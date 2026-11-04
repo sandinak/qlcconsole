@@ -1069,7 +1069,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     rulerBtn->setToolTip(tr("Show or hide the measurement rulers"));
     connect(rulerBtn, &QAction::toggled, this, [this](bool on) { setRulersVisible(on); });
 
-    QAction *labelsBtn = showMenu->addAction(tr("Fixture labels"));
+    QAction *labelsBtn = showMenu->addAction(tr("Fixture Labels"));
     labelsBtn->setCheckable(true);
     labelsBtn->setChecked(m_props->labelsVisible());
     connect(labelsBtn, &QAction::toggled, this, [this](bool on) { slotShowLabels(on); });
@@ -1077,7 +1077,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     /* Fixtures left on Auto drawn as their closest stage look (an LED PAR,
        a moving head spot...) instead of by their definition's type. Per
        show, saved with it; one Ctrl+Z, like any change to the plot. */
-    QAction *autoLooksBtn = showMenu->addAction(tr("Show Auto fixtures as their closest plot symbol"));
+    QAction *autoLooksBtn = showMenu->addAction(tr("Show Auto Fixtures as Their Closest Plot Symbol"));
     autoLooksBtn->setObjectName(QStringLiteral("autoStageLooksAction"));
     autoLooksBtn->setCheckable(true);
     autoLooksBtn->setChecked(m_props->autoStageLooks());
@@ -1101,7 +1101,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
        hard to click in the top view; hiding them clears the plot while
        structures are being placed. Free-standing fixtures are never hidden --
        there is nothing under them to reach. */
-    QAction *mountedBtn = showMenu->addAction(tr("Fixtures on the rig"));
+    QAction *mountedBtn = showMenu->addAction(tr("Fixtures on the Rig"));
     mountedBtn->setCheckable(true);
     mountedBtn->setToolTip(tr("Show or hide the fixtures mounted on trusses, "
                               "pipes, towers and platforms, so the structure "
@@ -1114,7 +1114,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     /* Where the selected moving heads cannot aim: a design aid for deciding
        how to rig them (on top of a tower, or hung under a bar) before the
        load-in, so not remembered between sessions. */
-    QAction *reachBtn = showMenu->addAction(tr("Where selected heads CANNOT reach"));
+    QAction *reachBtn = showMenu->addAction(tr("Where Selected Heads CANNOT Reach"));
     reachBtn->setCheckable(true);
     reachBtn->setToolTip(tr("Shade, in the top view, where the selected moving "
                             "heads cannot point at subject height"));
@@ -1126,7 +1126,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
        fixture covering", and what a count bubble shows when you double-click
        it. Top view, and not remembered -- it is a question you ask, not a way
        you leave the plot. */
-    QAction *projectionBtn = showMenu->addAction(tr("Light footprint: everywhere selected heads CAN light"));
+    QAction *projectionBtn = showMenu->addAction(tr("Light Footprint: Everywhere Selected Heads CAN Light"));
     projectionBtn->setCheckable(true);
     projectionBtn->setToolTip(tr("Shade every part of the deck the selected heads "
                                  "can put light on, with where each is pointed "
@@ -1145,7 +1145,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
 
     /* RC8: what lit lasers and star lasers throw, on the Top plot -- every
        lit one, in its live colour. A view choice, remembered; on. */
-    QAction *laserBtn = showMenu->addAction(tr("Laser && star output"));
+    QAction *laserBtn = showMenu->addAction(tr("Laser && Star Output"));
     laserBtn->setObjectName(QStringLiteral("showLaserOutput"));
     laserBtn->setCheckable(true);
     laserBtn->setChecked(m_graphicsView->emissionOverlayVisible());
@@ -1160,10 +1160,10 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
        When Blocked, an Aim look's "Dim lights that can't see the target" and
        the blocked aim traces go by; whether the rig views stop beams at
        them too is a view choice, remembered here. */
-    QMenu *sightMenu = showMenu->addMenu(tr("Line of sight"));
+    QMenu *sightMenu = showMenu->addMenu(tr("Line of Sight"));
     sightMenu->setObjectName("lineOfSightMenu");
     sightMenu->setToolTipsVisible(true);
-    QAction *sightBeams = sightMenu->addAction(tr("Beams stop at what is in their way"));
+    QAction *sightBeams = sightMenu->addAction(tr("Beams Stop at What Is in Their Way"));
     sightBeams->setObjectName("lineOfSightBeams");
     sightBeams->setCheckable(true);
     sightBeams->setToolTip(tr("In the 3D views, a beam stops at a tower, a truss or a riser's "
@@ -1214,7 +1214,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
 
     /* Item 10: the targets the cue on show uses, or All targets. */
     {
-        QAction *allAct = showMenu->addAction(tr("All targets"));
+        QAction *allAct = showMenu->addAction(tr("All Targets"));
         allAct->setObjectName(QStringLiteral("showAllTargets"));
         allAct->setCheckable(true);
         allAct->setChecked(m_allTargets);
@@ -1227,7 +1227,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         });
     }
 
-    QAction *centerBtn = showMenu->addAction(tr("Stage centre lines"));
+    QAction *centerBtn = showMenu->addAction(tr("Stage Centre Lines"));
     centerBtn->setCheckable(true);
     connect(centerBtn, &QAction::toggled, this, [this](bool on) {
         m_graphicsView->setCenterLinesVisible(on);
@@ -1240,7 +1240,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
        the plot's Stage layer now (Q147), shown, set and dragged there. On
        unless turned off; the show's, but no undo step. */
     {
-        QAction *positionsAct = showMenu->addAction(tr("Target positions"));
+        QAction *positionsAct = showMenu->addAction(tr("Target Positions"));
         positionsAct->setObjectName(QStringLiteral("showTargetPositions"));
         positionsAct->setCheckable(true);
         positionsAct->setChecked(m_props->targetPositionsVisible());
@@ -1267,17 +1267,17 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     originBtn->setToolTip(tr("Set where the rulers read 0,0 (origin / centre)"));
     {
         QMenu *om = new QMenu(originBtn);
-        om->addAction(tr("Click to place 0,0…"), this, [this]() {
+        om->addAction(tr("Click to Place 0,0…"), this, [this]() {
             m_graphicsView->beginPickOrigin();
         });
         om->addSeparator();
-        om->addAction(tr("Stage centre"), this, [this]() {
+        om->addAction(tr("Stage Centre"), this, [this]() {
             const double mpu = double(m_props->gridUnits() == MonitorProperties::Feet ? 0.3048 : 1.0);
             m_graphicsView->setStageOriginMetres(
                 QPointF(m_props->gridSize().x() * mpu / 2.0,
                         m_props->gridSize().z() * mpu / 2.0));
         });
-        om->addAction(tr("Downstage centre"), this, [this]() {
+        om->addAction(tr("Downstage Centre"), this, [this]() {
             const double mpu = double(m_props->gridUnits() == MonitorProperties::Feet ? 0.3048 : 1.0);
             m_graphicsView->setStageOriginMetres(
                 QPointF(m_props->gridSize().x() * mpu / 2.0,
@@ -2228,7 +2228,7 @@ void Monitor::initGraphicsToolbar()
        It is the user's, not the show's: QSettings. */
     {
         QMenu *lockMenu = new QMenu(this);
-        m_startLockedAction = lockMenu->addAction(tr("Always start with the plot locked"));
+        m_startLockedAction = lockMenu->addAction(tr("Always Start with the Plot Locked"));
         m_startLockedAction->setObjectName(QStringLiteral("startPlotLockedAction"));
         m_startLockedAction->setCheckable(true);
         m_startLockedAction->setChecked(startPlotLocked());
@@ -2247,7 +2247,7 @@ void Monitor::initGraphicsToolbar()
     /* A locked plot moves nothing, aim targets included (Q183). Someone who
        re-aims during a show turns this on: it is theirs, not the show's, so
        it lives in their settings and a show file never changes it. */
-    m_targetsAdjustableAction = m_graphicsToolBar->addAction(tr("Targets stay adjustable"));
+    m_targetsAdjustableAction = m_graphicsToolBar->addAction(tr("Targets Stay Adjustable"));
     m_targetsAdjustableAction->setObjectName(QStringLiteral("targetsAdjustableAction"));
     m_targetsAdjustableAction->setCheckable(true);
     m_targetsAdjustableAction->setChecked(
@@ -2339,7 +2339,7 @@ void Monitor::initGraphicsToolbar()
     m_graphicsToolBar->addWidget(addBtn);
 
     // Single Remove button removes whatever is selected
-    m_graphicsToolBar->addAction(QIcon(":/edit_remove.png"), tr("Remove selected"),
+    m_graphicsToolBar->addAction(QIcon(":/edit_remove.png"), tr("Remove Selected"),
                                  this, SLOT(slotRemoveSelected()));
 
     m_graphicsToolBar->addSeparator();
@@ -2395,21 +2395,26 @@ void Monitor::initGraphicsToolbar()
 
     moreMenu->addSeparator();
 
-    moreMenu->addAction(tr("Select All (Ctrl+A)"), this, [this]() {
+    QAction *selectAll = moreMenu->addAction(tr("Select All"), this, [this]() {
         if (m_graphicsView != NULL)
             m_graphicsView->selectAllMapItems();
     });
+    // The key is the plot's own (⌘A on the map); shown here in the menu's
+    // key column, not typed into the label (the right-click canon). Widget
+    // context: only the open menu could fire it, so ⌘A has one owner.
+    selectAll->setShortcut(QKeySequence::SelectAll);
+    selectAll->setShortcutContext(Qt::WidgetShortcut);
 
     // Copy / paste of stage features (trusses, platforms, targets). addAction()
     // keeps the Cmd/Ctrl+C/V shortcuts alive on the window even off the toolbar.
-    QAction *copyAct = new QAction(QIcon(":/editcopy.png"), tr("Copy selected features"), this);
+    QAction *copyAct = new QAction(QIcon(":/editcopy.png"), tr("Copy Selected Features"), this);
     copyAct->setShortcut(QKeySequence::Copy);
     copyAct->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     connect(copyAct, SIGNAL(triggered()), this, SLOT(slotCopySelected()));
     moreMenu->addAction(copyAct);
     addAction(copyAct);
 
-    m_pasteAction = new QAction(QIcon(":/editpaste.png"), tr("Paste features"), this);
+    m_pasteAction = new QAction(QIcon(":/editpaste.png"), tr("Paste Features"), this);
     m_pasteAction->setShortcut(QKeySequence::Paste);
     m_pasteAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     m_pasteAction->setEnabled(false);
@@ -2421,7 +2426,7 @@ void Monitor::initGraphicsToolbar()
 
     // Background image is now a placeable object (Add ▸ Add Image) that lives in
     // a layer; flat background colour stays here.
-    moreMenu->addAction(QIcon(":/color.png"), tr("Set background colour"),
+    moreMenu->addAction(QIcon(":/color.png"), tr("Set Background Colour"),
                         this, SLOT(slotSetBackgroundColor()));
     moreMenu->addAction(tr("Network Topology…"), this, [this]() { slotEditNetworkNode(0); });
     moreMenu->addAction(tr("Network Report…"), this, &Monitor::slotNetworkReport);
@@ -2435,7 +2440,7 @@ void Monitor::initGraphicsToolbar()
 
     // The Layers toggle is NOT on the toolbar — it lives as a small popout
     // handle at the top-left of the canvas (added in initGraphicsFooter).
-    m_layersAction = new QAction(QIcon(":/frame.png"), tr("Plot layers"), this);
+    m_layersAction = new QAction(QIcon(":/frame.png"), tr("Plot Layers"), this);
     m_layersAction->setCheckable(true);
     m_layersAction->setToolTip(tr("Show or hide the Plot layers sidebar"));
     connect(m_layersAction, SIGNAL(toggled(bool)), this, SLOT(slotToggleLayersPanel(bool)));
@@ -3188,7 +3193,7 @@ void Monitor::showStageOverview()
     showBtn->setToolTip(tr("Choose what is drawn on the rig"));
     QMenu *showMenu = new QMenu(showBtn);
     showBtn->setMenu(showMenu);
-    QAction *positionsAct = showMenu->addAction(tr("Target positions"));
+    QAction *positionsAct = showMenu->addAction(tr("Target Positions"));
     positionsAct->setObjectName(QStringLiteral("rigShowTargetPositions"));
     positionsAct->setCheckable(true);
     positionsAct->setToolTip(tr("Write where each target is beside it, measured from the "
@@ -3205,7 +3210,7 @@ void Monitor::showStageOverview()
     });
     positionsAct->setChecked(m_props->targetPositionsVisible());
     {
-        QAction *allAct = showMenu->addAction(tr("All targets"));
+        QAction *allAct = showMenu->addAction(tr("All Targets"));
         allAct->setObjectName(QStringLiteral("rigShowAllTargets"));
         allAct->setCheckable(true);
         allAct->setChecked(m_allTargets);
@@ -3263,7 +3268,7 @@ void Monitor::showStageOverview()
             }
         }
         layersMenu->addSeparator();
-        QAction *all = layersMenu->addAction(tr("Show all"));
+        QAction *all = layersMenu->addAction(tr("Show All"));
         connect(all, &QAction::triggered, layersMenu, [setShown, layers]() {
             for (const MonitorProperties::MonitorLayer &lyr : layers)
                 if (!lyr.visible)
@@ -9721,7 +9726,7 @@ protected:
         if (!m_addBarCb) return;
         const float off = offsetAtPos(ev->pos());
         QMenu m(this);
-        QAction *add = m.addAction(tr("Add bar here"));
+        QAction *add = m.addAction(tr("Add Bar Here"));
         if (m.exec(ev->globalPos()) == add)
             m_addBarCb(off);
     }

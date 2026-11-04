@@ -6799,9 +6799,10 @@ void MonitorGraphicsView::updateAimLines()
                 const QPointF stopPx = fixPx + (tgtPx - fixPx) * qreal(qBound(0.0f, hit.fraction, 1.0f));
                 QPen blockedPen(QColor(235, 70, 60), 2.0);
                 blockedPen.setStyle(Qt::DashLine);
-                const QString tip = tr("%1 cannot see %2: blocked by %3, %4 m out")
-                                        .arg(fxi->name(), tgt->name(), hit.name)
-                                        .arg(double(hit.distance), 0, 'f', 1);
+                const QString tip = tr("%1 cannot see %2: blocked by %3, %4 out")
+                                        .arg(fxi->name(), tgt->name(), hit.name,
+                                             MonitorProperties::formatStageDistance(
+                                                 hit.distance, m_doc->monitorProperties()->gridUnits()));
                 QGraphicsLineItem *toBlock = m_scene->addLine(
                     fixPx.x(), fixPx.y(), stopPx.x(), stopPx.y(), blockedPen);
                 toBlock->setZValue(2.5);
@@ -9581,13 +9582,13 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
                 continue;
             const quint32 twid = tw->id();
             QMenu *spots = towerMenu->addMenu(tw->name().isEmpty() ? tr("Tower %1").arg(twid) : tw->name());
-            QAction *top = spots->addAction(tr("Top of tower"), this, [this, mountIds, twid]() {
+            QAction *top = spots->addAction(tr("Top of Tower"), this, [this, mountIds, twid]() {
                 for (quint32 id : mountIds)
                     mountFixtureOnTower(id, twid, FixtureRigProps::TowerTop);
             });
             top->setCheckable(true);
             top->setChecked(rp.towerId == twid && rp.towerMountSide == FixtureRigProps::TowerTop);
-            QAction *bottom = spots->addAction(tr("Bottom of tower"), this, [this, mountIds, twid]() {
+            QAction *bottom = spots->addAction(tr("Bottom of Tower"), this, [this, mountIds, twid]() {
                 for (quint32 id : mountIds)
                     mountFixtureOnTower(id, twid, FixtureRigProps::TowerBottom);
             });
@@ -9622,7 +9623,7 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
                 decks.removeAt(i);
         }
         deckMenu->setEnabled(!decks.isEmpty());
-        deckMenu->addAction(deckIds.size() > 1 ? tr("The deck under each") : tr("The deck under it"),
+        deckMenu->addAction(deckIds.size() > 1 ? tr("The Deck Under Each") : tr("The Deck Under It"),
                             this, [this, deckIds]() {
             standOnDeck(deckIds, FixtureRigProps::invalidPlatformId());
         });

@@ -38,6 +38,7 @@
 #include <QSet>
 
 #include "studiogroupeditor.h"
+#include "lengthspinbox.h"
 #include "studiotemplate.h"
 #include "studioplaneview.h"
 #include "doc.h"
@@ -96,9 +97,18 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
         s->setSuffix(suffix);
         return s;
     };
-    m_ox  = mkSpin(-1000.0, 1000.0, tr(" m"));
-    m_oy  = mkSpin(-1000.0, 1000.0, tr(" m"));
-    m_oz  = mkSpin(-1000.0, 1000.0, tr(" m"));
+    // A length: shown and typed in the unit Settings > Units picks (5' 6",
+    // 1.68 m); value() stays in metres, as the group keeps it.
+    auto mkLength = [&](double lo, double hi) {
+        QDoubleSpinBox *s = new LengthSpinBox(1000.0, frameBox);
+        s->setRange(lo, hi);
+        s->setDecimals(3);
+        s->setSingleStep(0.05);
+        return s;
+    };
+    m_ox  = mkLength(-1000.0, 1000.0);
+    m_oy  = mkLength(-1000.0, 1000.0);
+    m_oz  = mkLength(-1000.0, 1000.0);
     m_rot = mkSpin(-360.0, 360.0, tr(" °"));
     m_rot->setSingleStep(1.0);
     m_ox->setValue(double(g.origin.x()));
@@ -130,8 +140,8 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     }
     bindForm->addRow(tr("Bind to"), m_fgCombo);
 
-    m_pitchX = mkSpin(0.001, 100.0, tr(" m/cell"));
-    m_pitchY = mkSpin(0.001, 100.0, tr(" m/cell"));
+    m_pitchX = mkLength(0.001, 100.0);
+    m_pitchY = mkLength(0.001, 100.0);
     m_pitchX->setValue(double(g.pitchX > 0 ? g.pitchX : 0.5f));
     m_pitchY->setValue(double(g.pitchY > 0 ? g.pitchY : 0.5f));
     QHBoxLayout *pitchRow = new QHBoxLayout;
@@ -215,9 +225,9 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     selForm->addRow(tr("Face"), m_selFace);
     m_selAngle = mkSpin(-360.0, 360.0, tr(" °")); m_selAngle->setSingleStep(1.0);
     selForm->addRow(tr("Angle"), m_selAngle);
-    m_selX = mkSpin(-1000.0, 1000.0, tr(" m"));
-    m_selY = mkSpin(-1000.0, 1000.0, tr(" m"));
-    m_selZ = mkSpin(-1000.0, 1000.0, tr(" m"));
+    m_selX = mkLength(-1000.0, 1000.0);
+    m_selY = mkLength(-1000.0, 1000.0);
+    m_selZ = mkLength(-1000.0, 1000.0);
     QHBoxLayout *xyzRow = new QHBoxLayout;
     xyzRow->addWidget(new QLabel(tr("X"))); xyzRow->addWidget(m_selX);
     xyzRow->addWidget(new QLabel(tr("Y"))); xyzRow->addWidget(m_selY);

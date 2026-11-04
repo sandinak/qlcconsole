@@ -807,20 +807,20 @@ void FixtureGroupEditor::slotTableContextMenu(const QPoint &pos)
 
     // Whole-fixture move: shifts every head of this fixture as one block.
     const QString fxName = (fxi != NULL) ? fxi->name() : tr("fixture");
-    QAction *fUp    = menu.addAction(tr("Move %1 up").arg(fxName));
-    QAction *fDown  = menu.addAction(tr("Move %1 down").arg(fxName));
-    QAction *fLeft  = menu.addAction(tr("Move %1 left").arg(fxName));
-    QAction *fRight = menu.addAction(tr("Move %1 right").arg(fxName));
+    QAction *fUp    = menu.addAction(tr("Move %1 Up").arg(fxName));
+    QAction *fDown  = menu.addAction(tr("Move %1 Down").arg(fxName));
+    QAction *fLeft  = menu.addAction(tr("Move %1 Left").arg(fxName));
+    QAction *fRight = menu.addAction(tr("Move %1 Right").arg(fxName));
 
     // Sub-group move (only when this cell belongs to a pasted block).
     QAction *up = NULL, *down = NULL, *left = NULL, *right = NULL;
     if (sg != 0)
     {
         menu.addSeparator();
-        up    = menu.addAction(tr("Move sub-group up"));
-        down  = menu.addAction(tr("Move sub-group down"));
-        left  = menu.addAction(tr("Move sub-group left"));
-        right = menu.addAction(tr("Move sub-group right"));
+        up    = menu.addAction(tr("Move Sub-group Up"));
+        down  = menu.addAction(tr("Move Sub-group Down"));
+        left  = menu.addAction(tr("Move Sub-group Left"));
+        right = menu.addAction(tr("Move Sub-group Right"));
     }
 
     QAction *c = menu.exec(m_table->viewport()->mapToGlobal(pos));

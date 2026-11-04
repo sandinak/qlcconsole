@@ -161,7 +161,7 @@ QMenu *EffectRunsMenu::add(QMenu *menu, Doc *doc, const QList<quint32> &palettes
         const double rate = first->effectParamValues().value(cyc, cycDef.defaultValue);
         const double own = first->effectParamValues().value(QStringLiteral("__ownRate"), 1.0);
         const double cycle = rate > 0.0 && own > 0.0 ? 1.0 / (rate * own) : 0.0;
-        QAction *len = sub->addAction(tr("Length: %1 s…").arg(QString::number(cycle, 'f', 2)));
+        QAction *len = sub->addAction(tr("Length (%1 s)…").arg(QString::number(cycle, 'f', 2)));
         len->setObjectName(QStringLiteral("effectRunLengthAction"));
         len->setToolTip(tr("One cycle of the wave (one breath): Once plays one, ending where it began"));
         len->setEnabled(!now.loops());
@@ -175,7 +175,7 @@ QMenu *EffectRunsMenu::add(QMenu *menu, Doc *doc, const QList<quint32> &palettes
         });
         return sub;
     }
-    QAction *len = sub->addAction(now.lengthMs > 0 ? tr("Length: %1 s…").arg(now.lengthMs / 1000.0)
+    QAction *len = sub->addAction(now.lengthMs > 0 ? tr("Length (%1 s)…").arg(now.lengthMs / 1000.0)
                                                    : tr("Length: auto…"));
     len->setObjectName(QStringLiteral("effectRunLengthAction"));
     len->setToolTip(tr("One run's length: auto is the cue's time"));

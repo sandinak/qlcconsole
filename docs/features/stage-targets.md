@@ -60,7 +60,7 @@ be affected before you commit.
 its place from the stage marks ("SL 2.4 · US 3.1 m": left or right of the
 centre line, up or downstage of the number line), live while you drag
 it. The Rig Overview writes it too, and focus calls say it ("SL 2, US
-1"). **Show ▸ Target positions** hides it. See
+1"). **Show ▸ Target Positions** hides it. See
 [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
 
 ## Which targets the rig shows
@@ -76,7 +76,7 @@ and effects centred on a target. On show means:
 - **Nothing on show**: every target.
 
 A target you place stays drawn (you can't lose one you just put down), and
-so does a selected one. **Show ▸ All targets**, on the plot's or the Rig
+so does a selected one. **Show ▸ All Targets**, on the plot's or the Rig
 Overview's footer, draws them all, always; it is remembered.
 
 ## Area targets
@@ -421,7 +421,7 @@ doesn't stop just because that's where you pointed it.
 | **Kind** | What a target represents — None, Person, Drum Kit, Structure, Area or Line — governing its default aim height and how it's drawn. |
 | **Line** | A target that is a curve: each light aimed at it gets its own, evenly spaced point along it. |
 | **Aim palette** | A palette that names a target instead of carrying fixed DMX values; resolved per-fixture through the Aim Solver. |
-| **Line of sight** | Whether a solid stage feature (a closed drape, a wall, a riser, a tower) stands between a head and the point it's aimed at. Its own mount never counts. |
+| **Line of Sight** | Whether a solid stage feature (a closed drape, a wall, a riser, a tower) stands between a head and the point it's aimed at. Its own mount never counts. |
 | **Height** (Person) | How tall a person is, standing on whatever is under them: the figure is drawn that tall and light is aimed at 80% of it. A person without one is 5'9". |
 | **Follow-spot aim height (chest)** | Where a follow spot aims above the deck — a chest, not how tall anyone is — overriding a target's stored Z in follow-spot mode. It never sizes a person: a Person is aimed at 80% of its own Height. (Called "subject height" before.) |
 | **Reachable / margin** | Whether a fixture's calibrated pan/tilt range can actually get to a target, and how much spare travel it has if so. |

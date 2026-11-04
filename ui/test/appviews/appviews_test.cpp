@@ -3399,7 +3399,7 @@ void AppViews_Test::aPinKeepsTheShowInOperate()
     QVERIFY(!settingsAction->isEnabled());
     QAction *liveEdit = nullptr;
     for (QAction *a : m_app->findChildren<QAction *>())
-        if (a->text() == QObject::tr("Live edit a function"))
+        if (a->text() == QObject::tr("Live Edit a Function"))
             liveEdit = a;
     QVERIFY(liveEdit != nullptr);
     QVERIFY(!liveEdit->isEnabled());

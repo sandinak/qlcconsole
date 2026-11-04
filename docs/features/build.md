@@ -217,7 +217,7 @@ selected again. Loading something from the navigator starts afresh.
 **Adding, removing, reordering** — on a collection:
 
 - **+ Scene** adds scenes (or any function) from the show, picked in a list,
-  after the selected layer; its menu's **New empty scene** makes one, filed
+  after the selected layer; its menu's **New Empty Scene** makes one, filed
   with the collection.
 - **+ Effect ▾** → **EFX** or **RGB Matrix** makes a **new** one on the selected layer's
   groups — an EFX on its heads, an RGB Matrix on its first group — add it
@@ -597,7 +597,7 @@ names it first, for example *New Scene in Act 1 (⇧⌘N)*.
 | Where | ⇧⌘N makes |
 |---|---|
 | Scenes: a folder, or a scene in one | A new scene in that folder (nothing selected: at the top level), loaded, its name open to type |
-| The Workbench, a collection loaded | A new empty scene as a layer, as **+ Scene ▸ New empty scene** |
+| The Workbench, a collection loaded | A new empty scene as a layer, as **+ Scene ▸ New Empty Scene** |
 | The Workbench, a chaser loaded | A new empty scene as the step after the one you are on, filed with the chaser, and walks to it |
 | Effects | A new effect, in the designer |
 | Palettes | Nothing: use **+ New** there |
@@ -711,7 +711,7 @@ and Bundles stay here.
    to take them out of the scene.
 8. Moving on to the next scene that uses the same group or look? Drag the
    row there (⌥ copies it).
-9. Gathering scenes into a collection? **+ Scene ▸ New collection** over the
+9. Gathering scenes into a collection? **+ Scene ▸ New Collection** over the
    outline, then drag scenes onto its layers — or load one you have, and add
    an EFX or RGB Matrix on a layer's groups with **+ Effect ▾**
    ([The Workbench](#the-workbench)).

@@ -115,7 +115,7 @@ VCButton::VCButton(QWidget* parent, Doc* doc) : VCWidget(parent, doc)
     setFrameStyle(KVCFrameStyleNone);
 
     /* Menu actions */
-    m_chooseIconAction = new QAction(QIcon(":/image.png"), tr("Choose..."),
+    m_chooseIconAction = new QAction(QIcon(":/image.png"), tr("Choose…"),
                                      this);
     m_chooseIconAction->setShortcut(QKeySequence("SHIFT+C"));
 

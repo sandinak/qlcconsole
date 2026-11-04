@@ -72,26 +72,26 @@ TrackItem::TrackItem(Track *track, int number)
     // which overlapped it) — same right edge as before (TRACK_WIDTH - 12).
     m_intensityRegion = new QRectF(14.0, 30.0, TRACK_WIDTH - 26.0, 9.0);
 
-    m_moveUp = new QAction(QIcon(":/up.png"), tr("Move up"), this);
+    m_moveUp = new QAction(QIcon(":/up.png"), tr("Move Up"), this);
     connect(m_moveUp, SIGNAL(triggered()),
             this, SLOT(slotMoveUpClicked()));
-    m_moveDown = new QAction(QIcon(":/down.png"), tr("Move down"), this);
+    m_moveDown = new QAction(QIcon(":/down.png"), tr("Move Down"), this);
     connect(m_moveDown, SIGNAL(triggered()),
             this, SLOT(slotMoveDownClicked()));
 
-    m_changeName = new QAction(QIcon(":/editclear.png"), tr("Change name"), this);
+    m_changeName = new QAction(QIcon(":/editclear.png"), tr("Rename"), this);
     connect(m_changeName, SIGNAL(triggered()),
             this, SLOT(slotChangeNameClicked()));
 
-    m_delete = new QAction(QIcon(":/editdelete.png"), tr("Delete track"), this);
+    m_delete = new QAction(QIcon(":/editdelete.png"), tr("Delete Track"), this);
     connect(m_delete, SIGNAL(triggered()),
             this, SLOT(slotDeleteTrackClicked()));
 
-    m_newTrack = new QAction(QIcon(":/edit_add.png"), tr("New track"), this);
+    m_newTrack = new QAction(QIcon(":/edit_add.png"), tr("New Track"), this);
     connect(m_newTrack, SIGNAL(triggered()),
             this, SLOT(slotNewTrackClicked()));
 
-    m_color = new QAction(QIcon(":/color.png"), tr("Track colour…"), this);
+    m_color = new QAction(QIcon(":/color.png"), tr("Track Colour…"), this);
     connect(m_color, SIGNAL(triggered()),
             this, SLOT(slotColorClicked()));
 }
@@ -272,11 +272,11 @@ void TrackItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)
         aSoloSafe->setCheckable(true);
         aSoloSafe->setChecked(m_track->isSoloSafe());
 
-        aHoldLast = menu.addAction(tr("Hold at end (stays up between cues)"));
+        aHoldLast = menu.addAction(tr("Hold at End (stays up between cues)"));
         aHoldLast->setCheckable(true);
         aHoldLast->setChecked(m_track->isHoldLast());
 
-        QMenu *prio = menu.addMenu(tr("Priority / role"));
+        QMenu *prio = menu.addMenu(tr("Priority / Role"));
         aBg = prio->addAction(tr("Background (yields to all)"));
         aNormal = prio->addAction(tr("Normal (last-writer wins)"));
         aOverride = prio->addAction(tr("Override (wins LTP)"));

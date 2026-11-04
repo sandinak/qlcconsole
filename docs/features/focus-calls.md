@@ -37,7 +37,7 @@ from the show's own targets: one call per stage target that a layer in
 any cue list or hit aims at (an Aim look, or a line aim), with the groups
 whose layers aim there, every owner (tour, house or rental), named "From
 the show: DH Tspots → DSC". They are rebuilt each time you start while you
-have not changed them, appear in **Edit focus calls…**, and are saved with
+have not changed them, appear in **Edit Focus Calls…**, and are saved with
 the show only when you edit them or press **Save calls** (starting does
 not save). A light no layer aims at a target is in no call: it still gets
 its correction through calibration (the venue's pan/tilt offsets, a
@@ -58,7 +58,7 @@ are empty.
 What you correct in a venue belongs to that room, not to the show. Choose
 the **Venue** before you start:
 
-- **New venue…** — type its name ("Lincoln HS"), or leave it empty and it
+- **New Venue…** — type its name ("Lincoln HS"), or leave it empty and it
   is named with the date and time ("Venue 2026-10-23 19:04"). On a tour,
   **Start from Lincoln HS** (ticked by default, naming the venue changed
   last) copies that room's corrections, trims and targets into the new
@@ -74,8 +74,8 @@ the **Venue** before you start:
 The **venue menu** does the same from anywhere: click the **Venue** chip
 in the footer, or **View ▸ Venue…**, or **Focus ▸ Venues** on the
 Lighting Studio toolbar (all three open the same menu; see [The venue
-chip](venues.md#the-venue-chip)): **Switch venue ▸** a venue (or None),
-**New venue…**, **Rename…**, and **Rig and universes…** for the venue
+chip](venues.md#the-venue-chip)): **Switch Venue ▸** a venue (or None),
+**New Venue…**, **Rename…**, and **Rig and Universes…** for the venue
 applied. **Rename…** and **Delete** in this dialog rename or forget a
 venue and its corrections; the show is not changed. A venue needs a saved
 show: until the show has been saved, the dialog says "Save the show
@@ -115,7 +115,7 @@ its menu starts with **Still at Lincoln HS?…**, which asks again):
 The answer shows on the chip: **Venue: Lincoln HS** (its tooltip:
 "Confirmed: you are at Lincoln HS."), the new venue, or **Venue: none**.
 The Venue Focus dialog does not pick an old venue for you either: until
-it is confirmed, **New venue…** is chosen, with a note naming the old
+it is confirmed, **New Venue…** is chosen, with a note naming the old
 one.
 
 **A fixture that changed.** A correction remembers the fixture's type and
@@ -151,7 +151,7 @@ package](venues.md).
 
 ## Running venue focus
 
-**Focus ▸ Venue focus…** on the Lighting Studio toolbar, or **Venue
+**Focus ▸ Venue Focus…** on the Lighting Studio toolbar, or **Venue
 focus…** on the Run tab, runs the calls for the venue applied. With no
 venue applied it opens the list first, so you say which room this is
 before anything is saved. In the list, **Start venue focus** runs them.
@@ -314,7 +314,7 @@ same jobs.
 
 ## The focus report
 
-**Focus ▸ Focus report…** (for the venue applied), or **Export focus
+**Focus ▸ Focus Report…** (for the venue applied), or **Export focus
 report…** in the list (below the venue, beside **Focused by:**), writes
 what was focused in the venue, light by light and call by call:
 

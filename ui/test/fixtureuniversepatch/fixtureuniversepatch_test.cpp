@@ -285,12 +285,12 @@ void FixtureUniversePatch_Test::anUnpatchedUniverseOffersPatchOutput()
     selectOnly(mgr, row);
 
     const QStringList texts = rightClick(mgr, row);
-    QVERIFY2(texts.contains("Patch output…"), qPrintable(texts.join(" | ")));
-    QVERIFY2(!texts.contains("Unpatch output"), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Patch Output…"), qPrintable(texts.join(" | ")));
+    QVERIFY2(!texts.contains("Unpatch Output"), qPrintable(texts.join(" | ")));
     QVERIFY2(texts.contains("Delete Universe…"), qPrintable(texts.join(" | ")));
     // One universe selected: no plural entries.
     foreach (const QString &t, texts)
-        QVERIFY2(!t.contains("selected universes"), qPrintable(t));
+        QVERIFY2(!t.contains("Selected Universes"), qPrintable(t));
 }
 
 void FixtureUniversePatch_Test::patchingFromTheMenuSetsTheOutputAndCanBeUndone()
@@ -310,7 +310,7 @@ void FixtureUniversePatch_Test::patchingFromTheMenuSetsTheOutputAndCanBeUndone()
             pickTarget(ed, "Quad (172.18.2.50) — port 3");
         });
         bool found = false;
-        rightClick(mgr, row, "Patch output…", &found);
+        rightClick(mgr, row, "Patch Output…", &found);
         QVERIFY(found);
         QCOMPARE(answer.opened, 1);
         QCOMPARE(answer.universe, quint32(0));
@@ -357,10 +357,10 @@ void FixtureUniversePatch_Test::aPatchedUniverseSaysWhereItGoesAndCanBeUnpatched
     foreach (const QString &t, texts)
         said = said || t.startsWith(where);
     QVERIFY2(said, qPrintable(texts.join(" | ")));
-    QVERIFY2(texts.contains("Edit connection…"), qPrintable(texts.join(" | ")));
-    QVERIFY2(texts.contains("Unpatch output"), qPrintable(texts.join(" | ")));
-    QVERIFY2(!texts.contains("Patch output…"), qPrintable(texts.join(" | ")));
-    QVERIFY2(!texts.contains("Change interface / target…"), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Edit Connection…"), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Unpatch Output"), qPrintable(texts.join(" | ")));
+    QVERIFY2(!texts.contains("Patch Output…"), qPrintable(texts.join(" | ")));
+    QVERIFY2(!texts.contains("Change Interface / Target…"), qPrintable(texts.join(" | ")));
 
     // Edit connection: the same window, filled in with where it goes now.
     {
@@ -370,7 +370,7 @@ void FixtureUniversePatch_Test::aPatchedUniverseSaysWhereItGoesAndCanBeUnpatched
             pickTarget(ed, "Quad (172.18.2.50) — port 4");
         });
         bool found = false;
-        rightClick(mgr, row, "Edit connection…", &found);
+        rightClick(mgr, row, "Edit Connection…", &found);
         QVERIFY(found);
         QCOMPARE(answer.opened, 1);
         QCOMPARE(answer.universe, quint32(1));
@@ -384,7 +384,7 @@ void FixtureUniversePatch_Test::aPatchedUniverseSaysWhereItGoesAndCanBeUnpatched
     QCOMPARE(port, quint32(3));
 
     bool found = false;
-    rightClick(mgr, row, "Unpatch output", &found);
+    rightClick(mgr, row, "Unpatch Output", &found);
     QVERIFY(found);
     QCOMPARE(iom->outputPatchesCount(1), 0);
     QVERIFY2(!row->text(KColumnName).contains(kNode), qPrintable(row->text(KColumnName)));
@@ -413,7 +413,7 @@ void FixtureUniversePatch_Test::severalSelectedArePatchedInTheOrderTheyWerePicke
         DialogAnswers answers(QStringList() << "#0" << "Quad (172.18.2.50)" << "#0");
         bool found = false;
         const QStringList texts = rightClick(mgr, universeRow(mgr, 3),
-                                             "Patch 4 selected universes to…", &found);
+                                             "Patch 4 Selected Universes to…", &found);
         QVERIFY2(found, qPrintable(texts.join(" | ")));
         QCOMPARE(answers.left(), 0);
         QCOMPARE(answers.messages.count(), 1);
@@ -458,9 +458,9 @@ void FixtureUniversePatch_Test::severalSelectedAreUnpatchedInOneStep()
 
     bool found = false;
     const QStringList texts = rightClick(mgr, universeRow(mgr, 0),
-                                         "Unpatch 2 selected universes", &found);
+                                         "Unpatch 2 Selected Universes", &found);
     QVERIFY2(found, qPrintable(texts.join(" | ")));
-    QVERIFY2(texts.contains("Patch 3 selected universes to…"), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Patch 3 Selected Universes to…"), qPrintable(texts.join(" | ")));
     QCOMPARE(iom->outputPatchesCount(0), 0);
     QCOMPARE(iom->outputPatchesCount(2), 0);
     QCOMPARE(iom->outputPatchesCount(1), 1);     // not selected: untouched
@@ -495,7 +495,7 @@ void FixtureUniversePatch_Test::aFixtureRowsMenuIsUnchanged()
     foreach (const QString &t, texts)
         QVERIFY2((!t.contains("output", Qt::CaseInsensitive)
                   || t == "Output Rules…")      // the fixture's own (relays, house lights)
-                 && !t.contains("selected universes")
+                 && !t.contains("Selected Universes")
                  && t != "Delete Universe…", qPrintable(texts.join(" | ")));
 }
 

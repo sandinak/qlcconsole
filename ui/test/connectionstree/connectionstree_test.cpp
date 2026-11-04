@@ -1208,7 +1208,7 @@ void ConnectionsTree_Test::multiPatchPutsThemOnTheDevicePortsInPickedOrder()
 
     // The menu now offers it for the whole selection, by count.
     const QStringList offered = contextMenuOn(tree, 0, QString());
-    QVERIFY2(offered.contains("Patch 5 selected universes to…"), qPrintable(offered.join(" | ")));
+    QVERIFY2(offered.contains("Patch 5 Selected Universes to…"), qPrintable(offered.join(" | ")));
 
     const QList<quint32> ports = QList<quint32>() << 0 << 1 << 2 << 3;
     const ConnectionsTree::OrderedPatch plan = tree.planOrderedPatch(
@@ -1316,10 +1316,10 @@ void ConnectionsTree_Test::multiUnpatchRemovesEveryOneInOneStep()
     connect(tree.m_tree->model(), &QAbstractItemModel::modelReset, &counting, [&rebuilds]() { rebuilds++; });
 
     // From the menu, as Branson would: all four go at once.
-    const QStringList offered = contextMenuOn(tree, 1, "Unpatch 4 selected universes");
-    QVERIFY2(offered.contains("Unpatch 4 selected universes"), qPrintable(offered.join(" | ")));
+    const QStringList offered = contextMenuOn(tree, 1, "Unpatch 4 Selected Universes");
+    QVERIFY2(offered.contains("Unpatch 4 Selected Universes"), qPrintable(offered.join(" | ")));
     // ...and the single-row action is still there for the row under the pointer.
-    QVERIFY(offered.contains("Unpatch from this interface"));
+    QVERIFY(offered.contains("Unpatch from This Interface"));
 
     for (quint32 u = 0; u < 4; u++)
         QCOMPARE(iom->outputPatchesCount(u), 0);
@@ -2052,7 +2052,7 @@ void ConnectionsTree_Test::repatchAsksTheInterfaceAgain()
     // The menu has it as the one connection window, which asks the interface too.
     showUniverseList(tree);
     const QStringList offered = contextMenuOn(tree, 6, QString());
-    QVERIFY2(offered.contains("Edit connection…"), qPrintable(offered.join(" | ")));
+    QVERIFY2(offered.contains("Edit Connection…"), qPrintable(offered.join(" | ")));
 }
 
 /* "By-universe and By-device views must agree": a node patched from the
@@ -2432,26 +2432,31 @@ void ConnectionsTree_Test::aUniversesMenuHasOneEditConnection()
     showUniverseList(tree);
 
     const QStringList patched = contextMenuOn(tree, 1, QString());
-    QVERIFY2(patched.contains("Edit connection…"), qPrintable(patched.join(" | ")));
+    QVERIFY2(patched.contains("Edit Connection…"), qPrintable(patched.join(" | ")));
     // The editing entries it replaces are gone from the menu.
-    const QStringList gone = QStringList() << "Change interface / target…" << "Configure interface…"
+    const QStringList gone = QStringList() << "Change Interface / Target…" << "Configure interface…"
         << "Transmit mode" << "Passthrough" << "Feedback to" << "Input profile"
         << "MIDI output mode" << "Change feedback address / port…";
     foreach (const QString &g, gone)
         QVERIFY2(patched.contains(g) == false, qPrintable(g + " still in: " + patched.join(" | ")));
     // What is not editing stays.
-    QVERIFY(patched.contains("Rename universe…"));
-    QVERIFY(patched.contains("Unpatch from this interface"));
-    QVERIFY(patched.contains("Delete universe entirely…"));
+    QVERIFY(patched.contains("Rename Universe…"));
+    QVERIFY(patched.contains("Unpatch from This Interface"));
+    QVERIFY(patched.contains("Delete Universe…"));
+    // The right-click canon: the list's own items on top, the row's Delete last.
+    QStringList named = patched;
+    named.removeAll(QString());
+    QCOMPARE(named.first(), QString("Add Universe"));
+    QCOMPARE(named.last(), QString("Delete Universe…"));
 
     // An unpatched universe: the same entry, where "Patch to…" was.
     const QStringList unpatched = contextMenuOn(tree, 4, QString());
-    QVERIFY2(unpatched.contains("Edit connection…"), qPrintable(unpatched.join(" | ")));
+    QVERIFY2(unpatched.contains("Edit Connection…"), qPrintable(unpatched.join(" | ")));
     QVERIFY(unpatched.contains("Patch to…") == false);
 
     // And it opens the window on that universe.
     EditorSpy spy;
-    contextMenuOn(tree, 1, "Edit connection…");
+    contextMenuOn(tree, 1, "Edit Connection…");
     QCOMPARE(spy.opened, 1);
     QCOMPARE(spy.universe, quint32(1));
 }
@@ -2857,7 +2862,7 @@ void ConnectionsTree_Test::severalSelectedTakeOneTransmitMode()
             return;
         foreach (QAction *a, m->actions())
         {
-            if (a->menu() != NULL && a->text() == "Transmit mode of 2 selected universes")
+            if (a->menu() != NULL && a->text() == "Transmit Mode of 2 Selected Universes")
             {
                 foreach (QAction *sub, a->menu()->actions())
                     modes << sub->text();

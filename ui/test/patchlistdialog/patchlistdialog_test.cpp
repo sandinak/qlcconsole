@@ -515,12 +515,12 @@ void PatchListDialog_Test::theRightClickMenu()
     dlg.itemFor("Back")->setSelected(true);
     menu.reset(dlg.contextMenu());
     QAction *one = action(menu.get(), "patchListPrintLabels");
-    QCOMPARE(one->text(), QString("Print Label..."));
+    QCOMPARE(one->text(), QString("Print Label…"));
     QVERIFY(one->isEnabled());
 
     dlg.itemFor("Front")->setSelected(true);
     menu.reset(dlg.contextMenu());
-    QCOMPARE(action(menu.get(), "patchListPrintLabels")->text(), QString("Print 2 Labels..."));
+    QCOMPARE(action(menu.get(), "patchListPrintLabels")->text(), QString("Print 2 Labels…"));
 
     // It opens the labels on those two, the selection picked.
     QStringList seen;

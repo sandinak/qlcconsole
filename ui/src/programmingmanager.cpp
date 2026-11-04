@@ -418,7 +418,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         fieldAction(beatMenu->menu(), tr("BPM"), m_bpmSpin);
         beatMenu->menu()->addSeparator();
         mastersBtn->hide();
-        QAction *mastersAct = beatMenu->menu()->addAction(tr("Speed masters…"));
+        QAction *mastersAct = beatMenu->menu()->addAction(tr("Speed Masters…"));
         mastersAct->setToolTip(mastersBtn->toolTip());
         connect(mastersAct, &QAction::triggered, mastersBtn, &QPushButton::click);
         // The button says the tempo, so it needn't be opened to read it.
@@ -948,15 +948,15 @@ QWidget *ProgrammingManager::buildScenesSection()
     m_addFuncBtn->setPopupMode(QToolButton::MenuButtonPopup);
     QMenu *addFuncMenu = new QMenu(m_addFuncBtn);
     addFuncMenu->setToolTipsVisible(true);
-    QAction *addSceneAction  = addFuncMenu->addAction(QIcon(":/scene.png"), tr("New scene"));
-    QAction *addCollAction   = addFuncMenu->addAction(QIcon(":/collection.png"), tr("New collection"));
+    QAction *addSceneAction  = addFuncMenu->addAction(QIcon(":/scene.png"), tr("New Scene"));
+    QAction *addCollAction   = addFuncMenu->addAction(QIcon(":/collection.png"), tr("New Collection"));
     addCollAction->setToolTip(tr("Layers that play together: scenes, EFX, RGB Matrices. It loads in the Workbench."));
-    QAction *addChaserAction = addFuncMenu->addAction(QIcon(":/chaser.png"), tr("New chaser"));
+    QAction *addChaserAction = addFuncMenu->addAction(QIcon(":/chaser.png"), tr("New Chaser"));
     addChaserAction->setToolTip(tr("Steps that play one after another (its steps are edited in its step table)"));
     addFuncMenu->addSeparator();
-    QAction *addFolderAction = addFuncMenu->addAction(QIcon(":/folder.png"), tr("New scene in a new folder…"));
+    QAction *addFolderAction = addFuncMenu->addAction(QIcon(":/folder.png"), tr("New Scene in a New Folder…"));
     // W2: habit 1, "chase the scenes" -- the scenes selected, in the order picked.
-    QAction *chaseAction = addFuncMenu->addAction(QIcon(":/chaser.png"), tr("Chaser from selection"));
+    QAction *chaseAction = addFuncMenu->addAction(QIcon(":/chaser.png"), tr("Chaser from Selection"));
     chaseAction->setObjectName(QStringLiteral("chaserFromSelection"));
     chaseAction->setToolTip(tr("A new chaser with the scenes selected on the left as its steps, in the order "
                                "you selected them"));
@@ -1147,7 +1147,7 @@ QWidget *ProgrammingManager::buildEffectsSection()
     newBtn->setPopupMode(QToolButton::MenuButtonPopup);
     QMenu *newMenu = new QMenu(newBtn);
     newMenu->setToolTipsVisible(true);
-    QAction *a = newMenu->addAction(QIcon(":/script.png"), tr("Effect palette…"), this,
+    QAction *a = newMenu->addAction(QIcon(":/script.png"), tr("Effect Palette…"), this,
                                     [this]() { designEffect(QLCPalette::invalidId()); });
     a->setObjectName(QStringLiteral("buildEffectsNewPalette"));
     a->setToolTip(tr("A script effect, designed in the Workbench on the Try on groups: plays in scenes, "

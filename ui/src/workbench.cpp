@@ -341,7 +341,7 @@ void Workbench::fillFocusMenu(QMenu *m)
 {
     m->clear();
     TreeCueStack *tree = qobject_cast<TreeCueStack *>(m_stack);
-    QAction *self = m->addAction(tree != nullptr ? tr("Focus this cue\342\200\246") : tr("Focus this look\342\200\246"),
+    QAction *self = m->addAction(tree != nullptr ? tr("Focus This Cue…") : tr("Focus This Look…"),
                                  this, [this]() { openRefine(); });
     self->setObjectName(QStringLiteral("workbenchRefine"));
     FocusMenu::setAvailable(self, FocusMenu::focusCueBlocked(m_doc),
@@ -355,7 +355,7 @@ void Workbench::fillFocusMenu(QMenu *m)
     const ShowTree::CueList *list = cue != nullptr ? m_doc->showTree()->listOfCue(cueId) : nullptr;
     if (list == nullptr || list->looks)
         return;
-    QAction *make = m->addAction(tr("Make this a venue focus cue"));
+    QAction *make = m->addAction(tr("Make This a Venue Focus Cue"));
     make->setObjectName(QStringLiteral("workbenchFocusCue"));
     make->setCheckable(true);
     make->setChecked(cue->focusCall);
@@ -512,9 +512,9 @@ void Workbench::buildAddBar(QWidget *column)
     m_addSceneBtn->setPopupMode(QToolButton::MenuButtonPopup);
     QMenu *sceneMenu = new QMenu(m_addSceneBtn);
     sceneMenu->setToolTipsVisible(true);
-    sceneMenu->addAction(tr("From the show…"), this, &Workbench::addExisting)
+    sceneMenu->addAction(tr("From the Show…"), this, &Workbench::addExisting)
         ->setToolTip(tr("Pick scenes (or any function) already in the show"));
-    sceneMenu->addAction(tr("New empty scene"), this, [this]() { addNew(Function::SceneType); })
+    sceneMenu->addAction(tr("New Empty Scene"), this, [this]() { addNew(Function::SceneType); })
         ->setToolTip(tr("A new scene, filed with this collection, as a layer"));
     m_addSceneBtn->setMenu(sceneMenu);
     connect(m_addSceneBtn, &QToolButton::clicked, this, &Workbench::addExisting);
@@ -527,21 +527,21 @@ void Workbench::buildAddBar(QWidget *column)
     m_addEffectBtn->setPopupMode(QToolButton::InstantPopup);
     QMenu *effectMenu = new QMenu(m_addEffectBtn);
     effectMenu->setToolTipsVisible(true);
+    // An effect palette (a sparkle, a wave, a ballyhoo...): the designer, made
+    // a layer here -- beside the effects there, a movement and an intensity
+    // effect together. First, with the same name as Build ▸ Effects' + New.
+    QAction *designLook = effectMenu->addAction(QIcon(QStringLiteral(":/script.png")), tr("Effect Palette…"));
+    designLook->setObjectName(QStringLiteral("workbenchDesignEffect"));
+    designLook->setToolTip(tr("Design an effect palette and make it a layer here, beside the effects "
+                              "already there (a movement and an intensity effect together)"));
+    connect(designLook, &QAction::triggered, this, [this]() { designEffect(EffectRequest()); });
+    effectMenu->addSection(tr("QLC+ effects (EFX, RGB Matrix)"));
     m_addEfxBtn = effectMenu->addAction(QIcon(QStringLiteral(":/efx.png")), tr("EFX"));
     m_addEfxBtn->setObjectName(QStringLiteral("workbenchAddEfx"));
     connect(m_addEfxBtn, &QAction::triggered, this, [this]() { addNew(Function::EFXType); });
     m_addMatrixBtn = effectMenu->addAction(QIcon(QStringLiteral(":/rgbmatrix.png")), tr("RGB Matrix"));
     m_addMatrixBtn->setObjectName(QStringLiteral("workbenchAddMatrix"));
     connect(m_addMatrixBtn, &QAction::triggered, this, [this]() { addNew(Function::RGBMatrixType); });
-    // An effect look (a sparkle, a wave, a ballyhoo...): the designer, made
-    // a layer here -- beside the effects there, a movement and an
-    // intensity effect together.
-    effectMenu->addSeparator();
-    QAction *designLook = effectMenu->addAction(tr("Effect look…"));
-    designLook->setObjectName(QStringLiteral("workbenchDesignEffect"));
-    designLook->setToolTip(tr("Design an effect look and make it a layer here, beside the effects "
-                              "already there (a movement and an intensity effect together)"));
-    connect(designLook, &QAction::triggered, this, [this]() { designEffect(EffectRequest()); });
     m_addEffectBtn->setMenu(effectMenu);
     hl->addWidget(m_addEffectBtn);
     hl->addStretch(1);

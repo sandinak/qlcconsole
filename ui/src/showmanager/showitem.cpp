@@ -61,10 +61,10 @@ ShowItem::ShowItem(ShowFunction *function, QObject *)
 
     setLocked(m_function->isLocked());
 
-    m_alignToCursor = new QAction(tr("Align to cursor"), this);
+    m_alignToCursor = new QAction(tr("Align to Cursor"), this);
     connect(m_alignToCursor, SIGNAL(triggered()),
             this, SLOT(slotAlignToCursorClicked()));
-    m_lockAction = new QAction(tr("Lock item"), this);
+    m_lockAction = new QAction(tr("Lock Item"), this);
     connect(m_lockAction, SIGNAL(triggered()),
             this, SLOT(slotLockItemClicked()));
 }

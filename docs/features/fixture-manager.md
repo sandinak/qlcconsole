@@ -780,17 +780,17 @@ A universe row patches where the universe goes in the Connections tab's
 own connection window, with the same rules and undo (see
 [Editing a connection](other-improvements.md#editing-a-connection)):
 
-- **Patch output…** — on a universe that goes nowhere yet: the connection
+- **Patch Output…** — on a universe that goes nowhere yet: the connection
   window opens on that universe, not patched; pick the protocol, the
   interface and (Art-Net) the node port — the visible devices' ports, free
   ones first, with **Another address…** and **Broadcast**. A port another
   universe already uses is refused.
 - On a patched universe the menu says where it goes now, e.g. **Output:
   ArtNet → CS1 (172.18.2.211) · port 1 · universe 0:0:0**, then **Edit
-  connection…** (the same window, filled in) and **Unpatch output**.
-- With several universe rows selected: **Patch N selected universes to…**
+  connection…** (the same window, filled in) and **Unpatch Output**.
+- With several universe rows selected: **Patch N Selected Universes to…**
   puts them on a device's ports in the order you clicked them, and
-  **Unpatch N selected universes** takes them all off.
+  **Unpatch N Selected Universes** takes them all off.
 - **Show in Connections** opens the Connections tab on that universe.
 
 Each is one step of **Undo Patch Change** in Connections, and the row's

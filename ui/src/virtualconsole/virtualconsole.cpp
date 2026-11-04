@@ -376,16 +376,16 @@ void VirtualConsole::initActions()
     m_addSpeedDialAction = new QAction(QIcon(":/speed.png"), tr("New Speed Dial"), this);
     connect(m_addSpeedDialAction, SIGNAL(triggered(bool)), this, SLOT(slotAddSpeedDial()), Qt::QueuedConnection);
 
-    m_addXYPadAction = new QAction(QIcon(":/xypad.png"), tr("New XY pad"), this);
+    m_addXYPadAction = new QAction(QIcon(":/xypad.png"), tr("New XY Pad"), this);
     connect(m_addXYPadAction, SIGNAL(triggered(bool)), this, SLOT(slotAddXYPad()), Qt::QueuedConnection);
 
-    m_addCueListAction = new QAction(QIcon(":/cuelist.png"), tr("New Cue list"), this);
+    m_addCueListAction = new QAction(QIcon(":/cuelist.png"), tr("New Cue List"), this);
     connect(m_addCueListAction, SIGNAL(triggered(bool)), this, SLOT(slotAddCueList()), Qt::QueuedConnection);
 
     m_addFrameAction = new QAction(QIcon(":/frame.png"), tr("New Frame"), this);
     connect(m_addFrameAction, SIGNAL(triggered(bool)), this, SLOT(slotAddFrame()), Qt::QueuedConnection);
 
-    m_addSoloFrameAction = new QAction(QIcon(":/soloframe.png"), tr("New Solo frame"), this);
+    m_addSoloFrameAction = new QAction(QIcon(":/soloframe.png"), tr("New Solo Frame"), this);
     connect(m_addSoloFrameAction, SIGNAL(triggered(bool)), this, SLOT(slotAddSoloFrame()), Qt::QueuedConnection);
 
     m_addLabelAction = new QAction(QIcon(":/label.png"), tr("New Label"), this);
@@ -407,7 +407,7 @@ void VirtualConsole::initActions()
     m_addAnimationAction = new QAction(QIcon(":/animation.png"), tr("New Animation"), this);
     connect(m_addAnimationAction, SIGNAL(triggered(bool)), this, SLOT(slotAddAnimation()), Qt::QueuedConnection);
 
-    m_addShowControlAction = new QAction(QIcon(":/show.png"), tr("New Show control"), this);
+    m_addShowControlAction = new QAction(QIcon(":/show.png"), tr("New Show Control"), this);
     connect(m_addShowControlAction, SIGNAL(triggered(bool)), this, SLOT(slotAddShowControl()), Qt::QueuedConnection);
 
     m_addCueRunnerAction = new QAction(QIcon(":/chaser.png"), tr("New Cue Runner"), this);
@@ -548,10 +548,10 @@ void VirtualConsole::initActions()
     m_frameActionGroup->addAction(m_frameNoneAction);
 
     /* Stacking menu actions */
-    m_stackingRaiseAction = new QAction(QIcon(":/up.png"), tr("Bring to front"), this);
+    m_stackingRaiseAction = new QAction(QIcon(":/up.png"), tr("Bring to Front"), this);
     connect(m_stackingRaiseAction, SIGNAL(triggered(bool)), this, SLOT(slotStackingRaise()));
 
-    m_stackingLowerAction = new QAction(QIcon(":/down.png"), tr("Send to back"), this);
+    m_stackingLowerAction = new QAction(QIcon(":/down.png"), tr("Send to Back"), this);
     connect(m_stackingLowerAction, SIGNAL(triggered(bool)), this, SLOT(slotStackingLower()));
 
     /* Put stacking actions under the same group */

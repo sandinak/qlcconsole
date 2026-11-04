@@ -105,7 +105,7 @@ happens, never per frame.
 **Nothing comes out of a universe, or only part of a rig lights.**
 Connections → tick **By universe**: every universe with where it goes.
 One reading "not patched" has no output — double-click it (or
-right-click ▸ **Edit connection…**) and pick where it goes. Select a universe to see the channels it is actually
+right-click ▸ **Edit Connection…**) and pick where it goes. Select a universe to see the channels it is actually
 sending: if the values are there, the problem is downstream (node, cable,
 the fixture's address); if not, it's the look or the patch.
 
@@ -140,7 +140,7 @@ show's rig networks in **Settings ▸ General ▸ Network**. See
 **A new Art-Net node doesn't show up, or shows amber "set its IP".** It's
 still on its factory address (2.x.x.x, 10.x.x.x, its maker's default) or
 self-assigned (169.254.x.x), not on your network. Press **Rescan**; if it
-appears, right-click it → **Set node IP address…**. If it doesn't, or the
+appears, right-click it → **Set Node IP Address…**. If it doesn't, or the
 dialog says it can't be sent to, give this computer a temporary address on
 the node's network first. See
 [Setting up a new Art-Net node](other-improvements.md#setting-up-a-new-art-net-node).
@@ -214,7 +214,7 @@ black patches. Untick its **GPU** box: it draws on the processor instead,
 and a graphics driver can't get it wrong. See [Keeping it quick](getting-started.md#keeping-it-quick).
 
 **I can't click a truss for the fixtures on it.** Show → untick
-**Fixtures on the rig** to hide mounted fixtures while placing structures;
+**Fixtures on the Rig** to hide mounted fixtures while placing structures;
 crowded structures in Front/Side collapse their fixtures into a count
 badge you can click.
 

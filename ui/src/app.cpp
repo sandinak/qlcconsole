@@ -2315,7 +2315,7 @@ void App::initActions()
     m_fileSaveAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_fileSaveAction, SIGNAL(triggered(bool)), this, SLOT(slotFileSave()));
 
-    m_fileSaveAsAction = new QAction(QIcon(":/filesaveas.png"), tr("Save &As..."), this);
+    m_fileSaveAsAction = new QAction(QIcon(":/filesaveas.png"), tr("Save &As…"), this);
     m_fileSaveAsAction->setObjectName(QStringLiteral("fileSaveAs"));
     m_fileSaveAsAction->setShortcut(saveAsShortcut());
     m_fileSaveAsAction->setShortcutContext(Qt::ApplicationShortcut);
@@ -2430,11 +2430,11 @@ void App::initActions()
     connect(m_timelineSuspendAction, SIGNAL(triggered(bool)),
             this, SLOT(slotControlTimelineSuspend(bool)));
 
-    m_liveEditAction = new QAction(QIcon(":/liveedit.png"), tr("Live edit a function"), this);
+    m_liveEditAction = new QAction(QIcon(":/liveedit.png"), tr("Live Edit a Function"), this);
     connect(m_liveEditAction, SIGNAL(triggered()), this, SLOT(slotFunctionLiveEdit()));
     m_liveEditAction->setEnabled(false);
 
-    m_liveEditVirtualConsoleAction = new QAction(QIcon(":/liveedit_vc.png"), tr("Toggle Virtual Console Live edit"), this);
+    m_liveEditVirtualConsoleAction = new QAction(QIcon(":/liveedit_vc.png"), tr("Toggle Virtual Console Live Edit"), this);
     connect(m_liveEditVirtualConsoleAction, SIGNAL(triggered()), this, SLOT(slotLiveEditVirtualConsole()));
     m_liveEditVirtualConsoleAction->setCheckable(true);
     m_liveEditVirtualConsoleAction->setEnabled(false);
@@ -2457,11 +2457,11 @@ void App::initActions()
     m_captureUndoAction->setEnabled(false);
     connect(m_captureUndoAction, SIGNAL(triggered()), this, SLOT(slotCaptureUndo()));
 
-    m_dumpDmxAction = new QAction(QIcon(":/add_dump.png"), tr("Dump DMX values to a function"), this);
+    m_dumpDmxAction = new QAction(QIcon(":/add_dump.png"), tr("Dump DMX Values to a Function"), this);
     m_dumpDmxAction->setShortcut(QKeySequence("CTRL+D"));
     connect(m_dumpDmxAction, SIGNAL(triggered()), this, SLOT(slotDumpDmxIntoFunction()));
 
-    m_controlPanicAction = new QAction(QIcon(":/panic.png"), tr("Stop ALL functions!"), this);
+    m_controlPanicAction = new QAction(QIcon(":/panic.png"), tr("Stop ALL Functions!"), this);
     m_controlPanicAction->setShortcut(QKeySequence("CTRL+SHIFT+ESC"));
     // The show controls' button says the short form (iconText); the Control
     // menu keeps the full name.
@@ -2471,22 +2471,22 @@ void App::initActions()
     connect(m_controlPanicAction, SIGNAL(triggered(bool)), this, SLOT(slotControlPanic()));
 
     m_fadeAndStopMenu = new QMenu();
-    QAction *fade1 = new QAction(tr("Fade 1 second and stop"), this);
+    QAction *fade1 = new QAction(tr("Fade 1 Second and Stop"), this);
     fade1->setData(QVariant(1000));
     connect(fade1, SIGNAL(triggered()), this, SLOT(slotFadeAndStopAll()));
     m_fadeAndStopMenu->addAction(fade1);
 
-    QAction *fade5 = new QAction(tr("Fade 5 seconds and stop"), this);
+    QAction *fade5 = new QAction(tr("Fade 5 Seconds and Stop"), this);
     fade5->setData(QVariant(5000));
     connect(fade5, SIGNAL(triggered()), this, SLOT(slotFadeAndStopAll()));
     m_fadeAndStopMenu->addAction(fade5);
 
-    QAction *fade10 = new QAction(tr("Fade 10 seconds and stop"), this);
+    QAction *fade10 = new QAction(tr("Fade 10 Seconds and Stop"), this);
     fade10->setData(QVariant(10000));
     connect(fade10, SIGNAL(triggered()), this, SLOT(slotFadeAndStopAll()));
     m_fadeAndStopMenu->addAction(fade10);
 
-    QAction *fade30 = new QAction(tr("Fade 30 seconds and stop"), this);
+    QAction *fade30 = new QAction(tr("Fade 30 Seconds and Stop"), this);
     fade30->setData(QVariant(30000));
     connect(fade30, SIGNAL(triggered()), this, SLOT(slotFadeAndStopAll()));
     m_fadeAndStopMenu->addAction(fade30);
@@ -3057,7 +3057,7 @@ void App::initMenuBar()
         // is already one click away via its own tab, and via View's jump
         // list) — this menu's whole reason to exist is actions that don't
         // live anywhere else yet.
-        QAction* editorAction = fixturesMenu->addAction(tr("Fixture Editor..."));
+        QAction* editorAction = fixturesMenu->addAction(tr("Fixture Editor…"));
         connect(editorAction, &QAction::triggered, this, [this]() {
             AppUtil::launchFixtureEditor(QString(), this);
         });
@@ -7889,20 +7889,20 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             m_doc->function(ShowManager::instance() != NULL
                                 ? ShowManager::instance()->currentShowId()
                                 : Function::invalidId()));
-        QAction *aCal = menu.addAction(tr("Calibrate offset…"));
+        QAction *aCal = menu.addAction(tr("Calibrate Offset…"));
         aCal->setEnabled(curShow != NULL);
         if (curShow == NULL)
             aCal->setToolTip(tr("Select a show in the Show Manager first."));
         connect(aCal, &QAction::triggered, this, [this]() { openTimecodeCalibration(); });
         menu.addSeparator();
 
-        QAction *hdr = menu.addAction(tr("Timecode source universe"));
+        QAction *hdr = menu.addAction(tr("Timecode Source Universe"));
         hdr->setEnabled(false);
 
         QActionGroup *grp = new QActionGroup(&menu);
         const qint32 cur = (tc != NULL) ? tc->sourceUniverse() : -1;
 
-        QAction *anyA = menu.addAction(tr("Any universe (auto-detect)"));
+        QAction *anyA = menu.addAction(tr("Any Universe (auto-detect)"));
         anyA->setCheckable(true);
         anyA->setActionGroup(grp);
         anyA->setChecked(cur < 0);
@@ -7916,7 +7916,7 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         });
 
         // LTC from the audio input: a source of its own, not a universe
-        QAction *ltcA = menu.addAction(tr("Audio input (LTC)"));
+        QAction *ltcA = menu.addAction(tr("Audio Input (LTC)"));
         ltcA->setCheckable(true);
         ltcA->setActionGroup(grp);
         ltcA->setChecked(cur == TimecodeSource::LtcUniverse);
@@ -8003,7 +8003,7 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             QAction *hint = menu.addAction(tr("(waiting for the source to roll…)"));
             hint->setEnabled(false);
         }
-        menu.addAction(tr("Patch a MIDI input (Connections)…"), this, [this]() {
+        menu.addAction(tr("Patch a MIDI Input (Connections)…"), this, [this]() {
             if (InputOutputManager::instance() != NULL && m_tab != NULL)
                 m_tab->setCurrentWidget(InputOutputManager::instance());
         });
@@ -9108,18 +9108,18 @@ void App::showTeachingMenu()
     menu.setObjectName(QStringLiteral("teachingMenu"));
     menu.setToolTipsVisible(true);
     TeachingSettings *teach = m_doc->teachingSettings();
-    menu.addAction(tr("What Teaching mode does"), this, [this]() {
+    menu.addAction(tr("What Teaching Mode Does"), this, [this]() {
         HelpBrowser::open(QStringLiteral("teaching.md"));
     });
     if (!teach->link().isEmpty())
     {
         const QString link = teach->link();
-        menu.addAction(teach->lesson().isEmpty() ? tr("Lesson handout")
+        menu.addAction(teach->lesson().isEmpty() ? tr("Lesson Handout")
                                                  : tr("Lesson %1 handout").arg(teach->lesson()),
                        this, [link]() { QDesktopServices::openUrl(QUrl::fromUserInput(link)); });
     }
     menu.addSeparator();
-    QAction *settings = menu.addAction(tr("Teaching settings…"), this, [this]() { openShowSettings(); });
+    QAction *settings = menu.addAction(tr("Teaching Settings…"), this, [this]() { openShowSettings(); });
     settings->setEnabled(m_doc->mode() == Doc::Design);
     settings->setToolTip(tr("File \342\226\270 Show Settings: turn Teaching mode off, let real output through"));
     menu.exec(QCursor::pos());

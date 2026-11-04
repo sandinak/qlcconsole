@@ -62,6 +62,21 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Every menu says its items the same way.** About 170 menu items that
+  were still in sentence case (the Connections tree, the plot's Show and
+  Lock menus, Focus and Venue menus, the Workbench's + Scene / + Effect,
+  Build's + New, the show timeline, the power widget…) are now Title Case
+  with "…" where a dialog follows, like the rest. The Connections menus put
+  Collapse / Expand All Below and Add Universe on top and Delete last, and
+  say Delete for what destroys ("Delete Universe…", "Delete Target…",
+  "Delete Port"; "Forget this patch" is **Unpatch…**). The Workbench's
+  **+ Effect** menu starts with **Effect Palette…** (was "Effect look…"), as
+  Build ▸ Effects' **+ New** does. A new test reads every menu label in the
+  UI's sources and fails on one off the canon.
+- **Lengths in feet where the show is in feet.** The plot's group frame
+  editor (origin, cell pitch, a member's position), the patch plan's cable
+  distance, the line-of-sight tooltip and Focus mode's step now follow
+  Settings ▸ Units (5' 6" or 1.68 m); they showed metres only.
 - **An Aim at an Area covers the area** (board Q209). Every light aimed at
   a sized Area used to point at its centre, at the area's own height, and
   the corners stayed dark. Now the area is split into one zone per light

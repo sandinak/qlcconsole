@@ -55,20 +55,20 @@ QString UniversePatcher::portAddressText(quint32 pa)
 
 QString UniversePatcher::patchSelectionText(int count)
 {
-    return tr("Patch %1 selected universes to…").arg(count);
+    return tr("Patch %1 Selected Universes to…").arg(count);
 }
 
 QString UniversePatcher::unpatchSelectionText(int patchedCount)
 {
     return patchedCount == 1
-        ? tr("Unpatch the 1 patched universe of the selection")
-        : tr("Unpatch %1 selected universes").arg(patchedCount);
+        ? tr("Unpatch the 1 Patched Universe of the Selection")
+        : tr("Unpatch %1 Selected Universes").arg(patchedCount);
 }
 
 QString UniversePatcher::retargetText(const QString &pluginName)
 {
     return pluginName == QLatin1String("WLED") ? tr("WLED Devices / Backup Lanterns…")
-                                               : tr("Change interface / target…");
+                                               : tr("Change Interface / Target…");
 }
 
 bool UniversePatcher::supportsTargets(const QString &pluginName) const
