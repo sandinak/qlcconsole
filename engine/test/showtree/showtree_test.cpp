@@ -10222,3 +10222,354 @@ void ShowTree_Test::effectKindIsForEffectsOnly()
     QLCPalette effect(QLCPalette::Effect, m_doc);
     QCOMPARE(st->effectKind(&effect), QString("Other"));
 }
+
+/****************************************************************************
+ * Bring Into This Cue / Start Here Instead (the grey row's two actions)
+ ****************************************************************************/
+
+namespace
+{
+QByteArray treeXml(const ShowTreeController *st)
+{
+    QByteArray xml;
+    QBuffer buffer(&xml);
+    buffer.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buffer);
+    w.setAutoFormatting(true);
+    for (const Production &p : st->productions())
+        ShowTree::saveXML(&w, p);
+    return xml;
+}
+}
+
+/* Bring a carried-in layer into a cue: it holds the carried values (cue look,
+   inherited colour and all), every cue plays as before, the cues after it
+   track from here, and the earlier cue is left alone. */
+void ShowTree_Test::bringIntoKeepsEveryCueTheSame()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    FixtureGroup *c = group("C", { m_fixtures[2] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    const quint32 blue = colour("Blue");
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setName("Red");
+    red->setValue(QLCPalette::colorToString(QColor(Qt::red), QColor(Qt::black)));
+    m_doc->addPalette(red);
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 c4 = st->addCue(listId, 2, "Four");
+    // 1: A and C in Full; the cue's Blue reaches both; B in Half.
+    const quint32 la = st->addLayer(c1, groupTarget(a->id()));
+    QVERIFY(st->setLayerLook(c1, la, st->lookForPalette(full)));
+    const quint32 lc = st->addLayer(c1, groupTarget(c->id()));
+    QVERIFY(st->setLayerLook(c1, lc, st->lookForPalette(full)));
+    const quint32 lb = st->addLayer(c1, groupTarget(b->id()));
+    QVERIFY(st->setLayerLook(c1, lb, st->lookForPalette(half)));
+    QVERIFY(st->setCueLook(c1, st->lookForPalette(blue)));
+    // 2: Red for the cue, reaching B's own layer; A and C are carried in.
+    QVERIFY(st->setTargetLook(c2, groupTarget(b->id()), st->lookForPalette(half)));
+    QVERIFY(st->setCueLook(c2, st->lookForPalette(red->id())));
+    // 4: B changes again.
+    QVERIFY(st->setTargetLook(c4, groupTarget(b->id()), st->lookForPalette(full)));
+
+    const QList<quint32> cues { c1, c2, c3, c4 };
+    auto play = [&]() {
+        QList<QHash<quint32, uchar>> out;
+        for (quint32 id : cues)
+        {
+            st->previewCue(id);
+            out << settle(6);
+        }
+        return out;
+    };
+    const QList<QHash<quint32, uchar>> dmxBefore = play();
+    QCOMPARE(dmxBefore.at(1).value(0), uchar(255));     // A, carried into 2
+    const CueList before = *st->cueList(listId);
+    const QByteArray xmlBefore = treeXml(st);
+
+    // A: carried into 2, with Blue from the cue look of 1 (the cue's Red
+    // doesn't reach it) -- brought in, it keeps exactly that.
+    QVERIFY(layersOn(st, c2, groupTarget(a->id())).isEmpty());
+    QVERIFY(st->bringIntoPlan(c2, groupTarget(a->id())).ok);
+    QString why;
+    QVERIFY2(st->bringIntoCue(c2, groupTarget(a->id()), &why), qPrintable(why));
+    QVERIFY(st->undoText().startsWith("Bring"));
+    QVERIFY(!stageDiffers(before, *st->cueList(listId)));
+    QCOMPARE(play(), dmxBefore);
+    const QList<const Layer *> own = layersOn(st, c2, groupTarget(a->id()));
+    QCOMPARE(own.count(), 1);
+    QCOMPARE(own.first()->look(KeyDimmer)->palettes, QList<quint32>({ full }));
+    QCOMPARE(own.first()->look(KeyColour)->palettes, QList<quint32>({ blue }));
+    QCOMPARE(own.first()->release, false);
+    // The earlier cue is unchanged; the cues after track from here.
+    QCOMPARE(st->cue(c1)->layers.count(), 3);
+    QCOMPARE(st->cue(c2)->layers.count(), 2);
+    QList<ResolvedCue> r = resolve(*st->cueList(listId));
+    CHECK_VALUE(r[1], a->id(), KeyDimmer, full, Origin::Own, c2);
+    CHECK_VALUE(r[2], a->id(), KeyDimmer, full, Origin::Tracked, c2);
+    CHECK_VALUE(r[3], a->id(), KeyColour, blue, Origin::Tracked, c2);
+    // One undo step, exactly.
+    QVERIFY(st->undo());
+    QCOMPARE(treeXml(st), xmlBefore);
+
+    // C: Blue from 1 too; 2's Red is a cue look that doesn't reach it, and
+    // must not once the cue has a layer of C's.
+    QVERIFY2(st->bringIntoCue(c2, groupTarget(c->id()), &why), qPrintable(why));
+    QVERIFY(!stageDiffers(before, *st->cueList(listId)));
+    QCOMPARE(play(), dmxBefore);
+    r = resolve(*st->cueList(listId));
+    CHECK_VALUE(r[1], c->id(), KeyColour, blue, Origin::Own, c2);
+    // Brought in again: it is the cue's own now.
+    QVERIFY(!st->bringIntoPlan(c2, groupTarget(c->id())).ok);
+    QVERIFY(st->bringIntoPlan(c2, groupTarget(c->id())).why.contains("own"));
+    QVERIFY(st->undo());
+    QCOMPARE(treeXml(st), xmlBefore);
+}
+
+/* Start Here Instead: the layer begins in this cue; the cue that set it and
+   those between no longer have it; this cue and later ones play as before. */
+void ShowTree_Test::startHereMovesTheStartForward()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    const quint32 blue = colour("Blue");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 c4 = st->addCue(listId, 2, "Four");
+    const quint32 la = st->addLayer(c1, groupTarget(a->id()));
+    QVERIFY(st->setLayerLook(c1, la, st->lookForPalette(full)));
+    QVERIFY(st->setLayerLook(c1, la, st->lookForPalette(blue)));
+    const quint32 lb = st->addLayer(c1, groupTarget(b->id()));
+    QVERIFY(st->setLayerLook(c1, lb, st->lookForPalette(half)));
+    // 2 sets A again (Half); 3 changes only B; 4 tracks.
+    QVERIFY(st->setTargetLook(c2, groupTarget(a->id()), st->lookForPalette(half)));
+    QVERIFY(st->setTargetLook(c3, groupTarget(b->id()), st->lookForPalette(full)));
+
+    const QList<quint32> cues { c1, c2, c3, c4 };
+    auto play = [&]() {
+        QList<QHash<quint32, uchar>> out;
+        for (quint32 id : cues)
+        {
+            st->previewCue(id);
+            out << settle(6);
+        }
+        return out;
+    };
+    const QList<QHash<quint32, uchar>> dmxBefore = play();
+    QCOMPARE(dmxBefore.at(0).value(0), uchar(255));
+    QCOMPARE(dmxBefore.at(2).value(0), uchar(127));
+    const CueList before = *st->cueList(listId);
+    const QByteArray xmlBefore = treeXml(st);
+
+    const ShowTreeController::TrackOp plan = st->startHerePlan(c3, groupTarget(a->id()));
+    QVERIFY2(plan.ok, qPrintable(plan.why));
+    QCOMPARE(plan.from, c1);
+    QCOMPARE(plan.lose, QList<quint32>({ c1, c2 }));
+    QString why;
+    QList<quint32> lost;
+    QVERIFY2(st->startLayerHere(c3, groupTarget(a->id()), &why, &lost), qPrintable(why));
+    QCOMPARE(lost, QList<quint32>({ c1, c2 }));
+    QVERIFY(st->undoText().startsWith("Start"));
+
+    // 1 and 2 don't have A; B is as it was; 3 and 4 play as before.
+    QVERIFY(layersOn(st, c1, groupTarget(a->id())).isEmpty());
+    QVERIFY(layersOn(st, c2, groupTarget(a->id())).isEmpty());
+    QCOMPARE(layersOn(st, c3, groupTarget(a->id())).count(), 1);
+    const QList<QHash<quint32, uchar>> dmxAfter = play();
+    QCOMPARE(dmxAfter.at(0).value(0), uchar(0));
+    QCOMPARE(dmxAfter.at(1).value(0), uchar(0));
+    QCOMPARE(dmxAfter.at(2), dmxBefore.at(2));
+    QCOMPARE(dmxAfter.at(3), dmxBefore.at(3));
+    for (int i = 0; i < 4; ++i)
+        QCOMPARE(dmxAfter.at(i).value(1), dmxBefore.at(i).value(1));       // B untouched
+    quint32 badCue = invalidId();
+    QVERIFY(stageDiffers(before, *st->cueList(listId), &badCue));
+    QCOMPARE(badCue, c1);
+    // This cue holds A with the carried values: Half (from 2) and Blue (from 1).
+    QList<ResolvedCue> r = resolve(*st->cueList(listId));
+    CHECK_VALUE(r[2], a->id(), KeyDimmer, half, Origin::Own, c3);
+    CHECK_VALUE(r[2], a->id(), KeyColour, blue, Origin::Own, c3);
+    CHECK_VALUE(r[3], a->id(), KeyDimmer, half, Origin::Tracked, c3);
+    QVERIFY(r[0].layer(groupTarget(a->id())) == nullptr);
+    QVERIFY(r[1].layer(groupTarget(a->id())) == nullptr);
+
+    // One undo step, exactly.
+    QVERIFY(st->undo());
+    QCOMPARE(treeXml(st), xmlBefore);
+    QVERIFY(!stageDiffers(before, *st->cueList(listId)));
+    QCOMPARE(play(), dmxBefore);
+}
+
+/* The cases that are handled or refused with a reason: an include, a Block
+   cue between, a Cue-only cue, the base cue. */
+void ShowTree_Test::trackOpsEdgeCases()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const Target ta = groupTarget(a->id()), tb = groupTarget(b->id());
+    QString why;
+
+    // --- an include: cue 5 includes cue 1, which Start Here would change.
+    {
+        const quint32 listId = st->addCueList(prod, "Inc", ListMode::Tracking);
+        const quint32 c1 = st->addCue(listId, -1, "One");
+        const quint32 c2 = st->addCue(listId, 0, "Two");
+        const quint32 c3 = st->addCue(listId, 1, "Three");
+        const quint32 c4 = st->addCue(listId, 2, "Four");
+        const quint32 la = st->addLayer(c1, ta);
+        QVERIFY(st->setLayerLook(c1, la, st->lookForPalette(full)));
+        QVERIFY(st->setTargetLook(c4, tb, st->lookForPalette(half)));
+        QVERIFY(st->addInclude(c4, c1, &why));
+        const CueList before = *st->cueList(listId);
+        const QByteArray xml = treeXml(st);
+        const ShowTreeController::TrackOp op = st->startHerePlan(c3, ta);
+        QVERIFY(!op.ok);
+        QVERIFY2(op.why.contains("includes"), qPrintable(op.why));
+        QVERIFY(!st->startLayerHere(c3, ta, &why));
+        QCOMPARE(treeXml(st), xml);                      // refused: nothing changed
+        // Bringing it in leaves the include alone.
+        QVERIFY2(st->bringIntoCue(c3, ta, &why), qPrintable(why));
+        QVERIFY(!stageDiffers(before, *st->cueList(listId)));
+        QVERIFY(st->cue(c1)->layers.count() == 1);
+        (void)c2;
+    }
+    // --- a layer here from an include (a Block cue): brought in, not moved.
+    {
+        const quint32 listId = st->addCueList(prod, "Blk", ListMode::Tracking);
+        const quint32 c1 = st->addCue(listId, -1, "One");
+        const quint32 c2 = st->addCue(listId, 0, "Two");
+        const quint32 la = st->addLayer(c1, ta);
+        QVERIFY(st->setLayerLook(c1, la, st->lookForPalette(full)));
+        QVERIFY(st->setCueMode(c2, CueMode::Block));
+        QVERIFY(st->addInclude(c2, c1, &why));
+        const CueList before = *st->cueList(listId);
+        QVERIFY(!st->startHerePlan(c2, ta).ok);
+        QVERIFY2(st->bringIntoPlan(c2, ta).ok, qPrintable(st->bringIntoPlan(c2, ta).why));
+        QVERIFY(st->bringIntoCue(c2, ta, &why));
+        QVERIFY(!stageDiffers(before, *st->cueList(listId)));
+    }
+    // --- a Block cue between: the layer starts at the Block cue, not before.
+    {
+        const quint32 listId = st->addCueList(prod, "Block", ListMode::Tracking);
+        const quint32 c1 = st->addCue(listId, -1, "One");
+        const quint32 c2 = st->addCue(listId, 0, "Two");
+        const quint32 c3 = st->addCue(listId, 1, "Three");
+        const quint32 c4 = st->addCue(listId, 2, "Four");
+        const quint32 l1 = st->addLayer(c1, ta);
+        QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(half)));
+        QVERIFY(st->setCueMode(c2, CueMode::Block));
+        const quint32 l2 = st->addLayer(c2, ta);
+        QVERIFY(st->setLayerLook(c2, l2, st->lookForPalette(full)));
+        QVERIFY(st->setTargetLook(c4, tb, st->lookForPalette(full)));
+        const CueList before = *st->cueList(listId);
+        const ShowTreeController::TrackOp op = st->startHerePlan(c4, ta);
+        QVERIFY2(op.ok, qPrintable(op.why));
+        QCOMPARE(op.from, c2);
+        QCOMPARE(op.lose, QList<quint32>({ c2, c3 }));
+        QVERIFY2(st->startLayerHere(c4, ta, &why), qPrintable(why));
+        QCOMPARE(st->cue(c1)->layers.count(), 1);        // before the Block cue: as it was
+        QVERIFY(layersOn(st, c2, ta).isEmpty());
+        QVERIFY(layersOn(st, c3, ta).isEmpty());
+        const QList<ResolvedCue> r = resolve(*st->cueList(listId));
+        QVERIFY(r[3].layer(ta) != nullptr);
+        QCOMPARE(r[3].layer(ta)->values.value(KeyDimmer).look.palettes, QList<quint32>({ full }));
+        quint32 bad = invalidId();
+        QVERIFY(stageDiffers(before, *st->cueList(listId), &bad));
+        QCOMPARE(bad, c2);                               // 1 is as it was; 2 and 3 lost it
+    }
+    // --- a Cue-only cue: it can't start the layer; one between is left alone.
+    {
+        const quint32 listId = st->addCueList(prod, "Only", ListMode::Tracking);
+        const quint32 c1 = st->addCue(listId, -1, "One");
+        const quint32 c2 = st->addCue(listId, 0, "Two");
+        const quint32 c3 = st->addCue(listId, 1, "Three");
+        const quint32 c4 = st->addCue(listId, 2, "Four");
+        const quint32 l1 = st->addLayer(c1, ta);
+        QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+        QVERIFY(st->setCueMode(c2, CueMode::CueOnly));
+        QVERIFY(st->setTargetLook(c2, tb, st->lookForPalette(half)));
+        QVERIFY(st->setCueMode(c4, CueMode::CueOnly));
+        const CueList before = *st->cueList(listId);
+        // 4 is Cue-only: the cues after it would lose A.
+        const ShowTreeController::TrackOp none = st->startHerePlan(c4, ta);
+        QVERIFY(!none.ok);
+        QVERIFY2(none.why.contains("Cue-only"), qPrintable(none.why));
+        // Bringing it into a Cue-only cue changes nothing that plays.
+        QVERIFY2(st->bringIntoCue(c4, ta, &why), qPrintable(why));
+        QVERIFY(!stageDiffers(before, *st->cueList(listId)));
+        QVERIFY(st->undo());
+        // From 3 (a plain cue), through the Cue-only 2 to 1.
+        const ShowTreeController::TrackOp op = st->startHerePlan(c3, ta);
+        QVERIFY2(op.ok, qPrintable(op.why));
+        QCOMPARE(op.lose, QList<quint32>({ c1, c2 }));
+        QVERIFY2(st->startLayerHere(c3, ta, &why), qPrintable(why));
+        QVERIFY(layersOn(st, c2, tb).count() == 1);      // 2 keeps its own B
+        QVERIFY(layersOn(st, c2, ta).isEmpty());
+        quint32 bad = invalidId();
+        QVERIFY(stageDiffers(before, *st->cueList(listId), &bad));
+        QCOMPARE(bad, c1);
+        const QList<ResolvedCue> r = resolve(*st->cueList(listId));
+        QVERIFY(r[2].layer(ta) != nullptr);
+        QVERIFY(r[3].layer(ta) != nullptr);              // 4 tracks from 3
+    }
+    // --- the base cue: releasing A goes back to it, so it can't lose A.
+    {
+        const quint32 listId = st->addCueList(prod, "Base", ListMode::Tracking);
+        const quint32 c1 = st->addCue(listId, -1, "One");
+        const quint32 c2 = st->addCue(listId, 0, "Two");
+        const quint32 c3 = st->addCue(listId, 1, "Three");
+        const quint32 c4 = st->addCue(listId, 2, "Four");
+        const quint32 l1 = st->addLayer(c1, ta);
+        QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+        QVERIFY(st->setTargetLook(c2, tb, st->lookForPalette(half)));
+        QVERIFY(st->setBaseCue(listId, c1));
+        QVERIFY(st->setTargetRelease(c4, ta, true));
+        const ShowTreeController::TrackOp op = st->startHerePlan(c3, ta);
+        QVERIFY(!op.ok);
+        QVERIFY2(op.why.contains("base cue"), qPrintable(op.why));
+        QVERIFY(st->bringIntoPlan(c3, ta).ok);
+    }
+    // --- the cue's own looks must not reach what is brought in: A carries a
+    // level only, and cue 2 has a Blue look for its own layers.
+    {
+        const quint32 blue = colour("Blue");
+        const quint32 listId = st->addCueList(prod, "Looks", ListMode::Tracking);
+        const quint32 c1 = st->addCue(listId, -1, "One");
+        const quint32 c2 = st->addCue(listId, 0, "Two");
+        const quint32 l1 = st->addLayer(c1, ta);
+        QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+        QVERIFY(st->setTargetLook(c2, tb, st->lookForPalette(half)));
+        QVERIFY(st->setCueLook(c2, st->lookForPalette(blue)));
+        const CueList before = *st->cueList(listId);
+        QVERIFY2(st->bringIntoCue(c2, ta, &why), qPrintable(why));
+        QVERIFY(!stageDiffers(before, *st->cueList(listId)));
+        const QList<const Layer *> own = layersOn(st, c2, ta);
+        QCOMPARE(own.count(), 1);
+        QVERIFY(own.first()->look(KeyColour) != nullptr && own.first()->look(KeyColour)->none);
+    }
+    // --- the first cue and a layer the cue owns: nothing to do.
+    {
+        const quint32 listId = st->addCueList(prod, "First", ListMode::Tracking);
+        const quint32 c1 = st->addCue(listId, -1, "One");
+        const quint32 l1 = st->addLayer(c1, ta);
+        QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+        QVERIFY(!st->bringIntoPlan(c1, ta).ok);
+        QVERIFY(!st->startHerePlan(c1, ta).ok);
+        QVERIFY(!st->bringIntoPlan(c1, tb).ok);          // not on stage at all
+    }
+}

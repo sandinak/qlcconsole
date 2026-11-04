@@ -299,7 +299,11 @@ and the Workbench's (docked) layer row.
 - Places on top: the tree (+ Cue List…, + Hit for This Cue, + Cue, +
   Sub-cue, Merge Layers, N Selected Layers ▸), the Workbench (Solo This
   Layer, Cue Mode ▸, Show in Tree). A layer carried into the cue has only
-  Open, Release and Why is this on?.
+  Open, Release and Why is this on?, and two more Places on top, in the tree
+  and the Workbench alike: Bring Into This Cue and Start Here Instead (the
+  second names the cues that lose the layer in its tooltip and a confirm;
+  both are greyed with the reason when they could not keep the show the
+  same). Two items more in the Show Tree menus, by the ask of 2026-11-03.
 
 **Cue / sub-cue / hit** — the tree's cue rows.
 - Open: Open in Workbench

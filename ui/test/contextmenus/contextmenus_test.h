@@ -53,6 +53,7 @@ private slots:
     void aLookRowPutsItsOwnItemsOnTop();
     void aFunctionHasOneMenuEverywhere();
     void aLayerHasOneMenuEverywhere();
+    void aCarriedInLayerOffersTheTrackOps();
     void theShowTreeMenusFollowTheCanon();
     void theRigViewFollowsTheCanon();
 
