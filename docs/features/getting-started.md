@@ -70,7 +70,13 @@ tablet and setting up users.
   the time. For a show never saved, the next launch offers to **recover
   the unsaved work**. For a saved show the copy is *Show*.qlcc.autosave
   beside it (see [Troubleshooting](troubleshooting.md#files-and-fixtures)).
-  Saving, or a clean quit, removes it.
+  Saving, or a clean quit, removes it. If a recovery copy can't be written
+  (a full disk, a folder you can't write to), the footer turns to **⚠
+  Autosave failed**; hover it for why, and save the show.
+- **A save that can't finish never spoils the show.** The new file is
+  written beside the old one first; if it can't be written whole, the old
+  one stays as it was and the error names the file. Make room or Save As
+  somewhere else.
 - A .qlcc **carries its own copies** of every fixture definition, effect
   script and RGB script it uses that isn't part of the app, so it opens
   complete on another computer; where that computer's copy differs, the

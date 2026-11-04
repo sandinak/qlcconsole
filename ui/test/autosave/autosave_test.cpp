@@ -20,6 +20,8 @@
 #include <QtTest>
 #include <QSettings>
 #include <QTemporaryDir>
+#include <QXmlStreamWriter>
+#include <QLabel>
 #include <QScopeGuard>
 #include <QMessageBox>
 #include <QAbstractButton>
@@ -272,6 +274,83 @@ void Autosave_Test::aModifiedShowWritesARecoveryCopyThatLoadsBack()
     QVERIFY(QFile::remove(copy));
     m_app->slotAutosave();
     QVERIFY(!QFile::exists(copy));
+}
+
+/* wfaudit 2026-11-03: a save or autosave that can't be written whole never
+   replaces the file it was to replace, and says so: the status chip for an
+   autosave, the error (naming the file) for a save. */
+void Autosave_Test::aSaveThatCannotWriteKeepsTheShowAndSaysSo()
+{
+    // A writer whose writes don't reach the file: not "written whole".
+    {
+        QTemporaryDir tmp;
+        QFile ro(tmp.filePath("ro.xml"));
+        QVERIFY(ro.open(QIODevice::WriteOnly));
+        ro.write("x");
+        ro.close();
+        QVERIFY(ro.open(QIODevice::ReadOnly));
+        QXmlStreamWriter w(&ro);
+        w.writeStartDocument();
+        w.writeTextElement("A", QString(64, QLatin1Char('a')));
+        w.writeEndDocument();
+        QVERIFY(!App::writtenWhole(w, &ro));
+        ro.close();
+        QFile ok(tmp.filePath("ok.xml"));
+        QVERIFY(ok.open(QIODevice::WriteOnly));
+        QXmlStreamWriter w2(&ok);
+        w2.writeStartDocument();
+        w2.writeTextElement("A", "b");
+        w2.writeEndDocument();
+        QVERIFY(App::writtenWhole(w2, &ok));
+    }
+
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString folder = dir.filePath("locked");
+    QVERIFY(QDir().mkpath(folder));
+    const QString show = folder + "/Kept.qxw";
+    Doc *doc = m_app->doc();
+    doc->clearContents();
+    auto tidy = qScopeGuard([this, doc, folder]() {
+        QFile::setPermissions(folder, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        doc->clearContents();
+        doc->resetModified();
+        m_app->setFileName(QString());
+    });
+    QVERIFY(addNamedFixture(doc, "First", 0) != nullptr);
+    QCOMPARE(m_app->saveXML(show), QFile::NoError);
+    const QByteArray before = [&]() {
+        QFile f(show);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    }();
+    QVERIFY(!before.isEmpty());
+
+    // The folder can't be written any more (a locked share, a full volume).
+    QVERIFY(QFile::setPermissions(folder, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+    {
+        QFile probe(folder + "/probe");
+        if (probe.open(QIODevice::WriteOnly))
+        {
+            probe.close();
+            probe.remove();
+            QSKIP("this account writes into a read-only folder (root): nothing to test");
+        }
+    }
+    QVERIFY(addNamedFixture(doc, "Second", 10) != nullptr);
+    QVERIFY(m_app->saveXML(show) != QFile::NoError);
+    {
+        QFile f(show);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), before);          // the show on disk as it was
+    }
+    QVERIFY(doc->isModified());
+
+    // The autosave beside it can't be written either: the chip says so.
+    m_app->setFileName(show);
+    m_app->slotAutosave();
+    QVERIFY(m_app->m_statusDirtyLabel != nullptr);
+    QCOMPARE(m_app->m_statusDirtyLabel->text(), QString("⚠ Autosave failed"));
+    QVERIFY(m_app->m_statusDirtyLabel->toolTip().contains("Save the show"));
 }
 
 void Autosave_Test::anUntitledShowsRecoveryCopyIsWhereStartUpLooks()

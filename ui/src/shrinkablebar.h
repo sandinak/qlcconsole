@@ -49,6 +49,11 @@ public:
         setBackgroundRole(bar->backgroundRole());
         setAutoFillBackground(bar->autoFillBackground());
         setPalette(bar->palette());
+        /* The scroll bar comes and goes as the row's content changes too (a
+           notice shown, a combo's text), not only on a resize: the bar's
+           height follows it, or the row is squashed under the scroll bar. */
+        connect(horizontalScrollBar(), &QScrollBar::rangeChanged, this, [this]() { updateGeometry(); },
+                Qt::QueuedConnection);      // queued: it changes inside the parent's layout pass
     }
 
     QSize minimumSizeHint() const override
@@ -62,6 +67,15 @@ public:
     }
 
 protected:
+    bool event(QEvent *e) override
+    {
+        const bool done = QScrollArea::event(e);
+        // The row asked for a new layout (a notice shown, a label longer):
+        // the scroll bar may have come in, and the bar's height with it.
+        if (e->type() == QEvent::LayoutRequest)
+            updateGeometry();
+        return done;
+    }
     void resizeEvent(QResizeEvent *e) override
     {
         QScrollArea::resizeEvent(e);
@@ -74,7 +88,7 @@ private:
         if (widget() == nullptr)
             return 0;
         int h = widget()->sizeHint().height();
-        if (widget()->minimumSizeHint().width() > width())
+        if (horizontalScrollBar()->maximum() > 0 || widget()->minimumSizeHint().width() > width())
             h += horizontalScrollBar()->sizeHint().height();
         return h;
     }

@@ -715,6 +715,9 @@ QString TreeCueStack::dropPlanOn(int layer, const QMimeData *mime, bool separate
         if (lid == ShowTree::invalidId())
             t = rs.at(layer).target;
     }
+    const QString refusal = m_view->dropRefusal(m_cue, lid, mime, t);
+    if (!refusal.isEmpty())
+        return QStringLiteral("!") + refusal;
     const QString hint = m_view->dropHint(m_cue, lid, mime, separate, t);
     if (!m_view->acceptsDrop(m_cue, lid, mime, t))
         return hint.isEmpty() ? QString() : QStringLiteral("!") + hint;
@@ -812,6 +815,11 @@ bool TreeCueStack::dropOn(int layer, const QMimeData *mime, bool separate)
             t = rs.at(layer).target;
     }
     return m_view->dropMime(m_cue, lid, mime, separate, t, /*stayOnCue*/ true);
+}
+
+QString TreeCueStack::lastRefusal() const
+{
+    return m_view.isNull() ? QString() : m_view->lastDropFailure();
 }
 
 bool TreeCueStack::showMenu(int layer, int attribute, const QPoint &globalPos)

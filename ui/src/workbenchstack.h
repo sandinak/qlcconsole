@@ -166,6 +166,8 @@ public:
     virtual QString dropPlanOn(int layer, const QMimeData *mime, bool separate) const;
     /** Drop it: one step. */
     virtual bool dropOn(int layer, const QMimeData *mime, bool separate);
+    /** Why the last dropOn() that returned false did nothing ("" unknown). */
+    virtual QString lastRefusal() const { return QString(); }
     /** The context menu of layer @a layer (or its attribute row
      *  @a attribute, -1: the layer). False: the Workbench's own. */
     virtual bool showMenu(int layer, int attribute, const QPoint &globalPos);

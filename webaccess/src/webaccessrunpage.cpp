@@ -188,6 +188,7 @@ function connect(){
       if(p[3]==='refused')msg('Refused: GO from the phone is off.');
       else if(p[3]==='needpin'){unlocked=false;askPin('')}
       else if(p[3]==='nothing')msg('Nothing to play.');
+      else if(p[3]==='design')msg('Hits fire in Operate: switch the console to Operate.');
       else msg('')}}}
 var pendingPin='';
 $('pinok').onclick=function(){pendingPin=$('pin').value;send('QLC+RUN|pin|'+pendingPin)};

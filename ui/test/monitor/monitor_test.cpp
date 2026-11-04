@@ -1322,6 +1322,47 @@ void Monitor_Test::hoveringThePlotKeepsItStill()
     // The readout follows the pointer all the same.
     readings.removeDuplicates();
     QVERIFY2(readings.size() > 6, qPrintable(readings.join(" | ")));
+
+    // A bare bar: a row that grows past its page without the page resizing.
+    {
+        QWidget page;
+        QVBoxLayout *pl = new QVBoxLayout(&page);
+        pl->setContentsMargins(0, 0, 0, 0);
+        pl->setSpacing(0);
+        QWidget *above = new QWidget(&page);
+        above->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        pl->addWidget(above);
+        QWidget *row = new QWidget;
+        QHBoxLayout *rl = new QHBoxLayout(row);
+        QLabel *note = new QLabel(QStringLiteral("short"), row);
+        rl->addWidget(note);
+        ShrinkableBar *lone = new ShrinkableBar(row, &page);
+        pl->addWidget(lone);
+        page.resize(300, 200);
+        page.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&page));
+        QApplication::processEvents();
+        QCOMPARE(lone->horizontalScrollBar()->maximum(), 0);
+        note->setText(QString("a notice far wider than the page ").repeated(4));
+        for (int i = 0; i < 5; ++i)
+            QApplication::processEvents();
+        QVERIFY(lone->horizontalScrollBar()->maximum() > 0);
+        QVERIFY2(lone->viewport()->height() >= row->sizeHint().height(),
+                 qPrintable(QString("lone row %1 px tall in a %2 px viewport").arg(row->sizeHint().height())
+                            .arg(lone->viewport()->height())));
+    }
+
+    /* A notice widens the row past the window (wfaudit 2026-11-03): its
+       scroll bar comes in without a resize, and the bar grows to hold it --
+       the row is never squashed under the scroll bar (where the notice it
+       just showed can't be read). */
+    mon.showNotice(QString("A long notice that the row can only hold by scrolling sideways ").repeated(3));
+    QApplication::processEvents();
+    QApplication::processEvents();
+    QVERIFY(bar->horizontalScrollBar()->maximum() > 0);
+    QVERIFY2(bar->viewport()->height() >= bar->widget()->sizeHint().height(),
+             qPrintable(QString("row %1 px tall in a %2 px viewport").arg(bar->widget()->sizeHint().height())
+                        .arg(bar->viewport()->height())));
 }
 
 /* Q145: the Rig Overview's controls are in a footer bar under the picture,
@@ -15357,6 +15398,13 @@ void Monitor_Test::aDropOnALockedPlotIsRefused()
     // Unlocked, an unknown id is skipped and the real one lands.
     rig.mon->slotFixturesDropped(QList<quint32>() << 99999 << staged->id(), QPointF(0, 0));
     QVERIFY(rig.gv->fixturesID().contains(staged->id()));
+
+    // Dropped again (wfaudit 2026-11-03): not a silent nothing -- said, and
+    // selected where it already is.
+    rig.mon->m_noticeLabel->clear();
+    rig.mon->slotFixturesDropped(QList<quint32>() << staged->id(), QPointF(0, 0));
+    QCOMPARE(rig.mon->m_noticeLabel->text(),
+             QString::fromUtf8("Refused Bar is already on the plot (selected): drag it there to move it"));
     m_doc->monitorProperties()->setLayoutLocked(wasLocked);
 }
 

@@ -14,6 +14,45 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **A drop that does nothing says why.** Dragging onto the Show Tree (the
+  tree, the cue page, the layer page) or the Workbench's rows used to show
+  only a no-drop cursor where a drop can't go, and a drop that changed
+  nothing (a group onto a layer that already has it) quietly did nothing.
+  The drop hint now says why while you hover and keeps the reason after you
+  let go: *"✕ Towers is already in layer Towers (⇧: a child layer on part
+  of it)"*, *"✕ A function goes on the cue, not on a layer"*. A grey value
+  or grey layer that ⌫ can't clear in the Workbench says it is carried in
+  from an earlier cue. On the plot, a fixture dragged in that is already
+  placed is selected and the footer says so; ⌘V with nothing copied says
+  so too. See [When a drop does nothing](docs/features/show-tree.md).
+- **Several selected: the right-click acts on all of them.** With several
+  cues or layers selected in the Show Tree, the menu offers what acts on
+  all of them and says how many (**Copy 2 Layers**, **Duplicate 3 Cues**,
+  **Move 2 Cues Down** as a block, **Delete 3 Cues**); one-thing items such
+  as Rename or Record as New Cue no longer quietly act on just the clicked
+  row. **Duplicate N Palettes** with several palettes selected (one undo
+  step, everywhere the palette menu appears). The Library's functions,
+  Plot Layers' folders (**Lock N Folders**, **Dissolve N Folders**) and a
+  truss's Studio (**Remove N Fixtures from Truss**) act on the whole
+  selection too.
+- **⌘F in Build and the Fixtures tab** goes to their search, as it does to
+  the Library filter in the Show Tree.
+- **Failures you used not to see.** A save that can't be written whole (a
+  full disk, a volume that went away) no longer replaces the show with a
+  cut-short file: the copy on disk stays as it was, and the error names the
+  file and what to do. An autosave that fails turns the status chip to
+  **⚠ Autosave failed** (hover says why) instead of leaving an old
+  "Autosaved" time up. The phone's Run page says *Hits fire in Operate* when
+  a hit is tapped in Design. The Look Editor warns when a Pan/Tilt, Aim or
+  Zoom look sits on lights that can't move or zoom (*No target fixture can
+  pan or tilt*), as it already did for gobos.
+- **The plot's footer stays readable on a laptop-size window.** When a
+  notice or a longer reading made the Lighting Studio's footer wider than
+  the window, its scroll bar came in without the bar growing, and the whole
+  footer (Grid, Snap, Overlay, View and the notice) was squashed to a
+  sliver under the scroll bar. It now grows to hold the scroll bar (any
+  bar that scrolls sideways does).
+
 - **Three states for a Show Review warning, visible on the cue.** Open is
   the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
   who marked it, when, and the note); **Not a Problem…** (was Accept…)

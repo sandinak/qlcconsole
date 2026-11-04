@@ -27,6 +27,8 @@ class LookEditor_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** A position or zoom look on lights that can't do it says so */
+    void aLookTheTargetsCantDoIsSaid();
     /** An Aim look on a line shows the line's Spread; the slider and the
      *  box move together, write the look's param, and the strip shows where
      *  the lights land. A point target hides them. */

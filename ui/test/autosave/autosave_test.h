@@ -43,6 +43,7 @@ private slots:
     /** A modified show's recovery copy is written beside it and loads back
      *  with the change; an unmodified one writes nothing */
     void aModifiedShowWritesARecoveryCopyThatLoadsBack();
+    void aSaveThatCannotWriteKeepsTheShowAndSaysSo();
     /** An untitled show's recovery copy goes to the user folder, where the
      *  next start looks for it */
     void anUntitledShowsRecoveryCopyIsWhereStartUpLooks();

@@ -177,6 +177,8 @@ private:
     /** Whether any target fixture of the context scene has a channel in the
      *  given QLCChannel::Group. */
     bool targetsHaveChannelGroup(int group) const;
+    /** The context scene has fixtures or groups to warn about */
+    bool hasTargets() const;
 
     /** A representative target-fixture channel of the given group, or NULL.
      *  Used to surface capability (gobo/shutter/strobe) names. */

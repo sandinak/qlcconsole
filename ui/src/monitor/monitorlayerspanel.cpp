@@ -2362,10 +2362,24 @@ void MonitorLayersPanel::buildContextMenu(QMenu *out, QTreeWidgetItem *item)
         }
         if (m_editable)
         {
+            // Every plain folder selected (the clicked one if it isn't):
+            // Lock and Dissolve act on all of them, as the plot's menu does.
+            QList<quint32> folders { id };
+            if (item->isSelected())
+                for (QTreeWidgetItem *sel : m_tree->selectedItems())
+                {
+                    const quint32 sid = sel->data(0, NodeIdRole).toUInt();
+                    if (sel->data(0, NodeTypeRole).toInt() == NodeGroup && !folders.contains(sid)
+                        && m_props->group(sid).anchorKind.isEmpty())
+                        folders << sid;
+                }
+            const int n = folders.count();
             const bool locked = g.locked;
-            menu.addAction(locked ? tr("Unlock Folder Position") : tr("Lock Folder Position"),
-                           this, [this, id, locked]() {
-                m_props->setGroupLocked(id, !locked);
+            menu.addAction(n > 1 ? (locked ? tr("Unlock %1 Folders").arg(n) : tr("Lock %1 Folders").arg(n))
+                                 : (locked ? tr("Unlock Folder Position") : tr("Lock Folder Position")),
+                           this, [this, folders, locked]() {
+                for (quint32 f : folders)
+                    m_props->setGroupLocked(f, !locked);
                 m_doc->setModified();
                 if (m_view) m_view->refreshItemLayerState();
                 reload();
@@ -2374,9 +2388,12 @@ void MonitorLayersPanel::buildContextMenu(QMenu *out, QTreeWidgetItem *item)
                            this, [this, item]() {
                 m_tree->editItem(item, 0);
             });
-            menu.addAction(g.hasFrame ? tr("Ungroup") : tr("Dissolve Folder"),
-                           this, [this, id]() {
-                if (m_view) m_view->ungroupById(id);
+            menu.addAction(n > 1 ? tr("Dissolve %1 Folders").arg(n)
+                                 : g.hasFrame ? tr("Ungroup") : tr("Dissolve Folder"),
+                           this, [this, folders]() {
+                if (m_view)
+                    for (quint32 f : folders)
+                        m_view->ungroupById(f);
             });
             QAction *sub = menu.addAction(tr("New Folder Inside"), this, [this, id]() {
                 addFolder(m_props->group(id).layerId, id);

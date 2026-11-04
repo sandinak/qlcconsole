@@ -1833,6 +1833,7 @@ void App::slotDocModified(bool state)
         {
             m_statusDirtyLabel->setText(tr("✓ Saved"));
             m_statusDirtyLabel->setStyleSheet("QLabel { color: gray; }");
+            m_statusDirtyLabel->setToolTip(QString());
         }
     }
 }
@@ -3213,7 +3214,7 @@ void App::initMenuBar()
  * File action slots
  *****************************************************************************/
 
-bool App::handleFileError(QFile::FileError error)
+bool App::handleFileError(QFile::FileError error, const QString &fileName)
 {
     QString msg;
 
@@ -3249,6 +3250,15 @@ bool App::handleFileError(QFile::FileError error)
         break;
     }
 
+    // Which file, and what to do: never a bare "Unable to write to file".
+    if (!fileName.isEmpty())
+    {
+        msg += QStringLiteral(":\n%1").arg(QDir::toNativeSeparators(fileName));
+        if (error == QFile::WriteError || error == QFile::OpenError || error == QFile::ResourceError)
+            msg += QStringLiteral("\n\n") + tr("The copy already on disk was kept as it was. Check the disk has "
+                                                "room and the folder can be written, then save again, or "
+                                                "use Save As… to put it somewhere else.");
+    }
     QMessageBox::warning(this, tr("File error"), msg);
 
     return false;
@@ -4014,7 +4024,7 @@ QFile::FileError App::slotFileSave()
     else
         error = saveXML(fileName());
 
-    if (handleFileError(error))
+    if (handleFileError(error, fileName()))
     {
         // Remove autosave file on successful save
         removeAutosaveFile();
@@ -4083,7 +4093,7 @@ QFile::FileError App::slotFileSaveAs()
     /* Save the document and set workspace name */
     QFile::FileError error = saveXML(fn);
 
-    if (handleFileError(error))
+    if (handleFileError(error, fn))
     {
         /* remove autosave file if present */
         QFile asFile(asfName);
@@ -6516,17 +6526,25 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
 
     /* End the document and close all the open elements */
     doc.writeEndDocument();
+    // A short write (a full disk, a volume gone) must never replace the
+    // show it was to replace: the old file stays, and the save says so.
+    bool written = writtenWhole(doc, &file);
 #ifdef Q_OS_UNIX
     // Flush just this file's data to disk before the atomic rename below.
     // A global sync() flushes EVERY dirty buffer system-wide and blocks the
     // UI thread — seconds of beachball when the workspace lives on a slow or
     // external volume (e.g. /Volumes/Ext). fsync() on this fd only writes our
     // ~tens-of-KB workspace, which is milliseconds.
-    file.flush();
     if (file.handle() != -1)
-        fsync(file.handle());
+        written = fsync(file.handle()) == 0 && written;
 #endif
     file.close();
+    if (!written || file.error() != QFile::NoError)
+    {
+        qWarning() << "Could not write" << tempFileName << "-" << file.errorString() << "; kept" << fileName;
+        QFile::remove(tempFileName);
+        return QFile::WriteError;
+    }
 
     // Save to actual requested file name
     QFile currFile(fileName);
@@ -7063,6 +7081,25 @@ QString App::autosaveFilePath() const
     return m_fileName + ".autosave";
 }
 
+bool App::writtenWhole(const QXmlStreamWriter &writer, QFileDevice *file)
+{
+    if (file == nullptr)
+        return false;
+    const bool flushed = file->flush();
+    return !writer.hasError() && flushed && file->error() == QFileDevice::NoError;
+}
+
+void App::autosaveFailed(const QString &why)
+{
+    // Never silent: a designer working for hours believes a recovery copy
+    // exists. The chip says it failed until the next autosave or save.
+    if (m_statusDirtyLabel == NULL)
+        return;
+    m_statusDirtyLabel->setText(tr("⚠ Autosave failed"));
+    m_statusDirtyLabel->setToolTip(tr("Autosave failed: %1. Save the show (⌘S) to keep your changes.").arg(why));
+    m_statusDirtyLabel->setStyleSheet("QLabel { color: #d04040; font-weight: bold; }");
+}
+
 void App::slotAutosave()
 {
     // Only autosave if document has been modified
@@ -7085,6 +7122,8 @@ void App::slotAutosave()
     if (file.open(QIODevice::WriteOnly) == false)
     {
         qWarning() << "[Autosave] Failed to open file for writing:" << tempFileName;
+        autosaveFailed(tr("couldn't open %1 (%2)").arg(QDir::toNativeSeparators(tempFileName),
+                                                      file.errorString()));
         return;
     }
 
@@ -7116,26 +7155,37 @@ void App::slotAutosave()
 
     doc.writeEndElement();
     doc.writeEndDocument();
+    // A short write keeps the last good recovery copy, and the chip says so.
+    bool written = writtenWhole(doc, &file);
 #ifdef Q_OS_UNIX
     // fsync this file only — a global sync() beachballs the UI on external
     // volumes (see saveXML). Autosave runs on a timer, so an inline global
     // sync() would periodically freeze the app too.
-    file.flush();
     if (file.handle() != -1)
-        fsync(file.handle());
+        written = fsync(file.handle()) == 0 && written;
 #endif
     file.close();
+    if (!written || file.error() != QFile::NoError)
+    {
+        qWarning() << "[Autosave] Could not write" << tempFileName << "-" << file.errorString();
+        QFile::remove(tempFileName);
+        autosaveFailed(tr("couldn't write %1 (%2)").arg(QDir::toNativeSeparators(tempFileName),
+                                                       file.errorString()));
+        return;
+    }
 
     // Move temp file to actual autosave file
     QFile autosaveFile(autosavePath);
     if (autosaveFile.exists() && !autosaveFile.remove())
     {
         qWarning() << "[Autosave] Could not remove old autosave file:" << autosavePath;
+        autosaveFailed(tr("couldn't replace %1").arg(QDir::toNativeSeparators(autosavePath)));
         return;
     }
     if (!file.rename(autosavePath))
     {
         qWarning() << "[Autosave] Could not rename temp file to:" << autosavePath;
+        autosaveFailed(tr("couldn't write %1").arg(QDir::toNativeSeparators(autosavePath)));
         return;
     }
 
@@ -7153,6 +7203,7 @@ void App::slotAutosave()
     {
         m_statusDirtyLabel->setText(tr("Autosaved %1").arg(m_lastAutosaveTime));
         m_statusDirtyLabel->setStyleSheet("QLabel { color: gray; }");
+        m_statusDirtyLabel->setToolTip(QString());
     }
 
     qDebug() << "[Autosave] Successfully saved to" << autosavePath;
