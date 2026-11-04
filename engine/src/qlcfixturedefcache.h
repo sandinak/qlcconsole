@@ -165,6 +165,8 @@ public:
     /** Every definition known, loaded or not -- without loading any (unlike
      *  fixtureDef()). For listing them with their source(). */
     QList<QLCFixtureDef *> definitions() const { return m_defs; }
+    /** The folder a map's relative definition paths are relative to. */
+    QString mapPath() const { return m_mapAbsolutePath; }
 
     /**
      * Load fixture definitions from the given path. Ignores duplicates.

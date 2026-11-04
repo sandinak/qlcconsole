@@ -102,6 +102,20 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   carry it. Show Review **BLK-01** says when a blocking puts a target out
   of reach. Older shows open with Default only and play exactly as before.
 
+
+- **Gobos show in the rig view even when the definition has no pictures.**
+  A gobo channel that names its slots ("3 Spots", "Zebra", "Flower") but
+  has no usable picture -- none, a Res that is a bare folder (a definition
+  saved by another install), or a file that is not there -- now draws a
+  generated stand-in in the pool, matched by name, wobbling for a shake
+  slot and turning for a "Gobo Rotate Speed" range; "Open", "White" and
+  "No gobo" stay open. **Gobo Wheels…** lists those slots, suggests a
+  library picture by name and has **Fit suggested pictures**; Show Review
+  notes it as **FIX-17** once per definition, with Fix opening Gobo Wheels.
+  A definition's absolute path into another install's Gobos folder is now
+  found in this one's library when the same file is there.
+
+
 - **Three states for a Show Review warning, visible on the cue.** Open is
   the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
   who marked it, when, and the note); **Not a Problem…** (was Accept…)

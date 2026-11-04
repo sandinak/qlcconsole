@@ -13,6 +13,8 @@
 #include <QRegularExpression>
 #include <QHash>
 #include <QMutex>
+#include <QPainter>
+#include <QPainterPath>
 #include <QtMath>
 
 #include "beamoptics.h"
@@ -71,6 +73,66 @@ namespace
         return false;
     }
 
+    /** A small, stable generator (xorshift): the same stand-in on every run
+     *  and platform, which qHash and QRandomGenerator don't promise. */
+    struct Rng
+    {
+        quint32 s;
+        explicit Rng(quint32 seed) : s(seed ? seed : 0x9e3779b9u) { next(); next(); }
+        quint32 next()
+        {
+            s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+            return s;
+        }
+        double unit() { return (next() & 0xffffff) / double(0x1000000); }
+        double range(double a, double b) { return a + (b - a) * unit(); }
+    };
+
+    quint32 fnv(const QString &text)
+    {
+        quint32 h = 2166136261u;
+        const QByteArray b = text.toUtf8();
+        for (char c : b)
+            h = (h ^ quint8(c)) * 16777619u;
+        return h;
+    }
+
+    int leadingCount(const QString &name, int fallback)
+    {
+        static const QRegularExpression rx(QStringLiteral("(\\d+)"));
+        const QRegularExpressionMatch m = rx.match(name);
+        return m.hasMatch() ? qBound(2, m.captured(1).toInt(), 12) : fallback;
+    }
+
+    /** What the name says the glass looks like. */
+    enum Look { Dots, Split, Rings, Swirl, Zebra, Tetris, Scatter, Petals, Triangles };
+
+    bool lookFromName(const QString &name, Look *look)
+    {
+        auto has = [&](const char *w) { return name.contains(QLatin1String(w), Qt::CaseInsensitive); };
+        if (has("random") || has("scatter") || has("break"))
+            *look = Scatter;
+        else if (has("concen") || has("ring"))
+            *look = Rings;
+        else if (has("split") || has("slice") || has("pie"))
+            *look = Split;
+        else if (has("swirl") || has("spiral") || has("vortex"))
+            *look = Swirl;
+        else if (has("flower") || has("lotus") || has("rose") || has("petal") || has("bloom"))
+            *look = Petals;
+        else if (has("triang") || has("pyramid") || has("delta"))
+            *look = Triangles;
+        else if (has("zebra") || has("stripe"))
+            *look = Zebra;
+        else if (has("tetris") || has("block") || has("square"))
+            *look = Tetris;
+        else if (has("spot") || has("dot") || has("star") || has("circle"))
+            *look = Dots;
+        else
+            return false;
+        return true;
+    }
+
     // Slowest and fastest a "slow - fast" range is drawn turning, deg/s.
     const double kSlow = 12.0;
     const double kFast = 200.0;
@@ -112,6 +174,219 @@ QImage BeamOptics::goboMask(const QString &path)
     if (cache.size() > 256)
         cache.clear();
     cache.insert(path, out);
+    return out;
+}
+
+QImage BeamOptics::standInMask(const QString &slotName, int index)
+{
+    static QHash<QString, QImage> cache;
+    static QMutex lock;
+    const QString base = GoboLibrary::slotBaseName(slotName);
+    if (base.isEmpty() || GoboLibrary::isOpenSlotName(base))
+        return QImage();
+    const QString key = QString::number(index) + QLatin1Char('|') + base;
+    {
+        QMutexLocker locker(&lock);
+        auto it = cache.constFind(key);
+        if (it != cache.constEnd())
+            return it.value();
+    }
+
+    Rng rng(fnv(base) ^ (quint32(index) * 2654435761u));
+    Look look;
+    if (!lookFromName(base, &look))
+        look = Look(rng.next() % 6);               // Dots..Tetris, not the named-only looks
+    const int n = leadingCount(base, 3 + int(rng.next() % 3));
+
+    const int size = kMaskSize;
+    QImage out(size, size, QImage::Format_Grayscale8);
+    out.fill(0);                                   // the metal: black blocks
+    {
+        QPainter p(&out);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.translate(size * 0.5, size * 0.5);
+        p.scale(size * 0.5, -size * 0.5);          // beam coordinates, y up
+        p.setPen(Qt::NoPen);
+        p.setBrush(Qt::white);
+        const double rot = rng.range(0.0, M_PI * 2.0);
+        auto dot = [&](double cx, double cy, double r) { p.drawEllipse(QPointF(cx, cy), r, r); };
+
+        switch (look)
+        {
+            case Dots:
+            {
+                const double ring = n <= 2 ? 0.45 : 0.52;
+                const double r = qBound(0.12, 0.62 / (1.0 + n * 0.45) + 0.08, 0.34);
+                for (int k = 0; k < n; ++k)
+                {
+                    const double a = rot + 2.0 * M_PI * k / n;
+                    dot(ring * qCos(a), ring * qSin(a), r);
+                }
+                if (n > 4)
+                    dot(0.0, 0.0, r);
+                break;
+            }
+            case Split:
+            {
+                // A disc cut into n pie slices by dark spokes.
+                const int parts = qMax(2, n);
+                const double gap = 0.09;
+                for (int k = 0; k < parts; ++k)
+                {
+                    const double a0 = 360.0 * k / parts + qRadiansToDegrees(rot);
+                    const double span = 360.0 / parts;
+                    QPainterPath path;
+                    path.moveTo(0.0, 0.0);
+                    path.arcTo(QRectF(-0.92, -0.92, 1.84, 1.84), a0 + span * gap * 3.0,
+                               span - span * gap * 6.0);
+                    path.closeSubpath();
+                    p.drawPath(path);
+                }
+                break;
+            }
+            case Rings:
+            {
+                // Rings broken by a few dark bridges, so the centre isn't loose.
+                QPen pen(Qt::white, 0.17, Qt::SolidLine, Qt::FlatCap);
+                p.setPen(pen);
+                p.setBrush(Qt::NoBrush);
+                const double radii[3] = { 0.78, 0.50, 0.22 };
+                for (int ri = 0; ri < 3; ++ri)
+                {
+                    const double r = radii[ri];
+                    const int bridges = 3 + ri;
+                    for (int k = 0; k < bridges; ++k)
+                    {
+                        const double a0 = qRadiansToDegrees(rot) + 360.0 * k / bridges + 360.0 * ri / 7.0;
+                        const double span = 360.0 / bridges - 28.0;
+                        p.drawArc(QRectF(-r, -r, 2 * r, 2 * r), int(a0 * 16.0), int(span * 16.0));
+                    }
+                }
+                p.setPen(Qt::NoPen);
+                p.setBrush(Qt::white);
+                dot(0.0, 0.0, 0.1);
+                break;
+            }
+            case Swirl:
+            {
+                // Spiral arms from the middle out.
+                const int arms = qBound(2, n, 4);
+                p.setPen(QPen(Qt::white, 0.16, Qt::SolidLine, Qt::RoundCap));
+                p.setBrush(Qt::NoBrush);
+                for (int k = 0; k < arms; ++k)
+                {
+                    QPainterPath path;
+                    const double a0 = rot + 2.0 * M_PI * k / arms;
+                    for (int i = 0; i <= 24; ++i)
+                    {
+                        const double t = i / 24.0;
+                        const double r = 0.1 + 0.8 * t, a = a0 + t * 2.2;
+                        const QPointF pt(r * qCos(a), r * qSin(a));
+                        if (i == 0)
+                            path.moveTo(pt);
+                        else
+                            path.lineTo(pt);
+                    }
+                    p.drawPath(path);
+                }
+                break;
+            }
+            case Zebra:
+            {
+                // Parallel bars, wavy so they don't read as a grille.
+                p.setPen(QPen(Qt::white, 0.17, Qt::SolidLine, Qt::FlatCap));
+                p.setBrush(Qt::NoBrush);
+                const int bars = 5;
+                const double wave = rng.range(0.05, 0.14);
+                p.rotate(qRadiansToDegrees(rot));
+                for (int k = 0; k < bars; ++k)
+                {
+                    const double y0 = -0.8 + 1.6 * k / (bars - 1);
+                    QPainterPath path;
+                    for (int i = 0; i <= 20; ++i)
+                    {
+                        const double x = -1.0 + 2.0 * i / 20.0;
+                        const QPointF pt(x, y0 + wave * qSin(x * 4.0 + k));
+                        if (i == 0)
+                            path.moveTo(pt);
+                        else
+                            path.lineTo(pt);
+                    }
+                    p.drawPath(path);
+                }
+                break;
+            }
+            case Tetris:
+            {
+                // Squares in a tetromino: four cells of a 4x4 grid, joined.
+                const double cell = 0.34;
+                static const int shapes[5][4][2] = {
+                    { {0,0}, {1,0}, {2,0}, {1,1} },     // T
+                    { {0,0}, {0,1}, {0,2}, {1,2} },     // L
+                    { {0,0}, {1,0}, {1,1}, {2,1} },     // Z
+                    { {0,0}, {1,0}, {0,1}, {1,1} },     // O
+                    { {0,0}, {1,0}, {2,0}, {3,0} } };   // I
+                const int sh = int(rng.next() % 5);
+                int minx = 9, miny = 9, maxx = -9, maxy = -9;
+                for (int c = 0; c < 4; ++c)
+                {
+                    minx = qMin(minx, shapes[sh][c][0]); maxx = qMax(maxx, shapes[sh][c][0]);
+                    miny = qMin(miny, shapes[sh][c][1]); maxy = qMax(maxy, shapes[sh][c][1]);
+                }
+                const double ox = -(minx + maxx + 1) * 0.5 * cell, oy = -(miny + maxy + 1) * 0.5 * cell;
+                p.rotate(90.0 * (rng.next() % 4));
+                for (int c = 0; c < 4; ++c)
+                    p.drawRect(QRectF(ox + shapes[sh][c][0] * cell + 0.015, oy + shapes[sh][c][1] * cell + 0.015,
+                                      cell - 0.03, cell - 0.03));
+                break;
+            }
+            case Petals:
+            {
+                // Petals round a middle: an ellipse each, turned.
+                const int petals = n > 4 ? qMin(n, 9) : 6 + int(rng.next() % 3);
+                for (int k = 0; k < petals; ++k)
+                {
+                    p.save();
+                    p.rotate(qRadiansToDegrees(rot) + 360.0 * k / petals);
+                    p.drawEllipse(QPointF(0.5, 0.0), 0.36, 0.14 + 0.4 / petals);
+                    p.restore();
+                }
+                dot(0.0, 0.0, 0.16);
+                break;
+            }
+            case Triangles:
+            {
+                const int count = 3;
+                for (int k = 0; k < count; ++k)
+                {
+                    p.save();
+                    p.rotate(qRadiansToDegrees(rot) + 360.0 * k / count);
+                    QPainterPath tri;
+                    tri.moveTo(0.82, 0.0);
+                    tri.lineTo(0.12, 0.38);
+                    tri.lineTo(0.12, -0.38);
+                    tri.closeSubpath();
+                    p.drawPath(tri);
+                    p.restore();
+                }
+                break;
+            }
+            case Scatter:
+            {
+                const int count = 9 + int(rng.next() % 6);
+                for (int k = 0; k < count; ++k)
+                {
+                    const double a = rng.range(0.0, 2.0 * M_PI), r = 0.8 * qSqrt(rng.unit());
+                    dot(r * qCos(a), r * qSin(a), rng.range(0.06, 0.17));
+                }
+                break;
+            }
+        }
+    }
+    QMutexLocker locker(&lock);
+    if (cache.size() > 512)
+        cache.clear();
+    cache.insert(key, out);
     return out;
 }
 
@@ -230,9 +505,9 @@ QString BeamOptics::slotPicture(const Fixture *fx, quint32 channel, const QLCCap
                 return path;
         }
     }
-    if (cap->presetType() != QLCCapability::Picture)
+    if (!GoboLibrary::hasPicture(cap))
         return QString();
-    return const_cast<QLCCapability *>(cap)->resource(0).toString();
+    return GoboLibrary::resolve(const_cast<QLCCapability *>(cap)->resource(0).toString());
 }
 
 BeamOptics::Optics BeamOptics::opticsFor(const Fixture *fx, const QByteArray &values, double seconds,
@@ -260,17 +535,66 @@ BeamOptics::Optics BeamOptics::opticsFor(const Fixture *fx, const QByteArray &va
 
         if (ch->group() == QLCChannel::Gobo)
         {
-            if (hasPictures(ch))
+            const bool wheel = hasPictures(ch) || !GoboLibrary::standInGlass(ch).isEmpty();
+            if (wheel && cap != nullptr)
             {
-                // A wheel: the picture in the slot it is on. "Open" is the
-                // absence of a gobo; a wheel spinning between slots shows none.
+                /* A wheel: the picture in the slot it is on, or -- where the
+                   definition names a slot but has no usable picture for it
+                   (none, a folder, a missing file) -- a generated stand-in,
+                   unless the show fitted a picture. "Open" is the absence of
+                   a gobo; a wheel spinning between slots shows none. */
+                const QLCCapability *slot = cap;
+                bool spinning = false;
+                if (GoboLibrary::isRotationPreset(cap->preset()))
+                    slot = nullptr;
+                else if (GoboLibrary::isRotationSlotName(cap->name()))
+                {
+                    // "Gobo Rotate Speed": turns the glass before this range.
+                    spinning = true;
+                    slot = nullptr;
+                    foreach (QLCCapability *c, GoboLibrary::standInCaps(ch))
+                        if (c->min() < cap->min())
+                            slot = c;
+                }
                 QImage mask;
-                const QString path = slotPicture(fx, i, cap, props);
-                if (!path.isEmpty()
-                    && !path.contains(QLatin1String("/open."), Qt::CaseInsensitive))
-                    mask = goboMask(path);
-                wheels << Wheel{ i, mask, 0.0 };
+                bool shake = false;
+                if (slot != nullptr)
+                {
+                    const QString path = slotPicture(fx, i, slot, props);
+                    if (!path.isEmpty())
+                    {
+                        if (!path.contains(QLatin1String("/open."), Qt::CaseInsensitive))
+                            mask = goboMask(path);
+                    }
+                    else
+                    {
+                        const int idx = GoboLibrary::standInIndex(ch, slot);
+                        if (idx >= 0)
+                        {
+                            mask = standInMask(slot->name(), idx);
+                            shake = GoboLibrary::isShakeCap(slot);
+                        }
+                    }
+                }
+                Wheel w{ i, mask, 0.0 };
+                if (!mask.isNull() && shake && !spinning)
+                {
+                    // A shake: a quick small wobble either way.
+                    w.angleDeg = 9.0 * std::sin(seconds * 2.0 * M_PI * 3.0);
+                    out.animated = true;
+                }
+                else if (!mask.isNull() && spinning)
+                {
+                    const double span = qMax(1, int(cap->max()) - int(cap->min()));
+                    const double frac = qBound(0.0, (v - int(cap->min())) / span, 1.0);
+                    const double speed = kSlow + (kFast - kSlow) * frac;
+                    w.angleDeg = std::fmod(speed * seconds, 360.0);
+                    out.animated = true;
+                }
+                wheels << w;
             }
+            else if (wheel)
+                wheels << Wheel{ i, QImage(), 0.0 };
             else if (turns(ch) && !wheels.isEmpty())
             {
                 // Gobo rotation: turns the nearest wheel before it.

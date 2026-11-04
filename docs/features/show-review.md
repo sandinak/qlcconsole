@@ -168,6 +168,12 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
 - **FIX-08** A light marked dead at the applied venue that a cue, hit or
   scene still lights.
 - **FIX-14** Two fixtures with one name.
+- **FIX-17** Gobo slots with no picture: a definition names its gobo slots
+  but gives no picture (none, a bare folder, a file that is not there), so
+  the rig view draws a stand-in. A note, once per definition, saying how
+  many slots and whether they "have no picture" or "point at a folder, not
+  a picture". **Fix** opens Gobo Wheels; once every slot has a fitted
+  picture the note goes.
 - **FIX-15** A light buried in the stage: its body (the Physical Dimensions
   box the rig view draws) is inside a deck, riser or step with a solid top.
   Says *"UST-2 is inside Deck SR. Sit it on Deck SR (0.61 m)."* The same

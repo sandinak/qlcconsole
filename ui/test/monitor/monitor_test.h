@@ -554,6 +554,12 @@ private slots:
     /** "specialized gobos": a slot of ONE unit fitted with the operator's
      *  own picture (Gobo Wheels…), saved per fixture, drawn on the rig. */
     void goboWheelsFitsYourOwnGlassInOneUnit();
+    /** A Gobo channel that names its slots but has no pictures draws a
+     *  generated stand-in: not for open/white, different per slot, stable,
+     *  shaking and spinning animate; Gobo Wheels suggests library pictures. */
+    void aGoboWithNoPictureDrawsAStandIn();
+    void goboWheelsSuggestsPicturesForBareSlots();
+    void aGoboWhosePictureIsAFolderDrawsAStandIn();
     void selectAllTakesEverythingSelectable();
     void aDecksCountBubbleMovesWithIt();
     /** "when I zoom in, the blue circles can stay the same size so what's

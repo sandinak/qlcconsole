@@ -130,6 +130,18 @@ teacher note in level-2 lesson-05 (spike marks). Leftovers:
 - Show Review's other checks read Default; only BLK-01 reads each blocking.
 - A course lesson on blocking (level 3?) if classes ask for it.
 
+## Gobos with no picture (feat/04-gobo-no-picture, 2026-11-03) -- done
+
+"gobo didn't render in the rigview .. thought we had that." Definitions
+that name gobo slots but have no usable picture (no Res, a folder Res,
+a missing file) drew a plain beam. Built: `BeamOptics::standInMask`
+(deterministic per slot, cached), `GoboLibrary::hasPicture/standInCaps`,
+Gobo Wheels suggestions + Fit suggested pictures, Show Review FIX-17.
+Tests: Monitor_Test::aGoboWithNoPictureDrawsAStandIn,
+aGoboWhosePictureIsAFolderDrawsAStandIn,
+goboWheelsSuggestsPicturesForBareSlots, ShowReview_Test::fix17.
+Move to DONE.md when landed.
+
 ## Area cover: an Aim at an Area covers it (Q209, areacover, 2026-11-03) — built
 
 Zones by where the lights hang (least-squares match of x and depth key to
