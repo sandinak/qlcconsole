@@ -811,10 +811,13 @@ void ShowReviewPanel_Test::onlyTheWarningBadgeIsColoured()
         return true;
     }));
     p = pieces(cues.first());
-    QCOMPARE(p.count(), 2);
-    QCOMPARE(p.at(0).second, normal);           // mix
-    QCOMPARE(p.at(1).first, QStringLiteral("needs work"));
-    QCOMPARE(p.at(1).second, ShowTreeView::warningColour());
+    // Needs work is an open note (Q212): its ✎ mark leads, in the warning colour.
+    QCOMPARE(p.count(), 3);
+    QCOMPARE(p.at(0).first, QStringLiteral("✎"));
+    QCOMPARE(p.at(0).second, ShowTreeView::warningColour());
+    QCOMPARE(p.at(1).second, normal);           // mix
+    QCOMPARE(p.at(2).first, QStringLiteral("needs work"));
+    QCOMPARE(p.at(2).second, ShowTreeView::warningColour());
 }
 
 /* "On the rig .. we shouldn't show colorization of the props .. they should be

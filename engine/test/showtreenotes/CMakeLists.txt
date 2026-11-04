@@ -1,0 +1,21 @@
+add_executable(showtreenotes_test WIN32
+    showtreenotes_test.cpp showtreenotes_test.h
+)
+target_include_directories(showtreenotes_test PRIVATE
+    ../../../plugins/interfaces
+    ../../src
+    ../common
+)
+
+target_link_libraries(showtreenotes_test PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Test
+    qlcplusengine
+)
+
+target_compile_definitions(showtreenotes_test PRIVATE
+    TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../common/fixtures/"
+    SAMPLE_SHOW="${CMAKE_CURRENT_SOURCE_DIR}/../../../resources/samples/Sample.qxw"
+    DH_SHOW="${CMAKE_CURRENT_SOURCE_DIR}/../../../test-workspaces/DanceHysteria-0.1.qlcc"
+)

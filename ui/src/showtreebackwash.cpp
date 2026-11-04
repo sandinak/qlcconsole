@@ -71,7 +71,7 @@ public:
     {
         const QStringList warn = index.data(ShowTreeView::WarnPiecesRole).toStringList()
                                  + index.data(ShowTreeView::MeantPiecesRole).toStringList();
-        if (warn.isEmpty())
+        if (warn.isEmpty() && index.data(ShowTreeView::NoteMarkRole).toString().isEmpty())
         {
             QStyledItemDelegate::paint(painter, option, index);
             return;
@@ -130,6 +130,11 @@ QList<QPair<QString, QColor>> ShowTreeView::flagPieces(const QModelIndex &index,
     for (const QString &piece : index.data(Qt::DisplayRole).toString().split(QStringLiteral(", "), Qt::SkipEmptyParts))
         out << qMakePair(piece, warn.contains(piece) ? warningColour()
                                 : meant.contains(piece) ? meantColour(background.isValid() ? background : normal) : normal);
+    // Q212: the notes mark, first (it is short, and stays in view when the
+    // column is narrow) -- open notes in the warning colour.
+    const QString mark = index.data(NoteMarkRole).toString();
+    if (!mark.isEmpty())
+        out.prepend(qMakePair(mark, index.data(NoteOpenRole).toBool() ? warningColour() : normal));
     return out;
 }
 

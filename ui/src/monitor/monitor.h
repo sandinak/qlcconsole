@@ -379,6 +379,9 @@ public:
     /** ⇧⌘R: open it -- or, when it is the window in front, close it. Open
      *  behind others, it is brought forward rather than shut unseen. */
     void toggleStageOverview();
+    /** The Rig Overview's view (Q212: a note's snapshot of the view); with
+     *  @a open, the window is opened first when it isn't. Null: not open. */
+    class StructureStudioView *stageOverviewView(bool open = false);
 
     /** The show's stage marks (MonitorProperties::stageMarks()) or their
      *  positions changed: redraw them on the plot and the Rig Overview. */

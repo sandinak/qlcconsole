@@ -1226,14 +1226,18 @@ later at the laptop. It is only a mark. Nothing plays differently.
   with the controller, hold **Y** (Triangle) to tag the cue you're on.
   Hold it again to clear the tag.
 - **On the laptop.** Tick **Needs work** on the cue's page.
+- **It is an open note.** Needs work means the cue has an open
+  [note](#notes). Tagging a cue adds an open note "Needs work". Clearing the
+  tag ticks its open notes done. A note added in the notes pane tags the
+  cue, and ticking the last open one done clears the tag. Write what needs
+  doing in the note.
 - **Where it shows.** The cue's row says **needs work** in orange among
-  its flags. Its tooltip shows the cue's note, so write what needs doing
-  there. A walk that reaches the cue says "Needs work" too.
+  its flags. A walk that reaches the cue says "Needs work" too.
 - **Undo.** Each tag is one undo step.
 - **Saved with the show.** An older build opens the show as it was,
-  without the tag.
+  with the tag and without the notes.
 
-Not yet: a filter that shows only the tagged cues.
+To see every tagged cue at once, open **All notes…** in the [notes](#notes) pane and filter it to **Open**.
 
 ### Changing a tracked value
 
@@ -1607,6 +1611,49 @@ to keep cues.
 
 The script is saved as a `CallingScript` element of its production, which
 an older build ignores.
+
+## Notes
+
+Tech notes beside the tree: what you were thinking about a cue, a layer, a
+list, a production or a palette, with the date, who wrote it and, if you
+like, a snapshot of what you were looking at.
+
+- **The notes pane** is under the cue page. It follows the selection: the
+  row selected in the tree, or a palette picked in the Library. Newest
+  first, each note says when, who (**Your name** in Show Review, else the
+  computer's account) and what. A cue's own note (the **Note** field on its
+  page) is its first entry, marked "cue note".
+- **Add one.** Type in the box at the bottom and press **Return** (Shift+Return
+  for a new line), or **Add**. A new note is open.
+- **Snapshot the view.** **Snapshot the view** adds the note with the Rig
+  Overview's camera (plane, turn, angle, zoom and pan), a small picture of
+  it and the cue that was on stage. The Rig Overview opens if it is not
+  already open. **Show me** on the note puts the camera back. In Design it
+  also selects that cue, so it is on the rig again. In Operate only the
+  camera moves and the stage is left alone.
+- **Open and done.** Tick a note when it is done; untick to open it again.
+  An open note on a cue is [Needs work](#needs-work).
+- **⋯ on a note.** Edit it, snapshot the view again, remove the snapshot or
+  delete the note.
+- **Marks on the rows.** A row with notes shows **✎** in its flags: orange
+  with the count while notes are open, grey when they are all done. Hover
+  the row to read the newest note.
+- **All notes…** (the pane's header) lists every note in the show. Filter it
+  by open or done, by item, or by words (a cue number works). Double-click a
+  row, or **Go to**, to select its item in the tree. **Print…** prints the
+  list. **Export…** writes it as PDF, with the pictures, or as Markdown, a
+  checklist for after rehearsal.
+- **Undo.** Every add, edit, tick, snapshot and delete is one step on the
+  Show Tree's undo.
+
+The notes are saved in the show file, inside the `ShowTree` element: a
+`Notes` element with a `Note` for each, and each picture once as a
+`NoteImage` (base64, a JPEG about 480 pixels wide, usually 20 to 60 KB). A
+cue's note is still saved in the cue's `Note` attribute and Needs work in
+`NeedsWork`, so an older build keeps both and skips the rest. The pane warns
+when the pictures add more than 4 MB to the file; remove the snapshots you
+no longer need. A deleted item's notes stay until the show is saved, so
+undoing the delete brings them back.
 
 ## Seeing it on the rig
 

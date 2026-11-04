@@ -153,7 +153,8 @@ static bool splitterStateUsable(const QByteArray &state, int panes, int mustShow
 }
 // "2": the list's mode left this column for M (2026-10-29), so it starts narrower.
 #define SETTINGS_BADGE_COLUMN QStringLiteral("showtree/badgeColumn2")
-#define SETTINGS_EDITOR_SPLITTER QStringLiteral("showtree/editorSplitter")
+// "2": the notes pane joined the page and the Look Editor (Q212).
+#define SETTINGS_EDITOR_SPLITTER QStringLiteral("showtree/editorSplitter2")
 
 static const int kRecentMax = 10;
 
@@ -2366,6 +2367,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     split->setStretchFactor(0, 2);
     split->setStretchFactor(1, 2);
     split->setStretchFactor(2, 3);
+    setupNotes(vsplit);     // Q212: notes under the page (showtreenotemarks.cpp)
     {
         QSettings settings;
         const QVariant state = settings.value(SETTINGS_SPLITTER);
@@ -3577,6 +3579,7 @@ void ShowTreeView::buildTree()
         if (QTreeWidgetItem *item = findItem(sel.first, sel.second))
             item->setSelected(true);
     applyBackwashMarks();
+    applyNoteMarks();
     m_reloading = false;
 }
 
