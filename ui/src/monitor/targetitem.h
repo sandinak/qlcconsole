@@ -130,6 +130,21 @@ public:
     void setFootprintPx(const QSizeF &size);
     QRectF footprintRect() const;
 
+    /** A band instrument (Keyboard, pianos, Rack) is drawn as the thing itself
+     *  inside its footprint: from above its plan (keybed with key stripes, the
+     *  grand's curved case, the rack's units); in an elevation its silhouette
+     *  from the deck (@p feet, set with setFigure()) up to bodyHeight(). The
+     *  view sets the footprint as for a kit, and the figure's feet and crown
+     *  as for a person in an elevation. Empty for any other kind. */
+    QRectF bandRect() const;
+    /** bandRect() as drawn: turned by the band angle from above. */
+    QRectF bandBounds() const;
+    /** From above, how far the instrument is turned on the screen, degrees
+     *  (the target's rotation, seen through the plot's own turn). */
+    void setBandAngle(double deg);
+    /** What bandRect() draws, in item coordinates; used by paint() and tests. */
+    QPainterPath bandOutline() const;
+
     /** A line target (docs/design/LINE_TARGET_DESIGN.md), in item coordinates -- the
      *  item sits on the line's centre: the sampled curve, how far along
      *  (0..1) each sample is, and the handles (the ends first and last).
@@ -204,6 +219,7 @@ private:
     int                m_aimedHeads = 0;
 
     QSizeF             m_footprintPx;
+    double             m_bandAngle = 0.0;
     QPointF            m_feet;
     QPointF            m_crown;
     double             m_pxPerMetre = 0.0;   ///< 0 = no figure set

@@ -7147,6 +7147,11 @@ void Monitor::slotEditTarget(quint32 tid)
                        int(StageTarget::Kind::None));
     kindCombo->addItem(tr("Person"),        int(StageTarget::Kind::Person));
     kindCombo->addItem(tr("Drum kit"),      int(StageTarget::Kind::DrumKit));
+    kindCombo->addItem(tr("Keyboard"),      int(StageTarget::Kind::Keyboard));
+    kindCombo->addItem(tr("Grand piano"),   int(StageTarget::Kind::GrandPiano));
+    kindCombo->addItem(tr("Upright piano"), int(StageTarget::Kind::UprightPiano));
+    kindCombo->addItem(tr("Equipment rack"), int(StageTarget::Kind::Rack));
+    kindCombo->addItem(tr("Speaker (on wheels)"), int(StageTarget::Kind::Speaker));
     kindCombo->addItem(tr("Bound to a structure"),
                        int(StageTarget::Kind::Structure));
     kindCombo->addItem(tr("Area"),          int(StageTarget::Kind::Area));
@@ -7232,8 +7237,27 @@ void Monitor::slotEditTarget(quint32 tid)
         const StageTarget::Kind k =
             StageTarget::Kind(kindCombo->currentData().toInt());
         boundCombo->setEnabled(k == StageTarget::Kind::Structure);
-        const bool sized = (k == StageTarget::Kind::DrumKit
-                            || k == StageTarget::Kind::Area);
+        const bool sized = StageTarget::hasFootprintKind(k);
+        /* A band instrument has a size of its own: a footprint still empty, or
+           still the last instrument's, becomes this one's. */
+        if (StageTarget::isBandKind(k))
+        {
+            const QSizeF now(wSpin->value() * fromDisp_t, dSpin->value() * fromDisp_t);
+            bool stock = now.isEmpty();
+            for (StageTarget::Kind o : { StageTarget::Kind::Keyboard, StageTarget::Kind::GrandPiano,
+                                         StageTarget::Kind::UprightPiano, StageTarget::Kind::Rack,
+                                         StageTarget::Kind::Speaker })
+                if (o != k && qAbs(now.width() - StageTarget::defaultFootprint(o).width()) < 0.006
+                    && qAbs(now.height() - StageTarget::defaultFootprint(o).height()) < 0.006)
+                    stock = true;
+            if (stock)
+            {
+                const QSizeF d = StageTarget::defaultFootprint(k);
+                QSignalBlocker bw(wSpin), bd(dSpin);
+                wSpin->setValue(d.width() * toDisp_t);
+                dSpin->setValue(d.height() * toDisp_t);
+            }
+        }
         wSpin->setEnabled(sized);
         dSpin->setEnabled(sized);
         personSpin->setEnabled(k == StageTarget::Kind::Person);

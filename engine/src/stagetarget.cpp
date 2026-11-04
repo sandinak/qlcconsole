@@ -22,6 +22,7 @@
 #define KXMLStageTargetY       QStringLiteral("Y")
 #define KXMLStageTargetZ       QStringLiteral("Z")
 #define KXMLStageTargetColor   QStringLiteral("Color")
+#define KXMLStageTargetRotation QStringLiteral("Rotation")
 #define KXMLStageTargetLocked  QStringLiteral("Locked")
 #define KXMLStageTargetLayerId QStringLiteral("LayerId")
 #define KXMLStageTargetGroupId QStringLiteral("GroupId")
@@ -84,6 +85,8 @@ bool StageTarget::loadXML(QXmlStreamReader &root)
         m_boundType = a.value(KXMLStageTargetBoundType).toString();
     if (a.hasAttribute(KXMLStageTargetBoundId))
         m_boundId = a.value(KXMLStageTargetBoundId).toUInt();
+    if (a.hasAttribute(KXMLStageTargetRotation))
+        m_rotation = a.value(KXMLStageTargetRotation).toFloat();
     if (a.hasAttribute(KXMLStageTargetW) || a.hasAttribute(KXMLStageTargetD))
         m_footprint = QSizeF(a.value(KXMLStageTargetW).toDouble(),
                              a.value(KXMLStageTargetD).toDouble());
@@ -117,6 +120,11 @@ QString StageTarget::kindToString(Kind k)
     case Kind::Structure: return QStringLiteral("structure");
     case Kind::Area:      return QStringLiteral("area");
     case Kind::Line:      return QStringLiteral("line");
+    case Kind::Keyboard:  return QStringLiteral("keyboard");
+    case Kind::GrandPiano:   return QStringLiteral("grandpiano");
+    case Kind::UprightPiano: return QStringLiteral("uprightpiano");
+    case Kind::Rack:      return QStringLiteral("rack");
+    case Kind::Speaker:   return QStringLiteral("speaker");
     case Kind::None:
     default:              return QStringLiteral("none");
     }
@@ -130,6 +138,11 @@ StageTarget::Kind StageTarget::stringToKind(const QString &s, Kind fallback)
     if (k == QLatin1String("structure")) return Kind::Structure;
     if (k == QLatin1String("area"))      return Kind::Area;
     if (k == QLatin1String("line"))      return Kind::Line;
+    if (k == QLatin1String("keyboard"))  return Kind::Keyboard;
+    if (k == QLatin1String("grandpiano")) return Kind::GrandPiano;
+    if (k == QLatin1String("uprightpiano")) return Kind::UprightPiano;
+    if (k == QLatin1String("rack"))      return Kind::Rack;
+    if (k == QLatin1String("speaker"))   return Kind::Speaker;
     if (k == QLatin1String("none"))      return Kind::None;
     /* Anything else came from a newer file than this build. Degrade to the
        fallback rather than guessing -- the whole reason these are names and not
@@ -143,11 +156,42 @@ float StageTarget::defaultAimHeight(Kind k)
     {
     case Kind::Person:  return 1.4f;    ///< chest, not feet
     case Kind::DrumKit: return 1.0f;    ///< around the rims and cymbals
+    case Kind::Keyboard:     return 1.1f;   ///< the hands and face of the player
+    case Kind::GrandPiano:   return 1.1f;
+    case Kind::UprightPiano: return 1.2f;
+    case Kind::Rack:         return 1.0f;
+    case Kind::Speaker:      return 0.8f;   ///< the cone, on its casters
     case Kind::None:
     case Kind::Structure:
     case Kind::Area:
     case Kind::Line:                    ///< its points carry their own heights
     default:            return 0.0f;    ///< the surface itself
+    }
+}
+
+QSizeF StageTarget::defaultFootprint(Kind k)
+{
+    switch (k)
+    {
+    case Kind::Keyboard:     return QSizeF(1.4, 0.5);
+    case Kind::GrandPiano:   return QSizeF(1.5, 1.8);
+    case Kind::UprightPiano: return QSizeF(1.5, 0.6);
+    case Kind::Rack:         return QSizeF(0.6, 0.6);
+    case Kind::Speaker:      return QSizeF(0.55, 0.5);
+    default:                 return QSizeF();
+    }
+}
+
+float StageTarget::bodyHeight(Kind k)
+{
+    switch (k)
+    {
+    case Kind::Keyboard:     return 0.95f;  ///< the keybed on its stand
+    case Kind::GrandPiano:   return 1.0f;   ///< the case; the lid goes higher
+    case Kind::UprightPiano: return 1.3f;
+    case Kind::Rack:         return 1.2f;
+    case Kind::Speaker:      return 1.1f;   ///< 1.0 m box on 0.1 m casters
+    default:                 return 0.0f;
     }
 }
 
@@ -195,6 +239,8 @@ bool StageTarget::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLStageTargetBoundType, m_boundType);
         doc->writeAttribute(KXMLStageTargetBoundId, QString::number(m_boundId));
     }
+    if (!qFuzzyIsNull(m_rotation))
+        doc->writeAttribute(KXMLStageTargetRotation, QString::number(double(m_rotation), 'f', 2));
     if (m_footprint.isEmpty() == false)
     {
         doc->writeAttribute(KXMLStageTargetW,

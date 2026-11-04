@@ -19,9 +19,22 @@ look that aims at it re-solves automatically.
 | **None** (a plain mark) | A bare point | Amber crosshair |
 | **Person** | A standing subject of a given **Height** (5'9" unless set), drawn that tall and aimed at the chest — 80% of it | Crosshair over a lofted human silhouette |
 | **Drum Kit** | A low, wide subject | Crosshair over a footprint rectangle, aimed lower by default |
+| **Keyboard** | A keyboard on an X-stand, 1.4 × 0.5 m, aimed at 1.1 m (hands and face) | A keybed with key stripes over the stand's X; in the Rig View, a slab on an X-stand |
+| **Grand piano** | A grand, lid up, 1.5 × 1.8 m, aimed at 1.1 m | The curved case with the keybed on the house edge; in the Rig View, the case on legs with the lid propped |
+| **Upright piano** | An upright, 1.5 × 0.6 m, 1.3 m tall, aimed at 1.2 m | A box with the keyboard edge; in the Rig View, a box with the key ledge |
+| **Equipment rack** | An amp or equipment rack, 0.6 × 0.6 m, 1.2 m tall, aimed at 1.0 m | A box with rack-unit lines; in the Rig View, a box with units on its face |
+| **Speaker** | A powered speaker on casters: the box 0.55 × 0.5 m and 1.0 m tall, sitting 0.1 m up; aimed at 0.8 m | A box with the cone circle and a tick on the face it points from; in the Rig View, a cabinet on four little wheels |
 | **Area** | A region of deck, not a point: the lights aimed at it [cover it](#area-targets), each its own part | A dashed-outline footprint rectangle |
 | **Structure** | Bound to a truss/platform/steps/tower — its position *follows* whatever it's bound to | Crosshair, position always live |
 | **Line** | A curve in space — every light aimed at it gets its **own** point on it, evenly spaced | The curve, square handles at its ends, round ones at its mid points, and a crosshair at its centre |
+
+The band kinds (Keyboard, pianos, rack, speaker) start at the sizes above and
+resize in **Size (W x D)** like a Drum Kit. They stand in front of a stage
+feature as a person does (Show Review does not call them "on" the cyc). The
+speaker, like the others, **turns with `]` and `[`** (15 degrees; `}` and `{`
+one degree): its tick and its grille face the way it points, on the plot and in
+the Rig View. They are the **Subject** choices in Edit Target; adding one adds
+no menu item.
 
 A target being **aimed at** by the currently-open scene shows fading
 concentric rings around its crosshair — that's a separate, temporary fact
@@ -36,9 +49,9 @@ Targets are created on the Lighting Studio plot (Top, Front or Side):
    stand, tower or truss ▸ **Add ▸ Target Here** (or **Person Here**). The
    toolbar's **Add ▸ Add Target Position** works too.
 2. The **Edit Target** dialog opens: name, X/Y/Z, a **Subject** kind
-   (None/Person/Drum Kit/Structure/Area), a **Follows** structure picker
+   (None/Person/Drum Kit/Keyboard/Piano/Rack/Speaker/Structure/Area), a **Follows** structure picker
    (for a Structure-kind target), a per-target aim-height override, size
-   (for Area/Drum Kit), and color.
+   (for Area, Drum Kit and the band kinds), and color.
 3. An Aim palette named after the target is created for you automatically
    (unless one already exists) — an **Aim** palette, not a Pan/Tilt one,
    specifically because Pan/Tilt carries fixed angles and won't follow the
@@ -467,7 +480,7 @@ doesn't stop just because that's where you pointed it.
 | Term | Meaning |
 |---|---|
 | **Stage Target** | A named 3D point with a kind, optional structure binding, optional footprint, and color. |
-| **Kind** | What a target represents — None, Person, Drum Kit, Structure, Area or Line — governing its default aim height and how it's drawn. |
+| **Kind** | What a target represents — None, Person, Drum Kit, Keyboard, Grand or Upright piano, Rack, Speaker, Structure, Area or Line — governing its default aim height and how it's drawn. |
 | **Line** | A target that is a curve: each light aimed at it gets its own, evenly spaced point along it. |
 | **Aim palette** | A palette that names a target instead of carrying fixed DMX values; resolved per-fixture through the Aim Solver. |
 | **Line of Sight** | Whether a solid stage feature (a closed drape, a wall, a riser, a tower) stands between a head and the point it's aimed at. Its own mount never counts. |

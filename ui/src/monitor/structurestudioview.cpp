@@ -1444,7 +1444,7 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
 
         /* An Area or a drum kit: its outline on the deck, in its colour, at
            its real size -- where a beam lands relative to it is the point. */
-        if ((t->kind() == StageTarget::Kind::Area || t->kind() == StageTarget::Kind::DrumKit)
+        if (StageTarget::hasFootprintKind(t->kind())
             && t->footprint().isEmpty() == false)
         {
             const QVector3D at = props->targetAimPoint(t, true);
@@ -1452,12 +1452,124 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
             const float hw = float(t->footprint().width()) * 0.5f;
             const float hd = float(t->footprint().height()) * 0.5f;
             const QColor mark = t->color().isValid() ? t->color() : QColor(255, 180, 0);
-            const QVector3D c[4] = {
-                QVector3D(at.x() - hw, at.y() - hd, ground), QVector3D(at.x() + hw, at.y() - hd, ground),
-                QVector3D(at.x() + hw, at.y() + hd, ground), QVector3D(at.x() - hw, at.y() + hd, ground) };
+            /* Movable gear is turned on the deck (the ] and [ keys): the house
+               side is +y until it is. */
+            const double rad = double(t->rotation()) * M_PI / 180.0;
+            const float rc = float(std::cos(rad)), rs = float(std::sin(rad));
+            auto turned = [&](float fx, float fy, float z) {
+                const float dx = fx * hw, dy = fy * hd;
+                return QVector3D(at.x() + dx * rc - dy * rs, at.y() + dx * rs + dy * rc, z);
+            };
+            const QVector3D c[4] = { turned(-1, -1, ground), turned(1, -1, ground),
+                                     turned(1, 1, ground), turned(-1, 1, ground) };
             for (int k = 0; k < 4; ++k)
                 emitLine(w2s(c[k]), w2s(c[(k + 1) % 4]), viewDepth(c[k]), viewDepth(c[(k + 1) % 4]),
                          mark, 2.0, p);
+            if (StageTarget::isBandKind(t->kind()))
+            {
+                /* The instrument itself, at real size, as wire: a keyboard on
+                   its X-stand, a grand with the lid up, an upright, a rack. */
+                auto seg = [&](const QVector3D &a, const QVector3D &b) {
+                    emitLine(w2s(a), w2s(b), viewDepth(a), viewDepth(b), mark, 1.6, p);
+                };
+                auto P = [&](float fx, float fy, float z) {      // fx, fy in -1..1 of the footprint
+                    return turned(fx, fy, ground + z);
+                };
+                auto ring = [&](const QVector<QPointF> &pl, float z0, float z1, bool verticals) {
+                    for (int k = 0; k < pl.size(); ++k)
+                    {
+                        const QPointF a = pl.at(k), b = pl.at((k + 1) % pl.size());
+                        seg(P(float(a.x()), float(a.y()), z0), P(float(b.x()), float(b.y()), z0));
+                        if (z1 > z0)
+                            seg(P(float(a.x()), float(a.y()), z1), P(float(b.x()), float(b.y()), z1));
+                        if (verticals && z1 > z0)
+                            seg(P(float(a.x()), float(a.y()), z0), P(float(a.x()), float(a.y()), z1));
+                    }
+                };
+                const QVector<QPointF> box = { QPointF(-1, -1), QPointF(1, -1), QPointF(1, 1), QPointF(-1, 1) };
+                const float H = StageTarget::bodyHeight(t->kind());
+                switch (t->kind())
+                {
+                case StageTarget::Kind::Keyboard:
+                {
+                    const float top = H, bot = H - 0.07f;
+                    ring(box, bot, top, true);
+                    for (int i = 1; i < 12; ++i)                 // the keys, on the house edge
+                    {
+                        const float x = -1.0f + 2.0f * i / 12.0f;
+                        seg(P(x, 0.2f, top), P(x, 1.0f, top));
+                    }
+                    for (float sx : { -0.72f, 0.72f })           // the X-stand
+                    {
+                        seg(P(sx, -0.2f, bot), P(sx + 0.16f, 0.2f, 0.0f));
+                        seg(P(sx, 0.2f, bot), P(sx + 0.16f, -0.2f, 0.0f));
+                    }
+                    break;
+                }
+                case StageTarget::Kind::GrandPiano:
+                {
+                    QVector<QPointF> plan;                        // the case, as the plot draws it
+                    plan << QPointF(-1, 1) << QPointF(-1, -0.6);
+                    for (int i = 1; i <= 4; ++i)                  // the rounded tail
+                    {
+                        const double u = i / 4.0, v = 1.0 - u;
+                        plan << QPointF(v * v * -1.0 + 2 * u * v * -1.0 + u * u * -0.4,
+                                        v * v * -0.6 + 2 * u * v * -1.0 + u * u * -1.0);
+                    }
+                    for (int i = 1; i <= 8; ++i)                  // the bent side
+                    {
+                        const double u = i / 8.0, v = 1.0 - u;
+                        plan << QPointF(v * v * v * -0.4 + 3 * v * v * u * 0.36 + 3 * v * u * u * 0.24 + u * u * u * 1.0,
+                                        v * v * v * -1.0 + 3 * v * v * u * -1.0 + 3 * v * u * u * 0.0 + u * u * u * 0.0);
+                    }
+                    plan << QPointF(1, 1);
+                    ring(plan, 0.72f, 0.88f, false);
+                    seg(P(-0.96f, 0.95f, 0.88f), P(0.96f, 0.95f, 0.88f));
+                    for (const QPointF &leg : { QPointF(-0.9, 0.85), QPointF(0.9, 0.85), QPointF(-0.9, -0.5) })
+                        seg(P(float(leg.x()), float(leg.y()), 0.0f), P(float(leg.x()), float(leg.y()), 0.72f));
+                    /* The lid, propped up over the bass side. */
+                    seg(P(-1.0f, 0.9f, 0.88f), P(-0.45f, 0.8f, 1.45f));
+                    seg(P(-1.0f, -0.6f, 0.88f), P(-0.45f, -0.5f, 1.45f));
+                    seg(P(-0.45f, 0.8f, 1.45f), P(-0.45f, -0.5f, 1.45f));
+                    break;
+                }
+                case StageTarget::Kind::UprightPiano:
+                    ring(box, 0.0f, H, true);
+                    seg(P(-1.0f, 1.0f, 0.75f), P(1.0f, 1.0f, 0.75f));
+                    for (int i = 1; i < 12; ++i)
+                    {
+                        const float x = -0.9f + 1.8f * i / 12.0f;
+                        seg(P(x, 1.0f, 0.75f), P(x, 1.0f, 0.65f));
+                    }
+                    break;
+                case StageTarget::Kind::Speaker:
+                {
+                    const float foot = 0.1f;                     // the casters lift it
+                    ring(box, foot, H, true);
+                    const float cx = 0.0f, cz = foot + (H - foot) * 0.55f;
+                    QVector<QPointF> grille;                     // the cone, on the house face
+                    for (int i = 0; i < 12; ++i)
+                        grille << QPointF(cx + 0.55 * std::cos(i * M_PI / 6.0), 0.0 + 0.55 * std::sin(i * M_PI / 6.0));
+                    for (int i = 0; i < grille.size(); ++i)
+                    {
+                        const QPointF a = grille.at(i), b = grille.at((i + 1) % grille.size());
+                        seg(P(float(a.x()), 1.0f, cz + float(a.y()) * (H - foot) * 0.5f * 0.9f),
+                            P(float(b.x()), 1.0f, cz + float(b.y()) * (H - foot) * 0.5f * 0.9f));
+                    }
+                    for (float fx : { -0.8f, 0.8f })             // four little wheels
+                        for (float fy : { -0.8f, 0.8f })
+                            seg(P(fx, fy, 0.0f), P(fx, fy, foot));
+                    break;
+                }
+                case StageTarget::Kind::Rack:
+                    ring(box, 0.0f, H, true);
+                    for (int i = 1; i < 8; ++i)                  // rack units on the house face
+                        seg(P(-0.85f, 1.0f, H * i / 8.0f), P(0.85f, 1.0f, H * i / 8.0f));
+                    break;
+                default:
+                    break;
+                }
+            }
             continue;
         }
 
@@ -2280,7 +2392,7 @@ QList<QPair<QString, QRectF> > StructureStudioView::targetReadouts(const QFont &
             continue;
         const bool person = t->kind() == StageTarget::Kind::Person
                             && props->targetFigureHeight(t) > 0.0f;
-        const bool area = (t->kind() == StageTarget::Kind::Area || t->kind() == StageTarget::Kind::DrumKit)
+        const bool area = StageTarget::hasFootprintKind(t->kind())
                           && !t->footprint().isEmpty();
         if (!person && !area && !t->isLine())
             continue;           // the overview draws nothing for it to label
