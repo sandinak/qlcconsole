@@ -774,6 +774,15 @@ public:
     bool cutSelection();
     bool pasteClipboard();
     bool duplicateSelection();
+    /** Q215: Copy / Paste / Duplicate of a cue list or a production on its
+     *  row, and of a reusable cue in the Library (a copy of it there). */
+    bool copyListOrProduction();
+    bool pasteListOrProduction(const ShowTreeCommand::Clipboard &clip);
+    bool copyLibraryReusable();
+    bool pasteReusableCue();
+    bool duplicateLibraryReusable();
+    bool duplicateReusableCueRow(quint32 id);
+    void listClipboardItems(ContextMenu &menu, const QString &what);
 
     typedef QPair<quint32, quint32> LayerRef;       //!< cue, layer
     /** MIME type of layers dragged within the tree (cue, layer id pairs). */
@@ -1305,6 +1314,7 @@ private:
     QToolButton *m_newPalette = nullptr;
     bool m_paletteByType = true;
     bool m_libRenaming = false;
+    quint32 m_libraryClip = 0xFFFFFFFF;     //!< Q215: the reusable cue copied in the Library
     QTreeWidgetItem *m_libRenameItem = nullptr;
     void slotLibraryItemRenamed(QTreeWidgetItem *item, int column);
     /** The Look Editor's Used by line for @a paletteId. */

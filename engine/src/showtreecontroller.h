@@ -342,6 +342,25 @@ public:
      *  Non-tracking (D12, importChaser()), so it plays as it did. */
     quint32 addCueList(quint32 productionId, const QString &name,
                        ShowTree::ListMode mode = ShowTree::ListMode::Tracking);
+    /** Q215: a deep copy of cue list @a listId (its cues, sub-cues, hits
+     *  scoped to nothing else, layers, tracking, blocking, notes, sections)
+     *  into production @a toProductionId, named "<name> (copy)" -- or, with
+     *  @a nameAsIs (a paste into another production), as it was when the
+     *  name is free there. One undo step; the new list's id, or invalid.
+     *  Decided (can change): a use of a reusable layer or cue keeps using
+     *  the SAME reusable -- it is shared, not deep-copied. */
+    quint32 pasteCueList(quint32 listId, quint32 toProductionId, bool nameAsIs);
+    /** Duplicate: pasteCueList() into the list's own production. */
+    quint32 duplicateCueList(quint32 listId);
+    /** A deep copy of production @a productionId (every list, its Looks
+     *  section and hits, running order, script, numbering), "<name> (copy)",
+     *  not current. One undo step; its id, or invalid. Used for both
+     *  Duplicate and Paste. */
+    quint32 pasteProduction(quint32 productionId);
+    /** A copy of reusable cue @a reusableId in the library, "<name> (copy)"
+     *  (its layers' own reusables stay shared). One undo step. Duplicate and
+     *  Paste both. */
+    quint32 duplicateReusableCue(quint32 reusableId);
     /** A new cue after @a afterIndex (-1: at the top), numbered per D23. */
     quint32 addCue(quint32 listId, int afterIndex, const QString &name);
     bool removeCue(quint32 cueId);

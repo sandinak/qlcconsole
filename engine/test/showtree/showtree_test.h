@@ -243,6 +243,7 @@ private slots:
     void aSkippedCueStillPlaysWhenJumpedToAndIncluded();
     void skippedCuesBakeToSkippedSteps();
     void skippedCuesSaveLoadAndUndo();
+    void duplicateAndPasteListProductionReusableCue();
     /** Q38: move in black per list and per cue -- the decision matrix, the
      *  lookup the planner uses, save/load, undo, and an older reader. */
     void moveInBlackDecisionMatrix();

@@ -2506,6 +2506,15 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             // Esc: back out first, then the Library's selection goes.
             EditKeys::Verbs keys;
             keys.backOut = [this]() { return backOutOneLevel(); };
+            // Q215: a reusable cue copies, pastes and duplicates in the library.
+            keys.copy = [this]() { copyLibraryReusable(); };
+            keys.paste = [this]() { pasteReusableCue(); };
+            keys.duplicate = [this]() { duplicateLibraryReusable(); };
+            keys.hasSelection = [this]() {
+                QTreeWidgetItem *it = m_library->currentItem();
+                return it != nullptr && it->isSelected() && it->data(0, KindRole).toInt() == LibReusable
+                       && m_st->reusableCue(it->data(0, IdRole).toUInt()) != nullptr;
+            };
             EditKeys::install(m_library, keys);
         }
         static_cast<LibraryWidget *>(m_library)->onPaletteDrop = [this](const QList<quint32> &ids, const QString &f) {
@@ -8795,6 +8804,7 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
         if (m_st->canRestoreOriginal(id))
             menu.add(ContextMenu::Kind, tr("Restore Original…"), [this, id]() { restoreOriginal(id); },
                      QStringLiteral("stRestoreOriginal"));
+        listClipboardItems(menu, QStringLiteral("List"));
         menu.add(ContextMenu::Edit, tr("Rename…"), [this, id, item]() {
             bool ok = false;
             const QString n = QInputDialog::getText(this, tr("Rename"), tr("Name"),
@@ -8836,6 +8846,7 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
                      [this, id, cur]() { m_st->setCurrentProduction(cur ? invalidId() : id); },
                      QStringLiteral("stMakeCurrent"));
         }
+        listClipboardItems(menu, QStringLiteral("Production"));
         menu.add(ContextMenu::Edit, tr("Rename…"), [this, id, item]() {
             bool ok = false;
             const QString n = QInputDialog::getText(this, tr("Rename"), tr("Name"),
@@ -8848,6 +8859,56 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
         return;
     }
     menu.add(ContextMenu::Remove, tr("Delete"), [this]() { slotDelete(); });
+}
+
+void ShowTreeView::listClipboardItems(ContextMenu &menu, const QString &what)
+{
+    // Q215: a cue list's and a production's Copy / Paste / Duplicate, the
+    // cue menu's. Paste puts a list in this production (or this list's), a
+    // production beside the others.
+    menu.add(ContextMenu::Edit, tr("Copy"), [this]() { copySelection(); }, QStringLiteral("stCopy") + what)
+        ->setShortcut(QKeySequence::Copy);
+    QAction *paste = menu.add(ContextMenu::Edit, tr("Paste"), [this]() { pasteClipboard(); },
+                              QStringLiteral("stPaste") + what);
+    paste->setShortcut(QKeySequence::Paste);
+    paste->setEnabled(m_commander->clipboard.list != invalidId() || m_commander->clipboard.production != invalidId());
+    menu.add(ContextMenu::Edit, tr("Duplicate"), [this]() { duplicateSelection(); },
+             QStringLiteral("stDuplicate") + what)
+        ->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+}
+
+bool ShowTreeView::duplicateReusableCueRow(quint32 id)
+{
+    const quint32 made = m_st->duplicateReusableCue(id);
+    if (made == invalidId())
+        return false;
+    reloadLibrary();
+    m_hint->setText(tr("Duplicated reusable cue as “%1”").arg(m_st->reusableName(made)));
+    return true;
+}
+
+bool ShowTreeView::pasteReusableCue()
+{
+    return m_libraryClip != invalidId() && duplicateReusableCueRow(m_libraryClip);
+}
+
+bool ShowTreeView::copyLibraryReusable()
+{
+    QTreeWidgetItem *item = m_library->currentItem();
+    if (item == nullptr || item->data(0, KindRole).toInt() != LibReusable
+        || m_st->reusableCue(item->data(0, IdRole).toUInt()) == nullptr)
+        return false;
+    m_libraryClip = item->data(0, IdRole).toUInt();
+    return true;
+}
+
+bool ShowTreeView::duplicateLibraryReusable()
+{
+    QTreeWidgetItem *item = m_library->currentItem();
+    if (item == nullptr || item->data(0, KindRole).toInt() != LibReusable
+        || m_st->reusableCue(item->data(0, IdRole).toUInt()) == nullptr)
+        return false;
+    return duplicateReusableCueRow(item->data(0, IdRole).toUInt());
 }
 
 void ShowTreeView::importChaser(quint32 chaserId, bool showReport)
@@ -10087,6 +10148,20 @@ void ShowTreeView::fillLibraryMenu(QMenu *out, QTreeWidgetItem *item)
                 usedBy->addAction(x)->setEnabled(false);
         if (usedBy->isEmpty())
             usedBy->addAction(tr("(not used)"))->setEnabled(false);
+        if (m_st->reusableCue(id) != nullptr)
+        {
+            // Q215: Copy and Paste both make a copy in the library.
+            menu.add(ContextMenu::Edit, tr("Copy"), [this, id]() {
+                m_libraryClip = id;
+                m_hint->setText(tr("Copied reusable cue “%1”: ⌘V pastes a copy in the library").arg(m_st->reusableName(id)));
+            }, QStringLiteral("stCopyReusable"))->setShortcut(QKeySequence::Copy);
+            QAction *pasteRc = menu.add(ContextMenu::Edit, tr("Paste"), [this]() { pasteReusableCue(); },
+                                        QStringLiteral("stPasteReusable"));
+            pasteRc->setShortcut(QKeySequence::Paste);
+            pasteRc->setEnabled(m_st->reusableCue(m_libraryClip) != nullptr);
+            menu.add(ContextMenu::Edit, tr("Duplicate"), [this, id]() { duplicateReusableCueRow(id); },
+                     QStringLiteral("stDuplicateReusable"))->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+        }
         menu.add(ContextMenu::Edit, tr("Rename…"), [this, id, name]() {
             bool ok = false;
             const QString n = QInputDialog::getText(this, tr("Rename"), tr("Name"), QLineEdit::Normal, name, &ok);
@@ -11388,7 +11463,7 @@ bool ShowTreeView::copySelection()
             layers << qMakePair((*it)->data(0, CueRole).toUInt(), (*it)->data(0, IdRole).toUInt());
     }
     if (cues.isEmpty() && layers.isEmpty())
-        return false;
+        return copyListOrProduction();
     ShowTreeCommand::Clipboard clip;
     if (!cues.isEmpty())
         clip.cues = cues;
@@ -11399,6 +11474,65 @@ bool ShowTreeView::copySelection()
                                     : tr("Copied %1 layer(s): ⌘V pastes into the selected cue, or after the selected layer")
                                           .arg(layers.count()));
     return true;
+}
+
+bool ShowTreeView::copyListOrProduction()
+{
+    // Q215: a cue list or a production, on its own row.
+    ShowTreeCommand::Clipboard clip;
+    const quint32 id = currentId();
+    if (currentKind() == ListNode)
+    {
+        const CueList *l = m_st->cueList(id);
+        if (l == nullptr || l->looks || l->isSubCues())
+            return false;
+        clip.list = id;
+        m_hint->setText(tr("Copied cue list “%1”: ⌘V pastes it into the selected production").arg(l->name));
+    }
+    else if (currentKind() == ProductionNode)
+    {
+        const Production *p = m_st->production(id);
+        if (p == nullptr)
+            return false;
+        clip.production = id;
+        m_hint->setText(tr("Copied production “%1”: ⌘V pastes a copy beside it").arg(p->name));
+    }
+    else
+        return false;
+    m_commander->clipboard = clip;
+    return true;
+}
+
+bool ShowTreeView::pasteListOrProduction(const ShowTreeCommand::Clipboard &clip)
+{
+    if (clip.production != invalidId())
+    {
+        const quint32 made = m_st->pasteProduction(clip.production);
+        if (made == invalidId())
+            return false;
+        selectNode(made);
+        m_hint->setText(tr("Pasted production “%1”").arg(m_st->production(made)->name));
+        return true;
+    }
+    if (clip.list != invalidId())
+    {
+        // Into the production selected (or the one the selected row is in).
+        quint32 pid = invalidId();
+        for (QTreeWidgetItem *item = m_tree->currentItem(); item != nullptr; item = item->parent())
+            if (item->data(0, KindRole).toInt() == ProductionNode)
+                pid = item->data(0, IdRole).toUInt();
+        if (pid == invalidId() && m_st->productions().count() == 1)
+            pid = m_st->productions().first().id;
+        if (pid == invalidId())
+            m_st->cueList(clip.list, &pid);
+        const quint32 made = pid == invalidId() ? invalidId() : m_st->pasteCueList(clip.list, pid, true);
+        if (made == invalidId())
+            return false;
+        selectNode(made);
+        m_hint->setText(tr("Pasted cue list “%1”").arg(m_st->cueList(made)->name));
+        return true;
+    }
+    return false;
 }
 
 bool ShowTreeView::cutSelection()
@@ -11426,6 +11560,8 @@ bool ShowTreeView::pasteClipboard()
 {
     const ShowTreeCommand::Clipboard clip = m_commander->clipboard;
     const quint32 cueId = currentCueId();
+    if (clip.list != invalidId() || clip.production != invalidId())
+        return pasteListOrProduction(clip);
     if (clip.isEmpty() || cueId == invalidId())
         return false;
     if (!clip.cues.isEmpty())
