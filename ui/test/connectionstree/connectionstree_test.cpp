@@ -2214,11 +2214,12 @@ void ConnectionsTree_Test::ctrlNAddsAndCtrlDDeletesAUniverseAndUndoPutsItBack()
     QAction *undo = mgr.m_undoPatchAction;
     QVERIFY(add != nullptr && del != nullptr && undo != nullptr);
     QCOMPARE(add->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_N));
-    QCOMPARE(del->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_D));
+    // Delete / Backspace in the list now (EditKeys); Cmd/Ctrl+D is Duplicate, so
+    // none here (decided: a universe is not duplicated; can change).
+    QVERIFY(del->shortcut().isEmpty());
     QCOMPARE(undo->shortcut(), QKeySequence(QKeySequence::Undo));
     // Connections' own: not the window's New / Dump DMX.
     QCOMPARE(add->shortcutContext(), Qt::WidgetWithChildrenShortcut);
-    QCOMPARE(del->shortcutContext(), Qt::WidgetWithChildrenShortcut);
     QCOMPARE(undo->shortcutContext(), Qt::WidgetWithChildrenShortcut);
 
     const quint32 before = io->universesCount();
@@ -2247,7 +2248,15 @@ void ConnectionsTree_Test::ctrlNAddsAndCtrlDDeletesAUniverseAndUndoPutsItBack()
     mgr.m_list->setCurrentRow(int(before));
     QVERIFY(del->isEnabled());
     const quint32 lastId = io->getUniverseID(int(before));
+    answerNextMessageBox(QMessageBox::No);
     del->trigger();
+    QCOMPARE(io->universesCount(), before + 1);
+    // The Delete key asks too, and does it on Yes; Ctrl+D does nothing.
+    mgr.m_list->setFocus();
+    QTest::keyClick(mgr.m_list, Qt::Key_D, Qt::ControlModifier);
+    QCOMPARE(io->universesCount(), before + 1);
+    answerNextMessageBox(QMessageBox::Yes);
+    QTest::keyClick(mgr.m_list, Qt::Key_Delete);
     QCOMPARE(io->universesCount(), before);
     QCOMPARE(quint32(mgr.m_list->count()), before);
 
@@ -2261,6 +2270,7 @@ void ConnectionsTree_Test::ctrlNAddsAndCtrlDDeletesAUniverseAndUndoPutsItBack()
 
     // Undo asked and declined: nothing changes.
     mgr.m_list->setCurrentRow(int(before));
+    answerNextMessageBox(QMessageBox::Yes);
     del->trigger();
     QCOMPARE(io->universesCount(), before);
     answerNextMessageBox(QMessageBox::No);

@@ -244,6 +244,21 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
     QCOMPARE(m_app->m_rigOverviewAction->shortcut(),
              QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_R));
 
+    // Q214: Cmd/Ctrl+D is Duplicate in every list; Dump DMX is Opt/Alt+Cmd/Ctrl+D.
+    QCOMPARE(m_app->m_dumpDmxAction->shortcut(), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_D));
+    QVERIFY(m_app->m_dumpDmxAction->shortcut() != QKeySequence(Qt::CTRL | Qt::Key_D));
+    if (!qEnvironmentVariable("WFKEYS_SHOTS").isEmpty())
+    {
+        // The Control menu as open (Q207 shot): Dump DMX shows its new key.
+        foreach (QMenu *m, m_app->menuBar()->findChildren<QMenu *>())
+            if (m->actions().contains(m_app->m_dumpDmxAction))
+            {
+                m->resize(m->sizeHint());
+                m->grab().save(QStringLiteral("%1/%2-control-menu.png").arg(qEnvironmentVariable("WFKEYS_SHOTS"),
+                                qEnvironmentVariable("WFKEYS_PREFIX", QStringLiteral("after"))));
+            }
+    }
+
     const QString label = tabs->tabBar()->tabData(2).toString();
     m_app->slotDetachContext(2);
     QCOMPARE(m_app->detachedContexts(), QStringList() << label);
@@ -4906,9 +4921,12 @@ void AppViews_Test::ctrlDOnTheShowTreeDuplicates()
     QTRY_COMPARE(st->cueList(list)->cues.count(), 2);
     QCOMPARE(dump.dumped.count(), 0);
 
-    // Nothing selected: the tree leaves Ctrl+D to the window (Dump DMX).
+    // Nothing selected: Ctrl+D does nothing (Dump DMX is Alt+Ctrl+D).
     tree->clearSelection();
     typeKey(tree, Qt::Key_D, Qt::ControlModifier);
+    QCOMPARE(st->cueList(list)->cues.count(), 2);
+    QCOMPARE(dump.dumped.count(), 0);
+    typeKey(tree, Qt::Key_D, Qt::ControlModifier | Qt::AltModifier);
     QCOMPARE(st->cueList(list)->cues.count(), 2);
     QCOMPARE(dump.dumped.count(), 1);
     m_app->clearDocument();
@@ -4976,9 +4994,12 @@ void AppViews_Test::ctrlDInBuildListsDuplicates()
     typeKey(pm->m_effectsList, Qt::Key_V, Qt::ControlModifier);
     QTRY_COMPARE(efxCount(), 3);
 
-    // Nothing selected: Dump DMX.
+    // Nothing selected: Ctrl+D does nothing; Alt+Ctrl+D is Dump DMX.
     pm->m_effectsList->clearSelection();
     typeKey(pm->m_effectsList, Qt::Key_D, Qt::ControlModifier);
+    QCOMPARE(dump.dumped.count(), 0);
+    QCOMPARE(efxCount(), 3);
+    typeKey(pm->m_effectsList, Qt::Key_D, Qt::ControlModifier | Qt::AltModifier);
     QCOMPARE(dump.dumped.count(), 1);
     QCOMPARE(efxCount(), 3);
     m_app->clearDocument();
@@ -5294,9 +5315,13 @@ void AppViews_Test::ctrlDOnThePlotDuplicates()
         named = named || o->name() == QStringLiteral("Soloist 2");
     QVERIFY(named);
 
-    // Nothing selected: the plot leaves Ctrl+D to the window (Dump DMX).
+    // Nothing selected: Ctrl+D does nothing; Alt+Ctrl+D is Dump DMX.
     gv->scene()->clearSelection();
     QTest::keyClick(QApplication::focusWidget(), Qt::Key_D, Qt::ControlModifier);
+    QCoreApplication::processEvents();
+    QCOMPARE(props->stageTargets().size(), before + 1);
+    QCOMPARE(dumped.count(), 0);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_D, Qt::ControlModifier | Qt::AltModifier);
     QCoreApplication::processEvents();
     QCOMPARE(props->stageTargets().size(), before + 1);
     QCOMPARE(dumped.count(), 1);

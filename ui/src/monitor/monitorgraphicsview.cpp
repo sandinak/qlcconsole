@@ -4764,9 +4764,9 @@ static bool isDuplicateKey(const QKeyEvent *ke)
 
 bool MonitorGraphicsView::event(QEvent *e)
 {
-    /* Cmd/Ctrl+D on the plot duplicates the selection. The app's own Ctrl+D
-       (dump DMX) is a window shortcut: claim the key while the plot has the
-       focus and something is selected. */
+    /* Cmd/Ctrl+D on the plot duplicates the selection. Dump DMX is Alt+Ctrl+D, so
+       the key is the plot's alone; it is claimed while something is
+       selected, else it does nothing. */
     if (e->type() == QEvent::ShortcutOverride && isDuplicateKey(static_cast<QKeyEvent *>(e))
         && !m_scene->selectedItems().isEmpty())
     {

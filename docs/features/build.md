@@ -635,7 +635,7 @@ with its id, in its place in every collection, chaser and show track, and on
 the VC buttons and cue lists that played it; **⇧⌘Z** deletes it again.
 **Duplicate**, **⌘D** and **⌘C ⌘V** are one step too: ⌘Z takes the copies
 away. ⌘D works in Palettes, Effects and Scenes on what is selected (with
-nothing selected it is Control ▸ Dump DMX); in Effects ⌘C ⌘V copies the
+nothing selected it does nothing; Dump DMX is ⌥⌘D); in Effects ⌘C ⌘V copies the
 effect palette, EFX or RGB Matrix. **Esc** backs the Workbench out first,
 then lets go of the selection
 ([Edit keys](shortcuts.md#edit-keys-the-same-in-every-list)).
