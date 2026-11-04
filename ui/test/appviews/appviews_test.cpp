@@ -4537,6 +4537,32 @@ void AppViews_Test::theFooterSaysWhatLightsTheStage()
     QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0, 5000);
     QTRY_VERIFY_WITH_TIMEOUT(m_app->m_stage == App::Stage::Live, 5000);
 
+    // GO takes the stage while a cue is selected in the Show Tree: the preview is held,
+    // and the chip says so (what the old toolbar's Held line did).
+    st->previewCue(c2);
+    m_app->m_cueGoAction->trigger();
+    QTRY_VERIFY_WITH_TIMEOUT(int(st->previewState()) == int(ShowTreeController::PreviewState::Held), 5000);
+    m_app->resize(1280, 800);
+    QCoreApplication::processEvents();
+    m_app->updateStageIndicator();
+    // (this one-cue list may have run out on that GO: LIVE, or "no cue list", either way held)
+    QVERIFY2((m_app->m_stage == App::Stage::Live || m_app->m_stage == App::Stage::NoList)
+             && (chip->text() + chip->toolTip()).contains(QStringLiteral("Show Tree preview held")),
+             qPrintable(chip->text()));
+    QVERIFY(chip->toolTip().contains("Chorus") && chip->toolTip().contains("Play"));
+    shots("gohold");
+    st->resumePreview();            // Play: the chip names the on-rig cue again
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains("Chorus") && !chip->toolTip().contains("Show Tree preview held"),
+                              qPrintable(chip->text()), 5000);
+    st->stopPreview();
+    QTRY_VERIFY2_WITH_TIMEOUT(!chip->text().contains("held") && !chip->text().contains("Show Tree)"),
+                              qPrintable(chip->text()), 5000);
+    doc->masterTimer()->stopAllFunctions();
+    QTRY_VERIFY_WITH_TIMEOUT(!list->isRunning(), 5000);
+    m_app->m_cueGoAction->trigger();
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(m_app->m_stage == App::Stage::Live, 5000);
+
     // Blind (Operate's Blind view): the stage holds the cue while the screens show the edit.
     doc->setMode(Doc::Operate);
     m_app->setBlindView(true);

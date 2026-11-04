@@ -76,7 +76,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   *"· Act 1 running"* when a list plays underneath, instead of the last cue
   the Run tab played. Click the chip to jump to that cue. This replaces the
   Show Tree toolbar's "On the rig" line, which is gone: the footer is the one
-  place that says what is on stage.
+  place that says what is on stage. When GO takes the stage from a cue
+  selected in the Show Tree, the chip adds *Show Tree preview held*; its hover
+  says how to bring the preview back (Play).
 
 - **The rig view holds still under the mouse.** Hovering over the 3D/rig
   view while a show ran made the rig shimmer back and forth by a hair:

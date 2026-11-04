@@ -4655,6 +4655,19 @@ QString App::stageIndicatorText(Stage *stageOut, QString *tipOut) const
         tip = tr("No cue list is running and nothing is being built: the stage is not lit by "
                  "the show. Click for the Show Tree.");
     }
+    // The Show Tree's preview held back because GO took the stage (it was the old
+    // toolbar's "Held" line): say so, and how to get it back.
+    if ((stage == Stage::Live || stage == Stage::NoList) && design && tree != nullptr
+        && tree->previewState() == ShowTreeController::PreviewState::Held)
+        if (const ShowTree::CueList *hl = tree->listOfCue(tree->previewedCue()))
+        {
+            const QString held = tree->cueLabel(*hl, hl->indexOf(tree->previewedCue()));
+            text += tr(" \u00b7 Show Tree preview held");
+            tip += tr("\nHeld: GO took the stage, so the cue you selected in the Show Tree (%1) is not on "
+                      "the rig. Press Play in the Show Tree toolbar (or the Workbench) to preview it "
+                      "again; the running list keeps going underneath. Click here to jump to it.")
+                       .arg(held);
+        }
     if (stageOut != nullptr)
         *stageOut = stage;
     if (tipOut != nullptr)
@@ -7732,10 +7745,15 @@ void App::initStatusBar()
     m_statusStage->setProperty("helpTopic", QStringLiteral("show-tree.md"));
     connect(m_statusStage, &QToolButton::clicked, this, [this]() {
         const bool run = m_stage == Stage::Live || m_stage == Stage::BlindView || m_stage == Stage::BlindMuted;
-        showContext(run ? tr("Run") : tr("Show Tree"));
+        const ShowTreeController *held = m_doc != NULL ? m_doc->showTree() : nullptr;
+        const bool heldPreview = m_stage == Stage::Live && held != nullptr
+            && held->previewState() == ShowTreeController::PreviewState::Held;
+        showContext(run && !heldPreview ? tr("Run") : tr("Show Tree"));
         // On the rig from the Show Tree: jump to that cue.
         ShowTreeController *st = m_doc != NULL ? m_doc->showTree() : nullptr;
-        if (!run && st != nullptr && st->previewedCue() != ShowTree::invalidId()
+        if ((!run || (m_stage == Stage::Live && st != nullptr
+                      && st->previewState() == ShowTreeController::PreviewState::Held))
+            && st != nullptr && st->previewedCue() != ShowTree::invalidId()
             && ShowTreeView::instance() != NULL)
             ShowTreeView::instance()->selectNode(st->previewedCue());
     });

@@ -187,7 +187,8 @@ the tree and the Workbench follows it.
   highlighted on the 2D view, and clicking a fixture there selects the
   layer that lights it. **Solo** plays only the selected layer. **Stop**
   holds the preview, **Play** brings it back. A GO holds it too, and while
-  the list runs it says **■ Held** until you press **Play** (see
+  the list runs the footer chip says **Show Tree preview held** until you
+  press **Play** (see
   [Seeing it on the rig](#seeing-it-on-the-rig)). In Operate nothing
   previews, as everywhere in the tree: **Play** and **Solo** stay in view,
   greyed, and say why.
@@ -1639,8 +1640,9 @@ an older build ignores.
   the editors' Test plays hold the same way. Simple Desk, the Virtual
   Console, Focus and Refine and the programmer's flash are not previews:
   GO leaves them running.
-- **The latest thing you do wins.** After GO the top right says
-  *"■ Held — Full Show running. Play to preview 1.0.1 Verse over it."*
+- **The latest thing you do wins.** After GO the footer chip says
+  *"● LIVE · Full Show · 1.0.1 Verse · Show Tree preview held"*; hover it
+  for what is held and how to get it back (**Play**), click it to jump to the cue.
   Select a cue — another one, or click the one already selected — and it
   is on the stage again, over the run: the cue you are on takes precedence
   on every channel it sets, so a dimmer you edit down shows even over a
