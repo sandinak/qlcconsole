@@ -72,6 +72,9 @@ public:
     /** Can this machine draw on the GPU at all? Asks once; false on the
      *  offscreen/minimal platforms unless QLC_RIG_GPU=1. */
     static bool available();
+    /** The graphics API available() found ("Metal", "Vulkan", "D3D11",
+     *  "OpenGL"...); empty when there is none (the CPU draws). */
+    static QString availableBackend();
 
     /**
      * Draws a frame.
@@ -125,6 +128,8 @@ private:
 
     QImage m_scene;
     QImage m_light;
+private:
+    static QString s_backend;
 };
 
 /** @} */

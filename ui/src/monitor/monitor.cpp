@@ -3416,8 +3416,20 @@ void Monitor::showStageOverview()
              "the same picture, more slowly.")
         : tr("No graphics card this view can draw on: the rig is drawn on "
              "the CPU."));
+    if (RhiRaster::available())
+        gpuCheck->setText(tr("GPU · %1").arg(RhiRaster::availableBackend()));
+    /* Which one is drawing now, said where the switch is: "is it on the
+       GPU?" is a question the picture alone can't answer. */
+    auto sayBackend = [gpuCheck, view]() {
+        gpuCheck->setToolTip(gpuCheck->toolTip().section(QStringLiteral("\n"), 0, 0)
+                             + QStringLiteral("\n") + tr("Drawing on: %1").arg(view->renderBackendLabel()));
+    };
+    sayBackend();
     bar->addWidget(gpuCheck);
-    connect(gpuCheck, &QCheckBox::toggled, &dlg, [view](bool on) { view->setGpu(on); });
+    connect(gpuCheck, &QCheckBox::toggled, &dlg, [view, sayBackend](bool on) {
+        view->setGpu(on);
+        sayBackend();
+    });
 
     QComboBox *rateCombo = new QComboBox(footer);
     rateCombo->setObjectName(QStringLiteral("rigRate"));

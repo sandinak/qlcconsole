@@ -79,8 +79,16 @@ bool RhiRaster::available()
     {
         RhiRaster probe;
         probed = probe.ensureRhi() ? 1 : 0;
+        s_backend = probe.backendName();
     }
     return probed == 1;
+}
+
+QString RhiRaster::s_backend;
+
+QString RhiRaster::availableBackend()
+{
+    return available() ? s_backend : QString();
 }
 
 QString RhiRaster::backendName() const

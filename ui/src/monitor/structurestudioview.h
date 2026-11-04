@@ -182,6 +182,19 @@ public:
     int renderThreads() const { return m_renderThreads; }
     void setMaxFrameRate(int fps);
     int maxFrameRate() const { return m_maxFps; }
+    /** The ceiling on the live rate in Operate, whatever maxFrameRate()
+     *  says: the show comes first (setting monitor/rig/operatefps, 15). */
+    static int operateFrameRate();
+    /** The smoothed cost of a frame (the live rate follows it) after one
+     *  that cost @a ms: down quickly, up slowly, one frame moving it by
+     *  three times at most. */
+    static double nextFrameEstimate(double estimate, double ms);
+    /** What draws the rig now, for the operator: "GPU · Metal" (the graphics
+     *  API in use), or "CPU". */
+    QString renderBackendLabel() const;
+    /** The threads a frame is drawn on: renderThreads() when set, else
+     *  SystemProbe::performanceCores(), two fewer in Operate. */
+    int frameThreads() const;
     /** The scene whose Aim palettes decide where movers are POINTED when there
      *  is no live DMX saying otherwise. The studio draws these as dashed lines;
      *  this is the same association, shown as the direction it actually means. */
@@ -528,6 +541,7 @@ private:
     mutable QVector<DrawOp> m_pickOps;
     mutable OpRefs m_pickOpaque, m_pickSeeThrough;
     mutable bool m_pickDirty = false;
+    mutable int m_pickRow = -1;     ///< the one row pickDepth() has drawn (GPU frames)
     bool gpuRender(QPainter &p, const OpRefs &opaque, const OpRefs &translucent,
                    const OpRefs &lights) const;
     double pickDepth(const QPoint &px) const;
@@ -535,6 +549,9 @@ private:
     int      m_renderThreads = 0; ///< 0 = one per core
     int      m_maxFps = 30;       ///< ceiling on the live repaint rate
     mutable class QThreadPool *m_renderPool = nullptr;
+    /** m_renderPool, made (low priority) and grown to @a threads */
+    class QThreadPool *renderPool(int threads) const;
+    bool operating() const;          ///< the show is in Operate
     bool     m_useZBuffer = true; ///< false = the old sorted-primitive painter
     mutable QVector<DrawOp> m_ops;      ///< queue, only while m_collecting
     mutable bool m_collecting = false;
@@ -830,9 +847,10 @@ private:
         double baseZ = 0.0;
         QList<StagePlatform::Block> blocks;
     };
-    /** beamThrow() without the kept landings. */
+    /** beamThrow() without the kept landings. @a skipDriven: not the
+     *  curtains a fixture opens and flies (applyDrivenDrapes() adds them). */
     double beamThrowUncached(const QVector3D &apex, const QVector3D &dir, bool *hit,
-                             QVector3D *landNormal, int *surface) const;
+                             QVector3D *landNormal, int *surface, bool skipDriven = false) const;
     QVector<Deck> decks() const;
     mutable QVector<Deck> m_decks;      ///< this frame's, while painting
     /** Something a light's haze can be hidden behind (opaqueTowardTheEye()):
@@ -897,18 +915,47 @@ private:
     { return keysHash(k.v, seed); }
     struct Throw
     {
+        /* Where it lands on what stays put: decks, the floor, scenery
+           nothing drives. */
         double run = 0.0;
         QVector3D normal;
         int surface = 0;
         bool hit = false;
         quint32 frame = 0;              ///< the last frame that threw it
+        /* And with the driven curtains where they were at drapeKey: a
+           curtain opening moves only these, one curtain test per ray, where
+           every ray of the rig used to be thrown again on every frame of the
+           move (half a second a frame on a 210-fixture show). */
+        double fullRun = 0.0;
+        QVector3D fullNormal;
+        int fullSurface = 0;
+        bool fullHit = false;
+        quint64 drapeKey = 0;
     };
+    /** @a t's full landing: its static one, then the driven curtains as
+     *  this frame has them (m_drapeKey). */
+    void applyDrivenDrapes(const QVector3D &apex, const QVector3D &dir, Throw &t) const;
     mutable QHash<ThrowKey, Throw> m_throws;
     mutable quint64 m_throwScene = 0;
+    mutable quint64 m_drapeKey = 0;       ///< this frame's driven curtain poses
+    /** Each piece of scenery shown, with the box it stands in this frame:
+     *  a ray that misses the box cannot meet it, and is not asked of it --
+     *  most rays pass most scenery by, and Scenery::rayHit() is a walk of
+     *  its panels (beamThrowUncached(), applyDrivenDrapes()). In the order
+     *  the show lists them, as they were asked before. */
+    struct SceneryBox { Scenery *sc; QVector3D lo, hi; bool driven; bool empty; };
+    mutable QVector<SceneryBox> m_sceneryBoxes;
+    void buildSceneryBoxes() const;
+    static bool rayMayMeet(const SceneryBox &box, const QVector3D &apex, const QVector3D &dir,
+                           double reach);
+    mutable quint64 m_meshDrapeKey = 0;   ///< the poses the kept meshes landed on
     /** This frame's line-of-sight model, when beams stop at what is in
      *  their way (lineOfSightBeams()); null otherwise. */
     mutable BeamOcclusion::ModelPtr m_sightModel;
     static bool s_lineOfSightBeams;
+    /** Tests: every ray thrown afresh against everything, no kept landings
+     *  and no boxes -- the picture the shortcuts must reproduce exactly. */
+    static bool s_referenceThrows;
     mutable quint32 m_throwFrame = 0;
     mutable int m_throwsUsed = 0;
     /** A split pool's mesh, as it landed (drawBeamCone()): kept while the
@@ -1380,6 +1427,7 @@ private:
      *  not flip the rig between light and full frames -- seen as the whole
      *  picture shifting a hair back and forth under the mouse. */
     bool     m_hoverFrame = false;
+    bool     m_hoverTickPending = false;  ///< Operate: a pointer frame waiting its turn
     QElapsedTimer m_lastFrameAt;     ///< when the last frame started
     class QTimer *m_degradeSettle = nullptr;  ///< the full-quality frame after values stop
     static qint64 processCpuNs();

@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QApplication>
 #include <QTimer>
 #include <QScopeGuard>
 #include <QMouseEvent>
@@ -41,6 +42,11 @@
 #undef private
 
 #include "monitorproperties.h"
+#include "systemprobe.h"
+#include "rhiraster.h"
+#include "zraster.h"
+#include "qlcfixturedef.h"
+#include "scenery.h"
 #include "qlcfixturemode.h"
 #include "qlccapability.h"
 #include "qlcchannel.h"
@@ -59,6 +65,7 @@ bool reporting()
 }
 
 const int kUniverses = 8;
+
 
 /** The process's CPU time in ns: the view renders on a thread pool, and
  *  every thread's work is the frame's cost. Wall clock where there is no
@@ -121,6 +128,9 @@ void RenderPerf_Test::initTestCase()
     spec.scenes = spec.chasers = spec.matrices = spec.efx = spec.collections = spec.cuelists = 0;
     buildShow(m_doc, spec, INTERNAL_FIXTUREDIR, INTERNAL_SCRIPTDIR);
     QCOMPARE(int(m_doc->fixtures().size()), kUniverses * ShowSpec::mixedFixturesPerUni);
+    // The cores the view spreads over: some, never more than the machine has.
+    QVERIFY(SystemProbe::performanceCores() >= 1);
+    QVERIFY(SystemProbe::performanceCores() <= qMax(1, QThread::idealThreadCount()));
     // The plot shows the stage the rig hangs over (metres).
     m_doc->monitorProperties()->setGridSize(QVector3D(14, 8, 14));
     changeValues(0);
@@ -181,6 +191,8 @@ void RenderPerf_Test::anIdleRigViewDrawsNothing()
     QVERIFY(QTest::qWaitForWindowExposed(&v));
     v.setLiveValues(true);
     QVERIFY(v.m_liveTimer != nullptr && v.m_liveTimer->isActive());
+    // Offscreen there is no graphics card to draw on: the CPU, and it says so.
+    QCOMPARE(v.renderBackendLabel(), QStringLiteral("CPU"));
     // Whatever the opening needs (the first frames, the half-second caches)
     QTRY_VERIFY_WITH_TIMEOUT(!v.m_settlePending && v.paintCount() > 0, 5000);
     QTest::qWait(700);
@@ -217,10 +229,15 @@ void RenderPerf_Test::anIdlePlotDrawsNothing()
     QTRY_VERIFY(paints.count > painted);
 }
 
-/* A running show (values changing the whole time) with Live on: the frame
-   budget holds the view well under one core, and when the values stop, a
-   full-quality frame follows and then nothing is drawn. */
-void RenderPerf_Test::aRunningShowStaysUnderOneCore()
+/* A running show (values changing the whole time) with Live on. The frame
+   budget gives the view a share of the performance cores -- all but two of
+   them, about 40% of each (SystemProbe::performanceCores()) -- where it used
+   to hold it to 40% of ONE core whatever the machine: a 240-fixture rig drew
+   4 frames a second with most cores idle ("we have lots of CPUs .. but only
+   using 1"). In Operate, where the DMX comes first, it is held to the old
+   share and to 15 frames a second. When the values stop, a full-quality
+   frame follows and then nothing is drawn. */
+void RenderPerf_Test::aRunningShowStaysWithinItsShare()
 {
     StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
     v.resize(960, 600);
@@ -233,25 +250,44 @@ void RenderPerf_Test::aRunningShowStaysUnderOneCore()
     QTRY_VERIFY_WITH_TIMEOUT(!v.m_settlePending && v.paintCount() > 0, 5000);
     QTest::qWait(700);
 
-    QElapsedTimer wall;
-    wall.start();
-    const qint64 cpu0 = cpuNs(wall);
-    const int painted0 = v.paintCount();
     int step = 100;
-    QTimer show;                            // the engine: new values every 40 ms
-    connect(&show, &QTimer::timeout, this, [this, &step]() { changeValues(++step); });
-    show.start(40);
-    while (wall.elapsed() < 3000)
-        QTest::qWait(20);
-    show.stop();
-    const double secs = wall.elapsed() / 1000.0;
-    const double cores = double(cpuNs(wall) - cpu0) / 1e9 / secs;
-    m_runningNsPerSec = double(cpuNs(wall) - cpu0) / secs;
-    const int frames = v.paintCount() - painted0;
-    qInfo("a running show: %d frames in %.1f s, %.2f cores", frames, secs, cores);
-    QVERIFY(frames > 0);
+    // Three seconds of a show in @a mode: frames drawn, cores used.
+    auto run = [&](Doc::Mode mode, int &frames, double &cores) {
+        m_doc->setMode(mode);
+        QTest::qWait(300);                  // the rate settles to the mode
+        QElapsedTimer wall;
+        wall.start();
+        const qint64 cpu0 = cpuNs(wall);
+        const int painted0 = v.paintCount();
+        QTimer show;                        // the engine: new values every 40 ms
+        connect(&show, &QTimer::timeout, this, [this, &step]() { changeValues(++step); });
+        show.start(40);
+        while (wall.elapsed() < 3000)
+            QTest::qWait(20);
+        show.stop();
+        const double secs = wall.elapsed() / 1000.0;
+        cores = double(cpuNs(wall) - cpu0) / 1e9 / secs;
+        frames = v.paintCount() - painted0;
+        if (mode == Doc::Design)
+            m_runningNsPerSec = double(cpuNs(wall) - cpu0) / secs;
+    };
+    int designFrames = 0, operateFrames = 0;
+    double designCores = 0, operateCores = 0;
+    run(Doc::Operate, operateFrames, operateCores);
+    const int operateInterval = v.m_liveTimer->interval();
+    run(Doc::Design, designFrames, designCores);
+    m_doc->setMode(Doc::Design);
+    const int share = qMax(1, SystemProbe::performanceCores() - 2);
+    qInfo("a running show: Design %d frames, %.2f cores (share %d); Operate %d frames, %.2f cores",
+          designFrames, designCores, share, operateFrames, operateCores);
+    QVERIFY(designFrames > 0 && operateFrames > 0);
+    // Operate: never faster than its ceiling.
+    QVERIFY2(operateInterval >= 1000 / StructureStudioView::operateFrameRate(),
+             qPrintable(QString("Operate's live interval %1 ms").arg(operateInterval)));
 #if defined(QT_NO_DEBUG) && defined(Q_OS_UNIX) // no process CPU clock elsewhere: cpuNs() is wall time there, always ~1 core. A debug build's frames and the test's own value writes swamp the budget
-    QVERIFY2(cores < 0.75, qPrintable(QString("a running show took %1 cores").arg(cores)));
+    QVERIFY2(operateCores < 0.75, qPrintable(QString("in Operate a running show took %1 cores").arg(operateCores)));
+    QVERIFY2(designCores < 0.4 * share + 0.35,
+             qPrintable(QString("a running show took %1 cores, its share is %2").arg(designCores).arg(share)));
 #endif
 
     // A value-driven frame close on the last is drawn light, then a full one settles.
@@ -270,6 +306,325 @@ void RenderPerf_Test::aRunningShowStaysUnderOneCore()
     QTest::qWait(500);
     QCOMPARE(v.paintCount(), settled);
     v.setLiveValues(false);
+}
+
+/* In Operate the pointer gets no more frames than the show: twenty moves
+   in a few milliseconds over the rig paint once now and once more when the
+   show's next frame is due, not twenty times. In Design every move is
+   drawn at once. */
+void RenderPerf_Test::operatePointerFramesWait()
+{
+    StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
+    v.resize(640, 400);
+    v.reload();
+    v.setPlane(StructureStudioView::Top);
+    v.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&v));
+    auto moves = [&v]() {
+        for (int i = 0; i < 20; ++i)
+        {
+            const QPointF at(100 + i * 5, 150);
+            QMouseEvent mv(QEvent::MouseMove, at, v.mapToGlobal(at), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(&v, &mv);
+            QCoreApplication::processEvents();
+        }
+    };
+    m_doc->setMode(Doc::Operate);
+    auto design = qScopeGuard([this]() { m_doc->setMode(Doc::Design); });
+    v.repaint();                            // a frame just drawn
+    const int before = v.paintCount();
+    moves();
+    QVERIFY2(v.paintCount() - before <= 1,
+             qPrintable(QString("%1 pointer frames at once in Operate").arg(v.paintCount() - before)));
+    QTRY_VERIFY_WITH_TIMEOUT(v.paintCount() > before, 1000);   // the crosshair still follows
+    QTRY_VERIFY(!v.m_hoverTickPending);
+
+    m_doc->setMode(Doc::Design);
+    QTest::qWait(100);
+    const int designBefore = v.paintCount();
+    moves();
+    QVERIFY(v.paintCount() - designBefore >= 5);
+}
+
+/* One heavy frame -- every beam landing again after a GO -- must not hold
+   the rate down for long. It went from 40 ms to 450-780 ms and came back by
+   a fifth a frame, so a show sat at 1-2 fps for seconds after each GO. */
+void RenderPerf_Test::theRateRecoversAfterABurst()
+{
+    StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
+    v.resize(640, 400);
+    v.reload();
+    v.setPlane(StructureStudioView::Top);   // cheap frames
+    v.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&v));
+    v.setLiveValues(true);
+    v.m_liveTimer->stop();
+    v.m_frameMs = 600.0;                    // the burst's estimate
+    v.m_liveTimer->setInterval(750);
+    for (int i = 0; i < 6; ++i)
+    {
+        changeValues(900 + i);
+        v.repaint();
+    }
+    QVERIFY2(v.m_liveTimer->interval() < 120,
+             qPrintable(QString("still %1 ms between frames six frames after a burst")
+                        .arg(v.m_liveTimer->interval())));
+    // One slow frame among quick ones moves the estimate by three times at most.
+    QVERIFY(v.m_frameMs < 100.0);
+    QCOMPARE(StructureStudioView::nextFrameEstimate(40.0, 900.0), 40.0 * 0.8 + 120.0 * 0.2);
+    QCOMPARE(StructureStudioView::nextFrameEstimate(600.0, 40.0), 320.0);
+    QCOMPARE(StructureStudioView::nextFrameEstimate(0.0, 25.0), 25.0);
+    v.setLiveValues(false);
+}
+
+namespace
+{
+/** A 6-channel moving head (pan, tilt, dimmer, RGB) with a @a beamDeg lens */
+QLCFixtureDef *moverDefinition(double beamDeg)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Head");
+    def->setType(QLCFixtureDef::MovingHead);
+    const char *nm[] = { "Pan", "Tilt", "Dimmer", "Red", "Green", "Blue" };
+    const QLCChannel::Group gp[] = { QLCChannel::Pan, QLCChannel::Tilt,
+        QLCChannel::Intensity, QLCChannel::Intensity, QLCChannel::Intensity,
+        QLCChannel::Intensity };
+    const QLCChannel::PrimaryColour cl[] = { QLCChannel::NoColour, QLCChannel::NoColour,
+        QLCChannel::NoColour, QLCChannel::Red, QLCChannel::Green, QLCChannel::Blue };
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("6ch");
+    for (int k = 0; k < 6; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(nm[k]); ch->setGroup(gp[k]);
+        if (cl[k] != QLCChannel::NoColour) ch->setColour(cl[k]);
+        if (k < 2) ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch); mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setWidth(300); ph.setHeight(400); ph.setDepth(300);
+    ph.setFocusPanMax(540); ph.setFocusTiltMax(270);
+    ph.setLensDegreesMin(beamDeg); ph.setLensDegreesMax(beamDeg);
+    mode->setPhysical(ph);
+    QLCFixtureHead hd;
+    for (int k = 0; k < 6; ++k) hd.addChannel(quint32(k));
+    mode->insertHead(-1, hd);
+    def->addMode(mode);
+    return def;
+}
+}
+
+/* The shortcuts beams take -- landings kept from frame to frame, a moving
+   curtain asked of again by itself, scenery a ray cannot reach not asked at
+   all -- draw exactly the picture of every ray thrown afresh against
+   everything. Twenty-four heads over a stage with a cyc, a proscenium, a
+   wall and a drape its motor opens: the same pixels, the curtain still and
+   moving, the heads still and moving. (The mixed rig hangs its fixtures at
+   6000 m -- showbuilder.cpp gives Z in mm where it is metres -- so its
+   beams land on nothing; this stage is built to be landed on.) */
+void RenderPerf_Test::beamShortcutsDrawTheSamePicture()
+{
+    const bool moveSpeedWas = StructureStudioView::s_moveSpeed;
+    StructureStudioView::setMoveSpeed(false);
+    auto restore = qScopeGuard([moveSpeedWas]() {
+        StructureStudioView::setMoveSpeed(moveSpeedWas);
+        StructureStudioView::s_referenceThrows = false;
+    });
+
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+    props->setGridSize(QVector3D(14, 10, 8));
+    Scenery *cyc = props->addScenery();
+    cyc->setKind(Scenery::Cyclorama);
+    cyc->setOriginX(7.0f); cyc->setOriginY(1.0f); cyc->setWidth(12.0f); cyc->setHeight(6.0f);
+    Scenery *pros = props->addScenery();
+    pros->setKind(Scenery::Proscenium);
+    pros->setOriginX(7.0f); pros->setOriginY(8.5f); pros->setWidth(14.0f); pros->setHeight(7.0f);
+    pros->setThickness(0.4f); pros->setOpeningWidth(11.0f); pros->setOpeningHeight(5.5f);
+    Scenery *wall = props->addScenery();
+    wall->setKind(Scenery::Wall);
+    wall->setOriginX(4.0f); wall->setOriginY(5.0f); wall->setWidth(3.0f); wall->setHeight(1.0f);
+    wall->setThickness(0.3f);
+    Scenery *drape = props->addScenery();
+    drape->setKind(Scenery::MainDrape);
+    drape->setOriginX(7.0f); drape->setOriginY(7.0f); drape->setWidth(14.0f); drape->setHeight(6.0f);
+    drape->setOpeningWidth(10.0f);
+    drape->setState(Scenery::Open);
+
+    QLCFixtureDef *curtainDef = new QLCFixtureDef();
+    curtainDef->setManufacturer("Test"); curtainDef->setModel("Curtain");
+    curtainDef->setType(QLCFixtureDef::Other);
+    QLCFixtureMode *curtainMode = new QLCFixtureMode(curtainDef);
+    curtainMode->setName("Open");
+    QLCChannel *openCh = new QLCChannel();
+    openCh->setName("Open");
+    openCh->setGroup(QLCChannel::Maintenance);
+    curtainDef->addChannel(openCh);
+    curtainMode->insertChannel(openCh, 0);
+    curtainDef->addMode(curtainMode);
+    Fixture *motor = new Fixture(&doc);
+    motor->setName("Drape motor");
+    motor->setFixtureDefinition(curtainDef, curtainMode);
+    motor->setAddress(500);
+    QVERIFY(doc.addFixture(motor));
+    drape->setDriverFixture(motor->id());
+    QVERIFY(drape->isDriven());
+
+    QLCFixtureDef *headDef = moverDefinition(18.0);
+    QList<Fixture *> heads;
+    for (int i = 0; i < 24; ++i)
+    {
+        Fixture *f = new Fixture(&doc);
+        f->setName(QString("Head %1").arg(i));
+        f->setFixtureDefinition(headDef, headDef->modes().first());
+        f->setAddress(quint32(i * 6));
+        QVERIFY(doc.addFixture(f));
+        // Two rows over the stage, metres up; X/Y in mm (setFixturePosition()).
+        props->setFixturePosition(f->id(), 0, 0,
+                                  QVector3D(1000.0f + (i % 12) * 1100.0f, i < 12 ? 3000.0f : 7500.0f, 6.0f));
+        heads << f;
+    }
+    auto look = [&](int step, uchar open) {
+        QByteArray u(512, char(0));
+        for (int i = 0; i < heads.size(); ++i)
+        {
+            const int a = i * 6;
+            u[a] = char((i * 37 + step * 13) & 0xff);                // pan
+            u[a + 1] = char(40 + ((i * 53 + step * 7) % 160));       // tilt
+            u[a + 2] = char(255);
+            u[a + 3] = char((i * 70) & 0xff);
+            u[a + 4] = char(200);
+            u[a + 5] = char((255 - i * 40) & 0xff);
+        }
+        u[500] = char(open);
+        for (Fixture *f : heads)
+            f->setChannelValues(u);
+        motor->setChannelValues(u);
+    };
+
+    StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+    v.resize(900, 560);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setBeams(true);
+    v.m_gpuWanted = false;                  // the CPU's picture: exact everywhere
+    v.m_supersample = 1;
+    v.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&v));
+    v.setLiveValues(true);
+    v.m_liveTimer->stop();
+    QTRY_VERIFY_WITH_TIMEOUT(!v.m_settlePending, 5000);
+
+    auto frame = [&](bool reference) {
+        StructureStudioView::s_referenceThrows = reference;
+        v.m_liveDirty = true;
+        v.repaint();                        // twice: kept landings in play
+        v.m_liveDirty = true;
+        v.repaint();
+        return v.grab().toImage();
+    };
+    int onScenery = 0, onDrape = 0;
+    int step = 0;
+    for (const uchar open : { uchar(0), uchar(90), uchar(91), uchar(200), uchar(255), uchar(255) })
+    {
+        look(++step, open);
+        const QImage exact = frame(true);
+        const QImage fast = frame(false);
+        QCOMPARE(fast.size(), exact.size());
+        int differ = 0;
+        for (int y = 0; y < fast.height(); ++y)
+            for (int x = 0; x < fast.width(); ++x)
+                if (fast.pixel(x, y) != exact.pixel(x, y))
+                    ++differ;
+        QVERIFY2(differ == 0, qPrintable(QString("curtain at %1: %2 pixels differ").arg(open).arg(differ)));
+        for (auto it = v.m_throws.constBegin(); it != v.m_throws.constEnd(); ++it)
+            if (it->fullHit && it->fullSurface < 0 && it->fullSurface > -1000000)
+            {
+                ++onScenery;
+                if (it->fullSurface == -1 - int(drape->id()))
+                    ++onDrape;
+            }
+    }
+    // The test is only worth something if beams met the scenery and the drape.
+    QVERIFY2(onScenery > 100 && onDrape > 10,
+             qPrintable(QString("%1 rays on scenery, %2 on the drape").arg(onScenery).arg(onDrape)));
+
+    /* What a frame costs, the curtain and the heads moving: the display's
+       budget (docs/performance.md, "The display"). Release only: a debug
+       build is several times slower. */
+    StructureStudioView::s_referenceThrows = false;
+    QElapsedTimer clock;
+    clock.start();
+    const qint64 cpu0 = cpuNs(clock);
+    for (int i = 0; i < 6; ++i)
+    {
+        look(100 + i, uchar(40 * i));
+        v.m_liveDirty = true;
+        v.repaint();
+    }
+    const double msPerFrame = double(cpuNs(clock) - cpu0) / 6 / 1e6;
+    qInfo("a frame with the curtain and the heads moving: %.1f ms of CPU", msPerFrame);
+#if defined(QT_NO_DEBUG) && defined(Q_OS_UNIX)
+    /* 20 ms on an M4, so a slower gate machine passes and a return of every
+       ray asking every piece of scenery does not. */
+    const double kMovingFrameBudgetMs = 120.0;
+    QVERIFY2(msPerFrame < kMovingFrameBudgetMs,
+             qPrintable(QString("a moving frame cost %1 ms of CPU, the budget is %2")
+                        .arg(msPerFrame).arg(kMovingFrameBudgetMs)));
+#endif
+    v.setLiveValues(false);
+}
+
+/* Over a GPU frame the cursor readout asks the depth under the pointer:
+   one row drawn on the CPU, not the whole frame (10-13 ms on the GUI thread,
+   every frame the pointer was over the rig) -- and the same depth. Needs a
+   graphics card: skipped where there is none to draw on. */
+void RenderPerf_Test::pickingDrawsOneRow()
+{
+    qputenv("QLC_RIG_GPU", "1");
+    auto unset = qScopeGuard([]() { qunsetenv("QLC_RIG_GPU"); });
+    if (!RhiRaster::available())
+        QSKIP("no graphics card to draw on here");
+
+    StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
+    v.resize(800, 500);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setBeams(true);
+    v.m_gpuWanted = true;
+    v.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&v));
+    QCOMPARE(v.renderBackendLabel(), QStringLiteral("GPU · %1").arg(RhiRaster::availableBackend()));
+    changeValues(1500);
+    v.repaint();
+    QVERIFY(v.m_drewOnGpu);
+    QVERIFY(v.m_pickDirty);
+
+    // Every depth from the frame's ops, as the whole-frame pick drew it.
+    ZRaster whole;
+    {
+        ZRaster *mine = v.m_z;
+        v.m_z = &whole;
+        whole.begin(v.size(), 1, Qt::transparent);
+        for (const StructureStudioView::DrawOp *o : std::as_const(v.m_pickOpaque))
+            v.rasterOp(*o, true, 0, INT_MAX);
+        for (const StructureStudioView::DrawOp *o : std::as_const(v.m_pickSeeThrough))
+            v.rasterOp(*o, false, 0, INT_MAX);
+        v.m_z = mine;
+    }
+    int probed = 0, onSomething = 0;
+    for (int y = 20; y < v.height(); y += 37)
+        for (int x = 15; x < v.width(); x += 53)
+        {
+            const QPoint at(x, y);
+            const double expected = whole.depthAt(at);
+            QCOMPARE(v.pickDepth(at), expected);
+            QCOMPARE(v.m_pickRow, y);
+            ++probed;
+            if (expected > -1e29)
+                ++onSomething;
+        }
+    QVERIFY(probed > 50 && onSomething > 0);
 }
 
 /* "Visual artifacts in the rig view ... moving a very small distance back and
