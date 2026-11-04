@@ -22834,9 +22834,15 @@ void Monitor_Test::clickingAGroupMemberAgainPicksItOut()
     const QPoint at = rig.gv->mapFromScene(item->sceneBoundingRect().center());
     QCOMPARE(rig.gv->topPickableAt(rig.gv->mapToScene(at)), static_cast<QGraphicsItem *>(item));
 
-    // One click: the group, selected together...
+    // One click: just the one clicked (the one selection rule, 2026-11-03:
+    // a group is picked from its Plot layers row or Select Group)...
     rig.gv->m_scene->clearSelection();
     QTest::mouseClick(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QCOMPARE(rig.gv->m_scene->selectedItems().size(), 1);
+    QVERIFY(item->isSelected());
+
+    // ...the group selected as a group, from its row...
+    rig.gv->selectItemsInGroup(gid);
     QVERIFY2(rig.gv->m_scene->selectedItems().size() == 3,
              qPrintable(QString::number(rig.gv->m_scene->selectedItems().size())));
 
@@ -30370,5 +30376,694 @@ void Monitor_Test::peopleFollowTheirLine()
     expectCrowdOnLine(gv, line, "undone shrink");
     QVERIFY(qAbs((line->linePoints().last() - line->linePoints().first()).length() - lenBefore) < 1e-3f);
     delete doc;
+}
+
+/* One selection rule for everything on the plot (2026-11-03): "if you grab a
+   pair with a line, just that pair .. if you grab an individual, just that
+   individual .. if you grab one and right click select similar they should
+   all get picked .. or if you select the group in the layers, that could
+   select the group". A Studio with a group of three people, a choir of
+   performer lines (pairs), trusses of two types and two kinds of fixture. */
+/* A point on @p item where a click lands on it and nothing above it. */
+static QPoint pickPointOn(MonitorGraphicsView *gv, QGraphicsItem *item)
+{
+    const QRectF r = item->sceneBoundingRect();
+    for (int iy = 1; iy < 12; ++iy)
+        for (int ix = 1; ix < 12; ++ix)
+        {
+            const QPointF p(r.left() + r.width() * ix / 12.0, r.top() + r.height() * iy / 12.0);
+            if (gv->topPickableAt(p) == item)
+                return gv->mapFromScene(p);
+        }
+    return QPoint(-1, -1);
+}
+
+struct StudioSelRig
+{
+    QWidget parent;
+    Monitor *mon = nullptr;
+    MonitorGraphicsView *gv = nullptr;
+    quint32 leads = 0, choir = 0;
+    QList<StageTarget *> people, rows;
+    QList<Truss *> trusses;
+    QList<quint32> fixtures;
+
+    ~StudioSelRig() { delete mon; }
+
+    bool build(Doc *doc)
+    {
+        doc->setMode(Doc::Design);
+        MonitorProperties *props = doc->monitorProperties();
+        parent.resize(1400, 900);
+        mon = new Monitor(&parent, doc);
+        mon->resize(1400, 900);
+        mon->showGraphicsView();
+        gv = mon->m_graphicsView;
+        gv->setSnapDivisions(0);
+        gv->setGridMetrics(1000.0);
+        gv->setGridSize(QSize(20, 12));
+
+        for (int i = 0; i < 3; ++i)
+        {
+            Truss *t = props->addTruss();
+            t->setName(QString("T%1").arg(i + 1));
+            t->setOrigin(QVector3D(2.0f, 1.0f + i * 1.5f, 5.0f));
+            t->setLength(i == 2 ? 4.0f : 8.0f);
+            if (i == 2)
+                t->setProfile(Truss::Profile(int(t->profile()) + 1));
+            trusses << t;
+        }
+        gv->updateTrusses();
+
+        leads = props->nextGroupId();
+        props->createGroup(leads, QStringLiteral("Leads"), 0, 0);
+        for (int i = 0; i < 3; ++i)
+        {
+            StageTarget *t = props->addStageTarget();
+            t->setName(QString("Lead %1").arg(i + 1));
+            t->setKind(StageTarget::Kind::Person);
+            t->setPosition(QVector3D(4.0f + i * 3.0f, 9.0f, 0.0f));
+            t->setGroupId(leads);
+            people << t;
+        }
+        choir = props->nextGroupId();
+        props->createGroup(choir, QStringLiteral("Choir"), 0, 0);
+        for (int i = 0; i < 2; ++i)
+        {
+            StageTarget *t = props->addStageTarget();
+            t->setName(QString("Choir row %1").arg(i + 1));
+            t->setKind(StageTarget::Kind::Line);
+            t->setPerformerCount(2);                 // a pair, joined by its line
+            t->setPosition(QVector3D(5.0f + i * 5.0f, 7.0f, 0.0f));
+            t->setLinePoints({ QVector3D(-1.0f, 0, 0), QVector3D(1.0f, 0, 0) });
+            t->setGroupId(choir);
+            rows << t;
+        }
+        gv->updateTargets();
+
+        // Two pars of one kind, a dimmer of another.
+        for (int i = 0; i < 3; ++i)
+        {
+            Fixture *f = new Fixture(doc);
+            f->setName(QString("F%1").arg(i + 1));
+            f->setChannels(i == 2 ? 2 : 1);
+            f->setAddress(quint32(i * 4));
+            if (!doc->addFixture(f))
+                return false;
+            fixtures << f->id();
+            gv->addFixture(f->id(), QPointF(14000.0 + i * 1500.0, 4000.0));
+        }
+        parent.show();
+        if (!QTest::qWaitForWindowExposed(&parent))
+            return false;
+        if (gv->m_targetItems.size() != 5)
+            qWarning() << "targets drawn:" << gv->m_targetItems.size();
+        return gv->m_targetItems.size() == 5;
+    }
+
+    TargetItem *item(StageTarget *t) const { return gv->m_targetItems.value(t->id()); }
+    QPoint at(QGraphicsItem *gi) const { return gv->mapFromScene(gi->sceneBoundingRect().center()); }
+    void click(const QPoint &p, Qt::KeyboardModifiers mods = Qt::NoModifier) const
+    {
+        QTest::qWait(QApplication::doubleClickInterval() + 50);    // never a double-click
+        QTest::mouseClick(gv->viewport(), Qt::LeftButton, mods, p);
+        QCoreApplication::processEvents();
+    }
+    QAction *menuAction(QMenu &menu, const QString &kind, quint32 id, const QString &name) const
+    {
+        MonitorGraphicsView::MenuPlace place;
+        gv->buildItemMenu(&menu, kind, id, place, QPointF());
+        return menu.findChild<QAction *>(name);
+    }
+    QSet<QGraphicsItem *> selected() const
+    {
+        const QList<QGraphicsItem *> s = gv->scene()->selectedItems();
+        return QSet<QGraphicsItem *>(s.begin(), s.end());
+    }
+};
+
+void Monitor_Test::aClickOnAGroupedPersonSelectsJustThem()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    StudioSelRig rig;
+    QVERIFY(rig.build(docOwner.data()));
+    TargetItem *lead2 = rig.item(rig.people[1]);
+
+    rig.click(rig.at(lead2));
+    QCOMPARE(rig.selected(), QSet<QGraphicsItem *>({ lead2 }));
+
+    // And a drag moves just them: the rest of the group stays put.
+    const QVector3D others0 = rig.people[0]->position(), others2 = rig.people[2]->position();
+    const QVector3D was = rig.people[1]->position();
+    rig.gv->scene()->clearSelection();
+    dragOnPlot(rig.gv, lead2, QPoint(60, 40));
+    QVERIFY2(rig.people[1]->position() != was, "the person clicked did not move");
+    QCOMPARE(rig.people[0]->position(), others0);
+    QCOMPARE(rig.people[2]->position(), others2);
+    QCOMPARE(rig.people[1]->groupId(), rig.leads);       // still in the group: data, not click
+}
+
+void Monitor_Test::aClickOnAPairsEndSelectsThePair()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    StudioSelRig rig;
+    QVERIFY(rig.build(docOwner.data()));
+    TargetItem *row = rig.item(rig.rows[0]);
+    QVERIFY(row->isLine() && row->lineHandleCount() >= 2);
+
+    // One end of the line: that pair, the line and both its people -- not
+    // the rest of the choir.
+    rig.click(rig.gv->mapFromScene(row->mapToScene(row->lineHandle(0))));
+    QCOMPARE(rig.selected(), QSet<QGraphicsItem *>({ row }));
+    // The other end, the same.
+    rig.gv->scene()->clearSelection();
+    rig.click(rig.gv->mapFromScene(row->mapToScene(row->lineHandle(row->lineHandleCount() - 1))));
+    QCOMPARE(rig.selected(), QSet<QGraphicsItem *>({ row }));
+}
+
+void Monitor_Test::selectSimilarPicksEveryOneOfAKind()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    StudioSelRig rig;
+    QVERIFY(rig.build(docOwner.data()));
+    MonitorGraphicsView *gv = rig.gv;
+
+    // Fixtures: the same model and mode.
+    {
+        QMenu menu;
+        QAction *sim = rig.menuAction(menu, "fixture", rig.fixtures[0], "selectAllSimilar");
+        QVERIFY(sim != nullptr);
+        QVERIFY(sim->isEnabled());
+        sim->trigger();
+        QCOMPARE(rig.selected(), QSet<QGraphicsItem *>({ gv->m_fixtures.value(rig.fixtures[0]),
+                                                         gv->m_fixtures.value(rig.fixtures[1]) }));
+    }
+    // People: every person, grouped or not, and not the choir's lines.
+    StageTarget *loose = docOwner->monitorProperties()->addStageTarget();
+    loose->setKind(StageTarget::Kind::Person);
+    loose->setPosition(QVector3D(16.0f, 9.0f, 0.0f));
+    gv->updateTargets();
+    {
+        QMenu menu;
+        QAction *sim = rig.menuAction(menu, "target", rig.people[0]->id(), "selectAllSimilar");
+        QVERIFY(sim != nullptr);
+        QCOMPARE(sim->text(), QString("Select All Similar (4)"));
+        QCOMPARE(sim->property(ContextMenu::sectionProperty()).toInt(), int(ContextMenu::Selection));
+        sim->trigger();
+        QCOMPARE(rig.selected(), QSet<QGraphicsItem *>({ rig.item(rig.people[0]), rig.item(rig.people[1]),
+                                                         rig.item(rig.people[2]), rig.item(loose) }));
+    }
+    // A performer line: the lines of its set.
+    {
+        QMenu menu;
+        QAction *sim = rig.menuAction(menu, "target", rig.rows[1]->id(), "selectAllSimilar");
+        QVERIFY(sim != nullptr);
+        sim->trigger();
+        QCOMPARE(rig.selected(), QSet<QGraphicsItem *>({ rig.item(rig.rows[0]), rig.item(rig.rows[1]) }));
+    }
+    // A structure: the trusses of its type, not the other one.
+    {
+        QMenu menu;
+        QAction *sim = rig.menuAction(menu, "truss", rig.trusses[0]->id(), "selectAllSimilar");
+        QVERIFY(sim != nullptr);
+        sim->trigger();
+        QCOMPARE(rig.selected(), QSet<QGraphicsItem *>({ gv->m_trussItems.value(rig.trusses[0]->id()),
+                                                         gv->m_trussItems.value(rig.trusses[1]->id()) }));
+        QMenu menu2;
+        QAction *only = rig.menuAction(menu2, "truss", rig.trusses[2]->id(), "selectAllSimilar");
+        QVERIFY(only != nullptr);
+        QVERIFY(!only->isEnabled());              // nothing like it but itself
+    }
+}
+
+void Monitor_Test::aGroupIsSelectedFromItsLayersRowOrSelectGroup()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    StudioSelRig rig;
+    QVERIFY(rig.build(docOwner.data()));
+    MonitorLayersPanel *panel = rig.mon->m_layersPanel;
+    panel->reload();
+    QTreeWidgetItem *groupRow = nullptr;
+    for (QTreeWidgetItemIterator it(panel->m_tree); *it; ++it)
+        if ((*it)->data(0, Qt::UserRole).toInt() == 1 && (*it)->data(0, Qt::UserRole + 1).toUInt() == rig.leads)
+            groupRow = *it;
+    QVERIFY(groupRow != nullptr);
+    panel->m_tree->setCurrentItem(groupRow);
+    panel->slotItemClicked(groupRow, 0);
+    const QSet<QGraphicsItem *> all({ rig.item(rig.people[0]), rig.item(rig.people[1]), rig.item(rig.people[2]) });
+    QCOMPARE(rig.selected(), all);
+
+    // A drag of one of them moves them all, by the same amount.
+    QVector3D was[3];
+    for (int i = 0; i < 3; ++i)
+        was[i] = rig.people[i]->position();
+    dragOnPlot(rig.gv, rig.item(rig.people[1]), QPoint(60, 40));
+    const QVector3D moved = rig.people[1]->position() - was[1];
+    QVERIFY2(moved.length() > 0.1f, "the group did not move");
+    for (int i = 0; i < 3; ++i)
+        QVERIFY2((rig.people[i]->position() - was[i] - moved).length() < 1e-3f, qPrintable(QString::number(i)));
+
+    // Right-click a member > Select Group: the same.
+    rig.gv->scene()->clearSelection();
+    QMenu menu;
+    QAction *grp = rig.menuAction(menu, "target", rig.people[2]->id(), "plotSelectGroup");
+    QVERIFY(grp != nullptr);
+    QCOMPARE(grp->text(), QString::fromUtf8("Select Group “Leads”"));
+    QCOMPARE(grp->property(ContextMenu::sectionProperty()).toInt(), int(ContextMenu::Selection));
+    grp->trigger();
+    QCOMPARE(rig.selected(), all);
+    // Nothing to offer for an item in no group.
+    QMenu none;
+    QVERIFY(rig.menuAction(none, "truss", rig.trusses[0]->id(), "plotSelectGroup") == nullptr);
+}
+
+void Monitor_Test::shiftAddsAndALockHoldsInTheOneRule()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    StudioSelRig rig;
+    QVERIFY(rig.build(docOwner.data()));
+    TargetItem *a = rig.item(rig.people[0]);
+    TargetItem *row = rig.item(rig.rows[1]);
+    TrussItem *t = rig.gv->m_trussItems.value(rig.trusses[0]->id());
+
+    // Shift adds, one item at a time, whatever their groups.
+    rig.click(rig.at(a));
+    // (Shift on a line's END point locks its drag to an axis: its middle.)
+    rig.click(rig.gv->mapFromScene(row->mapToScene(QPointF(0, 0))), Qt::ShiftModifier);
+    rig.click(pickPointOn(rig.gv, t), Qt::ShiftModifier);
+    QCOMPARE(rig.selected(), QSet<QGraphicsItem *>({ a, row, t }));
+    rig.click(rig.at(a), Qt::ShiftModifier);                 // and out again
+    QCOMPARE(rig.selected(), QSet<QGraphicsItem *>({ row, t }));
+
+    // A locked person is still picked, alone, and does not move.
+    rig.gv->scene()->clearSelection();
+    rig.people[1]->setLocked(true);
+    rig.gv->updateTargets();
+    TargetItem *held = rig.item(rig.people[1]);
+    rig.click(rig.at(held));
+    QCOMPARE(rig.selected(), QSet<QGraphicsItem *>({ held }));
+    const QVector3D was = rig.people[1]->position();
+    dragOnPlot(rig.gv, held, QPoint(60, 40));
+    QCOMPARE(rig.people[1]->position(), was);
+
+    // A locked plot: a click still picks just the one.
+    rig.people[1]->setLocked(false);
+    rig.gv->updateTargets();
+    rig.mon->m_lockAction->setChecked(true);
+    rig.gv->scene()->clearSelection();
+    TargetItem *b = rig.item(rig.people[2]);
+    rig.click(rig.at(b));
+    QCOMPARE(rig.selected(), QSet<QGraphicsItem *>({ b }));
+    rig.mon->m_lockAction->setChecked(false);
+}
+
+void Monitor_Test::groupingOrLayeringOneMemberLeavesItsGroup()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    MonitorProperties *props = docOwner->monitorProperties();
+    StudioSelRig rig;
+    QVERIFY(rig.build(docOwner.data()));
+    MonitorGraphicsView *gv = rig.gv;
+
+    // Moving one member to another layer takes it out of its folder; the
+    // rest stay on theirs.
+    const quint32 layer = props->addLayer(QStringLiteral("Elsewhere"));
+    gv->scene()->clearSelection();
+    rig.item(rig.people[2])->setSelected(true);
+    QCOMPARE(gv->setSelectedItemsLayer(layer), 1);
+    QCOMPARE(rig.people[2]->layerId(), layer);
+    QCOMPARE(rig.people[2]->groupId(), 0u);
+    QVERIFY(props->group(rig.leads).layerId != layer);
+
+    // Ctrl+G on one lead and a truss: the lead joins the new group, the
+    // other two leads stay in Leads.
+    gv->scene()->clearSelection();
+    rig.item(rig.people[0])->setSelected(true);
+    gv->m_trussItems.value(rig.trusses[2]->id())->setSelected(true);
+    QCOMPARE(gv->groupSelectedItems(), 2);
+    const quint32 made = rig.people[0]->groupId();
+    QVERIFY(made != rig.leads && made != 0);
+    QCOMPARE(rig.trusses[2]->groupId(), made);
+    QCOMPARE(rig.people[1]->groupId(), rig.leads);
+    QCOMPARE(props->group(rig.leads).parentGroupId, 0u);
+
+    // The whole of a group selected (its Layers row) nests as a unit.
+    gv->selectItemsInGroup(rig.choir);
+    rig.item(rig.people[1])->setSelected(true);
+    const quint32 outer = props->nextGroupId();
+    QVERIFY(gv->groupSelectedItems() > 0);
+    QCOMPARE(props->group(rig.choir).parentGroupId, outer);
+    QCOMPARE(rig.rows[0]->groupId(), rig.choir);
+    // Leads is down to that one person, all of it selected: it nests too.
+    QCOMPARE(props->group(rig.leads).parentGroupId, outer);
+    QCOMPARE(rig.people[1]->groupId(), rig.leads);
+}
+
+/* Add Fountain, as the menu runs it, into @p rig's plot. */
+static quint32 addFountain(StudioSelRig &rig, Doc *doc)
+{
+    QLCFixtureDef *def = silkFlameDef();
+    doc->fixtureDefCache()->addFixtureDef(def);
+    driveDialog([](QWidget *) { return true; });
+    rig.mon->slotAddFountain();
+    QCoreApplication::processEvents();
+    foreach (StagePlatform *p, doc->monitorProperties()->platforms())
+        if (p->hasRoundedFront())
+            return p->groupId();
+    return 0;
+}
+
+/* "single click on group selected a piece not the group .. have to lasso
+   select to move all": a fountain is built as one thing, so a click on any
+   part takes all of it; a double-click goes in for the one part. */
+void Monitor_Test::aBuiltAssemblySelectsAndMovesWhole()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    StudioSelRig rig;
+    QVERIFY(rig.build(doc));
+    const quint32 gid = addFountain(rig, doc);
+    QVERIFY(gid != 0);
+    QVERIFY(props->group(gid).assembly);
+    MonitorGraphicsView *gv = rig.gv;
+
+    Scenery *inner = nullptr;
+    foreach (Scenery *sc, props->sceneries())
+        if (inner == nullptr || sc->height() > inner->height())
+            inner = sc;
+    QGraphicsItem *wall = gv->m_sceneryItems.value(inner->id());
+    QVERIFY(wall != nullptr);
+    gv->centerOn(wall);
+    const QPoint at = pickPointOn(gv, wall);
+    QVERIFY2(at.x() >= 0, "no point on the inner wall to click");
+    const QList<QGraphicsItem *> parts = gv->itemsUnderGroup(gid);
+    QVERIFY(parts.size() >= 3);
+
+    // A click on the inner wall: the whole fountain.
+    rig.click(at);
+    QCOMPARE(rig.selected(), QSet<QGraphicsItem *>(parts.begin(), parts.end()));
+
+    // A drag of the wall moves all of it (the flame too, when it is in it).
+    QHash<quint32, QPointF> was;
+    foreach (Scenery *sc, props->sceneries())
+        was.insert(sc->id(), QPointF(sc->originX(), sc->originY()));
+    StagePlatform *base = nullptr;
+    foreach (StagePlatform *p, props->platforms())
+        if (p->groupId() == gid)
+            base = p;
+    QVERIFY(base != nullptr);
+    const QPointF baseWas(base->originX(), base->originY());
+    quint32 flame = Fixture::invalidId();
+    foreach (Fixture *fx, doc->fixtures())
+        if (props->fixtureGroup(fx->id()) == gid)
+            flame = fx->id();
+    const QVector3D flameWas = flame != Fixture::invalidId() ? props->fixtureRigPosition(flame) : QVector3D();
+    {
+        QWidget *vp = gv->viewport();
+        QTest::qWait(QApplication::doubleClickInterval() + 50);
+        QTest::mousePress(vp, Qt::LeftButton, Qt::NoModifier, at);
+        QTest::mouseMove(vp, at + QPoint(30, 20));
+        QTest::mouseMove(vp, at + QPoint(60, 40));
+        QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, at + QPoint(60, 40));
+        QCoreApplication::processEvents();
+    }
+    const QPointF moved = QPointF(base->originX(), base->originY()) - baseWas;
+    QVERIFY2(qAbs(moved.x()) + qAbs(moved.y()) > 0.1, "the fountain's base did not move with its wall");
+    foreach (Scenery *sc, props->sceneries())
+    {
+        const QPointF d = QPointF(sc->originX(), sc->originY()) - was.value(sc->id());
+        QVERIFY2(qAbs(d.x() - moved.x()) < 0.02 && qAbs(d.y() - moved.y()) < 0.02, qPrintable(sc->name()));
+    }
+    if (flame != Fixture::invalidId())
+    {
+        const QVector3D d = props->fixtureRigPosition(flame) - flameWas;
+        QVERIFY2(qAbs(d.x() - moved.x()) < 0.05f && qAbs(d.y() - moved.y()) < 0.05f, "the flame stayed behind");
+    }
+
+    // A double-click goes into it: just the wall.
+    const QPoint at2 = pickPointOn(gv, wall);
+    QTest::qWait(QApplication::doubleClickInterval() + 50);
+    QTest::mouseDClick(gv->viewport(), Qt::LeftButton, Qt::NoModifier, at2);
+    QCoreApplication::processEvents();
+    QCOMPARE(rig.selected(), QSet<QGraphicsItem *>({ wall }));
+    QCOMPARE(gv->m_enteredAssembly, gid);
+    // Escape comes out again: the part takes the whole of it.
+    QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    gv->keyPressEvent(&esc);
+    QCOMPARE(gv->m_enteredAssembly, 0u);
+    QCOMPARE(rig.selected(), QSet<QGraphicsItem *>(parts.begin(), parts.end()));
+
+    // A person in a user group: still just them.
+    rig.click(rig.at(rig.item(rig.people[0])));
+    QCOMPARE(rig.selected(), QSet<QGraphicsItem *>({ rig.item(rig.people[0]) }));
+
+    // Shift-click on a part adds the whole fountain.
+    rig.click(at2, Qt::ShiftModifier);
+    QCOMPARE(rig.selected().size(), parts.size() + 1);
+
+    // A fountain saved before the flag is known again on load.
+    props->setGroupAssembly(gid, false);
+    QCOMPARE(props->assemblyOf(gid), 0u);
+    Fountain::repair(doc, props);
+    QCOMPARE(props->assemblyOf(gid), gid);
+}
+
+/* "selecting multiple things on the studio and right click lock doesn't do
+   them all": a right-click inside the selection acts on all of it. */
+void Monitor_Test::aRightClickActsOnTheWholeSelection()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    StudioSelRig rig;
+    QVERIFY(rig.build(doc));
+    const quint32 gid = addFountain(rig, doc);
+    QVERIFY(gid != 0);
+    MonitorGraphicsView *gv = rig.gv;
+    Scenery *flat = props->addScenery();
+    flat->setName("Flat");
+    flat->setKind(Scenery::Wall);
+    flat->setOriginX(15.0f); flat->setOriginY(8.0f);
+    gv->updatePlatforms();
+
+    // A fixture with a definition (an undo puts back what the show file
+    // keeps: a definition-less test fixture is not in it).
+    Fixture *lamp = new Fixture(doc);
+    QLCFixtureDef *ldef = doc->fixtureDefCache()->fixtureDef("Generic", "Silk Flame (relay)");
+    QVERIFY(ldef != nullptr);
+    lamp->setFixtureDefinition(ldef, ldef->modes().first());
+    lamp->setName("Lamp");
+    lamp->setAddress(40);
+    QVERIFY(doc->addFixture(lamp));
+    gv->addFixture(lamp->id(), QPointF(16000.0, 4000.0));
+    QVERIFY(gv->m_fixtures.value(lamp->id()) != nullptr);
+
+    // Five things: a fixture, a person, a flat, the fountain, a truss.
+    gv->scene()->clearSelection();
+    gv->m_fixtures.value(lamp->id())->setSelected(true);
+    rig.item(rig.people[0])->setSelected(true);
+    gv->m_sceneryItems.value(flat->id())->setSelected(true);
+    foreach (QGraphicsItem *gi, gv->itemsUnderGroup(gid))
+        gi->setSelected(true);
+    gv->m_trussItems.value(rig.trusses[0]->id())->setSelected(true);
+    const QList<QPair<QString, quint32> > five = gv->selectedMapObjects();
+    QCOMPARE(gv->itemUnits(five), 5);
+    // An undo rebuilds the rig's objects: from here on, look them up by id.
+    const quint32 personId = rig.people[0]->id(), otherId = rig.people[2]->id();
+    const quint32 flatId = flat->id(), trussId = rig.trusses[0]->id();
+    auto reselect = [&]() {             // an undo rebuilds the plot's items
+        gv->scene()->clearSelection();
+        for (const auto &o : five)
+            if (QGraphicsItem *gi = gv->itemFor(o.first, o.second))
+                gi->setSelected(true);
+    };
+
+    auto menuFor = [&](QMenu &menu, const QString &kind, quint32 id) {
+        reselect();
+        MonitorGraphicsView::MenuPlace place;
+        place.selection = gv->selectedMapObjects();
+        gv->buildItemMenu(&menu, kind, id, place, QPointF());
+    };
+    auto allLocked = [&](bool on) {
+        for (const auto &o : five)
+            if (MonitorGraphicsView::kindHasOwnLock(o.first) && gv->itemOwnLocked(o.first, o.second) != on)
+                return false;
+        return true;
+    };
+
+    // Move to Layer: all five; the fountain stays one piece.
+    const quint32 layer = props->addLayer(QStringLiteral("Elsewhere"));
+    {
+        QMenu menu;
+        menuFor(menu, "truss", trussId);
+        QAction *to = nullptr;
+        foreach (QAction *a, menu.actions())
+        {
+            if (a->menu() == nullptr || a->text() != QStringLiteral("Move to Layer"))
+                continue;
+            foreach (QAction *l, a->menu()->actions())
+            {
+                if (l->text() == QStringLiteral("Elsewhere"))
+                    to = l;
+            }
+        }
+        QVERIFY(to != nullptr);
+        to->trigger();
+    }
+    QCOMPARE(props->fixtureLayer(lamp->id()), layer);
+    QCOMPARE(props->stageTarget(personId)->layerId(), layer);
+    QCOMPARE(props->scenery(flatId)->layerId(), layer);
+    QCOMPARE(props->truss(trussId)->layerId(), layer);
+    QCOMPARE(props->group(gid).layerId, layer);
+    foreach (Scenery *sc, props->sceneries())
+    {
+        if (sc->id() != flatId)
+            QCOMPARE(sc->groupId(), gid);              // not taken apart
+    }
+    gv->undoLastMove();                                  // one step: all back
+    QVERIFY(props->stageTarget(personId)->layerId() != layer);
+    QVERIFY(props->truss(trussId)->layerId() != layer);
+    QVERIFY(props->scenery(flatId)->layerId() != layer);
+    QVERIFY(props->group(gid).layerId != layer);
+
+
+
+    // Lock: all of them that lock (a fixture has no lock of its own: its
+    // layer or what it hangs on holds it), one undo step.
+    {
+        QMenu menu;
+        menuFor(menu, "target", personId);
+        QAction *lk = menu.findChild<QAction *>("itemLock");
+        QVERIFY(lk != nullptr);
+        QCOMPARE(lk->text(), QString("Lock 4 Items"));
+        lk->trigger();
+    }
+    QVERIFY(allLocked(true));
+    {
+        QMenu menu;
+        menuFor(menu, "scenery", flatId);
+        QAction *lk = menu.findChild<QAction *>("itemLock");
+        QVERIFY(lk != nullptr);
+        QCOMPARE(lk->text(), QString("Unlock 4 Items"));
+        lk->trigger();
+    }
+    QVERIFY(allLocked(false));
+    gv->undoLastMove();                                  // back to locked, all of them
+    QVERIFY(allLocked(true));
+    gv->undoLastMove();
+    QVERIFY(allLocked(false));
+
+    // Delete names the count; Edit stays the one right-clicked.
+    {
+        QMenu menu;
+        menuFor(menu, "target", personId);
+        QAction *del = menu.findChild<QAction *>("plotDeleteItem");
+        QVERIFY(del != nullptr);
+        QCOMPARE(del->text(), QString::fromUtf8("Delete 4 Items…"));
+        QAction *edit = menu.findChild<QAction *>("plotEditItem");
+        QVERIFY(edit != nullptr);
+        QCOMPARE(edit->text(), QString::fromUtf8("Edit Target…"));
+    }
+    // Right-clicked outside the selection: just that one.
+    {
+        QMenu menu;
+        menuFor(menu, "target", otherId);
+        QAction *lk = menu.findChild<QAction *>("itemLock");
+        QVERIFY(lk != nullptr);
+        QCOMPARE(lk->text(), QString("Lock Position"));
+    }
+}
+
+/* "I can't right click select a target and dupe or c/p a new one". */
+void Monitor_Test::targetsDuplicateAndCopyPaste()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    StudioSelRig rig;
+    QVERIFY(rig.build(doc));
+    MonitorGraphicsView *gv = rig.gv;
+
+    StageTarget *solo = props->addStageTarget();
+    solo->setName("Soloist");
+    solo->setKind(StageTarget::Kind::Person);
+    solo->setPosition(QVector3D(12.0f, 8.0f, 0.0f));
+    solo->setColor(QColor(200, 30, 40));
+    solo->setPersonHeight(1.6f);
+    solo->setAimHeightOverride(1.3f);
+    StageTarget *area = props->addStageTarget();
+    area->setName("DS Area");
+    area->setKind(StageTarget::Kind::Area);
+    area->setFootprint(QSizeF(3.0, 2.0));
+    area->setPosition(QVector3D(14.0f, 3.0f, 0.0f));
+    gv->updateTargets();
+    const int before = props->stageTargets().size();
+
+    auto newest = [&]() {
+        StageTarget *n = nullptr;
+        foreach (StageTarget *t, props->stageTargets())
+            if (n == nullptr || t->id() > n->id())
+                n = t;
+        return n;
+    };
+
+    // The menu has Duplicate; a person duplicates whole, numbered.
+    gv->scene()->clearSelection();
+    rig.item(solo)->setSelected(true);
+    {
+        QMenu menu;
+        QAction *dup = rig.menuAction(menu, "target", solo->id(), "plotDuplicate");
+        QVERIFY(dup != nullptr);
+        QCOMPARE(dup->text(), QString("Duplicate"));
+        dup->trigger();
+    }
+    QCOMPARE(props->stageTargets().size(), before + 1);
+    StageTarget *copy = newest();
+    QCOMPARE(copy->name(), QString("Soloist 2"));
+    QCOMPARE(copy->kind(), StageTarget::Kind::Person);
+    QCOMPARE(copy->color(), solo->color());
+    QCOMPARE(copy->personHeight(), 1.6f);
+    QCOMPARE(copy->aimHeightOverride(), 1.3f);
+    QVERIFY(qAbs(copy->x() - 12.5f) < 1e-3f && qAbs(copy->y() - 8.5f) < 1e-3f);
+    QCOMPARE(copy->groupId(), 0u);
+
+    // A performer line keeps its points and people; an area its footprint
+    // (Cmd/Ctrl+D on the plot).
+    StageTarget *row = rig.rows[0];
+    gv->scene()->clearSelection();
+    rig.item(row)->setSelected(true);
+    gv->setFocus();
+    QTest::keyClick(gv->viewport(), Qt::Key_D, Qt::ControlModifier);
+    QCoreApplication::processEvents();
+    if (props->stageTargets().size() == before + 1)       // offscreen focus: the handler itself
+    {
+        QKeyEvent dk(QEvent::KeyPress, Qt::Key_D, Qt::ControlModifier);
+        gv->keyPressEvent(&dk);
+    }
+    QCOMPARE(props->stageTargets().size(), before + 2);
+    copy = newest();
+    QCOMPARE(copy->name(), QString("Choir row 3"));
+    QCOMPARE(copy->linePoints(), row->linePoints());
+    QCOMPARE(copy->performerCount(), 2);
+    QCOMPARE(copy->groupId(), 0u);                          // its own, not the choir's
+    gv->scene()->clearSelection();
+    rig.item(area)->setSelected(true);
+    QVERIFY(rig.mon->duplicateSelected());
+    copy = newest();
+    QCOMPARE(copy->kind(), StageTarget::Kind::Area);
+    QCOMPARE(copy->footprint(), QSizeF(3.0, 2.0));
+
+    // Copy three mixed targets and paste them: three more, one undo.
+    gv->scene()->clearSelection();
+    rig.item(solo)->setSelected(true);
+    rig.item(area)->setSelected(true);
+    rig.item(rig.rows[1])->setSelected(true);
+    rig.mon->slotCopySelected();
+    const int mid = props->stageTargets().size();
+    QVERIFY(rig.mon->pasteClipboard(1.0f, 0.0f));
+    QCOMPARE(props->stageTargets().size(), mid + 3);
+    gv->undoLastMove();
+    QCOMPARE(props->stageTargets().size(), mid);
 }
 

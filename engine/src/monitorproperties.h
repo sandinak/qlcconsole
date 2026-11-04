@@ -746,8 +746,11 @@ public:
         quint32   boundFxGroup = 0;
         float     pitchX = 0.5f;      ///< metres per cell in X (seed spacing)
         float     pitchY = 0.5f;      ///< metres per cell in Y (seed spacing)
-        /** A built assembly (a fountain): pieces made to be one object, so
-         *  a click can take the whole of it. Set by the builders. */
+        /** A built assembly (a fountain, a stamped studio component):
+         *  pieces made to be one object, as against a group the user made of
+         *  things placed one by one. A click on any part selects the whole
+         *  of it; a double-click enters it to pick one part. Set by the
+         *  builders; an older fountain is marked on load (Fountain::repair). */
         bool      assembly = false;
     };
 
@@ -758,6 +761,8 @@ public:
 
     /** Set a group's position-lock flag (no-op if the group is unknown). */
     void setGroupLocked(quint32 gid, bool locked);
+    /** The nearest group at or above @p gid that is a built assembly; 0 if none. */
+    quint32 assemblyOf(quint32 gid) const;
     /** True if @p gid or any of its ancestor groups is position-locked. */
     bool groupChainLocked(quint32 gid) const;
 

@@ -170,6 +170,7 @@ quint32 StudioTemplate::stamp(Doc *doc, const QString &filePath,
                        props->activeLayerId(), 0);
     props->setGroupFrame(gid, origin, 0.0f);
     props->setGroupHasFrame(gid, true);
+    props->setGroupAssembly(gid, true);        // a stamped component is one object
     const QString anchorKind = root.value("anchorKind").toString();
     props->setGroupBinding(gid, 0,
                            float(root.value("pitchX").toDouble(0.5)),

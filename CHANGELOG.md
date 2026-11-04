@@ -169,6 +169,24 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   editor (origin, cell pitch, a member's position), the patch plan's cable
   distance, the line-of-sight tooltip and Focus mode's step now follow
   Settings ▸ Units (5' 6" or 1.68 m); they showed metres only.
+- **One selection rule in the Lighting Studio.** A click on the plot
+  selects exactly what you click: one performer out of a group, one line
+  of a choir (its pair of people with it), one scenery piece of a fountain.
+  It used to take the whole group, so one person could not be grabbed on
+  their own. **Right-click ▸ Select All Similar** now works on everything
+  on the plot (people: every person, or the lines of a set; trusses of a
+  type; scenery of a kind), and **Select Group** on a member, or the group's
+  row in Plot layers, selects the group to drag as one. Groups themselves
+  are unchanged; a truss or riser still brings its own bars and fixtures.
+  A **built assembly** (Add Fountain's base, walls and flame; a stamped
+  component) is one thing: a click on any part takes it all, a double-click
+  goes in for one part, Esc comes out. A **right-click inside a selection
+  acts on all of it** (Lock N Items, Move to Layer, Duplicate, Delete N
+  Items…), one undo step each. Targets **duplicate** (right-click, Cmd/Ctrl+D)
+  and copy-paste whole: kind, colour, size, heights, a line's points,
+  numbered on ("Soloist 2").
+  See [Selecting and undo on the plot](docs/features/lighting-studio.md#selecting-and-undo-on-the-plot).
+
 - **An Aim at an Area covers the area** (board Q209). Every light aimed at
   a sized Area used to point at its centre, at the area's own height, and
   the corners stayed dark. Now the area is split into one zone per light

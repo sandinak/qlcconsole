@@ -47,6 +47,7 @@
 #include <QScopedValueRollback>
 #include <QScopeGuard>
 #include <functional>
+#include <algorithm>
 #include <QDialog>
 #include <QLabel>
 #include <QDialogButtonBox>
@@ -532,9 +533,21 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
         }
     }
 
+    /* An assembly entered with a double-click is left by a click anywhere
+       outside it: the next click on one of its parts takes it all again. */
+    if (m_enteredAssembly != 0 && event->button() != Qt::NoButton)
+    {
+        QGraphicsItem *hit = topPickableAt(mapToScene(event->pos()));
+        while (hit != nullptr && hit->parentItem() != nullptr)
+            hit = hit->parentItem();
+        if (hit == nullptr || assemblyOfItem(hit) != m_enteredAssembly)
+            leaveAssembly();
+    }
+
     /* Click again: a press on a member of a group (or a truss's worth) that
        is already selected TOGETHER -- the release, if it did not drag, picks
-       just that one out, to slide or drag clear (clickAgainToPickOut()). */
+       just that one out, to slide or drag clear (clickAgainToPickOut()).
+       Not a part of an assembly: a click takes all of it, again. */
     m_clickAgainItem = nullptr;
     if (event->button() == Qt::LeftButton && event->modifiers() == Qt::NoModifier && !m_layoutLocked)
     {
@@ -542,7 +555,9 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
         while (hit != nullptr && hit->parentItem() != nullptr)
             hit = hit->parentItem();
         MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(hit);
+        const quint32 assembly = assemblyOfItem(hit);
         if (hit != nullptr && hit->isSelected() && m_scene->selectedItems().size() > 1
+            && (assembly == 0 || assembly == m_enteredAssembly)
             && (itemGroupId(hit) != 0 || (mfi != nullptr && mfi->isBoundToTruss())))
         {
             m_clickAgainItem = hit;
@@ -624,9 +639,21 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
             hit = hit->parentItem();
         if (hit && (hit->flags() & QGraphicsItem::ItemIsSelectable))
         {
-            hit->setSelected(!hit->isSelected());
-            if (hit->isSelected())
+            const bool on = !hit->isSelected();
+            /* A part of an assembly adds (or takes away) the whole of it. */
+            const quint32 assembly = assemblyOfItem(hit);
+            if (assembly != 0 && assembly != m_enteredAssembly)
+            {
+                m_extendingSelection = true;
+                foreach (QGraphicsItem *gi, itemsUnderGroup(assembly))
+                    gi->setSelected(on);
+                m_extendingSelection = false;
+            }
+            hit->setSelected(on);
+            if (on)
                 captureMoveUndo();
+            else
+                emit mapSelectionChanged();
         }
         return;
     }
@@ -1121,16 +1148,23 @@ int MonitorGraphicsView::setSelectedItemsLayer(quint32 layerId)
 
     if (count > 0)
     {
-        // Keep groups consistent: any group represented in the selection follows
-        // its items onto the target layer (subtree included), so its folder in
-        // the Layers tree stays under the right layer.
+        // Keep groups consistent: a group the selection carries (all of it
+        // selected, or a structure's own parts) follows its items onto the
+        // target layer, subtree included, so its folder in the Layers tree
+        // stays under the right layer. One member picked out of a folder
+        // leaves the folder instead: the rest of it stays where it is.
         MonitorProperties *props = m_doc->monitorProperties();
         QSet<quint32> tops;
         foreach (QGraphicsItem *gi, m_scene->selectedItems())
         {
             const quint32 g = itemGroupId(gi);
-            if (g != 0 && props->hasGroup(g))
-                tops.insert(topLevelGroup(g));
+            if (g == 0 || !props->hasGroup(g))
+                continue;
+            const quint32 carried = groupCarriedBySelection(gi);
+            if (carried != 0)
+                tops.insert(carried);
+            else if (props->group(g).layerId != layerId)
+                setItemGroupId(gi, 0);
         }
         foreach (quint32 top, tops)
             setGroupSubtreeLayer(top, layerId);
@@ -1488,6 +1522,12 @@ QList<QGraphicsItem *> MonitorGraphicsView::itemsUnderGroup(quint32 top) const
     foreach (MonitorFixtureItem *i, m_fixtures)        if (groupIsUnder(itemGroupId(i), top)) out << i;
     foreach (TrussItem *i, m_trussItems)               if (groupIsUnder(itemGroupId(i), top)) out << i;
     foreach (PlatformItem *i, m_platformItems)         if (groupIsUnder(itemGroupId(i), top)) out << i;
+    /* Booms, stands, scenery and towers too: a fountain's walls were left
+       out, so its Plot layers row selected the base without them. */
+    foreach (PipeItem *i, m_pipeItems)                 if (groupIsUnder(itemGroupId(i), top)) out << i;
+    foreach (StandItem *i, m_standItems)               if (groupIsUnder(itemGroupId(i), top)) out << i;
+    foreach (SceneryItem *i, m_sceneryItems)           if (groupIsUnder(itemGroupId(i), top)) out << i;
+    foreach (TowerItem *i, m_towerItems)               if (groupIsUnder(itemGroupId(i), top)) out << i;
     foreach (TargetItem *i, m_targetItems)             if (groupIsUnder(itemGroupId(i), top)) out << i;
     foreach (PowerSourceItem *i, m_powerSourceItems)   if (groupIsUnder(itemGroupId(i), top)) out << i;
     foreach (NetworkNodeItem *i, m_networkNodeItems)   if (groupIsUnder(itemGroupId(i), top)) out << i;
@@ -2029,14 +2069,19 @@ int MonitorGraphicsView::groupSelectedItems()
     // Count the distinct "units" in the selection: loose items plus distinct
     // top-level groups. Grouping only makes sense when combining >= 2 units
     // (otherwise you'd just wrap a single existing group in a pointless layer).
+    // A member picked out of a folder on its own counts as loose: it moves
+    // into the new group and the rest of its folder stays as it is. A folder
+    // selected whole (from Plot layers or Select Group), or a structure with
+    // its parts, nests in the new group as a unit.
     QSet<quint32> topGroups;
-    int loose = 0;
+    QList<QGraphicsItem *> looseItems;
     foreach (QGraphicsItem *gi, sel)
     {
-        const quint32 g = itemGroupId(gi);
-        if (g == 0) loose++;
-        else        topGroups.insert(topLevelGroup(g));
+        const quint32 carried = groupCarriedBySelection(gi);
+        if (carried == 0) looseItems << gi;
+        else              topGroups.insert(carried);
     }
+    const int loose = looseItems.size();
     if (loose + topGroups.size() < 2)
         return 0;
 
@@ -2055,13 +2100,10 @@ int MonitorGraphicsView::groupSelectedItems()
     props->createGroup(pid, tr("Group %1").arg(pid), layer, 0);
 
     // Loose items become direct members of the new group, on its layer.
-    foreach (QGraphicsItem *gi, sel)
+    foreach (QGraphicsItem *gi, looseItems)
     {
-        if (itemGroupId(gi) == 0)
-        {
-            setItemGroupId(gi, pid);
-            setItemLayer(gi, layer);
-        }
+        setItemGroupId(gi, pid);
+        setItemLayer(gi, layer);
     }
     // Each existing top-level group nests under the new parent, subtree onto layer.
     foreach (quint32 top, topGroups)
@@ -2802,6 +2844,9 @@ void MonitorGraphicsView::reparentToLayer(const QList<QPair<QString, quint32> > 
         if (g != 0 && props->hasGroup(g) && props->group(g).anchorKind == it.first
             && props->group(g).anchorId == it.second)
             wholeGroups.insert(g);
+        // An assembly is one thing: it goes whole, never in pieces.
+        if (const quint32 a = props->assemblyOf(g))
+            wholeGroups.insert(a);
     }
     int n = 0;
     foreach (quint32 g, wholeGroups)
@@ -2813,7 +2858,8 @@ void MonitorGraphicsView::reparentToLayer(const QList<QPair<QString, quint32> > 
     for (const QPair<QString, quint32> &it : items)
     {
         QGraphicsItem *gi = itemFor(it.first, it.second);
-        if (gi == nullptr || wholeGroups.contains(itemGroupId(gi)))
+        if (gi == nullptr || wholeGroups.contains(itemGroupId(gi))
+            || wholeGroups.contains(props->assemblyOf(itemGroupId(gi))))
             continue;
         setItemGroupId(gi, 0);        // pulled out of any group
         setItemLayer(gi, layerId);
@@ -2900,47 +2946,205 @@ void MonitorGraphicsView::extendSelectionToGroups()
     // mid-rebuild (dynamic_cast on those crashed).
     if (m_extendingSelection || m_itemsRebuilding)
         return;
-    // When the plot is LOCKED nothing moves, so select-together (whose whole point
-    // is dragging a group as one) just gets in the way of picking a single item to
-    // inspect. Locked → single-click selects the individual; leave it un-extended.
+    // When the plot is LOCKED nothing moves, so a structure's parts need not
+    // come along: a click inspects just the thing clicked.
     if (m_layoutLocked)
         return;
     m_extendingSelection = true;
 
     MonitorProperties *props = m_doc->monitorProperties();
 
-    // Selecting any grouped item selects its whole OUTERMOST group subtree —
-    // EXCEPT for a dedicated structural group (anchorKind set: the auto-group
-    // ensureTrussGroup()/ensurePlatformGroup() maintains for a truss/riser and
-    // its rigged fixtures). That relationship is parent→child, not peers:
-    // the truss already carries its bound fixtures when IT moves (see
-    // slotTrussMoved(), independent of selection), but a fixture being
-    // repositioned relative to its truss must not drag the truss along too.
-    // So only extend a dedicated group when the anchor ITSELF (the truss/
-    // platform) is what got selected — clicking a member stays solo. A group
-    // the user has built out further manually (anchor cleared once it holds
-    // more than one structural item — see structuralMembersOf()) falls back
-    // to the normal symmetric select-together below.
-    QSet<quint32> tops;
+    /* One rule for everything on the plot: a click selects exactly what was
+       clicked ("if you grab a pair with a line, just that pair .. if you
+       grab an individual, just that individual"). A plot group -- a folder,
+       a fill's performer lines, a fountain -- is data: it is selected from
+       its Plot layers row or with Select Group, never by clicking one of
+       its members. It used to be: one person of a choir took the whole set.
+
+       The one thing a click still brings along is a structure's own parts:
+       its dedicated group (anchorKind set: the auto-group ensureTrussGroup()/
+       ensurePlatformGroup() keeps for a truss or riser and the bars and
+       fixtures rigged on it) when the structure ITSELF is what was clicked.
+       That is one item made of linked parts, like a line with its points.
+       A member clicked stays solo: a fixture repositioned on its truss must
+       not drag the truss along. Only the structure's own group -- not a
+       folder the structure has been filed in. */
+    QSet<quint32> parts;
     foreach (QGraphicsItem *gi, m_scene->selectedItems())
     {
         const quint32 g = itemGroupId(gi);
-        if (g == 0)
+        if (g == 0 || !props->hasGroup(g))
             continue;
-        const quint32 top = topLevelGroup(g);
-        const MonitorProperties::MonitorGroup grp = props->group(top);
-        if (!grp.anchorKind.isEmpty() && !isGroupAnchorItem(gi, grp.anchorKind, grp.anchorId))
+        /* A built assembly -- a fountain's base, walls and flame -- is one
+           thing: any part clicked takes all of it, unless it was entered
+           (double-click) to work on one part. */
+        const quint32 a = props->assemblyOf(g);
+        if (a != 0 && a != m_enteredAssembly)
+        {
+            parts.insert(a);
             continue;
-        tops.insert(top);
+        }
+        const MonitorProperties::MonitorGroup grp = props->group(g);
+        if (!grp.anchorKind.isEmpty() && isGroupAnchorItem(gi, grp.anchorKind, grp.anchorId))
+            parts.insert(g);
     }
-    foreach (quint32 top, tops)
-        foreach (QGraphicsItem *gi, itemsUnderGroup(top))
+    foreach (quint32 g, parts)
+        foreach (QGraphicsItem *gi, itemsUnderGroup(g))
             if (!gi->isSelected())
                 gi->setSelected(true);
 
     m_extendingSelection = false;
     updateTrussAnchorLines();   // tether color follows the truss's selected state
     emit mapSelectionChanged();
+}
+
+quint32 MonitorGraphicsView::assemblyOfItem(QGraphicsItem *gi) const
+{
+    return gi != nullptr ? m_doc->monitorProperties()->assemblyOf(itemGroupId(gi)) : 0;
+}
+
+void MonitorGraphicsView::leaveAssembly()
+{
+    m_enteredAssembly = 0;
+}
+
+quint32 MonitorGraphicsView::groupCarriedBySelection(QGraphicsItem *gi) const
+{
+    const quint32 g = itemGroupId(gi);
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (g == 0 || !props->hasGroup(g))
+        return 0;
+    const quint32 top = topLevelGroup(g);
+    // A structure's part (a fixture on its truss) stays filed with it, and
+    // an assembly's part with its assembly.
+    if (!props->group(g).anchorKind.isEmpty() || props->assemblyOf(g) != 0)
+        return top;
+    foreach (QGraphicsItem *other, itemsUnderGroup(top))
+        if (!other->isSelected())
+            return 0;
+    return top;
+}
+
+quint32 MonitorGraphicsView::selectableGroupOf(const QString &kind, quint32 id) const
+{
+    /* The group Select Group picks for an item: the folder it is filed in.
+       A structure's own parts group is the structure (a click already takes
+       it), so for the structure itself it is the folder around that. */
+    QGraphicsItem *gi = itemFor(kind, id);
+    quint32 g = (kind == QLatin1String("fixture")) ? m_doc->monitorProperties()->fixtureGroup(id)
+                                                   : (gi != nullptr ? itemGroupId(gi) : 0);
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (g == 0 || !props->hasGroup(g))
+        return 0;
+    const MonitorProperties::MonitorGroup grp = props->group(g);
+    if (gi != nullptr && !grp.anchorKind.isEmpty() && isGroupAnchorItem(gi, grp.anchorKind, grp.anchorId))
+        g = grp.parentGroupId;
+    // A part of an assembly: the click already takes the assembly, so its
+    // group is the folder the assembly is filed in.
+    if (const quint32 a = props->assemblyOf(g))
+        g = props->group(a).parentGroupId;
+    return (g != 0 && props->hasGroup(g)) ? g : 0;
+}
+
+void MonitorGraphicsView::selectGroupOf(const QString &kind, quint32 id)
+{
+    const quint32 g = selectableGroupOf(kind, id);
+    if (g == 0)
+        return;
+    selectItemsInGroup(g);
+    emit mapSelectionChanged();
+}
+
+QString MonitorGraphicsView::similarKey(const QString &kind, quint32 id) const
+{
+    /* What "the same kind" means for each kind of thing on the plot, for
+       Select All Similar: a fixture's model and mode; a target's kind -- and
+       for people, the same set (a fill's lines; loose ones together); a
+       structure's type. Empty: nothing to match. */
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (kind == QLatin1String("fixture"))
+    {
+        Fixture *f = m_doc->fixture(id);
+        return f != nullptr ? QStringLiteral("fixture:") + CreateFixtureGroup::fixtureModelKey(f) : QString();
+    }
+    if (kind == QLatin1String("target"))
+    {
+        const StageTarget *t = props->stageTarget(id);
+        if (t == nullptr)
+            return QString();
+        if (t->isPerformerLine())
+            return QStringLiteral("people:%1").arg(t->groupId());
+        return QStringLiteral("target:") + StageTarget::kindToString(t->kind());
+    }
+    if (kind == QLatin1String("truss"))
+    {
+        const Truss *t = props->truss(id);
+        return t != nullptr ? QStringLiteral("truss:%1:%2").arg(int(t->type())).arg(int(t->profile())) : QString();
+    }
+    if (kind == QLatin1String("platform"))
+    {
+        const StagePlatform *p = props->platform(id);
+        return p != nullptr ? QStringLiteral("platform:%1").arg(int(p->shape())) : QString();
+    }
+    if (kind == QLatin1String("pipe"))
+    {
+        const Pipe *p = props->pipe(id);
+        return p != nullptr ? QStringLiteral("pipe:%1").arg(int(p->orientation())) : QString();
+    }
+    if (kind == QLatin1String("scenery"))
+    {
+        const Scenery *s = props->scenery(id);
+        return s != nullptr ? QStringLiteral("scenery:%1").arg(s->kind()) : QString();
+    }
+    if (kind == QLatin1String("network"))
+    {
+        const NetworkTopology *nt = m_doc->networkTopology();
+        if (nt == nullptr || int(id) >= nt->nodes().size())
+            return QString();
+        return QStringLiteral("network:%1").arg(nt->nodes().at(int(id)).transport);
+    }
+    // One kind of each: every stand, tower, hanger, image or power source.
+    if (kind == QLatin1String("stand") || kind == QLatin1String("tower") || kind == QLatin1String("hanger")
+        || kind == QLatin1String("image") || kind == QLatin1String("power"))
+        return itemFor(kind, id) != nullptr ? kind : QString();
+    return QString();
+}
+
+QList<QPair<QString, quint32> > MonitorGraphicsView::similarObjects(const QString &kind, quint32 id) const
+{
+    QList<QPair<QString, quint32> > out;
+    const QString key = similarKey(kind, id);
+    if (key.isEmpty())
+        return out;
+    QList<quint32> ids;
+    if (kind == QLatin1String("fixture"))       ids = m_fixtures.keys();
+    else if (kind == QLatin1String("target"))   ids = m_targetItems.keys();
+    else if (kind == QLatin1String("truss"))    ids = m_trussItems.keys();
+    else if (kind == QLatin1String("platform")) ids = m_platformItems.keys();
+    else if (kind == QLatin1String("pipe"))     ids = m_pipeItems.keys();
+    else if (kind == QLatin1String("stand"))    ids = m_standItems.keys();
+    else if (kind == QLatin1String("scenery"))  ids = m_sceneryItems.keys();
+    else if (kind == QLatin1String("tower"))    ids = m_towerItems.keys();
+    else if (kind == QLatin1String("hanger"))   ids = m_hangerItems.keys();
+    else if (kind == QLatin1String("image"))    ids = m_imageItems.keys();
+    else if (kind == QLatin1String("power"))
+        for (int i = 0; i < m_powerSourceItems.size(); ++i) ids << quint32(i);
+    else if (kind == QLatin1String("network"))
+        for (int i = 0; i < m_networkNodeItems.size(); ++i) ids << quint32(i);
+    std::sort(ids.begin(), ids.end());
+    for (quint32 other : ids)
+        if (other == id || similarKey(kind, other) == key)
+            out << qMakePair(kind, other);
+    return out;
+}
+
+void MonitorGraphicsView::selectSimilarTo(const QString &kind, quint32 id)
+{
+    const QList<QPair<QString, quint32> > same = similarObjects(kind, id);
+    if (same.isEmpty())
+        return;
+    selectMapItems(same);
+    emit selectInLayersRequested(same);     // the ones buried on a structure too
 }
 
 void MonitorGraphicsView::setStageFeaturesOnly(bool on)
@@ -4523,8 +4727,43 @@ void MonitorGraphicsView::updateDragBorders()
     }
 }
 
+static bool isDuplicateKey(const QKeyEvent *ke)
+{
+    return ke->key() == Qt::Key_D
+        && (ke->modifiers() & ~Qt::KeypadModifier) == Qt::ControlModifier;
+}
+
+bool MonitorGraphicsView::event(QEvent *e)
+{
+    /* Cmd/Ctrl+D on the plot duplicates the selection. The app's own Ctrl+D
+       (dump DMX) is a window shortcut: claim the key while the plot has the
+       focus and something is selected. */
+    if (e->type() == QEvent::ShortcutOverride && isDuplicateKey(static_cast<QKeyEvent *>(e))
+        && !m_scene->selectedItems().isEmpty())
+    {
+        e->accept();
+        return true;
+    }
+    return QGraphicsView::event(e);
+}
+
 void MonitorGraphicsView::keyPressEvent(QKeyEvent *event)
 {
+    if (isDuplicateKey(event) && !m_scene->selectedItems().isEmpty())
+    {
+        if (Monitor *mon = Monitor::instance())
+            mon->duplicateSelected();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Escape && m_enteredAssembly != 0)
+    {
+        // Out of the assembly: the part picked takes the whole of it again.
+        leaveAssembly();
+        extendSelectionToGroups();
+        event->accept();
+        return;
+    }
     if (event->key() == Qt::Key_Shift && (QGuiApplication::mouseButtons() & Qt::LeftButton))
         updateDragBorders();
     QGraphicsView::keyPressEvent(event);
@@ -8659,6 +8898,25 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
        and a fixture three ways to open (CONSOLIDATION_REVIEW #3). */
     auto drilledIntoGroup = [&](QGraphicsItem *) -> bool { return false; };
 
+    /* An assembly (a fountain: base, walls, flame) is one thing to a click;
+       a double-click goes into it and picks the one part, to move or edit
+       on its own. Escape, or a click outside it, comes back out. Inside
+       it, a double-click opens the part's editor as anywhere else. */
+    if (const quint32 assembly = assemblyOfItem(it))
+    {
+        if (assembly != m_enteredAssembly)
+        {
+            m_enteredAssembly = assembly;
+            m_extendingSelection = true;
+            m_scene->clearSelection();
+            it->setSelected(true);
+            m_extendingSelection = false;
+            emit mapSelectionChanged();
+            event->accept();
+            return;
+        }
+    }
+
     if (auto *fi = dynamic_cast<MonitorFixtureItem *>(it))
     {
         /* A fixture: its properties, wherever it is mounted. (Its structure
@@ -9022,9 +9280,9 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
        is right-clicked: a fixture's is ContextMenus::rig, as in the
        Fixtures tab, Build and the Show Tree. */
     ContextMenu cm(menu);
-    m_menuSelection = place.selection;
+    m_menuSelection = place.selection;     // what menuObjects() acts on, to the end
+    auto forget = qScopeGuard([this]() { m_menuSelection.clear(); });
     populateItemMenu(menu, cm, kind, id, scenePos);
-    m_menuSelection.clear();
 
     if (place.inList)
         menu->addAction(tr("Show on Map"), this, [this, kind, id]() {
@@ -9048,6 +9306,9 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
 
     if (kind == QLatin1String("fixture"))
     {
+        // A selection with things that lock: lock them all from here too.
+        if (menuObjects(kind, id).size() > 1)
+            addLockAction(menu, kind, id);
         // Taking it off the plot (it stays in the show): this place's own.
         menu->addAction(tr("Remove from View"), this, [this, id]() {
             requestDeleteItem(QStringLiteral("fixture"), id);
@@ -9069,16 +9330,8 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
         // Every fixture of the same model and mode on the plot -- all the
         // step bars, all the XL-450s -- to patch, move or group together.
         {
-            const QString key = CreateFixtureGroup::fixtureModelKey(m_doc->fixture(id));
-            QList<QPair<QString, quint32> > same;
-            for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
-                if (CreateFixtureGroup::fixtureModelKey(m_doc->fixture(it.key())) == key)
-                    same << qMakePair(QStringLiteral("fixture"), it.key());
-            rig.similarCount = qMax(1, int(same.size()));
-            rig.selectSimilar = [this, same]() {
-                selectMapItems(same);
-                emit selectInLayersRequested(same);     // the ones buried on a truss too
-            };
+            rig.similarCount = qMax(1, int(similarObjects(kind, id).size()));
+            rig.selectSimilar = [this, kind, id]() { selectSimilarTo(kind, id); };
         }
         rig.patch = [this](const QList<quint32> &ids) {
             PatchInventoryDialog dlg(m_doc, ids, this);
@@ -9103,6 +9356,7 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
             emit mapStructureChanged();
         };
         ContextMenus::rig(cm, m_doc, QList<quint32>(), fixtures, rig);
+        addSelectGroup(cm, kind, id);
         return;
     }
 
@@ -9111,6 +9365,19 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
     if (selectionItems.size() > 0)
         for (QAction *a : selectionItems)
             cm.add(ContextMenu::Selection, a);
+    /* Select All Similar, as for a fixture: every one of its kind -- the
+       people of its set, the trusses of its type. */
+    {
+        const int similar = int(similarObjects(kind, id).size());
+        if (similar > 0)
+        {
+            QAction *sim = cm.add(ContextMenu::Selection, ContextMenus::selectAllSimilarText(similar),
+                                  [this, kind, id]() { selectSimilarTo(kind, id); },
+                                  QStringLiteral("selectAllSimilar"));
+            sim->setEnabled(similar > 1);           // 1: nothing like it but itself
+        }
+    }
+    addSelectGroup(cm, kind, id);
     if (kind == QLatin1String("target"))
     {
         // The Aim palettes pointing at it, each to edit.
@@ -9176,6 +9443,25 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
                    QStringLiteral("plotUngroup"));
         }
 
+        /* Duplicate: the copy half a metre on, as Cmd/Ctrl+D -- for this, or
+           all of the selection it is part of. */
+        static const QStringList copyable = { QStringLiteral("truss"), QStringLiteral("platform"),
+            QStringLiteral("target"), QStringLiteral("scenery"), QStringLiteral("tower"),
+            QStringLiteral("pipe"), QStringLiteral("stand") };
+        if (copyable.contains(kind))
+        {
+            int n = 0;
+            QList<QPair<QString, quint32> > dup;
+            for (const auto &o : menuObjects(kind, id))
+                if (copyable.contains(o.first))
+                    dup << o;
+            n = itemUnits(dup);
+            cm.add(ContextMenu::Edit, n > 1 ? tr("Duplicate %1 Items").arg(n) : tr("Duplicate"), []() {
+                if (Monitor *mon = Monitor::instance())
+                    mon->duplicateSelected();
+            }, QStringLiteral("plotDuplicate"))->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+        }
+
         const std::function<void()> inPlace = place.renameInPlace;
         // Inline in the list ("Rename"), a dialog on the plot ("Rename…").
         cm.add(ContextMenu::Edit, ContextMenus::renameText(!inPlace), [this, kind, id, inPlace]() {
@@ -9197,6 +9483,19 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
 
     // Deleting it, last.
     addItemRemoval(cm, kind, id);
+}
+
+/* Select Group: a click takes one member; this takes the folder it is in,
+   the same as clicking the folder's row in Plot layers. */
+void MonitorGraphicsView::addSelectGroup(ContextMenu &cm, const QString &kind, quint32 id)
+{
+    const quint32 g = selectableGroupOf(kind, id);
+    if (g == 0)
+        return;
+    const QString name = m_doc->monitorProperties()->group(g).name;
+    cm.add(ContextMenu::Selection,
+           name.isEmpty() ? tr("Select Group") : tr("Select Group “%1”").arg(name),
+           [this, kind, id]() { selectGroupOf(kind, id); }, QStringLiteral("plotSelectGroup"));
 }
 
 /* An item's name, for prefilling Rename. */
@@ -9383,7 +9682,8 @@ void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
     // Folders.
     QList<QPair<QString, quint32> > inFolder;
     for (const auto &o : objects)
-        if (groupOf(o.first, o.second) != 0)
+        if (groupOf(o.first, o.second) != 0
+            && props->assemblyOf(groupOf(o.first, o.second)) == 0)   // an assembly's parts stay in it
             inFolder << o;
     if (!inFolder.isEmpty())
         menu->addAction(inFolder.size() > 1 ? tr("Remove %1 Items from Folder").arg(inFolder.size())
@@ -9487,7 +9787,10 @@ void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
     {
         const quint32 lid = lyr.id;
         moveMenu->addAction(lyr.name, this, [this, objects, lid]() {
+            const QByteArray before = m_rigSnapshotter ? m_rigSnapshotter() : QByteArray();
             reparentToLayer(objects, lid);
+            if (!before.isEmpty())
+                pushRigUndo(before);            // one undo step for all of them
             emit mapStructureChanged();
         });
     }
@@ -9508,22 +9811,8 @@ void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
         emit mapStructureChanged();
     });
 
-    // Several at once: one object's lock is in its own section.
-    QList<QPair<QString, quint32> > lockable;
-    for (const auto &o : objects)
-        if (kindHasOwnLock(o.first))
-            lockable << o;
-    if (lockable.size() >= 2)
-    {
-        menu->addAction(tr("Lock Their Positions"), this, [this, lockable]() {
-            for (const auto &o : lockable)
-                setItemLocked(o.first, o.second, true);
-        });
-        menu->addAction(tr("Unlock Their Positions"), this, [this, lockable]() {
-            for (const auto &o : lockable)
-                setItemLocked(o.first, o.second, false);
-        });
-    }
+    // Several at once: Lock N Items stands where one object's lock does
+    // (addLockAction()).
 }
 
 static QString itemNoun(const QString &kind)
@@ -9542,10 +9831,95 @@ static QString itemNoun(const QString &kind)
     return MonitorGraphicsView::tr("Fixture");
 }
 
+QList<QPair<QString, quint32> > MonitorGraphicsView::menuObjects(const QString &kind, quint32 id) const
+{
+    /* Right-clicking part of the selection acts on the selection; anything
+       else has already been selected on its own by the right-press. */
+    const QPair<QString, quint32> self(kind, id);
+    if (m_menuSelection.size() > 1 && m_menuSelection.contains(self))
+    {
+        QList<QPair<QString, quint32> > out;
+        for (const auto &o : m_menuSelection)
+            if (o.first != QLatin1String("stage"))
+                out << o;
+        return out;
+    }
+    return { self };
+}
+
+int MonitorGraphicsView::itemUnits(const QList<QPair<QString, quint32> > &objects) const
+{
+    // An assembly's parts count as the one thing they are.
+    QSet<quint32> assemblies;
+    int n = 0;
+    for (const auto &o : objects)
+    {
+        quint32 a = 0;
+        if (o.first == QLatin1String("fixture"))
+            a = m_doc->monitorProperties()->assemblyOf(m_doc->monitorProperties()->fixtureGroup(o.second));
+        else
+            a = assemblyOfItem(itemFor(o.first, o.second));
+        if (a == 0)
+            n++;
+        else if (!assemblies.contains(a))
+        {
+            assemblies.insert(a);
+            n++;
+        }
+    }
+    return n;
+}
+
+void MonitorGraphicsView::addLockAction(QMenu *menu, const QString &kind, quint32 id)
+{
+    QList<QPair<QString, quint32> > lockable;
+    for (const auto &o : menuObjects(kind, id))
+        if (kindHasOwnLock(o.first))
+            lockable << o;
+    if (lockable.isEmpty())
+        return;
+    bool allLocked = true;
+    for (const auto &o : lockable)
+        allLocked = allLocked && itemOwnLocked(o.first, o.second);
+    const int n = itemUnits(lockable);
+    QString text;
+    if (lockable.size() == 1 && lockable.first() == qMakePair(kind, id))
+        text = allLocked ? tr("Unlock Position") : tr("Lock Position");
+    else if (n == 1)
+        text = allLocked ? tr("Unlock 1 Item") : tr("Lock 1 Item");
+    else
+        text = allLocked ? tr("Unlock %1 Items").arg(n) : tr("Lock %1 Items").arg(n);
+    QAction *lk = menu->addAction(text, this, [this, lockable, allLocked]() {
+        const QByteArray before = m_rigSnapshotter ? m_rigSnapshotter() : QByteArray();
+        for (const auto &o : lockable)
+            setItemLocked(o.first, o.second, !allLocked);
+        if (!before.isEmpty())
+            pushRigUndo(before);                // one undo step for all of them
+    });
+    lk->setObjectName(QStringLiteral("itemLock"));
+    if (lockable.size() < menuObjects(kind, id).size())
+        lk->setToolTip(tr("Fixtures have no lock of their own: lock their layer, or what they hang on"));
+}
+
 void MonitorGraphicsView::addItemRemoval(ContextMenu &cm, const QString &kind, quint32 id)
 {
     if (kind == QLatin1String("power") || kind == QLatin1String("fixture"))
         return;
+    /* Part of a selection: Delete takes the selection, as the toolbar's
+       Remove does (one confirm naming the fixtures on them). */
+    QList<QPair<QString, quint32> > removable;
+    for (const auto &o : menuObjects(kind, id))
+        if (o.first != QLatin1String("fixture") && o.first != QLatin1String("power")
+            && o.first != QLatin1String("stage"))
+            removable << o;
+    if (removable.size() > 1)
+    {
+        cm.add(ContextMenu::Remove, tr("Delete %1 Items…").arg(itemUnits(removable)), []() {
+            if (Monitor *mon = Monitor::instance())
+                QMetaObject::invokeMethod(mon, "slotRemoveSelected");
+        }, QStringLiteral("plotDeleteItem"));
+        return;
+    }
     const QString noun = itemNoun(kind);
     // A target asks first: aim palettes and scenes may depend on it.
     cm.add(ContextMenu::Remove, kind == QLatin1String("target") ? tr("Delete %1…").arg(noun) : tr("Delete %1").arg(noun),
@@ -9699,16 +10073,9 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
         }
 
         menu->addSeparator();
-        /* Two locks: this one thing, and the layer it is on. */
-        if (kindHasOwnLock(kind))
-        {
-            const bool own = itemOwnLocked(kind, id);
-            QAction *lk = menu->addAction(own ? tr("Unlock Position") : tr("Lock Position"),
-                                          this, [this, kind, id, own]() {
-                setItemLocked(kind, id, !own);
-            });
-            lk->setObjectName(QStringLiteral("itemLock"));
-        }
+        /* Two locks: this one thing -- or all of the selection it is part
+           of -- and the layer it is on. */
+        addLockAction(menu, kind, id);
         const bool layerLocked = m_doc->monitorProperties()->layer(objectLayerId(kind, id)).locked;
         const QString layerName = m_doc->monitorProperties()->layer(objectLayerId(kind, id)).name;
         menu->addAction(layerLocked ? tr("Unlock Layer “%1”").arg(layerName)
