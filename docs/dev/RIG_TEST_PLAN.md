@@ -177,7 +177,7 @@ information, not a regression check.
 ## K · Release 0.1.0 — run this first (October's work)
 Run the installed app (`/Applications/qlcconsole.app`, from the 0.1.0 DMG) on
 the show machine — kronk — with the office rig. Not while the soak is
-running on it (`pgrep -f run_soak.py`): it drives the same rig.
+running on it (`pgrep -f "run_soa[k].py"`): it drives the same rig.
 
 | # | Step | Expect | ✅/❌ |
 |---|------|--------|------|

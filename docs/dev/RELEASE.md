@@ -227,6 +227,31 @@ Steps:
 GitHub — real, visible actions, and the in-app updater offers the result
 to users. Run them deliberately, not as part of routine iteration.
 
+## Linux gate hosts
+
+The gate pool's Linux leg (`platforms/macos/gate-linux.sh`) reads
+`platforms/macos/gate-linux-hosts.conf` (name, ssh destination; put the
+faster host first). Per pass it tries the hosts in order and takes the first
+that answers ssh, has `cmake ninja ccache g++` and `qtpaths6`/`qmake6`, and
+whose `~/gates/.gatelock` (`gate-lock.sh`: dead or over-2-h holders are
+cleared) is free. If none is, the gates queue first come, first served: each
+waiting leg holds a ticket `<epoch>-<pid>` in `~/gates/.linux-queue/` on the
+Mac that runs the pool, and only the oldest live ticket tries the hosts, so
+two waiters no longer race. `GATE_LINUX_HOST=user@ip` bypasses the file.
+`platforms/macos/gate-linux.sh --dry-run` (or `gate-pool.sh --status`) prints
+the host it would pick, or "would wait", taking nothing. `gate-linux.sh
+--self-test` (run by `check-all.sh`) exercises the choice, the lock states and
+the queue on fake hosts. The result line keeps `linux_host=NAME` (the name in
+the file).
+
+A new host: put the pool Mac's ssh key in its `authorized_keys`, install the
+same packages as the first (Debian 13, Qt 6.8.2 dev, GCC 14, ninja,
+ccache), add a line to the conf, and check `gate-linux.sh --dry-run`.
+
+When you wait for a gate from a shell loop, never `pgrep -f "check-all.sh"`:
+the loop's own command line contains the pattern and matches itself. Write
+`pgrep -f "[c]heck-all.sh"`.
+
 ## Pre-release checks
 
 One command per platform proves an installer, and what it installs, is

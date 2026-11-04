@@ -77,9 +77,11 @@ then push that exact SHA: `git push origin <sha>:main`. Host notes: memory
 
 **The Linux leg** (`platforms/macos/gate-linux.sh`, started by the pool beside
 the Mac's gate, so it is off the critical path): the same SHA is `git
-archive`d to `~/gates/lx-<sha>…` on the Linux build host (`GATE_LINUX_HOST`,
-default `branson@192.168.1.245`: GCC 14, Qt 6.8.2 — what CI's Linux job uses;
-memory `linux-build-host`), configured and built as CI does (Ninja, Release,
+archive`d to `~/gates/lx-<sha>…` on a Linux build host (listed in
+`platforms/macos/gate-linux-hosts.conf`, `GATE_LINUX_HOST=user@ip` overrides
+with one; first reachable host with the toolchain and a free lock, else the
+gates wait in FIFO order for whichever frees first: GCC 14, Qt 6.8.2 — what
+CI's Linux job uses; memory `linux-build-host`), configured and built as CI does (Ninja, Release,
 ccache, Linux's own `-Werror`), and `unittest.sh` runs offscreen with the same
 "every program ran" count. It takes that host's `~/gates/.gatelock` like any
 gate (one at a time; waits) and its result is the `linux=N linux_qt=` part of

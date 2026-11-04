@@ -31,6 +31,7 @@
 #                        lines: stale ones cleared); nothing = free
 #   gl_try ID SHA [FROM] take the lock (FROM: the Mac that asks): last line
 #                        "@@ok", or "@@busy WHAT"
+#   gl_need              the host has the Linux leg's toolchain (GL_NEED words)
 #   gl_release ID        drop the lock if ID holds it and its gate is not
 #                        running (a gate still running keeps it; it drops
 #                        it itself when done: gl_done)
@@ -181,6 +182,21 @@ gl_holder() {
             echo "gate ${id:0:12} running since $(gl_clock "$since")"
         fi
     done
+}
+
+# Whether this host has the toolchain the Linux leg builds with: every word
+# of GL_NEED, where a|b means either (default: cmake ninja ccache g++
+# qtpaths6|qmake6). Prints "@@notool missing X" and fails when not.
+gl_need() {
+    local w alt ok
+    for w in ${GL_NEED:-cmake ninja ccache g++ qtpaths6|qmake6}; do
+        ok=
+        for alt in $(printf '%s' "$w" | tr '|' ' '); do
+            command -v "$alt" >/dev/null 2>&1 && ok=1
+        done
+        [ -n "$ok" ] || { echo "@@notool missing $w"; return 1; }
+    done
+    return 0
 }
 
 gl_try() {

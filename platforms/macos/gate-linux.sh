@@ -25,29 +25,213 @@
 # unreachable or the copy failed; 98 lost touch), then its timings and, on a
 # failure, what failed. The exit status is N.
 #
-# GATE_LINUX_HOST (default branson@192.168.1.245) names the host.
+# Hosts: gate-linux-hosts.conf beside this script (name, ssh destination;
+# GATE_LINUX_HOSTS names another file). The leg takes the FIRST host in the
+# file that is reachable, has the toolchain (cmake ninja ccache g++
+# qtpaths6|qmake6) and a free lock; if every one is busy it waits, and the
+# gates that wait are served first come, first served: a ticket in
+# ${GATE_LINUX_QUEUE:-~/gates/.linux-queue} (on this Mac) keeps the
+# longest-waiting gate at the head, and only the head tries the hosts.
+# GATE_LINUX_HOST=user@ip uses that one host and nothing else. linux_host= in
+# the result line is the host's name from the file.
+#
+#   gate-linux.sh --dry-run     say which host it would pick (or "would wait"),
+#                               take nothing; GATE_DRYRUN=1 does the same
+#   gate-linux.sh --self-test   the host choice and the queue, on fake hosts
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 LOCKLIB="$HERE/gate-lock.sh"
-HOST="${GATE_LINUX_HOST:-branson@192.168.1.245}"
+CONF="${GATE_LINUX_HOSTS:-$HERE/gate-linux-hosts.conf}"
+QDIR="${GATE_LINUX_QUEUE:-$HOME/gates/.linux-queue}"
+NEED="${GATE_LINUX_NEED:-cmake ninja ccache g++ qtpaths6|qmake6}"
+HOST=""; NAME=""
 PATIENCE="${GATE_POOL_PATIENCE:-1800}"
 POLL="${GATE_POOL_POLL:-30}"
 SSHOPT=(-o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
-REV=HEAD; OUT=""
+on() { ssh "${SSHOPT[@]}" "$@" "$HOST" bash -s; }
+onlock() { { cat "$LOCKLIB"; echo "GL_NEED='$NEED'"; cat; } | on "$@"; }
+say() { echo "linux: $*"; }
+
+# The hosts, in the order they are tried: HN[] names, HA[] ssh destinations.
+HN=(); HA=()
+lx_hosts() {
+    HN=(); HA=()
+    if [ -n "${GATE_LINUX_HOST:-}" ]; then
+        HN=("${GATE_LINUX_HOST#*@}"); HA=("$GATE_LINUX_HOST")
+        return 0
+    fi
+    [ -r "$CONF" ] || { echo >&2 "gate-linux.sh: no host list $CONF (or set GATE_LINUX_HOST)"; return 1; }
+    local n a
+    while read -r n a _; do
+        case "$n" in ''|'#'*) continue ;; esac
+        [ -n "$a" ] || continue
+        HN+=("$n"); HA+=("$a")
+    done < "$CONF"
+    [ ${#HN[@]} -gt 0 ] || { echo >&2 "gate-linux.sh: $CONF lists no host"; return 1; }
+}
+
+# One pass over the hosts, first to last. Sets HOST/NAME and returns 0 on the
+# first one that is up, has the toolchain and gives up its lock (dry: that is
+# free -- nothing taken). Else returns 1 with LX_HELD (what holds each busy
+# host) and LX_UP (how many answered with a lock state) for the wait message.
+LX_HELD=""; LX_UP=0
+lx_try_all() { # <id> <sha> [dry]
+    local id=$1 sha=$2 dry=${3:-} i out last
+    LX_HELD=""; LX_UP=0
+    for ((i = 0; i < ${#HN[@]}; i++)); do
+        HOST=${HA[i]}; NAME=${HN[i]}
+        if [ -n "$dry" ]; then
+            out=$(onlock <<<"gl_need && { h=\$(GL_CLEAN=0 gl_holder | head -n 1); [ -z \"\$h\" ] && echo @@ok || echo \"@@busy \$h\"; }" 2>/dev/null)
+        else
+            out=$(onlock <<<"gl_need && gl_try '$id' '$sha' '$(hostname -s)'" 2>/dev/null)
+        fi
+        last=$(printf '%s\n' "$out" | tail -n 1)
+        [ "${last#@@}" != "$last" ] || continue    # unreachable
+        printf '%s\n' "$out" | sed -n "s/^note: /linux: $NAME: /p"
+        case "$last" in
+            @@ok) LX_UP=$((LX_UP + 1)); return 0 ;;
+            @@busy*) LX_UP=$((LX_UP + 1)); LX_HELD="${LX_HELD:+$LX_HELD; }$NAME: ${last#@@busy }" ;;
+            @@notool*) LX_HELD="${LX_HELD:+$LX_HELD; }$NAME: ${last#@@}" ;;
+        esac
+    done
+    return 1
+}
+
+# The queue (this Mac): one ticket a waiting gate, named <epoch>-<pid>, whose
+# content is that pid. The head is the oldest ticket with a live pid; dead
+# tickets are swept. Only the head tries the hosts, so the gate that has
+# waited longest takes the next free one.
+lq_tickets() { ls "${QDIR:?}" 2>/dev/null | grep -E '^[0-9]+-[0-9]+$' | sort; }
+lq_join() { # <name>
+    mkdir -p "${QDIR:?}"
+    printf '%s\n' "$$" > "${QDIR:?}/${1:?}.tmp" && mv "${QDIR:?}/${1:?}.tmp" "${QDIR:?}/${1:?}"
+}
+lq_leave() { [ -n "${1:-}" ] && rm -f "${QDIR:?}/${1:?}" "${QDIR:?}/${1:?}.tmp"; return 0; }
+lq_live() { local p; p=$(cat "${QDIR:?}/${1:?}" 2>/dev/null); [ -n "$p" ] && kill -0 "$p" 2>/dev/null; }
+lq_head() { # prints the head ticket's name
+    local f
+    for f in $(lq_tickets); do
+        if lq_live "$f"; then echo "$f"; return 0; fi
+        rm -f "${QDIR:?}/${f:?}"
+    done
+    return 1
+}
+lq_ahead() { # <name>: how many live tickets are older
+    local f n=0
+    for f in $(lq_tickets); do
+        [ "$f" = "$1" ] && break
+        lq_live "$f" && n=$((n + 1))
+    done
+    echo "$n"
+}
+
+# --self-test: the host choice and the queue, on fake hosts (a fake ssh runs
+# the host's side in a scratch $HOME each). Seconds.
+lx_selftest() {
+    local fails=0 T rc out sleeper p1 p2 p3
+    T=$(mktemp -d "${TMPDIR:-/tmp}/gate-linux-test.XXXXXX") || return 1
+    check() { local what=$1; shift; if "$@"; then :; else echo "FAIL: $what"; fails=$((fails + 1)); fi; }
+    mkdir -p "$T/bin" "$T/ha/gates" "$T/hb/gates" "$T/hc/gates"
+    cat > "$T/bin/ssh" <<'FAKE'
+#!/bin/bash
+# fake ssh: the first word that is not "-o VALUE" is the host; it maps to a scratch HOME.
+while [ "${1:-}" = -o ]; do shift 2; done
+h=$1; shift
+case "$h" in
+    fa|*@fa) export HOME="$FAKE_ROOT/ha" ;;
+    fb|*@fb) export HOME="$FAKE_ROOT/hb" ;;
+    fc|*@fc) export HOME="$FAKE_ROOT/hc" ;;
+    *) exit 255 ;;
+esac
+exec "$@"
+FAKE
+    chmod +x "$T/bin/ssh"
+    export FAKE_ROOT="$T" PATH="$T/bin:$PATH"
+    SSHOPT=(-o BatchMode=yes)
+    printf '# test\nalpha fa\nbeta  fb\ngamma fc\ndead  fx\n' > "$T/hosts.conf"
+    CONF="$T/hosts.conf"; NEED="bash"
+    lock() { # <home> <id>: a held lock, its gate alive
+        mkdir -p "$1/gates/.gatelock"
+        printf 'id=%s\nsha=abcdefabcdef\nsince=%s\nfrom=x\n' "$2" "$(date +%s)" > "$1/gates/.gatelock/info"
+        echo "$sleeper" > "$1/gates/$2.pid"
+    }
+    unlock() { rm -rf "${1:?}/gates/.gatelock"; }
+    sleep 120 & sleeper=$!
+
+    lx_hosts
+    check "the file lists four hosts" [ "${#HN[@]}" = 4 ]
+    out=$(lx_try_all x y dry; echo "$NAME")
+    check "all free: the first host" [ "$out" = alpha ]
+    check "a dry run takes nothing" [ ! -d "$T/ha/gates/.gatelock" ]
+    lock "$T/ha" ga
+    out=$(lx_try_all x y dry; echo "$NAME")
+    check "first locked: the second" [ "$out" = beta ]
+    lock "$T/hb" gb
+    out=$(lx_try_all x y dry; echo "$NAME")
+    check "two locked: the third" [ "$out" = gamma ]
+    lock "$T/hc" gc
+    lx_try_all x y dry; rc=$?
+    check "all locked: none (rc 1)" [ "$rc" = 1 ]
+    check "the dead host is not counted up" [ "$LX_UP" = 3 ]
+    check "the wait message names the busy hosts" [ "${LX_HELD#alpha: gate abcdefabcdef running}" != "$LX_HELD" ]
+    # A gate that died leaves a stale lock: free.
+    echo 99999999 > "$T/ha/gates/ga.pid"
+    out=$(lx_try_all x y dry; echo "$NAME")
+    check "a dead gate's lock is free: the first host" [ "$out" = alpha ]
+    unlock "$T/ha"; lock "$T/ha" ga
+    # Real takes: the free host is taken once, the next caller goes elsewhere.
+    unlock "$T/hb"; unlock "$T/hc"
+    lx_try_all id1 sha1 >/dev/null; check "a real take gets beta" [ "$NAME" = beta ]
+    check "its lock is there" grep -q '^id=id1$' "$T/hb/gates/.gatelock/info"
+    lx_try_all id2 sha2 >/dev/null; check "the next gets gamma" [ "$NAME" = gamma ]
+    lx_try_all id3 sha3 >/dev/null; rc=$?
+    check "no free host: busy, nothing taken" [ "$rc" = 1 -a "$(sed -n 's/^id=//p' "$T/hc/gates/.gatelock/info")" = id2 ]
+    # The toolchain check.
+    unlock "$T/ha"; unlock "$T/hb"; unlock "$T/hc"
+    NEED="no-such-tool-xyz"
+    lx_try_all x y dry; rc=$?
+    check "no toolchain on any host: none" [ "$rc" = 1 -a "$LX_UP" = 0 ]
+    check "...and it says which" [ "${LX_HELD#alpha: notool}" != "$LX_HELD" ]
+    NEED="bash"
+    # GATE_LINUX_HOST: one host only.
+    out=$(GATE_LINUX_HOST=user@fc lx_hosts; echo "${HN[*]}/${HA[*]}")
+    check "GATE_LINUX_HOST overrides the file" [ "$out" = "fc/user@fc" ]
+    # The queue: oldest live first; a dead head is skipped.
+    QDIR="$T/q"
+    sleep 120 & p1=$!; sleep 120 & p2=$!; sleep 120 & p3=$!
+    mkdir -p "$QDIR"
+    echo $p2 > "$QDIR/1000-2"; echo $p1 > "$QDIR/1000-1"; echo $p3 > "$QDIR/1005-3"
+    check "the oldest ticket is the head" [ "$(lq_head)" = 1000-1 ]
+    check "two are ahead of the third" [ "$(lq_ahead 1005-3)" = 2 ]
+    kill $p1 2>/dev/null; wait $p1 2>/dev/null
+    check "a dead head is skipped" [ "$(lq_head)" = 1000-2 ]
+    check "...and swept" [ ! -e "$QDIR/1000-1" ]
+    lq_leave 1000-2
+    check "leaving passes the head on" [ "$(lq_head)" = 1005-3 ]
+    kill $p2 $p3 $sleeper 2>/dev/null; wait 2>/dev/null
+    rm -rf "${T:?}"
+    if [ "$fails" -eq 0 ]; then echo "gate-linux.sh self-test: ok"; return 0; fi
+    echo "gate-linux.sh self-test: $fails failed"; return 1
+}
+
+REV=HEAD; OUT=""; DRY="${GATE_DRYRUN:+1}"
 while [ $# -gt 0 ]; do
     case "$1" in
         --rev)  shift; REV="${1:?--rev needs a commit}" ;;
         --out)  shift; OUT="${1:?--out needs a file}" ;;
-        --host) shift; HOST="${1:?--host needs user@ip}" ;;
-        -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+        --host) shift; export GATE_LINUX_HOST="${1:?--host needs user@ip}" ;;
+        --dry-run) DRY=1 ;;
+        --self-test) lx_selftest; exit $? ;;
+        -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
         *) echo >&2 "gate-linux.sh: unknown option '$1'"; exit 2 ;;
     esac
     shift
 done
-[ -n "$OUT" ] || { echo >&2 "gate-linux.sh: --out FILE is required"; exit 2; }
+[ -n "$OUT" ] || [ -n "$DRY" ] || { echo >&2 "gate-linux.sh: --out FILE is required"; exit 2; }
+lx_hosts || exit 2
 
 SHA=$(git -C "$REPO" rev-parse --verify "$REV^{commit}" 2>/dev/null) \
     || { echo >&2 "gate-linux.sh: '$REV' is not a commit here"; exit 2; }
@@ -55,45 +239,54 @@ ID="lx-${SHA:0:12}-$(date +%Y%m%d-%H%M%S)-$$"
 T0=$(date +%s)
 RUN=""
 
-on() { ssh "${SSHOPT[@]}" "$@" "$HOST" bash -s; }
-onlock() { { cat "$LOCKLIB"; cat; } | on "$@"; }
-say() { echo "linux: $*"; }
 
 fail() { # <code> <why>: the result file, then out
     say "$2"
-    { echo "linux=$1 linux_qt=? linux_host=${HOST#*@}"; echo "$2"; } > "$OUT"
+    { echo "linux=$1 linux_qt=? linux_host=${NAME:-${HOST#*@}}"; echo "$2"; } > "$OUT"
     exit "$1"
 }
+# Dry run: which host would it be?
+if [ -n "$DRY" ]; then
+    if lx_try_all "$ID" "$SHA" dry; then
+        say "would pick $NAME ($HOST)"; exit 0
+    fi
+    say "would wait: ${LX_HELD:-no host answers}"
+    [ "$LX_UP" -gt 0 ] && exit 0
+    exit 1
+fi
+
 # The host's lock dropped on the way out, whatever happens here -- unless the
 # leg is still running there (lost touch): it drops it itself when done.
-trap '[ -n "$RUN" ] && rm -f "$RUN"; onlock <<<"gl_release $ID" >/dev/null 2>&1' EXIT
+TICKET="$(date +%s)-$$"
+trap '[ -n "$RUN" ] && rm -f "$RUN"; lq_leave "$TICKET"; [ -n "$HOST" ] && onlock <<<"gl_release $ID" >/dev/null 2>&1' EXIT
 
-# The host's lock: taken, or waited for.
+# A host: the first free one, once this gate is the head of the queue.
 WAITED=0; DOWN=0; SAID=""
 trap 'fail 130 "stopped while waiting for the Linux host"' INT TERM
+lq_join "$TICKET"
 while :; do
-    out=$(onlock <<<"gl_try '$ID' '$SHA' '$(hostname -s)'" 2>/dev/null)
-    last=$(printf '%s\n' "$out" | tail -n 1)
-    if [ "${last#@@}" != "$last" ]; then
-        DOWN=0
-        printf '%s\n' "$out" | sed -n "s/^note: /linux: /p"
-        [ "$last" = "@@ok" ] && break
-        held=${last#@@busy }
-        if [ "$held" != "$SAID" ] || [ $((WAITED % 300)) -lt "$POLL" ]; then
-            say "waiting for the Linux host: $held (${WAITED}s so far)"
-            SAID=$held
+    if [ "$(lq_head)" = "$TICKET" ]; then
+        if lx_try_all "$ID" "$SHA"; then lq_leave "$TICKET"; break; fi
+        if [ "$LX_UP" -gt 0 ]; then
+            DOWN=0
+            if [ "$LX_HELD" != "$SAID" ] || [ $((WAITED % 300)) -lt "$POLL" ]; then
+                say "waiting for a Linux host: $LX_HELD (${WAITED}s so far)"
+                SAID=$LX_HELD
+            fi
+        else
+            [ "$WAITED" -eq 0 ] && fail 99 "no Linux host is usable (${LX_HELD:-all unreachable}; ALLOW_SKIP=1 to gate without it)"
+            DOWN=$((DOWN + POLL))
+            [ "$DOWN" -ge "$PATIENCE" ] && fail 99 "no Linux host was usable for ${DOWN}s while waiting (${LX_HELD:-all unreachable})"
         fi
-    else
-        [ "$WAITED" -eq 0 ] && fail 99 "the Linux host $HOST is unreachable (ALLOW_SKIP=1 to gate without it)"
-        DOWN=$((DOWN + POLL))
-        [ "$DOWN" -ge "$PATIENCE" ] && fail 99 "the Linux host $HOST was unreachable for ${DOWN}s while waiting for its lock"
+    elif [ $((WAITED % 300)) -lt "$POLL" ]; then
+        say "queued: $(lq_ahead "$TICKET") gate(s) ahead for a Linux host (${WAITED}s so far)"
     fi
     sleep "$POLL"
     WAITED=$((WAITED + POLL))
 done
 trap - INT TERM
 
-say "${SHA:0:12} on $HOST, ~/gates/$ID"
+say "${SHA:0:12} on $NAME ($HOST), ~/gates/$ID"
 on <<EOF || fail 99 "the Linux host $HOST is unreachable (ALLOW_SKIP=1 to gate without it)"
 mkdir -p "\$HOME/gates/$ID" && touch "\$HOME/gates/$ID.running"
 EOF
@@ -138,7 +331,7 @@ if [ \$rc -eq 0 ]; then
     fi
 fi
 {
-    echo "linux=\$rc linux_qt=\$QTV linux_host=\$(hostname -s)"
+    echo "linux=\$rc linux_qt=\$QTV linux_host=$NAME"
     echo "  Linux        gcc \$(gcc -dumpfullversion 2>/dev/null), Release, Ninja: configure \${tc}s   build \${tb}s   test \${tt}s   alone \${ta}s   tests \${ran}/\${exp}   \$res"
     if [ \$rc -ne 0 ]; then
         echo "FAILED: Linux \$res"

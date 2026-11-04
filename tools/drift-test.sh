@@ -99,7 +99,7 @@ for line in sys.stdin:
     sys.stdout.write(datetime.datetime.now().isoformat(timespec="milliseconds")+" "+line)' \
   > "$LOG" &
 sleep 3
-APP=$(pgrep -n -f "qlcconsole -p -d 0 -o $WS")
+APP=$(pgrep -n -f "[q]lcconsole -p -d 0 -o $WS")
 [ -n "${APP:-}" ] || { echo "DRIFT_ABORT=app did not start"; exit 1; }
 
 PROGRAMMED_MS=$(( STEPS * STEP_MS ))
