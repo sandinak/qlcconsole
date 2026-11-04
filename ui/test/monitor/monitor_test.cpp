@@ -168,6 +168,8 @@
 #include "qlcfixturedefcache.h"
 #include <QFileInfo>
 #include "../common/dragpos.h"
+#include "blockingview.h"
+#include "blocking.h"
 
 // Find a visible QPushButton by its exact text anywhere under a widget —
 // QMessageBox's extra buttons (confirmFeatureDelete's "Delete"/"Detach &&
@@ -15895,6 +15897,123 @@ void Monitor_Test::draggingATargetAnnouncesTheMove()
         QVERIFY(qAbs(t->y() - 2.0f) < 0.01f);
     }
     delete doc;
+}
+
+/* Blocking (docs/design/BLOCKING.md): with a blocking set picked in the
+   Studio, a drag moves the target in that set -- its Default place stays,
+   drawn as a ghost -- and Undo puts the set back. With the cue in edit
+   picked, the drag goes into that cue's blocking; in Default, it moves
+   the target itself as it always did. */
+void Monitor_Test::draggingATargetInABlockingLeavesDefault()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StageTarget *t = props->addStageTarget();
+    t->setName("Front Rank");
+    t->setPosition(QVector3D(2.0f, 2.0f, 0.0f));
+    const quint32 apron = props->addBlockingSet("Apron number");
+    BlockingView *bv = BlockingView::of(doc);
+    QVERIFY(bv != nullptr);
+    QCOMPARE(bv->blocking(), quint32(0));
+    QVERIFY(bv->bannerText().isEmpty());
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 8));
+        view.updateTargets();
+
+        bv->setPick(apron);
+        QVERIFY(bv->editsSet());
+        QCOMPARE(bv->bannerText(), QString("Moving targets in: Apron number"));
+        view.blockingChanged();
+        TargetItem *ti = view.m_targetItems.value(t->id(), nullptr);
+        QVERIFY(ti != nullptr);
+        QVERIFY(view.m_blockingGhosts.isEmpty());       // nothing moved in it yet
+
+        ti->setPos(ti->pos() + QPointF(0, view.m_cellPixels * 2));
+        view.slotTargetMoved(ti);
+        QVERIFY2(qAbs(t->y() - 2.0f) < 0.01f, qPrintable(QString("Default moved to y=%1").arg(t->y())));
+        QVERIFY(t->isBlockedIn(apron));
+        const QVector3D there = props->targetPosition(t, apron);
+        QVERIFY2(qAbs(there.y() - 4.0f) < 0.05f, qPrintable(QString("blocked at y=%1").arg(there.y())));
+        QCOMPARE(view.m_blockingGhosts.size(), 3);      // ring, line, label at Default
+        // The item stands where the blocking puts it after a redraw.
+        view.updateTargets();
+        ti = view.m_targetItems.value(t->id(), nullptr);
+        const QPointF px = view.projectMm(there.x() * 1000.0, there.y() * 1000.0, there.z() * 1000.0);
+        QVERIFY(QLineF(ti->pos(), px).length() < 1.0);
+
+        view.undoLastMove();
+        QVERIFY(!t->isBlockedIn(apron));
+        QVERIFY(qAbs(t->y() - 2.0f) < 0.01f);
+
+        // Whatever the selection is -- here two performers -- the drag
+        // moves them all, in the blocking only.
+        StageTarget *u = props->addStageTarget();
+        u->setName("Soloist");
+        u->setPosition(QVector3D(5.0f, 2.0f, 0.0f));
+        view.updateTargets();
+        ti = view.m_targetItems.value(t->id(), nullptr);
+        TargetItem *ui = view.m_targetItems.value(u->id(), nullptr);
+        QVERIFY(ui != nullptr);
+        ti->setSelected(true);
+        ui->setSelected(true);
+        ti->setPos(ti->pos() + QPointF(0, view.m_cellPixels));
+        ui->setPos(ui->pos() + QPointF(0, view.m_cellPixels));
+        view.slotTargetMoved(ti);
+        QVERIFY(t->isBlockedIn(apron) && u->isBlockedIn(apron));
+        QVERIFY(qAbs(props->targetPosition(u, apron).y() - 3.0f) < 0.05f);
+        QVERIFY(qAbs(u->y() - 2.0f) < 0.01f && qAbs(t->y() - 2.0f) < 0.01f);
+        view.undoLastMove();                            // one step for the pair
+        QVERIFY(!t->isBlockedIn(apron) && !u->isBlockedIn(apron));
+        ti->setSelected(false);
+        ui->setSelected(false);
+
+        // Save Positions as Blocking...: a copy of where they stand now.
+        StageTarget::Blocked b;
+        b.hasOffset = true;
+        b.offset = QVector3D(0, 1, 0);
+        u->setBlocked(apron, b);
+        const quint32 kept = BlockingView::savePositionsAs(doc, "Finale", apron);
+        QVERIFY(kept != apron && props->hasBlockingSet(kept));
+        QVERIFY(u->isBlockedIn(kept) && !t->isBlockedIn(kept));
+        QVERIFY(qAbs(props->targetPosition(u, kept).y() - 3.0f) < 0.05f);
+        QCOMPARE(BlockingView::saveActionText(), QString("Save Positions as Blocking\u2026"));
+        u->clearBlocked(apron);
+
+        // The cue in edit: its blocking is what a drag moves.
+        ShowTreeController *st = doc->showTree();
+        const quint32 listId = st->addCueList(st->addProduction("P"), "Main", ShowTree::ListMode::Tracking);
+        const quint32 c1 = st->addCue(listId, -1, "One");
+        const quint32 c2 = st->addCue(listId, 0, "Two");
+        QVERIFY(st->setCuesBlocking({ c2 }, apron));
+        bv->setPick(BlockingView::followCue());
+        st->pickCue(c1);
+        QCOMPARE(bv->blocking(), quint32(0));
+        QVERIFY(!bv->editsSet());
+        st->pickCue(c2);
+        QCOMPARE(bv->blocking(), apron);
+        view.blockingChanged();
+        ti = view.m_targetItems.value(t->id(), nullptr);
+        ti->setPos(ti->pos() + QPointF(view.m_cellPixels, 0));
+        view.slotTargetMoved(ti);
+        QVERIFY(t->isBlockedIn(apron));
+        QVERIFY(qAbs(t->x() - 2.0f) < 0.01f);
+
+        // Default: the drag moves the target itself.
+        bv->setPick(MonitorProperties::defaultBlocking());
+        QVERIFY(!bv->editsSet());
+        view.blockingChanged();
+        QVERIFY(view.m_blockingGhosts.isEmpty());
+        ti = view.m_targetItems.value(t->id(), nullptr);
+        ti->setPos(ti->pos() + QPointF(0, view.m_cellPixels));
+        view.slotTargetMoved(ti);
+        QVERIFY2(t->y() > 2.5f, qPrintable(QString("Default at y=%1").arg(t->y())));
+    }
+    delete doc;
+    // The views' blocking went with the Doc.
+    QVERIFY(!BlockingScope::active());
 }
 
 void Monitor_Test::aMoverOnATopFaceStandsUpOrHangsDown()

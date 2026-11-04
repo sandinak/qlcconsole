@@ -194,6 +194,8 @@ static QList<quint32> studioMenuFixtures(const StructureStudioView *view, quint3
 #include "itemicons.h"
 #include "collection.h"
 #include "showtreecontroller.h"
+#include "blockingview.h"
+#include "monitorproperties.h"
 
 #define SETTINGS_VSPLITTER "monitor/vsplitter2"
 #define SETTINGS_LAYERS_PANEL "monitor/layerspanel3"
@@ -641,6 +643,15 @@ void Monitor::initGraphicsView()
     viewGrid->addWidget(m_graphicsView, 1, 1);
     viewGrid->setRowStretch(1, 1);
     viewGrid->setColumnStretch(1, 1);
+    /* Over the plot, when a drag edits a blocking set and not Default
+       (BLOCKING.md): nobody moves the Default marks by accident. */
+    m_blockingBanner = new QLabel(gcontainer);
+    m_blockingBanner->setObjectName(QStringLiteral("blockingBanner"));
+    m_blockingBanner->setAlignment(Qt::AlignCenter);
+    m_blockingBanner->setStyleSheet(QStringLiteral(
+        "QLabel { background: #2c5d8f; color: white; font-weight: bold; padding: 4px 8px; }"));
+    m_blockingBanner->setVisible(false);
+    gcLayout->addWidget(m_blockingBanner);
     gcLayout->addWidget(viewArea);
 
     // Layers side panel, docked on the LEFT (first splitter pane) as most apps
@@ -1293,6 +1304,18 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     fl->addWidget(originBtn);
 
     fl->addStretch(1);
+
+    // Blocking (BLOCKING.md): the picker is the toolbar's Blocking button;
+    // its state, and the banner's, as they are now (no redraw: the plot drew
+    // its targets in it).
+    connect(BlockingView::of(m_doc), &BlockingView::changed, this, &Monitor::refreshBlocking);
+    m_shownBlocking = BlockingView::of(m_doc)->blocking();
+    if (m_blockingBanner != nullptr)
+    {
+        m_blockingBanner->setText(BlockingView::of(m_doc)->bannerText());
+        m_blockingBanner->setVisible(BlockingView::of(m_doc)->editsSet());
+    }
+    fillBlockingCombo();
 
     // ---- Overlay + View, RIGHT-justified ----  the single source of state.
     fl->addWidget(new QLabel(tr("Overlay:")));
@@ -2368,6 +2391,26 @@ void Monitor::initGraphicsToolbar()
         m_focusBtn->setMenu(focusMenu);
     }
     m_graphicsToolBar->addWidget(m_focusBtn);
+
+    /* Blocking ▾ (BLOCKING.md): which blocking the plot shows and a drag
+       moves -- the cue in edit's, Default or a set -- and Save Positions as
+       Blocking... In the toolbar, not the footer: the footer is full, and
+       widening it moved the plot under the pointer. */
+    m_blockingBtn = new QToolButton(this);
+    m_blockingBtn->setObjectName(QStringLiteral("blockingButton"));
+    m_blockingBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_blockingBtn->setPopupMode(QToolButton::InstantPopup);
+    m_blockingBtn->setStyleSheet(QStringLiteral("QToolButton { padding-right: 14px; }"));   // room for the arrow
+    m_blockingBtn->setToolTip(tr("Where the stage targets stand on the plot, and what dragging them "
+                                 "changes: the blocking of the cue in edit, Default, or a set."));
+    {
+        QMenu *bm = new QMenu(m_blockingBtn);
+        bm->setObjectName(QStringLiteral("blockingMenu"));
+        connect(bm, &QMenu::aboutToShow, this, [this, bm]() { fillBlockingMenu(bm); });
+        m_blockingBtn->setMenu(bm);
+    }
+    m_graphicsToolBar->addWidget(m_blockingBtn);
+    fillBlockingCombo();
 
     m_moreBtn = new QToolButton(this);
     QToolButton *moreBtn = m_moreBtn;
@@ -9142,6 +9185,11 @@ void Monitor::fillCanvasMenu(QMenu *out, QPointF scenePos)
     addMenu->addAction(tr("Network Node"),
                        this, SLOT(slotAddNetworkNode()));
 
+    /* Where the people stand now, kept as a blocking (BLOCKING.md): the
+       crew's "store this formation". The plot then shows and moves it. */
+    cm.add(ContextMenu::Kind, BlockingView::saveActionText(), [this]() { saveBlockingFromPlot(); })
+        ->setObjectName(QStringLiteral("plotSaveBlocking"));
+
     // Shortcuts are on the actions (Qt shows them), not typed into the names.
     QAction *groupAct = cm.add(ContextMenu::Organise, tr("Group Selected"), [this]() { slotGroupItems(); });
     groupAct->setIcon(QIcon(":/group.png"));
@@ -12334,4 +12382,70 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     flushSceneCaches();
     m_doc->setModified();
     edit.accept();
+}
+
+/*********************************************************************
+ * Blocking (docs/design/BLOCKING.md)
+ *********************************************************************/
+
+void Monitor::fillBlockingCombo()
+{
+    // The button says which blocking the plot shows.
+    if (m_blockingBtn == nullptr)
+        return;
+    BlockingView *bv = BlockingView::of(m_doc);
+    m_blockingBtn->setText(tr("Blocking: %1").arg(bv->blockingName()));
+}
+
+void Monitor::fillBlockingMenu(QMenu *menu)
+{
+    BlockingView *bv = BlockingView::of(m_doc);
+    MonitorProperties *mp = m_doc->monitorProperties();
+    menu->clear();
+    QActionGroup *group = new QActionGroup(menu);
+    auto pick = [this, menu, group, bv](const QString &text, quint32 id) {
+        QAction *a = menu->addAction(text, this, [bv, id]() { bv->setPick(id); });
+        a->setCheckable(true);
+        a->setChecked(bv->pick() == id);
+        a->setData(id);
+        group->addAction(a);
+    };
+    const quint32 cue = bv->pick() == BlockingView::followCue() ? bv->blocking() : 0;
+    pick(tr("Cue in Edit (%1)").arg(mp->blockingName(cue)), BlockingView::followCue());
+    pick(mp->blockingName(MonitorProperties::defaultBlocking()), MonitorProperties::defaultBlocking());
+    for (const MonitorProperties::BlockingSet &b : mp->blockingSets())
+        pick(b.name, b.id);
+    menu->addSeparator();
+    menu->addAction(BlockingView::saveActionText(), this, [this]() { saveBlockingFromPlot(); })
+        ->setObjectName(QStringLiteral("blockingSave"));
+}
+
+void Monitor::refreshBlocking()
+{
+    fillBlockingCombo();
+    BlockingView *bv = BlockingView::of(m_doc);
+    if (m_blockingBanner != nullptr)
+    {
+        m_blockingBanner->setText(bv->bannerText());
+        m_blockingBanner->setVisible(bv->editsSet());
+    }
+    // Redrawn only when it is another blocking: a rebuild of the targets
+    // mid-drag (or at start-up, in Default) has nothing to show.
+    if (m_graphicsView != nullptr && bv->blocking() != m_shownBlocking)
+    {
+        m_shownBlocking = bv->blocking();
+        m_graphicsView->blockingChanged();
+    }
+}
+
+void Monitor::saveBlockingFromPlot()
+{
+    BlockingView *bv = BlockingView::of(m_doc);
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, tr("Save Positions as Blocking"),
+                                               tr("Name (where the people stand, e.g. \"Apron number\"):"),
+                                               QLineEdit::Normal, QString(), &ok);
+    if (ok && !name.trimmed().isEmpty())
+        bv->setPick(BlockingView::savePositionsAs(m_doc, name, bv->blocking()));
+    fillBlockingCombo();
 }

@@ -2982,7 +2982,7 @@ void ProgrammerController::applyDesignJoystick()
         {
             if (!m_stageAimValid)
             {
-                QVector3D pos = tgt->position();
+                QVector3D pos = tgt->positionIn(mProps->liveBlocking());
                 m_stageAimX = pos.x();
                 m_stageAimY = pos.y();
                 m_stageAimValid = true;
@@ -3007,7 +3007,7 @@ void ProgrammerController::applyDesignJoystick()
             m_beamHeldValid = true;   // a real beam position now exists (lastPosition)
             m_followMovedClock.restart();
 
-            tgt->setPosition(QVector3D(m_stageAimX, m_stageAimY, 0.0f));
+            mProps->setTargetPositionIn(tgt, mProps->liveBlocking(), QVector3D(m_stageAimX, m_stageAimY, 0.0f));
 
             // Both Design and Operate modes: the scene is running (preview or
             // operate-scene).  resetRuntime() clears the fader map so the next
@@ -3811,9 +3811,9 @@ void ProgrammerController::seedStageAim(quint32 sceneId, bool transient)
             if (hold)
             {
                 m_aimRestoreTgtId = p->stageTargetId();
-                m_aimRestoreOrig  = tgt->position();
+                m_aimRestoreOrig  = tgt->positionIn(mProps->liveBlocking());
                 m_aimRestoreValid = true;
-                tgt->setPosition(QVector3D(m_stageAimX, m_stageAimY, 0.0f));
+                mProps->setTargetPositionIn(tgt, mProps->liveBlocking(), QVector3D(m_stageAimX, m_stageAimY, 0.0f));
                 m_stageAimValid = true;
                 if (Scene *s = qobject_cast<Scene*>(m_doc->function(sceneId)))
                     s->requestReaim();
@@ -3821,7 +3821,7 @@ void ProgrammerController::seedStageAim(quint32 sceneId, bool transient)
             else
             {
                 // snapToTarget, or first activation: seed from the scene's target.
-                const QVector3D pos = tgt->position();
+                const QVector3D pos = tgt->positionIn(mProps->liveBlocking());
                 m_stageAimX = pos.x();
                 m_stageAimY = pos.y();
                 m_stageAimValid = true;
@@ -3866,7 +3866,7 @@ void ProgrammerController::restoreAim()
     StageTarget *tgt = mProps ? mProps->stageTarget(m_aimRestoreTgtId) : nullptr;
     if (tgt)
     {
-        tgt->setPosition(m_aimRestoreOrig);
+        mProps->setTargetPositionIn(tgt, mProps->liveBlocking(), m_aimRestoreOrig);
         // Re-resolve only the position so heads return to the authored aim
         // without flashing the LEDs.
         if (Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId)))
@@ -3963,11 +3963,11 @@ void ProgrammerController::startRestoreGlide()
     m_aimRestoreValid = false;
     MonitorProperties *mProps = m_doc->monitorProperties();
     StageTarget *tgt = mProps ? mProps->stageTarget(m_aimRestoreTgtId) : nullptr;
-    if (tgt == nullptr || (tgt->position() - m_aimRestoreOrig).length() < 1e-4f)
+    if (tgt == nullptr || (tgt->positionIn(mProps->liveBlocking()) - m_aimRestoreOrig).length() < 1e-4f)
         return;
     m_glide.active = true;
     m_glide.targetId = m_aimRestoreTgtId;
-    m_glide.from = tgt->position();
+    m_glide.from = tgt->positionIn(mProps->liveBlocking());
     m_glide.to = m_aimRestoreOrig;
     m_glide.ms = liveCueFadeMs();
     m_glide.elapsedMs = 0;
@@ -3987,7 +3987,7 @@ void ProgrammerController::advanceRestoreGlide()
     m_glide.elapsedMs += m_designJoyTimer != nullptr ? m_designJoyTimer->interval() : 20;
     const double t = qMin(1.0, double(m_glide.elapsedMs) / double(qMax(1, m_glide.ms)));
     const double e = t * t * (3.0 - 2.0 * t);          // eased in and out
-    tgt->setPosition(m_glide.from + (m_glide.to - m_glide.from) * float(e));
+    mProps->setTargetPositionIn(tgt, mProps->liveBlocking(), m_glide.from + (m_glide.to - m_glide.from) * float(e));
     // Whatever still aims at it follows it back.
     for (Scene *sc : liveScenes())
         for (quint32 pid : sc->palettes())

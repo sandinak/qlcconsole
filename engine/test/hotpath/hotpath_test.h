@@ -59,6 +59,7 @@ private slots:
     void aMatrixComputesAMapPerStepNotPerTick();
     void aGroupMasterAddsNoAllocationPerFrame();
     void whoLetGoAddsNoAllocationPerFrame();
+    void resolvingABlockedTargetAllocatesNothing();
 
     /* The mixed rig (stresstest/engine/showbuilder.cpp, ShowSpec::MixedRig):
        movers, LED pars, pixel bars and strips, dimmers on 32 universes */

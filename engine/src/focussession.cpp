@@ -598,7 +598,8 @@ QString FocusSession::callPositionPhrase() const
     const StageTarget *t = m_doc->monitorProperties()->stageTarget(c.target.id);
     if (t == nullptr)
         return QString();
-    return m_doc->monitorProperties()->stagePositionText(t->position(), MonitorProperties::SpokenOffset);
+    return m_doc->monitorProperties()->stagePositionText(m_doc->monitorProperties()->targetPosition(t),
+                                                         MonitorProperties::SpokenOffset);
 }
 
 QString FocusSession::wherePhrase(bool withPosition) const
