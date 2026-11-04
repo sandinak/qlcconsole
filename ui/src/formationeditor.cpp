@@ -161,6 +161,10 @@ FormationEditor::FormationEditor(Doc *doc, QWidget *parent)
     connect(m_pickList, &QListWidget::itemChanged, this, &FormationEditor::slotPickChanged);
     if (m_doc != nullptr)
         connect(m_doc, &Doc::cleared, this, &FormationEditor::slotDocCleared);
+    // A line added, renamed or removed in the Lighting Studio shows here at once.
+    if (m_doc != nullptr && m_doc->monitorProperties() != nullptr)
+        connect(m_doc->monitorProperties(), &MonitorProperties::stageTargetsChanged, this,
+                &FormationEditor::syncLines);
     // The pop-out (as the Show Tree's): the same preview, bigger.
     connect(m_strip, &LineSpreadPreview::popOutRequested, this, &FormationEditor::openPlanWindow);
     connect(m_plan, &LinePlanView::popOutRequested, this, &FormationEditor::openPlanWindow);
@@ -393,6 +397,25 @@ void FormationEditor::clearPick()
     Pick none;
     none.line = m_pick.line;
     setPick(none);
+}
+
+void FormationEditor::syncLines()
+{
+    const QList<const StageTarget *> lines = lineTargets(m_doc);
+    bool same = m_lineCombo->count() == lines.count();
+    for (int i = 0; same && i < lines.count(); ++i)
+        same = m_lineCombo->itemText(i) == lines.at(i)->name()
+               && m_lineCombo->itemData(i).toUInt() == lines.at(i)->id();
+    if (same)
+        return;
+    m_loading = true;
+    m_lineCombo->clear();
+    for (const StageTarget *t : lines)
+        m_lineCombo->addItem(t->name(), QVariant(t->id()));
+    const int li = m_lineCombo->findData(QVariant(m_pick.line));
+    m_lineCombo->setCurrentIndex(li);
+    m_lineCombo->setEnabled(m_lineCombo->count() > 0);
+    m_loading = false;
 }
 
 void FormationEditor::syncPicker()

@@ -4131,6 +4131,7 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
             t->makeLine();
         }
         newTargetIds.append(t->id());
+        m_props->notifyStageTargetsChanged();   // named and placed now: the lists were told too early
 
         // Mirror slotAddTarget: give the copy its own linked PanTilt palette so
         // it is immediately usable rather than a dangling position.
@@ -6921,6 +6922,7 @@ void Monitor::addTarget(bool line)
     // same rule a drag follows, so placing and moving agree.
     t->setZ(m_graphicsView->floorHeightAt(t->x(), t->y()));
     t->setLayerId(layer);   // land on the selected layer
+    m_props->notifyStageTargetsChanged();   // addStageTarget() told the lists before the name was set
 
     m_graphicsView->updateTargets();
     if (m_layersPanel) m_layersPanel->reload();
@@ -6985,6 +6987,7 @@ void Monitor::slotAddPerson()
     t->setY(float(mm.y() / 1000.0));
     t->setZ(m_graphicsView->floorHeightAt(t->x(), t->y()));   // stand on the deck
     t->setLayerId(layer);
+    m_props->notifyStageTargetsChanged();   // addStageTarget() told the lists before the name was set
 
     m_graphicsView->updateTargets();
     if (m_layersPanel) m_layersPanel->reload();

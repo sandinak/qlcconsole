@@ -4088,6 +4088,47 @@ void ShowTreeView_Test::planPopOutWindow()
     QSettings().remove(LinePlanWindow::geometryKey());
 }
 
+/* A target added in the Lighting Studio shows in Library > All > Targets with
+   no reload: the Studio adds it (its default name), names and places it, and
+   tells the lists. Rename, kind and delete follow the same way. */
+void ShowTreeView_Test::theLibraryFollowsTargetsAddedInTheStudio()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    ShowTreeView view(nullptr, m_doc);   // never shown: a hidden tab follows too
+    QVERIFY(libraryItem(view.library(), "Targets") == nullptr);
+
+    // The same sequence as Monitor::addTarget().
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("Centre");
+    mark->setPosition(QVector3D(0, 3, 0));
+    props->notifyStageTargetsChanged();
+    QTRY_VERIFY(libraryItem(view.library(), "Targets") != nullptr);
+    QTRY_VERIFY(libraryItem(view.library(), "Centre") != nullptr);
+
+    // A line and a person (Kind::Person) are offered too.
+    StageTarget *edge = props->addStageTarget();
+    edge->makeLine();
+    edge->setName("DS-Edge");
+    props->notifyStageTargetsChanged();
+    StageTarget *who = props->addStageTarget();
+    who->setKind(StageTarget::Kind::Person);
+    who->setName("Singer");
+    props->notifyStageTargetsChanged();
+    QTRY_VERIFY(libraryItem(view.library(), "DS-Edge (line)") != nullptr);
+    QTRY_VERIFY(libraryItem(view.library(), "Singer") != nullptr);
+
+    // Rename.
+    mark->setName("Downstage");
+    props->notifyStageTargetsChanged();
+    QTRY_VERIFY(libraryItem(view.library(), "Downstage") != nullptr);
+    QVERIFY(libraryItem(view.library(), "Centre") == nullptr);
+
+    // Delete.
+    props->removeStageTarget(who->id());
+    QTRY_VERIFY(libraryItem(view.library(), "Singer") == nullptr);
+    QVERIFY(libraryItem(view.library(), "Downstage") != nullptr);
+}
+
 /* §3B in the tab: Library → Targets; a line dropped on the cue is one
    formation over its layers (the rows say so, the order strip numbers the
    lights across both by where they hang); Spread / Grouping / Cross rows
