@@ -18239,6 +18239,60 @@ void Monitor_Test::aFixtureInTheFountainMovesAndTurnsWithIt()
     delete doc;
 }
 
+/* The plot rebuilds its structures on a resize (the window, or the footer's
+   scroll bar coming in): a selected fountain stayed selected only in its
+   fixtures, and a turn then left the base and walls behind (train9,
+   2026-11-04). */
+void Monitor_Test::aResizedPlotKeepsTheFountainSelected()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = silkFlameDef();
+    QVERIFY(def != nullptr);
+    QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(12, 6, 8));
+    {
+        QWidget parent;
+        parent.resize(1400, 900);
+        Monitor *mon = new Monitor(&parent, doc);
+        parent.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&parent));
+        MonitorGraphicsView *gv = mon->m_graphicsView;
+        Fixture *flame = nullptr;
+        const quint32 gid = addTestFountain(*mon, doc, def, &flame);
+        QVERIFY(gid != 0 && flame != nullptr);
+        StagePlatform *base = props->platforms().first();
+        const Fountain::Parts f = Fountain::ofGroup(props, gid);
+        QVERIFY(f.isValid());
+
+        gv->scene()->clearSelection();
+        QList<QPair<QString, quint32> > all;
+        all << qMakePair(QString("platform"), base->id())
+            << qMakePair(QString("scenery"), f.inner->id())
+            << qMakePair(QString("scenery"), f.outer->id())
+            << qMakePair(QString("fixture"), flame->id());
+        gv->selectMapItems(all);
+        QCOMPARE(gv->scene()->selectedItems().size(), 4);
+
+        // The plot made shorter and back: the same four are selected.
+        const QSize was = gv->size();
+        gv->resize(was.width(), was.height() - 30);
+        QVERIFY(gv->size() != was);
+        QCOMPARE(gv->scene()->selectedItems().size(), 4);
+        QVERIFY(gv->m_platformItems.value(base->id())->isSelected());
+        QVERIFY(gv->m_sceneryItems.value(f.inner->id())->isSelected());
+        QVERIFY(gv->m_sceneryItems.value(f.outer->id())->isSelected());
+        gv->resize(was);
+        QCOMPARE(gv->scene()->selectedItems().size(), 4);
+
+        // And it turns as one.
+        QVERIFY(gv->rotateSelectedItems(90.0) >= 4);
+        delete mon;
+    }
+    delete doc;
+}
+
 void Monitor_Test::aFountainsFlameUnlocksWhereItShowsLocked()
 {
     Doc *doc = new Doc(this);

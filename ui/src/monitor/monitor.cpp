@@ -1557,6 +1557,9 @@ void Monitor::setRulersVisible(bool on)
 
 void Monitor::fillGraphicsView(bool keepView)
 {
+    // Filled afresh (another show, perhaps): nothing carried over selected.
+    // A resize or a new scale keeps the selection; this is not one.
+    m_graphicsView->scene()->clearSelection();
     m_graphicsView->clearFixtures();
 
     m_gridWSpin->blockSignals(true);

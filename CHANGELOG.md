@@ -228,6 +228,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A resize keeps the plot's selection.** Resizing the Lighting Studio
+  (or its footer gaining a scroll bar) dropped selected decks, scenery,
+  trusses and other structures and kept only the fixtures, so a selected
+  fountain then turned without its base and walls. They stay selected.
+
 - **A target added in the Lighting Studio shows up everywhere at once.**
   A new point, person or line target did not appear in the Show Tree's
   Library (All > Targets), the Look Editor's **Aim at:** list or the
