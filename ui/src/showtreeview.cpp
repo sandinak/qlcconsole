@@ -6123,6 +6123,84 @@ bool ShowTreeView::setLayerReleaseIn(quint32 cueId, quint32 layerId, const Targe
     return true;
 }
 
+bool ShowTreeView::bringIntoCue(quint32 cueId, const Target &target, QString *why)
+{
+    QString reason;
+    if (!m_st->bringIntoCue(cueId, target, &reason))
+    {
+        if (why != nullptr)
+            *why = reason;
+        return false;
+    }
+    // The carried-in row became the cue's own: select it there.
+    if (const Cue *c = m_st->cue(cueId))
+        for (const Layer &l : c->layers)
+            if (l.target == target)
+                selectNode(l.id, cueId);
+    return true;
+}
+
+QString ShowTreeView::startHereSentence(quint32 cueId, const Target &target) const
+{
+    const CueList *list = m_st->listOfCue(cueId);
+    const ShowTreeController::TrackOp op = m_st->startHerePlan(cueId, target);
+    if (list == nullptr || !op.ok)
+        return QString();
+    QStringList names;
+    for (quint32 id : op.lose)
+        names << m_st->cueLabel(*list, list->indexOf(id));
+    const int more = names.count() - 3;
+    if (more > 1)
+    {
+        names = names.mid(0, 3);
+        names << tr("%n more", "", more);
+    }
+    return tr("%1 will no longer have %2")
+        .arg(QLocale().createSeparatedList(names), m_st->targetLabel(target));
+}
+
+QMessageBox *ShowTreeView::startHereBox(quint32 cueId, const Target &target)
+{
+    const CueList *list = m_st->listOfCue(cueId);
+    const Cue *cue = m_st->cue(cueId);
+    if (list == nullptr || cue == nullptr)
+        return nullptr;
+    QMessageBox *box = new QMessageBox(QMessageBox::Question, tr("Start Here Instead"),
+                                       tr("Start %1 in %2 instead?")
+                                           .arg(m_st->targetLabel(target),
+                                                m_st->cueLabel(*list, list->indexOf(cueId))),
+                                       QMessageBox::Ok | QMessageBox::Cancel, this);
+    box->setInformativeText(startHereSentence(cueId, target) + QStringLiteral(".\n")
+                            + tr("This cue sets it with the values it carries now, and the cues after it "
+                                 "track from here. One undo step."));
+    box->setObjectName(QStringLiteral("stStartHereBox"));
+    return box;
+}
+
+bool ShowTreeView::startHereInstead(quint32 cueId, const Target &target, bool ask, QString *why)
+{
+    QString reason;
+    if (m_st->startHerePlan(cueId, target).ok && ask)
+    {
+        QMessageBox *box = startHereBox(cueId, target);
+        const bool yes = box != nullptr && box->exec() == QMessageBox::Ok;
+        delete box;
+        if (!yes)
+            return false;
+    }
+    if (!m_st->startLayerHere(cueId, target, &reason))
+    {
+        if (why != nullptr)
+            *why = reason;
+        return false;
+    }
+    if (const Cue *c = m_st->cue(cueId))
+        for (const Layer &l : c->layers)
+            if (l.target == target)
+                selectNode(l.id, cueId);
+    return true;
+}
+
 bool ShowTreeView::toggleSkipSelected()
 {
     const QList<quint32> cues = selectedCues();
@@ -7792,6 +7870,30 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
         return;
     const Target t = own != nullptr ? own->target : tracked;
     const bool design = m_doc->mode() == Doc::Design;
+
+    /* ---- This place: a layer carried in can be brought into the cue as it
+       is, or start here instead of in the cue that sets it ---- */
+    if (own == nullptr && list != nullptr && !list->looks && !list->isSubCues())
+    {
+        const ShowTreeController::TrackOp bring = m_st->bringIntoPlan(cueId, t);
+        QAction *bi = menu.add(ContextMenu::Place, tr("Bring Into This Cue"), [this, cueId, t]() {
+            QString why;
+            if (!bringIntoCue(cueId, t, &why))
+                QMessageBox::information(this, tr("Bring into this cue"), why);
+        }, QStringLiteral("stBringIntoCue"));
+        bi->setEnabled(bring.ok);
+        bi->setToolTip(bring.ok ? tr("This cue holds the layer with the values it carries in: nothing "
+                                     "changes on stage, and the cues after it track from here")
+                                : bring.why);
+        const ShowTreeController::TrackOp start = m_st->startHerePlan(cueId, t);
+        QAction *sh = menu.add(ContextMenu::Place, tr("Start Here Instead"), [this, cueId, t]() {
+            QString why;
+            if (!startHereInstead(cueId, t, true, &why) && !why.isEmpty())
+                QMessageBox::information(this, tr("Start here instead"), why);
+        }, QStringLiteral("stStartHere"));
+        sh->setEnabled(start.ok);
+        sh->setToolTip(start.ok ? startHereSentence(cueId, t) + QStringLiteral(".") : start.why);
+    }
 
     /* ---- 1. Open: a function played as it is in its own editor (W0: first),
        the layer in the Workbench ---- */

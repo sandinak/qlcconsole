@@ -1246,6 +1246,43 @@ choices:
   every cue it tracks into follows. Its **None (off from there on)** turns it
   off at the source.
 
+### Bring a tracked layer into this cue
+
+Right-click a grey (carried-in) layer, in the tree or in the Workbench. At
+the top of its menu, with the other items that belong to this place:
+
+- **Bring Into This Cue.** This cue now holds the layer with exactly the
+  values it carried in, as the grey row shows them (a cue look and
+  inherited values included). Every cue plays as before. The cues after it
+  that tracked the layer now track from here, and the earlier cue is
+  unchanged. Use it before a subtle change, or to pin a layer to this cue.
+  One undo step. (Editing the grey row, a drop or **Set in This Cue** still
+  brings it in without asking, as before.)
+- **Start Here Instead.** The layer's start moves from the cue that sets it
+  to this cue. That cue and the cues between it and this one no longer have
+  the layer; this cue sets it with the carried values; later cues track from
+  here. Use it to move a layer forward without leaving it behind. The
+  item's tooltip, and a confirm line before it runs, name the cues that
+  lose it (*"1.0.1 Verse and 1.0.2 Chorus will no longer have Towers"*).
+  One undo step.
+
+Each is greyed, with the reason as its tooltip, when it could not keep the
+show the same:
+
+- **Start Here Instead** is refused when a cue that would lose the layer is
+  **included** by another cue (the include would change), when the layer
+  reaches this cue from an include or the base cue, when this cue is
+  **Cue-only** (what it sets doesn't pass on, so the cues after it would
+  lose the layer), when the layer's old cue is the **base cue** and a
+  release goes back to it, or when it has child layers there.
+  A **Block** cue between is not a problem: the layer starts at the Block
+  cue, so only the Block cue and the cues after it lose it.
+- Either is refused when the layer is one effect or aim shared with other
+  layers by a cue look (on its own it would play as several), or is a child
+  layer whose parent is carried in too (bring the parent in first).
+- **Bring Into This Cue** on a layer that comes in from an include leaves
+  the include as it is, and works in a Cue-only cue.
+
 ### Record and duplicate
 
 **Record** (in the header, or right-click a cue → **Record as New Cue**)

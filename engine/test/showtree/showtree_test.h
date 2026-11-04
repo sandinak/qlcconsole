@@ -152,6 +152,10 @@ private slots:
     // P2 answers (2026-10-17)
     void recordTheRunningCueOrEverythingLit();
     void splitALayerKeepsTracking();
+    // Bring Into This Cue / Start Here Instead on a carried-in layer
+    void bringIntoKeepsEveryCueTheSame();
+    void startHereMovesTheStartForward();
+    void trackOpsEdgeCases();
     void mergeLayersKeepsTracking();
     void aTypedValueReusesAPalette();
     void aNewPaletteIsNamedAsTheShowsAre();

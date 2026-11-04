@@ -10,6 +10,18 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Track ops: Bring Into This Cue / Start Here Instead (trackops, 2026-11-03) -- built
+
+A grey (tracked) layer's right-click, in the tree and the Workbench: **Bring
+Into This Cue** (own, same values, same output; later cues track from here)
+and **Start Here Instead** (the layer's start moves to this cue; the cues
+from the setter up to here lose it; confirm names them). Engine:
+`ShowTreeController::bringIntoCue / startLayerHere` (+ `...Plan`),
+`engine/src/showtreetrackops.cpp`, verified by re-resolving the edited list.
+Decided: sub-cue lists and Looks refuse both (can change); a layer that is
+one effect/aim across layers set by a cue look is refused (can change).
+Leftover: Bring Into on a child layer needs its parent brought in first.
+
 ## Area cover: an Aim at an Area covers it (Q209, areacover, 2026-11-03) — built
 
 Zones by where the lights hang (least-squares match of x and depth key to
