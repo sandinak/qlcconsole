@@ -24,6 +24,9 @@
 #include <QAbstractGraphicsShapeItem>
 #include <QFont>
 #include <QElapsedTimer>
+#include <QPainterPath>
+#include <QVector>
+#include <QLineF>
 
 #include "fixturevisualtraits.h"
 
@@ -162,6 +165,19 @@ public:
 
     /** Return the fixture ID associated to this item */
     quint32 fixtureID() const { return m_fid; }
+
+    /** Where its LEDs are when a pixel path lays them out (PixelPath), in
+     *  item coordinates, drawn as glowing points in its heads' live colours;
+     *  @p staff a wand's staff, @p flame a silk flame's outline (dashed).
+     *  Empty: nothing extra. docs/design/FOUNTAIN_WAND.md */
+    void setPathDecor(const QVector<QPointF> &pixels, const QLineF &staff,
+                      const QPainterPath &flame);
+    QVector<QPointF> pathPixels() const { return m_pathPixels; }
+    /** The live colour of path pixel @p i: its head's, or the one head's. */
+    QColor pathPixelColour(int i) const;
+private:
+    void paintPathDecor(QPainter *painter);
+public:
 
     /** Return the number of heads represented by this item */
     int headsCount() const { return m_heads.count(); }
@@ -408,6 +424,9 @@ private:
     bool m_attachMode    = false;
     bool m_beneath       = false;   ///< setBeneath()
     bool m_isolated      = false;   ///< drilled-in single selection within a group
+    QVector<QPointF> m_pathPixels;  ///< setPathDecor()
+    QLineF m_staffLine;
+    QPainterPath m_flameOutline;
     bool m_ghosted       = false;   ///< locked-layer indicator: red + click-through
     bool m_highlighted   = false;
     bool m_hinted        = false;

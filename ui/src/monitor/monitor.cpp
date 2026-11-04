@@ -174,6 +174,8 @@
 #include "ledlayouteditor.h"
 #include "beamocclusion.h"
 #include "fountaindiagram.h"
+#include "fountain.h"
+#include "pixelpath.h"
 #include "fixturemanager.h"
 #include "patchinventorydialog.h"
 #include "createfixturegroup.h"
@@ -3703,6 +3705,9 @@ void Monitor::slotAddFixture()
             m_props->setFixturePosition(fid, 0, 0, QVector3D(mm.x(), mm.y(), 0));
             m_props->setFixtureFlags(fid, 0, 0, 0);
             m_props->setFixtureLayer(fid, layer);  // land on the selected layer
+            // Added inside a fountain: one of its pieces (FOUNTAIN_WAND.md).
+            if (Fountain::mountIn(m_doc, m_props, fid, mm.x() / 1000.0, mm.y() / 1000.0))
+                m_graphicsView->updateFixture(fid);
             m_doc->setModified();
         }
     }
@@ -6439,6 +6444,7 @@ void Monitor::slotFixturesDropped(const QList<quint32> &fixtureIds, QPointF scen
         m_props->setFixturePosition(fid, 0, 0, QVector3D(mm.x(), mm.y(), 0));
         m_props->setFixtureFlags(fid, 0, 0, 0);
         m_props->setFixtureLayer(fid, layer);
+        Fountain::mountIn(m_doc, m_props, fid, mm.x() / 1000.0, mm.y() / 1000.0);
         m_graphicsView->finishFixtureDrop(fid);
         n++;
     }
@@ -7658,6 +7664,8 @@ void Monitor::slotAddFountain()
     QDoubleSpinBox *innerSpin = mkSpin(0.3556, "fountainInner", tr("The inner wall, above the base"));
     QDoubleSpinBox *thickSpin = mkSpin(0.1016, "fountainThickness", tr("How thick each wall is"));
     QDoubleSpinBox *gapSpin = mkSpin(0.1016, "fountainGap", tr("Between the outer wall and the inner one"));
+    QDoubleSpinBox *fireSpin = mkSpin(double(Fountain::kDefaultFireHeight), "fountainFire",
+                                      tr("How high the silk rises above the inner wall's top"));
     QCheckBox *flameChk = new QCheckBox(tr("A silk flame in the middle"), &dlg);
     flameChk->setChecked(true);
     flameChk->setObjectName("fountainFlame");
@@ -7670,6 +7678,8 @@ void Monitor::slotAddFountain()
     form->addRow(tr("Wall thickness:"), thickSpin);
     form->addRow(tr("Gap:"), gapSpin);
     form->addRow(QString(), flameChk);
+    form->addRow(tr("Fire height:"), fireSpin);
+    connect(flameChk, &QCheckBox::toggled, fireSpin, &QWidget::setEnabled);
     /* Beside the fields, what each one measures: the fountain from above and
        cut through its front, every value where it is taken, the field being
        edited picked out ("a side display showing what each measurement is"). */
@@ -7722,6 +7732,7 @@ void Monitor::slotAddFountain()
     const quint32 gid = m_props->nextGroupId();
     const int n = gid;
     m_props->createGroup(gid, tr("Fountain %1").arg(n), layer, 0);
+    m_props->setGroupAssembly(gid, true);    // built as one object
 
     // The base: as wide and deep as the fountain, its front a half circle.
     StagePlatform *pl = m_props->addPlatform();
@@ -7779,8 +7790,14 @@ void Monitor::slotAddFountain()
                 FixtureRigProps rp = m_props->fixtureRigProps(fx->id());
                 rp.deckPlatformId = pl->id();
                 rp.mountingType = Truss::FloorMounted;
+                // The silk starts at the inner wall's top and rises this high.
+                rp.flameHeight = float(fireSpin->value() * fromDisp);
                 m_props->setFixtureRigProps(fx->id(), rp);
                 m_props->setFixtureGroup(fx->id(), gid);
+                /* On the fountain's layer, with the rest of it: on another,
+                   that layer's lock held it while the fountain moved and
+                   showed it locked where the fountain was not. */
+                m_props->setFixtureLayer(fx->id(), layer);
                 m_graphicsView->addFixture(fx->id(), QPointF(at.x() * 1000.0, at.y() * 1000.0));
             }
             else
@@ -8731,6 +8748,10 @@ void Monitor::slotEditPlatform(quint32 pid)
     QDialog dlg(this);
     dlg.setWindowTitle(p->isSteps() ? tr("Lighting Studio Editor — Steps %1").arg(p->name())
                                     : tr("Lighting Studio Editor — Riser %1").arg(p->name()));
+    // A fountain's base is the fountain's editor (FOUNTAIN_WAND.md).
+    const Fountain::Parts fountain = Fountain::ofBase(m_props, pid);
+    if (fountain.isValid())
+        dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(m_props->group(fountain.groupId).name));
 
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl   = new QVBoxLayout(geomW);
@@ -8907,6 +8928,36 @@ void Monitor::slotEditPlatform(quint32 pid)
     stackChk->setToolTip(tr("A stackable platform is exempt from the no-overlap rule, "
                             "so it can be placed on top of a solid deck."));
     form->addRow(QString(), stackChk);
+    /* A fountain's flame: how high the silk rises above the inner wall's
+       top, where it starts. Every flame in the fountain, live. */
+    if (fountain.isValid())
+    {
+        QList<quint32> flames;
+        foreach (quint32 fid, m_props->fixtureItemsID())
+            if (m_props->fixtureGroup(fid) == fountain.groupId && Fountain::isFlame(m_doc->fixture(fid)))
+                flames << fid;
+        if (!flames.isEmpty())
+        {
+            FeetInchesSpinBox *fireSpin = new FeetInchesSpinBox(isFeet_p, &dlg);
+            fireSpin->setObjectName(QStringLiteral("fountainFireHeight"));
+            fireSpin->setRange(0.05 * toDisp_p, hMax_p);
+            fireSpin->setValue(double(Fountain::flameHeight(m_doc, m_props, flames.first())) * toDisp_p);
+            fireSpin->setToolTip(tr("How high the silk flame rises above the inner wall's top, "
+                                    "where it starts"));
+            form->addRow(tr("Fire height:"), fireSpin);
+            connect(fireSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                    [this, flames, fromDisp_p](double v) {
+                foreach (quint32 fid, flames)
+                {
+                    FixtureRigProps rp = m_props->fixtureRigProps(fid);
+                    rp.flameHeight = float(v * fromDisp_p);
+                    m_props->setFixtureRigProps(fid, rp);
+                    m_graphicsView->updateFixture(fid);
+                }
+                m_doc->setModified();
+            });
+        }
+    }
     connect(solidChk, &QCheckBox::toggled, &dlg, [p, this](bool on) {
         p->setSolid(on); m_doc->setModified();
     });

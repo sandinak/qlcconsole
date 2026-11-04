@@ -144,6 +144,8 @@ add_library(${module_name}
     monitor/rhiraster.cpp monitor/rhiraster.h
     monitor/fixturevisualtraits.cpp monitor/fixturevisualtraits.h
     monitor/lanternpixels.cpp monitor/lanternpixels.h
+    monitor/pixelpathdecor.cpp monitor/pixelpathdecor.h
+    monitor/structurestudioview_pixels.cpp
     monitor/lightcontrols.cpp monitor/lightcontrols.h
     monitor/rigeditsession.h
     monitor/fixturefields.cpp monitor/fixturefields.h

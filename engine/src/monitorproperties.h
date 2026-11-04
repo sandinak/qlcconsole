@@ -746,7 +746,15 @@ public:
         quint32   boundFxGroup = 0;
         float     pitchX = 0.5f;      ///< metres per cell in X (seed spacing)
         float     pitchY = 0.5f;      ///< metres per cell in Y (seed spacing)
+        /** A built assembly (a fountain): pieces made to be one object, so
+         *  a click can take the whole of it. Set by the builders. */
+        bool      assembly = false;
     };
+
+    /** Mark @p gid as a built assembly (MonitorGroup::assembly). */
+    void setGroupAssembly(quint32 gid, bool on);
+    bool groupIsAssembly(quint32 gid) const
+    { return m_groups.contains(gid) && m_groups.value(gid).assembly; }
 
     /** Set a group's position-lock flag (no-op if the group is unknown). */
     void setGroupLocked(quint32 gid, bool locked);

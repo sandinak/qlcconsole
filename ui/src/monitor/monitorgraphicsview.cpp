@@ -71,6 +71,8 @@
 #include "headtypesdialog.h"
 #include "ledlayouteditor.h"
 #include "monitorfixtureitem.h"
+#include "pixelpathdecor.h"
+#include "fountain.h"
 #include "trussitem.h"
 #include "studiogroupeditor.h"
 #include "studiotemplate.h"
@@ -3990,6 +3992,7 @@ void MonitorGraphicsView::updateFixture(quint32 id)
     // the derived point — otherwise the top view shows the stale stored XY (e.g.
     // a studio group distributed on a step looked un-distributed in 2D).
     const bool riser = frp.onRiser() || frp.onPipe() || frp.onTower() || frp.onHanger()
+                       || frp.isHeld()      // a wand in a performer's hand
                        || m_doc->monitorProperties()->fixtureFrameGroup(id) != 0;
     // A truss-bound fixture's stored position is the point ON the truss line, so
     // centre the icon on it (like risers) instead of pinning its top-left corner.
@@ -4023,6 +4026,14 @@ void MonitorGraphicsView::updateFixture(quint32 id)
                the store keeps the corner, the icon is not always the size
                of the body, and the aim lines and the rig view start at the
                body's centre. */
+            /* A deck carries what stands on it (slotPlatformMoved() and a
+               turn write the store): read it back, or the icon stays where
+               the deck was ("the flame still didn't move"). */
+            if (frp.onDeck())
+            {
+                const QVector3D st = m_doc->monitorProperties()->fixturePosition(id, 0, 0);
+                item->setRealPosition(QPointF(double(st.x()), double(st.y())));
+            }
             const QPointF off = freeCentreOffsetMm(id);
             const QPointF c = realPositionToPixels(item->realPosition().x() + off.x(),
                                                    item->realPosition().y() + off.y());
@@ -4042,6 +4053,9 @@ void MonitorGraphicsView::updateFixture(quint32 id)
         else
             item->setPos(p - halfIcon(item));
     }
+
+    // Its LEDs along a path, a wand's staff, a flame's silk.
+    PixelPathDecor::apply(this, m_doc, item, id);
 
     /* The grid layout unions this too, but it runs before any item exists (and
        again on resize), so a fixture placed OUTSIDE the grid afterwards would
@@ -5695,6 +5709,9 @@ void MonitorGraphicsView::slotPlatformMoved(PlatformItem *item)
             {
                 if (mprops->fixtureRigProps(it.key()).deckPlatformId != p->id())
                     continue;
+                // Dragged along with it (a lasso round a fountain): it moved itself.
+                if (it.value()->isSelected() && (it.value()->flags() & QGraphicsItem::ItemIsMovable))
+                    continue;
                 QVector3D fp = mprops->fixturePosition(it.key(), 0, 0);   // mm
                 fp.setX(fp.x() + dxMm);
                 fp.setY(fp.y() + dyMm);
@@ -6430,6 +6447,10 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
             emit targetMoved(ti->targetId(), QPointF(double(t->x()), double(t->y())));
         }
     }
+    // What the people moved hold (a wand) goes with them.
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+        if (m_doc->monitorProperties()->fixtureRigProps(it.key()).isHeld())
+            updateFixture(it.key());
 
     if (!e.targetPositions.isEmpty())
     {
@@ -11485,11 +11506,25 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
         }
         mfi->setAttachMode(false);
 
+        /* Riding its deck: the deck is in the same move (a lasso round a
+           fountain), so where it lands is on the deck wherever that lands --
+           judged against the deck's old place it was "off" and fell off it. */
+        const bool ridingDeck = rp.onDeck() && m_platformItems.value(rp.deckPlatformId) != nullptr
+                                && m_platformItems.value(rp.deckPlatformId)->isSelected();
+        /* Into a fountain: one object, so no Shift -- on its base, or on its
+           inner wall's top, in its group (docs/design/FOUNTAIN_WAND.md). */
+        bool inFountain = ridingDeck;
+        if (!ridingDeck && m_pov == PovTop && rp.trussId == Truss::invalidId()
+            && rp.pipeId == Pipe::invalidId() && !rp.onRiser() && !rp.isHeld() && m_cellPixels > 0)
+            inFountain = dropIntoFountain(fid, mmCentre);
+        if (inFountain)
+            rp = props->fixtureRigProps(fid);
+
         // Auto DECK-MOUNT: unlike trusses, a fixture dropped over a PLATFORM
         // stands on its deck (Z = deck top) — the user asked for this. Dragging
         // it off the platform un-decks it. Riser-face, truss and pipe mounts
         // opt out.
-        if (rp.trussId == Truss::invalidId() && rp.pipeId == Pipe::invalidId()
+        if (!inFountain && rp.trussId == Truss::invalidId() && rp.pipeId == Pipe::invalidId()
                 && !rp.onRiser() && m_cellPixels > 0)
         {
             const QPointF cPx = mfi->pos() + halfIcon(mfi);

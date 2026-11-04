@@ -30,6 +30,11 @@
 #define private public
 #include "monitorproperties.h"
 #include "righeads.h"
+#include "pixelpath.h"
+#include "fountain.h"
+#include "scenery.h"
+#include "stagetarget.h"
+#include "stageplatform.h"
 #include "hanger.h"
 #include "qlcphysical.h"
 #include "qlcchannel.h"
@@ -3751,4 +3756,228 @@ void MonitorProperties_Test::aPlatformKeepsItsFinish()
     delete wood.first;
     riser.setFinish(QColor());
     QCOMPARE(riser.finish(), StagePlatform::defaultFinish());
+}
+
+/* Fountains and wands (docs/design/FOUNTAIN_WAND.md). */
+
+// A fountain as Add Fountain builds one: a base and two U walls on it.
+static quint32 buildFountain(MonitorProperties &mp, StagePlatform **baseOut = nullptr,
+                             Scenery **innerOut = nullptr)
+{
+    const quint32 gid = 40;
+    mp.createGroup(gid, QStringLiteral("Fountain"), 0, 0);
+    StagePlatform *base = mp.addPlatform();
+    base->setOriginX(4.5f);
+    base->setOriginY(3.0f);
+    base->setWidth(0.9144f);
+    base->setDepth(1.2192f);
+    base->setHeight(0.127f);
+    base->setFrontCurve(0.4572f);
+    base->setGroupId(gid);
+    Scenery *inner = nullptr;
+    for (int k = 0; k < 2; ++k)
+    {
+        Scenery *s = mp.addScenery();
+        s->setKind(Scenery::Wall);
+        s->setOutline(Scenery::RoundedU);
+        s->setOriginX(4.9572f);
+        s->setOriginY(3.0f);
+        const float inset = k == 0 ? 0.0508f : 0.2540f;
+        s->setWidth(0.9144f - 2.0f * inset);
+        s->setDepth(1.2192f - inset);
+        s->setThickness(0.1016f);
+        s->setHeight(k == 0 ? 0.2032f : 0.3556f);
+        s->setBottom(0.127f);
+        s->setGroupId(gid);
+        if (k == 1)
+            inner = s;
+    }
+    if (baseOut) *baseOut = base;
+    if (innerOut) *innerOut = inner;
+    return gid;
+}
+
+void MonitorProperties_Test::pixelPathLaysPointsEvenly()
+{
+    // A 1 m line, four points: the middles of four 25 cm stretches.
+    const QVector<QVector3D> open = PixelPath::along({ QVector3D(0, 0, 0), QVector3D(1, 0, 0) }, 4);
+    QCOMPARE(open.size(), 4);
+    QVERIFY(qAbs(open.at(0).x() - 0.125f) < 1e-4f && qAbs(open.at(3).x() - 0.875f) < 1e-4f);
+    // Round a closed square, evenly by length, the first at its first corner.
+    const QVector<QVector3D> sq = PixelPath::along({ QVector3D(0, 0, 0), QVector3D(1, 0, 0),
+                                                     QVector3D(1, 1, 0), QVector3D(0, 1, 0) }, 8, true);
+    QCOMPARE(sq.size(), 8);
+    for (int i = 0; i < 8; ++i)
+        QVERIFY2(qAbs((sq.at((i + 1) % 8) - sq.at(i)).length() - 0.5f) < 1e-3f, "not evenly spaced");
+}
+
+void MonitorProperties_Test::aRingIsOnTheWallTopInOrder()
+{
+    MonitorProperties mp;
+    Scenery *inner = nullptr;
+    const quint32 gid = buildFountain(mp, nullptr, &inner);
+    const Fountain::Parts f = Fountain::ofGroup(&mp, gid);
+    QVERIFY(f.isValid());
+    QCOMPARE(f.inner, inner);
+    QVERIFY(qAbs(Fountain::innerTop(f) - (0.127f + 0.3556f)) < 1e-4f);
+
+    // A 30-pixel strip on the inner wall's top, in head order round the U.
+    const quint32 fid = 5;
+    mp.setFixturePosition(fid, 0, 0, QVector3D(4957.0f, 3500.0f, 0.0f));
+    mp.setFixtureGroup(fid, gid);
+    FixtureRigProps rp;
+    rp.pixelPath = PixelPath::InnerWallTop;
+    mp.setFixtureRigProps(fid, rp);
+    const QVector<QVector3D> pts = PixelPath::positions(nullptr, &mp, fid, 30);
+    QCOMPARE(pts.size(), 30);
+    const QList<QPointF> line = inner->baseLine(48);
+    double lastU = -1.0;
+    for (const QVector3D &p : pts)
+    {
+        QVERIFY(qAbs(p.z() - Fountain::innerTop(f)) < 0.01f);
+        // On the wall's line: within a few mm of it, and further along than the last.
+        double best = 1e9, bestU = 0.0, run = 0.0;
+        for (int i = 0; i + 1 < line.size(); ++i)
+        {
+            const QPointF a = line.at(i), ab = line.at(i + 1) - a;
+            const double len = qSqrt(QPointF::dotProduct(ab, ab));
+            const double t = qBound(0.0, QPointF::dotProduct(QPointF(p.x(), p.y()) - a, ab) / (len * len), 1.0);
+            const QPointF d = QPointF(p.x(), p.y()) - (a + ab * t);
+            const double dist = qSqrt(QPointF::dotProduct(d, d));
+            if (dist < best) { best = dist; bestU = run + t * len; }
+            run += len;
+        }
+        QVERIFY2(best < 0.005, "a pixel is off the wall's top");
+        QVERIFY2(bestU > lastU, "pixels are out of head order");
+        lastU = bestU;
+    }
+    // Out of the fountain, no path: nothing laid out.
+    mp.setFixtureGroup(fid, 0);
+    QVERIFY(PixelPath::positions(nullptr, &mp, fid, 30).isEmpty());
+}
+
+void MonitorProperties_Test::aWandHelixHasItsTurns()
+{
+    // Three turns along a 1.2 m staff: the angle round the axis winds 3 x 360.
+    const QVector3D from(0, 0, 0), to(0, 0, 1.2f);
+    const int n = 121;
+    const QVector<QVector3D> h = PixelPath::helix(from, to, 0.0125, 3.0, n);
+    QCOMPARE(h.size(), n);
+    QVERIFY(qAbs(h.first().z()) < 1e-4f && qAbs(h.last().z() - 1.2f) < 1e-4f);
+    double wound = 0.0;
+    for (int i = 1; i < n; ++i)
+    {
+        QVERIFY(qAbs(QVector2D(h.at(i).x(), h.at(i).y()).length() - 0.0125f) < 1e-4f);
+        double d = qAtan2(double(h.at(i).y()), double(h.at(i).x()))
+                 - qAtan2(double(h.at(i - 1).y()), double(h.at(i - 1).x()));
+        while (d > M_PI) d -= 2 * M_PI;
+        while (d < -M_PI) d += 2 * M_PI;
+        wound += d;
+    }
+    QVERIFY(qAbs(qAbs(wound) / (2 * M_PI) - 3.0) < 0.01);
+    // Auto: 144 LEDs at 2 cm (2.88 m of strip) round a 25 mm staff 1.2 m long.
+    const double turns = PixelPath::autoWandTurns(144, 1.2);
+    QVERIFY(qAbs(turns - qSqrt(2.88 * 2.88 - 1.2 * 1.2) / (2 * M_PI * 0.0125)) < 1e-6);
+    QVERIFY(PixelPath::autoWandTurns(10, 1.2) >= 0.5);
+
+    // A wand standing where placed: from its foot up its length.
+    MonitorProperties mp;
+    mp.setFixturePosition(9, 0, 0, QVector3D(2000.0f, 1000.0f, 0.0f));
+    FixtureRigProps rp;
+    rp.pixelPath = PixelPath::Wand;
+    rp.wandLength = 1.2f;
+    rp.pixelTurns = 3.0f;
+    mp.setFixtureRigProps(9, rp);
+    QVector3D b, t;
+    QVERIFY(PixelPath::wandEnds(&mp, 9, b, t));
+    QVERIFY(qAbs((t - b).length() - 1.2f) < 1e-4f);
+    QVERIFY(qAbs(t.z() - b.z() - 1.2f) < 1e-4f);
+    const QVector<QVector3D> leds = PixelPath::positions(nullptr, &mp, 9, 60);
+    QCOMPARE(leds.size(), 60);
+    QVERIFY(qAbs(leds.last().z() - t.z()) < 1e-3f);
+}
+
+void MonitorProperties_Test::aHeldWandMovesWithItsPerson()
+{
+    MonitorProperties mp;
+    StageTarget *ann = mp.addStageTarget();
+    ann->setKind(StageTarget::Kind::Person);
+    ann->setX(3.0f);
+    ann->setY(2.0f);
+    const quint32 fid = 11;
+    mp.setFixturePosition(fid, 0, 0, QVector3D(500.0f, 500.0f, 0.0f));
+    FixtureRigProps rp;
+    rp.pixelPath = PixelPath::Wand;
+    rp.heldBy = ann->id();
+    mp.setFixtureRigProps(fid, rp);
+
+    // In her hand: a metre up, in front of her, leaning 20 degrees forward.
+    QVector3D c = mp.fixtureRigPosition(fid);
+    QVERIFY(qAbs(c.x() - 3.0f) < 1e-4f && qAbs(c.z() - 1.0f) < 1e-4f);
+    QVERIFY(c.y() > 2.0f && c.y() < 2.5f);
+    QVector3D b, t;
+    QVERIFY(PixelPath::wandEnds(&mp, fid, b, t));
+    const QVector3D axis = (t - b).normalized();
+    QVERIFY(qAbs(qRadiansToDegrees(qAcos(double(axis.z()))) - 20.0) < 0.01);
+    QVERIFY(axis.y() > 0.0f);      // toward the audience
+    QVERIFY(qAbs(((b + t) / 2.0f - c).length()) < 1e-4f);
+
+    // She walks; it goes with her.
+    ann->setX(6.0f);
+    ann->setY(4.0f);
+    const QVector3D c2 = mp.fixtureRigPosition(fid);
+    QVERIFY(qAbs(c2.x() - 6.0f) < 1e-4f && c2.y() > 4.0f);
+    QVERIFY(PixelPath::positions(nullptr, &mp, fid, 40).first().x() > 5.5f);
+
+    // Put down, it stands where it was placed.
+    rp.heldBy = UINT_MAX;
+    mp.setFixtureRigProps(fid, rp);
+    QVERIFY(qAbs(mp.fixtureRigPosition(fid).x() - 0.5f) < 1e-4f);
+}
+
+void MonitorProperties_Test::fountainPixelsAndWandsRoundTrip()
+{
+    MonitorProperties mp;
+    const quint32 gid = buildFountain(mp);
+    mp.setGroupAssembly(gid, true);
+    FixtureRigProps rp;
+    rp.flameHeight = 0.75f;
+    rp.pixelPath = PixelPath::FlameSpiral;
+    rp.pixelTurns = 4.5f;
+    rp.wandLength = 1.5f;
+    rp.heldBy = 3;
+    rp.holdHeight = 1.1f;
+    rp.holdTilt = 25.0f;
+    mp.setFixturePosition(7, 0, 0, QVector3D(1, 2, 0));
+    mp.setFixtureRigProps(7, rp);
+    FixtureRigProps plain;
+    mp.setFixturePosition(8, 0, 0, QVector3D(1, 2, 0));
+    mp.setFixtureRigProps(8, plain);
+
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+    MonitorProperties mp2;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp2.loadXML(reader, nullptr));
+
+    QVERIFY(mp2.groupIsAssembly(gid));
+    const FixtureRigProps r2 = mp2.fixtureRigProps(7);
+    QCOMPARE(r2.flameHeight, 0.75f);
+    QCOMPARE(r2.pixelPath, int(PixelPath::FlameSpiral));
+    QCOMPARE(r2.pixelTurns, 4.5f);
+    QCOMPARE(r2.wandLength, 1.5f);
+    QCOMPARE(r2.heldBy, quint32(3));
+    QVERIFY(qAbs(r2.holdHeight - 1.1f) < 1e-4f);
+    QCOMPARE(r2.holdTilt, 25.0f);
+    // Unset stays unset: no fire height, no path, nobody holding it.
+    const FixtureRigProps r3 = mp2.fixtureRigProps(8);
+    QVERIFY(r3.flameHeight < 0.0f);
+    QCOMPARE(r3.pixelPath, 0);
+    QVERIFY(!r3.isHeld());
+    QCOMPARE(r3.wandLength, 1.2f);
 }

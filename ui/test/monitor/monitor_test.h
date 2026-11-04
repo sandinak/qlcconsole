@@ -521,6 +521,12 @@ private slots:
      *  one ⌘Z puts it back */
     void aFixtureMarkedCurtainIsDrawnAsItsDrape();
     void addFountainBuildsItAsOneGroup();
+    void aFountainsFlameStartsAtItsInnerWallTop();
+    void anOldFountainsFlameKeepsItsTopAndJoinsIt();
+    void aFixtureInTheFountainMovesAndTurnsWithIt();
+    void aFountainsFlameUnlocksWhereItShowsLocked();
+    void aWledRingLaysItsPixelsOnTheWallTop();
+    void aHeldWandGoesWithItsPerformer();
     void beamsLandOnTheCycloramaInTheRigView();
     /** "set a gobo and projected on the cyc .. and it's not visible" /
      *  "handle prisms and rotation". What the gobo wheels, their rotation and
