@@ -3864,6 +3864,11 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             rp.tiltInvert     = a.value("TiltInv").toString() == QStringLiteral("1");
             if (a.hasAttribute("Lens"))
                 rp.lensDeg = a.value("Lens").toFloat();
+            rp.maskTop = a.value("MaskTop").toFloat();
+            rp.maskBottom = a.value("MaskBottom").toFloat();
+            rp.maskLeft = a.value("MaskLeft").toFloat();
+            rp.maskRight = a.value("MaskRight").toFloat();
+            rp.laserClass = a.value("LaserClass").toInt();
             if (a.hasAttribute("AimDown"))
             {
                 rp.fixedAim = true;
@@ -4759,6 +4764,16 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
             doc->writeAttribute(QStringLiteral("AimDown"), QString::number(double(rp.aimDown), 'f', 1));
         if (rp.lensDeg > 0.0f)
             doc->writeAttribute(QStringLiteral("Lens"), QString::number(double(rp.lensDeg), 'f', 1));
+        if (rp.maskTop > 0.0f)
+            doc->writeAttribute(QStringLiteral("MaskTop"), QString::number(double(rp.maskTop), 'f', 1));
+        if (rp.maskBottom > 0.0f)
+            doc->writeAttribute(QStringLiteral("MaskBottom"), QString::number(double(rp.maskBottom), 'f', 1));
+        if (rp.maskLeft > 0.0f)
+            doc->writeAttribute(QStringLiteral("MaskLeft"), QString::number(double(rp.maskLeft), 'f', 1));
+        if (rp.maskRight > 0.0f)
+            doc->writeAttribute(QStringLiteral("MaskRight"), QString::number(double(rp.maskRight), 'f', 1));
+        if (rp.laserClass > 0)
+            doc->writeAttribute(QStringLiteral("LaserClass"), QString::number(rp.laserClass));
         if (rp.panOffsetDeg  != 0.0f)
             doc->writeAttribute(QStringLiteral("PanOfs"),  QString::number(double(rp.panOffsetDeg),  'f', 2));
         if (rp.tiltOffsetDeg != 0.0f)

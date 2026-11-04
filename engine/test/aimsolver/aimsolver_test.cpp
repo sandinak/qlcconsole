@@ -1276,6 +1276,15 @@ void AimSolver_Test::areaCoverageFollowsBeamWidth()
     QVERIFY(wide.gap.isEmpty());
     QVERIFY(wide.gapRects().isEmpty());
     QCOMPARE(wide.caption(), QString("Covers all of Chorus"));
+    // Tape over the bottom of every cone: they light less of the area.
+    {
+        QList<AreaCover::Beam> taped = beams(32.0, -1);
+        for (AreaCover::Beam &b : taped)
+            b.mask.bottom = 20.0f;
+        const AreaCover::Coverage cut = AreaCover::coverage(props, area, taped);
+        QVERIFY2(cut.fraction < wide.fraction - 0.1,
+                 qPrintable(QString("taped covers %1, untaped %2").arg(cut.fraction).arg(wide.fraction)));
+    }
     // Without the upstage, stage-left light (the back row, the largest x):
     // its zone is the gap, and it is named so.
     const AreaCover::Coverage missing = AreaCover::coverage(props, area, beams(32.0, 2));

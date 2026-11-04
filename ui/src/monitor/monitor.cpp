@@ -11540,6 +11540,43 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                             "definition gives. Quick focus sets it too."));
     rigForm->addRow(tr("Beam (lens set to):"), lensSpin);
 
+    /* Masking: tape over the front of the light -- "tape off the bottom 15
+       degrees". Cut from the beam (a laser's scan window) as seen from behind
+       it; every view and Show Review reads it. A unit setting, kept with the
+       show. */
+    QDoubleSpinBox *maskSpin[4];
+    {
+        static const char *const names[4] = { QT_TR_NOOP("Top"), QT_TR_NOOP("Bottom"),
+                                              QT_TR_NOOP("Left"), QT_TR_NOOP("Right") };
+        QWidget *row = new QWidget;
+        QHBoxLayout *rl = new QHBoxLayout(row);
+        rl->setContentsMargins(0, 0, 0, 0);
+        for (int i = 0; i < 4; ++i)
+        {
+            maskSpin[i] = new QDoubleSpinBox;
+            maskSpin[i]->setObjectName(QStringLiteral("fixtureMask%1").arg(QLatin1String(names[i])));
+            maskSpin[i]->setRange(0.0, 90.0);
+            maskSpin[i]->setDecimals(1);
+            maskSpin[i]->setSuffix(QString::fromUtf8("°"));
+            maskSpin[i]->setToolTip(tr("Degrees of the beam taped off at the %1, seen from behind the "
+                                       "light").arg(tr(names[i]).toLower()));
+            rl->addWidget(new QLabel(tr(names[i])));
+            rl->addWidget(maskSpin[i], 1);
+        }
+        rigForm->addRow(tr("Masking (tape):"), row);
+    }
+    QComboBox *laserClassCb = new QComboBox;
+    laserClassCb->setObjectName(QStringLiteral("fixtureLaserClass"));
+    laserClassCb->addItem(tr("Not set"), 0);
+    laserClassCb->addItem(tr("Class 1"), 1);
+    laserClassCb->addItem(tr("Class 2"), 2);
+    laserClassCb->addItem(tr("Class 3R"), 3);
+    laserClassCb->addItem(tr("Class 3B"), 4);
+    laserClassCb->addItem(tr("Class 4"), 5);
+    laserClassCb->setToolTip(tr("The laser's power class. Show Review treats 1, 2 and 3R reaching the "
+                                "audience as a note, 3B and 4 as a warning."));
+    rigForm->addRow(tr("Laser class:"), laserClassCb);
+
     QDoubleSpinBox *panOffsetSpin = new QDoubleSpinBox;
     panOffsetSpin->setRange(-720, 720);   // 540° pan fixtures need up to ±270°; 720 gives headroom
     panOffsetSpin->setSuffix(QString::fromUtf8("°"));
@@ -11637,6 +11674,19 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
 
     const FixtureRigProps rp = m_props->fixtureRigProps(fxId);
     heightOffSpin->setValue(double(rp.mountZOffset) * toDisp_fx);
+    maskSpin[0]->setValue(double(rp.maskTop));
+    maskSpin[1]->setValue(double(rp.maskBottom));
+    maskSpin[2]->setValue(double(rp.maskLeft));
+    maskSpin[3]->setValue(double(rp.maskRight));
+    {
+        const bool isLaserUnit = fxi->fixtureMode() != nullptr
+            && (fxi->fixtureMode()->physical().emission() == QLCPhysical::LaserEmission
+                || (fxi->fixtureDef() != nullptr && fxi->fixtureDef()->type() == QLCFixtureDef::Laser));
+        laserClassCb->setCurrentIndex(qMax(0, laserClassCb->findData(rp.laserClass)));
+        laserClassCb->setVisible(isLaserUnit);
+        if (QWidget *lbl = rigForm->labelForField(laserClassCb))
+            lbl->setVisible(isLaserUnit);
+    }
     panZeroSpin->setValue(double(rp.panZeroDir));
     double lensLo = 0.0, lensHi = 0.0;
     const bool lensByHand = RigHeads::lensRange(fxi, lensLo, lensHi) && !RigHeads::hasZoomChannel(fxi);
@@ -11866,6 +11916,11 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         }
         if (lensByHand && lensTouched)
             live.lensDeg = float(lensSpin->value());
+        live.maskTop    = float(maskSpin[0]->value());
+        live.maskBottom = float(maskSpin[1]->value());
+        live.maskLeft   = float(maskSpin[2]->value());
+        live.maskRight  = float(maskSpin[3]->value());
+        live.laserClass = laserClassCb->currentData().toInt();
         m_props->setFixtureRigProps(fxId_dlg, live);
         // Keep the 2D facing arrow in sync with the spinbox live.
         if (MonitorFixtureItem *fi = m_graphicsView->fixtureItemForId(fxId_dlg))
@@ -11888,6 +11943,9 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         lensTouched = true;
         liveRigUpdate();
     });
+    for (int i = 0; i < 4; ++i)
+        connect(maskSpin[i], QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){ liveRigUpdate(); });
+    connect(laserClassCb, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int){ liveRigUpdate(); });
     connect(panOffsetSpin,  QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){ liveRigUpdate(); });
     connect(tiltOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){ liveRigUpdate(); });
     connect(panInvertCb,    &QCheckBox::toggled, [&](bool) { liveRigUpdate(); });

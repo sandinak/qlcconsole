@@ -309,7 +309,10 @@ both give the same answer.
   definition's widest lens angle across, its narrowest up and down when that
   is declared and narrower, else a square; 40 degrees when it declares none),
   not a round cone. Lasers on pan and tilt aren't read here: their aim is by
-  cue (PWR-11 reads it).
+  cue (PWR-11 reads it). Tape on the unit (**Masking**) is taken off its
+  window first. When the unit has a **power class**, 1, 2 and 3R reaching the
+  audience is a **Note** that names the class; 3B and 4 stay a Warning, and
+  so does a laser with no class set.
 - **PWR-10** A laser whose scan window is a **static pencil** (under 1 degree
   either way) or **tight** (under 10 × 10 degrees' worth), which puts all its
   power on a few spots. A note; a warning when a fixed laser's window also
@@ -323,7 +326,12 @@ both give the same answer.
   lit light's cone is followed 30 m from where it is in the rig: a mover from
   its position in the cue, a fixed light from where it throws, a laser as its
   window. A beam stops at the stage floor, so a pit's zone reaches up to it.
-  Aim it off, darken it in that cue, or move the zone. Zones are drawn and
+  A laser's window is read after any **Masking** on it, and a ray stopped by
+  solid scenery (the cyc, a closed drape) does not reach a zone behind it:
+  only past its edge or over its top. For a laser the finding says where the
+  bottom of its window passes through the zone, and how many degrees of tape
+  on the bottom clear it (**Apply This Cut** puts it in the unit's Masking).
+  Aim it off, darken it in that cue, tape it, or move the zone. Zones are drawn and
   edited in the [Lighting Studio](lighting-studio.md#no-light-zones).
 - **PWR-12** Light on the cyc nobody meant (*backwash*): a lit beam whose
   cone reaches a cyc or a scrim (or any scenery with **Light here only on

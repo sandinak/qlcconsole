@@ -5332,20 +5332,104 @@ void MonitorGraphicsView::updateNoLightZones()
         const QVector3D apex = RigHeads::fixtureCentre(m_doc, fx->id());
         double h, v;
         LightRays::laserWindow(phy, h, v);
-        const QVector<QVector3D> rays = LightRays::window(dir, h, v);     // 9 x 9, i-major
+        // 9 x 9, i-major, with whatever tape is on it cut off.
+        const QVector<QVector3D> rays = LightRays::window(dir, h, v, props->fixtureRigProps(fx->id()).mask());
+        if (rays.size() != 81)
+            continue;                  // taped over: nothing leaves it
+        /* Where each ray of the window ends: the first of the floor and a
+           piece of scenery standing in its way (a cyc is what a sky laser
+           throws onto), the same rule the rig view and Show Review use
+           (Scenery::rayHit, a scrim lets the ray on through). A ray that
+           meets the cyc lands ON the cyc, not on the empty floor behind it. */
+        QVector<const Scenery *> screens;
+        foreach (Scenery *sc, props->sceneries())
+        {
+            if (sc != nullptr && props->layer(sc->layerId()).visible && !sc->isSeeThrough())
+                screens << sc;
+        }
+        QVector<bool> onScenery;
         auto landing = [&](int i, int j) {
             const QVector3D r = rays.at((i + 4) * 9 + (j + 4));
             double t = 30.0;
             if (r.z() < -1e-4f && apex.z() > 0.0f)
                 t = qMin(t, double(apex.z()) / -double(r.z()));
-            return pt(double(apex.x()) + double(r.x()) * t, double(apex.y()) + double(r.y()) * t, 0);
+            bool hit = false;
+            foreach (const Scenery *sc, screens)
+            {
+                double st = 0.0;
+                if (sc->rayHit(apex, r, st, t) && st > 0.05 && st < t)
+                {
+                    t = st;
+                    hit = true;
+                }
+            }
+            onScenery << hit;
+            const double z = hit ? double(apex.z()) + double(r.z()) * t : 0.0;
+            return pt(double(apex.x()) + double(r.x()) * t, double(apex.y()) + double(r.y()) * t,
+                      m_pov == PovTop ? 0.0 : z);
         };
         QPolygonF poly;
         for (int j = -4; j <= 4; ++j)  poly << landing(-4, j);
         for (int i = -3; i <= 4; ++i)  poly << landing(i, 4);
         for (int j = 3; j >= -4; --j)  poly << landing(4, j);
         for (int i = 3; i >= -3; --i)  poly << landing(i, -4);
+        /* The pool on the cyc, as a highlighted span along its line; the
+           floor part, if any, stays the dashed outline. */
+        QVector<QLineF> spans;
+        for (int k = 0; k < poly.size(); ++k)
+        {
+            const int n = (k + 1) % poly.size();
+            if (onScenery.at(k) && onScenery.at(n))
+                spans << QLineF(poly.at(k), poly.at(n));
+        }
+        /* Never drawn out past the stage: clipped to the plot's floor. */
+        const QPointF a = pt(0.0, 0.0, 0.0);
+        const QPointF b = pt(double(m_gridExtent.width()) * m_unitValue / 1000.0,
+                             double(m_gridExtent.height()) * m_unitValue / 1000.0, 0.0);
+        const QRectF floorRect = QRectF(a, b).normalized();
+        if (!floorRect.contains(poly.boundingRect()))
+        {
+            // Nothing of it on the floor at all: no outline (a span may remain).
+            poly = poly.intersected(QPolygonF(floorRect));
+            QVector<QLineF> keep;
+            foreach (const QLineF &l, spans)
+            {
+                if (floorRect.adjusted(-1, -1, 1, 1).contains(l.p1())
+                    && floorRect.adjusted(-1, -1, 1, 1).contains(l.p2()))
+                    keep << l;
+            }
+            spans = keep;
+        }
+        /* Where the window crosses a no-light zone that keeps lasers out: the
+           part of each ray inside it, in red, so the band's leak shows (and
+           the tape that clears it shows by it going away). A ray stopped by
+           the cyc first does not reach a zone behind it. */
+        QVector<QLineF> leaks;
+        foreach (const NoLightZone &z, props->noLightZones())
+        {
+            if (!z.applies(true, 0.0))
+                continue;
+            foreach (const QVector3D &r, rays)
+            {
+                double stop = 30.0;
+                foreach (const Scenery *sc, screens)
+                {
+                    double st = 0.0;
+                    if (sc->rayHit(apex, r, st, stop) && st > 0.05)
+                        stop = st;
+                }
+                double t0, t1;
+                if (!z.raySpan(apex, r, stop, t0, t1) || t1 <= t0)
+                    continue;
+                leaks << QLineF(pt(double(apex.x()) + double(r.x()) * t0, double(apex.y()) + double(r.y()) * t0, 0),
+                                pt(double(apex.x()) + double(r.x()) * t1, double(apex.y()) + double(r.y()) * t1, 0));
+            }
+        }
+        if (poly.isEmpty() && spans.isEmpty() && leaks.isEmpty())
+            continue;
         ZoneItem *zi = new ZoneItem(ZoneItem::ScanWindow, fx->id(), poly, fx->name());
+        zi->setSpans(spans);
+        zi->setLeaks(leaks);
         zi->setZValue(1.6);
         m_scene->addItem(zi);
         m_zoneItems.append(zi);
@@ -9601,6 +9685,14 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
         fp->setCheckable(true);
         fp->setChecked(fpOn);
         fp->setToolTip(tr("Draw where this head's beam lands, in Top view"));
+        /* Tape over the front of the light: opens its Fixture Properties,
+           where the Masking row is. */
+        QAction *mask = menu->addAction(tr("Masking…"), this, [this, fid]() {
+            if (Monitor *mon = Monitor::instance())
+                mon->editFixturesProperties({ fid });
+        });
+        mask->setToolTip(tr("Tape off part of this light's beam or scan window: top, bottom, "
+                            "left and right, in degrees"));
     }
 
     // Mounting.

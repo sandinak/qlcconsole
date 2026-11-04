@@ -462,7 +462,7 @@ AreaCover::Coverage AreaCover::coverage(const MonitorProperties *props, const St
     cov.headLit.fill(false, cov.cols * cov.rows);
     cov.deckLit.fill(false, cov.cols * cov.rows);
 
-    struct Cone { QVector3D o, a; float cosHalf; };
+    struct Cone { QVector3D o, a; float cosHalf; double half; LightMask mask; };
     QVector<Cone> cones;
     cones.reserve(beams.size());
     for (Beam &b : cov.beams)
@@ -473,7 +473,8 @@ AreaCover::Coverage AreaCover::coverage(const MonitorProperties *props, const St
         if (b.patch.isEmpty())
             b.patch = footprint(b.origin, b.aim, b.degrees);
         cones << Cone { b.origin, ax.normalized(),
-                        float(qCos(qDegreesToRadians(qBound(0.1, b.degrees, 170.0) / 2.0))) };
+                        float(qCos(qDegreesToRadians(qBound(0.1, b.degrees, 170.0) / 2.0))),
+                        qBound(0.1, b.degrees, 170.0) / 2.0, b.mask };
     }
     const float subject = subjectHeight(target);
     const double w = cov.area.width() / double(cov.cols), h = cov.area.height() / double(cov.rows);
@@ -483,7 +484,18 @@ AreaCover::Coverage AreaCover::coverage(const MonitorProperties *props, const St
             const QVector3D d = pt - k.o;
             const float len = d.length();
             if (len > 1e-4f && QVector3D::dotProduct(d, k.a) >= k.cosHalf * len)
+            {
+                if (!k.mask.isNone())
+                {
+                    // Tape: the point has to be in what is left of the cone.
+                    double ax, ay;
+                    LightRays::angles(k.a, d / len, ax, ay);
+                    if (ax < -k.half + double(k.mask.left) || ax > k.half - double(k.mask.right)
+                        || ay < -k.half + double(k.mask.top) || ay > k.half - double(k.mask.bottom))
+                        continue;
+                }
                 return true;
+            }
         }
         return false;
     };
@@ -549,6 +561,7 @@ AreaCover::Coverage AreaCover::coverage(Doc *doc, const StageTarget *target,
         b.origin = f.position;
         b.aim = z.aim;
         b.degrees = degrees.value(fx->id());
+        b.mask = props->fixtureRigProps(fx->id()).mask();
         beams << b;
     }
     Coverage cov = coverage(props, target, beams);
