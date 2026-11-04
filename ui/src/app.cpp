@@ -1007,6 +1007,12 @@ void App::startFollowSpotProbe()
         lines << QStringLiteral("  stick=\"%1\" pan=%2 tilt=%3 fromProfile=%4")
                      .arg(pc->followSpotStickName(), pc->panAxisLabel(), pc->tiltAxisLabel())
                      .arg(pc->isBoundFromProfile() ? "yes" : "no");
+        QStringList plugins;
+        for (QLCIOPlugin *plugin : m_doc->ioPluginCache()->plugins())
+            if (plugin->capabilities() & QLCIOPlugin::Input)
+                plugins << QStringLiteral("%1 (%2 inputs)").arg(plugin->name()).arg(plugin->inputs().size());
+        lines << QStringLiteral("  input plugins: %1").arg(plugins.isEmpty() ? QStringLiteral("none")
+                                                                          : plugins.join(QStringLiteral(", ")));
         for (QLCIOPlugin *plugin : m_doc->ioPluginCache()->plugins())
         {
             if (!(plugin->capabilities() & QLCIOPlugin::Input) || plugin->name() != QLatin1String("HID"))
