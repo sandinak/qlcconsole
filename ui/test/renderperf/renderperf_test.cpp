@@ -20,6 +20,7 @@
 #include <QtTest>
 #include <QApplication>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QScopeGuard>
 #include <QMouseEvent>
 #include <QFile>
@@ -398,16 +399,30 @@ void RenderPerf_Test::theRateRecoversAfterABurst()
     v.m_liveTimer->stop();
     v.m_frameMs = 600.0;                    // the burst's estimate
     v.m_liveTimer->setInterval(750);
+    // The rate follows what a frame costs HERE: "cheap frames" are 20-40 ms
+    // on a quiet Mac and 100 ms on a loaded Intel one (val measured 127 ms
+    // between frames, 20 of its 127 ms being the frames themselves). So the
+    // limits are the burst's decay (600 ms halving six times is 10 ms) plus
+    // the slowest frame this run saw, never a fixed figure alone.
+    qint64 slowest = 0;
     for (int i = 0; i < 6; ++i)
     {
         changeValues(900 + i);
+        QElapsedTimer frame;
+        frame.start();
         v.repaint();
+        slowest = qMax(slowest, frame.elapsed());
     }
-    QVERIFY2(v.m_liveTimer->interval() < 120,
-             qPrintable(QString("still %1 ms between frames six frames after a burst")
-                        .arg(v.m_liveTimer->interval())));
+    const double settled = 600.0 / 64 + double(slowest);   // the most the estimate can hold
+    const int limit = qMax(120, int(settled * 1.25) + 10);
+    qInfo().noquote() << QString("rate after a burst: %1 ms between frames (limit %2, slowest frame %3 ms)")
+                             .arg(v.m_liveTimer->interval()).arg(limit).arg(slowest);
+    QVERIFY2(v.m_liveTimer->interval() < limit,
+             qPrintable(QString("still %1 ms between frames six frames after a burst "
+                                "(limit %2, slowest frame %3 ms)")
+                        .arg(v.m_liveTimer->interval()).arg(limit).arg(slowest)));
     // One slow frame among quick ones moves the estimate by three times at most.
-    QVERIFY(v.m_frameMs < 100.0);
+    QVERIFY(v.m_frameMs < qMax(100.0, settled + 10));
     QCOMPARE(StructureStudioView::nextFrameEstimate(40.0, 900.0), 40.0 * 0.8 + 120.0 * 0.2);
     QCOMPARE(StructureStudioView::nextFrameEstimate(600.0, 40.0), 320.0);
     QCOMPARE(StructureStudioView::nextFrameEstimate(0.0, 25.0), 25.0);
