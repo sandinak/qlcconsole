@@ -33,8 +33,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **Notes beside the Show Tree.** A notes pane under the cue page follows
   the selection (a cue, layer, list, production or Library palette) and
   lists its notes newest first, each dated, signed with Your name, and
-  open until ticked done. **Snapshot the view** keeps the Rig Overview's
-  camera, a small picture and the cue on stage with the note; **Show me**
+  open until ticked done. **Snapshot the View** keeps the Rig Overview's
+  camera, a small picture and the cue on stage with the note; **Show Me**
   puts the camera back (and, in Design, the cue on the rig). Rows with
   notes show **✎** (orange while open) and the newest note on hover.
   **All notes…** lists the whole show's notes with open/done, item and
@@ -156,6 +156,21 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Buttons read in Title Case, like the menus** (board W2-Q3): "Focus This
+  Cue…", "Remove Selected", "Add Source", "Snapshot the View". About 100
+  button texts changed; the help and the course quote the new words.
+  `menuwords_test` now checks every button text given in code the way it
+  checks the menus (the stock QLC+ `.ui` dialogs are untouched upstream
+  files and keep their words).
+- **Show Review says "Not a Problem" everywhere** (board W2-Q4). The group
+  that held the findings you marked, its filter and the summary were
+  "Accepted"; they now use the action's word.
+- **The Show Tree opens with its cue names showing.** With fresh settings
+  the tree pane got about 185 px at 1280 wide, so every cue read "0.0.2 …".
+  The Library | tree | page split now starts at 17 : 42 : 41 (a cue's number
+  and name show at 1280x800 and 1024x640, the page keeps about 480 px or more).
+  Panes you have already moved keep their sizes.
+
 - **Area cover counts the deck as well as head height** (board Q213). A
   spot of an Area now counts as lit only if it is lit at head height **and**
   on the deck, riser or step top under it. Before, only head height was
@@ -266,6 +281,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   neither fired: a selected cue was not duplicated and no dump opened.
   Now the tree takes ⌘D while it has the focus and a selection; everywhere
   else ⌘D is still Dump DMX.
+
+- **The footer's chips no longer run into each other** at the window's
+  smallest width (board W1-30). When they do not all fit, the least
+  important give up their room first (Load, Next, the counters, then the
+  venue and Review) and come back when the window grows; the stage chip,
+  Unsaved, Design/Operate, readiness and the Grand Master stay.
 
 - **A target added in the Lighting Studio shows up everywhere at once.**
   A new point, person or line target did not appear in the Show Tree's

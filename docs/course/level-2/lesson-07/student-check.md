@@ -25,7 +25,7 @@ app: true
    | | | | | |
 
 4. **Program it** from `lesson-1-1-start.qlcc`: **+ Production** (in the header, or under **More ▾**)
-   named for your group, **+ Cue list** named for the song, then your
+   named for your group, **+ Cue List** named for the song, then your
    cues. A second song is a **+ Section** of that list, not another list. It must have:
    - at least one **Block** cue, and **Release** or **Cue-only** where
      something mustn't carry on;

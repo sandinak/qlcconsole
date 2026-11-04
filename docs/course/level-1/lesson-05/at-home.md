@@ -18,7 +18,7 @@ these.
    and the timing.
 3. Download [`lesson-1-1-start.qlcc`](../../shows/lesson-1-1-start.qlcc)
    (the empty classroom show) and start programming it: **+ Production**,
-   **+ Cue list**, then your cues.
+   **+ Cue List**, then your cues.
 4. Run it from the **Run** tab while the clip plays, with someone at home
    calling it as your stage manager.
 5. Save it as `Level1-check-yourname.qlcc` and bring it in with the cue

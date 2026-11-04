@@ -46,7 +46,7 @@ class Doc;
  *   Open          amber "⚠ cyc" on the cue; counted in the footer chip
  *   Meant         green "cyc ✓" on the cue (PWR-12 only: the light on the
  *                 cyc is intended); who, when and the note on hover
- *   Not a Problem hidden on the cue; listed in Show Review under Accepted
+ *   Not a Problem hidden on the cue; listed in Show Review under Not a Problem
  *                 (the panel's Accept, with a note)
  * and the answers that move between them:
  *   I Meant It        Open -> Meant (PWR-12: kept on the layer that lights it)

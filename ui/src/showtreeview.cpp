@@ -159,6 +159,10 @@ static bool splitterStateUsable(const QByteArray &state, int panes, int mustShow
 #define SETTINGS_EDITOR_SPLITTER QStringLiteral("showtree/editorSplitter2")
 
 static const int kRecentMax = 10;
+// Fresh settings' split of Library | tree | page, as shares of the width.
+static const int kDefaultLibraryShare = 17;
+static const int kDefaultTreeShare = 42;
+static const int kDefaultPageShare = 41;
 
 static ShowTreeView *s_instance = nullptr;
 
@@ -1122,7 +1126,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     // show needs (lesson 1.1). After that, under More ▾.
     m_newProduction = make(tr("+ Production"), tr("A new production: the top of a show's tree"), "stNewProduction");
     m_newProductionAction = bar->addWidget(m_newProduction);
-    m_newList = button(tr("+ Cue list"), tr("A new Tracking cue list in the selected production (an imported chaser starts "
+    m_newList = button(tr("+ Cue List"), tr("A new Tracking cue list in the selected production (an imported chaser starts "
                                          "Non-tracking)"), "stNewList");
     m_newCue = button(tr("+ Cue"), tr("A new cue after the selected one, numbered for you (never renumbers)"), "stNewCue");
     m_addLayer = button(tr("+ Layer"), tr("A layer on the groups or fixtures selected in the Library "
@@ -1270,7 +1274,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_bridgeText->setObjectName(QStringLiteral("stBridgeText"));
         m_bridgeText->setWordWrap(true);
         h->addWidget(m_bridgeText, 1);
-        QPushButton *convert = new QPushButton(tr("Upgrade this show…"), m_bridgeBanner);
+        QPushButton *convert = new QPushButton(tr("Upgrade This Show…"), m_bridgeBanner);
         convert->setObjectName(QStringLiteral("stBridgeUpgrade"));
         convert->setToolTip(tr("Each chaser and collection with its plan, checked, and raw scenes into palettes; "
                                "nothing changes until you press Upgrade, and it is one undo step"));
@@ -1280,7 +1284,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         dismiss->setObjectName(QStringLiteral("stBridgeDismiss"));
         dismiss->setText(QStringLiteral("✕"));
         dismiss->setAutoRaise(true);
-        dismiss->setToolTip(tr("Not now: File ▸ Upgrade this show… is always there"));
+        dismiss->setToolTip(tr("Not now: File ▸ Upgrade This Show… is always there"));
         connect(dismiss, &QToolButton::clicked, this, [this]() {
             m_bridgeDismissed = true;
             updateBridgeBanner();
@@ -1698,19 +1702,19 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         QWidget *row = new QWidget(m_listPage);
         QHBoxLayout *h = new QHBoxLayout(row);
         h->setContentsMargins(0, 0, 0, 0);
-        m_listConvert = new QPushButton(tr("Convert to tracking…"), row);
+        m_listConvert = new QPushButton(tr("Convert to Tracking…"), row);
         m_listConvert->setObjectName("stListConvert");
         m_listConvert->setToolTip(tr("Makes the list Tracking without changing what any cue plays: values a "
                                      "cue only repeats go, \"includes the cue before\" becomes tracking. Shows "
                                      "what changes first; one undo step."));
-        m_listDetach = new QPushButton(tr("Detach to plain chaser…"), row);
+        m_listDetach = new QPushButton(tr("Detach to Plain Chaser…"), row);
         m_listDetach->setObjectName("stListDetach");
         m_listDetach->setToolTip(tr("The list's chaser and its cues' collections become ordinary functions you "
                                     "edit in Build ▸ Scenes; the list leaves the Show Tree. One undo step."));
         h->addWidget(m_listConvert);
         h->addWidget(m_listDetach);
         // W5: an import in place, undone.
-        m_listRestore = new QPushButton(tr("Restore original…"), row);
+        m_listRestore = new QPushButton(tr("Restore Original…"), row);
         m_listRestore->setObjectName("stListRestore");
         m_listRestore->setToolTip(tr("Undo Import in place: the list leaves the Show Tree, the chaser and its "
                                      "originals go back to their folders, and what fires the list fires the "
@@ -1722,7 +1726,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_listRestore->hide();
         h->addWidget(m_listRestore);
         // R3: a Looks section or folder -- a VC page of buttons for it.
-        m_listVcPage = new QPushButton(tr("Make VC page"), row);
+        m_listVcPage = new QPushButton(tr("Make VC Page"), row);
         m_listVcPage->setObjectName("stMakeVcPage");
         m_listVcPage->setToolTip(tr("A frame on the Virtual Console with one button per hit here, "
                                     "captioned with its name and coloured by its first colour"));
@@ -1840,7 +1844,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             QToolButton *focus = new QToolButton(inner);
             focus->setObjectName("stCueFocusMenu");
             focus->setText(tr("Focus"));
-            focus->setToolTip(tr("Focus this cue from the stage, or make it the show's venue focus cue"));
+            focus->setToolTip(tr("Focus This Cue from the stage, or make it the show's venue focus cue"));
             focus->setPopupMode(QToolButton::InstantPopup);
             focus->setToolButtonStyle(Qt::ToolButtonTextOnly);
             QMenu *m = new QMenu(focus);
@@ -1958,7 +1962,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             connect(fcc, &FocusCallCue::stateChanged, this, &ShowTreeView::refreshFocusCallState);
         /* Focus this cue (docs/design/FOCUS_REFINE_DESIGN.md): this cue's own values
            from the stage, with the controller. */
-        QPushButton *refine = new QPushButton(tr("Focus this cue\342\200\246"), inner);
+        QPushButton *refine = new QPushButton(tr("Focus This Cue\342\200\246"), inner);
         refine->setObjectName("stCueRefine");
         m_cueRefine = refine;
         refine->setToolTip(FocusMenu::focusCueTip(m_doc));
@@ -2397,9 +2401,10 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     split->insertWidget(0, lib);
     split->insertWidget(1, m_tree);
     split->insertWidget(2, vsplit);
-    split->setStretchFactor(0, 2);
-    split->setStretchFactor(1, 2);
-    split->setStretchFactor(2, 3);
+    // The same shares as the default sizes below: a resize keeps them.
+    split->setStretchFactor(0, kDefaultLibraryShare);
+    split->setStretchFactor(1, kDefaultTreeShare);
+    split->setStretchFactor(2, kDefaultPageShare);
     setupNotes(vsplit);     // Q212: notes under the page (showtreenotemarks.cpp)
     {
         QSettings settings;
@@ -2410,8 +2415,20 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
            Such a state is dropped and the default split used. */
         if (state.isValid() && splitterStateUsable(state.toByteArray(), 3, 2))
             split->restoreState(state.toByteArray());
-        else if (state.isValid())
-            settings.remove(SETTINGS_SPLITTER);
+        else
+        {
+            if (state.isValid())
+                settings.remove(SETTINGS_SPLITTER);
+            /* Fresh settings: the Library and the tree get what they need
+               to read -- a cue's number and its name -- and the page the
+               rest. By the stretch factors alone the tree had ~185 px at
+               1280 wide, every cue read "0.0.2 …" and no name showed
+               (wfaudit W1-28). Set when the splitter first has a real
+               width (eventFilter): before it, a split of a few pixels is
+               clamped to the panes' minimums and kept so. */
+            m_defaultSplitPending = true;
+            split->installEventFilter(this);
+        }
         connect(split, &QSplitter::splitterMoved, this, [this, split]() {
             // Docked, the panes are not the page's: closeWorkbench() puts the
             // split back as it was, and that is what is kept. Nor while
@@ -2679,7 +2696,7 @@ QWidget *ShowTreeView::lockedBanner(QWidget *parent, Doc *doc, quint32 functionI
     if (detached && qobject_cast<Scene *>(doc->function(functionId)) != nullptr
         && st->generatedNode(functionId, &listId, &cueId, &layerId) && layerId != invalidId())
     {
-        QPushButton *detach = new QPushButton(tr("Detach to plain scene"), bar);
+        QPushButton *detach = new QPushButton(tr("Detach to Plain Scene"), bar);
         detach->setObjectName(QStringLiteral("stLockedDetach"));
         const CueList *list = st->cueList(listId);
         if (list != nullptr)
@@ -3191,7 +3208,7 @@ void ShowTreeView::buildTree()
                 f->setData(0, KindRole, LookFolderNode);
                 f->setData(0, IdRole, list.id);
                 f->setData(0, FolderRole, path);
-                f->setToolTip(0, tr("A folder of hits: drag hits onto it; Make VC page makes a button for each"));
+                f->setToolTip(0, tr("A folder of hits: drag hits onto it; Make VC Page makes a button for each"));
                 folderItems.insert(path, f);
                 return f;
             };
@@ -3202,7 +3219,7 @@ void ShowTreeView::buildTree()
                 li->setData(0, FolderRole, QStringLiteral("/"));
                 li->setIcon(0, QIcon(":/collection.png"));
                 li->setToolTip(0, tr("Hits, for busking: built with layers like cues, never tracking; each plays from a "
-                                     "VC button (Make VC page), over whatever runs."));
+                                     "VC button (Make VC Page), over whatever runs."));
                 for (const QString &path : m_st->lookFolders(list.id))
                     folderItem(path);
                 // By hit (a button can hold several, Q154); an older
@@ -4332,7 +4349,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
         {
             const QStringList fired = lookFiredBy(cue.id);
             m_lookFiredBy->setText((fired.isEmpty() ? tr("no VC button yet") : fired.join(QStringLiteral(", ")).toHtmlEscaped())
-                                   + QStringLiteral(" · <a href=\"vcpage\">%1</a>").arg(tr("Make VC page"))
+                                   + QStringLiteral(" · <a href=\"vcpage\">%1</a>").arg(tr("Make VC Page"))
                                    + QStringLiteral(" · <a href=\"folder\">%1</a>").arg(tr("Move to folder…")));
             m_lookFiredBy->setToolTip(tr("A hit plays from a VC button like any function: Toggle or Flash. "
                                          "Over a running cue list it mixes as any function does -- the "
@@ -4921,7 +4938,7 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
                 buttons->setContentsMargins(0, 0, 0, 0);
                 buttons->addWidget(open);
                 const ShowTreeController::CapturePlan plan = m_st->planCapture(fid);
-                QPushButton *cap = new QPushButton(tr("Capture into palettes…"), box);
+                QPushButton *cap = new QPushButton(tr("Capture into Palettes…"), box);
                 cap->setObjectName(QStringLiteral("stLayerCapture"));
                 cap->setEnabled(plan.ok);
                 cap->setToolTip(plan.ok ? tr("Its values become layers of groups / fixtures and palettes "
@@ -8629,7 +8646,7 @@ void ShowTreeView::updateBridgeBanner()
     if (lists.count() > 3)
         shown << tr("…");
     m_bridgeText->setText(tr("This show has %n chaser(s) that work like cue lists (%1). They play as they are; "
-                             "Upgrade this show… makes them Show Tree cue lists, checked, when you want.", "",
+                             "Upgrade This Show… makes them Show Tree cue lists, checked, when you want.", "",
                              int(lists.count())).arg(shown.join(QStringLiteral(", "))));
     m_bridgeBanner->show();
 }
@@ -11449,6 +11466,17 @@ void ShowTreeView::slotCommandEntered()
 
 bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
 {
+    if (m_defaultSplitPending && obj == m_mainSplit && ev->type() == QEvent::Resize
+        && m_mainSplit->width() >= 600 && m_mainSplit->count() == 3 && !isWorkbenchDocked()
+        && m_libraryHost == nullptr)
+    {
+        m_defaultSplitPending = false;
+        m_mainSplit->removeEventFilter(this);
+        const int w = m_mainSplit->width();
+        const int total = kDefaultLibraryShare + kDefaultTreeShare + kDefaultPageShare;
+        m_mainSplit->setSizes({ w * kDefaultLibraryShare / total, w * kDefaultTreeShare / total,
+                                w * kDefaultPageShare / total });
+    }
     if (m_tree != nullptr && obj == m_tree->viewport() && ev->type() == QEvent::Resize)
         fitTreeColumns();
     // Q60: a click in the tree applies a time typed on the cue page first,

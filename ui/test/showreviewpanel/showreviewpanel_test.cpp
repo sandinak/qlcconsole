@@ -238,7 +238,7 @@ void ShowReviewPanel_Test::acceptAndReopen()
     QVERIFY(row != nullptr);
     QVERIFY(row->text(1).contains("Doubled lamp on purpose"));
     QVERIFY(row->text(1).contains("Ava R."));
-    QVERIFY(panel.summary()->text().contains("1 accepted"));
+    QVERIFY(panel.summary()->text().contains("1 marked Not a Problem"));
     QVERIFY(panel.selectCheck("PAT-01"));
     QVERIFY(panel.reopenButton()->isEnabled());
     QVERIFY(panel.reopenSelected());
@@ -665,7 +665,7 @@ void ShowReviewPanel_Test::threeStatesEverywhere()
         return nullptr;
     };
     QVERIFY(group("Meant (1)") != nullptr);
-    QVERIFY(group("Accepted") == nullptr);
+    QVERIFY(group("Not a Problem") == nullptr);
     panel.tree()->clearSelection();
     rowOf(panel.tree(), "PWR-12")->setSelected(true);
     QCOMPARE(panel.reopenButton()->text(), QStringLiteral("Not Meant"));
@@ -703,7 +703,7 @@ void ShowReviewPanel_Test::threeStatesEverywhere()
     }
     QCOMPARE(ShowReviewMarker::stateSummary(m_doc), summary(0, 0, 1));
     panel.recheck();
-    QVERIFY(group("Accepted (1)") != nullptr);
+    QVERIFY(group("Not a Problem (1)") != nullptr);
     QVERIFY(group("Meant") == nullptr);
     // Not a Problem -> Open (Reopen), from the Review row's right-click menu.
     panel.tree()->clearSelection();

@@ -35,7 +35,7 @@ Open it from any of three places:
   effect…**, or use **Design Effect…** in the ⋯ menu of a layer's Effect
   row. The designer plays on that layer's fixtures. The layer's own colour
   and dimmer play under the effect, so it looks as it will in the cue.
-  **In context** keeps the rest of the cue playing; **Solo** plays only the
+  **In Context** keeps the rest of the cue playing; **Solo** plays only the
   effect.
 - **Build ▸ Effects.** **+ New**, or click an effect palette: the
   designer opens in the Workbench's editor pane, on the **bench**
@@ -52,7 +52,7 @@ scene in Build — your changes show on the rig at once (speed, size,
 colours, any setting, another effect picked); **Cancel** puts it back as
 it was, **Update** keeps them.
 
-- **Keep on this layer** (on a layer): a one-off for that layer, named
+- **Keep on This Layer** (on a layer): a one-off for that layer, named
   after the effect and the cue ("Color Chase · 0.0.3 Announcer
   AT-W-ALL"). It works like a value picked in the tree. Its row offers
   **Make reusable** later. An effect of another kind goes **beside** the
@@ -60,7 +60,7 @@ it was, **Update** keeps them.
   of the same kind replaces it. Opened from one effect's own row, the
   designer changes that effect. Designing the layer's own one-off again
   changes that one-off; it doesn't make a second.
-- **Save in this show…**: files the effect where the show keeps its effect
+- **Save in This Show…**: files the effect where the show keeps its effect
   palettes, named after the effect (no name box first), so you can use it
   anywhere; in Build ▸ Effects its name is open to type over at once. On a
   layer it also goes on the layer. The Show Tree's Library lists it at
@@ -72,7 +72,7 @@ it was, **Update** keeps them.
   (a portable .qxfx file) and **Import…** it there. The browser's presets —
   the ones that come with qlcconsole and any you saved before — are still
   starting points.
-- **Save to My effects…** is in the Look Editor with an effect palette
+- **Save to My Effects…** is in the Look Editor with an effect palette
   open, under **Import…** and **Export…** (not in the designer). It keeps
   the effect and its current settings as a named effect among the
   browser's presets on this computer (**Mine**), and the palette then
@@ -92,9 +92,9 @@ shows:
 | Kind | How you make one | Where it lives | How it is marked |
 |---|---|---|---|
 | **Built-in** | Comes with qlcconsole | Every show, every computer | No mark |
-| **Mine** | **Save to My effects…** | Every show on this computer | A small **mine** mark |
-| **This show** | **Save in this show…** | This show's effect palettes | The palette mark |
-| **One-off** | **Keep on this layer** | That one layer of that cue | *one-off* in italics, with **Make reusable** |
+| **Mine** | **Save to My Effects…** | Every show on this computer | A small **mine** mark |
+| **This show** | **Save in This Show…** | This show's effect palettes | The palette mark |
+| **One-off** | **Keep on This Layer** | That one layer of that cue | *one-off* in italics, with **Make reusable** |
 
 In the effect browser, **Built-in · Mine · This show** filter the list by
 where an effect came from. Picking one of the show's effect palettes there
@@ -186,9 +186,9 @@ one undo step: one in the Show Tree's history for a cue, one in Build's
 for a scene.
 
 The layer plays the **palette** when the bench has a saved effect palette
-on it, unchanged: **Save in this show…** first, or start from one in the
+on it, unchanged: **Save in This Show…** first, or start from one in the
 list. Otherwise it plays a **one-off** copy of the design, made the same way
-**Keep on this layer** makes one ("Matrix Fire · 1 Chorus Towers"). The
+**Keep on This Layer** makes one ("Matrix Fire · 1 Chorus Towers"). The
 bench keeps your design either way, so you can make another layer from
 it.
 

@@ -271,7 +271,7 @@ void ShowConverter::build()
         if (left == 0)
             note << (upgraded > 0
                      ? tr("Nothing left to upgrade: every cue-list chaser of this show is a Show Tree cue list "
-                          "already. Restore original… on its row puts one back.")
+                          "already. Restore Original… on its row puts one back.")
                      : tr("Nothing to upgrade: no chaser of this show works as a cue list."));
         if (generated > 0)
             note << tr("%n chaser(s) belong to the Show Tree's own cue lists, and aren't listed.", "", generated);
@@ -476,7 +476,7 @@ QString ShowConverter::resultsHtml() const
     h += QStringLiteral("</ul>");
     if (m_kind == Upgrade)
         h += QStringLiteral("<p>%1</p>").arg(tr("Undo (Edit ▸ Undo, or ⌘Z in the Show Tree) takes the whole "
-                                                "upgrade back as one step. Restore original… puts one chaser "
+                                                "upgrade back as one step. Restore Original… puts one chaser "
                                                 "back.").toHtmlEscaped());
     return h + QStringLiteral("<hr>");
 }
@@ -505,7 +505,7 @@ void ShowConverter::buildUpgradeRows()
             for (int c = 0; c < m_table->columnCount(); ++c)
                 item->setForeground(c, grey);
 
-            QPushButton *restoreRow = new QPushButton(tr("Restore original…"));
+            QPushButton *restoreRow = new QPushButton(tr("Restore Original…"));
             restoreRow->setObjectName(QStringLiteral("stUpgradeRestore"));
             const quint32 listId = l.id;
             // Queued: restoring rebuilds the table, and this button with it.
@@ -765,7 +765,7 @@ void ShowConverter::showItem(QTreeWidgetItem *item)
         const CueList *l = st->cueList(id);
         h += QStringLiteral("<p>%1</p>").arg(
                  tr("Upgraded in place: the cue list %1 took over from this chaser, which is filed with its "
-                    "originals. Restore original… on its row puts the chaser back and points what fires the "
+                    "originals. Restore Original… on its row puts the chaser back and points what fires the "
                     "list at it again (it asks first; one undo step).").arg(l == nullptr ? QString() : l->name).toHtmlEscaped());
     }
     else if (kind == CollectionRow)

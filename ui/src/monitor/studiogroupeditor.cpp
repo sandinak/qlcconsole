@@ -70,7 +70,7 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     m_list->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_list->setMinimumWidth(190);
     leftCol->addWidget(m_list, 1);
-    QPushButton *addFxBtn = new QPushButton(tr("Add fixtures…"), this);
+    QPushButton *addFxBtn = new QPushButton(tr("Add Fixtures…"), this);
     addFxBtn->setToolTip(tr("Pull patched fixtures into this studio group "
                             "(they keep their current position)"));
     leftCol->addWidget(addFxBtn);
@@ -123,7 +123,7 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     form->addRow(tr("Origin"), originRow);
     form->addRow(tr("Rotation"), m_rot);
 
-    QPushButton *recenter = new QPushButton(tr("Re-center origin on members"), frameBox);
+    QPushButton *recenter = new QPushButton(tr("Re-center Origin on Members"), frameBox);
     form->addRow(QString(), recenter);
     root->addWidget(frameBox);
 
@@ -150,8 +150,8 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     bindForm->addRow(tr("Cell pitch"), pitchRow);
 
     QHBoxLayout *bindBtns = new QHBoxLayout;
-    QPushButton *seedBtn  = new QPushButton(tr("Seed from cells"), bindBox);
-    QPushButton *adoptBtn = new QPushButton(tr("Adopt current positions"), bindBox);
+    QPushButton *seedBtn  = new QPushButton(tr("Seed from Cells"), bindBox);
+    QPushButton *adoptBtn = new QPushButton(tr("Adopt Current Positions"), bindBox);
     seedBtn->setToolTip(tr("Lay the bound group's fixtures out on a grid at the "
                            "cell pitch (their matrix layout → metric offsets)"));
     adoptBtn->setToolTip(tr("Pull the bound group's fixtures in at where they "
@@ -167,7 +167,7 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     m_faceCombo->addItem(tr("Front"), 1);
     m_faceCombo->addItem(tr("Side"),  2);
     m_faceCombo->setCurrentIndex(1);
-    QPushButton *grpFaceBtn = new QPushButton(tr("Put group on face"), bindBox);
+    QPushButton *grpFaceBtn = new QPushButton(tr("Put Group on Face"), bindBox);
     grpFaceBtn->setToolTip(tr("Assign the picked FixtureGroup's fixtures to this "
                               "face and distribute them on it"));
     faceRow->addWidget(new QLabel(tr("onto")));
@@ -191,7 +191,7 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     m_planeCombo->addItem(tr("Side (Y → / Z ↑)"),  int(StudioPlaneView::Side));
     planeTop->addWidget(new QLabel(tr("View")));
     planeTop->addWidget(m_planeCombo);
-    QPushButton *putBtn = new QPushButton(tr("Put on this face"), planeBox);
+    QPushButton *putBtn = new QPushButton(tr("Put on This Face"), planeBox);
     putBtn->setToolTip(tr("Move the selected fixtures onto the face shown, "
                           "keeping their arrangement"));
     planeTop->addWidget(putBtn);

@@ -366,7 +366,7 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     tb->addSeparator();
 
     m_moveHereBtn = new QToolButton(this);
-    m_moveHereBtn->setText(tr("Move selection here"));
+    m_moveHereBtn->setText(tr("Move Selection Here"));
     m_moveHereBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
     m_moveHereBtn->setToolTip(tr("Assign the canvas selection to the selected layer"));
     tb->addWidget(m_moveHereBtn);

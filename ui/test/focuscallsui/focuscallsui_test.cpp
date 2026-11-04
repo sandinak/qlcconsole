@@ -1573,7 +1573,7 @@ void FocusCallsUi_Test::focusEntriesElsewhereSayWhy()
     CueRunner runner(m_doc, CueRunner::Full);
     QToolButton *venue = runner.findChild<QToolButton *>("crFocusCalls");
     QVERIFY(venue != nullptr);
-    QCOMPARE(venue->text(), QString("Venue focus\342\200\246"));
+    QCOMPARE(venue->text(), QString("Venue Focus\342\200\246"));
     QVERIFY(!venue->isEnabled());
     QVERIFY(venue->toolTip().startsWith("No focus calls yet"));
     FocusCall call;

@@ -22,6 +22,19 @@ until Q214 decides. Leftovers:
 - ⌘D in the Fixtures tab is not on ⌘Z (the copy is deleted with ⌫).
 - Connections' Universes tab keeps ⌘D = Delete Universe (Q214).
 
+## Words and layout (wfwords, 2026-11-04) -- built
+
+Buttons Title Case (menuwords_test reads code-given button texts; stock `.ui`
+dialogs untouched), Show Review "Not a Problem" everywhere, Show Tree default
+split 17:42:41 set at the first real width, footer chips drop by priority when
+the window is narrow. Tests: menuwords, layoutsanity
+(theShowTreeShowsCueNamesWithFreshSettings, theFooterChipsNeverOverlap).
+Leftovers:
+- Buttons whose text is set through a variable not named ...Btn/...Button/
+  ...btn (e.g. `m_encLearn`) are not read by the check; a name outside the
+  pattern is found by eye.
+- The tab bar still overflows at 1024 wide (Run is cut off).
+
 ## Notes beside the Show Tree (Q212, notes, 2026-11-03) — built, leftovers
 
 Notes pane under the cue page (follows the tree row or a Library palette),

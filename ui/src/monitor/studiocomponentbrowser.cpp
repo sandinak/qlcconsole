@@ -81,7 +81,7 @@ StudioComponentBrowser::StudioComponentBrowser(Doc *doc, const QList<quint32> &s
             tr("Select fixtures on the map to enable stamping."), this));
 
     QHBoxLayout *actions = new QHBoxLayout;
-    m_stampBtn  = new QPushButton(tr("Stamp onto selection"), this);
+    m_stampBtn  = new QPushButton(tr("Stamp Onto Selection"), this);
     m_stampBtn->setDefault(true);
     m_renameBtn = new QPushButton(tr("Rename…"), this);
     m_deleteBtn = new QPushButton(tr("Delete"), this);

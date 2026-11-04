@@ -205,7 +205,7 @@ at the height of the deck at the front of the stage, with the same
 **Apron** dimension and the same **FOH · … DS of curtain line** labels by
 the trusses and pipes over the audience. In a small Rig Overview window it
 keeps the lines and leaves out those words, so they don't crowd the rig.
-Its **Plot layers** menu lists the pieces under **Stage**, each with a tick.
+Its **Plot Layers** menu lists the pieces under **Stage**, each with a tick.
 They're saved with the show; an older show opens with them off, and a show
 saved with the old **Show ▸ Stage marks** menu opens with the same marks in
 the same places, the apron it tinted now its own deck on **Auto**.
@@ -256,9 +256,9 @@ camera by number (**Around the stage**, **Height of eye**), and the turn
 button rotates the view 90° (a view setting only; nothing moves).
 
 **Its controls are along the foot**, in a footer bar like the Lighting
-Studio plot's: **Show** (with **Target Positions**) and **Plot layers** on
+Studio plot's: **Show** (with **Target Positions**) and **Plot Layers** on
 the left, then **Live**, **Beams**, **Room**, **Haze**, **Owner**, **Quality**,
-**GPU**, the frame rate, **Quick focus** and **Fit**, and **View** (Top,
+**GPU**, the frame rate, **Quick Focus** and **Fit**, and **View** (Top,
 Front, Back, Side, 45°) on the right, where the plot has its own View. The
 window's title bar moves and closes it as before. Click a box (View,
 Room, Haze, Quality) to step to its next choice; its arrow lists them
@@ -278,7 +278,7 @@ deck no longer stops a beam). Toggling a layer redraws the open overview
 where it is, keeping your angle and zoom. A structure's own editor always
 shows that structure, whatever layer it is on.
 
-**Or hide it from the overview itself.** The overview's **Plot layers** menu lists
+**Or hide it from the overview itself.** The overview's **Plot Layers** menu lists
 the show's layers with a tick each: untick one to hide it, **Show All** to
 bring everything back. It is the same switch as the layer's eye in the
 Studio (and saved with the show), so the two always agree. Showing, hiding
@@ -448,7 +448,7 @@ scene, not a marker, so they stay drawn while their layer is visible.
 Lines go in a **Performers** layer of their own (made the first time). Its
 eye hides them on the plot and in the rig view, and its lock holds them
 still. A fill's lines are one group named for the set: a click picks one line
-(its people with it); click the set's row in **Plot layers**, or
+(its people with it); click the set's row in **Plot Layers**, or
 right-click a line ▸ **Select Group** or **Select All Similar**, to take
 the whole set and drag it as one piece.
 Move or turn a riser and the lines standing on it go with it; move the
@@ -512,7 +512,7 @@ dropping to one hook. One fixture hangs below the hook.
 - **Remove it:** right-click → **Delete Hanger…**. What hung on it stays in
   the show, just unmounted. Removing the truss or tower removes its hangers
   too.
-- **Plot layers** lists each hanger with its tower (rename, edit, delete there).
+- **Plot Layers** lists each hanger with its tower (rename, edit, delete there).
 
 Hangers show in the structure editors, the 3D views and on the **2D plot**:
 there, the arm out from its truss or tower and a ring at the hook (with the
@@ -616,7 +616,7 @@ cyc and a scrim, by default) is checked by [Show Review](show-review.md)
   the fixture in the cue its light starts landing, one undo step, saved in the
   show. It stays meant through the cues that follow while it keeps landing,
   even where the layer is set again. Take it back with **Not Meant** on the row
-  (Show Review's Accepted list) or **Light on the Cyc: Not Meant** on the
+  (Show Review's Not a Problem list) or **Light on the Cyc: Not Meant** on the
   layer's right-click in the Show Tree.
 - **Where you work.** Each cue that puts unmeant light on the cyc reads
   **⚠ cyc** in its Show Tree flags — only the mark is in the warning colour,
@@ -637,7 +637,7 @@ plays, which this check never touches (decided, can change).
 #### Curtains that move
 
 A main drape or a traveler can open and close in the show, because a fixture
-moves it. In its editor, **Driven by → Add curtain fixture** adds a
+moves it. In its editor, **Driven by → Add Curtain Fixture** adds a
 **Generic → Stage Curtain** fixture named after it (*Main drape curtain*) and links
 the two; or pick a curtain fixture you already have. It's saved with the
 show. A fixture you already have — a relay on a dimmer channel — becomes a curtain
@@ -1294,14 +1294,14 @@ props, images and nodes:
   type and profile; decks or steps; pipes of the same orientation; scenery of
   the same kind; every stand, tower, hanger, image or power source; network
   nodes of the same transport.
-- **A group is selected as a group**: click its row in **Plot layers**, or
+- **A group is selected as a group**: click its row in **Plot Layers**, or
   right-click a member ▸ **Select Group “name”**. Drag any of it and all
   of it moves; click one member again (no drag) to pick it out.
 - Groups are kept as they were: **Group** and **Ungroup** still make and
   split them, and locks hold as before. **Group** on one member and
   something else moves that member into the new group (the rest of its
   group stays); a whole group selected nests inside the new one.
-  **Move selection here** in Plot layers does the same: a whole group goes
+  **Move Selection Here** in Plot layers does the same: a whole group goes
   to the layer, one member leaves its group.
 
 - **The plot's footer bar**: **Grid** (stage size, units, subdivisions);
@@ -1504,7 +1504,7 @@ about). Definitions carry no speed, so these are defaults. A head that points
 within only part of its pan channel (a two-arm beam: pan 0-127 points, above
 that it spins) travels its range along that pointing band.
 
-Turn it off with **Real move speed** in the Rig Overview's footer, beside
+Turn it off with **Real Move Speed** in the Rig Overview's footer, beside
 Beams; the heads then snap to the output as before. Remembered. It changes only how the Rig
 Overview draws; the output itself is untouched.
 
@@ -1771,7 +1771,7 @@ PlayStation pad's own names, and its touchpad, are in
 [On a PlayStation pad](focus-calls.md#on-a-playstation-pad).
 
 **Start it** from **Focus ▸ Quick Focus…** on the Lighting Studio toolbar,
-**Quick focus** on the Rig Overview's bar, **View → Quick Focus…** (⌘⌥F),
+**Quick Focus** on the Rig Overview's bar, **View → Quick Focus…** (⌘⌥F),
 or by holding **View + Menu** on the controller. Choose:
 
 - **Heads** — **As selected** (what is selected on the plot, or in the
@@ -1921,7 +1921,7 @@ picks which device drives the nudges and which map is shown.
   says so: "Controller lost. Lights held." When it comes back it takes over
   again by itself and says "Controller back." — unless you are nudging
   with the keys at that moment (then once they have been still for a
-  second; **Use the controller** switches at once), or you chose
+  second; **Use the Controller** switches at once), or you chose
   **Keyboard** (then the panel and the voice say to click **Use the
   controller**; the controller is not forced on you).
 
@@ -2041,7 +2041,7 @@ in front: another app, the screen saver, a locked screen.
 
 ### Controller test
 
-**Controller test…**, next to **Use** in Quick focus's setup (and in
+**Controller Test…**, next to **Use** in Quick focus's setup (and in
 **Settings → Advanced → Game controllers**), opens a window listing every
 input your controllers send, as it arrives, whether or not they are patched:
 
@@ -2217,4 +2217,4 @@ Two small but load-bearing visual cues:
 | **DSC / CL** | Downstage centre: where the centre line (CL) meets the front of the stage. |
 | **Rig Overview** | The read-only, whole-rig 3D window (View → Rig Overview…, Ctrl/⌘+Shift+R). |
 | **Calibration offsets** | A head's pan/tilt offsets: in the DMX so the real light lands where intended, left out of every view so it shows the intended aim. |
-| **Quick focus** | Stepping through the heads, each aimed at its reference, to set their calibration offsets with the controller or keyboard. |
+| **Quick Focus** | Stepping through the heads, each aimed at its reference, to set their calibration offsets with the controller or keyboard. |

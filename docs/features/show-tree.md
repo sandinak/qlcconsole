@@ -43,7 +43,7 @@ is changed only in the tree: elsewhere it is locked. See
 
 ## The tab
 
-- **Header.** It has + Cue list, + Cue (**+ Hit** in a Hits section),
+- **Header.** It has + Cue List, + Cue (**+ Hit** in a Hits section),
   + Layer, Record, ✎ Workbench, **More ▾** (**+ Production**, **+ Sub-cue**
   and **Merge**), Delete, Undo and Redo; **Upgrade This Show…** while the
   show has chasers to upgrade; and the **Production** switcher once there
@@ -322,9 +322,9 @@ A show made the QLC+ way (scenes, collections, chasers, no Show Tree)
 opens as it is: nothing is converted on load, and it plays and saves as
 before. The Show Tree tab says so once, in a line at the top: *This show
 has 2 chasers that work like cue lists (Full Show, New Chaser 8). They
-play as they are; Upgrade this show… makes them Show Tree cue lists,
+play as they are; Upgrade This Show… makes them Show Tree cue lists,
 checked, when you want.*
-**Upgrade this show…** opens the upgrade (below); **✕** puts the line
+**Upgrade This Show…** opens the upgrade (below); **✕** puts the line
 away for this show. **Upgrade This Show…** is the one way in: in the File
 menu, the Show Tree's header, the Run tab when there is no cue list, and
 Build's **Send to Show Tree…** (the same dialog with just that chaser
@@ -406,7 +406,7 @@ a layer would play it differently.
 
 ### Upgrade this show
 
-**File → Upgrade This Show…** (or **Upgrade this show…** on the old-show
+**File → Upgrade This Show…** (or **Upgrade This Show…** on the old-show
 line, or the **Upgrade This Show…** button the Run tab shows while there is
 no main cue list) is the converter with everything around it, in one place. Nothing
 happens until you press **Upgrade**, and none of it is needed: a show
@@ -455,7 +455,7 @@ as a tracking cue list here, in Eos's cue numbers. See
 
 Use your own group and palette names in place of Towers, USTs, Blue and Red.
 
-1. **+ Production**. Then, with it selected, **+ Cue list** named
+1. **+ Production**. Then, with it selected, **+ Cue List** named
    `01-Opener` (a leading number numbers its cues: the first is 1.0.0). A
    new list is **Tracking**.
 2. **+ Cue** → **1.0.0**. Type the name `Preshow`.
@@ -487,7 +487,7 @@ cue + "Out" block
 ```
 
 - `list "…"` makes a **Tracking** list in the selected production (or the
-  only one), as **+ Cue list** does.
+  only one), as **+ Cue List** does.
 - Each `cue +` adds a cue after the selected one and selects it, so the
   lines after it act on that cue.
 - `Towers dimmer 100` in 1.0.1 brings the tracked Towers layer into the cue,
@@ -1488,13 +1488,13 @@ work. Select a header for its page:
   own mode (**B**), in a Tracking list.
 - **+ Section**: a new section after the last, its first cue numbered to the
   scheme (**2.0.1**, **300**). Also on the list's page.
-- **Remove section** (free numbers only): its cues join the section before.
+- **Remove Section** (free numbers only): its cues join the section before.
 
 **+ Cue** numbers to the scheme: with a header selected the new cue goes at
 the section's end (after 1.0.3 → **1.0.4**, never 2.0.1); after a cue it
 stays in that cue's section (between 1 and 3 in section 1 → **1.5**, not 2).
 
-**Merge lists into one…** (the production's page) turns a show built as a
+**Merge Lists into One…** (the production's page) turns a show built as a
 list per song into one list. Tick the lists and drag them into order; each
 becomes a section named after it. Cue numbers stay, unless two clash (two
 songs both numbered from 1): then the later cue gets a number between its
@@ -1516,7 +1516,7 @@ a list that went now fire the one list, from its top. With no scheme, the
 merge sets the one the numbers show, else free numbers with a section at
 each list's start. One undo step.
 
-**Running order…** (the production's page) changes tonight's song order for
+**Running Order…** (the production's page) changes tonight's song order for
 the Run and GO without renumbering or rebuilding a cue. Drag the songs into
 the order you will play them; untick a song to leave it out tonight (GO
 passes over it; a jump to it still plays it). The Run tab, GO, the footer, a
@@ -1553,11 +1553,11 @@ every cue.
 - **Anchor** (the cue's page, beside At timecode): the cues after it in its
   section count from this cue instead. Move it (a hit that moved in the new
   mix) and they move with it.
-- **Section times…** (the list's page, in its **Timecode** row): an older
+- **Section Times…** (the list's page, in its **Timecode** row): an older
   show keeps its times as they are until you click this. Each section
   without a start then starts at its first timed cue, and every cue stays
   exactly where it was. One undo step.
-- **Import Logic markers…** (the same row): in Logic, export the project as
+- **Import Logic Markers…** (the same row): in Logic, export the project as
   a MIDI file with its markers (File ▸ Export ▸ Selection as MIDI File, with
   the marker track). The markers are matched to the sections by name
   (*Chorus 2* matches *CHORUS-2*; case and punctuation don't count), and you
@@ -1623,13 +1623,13 @@ production selected, or the only one). It opens a window of its own beside
 the tree; it is a view of the production's cue lists, not another place
 to keep cues.
 
-- **Get the text in.** **Edit text** lets you type or paste it; **Import…**
+- **Get the text in.** **Edit Text** lets you type or paste it; **Import…**
   reads a plain text or Markdown file (UTF-8). The script is kept with the
   production in the show file. A production without one has none.
 - **Place a cue.** Drag a cue from the Show Tree onto a word: its **GO** is
   called there (hold Alt for its **standby**). Or select the words, pick the
   cue in the box beside **Import…** (it follows the cue selected in the
-  tree) and press **Cue here** or **Standby Here**; the box then moves to
+  tree) and press **Cue Here** or **Standby Here**; the box then moves to
   the next cue, so a script is called through from top to bottom. Right-click
   a line to place a cue there or take a cue off.
 - **Read the margin.** Each line shows the cues called on it: `STBY 1.0.2
@@ -1666,10 +1666,10 @@ like, a snapshot of what you were looking at.
   page) is its first entry, marked "cue note".
 - **Add one.** Type in the box at the bottom and press **Return** (Shift+Return
   for a new line), or **Add**. A new note is open.
-- **Snapshot the view.** **Snapshot the view** adds the note with the Rig
+- **Snapshot the View.** **Snapshot the View** adds the note with the Rig
   Overview's camera (plane, turn, angle, zoom and pan), a small picture of
   it and the cue that was on stage. The Rig Overview opens if it is not
-  already open. **Show me** on the note puts the camera back. In Design it
+  already open. **Show Me** on the note puts the camera back. In Design it
   also selects that cue, so it is on the rig again. In Operate only the
   camera moves and the stage is left alone.
 - **Open and done.** Tick a note when it is done; untick to open it again.
@@ -2345,7 +2345,7 @@ called them looks; they open as they were.)
   for each hit added since, the buttons it made for hits since deleted (or
   filed elsewhere) taken away; buttons you moved or resized and widgets of
   your own in the frame stay as they are. Delete the frame on the console
-  and the next Make VC page makes a new one. The hit's page lists the buttons that fire
+  and the next Make VC Page makes a new one. The hit's page lists the buttons that fire
   it (*Fired by*); the tree marks them **VC ×N**.
 - **One button, several hits.** Drag more hits onto a button (or **Add
   hit…** in its properties): it fires the **armed hit with the narrowest
@@ -2360,9 +2360,9 @@ called them looks; they open as they were.)
   tree to change it) and what it overrides or shares, under the button's
   map in words: *HIT 1 fires Blackout everywhere, except Strobe in cue
   2.3 (overrides Blackout); 2 hits live in cue 4 (Pop, Flash): step
-  through.* **Add hit…** and **Remove** change it. A VC button's hits
+  through.* **Add Hit…** and **Remove** change it. A VC button's hits
   have no undo of their own (the Virtual Console has none).
-- **Adding a hit asks** (by drag or Add hit…), never guessing:
+- **Adding a hit asks** (by drag or Add Hit…), never guessing:
   - a second hit at the **same place** as one the button has: **Step
     through** (each press fires the next), **Together** (a press fires
     them all), **Replace** (the one there goes) or **Cancel**;
@@ -2726,7 +2726,7 @@ it. A next cue closer than the **lead time** (0.8 s for a new show) is too
 soon to move in black, so nothing new is sent for it.
 
 It is one setting of the show. Its switch is the Show Tree's **MIB**
-button; Build's **Move in black ▾** shows and changes the same setting:
+button; Build's **Move in Black ▾** shows and changes the same setting:
 
 - **The Show Tree's header: MIB**, at its right end, just left of Stop
   all, Blackout and Blind. Click
@@ -2735,7 +2735,7 @@ button; Build's **Move in black ▾** shows and changes the same setting:
   *MIB · 3*.
 - **Build → Move in black ▾** (the Build tab's top bar): **Auto
   move-in-black** and **Lead time**, with marking lights by hand. While
-  Auto is on it reads **Move in black · Auto** (see
+  Auto is on it reads **Move in Black · Auto** (see
   [The Build tab](build.md#layout)).
 
 It is saved with this show, not this computer: another show keeps its own,

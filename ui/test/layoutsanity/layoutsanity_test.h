@@ -45,6 +45,15 @@ private slots:
      *  and a marked overlay are not. */
     void theCheckerFindsWhatItShould();
 
+    /** Fresh settings, 1280x800 and 1024x640: the Show Tree's pane shows a
+     *  cue's number AND its name (not "0.0.2 ..."), and the page beside it
+     *  keeps room (wfaudit W1-28). */
+    void theShowTreeShowsCueNamesWithFreshSettings();
+
+    /** The footer at 1024 wide and at the window's own minimum: no two
+     *  chips overlap, the stage chip and Unsaved stay (wfaudit W1-30). */
+    void theFooterChipsNeverOverlap();
+
     /** Every screen at every size: no overlaps, nothing clipped. */
     void everyScreenIsLaidOutCleanly_data();
     void everyScreenIsLaidOutCleanly();

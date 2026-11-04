@@ -21,7 +21,7 @@
    on the cyc (or a scrim, or any scenery kept for light on purpose) that
    nobody meant is marked where you work -- "⚠ cyc" in its flags (amber), or
    "cyc ✓" (green) once it is marked meant, nothing once it is a Not a
-   Problem (it is listed in Show Review under Accepted) -- the detail on hover (ShowReviewMarker::tooltip()) -- and a click on the mark
+   Problem (it is listed in Show Review under Not a Problem) -- the detail on hover (ShowReviewMarker::tooltip()) -- and a click on the mark
    opens the Show Review row; a right-click changes its state there (I Meant It,
    Not a Problem…, Not Meant, Show Me the Layer, Open in Show Review). A layer
    marked meant offers to take it back from its right-click.

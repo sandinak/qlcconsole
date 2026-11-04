@@ -49,6 +49,8 @@
 #include <QTabWidget>
 #include <QTemporaryDir>
 #include <QTextDocument>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
@@ -474,7 +476,7 @@ const QList<Known> &knownIssues()
         { "Workbench look pan/tilt", "min", "VCXYPadArea#lookPanTilt", "TODO layoutsanity L3" },
         // L4: Aim at the Workbench minimum: "Dim lights that can't see..." cut short.
         { "Workbench look aim", "min", "aimDimWhenBlocked", "TODO layoutsanity L4" },
-        // L5: Build's scene page at the Workbench minimum: "How this works" cut.
+        // L5: Build's scene page at the Workbench minimum: "How This Works" cut.
         { "Workbench scene", "min", "programmingScenePage", "TODO layoutsanity L5" },
         // L6: Show Settings at its minimum: the Teaching rows squeezed (word-wrapped
         // PIN text takes their height).
@@ -1024,6 +1026,96 @@ void LayoutSanity_Test::theCheckerFindsWhatItShould()
         QVERIFY2(all.contains(QStringLiteral("clipped QPushButton \"Out\"")), qPrintable(all));
         QVERIFY2(all.contains(QStringLiteral("text-cut QLabel \"A rather long label text\"")), qPrintable(all));
     }
+}
+
+void LayoutSanity_Test::theShowTreeShowsCueNamesWithFreshSettings()
+{
+    /* initTestCase() runs on a HOME of its own and nothing here has moved a
+       splitter: these are the default sizes. */
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    m_app->switchToTabContaining(view);
+    QSplitter *split = view->findChild<QSplitter *>(QStringLiteral("stSplitter"));
+    QTreeWidget *tree = nullptr;
+    for (QTreeWidget *t : view->findChildren<QTreeWidget *>())
+        if (tree == nullptr && t->headerItem() != nullptr && t->headerItem()->text(0) == QLatin1String("Show"))
+            tree = t;
+    QVERIFY(split != nullptr && tree != nullptr);
+    for (const QSize &z : { QSize(1280, 800), QSize(1024, 640) })
+    {
+        m_app->resize(z);
+        settle();
+        QTest::qWait(100);
+        settle();
+        // Cue rows: "1.0.1 Verse" -- number, then a name. At 1280 every one of
+        // a usual length is shown whole; at 1024 the first is.
+        static const QRegularExpression cueText(QStringLiteral("^\\d+\\.\\d+\\.\\d+(\\.\\d+)? \\S"));
+        QList<QTreeWidgetItem *> cues;
+        for (QTreeWidgetItemIterator it(tree); *it != nullptr; ++it)
+            if (cueText.match((*it)->text(0)).hasMatch() && (*it)->text(0).size() > 8
+                && (*it)->text(0).size() <= 18)
+                cues << *it;
+        QVERIFY2(!cues.isEmpty(), "no cue row in the Show Tree");
+        QString what;
+        for (QTreeWidgetItem *cue : z.width() >= 1280 ? cues : cues.mid(0, 1))
+        {
+            // It is shown whole: its rect holds the text and the room it needs.
+            const QRect r = tree->visualItemRect(cue);
+            const int need = tree->fontMetrics().horizontalAdvance(cue->text(0)) + 24;
+            what = QStringLiteral("%1x%2: \"%3\" needs %4 px, the row has %5 (panes %6)")
+                       .arg(z.width()).arg(z.height()).arg(cue->text(0)).arg(need).arg(r.width())
+                       .arg(QStringLiteral("%1").arg(split->sizes().at(1)));
+            QVERIFY2(r.width() >= need, qPrintable(what));
+        }
+        // ...and the page is not starved to give it.
+        QVERIFY2(split->sizes().at(2) >= 400, qPrintable(what));
+    }
+    m_app->resize(1280, 800);
+    settle();
+}
+
+void LayoutSanity_Test::theFooterChipsNeverOverlap()
+{
+    QStatusBar *sb = m_app->statusBar();
+    QVERIFY(sb != nullptr);
+    // Several chips on at once: a Design show with an output warning, the
+    // unsaved mark, the Load chip and an override.
+    m_app->doc()->setModified();
+    for (const int w : { 1280, 1024, m_app->minimumSizeHint().width() })
+    {
+        m_app->resize(w, 800);
+        settle();
+        QTest::qWait(100);
+        settle();
+        QList<QWidget *> chips;
+        for (QWidget *c : sb->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
+            if (c->isVisibleTo(sb) && c->width() > 0 && !qobject_cast<QSizeGrip *>(c))
+                chips << c;
+        QVERIFY2(!chips.isEmpty(), "no chips in the footer");
+        QStringList bad;
+        auto name = [](QWidget *c) {
+            return QStringLiteral("%1 \"%2\"").arg(QLatin1String(c->metaObject()->className()), c->objectName());
+        };
+        for (int i = 0; i < chips.size(); ++i)
+        {
+            if (!QRect(QPoint(0, 0), sb->size()).contains(chips.at(i)->geometry()))
+                bad << QStringLiteral("%1 is outside the footer (%2)").arg(name(chips.at(i)))
+                           .arg(QStringLiteral("%1,%2 %3x%4").arg(chips.at(i)->x()).arg(chips.at(i)->y())
+                                    .arg(chips.at(i)->width()).arg(chips.at(i)->height()));
+            for (int j = i + 1; j < chips.size(); ++j)
+                if (chips.at(i)->geometry().intersects(chips.at(j)->geometry()))
+                    bad << QStringLiteral("%1 overlaps %2").arg(name(chips.at(i)), name(chips.at(j)));
+        }
+        QVERIFY2(bad.isEmpty(), qPrintable(QStringLiteral("%1 wide:\n  ").arg(w) + bad.join(QStringLiteral("\n  "))));
+        // What stays first.
+        QVERIFY2(m_app->m_statusStage->isVisible() && m_app->m_statusStage->width() > 0,
+                 qPrintable(QStringLiteral("the stage chip at %1 wide").arg(w)));
+        QVERIFY2(m_app->m_statusDirtyLabel->isVisible() && m_app->m_statusDirtyLabel->width() > 0,
+                 qPrintable(QStringLiteral("Unsaved at %1 wide").arg(w)));
+    }
+    m_app->doc()->resetModified();
+    m_app->resize(1280, 800);
+    settle();
 }
 
 void LayoutSanity_Test::everyScreenIsLaidOutCleanly_data()

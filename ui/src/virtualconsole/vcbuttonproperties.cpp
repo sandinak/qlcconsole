@@ -246,7 +246,7 @@ void VCButtonProperties::buildHitsBox()
     m_hitsMap->setWordWrap(true);
     v->addWidget(m_hitsMap);
     QHBoxLayout *h = new QHBoxLayout();
-    QPushButton *add = new QPushButton(tr("Add hit…"), m_hitsBox);
+    QPushButton *add = new QPushButton(tr("Add Hit…"), m_hitsBox);
     add->setObjectName("vcbAddHit");
     QPushButton *remove = new QPushButton(tr("Remove"), m_hitsBox);
     remove->setObjectName("vcbRemoveHit");

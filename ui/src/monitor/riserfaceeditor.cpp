@@ -59,9 +59,9 @@ RiserFaceEditor::RiserFaceEditor(Doc *doc, StagePlatform *platform, QWidget *par
     top->addWidget(m_addCombo, 1);
     QPushButton *addBtn = new QPushButton(tr("Add"), this);
     top->addWidget(addBtn);
-    QPushButton *rmBtn = new QPushButton(tr("Remove selected"), this);
+    QPushButton *rmBtn = new QPushButton(tr("Remove Selected"), this);
     top->addWidget(rmBtn);
-    QPushButton *distBtn = new QPushButton(tr("Distribute evenly"), this);
+    QPushButton *distBtn = new QPushButton(tr("Distribute Evenly"), this);
     top->addWidget(distBtn);
     vl->addLayout(top);
 

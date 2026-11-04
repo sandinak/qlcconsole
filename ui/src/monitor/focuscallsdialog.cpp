@@ -150,7 +150,7 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
                               "rather than starting from the show's own"));
     venueRow->addWidget(m_fromLast);
     // The venue manager: apply now, rename, delete (the engine's own).
-    m_applyVenue = new QPushButton(tr("Apply now"), this);
+    m_applyVenue = new QPushButton(tr("Apply Now"), this);
     m_applyVenue->setObjectName(QStringLiteral("fcApplyVenue"));
     m_applyVenue->setToolTip(tr("Put this venue's corrections on the rig now (or, for None, the show's own)"));
     m_renameVenue = new QPushButton(tr("Rename\342\200\246"), this);
@@ -170,7 +170,7 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
         venueButtons->addWidget(b);
     /* What the venue owns (board Q137/Q138, docs/design/VENUES.md): its house rig, the
        patch of every universe in this room, what is not ours. */
-    QPushButton *venueRig = new QPushButton(tr("Rig and universes\342\200\246"), this);
+    QPushButton *venueRig = new QPushButton(tr("Rig and Universes\342\200\246"), this);
     venueRig->setObjectName(QStringLiteral("fcVenueRig"));
     venueRig->setToolTip(tr("This venue's house rig, its outputs for each universe, the channels it keeps, "
                             "and the clash check"));
@@ -191,7 +191,7 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
         QSettings().setValue(QStringLiteral("focusCalls/checkedBy"), t.trimmed());
     });
     reportRow->addWidget(m_checkedBy, 1);
-    m_report = new QPushButton(tr("Export focus report\342\200\246"), this);
+    m_report = new QPushButton(tr("Export Focus Report\342\200\246"), this);
     m_report->setObjectName(QStringLiteral("fcReport"));
     m_report->setToolTip(tr("This venue's focus, light by light: a PDF or web page to print, "
                             "or a CSV for Lightwright"));
@@ -1128,7 +1128,7 @@ void FocusCallsDialog::exportReport(Doc *doc, QWidget *parent, const QString &ve
     const QString pdf = tr("PDF, to print (*.pdf)");
     const QString html = tr("Web page (*.html)");
     const QString csv = tr("CSV for Lightwright (*.csv)");
-    QString path = QFileDialog::getSaveFileName(parent, tr("Export focus report"),
+    QString path = QFileDialog::getSaveFileName(parent, tr("Export Focus Report"),
                                                 QDir(dir).filePath(name + QStringLiteral(".pdf")),
                                                 QStringList({ pdf, html, csv }).join(QStringLiteral(";;")),
                                                 &filter);
@@ -1139,5 +1139,5 @@ void FocusCallsDialog::exportReport(Doc *doc, QWidget *parent, const QString &ve
                                                                          : QStringLiteral(".pdf");
     QString why;
     if (!writeReport(doc, venue, path, &why))
-        QMessageBox::warning(parent, tr("Export focus report"), why);
+        QMessageBox::warning(parent, tr("Export Focus Report"), why);
 }

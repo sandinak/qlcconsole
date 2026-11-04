@@ -78,7 +78,7 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     m_remove = new QPushButton(tr("Remove"), this);
     m_remove->setObjectName(QStringLiteral("controlMapRemove"));
     m_remove->setToolTip(tr("The selected triggers: their controls fire nothing (their lights go off)"));
-    m_removeAll = new QPushButton(tr("Remove all…"), this);
+    m_removeAll = new QPushButton(tr("Remove All…"), this);
     m_removeAll->setObjectName(QStringLiteral("controlMapRemoveAll"));
     m_last = new QLabel(this);
     m_last->setObjectName(QStringLiteral("controlMapLast"));
@@ -227,11 +227,11 @@ void ControlMapPanel::buildEncoderBox(QVBoxLayout *lay)
     m_encInvert = new QCheckBox(tr("Reverse"), m_encoderBox);
     m_encInvert->setObjectName(QStringLiteral("encoderInvert"));
     m_encInvert->setToolTip(tr("Clockwise lowers the value"));
-    m_encLearn = new QPushButton(tr("Learn encoder 1…"), m_encoderBox);
+    m_encLearn = new QPushButton(tr("Learn Encoder 1…"), m_encoderBox);
     m_encLearn->setObjectName(QStringLiteral("encoderLearn"));
     m_encLearn->setToolTip(tr("Turn the first encoder of the controller: the other encoders are the "
                               "channels after it"));
-    m_encLearnMore = new QPushButton(tr("Learn more…"), m_encoderBox);
+    m_encLearnMore = new QPushButton(tr("Learn More…"), m_encoderBox);
     m_encLearnMore->setObjectName(QStringLiteral("encoderLearnMore"));
     m_encLearnMore->setToolTip(tr("Press or turn the control: it is set as the pushes, a bank button or the "
                                   "rings. The ones that follow are the controls after it"));
@@ -403,8 +403,8 @@ void ControlMapPanel::startEncoderLearn(int target)
 void ControlMapPanel::endEncoderLearn()
 {
     m_encLearning = LearnNone;
-    m_encLearn->setText(tr("Learn encoder 1…"));
-    m_encLearnMore->setText(tr("Learn more…"));
+    m_encLearn->setText(tr("Learn Encoder 1…"));
+    m_encLearnMore->setText(tr("Learn More…"));
 }
 
 void ControlMapPanel::slotEncoderLearn()

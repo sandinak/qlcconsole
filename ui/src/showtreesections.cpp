@@ -91,7 +91,7 @@ void ShowTreeView::buildSectionPages()
                 m_st->setNumbering(currentId(), stringToNumbering(link.mid(4)));
         });
         f->insertRow(f->rowCount() - 1, QString(), m_prodNumberingHint);
-        m_prodMerge = new QPushButton(tr("Merge lists into one…"), m_prodPage);
+        m_prodMerge = new QPushButton(tr("Merge Lists into One…"), m_prodPage);
         m_prodMerge->setObjectName("stProdMerge");
         m_prodMerge->setToolTip(tr("One cue list for the show: each list becomes a song section of it, in "
                                    "order, keeping its cue numbers (renumbered only on a clash). GO and Run "
@@ -101,7 +101,7 @@ void ShowTreeView::buildSectionPages()
             if (currentKind() == ProductionNode)
                 mergeListsIntoOne(currentId());
         });
-        m_prodOrder = new QPushButton(tr("Running order…"), m_prodPage);
+        m_prodOrder = new QPushButton(tr("Running Order…"), m_prodPage);
         m_prodOrder->setObjectName("stProdOrder");
         m_prodOrder->setToolTip(tr("Tonight's song order for the Run and GO: drag the songs, untick one to leave "
                                    "it out. No cue is renumbered or moved; Reset goes back to number order. "
@@ -167,7 +167,7 @@ void ShowTreeView::buildSectionPages()
     QPushButton *add = new QPushButton(tr("+ Section"), row);
     add->setObjectName("stSectionAdd");
     connect(add, &QPushButton::clicked, this, [this]() { newSection(); });
-    m_sectionRemove = new QPushButton(tr("Remove section"), row);
+    m_sectionRemove = new QPushButton(tr("Remove Section"), row);
     m_sectionRemove->setObjectName("stSectionRemove");
     m_sectionRemove->setToolTip(tr("Its cues join the section before; no cue is deleted"));
     connect(m_sectionRemove, &QPushButton::clicked, this, [this]() {

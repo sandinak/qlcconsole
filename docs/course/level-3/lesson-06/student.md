@@ -77,7 +77,7 @@ softer.
    file goes beside your show.
 3. Click the **Lighting Studio** tab (⇧⌘3); open **View → Rig Overview**
    (⇧⌘R) beside it.
-4. In **Plot layers** → **Stage**, click the eye on **Centre line / DSC
+4. In **Plot Layers** → **Stage**, click the eye on **Centre line / DSC
    mark**, **Curtain line** and **Number line**.
 
    ![The stage marks](../../images/lesson-3-6/stage-marks.png)
@@ -123,7 +123,7 @@ softer.
     AT-Spots colour White dimmer Full aim "Soloist DS"
     ```
 
-22. On the cue's page: **Focus ▾ → Focus this cue…**.
+22. On the cue's page: **Focus ▾ → Focus This Cue…**.
 23. Press **,** twice, then **Return**: the cue gets a **Zoom** row; the
     venue focus is unchanged.
 24. Press **G** until the panel says **Fixture**, **→** twice, **Return**:

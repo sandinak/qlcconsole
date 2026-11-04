@@ -907,7 +907,7 @@ void FocusMode_Test::aDisconnectFallsBackToTheKeyboard()
     QVERIFY(!panel->findChild<QToolButton *>("focusUseController")->isEnabled());
     QVERIFY(QSettings().value("focusmode/inputDevice").toString().isEmpty());
 
-    /* Back: it takes over by itself (RC2: "Use the controller" was the only
+    /* Back: it takes over by itself (RC2: "Use the Controller" was the only
        way back, and nobody saw it), and says so. */
     plugInPad();
     QCOMPARE(s->inputDevice(), FocusSession::ControllerInput);
@@ -1042,7 +1042,7 @@ void FocusMode_Test::theKeysNudgingHoldTheTakeoverABeat()
     plugInPad();
     QCOMPARE(s->inputDevice(), FocusSession::KeyboardInput);
     QVERIFY2(note->text().contains("takes over when the keys stop"), qPrintable(note->text()));
-    QVERIFY2(note->text().contains("Use the controller"), qPrintable(note->text()));
+    QVERIFY2(note->text().contains("Use the Controller"), qPrintable(note->text()));
     QVERIFY(back->isVisible());
     QTRY_COMPARE_WITH_TIMEOUT(s->inputDevice(), FocusSession::ControllerInput, 3000);
     QVERIFY2(note->text().startsWith("Controller back"), qPrintable(note->text()));
@@ -1067,12 +1067,12 @@ void FocusMode_Test::aChosenKeyboardIsKeptAndSaysWhatToPress()
     QLabel *note = panel->findChild<QLabel *>("focusInputNote");
     QPushButton *back = panel->findChild<QPushButton *>("focusControllerBack");
     QVERIFY(note->isVisible());
-    QVERIFY2(note->text().contains("click Use the controller"), qPrintable(note->text()));
+    QVERIFY2(note->text().contains("click Use the Controller"), qPrintable(note->text()));
     QVERIFY(back->isVisible());
     QStringList lines;
     for (const QList<QVariant> &l : said)
         lines << l.at(0).toString();
-    QVERIFY2(lines.contains("Keyboard in use. Click Use the controller to switch."),
+    QVERIFY2(lines.contains("Keyboard in use. Click Use the Controller to switch."),
              qPrintable(lines.join(" | ")));
     back->click();
     QCOMPARE(s->inputDevice(), FocusSession::ControllerInput);

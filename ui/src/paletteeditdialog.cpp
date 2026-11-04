@@ -119,7 +119,7 @@ void PaletteEditDialog::buildUi()
         m_typeCombo->addItem(tr(t.label), int(t.type));
     form->addRow(tr("Type"), m_typeCombo);
 
-    m_colorButton = new QPushButton(tr("Pick color…"), this);
+    m_colorButton = new QPushButton(tr("Pick Color…"), this);
     form->addRow(tr("Color"), m_colorButton);
 
     m_value1Label = new QLabel(tr("Value"), this);

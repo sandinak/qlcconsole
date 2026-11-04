@@ -702,13 +702,13 @@ void EncoderBankUi_Test::theControlMapPanelLearnsBankButtonsAndRings()
         QVERIFY(m_doc->controlMap()->isListening());
         m_doc->controlMap()->handleInput(universe, channel, 127);
         QVERIFY(!m_doc->controlMap()->isListening());
-        QCOMPARE(more->text(), QString("Learn more…"));
+        QCOMPARE(more->text(), QString("Learn More…"));
     };
     QVERIFY(action("encoderLearnPushes") && action("encoderLearnNext") && action("encoderLearnPrevious")
             && action("encoderLearnDirect") && action("encoderLearnRings") && action("encoderForget"));
 
     action("encoderLearnNext")->trigger();
-    QVERIFY(more->text() != QString("Learn more…"));       // it says what it waits for
+    QVERIFY(more->text() != QString("Learn More…"));       // it says what it waits for
     m_doc->controlMap()->handleInput(0, 60, 127);
     QCOMPARE(enc->device().bankNext, 60);
     QCOMPARE(enc->device().encoders, qint32(kTurn));          // the rest is kept

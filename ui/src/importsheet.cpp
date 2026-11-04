@@ -464,7 +464,7 @@ QString ImportSheet::html(Doc *doc, const ShowTreeController::ImportReport &rep,
         h += QStringLiteral("</ul>");
         h += QStringLiteral("<p><small>%1</small></p>").arg(esc(
             tr("A scene with channel values of its own can become palettes: select its ▣ row in the tree and "
-               "Capture into palettes… (checked channel for channel; the scene is kept).")));
+               "Capture into Palettes… (checked channel for channel; the scene is kept).")));
     }
 
     if (!rep.htpConflicts.isEmpty())

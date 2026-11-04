@@ -2771,7 +2771,7 @@ void AppViews_Test::upgradingAClassicShowOffersTheConsoleView()
     QCOMPARE(opened, 2);
     QCOMPARE(m_app->workspaceView(), App::ClassicView);   // offered, not done
     QVERIFY(m_app->m_viewNotice->isVisible());
-    QCOMPARE(m_app->m_viewNoticeButton->text(), QString("Switch to the qlcconsole view"));
+    QCOMPARE(m_app->m_viewNoticeButton->text(), QString("Switch to the qlcconsole View"));
     viewShot(m_app, "view-upgrade-offer.png");
     // Once: dismissed, another upgrade doesn't ask again.
     m_app->hideViewNotice();
@@ -2806,7 +2806,7 @@ void AppViews_Test::aShowTreeShowSaysSoInClassic()
     QLabel *text = notice->findChild<QLabel *>("footerShowTreeNoticeText");
     QVERIFY(text != nullptr);
     QCOMPARE(text->text(), QString("This show uses the Show Tree. Open the qlcconsole view to edit it."));
-    QCOMPARE(button->text(), QString("Switch to the qlcconsole view"));
+    QCOMPARE(button->text(), QString("Switch to the qlcconsole View"));
 
     // Classic stays stock QLC+: no Show Tree or Run tab.
     const QStringList classicTabs = App::workspaceViewTabs(App::ClassicView);

@@ -350,8 +350,8 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     const QStringList names = { tr("Built-in"), tr("Mine"), tr("This show") };
     const QStringList tips = {
         tr("The effects that come with qlcconsole"),
-        tr("Effects saved on this computer with Save to My effects…: in any show"),
-        tr("This show's effect palettes (Save in this show…): picking one copies it into the look") };
+        tr("Effects saved on this computer with Save to My Effects…: in any show"),
+        tr("This show's effect palettes (Save in This Show…): picking one copies it into the look") };
     const char *objs[] = { "effectOriginBuiltIn", "effectOriginMine", "effectOriginShow" };
     for (int i = 0; i < 3; ++i)
     {

@@ -57,7 +57,7 @@ Put the problem on the board with the clock: "7:20. The lanterns are dark in son
 
 1. Open the start file. Click **Review**: read two rows aloud, and hover for why it matters. Show that a warning answers where it shows: hover a **⚠ cyc** mark on a cue, right-click it (**I Meant It** turns it green **cyc ✓**, **Not a Problem…** hides it, **Not Meant: Show Me the Layer**, **Open in Show Review**). A closed main curtain now stops its cyc light being flagged.
 2. CUE-02: **Fix ▸**, Block at section start, **Re-check**: five findings gone.
-3. VC-03: **Not a Problem…**; show the note on the Accepted filter.
+3. VC-03: **Not a Problem…**; show the note on the Not a Problem filter.
 4. Right-click a lantern → **Why is this on?** Read *Why it isn't on* top to bottom.
 5. The Run tab's fader name, double-click: full. Then Solo on a layer.
 
@@ -107,4 +107,4 @@ The [Level 3 check](level-check.md) is here: the preshow check and a song on the
 
 ## How this lesson was checked
 
-The course test (`ui/test/courseshow`, `levelThreeWithTheMouse` and `lessonThreeNineFindsTheFaults`) does the steps offscreen on the real app: Show Review on the start file finds CUE-02, CUE-01, VC-03 and the rest, **Block at section start** ticked, VC-03 accepted with a note, the re-check with neither CUE-02 nor VC-03 open; "Why is this on?" on a lantern naming the group master at 0 %; the master restored and the lanterns lit; and Solo on the cyc layer (the lanterns go out) and off. It doesn't drive the Review panel's buttons, the Run tab's fader, or the ⌘I window. `levelThreePictures` (with `COURSE_SHOTS=docs/course/images`) takes this lesson's pictures, in `images/lesson-3-9/`: the Review panel, why the Lanterns aren't on, and Solo on a layer.
+The course test (`ui/test/courseshow`, `levelThreeWithTheMouse` and `lessonThreeNineFindsTheFaults`) does the steps offscreen on the real app: Show Review on the start file finds CUE-02, CUE-01, VC-03 and the rest, **Block at section start** ticked, VC-03 marked Not a Problem with a note, the re-check with neither CUE-02 nor VC-03 open; "Why is this on?" on a lantern naming the group master at 0 %; the master restored and the lanterns lit; and Solo on the cyc layer (the lanterns go out) and off. It doesn't drive the Review panel's buttons, the Run tab's fader, or the ⌘I window. `levelThreePictures` (with `COURSE_SHOTS=docs/course/images`) takes this lesson's pictures, in `images/lesson-3-9/`: the Review panel, why the Lanterns aren't on, and Solo on a layer.

@@ -299,7 +299,7 @@ void ShowReviewMarker::fillMenu(ContextMenu &menu, Doc *doc, const QList<ReviewF
             add(tr("Not a Problem…"), [doc, f, parent]() { notAProblem(doc, f, parent); },
                 QStringLiteral("reviewAccept"),
                 tr("It doesn't matter here: say why. The warning is hidden on the cue and listed in Show "
-                   "Review under Accepted; the note is saved with the show, and the finding comes back "
+                   "Review under Not a Problem; the note is saved with the show, and the finding comes back "
                    "if what it's about changes."));
         }
         else if (!f.checkOff)

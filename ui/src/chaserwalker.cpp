@@ -158,7 +158,7 @@ ChaserWalker::ChaserWalker(FunctionStack *stack, QWidget *parent)
     m_shared->setWordWrap(true);
     m_shared->setStyleSheet(QStringLiteral("QLabel { color: #d08a2a; }"));
     shared->addWidget(m_shared, 1);
-    m_ownCopy = new QPushButton(tr("Make this step's own copy"), this);
+    m_ownCopy = new QPushButton(tr("Make This Step's Own Copy"), this);
     m_ownCopy->setObjectName(QStringLiteral("walkerOwnCopy"));
     m_ownCopy->setToolTip(tr("Split it off: this step plays a copy of its own, and an edit here changes "
                              "only this step. One step on the history."));
@@ -207,7 +207,7 @@ ChaserWalker::ChaserWalker(FunctionStack *stack, QWidget *parent)
         if (m_stack != nullptr)
             m_stack->moveStep(m_stack->step(), m_stack->step() + 1);
     });
-    m_removeStep = tool(tr("Remove step"), QStringLiteral("walkerRemoveStep"),
+    m_removeStep = tool(tr("Remove Step"), QStringLiteral("walkerRemoveStep"),
                         tr("Take the step out of the chaser; its function stays in the show"));
     connect(m_removeStep, &QToolButton::clicked, this, [this]() {
         if (m_stack != nullptr)

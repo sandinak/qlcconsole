@@ -69,7 +69,7 @@ Roles: **Driver** (mouse), **Navigator** (reads each step), **Designer**
    ![The Show Tree tab](../../images/lesson-1-1/showtree-tab.png)
 
 5. **+ Production**, type `Spring Show`, **OK**.
-6. **+ Cue list**, type `01-Everybody Scream`, **OK**.
+6. **+ Cue List**, type `01-Everybody Scream`, **OK**.
 
    {% include inapp.html do="Add a second song later" path="+ Section" see="GO plays one list, so a show has one. Each song is a **section** of it, numbered from its own first number (2.… for song 2). **+ Section** starts the next; don't make a second list." %}
 7. **+ Cue**, type `Pose`, press **Return**: **1.0.0 Pose**.

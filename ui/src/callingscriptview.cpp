@@ -411,18 +411,18 @@ CallingScriptView::CallingScriptView(Doc *doc, quint32 productionId, QWidget *pa
     m_import = new QPushButton(tr("Import…"), this);
     m_import->setObjectName(QStringLiteral("scriptImport"));
     m_import->setToolTip(tr("Use a plain text or Markdown file as the script or lyrics"));
-    m_edit = new QPushButton(tr("Edit text"), this);
+    m_edit = new QPushButton(tr("Edit Text"), this);
     m_edit->setObjectName(QStringLiteral("scriptEdit"));
     m_edit->setCheckable(true);
     m_edit->setToolTip(tr("Type or paste the script. Cues keep to their words as the text changes"));
     m_cue = new QComboBox(this);
     m_cue->setObjectName(QStringLiteral("scriptCue"));
-    m_cue->setToolTip(tr("The cue Cue here places. Drag a cue from the Show Tree onto a word instead"));
+    m_cue->setToolTip(tr("The cue Cue Here places. Drag a cue from the Show Tree onto a word instead"));
     m_cue->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    m_here = new QPushButton(tr("Cue here"), this);
+    m_here = new QPushButton(tr("Cue Here"), this);
     m_here->setObjectName(QStringLiteral("scriptCueHere"));
     m_here->setToolTip(tr("Call this cue's GO at the selected text (or the cursor)"));
-    m_standby = new QPushButton(tr("Standby here"), this);
+    m_standby = new QPushButton(tr("Standby Here"), this);
     m_standby->setObjectName(QStringLiteral("scriptStandbyHere"));
     m_standby->setToolTip(tr("Call this cue's standby at the selected text (or the cursor)"));
     m_follow = new QCheckBox(tr("Follow"), this);
@@ -446,8 +446,8 @@ CallingScriptView::CallingScriptView(Doc *doc, quint32 productionId, QWidget *pa
     root->addLayout(bar);
 
     m_text = new CallingScriptEdit(this);
-    m_text->setPlaceholderText(tr("Paste the script or lyrics here (Edit text), or Import… a .txt or .md file. "
-                                  "Then select a word and press Cue here, or drag a cue from the Show Tree onto it."));
+    m_text->setPlaceholderText(tr("Paste the script or lyrics here (Edit Text), or Import… a .txt or .md file. "
+                                  "Then select a word and press Cue Here, or drag a cue from the Show Tree onto it."));
     root->addWidget(m_text, 1);
     m_summary = new QLabel(this);
     m_summary->setObjectName(QStringLiteral("scriptSummary"));

@@ -156,18 +156,18 @@ patch; **Not ours** and the clash check work either way.
   venue** (the venue's own, or the show's), and **Not ours** (type
   `all`, a range such as `401-512`, or several: `1-24, 500-512`).
 - **Keep this patch for Lincoln HS** makes the outputs on the
-  Connections tab now the venue's; **Use the show's patch** forgets them.
+  Connections tab now the venue's; **Use the Show's Patch** forgets them.
 - **Clash check**: what clashes now.
 
 ## The clash check
 
-**Apply now** (in the focus calls list, beside the venue), or **Switch
+**Apply Now** (in the focus calls list, beside the venue), or **Switch
 venue ▸** in the venue menu, first lists what clashes with the show, with
 **Apply anyway** or **Cancel** (the default). Once a venue is applied, the
 footer's chip turns amber with the count while anything clashes, and
 **Clashes (n)…** in its menu opens the list.
 Starting the focus calls on a venue applies it without asking, so press
-Apply now first in a new room:
+Apply Now first in a new room:
 
 - **Overlap**: two fixtures on the same addresses in a universe, at
   least one of them the room's: a house fixture and a tour or rental

@@ -3332,7 +3332,7 @@ void ShowTreeView_Test::everyActionIsOneUndoStep()
     QVERIFY(oneStep("Record", [&] { return view.recordFrom(c1) != invalidId(); }));
     QVERIFY(oneStep("Duplicate cue", [&] { return st->duplicateCue(c1) != invalidId(); }));
     QVERIFY(oneStep("Rename a layer", [&] { return st->renameNode(merged, "Front"); }));
-    QVERIFY(oneStep("Detach to plain scene", [&] {
+    QVERIFY(oneStep("Detach to Plain Scene", [&] {
         return st->detachLayer(c2, layerOn(c2, pars->id())) != Function::invalidId();
     }));
     QVERIFY(oneStep("Delete a layer", [&] {
@@ -5393,7 +5393,7 @@ void ShowTreeView_Test::looksSectionInTheTree()
     QCOMPARE(qobject_cast<Collection *>(m_doc->function(st->cue(hit)->collection))->hitFadeIn(), 1500u);
     QVERIFY(view.selectNode(hit));
     QCOMPARE(hitIn->value(), 1.5);
-    QVERIFY(fired->text().contains("Make VC page"));
+    QVERIFY(fired->text().contains("Make VC Page"));
     // 0.4: Override on its page, "override" on its row; one undo step.
     QCheckBox *over = view.findChild<QCheckBox *>("stHitOverride");
     QVERIFY(over != nullptr);
@@ -7550,7 +7550,7 @@ void ShowTreeView_Test::upgradeThisShow()
     view.updateBridgeBanner();
     QPushButton *bannerButton = view.bridgeBanner()->findChild<QPushButton *>("stBridgeUpgrade");
     QVERIFY(bannerButton != nullptr);
-    QCOMPARE(bannerButton->text(), QString("Upgrade this show…"));
+    QCOMPARE(bannerButton->text(), QString("Upgrade This Show…"));
 
     QString planText, untickedText, afterText;
     QStringList results;
@@ -7612,7 +7612,7 @@ void ShowTreeView_Test::upgradeThisShow()
     // reading): captured where it is set, the capture tracks in with it.
     QVERIFY2(all.contains("Haze: captured into palettes in 1 cue(s), 0 channels differ."), qPrintable(all));
     QVERIFY2(afterText.contains("Full Show | Upgraded already: cue list Full Show (Restore original puts the "
-                                "chaser back). | [Restore original…]"), qPrintable(afterText));
+                                "chaser back). | [Restore Original…]"), qPrintable(afterText));
     QVERIFY2(afterText.contains("takes the whole upgrade back as one step"), qPrintable(afterText));
 
     const CueList *list = st->cueList(listId);
@@ -7722,7 +7722,7 @@ void ShowTreeView_Test::upgradeListsWhatIsUpgradedAlready()
         QPushButton *restore = c->restoreButton(listId);
         QVERIFY(restore != nullptr);
         QVERIFY(restore->isEnabled());
-        QCOMPARE(restore->text(), QString("Restore original…"));
+        QCOMPARE(restore->text(), QString("Restore Original…"));
         c->resize(900, 600);
         c->show();
         QVERIFY(QTest::qWaitForWindowExposed(c));
@@ -7740,9 +7740,9 @@ void ShowTreeView_Test::upgradeListsWhatIsUpgradedAlready()
     QCOMPARE(opened, 2);
     const QString name = chaser->name();
     for (const QString &want : { QString("    %1 | Upgraded already: cue list %1 (Restore original puts the chaser "
-                                         "back). | [Restore original…]").arg(name),
+                                         "back). | [Restore Original…]").arg(name),
                                  QString("Nothing left to upgrade: every cue-list chaser of this show is a Show "
-                                         "Tree cue list already. Restore original… on its row puts one back."),
+                                         "Tree cue list already. Restore Original… on its row puts one back."),
                                  QString("1 chaser(s) belong to the Show Tree's own cue lists, and aren't listed.") })
         QVERIFY2(text.contains(want), qPrintable(want + " not in:\n" + text));
     // The Show Tree's own chaser (the same name) isn't a row.

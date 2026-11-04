@@ -23,7 +23,7 @@ it now, from what the console sent on the last frame:
 - a Show Tree cue and layer, and where the value came from (*tracked from
   cue 1.0.1 Verse*, *from included cue*, *back to the base cue*);
 - an **override hit**, an **effect** and its depth while it fades in or
-  out, **Park**, **Highlight**, **Flash**, **Quick focus** and **Refine**,
+  out, **Park**, **Highlight**, **Flash**, **Quick Focus** and **Refine**,
   the **Simple Desk**, a **VC slider** or the widget that started a
   function, the programmer, a Design-mode **preview**;
 - then what changes it on the way out: a **group master** and the
@@ -197,7 +197,7 @@ face of what it hung on before; it is straightened when the show loads
 (and when it's hung) on this build. Re-open the show.
 
 **Something is missing from the Rig Overview.** Its layer is hidden — check
-the overview's **Plot layers** menu (or the Lighting Studio's Plot layers panel; it is
+the overview's **Plot Layers** menu (or the Lighting Studio's Plot layers panel; it is
 the same switch).
 
 **The Rig Overview is slow.** Make sure its **GPU** box is ticked, then
@@ -222,7 +222,7 @@ badge you can click.
 
 **The controller does nothing in Quick focus or Venue focus.** Look at
 the top of the panel. With **Use: Keyboard** chosen the pad is ignored on
-purpose: click **Use the controller**. If the panel names another pad,
+purpose: click **Use the Controller**. If the panel names another pad,
 that pad pressed Start first and has the tools: leave and start again
 from the pad you want. If the title says **HOLDING**, every light is
 held: click both sticks (or press H). **Controller paused:** says why

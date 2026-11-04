@@ -417,7 +417,7 @@
   }
   function addCue(name, focusName) {
     var r = targetList();
-    if (!r) return status('Click a cue list in the tree first (or make one with + Cue list).', false, true);
+    if (!r) return status('Click a cue list in the tree first (or make one with + Cue List).', false, true);
     var at = r.cue ? r.cueIdx + 1 : r.list.cues.length;
     var id;
     commit(function () {
@@ -629,7 +629,7 @@
       '</div>' +
       '<div class="toolbar" id="toolbar">' +
         '<button class="btn" type="button" data-act="add-prod">+ Production</button>' +
-        '<button class="btn" type="button" data-act="add-list">+ Cue list</button>' +
+        '<button class="btn" type="button" data-act="add-list">+ Cue List</button>' +
         '<button class="btn" type="button" data-act="add-cue">+ Cue</button>' +
         '<span class="sep"></span>' +
         '<button class="btn" type="button" data-act="delete">Delete</button>' +
@@ -829,7 +829,7 @@
         '<div class="field"><span class="k">Current</span><div class="v">' +
           (work.current === r.prod.id ? '▶ current — GO plays this production’s first cue list.' :
             '<button type="button" class="btn" data-act="make-current">Make current</button> <span class="sub">so GO plays it</span>') + '</div></div>' +
-        '<div class="field"><span class="k">Cue lists</span><div class="v">' + (r.prod.lists.length ? r.prod.lists.map(function (l) { return esc(l.name); }).join(', ') : '<span class="sub">none yet: click <b>+ Cue list</b></span>') + '</div></div>';
+        '<div class="field"><span class="k">Cue lists</span><div class="v">' + (r.prod.lists.length ? r.prod.lists.map(function (l) { return esc(l.name); }).join(', ') : '<span class="sub">none yet: click <b>+ Cue List</b></span>') + '</div></div>';
       return;
     }
     if (k === 'list') {
@@ -852,7 +852,7 @@
       '<p class="sub">Light the first three moments of “Everybody Scream”: Pose, Verse, Chorus. The steps are on the Lesson 1.1 handout and in the list beside the stage.</p>' +
       '<ol>' +
         '<li><b>+ Production</b>: <code>Spring Show</code></li>' +
-        '<li><b>+ Cue list</b>: <code>01-Everybody Scream</code></li>' +
+        '<li><b>+ Cue List</b>: <code>01-Everybody Scream</code></li>' +
         '<li><b>+ Cue</b> three times: Pose, Verse, Chorus</li>' +
         '<li>Drag a group from the Library onto each cue, then a colour and a level onto its row</li>' +
         '<li>Run tab: <b>GO</b> three times</li>' +
@@ -934,7 +934,7 @@
     var ranAll = pose && verse && chorus && ui.ran[pose.id] && ui.ran[verse.id] && ui.ran[chorus.id];
     return [
       ['+ Production: Spring Show', !!prod],
-      ['+ Cue list: 01-Everybody Scream', !!list],
+      ['+ Cue List: 01-Everybody Scream', !!list],
       ['+ Cue: 1.0.0 Pose', !!pose],
       ['Pose: drag TrussC-RGB onto the cue', !!layer(pose, 'trussc-rgb')],
       ['TrussC-RGB: Blue, Full', looks(layer(pose, 'trussc-rgb'), 'Blue', 'Full')],
@@ -991,7 +991,7 @@
     var go = document.getElementById('gobtn');
     if (!rl) {
       title.textContent = 'Nothing to run yet';
-      body.innerHTML = '<tr><td colspan="4" class="empty">GO plays the current production’s first cue list. Make one in the Show Tree tab: + Production, + Cue list, + Cue.</td></tr>';
+      body.innerHTML = '<tr><td colspan="4" class="empty">GO plays the current production’s first cue list. Make one in the Show Tree tab: + Production, + Cue List, + Cue.</td></tr>';
       document.getElementById('runstate').textContent = 'Stopped';
       document.getElementById('runwhat').textContent = '—';
       go.disabled = true;

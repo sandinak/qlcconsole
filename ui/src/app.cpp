@@ -21,6 +21,8 @@
 */
 
 #include <QScopeGuard>
+#include <QSizeGrip>
+#include <QStatusBar>
 #include <QTranslator>
 #include <QContextMenuEvent>
 #include <QMenu>
@@ -4807,6 +4809,70 @@ void App::resizeEvent(QResizeEvent *event)
 {
     QMainWindow::resizeEvent(event);
     updateStageIndicator();
+    if (m_statusFitTimer != nullptr)
+        m_statusFitTimer->start();
+}
+
+QList<QWidget *> App::statusChipsByPriority() const
+{
+    // What the stage shows, what is unsaved and the mode first (they are
+    // what a crew checks at a glance); then readiness and what holds the
+    // rig; the counters and the notices last.
+    const QList<QWidget *> order = {
+        m_statusStage, m_statusDirtyLabel, m_statusModeChipLabel,
+        m_statusModeLabel, m_statusOverridesChip, m_statusProgrammerLabel,
+        m_statusGrandMasterBox, m_statusReviewLabel, m_venueChip,
+        m_statusSelectionLabel, m_statusPadModeLabel,
+        m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
+        m_statusShowTreeNotice, m_statusTimecodeLabel, m_statusLoadLabel,
+        m_statusPowerLabel, m_statusDangleLabel, m_statusTimelineLabel
+    };
+    QList<QWidget *> out;
+    for (QWidget *w : order)
+        if (w != nullptr)
+            out << w;
+    return out;
+}
+
+void App::fitStatusBar()
+{
+    QStatusBar *sb = statusBar();
+    if (sb == nullptr || !sb->isVisible())
+        return;
+    const QList<QWidget *> chips = statusChipsByPriority();
+    const int gap = 6;                  // QStatusBar's spacing between items
+    int room = sb->width() - 2 * gap - (sb->isSizeGripEnabled() ? 20 : 0);
+    // What is not on the list (the Run controls, the spacers) keeps its place.
+    for (QWidget *w : sb->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
+        if (!chips.contains(w) && w->isVisibleTo(sb) && !qobject_cast<QSizeGrip *>(w))
+            room -= qMax(w->sizeHint().width(), w->minimumWidth()) + gap;
+    // A size hint does not move with the maximum width, so a squeezed chip
+    // is measured as it would be drawn: this is the same answer every time
+    // the sizes have not changed, and then nothing is touched.
+    for (QWidget *w : chips)
+    {
+        if (!w->isVisibleTo(sb))
+            continue;
+        const int want = qMax(qMax(w->sizeHint().width(), w->minimumSizeHint().width()), w->minimumWidth());
+        const bool fits = want + gap <= room;
+        room -= fits ? want + gap : gap;
+        const bool squeezed = w->property("statusSqueezed").toBool();
+        if (fits && squeezed)
+        {
+            // Back as it was (a chip of a fixed width has both ends set).
+            w->setProperty("statusSqueezed", false);
+            w->setMinimumWidth(w->property("statusMinWidth").toInt());
+            w->setMaximumWidth(w->property("statusMaxWidth").toInt());
+        }
+        else if (!fits && !squeezed)
+        {
+            w->setProperty("statusMinWidth", w->minimumWidth());
+            w->setProperty("statusMaxWidth", w->maximumWidth());
+            w->setProperty("statusSqueezed", true);
+            w->setMinimumWidth(0);
+            w->setMaximumWidth(0);
+        }
+    }
 }
 
 void App::slotFooterGrandMasterMoved(int value)
@@ -5578,7 +5644,7 @@ bool App::offerConsoleViewAfterUpgrade()
     m_upgradeOfferMade = true;
     showViewNotice(tr("This show now has a Show Tree. The qlcconsole view shows it, with Build "
                       "and Run, beside the QLC+ tabs you know."),
-                   tr("Switch to the qlcconsole view"),
+                   tr("Switch to the qlcconsole View"),
                    [this]() { setWorkspaceView(ConsoleView); });
     return true;
 }
@@ -7383,6 +7449,11 @@ QMenu *App::openVenueMenu()
 void App::initStatusBar()
 {
     QStatusBar* sb = statusBar();
+    m_statusFitTimer = new QTimer(this);
+    m_statusFitTimer->setSingleShot(true);
+    m_statusFitTimer->setInterval(0);
+    connect(m_statusFitTimer, &QTimer::timeout, this, &App::fitStatusBar);
+    sb->installEventFilter(this);       // a chip's size changed: fit again
 
     // Create mode label (far left). No stretch: a dedicated spacer centres the
     // global MTC/Load chips between the mode label and the right-hand chips.
@@ -7497,7 +7568,7 @@ void App::initStatusBar()
                                   m_statusShowTreeNotice);
         text->setObjectName(QStringLiteral("footerShowTreeNoticeText"));
         row->addWidget(text);
-        m_statusShowTreeButton = new QPushButton(tr("Switch to the qlcconsole view"), m_statusShowTreeNotice);
+        m_statusShowTreeButton = new QPushButton(tr("Switch to the qlcconsole View"), m_statusShowTreeNotice);
         m_statusShowTreeButton->setObjectName(QStringLiteral("footerShowTreeNoticeButton"));
         row->addWidget(m_statusShowTreeButton);
         QToolButton *close = new QToolButton(m_statusShowTreeNotice);
@@ -7924,6 +7995,10 @@ QMenu *App::tabContextMenu(int index)
 
 bool App::eventFilter(QObject *watched, QEvent *event)
 {
+    if (m_statusFitTimer != nullptr && watched == statusBar()
+        && (event->type() == QEvent::LayoutRequest || event->type() == QEvent::Resize
+            || event->type() == QEvent::Show))
+        m_statusFitTimer->start();
     /* The footer's "Unsaved changes": hover says how many, a click lists them. */
     if (watched == m_statusDirtyLabel && m_statusDirtyLabel != NULL && m_doc != NULL && m_doc->isModified())
     {
@@ -9115,7 +9190,7 @@ void App::updateReviewStatus()
         m_statusReviewLabel->setStyleSheet(blockers > 0 ? QStringLiteral("QLabel { color: #c0392b; font-weight: bold; }")
                                                         : QStringLiteral("QLabel { color: #b9770e; }"));
     }
-    const QString summary = tr("Show Review: %1 blockers, %2 warnings, %3 notes open; %4 accepted. "
+    const QString summary = tr("Show Review: %1 blockers, %2 warnings, %3 notes open; %4 marked Not a Problem. "
                                "Click for the Review panel.")
                             .arg(blockers).arg(warnings).arg(r.open[ReviewFinding::Note]).arg(accepted)
                             + QStringLiteral("\n") + ShowReviewMarker::stateSummary(m_doc);

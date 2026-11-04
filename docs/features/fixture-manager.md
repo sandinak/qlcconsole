@@ -343,7 +343,7 @@ with the sheet or the tape.
 
 ![The head-layout grid: the Pars group, eight fixtures in a row with per-head labels](../images/fixture-manager-grid-editor.png)
 
-Select a group to open it: a name field, an "Add group as block…" button,
+Select a group to open it: a name field, an "Add Group as Block…" button,
 and a grid of cells. Each occupied cell shows the fixture's icon, name, head
 number, DMX address/universe, and a short tag for what that head actually
 is — `[RGB]`, `[RGBW]`, `[Wheel]`, `[W]`, `[Amber]` — derived from its real
@@ -358,7 +358,7 @@ channel makeup.
   place one head of a multi-head fixture without the rest.
 - **The four arrow buttons** on the right edge open a fixture/head picker
   and place selections advancing in that direction from the current cell.
-- **"Add group as block…"** pastes another whole group's layout in,
+- **"Add Group as Block…"** pastes another whole group's layout in,
   anchored at the selected cell, preserving its relative positions.
 
 ### Moving things around

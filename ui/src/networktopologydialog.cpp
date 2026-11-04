@@ -55,7 +55,7 @@ NetworkTopologyDialog::NetworkTopologyDialog(Doc *doc, int selectNode, QWidget *
     m_list = new QListWidget(this);
     left->addWidget(m_list, 1);
     QHBoxLayout *leftBtns = new QHBoxLayout;
-    m_addNodeBtn = new QPushButton(tr("Add node"), this);
+    m_addNodeBtn = new QPushButton(tr("Add Node"), this);
     m_removeNodeBtn = new QPushButton(tr("Remove"), this);
     leftBtns->addWidget(m_addNodeBtn);
     leftBtns->addWidget(m_removeNodeBtn);
@@ -94,8 +94,8 @@ NetworkTopologyDialog::NetworkTopologyDialog(Doc *doc, int selectNode, QWidget *
     right->addWidget(m_ports, 2);
 
     QHBoxLayout *portBtns = new QHBoxLayout;
-    m_addPortBtn = new QPushButton(tr("Add port"), this);
-    m_removePortBtn = new QPushButton(tr("Remove port"), this);
+    m_addPortBtn = new QPushButton(tr("Add Port"), this);
+    m_removePortBtn = new QPushButton(tr("Remove Port"), this);
     portBtns->addWidget(m_addPortBtn);
     portBtns->addWidget(m_removePortBtn);
     portBtns->addStretch();

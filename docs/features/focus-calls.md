@@ -69,7 +69,7 @@ the **Venue** before you start:
 - **None** — saves go into the show's own calibration, as Quick focus
   does.
 
-**Apply now** puts the chosen venue on the rig without starting the calls
+**Apply Now** puts the chosen venue on the rig without starting the calls
 (listing its clashes first: see [The clash check](venues.md#the-clash-check)).
 The **venue menu** does the same from anywhere: click the **Venue** chip
 in the footer, or **View ▸ Venue…**, or **Focus ▸ Venues** on the
@@ -502,7 +502,7 @@ letting go a short one):
   panel switches to the keyboard. When the pad is back the voice says
   "Controller back." and it drives again by itself (in Quick focus and
   Venue focus, once the keys are still; with Keyboard chosen, the panel
-  says to click **Use the controller**). Focus this cue takes it back at once.
+  says to click **Use the Controller**). Focus this cue takes it back at once.
   A tool started with no pad at all says "No controller connected. Using
   the keyboard." The keys work all the while;
 - **nothing reaching the rig**: Blackout on, the Grand Master at zero, or
