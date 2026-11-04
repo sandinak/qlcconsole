@@ -1897,13 +1897,18 @@ void EffectInstance_Test::followSpotMovesEveryHeadToTheSamePoint()
 void EffectInstance_Test::followSpotInARunningCueMovesWithTheStick_data()
 {
     QTest::addColumn<bool>("twoArms");
-    QTest::newRow("one head") << false;
-    QTest::newRow("two arms") << true;
+    QTest::addColumn<bool>("benchBusy");
+    QTest::newRow("one head") << false << false;
+    QTest::newRow("two arms") << true << false;
+    // Some other scene open in the Workbench, as there nearly always is:
+    // before 0.4.0 it kept the stick, and the cue's follow spot never moved.
+    QTest::newRow("a scene open in the Workbench") << true << true;
 }
 
 void EffectInstance_Test::followSpotInARunningCueMovesWithTheStick()
 {
     QFETCH(bool, twoArms);
+    QFETCH(bool, benchBusy);
 
     // A mover with 16-bit pan and a tilt per arm (one arm, or two on a 1 m bar).
     const int arms = twoArms ? 2 : 1;
@@ -1953,7 +1958,7 @@ void EffectInstance_Test::followSpotInARunningCueMovesWithTheStick()
     StageTarget *who = props->addStageTarget();
     who->setName("Witch");
     who->setKind(StageTarget::Kind::Person);
-    const QVector3D home(0.0f, 3.0f, 0.0f);
+    const QVector3D home(0.0f, 3.0f, benchBusy ? 0.61f : 0.0f);   // on a riser, or the floor
     who->setPosition(home);
 
     // The cue: a group layer with an Aim look on the subject and the follow
@@ -1985,7 +1990,18 @@ void EffectInstance_Test::followSpotInARunningCueMovesWithTheStick()
     MasterTimer ownTimer(m_doc);
     MasterTimer *timer = &ownTimer;
     ProgrammerController *pc = m_doc->programmer();
-    QVERIFY(pc->m_focusedSceneId == Function::invalidId());     // nothing open in the Workbench
+    Scene *bench = nullptr;
+    if (benchBusy)
+    {
+        // A plain scene on the same spots, open in the Workbench.
+        bench = new Scene(m_doc);
+        bench->setName("Wash");
+        m_doc->addFunction(bench);
+        bench->addFixtureGroup(grp->id());
+        pc->setFocusedScene(bench->id());
+    }
+    else
+        QVERIFY(pc->m_focusedSceneId == Function::invalidId());     // nothing open in the Workbench
     auto tick = [&]() {
         pc->applyDesignJoystick();
         timer->timerTick();
@@ -2042,6 +2058,7 @@ void EffectInstance_Test::followSpotInARunningCueMovesWithTheStick()
         last = now;
     }
     QVERIFY(who->position().x() > home.x() + 0.5f);
+    QCOMPARE(who->position().z(), home.z());       // walked at her own height
     QCOMPARE(int(pc->followSpotStatus().state), int(ProgrammerController::FollowSpotStatus::Moving));
     QVERIFY2(pc->followSpotStatusText().contains("Witch"), qPrintable(pc->followSpotStatusText()));
 
@@ -2053,6 +2070,13 @@ void EffectInstance_Test::followSpotInARunningCueMovesWithTheStick()
     for (int i = 0; i < 70; ++i)
         tick();
     QVERIFY((who->position() - home).length() < 1e-4f);
+    if (benchBusy)
+    {
+        // The Workbench's scene has the stick again (it has no follow spot,
+        // so it says nothing); closing it gives nothing back.
+        QCOMPARE(int(pc->followSpotStatus().state), int(ProgrammerController::FollowSpotStatus::Off));
+        pc->setFocusedScene(Function::invalidId());
+    }
     QCOMPARE(int(pc->followSpotStatus().state), int(ProgrammerController::FollowSpotStatus::Off));
     pc->clearAxisBindings();
 }

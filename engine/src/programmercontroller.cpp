@@ -3004,10 +3004,21 @@ void ProgrammerController::applyDesignJoystick()
 
             m_stageAimX = qBound(-50.0f, m_stageAimX + xVel * speed * dt, 50.0f);
             m_stageAimY = qBound(-50.0f, m_stageAimY + yVel * speed * dt, 50.0f);
-            m_beamHeldValid = true;   // a real beam position now exists (lastPosition)
+            /* A real beam position now exists (lastPosition) -- a follow
+               spot's only: a plain Aim look dragged (the Workbench's) is not
+               where the next cue's follow spot picks up from. */
+            if (hasFollowSpotLook(scene->id()))
+            {
+                m_beamHeldValid = true;
+                m_beamHeldX = m_stageAimX;
+                m_beamHeldY = m_stageAimY;
+            }
             m_followMovedClock.restart();
 
-            mProps->setTargetPositionIn(tgt, mProps->liveBlocking(), QVector3D(m_stageAimX, m_stageAimY, 0.0f));
+            // Across the floor at its own height: a person on a riser stays on it
+            // (z = 0 here put the subject on the floor and the beams dipped).
+            mProps->setTargetPositionIn(tgt, mProps->liveBlocking(),
+                                        QVector3D(m_stageAimX, m_stageAimY, tgt->positionIn(mProps->liveBlocking()).z()));
 
             // Both Design and Operate modes: the scene is running (preview or
             // operate-scene).  resetRuntime() clears the fader map so the next
@@ -3763,10 +3774,12 @@ void ProgrammerController::setFocusedScene(quint32 sceneId)
     }
     m_stageAimValid = false;
 
-    // A scene opened in the Workbench takes the stick from a running cue's
-    // follow spot (Persist keeps its subject where it is; else it glides
-    // back). Nothing opened (the Show Tree's rows) leaves it alone.
-    if (sceneId != Function::invalidId())
+    // A follow spot opened in the Workbench takes the stick from a running
+    // cue's (Persist keeps its subject where it is; else it glides back).
+    // Any other scene there leaves the cue's alone: the Workbench nearly
+    // always holds some scene, and until 0.4.0 that alone kept the stick
+    // from every cue's follow spot.
+    if (sceneId != Function::invalidId() && hasFollowSpotLook(sceneId))
         endLiveFollow(Function::invalidId());
 
     // Entering a follow-spot scene that aims at an existing target: start the
@@ -3779,7 +3792,7 @@ void ProgrammerController::seedStageAimFromScene(quint32 sceneId)
 {
     // Nothing open, while a running cue's follow spot has the stick: its
     // subject stays where it is (endLiveFollow() decides when it goes back).
-    if (sceneId == Function::invalidId() && m_liveFollowSceneId != Function::invalidId())
+    if (m_liveFollowSceneId != Function::invalidId() && !hasFollowSpotLook(sceneId))
         return;
     seedStageAim(sceneId, m_doc->mode() == Doc::Operate);
 }
@@ -3815,7 +3828,10 @@ void ProgrammerController::seedStageAim(quint32 sceneId, bool transient)
                 m_aimRestoreTgtId = p->stageTargetId();
                 m_aimRestoreOrig  = tgt->positionIn(mProps->liveBlocking());
                 m_aimRestoreValid = true;
-                mProps->setTargetPositionIn(tgt, mProps->liveBlocking(), QVector3D(m_stageAimX, m_stageAimY, 0.0f));
+                m_stageAimX = m_beamHeldX;
+                m_stageAimY = m_beamHeldY;
+                mProps->setTargetPositionIn(tgt, mProps->liveBlocking(),
+                                            QVector3D(m_stageAimX, m_stageAimY, m_aimRestoreOrig.z()));
                 m_stageAimValid = true;
                 if (Scene *s = qobject_cast<Scene*>(m_doc->function(sceneId)))
                     s->requestReaim();
@@ -4031,10 +4047,28 @@ bool ProgrammerController::endLiveFollow(quint32 next)
     return false;
 }
 
+bool ProgrammerController::hasFollowSpotLook(quint32 sceneId) const
+{
+    const Scene *scene = qobject_cast<const Scene *>(m_doc->function(sceneId));
+    if (scene == nullptr)
+        return false;
+    for (quint32 pid : scene->palettes())
+        if (isFollowSpotPalette(m_doc->palette(pid)))
+            return true;
+    return false;
+}
+
 Scene *ProgrammerController::joystickScene()
 {
+    /* Who has the stick: a follow spot open in the Workbench (it is being
+       programmed), else the follow spot of a cue playing now, else the
+       Workbench's scene (its Aim look is dragged). Before 0.4.0 any scene
+       open in the Workbench won -- and one nearly always is, so a cue's
+       follow spot never moved and nothing said it was following. */
+    const bool benchFollows = m_focusedSceneId != Function::invalidId()
+                              && hasFollowSpotLook(m_focusedSceneId);
     quint32 live = Function::invalidId();
-    if (m_focusedSceneId == Function::invalidId())
+    if (!benchFollows)
     {
         // Look the running cues over ten times a second, not on every tick.
         if (m_liveFollowScanTicks <= 0)
@@ -4063,7 +4097,7 @@ Scene *ProgrammerController::joystickScene()
         }
     }
 
-    const quint32 id = m_focusedSceneId != Function::invalidId() ? m_focusedSceneId : live;
+    const quint32 id = live != Function::invalidId() ? live : m_focusedSceneId;
     return id == Function::invalidId() ? nullptr : qobject_cast<Scene*>(m_doc->function(id));
 }
 
@@ -4083,7 +4117,7 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
         if (st.paletteId != UINT_MAX)
         {
             st.sceneId = scene->id();
-            st.live = scene->id() == m_liveFollowSceneId && m_focusedSceneId == Function::invalidId();
+            st.live = scene->id() == m_liveFollowSceneId;
             if (!m_panBound && !m_tiltBound)
                 st.state = FollowSpotStatus::NoStick;
             else if (m_followMovedClock.isValid() && m_followMovedClock.elapsed() < 400)

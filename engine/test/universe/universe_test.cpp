@@ -73,6 +73,31 @@ void Universe_Test::initial()
     }
 }
 
+/* The effect scripts' fader is Override and on top of its priority: a Show
+   Tree preview's scene (Override too) started after it stays under it, so
+   the effect is seen on the second cue selected as on the first. Above
+   Override (an override hit) still goes over it. */
+void Universe_Test::aTopFaderStaysAboveLaterFadersOfItsPriority()
+{
+    QSharedPointer<GenericFader> first = m_uni->requestFader(Universe::Override);
+    QSharedPointer<GenericFader> effects = m_uni->requestTopFader(Universe::Override);
+    QSharedPointer<GenericFader> later = m_uni->requestFader(Universe::Override);
+    QSharedPointer<GenericFader> autoOne = m_uni->requestFader(Universe::Auto);
+    QSharedPointer<GenericFader> hit = m_uni->requestFader(Universe::HitOverride);
+    QVERIFY(effects->onTopOfPriority());
+    QList<QSharedPointer<GenericFader> > order = m_uni->faders();
+    QCOMPARE(order.indexOf(autoOne), 0);
+    QVERIFY(order.indexOf(first) < order.indexOf(effects));
+    QVERIFY(order.indexOf(later) < order.indexOf(effects));
+    QVERIFY(order.indexOf(effects) < order.indexOf(hit));
+
+    // A scene raised to Override afterwards (an edit preview) goes under it too.
+    m_uni->requestFaderPriority(autoOne, Universe::Override);
+    order = m_uni->faders();
+    QVERIFY(order.indexOf(autoOne) < order.indexOf(effects));
+    QVERIFY(order.indexOf(effects) < order.indexOf(hit));
+}
+
 void Universe_Test::blindIsSeenFromTheOutputThread()
 {
     QVERIFY(m_uni->inhibitOutput() == false);

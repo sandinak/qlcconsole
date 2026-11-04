@@ -351,6 +351,27 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **The follow spot in a cue follows the stick, wherever you run it
+  from.** Selecting 1.1.2 in the Show Tree, GO in Run, GO in Operate:
+  the AT-Spots now follow ES-Witch as the stick moves her. Any scene open
+  in the Workbench used to keep the stick to itself -- and one nearly
+  always is (the last thing opened in Build) -- so a cue's follow spot
+  never moved, and every indicator said "off". Now only a follow spot open
+  in the Workbench takes the stick from the cue's. The subject also keeps
+  its height while it moves (on a riser it stayed on the floor before,
+  and the beams dipped).
+- **Selecting a cue shows its effects every time.** In the Show Tree the
+  first cue selected breathed and the next ones held still (DanceHysteria's
+  Ahhs sub-cues, one Breathe over them): while any effect kept playing --
+  the lanterns' flicker -- a newly selected cue's look was laid over the
+  effects instead of under them. Effects now always sit on top of the cue
+  they play in, whichever cue you pick, in any order, again and back.
+- **See the follow spot from any tab.** A footer chip, **◎ Follow:
+  AT-Spots ← ES-Witch · stick moving** (green moving, amber holding, red
+  with no stick), shows while a follow spot is on -- in the Show Tree, the
+  Run tab and Operate alike; the rig view's ring and lines and the Show
+  Tree's **follow** flag light for a cue's follow spot too now.
+
 - **⌘D on a Show Tree cue duplicates again** (W1-27). In the full app the
   Show Tree's ⌘D and Control ▸ Dump DMX's Ctrl+D were the same key, so
   neither fired: a selected cue was not duplicated and no dump opened.

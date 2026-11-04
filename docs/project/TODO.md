@@ -176,6 +176,30 @@ docs/design/AREA_COVER.md. Changes the DMX of existing area aims
   everyone in its path: no shadowing by the people in front.
 - No "point at the centre" option: add one only if a show needs it.
 
+## A cue's follow spot and effects, every time (fix/04-cue-fires-effects, 2026-11-04) -- built
+
+"Followspot STILL NOT WORKING in 1.1.2 ... and no indicator" and "selecting
+a cue doesn't always fire its effect". Reproduced on a copy of
+DanceHysteria-0.6. Two causes:
+1. Any scene open in the Workbench kept the stick (`joystickScene()` only
+   looked at running cues with nothing open), and one nearly always is: no
+   follow, status Off, so no indicator. Now only a follow spot open there
+   takes it; a cue's follow spot wins over any other Workbench scene. The
+   subject keeps its height (z) while it moves; the held beam
+   (lastPosition) is the follow spot's only.
+2. The effect scripts' fader is Override, and a Show Tree preview's scene
+   faders are Override too: one requested later went above it, so from the
+   second cue selected on (while any effect kept the fader alive) a dimmer
+   or position effect was covered. `Universe::requestTopFader()` keeps it
+   on top of its priority.
+Footer chip **◎ Follow: AT-Spots ← ES-Witch · stick moving** on every tab.
+Tests: `FollowSpotCue_Test` (gate: `aCueFollowSpotMovesFromEveryRoute`,
+`everyCueSelectedShowsItsEffect`; `QLC_FSPOT_SHOW=<show>`: `hisShow`,
+`everyCueFiresItsEffects`), `Universe_Test::aTopFaderStaysAboveLaterFadersOfItsPriority`,
+`EffectInstance_Test::followSpotInARunningCueMovesWithTheStick` ("a scene
+open in the Workbench"). Open: an effect inside an override hit is still
+under the hit's own (HitOverride) faders. Move to DONE.md when landed.
+
 ## Follow spot in a cue doesn't move (fix/04-followspot, 2026-11-03) -- done
 
 "1.1.2 has a follow spot on tspots.. and it doesn't move." Cause: the stick

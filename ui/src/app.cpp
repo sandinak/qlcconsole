@@ -144,6 +144,8 @@
 #include "chaserstep.h"
 #include "showcontrol.h"
 #include "fixturegroup.h"
+#include "stagetarget.h"
+#include "scene.h"
 #include "qlcfile.h"
 #include "legacysettings.h"
 #include "apputil.h"
@@ -4830,7 +4832,7 @@ QList<QWidget *> App::statusChipsByPriority() const
     // rig; the counters and the notices last.
     const QList<QWidget *> order = {
         m_statusStage, m_statusDirtyLabel, m_statusModeChipLabel,
-        m_statusModeLabel, m_statusOverridesChip, m_statusProgrammerLabel,
+        m_statusFollowLabel, m_statusModeLabel, m_statusOverridesChip, m_statusProgrammerLabel,
         m_statusGrandMasterBox, m_statusReviewLabel, m_venueChip,
         m_statusSelectionLabel, m_statusPadModeLabel,
         m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
@@ -7872,6 +7874,15 @@ void App::initStatusBar()
     m_statusPadModeLabel->hide();
     sb->addPermanentWidget(m_statusPadModeLabel);
 
+    // The follow spot at work, wherever you are (Show Tree, Run, Operate):
+    // shown only while a follow spot is on.
+    m_statusFollowLabel = new QLabel(this);
+    m_statusFollowLabel->setObjectName(QStringLiteral("footerFollow"));
+    m_statusFollowLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_statusFollowLabel->setProperty("helpTopic", QStringLiteral("stage-targets.md"));
+    m_statusFollowLabel->hide();
+    sb->addPermanentWidget(m_statusFollowLabel);
+
 
     // The one override indicator (Q80): hidden unless something holds the
     // rig over the show; a click lets go of all of it.
@@ -7994,6 +8005,10 @@ void App::initStatusBar()
         slotProgrammerDirtyChanged(m_doc->isProgrammerDirty());
         slotProgrammerSelectionChanged();
         slotPadModeChanged(m_doc->padMode());
+        if (m_doc->programmer() != nullptr)
+            connect(m_doc->programmer(), &ProgrammerController::followSpotStatusChanged,
+                    this, &App::updateFollowChip);
+        updateFollowChip();
     }
 
     // A source registers into ShowStatus, not into this widget directly
@@ -8994,6 +9009,59 @@ void App::slotPadModeChanged(Doc::PadMode mode)
         tr("<span style='color:%1;font-weight:bold;'>"
            "▦ Pad: %2</span>").arg(color).arg(label));
     m_statusPadModeLabel->show();
+}
+
+void App::updateFollowChip()
+{
+    if (m_statusFollowLabel == nullptr || m_doc == nullptr || m_doc->programmer() == nullptr)
+        return;
+    using Status = ProgrammerController::FollowSpotStatus;
+    ProgrammerController *pc = m_doc->programmer();
+    const Status st = pc->followSpotStatus();
+    if (st.state == Status::Off)
+    {
+        m_statusFollowLabel->hide();
+        return;
+    }
+    // Who follows: the look's groups (else its scene's name); whom: the subject.
+    QStringList who;
+    if (const Scene *scene = qobject_cast<const Scene *>(m_doc->function(st.sceneId)))
+    {
+        for (quint32 gid : scene->fixtureGroups())
+            if (const FixtureGroup *g = m_doc->fixtureGroup(gid))
+                who << g->name();
+        if (who.isEmpty())
+            who << scene->name();
+    }
+    QString text = who.join(QStringLiteral(", "));
+    if (st.targetId != UINT_MAX)
+        if (const StageTarget *t = m_doc->monitorProperties() != nullptr
+                                   ? m_doc->monitorProperties()->stageTarget(st.targetId) : nullptr)
+            text += QStringLiteral(" ← ") + t->name();
+    QString how, colour;
+    switch (st.state)
+    {
+    case Status::Moving:
+        how = tr("stick moving");
+        colour = QStringLiteral("#3ec46d");
+        break;
+    case Status::Holding:
+        how = tr("stick");
+        colour = QStringLiteral("#e0a820");
+        break;
+    case Status::NoStick:
+    default:
+        how = tr("no stick");
+        colour = QStringLiteral("#d9534f");
+        break;
+    }
+    m_statusFollowLabel->setText(tr("<span style='color:%1;font-weight:bold;'>◎ Follow: %2 · %3</span>")
+                                 .arg(colour, text.toHtmlEscaped(), how));
+    m_statusFollowLabel->setToolTip(pc->followSpotStatusText()
+                                    + (st.live ? tr("\nFrom the cue playing now; the stick moves its subject "
+                                                    "for this run only.")
+                                               : tr("\nFrom the scene open in the Workbench.")));
+    m_statusFollowLabel->show();
 }
 
 void App::slotProgrammerDirtyChanged(bool dirty)

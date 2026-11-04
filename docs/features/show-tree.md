@@ -1725,6 +1725,11 @@ undoing the delete brings them back.
   1.0.1 Verse (Show Tree)"*; click it to jump to that cue.
 - Selecting another cue moves the preview there. A layer both cues share
   keeps running, with no re-fade.
+- Its effects play on top of its looks, every time: a Breathe, a chase, a
+  follow spot start with the cue you pick, in any order, picked again or
+  after another. A follow spot in it takes the stick (whatever is open in
+  the Workbench) and the footer says **◎ Follow:** who follows whom -- see
+  [Moving a follow spot](stage-targets.md#moving-a-follow-spot).
 - Selecting the list or nothing, or leaving the tab, stops the preview.
 - **Play / Stop and Solo** sit at the top of the cue's page and of a
   layer's page (docked, the Workbench's own pair takes their place):

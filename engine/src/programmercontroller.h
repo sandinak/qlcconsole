@@ -879,6 +879,8 @@ private:
     /** The scene the stick drives: the Workbench's, or else the running
      *  cue's follow spot (seeding / restoring its target as that changes). */
     Scene *joystickScene();
+    /** True if scene @p sceneId has a follow-spot effect look. */
+    bool hasFollowSpotLook(quint32 sceneId) const;
     /** The running cue's follow-spot scene the stick drives while nothing is
      *  open in the Workbench (invalid: none). Its target moves transiently. */
     quint32 m_liveFollowSceneId = UINT_MAX;
@@ -923,6 +925,8 @@ private:
     // scene transitions (unlike m_stageAimValid, reset by setFocusedScene) so a
     // new scene can resume the beam where it was rather than snapping to target.
     bool m_beamHeldValid = false;
+    float m_beamHeldX = 0.0f;   //!< where (stage metres) the follow spot was last driven
+    float m_beamHeldY = 0.0f;
     /** True if the scene's followspot effect is in lastPosition mode (default),
      *  i.e. the beam should hold across a transition instead of snapping. */
     bool sceneFollowspotLastPosition(Scene *scene) const;
