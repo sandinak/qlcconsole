@@ -575,8 +575,8 @@ void FixtureManager::initDataView()
     /* The edit keys every list has (EditKeys): ⌘D duplicates -- a fixture
        as a new one in the Inventory, a group as a copy beside it -- ⌘C ⌘V
        the same from what was copied, Esc clears the selection. ⌘D is the
-       tree's while it has the focus and a selection; Control ▸ Dump DMX
-       keeps it otherwise. */
+       tree's whenever it has the focus and a selection (Control ▸ Dump DMX is
+       ⌥⌘D). */
     {
         EditKeys::Verbs keys;
         keys.duplicate = [this]() { duplicateSelection(); };

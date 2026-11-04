@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include "editkeys.h"
 #include <QListWidgetItem>
 #include <QListWidget>
 #include <QMenu>
@@ -43,6 +44,7 @@
 #include "universeitemwidget.h"
 #include "connectionstree.h"
 #include "inputoutputmanager.h"
+#include "editkeys.h"
 #include "rigowner.h"
 #include "universe.h"
 #include "apputil.h"
@@ -153,8 +155,12 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
 
     m_deleteUniverseAction = new QAction(QIcon(":/edit_remove.png"),
                                    tr("&Delete Universe"), detailed);
-    m_deleteUniverseAction->setShortcut(QKeySequence("CTRL+D"));
-    m_deleteUniverseAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    /* No shortcut of its own: Delete / Backspace in the universe list (the
+       same key as every other list's remove, EditKeys below). Cmd/Ctrl+D is
+       Duplicate everywhere, and a universe is not duplicated (decided: a
+       copy would need the same plugin lines, which only one universe can
+       hold -- so the key does nothing here; can change). */
+    m_deleteUniverseAction->setToolTip(tr("Delete Universe (Delete)"));
     detailed->addAction(m_deleteUniverseAction);
     connect(m_deleteUniverseAction, SIGNAL(triggered(bool)),
             this, SLOT(slotDeleteUniverse()));
@@ -283,6 +289,12 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     connect(m_list, &QListWidget::customContextMenuRequested,
             this, &InputOutputManager::slotUniverseListContextMenu);
     m_splitter->widget(0)->layout()->addWidget(m_list);
+    {
+        EditKeys::Verbs keys;
+        keys.hasSelection = [this]() { return m_deleteUniverseAction->isEnabled(); };
+        keys.remove = [this]() { slotDeleteUniverse(); };
+        EditKeys::install(m_list, keys);
+    }
 
     /* Rescan button — below the universe list so it's always visible */
     {
@@ -686,6 +698,15 @@ void InputOutputManager::slotDeleteUniverse()
     if (current == InputOutputMap::invalidUniverse() || current + 1 != m_ioMap->universesCount())
         return;
     const int uniIdx = int(current);
+
+    // Delete always asks first, as the other lists do; undo brings it back.
+    if (QMessageBox::question(
+                this, tr("Delete Universe"),
+                tr("Delete %1? Undo Patch Change brings it back.").arg(m_ioMap->getUniverseNameByIndex(uniIdx)),
+                QMessageBox::Yes, QMessageBox::No) == QMessageBox::No)
+    {
+        return;
+    }
 
     // Check if the universe is patched
     if (m_ioMap->isUniversePatched(uniIdx) == true)

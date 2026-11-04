@@ -1570,9 +1570,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         connect(pasteSc, &QShortcut::activated, this, [this]() { pasteClipboard(); });
     }
     /* ⌘D duplicates, Esc backs out then clears the selection: the edit keys
-       every list has (EditKeys). ⌘D is the tree's only while it has the
-       focus and a selection -- Control ▸ Dump DMX keeps it otherwise (a
-       QShortcut here was ambiguous with it, and neither fired). */
+       every list has (EditKeys). ⌘D is Duplicate only; Control ▸ Dump DMX is
+       ⌥⌘D, so the two never share a key. */
     {
         EditKeys::Verbs keys;
         keys.duplicate = [this]() { duplicateSelection(); };

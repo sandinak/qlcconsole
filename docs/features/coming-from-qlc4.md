@@ -233,10 +233,10 @@ it take over from whatever else is playing them, and then hand them back:
 Without Monitor, a slider in Level mode joins the mix: the highest level
 wins for intensity, and the last one moved wins for everything else.
 
-### ⌘D: save what's on stage as a scene
+### ⌥⌘D: save what's on stage as a scene
 
-**Control ▸ Dump DMX Values to a Function** (⌘D; Ctrl+D on Windows and
-Linux) records the DMX values going out now as a scene. It doesn't matter
+**Control ▸ Dump DMX Values to a Function** (⌥⌘D; Ctrl+Alt+D on Windows and
+Linux; QLC+ 4 had Ctrl+D, which is Duplicate here) records the DMX values going out now as a scene. It doesn't matter
 what made them: the Simple Desk, a fader or a cue. In the dialog:
 
 - **Dump all channels**, or only the channels you pick in the tree.

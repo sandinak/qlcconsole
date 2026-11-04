@@ -35,9 +35,9 @@ class QWidget;
  * "Edit keys"): ⌫ / Delete, F2, ⌘C / ⌘V, ⌘D, ⌘F and Esc, each a verb the
  * list gives (an empty one leaves the list's own handling alone).
  *
- * Keys a window owns too (⌘D is Control ▸ Dump DMX) are claimed only while
- * the list has the focus and something is selected (a ShortcutOverride), so
- * the window's shortcut still works everywhere else.
+ * A key a window owns too is claimed only while the list has the focus and
+ * something is selected (a ShortcutOverride). ⌘D is Duplicate only (Control
+ * ▸ Dump DMX is ⌥⌘D): with nothing to duplicate it does nothing.
  *
  * Esc backs out first (the verb @c backOut: a Workbench or Look Editor open
  * over the page); with nothing to back out of it clears the selection.

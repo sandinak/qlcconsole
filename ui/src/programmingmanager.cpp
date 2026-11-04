@@ -762,8 +762,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     }
 
     /* The edit keys every list has (EditKeys): ⌘D duplicates what is
-       selected -- the list's while it has the focus and a selection, Control
-       ▸ Dump DMX keeps ⌘D otherwise -- and Esc backs the Workbench out, else
+       selected (Control ▸ Dump DMX is ⌥⌘D, not ⌘D) -- and Esc backs the Workbench out, else
        clears the selection. */
     const auto backOut = [this]() {
         return !isWorkbenchLent() && m_workbench->backOut();

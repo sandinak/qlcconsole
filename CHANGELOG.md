@@ -35,6 +35,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   out of the Workbench, the Look Editor or a plot assembly first; with
   nothing to back out of, it now lets go of the selection, in every list
   and on the plot. One table: [Edit keys](docs/features/shortcuts.md#edit-keys-the-same-in-every-list).
+- **⌘D is Duplicate, only Duplicate** (board Q214). It duplicates in every
+  list (Show Tree, Build, Library, Fixtures, the plot) and does nothing with
+  nothing to duplicate. **Control ▸ Dump DMX Values to a Function** moves to
+  **⌥⌘D** (Ctrl+Alt+D); the menu item stays. In Connections' Universes tab
+  **Delete Universe** moves to **⌫ / Delete** like every other list, and asks
+  first (**Undo Patch Change** brings it back); decided: a universe is not
+  duplicated, so ⌘D does nothing there (can change).
 
 - **Notes beside the Show Tree.** A notes pane under the cue page follows
   the selection (a cue, layer, list, production or Library palette) and

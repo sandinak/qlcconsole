@@ -13,7 +13,7 @@
 | ⌘F12 | Switch between **Design** and **Operate** |
 | **Esc** | **Back out** of an editor to what was showing before: a palette opened from a list, a group's layout, the effect bench, a ▣ layer, the Workbench docked in the Show Tree, the Show Tree's Look Editor. What you changed stays changed. In a rename or another inline edit, Esc cancels just that edit; in a dialog it closes the dialog. Plain Esc stops nothing |
 | ⌘⇧Esc | **Stop ALL Functions** (its arrow: fade 1/5/10/30 s and stop) |
-| ⌘D | Dump the current DMX values into a function — except in a list (or on the plot) with something selected, where ⌘D is **Duplicate** ([Edit keys](#edit-keys-the-same-in-every-list)) |
+| ⌥⌘D | **Dump** the current DMX values into a function (Control ▸ Dump DMX Values to a Function; Ctrl+Alt+D on Windows and Linux). ⌘D is **Duplicate**, in every list ([Edit keys](#edit-keys-the-same-in-every-list)) |
 | ⇧⌘N | **New here**: the next thing for where you are. In the Show Tree a production, a cue list, the next cue, a layer or a hit; in Build a scene in the folder, a step or a scene layer in the Workbench, an effect; in Fixtures a group in the folder. **Edit** names it first ([Show Tree](show-tree.md#new-here), [Build](build.md#new-here)). The Virtual Console keeps ⇧⌘N for an animation widget |
 | ⌘↩ / ⌘⇧↩ | **GO** / **Back** on the main cue list ([Show control](show-control.md#whats-next-and-go-from-anywhere)); with a [venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show) waiting, ⌘↩ begins its calls instead |
 | ⌥⌘↩ / ⌥⌘⇧↩ | **Sub GO** / **Sub Back**: the next / previous [sub-cue](show-control.md#sub-cues) of the cue playing |
@@ -52,10 +52,12 @@ menus are unchanged; the right-click menu has each one too.
 | ⌘F | To the search | the Library's filter | Build's search | the fixture search | the tree's search | Plot layers' search |
 | Esc | Back out first (the Workbench, the Look Editor, an assembly on the plot); with nothing to back out of, **let go of the selection** | ✓ | ✓ | ✓ | ✓ (the plot too) | ✓ |
 
-**⌘D** is a list's only while it has the focus and something is selected
-in it; everywhere else ⌘D is still **Control ▸ Dump DMX Values to a
-Function**. In Connections' Universes tab ⌘D still deletes the selected
-universe (QLC+'s key).
+**⌘D** is Duplicate and nothing else: in a list (or on the plot) with the
+focus and something selected it duplicates; with nothing to duplicate it
+does nothing. **Control ▸ Dump DMX Values to a Function** is **⌥⌘D**. In
+Connections' Universes tab **⌫ / Delete** removes the selected universe
+(it asks first; **Undo Patch Change** brings it back) and ⌘D does nothing:
+a universe is not duplicated.
 
 ## Lighting Studio (the plot)
 
@@ -71,7 +73,7 @@ universe (QLC+'s key).
 | ⇧-scroll | Zoom, centred on the pointer |
 | ⌘A | Select all |
 | ⌘C / ⌘V | Copy / paste trusses, decks, targets, scenery, towers, booms and stands; a truss brings its fixtures as new copies, and the paste asks: **Patch at next free addresses** (after the originals), **Leave unpatched** (**Patch Others Like This** addresses them later), **Truss only** or **Cancel**. The status line says what happened |
-| ⌘D (on the plot, something selected) | Duplicate the selection half a metre on (a target keeps its kind, size and heights, numbered on: "Soloist 2"); the Dump DMX ⌘D elsewhere |
+| ⌘D (on the plot, something selected) | Duplicate the selection half a metre on (a target keeps its kind, size and heights, numbered on: "Soloist 2") |
 | ⌫ / Delete | Take the selection off the plot: fixtures back to the Inventory (still in the show), a structure or target asks first; one ⌘Z undoes it |
 | F2 | Rename the selected item (its row in Plot layers) |
 | ⌘F | To Plot layers' search |
@@ -140,7 +142,7 @@ W say the light (⇧W feedback), H hold, ⌘Z undo, Esc leave. See
 | **Return** (navigator / Workbench rows) | To the Workbench's layers / to the editor pane |
 | **Return** / **F2** (Palettes, Effects, Groups &amp; fixtures) | Rename in place |
 | ⌫ (Palettes, Effects) | Delete what's selected, asking first and saying where it's used |
-| ⌘D (Palettes, Effects, Scenes) | Duplicate what's selected (with nothing selected, ⌘D is Dump DMX) |
+| ⌘D (Palettes, Effects, Scenes) | Duplicate what's selected |
 | ⌘C then ⌘V (Effects) | Copy the effect palette, EFX or RGB Matrix, then paste a copy |
 | ⌫ (a look or target row) | Take it out of the scene; on a cue's value row in the Workbench, clear it |
 | ⌥→ / ⌥← · ⌥-click a triangle | Open / close the row and everything under it |
@@ -161,7 +163,7 @@ W say the light (⇧W feedback), H hold, ⌘Z undo, Esc leave. See
 | **⌘F**, or **/** in the tree | To the Library's filter; type, then Return adds the first match |
 | **Return** / **F2** (in the tree) | Rename the row in place ([Renaming](show-tree.md#renaming)) |
 | **⇧⌘N** | New here: a production, a cue list, the next cue after the selected one, a layer on the Library's groups, a hit ([New here](show-tree.md#new-here)) |
-| **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate (⌘D with nothing selected is Dump DMX) |
+| **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
 | Drag cues up or down (before / after a row) | Move them there, renumbered for their place; with **⌥**, include it ([Reordering and numbering](show-tree.md#reordering-and-numbering)) |
 | Delete / Backspace (in the tree) | Delete the selected cue or layer (a list or production asks first) |
@@ -186,7 +188,7 @@ W say the light (⇧W feedback), H hold, ⌘Z undo, Esc leave. See
 | Keys | Does |
 |---|---|
 | ⌘N | Add a universe (Universes tab) |
-| ⌘D | Delete the selected universe (Universes tab) |
+| ⌫ / Delete | Delete the selected universe (Universes tab; asks first) |
 | ⌘Z | Undo the last patch change (**Undo Patch Change**; Devices or Universes) |
 | Double-click a universe | Its connection window: protocol, interface, port, input and feedback ([Editing a connection](other-improvements.md#editing-a-connection)) |
 | ⌘-click universes, then right-click | Retarget them, or set their transmit mode, all at once |
