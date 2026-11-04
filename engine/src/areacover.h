@@ -123,16 +123,33 @@ namespace AreaCover
         QList<Zone> zones;
         QList<Beam> beams;
         int cols = 0, rows = 0; //!< the sample grid; sample (c, r) row 0 upstage
-        QVector<bool> lit;      //!< cols x rows, row-major
-        double fraction = 1.0;  //!< lit samples / all samples
-        QString gap;            //!< where the gap is ("upstage left"), empty: none
+        /** Each sample is measured twice (board Q213): at subject height
+         *  (@c headLit) and on the surface under it, deck, riser or step
+         *  (@c deckLit). @c lit is both: a spot counts as lit only if it is
+         *  lit at head height AND on the surface. cols x rows, row-major. */
+        QVector<bool> lit, headLit, deckLit;
+        double fraction = 1.0;  //!< lit at both heights / all samples
+        double headOnly = 0.0;  //!< lit at head height, deck dark / all samples
+        double deckOnly = 0.0;  //!< lit on the deck, head height dark / all samples
+        QString gap;            //!< where the combined gap is ("upstage left"), empty: none
+        QString deckGap;        //!< where the deck is dark
+        QString headGap;        //!< where head height is dark
         bool valid() const { return !area.isEmpty(); }
-        /** The unlit samples, as plan rectangles (runs along each row). */
+        /** The samples not lit at both heights, as plan rectangles (runs along each row). */
         QList<QRectF> gapRects() const;
-        /** "Covers 86% of Chorus · gap upstage left" (no gap: "Covers all of Chorus"). */
+        /** The samples with the deck dark / with head height dark. */
+        QList<QRectF> deckGapRects() const;
+        QList<QRectF> headGapRects() const;
+        /** "Covers 82% of Chorus · deck dark upstage left · heads dark
+         *  downstage centre" (no gap: "Covers all of Chorus"). */
         QString caption() const;
-        /** "gap upstage left", "gaps all over", or empty. */
+        /** "gap upstage left", "gaps all over", or empty (what is dark at
+         *  both heights, or the same place at each). */
         QString gapPhrase() const;
+        /** Which height is missing where: "deck dark upstage left · heads
+         *  dark downstage centre"; "gap upstage left" when both are dark in
+         *  the same places; empty when nothing is dark. */
+        QString missingPhrase() const;
     };
 
     /** Coverage of area @p target by @p members aimed at it, each beam as

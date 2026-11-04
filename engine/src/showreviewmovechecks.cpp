@@ -401,10 +401,11 @@ void mov13(ReviewContext &ctx, QList<ReviewFinding> &out)
                 QStringList keys { QStringLiteral("list:%1/cue:%2").arg(list.id).arg(cue.id),
                                    QStringLiteral("target:%1").arg(tgt->id()) };
                 out << ReviewContext::make(QStringLiteral("MOV-13"), ReviewFinding::Note,
-                    tr("%1 aims %2 at %3 but lights only %4% of it (%5). Zoom them wider, "
-                       "add a light, or make the area smaller.")
-                        .arg(ctx.cueText(list, i), who, tgt->name()).arg(pct).arg(cov.gapPhrase()),
-                    keys, QByteArray::number(pct) + ',' + cov.gap.toUtf8(), QStringLiteral("cue"),
+                    tr("%1 aims %2 at %3 but lights only %4% of it, at head height and on the "
+                       "deck (%5). Zoom them wider, add a light, tilt some in so the beams "
+                       "reach the deck, or make the area smaller.")
+                        .arg(ctx.cueText(list, i), who, tgt->name()).arg(pct).arg(cov.missingPhrase()),
+                    keys, QByteArray::number(pct) + ',' + cov.missingPhrase().toUtf8(), QStringLiteral("cue"),
                     QVariantList() << cue.id);
             }
         }

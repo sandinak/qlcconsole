@@ -121,8 +121,12 @@ public:
      *  height, the gaps hatched. */
     bool isArea() const { return m_cover.valid(); }
     const AreaCover::Coverage &coverage() const { return m_cover; }
-    /** The hatched gap rectangles drawn at the last paint (tests). */
+    /** The hatched gap rectangles drawn at the last paint (tests): deck
+     *  dark and head height dark, each hatched its own way. */
     int gapsDrawn() const { return m_gapsDrawn; }
+    /** Which hatches the last paint's legend named (tests). */
+    bool legendShowsDeck() const { return m_legendDeck; }
+    bool legendShowsHeads() const { return m_legendHead; }
 
     /** Drawn dimmed: what it shows is the last plan, not the selection's. */
     void setDimmed(bool dimmed);
@@ -152,6 +156,7 @@ private:
     QList<QPolygonF> m_arrows;
     AreaCover::Coverage m_cover;                //!< an area aim: its zones, beams and gaps
     int m_gapsDrawn = 0;
+    bool m_legendDeck = false, m_legendHead = false;   //!< hatches on the plan at the last paint (legend)
     QRectF m_stage;                             //!< stored position: the stage outline
     QList<QPair<QPointF, QString>> m_marks;     //!< stored position: point targets
     QList<QList<QPointF>> m_otherLines;         //!< stored position: line targets

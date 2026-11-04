@@ -130,8 +130,11 @@ in the design (docs/design/SHOW_REVIEW.md in the source).
 - **MOV-13** An area left partly dark: a cue whose Aim look at an
   [area](stage-targets.md#area-targets) leaves more than a tenth of it unlit
   at the width the lights' zoom has now. It names the cue, the area, how much
-  is lit and where the gap is ("lights only 72% of it (gap upstage
-  left)"). Zoom wider, add a light, or make the area smaller.
+  is lit and which part is missing: lit at head height and on the deck
+  both count, so it says "deck dark upstage left" or "heads dark downstage
+  centre" ("lights only 72% of it, at head height and on the deck (deck dark
+  upstage left)"). Zoom wider, add a light, tilt some in so the beams reach
+  the deck, or make the area smaller.
 
 How long a move takes comes from the head's type: a moving head turns 180°
 in 0.4 s, a scanner in 0.1 s, pan and tilt together (the slower of the two).
