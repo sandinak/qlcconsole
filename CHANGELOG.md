@@ -23,6 +23,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   open warnings only and its tooltip adds "2 open · 1 meant · 3 not a
   problem". Who and when are saved with the show; older shows open as
   before.
+
+- **See the follow spot at work.** The Followspot effect's editor has a
+  light and a line (*Following ES-Witch · moving / holding*, or *which
+  doesn't move -- bind a stick*); the rig view rings the subject with a
+  line from each head; the Show Tree says **follow** under Flags on the
+  cue and its layer, green while it follows.
+
 - **A light buried in a deck, riser or step is an error in the footer.**
   A fixture whose body (its Physical Dimensions box, as the rig view draws
   it) sits inside a deck with a solid top -- a floor light left at height 0
@@ -103,6 +110,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A follow spot in a cue moves with the stick.** The stick only ever
+  drove the scene open in the Workbench, so a follow spot in a running
+  Show Tree cue (1.1.2's on the AT-Spots) held its subject and never
+  moved. It now moves the running cue's follow spot when nothing is open
+  there. Across cues nothing jumps: a follow spot tracked into the next
+  cue carries on where it is; with Persist across restarts on its look,
+  its subject stays where it was driven after the cue; otherwise it
+  glides back over the cue's fade.
+- **Lengths in your units.** The follow spot's Person Height and Size On
+  Subject showed raw centimetres; they show and take the unit Settings →
+  Units picks (5' 7"). The target editor's metre fields take a length
+  typed in feet or inches (5' 6", 66 in) too.
 - **The rig view holds still under the mouse.** Hovering over the 3D/rig
   view while a show ran made the rig shimmer back and forth by a hair:
   the crosshair's frames were drawn at full quality between the running

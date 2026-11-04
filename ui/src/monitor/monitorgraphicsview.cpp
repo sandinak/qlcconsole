@@ -146,6 +146,16 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     connect(m_scene, &QGraphicsScene::selectionChanged,
             this, &MonitorGraphicsView::extendSelectionToGroups);
 
+    /* The follow spot: its subject ringed and a line from each head, as its
+       status changes and as the stick moves the subject. */
+    if (m_doc != nullptr && m_doc->programmer() != nullptr)
+    {
+        connect(m_doc->programmer(), &ProgrammerController::followSpotStatusChanged,
+                this, &MonitorGraphicsView::updateFollowSpotOverlay);
+        connect(m_doc->programmer(), &ProgrammerController::followSpotPinChanged,
+                this, &MonitorGraphicsView::updateFollowSpotOverlay);
+    }
+
     /* The stage marks' spikes and numbers are sized for the screen: redrawn
        at a new zoom (rulersChanged() is how a zoom is told), and when a deck
        or a curtain they are found from is moved. */
@@ -764,6 +774,7 @@ MonitorGraphicsView::~MonitorGraphicsView()
         delete li;
     }
     m_aimLines.clear();
+    clearFollowSpotOverlay();
 
     foreach (QGraphicsLineItem *li, m_trussAnchorLines)
     {
@@ -7006,6 +7017,97 @@ void MonitorGraphicsView::setActiveScene(quint32 sceneId)
     updateTargets();  // re-filter targets to those used by the new scene
 }
 
+void MonitorGraphicsView::clearFollowSpotOverlay()
+{
+    for (QGraphicsItem *it : std::as_const(m_followItems))
+    {
+        if (m_scene != nullptr && it->scene() == m_scene)
+            m_scene->removeItem(it);
+        delete it;
+    }
+    m_followItems.clear();
+}
+
+void MonitorGraphicsView::updateFollowSpotOverlay()
+{
+    clearFollowSpotOverlay();
+    ProgrammerController *pc = m_doc != nullptr ? m_doc->programmer() : nullptr;
+    MonitorProperties *props = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
+    if (pc == nullptr || props == nullptr || m_scene == nullptr || m_cellPixels == 0)
+        return;
+    using Status = ProgrammerController::FollowSpotStatus;
+    const Status st = pc->followSpotStatus();
+    if (st.state == Status::Off || st.targetId == UINT_MAX)
+        return;
+    StageTarget *tgt = props->stageTarget(st.targetId);
+    Scene *scene = qobject_cast<Scene *>(m_doc->function(st.sceneId));
+    if (tgt == nullptr || scene == nullptr)
+        return;
+
+    const QColor colour = st.state == Status::Moving ? QColor(0x3e, 0xc4, 0x6d)
+                        : st.state == Status::Holding ? QColor(0xe0, 0xa8, 0x20)
+                                                      : QColor(0xd9, 0x53, 0x4f);
+    const QVector3D at = tgt->position();
+    // Where its marker is drawn (repositionTargetItems()), moved with it.
+    const QPointF tgtPx = realPositionToPixels(double(at.x()) * 1000.0, double(at.y()) * 1000.0);
+    const QString tip = pc->followSpotStatusText();
+
+    QList<quint32> heads = scene->fixtures();
+    for (quint32 gid : scene->fixtureGroups())
+        if (FixtureGroup *fg = m_doc->fixtureGroup(gid))
+            for (quint32 fid : fg->fixtureList())
+                if (!heads.contains(fid))
+                    heads << fid;
+    QPen linePen(colour, 2.0);
+    linePen.setCosmetic(true);
+    for (quint32 fid : std::as_const(heads))
+    {
+        MonitorFixtureItem *mfi = m_fixtures.value(fid);
+        if (mfi == nullptr)
+            continue;
+        const QPointF from = mfi->iconCentreScene();
+        QGraphicsLineItem *li = m_scene->addLine(from.x(), from.y(), tgtPx.x(), tgtPx.y(), linePen);
+        li->setZValue(98);
+        li->setAcceptedMouseButtons(Qt::NoButton);
+        li->setToolTip(tip);
+        li->setData(0, QStringLiteral("followLine"));
+        m_followItems << li;
+    }
+
+    const qreal r = 24.0;
+    QPen ringPen(colour, 3.0);
+    ringPen.setCosmetic(true);
+    QGraphicsEllipseItem *ring = m_scene->addEllipse(tgtPx.x() - r, tgtPx.y() - r, 2 * r, 2 * r, ringPen,
+                                                     QColor(colour.red(), colour.green(), colour.blue(), 40));
+    ring->setZValue(99);
+    ring->setAcceptedMouseButtons(Qt::NoButton);
+    ring->setToolTip(tip);
+    ring->setData(0, QStringLiteral("followRing"));
+    m_followItems << ring;
+
+    QGraphicsSimpleTextItem *label = m_scene->addSimpleText(
+        st.state == Status::Moving ? tr("following · moving")
+        : st.state == Status::Holding ? tr("following · holding") : tr("following · no stick"));
+    QFont lf = label->font();
+    lf.setBold(true);
+    label->setFont(lf);
+    label->setBrush(colour);
+    // Above the ring: the target's own name is beside it.
+    label->setPos(tgtPx.x() - label->boundingRect().width() / 2.0,
+                  tgtPx.y() - r - 2.0 - label->boundingRect().height());
+    label->setZValue(99.5);
+    label->setAcceptedMouseButtons(Qt::NoButton);
+    label->setToolTip(tip);
+    label->setData(0, QStringLiteral("followLabel"));
+    // A dark plate under it, so it reads over a busy plot.
+    QGraphicsRectItem *plate = m_scene->addRect(label->sceneBoundingRect().adjusted(-3, -1, 3, 1),
+                                                Qt::NoPen, QColor(0, 0, 0, 170));
+    plate->setZValue(99.4);
+    plate->setAcceptedMouseButtons(Qt::NoButton);
+    plate->setData(0, QStringLiteral("followPlate"));
+    m_followItems << plate << label;
+}
+
 void MonitorGraphicsView::setFollowSpotPin(bool visible, float xMeters, float yMeters)
 {
     if (!m_scene) return;
@@ -8043,6 +8145,7 @@ void MonitorGraphicsView::resizeEvent(QResizeEvent *event)
     m_fittedUnit = m_unitValue;
     updateGrid();
     refreshAllItems();
+    updateFollowSpotOverlay();     // drawn in pixels: placed again at the new scale
     centerOnGrid();
     emit rulersChanged();
 }

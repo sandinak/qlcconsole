@@ -152,6 +152,7 @@ private slots:
      *  (page, right-click, nomib), the badges and the MIB button's tooltip. */
     /** Needs work (Q192): the cue page's box, the row's flag and note. */
     void needsWorkInTheTree();
+    void followSpotFlagInTheTree();
     void moveInBlackPerListAndCueInTheTree();
     void cuesAtATimecodeAreSetOnTheCueAndListPages();
     /** A picture of a real show with cues skipped: QLC_SKIPCUE_SHOW (a

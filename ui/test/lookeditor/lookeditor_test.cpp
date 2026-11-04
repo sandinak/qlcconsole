@@ -42,6 +42,7 @@
 #include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "lookeditor.h"
+#include "programmercontroller.h"
 #include "matriximage.h"
 #include "effectbrowser.h"
 #undef private
@@ -90,6 +91,9 @@
 #include "qlcfixturehead.h"
 #include "qlcphysical.h"
 #include "aimsolver.h"
+#include "lengthspinbox.h"
+#include "measurementunits.h"
+#include "monitor/feetinchesspinbox.h"
 
 void LookEditor_Test::aColourDarkerThanAFifthIsCalledOut()
 {
@@ -2578,3 +2582,121 @@ void LookEditor_Test::aStoredPositionLandsWhereItAims()
     ed.setContextScene(nullptr);
     QVERIFY(!plan->isVisible());
 }
+
+/* "person height needs to be in feet/inches as set in settings": a length
+   shows in the unit Settings -> Units picks and takes a length typed in any
+   unit, kept as the caller keeps it (an effect's cm, a target's metres). */
+void LookEditor_Test::aLengthShowsAndTakesTheChosenUnit()
+{
+    // An effect's "cm" setting, in feet: 167.64 cm is 5' 6".
+    LengthSpinBox feet(10.0, nullptr, MeasurementUnits::Feet);
+    feet.setRange(50, 250);
+    feet.setValue(167.64);
+    QCOMPARE(feet.text(), QString("5' 6\""));
+    QCOMPARE(feet.valueFromText("5' 6\""), 167.64);
+    QVERIFY(qAbs(feet.valueFromText("5.5 ft") - 167.64) < 1e-6);
+    QVERIFY(qAbs(feet.valueFromText("66 in") - 167.64) < 1e-6);
+    QVERIFY(qAbs(feet.valueFromText("1.676 m") - 167.6) < 1e-6);
+    QVERIFY(qAbs(feet.valueFromText("5.5") - 167.64) < 1e-6);        // bare: the chosen unit
+    QString typed = "5' 6\"";
+    int pos = 0;
+    QCOMPARE(int(feet.validate(typed, pos)), int(QValidator::Acceptable));
+    typed = "12'";                                                    // past its 250 cm
+    QCOMPARE(int(feet.validate(typed, pos)), int(QValidator::Intermediate));
+    typed = "tall";
+    QCOMPARE(int(feet.validate(typed, pos)), int(QValidator::Intermediate));
+
+    // In metres and in centimetres.
+    LengthSpinBox metres(10.0, nullptr, MeasurementUnits::Metres);
+    metres.setRange(50, 250);
+    metres.setValue(167.64);
+    QCOMPARE(metres.text(), QString("1.6764 m"));
+    QVERIFY(qAbs(metres.valueFromText("5' 6\"") - 167.64) < 1e-6);
+    LengthSpinBox cm(10.0, nullptr, MeasurementUnits::Centimetres);
+    cm.setRange(50, 250);
+    cm.setValue(170);
+    QCOMPARE(cm.text(), QString("170 cm"));
+
+    // The target editor's metre fields take a length typed in feet too.
+    FeetInchesSpinBox m(false);
+    m.setRange(0.5, 3.0);
+    QVERIFY(qAbs(m.valueFromText("5' 6\"") - 1.6764) < 1e-6);
+    QVERIFY(qAbs(m.valueFromText("66 in") - 1.6764) < 1e-6);
+    QVERIFY(qAbs(m.valueFromText("5.5 ft") - 1.6764) < 1e-6);
+    QVERIFY(qAbs(m.valueFromText("1.676") - 1.676) < 1e-6);
+    QVERIFY(qAbs(m.valueFromText("1.676 m") - 1.676) < 1e-6);
+    typed = "5' 6\"";
+    QCOMPARE(int(m.validate(typed, pos)), int(QValidator::Acceptable));
+    FeetInchesSpinBox f(true);
+    f.setRange(0.5 * 3.28084, 3.0 * 3.28084);
+    f.setValue(1.6764 * 3.28084);
+    QCOMPARE(f.text(), QString("5' 6\""));
+
+    // The follow spot's Person Height in the effect editor: in feet when
+    // Settings -> Units says feet, kept in cm.
+    const MeasurementUnits::LengthUnit was = MeasurementUnits::preferredLength();
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
+    Doc doc(this);
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Follow");
+    look->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/followspot.js");
+    look->setEffectParamValue("personHeight", 167.64);
+    QVERIFY(doc.addPalette(look));
+    {
+        LookEditor ed(&doc);
+        ed.setPalette(look->id());
+        QDoubleSpinBox *height = ed.findChild<QDoubleSpinBox *>("effectParam_personHeight");
+        QVERIFY(height != nullptr);
+        QVERIFY(dynamic_cast<LengthSpinBox *>(height) != nullptr);
+        QCOMPARE(height->text(), QString("5' 6\""));
+        height->setValue(height->valueFromText("6'"));
+        QVERIFY(qAbs(look->effectParamValues().value("personHeight") - 182.88) < 1e-6);
+        QVERIFY2(height->toolTip().contains("from 1' 7.7\" to 8' 2.43\""), qPrintable(height->toolTip()));
+    }
+    MeasurementUnits::setPreferredLength(was);
+}
+
+/* "visual indication ... of followspot enable and activity": the follow-spot
+   effect's editor says whether it is on and what it is doing, with a light. */
+void LookEditor_Test::theFollowSpotEditorSaysWhatItIsDoing()
+{
+    Doc doc(this);
+    StageTarget *who = doc.monitorProperties()->addStageTarget();
+    who->setName("ES-Witch");
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Follow");
+    look->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/followspot.js");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.setPalette(look->id());
+    QLabel *say = ed.findChild<QLabel *>("followSpotText");
+    QLabel *light = ed.findChild<QLabel *>("followSpotLight");
+    QVERIFY(say != nullptr && light != nullptr);
+    QVERIFY2(say->text().contains("Not playing"), qPrintable(say->text()));
+
+    using Status = ProgrammerController::FollowSpotStatus;
+    ProgrammerController *pc = doc.programmer();
+    auto set = [&](Status::State state) {
+        Status st;
+        st.state = state;
+        st.paletteId = look->id();
+        st.targetId = who->id();
+        st.sceneId = 1;
+        st.live = true;
+        pc->m_followStatus = st;
+        emit pc->followSpotStatusChanged();
+    };
+    set(Status::NoStick);
+    QVERIFY2(say->text().contains("ES-Witch") && say->text().contains("doesn't move"), qPrintable(say->text()));
+    QCOMPARE(light->property("state").toInt(), int(Status::NoStick));
+    set(Status::Holding);
+    QVERIFY2(say->text().contains("holding"), qPrintable(say->text()));
+    QCOMPARE(light->property("state").toInt(), int(Status::Holding));
+    set(Status::Moving);
+    QVERIFY2(say->text().contains("Following ES-Witch · moving"), qPrintable(say->text()));
+    QCOMPARE(light->property("state").toInt(), int(Status::Moving));
+    QVERIFY(light->styleSheet().contains("#3ec46d"));
+    set(Status::Off);
+    QVERIFY(say->text().contains("Not playing"));
+}
+

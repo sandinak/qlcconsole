@@ -48,6 +48,8 @@
 #include "scenery.h"
 #include "fixture.h"
 #include "doc.h"
+#include "programmercontroller.h"
+#include "showtreecontroller.h"
 
 using namespace ShowTree;
 
@@ -60,7 +62,7 @@ const int BaseTipRole = Qt::UserRole + 41;
 const int BackwashKeyRole = Qt::UserRole + 42;
 
 /* The flags column, badge by badge: a warning's badge in the warning colour,
-   the others (Mix, Track, skip...) in the row's own. One colour for the
+   a lit one ("follow" while it follows) in the lit colour, the others (Mix, Track, skip...) in the row's own. One colour for the
    whole cell painted "Mix" orange beside "⚠ cyc". */
 class FlagsDelegate final : public QStyledItemDelegate
 {
@@ -70,7 +72,8 @@ public:
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
     {
         const QStringList warn = index.data(ShowTreeView::WarnPiecesRole).toStringList()
-                                 + index.data(ShowTreeView::MeantPiecesRole).toStringList();
+                                 + index.data(ShowTreeView::MeantPiecesRole).toStringList()
+                                 + index.data(ShowTreeView::LitPiecesRole).toStringList();
         if (warn.isEmpty())
         {
             QStyledItemDelegate::paint(painter, option, index);
@@ -122,13 +125,20 @@ QColor ShowTreeView::meantColour(const QColor &background)
     return background.lightness() < 128 ? QColor(0x5c, 0xb8, 0x5c) : QColor(0x2e, 0x7d, 0x32);
 }
 
+QColor ShowTreeView::litColour()
+{
+    return QColor(0x3e, 0xc4, 0x6d);
+}
+
 QList<QPair<QString, QColor>> ShowTreeView::flagPieces(const QModelIndex &index, const QColor &normal, const QColor &background)
 {
     QList<QPair<QString, QColor>> out;
     const QStringList warn = index.data(WarnPiecesRole).toStringList();
     const QStringList meant = index.data(MeantPiecesRole).toStringList();
+    const QStringList lit = index.data(LitPiecesRole).toStringList();
     for (const QString &piece : index.data(Qt::DisplayRole).toString().split(QStringLiteral(", "), Qt::SkipEmptyParts))
-        out << qMakePair(piece, warn.contains(piece) ? warningColour()
+        out << qMakePair(piece, lit.contains(piece) ? litColour()
+                                : warn.contains(piece) ? warningColour()
                                 : meant.contains(piece) ? meantColour(background.isValid() ? background : normal) : normal);
     return out;
 }
@@ -291,4 +301,37 @@ void ShowTreeView::backwashLayerMenu(QMenu *menu, quint32 cueId, quint32 layerId
     a->setObjectName(QStringLiteral("stBackwashNotMeant"));
     a->setToolTip(tr("Take back I Meant It for this layer: Show Review warns again where its light "
                      "lands on the cyc"));
+}
+
+void ShowTreeView::refreshFollowBadges()
+{
+    if (m_tree == nullptr || m_doc == nullptr || m_doc->programmer() == nullptr || m_st == nullptr)
+        return;
+    using Status = ProgrammerController::FollowSpotStatus;
+    const Status st = m_doc->programmer()->followSpotStatus();
+    const QString badge = tr("follow");
+    for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+    {
+        QTreeWidgetItem *item = *it;
+        const QVariantList pals = item->data(FlagsCol, FollowPalettesRole).toList();
+        if (pals.isEmpty())
+            continue;
+        const int kind = item->data(0, KindRole).toInt();
+        const quint32 cue = item->data(0, kind == CueNode ? IdRole : CueRole).toUInt();
+        const ShowTree::CueList *list = m_st->listOfCue(cue);
+        // Its follow spot, from this cue playing or open in the Workbench.
+        const bool here = st.state != Status::Off && pals.contains(QVariant(st.paletteId))
+                          && ((list != nullptr && m_st->runningCue(list->id) == cue) || m_st->editedCue() == cue);
+        QStringList lit = item->data(FlagsCol, LitPiecesRole).toStringList();
+        QStringList warn = item->data(FlagsCol, WarnPiecesRole).toStringList();
+        lit.removeAll(badge);
+        warn.removeAll(badge);
+        if (here && (st.state == Status::Moving || st.state == Status::Holding))
+            lit << badge;
+        else if (here && st.state == Status::NoStick)
+            warn << badge;
+        item->setData(FlagsCol, LitPiecesRole, lit);
+        item->setData(FlagsCol, WarnPiecesRole, warn);
+    }
+    m_tree->viewport()->update();
 }

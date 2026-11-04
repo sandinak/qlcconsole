@@ -25,6 +25,23 @@ docs/design/AREA_COVER.md. Changes the DMX of existing area aims
   everyone in its path: no shadowing by the people in front.
 - No "point at the centre" option: add one only if a show needs it.
 
+## Follow spot in a cue doesn't move (fix/04-followspot, 2026-11-03) -- done
+
+"1.1.2 has a follow spot on tspots.. and it doesn't move." Cause: the stick
+only drove the Workbench's focused scene (`ProgrammerController::applyDesignJoystick`),
+so a follow spot in a running Show Tree cue never moved; not a regression
+(same on dab9f579a, before arms). Now `joystickScene()` falls back to the
+running cue's follow spot; across cues it carries on when tracked, keeps
+its subject with Persist, else glides it back over the cue's fade;
+`followSpotStatus()` drives a light in the effect editor, a ring and lines
+on the rig view and a **follow** flag in the Show Tree. Lengths in effect
+params (`unit: "cm"`) and the target editor follow Settings → Units.
+Tests: `EffectInstance_Test::followSpotInARunningCueMovesWithTheStick` (one
+head, two arms), `followSpotKeepsItsSubjectAcrossCues`, `LookEditor_Test::aLengthShowsAndTakesTheChosenUnit`,
+`theFollowSpotEditorSaysWhatItIsDoing`, `ShowTreeView_Test::followSpotFlagInTheTree`,
+`Monitor_Test::theFollowSpotIsDrawnOnThePlot`. Open: line-of-sight "lost"
+state in the indicators. Move to DONE.md when landed.
+
 ## Faster packaging (tools/04-pkgfast, 2026-11-03) -- done
 
 `make dmg`: no tests (`QLC_NO_TESTS`, now also in ai/ and tools/artnetprobe), ccache for both slices, build

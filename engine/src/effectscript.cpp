@@ -330,6 +330,7 @@ bool EffectScript::parseMeta()
             def.name         = jsText(item.property("name"));
             def.description  = jsText(item.property("description"));
             def.type         = jsText(item.property("type"));
+            def.unit         = jsText(item.property("unit"));
             def.min          = (float)item.property("min").toNumber();
             def.max          = (float)item.property("max").toNumber();
             def.defaultValue = (float)item.property("defaultValue").toNumber();
