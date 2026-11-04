@@ -51,6 +51,9 @@ private slots:
     void fixtureDef();
     void channels();
     void degrees();
+    /** A definition that says 0 for its lens or pan/tilt range gets a default
+     *  by type, flagged as assumed; a declared one is untouched. */
+    void zeroLensAndRangeGetDefaults();
     void indexedPosition();
     void heads();
     void loadWrongRoot();

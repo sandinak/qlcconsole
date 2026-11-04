@@ -23,6 +23,7 @@
 #include <QLabel>
 
 #include "showreviewpanel_test.h"
+#include "../common/shotdark.h"
 #include "showstatusdialog.h"
 #include "showreviewpanel.h"
 #include "showtreecontroller.h"
@@ -40,6 +41,8 @@
 #include <QScrollBar>
 #include "app.h"
 #include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
+#include "qlcphysical.h"
 #include "qlcfixturedef.h"
 #include "showstatus.h"
 #include "showreview.h"
@@ -65,6 +68,42 @@ Fixture *dimmer(Doc *doc, const QString &name, quint32 address)
     QLCPhysical phy;
     phy.setPowerConsumption(500);
     mode->setPhysical(phy);
+    def->addMode(mode);
+    Fixture *fx = new Fixture(doc);
+    fx->setName(name);
+    fx->setFixtureDefinition(def, mode);
+    fx->setAddress(address);
+    doc->addFixture(fx);
+    return fx;
+}
+
+/* A moving head whose definition says 0 for its lens and pan/tilt range. */
+Fixture *zeroLensMover(Doc *doc, const QString &name, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Cheapo");
+    def->setModel("Mini Spot 10W");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const char *nm[] = { "Pan", "Tilt", "Dimmer" };
+    const QLCChannel::Group gp[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+    QLCFixtureHead hd;
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(nm[k]);
+        ch->setGroup(gp[k]);
+        if (k < 2)
+            ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(k));
+        hd.addChannel(quint32(k));
+    }
+    QLCPhysical ph;
+    ph.setPowerConsumption(100);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, hd);
     def->addMode(mode);
     Fixture *fx = new Fixture(doc);
     fx->setName(name);
@@ -125,6 +164,60 @@ void ShowReviewPanel_Test::listsBySeverity()
     QVERIFY(panel.summary()->text().contains("1 blockers"));
     // Why? is on the row: the check's title and paragraph.
     QVERIFY(rowOf(panel.tree(), "PAT-01")->toolTip(1).contains("fight"));
+}
+
+void ShowReviewPanel_Test::aZeroLensDefinitionIsOneNote()
+{
+    // Three fixtures on one 0-lens definition: one FIX-18 row, which can open the definition.
+    Fixture *a = zeroLensMover(m_doc, "Mini 1", 20);
+    for (quint32 i = 1; i < 3; ++i)
+    {
+        Fixture *b = new Fixture(m_doc);
+        b->setName(QString("Mini %1").arg(i + 1));
+        b->setFixtureDefinition(a->fixtureDef(), a->fixtureMode());
+        b->setAddress(20 + 3 * i);
+        QVERIFY(m_doc->addFixture(b));
+    }
+    if (!qEnvironmentVariable("QLC_ZEROLENS_SHOTS").isEmpty())
+        shotUseDarkTheme();
+    ShowReviewPanel panel(m_doc);
+    panel.recheck();
+    // (init()'s two lamps are definitions with no lens too: their own rows.)
+    QTreeWidgetItem *row = nullptr;
+    int rows = 0;
+    QTreeWidgetItemIterator it(panel.tree());
+    while (*it)
+    {
+        if ((*it)->text(0) == "FIX-18" && (*it)->text(1).startsWith("Cheapo"))
+            ++rows;
+        ++it;
+    }
+    QCOMPARE(rows, 1);
+    row = rowOf(panel.tree(), "FIX-18");
+    QVERIFY(row != nullptr);
+    QTreeWidgetItemIterator it2(panel.tree());
+    while (*it2 && !((*it2)->text(0) == "FIX-18" && (*it2)->text(1).startsWith("Cheapo")))
+        ++it2;
+    row = *it2;
+    QVERIFY(row != nullptr);
+    QVERIFY2(row->text(1).contains("Cheapo Mini Spot 10W: no beam angle and no pan/tilt range"),
+             qPrintable(row->text(1)));
+
+    const QString dir = qEnvironmentVariable("QLC_ZEROLENS_SHOTS");
+    if (!dir.isEmpty())
+    {
+        QDir().mkpath(dir);
+        const QList<QPair<QString, QSize>> sizes {
+            { "1024x640", QSize(1024, 640) }, { "1280x800", QSize(1280, 800) },
+            { "1920x1080", QSize(1920, 1080) } };
+        for (const auto &sz : sizes)
+        {
+            panel.resize(sz.second);
+            panel.show();
+            QTest::qWait(60);
+            QVERIFY(panel.grab().save(QStringLiteral("%1/after-showreview-%2.png").arg(dir, sz.first)));
+        }
+    }
 }
 
 void ShowReviewPanel_Test::acceptAndReopen()

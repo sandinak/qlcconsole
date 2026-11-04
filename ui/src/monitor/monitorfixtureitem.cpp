@@ -288,8 +288,9 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
             QLCFixtureMode *mode = fxi->fixtureMode();
             if (mode != NULL)
             {
-                if (mode->physical().focusPanMax() != 0)
-                    fxiItem->m_panMaxDegrees = mode->physical().focusPanMax();
+                const double pm = fxi->effectiveBeam().panMax;
+                if (pm > 0)
+                    fxiItem->m_panMaxDegrees = pm;
                 Fixture::positionBand(mode->channel(fxiItem->m_panChannel),
                                       fxiItem->m_panBandLo, fxiItem->m_panBandHi);
             }
@@ -305,8 +306,9 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
             QLCFixtureMode *mode = fxi->fixtureMode();
             if (mode != NULL)
             {
-                if (mode->physical().focusTiltMax() != 0)
-                    fxiItem->m_tiltMaxDegrees = mode->physical().focusTiltMax();
+                const double tm = fxi->effectiveBeam().tiltMax;
+                if (tm > 0)
+                    fxiItem->m_tiltMaxDegrees = tm;
                 Fixture::positionBand(mode->channel(fxiItem->m_tiltChannel),
                                       fxiItem->m_tiltBandLo, fxiItem->m_tiltBandHi);
             }
@@ -977,6 +979,15 @@ QString MonitorFixtureItem::baseToolTip() const
                .arg(fx->universe() + 1)
                .arg(fx->address() + 1)
                .arg(fx->address() + fx->channels());
+    /* A definition that says 0 for its beam angle or pan/tilt range: the rig
+       view and aims use a default for its type -- said here. */
+    const Fixture::EffectiveBeam eb = fx->effectiveBeam();
+    if (eb.lensAssumed)
+        tip += QObject::tr("\nBeam angle: %1").arg(Fixture::assumedText(eb.lensMax, true));
+    if (eb.panAssumed || eb.tiltAssumed)
+        tip += QObject::tr("\nPan/tilt: %1 × %2")
+                   .arg(Fixture::assumedText(eb.panMax, eb.panAssumed),
+                        Fixture::assumedText(eb.tiltMax, eb.tiltAssumed));
     /* RC8: drawn from the show's own copy of its definition while this
        computer has another -- said here, never switched by itself. */
     ShowEmbedding::Newer newer = ShowEmbedding::NewerUnknown;

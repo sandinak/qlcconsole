@@ -1379,7 +1379,12 @@ QString FixtureManager::fixtureInfo(const Fixture *fixture) const
         info += subTitle.arg(tr("Lens"));
         info += genInfo.arg(tr("Name")).arg(physical.lensName());
 
-        if (physical.lensDegreesMin() == physical.lensDegreesMax())
+        const Fixture::EffectiveBeam eb = fixture->effectiveBeam();
+        if (eb.lensAssumed)
+        {
+            info += genInfo.arg(tr("Beam Angle")).arg(Fixture::assumedText(eb.lensMax, true));
+        }
+        else if (physical.lensDegreesMin() == physical.lensDegreesMax())
         {
             info += genInfo.arg(tr("Beam Angle"))
                 .arg(angle1.arg(physical.lensDegreesMin()));
@@ -1398,8 +1403,10 @@ QString FixtureManager::fixtureInfo(const Fixture *fixture) const
         QString frange("%1&deg;");
         info += subTitle.arg(tr("Head(s)"));
         info += genInfo.arg(tr("Type")).arg(physical.focusType());
-        info += genInfo.arg(tr("Pan Range")).arg(frange.arg(physical.focusPanMax()));
-        info += genInfo.arg(tr("Tilt Range")).arg(frange.arg(physical.focusTiltMax()));
+        info += genInfo.arg(tr("Pan Range")).arg(eb.panAssumed ? Fixture::assumedText(eb.panMax, true)
+                                                               : frange.arg(physical.focusPanMax()));
+        info += genInfo.arg(tr("Tilt Range")).arg(eb.tiltAssumed ? Fixture::assumedText(eb.tiltMax, true)
+                                                                 : frange.arg(physical.focusTiltMax()));
         if (physical.layoutSize() != QSize(1, 1))
         {
             info += genInfo.arg(tr("Layout"))

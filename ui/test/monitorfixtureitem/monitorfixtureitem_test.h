@@ -32,6 +32,7 @@ private slots:
     void cleanupTestCase();
     void cleanup();
 
+    void aZeroLensFixtureSaysItsBeamIsAssumed();
     void computeAlpha();
     void computeAlpha_data();
 

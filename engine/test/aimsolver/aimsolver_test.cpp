@@ -1454,3 +1454,59 @@ void AimSolver_Test::areaCoversHisChorus()
              qPrintable(QString("covered %1 now, %2 before").arg(now.fraction).arg(was.fraction)));
     delete doc;
 }
+
+void AimSolver_Test::zeroRangeDefinitionsStillAim()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = placeSpot(doc, "Zero range", QVector3D(2.0f, 3.0f, 5.0f), 0.0);
+    QVERIFY(fx != nullptr);
+    QLCPhysical ph = fx->fixtureMode()->physical();
+    ph.setFocusPanMax(0);
+    ph.setFocusTiltMax(0);
+    fx->fixtureMode()->setPhysical(ph);
+    QCOMPARE(fx->fixtureMode()->physical().focusPanMax(), 0);
+
+    AimSolver::Frame frame;
+    QVERIFY(AimSolver::frameFor(doc, fx->id(), frame));
+    QCOMPARE(frame.panMax, 540.0f);
+    QCOMPARE(frame.tiltMax, 270.0f);
+
+    const QVector3D mark(4.0f, 7.0f, 0.0f);
+    float pan = 0.0f, tilt = 0.0f;
+    QVERIFY(AimSolver::aimDegrees(doc, fx->id(), mark, pan, tilt));
+    QVERIFY(pan > 0.0f && tilt > 0.0f);
+
+    // The DMX it writes, turned back into a beam, lands on the mark.
+    QByteArray values(int(fx->channels()), char(0));
+    for (int type : { int(QLCChannel::Pan), int(QLCChannel::Tilt) })
+        for (const SceneValue &sv : fx->positionToValues(type, type == QLCChannel::Pan ? pan : tilt))
+            values[int(sv.channel)] = char(sv.value);
+    QVERIFY(values.at(0) != 0 || values.at(2) != 0);
+    FixtureRigProps rp = doc->monitorProperties()->fixtureRigProps(fx->id());
+    QVector3D dir;
+    QVERIFY(AimSolver::headDirection(fx, values, 0, rp, dir));
+    QVERIFY2(degreesBetween(dir, mark - frame.position) < 0.5,
+             qPrintable(QString("a zero-range head aims %1 degrees off")
+                        .arg(degreesBetween(dir, mark - frame.position))));
+
+    // No pan/tilt channels: nothing to aim.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Dimmer only"); def->setType(QLCFixtureDef::Dimmer);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("1ch");
+    QLCChannel *ch = new QLCChannel();
+    ch->setName("Dim"); ch->setGroup(QLCChannel::Intensity);
+    def->addChannel(ch); mode->insertChannel(ch, 0);
+    QLCFixtureHead hd; hd.addChannel(0);
+    mode->insertHead(-1, hd);
+    def->addMode(mode);
+    Fixture *dim = new Fixture(doc);
+    dim->setFixtureDefinition(def, mode);
+    dim->setAddress(300);
+    QVERIFY(doc->addFixture(dim));
+    doc->monitorProperties()->setFixturePosition(dim->id(), 0, 0, QVector3D(1000, 1000, 4));
+    QCOMPARE(dim->effectiveBeam().panMax, 0.0);
+    QByteArray dv(1, char(0));
+    QVector3D d2;
+    QVERIFY(!AimSolver::headDirection(dim, dv, 0, FixtureRigProps(), d2));
+}

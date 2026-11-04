@@ -35,6 +35,7 @@
 #undef private
 
 #include "monitorfixtureitem_test.h"
+#include "../common/shotdark.h"
 #include "qlcfixturedefcache.h"
 #include "qlcfixturedef.h"
 #include "qlcfile.h"
@@ -459,3 +460,79 @@ void MonitorFixtureItem_Test::mountingHeightIsInTheShowsUnits()
 }
 
 QTEST_MAIN(MonitorFixtureItem_Test)
+
+/* A moving head whose definition says 0 for its lens and its pan/tilt range
+   (what the Fixture Editor's defaults give). */
+static Fixture *zeroLensMoverTip(Doc *doc, const QString &name, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Cheapo");
+    def->setModel("Mini Spot 10W");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const char *nm[] = { "Pan", "Tilt", "Dimmer" };
+    const QLCChannel::Group gp[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+    QLCFixtureHead hd;
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(nm[k]);
+        ch->setGroup(gp[k]);
+        if (k < 2)
+            ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(k));
+        hd.addChannel(quint32(k));
+    }
+    QLCPhysical ph;
+    ph.setWidth(200); ph.setHeight(300); ph.setDepth(200);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, hd);
+    def->addMode(mode);
+    Fixture *f = new Fixture(doc);
+    f->setName(name);
+    f->setFixtureDefinition(def, mode);
+    f->setAddress(address);
+    return doc->addFixture(f) ? f : nullptr;
+}
+
+void MonitorFixtureItem_Test::aZeroLensFixtureSaysItsBeamIsAssumed()
+{
+    Fixture *f = zeroLensMoverTip(m_doc, "Mini 1", 0);
+    QVERIFY(f != nullptr);
+    MonitorFixtureItem item(m_doc, f->id());
+    const QString tip = item.baseToolTip();
+    QVERIFY2(tip.contains("Beam angle: 15° (assumed: the definition says 0)"), qPrintable(tip));
+    QVERIFY2(tip.contains("Pan/tilt: 540° (assumed: the definition says 0) × 270° (assumed: the definition says 0)"),
+             qPrintable(tip));
+    // A declared definition adds nothing.
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Martin", "MAC250+");
+    QVERIFY(def != nullptr);
+    Fixture *real = new Fixture(m_doc);
+    real->setName("Real");
+    real->setFixtureDefinition(def, def->modes().at(1));
+    real->setAddress(100);
+    QVERIFY(m_doc->addFixture(real));
+    MonitorFixtureItem realItem(m_doc, real->id());
+    QVERIFY(!realItem.baseToolTip().contains("assumed"));
+
+    const QString dir = qEnvironmentVariable("QLC_ZEROLENS_SHOTS");
+    if (!dir.isEmpty())
+    {
+        QDir().mkpath(dir);
+        // The hover text on a tooltip-styled label.
+        shotUseDarkTheme();
+        QLabel label(tip);
+        label.setObjectName("QTipLabel");
+        label.setMargin(6);
+        QPalette tp = label.palette();
+        tp.setColor(QPalette::Window, tp.color(QPalette::ToolTipBase));
+        tp.setColor(QPalette::WindowText, tp.color(QPalette::ToolTipText));
+        label.setPalette(tp);
+        label.setAutoFillBackground(true);
+        label.ensurePolished();
+        label.resize(label.sizeHint());
+        QVERIFY(label.grab().save(QStringLiteral("%1/after-tooltip.png").arg(dir)));
+    }
+}

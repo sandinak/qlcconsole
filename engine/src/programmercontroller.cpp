@@ -3060,16 +3060,17 @@ void ProgrammerController::applyDesignJoystick()
         // need a resetRuntime() afterwards — and that tore the whole fader map down
         // 50×/s while the stick was deflected, re-fading every dimmer/colour
         // channel and making the rig blink. Replace-in-place needs no teardown.
+        const Fixture::EffectiveBeam ebr = f->effectiveBeam();
         if (m_panBound)
         {
-            float panMax = phy.focusPanMax() > 0 ? phy.focusPanMax() : 360.0f;
+            float panMax = ebr.panMax > 0 ? float(ebr.panMax) : 360.0f;
             for (const SceneValue &sv : f->positionToValues(QLCChannel::Pan, m_panNorm * panMax))
                 scene->setValue(SceneValue(sv.fxi, sv.channel, sv.value),
                                 /*blind=*/false, /*checkHTP=*/false);
         }
         if (m_tiltBound)
         {
-            float tiltMax = phy.focusTiltMax() > 0 ? phy.focusTiltMax() : 270.0f;
+            float tiltMax = ebr.tiltMax > 0 ? float(ebr.tiltMax) : 270.0f;
             for (const SceneValue &sv : f->positionToValues(QLCChannel::Tilt, m_tiltNorm * tiltMax))
                 scene->setValue(SceneValue(sv.fxi, sv.channel, sv.value),
                                 /*blind=*/false, /*checkHTP=*/false);
@@ -3410,8 +3411,9 @@ QLCPalette *ProgrammerController::buildPaletteFromBucket(const Doc::SaveBucket &
             if (fxi == NULL || fxi->fixtureMode() == NULL)
                 continue;
             const QLCPhysical phy = fxi->fixtureMode()->physical();
-            qreal panMax = phy.focusPanMax();  if (panMax == 0) panMax = 360;
-            qreal tiltMax = phy.focusTiltMax(); if (tiltMax == 0) tiltMax = 270;
+            const Fixture::EffectiveBeam ebr = fxi->effectiveBeam();
+            qreal panMax = ebr.panMax;  if (panMax <= 0) panMax = 360;
+            qreal tiltMax = ebr.tiltMax; if (tiltMax <= 0) tiltMax = 270;
 
             int panMSB = -1, panLSB = -1, tiltMSB = -1, tiltLSB = -1;
             for (auto chIt = fxIt.value().constBegin();
@@ -3917,10 +3919,8 @@ int ProgrammerController::positionMaxDegrees(int qlcChannelGroup, const Fixture 
     if (ref == NULL || ref->fixtureMode() == NULL)
         return fallback;
 
-    QLCPhysical phy = ref->fixtureMode()->physical();
-    const int max = (qlcChannelGroup == QLCChannel::Pan)
-                        ? phy.focusPanMax()
-                        : phy.focusTiltMax();
+    const Fixture::EffectiveBeam eb = ref->effectiveBeam();
+    const int max = int((qlcChannelGroup == QLCChannel::Pan) ? eb.panMax : eb.tiltMax);
     return (max > 0) ? max : fallback;
 }
 

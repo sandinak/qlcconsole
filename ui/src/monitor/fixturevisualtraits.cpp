@@ -216,8 +216,13 @@ static FixtureVisualTraits classifyByDefinition(Fixture *fx)
     /* The declared lens RANGE. A fixed head has these equal (or only one set);
        a zoom head has both, and where it currently sits between them is a live
        question -- see fixtureBeamAngle(). 0 stays 0 = undeclared. */
-    t.beamMinDeg = float(qMin(phys.lensDegreesMin(), phys.lensDegreesMax()));
-    t.beamMaxDeg = float(qMax(phys.lensDegreesMin(), phys.lensDegreesMax()));
+    /* A definition that says 0 gets a default by type (Fixture::effectiveLens()),
+       so its beam is drawn and aimed; beamAssumed lets a tooltip say so.
+       Resolved here, once per fixture, not per frame. */
+    const Fixture::EffectiveBeam eb = fx->effectiveLens();
+    t.beamMinDeg = float(eb.lensMin);
+    t.beamMaxDeg = float(eb.lensMax);
+    t.beamAssumed = eb.lensAssumed;
     t.beamsPerHead = phys.lensBeamsPerHead();
     /* The definition's own word on what it looks like and how it lights,
        over what its Type suggests: a WLED lantern is a colour changer by

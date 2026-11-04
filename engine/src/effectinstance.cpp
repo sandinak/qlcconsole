@@ -1655,8 +1655,9 @@ void EffectInstance::readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const
         return;
 
     const QLCPhysical &phy = mode->physical();
-    if (phy.focusPanMax() > 0)  f.panRange  = (float)phy.focusPanMax();
-    if (phy.focusTiltMax() > 0) f.tiltRange = (float)phy.focusTiltMax();
+    const Fixture::EffectiveBeam eb = fxi->effectiveBeam();
+    if (eb.panMax > 0)  f.panRange  = (float)eb.panMax;
+    if (eb.tiltMax > 0) f.tiltRange = (float)eb.tiltMax;
     f.lensMin = float(qMin(phy.lensDegreesMin(), phy.lensDegreesMax()));
     f.lensMax = float(qMax(phy.lensDegreesMin(), phy.lensDegreesMax()));
 

@@ -344,6 +344,16 @@ drapes):
   deck (Show Review FIX-15, see [Show Review](show-review.md)). A floor light
   beside a deck that the rest of its row stands on gets an amber ring and a
   footer warning (FIX-16, same fix).
+  - **A definition that says 0 for its beam angle or pan/tilt range** (the
+    Fixture Editor's defaults, many cheap definitions) still draws and aims:
+    the rig view and every aim use a default by fixture type, and the Fixture
+    Manager's details and the plot tooltip say "15° (assumed: the definition
+    says 0)". Beam angle: 15° moving head or scanner, 25° colour changer,
+    par or wash, 6° effect, 40° LED bar, 20° otherwise (none for a hazer, fan
+    or laser). Pan and tilt: 540° × 270° for a moving head with pan and tilt
+    channels (360° × 270° for other movers), none without those channels.
+    A definition that declares them is used as written. Show Review lists
+    each such definition once (FIX-18) so the real figures can be set.
   - **Two colours.** **Colour** is the plot's: it tells decks apart on the
     2D plan and in the layers list. **Finish (rig)** is what it is painted —
     stage black unless you set it — and the Lighting Studio's planes and the
