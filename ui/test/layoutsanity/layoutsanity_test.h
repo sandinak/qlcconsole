@@ -54,6 +54,13 @@ private slots:
      *  chips overlap, the stage chip and Unsaved stay (wfaudit W1-30). */
     void theFooterChipsNeverOverlap();
 
+    /** The tab strip in Auto mode, in each tool view at 1920 to the window's
+     *  minimum: every tab whole (no scroll buttons, no elision), Run in
+     *  view, full names before short before icons as the width falls, a
+     *  tooltip with the full name on every tab, and the explicit modes
+     *  unchanged. TABFIT_SHOTS=dir (+ TABFIT_TAG) saves pictures. */
+    void theTabStripFitsTheWindow();
+
     /** Every screen at every size: no overlaps, nothing clipped. */
     void everyScreenIsLaidOutCleanly_data();
     void everyScreenIsLaidOutCleanly();
