@@ -35,9 +35,13 @@
 #
 # The Linux leg (platforms/macos/gate-linux.sh): next to the Mac's gate, from
 # here, the pool compiles and tests the same commit on the Linux build host
-# (GATE_LINUX_HOST, default branson@192.168.1.245: GCC 14, Qt 6.8 -- what
-# CI's Linux job breaks on). It has the host's lock like any gate, runs while
-# the Mac gate does, and its result joins the summary: gate=0 needs it green.
+# (GCC 14, Qt 6.8 -- what CI's Linux job breaks on). The hosts are listed in
+# gate-linux-hosts.conf (GATE_LINUX_HOST=user@ip overrides it with one): the
+# leg takes the first one that is up, has the toolchain and no gate running,
+# else waits for whichever frees first, longest-waiting gate first
+# (gate-linux.sh; --status says which it would pick). It has the host's lock
+# like any gate, runs while the Mac gate does, and its result joins the
+# summary: gate=0 needs it green.
 # Host unreachable: gate=1, "linux=99", unless ALLOW_SKIP=1 (then
 # "linux=skipped", like a skipped Mac leg). Not run for --quick or --leg
 # (partial runs, not gates), or with GATE_LINUX=off.
@@ -148,7 +152,10 @@ if [ "$WANT" = auto ] || [ "$STATUS" = 1 ]; then
         echo >&2 "nothing free: falling back to ${N[BEST]} (this Mac)"
     fi
     echo >&2 "auto: ${N[BEST]}"
-    [ "$STATUS" = 1 ] && exit 0
+    if [ "$STATUS" = 1 ]; then
+        [ "${GATE_LINUX:-on}" = off ] || "$HERE/gate-linux.sh" --dry-run 2>&1 | sed 's/^/  /' >&2
+        exit 0
+    fi
     H=$BEST
 else
     H=-1

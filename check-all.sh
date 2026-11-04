@@ -240,6 +240,14 @@ if ! GUARD_OUT=$("$REPO/platforms/linux/check-test-guard.sh" --self-test 2>&1 \
     exit 1
 fi
 
+# The gate pool's Linux-host choice and queue: their own test (fake hosts).
+if [ -x "$REPO/platforms/macos/gate-linux.sh" ] && ! LX_OUT=$("$REPO/platforms/macos/gate-linux.sh" --self-test 2>&1); then
+    echo >&2 "$LX_OUT"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "gate-linux.sh --self-test failed. Nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
+fi
+
 # `#define private public` in a test must not sit in front of a header that
 # first includes a standard header (libstdc++ rejects it; broke Windows CI
 # 2026-11-01). The check's own test first.
