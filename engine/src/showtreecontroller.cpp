@@ -4810,6 +4810,7 @@ void ShowTreeController::bake()
             const QString folder = QStringLiteral("%1/%2/%3").arg(kProductionsFolder, prod.name,
                                                                   parentList != nullptr ? parentList->name : list.name);
             const QList<ResolvedCue> resolved = this->resolved(list);
+            const QVector<quint32> blockings = listBlockings(list);    // BLOCKING.md
             QHash<quint32, int> order;
             order.reserve(list.cues.count());
             for (int i = 0; i < list.cues.count(); ++i)
@@ -4995,7 +4996,7 @@ void ShowTreeController::bake()
                     coll->setHitFades(0, 0);
                 coll->setHitOverride(list.looks && cue.override);
                 // Where the targets stand when this cue goes (BLOCKING.md).
-                coll->setBlocking(list.looks ? invalidId() : cueBlocking(cue.id));
+                coll->setBlocking(list.looks ? invalidId() : blockings.value(i, 0));
                 if (coll->functions() != members)
                 {
                     m_lastChanged << cue.id;
@@ -6207,8 +6208,11 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
         for (const CueList &l : p.lists)
         {
             m_nextId = qMax(m_nextId, l.id + 1);
+            const QVector<quint32> blockings = listBlockings(l);
+            int ci = 0;
             for (const Cue &c : l.cues)
             {
+                const quint32 cueBlocking = blockings.value(ci++, 0);
                 m_nextId = qMax(m_nextId, c.id + 1);
                 for (const Layer &layer : c.layers)
                     m_nextId = qMax(m_nextId, layer.id + 1);
@@ -6224,7 +6228,7 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
                 // A cue's Collection, as the file left it: its blocking.
                 if (!l.looks)
                     if (Collection *coll = qobject_cast<Collection *>(m_doc->function(c.collection)))
-                        coll->setBlocking(cueBlocking(c.id));
+                        coll->setBlocking(cueBlocking);
             }
         }
     }

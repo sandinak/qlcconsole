@@ -541,6 +541,8 @@ public:
     /** Whether cue @a cueId plays with another blocking than the cue
      *  before it (the tree's flag). */
     bool cueChangesBlocking(quint32 cueId) const;
+    /** cueBlocking() of every cue of @a list, in one pass (the bake). */
+    QVector<quint32> listBlockings(const ShowTree::CueList &list) const;
 
     /** "Cue N at 00:01:23:10": @a ms (-1: none) is the incoming timecode
      *  at which a list that follows timecode goes to the cue

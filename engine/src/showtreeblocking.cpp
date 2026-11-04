@@ -88,3 +88,25 @@ bool ShowTreeController::cueChangesBlocking(quint32 cueId) const
     const quint32 before = list->isSubCues() ? cueBlocking(list->subOf) : 0;
     return before != c->blocking;
 }
+
+QVector<quint32> ShowTreeController::listBlockings(const CueList &list) const
+{
+    QVector<quint32> out(list.cues.count(), list.looks ? invalidId() : 0);
+    if (list.looks)
+        return out;
+    quint32 running = 0;
+    if (list.isSubCues())
+    {
+        running = cueBlocking(list.subOf);
+        if (running == invalidId())
+            running = 0;
+    }
+    for (int i = 0; i < list.cues.count(); ++i)
+    {
+        const Cue &c = list.cues.at(i);
+        out[i] = c.blocking != invalidId() ? c.blocking : running;
+        if (!c.skip)
+            running = out[i];
+    }
+    return out;
+}
