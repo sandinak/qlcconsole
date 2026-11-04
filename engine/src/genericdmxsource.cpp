@@ -38,14 +38,21 @@ GenericDMXSource::GenericDMXSource(Doc* doc)
 
 GenericDMXSource::~GenericDMXSource()
 {
+    /* Off the MasterTimer first. timerTickDMXSources() holds its list's lock
+       across writeDMX(), so once this returns no tick is inside this source
+       and none will start. Clearing the faders first (as stock QLC+ does)
+       raced a tick reading m_fadersMap on the timer thread: a use-after-free
+       that ASan caught when a scene editor closed (viewlayout_test,
+       2026-11-04), seen once in the gate as a SIGSEGV. */
+    m_doc->masterTimer()->unregisterDMXSource(this);
+
+    QMutexLocker locker(&m_mutex);
     foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
     {
         if (!fader.isNull())
             fader->requestDelete();
     }
     m_fadersMap.clear();
-
-    m_doc->masterTimer()->unregisterDMXSource(this);
 }
 
 void GenericDMXSource::set(quint32 fxi, quint32 ch, uchar value)

@@ -186,6 +186,27 @@ dir kept on /Volumes/Ext/build; `make dmg ARCH=native` arm64-only; ender's
 ccache on /Volumes/Ext/ccache (`platforms/macos/ccache-env.sh`). Move to
 DONE.md when landed.
 
+## Rig view smooth on a busy show (fix/rigperf, 2026-11-03) — done
+
+"dink's visualization has gotten very chunky." It was neither the new
+definitions (about +10%) nor a regression (2926 behaves the same): the frame
+budget held the view to 40% of one core (interval 1.25 x max(wall,
+2 x CPU)), a GO's burst of re-thrown beams held the rate down for seconds,
+every ray asked every piece of scenery (`Scenery::rayHit()` walked its
+panels, allocating), and the cursor readout re-rasterised the whole frame
+on the CPU over GPU frames. Fixed in `StructureStudioView` (share of
+`SystemProbe::performanceCores()` less two; Operate 40% of one core and
+15 fps; quick recovery; scenery boxes; a moving curtain re-asked alone;
+one-row pick; low-priority pool); the picture is pixel-identical
+(`RenderPerf_Test::beamShortcutsDrawTheSamePicture`). Leftovers:
+- The GUI-thread work that could still move: docs/design/OFFLOAD.md (the
+  user picks).
+- `stresstest/engine/showbuilder.cpp` hangs the mixed rig at Z = 6000 (m;
+  meant mm), so renderperf's beams land on nothing. Fixing it rebases the
+  `gui` perf point: do it with a `make perf-record`.
+- Measure on Windows (hybrid-core count via efficiency classes, D3D path)
+  when the VM is back; Linux big.LITTLE detection is untested on hardware.
+
 ## Rig view hover jitter (fix/04-rig-hover-jitter, 2026-11-03) — done
 
 "The rig view moves a very small distance back and forth when the mouse

@@ -17906,14 +17906,19 @@ void Monitor_Test::aDrapeDrivenByACurtainFixtureOpensAsItsChannelMoves()
         view.updateDrapePoses();         // (worked out once a frame)
         QCOMPARE(view.drapePose(sc), sc->staticPose());
         QCOMPARE(view.drapePose(fixed), fixed->staticPose());
-        // Its throw scene (what a ray can land on) follows the curtain.
+        /* Its throw scene (what kept landings stand on) does not move with
+           the curtain: each kept ray is asked of the curtain again as it
+           moves, on its own (applyDrivenDrapes()), instead of every ray of
+           the rig thrown again every frame of the move. The landings
+           themselves follow it: RenderPerf_Test::beamShortcutsDrawTheSamePicture. */
         view.setLiveValues(true);
         fx->setPreviewValue(0, 0);
         view.updateDrapePoses();
         const quint64 closedScene = view.throwScene();
         fx->setPreviewValue(0, 200);
         view.updateDrapePoses();
-        QVERIFY(view.throwScene() != closedScene);
+        QCOMPARE(view.throwScene(), closedScene);
+        QVERIFY(view.drapePose(sc).open > 0.5);
         view.setLiveValues(false);
 
         // Its fixture gone: back to its fixed state.

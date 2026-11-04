@@ -72,6 +72,7 @@
 #include "function.h"
 #include "zraster.h"
 #include "rhiraster.h"
+#include "systemprobe.h"
 #include "aimsolver.h"
 #include "areacover.h"
 #include "linecurve.h"
@@ -84,6 +85,8 @@
  * studio's body fill (QColor(33,33,33)) closely enough to read as the same
  * object in both windows, a shade up so it still separates from the deck. */
 static const int BODY_GREY = 52;
+/** m_pickRow when the CPU drew the frame: the depth of every row is there. */
+static const int kPickWholeFrame = -2;
 
 StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidget *parent)
     : QWidget(parent)
@@ -588,6 +591,27 @@ void StructureStudioView::setCamera(const Camera &c)
         refit();
     }
     update();
+}
+
+double StructureStudioView::nextFrameEstimate(double estimate, double ms)
+{
+    if (estimate <= 0.0)
+        return ms;
+    if (ms < estimate)
+        return estimate * 0.5 + ms * 0.5;
+    return estimate * 0.8 + qMin(ms, estimate * 3.0) * 0.2;
+}
+
+QString StructureStudioView::renderBackendLabel() const
+{
+    if (gpuActive())
+        return tr("GPU · %1").arg(RhiRaster::availableBackend());
+    return tr("CPU");
+}
+
+int StructureStudioView::operateFrameRate()
+{
+    return qBound(5, QSettings().value(QStringLiteral("monitor/rig/operatefps"), 15).toInt(), 120);
 }
 
 void StructureStudioView::setRotation(int quarterTurns)
@@ -1254,10 +1278,41 @@ void StructureStudioView::drawRigDepthSorted(QPainter &p) const
 
 thread_local StructureStudioView::EmitContext *StructureStudioView::s_emit = nullptr;
 
+bool StructureStudioView::operating() const
+{
+    return m_doc != nullptr && m_doc->mode() == Doc::Operate;
+}
+
+int StructureStudioView::frameThreads() const
+{
+    if (m_renderThreads > 0)
+        return m_renderThreads;
+    /* The performance cores, not every core: on Apple silicon the
+       efficiency cores counted too, and a frame fanned out over them waits
+       for the slowest. In Operate two are left for the DMX and whatever
+       else the show runs (SystemProbe::performanceCores()). */
+    const int cores = SystemProbe::performanceCores();
+    return operating() ? qMax(1, cores - 2) : cores;
+}
+
+QThreadPool *StructureStudioView::renderPool(int threads) const
+{
+    if (m_renderPool == nullptr)
+    {
+        m_renderPool = new QThreadPool(const_cast<StructureStudioView *>(this));
+        /* Below the GUI and far below the MasterTimer (a real-time thread):
+           a busy picture never takes a core the DMX needs. */
+        m_renderPool->setThreadPriority(QThread::LowPriority);
+    }
+    if (m_renderPool->maxThreadCount() < threads)
+        m_renderPool->setMaxThreadCount(threads);
+    return m_renderPool;
+}
+
 void StructureStudioView::drawFixturesInParallel(QPainter &p, const QVector<quint32> &fids,
                                                  bool nameEveryone) const
 {
-    int threads = (m_renderThreads > 0) ? m_renderThreads : QThread::idealThreadCount();
+    int threads = frameThreads();
     threads = qMin(threads, int(fids.size() / 8));      // a few: not worth the hand-off
     if (threads <= 1)
     {
@@ -1296,10 +1351,7 @@ void StructureStudioView::drawFixturesInParallel(QPainter &p, const QVector<quin
 
     opticsTime();                       // starts its clock: read-only from here
     QVector<EmitContext> ctx(runs.size());
-    if (m_renderPool == nullptr)
-        m_renderPool = new QThreadPool(const_cast<StructureStudioView *>(this));
-    if (m_renderPool->maxThreadCount() < threads)
-        m_renderPool->setMaxThreadCount(threads);
+    renderPool(threads);
 
     QSemaphore done;
     int started = 0;
@@ -2785,11 +2837,13 @@ void StructureStudioView::flushOps(QPainter &p) const
                 if (o->pickable)
                     m_pickSeeThrough << o;
             m_pickDirty = true;
+            m_pickRow = -1;
         }
     }
     if (!drawn)
     {
     m_pickDirty = false;
+    m_pickRow = kPickWholeFrame;        // the CPU's frame: every row's depth
     if (m_z == nullptr)
         m_z = new ZRaster();
 
@@ -2837,7 +2891,7 @@ void StructureStudioView::flushOps(QPainter &p) const
        the same order as the whole frame would, so splitting it changes the
        speed and nothing else. Band edges fall on whole final-image rows, so a
        band's light rows and its supersampled rows cover the same stripe. */
-    int threads = (m_renderThreads > 0) ? m_renderThreads : QThread::idealThreadCount();
+    int threads = frameThreads();
     const int rows = m_z->bufferHeight();
     threads = qBound(1, threads, qMax(1, rows / (8 * ss)));
     if (threads <= 1)
@@ -2848,10 +2902,7 @@ void StructureStudioView::flushOps(QPainter &p) const
     }
     else
     {
-        if (m_renderPool == nullptr)
-            m_renderPool = new QThreadPool(const_cast<StructureStudioView *>(this));
-        if (m_renderPool->maxThreadCount() < threads)
-            m_renderPool->setMaxThreadCount(threads);
+        renderPool(threads);
 
         const int perBand = ((rows / threads + ss - 1) / ss) * ss;
         QVector<QRect> lit(threads);
@@ -3069,17 +3120,22 @@ double StructureStudioView::pickDepth(const QPoint &px) const
 {
     if (!m_useZBuffer)
         return -1e30;
-    if (m_pickDirty)
+    if (m_pickDirty || (m_pickRow != kPickWholeFrame && px.y() != m_pickRow))
     {
-        // The GPU drew the frame: depth alone, once, from what it drew.
+        /* The GPU drew the frame: depth alone, from what it drew -- and only
+           the row asked about. The whole frame was 10-13 ms on the GUI
+           thread for every frame with the pointer over the rig (the cursor
+           readout asks), a quarter of a frame's work on a running show. */
         if (m_z == nullptr)
             m_z = new ZRaster();
         m_z->begin(size(), 1, Qt::transparent);
+        const int row = qBound(0, px.y(), qMax(0, height() - 1));
         for (const DrawOp *o : std::as_const(m_pickOpaque))
-            rasterOp(*o, true, 0, INT_MAX);
+            rasterOp(*o, true, row, row + 1);
         for (const DrawOp *o : std::as_const(m_pickSeeThrough))
-            rasterOp(*o, false, 0, INT_MAX);
+            rasterOp(*o, false, row, row + 1);
         m_pickDirty = false;
+        m_pickRow = px.y();
     }
     return (m_z != nullptr && m_z->isValid()) ? m_z->depthAt(px) : -1e30;
 }
@@ -4429,6 +4485,7 @@ QVector<StructureStudioView::Deck> StructureStudioView::decks() const
 }
 
 bool StructureStudioView::s_lineOfSightBeams = false;
+bool StructureStudioView::s_referenceThrows = false;
 
 void StructureStudioView::setLineOfSightBeams(bool on)
 {
@@ -4467,7 +4524,11 @@ quint64 StructureStudioView::throwScene() const
           << float(sc->outline()) << sc->depth() << sc->thickness() << float(sc->state())
           << sc->openingWidth() << sc->openingHeight()
           << sc->doorWidth() << sc->doorHeight() << sc->doorAt();
-        if (sc->isDriven())
+        /* Where a driven curtain is now is not part of it: its rays are
+           tested against it afresh as it moves (applyDrivenDrapes()). The
+           line-of-sight model is built round the curtains, so with it on a
+           move still starts again. */
+        if (sc->isDriven() && m_sightModel)
         {
             const Scenery::Pose pose = drapePose(sc);
             f << float(pose.open) << float(pose.fly);
@@ -4483,6 +4544,8 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
     /* While painting, a ray thrown before (the same apex, the same way) at
        the same scene lands where it did: no need to ask every deck and every
        piece of scenery again. */
+    if (s_referenceThrows)
+        return beamThrowUncached(apex, dir, hit, landNormal, surface);
     ThrowKey key;
     if (m_decksValid)
     {
@@ -4492,45 +4555,165 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
         {
             /* On a drawing thread the kept landings are only read: what was
                used is marked once they all are done. */
-            if (s_emit != nullptr)
-                s_emit->throwHits << &it.value();
-            else if (it->frame != m_throwFrame)
+            const Throw *kept = &it.value();
+            Throw moved;
+            if (kept->drapeKey != m_drapeKey)
             {
-                const_cast<Throw &>(it.value()).frame = m_throwFrame;
+                /* A curtain has moved since: this ray against the curtains
+                   only. Put back like a new landing -- on a drawing thread
+                   the kept ones are only read. */
+                moved = *kept;
+                moved.frame = m_throwFrame;
+                applyDrivenDrapes(apex, dir, moved);
+                if (s_emit != nullptr)
+                    s_emit->newThrows << qMakePair(key, moved);
+                else
+                {
+                    if (kept->frame != m_throwFrame)
+                        ++m_throwsUsed;
+                    const_cast<Throw &>(*kept) = moved;
+                }
+                kept = &moved;
+            }
+            else if (s_emit != nullptr)
+                s_emit->throwHits << kept;
+            else if (kept->frame != m_throwFrame)
+            {
+                const_cast<Throw *>(kept)->frame = m_throwFrame;
                 ++m_throwsUsed;
             }
             if (hit != nullptr)
-                *hit = it->hit;
+                *hit = kept->fullHit;
             if (landNormal != nullptr)
-                *landNormal = it->normal;
+                *landNormal = kept->fullNormal;
             if (surface != nullptr)
-                *surface = it->surface;
-            return it->run;
+                *surface = kept->fullSurface;
+            return kept->fullRun;
         }
     }
 
-    bool h = false;
-    QVector3D n;
-    int sf = 0;
-    const double run = beamThrowUncached(apex, dir, &h, &n, &sf);
-    if (m_decksValid)
+    if (!m_decksValid)
+        return beamThrowUncached(apex, dir, hit, landNormal, surface);
+
+    Throw t;
+    t.run = beamThrowUncached(apex, dir, &t.hit, &t.normal, &t.surface, true);
+    t.frame = m_throwFrame;
+    applyDrivenDrapes(apex, dir, t);
+    if (s_emit != nullptr)
+        s_emit->newThrows << qMakePair(key, t);
+    else
     {
-        if (s_emit != nullptr)
-            s_emit->newThrows << qMakePair(key, Throw{ run, n, sf, h, m_throwFrame });
-        else
-        {
-            m_throws.insert(key, Throw{ run, n, sf, h, m_throwFrame });
-            ++m_throwsUsed;
-        }
+        m_throws.insert(key, t);
+        ++m_throwsUsed;
     }
     if (hit != nullptr)
-        *hit = h;
+        *hit = t.fullHit;
     if (landNormal != nullptr)
-        *landNormal = n;
+        *landNormal = t.fullNormal;
     if (surface != nullptr)
-        *surface = sf;
-    return run;
+        *surface = t.fullSurface;
+    return t.fullRun;
 }
+
+void StructureStudioView::applyDrivenDrapes(const QVector3D &apex, const QVector3D &dir, Throw &t) const
+{
+    // beamThrowUncached()'s limits.
+    static const double MIN_THROW = 0.05;
+    static const double MAX_THROW = 24.0;
+    t.fullRun = t.run;
+    t.fullNormal = t.normal;
+    t.fullSurface = t.surface;
+    t.fullHit = t.hit;
+    t.drapeKey = m_drapeKey;
+    if (m_drapePoses.isEmpty())
+        return;
+    for (const SceneryBox &box : std::as_const(m_sceneryBoxes))
+    {
+        if (!box.driven || !rayMayMeet(box, apex, dir, t.fullHit ? t.fullRun : MAX_THROW))
+            continue;
+        Scenery *sc = box.sc;
+        double d = 0.0;
+        QVector3D n;
+        const Scenery::Pose pose = drapePose(sc);
+        if (sc->rayHit(apex, dir, d, t.fullHit ? t.fullRun : MAX_THROW, 16, &n, &pose) && d > MIN_THROW)
+        {
+            t.fullRun = d;
+            t.fullNormal = n;
+            t.fullSurface = -1 - int(sc->id());
+            t.fullHit = true;
+        }
+    }
+}
+
+void StructureStudioView::buildSceneryBoxes() const
+{
+    m_sceneryBoxes.clear();
+    if (m_doc == nullptr)
+        return;
+    foreach (Scenery *sc, m_doc->monitorProperties()->sceneries())
+    {
+        if (sc == nullptr || !layerShown(sc->layerId()))
+            continue;
+        /* Through the points Scenery::rayHit() lays its panels between, on
+           both faces and the line between them, top to bottom of each piece;
+           padded by the half-thickness (a wall's top is a disc of it round
+           the line) and a centimetre. */
+        const double half = double(sc->thickness()) / 2.0;
+        const int full = (sc->segments() == 1) ? 1 : qMax(16, sc->segments());
+        SceneryBox box{ sc, QVector3D(1e9f, 1e9f, 1e9f), QVector3D(-1e9f, -1e9f, -1e9f),
+                        sc->isDriven(), true };
+        for (const Scenery::Piece &pc : sc->pieces(drapePose(sc)))
+        {
+            const int n = qMax(1, int(qCeil(full * (pc.u1 - pc.u0) / 2.0)));
+            for (int i = 0; i <= n; ++i)
+            {
+                const double u = pc.u0 + (pc.u1 - pc.u0) * i / n;
+                for (double off : { -half, 0.0, half })
+                {
+                    const QVector3D q = sc->pointAt(u, 0.0, off);
+                    for (float z : { pc.z0, pc.z1 })
+                    {
+                        box.lo = QVector3D(qMin(box.lo.x(), q.x()), qMin(box.lo.y(), q.y()), qMin(box.lo.z(), z));
+                        box.hi = QVector3D(qMax(box.hi.x(), q.x()), qMax(box.hi.y(), q.y()), qMax(box.hi.z(), z));
+                        box.empty = false;
+                    }
+                }
+            }
+        }
+        const float pad = float(half) + 0.01f;
+        box.lo -= QVector3D(pad, pad, pad);
+        box.hi += QVector3D(pad, pad, pad);
+        m_sceneryBoxes << box;
+    }
+}
+
+bool StructureStudioView::rayMayMeet(const SceneryBox &box, const QVector3D &apex,
+                                     const QVector3D &dir, double reach)
+{
+    if (box.empty)
+        return false;               // flown out, or all gathered away
+    double t0 = 0.0, t1 = reach;
+    for (int a = 0; a < 3; ++a)
+    {
+        const double o = double(apex[a]), dv = double(dir[a]);
+        const double lo = double(box.lo[a]), hi = double(box.hi[a]);
+        if (qAbs(dv) < 1e-12)
+        {
+            if (o < lo || o > hi)
+                return false;
+            continue;
+        }
+        double ta = (lo - o) / dv, tb = (hi - o) / dv;
+        if (ta > tb)
+            std::swap(ta, tb);
+        t0 = qMax(t0, ta);
+        t1 = qMin(t1, tb);
+        if (t0 > t1)
+            return false;
+    }
+    return true;
+}
+
 
 /* A platform block as something a ray runs into: a box from @p baseZ to its
  * top, in the platform's plan frame. The ray is @p o + t @p e across the plan
@@ -4627,7 +4810,8 @@ static QVector3D blockFaceNormal(const StagePlatform *pl, int face)
 }
 
 double StructureStudioView::beamThrowUncached(const QVector3D &apex, const QVector3D &dir,
-                                             bool *hit, QVector3D *landNormal, int *surface) const
+                                             bool *hit, QVector3D *landNormal, int *surface,
+                                             bool skipDriven) const
 {
     static const double NO_HIT = 8.0;      // metres, for a beam fired into the air
     static const double MAX_THROW = 24.0;
@@ -4687,10 +4871,7 @@ double StructureStudioView::beamThrowUncached(const QVector3D &apex, const QVect
 
     /* Scenery: a cyc or a drape stands in the way of a beam going level or
        even upward, which is exactly how a cyc is lit. */
-    foreach (Scenery *sc, props->sceneries())
-    {
-        if (sc == nullptr || !layerShown(sc->layerId()))
-            continue;
+    auto meet = [&](Scenery *sc) {
         double t = 0.0;
         QVector3D n;
         const Scenery::Pose pose = drapePose(sc);
@@ -4700,6 +4881,20 @@ double StructureStudioView::beamThrowUncached(const QVector3D &apex, const QVect
             normal = n;
             what = -1 - int(sc->id());
         }
+    };
+    if (m_decksValid && !s_referenceThrows)
+    {
+        // While painting: only what the ray can reach (buildSceneryBoxes()).
+        for (const SceneryBox &box : std::as_const(m_sceneryBoxes))
+            if (!(skipDriven && box.driven)
+                && rayMayMeet(box, apex, dir, best > 0.0 ? best : MAX_THROW))
+                meet(box.sc);
+    }
+    else
+    {
+        foreach (Scenery *sc, props->sceneries())
+            if (sc != nullptr && layerShown(sc->layerId()) && !(skipDriven && sc->isDriven()))
+                meet(sc);
     }
 
     /* Line of sight: a tower, a truss -- whatever else solid the stage
@@ -8055,6 +8250,11 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             // Read with beams off too: the LEDs on a wash's face still light.
             if (showingOutput)
             {
+                /* The gobo and prism it throws through are the fixture's,
+                   the same for every head: worked out once, not once a
+                   head (a 64-pixel bar walked its channels 64 times). */
+                BeamOptics::Optics fixtureOptics;
+                bool haveOptics = false;
                 for (int u = 0; u < units; ++u)
                 {
                     QColor live = unlit;
@@ -8073,7 +8273,12 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                         looks[u].beamColour = live;
                         beamLevel = qMax(beamLevel, looks[u].beamLevel);
                         // The gobo and prism it throws through.
-                        looks[u].optics = BeamOptics::opticsFor(fx, vals, opticsTime(), m_doc->monitorProperties());
+                        if (!haveOptics)
+                        {
+                            fixtureOptics = BeamOptics::opticsFor(fx, vals, opticsTime(), m_doc->monitorProperties());
+                            haveOptics = true;
+                        }
+                        looks[u].optics = fixtureOptics;
                         // A gobo's picture is sharp, whatever the lens.
                         looks[u].optics.softness = looks[u].optics.mask.isNull() ? traits.edgeSoftness : 0.0;
                         if (looks[u].optics.animated)
@@ -10449,6 +10654,14 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     m_sightModel = s_lineOfSightBeams ? m_doc->monitorProperties()->occlusionModel(m_drapePoses)
                                       : BeamOcclusion::ModelPtr();
     m_occluders = occluders();     // after the poses: where each curtain is now
+    {
+        QVector<float> poses;
+        for (auto it = m_drapePoses.constBegin(); it != m_drapePoses.constEnd(); ++it)
+            poses << float(it.key()) << float(it->open) << float(it->fly);
+        m_drapeKey = poses.isEmpty() ? 0
+                   : quint64(qHashBits(poses.constData(), size_t(poses.size()) * sizeof(float), 0xd2a9));
+        buildSceneryBoxes();
+    }
     m_decksValid = true;
 
     /* Where rays landed last frame still stands if what they land on hasn't
@@ -10460,6 +10673,13 @@ void StructureStudioView::paintEvent(QPaintEvent *)
         m_throws.clear();
         m_beamMeshes.clear();
         m_throwScene = scene;
+    }
+    /* A curtain moving: the kept landings are tested against it as they are
+       asked for (beamThrow()); a mesh is laid again from them. */
+    if (m_drapeKey != m_meshDrapeKey)
+    {
+        m_beamMeshes.clear();
+        m_meshDrapeKey = m_drapeKey;
     }
     ++m_throwFrame;
     m_throwsUsed = 0;
@@ -10555,12 +10775,25 @@ void StructureStudioView::paintEvent(QPaintEvent *)
            pool, so a 60 ms frame can cost 90 ms of processor. Asked for no
            more than about 40% of one core on a running show. */
         const double cpuMs = (processCpuNs() - cpuFrom) / 1000000.0;
-        const double ms = qMax(frameTimer.nsecsElapsed() / 1000000.0, cpuMs * 2.0);
-        m_frameMs = (m_frameMs <= 0.0) ? ms : (m_frameMs * 0.8 + ms * 0.2);
+        /* That was 40% of ONE core whatever the machine: a frame costing
+           45 ms of processor across the pool was held to 9 fps with most
+           cores idle ("we have lots of CPUs .. but only using 1"). Now a
+           share of the performance cores, leaving two of them free; in
+           Operate, where the DMX and the programming come first, one core's
+           40% as before, and no more than operateFrameRate(). */
+        const bool operate = operating();
+        const int share = operate ? 1 : qMax(1, SystemProbe::performanceCores() - 2);
+        const double ms = qMax(frameTimer.nsecsElapsed() / 1000000.0, cpuMs * 2.0 / share);
+        /* Quick to come back down, slow to go up: the burst after a GO (every
+           beam landing again) used to hold the rate at 1-2 fps for seconds
+           after the frames were cheap again. One frame moves it by at most
+           three times where it stood. */
+        m_frameMs = nextFrameEstimate(m_frameMs, ms);
         /* At the chosen rate when frames are cheap enough to allow it, slower
            when they are not -- a quarter of the interval spare, so the event
            loop still breathes between repaints. */
-        const int want = int(qBound(1000.0 / m_maxFps, m_frameMs * 1.25, 1000.0));
+        const int fps = operate ? qMin(m_maxFps, operateFrameRate()) : m_maxFps;
+        const int want = int(qBound(1000.0 / fps, m_frameMs * 1.25, 1000.0));
         if (qAbs(m_liveTimer->interval() - want) > 8)
             m_liveTimer->setInterval(want);
     }
@@ -10947,7 +11180,26 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
             m_dragged = true;
     }
     if (e->buttons() == Qt::NoButton)
+    {
         m_hoverFrame = true;   // only the pointer moved: see paintEvent()
+        /* In Operate the pointer gets no more frames than the show does
+           (operateFrameRate()): a mouse resting on a moving rig asked for
+           one per move, sixty a second. */
+        const int gap = 1000 / operateFrameRate();
+        if (operating() && m_lastFrameAt.isValid() && m_lastFrameAt.elapsed() < gap)
+        {
+            if (!m_hoverTickPending)
+            {
+                m_hoverTickPending = true;
+                QTimer::singleShot(int(gap - m_lastFrameAt.elapsed()), this, [this]() {
+                    m_hoverTickPending = false;
+                    m_hoverFrame = true;
+                    update();
+                });
+            }
+            return;
+        }
+    }
     update();   // keep the ruler crosshair/readout live on hover
 }
 

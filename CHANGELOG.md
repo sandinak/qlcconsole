@@ -361,6 +361,24 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   had been. Shows from before are repaired on load: what stands on a
   fountain's base joins its group, on its layer.
 
+
+- **Closing a scene editor while a show runs can no longer crash.** Its
+  live output left the 50 Hz timer only after clearing what the timer
+  was still reading (stock QLC+ does the same); it now leaves first.
+- **The rig view runs smoothly again on a busy show.** A frame budget
+  held the 3D/rig view to 40% of one core whatever the computer, so on
+  Dance Hysteria (210 fixtures) a playing cue drew a frame every quarter
+  second, and after each GO, with every beam landing again, one a second
+  for several seconds. The view now uses a share of the performance
+  cores (all but two), comes back to speed within a few frames after a
+  GO, and no longer asks every piece of scenery about every ray of every
+  beam. That walk was most of a frame while a curtain or the heads
+  moved: 450 ms of processor a frame, now about 25. The cursor readout
+  no longer re-draws the whole rig on the CPU over a GPU frame. In
+  **Operate** the show comes first: the view keeps to part of one core
+  and 15 frames a second, and its drawing threads run below the DMX. The
+  picture is the same, pixel for pixel. The **GPU** box now says what is
+  drawing (**GPU · Metal** or **CPU**).
 - **The rig view holds still under the mouse.** Hovering over the 3D/rig
   view while a show ran made the rig shimmer back and forth by a hair:
   the crosshair's frames were drawn at full quality between the running

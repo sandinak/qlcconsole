@@ -17,11 +17,17 @@
 
 
 #include <QDebug>
+#include <QFile>
+#include <QThread>
 
 #if defined(Q_OS_LINUX)
 #include <sys/resource.h>
+#include <sched.h>
 #elif defined(Q_OS_WIN)
 #include <windows.h>
+#elif defined(Q_OS_MACOS)
+#include <sys/types.h>
+#include <sys/sysctl.h>
 #endif
 
 #include "systemprobe.h"
@@ -172,4 +178,86 @@ void SystemProbe::setFullSpeed(bool on, bool keepDisplayAwake, const QString &re
 bool SystemProbe::fullSpeedHeld()
 {
     return s_held;
+}
+
+/*********************************************************************
+ * The cores display work may use
+ *********************************************************************/
+
+int SystemProbe::performanceCores()
+{
+    static const int cores = []() {
+        int n = 0;
+#if defined(Q_OS_MACOS)
+        /* Apple silicon: the performance cluster. hw.ncpu counts the
+           efficiency cores too, which a busy pool would fill and slow
+           everything else on the machine. Intel Macs have no perflevels. */
+        int v = 0;
+        size_t len = sizeof(v);
+        if (sysctlbyname("hw.perflevel0.logicalcpu", &v, &len, nullptr, 0) == 0 && v > 0)
+            n = v;
+#elif defined(Q_OS_LINUX)
+        /* The CPUs this process may run on: isolcpus and a cgroup's cpuset
+           are already left out of the affinity mask. On big.LITTLE (ARM
+           boards, Intel hybrids) only the biggest: cpu_capacity, where the
+           kernel reports it. */
+        cpu_set_t set;
+        CPU_ZERO(&set);
+        if (sched_getaffinity(0, sizeof(set), &set) == 0)
+        {
+            int best = -1, atBest = 0, all = 0;
+            for (int c = 0; c < CPU_SETSIZE; ++c)
+            {
+                if (!CPU_ISSET(c, &set))
+                    continue;
+                ++all;
+                QFile f(QStringLiteral("/sys/devices/system/cpu/cpu%1/cpu_capacity").arg(c));
+                int cap = -1;
+                if (f.open(QIODevice::ReadOnly))
+                    cap = f.readAll().trimmed().toInt();
+                if (cap > best)
+                {
+                    best = cap;
+                    atBest = 1;
+                }
+                else if (cap == best)
+                    ++atBest;
+            }
+            n = (best > 0) ? atBest : all;
+        }
+#elif defined(Q_OS_WIN)
+        /* Hybrid CPUs (12th-gen Intel and later): the highest efficiency
+           class is the performance cores. Without classes, every core. */
+        DWORD bytes = 0;
+        GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &bytes);
+        if (bytes > 0)
+        {
+            QByteArray buf(int(bytes), Qt::Uninitialized);
+            auto *info = reinterpret_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *>(buf.data());
+            if (GetLogicalProcessorInformationEx(RelationProcessorCore, info, &bytes))
+            {
+                int best = -1, atBest = 0;
+                for (DWORD off = 0; off < bytes; )
+                {
+                    auto *p = reinterpret_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *>(buf.data() + off);
+                    int logical = 0;
+                    for (WORD g = 0; g < p->Processor.GroupCount; ++g)
+                    {
+                        KAFFINITY m = p->Processor.GroupMask[g].Mask;
+                        while (m) { logical += int(m & 1); m >>= 1; }
+                    }
+                    const int cls = p->Processor.EfficiencyClass;
+                    if (cls > best) { best = cls; atBest = logical; }
+                    else if (cls == best) atBest += logical;
+                    off += p->Size;
+                }
+                n = atBest;
+            }
+        }
+#endif
+        if (n <= 0)
+            n = QThread::idealThreadCount();
+        return qMax(1, n);
+    }();
+    return cores;
 }

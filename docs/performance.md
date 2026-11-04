@@ -486,6 +486,62 @@ The CPU-per-operation slots run each operation once in the gate (no
 `QLC_PERF_REPORT`), just to keep them working; only the guard measures and
 judges them.
 
+### The display
+
+Drawing is held to a target like the DMX, and a display regression fails the
+gate like an engine one. The target (2026-11-03): **on an M-series machine
+with 4 performance cores, at 1280×800, Smooth, the rig view of a ~200-fixture
+show playing a cue draws a frame in under 40 ms (p95, wall), with no more
+than 100 ms between frames**, while the DMX tick interval p99 stays where it
+is with the view closed. On the 240-fixture mixed rig, a frame of the angled
+view with beams stays under 100 ms of CPU.
+
+How the view keeps to it (`StructureStudioView::paintEvent()`):
+
+- **A share of the performance cores.** The live rate follows the frame's
+  cost: interval = 1.25 × max(wall, 2 × CPU ÷ share), where the share is
+  `SystemProbe::performanceCores()` less two (Apple silicon:
+  `hw.perflevel0.logicalcpu`; Linux: the CPUs the process may use, the big
+  ones on big.LITTLE; Windows: the highest efficiency class). It was one
+  core whatever the machine, which kept his show to 4 frames a second.
+- **Operate: the show first.** The share is one core, the rate at most
+  `monitor/rig/operatefps` (15), pointer frames wait for the next one, and
+  the drawing pool runs at `QThread::LowPriority` with two cores left free.
+- **Quick recovery.** The estimate comes down by half the gap a frame and
+  goes up by at most three times a frame, so a GO's burst no longer holds
+  the rate down for seconds.
+- **Rays ask only what they can reach.** Each piece of scenery has a box
+  per frame; a ray that misses it is not asked of it. A curtain a fixture
+  moves is asked again on its own, and kept landings stand.
+- **Picking reads one row.** Over a GPU frame the cursor readout draws the
+  depth of the pointer's row only.
+
+The gate's checks (`ui/test/renderperf`): the running-show share and the
+Operate ceiling; recovery after a burst; pointer frames in Operate; the beam
+shortcuts draw **the same pixels** as every ray thrown afresh
+(`beamShortcutsDrawTheSamePicture`, which also fails a moving frame over
+120 ms of CPU in a Release build); the one-row pick gives the whole frame's
+depth (with a graphics card).
+
+Measured on Dance Hysteria 0.6 (210 fixtures), 1280×800, Smooth, GPU, beams
+on, offscreen: a harness that opens the show, plays its cues and times each frame.
+Process CPU per frame and the interval between frames while values change:
+
+| Machine | Case | Before (6a4fa9ed3) | After |
+|---|---|---|---|
+| ender, M4 Max (under load) | GO 1.1.1, the first seconds | 665 ms CPU, every 1471 ms | 30 ms, every 55 ms |
+| ender | playing 1.1.2 | 107 ms, every 635 ms | 27 ms, every 134 ms |
+| ender | beams off, playing | 31 ms, every 106-240 ms | 18-19 ms, every 37-40 ms |
+| ender | Operate, playing | 65-370 ms, every 420-640 ms | 43-46 ms, every 99-105 ms |
+| dink, M4, 4 performance cores (quiet) | playing 1.1.2 | 48 ms wall (p95 80) / 78 ms CPU, every 245 ms | 23 ms wall (p95 30) / 45 ms CPU, every 56 ms |
+| dink | GO 1.1.1 | 118 / 230 ms, every 750 ms | 24 / 53 ms, every 65 ms |
+| dink | the pointer moving over the playing rig | 16 / 42 ms, 60 fps | 12 / 35 ms, 55 fps |
+
+DMX tick interval p99, the rig view open and playing: 20.1-20.4 ms before
+and after, Design and Operate, on both machines (20.1-20.3 ms with the view
+closed). The rest of the GUI thread's work, and what could still move off
+it: [docs/design/OFFLOAD.md](design/OFFLOAD.md).
+
 ### The mixed rig
 
 Until October 29 every point above was Generic RGB fixtures: EFX in RGB

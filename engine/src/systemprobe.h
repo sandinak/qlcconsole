@@ -69,6 +69,14 @@ namespace SystemProbe
 
     /** Whether setFullSpeed(true, ...) is in force */
     QLC_ENGINE_EXPORT bool fullSpeedHeld();
+
+    /** The cores display work may spread over: Apple silicon's performance
+     *  cores (hw.perflevel0.logicalcpu); on Linux the CPUs this process may
+     *  run on (isolcpus and cpusets already left out), only the biggest on
+     *  big.LITTLE (cpu_capacity); on Windows the highest efficiency class.
+     *  QThread::idealThreadCount() where none of that can be read. At
+     *  least 1, worked out once. */
+    QLC_ENGINE_EXPORT int performanceCores();
 }
 
 /** @} */

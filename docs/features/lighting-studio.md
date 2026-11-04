@@ -307,6 +307,15 @@ still, or a window that is hidden, minimised or covered, costs next to
 nothing; a gobo or prism that is turning keeps it drawing. The floor grid
 is drawn once and reused until the view or the rig's extent changes.
 
+The **GPU** box says what is drawing — **GPU · Metal** (or Vulkan, D3D,
+OpenGL) — and its tooltip says "Drawing on: GPU · Metal" or "Drawing on:
+CPU". A running show may use the computer's performance cores, all but
+two of them; in **Operate** the show comes first: the view uses no more
+than part of one core, draws no more than 15 frames a second (setting
+`monitor/rig/operatefps`), and its drawing threads run below the DMX and
+the rest of the app. A covered or hidden Rig Overview draws nothing in
+either mode.
+
 ## Stage structures
 
 Six structure types, each its own object with its own geometry, plus
