@@ -614,6 +614,16 @@ most of 0.5 ("The show explains itself"); there is no separate 0.3.1.
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### The tab strip fits the window
+
+- **The main tabs never run off the edge.** Settings ▸ Appearance ▸ Toolbar
+  style has a new **Automatic** choice (the default): full tab names when they
+  fit, short names (I/O, Studio, Tree, Console, Desk) when they do not, and
+  icons alone when even those do not. It is measured from the real fonts, so
+  it follows the window size, the Workspace view, a tab in its own window and
+  the language. Run is always on the bar; every tab's tooltip has its full
+  name. The other choices work as before. No new menu item.
+
 ### One right-click menu per kind
 
 - **A fixture group, a fixture or a palette has the same right-click menu

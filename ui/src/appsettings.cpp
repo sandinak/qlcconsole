@@ -112,11 +112,14 @@ AppSettings::AppSettings(App *app, QWidget *parent)
         winForm->addRow(tr("Theme:"), m_themeCombo);
         m_tabLabelModeCombo = new QComboBox(winGroup);
         m_tabLabelModeCombo->setObjectName(QStringLiteral("settingsToolbarStyle"));
+        m_tabLabelModeCombo->addItem(tr("Automatic"),      App::TabAuto);
         m_tabLabelModeCombo->addItem(tr("Icons and text"), App::TabIconAndText);
         m_tabLabelModeCombo->addItem(tr("Icons only"),     App::TabIconOnly);
         m_tabLabelModeCombo->addItem(tr("Text only"),      App::TabTextOnly);
         m_tabLabelModeCombo->setCurrentIndex(m_tabLabelModeCombo->findData(m_app->tabLabelMode()));
         m_tabLabelModeCombo->setToolTip(tr("The tabs, the top bar and every tab's own tools: "
+                                           "automatic (the tabs use full names, then short "
+                                           "names, then icons, whichever fits the window), "
                                            "icons and text, icons only (tooltips name them) "
                                            "or text only."));
         winForm->addRow(tr("Toolbar style:"), m_tabLabelModeCombo);

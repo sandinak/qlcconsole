@@ -1118,6 +1118,126 @@ void LayoutSanity_Test::theFooterChipsNeverOverlap()
     settle();
 }
 
+void LayoutSanity_Test::theTabStripFitsTheWindow()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    QTabBar *bar = tabs->tabBar();
+    const int oldMode = m_app->tabLabelMode();
+    const int oldView = m_app->m_workspaceView;
+    const int oldTheme = m_app->theme();
+    m_app->setTheme(App::ThemeVSCodeDark);
+    /* TABFIT_BEFORE=1: pictures of the old strip (Icons and text, the strip
+       left as the style has it) for the before/after check; no assertions. */
+    const bool before = qEnvironmentVariableIsSet("TABFIT_BEFORE");
+    m_app->setTabLabelMode(before ? App::TabIconAndText : App::TabAuto);
+    if (before)
+    {
+        bar->setUsesScrollButtons(bar->style()->styleHint(QStyle::SH_TabBar_PreferNoArrows) == 0);
+        bar->setElideMode(Qt::ElideRight);
+    }
+    const QString shots = qEnvironmentVariable("TABFIT_SHOTS");
+    const QString tag = qEnvironmentVariable("TABFIT_TAG", QStringLiteral("after"));
+    const QStringList viewNames = { QStringLiteral("classic"), QStringLiteral("qlcconsole"),
+                                    QStringLiteral("everything") };
+
+    for (int v = 0; v < 3; ++v)
+    {
+        m_app->setWorkspaceView(App::WorkspaceView(v), false);
+        int lastFit = -1;
+        for (const int w : { 1920, 1280, 1100, 1024, 900, 0 })
+        {
+            const int width = w > 0 ? w : m_app->minimumSizeHint().width();
+            const QString where = QStringLiteral("%1 view, %2 wide").arg(viewNames.at(v)).arg(width);
+            m_app->resize(width, 800);
+            settle();
+            QTest::qWait(50);
+            settle();
+            if (!shots.isEmpty())
+            {
+                QDir().mkpath(shots);
+                m_app->grab().save(
+                    QStringLiteral("%1/%2-tabs-%3-%4.png").arg(shots, tag, viewNames.at(v)).arg(width));
+            }
+
+            if (before)
+                continue;
+            const int fit = m_app->tabFit();
+            QVERIFY2(fit >= lastFit, qPrintable(where + ": wording came back as the window narrowed"));
+            lastFit = fit;
+            if (width >= 1920)
+                QCOMPARE(fit, int(App::TabFitFull));
+
+            // No scroll buttons showing.
+            for (QToolButton *b : bar->findChildren<QToolButton *>())
+                QVERIFY2(!b->isVisibleTo(bar), qPrintable(where + ": the tab strip scrolls"));
+
+            bool sawRun = false;
+            QVERIFY(bar->count() >= 6);
+            for (int i = 0; i < bar->count(); ++i)
+            {
+                const QString label = bar->tabData(i).toString();
+                const QString full = m_app->tabDisplayLabel(label);
+                const QString expect = fit == App::TabFitFull ? full
+                                     : fit == App::TabFitShort ? m_app->tabShortLabel(label) : QString();
+                QCOMPARE(bar->tabText(i), expect);
+                QCOMPARE(bar->tabToolTip(i), full);
+                const QRect r = bar->tabRect(i);
+                QVERIFY2(r.left() >= 0 && r.right() < bar->width() && r.width() > 0,
+                         qPrintable(QStringLiteral("%1: tab \"%2\" is outside the strip (%3..%4 of %5)")
+                                        .arg(where, label).arg(r.left()).arg(r.right()).arg(bar->width())));
+                if (fit != App::TabFitIcons)
+                {
+                    // Whole: the text is not cut short.
+                    const int need = bar->fontMetrics().horizontalAdvance(expect);
+                    QVERIFY2(r.width() > need, qPrintable(where + ": " + label + " is cut"));
+                }
+                if (label == m_app->tr("Run"))
+                    sawRun = true;
+            }
+            QVERIFY2(sawRun || v == 0, qPrintable(where + ": no Run tab"));
+        }
+    }
+
+    if (before)
+    {
+        m_app->setTabLabelMode(oldMode);
+        return;
+    }
+    // The explicit modes still mean what they said.
+    m_app->resize(1920, 800);
+    settle();
+    m_app->setTabLabelMode(App::TabIconOnly);
+    QVERIFY(bar->tabText(0).isEmpty());
+    QVERIFY(!bar->tabToolTip(0).isEmpty());
+    m_app->setTabLabelMode(App::TabTextOnly);
+    QVERIFY(!bar->tabText(0).isEmpty());
+    QVERIFY(bar->tabIcon(0).isNull());
+    m_app->setTabLabelMode(App::TabIconAndText);
+    QCOMPARE(bar->tabText(0), m_app->tabDisplayLabel(bar->tabData(0).toString()));
+
+    // A tab put in its own window keeps its full name in the title.
+    m_app->setTabLabelMode(App::TabAuto);
+    m_app->resize(900, 800);
+    settle();
+    const QString label = bar->tabData(1).toString();
+    m_app->slotDetachContext(1);
+    settle();
+    bool titled = false;
+    for (DetachedContext *dw : m_app->findChildren<DetachedContext *>())
+        if (dw->windowTitle().contains(m_app->tabDisplayLabel(label)))
+            titled = true;
+    QVERIFY2(titled, "the detached window's title keeps the full name");
+    for (DetachedContext *dw : m_app->findChildren<DetachedContext *>())
+        dw->close();
+    settle();
+
+    m_app->setTabLabelMode(oldMode);
+    m_app->setTheme(oldTheme);
+    m_app->setWorkspaceView(App::WorkspaceView(oldView), false);
+    m_app->resize(1280, 800);
+    settle();
+}
+
 void LayoutSanity_Test::everyScreenIsLaidOutCleanly_data()
 {
     QTest::addColumn<int>("index");

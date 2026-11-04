@@ -129,6 +129,8 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
     /** The stage chip shortens its cue to the room the footer has. */
     void resizeEvent(QResizeEvent *event) override;
+    /** A language change re-words the tabs (Auto re-measures them). */
+    void changeEvent(QEvent *event) override;
 
 public slots:
     /** Help > Troubleshooting > Copy Layout Report (LayoutDiagnostics). */
@@ -147,11 +149,24 @@ protected:
      * Tab label mode
      *********************************************************************/
 public:
-    enum TabLabelMode { TabIconAndText = 0, TabIconOnly = 1, TabTextOnly = 2 };
+    /** TabAuto (the default) fits the tab strip to the window: full names,
+        else short names, else icons only (fitTabLabels()). The other
+        toolbars read it as Icons and text. */
+    enum TabLabelMode { TabIconAndText = 0, TabIconOnly = 1, TabTextOnly = 2, TabAuto = 3 };
+    enum TabFit { TabFitFull = 0, TabFitShort = 1, TabFitIcons = 2 };
 
     int tabLabelMode() const;
     void setTabLabelMode(int mode);
     void applyTabLabelMode();
+    /** The short form of a tab's label (Auto mode, second step). */
+    QString tabShortLabel(const QString &label) const;
+    /** Auto mode's chosen step now (TabFit); TabFitFull in any other mode. */
+    int tabFit() const { return m_tabFit; }
+
+    /** Auto mode: the widest of full / short / icons-only whose tabs all fit
+     *  the strip, by the real font metrics and style. Run again on resize,
+     *  view switch, detach/reattach and language change. */
+    void fitTabLabels();
 
     /** Switch the main tab strip to whichever tab hosts @p w (no-op if @p w
      *  isn't a direct tab-page widget). Lets a tab's own content navigate
@@ -160,7 +175,11 @@ public:
     void switchToTabContaining(QWidget *w);
 
 private:
-    int m_tabLabelMode = TabIconAndText;
+    int m_tabLabelMode = TabAuto;
+    int m_tabFit = TabFitFull;
+    bool m_fittingTabs = false;
+    bool m_tabsCompact = false;
+    void setTabsCompact(bool compact);
     QList<QPair<QString, QIcon>> m_tabOriginals; // stored on first tab add
 
     /*********************************************************************
