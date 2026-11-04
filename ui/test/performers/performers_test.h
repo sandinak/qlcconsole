@@ -32,6 +32,9 @@ class Performers_Test final : public QObject
 private slots:
     /** A performer line's count stands evenly along it, one on each end. */
     void countSpreadsEvenly();
+    /** People keep their fractions along the line as it shrinks, bends
+     *  and moves. */
+    void peopleKeepTheirFractionsWhenTheLineChanges();
     /** Each person's feet on the highest surface under them: the usual
      *  choir -- three riser tiers and the apron, four lines -- and a line
      *  up the steps. */

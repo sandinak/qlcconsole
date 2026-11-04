@@ -988,6 +988,10 @@ private slots:
      *  amber from the footer's "fixtures.offrow" warning */
     void aFloorLightBesideItsRowsDeckIsRingedAmber();
 
+    /** A performer line's people keep their fractions along it as its
+     *  handles, middle, place and undo change it */
+    void peopleFollowTheirLine();
+
 private:
     Doc* m_doc;
 };

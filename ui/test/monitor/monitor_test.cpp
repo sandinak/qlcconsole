@@ -129,6 +129,7 @@
 #include "trussitem.h"
 #include "powerdistribution.h"
 #include "targetitem.h"
+#include "performerfill.h"
 #undef protected
 #undef private
 
@@ -29715,5 +29716,87 @@ void Monitor_Test::aBuriedLightIsRingedOnThePlot()
     // ...clean again when the footer entry clears.
     ShowStatus::instance()->clearStatus("fixtures.buried");
     QVERIFY(!item->isBuried());
+    delete doc;
+}
+
+/* The people on a performer line are drawn by the same fractions along the
+ * line as it is NOW: a handle dragged, the middle bent, the line moved or
+ * the edit undone re-lays them (they stayed spread over the old line). */
+static void expectCrowdOnLine(MonitorGraphicsView *gv, StageTarget *line, const char *what)
+{
+    TargetItem *ti = gv->m_targetItems.value(line->id());
+    QVERIFY2(ti != nullptr, what);
+    MonitorProperties *props = gv->m_doc->monitorProperties();
+    const QVector3D aim = props->targetAimPoint(line);
+    const QPointF centre = gv->projectMm(double(aim.x()) * 1000.0, double(aim.y()) * 1000.0,
+                                         double(aim.z()) * 1000.0);
+    const QList<PerformerFill::Performer> people = PerformerFill::people(props, line);
+    const QVector<QPair<QPointF, QPointF> > drawn = ti->performers();
+    QVERIFY2(drawn.size() == people.size() && drawn.size() == line->performerCount(), what);
+    for (int i = 0; i < people.size(); ++i)
+    {
+        const QVector3D f = people.at(i).feet * 1000.0f;
+        const QPointF want = gv->projectMm(f.x(), f.y(), f.z()) - centre;
+        QVERIFY2(QLineF(want, drawn.at(i).first).length() < 0.5, what);
+    }
+}
+
+void Monitor_Test::peopleFollowTheirLine()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10, 6, 8));
+    QWidget parent;
+    Monitor mon(&parent, doc);
+    MonitorGraphicsView *gv = mon.m_graphicsView;
+    gv->setViewPOV(MonitorGraphicsView::PovTop);
+    gv->resize(1000, 700);
+    QResizeEvent ev(QSize(1000, 700), QSize(800, 600));
+    gv->resizeEvent(&ev);
+
+    PerformerFill::Options o;
+    StageTarget *line = PerformerFill::addLine(props, QVector3D(1, 3, 0), QVector3D(9, 3, 0), 5, o,
+                                               PerformerFill::ensureLayer(props));
+    QVERIFY(line != nullptr);
+    gv->updateTargets();
+    expectCrowdOnLine(gv, line, "as made");
+    TargetItem *ti = gv->m_targetItems.value(line->id());
+    const float lenBefore = (line->linePoints().last() - line->linePoints().first()).length();
+
+    // Shrink by the end handle: five people over the shorter line.
+    const QPointF h1 = ti->mapToScene(ti->lineHandle(1));
+    emit ti->lineHandleMoved(ti, 1, h1 - QPointF(gv->m_cellPixels * 4.0, 0.0), Qt::NoModifier);
+    expectCrowdOnLine(gv, line, "mid drag");
+    emit ti->lineHandleReleased(ti, 1);
+    expectCrowdOnLine(gv, line, "shrunk");
+    QVERIFY((line->linePoints().last() - line->linePoints().first()).length() < lenBefore * 0.7f);
+    // The last person stands on the new end, the first on the old one.
+    const QList<PerformerFill::Performer> ppl = PerformerFill::people(props, line);
+    const QVector<QVector3D> world = props->targetLinePoints(line);
+    QVERIFY(qAbs(ppl.last().feet.x() - world.last().x()) < 1e-3f);
+    QVERIFY(qAbs(ppl.first().feet.x() - world.first().x()) < 1e-3f);
+
+    // Bend it: a middle point dragged off the line.
+    const QVector3D posB = line->position();
+    const QVector<QVector3D> ptsB = line->linePoints();
+    QVector<QVector3D> bent = ptsB;
+    bent.insert(1, (ptsB.first() + ptsB.last()) * 0.5f + QVector3D(0.0f, 2.0f, 0.0f));
+    line->setLinePoints(bent);
+    gv->commitLineEdit(line, posB, ptsB);
+    expectCrowdOnLine(gv, line, "bent");
+
+    // Move the whole line.
+    line->setX(line->x() + 1.5f);
+    gv->updateTargets();
+    expectCrowdOnLine(gv, line, "moved");
+    line->setX(line->x() - 1.5f);
+
+    // Undo puts the line back and the people with it.
+    gv->undoLastMove();
+    expectCrowdOnLine(gv, line, "undone bend");
+    gv->undoLastMove();
+    expectCrowdOnLine(gv, line, "undone shrink");
+    QVERIFY(qAbs((line->linePoints().last() - line->linePoints().first()).length() - lenBefore) < 1e-3f);
     delete doc;
 }

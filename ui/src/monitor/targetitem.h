@@ -137,6 +137,8 @@ public:
     void setLineGeometry(const QPolygonF &curve, const QVector<double> &fractions,
                          const QVector<QPointF> &handles);
     bool isLine() const { return m_curve.size() >= 2; }
+    /** The people drawn on a performer line: feet and crown, relative to the item. */
+    QVector<QPair<QPointF, QPointF> > performers() const { return m_performers; }
     int lineHandleCount() const { return m_handles.size(); }
     QPointF lineHandle(int index) const { return m_handles.value(index); }
     /** The handle under @p local (item coordinates), or -1. */

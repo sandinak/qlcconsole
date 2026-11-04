@@ -163,6 +163,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Subject showed raw centimetres; they show and take the unit Settings →
   Units picks (5' 7"). The target editor's metre fields take a length
   typed in feet or inches (5' 6", 66 in) too.
+
+- **People on a performer line follow it when you edit it.** Shrinking a
+  line by its end handle (or bending it, moving it, undoing the edit) left the
+  people drawn spread over the old line; they are now laid again along the
+  line as it is, by the same fractions, in the same step as the edit.
 - **The rig view holds still under the mouse.** Hovering over the 3D/rig
   view while a show ran made the rig shimmer back and forth by a hair:
   the crosshair's frames were drawn at full quality between the running
