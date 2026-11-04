@@ -84,6 +84,7 @@ add_library(${module_name} SHARED
     showtreesubcueconvert.cpp
     showtreesections.cpp
     showtreescript.cpp
+    showtreenotes.cpp showtreenotes.h
     callingscript.cpp callingscript.h
     showtreetimecode.cpp
     showtreenumbering.cpp

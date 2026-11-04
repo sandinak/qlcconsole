@@ -42,6 +42,8 @@ class QListWidget;
 class ShowTreeCommand;
 class QBoxLayout;
 class QSplitter;
+class ShowNotesPane;
+class ShowNotesList;
 class QMimeData;
 class QDoubleSpinBox;
 class QTreeWidgetItem;
@@ -126,7 +128,12 @@ public:
          *  while its follow spot is following. */
         LitPiecesRole = Qt::UserRole + 46,
         /** A cue's or layer's follow-spot effect looks (palette ids). */
-        FollowPalettesRole = Qt::UserRole + 47
+        FollowPalettesRole = Qt::UserRole + 47,
+        /** Q212: the notes mark in the flags column ("✎", "✎ 2" open),
+         *  drawn before the badges (flagPieces()); NoteOpenRole: it is for
+         *  open notes (the warning colour), else done ones only. */
+        NoteMarkRole = Qt::UserRole + 50,
+        NoteOpenRole = Qt::UserRole + 51
     };
 
     /** The colour of a lit badge ("follow" while it follows). */
@@ -188,9 +195,19 @@ public:
     bool backwashMarkMenu(const QPoint &pos);
     /** The warning menu while it is open (tests). */
     QMenu *lastWarningMenu() const { return m_lastWarningMenu; }
+
+    /** Q212 (showtreenotemarks.cpp): the notes pane beside the tree, which
+     *  follows the selection; the marks on rows with notes; All notes…. */
+    ShowNotesPane *notesPane() const { return m_notesPane; }
+    void applyNoteMarks();
+    ShowNotesList *showAllNotes();
 private:
     QMenu *m_lastWarningMenu = nullptr;
     void setupBackwashMarks();
+    void setupNotes(QSplitter *pageSplit);
+    void syncNotesPane(bool fromLibrary);
+    ShowNotesPane *m_notesPane = nullptr;
+    ShowNotesList *m_notesList = nullptr;
     void backwashLayerMenu(QMenu *menu, quint32 cueId, quint32 layerId);
 public:
 

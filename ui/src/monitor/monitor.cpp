@@ -3006,6 +3006,13 @@ void Monitor::toggleStageOverview()
     showStageOverview();
 }
 
+StructureStudioView *Monitor::stageOverviewView(bool open)
+{
+    if (m_overviewView == NULL && open)
+        showStageOverview();
+    return m_overviewView;
+}
+
 void Monitor::showStageOverview()
 {
     /* A read-only angled look at the whole rig. StructureStudioView already

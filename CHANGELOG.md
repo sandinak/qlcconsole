@@ -14,6 +14,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Notes beside the Show Tree.** A notes pane under the cue page follows
+  the selection (a cue, layer, list, production or Library palette) and
+  lists its notes newest first, each dated, signed with Your name, and
+  open until ticked done. **Snapshot the view** keeps the Rig Overview's
+  camera, a small picture and the cue on stage with the note; **Show me**
+  puts the camera back (and, in Design, the cue on the rig). Rows with
+  notes show **✎** (orange while open) and the newest note on hover.
+  **All notes…** lists the whole show's notes with open/done, item and
+  word filters, jumps to the item, and prints or exports them (PDF or
+  Markdown). A cue's existing note becomes its first entry, and Needs
+  work now means "has an open note". Every edit is one undo step; older
+  shows open with their cue notes as entries.
 - **Three states for a Show Review warning, visible on the cue.** Open is
   the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
   who marked it, when, and the note); **Not a Problem…** (was Accept…)

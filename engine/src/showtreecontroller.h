@@ -31,6 +31,7 @@
 #include "qlcengine_export.h"
 #include "functionparent.h"
 #include "showtreemodel.h"
+#include "showtreenotes.h"
 #include "qlcpalette.h"
 #include "scenevalue.h"
 
@@ -1762,6 +1763,75 @@ private:
     bool m_batchChanged = false;
     QList<quint32> m_lastChanged;
 
+    /************************************************************************
+     * Notes beside the tree (Q212, showtreenotes.cpp)
+     ************************************************************************/
+public:
+    /** The notes on @a kind @a target, newest first (a cue's own note, from
+     *  before notes had dates, last). */
+    QList<ShowTree::Note> notes(ShowTree::NoteKind kind, quint32 target) const;
+    /** Every note on something that is still there, newest first. */
+    QList<ShowTree::Note> allNotes() const;
+    const ShowTree::Note *note(quint32 noteId) const;
+    /** How many notes @a kind @a target has, and how many are open. */
+    int noteCount(ShowTree::NoteKind kind, quint32 target, int *open = nullptr) const;
+    /** The newest note on @a kind @a target (null: none). */
+    const ShowTree::Note *latestNote(ShowTree::NoteKind kind, quint32 target) const;
+    /** Whether a note's item is still there (a deleted cue's notes are kept
+     *  for its undo, and not saved). */
+    bool noteTargetExists(const ShowTree::Note &note) const;
+    /** What a person reads for a note's item: "Cue 1.0.2 Opener", "Layer
+     *  Towers (cue 1.0.2)", "List Main", "Palette Blue". */
+    QString noteTargetLabel(const ShowTree::Note &note) const;
+    /** A new note on @a kind @a target (a layer: in cue @a layerCue; any
+     *  other: ignored), open, dated now, by @a author (empty: the "Your
+     *  name" setting, else the account). One undo step. Invalid: no such
+     *  item, or nothing to say (no text and no view). */
+    quint32 addNote(ShowTree::NoteKind kind, quint32 target, const QString &text,
+                    const ShowTree::NoteView &view = ShowTree::NoteView(),
+                    quint32 layerCue = 0xFFFFFFFF, const QString &author = QString());
+    /** Edit, tick, snapshot or remove a note: one undo step each; false when
+     *  nothing changed. A cue's own note entry edits the cue's note. */
+    bool setNoteText(quint32 noteId, const QString &text);
+    bool setNoteDone(quint32 noteId, bool done);
+    bool setNoteView(quint32 noteId, const ShowTree::NoteView &view);
+    bool removeNote(quint32 noteId);
+    /** Keep a snapshot's picture (JPEG or PNG bytes): its id, the same for
+     *  the same bytes. Pictures are kept apart from the undo steps (they
+     *  never change), and only those a note uses are saved. */
+    QString addNoteImage(const QByteArray &bytes);
+    QByteArray noteImage(const QString &id) const;
+    /** The bytes the saved show's pictures take (base64 adds a third). */
+    qint64 noteImageBytes() const;
+    /** Past this, the notes pane warns that the pictures make the show
+     *  file big (4 MB). */
+    static qint64 noteImageWarnBytes() { return qint64(4) * 1024 * 1024; }
+
+signals:
+    /** A note was added, edited, ticked or removed (also on undo/redo,
+     *  with changed()). */
+    void notesChanged();
+
+private:
+    /** Run @a change on the notes (and the tree, for a cue note or Needs
+     *  work) as one undo step; bakes only when a cue's note changed. */
+    bool editNotes(const QString &label,
+                   const std::function<bool(QList<ShowTree::Note> &, QList<ShowTree::Production> &)> &change);
+    /** A cue's note and its entry, Needs work and the open notes, kept in
+     *  step after an edit of the tree (and on load): a cue note with no
+     *  entry gets one, Needs work with no open note gets one, an open note
+     *  sets Needs work. */
+    void syncCueNotes(QList<ShowTree::Production> &ps);
+    /** After a notes edit: Needs work is "has an open note". */
+    void syncNeedsWork(QList<ShowTree::Production> &ps) const;
+    void saveNotes(QXmlStreamWriter *doc, bool snapshot) const;
+    void loadNotes(QXmlStreamReader &root);
+    void loadNoteImage(QXmlStreamReader &root);
+    QList<ShowTree::Note> m_notes;
+    QList<ShowTree::Note> m_batchNotes;
+    QHash<QString, QByteArray> m_noteImages;
+
+private:
     Doc *m_doc;
     QList<ShowTree::Production> m_productions;
     quint32 m_nextId = 1;
