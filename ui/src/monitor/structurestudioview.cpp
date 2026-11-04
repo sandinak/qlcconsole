@@ -7777,6 +7777,10 @@ double StructureStudioView::beamVisibility(Fixture *fx, const FixtureRigProps &r
 
     if (beamDeg <= 0.0 || beamDeg >= 360.0)
         return 1.0;
+    /* A cone we assumed (the definition says 0) is a guess: it is drawn, but
+       never used to dim the fixture, as an undeclared lens never was. */
+    if (traits.beamAssumed)
+        return 1.0;
     const double beam = beamDeg;
 
     QVector3D throwDir;                 // not "emit": that is a Qt keyword macro

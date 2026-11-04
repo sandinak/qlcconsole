@@ -131,6 +131,15 @@ ring on the plot. Tests: ShowReview_Test::fix15 + fix15Geometry,
 ProgrammingManager_Test::aBuriedLightIsAFooterErrorUntilItIsFixed,
 Monitor_Test::aBuriedLightIsRingedOnThePlot.
 
+- **Zero lens / zero pan-tilt defaults built (2026-11-03, branch
+  fix/04-zero-lens):** `Fixture::effectiveBeam()` (15 degrees moving head or
+  scanner, 25 colour changer, 6 effect, 40 LED bar, 20 other; pan 540 / tilt
+  270 for a moving head with pan/tilt channels, 0 without) feeds the rig view
+  traits, RigHeads, AimSolver and positionToValues; the Fixture Manager and
+  plot tooltip say "(assumed: the definition says 0)"; Show Review FIX-18
+  once per definition. Tests: Fixture_Test::zeroLensAndRangeGetDefaults,
+  AimSolver_Test::zeroRangeDefinitionsStillAim, ShowReview_Test::fix18,
+  Monitor_Test::aZeroLensFixtureDrawsABeam.
 - **FIX-16 built (Q208, 2026-11-03):** "not on its row's riser" as a
   warning (`PlacementCheck::offRow()`, footer `fixtures.offrow`, amber ring,
   Sit on Top); on his show copy it flags UST-2 only. Row-mates = same type in

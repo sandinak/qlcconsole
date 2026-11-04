@@ -169,6 +169,22 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   editor (origin, cell pitch, a member's position), the patch plan's cable
   distance, the line-of-sight tooltip and Focus mode's step now follow
   Settings ▸ Units (5' 6" or 1.68 m); they showed metres only.
+
+- **A definition that says 0 for its lens or pan/tilt range no longer
+  draws nothing.** Many cheap or user-made definitions (the Fixture Editor's
+  defaults) have a beam angle of 0 and/or a Pan/Tilt range of 0, so the
+  rig view drew no beam and aiming guessed. Now the rig view, the plot and
+  every aim use a default by type, and say so ("15° (assumed: the
+  definition says 0)" in the Fixture Manager's details and the plot
+  tooltip): beam angle 15° for a moving head or scanner, 25° colour
+  changer / par / wash, 6° effect, 40° LED bar, 20° otherwise (none for a
+  hazer, fan or laser); pan 540° and tilt 270° for a moving head with pan/tilt
+  channels (360° / 270° for other movers). A definition that declares them is
+  unchanged. **Old shows:** a light on such a definition now draws a beam,
+  and its aim DMX changes where its pan range was 0 (it was solved over 360°,
+  now 540° for a moving head). Re-aim, or set the real figures on the
+  definition. New Show Review note **FIX-18** names each such definition once
+  and opens it in the Fixture Editor (Edit Definition…).
 - **An Aim at an Area covers the area** (board Q209). Every light aimed at
   a sized Area used to point at its centre, at the area's own height, and
   the corners stayed dark. Now the area is split into one zone per light

@@ -573,8 +573,8 @@ float RefineSession::dmxToDegrees(Fixture *fx, int type, quint16 dmx)
     const quint32 lsb = fx->channelNumber(type, QLCChannel::LSB);
     if (msb == QLCChannel::invalid())
         return 0.0f;
-    QLCPhysical phy = fx->fixtureMode()->physical();
-    double maxDeg = (type == QLCChannel::Pan) ? phy.focusPanMax() : phy.focusTiltMax();
+    const Fixture::EffectiveBeam eb = fx->effectiveBeam();
+    double maxDeg = (type == QLCChannel::Pan) ? eb.panMax : eb.tiltMax;
     if (maxDeg <= 0.0)
         maxDeg = (type == QLCChannel::Pan) ? 360.0 : 270.0;
     auto dmxAt = [&](double deg) {

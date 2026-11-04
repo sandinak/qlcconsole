@@ -635,6 +635,64 @@ void ShowReview_Test::fix16()
     QVERIFY(PlacementCheck::offRow(m_doc).isEmpty());
 }
 
+void ShowReview_Test::fix18()
+{
+    // Two fixtures on one definition that says 0 for its lens: one note.
+    Fixture *a = mover(QStringLiteral("Spot 1"), 0);
+    QVERIFY(a != nullptr);
+    Fixture *b = new Fixture(m_doc);
+    b->setName(QStringLiteral("Spot 2"));
+    b->setFixtureDefinition(a->fixtureDef(), a->fixtureMode());
+    b->setAddress(20);
+    QVERIFY(m_doc->addFixture(b));
+    QVERIFY(fires("FIX-18"));
+    QList<ReviewFinding> all = findings("FIX-18");
+    QCOMPARE(all.size(), 1);
+    const ReviewFinding f = all.first();
+    QCOMPARE(f.severity, ReviewFinding::Note);
+    QCOMPARE(f.targets.size(), 2);
+    QVERIFY2(f.message.contains(QStringLiteral("no beam angle")), qPrintable(f.message));
+    QVERIFY2(f.message.contains(QStringLiteral("15\u00B0")), qPrintable(f.message));
+    QVERIFY2(!f.message.contains(QStringLiteral("pan/tilt")), qPrintable(f.message));
+    QCOMPARE(f.jump, QStringLiteral("status:fixtures.output"));
+
+    // A definition with no pan/tilt range too: said in the same note.
+    QLCFixtureMode *mode = const_cast<QLCFixtureMode *>(a->fixtureMode());
+    QLCPhysical ph = mode->physical();
+    ph.setFocusPanMax(0);
+    ph.setFocusTiltMax(0);
+    mode->setPhysical(ph);
+    all = findings("FIX-18");
+    QCOMPARE(all.size(), 1);
+    QVERIFY2(all.first().message.contains(QStringLiteral("no beam angle and no pan/tilt range")),
+             qPrintable(all.first().message));
+    QVERIFY2(all.first().message.contains(QStringLiteral("540\u00B0\u00D7270\u00B0")),
+             qPrintable(all.first().message));
+
+    // Declared, it says nothing.
+    ph.setLensDegreesMin(12);
+    ph.setLensDegreesMax(12);
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    QVERIFY(quiet("FIX-18"));
+}
+
+void ShowReview_Test::fix18SameNameTwoDefinitions()
+{
+    // Two separate definitions called alike: two rows, told apart.
+    Fixture *a = mover(QStringLiteral("Spot A"), 0);
+    Fixture *b = mover(QStringLiteral("Spot B"), 10);
+    QVERIFY(a != nullptr && b != nullptr);
+    QVERIFY(a->fixtureDef() != b->fixtureDef());
+    QCOMPARE(a->fixtureDef()->model(), b->fixtureDef()->model());
+    const QList<ReviewFinding> all = findings("FIX-18");
+    QCOMPARE(all.size(), 2);
+    QVERIFY(all.at(0).message != all.at(1).message);
+    QVERIFY(all.at(0).fingerprint != all.at(1).fingerprint);
+    QVERIFY2(all.at(0).message.contains(QStringLiteral("(Spot ")), qPrintable(all.at(0).message));
+}
+
 void ShowReview_Test::fix16Rows()
 {
     MonitorProperties *mp = m_doc->monitorProperties();

@@ -845,7 +845,8 @@ ShowTreeController::CapturePlan ShowTreeController::planCapture(quint32 sceneId)
             };
             if (mode != nullptr)
             {
-                int panMax = mode->physical().focusPanMax(), tiltMax = mode->physical().focusTiltMax();
+                const Fixture::EffectiveBeam eb = fx->effectiveBeam();
+                int panMax = int(eb.panMax), tiltMax = int(eb.tiltMax);
                 if (panMax <= 0)
                     panMax = 360;
                 if (tiltMax <= 0)
