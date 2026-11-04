@@ -998,7 +998,6 @@ private:
     QToolButton *m_record;
     QToolButton *m_merge;
     QLabel *m_hint;
-    QLabel *m_previewLabel;
     QToolButton *m_previewPlay = nullptr;   //!< RC8: Play over a running show
     QList<QToolButton *> m_pagePlay;        //!< the cue and layer pages' Play / Stop
     QList<QToolButton *> m_pageSolo;        //!< ...and their Solo

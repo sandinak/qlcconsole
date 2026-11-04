@@ -51,11 +51,11 @@ is changed only in the tree: elsewhere it is locked. See
   At its right end, by the show controls, is **MIB**, the show's auto
   move-in-black (see [Move in black](#move-in-black)); a narrow window
   folds the buttons into **»**, never MIB.
-  On the right are two pieces of status:
-  - what the rig shows, such as *"▶ On the rig: 1.0.1 Verse"* (see
-    [Seeing it on the rig](#seeing-it-on-the-rig));
-  - while you drag, what the drop will do; after an edit, which cues it
-    changed (*"Changed: 1.0.1 Verse, 1.0.2 Out"*).
+  On the right is status: while you drag, what the drop will do; after an
+  edit, which cues it changed (*"Changed: 1.0.1 Verse, 1.0.2 Out"*). What
+  the rig shows is not here: the **stage chip in the footer** says it, such
+  as *"Stage: 1.0.1 Verse (Show Tree)"* (see
+  [Seeing it on the rig](#seeing-it-on-the-rig)).
 Left to right: **the Library**, **the tree**, **the page** — so a drag
 from the Library lands in the tree right beside it.
 
@@ -187,7 +187,8 @@ the tree and the Workbench follows it.
   highlighted on the 2D view, and clicking a fixture there selects the
   layer that lights it. **Solo** plays only the selected layer. **Stop**
   holds the preview, **Play** brings it back. A GO holds it too, and while
-  the list runs it says **■ Held** until you press **Play** (see
+  the list runs the footer chip says **Show Tree preview held** until you
+  press **Play** (see
   [Seeing it on the rig](#seeing-it-on-the-rig)). In Operate nothing
   previews, as everywhere in the tree: **Play** and **Solo** stay in view,
   greyed, and say why.
@@ -1613,8 +1614,8 @@ an older build ignores.
 **Design mode: the cue you are editing is on the rig.**
 
 - Selecting a cue, or a layer in it, plays that cue (its whole tracked
-  state), and every change shows at once. The top right says *"▶ On the rig:
-  1.0.1 Verse"*.
+  state), and every change shows at once. The footer's stage chip says *"Stage:
+  1.0.1 Verse (Show Tree)"*; click it to jump to that cue.
 - Selecting another cue moves the preview there. A layer both cues share
   keeps running, with no re-fade.
 - Selecting the list or nothing, or leaving the tab, stops the preview.
@@ -1639,13 +1640,14 @@ an older build ignores.
   the editors' Test plays hold the same way. Simple Desk, the Virtual
   Console, Focus and Refine and the programmer's flash are not previews:
   GO leaves them running.
-- **The latest thing you do wins.** After GO the top right says
-  *"■ Held — Full Show running. Play to preview 1.0.1 Verse over it."*
+- **The latest thing you do wins.** After GO the footer chip says
+  *"● LIVE · Full Show · 1.0.1 Verse · Show Tree preview held"*; hover it
+  for what is held and how to get it back (**Play**), click it to jump to the cue.
   Select a cue — another one, or click the one already selected — and it
   is on the stage again, over the run: the cue you are on takes precedence
   on every channel it sets, so a dimmer you edit down shows even over a
-  running cue at full (*"▶ On the rig: 1.0.1 Verse, over Full Show
-  running"*). **Play** (beside the line, or the Workbench's) does the same.
+  running cue at full (*"Stage: 1.0.1 Verse (Show Tree) · Full Show
+  running"* in the footer chip). **Play** (in the toolbar, or the Workbench's) does the same.
   The next GO holds it again. The running list keeps going underneath.
 - **The Run tab, in Design**: clicking a cue there shows it on the stage
   too, and puts it on standby, so GO plays the same look. Leaving the Run

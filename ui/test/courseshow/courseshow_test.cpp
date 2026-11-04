@@ -1984,8 +1984,7 @@ void CourseShow_Test::lessonFiveOperate()
     QTest::qWait(600);
     QCOMPARE(sends(doc, "SR Truss Wash 1"), QByteArray("\x00\x00\x00", 3));
     QCOMPARE(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3));
-    qInfo().noquote() << "[L5] Show Tree in LIVE says:" << hintOf(view)->text()
-                      << "|" << stFind<QLabel>(view, "stPreview")->text();
+    qInfo().noquote() << "[L5] Show Tree in LIVE says:" << hintOf(view)->text();
 
     run = runTab(m_app);
     press(run, "crStop");

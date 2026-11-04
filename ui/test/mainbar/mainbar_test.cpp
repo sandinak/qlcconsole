@@ -358,6 +358,108 @@ void MainBar_Test::theShowControlsWorkInBothPlacements()
     }
 }
 
+/* Bug 2980: coming out of Blind the footer stayed blue. Whichever way Blind
+   goes on (the button in Design = the mute, a remote/web toggle of the
+   inhibit, Operate's Blind view) and whichever way it goes off (the button,
+   the remote toggle, the Design/Operate switch, loading a show), the status
+   bar is exactly what it was before -- stylesheet, palette, the pixels it
+   draws -- and the stage chip reads "Stage: ..." again. */
+void MainBar_Test::leavingBlindRestoresTheFooter_data()
+{
+    QTest::addColumn<int>("theme");
+    QTest::newRow("default") << int(App::ThemeDefault);
+    QTest::newRow("dark") << int(App::ThemeVSCodeDark);
+    QTest::newRow("redshift") << int(App::ThemeRedShift);
+}
+
+void MainBar_Test::leavingBlindRestoresTheFooter()
+{
+    QFETCH(int, theme);
+    const int oldTheme = m_app->theme();
+    auto themeBack = qScopeGuard([&]() { m_app->setTheme(oldTheme); });
+    m_app->setTheme(theme);
+    QCoreApplication::processEvents();
+    Doc *doc = m_app->doc();
+    InputOutputMap *io = doc->inputOutputMap();
+    ShowControls *sc = m_app->m_showControls;
+    QStatusBar *bar = m_app->statusBar();
+    QToolButton *chip = bar->findChild<QToolButton *>("footerStage");
+    QVERIFY(chip != nullptr);
+    doc->setMode(Doc::Design);
+    io->setOutputInhibited(false);
+    m_app->setBlindView(false);
+    QCoreApplication::processEvents();
+
+    auto edge = [bar]() { return bar->grab().toImage().pixel(2, bar->height() / 2); };
+    struct Base { QString sheet; QPalette pal; QRgb pixel; };
+    auto snap = [&]() { return Base{ bar->styleSheet(), bar->palette(), edge() }; };
+    // The footer with no Blind in either mode, taken before any Blind.
+    QMap<int, Base> base;
+    for (Doc::Mode m : { Doc::Operate, Doc::Design })
+    {
+        doc->setMode(m);
+        QCoreApplication::processEvents();
+        QVERIFY2(chip->text().startsWith(QStringLiteral("Stage:")), qPrintable(chip->text()));
+        base.insert(int(m), snap());
+    }
+
+    auto inBlind = [&](const char *how) {
+        QVERIFY2(bar->styleSheet().contains(BlindStyle::colour()), how);
+        QVERIFY2(chip->text().startsWith(QStringLiteral("BLIND")), how);
+        QVERIFY2(edge() != base[int(doc->mode())].pixel, how);
+    };
+    auto restored = [&](const char *how) {
+        QCoreApplication::processEvents();
+        const Base &b = base[int(doc->mode())];
+        QVERIFY2(bar->styleSheet() == b.sheet, qPrintable(QStringLiteral("%1: [%2]").arg(how, bar->styleSheet())));
+        QVERIFY2(bar->palette() == b.pal, how);
+        QVERIFY2(edge() == b.pixel, how);
+        QVERIFY2(chip->text().startsWith(QStringLiteral("Stage:")), qPrintable(chip->text()));
+    };
+    doc->setMode(Doc::Design);
+
+    // Design: the button, off by the button.
+    sc->blindButton()->click();
+    inBlind("design button");
+    sc->blindButton()->click();
+    restored("design button off");
+
+    // Design: a remote/web toggle of the inhibit, both ways.
+    io->setOutputInhibited(true);
+    inBlind("remote on");
+    io->setOutputInhibited(false);
+    restored("remote off");
+
+    // Design: muted, then into Operate (the mute goes).
+    sc->blindButton()->click();
+    inBlind("mute then operate");
+    doc->setMode(Doc::Operate);
+    restored("mute -> operate");
+
+    // Operate: the Blind view by the button, off by the button.
+    sc->blindButton()->click();
+    inBlind("view button");
+    sc->blindButton()->click();
+    restored("view button off");
+
+    // Operate: the view on, then back to Design.
+    m_app->setBlindView(true);
+    inBlind("view api");
+    doc->setMode(Doc::Design);
+    restored("view -> design");
+
+    // Operate: the view on, then Blind toggled by the remote inhibit path.
+    doc->setMode(Doc::Operate);
+    m_app->setBlindView(true);
+    inBlind("view then remote");
+    io->setOutputInhibited(true);
+    io->setOutputInhibited(false);
+    m_app->setBlindView(false);
+    restored("view + remote off");
+
+    doc->setMode(Doc::Design);
+}
+
 /* docs/design/LIVE_BLIND.md. Design: Blind mutes the rig. Into Operate
    the mute goes (a muted rig never survives into a show) and the same
    button is the Blind VIEW: the fixtures the rig views draw show the cue in
