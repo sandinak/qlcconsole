@@ -759,6 +759,15 @@ void EffectScriptRunner::publishWrites()
         QMutexLocker locker(&m_instanceMutex);
         for (const EffectInstance *inst : m_instances)
         {
+            if (!m_offStage.isEmpty())
+            {
+                // Every scene it plays for held off stage: nothing drawn.
+                bool held = true;
+                for (quint32 sid : inst->sceneIds())
+                    held = held && m_offStage.contains(sid);
+                if (held)
+                    continue;
+            }
             const int from = int(combined.size());
             combined += inst->dmxWrites();
             // Part way in or out: each write that far over what is under it.
@@ -776,6 +785,14 @@ void EffectScriptRunner::publishWrites()
     QMutexLocker locker(&m_writesMutex);
     m_publishedWrites = combined;
     m_drawn = drawn;
+}
+
+void EffectScriptRunner::setScenesOffStage(const QSet<quint32> &sceneIds)
+{
+    if (sceneIds == m_offStage)
+        return;
+    m_offStage = sceneIds;
+    publishWrites();        // at once, not at the next tick that draws
 }
 
 bool EffectScriptRunner::hasDrawn(quint32 sceneId, quint32 paletteId) const

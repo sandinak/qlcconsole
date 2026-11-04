@@ -97,6 +97,21 @@ private slots:
     void noPreviewInLiveMode();
     void inDesignTheEditWinsOverARunningList();
     void theLatestActionWins();
+    /** 2026-11-04 ("i disabled USTs tracking in a cue .. but the display
+     *  didn't change"): with a list running for real in Design, an edit to
+     *  the previewed cue that takes light away -- a Release in the cue
+     *  before, a Block, a layer taken out -- is dark on the rig in the
+     *  same frame; the run, held off stage, comes back when the preview
+     *  stops and with the next GO. */
+    void anEditThatTakesLightAwayShowsOverARunningList();
+    /** 2026-11-04 ("a hit can't be soloed .. should have gone to
+     *  nothing"): a selected hit plays alone, as a cue does -- an empty
+     *  one is a dark rig, also with a list running; Solo on a hit's layer
+     *  plays only that layer. */
+    void anEmptyHitShowsNothingAndSoloShowsOnlyIt();
+    /** A running list that follows on by itself under the preview never
+     *  flashes through: every cue of it is held, not only the one playing. */
+    void anAutoFollowUnderThePreviewStaysOffStage();
     void aCuesLevelsAreWhatItPutsOnStage();
 
     // Import (§7)

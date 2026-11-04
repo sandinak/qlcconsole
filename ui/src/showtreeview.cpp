@@ -1319,8 +1319,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_previewPlay = new QToolButton(this);
     m_previewPlay->setObjectName("stPreviewPlay");
     m_previewPlay->setText(tr("Play"));
-    m_previewPlay->setToolTip(tr("Preview the selected cue over the running show (the edit wins on the "
-                                 "channels it plays), until the next GO"));
+    m_previewPlay->setToolTip(tr("Preview the selected cue instead of the running show (it runs on, unseen), "
+                                 "until the next GO"));
     connect(m_previewPlay, &QToolButton::clicked, this, [this]() {
         commitPendingCueEdits();   // a time typed and not yet left plays too
         m_previewStopped = false;
@@ -4040,11 +4040,12 @@ QString ShowTreeView::previewText() const
     {
         case ShowTreeController::PreviewState::Playing:
         {
-            // Design: the edit wins over a list running for real, which
-            // keeps going underneath and comes back when the preview stops.
+            // Design: what is in edit is all that shows; a list running for
+            // real keeps going, held off stage, and comes back when the
+            // preview stops (ShowTreeController::runHeldOffStage).
             const QStringList running = m_st->listsRunning();
             if (!running.isEmpty())
-                return tr("▶ On the rig: %1, over %2 running").arg(cue, running.join(", "));
+                return tr("▶ On the rig: %1 (%2 runs on, unseen)").arg(cue, running.join(", "));
             return tr("▶ On the rig: %1").arg(cue);
         }
         case ShowTreeController::PreviewState::Dark:
@@ -4057,7 +4058,7 @@ QString ShowTreeView::previewText() const
             const QStringList running = m_st->listsRunning();
             if (running.isEmpty())
                 return tr("■ Held — GO took the stage. Play to preview %1.").arg(cue);
-            return tr("■ Held — %1 running. Play to preview %2 over it.").arg(running.join(", "), cue);
+            return tr("■ Held — %1 running. Play to preview %2 instead.").arg(running.join(", "), cue);
         }
         case ShowTreeController::PreviewState::Off:
         break;

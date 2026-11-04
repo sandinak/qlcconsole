@@ -85,6 +85,10 @@ private slots:
      *  none (0) plays as before, at full at once. */
     void anEffectFollowsItsScenesFades();
     void anEffectWithNoFadeTimesPlaysAsBefore();
+    /** A scene held off stage (the Show Tree preview over a running list,
+     *  ShowTreeController::runHeldOffStage): its effect draws nothing, and
+     *  draws again, still running, once it is let go of. */
+    void anEffectOfASceneHeldOffStageDrawsNothing();
     /** Two effects on one channel, one going and one coming. */
     void effectsPartWayInOrOutCompose();
 

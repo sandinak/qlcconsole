@@ -4450,7 +4450,12 @@ void App::setBlindView(bool on)
         m_blindViewTimer->setInterval(200);
         connect(m_blindViewTimer, &QTimer::timeout, this, &App::refreshBlindView);
         if (ShowTreeController *st = m_doc->showTree())
+        {
             connect(st, &ShowTreeController::editedCueChanged, this, &App::refreshBlindView);
+            // A tree edit (a Release, a cue's mode, a look, an undo): the
+            // cue in edit drawn as it now is, at once, not at the next poll.
+            connect(st, &ShowTreeController::changed, this, &App::refreshBlindView);
+        }
     }
     if (m_controlBlindAction != NULL && m_doc->mode() == Doc::Operate
         && m_controlBlindAction->isChecked() != on)

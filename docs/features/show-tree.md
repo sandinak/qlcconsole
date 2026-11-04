@@ -1751,7 +1751,9 @@ undoing the delete brings them back.
   - **Solo** plays only the selected layer (and its child layers), as the
     controller's walk does. Select another layer of the cue and that one
     plays alone instead; on the cue's page the whole cue plays until you
-    pick a layer. Leaving the cue turns Solo off.
+    pick a layer. Leaving the cue turns Solo off. Only means only: a list
+    running for real goes on unseen while Solo plays, and a hit soloed
+    plays only the hit (an empty one: a dark rig).
   - In Operate both stay in view, greyed: only the run is live there.
 - **GO holds the preview.** GO, Back or Sub GO — from the Run tab, ⌘↩,
   the Control menu, OSC, MSC, the Virtual Console or a controller button
@@ -1767,19 +1769,22 @@ undoing the delete brings them back.
   *"● LIVE · Full Show · 1.0.1 Verse · Show Tree preview held"*; hover it
   for what is held and how to get it back (**Play**), click it to jump to the cue.
   Select a cue — another one, or click the one already selected — and it
-  is on the stage again, over the run: the cue you are on takes precedence
-  on every channel it sets, so a dimmer you edit down shows even over a
-  running cue at full (*"Stage: 1.0.1 Verse (Show Tree) · Full Show
-  running"* in the footer chip). **Play** (in the toolbar, or the Workbench's) does the same.
-  The next GO holds it again. The running list keeps going underneath.
+  is on the stage again, and **only it**: the running list keeps going,
+  unseen, so what you see is the cue you are on and nothing of the run
+  under it. A dimmer you edit down, a layer you take out or Release, a
+  Block, an empty cue or hit, a Solo — each shows on the rig at the next
+  frame, not the run's look left standing (*"Stage: 1.0.1 Verse (Show
+  Tree) · Full Show running"* in the footer chip). **Play** (in the
+  toolbar, or the Workbench's) does the same. The next GO, or the preview
+  stopping, brings the run back as it plays then; the next GO also holds
+  the preview again.
 - **The Run tab, in Design**: clicking a cue there shows it on the stage
   too, and puts it on standby, so GO plays the same look. Leaving the Run
   tab lets go of it. In Operate a click there only loads.
 - **What you see is what GO plays.** The preview puts out what the cue puts
   out when it is played — the same values on every channel, also where
   layers overlap and in a cue that mixes (its own layers mix with each
-  other there as they do on GO, highest intensity winning, while together
-  they still take precedence over a running list).
+  other there as they do on GO, highest intensity winning).
 - When the preview stops, the stage is what really runs again. Nothing a
   chaser or the Virtual Console started is stopped.
 
@@ -2466,10 +2471,13 @@ called them looks; they open as they were.)
     *Decided (can change).*
   - Saved with the show as `Override="1"`; an older build opens it as a
     plain hit.
-- **Seeing it.** Selected in Design, a hit plays on the rig, as a cue does
-  (it wins over what runs); in Operate nothing previews — what runs owns the
-  stage. **Record as New Cue → everything lit** records a hit a button
-  fired as its layers.
+- **Seeing it.** Selected in Design, a hit plays on the rig alone, as a
+  cue does: what it puts on stage and nothing else — an empty hit is a
+  dark rig, and a list running for real goes on unseen. To see it on top
+  of a cue, fire it from its button while that cue runs. *Decided (can
+  change).* In Operate nothing previews — what runs owns the stage.
+  **Record as New Cue → everything lit** records a hit a button fired as
+  its layers.
 - **Copy to a Hit** (right-click a cue) freezes what the cue puts on stage —
   tracked, included and its own — into a new hit. **Copy / Paste** copy
   layers and cues between lists and hits too; **Cut** and **Paste**, or a
@@ -2869,9 +2877,6 @@ and *MIB · n* counts the lights a list set **On** is moving.
 - **Convert to Tracking** leaves cue looks alone (taking one out could
   change which value wins where layers overlap).
 
-- **Effects in the cue don't take precedence in the Design preview.** Played
-  over a running list (Play), the cue's looks win, but an EFX, RGB Matrix or other
-  function played as it is mixes with what runs, as it normally would.
 - **Gobo names ignore numbers** in the singular/plural step. So "Gobo 3
   Shake" can find a wheel's only "Gobo 2 Shake" (with several, it is
   ambiguous). Pick the slot for that type to be sure. A second gobo wheel

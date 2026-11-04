@@ -1480,7 +1480,7 @@ void ShowTreeView_Test::inDesignTheEditShowsOverItsRunningList()
     st->previewCue(c1);                 // what the view does on a refresh
     QCOMPARE(st->previewedCue(), c1);
     QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
-    QCOMPARE(view.previewText(), QString("■ Held — Full Show running. Play to preview 1 One over it."));
+    QCOMPARE(view.previewText(), QString("■ Held — Full Show running. Play to preview 1 One instead."));
     QToolButton *play = view.findChild<QToolButton *>("stPreviewPlay");
     QVERIFY(play != nullptr);
     // On the bar (its action shown; a narrow window may put it in the
@@ -1504,7 +1504,7 @@ void ShowTreeView_Test::inDesignTheEditShowsOverItsRunningList()
     QVERIFY(!playShown());
     QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(d50)));
     QCoreApplication::processEvents();
-    QCOMPARE(view.previewText(), QString("▶ On the rig: 1 One, over Full Show running"));
+    QCOMPARE(view.previewText(), QString("▶ On the rig: 1 One (Full Show runs on, unseen)"));
     QHash<quint32, uchar> v = settleDmx(m_doc);
     QCOMPARE(int(v[0]), 127);
     QCOMPARE(int(v[1]), 127);
@@ -1633,16 +1633,17 @@ void ShowTreeView_Test::theLatestActionWinsAndOperateIsBlind()
     goCue(1);
     QCOMPARE(lit(), (QList<int>{ 0, 255, 0 }));
     QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
-    // A click on the cue still selected: that look again, over the run.
+    // A click on the cue still selected: that look again -- only it, the
+    // run going on unseen (what is in edit is all that shows).
     clickCue(c1);
     QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
-    QCOMPARE(lit(), (QList<int>{ 255, 255, 0 }));
+    QCOMPARE(lit(), (QList<int>{ 255, 0, 0 }));
     // GO again: the run's only.
     goCue(1);
     QCOMPARE(lit(), (QList<int>{ 0, 255, 0 }));
-    // Another cue selected: that one.
+    // Another cue selected: that one, alone.
     QVERIFY(view.selectNode(c3));
-    QCOMPARE(lit(), (QList<int>{ 0, 255, 255 }));
+    QCOMPARE(lit(), (QList<int>{ 0, 0, 255 }));
     // GO: the run's.
     goCue(0);
     QCOMPARE(lit(), (QList<int>{ 255, 0, 0 }));

@@ -3034,6 +3034,49 @@ void EffectInstance_Test::anEffectWithNoFadeTimesPlaysAsBefore()
     QVERIFY(runner->instanceForPalette(m_palette->id()) == nullptr);
 }
 
+void EffectInstance_Test::anEffectOfASceneHeldOffStageDrawsNothing()
+{
+    Fixture *fx = oneDimmerFixture(m_doc, 300);
+    QTemporaryDir dir;
+    m_palette->setScriptPath(halfDimmerScript(dir));
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    MasterTimer timer(m_doc);
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(fx->id());
+    scene->addPalette(m_palette->id());
+    scene->m_running = true;                        // as if a cue had started it
+    runner->createInstancesForScene(scene->id());
+    EffectInstance *inst = runner->instanceForPalette(m_palette->id());
+    QVERIFY(inst != nullptr);
+    auto frame = [&]() {
+        inst->runTick();
+        runner->publishWrites();
+        QList<Universe *> u = m_doc->inputOutputMap()->claimUniverses();
+        runner->writeDMX(&timer, u);
+        u.first()->processFaders();
+        const int v = uchar(u.first()->preGMValues().at(300));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    QCOMPARE(frame(), 128);
+
+    // Held off stage: nothing drawn, at once -- the instance keeps running.
+    runner->setScenesOffStage(QSet<quint32>() << scene->id());
+    QVERIFY(runner->m_publishedWrites.isEmpty());
+    QCOMPARE(frame(), 0);
+    QCOMPARE(runner->instanceForPalette(m_palette->id()), inst);
+    // Another scene held changes nothing for this one.
+    runner->setScenesOffStage(QSet<quint32>() << scene->id() + 1000);
+    QCOMPARE(frame(), 128);
+    // Let go of: it draws again.
+    runner->setScenesOffStage(QSet<quint32>());
+    QCOMPARE(frame(), 128);
+
+    runner->destroyInstancesForScene(scene->id(), false);
+    scene->m_running = false;
+}
+
 void EffectInstance_Test::effectsPartWayInOrOutCompose()
 {
     auto w = [](int value, bool replace, float depth, float scale = -1.0f, int base = 0) {

@@ -1029,7 +1029,7 @@ void TreeCueStack::releaseRunHold()
 QString TreeCueStack::ownPreviewText() const
 {
     if (m_solo && ownPreviewHeld())
-        return tr("■ Solo held — %1 running. Play to preview over it.")
+        return tr("■ Solo held — %1 running. Play to preview it instead.")
                    .arg(st()->listsRunning().join(QStringLiteral(", ")));
     if (m_solo)
     {
@@ -1098,6 +1098,14 @@ void TreeCueStack::playSolo()
     }
     const quint32 sid = layerScene(focusIndex());
     Function *f = m_doc->function(sid);
+    // Solo has the stage: a list running for real underneath is held off it
+    // too (ShowTreeController::runHeldOffStage), so only the layer shows --
+    // and with no layer (an empty hit, nothing picked yet), nothing does.
+    if (st() != nullptr)
+    {
+        st()->setSoloPlaying(true, f != nullptr ? sid : Function::invalidId());
+        m_soloStage = true;
+    }
     if (f != nullptr && sid == m_soloScene && f->isRunning())
     {
         // The same scene (re-baked in place): it re-reads itself.
@@ -1110,8 +1118,9 @@ void TreeCueStack::playSolo()
         const quint32 old = m_soloScene;
         if (f != nullptr)
             f->start(m_doc->masterTimer(), soloParent());
-        if (old != sid)
-            stopSolo();
+        if (old != sid && old != Function::invalidId())
+            if (Function *was = m_doc->function(old))
+                was->stop(soloParent());
         m_soloScene = f != nullptr ? sid : Function::invalidId();
     }
     if (st() != nullptr && st()->previewedCue() == m_cue)
@@ -1120,6 +1129,9 @@ void TreeCueStack::playSolo()
 
 void TreeCueStack::stopSolo()
 {
+    if (m_soloStage && m_doc != nullptr && st() != nullptr)
+        st()->setSoloPlaying(false);
+    m_soloStage = false;
     if (m_soloScene == Function::invalidId() || m_doc == nullptr)
         return;
     if (Function *f = m_doc->function(m_soloScene))

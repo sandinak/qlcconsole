@@ -47,6 +47,8 @@
 #include "qlcpalette.h"
 #include "chaserstep.h"
 #include "mastertimer.h"
+#include "inputoutputmap.h"
+#include "universe.h"
 #include "fixture.h"
 #include "chaser.h"
 #include "scene.h"
@@ -6368,6 +6370,16 @@ void ShowTreeController::reset()
 void ShowTreeController::slotFunctionRemoved(quint32 fid)
 {
     m_previewRunning.removeAll(fid);
+    if (m_runMuted.remove(fid))
+    {
+        // Its id may be given to a new function: not held under it.
+        if (m_doc->inputOutputMap() != nullptr)
+            for (Universe *uni : m_doc->inputOutputMap()->universes())
+                if (uni != nullptr)
+                    uni->setFunctionsHeld(m_runMuted);
+        if (EffectScriptRunner *runner = m_doc->effectScriptRunner())
+            runner->setScenesOffStage(m_runMuted);
+    }
     m_generatedScenes.remove(fid);
     m_generatedCollections.remove(fid);
     m_generatedChasers.remove(fid);
@@ -6611,6 +6623,104 @@ QStringList ShowTreeController::listsRunning() const
     return names;
 }
 
+void ShowTreeController::setSoloPlaying(bool on, quint32 function)
+{
+    if (!on)
+        function = invalidId();
+    if (on == m_soloPlaying && function == m_soloFunction)
+        return;
+    m_soloPlaying = on;
+    m_soloFunction = function;
+    syncRunHold();
+}
+
+void ShowTreeController::syncRunHold()
+{
+    /* Design, the preview (or a Solo) on stage, a list running for real:
+       the run's cues are held off stage -- their faders write nothing
+       (Universe::setFunctionsHeld), their effects draw nothing -- so what
+       is in edit is all that shows: a Release, a Block, an empty hit, a
+       Solo take light away on the rig too, where the run under the preview
+       used to keep it lit. Every cue of the running list, not only the one
+       playing, so an auto-follow on to the next never flashes through.
+       What the preview plays itself (a scene both share) stays up. */
+    QSet<quint32> hold;
+    const bool own = m_doc->mode() == Doc::Design && !m_previewHeld
+                     && (m_previewState == PreviewState::Playing || m_previewState == PreviewState::Dark
+                         || m_soloPlaying);
+    if (own)
+    {
+        QSet<quint32> containers;       // what the run starts its cues' functions from
+        auto collect = [this, &hold, &containers](quint32 collectionId) {
+            if (const Collection *coll = qobject_cast<const Collection *>(m_doc->function(collectionId)))
+            {
+                containers.insert(collectionId);
+                for (quint32 fid : coll->functions())
+                    hold.insert(fid);
+            }
+        };
+        for (const Production &p : m_productions)
+            for (const CueList &l : p.lists)
+            {
+                if (l.looks || l.isSubCues())
+                    continue;
+                const Function *chaser = m_doc->function(l.chaser);
+                if (chaser == nullptr || !chaser->isRunning() || chaser->startedOnlyByPreview())
+                    continue;
+                containers.insert(l.chaser);
+                for (const Cue &c : l.cues)
+                {
+                    collect(c.collection);
+                    for (const CueList &s : p.lists)
+                        if (s.isSubCues() && s.subOf == c.id)
+                        {
+                            containers.insert(s.chaser);
+                            for (const Cue &sc : s.cues)
+                                collect(sc.collection);
+                        }
+                }
+            }
+        /* And what runs under them: a layer an edit took out of a cue plays
+           on in the run (a running collection keeps what it started) until
+           the next GO, and an opaque layer (an adopted chaser, a collection)
+           runs functions of its own. Whatever runs with a parent held, or
+           started by the run, is held with it. */
+        if (!containers.isEmpty())
+        {
+            const QList<Function *> all = m_doc->functions();
+            for (bool more = true; more; )
+            {
+                more = false;
+                for (Function *f : all)
+                {
+                    if (f == nullptr || !f->isRunning() || hold.contains(f->id()))
+                        continue;
+                    for (const FunctionParent &src : f->sources())
+                        if (src.type() == FunctionParent::Function
+                            && (containers.contains(src.id()) || hold.contains(src.id())))
+                        {
+                            hold.insert(f->id());
+                            more = true;
+                            break;
+                        }
+                }
+            }
+        }
+        for (quint32 fid : std::as_const(m_previewRunning))
+            hold.remove(fid);
+        hold.remove(m_soloFunction);
+    }
+
+    if (hold == m_runMuted)
+        return;
+    m_runMuted = hold;
+    for (Universe *uni : m_doc->inputOutputMap()->universes())
+        if (uni != nullptr)
+            uni->setFunctionsHeld(hold);
+    if (EffectScriptRunner *runner = m_doc->effectScriptRunner())
+        runner->setScenesOffStage(hold);
+}
+
 static void setEditOverride(Function *f, bool on)
 {
     if (Scene *s = qobject_cast<Scene *>(f))
@@ -6666,6 +6776,7 @@ void ShowTreeController::syncPreview()
         // nothing left to start or stop a preview on.
         m_previewRunning.clear();
         m_previewState = PreviewState::Off;
+        m_runMuted.clear();
         return;
     }
     /* The preview is what is on stage: its cue's blocking is the live one
@@ -6705,6 +6816,9 @@ void ShowTreeController::syncPreview()
     if (stoppedAny)
         m_sweepTimer->start();
 
+    // What runs for real underneath: off stage while this has it.
+    syncRunHold();
+
     if (state != before || want != runningBefore)
         emit previewChanged();
 }
@@ -6729,6 +6843,10 @@ void ShowTreeController::slotModeChanged()
 void ShowTreeController::slotTimerFunctionStarted(quint32 fid)
 {
     noteListRuntime(fid);       // scoped hits (Q154): what is armed
+    // Holding a run off stage: what it starts now (an opaque layer's next
+    // step) is held too.
+    if (!m_runMuted.isEmpty())
+        syncRunHold();
     // A cue list started for real -- from anywhere, a VC cue list too --
     // takes the stage: the preview holds (RC8). Not one a preview itself
     // plays (the Workbench on a list's chaser).
@@ -6741,7 +6859,10 @@ void ShowTreeController::slotTimerFunctionStarted(quint32 fid)
                     && m_doc->mode() == Doc::Design && !m_previewHeld)
                     takeStageForRun();
                 else
+                {
+                    syncRunHold();           // a list started under the preview
                     emit previewChanged();   // what the header says changes
+                }
                 return;
             }
 }
@@ -6756,6 +6877,7 @@ void ShowTreeController::slotTimerFunctionStopped(quint32 fid)
         for (const CueList &l : p.lists)
             if (l.chaser == fid)
             {
+                syncRunHold();      // nothing to hold off stage any more
                 emit previewChanged();
                 return;
             }

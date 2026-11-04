@@ -372,6 +372,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **In Design, the cue you are on is all the rig shows** — also with a cue
+  list running for real. The preview used to play over the run, winning
+  only the channels it set, so an edit that took light away from the
+  selected cue (Release, a Block cue, a layer taken out) seemed not to
+  reach the rig, an empty hit showed the last cue's look, and Solo didn't
+  go dark. Now the run keeps going, unseen, while the preview or a Solo
+  has the stage (its effects too), and comes back as it plays then when
+  the preview stops or on the next GO. A selected hit plays alone, like a
+  cue (an empty one: a dark rig). In Operate's Blind view, a tree edit
+  redraws the cue in edit at once instead of at the next poll.
+
 - **⌘D on a Show Tree cue duplicates again** (W1-27). In the full app the
   Show Tree's ⌘D and Control ▸ Dump DMX's Ctrl+D were the same key, so
   neither fired: a selected cue was not duplicated and no dump opened.

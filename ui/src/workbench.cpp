@@ -1081,11 +1081,11 @@ void Workbench::updateOnRig()
     }
     if (m_ownPreview && m_stack != nullptr && m_stack->ownPreviewHeld())
     {
-        // RC8: a list runs and GO took the stage -- Play previews over it.
+        // RC8: a list runs and GO took the stage -- Play previews instead.
         m_onRig->setText(m_stack->ownPreviewText());
         m_onRig->setStyleSheet(QString());
         m_playBtn->setText(tr("Play"));
-        m_playBtn->setToolTip(tr("Preview this over the running show (the edit wins on the channels it plays)"));
+        m_playBtn->setToolTip(tr("Preview this instead of the running show (it runs on, unseen)"));
         m_playBtn->setVisible(true);
         return;
     }

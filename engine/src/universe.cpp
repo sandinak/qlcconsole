@@ -420,6 +420,12 @@ void Universe::setFaderFadeOut(int fadeTime)
     }
 }
 
+void Universe::setFunctionsHeld(const QSet<quint32> &functionIDs)
+{
+    QMutexLocker fadersLocker(&m_fadersMutex);
+    m_heldFunctions = functionIDs;
+}
+
 void Universe::tick()
 {
     m_semaphore.release(1);
@@ -460,6 +466,9 @@ void Universe::processFaders()
             }
 
             if (fader->isEnabled() == false)
+                continue;
+            // Held off stage (setFunctionsHeld): running, unseen.
+            if (!m_heldFunctions.isEmpty() && m_heldFunctions.contains(fader->parentFunctionID()))
                 continue;
 
             //qDebug() << "Processing fader" << fader->name() << fader->channelsCount();
