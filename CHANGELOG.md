@@ -239,6 +239,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Dropping several targets at once is safe when the plot redraws.** A
+  drop (in Default or a blocking) that set off a redraw of the 2D plot --
+  a resize, a blocking change, anything listening for the move -- went on
+  reading the targets' freed items: the second target of a pair kept its
+  old place, and a crash was possible. The drop now reads every target's
+  new place first and writes by target; the mouse release keeps the items
+  it dispatches to under guard.
 - **A target added in the Lighting Studio shows up everywhere at once.**
   A new point, person or line target did not appear in the Show Tree's
   Library (All > Targets), the Look Editor's **Aim at:** list or the

@@ -15967,8 +15967,11 @@ void Monitor_Test::draggingATargetInABlockingLeavesDefault()
         QVERIFY(qAbs(u->y() - 2.0f) < 0.01f && qAbs(t->y() - 2.0f) < 0.01f);
         view.undoLastMove();                            // one step for the pair
         QVERIFY(!t->isBlockedIn(apron) && !u->isBlockedIn(apron));
-        ti->setSelected(false);
-        ui->setSelected(false);
+        // The undo redrew the targets: ti and ui went with the old items.
+        QVERIFY(view.m_scene->selectedItems().isEmpty());
+        ti = view.m_targetItems.value(t->id(), nullptr);
+        ui = view.m_targetItems.value(u->id(), nullptr);
+        QVERIFY(ti != nullptr && ui != nullptr && !ti->isSelected() && !ui->isSelected());
 
         // Save Positions as Blocking...: a copy of where they stand now.
         StageTarget::Blocked b;
@@ -16014,6 +16017,81 @@ void Monitor_Test::draggingATargetInABlockingLeavesDefault()
     delete doc;
     // The views' blocking went with the Doc.
     QVERIFY(!BlockingScope::active());
+}
+
+/* A drop that sets off a redraw of the plot -- a listener of targetMoved,
+   a resize, a blocking change -- frees every TargetItem the drop was still
+   walking. The drop reads every item first and writes by id after, so both
+   targets of a pair move, in Default and in a blocking, and nothing reads
+   a freed item (gate b7316b663: SIGSEGV in the test above, Qt 6.9.3). */
+void Monitor_Test::aDropThatRedrawsThePlotMovesEveryTarget()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StageTarget *t = props->addStageTarget();
+    t->setName("Left");
+    t->setPosition(QVector3D(2.0f, 2.0f, 0.0f));
+    StageTarget *u = props->addStageTarget();
+    u->setName("Right");
+    u->setPosition(QVector3D(5.0f, 2.0f, 0.0f));
+    const quint32 apron = props->addBlockingSet("Apron");
+    BlockingView *bv = BlockingView::of(doc);
+    QVERIFY(bv != nullptr);
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 8));
+        view.updateTargets();
+
+        int redraws = 0;
+        connect(&view, &MonitorGraphicsView::targetMoved, &view, [&view, &redraws]() {
+            ++redraws;
+            view.refreshAllItems();
+            view.resize(view.width() + 1, view.height());
+        });
+
+        auto dragPair = [&view, t, u](double cells) {
+            TargetItem *ti = view.m_targetItems.value(t->id(), nullptr);
+            TargetItem *ui = view.m_targetItems.value(u->id(), nullptr);
+            QVERIFY(ti != nullptr && ui != nullptr);
+            view.m_scene->clearSelection();
+            ti->setSelected(true);
+            ui->setSelected(true);
+            ti->setPos(ti->pos() + QPointF(0, view.m_cellPixels * cells));
+            ui->setPos(ui->pos() + QPointF(0, view.m_cellPixels * cells));
+            view.slotTargetMoved(ti);
+            view.m_scene->clearSelection();
+        };
+
+        // In a blocking: both are blocked, one step undoes the pair.
+        bv->setPick(apron);
+        view.blockingChanged();
+        dragPair(2.0);
+        QVERIFY(redraws >= 2);
+        QVERIFY(t->isBlockedIn(apron) && u->isBlockedIn(apron));
+        QVERIFY2(qAbs(props->targetPosition(u, apron).y() - 4.0f) < 0.05f,
+                 qPrintable(QString("second target blocked at y=%1").arg(props->targetPosition(u, apron).y())));
+        QVERIFY(qAbs(t->y() - 2.0f) < 0.01f && qAbs(u->y() - 2.0f) < 0.01f);
+        view.undoLastMove();
+        QVERIFY(!t->isBlockedIn(apron) && !u->isBlockedIn(apron));
+
+        // In Default: both move themselves.
+        bv->setPick(MonitorProperties::defaultBlocking());
+        view.blockingChanged();
+        redraws = 0;
+        dragPair(1.0);
+        QVERIFY(redraws >= 2);
+        QVERIFY2(qAbs(t->y() - 3.0f) < 0.05f && qAbs(u->y() - 3.0f) < 0.05f,
+                 qPrintable(QString("Default at y=%1 / %2").arg(t->y()).arg(u->y())));
+        view.undoLastMove();
+        QVERIFY(qAbs(t->y() - 2.0f) < 0.01f && qAbs(u->y() - 2.0f) < 0.01f);
+
+        // The items standing now are where the targets are.
+        foreach (TargetItem *ti, view.m_targetItems)
+            QVERIFY(ti != nullptr && ti->target() != nullptr);
+    }
+    delete doc;
 }
 
 void Monitor_Test::aMoverOnATopFaceStandsUpOrHangsDown()
