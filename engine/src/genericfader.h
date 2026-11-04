@@ -102,6 +102,10 @@ public:
     /** Replace an existing FaderChannel */
     void replace(const FadeChannel& ch);
 
+    /** The current value of channel @p channel of @p fixtureID, in @p out;
+     *  false when this fader has no such channel. No allocation. */
+    bool currentValue(quint32 fixtureID, quint32 channel, quint32 *out) const;
+
     /** The doc its channels' fixtures are in -- for an UNPATCHED fixture's
      *  channels, whose values go to the fixture for display (no address).
      *  Set by getChannelFader(); a writer that only add()s or replace()s

@@ -74,7 +74,7 @@ namespace PixelPath
 
     /** Where a wand held by @p person has its middle (metres): holdHeight
      *  above them, a hand's reach downstage. */
-    QVector3D heldCentre(const StageTarget *person, const FixtureRigProps &rp);
+    QVector3D heldCentre(const MonitorProperties *props, const StageTarget *person, const FixtureRigProps &rp);
     /** A wand's two ends, as it is drawn: held (leaning holdTilt forward,
      *  centred on heldCentre()) or standing where it was placed. */
     bool wandEnds(MonitorProperties *props, quint32 fid, QVector3D &bottom, QVector3D &top);

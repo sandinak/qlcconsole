@@ -542,7 +542,7 @@ QList<quint32> AimSolver::orderedLineHeads(Doc *doc, const StageTarget *target,
     /* By where the heads hang, measured from the line's first end towards
        its last: the stage-left head takes the stage-left end, so a full
        spread never crosses beams by accident. */
-    const QVector<QVector3D> pts = target->linePoints();
+    const QVector<QVector3D> pts = target->linePointsIn(doc->monitorProperties()->currentBlocking());
     if (pts.size() < 2)
         return heads;
     QVector<QVector3D> where;
@@ -563,7 +563,7 @@ QList<GroupHead> AimSolver::orderedLineMembers(Doc *doc, const StageTarget *targ
 {
     if (doc == NULL || target == NULL || order != LineSpread::AlongLine)
         return members;
-    const QVector<QVector3D> pts = target->linePoints();
+    const QVector<QVector3D> pts = target->linePointsIn(doc->monitorProperties()->currentBlocking());
     if (pts.size() < 2)
         return members;
     // Each arm by where it hangs: the two arms of a bar take neighbouring

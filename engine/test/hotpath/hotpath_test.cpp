@@ -66,6 +66,9 @@
 #include "showtreemodel.h"
 #include "groupmasters.h"
 #include "timecodesource.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
+#include "blocking.h"
 #include "doc.h"
 #include "monitorproperties.h"
 #include "stagetarget.h"
@@ -641,6 +644,52 @@ void HotPath_Test::aGroupMasterAddsNoAllocationPerFrame()
     QCOMPARE(int(uni->groupMaster(0)), 255);
 }
 
+
+/* Blocking (docs/design/BLOCKING.md): the follow spot reads where its
+   target stands every tick, so resolving a target's place in the live
+   blocking -- an offset looked up on the target -- must cost no
+   allocation: not for a target the blocking moves, not for one it leaves
+   alone, not inside a scope. */
+void HotPath_Test::resolvingABlockedTargetAllocatesNothing()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    StageTarget *moved = mp->addStageTarget();
+    moved->setKind(StageTarget::Kind::Person);
+    moved->setPosition(QVector3D(0, 2, 0));
+    StageTarget *still = mp->addStageTarget();
+    still->setPosition(QVector3D(2, 1, 0));
+    const quint32 apron = mp->addBlockingSet("Apron number");
+    StageTarget::Blocked b;
+    b.hasOffset = true;
+    b.offset = QVector3D(0, 1.8f, 0);
+    moved->setBlocked(apron, b);
+    mp->setLiveBlocking(apron);
+
+    float sink = 0.0f;
+    {
+        // Once, outside the count: a thread's first touch of its
+        // thread-locals (the scope) may allocate their storage.
+        BlockingScope warm(0);
+        sink += mp->targetPosition(moved).y();
+    }
+    const long n = allocationsIn([&]() {
+        for (int i = 0; i < 1000; ++i)
+        {
+            sink += mp->targetPosition(moved).y() + mp->targetPosition(still).x();
+            sink += mp->targetAimPoint(moved, true).z() + mp->targetFootprint(moved).width();
+            BlockingScope scope(0);
+            sink += mp->targetPosition(moved).y();
+        }
+    });
+    QVERIFY(sink > 0.0f);
+    qInfo("blocking: %ld allocations in 1000 resolves", n);
+    QCOMPARE(n, 0L);
+
+    mp->setLiveBlocking(MonitorProperties::defaultBlocking());
+    mp->removeBlockingSet(apron);
+    mp->removeStageTarget(moved->id());
+    mp->removeStageTarget(still->id());
+}
 
 /* "Why is this on?" v2 (WhyOn) names who left a value behind: the universe
    notes which fader let go of a channel when it does -- an auto-removed

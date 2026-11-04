@@ -1553,6 +1553,7 @@ Branson's review), after the freeze lifts.
 | VEN-05 | Swapped fixtures needing focus |
 | VEN-09 | Venue sidecar missing |
 | VEN-10 | Practice venue left applied |
+| BLK-01 | A blocking leaves a target out of reach (docs/design/BLOCKING.md) |
 | FX-01 | Effects too heavy for the target machine (with the Pi 5 cost table only) |
 | FX-02 | RGB matrices on lights with no colour mixing |
 | FX-03 | Effects of zero size or speed, or on a paused speed master |

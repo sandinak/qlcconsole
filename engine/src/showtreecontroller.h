@@ -528,6 +528,23 @@ public:
     bool setCuesNoMoveInBlack(const QList<quint32> &cueIds, bool no);
     bool isCueNoMoveInBlack(quint32 cueId) const;
 
+    /** Blocking (docs/design/BLOCKING.md, Q211): set cues @a cueIds to
+     *  blocking set @a set (0: Default; invalid: track the cue before's).
+     *  One undo step; false when none changed (hits have no blocking). */
+    bool setCuesBlocking(const QList<quint32> &cueIds, quint32 set);
+    /** The cue's own blocking (invalid: it tracks). */
+    quint32 cueOwnBlocking(quint32 cueId) const;
+    /** The blocking cue @a cueId plays with: its own, else the nearest cue
+     *  before it in its list that has one (skipped cues passed over), else
+     *  for a sub-cue its cue's, else Default (0). Invalid for a hit or an
+     *  unknown cue. */
+    quint32 cueBlocking(quint32 cueId) const;
+    /** Whether cue @a cueId plays with another blocking than the cue
+     *  before it (the tree's flag). */
+    bool cueChangesBlocking(quint32 cueId) const;
+    /** cueBlocking() of every cue of @a list, in one pass (the bake). */
+    QVector<quint32> listBlockings(const ShowTree::CueList &list) const;
+
     /** "Cue N at 00:01:23:10": @a ms (-1: none) is the incoming timecode
      *  at which a list that follows timecode goes to the cue
      *  (Cue::timecode, TimecodeCues). One undo step; false when nothing

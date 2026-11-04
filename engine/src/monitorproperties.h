@@ -956,12 +956,72 @@ public:
      *                      plain one still takes the global aimSubjectHeight()
      *                      this way, which is how every existing show behaves.
      */
-    QVector3D targetAimPoint(const class StageTarget *t, bool subjectMode = false) const;
+    QVector3D targetAimPoint(const class StageTarget *t, bool subjectMode = false,
+                             quint32 blocking = currentBlockingMarker()) const;
 
     /** A line target's control points in world space: its points around
      *  targetAimPoint() (its centre, following any binding). Empty for any
      *  other kind. */
-    QVector<QVector3D> targetLinePoints(const class StageTarget *t) const;
+    QVector<QVector3D> targetLinePoints(const class StageTarget *t,
+                                        quint32 blocking = currentBlockingMarker()) const;
+
+    /********************************************************************
+     * Blocking (docs/design/BLOCKING.md, board Q211)
+     ********************************************************************/
+    /** Default: where every target stands when no blocking says otherwise. */
+    static constexpr quint32 defaultBlocking() { return 0; }
+    /** "Whatever blocking is current" (currentBlocking()): the default
+     *  argument of every reader below. */
+    static constexpr quint32 currentBlockingMarker() { return UINT_MAX - 1; }
+    static constexpr quint32 invalidBlocking() { return UINT_MAX; }
+
+    struct BlockingSet
+    {
+        quint32 id = 0;
+        QString name;
+    };
+    /** The show's blocking sets, in id order; Default is not one of them. */
+    QList<BlockingSet> blockingSets() const;
+    bool hasBlockingSet(quint32 id) const;
+    /** A set's name; "Default" for 0; empty for none. */
+    QString blockingName(quint32 id) const;
+    /** A new set named @p name (made unique); its id. */
+    quint32 addBlockingSet(const QString &name);
+    bool renameBlockingSet(quint32 id, const QString &name);
+    /** Remove set @p id and every target's override in it. */
+    void removeBlockingSet(quint32 id);
+
+    /** The blocking live output aims with: the last Show Tree cue to GO
+     *  (Collection::preRun()). Atomic: set on the MasterTimer thread. */
+    quint32 liveBlocking() const { return m_liveBlocking.load(std::memory_order_acquire); }
+    /** Set it; true when it changed. Scenes still running re-aim over
+     *  @p fadeMs (liveBlockingChanged(), Doc). */
+    bool setLiveBlocking(quint32 id, uint fadeMs = 0);
+
+    /** The blocking a reader on this thread uses: an open BlockingScope's
+     *  (Blind, the Studio's picker, Show Review), else liveBlocking(). */
+    quint32 currentBlocking() const;
+    /** @p blocking, with currentBlockingMarker() made currentBlocking(). */
+    quint32 resolveBlocking(quint32 blocking) const
+    { return blocking == currentBlockingMarker() ? currentBlocking() : blocking; }
+
+    /** THE reader of where a target is: its own position in @p blocking (an
+     *  override's offset on Default), following a structure binding, before
+     *  any aim height. Every view, solver and check reads it through here or
+     *  targetAimPoint(). No allocation. */
+    QVector3D targetPosition(const class StageTarget *t,
+                             quint32 blocking = currentBlockingMarker()) const;
+    /** Put target @p t at @p p in blocking @p blocking: Default (0, or a
+     *  set that is gone) moves the target itself; a set changes only the
+     *  target's offset in it (from its own Default place, not following a
+     *  binding: read it back with StageTarget::positionIn()). What the
+     *  follow-spot stick writes, in the
+     *  live cue's blocking (BLOCKING.md), as a Studio drag in that set. */
+    void setTargetPositionIn(class StageTarget *t, quint32 blocking, const QVector3D &p);
+
+    /** A target's footprint (area, kit) in @p blocking. */
+    QSizeF targetFootprint(const class StageTarget *t,
+                           quint32 blocking = currentBlockingMarker()) const;
 
     /** The point a head at @p from with a beam @p beamDeg wide should aim at,
      *  for target @p t. A follow spot on a Person: the chest while the beam is
@@ -1153,6 +1213,8 @@ public:
 
 private:
     QMap<quint32, StageTarget*> m_stageTargets;
+    QMap<quint32, QString> m_blockingSets;          ///< id -> name; 0 (Default) never in it
+    std::atomic<quint32> m_liveBlocking { 0 };
 
     /********************************************************************
      * Fixture rig properties
@@ -1194,6 +1256,10 @@ signals:
      *  written from the DMX thread), so the UI that edits them calls
      *  notifyStageTargetsChanged(). */
     void stageTargetsChanged();
+    /** A blocking set was added, renamed or removed. */
+    void blockingSetsChanged();
+    /** liveBlocking() changed (emitted on the thread that changed it). */
+    void liveBlockingChanged(quint32 from, quint32 to, uint fadeMs);
 
 public:
     void notifyStageTargetsChanged() { emit stageTargetsChanged(); }

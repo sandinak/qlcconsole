@@ -1640,6 +1640,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 doc->writeAttribute(QStringLiteral("Colour"), cue.colour);
             if (cue.noMoveInBlack && !list.looks)
                 doc->writeAttribute(QStringLiteral("NoMoveInBlack"), QStringLiteral("1"));
+            if (cue.blocking != 0xFFFFFFFF && !list.looks)
+                doc->writeAttribute(QStringLiteral("Blocking"), QString::number(cue.blocking));
             if (cue.focusCall && !list.looks)
                 doc->writeAttribute(QStringLiteral("FocusCall"), QStringLiteral("1"));
             if (cue.timecode >= 0 && !list.looks && !list.isSubCues())
@@ -1914,6 +1916,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             cue.skip = !looks && a.value(QStringLiteral("Skip")).toString() == QLatin1String("1");
             cue.colour = readColour(a);
             cue.noMoveInBlack = !looks && a.value(QStringLiteral("NoMoveInBlack")).toString() == QLatin1String("1");
+            cue.blocking = looks ? 0xFFFFFFFF : readId(a, QStringLiteral("Blocking"));
             cue.focusCall = !looks && a.value(QStringLiteral("FocusCall")).toString() == QLatin1String("1");
             cue.timecode = (!looks && !subs && a.hasAttribute(QStringLiteral("Timecode")))
                            ? qMax(-1, a.value(QStringLiteral("Timecode")).toString().toInt()) : -1;

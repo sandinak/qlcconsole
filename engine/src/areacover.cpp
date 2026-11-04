@@ -58,7 +58,7 @@ QRectF AreaCover::areaRect(const MonitorProperties *props, const StageTarget *ta
     if (props == nullptr || !covers(target))
         return QRectF();
     const QVector3D c = props->targetAimPoint(target);
-    const QSizeF fp = target->footprint();
+    const QSizeF fp = props->targetFootprint(target);      // in the blocking read (BLOCKING.md)
     return QRectF(double(c.x()) - fp.width() / 2.0, double(c.y()) - fp.height() / 2.0,
                   fp.width(), fp.height());
 }

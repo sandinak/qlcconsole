@@ -87,6 +87,7 @@
 #include "areacover.h"
 #include "lineformation.h"
 #include "monitorproperties.h"
+#include "blockingview.h"
 #include "outputrulesdialog.h"
 #include "stagetarget.h"
 #include "linespread.h"
@@ -1901,6 +1902,67 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         connect(m_cueReuse, &QLabel::linkActivated, this, &ShowTreeView::reuseLinkActivated);
         f->addRow(tr("Reuse"), m_cueReuse);
         f->addRow(tr("Mode"), m_cueMode);
+        /* Blocking (Q211, docs/design/BLOCKING.md): where the stage targets
+           stand from this cue on -- one look aimed at "Front Rank" lights
+           them on the apron in the apron number. Tracks like a value. */
+        m_cueBlockingRow = new QWidget(inner);
+        {
+            QHBoxLayout *bl = new QHBoxLayout(m_cueBlockingRow);
+            bl->setContentsMargins(0, 0, 0, 0);
+            m_cueBlocking = new QComboBox(m_cueBlockingRow);
+            m_cueBlocking->setObjectName("stCueBlocking");
+            m_cueBlocking->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+            m_cueBlocking->setMinimumContentsLength(12);
+            m_cueBlocking->setToolTip(tr("Where the stage targets stand from this cue on. Unset, it keeps the "
+                                         "cue before's (it tracks); the first cue starts from Default. Move the "
+                                         "targets of a blocking in the Lighting Studio."));
+            bl->addWidget(m_cueBlocking, 1);
+            QPushButton *nb = new QPushButton(BlockingView::saveActionText(), m_cueBlockingRow);
+            nb->setObjectName("stCueBlockingNew");
+            nb->setToolTip(tr("Store where the stage targets stand in this cue now as a new blocking "
+                              "(a formation: where the people stand for a number), used from this cue "
+                              "on. Move them for it in the Lighting Studio."));
+            bl->addWidget(nb);
+            m_cueBlockingRename = new QPushButton(tr("Rename\u2026"), m_cueBlockingRow);
+            m_cueBlockingRename->setObjectName("stCueBlockingRename");
+            bl->addWidget(m_cueBlockingRename);
+            connect(m_cueBlocking, QOverload<int>::of(&QComboBox::activated), this, [this](int i) {
+                if (m_inspectorUpdating || m_pageCue == invalidId())
+                    return;
+                m_st->setCuesBlocking({ m_pageCue }, m_cueBlocking->itemData(i).toUInt());
+            });
+            connect(nb, &QPushButton::clicked, this, [this]() {
+                if (m_pageCue == invalidId())
+                    return;
+                bool ok = false;
+                const QString name = QInputDialog::getText(this, tr("Save Positions as Blocking"),
+                        tr("Name (where the people stand, e.g. \"Apron number\"):"),
+                        QLineEdit::Normal, QString(), &ok);
+                if (!ok || name.trimmed().isEmpty())
+                    return;
+                // From where they stand in this cue now: a copy to change.
+                const quint32 from = m_st->cueBlocking(m_pageCue);
+                const quint32 id = BlockingView::savePositionsAs(m_doc, name, from == invalidId() ? 0 : from);
+                m_st->setCuesBlocking({ m_pageCue }, id);
+                fillCueBlocking();
+            });
+            connect(m_cueBlockingRename, &QPushButton::clicked, this, [this]() {
+                if (m_pageCue == invalidId())
+                    return;
+                MonitorProperties *mp = m_doc->monitorProperties();
+                const quint32 id = m_st->cueBlocking(m_pageCue);
+                if (!mp->hasBlockingSet(id))
+                    return;
+                bool ok = false;
+                const QString name = QInputDialog::getText(this, tr("Rename blocking"), tr("Name:"),
+                                                           QLineEdit::Normal, mp->blockingName(id), &ok);
+                if (ok && mp->renameBlockingSet(id, name))
+                    m_doc->setModified();
+            });
+            connect(m_doc->monitorProperties(), &MonitorProperties::blockingSetsChanged,
+                    this, &ShowTreeView::fillCueBlocking);
+        }
+        f->addRow(tr("Blocking"), m_cueBlockingRow);
         m_cueBase = new QCheckBox(tr("The list's base cue (released layers go back to it)"), inner);
         m_cueBase->setObjectName("stCueBase");
         f->addRow(QString(), m_cueBase);
@@ -3324,6 +3386,16 @@ void ShowTreeView::buildTree()
                                                  : tr("Needs work: %1").arg(cue.note) })
                                .join(QStringLiteral("\n\n")).trimmed();
                 }
+                // Q211: the targets stand somewhere else from this cue on.
+                if (!list.looks && m_st->cueChangesBlocking(cue.id))
+                {
+                    const QString bname = m_doc->monitorProperties()->blockingName(cue.blocking);
+                    badges << tr("blocking: %1").arg(bname.isEmpty() ? tr("Default") : bname);
+                    badgeTip = QStringList({ badgeTip, tr("The targets stand in blocking '%1' from this cue "
+                                                          "on: every look aimed at them follows.")
+                                                       .arg(bname.isEmpty() ? tr("Default") : bname) })
+                               .join(QStringLiteral("\n\n")).trimmed();
+                }
                 // Q38: a cue that says no move in black where its list
                 // would (a list's own setting is badged on the list).
                 if (!list.looks && cue.noMoveInBlack)
@@ -4317,7 +4389,8 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
                             static_cast<QWidget *>(m_cueBase), m_cueIncludes->parentWidget(),
                             static_cast<QWidget *>(m_cueHold), static_cast<QWidget *>(m_cueNext),
                             static_cast<QWidget *>(m_cueTracked), static_cast<QWidget *>(m_cueSkip),
-                            static_cast<QWidget *>(m_cueNoMib), static_cast<QWidget *>(m_cueFocusCall) })
+                            static_cast<QWidget *>(m_cueNoMib), static_cast<QWidget *>(m_cueFocusCall),
+                            m_cueBlockingRow })
             m_cueForm->setRowVisible(w, cueRows);
         m_cueForm->setRowVisible(m_cueTcRow, cueRows && !list.isSubCues());
         m_cueForm->setRowVisible(m_lookFiredBy, list.looks);
@@ -4406,6 +4479,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
         QSignalBlocker block(m_cueNoMib);
         m_cueNoMib->setChecked(cue.noMoveInBlack);
     }
+    fillCueBlocking();
     {
         QSignalBlocker block(m_cueTc);
         if (!m_cueTc->hasFocus())
@@ -11660,4 +11734,48 @@ CallingScriptView *ShowTreeView::showCallingScript()
     m_scriptView->raise();
     m_scriptView->activateWindow();
     return m_scriptView;
+}
+
+void ShowTreeView::fillCueBlocking()
+{
+    if (m_cueBlocking == nullptr)
+        return;
+    QSignalBlocker block(m_cueBlocking);
+    m_cueBlocking->clear();
+    const ShowTree::Cue *cue = m_pageCue == invalidId() ? nullptr : m_st->cue(m_pageCue);
+    if (cue == nullptr)
+        return;
+    MonitorProperties *mp = m_doc->monitorProperties();
+    // Unset: it tracks -- say from what, as a tracked value does.
+    const ShowTree::CueList *list = m_st->listOfCue(cue->id);
+    quint32 tracked = 0;
+    if (list != nullptr)
+    {
+        const int at = list->indexOf(cue->id);
+        for (int i = at - 1; i >= 0; --i)
+            if (!list->cues.at(i).skip)
+            {
+                tracked = m_st->cueBlocking(list->cues.at(i).id);
+                break;
+            }
+        if (at <= 0 && list->isSubCues())
+            tracked = m_st->cueBlocking(list->subOf);
+    }
+    if (tracked == invalidId())
+        tracked = 0;
+    m_cueBlocking->addItem(tr("Tracks (%1)").arg(mp->blockingName(tracked)), invalidId());
+    m_cueBlocking->addItem(mp->blockingName(MonitorProperties::defaultBlocking()),
+                           MonitorProperties::defaultBlocking());
+    for (const MonitorProperties::BlockingSet &b : mp->blockingSets())
+        m_cueBlocking->addItem(b.name, b.id);
+    int at = m_cueBlocking->findData(cue->blocking);
+    if (at < 0 && cue->blocking != invalidId())
+    {
+        // A set since removed: it plays Default; say so.
+        m_cueBlocking->addItem(tr("(removed: Default)"), cue->blocking);
+        at = m_cueBlocking->count() - 1;
+    }
+    m_cueBlocking->setCurrentIndex(qMax(0, at));
+    if (m_cueBlockingRename != nullptr)
+        m_cueBlockingRename->setEnabled(mp->hasBlockingSet(m_st->cueBlocking(cue->id)));
 }

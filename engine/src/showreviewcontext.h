@@ -106,6 +106,9 @@ namespace ShowReviewChecks
     /** The checks over venues and focus: focus calls, swapped fixtures, the
      *  venue file, a practice venue left on */
     QList<ShowReview::Check> venueChecks();
+    /** The checks over blocking: a blocking that leaves a target out of
+     *  reach (docs/design/BLOCKING.md) */
+    QList<ShowReview::Check> blockingChecks();
     /** Effect looks in scenes that can't run, by design: no script chosen,
      *  or the script isn't on this computer (palette id -> why). */
     QHash<quint32, QString> designEffectProblems(Doc *doc);

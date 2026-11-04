@@ -35,6 +35,7 @@
 #include <QLocale>
 #include <QScopedValueRollback>
 #include "monitorproperties.h"
+#include "blocking.h"
 #include "righeads.h"
 #include "fountain.h"
 #include "pixelpath.h"
@@ -282,8 +283,11 @@ bool MonitorProperties::restoreSnapshot(const QByteArray &snap, const Doc *mainD
 
     const QList<quint32> before = m_rigProps.keys();
     const bool autoLooksWere = autoStageLooks();
+    const quint32 liveWas = liveBlocking();     // what the stage plays is not the rig's undo
     reset();
     const bool ok = loadXML(r, mainDocument);
+    if (liveWas == defaultBlocking() || m_blockingSets.contains(liveWas))
+        m_liveBlocking.store(liveWas, std::memory_order_release);
     /* reset() clears it quietly and loadXML() only says so when it sets it
        on: an undo back to "off" has to be said too. */
     if (autoStageLooks() != autoLooksWere)
@@ -1021,6 +1025,8 @@ QString MonitorProperties::formatCurtainLineOffset(float downstage, GridUnits un
 
 void MonitorProperties::reset()
 {
+    m_blockingSets.clear();
+    m_liveBlocking.store(defaultBlocking(), std::memory_order_release);
     m_gridSize = QVector3D(GRID_DEFAULT_WIDTH, GRID_DEFAULT_HEIGHT, GRID_DEFAULT_DEPTH);
     m_gridUnits = Meters;
     m_pointOfView = Undefined;
@@ -2774,12 +2780,13 @@ float MonitorProperties::platformHeightAt(float xMetres, float yMetres) const
     return h;
 }
 
-QVector3D MonitorProperties::targetAimPoint(const StageTarget *t, bool subjectMode) const
+QVector3D MonitorProperties::targetPosition(const StageTarget *t, quint32 blocking) const
 {
     if (t == nullptr)
         return QVector3D();
+    blocking = resolveBlocking(blocking);
 
-    QVector3D p = t->position();
+    QVector3D p = t->positionIn(blocking);
 
     /* A BOUND target is a relationship, not a coordinate. Read the structure
        every time rather than copying its position at bind time: a step gets
@@ -2813,7 +2820,42 @@ QVector3D MonitorProperties::targetAimPoint(const StageTarget *t, bool subjectMo
             if (Tower *tw = tower(t->boundId()))
                 p = QVector3D(float(tw->centre().x()), float(tw->centre().y()), tw->height() * 0.5f);
         }
+        /* A blocking moves a bound target off its structure by its offset:
+           "on the step, a metre to the left" in that number. */
+        if (blocking != defaultBlocking() && t->isBlockedIn(blocking))
+            p += t->positionIn(blocking) - t->position();
     }
+    return p;
+}
+
+void MonitorProperties::setTargetPositionIn(StageTarget *t, quint32 blocking, const QVector3D &p)
+{
+    if (t == nullptr)
+        return;
+    if (blocking == defaultBlocking() || !m_blockingSets.contains(blocking))
+    {
+        t->setPosition(p);
+        return;
+    }
+    // Its own coordinates (StageTarget::positionIn()), as the stick reads
+    // them: the offset is from where Default puts it.
+    StageTarget::Blocked b = t->blocked(blocking);
+    b.offset = p - t->position();
+    b.hasOffset = true;
+    t->setBlocked(blocking, b);
+}
+
+QSizeF MonitorProperties::targetFootprint(const StageTarget *t, quint32 blocking) const
+{
+    return t == nullptr ? QSizeF() : t->footprintIn(resolveBlocking(blocking));
+}
+
+QVector3D MonitorProperties::targetAimPoint(const StageTarget *t, bool subjectMode, quint32 blocking) const
+{
+    if (t == nullptr)
+        return QVector3D();
+
+    QVector3D p = targetPosition(t, blocking);
 
     /* A line's points carry their own heights; an aim height would lift
        the whole curve off the heights it was drawn at. */
@@ -2827,11 +2869,91 @@ QVector3D MonitorProperties::targetAimPoint(const StageTarget *t, bool subjectMo
     return p;
 }
 
-QVector<QVector3D> MonitorProperties::targetLinePoints(const StageTarget *t) const
+QVector<QVector3D> MonitorProperties::targetLinePoints(const StageTarget *t, quint32 blocking) const
 {
     if (t == nullptr || !t->isLine())
         return QVector<QVector3D>();
-    return t->linePointsAround(targetAimPoint(t));
+    blocking = resolveBlocking(blocking);
+    const QVector3D origin = targetAimPoint(t, false, blocking);
+    QVector<QVector3D> pts = t->linePointsIn(blocking);
+    for (QVector3D &p : pts)
+        p += origin;
+    return pts;
+}
+
+/****************************************************************************
+ * Blocking
+ ****************************************************************************/
+
+QList<MonitorProperties::BlockingSet> MonitorProperties::blockingSets() const
+{
+    QList<BlockingSet> out;
+    for (auto it = m_blockingSets.constBegin(); it != m_blockingSets.constEnd(); ++it)
+        out << BlockingSet{ it.key(), it.value() };
+    return out;
+}
+
+bool MonitorProperties::hasBlockingSet(quint32 id) const
+{
+    return m_blockingSets.contains(id);
+}
+
+QString MonitorProperties::blockingName(quint32 id) const
+{
+    if (id == defaultBlocking())
+        return tr("Default");
+    return m_blockingSets.value(id);
+}
+
+quint32 MonitorProperties::addBlockingSet(const QString &name)
+{
+    quint32 id = 1;
+    while (m_blockingSets.contains(id))
+        ++id;
+    QString n = name.trimmed().isEmpty() ? tr("Blocking") : name.trimmed();
+    const QString stem = n;
+    for (int k = 2; n == tr("Default") || m_blockingSets.values().contains(n); ++k)
+        n = QStringLiteral("%1 %2").arg(stem).arg(k);
+    m_blockingSets.insert(id, n);
+    emit blockingSetsChanged();
+    return id;
+}
+
+bool MonitorProperties::renameBlockingSet(quint32 id, const QString &name)
+{
+    const QString n = name.trimmed();
+    if (!m_blockingSets.contains(id) || n.isEmpty() || n == m_blockingSets.value(id)
+        || n == tr("Default") || m_blockingSets.values().contains(n))
+        return false;
+    m_blockingSets.insert(id, n);
+    emit blockingSetsChanged();
+    return true;
+}
+
+void MonitorProperties::removeBlockingSet(quint32 id)
+{
+    if (!m_blockingSets.remove(id))
+        return;
+    for (StageTarget *t : std::as_const(m_stageTargets))
+        t->clearBlocked(id);
+    if (liveBlocking() == id)
+        setLiveBlocking(defaultBlocking());
+    emit blockingSetsChanged();
+    emit stageTargetsChanged();
+}
+
+bool MonitorProperties::setLiveBlocking(quint32 id, uint fadeMs)
+{
+    const quint32 was = m_liveBlocking.exchange(id, std::memory_order_acq_rel);
+    if (was == id)
+        return false;
+    emit liveBlockingChanged(was, id, fadeMs);
+    return true;
+}
+
+quint32 MonitorProperties::currentBlocking() const
+{
+    return BlockingScope::active() ? BlockingScope::current() : liveBlocking();
 }
 
 QVector3D MonitorProperties::targetAimPointFor(const StageTarget *t, bool subjectMode,
@@ -3136,7 +3258,7 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
     /* A wand held by a person: in their hand, wherever they are. */
     if (rp.isHeld())
         if (const StageTarget *t = m_stageTargets.value(rp.heldBy, nullptr))
-            return PixelPath::heldCentre(t, rp);
+            return PixelPath::heldCentre(this, t, rp);
     return fixtureBasePosition(fid);
 }
 
@@ -3821,6 +3943,16 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 qWarning() << "Discarding tower with missing or duplicate id" << t->id();
                 delete t;
             }
+        }
+        else if (root.name() == QStringLiteral("Blocking"))
+        {
+            // A blocking set (docs/design/BLOCKING.md); the targets carry
+            // where they stand in it.
+            const QXmlStreamAttributes a = root.attributes();
+            const quint32 id = a.value(QStringLiteral("ID")).toUInt();
+            if (id != defaultBlocking() && id < currentBlockingMarker())
+                m_blockingSets.insert(id, a.value(QStringLiteral("Name")).toString());
+            root.skipCurrentElement();
         }
         else if (root.name() == QStringLiteral("StageTarget"))
         {
@@ -4738,6 +4870,16 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
     // Stage targets
     foreach (const StageTarget *t, m_stageTargets)
         t->saveXML(doc);
+
+    // Blocking sets (docs/design/BLOCKING.md): only when there are some, so
+    // a show without blocking saves as it did.
+    for (auto it = m_blockingSets.constBegin(); it != m_blockingSets.constEnd(); ++it)
+    {
+        doc->writeStartElement(QStringLiteral("Blocking"));
+        doc->writeAttribute(QStringLiteral("ID"), QString::number(it.key()));
+        doc->writeAttribute(QStringLiteral("Name"), it.value());
+        doc->writeEndElement();
+    }
 
     // Gobo swaps
     for (auto fit = m_goboSwaps.constBegin(); fit != m_goboSwaps.constEnd(); ++fit)

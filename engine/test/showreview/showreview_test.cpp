@@ -3258,6 +3258,89 @@ void ShowReview_Test::pwr11BandedPan()
     QVERIFY2(quiet("PWR-11"), "the head does not point there");
 }
 
+/* BLK-01 (docs/design/BLOCKING.md): a blocking that puts a target where
+   the lights aimed at it, which reach it in Default, can't. */
+void ShowReview_Test::blk01()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    Truss *pipe = mp->addTruss();
+    pipe->setType(Truss::Horizontal);
+    pipe->setOrigin(QVector3D(-3.0f, 0.0f, 6.0f));
+    pipe->setDirection(QPointF(1.0, 0.0));
+    pipe->setLength(6.0f);
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Spot BLK");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    for (int k = 0; k < 2; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(k == 0 ? "Pan" : "Tilt");
+        ch->setGroup(k == 0 ? QLCChannel::Pan : QLCChannel::Tilt);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    head.addChannel(0); head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *spot = new Fixture(m_doc);
+    spot->setName("Spot");
+    spot->setFixtureDefinition(def, mode);
+    QVERIFY(m_doc->addFixture(spot));
+    FixtureRigProps rp;
+    rp.trussId = pipe->id();
+    rp.trussOffset = 3.0f;
+    rp.mountingType = Truss::TopHung;
+    mp->setFixtureRigProps(spot->id(), rp);
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setSize(QSize(1, 1));
+    grp->assignFixture(spot->id());
+    m_doc->addFixtureGroup(grp);
+
+    StageTarget *rank = mp->addStageTarget();
+    rank->setName("Front Rank");
+    rank->setPosition(QVector3D(0, 2, 0));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setName("Front Rank warm");
+    aim->setStageTargetId(rank->id());
+    QVERIFY(m_doc->addPalette(aim));
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "Main", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    Target t;
+    t.groups << grp->id();
+    st->setLayerLook(c1, st->addLayer(c1, t), st->lookForPalette(aim->id()));
+
+    QVERIFY(quiet("BLK-01"));                   // no blocking at all
+    const quint32 up = mp->addBlockingSet("Flying");
+    StageTarget::Blocked b;
+    b.hasOffset = true;
+    b.offset = QVector3D(0, -2, 14);            // straight over the pipe
+    rank->setBlocked(up, b);
+    QVERIFY(quiet("BLK-01"));                   // a set no cue plays
+    QVERIFY(st->setCuesBlocking({ c2 }, up));
+    QVERIFY(fires("BLK-01"));
+    const ReviewFinding f = findings("BLK-01").first();
+    QVERIFY2(f.message.contains("Flying") && f.message.contains("Front Rank"), qPrintable(f.message));
+    QVERIFY(f.targets.contains(QString("blocking:%1").arg(up)));
+    QCOMPARE(findings("BLK-01").count(), 1);    // once, though cue 2 is the only one
+
+    // Within reach in that blocking: quiet.
+    b.offset = QVector3D(0, 1.5f, 0);
+    rank->setBlocked(up, b);
+    QVERIFY(quiet("BLK-01"));
+}
+
 void ShowReview_Test::everyCheckIsTested()
 {
     for (const ShowReview::Check &c : ShowReview::catalog())

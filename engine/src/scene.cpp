@@ -397,9 +397,11 @@ void Scene::requestPaletteRefresh()
     m_repaletteRequested = true;
 }
 
-void Scene::requestReaim()
+void Scene::requestReaim(uint fadeMs)
 {
     QMutexLocker locker(&m_valueListMutex);
+    // Several before the next write: the slowest asked wins.
+    m_reaimFade = m_reaimRequested ? qMax(m_reaimFade, fadeMs) : fadeMs;
     m_reaimRequested = true;
 }
 
@@ -1886,8 +1888,10 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             //   repalette — the programmer edited a palette's value: refresh every
             //               palette, since any type may have changed.
             const bool positionsOnly = !m_repaletteRequested;
+            const uint reaimFade = positionsOnly ? m_reaimFade : 0;
             m_reaimRequested = false;
             m_repaletteRequested = false;
+            m_reaimFade = 0;
 
             const int lookDim = QLCPalette::lookDimmerValue(doc(), runtimePalettes());
             auto replaceOne = [&](const SceneValue &scv) {
@@ -1900,10 +1904,15 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 if (m_sightDimmed.contains(scv.fxi) && sightDimChannels(fixture).contains(scv.channel))
                     v = 0;
                 FadeChannel fc(doc(), scv.fxi, scv.channel);
-                fc.setStart(v);
+                quint32 from = v;
+                /* A blocking change moves the heads over the cue's fade in,
+                   from where they are now (BLOCKING.md). */
+                if (reaimFade == 0 || !m_fadersMap[universe]->currentValue(scv.fxi, scv.channel, &from))
+                    from = v;
+                fc.setStart(from);
                 fc.setTarget(v);
-                fc.setCurrent(v);
-                fc.setFadeTime(0);
+                fc.setCurrent(from);
+                fc.setFadeTime(from == v ? 0 : reaimFade);
                 if (m_editOverrideApplied)
                     fc.addFlag(FadeChannel::Override | FadeChannel::EditOverride);
                 m_fadersMap[universe]->replace(fc);

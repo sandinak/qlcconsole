@@ -24,6 +24,7 @@
 #include <algorithm>
 
 #include "showreview.h"
+#include "blocking.h"
 #include "monitorproperties.h"
 #include "scenery.h"
 #include "showreviewcontext.h"
@@ -78,6 +79,7 @@ const QList<ShowReview::Check> &ShowReview::catalog()
         c += ShowReviewChecks::treeChecks();
         c += ShowReviewChecks::vcChecks();
         c += ShowReviewChecks::venueChecks();
+        c += ShowReviewChecks::blockingChecks();
         return c;
     }();
     return all;
@@ -185,6 +187,9 @@ ShowReview::Result ShowReview::run(const Options &options)
     Result r;
     QElapsedTimer all;
     all.start();
+    /* The show as built: targets where Default stands them, whatever the
+       Lighting Studio shows now. BLK-01 reads each blocking itself. */
+    BlockingScope blocking(MonitorProperties::defaultBlocking());
     ReviewContext ctx(m_doc, options);
     for (const Check &c : catalog())
     {
