@@ -2488,6 +2488,8 @@ int MonitorGraphicsView::rotateSelectedItems(double deg)
             const QPointF o = turnPt(double(t->x()), double(t->y()));
             t->setX(float(o.x()));
             t->setY(float(o.y()));
+            if (StageTarget::isBandKind(t->kind()))
+                t->setRotation(t->rotation() + fdeg);        // the gear turns as well as moves
             ++turned;
         }
         else if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))
@@ -6201,6 +6203,7 @@ void MonitorGraphicsView::updateTargets()
         float pxY = float(tp.y());
 
         TargetItem *ti = new TargetItem(t, m_doc, pxX, pxY);
+        bool bandSideOn = (m_pov == PovSide);
         /* Where it is in crew terms, against the stage marks: read from where
            the item is while it is dragged in the Top view, from the target
            itself in an elevation (where the plot shows no Y). Unless Show >
@@ -6228,17 +6231,56 @@ void MonitorGraphicsView::updateTargets()
         /* An Area or a drum kit at its real size: width across the stage,
            depth up and down it. From the front only the width shows, from the
            side only the depth. */
-        if ((t->kind() == StageTarget::Kind::Area || t->kind() == StageTarget::Kind::DrumKit)
+        if (StageTarget::hasFootprintKind(t->kind())
             && t->footprint().isEmpty() == false)
         {
             const double ppm = 1000.0 * m_cellPixels / m_unitValue;
             const QSizeF fp = t->footprint();
+            /* Movable gear turned on the deck: the glyph turns with it, seen
+               through the plot's own turn (the house is at +y, drawn down). */
+            double wide = (m_pov == PovSide) ? fp.height() : fp.width(), deep = fp.height();
+            bool sideOn = (m_pov == PovSide);
+            if (StageTarget::isBandKind(t->kind()))
+            {
+                const double th = qDegreesToRadians(double(t->rotation()));
+                const double c = std::abs(std::cos(th)), s = std::abs(std::sin(th));
+                if (m_pov != PovTop)
+                {
+                    const double across = fp.width() * c + fp.height() * s;
+                    const double along = fp.width() * s + fp.height() * c;
+                    wide = m_pov == PovFront ? across : along;
+                    deep = wide;
+                    sideOn = (m_pov == PovFront) ? (s > 0.7) : (s <= 0.7);
+                }
+                else
+                {
+                    const QPointF a = projectMm(t->x() * 1000.0, t->y() * 1000.0, 0.0);
+                    const double dx = -std::sin(th), dy = std::cos(th);
+                    const QPointF b = projectMm((t->x() + dx) * 1000.0, (t->y() + dy) * 1000.0, 0.0);
+                    ti->setBandAngle(qRadiansToDegrees(std::atan2(b.y() - a.y(), b.x() - a.x())) - 90.0);
+                }
+            }
             if (m_pov == PovTop)
                 ti->setFootprintPx(QSizeF(fp.width() * ppm, fp.height() * ppm));
             else if (m_pov == PovFront)
-                ti->setFootprintPx(QSizeF(fp.width() * ppm, 0.0));
+                ti->setFootprintPx(QSizeF(wide * ppm, 0.0));
             else
-                ti->setFootprintPx(QSizeF(fp.height() * ppm, 0.0));
+                ti->setFootprintPx(QSizeF(wide * ppm, 0.0));
+            if (StageTarget::isBandKind(t->kind()) && m_pov != PovTop)
+                bandSideOn = sideOn;
+        }
+        /* A band instrument stands on the deck under it, as tall as it is; the
+           item draws its plan from above, its silhouette in an elevation. */
+        if (StageTarget::isBandKind(t->kind()) && m_pov != PovTop)
+        {
+            const QVector3D aimAt = props->targetAimPoint(t, true);
+            const double footMm = double(aimAt.z() - props->targetAimHeight(t, true)) * 1000.0;
+            const double tallMm = double(StageTarget::bodyHeight(t->kind())) * 1000.0;
+            const QPointF feet  = projectMm(aimAt.x() * 1000.0, aimAt.y() * 1000.0, footMm) - tp;
+            const QPointF crown = projectMm(aimAt.x() * 1000.0, aimAt.y() * 1000.0,
+                                            footMm + tallMm) - tp;
+            ti->setFigure(feet, crown, 1000.0 * m_cellPixels / m_unitValue,
+                          bandSideOn);
         }
         if (props->targetFigureHeight(t) > 0.0f)
         {

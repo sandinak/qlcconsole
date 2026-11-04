@@ -10,6 +10,15 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Band instruments as stage targets (bandtargets, 2026-11-03) — built
+
+Keyboard, Grand piano, Upright piano, Equipment rack and Speaker (on wheels)
+beside Drum Kit: a default size, aim height, a plan glyph on the plot, a solid
+shape in the Rig View, `]` / `[` turn them. Not built (listed for the user): a
+Mic / Vocalist stand and a Guitar / Bass amp (a Person plus a Speaker covers
+both for now); a facing field in Edit Target (the keys turn it); the Drum Kit
+itself still draws as a rectangle, not a kit.
+
 ## Area cover: an Aim at an Area covers it (Q209, areacover, 2026-11-03) — built
 
 Zones by where the lights hang (least-squares match of x and depth key to
