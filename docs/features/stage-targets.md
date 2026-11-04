@@ -386,9 +386,17 @@ re-aims, so they stay together on the one spot. Let go and it holds.
 
 - **In a running cue.** Fire the cue (GO, the Run tab, the pad) and the
   stick moves its follow spot -- nothing needs to be open in the
-  Workbench. The subject moves for that cue only: when the cue ends, it
-  is back where the show has it. (Open in Build, the stick moves the
-  Workbench's scene instead, and Save Positions keeps it.)
+  Workbench. (Open in Build, the stick moves the Workbench's scene
+  instead, and Save Positions keeps it.)
+- **Across cues nothing jumps.** A layer that tracks into the next cue
+  (the same subject followed there) carries on from where the stick left
+  it. With **Persist across restarts** ticked on the follow-spot look, the
+  subject stays where you drove it after the cue ends too, and the next
+  cue that follows it starts from there -- the line then says *·
+  persists*. Otherwise, when the follow spot is released, the subject
+  glides back to where the show has it over the cue's fade (half a second
+  at the least), never in one step. Flying a spot in a cue never changes
+  the saved show.
 - **No stick bound**, it holds the subject where it stands, and says so.
 - **With no Aim look** it flies each head's angle from the stick itself
   (free-fly); good for one head, not for several.

@@ -882,6 +882,34 @@ private:
     /** The running cue's follow-spot scene the stick drives while nothing is
      *  open in the Workbench (invalid: none). Its target moves transiently. */
     quint32 m_liveFollowSceneId = UINT_MAX;
+    /** Its follow-spot look and the target it follows. */
+    quint32 m_liveFollowPalette = UINT_MAX;
+    quint32 m_liveFollowTarget = UINT_MAX;
+    /** The running cue's follow spot ends (or the stick goes to the
+     *  Workbench, @p next invalid): it carries on into @p next when that
+     *  follows the same target (the layer tracks), and nothing moves; else
+     *  a Persist look keeps its subject where it was driven, and any other
+     *  glides it back (startRestoreGlide()). True when it carried on. */
+    bool endLiveFollow(quint32 next);
+    /** The follow-spot look and the target of @p scene (UINT_MAX: none). */
+    void followOf(const Scene *scene, quint32 &palette, quint32 &target) const;
+    /** The scenes playing now, newest first (as routeProgrammerEdit() reads them). */
+    QList<Scene *> liveScenes() const;
+    /** A subject going back where the show has it: over the cue's fade,
+     *  never in one step. Advanced one stick tick (20 ms) at a time. */
+    struct RestoreGlide
+    {
+        bool active = false;
+        quint32 targetId = UINT_MAX;
+        QVector3D from, to;
+        int ms = 0;
+        int elapsedMs = 0;
+    } m_glide;
+    void startRestoreGlide();
+    void advanceRestoreGlide();
+    /** The fade of the cue going on now (its chaser step's fade in), at
+     *  least 500 ms, so no subject jumps. */
+    int liveCueFadeMs() const;
     /** Ticks since the running scenes were last searched (10 Hz scan). */
     int m_liveFollowScanTicks = 0;
     quint32 m_liveFollowScanResult = UINT_MAX;

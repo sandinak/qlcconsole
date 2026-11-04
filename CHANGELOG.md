@@ -77,7 +77,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   drove the scene open in the Workbench, so a follow spot in a running
   Show Tree cue (1.1.2's on the AT-Spots) held its subject and never
   moved. It now moves the running cue's follow spot when nothing is open
-  there; the subject goes back where the show has it when the cue ends.
+  there. Across cues nothing jumps: a follow spot tracked into the next
+  cue carries on where it is; with Persist across restarts on its look,
+  its subject stays where it was driven after the cue; otherwise it
+  glides back over the cue's fade.
 - **Lengths in your units.** The follow spot's Person Height and Size On
   Subject showed raw centimetres; they show and take the unit Settings →
   Units picks (5' 7"). The target editor's metre fields take a length

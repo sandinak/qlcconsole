@@ -2045,15 +2045,199 @@ void EffectInstance_Test::followSpotInARunningCueMovesWithTheStick()
     QCOMPARE(int(pc->followSpotStatus().state), int(ProgrammerController::FollowSpotStatus::Moving));
     QVERIFY2(pc->followSpotStatusText().contains("Witch"), qPrintable(pc->followSpotStatusText()));
 
-    // The cue ends: the subject is back where the show has it -- flying a
-    // spot in a running cue never edits the show -- and the follow is off.
+    // The cue ends: the subject glides back where the show has it -- flying
+    // a spot in a running cue never edits the show -- and the follow is off.
     pc->slotControllerInputChanged(9, 0, 128, QString());
     cue->stop(FunctionParent::master());
     pc->slotProgrammerFunctionStopped(cue->id());
-    for (int i = 0; i < 12; ++i)
+    for (int i = 0; i < 70; ++i)
         tick();
-    QCOMPARE(who->position(), home);
+    QVERIFY((who->position() - home).length() < 1e-4f);
     QCOMPARE(int(pc->followSpotStatus().state), int(ProgrammerController::FollowSpotStatus::Off));
+    pc->clearAxisBindings();
+}
+
+void EffectInstance_Test::followSpotKeepsItsSubjectAcrossCues_data()
+{
+    QTest::addColumn<QString>("how");
+    QTest::newRow("Persist on: the cue ends") << "persist";
+    QTest::newRow("the layer tracks into the next cue") << "tracks";
+    QTest::newRow("released, Persist off") << "release";
+}
+
+/* "the target should NOT jump if persist is set on the followspot effect ..
+   or if that is tracking": a subject flown in a cue stays where it was driven
+   with Persist on, carries on untouched into a cue that follows it too, and
+   otherwise glides back over the fade -- never in one step. */
+void EffectInstance_Test::followSpotKeepsItsSubjectAcrossCues()
+{
+    QFETCH(QString, how);
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Spot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    QLCFixtureHead head;
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(k == 2 ? "Tilt" : k == 1 ? "Pan fine" : "Pan");
+        ch->setGroup(k == 2 ? QLCChannel::Tilt : QLCChannel::Pan);
+        ch->setControlByte(k == 1 ? QLCChannel::LSB : QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(k));
+        head.addChannel(quint32(k));
+    }
+    mode->insertHead(-1, head);
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    Fixture *spot = new Fixture(m_doc);
+    spot->setFixtureDefinition(def, mode);
+    spot->setUniverse(0);
+    spot->setAddress(400);
+    QVERIFY(m_doc->addFixture(spot));
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setFixturePosition(spot->id(), 0, 0, QVector3D(0, 0, 4));
+    FixtureRigProps rp;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(spot->id(), rp);
+    StageTarget *who = props->addStageTarget();
+    who->setName("Witch");
+    who->setKind(StageTarget::Kind::Person);
+    const QVector3D home(0.0f, 3.0f, 0.0f);
+    who->setPosition(home);
+
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    QVERIFY(m_doc->addFixtureGroup(grp));
+    grp->assignFixture(spot->id());
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setStageTargetId(who->id());
+    QVERIFY(m_doc->addPalette(aim));
+    QLCPalette *follow = new QLCPalette(QLCPalette::Effect, m_doc);
+    follow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/followspot.js");
+    follow->setPersistent(how == "persist");
+    QVERIFY(m_doc->addPalette(follow));
+    // Cue A, and cue B as the Show Tree plays a layer tracked into it: the
+    // same group, the same Aim and follow spot.
+    auto makeCue = [&](const QString &name) {
+        Scene *sc = new Scene(m_doc);
+        sc->setName(name);
+        m_doc->addFunction(sc);
+        sc->addFixtureGroup(grp->id());
+        sc->addPalette(aim->id());
+        sc->addPalette(follow->id());
+        Collection *c = new Collection(m_doc);
+        c->setName(name);
+        m_doc->addFunction(c);
+        c->addFunction(sc->id());
+        return c;
+    };
+    Collection *cueA = makeCue("1.1.2");
+    Collection *cueB = makeCue("1.1.3");
+
+    MasterTimer ownTimer(m_doc);
+    ProgrammerController *pc = m_doc->programmer();
+    auto tick = [&]() {
+        pc->applyDesignJoystick();
+        ownTimer.timerTick();
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        ua.first()->processFaders();
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    };
+    auto pan = [&]() {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const QByteArray dmx = ua.first()->preGMValues();
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return (uchar(dmx.at(400)) << 8) | uchar(dmx.at(401));
+    };
+    auto start = [&](Collection *c) {
+        c->start(&ownTimer, FunctionParent::master());
+        pc->slotProgrammerFunctionStarted(c->id());
+    };
+    auto stop = [&](Collection *c) {
+        c->stop(FunctionParent::master());
+        pc->slotProgrammerFunctionStopped(c->id());
+    };
+
+    // Cue A: the stick flies the subject a good way off, then lets go.
+    pc->bindPanAxis();
+    pc->slotControllerInputChanged(9, 0, 128, QString());
+    pc->bindTiltAxis();
+    pc->slotControllerInputChanged(9, 1, 128, QString());
+    start(cueA);
+    for (int i = 0; i < 10; ++i)
+        tick();
+    pc->slotControllerInputChanged(9, 0, 250, QString());
+    for (int i = 0; i < 40; ++i)
+        tick();
+    pc->slotControllerInputChanged(9, 0, 128, QString());
+    for (int i = 0; i < 6; ++i)
+        tick();
+    const QVector3D driven = who->position();
+    QVERIFY((driven - home).length() > 1.0f);
+    const int lastPan = pan();
+    if (how == "persist")
+        QVERIFY2(pc->followSpotStatusText().contains("persists"), qPrintable(pc->followSpotStatusText()));
+
+    if (how == "tracks")
+    {
+        // A to B in one tick: the subject and the beam stay put.
+        stop(cueA);
+        start(cueB);
+        tick();
+        QVERIFY2(qAbs(pan() - lastPan) <= 256,
+                 qPrintable(QString("the pan jumped from %1 to %2 across the cue change").arg(lastPan).arg(pan())));
+        for (int i = 0; i < 70; ++i)
+        {
+            tick();
+            QVERIFY((who->position() - driven).length() < 1e-4f);
+            QVERIFY2(qAbs(pan() - lastPan) <= 256, qPrintable(QString("pan %1, was %2").arg(pan()).arg(lastPan)));
+        }
+        QCOMPARE(pc->followSpotStatus().sceneId, cueB->functions().first());
+        stop(cueB);
+    }
+    else if (how == "persist")
+    {
+        // The cue ends: the subject stays where it was driven, and the next
+        // cue that follows it starts from there.
+        stop(cueA);
+        for (int i = 0; i < 70; ++i)
+            tick();
+        QVERIFY((who->position() - driven).length() < 1e-4f);
+        start(cueA);
+        for (int i = 0; i < 20; ++i)
+            tick();
+        QVERIFY((who->position() - driven).length() < 1e-4f);
+        stop(cueA);
+        for (int i = 0; i < 10; ++i)
+            tick();
+        QVERIFY((who->position() - driven).length() < 1e-4f);
+    }
+    else
+    {
+        // Released, Persist off: back where the show has it -- over the fade
+        // (1 s with no cue going on), not in one step.
+        stop(cueA);
+        float last = (who->position() - home).length();
+        const float span = (driven - home).length();
+        int steps = 0;
+        for (int i = 0; i < 70; ++i)
+        {
+            tick();
+            const float now = (who->position() - home).length();
+            QVERIFY2(last - now <= span * 0.06f,
+                     qPrintable(QString("the subject jumped %1 m in one tick").arg(last - now)));
+            if (now < last - 1e-5f)
+                ++steps;
+            last = now;
+        }
+        QVERIFY2(steps >= 30, qPrintable(QString("it went back in %1 steps").arg(steps)));
+        QVERIFY((who->position() - home).length() < 1e-4f);
+    }
     pc->clearAxisBindings();
 }
 

@@ -132,6 +132,8 @@ private slots:
      *  two-arm one; its subject goes back where the show has it after. */
     void followSpotInARunningCueMovesWithTheStick_data();
     void followSpotInARunningCueMovesWithTheStick();
+    void followSpotKeepsItsSubjectAcrossCues_data();
+    void followSpotKeepsItsSubjectAcrossCues();
     /** A script that leaves out notes, lifecycle and the rest: empty and
      *  the defaults -- not the word "undefined" shown under the effect. */
     void aScriptsMissingTextIsEmptyNotUndefined();

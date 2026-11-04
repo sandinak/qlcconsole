@@ -16,12 +16,13 @@ under `~/.claude/.../memory/`.
 only drove the Workbench's focused scene (`ProgrammerController::applyDesignJoystick`),
 so a follow spot in a running Show Tree cue never moved; not a regression
 (same on dab9f579a, before arms). Now `joystickScene()` falls back to the
-running cue's follow spot (transient subject, restored when the cue ends);
+running cue's follow spot; across cues it carries on when tracked, keeps
+its subject with Persist, else glides it back over the cue's fade;
 `followSpotStatus()` drives a light in the effect editor, a ring and lines
 on the rig view and a **follow** flag in the Show Tree. Lengths in effect
 params (`unit: "cm"`) and the target editor follow Settings → Units.
 Tests: `EffectInstance_Test::followSpotInARunningCueMovesWithTheStick` (one
-head, two arms), `LookEditor_Test::aLengthShowsAndTakesTheChosenUnit`,
+head, two arms), `followSpotKeepsItsSubjectAcrossCues`, `LookEditor_Test::aLengthShowsAndTakesTheChosenUnit`,
 `theFollowSpotEditorSaysWhatItIsDoing`, `ShowTreeView_Test::followSpotFlagInTheTree`,
 `Monitor_Test::theFollowSpotIsDrawnOnThePlot`. Open: line-of-sight "lost"
 state in the indicators. Move to DONE.md when landed.

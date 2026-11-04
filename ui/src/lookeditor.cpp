@@ -1061,7 +1061,8 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
         tr("Keep this effect running where it left off when the scene using it stops "
            "and another scene with the SAME look starts, instead of restarting it from "
            "its first frame. Use for long, slowly-evolving effects that must survive a "
-           "scene change."));
+           "scene change. On a follow spot: the subject stays where the stick left it "
+           "when the cue ends, instead of going back."));
     efv->addWidget(m_effectPersistentCb);
     connect(m_effectPersistentCb, &QCheckBox::clicked, this, [this](bool checked) {
         QLCPalette *p = m_doc->palette(m_paletteId);
