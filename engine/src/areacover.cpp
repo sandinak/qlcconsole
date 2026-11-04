@@ -226,7 +226,12 @@ QVector<QRectF> AreaCover::cells(const QRectF &area, const QVector<QVector3D> &w
         {
             const double cx = (cell.at(j).center().x() - area.left()) / area.width();
             const double cd = (area.bottom() - cell.at(j).center().y()) / area.height();
-            cost[i][j] = (sx - cx) * (sx - cx) + (sd - cd) * (sd - cd);
+            /* Rounded to 1e-9: lights that sit alike (a UST's two arms, a wash on
+               each tower) tie exactly, and which of the tied matches the solver
+               picks must not hang on the last bit of a fused multiply-add (arm64
+               macOS) versus a plain one (x86-64 GCC). */
+            const double d2 = (sx - cx) * (sx - cx) + (sd - cd) * (sd - cd);
+            cost[i][j] = std::round(d2 * 1e9) / 1e9;
         }
     }
     const QVector<int> match = assign(cost);
