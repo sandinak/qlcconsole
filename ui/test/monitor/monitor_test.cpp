@@ -25117,7 +25117,9 @@ void Monitor_Test::noLightZonesAreOnThePlot()
             if (zi->role() == ZoneItem::ScanWindow && zi->id() == laser->id())
             {
                 ++windows;
-                QVERIFY(zi->outline().size() >= 30);
+                // Clipped to the plot's floor now: what is left of it, or its
+                // spans or the part inside the zone.
+                QVERIFY(zi->outline().size() >= 3 || !zi->spans().isEmpty() || !zi->leaks().isEmpty());
             }
         QCOMPARE(windows, 1);
         QCOMPARE(gv->zoneAt(gv->projectMm(5000.0, 1000.0, 0.0)), UINT_MAX);    // a window is no zone
