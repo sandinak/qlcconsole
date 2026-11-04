@@ -14,6 +14,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Duplicate, Copy and Paste for cue lists, productions and reusable cues**
+  (board Q215). They had only Rename and Delete; now the same Copy / Paste /
+  Duplicate (**⌘C ⌘V ⌘D**) as a cue: a deep copy (cues, sub-cues, layers,
+  tracking, blocking, notes), "Name (copy)", one undo step. A list pastes
+  into another production, a production at the top level, a reusable cue
+  into the Library. A copied list keeps using the same reusable layers and
+  cues (shared, not copied).
 - **The same edit keys in every list** (board WF1-A, W2-Q2). **⌫**,
   **F2**, **⌘C / ⌘V**, **⌘D** and **⌘F** now do the same thing in the Show
   Tree, Build's Palettes, Effects and Scenes, the Fixtures tab, Plot layers

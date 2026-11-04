@@ -10096,3 +10096,106 @@ void ShowTreeView_Test::theHitPageFadeBoxesSetTheHitsFades()
     QCOMPARE(qobject_cast<Collection *>(m_doc->function(st->cue(hit)->collection))->hitFadeIn(), 0u);
     QCOMPARE(treeState(m_doc), before);
 }
+
+/* Q215: a cue list, a production and a reusable cue have Copy / Paste /
+   Duplicate in their menus and on the keys, one undo step each. */
+void ShowTreeView_Test::listsProductionsAndReusableCuesDuplicateCopyAndPaste()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 prod2 = st->addProduction("Q");
+    const quint32 list = st->addCueList(prod, "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    st->addCue(list, 0, "Two");
+    const quint32 rc = st->makeCueReusable(c1, "State");
+    QVERIFY(rc != invalidId());
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto names = [](QMenu *m) {
+        QStringList out;
+        for (QAction *a : m->findChildren<QAction *>())
+            out << a->objectName();
+        return out;
+    };
+
+    // The menus have the three, before Delete.
+    QVERIFY(view.selectNode(list));
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, view.tree()->currentItem());
+        const QStringList all = names(&menu);
+        QVERIFY(all.contains("stCopyList") && all.contains("stPasteList") && all.contains("stDuplicateList"));
+        QVERIFY(all.indexOf("stDuplicateList") < all.indexOf("stDeleteList"));
+        QVERIFY(!menu.findChild<QAction *>("stPasteList")->isEnabled());      // nothing copied yet
+    }
+    // Duplicate (the key's verb): "L (copy)" beside it; one undo step.
+    QVERIFY(view.duplicateSelection());
+    QCOMPARE(st->production(prod)->lists.count(), 2);
+    QCOMPARE(st->production(prod)->lists.last().name, QString("L (copy)"));
+    QCOMPARE(view.tree()->currentItem()->data(0, ShowTreeView::IdRole).toUInt(), st->production(prod)->lists.last().id);
+    QVERIFY(st->undo());
+    QCOMPARE(st->production(prod)->lists.count(), 1);
+
+    // Copy the list, select the other production, Paste: into it, as named.
+    QVERIFY(view.selectNode(list));
+    QVERIFY(view.copySelection());
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, view.tree()->currentItem());
+        QVERIFY(menu.findChild<QAction *>("stPasteList")->isEnabled());
+    }
+    QVERIFY(view.selectNode(prod2));
+    QVERIFY(view.pasteClipboard());
+    QCOMPARE(st->production(prod2)->lists.count(), 1);
+    QCOMPARE(st->production(prod2)->lists.first().name, QString("L"));
+    QCOMPARE(st->production(prod2)->lists.first().cues.count(), 2);
+    QVERIFY(st->undo());
+    QCOMPARE(st->production(prod2)->lists.count(), 0);
+
+    // A production: Copy, Paste at the top level; Duplicate leaves the clipboard.
+    QVERIFY(view.selectNode(prod));
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, view.tree()->currentItem());
+        const QStringList all = names(&menu);
+        QVERIFY(all.contains("stCopyProduction") && all.contains("stPasteProduction")
+                && all.contains("stDuplicateProduction"));
+    }
+    QVERIFY(view.copySelection());
+    QVERIFY(view.pasteClipboard());
+    QCOMPARE(st->productions().count(), 3);
+    QCOMPARE(st->productions().last().name, QString("P (copy)"));
+    QCOMPARE(st->productions().last().lists.first().cues.count(), 2);
+    QVERIFY(st->undo());
+    QCOMPARE(st->productions().count(), 2);
+    QVERIFY(view.selectNode(prod));
+    QVERIFY(view.duplicateSelection());
+    QCOMPARE(st->productions().count(), 3);
+
+    // A reusable cue in the Library: Duplicate / Copy + Paste make a copy.
+    QMetaObject::invokeMethod(&view, "reloadLibrary");
+    QTreeWidgetItem *row = rowOf(view.library(), ShowTreeView::LibReusable, rc);
+    QVERIFY(row != nullptr);
+    view.library()->setCurrentItem(row);
+    {
+        QMenu menu;
+        view.fillLibraryMenu(&menu, row);
+        const QStringList all = names(&menu);
+        QVERIFY(all.contains("stCopyReusable") && all.contains("stPasteReusable")
+                && all.contains("stDuplicateReusable"));
+    }
+    QVERIFY(view.duplicateLibraryReusable());
+    QCOMPARE(st->reusableCues().count(), 2);
+    row = rowOf(view.library(), ShowTreeView::LibReusable, rc);          // the Library was rebuilt
+    QVERIFY(row != nullptr);
+    view.library()->setCurrentItem(row);
+    QVERIFY(view.copyLibraryReusable());
+    QVERIFY(view.pasteReusableCue());
+    QCOMPARE(st->reusableCues().count(), 3);
+    QVERIFY(st->undo());
+    QVERIFY(st->undo());
+    QCOMPARE(st->reusableCues().count(), 1);
+}

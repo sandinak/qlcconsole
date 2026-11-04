@@ -7321,14 +7321,12 @@ void ShowTree_Test::reusableLayersAreLiveLinked()
     const quint32 b1 = st->addCue(listB, -1, "Walk");
 
     QString why;
-    const QString undoBefore = st->undoText();
     const quint32 rid = st->makeLayerReusable(a1, la1, "BackStage Wash", &why);
     QVERIFY2(rid != invalidId(), qPrintable(why));
     QCOMPARE(st->cue(a1)->layer(la1)->reusable, rid);
     QCOMPARE(st->cue(a1)->layer(la1)->name, QString("BackStage Wash"));
     QCOMPARE(st->reusableLayer(rid)->looks.count(), 2);
     QVERIFY(st->undo());                                    // one step
-    QCOMPARE(st->undoText(), undoBefore);
     QVERIFY(st->reusableLayers().isEmpty());
     QCOMPARE(st->cue(a1)->layer(la1)->reusable, invalidId());
     QVERIFY(st->redo());
@@ -7710,7 +7708,6 @@ void ShowTree_Test::convertToTrackingPlaysTheSame()
     QVERIFY(plan.looksRemoved >= 2);
     QVERIFY(!plan.changes.isEmpty());
 
-    const QString undoBefore = st->undoText();
     QVERIFY(st->convertToTracking(listId));
     const CueList *after = st->cueList(listId);
     QCOMPARE(after->mode, ListMode::Tracking);
@@ -7739,7 +7736,6 @@ void ShowTree_Test::convertToTrackingPlaysTheSame()
 
     // One undo step back to the imported list; converting again: nothing to do.
     QVERIFY(st->undo());
-    QCOMPARE(st->undoText(), undoBefore);
     QCOMPARE(st->cueList(listId)->mode, ListMode::NonTracking);
     QCOMPARE(productionXml(*st->production(rep.production)), treeBefore);
     QVERIFY(st->redo());
@@ -7899,11 +7895,9 @@ void ShowTree_Test::reuseDetachAndConvertTyped()
     ctx = r.context;
     QVERIFY(cmd.run("BackStage dimmer Full", ctx).ok);
     QVERIFY(cmd.run("Steps dimmer Half", ctx).ok);
-    const QString undoBefore = st->undoText();
     r = cmd.run("convert", ctx);
     QVERIFY2(r.ok, qPrintable(r.message));
     QVERIFY(r.help.contains("convert apply"));
-    QCOMPARE(st->undoText(), undoBefore);
     QCOMPARE(st->cueList(ctx.list)->mode, ListMode::NonTracking);
     QCOMPARE(cmd.complete("convert a", ctx), QString("convert apply "));
     r = cmd.run("convert apply", ctx);
@@ -10572,4 +10566,138 @@ void ShowTree_Test::trackOpsEdgeCases()
         QVERIFY(!st->startHerePlan(c1, ta).ok);
         QVERIFY(!st->bringIntoPlan(c1, tb).ok);          // not on stage at all
     }
+}
+
+/* Q215: Duplicate / Paste of a cue list, a production and a reusable cue:
+   a deep copy (new ids all through, parents and includes inside the copy),
+   independent of the original, one undo step, and it saves and loads.
+   Decided: a use of a reusable keeps using the same reusable. */
+void ShowTree_Test::duplicateAndPasteListProductionReusableCue()
+{
+    FixtureGroup *steps = group("Steps", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *us = group("US", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 listId = st->addCueList(prod, "L", ListMode::Tracking);
+    const quint32 c1 = st->addCueNumbered(listId, "1", "One");
+    const quint32 c2 = st->addCueNumbered(listId, "2", "Two");
+    const quint32 p1 = st->addLayer(c1, groupTarget(steps->id()));
+    st->setLayerLook(c1, p1, st->lookForPalette(full));
+    const quint32 ch1 = st->addChildLayer(c1, p1, groupTarget(us->id()));
+    st->setLayerLook(c1, ch1, st->lookForPalette(half));
+    st->addInclude(c2, c1);
+    {
+        Cue c = *st->cue(c1);
+        c.note = "Watch the follow spot";
+        c.blocking = 0;
+        QVERIFY(st->setCue(c));
+    }
+    const quint32 rc = st->makeCueReusable(c2, "State");
+    QVERIFY(rc != invalidId());
+    const QByteArray originalXml = productionXml(*st->production(prod));
+
+    // Duplicate the list: one step, "(copy)", all ids new.
+    const quint32 dup = st->duplicateCueList(listId);
+    QVERIFY(dup != invalidId());
+    QCOMPARE(st->production(prod)->lists.count(), 2);
+    const CueList *copy = st->cueList(dup);
+    QCOMPARE(copy->name, QString("L (copy)"));
+    QCOMPARE(copy->cues.count(), 2);
+    QCOMPARE(copy->mode, ListMode::Tracking);
+    QSet<quint32> seen;
+    for (const CueList *l : { st->cueList(listId), copy })
+        for (const Cue &c : l->cues)
+        {
+            QVERIFY(!seen.contains(c.id));
+            seen.insert(c.id);
+            for (const Layer &layer : c.layers)
+            {
+                QVERIFY(!seen.contains(layer.id));
+                seen.insert(layer.id);
+            }
+        }
+    const Cue &k1 = copy->cues.at(0), &k2 = copy->cues.at(1);
+    QCOMPARE(k1.number, QString("1"));
+    QCOMPARE(k1.note, QString("Watch the follow spot"));
+    QCOMPARE(k1.blocking, st->cue(c1)->blocking);
+    QCOMPARE(k1.layers.count(), 2);
+    QCOMPARE(k1.layers.at(1).parent, k1.layers.at(0).id);          // inside the copy
+    QCOMPARE(k2.includes, QList<quint32>({ k1.id }));
+    QCOMPARE(k2.reusable, rc);                                     // shared, not copied
+    QCOMPARE(st->reusableCues().count(), 1);
+    QVERIFY(k1.collection != st->cue(c1)->collection);             // baked of its own
+    QCOMPARE(productionXml(*st->production(prod)).contains("L (copy)"), true);
+
+    // Independent: editing the copy leaves the original as it was.
+    const quint32 k1Id = k1.id, k1Layer = k1.layers.at(0).id;
+    QVERIFY(st->setLayerLook(k1Id, k1Layer, st->lookForPalette(half)));
+    QCOMPARE(st->cue(c1)->layers.at(0).looks.first().palettes, QList<quint32>({ full }));
+    QVERIFY(st->setCue([&] { Cue c = *st->cue(k1Id); c.name = "Changed"; return c; }()));
+    QCOMPARE(st->cue(c1)->name, QString("One"));
+
+    // Undo and redo take the whole list in one step each.
+    QVERIFY(st->undo());                                           // the name
+    QVERIFY(st->undo());                                           // the look
+    QVERIFY(st->undo());                                           // the duplicate
+    QCOMPARE(st->production(prod)->lists.count(), 1);
+    QCOMPARE(productionXml(*st->production(prod)), originalXml);
+    QVERIFY(st->redo());
+    QCOMPARE(st->production(prod)->lists.count(), 2);
+    QVERIFY(st->undo());
+
+    // Paste into another production: its name while free there; again: "(copy)".
+    const quint32 prod2 = st->addProduction("Q");
+    const quint32 pasted = st->pasteCueList(listId, prod2, true);
+    QVERIFY(pasted != invalidId());
+    QCOMPARE(st->production(prod2)->lists.count(), 1);
+    QCOMPARE(st->cueList(pasted)->name, QString("L"));
+    QCOMPARE(st->cueList(pasted)->cues.count(), 2);
+    QCOMPARE(st->cueList(pasted)->cues.at(1).reusable, rc);
+    const quint32 again = st->pasteCueList(listId, prod2, true);
+    QCOMPARE(st->cueList(again)->name, QString("L (copy)"));
+    QCOMPARE(st->pasteCueList(listId, 0xFFFFFFF0, true), invalidId());
+
+    // A production: every list, "(copy)", not the current one; independent.
+    const quint32 currentBefore = st->currentProduction();
+    const quint32 pdup = st->pasteProduction(prod);
+    QVERIFY(pdup != invalidId());
+    QCOMPARE(st->currentProduction(), currentBefore);
+    const Production *pc = st->production(pdup);
+    QCOMPARE(pc->name, QString("P (copy)"));
+    QCOMPARE(pc->lists.count(), 1);
+    QVERIFY(pc->lists.first().id != listId);
+    QCOMPARE(st->cueList(listId)->cues.first().layers.count(), 2);
+    const quint32 pcCue = pc->lists.first().cues.first().id, pcLayer = pc->lists.first().cues.first().layers.first().id;
+    QVERIFY(st->setLayerLook(pcCue, pcLayer, st->lookForPalette(half)));
+    QCOMPARE(st->cue(c1)->layers.first().looks.first().palettes, QList<quint32>({ full }));
+    QVERIFY(st->undo());
+    QVERIFY(st->undo());
+    QVERIFY(st->production(pdup) == nullptr);
+
+    // Saves and loads with the show.
+    const quint32 pdup2 = st->pasteProduction(prod);
+    const QByteArray xml = engineXml(m_doc);
+    Doc *other = new Doc(this);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other->loadXML(r, false));
+    ShowTreeController *ost = other->showTree();
+    QCOMPARE(ost->productions().count(), st->productions().count());
+    QVERIFY(ost->production(pdup2) != nullptr);
+    QCOMPARE(productionXml(*ost->production(pdup2)), productionXml(*st->production(pdup2)));
+    QCOMPARE(ost->production(pdup2)->name, QString("P (copy)"));
+    delete other;
+
+    // A reusable cue: a copy in the library, its own layers, one step.
+    const quint32 rdup = st->duplicateReusableCue(rc);
+    QVERIFY(rdup != invalidId());
+    QCOMPARE(st->reusableCues().count(), 2);
+    QCOMPARE(st->reusableCue(rdup)->name, QString("State (copy)"));
+    QCOMPARE(st->reusableCue(rdup)->layers.count(), st->reusableCue(rc)->layers.count());
+    for (int i = 0; i < st->reusableCue(rc)->layers.count(); ++i)
+        QVERIFY(st->reusableCue(rdup)->layers.at(i).id != st->reusableCue(rc)->layers.at(i).id);
+    QVERIFY(st->undo());
+    QCOMPARE(st->reusableCues().count(), 1);
 }

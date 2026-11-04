@@ -229,6 +229,7 @@ private slots:
     void effectRunsIsAnUndoStep();
     void releaseTakesAFunctionLayer();
     void theHitPageFadeBoxesSetTheHitsFades();
+    void listsProductionsAndReusableCuesDuplicateCopyAndPaste();
 
 private:
     quint32 dimmer(int level, const QString &name);

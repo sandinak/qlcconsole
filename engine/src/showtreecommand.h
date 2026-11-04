@@ -219,9 +219,17 @@ public:
     {
         QList<quint32> cues;
         QList<QPair<quint32, quint32>> layers;
+        /** Q215: a cue list, a production or a reusable cue (one of them). */
+        quint32 list = 0xFFFFFFFF;
+        quint32 production = 0xFFFFFFFF;
+        quint32 reusableCue = 0xFFFFFFFF;
         /** ⌘X: the layers are moved by the paste, not copied. */
         bool cut = false;
-        bool isEmpty() const { return cues.isEmpty() && layers.isEmpty(); }
+        bool isEmpty() const
+        {
+            return cues.isEmpty() && layers.isEmpty() && list == 0xFFFFFFFF && production == 0xFFFFFFFF
+                   && reusableCue == 0xFFFFFFFF;
+        }
     };
     Clipboard clipboard;
 

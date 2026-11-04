@@ -2321,6 +2321,8 @@ ShowTreeCommand::Result ShowTreeCommand::runParsed(const QString &line, const Co
             error = tr("paste -- then nothing more");
         else if (clipboard.isEmpty())
             error = tr("Nothing copied yet (copy, or ⌘C in the tree).");
+        else if (clipboard.cues.isEmpty() && clipboard.layers.isEmpty())
+            error = tr("A copied list, production or reusable cue is pasted in the tree (⌘V).");
         else if (!clipboard.cues.isEmpty())
         {
             const QList<quint32> made = m_st->pasteCues(clipboard.cues, ctx.cue);

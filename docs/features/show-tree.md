@@ -1340,6 +1340,20 @@ running) asks instead. Typing `record selected`, `record running` or
 **Duplicate** (right-click a cue, ⌘D, or `dup`) copies the cue's own
 content, not what tracks into it. It is never the base cue.
 
+**Duplicate and paste a cue list, a production or a reusable cue.** The
+same **Copy**, **Paste** and **Duplicate** (**⌘C**, **⌘V**, **⌘D**) work on
+a cue list's row, a production's row and a reusable cue in the Library. A
+copy is a deep one: every cue and sub-cue with its layers, tracking,
+blocking, timecode and notes, made again with its own ids, so editing the
+copy never changes the original. **Duplicate** puts "Name (copy)" beside it;
+**Paste** puts a copied list into the selected production (a production
+other than its own keeps the name), a copied production at the top level
+("Name (copy)", never made current), and a reusable cue in the Library. Each
+is one undo step. A copied list that uses a reusable layer or cue keeps
+using the *same* one: the reusable is shared, not copied, so editing it
+still changes every use. A production's Hits section is copied with the
+production, not with a single list.
+
 **Copy, cut and paste.** In the tree, **⌘C** copies the selected cues
 (several: ⌘-click them), **⌘V** pastes them right after the selected cue, in
 their order, each numbered in turn. This works into another cue list too.
@@ -2141,10 +2155,12 @@ menus](fixture-manager.md#right-click-menus)):
   This Layer**), **Duplicate**, **Rename…** | **Delete Layer**;
 - a cue list: **Learn Trigger…**, **Convert to Tracking…**, **Colour ▸**,
   **Move in Black ▸**, **Make Main List**, **Play on GO**, **Detach to
-  Plain Chaser…**, **Restore Original…** | **Rename…** | **Delete Cue
-  List…**;
-- a production: **Make Current Production** | **Rename…** | **Delete
-  Production…**.
+  Plain Chaser…**, **Restore Original…** | **Copy**, **Paste**,
+  **Duplicate**, **Rename…** | **Delete Cue List…**;
+- a production: **Make Current Production** | **Copy**, **Paste**,
+  **Duplicate**, **Rename…** | **Delete Production…**;
+- a reusable cue (in the Library): **Use in the Selected Cue**, **Used By
+  ▸** | **Copy**, **Paste**, **Duplicate**, **Rename…** | **Delete…**.
 
 A look row (its **⋯**, or a right-click on it in the Workbench) puts its own
 **Set to ▸**, **None (off here)** and **Clear (inherit)** on top, and the

@@ -10,6 +10,17 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Duplicate / Copy / Paste on lists, productions, reusable cues (Q215, dup-lists, 2026-11-04) -- built
+
+ShowTreeController::pasteCueList / duplicateCueList / pasteProduction /
+duplicateReusableCue (showtreeproductions.cpp); rows' menus + EditKeys in
+ShowTreeView. Decided: a copied list shares the reusables its cues use (can
+change); a list's Hits are not copied with it, a production's are; list /
+production notes (not cue notes) stay with the original. Tests: showtree_test
+duplicateAndPasteListProductionReusableCue, showtreeview_test
+listsProductionsAndReusableCuesDuplicateCopyAndPaste. Leftover: the command
+line has no `copy list`.
+
 ## Edit keys the same in every list (WF1-A, W1-27, W2-Q2; wfkeys, 2026-11-04) — built, leftovers
 
 ⌫ / F2 / ⌘C ⌘V / ⌘D / ⌘F / Esc in the Show Tree, Build (Palettes,
