@@ -17,6 +17,7 @@
 #include <QXmlStreamWriter>
 
 #include "blocking_test.h"
+#include "../common/stdprelude.h"       // every std header, before the define
 #define private public                  // MasterTimer::timerTick()
 #define protected public                // Universe::processFaders()
 #include "mastertimer.h"
