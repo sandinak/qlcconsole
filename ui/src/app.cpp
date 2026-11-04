@@ -2517,7 +2517,8 @@ void App::initActions()
     connect(m_captureUndoAction, SIGNAL(triggered()), this, SLOT(slotCaptureUndo()));
 
     m_dumpDmxAction = new QAction(QIcon(":/add_dump.png"), tr("Dump DMX Values to a Function"), this);
-    m_dumpDmxAction->setShortcut(QKeySequence("CTRL+D"));
+    /* Cmd/Ctrl+D is Duplicate in every list; Dump DMX is Opt/Alt+Cmd/Ctrl+D. */
+    m_dumpDmxAction->setShortcut(QKeySequence("CTRL+ALT+D"));
     connect(m_dumpDmxAction, SIGNAL(triggered()), this, SLOT(slotDumpDmxIntoFunction()));
 
     m_controlPanicAction = new QAction(QIcon(":/panic.png"), tr("Stop ALL Functions!"), this);

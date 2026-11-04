@@ -17,7 +17,7 @@ its columns are By universe's, below.)
 
 **Universes** lists the open show's universes, one row each — only that
 show's, however many shows were opened before it. Its toolbar works on
-the universe selected: **Add Universe** (⌘N), **Delete Universe** (⌘D),
+the universe selected: **Add Universe** (⌘N), **Delete Universe** (⌫),
 **Undo Patch Change** (⌘Z), **Universe name** (rename it in place),
 **Passthrough**, and **Slot**, **Tour** or **House** (see
 [Universes: slots](venues.md#universes-slots-the-rooms-patch-not-ours)).
