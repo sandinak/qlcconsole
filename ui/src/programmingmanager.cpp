@@ -724,6 +724,15 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     pasteSc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(pasteSc, SIGNAL(activated()), this, SLOT(slotPaste()));
 
+    // ⌘F: Build's one search, as ⌘F finds in the Show Tree's Library.
+    QShortcut *findSc = new QShortcut(QKeySequence::Find, this);
+    findSc->setObjectName(QStringLiteral("buildFind"));
+    findSc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(findSc, &QShortcut::activated, this, [this]() {
+        m_buildSearch->setFocus(Qt::ShortcutFocusReason);
+        m_buildSearch->selectAll();
+    });
+
     // ⌘Z / ⇧⌘Z: the one shared history (the Show Tree's, the palette
     // operations', every scene and collection edit here), newest first.
     QShortcut *undoSc = new QShortcut(QKeySequence::Undo, this);

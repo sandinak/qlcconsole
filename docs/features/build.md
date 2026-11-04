@@ -361,7 +361,8 @@ the tab.
   menus](fixture-manager.md#right-click-menus)): an effect palette is a
   palette — **Edit Effect**, **Runs ▸**, **Used By ▸**, **Move to Folder ▸**,
   **Save as Bundle…**, **Duplicate**, **Rename** (or F2), **Delete
-  Palette…** — and an EFX or RGB Matrix a function — **Open in Workbench**,
+  Palette…** (with several palettes selected: **Duplicate N Palettes**, one
+  undo step) — and an EFX or RGB Matrix a function — **Open in Workbench**,
   **Learn Trigger…**, **Runs ▸**, **Used By ▸**, **Move to Folder ▸**,
   **Duplicate**, **Rename**, **Delete…**. Delete is last (⌫ too; it asks
   first, and says where the effect is used). Right-click empty space for

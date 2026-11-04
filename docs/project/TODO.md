@@ -10,6 +10,24 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Designer workflow walk (wfaudit1, 2026-11-03 night) — built
+
+"The same action works in one place and not another, things are hard to
+find, and failures are silent." Built: drop refusals said (Show Tree, cue
+and layer pages, Workbench rows), several-selected menus that act on all
+(cues, layers, palettes, Library functions, Plot Layers folders, a truss's
+Studio), a save that can't be written whole keeps the show and names the
+file, a failed autosave shows in the chip, the web Run page says why a hit
+did nothing in Design, the Look Editor warns when a position or zoom look
+can't move the scene's lights, ⌘F in Build and Fixtures. On the board
+(scratchpad wfaudit/board-questions.md): one set of edit keys everywhere,
+Duplicate for cue lists and productions, ⌫ on the plot and in Fixtures
+(with wf2's W2-04), lock outside the plot, the audience (Q160). Leftovers:
+- Show Review **Fix ▸** on a finding whose cue is gone does nothing, silently.
+- Workbench **Add existing…** with nothing new picked says nothing.
+- Plot Layers drops onto a locked layer or a vanished group say nothing.
+- The Fixtures tab's circuit drop ignores a refused assignment.
+
 ## Area cover: an Aim at an Area covers it (Q209, areacover, 2026-11-03) — built
 
 Zones by where the lights hang (least-squares match of x and depth key to

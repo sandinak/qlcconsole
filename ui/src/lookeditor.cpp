@@ -1666,6 +1666,22 @@ void LookEditor::setPalette(quint32 paletteId)
             m_warning->setText(tr("⚠ No target fixture has a strobe-capable shutter channel."));
             m_warning->show();
         }
+        // A position on lights that can't move: said, not a look that
+        // silently does nothing (an Aim on a group of pars).
+        else if ((p->type() == QLCPalette::Pan || p->type() == QLCPalette::Tilt
+                  || p->type() == QLCPalette::PanTilt || p->type() == QLCPalette::Aim)
+                 && hasTargets()
+                 && !targetsHaveChannelGroup(QLCChannel::Pan) && !targetsHaveChannelGroup(QLCChannel::Tilt))
+        {
+            m_warning->setText(tr("⚠ No target fixture can pan or tilt: this look moves nothing here."));
+            m_warning->show();
+        }
+        else if (p->type() == QLCPalette::Zoom && hasTargets()
+                 && targetsHaveChannelGroup(QLCChannel::Beam) == false)
+        {
+            m_warning->setText(tr("⚠ No target fixture has a zoom (beam) channel."));
+            m_warning->show();
+        }
     }
 
     m_loading = false;
@@ -1710,6 +1726,12 @@ void LookEditor::setContextScene(Scene *scene)
     // Re-evaluate the applicability warning for the current look.
     if (m_paletteId != QLCPalette::invalidId())
         setPalette(m_paletteId);
+}
+
+bool LookEditor::hasTargets() const
+{
+    return m_contextScene != NULL
+           && (!m_contextScene->fixtures().isEmpty() || !m_contextScene->fixtureGroups().isEmpty());
 }
 
 bool LookEditor::targetsHaveChannelGroup(int group) const

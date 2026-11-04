@@ -1668,6 +1668,9 @@ void WebAccess_Test::aHitFiresAtTheNarrowestArmedPlace()
     m_doc->setMode(Doc::Design);
     ws->sendTextMessage(QStringLiteral("QLC+RUN|hit"));
     QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|hit|design")));
+    // ...and the page says why, never a tap that seems to do nothing
+    QVERIFY(WebAccessRun::html().contains(QStringLiteral("p[3]==='design'")));
+    QVERIFY(WebAccessRun::html().contains(QStringLiteral("Hits fire in Operate")));
     m_doc->setMode(Doc::Operate);
 
     // the wide one isn't armed while a narrower one is

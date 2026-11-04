@@ -794,6 +794,30 @@ static quint32 halfPalette(Doc *doc)
     return pal->id();
 }
 
+/* wfaudit 2026-11-03: Duplicate is there with several palettes selected,
+   as Move and Delete are; it copies each, one undo step. */
+void ContextMenus_Test::severalPalettesDuplicateInOneStep()
+{
+    m_doc->setMode(Doc::Design);
+    const quint32 a = halfPalette(m_doc);
+    const quint32 b = halfPalette(m_doc);
+    const int before = m_doc->palettes().count();
+    QMenu out;
+    {
+        ContextMenu menu(&out);
+        ContextMenus::PalettePlace place;
+        ContextMenus::palette(menu, m_doc, { a, b }, place);
+    }
+    QAction *dup = out.findChild<QAction *>("ctxDuplicate");
+    QVERIFY(dup != nullptr);
+    QCOMPARE(dup->text(), QString("Duplicate 2 Palettes"));
+    QVERIFY(ContextMenu::checkCanon(&out).isEmpty());
+    dup->trigger();
+    QCOMPARE(m_doc->palettes().count(), before + 2);
+    QVERIFY(m_doc->paletteOps()->undo());
+    QCOMPARE(m_doc->palettes().count(), before);
+}
+
 void ContextMenus_Test::aPaletteHasOneMenuEverywhere()
 {
     m_doc->setMode(Doc::Design);

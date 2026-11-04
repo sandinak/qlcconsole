@@ -601,7 +601,7 @@ void FixtureManager::initDataView()
     fixturesPaneLayout->setContentsMargins(0, 0, 0, 0);
     fixturesPaneLayout->setSpacing(0);
     m_fixturesSearch = new QLineEdit(fixturesPane);
-    m_fixturesSearch->setPlaceholderText(tr("Search fixtures..."));
+    m_fixturesSearch->setPlaceholderText(tr("Search fixtures…"));
     m_fixturesSearch->setClearButtonEnabled(true);
     connect(m_fixturesSearch, &QLineEdit::textChanged,
             this, &FixtureManager::slotFixturesSearchChanged);
@@ -611,6 +611,15 @@ void FixtureManager::initDataView()
     // Labeled "Fixtures" (not "Fixture Groups") -- this tree holds the whole
     // patch (fixtures, spatial groups, Power, Universes), not just groups;
     // the old label undersold what's actually in it.
+    // ⌘F: to the search, as ⌘F finds in Build and the Show Tree.
+    QShortcut *findSc = new QShortcut(QKeySequence::Find, this);
+    findSc->setObjectName(QStringLiteral("fixturesFind"));
+    findSc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(findSc, &QShortcut::activated, this, [this, tabs, fixturesPane]() {
+        tabs->setCurrentWidget(fixturesPane);
+        m_fixturesSearch->setFocus(Qt::ShortcutFocusReason);
+        m_fixturesSearch->selectAll();
+    });
     tabs->setTabToolTip(tabs->addTab(fixturesPane, tr("Fixtures")), tr(
         "The full patch: fixtures, universes, power circuits, and spatial "
         "groups (fixtures arranged on a head-layout grid, used for XY-pad / "

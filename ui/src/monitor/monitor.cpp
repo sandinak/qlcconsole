@@ -4297,7 +4297,11 @@ void Monitor::showNotice(const QString &text)
 void Monitor::slotPasteFeatures()
 {
     if (!clipboardHasFeatures())
+    {
+        showNotice(tr("Nothing to paste: copy stage features on the plot first (%1)")
+                   .arg(QKeySequence(QKeySequence::Copy).toString(QKeySequence::NativeText)));
         return;
+    }
 
     // Cascade each successive paste so repeated Ctrl+V copies don't stack
     // exactly on top of one another.
@@ -5352,7 +5356,12 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             /* The canon (docs/design/CONTEXT_MENUS.md): what only this
                structure offers on top -- off it, a bar or hanger here -- then
                the fixture's own menu, as everywhere (ContextMenus::rig). */
-            QAction *aRem  = m.addAction(tr("Remove from %1").arg(objectNoun));
+            // The ringed fixtures when this one is among them: Remove acts on
+            // the same fixtures as the rest of the menu.
+            const QList<quint32> menuFids = studioMenuFixtures(view, fidUnder);
+            QAction *aRem  = m.addAction(menuFids.size() > 1
+                                         ? tr("Remove %1 Fixtures from %2").arg(menuFids.size()).arg(objectNoun)
+                                         : tr("Remove from %1").arg(objectNoun));
             QAction *aBarF = addBarAction();
             QAction *aHangF = addHangerAction();
             ContextMenu::fileAsPlace(&m);
@@ -5369,7 +5378,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
                 rig.changed = [view, rebuildTree, rebuildSource, refreshMap]() {
                     view->reload(); rebuildTree(); rebuildSource(); refreshMap();
                 };
-                ContextMenus::rig(cm, m_doc, QList<quint32>(), studioMenuFixtures(view, fidUnder), rig);
+                ContextMenus::rig(cm, m_doc, QList<quint32>(), menuFids, rig);
             }
             QAction *ch = m.exec(globalPos);
             if (aHangF && ch == aHangF) { studioAddHanger(kind, id, view, barAt); rebuildTree(); rebuildSource(); }
@@ -5377,7 +5386,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             else if (ch == aRem)
             {
                 pushUndo();
-                removeFromObject({ fidUnder });
+                removeFromObject(menuFids);
                 view->reload(); rebuildTree(); rebuildSource(); refreshMap();
             }
             return;
@@ -6420,9 +6429,12 @@ void Monitor::slotFixturesDropped(const QList<quint32> &fixtureIds, QPointF scen
     int n = 0;
     bool asked = false;
     quint32 layer = 0;
+    QList<quint32> placed;      // already on the plot: shown, not silently skipped
     foreach (quint32 fid, fixtureIds)
     {
         Fixture *fx = m_doc->fixture(fid);
+        if (fx != NULL && m_graphicsView->fixturesID().contains(fid))
+            placed << fid;
         if (fx == NULL || m_graphicsView->fixturesID().contains(fid))
             continue;
         // Asked once, at the first one that lands (Q159-1); Cancel drops none.
@@ -6447,6 +6459,17 @@ void Monitor::slotFixturesDropped(const QList<quint32> &fixtureIds, QPointF scen
     if (m_layersPanel) m_layersPanel->reload();
     m_graphicsView->refreshFixtureLabels();
     if (m_inventoryPanel) m_inventoryPanel->reload();
+    if (!placed.isEmpty())
+    {
+        // Selected where they are, and said: a drop never just does nothing.
+        if (n == 0)
+            m_graphicsView->selectFixtures(placed);
+        const Fixture *one = m_doc->fixture(placed.first());
+        showNotice(placed.count() == 1 && one != NULL
+                   ? tr("%1 is already on the plot (selected): drag it there to move it").arg(one->name())
+                   : tr("%1 fixtures are already on the plot%2: drag them there to move them")
+                         .arg(placed.count()).arg(n == 0 ? tr(" (selected)") : QString()));
+    }
 }
 
 void Monitor::slotEditImage(quint32 id)

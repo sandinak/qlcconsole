@@ -15357,6 +15357,13 @@ void Monitor_Test::aDropOnALockedPlotIsRefused()
     // Unlocked, an unknown id is skipped and the real one lands.
     rig.mon->slotFixturesDropped(QList<quint32>() << 99999 << staged->id(), QPointF(0, 0));
     QVERIFY(rig.gv->fixturesID().contains(staged->id()));
+
+    // Dropped again (wfaudit 2026-11-03): not a silent nothing -- said, and
+    // selected where it already is.
+    rig.mon->m_noticeLabel->clear();
+    rig.mon->slotFixturesDropped(QList<quint32>() << staged->id(), QPointF(0, 0));
+    QCOMPARE(rig.mon->m_noticeLabel->text(),
+             QString::fromUtf8("Refused Bar is already on the plot (selected): drag it there to move it"));
     m_doc->monitorProperties()->setLayoutLocked(wasLocked);
 }
 

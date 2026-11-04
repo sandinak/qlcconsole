@@ -772,8 +772,10 @@ but not yet on the plot. A network fixture is marked **[network]**, and
 one that isn't the tour's **[House]** or **[Rental]**; **Filter** narrows
 the list by name, and its foot says how many are waiting to be placed.
 Drag one onto a truss, riser or tower to mount it there, or onto the
-floor to set it down. **Add to inventory...** opens Add Fixture with no
-address. Patching is a separate step: see
+floor to set it down. A fixture dragged in (from Inventory or the
+Fixtures tab) that is already on the plot isn't placed twice: the footer
+says so and it is selected where it is. **Add to inventory...** opens Add
+Fixture with no address. Patching is a separate step: see
 [The Patch dialog](fixture-manager.md#patching-the-patch-dialog).
 
 ### Fixture Properties
