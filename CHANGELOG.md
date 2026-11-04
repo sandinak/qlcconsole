@@ -656,6 +656,15 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   the language. Run is always on the bar; every tab's tooltip has its full
   name. The other choices work as before. No new menu item.
 
+### Timeline
+
+- **A Show Tree cue list on a Shows track keeps its cues.** Dragging a cue,
+  a fade or the block's end, deleting or scaling cues on the generated
+  chaser now says "This is the cue list ‘X’ from the Show Tree — edit its
+  cues there" and changes nothing (it used to write into the chaser, and
+  the next bake threw the edit away). Moving or removing the block is
+  unchanged. shows.md says a cue list on a track plays by step length.
+
 ### One right-click menu per kind
 
 - **A fixture group, a fixture or a palette has the same right-click menu

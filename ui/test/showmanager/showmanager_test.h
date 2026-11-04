@@ -55,6 +55,7 @@ private slots:
     /** A plain click on a one-cue chase block selects it; it doesn't move
      *  it or touch the show (a stale press position made it a move) */
     void aClickOnAChaseBlockDoesntMoveIt();
+    void aGeneratedCueListKeepsItsStepsOnATrack();
 
 private:
     Doc *m_doc = nullptr;

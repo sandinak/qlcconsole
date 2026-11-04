@@ -63,6 +63,15 @@ public:
     /** Return a pointer to a Chaser Function associated to this item */
     Chaser *getChaser() const;
 
+    /** Whether this block plays a chaser the Show Tree generated: its steps
+     *  are the tree's (the next bake would throw an edit away), so the
+     *  timeline refuses step edits. The block itself still moves. */
+    bool stepsLocked() const;
+
+    /** The text of the last refused step edit ("This is the cue list ...
+     *  edit its cues there."); empty when none was refused. */
+    QString lastRefusal() const { return m_lastRefusal; }
+
 protected:
     /** @reimp — keep the chase name in a compact top strip so it doesn't clash
      *  with the per-cue labels drawn in the body. */
@@ -86,6 +95,12 @@ protected slots:
     void slotSequenceChanged(quint32);
 
 private:
+    /** Say why a step edit did nothing (a tooltip at the pointer); true
+     *  when the chaser is locked and the caller must stop. */
+    bool refuseLockedEdit();
+
+    QString m_lastRefusal;
+
     /** Calculate sequence width for paint() and boundingRect() */
     void calculateWidth();
 
