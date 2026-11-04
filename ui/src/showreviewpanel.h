@@ -81,6 +81,9 @@ public:
     QPushButton *fixButton() const { return m_fix; }
     QPushButton *acceptButton() const { return m_accept; }
     QPushButton *reopenButton() const { return m_reopen; }
+    /** PWR-11's "Apply This Cut": the suggested tape on the bottom, put on. */
+    QPushButton *cutButton() const { return m_cut; }
+    void applySuggestedCut();
 
     /** The findings selected (rows of findings, not footer rows). */
     QList<ReviewFinding> selectedFindings() const;
@@ -124,6 +127,7 @@ private:
     QPushButton *m_fix;
     QPushButton *m_accept;
     QPushButton *m_reopen;
+    QPushButton *m_cut;
     QPushButton *m_why;
     QPushButton *m_off;
     QList<ReviewFinding> m_findings;

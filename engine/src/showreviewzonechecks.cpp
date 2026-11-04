@@ -170,9 +170,18 @@ double headFraction(const Fixture *fx, QLCChannel::Group group, double dmxFracti
     return Fixture::positionFraction(ch, dmxFraction * 255.0);
 }
 
+/** What raysOf() read, for a check that wants to suggest a cut of tape. */
+struct Throw
+{
+    QVector3D dir;
+    double h = 0.0, v = 0.0;        //!< a laser's window, full angles
+    double halfRad = 0.0;           //!< any other light's cone
+    bool laser = false;
+};
+
 /** The rays a lit light throws, from @a apex. False when it has no throw. */
 bool raysOf(Doc *doc, Fixture *fx, const Beam &b, QVector3D &apex, QVector<QVector3D> &rays,
-            bool &laser, double &coneDeg)
+            bool &laser, double &coneDeg, Throw *info = nullptr)
 {
     MonitorProperties *mp = doc->monitorProperties();
     const QLCPhysical &phy = fx->fixtureMode()->physical();
@@ -195,18 +204,31 @@ bool raysOf(Doc *doc, Fixture *fx, const Beam &b, QVector3D &apex, QVector<QVect
     dir.normalize();
     apex = RigHeads::fixtureCentre(doc, fx->id());
     const double declared = qMax(phy.lensDegreesMin(), phy.lensDegreesMax());
+    if (info != nullptr)
+    {
+        info->dir = dir;
+        info->laser = laser;
+    }
     if (laser)
     {
         double h, v;
         LightRays::laserWindow(phy, h, v);
+        if (info != nullptr)
+        {
+            info->h = h;
+            info->v = v;
+        }
         coneDeg = qMax(h, v);
-        rays = LightRays::window(dir, h, v);
-        return true;
+        rays = LightRays::window(dir, h, v, mp->fixtureRigProps(fx->id()).mask());
+        return !rays.isEmpty();
     }
     coneDeg = stars ? ((declared > 0.0 && declared < 170.0) ? declared : 100.0)
                     : (declared > 0.0 ? declared : 25.0);
-    rays = LightRays::cone(dir, qDegreesToRadians(qMin(coneDeg, 160.0) / 2.0));
-    return true;
+    if (info != nullptr)
+        info->halfRad = qDegreesToRadians(qMin(coneDeg, 160.0) / 2.0);
+    rays = LightRays::cone(dir, qDegreesToRadians(qMin(coneDeg, 160.0) / 2.0),
+                           mp->fixtureRigProps(fx->id()).mask());
+    return !rays.isEmpty();
 }
 
 QString joined(ReviewContext &ctx, const QList<quint32> &ids, int max = 4)
@@ -220,6 +242,82 @@ QString joined(ReviewContext &ctx, const QList<quint32> &ids, int max = 4)
     return s;
 }
 
+/** How far each ray runs before solid scenery (not a scrim) stops it: a
+ *  zone behind a cyc or a closed drape is not reached through it. */
+QVector<double> sceneryStops(MonitorProperties *mp, const QVector3D &apex, const QVector<QVector3D> &rays)
+{
+    QVector<double> stops(rays.size(), kRange);
+    QList<const Scenery *> solid;
+    for (const Scenery *sc : mp->sceneries())
+        if (sc != nullptr && !sc->isSeeThrough())
+            solid << sc;
+    if (solid.isEmpty())
+        return stops;
+    for (int i = 0; i < rays.size(); ++i)
+        for (const Scenery *sc : solid)
+        {
+            double t = 0.0;
+            if (sc->rayHit(apex, rays.at(i), t, stops.at(i)) && t > 0.05)
+                stops[i] = t;
+        }
+    return stops;
+}
+
+/** One light's crossing of one zone, and the cut of tape that clears it. */
+struct LeakInfo
+{
+    bool hit = false;
+    bool laser = false;
+    double lowZ = 0.0;          //!< the lowest height a ray enters the zone at
+    double cutBottom = 0.0;     //!< more tape on the bottom that clears it; 0: none does
+};
+
+bool anyHit(const NoLightZone &z, const QVector3D &apex, const QVector<QVector3D> &rays,
+            const QVector<double> &stops, double *lowZ = nullptr)
+{
+    bool hit = false;
+    for (int i = 0; i < rays.size(); ++i)
+    {
+        double ez = 0.0;
+        if (z.hitByRay(apex, rays.at(i), stops.at(i), &ez))
+        {
+            hit = true;
+            if (lowZ == nullptr)
+                return true;
+            *lowZ = qMin(*lowZ, ez);
+        }
+    }
+    return hit;
+}
+
+LeakInfo leakOf(MonitorProperties *mp, const NoLightZone &z, const QVector3D &apex,
+                const QVector<QVector3D> &rays, const QVector<double> &stops, const Throw &info,
+                const LightMask &mask)
+{
+    LeakInfo li;
+    li.laser = info.laser;
+    double low = 1e9;
+    if (!anyHit(z, apex, rays, stops, &low))
+        return li;
+    li.hit = true;
+    li.lowZ = qMax(low, double(z.floorZ));
+    // More tape on the bottom, in half degrees, until nothing crosses.
+    const double room = info.laser ? info.v : qRadiansToDegrees(info.halfRad) * 2.0;
+    for (double cut = 0.5; cut < room - double(mask.top) - double(mask.bottom) - 0.4; cut += 0.5)
+    {
+        LightMask m = mask;
+        m.bottom += float(cut);
+        const QVector<QVector3D> r2 = info.laser ? LightRays::window(info.dir, info.h, info.v, m)
+                                                 : LightRays::cone(info.dir, info.halfRad, m);
+        if (!anyHit(z, apex, r2, sceneryStops(mp, apex, r2)))
+        {
+            li.cutBottom = cut;
+            break;
+        }
+    }
+    return li;
+}
+
 void pwr11(ReviewContext &ctx, QList<ReviewFinding> &out)
 {
     // decided (can change): reported in the first cue a light's cone starts
@@ -231,6 +329,7 @@ void pwr11(ReviewContext &ctx, QList<ReviewFinding> &out)
         return;
     const QList<NoLightZone> zones = mp->noLightZones();
     QHash<QPair<quint32, quint32>, QList<SceneValue>> cache;
+    QHash<QPair<quint32, quint32>, LeakInfo> leaks;     // (zone, fixture)
 
     for (const Production &p : doc->showTree()->productions())
     {
@@ -258,11 +357,21 @@ void pwr11(ReviewContext &ctx, QList<ReviewFinding> &out)
                     QVector<QVector3D> rays;
                     bool laser;
                     double cone;
-                    if (!raysOf(doc, fx, b.value(), apex, rays, laser, cone))
+                    Throw info;
+                    if (!raysOf(doc, fx, b.value(), apex, rays, laser, cone, &info))
                         continue;
+                    const QVector<double> stops = sceneryStops(mp, apex, rays);
                     for (const NoLightZone &z : zones)
-                        if (z.applies(laser, cone) && z.hitByRays(apex, rays, kRange))
+                    {
+                        if (!z.applies(laser, cone))
+                            continue;
+                        const LeakInfo li = leakOf(mp, z, apex, rays, stops, info, mp->fixtureRigProps(b.key()).mask());
+                        if (li.hit)
+                        {
                             found[z.id].insert(b.key());
+                            leaks.insert(qMakePair(z.id, b.key()), li);
+                        }
+                    }
                 }
                 hits.insert(i, found);
                 return found;
@@ -301,12 +410,34 @@ void pwr11(ReviewContext &ctx, QList<ReviewFinding> &out)
                              + QByteArray::number(qRound(z.depth * 100)) + ','
                              + QByteArray::number(qRound(z.floorZ * 100)) + ','
                              + QByteArray::number(qRound(z.height * 100)) + ',' + QByteArray::number(z.kind);
-                    out << ReviewContext::make(QStringLiteral("PWR-11"), ReviewFinding::Warning,
-                        tr("In %1 a lit beam from %2 crosses the no-light zone '%3' (%4). Aim it off, "
-                           "darken it in this cue, or move the zone.")
+                    QString how;
+                    QVariantList fixMask;
+                    for (quint32 fid : fresh)
+                    {
+                        const LeakInfo li = leaks.value(qMakePair(z.id, fid));
+                        if (!li.laser && li.cutBottom <= 0.0)
+                            continue;
+                        if (li.cutBottom > 0.0)
+                        {
+                            how += tr(" The bottom of %1's window passes through it at %2 m: tape off about "
+                                      "%3° of the bottom.")
+                                       .arg(ctx.fixtureName(fid))
+                                       .arg(li.lowZ, 0, 'f', 1).arg(li.cutBottom, 0, 'f', 1);
+                            fixMask << fid << li.cutBottom;
+                        }
+                        else
+                            how += tr(" No cut of the bottom alone keeps %1's window out of it: tape another "
+                                      "edge, aim it elsewhere, or move the zone.").arg(ctx.fixtureName(fid));
+                    }
+                    ReviewFinding f = ReviewContext::make(QStringLiteral("PWR-11"), ReviewFinding::Warning,
+                        tr("In %1 a lit beam from %2 crosses the no-light zone '%3' (%4, up to %5 m).%6 "
+                           "Aim it off, darken it in this cue, or move the zone.")
                             .arg(ctx.cueText(list, i), joined(ctx, fresh), z.name,
-                                 NoLightZone::kindLabel(z.kind).toLower()),
+                                 NoLightZone::kindLabel(z.kind).toLower())
+                            .arg(double(z.floorZ + z.height), 0, 'f', 1).arg(how),
                         keys, print, QStringLiteral("cue"), QVariantList() << cue.id);
+                    f.fixMask = fixMask;
+                    out << f;
                 }
             }
         }

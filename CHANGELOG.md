@@ -14,6 +14,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Masking (tape) on any light, and a laser power class.** In Fixture
+  Properties (or right-click ▸ **Masking…**) cut the beam or scan window
+  off at the top, bottom, left and right, in degrees: "tape off the bottom
+  15°". The plot, Show Review (PWR-09/10/11/12) and area coverage all read
+  it. A laser can carry a class (1, 2, 3R, 3B, 4): class 1, 2 and 3R reaching
+  the audience is a note in PWR-09/10, 3B and 4 stay warnings. PWR-11 now
+  says how a laser's window crosses a no-light zone (such as the showband
+  between cyc and risers), at what height, and how much tape on the bottom
+  clears it, with **Apply This Cut** in Show Review; a zone behind the cyc is
+  reached only past the cyc's edge or over its top. The plot draws the part of
+  the window inside the zone in red.
+
 - **Three states for a Show Review warning, visible on the cue.** Open is
   the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
   who marked it, when, and the note); **Not a Problem…** (was Accept…)
@@ -102,6 +114,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   otherwise; `make test` now uses ccache too.
 
 ### Fixed
+
+- **The big amber dashed shapes upstage of the cyc on the 2D plot.** They
+  were a fixed laser's scan window drawn onto the floor behind the cyc
+  (where the beam would land if the cyc weren't there). A window now stops
+  at the cyc, drape or flat in its way (the same rule as the rig view and
+  Show Review): the pool is drawn as a heavy amber span along the cyc, and
+  any part that does reach the floor is clipped to the plot's floor.
 
 - **The rig view holds still under the mouse.** Hovering over the 3D/rig
   view while a show ran made the rig shimmer back and forth by a hair:

@@ -25132,6 +25132,153 @@ void Monitor_Test::noLightZonesAreOnThePlot()
     delete doc;
 }
 
+
+namespace
+{
+/* The laser's scan window item on the plot, or null. */
+ZoneItem *windowOf(MonitorGraphicsView *gv, quint32 fid)
+{
+    for (ZoneItem *zi : gv->m_zoneItems)
+        if (zi->role() == ZoneItem::ScanWindow && zi->id() == fid)
+            return zi;
+    return nullptr;
+}
+
+/* Y of a plot point, in metres. */
+double yMetres(MonitorGraphicsView *gv, const QPointF &px)
+{
+    return gv->pixelsToRealPosition(px.x(), px.y()).y() / 1000.0;
+}
+}
+
+/* A fixed laser aimed at the cyc lands ON the cyc: no window out on the empty
+   floor behind it, a span along the cyc line instead; aimed at the floor in
+   front of the cyc it keeps its floor footprint; with the cyc gone, the floor
+   (clipped to the stage) comes back. */
+void Monitor_Test::aLaserWindowStopsAtTheCyc()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridSize(QVector3D(10.0f, 3.0f, 8.0f));
+    Fixture *laser = rigFacedLaser(doc, QLCPhysical::LaserEmission);
+    QVERIFY(laser != nullptr);
+    QLCPhysical ph = laser->fixtureMode()->physical();
+    ph.setLensDegreesMin(30); ph.setLensDegreesMax(30);
+    laser->fixtureMode()->setPhysical(ph);
+    Scenery *cyc = props->addScenery();
+    cyc->setKind(Scenery::Cyclorama);
+    cyc->setOriginX(5.0f);
+    cyc->setOriginY(1.0f);
+    cyc->setWidth(20.0f);
+    cyc->setHeight(6.0f);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        gv->updateTrusses();
+        auto aim = [&](double down) {
+            FixtureRigProps rp = props->fixtureRigProps(laser->id());
+            rp.fixedAim = true;
+            rp.panZeroDir = 180;                // upstage
+            rp.aimDown = float(down);
+            props->setFixtureRigProps(laser->id(), rp);
+            gv->updateNoLightZones();
+            return windowOf(gv, laser->id());
+        };
+        // Level-ish at the cyc: everything lands on it, not behind it.
+        ZoneItem *zi = aim(20.0);
+        QVERIFY(zi != nullptr);
+        QVERIFY2(!zi->spans().isEmpty(), "a pool on the cyc");
+        for (const QPointF &p : zi->outline())
+            QVERIFY2(yMetres(gv, p) > 0.9, qPrintable(QString("upstage of the cyc: y %1").arg(yMetres(gv, p))));
+        // Steeply down: lands on the floor in front of it, no span.
+        zi = aim(60.0);
+        QVERIFY(zi != nullptr);
+        QVERIFY(zi->spans().isEmpty());
+        double lo = 1e9, hi = -1e9;
+        for (const QPointF &p : zi->outline())
+        {
+            lo = qMin(lo, yMetres(gv, p));
+            hi = qMax(hi, yMetres(gv, p));
+        }
+        QVERIFY2(lo > 0.9 && hi > 2.5, qPrintable(QString("floor footprint y %1..%2").arg(lo).arg(hi)));
+        // The cyc hidden or removed: the floor footprint returns, upstage of
+        // where it was but kept on the plot's floor.
+        props->removeScenery(cyc->id());
+        zi = aim(40.0);
+        QVERIFY(zi != nullptr);
+        QVERIFY(zi->spans().isEmpty());
+        double minY = 1e9;
+        for (const QPointF &p : zi->outline())
+            minY = qMin(minY, yMetres(gv, p));
+        QVERIFY2(minY > -0.01, qPrintable(QString("clipped to the floor: y %1").arg(minY)));
+        QVERIFY2(minY < 0.5, qPrintable(QString("runs on to the stage's far edge: y %1").arg(minY)));
+    }
+    delete doc;
+}
+
+/* Tape on the laser cuts its window on the plot; a band zone in the window's
+   way shows the part of it inside the zone; the suggested cut clears it. */
+void Monitor_Test::aTapedLaserWindowAndTheBand()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridSize(QVector3D(10.0f, 3.0f, 8.0f));
+    Fixture *laser = rigFacedLaser(doc, QLCPhysical::LaserEmission);
+    QVERIFY(laser != nullptr);
+    QLCPhysical ph = laser->fixtureMode()->physical();
+    ph.setLensDegreesMin(30); ph.setLensDegreesMax(30);
+    laser->fixtureMode()->setPhysical(ph);
+    FixtureRigProps rp = props->fixtureRigProps(laser->id());
+    rp.fixedAim = true;
+    rp.panZeroDir = 180;
+    rp.aimDown = 20.0f;
+    props->setFixtureRigProps(laser->id(), rp);
+    const quint32 zid = props->addNoLightZone(2.0f, 1.0f);
+    NoLightZone z = props->noLightZone(zid);
+    z.name = QStringLiteral("Band");
+    z.width = 6.0f;
+    z.depth = 2.0f;
+    z.height = 2.0f;
+    z.kind = NoLightZone::NoLasers;
+    props->setNoLightZone(z);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        gv->updateTrusses();
+        gv->updateNoLightZones();
+        ZoneItem *zi = windowOf(gv, laser->id());
+        QVERIFY(zi != nullptr);
+        QVERIFY2(!zi->leaks().isEmpty(), "the window crosses the band");
+        // Tape the bottom off: the part in the band goes, the window shrinks.
+        rp = props->fixtureRigProps(laser->id());
+        rp.maskBottom = 21.0f;
+        props->setFixtureRigProps(laser->id(), rp);
+        gv->updateNoLightZones();
+        zi = windowOf(gv, laser->id());
+        // What is left throws over the band and off the plot's floor: no red in the zone.
+        QVERIFY(zi == nullptr || zi->leaks().isEmpty());
+        // A smaller cut shrinks the window but it still crosses the band.
+        rp.maskBottom = 5.0f;
+        props->setFixtureRigProps(laser->id(), rp);
+        gv->updateNoLightZones();
+        zi = windowOf(gv, laser->id());
+        QVERIFY(zi != nullptr && !zi->leaks().isEmpty());
+        rp.maskBottom = 21.0f;
+        props->setFixtureRigProps(laser->id(), rp);
+        // Everything taped: no window at all.
+        rp.maskTop = 25.0f;
+        props->setFixtureRigProps(laser->id(), rp);
+        gv->updateNoLightZones();
+        QVERIFY(windowOf(gv, laser->id()) == nullptr);
+    }
+    delete doc;
+}
+
+
 /* A no-light zone is dragged by its outline or centre handle: Top moves X and
    Y, Front moves X and the bottom, Side Y and the bottom -- one undo step each.
    Its inside grabs nothing, so the plot under it stays selectable. */

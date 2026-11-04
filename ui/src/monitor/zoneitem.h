@@ -20,6 +20,8 @@
 
 #include <QGraphicsItem>
 #include <QPolygonF>
+#include <QLineF>
+#include <QVector>
 #include <QString>
 
 /** \addtogroup ui_mon DMX Monitor
@@ -53,6 +55,13 @@ public:
     bool grabAt(const QPointF &scenePos, qreal tol) const;
     /** The centre handle's rectangle, in scene pixels. */
     QRectF handleRect() const;
+    /** The parts of a scan window's rays inside a no-light zone, scene pixels. */
+    QVector<QLineF> spans() const { return m_spans; }
+    QVector<QLineF> leaks() const { return m_leaks; }
+    void setLeaks(const QVector<QLineF> &leaks) { m_leaks = leaks; update(); }
+    /** Where a scan window lands on scenery (a cyc): segments in scene pixels,
+     *  drawn as a heavy amber span. */
+    void setSpans(const QVector<QLineF> &spans) { m_spans = spans; update(); }
 
     QRectF boundingRect() const override;
     QPainterPath shape() const override;
@@ -64,6 +73,8 @@ private:
     quint32 m_id;
     QPolygonF m_outline;
     QString m_label;
+    QVector<QLineF> m_spans;
+    QVector<QLineF> m_leaks;
 };
 
 /** @} */

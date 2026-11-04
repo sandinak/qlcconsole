@@ -20,6 +20,7 @@
 #ifndef AREACOVER_H
 #define AREACOVER_H
 
+#include "nolightzone.h"
 #include <QVector3D>
 #include <QPointF>
 #include <QRectF>
@@ -113,6 +114,7 @@ namespace AreaCover
         QVector3D aim;          //!< its zone point
         double degrees = 0.0;   //!< its beam, as wide as its zoom has it
         QVector<QPointF> patch; //!< its footprint at the aim's height (plan)
+        LightMask mask;         //!< tape over its front (none: the whole cone)
     };
 
     /** How much of an area the beams light. */

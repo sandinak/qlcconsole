@@ -97,6 +97,22 @@ void ZoneItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidge
         painter->setPen(QPen(QColor(240, 170, 20), 1.2, Qt::DashLine));
         painter->setBrush(QColor(240, 170, 20, 25));
         painter->drawPolygon(m_outline);
+        if (!m_spans.isEmpty())
+        {
+            QPen span(QColor(240, 170, 20), 4.0, Qt::SolidLine, Qt::FlatCap);
+            span.setCosmetic(true);
+            painter->setPen(span);
+            for (const QLineF &l : m_spans)
+                painter->drawLine(l);
+        }
+        if (!m_leaks.isEmpty())
+        {
+            QPen leak(QColor(235, 60, 50), 3.0, Qt::SolidLine, Qt::RoundCap);
+            leak.setCosmetic(true);
+            painter->setPen(leak);
+            for (const QLineF &l : m_leaks)
+                painter->drawLine(l);
+        }
     }
     if (m_role == Zone)
     {

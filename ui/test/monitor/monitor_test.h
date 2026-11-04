@@ -49,6 +49,8 @@ private slots:
     void hangersAreOnThePlot();
     void noLightZonesAreOnThePlot();
     void aNoLightZoneDragsByItsOutline();
+    void aLaserWindowStopsAtTheCyc();
+    void aTapedLaserWindowAndTheBand();
     void aNewShowDropsTheStructureItemsFirst();
     void removingAStructureDropsItsItemFirst();
     void aRebuiltPlotItemStartsShownAndUnzoomed();
