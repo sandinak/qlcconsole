@@ -6359,7 +6359,7 @@ void MonitorGraphicsView::updateTargets()
             const QSizeF fp = props->targetFootprint(t);
             /* Movable gear turned on the deck: the glyph turns with it, seen
                through the plot's own turn (the house is at +y, drawn down). */
-            double wide = (m_pov == PovSide) ? fp.height() : fp.width(), deep = fp.height();
+            double wide = (m_pov == PovSide) ? fp.height() : fp.width();
             bool sideOn = (m_pov == PovSide);
             if (StageTarget::isBandKind(t->kind()))
             {
@@ -6370,7 +6370,6 @@ void MonitorGraphicsView::updateTargets()
                     const double across = fp.width() * c + fp.height() * s;
                     const double along = fp.width() * s + fp.height() * c;
                     wide = m_pov == PovFront ? across : along;
-                    deep = wide;
                     sideOn = (m_pov == PovFront) ? (s > 0.7) : (s <= 0.7);
                 }
                 else
