@@ -346,6 +346,43 @@ void RenderPerf_Test::operatePointerFramesWait()
     QVERIFY(v.paintCount() - designBefore >= 5);
 }
 
+/* A rig view closed in the middle of a running show -- the Rig Overview's
+   close deletes it -- with its drawing pool, live timer and pending frames
+   all in flight: twenty times, at a different point of a frame each time,
+   in Design and in Operate. Nothing it left behind may run after it. */
+void RenderPerf_Test::aPlayingRigViewClosesMidFrame()
+{
+    int step = 3000;
+    QTimer show;
+    connect(&show, &QTimer::timeout, this, [this, &step]() { changeValues(++step); });
+    show.start(15);
+    for (int i = 0; i < 20; ++i)
+    {
+        m_doc->setMode(i % 2 ? Doc::Operate : Doc::Design);
+        QWidget *window = new QWidget;
+        window->setAttribute(Qt::WA_DeleteOnClose);
+        StructureStudioView *v = new StructureStudioView(m_doc, StructureStudioView::StageKind, 0, window);
+        v->resize(480, 320);
+        window->resize(480, 320);
+        v->reload();
+        v->setPlane(StructureStudioView::Angled);
+        v->setBeams(true);
+        window->show();
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        v->setLiveValues(true);
+        const QPointF at(100 + i * 7, 120);
+        QMouseEvent mv(QEvent::MouseMove, at, v->mapToGlobal(at), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(v, &mv);   // a pointer frame pending in Operate
+        QTest::qWait(5 + (i * 11) % 60);
+        window->close();                    // deleteLater, as the dock does
+        QTest::qWait(i % 3);
+    }
+    show.stop();
+    m_doc->setMode(Doc::Design);
+    QTest::qWait(400);                      // anything left pending would fire now
+    QVERIFY(true);
+}
+
 /* One heavy frame -- every beam landing again after a GO -- must not hold
    the rate down for long. It went from 40 ms to 450-780 ms and came back by
    a fifth a frame, so a show sat at 1-2 fps for seconds after each GO. */

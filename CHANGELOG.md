@@ -103,6 +103,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Closing a scene editor while a show runs can no longer crash.** Its
+  live output left the 50 Hz timer only after clearing what the timer
+  was still reading (stock QLC+ does the same); it now leaves first.
 - **The rig view runs smoothly again on a busy show.** A frame budget
   held the 3D/rig view to 40% of one core whatever the computer, so on
   Dance Hysteria (210 fixtures) a playing cue drew a frame every quarter

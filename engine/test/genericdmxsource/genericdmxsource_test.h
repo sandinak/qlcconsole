@@ -36,6 +36,7 @@ private slots:
     void setUnset();
     void unsetAll();
     void aStagedFixtureNeverReachesAFader();
+    void aSourceGoneMidTickIsNeverRead();
 
 private:
     Doc* m_doc;

@@ -18,6 +18,8 @@
 */
 
 #include <QtTest>
+#include <QThread>
+#include <QElapsedTimer>
 
 #include "../common/stdprelude.h"
 #define protected public
@@ -25,6 +27,7 @@
 #include "genericdmxsource_test.h"
 #include "genericdmxsource.h"
 #include "doc.h"
+#include "mastertimer.h"
 #include "genericfader.h"
 #include "fadechannel.h"
 #include "fixture.h"
@@ -105,6 +108,54 @@ void GenericDMXSource_Test::aStagedFixtureNeverReachesAFader()
     const QHash<quint32, FadeChannel> chans = src.m_fadersMap.first()->channels();
     QCOMPARE(chans.size(), 1);
     QCOMPARE(chans.begin().value().fixture(), m_fxiId);
+}
+
+/* A source deleted while the MasterTimer is ticking -- a scene editor
+   closed during a show -- is never read again: its faders went before it
+   left the timer, and a tick still inside writeDMX() read the freed map. */
+void GenericDMXSource_Test::aSourceGoneMidTickIsNeverRead()
+{
+    // A wide fixture: a tick's write is long enough to be caught in.
+    Fixture *wide = new Fixture(m_doc);
+    wide->setChannels(512);
+    wide->setUniverse(1);
+    wide->setAddress(0);
+    QVERIFY(m_doc->addFixture(wide));
+    m_doc->masterTimer()->start();
+    QElapsedTimer clock;
+    clock.start();
+    int fed = 0, withFaders = 0;
+    for (int i = 0; clock.elapsed() < 4000; ++i)
+    {
+        // Several at once, as a show with editors open has.
+        QList<GenericDMXSource *> srcs;
+        for (int k = 0; k < 8; ++k)
+        {
+            GenericDMXSource *src = new GenericDMXSource(m_doc);
+            src->setOutputEnabled(true);
+            src->set(m_fxiId, 0, uchar(i + k));
+            for (quint32 c = 0; c < 512; ++c)
+                src->set(wide->id(), c, uchar(c + k));
+            srcs << src;
+        }
+        QThread::usleep(20000 + quint64(i % 13) * 1500);   // a tick or two, then anywhere in one
+        for (GenericDMXSource *src : srcs)
+        {
+            {
+                QMutexLocker locker(&src->m_mutex);
+                if (!src->m_fadersMap.isEmpty())
+                    ++withFaders;
+            }
+            src->set(m_fxiId, 0, uchar(i));                 // the next tick writes again
+            QThread::usleep(quint64(i % 9) * 2000);
+            QThread::usleep(quint64(i % 5) * 400);
+            delete src;
+        }
+        ++fed;
+    }
+    m_doc->masterTimer()->stop();
+    QVERIFY(fed > 10);                              // ASan, or a crash, says otherwise
+    QVERIFY2(withFaders > fed, "the timer never wrote the sources: the test tests nothing");
 }
 
 QTEST_MAIN(GenericDMXSource_Test)

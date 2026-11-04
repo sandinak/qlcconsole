@@ -53,6 +53,7 @@ private slots:
     void aRunningShowStaysWithinItsShare();
     void theRateRecoversAfterABurst();
     void operatePointerFramesWait();
+    void aPlayingRigViewClosesMidFrame();
     void beamShortcutsDrawTheSamePicture();
     void pickingDrawsOneRow();
     void aGelFiltersTheLight();
