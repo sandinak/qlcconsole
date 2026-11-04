@@ -834,11 +834,11 @@ void SequenceItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     if (m_editable && m_selectedSteps.isEmpty() == false)
     {
         const int n = m_selectedSteps.count();
-        QAction *del = menu.addAction(n > 1 ? tr("Delete %1 selected cues").arg(n)
+        QAction *del = menu.addAction(n > 1 ? tr("Delete %1 Selected Cues").arg(n)
                                             : tr("Delete cue"));
         connect(del, &QAction::triggered, this, [this]() { deleteSelectedCues(); });
 
-        QAction *scale = menu.addAction(n > 1 ? tr("Scale %1 cues' timing…").arg(n)
+        QAction *scale = menu.addAction(n > 1 ? tr("Scale %1 Cues' Timing…").arg(n)
                                               : tr("Scale cue timing…"));
         connect(scale, &QAction::triggered, this, [this]() {
             bool ok = false;

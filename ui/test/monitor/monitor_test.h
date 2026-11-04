@@ -639,7 +639,7 @@ private slots:
     /** Lay a step out once, save it as a component, stamp it onto the next
      *  step's fixtures: the arrangement must arrive intact. */
     void aSavedComponentStampsItsLayoutOntoOtherFixtures();
-    /** "Fixtures on the rig" unchecked must STAY unchecked across a refresh. */
+    /** "Fixtures on the Rig" unchecked must STAY unchecked across a refresh. */
     void hidingMountedFixturesSurvivesARefresh();
     /** Fixtures that bury their structure in THIS view are replaced by a count;
      *  in a view where they do not bury it, they stay. */
@@ -943,7 +943,7 @@ private slots:
      *  Lantern, Truss > Bar > Spot, Stand > Truss, Boom > Crossbar; a
      *  fixture dropped on a hanger or a bar's row is hung there */
     void mountsNestInPlotLayers();
-    /** a0: "Always start with the plot locked" (the user's, off by
+    /** a0: "Always Start with the Plot Locked" (the user's, off by
      *  default) locks a show as it opens, without marking it changed */
     void alwaysStartLockedLocksAnOpenedShow();
     /** a0: while the plot is locked, every layer's lock shows held by the

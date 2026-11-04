@@ -2299,7 +2299,7 @@ void ProgrammingManager_Test::palettesAndTheirFoldersDragIntoFolders()
     FunctionsTreeWidget *tree = mgr.m_paletteTree;
     tree->updateTree();
 
-    // An empty folder, as "New folder…" makes it, takes a palette.
+    // An empty folder, as "New Folder…" makes it, takes a palette.
     QTreeWidgetItem *fresh = tree->ensurePaletteFolder("Palettes/Fresh");
     QVERIFY(fresh != nullptr);
     QScopedPointer<QMimeData> mime(treeMimeData(tree,

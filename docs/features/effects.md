@@ -487,7 +487,7 @@ the same point, which is a look in itself.
 
 Tempo masters for effects to run on, so one tap or one fader moves
 everything on a master together. Open them from the Build toolbar's
-**Beat** menu → **Speed masters…**. **Masters:** at the top sets how many
+**Beat** menu → **Speed Masters…**. **Masters:** at the top sets how many
 the show uses — 4 to 16 (fixed slots, so a control surface can map them).
 Each row has:
 
@@ -631,7 +631,7 @@ so neither covers the other.
   is **one** effect over all of them: every layer's lights move, each
   from its own layer's colour and level.
 - **In Build**: a scene's Looks list takes as many effects as you like:
-  drop them in, or **+ Effect ▾ ▸ Effect look…** in the Workbench. Drag a
+  drop them in, or **+ Effect ▾ ▸ Effect Palette…** in the Workbench. Drag a
   look's row to change the order (lower wins where two set the same
   channel; ⌥ copies).
 - **An effect's own colour or dimmer** sits under it in the list and stays
@@ -814,6 +814,6 @@ An effect is a JavaScript file in your **EffectScripts** folder
 appears in the browser next time the app starts. The script is handed every
 fixture (each head of a pixel fixture), the look's colours and its own
 settings each tick, and returns what each should do. In the Look Editor,
-an Effect look's **Script ▾** has **New script…** (a new one from a
-template) and **Edit script…** (the one behind the picked effect). See the
+an Effect look's **Script ▾** has **New Script…** (a new one from a
+template) and **Edit Script…** (the one behind the picked effect). See the
 [Effect script API](../dev/EFFECTSCRIPT_API.md) for the full reference.

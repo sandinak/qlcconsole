@@ -312,9 +312,15 @@ Left:
 - [ ] **Virtual Console**: its right-click menu is the menu bar's Edit menu,
   so Delete is fourth and "Widget Properties" has no "…". Give it its own
   menu (§3.4).
-- [ ] **Connections, power widget, show timeline**: title case,
+- [x] **Connections, power widget, show timeline**: title case,
   Delete last ("Delete universe entirely…" is followed by Add Universe),
-  one word for remove ("Unassign", "Forget").
+  one word for remove ("Unassign", "Forget"). Done 2026-11-04 (wfaudit2):
+  every menu label in ui/src is Title Case, checked by
+  `ui/test/menuwords` (it reads the sources, so a new menu anywhere is
+  held to the canon's words); Connections puts Collapse / Expand All Below
+  and Add Universe on top and the row's Delete last ("Delete Universe…",
+  "Delete Target…", "Delete Port", "Unpatch…" for "Forget this patch").
+  Left: the power widget's "Unassign" (a value, not a destroy: kept).
 - [ ] **Line-param rows** (Spread / Grouping / Cross ⋯) and the Look
   Editor's pick menus: no kind block yet (a value, not an object), §3.4.
 - [ ] **Functions tab**: QLC+'s own window, hidden by default (Q32); on the

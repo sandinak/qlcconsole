@@ -20,7 +20,7 @@ In the [Show Tree](show-tree.md), in Design or Operate:
 
 - a cue's page: **Focus ▾ Focus this cue…** in its header, or **Focus
   this cue…** on the page, or
-- right-click a layer: **Focus this cue…** (it starts on that layer).
+- right-click a layer: **Focus This Cue…** (it starts on that layer).
 
 In Design the cue is previewed on the rig. In Operate the show carries on
 as it is running (see [Focusing during the show](#focusing-during-the-show)).
@@ -34,7 +34,7 @@ In Build's [Workbench](build.md#the-workbench):
   look…** for a Build scene. For a cue, the same menu has **Make this a
   venue focus cue** (see [A venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show)), or
 - right-click a cue's layer, a scene, or a scene's group or fixture row:
-  **Focus this cue…** or **Focus this look…** (it starts on that row).
+  **Focus This Cue…** or **Focus This Look…** (it starts on that row).
 
 Each is greyed, with the reason in its tooltip, while the show has no
 lights to focus.

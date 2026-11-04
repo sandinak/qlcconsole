@@ -12,7 +12,7 @@
 | ⌘, | **Settings…** (autosave, appearance, …): in the qlcconsole menu on a Mac, File elsewhere |
 | ⌘F12 | Switch between **Design** and **Operate** |
 | **Esc** | **Back out** of an editor to what was showing before: a palette opened from a list, a group's layout, the effect bench, a ▣ layer, the Workbench docked in the Show Tree, the Show Tree's Look Editor. What you changed stays changed. In a rename or another inline edit, Esc cancels just that edit; in a dialog it closes the dialog. Plain Esc stops nothing |
-| ⌘⇧Esc | **Stop ALL functions** (its arrow: fade 1/5/10/30 s and stop) |
+| ⌘⇧Esc | **Stop ALL Functions** (its arrow: fade 1/5/10/30 s and stop) |
 | ⌘D | Dump the current DMX values into a function |
 | ⇧⌘N | **New here**: the next thing for where you are. In the Show Tree a production, a cue list, the next cue, a layer or a hit; in Build a scene in the folder, a step or a scene layer in the Workbench, an effect; in Fixtures a group in the folder. **Edit** names it first ([Show Tree](show-tree.md#new-here), [Build](build.md#new-here)). The Virtual Console keeps ⇧⌘N for an animation widget |
 | ⌘↩ / ⌘⇧↩ | **GO** / **Back** on the main cue list ([Show control](show-control.md#whats-next-and-go-from-anywhere)); with a [venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show) waiting, ⌘↩ begins its calls instead |
@@ -166,6 +166,7 @@ W say the light (⇧W feedback), H hold, ⌘Z undo, Esc leave. See
 |---|---|
 | **Return** / **F2** | Rename the selected fixture, group, group folder or universe in place; Esc cancels ([Layout](fixture-manager.md#layout)) |
 | Double-click | A group opens its grid editor, a fixture its properties, a folder renames |
+| ⌫ / Delete | Delete the selected fixtures or groups, asking first (as the toolbar's **Delete…**) |
 | ⌘Z | Undo the rig's last change: a Patch dialog **Apply**, properties, renames, plot symbols, output rules |
 | Drag fixtures or a group onto a universe | The **Patch** dialog, packed into that universe, to review and apply |
 

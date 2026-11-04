@@ -1538,7 +1538,7 @@ void PowerDistributionWidget::slotFixtureContextMenu(const QPoint &pos)
     PowerDistribution *pd = m_doc->powerDistribution();
     const QList<PowerSource> &srcs = pd->sources();
 
-    QMenu *assign = menu.addMenu(tr("Add %1 to circuit").arg(scope));
+    QMenu *assign = menu.addMenu(tr("Add %1 to Circuit").arg(scope));
     bool haveCircuit = false;
     for (int s = 0; s < srcs.size(); s++)
     {
@@ -1621,17 +1621,17 @@ void PowerDistributionWidget::slotTreeContextMenu(const QPoint &pos)
     const bool wall = (srcType == PowerSource::WallSocket);
 
     QMenu menu(this);
-    QAction *addSource = menu.addAction(tr("Add source"));
+    QAction *addSource = menu.addAction(tr("Add Source"));
 
     // A wall socket has no separate circuits; every other source type can gain one.
     QAction *addCircuit = NULL;
     if (type == TypeCircuit || (type == TypeSource && !wall))
-        addCircuit = menu.addAction(tr("Add circuit"));
+        addCircuit = menu.addAction(tr("Add Circuit"));
 
     // Breakout presets — turn a single feed into a fixed set of circuits.
     QMenu *presetMenu = NULL;
     if (type == TypeSource && srcType == PowerSource::BreakoutBox)
-        presetMenu = menu.addMenu(tr("Add breakout preset"));
+        presetMenu = menu.addMenu(tr("Add Breakout Preset"));
     static const struct { const char *label; int n; double volts, amps; const char *conn; } kPresets[] = {
         { "L14-30 → 2 × 120 V / 20 A", 2, 120, 20, "Edison 5-20" },
         { "L21-30 → 3 × 120 V / 20 A", 3, 120, 20, "Edison 5-20" },

@@ -189,7 +189,7 @@ there whether or not the marks are shown, and it follows the target as you
 drag it. In the Rig Overview, the same readout sits at the feet of each
 figure and area, and under the person Quick focus stands where a fixed light
 lands, so it follows that spot as you nudge it. To hide the readouts, untick
-**Show ▸ Target positions** on the plot's footer (or the Rig Overview's).
+**Show ▸ Target Positions** on the plot's footer (or the Rig Overview's).
 It's on by default and saved with the show.
 
 Two targets close together don't print their readouts on top of each other:
@@ -256,7 +256,7 @@ camera by number (**Around the stage**, **Height of eye**), and the turn
 button rotates the view 90° (a view setting only; nothing moves).
 
 **Its controls are along the foot**, in a footer bar like the Lighting
-Studio plot's: **Show** (with **Target positions**) and **Plot layers** on
+Studio plot's: **Show** (with **Target Positions**) and **Plot layers** on
 the left, then **Live**, **Beams**, **Room**, **Haze**, **Owner**, **Quality**,
 **GPU**, the frame rate, **Quick focus** and **Fit**, and **View** (Top,
 Front, Back, Side, 45°) on the right, where the plot has its own View. The
@@ -279,7 +279,7 @@ where it is, keeping your angle and zoom. A structure's own editor always
 shows that structure, whatever layer it is on.
 
 **Or hide it from the overview itself.** The overview's **Plot layers** menu lists
-the show's layers with a tick each: untick one to hide it, **Show all** to
+the show's layers with a tick each: untick one to hide it, **Show All** to
 bring everything back. It is the same switch as the layer's eye in the
 Studio (and saved with the show), so the two always agree. Showing, hiding
 and labels work in Operate mode too; locking a layer stays a Design-mode
@@ -429,7 +429,7 @@ rotated in its properties, the rig view stands them facing that riser's
 front (the highest deck under their feet decides, so a flat step on a turned
 riser keeps them facing the same way).
 
-The cue scope does not hide people. **Show ▸ All targets** off narrows the
+The cue scope does not hide people. **Show ▸ All Targets** off narrows the
 targets drawn to the ones the cue on show aims at; the performers are the
 scene, not a marker, so they stay drawn while their layer is visible.
 
@@ -890,7 +890,7 @@ made some lanterns draw on their side, as dark squares).
 **Standing fixtures on a deck.** Select them (as many as you like),
 right-click one → **Mount on → Deck (N fixtures)**:
 
-- **The deck under each** stands every selected fixture on the platform it
+- **The Deck Under Each** stands every selected fixture on the platform it
   is over — the nearest within half a metre when it sits on or just off an
   edge — with its base on the deck's top surface;
 - or pick a **platform by name** to put them all on that one.
@@ -1066,7 +1066,7 @@ moving head that is used as a followspot *Moving head spot*, not
 the plot.
 
 **Showing Auto fixtures as their closest symbol.** On the plot's **Show**
-menu, **Show Auto fixtures as their closest plot symbol** shows every
+menu, **Show Auto Fixtures as Their Closest Plot Symbol** shows every
 fixture left on Auto as the symbol its picker names — a colour changer as an
 LED PAR, a moving head with a gobo as a moving head spot, a dimmer channel
 as an ellipsoidal — exactly as if that symbol were set: its icon in the
@@ -1092,19 +1092,19 @@ Either one is enough.
 | **Object lock** | An object's right-click menu → **Lock Position** / **Unlock Position** (**Lock Their Positions** for several), or a power source's or network node's own toggle | That one object. It stays selectable, so you can unlock it again; its Plot layers row shows a padlock |
 | **Layer lock** | An object's right-click menu → **Lock Layer "Rig"** (named for its layer), or the layer's padlock in the Plot layers panel | Everything on that layer. On the plot it is click-through: a click, a rubber band or Select All passes it by and reaches what is under it. Select it from the Plot layers tree to inspect it (Properties and the right-click menu work); it still can't be moved or deleted |
 | **Folder ("group") position lock** | The Plot layers panel / group properties | Every member's position, but they stay selectable (locking a parent folder locks its children too) |
-| **Global layout lock** | The 🔒 "Edit Plot" toolbar button | The whole plot at once, aim targets included, still selectable. **Targets stay adjustable**, beside the button while the plot is locked, lets aim targets be dragged anyway. The arrow on the button opens **Always start with the plot locked** |
+| **Global layout lock** | The 🔒 "Edit Plot" toolbar button | The whole plot at once, aim targets included, still selectable. **Targets Stay Adjustable**, beside the button while the plot is locked, lets aim targets be dragged anyway. The arrow on the button opens **Always Start with the Plot Locked** |
 
 **Dragging something locked** moves nothing and says why on the plot's
 status line: **Plot locked — Edit Plot to move**, **Layer locked — unlock it
 in Layers to move**, or **Locked — unlock it to move**. Nothing is stored, so
 the show isn't marked changed and there is nothing to undo.
 
-**Targets stay adjustable** (off to start with) is for re-aiming during a
+**Targets Stay Adjustable** (off to start with) is for re-aiming during a
 show with the rig frozen: on, aim targets drag while the plot is locked;
 off, a locked plot moves nothing at all. It is your setting, kept on this
 computer, not saved in the show.
 
-**Always start with the plot locked** (off to start with) is in the menu
+**Always Start with the Plot Locked** (off to start with) is in the menu
 on the lock button's arrow. On, every show you open starts with its whole
 plot locked, ready to run; the show isn't marked changed by it. Like
 Targets stay adjustable it is yours, kept on this computer, not the
@@ -1176,11 +1176,11 @@ of, and doesn't override, the real locks above.
 ## Selecting and undo on the plot
 
 - **The plot's footer bar**: **Grid** (stage size, units, subdivisions);
-  **Snap** (below); **Show** — **Rulers**, **Fixture labels**, **Fixtures
+  **Snap** (below); **Show** — **Rulers**, **Fixture Labels**, **Fixtures
   on the rig** (hide the mounted fixtures while you place structures),
-  **Stage centre lines** (the teal cross) and the beam and reach views;
-  **⌖ 0,0**, where the rulers read 0 (click a point, **Stage centre**,
-  **Downstage centre** or the top-left corner); **Overlay** (Normal,
+  **Stage Centre Lines** (the teal cross) and the beam and reach views;
+  **⌖ 0,0**, where the rulers read 0 (click a point, **Stage Centre**,
+  **Downstage Centre** or the top-left corner); **Overlay** (Normal,
   Power, DMX, Network, Owner, Stage only); **View** (Top, Front, Side)
   and the button that turns the plot 90° (a view setting; nothing moves).
   Click a box to step to its next choice; its arrow lists them all.
@@ -1350,7 +1350,7 @@ show it:
   spot's *Fade When Blocked*, an Aim look's *Dim lights that can't see the
   target* and the blocked traces go by. See
   [Line of sight](stage-targets.md#line-of-sight).
-- **Beams stop at what is in their way** — in the Angled view and the Rig
+- **Beams Stop at What Is in Their Way** — in the Angled view and the Rig
   Overview a beam already stops at a platform (its top or its side), a
   drape or a wall; with this on it stops at a tower or a truss too. Off by
   default; remembered.
@@ -1593,21 +1593,21 @@ For a whole rig, use Quick focus.
 Every tool for focusing is on one drop-down on the Lighting Studio
 toolbar, **Focus ▾**, beside **Add ▾**:
 
-- **Quick focus…** — the rig, a head at a time, into the show's own
+- **Quick Focus…** — the rig, a head at a time, into the show's own
   calibration ([below](#quick-focus)).
-- **Venue focus…** — the show's focus calls, for the venue applied
+- **Venue Focus…** — the show's focus calls, for the venue applied
   ([Venue focus](focus-calls.md#running-venue-focus)).
-- **Edit focus calls…** — the calls, in order, and the venue
+- **Edit Focus Calls…** — the calls, in order, and the venue
   ([Setting up the calls](focus-calls.md#setting-up-the-calls)).
 - **Venues ▸** — the venue menu, the same one the footer's venue chip
-  and **View ▸ Venue…** open: **Switch venue ▸** a venue (or None), **New
-  venue…**, **Rename…**, **Rig and universes…**, **Venue focus…**, **Focus
+  and **View ▸ Venue…** open: **Switch Venue ▸** a venue (or None), **New
+  venue…**, **Rename…**, **Rig and Universes…**, **Venue Focus…**, **Focus
   report…**, and **Clashes (n)…** when there are any ([The venue
   chip](venues.md#the-venue-chip)).
 - **Practice (scramble)…** — knocks the moving heads in the calls off
   their targets by a random amount for you to focus back, scored
   ([Practice](focus-calls.md#practice-scramble-and-focus-back)).
-- **Focus report…** — the venue's focus, light by light
+- **Focus Report…** — the venue's focus, light by light
   ([The focus report](focus-calls.md#the-focus-report)).
 
 An entry that cannot be used yet is greyed, and its tooltip says why: no
@@ -1623,7 +1623,7 @@ the keyboard. This guide names the Xbox buttons; a
 PlayStation pad's own names, and its touchpad, are in
 [On a PlayStation pad](focus-calls.md#on-a-playstation-pad).
 
-**Start it** from **Focus ▸ Quick focus…** on the Lighting Studio toolbar,
+**Start it** from **Focus ▸ Quick Focus…** on the Lighting Studio toolbar,
 **Quick focus** on the Rig Overview's bar, **View → Quick Focus…** (⌘⌥F),
 or by holding **View + Menu** on the controller. Choose:
 

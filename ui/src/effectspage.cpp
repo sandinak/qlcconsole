@@ -72,7 +72,7 @@ EffectsPage::EffectsPage(Doc *doc, QWidget *parent)
     m_newBtn->setPopupMode(QToolButton::InstantPopup);
     QMenu *newMenu = new QMenu(m_newBtn);
     newMenu->setToolTipsVisible(true);
-    QAction *a = newMenu->addAction(tr("Effect palette"), this, &EffectsPage::newEffect);
+    QAction *a = newMenu->addAction(tr("Effect Palette…"), this, &EffectsPage::newEffect);
     a->setToolTip(tr("A script effect, designed here on the bench: plays in scenes and the Show Tree"));
     newMenu->addSection(tr("QLC+ effects (EFX, RGB Matrix)"));
     a = newMenu->addAction(QIcon(QStringLiteral(":/efx.png")), tr("EFX"), this, [this]() { newEfx(); });

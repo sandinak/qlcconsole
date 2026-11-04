@@ -113,9 +113,9 @@ from the Library lands in the tree right beside it.
     check box, **Overlapping layers mix**, **Skip**, **Don't move in black
     into this cue**, **At timecode** with **Learn** (the time a list that
     follows timecode plays it; [Cues at a timecode](shows.md#cues-at-a-timecode)),
-    **Make this a venue focus cue**
+    **Make This a Venue Focus Cue**
     ([A venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show)),
-    **Focus this cue…** ([Focus this cue](refine.md)), includes, fade in /
+    **Focus This Cue…** ([Focus this cue](refine.md)), includes, fade in /
     out, hold, its **sub-cues** (and + Sub-cue), cue looks, every
     layer on stage in it, a dashed drop area, and *Next cue receives*. A
     **sub-cue** shows **Advance** (Sub GO, or Auto-follow after a wait) in
@@ -897,10 +897,10 @@ usual. An effect that carries on into the next cue just keeps running. A
 cue with no fade times starts and stops its effects at once. On the
 effect's row, **⋯ → Fade In / Out** chooses:
 
-- **With the cue's fades**: the default for a new effect.
-- **At once**: the effect starts and stops at full, whatever the cue's
+- **With the Cue's Fades**: the default for a new effect.
+- **At Once**: the effect starts and stops at full, whatever the cue's
   fades are.
-- **Own times…**: its own fade in and fade out, in seconds, in the strip
+- **Own Times…**: its own fade in and fade out, in seconds, in the strip
   at the bottom of the Show Tree.
 
 From the command line, `fade` goes right after the effect (or after its
@@ -912,7 +912,7 @@ Design mode only, and AI Assist can propose it.
 
 If an effect is let go while it is still fading in, it fades out from
 the point it had reached. Effect fades are saved with the show. A show
-saved before effect fades opens with its effects set to **At once**, so
+saved before effect fades opens with its effects set to **At Once**, so
 it plays as it did. An EFX or RGB Matrix played as a layer keeps QLC+'s
 own handling of the cue's fades: an EFX grows from nothing over the fade
 in and stops at once, and an RGB Matrix fades in and out.
@@ -971,7 +971,7 @@ of its own.
   as crossing beams (see
   [Reading the strip and the plan](stage-targets.md#reading-the-strip-and-the-plan)).
 - **In a window.** On a small screen, **⤢** on the plan (or right-click
-  the strip or the plan ▸ **Open in a window**) opens both in a window of
+  the strip or the plan ▸ **Open in a Window**) opens both in a window of
   their own: resize it, put it on a second screen, and the dots, numbers
   and light names grow with it. It updates as you edit, from the tree rows,
   the cue's Line ⋯, the command line, the pad or undo, and follows the cue
@@ -1355,7 +1355,7 @@ other cue is renumbered:
 A number a sub-cue already answers to is skipped (with sub-cues 4.1 to 4.5,
 a cue dropped between 4 and 4.6 becomes 4.0.5). If nothing fits three levels
 down, the drop is refused and the hint says to use **Renumber This Level…**
-first. **Move up** and **Move down** on a cue's right-click menu renumber in
+first. **Move up** and **Move Down** on a cue's right-click menu renumber in
 the same way.
 
 Several selected cues dragged together move as a block. They keep their
@@ -1584,7 +1584,7 @@ to keep cues.
 - **Place a cue.** Drag a cue from the Show Tree onto a word: its **GO** is
   called there (hold Alt for its **standby**). Or select the words, pick the
   cue in the box beside **Import…** (it follows the cue selected in the
-  tree) and press **Cue here** or **Standby here**; the box then moves to
+  tree) and press **Cue here** or **Standby Here**; the box then moves to
   the next cue, so a script is called through from top to bottom. Right-click
   a line to place a cue there or take a cue off.
 - **Read the margin.** Each line shows the cues called on it: `STBY 1.0.2
@@ -2460,7 +2460,7 @@ Console widget is the same runner on a VC page.
   the current production, or any list of any production; with only one
   list there is nothing to choose and no box), the **timecode** once
   there is a source (*TC 01:02:03:15*, *hold* when it stops arriving),
-  **LIVE / DESIGN** (⌘F12 switches), and **Venue focus…** (greyed, with
+  **LIVE / DESIGN** (⌘F12 switches), and **Venue Focus…** (greyed, with
   why, while there is nothing to focus). With a
   [venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show) armed, a
   line says *Venue focus: waiting for the controller — press Start*, with
@@ -2629,7 +2629,7 @@ fader, not an edit to every cue.
 
 ### Move in black
 
-**Auto move-in-black** looks ahead to the next cue while the show runs. Any
+**Auto Move-in-black** looks ahead to the next cue while the show runs. Any
 mover that cue will light, and that is dark now, is sent ahead of time to
 where it will be revealed: pan and tilt, colour, gobo, beam. Its level is
 left alone, so nobody sees it move. Each light is let go as its cue lights

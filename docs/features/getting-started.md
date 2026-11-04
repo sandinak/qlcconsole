@@ -354,9 +354,9 @@ needs an address until the end.
    all addressed the same in their own universes.
    ([Patching](fixture-manager.md#patching-the-patch-dialog))
 7. **Wire the universes.** Connections ▸ Devices: double-click a universe
-   (or right-click ▸ **Edit connection…**) and pick the protocol, the
+   (or right-click ▸ **Edit Connection…**) and pick the protocol, the
    interface and the node's port. For a node not heard yet, right-click
-   the interface ▸ **Add a target on this interface…**. Select a universe
+   the interface ▸ **Add a Target on This Interface…**. Select a universe
    to see what it's sending.
 8. **Group the fixtures** for effects and looks: select on the plot →
    **Create Fixture Group from Selection**, or lay a group out from the
@@ -394,8 +394,8 @@ hired rig with a patch sheet):
    come from the show cache, your library, or can be repaired in the
    Fixture Editor.
 2. **Pick the room.** Click the **Venue** chip in the footer (or **View ▸
-   Venue…**): **Switch venue ▸** this room if the show has been here
-   before, or **New venue…** for a new one. Its clashes with the show (a
+   Venue…**): **Switch Venue ▸** this room if the show has been here
+   before, or **New Venue…** for a new one. Its clashes with the show (a
    house light on a tour light's channels, channels the house keeps) are
    listed before it goes on; the room's house rig and patch come in with
    it, and the tour package stays as it is.
@@ -416,7 +416,7 @@ hired rig with a patch sheet):
    maximum — measure them once and copy the profile to the same fixtures.
    ([A fixture's maximum draw](other-improvements.md#a-fixtures-maximum-draw))
 7. **Focus for the room** if the show has focus calls: **Focus ▸ Venue
-   focus** (or the venue menu's **Venue focus…**); corrections are kept
+   focus** (or the venue menu's **Venue Focus…**); corrections are kept
    for the venue. ([Venue focus](focus-calls.md))
 8. **Save.** The show file keeps the tour package and its own patch; the
    room's house rig, patch and focus corrections are kept with the venue,

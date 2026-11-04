@@ -18,14 +18,14 @@ can show the same timeline for the scene you're building.
 | **Chaser** | Steps that are each **any** function, in any order (forward, backward, ping-pong, random). Put one on the timeline when the steps aren't all one scene. |
 | **Cue** | One step of a sequence on the timeline: when it starts, its fade in, its hold, its fade out ("fade in 2 s · hold 4 s · fade out 1 s · starts 1:12.5"). Select several to move or **Scale cue timing** together. |
 | **Cursor / playhead** | The vertical line: where playback starts and where it is. The time field shows it. Click the time ruler or an empty part of a track to move it; drag across empty track space to select items. |
-| **Show end** | The handle at the end of the timeline: the show's length. Drag it, or right-click it — **Fit end to content**, **End at current playhead**, **End at SMPTE…**, **Set length…**. When the show reaches its end it stops there and **parks** — the last look stays up, as a base under whatever you play next — instead of running on into nothing. |
+| **Show end** | The handle at the end of the timeline: the show's length. Drag it, or right-click it — **Fit end to content**, **End at Current Playhead**, **End at SMPTE…**, **Set Length…**. When the show reaches its end it stops there and **parks** — the last look stays up, as a base under whatever you play next — instead of running on into nothing. |
 | **Time markers** | The ruler's units: time, or BPM in 4/4, 3/4 or 2/2 (with the tempo beside it). **Snap to grid** (⌘G) puts items on the marks. |
 
 ### A track's flags
 
 Right-click a track's header:
 
-- **Hold at end (stays up between cues)** — a gap between items keeps
+- **Hold at End (stays up between cues)** — a gap between items keeps
   the last look on, rather than going dark. The held look is a base under
   everything else: anything that plays on top of it mixes with it as two
   cues would (the higher level of a dimmer shows; a position or colour
@@ -33,7 +33,7 @@ Right-click a track's header:
   those fixtures, takes them over.
 - **Solo-safe (mute-exempt)** — soloing another track doesn't mute this
   one (house light, a haze track).
-- **Priority / role** — **Normal** (a dimmer takes the highest level of
+- **Priority / Role** — **Normal** (a dimmer takes the highest level of
   what plays; any other channel, the last item to write it),
   **Override** (this track wins every channel its scenes play, dimmers
   too: a lower level on it pulls a light below a Normal track or a cue at
@@ -44,7 +44,7 @@ Right-click a track's header:
 - **Intensity submaster** — the track's fader scales everything on it.
   It's saved with the show, and the level you set last, before Start or
   while the show plays, is the one that plays.
-- **Track colour…**, **Track name**, **Delete Track**.
+- **Track Colour…**, **Rename**, **Delete Track**.
 
 ## Doing things
 
@@ -76,7 +76,7 @@ channels mixed, the default), **Left channel**, **Right channel**, **Both
 channels**, or **Hide waveform**. Zooming and scrolling draw only what is on
 screen, so a 5-minute song stays smooth.
 
-- **Sections (markers)** — right-click the markers lane: **Add marker here…**;
+- **Sections (markers)** — right-click the markers lane: **Add Marker Here…**;
   drag a marker or its edges, double-click to rename. They are saved in the
   show and ⌘Z takes back each edit. A section's start is also where a dropped
   item snaps: with **Snap to grid** on (⌘G), an item dropped within about 8
@@ -107,7 +107,7 @@ the source list as *Art-Net TimeCode*. The four rates are all read: film
 
 **LTC (audio timecode)** is the third source. Many playback rigs and
 recorders print SMPTE timecode as a sound on a spare track; patch that
-track to this computer's audio input and pick **Audio input (LTC)** as the
+track to this computer's audio input and pick **Audio Input (LTC)** as the
 source (the footer chip's menu, or Connections → Devices → Show control &amp;
 sync). It is read from the **first channel** of the input chosen in the
 audio settings (the one audio triggers use), at 24, 25, 29.97 drop-frame

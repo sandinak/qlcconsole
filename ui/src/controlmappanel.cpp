@@ -247,7 +247,7 @@ void ControlMapPanel::buildEncoderBox(QVBoxLayout *lay)
     learnItem(tr("Bank 1 button (the next four follow)…"), QStringLiteral("encoderLearnDirect"), LearnDirect);
     learnItem(tr("Ring of encoder 1 (turn that encoder)…"), QStringLiteral("encoderLearnRings"), LearnRings);
     more->addSeparator();
-    QAction *forget = more->addAction(tr("Forget the pushes, bank buttons and rings"));
+    QAction *forget = more->addAction(tr("Forget the Pushes, Bank Buttons and Rings"));
     forget->setObjectName(QStringLiteral("encoderForget"));
     forget->setData(-1);
     m_encLearnMore->setMenu(more);

@@ -113,6 +113,66 @@ void FixtureManager_Test::cleanup()
     delete m_doc;
 }
 
+void FixtureManager_Test::theDeleteKeyDeletesTheSelectionAskingFirst()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Probe");
+    fxi->setChannels(4);
+    QVERIFY(m_doc->addFixture(fxi));
+    const quint32 fid = fxi->id();
+
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.resize(1000, 700);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    // A key's shortcut fires in the active window only.
+    mgr.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&mgr));
+    QTreeWidgetItem *row = nullptr;
+    for (QTreeWidgetItemIterator it(mgr.m_fixtures_tree); *it != nullptr; ++it)
+        if ((*it)->data(KColumnName, PROP_ID).isValid()
+            && (*it)->data(KColumnName, PROP_ID).toString().toUInt() == fid)
+            row = *it;
+    QVERIFY(row != nullptr);
+    mgr.m_fixtures_tree->setCurrentItem(row);
+    row->setSelected(true);
+    mgr.m_fixtures_tree->setFocus();
+    QApplication::processEvents();
+    QVERIFY2(mgr.m_removeAction->isEnabled(), "a selected fixture leaves Delete… greyed");
+
+    // Answer the question when it shows: No first, then Yes.
+    auto answer = [](QMessageBox::StandardButton b, bool *asked) {
+        QTimer *poll = new QTimer;
+        poll->setInterval(10);
+        QObject::connect(poll, &QTimer::timeout, [poll, b, asked]() {
+            QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+            if (box == nullptr || box->button(b) == nullptr)
+                return;
+            *asked = true;
+            poll->stop();
+            poll->deleteLater();
+            box->button(b)->click();
+        });
+        poll->start();
+        QTimer::singleShot(5000, poll, [poll]() { poll->stop(); poll->deleteLater(); });
+    };
+    bool asked = false;
+    answer(QMessageBox::No, &asked);
+    QTest::keyClick(mgr.m_fixtures_tree, Qt::Key_Backspace);
+    QTRY_VERIFY2(asked, "⌫ on the list asked nothing");
+    QVERIFY2(m_doc->fixture(fid) != nullptr, "No deleted it anyway");
+
+    asked = false;
+    answer(QMessageBox::Yes, &asked);
+    mgr.activateWindow();
+    mgr.m_fixtures_tree->setFocus();
+    QTRY_VERIFY(mgr.m_fixtures_tree->hasFocus());
+    QTest::keyClick(mgr.m_fixtures_tree, Qt::Key_Delete);
+    QTRY_VERIFY(asked);
+    QTRY_VERIFY2(m_doc->fixture(fid) == nullptr, "Delete on the list, answered Yes, kept the fixture");
+}
+
 void FixtureManager_Test::deletingAFixtureRemovesItsRowUnderItsUniverse()
 {
     QVERIFY(m_doc->inputOutputMap()->addUniverse());

@@ -395,7 +395,7 @@ void FocusCallsUi_Test::refineFromTheWorkbench()
     emit btn->menu()->aboutToShow();
     QAction *self = btn->menu()->findChild<QAction *>("workbenchRefine");
     QVERIFY(self != nullptr && self->isEnabled());
-    QCOMPARE(self->text(), QString("Focus this look\342\200\246"));
+    QCOMPARE(self->text(), QString("Focus This Look\342\200\246"));
     // A Build scene is not a cue: no venue focus cue to make.
     QVERIFY(btn->menu()->findChild<QAction *>("workbenchFocusCue") == nullptr);
     self->trigger();
@@ -1488,16 +1488,16 @@ void FocusCallsUi_Test::theFocusMenuGreysWhatCannotBeUsed()
         if (!a->isSeparator())
             texts << a->text();
     // Not a Teaching show: no scramble in the menu
-    QCOMPARE(texts, QStringList({ "Quick focus\342\200\246", "Venue focus\342\200\246", "Edit focus calls\342\200\246",
-                                  "Venues", "Focus report\342\200\246" }));
+    QCOMPARE(texts, QStringList({ "Quick Focus\342\200\246", "Venue Focus\342\200\246", "Edit Focus Calls\342\200\246",
+                                  "Venues", "Focus Report\342\200\246" }));
     empty.teachingSettings()->setEnabled(true);
     FocusMenu::fill(&menu, &empty, &parent, [&quick]() { ++quick; });
     texts.clear();
     for (QAction *a : menu.actions())
         if (!a->isSeparator())
             texts << a->text();
-    QCOMPARE(texts, QStringList({ "Quick focus\342\200\246", "Venue focus\342\200\246", "Edit focus calls\342\200\246",
-                                  "Venues", "Practice (scramble)\342\200\246", "Focus report\342\200\246" }));
+    QCOMPARE(texts, QStringList({ "Quick Focus\342\200\246", "Venue Focus\342\200\246", "Edit Focus Calls\342\200\246",
+                                  "Venues", "Practice (scramble)\342\200\246", "Focus Report\342\200\246" }));
     QVERIFY(menu.toolTipsVisible());
 
     // Nothing to focus: greyed, each with its reason as the tooltip.
@@ -1519,9 +1519,9 @@ void FocusCallsUi_Test::theFocusMenuGreysWhatCannotBeUsed()
     for (QAction *a : venues->actions())
         if (!a->isSeparator())
             vt << a->text();
-    QCOMPARE(vt, QStringList({ "Switch venue", "New venue\342\200\246", "Rename\342\200\246",
-                               "Rig and universes\342\200\246", "Venue focus\342\200\246",
-                               "Focus report\342\200\246" }));
+    QCOMPARE(vt, QStringList({ "Switch Venue", "New Venue\342\200\246", "Rename\342\200\246",
+                               "Rig and Universes\342\200\246", "Venue Focus\342\200\246",
+                               "Focus Report\342\200\246" }));
     QAction *newVenue = menuAction(venues, "venueNew");
     QVERIFY(!newVenue->isEnabled());
     QCOMPARE(newVenue->toolTip(), QString("Save the show first: a venue's corrections are kept in a file beside it."));
@@ -1554,7 +1554,7 @@ void FocusCallsUi_Test::theFocusMenuGreysWhatCannotBeUsed()
     for (QAction *a : apply->menu()->actions())
         at << QString("%1%2").arg(a->text(), a->isChecked() ? "*" : "");
     QCOMPARE(at, QStringList({ "None (the show's own calibration)", "Lincoln HS*" }));
-    // Switch venue > None: the show's own, at once.
+    // Switch Venue > None: the show's own, at once.
     apply->menu()->actions().first()->trigger();
     QVERIFY(!vc->isActive());
     // Filled again (each time it opens): one Switch submenu, not two.
@@ -1605,7 +1605,7 @@ void FocusCallsUi_Test::focusEntriesElsewhereSayWhy()
     for (QAction *a : m->actions())
         if (!a->isSeparator())
             texts << a->text();
-    QCOMPARE(texts, QStringList({ "Focus this cue\342\200\246", "Make this a venue focus cue", "Venue focus\342\200\246" }));
+    QCOMPARE(texts, QStringList({ "Focus This Cue\342\200\246", "Make This a Venue Focus Cue", "Venue Focus\342\200\246" }));
     QVERIFY(menuAction(m, "stCueFocusThis")->isEnabled());
     QVERIFY(!menuAction(m, "stCueFocusVenueCue")->isEnabled());
     QVERIFY(!menuAction(m, "stCueVenueFocus")->isEnabled());
@@ -1776,9 +1776,9 @@ void FocusCallsUi_Test::theVenueChipSaysTheVenueAndOpensItsMenu()
     QPointer<QMenu> menu = chip.openMenu();
     QVERIFY(menu != nullptr);
     QTRY_VERIFY(menu->isVisible());
-    QCOMPARE(menuTexts(menu), QStringList({ "Switch venue (off)", "New venue\342\200\246 (off)",
-                                            "Rename\342\200\246 (off)", "Rig and universes\342\200\246 (off)",
-                                            "Venue focus\342\200\246 (off)", "Focus report\342\200\246 (off)" }));
+    QCOMPARE(menuTexts(menu), QStringList({ "Switch Venue (off)", "New Venue\342\200\246 (off)",
+                                            "Rename\342\200\246 (off)", "Rig and Universes\342\200\246 (off)",
+                                            "Venue Focus\342\200\246 (off)", "Focus Report\342\200\246 (off)" }));
     menu->close();
 
     // Saved, two venues, Lincoln HS applied: the chip says so at once.
@@ -1790,9 +1790,9 @@ void FocusCallsUi_Test::theVenueChipSaysTheVenueAndOpensItsMenu()
     QVERIFY(chip.toolTip().contains("Lincoln HS is applied"));
     menu = chip.openMenu();
     QStringList texts = menuTexts(menu);
-    QCOMPARE(texts, QStringList({ "Switch venue", "New venue\342\200\246", "Rename\342\200\246",
-                                  "Rig and universes\342\200\246", "Venue focus\342\200\246 (off)",
-                                  "Focus report\342\200\246" }));
+    QCOMPARE(texts, QStringList({ "Switch Venue", "New Venue\342\200\246", "Rename\342\200\246",
+                                  "Rig and Universes\342\200\246", "Venue Focus\342\200\246 (off)",
+                                  "Focus Report\342\200\246" }));
     QMenu *sw = menuAction(menu, "venueSwitch")->menu();
     QStringList names;
     for (QAction *a : sw->actions())

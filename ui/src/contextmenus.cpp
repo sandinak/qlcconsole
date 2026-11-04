@@ -171,7 +171,12 @@ QString ContextMenu::checkTitleCase(const QString &text)
                                       Qt::SkipEmptyParts);
     for (int i = 0; i < words.size(); ++i)
     {
-        const QString &w = words.at(i);
+        // "to…", "Setup:" -- the word without what trails it
+        QString w = words.at(i);
+        while (!w.isEmpty() && !w.at(w.size() - 1).isLetterOrNumber())
+            w.chop(1);
+        if (w.isEmpty())
+            continue;
         const QChar c = w.at(0);
         if (!c.isLetter())
             continue;                        // "+ Cue", "…", "3"

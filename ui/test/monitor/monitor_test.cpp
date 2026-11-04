@@ -695,7 +695,7 @@ void Monitor_Test::layersShowAndHideFromTheRigOverviewInAnyMode()
         emit menu->aboutToShow();               // rebuilt: as the show is now
         QAction *all = nullptr;
         for (QAction *a : menu->actions())
-            if (a->text() == "Show all")
+            if (a->text() == "Show All")
                 all = a;
         QVERIFY(all != nullptr);
         all->trigger();
@@ -7010,7 +7010,7 @@ void Monitor_Test::theLayersListOffersEverythingThePlotDoes()
         {
             QMenu m;
             panel.buildContextMenu(&m, rowFor(QStringLiteral("fixture"), spot->id()));
-            QAction *a = menuAction(&m, QStringLiteral("Mount on > Tower > Tower > Top of tower"));
+            QAction *a = menuAction(&m, QStringLiteral("Mount on > Tower > Tower > Top of Tower"));
             QVERIFY2(a != nullptr, "the fixture's row cannot mount it on a tower");
             a->trigger();
             QCOMPARE(props->fixtureRigProps(spot->id()).towerId, tower->id());
@@ -28818,7 +28818,7 @@ void Monitor_Test::aHeldObjectIsNeverMovedByADrag()
         {
             QVERIFY2(h.item != nullptr, qPrintable(why + ": no item for the " + h.kind));
             if (h.kind == "target" && !targetHeld)
-                continue;           // "Targets stay adjustable": checked below
+                continue;           // "Targets Stay Adjustable": checked below
             const QPointF pos = h.item->pos();
             const bool shown = h.item->isVisible();
             QPointF on = h.item->sceneBoundingRect().center();
@@ -28867,7 +28867,7 @@ void Monitor_Test::aHeldObjectIsNeverMovedByADrag()
     dragEverything("plot locked, Front", true);
     gv->setViewPOV(MonitorGraphicsView::PovTop);
 
-    /* 1b. "Targets stay adjustable" on: the plot still holds everything else,
+    /* 1b. "Targets Stay Adjustable" on: the plot still holds everything else,
        but an aim target drags -- in plan and, for its height, in Front. */
     mon->m_targetsAdjustableAction->setChecked(true);
     QVERIFY(gv->targetsAdjustableWhenLocked());

@@ -410,11 +410,11 @@ QMenu *PatchListDialog::contextMenu()
 {
     const int n = selectedRows().size();
     QMenu *menu = new QMenu(this);
-    QAction *print = menu->addAction(n == 1 ? tr("Print Label...") : tr("Print %1 Labels...").arg(n),
+    QAction *print = menu->addAction(n == 1 ? tr("Print Label…") : tr("Print %1 Labels…").arg(n),
                                      this, &PatchListDialog::slotPrintSelectedLabels);
     print->setObjectName(QStringLiteral("patchListPrintLabels"));
     print->setEnabled(n > 0);
-    QAction *all = menu->addAction(tr("Print Labels for the List Shown..."), this,
+    QAction *all = menu->addAction(tr("Print Labels for the List Shown…"), this,
                                    [this]() { openLabels(QList<PatchList::Row>()); });
     all->setObjectName(QStringLiteral("patchListPrintAllLabels"));
     all->setEnabled(!m_shown.isEmpty());

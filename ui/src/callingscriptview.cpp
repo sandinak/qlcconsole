@@ -369,9 +369,9 @@ void CallingScriptEdit::contextMenuEvent(QContextMenuEvent *event)
     const quint32 chosen = m_view->chosenCue();
     if (chosen != invalidId())
     {
-        QAction *here = menu->addAction(tr("Cue here (GO)"), m_view, [this, chosen]() { m_view->cueHere(chosen, true); });
+        QAction *here = menu->addAction(tr("Cue Here (GO)"), m_view, [this, chosen]() { m_view->cueHere(chosen, true); });
         here->setObjectName(QStringLiteral("scriptCueHereAction"));
-        menu->addAction(tr("Standby here"), m_view, [this, chosen]() { m_view->cueHere(chosen, false); });
+        menu->addAction(tr("Standby Here"), m_view, [this, chosen]() { m_view->cueHere(chosen, false); });
     }
     const int line = cursorForPosition(event->pos()).blockNumber();
     if (const CallingScriptSheet::Line *l = lineOf(line))
@@ -383,7 +383,7 @@ void CallingScriptEdit::contextMenuEvent(QContextMenuEvent *event)
                 continue;
             seen.insert(m.cueId);
             const quint32 id = m.cueId;
-            menu->addAction(tr("Take cue %1 off the script").arg(m.number), m_view, [this, id]() { m_view->removeCue(id); });
+            menu->addAction(tr("Take Cue %1 Off the Script").arg(m.number), m_view, [this, id]() { m_view->removeCue(id); });
         }
     }
     menu->exec(event->globalPos());

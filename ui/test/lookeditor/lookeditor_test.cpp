@@ -863,8 +863,8 @@ void LookEditor_Test::scriptsAreUnderOneScriptButton()
     QCOMPARE(script->popupMode(), QToolButton::InstantPopup);
     QVERIFY(script->menu() != nullptr);
     QCOMPARE(script->menu()->actions(), QList<QAction *>({ ed.m_newScriptButton, ed.m_editScriptButton }));
-    QCOMPARE(ed.m_newScriptButton->text(), QString::fromUtf8("New script…"));
-    QCOMPARE(ed.m_editScriptButton->text(), QString::fromUtf8("Edit script…"));
+    QCOMPARE(ed.m_newScriptButton->text(), QString::fromUtf8("New Script…"));
+    QCOMPARE(ed.m_editScriptButton->text(), QString::fromUtf8("Edit Script…"));
     for (QAbstractButton *b : ed.findChildren<QAbstractButton *>())
         QVERIFY2(!b->text().contains("script…"), qPrintable(b->text()));
 }
