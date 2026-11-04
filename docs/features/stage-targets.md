@@ -282,9 +282,14 @@ wherever they are. Theatre calls the places *spike marks*.
   one before.
 - **Moving targets in a blocking.** In the Lighting Studio, the footer's
   **Blocking** picker says which blocking the plot shows: the cue in edit
-  (the default), Default, or a set; **New blocking…** makes one. When it is
+  (the default), Default, or a set.
+- **Storing a formation.** **Save Positions as Blocking…** (in the picker,
+  on the plot's right-click on empty space, and on the cue page) keeps
+  where the targets stand now as a new blocking and switches the plot to
+  it, so the next drags change only it. When it is
   not Default, a blue banner over the plot reads **Moving targets in:
-  Apron number**, and a drag moves the target in that blocking only. A
+  Apron number**, and a drag moves the selected targets (one, a pair, a
+  whole line of performers) in that blocking only. A
   dashed ring and line show where Default puts each moved target. Dragging
   a line's handles reshapes it in the blocking. Undo puts it back.
 - **What follows it.** Everything that reads where a target is: the Aim

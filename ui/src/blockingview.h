@@ -47,6 +47,13 @@ public:
     /** A drag on the plot edits a blocking set, not Default. */
     bool editsSet() const { return m_blocking != 0; }
 
+    /** "Save Positions as Blocking...": a new set @p name holding where
+     *  every target stands in blocking @p from now (a copy of its
+     *  overrides); its id. Undo is the set's removal by hand. */
+    static quint32 savePositionsAs(Doc *doc, const QString &name, quint32 from);
+    /** The menu/button text, the same everywhere. */
+    static QString saveActionText();
+
     /** "Moving targets in: Apron number" (empty in Default). */
     QString bannerText() const;
 

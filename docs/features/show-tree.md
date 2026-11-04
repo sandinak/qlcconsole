@@ -1242,8 +1242,9 @@ A cue's **Blocking** says where the stage targets stand from that cue on
 rank downstage, and every look aimed at them follows, with no second look.
 
 - **On the cue page.** Pick **Tracks (…)**, **Default** or a set from the
-  **Blocking** row. **New…** makes a set from where the targets stand in
-  this cue now and uses it from this cue on; **Rename…** renames the one
+  **Blocking** row. **Save Positions as Blocking…** makes a set from where
+  the targets stand in this cue now (a formation) and uses it from this
+  cue on; **Rename…** renames the one
   the cue plays.
 - **It tracks.** An unset cue keeps the blocking of the cue before it; the
   first cue starts from Default; a skipped cue passes nothing on. A cue

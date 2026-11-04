@@ -13,6 +13,7 @@
 #include "showtreecontroller.h"
 #include "monitorproperties.h"
 #include "blocking.h"
+#include "stagetarget.h"
 #include "doc.h"
 
 BlockingView *BlockingView::of(Doc *doc)
@@ -97,4 +98,21 @@ QString BlockingView::blockingName() const
 QString BlockingView::bannerText() const
 {
     return editsSet() ? tr("Moving targets in: %1").arg(m_name) : QString();
+}
+
+quint32 BlockingView::savePositionsAs(Doc *doc, const QString &name, quint32 from)
+{
+    MonitorProperties *mp = doc->monitorProperties();
+    const quint32 id = mp->addBlockingSet(name);
+    if (from != 0 && mp->hasBlockingSet(from))
+        for (StageTarget *t : mp->stageTargets())
+            if (t->isBlockedIn(from))
+                t->setBlocked(id, t->blocked(from));
+    doc->setModified();
+    return id;
+}
+
+QString BlockingView::saveActionText()
+{
+    return tr("Save Positions as Blocking\u2026");
 }

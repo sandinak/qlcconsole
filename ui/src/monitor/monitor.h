@@ -723,6 +723,9 @@ protected:
     QLabel    *m_blockingBanner = nullptr;
     void fillBlockingCombo();
     void refreshBlocking();
+    /** "Save Positions as Blocking...": the targets where the plot shows
+     *  them now, as a new set the plot then shows and moves. */
+    void saveBlockingFromPlot();
 
     /* Footer measurement bar (built in initGraphicsFooter). */
     class MonitorRuler *m_hRuler = nullptr;  ///< top ruler

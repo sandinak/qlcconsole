@@ -80,13 +80,17 @@ blocking stores them as they are (a shape, not a place).
 
 ## UI
 
-- **Cue page** (Show Tree): a *Blocking* row: a combo (`(tracks: Apron
-  number)` for an unset cue, `Default`, each set), *New…* and *Rename…*.
+- **Cue page** (Show Tree): a *Blocking* row: a combo (`Tracks (Apron
+  number)` for an unset cue, `Default`, each set), *Save Positions as
+  Blocking…* (a copy of where they stand in this cue, used from it on) and
+  *Rename…*. The same *Save Positions as Blocking…* is in the Studio's
+  picker and on its empty-plot right-click: the crew's "store a formation".
   A cue that changes blocking shows a small flag in the tree's flags column,
   with the set's name in the tooltip.
 - **Lighting Studio plot**: a *Blocking* picker in the toolbar (`Default`,
-  `The edited cue (…)`, each set, *New…*). Dragging a target writes the
-  picked blocking. When it is not Default a banner over the plot reads
+  `Cue in edit (…)`, each set, *Save Positions as Blocking…*). Dragging
+  writes the picked blocking for whatever is selected (one target or many);
+  how the plot selects and groups is the Studio's own rule. When it is not Default a banner over the plot reads
   "Moving targets in: Apron number" and each moved target leaves a dashed
   ghost at its Default place. In Default, a drag moves the target itself, as
   before.

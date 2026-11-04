@@ -87,6 +87,7 @@
 #include "areacover.h"
 #include "lineformation.h"
 #include "monitorproperties.h"
+#include "blockingview.h"
 #include "outputrulesdialog.h"
 #include "stagetarget.h"
 #include "linespread.h"
@@ -1884,10 +1885,11 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                          "cue before's (it tracks); the first cue starts from Default. Move the "
                                          "targets of a blocking in the Lighting Studio."));
             bl->addWidget(m_cueBlocking, 1);
-            QPushButton *nb = new QPushButton(tr("New\u2026"), m_cueBlockingRow);
+            QPushButton *nb = new QPushButton(BlockingView::saveActionText(), m_cueBlockingRow);
             nb->setObjectName("stCueBlockingNew");
-            nb->setToolTip(tr("A new blocking, a copy of where the targets stand in this cue now, "
-                              "used from this cue on."));
+            nb->setToolTip(tr("Store where the stage targets stand in this cue now as a new blocking "
+                              "(a formation: where the people stand for a number), used from this cue "
+                              "on. Move them for it in the Lighting Studio."));
             bl->addWidget(nb);
             m_cueBlockingRename = new QPushButton(tr("Rename\u2026"), m_cueBlockingRow);
             m_cueBlockingRename->setObjectName("stCueBlockingRename");
@@ -1901,20 +1903,14 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                 if (m_pageCue == invalidId())
                     return;
                 bool ok = false;
-                const QString name = QInputDialog::getText(this, tr("New blocking"),
+                const QString name = QInputDialog::getText(this, tr("Save Positions as Blocking"),
                         tr("Name (where the people stand, e.g. \"Apron number\"):"),
                         QLineEdit::Normal, QString(), &ok);
                 if (!ok || name.trimmed().isEmpty())
                     return;
-                MonitorProperties *mp = m_doc->monitorProperties();
                 // From where they stand in this cue now: a copy to change.
                 const quint32 from = m_st->cueBlocking(m_pageCue);
-                const quint32 id = mp->addBlockingSet(name);
-                if (from != invalidId() && from != 0)
-                    for (StageTarget *t : mp->stageTargets())
-                        if (t->isBlockedIn(from))
-                            t->setBlocked(id, t->blocked(from));
-                m_doc->setModified();
+                const quint32 id = BlockingView::savePositionsAs(m_doc, name, from == invalidId() ? 0 : from);
                 m_st->setCuesBlocking({ m_pageCue }, id);
                 fillCueBlocking();
             });

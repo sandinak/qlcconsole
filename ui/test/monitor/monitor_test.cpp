@@ -15859,6 +15859,40 @@ void Monitor_Test::draggingATargetInABlockingLeavesDefault()
         QVERIFY(!t->isBlockedIn(apron));
         QVERIFY(qAbs(t->y() - 2.0f) < 0.01f);
 
+        // Whatever the selection is -- here two performers -- the drag
+        // moves them all, in the blocking only.
+        StageTarget *u = props->addStageTarget();
+        u->setName("Soloist");
+        u->setPosition(QVector3D(5.0f, 2.0f, 0.0f));
+        view.updateTargets();
+        ti = view.m_targetItems.value(t->id(), nullptr);
+        TargetItem *ui = view.m_targetItems.value(u->id(), nullptr);
+        QVERIFY(ui != nullptr);
+        ti->setSelected(true);
+        ui->setSelected(true);
+        ti->setPos(ti->pos() + QPointF(0, view.m_cellPixels));
+        ui->setPos(ui->pos() + QPointF(0, view.m_cellPixels));
+        view.slotTargetMoved(ti);
+        QVERIFY(t->isBlockedIn(apron) && u->isBlockedIn(apron));
+        QVERIFY(qAbs(props->targetPosition(u, apron).y() - 3.0f) < 0.05f);
+        QVERIFY(qAbs(u->y() - 2.0f) < 0.01f && qAbs(t->y() - 2.0f) < 0.01f);
+        view.undoLastMove();                            // one step for the pair
+        QVERIFY(!t->isBlockedIn(apron) && !u->isBlockedIn(apron));
+        ti->setSelected(false);
+        ui->setSelected(false);
+
+        // Save Positions as Blocking...: a copy of where they stand now.
+        StageTarget::Blocked b;
+        b.hasOffset = true;
+        b.offset = QVector3D(0, 1, 0);
+        u->setBlocked(apron, b);
+        const quint32 kept = BlockingView::savePositionsAs(doc, "Finale", apron);
+        QVERIFY(kept != apron && props->hasBlockingSet(kept));
+        QVERIFY(u->isBlockedIn(kept) && !t->isBlockedIn(kept));
+        QVERIFY(qAbs(props->targetPosition(u, kept).y() - 3.0f) < 0.05f);
+        QCOMPARE(BlockingView::saveActionText(), QString("Save Positions as Blocking\u2026"));
+        u->clearBlocked(apron);
+
         // The cue in edit: its blocking is what a drag moves.
         ShowTreeController *st = doc->showTree();
         const quint32 listId = st->addCueList(st->addProduction("P"), "Main", ShowTree::ListMode::Tracking);

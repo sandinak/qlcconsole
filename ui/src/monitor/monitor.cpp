@@ -1317,18 +1317,9 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         BlockingView *bv = BlockingView::of(m_doc);
         if (!d.isValid())
         {
-            // New...: a set, picked straight away so the next drag goes into it.
-            bool ok = false;
-            const QString name = QInputDialog::getText(this, tr("New blocking"),
-                                                       tr("Name (where the people stand, e.g. \"Apron number\"):"),
-                                                       QLineEdit::Normal, QString(), &ok);
-            if (ok && !name.trimmed().isEmpty())
-            {
-                const quint32 id = m_doc->monitorProperties()->addBlockingSet(name);
-                m_doc->setModified();
-                bv->setPick(id);
-            }
-            fillBlockingCombo();
+            // Save Positions as Blocking...: picked straight away so the
+            // next drag goes into it.
+            saveBlockingFromPlot();
             return;
         }
         bv->setPick(d.toUInt());
@@ -9098,6 +9089,11 @@ void Monitor::fillCanvasMenu(QMenu *out, QPointF scenePos)
     addMenu->addAction(tr("Network Node"),
                        this, SLOT(slotAddNetworkNode()));
 
+    /* Where the people stand now, kept as a blocking (BLOCKING.md): the
+       crew's "store this formation". The plot then shows and moves it. */
+    cm.add(ContextMenu::Kind, BlockingView::saveActionText(), [this]() { saveBlockingFromPlot(); })
+        ->setObjectName(QStringLiteral("plotSaveBlocking"));
+
     // Shortcuts are on the actions (Qt shows them), not typed into the names.
     QAction *groupAct = cm.add(ContextMenu::Organise, tr("Group Selected"), [this]() { slotGroupItems(); });
     groupAct->setIcon(QIcon(":/group.png"));
@@ -12252,7 +12248,7 @@ void Monitor::fillBlockingCombo()
                              MonitorProperties::defaultBlocking());
     for (const MonitorProperties::BlockingSet &b : mp->blockingSets())
         m_blockingCombo->addItem(b.name, b.id);
-    m_blockingCombo->addItem(tr("New blocking..."));
+    m_blockingCombo->addItem(BlockingView::saveActionText());
     m_blockingCombo->setCurrentIndex(qMax(0, m_blockingCombo->findData(bv->pick())));
 }
 
@@ -12267,4 +12263,16 @@ void Monitor::refreshBlocking()
     }
     if (m_graphicsView != nullptr)
         m_graphicsView->blockingChanged();
+}
+
+void Monitor::saveBlockingFromPlot()
+{
+    BlockingView *bv = BlockingView::of(m_doc);
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, tr("Save Positions as Blocking"),
+                                               tr("Name (where the people stand, e.g. \"Apron number\"):"),
+                                               QLineEdit::Normal, QString(), &ok);
+    if (ok && !name.trimmed().isEmpty())
+        bv->setPick(BlockingView::savePositionsAs(m_doc, name, bv->blocking()));
+    fillBlockingCombo();
 }
