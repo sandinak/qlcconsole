@@ -21,6 +21,7 @@
 #include <QCursor>
 #include <QApplication>
 #include <QTimer>
+#include <QPointer>
 #include <QSettings>
 #include <QDateTime>
 #include <QGraphicsPathItem>
@@ -6802,12 +6803,13 @@ void MonitorGraphicsView::updateBlockingGhosts()
 void MonitorGraphicsView::moveTargetsInBlocking(const QList<TargetItem *> &moved, quint32 set)
 {
     MonitorProperties *props = m_doc->monitorProperties();
-    UndoEntry e;
-    e.type = UndoEntry::TargetBlock;
-    e.blockingSet = set;
+    /* Where every dropped item says its target now is, read before anything
+       is written: what a write sets off (targetMoved, a re-aim) may rebuild
+       the target items, and the rest of `moved` would be freed under us. */
+    QList<QPair<quint32, QVector3D>> drops;
     foreach (TargetItem *ti, moved)
     {
-        StageTarget *t = ti->target();
+        StageTarget *t = ti != nullptr ? ti->target() : nullptr;
         if (t == nullptr)
             continue;
         const QVector3D cur = props->targetPosition(t, set);
@@ -6819,6 +6821,19 @@ void MonitorGraphicsView::moveTargetsInBlocking(const QList<TargetItem *> &moved
         else if (m_pov == PovTop)
             now.setZ(floorHeightAt(now.x(), now.y())
                      + qMax(0.0f, cur.z() - floorHeightAt(cur.x(), cur.y())));
+        drops.append(qMakePair(t->id(), now));
+    }
+
+    UndoEntry e;
+    e.type = UndoEntry::TargetBlock;
+    e.blockingSet = set;
+    for (const QPair<quint32, QVector3D> &d : std::as_const(drops))
+    {
+        StageTarget *t = props->stageTarget(d.first);
+        if (t == nullptr)
+            continue;
+        const QVector3D cur = props->targetPosition(t, set);
+        const QVector3D now = d.second;
         if ((now - cur).length() < 1e-4f)
             continue;
         StageTarget::Blocked b = t->blocked(set);
@@ -6827,7 +6842,7 @@ void MonitorGraphicsView::moveTargetsInBlocking(const QList<TargetItem *> &moved
         b.hasOffset = true;
         t->setBlocked(set, b);
         reaimScenesAimingAt(t->id());
-        emit targetMoved(ti->targetId(), QPointF(double(now.x()), double(now.y())));
+        emit targetMoved(t->id(), QPointF(double(now.x()), double(now.y())));
     }
     if (!e.targetBlocked.isEmpty())
     {
@@ -6948,10 +6963,15 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
         return;
     }
 
-    UndoEntry e; e.type = UndoEntry::TargetMove;
+    /* Where each dropped item puts its target, read from all of them before
+       anything is written: a write's signals (targetMoved, a re-aim, the
+       Doc's modified) may rebuild the target items, and every TargetItem in
+       `moved` would then be freed under us. From here on, ids only. */
+    struct Drop { quint32 id; QPointF pos; float z; };
+    QList<Drop> drops;
     foreach (TargetItem *ti, moved)
     {
-        StageTarget *t = ti->target();
+        StageTarget *t = ti != nullptr ? ti->target() : nullptr;
         if (t == nullptr)
             continue;
         const QPointF oldPos(double(t->x()), double(t->y()));
@@ -6991,14 +7011,25 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
         // and back is not a move.
         const bool movedXY = qAbs(newPos.x() - oldPos.x()) > 1e-4 || qAbs(newPos.y() - oldPos.y()) > 1e-4;
         if (movedXY || qAbs(newZ - oldZ) > 1e-4f)
-        {
-            e.targetPositions.insert(t->id(), oldPos);
-            e.targetZ.insert(t->id(), oldZ);
-            t->setX(float(newPos.x()));
-            t->setY(float(newPos.y()));
-            t->setZ(newZ);
-            emit targetMoved(ti->targetId(), QPointF(double(t->x()), double(t->y())));
-        }
+            drops.append(Drop{ t->id(), newPos, newZ });
+    }
+    QList<quint32> movedIds;
+    foreach (TargetItem *ti, moved)
+        if (ti != nullptr)
+            movedIds.append(ti->targetId());
+
+    UndoEntry e; e.type = UndoEntry::TargetMove;
+    for (const Drop &d : std::as_const(drops))
+    {
+        StageTarget *t = m_doc->monitorProperties()->stageTarget(d.id);
+        if (t == nullptr)
+            continue;
+        e.targetPositions.insert(t->id(), QPointF(double(t->x()), double(t->y())));
+        e.targetZ.insert(t->id(), t->z());
+        t->setX(float(d.pos.x()));
+        t->setY(float(d.pos.y()));
+        t->setZ(d.z);
+        emit targetMoved(t->id(), QPointF(double(t->x()), double(t->y())));
     }
     // What the people moved hold (a wand) goes with them.
     for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
@@ -7015,9 +7046,8 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
 
     // Snap running scenes whose palettes reference any moved target to the new
     // position immediately (override fade to 0 for one write cycle).
-    foreach (TargetItem *ti, moved)
+    foreach (const quint32 tid, movedIds)
     {
-        const quint32 tid = ti->targetId();
         foreach (Function *fn, m_doc->functions())
         {
             Scene *s = qobject_cast<Scene *>(fn);
@@ -8928,47 +8958,51 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
                           >= QApplication::startDragDistance();
     if (wasDrag && !refused && m_scene != nullptr)
     {
-        MonitorFixtureItem *repFixture = nullptr;
-        TrussItem          *repTruss   = nullptr;
-        PlatformItem       *repPlatform = nullptr;
-        PipeItem           *repPipe    = nullptr;
-        StandItem          *repStand   = nullptr;
-        SceneryItem        *repScenery = nullptr;
-        TowerItem          *repTower   = nullptr;
-        PowerSourceItem    *repPower   = nullptr;
-        NetworkNodeItem    *repNetwork = nullptr;
-        MonitorImageItem   *repImage   = nullptr;
-        TargetItem         *repTarget  = nullptr;
+        /* Guarded: a slot below, or whatever hears what it emits, may rebuild
+           the plot's items (a resize or a blocking change runs updateTargets()
+           and refreshAllItems()), and a raw pointer to the next rep would be
+           left pointing at a freed item. */
+        QPointer<MonitorFixtureItem> repFixture;
+        QPointer<TrussItem> repTruss;
+        QPointer<PlatformItem> repPlatform;
+        QPointer<PipeItem> repPipe;
+        QPointer<StandItem> repStand;
+        QPointer<SceneryItem> repScenery;
+        QPointer<TowerItem> repTower;
+        QPointer<PowerSourceItem> repPower;
+        QPointer<NetworkNodeItem> repNetwork;
+        QPointer<MonitorImageItem> repImage;
+        QPointer<TargetItem> repTarget;
 
         foreach (QGraphicsItem *gi, m_scene->selectedItems())
         {
             // Only what Qt actually moved: a held item rode along with nothing.
             if (!itemDraggable(gi))
                 continue;
-            if (repFixture == nullptr)  repFixture  = dynamic_cast<MonitorFixtureItem *>(gi);
-            if (repTruss == nullptr)    repTruss    = dynamic_cast<TrussItem *>(gi);
-            if (repPlatform == nullptr) repPlatform = dynamic_cast<PlatformItem *>(gi);
-            if (repPipe == nullptr)     repPipe     = dynamic_cast<PipeItem *>(gi);
-            if (repStand == nullptr)    repStand    = dynamic_cast<StandItem *>(gi);
-            if (repScenery == nullptr)  repScenery  = dynamic_cast<SceneryItem *>(gi);
-            if (repTower == nullptr)    repTower    = dynamic_cast<TowerItem *>(gi);
-            if (repPower == nullptr)    repPower    = dynamic_cast<PowerSourceItem *>(gi);
-            if (repNetwork == nullptr)  repNetwork  = dynamic_cast<NetworkNodeItem *>(gi);
-            if (repImage == nullptr)    repImage    = dynamic_cast<MonitorImageItem *>(gi);
-            if (repTarget == nullptr)   repTarget   = dynamic_cast<TargetItem *>(gi);
+            if (repFixture.isNull())  repFixture  = dynamic_cast<MonitorFixtureItem *>(gi);
+            if (repTruss.isNull())    repTruss    = dynamic_cast<TrussItem *>(gi);
+            if (repPlatform.isNull()) repPlatform = dynamic_cast<PlatformItem *>(gi);
+            if (repPipe.isNull())     repPipe     = dynamic_cast<PipeItem *>(gi);
+            if (repStand.isNull())    repStand    = dynamic_cast<StandItem *>(gi);
+            if (repScenery.isNull())  repScenery  = dynamic_cast<SceneryItem *>(gi);
+            if (repTower.isNull())    repTower    = dynamic_cast<TowerItem *>(gi);
+            if (repPower.isNull())    repPower    = dynamic_cast<PowerSourceItem *>(gi);
+            if (repNetwork.isNull())  repNetwork  = dynamic_cast<NetworkNodeItem *>(gi);
+            if (repImage.isNull())    repImage    = dynamic_cast<MonitorImageItem *>(gi);
+            if (repTarget.isNull())   repTarget   = dynamic_cast<TargetItem *>(gi);
         }
 
-        if (repFixture != nullptr)  slotFixtureMoved(repFixture);
-        if (repTruss != nullptr)    slotTrussMoved(repTruss);
-        if (repPlatform != nullptr) slotPlatformMoved(repPlatform);
-        if (repPipe != nullptr)     slotPipeMoved(repPipe);
-        if (repStand != nullptr)    slotStandMoved(repStand);
-        if (repScenery != nullptr)  slotSceneryMoved(repScenery);
-        if (repTower != nullptr)    slotTowerMoved(repTower);
-        if (repPower != nullptr)    slotPowerSourceMoved(repPower);
-        if (repNetwork != nullptr)  slotNetworkNodeMoved(repNetwork);
-        if (repImage != nullptr)    slotImageMoved(repImage);
-        if (repTarget != nullptr)   slotTargetMoved(repTarget);
+        if (!repFixture.isNull())  slotFixtureMoved(repFixture);
+        if (!repTruss.isNull())    slotTrussMoved(repTruss);
+        if (!repPlatform.isNull()) slotPlatformMoved(repPlatform);
+        if (!repPipe.isNull())     slotPipeMoved(repPipe);
+        if (!repStand.isNull())    slotStandMoved(repStand);
+        if (!repScenery.isNull())  slotSceneryMoved(repScenery);
+        if (!repTower.isNull())    slotTowerMoved(repTower);
+        if (!repPower.isNull())    slotPowerSourceMoved(repPower);
+        if (!repNetwork.isNull())  slotNetworkNodeMoved(repNetwork);
+        if (!repImage.isNull())    slotImageMoved(repImage);
+        if (!repTarget.isNull())   slotTargetMoved(repTarget);
         refreshFixtureCountBadges();   // moved fixtures change what covers what
     }
 

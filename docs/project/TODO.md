@@ -160,6 +160,7 @@ Duplicate for cue lists and productions, ⌫ on the plot and in Fixtures
 - Plot Layers drops onto a locked layer or a vanished group say nothing.
 - The Fixtures tab's circuit drop ignores a refused assignment.
 
+
 ## Area cover: an Aim at an Area covers it (Q209, areacover, 2026-11-03) — built
 
 Zones by where the lights hang (least-squares match of x and depth key to

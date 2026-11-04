@@ -501,6 +501,7 @@ private slots:
     void theTrussEditorsMenusOfferAddBar();
     void draggingATargetAnnouncesTheMove();
     void draggingATargetInABlockingLeavesDefault();
+    void aDropThatRedrawsThePlotMovesEveryTarget();
     void aMoverOnATopFaceStandsUpOrHangsDown();
     void aFixtureCanBeRaisedOntoATowersTopCap();
     void fixturesAndBarsAreRenamedInTheStructureEditorsList();
