@@ -415,6 +415,7 @@ static void fix18(ReviewContext &ctx, QList<ReviewFinding> &out)
     QHash<QString, int> nameCount;
     for (auto it = byDef.constBegin(); it != byDef.constEnd(); ++it)
         nameCount[QStringLiteral("%1 %2").arg(it.key()->manufacturer(), it.key()->model()).trimmed()]++;
+    QSet<QString> usedLabels;
     for (auto it = byDef.constBegin(); it != byDef.constEnd(); ++it)
     {
         const Fixture::EffectiveBeam &e = shown.value(it.key());
@@ -434,10 +435,12 @@ static void fix18(ReviewContext &ctx, QList<ReviewFinding> &out)
         QString name = QStringLiteral("%1 %2").arg(it.key()->manufacturer(), it.key()->model()).trimmed();
         if (nameCount.value(name) > 1)
         {
-            const QString file = QFileInfo(it.key()->definitionSourceFile()).fileName();
+            // By its first fixture (a source file path is not stable across a reload).
             Fixture *first = ctx.doc()->fixture(it.value().first());
-            name += QStringLiteral(" (%1)").arg(!file.isEmpty() ? file
-                                               : first != nullptr ? first->name() : QString::number(it.value().first()));
+            name += QStringLiteral(" (%1)").arg(first != nullptr ? first->name() : QString::number(it.value().first()));
+            if (usedLabels.contains(name))      // even its first fixture's name is shared
+                name += QStringLiteral(" #%1").arg(it.value().first());
+            usedLabels.insert(name);
         }
         out << ReviewContext::make(QStringLiteral("FIX-18"), ReviewFinding::Note,
             trn("%1: %2 in its definition (%n fixture(s)); the rig view and aims assume %3. "

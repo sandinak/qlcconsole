@@ -691,6 +691,12 @@ void ShowReview_Test::fix18SameNameTwoDefinitions()
     QVERIFY(all.at(0).message != all.at(1).message);
     QVERIFY(all.at(0).fingerprint != all.at(1).fingerprint);
     QVERIFY2(all.at(0).message.contains(QStringLiteral("(Spot ")), qPrintable(all.at(0).message));
+
+    // Even the first fixtures sharing a name: still told apart.
+    b->setName(QStringLiteral("Spot A"));
+    const QList<ReviewFinding> same = findings("FIX-18");
+    QCOMPARE(same.size(), 2);
+    QVERIFY(same.at(0).message != same.at(1).message);
 }
 
 void ShowReview_Test::fix16Rows()
