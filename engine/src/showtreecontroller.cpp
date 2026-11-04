@@ -714,7 +714,7 @@ quint32 ShowTreeController::addCue(quint32 listId, int afterIndex, const QString
 
 bool ShowTreeController::removeCue(quint32 cueId)
 {
-    return edit(tr("Delete cue"), [&](QList<Production> &ps) {
+    return edit(isLook(cueId) ? tr("Delete hit") : tr("Delete cue"), [&](QList<Production> &ps) {
         CueList *l = nullptr;
         if (cueIn(ps, cueId, &l) == nullptr)
             return false;
@@ -1479,7 +1479,7 @@ quint32 ShowTreeController::duplicateCue(quint32 cueId)
         if (l.parent != invalidId())
             l.parent = ids.value(l.parent, invalidId());     // the copy's own parent
     const quint32 listId = have->id;
-    const bool ok = edit(tr("Duplicate cue"), [&](QList<Production> &ps) {
+    const bool ok = edit(have->looks ? tr("Duplicate hit") : tr("Duplicate cue"), [&](QList<Production> &ps) {
         CueList *l = listIn(ps, listId);
         if (l == nullptr)
             return false;
@@ -1524,7 +1524,8 @@ QList<quint32> ShowTreeController::pasteCues(const QList<quint32> &cueIds, quint
     if (copies.isEmpty())
         return {};
     QList<quint32> made;
-    const bool ok = edit(copies.count() == 1 ? tr("Paste cue") : tr("Paste %1 cues").arg(copies.count()),
+    const bool ok = edit(dest->looks ? (copies.count() == 1 ? tr("Paste hit") : tr("Paste %1 hits").arg(copies.count()))
+                           : copies.count() == 1 ? tr("Paste cue") : tr("Paste %1 cues").arg(copies.count()),
                          [&](QList<Production> &ps) {
         CueList *l = listIn(ps, destId);
         if (l == nullptr)

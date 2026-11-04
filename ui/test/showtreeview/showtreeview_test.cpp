@@ -5948,6 +5948,63 @@ void ShowTreeView_Test::eachRowKindHasItsOwnIcon()
         QCOMPARE(image(hitsNode), bolt);
 }
 
+/* A hit's right-click menu, undo texts: it says Hit, never Layer or Cue. */
+void ShowTreeView_Test::aHitsMenuNamesAHit()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 hit = st->addLook(prod, "Strike", "Hits");
+    const quint32 hit2 = st->addLook(prod, "Blinder", "Hits");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto menuTexts = [&](bool two) {
+        QStringList texts;
+        ModalCloser closer([&](QWidget *w) {
+            QMenu *m = qobject_cast<QMenu *>(w);
+            if (m == nullptr)
+                return false;
+            for (QAction *act : m->actions())
+                texts << act->text();
+            const QString dir = qEnvironmentVariable("QLC_HIT_SHOTS");
+            if (!dir.isEmpty())
+                m->grab().save(QString("%1/after-hit-menu%2.png").arg(dir, two ? "-2" : ""));
+            m->close();
+            return true;
+        });
+        view.tree()->expandAll();
+        QTreeWidgetItem *row = rowOf(view.tree(), ShowTreeView::CueNode, hit);
+        view.tree()->clearSelection();
+        clickRow(view.tree(), row);
+        if (two)
+            clickRow(view.tree(), rowOf(view.tree(), ShowTreeView::CueNode, hit2), Qt::ControlModifier);
+        QMetaObject::invokeMethod(&view, "slotTreeContextMenu",
+                                  Q_ARG(QPoint, view.tree()->visualItemRect(row).center()));
+        return texts;
+    };
+    for (bool two : { false })
+    {
+        const QStringList texts = menuTexts(two);
+        QVERIFY(!texts.isEmpty());
+        QStringList named;          // the "+ New" entries are the tree's own, not the hit's
+        for (const QString &t : texts)
+            if (!t.startsWith("+"))
+                named << t;
+        const QString all = named.join(" | ");
+        QVERIFY2(all.contains("Hit"), qPrintable(all));
+        QVERIFY2(!all.contains("Layer", Qt::CaseInsensitive), qPrintable(all));
+        QVERIFY2(!all.contains("Cue", Qt::CaseInsensitive), qPrintable(all));
+        QVERIFY2(all.contains(two ? "Delete 2 Hits" : "Delete Hit"), qPrintable(all));
+        QVERIFY2(all.contains(two ? "Duplicate 2 Hits" : "Duplicate Hit"), qPrintable(all));
+        if (!two)
+            QVERIFY2(all.contains("Rename Hit"), qPrintable(all));
+    }
+    // The undo steps name a hit too.
+    QVERIFY(st->removeCue(hit2));
+    QCOMPARE(st->undoText(), QString("Delete hit"));
+}
+
 void ShowTreeView_Test::subCuesInTheTree()
 {
     FixtureGroup *a = group("A", 0, 1);
