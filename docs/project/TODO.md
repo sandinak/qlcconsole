@@ -133,6 +133,8 @@ coverage at both heights: integer costs, tight pairs from the Hungarian
 potentials, coarse bitset grid, second assignment + bounded swap search.
 His Chorus 57.5% -> 74.9% (best of 384 ties). docs/design/AREA_COVER.md.
 Tests: `AimSolver_Test::areaTiesGoToTheBestCover`, Chorus floor back to 0.7.
+Zones are cached by their inputs (dim-when-blocked asks every tick):
+`HotPath_Test::anAreaAimThatDimsWorksOutItsZonesOnce`.
 Move to DONE.md when landed.
 
 ## Faster packaging (tools/04-pkgfast, 2026-11-03) -- done

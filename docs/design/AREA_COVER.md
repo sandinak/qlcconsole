@@ -64,6 +64,16 @@ in rows from downstage to upstage, each row split evenly across the stage.
   zones take 0.2 ms (27 µs before; Release, M4 Max), its coverage 0.33 ms
   (0.14). `AreaCover::cells()` itself stays the pure rule (no beams, plain
   pick).
+- **Never on the tick.** An Aim look that dims blocked heads asks for the
+  zones every playback tick (`Scene::write` → `updateSightDim` →
+  `AimSolver::blockedDimmedHeads` → `memberPoints`). `zones()` and
+  `memberPoints()` keep the last 8 results by their inputs (area, subject
+  height, each member's position, lens and tape, the surface under the
+  sample grid; each kept aim is re-checked against the surface under it)
+  and hand them back shared, without allocating. Anything that changes
+  an input is a new entry, worked out once. `hotpath_test`
+  (`anAreaAimThatDimsWorksOutItsZonesOnce`) holds it: once in 100 ticks,
+  0 allocations per lookup, no more allocations per tick than a point aim.
 - **Height.** Each member aims at its cell's centre, at **subject height**
   above whatever is under that point: `platformHeightAt(x, y)` (deck,
   riser, step tread) plus the target's aim-height override if it has one,

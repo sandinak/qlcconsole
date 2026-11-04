@@ -95,6 +95,10 @@ namespace AreaCover
     /** Each member's aim point: what an Aim look at the area writes. */
     QHash<GroupHead, QVector3D> memberPoints(Doc *doc, const StageTarget *target,
                                              const QList<GroupHead> &members);
+    /** How many times zones have been worked out rather than handed back
+     *  from the cache (zones() and memberPoints() keep the last few by
+     *  their inputs, so the playback tick never redoes them). Tests. */
+    quint64 zonesWorkedOut();
     /** The aim point @p offset from the area's centre, read fresh: at
      *  subject height above the surface there (a dragged area is followed). */
     QVector3D pointAt(const MonitorProperties *props, const StageTarget *target, const QPointF &offset);

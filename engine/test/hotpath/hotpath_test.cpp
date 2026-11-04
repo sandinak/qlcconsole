@@ -67,6 +67,14 @@
 #include "groupmasters.h"
 #include "timecodesource.h"
 #include "doc.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
+#include "areacover.h"
+#include "aimsolver.h"
+#include "qlcphysical.h"
+#include "qlcfixturehead.h"
+#include "qlcchannel.h"
+#include "truss.h"
 #undef protected
 #undef private
 
@@ -843,6 +851,141 @@ void HotPath_Test::aGoInABigShowTreeMakesAndDeletesNothing()
    the absolute time TimecodeCues compares with. So frames of a show timed
    from its sections cost no more allocations than frames of the same show
    with absolute times, and the frames themselves resolve nothing. */
+/* An Aim look at an Area that dims the heads that can't see it asks for
+   every head's zone on every tick (Scene::write -> updateSightDim ->
+   AimSolver::blockedDimmedHeads -> AreaCover::memberPoints). Working the
+   zones out -- a least-squares match and its tie-break by coverage -- costs
+   about a fifth of a millisecond for a 22-light rig; the tick must only
+   ever read them back. Here: worked out once over a hundred ticks, the
+   lookup allocates nothing, and a tick costs no more allocations aimed at
+   the area than aimed at a point. */
+namespace
+{
+Fixture *hungSpot(Doc *doc, const QString &name, const QVector3D &at, double lensDeg)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Area spot " + name);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+    const char *names[] = { "Pan", "Tilt", "Dimmer" };
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    ph.setLensDegreesMin(lensDeg);
+    ph.setLensDegreesMax(lensDeg);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    head.addChannel(0);
+    head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(quint32(doc->fixtures().size() * 3));
+    if (!doc->addFixture(fxi))
+        return nullptr;
+    MonitorProperties *props = doc->monitorProperties();
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(at.x() * 1000, at.y() * 1000, at.z()));
+    FixtureRigProps rp;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(fxi->id(), rp);
+    return fxi;
+}
+}
+
+void HotPath_Test::anAreaAimThatDimsWorksOutItsZonesOnce()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    // Two towers of three, mirrored, and four spots one behind and above the
+    // next on the centre line: plenty of exact ties for the tie-break.
+    Scene *look = new Scene(doc);
+    look->setFadeInSpeed(0);
+    look->setFadeOutSpeed(0);
+    QList<quint32> ids;
+    for (float z : { 0.5f, 1.5f, 2.5f })
+        for (float x : { 0.0f, 12.0f })
+            ids << hungSpot(doc, QString("Tower %1 %2").arg(x).arg(z), QVector3D(x, 9.0f, z), 25.0)->id();
+    for (int i = 0; i < 4; ++i)
+        ids << hungSpot(doc, QString("Centre %1").arg(i), QVector3D(6.0f, 10.0f + i, 3.0f + i), 10.0 + 6.0 * i)->id();
+    for (quint32 id : ids)
+    {
+        look->addFixture(id);
+        look->setValue(id, 2, 255);
+    }
+    StageTarget *area = props->addStageTarget();
+    area->setName("Chorus");
+    area->setKind(StageTarget::Kind::Area);
+    area->setPosition(QVector3D(6.0f, 4.0f, 0.0f));
+    area->setFootprint(QSizeF(8.0, 4.0));
+    StageTarget *point = props->addStageTarget();
+    point->setName("Vocalist");
+    point->setKind(StageTarget::Kind::Person);
+    point->setPosition(QVector3D(6.0f, 4.0f, 0.0f));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("Cover the chorus");
+    aim->setStageTargetId(area->id());
+    aim->setDimWhenBlocked(true);
+    doc->addPalette(aim);
+    look->addPalette(aim->id());
+    doc->addFunction(look);
+
+    const quint64 before = AreaCover::zonesWorkedOut();
+    look->start(doc->masterTimer(), FunctionParent::master());
+    frame(doc, 5);
+    const quint64 started = AreaCover::zonesWorkedOut();
+    QVERIFY2(started > before, "the look never asked for its zones");
+    const long onArea = allocationsIn([doc]() { frame(doc, 100); });
+    QCOMPARE(AreaCover::zonesWorkedOut(), started);     // read back, never redone
+
+    // The lookup the tick makes: no allocation at all.
+    const QList<GroupHead> heads = AimSolver::aimMembers(doc, look, aim->id());
+    QHash<GroupHead, QVector3D> pts = AreaCover::memberPoints(doc, area, heads);
+    QCOMPARE(pts.size(), ids.size());
+    QCOMPARE(allocationsIn([&]() { pts = AreaCover::memberPoints(doc, area, heads); }), 0L);
+    QCOMPARE(AreaCover::zonesWorkedOut(), started);
+
+    // The same look aimed at a point: the area costs the tick nothing more.
+    look->stop(FunctionParent::master());
+    frame(doc, 3);
+    aim->setStageTargetId(point->id());
+    look->start(doc->masterTimer(), FunctionParent::master());
+    frame(doc, 5);
+    const long atPoint = allocationsIn([doc]() { frame(doc, 100); });
+    qInfo("area aim that dims: %ld allocations in 100 ticks (%ld at a point), zones worked out %llu time(s)",
+          onArea, atPoint, (unsigned long long)(started - before));
+    QVERIFY2(onArea <= atPoint,
+             qPrintable(QString("100 ticks: %1 allocations at the area, %2 at a point").arg(onArea).arg(atPoint)));
+
+    // Moving the area is a new layout, worked out once again.
+    look->stop(FunctionParent::master());
+    frame(doc, 3);
+    aim->setStageTargetId(area->id());
+    area->setPosition(QVector3D(6.5f, 4.0f, 0.0f));
+    look->start(doc->masterTimer(), FunctionParent::master());
+    frame(doc, 50);
+    QVERIFY(AreaCover::zonesWorkedOut() > started);
+    const quint64 moved = AreaCover::zonesWorkedOut();
+    frame(doc, 50);
+    QCOMPARE(AreaCover::zonesWorkedOut(), moved);
+    look->stop(FunctionParent::master());
+    frame(doc, 3);
+    delete doc;
+}
+
 void HotPath_Test::timecodeFramesWithAnchorsAllocateNothing()
 {
     Doc *doc = new Doc(this);

@@ -22,6 +22,9 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <vector>
+#include <atomic>
+#include <QMutex>
 
 #include "areacover.h"
 #include "aimsolver.h"
@@ -498,14 +501,14 @@ QVector3D AreaCover::pointAt(const MonitorProperties *props, const StageTarget *
     return QVector3D(x, y, props->platformHeightAt(x, y) + subjectHeight(target));
 }
 
-QList<AreaCover::Zone> AreaCover::zones(Doc *doc, const StageTarget *target,
-                                        const QList<GroupHead> &members)
+namespace
 {
-    QList<Zone> out;
-    MonitorProperties *props = doc != nullptr ? doc->monitorProperties() : nullptr;
-    if (props == nullptr || !covers(target) || members.isEmpty())
-        return out;
-    const QRectF area = areaRect(props, target);
+/* The zones, worked out: the least-squares rule and its tie-break. */
+QList<AreaCover::Zone> workOutZones(Doc *doc, MonitorProperties *props, const StageTarget *target,
+                                    const QList<GroupHead> &members)
+{
+    QList<AreaCover::Zone> out;
+    const QRectF area = AreaCover::areaRect(props, target);
     QList<GroupHead> placed;
     QVector<QVector3D> where;
     /* The beams that settle a tie: each light's lens as its definition
@@ -513,8 +516,7 @@ QList<AreaCover::Zone> AreaCover::zones(Doc *doc, const StageTarget *target,
        zone is must not move with what is playing. */
     Lens lens;
     lens.props = props;
-    lens.subject = subjectHeight(target);
-    QHash<quint32, double> degrees;           // per fixture: its arms share a lens
+    lens.subject = AreaCover::subjectHeight(target);
     for (const GroupHead &m : members)
     {
         AimSolver::Frame f;
@@ -522,24 +524,147 @@ QList<AreaCover::Zone> AreaCover::zones(Doc *doc, const StageTarget *target,
             continue;
         placed << m;
         where << f.position;
-        if (!degrees.contains(m.fxi))
-        {
-            const double deg = RigHeads::beamAngle(doc->fixture(m.fxi), QByteArray());
-            degrees.insert(m.fxi, deg > 0.0 ? deg : defaultBeamDegrees());
-        }
-        lens.degrees << degrees.value(m.fxi);
+        const double deg = RigHeads::beamAngle(doc->fixture(m.fxi), QByteArray());
+        lens.degrees << (deg > 0.0 ? deg : AreaCover::defaultBeamDegrees());
         lens.masks << props->fixtureRigProps(m.fxi).mask();
     }
     const QVector<QRectF> cell = layout(area, where, nullptr, &lens);
     for (int i = 0; i < placed.size(); ++i)
     {
-        Zone z;
+        AreaCover::Zone z;
         z.member = placed.at(i);
         z.cell = cell.at(i);
         z.offset = cell.at(i).center() - area.center();
-        z.aim = pointAt(props, target, z.offset);
+        z.aim = AreaCover::pointAt(props, target, z.offset);
         out << z;
     }
+    return out;
+}
+
+/* Every input the zones depend on, as numbers: the area, the subject
+   height, each member with where it hangs, its lens and its tape, and the
+   surface under the tie-break's sample grid. The same numbers give the same
+   zones, so a match is a cache hit. Fills @p key without allocating once it
+   has grown to size. */
+void zoneKey(Doc *doc, MonitorProperties *props, const StageTarget *target,
+             const QList<GroupHead> &members, std::vector<double> &key)
+{
+    key.clear();
+    const QRectF area = AreaCover::areaRect(props, target);
+    key.push_back(area.x());
+    key.push_back(area.y());
+    key.push_back(area.width());
+    key.push_back(area.height());
+    key.push_back(double(AreaCover::subjectHeight(target)));
+    key.push_back(double(members.size()));
+    for (const GroupHead &m : members)
+    {
+        key.push_back(double(m.fxi));
+        key.push_back(double(m.head));
+        AimSolver::Frame f;
+        if (!AimSolver::frameFor(doc, m, f))
+        {
+            key.push_back(0.0);
+            continue;
+        }
+        key.push_back(1.0);
+        key.push_back(double(f.position.x()));
+        key.push_back(double(f.position.y()));
+        key.push_back(double(f.position.z()));
+        key.push_back(RigHeads::beamAngle(doc->fixture(m.fxi), QByteArray()));
+        const LightMask mask = props->fixtureRigProps(m.fxi).mask();
+        key.push_back(double(mask.top));
+        key.push_back(double(mask.bottom));
+        key.push_back(double(mask.left));
+        key.push_back(double(mask.right));
+    }
+    const int cols = kTieSamplesAcross;
+    const int rows = qBound(3, int(std::lround(double(cols) * area.height() / area.width())), kTieSamplesAcross);
+    const double sw = area.width() / double(cols), sh = area.height() / double(rows);
+    for (int r = 0; r < rows; ++r)
+        for (int c = 0; c < cols; ++c)
+            key.push_back(double(props->platformHeightAt(float(area.left() + (double(c) + 0.5) * sw),
+                                                         float(area.top() + (double(r) + 0.5) * sh))));
+}
+
+/* zones() is asked on the playback tick: Scene::write() -> updateSightDim()
+   -> AimSolver::blockedDimmedHeads() -> memberPoints(), every tick an Aim
+   look that dims blocked heads plays. The tie-break must never run there:
+   the last few results are kept, by their inputs, and handed back shared
+   (no allocation) while the inputs hold. */
+struct ZoneMemo
+{
+    std::vector<double> key;
+    QList<AreaCover::Zone> zones;
+    QHash<GroupHead, QVector3D> points;
+    quint64 used = 0;
+};
+constexpr int kMemoSize = 8;
+QMutex g_memoMutex;
+ZoneMemo g_memo[kMemoSize];
+quint64 g_memoClock = 0;
+std::atomic<quint64> g_workedOut { 0 };
+
+/* Whether each kept zone's aim is still at subject height above what is
+   under it now (the surface there is read fresh, as pointAt() does). */
+bool aimsHold(const MonitorProperties *props, const StageTarget *target, const QList<AreaCover::Zone> &zones)
+{
+    const float subject = AreaCover::subjectHeight(target);
+    for (const AreaCover::Zone &z : zones)
+        if (props->platformHeightAt(z.aim.x(), z.aim.y()) + subject != z.aim.z())
+            return false;
+    return true;
+}
+
+void memoZones(Doc *doc, const StageTarget *target, const QList<GroupHead> &members,
+               QList<AreaCover::Zone> *zones, QHash<GroupHead, QVector3D> *points)
+{
+    MonitorProperties *props = doc != nullptr ? doc->monitorProperties() : nullptr;
+    if (props == nullptr || !AreaCover::covers(target) || members.isEmpty())
+        return;
+    static thread_local std::vector<double> key;
+    zoneKey(doc, props, target, members, key);
+    {
+        QMutexLocker locker(&g_memoMutex);
+        for (ZoneMemo &m : g_memo)
+            if (m.used != 0 && m.key == key && aimsHold(props, target, m.zones))
+            {
+                m.used = ++g_memoClock;
+                if (zones != nullptr)
+                    *zones = m.zones;
+                if (points != nullptr)
+                    *points = m.points;
+                return;
+            }
+    }
+    const QList<AreaCover::Zone> worked = workOutZones(doc, props, target, members);
+    g_workedOut.fetch_add(1, std::memory_order_relaxed);
+    QHash<GroupHead, QVector3D> pts;
+    for (const AreaCover::Zone &z : worked)
+        pts.insert(z.member, z.aim);
+    {
+        QMutexLocker locker(&g_memoMutex);
+        ZoneMemo *oldest = &g_memo[0];
+        for (ZoneMemo &m : g_memo)
+            if (m.used < oldest->used)
+                oldest = &m;
+        oldest->key = key;
+        oldest->zones = worked;
+        oldest->points = pts;
+        oldest->used = ++g_memoClock;
+    }
+    if (zones != nullptr)
+        *zones = worked;
+    if (points != nullptr)
+        *points = pts;
+}
+}
+
+QList<AreaCover::Zone> AreaCover::zones(Doc *doc, const StageTarget *target,
+                                        const QList<GroupHead> &members)
+{
+    QList<Zone> out;
+    memoZones(doc, target, members, &out, nullptr);
     return out;
 }
 
@@ -547,9 +672,13 @@ QHash<GroupHead, QVector3D> AreaCover::memberPoints(Doc *doc, const StageTarget 
                                                     const QList<GroupHead> &members)
 {
     QHash<GroupHead, QVector3D> out;
-    for (const Zone &z : zones(doc, target, members))
-        out.insert(z.member, z.aim);
+    memoZones(doc, target, members, nullptr, &out);
     return out;
+}
+
+quint64 AreaCover::zonesWorkedOut()
+{
+    return g_workedOut.load(std::memory_order_relaxed);
 }
 
 QVector<QPointF> AreaCover::footprint(const QVector3D &origin, const QVector3D &aim,
