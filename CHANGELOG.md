@@ -140,6 +140,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Area cover settles ties by coverage.** When several ways of sharing an
+  Area's zones out fit where the lights hang equally well (the two arms of
+  a beam bar, washes mirrored on two towers), the one that lights the most
+  of the area at head height and on the deck now wins, the same on every
+  platform. On a chorus on risers with eight two-arm beams and six tower
+  washes the area goes from 58% to 75% lit. Changes the DMX of some
+  existing area aims. No file change.
+
 - **Area cover counts the deck as well as head height** (board Q213). A
   spot of an Area now counts as lit only if it is lit at head height **and**
   on the deck, riser or step top under it. Before, only head height was

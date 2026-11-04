@@ -21,6 +21,7 @@
 #include <QtMath>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "areacover.h"
 #include "aimsolver.h"
@@ -83,30 +84,34 @@ double depthKey(const QVector3D &p)
 }
 
 /* The least-cost one-to-one match of rows (lights) to columns (cells) of a
-   square @p cost: the Hungarian method, O(n^3). Row i gets column out[i]. */
-QVector<int> assign(const QVector<QVector<double>> &cost)
+   square @p cost: the Hungarian method, O(n^3), in whole numbers so a tie is
+   a tie on every platform. Row i gets column out[i]. @p u and @p v, when
+   given, get the potentials it ends with: cost[i][j] - u[i] - v[j] is never
+   below 0, and is 0 on every pair some least-cost match can use. */
+QVector<int> assign(const QVector<QVector<qint64>> &cost, QVector<qint64> *uOut = nullptr,
+                    QVector<qint64> *vOut = nullptr)
 {
     const int n = cost.size();
-    const double inf = 1e300;
+    const qint64 inf = std::numeric_limits<qint64>::max() / 4;
     // 1-based, with potentials u (rows) and v (columns); p[j]: row on column j.
-    QVector<double> u(n + 1, 0.0), v(n + 1, 0.0);
+    QVector<qint64> u(n + 1, 0), v(n + 1, 0);
     QVector<int> p(n + 1, 0), way(n + 1, 0);
     for (int i = 1; i <= n; ++i)
     {
         p[0] = i;
         int j0 = 0;
-        QVector<double> minv(n + 1, inf);
+        QVector<qint64> minv(n + 1, inf);
         QVector<bool> used(n + 1, false);
         do
         {
             used[j0] = true;
             const int i0 = p[j0];
-            double delta = inf;
+            qint64 delta = inf;
             int j1 = 0;
             for (int j = 1; j <= n; ++j)
                 if (!used[j])
                 {
-                    const double cur = cost[i0 - 1][j - 1] - u[i0] - v[j];
+                    const qint64 cur = cost[i0 - 1][j - 1] - u[i0] - v[j];
                     if (cur < minv[j])
                     {
                         minv[j] = cur;
@@ -139,6 +144,10 @@ QVector<int> assign(const QVector<QVector<double>> &cost)
     for (int j = 1; j <= n; ++j)
         if (p[j] > 0)
             out[p[j] - 1] = j - 1;
+    if (uOut != nullptr)
+        *uOut = u.mid(1);
+    if (vOut != nullptr)
+        *vOut = v.mid(1);
     return out;
 }
 
@@ -151,9 +160,243 @@ QVector<int> rowSizes(int n, int rows)
         ++out[i];
     return out;
 }
+
+/* What tells exactly tied matches apart: each light's beam, and the area's
+   surface (AreaCover::zones() fills it in). */
+struct Lens
+{
+    const MonitorProperties *props = nullptr;
+    float subject = 1.4f;
+    QVector<double> degrees;    //!< per light: its lens as declared (or set by hand)
+    QVector<LightMask> masks;   //!< per light: tape over its front
+};
+
+/* A beam for the tie-break's own sample test: in double, the same rule as
+   AreaCover::coverage()'s. */
+struct TieCone
+{
+    double ox = 0.0, oy = 0.0, oz = 0.0, ax = 0.0, ay = 0.0, az = 1.0, cosHalf = 1.0, half = 0.0;
+    LightMask mask;
+    QVector3D axis;
+    bool valid = false;
+};
+
+TieCone tieCone(const QVector3D &origin, double x, double y, double z, double degrees, const LightMask &mask)
+{
+    TieCone k;
+    k.ox = double(origin.x()); k.oy = double(origin.y()); k.oz = double(origin.z());
+    const double dx = x - k.ox, dy = y - k.oy, dz = z - k.oz;
+    const double len = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (len < 1e-4 || degrees <= 0.0)
+        return k;
+    k.ax = dx / len; k.ay = dy / len; k.az = dz / len;
+    k.half = qBound(0.1, degrees, 170.0) / 2.0;
+    k.cosHalf = std::cos(qDegreesToRadians(k.half));
+    k.mask = mask;
+    k.axis = QVector3D(float(k.ax), float(k.ay), float(k.az));
+    k.valid = true;
+    return k;
+}
+
+bool tieLit(const TieCone &k, double x, double y, double z)
+{
+    const double dx = x - k.ox, dy = y - k.oy, dz = z - k.oz;
+    const double len = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (len <= 1e-4 || dx * k.ax + dy * k.ay + dz * k.az < k.cosHalf * len)
+        return false;
+    if (k.mask.isNone())
+        return true;
+    double ax, ay;
+    LightRays::angles(k.axis, QVector3D(float(dx / len), float(dy / len), float(dz / len)), ax, ay);
+    return !(ax < -k.half + double(k.mask.left) || ax > k.half - double(k.mask.right)
+             || ay < -k.half + double(k.mask.top) || ay > k.half - double(k.mask.bottom));
+}
+
+int bitCount(quint64 w)
+{
+    int c = 0;
+    for (; w != 0; w &= w - 1)
+        ++c;
+    return c;
+}
+
+/* Bounds on the tie-break, so a big rig stays interactive: past these the
+   plain least-squares pick stands. */
+constexpr int kTieMaxLights = 96;       // lights in the area
+constexpr int kTieMaxPairs = 3000;      // light/cell pairs some tied match can use
+constexpr int kTieMaxTries = 4000;      // swaps tried
+constexpr int kTieSamplesAcross = 32;   // the coarse grid the candidates are scored on
+
+/* Among the matches as cheap as @p match (all least-squares, exactly tied:
+   a UST's two arms, the washes mirrored on two towers), the one that lights
+   the most of @p area at head height AND on the deck (Q213). Pairs some
+   least-cost match can use are the tight ones under the potentials @p u, @p v.
+   First a second assignment over those pairs, by how much of its own cell
+   each light lights; then swaps of two lights that keep the cost, scored on
+   the whole area, kept while they gain. Everything is counted in whole
+   samples, so the pick is the same on every platform. */
+void breakTies(const QRectF &area, const QVector<QRectF> &cell, const QVector<QVector3D> &where,
+               const QVector<QVector<qint64>> &cost, const QVector<qint64> &u, const QVector<qint64> &v,
+               const Lens &lens, QVector<int> &match)
+{
+    const int n = where.size();
+    if (n < 2 || n > kTieMaxLights || lens.props == nullptr
+        || lens.degrees.size() != n || lens.masks.size() != n)
+        return;
+    QVector<int> pairOf(n * n, -1);     // i * n + j -> its index among the tight pairs
+    int pairs = 0;
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            if (cost[i][j] - u[i] - v[j] == 0)
+                pairOf[i * n + j] = pairs++;
+    if (pairs <= n || pairs > kTieMaxPairs)
+        return;                         // one way only (or too many to weigh)
+
+    // The coarse grid: each sample at head height and on the surface under it.
+    const int cols = kTieSamplesAcross;
+    const int rows = qBound(3, int(std::lround(double(cols) * area.height() / area.width())), kTieSamplesAcross);
+    const int samples = cols * rows, words = (samples + 63) / 64;
+    const double sw = area.width() / double(cols), sh = area.height() / double(rows);
+    QVector<double> sx(samples), sy(samples), sz(samples);
+    for (int r = 0; r < rows; ++r)
+        for (int c = 0; c < cols; ++c)
+        {
+            const int at = r * cols + c;
+            sx[at] = area.left() + (double(c) + 0.5) * sw;
+            sy[at] = area.top() + (double(r) + 0.5) * sh;
+            sz[at] = double(lens.props->platformHeightAt(float(sx[at]), float(sy[at])));
+        }
+    // Each cell's own samples, and the point a light aims at in it.
+    QVector<quint64> inCell(n * words, 0);
+    QVector<double> aimZ(n);
+    int perCell = 1;
+    for (int j = 0; j < n; ++j)
+    {
+        const QRectF &cj = cell.at(j);
+        int count = 0;
+        for (int at = 0; at < samples; ++at)
+            if (sx[at] >= cj.left() && sx[at] < cj.right() && sy[at] >= cj.top() && sy[at] < cj.bottom())
+            {
+                inCell[j * words + at / 64] |= quint64(1) << (at % 64);
+                ++count;
+            }
+        perCell = qMax(perCell, count);
+        const QPointF c = cj.center();
+        aimZ[j] = double(lens.props->platformHeightAt(float(c.x()), float(c.y()))) + double(lens.subject);
+    }
+    // What each tight pair lights: at head height, and on the deck.
+    QVector<quint64> head(pairs * words, 0), deck(pairs * words, 0);
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+        {
+            const int p = pairOf[i * n + j];
+            if (p < 0)
+                continue;
+            const QPointF c = cell.at(j).center();
+            const TieCone k = tieCone(where.at(i), c.x(), c.y(), aimZ[j], lens.degrees.at(i), lens.masks.at(i));
+            if (!k.valid)
+                continue;
+            for (int at = 0; at < samples; ++at)
+            {
+                const quint64 bit = quint64(1) << (at % 64);
+                if (tieLit(k, sx[at], sy[at], sz[at] + double(lens.subject)))
+                    head[p * words + at / 64] |= bit;
+                if (tieLit(k, sx[at], sy[at], sz[at]))
+                    deck[p * words + at / 64] |= bit;
+            }
+        }
+
+    /* The second assignment: least-squares first, then the fewest samples
+       of its own cell each light leaves dark at either height. K keeps the
+       first ahead of the second whatever the second adds up to. */
+    const qint64 K = qint64(n) * qint64(perCell) + 1;
+    QVector<QVector<qint64>> second(n, QVector<qint64>(n));
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+        {
+            int dark = 0;
+            const int p = pairOf[i * n + j];
+            for (int w = 0; w < words; ++w)
+            {
+                const quint64 lit = p < 0 ? 0 : (head[p * words + w] & deck[p * words + w]);
+                dark += bitCount(inCell[j * words + w] & ~lit);
+            }
+            second[i][j] = cost[i][j] * K + dark;
+        }
+    QVector<int> pick = assign(second);
+    for (int i = 0; i < n; ++i)
+        if (pairOf[i * n + pick.at(i)] < 0 || pairOf[i * n + match.at(i)] < 0)
+            return;                     // cannot happen; keep the plain pick if it does
+
+    // Then the whole area: swap two lights while the cost holds and it gains.
+    QVector<quint64> h(words), d(words);
+    auto score = [&](const QVector<int> &m) {
+        h.fill(0);
+        d.fill(0);
+        for (int i = 0; i < n; ++i)
+        {
+            const int p = pairOf[i * n + m.at(i)];
+            for (int w = 0; w < words; ++w)
+            {
+                h[w] |= head[p * words + w];
+                d[w] |= deck[p * words + w];
+            }
+        }
+        int lit = 0;
+        for (int w = 0; w < words; ++w)
+            lit += bitCount(h[w] & d[w]);
+        return lit;
+    };
+    /* The separate count is only a guide (a light's spill lights its
+       neighbours' cells too): start from whichever of the two lights more. */
+    int best = score(pick);
+    const int plain = score(match);
+    if (plain >= best)
+    {
+        pick = match;
+        best = plain;
+    }
+    int tries = 0;
+    for (bool gained = true; gained && tries < kTieMaxTries;)
+    {
+        gained = false;
+        for (int i = 0; i < n && tries < kTieMaxTries; ++i)
+            for (int k = i + 1; k < n && tries < kTieMaxTries; ++k)
+            {
+                const int a = pick.at(i), b = pick.at(k);
+                if (pairOf[i * n + b] < 0 || pairOf[k * n + a] < 0)
+                    continue;
+                ++tries;
+                pick[i] = b;
+                pick[k] = a;
+                const int s = score(pick);
+                if (s > best)
+                {
+                    best = s;
+                    gained = true;
+                }
+                else
+                {
+                    pick[i] = a;
+                    pick[k] = b;
+                }
+            }
+    }
+    match = pick;
+}
+
+/* AreaCover::cells(), with exact ties settled by @p lens when there is one. */
+QVector<QRectF> layout(const QRectF &area, const QVector<QVector3D> &where, int *rowsOut, const Lens *lens);
 }
 
 QVector<QRectF> AreaCover::cells(const QRectF &area, const QVector<QVector3D> &where, int *rowsOut)
+{
+    return layout(area, where, rowsOut, nullptr);
+}
+
+namespace
+{
+QVector<QRectF> layout(const QRectF &area, const QVector<QVector3D> &where, int *rowsOut, const Lens *lens)
 {
     const int n = where.size();
     QVector<QRectF> out(n);
@@ -217,7 +460,7 @@ QVector<QRectF> AreaCover::cells(const QRectF &area, const QVector<QVector3D> &w
     auto norm = [](double v, double lo, double hi) {
         return hi - lo > 1e-6 ? (v - lo) / (hi - lo) : 0.5;
     };
-    QVector<QVector<double>> cost(n, QVector<double>(n));
+    QVector<QVector<qint64>> cost(n, QVector<qint64>(n));
     for (int i = 0; i < n; ++i)
     {
         const double sx = norm(double(where.at(i).x()), xLo, xHi);
@@ -226,18 +469,23 @@ QVector<QRectF> AreaCover::cells(const QRectF &area, const QVector<QVector3D> &w
         {
             const double cx = (cell.at(j).center().x() - area.left()) / area.width();
             const double cd = (area.bottom() - cell.at(j).center().y()) / area.height();
-            /* Rounded to 1e-9: lights that sit alike (a UST's two arms, a wash on
-               each tower) tie exactly, and which of the tied matches the solver
-               picks must not hang on the last bit of a fused multiply-add (arm64
+            /* In whole units of 1e-9: lights that sit alike (a UST's two arms,
+               a wash on each tower) tie exactly, and which of the tied matches
+               wins must not hang on the last bit of a fused multiply-add (arm64
                macOS) versus a plain one (x86-64 GCC). */
             const double d2 = (sx - cx) * (sx - cx) + (sd - cd) * (sd - cd);
-            cost[i][j] = std::round(d2 * 1e9) / 1e9;
+            cost[i][j] = std::llround(d2 * 1e9);
         }
     }
-    const QVector<int> match = assign(cost);
+    QVector<qint64> u, v;
+    QVector<int> match = assign(cost, &u, &v);
+    // Of the tied ones, the match that lights the most of the area.
+    if (lens != nullptr)
+        breakTies(area, cell, where, cost, u, v, *lens, match);
     for (int i = 0; i < n; ++i)
         out[i] = cell.at(match.at(i));
     return out;
+}
 }
 
 QVector3D AreaCover::pointAt(const MonitorProperties *props, const StageTarget *target,
@@ -260,6 +508,13 @@ QList<AreaCover::Zone> AreaCover::zones(Doc *doc, const StageTarget *target,
     const QRectF area = areaRect(props, target);
     QList<GroupHead> placed;
     QVector<QVector3D> where;
+    /* The beams that settle a tie: each light's lens as its definition
+       declares it (or as set by hand), not its zoom now -- where a light's
+       zone is must not move with what is playing. */
+    Lens lens;
+    lens.props = props;
+    lens.subject = subjectHeight(target);
+    QHash<quint32, double> degrees;           // per fixture: its arms share a lens
     for (const GroupHead &m : members)
     {
         AimSolver::Frame f;
@@ -267,8 +522,15 @@ QList<AreaCover::Zone> AreaCover::zones(Doc *doc, const StageTarget *target,
             continue;
         placed << m;
         where << f.position;
+        if (!degrees.contains(m.fxi))
+        {
+            const double deg = RigHeads::beamAngle(doc->fixture(m.fxi), QByteArray());
+            degrees.insert(m.fxi, deg > 0.0 ? deg : defaultBeamDegrees());
+        }
+        lens.degrees << degrees.value(m.fxi);
+        lens.masks << props->fixtureRigProps(m.fxi).mask();
     }
-    const QVector<QRectF> cell = cells(area, where);
+    const QVector<QRectF> cell = layout(area, where, nullptr, &lens);
     for (int i = 0; i < placed.size(); ++i)
     {
         Zone z;

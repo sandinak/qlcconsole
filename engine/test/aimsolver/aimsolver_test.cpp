@@ -17,6 +17,7 @@
 
 #include <QtTest>
 #include <QtMath>
+#include <algorithm>
 
 #include "aimsolver_test.h"
 #include "aimsolver.h"
@@ -1527,13 +1528,70 @@ void AimSolver_Test::areaCoversHisChorus()
     QVERIFY2(headAlone > was.fraction + was.headOnly + 0.1 && headAlone > 0.85,
              qPrintable(QString("head height covers %1 now, %2 before")
                         .arg(headAlone).arg(was.fraction + was.headOnly)));
-    // (Which of several exactly tied matches the solver picks moves the
-    // reading by a few points -- 55 to 74% depending on the pick -- so the
-    // bound is the floor that holds for any of them, and the pick itself is
-    // made platform-independent in AreaCover::cells.)
-    QVERIFY2(now.fraction > 0.5 && now.fraction < headAlone - 0.05 && now.headOnly > 0.05,
+    // (384 matches tie exactly here -- the USTs' two arms, the washes
+    // mirrored on the towers -- and they light 53 to 76% at both heights;
+    // the zones take the one that lights the most, AreaCover::zones.)
+    QVERIFY2(now.fraction > 0.7 && now.fraction < headAlone - 0.05 && now.headOnly > 0.05,
              qPrintable(QString("both %1, head only %2").arg(now.fraction).arg(now.headOnly)));
     QVERIFY(!now.deckGap.isEmpty());
     QVERIFY(now.caption().contains("deck dark"));
+    delete doc;
+}
+
+void AimSolver_Test::areaTiesGoToTheBestCover()
+{
+    /* Four spots hung one behind and above the next, on the centre line:
+       each sits exactly where the others do across and in depth (height
+       less distance downstage is the same), so every way of giving them the
+       four zones costs the same. Their lenses differ, and so does how far
+       each throws: which spot takes which zone is the whole difference in
+       how much of the area is lit. The zones go to the best of the ties. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    const double lens[4] = { 10.0, 16.0, 24.0, 34.0 };
+    QList<quint32> ids;
+    for (int i = 0; i < 4; ++i)
+        ids << placeSpot(doc, QString("Spot %1").arg(i + 1), QVector3D(6.0f, 10.0f + i, 3.0f + i), lens[i])->id();
+    StageTarget *area = addArea(doc, "Chorus", QVector3D(6.0f, 4.0f, 0.0f), QSizeF(8.0, 4.0));
+    const QList<GroupHead> members = AimSolver::aimMembers(doc, ids);
+    QCOMPARE(members.size(), 4);
+
+    const QList<AreaCover::Zone> zones = AreaCover::zones(doc, area, members);
+    QCOMPARE(zones.size(), 4);
+    const AreaCover::Coverage now = AreaCover::coverage(doc, area, members);
+
+    // Every one of the 24 tied ways, measured the same way.
+    QVector<int> perm = { 0, 1, 2, 3 };
+    double best = 0.0, worst = 1.0;
+    do
+    {
+        QList<AreaCover::Beam> beams;
+        for (int i = 0; i < 4; ++i)
+        {
+            AimSolver::Frame f;
+            QVERIFY(AimSolver::frameFor(doc, members.at(i), f));
+            AreaCover::Beam b;
+            b.member = members.at(i);
+            b.origin = f.position;
+            b.aim = zones.at(perm.at(i)).aim;
+            b.degrees = lens[i];
+            beams << b;
+        }
+        const double got = AreaCover::coverage(props, area, beams).fraction;
+        best = qMax(best, got);
+        worst = qMin(worst, got);
+    } while (std::next_permutation(perm.begin(), perm.end()));
+    qDebug().noquote() << QString("Tied layouts: %1% to %2%, zones give %3%")
+                          .arg(worst * 100, 0, 'f', 1).arg(best * 100, 0, 'f', 1).arg(now.fraction * 100, 0, 'f', 1);
+    // The pick matters here, and the zones take the best of it (scored on a
+    // coarser grid than this one: a sample's worth either way).
+    QVERIFY2(best - worst > 0.05, qPrintable(QString("ties span %1 to %2").arg(worst).arg(best)));
+    QVERIFY2(now.fraction >= best - 0.01,
+             qPrintable(QString("zones give %1, the best tie %2").arg(now.fraction).arg(best)));
+
+    // The same pick every time.
+    const QList<AreaCover::Zone> again = AreaCover::zones(doc, area, members);
+    for (int i = 0; i < 4; ++i)
+        QCOMPARE(again.at(i).cell, zones.at(i).cell);
     delete doc;
 }

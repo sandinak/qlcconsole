@@ -106,6 +106,9 @@ at the area's own height, and the corners stayed dark.
   Two towers of three shelves either side of a chorus on risers: each
   tower lights its own half, the bottom shelf the front rank and the top
   shelf the back rank on the risers. For a regular rig no two beams cross.
+  Where two ways of sharing the zones out fit where the lights hang
+  equally well (the two arms of a beam bar, the washes mirrored on two
+  towers), the one that lights more of the area wins.
 - **How high.** Each light aims at its zone's centre, at subject height
   above whatever is under it there (the deck, a riser, a step's tread): a
   person's chest, 1.4 m, or the area's aim height when you set one. Not the
