@@ -46,6 +46,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   a hit is tapped in Design. The Look Editor warns when a Pan/Tilt, Aim or
   Zoom look sits on lights that can't move or zoom (*No target fixture can
   pan or tilt*), as it already did for gobos.
+- **The plot's footer stays readable on a laptop-size window.** When a
+  notice or a longer reading made the Lighting Studio's footer wider than
+  the window, its scroll bar came in without the bar growing, and the whole
+  footer (Grid, Snap, Overlay, View and the notice) was squashed to a
+  sliver under the scroll bar. It now grows to hold the scroll bar (any
+  bar that scrolls sideways does).
 
 - **Three states for a Show Review warning, visible on the cue.** Open is
   the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
