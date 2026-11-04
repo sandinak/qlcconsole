@@ -64,7 +64,7 @@ ShowTimelineEditor::ShowTimelineEditor(QWidget *parent, Show *show, Doc *doc)
     tb->addSeparator();
     QAction *addTrack = tb->addAction(QIcon(":/edit_add.png"), tr("Add Track"));
     connect(addTrack, SIGNAL(triggered()), this, SLOT(slotNewTrackRequested()));
-    m_deleteAction = tb->addAction(QIcon(":/editdelete.png"), tr("Delete selected clip(s)"));
+    m_deleteAction = tb->addAction(QIcon(":/editdelete.png"), tr("Delete Selected Clips"));
     connect(m_deleteAction, SIGNAL(triggered()), this, SLOT(slotDeleteSelected()));
 
     // Show LENGTH: always-visible control (the drag handle can sit off-screen for
@@ -76,9 +76,9 @@ ShowTimelineEditor::ShowTimelineEditor(QWidget *parent, Show *show, Doc *doc)
                           "playhead parks. Content past it is not played."));
     lenBtn->setPopupMode(QToolButton::InstantPopup);
     QMenu *lenMenu = new QMenu(lenBtn);
-    QAction *lenSet = lenMenu->addAction(tr("Set length…"));
-    QAction *lenFit = lenMenu->addAction(tr("Fit to content (auto)"));
-    QAction *lenCur = lenMenu->addAction(tr("End at current playhead"));
+    QAction *lenSet = lenMenu->addAction(tr("Set Length…"));
+    QAction *lenFit = lenMenu->addAction(tr("Fit to Content (auto)"));
+    QAction *lenCur = lenMenu->addAction(tr("End at Current Playhead"));
     connect(lenSet, &QAction::triggered, this, [this]() {
         if (m_show == NULL)
             return;

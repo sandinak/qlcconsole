@@ -1544,10 +1544,10 @@ void SceneGroupLooks::slotLookContextMenu(const QPoint &pos)
     if (!effects.isEmpty())
     {
         if (anyNested)
-            toBase = menu.addAction(tr("Move to fixtures (static base)"));
+            toBase = menu.addAction(tr("Move to Fixtures (static base)"));
         if (anyBase || anyNested)
         {
-            QMenu *feed = menu.addMenu(tr("Feed effect"));
+            QMenu *feed = menu.addMenu(tr("Feed Effect"));
             for (const auto &e : effects)
             {
                 QAction *a = feed->addAction(e.second.isEmpty() ? tr("(effect)") : e.second);
@@ -1556,9 +1556,9 @@ void SceneGroupLooks::slotLookContextMenu(const QPoint &pos)
         }
         menu.addSeparator();
     }
-    QAction *rin   = menu.addAction(tr("Reset Fade In to step"));
-    QAction *rout  = menu.addAction(tr("Reset Fade Out to step"));
-    QAction *rboth = menu.addAction(tr("Reset both to step"));
+    QAction *rin   = menu.addAction(tr("Reset Fade In to Step"));
+    QAction *rout  = menu.addAction(tr("Reset Fade Out to Step"));
+    QAction *rboth = menu.addAction(tr("Reset Both to Step"));
     QAction *chosen = menu.exec(m_lookList->viewport()->mapToGlobal(pos));
     if (chosen == NULL)
         return;

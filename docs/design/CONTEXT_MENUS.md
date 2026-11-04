@@ -368,6 +368,32 @@ two layer menus; the fixture menus of the plot, Structure Studio, the Rig
 Overview and the riser-face editor). Several places' menus are longer
 (a look row now carries its palette's menu): that is the ask.
 
+### 3.6 Every menu, not only the builders' (2026-11-04)
+
+The builders hold the kind block; the words hold everywhere. A second
+audit (wfaudit2) found about 170 menu items outside the builders still in
+sentence case: the Connections tree, the plot's Show, Lock and Origin
+menus, the Focus and Venue menus, the Workbench's + Scene and + Effect,
+Build's + New, the show timeline and the power widget. They are Title Case
+now, and `ui/test/menuwords` reads every label given to `addAction()`,
+`addMenu()` and `ContextMenu::add()` in `ui/src` (both sides of a ternary)
+and fails on one that is not Title Case, has "..." for "…", or has a
+shortcut typed into it. A disabled line of information in a menu ("(no
+folder)", a note) is not an item and is not checked; nor is a question
+("Why is this on?") or a prompt ending in ":".
+
+The same test fails on a text that shows a length in metres only (a "%1 m"
+with no feet text beside it): a show in feet reads feet.
+
+Connections now follows the order: Collapse / Expand All Below and Add
+Universe on top (the list's own), the row's items, its Delete last. Delete
+destroys ("Delete Universe…", "Delete Target…", "Delete Port"); the pending
+patch's "Forget this patch (unpatch)…" is **Unpatch…**.
+
+The Workbench's **+ Effect** and Build ▸ Effects' **+ New** now read the
+same: **Effect Palette…** first, then a "QLC+ effects" heading over EFX and
+RGB Matrix (the Workbench said "Effect look…", last).
+
 ### 3.5 Reserved slots for work landing alongside
 
 (Section names, not the old numbers: the order changed on 2026-11-03.)

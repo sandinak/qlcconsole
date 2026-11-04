@@ -556,6 +556,21 @@ void FixtureManager::initDataView()
                         FixtureTreeWidget::ShowPower;
 
     m_fixtures_tree = new FixtureTreeWidget(m_doc, treeFlags, this);
+    /* ⌫ / Delete on the list: the toolbar's Delete… (it asks first), as in
+       the Show Tree, Build and the Library. On the tree only, so a rename's
+       editor keeps its keys. */
+    for (const QKeySequence &key : { QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace) })
+    {
+        QShortcut *del = new QShortcut(key, m_fixtures_tree);
+        del->setObjectName(QStringLiteral("fmDeleteKey"));
+        del->setContext(Qt::WidgetShortcut);
+        // Queued: the question opens after the key is done, not inside the
+        // shortcut's dispatch (a modal there loses its answer).
+        connect(del, &QShortcut::activated, this, [this]() {
+            if (m_removeAction != NULL && m_removeAction->isEnabled())
+                QMetaObject::invokeMethod(this, &FixtureManager::slotRemove, Qt::QueuedConnection);
+        });
+    }
     m_fixtures_tree->setIconSize(QSize(32, 32));
     m_fixtures_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_fixtures_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -1605,7 +1620,7 @@ void FixtureManager::initActions()
     connect(m_unGroupAction, SIGNAL(triggered(bool)),
             this, SLOT(slotUnGroup()));
 
-    m_newGroupAction = new QAction(tr("New Group..."), this);
+    m_newGroupAction = new QAction(tr("New Group…"), this);
 
     m_moveUpAction = new QAction(QIcon(":/up.png"),
                                  tr("Move channel group up..."), this);
@@ -1635,7 +1650,7 @@ void FixtureManager::initActions()
     connect(m_remapAction, SIGNAL(triggered(bool)),
             this, SLOT(slotRemap()));
 
-    m_patchListAction = new QAction(QIcon(":/fileexport.png"), tr("Patch List..."), this);
+    m_patchListAction = new QAction(QIcon(":/fileexport.png"), tr("Patch List…"), this);
     m_patchListAction->setToolTip(tr("Every fixture's patch, output and mount: copy it, save it as CSV, XLSX or PDF, or print fixture labels"));
     connect(m_patchListAction, &QAction::triggered, this, &FixtureManager::slotPatchList);
 
@@ -3383,7 +3398,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
            the same one Connections opens, filled in with this universe. */
         if (legs.isEmpty())
         {
-            patchOut = cm.add(ContextMenu::Open, tr("Patch output…"));
+            patchOut = cm.add(ContextMenu::Open, tr("Patch Output…"));
             patchOut->setToolTip(tr("Choose the protocol, interface and node port this "
                                     "universe goes out on"));
         }
@@ -3391,10 +3406,10 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         {
             QAction *where = cm.add(ContextMenu::Open, tr("Output: %1").arg(legs.join(QStringLiteral(" · "))));
             where->setEnabled(false);
-            patchOut = cm.add(ContextMenu::Open, tr("Edit connection…"));
+            patchOut = cm.add(ContextMenu::Open, tr("Edit Connection…"));
             patchOut->setToolTip(tr("Where this universe goes, its input and feedback, "
                                     "in one window"));
-            unpatchOut = cm.add(ContextMenu::Kind, tr("Unpatch output"));
+            unpatchOut = cm.add(ContextMenu::Kind, tr("Unpatch Output"));
         }
         if (ShowStatus::instance()->actionLabel(QStringLiteral("connections.universe")).isEmpty() == false)
             showInConnections = cm.add(ContextMenu::Place, tr("Show in Connections"));

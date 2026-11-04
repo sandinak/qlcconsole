@@ -73,30 +73,31 @@ it is ("Front Par, channel 1 — Dimmer").
 
 Each row's right-click offers what that level of the wiring owns:
 
-- **The top row:** **Add a protocol ▸**.
-- **A protocol:** **Add an interface…**, **Add a target…** and
+- **The top row:** **Add a Protocol ▸**.
+- **A protocol:** **Add an Interface…**, **Add a Target…** and
   **Configure &lt;protocol&gt;…**.
-- **An interface:** **Name this interface…**; on Art-Net and sACN **Add a
-  target on this interface…** or **Add a target from device library…**; on a
+- **An interface:** **Rename Interface…**; on Art-Net and sACN **Add a
+  Target on This Interface…** or **Add a Target from Device Library…**; on a
   USB widget or MIDI line, where the line itself is the destination, **Patch
-  a universe here (output)…** / **(input)…**. **Reroute N universes to a
-  different interface…** moves everything patched there to another network
-  card in one step, and **Stop showing this interface** hides one with
+  a Universe Here (output)…** / **(input)…**. **Reroute N Universes to Another
+  Interface…** moves everything patched there to another network
+  card in one step, and **Stop Showing This Interface** hides one with
   nothing on it.
-- **A node (target):** **Name this target…** and **Set node IP address…**;
-  on a node you added by hand, also **Add a port…** and **Forget this
-  target…**.
-- **A port:** **Patch a universe to this port…**, and **Remove this port**
+- **A node (target):** **Rename Target…** and **Set Node IP Address…**;
+  on a node you added by hand, also **Add a Port…** and **Delete
+  Target…**.
+- **A port:** **Patch a Universe to This Port…**, and **Delete Port**
   on one you added.
-- **A universe:** **Edit connection…** (or just double-click it), **Rename
-  universe…**, **Unpatch from this interface** and **Delete universe
-  entirely…**. Those act on the one row you right-clicked; ⌘-click several
-  universes first for **Retarget N selected universes…** and **Transmit
-  mode of N selected universes**.
+- **A universe:** **Edit Connection…** (or just double-click it), **Rename
+  Universe…**, **Unpatch from This Interface** and, last, **Delete
+  Universe…**. Those act on the one row you right-clicked; ⌘-click several
+  universes first for **Retarget N Selected Universes…** and **Transmit
+  Mode of N Selected Universes**. **Collapse All Below**, **Expand All
+  Below** and **Add Universe** are on top of every row's menu.
 
 ### Editing a connection
 
-**Edit connection…** — or a double-click on any universe, in either view —
+**Edit Connection…** — or a double-click on any universe, in either view —
 opens one window for everything about where that universe goes. Patching an
 unpatched universe and editing a patched one are the same window; a patched
 one opens filled in.
@@ -145,7 +146,7 @@ profile's file; a universe that used it has none.
 **Several universes at once.** Ctrl-click (⌘-click on a Mac) universes —
 in either view, patched or not — and right-click one of them:
 
-- **Patch N selected universes to…** asks the protocol, the interface and
+- **Patch N Selected Universes to…** asks the protocol, the interface and
   the device, then the port to start from. The universes go onto the ports
   **in the order you clicked them**, not the order they are listed: the
   first one you picked on the starting port, the second on the next, and so
@@ -158,7 +159,7 @@ in either view, patched or not — and right-click one of them:
   interface with no target, or **Another address…** to number up from a
   port address you type. On a protocol without devices (a multi-universe
   USB widget) they go onto consecutive interfaces.
-- **Unpatch N selected universes** removes the patch from every one of them
+- **Unpatch N Selected Universes** removes the patch from every one of them
   at once.
 - **Retarget N selected universes…** re-aims already-patched universes at
   one node on consecutive port addresses, also in clicked order.
@@ -167,7 +168,7 @@ in either view, patched or not — and right-click one of them:
   universe at once.
 
 Each is one step for **Undo Patch Change**. The Fixture Manager's universe
-rows open the same connection window (**Patch output…**, or **Edit
+rows open the same connection window (**Patch Output…**, or **Edit
 connection…** on a patched one) and offer the same plural actions — see
 [Patching a universe's output](fixture-manager.md#patching-a-universes-output).
 (The Devices tab keeps all of this
@@ -235,7 +236,7 @@ the VPN comes up — they reconnect by themselves within a few seconds. The
 same holds for **inputs and feedback** patched to a device or interface
 that isn't present, and for any patch whose plugin isn't installed on this
 computer. Patching or unpatching an offline universe by hand works as
-usual; **Forget this patch (unpatch)…** (right-click it) drops a kept patch for good.
+usual; **Unpatch…** (right-click it) drops a kept patch for good.
 
 Saved shows keep the interface address and line number older versions
 read, plus the network they're on (a `Network` attribute older versions
@@ -277,7 +278,7 @@ show was opened without it:
 
 The device is found by its name — maker, model and serial, as listed in
 Connections — so another device that turns up on the same line is never
-taken for it without asking. **Forget this patch** (right-click the greyed
+taken for it without asking. **Unpatch…** (right-click the greyed
 universe) stops waiting for it.
 
 #### One input, whichever controller is here
@@ -303,8 +304,8 @@ and whichever is switched on drives it.
 - **The list.** In **Connections ▸ Devices** each controller in the list
   is a row under its universe's input: "1. Xbox Wireless Controller · in
   use", "2. DUALSHOCK 4 … · connected — standing by", "3. DualSense … · not
-  connected". Right-click one to **Move up (preferred)**, **Move down** or
-  **Remove from universe 2**, or **Also take any game controller (last)**:
+  connected". Right-click one to **Move Up (preferred)**, **Move Down** or
+  **Remove from universe 2**, or **Also Take Any Game Controller (last)**:
   the first pad of any make that no other universe has. Take the list down
   to one and the universe is an ordinary patch on that pad again. Patching
   the universe by hand to a device that isn't in its list replaces the list.
@@ -446,7 +447,7 @@ operating system throws the answer away before any program sees it, and the
 node can't appear until this computer has an address on that network too
 (below).
 
-To set its address: right-click the node → **Set node IP address…**. The
+To set its address: right-click the node → **Set Node IP Address…**. The
 dialog shows the node (name, address, MAC, interface), and:
 
 - **Fixed address** (IP, subnet mask, optionally a gateway), **DHCP** (if
@@ -473,7 +474,7 @@ interface the node was heard on, for example on a Mac:
 (Linux: `sudo ip addr add 2.255.255.250/8 dev vlan0`; Windows, as
 administrator: `netsh interface ipv4 add address "Ethernet" 2.255.255.250
 255.0.0.0`.) Then **Rescan**: the node answers, is no longer amber, and
-**Set node IP address…** can send to it.
+**Set Node IP Address…** can send to it.
 When it's done, remove the address (the dialog shows that command too) and
 **Rescan** again to find the node at its new address.
 

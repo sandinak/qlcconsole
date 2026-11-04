@@ -916,9 +916,9 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     scriptBtn->setToolTip(tr("The .js script behind an effect: a new one from a template, or this one's"));
     QMenu *scriptMenu = new QMenu(scriptBtn);
     scriptMenu->setToolTipsVisible(true);
-    m_newScriptButton = scriptMenu->addAction(tr("New script…"), this, &LookEditor::slotNewEffectScript);
+    m_newScriptButton = scriptMenu->addAction(tr("New Script…"), this, &LookEditor::slotNewEffectScript);
     m_newScriptButton->setToolTip(tr("Create a new effect script from a template and open it in the editor"));
-    m_editScriptButton = scriptMenu->addAction(tr("Edit script…"), this, &LookEditor::slotEditEffectScript);
+    m_editScriptButton = scriptMenu->addAction(tr("Edit Script…"), this, &LookEditor::slotEditEffectScript);
     m_editScriptButton->setToolTip(tr("Edit this Generator's underlying .js script"));
     scriptBtn->setMenu(scriptMenu);
     efScriptRow->addWidget(scriptBtn);

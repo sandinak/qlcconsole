@@ -273,8 +273,11 @@ void Workbench_Test::aCollectionsMembersAreLayers()
         QVERIFY(effect != nullptr && effect->isEnabled());
         QCOMPARE(effect->text(), QString("+ Effect"));
         QVERIFY(effect->menu() != nullptr);
-        QCOMPARE(effect->menu()->actions().mid(0, 2), QList<QAction *>({ wb.m_addEfxBtn, wb.m_addMatrixBtn }));
-        QCOMPARE(effect->menu()->actions().last()->objectName(), QString("workbenchDesignEffect"));
+        // Effect Palette… first, then the QLC+ effects: as Build ▸ Effects' + New.
+        QCOMPARE(effect->menu()->actions().first()->objectName(), QString("workbenchDesignEffect"));
+        QCOMPARE(effect->menu()->actions().first()->text(), QString("Effect Palette…"));
+        QCOMPARE(effect->menu()->actions().mid(effect->menu()->actions().size() - 2),
+                 QList<QAction *>({ wb.m_addEfxBtn, wb.m_addMatrixBtn }));
         QCOMPARE(wb.m_addEfxBtn->text(), QString("EFX"));
         QCOMPARE(wb.m_addMatrixBtn->text(), QString("RGB Matrix"));
         for (QAbstractButton *b : wb.findChildren<QAbstractButton *>())

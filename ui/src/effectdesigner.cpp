@@ -528,7 +528,7 @@ void EffectDesigner::fillTryOnMenu()
         });
     }
     if (groups.isEmpty())
-        menu->addAction(tr("No groups in this show"))->setEnabled(false);
+        menu->addAction(tr("No Groups in This Show"))->setEnabled(false);
 }
 
 /****************************************************************************
@@ -1203,7 +1203,7 @@ void EffectDesigner::fillMakeLayerMenu()
     }
     else
     {
-        QAction *a = menu->addAction(tr("Into the Show Tree's cue (none selected)"));
+        QAction *a = menu->addAction(tr("Into the Show Tree's Cue (none selected)"));
         a->setObjectName(QStringLiteral("edLayerTreeCue"));
         a->setEnabled(false);
         a->setToolTip(tr("Select a cue in the Show Tree to make the layer there"));

@@ -2088,7 +2088,7 @@ void CourseShow_Test::lessonStageLooks()
 
     QAction *autoLooks = nullptr;
     for (QAction *a : Monitor::instance()->findChildren<QAction *>())
-        if (a->text() == QLatin1String("Show Auto fixtures as their closest plot symbol"))
+        if (a->text() == QLatin1String("Show Auto Fixtures as Their Closest Plot Symbol"))
             autoLooks = a;
     QVERIFY(autoLooks != nullptr);
     autoLooks->trigger();
@@ -2552,7 +2552,7 @@ void CourseShow_Test::lessonFocusAndCalibration()
     studio->m_layersPanel->reload();
     QAction *positions = studio->findChild<QAction *>(QStringLiteral("showTargetPositions"));
     QVERIFY(positions != nullptr);
-    QCOMPARE(positions->text(), QStringLiteral("Target positions"));
+    QCOMPARE(positions->text(), QStringLiteral("Target Positions"));
     QVERIFY(positions->isChecked());       // on already
     QCOMPARE(MonitorProperties::stagePieceName(MonitorProperties::CentrePiece), QStringLiteral("Centre line / DSC mark"));
     QCOMPARE(MonitorProperties::stagePieceName(MonitorProperties::CurtainPiece), QStringLiteral("Curtain line"));
@@ -4771,7 +4771,7 @@ void CourseShow_Test::lessonTwoFourExtension()
     const QString key = doc->showTree()->keyForPalette(paletteNamed(doc, "Step Sparkle")->id());
     QVERIFY(rowMenu(view, key, "Its Own Colour / Dimmer", "Amber"));
     QVERIFY2(rowText(view, key).startsWith(QStringLiteral("Step Sparkle in Amber")), qPrintable(rowText(view, key)));
-    QVERIFY(rowMenu(view, key, "Its Own Colour / Dimmer", "None of its own"));
+    QVERIFY(rowMenu(view, key, "Its Own Colour / Dimmer", "None of Its Own"));
     QCOMPARE(rowText(view, key), QStringLiteral("Step Sparkle"));
     doc->resetModified();
 }

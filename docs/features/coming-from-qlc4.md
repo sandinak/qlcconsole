@@ -235,7 +235,7 @@ wins for intensity, and the last one moved wins for everything else.
 
 ### ⌘D: save what's on stage as a scene
 
-**Control ▸ Dump DMX values to a function** (⌘D; Ctrl+D on Windows and
+**Control ▸ Dump DMX Values to a Function** (⌘D; Ctrl+D on Windows and
 Linux) records the DMX values going out now as a scene. It doesn't matter
 what made them: the Simple Desk, a fader or a cue. In the dialog:
 

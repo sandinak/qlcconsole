@@ -36,6 +36,7 @@
 #include "venuecorrections.h"
 #include "fixture.h"
 #include "showsettingsdialog.h"
+#include "monitorproperties.h"
 #include "doc.h"
 
 #define COL_NAME    0
@@ -589,9 +590,12 @@ QString PatchInventoryDialog::viaText(int row, quint32 universe) const
         const int ni = via->data(ROLE_NODE).toInt();
         if (ni < nt->nodes().size())
         {
-            QString t = tr("%1 · port %2 · %3 m").arg(nt->nodes().at(ni).name)
+            // How far, in the show's units (Settings > Units): 12' 6" or 3.8 m.
+            QString t = tr("%1 · port %2 · %3").arg(nt->nodes().at(ni).name)
                             .arg(via->data(ROLE_PORT).toInt() + 1)
-                            .arg(via->data(ROLE_DIST).toDouble(), 0, 'f', 1);
+                            .arg(MonitorProperties::formatStageDistance(
+                                float(via->data(ROLE_DIST).toDouble()),
+                                m_doc->monitorProperties()->gridUnits()));
             if (via->data(ROLE_CLAIMS).toBool())
                 t += tr(" (assigns the port)");
             return t;

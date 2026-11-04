@@ -192,8 +192,8 @@ void CollectionEditor::slotTreeContextMenu(const QPoint& pos)
 
     QMenu menu(this);
     QAction* removeAction = menu.addAction(
-        count > 1 ? tr("Remove %1 functions from collection").arg(count)
-                  : tr("Remove from collection"));
+        count > 1 ? tr("Remove %1 Functions from Collection").arg(count)
+                  : tr("Remove from Collection"));
 
     if (menu.exec(m_tree->viewport()->mapToGlobal(pos)) == removeAction)
         slotRemove();

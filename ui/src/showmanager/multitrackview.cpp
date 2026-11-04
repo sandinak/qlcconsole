@@ -1144,8 +1144,8 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
         if (qAbs(scenePos.x() - ex) <= 10.0 && scenePos.y() >= HEADER_HEIGHT)
         {
             QMenu emenu;
-            QAction *fitAct = emenu.addAction(tr("Fit end to content (auto)"));
-            QAction *setAct = emenu.addAction(tr("Set show length…"));
+            QAction *fitAct = emenu.addAction(tr("Fit End to Content (auto)"));
+            QAction *setAct = emenu.addAction(tr("Set Show Length…"));
             QAction *smpteAct = emenu.addAction(tr("End at SMPTE…"));
             QAction *chosen = emenu.exec(event->globalPos());
             if (chosen == fitAct)
@@ -1192,7 +1192,7 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
     {
         // Blank part of the track-header column (no item here): offer to create a track.
         QMenu hmenu;
-        QAction *newAct = hmenu.addAction(tr("New track"));
+        QAction *newAct = hmenu.addAction(tr("New Track"));
         if (hmenu.exec(event->globalPos()) == newAct)
             emit newTrackRequested();
         return;
@@ -1206,7 +1206,7 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
     {
         quint32 hit = markerAt(scenePos.x());
         QMenu mmenu;
-        QAction *addAct = mmenu.addAction(tr("Add marker here…"));
+        QAction *addAct = mmenu.addAction(tr("Add Marker Here…"));
         QAction *renAct = NULL;
         QAction *colAct = NULL;
         QAction *cueAct = NULL;
@@ -1214,10 +1214,10 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
         if (hit != UINT_MAX)
         {
             mmenu.addSeparator();
-            renAct = mmenu.addAction(tr("Rename marker…"));
-            colAct = mmenu.addAction(tr("Change colour…"));
-            cueAct = mmenu.addAction(tr("Link manual cue list…"));
-            delAct = mmenu.addAction(tr("Delete marker"));
+            renAct = mmenu.addAction(tr("Rename Marker…"));
+            colAct = mmenu.addAction(tr("Change Colour…"));
+            cueAct = mmenu.addAction(tr("Link Manual Cue List…"));
+            delAct = mmenu.addAction(tr("Delete Marker"));
         }
         QAction *chosen = mmenu.exec(event->globalPos());
         if (chosen == addAct)
@@ -1239,7 +1239,7 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
         track = m_tracks.at(row)->getTrack();
 
     QMenu menu;
-    QAction *addAct = menu.addAction(tr("Add function here…"));
+    QAction *addAct = menu.addAction(tr("Add Function Here…"));
     if (menu.exec(event->globalPos()) == addAct)
         emit addAtRequested(startTime, track);
 }

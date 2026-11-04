@@ -1130,8 +1130,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                           "and an ⌥-drop do."), "stAddLayer");
     {
         QMenu *m = new QMenu(m_addLayer);
-        m->addAction(tr("One layer on all selected"), this, [this]() { addLayersFromLibrary(false); });
-        m->addAction(tr("A layer for each (⌥)"), this, [this]() { addLayersFromLibrary(true); });
+        m->addAction(tr("One Layer on All Selected"), this, [this]() { addLayersFromLibrary(false); });
+        m->addAction(tr("A Layer for Each (⌥)"), this, [this]() { addLayersFromLibrary(true); });
         m_addLayer->setMenu(m);
         m_addLayer->setPopupMode(QToolButton::MenuButtonPopup);
     }
@@ -5588,7 +5588,7 @@ void ShowTreeView::fillAttributeMenu(QMenu *out, quint32 cueId, quint32 layerId,
             });
         }
         own->addSeparator();
-        own->addAction(tr("None of its own"), this, [this, cueId, layerId, key, target]() {
+        own->addAction(tr("None of Its Own"), this, [this, cueId, layerId, key, target]() {
             setEffectOwn(cueId, layerId, key, {}, target);
         });
 
@@ -5601,19 +5601,19 @@ void ShowTreeView::fillAttributeMenu(QMenu *out, quint32 cueId, quint32 layerId,
             fades->setToolTipsVisible(true);
             const bool follow = here.fadeIn == Look::FadeFollowCue && here.fadeOut == Look::FadeFollowCue;
             const bool snap = here.fadeIn == Look::FadeSnap && here.fadeOut == Look::FadeSnap;
-            QAction *a = fades->addAction(tr("With the cue's fades"), this, [this, cueId, layerId, key, target]() {
+            QAction *a = fades->addAction(tr("With the Cue's Fades"), this, [this, cueId, layerId, key, target]() {
                 setEffectFades(cueId, layerId, key, Look::FadeFollowCue, Look::FadeFollowCue, target);
             });
             a->setCheckable(true);
             a->setChecked(follow);
             a->setToolTip(tr("The effect comes up over the cue's fade in and goes over its fade out."));
-            a = fades->addAction(tr("At once"), this, [this, cueId, layerId, key, target]() {
+            a = fades->addAction(tr("At Once"), this, [this, cueId, layerId, key, target]() {
                 setEffectFades(cueId, layerId, key, Look::FadeSnap, Look::FadeSnap, target);
             });
             a->setCheckable(true);
             a->setChecked(snap);
             a->setToolTip(tr("The effect starts and stops at full, whatever the cue's fades."));
-            a = fades->addAction(follow || snap ? tr("Own times…")
+            a = fades->addAction(follow || snap ? tr("Own Times…")
                                                 : tr("Own times (%1 in, %2 out)…")
                                                   .arg(fadeLabel(here.fadeIn), fadeLabel(here.fadeOut)),
                                  this, [this, cueId, layerId, key, target, here]() {
@@ -5964,7 +5964,7 @@ void ShowTreeView::fillCueFocusMenu(QMenu *m)
     const quint32 cueId = m_pageCue;
     const ShowTree::Cue *cue = cueId != invalidId() ? m_st->cue(cueId) : nullptr;
     const ShowTree::CueList *list = cue != nullptr ? m_st->listOfCue(cueId) : nullptr;
-    QAction *self = m->addAction(tr("Focus this cue\342\200\246"), this, [this, cueId]() {
+    QAction *self = m->addAction(tr("Focus This Cue…"), this, [this, cueId]() {
         if (cueId != invalidId())
             RefinePanel::open(m_doc, window(), cueId);
     });
@@ -5974,7 +5974,7 @@ void ShowTreeView::fillCueFocusMenu(QMenu *m)
     // A look list's looks are fired from the VC, never GO'd onto: no venue focus cue.
     if (list != nullptr && !list->looks)
     {
-        QAction *make = m->addAction(tr("Make this a venue focus cue"));
+        QAction *make = m->addAction(tr("Make This a Venue Focus Cue"));
         make->setObjectName("stCueFocusVenueCue");
         make->setCheckable(true);
         make->setChecked(cue->focusCall);
@@ -5985,7 +5985,7 @@ void ShowTreeView::fillCueFocusMenu(QMenu *m)
         });
     }
     m->addSeparator();
-    QAction *venue = m->addAction(tr("Venue focus\342\200\246"), this, [this]() {
+    QAction *venue = m->addAction(tr("Venue Focus…"), this, [this]() {
         FocusCallsDialog::startVenueFocus(m_doc, window());
     });
     venue->setObjectName("stCueVenueFocus");
@@ -8053,7 +8053,7 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
                 });
             }
             childMenu->addSeparator();
-            childMenu->addAction(tr("The Library's selection"), this, [this, cueId, layerId]() {
+            childMenu->addAction(tr("The Library's Selection"), this, [this, cueId, layerId]() {
                 QList<quint32> groups, fixtures, sets;
                 for (QTreeWidgetItem *it : m_library->selectedItems())
                 {
@@ -8212,9 +8212,9 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
         QMenu *several = menu.addMenu(ContextMenu::Place, tr("%1 Selected Layers").arg(selRefs.count()),
                                       QStringLiteral("stSeveralLayers"));
         several->addAction(tr("Release on"), this, [this]() { setReleaseOnSelected(true); });
-        several->addAction(tr("Release off"), this, [this]() { setReleaseOnSelected(false); });
-        QMenu *set = several->addMenu(tr("Set look"));
-        QMenu *clear = several->addMenu(tr("Clear look"));
+        several->addAction(tr("Release Off"), this, [this]() { setReleaseOnSelected(false); });
+        QMenu *set = several->addMenu(tr("Set Look"));
+        QMenu *clear = several->addMenu(tr("Clear Look"));
         const QPair<quint32, quint32> cur(item->data(0, CueRole).toUInt(), id);
         QHash<QString, QMenu *> kinds;
         QList<QLCPalette *> pals = m_doc->palettes();
@@ -8242,7 +8242,7 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
                 dropPalettes(cur.first, cur.second, { pid });
             });
         }
-        several->addAction(tr("Split each (one layer per group)"), this, [this, selRefs]() {
+        several->addAction(tr("Split Each (One Layer per Group)"), this, [this, selRefs]() {
             m_st->beginBatch(tr("Split %1 layers").arg(selRefs.count()));
             bool any = false;
             for (const QPair<quint32, quint32> &ref : selRefs)
@@ -10876,7 +10876,7 @@ void ShowTreeView::lookFolderMenu(QMenu *menu, quint32 listId, const QList<quint
     for (const QString &f : m_st->lookFolders(listId))
         menu->addAction(f, this, [this, lookIds, f]() { m_st->setLookFolder(lookIds, f); });
     menu->addSeparator();
-    menu->addAction(tr("New folder…"), this, [this, lookIds]() {
+    menu->addAction(tr("New Folder…"), this, [this, lookIds]() {
         bool ok = false;
         const QString n = QInputDialog::getText(this, tr("Move to a new folder"), tr("Folder name"),
                                                 QLineEdit::Normal, QString(), &ok);

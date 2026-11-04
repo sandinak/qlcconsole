@@ -150,7 +150,7 @@ void FocusMenu::fill(QMenu *menu, Doc *doc, QWidget *parent, const std::function
     menu->setToolTipsVisible(true);
     VenueCorrections *venues = doc->programmer()->venueCorrections();
 
-    QAction *quick = menu->addAction(tr("Quick focus\342\200\246"), parent, [quickFocus]() {
+    QAction *quick = menu->addAction(tr("Quick Focus…"), parent, [quickFocus]() {
         if (quickFocus)
             quickFocus();
     });
@@ -160,7 +160,7 @@ void FocusMenu::fill(QMenu *menu, Doc *doc, QWidget *parent, const std::function
                     "there; saves into the show (controller: %1)")
                  .arg(doc->programmer()->padText(QStringLiteral("{View} + {Menu}"))));
 
-    QAction *venue = menu->addAction(tr("Venue focus\342\200\246"), parent, [doc, parent]() {
+    QAction *venue = menu->addAction(tr("Venue Focus…"), parent, [doc, parent]() {
         FocusCallsDialog::startVenueFocus(doc, parent);
     });
     venue->setObjectName(QStringLiteral("focusVenue"));
@@ -171,7 +171,7 @@ void FocusMenu::fill(QMenu *menu, Doc *doc, QWidget *parent, const std::function
                                     : tr("Run the focus calls: name the venue first, then group by group "
                                          "to each point; corrections are saved for the venue, not the show"));
 
-    QAction *edit = menu->addAction(tr("Edit focus calls\342\200\246"), parent, [doc, parent]() {
+    QAction *edit = menu->addAction(tr("Edit Focus Calls…"), parent, [doc, parent]() {
         FocusCallsDialog::run(doc, parent);
     });
     edit->setObjectName(QStringLiteral("focusEditCalls"));
@@ -201,7 +201,7 @@ void FocusMenu::fill(QMenu *menu, Doc *doc, QWidget *parent, const std::function
                         "never touched."));
     }
 
-    QAction *report = menu->addAction(tr("Focus report\342\200\246"), parent, [doc, parent]() {
+    QAction *report = menu->addAction(tr("Focus Report…"), parent, [doc, parent]() {
         FocusCallsDialog::exportAppliedReport(doc, parent);
     });
     report->setObjectName(QStringLiteral("focusReport"));

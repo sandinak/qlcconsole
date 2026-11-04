@@ -40,7 +40,7 @@ MoveInBlackButton::MoveInBlackButton(Doc *doc, QWidget *parent)
 
     QMenu *menu = new QMenu(this);
     menu->setObjectName(QStringLiteral("moveInBlackMenu"));
-    m_autoAction = menu->addAction(tr("Auto move-in-black"));
+    m_autoAction = menu->addAction(tr("Auto Move-in-black"));
     m_autoAction->setObjectName(QStringLiteral("moveInBlackAuto"));
     m_autoAction->setCheckable(true);
 
@@ -62,7 +62,7 @@ MoveInBlackButton::MoveInBlackButton(Doc *doc, QWidget *parent)
     wa->setDefaultWidget(row);
     menu->addAction(wa);
     menu->addSeparator();
-    QAction *note = menu->addAction(tr("Saved with the show (also in Programming and Settings)"));
+    QAction *note = menu->addAction(tr("Saved with the show (also in Build and Settings)"));
     note->setEnabled(false);
     setMenu(menu);
 

@@ -292,11 +292,11 @@ void SceneEditor::init(bool applyValues)
     m_recordAction = new QAction(QIcon(":/record.png"),
                                  tr("Clone this scene and append as a new step to the selected chaser"), this);
 
-    m_nextTabAction = new QAction(QIcon(":/forward.png"), tr("Go to next fixture tab"), this);
+    m_nextTabAction = new QAction(QIcon(":/forward.png"), tr("Go to Next Fixture Tab"), this);
     m_nextTabAction->setShortcut(QKeySequence("Alt+Right"));
     connect(m_nextTabAction, SIGNAL(triggered(bool)),
             this, SLOT(slotGoToNextTab()));
-    m_prevTabAction = new QAction(QIcon(":/back.png"), tr("Go to previous fixture tab"), this);
+    m_prevTabAction = new QAction(QIcon(":/back.png"), tr("Go to Previous Fixture Tab"), this);
     m_prevTabAction->setShortcut(QKeySequence("Alt+Left"));
     connect(m_prevTabAction, SIGNAL(triggered(bool)),
             this, SLOT(slotGoToPreviousTab()));

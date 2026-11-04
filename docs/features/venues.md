@@ -30,16 +30,16 @@ Venues** in the Lighting Studio open the same menu.
 
 ![The venue menu: switch, new, rename, the venue page, venue focus, the focus report and the clashes](../images/venue-menu.png)
 
-1. **Switch venue ▸**: the show's venues, and **None** (the show's own
+1. **Switch Venue ▸**: the show's venues, and **None** (the show's own
    calibration, rig and patch). Clashes are listed first, as with Apply
    now (see [The clash check](#the-clash-check)).
-2. **New venue…**: name the room you are in; its corrections start from
+2. **New Venue…**: name the room you are in; its corrections start from
    the venue changed last. It is applied at once.
 3. **Rename…** the venue applied. Its corrections, house rig and patch
    go with the name.
-4. **Rig and universes…**: [the venue page](#the-venue-page).
-5. **Venue focus…**: run the focus calls in this room.
-6. **Focus report…**: the venue's focus, light by light.
+4. **Rig and Universes…**: [the venue page](#the-venue-page).
+5. **Venue Focus…**: run the focus calls in this room.
+6. **Focus Report…**: the venue's focus, light by light.
 7. **Clashes (n)…**, only when there are any: the venue page, its clash
    list in front.
 
@@ -47,7 +47,7 @@ The venue menu needs a saved show: a venue's corrections are kept in a
 file beside it, so until the show is saved its entries are greyed with
 **Save the show first**. While Quick focus or Venue focus is running,
 switching venue is refused (the heads are being worked on): leave it
-first. **New venue…** then makes the venue but doesn't apply it, and a
+first. **New Venue…** then makes the venue but doesn't apply it, and a
 name the show already has is refused — switch to that venue instead.
 
 The chip follows everything that changes it: a venue applied, renamed or
@@ -135,9 +135,9 @@ dialog marks it **CONFLICT**.
 
 ## The venue page
 
-**Rig and universes…** in the venue menu (for the venue applied; greyed
-until one is), or **Rig and universes…** in the focus calls list (for the
-venue chosen beside it: with **None** or **New venue…** chosen, it asks
+**Rig and Universes…** in the venue menu (for the venue applied; greyed
+until one is), or **Rig and Universes…** in the focus calls list (for the
+venue chosen beside it: with **None** or **New Venue…** chosen, it asks
 you to choose a venue first), opens the venue page. Apply the venue first to change its house rig or its
 patch; **Not ours** and the clash check work either way.
 

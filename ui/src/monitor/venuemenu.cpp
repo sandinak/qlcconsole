@@ -243,7 +243,7 @@ void VenueMenu::fill(QMenu *menu, Doc *doc, QWidget *parent)
         menu->addSeparator();
     }
 
-    QMenu *switchMenu = menu->addMenu(tr("Switch venue"));
+    QMenu *switchMenu = menu->addMenu(tr("Switch Venue"));
     switchMenu->setObjectName(QStringLiteral("venueSwitchMenu"));
     switchMenu->menuAction()->setObjectName(QStringLiteral("venueSwitch"));
     switchMenu->setToolTipsVisible(true);
@@ -273,7 +273,7 @@ void VenueMenu::fill(QMenu *menu, Doc *doc, QWidget *parent)
         }
     }
 
-    QAction *add = menu->addAction(tr("New venue\342\200\246"), parent, [doc, parent]() {
+    QAction *add = menu->addAction(tr("New Venue…"), parent, [doc, parent]() {
         askNewVenue(doc, parent);
     });
     add->setObjectName(QStringLiteral("venueNew"));
@@ -286,7 +286,7 @@ void VenueMenu::fill(QMenu *menu, Doc *doc, QWidget *parent)
     FocusMenu::setAvailable(rename, renameBlocked(doc),
                             active.isEmpty() ? QString() : tr("Give %1 another name").arg(active));
 
-    QAction *rig = menu->addAction(tr("Rig and universes\342\200\246"), parent, [doc, parent]() {
+    QAction *rig = menu->addAction(tr("Rig and Universes…"), parent, [doc, parent]() {
         VenueRigDialog::open(doc, parent, venuesOf(doc)->activeVenue());
     });
     rig->setObjectName(QStringLiteral("venueRig"));
@@ -295,7 +295,7 @@ void VenueMenu::fill(QMenu *menu, Doc *doc, QWidget *parent)
                                "and the clash check"));
 
     menu->addSeparator();
-    QAction *focus = menu->addAction(tr("Venue focus\342\200\246"), parent, [doc, parent]() {
+    QAction *focus = menu->addAction(tr("Venue Focus…"), parent, [doc, parent]() {
         FocusCallsDialog::startVenueFocus(doc, parent);
     });
     focus->setObjectName(QStringLiteral("venueFocus"));
@@ -305,7 +305,7 @@ void VenueMenu::fill(QMenu *menu, Doc *doc, QWidget *parent)
                                              : tr("Run the focus calls for %1, group by group to each point")
                                                    .arg(active));
 
-    QAction *report = menu->addAction(tr("Focus report\342\200\246"), parent, [doc, parent]() {
+    QAction *report = menu->addAction(tr("Focus Report…"), parent, [doc, parent]() {
         FocusCallsDialog::exportAppliedReport(doc, parent);
     });
     report->setObjectName(QStringLiteral("venueReport"));

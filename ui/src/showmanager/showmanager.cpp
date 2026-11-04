@@ -502,9 +502,9 @@ void ShowManager::initToolbar()
                           "playhead parks. Content past it is not played."));
     m_lengthButton->setPopupMode(QToolButton::InstantPopup);
     QMenu *lenMenu = new QMenu(m_lengthButton);
-    QAction *lenSet = lenMenu->addAction(tr("Set length…"));
-    QAction *lenFit = lenMenu->addAction(tr("Fit to content (auto)"));
-    QAction *lenCur = lenMenu->addAction(tr("End at current playhead"));
+    QAction *lenSet = lenMenu->addAction(tr("Set Length…"));
+    QAction *lenFit = lenMenu->addAction(tr("Fit to Content (auto)"));
+    QAction *lenCur = lenMenu->addAction(tr("End at Current Playhead"));
     connect(lenSet, &QAction::triggered, this, [this]() {
         if (m_show == NULL)
             return;
@@ -598,8 +598,8 @@ void ShowManager::initToolbar()
     tcOffBtn->setPopupMode(QToolButton::InstantPopup);
     QMenu *tcMenu = new QMenu(tcOffBtn);
     QAction *tcHour = tcMenu->addAction(tr("Timeline 0 = 01:00:00:00 (Logic default)"));
-    QAction *tcNow  = tcMenu->addAction(tr("Timeline 0 = current timecode"));
-    QAction *tcZero = tcMenu->addAction(tr("No offset (timeline 0 = 00:00:00:00)"));
+    QAction *tcNow  = tcMenu->addAction(tr("Timeline 0 = Current Timecode"));
+    QAction *tcZero = tcMenu->addAction(tr("No Offset (timeline 0 = 00:00:00:00)"));
     connect(tcHour, &QAction::triggered, this, [this]() {
         if (m_show) { m_show->setTimecodeOffset(3600000); m_doc->setModified(); } });
     connect(tcNow, &QAction::triggered, this, [this]() {

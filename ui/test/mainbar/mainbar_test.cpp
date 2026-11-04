@@ -827,7 +827,7 @@ void MainBar_Test::fadeOneSecondAndStopFadesTheLightOut()
     QVERIFY(menu != nullptr);
     QAction *fade1 = nullptr;
     for (QAction *a : menu->actions())
-        if (a->text() == QStringLiteral("Fade 1 second and stop"))
+        if (a->text() == QStringLiteral("Fade 1 Second and Stop"))
             fade1 = a;
     QVERIFY(fade1 != nullptr);
     QCOMPARE(fade1->data().toInt(), 1000);

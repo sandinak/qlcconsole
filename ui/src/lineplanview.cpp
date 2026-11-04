@@ -240,7 +240,7 @@ void LinePlanView::contextMenuEvent(QContextMenuEvent *event)
     if (!m_poppable)
         return;
     QMenu menu(this);
-    QAction *open = menu.addAction(tr("Open in a window"));
+    QAction *open = menu.addAction(tr("Open in a Window"));
     if (menu.exec(event->globalPos()) == open)
         emit popOutRequested();
 }

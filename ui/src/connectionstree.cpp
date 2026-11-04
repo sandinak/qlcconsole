@@ -2398,7 +2398,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         QList<quint32> selLines;
         const QList<quint32> selUnis = selectedUniverses(selPlug, selLines);
         if (selUnis.count() > 1 && pluginSupportsTargetsIn(m_doc, selPlug))
-            m_pluralRetarget = menu.addAction(tr("Retarget %1 selected universes…")
+            m_pluralRetarget = menu.addAction(tr("Retarget %1 Selected Universes…")
                                                   .arg(selUnis.count()));
     }
     /* The transmit mode of every selected Art-Net or sACN universe at once
@@ -2419,7 +2419,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         }
         if (targets || sacn)
         {
-            QMenu *modes = menu.addMenu(tr("Transmit mode of %1 selected universes")
+            QMenu *modes = menu.addMenu(tr("Transmit Mode of %1 Selected Universes")
                                             .arg(m_pluralUniverses.count()));
             QStringList names;
             if (targets)
@@ -2442,9 +2442,9 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
        what got right-clicked, so they read as generic, root-level actions
        rather than something this particular row can do. Built here but not
        ADDED to the menu until appendUniversalMenuActions() runs, right
-       before whichever exec() below actually fires -- so the menu reads
-       top-down by hierarchy: what this exact row offers first, the generic
-       stuff last, instead of the other way round. */
+       before whichever exec() below actually fires, which puts them on top
+       (the right-click canon: the place and the view first, then the row's
+       own items with Delete last). */
     QAction *collapseAll = NULL;
     QAction *expandAll = NULL;
     QAction *addUniv = NULL;
@@ -2498,7 +2498,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         QMap<QAction *, QLCIOPlugin *> actionToPlugin;
         if (protoByDisplayName.isEmpty() == false)
         {
-            addProtoMenu = menu.addMenu(tr("Add a protocol"));
+            addProtoMenu = menu.addMenu(tr("Add a Protocol"));
             for (QMap<QString, QLCIOPlugin *>::const_iterator it = protoByDisplayName.constBegin();
                  it != protoByDisplayName.constEnd(); ++it)
                 actionToPlugin.insert(addProtoMenu->addAction(it.key()), it.value());
@@ -2543,7 +2543,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         const bool canInHere = (p != NULL)
             && (p->capabilities() & QLCIOPlugin::Input) && p->inputs().isEmpty() == false;
         QAction *addIface = (canOutHere || canInHere)
-            ? menu.addAction(tr("Add an interface…")) : NULL;
+            ? menu.addAction(tr("Add an Interface…")) : NULL;
 
         /* "Create a connection, then patch a universe to it separately" --
            the same thing "Add a target on this interface…" already does,
@@ -2556,7 +2556,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            only: a DMX-USB/MIDI line has no target to declare, the line
            itself IS the destination. */
         QAction *addTgtHere = (canOutHere && p != NULL && p->supportsOutputTargets())
-            ? menu.addAction(tr("Add a target…")) : NULL;
+            ? menu.addAction(tr("Add a Target…")) : NULL;
 
         /* Superseded by per-row CRUD everywhere below: this dialog is a
            second, differently-shaped editor for the exact same target IP /
@@ -2592,7 +2592,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         InputOutputMap *iom = m_doc->inputOutputMap();
         const bool manual = (iom != NULL && iom->isManualTarget(addr));
 
-        QAction *ren = menu.addAction(tr("Name this target…"));
+        QAction *ren = menu.addAction(tr("Rename Target…"));
         /* Network settings of a discovered device (an Art-Net node's IP) --
            the plugin owns the dialog and its confirmation. */
         QTreeWidgetItem *lineItem = item->parent();
@@ -2600,18 +2600,18 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             ? m_doc->ioPluginCache()->plugin(lineItem->data(COL_NAME, ROLE_PLUGIN).toString())
             : NULL;
         QAction *setIp = (devPlugin != NULL && devPlugin->canConfigureDevice(addr))
-            ? menu.addAction(tr("Set node IP address…")) : NULL;
+            ? menu.addAction(tr("Set Node IP Address…")) : NULL;
         /* Ports can only be added to a target we invented. A discovered node
            reports its own ports in every ArtPollReply, so a hand-added port
            there would be overwritten within seconds -- offering it would be
            offering something that cannot stick. */
         QAction *addPort = manual
-            ? menu.addAction(tr("Add a port…")) : NULL;
+            ? menu.addAction(tr("Add a Port…")) : NULL;
         QAction *forget = NULL;
         if (manual)
         {
             menu.addSeparator();
-            forget = menu.addAction(tr("Forget this target…"));
+            forget = menu.addAction(tr("Delete Target…"));
         }
 
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
@@ -2644,13 +2644,13 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         if (uniVar.isValid())
         {
             const quint32 uni = uniVar.toUInt();
-            QAction *ren = menu.addAction(tr("Rename universe…"));
+            QAction *ren = menu.addAction(tr("Rename Universe…"));
             QAction *retgt = (item->data(COL_NAME, ROLE_OUTPUT).toBool()
                               && pluginSupportsTargetsIn(m_doc, plugin))
                 ? menu.addAction(UniversePatcher::retargetText(plugin)) : NULL;
-            QAction *unp = menu.addAction(tr("Unpatch from this interface"));
+            QAction *unp = menu.addAction(tr("Unpatch from This Interface"));
             menu.addSeparator();
-            QAction *del = menu.addAction(tr("Delete universe entirely…"));
+            QAction *del = menu.addAction(tr("Delete Universe…"));
             appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
             QAction *c = menu.exec(m_tree->viewport()->mapToGlobal(pos));
             if (handleUniversalMenuAction(c, item, collapseAll, expandAll, addUniv, delUniv))
@@ -2670,12 +2670,12 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         InputOutputMap *iom = m_doc->inputOutputMap();
         const bool manual = (iom != NULL && iom->isManualTarget(addr));
 
-        QAction *p = menu.addAction(tr("Patch a universe to this port…"));
+        QAction *p = menu.addAction(tr("Patch a Universe to This Port…"));
         QAction *rmPort = NULL;
         if (manual)
         {
             menu.addSeparator();
-            rmPort = menu.addAction(tr("Remove this port"));
+            rmPort = menu.addAction(tr("Delete Port"));
         }
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *pick2 = menu.exec(m_tree->viewport()->mapToGlobal(pos));
@@ -2730,7 +2730,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            answer where nothing would ever read it. */
         const bool targets = canOut && p->supportsOutputTargets();
 
-        QAction *nameLine = menu.addAction(tr("Name this interface…"));
+        QAction *nameLine = menu.addAction(tr("Rename Interface…"));
 
         /* This level is interface CRUD only, scoped to targets -- a target
            is the thing that hangs off an interface, same as a universe hangs
@@ -2742,13 +2742,13 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            further down) keeps patching here instead, since for those
            this IS the bottom of the hierarchy. */
         QAction *addTgt = targets
-            ? menu.addAction(tr("Add a target on this interface…")) : NULL;
+            ? menu.addAction(tr("Add a Target on This Interface…")) : NULL;
         QAction *addTgtLib = targets
-            ? menu.addAction(tr("Add a target from device library…")) : NULL;
+            ? menu.addAction(tr("Add a Target from Device Library…")) : NULL;
         QAction *pOut = (canOut && targets == false)
-            ? menu.addAction(tr("Patch a universe here (output)…")) : NULL;
+            ? menu.addAction(tr("Patch a Universe Here (output)…")) : NULL;
         QAction *pIn = (canIn && targets == false)
-            ? menu.addAction(tr("Patch a universe here (input)…")) : NULL;
+            ? menu.addAction(tr("Patch a Universe Here (input)…")) : NULL;
 
         /* "This got bound to lo0 by mistake, move every universe on it to
            the real NIC" used to mean re-patching each affected universe by
@@ -2761,7 +2761,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            once. */
         const QList<quint32> boundHere = canOut ? universesOn(plugin, line, true) : QList<quint32>();
         QAction *reroute = boundHere.isEmpty() == false
-            ? menu.addAction(tr("Reroute %1 universe%2 to a different interface…")
+            ? menu.addAction(tr("Reroute %1 Universe%2 to Another Interface…")
                                  .arg(boundHere.count())
                                  .arg(boundHere.count() == 1 ? QString() : QString("s")))
             : NULL;
@@ -2777,7 +2777,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         const bool idle = boundHere.isEmpty()
             && (canIn == false || universesOn(plugin, line, false).isEmpty());
         QAction *unpin = (isPinned && idle)
-            ? menu.addAction(tr("Stop showing this interface")) : NULL;
+            ? menu.addAction(tr("Stop Showing This Interface")) : NULL;
 
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
@@ -2813,12 +2813,12 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            port. Same destination as patching from a port row, just reached
            by starting from the universe instead of from the wire. */
         const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
-        QAction *patchTo = menu.addAction(tr("Edit connection…"));
+        QAction *patchTo = menu.addAction(tr("Edit Connection…"));
         menu.setDefaultAction(patchTo);
         menu.addSeparator();
-        QAction *ren = menu.addAction(tr("Rename universe…"));
+        QAction *ren = menu.addAction(tr("Rename Universe…"));
         menu.addSeparator();
-        QAction *del = menu.addAction(tr("Delete universe entirely…"));
+        QAction *del = menu.addAction(tr("Delete Universe…"));
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
@@ -2838,18 +2838,18 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
         const int index = item->data(COL_NAME, ROLE_LINE).toInt();
         const QList<Universe::InputSlotDevice> devs = iom->inputSlot(uni);
-        QAction *up = menu.addAction(tr("Move up (preferred)"));
+        QAction *up = menu.addAction(tr("Move Up (preferred)"));
         up->setEnabled(index > 0);
-        QAction *down = menu.addAction(tr("Move down"));
+        QAction *down = menu.addAction(tr("Move Down"));
         down->setEnabled(index + 1 < devs.count());
         bool hasAny = false;
         foreach (const Universe::InputSlotDevice &d, devs)
             hasAny = hasAny || d.anyGamepad;
         QAction *any = NULL;
         if (hasAny == false)
-            any = menu.addAction(tr("Also take any game controller (last)"));
+            any = menu.addAction(tr("Also Take Any Game Controller (last)"));
         menu.addSeparator();
-        QAction *remove = menu.addAction(tr("Remove from universe %1").arg(uni + 1));
+        QAction *remove = menu.addAction(tr("Remove from Universe %1").arg(uni + 1));
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
@@ -2883,13 +2883,13 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
         /* Patch it to an interface that IS here: the connection window,
            which says what it is waiting for and replaces it. */
-        QAction *editConn = menu.addAction(tr("Edit connection…"));
+        QAction *editConn = menu.addAction(tr("Edit Connection…"));
         menu.addSeparator();
-        QAction *ren = menu.addAction(tr("Rename universe…"));
+        QAction *ren = menu.addAction(tr("Rename Universe…"));
         menu.addSeparator();
-        QAction *forget = menu.addAction(tr("Forget this patch (unpatch)…"));
+        QAction *forget = menu.addAction(tr("Unpatch…"));
         menu.addSeparator();
-        QAction *del = menu.addAction(tr("Delete universe entirely…"));
+        QAction *del = menu.addAction(tr("Delete Universe…"));
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
@@ -2915,16 +2915,16 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            priority...), the universe's input, profile, feedback and
            passthrough -- is one window, filled in: "Edit connection…". It
            used to be a dozen entries here, each its own small dialog. */
-        QAction *editConn = menu.addAction(tr("Edit connection…"));
+        QAction *editConn = menu.addAction(tr("Edit Connection…"));
         menu.setDefaultAction(editConn);
         menu.addSeparator();
-        QAction *ren = menu.addAction(tr("Rename universe…"));
+        QAction *ren = menu.addAction(tr("Rename Universe…"));
         /* Wording matters here: a universe can be patched to several lines, so
            removing it from THIS one must not read as deleting the universe.
            Conflating the two would quietly destroy a fan-out. */
-        QAction *unp = menu.addAction(tr("Unpatch from this interface"));
+        QAction *unp = menu.addAction(tr("Unpatch from This Interface"));
         menu.addSeparator();
-        QAction *del = menu.addAction(tr("Delete universe entirely…"));
+        QAction *del = menu.addAction(tr("Delete Universe…"));
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
@@ -3318,17 +3318,19 @@ void ConnectionsTree::appendUniversalMenuActions(QMenu &menu, QTreeWidgetItem *i
     // handleUniversalMenuAction() and don't need their own special case.
     Q_UNUSED(delUniv)
 
-    if (menu.isEmpty() == false)
-        menu.addSeparator();
+    /* The right-click canon (docs/design/CONTEXT_MENUS.md): what this place
+       offers and the list's own view go on top, then the row's own items,
+       with its Delete last. These are put in front of what the row added. */
+    QList<QAction *> top;
 
     /* Deep branches are quick to open and tedious to close one triangle at a
        time, and the plugin and device rows had no menu at all -- so the rows
        most worth collapsing were the ones you could not act on. */
     if (item->childCount() > 0)
     {
-        collapseAll = menu.addAction(tr("Collapse everything below"));
-        expandAll = menu.addAction(tr("Expand everything below"));
-        menu.addSeparator();
+        collapseAll = new QAction(tr("Collapse All Below"), &menu);
+        expandAll = new QAction(tr("Expand All Below"), &menu);
+        top << collapseAll << expandAll;
     }
 
     /* Add Universe, on EVERY row, not just empty space -- empty space was
@@ -3338,18 +3340,23 @@ void ConnectionsTree::appendUniversalMenuActions(QMenu &menu, QTreeWidgetItem *i
        It reads fine anywhere because it does not reference anything
        specific to the row it is on.
 
-       Delete Universe is deliberately NOT offered here, unlike the
-       original version of this function -- "Delete Universe 'X'…" showing
-       up on an ArtNet row, or any row unrelated to universe X, read as if
-       deleting it were somehow an ArtNet action, when it silently deletes
-       whichever universe happens to be LAST regardless of what was
-       clicked. It already has real, contextual homes: right-click that
-       exact universe's own row (KIND_UNIVERSE/UNPATCHED/PENDING all offer
-       "Delete universe entirely…" already), or empty space, which still
-       offers both Add and Delete together for when there is truly nothing
-       else to click. @p delUniv stays NULL from here; kept as a parameter
-       so callers do not need their own special case for it. */
-    addUniv = menu.addAction(QIcon(":/edit_add.png"), tr("Add Universe"));
+       Delete Universe is deliberately NOT offered here: "Delete Universe
+       'X'…" on an ArtNet row read as if deleting it were an ArtNet action.
+       It has real, contextual homes: the universe's own row (KIND_UNIVERSE/
+       UNPATCHED/PENDING offer "Delete Universe…", last), or empty space,
+       which offers Add and Delete together. @p delUniv stays NULL here. */
+    addUniv = new QAction(QIcon(":/edit_add.png"), tr("Add Universe"), &menu);
+    top << addUniv;
+
+    QAction *before = menu.actions().isEmpty() ? nullptr : menu.actions().first();
+    for (QAction *a : top)
+    {
+        if (a == addUniv && top.size() > 1)
+            menu.insertSeparator(before);
+        menu.insertAction(before, a);
+    }
+    if (before != nullptr)
+        menu.insertSeparator(before);
 }
 
 void ConnectionsTree::rerouteLine(const QString &pluginName, quint32 oldLine,

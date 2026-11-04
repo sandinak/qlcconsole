@@ -583,8 +583,8 @@ void ProgrammingOutline::addSceneRows(QTreeWidgetItem *sceneItem, Scene *scene)
 QString ProgrammingOutline::focusThisText() const
 {
     // A Show Tree cue on the Workbench is a cue; anything from Build, a look.
-    return m_stack != nullptr && m_stack->inherits("TreeCueStack") ? tr("Focus this cue\342\200\246")
-                                                                   : tr("Focus this look\342\200\246");
+    return m_stack != nullptr && m_stack->inherits("TreeCueStack") ? tr("Focus This Cue…")
+                                                                   : tr("Focus This Look…");
 }
 
 void ProgrammingOutline::setStack(WorkbenchStack *stack)
