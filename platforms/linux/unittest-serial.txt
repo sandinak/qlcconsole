@@ -29,3 +29,9 @@ ui/test/monkey
 # and several cases run in a child process. Under load the waits miss and the
 # WebSocket connects flake; it measures wall-clock time, so it runs alone.
 webaccess/test
+
+# The live frame rate follows what a frame costs on the wall clock
+# (theRateRecoversAfterABurst times its own repaints for its limit); on val,
+# next to a gate's other tests, six "cheap" frames settled at 127 ms between
+# frames where a quiet Mac gets 40.
+ui/test/renderperf
