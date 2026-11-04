@@ -30897,10 +30897,15 @@ void Monitor_Test::aRightClickActsOnTheWholeSelection()
         menuFor(menu, "truss", trussId);
         QAction *to = nullptr;
         foreach (QAction *a, menu.actions())
-            if (a->menu() != nullptr && a->text() == QStringLiteral("Move to Layer"))
-                foreach (QAction *l, a->menu()->actions())
-                    if (l->text() == QStringLiteral("Elsewhere"))
-                        to = l;
+        {
+            if (a->menu() == nullptr || a->text() != QStringLiteral("Move to Layer"))
+                continue;
+            foreach (QAction *l, a->menu()->actions())
+            {
+                if (l->text() == QStringLiteral("Elsewhere"))
+                    to = l;
+            }
+        }
         QVERIFY(to != nullptr);
         to->trigger();
     }
