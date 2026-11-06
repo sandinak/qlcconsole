@@ -3944,7 +3944,7 @@ void Monitor_Test::studioEditorDialogDragDoesNotCrash()
     QVERIFY2(m_doc->fixture(fid) != nullptr, "the fixture must still be alive");
 
     // slotEditTruss() blocks in exec(); drive the drag from inside that loop.
-    QTimer::singleShot(0, mon, [mon, fid]() {
+    QTimer::singleShot(0, mon, [fid]() {
         StructureStudioView *view = nullptr;
         QDialog *found = nullptr;
         foreach (QWidget *w, QApplication::topLevelWidgets())

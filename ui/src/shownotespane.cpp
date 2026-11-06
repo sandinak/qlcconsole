@@ -90,7 +90,7 @@ ShowNotesPane::ShowNotesPane(Doc *doc, QWidget *parent)
     head->addWidget(m_title, 1);
     m_all = new QToolButton(this);
     m_all->setObjectName(QStringLiteral("stNotesAll"));
-    m_all->setText(tr("All notes…"));
+    m_all->setText(tr("All Notes…"));
     m_all->setAutoRaise(true);
     m_all->setToolTip(tr("Every note in the show, to filter, jump to, print or export after rehearsal"));
     connect(m_all, &QToolButton::clicked, this, &ShowNotesPane::allNotesRequested);

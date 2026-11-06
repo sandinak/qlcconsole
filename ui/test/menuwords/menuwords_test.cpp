@@ -74,11 +74,11 @@ const QRegularExpression &trRe()
     return re;
 }
 
-QList<QPair<QString, QStringList>> sources()
+QList<QPair<QString, QStringList>> sources(const QStringList &filters = { QStringLiteral("*.cpp") })
 {
     QList<QPair<QString, QStringList>> out;
     const QString root = QStringLiteral(UI_SRC_DIR);
-    QDirIterator it(root, { QStringLiteral("*.cpp") }, QDir::Files, QDirIterator::Subdirectories);
+    QDirIterator it(root, filters, QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext())
     {
         const QString path = it.next();
@@ -138,12 +138,35 @@ QList<Label> menuLabels()
 
 /* Every text given to a push or tool button in code in ui/src: a new
    QPushButton(tr("…")) or QToolButton, the button factories' (dropDown(),
-   tool(), button(), makeButton()) and setText(tr("…")) on a variable named
-   ...Btn / ...Button / ...btn. The stock .ui files are not read: they are
+   tool(), button(), makeButton()) and setText(tr("…"))
+   on a variable named ...Btn / ...Button / ...btn, or declared anywhere in
+   ui/src as a QPushButton / QToolButton / QAbstractButton, whatever its
+   name. (addButton() texts of dialog boxes are not read: they are answers,
+   "Not now", "Apply anyway", in sentence case on purpose.) The stock .ui files are not read: they are
    QLC+'s untouched dialogs (docs/dev/UPSTREAM.md takes upstream's .ui as
    they are), so their words stay upstream's until a dialog is reworked here. */
 QList<Label> buttonLabels()
 {
+    /* The variables declared as a push, tool or abstract button anywhere in
+       ui/src (headers too), whatever they are called: setText(tr("…")) on
+       one of them is a button text. */
+    QSet<QString> names;
+    static const QRegularExpression decl(QStringLiteral(
+        "\\bQ(?:PushButton|ToolButton|AbstractButton)\\s*\\*\\s*(\\w+)|"
+        "\\bauto\\s*\\*?\\s*(\\w+)\\s*=\\s*new Q(?:PushButton|ToolButton)\\b"));
+    for (const auto &src : sources({ QStringLiteral("*.cpp"), QStringLiteral("*.h") }))
+        for (const QString &l : src.second)
+        {
+            QRegularExpressionMatchIterator d = decl.globalMatch(l);
+            while (d.hasNext())
+            {
+                const QRegularExpressionMatch m = d.next();
+                names.insert(m.captured(1).isEmpty() ? m.captured(2) : m.captured(1));
+            }
+        }
+    names.remove(QString());
+    const QRegularExpression byName(QStringLiteral("\\b(?:%1)(?:->|\\.)setText\\(\\s*tr\\(\"((?:[^\"\\\\]|\\\\.)*)\"")
+                                        .arg(QStringList(names.begin(), names.end()).join(QLatin1Char('|'))));
     static const QRegularExpression call(QStringLiteral(
         "(new (QPushButton|QToolButton)\\(\\s*|\\b(dropDown|tool|button|makeButton)\\(\\s*|"
         "\\b\\w*([bB]tn|[bB]utton)\\w*(->|\\.)setText\\(\\s*)"
@@ -157,6 +180,21 @@ QList<Label> buttonLabels()
             QRegularExpressionMatchIterator t = call.globalMatch(lines.at(i));
             while (t.hasNext())
                 out << Label{ src.first, i + 1, unescape(t.next().captured(6)) };
+            if (!names.isEmpty())
+            {
+                QRegularExpressionMatchIterator n = byName.globalMatch(lines.at(i));
+                while (n.hasNext())
+                {
+                    const QString text = unescape(n.next().captured(1));
+                    // Already read by the pattern above (a ...Btn / ...Button variable)?
+                    bool dup = false;
+                    QRegularExpressionMatchIterator c = call.globalMatch(lines.at(i));
+                    while (c.hasNext() && !dup)
+                        dup = unescape(c.next().captured(6)) == text;
+                    if (!dup)
+                        out << Label{ src.first, i + 1, text };
+                }
+            }
         }
     }
     return out;

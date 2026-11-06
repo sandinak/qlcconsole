@@ -401,6 +401,23 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   zero-then-write inside one frame); a qlcstress run that outlives its
   budget now writes every thread's stack (`<point>.hang-stacks.txt`) before it is killed.
 
+- **Compiler warnings outside the -Werror set cleared** (clang -Wall -Wextra
+  over engine, ui and the tests): `virtual` dropped from methods of our
+  `final` classes that nothing can override (FadeChannel,
+  InputOutputMap::claimUniverses/releaseUniverses, QLCPhysical,
+  QLCFixtureHead, QLCFixtureMode, VCWidgetProperties, ctkRangeSlider), four
+  missing `override`s and eleven unused lambda captures. No behaviour change.
+- **The ARM char-signedness test runs** — the XY pad's position-to-DMX check
+  in vcxypad_test was commented out; it is a real test now, comparing as
+  uchar so it holds on the Pi (unsigned char) and on x86/Apple (signed).
+- **Six button texts in Title Case**, found by a wider menuwords test that
+  now reads every variable declared as a push or tool button, not only
+  those named ...Btn/...Button: Section Times…, Learn Section Starts, Move
+  the Show's House Fixtures In, Turn Encoder 1…, All Notes…, Start Venue
+  Focus (Cue Runner).
+- **A grey row's Go to names the cue** — right-click a carried-in layer:
+  **Go to 1.1.1 Setup**, the same words as the T column's *Set in 1.1.1
+  Setup*, not just the number.
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections
   (or by a controller slot) now moves the follow spot from the Show Tree,

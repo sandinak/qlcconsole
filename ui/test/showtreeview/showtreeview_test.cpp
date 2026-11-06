@@ -10367,9 +10367,21 @@ void ShowTreeView_Test::releaseAndUntrackOnTheGreyRow()
         QVERIFY(rel != nullptr && un != nullptr && go != nullptr);
         QCOMPARE(rel->text(), QString("Release After This Cue"));
         QCOMPARE(un->text(), QString("Untrack From This Cue"));
-        QCOMPARE(go->text(), QString("Go to 1"));
+        QCOMPARE(go->text(), QString("Go to 1 Verse"));     // the number and the name, as the T tooltip
         QVERIFY(un->isEnabled());
         QVERIFY2(un->toolTip().contains("2 Chorus gets the Release"), qPrintable(un->toolTip()));
+        const QByteArray shotDir = qgetenv("QLC_SHOT_DIR");
+        if (!shotDir.isEmpty())
+        {
+            menu.ensurePolished();
+            menu.adjustSize();
+            menu.grab().save(QString::fromLocal8Bit(shotDir) + "/greyrow-menu-after.png");
+            const QString was = go->text();
+            go->setText(QStringLiteral("Go to 1"));       // the wording before
+            menu.adjustSize();
+            menu.grab().save(QString::fromLocal8Bit(shotDir) + "/greyrow-menu-before.png");
+            go->setText(was);
+        }
         const QList<QAction *> acts = menu.actions();
         QVERIFY(acts.indexOf(rel) < acts.indexOf(un) && acts.indexOf(un) < acts.indexOf(go));
         QVERIFY(acts.indexOf(go) < acts.indexOf(menu.findChild<QAction *>("stBringIntoCue")));

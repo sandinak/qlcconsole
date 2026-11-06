@@ -314,7 +314,7 @@ protected:
     void paintEvent(QPaintEvent *event) override;
 
     /** Override mimeData to provide function IDs for Qt's built-in drag */
-    QMimeData* mimeData(const QList<QTreeWidgetItem*> &items) const
+    QMimeData* mimeData(const QList<QTreeWidgetItem*> &items) const override
         { return buildMimeData(items); }
     QMimeData* mimeData(const QList<QTreeWidgetItem*> items) const
         { return buildMimeData(items); }

@@ -1290,7 +1290,7 @@ void FixtureTreeWidget::updateTree()
     QTreeWidgetItem *clashRoot = NULL;
     QMap<QString, QTreeWidgetItem *> invManuf;    // manufacturer -> folder
     QMap<QString, QTreeWidgetItem *> invModel;    // manufacturer\x1fmodel -> folder
-    auto newInventoryFolder = [this](QTreeWidgetItem *parent, const QString &name) {
+    auto newInventoryFolder = [](QTreeWidgetItem *parent, const QString &name) {
         QTreeWidgetItem *f = new QTreeWidgetItem(parent);
         f->setText(KColumnName, name);
         f->setIcon(KColumnName, QIcon(":/folder.png"));

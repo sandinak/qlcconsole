@@ -8359,9 +8359,9 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
                 if (const CueList *sl = m_st->listOfCue(span.setIn))
                 {
                     const quint32 origin = span.setIn;
-                    menu.add(ContextMenu::Place, tr("Go to %1").arg(m_st->cueNumber(*sl, sl->indexOf(origin))),
+                    menu.add(ContextMenu::Place, tr("Go to %1").arg(m_st->cueLabel(*sl, sl->indexOf(origin))),
                              [this, origin]() { selectNode(origin); }, QStringLiteral("stGoToOrigin"))
-                        ->setToolTip(tr("The cue that sets this layer: %1").arg(m_st->cueLabel(*sl, sl->indexOf(origin))));
+                        ->setToolTip(tr("The cue that sets this layer"));
                 }
         }
     }
@@ -9994,7 +9994,7 @@ void ShowTreeView::reloadLibrary()
         add(pinned, p.first, p.second);
     QTreeWidgetItem *all = section(tr("All"), 2);
 
-    auto folder = [this](QTreeWidgetItem *parent, const QString &name) {
+    auto folder = [](QTreeWidgetItem *parent, const QString &name) {
         QTreeWidgetItem *f = new QTreeWidgetItem(parent);
         f->setText(0, name);
         f->setData(0, KindRole, LibFolder);
@@ -10487,7 +10487,7 @@ void ShowTreeView::buildLibraryPalettes(QTreeWidgetItem *all,
 
     // Nested folder rows under @a parent for @a paths (their parents too),
     // first: folders before palettes.
-    auto makeFolders = [this](QTreeWidgetItem *parent, const QString &scope, const QStringList &paths) {
+    auto makeFolders = [](QTreeWidgetItem *parent, const QString &scope, const QStringList &paths) {
         QStringList withParents;
         for (const QString &path : paths)
         {

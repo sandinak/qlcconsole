@@ -265,7 +265,7 @@ void VenueRigDialog::refresh()
     }
     m_house->setText(houseText);
     const int showHouse = applied ? int(vc->rig()->showHouseFixtures().size()) : 0;
-    m_moveIn->setText(tr("Move the show's house fixtures in (%1)").arg(showHouse));
+    m_moveIn->setText(tr("Move the Show's House Fixtures In (%1)").arg(showHouse));
     m_moveIn->setVisible(applied && showHouse > 0);
 
     // The slots.

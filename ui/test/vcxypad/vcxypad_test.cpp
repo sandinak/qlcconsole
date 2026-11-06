@@ -470,18 +470,27 @@ void VCXYPad_Test::modeChange()
     QVERIFY(pad->fixtures()[0].m_yMSB != QLCChannel::invalid());
     QCOMPARE(m_doc->masterTimer()->m_dmxSourceList.size(), 1);
     QCOMPARE(m_doc->masterTimer()->m_dmxSourceList[0], pad);
-/*
-    // FIXME !!
-    pad->m_area->setPosition(QPoint(pad->m_area->width(), pad->m_area->height()));
-    pad->writeDMX(m_doc->masterTimer(), &ua);
-    QCOMPARE(ua.preGMValues()[0], char(255));
-    QCOMPARE(ua.preGMValues()[1], char(255));
+    /* The pad's position reaches the fixture's pan/tilt MSB. Read as uchar:
+       a plain char is unsigned on ARM Linux (the Pi) and signed on x86 and
+       Apple, and 255 or 128 must compare the same on both. */
+    auto msbs = [&]() {
+        m_doc->masterTimer()->timerTick();
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        pad->writeDMX(m_doc->masterTimer(), ua);
+        ua.first()->processFaders();
+        const QByteArray v = ua.first()->preGMValues();
+        const int x = int(fxi->address()) + int(pad->fixtures()[0].m_xMSB);
+        const int y = int(fxi->address()) + int(pad->fixtures()[0].m_yMSB);
+        const QPair<uchar, uchar> out(uchar(v.at(x)), uchar(v.at(y)));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return out;
+    };
 
-    pad->m_area->setPosition(QPoint(pad->m_area->width() / 2, pad->m_area->height() / 4));
-    pad->writeDMX(m_doc->masterTimer(), &ua);
-    QCOMPARE(ua.preGMValues()[0], char(128));
-    QCOMPARE(ua.preGMValues()[1], char(64));
-*/
+    pad->m_area->setPosition(QPointF(256, 256));
+    QCOMPARE(msbs(), qMakePair(uchar(255), uchar(255)));
+
+    pad->m_area->setPosition(QPointF(128, 64));
+    QCOMPARE(msbs(), qMakePair(uchar(128), uchar(64)));
     m_doc->setMode(Doc::Design);
     QCOMPARE(pad->fixtures()[0].m_xMSB, QLCChannel::invalid());
     QCOMPARE(pad->fixtures()[0].m_yMSB, QLCChannel::invalid());
