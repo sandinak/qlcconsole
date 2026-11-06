@@ -12,7 +12,7 @@ SHELL := /bin/bash
 DEV_APP ?= $(HOME)/Applications/qlcconsole-dev.app
 export DEV_APP
 
-.PHONY: help test run check quick pool pool-status perf perf-record perf-history-commit translations dmg release-check beta release attach publish
+.PHONY: help test run check quick pool pool-status ux-walk perf perf-record perf-history-commit translations dmg release-check beta release attach publish
 
 help:
 	@v=$$(cat VERSION); \
@@ -35,6 +35,10 @@ help:
 	echo "  make pool       The full gate of a committed REV (default HEAD) on whichever Mac"; \
 	echo "                  of platforms/macos/gate-hosts.conf is idle (HOST=name to pick);"; \
 	echo "                  ends with gate=N host=... qt=... rev=...  make pool-status: who's free."; \
+	echo "  make ux-walk [SHOW=a.qlcc] [UNITS=feet|mm|feet,mm] [OUT=dir] [HOSTS=brm,dink|auto] [NOLOCAL=1]"; \
+	echo "                  The UX walker (docs/dev/UX_WALKER.md): every tab, menu, dialog and"; \
+	echo "                  right-click of real shows, offscreen, recorded and checked against"; \
+	echo "                  docs/dev/ux_rules.json; OUT/report.html. Report-only, not the gate."; \
 	echo "  make perf       The performance guard (tools/perf/guard.py, ~9 min): a Release engine"; \
 	echo "                  (build-perf/) under the stress harness at fixed loads + the hot-path"; \
 	echo "                  CPU costs, against this machine's baseline in docs/perf-data/;"; \
@@ -95,6 +99,19 @@ pool:
 
 pool-status:
 	@platforms/macos/gate-pool.sh --status
+
+# The UX walker (docs/dev/UX_WALKER.md). Opt-in, never in the gate.
+UNITS ?= feet,mm
+OUT ?= uxwalk-out
+UXWALK_SHOWS ?= $(or $(wildcard test-workspaces/DanceHysteria-0.6.qlcc test-workspaces/Office.qlcc),docs/course/shows/lesson-3-9-finish.qlcc)
+UXWALK_JOBS ?= $(shell sysctl -n hw.perflevel0.logicalcpu 2>/dev/null || nproc 2>/dev/null || echo 4)
+ux-walk:
+	@set -e; if [ -z "$(NOLOCAL)" ]; then \
+	    cmake -S . -B build-uxwalk -DQLC_UXWALK=ON $(UXWALK_CMAKE) > /dev/null; \
+	    nice cmake --build build-uxwalk -j$(UXWALK_JOBS) --target uxwalk; \
+	fi; \
+	python3 tools/uxwalk/run.py $(foreach s,$(or $(SHOW),$(UXWALK_SHOWS)),--show $(s)) --units $(UNITS) \
+	    --out $(OUT) $(if $(HOSTS),--hosts $(HOSTS)) $(if $(NOLOCAL),--no-local) $(if $(REV),--rev $(REV))
 
 perf:
 	python3 tools/perf/guard.py $(if $(HOST_CLASS),--host-class $(HOST_CLASS)) $(PERF_ARGS)
