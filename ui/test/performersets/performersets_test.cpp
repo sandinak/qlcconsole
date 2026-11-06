@@ -112,6 +112,8 @@ void PerformerSets_Test::theSetSharesItsLook()
 
 void PerformerSets_Test::oneDialogChangesTheWholeSet()
 {
+    // The fields' numbers are metres when Settings > Units is metric.
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
     Doc doc(this);
     MonitorProperties *props = doc.monitorProperties();
     QWidget parent;
