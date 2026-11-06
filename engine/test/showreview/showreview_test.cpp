@@ -145,6 +145,8 @@ bool loadFunctionXml(Doc *doc, const QString &xml)
 void ShowReview_Test::init()
 {
     m_doc = new Doc(this);
+    // The checks' texts are written for metres; lengths follow Settings > Units.
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
 }
 
 void ShowReview_Test::cleanup()
@@ -557,7 +559,7 @@ void ShowReview_Test::fix15()
     QCOMPARE(f.severity, ReviewFinding::Warning);
     QCOMPARE(f.targets, QStringList() << QStringLiteral("fx:%1").arg(ust->id()));
     QVERIFY2(f.message.startsWith(QStringLiteral("UST-2 is inside Deck SR")), qPrintable(f.message));
-    QVERIFY2(f.message.contains(QStringLiteral("Sit it on Deck SR (0.61 m)")), qPrintable(f.message));
+    QVERIFY2(f.message.contains(QStringLiteral("Sit it on Deck SR (0.6 m)")), qPrintable(f.message));
     QCOMPARE(f.jump, QStringLiteral("status:fixtures.buried"));
     QCOMPARE(ShowReview::footerCheckId(QStringLiteral("fixtures.buried")), QStringLiteral("FIX-15"));
 
@@ -686,9 +688,9 @@ void ShowReview_Test::fix16()
     const ReviewFinding f = all.first();
     QCOMPARE(f.severity, ReviewFinding::Warning);
     QCOMPARE(f.targets, QStringList() << QStringLiteral("fx:%1").arg(ust2->id()));
-    QVERIFY2(f.message.startsWith(QStringLiteral("UST-2 is on the floor; UST-1, UST-3…UST-8 are on Deck USP1 (0.61 m)")),
+    QVERIFY2(f.message.startsWith(QStringLiteral("UST-2 is on the floor; UST-1, UST-3…UST-8 are on Deck USP1 (0.6 m)")),
              qPrintable(f.message));
-    QVERIFY2(f.message.contains(QStringLiteral("Sit it on Deck USP1 (0.61 m)")), qPrintable(f.message));
+    QVERIFY2(f.message.contains(QStringLiteral("Sit it on Deck USP1 (0.6 m)")), qPrintable(f.message));
     QCOMPARE(f.jump, QStringLiteral("status:fixtures.offrow"));
     QCOMPARE(ShowReview::footerCheckId(QStringLiteral("fixtures.offrow")), QStringLiteral("FIX-16"));
 

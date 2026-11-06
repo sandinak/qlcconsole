@@ -1113,6 +1113,7 @@ void Monitor_Test::stagePiecePositionsFollowTheShowsUnit()
     Monitor mon(&parent, doc);
     // Then the show turns out to be in feet (Settings > Units on load).
     props->convertGridUnits(MonitorProperties::Feet);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
     StagePlatform *deck = props->addPlatform();
     deck->setOriginX(0.3048f); deck->setOriginY(0.3048f);
     deck->setWidth(30.0f * 0.3048f); deck->setDepth(20.0f * 0.3048f);   // front at 21'
@@ -1663,8 +1664,8 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         QLabel *curtainWords = curtainProps.findChild<QLabel *>(QStringLiteral("curtainLineYWords"));
         QVERIFY(numAuto != nullptr && numSpin != nullptr && numWords != nullptr && curtainWords != nullptr);
         QCOMPARE(numSpin->value(), 3.0);                // automatic: on the front, y 8
-        QCOMPARE(numWords->text(), QStringLiteral("3.0 m DS of curtain line"));
-        QCOMPARE(curtainWords->text(), QStringLiteral("3.0 m US of the front of the deck"));
+        QCOMPARE(numWords->text(), QStringLiteral("3 m DS of curtain line"));
+        QCOMPARE(curtainWords->text(), QStringLiteral("3 m US of the front of the deck"));
         numAuto->setChecked(false);
         numSpin->setValue(1.5);
         QCOMPARE(props->numberLineY(), 6.5f);
@@ -1685,7 +1686,7 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         QVERIFY(labels("apron").isEmpty());
         props->setStagePieceVisible(MonitorProperties::ApronPiece, true);
         mon.stageMarksChanged();
-        QCOMPARE(labels("apron"), QStringList() << "Apron 3.0 m");
+        QCOMPARE(labels("apron"), QStringList() << "Apron 3 m");
         QVERIFY(gv->m_apronDeckItem != nullptr);
         QVERIFY(props->apronPlatform() != nullptr);
         QCOMPARE(gv->m_apronDeckItem->platform(), props->apronPlatform());
@@ -1729,7 +1730,7 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         QVERIFY(props->apronPlatform() != nullptr);
         QCOMPARE(stage->depth(), 5.0f);                 // the deck is not touched
         QVERIFY(qAbs(props->downstageEdgeY() - 7.0f) < 1e-4f);
-        QCOMPARE(labels("apron"), QStringList() << "Apron 2.0 m");
+        QCOMPARE(labels("apron"), QStringList() << "Apron 2 m");
         props->setStagePieceVisible(MonitorProperties::ApronPiece, false);
         props->setApronAuto(true);
         mon.stageMarksChanged();
@@ -1855,7 +1856,7 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         fohOver->setType(Truss::Horizontal);
         fohOver->setOrigin(QVector3D(2.0f, 8.0f, 6.0f));
         fohOver->setLength(6.0f);
-        const QString fohLabel = QString::fromUtf8("FOH \u00B7 3.0 m DS of curtain line");
+        const QString fohLabel = QString::fromUtf8("FOH \u00B7 3 m DS of curtain line");
         foreach (StructureStudioView::Plane plane,
                  QList<StructureStudioView::Plane>() << StructureStudioView::Top
                                                      << StructureStudioView::Angled)
@@ -15751,7 +15752,7 @@ void Monitor_Test::addNetworkNodeCancelledAddsNothing()
     driveDialog([](QWidget *dlg) {
         // Feet, as every length is entered: feet and inches.
         QDoubleSpinBox *x = dlg->findChild<QDoubleSpinBox *>();
-        return x != nullptr && x->text().contains('\'');
+        return x != nullptr && (x->text().contains('\'') || x->text().contains('"'));   // 0 reads 0"
     }, false);
     rig.mon->slotAddNetworkNode();
     m_doc->monitorProperties()->setGridUnits(units);
@@ -16376,8 +16377,8 @@ void Monitor_Test::aFixtureCanBeRaisedOntoATowersTopCap()
         QStringList items;
         for (int i = 0; i < pos->count(); ++i)
             items << pos->itemText(i);
-        QCOMPARE(items, QStringList({ "Top (2.44 m)", "Shelf 3 (1.80 m)", "Shelf 2 (1.20 m)",
-                                      "Shelf 1 (0.60 m)", "Bottom" }));
+        QCOMPARE(items, QStringList({ "Top (2.438 m)", "Shelf 3 (1.8 m)", "Shelf 2 (1.2 m)",
+                                      "Shelf 1 (0.6 m)", "Bottom" }));
         QCOMPARE(pos->currentText(), QString("Bottom"));
         pos->setCurrentIndex(0);
         QCOMPARE(props->fixtureRigProps(spot->id()).towerMountSide, int(FixtureRigProps::TowerTop));

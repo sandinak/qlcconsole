@@ -69,7 +69,8 @@ void EditPhysical_Test::inchesTypedInInches()
 
 void EditPhysical_Test::inchesTypedInMillimetres()
 {
-    EditPhysical page(QLCPhysical(), nullptr);   // never set: mm
+    MU::setPreferredLength(MU::Millimetres);
+    EditPhysical page(QLCPhysical(), nullptr);
     page.show();
     QCOMPARE(page.m_widthEdit->unit(), MU::Millimetres);
 
@@ -180,6 +181,7 @@ void EditPhysical_Test::uncommittedText()
 
 void EditPhysical_Test::followsPreference()
 {
+    MU::setPreferredLength(MU::Millimetres);
     EditPhysical page(QLCPhysical(), nullptr);
     page.show();
     QCOMPARE(page.m_widthEdit->unit(), MU::Millimetres);

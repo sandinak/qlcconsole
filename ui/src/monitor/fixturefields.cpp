@@ -975,7 +975,6 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     m_wandLength = new FeetInchesSpinBox(isFeet, parent);
     m_wandLength->setObjectName(QStringLiteral("fixtureWandLength"));
     m_wandLength->setRange(0.1 * toDisp, 5.0 * toDisp);
-    m_wandLength->setDecimals(2);
     form->addRow(tr("Wand length:"), m_wandLength);
 
     m_heldBy = new QComboBox(parent);
@@ -986,7 +985,6 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     m_holdHeight = new FeetInchesSpinBox(isFeet, parent);
     m_holdHeight->setObjectName(QStringLiteral("fixtureHoldHeight"));
     m_holdHeight->setRange(0.0, 3.0 * toDisp);
-    m_holdHeight->setDecimals(2);
     m_holdHeight->setToolTip(tr("How high its middle is held, above where they stand"));
     form->addRow(tr("Held at:"), m_holdHeight);
 

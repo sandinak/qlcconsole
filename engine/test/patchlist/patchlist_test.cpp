@@ -194,6 +194,7 @@ void PatchList_Test::theCsvFollowsThePlotUnits()
     csv = PatchList::build(m_doc).toCsv();
     QVERIFY2(csv.contains(QStringLiteral("X (ft)")) && csv.contains(QStringLiteral(",3.3,6.6,9.8,")),
              qPrintable(csv));
+    MeasurementUnits::setPreferredLength(unitWas);
 }
 
 void PatchList_Test::aGelIsListedOnlyWhenSomeFixtureHasOne()

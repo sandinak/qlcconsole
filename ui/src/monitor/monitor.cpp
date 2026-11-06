@@ -4912,7 +4912,6 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     barOnLbl->setStyleSheet("color:#b0b4c0;");
     inspForm->addRow(tr("Mounted on:"), barOnLbl);
     QDoubleSpinBox *barAlongSpin = new FeetInchesSpinBox(FeetInchesSpinBox::valuesInFeet(), insp);
-    barAlongSpin->setDecimals(2);
     inspForm->addRow(tr("Along truss:"), barAlongSpin);
 
     iv->addLayout(inspForm);
@@ -5771,7 +5770,7 @@ void Monitor::openGroupStudio(quint32 gid)
     QLineEdit *nameEdit = new QLineEdit(g.name, geomW);
     form->addRow(tr("Name:"), nameEdit);
     auto mk = [&](double v) { QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet, geomW);
-        s->setRange(-200, 200); s->setDecimals(2); s->setValue(v * toDisp); return s; };
+        s->setRange(-200, 200); s->setValue(v * toDisp); return s; };
     QDoubleSpinBox *ox = mk(g.origin.x()), *oy = mk(g.origin.y()), *oz = mk(g.origin.z());
     QDoubleSpinBox *rot = new QDoubleSpinBox(geomW);
     rot->setRange(-180, 180); rot->setDecimals(0); rot->setSuffix(QStringLiteral("°")); rot->setValue(double(g.rotation));
@@ -6434,7 +6433,7 @@ void Monitor::slotEditHanger(quint32 hid)
     form->addRow(tr("On:"), new QLabel(on.isEmpty() ? tr("(nothing -- its structure is gone)") : on, &dlg));
     auto mkSpin = [&](double val, double hi) {
         QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
-        sp->setRange(0.0, hi * toDisp); sp->setDecimals(2);
+        sp->setRange(0.0, hi * toDisp);
         sp->setValue(val * toDisp);
         return sp;
     };
@@ -6741,7 +6740,7 @@ void Monitor::slotEditImage(quint32 id)
 
     auto mkSpin = [&](double val, double lo, double hi) {
         QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet);
-        s->setRange(lo, hi); s->setDecimals(2);
+        s->setRange(lo, hi);
         s->setValue(val * toD); return s;
     };
     QDoubleSpinBox *wSpin = mkSpin(img.width,  0.05, 200);
@@ -6871,7 +6870,6 @@ bool Monitor::editNoLightZone(quint32 zoneId)
         QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet, &dlg);
         s->setObjectName(obj);
         s->setRange(lo * toDisp, hi * toDisp);
-        s->setDecimals(2);
         s->setValue(v * toDisp);
         return s;
     };
@@ -6982,12 +6980,12 @@ void Monitor::slotAddNetworkNode()
     const double posRange = isFeet ? 164.0 : 50.0;
 
     QDoubleSpinBox *xSpin = new FeetInchesSpinBox(isFeet, &dlg);
-    xSpin->setRange(-posRange, posRange); xSpin->setDecimals(2);
+    xSpin->setRange(-posRange, posRange);
     xSpin->setValue(pendMm.x() / 1000.0 * toDisp);
     form->addRow(tr("X (stage left):"), xSpin);
 
     QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet, &dlg);
-    ySpin->setRange(-posRange, posRange); ySpin->setDecimals(2);
+    ySpin->setRange(-posRange, posRange);
     ySpin->setValue(pendMm.y() / 1000.0 * toDisp);
     form->addRow(tr("Y (downstage):"), ySpin);
 
@@ -7338,17 +7336,17 @@ void Monitor::slotEditTarget(quint32 tid)
     const double posRange_t = isFeet_t ? 164.0 : 50.0;   // ~50m in feet
 
     QDoubleSpinBox *xSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
-    xSpin->setRange(-posRange_t, posRange_t); xSpin->setDecimals(2);
+    xSpin->setRange(-posRange_t, posRange_t);
     xSpin->setValue(double(t->x()) * toDisp_t);
     form->addRow(tr("X (stage left):"), xSpin);
 
     QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet_t, &dlg);
-    ySpin->setRange(-posRange_t, posRange_t); ySpin->setDecimals(2);
+    ySpin->setRange(-posRange_t, posRange_t);
     ySpin->setValue(double(t->y()) * toDisp_t);
     form->addRow(tr("Y (downstage):"), ySpin);
 
     QDoubleSpinBox *zSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
-    zSpin->setRange(0, isFeet_t ? 65.6 : 20.0); zSpin->setDecimals(2);
+    zSpin->setRange(0, isFeet_t ? 65.6 : 20.0);
     zSpin->setValue(double(t->z()) * toDisp_t);
     zSpin->setToolTip(tr("ABSOLUTE aim height above the stage floor for this "
                          "target (used by Pan/Tilt aim palettes). 0 = floor."));
@@ -7358,7 +7356,7 @@ void Monitor::slotEditTarget(quint32 tid)
     // aims at this height above the platform the subject stands on, OVERRIDING
     // the target Z so the beam tracks the body across risers. Per-workspace.
     QDoubleSpinBox *subjSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
-    subjSpin->setRange(0, isFeet_t ? 32.8 : 10.0); subjSpin->setDecimals(2);
+    subjSpin->setRange(0, isFeet_t ? 32.8 : 10.0);
     subjSpin->setValue(double(m_props->aimSubjectHeight()) * toDisp_t);
     subjSpin->setToolTip(tr("Where a follow spot aims above the platform/deck -- a "
                             "chest, not how tall anyone is (overrides the target Z "
@@ -7395,7 +7393,6 @@ void Monitor::slotEditTarget(quint32 tid)
     QDoubleSpinBox *personSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     personSpin->setObjectName(QStringLiteral("personHeight"));
     personSpin->setRange(0.5 * toDisp_t, 3.0 * toDisp_t);
-    personSpin->setDecimals(2);
     personSpin->setValue(double(t->effectivePersonHeight()) * toDisp_t);
     personSpin->setToolTip(tr("How tall this person is. They are drawn this tall, and "
                               "light is aimed at their chest -- 80% of it."));
@@ -7433,7 +7430,6 @@ void Monitor::slotEditTarget(quint32 tid)
     ovrChk->setChecked(t->hasAimHeightOverride());
     QDoubleSpinBox *ovrSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     ovrSpin->setRange(0, isFeet_t ? 32.8 : 10.0);
-    ovrSpin->setDecimals(2);
     ovrSpin->setValue(double(m_props->targetAimHeight(t, true)) * toDisp_t);
     ovrSpin->setEnabled(ovrChk->isChecked());
     connect(ovrChk, &QCheckBox::toggled, ovrSpin, &QWidget::setEnabled);
@@ -7448,11 +7444,9 @@ void Monitor::slotEditTarget(quint32 tid)
        what lets the view show whether a beam actually COVERS the thing. */
     QDoubleSpinBox *wSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     wSpin->setRange(0, isFeet_t ? 98.0 : 30.0);
-    wSpin->setDecimals(2);
     wSpin->setValue(t->footprint().width() * toDisp_t);
     QDoubleSpinBox *dSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     dSpin->setRange(0, isFeet_t ? 98.0 : 30.0);
-    dSpin->setDecimals(2);
     dSpin->setValue(t->footprint().height() * toDisp_t);
     QHBoxLayout *sizeRow = new QHBoxLayout;
     sizeRow->addWidget(wSpin);
@@ -7537,7 +7531,6 @@ void Monitor::slotEditTarget(quint32 tid)
     QDoubleSpinBox *spreadSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     spreadSpin->setObjectName(QStringLiteral("lineHeightSpread"));
     spreadSpin->setRange(0.0, 0.3 * toDisp_t);
-    spreadSpin->setDecimals(2);
     spreadSpin->setValue(double(t->heightSpread()) * toDisp_t);
     quint32 chosenSeed = t->seed();
     QPushButton *shuffleBtn = new QPushButton(tr("Shuffle"), &dlg);
@@ -7715,7 +7708,7 @@ void Monitor::slotEditStand(quint32 sid)
     form->addRow(tr("Name:"), nameEdit);
     auto mkSpin = [&](double val, double lo, double hi) {
         QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
-        sp->setRange(lo, hi); sp->setDecimals(2);
+        sp->setRange(lo, hi);
         sp->setValue(val * toDisp); return sp;
     };
     QDoubleSpinBox *oxSpin = mkSpin(s->originX(), -posR, posR);
@@ -7912,7 +7905,6 @@ void Monitor::slotAddFountain()
     auto mkSpin = [&](double metres, const char *name, const QString &tip) {
         QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
         sp->setRange(0.01, isFeet ? 33.0 : 10.0);
-        sp->setDecimals(3);
         sp->setValue(metres * toDisp);
         sp->setObjectName(QString::fromLatin1(name));
         sp->setToolTip(tip);
@@ -8093,7 +8085,7 @@ void Monitor::slotEditScenery(quint32 sid)
     form->addRow(tr("Name:"), nameEdit);
     auto mkSpin = [&](double val, double lo, double hi) {
         QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
-        sp->setRange(lo, hi); sp->setDecimals(2);
+        sp->setRange(lo, hi);
         sp->setValue(val * toDisp);
         return sp;
     };
@@ -8475,7 +8467,7 @@ void Monitor::slotEditTower(quint32 tid)
     form->addRow(tr("Name:"), nameEdit);
     auto mkSpin = [&](double val, double lo, double hi) {
         QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
-        sp->setRange(lo, hi); sp->setDecimals(2);
+        sp->setRange(lo, hi);
         sp->setValue(val * toDisp); return sp;
     };
     QDoubleSpinBox *oxSpin = mkSpin(t->originX(), -posR, posR);
@@ -8560,7 +8552,7 @@ void Monitor::slotEditTower(quint32 tid)
 
     QHBoxLayout *shelfBtns = new QHBoxLayout;
     QDoubleSpinBox *newShelf = new FeetInchesSpinBox(isFeet, &dlg);
-    newShelf->setRange(0.0, hMax); newShelf->setDecimals(2);
+    newShelf->setRange(0.0, hMax);
     newShelf->setValue(1.0 * toDisp);
     QPushButton *addShelfBtn = new QPushButton(tr("Add Shelf"), &dlg);
     QPushButton *delShelfBtn = new QPushButton(tr("Remove Selected"), &dlg);
@@ -8791,7 +8783,7 @@ void Monitor::slotEditPipe(quint32 bid)
 
     auto mkSpin = [&](double val, double lo, double hi) {
         QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet, &dlg);
-        s->setRange(lo, hi); s->setDecimals(2);
+        s->setRange(lo, hi);
         s->setValue(val * toDisp); return s;
     };
     QDoubleSpinBox *oxSpin = mkSpin(b->originX(), -posR, posR);
@@ -8908,7 +8900,7 @@ void Monitor::slotEditPipe(quint32 bid)
             ni->setFlags(ni->flags() & ~Qt::ItemIsEditable);
             tbl->setItem(i, 0, ni);
             QDoubleSpinBox *os = new FeetInchesSpinBox(isFeet, tbl);
-            os->setRange(0.0, qMax(0.1, double(b->length()) * toDisp)); os->setDecimals(2);
+            os->setRange(0.0, qMax(0.1, double(b->length()) * toDisp));
             os->setValue(double(rp.pipeOffset) * toDisp);
             tbl->setCellWidget(i, 1, os); offSpins << os;
             QDoubleSpinBox *as = new QDoubleSpinBox(tbl);
@@ -9028,12 +9020,12 @@ void Monitor::slotEditPlatform(quint32 pid)
     const double hMax_p     = isFeet_p ? 32.8  : 10.0;
 
     QDoubleSpinBox *oxSpin = new FeetInchesSpinBox(isFeet_p, &dlg);
-    oxSpin->setRange(-posRange_p, posRange_p); oxSpin->setDecimals(2);
+    oxSpin->setRange(-posRange_p, posRange_p);
     oxSpin->setValue(double(p->originX()) * toDisp_p);
     form->addRow(tr("Origin X:"), oxSpin);
 
     QDoubleSpinBox *oySpin = new FeetInchesSpinBox(isFeet_p, &dlg);
-    oySpin->setRange(-posRange_p, posRange_p); oySpin->setDecimals(2);
+    oySpin->setRange(-posRange_p, posRange_p);
     oySpin->setValue(double(p->originY()) * toDisp_p);
     form->addRow(tr("Origin Y:"), oySpin);
 
@@ -10448,17 +10440,17 @@ void Monitor::slotEditTruss(quint32 tid)
     const double wMax_e     = isFeet_e ? 16.4  : 5.0;
 
     QDoubleSpinBox *originX = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    originX->setRange(-posRange_e, posRange_e); originX->setDecimals(2);
+    originX->setRange(-posRange_e, posRange_e);
     originX->setValue(t->origin().x() * toDisp_e);
     form->addRow(tr("Origin X:"), originX);
 
     QDoubleSpinBox *originY = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    originY->setRange(-posRange_e, posRange_e); originY->setDecimals(2);
+    originY->setRange(-posRange_e, posRange_e);
     originY->setValue(t->origin().y() * toDisp_e);
     form->addRow(tr("Origin Y:"), originY);
 
     QDoubleSpinBox *originZ = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    originZ->setRange(0, zMax_e); originZ->setDecimals(2);
+    originZ->setRange(0, zMax_e);
     originZ->setValue(t->origin().z() * toDisp_e);
     form->addRow(tr("Height Z:"), originZ);
 
@@ -10474,12 +10466,12 @@ void Monitor::slotEditTruss(quint32 tid)
     form->addRow(tr("Direction (°):"), dirAngle);
 
     QDoubleSpinBox *lenSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    lenSpin->setRange(0.1, lenMax_e); lenSpin->setDecimals(2);
+    lenSpin->setRange(0.1, lenMax_e);
     lenSpin->setValue(t->length() * toDisp_e);
     form->addRow(tr("Length:"), lenSpin);
 
     QDoubleSpinBox *widthSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    widthSpin->setRange(0.05, wMax_e); widthSpin->setDecimals(2);
+    widthSpin->setRange(0.05, wMax_e);
     widthSpin->setValue(t->width() * toDisp_e);
     form->addRow(tr("Width:"), widthSpin);
 
@@ -10588,7 +10580,7 @@ void Monitor::slotEditTruss(quint32 tid)
 
     // Along the parent truss (slides top↔bottom on a tower, left↔right overhead).
     QDoubleSpinBox *alongSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    alongSpin->setRange(-lenMax_e, lenMax_e); alongSpin->setDecimals(2);
+    alongSpin->setRange(-lenMax_e, lenMax_e);
     alongSpin->setValue(t->parentOffset() * toDisp_e);
     alongSpin->setToolTip(tr("Position ALONG the parent truss"));
     QLabel *alongLbl = new QLabel(tr("Along truss:")); form->addRow(alongLbl, alongSpin);
@@ -10608,7 +10600,7 @@ void Monitor::slotEditTruss(quint32 tid)
 
     // Stand-off off that face (the drop / reach).
     QDoubleSpinBox *standoffSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    standoffSpin->setRange(0, zMax_e); standoffSpin->setDecimals(2);
+    standoffSpin->setRange(0, zMax_e);
     standoffSpin->setValue(t->barStandoff() * toDisp_e);
     standoffSpin->setToolTip(tr("Distance off that face (0 = on the truss)"));
     QLabel *standoffLbl = new QLabel(tr("Stand-off:")); form->addRow(standoffLbl, standoffSpin);
@@ -10921,17 +10913,17 @@ void Monitor::slotAddTruss()
     const double wMax_a     = isFeet_a ? 16.4  : 5.0;
 
     QDoubleSpinBox *originX = new FeetInchesSpinBox(isFeet_a, &dlg);
-    originX->setRange(-posRange_a, posRange_a); originX->setDecimals(2);
+    originX->setRange(-posRange_a, posRange_a);
     originX->setValue(pendMm.x() / 1000.0 * toDisp_a);
     form->addRow(tr("Origin X (stage left):"), originX);
 
     QDoubleSpinBox *originY = new FeetInchesSpinBox(isFeet_a, &dlg);
-    originY->setRange(-posRange_a, posRange_a); originY->setDecimals(2);
+    originY->setRange(-posRange_a, posRange_a);
     originY->setValue(pendMm.y() / 1000.0 * toDisp_a);
     form->addRow(tr("Origin Y (downstage):"), originY);
 
     QDoubleSpinBox *originZ = new FeetInchesSpinBox(isFeet_a, &dlg);
-    originZ->setRange(0, zMax_a); originZ->setDecimals(2);
+    originZ->setRange(0, zMax_a);
     originZ->setValue(6.0 * toDisp_a);
     form->addRow(tr("Height Z:"), originZ);
 
@@ -10940,12 +10932,12 @@ void Monitor::slotAddTruss()
     form->addRow(tr("Direction (° from stage-right):"), dirAngle);
 
     QDoubleSpinBox *length = new FeetInchesSpinBox(isFeet_a, &dlg);
-    length->setRange(0.1, lenMax_a); length->setDecimals(2);
+    length->setRange(0.1, lenMax_a);
     length->setValue(6.0 * toDisp_a);
     form->addRow(tr("Length:"), length);
 
     QDoubleSpinBox *width = new FeetInchesSpinBox(isFeet_a, &dlg);
-    width->setRange(0.05, wMax_a); width->setDecimals(2);
+    width->setRange(0.05, wMax_a);
     width->setValue(0.29 * toDisp_a);
     form->addRow(tr("Width:"), width);
 
@@ -11798,7 +11790,6 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     // Fine height nudge above/below a structural mount (truss/bar/tower).
     QDoubleSpinBox *heightOffSpin = new FeetInchesSpinBox(isFeet_fx);
     heightOffSpin->setRange(-10 * toDisp_fx, 10 * toDisp_fx);
-    heightOffSpin->setDecimals(2);
     heightOffSpin->setToolTip(tr("Raise (+) or lower (−) the fixture relative to its "
                                  "mount — e.g. lift a followspot above the truss."));
     rigForm->addRow(tr("Height offset:"), heightOffSpin);
@@ -12247,7 +12238,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     QDoubleSpinBox *xSpin = new FeetInchesSpinBox(isFeet_fx);
     xSpin->setObjectName(QStringLiteral("fixtureX"));
     xSpin->setMaximum(m_graphicsView->gridSize().width() * gridToDisp_fx);
-    xSpin->setSingleStep(0.1); xSpin->setDecimals(2);
+    xSpin->setSingleStep(0.1);
     /* Not on the plot: its plot position and icon rotation read what the
        show has stored (0 for a light never placed) and are greyed. */
     const PreviewItem stored = m_props->fixtureItem(fxId, 0, 0);
@@ -12259,7 +12250,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet_fx);
     ySpin->setObjectName(QStringLiteral("fixtureY"));
     ySpin->setMaximum(m_graphicsView->gridSize().height() * gridToDisp_fx);
-    ySpin->setSingleStep(0.1); ySpin->setDecimals(2);
+    ySpin->setSingleStep(0.1);
     ySpin->setValue(plotPos.y() * toDisp_fx / 1000.0);
     posForm->addRow(tr("Y:"), ySpin);
 
