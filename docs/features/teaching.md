@@ -47,11 +47,32 @@ outputs again (network and hardware). Use it on the teacher's own show when a le
 **Lesson** and **Handout link** are optional. A link adds "Lesson 3.6 handout"
 to the chip's menu.
 
+## Instructor settings
+
+Show Settings ▸ Teaching holds three things back from a student copy. Each is
+the instructor's to change, and each is saved with the show behind the same
+PIN (the next section).
+
+| Setting | Default in a Teaching show | What it does |
+| --- | --- | --- |
+| **Let real output through** | held | Art-Net, sACN, OSC, WLED and hardware lighting outputs (above). |
+| **Let show control out (QLab / OSC / MSC) through** | held | The cue trigger a GO sends to QLab, OSC and MSC ([Show control](show-control.md)). |
+| **Hold show control out while Blind is on** | send | Off: a GO sends its show control in Blind, as in any show. On: nothing is sent while Blind is on. |
+
+When a GO's show control out is held, the footer says what and why ("Show
+control held: Teaching (cue 4 not sent)", or "held: Blind (Teaching)"), and
+the Show control page's **Last sent** line says the same. A held trigger is
+not kept: when it is let through, or Blind ends, only the next GO sends.
+
+Outside Teaching mode a real GO always sends, Blind or not: Blind only keeps
+edits off the stage. A Make Student Handout copy is written with the safe
+defaults (everything held, Blind sends).
+
 ## The PIN
 
 A show has one PIN (Show Settings, [Show settings](getting-started.md#show-settings)).
-With a PIN set, **turning Teaching mode off** and **letting real output
-through** ask for it. A wrong PIN leaves things as they were.
+With a PIN set, **turning Teaching mode off**, **letting real output
+through** and letting show control through (or sending it in Blind again) ask for it. A wrong PIN leaves things as they were.
 
 The PIN also locks Design in Operate, as it always did. Untick **Going back to
 Design asks for the PIN** to use the PIN for Teaching only: that is how a

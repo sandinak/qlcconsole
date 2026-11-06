@@ -207,6 +207,9 @@ never changed.
 
 ### Network fixtures: one IP each
 
+A show has at most 1024 universes. Add Fixture refuses a fixture that would end
+past the last one, with a message saying so: pick a lower universe or address.
+
 Add Fixture's **Connection** is chosen per fixture:
 
 - **DMX** — hangs off a node or a wireless receiver.

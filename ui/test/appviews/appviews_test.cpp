@@ -3671,6 +3671,38 @@ void AppViews_Test::teachingModeIsGuardedByThePin()
     QVERIFY(doc->teachingSettings()->allowOutput());
     QVERIFY(!doc->inputOutputMap()->teachingHold());
 
+    // Q203: letting show control through (or sending it in Blind) asks too;
+    // holding more does not
+    QVERIFY(!doc->teachingSettings()->allowShowControl());
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        dlg.findChild<QCheckBox *>("showSettingsAllowShowControl")->setChecked(true);
+        ShowSettingsDialog::testAnswers() = { "9999" };
+        dlg.accept();
+        QVERIFY(!doc->teachingSettings()->allowShowControl());
+        ShowSettingsDialog::testAnswers() = { "2468" };
+        dlg.accept();
+    }
+    QVERIFY(doc->teachingSettings()->allowShowControl());
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        dlg.findChild<QCheckBox *>("showSettingsHoldBlindControl")->setChecked(true);
+        ShowSettingsDialog::testAnswers().clear();
+        dlg.accept();                                   // holding more: no PIN
+        QCOMPARE(dlg.result(), int(QDialog::Accepted));
+    }
+    QVERIFY(doc->teachingSettings()->holdShowControlInBlind());
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        dlg.findChild<QCheckBox *>("showSettingsHoldBlindControl")->setChecked(false);
+        ShowSettingsDialog::testAnswers() = { "9999" };
+        dlg.accept();                                   // sending in Blind again: PIN
+        QVERIFY(doc->teachingSettings()->holdShowControlInBlind());
+        ShowSettingsDialog::testAnswers() = { "2468" };
+        dlg.accept();
+    }
+    QVERIFY(!doc->teachingSettings()->holdShowControlInBlind());
+
     // The lock-Design box is only for a show with a PIN, and off keeps the
     // PIN for Teaching alone: a student can still leave Operate
     QVERIFY(doc->operateSettings()->hasPin());
@@ -3773,6 +3805,17 @@ void AppViews_Test::teachingOperateWarnsQuietlyThenAsksWhenItLooksReal()
     QCOMPARE(doc->mode(), Doc::Operate);
     QVERIFY(!boxed);
     m_app->slotModeDesign();
+
+    // Q204: the web page's toggle never puts the question on the console
+    // (it would look real here: output let through and patched)
+    boxed = false;
+    m_app->slotModeToggleFromWeb();
+    QTest::qWait(60);
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(!boxed);
+    m_app->slotModeToggleFromWeb();
+    QCOMPARE(doc->mode(), Doc::Design);
+    QVERIFY(!boxed);
 
     // Cancel: stays in Design. Operate in Teaching Mode: goes, and asks once.
     probe.stop();
@@ -5368,4 +5411,49 @@ void AppViews_Test::ctrlDOnThePlotDuplicates()
     QCOMPARE(dumped.count(), 1);
     closer.stop();
     m_app->clearDocument();
+}
+
+/* A notice above the tabs (showViewNotice) pushes the page down: at each
+   window size the bar ends where the tabs begin, and no button or box of the
+   page on show is cut off by the edge of the widget holding it. */
+void AppViews_Test::theViewNoticePushesThePageDown()
+{
+    m_app->clearDocument();
+    m_app->show();
+    QTabWidget *tabs = m_app->findChild<QTabWidget *>("MainTabs");
+    QVERIFY(tabs != nullptr);
+    const QSize sizes[] = { m_app->minimumSizeHint(), QSize(1280, 800), QSize(1920, 1080) };
+    for (const QString &label : { QString("Connections"), QString("Show Tree"), QString("Run") })
+    {
+        int at = -1;
+        for (int i = 0; i < tabs->count(); ++i)
+            if (tabs->tabText(i).contains(label))
+                at = i;
+        QVERIFY2(at >= 0, qPrintable(label));
+        tabs->setCurrentIndex(at);
+        for (const QSize &sz : sizes)
+        {
+            m_app->resize(sz);
+            m_app->showViewNotice(QStringLiteral("Show control held: Teaching (cue 1 not sent)"));
+            QTest::qWait(60);
+            QVERIFY(m_app->m_viewNotice->isVisible());
+            const QRect bar(m_app->m_viewNotice->mapTo(m_app, QPoint(0, 0)), m_app->m_viewNotice->size());
+            const QRect tab(tabs->mapTo(m_app, QPoint(0, 0)), tabs->size());
+            QVERIFY2(bar.bottom() < tab.top(), qPrintable(QString("%1 %2x%3: bar %4-%5, tabs from %6")
+                         .arg(label).arg(sz.width()).arg(sz.height()).arg(bar.top()).arg(bar.bottom()).arg(tab.top())));
+            QWidget *page = tabs->currentWidget();
+            // (at the window's minimum, pages are squeezed by their own design: only the bar is checked)
+            const auto buttons = sz.width() >= 1280 ? page->findChildren<QAbstractButton *>() : QList<QAbstractButton *>();
+            for (QAbstractButton *b : buttons)
+            {
+                if (!b->isVisible() || b->parentWidget() == nullptr || b->width() < 4)
+                    continue;
+                QVERIFY2(b->y() >= 0 && b->parentWidget()->rect().adjusted(0, -2, 0, 0).contains(b->geometry().topLeft()),
+                         qPrintable(QString("%1 %2x%3: %4 \"%5\" starts above its parent (y=%6)")
+                                        .arg(label).arg(sz.width()).arg(sz.height())
+                                        .arg(b->metaObject()->className(), b->text()).arg(b->y())));
+            }
+            m_app->hideViewNotice();
+        }
+    }
 }

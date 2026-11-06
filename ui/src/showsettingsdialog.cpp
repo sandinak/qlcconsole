@@ -90,6 +90,18 @@ ShowSettingsDialog::ShowSettingsDialog(Doc *doc, QWidget *parent)
                                  "student copy cannot reach the school network. Tick this to send it."));
     m_allowOutput->setChecked(teach->allowOutput());
     tl->addWidget(m_allowOutput);
+    m_allowShowControl = new QCheckBox(tr("Let show control out (QLab / OSC / MSC) through (instructor)"), tbox);
+    m_allowShowControl->setObjectName(QStringLiteral("showSettingsAllowShowControl"));
+    m_allowShowControl->setToolTip(tr("Teaching mode holds the cue triggers a GO sends to QLab, OSC and MSC, "
+                                      "so a student copy cannot fire a real show. Tick this to send them."));
+    m_allowShowControl->setChecked(teach->allowShowControl());
+    tl->addWidget(m_allowShowControl);
+    m_holdBlindControl = new QCheckBox(tr("Hold show control out while Blind is on (instructor)"), tbox);
+    m_holdBlindControl->setObjectName(QStringLiteral("showSettingsHoldBlindControl"));
+    m_holdBlindControl->setToolTip(tr("Off: a GO sends its show control out in Blind too, as in any show. "
+                                      "On: nothing is sent while Blind is on."));
+    m_holdBlindControl->setChecked(teach->holdShowControlInBlind());
+    tl->addWidget(m_holdBlindControl);
     QFormLayout *lf = new QFormLayout();
     m_lesson = new QLineEdit(teach->lesson(), tbox);
     m_lesson->setObjectName(QStringLiteral("showSettingsLesson"));
@@ -182,6 +194,8 @@ void ShowSettingsDialog::updatePinText()
 void ShowSettingsDialog::updateEnabled()
 {
     m_allowOutput->setEnabled(m_teaching->isChecked());
+    m_allowShowControl->setEnabled(m_teaching->isChecked());
+    m_holdBlindControl->setEnabled(m_teaching->isChecked());
     m_lesson->setEnabled(m_teaching->isChecked());
     m_link->setEnabled(m_teaching->isChecked());
     m_reset->setEnabled(m_doc->teachingSettings()->enabled()
@@ -221,15 +235,23 @@ void ShowSettingsDialog::accept()
     /* Turning Teaching off, or letting real output through, asks for the
        show's PIN (the stored one, not one just set in this dialog). */
     const bool off = teach->enabled() && !m_teaching->isChecked();
-    const bool lets = m_teaching->isChecked() && !teach->allowOutput() && m_allowOutput->isChecked();
-    if ((off || lets) && op->hasPin()
+    const bool on = m_teaching->isChecked();
+    const bool lets = on && !teach->allowOutput() && m_allowOutput->isChecked();
+    // Loosening a flag asks too (holding more does not): show control let
+    // through, or sent in Blind again.
+    const bool letsControl = on && ((!teach->allowShowControl() && m_allowShowControl->isChecked())
+                                    || (teach->holdShowControlInBlind() && !m_holdBlindControl->isChecked()));
+    if ((off || lets || letsControl) && op->hasPin()
         && !askForPin(this, op->pinHash(),
                       off ? tr("Enter the PIN to turn Teaching mode off.")
-                          : tr("Enter the PIN to let real output through.")))
+                          : lets ? tr("Enter the PIN to let real output through.")
+                                 : tr("Enter the PIN to change what Teaching holds.")))
         return;
 
     teach->setEnabled(m_teaching->isChecked());
     teach->setAllowOutput(m_teaching->isChecked() && m_allowOutput->isChecked());
+    teach->setAllowShowControl(m_teaching->isChecked() && m_allowShowControl->isChecked());
+    teach->setHoldShowControlInBlind(m_teaching->isChecked() && m_holdBlindControl->isChecked());
     if (m_teaching->isChecked())
         teach->setLesson(m_lesson->text().trimmed(), m_link->text().trimmed());
 

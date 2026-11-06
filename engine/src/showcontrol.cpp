@@ -34,6 +34,7 @@
 #include "qlcioplugin.h"
 #include "chaser.h"
 #include "doc.h"
+#include "teachingsettings.h"
 #include "showtreecontroller.h"
 
 #define KXMLQLCShowControlMainCueList QStringLiteral("MainCueList")
@@ -798,6 +799,22 @@ QList<ShowControl::OutMessage> ShowControl::outMessagesFor(const Chaser *chaser,
 void ShowControl::sendOut(const Chaser *chaser, int step, const QString &cue)
 {
     const QList<OutMessage> messages = outMessagesFor(chaser, step, cue);
+    // Q203: a real GO sends, Blind or not. Only a Teaching show's instructor
+    // flags hold it (TeachingSettings); what is held is not sent later.
+    if (!messages.isEmpty() && m_doc != nullptr && m_doc->teachingSettings() != nullptr)
+    {
+        const bool blind = m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->outputInhibited();
+        const QString why = m_doc->teachingSettings()->showControlHeldBecause(blind);
+        if (!why.isEmpty())
+        {
+            const QString what = tr("held: %1 (cue %2 not sent)").arg(why, cue);
+            if (QThread::currentThread() == thread())
+                emit outHeld(what);
+            else
+                QMetaObject::invokeMethod(this, [this, what]() { emit outHeld(what); }, Qt::QueuedConnection);
+            return;
+        }
+    }
     for (const OutMessage &m : messages)
     {
         const QString what = m.kind == OutMessage::Osc

@@ -38,6 +38,7 @@ private slots:
     void aStagedFixtureAppearsInNoUniverseAnywhere();
     void aStagedFixtureNeverOccupiesAnAddress();
     void ordinaryAddStillPatches();
+    void addPastTheUniverseLimitSaysSo();
     void networkFixtureKeepsItsIp();
     void aBatchOfNetworkFixturesGetsOneIpEach();
     void aMultiAddStagesEveryFixtureUnpatched();

@@ -36,6 +36,7 @@
 #include "inputoutputmap.h"
 #include "functionparent.h"
 #include "showcontrol.h"
+#include "teachingsettings.h"
 #include "chaserstep.h"
 #include "chaser.h"
 #include "scene.h"
@@ -1229,6 +1230,85 @@ void ShowControl_Test::aGoSendsOscAndMscWithTheCueNumber()
         m_doc->masterTimer()->timerTick();
     QVERIFY(sc->execute(ShowControl::Request()));       // the next: 12.5
     QCOMPARE(got.at(1).data, QByteArray::fromHex("f07f03020101" "31322e35" "f7"));
+    stopAll();
+}
+
+/* Q203 (answered 2026-11-03): a real GO is a real GO. Blind hides edits from
+   the stage; a GO in a normal show still sends QLab / OSC / MSC. */
+void ShowControl_Test::aGoInBlindSendsInANormalShow()
+{
+    Chaser *c = makeList(3, "Main");
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(c->id());
+    QList<ShowControl::OutMessage> got;
+    sc->setOutSender([&got](const ShowControl::OutMessage &m) { got << m; return true; });
+    ShowControl::OutSettings o;
+    o.oscEnabled = true;
+    o.oscHost = "127.0.0.1";
+    sc->setOutSettings(o);
+    QSignalSpy held(sc, &ShowControl::outHeld);
+
+    QVERIFY(m_doc->inputOutputMap()->setOutputInhibited(true));
+    QVERIFY(sc->execute(ShowControl::Request()));
+    QCOMPARE(got.count(), 1);
+    QCOMPARE(held.count(), 0);
+    m_doc->inputOutputMap()->setOutputInhibited(false);
+    stopAll();
+}
+
+/* Q203: Teaching's instructor flags -- show control out is held in a
+   Teaching show (default), let through by AllowShowControl; and optionally
+   held while Blind. Held is not kept: the next GO sends as normal. */
+void ShowControl_Test::teachingHoldsShowControlOutByItsInstructorFlags()
+{
+    Chaser *c = makeList(4, "Main");
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(c->id());
+    QList<ShowControl::OutMessage> got;
+    sc->setOutSender([&got](const ShowControl::OutMessage &m) { got << m; return true; });
+    ShowControl::OutSettings o;
+    o.oscEnabled = true;
+    o.oscHost = "127.0.0.1";
+    sc->setOutSettings(o);
+    QSignalSpy held(sc, &ShowControl::outHeld);
+    TeachingSettings *t = m_doc->teachingSettings();
+    auto go = [&]() {
+        for (int i = 0; i < 3; ++i)
+            m_doc->masterTimer()->timerTick();
+        return sc->execute(ShowControl::Request());
+    };
+
+    // Teaching on, defaults: held, and the reason is named.
+    t->setEnabled(true);
+    QVERIFY(go());
+    QCOMPARE(got.count(), 0);
+    QCOMPARE(held.count(), 1);
+    QVERIFY2(held.last().at(0).toString().contains("Teaching"), qPrintable(held.last().at(0).toString()));
+
+    // Let through: the next GO sends, nothing from the held one comes late.
+    t->setAllowShowControl(true);
+    QVERIFY(go());
+    QCOMPARE(got.count(), 1);
+    QCOMPARE(held.count(), 1);
+
+    // Blind, default: sends. Blind, held: held, named; Blind off: sends again.
+    QVERIFY(m_doc->inputOutputMap()->setOutputInhibited(true));
+    QVERIFY(go());
+    QCOMPARE(got.count(), 2);
+    t->setHoldShowControlInBlind(true);
+    QVERIFY(go());
+    QCOMPARE(got.count(), 2);
+    QCOMPARE(held.count(), 2);
+    QVERIFY2(held.last().at(0).toString().contains("Blind"), qPrintable(held.last().at(0).toString()));
+    m_doc->inputOutputMap()->setOutputInhibited(false);
+    QVERIFY(go());
+    QCOMPARE(got.count(), 3);
+
+    // Teaching off: the flags do nothing.
+    t->setEnabled(false);
+    t->setAllowShowControl(false);
+    QVERIFY(go());
+    QCOMPARE(got.count(), 4);
     stopAll();
 }
 

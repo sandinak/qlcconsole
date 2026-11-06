@@ -548,14 +548,20 @@ Map: docs/dev/TEST_MAP.md Part 1b. Decide or fix:
 - **Engine Show keeps a deleted function's block** (only the Shows tab
   prunes it); `Show_Test::aSceneDeletedWhileTheShowPlaysLeavesTheRestPlaying`
   has the QEXPECT_FAIL ("TODO 0.4 tcov").
-- **"Design only" effect fades:** CHANGELOG says Design only; a typed
-  `… effect … fade 2` works in Operate (plans are refused). Wording or code?
-- **QLab out with Blind on:** a real GO while Blind is on still sends.
-  Intended?
-- **Teaching's question from the web Design/Operate toggle:** goes through
-  `App::slotModeOperate` without `m_unattendedOperate`; may ask on the console.
-- **Add Fixture says nothing when the engine refuses** a fixture past
-  universe 1024 (`FixtureCreator::addFromDialog`).
+- Q202 answered 2026-11-03: an effect fade typed in Operate is refused
+  ("Changes can't be made in Operate mode"). Done
+  (`OperationRegistry_Test::aChangeWordIsRefusedInOperateAndWorksInDesign`).
+- Q203 answered 2026-11-03: a real GO sends in Blind; Teaching mode has
+  instructor flags (show control held by default, Blind behaviour
+  selectable). Done (`ShowControl_Test::aGoInBlindSendsInANormalShow`,
+  `teachingHoldsShowControlOutByItsInstructorFlags`,
+  `Teaching_Test::showControlFlagsSaveAndOldFilesLoadSafe`, PIN in
+  `AppViews_Test::teachingModeIsGuardedByThePin`).
+- Q204 answered 2026-11-03: no Teaching question on the console from the web
+  toggle; the PIN still applies. Done (`App::slotModeToggleFromWeb`, in
+  `AppViews_Test::teachingOperateWarnsQuietlyThenAsksWhenItLooksReal`).
+- Q205 answered 2026-11-03: Add Fixture shows a message past universe 1024.
+  Done (`FixtureCreator_Test::addPastTheUniverseLimitSaysSo`).
 - Still untested (med): HID trigger feedback per pad type (plugins/hid),
   Fixture Properties' universe box / truss paste Teaching asks, audio-trigger
   log bands, real LTC audio and the timecode footer chip, Snap-to-section on a

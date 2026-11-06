@@ -292,6 +292,10 @@ signals:
     /** A GO sent @a count messages on (for the page's "last sent" line). */
     void sentOut(const QString &what, bool ok);
 
+    /** A GO's show control out was held (Teaching's instructor flags,
+     *  board Q203): @a what says what and why. Nothing is sent later. */
+    void outHeld(const QString &what);
+
 private:
     void sendOut(const Chaser *chaser, int step, const QString &cue);
     bool sendViaPlugin(const OutMessage &message);

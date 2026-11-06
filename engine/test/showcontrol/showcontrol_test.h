@@ -72,6 +72,8 @@ private slots:
     // QLab out: what a GO sends on (exact bytes).
     void aGoSendsOscAndMscWithTheCueNumber();
     void aCueWithoutANumberIsLeftOutWhenOnlyNumberedAreSent();
+    void aGoInBlindSendsInANormalShow();
+    void teachingHoldsShowControlOutByItsInstructorFlags();
     void aDisabledSendSendsNothing();
     void aGoThatFindsNothingSendsNothing();
     void aCommandFromOscOrMscIsNotEchoed();

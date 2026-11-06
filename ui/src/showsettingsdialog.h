@@ -122,6 +122,8 @@ private:
     QCheckBox *m_lockDesign;
     QCheckBox *m_teaching;
     QCheckBox *m_allowOutput;
+    QCheckBox *m_allowShowControl;
+    QCheckBox *m_holdBlindControl;
     QLineEdit *m_lesson;
     QLineEdit *m_link;
     QPushButton *m_handout;

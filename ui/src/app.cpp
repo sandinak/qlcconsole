@@ -2324,6 +2324,17 @@ void App::slotModeDesign()
     m_doc->setMode(Doc::Design);
 }
 
+void App::slotModeToggleFromWeb()
+{
+    /* Q204: nobody is at the console to answer Teaching's "Run this show
+       for real?" -- the phone's toggle skips it (the Design lock's PIN is
+       still asked by slotModeDesign()). */
+    const bool was = m_unattendedOperate;
+    m_unattendedOperate = true;
+    slotModeToggle();
+    m_unattendedOperate = was;
+}
+
 void App::slotModeToggle()
 {
     if (m_doc->mode() == Doc::Design)
@@ -2692,6 +2703,10 @@ void App::initActions()
     /* The one GO path (docs/design/RUN_COMMANDS.md): whatever asks for a
        GO, Back, Stop... -- the Run tab, a VC Cue Runner, the pad, the
        Control Map, OSC, MSC -- asks ShowControl::run(), which comes here. */
+    /* Q203: what Teaching's instructor flags held back from a GO, and why. */
+    connect(m_doc->showControl(), &ShowControl::outHeld, this, [this](const QString &what) {
+        showViewNotice(tr("Show control %1").arg(what));
+    });
     m_doc->showControl()->setRunHandler([this](const ShowControl::Request &r, ShowControl::Route route) {
         return runCommand(r, route);
     });

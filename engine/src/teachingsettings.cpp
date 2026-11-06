@@ -26,6 +26,8 @@
 
 #define KXMLTeachingEnabled     QStringLiteral("Enabled")
 #define KXMLTeachingAllowOutput QStringLiteral("AllowOutput")
+#define KXMLTeachingShowControl QStringLiteral("AllowShowControl")
+#define KXMLTeachingBlindControl QStringLiteral("BlindShowControl")
 #define KXMLTeachingLesson      QStringLiteral("Lesson")
 #define KXMLTeachingLink        QStringLiteral("Link")
 #define KXMLTeachingHandedOut   QStringLiteral("HandedOut")
@@ -66,6 +68,33 @@ void TeachingSettings::setAllowOutput(bool on)
     changed();
 }
 
+void TeachingSettings::setAllowShowControl(bool on)
+{
+    if (on == m_allowShowControl)
+        return;
+    m_allowShowControl = on;
+    changed();
+}
+
+void TeachingSettings::setHoldShowControlInBlind(bool on)
+{
+    if (on == m_holdInBlind)
+        return;
+    m_holdInBlind = on;
+    changed();
+}
+
+QString TeachingSettings::showControlHeldBecause(bool blind) const
+{
+    if (!m_enabled)
+        return QString();
+    if (!m_allowShowControl)
+        return tr("Teaching");
+    if (blind && m_holdInBlind)
+        return tr("Blind (Teaching)");
+    return QString();
+}
+
 void TeachingSettings::setLesson(const QString &lesson, const QString &link)
 {
     if (lesson == m_lesson && link == m_link)
@@ -103,11 +132,13 @@ QByteArray TeachingSettings::unpackSnapshot(const QByteArray &snapshot)
 
 void TeachingSettings::reset()
 {
-    if (!m_enabled && !m_allowOutput && m_lesson.isEmpty() && m_link.isEmpty()
+    if (!m_enabled && !m_allowOutput && !m_allowShowControl && !m_holdInBlind && m_lesson.isEmpty() && m_link.isEmpty()
         && m_handedOut.isEmpty() && m_snapshot.isEmpty() && m_unknown.isEmpty())
         return;
     m_enabled = false;
     m_allowOutput = false;
+    m_allowShowControl = false;
+    m_holdInBlind = false;
     m_lesson.clear();
     m_link.clear();
     m_handedOut.clear();
@@ -135,6 +166,11 @@ void TeachingSettings::saveXML(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLTeachingEnabled, QStringLiteral("1"));
     if (allow)
         doc->writeAttribute(KXMLTeachingAllowOutput, QStringLiteral("1"));
+    // A handout copy carries the safe defaults for the two show control flags.
+    if (m_saveOverride == nullptr && m_allowShowControl)
+        doc->writeAttribute(KXMLTeachingShowControl, QStringLiteral("1"));
+    if (m_saveOverride == nullptr && m_holdInBlind)
+        doc->writeAttribute(KXMLTeachingBlindControl, QStringLiteral("hold"));
     if (!lesson.isEmpty())
         doc->writeAttribute(KXMLTeachingLesson, lesson);
     if (!link.isEmpty())
@@ -153,6 +189,8 @@ void TeachingSettings::loadXML(QXmlStreamReader &root)
     const QXmlStreamAttributes attrs = root.attributes();
     m_enabled = attrs.value(KXMLTeachingEnabled) == QLatin1String("1");
     m_allowOutput = attrs.value(KXMLTeachingAllowOutput) == QLatin1String("1");
+    m_allowShowControl = attrs.value(KXMLTeachingShowControl) == QLatin1String("1");
+    m_holdInBlind = attrs.value(KXMLTeachingBlindControl) == QLatin1String("hold");
     m_lesson = attrs.value(KXMLTeachingLesson).toString();
     m_link = attrs.value(KXMLTeachingLink).toString();
     m_handedOut = attrs.value(KXMLTeachingHandedOut).toString();
@@ -160,7 +198,8 @@ void TeachingSettings::loadXML(QXmlStreamReader &root)
     for (const QXmlStreamAttribute &a : attrs)
     {
         const QString n = a.qualifiedName().toString();
-        if (n != KXMLTeachingEnabled && n != KXMLTeachingAllowOutput && n != KXMLTeachingLesson
+        if (n != KXMLTeachingEnabled && n != KXMLTeachingAllowOutput && n != KXMLTeachingShowControl
+            && n != KXMLTeachingBlindControl && n != KXMLTeachingLesson
             && n != KXMLTeachingLink && n != KXMLTeachingHandedOut)
             m_unknown.append(a);
     }

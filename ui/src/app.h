@@ -481,6 +481,9 @@ public slots:
     void slotModeOperate();
     void slotModeDesign();
     void slotModeToggle();
+    /** The web page's Design / Operate toggle: as slotModeToggle(), without
+        Teaching's question on the console (the PIN still applies). */
+    void slotModeToggleFromWeb();
     void slotModeChanged(Doc::Mode mode);
 
     /*********************************************************************
