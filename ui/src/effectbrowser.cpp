@@ -371,7 +371,7 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     origins->addStretch(1);
     m_showAll = new QToolButton(this);
     m_showAll->setObjectName(QStringLiteral("effectShowAll"));
-    m_showAll->setText(tr("Show all effects"));
+    m_showAll->setText(tr("Show All Effects"));
     m_showAll->setToolTip(tr("The list holds the effects that fit this look's fixtures. "
                              "Show the others too, greyed, with why they don't fit."));
     m_showAll->setCheckable(true);

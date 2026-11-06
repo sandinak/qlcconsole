@@ -926,7 +926,7 @@ names the effect, with **Change Effect…** to open the browser again:
   colour mixing, and the intensity effects for a dimmer. A mixed set fits an
   effect if any of it does -- hover the row for "Runs on 6 of 10
   fixtures". A look with no fixtures yet lists everything.
-- **Show all effects** (top right, once the look has fixtures) lists the
+- **Show All Effects** (top right, once the look has fixtures) lists the
   rest too, greyed, with the reason on hover ("Needs a gobo wheel; none of
   these fixtures has one"). It starts off every time. The effect a look
   already runs is always listed and selected, with that reason under the

@@ -83,14 +83,14 @@ public:
 
     /** The fixtures the look works on. Only the effects that fit them are
      *  listed (WLED's only where there is a WLED device, position effects
-     *  for pan/tilt heads, ...) unless "Show all effects" is on; the one the
+     *  for pan/tilt heads, ...) unless "Show All Effects" is on; the one the
      *  look already runs is always listed. No fixtures known: everything. */
     void setTargets(const EffectFit::Targets &targets);
     const EffectFit::Targets &targets() const { return m_targets; }
     /** Whether a WLED device is among the targets (true while none are known). */
     bool wledTargets() const { return !m_targets.known() || m_targets.anyWled(); }
 
-    /** The "Show all effects" toggle (hidden while no targets are known). */
+    /** The "Show All Effects" toggle (hidden while no targets are known). */
     QToolButton *showAllButton() const { return m_showAll; }
     /** One line on how the effect now picked fits the targets; empty if it fits. */
     QLabel *fitNote() const { return m_fitNote; }

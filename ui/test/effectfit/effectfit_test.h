@@ -39,13 +39,13 @@ private slots:
     void aMixedSetRunsOnSome();
     /** No fixtures known: everything fits. */
     void noTargetsListsEverything();
-    /** A non-WLED look finds no WLED effect by name until "Show all effects". */
+    /** A non-WLED look finds no WLED effect by name until "Show All Effects". */
     void searchHidesWhatDoesNotFit();
     /** The effect a look already runs stays listed, with the reason. */
     void theEffectInUseIsNeverDropped();
 
     /** Pictures of the picker on three kinds of group, QLC_SHOT_DIR set
-     *  (skipped otherwise): "all" = Show all effects, i.e. what it listed
+     *  (skipped otherwise): "all" = Show All Effects, i.e. what it listed
      *  before, and "fitted". */
     void shots();
 

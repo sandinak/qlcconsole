@@ -439,7 +439,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   gobo wheel, zoom/iris for fixtures that have them, matrix for a grid of
   heads, colour for colour mixing, a dimmer-only target gets the intensity
   effects. A mixed set shows what runs on some ("Runs on 6 of 10
-  fixtures"). **Show all effects** lists the rest greyed with the reason; the
+  fixtures"). **Show All Effects** lists the rest greyed with the reason; the
   effect a look already runs always stays listed.
 
 - **The follow spot's stick is the controller you have patched** — a

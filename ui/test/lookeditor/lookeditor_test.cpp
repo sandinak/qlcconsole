@@ -1525,7 +1525,7 @@ void LookEditor_Test::wledOnlyEffectsNeedAWledTarget()
     // too.
     QVERIFY2(inWledTab().isEmpty(), "no WLED effects for a plain fixture");
     QVERIFY(browser->tabNames().indexOf("WLED") < 0);
-    // Show all effects brings them back, greyed.
+    // Show All Effects brings them back, greyed.
     browser->showAllButton()->setChecked(true);
     QVERIFY(browser->tabNames().indexOf("WLED") >= 0);
     browser->showAllButton()->setChecked(false);
