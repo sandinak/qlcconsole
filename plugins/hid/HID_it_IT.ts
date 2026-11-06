@@ -76,7 +76,7 @@
 <context>
     <name>HIDPlugin</name>
     <message>
-        <location filename="hidplugin.cpp" line="431"/>
+        <location filename="hidplugin.cpp" line="451"/>
         <source>This plugin provides support for HID-based joysticks, gamepads and some USB DMX adapters.</source>
         <translation>Questa plugin fornisce supporto per joystick e gamepad basati su sistema HID e per alcuni adattatori USB DMX.</translation>
     </message>
