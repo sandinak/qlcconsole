@@ -19,6 +19,7 @@
 #define STARTUPWINDOW_H
 
 #include <QWidget>
+#include <QStringList>
 
 class QVBoxLayout;
 class QLabel;
@@ -63,6 +64,12 @@ public:
      *  the progress bar -- callers decide themselves whether a question is
      *  one of their counted steps. */
     bool askYesNo(const QString &question);
+
+    /** The same, with a button per answer (Title Case), under the
+     *  question: returns the index of the one pressed. @a detail, if any,
+     *  goes in the log with the question. */
+    int ask(const QString &question, const QStringList &answers,
+            const QString &detail = QString());
 
 private:
     QVBoxLayout *m_layout;

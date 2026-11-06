@@ -44,6 +44,7 @@
 #include "qlcui_export.h"
 
 class QProgressDialog;
+class QDateTime;
 class QXmlStreamWriter;
 class VideoProvider;
 class QMessageBox;
@@ -930,9 +931,12 @@ public:
      * see damagedFile().
      *
      * @param fileName The name of the file to load from.
+     * @param asShow The show file it stands for, when it is read from
+     *        elsewhere (a recovered autosave): the file name, folder, venue
+     *        and recent list are that show's, so Save writes the show.
      * @return QFile::NoError if successful.
      */
-    QFile::FileError loadXML(const QString& fileName);
+    QFile::FileError loadXML(const QString& fileName, const QString &asShow = QString());
 
     /** The show file that opened damaged or incomplete, while it is still
      *  the current file (empty otherwise): Save goes to Save As for it, so
@@ -1049,6 +1053,49 @@ private:
 
     /** Remove autosave file for current document */
     void removeAutosaveFile();
+
+public:
+    /** What to do with a saved show's autosave when the show is opened */
+    enum RecoveryChoice
+    {
+        NoRecovery,     ///< nothing to offer: open the show
+        RecoverAutosave,///< open the autosave's content as the show, modified
+        OpenSavedShow,  ///< open the show; the autosave is kept aside
+        CancelOpen      ///< open nothing
+    };
+
+    /** The autosave beside @a showFile that is worth offering: there,
+     *  newer than the show and different from it (empty otherwise). A copy
+     *  that is the same as the show is removed here. */
+    static QString pendingAutosave(const QString &showFile);
+
+    /** Before a saved show is opened: offer its newer autosave, once
+     *  (inline in the start-up window, else a message box), and act on the
+     *  answer (Open the Saved Show moves the autosave aside). With nobody
+     *  to ask the files are left as they are, and the autosave is not
+     *  written over this session. */
+    RecoveryChoice askAboutAutosave(const QString &showFile);
+
+    /** Open @a showFile after askAboutAutosave() said @a choice: the
+     *  autosave's content as the show (modified), or the show itself. */
+    QFile::FileError loadShowFile(const QString &showFile, RecoveryChoice choice);
+
+    /** The name the autosave of @a showFile is kept under when the saved
+     *  show is opened instead (Show.qlcc.autosave-20261106-231502) */
+    static QString keptAutosaveName(const QString &showFile, const QDateTime &when);
+
+private:
+    /** Whether a recovery prompt can be answered here (not offscreen or
+     *  minimal, not QLC_NO_RECOVERY_PROMPT; a test can lift that) */
+    static bool canAskAboutRecovery();
+    /** Tests: ask even offscreen, answering through the box they find */
+    static bool s_askRecoveryOffscreen;
+
+    /** Autosave that may not be written over, nor removed: one found when
+     *  nobody could be asked, and any while the question is open */
+    bool autosaveHeld(const QString &path) const;
+    QString m_heldAutosave;
+    bool m_recoveryAsking;
 
 private:
     QTimer *m_autosaveTimer;

@@ -69,8 +69,15 @@ tablet and setting up users.
   minutes); the footer reads **● Unsaved changes**, then **Autosaved** and
   the time. For a show never saved, the next launch offers to **recover
   the unsaved work**. For a saved show the copy is *Show*.qlcc.autosave
-  beside it (see [Troubleshooting](troubleshooting.md#files-and-fixtures)).
-  Saving, or a clean quit, removes it. If a recovery copy can't be written
+  beside it, and opening the show (**File ▸ Open**, the recent list, `-o`)
+  asks **Recover the autosave from** *time*? when that copy is newer than
+  the saved show: **Recover** opens the unsaved work under the show's own
+  name (still unsaved: **Save** writes the show), **Open the Saved Show**
+  opens the show and keeps the copy beside it as
+  *Show*.qlcc.autosave-*date-time*, **Cancel** opens nothing. At start-up
+  the question is in the start-up window. Nothing writes over the copy
+  before you answer. Opening a show is something you do on purpose, so it
+  asks in Operate too. Saving, or a clean quit, removes the copy. If a recovery copy can't be written
   (a full disk, a folder you can't write to), the footer turns to **⚠
   Autosave failed**; hover it for why, and save the show.
 - **A save that can't finish never spoils the show.** The new file is

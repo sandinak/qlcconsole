@@ -257,10 +257,13 @@ effect scripts, RGB scripts and LED maps are in **EffectScripts**,
 can overwrite it.
 
 **The app stopped without saving.** A show never saved is offered back
-at the next launch. A saved show isn't: its recovery copy is
-*Show*.qlcc.autosave beside it. **File ▸ Open**, choose **All Files**,
-open that copy and check it, then **File ▸ Save As…** over the show's own
-name (a plain Save would write to the .autosave).
+at the next launch. A saved show is offered when you open it: its
+recovery copy, *Show*.qlcc.autosave beside it, is newer than the show, so
+the app asks **Recover the autosave from** *time*?. **Recover** opens the
+unsaved work as the show; check it and **Save**. **Open the Saved Show**
+keeps the copy as *Show*.qlcc.autosave-*date-time*: to look at it later,
+**File ▸ Open**, choose **All Files**, open it, then **File ▸ Save As…**
+over the show's own name.
 
 **An RGB matrix runs nothing, and the footer says its effect isn't
 installed.** The show uses a matrix script this computer doesn't have. It
