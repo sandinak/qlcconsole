@@ -2268,6 +2268,11 @@ void WebAccess_Test::theFocusRemoteWorksTheRunningSession()
     QTRY_VERIFY(s->isDirty(spots.at(1)->id()));
     ws->sendTextMessage(QStringLiteral("QLC+FOCUS|press|b"));
     QTRY_VERIFY(!s->isDirty(spots.at(1)->id()));
+    // The page answers in order: once the marker's answer is in, every
+    // earlier ack (the B press's too) is heard, and none can land after the
+    // clear below.
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|call|8"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("FOCUS|ack|call|nothing")));
     // Menu (Exit), an unknown role, a call out of range: nothing.
     heard.clear();
     ws->sendTextMessage(QStringLiteral("QLC+FOCUS|press|start"));

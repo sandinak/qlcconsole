@@ -16,4 +16,5 @@ target_link_libraries(focussession_test PRIVATE
     Qt6::Gui
     Qt6::Test
     qlcplusengine
+    iopluginstub   # its typeinfo, for UBSan vptr on static_cast
 )

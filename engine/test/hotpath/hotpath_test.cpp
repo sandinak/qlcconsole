@@ -213,19 +213,58 @@ static void countMalloc(uint32_t type, uintptr_t, uintptr_t, uintptr_t, uintptr_
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmismatched-new-delete"
 #endif
-void *operator new(std::size_t n)
+// The whole family is replaced, so every new/delete pair a library picks
+// (std::stable_sort's temporary buffer uses the nothrow form, containers
+// the aligned ones) lands on the same malloc/free; a partial set made ASan
+// report alloc-dealloc-mismatch.
+static void *countedAlloc(std::size_t n) noexcept
 {
     if (countingHere())
         g_allocs.fetch_add(1, std::memory_order_relaxed);
-    if (void *p = std::malloc(n ? n : 1))
+    return std::malloc(n ? n : 1);
+}
+void *operator new(std::size_t n)
+{
+    if (void *p = countedAlloc(n))
         return p;
     throw std::bad_alloc();
 }
 void *operator new[](std::size_t n) { return operator new(n); }
+void *operator new(std::size_t n, const std::nothrow_t &) noexcept { return countedAlloc(n); }
+void *operator new[](std::size_t n, const std::nothrow_t &) noexcept { return countedAlloc(n); }
 void operator delete(void *p) noexcept { std::free(p); }
 void operator delete[](void *p) noexcept { std::free(p); }
 void operator delete(void *p, std::size_t) noexcept { std::free(p); }
 void operator delete[](void *p, std::size_t) noexcept { std::free(p); }
+void operator delete(void *p, const std::nothrow_t &) noexcept { std::free(p); }
+void operator delete[](void *p, const std::nothrow_t &) noexcept { std::free(p); }
+#if !defined(Q_OS_WIN)
+static void *countedAlignedAlloc(std::size_t n, std::align_val_t al) noexcept
+{
+    if (countingHere())
+        g_allocs.fetch_add(1, std::memory_order_relaxed);
+    void *p = nullptr;
+    std::size_t a = static_cast<std::size_t>(al);
+    if (a < sizeof(void *))
+        a = sizeof(void *);
+    return posix_memalign(&p, a, n ? n : 1) == 0 ? p : nullptr;
+}
+void *operator new(std::size_t n, std::align_val_t al)
+{
+    if (void *p = countedAlignedAlloc(n, al))
+        return p;
+    throw std::bad_alloc();
+}
+void *operator new[](std::size_t n, std::align_val_t al) { return operator new(n, al); }
+void *operator new(std::size_t n, std::align_val_t al, const std::nothrow_t &) noexcept { return countedAlignedAlloc(n, al); }
+void *operator new[](std::size_t n, std::align_val_t al, const std::nothrow_t &) noexcept { return countedAlignedAlloc(n, al); }
+void operator delete(void *p, std::align_val_t) noexcept { std::free(p); }
+void operator delete[](void *p, std::align_val_t) noexcept { std::free(p); }
+void operator delete(void *p, std::size_t, std::align_val_t) noexcept { std::free(p); }
+void operator delete[](void *p, std::size_t, std::align_val_t) noexcept { std::free(p); }
+void operator delete(void *p, std::align_val_t, const std::nothrow_t &) noexcept { std::free(p); }
+void operator delete[](void *p, std::align_val_t, const std::nothrow_t &) noexcept { std::free(p); }
+#endif
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
 #endif

@@ -22,6 +22,7 @@ target_link_libraries(${module_name} PRIVATE
     Qt6::Test
     Qt6::Widgets
     qlcplusengine
+    iopluginstub   # its typeinfo, for UBSan vptr on static_cast
     qlcplusui
 )
 

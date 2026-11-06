@@ -376,6 +376,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Tooling
 
+- **Sanitizer builds link and run clean.** The I/O plugin stub tests link
+  the stub (UBSan's vptr check needs its typeinfo, no more
+  `-fno-sanitize=vptr`); the hot-path test replaces the whole `operator
+  new`/`delete` family, so ASan no longer reports an alloc-dealloc mismatch
+  from `std::stable_sort`'s buffer; the web remote's focus test waits for an
+  in-order marker instead of racing a late ack.
+
 - **`make dmg` is much faster.** It builds only what ships (no test
   programs), through ccache, in a build dir that lasts between runs;
   `make dmg ARCH=native` makes an arm64-only DMG (named `-arm64-native-`,
@@ -452,6 +459,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   on a ten-light rig, more with drapes and decks). It now reuses them: 0 a
   tick, the same heads dimmed, the same DMX out.
 
+- **Course handouts link to the lessons they mean.** Lesson 3.5 and 3.8 handouts pointed at lesson pages that do not exist from where a handout is built (0.5, 0.7, 2.1, 3.7); the course site link check is clean again.
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections
   (or by a controller slot) now moves the follow spot from the Show Tree,
