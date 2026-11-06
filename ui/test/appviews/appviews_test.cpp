@@ -5427,7 +5427,7 @@ void AppViews_Test::theViewNoticePushesThePageDown()
     {
         int at = -1;
         for (int i = 0; i < tabs->count(); ++i)
-            if (tabs->tabText(i).contains(label))
+            if (tabs->tabBar()->tabData(i).toString() == label) // the text may be short or an icon (tab fit)
                 at = i;
         QVERIFY2(at >= 0, qPrintable(label));
         tabs->setCurrentIndex(at);
