@@ -1059,11 +1059,9 @@ void FocusModePanel::refresh()
         m_savedLabel->setStyleSheet(m_session->isDirty(fid) ? QStringLiteral("color: #d08a1c;")
                                                             : QStringLiteral("color: #3a9a4a;"));
         {
-            // The step on the stage, in the show's units (Settings > Units).
+            // The step on the stage, in Settings > Units.
             const double stepM = double(m_session->stepDegrees() * FocusSession::metresPerDegree());
-            const bool feet = m_doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
-            m_stepLabel->setText(feet ? tr("Step %1 in").arg(stepM / 0.0254, 0, 'g', 3)
-                                      : tr("Step %1 m").arg(stepM, 0, 'g', 3));
+            m_stepLabel->setText(tr("Step %1").arg(MeasurementUnits::formatMetres(stepM)));
         }
         m_progressLabel->setText(tr("%1 of %2 checked").arg(m_session->checkedCount()).arg(m_session->count()));
         m_map->setStepDegrees(m_session->stepDegrees());

@@ -46,6 +46,7 @@
 #include "mainbar.h"
 #include "speedmasterspanel.h"
 #include "programmingmanager.h"
+#include "measurementunits.h"
 #include "editkeys.h"
 #include "contextmenus.h"
 #include "effectrunsmenu.h"
@@ -311,7 +312,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_speedSpin->setSingleStep(10);
         m_speedSpin->setValue(100);
         m_speedSpin->setSuffix(tr("%"));
-        m_speedSpin->setToolTip(tr("Joystick speed for position editing (100% = 2 m/s at full deflection)"));
+        m_speedSpin->setToolTip(tr("Joystick speed for position editing (100% = %1 a second at full deflection)")
+                                    .arg(MeasurementUnits::formatLength(2000.0)));
 
         m_saveBtn = new QPushButton(tr("Save Positions"), this);
         m_saveBtn->setEnabled(false);

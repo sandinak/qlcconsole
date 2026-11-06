@@ -161,9 +161,6 @@
         </item>
         <item row="0" column="1">
          <widget class="QSpinBox" name="m_phyWidthSpin">
-          <property name="suffix">
-           <string>mm</string>
-          </property>
           <property name="minimum">
            <number>1</number>
           </property>
@@ -184,9 +181,6 @@
         </item>
         <item row="1" column="1">
          <widget class="QSpinBox" name="m_phyHeightSpin">
-          <property name="suffix">
-           <string>mm</string>
-          </property>
           <property name="minimum">
            <number>1</number>
           </property>

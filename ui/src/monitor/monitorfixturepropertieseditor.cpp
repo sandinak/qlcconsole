@@ -24,6 +24,7 @@
 #include <QVBoxLayout>
 
 #include "monitorfixturepropertieseditor.h"
+#include "lengthspinbox.h"
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
 #include "monitorproperties.h"
@@ -43,19 +44,22 @@ MonitorFixturePropertiesEditor::MonitorFixturePropertiesEditor(
 
     setupUi(this);
 
-    m_xPosSpin->setMaximum(m_gfxView->gridSize().width());
-    m_yPosSpin->setMaximum(m_gfxView->gridSize().height());
-
-    if (m_props->gridUnits() == MonitorProperties::Feet)
-    {
-        m_xPosSpin->setSuffix("ft");
-        m_yPosSpin->setSuffix("ft");
-    }
-    else
-    {
-        m_xPosSpin->setSuffix("m");
-        m_yPosSpin->setSuffix("m");
-    }
+    /* The position is in metres (the item's real position is millimetres),
+       shown and typed in Settings > Units: the form's plain spin boxes
+       become length fields. The grid's size is in its own cells. */
+    const double cellMetres = double(m_props->gridUnitMetres());
+    auto lengthField = [](QDoubleSpinBox *&spin, double max) {
+        LengthSpinBox *field = new LengthSpinBox(1000.0, spin->parentWidget());
+        field->setObjectName(spin->objectName());
+        field->setDecimals(4);
+        field->setRange(0.0, max);
+        if (QLayout *l = spin->parentWidget() != nullptr ? spin->parentWidget()->layout() : nullptr)
+            delete l->replaceWidget(spin, field);
+        delete spin;
+        spin = field;
+    };
+    lengthField(m_xPosSpin, m_gfxView->gridSize().width() * cellMetres);
+    lengthField(m_yPosSpin, m_gfxView->gridSize().height() * cellMetres);
 
     m_fxName->setText(m_fxItem->name());
     m_xPosSpin->setValue(m_fxItem->realPosition().x() / 1000);
@@ -90,10 +94,9 @@ MonitorFixturePropertiesEditor::MonitorFixturePropertiesEditor(
         m_trussCb->addItem(t->name(), t->id());
     rigForm->addRow(tr("Truss:"), m_trussCb);
 
-    m_trussOffsetSpin = new QDoubleSpinBox(rigBox);
+    m_trussOffsetSpin = new LengthSpinBox(1000.0, rigBox);     // metres
     m_trussOffsetSpin->setRange(-100, 100);
-    m_trussOffsetSpin->setSuffix(" m");
-    m_trussOffsetSpin->setDecimals(2);
+    m_trussOffsetSpin->setDecimals(4);
     rigForm->addRow(tr("Offset along truss:"), m_trussOffsetSpin);
 
     m_mountingCb = new QComboBox(rigBox);

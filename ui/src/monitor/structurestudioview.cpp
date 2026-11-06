@@ -2331,8 +2331,7 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
             floorLine(ax, y, ax, front);
             floorLine(ax - tick, y, ax + tick, y);
             floorLine(ax - tick, front, ax + tick, front);
-            const QString text = tr("Apron %1").arg(MonitorProperties::formatStageDistance(float(apron),
-                                                                                         props->gridUnits()));
+            const QString text = tr("Apron %1").arg(MonitorProperties::formatStageDistance(float(apron)));
             const QPointF mid = (w2s(floorAt(ax, y)) + w2s(floorAt(ax, front))) / 2.0;
             /* Beside the dimension line, just off centre -- where a figure
                standing near centre has its position readout
@@ -3633,9 +3632,6 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             // labelled with its number and height so a fixture dragged onto one
             // (see dragFixtureTo()'s "snap to nearest shelf by height") can
             // actually be identified rather than just seen as an unlabelled line.
-            const bool isFeet = (props->gridUnits() == MonitorProperties::Feet);
-            const double toDisp = isFeet ? 3.28084 : 1.0;
-            const QString sfx = isFeet ? tr(" ft") : tr(" m");
             if (t->isRotated())
             {
                 // Seen flat, a turned tower is as wide as its corners reach.
@@ -3684,7 +3680,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                    used to print over each other ("text stomping on each
                    other .. shelf info on left and light info on right"). */
                 p.setPen(steel.lighter(170));
-                const QString label = shelfLabel(i, z, toDisp, sfx);
+                const QString label = shelfLabel(i, z);
                 const double leftX = qMin(sA.x(), sB.x());
                 p.drawText(QPointF(leftX - 6 - fm.horizontalAdvance(label), sA.y() - 3), label);
             }
@@ -9829,10 +9825,8 @@ void StructureStudioView::drawDimensions(QPainter &p) const
         sMinX = qMin(sMinX, s.x()); sMaxX = qMax(sMaxX, s.x());
         sMinY = qMin(sMinY, s.y()); sMaxY = qMax(sMaxY, s.y());
     }
-    const bool feet = props->gridUnits() == MonitorProperties::Feet;
-    const double conv = feet ? 3.28084 : 1.0;
-    const QString sfx = feet ? QStringLiteral(" ft") : QStringLiteral(" m");
-    const double wSpan = (maxA - minA) * conv, hSpan = (maxB - minB) * conv;
+    // Spans in metres, written in Settings > Units.
+    const double wSpan = maxA - minA, hSpan = maxB - minB;
 
     // The bracket is drawn "just below the structure" -- but a fixture
     // mounted on it (icon + name label, drawn earlier in paintEvent()) can
@@ -9859,7 +9853,7 @@ void StructureStudioView::drawDimensions(QPainter &p) const
         p.drawLine(QPointF(sMinX, y - 4), QPointF(sMinX, y + 4));
         p.drawLine(QPointF(sMaxX, y - 4), QPointF(sMaxX, y + 4));
         p.drawText(QRectF(sMinX, y + 2, sMaxX - sMinX, 14), Qt::AlignCenter,
-                   QString("%1%2").arg(wSpan, 0, 'f', 1).arg(sfx));
+                   MonitorProperties::formatStageDistance(float(wSpan)));
     }
     // Vertical dimension, just left of the structure -- and left of a
     // tower's shelf labels, which are drawn on that side.
@@ -9873,16 +9867,14 @@ void StructureStudioView::drawDimensions(QPainter &p) const
         p.translate(x - 4, (sMinY + sMaxY) / 2.0);
         p.rotate(-90);
         p.drawText(QRectF(-40, -12, 80, 12), Qt::AlignCenter,
-                   QString("%1%2").arg(hSpan, 0, 'f', 1).arg(sfx));
+                   MonitorProperties::formatStageDistance(float(hSpan)));
         p.restore();
     }
 }
 
-QString StructureStudioView::shelfLabel(int index, float height, double toDisp,
-                                       const QString &unitSuffix) const
+QString StructureStudioView::shelfLabel(int index, float height) const
 {
-    return tr("Shelf %1 — %2%3").arg(index + 1)
-        .arg(double(height) * toDisp, 0, 'f', 2).arg(unitSuffix);
+    return tr("Shelf %1 — %2").arg(index + 1).arg(MeasurementUnits::formatMetres(double(height)));
 }
 
 double StructureStudioView::shelfLabelsWidth() const
@@ -9893,12 +9885,10 @@ double StructureStudioView::shelfLabelsWidth() const
     Tower *t = m_doc->monitorProperties()->tower(m_id);
     if (t == nullptr || t->shelfCount() == 0)
         return 0.0;
-    const bool isFeet = (m_doc->monitorProperties()->gridUnits() == MonitorProperties::Feet);
     const QFontMetricsF fm(QFont("Arial", 8));
     double w = 0.0;
     for (int i = 0; i < t->shelfCount(); ++i)
-        w = qMax(w, fm.horizontalAdvance(shelfLabel(i, t->shelfHeight(i), isFeet ? 3.28084 : 1.0,
-                                                     isFeet ? tr(" ft") : tr(" m"))));
+        w = qMax(w, fm.horizontalAdvance(shelfLabel(i, t->shelfHeight(i))));
     return w + 8.0;
 }
 
@@ -10020,11 +10010,12 @@ void StructureStudioView::drawRulers(QPainter &p) const
 
     // Match the main-window ruler bars: dark band, 9px font, a number at every
     // sensibly-spaced unit, blue axis label, blue cursor.
-    MonitorProperties *props = m_doc->monitorProperties();
-    const bool feet = props->gridUnits() == MonitorProperties::Feet;
-    const double conv = feet ? 3.28084 : 1.0;
-    const QString sfx = feet ? QStringLiteral("ft") : QStringLiteral("m");
-    const double stepM = 1.0 / conv;                 // one display unit, in metres
+    /* A tick a foot apart for feet or inches (Settings > Units), else a
+       metre; the ruler names that unit. Readings beside it are in the
+       preferred unit itself. */
+    const bool feet = MeasurementUnits::isImperial(MeasurementUnits::preferredLength());
+    const QString sfx = MeasurementUnits::symbol(feet ? MeasurementUnits::Feet : MeasurementUnits::Metres);
+    const double stepM = feet ? 0.3048 : 1.0;        // one ruler unit, in metres
     const double pxPerUnit = stepM * m_scale;        // its width in pixels
     // Choose a label interval that keeps ~34 px between numbers.
     int lblEvery = 1;
@@ -10064,7 +10055,7 @@ void StructureStudioView::drawRulers(QPainter &p) const
             p.setBrush(mk);
             QPolygonF tri; tri << QPointF(GW + 1, sy) << QPointF(GW + 8, sy - 4) << QPointF(GW + 8, sy + 4);
             p.drawPolygon(tri);
-            p.drawText(QPointF(GW + 11, sy - 3), QString("max %1 %2").arg(topZ * conv, 0, 'f', 1).arg(sfx));
+            p.drawText(QPointF(GW + 11, sy - 3), tr("max %1").arg(MonitorProperties::formatStageDistance(float(topZ))));
         }
     }
 
@@ -10202,9 +10193,6 @@ QVector3D StructureStudioView::worldAt(const QPointF &px, int *known, bool *onSu
 
 QString StructureStudioView::cursorReadoutText(const QPointF &px) const
 {
-    const bool feet = m_doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
-    const double conv = feet ? 3.28084 : 1.0;
-    const QString sfx = feet ? QStringLiteral("ft") : QStringLiteral("m");
     /* H across the stage (stage left +), V up/downstage (downstage +), Z the
        height above the floor -- of whatever is under the pointer ("can we
        have the crosshairs hover give H, V, and Z"). Over nothing at an angle
@@ -10213,13 +10201,13 @@ QString StructureStudioView::cursorReadoutText(const QPointF &px) const
     int known = 0;
     bool onSurface = false;
     const QVector3D w = worldAt(px, &known, &onSurface) - stageZero();
+    // Each in Settings > Units, to the millimetre.
     auto num = [&](int bit, float v) {
         if (!(known & bit))
             return QStringLiteral("—");
-        const double d = double(v) * conv;
-        return QString::number(qAbs(d) < 0.005 ? 0.0 : d, 'f', 2);
+        return MeasurementUnits::formatLength(std::round(double(v) * 1000.0));
     };
-    QString t = QString("H %1  V %2  Z %3 %4").arg(num(1, w.x()), num(2, w.y()), num(4, w.z()), sfx);
+    QString t = QString("H %1  V %2  Z %3").arg(num(1, w.x()), num(2, w.y()), num(4, w.z()));
     if (!onSurface && m_plane == Angled && known)
         t += tr("  (floor)");
     return t;

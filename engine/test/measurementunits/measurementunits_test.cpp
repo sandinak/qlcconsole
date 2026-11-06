@@ -264,7 +264,8 @@ void MeasurementUnits_Test::storedMm()
 
 void MeasurementUnits_Test::preference()
 {
-    QCOMPARE(MU::preferredLength(), MU::Millimetres);   // never set: mm
+    QCOMPARE(MU::preferredLength(), MU::Feet);   // never set: feet and inches, the product's default
+    QCOMPARE(MU::formatLength(1905.0, MU::preferredLength()), QString("6' 3\""));
     MU::setPreferredLength(MU::Inches);
     QCOMPARE(MU::preferredLength(), MU::Inches);
     QCOMPARE(MU::weightUnitFor(MU::Inches), MU::Pounds);
@@ -279,7 +280,7 @@ void MeasurementUnits_Test::preference()
                 QLCFile::settingsOrganisation(), QStringLiteral("qlcconsole"));
     QCOMPARE(s.value(MU::settingsKey()).toString(), QString("ft"));
     s.setValue(MU::settingsKey(), QStringLiteral("nonsense"));
-    QCOMPARE(MU::preferredLength(), MU::Millimetres);
+    QCOMPARE(MU::preferredLength(), MU::Feet);
 }
 
 void MeasurementUnits_Test::keptWithEveryOtherSetting()
@@ -360,7 +361,7 @@ void MeasurementUnits_Test::seedFromFirstShow()
     QVERIFY(!MU::seedFromFirstShow(false));
     QVERIFY(!MU::isPreferenceSet());
     QVERIFY(!MU::seedFromFirstShow(true));
-    QCOMPARE(MU::preferredLength(), MU::Millimetres);
+    QCOMPARE(MU::preferredLength(), MU::Feet);      // unset: the default, feet and inches
 
     // A unit already chosen is never overridden.
     s.clear();

@@ -29,6 +29,7 @@
 
 #include "itemlock.h"
 #include "trussitem.h"
+#include "monitorproperties.h"
 
 static QCursor smallOpenHandCursor()
 {
@@ -73,7 +74,7 @@ TrussItem::TrussItem(Truss *truss, Doc *doc, float pxLen, float pxWid,
     // Label is a child — it rotates with the item, which is acceptable for
     // trusses that run at non-trivial angles.
     m_label = new QGraphicsTextItem(
-        QString("%1\n(Z: %2m)").arg(truss->name()).arg(truss->origin().z(), 0, 'f', 1),
+        QString("%1\n(Z: %2)").arg(truss->name(), MonitorProperties::formatStageDistance(truss->origin().z())),
         this);
     m_label->setDefaultTextColor(QColor(40, 40, 40));
     m_label->setFont(QFont("Arial", 7));

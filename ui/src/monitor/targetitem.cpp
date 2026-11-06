@@ -49,7 +49,7 @@ TargetItem::TargetItem(StageTarget *target, Doc *doc, float pxX, float pxY,
 
     QString labelText = target->name();
     if (target->z() > 0.0f)
-        labelText += QString("\n(Z: %1m)").arg(double(target->z()), 0, 'f', 1);
+        labelText += QString("\n(Z: %1)").arg(MonitorProperties::formatStageDistance(target->z()));
 
     m_label = new QGraphicsTextItem(labelText, this);
     QColor textColor = target->color().isValid() ? target->color().lighter(160)

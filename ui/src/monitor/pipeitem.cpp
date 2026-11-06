@@ -51,12 +51,8 @@ PipeItem::PipeItem(Pipe *pipe, Doc *doc,
     setCursor((elevation || pipe->locked() || derived) ? Qt::ArrowCursor : AppUtil::nativeCursorShape(Qt::SizeAllCursor));
     setPos(pxX, pxY);
 
-    const bool isFeet = doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
-    const double conv = isFeet ? 3.28084 : 1.0;
-    const QString unitStr = isFeet ? "ft" : "m";
-    m_label = new QGraphicsTextItem(
-        QString("%1 (%2 %3)").arg(pipe->name())
-            .arg(double(pipe->height()) * conv, 0, 'f', 1).arg(unitStr),
+    m_label = new QGraphicsTextItem(       // the height in Settings > Units
+        QString("%1 (%2)").arg(pipe->name(), MonitorProperties::formatStageDistance(pipe->height())),
         this);
     m_label->setDefaultTextColor(QColor(235, 235, 240, 220));
     m_label->setFont(QFont("Arial", 9, QFont::Bold));

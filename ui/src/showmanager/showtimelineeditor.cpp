@@ -84,6 +84,7 @@ ShowTimelineEditor::ShowTimelineEditor(QWidget *parent, Show *show, Doc *doc)
             return;
         bool ok = false;
         const double cur = m_show->totalDuration() / 1000.0;
+        // units-ok: seconds, not a length
         const double v = QInputDialog::getDouble(this, tr("Show length"),
                     tr("Length (seconds):"), cur, 0.25, 86400.0, 2, &ok);
         if (ok)

@@ -46,16 +46,11 @@ PlatformItem::PlatformItem(StagePlatform *platform, Doc *doc,
     setCursor(platform->locked() ? Qt::ArrowCursor : AppUtil::nativeCursorShape(Qt::SizeAllCursor));
     setPos(pxX, pxY);
 
-    bool isFeet = doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
-    const double conv = isFeet ? 3.28084 : 1.0;
-    const double dispW = double(platform->width())  * conv;
-    const double dispD = double(platform->depth())  * conv;
-    const double dispH = double(platform->height()) * conv;
-    QString unitStr = isFeet ? "ft" : "m";
-    // Full footprint × height so the size is unambiguous (was height only).
+    // Full footprint × height so the size is unambiguous (was height only),
+    // in Settings > Units.
     m_label = new QGraphicsTextItem(
-        QString("%1\n(%2×%3×%4 %5)").arg(platform->name())
-            .arg(dispW, 0, 'f', 1).arg(dispD, 0, 'f', 1).arg(dispH, 0, 'f', 1).arg(unitStr),
+        QString("%1\n(%2 × %3 × %4)").arg(platform->name(), MonitorProperties::formatStageDistance(platform->width()),
+                                          MonitorProperties::formatStageDistance(platform->depth()), MonitorProperties::formatStageDistance(platform->height())),
         this);
     m_label->setDefaultTextColor(QColor(240, 240, 240, 220));
     m_label->setFont(QFont("Arial", 10, QFont::Bold));

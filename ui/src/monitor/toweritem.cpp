@@ -42,12 +42,8 @@ TowerItem::TowerItem(Tower *tower, Doc *doc,
     setCursor((elevation || tower->locked()) ? Qt::ArrowCursor : AppUtil::nativeCursorShape(Qt::SizeAllCursor));
     setPos(pxX, pxY);
 
-    const bool isFeet = doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
-    const double conv = isFeet ? 3.28084 : 1.0;
-    const QString unitStr = isFeet ? "ft" : "m";
-    m_label = new QGraphicsTextItem(
-        QString("%1 (%2 %3 · %4 shelves)").arg(tower->name())
-            .arg(double(tower->height()) * conv, 0, 'f', 1).arg(unitStr)
+    m_label = new QGraphicsTextItem(       // the height in Settings > Units
+        QString("%1 (%2 · %3 shelves)").arg(tower->name(), MonitorProperties::formatStageDistance(tower->height()))
             .arg(tower->shelfCount()),
         this);
     m_label->setDefaultTextColor(QColor(220, 224, 235, 210));

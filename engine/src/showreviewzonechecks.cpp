@@ -419,10 +419,11 @@ void pwr11(ReviewContext &ctx, QList<ReviewFinding> &out)
                             continue;
                         if (li.cutBottom > 0.0)
                         {
-                            how += tr(" The bottom of %1's window passes through it at %2 m: tape off about "
+                            how += tr(" The bottom of %1's window passes through it at %2: tape off about "
                                       "%3° of the bottom.")
-                                       .arg(ctx.fixtureName(fid))
-                                       .arg(li.lowZ, 0, 'f', 1).arg(li.cutBottom, 0, 'f', 1);
+                                       .arg(ctx.fixtureName(fid),
+                                            MonitorProperties::formatStageDistance(float(li.lowZ)))
+                                       .arg(li.cutBottom, 0, 'f', 1);
                             fixMask << fid << li.cutBottom;
                         }
                         else
@@ -430,11 +431,11 @@ void pwr11(ReviewContext &ctx, QList<ReviewFinding> &out)
                                       "edge, aim it elsewhere, or move the zone.").arg(ctx.fixtureName(fid));
                     }
                     ReviewFinding f = ReviewContext::make(QStringLiteral("PWR-11"), ReviewFinding::Warning,
-                        tr("In %1 a lit beam from %2 crosses the no-light zone '%3' (%4, up to %5 m).%6 "
+                        tr("In %1 a lit beam from %2 crosses the no-light zone '%3' (%4, up to %5).%6 "
                            "Aim it off, darken it in this cue, or move the zone.")
                             .arg(ctx.cueText(list, i), joined(ctx, fresh), z.name,
-                                 NoLightZone::kindLabel(z.kind).toLower())
-                            .arg(double(z.floorZ + z.height), 0, 'f', 1).arg(how),
+                                 NoLightZone::kindLabel(z.kind).toLower(),
+                                 MonitorProperties::formatStageDistance(float(z.floorZ + z.height)), how),
                         keys, print, QStringLiteral("cue"), QVariantList() << cue.id);
                     f.fixMask = fixMask;
                     out << f;

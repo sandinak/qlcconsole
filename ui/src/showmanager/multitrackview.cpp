@@ -1156,6 +1156,7 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
             {
                 bool ok = false;
                 const double cur = effectiveEndMs() / 1000.0;
+                // units-ok: seconds, not a length
                 const double v = QInputDialog::getDouble(this, tr("Show length"),
                             tr("Length (seconds):"), cur, 0.25, 86400.0, 2, &ok);
                 if (ok)

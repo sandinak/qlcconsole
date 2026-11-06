@@ -24,6 +24,8 @@
 #include <QString>
 #include <QList>
 
+#include "measurementunits.h"
+
 class Doc;
 
 /** @addtogroup engine Engine
@@ -101,12 +103,13 @@ public:
     /** Index into ports of the longest anchored run, or -1 if none. */
     int longestRun() const;
 
-    /** A readable summary, lengths in feet when @p feet. */
-    QString toText(bool feet = false) const;
+    /** A readable summary, lengths in @p unit (Settings > Units). */
+    QString toText(MeasurementUnits::LengthUnit unit = MeasurementUnits::preferredLength()) const;
 
     /** Two CSV tables for a spreadsheet, separated by a blank line: the ports,
-     *  then the network fixtures. Lengths in feet when @p feet. */
-    QString toCsv(bool feet = false) const;
+     *  then the network fixtures. Run lengths in @p unit, named in the
+     *  column header. */
+    QString toCsv(MeasurementUnits::LengthUnit unit = MeasurementUnits::preferredLength()) const;
 };
 
 /** @} */

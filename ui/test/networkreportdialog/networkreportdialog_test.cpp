@@ -87,16 +87,22 @@ void NetworkReportDialog_Test::cleanup()
 
 void NetworkReportDialog_Test::itShowsTheReportInThePlotsUnits()
 {
+    // Settings > Units, whatever the grid is in.
+    const MeasurementUnits::LengthUnit was = MeasurementUnits::preferredLength();
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
+    m_doc->monitorProperties()->setGridUnits(MonitorProperties::Feet);
     {
         NetworkReportDialog dlg(m_doc);
         QCOMPARE(dlg.windowTitle(), QString("Network Report"));
         QVERIFY(dlg.m_text->isReadOnly());
-        QCOMPARE(dlg.m_text->toPlainText(), dlg.report().toText(false));
-        QVERIFY(dlg.m_text->toPlainText().contains("run ~5.0 m"));
+        QCOMPARE(dlg.m_text->toPlainText(), dlg.report().toText(MeasurementUnits::Metres));
+        QVERIFY(dlg.m_text->toPlainText().contains("run ~5 m"));
     }
-    m_doc->monitorProperties()->setGridUnits(MonitorProperties::Feet);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
+    m_doc->monitorProperties()->setGridUnits(MonitorProperties::Meters);
     NetworkReportDialog dlg(m_doc);
-    QVERIFY2(dlg.m_text->toPlainText().contains("run ~16.4 ft"), qPrintable(dlg.m_text->toPlainText()));
+    QVERIFY2(dlg.m_text->toPlainText().contains("run ~16' 5\""), qPrintable(dlg.m_text->toPlainText()));
+    MeasurementUnits::setPreferredLength(was);
 }
 
 void NetworkReportDialog_Test::copyPutsTheSummaryOnTheClipboard()
@@ -116,7 +122,7 @@ void NetworkReportDialog_Test::saveCsvWritesTheSpreadsheet()
     QVERIFY(dlg.saveCsv(path));
     QFile f(path);
     QVERIFY(f.open(QIODevice::ReadOnly | QIODevice::Text));
-    QCOMPARE(QString::fromUtf8(f.readAll()), dlg.report().toCsv(false));
+    QCOMPARE(QString::fromUtf8(f.readAll()), dlg.report().toCsv(MeasurementUnits::preferredLength()));
 }
 
 void NetworkReportDialog_Test::saveCsvReportsAPathItCannotWrite()

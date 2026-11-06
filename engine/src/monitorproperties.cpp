@@ -943,23 +943,27 @@ MonitorProperties::StageOffset MonitorProperties::stageOffset(const QVector3D &w
     return o;
 }
 
-QString MonitorProperties::formatStageOffset(const StageOffset &offset, GridUnits units,
+QString MonitorProperties::formatStageOffset(const StageOffset &offset, MeasurementUnits::LengthUnit unit,
                                              OffsetStyle style)
 {
-    const bool feet = (units == Feet);
+    using MU = MeasurementUnits;
+    const bool feet = (unit == MU::Feet);
     const bool spoken = (style == SpokenOffset);
-    /* Rounded to what is written: a tenth of a metre or an inch on screen,
-       a whole unit spoken. Zero is what rounds to nothing. */
-    const double step = spoken ? 1.0 : (feet ? 1.0 / 12.0 : 0.1);
-    auto rounded = [feet, step](float metres) {
-        const double inUnits = double(metres) / (feet ? 0.3048 : 1.0);
+    const double per = MU::mmPer(unit) / 1000.0;     // metres in one unit
+    /* Rounded to what is written: a tenth of a metre, a centimetre, a
+       millimetre or an inch on screen (feet: the inch), a whole unit spoken.
+       Zero is what rounds to nothing. */
+    const double step = spoken ? 1.0
+                               : (feet ? 1.0 / 12.0 : (unit == MU::Metres ? 0.1 : 1.0));
+    auto rounded = [per, step](float metres) {
+        const double inUnits = double(metres) / per;
         return std::round(std::fabs(inUnits) / step) * step;
     };
-    auto number = [feet, spoken](double v) {
+    auto number = [feet, spoken, unit](double v) {
         if (spoken)
             return QString::number(qRound(v));
         if (!feet)
-            return QString::number(v, 'f', 1);
+            return QString::number(v, 'f', unit == MU::Metres ? 1 : 0);
         const int inches = qRound(v * 12.0);
         return (inches % 12) == 0 ? QStringLiteral("%1'").arg(inches / 12)
                                   : QStringLiteral("%1' %2\"").arg(inches / 12).arg(inches % 12);
@@ -997,30 +1001,34 @@ QString MonitorProperties::formatStageOffset(const StageOffset &offset, GridUnit
                          : QStringLiteral("↑ %1").arg(number(high)));
         lastNumber = parts.size() - 1;
     }
-    // Metres once, after the last number (feet carry their own marks).
+    // The unit once, after the last number (feet carry their own marks).
     if (!feet && !spoken && lastNumber >= 0)
-        parts[lastNumber] += QStringLiteral(" m");
+        parts[lastNumber] += QLatin1Char(' ') + MU::symbol(unit);
     return parts.join(spoken ? QStringLiteral(", ") : QStringLiteral(" · "));
 }
 
-QString MonitorProperties::formatStageDistance(float metres, GridUnits units)
+double MonitorProperties::roundStageDistance(double metres, MeasurementUnits::LengthUnit unit)
 {
-    const double v = std::fabs(double(metres));
-    if (units != Feet)
-        return QStringLiteral("%1 m").arg(QString::number(std::round(v * 10.0) / 10.0, 'f', 1));
-    const int inches = int(std::lround(v / 0.0254));
-    return (inches % 12) == 0 ? QStringLiteral("%1'").arg(inches / 12)
-                              : QStringLiteral("%1' %2\"").arg(inches / 12).arg(inches % 12);
+    using MU = MeasurementUnits;
+    // A tenth of a metre, else one of the unit (feet: the inch).
+    const double step = unit == MU::Metres ? 0.1
+                      : MU::isImperial(unit) ? 0.0254
+                      : MU::mmPer(unit) / 1000.0;
+    return std::round(std::fabs(metres) / step) * step;
 }
 
-QString MonitorProperties::formatCurtainLineOffset(float downstage, GridUnits units)
+QString MonitorProperties::formatStageDistance(float metres, MeasurementUnits::LengthUnit unit)
 {
-    // Rounded to what is written: a tenth of a metre, or an inch.
-    const double step = (units == Feet) ? 0.0254 : 0.1;
-    if (std::round(std::fabs(double(downstage)) / step) == 0.0)
+    return MeasurementUnits::formatLength(roundStageDistance(double(metres), unit) * 1000.0, unit);
+}
+
+QString MonitorProperties::formatCurtainLineOffset(float downstage, MeasurementUnits::LengthUnit unit)
+{
+    // Rounded to what is written.
+    if (roundStageDistance(double(downstage), unit) == 0.0)
         return tr("on the curtain line");
-    return downstage > 0.0f ? tr("%1 DS of curtain line").arg(formatStageDistance(downstage, units))
-                            : tr("%1 US of curtain line").arg(formatStageDistance(downstage, units));
+    return downstage > 0.0f ? tr("%1 DS of curtain line").arg(formatStageDistance(downstage, unit))
+                            : tr("%1 US of curtain line").arg(formatStageDistance(downstage, unit));
 }
 
 void MonitorProperties::reset()
@@ -3155,10 +3163,6 @@ void MonitorProperties::removeStageTarget(quint32 id)
    different ways in two different panels. */
 QString MonitorProperties::mountDescription(const FixtureRigProps &rp, quint32 fid) const
 {
-    const bool isFeet = (gridUnits() == Feet);
-    const QString sfx = isFeet ? tr(" ft") : tr(" m");
-    const double toDisp = isFeet ? 3.28084 : 1.0;
-
     if (rp.onHanger())
     {
         Hanger *h = hanger(rp.hangerId);
@@ -3177,8 +3181,8 @@ QString MonitorProperties::mountDescription(const FixtureRigProps &rp, quint32 f
     if (rp.trussId != Truss::invalidId())
     {
         Truss *t = truss(rp.trussId);
-        return tr("Truss %1 · %2%3 along").arg(t ? t->name() : QString())
-               .arg(double(rp.trussOffset) * toDisp, 0, 'f', 1).arg(sfx);
+        return tr("Truss %1 · %2 along").arg(t ? t->name() : QString(),
+                                             MeasurementUnits::formatMetres(double(rp.trussOffset)));
     }
     if (rp.pipeId != Pipe::invalidId())
     {

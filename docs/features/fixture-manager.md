@@ -858,7 +858,7 @@ definition. On top of stock QLC+'s editor:
   errors asks first.
 - **Physical tab → Dimensions in your own units.** Width, height, depth
   and weight show in the unit chosen in qlcconsole's **Settings ▸ General ▸ Units**
-  (millimetres, centimetres, metres, inches, or feet and inches; weight in
+  (feet and inches by default, or millimetres, centimetres, metres or inches; weight in
   kg with the metric ones, lb with inches and feet). Type a bare number in
   that unit, or any unit with the number and it's converted: `7.5"`,
   `7.5 in`, `0.625'`, `0.625 ft`, `6' 3"`, `190.5 mm`, `19.05 cm`,

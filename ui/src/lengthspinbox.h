@@ -60,7 +60,7 @@ public:
     double valueFromText(const QString &text) const override
     {
         bool ok = false;
-        const double mm = MeasurementUnits::parseLength(clean(text), m_unit, &ok);
+        const double mm = parse(text, &ok);
         return ok ? mm / m_mmPerValue : value();
     }
 
@@ -68,7 +68,7 @@ public:
     {
         Q_UNUSED(pos)
         bool ok = false;
-        const double mm = MeasurementUnits::parseLength(clean(input), m_unit, &ok);
+        const double mm = parse(input, &ok);
         if (!ok)
             return QValidator::Intermediate;
         const double v = mm / m_mmPerValue;
@@ -77,6 +77,20 @@ public:
     }
 
 private:
+    /** Millimetres typed, a leading minus kept (an offset, below the deck) */
+    double parse(const QString &text, bool *ok) const
+    {
+        QString t = clean(text);
+        bool neg = false;
+        if (t.startsWith(QLatin1Char('-')) || t.startsWith(QChar(0x2212)))
+        {
+            neg = true;
+            t = t.mid(1).trimmed();
+        }
+        const double mm = MeasurementUnits::parseLength(t, m_unit, ok);
+        return neg ? -mm : mm;
+    }
+
     static QString clean(QString text)
     {
         text.replace(QChar(0x2032), QLatin1Char('\''));   // prime

@@ -270,6 +270,10 @@ static QString testLayouts()
    behind such warnings. */
 void Monitor_Test::init()
 {
+    /* Most of these tests were written in metres: lengths are shown and
+       typed in Settings > Units, so that is metres here unless a test
+       says feet. */
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
     // Tests change the output and draw at once: heads snap unless a test is about the travel.
     StructureStudioView::setMoveSpeed(false);
     QTest::failOnWarning(QRegularExpression(QStringLiteral("No such (slot|signal)")));
@@ -9489,6 +9493,7 @@ void Monitor_Test::theRigGridMatchesTheStudioGrid()
        lines about 3.28 times closer together than in metres. */
     const double metresPerCell = 1.0;
     props->setGridUnits(MonitorProperties::Feet);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);   // a feet show, worked in feet
     StructureStudioView vf(doc, StructureStudioView::StageKind, 0);
     vf.resize(900, 620);
     vf.reload();
@@ -15742,6 +15747,7 @@ void Monitor_Test::addNetworkNodeCancelledAddsNothing()
     QVERIFY(rig.build(m_doc));
     const MonitorProperties::GridUnits units = m_doc->monitorProperties()->gridUnits();
     m_doc->monitorProperties()->setGridUnits(MonitorProperties::Feet);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);   // a feet show, worked in feet
     driveDialog([](QWidget *dlg) {
         // Feet, as every length is entered: feet and inches.
         QDoubleSpinBox *x = dlg->findChild<QDoubleSpinBox *>();
@@ -18539,6 +18545,7 @@ void Monitor_Test::addFountainBuildsItAsOneGroup()
     QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
     MonitorProperties *props = doc->monitorProperties();
     props->setGridUnits(MonitorProperties::Feet);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);   // a feet show, worked in feet
     props->setGridSize(QVector3D(40, 20, 24));
     {
         QWidget parent;
@@ -18657,6 +18664,7 @@ void Monitor_Test::aFountainsFlameStartsAtItsInnerWallTop()
     QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
     MonitorProperties *props = doc->monitorProperties();
     props->setGridUnits(MonitorProperties::Feet);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);   // a feet show, worked in feet
     props->setGridSize(QVector3D(40, 20, 24));
     {
         QWidget parent;
@@ -18720,6 +18728,7 @@ void Monitor_Test::anOldFountainsFlameKeepsItsTopAndJoinsIt()
     QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
     MonitorProperties *props = doc->monitorProperties();
     props->setGridUnits(MonitorProperties::Feet);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);   // a feet show, worked in feet
     props->setGridSize(QVector3D(40, 20, 24));
     QWidget parent;
     Monitor *mon = new Monitor(&parent, doc);
@@ -19716,7 +19725,12 @@ void Monitor_Test::towerShelfLabelsAreOnTheLeft()
         StructureStudioView v(doc, StructureStudioView::TowerKind, t->id());
         v.resize(520, 780);
         v.setPlane(StructureStudioView::Front);
-        QCOMPARE(v.shelfLabel(2, 1.8f, 1.0, " m"), QString::fromUtf8("Shelf 3 — 1.80 m"));
+        const MeasurementUnits::LengthUnit unitWas = MeasurementUnits::preferredLength();
+        MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
+        QCOMPARE(v.shelfLabel(2, 1.8f), QString::fromUtf8("Shelf 3 — 1.8 m"));
+        MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
+        QCOMPARE(v.shelfLabel(2, 1.8288f), QString::fromUtf8("Shelf 3 — 6'"));
+        MeasurementUnits::setPreferredLength(unitWas);
         const double w = v.shelfLabelsWidth();
         QVERIFY2(w > 40.0, qPrintable(QString::number(w)));   // room for "Shelf 3 — 1.80 m"
 
@@ -25073,6 +25087,7 @@ void Monitor_Test::theCrosshairsSayWhereThePointerIs()
     Doc *doc = new Doc(this);
     MonitorProperties *props = doc->monitorProperties();
     props->setGridUnits(MonitorProperties::Feet);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);   // a feet show, worked in feet
     StagePlatform *riser = props->addPlatform();
     riser->setOriginX(0.0f); riser->setOriginY(0.0f);
     riser->setWidth(2.438f); riser->setDepth(1.219f); riser->setHeight(0.610f);

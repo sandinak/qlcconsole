@@ -1416,13 +1416,13 @@ void PlotAlignment_Test::studioRulerCountsFromThePlotsZero()
     view.setPlane(StructureStudioView::Top);
     view.reload();
     const QPointF onCl = view.w2s(QVector3D(props->stageCentre().x(), 4.0f, 0.0f));
-    QVERIFY2(view.cursorReadoutText(onCl).startsWith(QStringLiteral("H 0.00 ")),
+    QVERIFY2(view.cursorReadoutText(onCl).startsWith(QStringLiteral("H %1 ").arg(MeasurementUnits::formatLength(0.0))),
              qPrintable(QStringLiteral("on the centre line the readout says %1").arg(view.cursorReadoutText(onCl))));
     props->setStageOrigin(QPointF(2.5, 1.0));
     view.reload();
     QVERIFY2(qAbs(view.structureCentreA() - 2.5) < 1e-6, "with a ⌖ origin set, the ruler counts from it");
     const QPointF onOrigin = view.w2s(QVector3D(2.5f, 1.0f, 0.0f));
-    QVERIFY2(view.cursorReadoutText(onOrigin).startsWith(QStringLiteral("H 0.00  V 0.00 ")),
+    QVERIFY2(view.cursorReadoutText(onOrigin).startsWith(QStringLiteral("H %1  V %1 ").arg(MeasurementUnits::formatLength(0.0))),
              qPrintable(QStringLiteral("on the origin the readout says %1").arg(view.cursorReadoutText(onOrigin))));
 }
 

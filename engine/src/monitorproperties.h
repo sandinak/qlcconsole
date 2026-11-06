@@ -337,11 +337,17 @@ public:
      *  "1' 6\" US of curtain line", "on the curtain line". For a pipe or a
      *  truss over the audience, like the FOH electric. */
     inline float curtainLineOffset(float y) const { return y - curtainLineY(); }
-    static QString formatCurtainLineOffset(float downstage, GridUnits units);
+    static QString formatCurtainLineOffset(float downstage,
+                                           MeasurementUnits::LengthUnit unit = MeasurementUnits::preferredLength());
     QString curtainLineOffsetText(float y) const
-    { return formatCurtainLineOffset(curtainLineOffset(y), m_gridUnits); }
-    /** A distance on its own, as the screen writes it: "1.8 m", "5' 11\"". */
-    static QString formatStageDistance(float metres, GridUnits units);
+    { return formatCurtainLineOffset(curtainLineOffset(y)); }
+    /** A distance on its own, as the screen writes it, in Settings > Units
+     *  (never the grid's unit): "1.8 m", "5' 11\"", "71 in", "180 cm".
+     *  Rounded to a tenth of a metre, a centimetre, a millimetre or an inch. */
+    static QString formatStageDistance(float metres,
+                                       MeasurementUnits::LengthUnit unit = MeasurementUnits::preferredLength());
+    /** @a metres rounded the way formatStageDistance() writes it, in metres */
+    static double roundStageDistance(double metres, MeasurementUnits::LengthUnit unit);
 
     /** The apron: the stage downstage of the curtain line, as its own
      *  piece. It starts at the curtain line and runs downstage by its depth,
@@ -445,11 +451,11 @@ public:
      *  "SR 3' 4\" · DS 1' 6\"", "CL · on line"). Spoken: whole units, for a
      *  call or a voice ("SL 2, US 1", "CL, on the number line"). */
     enum OffsetStyle { CompactOffset, SpokenOffset };
-    static QString formatStageOffset(const StageOffset &offset, GridUnits units,
+    static QString formatStageOffset(const StageOffset &offset, MeasurementUnits::LengthUnit unit,
                                      OffsetStyle style = CompactOffset);
-    /** stageOffset() written in this show's unit. */
+    /** stageOffset() written in Settings > Units. */
     QString stagePositionText(const QVector3D &world, OffsetStyle style = CompactOffset) const
-    { return formatStageOffset(stageOffset(world), m_gridUnits, style); }
+    { return formatStageOffset(stageOffset(world), MeasurementUnits::preferredLength(), style); }
 
 private:
     QVector3D m_gridSize;

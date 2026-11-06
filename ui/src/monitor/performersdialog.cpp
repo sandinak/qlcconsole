@@ -40,7 +40,9 @@ PerformersDialog::PerformersDialog(MonitorProperties *props, const QList<quint32
     setObjectName(QStringLiteral("performersDialog"));
     setWindowTitle(fills() ? tr("Fill with People") : tr("Performer Line"));
     setProperty("helpTopic", QStringLiteral("lighting-studio.md#people-on-the-stage"));
-    m_feet = (props != nullptr && props->gridUnits() == MonitorProperties::Feet);
+    // Fields show Settings > Units; their numbers are in feet when that is
+    // feet or inches (a step of an inch), else metres.
+    m_feet = FeetInchesSpinBox::valuesInFeet();
     const double toDisp = m_feet ? 3.28084 : 1.0;
 
     QVBoxLayout *vl = new QVBoxLayout(this);
@@ -69,7 +71,9 @@ PerformersDialog::PerformersDialog(MonitorProperties *props, const QList<quint32
     m_spacing->setRange(0.3 * toDisp, 3.0 * toDisp);
     m_spacing->setSingleStep(m_feet ? 1.0 / 12.0 : 0.05);
     m_spacing->setValue(0.6 * toDisp);
-    m_spacing->setToolTip(tr("Shoulder to shoulder is about 0.5 m; a choir stands about 0.6 m apart"));
+    m_spacing->setToolTip(tr("Shoulder to shoulder is about %1; a choir stands about %2 apart")
+                              .arg(MonitorProperties::formatStageDistance(0.5f),
+                                   MonitorProperties::formatStageDistance(0.6f)));
     form->addRow(tr("Apart:"), m_spacing);
 
     m_perRow = new QSpinBox(this);

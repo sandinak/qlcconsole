@@ -3475,7 +3475,7 @@ void LookEditor::rebuildEffectDynWidget()
                    sliders -- on macOS those then render a stale handle. */
                 /* A length ("unit": "cm") shows and takes the unit Settings ->
                    Units picks -- 5' 7" with feet -- and is kept in cm. */
-                const bool isLength = pd.unit == QLatin1String("cm");
+                const bool isLength = pd.unit == QLatin1String("cm");   // units-ok: a script's declared unit
                 QDoubleSpinBox *val = isLength ? new LengthSpinBox(10.0, row) : new QDoubleSpinBox(row);
                 val->setObjectName(QStringLiteral("effectParam_") + pd.name);
                 val->setButtonSymbols(QAbstractSpinBox::NoButtons);

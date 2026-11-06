@@ -48,8 +48,10 @@ public:
     enum LengthUnit { Millimetres = 0, Centimetres, Metres, Inches, Feet };
     enum WeightUnit { Kilograms = 0, Pounds };
 
-    /** The preferred length unit (Millimetres when never set). Read from
-     *  qlcconsole's own settings so the fixture editor follows it too. */
+    /** The preferred length unit (feet and inches when never set: the
+     *  product's default). Read from qlcconsole's own settings so the
+     *  fixture editor follows it too. Every length a person reads or types
+     *  goes through this unit -- never the show grid's. */
     static LengthUnit preferredLength();
     static void setPreferredLength(LengthUnit unit);
     /** True once a unit has been chosen (or seeded) */
@@ -59,6 +61,9 @@ public:
      *  before Settings -> Units), the preference becomes feet. Any later
      *  show changes nothing. True when it set the preference. */
     static bool seedFromFirstShow(bool showInFeet);
+
+    /** True for inches and feet */
+    static bool isImperial(LengthUnit unit);
 
     /** Kilograms for the metric lengths, pounds for inches and feet */
     static WeightUnit weightUnitFor(LengthUnit unit);
@@ -87,6 +92,10 @@ public:
      *  7.5 in, not 7.52); anything else is rounded to the unit's precision
      *  (mm 0.1, cm 0.01, m 0.0001, in 0.01). Trailing zeros are dropped. */
     static QString formatLength(double mm, LengthUnit unit);
+    /** @a mm shown in preferredLength() */
+    static QString formatLength(double mm);
+    /** @a metres shown in preferredLength() */
+    static QString formatMetres(double metres);
     /** @a kg shown in @a unit: kg to 0.001, lb to 0.01, no trailing zeros */
     static QString formatWeight(double kg, WeightUnit unit);
 

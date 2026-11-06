@@ -1348,9 +1348,11 @@ static void pwr09(ReviewContext &ctx, QList<ReviewFinding> &out)
         const int lclass = laser ? mp->fixtureRigProps(fx->id()).laserClass : 0;
         const bool low = laser && laserClassLow(lclass);
         QString text = stars ? tr("%1's star field can reach the audience: it spreads over the space past the "
-                                  "stage edge below 3 m (eye height).").arg(fx->name())
+                                  "stage edge below %2 (eye height).").arg(fx->name(),
+                                  MonitorProperties::formatStageDistance(float(kEyeLimit)))
                              : tr("%1's beam can reach the audience: it enters the space past the stage edge "
-                                  "below 3 m (eye height).").arg(fx->name());
+                                  "below %2 (eye height).").arg(fx->name(),
+                                  MonitorProperties::formatStageDistance(float(kEyeLimit)));
         if (low)
             text += tr(" It is class %1, low power: check the scan and the audience distance, and tape it "
                        "off if it needs to.").arg(laserClassName(lclass));

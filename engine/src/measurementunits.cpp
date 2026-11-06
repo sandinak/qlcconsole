@@ -253,7 +253,7 @@ QString MeasurementUnits::settingsKey()
 MeasurementUnits::LengthUnit MeasurementUnits::preferredLength()
 {
     APP_SETTINGS(s);
-    return fromKey(s.value(settingsKey()).toString());
+    return fromKey(s.value(settingsKey()).toString(), Feet);
 }
 
 void MeasurementUnits::setPreferredLength(LengthUnit unit)
@@ -281,9 +281,14 @@ bool MeasurementUnits::seedFromFirstShow(bool showInFeet)
     return true;
 }
 
+bool MeasurementUnits::isImperial(LengthUnit unit)
+{
+    return unit == Inches || unit == Feet;
+}
+
 MeasurementUnits::WeightUnit MeasurementUnits::weightUnitFor(LengthUnit unit)
 {
-    return (unit == Inches || unit == Feet) ? Pounds : Kilograms;
+    return isImperial(unit) ? Pounds : Kilograms;
 }
 
 QString MeasurementUnits::symbol(LengthUnit unit)
@@ -376,8 +381,25 @@ double MeasurementUnits::parseWeight(const QString &text, WeightUnit bareUnit, b
  * Formatting
  *****************************************************************************/
 
+QString MeasurementUnits::formatLength(double mm)
+{
+    return formatLength(mm, preferredLength());
+}
+
+QString MeasurementUnits::formatMetres(double metres)
+{
+    return formatLength(metres * 1000.0, preferredLength());
+}
+
 QString MeasurementUnits::formatLength(double mm, LengthUnit unit)
 {
+    // An offset (stage left of centre, below the deck) keeps its sign.
+    if (mm < 0.0)
+    {
+        const QString pos = formatLength(-mm, unit);
+        return pos.startsWith(QLatin1Char('0')) && !pos.contains(QRegularExpression(QStringLiteral("[1-9]")))
+               ? pos : QStringLiteral("-") + pos;
+    }
     int d = 0;
     if (unit == Feet)
     {

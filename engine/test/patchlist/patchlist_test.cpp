@@ -181,11 +181,16 @@ void PatchList_Test::theCsvFollowsThePlotUnits()
     // The plot keeps X/Y in millimetres and Z in metres.
     mp->setFixturePosition(f->id(), 0, 0, QVector3D(1000, 2000, 3.0f));
 
+    // Settings > Units, not the grid's unit.
+    const MeasurementUnits::LengthUnit unitWas = MeasurementUnits::preferredLength();
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
+    mp->setGridUnits(MonitorProperties::Feet);
     QString csv = PatchList::build(m_doc).toCsv();
     QVERIFY2(csv.contains(QStringLiteral("X (m)")) && csv.contains(QStringLiteral(",1.0,2.0,3.0,")),
              qPrintable(csv));
 
-    mp->setGridUnits(MonitorProperties::Feet);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
+    mp->setGridUnits(MonitorProperties::Meters);
     csv = PatchList::build(m_doc).toCsv();
     QVERIFY2(csv.contains(QStringLiteral("X (ft)")) && csv.contains(QStringLiteral(",3.3,6.6,9.8,")),
              qPrintable(csv));
