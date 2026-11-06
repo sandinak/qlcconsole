@@ -438,6 +438,11 @@ here is still checked against QLC+ 4.14.4 itself.
 
 ### Known issues
 
+- **After a crash, reopening a saved show doesn't offer its autosave.**
+  Recovery is offered only for an untitled show. A saved show's recovery
+  copy, `Show.qlcc.autosave` beside it, is still there: open it with
+  File ▸ Open before you change the show, because the show's next autosave
+  replaces it. A fix is planned for 0.4.2.
 - **The Windows installer is not code-signed**, so Windows SmartScreen
   warns on first run (More info ▸ Run anyway).
 - **RGB colour effects** (Rainbow, Color Spread and the like) don't run on
