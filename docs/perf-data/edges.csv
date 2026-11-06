@@ -17,3 +17,9 @@ pi,normal,cp-chasers-perstep,break,256,264,260,4,1.5,False,264,,264:1/3,21,other
 pi,normal,cp-chasers-perstep,jitter,256,264,260,4,1.5,False,264,,264:1/3,21,other,6.8.2,Debian GNU/Linux 13 (trixie),ddb33495f,2026-11-03
 pi,rt,a1p-universes-mixed-perstep,break,132,136,134,2,1.5,False,128,148,128:2/3 136:1/3 144:1/3,22,fifo,6.8.2,Debian GNU/Linux 13 (trixie),ddb33495f,2026-11-03
 pi,rt,a1p-universes-mixed-perstep,jitter,132,136,134,2,1.5,False,128,148,128:2/3 136:1/3 144:1/3,22,fifo,6.8.2,Debian GNU/Linux 13 (trixie),ddb33495f,2026-11-03
+pi,rt,a2-universes-static,break,248,256,252,4,1.6,False,240,256,240:2/3 248:2/3 256:1/3,23,fifo,6.8.2,Debian GNU/Linux 13 (trixie),ddb33495f,2026-11-03
+pi,rt,a2-universes-static,jitter,248,256,252,4,1.6,False,240,256,240:2/3 248:2/3 256:1/3,23,fifo,6.8.2,Debian GNU/Linux 13 (trixie),ddb33495f,2026-11-03
+pi,rt,c-rgbmatrix-script,break,160,168,164,4,2.4,False,160,,160:2/3,29,fifo,6.8.2,Debian GNU/Linux 13 (trixie),ddb33495f,2026-11-03
+pi,rt,c-rgbmatrix-script,jitter,104,108,106,2,1.9,False,96,108,96:2/3 108:1/3,19,fifo,6.8.2,Debian GNU/Linux 13 (trixie),ddb33495f,2026-11-03
+pi,rt,cp-chasers-perstep,break,176,184,180,4,2.2,False,184,256,192:1/3 256:1/3,19,fifo,6.8.2,Debian GNU/Linux 13 (trixie),ddb33495f,2026-11-03
+pi,rt,cp-chasers-perstep,jitter,176,184,180,4,2.2,False,184,256,192:1/3 256:1/3,19,fifo,6.8.2,Debian GNU/Linux 13 (trixie),ddb33495f,2026-11-03

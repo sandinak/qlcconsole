@@ -538,6 +538,13 @@ measured (normal only). Leftovers:
 - **Pi 5: `olad` spins a core** (110% CPU, 62 h of CPU in 12 days), left
   running during the runs (stopping it was not ours to do). Rerun the Pi
   after it is fixed or stopped; the numbers are a Pi with a busy daemon.
+- **SCHED_FIFO on the timer alone is not a free win** (Pi 5): +31% at the
+  realistic load, +77% with static looks, but per-step chasers alone break
+  at 180 instead of 260, and past ~134 universes the real-time tick waits
+  inside itself (wall − CPU p99 16–34 ms) — most likely on work shared with
+  the universe threads at normal priority. For the rttune work: try the
+  universe threads at real-time too, then rerun `rt:a1p,cp` with
+  `perf_sweep.py --refine --wrap ...`.
 - Other sweeps (`r`, `bp`) are not refined yet; the Art-Net wire limits are
   still ladder-only.
 

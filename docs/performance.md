@@ -331,9 +331,19 @@ has the detail; data in [`perf-data/edges.csv`](perf-data/edges.csv) and
 | Late frames at 128 universes | 3.0% | 0.2% |
 | Tick p99 over 20 ms from | 188 ± 4 universes | 134 ± 2 |
 
+Per function (32 universes × 170 RGB fixtures; smooth to, then breaks at):
+
+| Raspberry Pi 5 | Normal priority | SCHED_FIFO |
+|---|---|---|
+| Static 170-fixture looks, one per universe (universes) | 142 ± 2, breaks 276 ± 4 | **252 ± 4** (both) |
+| Chasers, per-step timing | 260 ± 4 | **180 ± 4** (worse) |
+| Scripted RGB matrices | 102 ± 2, breaks 158 ± 2 | 106 ± 2, breaks 164 ± 4 |
+
 Granting real-time priority is worth about a third more universes of
-steady output on a Pi 5 and removes the timer's wake-up lateness
-outright. It does not raise how much work fits in a tick: past about 134
+steady output on a Pi 5 at the realistic load, and three quarters more
+with static looks, and removes the timer's wake-up lateness outright. It
+is not a free win: many per-step chasers alone break sooner with it
+(180 against 260), and scripted matrices barely move. It does not raise how much work fits in a tick: past about 134
 universes the real-time timer waits inside its tick instead. The i7
 container cannot grant SCHED_FIFO at all (an unprivileged LXC refuses
 `prlimit --rtprio`), so it has no real-time column. To grant it, give
