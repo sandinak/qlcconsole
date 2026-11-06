@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QLayout>
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QDir>
@@ -35,6 +36,14 @@
 #include "teachingtips.h"
 #include "showoperate.h"
 #include "doc.h"
+
+QSize ShowSettingsDialog::minimumSizeHint() const
+{
+    QSize s = QWidget::minimumSizeHint();
+    if (layout() != nullptr && s.width() > 0)
+        s.setHeight(qMax(s.height(), layout()->totalMinimumHeightForWidth(s.width())));
+    return s;
+}
 
 ShowSettingsDialog::ShowSettingsDialog(Doc *doc, QWidget *parent)
     : QDialog(parent)

@@ -15,6 +15,7 @@
   limitations under the License.
 */
 
+#include <QLayout>
 #include <QDialogButtonBox>
 #include <QRadioButton>
 #include <QButtonGroup>
@@ -42,6 +43,14 @@
 #define COL_HEADS 1
 #define COL_GRID  2
 #define COL_NOTE  3
+
+QSize CreateGroupsDialog::minimumSizeHint() const
+{
+    QSize s = QWidget::minimumSizeHint();
+    if (layout() != nullptr && s.width() > 0)
+        s.setHeight(qMax(s.height(), layout()->totalMinimumHeightForWidth(s.width())));
+    return s;
+}
 
 CreateGroupsDialog::CreateGroupsDialog(Doc *doc, const QList<quint32> &fixtureIds,
                                        const QList<quint32> &groupIds,

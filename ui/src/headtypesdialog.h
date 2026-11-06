@@ -40,6 +40,10 @@ class HeadTypesDialog final : public QDialog
 {
     Q_OBJECT
 public:
+    /** The wrapping text needs more height at the narrowest width than the
+     *  layout's plain minimum says. */
+    QSize minimumSizeHint() const override;
+
     /** @param fixtureIds  the fixtures to group (any may be single-kind)
      *  @param baseName    the groups are named "<baseName> <kind>" */
     HeadTypesDialog(Doc *doc, const QList<quint32> &fixtureIds, const QString &baseName,

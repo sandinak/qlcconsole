@@ -61,6 +61,10 @@ class ShowSettingsDialog final : public QDialog
     Q_OBJECT
 
 public:
+    /** The wrapping text needs more height at the narrowest width than the
+     *  layout's plain minimum says. */
+    QSize minimumSizeHint() const override;
+
     explicit ShowSettingsDialog(Doc *doc, QWidget *parent = nullptr);
 
     /** The PIN the dialog will set on OK: empty for none. */

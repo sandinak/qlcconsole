@@ -65,6 +65,10 @@ public:
     /** Repopulate the lists from the scene's current targets/looks. */
     void reload();
 
+    /** The wrapping timing row needs more height at the narrowest width
+     *  than the layout's plain minimum says. */
+    QSize minimumSizeHint() const override;
+
     /** Show or hide the Targets and Looks lists. The Programming tab's
      *  outline lists a scene's targets and looks itself, so its scene page
      *  keeps only the timing row (fades, transitions, speed). */

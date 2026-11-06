@@ -9,6 +9,7 @@
       http://www.apache.org/licenses/LICENSE-2.0.txt
 */
 
+#include <QLayout>
 #include <QDialogButtonBox>
 #include <QMouseEvent>
 #include <QPushButton>
@@ -432,6 +433,14 @@ LedLayoutEditor::LedLayoutEditor(Doc *doc, QWidget *parent)
         else
             stopFixtureLight();
     });
+}
+
+QSize LedLayoutEditor::minimumSizeHint() const
+{
+    QSize s = QWidget::minimumSizeHint();
+    if (QWidget::layout() != nullptr && s.width() > 0)
+        s.setHeight(qMax(s.height(), QWidget::layout()->totalMinimumHeightForWidth(s.width())));
+    return s;
 }
 
 LedLayoutEditor::~LedLayoutEditor()

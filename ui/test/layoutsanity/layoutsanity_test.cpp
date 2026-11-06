@@ -466,29 +466,6 @@ struct Known
 const QList<Known> &knownIssues()
 {
     static const QList<Known> list = {
-        // L1: the picker's own rows (Hue/Red/HTML, its well) under the sliders and the
-        // "Wheel / ring" row; feat/04-cpick fixes it (scroll + reflow), then these go.
-        { "Workbench look colour", "", "QColorDialog#lookColor", "TODO layoutsanity L1" },
-        { "Workbench look colour", "min", "lookPages/QLabel \"", "TODO layoutsanity L1" },
-        // L2: the Workbench at its own minimum squeezes its header's title.
-        { "Workbench", "min", "workbenchTitle", "TODO layoutsanity L2" },
-        // L3: Pan/Tilt at the Workbench minimum: the pad over its Home/Front/... column.
-        { "Workbench look pan/tilt", "min", "VCXYPadArea#lookPanTilt", "TODO layoutsanity L3" },
-        // L4: Aim at the Workbench minimum: "Dim lights that can't see..." cut short.
-        { "Workbench look aim", "min", "aimDimWhenBlocked", "TODO layoutsanity L4" },
-        // L5: Build's scene page at the Workbench minimum: "How This Works" cut.
-        { "Workbench scene", "min", "programmingScenePage", "TODO layoutsanity L5" },
-        // L6: Show Settings at its minimum: the Teaching rows squeezed (word-wrapped
-        // PIN text takes their height).
-        { "Show Settings", "min", "text-cut", "TODO layoutsanity L6" },
-        // L7: Create groups / Head types at their minimum: the preview / LED map cut
-        // or over its caption.
-        { "Create groups", "min", "GroupPreviewWidget", "TODO layoutsanity L7" },
-        // (Linux fonts: the order strip below it cut instead.)
-        { "Head types", "min", "LedLayoutEditor#ledLayoutEditor", "TODO layoutsanity L7" },
-        // L8: the scene's group looks panel at its own minimum: the Edge/Speed row
-        // over the Targets/Looks captions.
-        { "Scene group looks", "min", "overlap", "TODO layoutsanity L8" },
     };
     return list;
 }

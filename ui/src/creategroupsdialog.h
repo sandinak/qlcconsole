@@ -52,6 +52,10 @@ class CreateGroupsDialog final : public QDialog
     Q_DISABLE_COPY(CreateGroupsDialog)
 
 public:
+    /** The wrapping text needs more height at the narrowest width than the
+     *  layout's plain minimum says. */
+    QSize minimumSizeHint() const override;
+
     /** @param groupIds  groups selected too: a block each in one group,
      *                   their fixtures' heads in a group per type
      *  @param baseName  what the groups are named after; empty: the groups'

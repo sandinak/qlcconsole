@@ -385,6 +385,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Layout: nothing squeezed at the minimum size.** The Workbench, a
+  scene's group looks, Show Settings, Create Groups, Head Types and the LED
+  layout editor now report the height their word-wrapped text needs at the
+  narrowest width, so at their smallest the header title, the timing row,
+  the Teaching fields, the group preview and the LED map are no longer cut
+  off or laid over each other. The layout sanity test has no known issues
+  left.
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections
   (or by a controller slot) now moves the follow spot from the Show Tree,
