@@ -34,6 +34,7 @@ struct Defs
     bool oneShot = false;
     bool release = false;
     QString cycleParam;
+    QStringList fixtureTypes;
 };
 
 const Defs &defsFor(const QString &path)
@@ -49,6 +50,7 @@ const Defs &defsFor(const QString &path)
     if (s.load(path))
     {
         d.params = s.paramDefs();
+        d.fixtureTypes = s.fixtureTypes();
         d.oneShot = s.isOneShot();
         d.release = s.onFinish() == QLatin1String("release");
         if (!s.isOneShot())
@@ -96,6 +98,11 @@ QString EffectOrigin::scriptCycleParam(const QString &path, EffectScript::ParamD
             return d.cycleParam;
         }
     return QString();
+}
+
+QStringList EffectOrigin::scriptFixtureTypes(const QString &path)
+{
+    return path.isEmpty() ? QStringList() : defsFor(path).fixtureTypes;
 }
 
 QList<EffectScript::ParamDef> EffectOrigin::scriptParams(const QString &path)

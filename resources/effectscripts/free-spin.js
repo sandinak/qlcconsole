@@ -31,11 +31,11 @@
     effect.parameters = [
         { name: "axis",      description: "Axis", values: ["Pan", "Tilt", "Pan and tilt"], defaultValue: 0 },
         { name: "speed",     description: "Speed (1 = slowest the head goes, 100 = fastest)", min: 1, max: 100, defaultValue: 30 },
-        { name: "rpm",       description: "RPM where the definition gives it (0 = use Speed)", min: 0, max: 200, defaultValue: 0 },
+        { name: "rpm",       description: "RPM, where the definition gives it (0 = off: use Speed)", min: 0, max: 200, defaultValue: 0 },
         { name: "direction", description: "Direction", values: ["Clockwise", "Counter-clockwise", "Alternate fixtures", "Bounce"], defaultValue: 0 },
-        { name: "bounce",    description: "Bounce: reverse every (seconds)", min: 1, max: 120, defaultValue: 8 },
-        { name: "stagger",   description: "Stagger: each fixture starts this many seconds after the one before", min: 0, max: 10, defaultValue: 0 },
-        { name: "fadeIn",    description: "Fade in: seconds to come up to speed", min: 0, max: 30, defaultValue: 2 },
+        { name: "bounce",    description: "Seconds between bounces", min: 1, max: 120, defaultValue: 8 },
+        { name: "stagger",   description: "Stagger seconds per fixture (each starts this long after the one before)", min: 0, max: 10, defaultValue: 0 },
+        { name: "fadeIn",    description: "Fade-in seconds (to come up to speed)", min: 0, max: 30, defaultValue: 2 },
         { name: "stop",      description: "When it stops", values: ["Hold where it stopped", "Return to the look's position"], defaultValue: 1 }
     ];
 

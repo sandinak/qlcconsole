@@ -10879,6 +10879,109 @@ void ShowTreeView_Test::aColourChaseShowsItsColoursAndACueEffectItsLayers()
     QVERIFY(rowFor(view.attributeRows(), keyLabel(key)).contains("one effect with Right"));
 }
 
+/* Free Spin on a group of beams that turn endlessly and a par: it says how
+   many it runs on and what the rest lack, and its settings in words. */
+static FixtureGroup *freeSpinBeams(Doc *doc, QList<quint32> *ids = nullptr)
+{
+    auto load = [doc](const QString &qxf, const QString &mode, const QString &name, quint32 addr) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        if (def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/" + qxf) != QFile::NoError)
+        {
+            delete def;
+            return quint32(Fixture::invalidId());
+        }
+        doc->fixtureDefCache()->addFixtureDef(def);
+        Fixture *f = new Fixture(doc);
+        f->setFixtureDefinition(def, def->mode(mode));
+        f->setName(name);
+        f->setUniverse(3);
+        f->setAddress(addr);
+        doc->addFixture(f);
+        return f->id();
+    };
+    FixtureGroup *beams = new FixtureGroup(doc);
+    beams->setName("Beams");
+    doc->addFixtureGroup(beams);
+    const quint32 a = load("Cameo/Cameo-Movo-Beam-100.qxf", "15 Channel", "Movo 1", 0);
+    const quint32 b = load("Cameo/Cameo-Movo-Beam-100.qxf", "15 Channel", "Movo 2", 20);
+    const quint32 c = load("Junman/Junman-2-Head.qxf", "16 Channel", "Twin", 40);
+    const quint32 d = rgbPar(doc, "Par 1")->id();
+    for (quint32 id : { a, b, c, d })
+    {
+        beams->assignFixture(id);
+        if (ids != nullptr)
+            *ids << id;
+    }
+    return beams;
+}
+
+void ShowTreeView_Test::aFreeSpinSaysWhichHeadsCanTurn()
+{
+    m_doc->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    FixtureGroup *beams = freeSpinBeams(m_doc);
+    QLCPalette *fx = scriptEffect(m_doc, "Spin", "free-spin.js");
+    fx->setEffectParamValue("direction", 3.0);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << beams->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.dropPalettes(c1, l1, { fx->id() }));
+    QCOMPARE(st->keyForPalette(fx->id()), effectKey("Position"));
+    QVERIFY(view.selectNode(l1, c1));
+    const QStringList rows = view.attributeRows();
+    QCOMPARE(rowFor(rows, "Runs on"),
+             QString("Runs on | Beams · 3 of 4 fixtures (Par 1 has no free rotation) | "));
+    QCOMPARE(rowFor(rows, "Direction"), QString("Direction | Bounce | from Effect “Spin”"));
+    QCOMPARE(rowFor(rows, "Axis"), QString("Axis | Pan | the script's default"));
+    QCOMPARE(rowFor(rows, "When it stops"),
+             QString("When it stops | Return to the look's position | the script's default"));
+}
+
+void ShowTreeView_Test::freeSpinShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    m_doc->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    FixtureGroup *beams = freeSpinBeams(m_doc);
+    QLCPalette *fx = scriptEffect(m_doc, "Spin", "free-spin.js");
+    fx->setEffectParamValue("direction", 3.0);
+    fx->setEffectParamValue("speed", 60.0);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Demo"), "Main", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "Opening");
+    Target t;
+    t.groups << beams->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.dropPalettes(c1, l1, { fx->id() }));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QDir().mkpath(dir);
+    for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        view.resize(sz);
+        QVERIFY(view.selectNode(l1, c1));
+        QTest::qWait(50);
+        QList<QLabel *> fxRows;
+        for (QLabel *l : view.findChildren<QLabel *>())
+            if (l->objectName().startsWith("stRow:Effect.") && l->isVisible())
+                fxRows << l;
+        if (!fxRows.isEmpty())
+            for (QScrollArea *sa : view.findChildren<QScrollArea *>())
+                if (sa->widget() != nullptr && sa->widget()->isAncestorOf(fxRows.first()))
+                {
+                    sa->ensureWidgetVisible(fxRows.last());
+                    sa->ensureWidgetVisible(fxRows.first(), 50, 10);
+                }
+        QTest::qWait(50);
+        QVERIFY(view.grab().save(QString("%1/showtree-free-spin-%2x%3.png").arg(dir).arg(sz.width()).arg(sz.height())));
+    }
+}
+
 void ShowTreeView_Test::effectRowsShots()
 {
     const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");

@@ -290,10 +290,10 @@ is left alone.
 |---|---|
 | **Axis** | Pan, tilt, or both. A head that only spins one way round turns on the axis it has |
 | **Speed** | From the slowest the head goes (1) to its fastest (100), each head by its own range |
-| **RPM** | Revolutions per minute, for a head whose definition gives them; 0 uses Speed |
-| **Direction** | Clockwise, counter-clockwise, alternate fixtures, or **Bounce**: reverse every so many seconds, easing through each reversal |
-| **Stagger** | Each fixture starts this many seconds after the one before |
-| **Fade in** | Seconds to come up to speed. The look's Fade Out takes the spin down the same way |
+| **RPM** | Revolutions per minute, for a head whose definition gives them; 0 (off) uses Speed |
+| **Direction** | Clockwise, counter-clockwise, alternate fixtures, or **Bounce**: reverse every **Seconds between bounces**, easing through each reversal |
+| **Stagger seconds per fixture** | Each fixture starts this many seconds after the one before |
+| **Fade-in seconds** | How long it takes to come up to speed. The look's Fade Out takes the spin down the same way |
 | **When it stops** | **Hold where it stopped** sends the head's stop value; **Return to the look's position** also points it where the look does |
 
 A head that spins on its pan channel itself can only stop by pointing, so

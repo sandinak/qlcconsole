@@ -245,6 +245,8 @@ private slots:
     void anEffectSettingSetHereBecomesThisCuesOwn();
     void aColourChaseShowsItsColoursAndACueEffectItsLayers();
     /** With QLC_SHOT_DIR: the two effect layer pages at three sizes. */
+    void aFreeSpinSaysWhichHeadsCanTurn();
+    void freeSpinShots();
     void effectRowsShots();
 
 private:

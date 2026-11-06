@@ -94,6 +94,7 @@
 #include "linespread.h"
 #include "effectdesigner.h"
 #include "effectrows.h"
+#include "effectorigin.h"
 #include "lengthspinbox.h"
 #include "focuscallcue.h"
 #include "refinepanel.h"
@@ -4661,7 +4662,11 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
                     if (rl.values.contains(l.key) && rl.values.value(l.key).origin == Origin::CueLook)
                         on << rl.target;
             if (!on.isEmpty())
-                line += tr(" — runs on %1").arg(EffectRows::runsOnText(m_doc, l.key, on));
+            {
+                const QLCPalette *fx = EffectRows::effectPalette(m_doc, l);
+                line += tr(" — runs on %1").arg(EffectRows::runsOnText(
+                    m_doc, l.key, on, fx != nullptr ? EffectOrigin::scriptFixtureTypes(fx->scriptPath()) : QStringList()));
+            }
         }
         looks << line;
     }
