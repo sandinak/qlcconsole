@@ -22,6 +22,7 @@
 #include <QDebug>
 
 #include "qlcfixturehead.h"
+#include "freerotation.h"
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
 
@@ -197,13 +198,19 @@ void QLCFixtureHead::cacheChannels(const QLCFixtureMode* mode)
         const QLCChannel* ch = mode->channels().at(i);
         Q_ASSERT(ch != NULL);
 
-        if (ch->group() == QLCChannel::Pan)
+        if (ch->group() == QLCChannel::Pan || ch->group() == QLCChannel::Tilt)
         {
-            setMapIndex(QLCChannel::Pan, ch->controlByte(), i);
-        }
-        else if (ch->group() == QLCChannel::Tilt)
-        {
-            setMapIndex(QLCChannel::Tilt, ch->controlByte(), i);
+            /* A channel that only spins the head ("Endless Pan rotation")
+               never points it: listed after Pan it used to become the
+               head's pan, and pointing the head set it turning. It is the
+               head's pan only when there is no other. */
+            const int type = ch->group() == QLCChannel::Pan ? QLCChannel::Pan : QLCChannel::Tilt;
+            const quint32 had = channelNumber(type, ch->controlByte());
+            const bool spins = FreeRotation::spinsOnly(ch);
+            const bool hadSpins = had != QLCChannel::invalid() && had < quint32(mode->channels().size())
+                                  && FreeRotation::spinsOnly(mode->channels().at(int(had)));
+            if (!spins || had == QLCChannel::invalid() || hadSpins)
+                setMapIndex(type, ch->controlByte(), i);
         }
         else if (ch->group() == QLCChannel::Intensity)
         {

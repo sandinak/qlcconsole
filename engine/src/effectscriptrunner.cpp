@@ -774,7 +774,8 @@ void EffectScriptRunner::publishWrites()
             const float depth = inst->depth();
             if (depth < 1.0f)
                 for (int i = from; i < int(combined.size()); ++i)
-                    combined[i].depth = depth;
+                    if (!combined.at(i).snap)
+                        combined[i].depth = depth;
             for (quint32 sid : inst->tickedScenes())
                 drawn.insert((quint64(sid) << 32) | inst->effectPaletteId());
         }
