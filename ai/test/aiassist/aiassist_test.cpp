@@ -96,11 +96,11 @@ public:
 
     /** Answers for @a path, in order; the last one repeats. */
     void queue(const QString &path, const Response &r) { m_queue[path] << r; }
-    void queueJson(const QString &path, const QByteArray &json) { queue(path, Response { 200, json, false }); }
-    void hold(const QString &path) { queue(path, Response { 200, QByteArray(), true }); }
+    void queueJson(const QString &path, const QByteArray &json) { queue(path, Response { 200, json, false, 0, false }); }
+    void hold(const QString &path) { queue(path, Response { 200, QByteArray(), true, 0, false }); }
     void queueDelayed(const QString &path, const QByteArray &json, int ms)
     {
-        queue(path, Response { 200, json, false, ms });
+        queue(path, Response { 200, json, false, ms, false });
     }
     void queueDrop(const QString &path) { queue(path, Response { 200, QByteArray(), false, 0, true }); }
     void clearQueue() { m_queue.clear(); }
@@ -138,7 +138,7 @@ private:
         m_buffers.remove(s);
         requests << req;
 
-        Response r { 404, QByteArray("{\"error\":\"nothing queued\"}"), false };
+        Response r { 404, QByteArray("{\"error\":\"nothing queued\"}"), false, 0, false };
         QList<Response> &q = m_queue[req.path];
         if (!q.isEmpty())
             r = q.count() > 1 ? q.takeFirst() : q.first();
@@ -152,7 +152,7 @@ private:
         if (r.delayMs > 0)
         {
             QPointer<QTcpSocket> later(s);
-            const Response delayed { r.status, r.body, false };
+            const Response delayed { r.status, r.body, false, 0, false };
             QTimer::singleShot(r.delayMs, this, [later, delayed]() {
                 if (later.isNull())
                     return;
@@ -1309,7 +1309,7 @@ void AiAssist_Test::busyIndicatorWhileAsking()
 
     // An error: cleared, and said.
     m_server->clearQueue();
-    m_server->queue(kChat, FakeModelServer::Response { 500, QByteArray("{\"error\":\"model fell over\"}"), false });
+    m_server->queue(kChat, FakeModelServer::Response { 500, QByteArray("{\"error\":\"model fell over\"}"), false, 0, false });
     answered.clear();
     QVERIFY(b.cl->handle("? anything", ctx));
     QVERIFY(b.cl->isBusyShown());

@@ -8989,7 +8989,8 @@ void ShowTreeView_Test::liveOllamaTypoOrLanguage()
         g->assignFixture(fixtures.at(i));
         m_doc->addFixtureGroup(g);
     }
-    for (const QString &c : { "Blue", "Red", "Amber" })
+    const QStringList colours { "Blue", "Red", "Amber" };
+    for (const QString &c : colours)
     {
         QLCPalette *p = new QLCPalette(QLCPalette::Color, m_doc);
         p->setName(c);
@@ -9016,10 +9017,13 @@ void ShowTreeView_Test::liveOllamaTypoOrLanguage()
                               "dimer 50", "go 2", "Steps colour Bleu" };
     for (const QString &l : lines)
     {
+        // Typed and Enter, as the operator does (the line clears when sent).
         line->setText(l);
+        line->setFocus();
         QElapsedTimer t;
         t.start();
-        const bool sent = view.runCommand(l);
+        QTest::keyClick(line, Qt::Key_Return);
+        const bool sent = line->text().isEmpty();
         const bool busy = line->actions().contains(spinner);
         const QString first = view.commandMessage();
         if (busy)
