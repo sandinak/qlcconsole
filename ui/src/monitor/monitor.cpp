@@ -1430,11 +1430,11 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         const QFontMetrics fm(rf);
         int w = 160;
         // 888' 11.88" (270 m) in whichever unit the readout is in.
-        const QString far = MeasurementUnits::formatLength(270968.0);
-        foreach (const QString &widest, QStringList() << tr("%1   %2").arg(tr("%1 %2").arg(tr("SL"), far),
-                                                                       tr("%1 %2").arg(tr("DS"), far))
-                                                      << tr("%1   %2").arg(tr("%1: %2").arg("X", "-" + far),
-                                                                           tr("%1: %2").arg("Y", "-" + far)))
+        const QString farText = MeasurementUnits::formatLength(270968.0);
+        foreach (const QString &widest, QStringList() << tr("%1   %2").arg(tr("%1 %2").arg(tr("SL"), farText),
+                                                                       tr("%1 %2").arg(tr("DS"), farText))
+                                                      << tr("%1   %2").arg(tr("%1: %2").arg("X", "-" + farText),
+                                                                           tr("%1: %2").arg("Y", "-" + farText)))
             w = qMax(w, fm.horizontalAdvance(widest) + 8);
         m_readoutLabel->setFixedWidth(w);
     }

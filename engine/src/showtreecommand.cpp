@@ -3904,7 +3904,7 @@ ShowTreeCommand::Failure ShowTreeCommand::classifyFailure(const QString &line, c
                 return true;
         return false;
     };
-    auto near = [&](const QString &t) {
+    auto nearMissOf = [&](const QString &t) {
         if (t.length() < 3)
             return false;
         const int limit = t.length() >= 8 ? 2 : 1;
@@ -3963,7 +3963,7 @@ ShowTreeCommand::Failure ShowTreeCommand::classifyFailure(const QString &line, c
             ++f.language;
         else if (grammar.contains(t) || whole.contains(t) || t.startsWith(QLatin1Char('#')))
             ++f.known;
-        else if (near(t))
+        else if (nearMissOf(t))
             ++f.nearMiss;
         else
             ++f.unknown;

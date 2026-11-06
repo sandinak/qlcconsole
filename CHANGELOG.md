@@ -389,6 +389,10 @@ here is still checked against QLC+ 4.14.4 itself.
 
 ### For developers
 
+- **The gate catches names Windows turns into nothing.** `<windows.h>`
+  defines `near` and `far` as empty macros, so a variable or lambda with
+  either name built on macOS and Linux and broke only the Windows build.
+  `platforms/linux/check-win-macros.sh` runs before every gate builds.
 - **Every course show and the sample are reviewed in the gate**
   (`showreviewshows_test`), with the checks expected open on each, so a
   check or show that drifts fails. `qlcconsole --review` has a hermetic

@@ -240,6 +240,15 @@ if ! GUARD_OUT=$("$REPO/platforms/linux/check-test-guard.sh" --self-test 2>&1 \
     exit 1
 fi
 
+# <windows.h> defines `near` and `far` as empty macros: a name like that
+# builds here and breaks only CI's Windows (MinGW) build, which no leg runs.
+if ! WINMAC_OUT=$("$REPO/platforms/linux/check-win-macros.sh" --source "$REPO" 2>&1); then
+    echo >&2 "$WINMAC_OUT"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "check-win-macros.sh failed: a name that <windows.h> turns into nothing. Nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
+fi
+
 # The gate pool's Linux-host choice and queue: their own test (fake hosts).
 if [ -x "$REPO/platforms/macos/gate-linux.sh" ] && ! LX_OUT=$("$REPO/platforms/macos/gate-linux.sh" --self-test 2>&1); then
     echo >&2 "$LX_OUT"
