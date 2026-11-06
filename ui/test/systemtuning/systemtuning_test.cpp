@@ -406,6 +406,10 @@ void SystemTuning_Test::showStatusCanBeTurnedOff()
 void SystemTuning_Test::thePageListsTheItemsAndCopiesTheCommand()
 {
     SystemTuningPage page(m_doc);
+    /* The page's first fill used this machine's real probe and selected
+       whatever that found to improve; setProbe() keeps the selection by key.
+       Start from none, or the test depends on the host it runs on (the Pi). */
+    page.itemsTree()->setCurrentItem(nullptr);
     page.setProbe([]() { return linuxProbe(); });
     page.show();
 
