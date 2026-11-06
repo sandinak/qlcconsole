@@ -170,6 +170,7 @@ add_library(${module_name}
     bundlebrowser.cpp bundlebrowser.h
     effectbrowser.cpp effectbrowser.h
     effectorigin.cpp effectorigin.h
+    effectrows.cpp effectrows.h
     effectrunsmenu.cpp effectrunsmenu.h
     effectdesigner.cpp effectdesigner.h
     effectspage.cpp effectspage.h

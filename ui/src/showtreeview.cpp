@@ -67,6 +67,7 @@
 #include <QPainter>
 #include <QStyle>
 #include <algorithm>
+#include <cmath>
 
 #include "mainbar.h"
 #include "moveinblackbutton.h"
@@ -92,6 +93,8 @@
 #include "stagetarget.h"
 #include "linespread.h"
 #include "effectdesigner.h"
+#include "effectrows.h"
+#include "lengthspinbox.h"
 #include "focuscallcue.h"
 #include "refinepanel.h"
 #include "focuscallsdialog.h"
@@ -4636,8 +4639,25 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     updateIncludeButtons();
 
     QStringList looks;
+    QList<ResolvedCue> cueResolved;
     for (const Look &l : cue.looks)
-        looks << QStringLiteral("%1: %2").arg(keyLabel(l.key), lookText(l));
+    {
+        QString line = QStringLiteral("%1: %2").arg(keyLabel(l.key), lookText(l));
+        // A cue-level effect (D10): the layers it runs on, as one.
+        if (isEffectKey(l.key) && !l.none)
+        {
+            if (cueResolved.isEmpty())
+                cueResolved = m_st->resolved(list);
+            QList<Target> on;
+            if (index < cueResolved.count())
+                for (const ResolvedLayer &rl : cueResolved.at(index).layers)
+                    if (rl.values.contains(l.key) && rl.values.value(l.key).origin == Origin::CueLook)
+                        on << rl.target;
+            if (!on.isEmpty())
+                line += tr(" — runs on %1").arg(EffectRows::runsOnText(m_doc, l.key, on));
+        }
+        looks << line;
+    }
     m_cueLooks->setText(looks.isEmpty() ? tr("— (drop a palette here or on the cue)") : looks.join(QStringLiteral("\n")));
 
     // The layers, one row each: the cue's own, then (grey) the carried-in.
@@ -5410,6 +5430,10 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
         m_rows->addWidget(more, row, 4);
         m_rowText << QStringLiteral("%1 | %2 | %3").arg(label->text().trimmed(), text, origin);
         ++row;
+        // Under an effect, as under a line aim's Position: what it runs on,
+        // what it moves, and each of its settings with where it comes from.
+        if (!addEffect && isEffectKey(key) && rl->values.contains(key))
+            row = addEffectRows(row, list, cue.id, layerId, target, *rl, key);
         // Under a line aim's Position: where each light lands, numbered by
         // where they hang along the line (the formation's, if one).
         if (key == KeyPosition && lineAim)
@@ -5528,6 +5552,124 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
     }
     m_rows->setRowStretch(row, 1);
     m_pages->setCurrentWidget(m_layerPage);
+}
+
+int ShowTreeView::addEffectRows(int row, const CueList &list, quint32 cueId, quint32 layerId, const Target &target,
+                                const ResolvedLayer &rl, const QString &key)
+{
+    const ResolvedValue &v = rl.values.value(key);
+    if (v.look.none)
+        return row;
+    const QBrush grey = palette().brush(QPalette::Disabled, QPalette::Text);
+    const QList<Target> span = m_st->spanMembers(cueId, rl.target, key);
+    for (const EffectRows::Row &r : EffectRows::rows(m_doc, rl, key, v, originText(list, v), span))
+    {
+        QLabel *label = new QLabel(QStringLiteral("   ") + r.label, m_rowsHost);     // the effect's children
+        QLabel *value = new QLabel(r.origin.isEmpty() ? r.text : QStringLiteral("%1 — %2").arg(r.text, r.origin),
+                                   m_rowsHost);
+        value->setObjectName(QStringLiteral("stRow:%1/%2").arg(key, r.id));
+        value->setTextFormat(Qt::PlainText);
+        value->setWordWrap(true);
+        value->setToolTip(r.tip);
+        label->setToolTip(r.tip);
+        if (r.inherited)
+        {
+            QPalette pal = value->palette();
+            pal.setBrush(QPalette::WindowText, grey);
+            value->setPalette(pal);
+            QFont f = value->font();
+            f.setItalic(true);
+            value->setFont(f);
+        }
+        m_rows->addWidget(label, row, 0);
+        m_rows->addWidget(value, row, 1, 1, r.editable ? 3 : 4);
+        if (r.editable)
+        {
+            QToolButton *more = new QToolButton(m_rowsHost);
+            more->setObjectName(QStringLiteral("stMore:%1/%2").arg(key, r.id));
+            more->setText(QStringLiteral("⋯"));
+            more->setToolTip(tr("Set %1 here (it becomes this cue's own)").arg(r.label));
+            const EffectScript::ParamDef def = r.def;
+            const double now = r.value;
+            connect(more, &QToolButton::clicked, this, [this, cueId, layerId, target, key, def, now, more]() {
+                QMenu menu(this);
+                effectParamMenu(&menu, cueId, layerId, target, key, def, now);
+                menu.exec(more->mapToGlobal(QPoint(0, more->height())));
+            });
+            m_rows->addWidget(more, row, 4);
+        }
+        m_rowText << QStringLiteral("%1 | %2 | %3").arg(r.label, r.text, r.origin);
+        ++row;
+    }
+    return row;
+}
+
+bool ShowTreeView::setEffectParam(quint32 cueId, quint32 layerId, const QString &effectKey, const QString &param,
+                                  double value, const Target &target)
+{
+    return EffectRows::setParam(m_doc, cueId, layerId, layerId == invalidId() ? target : Target(), effectKey,
+                                param, value);
+}
+
+bool ShowTreeView::clearEffectParam(quint32 cueId, quint32 layerId, const QString &effectKey, const QString &param,
+                                    const Target &target)
+{
+    return EffectRows::setParam(m_doc, cueId, layerId, layerId == invalidId() ? target : Target(), effectKey,
+                                param, 0.0, true);
+}
+
+void ShowTreeView::effectParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, const Target &target,
+                                   const QString &key, const EffectScript::ParamDef &def, double now)
+{
+    menu->setToolTipsVisible(true);
+    auto set = [this, cueId, layerId, target, key, def](double v) {
+        setEffectParam(cueId, layerId, key, def.name, v, target);
+    };
+    if (!def.enumValues.isEmpty())
+    {
+        for (int i = 0; i < def.enumValues.size(); ++i)
+        {
+            QAction *a = menu->addAction(def.enumValues.at(i), this, [set, i]() { set(i); });
+            a->setCheckable(true);
+            a->setChecked(int(std::lround(now)) == i);
+        }
+    }
+    else
+    {
+        // A few steps across its range, as the line aim's Spread has.
+        QList<double> steps;
+        if (def.max > def.min)
+            for (int i = 0; i <= 4; ++i)
+                steps << def.min + (def.max - def.min) * i / 4.0;
+        if (!steps.contains(double(def.defaultValue)))
+            steps << def.defaultValue;
+        std::sort(steps.begin(), steps.end());
+        for (double v : steps)
+        {
+            QAction *a = menu->addAction(EffectRows::valueText(def, v), this, [set, v]() { set(v); });
+            a->setCheckable(true);
+            a->setChecked(std::fabs(v - now) < 1e-4);
+        }
+        menu->addAction(tr("%1…").arg(EffectRows::paramLabel(def)), this, [this, def, now, set]() {
+            // A length in Settings ▸ Units; anything else as the script counts it.
+            const bool isLength = def.unit == QLatin1String("cm");
+            QDoubleSpinBox *spin = isLength ? new LengthSpinBox(10.0) : new QDoubleSpinBox;
+            spin->setObjectName("stPickerEffectParam");
+            spin->setDecimals(isLength ? 2 : def.max - def.min <= 2.0 ? 3 : 2);
+            if (def.max > def.min)
+                spin->setRange(def.min, def.max);
+            else
+                spin->setRange(-1.0e6, 1.0e6);
+            spin->setSingleStep(def.max > def.min ? (def.max - def.min) / 100.0 : 0.1);
+            spin->setValue(now);
+            spin->setToolTip(def.description);
+            openDockedPicker(EffectRows::paramLabel(def), spin, spin, [spin, set]() { set(spin->value()); });
+        });
+    }
+    menu->addSeparator();
+    menu->addAction(tr("Back to Its Default"), this, [this, cueId, layerId, target, key, def]() {
+        clearEffectParam(cueId, layerId, key, def.name, target);
+    })->setToolTip(tr("The preset's or the script's own value"));
 }
 
 const QLCPalette *ShowTreeView::areaAimPalette(const Look &look) const

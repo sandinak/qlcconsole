@@ -34,6 +34,7 @@
 #include "showtreemodel.h"
 #include "showtreecommand.h"
 #include "qlcpalette.h"
+#include "effectscript.h"
 #include "lineplanview.h"
 
 class QMessageBox;
@@ -696,6 +697,13 @@ public:
      *  carried-in @a target, or (no layer) the cue. */
     bool setLineParam(quint32 cueId, quint32 layerId, const QString &key, const QString &value,
                       const ShowTree::Target &target = ShowTree::Target());
+    /** Set (or clear: back to its default) parameter @a param of effect
+     *  @a effectKey on the layer, or the carried-in @a target: it becomes
+     *  this cue's own (EffectRows::setParam). One undo step. */
+    bool setEffectParam(quint32 cueId, quint32 layerId, const QString &effectKey, const QString &param,
+                        double value, const ShowTree::Target &target = ShowTree::Target());
+    bool clearEffectParam(quint32 cueId, quint32 layerId, const QString &effectKey, const QString &param,
+                          const ShowTree::Target &target = ShowTree::Target());
     /** The layer page's "Contains:" line, as text (tests). */
     QString layerContentsText() const;
     /** The order strip under a line aim's Position row (null: none). */
@@ -998,6 +1006,14 @@ private:
     void includesMenu(QMenu *menu, quint32 cueId);
     /** A line's Spread / Grouping / Cross (D16): submenus that set them on
      *  the layer (or the carried-in @a target, or the cue). */
+    /** The rows under an effect on the layer page (EffectRows), from grid
+     *  row @a row; returns the next free row. */
+    int addEffectRows(int row, const ShowTree::CueList &list, quint32 cueId, quint32 layerId,
+                      const ShowTree::Target &target, const ShowTree::ResolvedLayer &rl, const QString &key);
+    /** An effect setting's ⋯: values across its range, a typed value, back
+     *  to its default. */
+    void effectParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                         const QString &key, const EffectScript::ParamDef &def, double now);
     void lineParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, const ShowTree::Target &target,
                        const QString &onlyKey = QString());
     void updateIncludeButtons();

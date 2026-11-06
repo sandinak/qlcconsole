@@ -98,6 +98,11 @@ QString EffectOrigin::scriptCycleParam(const QString &path, EffectScript::ParamD
     return QString();
 }
 
+QList<EffectScript::ParamDef> EffectOrigin::scriptParams(const QString &path)
+{
+    return path.isEmpty() ? QList<EffectScript::ParamDef>() : defsFor(path).params;
+}
+
 bool EffectOrigin::isMinePath(const QString &path)
 {
     if (path.isEmpty())
