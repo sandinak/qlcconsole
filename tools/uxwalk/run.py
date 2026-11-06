@@ -180,6 +180,7 @@ class Remote:
         self.id = "uxwalk-%s-%s-%d" % (rev[:12], time.strftime("%Y%m%d-%H%M%S"), os.getpid())
         self.run_dir = "uxwalk/runs/%s" % self.id
         self.ok = False
+        self.finished = False
 
     def ssh(self, script, check=True, timeout=None, stdin=None):
         pre = "export PATH=%s/usr/local/bin:/opt/homebrew/bin:$PATH; " % (
@@ -207,7 +208,8 @@ class Remote:
 
     def release_lock(self):
         try:
-            self.ssh("rm -f ~/gates/%s.pid; gl_done '%s'\n" % (self.id, self.id), check=False,
+            self.ssh("kill $(cat ~/gates/%s.pid 2>/dev/null) 2>/dev/null; rm -f ~/gates/%s.pid; gl_done '%s'\n"
+                     % (self.id, self.id, self.id), check=False,
                      stdin=self.lock_lib())
         except Exception:               # noqa: BLE001 -- best effort on the way out
             pass
@@ -265,6 +267,7 @@ class Remote:
         except Exception as e:          # noqa: BLE001 -- a host that can't build sits out
             log("%s: not used: %s" % (self.h["name"], str(e)[-400:]))
             self.release_lock()
+            self.finished = True
             return
         threads = [threading.Thread(target=self.worker, daemon=True) for _ in range(n)]
         for t in threads:
@@ -272,6 +275,17 @@ class Remote:
         for t in threads:
             t.join()
         self.ssh("rm -rf ~/%s" % self.run_dir, check=False)
+        self.release_lock()
+        self.finished = True
+
+    def abandon(self):
+        """The walk is over before this host was ready: stop its build."""
+        try:
+            self.ssh("pkill -f 'cmake --build build .*--target uxwalk' || true; "
+                     "pkill -f 'cmake -S src -B build -DQLC_UXWALK' || true; rm -rf ~/%s" % self.run_dir,
+                     check=False, timeout=30)
+        except Exception:               # noqa: BLE001 -- best effort on the way out
+            pass
         self.release_lock()
 
     def worker(self):
@@ -354,8 +368,14 @@ def main():
             t = LocalWorker(q, a.binary, a.out, "local#%d" % i)
             t.start()
             threads.append(t)
-    for t in threads:
-        t.join()
+    # Done when every shard is: a host still building then has nothing to
+    # take, so it is stopped and its lock let go (nobody waits for it).
+    while q.unfinished_tasks and any(t.is_alive() for t in threads):
+        time.sleep(1)
+    for r in remotes:
+        if not r.finished:
+            log("%s: not needed any more%s" % (r.h["name"], "" if r.ok else " (stopped its build)"))
+            r.abandon()
     if a.hosts:
         shutil.rmtree(src, ignore_errors=True)
     left = q.qsize()

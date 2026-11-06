@@ -867,6 +867,13 @@ bool contextOnItem(Walker &walk, QTreeWidget *tree, QTreeWidgetItem *item, const
                   QStringLiteral("nothing of that kind in this show"));
         return false;
     }
+    if (!tree->isVisible())
+    {
+        // Not on screen (a pane the person has not opened): nothing to click.
+        walk.note(QStringLiteral("context"), name, QStringLiteral("walker-missing"),
+                  QStringLiteral("its list is not shown"));
+        return false;
+    }
     const QStringList path = rowPath(item);
     for (QTreeWidgetItem *p = item->parent(); p != nullptr; p = p->parent())
         p->setExpanded(true);
