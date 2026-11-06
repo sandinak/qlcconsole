@@ -8231,12 +8231,19 @@ void Monitor_Test::aSavedComponentStampsItsLayoutOntoOtherFixtures()
     // the operator's real library never gains (or, on a failed run, keeps) a test file.
     QTemporaryDir testHome;
     QVERIFY(testHome.isValid());
+    // QLCFile::userDirectory() reads HOME on macOS/Linux and %UserProfile% on Windows.
     struct HomeGuard
     {
-        QByteArray old = qgetenv("HOME");
-        ~HomeGuard() { qputenv("HOME", old); }
+        QByteArray oldHome = qgetenv("HOME");
+        QByteArray oldProfile = qgetenv("USERPROFILE");
+        ~HomeGuard()
+        {
+            qputenv("HOME", oldHome);
+            qputenv("USERPROFILE", oldProfile);
+        }
     } homeGuard;
     qputenv("HOME", testHome.path().toUtf8());
+    qputenv("USERPROFILE", testHome.path().toUtf8());   // '/' as the check below compares
     QVERIFY(StudioTemplate::libraryPath().startsWith(testHome.path()));
 
     Doc *doc = new Doc(this);
