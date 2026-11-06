@@ -807,3 +807,72 @@ non-coverage objects for the same tree.
   - newaudio: none. The Office repro was killed with SIGKILL, which leaves no
     report.
   - Linux and Pi: no core files.
+
+## 0.4.1 matrix (2026-11-06)
+
+**SHA tested:** `d5c45d61bc85` (origin/main when the run started; main moved by
+9 merges during the day, so this is not the 0.4.1 candidate). Every host ran a
+`git archive` of that commit in `~/gates/mx-d5c45d61bc85/`, nice 20, never the
+host's own checkout. All copies are removed.
+
+| Host | Arch / OS | Qt | What ran | Result |
+|---|---|---|---|---|
+| rpi5 | aarch64 Debian 13 | 6.8.2 (apt) | Ninja Release `-j3`, then the full offscreen suite with the plugin directory masked (RASPI.md section 4), 3 jobs | 252 of 253 programs passed; 8210 test functions passed, 1 failed, 87 skipped. The failure was a test that depended on the host (S1), fixed here |
+| val | Intel macOS 26.7 | 6.9.3 (the DMG's Qt) | Debug build; full suite in random order three times (seeds 20261106, 1106, 777), 6 jobs | Run 1: 251 of 253, `effectinstance` and `renderperf` failed while another gate ran (load 114); both pass alone on a quiet host. Runs 2 and 3: **253 of 253**, 8214 passed, 0 failed, 83 skipped |
+| buildhost-qlcplus | x86_64 Debian 13, GCC 14.2 | 6.8.2 (apt) | ASan + UBSan Debug build (`-fno-sanitize=vptr`), full suite, 3 jobs | 251 of 253; `effectinstance` and `renderperf` failed on timing (sanitized build). 8208 passed, 2 failed, 88 skipped. See H1 to H3 |
+| GitHub Actions | | | Run 41896073652 on `d5c45d61b` | See below |
+| Windows VM | | | Skipped: the VM is down today |
+
+### Commands
+
+```sh
+# Pi (RASPI.md section 4), under the gate lock
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && nice -n 20 ninja -C build -j3
+sudo unshare -m sh -c "mount --bind ~/qlc-smoke/emptyplugins /usr/lib/qt6/plugins/qlcconsole && \
+  exec setpriv --reuid=$(id -u) --regid=$(id -g) --init-groups env HOME=$HOME USER=$USER \
+  QT_QPA_PLATFORM=offscreen QLC_TEST_JOBS=3 nice -n 20 ./unittest.sh ui build"
+
+# val: random order, see "newaudio: random order" above; times files are "<random> <test dir>"
+awk 'BEGIN{srand(SEED)}{print int(rand()*1000), $2}' ~/.cache/qlcconsole/unittest-times > times-rand
+QLC_TEST_TIMES=$PWD/times-rand QLC_TEST_JOBS=6 nice -n 20 ./unittest.sh ui build
+
+# Linux: ASan + UBSan. On GCC the vptr check needs a typeinfo that two test programs do not link (H1)
+cmake -S . -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+  "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize=vptr -fsanitize-recover=address -fno-omit-frame-pointer" \
+  -DCMAKE_{EXE,SHARED,MODULE}_LINKER_FLAGS=-fsanitize=address,undefined
+ASAN_OPTIONS=detect_leaks=0:halt_on_error=0:abort_on_error=0:log_path=$PWD/asanlogs/asan \
+UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:log_path=$PWD/asanlogs/ubsan \
+QT_QPA_PLATFORM=offscreen QLC_TEST_JOBS=3 QTEST_FUNCTION_TIMEOUT=900000 nice -n 20 ./unittest.sh ui build-asan
+```
+
+### CI on main (run 41896073652, `d5c45d61b`; the two runs before it fail the same way)
+
+- **Linux build (AppImage) and Linux coverage: green.**
+- **Windows:** 248 test binaries passed; `followspotcue_test` failed in
+  `initTestCase()`: `'hidPlugin(m_app->doc()) != nullptr' returned FALSE. (the HID plugin did not load)`
+  (`followspotcue_test.cpp` line 201). The installer, smoke test and release check passed.
+- **macOS:** `GenericDMXSource_Test::aSourceGoneMidTickIsNeverRead() 'fed > 10' returned FALSE`
+  (`genericdmxsource_test.cpp` line 157; failed in all three runs), and
+  `ShowTreeWorkbench_Test::aRealMouseDragMovesALookRowAndAltCopiesIt() 'spy.drags > before' returned FALSE.
+  (pressing a look row and moving starts a drag)`. The run before also had
+  `WebAccess_Test::theFocusRemoteWorksTheRunningSession() '!heardAn(heard, "FOCUS|ack|press")' returned FALSE`.
+  Triaged elsewhere (CI and flaky agents).
+- **Course site (run 41873669914):** the link check failed: `site: level-3/lesson-05/handout.html:
+  ../0-7/ goes nowhere` (also `../0-5/`; `level-3/lesson-08/handout.html: ../2-1/`, `../0-7/`, `../3-7/`), 5 problems.
+
+### Findings
+
+| # | Where | What | Verdict |
+|---|---|---|---|
+| S1 | rpi5 | `SystemTuning_Test::thePageListsTheItemsAndCopiesTheCommand()` "Compared pointers are not the same" (`tree->currentItem()` vs `topLevelItem(0)`), 3 of 3 reruns. The page's constructor fills from the real probe and selects the first thing to improve on this machine; `setProbe()` then keeps that selection by key. | Test depends on the host. Fixed in this branch (clear the selection first); 18 of 18 pass on the Pi afterwards. The page keeping the selection across a probe change is by design |
+| T1 | val | `EffectInstance_Test::matrixEffectsKeepTimeOnEightBoxes()` `'slow.isEmpty()'` (matrix-noise.js 24.57 ms, matrix-fire.js 24.67 ms), and `RenderPerf_Test::operatePointerFramesWait()` `'v.paintCount() - before <= 1'` (4 pointer frames at once in Operate), both at load 114 with a pool gate running. | Flaky under load: both pass alone (53 s and 27 s), and both passed in random runs 2 and 3 |
+| H1 | Linux, ASan | With `-fsanitize=undefined` on GCC, `controlmap_test` and `encoderbank_test` do not link: `undefined reference to typeinfo for IOPluginStub` (vptr check; the stub is not linked into them). | Harness. `-fno-sanitize=vptr` avoids it; a real fix is linking the stub library into both |
+| H2 | Linux, ASan | `alloc-dealloc-mismatch (operator new vs free)` in `HotPath_Test::thePowerEstimateOfABigRigAddsUp`: the test's replaced sized `operator delete` (`hotpath_test.cpp:225`) frees memory that `std::stable_sort`'s temporary buffer in `PowerEstimator::byType` (`powerdistribution.cpp:551`) got from libstdc++'s `operator new`. | Harness (the counting allocator is only half replaced); no product leak or overflow |
+| H3 | Linux, ASan | 60 `odr-violation` reports of `staticMetaObject` (`moc_qlcioplugin.cpp`, `moc_mcpserver.cpp` and other AI moc files), each global built into two libraries. | Build structure; not a runtime fault. No heap overflow, use-after-free or UBSan runtime error was reported in any test |
+| H4 | Linux, ASan | `EffectInstance_Test::matrixEffectsKeepTimeOnEightBoxes()` (25 to 38 ms per matrix script) and `RenderPerf_Test::operatePointerFramesWait()` (2 pointer frames at once) | Timing budgets cannot hold in an ASan build; the serial-list tests were run alone. Not a product bug |
+| P1 | all | The gate lock treats a lock with no `~/gates/<id>.pid` as stale after 900 s. A matrix job that takes the lock by hand without a live pid file loses it after 15 min, and a pool gate then runs on top of it (this is what put val at load 114). | Process: give a hand-held lock a live pid file, and hold it only while a job runs |
+
+Not run: the Windows VM (down), TSan, scale and locale variants, Linux Release
+`-Wall -Wextra` build, mutation or fuzz runs. Still outstanding on the Linux
+host: a plain run of the new tests under `-Wpedantic` and the `de_DE.UTF-8`
+locale, if wanted for the candidate.
