@@ -385,6 +385,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **CI tests on Windows and macOS**: the follow-spot test copies the HID
+  plugin into its plugin folder instead of linking it (a Windows link is a
+  .lnk the loader ignores), and the generic DMX source mid-tick test counts
+  rounds instead of a 4 s window, so a slow runner runs the same work.
+
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections
   (or by a controller slot) now moves the follow spot from the Show Tree,

@@ -187,7 +187,9 @@ void FollowSpotCue_Test::initTestCase()
     QVERIFY(m_pluginDir->isValid());
     const QFileInfo hid(QStringLiteral(QLC_HID_PLUGIN_FILE));
     QVERIFY2(hid.exists(), QLC_HID_PLUGIN_FILE);
-    QVERIFY(QFile::link(hid.absoluteFilePath(), m_pluginDir->filePath(hid.fileName())));
+    // A copy, not a link: on Windows QFile::link makes a .lnk shortcut, which
+    // the plugin loader does not see as a plugin.
+    QVERIFY(QFile::copy(hid.absoluteFilePath(), m_pluginDir->filePath(hid.fileName())));
     qputenv("QLC_IOPLUGIN_DIR", m_pluginDir->path().toLocal8Bit());
     qputenv("QLC_HID_PROFILE_DIR", QByteArray(QLC_TEST_RESOURCE_ROOT) + "hidprofiles");
     qputenv("QLC_HID_VIRTUAL_PAD", QByteArray("054c:09cc:") + kDS4 + ";054c:0ce6:" + kDualSense
