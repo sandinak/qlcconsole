@@ -703,9 +703,14 @@ int captureWindows(Walker &walk, const QString &group, const QString &name,
             if (QMenu *m = qobject_cast<QMenu *>(w))
             {
                 if (leaveMenus)
+                {
                     handled.remove(w);      // the right-click's own: its owner picks
-                else
-                    m->close();
+                    continue;
+                }
+                // A menu to finish in (View ▸ Venue… opens one): recorded too.
+                ++seen;
+                walk.recordMenu(m, group, seen == 1 ? name : QStringLiteral("%1 (%2)").arg(name).arg(seen));
+                m->close();
                 continue;
             }
             ++seen;
