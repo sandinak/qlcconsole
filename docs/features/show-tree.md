@@ -1121,7 +1121,7 @@ Each cue has a **mode** too, set on its page or by typing it:
   cue since the one that set it. Its tooltip says *Set in 1.1.1 Setup ·
   tracking 3 cues*, and *· ends after 1.1.5* when a later cue releases it.
   A released layer's **R** dot says *Release: it ends after 1.1.3
-  (released before 1.1.4)*. Right-click a grey row → **Go to 1.1.1**
+  (released before 1.1.4)*. Right-click a grey row → **Go to 1.1.1 Setup**
   selects the cue that set it.
 - **Stopping a scene played as it is.** A **▣** layer (+ Scene, or a
   function dropped on a cue) tracks like any other layer. To stop it, find
@@ -2166,7 +2166,7 @@ menus](fixture-manager.md#right-click-menus)):
   empty space, with **+ Hit for Everywhere**); on a layer, **Merge Layers**
   and, with several selected, **N Selected Layers ▸**; on a layer,
   **Release After This Cue**, and on a grey (carried-in) row also
-  **Untrack From This Cue** and **Go to 1.1.1** (the cue that set it), then
+  **Untrack From This Cue** and **Go to 1.1.1 Setup** (the cue that set it), then
   **Bring Into This Cue** and **Start Here Instead**;
 - **several selected:** the menu offers only what acts on all of them, and
   says how many: **Copy 2 Layers**, **Duplicate 3 Cues**, **Move 2 Cues

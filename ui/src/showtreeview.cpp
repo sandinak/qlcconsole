@@ -8359,9 +8359,9 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
                 if (const CueList *sl = m_st->listOfCue(span.setIn))
                 {
                     const quint32 origin = span.setIn;
-                    menu.add(ContextMenu::Place, tr("Go to %1").arg(m_st->cueNumber(*sl, sl->indexOf(origin))),
+                    menu.add(ContextMenu::Place, tr("Go to %1").arg(m_st->cueLabel(*sl, sl->indexOf(origin))),
                              [this, origin]() { selectNode(origin); }, QStringLiteral("stGoToOrigin"))
-                        ->setToolTip(tr("The cue that sets this layer: %1").arg(m_st->cueLabel(*sl, sl->indexOf(origin))));
+                        ->setToolTip(tr("The cue that sets this layer"));
                 }
         }
     }

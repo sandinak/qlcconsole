@@ -384,6 +384,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A grey row's Go to names the cue** — right-click a carried-in layer:
+  **Go to 1.1.1 Setup**, the same words as the T column's *Set in 1.1.1
+  Setup*, not just the number.
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections
   (or by a controller slot) now moves the follow spot from the Show Tree,
