@@ -123,9 +123,11 @@ EffectFit::Need EffectFit::wledNeed()
     return n;
 }
 
-EffectFit::Need EffectFit::scriptNeed(const QStringList &fixtureTypes, const QString &scriptPath)
+EffectFit::Need EffectFit::scriptNeed(const QStringList &fixtureTypes, const QString &scriptPath,
+                                      const QString &wledPort)
 {
     Need n;
+    n.wled = !wledPort.isEmpty();
     for (const QString &t : fixtureTypes)
         n.types << t.toLower();
     n.matrix = n.types.contains(QLatin1String("matrix"));

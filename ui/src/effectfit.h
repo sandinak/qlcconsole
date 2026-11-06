@@ -80,8 +80,11 @@ public:
     /** A WLED device effect (listed under WLED). */
     static Need wledNeed();
     /** A script's need, from its declared types and the intents it emits
-     *  (read from the file at @p scriptPath; empty: types only). */
-    static Need scriptNeed(const QStringList &fixtureTypes, const QString &scriptPath);
+     *  (read from the file at @p scriptPath; empty: types only). A script that
+     *  ports a WLED effect (@p wledPort, its effect.wled) is WLED's: it needs a
+     *  WLED device like the device effects. */
+    static Need scriptNeed(const QStringList &fixtureTypes, const QString &scriptPath,
+                           const QString &wledPort = QString());
 
     struct Result
     {

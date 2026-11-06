@@ -388,7 +388,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   listed WLED's effects, position effects and the rest for any fixtures.
   Now, once a look has fixtures or groups, the picker (in the look editor
   and the effect designer) lists only effects that run on them: WLED's
-  where there is a WLED device, position for pan/tilt heads, gobo for a
+  where there is a WLED device (its device effects and the script
+  ports of them, "WLED Aurora" and the rest), position for pan/tilt heads, gobo for a
   gobo wheel, zoom/iris for fixtures that have them, matrix for a grid of
   heads, colour for colour mixing, a dimmer-only target gets the intensity
   effects. A mixed set shows what runs on some ("Runs on 6 of 10

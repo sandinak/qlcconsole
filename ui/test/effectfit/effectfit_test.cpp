@@ -221,6 +221,34 @@ void EffectFit_Test::searchHidesWhatDoesNotFit()
 
     QVERIFY(browser->tabNames().indexOf("WLED") < 0);      // the whole tab is gone
     QVERIFY(find("chase", "WLED").isEmpty());
+
+    // Nor WLED's ports (scripts that say effect.wled): not under Color, not by name.
+    EffectScriptCache *cache = m_doc->effectScriptRunner()->cache();
+    auto wledDerived = [&]() {
+        QStringList out;
+        for (int i = 0; i < browser->list()->count(); ++i)
+        {
+            const int e = browser->list()->item(i)->data(Qt::UserRole + 10).toInt();
+            const EffectBrowser::Entry &en = browser->m_entries.at(e);
+            if (en.category == "WLED" || !cache->scriptMeta(en.name).wled.isEmpty())
+                out << en.name;
+        }
+        return out;
+    };
+    QVERIFY(!cache->scriptMeta("WLED Aurora").wled.isEmpty());       // it is a port
+    QVERIFY(find("aurora", "Color").isEmpty());
+    // (the RGB Matrix library has its own, plain "Aurora": that one may show)
+    QVERIFY2(wledDerived().isEmpty(), qPrintable(wledDerived().join(", ")));
+    browser->search()->setText(QString());
+    browser->tabs()->setCurrentIndex(browser->tabNames().indexOf("Color"));
+    QVERIFY(browser->list()->count() > 0);
+    QVERIFY2(wledDerived().isEmpty(), qPrintable(wledDerived().join(", ")));
+    // Show all: they come back (greyed), the port among them.
+    browser->showAllButton()->setChecked(true);
+    QVERIFY(!find("aurora", "Color").isEmpty());
+    browser->showAllButton()->setChecked(false);
+    browser->search()->setText(QString());
+
     // A position effect isn't for a par either.
     QVERIFY(find("diamond", "Position").isEmpty());
 

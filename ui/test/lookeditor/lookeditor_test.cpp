@@ -1521,8 +1521,8 @@ void LookEditor_Test::wledOnlyEffectsNeedAWledTarget()
         return names;
     };
     QVERIFY(!browser->wledTargets());
-    // None of WLED's own on a par: the tab is gone (its ported generators
-    // stay, as ordinary effects, under Color).
+    // None of WLED's own on a par: the tab is gone, and its ported generators
+    // too.
     QVERIFY2(inWledTab().isEmpty(), "no WLED effects for a plain fixture");
     QVERIFY(browser->tabNames().indexOf("WLED") < 0);
     // Show all effects brings them back, greyed.

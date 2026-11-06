@@ -535,7 +535,10 @@ void EffectBrowser::reload()
                 const QString gen = (kind == KindScript || kind == KindPreset || kind == KindShow)
                                         ? e.scriptPath : QString();
                 const QString genName = kind == KindScript ? name : lastScriptLabel;
-                need = EffectFit::scriptNeed(cache->scriptMeta(genName).fixtureTypes, gen);
+                {
+                    const EffectScriptCache::ScriptMeta m = cache->scriptMeta(genName);
+                    need = EffectFit::scriptNeed(m.fixtureTypes, gen, m.wled);
+                }
             }
             e.fit = EffectFit::fit(need, m_targets);
         }

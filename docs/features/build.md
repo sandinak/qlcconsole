@@ -919,7 +919,7 @@ names the effect, with **Change Effect…** to open the browser again:
   and **WLED**. Recent is remembered between sessions.
 - **The list fits the look's fixtures.** Once the look has fixtures or
   groups, the browser lists only the effects that run on them, in the tabs
-  and in search: WLED's own effects only where a WLED device is among them,
+  and in search: WLED's own effects, and the "WLED …" ports of them, only where a WLED device is among them,
   position effects for pan/tilt heads, gobo effects for a gobo wheel, zoom
   and iris effects for fixtures that have them, matrix effects for a grid
   of heads (a pixel bar, or several fixtures together), colour effects for
