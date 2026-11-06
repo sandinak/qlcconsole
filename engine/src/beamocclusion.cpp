@@ -428,7 +428,7 @@ BeamOcclusion::Poses BeamOcclusion::livePoses(const Doc *doc, const MonitorPrope
     Poses out;
     if (doc == nullptr || mp == nullptr)
         return out;
-    foreach (Scenery *sc, mp->sceneries())
+    for (Scenery *sc : mp->sceneryMap())
     {
         if (sc == nullptr || !sc->isDriven())
             continue;
@@ -576,8 +576,15 @@ static void addTrussChain(const MonitorProperties *mp, quint32 trussId,
 QVector<BeamOcclusion::Exclude> BeamOcclusion::ownMounts(const MonitorProperties *mp, quint32 fixtureId)
 {
     QVector<Exclude> out;
+    ownMounts(mp, fixtureId, out);
+    return out;
+}
+
+void BeamOcclusion::ownMounts(const MonitorProperties *mp, quint32 fixtureId, QVector<Exclude> &out)
+{
+    out.clear();
     if (mp == nullptr)
-        return out;
+        return;
     const FixtureRigProps rp = mp->fixtureRigProps(fixtureId);
     switch (rp.primaryMount())
     {
@@ -624,13 +631,12 @@ QVector<BeamOcclusion::Exclude> BeamOcclusion::ownMounts(const MonitorProperties
         {
             // A free head standing on a platform stands on its deck.
             const QVector3D at = mp->fixtureRigPosition(fixtureId);
-            foreach (StagePlatform *pl, mp->platforms())
+            for (StagePlatform *pl : mp->platformMap())
                 if (pl != nullptr && pl->containsPoint(at.x(), at.y()))
                     out << Exclude{ Platforms, pl->id() };
         }
         break;
     }
-    return out;
 }
 
 /*****************************************************************************
@@ -647,7 +653,7 @@ static quint64 stageSignature(const MonitorProperties *mp, int kinds, float minS
     if (mp == nullptr)
         return s.h;
     if (kinds & (Drapes | Walls))
-        for (Scenery *sc : mp->sceneries())
+        for (Scenery *sc : mp->sceneryMap())
         {
             if (sc == nullptr) continue;
             s.add(sc->id()); s.add(sc->kind()); s.add(sc->name());
@@ -657,15 +663,17 @@ static quint64 stageSignature(const MonitorProperties *mp, int kinds, float minS
             s.add(sc->openingWidth()); s.add(sc->openingHeight());
             s.add(sc->doorWidth()); s.add(sc->doorHeight()); s.add(sc->doorAt());
             /* What actually hangs: whatever opens or flies the curtain --
-               its state, or where its driving fixture has it now -- shows
-               here. */
-            for (const Scenery::Piece &pc : piecesNow(sc, poses))
-            {
-                s.add(pc.u0); s.add(pc.u1); s.add(pc.z0); s.add(pc.z1);
-            }
+               its state, or where its driving fixture has it now. Its
+               pieces (Scenery::pieces()) are made from the fields above and
+               this pose alone, so the pose stands for them, to the bit,
+               without building their list every tick. */
+            const auto pose = poses.constFind(sc->id());
+            const Scenery::Pose now = (pose != poses.constEnd()) ? pose.value() : sc->staticPose();
+            s.bytes(&now.open, sizeof(now.open));
+            s.bytes(&now.fly, sizeof(now.fly));
         }
     if (kinds & Platforms)
-        for (StagePlatform *pl : mp->platforms())
+        for (StagePlatform *pl : mp->platformMap())
         {
             if (pl == nullptr || mp->isHiddenApronPlatform(pl->id()))
             {
@@ -679,7 +687,7 @@ static quint64 stageSignature(const MonitorProperties *mp, int kinds, float minS
             s.add(mp->platformBaseZ(pl->id()));
         }
     if (kinds & Towers)
-        for (Tower *tw : mp->towers())
+        for (Tower *tw : mp->towerMap())
         {
             if (tw == nullptr) continue;
             s.add(tw->id()); s.add(tw->name());
@@ -687,7 +695,7 @@ static quint64 stageSignature(const MonitorProperties *mp, int kinds, float minS
             s.add(tw->height()); s.add(tw->rotation());
         }
     if (kinds & Trusses)
-        for (Truss *t : mp->trusses())
+        for (Truss *t : mp->trussMap())
         {
             if (t == nullptr) continue;
             s.add(t->id()); s.add(t->name()); s.add(int(t->type())); s.add(t->width());
@@ -695,14 +703,14 @@ static quint64 stageSignature(const MonitorProperties *mp, int kinds, float minS
             s.add(t->parentTrussId());
         }
     if (kinds & Pipes)
-        for (Pipe *p : mp->pipes())
+        for (Pipe *p : mp->pipeMap())
         {
             if (p == nullptr) continue;
             s.add(p->id()); s.add(p->name()); s.add(p->diameter());
             s.add(p->positionAt(0.0f)); s.add(p->positionAt(p->length()));
         }
     if (kinds & Stands)
-        for (Stand *st : mp->stands())
+        for (Stand *st : mp->standMap())
         {
             if (st == nullptr) continue;
             s.add(st->id()); s.add(st->name()); s.add(st->topPos());

@@ -827,6 +827,8 @@ private:
 public:
     /** Return all defined trusses (owned by this object). */
     QList<Truss*> trusses() const { return m_trusses.values(); }
+    /** The same by id, without building a list: for the playback tick. */
+    const QMap<quint32, Truss*> &trussMap() const { return m_trusses; }
 
     /** Look up a truss by ID; returns nullptr if not found. */
     Truss *truss(quint32 id) const { return m_trusses.value(id, nullptr); }
@@ -920,6 +922,8 @@ private:
 public:
     /** Return all defined platforms (owned by this object). */
     QList<StagePlatform*> platforms() const { return m_platforms.values(); }
+    /** The same by id, without building a list: for the playback tick. */
+    const QMap<quint32, StagePlatform*> &platformMap() const { return m_platforms; }
 
     /** Look up a platform by ID; returns nullptr if not found. */
     StagePlatform *platform(quint32 id) const { return m_platforms.value(id, nullptr); }
@@ -1059,6 +1063,8 @@ public:
 public:
     /** Return all defined pipes (owned by this object). */
     QList<Pipe*> pipes() const { return m_pipes.values(); }
+    /** The same by id, without building a list: for the playback tick. */
+    const QMap<quint32, Pipe*> &pipeMap() const { return m_pipes; }
 
     /** Look up a pipe by ID; returns nullptr if not found. */
     Pipe *pipe(quint32 id) const { return m_pipes.value(id, nullptr); }
@@ -1077,6 +1083,8 @@ public:
      ********************************************************************/
 public:
     QList<Stand*> stands() const { return m_stands.values(); }
+    /** The same by id, without building a list: for the playback tick. */
+    const QMap<quint32, Stand*> &standMap() const { return m_stands; }
     Stand *stand(quint32 id) const { return m_stands.value(id, nullptr); }
     Stand *addStand();
     void removeStand(quint32 id);
@@ -1090,6 +1098,8 @@ public:
      ********************************************************************/
 public:
     QList<Tower*> towers() const { return m_towers.values(); }
+    /** The same by id, without building a list: for the playback tick. */
+    const QMap<quint32, Tower*> &towerMap() const { return m_towers; }
     Tower *tower(quint32 id) const { return m_towers.value(id, nullptr); }
     Tower *addTower();
     void removeTower(quint32 id);
@@ -1119,6 +1129,8 @@ public:
      ********************************************************************/
 public:
     QList<Scenery*> sceneries() const { return m_sceneries.values(); }
+    /** The same by id, without building a list: for the playback tick. */
+    const QMap<quint32, Scenery*> &sceneryMap() const { return m_sceneries; }
     Scenery *scenery(quint32 id) const { return m_sceneries.value(id, nullptr); }
     Scenery *addScenery();
     void removeScenery(quint32 id);

@@ -445,6 +445,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   plugin into its plugin folder instead of linking it (a Windows link is a
   .lnk the loader ignores), and the generic DMX source mid-tick test counts
   rounds instead of a 4 s window, so a slow runner runs the same work.
+- **An Aim look that dims blocked lights no longer allocates on every
+  tick** — the line-of-sight check behind "Dim lights that can't see the
+  target" built its member lists, each head's mounts and the stage's list
+  of drapes and platforms afresh 50 times a second (20 allocations a tick
+  on a ten-light rig, more with drapes and decks). It now reuses them: 0 a
+  tick, the same heads dimmed, the same DMX out.
 
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections

@@ -1870,7 +1870,18 @@ written, known issues included.
   first soak's real-show phase (RSS 201 → 1116 MB, no crash, ticks fine);
   neither the engine nor the App driven offscreen reproduces it. The
   second soak runs with `--heap-track` (hourly `heap -s` / `vmmap
-  --summary`): diff two snapshots for what grew.
+  --summary`): diff two snapshots for what grew. **2026-11-06 (0.4.1):**
+  an hour of `stresstest/studiosoak/` -- DanceHysteria-0.6 with the
+  Lighting Studio in front, the Rig Overview open and looks cycling,
+  offscreen, `MallocStackLogging=1`, snapshots every 10 min -- does not
+  grow: footprint 286 MB at 1 min, 273-311 MB after, 302 MB at 60 min (it
+  moves with the looks playing; ~65 MB of it is the stack logging), `leaks`
+  0 at all six snapshots, the heap 187.0 MB at 12 min and 190.4 MB at
+  52 min (the faders' FadeChannel hashes for the looks then running,
+  harfbuzz font tables, the Rig Overview's throw cache: all bounded). So what grows is
+  what offscreen does not draw: the Cocoa backing store / CoreAnimation
+  path. Left: kronk's `--heap-track` snapshots (not on ender) or a
+  `vmmap --summary` diff of the real app on kronk's screen.
 - **WLED config check: log noise** — reported from the soak logs (where
   it logs from is not yet pinned down); find what logs it and how often,
   and quiet it.

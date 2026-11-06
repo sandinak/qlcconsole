@@ -209,6 +209,10 @@ protected:
      *  the target" has dimmed because something on stage is in their way
      *  (QLCPalette::dimWhenBlocked). Under m_valueListMutex, like the faders. */
     QSet<quint32> m_sightDimmed;
+    /** What AimSolver::blockedDimmedFixtures() answered this tick: kept so
+     *  its room is reused and a tick allocates nothing for it. Under
+     *  m_valueListMutex. */
+    QVector<quint32> m_sightBlocked;
     /** Look again, each tick, for heads that became blocked or clear, and
      *  fade their dimmers down or back. Holds m_valueListMutex. */
     void updateSightDim(QList<Universe *> ua);
@@ -467,6 +471,10 @@ public:
     /** The fixtures look @a paletteId writes: the scene's own targets'
      *  fixtures, less the ones it leaves out. */
     QList<quint32> writtenFixtures(quint32 paletteId) const;
+    /** The same two into @a into (cleared first), for the playback tick:
+     *  once @a into has grown to the size it needs, nothing is allocated. */
+    void layoutFixtures(quint32 paletteId, QList<quint32> &into) const;
+    void writtenFixtures(quint32 paletteId, QList<quint32> &into) const;
 
 private:
     /** Both guarded by m_bindingsMutex. */

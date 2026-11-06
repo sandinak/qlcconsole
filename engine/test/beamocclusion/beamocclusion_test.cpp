@@ -49,6 +49,7 @@
 #include "tower.h"
 #include "truss.h"
 #include "scene.h"
+#include "fixturegroup.h"
 #include "pipe.h"
 #include "doc.h"
 
@@ -753,6 +754,108 @@ void BeamOcclusion_Test::aDrivenCurtainBlocksAsItsFixtureHasIt()
     QCOMPARE(int(v), 255);
     st.scene->stop(FunctionParent::master());
     tick();
+    // The doc is the test's (deleted after the timer, which still knows it).
+}
+
+/* The playback tick asks AimSolver::blockedDimmedFixtures() -- the member
+   lists and mounts kept per thread, reused every tick -- where everything
+   else asks blockedDimmedHeads(), which builds them afresh. Across rig edits
+   (the drape, a head moved, its truss moved, a group's members) the two give
+   the same heads, and the DMX out is what the full check says: 0 for each
+   blocked head, the look's level for each clear one. */
+void BeamOcclusion_Test::theTickAnswersAsTheFullCheckAcrossRigEdits()
+{
+    Doc *doc = new Doc(this);
+    DrapeStage st = drapeStage(doc);       // FOH spot on its pipe, vocalist upstage
+    MonitorProperties *props = doc->monitorProperties();
+    // A free-hung spot upstage of the drape (in a group in the look, too)
+    // and one downstage; a platform on the deck, so a free head's mounts
+    // are looked for.
+    Fixture *back = makeSpot(doc, "Back");
+    props->setFixturePosition(back->id(), 0, 0, QVector3D(-2000.0f, -1000.0f, 6.0f));
+    FixtureRigProps rp;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(back->id(), rp);
+    Fixture *side = makeSpot(doc, "Side");
+    props->setFixturePosition(side->id(), 0, 0, QVector3D(3000.0f, 4000.0f, 6.0f));
+    props->setFixtureRigProps(side->id(), rp);
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(4.0f);
+    deck->setOriginY(3.0f);
+    deck->setWidth(2.0f);
+    deck->setDepth(2.0f);
+    FixtureGroup *grp = new FixtureGroup(doc);
+    grp->setName("Backs");
+    grp->setSize(QSize(4, 1));
+    QVERIFY(doc->addFixtureGroup(grp));
+    grp->assignFixture(back->id());
+    st.scene->addFixtureGroup(grp->id());
+    st.scene->setValue(back->id(), 2, 255);
+    st.scene->setValue(side->id(), 2, 255);
+    st.aim->setDimWhenBlocked(true);
+    Truss *pipe = props->truss(props->fixtureRigProps(st.spot->id()).trussId);
+    QVERIFY(pipe != nullptr);
+
+    MasterTimer timer(doc);
+    auto dimmers = [&]() {
+        timer.timerTick();
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        ua[0]->processFaders();
+        QHash<quint32, int> v;
+        for (Fixture *f : { st.spot, back, side })
+            v.insert(f->id(), uchar(ua[0]->preGMValues()[int(f->address()) + 2]));
+        doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    auto agree = [&](const char *what, int expectBlocked) {
+        st.scene->requestReaim();
+        QHash<quint32, int> v;
+        for (int i = 0; i < 40; ++i)
+            v = dimmers();
+        const QHash<quint32, BeamOcclusion::Hit> full = AimSolver::blockedDimmedHeads(doc, st.scene);
+        QVector<quint32> tick;
+        AimSolver::blockedDimmedFixtures(doc, st.scene, tick);
+        QCOMPARE(QSet<quint32>(tick.constBegin(), tick.constEnd()),
+                 QSet<quint32>(full.keyBegin(), full.keyEnd()));
+        QCOMPARE(tick.size(), full.size());                    // once each
+        QStringList by;
+        for (auto it = full.constBegin(); it != full.constEnd(); ++it)
+            by << doc->fixture(it.key())->name() + " by " + it.value().name;
+        QVERIFY2(full.size() == expectBlocked,
+                 qPrintable(QString("%1: %2 blocked (%4), expected %3").arg(what).arg(full.size())
+                            .arg(expectBlocked).arg(by.join(", "))));
+        for (quint32 fid : { st.spot->id(), back->id(), side->id() })
+            QVERIFY2(v.value(fid) == (full.contains(fid) ? 0 : 255),
+                     qPrintable(QString("%1: %2 at %3").arg(what).arg(doc->fixture(fid)->name()).arg(v.value(fid))));
+    };
+
+    st.scene->start(&timer, FunctionParent::master());
+    agree("start: the pipe and side spots behind the drape", 2);
+    st.drape->setState(Scenery::Open);
+    agree("drape open", 0);
+    st.drape->setState(Scenery::Closed);
+    agree("drape closed", 2);
+    // A rig edit: the free spot hung downstage, beside the pipe.
+    props->setFixturePosition(back->id(), 0, 0, QVector3D(-2000.0f, 4000.0f, 6.0f));
+    agree("back spot moved downstage", 3);
+    // Its pipe flown upstage of the drape: the pipe spot goes with it.
+    pipe->setOrigin(QVector3D(-3.0f, -1.0f, 6.0f));
+    agree("pipe moved upstage", 2);
+    // The look leaves the side spot out: not dimmed, at the scene's level.
+    st.scene->setExcludedFixtures(st.aim->id(), { side->id() });
+    agree("side spot left out of the aim", 1);
+    // The group's members change: the back spot is the scene's own as well.
+    grp->assignFixture(side->id());
+    grp->resignFixture(back->id());
+    agree("group members swapped", 1);
+    // The target walks downstage of the drape: the back spot (downstage
+    // now) sees it, the pipe spot (upstage now) loses it.
+    st.who->setPosition(QVector3D(0.0f, 2.0f, 0.0f));
+    agree("target downstage", 1);
+    QVERIFY(AimSolver::blockedDimmedHeads(doc, st.scene).contains(st.spot->id()));
+
+    st.scene->stop(FunctionParent::master());
+    dimmers();
     // The doc is the test's (deleted after the timer, which still knows it).
 }
 

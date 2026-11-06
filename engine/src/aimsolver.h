@@ -315,6 +315,13 @@ namespace AimSolver
      *  the target" on points at something they cannot see, and what is in the
      *  way. Empty -- and cheap -- when no Aim look in it has that on. */
     QHash<quint32, BeamOcclusion::Hit> blockedDimmedHeads(Doc *doc, const Scene *scene);
+    /** The same for the playback tick (Scene::write, every tick): only the
+     *  blocked heads' fixture ids, once each, into @p into (cleared first).
+     *  The member lists and mounts it works through are kept per thread and
+     *  reused, so once they and @p into have grown to the rig's size a tick
+     *  allocates nothing here. The same answer as blockedDimmedHeads()'s
+     *  keys, in the order it first meets them. */
+    void blockedDimmedFixtures(Doc *doc, const Scene *scene, QVector<quint32> &into);
 }
 
 /** @} */
