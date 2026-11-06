@@ -22,6 +22,8 @@
 #include <QColor>
 #include <QHash>
 
+#include "effectfit.h"
+
 class QListWidgetItem;
 class QListWidget;
 class QComboBox;
@@ -29,6 +31,7 @@ class QLineEdit;
 class QTabBar;
 class QTimer;
 class QToolButton;
+class QLabel;
 class Doc;
 
 /** @addtogroup ui UI
@@ -78,17 +81,19 @@ public:
      *  click or Enter picks. */
     void setPickWhileBrowsing(bool on) { m_pickWhileBrowsing = on; }
 
-    /** Whether the look has a WLED device to run on. Without one, a WLED
-     *  effect that has no port (it runs on the device only) isn't offered.
-     *  Default true: nothing known, everything listed. */
-    void setWledTargets(bool any)
-    {
-        if (any == m_wledTargets)
-            return;
-        m_wledTargets = any;
-        reload();
-    }
-    bool wledTargets() const { return m_wledTargets; }
+    /** The fixtures the look works on. Only the effects that fit them are
+     *  listed (WLED's only where there is a WLED device, position effects
+     *  for pan/tilt heads, ...) unless "Show all effects" is on; the one the
+     *  look already runs is always listed. No fixtures known: everything. */
+    void setTargets(const EffectFit::Targets &targets);
+    const EffectFit::Targets &targets() const { return m_targets; }
+    /** Whether a WLED device is among the targets (true while none are known). */
+    bool wledTargets() const { return !m_targets.known() || m_targets.anyWled(); }
+
+    /** The "Show all effects" toggle (hidden while no targets are known). */
+    QToolButton *showAllButton() const { return m_showAll; }
+    /** One line on how the effect now picked fits the targets; empty if it fits. */
+    QLabel *fitNote() const { return m_fitNote; }
 
 protected:
     void showEvent(QShowEvent *e) override;
@@ -112,10 +117,16 @@ private:
          *  then its own, so it stays under the effect it came from. */
         QString sortName;
         QString key() const;    ///< for Recent: kind and name
+        EffectFit::Result fit;  ///< against the targets (fits when none are known)
     };
 
     bool m_pickWhileBrowsing = false;
-    bool m_wledTargets = true;
+    EffectFit::Targets m_targets;
+    QToolButton *m_showAll = nullptr;
+    QLabel *m_fitNote = nullptr;
+    /** Listed now: it fits, "Show all" is on, or it is what the look runs. */
+    bool listed(const Entry &e) const;
+    void updateFitNote();
     void refill();
     void pick(QListWidgetItem *item);
     void tickPreviews();

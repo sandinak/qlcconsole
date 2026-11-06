@@ -917,6 +917,20 @@ names the effect, with **Change Effect…** to open the browser again:
   computer; the palette mark shows one of the show's effect palettes.
 - Tabs: **Recent**, **Color**, **Dimmer**, **Position**, **Beam**, **Other**
   and **WLED**. Recent is remembered between sessions.
+- **The list fits the look's fixtures.** Once the look has fixtures or
+  groups, the browser lists only the effects that run on them, in the tabs
+  and in search: WLED's own effects only where a WLED device is among them,
+  position effects for pan/tilt heads, gobo effects for a gobo wheel, zoom
+  and iris effects for fixtures that have them, matrix effects for a grid
+  of heads (a pixel bar, or several fixtures together), colour effects for
+  colour mixing, and the intensity effects for a dimmer. A mixed set fits an
+  effect if any of it does -- hover the row for "Runs on 6 of 10
+  fixtures". A look with no fixtures yet lists everything.
+- **Show all effects** (top right, once the look has fixtures) lists the
+  rest too, greyed, with the reason on hover ("Needs a gobo wheel; none of
+  these fixtures has one"). It starts off every time. The effect a look
+  already runs is always listed and selected, with that reason under the
+  list if it doesn't fit; nothing is changed for you.
 - Each row shows the effect's name, what it does, and a live preview of
   what it does:
   - a **colour or dimmer** effect: a strip of 16 lights running it (amber

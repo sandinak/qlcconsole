@@ -384,6 +384,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **The effect picker knows which fixtures you are working with** -- it
+  listed WLED's effects, position effects and the rest for any fixtures.
+  Now, once a look has fixtures or groups, the picker (in the look editor
+  and the effect designer) lists only effects that run on them: WLED's
+  where there is a WLED device, position for pan/tilt heads, gobo for a
+  gobo wheel, zoom/iris for fixtures that have them, matrix for a grid of
+  heads, colour for colour mixing, a dimmer-only target gets the intensity
+  effects. A mixed set shows what runs on some ("Runs on 6 of 10
+  fixtures"). **Show all effects** lists the rest greyed with the reason; the
+  effect a look already runs always stays listed.
+
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections
   (or by a controller slot) now moves the follow spot from the Show Tree,
