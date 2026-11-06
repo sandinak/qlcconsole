@@ -577,7 +577,7 @@ void CueRunner::buildFullLayout()
         fh->addWidget(m_focusArmedLabel, 1);
         m_focusStart = new QToolButton(m_focusArmed);
         m_focusStart->setObjectName(QStringLiteral("crFocusStart"));
-        m_focusStart->setText(tr("Start venue focus"));
+        m_focusStart->setText(tr("Start Venue Focus"));
         m_focusStart->setToolTip(tr("Begin venue focus (Start on the controller, or \u2318\u21a9)"));
         connect(m_focusStart, &QToolButton::clicked, this, [this]() {
             m_doc->programmer()->focusCallCue()->start();

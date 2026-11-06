@@ -384,6 +384,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Six button texts in Title Case**, found by a wider menuwords test that
+  now reads every variable declared as a push or tool button, not only
+  those named ...Btn/...Button: Section Times…, Learn Section Starts, Move
+  the Show's House Fixtures In, Turn Encoder 1…, All Notes…, Start Venue
+  Focus (Cue Runner).
 - **A grey row's Go to names the cue** — right-click a carried-in layer:
   **Go to 1.1.1 Setup**, the same words as the T column's *Set in 1.1.1
   Setup*, not just the number.

@@ -191,7 +191,7 @@ void ShowTreeView::updateListTimecodeRows(const CueList &list)
         return;
     const int absolute = m_st->absoluteTimedCues(list.id);
     m_listTcConvert->setVisible(absolute > 0);
-    m_listTcConvert->setText(tr("Section times (%n cue(s))…", "", absolute));
+    m_listTcConvert->setText(tr("Section Times (%n cue(s))…", "", absolute));
     updateLearnButton();
 }
 
@@ -426,7 +426,7 @@ void ShowTreeView::updateLearnButton()
     }
     else
     {
-        m_listTcLearn->setText(tr("Learn section starts"));
+        m_listTcLearn->setText(tr("Learn Section Starts"));
         m_listTcLearn->setToolTip(tr("Play the new export with timecode out and tap at each section's start: "
                                      "each tap sets that section's start, and its cues follow"));
     }

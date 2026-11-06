@@ -442,7 +442,7 @@ void ShowTreeSectionsUi_Test::timecodeAnchorsOnThePages()
     QVERIFY(view.selectNode(list));
     QPushButton *learn = view.findChild<QPushButton *>("stListTcLearn");
     QVERIFY(learn != nullptr && learn->isVisibleTo(&view));
-    QCOMPARE(learn->text(), QString("Learn section starts"));
+    QCOMPARE(learn->text(), QString("Learn Section Starts"));
     learn->click();
     QCOMPARE(view.learnSection(), QString("0 — 00-Preshow"));
     QCOMPARE(learn->text(), QString("Tap at: 0 — 00-Preshow"));
@@ -452,7 +452,7 @@ void ShowTreeSectionsUi_Test::timecodeAnchorsOnThePages()
     QVERIFY(view.learnTap(41000));
     QCOMPARE(st->cue(ids[5])->timecode, 45000);
     QVERIFY(view.learnSection().isEmpty());
-    QCOMPARE(learn->text(), QString("Learn section starts"));
+    QCOMPARE(learn->text(), QString("Learn Section Starts"));
     QVERIFY(!view.learnTap(50000));
 
     // Ripple and stretch, as the cue's Ripple timecode… does.

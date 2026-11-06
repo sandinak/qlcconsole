@@ -387,14 +387,14 @@ void ControlMapPanel::startEncoderLearn(int target)
     m_encLearning = target;
     if (target == LearnEncoders)
     {
-        m_encLearn->setText(tr("Turn encoder 1…"));
+        m_encLearn->setText(tr("Turn Encoder 1…"));
     }
     else
     {
         const QString what = target == LearnPushes ? tr("Push encoder 1…")
                            : target == LearnNext ? tr("Press next bank…")
                            : target == LearnPrevious ? tr("Press previous bank…")
-                           : target == LearnDirect ? tr("Press bank 1…") : tr("Turn encoder 1…");
+                           : target == LearnDirect ? tr("Press bank 1…") : tr("Turn Encoder 1…");
         m_encLearnMore->setText(what);
     }
     m_doc->controlMap()->listen();
