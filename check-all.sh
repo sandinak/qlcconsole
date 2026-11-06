@@ -249,6 +249,17 @@ if ! WINMAC_OUT=$("$REPO/platforms/linux/check-win-macros.sh" --source "$REPO" 2
     exit 1
 fi
 
+# The UX rules (docs/dev/UX_RULES.md for people, ux_rules.json for the
+# walker and the reviewer) say the same thing, name tests that exist, and
+# each forbid_regex catches its own Wrong example. The check's own test first.
+if ! UXR_OUT=$(python3 -I "$REPO/tools/uxreview/check_rules.py" --source "$REPO" --self-test 2>&1 \
+        && python3 -I "$REPO/tools/uxreview/check_rules.py" --source "$REPO" 2>&1); then
+    echo >&2 "$UXR_OUT"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "tools/uxreview/check_rules.py failed: UX_RULES.md and ux_rules.json are out of step. Nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
+fi
+
 # The gate pool's Linux-host choice and queue: their own test (fake hosts).
 if [ -x "$REPO/platforms/macos/gate-linux.sh" ] && ! LX_OUT=$("$REPO/platforms/macos/gate-linux.sh" --self-test 2>&1); then
     echo >&2 "$LX_OUT"
