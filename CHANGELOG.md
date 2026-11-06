@@ -255,6 +255,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   layout. See [Steam Deck and gamepad remote](docs/features/gamepad-remote.md).
 
 ### Changed
+- Footer: the right side is one line. Selection, mode, stage chip, Follow chip and the autosave label share a vertical centre, height and 6 px padding; the stage chip no longer draws a frame (only its coloured states have a fill).
 
 - **Buttons read in Title Case, like the menus** (board W2-Q3): "Focus This
   Cue…", "Remove Selected", "Add Source", "Snapshot the View". About 100

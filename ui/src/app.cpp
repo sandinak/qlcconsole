@@ -4906,10 +4906,10 @@ void App::updateStageIndicator()
                                    " border-radius: 3px; padding: 0 6px; }");
             break;
         case Stage::BuildLook:
-            sheet = QStringLiteral("QToolButton { color: palette(text); font-weight: bold; padding: 0 6px; }");
+            sheet = QStringLiteral("QToolButton { color: palette(text); font-weight: bold; padding: 0 6px; border: none; background: transparent; }");
             break;
         case Stage::NoList:
-            sheet = QStringLiteral("QToolButton { color: gray; padding: 0 6px; }");
+            sheet = QStringLiteral("QToolButton { color: gray; padding: 0 6px; border: none; background: transparent; }");
             break;
     }
     if (sheet != m_stageStyle)       // only on a change
@@ -8068,14 +8068,14 @@ void App::initStatusBar()
     // when nothing is selected, otherwise shows fully-selected fixture
     // group names or a fixture count fallback.
     m_statusSelectionLabel = new QLabel(this);
-    m_statusSelectionLabel->setAlignment(Qt::AlignRight);
+    m_statusSelectionLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_statusSelectionLabel->hide();
     sb->addPermanentWidget(m_statusSelectionLabel);
 
     // Pad-grid mode indicator. Shows "Pad: Fixture select" etc. when
     // the matrix is in any mode other than Off; hides otherwise.
     m_statusPadModeLabel = new QLabel(this);
-    m_statusPadModeLabel->setAlignment(Qt::AlignRight);
+    m_statusPadModeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_statusPadModeLabel->hide();
     sb->addPermanentWidget(m_statusPadModeLabel);
 
@@ -8094,7 +8094,7 @@ void App::initStatusBar()
     m_statusOverridesChip = new QToolButton(this);
     m_statusOverridesChip->setObjectName("footerOverrides");
     m_statusOverridesChip->setAutoRaise(true);
-    m_statusOverridesChip->setStyleSheet("QToolButton { color: #a06000; font-weight: bold; }");
+    m_statusOverridesChip->setStyleSheet("QToolButton { color: #a06000; font-weight: bold; padding: 0 6px; border: none; }");
     m_statusOverridesChip->hide();
     connect(m_statusOverridesChip, &QToolButton::clicked, this, &App::clearOverrides);
     sb->addPermanentWidget(m_statusOverridesChip);
@@ -8123,7 +8123,7 @@ void App::initStatusBar()
     // mode, not the current one). Always visible.
     m_statusModeChipLabel = new QLabel(this);
     m_statusModeChipLabel->setObjectName("footerMode");
-    m_statusModeChipLabel->setAlignment(Qt::AlignRight);
+    m_statusModeChipLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_statusModeChipLabel->setCursor(Qt::PointingHandCursor);
     m_statusModeChipLabel->setToolTip(tr("Click to switch Design/Operate mode."));
     m_statusModeChipLabel->installEventFilter(this);   // click → toggle mode
@@ -8182,7 +8182,7 @@ void App::initStatusBar()
     // Programmer dirty indicator. Hidden when clean, red bullet + text
     // when dirty. Mirrors the in-frame SaveProgrammer button highlight.
     m_statusProgrammerLabel = new QLabel(this);
-    m_statusProgrammerLabel->setAlignment(Qt::AlignRight);
+    m_statusProgrammerLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_statusProgrammerLabel->hide();
     sb->addPermanentWidget(m_statusProgrammerLabel);
 
@@ -8194,10 +8194,28 @@ void App::initStatusBar()
     // now lives in m_statusModeLabel's own slot (far left, see
     // updateOutputReadiness()), not a chip here.
     m_statusDirtyLabel = new QLabel(this);
-    m_statusDirtyLabel->setAlignment(Qt::AlignRight);
+    m_statusDirtyLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     sb->addPermanentWidget(m_statusDirtyLabel);
     m_statusDirtyLabel->installEventFilter(this);       // a click lists the changes
     slotDocModified(m_doc != NULL ? m_doc->isModified() : false);
+
+    // One line for the whole right side (decided: no frame on any chip; only the
+    // coloured states have a fill): same height, same 6 px inner padding, text
+    // centred vertically -- a chip slots in here without its own rules.
+    {
+        const int h = fontMetrics().height() + 4;
+        const QList<QWidget *> items = { m_statusSelectionLabel, m_statusPadModeLabel, m_statusOverridesChip,
+                                         m_statusFollowLabel, m_statusModeChipLabel, m_statusStage,
+                                         m_statusProgrammerLabel, m_statusDirtyLabel };
+        for (QWidget *w : items)
+        {
+            if (w == nullptr)
+                continue;
+            w->setFixedHeight(h);
+            if (QLabel *l = qobject_cast<QLabel *>(w))
+                l->setContentsMargins(6, 0, 6, 0);
+        }
+    }
 
     if (m_doc != NULL)
     {

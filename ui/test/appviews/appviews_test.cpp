@@ -2243,7 +2243,6 @@ void AppViews_Test::aSkippedCueReadsInEveryTheme()
             QVERIFY(view->grab().save(QStringLiteral("%1/skipped-theme-%2.png").arg(dir).arg(theme)));
     }
     m_app->setTheme(was);
-    m_app->hide();
     QVERIFY(st->removeProduction(st->productions().first().id));
 }
 
@@ -2349,7 +2348,6 @@ void AppViews_Test::textColoursReadInEveryTheme()
             QVERIFY(runner->grab().save(QStringLiteral("%1/run-theme-%2.png").arg(dir).arg(theme)));
     }
     m_app->setTheme(was);
-    m_app->hide();
     QVERIFY(st->removeProduction(prod));
 }
 
@@ -2509,7 +2507,6 @@ void AppViews_Test::aJumpToAHiddenTabShowsEverything()
     QVERIFY(!m_app->m_viewNotice->isVisible());
     QCOMPARE(m_app->workspaceView(), App::EverythingView);
     m_app->setWorkspaceView(App::ConsoleView);
-    m_app->hide();
     m_app->doc()->resetModified();
 }
 
@@ -2806,7 +2803,6 @@ void AppViews_Test::upgradingAClassicShowOffersTheConsoleView()
     QVERIFY(m_app->doc()->isModified());
     QVERIFY(!m_app->m_viewNotice->isVisible());
     view->setConverterRunner(nullptr);
-    m_app->hide();
     m_app->clearDocument();
 }
 
@@ -3177,7 +3173,6 @@ void AppViews_Test::fullScreenIsBack()
     else    // a screen under the window's minimum (offscreen at QT_SCALE_FACTOR=2: 400x400): placed at its origin
         QCOMPARE(m_app->geometry().topLeft(), screen.topLeft());
     m_app->showNormal();
-    m_app->hide();
 }
 
 /* 0.3.1 (k) 5: QLC+ 4's Monitor -- the channels and their values -- from
@@ -4609,6 +4604,50 @@ void AppViews_Test::aLoadedTeachingShowOpensInOperateWithoutAsking()
     m_app->slotLoadDocFromMemory(saved);
     QTest::qWait(60);
     QVERIFY(!boxed);
+}
+
+/* The footer's right side is one line: selection, mode, stage chip, the Follow chip and
+   the autosave label share a vertical centre and a height, and the gaps are equal. */
+void AppViews_Test::theFooterRightSideSharesOneLine()
+{
+    const QSize oldSize = m_app->size();
+    m_app->m_doc->setMode(Doc::Design);
+    m_app->hideViewNotice();
+    m_app->show();
+    m_app->m_statusSelectionLabel->setText("Selected: Lanterns (6)");
+    m_app->m_statusSelectionLabel->show();
+    m_app->m_statusFollowLabel->setText(QString::fromUtf8("\xe2\x97\x8e Follow \xc2\xb7 Lanterns"));
+    m_app->m_statusFollowLabel->show();
+    const QList<QWidget *> items = { m_app->m_statusSelectionLabel, m_app->m_statusFollowLabel,
+                                     m_app->m_statusModeChipLabel, m_app->m_statusStage,
+                                     m_app->m_statusDirtyLabel };
+    const QByteArray shotDir = qgetenv("QLC_SHOT_DIR");
+    for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        m_app->resize(sz);
+        for (int i = 0; i < 5; ++i)
+            QCoreApplication::processEvents();
+        if (!shotDir.isEmpty())
+            m_app->statusBar()->grab().save(QString::fromLocal8Bit(shotDir)
+                + QStringLiteral("/after-follow-%1-footer.png").arg(sz.width()));
+        QList<QRect> r;
+        for (QWidget *w : items)
+        {
+            if (!w->isVisibleTo(m_app->statusBar()))
+                continue;
+            r << QRect(w->mapTo(m_app->statusBar(), QPoint(0, 0)), w->size());
+        }
+        QVERIFY2(r.size() >= 3, qPrintable(QString::number(r.size())));
+        for (const QRect &q : r)
+        {
+            QVERIFY2(qAbs(q.center().y() - r.first().center().y()) <= 1, qPrintable(QString::number(sz.width())));
+            QCOMPARE(q.height(), r.first().height());
+        }
+        const int gap = r[1].left() - r[0].right();
+        for (int i = 1; i < r.size(); ++i)
+            QVERIFY2(qAbs((r[i].left() - r[i - 1].right()) - gap) <= 1, qPrintable(QString::number(sz.width())));
+    }
+    m_app->resize(oldSize);
 }
 
 /* The footer's stage chip (CHANGELOG [Unreleased]): one item that always says what lights
