@@ -47,25 +47,51 @@ A good start is Ollama on the same Mac with a model that can call tools
 ## Asking
 
 There is one line, and it decides. Open the Show Tree's command line (`:`
-from the tree) and type. A command runs as you typed it, and the model is
-never involved. A line that isn't a command is first **spell-checked**
-here, on this computer (a word of the grammar, or a cue, group, fixture or
-palette of the show spelt slightly wrong: *Did you mean `Towers colour
-Blue`?*; Enter runs the corrected line, **Esc** puts back what you typed).
-Only a line the spell-check can't put right goes to AI Assist, with the
-command line's error and the syntax, and only while AI Assist is on and the
-console is in Design. The line says when it will: its grey hint ends *or ask
-in plain words (AI Assist)*. You can keep working while it thinks; **Esc**
-in the line cancels.
+from the tree) or Build's command bar and type. A command runs as you typed
+it, and the model is never involved. A line that isn't a command is read
+first, here on this computer, to tell a **typo** from **plain words**:
+
+- **A typo** is the command line's own words and the show's names with a
+  slip or two: `towrs colour blu`, `relase Towers`, `dimer 50`, `go 1.2.3`.
+  It is put right in the line (*Did you mean `Towers colour Blue`?*): Enter
+  runs the corrected line, **Esc** puts back what you typed. Nothing is sent
+  anywhere. A line of the right words whose cue or name the show hasn't
+  (`skip 9.9`, `Towers colour Purple`) just gets the command line's answer.
+- **Plain words** read as language: a question (*why is FOH 3 on*, anything
+  ending in `?`), small words the command line doesn't use (*the*, *for*,
+  *with*, *please*…), or several words that are neither the command line's
+  nor names of the show: *make the towers blue for the chorus*, *fade
+  everything out over 5 seconds*. A line that starts as a command and goes
+  on in words (*Towers colour the nice blue please*) counts too. These go to
+  AI Assist, with the command line's error and the syntax.
+- **In between** (one word nobody owns: *paint towers blue*) goes to AI
+  Assist too when it is on; if the spell-check had a fix, it waits in the
+  pane as a link (*Spell-check: did you mean …*) that puts it in the line.
+  With AI Assist off or in Operate, the fix goes in the line as for a typo.
+
+Plain words go to AI Assist only while it is on and the console is in
+Design. The line says when they will: its grey hint ends *or ask in plain
+words (AI Assist)*. Start the line with `?`, a space and your question to
+ask even when it could read as a command.
+
+**While it thinks**, the line shows it: a spinner turns at the end of the
+line and the message beside it says *Asking AI Assist (model)… Esc
+cancels*, with the seconds once it has taken more than two. **Esc** in the
+line, or a click on the spinner, cancels. The line stays yours meanwhile: a
+command you type runs as usual (its message takes the place of the busy
+one; the spinner keeps turning), and another line for AI Assist replaces the
+one in flight -- the newest is what you meant. If a one-step answer comes
+back while you are typing, it waits in the pane instead of taking over the
+line. The spinner stops when the answer, an error or the time limit
+(Settings ▸ AI Assist) comes; only the line that asked shows the answer.
 
 What comes back is either a corrected command, shown as a change to apply
-(see below, with the real syntax in the line), or an answer in words. Start
-the line with `?`, a space and your question to ask a question even when it
-could read as a command.
+(see below, with the real syntax in the line), or an answer in words.
 
 With AI Assist off, plain words get the command line's error and *To type
-in plain words, turn on Settings ▸ AI Assist*. In Operate only the
-spell-check runs; the line never asks the model.
+in plain words, turn on Settings ▸ AI Assist*. In Operate the model is
+never asked: plain words get the error and *AI Assist takes plain words in
+Design mode only*; typos still get their fix.
 
 The answer appears in the pane above the line, with **Asked the console:**
 and the commands it used (`conflicts`, `fixtures Spot`). Click one to put
@@ -102,6 +128,9 @@ sentence saying what it does:
   line, or asking a new question, drops it too. Nothing has changed.
 - A single step also goes straight into the line, as you could have typed
   it: Enter runs it.
+- **In Build's command bar** each step runs as a line of the bar, onto the
+  scene loaded in the Workbench (as if you had typed it), so each is its
+  own undo step there.
 
 Each step runs where the one before left the selection, so `cue 3` then
 `Towers colour Blue` sets the colour in cue 3. Before anything runs, every

@@ -28,6 +28,10 @@
 #include <QPointer>
 #include <QWidget>
 #include <QtTest>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QSettings>
 
 #include "../../../engine/test/common/stdprelude.h"
 #define private public
@@ -39,6 +43,10 @@
 #include "workbench.h"
 #undef protected
 #undef private
+#ifdef QLC_AI_ASSIST
+#include "heldmodel.h"
+#include "aiassist.h"
+#endif
 
 #include "functionstreewidget.h"
 #include "showtreecontroller.h"
@@ -349,6 +357,134 @@ void LibraryBuild_Test::helpAndQuestions()
     QVERIFY(bar->message().contains("Workbench"));
     rig.pm->returnWorkbench(lent);
     QVERIFY(bar->runLine("Towers colour Blue"));
+}
+
+/* 0.4.1: Build's command bar has the Show Tree's one-line fallback: a
+   typo gets "Did you mean" (Esc puts back what was typed), plain words go
+   to AI Assist with the line busy meanwhile, and what the assistant
+   proposes runs as a line of the bar -- onto the scene. The Show Tree's
+   line, beside it, shows nothing of a question Build asked. */
+void LibraryBuild_Test::commandBarTypoOrLanguage()
+{
+#ifndef QLC_AI_ASSIST
+    QSKIP("built without AI Assist");
+#else
+    HeldModel model;
+    QSettings().setValue(QStringLiteral("ai/enabled"), true);
+    QSettings().setValue(QStringLiteral("ai/provider"), QStringLiteral("ollama"));
+    QSettings().setValue(QStringLiteral("ai/endpoint"), model.endpoint());
+    QSettings().setValue(QStringLiteral("ai/model"), QStringLiteral("test-model"));
+    {
+        AiAssist ai(m_doc);
+        ai.settingsChanged();
+        Rig rig(m_doc);
+        BuildCommandBar *bar = rig.pm->commandBar();
+        QLineEdit *line = bar->line();
+        QAction *spinner = bar->findChild<QAction *>("aiBusySpinner");
+        QVERIFY(spinner != nullptr);
+        QVERIFY(line->placeholderText().contains("plain words"));
+
+        // A typo: the fix in the line; Esc puts back what was typed.
+        line->setText("Towrs colour Blu");
+        QVERIFY(!bar->runLine(line->text()));
+        QCOMPARE(line->text(), QStringLiteral("Towers colour Blue"));
+        QVERIFY2(bar->message().contains("Did you mean"), qPrintable(bar->message()));
+        line->setFocus();
+        QTest::keyClick(line, Qt::Key_Escape);
+        QCOMPARE(line->text(), QStringLiteral("Towrs colour Blu"));
+        QTest::qWait(50);
+        QCOMPARE(model.requests, 0);
+        QVERIFY(rig.mine->palettes().isEmpty());
+
+        // Plain words: asked; the bar is busy, the Show Tree's line isn't.
+        line->setText("make the towers blue for the chorus");
+        QTest::keyClick(line, Qt::Key_Return);
+        QVERIFY(line->text().isEmpty());
+        QVERIFY2(bar->message().startsWith("Asking AI Assist (test-model)"), qPrintable(bar->message()));
+        QVERIFY(line->actions().contains(spinner));
+        QTRY_COMPARE_WITH_TIMEOUT(model.requests, 1, 3000);
+        QAction *treeSpinner = rig.view->findChild<QAction *>("aiBusySpinner");
+        QVERIFY(treeSpinner != nullptr);
+        QVERIFY(!rig.view->commandLine()->actions().contains(treeSpinner));
+        QVERIFY(!rig.view->commandMessage().contains("Asking"));
+        QTest::keyClick(line, Qt::Key_Escape);
+        QVERIFY(!line->actions().contains(spinner));
+
+        // What it proposes is a line of the bar: Enter puts it on the scene.
+        const QJsonObject args { { "targets", QJsonArray { "Towers" } },
+                                 { "looks", QJsonArray { QJsonObject { { "attribute", "colour" }, { "value", "Blue" } } } } };
+        const QJsonObject call { { "id", "call_1" }, { "type", "function" },
+                                 { "function", QJsonObject { { "name", "set_look" },
+                                                             { "arguments", QString::fromUtf8(QJsonDocument(args).toJson()) } } } };
+        model.replies = {
+            QJsonDocument(QJsonObject { { "choices", QJsonArray { QJsonObject { { "message", QJsonObject {
+                { "role", "assistant" }, { "content", "" }, { "tool_calls", QJsonArray { call } } } } } } } }).toJson(),
+            QJsonDocument(QJsonObject { { "choices", QJsonArray { QJsonObject { { "message", QJsonObject {
+                { "role", "assistant" }, { "content", "Towers colour Blue: Enter applies it." } } } } } } }).toJson() };
+        line->setText("paint the towers blue please");
+        QTest::keyClick(line, Qt::Key_Return);
+        QTRY_COMPARE_WITH_TIMEOUT(line->text(), QStringLiteral("Towers colour Blue"), 5000);
+        QVERIFY(!line->actions().contains(spinner));
+        QVERIFY(rig.mine->palettes().isEmpty());            // nothing yet
+        QVERIFY2(bar->message().contains("Enter applies"), qPrintable(bar->message()));
+        QTest::keyClick(line, Qt::Key_Return);
+        QVERIFY2(rig.mine->fixtureGroups().contains(m_towers), qPrintable(bar->message()));
+        QVERIFY(rig.mine->palettes().contains(m_blue));
+        QVERIFY(line->text().isEmpty());
+        QVERIFY(m_doc->showTree()->productions().isEmpty());   // no cue was made
+
+        // Operate: plain words ask no one, and say AI Assist is Design's.
+        m_doc->setMode(Doc::Operate);
+        QTest::qWait(100);
+        const int before = model.requests;
+        QVERIFY(!bar->runLine("make the towers blue for the chorus"));
+        QVERIFY2(bar->message().contains("Design mode only"), qPrintable(bar->message()));
+        QTest::qWait(50);
+        QCOMPARE(model.requests, before);
+        m_doc->setMode(Doc::Design);
+
+        // QLC_SHOT_DIR: the bar at three sizes -- a typo's fix, plain words
+        // with AI Assist working (seconds showing), and its proposal.
+        const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+        if (!shots.isEmpty())
+        {
+            QDir().mkpath(shots);
+            const QList<QByteArray> proposal = {
+                QJsonDocument(QJsonObject { { "choices", QJsonArray { QJsonObject { { "message", QJsonObject {
+                    { "role", "assistant" }, { "content", "" }, { "tool_calls", QJsonArray { call } } } } } } } }).toJson(),
+                QJsonDocument(QJsonObject { { "choices", QJsonArray { QJsonObject { { "message", QJsonObject {
+                    { "role", "assistant" }, { "content", "Towers colour Blue: Enter applies it." } } } } } } }).toJson() };
+            for (const QSize &size : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+            {
+                const QString tag = QString("%1x%2").arg(size.width()).arg(size.height());
+                rig.window.resize(size);
+                rig.tabs->resize(size);
+                QTest::qWait(100);
+                line->setText("Towrs colour Blu");
+                QVERIFY(!bar->runLine(line->text()));
+                QTest::qWait(50);
+                rig.window.grab().save(shots + "/build-typo-didyoumean-" + tag + ".png");
+                line->clear();
+                model.replies.clear();
+                line->setText("make the towers blue for the chorus");
+                QTest::keyClick(line, Qt::Key_Return);
+                QTest::qWait(2300);
+                rig.window.grab().save(shots + "/build-language-busy-" + tag + ".png");
+                QTest::keyClick(line, Qt::Key_Escape);
+                model.replies = proposal;
+                line->setText("paint the towers blue please");
+                QTest::keyClick(line, Qt::Key_Return);
+                QTRY_COMPARE_WITH_TIMEOUT(line->text(), QStringLiteral("Towers colour Blue"), 5000);
+                QTest::qWait(50);
+                rig.window.grab().save(shots + "/build-language-proposal-" + tag + ".png");
+                QTest::keyClick(line, Qt::Key_Escape);
+                line->clear();
+            }
+        }
+    }
+    for (const char *k : { "ai/enabled", "ai/provider", "ai/endpoint", "ai/model" })
+        QSettings().remove(QString::fromLatin1(k));
+#endif
 }
 
 void LibraryBuild_Test::withoutAShowTreeView()

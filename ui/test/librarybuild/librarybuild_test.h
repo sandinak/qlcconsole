@@ -52,6 +52,7 @@ private slots:
     void helpAndQuestions();
     /** Without a Show Tree view the bar and the Groups & fixtures pane
      *  still work. */
+    void commandBarTypoOrLanguage();
     void withoutAShowTreeView();
 
 private:

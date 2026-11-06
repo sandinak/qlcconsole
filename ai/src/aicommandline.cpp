@@ -17,11 +17,27 @@
 
 #include <QTextBrowser>
 #include <QLineEdit>
+#include <QPainter>
+#include <QPixmap>
+#include <QAction>
+#include <QTimer>
 #include <QLabel>
+#include <QIcon>
 #include <QUrl>
 
 #include "operationregistry.h"
 #include "aicommandline.h"
+
+namespace
+{
+/** The line whose question is in flight: it alone shows the busy line and
+ *  the answer (Build's bar and the Show Tree's share the assistant). */
+QPointer<AiCommandLine> s_asker;
+/** The spinner turns this often (ms). */
+const int kSpinMs = 100;
+/** The seconds since asking show after this long (ms). */
+const int kShowSecondsMs = 2000;
+}
 
 AiCommandLine::AiCommandLine(QLineEdit *line, QTextBrowser *pane, QLabel *message, QObject *parent)
     : QObject(parent)
@@ -30,6 +46,14 @@ AiCommandLine::AiCommandLine(QLineEdit *line, QTextBrowser *pane, QLabel *messag
     , m_message(message)
     , m_placeholder(line->placeholderText())
 {
+    // The busy indicator: a spinner in the line while a question is out.
+    m_spinner = new QAction(this);
+    m_spinner->setObjectName(QStringLiteral("aiBusySpinner"));
+    m_spinner->setToolTip(tr("AI Assist is working on it: Esc (or a click here) cancels"));
+    connect(m_spinner, &QAction::triggered, this, [this]() { cancel(); });
+    m_spin = new QTimer(this);
+    m_spin->setInterval(kSpinMs);
+    connect(m_spin, &QTimer::timeout, this, &AiCommandLine::tick);
     // The proposal's links (the view's own handler only takes "ex:").
     if (!m_pane.isNull())
         connect(m_pane.data(), &QTextBrowser::anchorClicked, this, [this](const QUrl &url) {
@@ -52,6 +76,7 @@ AiAssist *AiCommandLine::assist()
         m_ai = ai;
         connect(ai, &AiAssist::availabilityChanged, this, &AiCommandLine::update);
         connect(ai, &AiAssist::busyChanged, this, &AiCommandLine::update);
+        connect(ai, &AiAssist::busyChanged, this, &AiCommandLine::busyChanged);
         connect(ai, &AiAssist::answered, this, &AiCommandLine::showAnswer);
         connect(ai, &AiAssist::proposalChanged, this, &AiCommandLine::proposalChanged);
         if (m_selectionProvider)
@@ -79,14 +104,120 @@ void AiCommandLine::update()
                                               : tr("%1 · ? asks AI Assist").arg(m_placeholder));
 }
 
+void AiCommandLine::setBasePlaceholder(const QString &text)
+{
+    m_placeholder = text;
+    update();
+}
+
 void AiCommandLine::setPlainWords(bool on)
 {
     m_plainWords = on;
     update();
 }
 
+bool AiCommandLine::isAsking() const
+{
+    return s_asker == this && !m_ai.isNull() && m_ai->isBusy();
+}
+
+bool AiCommandLine::isBusyShown() const
+{
+    return m_spin->isActive();
+}
+
+int AiCommandLine::elapsedSeconds() const
+{
+    return isAsking() && m_since.isValid() ? int(m_since.elapsed() / 1000) : -1;
+}
+
+bool AiCommandLine::askNow(const QString &question, const ShowTreeCommand::Context &selection, QString *why,
+                           const QString &parserError)
+{
+    AiAssist *ai = assist();
+    if (ai == nullptr)
+    {
+        *why = tr("AI Assist isn't running");
+        return false;
+    }
+    // One in flight already: the newest line is what the operator wants.
+    if (ai->isBusy() && ai->isAvailable())
+    {
+        m_replacing = true;
+        ai->cancel();
+        m_replacing = false;
+    }
+    const QPointer<AiCommandLine> before = s_asker;
+    s_asker = this;
+    if (!ai->ask(question, selection, why, parserError))
+    {
+        s_asker = before;
+        return false;
+    }
+    return true;
+}
+
+QString AiCommandLine::busyText() const
+{
+    const qint64 ms = m_since.isValid() ? m_since.elapsed() : 0;
+    if (ms < kShowSecondsMs)
+        return tr("Asking AI Assist (%1)… Esc cancels").arg(AiSettings::load().model);
+    return tr("Asking AI Assist (%1)… %2 s · Esc cancels").arg(AiSettings::load().model).arg(ms / 1000);
+}
+
+void AiCommandLine::busyChanged(bool busy)
+{
+    if (busy && s_asker == this)
+    {
+        m_since.start();
+        m_frame = 0;
+        m_busyShown.clear();
+        if (!m_line.isNull() && !m_line->actions().contains(m_spinner))
+            m_line->addAction(m_spinner, QLineEdit::TrailingPosition);
+        tick();
+        m_spin->start();
+        return;
+    }
+    if (busy)
+        return;
+    m_spin->stop();
+    m_since.invalidate();
+    if (!m_line.isNull())
+        m_line->removeAction(m_spinner);
+    m_busyShown.clear();
+}
+
+void AiCommandLine::tick()
+{
+    if (m_line.isNull())
+        return;
+    // A 270° arc, a step round each tick.
+    const qreal dpr = m_line->devicePixelRatioF();
+    const int side = 16;
+    QPixmap pm(int(side * dpr), int(side * dpr));
+    pm.setDevicePixelRatio(dpr);
+    pm.fill(Qt::transparent);
+    {
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing);
+        QPen pen(m_line->palette().color(QPalette::Highlight), 2.2);
+        pen.setCapStyle(Qt::RoundCap);
+        p.setPen(pen);
+        p.drawArc(QRectF(2.5, 2.5, side - 5, side - 5), -(m_frame * 30) * 16, 270 * 16);
+    }
+    m_spinner->setIcon(QIcon(pm));
+    ++m_frame;
+    // The message, unless something else (a command typed meanwhile) has
+    // said its piece there since.
+    if (!m_message.isNull() && (m_busyShown.isEmpty() || m_message->text() == m_busyShown))
+    {
+        m_busyShown = busyText();
+        setMessage(m_busyShown, false);
+    }
+}
+
 bool AiCommandLine::fallback(const QString &line, const QString &parserError,
-                             const ShowTreeCommand::Context &selection, QString *note)
+                             const ShowTreeCommand::Context &selection, QString *note, const QString &fix)
 {
     if (!AiAssist::isEnabled())
     {
@@ -101,15 +232,23 @@ bool AiCommandLine::fallback(const QString &line, const QString &parserError,
     if (ai->hasProposal())
         ai->discard();
     QString why;
-    if (!ai->ask(line.trimmed(), selection, &why, parserError))
+    if (!askNow(line.trimmed(), selection, &why, parserError))
     {
         if (note != nullptr)
             *note = why;
         return false;
     }
     m_fallbackError = parserError;
-    setMessage(tr("Not a command (%1). Asking %2… (Esc cancels)").arg(parserError, AiSettings::load().model),
-               false);
+    m_fallbackFix = fix;
+    if (!m_pane.isNull())
+    {
+        // What was sent, and the spell-check's fix to take instead.
+        QString html = QStringLiteral("<p><b>? %1</b></p><p>%2</p>")
+                           .arg(line.trimmed().toHtmlEscaped(),
+                                tr("Not a command: asked AI Assist. Esc cancels.").toHtmlEscaped());
+        m_pane->setHtml(html + fixLink(fix));
+        m_pane->show();
+    }
     update();
     return true;
 }
@@ -143,11 +282,10 @@ bool AiCommandLine::handle(const QString &line, const ShowTreeCommand::Context &
         return false;
     const QString question = line.trimmed().mid(1).trimmed();
     QString why;
-    if (ai == nullptr)
-        why = tr("AI Assist isn't running");
-    else if (ai->ask(question, selection, &why))
+    if (askNow(question, selection, &why, QString()))
     {
-        setMessage(tr("Asking %1… (Esc cancels)").arg(AiSettings::load().model), false);
+        m_fallbackError.clear();
+        m_fallbackFix.clear();
         update();
         return true;
     }
@@ -185,6 +323,42 @@ bool AiCommandLine::applyProposal()
     AiAssist *ai = assist();
     if (ai == nullptr || !ai->hasProposal())
         return false;
+    if (m_lineRunner)
+    {
+        // Build: each step runs as a line of the bar (onto the scene).
+        if (!ai->isAvailable())
+        {
+            setMessage(tr("Not applied: AI Assist is unavailable in Operate mode"), true);
+            return false;
+        }
+        QStringList commands;
+        for (int i = 0; i < m_included.count(); ++i)
+            if (m_included.at(i) && i < ai->proposal().count())
+                commands << ai->proposal().at(i).command;
+        if (commands.isEmpty())
+        {
+            setMessage(tr("No step is included: tick one, or Esc to discard"), true);
+            return false;
+        }
+        ai->discard();
+        int done = 0;
+        for (const QString &c : commands)
+        {
+            if (!m_lineRunner(c))
+            {
+                if (!m_message.isNull())
+                    setMessage(tr("Stopped at “%1” (%2); %n step(s) before it applied", "", done)
+                                   .arg(c, m_message->text()), true);
+                return false;
+            }
+            ++done;
+        }
+        setMessage(tr("AI Assist applied %n line(s); undo takes each back", "", done), false);
+        ShowTreeCommand::Result r;
+        r.ok = true;
+        emit applied(r);
+        return true;
+    }
     QList<int> steps;
     for (int i = 0; i < m_included.count(); ++i)
         if (m_included.at(i))
@@ -257,30 +431,61 @@ void AiCommandLine::showProposal()
     html += QStringLiteral("</table><p><a href=\"ai:apply\"><b>%1</b></a> · <a href=\"ai:discard\">%2</a> "
                            "&nbsp; %3</p>")
                 .arg(tr("Apply"), tr("Discard"),
-                     tr("Enter applies the ticked steps as one undo step; Esc discards.").toHtmlEscaped());
+                     (m_lineRunner ? tr("Enter applies the ticked steps (each its own undo step); Esc discards.")
+                                   : tr("Enter applies the ticked steps as one undo step; Esc discards."))
+                         .toHtmlEscaped());
+    html += fixLink(m_answerFix);
     m_pane->setHtml(html);
     m_pane->show();
 }
 
+QString AiCommandLine::fixLink(const QString &fix)
+{
+    if (fix.isEmpty())
+        return QString();
+    return QStringLiteral("<p>%1 <a href=\"ex:%2\"><code>%3</code></a></p>")
+        .arg(tr("Spell-check: did you mean").toHtmlEscaped(), QString::fromLatin1(QUrl::toPercentEncoding(fix)),
+             fix.toHtmlEscaped());
+}
+
 void AiCommandLine::showAnswer(const AiAssist::Answer &answer)
 {
+    // A question replaced by a newer one: its "Cancelled" isn't news. An
+    // answer to the other line's question is that line's.
+    if (m_replacing)
+        return;
+    AiAssist *ai = assist();
+    if (!s_asker.isNull() && s_asker != this && !(ai != nullptr && ai->isExternalProposal()))
+        return;
     const QString fallbackError = m_fallbackError;
     m_fallbackError.clear();
+    m_answerFix = m_fallbackFix;
+    m_fallbackFix.clear();
     if (!answer.proposal.isEmpty())
     {
         m_answer = answer;
         m_included = QList<bool>(answer.proposal.count(), true);
-        // One step: in the line too, as the operator could have typed it.
+        // One step: in the line too, as the operator could have typed it --
+        // unless they are typing something else there meanwhile.
         m_lineProposal.clear();
-        if (answer.proposal.count() == 1 && !m_line.isNull())
+        if (answer.proposal.count() == 1 && !m_line.isNull() && m_line->text().trimmed().isEmpty())
         {
             m_lineProposal = answer.proposal.first().command;
             m_line->setText(m_lineProposal);
             m_line->end(false);
         }
         showProposal();
-        setMessage(tr("AI Assist proposes %n change(s): Enter applies them (one undo step), Esc discards",
-                      "", answer.proposal.count()), false);
+        const bool typing = !m_line.isNull() && !m_line->text().trimmed().isEmpty()
+                            && m_line->text().trimmed() != m_lineProposal;
+        if (typing)
+            setMessage(tr("AI Assist proposes %n change(s): Apply in the pane above, Esc discards",
+                          "", answer.proposal.count()), false);
+        else if (m_lineRunner)
+            setMessage(tr("AI Assist proposes %n change(s): Enter applies them, Esc discards",
+                          "", answer.proposal.count()), false);
+        else
+            setMessage(tr("AI Assist proposes %n change(s): Enter applies them (one undo step), Esc discards",
+                          "", answer.proposal.count()), false);
         update();
         return;
     }
@@ -300,6 +505,7 @@ void AiCommandLine::showAnswer(const AiAssist::Answer &answer)
     if (!answer.rejected.isEmpty())
         html += QStringLiteral("<p>%1 %2</p>").arg(tr("Refused (not a read-only question of the console):"),
                                                    answer.rejected.join(QStringLiteral(", ")).toHtmlEscaped());
+    html += fixLink(m_answerFix);
     if (!m_pane.isNull())
     {
         m_pane->setHtml(html);

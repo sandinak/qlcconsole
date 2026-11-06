@@ -47,6 +47,9 @@
 #include <QMimeData>
 #include <QXmlStreamReader>
 #include <QtTest>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 #include "../../../engine/test/common/stdprelude.h"
 #define private public
@@ -59,6 +62,10 @@
 #include "treecuestack.h"
 #undef protected
 #undef private
+#ifdef QLC_AI_ASSIST
+#include "heldmodel.h"
+#include "aiassist.h"
+#endif
 #include "functionliveeditdialog.h"
 #include "fadetimespin.h"
 #include "effectrunsmenu.h"
@@ -8771,7 +8778,7 @@ void ShowTreeView_Test::commandLineAsksTheRegistry()
 /* One command line (AI_ASSIST.md section 7): a command runs as typed; a typo
    puts the corrected command in the line (nothing runs; Enter runs it, Esc
    puts back what was typed); plain words with AI Assist off say where to
-   turn it on, and in Operate say nothing and ask no one. */
+   turn it on, and in Operate say AI Assist is Design's and ask no one. */
 void ShowTreeView_Test::oneCommandLineSpellChecksAndHintsAtAi()
 {
     QSettings().setValue(QStringLiteral("ai/enabled"), false);
@@ -8813,13 +8820,225 @@ void ShowTreeView_Test::oneCommandLineSpellChecksAndHintsAtAi()
     // One word of nonsense: just the parser's answer.
     QVERIFY(!view.runCommand("xyzzy"));
     QVERIFY(!view.commandMessage().contains("Settings"));
-    // Operate: the hint (a Design thing) stays out, and nothing is asked.
+    // Operate: nothing is asked, and the line says AI Assist is Design's
+    // (not a silent fail).
     m_doc->setMode(Doc::Operate);
     QVERIFY(!view.runCommand("please make everything blue"));
-    QVERIFY(!view.commandMessage().contains("Settings ▸ AI Assist"));
+    QVERIFY2(view.commandMessage().contains("Design mode"), qPrintable(view.commandMessage()));
     QVERIFY(!view.commandMessage().contains("Asking"));
     m_doc->setMode(Doc::Design);
     QVERIFY(!view.commandLine()->placeholderText().contains("AI Assist"));
+}
+
+/* 0.4.1: a failed line is a typo or plain words (ShowTreeCommand::
+   classifyFailure()), not both in turn: a typo gets "Did you mean" and asks
+   no one; plain words -- also a line that starts as a command and goes on
+   in words -- go to AI Assist (Design, on), and the line shows it is busy
+   until the answer, Esc or a newer line. In Operate plain words ask no one
+   and say AI Assist is Design's. */
+void ShowTreeView_Test::oneCommandLineTypoOrLanguage()
+{
+#ifndef QLC_AI_ASSIST
+    QSKIP("built without AI Assist");
+#else
+    HeldModel model;
+    QSettings().setValue(QStringLiteral("ai/enabled"), true);
+    QSettings().setValue(QStringLiteral("ai/provider"), QStringLiteral("ollama"));
+    QSettings().setValue(QStringLiteral("ai/endpoint"), model.endpoint());
+    QSettings().setValue(QStringLiteral("ai/model"), QStringLiteral("test-model"));
+    AiAssist ai(m_doc);
+    ai.settingsChanged();
+
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName("Towers");
+    m_doc->addFixtureGroup(g);
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setName("Blue");
+    blue->setValue(QLCPalette::colorToString(QColor(Qt::blue), QColor(Qt::black)));
+    m_doc->addPalette(blue);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 cue = st->addCue(list, -1, "One");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.selectNode(cue));
+    QLineEdit *line = view.commandLine();
+    QAction *spinner = view.findChild<QAction *>("aiBusySpinner");
+    QVERIFY(spinner != nullptr);
+    QVERIFY2(line->placeholderText().contains("plain words"),
+             qPrintable(QString("%1 | available %2 instance %3").arg(line->placeholderText()).arg(ai.isAvailable())
+                            .arg(AiAssist::instance() == &ai)));
+
+    // A typo: the fix in the line, nobody asked.
+    QVERIFY(!view.runCommand("towrs colour blu"));
+    QCOMPARE(line->text(), QStringLiteral("Towers colour Blue"));
+    QVERIFY2(view.commandMessage().contains("Did you mean"), qPrintable(view.commandMessage()));
+    QTest::qWait(50);
+    QCOMPARE(model.requests, 0);
+    line->clear();
+
+    // Plain words: asked, and the line is busy.
+    QVERIFY(view.runCommand("make the towers blue for the chorus"));
+    QVERIFY2(view.commandMessage().startsWith("Asking AI Assist (test-model)"), qPrintable(view.commandMessage()));
+    QVERIFY(line->actions().contains(spinner));
+    QTRY_COMPARE_WITH_TIMEOUT(model.requests, 1, 3000);
+    // Half a command, then words: asked too (it replaces the one in flight).
+    QVERIFY(view.runCommand("Towers colour the nice blue please"));
+    QTRY_COMPARE_WITH_TIMEOUT(model.requests, 2, 3000);
+    QVERIFY(line->actions().contains(spinner));
+    // A command typed meanwhile runs, and the spinner keeps turning.
+    QVERIFY(view.runCommand("Towers colour Blue"));
+    QCOMPARE(st->cue(cue)->layers.count(), 1);
+    QVERIFY(line->actions().contains(spinner));
+    // Esc cancels: not busy any more.
+    line->setFocus();
+    QTest::keyClick(line, Qt::Key_Escape);
+    QVERIFY(!line->actions().contains(spinner));
+    QVERIFY2(view.commandMessage().contains("Cancelled"), qPrintable(view.commandMessage()));
+
+    // Operate: plain words ask no one and say so; a typo still gets its fix.
+    m_doc->setMode(Doc::Operate);
+    QTest::qWait(100);
+    const int before = model.requests;
+    QVERIFY(!view.runCommand("make the towers blue for the chorus"));
+    QVERIFY2(view.commandMessage().contains("AI Assist takes plain words in Design mode only"),
+             qPrintable(view.commandMessage()));
+    QVERIFY(!line->actions().contains(spinner));
+    QVERIFY(!view.runCommand("towrs colour blu"));
+    QVERIFY(view.commandMessage().contains("Did you mean"));
+    QTest::qWait(50);
+    QCOMPARE(model.requests, before);
+    m_doc->setMode(Doc::Design);
+    line->clear();
+
+    // QLC_SHOT_DIR: the line at three sizes -- a typo's fix, plain words
+    // with AI Assist working (seconds showing), and the answer.
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty())
+    {
+        QDir().mkpath(shots);
+        for (const QSize &size : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+        {
+            const QString tag = QString("%1x%2").arg(size.width()).arg(size.height());
+            view.resize(size);
+            QTest::qWait(100);
+            QVERIFY(!view.runCommand("towrs colour blu"));
+            QTest::qWait(50);
+            view.grab().save(shots + "/showtree-typo-didyoumean-" + tag + ".png");
+            line->clear();
+            model.replies.clear();
+            QVERIFY(view.runCommand("make the towers blue for the chorus"));
+            QTest::qWait(2300);
+            view.grab().save(shots + "/showtree-language-busy-" + tag + ".png");
+            line->setFocus();
+            QTest::keyClick(line, Qt::Key_Escape);
+            model.replies = { QJsonDocument(QJsonObject { { "choices", QJsonArray { QJsonObject { { "message",
+                QJsonObject { { "role", "assistant" }, { "content",
+                    "To make the Towers blue in the chorus: select the chorus cue, then type Towers colour Blue." } } } } } } })
+                                  .toJson() };
+            QVERIFY(view.runCommand("make the towers blue for the chorus"));
+            QTRY_VERIFY_WITH_TIMEOUT(!line->actions().contains(spinner), 5000);
+            QTest::qWait(50);
+            view.grab().save(shots + "/showtree-language-answered-" + tag + ".png");
+            model.replies.clear();
+        }
+    }
+
+    // AI Assist off: plain words say how to turn it on.
+    QSettings().setValue(QStringLiteral("ai/enabled"), false);
+    ai.settingsChanged();
+    const int off = model.requests;
+    QVERIFY(!view.runCommand("make the towers blue for the chorus"));
+    QVERIFY2(view.commandMessage().contains("Settings ▸ AI Assist"), qPrintable(view.commandMessage()));
+    QTest::qWait(50);
+    QCOMPARE(model.requests, off);
+
+    for (const char *k : { "ai/enabled", "ai/provider", "ai/endpoint", "ai/model" })
+        QSettings().remove(QString::fromLatin1(k));
+#endif
+}
+
+/* By hand only (QLC_AI_LIVE_OLLAMA=http://127.0.0.1:11434, QLC_AI_LIVE_MODEL
+   optional): the real ShowTreeView against a real model -- five lines in
+   plain words and five typos, typed as the operator would, and what each
+   did. Nothing is asserted about the model's words. */
+void ShowTreeView_Test::liveOllamaTypoOrLanguage()
+{
+#ifndef QLC_AI_ASSIST
+    QSKIP("built without AI Assist");
+#else
+    const QString endpoint = qEnvironmentVariable("QLC_AI_LIVE_OLLAMA");
+    if (endpoint.isEmpty())
+        QSKIP("by hand: QLC_AI_LIVE_OLLAMA=http://127.0.0.1:11434");
+    QSettings().setValue(QStringLiteral("ai/enabled"), true);
+    QSettings().setValue(QStringLiteral("ai/provider"), QStringLiteral("ollama"));
+    QSettings().setValue(QStringLiteral("ai/endpoint"), endpoint);
+    QSettings().setValue(QStringLiteral("ai/model"),
+                         qEnvironmentVariable("QLC_AI_LIVE_MODEL", QStringLiteral("qwen3.6:35b-a3b-mtp-q4_K_M")));
+    QSettings().setValue(QStringLiteral("ai/timeoutSec"), 240);
+    AiAssist ai(m_doc);
+    ai.settingsChanged();
+    const QList<quint32> fixtures = m_fixtures;
+    const QStringList groups { "Towers", "Steps", "FOH 3", "Cyc", "Movers", "Tops" };
+    for (int i = 0; i < groups.count(); ++i)
+    {
+        FixtureGroup *g = new FixtureGroup(m_doc);
+        g->setName(groups.at(i));
+        g->assignFixture(fixtures.at(i));
+        m_doc->addFixtureGroup(g);
+    }
+    const QStringList colours { "Blue", "Red", "Amber" };
+    for (const QString &c : colours)
+    {
+        QLCPalette *p = new QLCPalette(QLCPalette::Color, m_doc);
+        p->setName(c);
+        p->setValue(QLCPalette::colorToString(QColor(c == "Blue" ? Qt::blue : c == "Red" ? Qt::red : Qt::yellow),
+                                              QColor(Qt::black)));
+        m_doc->addPalette(p);
+    }
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 cue = st->addCue(list, -1, "Verse");
+    st->addCue(list, -1, "Chorus");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.selectNode(cue));
+    QLineEdit *line = view.commandLine();
+    QAction *spinner = view.findChild<QAction *>("aiBusySpinner");
+    QTextBrowser *pane = view.findChild<QTextBrowser *>("stCommandHelp");
+
+    const QStringList lines { "make the towers blue for the chorus", "fade everything out over 5 seconds",
+                              "why is FOH 3 on", "add a cue after 1 with the cyc in red",
+                              "Towers colour the nice blue please", "towrs colour blu", "relase Towers",
+                              "dimer 50", "go 2", "Steps colour Bleu" };
+    for (const QString &l : lines)
+    {
+        // Typed and Enter, as the operator does (the line clears when sent).
+        line->setText(l);
+        line->setFocus();
+        QElapsedTimer t;
+        t.start();
+        QTest::keyClick(line, Qt::Key_Return);
+        const bool sent = line->text().isEmpty();
+        const bool busy = line->actions().contains(spinner);
+        const QString first = view.commandMessage();
+        if (busy)
+            QTRY_VERIFY_WITH_TIMEOUT(!line->actions().contains(spinner), 250000);
+        QString answer = pane != nullptr && pane->isVisible() ? pane->toPlainText().simplified() : QString();
+        qInfo().noquote() << QString("\nLINE  %1\n  sent=%2 busy=%3 took=%4 s\n  first: %5\n  then:  %6\n  line:  %7\n  pane:  %8")
+                                 .arg(l).arg(sent).arg(busy).arg(t.elapsed() / 1000.0, 0, 'f', 1)
+                                 .arg(first, view.commandMessage(), line->text(), answer.left(400));
+        QTest::keyClick(line, Qt::Key_Escape);        // drop a proposal, or put back what was typed
+        line->clear();
+    }
+    for (const char *k : { "ai/enabled", "ai/provider", "ai/endpoint", "ai/model", "ai/timeoutSec" })
+        QSettings().remove(QString::fromLatin1(k));
+#endif
 }
 
 void ShowTreeView_Test::commandSyntaxFoldsAwayAndIsRemembered()

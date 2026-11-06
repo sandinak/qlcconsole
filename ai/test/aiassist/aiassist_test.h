@@ -82,6 +82,8 @@ private slots:
     void oneLineFallbackSendsTheParserError();
     void oneLineFallbackProposesACorrectedCommand();
     void oneLineFallbackOffOrOperateAsksNothing();
+    void busyIndicatorWhileAsking();
+    void proposalLeavesWhatIsTyped();
     void decliningChangesNothing();
     void leavingAStepOut();
     void nothingChangesInOperate();

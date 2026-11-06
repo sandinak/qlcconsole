@@ -186,6 +186,8 @@ private slots:
     void commandSyntaxFoldsAwayAndIsRemembered();
     void commandLineAsksTheRegistry();
     void oneCommandLineSpellChecksAndHintsAtAi();
+    void oneCommandLineTypoOrLanguage();
+    void liveOllamaTypoOrLanguage();
     /** Q61: Level… / Colour… open docked in the window, not in a separate
      *  window that can fall behind it: Return / Apply applies, Esc / Cancel
      *  just closes, one at a time. */

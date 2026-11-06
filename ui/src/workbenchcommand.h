@@ -123,6 +123,10 @@ private:
 #endif
     QStringList m_history;
     int m_historyAt = -1;
+    /** "Did you mean": what was typed, and the fix put in its place (Esc
+     *  puts it back). */
+    QString m_suggestedFrom;
+    QString m_suggestedLine;
 };
 
 /** @} */
