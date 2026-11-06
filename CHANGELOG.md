@@ -384,6 +384,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **The ARM char-signedness test runs** — the XY pad's position-to-DMX check
+  in vcxypad_test was commented out; it is a real test now, comparing as
+  uchar so it holds on the Pi (unsigned char) and on x86/Apple (signed).
 - **Six button texts in Title Case**, found by a wider menuwords test that
   now reads every variable declared as a push or tool button, not only
   those named ...Btn/...Button: Section Times…, Learn Section Starts, Move
