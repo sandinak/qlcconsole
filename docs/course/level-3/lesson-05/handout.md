@@ -11,7 +11,7 @@ nav_order: 2
 
 ## Why this matters
 
-A song with the music running from QLab can be lit two ways. QLab calls the cue ("GO 1.0.2") and the cue goes when the sound op's cue goes. Or both computers follow one clock, and each cue goes at its time with nobody pressing anything. A person can change their mind; a clock repeats exactly, every night. A show usually wants both: the clock for the song, a hand on GO for what isn't on the music ([Lesson 0.7](../0-7/)).
+A song with the music running from QLab can be lit two ways. QLab calls the cue ("GO 1.0.2") and the cue goes when the sound op's cue goes. Or both computers follow one clock, and each cue goes at its time with nobody pressing anything. A person can change their mind; a clock repeats exactly, every night. A show usually wants both: the clock for the song, a hand on GO for what isn't on the music ([Lesson 0.7](../../level-0/lesson-07/student.md)).
 
 ## Today you will
 
@@ -31,7 +31,7 @@ A song with the music running from QLab can be lit two ways. QLab calls the cue 
 
 ## Part 1 — Plan it (on paper, everyone)
 
-The song map from [Lesson 0.5](../0-5/): write the time of each section change and the cue that belongs there. Which of them must land on the beat, and which are a few seconds either side?
+The song map from [Lesson 0.5](../../level-0/lesson-05/student.md): write the time of each section change and the cue that belongs there. Which of them must land on the beat, and which are a few seconds either side?
 
 ## Part 2 — Build it (at the laptop)
 

@@ -11,7 +11,7 @@ nav_order: 2
 
 ## Why this matters
 
-A show is one GO key and a dozen songs. The op can't stop between numbers to rebuild a list, so every song lives in the same list, and the one before mustn't leave its colours on the next ([Lesson 2.1](../2-1/)). Then the night adds what the plan didn't: the lanterns are too hot for the room, the soloist forgets the words and needs a quieter stage, and the stage manager wants the whole thing on paper ([Lesson 0.7](../0-7/)).
+A show is one GO key and a dozen songs. The op can't stop between numbers to rebuild a list, so every song lives in the same list, and the one before mustn't leave its colours on the next ([Lesson 2.1](../../level-2/lesson-01/student.md)). Then the night adds what the plan didn't: the lanterns are too hot for the room, the soloist forgets the words and needs a quieter stage, and the stage manager wants the whole thing on paper ([Lesson 0.7](../../level-0/lesson-07/student.md)).
 
 ## Today you will
 
@@ -111,7 +111,7 @@ you are in Design. Click **Operate**.
 
 On paper, before the house opens: the show open and saved; **Operate**; the
 Run tab on the first cue; Stage Power and the house lights as in
-[Lesson 3.7](../3-7/); every group master at full; the pad, phone and QLab
+[Lesson 3.7](../../level-3/lesson-07/student.md); every group master at full; the pad, phone and QLab
 as the plan says; a hand on **Blackout** (top right) and **Stop all**
 (⌘⇧Esc). Blackout takes every light that doesn't ignore it to zero, and
 **Stop all** lets go of every cue and hit. Neither is an edit.

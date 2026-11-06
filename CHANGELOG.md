@@ -385,6 +385,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Course handouts link to the lessons they mean.** Lesson 3.5 and 3.8 handouts pointed at lesson pages that do not exist from where a handout is built (0.5, 0.7, 2.1, 3.7); the course site link check is clean again.
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections
   (or by a controller slot) now moves the follow spot from the Show Tree,
