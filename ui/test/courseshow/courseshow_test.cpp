@@ -701,9 +701,11 @@ int outputValue(Doc *doc, const QString &fixture, const QString &name)
                 if (fx->channel(c)->name() == name)
                 {
                     QList<Universe *> us = doc->inputOutputMap()->claimUniverses();
-                    const QByteArray *post = us.at(int(fx->universe()))->postGMValues();
+                    // Through the frame lock (channelSnapshot), not the raw array: the
+                    // engine zeroes the intensity channels and writes them again inside
+                    // one frame, and a read between the two sees a 0 that never went out.
                     const int a = int(fx->address() + c);
-                    const int v = a < post->size() ? uchar(post->at(a)) : 0;
+                    const int v = int(us.at(int(fx->universe()))->channelSnapshot(a).postGM);
                     doc->inputOutputMap()->releaseUniverses(false);
                     return v;
                 }
@@ -2215,7 +2217,10 @@ void CourseShow_Test::lessonHouseLights()
             {
                 QList<Universe *> us = doc->inputOutputMap()->claimUniverses();
                 Universe *u = us.at(int(f->universe()));
-                const QByteArray frame = u->blackoutFrame(*u->postGMValues());
+                QByteArray live(512, char(0));   // the live values, each read under the frame lock
+                for (int i = 0; i < live.size(); ++i)
+                    live[i] = char(u->channelSnapshot(i).postGM);
+                const QByteArray frame = u->blackoutFrame(live);
                 doc->inputOutputMap()->releaseUniverses(false);
                 return int(uchar(frame.at(int(f->address() + ch))));
             }

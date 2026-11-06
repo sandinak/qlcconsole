@@ -35,6 +35,7 @@ import csv
 import json
 import math
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -247,6 +248,27 @@ def estimate(sweeps, seconds, warmup, refine_on, resolution, repeats, build_s=15
     return total, total * per
 
 
+def dump_stacks(pid, path):
+    """A run that outlived its budget is hung: write every thread's stack before
+    it is killed, so the next occurrence (c-efx-n0256, 2026-11-04: empty log,
+    passed on rerun) can be diagnosed instead of only retried."""
+    if shutil.which("sample"):                               # macOS
+        cmds = [["sample", str(pid), "3", "-file", path]]
+    elif shutil.which("gdb"):
+        cmds = [["gdb", "-p", str(pid), "-batch", "-ex", "thread apply all bt"]]
+    elif shutil.which("eu-stack"):
+        cmds = [["eu-stack", "-p", str(pid)]]
+    else:
+        return
+    for c in cmds:
+        try:
+            r = subprocess.run(c, capture_output=True, text=True, timeout=60)
+            if "-file" not in c:
+                open(path, "w").write(r.stdout + r.stderr)
+        except Exception as e:                               # the dump must never mask the timeout
+            open(path, "w").write("stack dump failed: %s\n" % e)
+
+
 def run_one(a, sweep, name, cfg, types, outdir):
     os.makedirs(os.path.join(outdir, sweep), exist_ok=True)
     prefix = os.path.join(outdir, sweep, name)
@@ -275,11 +297,14 @@ def run_one(a, sweep, name, cfg, types, outdir):
         cmd = wrap.split() + cmd
     t0 = time.time()
     with open(prefix + ".log", "w") as log:
+        proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
         try:
-            rc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT,
-                                timeout=a.max_sec).returncode
+            rc = proc.wait(timeout=a.max_sec)
         except subprocess.TimeoutExpired:
             rc = "timeout"
+            dump_stacks(proc.pid, prefix + ".hang-stacks.txt")
+            proc.kill()
+            proc.wait()
     wall = time.time() - t0
     res = json.load(open(prefix + ".json")) if os.path.exists(prefix + ".json") else None
     return res, rc, wall, False
