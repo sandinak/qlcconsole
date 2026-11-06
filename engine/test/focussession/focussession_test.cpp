@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QtMath>
 
@@ -977,18 +978,23 @@ void FocusSession_Test::aFixedLightIsFocusedByWhereItLands()
     const double down = qRadiansToDegrees(qAtan2(5.0 - FocusSession::subjectHeight(), 2.0));
     QVERIFY2(qAbs(rp.aimDown - down) < 0.1, qPrintable(QString::number(rp.aimDown)));
     QVERIFY(s->isDirty(par->id()));
-    // Since the save, in the show's units: a show in feet hears feet and
-    // inches, not metres.
-    QCOMPARE(s->deltaText(par->id()), QString("2.00 m downstage"));
-    props->setGridUnits(MonitorProperties::Feet);
+    // Since the save, in Settings > Units: feet hears feet and inches, not
+    // metres, whatever the grid is in.
+    const MeasurementUnits::LengthUnit unitWas = MeasurementUnits::preferredLength();
+    auto restoreUnit = qScopeGuard([unitWas]() { MeasurementUnits::setPreferredLength(unitWas); });
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
+    QCOMPARE(s->deltaText(par->id()), QString("2 m downstage"));
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
     QCOMPARE(s->deltaText(par->id()), QString("6' 7\" downstage"));
     s->nudge(0.05f, 0.0f);                                      // 2.5 cm across
     QCOMPARE(s->deltaText(par->id()), QString("1\" stage left, 6' 7\" downstage"));
     s->nudge(-0.03f, 0.0f);                                     // 1 cm left of where it was
     QCOMPARE(s->deltaText(par->id()), QString::fromUtf8("\u00BD\" stage left, 6' 7\" downstage"));
     s->nudge(-0.02f, 0.0f);
-    props->setGridUnits(MonitorProperties::Meters);
-    QCOMPARE(s->deltaText(par->id()), QString("2.00 m downstage"));
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
+    QCOMPARE(s->deltaText(par->id()), QString("2 m downstage"));
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Centimetres);
+    QCOMPARE(s->deltaText(par->id()), QString("200 cm downstage"));
 
     // Revert: the rig as it was before the session, not aimed.
     s->revert();

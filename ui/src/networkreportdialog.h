@@ -55,7 +55,7 @@ public slots:
 
 private:
     NetworkReport m_report;
-    bool m_feet;
+    MeasurementUnits::LengthUnit m_unit;   // Settings > Units, as opened
     QPlainTextEdit *m_text;
     QPushButton *m_copyBtn;
     QPushButton *m_saveBtn;

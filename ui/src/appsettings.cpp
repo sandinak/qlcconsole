@@ -374,11 +374,19 @@ AppSettings::AppSettings(App *app, QWidget *parent)
                                             MeasurementUnits::Feet })
         m_unitsCombo->addItem(MeasurementUnits::name(u), int(u));
     m_unitsCombo->setCurrentIndex(qMax(0, m_unitsCombo->findData(int(MeasurementUnits::preferredLength()))));
-    m_unitsCombo->setToolTip(tr("How lengths and weights are shown: fixture sizes here and in "
-                                "the fixture definition editor (any unit can still be typed: "
-                                "7.5\", 19 cm, 26 lb), and the Lighting Studio's grid, rulers "
-                                "and fields -- metres for mm, cm and m, feet for inches and "
-                                "feet. Files keep millimetres and kilograms either way."));
+    // Its examples written by MeasurementUnits itself.
+    m_unitsCombo->setToolTip(tr("How every length and weight is shown and typed: fixture sizes "
+                                "here and in the fixture definition editor, the Lighting "
+                                "Studio's fields and labels, reports and the focus remote "
+                                "(any unit can still be typed: %1, %2, %3). %4 unless you "
+                                "choose another. The grid's cells are %5 with imperial units, "
+                                "%6 with metric ones. Files keep millimetres and kilograms either way.")
+                             .arg(MeasurementUnits::formatLength(190.5, MeasurementUnits::Inches),
+                                  MeasurementUnits::formatLength(190.0, MeasurementUnits::Centimetres),
+                                  MeasurementUnits::formatWeight(12.0, MeasurementUnits::Pounds),
+                                  MeasurementUnits::name(MeasurementUnits::Feet),
+                                  MeasurementUnits::formatLength(304.8, MeasurementUnits::Feet),
+                                  MeasurementUnits::formatLength(1000.0, MeasurementUnits::Metres)));
     unitsLayout->addWidget(m_unitsCombo);
     unitsLayout->addStretch();
     mainLayout->addWidget(unitsGroup);

@@ -752,9 +752,9 @@ QDialog *FocusCallsDialog::showCorrections(Doc *doc, QWidget *parent)
         for (auto it = v.trims.constBegin(); it != v.trims.constEnd(); ++it)
         {
             const Truss *t = props->truss(it.key());
-            // In the show's unit, as the stage marks say it.
+            // In Settings > Units, as the stage marks say it.
             QListWidgetItem *item = new QListWidgetItem(tr("Trim %1: %2").arg(t != nullptr ? t->name() : QString::number(it.key()))
-                                                        .arg(MonitorProperties::formatStageDistance(it.value(), props->gridUnits())),
+                                                        .arg(MonitorProperties::formatStageDistance(it.value())),
                                                         list);
             item->setData(Qt::UserRole, int(TrimKind));
             item->setData(Qt::UserRole + 1, it.key());

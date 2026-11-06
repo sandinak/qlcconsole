@@ -807,9 +807,6 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     // Its place on a tower: the one shown (a place is one fixture's).
     if (Tower *tw = (onTower && !many) ? props->tower(rp.towerId) : nullptr)
     {
-        const bool isFeet = (props->gridUnits() == MonitorProperties::Feet);
-        const double toDisp = isFeet ? 3.28084 : 1.0;
-        const QString unit = isFeet ? tr("ft") : tr("m");
         m_towerPos->blockSignals(true);
         m_towerPos->clear();
         auto addPos = [this](const QString &label, int side, int shelf) {
@@ -817,11 +814,12 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
             m_towerPos->setItemData(m_towerPos->count() - 1, side, Qt::UserRole);
             m_towerPos->setItemData(m_towerPos->count() - 1, shelf, Qt::UserRole + 1);
         };
-        addPos(tr("Top (%1 %2)").arg(double(tw->height()) * toDisp, 0, 'f', 2).arg(unit),
+        // Heights in Settings > Units.
+        addPos(tr("Top (%1)").arg(MeasurementUnits::formatMetres(double(tw->height()))),
                FixtureRigProps::TowerTop, -1);
         for (int i = tw->shelfCount() - 1; i >= 0; --i)
-            addPos(tr("Shelf %1 (%2 %3)").arg(i + 1)
-                       .arg(double(tw->shelfHeight(i)) * toDisp, 0, 'f', 2).arg(unit),
+            addPos(tr("Shelf %1 (%2)").arg(i + 1)
+                       .arg(MeasurementUnits::formatMetres(double(tw->shelfHeight(i)))),
                    FixtureRigProps::TowerShelf, i);
         addPos(tr("Bottom"), FixtureRigProps::TowerBottom, -1);
         for (int i = 0; i < m_towerPos->count(); ++i)
@@ -953,7 +951,7 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
 void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
 {
     MonitorProperties *props = m_monitor->m_props;
-    const bool isFeet = (props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers only
     const double toDisp = isFeet ? 3.28084 : 1.0;
 
     m_pixelPath = new QComboBox(parent);
@@ -970,13 +968,13 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     m_pixelTurns->setDecimals(1);
     m_pixelTurns->setSpecialValueText(tr("Auto"));
     m_pixelTurns->setToolTip(tr("Turns of the strip round the flame or the staff. Auto: a wand's "
-                                "from its LEDs at 2 cm apart, a flame's about one every 30 cm"));
+                                "from its LEDs at %1 apart, a flame's about one every %2")
+                                .arg(MeasurementUnits::formatLength(20.0), MeasurementUnits::formatLength(300.0)));
     form->addRow(tr("Turns:"), m_pixelTurns);
 
     m_wandLength = new FeetInchesSpinBox(isFeet, parent);
     m_wandLength->setObjectName(QStringLiteral("fixtureWandLength"));
     m_wandLength->setRange(0.1 * toDisp, 5.0 * toDisp);
-    m_wandLength->setDecimals(2);
     form->addRow(tr("Wand length:"), m_wandLength);
 
     m_heldBy = new QComboBox(parent);
@@ -987,7 +985,6 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     m_holdHeight = new FeetInchesSpinBox(isFeet, parent);
     m_holdHeight->setObjectName(QStringLiteral("fixtureHoldHeight"));
     m_holdHeight->setRange(0.0, 3.0 * toDisp);
-    m_holdHeight->setDecimals(2);
     m_holdHeight->setToolTip(tr("How high its middle is held, above where they stand"));
     form->addRow(tr("Held at:"), m_holdHeight);
 
@@ -1046,8 +1043,7 @@ void FixtureFields::showPixelRows(quint32 fid)
     const bool pixels = PixelPathDecor::ledCount(doc, fid) > 1 || rp.pixelPath != PixelPath::None;
     if (!pixels)
         return;
-    const bool isFeet = (props->gridUnits() == MonitorProperties::Feet);
-    const double toDisp = isFeet ? 3.28084 : 1.0;
+    const double toDisp = FeetInchesSpinBox::valuesInFeet() ? 3.28084 : 1.0;   // the fields' numbers
     // The fountain paths only in a fountain.
     const bool inFountain = Fountain::ofFixture(props, fid).isValid()
                             || Fountain::ofBase(props, rp.deckPlatformId).isValid();

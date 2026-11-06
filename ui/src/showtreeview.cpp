@@ -5754,6 +5754,7 @@ void ShowTreeView::lineParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, co
         if (key == KeySpread)
             m->addAction(tr("Spread…"), this, [this, cueId, layerId, target]() {
                 bool ok = false;
+                // units-ok: a spread factor, not a length
                 const double d = QInputDialog::getDouble(this, tr("Spread"),
                                                          tr("-5 crossed … 0 all on the centre … +5 end to end"),
                                                          5.0, -5.0, 5.0, 1, &ok, Qt::WindowFlags(), 0.1);

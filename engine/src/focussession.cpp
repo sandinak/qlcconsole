@@ -1285,17 +1285,20 @@ QString FocusSession::deltaText(quint32 fid) const
     QStringList parts;
     if (h.fixed)
     {
-        /* In the show's units: a show laid out in feet reads a nudge in
-           inches (to the half inch), "4½\" stage left", "1' 2\" upstage". */
-        const MonitorProperties *props = m_doc->monitorProperties();
-        const bool feet = props != nullptr && props->gridUnits() == MonitorProperties::Feet;
-        auto distance = [feet](float metres) {
+        /* In Settings > Units: feet or inches read a nudge to the half inch,
+           "4½\" stage left", "1' 2\" upstage"; metric to the centimetre
+           (millimetre for mm). */
+        const MeasurementUnits::LengthUnit unit = MeasurementUnits::preferredLength();
+        auto distance = [unit](float metres) {
             const double v = qAbs(double(metres));
-            if (!feet)
-                return tr("%1 m").arg(v, 0, 'f', 2);
+            if (!MeasurementUnits::isImperial(unit))
+            {
+                const double step = unit == MeasurementUnits::Millimetres ? 1.0 : 10.0;
+                return MeasurementUnits::formatLength(std::round(v * 1000.0 / step) * step, unit);
+            }
             const double halves = std::round(v / 0.0254 * 2.0);
             if (halves >= 24.0)
-                return MonitorProperties::formatStageDistance(float(v), MonitorProperties::Feet);
+                return MonitorProperties::formatStageDistance(float(v), unit);
             const int whole = int(halves) / 2;
             const bool half = (int(halves) % 2) != 0;
             return QStringLiteral("%1%2\"").arg(whole > 0 || !half ? QString::number(whole) : QString(),

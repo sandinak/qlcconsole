@@ -6420,7 +6420,6 @@ void MonitorGraphicsView::updateNetworkRuns()
     for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
         positions.insert(it.key(), props->fixtureRigPosition(it.key()));
 
-    const bool feet = (props->gridUnits() == MonitorProperties::Feet);
     const QList<NetworkRun> runs = m_doc->networkTopology()->runs(m_doc, positions);
     foreach (const NetworkRun &run, runs)
     {
@@ -6458,11 +6457,11 @@ void MonitorGraphicsView::updateNetworkRuns()
         QString from = run.nodeName;
         if (run.wireless && !run.receiverName.isEmpty())
             from = tr("%1 via %2").arg(run.nodeName, run.receiverName);
-        QString stats = tr("%1 · Port %2 · Universe %3 · %4 fixture(s) · ~%5 %6 · %7/512 ch")
+        QString stats = tr("%1 · Port %2 · Universe %3 · %4 fixture(s) · ~%5 · %6/512 ch")
                             .arg(from).arg(run.portIndex + 1).arg(run.universe + 1)
                             .arg(run.fixtures.size())
-                            .arg(run.lengthMetres * (feet ? 3.28084 : 1.0), 0, 'f', 1)
-                            .arg(feet ? tr("ft") : tr("m")).arg(run.channels);
+                            .arg(MonitorProperties::formatStageDistance(float(run.lengthMetres)))
+                            .arg(run.channels);
         const int unplotted = run.fixtures.size() - run.plotted.size();
         if (unplotted > 0)
             stats += tr(" · %1 not on the plot").arg(unplotted);
@@ -7464,8 +7463,7 @@ void MonitorGraphicsView::updateAimLines()
                 blockedPen.setStyle(Qt::DashLine);
                 const QString tip = tr("%1 cannot see %2: blocked by %3, %4 out")
                                         .arg(fxi->name(), tgt->name(), hit.name,
-                                             MonitorProperties::formatStageDistance(
-                                                 hit.distance, m_doc->monitorProperties()->gridUnits()));
+                                             MonitorProperties::formatStageDistance(hit.distance));
                 QGraphicsLineItem *toBlock = m_scene->addLine(
                     fixPx.x(), fixPx.y(), stopPx.x(), stopPx.y(), blockedPen);
                 toBlock->setZValue(2.5);
@@ -8013,7 +8011,8 @@ qreal MonitorGraphicsView::originUnitsV() const
 
 QString MonitorGraphicsView::unitSuffix() const
 {
-    return (m_unitValue > 500.0) ? QStringLiteral("m") : QStringLiteral("ft");
+    // The ruler counts the grid's cells, so it names the grid's unit.
+    return MeasurementUnits::symbol(m_unitValue > 500.0 ? MeasurementUnits::Metres : MeasurementUnits::Feet);
 }
 
 QString MonitorGraphicsView::axisName(bool horizontal) const
@@ -8334,7 +8333,7 @@ void MonitorGraphicsView::updateStageMarks()
         line(ax, y, ax, front, dimPen, "apron");
         line(ax - tick, y, ax + tick, y, dimPen, "apron");
         line(ax - tick, front, ax + tick, front, dimPen, "apron");
-        label(tr("Apron %1").arg(MonitorProperties::formatStageDistance(float(apron), props->gridUnits())),
+        label(tr("Apron %1").arg(MonitorProperties::formatStageDistance(float(apron))),
               QPointF(ax, y), curtainColour, Qt::AlignLeft | Qt::AlignTop, "apron");   // under the curtain line
     }
     if (props->stageMarkShown(MonitorProperties::CurtainLineFlag))
@@ -11813,11 +11812,11 @@ void MonitorGraphicsView::rebuildProjectionOverlay()
                            .arg(who).arg(double(nfr.tiltMax), 0, 'f', 0);
                 else
                     note = tr("%1 can light nothing here: standing upright, %2° of "
-                              "tilt reaches %3° below level — %4 m out from %5 m up")
+                              "tilt reaches %3° below level — %4 out from %5 up")
                            .arg(who).arg(double(nfr.tiltMax), 0, 'f', 0)
                            .arg(below, 0, 'f', 0)
-                           .arg(up / qTan(qDegreesToRadians(below)), 0, 'f', 0)
-                           .arg(up, 0, 'f', 1);
+                           .arg(MonitorProperties::formatStageDistance(float(up / qTan(qDegreesToRadians(below)))),
+                                MonitorProperties::formatStageDistance(float(up)));
             }
             const QPointF c = mfi->iconCentreScene();
             const double nw = nfm.horizontalAdvance(note) + 8.0;
@@ -11973,7 +11972,7 @@ void MonitorGraphicsView::rebuildReachOverlay()
     m_reachItem->setPos(realPositionToPixels(0.0, 0.0));
     m_reachItem->setScale(cell * 1000.0 * m_cellPixels / m_unitValue);
     m_reachItem->setToolTip(tr("Shaded: where none of the selected heads can aim, "
-                               "%1 m above the deck").arg(double(above), 0, 'f', 1));
+                               "%1 above the deck").arg(MonitorProperties::formatStageDistance(float(above))));
     m_reachItem->setVisible(true);
 }
 

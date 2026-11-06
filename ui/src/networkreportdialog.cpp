@@ -36,7 +36,7 @@
 NetworkReportDialog::NetworkReportDialog(Doc *doc, QWidget *parent)
     : QDialog(parent)
     , m_report(NetworkReport::build(doc))
-    , m_feet(doc->monitorProperties()->gridUnits() == MonitorProperties::Feet)
+    , m_unit(MeasurementUnits::preferredLength())
 {
     setWindowTitle(tr("Network Report"));
     resize(640, 520);
@@ -45,7 +45,7 @@ NetworkReportDialog::NetworkReportDialog(Doc *doc, QWidget *parent)
     m_text = new QPlainTextEdit(this);
     m_text->setReadOnly(true);
     m_text->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-    m_text->setPlainText(m_report.toText(m_feet));
+    m_text->setPlainText(m_report.toText(m_unit));
     root->addWidget(m_text, 1);
 
     QDialogButtonBox *btns = new QDialogButtonBox(QDialogButtonBox::Close, this);
@@ -70,7 +70,7 @@ bool NetworkReportDialog::saveCsv(const QString &path, QString *error) const
         return false;
     }
     QTextStream out(&file);
-    out << m_report.toCsv(m_feet);
+    out << m_report.toCsv(m_unit);
     return true;
 }
 

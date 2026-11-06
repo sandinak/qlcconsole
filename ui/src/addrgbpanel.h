@@ -86,6 +86,10 @@ protected slots:
 
 protected:
     const Doc *m_doc;
+    /** The physical size, in millimetres, shown in Settings > Units (in
+     *  place of the form's plain mm spin boxes) */
+    class LengthSpinBox *m_phyWidth = nullptr;
+    class LengthSpinBox *m_phyHeight = nullptr;
 
 };
 

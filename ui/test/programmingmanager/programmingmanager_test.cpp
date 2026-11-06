@@ -1756,7 +1756,7 @@ void ProgrammingManager_Test::aBuriedLightIsAFooterErrorUntilItIsFixed()
     QCOMPARE(e.severity, ShowStatus::Error);
     QCOMPARE(e.summary, QString("UST-2 is inside Deck SR"));
     QCOMPARE(e.itemData, (QVariantList{ fx->id() }));
-    QVERIFY2(e.items.first().contains("Sit it on Deck SR (0.61 m)"), qPrintable(e.items.first()));
+    QVERIFY2(e.items.first().contains(QString("Sit it on Deck SR (%1)").arg(MonitorProperties::formatStageDistance(0.61f))), qPrintable(e.items.first()));
     // The footer's worst entry is this error.
     QCOMPARE(ShowStatus::instance()->worst().key, QString("fixtures.buried"));
 
@@ -1837,9 +1837,9 @@ void ProgrammingManager_Test::aFloorLightBesideItsRowsDeckIsAFooterWarning()
     AppUtil::updatePlacementStatus(m_doc);
     ShowStatus::Entry e = entry("fixtures.offrow");
     QCOMPARE(e.severity, ShowStatus::Warning);
-    QCOMPARE(e.summary, QString("UST-2 is on the floor; UST-1, UST-3, UST-4 are on Deck USP1 (0.61 m)"));
+    QCOMPARE(e.summary, QString("UST-2 is on the floor; UST-1, UST-3, UST-4 are on Deck USP1 (%1)").arg(MonitorProperties::formatStageDistance(0.61f)));
     QCOMPARE(e.itemData, (QVariantList{ row.at(1)->id() }));
-    QVERIFY2(e.items.first().contains("Sit it on Deck USP1 (0.61 m)"), qPrintable(e.items.first()));
+    QVERIFY2(e.items.first().contains(QString("Sit it on Deck USP1 (%1)").arg(MonitorProperties::formatStageDistance(0.61f))), qPrintable(e.items.first()));
     QVERIFY(entry("fixtures.buried").key.isEmpty());        // not a buried light
 
     QVERIFY(PlacementCheck::fix(m_doc, PlacementCheck::checkRow(m_doc, row.at(1)->id())));

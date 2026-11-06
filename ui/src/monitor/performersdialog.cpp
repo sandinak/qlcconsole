@@ -40,8 +40,11 @@ PerformersDialog::PerformersDialog(MonitorProperties *props, const QList<quint32
     setObjectName(QStringLiteral("performersDialog"));
     setWindowTitle(fills() ? tr("Fill with People") : tr("Performer Line"));
     setProperty("helpTopic", QStringLiteral("lighting-studio.md#people-on-the-stage"));
-    m_feet = (props != nullptr && props->gridUnits() == MonitorProperties::Feet);
-    const double toDisp = m_feet ? 3.28084 : 1.0;
+    /* Fields show Settings > Units and keep metres: a spacing that fits a
+       riser exactly must still fit it (in feet, 0.6 m came back 0.60015).
+       Feet or inches step an inch at a time. */
+    m_feet = FeetInchesSpinBox::valuesInFeet();
+    const double toDisp = 1.0;
 
     QVBoxLayout *vl = new QVBoxLayout(this);
     QFormLayout *form = new QFormLayout;
@@ -64,12 +67,14 @@ PerformersDialog::PerformersDialog(MonitorProperties *props, const QList<quint32
     m_by->addItem(tr("So many to a row"));
     form->addRow(tr("Place:"), m_by);
 
-    m_spacing = new FeetInchesSpinBox(m_feet, this);
+    m_spacing = new FeetInchesSpinBox(false, this);
     m_spacing->setObjectName(QStringLiteral("performersSpacing"));
     m_spacing->setRange(0.3 * toDisp, 3.0 * toDisp);
-    m_spacing->setSingleStep(m_feet ? 1.0 / 12.0 : 0.05);
+    m_spacing->setSingleStep(m_feet ? 0.0254 : 0.05);
     m_spacing->setValue(0.6 * toDisp);
-    m_spacing->setToolTip(tr("Shoulder to shoulder is about 0.5 m; a choir stands about 0.6 m apart"));
+    m_spacing->setToolTip(tr("Shoulder to shoulder is about %1; a choir stands about %2 apart")
+                              .arg(MonitorProperties::formatStageDistance(0.5f),
+                                   MonitorProperties::formatStageDistance(0.6f)));
     form->addRow(tr("Apart:"), m_spacing);
 
     m_perRow = new QSpinBox(this);
@@ -96,10 +101,10 @@ PerformersDialog::PerformersDialog(MonitorProperties *props, const QList<quint32
     m_heightPreset->addItem(tr("Students"), int(PerformerFill::Students));
     m_heightPreset->addItem(tr("Adults"), int(PerformerFill::Adults));
     m_heightPreset->setCurrentIndex(1);
-    m_height = new FeetInchesSpinBox(m_feet, this);
+    m_height = new FeetInchesSpinBox(false, this);
     m_height->setObjectName(QStringLiteral("performersHeight"));
     m_height->setRange(0.8 * toDisp, 2.2 * toDisp);
-    m_height->setSingleStep(m_feet ? 1.0 / 12.0 : 0.01);
+    m_height->setSingleStep(m_feet ? 0.0254 : 0.01);
     m_height->setValue(double(PerformerFill::presetHeight(PerformerFill::Students)) * toDisp);
     m_height->setToolTip(tr("How tall they are on average"));
     QHBoxLayout *heightRow = new QHBoxLayout;
@@ -111,10 +116,10 @@ PerformersDialog::PerformersDialog(MonitorProperties *props, const QList<quint32
             PerformerFill::HeightPreset(m_heightPreset->currentData().toInt()))) * toDisp);
     });
 
-    m_spread = new FeetInchesSpinBox(m_feet, this);
+    m_spread = new FeetInchesSpinBox(false, this);
     m_spread->setObjectName(QStringLiteral("performersSpread"));
     m_spread->setRange(0.0, 0.3 * toDisp);
-    m_spread->setSingleStep(m_feet ? 1.0 / 12.0 : 0.01);
+    m_spread->setSingleStep(m_feet ? 0.0254 : 0.01);
     m_spread->setValue(0.08 * toDisp);
     m_spread->setToolTip(tr("Some are taller than others: each person is the height above, "
                             "give or take this much, and keeps it (Shuffle in the line's "
@@ -169,7 +174,7 @@ PerformerFill::Options PerformersDialog::options() const
 {
     PerformerFill::Options o;
     o.setName = m_name->text();
-    const double fromDisp = m_feet ? (1.0 / 3.28084) : 1.0;
+    const double fromDisp = 1.0;   // the fields keep metres
     o.spacing = float(m_spacing->value() * fromDisp);
     o.perRow = (m_by->currentIndex() == 1) ? m_perRow->value() : 0;
     o.stagger = m_stagger->isChecked();

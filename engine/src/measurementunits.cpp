@@ -125,7 +125,48 @@ namespace
         t.replace(QChar(0x201C), QLatin1Char('"'));    // left double quote
         t.replace(QChar(0x2033), QLatin1Char('"'));    // double prime
         t.replace(QStringLiteral("''"), QStringLiteral("\""));
-        return t;
+        // A tape measure's fractions: ½ ¼ ¾ ⅛ ⅜ ⅝ ⅞, then 11 1/4, 11-1/4, 3/8.
+        static const QList<QPair<QChar, QString>> vulgar = {
+            { QChar(0x00BD), QStringLiteral(" 1/2") }, { QChar(0x00BC), QStringLiteral(" 1/4") },
+            { QChar(0x00BE), QStringLiteral(" 3/4") }, { QChar(0x215B), QStringLiteral(" 1/8") },
+            { QChar(0x215C), QStringLiteral(" 3/8") }, { QChar(0x215D), QStringLiteral(" 5/8") },
+            { QChar(0x215E), QStringLiteral(" 7/8") } };
+        for (const auto &v : vulgar)
+            t.replace(v.first, v.second);
+        static const QRegularExpression mixed(QStringLiteral("(\\d+(?:\\.\\d+)?)(?:\\s+|\\s*-\\s*)(\\d+)\\s*/\\s*(\\d+)"));
+        static const QRegularExpression frac(QStringLiteral("(\\d+)\\s*/\\s*(\\d+)"));
+        auto expand = [&t](const QRegularExpression &re, bool whole) {
+            QRegularExpressionMatch m;
+            int from = 0;
+            while ((m = re.match(t, from)).hasMatch())
+            {
+                const int k = whole ? 1 : 0;
+                const double num = m.captured(1 + k).toDouble(), den = m.captured(2 + k).toDouble();
+                if (den == 0.0)
+                    return;     // left as it is: it reads as malformed
+                const double v = (whole ? m.captured(1).toDouble() : 0.0) + num / den;
+                const QString rep = QString::number(v, 'g', 12);
+                t.replace(m.capturedStart(), m.capturedLength(), rep);
+                from = m.capturedStart() + rep.size();
+            }
+        };
+        expand(mixed, true);
+        expand(frac, false);
+        return t.trimmed();
+    }
+
+    /* Inches to the nearest eighth, the way a tape measure reads: 15 3/4,
+       7 1/2, 3/8, 12. Fractions reduced. */
+    QString eighths(qint64 total)
+    {
+        const qint64 whole = total / 8;
+        int e = int(total % 8);
+        if (e == 0)
+            return QString::number(whole);
+        int den = 8;
+        while (e % 2 == 0) { e /= 2; den /= 2; }
+        const QString f = QStringLiteral("%1/%2").arg(e).arg(den);
+        return whole == 0 ? f : QStringLiteral("%1 %2").arg(whole).arg(f);
     }
 
     /* Splits "6' 3\"", "12kg 400 g", "7,5 in" into (number, unit) terms.
@@ -253,7 +294,7 @@ QString MeasurementUnits::settingsKey()
 MeasurementUnits::LengthUnit MeasurementUnits::preferredLength()
 {
     APP_SETTINGS(s);
-    return fromKey(s.value(settingsKey()).toString());
+    return fromKey(s.value(settingsKey()).toString(), Feet);
 }
 
 void MeasurementUnits::setPreferredLength(LengthUnit unit)
@@ -281,9 +322,14 @@ bool MeasurementUnits::seedFromFirstShow(bool showInFeet)
     return true;
 }
 
+bool MeasurementUnits::isImperial(LengthUnit unit)
+{
+    return unit == Inches || unit == Feet;
+}
+
 MeasurementUnits::WeightUnit MeasurementUnits::weightUnitFor(LengthUnit unit)
 {
-    return (unit == Inches || unit == Feet) ? Pounds : Kilograms;
+    return isImperial(unit) ? Pounds : Kilograms;
 }
 
 QString MeasurementUnits::symbol(LengthUnit unit)
@@ -376,19 +422,39 @@ double MeasurementUnits::parseWeight(const QString &text, WeightUnit bareUnit, b
  * Formatting
  *****************************************************************************/
 
+QString MeasurementUnits::formatLength(double mm)
+{
+    return formatLength(mm, preferredLength());
+}
+
+QString MeasurementUnits::formatMetres(double metres)
+{
+    return formatLength(metres * 1000.0, preferredLength());
+}
+
 QString MeasurementUnits::formatLength(double mm, LengthUnit unit)
 {
-    int d = 0;
-    if (unit == Feet)
+    // An offset (stage left of centre, below the deck) keeps its sign.
+    if (mm < 0.0)
     {
-        const double inches = shortest(mm, 25.4, 2, &d);
-        const int feet = int(std::floor((inches + 1e-9) / 12.0));
-        const double rest = roundTo(inches - feet * 12.0, d);
+        const QString pos = formatLength(-mm, unit);
+        return pos.startsWith(QLatin1Char('0')) && !pos.contains(QRegularExpression(QStringLiteral("[1-9]")))
+               ? pos : QStringLiteral("-") + pos;
+    }
+    int d = 0;
+    if (unit == Feet || unit == Inches)
+    {
+        // To the nearest 1/8", as a tape measure reads: 3' 11 1/4", 15 3/4".
+        const qint64 total = qRound64(mm / 25.4 * 8.0);
+        if (unit == Inches)
+            return QStringLiteral("%1\"").arg(eighths(total));
+        const qint64 feet = total / 96;
+        const qint64 rest = total % 96;
         if (feet == 0)
-            return QStringLiteral("%1\"").arg(number(rest, d));
-        if (rest < 0.005)
+            return QStringLiteral("%1\"").arg(eighths(rest));
+        if (rest == 0)
             return QStringLiteral("%1'").arg(feet);
-        return QStringLiteral("%1' %2\"").arg(feet).arg(number(rest, d));
+        return QStringLiteral("%1' %2\"").arg(feet).arg(eighths(rest));
     }
 
     int maxD = 1;
@@ -396,7 +462,6 @@ QString MeasurementUnits::formatLength(double mm, LengthUnit unit)
     {
         case Centimetres: maxD = 2; break;
         case Metres:      maxD = 4; break;
-        case Inches:      maxD = 2; break;
         default:          maxD = 1; break;
     }
     const double v = shortest(mm, mmPer(unit), maxD, &d);
@@ -412,7 +477,7 @@ QString MeasurementUnits::formatWeight(double kg, WeightUnit unit)
 QString MeasurementUnits::lengthHelp(LengthUnit unit)
 {
     return tr("A number in %1, or a length with its unit, converted for you: "
-              "7.5\" or 7.5 in, 0.625' or 0.625 ft, 6' 3\", 190.5 mm, 19.05 cm, 0.19 m.")
+              "7 1/2\" or 7.5 in, 0.625' or 0.625 ft, 6' 3 1/4\", 190.5 mm, 19.05 cm, 0.19 m.")
             .arg(symbol(unit));
 }
 

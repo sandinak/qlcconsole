@@ -215,7 +215,7 @@ PatchList PatchList::build(Doc *doc, const QList<quint32> &ids)
 {
     PatchList list;
     MonitorProperties *mp = doc->monitorProperties();
-    list.m_feet = mp->gridUnits() == MonitorProperties::Feet;
+    list.m_unit = MeasurementUnits::preferredLength();
     const QList<quint32> plotted = mp->fixtureItemsID();
 
     /* A fixture's group: the first (lowest id) that holds it. */
@@ -343,11 +343,12 @@ static QString csvRow(const QStringList &fields)
     return out.join(QLatin1Char(','));
 }
 
-/* A plot coordinate in the plot's units, one decimal. */
-static QString coord(float metres, bool feet)
+/* A plot coordinate as a number in @a unit (Settings > Units), for a
+   column whose header names the unit: one decimal, whole millimetres. */
+static QString coord(float metres, MeasurementUnits::LengthUnit unit)
 {
-    const double m = double(metres);
-    return QString::number(feet ? m * 3.28084 : m, 'f', 1);
+    const double v = double(metres) * 1000.0 / MeasurementUnits::mmPer(unit);
+    return QString::number(v, 'f', unit == MeasurementUnits::Millimetres ? 0 : 1);
 }
 
 /*********************************************************************
@@ -474,7 +475,7 @@ QList<PatchList::Row> PatchList::arranged(GroupBy by) const
 
 QList<QStringList> PatchList::table(GroupBy by) const
 {
-    const QString unit = m_feet ? QStringLiteral("ft") : QStringLiteral("m");
+    const QString unit = MeasurementUnits::symbol(m_unit);
     QList<QStringList> out;
     QStringList header;
     if (by != ByNone)
@@ -513,9 +514,9 @@ QList<QStringList> PatchList::table(GroupBy by) const
                  << (at ? QString::number(r.lastChannel()) : QString())
                  << (r.network ? QStringLiteral("Network (%1)").arg(r.transport) : QStringLiteral("DMX"))
                  << r.ip << r.output << r.mountedOn
-                 << (r.onPlot ? coord(r.position.x(), m_feet) : QString())
-                 << (r.onPlot ? coord(r.position.y(), m_feet) : QString())
-                 << (r.onPlot ? coord(r.position.z(), m_feet) : QString())
+                 << (r.onPlot ? coord(r.position.x(), m_unit) : QString())
+                 << (r.onPlot ? coord(r.position.y(), m_unit) : QString())
+                 << (r.onPlot ? coord(r.position.z(), m_unit) : QString())
                  << (r.clash ? QStringLiteral("address clash: not output")
                              : (r.patched ? QString() : QStringLiteral("in the inventory")))
                  << r.location << r.group << r.type
@@ -584,7 +585,7 @@ bool PatchList::writeXlsx(const QString &path, GroupBy by, QString *error) const
 
 QString PatchList::toHtml(const QString &title, GroupBy by) const
 {
-    const QString unit = m_feet ? QStringLiteral(" ft") : QStringLiteral(" m");
+    const QString unit = QLatin1Char(' ') + MeasurementUnits::symbol(m_unit);
     QString h;
     h += QStringLiteral("<html><head><style>"
                         "body { font-family: sans-serif; font-size: 8pt; }"
@@ -644,9 +645,9 @@ QString PatchList::toHtml(const QString &title, GroupBy by) const
                                                   r.ip.isEmpty() ? QStringLiteral("(no IP)") : r.ip);
             QString pos;
             if (r.onPlot)
-                pos = QStringLiteral("%1, %2, %3%4").arg(coord(r.position.x(), m_feet),
-                                                        coord(r.position.y(), m_feet),
-                                                        coord(r.position.z(), m_feet), unit);
+                pos = QStringLiteral("%1, %2, %3%4").arg(coord(r.position.x(), m_unit),
+                                                        coord(r.position.y(), m_unit),
+                                                        coord(r.position.z(), m_unit), unit);
             /* The gel as a swatch the printout shows in colour, and its
                value beside it for a black-and-white copy. */
             QString gel;

@@ -69,6 +69,16 @@ void MeasurementUnits_Test::parseLength_data()
     QTest::newRow("bare ft")     << "0.625"       << MU::Feet        << 190.5;
     QTest::newRow("empty")       << "  "          << MU::Inches      << 0.0;
     QTest::newRow("zero")        << "0"           << MU::Inches      << 0.0;
+    // A tape measure's fractions, as well as decimals.
+    QTest::newRow("3' 11 1/4\"") << "3' 11 1/4\"" << MU::Millimetres << 47.25 * 25.4;
+    QTest::newRow("11 1/4\"")    << "11 1/4\""    << MU::Millimetres << 285.75;
+    QTest::newRow("11-1/4\"")    << "11-1/4\""    << MU::Millimetres << 285.75;
+    QTest::newRow("3/8\"")       << "3/8\""       << MU::Millimetres << 9.525;
+    QTest::newRow("7' 10 1/2\"") << "7' 10 1/2\"" << MU::Millimetres << 94.5 * 25.4;
+    QTest::newRow("6'3 1/2")     << "6'3 1/2"     << MU::Millimetres << 75.5 * 25.4;
+    QTest::newRow("bare 7 1/2")  << "7 1/2"       << MU::Inches      << 190.5;
+    QTest::newRow("half sign")   << QString("7") + QChar(0x00BD) + "\"" << MU::Millimetres << 190.5;
+    QTest::newRow("1/2 ft")      << "1/2 ft"      << MU::Millimetres << 152.4;
 }
 
 void MeasurementUnits_Test::parseLength()
@@ -159,28 +169,42 @@ void MeasurementUnits_Test::formatLength_data()
     QTest::addColumn<MU::LengthUnit>("unit");
     QTest::addColumn<QString>("text");
 
-    // Exactly what was typed, before it's stored
-    QTest::newRow("190.5 in")   << 190.5  << MU::Inches      << "7.5 in";
+    // Exactly what was typed, before it's stored. Feet and inches read
+    // like a tape measure: the nearest 1/8", the fraction reduced.
+    QTest::newRow("190.5 in")   << 190.5  << MU::Inches      << "7 1/2\"";
     QTest::newRow("190.5 mm")   << 190.5  << MU::Millimetres << "190.5 mm";
     QTest::newRow("190.5 cm")   << 190.5  << MU::Centimetres << "19.05 cm";
     QTest::newRow("190.5 m")    << 190.5  << MU::Metres      << "0.1905 m";
-    QTest::newRow("190.5 ft")   << 190.5  << MU::Feet        << "7.5\"";
+    QTest::newRow("190.5 ft")   << 190.5  << MU::Feet        << "7 1/2\"";
     QTest::newRow("1905 ft")    << 1905.0 << MU::Feet        << "6' 3\"";
     QTest::newRow("1828.8 ft")  << 1828.8 << MU::Feet        << "6'";
     // Whole millimetres, as a file holds them: the fewest decimals that
     // still mean that millimetre.
-    QTest::newRow("191 in")     << 191.0  << MU::Inches      << "7.5 in";
-    QTest::newRow("190 in")     << 190.0  << MU::Inches      << "7.48 in";
-    QTest::newRow("254 in")     << 254.0  << MU::Inches      << "10 in";
+    QTest::newRow("191 in")     << 191.0  << MU::Inches      << "7 1/2\"";
+    QTest::newRow("190 in")     << 190.0  << MU::Inches      << "7 1/2\"";
+    QTest::newRow("254 in")     << 254.0  << MU::Inches      << "10\"";
+    QTest::newRow("15 3/4 in")  << 400.05 << MU::Inches      << "15 3/4\"";
     QTest::newRow("191 mm")     << 191.0  << MU::Millimetres << "191 mm";
     QTest::newRow("191 cm")     << 191.0  << MU::Centimetres << "19.1 cm";
     QTest::newRow("191 m")      << 191.0  << MU::Metres      << "0.191 m";
     QTest::newRow("1905 whole ft") << 1905.0 << MU::Feet     << "6' 3\"";
-    QTest::newRow("400 ft")     << 400.0  << MU::Feet        << "1' 3.75\"";
-    QTest::newRow("8191 ft")    << 8191.0 << MU::Feet        << "26' 10.48\"";
-    QTest::newRow("8192 ft")    << 8192.0 << MU::Feet        << "26' 10.5\"";
-    QTest::newRow("8190 ft")    << 8190.0 << MU::Feet        << "26' 10.44\"";
-    QTest::newRow("0 in")       << 0.0    << MU::Inches      << "0 in";
+    QTest::newRow("400 ft")     << 400.0  << MU::Feet        << "1' 3 3/4\"";
+    QTest::newRow("8191 ft")    << 8191.0 << MU::Feet        << "26' 10 1/2\"";
+    QTest::newRow("8192 ft")    << 8192.0 << MU::Feet        << "26' 10 1/2\"";
+    QTest::newRow("8190 ft")    << 8190.0 << MU::Feet        << "26' 10 1/2\"";
+    QTest::newRow("1' 4\"")     << 406.4  << MU::Feet        << "1' 4\"";
+    QTest::newRow("3' 11 1/4\"") << 1200.15 << MU::Feet      << "3' 11 1/4\"";
+    QTest::newRow("7' 10 1/2\"") << 2400.3 << MU::Feet       << "7' 10 1/2\"";
+    QTest::newRow("26' 3\"")    << 8001.0 << MU::Feet        << "26' 3\"";
+    QTest::newRow("6' 0 1/8")   << 1832.0 << MU::Feet        << "6' 1/8\"";
+    QTest::newRow("3/8\"")      << 9.525  << MU::Feet        << "3/8\"";
+    QTest::newRow("2/8 is 1/4") << 6.35   << MU::Feet        << "1/4\"";
+    QTest::newRow("6/8 is 3/4") << 19.05  << MU::Feet        << "3/4\"";
+    // Halfway and beyond rounds up to the next eighth, under it down.
+    QTest::newRow("over 1/16")  << 27.0   << MU::Feet        << "1 1/8\"";
+    QTest::newRow("under 1/16") << 26.9   << MU::Feet        << "1\"";
+    QTest::newRow("to 1'")      << 304.0  << MU::Feet        << "1'";
+    QTest::newRow("0 in")       << 0.0    << MU::Inches      << "0\"";
     QTest::newRow("0 mm")       << 0.0    << MU::Millimetres << "0 mm";
     QTest::newRow("0 ft")       << 0.0    << MU::Feet        << "0\"";
     QTest::newRow("190.33 mm")  << 190.33 << MU::Millimetres << "190.3 mm";
@@ -228,6 +252,15 @@ void MeasurementUnits_Test::roundTripStoredMm()
             bool ok = false;
             const double back = MU::parseLength(shown, u, &ok);
             QVERIFY2(ok, qPrintable(shown));
+            if (MU::isImperial(u))
+            {
+                /* To the nearest 1/8": within half an eighth, and what comes
+                   back reads the same again. */
+                QVERIFY2(qAbs(back - mm) <= 25.4 / 16.0 + 1e-9,
+                         qPrintable(QString("%1 mm -> %2 -> %3").arg(mm).arg(shown).arg(back)));
+                QCOMPARE(MU::formatLength(back, u), shown);
+                continue;
+            }
             QVERIFY2(MU::toStoredMm(back) == mm,
                      qPrintable(QString("%1 mm -> %2 -> %3").arg(mm).arg(shown).arg(back)));
         }
@@ -259,12 +292,15 @@ void MeasurementUnits_Test::storedMm()
     QCOMPARE(MU::toStoredMm(0.0), 0);
     bool ok = false;
     QCOMPARE(MU::toStoredMm(MU::parseLength("7.5\"", MU::Inches, &ok)), 191);
-    QCOMPARE(MU::formatLength(191, MU::Inches), QString("7.5 in"));
+    QCOMPARE(MU::formatLength(191, MU::Inches), QString("7 1/2\""));
+    // An eighth typed is stored to the whole millimetre as before.
+    QCOMPARE(MU::toStoredMm(MU::parseLength("3' 11 1/4\"", MU::Feet, &ok)), 1200);
 }
 
 void MeasurementUnits_Test::preference()
 {
-    QCOMPARE(MU::preferredLength(), MU::Millimetres);   // never set: mm
+    QCOMPARE(MU::preferredLength(), MU::Feet);   // never set: feet and inches, the product's default
+    QCOMPARE(MU::formatLength(1905.0, MU::preferredLength()), QString("6' 3\""));
     MU::setPreferredLength(MU::Inches);
     QCOMPARE(MU::preferredLength(), MU::Inches);
     QCOMPARE(MU::weightUnitFor(MU::Inches), MU::Pounds);
@@ -279,7 +315,7 @@ void MeasurementUnits_Test::preference()
                 QLCFile::settingsOrganisation(), QStringLiteral("qlcconsole"));
     QCOMPARE(s.value(MU::settingsKey()).toString(), QString("ft"));
     s.setValue(MU::settingsKey(), QStringLiteral("nonsense"));
-    QCOMPARE(MU::preferredLength(), MU::Millimetres);
+    QCOMPARE(MU::preferredLength(), MU::Feet);
 }
 
 void MeasurementUnits_Test::keptWithEveryOtherSetting()
@@ -360,7 +396,7 @@ void MeasurementUnits_Test::seedFromFirstShow()
     QVERIFY(!MU::seedFromFirstShow(false));
     QVERIFY(!MU::isPreferenceSet());
     QVERIFY(!MU::seedFromFirstShow(true));
-    QCOMPARE(MU::preferredLength(), MU::Millimetres);
+    QCOMPARE(MU::preferredLength(), MU::Feet);      // unset: the default, feet and inches
 
     // A unit already chosen is never overridden.
     s.clear();

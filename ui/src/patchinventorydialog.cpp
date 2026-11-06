@@ -590,12 +590,11 @@ QString PatchInventoryDialog::viaText(int row, quint32 universe) const
         const int ni = via->data(ROLE_NODE).toInt();
         if (ni < nt->nodes().size())
         {
-            // How far, in the show's units (Settings > Units): 12' 6" or 3.8 m.
+            // How far, in Settings > Units: 12' 6" or 3.8 m.
             QString t = tr("%1 · port %2 · %3").arg(nt->nodes().at(ni).name)
                             .arg(via->data(ROLE_PORT).toInt() + 1)
                             .arg(MonitorProperties::formatStageDistance(
-                                float(via->data(ROLE_DIST).toDouble()),
-                                m_doc->monitorProperties()->gridUnits()));
+                                float(via->data(ROLE_DIST).toDouble())));
             if (via->data(ROLE_CLAIMS).toBool())
                 t += tr(" (assigns the port)");
             return t;

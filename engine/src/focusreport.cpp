@@ -317,7 +317,7 @@ QString FocusReport::html(Doc *doc, const QString &venueName, const QString &sho
             const Truss *t = props->truss(it.key());
             h += QStringLiteral("<li>%1</li>\n").arg(esc(tr("Trim %1: %2")
                      .arg(t != nullptr ? t->name() : QString::number(it.key()),
-                          MonitorProperties::formatStageDistance(it.value(), props->gridUnits()))));
+                          MonitorProperties::formatStageDistance(it.value()))));
         }
         for (auto it = v.targets.constBegin(); it != v.targets.constEnd(); ++it)
         {

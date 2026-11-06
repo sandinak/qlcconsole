@@ -136,6 +136,7 @@
 #include "sceneryitem.h"
 #include "monitorimageitem.h"
 #include "feetinchesspinbox.h"
+#include "lengthinputdialog.h"
 #include "rigeditsession.h"
 #include "nolightzone.h"
 #include "performersdialog.h"
@@ -894,15 +895,18 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
             return;
         /* Along the stage's width the rulers count from the centre line:
            read it the same way, SR or SL of it (stage right is -X). */
-        auto part = [this](bool horizontal, qreal v) {
+        /* The readout comes in grid units; it reads in Settings > Units,
+           to the millimetre (feet: the hundredth of an inch). */
+        const double mmPerUnit = double(m_props->gridUnitMetres()) * 1000.0;
+        auto part = [this, mmPerUnit](bool horizontal, qreal v) {
+            const double mm = std::round(double(v) * mmPerUnit);
             if (!m_graphicsView->rulerFromCentreLine(horizontal))
-                return tr("%1: %2").arg(m_graphicsView->axisName(horizontal)).arg(v, 0, 'f', 2);
-            if (qAbs(v) < 0.005)
+                return tr("%1: %2").arg(m_graphicsView->axisName(horizontal), MeasurementUnits::formatLength(mm));
+            if (qAbs(mm) < 0.5)
                 return tr("CL");
-            return tr("%1 %2").arg(v < 0 ? tr("SR") : tr("SL")).arg(qAbs(v), 0, 'f', 2);
+            return tr("%1 %2").arg(v < 0 ? tr("SR") : tr("SL"), MeasurementUnits::formatLength(qAbs(mm)));
         };
-        m_readoutLabel->setText(tr("%1   %2  %3")
-            .arg(part(true, hv.x()), part(false, hv.y()), m_graphicsView->unitSuffix()));
+        m_readoutLabel->setText(tr("%1   %2").arg(part(true, hv.x()), part(false, hv.y())));
     });
     // Move the ruler cursor markers in sync (needs the viewport pixel, which we
     // recompute from the readout is awkward — instead track the raw mouse via an
@@ -967,8 +971,6 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     // the show); shown here, not chosen here.
     m_unitsLabel = new QLabel();
     m_unitsLabel->setObjectName(QStringLiteral("monitorGridUnitsLabel"));
-    m_unitsLabel->setToolTip(tr("Metres for mm, cm and m; feet for inches and feet. "
-                                "Change it in Settings, Units."));
     updateUnitsLabel();
 
     m_gridSubdivSpin = new QSpinBox();
@@ -1201,8 +1203,8 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         k->setChecked((m_props->occlusionKinds() & kind) != 0);
         if (kind == BeamOcclusion::Trusses || kind == BeamOcclusion::Pipes
             || kind == BeamOcclusion::Stands)
-            k->setToolTip(tr("Only when at least %1 cm thick: a beam lights round a thin pipe")
-                              .arg(qRound(m_props->occlusionMinSize() * 100.0f)));
+            k->setToolTip(tr("Only when at least %1 thick: a beam lights round a thin pipe")
+                              .arg(MeasurementUnits::formatMetres(double(m_props->occlusionMinSize()))));
         connect(k, &QAction::toggled, this, [this, kind](bool on) {
             const int kinds = m_props->occlusionKinds();
             m_props->setOcclusionKinds(on ? (kinds | kind) : (kinds & ~kind));
@@ -1285,13 +1287,13 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         });
         om->addSeparator();
         om->addAction(tr("Stage Centre"), this, [this]() {
-            const double mpu = double(m_props->gridUnits() == MonitorProperties::Feet ? 0.3048 : 1.0);
+            const double mpu = double(m_props->gridUnitMetres());   // grid cells to metres
             m_graphicsView->setStageOriginMetres(
                 QPointF(m_props->gridSize().x() * mpu / 2.0,
                         m_props->gridSize().z() * mpu / 2.0));
         });
         om->addAction(tr("Downstage Centre"), this, [this]() {
-            const double mpu = double(m_props->gridUnits() == MonitorProperties::Feet ? 0.3048 : 1.0);
+            const double mpu = double(m_props->gridUnitMetres());   // grid cells to metres
             m_graphicsView->setStageOriginMetres(
                 QPointF(m_props->gridSize().x() * mpu / 2.0,
                         m_props->gridSize().z() * mpu));
@@ -1427,9 +1429,12 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     {
         const QFontMetrics fm(rf);
         int w = 160;
-        foreach (const QString &widest, QStringList() << tr("%1   %2  %3").arg(tr("SL 888.88"), tr("DS 888.88"), "ft")
-                                                      << tr("%1   %2  %3").arg(tr("%1: %2").arg("X", "-888.88"),
-                                                                               tr("%1: %2").arg("Y", "-888.88"), "ft"))
+        // 888' 11.88" (270 m) in whichever unit the readout is in.
+        const QString far = MeasurementUnits::formatLength(270968.0);
+        foreach (const QString &widest, QStringList() << tr("%1   %2").arg(tr("%1 %2").arg(tr("SL"), far),
+                                                                       tr("%1 %2").arg(tr("DS"), far))
+                                                      << tr("%1   %2").arg(tr("%1: %2").arg("X", "-" + far),
+                                                                           tr("%1: %2").arg("Y", "-" + far)))
             w = qMax(w, fm.horizontalAdvance(widest) + 8);
         m_readoutLabel->setFixedWidth(w);
     }
@@ -2691,8 +2696,12 @@ void Monitor::updateUnitsLabel()
 {
     if (m_unitsLabel == NULL)
         return;
-    m_unitsLabel->setText(m_props->gridUnits() == MonitorProperties::Feet
-                          ? tr("Feet (Settings, Units)") : tr("Metres (Settings, Units)"));
+    // Every length here follows Settings > Units; the grid counts whole
+    // cells of a foot (inches, feet) or a metre (mm, cm, m).
+    m_unitsLabel->setText(MeasurementUnits::name(MeasurementUnits::preferredLength()));
+    m_unitsLabel->setToolTip(tr("Every length follows Settings, Units (change it there). "
+                                "The stage size counts grid cells of %1.")
+                             .arg(MeasurementUnits::formatLength(double(m_props->gridUnitMetres()) * 1000.0)));
 }
 
 void Monitor::unitsChanged()
@@ -3019,8 +3028,8 @@ void Monitor::slotToggleLayersPanel(bool show)
 void Monitor::editStagePiece(int piece)
 {
     /* Its properties, live on the plot as they change: OK keeps them as one
-       undo step, Cancel puts the stage back. In the show's unit as it is
-       now (Q147: the positions read "1.00 m" on a feet show). */
+       undo step, Cancel puts the stage back. In Settings > Units
+       as it is now (Q147: the positions read "1.00 m" on a feet show). */
     if (m_props == NULL || piece < MonitorProperties::CentrePiece || piece > MonitorProperties::ApronPiece)
         return;
     RigEditSession edit(this);
@@ -3585,6 +3594,7 @@ void Monitor::slotRotateSelection()
     if (m_graphicsView == NULL || m_graphicsView->scene()->selectedItems().isEmpty())
         return;
     bool ok = false;
+    // units-ok: degrees, not a length
     const double deg = QInputDialog::getDouble(this, tr("Rotate"),
                                                tr("Turn the selection clockwise (seen from above) by, degrees "
                                                   "-- less than 0 turns it the other way:"),
@@ -4901,8 +4911,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     QLabel *barOnLbl = new QLabel(insp);
     barOnLbl->setStyleSheet("color:#b0b4c0;");
     inspForm->addRow(tr("Mounted on:"), barOnLbl);
-    QDoubleSpinBox *barAlongSpin = new FeetInchesSpinBox(m_props->gridUnits() == MonitorProperties::Feet, insp);
-    barAlongSpin->setDecimals(2);
+    QDoubleSpinBox *barAlongSpin = new FeetInchesSpinBox(FeetInchesSpinBox::valuesInFeet(), insp);
     inspForm->addRow(tr("Along truss:"), barAlongSpin);
 
     iv->addLayout(inspForm);
@@ -5010,7 +5019,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         fullBtn->setEnabled(true);
         inspTitle->setText(bar->name());
         Truss *parent = m_props->truss(bar->parentTrussId());
-        const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+        const bool isFeet = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
         const double toDisp = isFeet ? 3.28084 : 1.0;
         barOnLbl->setText(parent ? tr("Truss %1").arg(parent->name()) : QString("—"));
         barAlongSpin->blockSignals(true);
@@ -5048,7 +5057,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         if (bar == nullptr) return;
         Truss *parent = m_props->truss(bar->parentTrussId());
         if (parent == nullptr || bar->locked()) return;
-        const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+        const bool isFeet = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
         const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
         bar->setParentOffset(qBound(0.0f, float(v * fromDisp), parent->length()));
         m_props->recomputeChildTrusses();
@@ -5748,7 +5757,7 @@ void Monitor::openGroupStudio(quint32 gid)
     RigEditSession edit(this);
     MonitorProperties::MonitorGroup g = m_props->group(gid);
 
-    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
 
@@ -5761,7 +5770,7 @@ void Monitor::openGroupStudio(quint32 gid)
     QLineEdit *nameEdit = new QLineEdit(g.name, geomW);
     form->addRow(tr("Name:"), nameEdit);
     auto mk = [&](double v) { QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet, geomW);
-        s->setRange(-200, 200); s->setDecimals(2); s->setValue(v * toDisp); return s; };
+        s->setRange(-200, 200); s->setValue(v * toDisp); return s; };
     QDoubleSpinBox *ox = mk(g.origin.x()), *oy = mk(g.origin.y()), *oz = mk(g.origin.z());
     QDoubleSpinBox *rot = new QDoubleSpinBox(geomW);
     rot->setRange(-180, 180); rot->setDecimals(0); rot->setSuffix(QStringLiteral("°")); rot->setValue(double(g.rotation));
@@ -6394,7 +6403,7 @@ void Monitor::slotEditHanger(quint32 hid)
     if (h == nullptr)
         return;
     RigEditSession edit(this);
-    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
 
@@ -6424,7 +6433,7 @@ void Monitor::slotEditHanger(quint32 hid)
     form->addRow(tr("On:"), new QLabel(on.isEmpty() ? tr("(nothing -- its structure is gone)") : on, &dlg));
     auto mkSpin = [&](double val, double hi) {
         QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
-        sp->setRange(0.0, hi * toDisp); sp->setDecimals(2);
+        sp->setRange(0.0, hi * toDisp);
         sp->setValue(val * toDisp);
         return sp;
     };
@@ -6687,7 +6696,7 @@ void Monitor::slotEditImage(quint32 id)
     RigEditSession edit(this);
     MonitorProperties::MonitorImage img = m_props->image(id);
 
-    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toD  = isFeet ? 3.28084 : 1.0;
     const double frD  = isFeet ? (1.0 / 3.28084) : 1.0;
 
@@ -6731,7 +6740,7 @@ void Monitor::slotEditImage(quint32 id)
 
     auto mkSpin = [&](double val, double lo, double hi) {
         QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet);
-        s->setRange(lo, hi); s->setDecimals(2);
+        s->setRange(lo, hi);
         s->setValue(val * toD); return s;
     };
     QDoubleSpinBox *wSpin = mkSpin(img.width,  0.05, 200);
@@ -6839,7 +6848,7 @@ void Monitor::slotEditNoLightZone(quint32 zoneId)
 bool Monitor::editNoLightZone(quint32 zoneId)
 {
     NoLightZone z = m_props->noLightZone(zoneId);
-    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
 
@@ -6861,7 +6870,6 @@ bool Monitor::editNoLightZone(quint32 zoneId)
         QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet, &dlg);
         s->setObjectName(obj);
         s->setRange(lo * toDisp, hi * toDisp);
-        s->setDecimals(2);
         s->setValue(v * toDisp);
         return s;
     };
@@ -6966,18 +6974,18 @@ void Monitor::slotAddNetworkNode()
                            m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     m_pendingAddScenePos = QPointF();
 
-    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
     const double posRange = isFeet ? 164.0 : 50.0;
 
     QDoubleSpinBox *xSpin = new FeetInchesSpinBox(isFeet, &dlg);
-    xSpin->setRange(-posRange, posRange); xSpin->setDecimals(2);
+    xSpin->setRange(-posRange, posRange);
     xSpin->setValue(pendMm.x() / 1000.0 * toDisp);
     form->addRow(tr("X (stage left):"), xSpin);
 
     QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet, &dlg);
-    ySpin->setRange(-posRange, posRange); ySpin->setDecimals(2);
+    ySpin->setRange(-posRange, posRange);
     ySpin->setValue(pendMm.y() / 1000.0 * toDisp);
     form->addRow(tr("Y (downstage):"), ySpin);
 
@@ -7322,23 +7330,23 @@ void Monitor::slotEditTarget(quint32 tid)
     QLineEdit *nameEdit = new QLineEdit(t->name(), &dlg);
     form->addRow(tr("Name:"), nameEdit);
 
-    const bool isFeet_t = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet_t = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp_t   = isFeet_t ? 3.28084 : 1.0;
     const double fromDisp_t = isFeet_t ? (1.0 / 3.28084) : 1.0;
     const double posRange_t = isFeet_t ? 164.0 : 50.0;   // ~50m in feet
 
     QDoubleSpinBox *xSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
-    xSpin->setRange(-posRange_t, posRange_t); xSpin->setDecimals(2);
+    xSpin->setRange(-posRange_t, posRange_t);
     xSpin->setValue(double(t->x()) * toDisp_t);
     form->addRow(tr("X (stage left):"), xSpin);
 
     QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet_t, &dlg);
-    ySpin->setRange(-posRange_t, posRange_t); ySpin->setDecimals(2);
+    ySpin->setRange(-posRange_t, posRange_t);
     ySpin->setValue(double(t->y()) * toDisp_t);
     form->addRow(tr("Y (downstage):"), ySpin);
 
     QDoubleSpinBox *zSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
-    zSpin->setRange(0, isFeet_t ? 65.6 : 20.0); zSpin->setDecimals(2);
+    zSpin->setRange(0, isFeet_t ? 65.6 : 20.0);
     zSpin->setValue(double(t->z()) * toDisp_t);
     zSpin->setToolTip(tr("ABSOLUTE aim height above the stage floor for this "
                          "target (used by Pan/Tilt aim palettes). 0 = floor."));
@@ -7348,13 +7356,13 @@ void Monitor::slotEditTarget(quint32 tid)
     // aims at this height above the platform the subject stands on, OVERRIDING
     // the target Z so the beam tracks the body across risers. Per-workspace.
     QDoubleSpinBox *subjSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
-    subjSpin->setRange(0, isFeet_t ? 32.8 : 10.0); subjSpin->setDecimals(2);
+    subjSpin->setRange(0, isFeet_t ? 32.8 : 10.0);
     subjSpin->setValue(double(m_props->aimSubjectHeight()) * toDisp_t);
     subjSpin->setToolTip(tr("Where a follow spot aims above the platform/deck -- a "
                             "chest, not how tall anyone is (overrides the target Z "
-                            "when a follow spot drives the fixture). ~1.4 m hits the "
+                            "when a follow spot drives the fixture). ~%1 hits the "
                             "chest. A Person is aimed at 80% of its own Height "
-                            "instead."));
+                            "instead.").arg(MonitorProperties::formatStageDistance(1.4f)));
     form->addRow(tr("Follow-spot aim height (chest):"), subjSpin);
 
     /* WHAT this target is. A kind changes where light is aimed and what is
@@ -7385,7 +7393,6 @@ void Monitor::slotEditTarget(quint32 tid)
     QDoubleSpinBox *personSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     personSpin->setObjectName(QStringLiteral("personHeight"));
     personSpin->setRange(0.5 * toDisp_t, 3.0 * toDisp_t);
-    personSpin->setDecimals(2);
     personSpin->setValue(double(t->effectivePersonHeight()) * toDisp_t);
     personSpin->setToolTip(tr("How tall this person is. They are drawn this tall, and "
                               "light is aimed at their chest -- 80% of it."));
@@ -7423,7 +7430,6 @@ void Monitor::slotEditTarget(quint32 tid)
     ovrChk->setChecked(t->hasAimHeightOverride());
     QDoubleSpinBox *ovrSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     ovrSpin->setRange(0, isFeet_t ? 32.8 : 10.0);
-    ovrSpin->setDecimals(2);
     ovrSpin->setValue(double(m_props->targetAimHeight(t, true)) * toDisp_t);
     ovrSpin->setEnabled(ovrChk->isChecked());
     connect(ovrChk, &QCheckBox::toggled, ovrSpin, &QWidget::setEnabled);
@@ -7438,11 +7444,9 @@ void Monitor::slotEditTarget(quint32 tid)
        what lets the view show whether a beam actually COVERS the thing. */
     QDoubleSpinBox *wSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     wSpin->setRange(0, isFeet_t ? 98.0 : 30.0);
-    wSpin->setDecimals(2);
     wSpin->setValue(t->footprint().width() * toDisp_t);
     QDoubleSpinBox *dSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     dSpin->setRange(0, isFeet_t ? 98.0 : 30.0);
-    dSpin->setDecimals(2);
     dSpin->setValue(t->footprint().height() * toDisp_t);
     QHBoxLayout *sizeRow = new QHBoxLayout;
     sizeRow->addWidget(wSpin);
@@ -7527,7 +7531,6 @@ void Monitor::slotEditTarget(quint32 tid)
     QDoubleSpinBox *spreadSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     spreadSpin->setObjectName(QStringLiteral("lineHeightSpread"));
     spreadSpin->setRange(0.0, 0.3 * toDisp_t);
-    spreadSpin->setDecimals(2);
     spreadSpin->setValue(double(t->heightSpread()) * toDisp_t);
     quint32 chosenSeed = t->seed();
     QPushButton *shuffleBtn = new QPushButton(tr("Shuffle"), &dlg);
@@ -7688,7 +7691,7 @@ void Monitor::slotEditStand(quint32 sid)
     if (!s) return;
     RigEditSession edit(this);
 
-    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
     const double posR = isFeet ? 164.0 : 50.0;
@@ -7705,7 +7708,7 @@ void Monitor::slotEditStand(quint32 sid)
     form->addRow(tr("Name:"), nameEdit);
     auto mkSpin = [&](double val, double lo, double hi) {
         QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
-        sp->setRange(lo, hi); sp->setDecimals(2);
+        sp->setRange(lo, hi);
         sp->setValue(val * toDisp); return sp;
     };
     QDoubleSpinBox *oxSpin = mkSpin(s->originX(), -posR, posR);
@@ -7787,7 +7790,7 @@ void Monitor::slotAddScenery(int kind)
     {
         return;
     }
-    const double mpu = (m_props->gridUnits() == MonitorProperties::Feet) ? 0.3048 : 1.0;
+    const double mpu = double(m_props->gridUnitMetres());   // grid cells to metres
     const double stageW = double(m_props->gridSize().x()) * mpu;
     const double stageD = double(m_props->gridSize().z()) * mpu;
     const bool atClick = !m_pendingAddScenePos.isNull();
@@ -7879,10 +7882,10 @@ void Monitor::slotAddScenery(int kind)
 
 void Monitor::slotAddFountain()
 {
-    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
-    const double mpu = isFeet ? 0.3048 : 1.0;
+    const double mpu = double(m_props->gridUnitMetres());   // grid cells to metres
     const double stageW = double(m_props->gridSize().x()) * mpu;
     const double stageD = double(m_props->gridSize().z()) * mpu;
     QPointF centre(stageW / 2.0, qMax(1.0, stageD - 1.5));
@@ -7902,7 +7905,6 @@ void Monitor::slotAddFountain()
     auto mkSpin = [&](double metres, const char *name, const QString &tip) {
         QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
         sp->setRange(0.01, isFeet ? 33.0 : 10.0);
-        sp->setDecimals(3);
         sp->setValue(metres * toDisp);
         sp->setObjectName(QString::fromLatin1(name));
         sp->setToolTip(tip);
@@ -8069,7 +8071,7 @@ void Monitor::slotEditScenery(quint32 sid)
     RigEditSession edit(this);
     const QString oldName = s->name();
 
-    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
     const double posR = isFeet ? 164.0 : 50.0;
@@ -8083,7 +8085,7 @@ void Monitor::slotEditScenery(quint32 sid)
     form->addRow(tr("Name:"), nameEdit);
     auto mkSpin = [&](double val, double lo, double hi) {
         QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
-        sp->setRange(lo, hi); sp->setDecimals(2);
+        sp->setRange(lo, hi);
         sp->setValue(val * toDisp);
         return sp;
     };
@@ -8448,8 +8450,7 @@ void Monitor::slotEditTower(quint32 tid)
     if (!t) return;
     RigEditSession edit(this);
 
-    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString sfx = isFeet ? tr(" ft") : tr(" m");
+    const bool isFeet = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
     const double posR = isFeet ? 164.0 : 50.0;
@@ -8466,7 +8467,7 @@ void Monitor::slotEditTower(quint32 tid)
     form->addRow(tr("Name:"), nameEdit);
     auto mkSpin = [&](double val, double lo, double hi) {
         QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
-        sp->setRange(lo, hi); sp->setDecimals(2);
+        sp->setRange(lo, hi);
         sp->setValue(val * toDisp); return sp;
     };
     QDoubleSpinBox *oxSpin = mkSpin(t->originX(), -posR, posR);
@@ -8543,15 +8544,15 @@ void Monitor::slotEditTower(quint32 tid)
     auto reloadShelves = [&]() {
         shelfList->clear();
         for (int i = 0; i < t->shelfCount(); ++i)
-            shelfList->addItem(tr("Shelf %1  —  %2%3").arg(i + 1)
-                .arg(double(t->shelfHeight(i)) * toDisp, 0, 'f', 2).arg(sfx));
+            shelfList->addItem(tr("Shelf %1  —  %2").arg(i + 1)
+                .arg(MeasurementUnits::formatMetres(double(t->shelfHeight(i)))));
     };
     reloadShelves();
     vl->addWidget(shelfList);
 
     QHBoxLayout *shelfBtns = new QHBoxLayout;
     QDoubleSpinBox *newShelf = new FeetInchesSpinBox(isFeet, &dlg);
-    newShelf->setRange(0.0, hMax); newShelf->setDecimals(2);
+    newShelf->setRange(0.0, hMax);
     newShelf->setValue(1.0 * toDisp);
     QPushButton *addShelfBtn = new QPushButton(tr("Add Shelf"), &dlg);
     QPushButton *delShelfBtn = new QPushButton(tr("Remove Selected"), &dlg);
@@ -8596,11 +8597,11 @@ void Monitor::slotEditTower(quint32 tid)
         const int row = shelfList->currentRow();
         if (row < 0) return;
         bool ok = false;
-        const double z = QInputDialog::getDouble(&dlg, tr("Edit Shelf Height"),
-            tr("Height above floor:"), double(t->shelfHeight(row)) * toDisp,
-            0.0, hMax, 2, &ok);
+        const double z = LengthInputDialog::getMetres(&dlg, tr("Edit Shelf Height"),
+            tr("Height above floor:"), double(t->shelfHeight(row)),
+            0.0, hMax * fromDisp, &ok);
         if (!ok) return;
-        t->setShelfHeight(row, float(z * fromDisp));
+        t->setShelfHeight(row, float(z));
         reloadShelves();
         if (view) view->reload();
     });
@@ -8763,7 +8764,7 @@ void Monitor::slotEditPipe(quint32 bid)
     if (!b) return;
     RigEditSession edit(this);
 
-    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
     const double posR = isFeet ? 164.0 : 50.0;
@@ -8782,7 +8783,7 @@ void Monitor::slotEditPipe(quint32 bid)
 
     auto mkSpin = [&](double val, double lo, double hi) {
         QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet, &dlg);
-        s->setRange(lo, hi); s->setDecimals(2);
+        s->setRange(lo, hi);
         s->setValue(val * toDisp); return s;
     };
     QDoubleSpinBox *oxSpin = mkSpin(b->originX(), -posR, posR);
@@ -8899,7 +8900,7 @@ void Monitor::slotEditPipe(quint32 bid)
             ni->setFlags(ni->flags() & ~Qt::ItemIsEditable);
             tbl->setItem(i, 0, ni);
             QDoubleSpinBox *os = new FeetInchesSpinBox(isFeet, tbl);
-            os->setRange(0.0, qMax(0.1, double(b->length()) * toDisp)); os->setDecimals(2);
+            os->setRange(0.0, qMax(0.1, double(b->length()) * toDisp));
             os->setValue(double(rp.pipeOffset) * toDisp);
             tbl->setCellWidget(i, 1, os); offSpins << os;
             QDoubleSpinBox *as = new QDoubleSpinBox(tbl);
@@ -9011,7 +9012,7 @@ void Monitor::slotEditPlatform(quint32 pid)
     QLineEdit *nameEdit = new QLineEdit(p->name(), &dlg);
     form->addRow(tr("Name:"), nameEdit);
 
-    const bool isFeet_p = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet_p = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp_p   = isFeet_p ? 3.28084 : 1.0;
     const double fromDisp_p = isFeet_p ? (1.0 / 3.28084) : 1.0;
     const double posRange_p = isFeet_p ? 164.0 : 50.0;
@@ -9019,12 +9020,12 @@ void Monitor::slotEditPlatform(quint32 pid)
     const double hMax_p     = isFeet_p ? 32.8  : 10.0;
 
     QDoubleSpinBox *oxSpin = new FeetInchesSpinBox(isFeet_p, &dlg);
-    oxSpin->setRange(-posRange_p, posRange_p); oxSpin->setDecimals(2);
+    oxSpin->setRange(-posRange_p, posRange_p);
     oxSpin->setValue(double(p->originX()) * toDisp_p);
     form->addRow(tr("Origin X:"), oxSpin);
 
     QDoubleSpinBox *oySpin = new FeetInchesSpinBox(isFeet_p, &dlg);
-    oySpin->setRange(-posRange_p, posRange_p); oySpin->setDecimals(2);
+    oySpin->setRange(-posRange_p, posRange_p);
     oySpin->setValue(double(p->originY()) * toDisp_p);
     form->addRow(tr("Origin Y:"), oySpin);
 
@@ -9948,17 +9949,14 @@ public:
 
     // isVertical: true for tower/pipe trusses — draws a vertical elevation bar
     // (offset=0 at bottom, offset=length at top) instead of a horizontal strip.
-    // displayFactor/unitStr: multiply metre values by factor for label display.
+    // Lengths are metres; every label is written in Settings > Units.
     TrussStripWidget(float trussLength, const QList<Slot> &slotList,
                      bool isVertical = false,
-                     float displayFactor = 1.0f, const QString &unitStr = "m",
                      QWidget *parent = nullptr)
         : QWidget(parent)
         , m_len(trussLength > 0.0f ? trussLength : 1.0f)
         , m_slots(slotList)
         , m_vertical(isVertical)
-        , m_displayFactor(displayFactor)
-        , m_unitStr(unitStr)
     {
         if (m_vertical)
         {
@@ -10174,14 +10172,11 @@ protected:
             if (major)
             {
                 p.setPen(QColor(150, 150, 150));
-                p.drawText(x - 14, bar.bottom() + 9, 28, 12,
+                p.drawText(x - 20, bar.bottom() + 9, 40, 12,
                            Qt::AlignHCenter,
-                           QString::number(double(m * m_displayFactor), 'f', 1));
+                           MonitorProperties::formatStageDistance(m));
             }
         }
-        p.setPen(QColor(120, 120, 120));
-        p.drawText(bar.right() + 2, bar.bottom() + 9, 20, 12, Qt::AlignLeft, m_unitStr);
-        p.drawText(bar.left() - 7, bar.bottom() + 9, 14, 12, Qt::AlignHCenter, "0");
     }
 
     void paintVertical(QPainter &p)
@@ -10199,9 +10194,9 @@ protected:
         p.setPen(QColor(150, 150, 150));
         p.setFont(QFont("sans-serif", 7));
         p.drawText(bar.right() + 4, bar.top() + 10, 40, 12, Qt::AlignLeft,
-                   QString("%1%2").arg(double(m_len * m_displayFactor), 0, 'f', 1).arg(m_unitStr));
+                   MonitorProperties::formatStageDistance(m_len));
         p.drawText(bar.right() + 4, bar.bottom() - 4, 40, 12, Qt::AlignLeft,
-                   QString("0%1").arg(m_unitStr));
+                   MonitorProperties::formatStageDistance(0.0f));
 
         float step = tickStep();
         for (float m = 0.0f; m <= m_len + 0.001f; m += step)
@@ -10285,7 +10280,7 @@ protected:
                 {
                     p.setPen(Qt::white);
                     p.setFont(QFont("sans-serif", 7));
-                    QString val = QString("%1%2").arg(double(m_slots[i].offset * m_displayFactor), 0, 'f', 2).arg(m_unitStr);
+                    const QString val = MeasurementUnits::formatMetres(double(m_slots[i].offset));
                     if (m_vertical)
                         p.drawText(r.left(), r.bottom() + 2, r.width(), 12,
                                    Qt::AlignHCenter, val);
@@ -10396,8 +10391,6 @@ private:
     float       m_len;
     QList<Slot> m_slots;
     bool        m_vertical     = false;
-    float       m_displayFactor = 1.0f;
-    QString     m_unitStr       = "m";
     int         m_dragIdx   = -1;
     int         m_anchorPx  = 0;
     int         m_anchorPxX = 0;     ///< x anchor for 2D crossbar drag
@@ -10438,7 +10431,7 @@ void Monitor::slotEditTruss(quint32 tid)
                           "Vertical = a tower, or (as a bar) a drop that hangs down."));
     form->addRow(tr("Type:"), typeCb);
 
-    const bool isFeet_e = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet_e = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp_e   = isFeet_e ? 3.28084 : 1.0;
     const double fromDisp_e = isFeet_e ? (1.0 / 3.28084) : 1.0;
     const double posRange_e = isFeet_e ? 164.0 : 50.0;
@@ -10447,17 +10440,17 @@ void Monitor::slotEditTruss(quint32 tid)
     const double wMax_e     = isFeet_e ? 16.4  : 5.0;
 
     QDoubleSpinBox *originX = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    originX->setRange(-posRange_e, posRange_e); originX->setDecimals(2);
+    originX->setRange(-posRange_e, posRange_e);
     originX->setValue(t->origin().x() * toDisp_e);
     form->addRow(tr("Origin X:"), originX);
 
     QDoubleSpinBox *originY = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    originY->setRange(-posRange_e, posRange_e); originY->setDecimals(2);
+    originY->setRange(-posRange_e, posRange_e);
     originY->setValue(t->origin().y() * toDisp_e);
     form->addRow(tr("Origin Y:"), originY);
 
     QDoubleSpinBox *originZ = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    originZ->setRange(0, zMax_e); originZ->setDecimals(2);
+    originZ->setRange(0, zMax_e);
     originZ->setValue(t->origin().z() * toDisp_e);
     form->addRow(tr("Height Z:"), originZ);
 
@@ -10473,12 +10466,12 @@ void Monitor::slotEditTruss(quint32 tid)
     form->addRow(tr("Direction (°):"), dirAngle);
 
     QDoubleSpinBox *lenSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    lenSpin->setRange(0.1, lenMax_e); lenSpin->setDecimals(2);
+    lenSpin->setRange(0.1, lenMax_e);
     lenSpin->setValue(t->length() * toDisp_e);
     form->addRow(tr("Length:"), lenSpin);
 
     QDoubleSpinBox *widthSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    widthSpin->setRange(0.05, wMax_e); widthSpin->setDecimals(2);
+    widthSpin->setRange(0.05, wMax_e);
     widthSpin->setValue(t->width() * toDisp_e);
     form->addRow(tr("Width:"), widthSpin);
 
@@ -10587,7 +10580,7 @@ void Monitor::slotEditTruss(quint32 tid)
 
     // Along the parent truss (slides top↔bottom on a tower, left↔right overhead).
     QDoubleSpinBox *alongSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    alongSpin->setRange(-lenMax_e, lenMax_e); alongSpin->setDecimals(2);
+    alongSpin->setRange(-lenMax_e, lenMax_e);
     alongSpin->setValue(t->parentOffset() * toDisp_e);
     alongSpin->setToolTip(tr("Position ALONG the parent truss"));
     QLabel *alongLbl = new QLabel(tr("Along truss:")); form->addRow(alongLbl, alongSpin);
@@ -10607,7 +10600,7 @@ void Monitor::slotEditTruss(quint32 tid)
 
     // Stand-off off that face (the drop / reach).
     QDoubleSpinBox *standoffSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
-    standoffSpin->setRange(0, zMax_e); standoffSpin->setDecimals(2);
+    standoffSpin->setRange(0, zMax_e);
     standoffSpin->setValue(t->barStandoff() * toDisp_e);
     standoffSpin->setToolTip(tr("Distance off that face (0 = on the truss)"));
     QLabel *standoffLbl = new QLabel(tr("Stand-off:")); form->addRow(standoffLbl, standoffSpin);
@@ -10704,9 +10697,7 @@ void Monitor::slotEditTruss(quint32 tid)
                   return a.offset < b.offset; });
 
     bool isVertical = (t->type() == Truss::Vertical);
-    TrussStripWidget *strip = new TrussStripWidget(t->length(), stripSlots, isVertical,
-                                                   float(toDisp_e), isFeet_e ? "ft" : "m",
-                                                   &editDlg);
+    TrussStripWidget *strip = new TrussStripWidget(t->length(), stripSlots, isVertical, &editDlg);
     connect(lenSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             [strip, fromDisp_e](double v){ strip->setTrussLength(float(v * fromDisp_e)); });
 
@@ -10913,7 +10904,7 @@ void Monitor::slotAddTruss()
                            m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     m_pendingAddScenePos = QPointF();
 
-    const bool isFeet_a = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet_a = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp_a   = isFeet_a ? 3.28084 : 1.0;
     const double fromDisp_a = isFeet_a ? (1.0 / 3.28084) : 1.0;
     const double posRange_a = isFeet_a ? 164.0 : 50.0;
@@ -10922,17 +10913,17 @@ void Monitor::slotAddTruss()
     const double wMax_a     = isFeet_a ? 16.4  : 5.0;
 
     QDoubleSpinBox *originX = new FeetInchesSpinBox(isFeet_a, &dlg);
-    originX->setRange(-posRange_a, posRange_a); originX->setDecimals(2);
+    originX->setRange(-posRange_a, posRange_a);
     originX->setValue(pendMm.x() / 1000.0 * toDisp_a);
     form->addRow(tr("Origin X (stage left):"), originX);
 
     QDoubleSpinBox *originY = new FeetInchesSpinBox(isFeet_a, &dlg);
-    originY->setRange(-posRange_a, posRange_a); originY->setDecimals(2);
+    originY->setRange(-posRange_a, posRange_a);
     originY->setValue(pendMm.y() / 1000.0 * toDisp_a);
     form->addRow(tr("Origin Y (downstage):"), originY);
 
     QDoubleSpinBox *originZ = new FeetInchesSpinBox(isFeet_a, &dlg);
-    originZ->setRange(0, zMax_a); originZ->setDecimals(2);
+    originZ->setRange(0, zMax_a);
     originZ->setValue(6.0 * toDisp_a);
     form->addRow(tr("Height Z:"), originZ);
 
@@ -10941,12 +10932,12 @@ void Monitor::slotAddTruss()
     form->addRow(tr("Direction (° from stage-right):"), dirAngle);
 
     QDoubleSpinBox *length = new FeetInchesSpinBox(isFeet_a, &dlg);
-    length->setRange(0.1, lenMax_a); length->setDecimals(2);
+    length->setRange(0.1, lenMax_a);
     length->setValue(6.0 * toDisp_a);
     form->addRow(tr("Length:"), length);
 
     QDoubleSpinBox *width = new FeetInchesSpinBox(isFeet_a, &dlg);
-    width->setRange(0.05, wMax_a); width->setDecimals(2);
+    width->setRange(0.05, wMax_a);
     width->setValue(0.29 * toDisp_a);
     form->addRow(tr("Width:"), width);
 
@@ -10995,20 +10986,16 @@ void Monitor::slotManageTrusses()
     QListWidget *list = new QListWidget(&dlg);
     vl->addWidget(list);
 
-    const bool isFeet_m = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString unitStr_m = isFeet_m ? "ft" : "m";
-    const double toDisp_m   = isFeet_m ? 3.28084 : 1.0;
     auto repopulate = [&]() {
         list->clear();
         for (Truss *t : m_props->trusses())
         {
             QListWidgetItem *item = new QListWidgetItem(
-                QString("[%1] %2  (%3)  Z=%4 %6  L=%5 %6")
+                QString("[%1] %2  (%3)  Z=%4  L=%5")       // in Settings > Units
                     .arg(t->id()).arg(t->name())
                     .arg(Truss::typeToString(t->type()))
-                    .arg(double(t->origin().z()) * toDisp_m, 0, 'f', 2)
-                    .arg(double(t->length()) * toDisp_m, 0, 'f', 2)
-                    .arg(unitStr_m));
+                    .arg(MeasurementUnits::formatMetres(double(t->origin().z())),
+                         MeasurementUnits::formatMetres(double(t->length()))));
             item->setData(Qt::UserRole, t->id());
             list->addItem(item);
         }
@@ -11796,14 +11783,13 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     QGroupBox *rigBox = new QGroupBox(tr("Aim & Mount"), &dlg);
     QFormLayout *rigForm = new QFormLayout(rigBox);
 
-    const bool isFeet_fx = (m_props->gridUnits() == MonitorProperties::Feet);
+    const bool isFeet_fx = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp_fx   = isFeet_fx ? 3.28084 : 1.0;
     const double fromDisp_fx = isFeet_fx ? (1.0 / 3.28084) : 1.0;
 
     // Fine height nudge above/below a structural mount (truss/bar/tower).
     QDoubleSpinBox *heightOffSpin = new FeetInchesSpinBox(isFeet_fx);
     heightOffSpin->setRange(-10 * toDisp_fx, 10 * toDisp_fx);
-    heightOffSpin->setDecimals(2);
     heightOffSpin->setToolTip(tr("Raise (+) or lower (−) the fixture relative to its "
                                  "mount — e.g. lift a followspot above the truss."));
     rigForm->addRow(tr("Height offset:"), heightOffSpin);
@@ -12246,13 +12232,13 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     QHBoxLayout *posRow = new QHBoxLayout(posBox);
     QFormLayout *posForm = new QFormLayout;
     posRow->addLayout(posForm, 1);
-    const QString unit = isFeet_fx ? tr("ft") : tr("m");
-
-    // X / Y on the plot, as every length is entered (the show's units).
+    // X / Y on the plot, as every length is entered (Settings > Units); the
+    // grid's size is in its own cells.
+    const double gridToDisp_fx = double(m_props->gridUnitMetres()) * toDisp_fx;
     QDoubleSpinBox *xSpin = new FeetInchesSpinBox(isFeet_fx);
     xSpin->setObjectName(QStringLiteral("fixtureX"));
-    xSpin->setMaximum(m_graphicsView->gridSize().width());
-    xSpin->setSingleStep(0.1); xSpin->setDecimals(2);
+    xSpin->setMaximum(m_graphicsView->gridSize().width() * gridToDisp_fx);
+    xSpin->setSingleStep(0.1);
     /* Not on the plot: its plot position and icon rotation read what the
        show has stored (0 for a light never placed) and are greyed. */
     const PreviewItem stored = m_props->fixtureItem(fxId, 0, 0);
@@ -12263,8 +12249,8 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
 
     QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet_fx);
     ySpin->setObjectName(QStringLiteral("fixtureY"));
-    ySpin->setMaximum(m_graphicsView->gridSize().height());
-    ySpin->setSingleStep(0.1); ySpin->setDecimals(2);
+    ySpin->setMaximum(m_graphicsView->gridSize().height() * gridToDisp_fx);
+    ySpin->setSingleStep(0.1);
     ySpin->setValue(plotPos.y() * toDisp_fx / 1000.0);
     posForm->addRow(tr("Y:"), ySpin);
 
@@ -12299,13 +12285,12 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
        mount, and editing it here would just be overwritten. */
     QLabel *stagePosLbl = new QLabel(&dlg);
     stagePosLbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    refreshStagePos = [this, stagePosLbl, fxId_dlg, toDisp_fx, unit]() {
-        const QVector3D w = fixtureWorldCentre(m_doc, fxId_dlg);
-        stagePosLbl->setText(tr("X %1%4   Y %2%4   Z %3%4")
-                             .arg(double(w.x()) * toDisp_fx, 0, 'f', 2)
-                             .arg(double(w.y()) * toDisp_fx, 0, 'f', 2)
-                             .arg(double(w.z()) * toDisp_fx, 0, 'f', 2)
-                             .arg(unit));
+    refreshStagePos = [this, stagePosLbl, fxId_dlg]() {
+        const QVector3D w = fixtureWorldCentre(m_doc, fxId_dlg);    // metres
+        stagePosLbl->setText(tr("X %1   Y %2   Z %3")
+                             .arg(MeasurementUnits::formatMetres(double(w.x())),
+                                  MeasurementUnits::formatMetres(double(w.y())),
+                                  MeasurementUnits::formatMetres(double(w.z()))));
     };
     refreshStagePos();
     posForm->addRow(tr("Stage position:"), stagePosLbl);

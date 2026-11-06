@@ -167,6 +167,7 @@ QMenu *EffectRunsMenu::add(QMenu *menu, Doc *doc, const QList<quint32> &palettes
         len->setEnabled(!now.loops());
         QObject::connect(len, &QAction::triggered, sub, [doc, effects, cyc, cycDef, cycle, dialogParent]() {
             bool ok = false;
+            // units-ok: seconds, not a length
             const double s = QInputDialog::getDouble(dialogParent, tr("Length"),
                                                      tr("One cycle, in seconds:"),
                                                      cycle > 0.0 ? cycle : 5.0, 0.05, 600.0, 2, &ok);
@@ -181,6 +182,7 @@ QMenu *EffectRunsMenu::add(QMenu *menu, Doc *doc, const QList<quint32> &palettes
     len->setToolTip(tr("One run's length: auto is the cue's time"));
     len->setEnabled(!now.loops());
     QObject::connect(len, &QAction::triggered, sub, [doc, effects, now, dialogParent]() {
+        // units-ok: seconds, not a length
         bool ok = false;
         const double s = QInputDialog::getDouble(dialogParent, tr("Length"),
                                                  tr("One run, in seconds (0 = auto: the cue's time):"),

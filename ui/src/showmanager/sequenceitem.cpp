@@ -880,6 +880,7 @@ void SequenceItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
                                               : tr("Scale cue timing…"));
         connect(scale, &QAction::triggered, this, [this]() {
             bool ok = false;
+            // units-ok: a percentage, not a length
             double pct = QInputDialog::getDouble(
                 (scene() && !scene()->views().isEmpty()) ? scene()->views().first() : NULL,
                 tr("Scale cue timing"),

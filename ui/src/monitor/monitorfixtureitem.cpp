@@ -32,13 +32,14 @@
 
 #include <QGraphicsSceneContextMenuEvent>
 #include <QMenu>
-#include <QInputDialog>
 
 #include <QPixmap>
 
 #include <QtMath>
 #include "headlayout.h"
 #include "monitorfixtureitem.h"
+#include "lengthinputdialog.h"
+#include "measurementunits.h"
 #include "contextmenus.h"
 #include <QGraphicsScene>
 #include "monitor.h"
@@ -1780,26 +1781,22 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 
 QString MonitorFixtureItem::mountingHeightText(const MonitorProperties *props, quint32 fid)
 {
-    const bool feet = props->gridUnits() == MonitorProperties::Feet;
+    // In Settings > Units, never the grid's: "(12' 6\")", "(3.81 m)".
     const double mm = double(props->fixturePosition(fid, 0, 0).z());
-    return feet ? tr("Set Mounting Height… (%1 ft)").arg(mm / 304.8, 0, 'f', 2)
-                : tr("Set Mounting Height… (%1 m)").arg(mm / 1000.0, 0, 'f', 2);
+    return tr("Set Mounting Height… (%1)").arg(MeasurementUnits::formatLength(mm));
 }
 
 bool MonitorFixtureItem::askMountingHeight(QWidget *parent, MonitorProperties *props, quint32 fid)
 {
-    const bool feet = props->gridUnits() == MonitorProperties::Feet;
-    const double mmPerUnit = feet ? 304.8 : 1000.0;
     const QVector3D cur = props->fixturePosition(fid, 0, 0);
     bool ok = false;
-    const double h = QInputDialog::getDouble(parent, tr("Mounting Height"),
-                         feet ? tr("Height above the floor (feet):")
-                              : tr("Height above the floor (metres):"),
-                         double(cur.z()) / mmPerUnit, 0.0, feet ? 330.0 : 100.0, 2, &ok);
+    const double mm = LengthInputDialog::getMillimetres(parent, tr("Mounting Height"),
+                                                        tr("Height above the floor:"),
+                                                        double(cur.z()), 0.0, 100000.0, &ok);
     if (!ok)
         return false;
     QVector3D np = cur;
-    np.setZ(float(h * mmPerUnit));
+    np.setZ(float(mm));
     props->setFixturePosition(fid, 0, 0, np);
     return true;
 }

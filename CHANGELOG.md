@@ -489,6 +489,16 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   line replaces the question in flight, and only the line that asked shows
   the answer.
 
+- **Every length follows Settings ▸ Units; feet and inches by default.**
+  Feet and inches read like a tape measure, to the nearest 1/8" (`3' 11
+  1/4"`, `7' 10 1/2"`), and any field takes fractions or decimals
+  (`11-1/4"`, `3/8"`, `11.25"`). Set Mounting Height… asks in your unit
+  and takes `12' 6"` or `3.8 m`;
+  every rig label, editor field, readout, report, CSV column, Show Review
+  line and focus-mode call does the same, never the grid's unit (inches
+  showed as decimal feet, mm and cm as metres). A gate test (`units_test`)
+  fails on a unit written into a string, a bare-number length dialog, or
+  the grid unit used for a display.
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections
   (or by a controller slot) now moves the follow spot from the Show Tree,

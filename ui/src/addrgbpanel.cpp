@@ -24,6 +24,7 @@
 #include <math.h>
 
 #include "addrgbpanel.h"
+#include "lengthspinbox.h"
 #include "doc.h"
 
 #define SETTINGS_GEOMETRY "addrgbpanel/geometry"
@@ -33,6 +34,22 @@ AddRGBPanel::AddRGBPanel(QWidget *parent, const Doc *doc)
     , m_doc(doc)
 {
     setupUi(this);
+
+    /* The physical size in Settings > Units, typed in any unit (the form's
+       spin boxes are whole millimetres). */
+    auto lengthField = [](QSpinBox *spin) {
+        LengthSpinBox *field = new LengthSpinBox(1.0, spin->parentWidget());
+        field->setObjectName(spin->objectName());
+        field->setDecimals(0);
+        field->setRange(spin->minimum(), spin->maximum());
+        field->setValue(spin->value());
+        if (QLayout *l = spin->parentWidget() != nullptr ? spin->parentWidget()->layout() : nullptr)
+            delete l->replaceWidget(spin, field);
+        spin->hide();
+        return field;
+    };
+    m_phyWidth = lengthField(m_phyWidthSpin);
+    m_phyHeight = lengthField(m_phyHeightSpin);
 
     /* Fill universe combo with available universes */
     m_uniCombo->addItems(m_doc->inputOutputMap()->universeNames());
@@ -147,12 +164,12 @@ int AddRGBPanel::rows()
 
 quint32 AddRGBPanel::physicalWidth()
 {
-    return m_phyWidthSpin->value();
+    return quint32(MeasurementUnits::toStoredMm(m_phyWidth->value()));
 }
 
 quint32 AddRGBPanel::physicalHeight()
 {
-    return m_phyHeightSpin->value();
+    return quint32(MeasurementUnits::toStoredMm(m_phyHeight->value()));
 }
 
 AddRGBPanel::Orientation AddRGBPanel::orientation()

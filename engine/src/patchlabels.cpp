@@ -93,6 +93,7 @@ QList<PatchLabels::Sheet> PatchLabels::sheets()
        29 mm: a label a page, the printer's driver cuts between them. */
     Sheet roll;
     roll.key = QStringLiteral("roll62");
+    // units-ok: the label roll's product name, as sold
     roll.name = QCoreApplication::translate("PatchLabels", "62 mm roll (one 62 × 29 mm label a page)");
     roll.page = QSizeF(62, 29);
     roll.label = QSizeF(62, 29);

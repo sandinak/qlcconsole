@@ -194,6 +194,16 @@ QLC+ splits into an **engine** (no UI) and a Qt widgets **ui** layer.
 
 ### Conventions
 
+- **Every measurement follows Settings ▸ Units. No exceptions.** Any length a
+  person reads or types (heights, distances, sizes, offsets, throws, trims,
+  in any dialog, field, label, tooltip, menu text, report, CSV, web page or
+  voice line) is shown and parsed through `MeasurementUnits` in
+  `MeasurementUnits::preferredLength()`: fields are `LengthSpinBox` /
+  `MeasurementEdit`, text is `MeasurementUnits::formatLength()`. Never a bare
+  `QInputDialog::getDouble`, never a hard-coded "m", "mm", "metres" or "ft" in
+  a string, never `MonitorProperties::gridUnits()` to pick the display unit
+  (that is the grid's spacing only). Storage stays millimetres. The product
+  default is feet and inches. `units_test` in the gate enforces this.
 - Scene/collection names follow `SS-PP.II-Description`; when duplicating, learn
   the pattern from siblings — don't hard-code (memory: show-naming-convention).
 - Match surrounding QLC+ style (it's stock Qt6/C++; existing files set the bar

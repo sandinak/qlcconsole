@@ -98,6 +98,7 @@ void MeasurementEdit::showValue()
     if (m_kind == Length)
     {
         setText(MU::formatLength(m_value, m_unit));
+        // units-ok: what the definition file keeps: whole millimetres
         saved = tr("Saved in the fixture definition as %1 mm (it keeps whole millimetres).")
                 .arg(MU::toStoredMm(m_value));
         setToolTip(saved + QStringLiteral("\n") + MU::lengthHelp(m_unit));

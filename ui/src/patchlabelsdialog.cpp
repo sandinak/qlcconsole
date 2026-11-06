@@ -37,6 +37,7 @@
 #include <QLabel>
 
 #include "patchlabelsdialog.h"
+#include "lengthspinbox.h"
 #include "patchlabels.h"
 
 namespace
@@ -121,7 +122,7 @@ PatchLabelsDialog::PatchLabelsDialog(const QList<PatchList::Row> &all,
     m_tape = new QComboBox(this);
     m_tape->setObjectName(QStringLiteral("labelTape"));
     foreach (int mm, PatchLabels::tapeWidths())
-        m_tape->addItem(tr("%1 mm (TZe)").arg(mm), mm);
+        m_tape->addItem(tr("%1 mm (TZe)").arg(mm), mm);     // units-ok: the tape's product size, as sold
     form->addRow(tr("Tape:"), m_tape);
 
     QHBoxLayout *text = new QHBoxLayout;
@@ -143,12 +144,11 @@ PatchLabelsDialog::PatchLabelsDialog(const QList<PatchList::Row> &all,
     fields->setEnabled(false);
     form->addRow(QString(), fields);
 
-    m_cutGap = new QDoubleSpinBox(this);
+    m_cutGap = new LengthSpinBox(1.0, this);      // millimetres, in Settings > Units
     m_cutGap->setObjectName(QStringLiteral("labelCutGap"));
     m_cutGap->setRange(0, 20);
     m_cutGap->setSingleStep(1);
     m_cutGap->setDecimals(1);
-    m_cutGap->setSuffix(tr(" mm"));
     m_cutGap->setToolTip(tr("Blank tape between one label's text and the next, where it is cut"));
     form->addRow(tr("Cut gap:"), m_cutGap);
 
@@ -350,8 +350,9 @@ void PatchLabelsDialog::slotUpdate()
     const int pages = PatchLabels::pageCount(s, n);
     const QString labels = n == 1 ? tr("1 label") : tr("%1 labels").arg(n);
     if (s.tape)
-        m_count->setText(tr("%1, each %2 mm of %3 mm tape").arg(labels)
-                             .arg(qRound(s.page.width())).arg(qRound(s.page.height())));
+        m_count->setText(tr("%1, each %2 of %3 mm tape").arg(labels)    // units-ok: tape size as sold
+                             .arg(MeasurementUnits::formatLength(qRound(s.page.width())))
+                             .arg(qRound(s.page.height())));
     else if (s.perPage() > 1)
         m_count->setText(pages == 1 ? tr("%1, on 1 sheet").arg(labels)
                                     : tr("%1, on %2 sheets").arg(labels).arg(pages));

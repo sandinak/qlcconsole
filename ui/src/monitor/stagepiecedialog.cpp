@@ -27,8 +27,9 @@ StagePieceDialog::StagePieceDialog(MonitorProperties *props, int piece, QWidget 
     : QDialog(parent)
     , m_props(props)
     , m_piece(piece)
-    // The show's unit as it is now: entry and readouts alike (Q147).
-    , m_feet(props->gridUnits() == MP::Feet)
+    // Settings > Units as it is now: entry and readouts alike (Q147). The
+    // fields' numbers are in feet for feet or inches, else metres.
+    , m_feet(FeetInchesSpinBox::valuesInFeet())
 {
     setObjectName(QStringLiteral("stagePieceDialog"));
     setProperty("helpTopic", QStringLiteral("lighting-studio.md#stage-marks-centre-line-curtain-line-number-line"));
@@ -87,7 +88,8 @@ StagePieceDialog::StagePieceDialog(MonitorProperties *props, int piece, QWidget 
             m_value = addDistance(form, tr("Upstage of the front:"), QStringLiteral("curtainLineY"),
                                   tr("How far upstage of the front of the deck the curtain line is. "
                                      "Negative is downstage of it. Auto: the most downstage main drape, "
-                                     "else the proscenium, else 4 ft (1.2 m) upstage of the front."),
+                                     "else the proscenium, else %1 upstage of the front.")
+                                  .arg(MP::formatStageDistance(props->gridUnitMetres() > 0.5f ? 1.2f : 1.2192f)),
                                   &m_auto, &m_words);
             connect(m_auto, &QCheckBox::toggled, this, [this](bool on) {
                 if (m_syncing) return;
@@ -241,7 +243,6 @@ void StagePieceDialog::sync()
 {
     m_syncing = true;
     const MP::StagePiece sp = MP::StagePiece(m_piece);
-    const MP::GridUnits units = m_feet ? MP::Feet : MP::Meters;
     m_visible->setChecked(m_props->stagePieceVisible(sp));
     m_locked->setChecked(m_props->stagePieceLocked(sp));
     switch (sp)
@@ -259,14 +260,14 @@ void StagePieceDialog::sync()
             m_words->setText(std::fabs(up) < 0.005f ? tr("at the front of the deck")
                              : (up > 0.0f ? tr("%1 US of the front of the deck")
                                           : tr("%1 DS of the front of the deck"))
-                                   .arg(MP::formatStageDistance(up, units)));
+                                   .arg(MP::formatStageDistance(up)));
         }
         break;
         case MP::NumberPiece:
             m_auto->setChecked(m_props->numberLineIsAuto());
             m_value->setValue(toDisplay(m_props->numberLineDownstageOfCurtain()));
             m_value->setEnabled(!m_props->numberLineIsAuto());
-            m_words->setText(MP::formatCurtainLineOffset(m_props->numberLineDownstageOfCurtain(), units));
+            m_words->setText(MP::formatCurtainLineOffset(m_props->numberLineDownstageOfCurtain()));
         break;
         case MP::ApronPiece:
         {
@@ -278,15 +279,15 @@ void StagePieceDialog::sync()
             const float depth = m_props->apronDepth();
             m_words->setText(depth < 0.01f ? tr("No apron: the deck stops at the curtain line")
                                            : tr("Front %1 DS of the curtain line")
-                                                 .arg(MP::formatStageDistance(depth, units)));
+                                                 .arg(MP::formatStageDistance(depth)));
             const float height = m_props->apronHeight();
             m_heightAuto->setChecked(m_props->apronHeightIsAuto());
             m_height->setValue(toDisplay(height));
             m_height->setEnabled(!m_props->apronHeightIsAuto());
             m_heightWords->setText(height < 0.005f ? tr("On the floor")
                                    : m_props->apronHeightIsAuto()
-                                       ? tr("%1 high, as the main deck").arg(MP::formatStageDistance(height, units))
-                                       : tr("%1 high").arg(MP::formatStageDistance(height, units)));
+                                       ? tr("%1 high, as the main deck").arg(MP::formatStageDistance(height))
+                                       : tr("%1 high").arg(MP::formatStageDistance(height)));
         }
         break;
     }

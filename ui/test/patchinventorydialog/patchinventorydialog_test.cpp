@@ -483,7 +483,8 @@ void PatchInventoryDialog_Test::nearestNodeProposalsShowWhereTheyGoAndApply()
     PatchInventoryDialog dlg(m_doc);
     QVERIFY(dlg.m_proximity->isEnabled() && dlg.m_proximity->isChecked());
     const int r1 = rowOf(dlg, t1->id()), r4 = rowOf(dlg, t4->id());
-    QVERIFY2(dlg.m_table->item(r1, 7)->text() == QString::fromUtf8("SR Node · port 1 · 1.0 m"),
+    // How far, in Settings > Units (feet and inches unless chosen).
+    QVERIFY2(dlg.m_table->item(r1, 7)->text() == QString::fromUtf8("SR Node · port 1 · 3' 3\""),
              qPrintable(dlg.m_table->item(r1, 7)->text()));
     QVERIFY2(dlg.m_table->item(r4, 7)->text().startsWith(QString::fromUtf8("SL Node · port 1")),
              qPrintable(dlg.m_table->item(r4, 7)->text()));

@@ -18,6 +18,7 @@
 */
 
 #include <algorithm>
+#include <cmath>
 #include <QHash>
 #include <QSet>
 
@@ -29,7 +30,6 @@
 #include "fixture.h"
 #include "doc.h"
 
-#define FEET_PER_METRE 3.28084
 
 NetworkReport NetworkReport::build(Doc *doc)
 {
@@ -144,13 +144,16 @@ int NetworkReport::longestRun() const
     return best;
 }
 
-static QString lengthText(double metres, bool feet)
+/* A run: to a tenth of a metre, a centimetre, a millimetre or an inch. */
+static QString lengthText(double metres, MeasurementUnits::LengthUnit unit)
 {
-    return feet ? QStringLiteral("%1 ft").arg(metres * FEET_PER_METRE, 0, 'f', 1)
-                : QStringLiteral("%1 m").arg(metres, 0, 'f', 1);
+    const double step = unit == MeasurementUnits::Metres ? 100.0
+                      : MeasurementUnits::isImperial(unit) ? 25.4
+                      : MeasurementUnits::mmPer(unit);
+    return MeasurementUnits::formatLength(std::round(metres * 1000.0 / step) * step, unit);
 }
 
-QString NetworkReport::toText(bool feet) const
+QString NetworkReport::toText(MeasurementUnits::LengthUnit unit) const
 {
     QStringList out;
     out << QStringLiteral("NETWORK SUMMARY");
@@ -163,7 +166,7 @@ QString NetworkReport::toText(bool feet) const
         const Port &p = ports.at(longest);
         out << QStringLiteral("Longest run: %1, port %2 (universe %3), ~%4")
                    .arg(nodes.at(p.nodeIndex).name).arg(p.portIndex + 1).arg(p.universe + 1)
-                   .arg(lengthText(p.lengthMetres, feet));
+                   .arg(lengthText(p.lengthMetres, unit));
     }
 
     for (int n = 0; n < nodes.size(); n++)
@@ -194,7 +197,7 @@ QString NetworkReport::toText(bool feet) const
             if (!p.receiver.isEmpty())
                 line += QStringLiteral(", via %1").arg(p.receiver);
             if (p.hasRun())
-                line += QStringLiteral(", run ~%1").arg(lengthText(p.lengthMetres, feet));
+                line += QStringLiteral(", run ~%1").arg(lengthText(p.lengthMetres, unit));
             if (p.unplotted > 0)
                 line += QStringLiteral(" (%1 not on the plot)").arg(p.unplotted);
             out << line;
@@ -242,13 +245,13 @@ static QString csvRow(const QStringList &fields)
     return out.join(QLatin1Char(','));
 }
 
-QString NetworkReport::toCsv(bool feet) const
+QString NetworkReport::toCsv(MeasurementUnits::LengthUnit unit) const
 {
     QStringList out;
     out << csvRow({ QStringLiteral("Node"), QStringLiteral("Transport"), QStringLiteral("IP"),
                     QStringLiteral("Port"), QStringLiteral("Universe"), QStringLiteral("Receiver"),
                     QStringLiteral("Fixtures"), QStringLiteral("Channels"),
-                    feet ? QStringLiteral("Run (ft)") : QStringLiteral("Run (m)"),
+                    QStringLiteral("Run (%1)").arg(MeasurementUnits::symbol(unit)),
                     QStringLiteral("Not on plot") });
     foreach (const Port &p, ports)
     {
@@ -256,7 +259,7 @@ QString NetworkReport::toCsv(bool feet) const
         out << csvRow({ node.name, node.transport, node.ip, QString::number(p.portIndex + 1),
                         p.used ? QString::number(p.universe + 1) : QString(), p.receiver,
                         QString::number(p.fixtures), QString::number(p.channels),
-                        p.hasRun() ? QString::number(p.lengthMetres * (feet ? FEET_PER_METRE : 1.0), 'f', 1)
+                        p.hasRun() ? QString::number(p.lengthMetres * 1000.0 / MeasurementUnits::mmPer(unit), 'f', 1)
                                : QString(),
                         QString::number(p.unplotted) });
     }

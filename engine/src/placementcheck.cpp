@@ -235,7 +235,7 @@ QString PlacementCheck::problemText(Doc *doc, const Buried &b)
 QString PlacementCheck::fixText(Doc *doc, const Buried &b)
 {
     if (b.canSit)
-        return tr("Sit it on %1 (%2 m)").arg(platformName(doc, b.sitId)).arg(double(b.topZ), 0, 'f', 2);
+        return tr("Sit it on %1 (%2)").arg(platformName(doc, b.sitId), MonitorProperties::formatStageDistance(b.topZ));
     return tr("Move it clear of %1").arg(platformName(doc, b.platformId));
 }
 
@@ -556,7 +556,7 @@ QString PlacementCheck::problemText(Doc *doc, const OffRow &o)
     const QString name = fx != nullptr ? fx->name() : QString::number(o.fixtureId);
     const StagePlatform *pl = doc->monitorProperties()->platform(o.sitId);
     QString deck = deckLabel(pl != nullptr ? pl->name() : QString());
-    deck += QStringLiteral(" (%1 m)").arg(double(o.topZ), 0, 'f', 2);
+    deck += QStringLiteral(" (%1)").arg(MonitorProperties::formatStageDistance(o.topZ));
     if (o.decks.size() > 1)
         deck += o.decks.size() == 2 ? tr(" and 1 more deck")
                                     : tr(" and %1 more decks").arg(o.decks.size() - 1);
@@ -566,8 +566,8 @@ QString PlacementCheck::problemText(Doc *doc, const OffRow &o)
 QString PlacementCheck::fixText(Doc *doc, const OffRow &o)
 {
     const StagePlatform *pl = doc->monitorProperties()->platform(o.sitId);
-    return tr("Sit it on %1 (%2 m)").arg(deckLabel(pl != nullptr ? pl->name() : QString()))
-                                    .arg(double(o.topZ), 0, 'f', 2);
+    return tr("Sit it on %1 (%2)").arg(deckLabel(pl != nullptr ? pl->name() : QString()),
+                                       MonitorProperties::formatStageDistance(o.topZ));
 }
 
 bool PlacementCheck::fix(Doc *doc, const OffRow &o)

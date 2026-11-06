@@ -44,12 +44,8 @@ StandItem::StandItem(Stand *stand, Doc *doc,
     setCursor((elevation || stand->locked()) ? Qt::ArrowCursor : AppUtil::nativeCursorShape(Qt::SizeAllCursor));
     setPos(pxX, pxY);
 
-    const bool isFeet = doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
-    const double conv = isFeet ? 3.28084 : 1.0;
-    const QString unitStr = isFeet ? "ft" : "m";
-    m_label = new QGraphicsTextItem(
-        QString("%1 (%2 %3)").arg(stand->name())
-            .arg(double(stand->height()) * conv, 0, 'f', 1).arg(unitStr),
+    m_label = new QGraphicsTextItem(       // the height in Settings > Units
+        QString("%1 (%2)").arg(stand->name(), MonitorProperties::formatStageDistance(stand->height())),
         this);
     m_label->setDefaultTextColor(QColor(220, 220, 228, 200));
     m_label->setFont(QFont("Arial", 8));

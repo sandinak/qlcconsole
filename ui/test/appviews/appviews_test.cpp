@@ -951,13 +951,14 @@ void AppViews_Test::missingDefinitionsAreAskedAboutAndFetchedBack()
 
 void AppViews_Test::settingsChoosesTheUnits()
 {
-    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Millimetres);
+    // Never chosen: feet and inches, the product's default.
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Feet);
     {
         AppSettings dlg(m_app);
         QComboBox *units = dlg.findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo"));
         QVERIFY(units != nullptr);
         QCOMPARE(units->count(), 5);
-        QCOMPARE(units->currentData().toInt(), int(MeasurementUnits::Millimetres));
+        QCOMPARE(units->currentData().toInt(), int(MeasurementUnits::Feet));
         units->setCurrentIndex(units->findData(int(MeasurementUnits::Inches)));
         dlg.accept();
     }
@@ -1143,7 +1144,7 @@ void AppViews_Test::theGridFollowsTheUnitPreference()
     QCOMPARE(mp->gridUnits(), MonitorProperties::Meters);
     QVERIFY(qAbs(mp->gridSize().x() - 12.192f) < 1e-3f);
     QVERIFY(qAbs(mp->gridSize().z() - 9.144f) < 1e-3f);
-    QVERIFY(label->text().startsWith(QStringLiteral("Metres")));
+    QVERIFY(label->text().startsWith(QStringLiteral("Millimetres")));   // the person's unit, not the grid's
 
     // Saved in the person's unit, whole numbers for older readers.
     const QString saved = dir.filePath(QStringLiteral("metres.qxw"));
@@ -1164,7 +1165,7 @@ void AppViews_Test::theGridFollowsTheUnitPreference()
     }
     QCOMPARE(mp->gridUnits(), MonitorProperties::Feet);
     QVERIFY(qAbs(mp->gridSize().x() - 40.0f) < 1e-3f);
-    QVERIFY(label->text().startsWith(QStringLiteral("Feet")));
+    QVERIFY(label->text().startsWith(QStringLiteral("Inches")));   // the person's unit; the grid in feet
 
     // New: in the person's unit too.
     m_app->clearDocument();

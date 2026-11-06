@@ -122,6 +122,7 @@ ChaserWalker::ChaserWalker(FunctionStack *stack, QWidget *parent)
     m_note->setObjectName(QStringLiteral("walkerNote"));
     noteLabel->setBuddy(m_note);
     fields->addWidget(m_note, 1);
+    // units-ok: "2m" is two minutes
     const QString timeTip = tr("As the Chaser editor writes it: 1s.50, 2m, ∞ (hold until GO). Return applies it.");
     for (QLineEdit *e : { m_fadeIn, m_hold, m_fadeOut })
         e->setToolTip(timeTip);

@@ -18,6 +18,8 @@
 */
 
 #include <QLabel>
+#include <QLineEdit>
+#include <QDoubleSpinBox>
 #include <QApplication>
 #include <QInputDialog>
 #include <QTimer>
@@ -35,6 +37,9 @@
 #undef private
 
 #include "monitorfixtureitem_test.h"
+#include "lengthinputdialog.h"
+#include "lengthspinbox.h"
+#include "measurementunits.h"
 #include "../common/shotdark.h"
 #include "qlcfixturedefcache.h"
 #include "qlcfixturedef.h"
@@ -413,50 +418,68 @@ void MonitorFixtureItem_Test::aPracticeDrawsTheGaugesWhereTheLightPoints()
 
 void MonitorFixtureItem_Test::mountingHeightIsInTheShowsUnits()
 {
+    /* "The base setting for this tool is inches and feet. ANY measurement
+       MUST follow the settings": Settings > Units, never the grid's unit. */
     MonitorProperties *props = m_doc->monitorProperties();
     const MonitorProperties::GridUnits before = props->gridUnits();
+    const MeasurementUnits::LengthUnit was = MeasurementUnits::preferredLength();
     const quint32 fid = 4242;
     props->setFixturePosition(fid, 0, 0, QVector3D(1000.0f, 2000.0f, 3048.0f));
 
-    // Answers the dialog: what it asked and showed, then the typed value.
-    QString asked;
-    double shown = -1.0;
-    auto answerWith = [&](double value) {
-        QTimer::singleShot(0, [&asked, &shown, value]() {
-            QInputDialog *d = qobject_cast<QInputDialog *>(QApplication::activeModalWidget());
+    // Answers the dialog: what it asked and showed, then what is typed.
+    QString asked, shown;
+    bool lengthField = false;
+    auto answerWith = [&](const QString &typed) {
+        QTimer::singleShot(0, [&asked, &shown, &lengthField, typed]() {
+            QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
             if (d == nullptr)
                 return;
-            asked = d->labelText();
-            shown = d->doubleValue();
-            d->setDoubleValue(value);
+            QLabel *l = d->findChild<QLabel *>();
+            asked = l != nullptr ? l->text() : QString();
+            QDoubleSpinBox *f = d->findChild<QDoubleSpinBox *>(LengthInputDialog::fieldName());
+            lengthField = dynamic_cast<LengthSpinBox *>(f) != nullptr;
+            if (f == nullptr)
+                return;
+            shown = f->text();
+            f->findChild<QLineEdit *>()->setText(typed);
             d->accept();
         });
     };
 
-    // A feet show: 3048 mm is 10 ft; 12 typed is 12 ft.
-    props->setGridUnits(MonitorProperties::Feet);
-    QVERIFY2(MonitorFixtureItem::mountingHeightText(props, fid).contains("10.00 ft"),
-             qPrintable(MonitorFixtureItem::mountingHeightText(props, fid)));
-    answerWith(12.0);
+    // Feet and inches -- even on a metric grid: 3048 mm is 10'; 12' 6" typed.
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
+    props->setGridUnits(MonitorProperties::Meters);
+    QCOMPARE(MonitorFixtureItem::mountingHeightText(props, fid), QString("Set Mounting Height… (10')"));
+    answerWith("12' 6\"");
     QVERIFY(MonitorFixtureItem::askMountingHeight(nullptr, props, fid));
-    QVERIFY2(asked.contains("feet"), qPrintable(asked));
-    QCOMPARE(shown, 10.0);
-    QCOMPARE(qRound(props->fixturePosition(fid, 0, 0).z()), qRound(12 * 304.8));
+    QVERIFY(lengthField);
+    QCOMPARE(asked, QString("Height above the floor:"));
+    QCOMPARE(shown, QString("10'"));
+    QCOMPARE(qRound(props->fixturePosition(fid, 0, 0).z()), qRound(150 * 25.4));
     // Where it is on the floor is left alone.
     QCOMPARE(props->fixturePosition(fid, 0, 0).x(), 1000.0f);
-
-    // A metric show: metres.
-    props->setGridUnits(MonitorProperties::Meters);
-    props->setFixturePosition(fid, 0, 0, QVector3D(1000.0f, 2000.0f, 2500.0f));
-    QVERIFY(MonitorFixtureItem::mountingHeightText(props, fid).contains("2.50 m"));
-    answerWith(4.0);
+    // A metric length typed works too.
+    answerWith("3.8 m");
     QVERIFY(MonitorFixtureItem::askMountingHeight(nullptr, props, fid));
-    QVERIFY2(asked.contains("metres"), qPrintable(asked));
-    QCOMPARE(shown, 2.5);
+    QCOMPARE(qRound(props->fixturePosition(fid, 0, 0).z()), 3800);
+
+    // Metres -- even on a feet grid.
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
+    props->setGridUnits(MonitorProperties::Feet);
+    props->setFixturePosition(fid, 0, 0, QVector3D(1000.0f, 2000.0f, 2500.0f));
+    QCOMPARE(MonitorFixtureItem::mountingHeightText(props, fid), QString("Set Mounting Height… (2.5 m)"));
+    answerWith("4");
+    QVERIFY(MonitorFixtureItem::askMountingHeight(nullptr, props, fid));
+    QCOMPARE(shown, QString("2.5 m"));
     QCOMPARE(qRound(props->fixturePosition(fid, 0, 0).z()), 4000);
+
+    // Millimetres: what the file keeps, shown as such.
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Millimetres);
+    QCOMPARE(MonitorFixtureItem::mountingHeightText(props, fid), QString("Set Mounting Height… (4000 mm)"));
 
     props->removeFixture(fid);
     props->setGridUnits(before);
+    MeasurementUnits::setPreferredLength(was);
 }
 
 QTEST_MAIN(MonitorFixtureItem_Test)

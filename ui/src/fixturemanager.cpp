@@ -1521,6 +1521,7 @@ QString FixtureManager::fixtureInfo(const Fixture *fixture) const
         const MU::WeightUnit wunit = MU::weightUnitFor(unit);
         auto len = [unit](int mm) {
             return unit == MU::Millimetres ? MU::formatLength(mm, unit)
+                   // units-ok: the whole millimetres the file keeps, beside the preferred unit
                    : QStringLiteral("%1 (%2 mm)").arg(MU::formatLength(mm, unit)).arg(mm);
         };
         QString W("%1W");

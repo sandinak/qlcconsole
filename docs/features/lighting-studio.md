@@ -896,8 +896,8 @@ field as you change it.
 
 **Right-click a fixture** on the plot for **Facing (pan zero) ▸**
 (Downstage, Stage Right, Upstage, Stage Left), **Set Mounting Height…**
-(its height above the floor, in the show's units: feet on a feet show,
-metres on a metric one), **Unmount from "…"** and **Mount on ▸**. These are
+(its height above the floor, in your units from Settings → General → Units;
+type `12' 6"` or `3.8 m`, either works), **Unmount from "…"** and **Mount on ▸**. These are
 the plot's own and come first. Under them is the fixture's own menu —
 **Fixture Properties…**, **Locate**, **Why is this on?**, **Patch…**, **LED
 Layout…**, **Output Rules…**, **Selection ▸**, **Rename…** — the same as in
@@ -1385,13 +1385,19 @@ props, images and nodes:
   Properties: the
   plot follows its fields as you change them, **Cancel** puts back
   everything it did, and **OK** is one undo step. Lengths are entered in
-  your units — feet-and-inches, or metres (see below); colours are one swatch
+  your units — feet and inches unless you chose another (see below); colours are one swatch
   button showing the colour and its hex value, with **Reset**.
-- **Units are yours, not the show's.** The grid, rulers, H/V/Z readouts,
-  dimension labels and every length field use **Settings → General → Units**:
-  **metres** for mm, cm or m, **feet-and-inches** for inches or feet (finer
-  units would only crowd a stage grid). The Grid button's menu shows which,
-  and says where to change it. A show opens in your units whatever it was
+- **Units are yours, not the show's.** Every length you read or type —
+  H/V/Z readouts, dimension and height labels, every length field, the
+  mounting height, reports and CSV columns, the focus remote — uses
+  **Settings → General → Units**, exactly: `12' 6 1/4"` with feet and
+  inches (the default, read like a tape measure to the nearest 1/8"),
+  `150 1/4"` with inches, `3.81 m`, `381 cm` or `3810 mm` with the metric
+  ones. Any field takes a length typed in any unit, fractions or decimals
+  (`12' 6 1/4"`, `12' 6.25"`, `11-1/4"`, `3/8"` or `3.8 m` all work). Only the grid itself is coarser: its
+  cells and rulers count **feet** for inches or feet and **metres** for mm,
+  cm or m (finer cells would only crowd a stage grid). The Grid button's
+  menu shows your unit and says where to change it. A show opens in your units whatever it was
   saved in — the stage stays the same size, converted exactly — and is
   saved in them (whole numbers for older versions, the exact size beside
   them). The first show you ever open decides for you, once, if you had

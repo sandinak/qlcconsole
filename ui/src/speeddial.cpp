@@ -146,6 +146,7 @@ SpeedDial::SpeedDial(QWidget* parent)
 
     m_min = new FocusSpinBox(this);
     m_min->setRange(0, MIN_MAX);
+    // units-ok: minutes
     m_min->setSuffix("m");
     m_min->setButtonSymbols(QSpinBox::NoButtons);
     m_min->setToolTip(tr("Minutes"));

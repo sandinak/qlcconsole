@@ -177,9 +177,6 @@ void NetworkTopologyDialog::loadNode(int row)
     m_transport->setCurrentIndex(m_transport->findData(node.transport));
     m_ip->setText(node.ipHint);
 
-    const bool isFeet = (m_doc->monitorProperties()->gridUnits() == MonitorProperties::Feet);
-    const double toDisp = isFeet ? 3.28084 : 1.0;
-
     m_ports->setRowCount(node.ports.size());
     for (int p = 0; p < node.ports.size(); p++)
     {
@@ -198,10 +195,10 @@ void NetworkTopologyDialog::loadNode(int row)
 
         for (int col = COL_RX_X; col <= COL_RX_Y; col++)
         {
-            QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet, m_ports);
+            // In metres, shown and typed in Settings > Units.
+            QDoubleSpinBox *s = new FeetInchesSpinBox(false, m_ports);
             s->setRange(-500, 500);
-            s->setDecimals(2);
-            s->setValue((col == COL_RX_X ? port.receiver.posX : port.receiver.posY) * toDisp);
+            s->setValue(col == COL_RX_X ? port.receiver.posX : port.receiver.posY);
             connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
                     this, &NetworkTopologyDialog::slotPortCellEdited);
             m_ports->setCellWidget(p, col, s);
@@ -274,9 +271,6 @@ void NetworkTopologyDialog::storePorts()
 {
     if (m_row < 0 || m_row >= m_nodes.size())
         return;
-    const bool isFeet = (m_doc->monitorProperties()->gridUnits() == MonitorProperties::Feet);
-    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
-
     NetworkNode &node = m_nodes[m_row];
     for (int p = 0; p < node.ports.size() && p < m_ports->rowCount(); p++)
     {
@@ -286,9 +280,9 @@ void NetworkTopologyDialog::storePorts()
         if (QTableWidgetItem *placed = m_ports->item(p, COL_RECEIVER))
             port.receiver.placed = (placed->checkState() == Qt::Checked);
         if (QDoubleSpinBox *x = qobject_cast<QDoubleSpinBox *>(m_ports->cellWidget(p, COL_RX_X)))
-            port.receiver.posX = x->value() * fromDisp;
+            port.receiver.posX = x->value();
         if (QDoubleSpinBox *y = qobject_cast<QDoubleSpinBox *>(m_ports->cellWidget(p, COL_RX_Y)))
-            port.receiver.posY = y->value() * fromDisp;
+            port.receiver.posY = y->value();
     }
 }
 

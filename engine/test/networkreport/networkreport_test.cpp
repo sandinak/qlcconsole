@@ -148,7 +148,7 @@ void NetworkReport_Test::theLongestRunIsNamed()
     // The beach run starts at the receiver 10 m out, not the transmitter at -50.
     QCOMPARE(r.longestRun(), 3);
     QVERIFY2(qAbs(r.ports.at(3).lengthMetres - 10.0) < 0.01, qPrintable(QString::number(r.ports.at(3).lengthMetres)));
-    QVERIFY2(r.toText().contains("Longest run: Beach TX, port 1 (universe 3), ~10.0 m"), qPrintable(r.toText()));
+    QVERIFY2(r.toText(MeasurementUnits::Metres).contains("Longest run: Beach TX, port 1 (universe 3), ~10 m"), qPrintable(r.toText(MeasurementUnits::Metres)));
 }
 
 void NetworkReport_Test::networkFixturesAreListedByIp()
@@ -204,15 +204,15 @@ void NetworkReport_Test::theTextReadsLikeTheDataPackage()
     floating.placed = false;
     m_doc->networkTopology()->nodes() << floating;
 
-    const QString text = NetworkReport::build(m_doc).toText();
+    const QString text = NetworkReport::build(m_doc).toText(MeasurementUnits::Metres);
     QVERIFY2(text.startsWith("NETWORK SUMMARY\nNodes: 3   Ports: 4 (3 used, 1 free)   Universes carried: 3"),
              qPrintable(text));
     QVERIFY2(text.contains("SR Node -- ArtNet @ 172.18.2.10\n  3 port(s), 2 used; 3 fixture(s), 12 channel(s)"),
              qPrintable(text));
-    QVERIFY(text.contains("  Port 1: universe 1, 2 fixture(s), 8/512 ch, run ~5.0 m"));
+    QVERIFY(text.contains("  Port 1: universe 1, 2 fixture(s), 8/512 ch, run ~5 m"));
     QVERIFY(text.contains("  Port 2: universe 2, 1 fixture(s), 4/512 ch (1 not on the plot)"));
     QVERIFY(text.contains("  Port 3: free"));
-    QVERIFY(text.contains("  Port 1: universe 3, 1 fixture(s), 4/512 ch, via Rig RX, run ~10.0 m"));
+    QVERIFY(text.contains("  Port 1: universe 3, 1 fixture(s), 4/512 ch, via Rig RX, run ~10 m"));
     QVERIFY(text.contains("Spare -- sACN (not on the plot)"));
     QVERIFY(!text.contains("NETWORK FIXTURES"));      // none in this rig
 }
@@ -221,10 +221,10 @@ void NetworkReport_Test::lengthsFollowThePlotUnits()
 {
     buildRig(m_doc);
     const NetworkReport r = NetworkReport::build(m_doc);
-    QVERIFY(r.toText(true).contains("run ~16.4 ft"));
-    QVERIFY(r.toCsv(true).startsWith("Node,Transport,IP,Port,Universe,Receiver,Fixtures,Channels,Run (ft),"));
-    QVERIFY(r.toCsv(true).contains(",16.4,"));
-    QVERIFY(r.toCsv(false).contains(",5.0,"));
+    QVERIFY2(r.toText(MeasurementUnits::Feet).contains("run ~16' 5\""), qPrintable(r.toText(MeasurementUnits::Feet)));
+    QVERIFY(r.toCsv(MeasurementUnits::Feet).startsWith("Node,Transport,IP,Port,Universe,Receiver,Fixtures,Channels,Run (ft),"));
+    QVERIFY(r.toCsv(MeasurementUnits::Feet).contains(",16.4,"));
+    QVERIFY(r.toCsv(MeasurementUnits::Metres).contains(",5.0,"));
 }
 
 void NetworkReport_Test::theCsvIsSpreadsheetSafe()
@@ -235,7 +235,7 @@ void NetworkReport_Test::theCsvIsSpreadsheetSafe()
     f->setConnection(Fixture::Network);
     f->setIPAddress("172.18.2.41");
 
-    const QStringList lines = NetworkReport::build(m_doc).toCsv().split('\n');
+    const QStringList lines = NetworkReport::build(m_doc).toCsv(MeasurementUnits::Metres).split('\n');
     QCOMPARE(lines.at(1), QString("\"SR, \"\"upstage\"\"\",ArtNet,172.18.2.10,1,1,,2,8,5.0,0"));
     // Its only fixture is off the plot: nothing to measure.
     QCOMPARE(lines.at(2), QString("\"SR, \"\"upstage\"\"\",ArtNet,172.18.2.10,2,2,,1,4,,1"));

@@ -2693,7 +2693,10 @@ void LookEditor_Test::aLengthShowsAndTakesTheChosenUnit()
     cm.setValue(170);
     QCOMPARE(cm.text(), QString("170 cm"));
 
-    // The target editor's metre fields take a length typed in feet too.
+    /* The rig's metre fields show Settings > Units and take a length typed
+       in any unit: a bare number is in the chosen unit. */
+    const MeasurementUnits::LengthUnit before = MeasurementUnits::preferredLength();
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
     FeetInchesSpinBox m(false);
     m.setRange(0.5, 3.0);
     QVERIFY(qAbs(m.valueFromText("5' 6\"") - 1.6764) < 1e-6);
@@ -2703,10 +2706,24 @@ void LookEditor_Test::aLengthShowsAndTakesTheChosenUnit()
     QVERIFY(qAbs(m.valueFromText("1.676 m") - 1.676) < 1e-6);
     typed = "5' 6\"";
     QCOMPARE(int(m.validate(typed, pos)), int(QValidator::Acceptable));
+    m.setValue(1.6764);
+    QCOMPARE(m.text(), QString("1.6764 m"));
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
     FeetInchesSpinBox f(true);
     f.setRange(0.5 * 3.28084, 3.0 * 3.28084);
     f.setValue(1.6764 * 3.28084);
     QCOMPARE(f.text(), QString("5' 6\""));
+    FeetInchesSpinBox fm(false);                 // metres inside, feet shown
+    fm.setRange(0.5, 3.0);
+    fm.setValue(1.6764);
+    QCOMPARE(fm.text(), QString("5' 6\""));
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Millimetres);
+    QCOMPARE(fm.text(), QString("5' 6\""));      // a field keeps the unit it was made in
+    FeetInchesSpinBox mm(false);
+    mm.setRange(0.5, 3.0);
+    mm.setValue(1.6764);
+    QCOMPARE(mm.text(), QString("1676.4 mm"));
+    MeasurementUnits::setPreferredLength(before);
 
     // The follow spot's Person Height in the effect editor: in feet when
     // Settings -> Units says feet, kept in cm.
@@ -2727,7 +2744,7 @@ void LookEditor_Test::aLengthShowsAndTakesTheChosenUnit()
         QCOMPARE(height->text(), QString("5' 6\""));
         height->setValue(height->valueFromText("6'"));
         QVERIFY(qAbs(look->effectParamValues().value("personHeight") - 182.88) < 1e-6);
-        QVERIFY2(height->toolTip().contains("from 1' 7.7\" to 8' 2.43\""), qPrintable(height->toolTip()));
+        QVERIFY2(height->toolTip().contains("from 1' 7 5/8\" to 8' 2 3/8\""), qPrintable(height->toolTip()));
     }
     MeasurementUnits::setPreferredLength(was);
 }

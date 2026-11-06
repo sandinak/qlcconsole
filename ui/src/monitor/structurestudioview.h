@@ -755,7 +755,7 @@ private:
     void drawRigDepthSorted(QPainter &p) const;
     void drawDimensions(QPainter &p) const;
     /** "Shelf 3 — 5.91 ft": drawn left of a tower's shelf line. */
-    QString shelfLabel(int index, float height, double toDisp, const QString &unitSuffix) const;
+    QString shelfLabel(int index, float height) const;
     /** How far the shelf labels reach left of this tower editor's tower (0
      *  where none are drawn), so the height dimension clears them. */
     double shelfLabelsWidth() const;   ///< feature width/height labels (ft/m)

@@ -82,6 +82,7 @@ void ShowHeaderItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *op
                 {
                     int tmpMin = tmpSec / 60;
                     tmpSec = tmpSec - (tmpMin * 60);
+                    // units-ok: minutes and seconds
                     painter->drawText(xpos - 4, 15, QString("%1m%2s").arg(tmpMin).arg(tmpSec));
                 }
             }

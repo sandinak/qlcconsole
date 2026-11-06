@@ -24,6 +24,8 @@
 #include <QVector3D>
 #include <QColor>
 #include <QString>
+
+#include "measurementunits.h"
 #include <QList>
 
 #include "rigowner.h"
@@ -152,8 +154,8 @@ public:
      *  whose mode has two or more heads with colour (RGB) channels of their
      *  own -- what an RGB Matrix draws across. Everything else is discrete. */
     static bool isPixelFixture(const Fixture *fixture);
-    /** Lengths in feet rather than metres (the plot's units). */
-    bool feet() const { return m_feet; }
+    /** The unit lengths are written in: Settings > Units, as built. */
+    MeasurementUnits::LengthUnit lengthUnit() const { return m_unit; }
 
     /** The spreadsheet: a header line, then a line per fixture in the order
      *  arranged(@p by) gives, the section in a first column of its own when
@@ -179,7 +181,7 @@ public:
 
 private:
     QList<Row> m_rows;
-    bool m_feet = false;
+    MeasurementUnits::LengthUnit m_unit = MeasurementUnits::Feet;
     /** Some fixture is not the tour's: the list says whose each one is. */
     bool m_owners = false;
     /** Some fixture has a gel colour: the list shows each one's. */
