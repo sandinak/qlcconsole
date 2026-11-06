@@ -1173,18 +1173,22 @@ QString LookEditor::trialNote() const
  * The effect picker
  *********************************************************************/
 
-bool LookEditor::lookHasWledTarget() const
+EffectFit::Targets LookEditor::lookTargets() const
 {
+    EffectFit::Targets none;                // nothing known: list everything
     if (m_contextScene == nullptr)
-        return true;                        // nothing known: list everything
+        return none;
     QList<quint32> fids = m_contextScene->fixtures();
     foreach (quint32 gid, m_contextScene->fixtureGroups())
         if (FixtureGroup *g = m_doc->fixtureGroup(gid))
             fids << g->fixtureList();
-    foreach (quint32 fid, fids)
-        if (WledConfigCheck::isWled(m_doc->fixture(fid)))
-            return true;
-    return false;
+    return EffectFit::targetsOf(m_doc, fids);
+}
+
+bool LookEditor::lookHasWledTarget() const
+{
+    const EffectFit::Targets t = lookTargets();
+    return !t.known() || t.anyWled();
 }
 
 bool LookEditor::effectPickerOpen() const
@@ -1221,9 +1225,8 @@ void LookEditor::openEffectPicker()
             at.setX(me.left() + 20);
         m_effectPicker->move(at.x(), qMax(0, at.y()));
     }
-    // WLED effects that run only on a WLED device: offered when there's one.
-    m_effectBrowser->setWledTargets(lookHasWledTarget());
-    m_effectBrowser->reload();
+    // Only the effects that fit the look's fixtures (WLED's where there's a device).
+    m_effectBrowser->setTargets(lookTargets());
     m_effectPicker->show();
     m_effectPicker->raise();
     m_effectPicker->activateWindow();
@@ -4144,7 +4147,7 @@ void LookEditor::populateEffectPicker(QLCPalette *p)
 
     m_effectScriptCombo->setCurrentIndex(selectIdx);
     if (m_effectBrowser != nullptr)
-        m_effectBrowser->reload();
+        m_effectBrowser->setTargets(lookTargets());
 }
 
 QStringList LookEditor::wledEffectNames() const

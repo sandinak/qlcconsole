@@ -22,6 +22,7 @@
 #include <QColor>
 #include <functional>
 #include "qlcui_export.h"
+#include "effectfit.h"
 
 class QStackedWidget;
 class QColorDialog;
@@ -383,6 +384,8 @@ public:
     /** The look's targets include a WLED device (or there's no scene to
      *  tell: then true). */
     bool lookHasWledTarget() const;
+    /** The fixtures the look is worked on (none known: the picker lists every effect). */
+    EffectFit::Targets lookTargets() const;
 private:
     void updateEffectHeader();
     /** The grey "based on Fire · 2 changes" under the effect's name, with

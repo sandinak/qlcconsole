@@ -641,8 +641,7 @@ void EffectDesigner::setEffect(quint32 paletteId, const QList<quint32> &own)
     // Out with the old instance: this is another effect.
     m_lastSignature.clear();
     quietly([this]() { m_look->setPalette(m_draftId); });
-    m_browser->setWledTargets(m_look->lookHasWledTarget());
-    m_browser->reload();
+    m_browser->setTargets(m_look->lookTargets());
     refreshPreview(false);
     updateHeader();
     updateButtons();

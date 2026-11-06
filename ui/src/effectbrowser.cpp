@@ -23,6 +23,7 @@
 #include <QRadialGradient>
 #include <QTabBar>
 #include <QToolButton>
+#include <QLabel>
 #include <QHBoxLayout>
 #include <QTimer>
 #include <QtMath>
@@ -127,7 +128,9 @@ public:
 
         // Its name, and what it does.
         const bool selected = opt.state & QStyle::State_Selected;
-        const QColor text = selected ? opt.palette.highlightedText().color() : opt.palette.text().color();
+        QColor text = selected ? opt.palette.highlightedText().color() : opt.palette.text().color();
+        if (!e.fit.fits)
+            text.setAlpha(110);             // doesn't fit these fixtures (Show all)
         const int tx = strip.right() + 12;
         QFont bold = opt.font;
         bold.setBold(!e.isPreset);
@@ -366,6 +369,16 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
         origins->addWidget(b);
     }
     origins->addStretch(1);
+    m_showAll = new QToolButton(this);
+    m_showAll->setObjectName(QStringLiteral("effectShowAll"));
+    m_showAll->setText(tr("Show all effects"));
+    m_showAll->setToolTip(tr("The list holds the effects that fit this look's fixtures. "
+                             "Show the others too, greyed, with why they don't fit."));
+    m_showAll->setCheckable(true);
+    m_showAll->setAutoRaise(true);
+    m_showAll->setVisible(false);           // until there are fixtures to fit
+    connect(m_showAll, &QToolButton::toggled, this, [this]() { reload(); });
+    origins->addWidget(m_showAll);
     v->addLayout(origins);
 
     m_tabs = new QTabBar(this);
@@ -382,6 +395,12 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     m_list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_list->setMinimumHeight(220);
     v->addWidget(m_list, 1);
+
+    m_fitNote = new QLabel(this);
+    m_fitNote->setObjectName(QStringLiteral("effectFitNote"));
+    m_fitNote->setWordWrap(true);
+    m_fitNote->setVisible(false);
+    v->addWidget(m_fitNote);
 
     m_previewColours << QColor(255, 40, 40) << QColor(40, 80, 255) << QColor(255, 255, 255);
     m_clock.start();
@@ -417,10 +436,12 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
             if (e >= 0 && e < m_entries.size() && m_entries.at(e).comboIndex == m_source->currentIndex())
             {
                 m_list->setCurrentRow(i);
+                updateFitNote();
                 return;
             }
         }
         m_list->clearSelection();
+        updateFitNote();
     });
 
     reload();
@@ -499,17 +520,28 @@ void EffectBrowser::reload()
                     e.description = tr("Runs on WLED fixtures; others run its port");
             }
         }
-        /* A WLED effect with no port runs on a WLED device and nowhere else:
-           listed only when the look has one to run on ("not show the effects
-           that won't work if a wled instance isn't in the targets") -- or when
-           it is what the look already runs, so the list never loses it. */
-        if (kind == KindWled && e.scriptPath.isEmpty() && !m_wledTargets
-            && i != m_source->currentIndex())
-            continue;
         if (kind == KindScript && e.description.isEmpty() && cache != nullptr)
             e.description = cache->scriptMeta(name).description;
         if (kind == KindScript)
             lastScriptLabel = e.label;
+        if (m_targets.known())
+        {
+            // A preset or show effect runs through its generator, the script above.
+            EffectFit::Need need;
+            if (kind == KindWled)
+                need = EffectFit::wledNeed();
+            else if (cache != nullptr)
+            {
+                const QString gen = (kind == KindScript || kind == KindPreset || kind == KindShow)
+                                        ? e.scriptPath : QString();
+                const QString genName = kind == KindScript ? name : lastScriptLabel;
+                {
+                    const EffectScriptCache::ScriptMeta m = cache->scriptMeta(genName);
+                    need = EffectFit::scriptNeed(m.fixtureTypes, gen, m.wled);
+                }
+            }
+            e.fit = EffectFit::fit(need, m_targets);
+        }
         e.sortName = e.isPreset ? lastScriptLabel + QChar(1) + e.label : e.label;
         m_entries << e;
     }
@@ -523,7 +555,7 @@ void EffectBrowser::reload()
     {
         bool any = false;                   // a tab with nothing left to pick goes
         for (const Entry &e : m_entries)
-            any = any || e.category == c;
+            any = any || (e.category == c && listed(e));
         if (any)
             m_tabs->addTab(c);
         else
@@ -533,7 +565,7 @@ void EffectBrowser::reload()
     // Open on the tab of what the look has now; else where it was; else the first.
     int open = -1;
     for (const Entry &e : m_entries)
-        if (e.comboIndex == m_source->currentIndex())
+        if (e.comboIndex == m_source->currentIndex() && listed(e))
             open = categories.indexOf(e.category) + 1;
     if (open <= 0)
         open = qMax(0, tabNames().indexOf(was));
@@ -542,6 +574,33 @@ void EffectBrowser::reload()
     m_tabs->setCurrentIndex(open);
     m_filling = false;
     refill();
+}
+
+void EffectBrowser::setTargets(const EffectFit::Targets &targets)
+{
+    m_targets = targets;
+    m_showAll->setVisible(m_targets.known());
+    reload();
+}
+
+bool EffectBrowser::listed(const Entry &e) const
+{
+    return e.fit.fits || (m_showAll != nullptr && m_showAll->isChecked())
+           || e.comboIndex == m_source->currentIndex();
+}
+
+void EffectBrowser::updateFitNote()
+{
+    QString note;
+    if (m_targets.known())
+        for (const Entry &e : m_entries)
+            if (e.comboIndex == m_source->currentIndex())
+            {
+                note = e.fit.why;
+                break;
+            }
+    m_fitNote->setText(note);
+    m_fitNote->setVisible(!note.isEmpty());
 }
 
 void EffectBrowser::refill()
@@ -569,7 +628,7 @@ void EffectBrowser::refill()
         for (int i = 0; i < m_entries.size(); ++i)
         {
             const Entry &e = m_entries.at(i);
-            if (!originOk(e))
+            if (!originOk(e) || !listed(e))
                 continue;
             if (q.isEmpty() || e.label.contains(q, Qt::CaseInsensitive)
                 || e.description.contains(q, Qt::CaseInsensitive)
@@ -581,7 +640,7 @@ void EffectBrowser::refill()
     {
         foreach (const QString &key, recent())
             for (int i = 0; i < m_entries.size(); ++i)
-                if (m_entries.at(i).key() == key)
+                if (m_entries.at(i).key() == key && listed(m_entries.at(i)))
                 {
                     shown << i;
                     break;
@@ -590,7 +649,7 @@ void EffectBrowser::refill()
     else
     {
         for (int i = 0; i < m_entries.size(); ++i)
-            if (m_entries.at(i).category == tab)
+            if (m_entries.at(i).category == tab && listed(m_entries.at(i)))
                 shown << i;
     }
 
@@ -610,13 +669,17 @@ void EffectBrowser::refill()
         QListWidgetItem *item = new QListWidgetItem(e.label, m_list);
         item->setData(EntryRole, i);
         item->setData(PathRole, e.scriptPath);
-        item->setToolTip(e.diffTip.isEmpty() ? e.description
-                                             : e.description.isEmpty() ? e.diffTip
-                                                                       : e.description + QStringLiteral("\n\n") + e.diffTip);
+        QString tip = e.diffTip.isEmpty() ? e.description
+                                          : e.description.isEmpty() ? e.diffTip
+                                                                    : e.description + QStringLiteral("\n\n") + e.diffTip;
+        if (!e.fit.why.isEmpty())
+            tip = tip.isEmpty() ? e.fit.why : e.fit.why + QStringLiteral("\n\n") + tip;
+        item->setToolTip(tip);
         if (e.comboIndex == m_source->currentIndex())
             m_list->setCurrentItem(item);
     }
     m_filling = false;
+    updateFitNote();
     tickPreviews();
 }
 

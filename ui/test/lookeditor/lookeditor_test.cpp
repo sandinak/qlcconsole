@@ -1521,13 +1521,14 @@ void LookEditor_Test::wledOnlyEffectsNeedAWledTarget()
         return names;
     };
     QVERIFY(!browser->wledTargets());
-    // Only what runs here too: the ported ones.
-    const QStringList without = inWledTab();
-    QVERIFY2(!without.isEmpty(), "the ported WLED effects still run on the par");
-    // ...each one a port: an effect script that says it is WLED's.
-    EffectScriptCache *cache = doc.effectScriptRunner()->cache();
-    for (const QString &n : without)
-        QVERIFY2(!cache->scriptPathForWled(n).isEmpty(), qPrintable(n + " has no port"));
+    // None of WLED's own on a par: the tab is gone, and its ported generators
+    // too.
+    QVERIFY2(inWledTab().isEmpty(), "no WLED effects for a plain fixture");
+    QVERIFY(browser->tabNames().indexOf("WLED") < 0);
+    // Show all effects brings them back, greyed.
+    browser->showAllButton()->setChecked(true);
+    QVERIFY(browser->tabNames().indexOf("WLED") >= 0);
+    browser->showAllButton()->setChecked(false);
     ed.closeEffectPicker(true);
 
     // A WLED device among the targets: all of WLED's own.
@@ -1535,8 +1536,7 @@ void LookEditor_Test::wledOnlyEffectsNeedAWledTarget()
     ed.openEffectPicker();
     QVERIFY(browser->wledTargets());
     const QStringList with = inWledTab();
-    QVERIFY2(with.size() > without.size() + 10,
-             qPrintable(QString("%1 with a WLED target, %2 without").arg(with.size()).arg(without.size())));
+    QVERIFY2(with.size() > 10, qPrintable(QString("%1 with a WLED target").arg(with.size())));
     ed.closeEffectPicker(true);
 }
 
