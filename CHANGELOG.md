@@ -12,807 +12,442 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
-### Added
+## [0.4.1] - 2026-11-06
 
-- **Release and Untrack: two words for ending a tracked layer** (board
-  Q222), the same in menus, tooltips, the T and R columns, help, the
-  course glossary and the command line. **Release After This Cue**: the
-  layer plays in this cue, then lets go. **Untrack From This Cue** (on a
-  grey, carried-in row): the layer never reaches this cue -- the cue it is
-  carried from gets the Release. One undo step each; with several grey rows
-  selected they act on all of them; `untrack Towers` on the command line
-  beside `release Towers`. A grey row's **T** now says how long it has
-  tracked (**⤳ 3**, *Set in 1.1.1 Setup · tracking 3 cues · ends after
-  1.1.5* on hover), and its right-click **Go to 1.1.1** selects the cue
-  that set it.
+qlcconsole 0.4.1 is a stable release that hardens 0.4.0: the follow spot,
+the footer, aiming, the rig view and Show Review were fixed where they fell
+short in testing, every course show is now reviewed by the test suite, and
+a save that can't be written whole no longer costs you the show. The changes you will notice first:
+every length follows Settings ▸ Units, in feet and inches by default; the
+command line tells a typo from plain words and shows when it is asking AI
+Assist; the effect picker lists only effects that run on your fixtures, and
+an effect's rows in the Show Tree say what it runs on and where each
+setting comes from. New are Release and Untrack, Duplicate / Copy / Paste
+for cue lists and productions, notes beside the Show Tree, and a Steam Deck
+or gamepad remote. Like 0.4.0, it is built on QLC+ 4.14.4, and a .qxw saved
+here is still checked against QLC+ 4.14.4 itself.
 
-- **A hit has its own icon** (0.4.0): a yellow lightning bolt on every hit
-  row in the Show Tree and on the **Hits** rows over them, so a hit is told
-  from a layer (what it lights) and a cue (no picture) at a glance, in the
-  dark and light themes. A hit's right-click menu and undo steps say
-  Hit: **Copy Hit**, **Duplicate Hit**, **Rename Hit**, **Delete Hit**, "Undo
-  Delete hit".
+### New
 
-- **Duplicate, Copy and Paste for cue lists, productions and reusable cues**
-  (board Q215). They had only Rename and Delete; now the same Copy / Paste /
-  Duplicate (**⌘C ⌘V ⌘D**) as a cue: a deep copy (cues, sub-cues, layers,
-  tracking, blocking, notes), "Name (copy)", one undo step. A list pastes
-  into another production, a production at the top level, a reusable cue
-  into the Library. A copied list keeps using the same reusable layers and
-  cues (shared, not copied).
-- **The same edit keys in every list** (board WF1-A, W2-Q2). **⌫**,
-  **F2**, **⌘C / ⌘V**, **⌘D** and **⌘F** now do the same thing in the Show
-  Tree, Build's Palettes, Effects and Scenes, the Fixtures tab, Plot layers
-  and the plot, with no new menu items. New here: **⌫ on the plot** takes
-  the selection off it, every selected fixture back to the Inventory (still
-  in the show), a structure asking first, one ⌘Z for all of it; **⌘D in
-  the Fixtures tab** makes a new fixture like the selected one, unpatched in
-  the Inventory ("Front #2"), or a copy of a group (⌘C ⌘V the same); **⌘D
-  in Build** duplicates palettes, scenes and effects, and ⌘C ⌘V in Effects
-  copies the effect (it copied the selected scene); **F2 on the plot**
-  renames in Plot layers; **⌘F** on the plot or in Plot layers goes to its
-  search; **⌫ / ⌘D in Plot layers** act as on the plot. **Esc** still backs
-  out of the Workbench, the Look Editor or a plot assembly first; with
-  nothing to back out of, it now lets go of the selection, in every list
-  and on the plot. One table: [Edit keys](docs/features/shortcuts.md#edit-keys-the-same-in-every-list).
-- **⌘D is Duplicate, only Duplicate** (board Q214). It duplicates in every
-  list (Show Tree, Build, Library, Fixtures, the plot) and does nothing with
-  nothing to duplicate. **Control ▸ Dump DMX Values to a Function** moves to
-  **⌥⌘D** (Ctrl+Alt+D); the menu item stays. In Connections' Universes tab
-  **Delete Universe** moves to **⌫ / Delete** like every other list, and asks
-  first (**Undo Patch Change** brings it back); decided: a universe is not
-  duplicated, so ⌘D does nothing there (can change).
-
+- **Release and Untrack: two words for ending a tracked layer**, the same
+  in menus, tooltips, the T and R columns, help, the course glossary and
+  the command line. **Release After This Cue**: the layer plays in this
+  cue, then lets go. **Untrack From This Cue** (on a grey, carried-in
+  row): the layer never reaches this cue -- the cue it is carried from gets
+  the Release. One undo step each; with several grey rows selected they act
+  on all of them; `untrack Towers` on the command line beside `release
+  Towers`. A grey row's **T** now says how long it has tracked (**⤳ 3**,
+  *Set in 1.1.1 Setup · tracking 3 cues · ends after 1.1.5* on hover), and
+  its right-click **Go to 1.1.1 Setup** selects the cue that set it.
 - **Notes beside the Show Tree.** A notes pane under the cue page follows
   the selection (a cue, layer, list, production or Library palette) and
   lists its notes newest first, each dated, signed with Your name, and
   open until ticked done. **Snapshot the View** keeps the Rig Overview's
   camera, a small picture and the cue on stage with the note; **Show Me**
-  puts the camera back (and, in Design, the cue on the rig). Rows with
-  notes show **✎** (orange while open) and the newest note on hover.
-  **All notes…** lists the whole show's notes with open/done, item and
-  word filters, jumps to the item, and prints or exports them (PDF or
-  Markdown). A cue's existing note becomes its first entry, and Needs
-  work now means "has an open note". Every edit is one undo step; older
-  shows open with their cue notes as entries.
-
+  puts them back. Rows with notes show **✎** (orange while open).
+  **All notes…** lists the whole show's notes with filters, jumps to the
+  item, and prints or exports them (PDF or Markdown). A cue's existing note
+  becomes its first entry, and Needs work now means "has an open note".
+- **Duplicate, Copy and Paste for cue lists, productions and reusable
+  cues** (**⌘C ⌘V ⌘D**), as for a cue: a deep copy (cues, sub-cues, layers,
+  tracking, blocking, notes) named "Name (copy)", one undo step. A list
+  pastes into another production, a production at the top level, a
+  reusable cue into the Library. A copied list keeps using the same
+  reusable layers and cues (shared, not copied).
+- **An effect on a layer says what it runs on and where each setting comes
+  from** (Show Tree layer page). Under each effect's row: **Runs on** (the
+  groups, with *"2 of 4 fixtures (Pars have no pan/tilt)"* when some can't
+  run it), **Moves**, its **Colours**, each setting with its value and its
+  source (this cue's own, the effect palette's, the preset's, the script's
+  default, tracked from an earlier cue) and **Runs**. A setting's ⋯ sets it
+  here as this cue's own, one undo step. The cue page names the layers a
+  cue-level effect runs on.
+- **Steam Deck and gamepad remote.** A Steam Deck, phone or tablet works
+  the console over Wi-Fi in its browser, with nothing installed. A new
+  **focus remote** page (**/focus**) follows Focus mode or Venue focus on
+  the console (sticks pan and tilt, coarse and fine; tap a call or a light
+  to go to it and see it blink), and the **Run page** reads a game
+  controller (hold LB, then A for GO), lists Show Status warnings and fits
+  a 1280×800 screen held sideways. Both have a **controller test** panel and
+  follow the phone's GO rules (Allow remote GO, the PIN, the account's
+  level); a dropped Wi-Fi leaves no stick held. A Steam Deck's own
+  controller and Steam's virtual pad are read in the Xbox layout. See
+  [Steam Deck and gamepad remote](docs/features/gamepad-remote.md).
 - **Bring Into This Cue and Start Here Instead on a grey layer.**
   Right-click a carried-in layer (tree or Workbench): **Bring Into This
-  Cue** makes it this cue's own with exactly the values it carried, so every
-  cue plays as before and the cues after it track from here;
-  **Start Here Instead** moves its start from the cue that sets it to this
-  one -- that cue and those between no longer have it (the tooltip and a
-  confirm name them). Each is one undo step and is refused, with the
-  reason, where it could not keep the show the same (an include, the base
-  cue, a Cue-only cue, one effect shared with other layers). Editing a
-  grey row still brings it in as before.
-
+  Cue** makes it this cue's own with exactly the values it carried, so
+  every cue plays as before; **Start Here Instead** moves its start from
+  the cue that sets it to this one (the tooltip and a confirm name the cues
+  that lose it). Each is one undo step, and is refused, with the reason,
+  where it could not keep the show the same.
+- **Blocking: one look, wherever the people stand.** A cue's new
+  **Blocking** (its page in the Show Tree) picks a named set of stage
+  target places -- "Apron number" puts the front rank downstage -- and
+  tracks to the cues after it. Every look aimed at a target follows: Aim
+  looks, area cover, line spreads, the follow spot, the plan views, the rig
+  view, Blind and Focus. In the Lighting Studio a **Blocking ▾** button and
+  a banner say which blocking a drag moves, with a dashed ghost at the
+  Default place. A blocking is an offset from Default, so a venue's
+  corrections carry it. Show Review **BLK-01** says when a blocking puts a
+  target out of reach. Older shows open with Default only.
+- **Click "Unsaved changes" in the footer to see what changed** since the
+  last save, newest first, with every edit of one cue or palette joined
+  ("2 Chorus -- Colour, Dimmer (2 edits)"). A double-click goes to it;
+  **Save** and **Undo last** are in the dialog. Settings and programmer
+  values are counted as "Other changes", not itemised.
+- **A footer chip says what is on the stage**: `● LIVE · Act 1 · 1.2
+  Verse` while a cue list runs, *Stage: 1 Verse (Show Tree)* in Design
+  (with *· Act 1 running* when a list plays underneath, and *Show Tree
+  preview held* when GO takes the stage), `BLIND · stage holds 1.2 Verse`
+  in the Blind view, `Stage: no cue list`, and the holds (Blackout,
+  Teaching's output hold). Hover for the detail; click to jump to that cue.
+  It replaces the Show Tree toolbar's "On the rig" line and the long Blind
+  text.
+- **Several selected: the right-click acts on all of them.** In the Show
+  Tree the menu offers what acts on the whole selection and counts it
+  (**Copy 2 Layers**, **Duplicate 3 Cues**, **Move 2 Cues Down**, **Delete
+  3 Cues**); one-thing items such as Rename no longer quietly act on just
+  the clicked row. **Duplicate N Palettes**, the Library's functions, Plot
+  Layers' folders (**Lock N Folders**, **Dissolve N Folders**) and a
+  truss's Studio (**Remove N Fixtures from Truss**) do the same.
+- **A drop that does nothing says why.** Dragging onto the Show Tree or the
+  Workbench's rows, the drop hint says why while you hover and keeps the
+  reason after you let go (*"✕ Towers is already in layer Towers (⇧: a
+  child layer on part of it)"*). A grey value or layer that ⌫ can't clear
+  says it is carried in. On the plot, a fixture dragged in that is already
+  placed is selected and the footer says so; ⌘V with nothing copied says
+  so too. See [When a drop does nothing](docs/features/show-tree.md).
+- **Show Review warnings have three states, shown on the cue.** Open is
+  the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
+  who marked it, when, and the note); **Not a Problem…** (was Accept…)
+  hides it, and the group that lists those is now called Not a Problem too.
+  Hover a cue's mark, the footer Review chip or a Review row for the
+  detail; right-click it to change state or open the layer, without the
+  panel. The footer chip counts open warnings only. Who and when are saved
+  with the show.
+- **A light buried in a deck, or left on the floor beside its row on one.**
+  A fixture whose body sits inside a deck with a solid top is an error in
+  the footer ("UST-2 is inside Deck SR", Show Review **FIX-15**); a light on
+  the floor while most of its row stands on a deck is a warning (**FIX-16**:
+  "UST-2 is on the floor; UST-1, UST-3…UST-8 are on Deck USP1 (0.61 m)").
+  Both offer **Sit on Top** and **Show** and are ringed on the plot. Lights
+  clamped to a truss, pipe or tower, or a body that only touches, are not
+  flagged.
+- **A hit has its own icon**: a yellow lightning bolt on every hit row and
+  on the **Hits** rows over them, in the dark and light themes. Its menu
+  and undo steps say Hit (**Copy Hit**, **Duplicate Hit**, "Undo Delete
+  hit").
 - **Masking (tape) on any light, and a laser power class.** In Fixture
-  Properties (or right-click ▸ **Masking…**) cut the beam or scan window
-  off at the top, bottom, left and right, in degrees: "tape off the bottom
-  15°". The plot, Show Review (PWR-09/10/11/12) and area coverage all read
-  it. A laser can carry a class (1, 2, 3R, 3B, 4): class 1, 2 and 3R reaching
-  the audience is a note in PWR-09/10, 3B and 4 stay warnings. PWR-11 now
-  says how a laser's window crosses a no-light zone (such as the showband
-  between cyc and risers), at what height, and how much tape on the bottom
-  clears it, with **Apply This Cut** in Show Review; a zone behind the cyc is
-  reached only past the cyc's edge or over its top. The plot draws the part of
-  the window inside the zone in red.
-
-
-- **Band instruments as stage targets.** Beside Drum Kit, Edit Target's
-  **Subject** now has Keyboard (1.4 × 0.5 m, aimed at 1.1 m), Grand piano
-  (1.5 × 1.8 m, 1.1 m), Upright piano (1.5 × 0.6 m, 1.2 m), Equipment rack
-  (0.6 × 0.6 m, 1.2 m tall, 1.0 m) and Speaker on wheels (0.55 × 0.5 m, 0.8 m).
-  Each is drawn as itself on the plot (keybed and stand, the grand's case,
-  rack units, a cone with a facing tick) and as a solid shape at real size
-  in the Rig View; the size is editable and `]` / `[` turn them. Saved as new
-  kind names, so older builds read them as a plain mark.
-
+  Properties (or right-click ▸ **Masking…**) cut the beam or scan window off
+  at the top, bottom, left and right, in degrees. The plot, Show Review
+  (PWR-09 to PWR-12) and area coverage read it. A laser can carry a class
+  (1, 2, 3R, 3B, 4): 1, 2 and 3R reaching the audience is a note, 3B and 4
+  stay warnings. PWR-11 says how a laser's window crosses a no-light zone,
+  at what height and how much tape clears it, with **Apply This Cut**.
 - **Fountains: fire height, fixtures and a WLED set in them; wands.** A
-  fountain's silk flame now starts at the top of its inner wall and rises
-  by its **Fire height** (3 ft; set it in Add Fountain or the fountain's
-  editor, its base's). A fixture dragged or added inside a fountain is
-  mounted in it, on the base or on the inner wall's top, and moves and
-  turns with it; a par put there points up at the flame, and the flame
-  takes the colour of the lights on it. A pixel fixture (WLED) gets a
-  **Pixel path**: round the inner or outer wall's top, round the base, or
-  wound up the flame, its LEDs drawn in their live colours in the plot and
-  the rig view. **Wand**: the same LEDs wound round a 1.2 m staff, held by
-  a performer (it moves with them) or standing where placed. See
+  fountain's flame rises from its inner wall by its **Fire height** (3 ft).
+  A fixture added inside a fountain is mounted in it and moves with it; the
+  flame takes the colour of the lights on it. A pixel fixture (WLED) gets a
+  **Pixel path** round a wall, the base or up the flame, drawn in live
+  colours. A **Wand** winds the same LEDs round a 1.2 m staff, held by a
+  performer or standing. See
   [Fountains](docs/features/lighting-studio.md#fountains),
   [Pixel paths](docs/features/lighting-studio.md#pixel-paths) and
   [Wand](docs/features/lighting-studio.md#wand).
-- **Blocking: one look, wherever the people stand.** A cue's new
-  **Blocking** (its page in the Show Tree) picks a named set of stage
-  target places — "Apron number" puts the front rank downstage — and
-  tracks to the cues after it. Every look aimed at a target follows: the
-  Aim looks on stage, area cover, line spreads, the follow spot, the plan
-  views, the rig view, Blind and Focus. In the Lighting Studio a
-  **Blocking ▾** button and a banner (*Moving targets in: Apron number*)
-  say which blocking a drag moves, with a dashed ghost at the Default
-  place. A blocking is an offset from Default, so a venue's corrections
-  carry it. Show Review **BLK-01** says when a blocking puts a target out
-  of reach. Older shows open with Default only and play exactly as before.
-
-
-- **Gobos show in the rig view even when the definition has no pictures.**
-  A gobo channel that names its slots ("3 Spots", "Zebra", "Flower") but
-  has no usable picture -- none, a Res that is a bare folder (a definition
-  saved by another install), or a file that is not there -- now draws a
-  generated stand-in in the pool, matched by name, wobbling for a shake
-  slot and turning for a "Gobo Rotate Speed" range; "Open", "White" and
-  "No gobo" stay open. **Gobo Wheels…** lists those slots, suggests a
-  library picture by name and has **Fit Suggested Pictures**; Show Review
-  notes it as **FIX-17** once per definition, with Fix opening Gobo Wheels.
-  A definition's absolute path into another install's Gobos folder is now
-  found in this one's library when the same file is there.
-
-
-
-- **A drop that does nothing says why.** Dragging onto the Show Tree (the
-  tree, the cue page, the layer page) or the Workbench's rows used to show
-  only a no-drop cursor where a drop can't go, and a drop that changed
-  nothing (a group onto a layer that already has it) quietly did nothing.
-  The drop hint now says why while you hover and keeps the reason after you
-  let go: *"✕ Towers is already in layer Towers (⇧: a child layer on part
-  of it)"*, *"✕ A function goes on the cue, not on a layer"*. A grey value
-  or grey layer that ⌫ can't clear in the Workbench says it is carried in
-  from an earlier cue. On the plot, a fixture dragged in that is already
-  placed is selected and the footer says so; ⌘V with nothing copied says
-  so too. See [When a drop does nothing](docs/features/show-tree.md).
-- **Several selected: the right-click acts on all of them.** With several
-  cues or layers selected in the Show Tree, the menu offers what acts on
-  all of them and says how many (**Copy 2 Layers**, **Duplicate 3 Cues**,
-  **Move 2 Cues Down** as a block, **Delete 3 Cues**); one-thing items such
-  as Rename or Record as New Cue no longer quietly act on just the clicked
-  row. **Duplicate N Palettes** with several palettes selected (one undo
-  step, everywhere the palette menu appears). The Library's functions,
-  Plot Layers' folders (**Lock N Folders**, **Dissolve N Folders**) and a
-  truss's Studio (**Remove N Fixtures from Truss**) act on the whole
-  selection too.
-- **⌘F in Build and the Fixtures tab** goes to their search, as it does to
-  the Library filter in the Show Tree.
-- **Failures you used not to see.** A save that can't be written whole (a
-  full disk, a volume that went away) no longer replaces the show with a
-  cut-short file: the copy on disk stays as it was, and the error names the
-  file and what to do. An autosave that fails turns the status chip to
-  **⚠ Autosave failed** (hover says why) instead of leaving an old
-  "Autosaved" time up. The phone's Run page says *Hits fire in Operate* when
-  a hit is tapped in Design. The Look Editor warns when a Pan/Tilt, Aim or
-  Zoom look sits on lights that can't move or zoom (*No target fixture can
-  pan or tilt*), as it already did for gobos.
-- **The plot's footer stays readable on a laptop-size window.** When a
-  notice or a longer reading made the Lighting Studio's footer wider than
-  the window, its scroll bar came in without the bar growing, and the whole
-  footer (Grid, Snap, Overlay, View and the notice) was squashed to a
-  sliver under the scroll bar. It now grows to hold the scroll bar (any
-  bar that scrolls sideways does).
-- **Show Review's Fix ▸ says when it can't go there.** A finding whose
-  cue, layer or fixture has since changed or gone used to do nothing on Fix
-  ▸ or a double-click; the summary line now says so and to Re-check.
-- **Three states for a Show Review warning, visible on the cue.** Open is
-  the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
-  who marked it, when, and the note); **Not a Problem…** (was Accept…)
-  hides it and lists it in Show Review under Accepted. Right-click the cue
-  mark, a Review row or the footer chip to move between them (Not Meant,
-  Reopen). The Review panel has a **Meant** group; the footer chip counts
-  open warnings only and its tooltip adds "2 open · 1 meant · 3 not a
-  problem". Who and when are saved with the show; older shows open as
-  before.
-
-- **See the follow spot at work.** The Followspot effect's editor has a
-  light and a line (*Following ES-Witch · moving / holding*, or *which
-  doesn't move -- bind a stick*); the rig view rings the subject with a
-  line from each head; the Show Tree says **follow** under Flags on the
-  cue and its layer, green while it follows.
-
-- **Click "Unsaved changes" in the footer to see what changed.** It opens
-  a list of the changes since the last save, newest first: when, what sort
-  of thing (cue, layer, look, target, fixture, settings) and what was done,
-  with every edit of one cue or palette joined ("2 Chorus -- Colour, Dimmer
-  (2 edits)"). A double-click goes to it (Show Tree, Library, Fixtures);
-  **Save** and **Undo last** are in the dialog; hovering the footer says
-  how many. The list is the undo history's own steps taken since the save,
-  plus fixtures added, patched or removed; other edits (settings,
-  programmer values) are counted as "Other changes", not itemised.
-
-- **A light buried in a deck, riser or step is an error in the footer.**
-  A fixture whose body (its Physical Dimensions box, as the rig view draws
-  it) sits inside a deck with a solid top -- a floor light left at height 0
-  inside the riser the others stand on -- now shows "UST-2 is inside Deck
-  SR" as an error in the footer, with **Sit on Top** (stand it on the deck,
-  following it from then on) and **Show**; it is ringed red with a "!" on
-  the plot, and Show Review lists it as **FIX-15**. Lights clamped to a
-  truss, pipe, tower or hanger, standing on that deck, or in a Clear/Open
-  topped step are not flagged, nor is a body that only touches or sinks
-  under 3 cm. It re-reads a moment after any edit.
-
-- **A light left on the floor while its row is on a deck is a warning
-  (FIX-16).** In a row of lights the others stand on a deck -- UST-1 and
-  UST-3 to UST-8 at 0.61 m -- and UST-2 was left on the floor beside it
-  (touching the edge, so FIX-15 had nothing to say). Show Review and the
-  footer now say "UST-2 is on the floor; UST-1, UST-3…UST-8 are on Deck
-  USP1 (0.61 m)", with **Sit on Top** (the same deck mount as FIX-15) and
-  **Show**; the light gets an amber ring and triangle on the plot. A row is
-  the same fixture type in a group, a name series ("UST-1…8") or a line (Y
-  within 0.3 m); it fires when more than half (two at least) are on a deck
-  and the light is within a body length of one. A warning, since a floor
-  light by a riser can be deliberate: Accept with a note works as usual.
-
-- **Steam Deck and gamepad remote.** A Steam Deck, phone or tablet works
-  the console over Wi-Fi in its browser, with nothing installed: a new
-  **focus remote** page (**/focus**) follows the Focus mode or Venue
-  focus running on the console (sticks pan and tilt, coarse and fine; the
-  buttons do what the console's controller scheme says; tap a call or a
-  light to go to it and see it blink), and the **Run page** reads a game
-  controller (hold LB, then A for GO, as the pad's Run role), lists Show
-  Status warnings and is laid out for a 1280×800 screen held sideways.
-  Both have a **controller test** panel. Same rules as the phone's GO:
-  Allow remote GO, the PIN, the account's level. Moves go as deltas, so a
-  dropped Wi-Fi leaves no stick held. A Steam Deck's own controller and
-  Steam's virtual pad (Valve 28DE:1205 / 28DE:11FF) are read in the Xbox
-  layout. See [Steam Deck and gamepad remote](docs/features/gamepad-remote.md).
+- **Band instruments as stage targets.** Edit Target's **Subject** adds
+  Keyboard, Grand piano, Upright piano, Equipment rack and Speaker on
+  wheels beside Drum Kit, each at real size with its aim height, drawn as
+  itself on the plot and in the Rig View; `]` / `[` turn them. Older builds
+  read them as a plain mark.
+- **Gobos show in the rig view when the definition has no pictures.** A gobo
+  slot with a name ("3 Spots", "Zebra") but no usable picture draws a
+  stand-in matched by name, shaking or turning where the slot says. **Gobo
+  Wheels…** suggests a library picture and has **Fit Suggested Pictures**;
+  Show Review notes it as **FIX-17**. A definition pointing into another
+  install's Gobos folder finds the same file in this one.
+- **Settings ▸ Performance checks this computer for steady 50 Hz DMX.** Per
+  system (Linux and Raspberry Pi, macOS, Windows) it lists what helps the
+  DMX timer -- real-time scheduling, CPU governor, Wi-Fi power saving, Low
+  Power Mode, the power plan -- with its status and the command or steps;
+  the app never runs anything that needs an administrator. In Operate the
+  app runs at full speed (macOS: no App Nap or idle sleep; Windows: no
+  EcoQoS throttling or idle sleep), and the footer says when something
+  important is off. On Linux the timer takes real-time priority within a
+  smaller rtprio limit instead of being refused.
 
 ### Changed
-- Footer: the right side is one line. Selection, mode, stage chip, Follow chip and the autosave label share a vertical centre, height and 6 px padding; the stage chip no longer draws a frame (only its coloured states have a fill).
-
-- **Buttons read in Title Case, like the menus** (board W2-Q3): "Focus This
-  Cue…", "Remove Selected", "Add Source", "Snapshot the View". About 100
-  button texts changed; the help and the course quote the new words.
-  `menuwords_test` now checks every button text given in code the way it
-  checks the menus (the stock QLC+ `.ui` dialogs are untouched upstream
-  files and keep their words).
-- **Show Review says "Not a Problem" everywhere** (board W2-Q4). The group
-  that held the findings you marked, its filter and the summary were
-  "Accepted"; they now use the action's word.
-- **The Show Tree opens with its cue names showing.** With fresh settings
-  the tree pane got about 185 px at 1280 wide, so every cue read "0.0.2 …".
-  The Library | tree | page split now starts at 17 : 42 : 41 (a cue's number
-  and name show at 1280x800 and 1024x640, the page keeps about 480 px or more).
-  Panes you have already moved keep their sizes.
-
-- **Area cover settles ties by coverage.** When several ways of sharing an
-  Area's zones out fit where the lights hang equally well (the two arms of
-  a beam bar, washes mirrored on two towers), the one that lights the most
-  of the area at head height and on the deck now wins, the same on every
-  platform. On a chorus on risers with eight two-arm beams and six tower
-  washes the area goes from 58% to 75% lit. Changes the DMX of some
-  existing area aims. No file change.
-
-- **Area cover counts the deck as well as head height** (board Q213). A
-  spot of an Area now counts as lit only if it is lit at head height **and**
-  on the deck, riser or step top under it. Before, only head height was
-  measured, so 50° tower washes read 100% while the deck corners stayed
-  dark. The plan hatches "deck dark" (red) and "heads dark" (violet)
-  differently, with a legend, and the caption says which: "Covers 82% of
-  Chorus · deck dark upstage left · heads dark downstage centre". MOV-13
-  uses the combined figure and names which is missing. Aim points are
-  unchanged. No file change.
-
-
-- **Every menu says its items the same way.** About 170 menu items that
-  were still in sentence case (the Connections tree, the plot's Show and
-  Lock menus, Focus and Venue menus, the Workbench's + Scene / + Effect,
-  Build's + New, the show timeline, the power widget…) are now Title Case
-  with "…" where a dialog follows, like the rest. The Connections menus put
-  Collapse / Expand All Below and Add Universe on top and Delete last, and
-  say Delete for what destroys ("Delete Universe…", "Delete Target…",
-  "Delete Port"; "Forget this patch" is **Unpatch…**). The Workbench's
-  **+ Effect** menu starts with **Effect Palette…** (was "Effect look…"), as
-  Build ▸ Effects' **+ New** does. A new test reads every menu label in the
-  UI's sources and fails on one off the canon.
-- **⌫ deletes in the Fixtures tab too.** ⌫ / Delete on the fixtures list
-  deletes the selected fixtures or groups, asking first, as it does in the
-  Show Tree, Build and the Library (it did nothing there).
-- **Lengths in feet where the show is in feet.** The plot's group frame
-  editor (origin, cell pitch, a member's position), the patch plan's cable
-  distance, the line-of-sight tooltip and Focus mode's step now follow
-  Settings ▸ Units (5' 6" or 1.68 m); they showed metres only.
-
-- **A definition that says 0 for its lens or pan/tilt range no longer
-  draws nothing.** Many cheap or user-made definitions (the Fixture Editor's
-  defaults) have a beam angle of 0 and/or a Pan/Tilt range of 0, so the
-  rig view drew no beam and aiming guessed. Now the rig view, the plot and
-  every aim use a default by type, and say so ("15° (assumed: the
-  definition says 0)" in the Fixture Manager's details and the plot
-  tooltip): beam angle 15° for a moving head or scanner, 25° colour
-  changer / par / wash, 6° effect, 40° LED bar, 20° otherwise (none for a
-  hazer, fan or laser); pan 540° and tilt 270° for a moving head with pan/tilt
-  channels (360° / 270° for other movers). A definition that declares them is
-  unchanged. **Old shows:** a light on such a definition now draws a beam,
-  and its aim DMX changes where its pan range was 0 (it was solved over 360°,
-  now 540° for a moving head). Re-aim, or set the real figures on the
-  definition. New Show Review note **FIX-18** names each such definition once
-  and opens it in the Fixture Editor (Edit Definition…).
-
-- **One selection rule in the Lighting Studio.** A click on the plot
-  selects exactly what you click: one performer out of a group, one line
-  of a choir (its pair of people with it), one scenery piece of a fountain.
-  It used to take the whole group, so one person could not be grabbed on
-  their own. **Right-click ▸ Select All Similar** now works on everything
-  on the plot (people: every person, or the lines of a set; trusses of a
-  type; scenery of a kind), and **Select Group** on a member, or the group's
-  row in Plot layers, selects the group to drag as one. Groups themselves
-  are unchanged; a truss or riser still brings its own bars and fixtures.
-  A **built assembly** (Add Fountain's base, walls and flame; a stamped
-  component) is one thing: a click on any part takes it all, a double-click
-  goes in for one part, Esc comes out. A **right-click inside a selection
-  acts on all of it** (Lock N Items, Move to Layer, Duplicate, Delete N
-  Items…), one undo step each. Targets **duplicate** (right-click, Cmd/Ctrl+D)
-  and copy-paste whole: kind, colour, size, heights, a line's points,
-  numbered on ("Soloist 2").
-  See [Selecting and undo on the plot](docs/features/lighting-studio.md#selecting-and-undo-on-the-plot).
-
-- **An Aim at an Area covers the area** (board Q209). Every light aimed at
-  a sized Area used to point at its centre, at the area's own height, and
-  the corners stayed dark. Now the area is split into one zone per light
-  (each arm of a two-arm beam its own) by where they hang -- low and
-  downstage lights take the front ranks, high and upstage ones the back
-  ranks, stage right lights the stage right zones, no beams crossed on a
-  regular rig -- and each light aims at subject height (1.4 m, or the
-  area's aim height) above the deck, riser or step under its zone. The
-  Show Tree layer's Position row draws the area, the zones, each beam's
-  footprint and the gaps hatched, with "Covers 86% of Chorus · gap upstage
-  left"; Show Review notes a cue leaving more than a tenth of an area dark
-  (**MOV-13**). **Existing shows:** area aims now spread over their area,
-  so their pan and tilt change; an Area with no size still aims at its
-  point. No file change.
-
-- **Aim lines have arrowheads.** The line from each light to where its beam
-  lands (the order strip's connectors, the plan view in the Look Editor,
-  the Formation editor and the stored-position plan) now ends in a small
-  arrowhead at the landing dot, or at the ring for a beam that leaves the
-  stage, so source and destination read at a glance.
-
-- **A footer chip says what lights the stage.** `● LIVE · Act 1 · 1.2 Verse`
-  while a cue list runs for real, `BLIND · stage holds 1.2 Verse` (white on
-  the blue footer) in the Blind view so it is clear your edits are not
-  reaching the lights, `Stage: Build look`, `Stage: no cue list`, and the
-  holds (Blackout, Teaching's output hold). Hover for the detail; click for
-  the Run tab or the Show Tree. It replaces the long Blind text that
-  overlapped the OPERATE chip at the smallest window, and follows the
-  engine's signals, never a per-frame poll.
-
-### Tooling
-
-- **Sanitizer builds link and run clean.** The I/O plugin stub tests link
-  the stub (UBSan's vptr check needs its typeinfo, no more
-  `-fno-sanitize=vptr`); the hot-path test replaces the whole `operator
-  new`/`delete` family, so ASan no longer reports an alloc-dealloc mismatch
-  from `std::stable_sort`'s buffer; the web remote's focus test waits for an
-  in-order marker instead of racing a late ack.
-
-- **`make dmg` is much faster.** It builds only what ships (no test
-  programs), through ccache, in a build dir that lasts between runs;
-  `make dmg ARCH=native` makes an arm64-only DMG (named `-arm64-native-`,
-  never published) for our own Macs. ender's ccache moves to
-  `/Volumes/Ext/ccache` (100 GB) while that drive is mounted, internal 20 GB
-  otherwise; `make test` now uses ccache too.
-
-### Fixed
-
-- **Layout: nothing squeezed at the minimum size.** The Workbench, a
-  scene's group looks, Show Settings, Create Groups, Head Types and the LED
-  layout editor now report the height their word-wrapped text needs at the
-  narrowest width, so at their smallest the header title, the timing row,
-  the Teaching fields, the group preview and the LED map are no longer cut
-  off or laid over each other. The layout sanity test has no known issues
-  left.
-- **Test isolation and three timing flakes**: the Monitor component test saved into the
-  operator's real StudioComponents library (it now runs on a home of its own); the
-  Show Tree Workbench look-row drag test pressed before the rows' 120 ms rebuild had
-  landed (7 of 52 runs failed under load, 0 of 52 now); SpeedMasters' Go-on-beat test
-  measured the host's stalls instead of the quantize; the Course Show tests read the
-  output through the universe's frame lock (a raw read could catch the engine's
-  zero-then-write inside one frame); a qlcstress run that outlives its
-  budget now writes every thread's stack (`<point>.hang-stacks.txt`) before it is killed.
-
-- **Compiler warnings outside the -Werror set cleared** (clang -Wall -Wextra
-  over engine, ui and the tests): `virtual` dropped from methods of our
-  `final` classes that nothing can override (FadeChannel,
-  InputOutputMap::claimUniverses/releaseUniverses, QLCPhysical,
-  QLCFixtureHead, QLCFixtureMode, VCWidgetProperties, ctkRangeSlider), four
-  missing `override`s and eleven unused lambda captures. No behaviour change.
-- **The ARM char-signedness test runs** — the XY pad's position-to-DMX check
-  in vcxypad_test was commented out; it is a real test now, comparing as
-  uchar so it holds on the Pi (unsigned char) and on x86/Apple (signed).
-- **Six button texts in Title Case**, found by a wider menuwords test that
-  now reads every variable declared as a push or tool button, not only
-  those named ...Btn/...Button: Section Times…, Learn Section Starts, Move
-  the Show's House Fixtures In, Turn Encoder 1…, All Notes…, Start Venue
-  Focus (Cue Runner).
-- **A grey row's Go to names the cue** — right-click a carried-in layer:
-  **Go to 1.1.1 Setup**, the same words as the T column's *Set in 1.1.1
-  Setup*, not just the number.
-- **The course shows' cyc lights are cyc lights** (Show Review PWR-12): the
-  four SR/SL Truss Cyc boxes in every course show now carry the Cyc / strip
-  light stage look, so their light on the cyc no longer reads as backwash
-  nobody meant (a PWR-12 warning per cue in every course show from lesson
-  1.1's finish on).
-  `derive-classroom-rig.py` sets it too.
-- **Every course show and the sample are reviewed in the gate**
-  (`showreviewshows_test`): Show Review runs over each, with a table of the
-  checks expected open on each (lesson 3.9's start stays broken on purpose),
-  so a check or a show that drifts fails the gate. `qlcconsole --review`
-  has a hermetic mode for it (the repo's own fixtures, scripts and effects,
-  none of the user's).
-- **The effect picker knows which fixtures you are working with** -- it
-  listed WLED's effects, position effects and the rest for any fixtures.
-  Now, once a look has fixtures or groups, the picker (in the look editor
-  and the effect designer) lists only effects that run on them: WLED's
-  where there is a WLED device (its device effects and the script
-  ports of them, "WLED Aurora" and the rest), position for pan/tilt heads, gobo for a
-  gobo wheel, zoom/iris for fixtures that have them, matrix for a grid of
-  heads, colour for colour mixing, a dimmer-only target gets the intensity
-  effects. A mixed set shows what runs on some ("Runs on 6 of 10
-  fixtures"). **Show All Effects** lists the rest greyed with the reason; the
-  effect a look already runs always stays listed.
-- **CI tests on Windows and macOS**: the follow-spot test copies the HID
-  plugin into its plugin folder instead of linking it (a Windows link is a
-  .lnk the loader ignores), and the generic DMX source mid-tick test counts
-  rounds instead of a 4 s window, so a slow runner runs the same work.
-- **An Aim look that dims blocked lights no longer allocates on every
-  tick** — the line-of-sight check behind "Dim lights that can't see the
-  target" built its member lists, each head's mounts and the stage's list
-  of drapes and platforms afresh 50 times a second (20 allocations a tick
-  on a ten-light rig, more with drapes and decks). It now reuses them: 0 a
-  tick, the same heads dimmed, the same DMX out.
-
-- **Course handouts link to the lessons they mean.** Lesson 3.5 and 3.8 handouts pointed at lesson pages that do not exist from where a handout is built (0.5, 0.7, 2.1, 3.7); the course site link check is clean again.
-- **An effect on a layer says what it runs on and what each setting is**
-  (Show Tree layer page): under each effect's row, as a line aim's Spread /
-  Grouping sit under Position -- **Runs on** (the groups, with *"2 of 4
-  fixtures (Pars have no pan/tilt)"* when some can't run it), **Moves**,
-  its **Colours**, each setting with its value and where it comes from
-  (this cue's own, the effect palette's, the preset's, the script's
-  default, tracked from an earlier cue) and **Runs**. A setting's ⋯ sets it
-  here as this cue's own (a one-off copy of a shared or carried-in effect),
-  one undo step. The cue page names the layers a cue-level effect runs on.
-- **The command line tells a typo from plain words** — a line that isn't a
-  command is read first: the command line's words and the show's names
-  with a slip (`towrs colour blu`, `relase Towers`, `dimer 50`, `go 1.2.3`)
-  get *Did you mean …?* and ask no one; a line that reads as language
-  (*make the towers blue for the chorus*, *why is FOH 3 on*) goes to AI
-  Assist without a `?`, also when it starts as a command and goes on in
-  words. Before, any line the spell-check could bend into something was
-  "corrected" instead of asked, and a half-parsed line never reached AI
-  Assist. In Operate plain words now say *AI Assist takes plain words in
-  Design mode only* instead of failing silently.
-- **Build's command bar takes plain words too** — the same typo fix and AI
-  Assist fallback as the Show Tree's line; what the assistant proposes runs
-  as lines of the bar, onto the loaded scene.
-- **The command line shows when AI Assist is working** — a spinner turns in
-  the line and *Asking AI Assist… Esc cancels* (with the seconds after two)
-  shows beside it until the answer, an error, the time limit or Esc; a
-  click on the spinner cancels. The line stays usable meanwhile, a newer
-  line replaces the question in flight, and only the line that asked shows
-  the answer.
 
 - **Every length follows Settings ▸ Units; feet and inches by default.**
   Feet and inches read like a tape measure, to the nearest 1/8" (`3' 11
-  1/4"`, `7' 10 1/2"`), and any field takes fractions or decimals
-  (`11-1/4"`, `3/8"`, `11.25"`). Set Mounting Height… asks in your unit
-  and takes `12' 6"` or `3.8 m`;
-  every rig label, editor field, readout, report, CSV column, Show Review
-  line and focus-mode call does the same, never the grid's unit (inches
-  showed as decimal feet, mm and cm as metres). A gate test (`units_test`)
-  fails on a unit written into a string, a bare-number length dialog, or
-  the grid unit used for a display.
-- **The follow spot's stick is the controller you have patched** — a
-  DualShock 4, DualSense or Xbox pad patched as an input in Connections
-  (or by a controller slot) now moves the follow spot from the Show Tree,
-  Run and Operate, and the footer names it: **◎ Follow: AT-Spots ←
-  ES-Witch · DUALSHOCK 4 · stick moving**. The stick was only ever looked
-  for when the Build tab was shown, so a show opened and run from the Show
-  Tree or Run -- or a pad that connected after Build was shown -- said
-  *no stick* and nothing moved; the earlier fixes' tests bound the stick
-  by hand and never went through the controller. Now it is found when the
-  show opens and whenever a controller comes, goes or is patched, on any
-  tab, and a pad switched off says *no stick* again.
-
-- **In Design, the cue you are on is all the rig shows** — also with a cue
-  list running for real. The preview used to play over the run, winning
-  only the channels it set, so an edit that took light away from the
-  selected cue (Release, a Block cue, a layer taken out) seemed not to
-  reach the rig, an empty hit showed the last cue's look, and Solo didn't
-  go dark. Now the run keeps going, unseen, while the preview or a Solo
-  has the stage (its effects too), and comes back as it plays then when
-  the preview stops or on the next GO. A selected hit plays alone, like a
-  cue (an empty one: a dark rig). In Operate's Blind view, a tree edit
-  redraws the cue in edit at once instead of at the next poll.
-
-- **The follow spot in a cue follows the stick, wherever you run it
-  from.** Selecting 1.1.2 in the Show Tree, GO in Run, GO in Operate:
-  the AT-Spots now follow ES-Witch as the stick moves her. Any scene open
-  in the Workbench used to keep the stick to itself -- and one nearly
-  always is (the last thing opened in Build) -- so a cue's follow spot
-  never moved, and every indicator said "off". Now only a follow spot open
-  in the Workbench takes the stick from the cue's. The subject also keeps
-  its height while it moves (on a riser it stayed on the floor before,
-  and the beams dipped).
-- **Selecting a cue shows its effects every time.** In the Show Tree the
-  first cue selected breathed and the next ones held still (DanceHysteria's
-  Ahhs sub-cues, one Breathe over them): while any effect kept playing --
-  the lanterns' flicker -- a newly selected cue's look was laid over the
-  effects instead of under them. Effects now always sit on top of the cue
-  they play in, whichever cue you pick, in any order, again and back.
-- **See the follow spot from any tab.** A footer chip, **◎ Follow:
-  AT-Spots ← ES-Witch · stick moving** (green moving, amber holding, red
-  with no stick), shows while a follow spot is on -- in the Show Tree, the
-  Run tab and Operate alike; the rig view's ring and lines and the Show
-  Tree's **follow** flag light for a cue's follow spot too now.
-
-- **⌘D on a Show Tree cue duplicates again** (W1-27). In the full app the
-  Show Tree's ⌘D and Control ▸ Dump DMX's Ctrl+D were the same key, so
-  neither fired: a selected cue was not duplicated and no dump opened.
-  Now the tree takes ⌘D while it has the focus and a selection; everywhere
-  else ⌘D is still Dump DMX.
-
-- **The footer's chips no longer run into each other** at the window's
-  smallest width (board W1-30). When they do not all fit, the least
-  important give up their room first (Load, Next, the counters, then the
-  venue and Review) and come back when the window grows; the stage chip,
-  Unsaved, Design/Operate, readiness and the Grand Master stay.
-
-- **A resize keeps the plot's selection.** Resizing the Lighting Studio
-  (or its footer gaining a scroll bar) dropped selected decks, scenery,
-  trusses and other structures and kept only the fixtures, so a selected
-  fountain then turned without its base and walls. They stay selected.
-
-
-- **Dropping several targets at once is safe when the plot redraws.** A
-  drop (in Default or a blocking) that set off a redraw of the 2D plot --
-  a resize, a blocking change, anything listening for the move -- went on
-  reading the targets' freed items: the second target of a pair kept its
-  old place, and a crash was possible. The drop now reads every target's
-  new place first and writes by target; the mouse release keeps the items
-  it dispatches to under guard.
-- **A target added in the Lighting Studio shows up everywhere at once.**
-  A new point, person or line target did not appear in the Show Tree's
-  Library (All > Targets), the Look Editor's **Aim at:** list or the
-  formation editor's line picker until the show was reloaded. The Studio
-  now tells every list once the target is named and placed, and each list
-  follows adds, renames and deletes (a drag does not rebuild anything).
-
-- **Leaving Blind puts the footer back.** The status bar's blue is now
-  derived from the state on every change (Blind, the mute, Design/Operate),
-  and the bar and everything on it are re-polished when it goes, so no blue
-  or white-on-blue is left behind. Tested through every way in and out.
-- **The footer's stage chip names what is really on the rig.** In Design, the
-  cue selected in the Show Tree shows as *"Stage: 1 Verse (Show Tree)"*, with
-  *"· Act 1 running"* when a list plays underneath, instead of the last cue
-  the Run tab played. Click the chip to jump to that cue. This replaces the
-  Show Tree toolbar's "On the rig" line, which is gone: the footer is the one
-  place that says what is on stage. When GO takes the stage from a cue
-  selected in the Show Tree, the chip adds *Show Tree preview held*; its hover
-  says how to bring the preview back (Play).
-
-
-- **A follow spot in a cue moves with the stick.** The stick only ever
-  drove the scene open in the Workbench, so a follow spot in a running
-  Show Tree cue (1.1.2's on the AT-Spots) held its subject and never
-  moved. It now moves the running cue's follow spot when nothing is open
-  there. Across cues nothing jumps: a follow spot tracked into the next
-  cue carries on where it is; with Persist across restarts on its look,
-  its subject stays where it was driven after the cue; otherwise it
-  glides back over the cue's fade.
-- **Lengths in your units.** The follow spot's Person Height and Size On
-  Subject showed raw centimetres; they show and take the unit Settings →
-  Units picks (5' 7"). The target editor's metre fields take a length
-  typed in feet or inches (5' 6", 66 in) too.
-
-- **People on a performer line follow it when you edit it.** Shrinking a
-  line by its end handle (or bending it, moving it, undoing the edit) left the
-  people drawn spread over the old line; they are now laid again along the
-  line as it is, by the same fractions, in the same step as the edit.
-
-- **The big amber dashed shapes upstage of the cyc on the 2D plot.** They
-  were a fixed laser's scan window drawn onto the floor behind the cyc
-  (where the beam would land if the cyc weren't there). A window now stops
-  at the cyc, drape or flat in its way (the same rule as the rig view and
-  Show Review): the pool is drawn as a heavy amber span along the cyc, and
-  any part that does reach the floor is clipped to the plot's floor.
-
-- **A fountain's flame moves, turns and unlocks with the fountain.** The
-  flame was put on the default layer while the rest of the fountain went on
-  the layer you chose, so that layer's lock showed it locked where the
-  fountain wasn't, and unlocking the fountain didn't free it; and a fixture
-  standing on a deck that was dragged with it stayed drawn where the deck
-  had been. Shows from before are repaired on load: what stands on a
-  fountain's base joins its group, on its layer.
-
-
-- **Closing a scene editor while a show runs can no longer crash.** Its
-  live output left the 50 Hz timer only after clearing what the timer
-  was still reading (stock QLC+ does the same); it now leaves first.
-- **The rig view runs smoothly again on a busy show.** A frame budget
-  held the 3D/rig view to 40% of one core whatever the computer, so on
-  Dance Hysteria (210 fixtures) a playing cue drew a frame every quarter
-  second, and after each GO, with every beam landing again, one a second
-  for several seconds. The view now uses a share of the performance
-  cores (all but two), comes back to speed within a few frames after a
-  GO, and no longer asks every piece of scenery about every ray of every
-  beam. That walk was most of a frame while a curtain or the heads
-  moved: 450 ms of processor a frame, now about 25. The cursor readout
-  no longer re-draws the whole rig on the CPU over a GPU frame. In
-  **Operate** the show comes first: the view keeps to part of one core
-  and 15 frames a second, and its drawing threads run below the DMX. The
-  picture is the same, pixel for pixel. The **GPU** box now says what is
-  drawing (**GPU · Metal** or **CPU**).
-- **The rig view holds still under the mouse.** Hovering over the 3D/rig
-  view while a show ran made the rig shimmer back and forth by a hair:
-  the crosshair's frames were drawn at full quality between the running
-  show's lighter frames, and the two draw every edge a little apart. A
-  pointer frame now keeps the quality of the frame before it. On the 2D
-  plot the position readout is a fixed width, so its footer's scroll bar
-  no longer comes and goes with the reading and moves the plot.
-
-- **The cyc check sees the curtain.** Show Review PWR-12 (light on the cyc
-  nobody meant) no longer names light that lands on a closed main drape or
-  traveler in front of the cyc. A curtain moved by a fixture stands where
-  each cue leaves it (a "Curtain Open" scene the cue plays opens it, part
-  open is part open); one no cue moves is read at its set state. On a real
-  show the preshow's announcer specials, behind the closed drape, are no
-  longer flagged; the same lights after the curtain opens still are.
-- **A warning reads and answers where it shows.** Hover a "⚠ cyc" mark on a
-  Show Tree cue, the footer Review chip, or a Review row's check id for the
-  detail (fixtures, how much, on what, every cue it marks, what you can do);
-  right-click it for I Meant It / Accept…, Not Meant: Show Me the Layer /
-  Show Me, and Open in Show Review -- cleared there, no panel needed. One
-  tooltip and one menu builder (`ShowReviewMarker`) for every place.
-- **Only the warning is in the warning colour.** A cue's flags painted
-  "mix" (and every other flag) amber beside "⚠ cyc" or "needs work"; now
-  only the warning's own word is.
-- **Props are their real colour on the rig.** Risers and decks have a
-  **Finish (rig)** colour, stage black unless set, apart from the plot colour
-  that tells them apart on the plan; the Lighting Studio's planes and the Rig
-  Overview draw the finish (lit by the room and the rig), scenery its own
-  colour, and a warning on the cyc is an amber outline, never a fill.
-
-
-### Tests
-
-- **Every screen is checked for overlapping and cut-off controls**
-  (`layoutsanity_test`, in the gate, board Q207). The app's tabs, the
-  Workbench with each Look Editor page, the editors, panels and dialogs
-  open offscreen at their minimum, 1280x800 and 1920x1080; two controls in
-  the same place, one cut off by its window, text cut short or a control
-  squeezed to nothing fails it. It finds the colour look's "Wheel / ring"
-  row under the picker; that and the minimum-size problems it found are
-  listed in TODO.md ("Layout sanity").
-
-### Fixed
-
-- **The universe output view's heading stays inside the view** at its
-  narrowest (it was a fixed 600 px, past the view's edge).
-
-### Changed
-
-- **Each arm of a multi-arm fixture aims on its own.** A two-arm beam's
-  arms (each on its own pan and tilt) are two lights to an Aim look: at a
-  point each aims from where it hangs on the bar, so the two converge at
-  their own angles; on a line each takes its own place, number, group and
-  side, so eight two-arm beams are sixteen points and Pairs pairs a bar's
-  arms. A follow-spot or aiming effect solves each arm from its own place
-  too, and the Lighting Studio draws each arm's beam from that arm. A show
-  saved before this plays as it did except for its multi-arm fixtures,
-  whose arms now go to their own points instead of sharing one aim a
-  body-width apart. Fixtures with one pan and tilt -- a pixel bar on a
-  yoke included -- are unchanged.
-
-### Fixed
-
-- **A light on the deck or placed freely is aimed from the middle of its
-  body,** where the views draw it and its light leaves, not from the corner
-  of its plot icon: a two-arm beam on a riser drew each beam up to 0.3 m
-  wide of its point on the line (half the 510 mm bar), now within 7 cm
-  (one DMX step of its 128-step pan).
-- **An aimed light is drawn where it points, to the step.** The rig views
-  read a 16-bit head's fine byte back (read coarse only, a 540° head was
-  drawn up to 2° off its mark, 20 cm at a 6 m throw), and a two-arm beam's
-  indexed pan (DMX 0-127) is sent on the nearest step instead of the one
-  below it (up to 2.8° short). One readback, in the engine
-  (`AimSolver::headDirection()`), draws every mover's beam, and a
-  round-trip test (`AimSolver_Test::aimedHeadsLandOnTheirTarget`) aims
-  hung, standing, floor, turned, inverted and calibrated rigs, 8- and
-  16-bit heads and the two-arm beam at points, people and lines with
-  Spread, and checks each beam lands on its target.
-- **The Blind view shows the cue in edit on every fixture.** Only a
-  fixture at address 1 took the cue's levels; every other kept what the
-  stage had, so seven of eight USTs pointed where the last live cue left
-  them, not along the cue's line.
-- **A standing head aimed at a line traces to where it lights** (the
-  people on the line, the subject height above it) in the Lighting Studio
-  and Focus mode, as its DMX does, not to the deck below.
-
-### Colour picker
-
-- **The picker's swatch grid is stage colours.** Flesh and other skin tones,
-  Blacklight (drives UV where a fixture has it), Congo Blue, fluorescents,
-  Tungsten, Daylight, Candle, sodium and mercury vapour, Moonlight, Lavender,
-  Amber, Straw, Bastard Amber, Surprise Pink and the primaries replace Qt's
-  generic basics. Hover a swatch for its name and hex; hover the colour field
-  for the nearest named colour; a line under the picker names it too.
-- **Resizing the Look Editor no longer lays the sliders over the picker or the
-  "Pick Screen Color" button over the Wheel / ring row.** Narrow, the
-  sliders drop under the picker; smaller still, the page scrolls.
-
-### Changed
-
-- **Right-click menus: this place's own on top, then the thing's own
+  1/4"`), and any length field takes fractions, decimals or another unit
+  (`11-1/4"`, `3/8"`, `12' 6"`, `3.8 m`). Every rig label, editor field,
+  readout, report, CSV column, Show Review line and focus call does the
+  same, never the grid's unit: among them the group frame editor, the patch
+  plan's cable distance, the line-of-sight tooltip, Focus mode's step, Set
+  Mounting Height…, the target editor and the follow spot's Person Height
+  and Size On Subject (which showed raw centimetres).
+- **The command line tells a typo from plain words.** A slip in a command
+  or a show name (`towrs colour blu`, `relase Towers`, `dimer 50`) gets
+  *Did you mean …?* and asks no one; a line that reads as language (*make
+  the towers blue for the chorus*, *why is FOH 3 on*) goes to AI Assist
+  without a `?`, also when it starts as a command. Before, any line the
+  spell-check could bend was "corrected" instead of asked. Build's command
+  bar does the same, and runs what the assistant proposes on the loaded
+  scene. In Operate, plain words say *AI Assist takes plain words in Design
+  mode only*.
+- **The command line shows when AI Assist is working**: a spinner and
+  *Asking AI Assist… Esc cancels* (with the seconds after two) until the
+  answer, an error, the time limit or Esc; a click on the spinner cancels.
+  The line stays usable, and a newer line replaces the question in flight.
+- **The effect picker lists only effects that run on your fixtures.** Once a
+  look has fixtures or groups, the picker (look editor and effect designer)
+  offers WLED effects where there is a WLED device, position for pan/tilt
+  heads, gobo for a gobo wheel, zoom/iris where they exist, matrix for a
+  grid of heads, colour for colour mixing, intensity for dimmers. A mixed
+  set says "Runs on 6 of 10 fixtures". **Show All Effects** lists the rest
+  greyed with the reason; the effect a look already runs stays listed.
+- **The same edit keys in every list.** **⌫**, **F2**, **⌘C / ⌘V**, **⌘D**
+  and **⌘F** do the same thing in the Show Tree, Build's Palettes, Effects
+  and Scenes, the Fixtures tab, Plot layers and the plot. New: ⌫ on the
+  plot sends the selection back to the Inventory (one ⌘Z); ⌫ in the
+  Fixtures tab deletes, asking first; ⌘D in the Fixtures tab makes an
+  unpatched fixture like the selected one ("Front #2") or copies a group;
+  ⌘D in Build duplicates palettes, scenes and effects; F2 on the plot
+  renames; ⌘F goes to the search in Build, the Fixtures tab and the plot.
+  **⌘D is Duplicate only** -- it duplicates a Show Tree cue again --
+  and **Control ▸ Dump DMX Values to a Function** moves to **⌥⌘D**
+  (Ctrl+Alt+D). In Connections **Delete Universe** is **⌫ / Delete** and
+  asks first (**Undo Patch Change** brings it back); a universe is not
+  duplicated. **Esc** lets go of the selection when there is nothing to
+  back out of. See [Edit keys](docs/features/shortcuts.md#edit-keys-the-same-in-every-list).
+- **In Design, the cue you are on is all the rig shows**, also with a cue
+  list running. The preview used to play over the run, so an edit that
+  took light away (Release, a Block cue, a layer taken out) seemed not to
+  reach the rig and Solo didn't go dark. Now the run keeps going unseen and
+  comes back as it plays then when the preview stops or on the next GO. A
+  selected hit plays alone, like a cue.
+- **An Aim at an Area covers the area.** The area is split into one zone
+  per light (each arm of a two-arm beam its own) by where they hang, with
+  no beams crossed on a regular rig, and each light aims at subject height
+  above the deck, riser or step under its zone. A spot counts as lit only
+  if it is lit at head height **and** on the deck; ties go to the split
+  that lights the most. The Position row draws the zones and the gaps ("deck
+  dark" red, "heads dark" violet) with "Covers 82% of Chorus · deck dark
+  upstage left", and Show Review **MOV-13** notes a cue leaving more than a
+  tenth of an area dark. **Existing shows:** area aims change their pan
+  and tilt; an Area with no size still aims at its point.
+- **Each arm of a multi-arm fixture aims on its own**, at a point from where
+  it hangs on the bar, and on a line as its own place, so eight two-arm
+  beams are sixteen points and Pairs pairs a bar's arms. Follow-spot and
+  aiming effects and the Lighting Studio's beams do the same. Older shows
+  play as before except their multi-arm fixtures.
+- **Line aims you can see.** On a line aim's order strip and a Formation's
+  preview, lights that move together share a colour and a line runs from
+  each light to its point, so groups swapping sides are seen crossing; a
+  caption says it ("Groups swap sides: 24 beam crossings") and when Cross
+  does nothing. The plan is now really from above (it was a front view
+  upside down), names of close lights no longer overlap, and aim lines end
+  in an arrowhead. A Formation's preview names the groups it picked, with
+  **Show none**.
+- **A stored position shows where it lands.** A PanTilt look, under its
+  Position row and on the Look Editor's PanTilt page, gets a plan of each
+  beam solved from its DMX to where it lands, named for the nearest target
+  ("≈ Announcer"), stage area, or off stage / into the audience / the air.
+- **A definition that says 0 for its lens or pan/tilt range no longer draws
+  nothing.** The rig view, the plot and every aim use a default by type and
+  say so ("15° (assumed: the definition says 0)"): beam 15° for a moving
+  head or scanner, 25° par or wash, 40° LED bar, 20° otherwise; pan 540°
+  and tilt 270° for a moving head. **Old shows:** such a light now draws a
+  beam, and its aim DMX changes where its pan range was 0. Show Review
+  **FIX-18** names each such definition and opens it in the Fixture Editor.
+- **One selection rule in the Lighting Studio.** A click selects exactly
+  what you click: one performer of a group, one line of a choir.
+  **Right-click ▸ Select All Similar** works on everything on the plot, and
+  **Select Group** takes the whole group. A built assembly (a fountain, a
+  stamped component) is one thing; double-click goes in for one part, Esc
+  comes out. A right-click inside a selection acts on all of it. Targets
+  duplicate (⌘D) and copy-paste whole, numbered on ("Soloist 2"). See
+  [Selecting and undo on the plot](docs/features/lighting-studio.md#selecting-and-undo-on-the-plot).
+- **The colour picker's swatches are stage colours**: Flesh and other skin
+  tones, Blacklight (drives UV where a fixture has it), Congo Blue,
+  fluorescents, Tungsten, Daylight, Candle, sodium and mercury vapour,
+  Moonlight, Lavender, Amber, Straw, Bastard Amber, Surprise Pink and the
+  primaries. Hover a swatch or the colour field for the name; a line under
+  the picker names it too.
+- **Right-click menus: this place's own items on top, then the thing's own
   menu, the same everywhere.** A palette right-clicked on a cue's look row
-  or in the Workbench now offers everything Build and the Library do (Edit
-  Palette, Used By ▸, Move to Folder ▸, Save as Bundle…, Duplicate, Rename,
-  Delete Palette…) under its row's Set to ▸ / None / Clear. Functions, Show
-  Tree cues, lists and layers, fixtures on the plot and in the studio
-  editors, and stage targets and structures (Used By ▸ for a target) each
-  have one menu in one order, in Title Case
-  ([CONTEXT_MENUS.md](docs/design/CONTEXT_MENUS.md)).
-
-### Line aims you can see
-
-- **Grouping and Cross are drawn, not just listed.** On a line aim's order
-  strip (Look Editor, a Show Tree layer's Position rows) and a Formation
-  palette's preview, lights that move together share a colour (point,
-  square and beam, plus a bracket per group on the strip; colour-blind
-  checked), and a line runs from where each light hangs to its point, so
-  groups swapping sides or flipping are seen crossing. The plan says it in
-  a caption ("Pairs: 4 groups … Groups swap sides: 24 beam crossings"),
-  and both say when Cross does nothing because Spread isn't below 0. The
-  drawing comes from the engine's own line rule, so it can't disagree with
-  the stage.
-- **A stored position shows where it lands.** Under a layer's Position
-  row, a PanTilt (or any stored pan / tilt) look gets a line and a plan:
-  each head's beam solved forward from its DMX, as the rig view reads it,
-  to where it lands, named for the nearest target ("≈ Announcer") or stage
-  area, or off stage / into the audience / into the air. The PanTilt page
-  of the Look Editor shows it too, with lights in context.
-- **The line-aim plan is really from above.** It drew across and height (a
-  front view upside down), so hung lights showed below a line on the deck;
-  it now draws across and up/downstage, downstage at the bottom.
-- **Plan names no longer overlap.** Lights hung close together (T1-S1,
-  T1-S2) get their names on separate rows with a leader to the light.
-- **A Formation's preview says what it picked.** Before you pick lights it
-  shows the groups the show most often aims at the line and says so
-  ("Showing AT-W-ALL (aimed at Line 1 in cue 1.1.1 Verse)."), with **Show none**
-  to clear it.
-
-### Settings ▸ Performance
-
-- **Settings ▸ Performance checks this computer for steady 50 Hz DMX.** Per
-  system (Linux and Raspberry Pi, macOS, Windows) it lists what helps the
-  DMX timer — real-time scheduling, CPU governor, Wi-Fi power saving, Low
-  Power Mode, the power plan — with its status and the command to copy or
-  the steps; the app never runs anything that needs an administrator.
-  During Operate the app now runs at full speed (macOS: no App Nap or idle
-  sleep; Windows: no EcoQoS throttling or idle sleep), and the footer says
-  when something important is off. On Linux the timer now takes real-time
-  priority within a smaller rtprio limit instead of being refused.
-
-### Performance page: limits to ±5%, and jitter measured
-- The limits on the [performance page](docs/performance.md) are bisected
-  now, not read off a doubling ladder: each is a number with its
-  uncertainty (to about 5%, each count decided by two runs out of three), how it was measured
-  (host, OS, Qt, timer priority) and when. Jitter is reported as a
-  measurement: frame-interval percentiles, late frames split into
-  scheduling and load, and where jitter starts, separately from where the
-  engine breaks; with real-time priority on and off on the Raspberry Pi 5.
-
-### Four open questions, answered
-
+  or in the Workbench offers everything Build and the Library do. Functions,
+  cues, lists, layers, fixtures, targets and structures each have one menu
+  in one order.
+- **Menus and buttons read in Title Case**, with "…" where a dialog
+  follows: about 170 menu items and 100 buttons ("Focus This Cue…",
+  "Snapshot the View"); the help and the course quote the new words.
+  Connections' menus put Delete last and say Delete for what destroys;
+  "Forget this patch" is **Unpatch…**; the Workbench's **+ Effect** starts
+  with **Effect Palette…**.
+- **A real GO sends in Blind**, as in any show: Blind hides edits, not a GO.
+  **Teaching mode gets instructor settings** (Show Settings, behind the
+  show's PIN): show control out is held in a Teaching show unless the
+  instructor lets it through, and can be held while Blind is on; the footer
+  and **Last sent** say what was held. Shows saved before keep their output
+  as it was. See [Teaching mode](docs/features/teaching.md#instructor-settings).
 - **An effect fade typed in Operate is refused** ("Changes can't be made in
-  Operate mode"), like an AI plan; Design only, as the 0.4.0 notes said.
-- **A real GO sends in Blind.** Blind hides edits from the stage, not a GO:
-  QLab / OSC / MSC go out as in any show. **Teaching mode gets instructor
-  settings** (Show Settings, behind the show's PIN): show control out is held
-  in a Teaching show unless the instructor lets it through, and can be held
-  while Blind is on. The footer and **Last sent** say what was held and why;
-  a held trigger is not sent later. Shows saved before open with real output
-  as they were. See [Teaching mode](docs/features/teaching.md#instructor-settings).
+  Operate mode"), like an AI plan.
+- **Props are their real colour on the rig.** Risers and decks have a
+  **Finish (rig)** colour, stage black unless set, apart from their plot
+  colour; scenery draws its own colour, and a warning on the cyc is an
+  amber outline, never a fill. Only a warning's own word is in the warning
+  colour among a cue's flags.
+- **The Show Tree opens with its cue names showing**: with fresh settings
+  the Library | tree | page split fits a cue's number and name at 1280x800
+  and 1024x640. Panes you have moved keep their sizes.
+- **0 definitions from QLC+ upstream** (fixture library checked against
+  upstream 2026-11-05; nothing new).
+
+### Fixed
+
+- **The follow spot follows the stick, wherever you run the show from.**
+  A DualShock 4, DualSense or Xbox pad patched as an input in Connections
+  (or by a controller slot) now moves a cue's follow spot from the Show
+  Tree, Run and Operate. The stick used to be looked for only when the Build
+  tab was shown, and any scene open in the Workbench kept it, so a cue's
+  follow spot never moved and every indicator said "off". Now it is found
+  when the show opens and whenever a controller comes, goes or is patched,
+  and only a follow spot open in the Workbench takes it from the cue's. A
+  footer chip, **◎ Follow: AT-Spots ← ES-Witch · DUALSHOCK 4 · stick
+  moving** (green moving, amber holding, red with no stick), shows on any
+  tab; the effect's editor, the rig view's ring and lines and the Show
+  Tree's **follow** flag show it at work. The subject keeps its height on a
+  riser, and across cues nothing jumps: a tracked follow spot carries on,
+  with Persist across restarts the subject stays where it was driven,
+  otherwise it glides back over the fade.
+- **Selecting a cue shows its effects every time.** While any effect kept
+  playing, the next cue selected was laid over the effects instead of under
+  them, so only the first cue breathed. Effects now sit on top of their cue
+  in any order.
+- **The Blind view shows the cue in edit on every fixture** (only the fixture
+  at address 1 took its levels), and a tree edit in Operate's Blind view
+  redraws at once.
+- **Aimed lights land where they point.** A light on the deck or placed
+  freely is aimed from the middle of its body, not the corner of its plot
+  icon (a two-arm beam on a riser was up to 0.3 m off, now within 7 cm).
+  The rig views read a 16-bit head's fine byte (a 540° head was drawn up to
+  2° off), a two-arm beam's indexed pan goes to the nearest step, and a
+  standing head aimed at a line traces to the people on it, not the deck.
+- **The rig view runs smoothly on a busy show.** It was held to 40% of one
+  core, so on a 210-fixture show a playing cue drew a frame every quarter
+  second, and one a second after a GO. It now uses all performance cores
+  but two, recovers within a few frames after a GO, and a frame costs about
+  25 ms of processor instead of 450. In **Operate** the show comes first:
+  part of one core, 15 frames a second, below the DMX. The picture is the
+  same; the **GPU** box says what draws (**GPU · Metal** or **CPU**). The
+  view no longer shimmers under the mouse.
+- **The footer holds together.** At the smallest window the chips no longer
+  run into each other (the least important give up their room first and
+  come back); the right side is one line with one height; leaving Blind
+  puts the footer's colours back; the Lighting Studio's footer grows to
+  hold its scroll bar instead of being squashed, and its position readout
+  is a fixed width so the bar doesn't come and go.
+- **Failures you used not to see.** A save that can't be written whole (a
+  full disk, a volume that went away) leaves the file on disk as it was and
+  names the file and what to do. A failed autosave turns the chip to **⚠
+  Autosave failed**. The phone's Run page says *Hits fire in Operate* in
+  Design. The Look Editor warns when a Pan/Tilt, Aim or Zoom look sits on
+  lights that can't do it.
+- **Closing a scene editor while a show runs can no longer crash.**
+- **Dropping several targets at once is safe when the plot redraws** (the
+  second target could keep its old place, and a crash was possible).
+- **A target added in the Lighting Studio shows up everywhere at once**: the
+  Library, the Look Editor's **Aim at:** list and the formation editor, with
+  renames and deletes followed, without reloading the show.
+- **A resize keeps the plot's selection** (decks, scenery and trusses were
+  dropped, so a fountain turned without its walls).
+- **People on a performer line follow it** when it is shortened, bent,
+  moved or undone.
+- **A laser's scan window stops at the cyc** on the 2D plot (it drew big
+  amber shapes on the floor behind it).
+- **A fountain's flame moves, turns and unlocks with the fountain**, and a
+  fixture on a dragged deck goes with it. Older shows are repaired on load.
+- **The cyc check sees the curtain.** Show Review PWR-12 no longer names
+  light landing on a closed main drape or traveler in front of the cyc,
+  following where each cue leaves a curtain.
+- **The course shows' cyc lights are cyc lights**, so they no longer raise a
+  PWR-12 warning on every cue from lesson 1.1's finish on.
+- **Show Review's Fix ▸ says when it can't go there** (the cue, layer or
+  fixture has changed or gone), and to Re-check.
+- **Nothing squeezed at the minimum size**: the Workbench, a scene's group
+  looks, Show Settings, Create Groups, Head Types, the LED layout editor and
+  the universe output view keep their text whole at their narrowest;
+  resizing the Look Editor no longer lays the sliders over the colour
+  picker.
 - **Switching to Operate from the phone page** no longer asks Teaching's
   "Run this show for real?" on the console; the PIN still applies.
 - **Add Fixture says so past universe 1024** instead of adding nothing.
+- **An Aim look that dims blocked lights** no longer allocates memory 50
+  times a second; the same heads dim, the same DMX goes out.
+- **Course handouts link to the lessons they mean** (lessons 3.5 and 3.8).
+
+### For developers
+
+- **Every course show and the sample are reviewed in the gate**
+  (`showreviewshows_test`), with the checks expected open on each, so a
+  check or show that drifts fails. `qlcconsole --review` has a hermetic
+  mode for it (the repo's own fixtures, scripts and effects).
+- **Every screen is checked for overlapping and cut-off controls**
+  (`layoutsanity_test`): tabs, the Workbench with each Look Editor page,
+  editors, panels and dialogs open offscreen at their minimum, 1280x800 and
+  1920x1080; it has no known issues left.
+- **Wording and units are tested**: `menuwords_test` reads every menu label
+  and every push or tool button text in the UI's sources and fails on one
+  off Title Case (stock QLC+ `.ui` dialogs are untouched); `units_test`
+  fails on a unit written into a string, a bare-number length dialog, or the
+  grid unit used for display.
+- **One aim readback**: `AimSolver::headDirection()` draws every mover's
+  beam, and `AimSolver_Test::aimedHeadsLandOnTheirTarget` aims hung,
+  standing, floor, turned, inverted and calibrated rigs, 8- and 16-bit
+  heads and the two-arm beam, and checks each beam lands.
+- **The performance page's limits are bisected** to about ±5%, each with
+  how and where it was measured; jitter is reported as frame-interval
+  percentiles, late frames split into scheduling and load, with real-time
+  priority on and off on the Raspberry Pi 5. See
+  [docs/performance.md](docs/performance.md).
+- **`make dmg` is much faster**: only what ships, through ccache, in a build
+  dir that lasts; `make dmg ARCH=native` makes an arm64-only DMG (never
+  published). `make test` uses ccache too.
+- **Sanitizer builds link and run clean** (UBSan's vptr check on the plugin
+  stubs; no ASan alloc-dealloc mismatch in the hot-path test; the web
+  remote's focus test no longer races).
+- **CI tests on Windows and macOS**: the follow-spot test copies the HID
+  plugin instead of linking it, and the generic DMX source mid-tick test
+  counts rounds instead of a 4 s window.
+- **Test isolation and timing flakes**: the Monitor component test no
+  longer saves into the real StudioComponents library; the Show Tree
+  Workbench drag test waits for the rows' rebuild; SpeedMasters' Go-on-beat
+  test measures the quantize, not the host's stalls; the Course Show tests
+  read output through the frame lock; a qlcstress run past its budget
+  writes every thread's stack before it is killed.
+- **Compiler warnings outside the -Werror set cleared** (clang -Wall -Wextra):
+  `virtual` dropped in `final` classes, four `override`s, eleven unused
+  lambda captures. No behaviour change.
+- **The ARM char-signedness test runs**: vcxypad_test's position-to-DMX
+  check compares as uchar, so it holds on the Pi and on x86/Apple.
+
+### Known issues
+
+- **The Windows installer is not code-signed**, so Windows SmartScreen
+  warns on first run (More info ▸ Run anyway).
+- **RGB colour effects** (Rainbow, Color Spread and the like) don't run on
+  colour-wheel or CMY movers, so the effect picker doesn't offer them for
+  such groups.
+- **On macOS a long on-screen session can grow memory slowly.** It has not
+  been reproduced offscreen, where memory levels off with no leaks.
+- **Show Review notes MOV-08** (movers light before any cue positions them)
+  in the course shows from lesson 1.3 on; left as is for now.
+- **Not yet tried on real hardware:** the DualSense adaptive triggers and
+  touchpad swipes, encoder presets on a real encoder controller, the Stream
+  Deck + in a real Companion, and a third-party "Edge" pad's back buttons.
+- **Crackle** pulses up to the look's level from a lower Rest level; it
+  can't rise above the look.
 
 ## [0.4.0] - 2026-11-02
 
