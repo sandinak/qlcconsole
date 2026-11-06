@@ -1726,8 +1726,21 @@ void ShowTreeWorkbench_Test::aRealMouseDragMovesALookRowAndAltCopiesIt()
         QVERIFY(dimRow != nullptr);
         const QPoint from = inWindow(rows->visualItemRect(dimRow).center());
         QTest::mouseClick(win, Qt::LeftButton, Qt::NoModifier, from);
-        QTest::qWait(50);
+        // The click schedules the rows' debounced rebuild (120 ms), which swaps
+        // every item: pressing before it lands, or letting it land mid-drag,
+        // loses the row. Let it finish -- no fixed wait, a loaded host overruns it.
+        QCoreApplication::processEvents();
+        QTRY_VERIFY_WITH_TIMEOUT([&]() {
+            for (QTimer *tm : rows->findChildren<QTimer *>())
+                if (tm->isActive())
+                    return false;
+            return true;
+        }(), 10000);
+        QCoreApplication::processEvents();
         dimRow = rows->layerItem(towers)->child(attributeKeyed(stack, towers, KeyDimmer));
+        QVERIFY(dimRow != nullptr);
+        if (!dimRow->isSelected())          // the rebuild may have dropped the click's selection
+            rows->setCurrentItem(dimRow);
         const QPoint at = inWindow(rows->visualItemRect(dimRow).center());
         const int before = spy.drags;
         QTest::mousePress(win, Qt::LeftButton, mods, at);

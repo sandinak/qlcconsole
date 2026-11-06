@@ -392,6 +392,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   the Teaching fields, the group preview and the LED map are no longer cut
   off or laid over each other. The layout sanity test has no known issues
   left.
+- **Test isolation and three timing flakes**: the Monitor component test saved into the
+  operator's real StudioComponents library (it now runs on a home of its own); the
+  Show Tree Workbench look-row drag test pressed before the rows' 120 ms rebuild had
+  landed (7 of 52 runs failed under load, 0 of 52 now); SpeedMasters' Go-on-beat test
+  measured the host's stalls instead of the quantize; the Course Show tests read the
+  output through the universe's frame lock (a raw read could catch the engine's
+  zero-then-write inside one frame); a qlcstress run that outlives its
+  budget now writes every thread's stack (`<point>.hang-stacks.txt`) before it is killed.
+
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections
   (or by a controller slot) now moves the follow spot from the Show Tree,

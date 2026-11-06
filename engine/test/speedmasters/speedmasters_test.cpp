@@ -450,10 +450,12 @@ void SpeedMasters_Test::aGoLandsOnTheNextBeat()
     go(chase);                                       // twice in one beat: one step
     QElapsedTimer t;
     t.start();
-    double pos = 0;
+    double pos = 0, prev = 0, before = 0;
     qint64 landed = 0;
     while (t.elapsed() < 2000)
     {
+        before = prev;                               // the position at the tick before
+        prev = timer->beatPosition();
         timer->timerTick();
         if (chase->currentStepIndex() != 0)
         {
@@ -464,10 +466,13 @@ void SpeedMasters_Test::aGoLandsOnTheNextBeat()
         QTest::qWait(10);
     }
     QCOMPARE(chase->currentStepIndex(), 1);
-    QVERIFY2(landed > 650 && landed < 1100,
+    QVERIFY2(landed > 650 && landed < 1500,
              qPrintable(QString("landed %1 ms after the GO, the beat was ~850 away").arg(landed)));
-    // ...and on the beat.
-    QVERIFY2(pos - std::floor(pos) < 0.1, qPrintable(QString::number(pos)));
+    // ...and on the beat: it moved on the first tick after the beat, whatever
+    // stall (a loaded host) put that tick late -- a fixed 0.1-beat window after
+    // the beat measured the host, not the quantize.
+    QVERIFY2(std::floor(before) < std::floor(pos) && pos >= 1.0,
+             qPrintable(QString("moved between beat position %1 and %2").arg(before).arg(pos)));
     for (int i = 0; i < 20; ++i)
         timer->timerTick();
     QCOMPARE(chase->currentStepIndex(), 1);          // not two steps

@@ -8222,6 +8222,18 @@ void Monitor_Test::aTrussRowInLayersOpensTheTrussNotItsGroup()
    plane from the other 88. Lay one out, save it, stamp the rest. */
 void Monitor_Test::aSavedComponentStampsItsLayoutOntoOtherFixtures()
 {
+    // The component library lives under $HOME: give it a home of its own, so
+    // the operator's real library never gains (or, on a failed run, keeps) a test file.
+    QTemporaryDir testHome;
+    QVERIFY(testHome.isValid());
+    struct HomeGuard
+    {
+        QByteArray old = qgetenv("HOME");
+        ~HomeGuard() { qputenv("HOME", old); }
+    } homeGuard;
+    qputenv("HOME", testHome.path().toUtf8());
+    QVERIFY(StudioTemplate::libraryPath().startsWith(testHome.path()));
+
     Doc *doc = new Doc(this);
     MonitorProperties *props = doc->monitorProperties();
 
