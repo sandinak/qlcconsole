@@ -111,8 +111,12 @@ costs one step, not the shard: `uxwalk` prints `uxwalk-at: N group|name`
 before each step and a stack on SIGSEGV/SIGBUS/SIGABRT; the driver writes a
 W-CRASH note with the stack and reruns the shard with `--skip N`.
 
-Times (2026-11-06, brm, 10 performance cores, 5 local walkers): both
-default shows in Feet and Millimetres, ~1,100 screens, about 2 minutes.
+Times (2026-11-06, both default shows in Feet and Millimetres, 52 shards,
+~1,110 screens): about 3 minutes on brm alone (10 performance cores, 5
+walkers); through the pool from another Mac, brm's first (cold) build took
+150 s and the walk 200 s -- a later run of a new commit builds only what
+changed. A host still building when the queue runs dry is stopped and its
+lock let go: the walk never waits for a slow host.
 
 ## Adding a check
 

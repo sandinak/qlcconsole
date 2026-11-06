@@ -12,6 +12,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- For testing: `make ux-walk` walks every tab, menu, dialog and right-click
+  of a real show offscreen, in feet and in millimetres, and reports what
+  breaks the UI rules (docs/dev/UX_WALKER.md). Not part of the app.
+
 ## [0.4.1] - 2026-11-06
 
 qlcconsole 0.4.1 is a stable release that hardens 0.4.0: the follow spot,

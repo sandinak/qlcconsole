@@ -190,7 +190,7 @@ def check_units(rec, ctx):
 # Submenus that list the show's own things (its groups, layers, folders,
 # recent files): their items are names the person gave, not the app's words.
 DATA_MENUS = re.compile(r"Open Recent|New from Template|Recent|Add to Group|Move to Layer|Move to Folder"
-                        r"|▸ Selection$|Used By|Add to Circuit|Put Back")
+                        r"|▸ Selection$|Used By|Add to Circuit|Put Back|Remove from Fixture Group")
 SKIP_TITLE_MENUS = DATA_MENUS
 
 
