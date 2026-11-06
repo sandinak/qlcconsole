@@ -234,6 +234,17 @@ private slots:
     void theHitPageFadeBoxesSetTheHitsFades();
     void listsProductionsAndReusableCuesDuplicateCopyAndPaste();
 
+    /** 0.4.1 (fxrows): an effect's rows on the layer page, as a line aim's
+     *  under Position -- what it runs on ("2 of 4 fixtures (Pars have no
+     *  pan/tilt)"), what it moves, each setting with where it comes from
+     *  (own / carried in / the palette's / the script's default); a value
+     *  set here becomes this cue's own, one undo step. */
+    void anEffectShowsWhatItRunsOnAndWhereEachValueComesFrom();
+    void anEffectSettingSetHereBecomesThisCuesOwn();
+    void aColourChaseShowsItsColoursAndACueEffectItsLayers();
+    /** With QLC_SHOT_DIR: the two effect layer pages at three sizes. */
+    void effectRowsShots();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QColor &c, const QString &name);

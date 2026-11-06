@@ -73,6 +73,8 @@ public:
     /** Script @p path's cycle param (EffectScript::cycleParam()) when it is
      *  a wave, with that param's definition in @p def; empty when not. */
     static QString scriptCycleParam(const QString &path, EffectScript::ParamDef *def = nullptr);
+    /** Script @p path's parameters, as it defines them (read once per file). */
+    static QList<EffectScript::ParamDef> scriptParams(const QString &path);
 
     /** "based on Fire", and "· 2 changes" when there are some. */
     static QString basedOnLine(const QString &base, int changes);

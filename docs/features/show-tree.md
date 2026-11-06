@@ -680,7 +680,7 @@ A layer's page has one row per attribute:
 | Position | Spread, Grouping and Cross under it when it aims at a line ([Line aims](#line-aims)) |
 | Gobo, Zoom, Focus / Frost / Iris | The **Beam** family, indented; each resolves on its own |
 | Shutter | Shutter and strobe |
-| *kind* effect | One row per effect kind (Colour effect, Position effect…), plus an **Effect** row to add one |
+| *kind* effect | One row per effect kind (Colour effect, Position effect…), plus an **Effect** row to add one; under each, what it runs on and each of its settings ([Effects](#effects)) |
 
 Each row shows its value, where it comes from, and four controls:
 
@@ -885,6 +885,29 @@ runs on that layer's fixtures. On the effect's row, **⋯ → Its own colour /
 dimmer** gives it a colour or dimmer that applies inside the effect only
 (*"Sinelon in Red"*). On the command line, a colour or dimmer right after an
 effect is its own: `Steps effect Sinelon colour Red`.
+
+**Under the effect's row, what it does here**, indented as a line aim's
+Spread and Grouping are under Position:
+
+- **Runs on**: the groups it drives and how many fixtures — *"Towers · 2 of
+  4 fixtures (Pars have no pan/tilt)"* when some of them can't run it. An
+  effect on the cue names every layer it runs across.
+- **Moves**: what changes on stage (Position, Colour, Intensity, Beam).
+- **Colours** (a colour effect): its own colours, else the layer's Colour
+  it plays in.
+- **Each setting** (speed, size, direction, lengths in the units of
+  Settings ▸ Units…) with its value and where it comes from: plain when it
+  is this cue's own; grey and italic with *"from Effect “Chase”"* (the
+  effect palette), *"the “Fire” preset's"*, *"the script's default"*, and
+  *"tracked from 1.0.1"* when the effect is carried in. **Runs** says Loop,
+  Once or N times.
+
+A setting's **⋯** sets it here: values across its range, a typed value, or
+**Back to Its Default**. One undo step. The value becomes **this cue's
+own**: an effect that is already this cue's one-off changes in place; a
+shared effect palette, or an effect carried in from an earlier cue, is
+copied into a one-off for this cue first, so the palette and its other cues
+keep theirs. To change the palette everywhere, use ✎ on the effect's row.
 
 **An effect on the cue is one effect across its layers.** Drop it on the
 cue (or `cue look effect Sinelon`): a Sinelon runs across the stage as one,

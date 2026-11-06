@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QScrollArea>
 #include <QTreeWidgetItemIterator>
 #include <QDoubleSpinBox>
 #include <QMenu>
@@ -10438,4 +10439,294 @@ void ShowTreeView_Test::releaseAndUntrackOnTheGreyRow()
     QVERIFY(st->cue(c1)->layer(l1)->release);
     QVERIFY(st->undo());
     view.hide();
+}
+
+/****************************************************************************
+ * 0.4.1 fxrows: an effect's rows on the layer page
+ ****************************************************************************/
+
+namespace
+{
+Fixture *rgbPar(Doc *doc, const QString &name)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("RGB Par");
+    def->setType(QLCFixtureDef::ColorChanger);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const QLCChannel::PrimaryColour cols[] = { QLCChannel::Red, QLCChannel::Green, QLCChannel::Blue };
+    QLCFixtureHead head;
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(k == 0 ? "Red" : k == 1 ? "Green" : "Blue");
+        ch->setGroup(QLCChannel::Intensity);
+        ch->setColour(cols[k]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(k);
+    }
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(quint32(200 + doc->fixtures().size() * 3));
+    return doc->addFixture(fxi) ? fxi : nullptr;
+}
+
+QLCPalette *scriptEffect(Doc *doc, const QString &name, const QString &script)
+{
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, doc);
+    fx->setName(name);
+    fx->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/" + script);
+    doc->addPalette(fx);
+    return fx;
+}
+}
+
+void ShowTreeView_Test::anEffectShowsWhatItRunsOnAndWhereEachValueComesFrom()
+{
+    m_doc->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    group("Pars", 0, 2);
+    Fixture *s1 = placedSpot(m_doc, "S1", -2), *s2 = placedSpot(m_doc, "S2", 2);
+    FixtureGroup *towers = new FixtureGroup(m_doc);
+    towers->setName("Towers");
+    m_doc->addFixtureGroup(towers);
+    for (quint32 id : { m_fixtures[0], m_fixtures[1], s1->id(), s2->id() })
+        towers->assignFixture(id);
+    QLCPalette *fx = scriptEffect(m_doc, "Phaser", "pantilt-phaser.js");
+    fx->setEffectParamValue("panRate", 1.0);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    Target t;
+    t.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, t);
+
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.dropPalettes(c1, l1, { fx->id() }));
+    const QString key = st->keyForPalette(fx->id());
+    QCOMPARE(key, effectKey("Position"));
+    QVERIFY(view.selectNode(l1, c1));
+    const QStringList rows = view.attributeRows();
+    // Its own rows, right under its own (as Spread / Grouping under Position).
+    const int at = rows.indexOf(rowFor(rows, keyLabel(key)));
+    QVERIFY2(at >= 0, qPrintable(rows.join("\n")));
+    QCOMPARE(rows.value(at + 1), QString("Runs on | Towers · 2 of 4 fixtures (Pars have no pan/tilt) | "));
+    QCOMPARE(rows.value(at + 2), QString("Moves | Position (pan and tilt) | "));
+    // The palette's value, and the script's default where it sets none.
+    QCOMPARE(rowFor(rows, "Pan cycles per second"), QString("Pan cycles per second | 1 | from Effect “Phaser”"));
+    QCOMPARE(rowFor(rows, "Tilt cycles per second"),
+             QString("Tilt cycles per second | 0.5 | the script's default"));
+    QCOMPARE(rowFor(rows, "Runs"), QString("Runs | Loop | the script's default"));
+    // Grey and italic, with the tooltip saying where and what an edit does.
+    QLabel *tilt = view.findChild<QLabel *>(QString("stRow:%1/tiltRate").arg(key));
+    QVERIFY(tilt != nullptr);
+    QVERIFY(tilt->font().italic());
+    QVERIFY(tilt->toolTip().contains("becomes this cue's own"));
+    QVERIFY(view.findChild<QToolButton *>(QString("stMore:%1/tiltRate").arg(key)) != nullptr);
+
+    // Carried into cue 2: the same values, and from where.
+    QVERIFY(view.selectTracked(c2, t.signature()));
+    QCOMPARE(rowFor(view.attributeRows(), "Pan cycles per second"),
+             QString("Pan cycles per second | 1 | from Effect “Phaser” · tracked from 1 One"));
+    QCOMPARE(rowFor(view.attributeRows(), "Runs on"),
+             QString("Runs on | Towers · 2 of 4 fixtures (Pars have no pan/tilt) | "));
+}
+
+void ShowTreeView_Test::anEffectSettingSetHereBecomesThisCuesOwn()
+{
+    m_doc->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    FixtureGroup *pars = group("Pars", 0, 2);
+    QLCPalette *fx = scriptEffect(m_doc, "Phaser", "pantilt-phaser.js");
+    fx->setEffectParamValue("panRate", 1.0);
+    const quint32 fxId = fx->id();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    Target t;
+    t.groups << pars->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.dropPalettes(c1, l1, { fxId }));
+    const QString key = st->keyForPalette(fxId);
+
+    // In cue 2 (carried in), the palette's value: set here, it is cue 2's
+    // own -- a one-off copy; the palette and cue 1 keep theirs.
+    const int stepsBefore = st->undoSteps().count();
+    QVERIFY(view.setEffectParam(c2, invalidId(), key, "panRate", 2.0, t));
+    QCOMPARE(st->undoSteps().count(), stepsBefore + 1);
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
+    const Layer *own = &st->cue(c2)->layers.first();
+    const quint32 copy = own->look(key)->palettes.value(0);
+    QVERIFY(copy != fxId);
+    QVERIFY(st->isInlinePalette(copy));
+    QCOMPARE(m_doc->palette(copy)->effectParamValues().value("panRate"), 2.0);
+    QCOMPARE(m_doc->palette(fxId)->effectParamValues().value("panRate"), 1.0);
+    QVERIFY(view.selectNode(own->id, c2));
+    QCOMPARE(rowFor(view.attributeRows(), "Pan cycles per second"), QString("Pan cycles per second | 2 | "));
+    QLabel *pan = view.findChild<QLabel *>(QString("stRow:%1/panRate").arg(key));
+    QVERIFY(pan != nullptr && !pan->font().italic());
+    QVERIFY(view.selectNode(l1, c1));
+    QCOMPARE(rowFor(view.attributeRows(), "Pan cycles per second"),
+             QString("Pan cycles per second | 1 | from Effect “Phaser”"));
+
+    // Its own one-off now: set again, in place, one step on the shared history.
+    const quint32 ownId = st->cue(c2)->layers.first().id;
+    QVERIFY(view.setEffectParam(c2, ownId, key, "panRate", 3.0));
+    QCOMPARE(st->cue(c2)->layers.first().look(key)->palettes.value(0), copy);
+    QCOMPARE(m_doc->palette(copy)->effectParamValues().value("panRate"), 3.0);
+    QVERIFY(st->undoShared());
+    QCOMPARE(m_doc->palette(copy)->effectParamValues().value("panRate"), 2.0);
+    // ...and the copy itself: one more undo, and cue 2 carries cue 1's again.
+    QVERIFY(st->undoShared());
+    QVERIFY(st->cue(c2)->layers.isEmpty());
+    QCOMPARE(m_doc->palette(fxId)->effectParamValues().value("panRate"), 1.0);
+    QVERIFY(st->redoShared());
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
+    QCOMPARE(m_doc->palette(st->cue(c2)->layers.first().look(key)->palettes.value(0))
+                 ->effectParamValues().value("panRate"), 2.0);
+
+    // Back to its default: the script's again. A shared palette's own
+    // layer (cue 1) forks too; Release is untouched.
+    QVERIFY(view.clearEffectParam(c1, l1, key, "panRate"));
+    QVERIFY(view.selectNode(l1, c1));
+    QCOMPARE(rowFor(view.attributeRows(), "Pan cycles per second"),
+             QString("Pan cycles per second | 0.5 | the script's default"));
+    QCOMPARE(m_doc->palette(fxId)->effectParamValues().value("panRate"), 1.0);
+    QVERIFY(!st->cue(c1)->layer(l1)->release);
+    // Nothing to change: no step.
+    const int steps = st->undoSteps().count();
+    QVERIFY(!view.clearEffectParam(c1, l1, key, "panRate"));
+    QCOMPARE(st->undoSteps().count(), steps);
+    QVERIFY(!view.setEffectParam(c1, l1, key, "noSuchParam", 1.0));
+}
+
+void ShowTreeView_Test::aColourChaseShowsItsColoursAndACueEffectItsLayers()
+{
+    m_doc->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    FixtureGroup *left = new FixtureGroup(m_doc), *right = new FixtureGroup(m_doc);
+    left->setName("Left");
+    right->setName("Right");
+    m_doc->addFixtureGroup(left);
+    m_doc->addFixtureGroup(right);
+    for (int i = 0; i < 4; ++i)
+        (i < 2 ? left : right)->assignFixture(rgbPar(m_doc, QString("Par %1").arg(i + 1))->id());
+    const quint32 red = colour(Qt::red, "Red");
+    QLCPalette *fx = scriptEffect(m_doc, "Chase", "color-chase.js");
+    fx->setEffectParamValue("reverse", 1.0);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target tl, tr;
+    tl.groups << left->id();
+    tr.groups << right->id();
+    const quint32 ll = st->addLayer(c1, tl);
+    st->addLayer(c1, tr);
+    st->setLayerLook(c1, ll, st->lookForPalette(red));
+
+    ShowTreeView view(nullptr, m_doc);
+    // On the cue: one effect over both layers (D10).
+    QVERIFY(view.dropPalettes(c1, invalidId(), { fx->id() }));
+    const QString key = st->keyForPalette(fx->id());
+    QCOMPARE(key, effectKey("Color"));
+    QVERIFY(view.selectNode(ll, c1));
+    const QStringList rows = view.attributeRows();
+    QCOMPARE(rowFor(rows, "Runs on"), QString("Runs on | Left + Right · 4 fixtures | "));
+    QCOMPARE(rowFor(rows, "Moves"), QString("Moves | Colour | "));
+    QCOMPARE(rowFor(rows, "Colours"), QString("Colours | Red | the layer's Colour"));
+    // Set on the cue: each value says so, after where it comes from.
+    QCOMPARE(rowFor(rows, "Chase speed"), QString("Chase speed | 3 | the script's default · from cue 1 One"));
+    // A switch by its own words.
+    QCOMPARE(rowFor(rows, "Reverse direction"),
+             QString("Reverse direction | rev | from Effect “Chase” · from cue 1 One"));
+    // The cue page names where it runs, too.
+    QVERIFY(view.selectNode(c1));
+    QLabel *looks = view.findChild<QLabel *>("stCueLooks");
+    QVERIFY(looks != nullptr);
+    QVERIFY2(looks->text().contains("runs on Left + Right · 4 fixtures"), qPrintable(looks->text()));
+
+    // Set on the cue's one effect: it stays one, on the cue.
+    QVERIFY(view.setEffectParam(c1, ll, key, "speed", 6.0));
+    QVERIFY(st->cue(c1)->look(key) != nullptr);
+    QVERIFY(st->cue(c1)->layer(ll)->look(key) == nullptr);
+    QVERIFY(view.selectNode(ll, c1));
+    QCOMPARE(rowFor(view.attributeRows(), "Chase speed"), QString("Chase speed | 6 | from cue 1 One"));
+    QVERIFY(rowFor(view.attributeRows(), keyLabel(key)).contains("one effect with Right"));
+}
+
+void ShowTreeView_Test::effectRowsShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    m_doc->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    // A mixed group: four movers and four pars, and a colour chase on pars.
+    FixtureGroup *towers = new FixtureGroup(m_doc), *wash = new FixtureGroup(m_doc), *pars = new FixtureGroup(m_doc);
+    towers->setName("Towers");
+    wash->setName("Wash");
+    pars->setName("Pars");
+    for (FixtureGroup *g : { towers, wash, pars })
+        m_doc->addFixtureGroup(g);
+    for (int i = 0; i < 4; ++i)
+    {
+        const quint32 s = placedSpot(m_doc, QString("Spot %1").arg(i + 1), i * 2 - 3)->id();
+        towers->assignFixture(s);
+        const quint32 p = rgbPar(m_doc, QString("Par %1").arg(i + 1))->id();
+        towers->assignFixture(p);
+        pars->assignFixture(p);
+        wash->assignFixture(rgbPar(m_doc, QString("Wash %1").arg(i + 1))->id());
+    }
+    const quint32 red = colour(Qt::red, "Red");
+    const quint32 blue = colour(Qt::blue, "Blue");
+    QLCPalette *ph = scriptEffect(m_doc, "Phaser", "pantilt-phaser.js");
+    ph->setEffectParamValue("panRate", 1.0);
+    QLCPalette *ch = scriptEffect(m_doc, "Chase", "color-chase.js");
+    ch->setEffectParamValue("speed", 6.0);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Demo"), "Main", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "Opening");
+    Target tt, tw;
+    tt.groups << towers->id();
+    tw.groups << wash->id();
+    const quint32 lt = st->addLayer(c1, tt);
+    const quint32 lw = st->addLayer(c1, tw);
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.dropPalettes(c1, lt, { ph->id() }));
+    QVERIFY(view.dropPalettes(c1, lw, { red, ch->id() }));
+    QVERIFY(view.setEffectOwn(c1, lw, st->keyForPalette(ch->id()), { blue }));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QDir().mkpath(dir);
+    const QString tag = qEnvironmentVariable("QLC_SHOT_TAG", "after");
+    for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        view.resize(sz);
+        for (const auto &shot : { qMakePair(lt, QString("movement-mixed")), qMakePair(lw, QString("colour-chase")) })
+        {
+            QVERIFY(view.selectNode(shot.first, c1));
+            QTest::qWait(50);
+            // The effect's rows in view (its row, or before this change the
+            // last row of the page).
+            QList<QLabel *> fxRows;
+            for (QLabel *l : view.findChildren<QLabel *>())
+                if (l->objectName().startsWith("stRow:Effect.") && l->isVisible())
+                    fxRows << l;
+            if (!fxRows.isEmpty())
+                for (QScrollArea *sa : view.findChildren<QScrollArea *>())
+                    if (sa->widget() != nullptr && sa->widget()->isAncestorOf(fxRows.first()))
+                    {
+                        sa->ensureWidgetVisible(fxRows.last());
+                        sa->ensureWidgetVisible(fxRows.first(), 50, 10);
+                    }
+            QTest::qWait(50);
+            QVERIFY(view.grab().save(QString("%1/%2-%3-%4x%5.png").arg(dir, tag, shot.second)
+                                         .arg(sz.width()).arg(sz.height())));
+        }
+    }
 }

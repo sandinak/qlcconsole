@@ -460,6 +460,16 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   tick, the same heads dimmed, the same DMX out.
 
 - **Course handouts link to the lessons they mean.** Lesson 3.5 and 3.8 handouts pointed at lesson pages that do not exist from where a handout is built (0.5, 0.7, 2.1, 3.7); the course site link check is clean again.
+- **An effect on a layer says what it runs on and what each setting is**
+  (Show Tree layer page): under each effect's row, as a line aim's Spread /
+  Grouping sit under Position -- **Runs on** (the groups, with *"2 of 4
+  fixtures (Pars have no pan/tilt)"* when some can't run it), **Moves**,
+  its **Colours**, each setting with its value and where it comes from
+  (this cue's own, the effect palette's, the preset's, the script's
+  default, tracked from an earlier cue) and **Runs**. A setting's ⋯ sets it
+  here as this cue's own (a one-off copy of a shared or carried-in effect),
+  one undo step. The cue page names the layers a cue-level effect runs on.
+
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections
   (or by a controller slot) now moves the follow spot from the Show Tree,

@@ -171,6 +171,7 @@ add_library(${module_name}
     effectbrowser.cpp effectbrowser.h
     effectfit.cpp effectfit.h
     effectorigin.cpp effectorigin.h
+    effectrows.cpp effectrows.h
     effectrunsmenu.cpp effectrunsmenu.h
     effectdesigner.cpp effectdesigner.h
     effectspage.cpp effectspage.h
