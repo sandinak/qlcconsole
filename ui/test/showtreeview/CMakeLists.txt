@@ -26,3 +26,11 @@ target_link_libraries(${module_name} PRIVATE
     qlcplusengine
     qlcplusui
 )
+
+# The command line's AI path against a model on loopback (ai/test/common):
+# AiAssist is the one linked into qlcplusui.
+if(QLC_AI_ASSIST)
+    target_include_directories(${module_name} PRIVATE ../../../ai/src ../../../ai/test/common)
+    target_compile_definitions(${module_name} PRIVATE QLC_AI_ASSIST)
+    target_link_libraries(${module_name} PRIVATE Qt6::Network)
+endif()

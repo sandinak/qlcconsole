@@ -165,6 +165,44 @@ public:
      *  nothing is near or nothing would change. Deterministic. */
     QString suggest(const QString &line, const Context &context) const;
 
+    /** What a line that failed reads as: the one command line picks the
+     *  spell-check or AI Assist from this. Deterministic, nothing run. */
+    struct Failure
+    {
+        enum Kind
+        {
+            /** The command line's own words, the show's names and values,
+             *  with near misses at most: a typo (fix: the line put right)
+             *  or, fix empty, the parser's answer stands ("no cue 9.9").
+             *  Never AI. */
+            Typo,
+            /** Reads as language: a question, two or more function words
+             *  ("the", "for", "please"), several words that are neither
+             *  the grammar's nor the show's. AI Assist's (Design, on). */
+            Language,
+            /** Between the two (one word that is nobody's: a verb outside
+             *  the grammar, a name the show hasn't): AI Assist when on,
+             *  with fix (if any) offered as a link; else the local fix. */
+            Unsure
+        };
+        Kind kind = Unsure;
+        /** suggest(): the line with its near misses put right (empty: none). */
+        QString fix;
+        /** The line's words with letters, and what each counted as (values
+         *  -- numbers, cue numbers, #rrggbb, 50% -- are not words). */
+        int words = 0;
+        int known = 0;          //!< a grammar word or a name of the show
+        int nearMiss = 0;       //!< a small typo away from one of those
+        int language = 0;       //!< a function or question word outside the grammar
+        int unknown = 0;        //!< none of these
+        bool question = false;  //!< a question: "why …", "… ?"
+    };
+    /** Classify @a line, which failed. @a unparsed is the run's
+     *  Result::unparsed (false: the grammar took every word and a name or
+     *  a cue it named isn't there -- the parser's answer, unless the line
+     *  reads as language). */
+    Failure classifyFailure(const QString &line, const Context &context, bool unparsed = true) const;
+
     /** Is @a word (the first word of a line) one that only means something
      *  with a cue to act on -- cue, list, record, include, skip, mib, GO...?
      *  Build answers "Show Tree only" to these. */

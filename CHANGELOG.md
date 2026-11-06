@@ -384,6 +384,26 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **The command line tells a typo from plain words** — a line that isn't a
+  command is read first: the command line's words and the show's names
+  with a slip (`towrs colour blu`, `relase Towers`, `dimer 50`, `go 1.2.3`)
+  get *Did you mean …?* and ask no one; a line that reads as language
+  (*make the towers blue for the chorus*, *why is FOH 3 on*) goes to AI
+  Assist without a `?`, also when it starts as a command and goes on in
+  words. Before, any line the spell-check could bend into something was
+  "corrected" instead of asked, and a half-parsed line never reached AI
+  Assist. In Operate plain words now say *AI Assist takes plain words in
+  Design mode only* instead of failing silently.
+- **Build's command bar takes plain words too** — the same typo fix and AI
+  Assist fallback as the Show Tree's line; what the assistant proposes runs
+  as lines of the bar, onto the loaded scene.
+- **The command line shows when AI Assist is working** — a spinner turns in
+  the line and *Asking AI Assist… Esc cancels* (with the seconds after two)
+  shows beside it until the answer, an error, the time limit or Esc; a
+  click on the spinner cancels. The line stays usable meanwhile, a newer
+  line replaces the question in flight, and only the line that asked shows
+  the answer.
+
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections
   (or by a controller slot) now moves the follow spot from the Show Tree,

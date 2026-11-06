@@ -4937,6 +4937,148 @@ void ShowTree_Test::commandLineSpellCheck()
     QVERIFY(!cmd.run("Towers colour Blue", ctx).unparsed);
 }
 
+/* Typo or language (0.4.1): a line that failed is classified before the
+   command line picks the spell-check or AI Assist -- written as an operator
+   types them. "typo": the local fix (or the parser's answer, fix ""); 
+   "language": AI Assist's; "unsure": AI Assist when on, else the local fix.
+   A fix of "*" isn't checked. One show for the whole table (a show per row
+   would be most of the test's time); QLC_CLASSIFY_TABLE=1 prints it. */
+void ShowTree_Test::commandLineTypoOrLanguage()
+{
+    struct Row
+    {
+        const char *line;
+        const char *kind;
+        const char *fix;
+    };
+    static const Row rows[] = {
+        // Language: the assistant's.
+        { "make the towers blue for the chorus", "language", "*" },
+        { "fade everything out over 5 seconds", "language", "*" },
+        { "why is FOH 3 on", "language", "*" },
+        { "add a cue after 1.2 with the cyc in red", "language", "*" },
+        { "can you make the steps amber", "language", "*" },
+        { "turn all the movers to red", "language", "*" },
+        { "what is in cue 2", "language", "*" },
+        { "how do I make a chase", "language", "*" },
+        { "set the towers to blue and the steps to red", "language", "*" },
+        { "please make it brighter", "language", "*" },
+        { "put the cyc in amber during the bridge", "language", "*" },
+        { "which fixtures are not patched", "language", "*" },
+        { "bring the towers up to full", "language", "*" },
+        { "kill everything except the cyc", "language", "*" },
+        { "i want the tops in blue when the song starts", "language", "*" },
+        { "make every other mover red", "language", "*" },
+        { "copy cue 2 to the end of the list", "language", "*" },
+        { "find address conflicts", "language", "*" },
+        { "find address conflicts?", "language", "*" },
+        { "Towers colour the nice blue please", "language", "*" },
+        { "Towers dimmer as bright as it goes", "language", "*" },
+        { "swap the towers and the tops", "language", "*" },
+        { "give me a warm wash on stage", "language", "*" },
+        { "show me everything that is lit", "language", "*" },
+        { "dim the house lights slowly", "language", "*" },
+        { "what does track mean", "language", "*" },
+        { "Steps red and Towers blue with a slow fade", "language", "*" },
+        { "is anything parked", "language", "*" },
+        { "flash the cyc on every downbeat", "language", "*" },
+        { "copy the look from cue 2 into cue 3", "language", "*" },
+        // Typos: the command line's words and the show's names, near misses.
+        { "towrs colour blu", "typo", "Towers colour Blue" },
+        { "towrs blue", "typo", "*" },
+        { "cue 1.2 lyer cyc", "typo", "*" },
+        { "relase Towers", "typo", "release Towers" },
+        { "goto 1.1.3", "typo", "cue 1.1.3" },
+        { "go 1.2.3", "typo", "cue 1.2.3" },
+        { "dimer 50", "typo", "dimmer 50" },
+        { "Towers colur Blue", "typo", "Towers colour Blue" },
+        { "recrod", "typo", "record" },
+        { "Towers colour Rde dimer 30", "typo", "Towers colour Red dimmer 30" },
+        { "AT W AL colour Red", "typo", "AT W ALL colour Red" },
+        { "Steps colour Bleu", "typo", "Steps colour Blue" },
+        { "Movrs colour Amber", "typo", "Movers colour Amber" },
+        { "Towers,Tops colour Blu", "typo", "*" },
+        { "untrak Towers", "typo", "untrack Towers" },
+        { "dimmmer 40", "typo", "dimmer 40" },
+        { "Cyc colour Ambr", "typo", "Cyc colour Amber" },
+        { "undp", "typo", "undo" },
+        { "relese Steps", "typo", "release Steps" },
+        { "colour Bleu", "typo", "*" },
+        { "Steps spred 2", "typo", "Steps spread 2" },
+        { "Tops colur #ff8800", "typo", "Tops colour #ff8800" },
+        { "skip 9.9", "typo", "" },
+        { "Towers colour Purple", "typo", "" },
+        { "FOH 3 dimer 70", "typo", "FOH 3 dimmer 70" },
+        // Unsure: one word nobody owns.
+        { "make towers blue", "unsure", "*" },
+        { "paint towers blue", "unsure", "*" },
+        { "xyzzy", "unsure", "" },
+        { "Towers colour Blue please", "unsure", "*" },
+    };
+
+    group("Towers", { m_fixtures[0] });
+    group("Tops", { m_fixtures[1] });
+    group("AT W ALL", { m_fixtures[2] });
+    group("Steps", { m_fixtures[3] });
+    group("FOH 3", { m_fixtures[4] });
+    group("Cyc", { m_fixtures[5] });
+    group("Movers", { m_fixtures[6] });
+    colour("Blue");
+    colour("Red");
+    colour("Amber");
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ctx.list = st->addCueList(ctx.production, "L", ListMode::NonTracking);
+    ctx.cue = st->addCue(ctx.list, -1, "One");
+    st->addCue(ctx.list, -1, "Two");
+    st->addCue(ctx.list, -1, "Three");
+    // A layer selected, as when an attribute starts a line ("dimer 50").
+    const ShowTreeCommand::Result made = cmd.run("Towers colour Blue", ctx);
+    QVERIFY(made.ok);
+    ctx.layers = { { ctx.cue, made.layer } };
+    const QByteArray before = st->cue(ctx.cue)->layers.count() == 1 ? QByteArray("1") : QByteArray();
+    QCOMPARE(before, QByteArray("1"));
+
+    static const char *kinds[] = { "typo", "language", "unsure" };
+    const bool print = qEnvironmentVariableIsSet("QLC_CLASSIFY_TABLE");
+    QStringList wrong;
+    int languageRows = 0, typoRows = 0;
+    for (const Row &row : rows)
+    {
+        const QString line = QString::fromUtf8(row.line);
+        // The real path: the line fails first, then is classified.
+        const ShowTreeCommand::Result r = cmd.run(line, ctx);
+        if (r.ok)
+        {
+            wrong << QString("%1: ran").arg(line);
+            continue;
+        }
+        const ShowTreeCommand::Failure f = cmd.classifyFailure(line, ctx, r.unparsed);
+        const QString got = QString::fromLatin1(kinds[f.kind]);
+        const QString fix = QString::fromUtf8(row.fix);
+        const QString detail = QString("words %1 known %2 near %3 language %4 unknown %5 q %6 unparsed %7 fix \"%8\"")
+                                   .arg(f.words).arg(f.known).arg(f.nearMiss).arg(f.language).arg(f.unknown)
+                                   .arg(f.question).arg(r.unparsed).arg(f.fix);
+        if (print)
+            qInfo().noquote() << QString("%1 | %2 | %3").arg(line, -48).arg(got, -8).arg(detail);
+        if (got != QLatin1String(row.kind))
+            wrong << QString("%1: %2, not %3 (%4)").arg(line, got, QString::fromLatin1(row.kind), detail);
+        else if (fix != QLatin1String("*") && f.fix != fix)
+            wrong << QString("%1: fix \"%2\", not \"%3\"").arg(line, f.fix, fix);
+        // Deterministic.
+        if (cmd.classifyFailure(line, ctx, r.unparsed).kind != f.kind || cmd.suggest(line, ctx) != f.fix)
+            wrong << QString("%1: not the same twice").arg(line);
+        languageRows += QLatin1String(row.kind) == QLatin1String("language") ? 1 : 0;
+        typoRows += QLatin1String(row.kind) == QLatin1String("typo") ? 1 : 0;
+    }
+    QVERIFY2(wrong.isEmpty(), qPrintable(wrong.join("\n")));
+    QVERIFY(languageRows >= 20 && typoRows >= 20);
+    // Nothing ran: the one layer is still the only one.
+    QCOMPARE(st->cue(ctx.cue)->layers.count(), 1);
+}
+
 /* Tab for every kind of word the grammar takes (2026-10-17): a show set up
    with one of each, then a table -- what is typed, what Tab makes of it,
    and a word the options must hold. */

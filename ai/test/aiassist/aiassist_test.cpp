@@ -27,6 +27,7 @@
 #include <QTcpSocket>
 #include <QTextBrowser>
 #include <QToolButton>
+#include <QAction>
 #include <QHBoxLayout>
 #include <QCheckBox>
 #include <QComboBox>
@@ -73,6 +74,10 @@ public:
         int status = 200;
         QByteArray body;
         bool hold = false;
+        /** Answer after this long (a model that thinks a while). */
+        int delayMs = 0;
+        /** Close the connection without an answer (as a timeout ends). */
+        bool drop = false;
     };
 
     FakeModelServer()
@@ -93,6 +98,11 @@ public:
     void queue(const QString &path, const Response &r) { m_queue[path] << r; }
     void queueJson(const QString &path, const QByteArray &json) { queue(path, Response { 200, json, false }); }
     void hold(const QString &path) { queue(path, Response { 200, QByteArray(), true }); }
+    void queueDelayed(const QString &path, const QByteArray &json, int ms)
+    {
+        queue(path, Response { 200, json, false, ms });
+    }
+    void queueDrop(const QString &path) { queue(path, Response { 200, QByteArray(), false, 0, true }); }
     void clearQueue() { m_queue.clear(); }
 
     QList<Request> requests;
@@ -134,6 +144,26 @@ private:
             r = q.count() > 1 ? q.takeFirst() : q.first();
         if (r.hold)
             return;
+        if (r.drop)
+        {
+            s->abort();
+            return;
+        }
+        if (r.delayMs > 0)
+        {
+            QPointer<QTcpSocket> later(s);
+            const Response delayed { r.status, r.body, false };
+            QTimer::singleShot(r.delayMs, this, [later, delayed]() {
+                if (later.isNull())
+                    return;
+                QByteArray out = "HTTP/1.1 " + QByteArray::number(delayed.status) + " X\r\nContent-Type: "
+                                 "application/json\r\nConnection: close\r\nContent-Length: "
+                                 + QByteArray::number(delayed.body.size()) + "\r\n\r\n" + delayed.body;
+                later->write(out);
+                later->disconnectFromHost();
+            });
+            return;
+        }
         QByteArray out = "HTTP/1.1 " + QByteArray::number(r.status) + " X\r\nContent-Type: application/json\r\n"
                          "Connection: close\r\nContent-Length: " + QByteArray::number(r.body.size()) + "\r\n\r\n" + r.body;
         s->write(out);
@@ -1138,8 +1168,8 @@ void AiAssist_Test::oneLineFallbackSendsTheParserError()
     QSignalSpy answered(m_ai, &AiAssist::answered);
     QString note;
     QVERIFY(b.cl->fallback("make the towers a nice blue", "Don't know “make”.", ctx, &note));
-    QVERIFY(b.msg->text().contains("Don't know “make”."));
-    QVERIFY(b.msg->text().contains("Asking"));
+    QVERIFY2(b.msg->text().startsWith("Asking AI Assist"), qPrintable(b.msg->text()));
+    QVERIFY(b.msg->text().contains("Esc cancels"));
     QVERIFY(answered.wait(5000));
     QVERIFY(b.pane.toHtml().contains("front truss"));
     QCOMPARE(m_server->count(kChat), 1);
@@ -1200,6 +1230,130 @@ void AiAssist_Test::oneLineFallbackOffOrOperateAsksNothing()
     m_doc->setMode(Doc::Design);
     QTest::qWait(50);
     QCOMPARE(m_server->requests.count(), 0);
+}
+
+/* The working indicator (0.4.1): while a line is with the assistant the
+   line shows it -- a spinner that turns in the line, "Asking AI Assist…
+   Esc cancels" and, after two seconds, the seconds -- and stays usable. The
+   answer, an error, a dropped connection (how a timeout ends) and Esc each
+   clear it; a newer line replaces the one in flight; the other bar shows
+   nothing of it. */
+void AiAssist_Test::busyIndicatorWhileAsking()
+{
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    Bar b, other;
+    b.bar.show();
+    QAction *spinner = b.cl->findChild<QAction *>("aiBusySpinner");
+    QVERIFY(spinner != nullptr);
+    QVERIFY(!b.cl->isBusyShown());
+    QVERIFY(!b.line->actions().contains(spinner));
+
+    // A model that thinks for a while.
+    m_server->clearQueue();
+    m_server->hold(kChat);
+    QVERIFY(b.cl->fallback("make the towers blue for the chorus", "Don't know “make”.", ctx, nullptr,
+                           "Towers colour Blue"));
+    QVERIFY(b.cl->isAsking());
+    QVERIFY(b.cl->isBusyShown());
+    QVERIFY(b.line->actions().contains(spinner));
+    QVERIFY2(b.msg->text().startsWith("Asking AI Assist"), qPrintable(b.msg->text()));
+    QVERIFY(b.msg->text().contains("Esc cancels"));
+    QVERIFY(!b.msg->text().contains(" s ·"));
+    // The spell-check's fix waits in the pane as a link.
+    QVERIFY(b.pane.toHtml().contains("ex:Towers%20colour%20Blue"));
+    // It turns.
+    const qint64 first = spinner->icon().cacheKey();
+    QTRY_VERIFY_WITH_TIMEOUT(spinner->icon().cacheKey() != first, 1000);
+    // The other bar shows nothing of it.
+    QVERIFY(!other.cl->isBusyShown());
+    QVERIFY(!other.cl->isAsking());
+    // After two seconds: the seconds.
+    QTRY_VERIFY_WITH_TIMEOUT(b.msg->text().contains(" s · Esc cancels"), 4000);
+    QVERIFY(b.cl->elapsedSeconds() >= 2);
+
+    // The line stays usable: a command's message isn't overwritten, the
+    // spinner keeps turning.
+    b.msg->setText("Towers colour Blue: 1 layer");
+    QTest::qWait(250);
+    QCOMPARE(b.msg->text(), QStringLiteral("Towers colour Blue: 1 layer"));
+    QVERIFY(b.cl->isBusyShown());
+
+    // A newer line replaces the one in flight: still busy, no "Cancelled".
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(b.cl->fallback("fade everything out over 5 seconds", "Don't know “everything”.", ctx));
+    QVERIFY(b.cl->isBusyShown());
+    QCOMPARE(answered.count(), 1);                   // the old one, cancelled...
+    QVERIFY(!b.pane.toHtml().contains("Cancelled"));  // ...and not shown
+    QVERIFY(b.pane.toHtml().contains("fade everything out"));
+    QTRY_COMPARE_WITH_TIMEOUT(m_server->count(kChat), 2, 2000);
+
+    // Esc cancels: cleared.
+    QVERIFY(b.cl->cancel());
+    QVERIFY(!b.cl->isBusyShown());
+    QVERIFY(!b.line->actions().contains(spinner));
+    QVERIFY(b.msg->text().contains("Cancelled"));
+
+    // An answer after a while: busy until it comes, then cleared.
+    m_server->clearQueue();
+    m_server->queueDelayed(kChat, textReply("The Towers are the front truss."), 400);
+    answered.clear();
+    QVERIFY(b.cl->handle("? what are the towers", ctx));
+    QVERIFY(b.cl->isBusyShown());
+    QVERIFY(answered.wait(5000));
+    QVERIFY(!b.cl->isBusyShown());
+    QVERIFY(!b.line->actions().contains(spinner));
+    QVERIFY(b.pane.toHtml().contains("front truss"));
+    QVERIFY(!other.pane.toHtml().contains("front truss"));   // only the line that asked
+    QVERIFY(b.msg->text().contains("nothing in the show changed"));
+
+    // An error: cleared, and said.
+    m_server->clearQueue();
+    m_server->queue(kChat, FakeModelServer::Response { 500, QByteArray("{\"error\":\"model fell over\"}"), false });
+    answered.clear();
+    QVERIFY(b.cl->handle("? anything", ctx));
+    QVERIFY(b.cl->isBusyShown());
+    QVERIFY(answered.wait(5000));
+    QVERIFY(!b.cl->isBusyShown());
+    QVERIFY(!answered.first().first().value<AiAssist::Answer>().ok);
+
+    // No answer at all (the connection drops, as a timeout ends): cleared.
+    m_server->clearQueue();
+    m_server->queueDrop(kChat);
+    answered.clear();
+    QVERIFY(b.cl->handle("? anything", ctx));
+    QVERIFY(answered.wait(5000));
+    QVERIFY(!b.cl->isBusyShown());
+    QVERIFY(!b.line->actions().contains(spinner));
+
+    // A click on the spinner cancels too.
+    m_server->clearQueue();
+    m_server->hold(kChat);
+    QVERIFY(b.cl->handle("? anything", ctx));
+    QVERIFY(b.cl->isBusyShown());
+    spinner->trigger();
+    QVERIFY(!b.cl->isBusyShown());
+    m_server->clearQueue();
+}
+
+/* A single-step proposal goes in the line only when it is empty: what the
+   operator typed meanwhile stays. */
+void AiAssist_Test::proposalLeavesWhatIsTyped()
+{
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    Bar b;
+    propose(m_server, toolsReply({ { "set_look", QJsonObject { { "targets", QJsonArray { "Towers" } },
+                                                                 { "looks", QJsonArray { look("colour", "Blue") } } } } }),
+            "Towers colour Blue: Enter applies it.");
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(b.cl->fallback("paint towers blue", "Don't know “paint”.", ctx));
+    b.line->setText("cue 2");
+    QVERIFY(answered.wait(5000));
+    QVERIFY(m_ai->hasProposal());
+    QCOMPARE(b.line->text(), QStringLiteral("cue 2"));
+    QVERIFY2(b.msg->text().contains("Apply in the pane"), qPrintable(b.msg->text()));
+    m_ai->discard();
 }
 
 void AiAssist_Test::decliningChangesNothing()

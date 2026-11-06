@@ -102,11 +102,13 @@ BuildCommandBar::BuildCommandBar(Doc *doc, const Host &host, QWidget *parent)
     m_message->setObjectName(QStringLiteral("buildCommandMessage"));
     h->addWidget(m_message);
 #ifdef QLC_AI_ASSIST
-    // "? question": AI Assist's, through the registry, as in the tree. What
-    // it proposes changes the Show Tree, so it has no cue to act on here.
+    // "? question", and a line in plain words: AI Assist's, as in the
+    // tree. What it proposes runs as lines of this bar, onto the scene.
     m_ai = new AiCommandLine(m_line, m_help, m_message, this);
     m_ai->setOperations(m_operations);
+    m_ai->setPlainWords(true);
     m_ai->setSelectionProvider([]() { return ShowTreeCommand::Context(); });
+    m_ai->setLineRunner([this](const QString &command) { return runLine(command); });
 #endif
     v->addLayout(h);
     m_syntax = new QLabel(grammar(), this);
@@ -226,8 +228,12 @@ bool BuildCommandBar::runLine(const QString &line)
         ctx.recentPalettes = m_host.recentPalettes();
 
 #ifdef QLC_AI_ASSIST
+    // What AI Assist is asked with: no cue, and not this line's edit (it
+    // outlives the line; a proposal runs as lines of the bar).
+    ShowTreeCommand::Context aiCtx = ctx;
+    aiCtx.build = nullptr;
     // "? question": AI Assist's (it answers in the help pane, later).
-    if (m_ai != nullptr && m_ai->handle(line, ctx))
+    if (m_ai != nullptr && m_ai->handle(line, aiCtx))
     {
         if (m_history.isEmpty() || m_history.last() != line)
             m_history << line;
@@ -235,7 +241,56 @@ bool BuildCommandBar::runLine(const QString &line)
         return true;
     }
 #endif
-    const ShowTreeCommand::Result r = m_operations->runLine(line, ctx);
+    ShowTreeCommand::Result r = m_operations->runLine(line, ctx);
+    m_suggestedFrom.clear();
+    // One line, as in the tree: a line that isn't a command is a typo (the
+    // fix in the line) or plain words (AI Assist, in Design).
+    if (!r.ok && r.help.isEmpty())
+    {
+        const ShowTreeCommand::Failure f = m_commander->classifyFailure(line, ctx, r.unparsed);
+        auto offerFix = [this, &line, &f]() {
+            m_suggestedFrom = line;
+            m_suggestedLine = f.fix;
+            m_line->setText(f.fix);
+            m_line->end(false);
+            setMessage(tr("Did you mean “%1”? Enter runs it, Esc puts back what you typed.").arg(f.fix), true);
+            return false;                       // the fix stays in the line
+        };
+        if (f.kind == ShowTreeCommand::Failure::Typo)
+        {
+            if (!f.fix.isEmpty())
+                return offerFix();
+        }
+#ifdef QLC_AI_ASSIST
+        else if (m_ai != nullptr)
+        {
+            if (m_doc->mode() == Doc::Design)
+            {
+                QString note;
+                if (m_ai->fallback(line, r.message, aiCtx, &note,
+                                  f.kind == ShowTreeCommand::Failure::Unsure ? f.fix : QString()))
+                {
+                    if (m_history.isEmpty() || m_history.last() != line)
+                        m_history << line;
+                    m_historyAt = -1;
+                    return true;
+                }
+                if (f.kind == ShowTreeCommand::Failure::Unsure && !f.fix.isEmpty())
+                    return offerFix();
+                if (!note.isEmpty())
+                    r.message += QLatin1Char(' ') + note;
+            }
+            else if (f.kind == ShowTreeCommand::Failure::Unsure && !f.fix.isEmpty())
+                return offerFix();
+            else if (f.kind == ShowTreeCommand::Failure::Language)
+                r.message += QLatin1Char(' ') + (AiAssist::isEnabled()
+                                                     ? tr("AI Assist takes plain words in Design mode only.")
+                                                     : tr("AI Assist takes plain words in Design mode; turn it on in Settings ▸ AI Assist."));
+        }
+#endif
+        else if (f.kind == ShowTreeCommand::Failure::Unsure && !f.fix.isEmpty())
+            return offerFix();
+    }
     QString message = r.message;
     bool ok = r.ok;
     if (!r.help.isEmpty())
@@ -307,6 +362,14 @@ bool BuildCommandBar::eventFilter(QObject *obj, QEvent *ev)
         }
         if (ke->key() == Qt::Key_Escape)
         {
+            // A suggestion in the line: what was typed comes back.
+            if (!m_suggestedFrom.isNull() && m_line->text() == m_suggestedLine)
+            {
+                m_line->setText(m_suggestedFrom);
+                m_suggestedFrom.clear();
+                setMessage(QString(), true);
+                return true;
+            }
 #ifdef QLC_AI_ASSIST
             if (m_ai != nullptr && m_ai->cancel())
                 return true;

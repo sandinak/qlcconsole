@@ -3914,9 +3914,16 @@ void ShowTreeView::slotTreeSelectionChanged()
                     holds = tr("Layer %1: %2 — e.g. colour Blue, or name \"…\"")
                             .arg(l->name.isEmpty() ? m_st->targetLabel(l->target) : l->name,
                                  m_st->targetContents(l->target));
-        m_command->setPlaceholderText(holds.isEmpty()
-                                      ? tr("Type a command (: from the tree) — e.g. Towers colour Blue dimmer 45, or help")
-                                      : holds);
+        const QString placeholder = holds.isEmpty()
+                ? tr("Type a command (: from the tree) — e.g. Towers colour Blue dimmer 45, or help")
+                : holds;
+#ifdef QLC_AI_ASSIST
+        // AI Assist's hint ("or ask in plain words") stays on the end.
+        if (m_ai != nullptr)
+            m_ai->setBasePlaceholder(placeholder);
+        else
+#endif
+            m_command->setPlaceholderText(placeholder);
     }
     updateInspector();
     updateButtons();
@@ -11988,40 +11995,56 @@ bool ShowTreeView::runCommand(const QString &line)
 bool ShowTreeView::oneLineFallback(const QString &line, const ShowTreeCommand::Context &ctx,
                                    ShowTreeCommand::Result *r, bool *sent)
 {
-    // Step 2: the local spell-check -- a word of the grammar or a name of
-    // the show put right. The corrected line goes in the line, to read and
-    // run with Enter (Esc puts back what was typed); nothing ran.
-    const QString fix = m_commander->suggest(line, ctx);
-    if (!fix.isEmpty())
-    {
+    *sent = false;
+    m_suggestedFrom.clear();
+    // Step 2: what the line reads as -- the command line's words with a
+    // near miss (a typo), language, or between (classifyFailure()).
+    const ShowTreeCommand::Failure f = m_commander->classifyFailure(line, ctx, r->unparsed);
+    // The local spell-check's fix goes in the line, to read and run with
+    // Enter (Esc puts back what was typed); nothing ran.
+    auto offerFix = [this, &line, &f]() {
         m_suggestedFrom = line;
-        m_suggestedLine = fix;
-        m_command->setText(fix);
+        m_suggestedLine = f.fix;
+        m_command->setText(f.fix);
         m_command->end(false);
-        m_commandMsg->setText(tr("Did you mean “%1”? Enter runs it, Esc puts back what you typed.").arg(fix));
+        m_commandMsg->setText(tr("Did you mean “%1”? Enter runs it, Esc puts back what you typed.").arg(f.fix));
         QPalette pal = m_commandMsg->palette();
         pal.setColor(QPalette::WindowText, palette().color(QPalette::WindowText));
         m_commandMsg->setPalette(pal);
-        *sent = false;
         return true;
-    }
+    };
+    if (f.kind == ShowTreeCommand::Failure::Typo)
+        return !f.fix.isEmpty() && offerFix();      // else the parser's answer stands
 #ifdef QLC_AI_ASSIST
-    // Step 3: not in the grammar at all. Design only; Operate never asks.
-    if (r->unparsed && m_ai != nullptr && m_doc->mode() == Doc::Design)
+    // Step 3: language, or unsure: AI Assist's, in Design (the fix, if
+    // any, offered as a link with the answer). Operate never asks.
+    if (m_ai != nullptr)
     {
-        QString note;
-        if (m_ai->fallback(line, r->message, ctx, &note))
+        if (m_doc->mode() == Doc::Design)
         {
-            *sent = true;
-            return true;
+            QString note;
+            const QString link = f.kind == ShowTreeCommand::Failure::Unsure ? f.fix : QString();
+            if (m_ai->fallback(line, r->message, ctx, &note, link))
+            {
+                *sent = true;
+                return true;
+            }
+            if (f.kind == ShowTreeCommand::Failure::Unsure && !f.fix.isEmpty())
+                return offerFix();
+            if (!note.isEmpty())
+                r->message += QLatin1Char(' ') + note;
+            return false;
         }
-        if (!note.isEmpty())
-            r->message += QLatin1Char(' ') + note;
+        if (f.kind == ShowTreeCommand::Failure::Unsure && !f.fix.isEmpty())
+            return offerFix();
+        if (f.kind == ShowTreeCommand::Failure::Language)
+            r->message += QLatin1Char(' ') + (AiAssist::isEnabled()
+                                                  ? tr("AI Assist takes plain words in Design mode only.")
+                                                  : tr("AI Assist takes plain words in Design mode; turn it on in Settings ▸ AI Assist."));
+        return false;
     }
-#else
-    Q_UNUSED(sent)
 #endif
-    return false;
+    return f.kind == ShowTreeCommand::Failure::Unsure && !f.fix.isEmpty() && offerFix();
 }
 
 void ShowTreeView::slotCommandEntered()

@@ -160,6 +160,7 @@ private slots:
     void commandLineFailsAsAWhole();
     void commandLineCompletes();
     void commandLineSpellCheck();
+    void commandLineTypoOrLanguage();
     void commandLineCompletesEveryWord_data();
     void commandLineCompletesEveryWord();
     void commandLineTabCyclesAndRuns();

@@ -18,6 +18,7 @@
 */
 
 #include <QRegularExpression>
+#include <QSet>
 #include <QCoreApplication>
 #include <QColor>
 #include <algorithm>
@@ -3638,38 +3639,51 @@ static int typoDistance(const QString &a, const QString &b)
     return d[n][m];
 }
 
+// The line's words (a quoted name is one word, quotes kept off).
+static QStringList lineWords(const QString &line)
+{
+    QStringList toks;
+    QString cur;
+    bool quoted = false, any = false;
+    for (const QChar c : line.trimmed())
+    {
+        if (c == QLatin1Char('"'))
+        {
+            quoted = !quoted;
+            any = true;
+        }
+        else if (c == QLatin1Char(' ') && !quoted)
+        {
+            if (any)
+                toks << cur;
+            cur.clear();
+            any = false;
+        }
+        else
+        {
+            cur += c;
+            any = true;
+        }
+    }
+    if (any)
+        toks << cur;
+    return toks;
+}
+
 QString ShowTreeCommand::suggest(const QString &line, const Context &context) const
 {
-    // The line's words (a quoted name is one word, quotes kept off).
-    QStringList toks;
-    {
-        QString cur;
-        bool quoted = false, any = false;
-        for (const QChar c : line.trimmed())
-        {
-            if (c == QLatin1Char('"'))
-            {
-                quoted = !quoted;
-                any = true;
-            }
-            else if (c == QLatin1Char(' ') && !quoted)
-            {
-                if (any)
-                    toks << cur;
-                cur.clear();
-                any = false;
-            }
-            else
-            {
-                cur += c;
-                any = true;
-            }
-        }
-        if (any)
-            toks << cur;
-    }
+    QStringList toks = lineWords(line);
     if (toks.isEmpty())
         return QString();
+    bool changed = false;
+    // "go 1.2.3", "goto 1.2.3": a cue by number is `cue 1.2.3`.
+    static const QRegularExpression cueNumber(QStringLiteral("^[0-9]+(\\.[0-9]+)*$"));
+    if (toks.count() >= 2 && QStringList({ "go", "goto", "jump" }).contains(toks.first().toLower())
+        && cueNumber.match(toks.at(1)).hasMatch())
+    {
+        toks[0] = QStringLiteral("cue");
+        changed = true;
+    }
 
     auto hasLetter = [](const QString &s) {
         for (const QChar c : s)
@@ -3679,12 +3693,17 @@ QString ShowTreeCommand::suggest(const QString &line, const Context &context) co
     };
 
     QString head;
-    bool changed = false;
     int i = 0;
     while (i < toks.count())
     {
         QStringList cands;
         candidates(head, context, &cands);
+        // A line may start with an attribute (`dimmer 50`: the selected
+        // layers), which Tab doesn't offer first.
+        if (head.isEmpty())
+            for (const Word &w : words())
+                if (w.attribute)
+                    cands << w.word << w.aliases;
         const int most = qMin(4, int(toks.count()) - i);
 
         // A word that already stands there, whole (the longest run of
@@ -3758,4 +3777,192 @@ QString ShowTreeCommand::suggest(const QString &line, const Context &context) co
     }
     const QString out = head.trimmed();
     return changed && out.compare(line.trimmed(), Qt::CaseSensitive) != 0 ? out : QString();
+}
+
+/****************************************************************************
+ * Typo or language: what a failed line reads as
+ ****************************************************************************/
+
+// The command line's own words, lower case: every word of the table and its
+// aliases, the words its syntax lines spell out (thru, each, on, off,
+// apply…; placeholders and quoted examples left out), the attribute
+// aliases and the Show Tree words.
+static const QSet<QString> &grammarWords()
+{
+    static const QSet<QString> set = [] {
+        QSet<QString> s;
+        static const QRegularExpression placeholder(QStringLiteral("<[^>]*>|\"[^\"]*\""));
+        static const QRegularExpression word(QStringLiteral("[a-z][a-z-]*"));
+        for (const ShowTreeCommand::Word &w : ShowTreeCommand::words())
+        {
+            s.insert(w.word.toLower());
+            for (const QString &a : w.aliases)
+                s.insert(a.toLower());
+            QString syntax = w.syntax.toLower();
+            syntax.remove(placeholder);
+            QRegularExpressionMatchIterator it = word.globalMatch(syntax);
+            while (it.hasNext())
+                s.insert(it.next().captured(0));
+        }
+        for (const char *w : { "color", "dim", "level", "pos", "focus", "frost", "iris", "strobe", "fx", "redo",
+                               "go", "cut", "workbench", "textcolor", "cue-only", "grouping", "help", "thru" })
+            s.insert(QString::fromLatin1(w));
+        return s;
+    }();
+    return set;
+}
+
+// Words that make a line read as language when the grammar doesn't own them.
+static const QSet<QString> &languageWords()
+{
+    static const QSet<QString> set {
+        "the", "a", "an", "to", "for", "with", "and", "or", "but", "of", "from", "into", "onto", "over",
+        "under", "after", "before", "during", "while", "when", "whenever", "then", "than", "so", "that",
+        "this", "these", "those", "it", "its", "it's", "them", "they", "their", "there", "here", "me", "my",
+        "i", "i'm", "you", "your", "we", "us", "our", "please", "pls", "can", "could", "would", "should",
+        "will", "make", "let", "lets", "let's", "all", "every", "everything", "everyone", "anything",
+        "something", "nothing", "some", "any", "more", "less", "bit", "little", "very", "really", "just",
+        "also", "too", "like", "want", "need", "nice", "now", "again", "same", "other", "another", "by",
+        "as", "at", "up", "down", "about", "between", "until", "till", "is", "are", "was", "were", "be",
+        "been", "do", "does", "did", "have", "has", "had", "not", "no", "don't", "dont", "isn't", "why",
+        "what", "what's", "whats", "how", "which", "where", "who", "whose", "seconds", "second", "secs",
+        "minutes", "minute", "percent", "half", "slowly", "quickly", "slow", "fast", "brighter",
+        "darker", "warmer", "cooler", "if", "only", "both", "next", "last", "first", "one", "ones" };
+    return set;
+}
+
+// A first word that asks: the line is a question.
+static bool questionWord(const QString &w)
+{
+    static const QSet<QString> set { "why", "what", "what's", "whats", "how", "which", "where", "who",
+                                     "whose", "when", "is", "are", "was", "were", "does", "do", "did",
+                                     "can", "could", "should", "would", "will", "has", "have", "explain",
+                                     "tell" };
+    return set.contains(w);
+}
+
+// A number, a cue number, a time, a level or a colour: a value, not a word.
+static bool valueToken(const QString &t)
+{
+    static const QRegularExpression value(
+        QStringLiteral("^([+-]?[0-9]+([.,][0-9]+)*(%|s|ms)?|#[0-9a-fA-F]{6}|[,+@/()*=-]+)$"));
+    return value.match(t).hasMatch();
+}
+
+ShowTreeCommand::Failure ShowTreeCommand::classifyFailure(const QString &line, const Context &context,
+                                                          bool unparsed) const
+{
+    Failure f;
+    QString text = line.trimmed();
+    if (text.endsWith(QLatin1Char('?')))
+    {
+        f.question = true;
+        text.chop(1);
+    }
+    // Commas and "+" join targets ("Towers,Steps"): words either side.
+    text.replace(QLatin1Char(','), QStringLiteral(" , "));
+    const QStringList toks = lineWords(text);
+
+    // The show's names, whole (a name of several words counts once).
+    QStringList names = targetNames() + functionNames() + allPaletteNames() + listNames(context)
+                        + colourMacroNames() + reusableNames() + stageTargetNames() + setNames()
+                        + lookNames(context) + paletteFolders() + groupShortNames().keys();
+    for (const Production &p : m_st->productions())
+        names << p.name;
+    QSet<QString> whole;
+    QSet<QString> single;           // the names' words alike, for near misses
+    for (const QString &n : names)
+    {
+        const QString l = n.toLower();
+        if (l.isEmpty())
+            continue;
+        whole.insert(l);
+        if (!l.contains(QLatin1Char(' ')))
+            single.insert(l);
+    }
+    const QSet<QString> &grammar = grammarWords();
+    const QSet<QString> &lang = languageWords();
+
+    auto hasLetter = [](const QString &s) {
+        for (const QChar c : s)
+            if (c.isLetter())
+                return true;
+        return false;
+    };
+    auto near = [&](const QString &t) {
+        if (t.length() < 3)
+            return false;
+        const int limit = t.length() >= 8 ? 2 : 1;
+        for (const QSet<QString> *set : { &grammar, static_cast<const QSet<QString> *>(&single) })
+            for (const QString &c : *set)
+                if (qAbs(int(c.length()) - int(t.length())) <= limit && typoDistance(t, c) <= limit)
+                    return true;
+        return false;
+    };
+
+    int i = 0;
+    while (i < toks.count())
+    {
+        const QString t = toks.at(i).toLower();
+        if (!hasLetter(t) || valueToken(t))
+        {
+            ++i;
+            continue;
+        }
+        // A name of several words, typed whole ("AT W ALL", "FOH 3").
+        int run = 0;
+        for (int k = qMin(4, int(toks.count()) - i); k >= 2 && run == 0; --k)
+            if (whole.contains(toks.mid(i, k).join(QLatin1Char(' ')).toLower()))
+                run = k;
+        if (run > 0)
+        {
+            ++f.words;
+            ++f.known;
+            i += run;
+            continue;
+        }
+        // ...or a typo away from one ("AT W AL").
+        for (int k = qMin(4, int(toks.count()) - i); k >= 2 && run == 0; --k)
+        {
+            const QString chunk = toks.mid(i, k).join(QLatin1Char(' ')).toLower();
+            const int limit = chunk.length() >= 8 ? 2 : 1;
+            for (const QString &w : whole)
+                if (w.contains(QLatin1Char(' ')) && qAbs(int(w.length()) - int(chunk.length())) <= limit
+                    && typoDistance(chunk, w) <= limit)
+                {
+                    run = k;
+                    break;
+                }
+        }
+        if (run > 0)
+        {
+            ++f.words;
+            ++f.nearMiss;
+            i += run;
+            continue;
+        }
+        ++f.words;
+        if (i == 0 && questionWord(t) && !grammar.contains(t))
+            f.question = true;
+        if (lang.contains(t) && !grammar.contains(t))
+            ++f.language;
+        else if (grammar.contains(t) || whole.contains(t) || t.startsWith(QLatin1Char('#')))
+            ++f.known;
+        else if (near(t))
+            ++f.nearMiss;
+        else
+            ++f.unknown;
+        ++i;
+    }
+
+    f.fix = suggest(line, context);
+    const int foreign = f.language + f.unknown;
+    if ((f.question && f.words >= 2) || f.language >= 2 || (f.language >= 1 && f.unknown >= 1) || foreign >= 3
+        || (f.words >= 6 && foreign * 2 >= f.words))
+        f.kind = Failure::Language;
+    else if (foreign == 0 || (!unparsed && f.language == 0))
+        f.kind = Failure::Typo;
+    else
+        f.kind = Failure::Unsure;
+    return f;
 }
