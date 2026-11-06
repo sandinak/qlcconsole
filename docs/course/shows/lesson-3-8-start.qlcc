@@ -3166,6 +3166,7 @@
    <Name>SR Truss Cyc 1</Name>
    <Universe>2</Universe>
    <Address>165</Address>
+   <StageLook>CycStrip</StageLook>
    <Channels>165</Channels>
   </Fixture>
   <Fixture>
@@ -3176,6 +3177,7 @@
    <Name>SR Truss Cyc 2</Name>
    <Universe>2</Universe>
    <Address>330</Address>
+   <StageLook>CycStrip</StageLook>
    <Channels>165</Channels>
   </Fixture>
   <Fixture>
@@ -3186,6 +3188,7 @@
    <Name>SL Truss Cyc 2</Name>
    <Universe>1</Universe>
    <Address>165</Address>
+   <StageLook>CycStrip</StageLook>
    <Channels>165</Channels>
   </Fixture>
   <Fixture>
@@ -3196,6 +3199,7 @@
    <Name>SL Truss Cyc 1</Name>
    <Universe>1</Universe>
    <Address>0</Address>
+   <StageLook>CycStrip</StageLook>
    <Channels>165</Channels>
   </Fixture>
   <Fixture>

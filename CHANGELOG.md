@@ -418,6 +418,19 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **A grey row's Go to names the cue** — right-click a carried-in layer:
   **Go to 1.1.1 Setup**, the same words as the T column's *Set in 1.1.1
   Setup*, not just the number.
+- **The course shows' cyc lights are cyc lights** (Show Review PWR-12): the
+  four SR/SL Truss Cyc boxes in every course show now carry the Cyc / strip
+  light stage look, so their light on the cyc no longer reads as backwash
+  nobody meant (a PWR-12 warning per cue in every course show from lesson
+  1.1's finish on).
+  `derive-classroom-rig.py` sets it too.
+- **Every course show and the sample are reviewed in the gate**
+  (`showreviewshows_test`): Show Review runs over each, with a table of the
+  checks expected open on each (lesson 3.9's start stays broken on purpose),
+  so a check or a show that drifts fails the gate. `qlcconsole --review`
+  has a hermetic mode for it (the repo's own fixtures, scripts and effects,
+  none of the user's).
+
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections
   (or by a controller slot) now moves the follow spot from the Show Tree,

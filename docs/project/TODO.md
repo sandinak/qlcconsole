@@ -1519,8 +1519,12 @@ Leftovers of v1:
 - Accept all like this; Accept as an undo step; one-click fixes; Review
   before Operate and in Collect for Transfer; the chip hideable in
   Settings ▸ Appearance; counts saved with the show for the chip on open.
-- The course and sample shows reviewed in the gate with expected results;
-  a timing test on the stress-test show (serial list).
+- The course and sample shows reviewed in the gate with expected results
+  -- DONE 2026-11-06 (0.4.1, `showreviewshows_test`; the Truss Cyc boxes got
+  the Cyc stage look). Open: a timing test on the stress-test show (serial
+  list); MOV-08 on the 1.3+ shows (movers lit before any cue sets their
+  position) and PWR-12 from the audience-tower washes' spill on the cyc are
+  left as expected findings -- the lessons build those cues.
 
 ## Focus mode: shutters on profiles (future, asked 2026-10-23)
 

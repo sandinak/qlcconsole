@@ -159,6 +159,10 @@ def main(src, dst):
                 addr = 0
             f.find(N + 'Universe').text = str(uni_id)
             f.find(N + 'Address').text = str(addr)
+            # The cyc boxes are cyc lights: Show Review's backwash check (PWR-12)
+            # takes their light on the cyc as meant only with this stage look.
+            if 'Truss Cyc' in text(f, 'Name') and f.find(N + 'StageLook') is None:
+                ET.SubElement(f, N + 'StageLook').text = 'CycStrip'
             addr += ch
         for u in range(first, uni_id + 1):
             name = '%s' % label if first == uni_id else '%s %d' % (label, u - first + 1)
