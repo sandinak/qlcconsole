@@ -579,7 +579,12 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
         const QVector3D from = witch->position();
         const QList<int> before = pans();
         QVERIFY(padInput(doc, 0, 255));        // the left stick, hard right
-        QTest::qWait(500);
+        // Held until she has walked, not for a fixed half second: how far she
+        // gets in that time depends on the runner's frame rate.
+        QTRY_VERIFY2_WITH_TIMEOUT(witch->position().x() > from.x() + 0.2f,
+                                  qPrintable(QString("%1: the subject did not move (%2 -> %3)").arg(how)
+                                             .arg(from.x()).arg(witch->position().x())), 8000);
+        QTest::qWait(200);
         const QList<int> after = pans();
         QVERIFY2(chip->text().contains(QString::fromUtf8("DUALSHOCK 4 · stick moving")),
                  qPrintable(how + ": " + chip->text()));
