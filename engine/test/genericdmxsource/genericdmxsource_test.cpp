@@ -125,7 +125,9 @@ void GenericDMXSource_Test::aSourceGoneMidTickIsNeverRead()
     QElapsedTimer clock;
     clock.start();
     int fed = 0, withFaders = 0;
-    for (int i = 0; clock.elapsed() < 4000; ++i)
+    // A count, not a wall-clock window: a slow runner gets the same rounds,
+    // just later. The deadline is only a backstop against a hang.
+    for (int i = 0; fed < 40 && clock.elapsed() < 120000; ++i)
     {
         // Several at once, as a show with editors open has.
         QList<GenericDMXSource *> srcs;

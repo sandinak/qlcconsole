@@ -441,6 +441,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   effects. A mixed set shows what runs on some ("Runs on 6 of 10
   fixtures"). **Show All Effects** lists the rest greyed with the reason; the
   effect a look already runs always stays listed.
+- **CI tests on Windows and macOS**: the follow-spot test copies the HID
+  plugin into its plugin folder instead of linking it (a Windows link is a
+  .lnk the loader ignores), and the generic DMX source mid-tick test counts
+  rounds instead of a 4 s window, so a slow runner runs the same work.
 
 - **The follow spot's stick is the controller you have patched** — a
   DualShock 4, DualSense or Xbox pad patched as an input in Connections
