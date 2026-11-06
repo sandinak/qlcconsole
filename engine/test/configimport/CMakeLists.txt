@@ -12,6 +12,7 @@ target_link_libraries(configimport_test PRIVATE
     Qt6::Gui
     Qt6::Test
     qlcplusengine
+    iopluginstub   # its typeinfo, for UBSan vptr on static_cast
 )
 target_include_directories(configimport_test PRIVATE ../iopluginstub)
 target_compile_definitions(configimport_test PRIVATE

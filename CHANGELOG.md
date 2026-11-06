@@ -376,6 +376,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Tooling
 
+- **Sanitizer builds link and run clean.** The I/O plugin stub tests link
+  the stub (UBSan's vptr check needs its typeinfo, no more
+  `-fno-sanitize=vptr`); the hot-path test replaces the whole `operator
+  new`/`delete` family, so ASan no longer reports an alloc-dealloc mismatch
+  from `std::stable_sort`'s buffer; the web remote's focus test waits for an
+  in-order marker instead of racing a late ack.
+
 - **`make dmg` is much faster.** It builds only what ships (no test
   programs), through ccache, in a build dir that lasts between runs;
   `make dmg ARCH=native` makes an arm64-only DMG (named `-arm64-native-`,
