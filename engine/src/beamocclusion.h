@@ -190,6 +190,9 @@ namespace BeamOcclusion
      *  carries that), pipe, tower, the structure its hanger is on, the deck
      *  or riser it is fixed to, or the platform a free head stands on. */
     QVector<Exclude> ownMounts(const MonitorProperties *mp, quint32 fixtureId);
+    /** The same into @p out (cleared first): nothing allocated once @p out
+     *  has room (the Aim tick's sight checks). */
+    void ownMounts(const MonitorProperties *mp, quint32 fixtureId, QVector<Exclude> &out);
 
     /** The current model for a stage, rebuilt only when the stage changed.
      *  Thread-safe. */

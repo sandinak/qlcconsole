@@ -42,6 +42,7 @@ private slots:
     /** A curtain driven by a fixture blocks as that fixture has it, live --
      *  the query, the Aim look's dimming and the model's rebuild. */
     void aDrivenCurtainBlocksAsItsFixtureHasIt();
+    void theTickAnswersAsTheFullCheckAcrossRigEdits();
     void aHundredHeadsAndFiftyFeaturesFitATick();
 };
 

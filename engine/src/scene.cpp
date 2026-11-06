@@ -779,26 +779,28 @@ QHash<quint32, Scene::LayoutSpan> Scene::layoutSpans() const
 }
 
 /* Groups' members in their head order, then loose fixtures, once each, less
-   @a out. */
-static QList<quint32> fixturesOf(const Doc *doc, const QList<quint32> &groups,
-                                 const QList<quint32> &fixtures, const QList<quint32> &out)
+   @a out -- into @a all, cleared first. Read from the group's heads in place
+   (fixtureList() builds a list and a set): the Aim tick asks for this. */
+static void fixturesOf(const Doc *doc, const QList<quint32> &groups,
+                       const QList<quint32> &fixtures, const QList<quint32> &out,
+                       QList<quint32> &all)
 {
-    QList<quint32> all;
+    all.clear();
     if (doc == NULL)
-        return all;
+        return;
     for (quint32 gid : groups)
     {
         const FixtureGroup *g = doc->fixtureGroup(gid);
         if (g == NULL)
             continue;
-        for (quint32 fid : g->fixtureList())
-            if (!all.contains(fid) && !out.contains(fid))
-                all << fid;
+        const QMap<QLCPoint, GroupHead> heads = g->headsMap();
+        for (const GroupHead &head : heads)
+            if (!all.contains(head.fxi) && !out.contains(head.fxi))
+                all << head.fxi;
     }
     for (quint32 fid : fixtures)
         if (!all.contains(fid) && !out.contains(fid))
             all << fid;
-    return all;
 }
 
 QList<quint32> Scene::layoutGroups(quint32 paletteId) const
@@ -810,18 +812,33 @@ QList<quint32> Scene::layoutGroups(quint32 paletteId) const
 
 QList<quint32> Scene::layoutFixtures(quint32 paletteId) const
 {
+    QList<quint32> all;
+    layoutFixtures(paletteId, all);
+    return all;
+}
+
+void Scene::layoutFixtures(quint32 paletteId, QList<quint32> &into) const
+{
     QList<quint32> groups, fixtures, out;
     {
         QMutexLocker locker(&m_bindingsMutex);
-        const LayoutSpan span = m_layoutSpans.value(paletteId);
-        groups = span.isEmpty() ? m_fixtureGroups : span.groups;
-        fixtures = span.isEmpty() ? m_fixtures : span.fixtures;
+        const auto span = m_layoutSpans.constFind(paletteId);
+        const bool own = (span == m_layoutSpans.constEnd() || span.value().isEmpty());
+        groups = own ? m_fixtureGroups : span.value().groups;
+        fixtures = own ? m_fixtures : span.value().fixtures;
         out = m_excluded.value(paletteId);
     }
-    return fixturesOf(doc(), groups, fixtures, out);
+    fixturesOf(doc(), groups, fixtures, out, into);
 }
 
 QList<quint32> Scene::writtenFixtures(quint32 paletteId) const
+{
+    QList<quint32> all;
+    writtenFixtures(paletteId, all);
+    return all;
+}
+
+void Scene::writtenFixtures(quint32 paletteId, QList<quint32> &into) const
 {
     QList<quint32> groups, fixtures, out;
     {
@@ -830,7 +847,7 @@ QList<quint32> Scene::writtenFixtures(quint32 paletteId) const
         fixtures = m_fixtures;
         out = m_excluded.value(paletteId);
     }
-    return fixturesOf(doc(), groups, fixtures, out);
+    fixturesOf(doc(), groups, fixtures, out, into);
 }
 
 /*****************************************************************************
@@ -1665,12 +1682,15 @@ void Scene::fadeChannelTo(QList<Universe *> ua, quint32 fxi, quint32 channel, uc
 
 void Scene::updateSightDim(QList<Universe *> ua)
 {
-    const QHash<quint32, BeamOcclusion::Hit> blocked = AimSolver::blockedDimmedHeads(doc(), this);
-    QSet<quint32> now;
-    for (auto it = blocked.constBegin(); it != blocked.constEnd(); ++it)
-        now.insert(it.key());
-    if (now == m_sightDimmed)
+    AimSolver::blockedDimmedFixtures(doc(), this, m_sightBlocked);
+    /* The same heads as last tick -- nearly every tick: nothing to fade, and
+       nothing built to find that out. */
+    bool same = (m_sightBlocked.size() == m_sightDimmed.size());
+    for (int i = 0; same && i < m_sightBlocked.size(); ++i)
+        same = m_sightDimmed.contains(m_sightBlocked.at(i));
+    if (same)
         return;
+    const QSet<quint32> now(m_sightBlocked.constBegin(), m_sightBlocked.constEnd());
 
     const QSet<quint32> going = now - m_sightDimmed;
     const QSet<quint32> coming = m_sightDimmed - now;
@@ -1835,12 +1855,9 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             // Line of sight: an Aim look that dims the heads that cannot see
             // its target starts them out (only when one asks for it).
             m_sightDimmed.clear();
-            {
-                const QHash<quint32, BeamOcclusion::Hit> blocked =
-                    AimSolver::blockedDimmedHeads(doc(), this);
-                for (auto bit = blocked.constBegin(); bit != blocked.constEnd(); ++bit)
-                    m_sightDimmed.insert(bit.key());
-            }
+            AimSolver::blockedDimmedFixtures(doc(), this, m_sightBlocked);
+            for (quint32 fid : m_sightBlocked)
+                m_sightDimmed.insert(fid);
             QHash<quint32, QList<quint32> > sightChannels;
             foreach (quint32 fid, m_sightDimmed)
                 sightChannels.insert(fid, sightDimChannels(doc()->fixture(fid)));

@@ -78,6 +78,8 @@
 #include "qlcfixturehead.h"
 #include "qlcchannel.h"
 #include "truss.h"
+#include "scenery.h"
+#include "stageplatform.h"
 #undef protected
 #undef private
 
@@ -907,7 +909,12 @@ void HotPath_Test::aGoInABigShowTreeMakesAndDeletesNothing()
    about a fifth of a millisecond for a 22-light rig; the tick must only
    ever read them back. Here: worked out once over a hundred ticks, the
    lookup allocates nothing, and a tick costs no more allocations aimed at
-   the area than aimed at a point. */
+   the area than aimed at a point.
+   The sight check around it (AimSolver::blockedDimmedFixtures: the look's
+   members, the heads it writes, each one's mounts, a drape in the way of
+   some) allocates nothing either: it was 20 a tick, every tick, before its
+   lists were kept per thread. A tick with "dim when blocked" on costs no
+   more than the same look with it off. */
 namespace
 {
 Fixture *hungSpot(Doc *doc, const QString &name, const QVector3D &at, double lensDeg)
@@ -984,6 +991,22 @@ void HotPath_Test::anAreaAimThatDimsWorksOutItsZonesOnce()
     point->setName("Vocalist");
     point->setKind(StageTarget::Kind::Person);
     point->setPosition(QVector3D(6.0f, 4.0f, 0.0f));
+    // A drape across the middle, in the way of some beams, not all.
+    Scenery *drape = props->addScenery();
+    drape->setKind(Scenery::MainDrape);
+    drape->setName("Half height");
+    drape->setOriginX(6.0f);
+    drape->setOriginY(7.0f);
+    drape->setWidth(6.0f);
+    drape->setHeight(4.0f);
+    // A riser downstage left: each free-hung head's mounts are looked for
+    // among the platforms.
+    StagePlatform *riser = props->addPlatform();
+    riser->setOriginX(-4.0f);
+    riser->setOriginY(1.0f);
+    riser->setWidth(2.0f);
+    riser->setDepth(2.0f);
+    riser->setHeight(0.4f);
     QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
     aim->setName("Cover the chorus");
     aim->setStageTargetId(area->id());
@@ -1007,6 +1030,26 @@ void HotPath_Test::anAreaAimThatDimsWorksOutItsZonesOnce()
     QCOMPARE(allocationsIn([&]() { pts = AreaCover::memberPoints(doc, area, heads); }), 0L);
     QCOMPARE(AreaCover::zonesWorkedOut(), started);
 
+    // The sight check: some blocked, some not, and no allocation at all.
+    const QHash<quint32, BeamOcclusion::Hit> full = AimSolver::blockedDimmedHeads(doc, look);
+    QVERIFY2(!full.isEmpty() && full.size() < ids.size(),
+             qPrintable(QString("%1 of %2 blocked: the drape should stop some").arg(full.size()).arg(ids.size())));
+    QVector<quint32> blocked;
+    AimSolver::blockedDimmedFixtures(doc, look, blocked);
+    const long sight = allocationsIn([&]() { AimSolver::blockedDimmedFixtures(doc, look, blocked); });
+    QCOMPARE(sight, 0L);
+    QCOMPARE(QSet<quint32>(blocked.constBegin(), blocked.constEnd()),
+             QSet<quint32>(full.keyBegin(), full.keyEnd()));
+    QCOMPARE(look->m_sightDimmed.size(), full.size());
+
+    // Dimming off: a tick costs exactly as much.
+    aim->setDimWhenBlocked(false);
+    frame(doc, 5);
+    const long undimmed = allocationsIn([doc]() { frame(doc, 100); });
+    aim->setDimWhenBlocked(true);
+    frame(doc, 5);
+    QCOMPARE(onArea, undimmed);
+
     // The same look aimed at a point: the area costs the tick nothing more.
     look->stop(FunctionParent::master());
     frame(doc, 3);
@@ -1014,8 +1057,9 @@ void HotPath_Test::anAreaAimThatDimsWorksOutItsZonesOnce()
     look->start(doc->masterTimer(), FunctionParent::master());
     frame(doc, 5);
     const long atPoint = allocationsIn([doc]() { frame(doc, 100); });
-    qInfo("area aim that dims: %ld allocations in 100 ticks (%ld at a point), zones worked out %llu time(s)",
-          onArea, atPoint, (unsigned long long)(started - before));
+    qInfo("area aim that dims: %ld allocations in 100 ticks (%ld at a point, %ld without dimming), "
+          "sight check %ld, zones worked out %llu time(s)",
+          onArea, atPoint, undimmed, sight, (unsigned long long)(started - before));
     QVERIFY2(onArea <= atPoint,
              qPrintable(QString("100 ticks: %1 allocations at the area, %2 at a point").arg(onArea).arg(atPoint)));
 

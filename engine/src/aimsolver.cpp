@@ -190,6 +190,26 @@ bool AimSolver::frameFor(Doc *doc, const GroupHead &member, Frame &frame)
     return true;
 }
 
+/* Each of @a fids as its aim members, appended to @a out: the fixture, or
+   each of its arms in head order (as arms(), without building its list). */
+static void appendMembers(Doc *doc, const QList<quint32> &fids, QList<GroupHead> &out)
+{
+    for (quint32 fid : fids)
+    {
+        const Fixture *fx = doc->fixture(fid);
+        const QLCFixtureMode *mode = fx != nullptr ? fx->fixtureMode() : nullptr;
+        if (armCount(mode) < 2)
+        {
+            out << GroupHead(fid, -1);
+            continue;
+        }
+        const QList<QLCFixtureHead> &heads = mode->heads();
+        for (int h = 0; h < heads.size(); ++h)
+            if (ownsAim(heads, h))
+                out << GroupHead(fid, h);
+    }
+}
+
 QList<GroupHead> AimSolver::aimMembers(Doc *doc, const QList<quint32> &fixtures)
 {
     QList<GroupHead> out;
@@ -484,13 +504,14 @@ bool AimSolver::sceneFollowsSubject(Doc *doc, const Scene *scene)
     return false;
 }
 
-QList<quint32> AimSolver::aimable(Doc *doc, const QList<quint32> &fixtures)
+/* aimable() into @a heads, cleared first. */
+static void aimableInto(Doc *doc, const QList<quint32> &fixtures, QList<quint32> &heads)
 {
-    QList<quint32> heads;
+    heads.clear();
     if (doc == NULL)
-        return heads;
+        return;
     MonitorProperties *mProps = doc->monitorProperties();
-    foreach (quint32 fid, fixtures)
+    for (quint32 fid : fixtures)
     {
         if (heads.contains(fid))
             continue;
@@ -502,6 +523,12 @@ QList<quint32> AimSolver::aimable(Doc *doc, const QList<quint32> &fixtures)
             continue;               // nothing to point
         heads << fid;
     }
+}
+
+QList<quint32> AimSolver::aimable(Doc *doc, const QList<quint32> &fixtures)
+{
+    QList<quint32> heads;
+    aimableInto(doc, fixtures, heads);
     return heads;
 }
 
@@ -782,6 +809,104 @@ static QList<AimSolver::SceneAim> collectAims(Doc *doc, const Scene *scene, bool
 QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
 {
     return collectAims(doc, scene, false);
+}
+
+/* What the sight check of every tick works in, one per thread (MasterTimer's,
+   and the UI's when it asks): cleared and refilled each call, never freed,
+   so once grown to the rig's size it allocates nothing. */
+namespace
+{
+struct SightScratch
+{
+    QList<quint32> fixtures;
+    QList<quint32> aimable;
+    QList<GroupHead> heads;
+    QList<GroupHead> written;
+    QVector<BeamOcclusion::Exclude> mounts;
+};
+}
+
+/* Every head an Aim look in @a scene that dims when blocked points at
+   something it cannot see: @a blocked(fixtureId, hit) for each, in the order
+   sceneAims() lists them. As collectAims(dimmingOnly) without the lists it
+   builds: the members, written heads and mounts go into this thread's
+   scratch. A head's point and sight are worked out afresh every call (a
+   target that walks, a curtain driven by a fixture, a head that zooms). */
+template <typename F>
+static void forEachBlockedDimmed(Doc *doc, const Scene *scene, F blocked)
+{
+    if (doc == NULL || scene == NULL)
+        return;
+    MonitorProperties *mProps = doc->monitorProperties();
+    if (mProps == NULL)
+        return;
+    BeamOcclusion::ModelPtr sightModel;
+    bool subjectKnown = false, subject = false;
+    const QList<quint32> pals = scene->runtimePalettes();   // a tried-on Aim draws too
+    for (quint32 pid : pals)
+    {
+        QLCPalette *pal = doc->palette(pid);
+        if (pal == NULL || pal->type() != QLCPalette::Aim || !pal->dimWhenBlocked())
+            continue;
+        if (sightModel.isNull())
+            sightModel = mProps->occlusionModel(doc);
+        StageTarget *tgt = mProps->stageTarget(pal->stageTargetId());
+        if (tgt == NULL)
+            continue;
+        // Reached only when a look asks: a scene without one costs what
+        // it did, not a thread-local lookup more.
+        static thread_local SightScratch sc;
+        if (!subjectKnown)
+        {
+            subject = AimSolver::sceneFollowsSubject(doc, scene);
+            subjectKnown = true;
+        }
+        // As aimMembers(doc, scene, pid) and aimMembers(doc, writtenFixtures).
+        sc.heads.clear();
+        if (pid == UINT_MAX)
+            sc.heads = AimSolver::aimMembers(doc, scene, pid);
+        else
+        {
+            scene->layoutFixtures(pid, sc.fixtures);
+            aimableInto(doc, sc.fixtures, sc.aimable);
+            appendMembers(doc, sc.aimable, sc.heads);
+        }
+        scene->writtenFixtures(pid, sc.fixtures);
+        aimableInto(doc, sc.fixtures, sc.aimable);
+        sc.written.clear();
+        appendMembers(doc, sc.aimable, sc.written);
+
+        // Both empty, without a single allocation, unless the target is a
+        // line (lineMemberPoints) or an area (AreaCover's kept zones).
+        const QHash<GroupHead, QVector3D> onLine = AimSolver::lineMemberPoints(doc, pal, tgt, sc.heads);
+        const QHash<GroupHead, QVector3D> onArea = AreaCover::memberPoints(doc, tgt, sc.heads);
+        for (const GroupHead &m : sc.written)
+        {
+            AimSolver::Frame frame;
+            if (!AimSolver::frameFor(doc, m, frame))
+                continue;
+            const QVector3D point = tgt->isLine()
+                    ? onLine.value(m, mProps->targetAimPoint(tgt))
+                    : onArea.contains(m) ? onArea.value(m)
+                                         : AimSolver::aimPointFor(doc, m, tgt, subject);
+            // AimSolver::lineOfSight(), with the mounts in the scratch.
+            if (sightModel->isEmpty())
+                continue;                       // nothing to block it: clear
+            BeamOcclusion::ownMounts(mProps, m.fxi, sc.mounts);
+            const BeamOcclusion::Hit hit = sightModel->segment(frame.position, point, sc.mounts);
+            if (hit.blocked)
+                blocked(m.fxi, hit);
+        }
+    }
+}
+
+void AimSolver::blockedDimmedFixtures(Doc *doc, const Scene *scene, QVector<quint32> &into)
+{
+    into.clear();
+    forEachBlockedDimmed(doc, scene, [&into](quint32 fid, const BeamOcclusion::Hit &) {
+        if (!into.contains(fid))
+            into << fid;
+    });
 }
 
 QHash<quint32, BeamOcclusion::Hit> AimSolver::blockedDimmedHeads(Doc *doc, const Scene *scene)
