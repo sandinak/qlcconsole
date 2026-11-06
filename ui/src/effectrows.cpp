@@ -95,7 +95,7 @@ QString EffectRows::valueText(const EffectScript::ParamDef &def, double value)
 {
     if (!def.enumValues.isEmpty())
         return def.enumValues.value(qBound(0, int(std::lround(value)), int(def.enumValues.size()) - 1));
-    if (def.unit == QLatin1String("cm"))
+    if (def.unit == QLatin1String("cm"))  // units-ok: the script parameter's unit key; the value is shown through MeasurementUnits
         return MeasurementUnits::formatLength(value * 10.0, MeasurementUnits::preferredLength());
     // A switch the script spells out: "Reverse direction (0=fwd, 1=rev)".
     static const QRegularExpression pair(QStringLiteral("(-?\\d+)\\s*=\\s*([A-Za-z][\\w-]*)"));
@@ -315,7 +315,7 @@ QList<EffectRows::Row> EffectRows::rows(Doc *doc, const ResolvedLayer &layer, co
         if (!carried.isEmpty())
             why += QStringLiteral(" ") + tr("The effect is carried in (%1).").arg(carried);
         QString range;
-        if (pd.enumValues.isEmpty() && pd.max > pd.min && pd.unit != QLatin1String("cm"))
+        if (pd.enumValues.isEmpty() && pd.max > pd.min && pd.unit != QLatin1String("cm"))  // units-ok: the script parameter's unit key; the value is shown through MeasurementUnits
             range = tr(" From %1 to %2.").arg(number(pd.min), number(pd.max));
         r.tip = QStringLiteral("%1.%2\n%3\n%4").arg(pd.description.isEmpty() ? pd.name : pd.description,
                                                     range, why.trimmed(), becomesOwn);

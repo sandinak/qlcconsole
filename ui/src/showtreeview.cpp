@@ -5659,7 +5659,7 @@ void ShowTreeView::effectParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, 
         }
         menu->addAction(tr("%1…").arg(EffectRows::paramLabel(def)), this, [this, def, now, set]() {
             // A length in Settings ▸ Units; anything else as the script counts it.
-            const bool isLength = def.unit == QLatin1String("cm");
+            const bool isLength = def.unit == QLatin1String("cm");  // units-ok: the script parameter's unit key; the value is shown through MeasurementUnits
             QDoubleSpinBox *spin = isLength ? new LengthSpinBox(10.0) : new QDoubleSpinBox;
             spin->setObjectName("stPickerEffectParam");
             spin->setDecimals(isLength ? 2 : def.max - def.min <= 2.0 ? 3 : 2);
