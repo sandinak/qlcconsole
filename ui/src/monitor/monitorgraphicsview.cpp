@@ -10389,7 +10389,7 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
         fp->setToolTip(tr("Draw where this head's beam lands, in Top view"));
         /* Tape over the front of the light: opens its Fixture Properties,
            where the Masking row is. */
-        QAction *mask = menu->addAction(tr("Masking…"), this, [this, fid]() {
+        QAction *mask = menu->addAction(tr("Masking…"), this, [fid]() {
             if (Monitor *mon = Monitor::instance())
                 mon->editFixturesProperties({ fid });
         });

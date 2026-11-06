@@ -411,7 +411,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     stGroup->setObjectName(QStringLiteral("settingsShowTree"));
     stGroup->setProperty("helpTopic", QStringLiteral("show-tree.md"));
     QFormLayout *stLayout = new QFormLayout(stGroup);
-    auto recordCombo = [this, stGroup](bool perform) {
+    auto recordCombo = [stGroup](bool perform) {
         QComboBox *c = new QComboBox(stGroup);
         c->setObjectName(perform ? QStringLiteral("settingsRecordPerform") : QStringLiteral("settingsRecordDesign"));
         c->addItem(tr("Ask"), QStringLiteral("ask"));

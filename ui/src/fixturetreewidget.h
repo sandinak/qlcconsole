@@ -163,7 +163,7 @@ signals:
 protected:
     /** Provide fixture/group IDs for dragging onto drop targets (the group
      *  editor grid for fixtures, folders for groups). */
-    QMimeData* mimeData(const QList<QTreeWidgetItem*> &items) const
+    QMimeData* mimeData(const QList<QTreeWidgetItem*> &items) const override
         { return buildMimeData(items); }
     QMimeData* mimeData(const QList<QTreeWidgetItem*> items) const
         { return buildMimeData(items); }

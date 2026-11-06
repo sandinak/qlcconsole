@@ -9994,7 +9994,7 @@ void ShowTreeView::reloadLibrary()
         add(pinned, p.first, p.second);
     QTreeWidgetItem *all = section(tr("All"), 2);
 
-    auto folder = [this](QTreeWidgetItem *parent, const QString &name) {
+    auto folder = [](QTreeWidgetItem *parent, const QString &name) {
         QTreeWidgetItem *f = new QTreeWidgetItem(parent);
         f->setText(0, name);
         f->setData(0, KindRole, LibFolder);
@@ -10487,7 +10487,7 @@ void ShowTreeView::buildLibraryPalettes(QTreeWidgetItem *all,
 
     // Nested folder rows under @a parent for @a paths (their parents too),
     // first: folders before palettes.
-    auto makeFolders = [this](QTreeWidgetItem *parent, const QString &scope, const QStringList &paths) {
+    auto makeFolders = [](QTreeWidgetItem *parent, const QString &scope, const QStringList &paths) {
         QStringList withParents;
         for (const QString &path : paths)
         {

@@ -2206,7 +2206,7 @@ void ShowReview_Test::fingerprintsAreStable()
     b->setName("Par 1");
     Q_UNUSED(a)
     const QString xml = saveShow();
-    auto prints = [this](Doc *doc) {
+    auto prints = [](Doc *doc) {
         QStringList out;
         for (const ReviewFinding &f : doc->showReview()->run().findings)
             out << f.key() + QLatin1Char('=') + f.hash();

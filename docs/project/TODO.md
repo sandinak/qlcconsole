@@ -2474,17 +2474,12 @@ rig edits, bulk repatching, cross-show consistency checks.
   box to even confirm the roughed-in `SCHED_FIFO` call links/behaves as
   written before this is worth deciding.
 
-- **The ARM char-signedness tripwire is commented out (OPEN, 2026-08-26)** —
-  the assertion cited as the reason to want an ARM build host,
-  `QCOMPARE(ua.preGMValues()[0], char(255))` at
-  `ui/test/vcxypad/vcxypad_test.cpp:474-483`, sits inside a `/* FIXME !! */`
-  block and runs nowhere. The live `char(...)` comparisons in
-  `vcxypadfixture_test.cpp` are signedness-*insensitive* (both sides go through
-  the same conversion) so they pass identically on x86 and ARM. The Pi 5
-  confirms the ABI is there — plain `char` is unsigned, `__CHAR_UNSIGNED__`
-  defined — but nothing in the suite exercises it. **Un-commenting that block
-  is the experiment that cashes in on the ARM host existing**; until then the
-  host proves nothing about this bug class.
+- **The ARM char-signedness tripwire (DONE 2026-11-06, 0.4.1)** — the
+  commented-out block in `ui/test/vcxypad/vcxypad_test.cpp` (`modeChange`) is
+  a live test: it moves the pad to full and to (128, 64), runs `writeDMX`, and
+  compares the pan/tilt MSBs read as `uchar`, so it passes the same on x86 and
+  Apple (signed `char`) and on the Pi (unsigned). The code under test already
+  narrows through `uchar` (`VCXYPadFixture::writeDMX`), so no code change.
 
 - **Debian 12 setup quirk: Qt6 `lrelease` is not on PATH (2026-08-26)** —
   Debian's `qt6-l10n-tools` installs `lrelease`/`lupdate` to `/usr/lib/qt6/bin/`
@@ -2539,13 +2534,21 @@ rig edits, bulk repatching, cross-show consistency checks.
   insufficient rather than wrong. Five other UI test files still use fixed
   `QTest::qWait` and were left alone — none has failed.
 
-- **Warning backlog outside the `-Werror` set (OPEN, 2026-08-25)** — a
-  tree-wide `-Wall -Wextra` sweep reports ~1100
-  `-Wunnecessary-virtual-specifier`, 92 `-Wdeprecated-declarations` (all in
-  Homebrew's OLA headers, not ours), 38 `-Wnon-c-typedef-for-linkage` (e.g.
-  `PreviewItem`) and 20 `-Winconsistent-missing-override`. None is in the set
-  CI enforces and most are third-party. Noted so the next person doesn't
-  rediscover them and assume they're new.
+- **Warning backlog outside the `-Werror` set (MOSTLY DONE 2026-11-06, 0.4.1)** —
+  re-swept with clang `-Wall -Wextra -fsyntax-only` over engine/src, ui/src
+  and both test trees (902 TUs; 2,406 raw lines): the "~1100
+  `-Wunnecessary-virtual-specifier`" were 20 header lines in our own `final`
+  classes (`virtual` on a destructor or method nothing can override:
+  FadeChannel, InputOutputMap::claimUniverses/releaseUniverses, QLCPhysical,
+  QLCFixtureHead, QLCFixtureMode, VCWidgetProperties, ctkRangeSlider) --
+  removed; 4 `-Winconsistent-missing-override` (the `mimeData` of three tree
+  widgets, `ZoneItem::contains`) -- `override` added; 11
+  `-Wunused-lambda-capture` -- dropped. The OLA `-Wdeprecated-declarations`
+  and the `-Wnon-c-typedef-for-linkage` ones no longer show. GCC 14 on the
+  Linux host (`-O2 -Wall -Wextra`, 2,203 targets): one warning, a
+  `-Wmismatched-new-delete` false positive in `encoderbank_test.cpp:69`
+  (the test's own `operator new`/`delete` pair over malloc/free), left as is.
+  Not swept: `-Wshadow` (not in `-Wall -Wextra`).
 
 - **Rig fidelity test not done (OPEN, 2026-08-25)** — throughput was measured
   at the NIC with tcpdump, which proves what the console *transmits* but not

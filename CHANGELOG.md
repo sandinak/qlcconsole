@@ -384,6 +384,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Compiler warnings outside the -Werror set cleared** (clang -Wall -Wextra
+  over engine, ui and the tests): `virtual` dropped from methods of our
+  `final` classes that nothing can override (FadeChannel,
+  InputOutputMap::claimUniverses/releaseUniverses, QLCPhysical,
+  QLCFixtureHead, QLCFixtureMode, VCWidgetProperties, ctkRangeSlider), four
+  missing `override`s and eleven unused lambda captures. No behaviour change.
 - **The ARM char-signedness test runs** — the XY pad's position-to-DMX check
   in vcxypad_test was commented out; it is a real test now, comparing as
   uchar so it holds on the Pi (unsigned char) and on x86/Apple (signed).

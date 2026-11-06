@@ -243,7 +243,7 @@ void PixelBoxes_Test::aOnceBreatheInACuesHitBreathesEachFire()
     };
     // Each fire breathes as the first did: none starts "done". Mid-breath
     // and after it, give or take the timer's jitter under load.
-    auto same = [twenty](const QList<int> &a, const QList<int> &b) {
+    auto same = [](const QList<int> &a, const QList<int> &b) {
         return b.at(1) > twenty / 2 && qAbs(a.at(1) - b.at(1)) <= 16 && qAbs(a.at(2) - b.at(2)) <= 16;
     };
     go();                                           // cue One live: armed

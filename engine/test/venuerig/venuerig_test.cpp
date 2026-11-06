@@ -1205,7 +1205,7 @@ void VenueRig_Test::patchingOntoNotOursIsRefusedEveryWay()
     range.to = 7;
     QVERIFY(v->setNotOurs(a, { range }));
     QVERIFY(v->setActiveVenue(a));
-    auto onNotOurs = [this](const Fixture *fx) {
+    auto onNotOurs = [](const Fixture *fx) {
         return fx != nullptr && fx->isPatched() && fx->universe() == 0
                && fx->address() + fx->channels() > 4 && fx->address() <= 7;
     };

@@ -838,7 +838,7 @@ void ShowReviewPanel_Test::onlyTheWarningBadgeIsColoured()
 {
     const QList<quint32> cues = backwashShow(m_doc, nullptr);
     ShowTreeController *st = m_doc->showTree();
-    QVERIFY(st->edit("mix", [&cues](QList<ShowTree::Production> &tree) {
+    QVERIFY(st->edit("mix", [](QList<ShowTree::Production> &tree) {
         for (ShowTree::Production &p : tree)
             for (ShowTree::CueList &l : p.lists)
                 for (ShowTree::Cue &c : l.cues)

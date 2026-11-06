@@ -9663,7 +9663,7 @@ void App::showTeachingMenu()
     menu.setObjectName(QStringLiteral("teachingMenu"));
     menu.setToolTipsVisible(true);
     TeachingSettings *teach = m_doc->teachingSettings();
-    menu.addAction(tr("What Teaching Mode Does"), this, [this]() {
+    menu.addAction(tr("What Teaching Mode Does"), this, []() {
         HelpBrowser::open(QStringLiteral("teaching.md"));
     });
     if (!teach->link().isEmpty())

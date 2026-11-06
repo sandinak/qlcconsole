@@ -49,7 +49,7 @@ public:
     Role role() const { return m_role; }
     quint32 id() const { return m_id; }
     QPolygonF outline() const { return m_outline; }
-    bool contains(const QPointF &scenePos) const;
+    bool contains(const QPointF &scenePos) const override;
     /** Whether @a scenePos is on the zone's outline (within @a tol pixels) or
      *  on its centre handle: where a drag takes hold. Only a Zone grabs. */
     bool grabAt(const QPointF &scenePos, qreal tol) const;
