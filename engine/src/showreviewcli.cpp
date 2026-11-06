@@ -30,6 +30,7 @@
 #include "showreviewcli.h"
 #include "qlcfixturedefcache.h"
 #include "qlcmodifierscache.h"
+#include "effectscriptcache.h"
 #include "rgbscriptscache.h"
 #include "showembedding.h"
 #include "inputoutputmap.h"
@@ -155,7 +156,8 @@ static QString stateName(const ReviewFinding &f)
     }
 }
 
-int ShowReviewCli::run(const QStringList &args, QTextStream &out, QTextStream &err, bool libraries)
+int ShowReviewCli::run(const QStringList &args, QTextStream &out, QTextStream &err, bool libraries,
+                       const QString &resourceDir)
 {
     QString path, format = QStringLiteral("text");
     ReviewFinding::Severity min = ReviewFinding::Warning;
@@ -220,12 +222,25 @@ int ShowReviewCli::run(const QStringList &args, QTextStream &out, QTextStream &e
     Doc doc(nullptr);
     if (libraries)
     {
-        doc.fixtureDefCache()->load(QLCFixtureDefCache::userDefinitionDirectory());
-        doc.fixtureDefCache()->loadMap(QLCFixtureDefCache::systemDefinitionDirectory());
-        doc.modifiersCache()->load(QLCModifiersCache::systemTemplateDirectory(), true);
-        doc.modifiersCache()->load(QLCModifiersCache::userTemplateDirectory());
-        doc.rgbScriptsCache()->load(RGBScriptsCache::systemScriptsDirectory());
-        doc.rgbScriptsCache()->load(RGBScriptsCache::userScriptsDirectory());
+        // A given resource folder is a hermetic run (a test): its definitions,
+        // templates and scripts, and nothing of this computer's user data.
+        const bool own = !resourceDir.isEmpty();
+        const QDir res(resourceDir);
+        if (own)
+            EffectScriptCache::setSystemDirectoriesOverride(res.filePath(QStringLiteral("effectscripts")),
+                                                            res.filePath(QStringLiteral("rgbscripts")));
+        if (!own)
+            doc.fixtureDefCache()->load(QLCFixtureDefCache::userDefinitionDirectory());
+        doc.fixtureDefCache()->loadMap(own ? QDir(res.filePath(QStringLiteral("fixtures")))
+                                           : QLCFixtureDefCache::systemDefinitionDirectory());
+        doc.modifiersCache()->load(own ? QDir(res.filePath(QStringLiteral("modifierstemplates")))
+                                       : QLCModifiersCache::systemTemplateDirectory(), true);
+        if (!own)
+            doc.modifiersCache()->load(QLCModifiersCache::userTemplateDirectory());
+        doc.rgbScriptsCache()->load(own ? QDir(res.filePath(QStringLiteral("rgbscripts")))
+                                        : RGBScriptsCache::systemScriptsDirectory());
+        if (!own)
+            doc.rgbScriptsCache()->load(RGBScriptsCache::userScriptsDirectory());
     }
     const QString folder = info.absolutePath();
     doc.setWorkspacePath(folder);

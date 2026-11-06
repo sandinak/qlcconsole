@@ -52,9 +52,11 @@ namespace ShowReviewCli
     /** The command's work, with an application already made: @a args
      *  without the program name. Output to @a out, errors to @a err. Loads
      *  this computer's fixture definitions and scripts unless @a libraries
-     *  is false (tests give a show that needs none). */
+     *  is false (tests give a show that needs none). A non-empty @a resourceDir
+     *  (the repo's resources/) replaces the system fixture, modifier and
+     *  script folders and leaves this user's own out: a test's hermetic run. */
     QLC_ENGINE_EXPORT int run(const QStringList &args, QTextStream &out, QTextStream &err,
-                              bool libraries = true);
+                              bool libraries = true, const QString &resourceDir = QString());
 
     /** The usage text. */
     QLC_ENGINE_EXPORT QString usage();
