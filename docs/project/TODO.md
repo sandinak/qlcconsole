@@ -433,33 +433,15 @@ docs/features/gamepad-remote.md.
   mapping tables are C++ and tested; scripts are only syntax-checked by
   hand (node --check).
 
-## Layout sanity — what layoutsanity_test found (lay, Q207, 2026-11-03)
+## Layout sanity — done (0.4.1, lay)
 
 `ui/test/layoutsanity` opens every screen at its minimum, 1280x800 and
-1920x1080. These are in its `knownIssues()` (reported, not failed); fix
-one, then delete its row there. At 1280x800 and 1920x1080 only L1 shows.
-
-- **L1** Colour look: the picker's Hue/Sat/Red/HTML rows and its well lie
-  under the sliders and the "Wheel / ring" row, at every size (the user's
-  find). feat/04-cpick fixes it (checked: clean on that branch); delete the
-  two L1 rows when it lands.
-- **L2** Workbench at its own minimum (~310x239): the header's title
-  squeezed to half its height. The header needs a minimum height that holds
-  the 15pt title.
-- **L3** Pan/Tilt look at the Workbench minimum: the XY pad over its
-  Home/Front/Down/Left/Right column (squeezed to 6 px wide).
-- **L4** Aim look at the Workbench minimum: "Dim lights that can't see the
-  target" cut short.
-- **L5** Build's scene page at the Workbench minimum (~659x326): "How this
-  works" cut off at the bottom.
-- **L6** Show Settings at its minimum (~298x473): the Teaching rows
-  (Lesson, Handout link) squeezed to 5 px; the word-wrapped PIN text takes
-  their height. Needs a minimum width (or a heightForWidth-aware layout).
-- **L7** Create groups / Head types at their minimum: the group preview cut
-  off, the LED map over its "16 × RGB 16 × W" caption (on Linux, its
-  order strip cut instead).
-- **L8** Scene group looks at its own minimum (~341x184): the Edge/Speed
-  row over the Targets/Looks captions and the targets list.
+1920x1080; its `knownIssues()` is empty. L1-L8 are fixed: the Workbench,
+Scene group looks, Show Settings, Create groups, Head types and the LED
+layout editor report their minimum height at the narrowest width
+(`minimumSizeHint` through `totalMinimumHeightForWidth`), so word-wrapped
+text and the wrapping timing row are no longer squeezed at the minimum.
+L1, L3 and L4 did not show on macOS (Qt 6.11) by the time of the fix.
 
 ## Aim round trip — leftovers (fix/04-ust-aim, 2026-11-03)
 

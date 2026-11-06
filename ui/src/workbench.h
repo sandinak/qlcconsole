@@ -77,6 +77,10 @@ public:
     Workbench(Doc *doc, QWidget *parent = nullptr);
     ~Workbench();
 
+    /** Each pane's wrapping text needs more height at the narrowest width
+     *  than the layouts' plain minimum says. */
+    QSize minimumSizeHint() const override;
+
     /************************************************************************
      * What is loaded
      ************************************************************************/

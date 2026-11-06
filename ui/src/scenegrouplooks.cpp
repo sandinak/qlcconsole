@@ -488,6 +488,14 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     reload();
 }
 
+QSize SceneGroupLooks::minimumSizeHint() const
+{
+    QSize s = QWidget::minimumSizeHint();
+    if (layout() != nullptr && s.width() > 0)
+        s.setHeight(qMax(s.height(), layout()->totalMinimumHeightForWidth(s.width())));
+    return s;
+}
+
 SceneGroupLooks::~SceneGroupLooks()
 {
 }

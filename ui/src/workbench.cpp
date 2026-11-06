@@ -367,6 +367,24 @@ void Workbench::fillFocusMenu(QMenu *m)
     });
 }
 
+QSize Workbench::minimumSizeHint() const
+{
+    QSize s = QWidget::minimumSizeHint();
+    if (m_split == nullptr)
+        return s;
+    for (int i = 0; i < m_split->count(); ++i)
+    {
+        QWidget *pane = m_split->widget(i);
+        if (QStackedWidget *stack = qobject_cast<QStackedWidget *>(pane))
+            if (stack->currentWidget() != nullptr)
+                pane = stack->currentWidget();
+        const int w = qMax(pane->minimumSizeHint().width(), m_split->widget(i)->minimumSizeHint().width());
+        if (pane->layout() != nullptr && w > 0)
+            s.setHeight(qMax(s.height(), pane->layout()->totalMinimumHeightForWidth(w)));
+    }
+    return s;
+}
+
 void Workbench::buildHeader(QWidget *column)
 {
     QVBoxLayout *col = qobject_cast<QVBoxLayout *>(column->layout());

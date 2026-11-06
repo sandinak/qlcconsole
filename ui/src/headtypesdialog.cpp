@@ -9,6 +9,7 @@
       http://www.apache.org/licenses/LICENSE-2.0.txt
 */
 
+#include <QLayout>
 #include <QDialogButtonBox>
 #include <QPushButton>
 #include <QHBoxLayout>
@@ -100,6 +101,14 @@ int HeadTypesDialog::offerSplit(Doc *doc, const QList<quint32> &fixtureIds, cons
     if (made != nullptr)
         *made = dlg.createdGroups();
     return 1;
+}
+
+QSize HeadTypesDialog::minimumSizeHint() const
+{
+    QSize s = QWidget::minimumSizeHint();
+    if (layout() != nullptr && s.width() > 0)
+        s.setHeight(qMax(s.height(), layout()->totalMinimumHeightForWidth(s.width())));
+    return s;
 }
 
 HeadTypesDialog::HeadTypesDialog(Doc *doc, const QList<quint32> &fixtureIds,

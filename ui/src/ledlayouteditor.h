@@ -122,6 +122,10 @@ class QLC_UI_EXPORT LedLayoutEditor final : public QWidget
 public:
     /** @param doc  for lighting the real fixture during the preview; may be null */
     explicit LedLayoutEditor(Doc *doc, QWidget *parent = nullptr);
+
+    /** The wrapping text needs more height at the narrowest width than the
+     *  layout's plain minimum says. */
+    QSize minimumSizeHint() const override;
     ~LedLayoutEditor() override;
 
     /** Edit @p layout, the map of @p like's model and mode. */
