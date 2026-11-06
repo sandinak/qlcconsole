@@ -1390,10 +1390,11 @@ props, images and nodes:
 - **Units are yours, not the show's.** Every length you read or type —
   H/V/Z readouts, dimension and height labels, every length field, the
   mounting height, reports and CSV columns, the focus remote — uses
-  **Settings → General → Units**, exactly: `12' 6"` with feet and inches
-  (the default), `150 in` with inches, `3.81 m`, `381 cm` or `3810 mm`
-  with the metric ones. Any field takes a length typed in any unit
-  (`12' 6"` or `3.8 m` both work). Only the grid itself is coarser: its
+  **Settings → General → Units**, exactly: `12' 6 1/4"` with feet and
+  inches (the default, read like a tape measure to the nearest 1/8"),
+  `150 1/4"` with inches, `3.81 m`, `381 cm` or `3810 mm` with the metric
+  ones. Any field takes a length typed in any unit, fractions or decimals
+  (`12' 6 1/4"`, `12' 6.25"`, `11-1/4"`, `3/8"` or `3.8 m` all work). Only the grid itself is coarser: its
   cells and rulers count **feet** for inches or feet and **metres** for mm,
   cm or m (finer cells would only crowd a stage grid). The Grid button's
   menu shows your unit and says where to change it. A show opens in your units whatever it was

@@ -385,7 +385,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 ### Fixed
 
 - **Every length follows Settings ▸ Units; feet and inches by default.**
-  Set Mounting Height… asks in your unit and takes `12' 6"` or `3.8 m`;
+  Feet and inches read like a tape measure, to the nearest 1/8" (`3' 11
+  1/4"`, `7' 10 1/2"`), and any field takes fractions or decimals
+  (`11-1/4"`, `3/8"`, `11.25"`). Set Mounting Height… asks in your unit
+  and takes `12' 6"` or `3.8 m`;
   every rig label, editor field, readout, report, CSV column, Show Review
   line and focus-mode call does the same, never the grid's unit (inches
   showed as decimal feet, mm and cm as metres). A gate test (`units_test`)

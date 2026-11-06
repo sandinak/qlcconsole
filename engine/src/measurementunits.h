@@ -35,7 +35,8 @@
  * fixture definition editor. Lengths show in the chosen unit; weight follows
  * from it -- kilograms with mm/cm/m, pounds with in/ft.
  *
- * Typed values may carry their own unit and are converted: 7.5", 7.5 in,
+ * Typed values may carry their own unit and are converted: 7.5", 7 1/2",
+ * 11-1/4", 3/8", 7.5 in,
  * 0.625', 6' 3", 6 ft 3 in, 190.5mm, 19.05 cm, 0.19 m; 12 kg, 26.5 lb(s),
  * 400 g, 5 lb 4 oz. A bare number is in the preferred unit. Nothing here
  * changes what is stored: callers keep mm / kg as the file format does.
@@ -86,11 +87,13 @@ public:
     /** Parse a typed weight into kilograms (see parseLength) */
     static double parseWeight(const QString &text, WeightUnit bareUnit, bool *ok);
 
-    /** @a mm shown in @a unit, e.g. "190.5 mm", "7.5 in", "1' 3.5\"".
-     *  A whole number of millimetres -- what a file holds -- is shown with
-     *  the fewest decimals that still mean that same millimetre (191 mm ->
-     *  7.5 in, not 7.52); anything else is rounded to the unit's precision
-     *  (mm 0.1, cm 0.01, m 0.0001, in 0.01). Trailing zeros are dropped. */
+    /** @a mm shown in @a unit, e.g. "190.5 mm", "19.05 cm". Feet and
+     *  inches read like a tape measure, to the nearest 1/8" with the
+     *  fraction reduced: 3' 11 1/4", 7' 10 1/2", 26' 3", 7 1/2" (inches:
+     *  15 3/4"). Metric: a whole number of millimetres -- what a file
+     *  holds -- is shown with the fewest decimals that still mean that same
+     *  millimetre; anything else is rounded to the unit's precision (mm 0.1,
+     *  cm 0.01, m 0.0001). Trailing zeros are dropped. */
     static QString formatLength(double mm, LengthUnit unit);
     /** @a mm shown in preferredLength() */
     static QString formatLength(double mm);

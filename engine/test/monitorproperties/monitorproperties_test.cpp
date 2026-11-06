@@ -3394,7 +3394,7 @@ void MonitorProperties_Test::theApronIsMeasuredFromTheCurtainLine()
     QCOMPARE(MP::formatStageDistance(1.8f, MeasurementUnits::Metres), QStringLiteral("1.8 m"));
     QCOMPARE(MP::formatStageDistance(1.8f, MeasurementUnits::Feet), QStringLiteral("5' 11\""));
     QCOMPARE(MP::formatStageDistance(1.2192f, MeasurementUnits::Feet), QStringLiteral("4'"));
-    QCOMPARE(MP::formatStageDistance(1.8f, MeasurementUnits::Inches), QStringLiteral("71 in"));
+    QCOMPARE(MP::formatStageDistance(1.8f, MeasurementUnits::Inches), QStringLiteral("71\""));
     QCOMPARE(MP::formatStageDistance(1.8f, MeasurementUnits::Centimetres), QStringLiteral("180 cm"));
     QCOMPARE(MP::formatStageDistance(1.8f, MeasurementUnits::Millimetres), QStringLiteral("1800 mm"));
 }

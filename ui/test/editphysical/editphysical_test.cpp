@@ -56,7 +56,7 @@ void EditPhysical_Test::inchesTypedInInches()
     QCOMPARE(page.m_widthEdit->unit(), MU::Inches);
 
     typeInto(page.m_widthEdit, QStringLiteral("7.5\""));
-    QCOMPARE(page.m_widthEdit->text(), QString("7.5 in"));
+    QCOMPARE(page.m_widthEdit->text(), QString("7 1/2\""));
     QVERIFY(!page.m_widthEdit->hasError());
     QVERIFY(page.m_widthEdit->toolTip().contains("191 mm"));
     QCOMPARE(page.physical().width(), 191);
@@ -64,7 +64,7 @@ void EditPhysical_Test::inchesTypedInInches()
     // and as the saved 191 mm comes back
     EditPhysical again(page.physical(), nullptr);
     again.setUnit(MU::Inches);
-    QCOMPARE(again.m_widthEdit->text(), QString("7.5 in"));
+    QCOMPARE(again.m_widthEdit->text(), QString("7 1/2\""));
 }
 
 void EditPhysical_Test::inchesTypedInMillimetres()
@@ -95,7 +95,7 @@ void EditPhysical_Test::bareNumber()
     QCOMPARE(page.physical().width(), 300);
 
     page.setUnit(MU::Feet);
-    QCOMPARE(page.m_widthEdit->text(), QString("11.8\""));
+    QCOMPARE(page.m_widthEdit->text(), QString("11 3/4\""));
     typeInto(page.m_widthEdit, QStringLiteral("1.5"));
     QCOMPARE(page.m_widthEdit->text(), QString("1' 6\""));
     QCOMPARE(page.physical().width(), 457);
@@ -122,14 +122,14 @@ void EditPhysical_Test::invalid()
     phys.setWidth(300);
     EditPhysical page(phys, nullptr);
     page.setUnit(MU::Inches);
-    QCOMPARE(page.m_widthEdit->text(), QString("11.8 in"));
+    QCOMPARE(page.m_widthEdit->text(), QString("11 3/4\""));
 
     typeInto(page.m_widthEdit, QStringLiteral("wide"));
     QVERIFY(page.m_widthEdit->hasError());
     QCOMPARE(page.m_widthEdit->property("invalid").toBool(), true);
     QCOMPARE(page.m_widthEdit->text(), QString("wide"));   // left to fix
-    QVERIFY(page.m_widthEdit->toolTip().contains("7.5\""));
-    QVERIFY(page.m_widthEdit->toolTip().contains("11.8 in"));
+    QVERIFY(page.m_widthEdit->toolTip().contains("7 1/2\""));
+    QVERIFY(page.m_widthEdit->toolTip().contains("11 3/4\""));
     QCOMPARE(page.physical().width(), 300);                // unchanged
 
     typeInto(page.m_widthEdit, QStringLiteral("500 m"));   // too big
@@ -152,9 +152,9 @@ void EditPhysical_Test::loadShowsPreferredUnit()
     EditPhysical page(phys, nullptr);
 
     page.setUnit(MU::Inches);
-    QCOMPARE(page.m_widthEdit->text(), QString("7.48 in"));
-    QCOMPARE(page.m_heightEdit->text(), QString("75 in"));
-    QCOMPARE(page.m_depthEdit->text(), QString("0 in"));
+    QCOMPARE(page.m_widthEdit->text(), QString("7 1/2\""));
+    QCOMPARE(page.m_heightEdit->text(), QString("75\""));
+    QCOMPARE(page.m_depthEdit->text(), QString("0\""));
     QCOMPARE(page.m_weightEdit->text(), QString("26.5 lb"));
 
     page.setUnit(MU::Metres);

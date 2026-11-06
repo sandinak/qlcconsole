@@ -2744,7 +2744,7 @@ void LookEditor_Test::aLengthShowsAndTakesTheChosenUnit()
         QCOMPARE(height->text(), QString("5' 6\""));
         height->setValue(height->valueFromText("6'"));
         QVERIFY(qAbs(look->effectParamValues().value("personHeight") - 182.88) < 1e-6);
-        QVERIFY2(height->toolTip().contains("from 1' 7.7\" to 8' 2.43\""), qPrintable(height->toolTip()));
+        QVERIFY2(height->toolTip().contains("from 1' 7 5/8\" to 8' 2 3/8\""), qPrintable(height->toolTip()));
     }
     MeasurementUnits::setPreferredLength(was);
 }

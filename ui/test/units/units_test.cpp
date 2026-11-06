@@ -547,6 +547,19 @@ void Units_Test::feetAndInchesByDefault()
     QVERIFY(!MU::isPreferenceSet());
     QCOMPARE(MU::preferredLength(), MU::Feet);
     QCOMPARE(MU::formatLength(1905.0), QString("6' 3\""));
+    // Read like a tape measure: to the nearest 1/8", reduced; typed either way.
+    QCOMPARE(MU::formatLength(1200.15), QString("3' 11 1/4\""));
+    QCOMPARE(MU::formatLength(2400.3), QString("7' 10 1/2\""));
+    QCOMPARE(MU::formatLength(8001.0), QString("26' 3\""));
+    LengthSpinBox field(1.0, nullptr, MU::Feet);
+    field.setRange(0.0, 10000.0);
+    for (const QString &typed : { QStringLiteral("3' 11 1/4\""), QStringLiteral("3' 11.25\""),
+                                  QStringLiteral("47 1/4\""), QStringLiteral("47-1/4\""),
+                                  QStringLiteral("1.2 m") })
+        QVERIFY2(qAbs(field.valueFromText(typed) - (typed.endsWith('m') ? 1200.0 : 1200.15)) < 1e-6,
+                 qPrintable(typed));
+    field.setValue(1200.15);
+    QCOMPARE(field.text(), QString("3' 11 1/4\""));
     // A metric first show leaves it unset: still feet and inches.
     QVERIFY(!MU::seedFromFirstShow(false));
     QCOMPARE(MU::preferredLength(), MU::Feet);
@@ -572,7 +585,7 @@ void Units_Test::textFollowsThePreference()
         QVERIFY2(imperial ? !showsMetric(text) : !showsImperial(text),
                  qPrintable(QStringLiteral("%1: %2").arg(what, text)));
         QVERIFY2(text.contains(MU::symbol(MU::preferredLength()))
-                 || (MU::preferredLength() == MU::Feet && (text.contains('\'') || text.contains('"'))),
+                 || (MU::isImperial(MU::preferredLength()) && (text.contains('\'') || text.contains('"'))),
                  qPrintable(QStringLiteral("%1 not in %2: %3").arg(what, MU::symbol(MU::preferredLength()), text)));
     };
 
