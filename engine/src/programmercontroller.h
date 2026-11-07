@@ -777,6 +777,9 @@ private:
     /** Both stick clicks (the freeze chord, Q140): LS acts on its release
      *  unless RS came while it was held, and the other way round. */
     bool m_stickChord = false;
+    /** View + LS: Centre Sticks (a worn stick's rest learnt again); LS's
+     *  release then does nothing of its own. */
+    bool m_centreChord = false;
     bool m_holding = false;
     /** Hold A: save all / keep; hold B: back to the last save (Q126). */
     ControllerScheme::LongPress m_holdA { ControllerScheme::keepAllHoldSeconds() };
@@ -838,6 +841,9 @@ private:
     /** Focus mode's share of slotControllerInputChanged(). True if it took
      *  the event. */
     bool routeFocusInput(quint32 universe, quint32 channel, uchar value);
+    /** Centre Sticks on the controller patched to @p universe (View + LS):
+     *  its plugin learns where its sticks rest once they are let go. */
+    void centreSticks(quint32 universe);
     /** Persistent park DMXSource — holds parked fixtures at captured values. */
     ParkEffect *m_parkEffect = nullptr;
     /** Persistent mark DMXSource — pre-positions dark fixtures (non-intensity). */

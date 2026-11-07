@@ -23,6 +23,8 @@
 #include <QTreeWidget>
 #include <QLabel>
 #include <QFileInfo>
+#include <QSettings>
+#include <QPushButton>
 #include <QFile>
 #include <QDir>
 #include <QtTest>
@@ -34,7 +36,9 @@
 #include "showtreeview.h"
 #include "programmercontroller.h"
 #include "effectscriptrunner.h"
+#include "focussession.h"
 #include "programmingmanager.h"
+#include "controllertestdialog.h"
 #include "workbench.h"
 #undef protected
 #undef private
@@ -91,6 +95,10 @@ const char *kDS4 = " DUALSHOCK 4 Wireless Controller (DE:4C:09:77:77:93)";
 /* Others he might connect (not in his show's slot): a DualSense, an Xbox pad. */
 const char *kDualSense = " DualSense Wireless Controller (AA:BB:CC:DD:EE:01)";
 const char *kXbox = "Xbox Wireless Controller";
+/* A worn DUALSHOCK 4 whose sticks do not come back to the middle, and one
+   whose rest this computer remembers from before. */
+const char *kWorn = " DUALSHOCK 4 Wireless Controller (AA:00:00:00:00:01)";
+const char *kRemembered = " DUALSHOCK 4 Wireless Controller (AA:00:00:00:00:02)";
 
 QLCIOPlugin *hidPlugin(Doc *doc)
 {
@@ -193,7 +201,24 @@ void FollowSpotCue_Test::initTestCase()
     qputenv("QLC_IOPLUGIN_DIR", m_pluginDir->path().toLocal8Bit());
     qputenv("QLC_HID_PROFILE_DIR", QByteArray(QLC_TEST_RESOURCE_ROOT) + "hidprofiles");
     qputenv("QLC_HID_VIRTUAL_PAD", QByteArray("054c:09cc:") + kDS4 + ";054c:0ce6:" + kDualSense
-                                   + ";045e:0b13:" + kXbox);
+                                   + ";045e:0b13:" + kXbox + ";054c:09cc:" + kWorn
+                                   + ";054c:09cc:" + kRemembered);
+    /* Where the HID plugin remembers a stick's rest: a file of this test's,
+       with one remembered for kRemembered at +0.12 / -0.05. */
+    m_stickSettings = new QTemporaryDir();
+    QVERIFY(m_stickSettings->isValid());
+    const QString ini = m_stickSettings->filePath(QStringLiteral("sticks.ini"));
+    qputenv("QLC_HID_STICK_SETTINGS", ini.toLocal8Bit());
+    // A stick off the middle is said after 1.5 s here, not 3 s.
+    qputenv("QLC_HID_STICK_DRIFT_MS", "1500");
+    {
+        QString key = QStringLiteral("054c:09cc:") + QString::fromUtf8(kRemembered).trimmed();
+        for (QChar &c : key)
+            if (!c.isLetterOrNumber())
+                c = QLatin1Char('_');
+        QSettings(ini, QSettings::IniFormat).setValue(QStringLiteral("hid/stickRest/") + key,
+                                                      QStringList { "0=0.1200", "1=-0.0500" });
+    }
     qputenv("QLC_HID_VIRTUAL_ONLY", "1");
 
     m_app = new App();
@@ -213,6 +238,8 @@ void FollowSpotCue_Test::cleanupTestCase()
     m_app = nullptr;
     delete m_pluginDir;
     m_pluginDir = nullptr;
+    delete m_stickSettings;
+    m_stickSettings = nullptr;
 }
 
 bool FollowSpotCue_Test::open(const QString &path)
@@ -857,6 +884,211 @@ void FollowSpotCue_Test::everyCueSelectedShowsItsEffect()
     settle(200);
     breathes_(2, "after none");
     doc->resetModified();
+}
+
+namespace
+{
+// A -1..1 stick position as the pad's reading gives it (128 the middle).
+uchar stickAt(double n)
+{
+    return uchar(n >= 0 ? 128 + qRound(n * 127) : 128 + qRound(n * 128));
+}
+
+QVariantMap stickAxis(QLCIOPlugin *hid, int line, int channel)
+{
+    for (const QVariant &v : hid->inputStickAxes(quint32(line)))
+        if (v.toMap().value(QStringLiteral("channel")).toInt() == channel)
+            return v.toMap();
+    return QVariantMap();
+}
+
+// QLC_DRIFT_SHOTS=<dir>: @p w at the three review sizes (Q207; not in the gate).
+void shootDrift(QWidget *w, const QString &name)
+{
+    const QString dir = qEnvironmentVariable("QLC_DRIFT_SHOTS");
+    if (dir.isEmpty())
+        return;
+    QDir().mkpath(dir);
+    const QSize was = w->size();
+    for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        w->resize(sz);
+        settle(300);
+        w->grab().save(QString("%1/%2-%3x%4.png").arg(dir, name).arg(sz.width()).arg(sz.height()));
+    }
+    w->resize(was);
+    settle(100);
+}
+}
+
+void FollowSpotCue_Test::aWornStickMovesNothing()
+{
+    Doc *doc = m_app->doc();
+    ProgrammerController *pc = doc->programmer();
+    InputOutputMap *iom = doc->inputOutputMap();
+    QLCIOPlugin *hid = hidPlugin(doc);
+    QVERIFY(hid != nullptr);
+    const float mid = 128 / 255.0f;
+    pc->clearAxisBindings();
+
+    /* The symptom: a stick resting at +0.12 was a held push to every tool
+       (the Focus mode stick and followspot.js alike), so heads crept. */
+    QVERIFY(FocusSession::stickVelocity(stickAt(0.12) / 255.0f, 0.05f) != 0.0f);
+
+    for (const char *uid : { kWorn, kXbox })
+    {
+        const QString how = QString::fromUtf8(uid).trimmed();
+        const int line = hid->inputs().indexOf(QString::fromUtf8(uid));
+        QVERIFY2(line >= 0, uid);
+        // Connected: its sticks where a worn pad's rest, nobody touching it.
+        QVERIFY(iom->setInputPatch(0, QStringLiteral("HID"), QString(), quint32(line)));
+        QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 2000);
+        QVERIFY(padInput(doc, 0, stickAt(0.12), uid));
+        QVERIFY(padInput(doc, 1, stickAt(-0.07), uid));
+        QVERIFY(padInput(doc, 3, stickAt(0.05), uid));
+        QVERIFY(padInput(doc, 4, 128, uid));
+        // A moment later its rest is learnt, and it reads the middle...
+        QTRY_VERIFY2_WITH_TIMEOUT(stickAxis(hid, line, 0).value("learnt").toBool()
+                                  && stickAxis(hid, line, 1).value("learnt").toBool(), qPrintable(how), 2000);
+        QVERIFY2(qAbs(stickAxis(hid, line, 0).value("rest").toDouble() - 0.12) < 0.02, qPrintable(how));
+        QVERIFY2(qAbs(stickAxis(hid, line, 1).value("rest").toDouble() + 0.07) < 0.02, qPrintable(how));
+        QTRY_COMPARE_WITH_TIMEOUT(pc->m_panNorm, mid, 1000);
+        QTRY_COMPARE_WITH_TIMEOUT(pc->m_tiltNorm, mid, 1000);
+        // ...and nothing moves, tick after tick (the Focus stick, the follow spot).
+        for (int i = 0; i < 25; ++i)
+        {
+            QTest::qWait(40);
+            QCOMPARE(pc->m_panNorm, mid);
+            QCOMPARE(pc->m_tiltNorm, mid);
+            QCOMPARE(FocusSession::stickVelocity(pc->m_panNorm, pc->joystickDeadzone()), 0.0f);
+            QCOMPARE(FocusSession::stickVelocity(pc->m_tiltNorm, pc->joystickDeadzone()), 0.0f);
+        }
+        // Full travel still reaches both ends.
+        QVERIFY(padInput(doc, 0, 255, uid));
+        QTRY_COMPARE_WITH_TIMEOUT(pc->m_panNorm, 1.0f, 1000);
+        QVERIFY(padInput(doc, 0, 0, uid));
+        QTRY_COMPARE_WITH_TIMEOUT(pc->m_panNorm, 0.0f, 1000);
+        QVERIFY(padInput(doc, 1, 255, uid));
+        QTRY_COMPARE_WITH_TIMEOUT(pc->m_tiltNorm, 1.0f, 1000);
+        QVERIFY(padInput(doc, 1, stickAt(-0.07), uid));
+        QVERIFY(padInput(doc, 0, stickAt(0.12), uid));      // let go
+        // A slow push, held still once the pad has settled in, is kept.
+        QTest::qWait(2100);
+        QVERIFY(padInput(doc, 0, stickAt(0.4), uid));
+        QTest::qWait(600);
+        QVERIFY2(pc->m_panNorm > 0.6f, qPrintable(QString::number(pc->m_panNorm)));
+        QVERIFY(FocusSession::stickVelocity(pc->m_panNorm, pc->joystickDeadzone()) > 0.0f);
+        QVERIFY(padInput(doc, 0, stickAt(0.12), uid));
+        QTRY_COMPARE_WITH_TIMEOUT(pc->m_panNorm, mid, 1000);
+    }
+
+    /* Later the worn stick comes to rest further out (+0.30): nothing
+       re-centres it by itself, but once it has sat there 3 s (1.5 s in
+       this test) with nothing
+       else touched, the notice line says so -- once -- with Centre Sticks. */
+    const int worn = hid->inputs().indexOf(QString::fromUtf8(kWorn));
+    QVERIFY(iom->setInputPatch(0, QStringLiteral("HID"), QString(), quint32(worn)));
+    QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound(), 2000);
+    QTest::qWait(2200);                       // past the time it learns by itself
+    m_app->hideViewNotice();
+    QVERIFY(padInput(doc, 0, stickAt(0.42), kWorn));
+    QTest::qWait(600);
+    QVERIFY(pc->m_panNorm > 0.6f);           // not swallowed
+    QVERIFY(!m_app->m_viewNotice->isVisible());
+    QTRY_VERIFY_WITH_TIMEOUT(m_app->m_viewNotice->isVisible(), 3000);
+    const QString said = m_app->m_viewNoticeText->text();
+    qInfo().noquote() << "drift notice:" << said;
+    QVERIFY2(said.contains(QStringLiteral("DUALSHOCK 4 Wireless Controller's stick isn't resting in the middle (Left Stick X +0.")),
+             qPrintable(said));
+    QVERIFY(m_app->m_viewNoticeButton->isVisible());
+    QCOMPARE(m_app->m_viewNoticeButton->text(), QStringLiteral("Centre Sticks"));
+    QVERIFY(pc->m_panNorm > 0.6f);           // still not re-centred by itself
+    shootDrift(m_app, QStringLiteral("drift-notice"));
+
+    // Centre Sticks: its rest is learnt again and it reads the middle.
+    m_app->m_viewNoticeButton->click();
+    QVERIFY2(m_app->m_viewNoticeText->text().contains(QStringLiteral("let go of them")),
+             qPrintable(m_app->m_viewNoticeText->text()));
+    QTRY_COMPARE_WITH_TIMEOUT(pc->m_panNorm, mid, 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(m_app->m_viewNoticeText->text().contains(QStringLiteral("sticks are centred")), 2000);
+    // Once a session: a stick off the middle again is not said again.
+    QVERIFY(padInput(doc, 0, stickAt(-0.1), kWorn));
+    QTest::qWait(2000);
+    QVERIFY2(!m_app->m_viewNoticeText->text().contains(QStringLiteral("isn't resting")),
+             qPrintable(m_app->m_viewNoticeText->text()));
+
+    /* On the pad: View + LS (Create + L3 on this one), in any role. Its
+       stick now rests at -0.20; nothing else happens on the press. */
+    QVERIFY(padInput(doc, 0, stickAt(-0.2), kWorn));
+    QTest::qWait(400);
+    QVERIFY(pc->m_panNorm < 0.45f);
+    const int view = 6 + 6, ls = 6 + 8;      // the axes, then View and LS
+    QVERIFY(padInput(doc, quint32(view), 255, kWorn));
+    settle(50);    // a press and its release are never in the same instant
+    QVERIFY(padInput(doc, quint32(ls), 255, kWorn));
+    settle(50);
+    QVERIFY(pc->m_centreChord);
+    QVERIFY(padInput(doc, quint32(ls), 0, kWorn));
+    settle(50);
+    QVERIFY(padInput(doc, quint32(view), 0, kWorn));
+    QTRY_COMPARE_WITH_TIMEOUT(pc->m_panNorm, mid, 2000);
+    QVERIFY(qAbs(stickAxis(hid, worn, 0).value("rest").toDouble() + 0.2) < 0.02);
+    QVERIFY(!pc->m_centreChord);
+
+    // The Controller Test window shows each stick: reads, rests at, deadzone, what the tools get.
+    QVERIFY(padInput(doc, 0, stickAt(0.1), kWorn));
+    ControllerTestDialog *test = ControllerTestDialog::open(doc, m_app);
+    QVERIFY(test != nullptr);
+    settle(300);
+    QVERIFY2(test->stickRowCount() >= 4, qPrintable(QString::number(test->stickRowCount())));
+    QTreeWidget *sticks = test->m_sticks;
+    QTreeWidgetItem *lx = nullptr;
+    for (int i = 0; i < sticks->topLevelItemCount(); ++i)
+        if (sticks->topLevelItem(i)->text(0) == QString::fromUtf8(kWorn).trimmed()
+            && sticks->topLevelItem(i)->text(1) == QStringLiteral("Left Stick X")
+            && sticks->topLevelItem(i)->text(3) == QStringLiteral("-0.20"))
+            lx = sticks->topLevelItem(i);
+    QVERIFY(lx != nullptr);
+    qInfo().noquote() << "sticks row:" << lx->text(0) << lx->text(1) << lx->text(2) << lx->text(3)
+                      << lx->text(4) << lx->text(5);
+    QCOMPARE(lx->text(2), QStringLiteral("+0.10"));
+    QCOMPARE(lx->text(4), QStringLiteral("±0.16"));
+    QVERIFY2(lx->text(5).startsWith(QStringLiteral("+0.2")), qPrintable(lx->text(5)));
+    QVERIFY(test->m_centreButton->isEnabled());
+    sticks->scrollToItem(lx);
+    sticks->setCurrentItem(lx);
+    shootDrift(test, QStringLiteral("controller-test-sticks"));
+    QVERIFY(padInput(doc, 0, stickAt(0.1), kWorn));
+    QCOMPARE(test->centreSticks() > 0, true);
+    QTRY_VERIFY_WITH_TIMEOUT(test->m_sticksNote->text().contains(QStringLiteral("are centred")), 4000);
+    QTRY_VERIFY_WITH_TIMEOUT(qAbs(stickAxis(hid, worn, 0).value("rest").toDouble() - 0.10) < 0.01, 4000);
+    QTRY_COMPARE_WITH_TIMEOUT(pc->m_panNorm, mid, 1000);
+    test->close();
+    settle(100);
+
+    /* A pad whose rest this computer remembers (+0.12 / -0.05): right from
+       its first reading, before it could have learnt anything. */
+    const int remembered = hid->inputs().indexOf(QString::fromUtf8(kRemembered));
+    QVERIFY(remembered >= 0);
+    QVERIFY(qAbs(stickAxis(hid, remembered, 0).value("rest").toDouble() - 0.12) < 1e-6);
+    QVERIFY(iom->setInputPatch(0, QStringLiteral("HID"), QString(), quint32(remembered)));
+    QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound(), 2000);
+    QVERIFY(padInput(doc, 0, stickAt(0.12), kRemembered));
+    QVERIFY(padInput(doc, 1, stickAt(-0.05), kRemembered));
+    QTRY_COMPARE_WITH_TIMEOUT(pc->m_panNorm, mid, 200);
+    QTRY_COMPARE_WITH_TIMEOUT(pc->m_tiltNorm, mid, 200);
+    // And what is learnt is remembered for next time.
+    const QSettings saved(qEnvironmentVariable("QLC_HID_STICK_SETTINGS"), QSettings::IniFormat);
+    QString kept;
+    for (const QString &k : saved.allKeys())
+        if (k.contains(QStringLiteral("AA_00_00_00_00_01")))
+            kept = saved.value(k).toStringList().join(',');
+    // Its last Centre Sticks (the Controller Test's, at +0.10).
+    QVERIFY2(kept.startsWith(QStringLiteral("0=0.10")), qPrintable(kept));
+
+    QVERIFY(iom->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine()));
+    m_app->hideViewNotice();
+    m_app->doc()->resetModified();
 }
 
 QTEST_MAIN(FollowSpotCue_Test)

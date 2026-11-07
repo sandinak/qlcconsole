@@ -2629,6 +2629,18 @@ void ProgrammerController::applyTouch()
     }
 }
 
+void ProgrammerController::centreSticks(quint32 universe)
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = iom != nullptr && universe < iom->universesCount() ? iom->inputPatch(universe) : nullptr;
+    if (ip == nullptr || ip->plugin() == nullptr || !ip->plugin()->centreInputSticks(ip->input()))
+    {
+        tellOperator(tr("This controller's sticks can't be centred here."), ControllerScheme::ConfirmPriority);
+        return;
+    }
+    tellOperator(tr("Centring the sticks: let go of them."), ControllerScheme::ConfirmPriority);
+}
+
 bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uchar value)
 {
     const float norm = value / 255.0f;
@@ -2686,6 +2698,22 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         }
         else
             m_heldRoles.remove(role);
+        /* View + LS (Create + L3 on a PlayStation pad): Centre Sticks -- a
+           worn stick that does not come back to the middle is taken as
+           resting where it rests. In every tool and role, Design or
+           Operate: it moves nothing. LS's release is then its own. */
+        if (role == GamepadRole::LS && value > 0 && m_heldRoles.contains(GamepadRole::Back))
+        {
+            m_viewChord = true;
+            m_centreChord = true;
+            centreSticks(universe);
+            return true;
+        }
+        if (role == GamepadRole::LS && value == 0 && m_centreChord)
+        {
+            m_centreChord = false;
+            return true;
+        }
         // A focus-call cue armed: Start (Menu) begins the calls.
         if (!active && value > 0 && role == FocusCallCue::startRole() && m_focusCallCue->isArmed()
             && !m_heldRoles.contains(GamepadRole::Back))

@@ -39,6 +39,12 @@ private slots:
     void theStickIsWhicheverPadIsPatched();
     void everyCueSelectedShowsItsEffect();
     void hisShow();
+    /** A worn DUALSHOCK 4 (and Xbox pad) whose sticks rest at +0.10 / -0.07:
+     *  once connected nothing moves, full travel still reaches both ends,
+     *  a held push is kept, a stick left off the middle is said once with
+     *  Centre Sticks (the notice line, the Controller Test window, View +
+     *  LS), and a remembered rest is used next time. */
+    void aWornStickMovesNothing();
     void everyCueFiresItsEffects();
 
 private:
@@ -48,6 +54,7 @@ private:
 private:
     App *m_app = nullptr;
     QTemporaryDir *m_pluginDir = nullptr;
+    QTemporaryDir *m_stickSettings = nullptr;
 };
 
 #endif

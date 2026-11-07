@@ -29,6 +29,7 @@ target_sources(${module_name} PRIVATE
     hidprofile.cpp hidprofile.h
     hidprofileeditor.cpp hidprofileeditor.h
     hidvirtualpad.cpp hidvirtualpad.h
+    stickfilter.cpp stickfilter.h
     ${module_name}.cpp ${module_name}.h
     ../../engine/src/qlcfile.cpp ../../engine/src/qlcfile.h
 )

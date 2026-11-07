@@ -28,6 +28,7 @@ class QTreeWidgetItem;
 class QLCIOPlugin;
 class QTreeWidget;
 class QPushButton;
+class QTimer;
 class QLabel;
 class Doc;
 
@@ -65,6 +66,12 @@ public:
     /** Plugins reporting to it. */
     int pluginCount() const { return m_plugins.size(); }
 
+    /** Stick axes listed in the Sticks table (one row each). */
+    int stickRowCount() const;
+    /** Centre Sticks on every controller listed: their rests are learnt
+     *  again once the sticks are let go. How many controllers it asked. */
+    int centreSticks();
+
 private:
     void addInput(QLCIOPlugin *plugin, quint32 input, const QString &device,
                   const QString &connection, const QString &element, int raw,
@@ -79,6 +86,10 @@ private slots:
     void slotInputDiagnostic(quint32 input, const QString &device, const QString &connection,
                              const QString &element, int raw, int channel, int value);
     void refreshStatus();
+    /** The Sticks table: each stick's reading, rest, deadzone and output. */
+    void refreshSticks();
+    /** A plugin's inputSticksCentred() (by name). */
+    void slotSticksCentred(quint32 input, int held);
 
 private:
     void clear();
@@ -93,6 +104,10 @@ private:
     QPushButton *m_askButton;
     QPushButton *m_settingsButton;
     QTreeWidget *m_tree;
+    QTreeWidget *m_sticks;
+    QLabel *m_sticksNote;
+    QPushButton *m_centreButton;
+    QTimer *m_sticksTimer;
     FocusControlMap *m_actions;       ///< never shown: what a control does in Focus mode
     QHash<QString, QTreeWidgetItem *> m_rows;
     QHash<QString, QString> m_connections;   ///< device -> how it is connected

@@ -2046,6 +2046,43 @@ controller is read into the Xbox profile's layout, however it is connected:
 
 The **Controller test** below shows which way your controller is read.
 
+### A stick that doesn't come back to the middle
+
+A worn or uncalibrated stick — an older DualShock 4 often does it — rests a
+little off the middle, at +0.12 say. Every tool took that for a gentle
+push, so heads crept with nobody touching the pad: in Quick focus, Venue
+focus, the follow spot, and anything else a stick drives.
+
+qlcconsole now learns where each stick rests and takes it out of what the
+stick reads, before any tool sees it:
+
+- **As the controller arrives** (switched on, plugged in, or its input
+  patched), a stick left alone near the middle for a moment is taken as
+  resting there. A stick that is moving, or held well out, is not — it is
+  learnt later.
+- **Full travel stays full.** The rest is taken out and each side stretched,
+  so full left and full right still reach the ends, and the same push
+  either way moves a light at the same speed (a stick resting left of the
+  middle made pans to the right slower than to the left).
+- **Nothing re-centres itself during the show.** If a stick sits still past
+  the deadzone for 3 seconds with nothing else on the pad touched, the
+  notice line says so once — *DUALSHOCK 4's stick isn't resting in the
+  middle (Left Stick X +0.14)* — with **Centre Sticks**. A held slow pan
+  looks just the same, so it only asks.
+- **Centre Sticks** learns the rest again: let go of both sticks and press
+  it in the notice line, in the **Controller test** window, or on the pad —
+  hold **View** and click the **left stick** (**Create + L3** on a
+  PlayStation pad, **View + LS** on an Xbox pad). It works in Design and
+  Operate: it moves nothing. A stick still held is left as it was, and said.
+- **Remembered.** The rest is kept with this computer's settings for each
+  controller, so a known-worn stick is right from the first reading next
+  time.
+
+The deadzone is still the controller profile's, edited where it always was
+(the HID plugin's profile editor). With no profile, a game pad gets 0.05
+and any other joystick 0.08; the PlayStation profile now has 0.08. The
+web remote (Steam Deck) learns its sticks' rest the same way, in the page.
+
 ### Working in the background
 
 Quick focus — and the follow spot — keep reading the controller whatever is
@@ -2089,6 +2126,13 @@ input your controllers send, as it arrives, whether or not they are patched:
   it does in Quick focus (and, with the pad's Run role on, in Run: see
   [Pad Run](show-control.md#go-from-the-game-controller-pad-run)).
   *nothing* means the input is not in the layout.
+
+Below them, **Sticks** lists each stick of every controller that has sent
+anything, live: what it **reads**, where it **rests at** (learnt, see
+[A stick that doesn't come back to the middle](#a-stick-that-doesnt-come-back-to-the-middle)),
+the **deadzone** around the middle, and what the **tools get** — *(still)*
+while that is inside the deadzone. **Centre Sticks** learns every
+controller's rest again once you let go.
 
 Press every button once and move each stick and trigger all the way round;
 each input is one row. **Copy** puts the whole log — the devices, a row per

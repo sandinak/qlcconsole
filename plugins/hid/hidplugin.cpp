@@ -19,6 +19,8 @@
 
 #include <QApplication>
 #include <QFileSystemWatcher>
+#include <QSettings>
+#include <memory>
 #include <QMessageBox>
 #include <QStringList>
 #include <QTimer>
@@ -75,6 +77,8 @@ void HIDPlugin::init()
         loadProfiles(QDir(QDir::homePath() + QStringLiteral("/Library/Application Support/QLC+/HIDProfiles")));
 #endif
     }
+
+    m_stickClock.start();
 
     /* QLC_HID_VIRTUAL_PAD: pads that are not there, read as real ones
        (HIDVirtualPad). QLC_HID_VIRTUAL_ONLY=1: and none that are. */
@@ -231,8 +235,20 @@ float HIDPlugin::inputProfileDeadzone(quint32 input) const
 {
     HIDDevice *dev = device(input);
     if (!dev) return 0.05f;
-    const HIDProfile *prof = profileForDevice(dev);
-    return prof ? prof->deadzone() : 0.05f;
+    return deviceDeadzone(dev);
+}
+
+float HIDPlugin::deviceDeadzone(const HIDDevice *dev) const
+{
+    if (const HIDProfile *prof = profileForDevice(dev))
+        return prof->deadzone();
+    /* No profile: a game pad this plugin knows (a Steam Deck) is a modern
+       stick; any other joystick -- often an older, uncalibrated one -- gets
+       a wider middle (as the tools apply it: 0.08 is +-0.16 of travel). */
+    if (dev != nullptr && dev->axisCount() >= 0
+        && !GamepadLayout::deviceKind(dev->vendorId(), dev->productId()).isEmpty())
+        return 0.05f;
+    return 0.08f;
 }
 
 QString HIDPlugin::inputButtonAction(quint32 input, quint32 channel) const
@@ -305,8 +321,17 @@ void HIDPlugin::setupDiagnostics(HIDDevice *dev)
     dev->setDiagnostics(m_diagnostics > 0);
     if (m_diagnostics > 0 && !dev->isRunning())
     {
-        /* Not patched: run it for the test window alone. Its values go
-           nowhere -- nothing is connected to them. */
+        /* Not patched: run it for the test window alone. Its values go no
+           further than its sticks' readout (slotDeviceValue()). */
+        connect(dev, &HIDDevice::valueChanged, this, &HIDPlugin::slotDeviceValue,
+                Qt::UniqueConnection);
+        // Patched and in use, it learnt its rest when it was opened.
+        StickFilter *f = isPatchedInput(dev->line()) ? nullptr : stickFilter(dev);
+        if (f != nullptr)
+        {
+            f->begin(m_stickClock.elapsed());
+            ensureStickTimer();
+        }
         dev->openInput();
         m_diagnosticsStarted.insert(dev);
     }
@@ -397,9 +422,15 @@ bool HIDPlugin::openInput(quint32 input, quint32 universe)
     HIDDevice* dev = device(input);
     if (dev != NULL)
     {
-        connect(dev, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)),
-                this, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)));
+        connect(dev, &HIDDevice::valueChanged, this, &HIDPlugin::slotDeviceValue,
+                Qt::UniqueConnection);
         addToMap(universe, input, Input);
+        // Its sticks' rest is learnt from what it reads as it starts.
+        if (StickFilter *f = stickFilter(dev))
+        {
+            f->begin(m_stickClock.elapsed());
+            ensureStickTimer();
+        }
         return dev->openInput();
     }
     else
@@ -414,8 +445,7 @@ void HIDPlugin::closeInput(quint32 input, quint32 universe)
     {
         removeFromMap(universe, input, Input);
         dev->closeInput();
-        disconnect(dev, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)),
-                   this, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)));
+        disconnect(dev, &HIDDevice::valueChanged, this, &HIDPlugin::slotDeviceValue);
     }
     else
         qDebug() << name() << "has no input number:" << input;
@@ -844,4 +874,218 @@ void HIDPlugin::slotDeviceRemoved(uint vid, uint pid)
     qDebug() << Q_FUNC_INFO << QString::number(vid, 16) << QString::number(pid, 16);
 
     rescanDevices();
+}
+
+/*****************************************************************************
+ * Stick rest
+ *****************************************************************************/
+
+namespace
+{
+/** Where learnt rests are kept: the app's settings -- but in a test program
+ *  (QLC_TEST_OFFSCREEN_GUARD) nowhere, unless QLC_HID_STICK_SETTINGS names
+ *  a file of its own, so a test never writes the user's settings. */
+std::unique_ptr<QSettings> restSettings()
+{
+    const QString file = qEnvironmentVariable("QLC_HID_STICK_SETTINGS");
+    if (!file.isEmpty())
+        return std::make_unique<QSettings>(file, QSettings::IniFormat);
+    if (qEnvironmentVariableIntValue("QLC_TEST_OFFSCREEN_GUARD") == 1)
+        return nullptr;
+    return std::make_unique<QSettings>();
+}
+
+QString restSettingsKey(const QString &stickKey)
+{
+    QString k = stickKey;
+    for (QChar &c : k)
+        if (!c.isLetterOrNumber())
+            c = QLatin1Char('_');
+    return QStringLiteral("hid/stickRest/") + k;
+}
+}
+
+QString HIDPlugin::stickKey(const HIDDevice *dev)
+{
+    return QStringLiteral("%1:%2:%3").arg(dev->vendorId(), 4, 16, QLatin1Char('0'))
+                                     .arg(dev->productId(), 4, 16, QLatin1Char('0'))
+                                     .arg(dev->name().trimmed());
+}
+
+QList<int> HIDPlugin::stickAxes(const HIDDevice *dev) const
+{
+    QList<int> axes;
+    // Its profile's stick roles (and pan / tilt slots): never a trigger.
+    if (const HIDProfile *prof = profileForDevice(dev))
+    {
+        for (int i = 0; i < 64; ++i)
+        {
+            const QString role = prof->axisRole(i);
+            if (role == QLatin1String("lx") || role == QLatin1String("ly")
+                || role == QLatin1String("rx") || role == QLatin1String("ry")
+                || !prof->axisSlot(i).isEmpty())
+                axes << i;
+        }
+        if (!axes.isEmpty())
+            return axes;
+    }
+    // A pad read into the Xbox layout (a Steam Deck, a pad with no profile).
+    if (!GamepadLayout::deviceKind(dev->vendorId(), dev->productId()).isEmpty())
+        return { GamepadLayout::LeftX, GamepadLayout::LeftY,
+                 GamepadLayout::RightX, GamepadLayout::RightY };
+    /* Any other joystick: X and Y, its first two axes. The rest may be a
+       throttle or a slider, which has no middle to come back to. */
+    if (dev->axisCount() >= 2)
+        return { 0, 1 };
+    return axes;
+}
+
+StickFilter *HIDPlugin::stickFilter(const HIDDevice *dev)
+{
+    if (dev == nullptr || dev->axisCount() < 0)
+        return nullptr;
+    const QString key = stickKey(dev);
+    auto it = m_sticks.find(key);
+    if (it == m_sticks.end())
+    {
+        StickFilter f;
+        f.setAxes(stickAxes(dev));
+        // QLC_HID_STICK_DRIFT_MS: a test's shorter wait before drift is said.
+        const int driftMs = qEnvironmentVariableIntValue("QLC_HID_STICK_DRIFT_MS");
+        if (driftMs > 0)
+            f.setDriftTime(driftMs);
+        if (f.axes().isEmpty())
+            return nullptr;
+        // As it rested last time (Centre Sticks, or learnt as it arrived).
+        if (std::unique_ptr<QSettings> s = restSettings())
+        {
+            const QStringList saved = s->value(restSettingsKey(key)).toStringList();
+            for (const QString &one : saved)
+            {
+                const int eq = one.indexOf(QLatin1Char('='));
+                bool okC = false, okR = false;
+                const int ch = one.left(eq).toInt(&okC);
+                const double rest = one.mid(eq + 1).toDouble(&okR);
+                if (eq > 0 && okC && okR)
+                    f.setRest(ch, rest);
+            }
+        }
+        it = m_sticks.insert(key, f);
+    }
+    // The profile may have been edited since.
+    it->setDeadzone(deviceDeadzone(dev));
+    return &it.value();
+}
+
+void HIDPlugin::rememberRests(const QString &key, const StickFilter &f) const
+{
+    std::unique_ptr<QSettings> s = restSettings();
+    if (!s)
+        return;
+    QStringList out;
+    const QMap<int, double> rests = f.rests();
+    for (auto it = rests.constBegin(); it != rests.constEnd(); ++it)
+        out << QStringLiteral("%1=%2").arg(it.key()).arg(it.value(), 0, 'f', 4);
+    s->setValue(restSettingsKey(key), out);
+}
+
+void HIDPlugin::ensureStickTimer()
+{
+    if (m_stickTimer == nullptr)
+    {
+        m_stickTimer = new QTimer(this);
+        m_stickTimer->setInterval(100);
+        connect(m_stickTimer, &QTimer::timeout, this, &HIDPlugin::slotStickTick);
+    }
+    if (!m_stickTimer->isActive())
+        m_stickTimer->start();
+}
+
+void HIDPlugin::slotDeviceValue(quint32 universe, quint32 line, quint32 channel, uchar value)
+{
+    /* Queued from the device's thread: found by its line, never the
+       sender (it may have been replaced since). */
+    HIDDevice *dev = device(line);
+    if (dev != nullptr && dev->line() == line)
+    {
+        if (StickFilter *f = stickFilter(dev))
+        {
+            if (f->isAxis(int(channel)))
+            {
+                value = f->feed(int(channel), value, m_stickClock.elapsed());
+                if (f->needsTick())
+                    ensureStickTimer();
+            }
+            else
+                f->feed(int(channel), value, m_stickClock.elapsed());
+        }
+    }
+    if (isPatchedInput(line))
+        emit valueChanged(universe, line, channel, value);
+}
+
+void HIDPlugin::slotStickTick()
+{
+    const qint64 now = m_stickClock.elapsed();
+    bool busy = false;
+    for (int i = 0; i < m_devices.size(); ++i)
+    {
+        HIDDevice *dev = m_devices.at(i);
+        if (dev->axisCount() < 0)
+            continue;
+        const QString key = stickKey(dev);
+        auto it = m_sticks.find(key);
+        if (it == m_sticks.end())
+            continue;
+        StickFilter &f = it.value();
+        const StickFilter::Tick t = f.tick(now);
+        const quint32 line = quint32(i);
+        if (!t.learnt.isEmpty() || t.captureDone)
+            rememberRests(key, f);
+        // A rest learnt changes what the stick reads: say it again.
+        if (isPatchedInput(line))
+            for (int ch : t.learnt)
+                emit valueChanged(UINT_MAX, line, quint32(ch), f.output(ch));
+        if (t.captureDone)
+            emit inputSticksCentred(line, t.held);
+        if (t.drifted >= 0)
+            emit inputStickDrift(line, t.drifted, t.driftOffset);
+        busy = busy || f.needsTick();
+    }
+    if (!busy && m_stickTimer != nullptr)
+        m_stickTimer->stop();
+}
+
+QVariantList HIDPlugin::inputStickAxes(quint32 input) const
+{
+    QVariantList out;
+    HIDDevice *dev = device(input);
+    if (dev == nullptr)
+        return out;
+    const StickFilter *f = const_cast<HIDPlugin *>(this)->stickFilter(dev);
+    if (f == nullptr)
+        return out;
+    for (int ch : f->axes())
+    {
+        QVariantMap m;
+        m.insert(QStringLiteral("channel"), ch);
+        m.insert(QStringLiteral("raw"), f->raw(ch));
+        m.insert(QStringLiteral("rest"), f->rest(ch));
+        m.insert(QStringLiteral("learnt"), f->isLearnt(ch));
+        m.insert(QStringLiteral("output"), int(f->output(ch)));
+        m.insert(QStringLiteral("deadzone"), f->deadzone());
+        out << m;
+    }
+    return out;
+}
+
+bool HIDPlugin::centreInputSticks(quint32 input)
+{
+    HIDDevice *dev = device(input);
+    StickFilter *f = stickFilter(dev);
+    if (f == nullptr)
+        return false;
+    f->requestCapture(m_stickClock.elapsed());
+    ensureStickTimer();
+    return true;
 }
