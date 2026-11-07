@@ -21,6 +21,7 @@
 #define FOLLOWSPOTMOVER_H
 
 #include <QMutex>
+#include <climits>
 #include <QVector3D>
 
 #include "followspotdrive.h"
