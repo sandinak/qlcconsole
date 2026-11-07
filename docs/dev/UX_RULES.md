@@ -24,7 +24,8 @@ that have one. Change both files together.
     or a script (`help-shots.sh`), already in the gate;
   - `walker`: the upcoming screen walker, which opens every screen offscreen
     and asserts the rule on live widgets;
-  - `review`: the AI reviewer reads the diff against the rule;
+  - `review`: the AI reviewer reads the diff and the screenshots against the
+    rule ([UX_REVIEW.md](UX_REVIEW.md));
   - `manual`: a person has to look (shots, his real rig).
 - **enforced** means a gate test guards the catch that taught the rule.
   It does not mean every screen is covered: where the test only guards one
