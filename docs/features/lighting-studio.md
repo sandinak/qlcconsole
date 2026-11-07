@@ -772,6 +772,19 @@ the gap)** (it has to be in a fountain):
   and makes one span of each, in order, grouped **Spans per point** to a
   point. It says so when the device doesn't answer, and names any segment
   whose Reverse isn't set the way the note below says.
+- **Write Segments…** (a WLED on the network): the reverse. It reads the
+  device first, then asks "Write 16 segments to the WLED at …?" and, if you
+  agree, makes the device's segments the string's spans, set up as the note
+  below says: one segment per span, **Reverse** on every second one, the
+  LEDs between spans in no segment (dark), any other segments the device had
+  cleared. Then it reads them back and says "Wrote 16 segments to WLED
+  (172.18.2.100)", or what came back otherwise. While it works the note
+  under the buttons says what it is waiting on. It refuses, writing
+  nothing, when the string has more spans than the device keeps segments, or
+  a span runs past the LEDs the device drives (set its LED count first:
+  **Fix on Device…**, [Fixture Manager](fixture-manager.md)). This changes
+  the device itself: Undo can't take it back. A Teaching show that holds
+  real output refuses it, with the reason.
 
 Each span droops between the two wall tops: its middle hangs below the
 straight line between them by 30% of that distance, more for a span with
@@ -780,14 +793,16 @@ one point hang 2" (5 cm) apart. The LEDs are placed by their number on
 the string, so a live WLED's pixels and its effects land where they really
 are, whatever the segments' Reverse settings.
 
-**Setting up the WLED.** Make one segment per span, and leave the LEDs
+**Setting up the WLED.** **Write Segments…** does all of this for you,
+with no need for the WLED's own web page. By hand: make one segment per span, and leave the LEDs
 between points (the runs along the wall to the next point) out of every
 segment, so they stay dark. Tick **Reverse** on every second segment —
 the ones that run outer wall to inner — so that every span runs inner to
 outer: a Drip or Meteor effect then falls outward on all of them at once.
-WLED limits how many segments a device can have (about 32 on an ESP32);
-for more spans than that, a 2D matrix set up with Serpentine and a
-`ledmap.json` may do the same job, though that hasn't been tried here.
+WLED limits how many segments a device can have (32 on an ESP32; Write
+Segments reads the device's own limit and refuses past it); for more spans
+than that, a 2D matrix set up with Serpentine and a `ledmap.json` on the
+device may do the same job, though that hasn't been tried here.
 
 ### Wand
 

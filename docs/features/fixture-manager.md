@@ -221,6 +221,19 @@ Add Fixture's **Connection** is chosen per fixture:
   Art-Net one. A WLED that's slow to answer or on weak Wi-Fi shows up in
   the footer by fixture name.
 
+**The WLED's LED count.** When the show says how many LEDs a WLED fixture
+has (its **LEDs** in Fixture Properties, or its heads) and the device drives
+a different number, the fixture's **WLED** row and the footer say so: "the
+WLED drives 30 LEDs; this fixture has 50". **Fix on Device…** then asks on
+its own, with a warning: a wrong count can leave LEDs dark, and the WLED
+restarts its LED output to apply it (it is rebooted if it has to be), dark
+for a few seconds. Only the count changes, never the LED type, colour order,
+pins or Wi-Fi. While it works the row says what it is waiting on, then
+"WLED (172.18.2.100) now drives 50 LEDs", or what went wrong. A WLED with
+more than one LED output, or set up as a 2D matrix, is not changed: it says
+to set those counts in the WLED's own settings. Writing to the device can't
+be undone from here, and a Teaching show that holds real output refuses it.
+
 Adding a batch of network fixtures gives them **one IP each, counting up**
 from the one you type (…60, …61, …62, carrying past .255), and the dialog
 shows the range under the IP field — "One each: 172.18.2.60 to

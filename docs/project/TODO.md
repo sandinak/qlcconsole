@@ -10,6 +10,15 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## WLED setup from the show (feat/042-wled-write, 2026-11-07) -- built, one deferred
+
+Write Segments… (sprinkle loops) and Fix on Device's LED count are built.
+
+- [ ] Deferred (approved scope left it out): the WLED's brightness/power
+  limit (hw.led.maxpwr, per-output maxpwr/ledma) from the show's Max draw.
+  Same shape as the LED count: a finding, asked on its own, all of hw.led
+  sent back.
+
 ## Free Spin: an effect for heads with free pan/tilt rotation (spin, 2026-11-06, 0.4.2) -- built, leftovers
 
 Built on feat/042-free-rotate: FreeRotation (engine), free-spin.js, fitted

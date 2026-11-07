@@ -19,6 +19,7 @@ target_link_libraries(${module_name} PRIVATE
     Qt6::Gui
     Qt6::Test
     Qt6::Widgets
+    Qt6::Network
     qlcplusengine
     qlcplusui
 )

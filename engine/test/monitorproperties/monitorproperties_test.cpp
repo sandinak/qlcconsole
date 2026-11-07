@@ -18,6 +18,9 @@
 */
 
 #include <QtTest>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <functional>
 #include <QSignalSpy>
 #include <QXmlStreamReader>
@@ -4283,6 +4286,74 @@ void MonitorProperties_Test::sprinkleSpansRoundTrip()
 
 /* Read Segments: a WLED's /json/state segments become the spans, in LED
    order, grouped spans-per-point to a place. No network here: canned JSON. */
+/* Write Segments: spans become the request that makes them a WLED's
+   segments -- one a span, every second reversed, the LEDs between them in
+   none, the device's extra segments cleared -- or a refusal in words. */
+void MonitorProperties_Test::sprinkleSpansToWledSegments()
+{
+    QVector<SprinkleSpan> spans;
+    const int firsts[] = { 21, 1, 31, 45 }, lasts[] = { 30, 10, 40, 50 };   // out of order, gaps
+    for (int k = 0; k < 4; ++k)
+    {
+        SprinkleSpan sp;
+        sp.firstLed = firsts[k];
+        sp.lastLed = lasts[k];
+        spans << sp;
+    }
+    const QByteArray state = R"({"seg":[{"id":0,"start":0,"stop":30},{"id":1,"start":30,"stop":40},
+        {"id":2,"start":40,"stop":45},{"id":3,"start":45,"stop":48},{"id":4,"start":48,"stop":49},
+        {"id":5,"start":49,"stop":50}]})";
+    QJsonObject req;
+    QString error;
+    QVERIFY(PixelPath::sprinkleSpansToWled(spans, state, 32, 50, req, &error));
+    const QJsonArray seg = req.value("seg").toArray();
+    QCOMPARE(seg.size(), 6);                        // 4 spans, 2 cleared
+    const int starts[] = { 0, 20, 30, 44 }, stops[] = { 10, 30, 40, 50 };
+    for (int g = 0; g < 4; ++g)
+    {
+        const QJsonObject o = seg.at(g).toObject();
+        QCOMPARE(o.value("id").toInt(), g);
+        QCOMPARE(o.value("start").toInt(), starts[g]);     // LED order; 11-20 dark
+        QCOMPARE(o.value("stop").toInt(), stops[g]);       // exclusive
+        QCOMPARE(o.value("rev").toBool(), g % 2 == 1);
+        QCOMPARE(o.value("grp").toInt(), 1);
+        QVERIFY(!o.contains("col") && !o.contains("fx"));  // its look is the show's
+    }
+    QCOMPARE(seg.at(4).toObject(), QJsonObject({ { "id", 4 }, { "stop", 0 } }));
+    QCOMPARE(seg.at(5).toObject(), QJsonObject({ { "id", 5 }, { "stop", 0 } }));
+
+    // Reading back what was written: it matches; and what differs, in words.
+    QJsonArray back;
+    for (int g = 0; g < 4; ++g)
+        back << seg.at(g);
+    QVERIFY(PixelPath::wledSegmentsDiffer(spans, QJsonDocument(QJsonObject{ { "seg", back } }).toJson()).isEmpty());
+    QJsonObject third = back.at(2).toObject();
+    third["stop"] = 39;
+    back[2] = third;
+    QJsonObject fourth = back.at(3).toObject();
+    fourth["rev"] = false;
+    back[3] = fourth;
+    QCOMPARE(PixelPath::wledSegmentsDiffer(spans, QJsonDocument(QJsonObject{ { "seg", back } }).toJson()),
+             QStringList({ "Segment 3 is LEDs 31 to 39, not 31 to 40.", "Segment 4 is not reversed." }));
+    QVERIFY(!PixelPath::wledSegmentsDiffer(spans.mid(0, 2), QJsonDocument(QJsonObject{ { "seg", back } }).toJson())
+                 .first().isEmpty());
+
+    // Refused: past what it keeps (pointing to 2D), past its LEDs, none, overlapping.
+    QVERIFY(!PixelPath::sprinkleSpansToWled(spans, state, 3, 50, req, &error));
+    QVERIFY(error.contains("at most 3 segments") && error.contains("ledmap"));
+    QVERIFY(req.isEmpty());
+    QVERIFY(!PixelPath::sprinkleSpansToWled(spans, state, 32, 30, req, &error));
+    QVERIFY(error.contains("drives 30 LEDs"));
+    QVERIFY(!PixelPath::sprinkleSpansToWled({}, state, 32, 50, req, &error));
+    spans[1].lastLed = 25;
+    QVERIFY(!PixelPath::sprinkleSpansToWled(spans, state, 32, 50, req, &error));
+    QVERIFY(error.contains("overlap"));
+    // Not known (0): not held against it; a device with fewer segments, nothing cleared.
+    spans[1].lastLed = 10;
+    QVERIFY(PixelPath::sprinkleSpansToWled(spans, R"({"seg":[{"id":0,"start":0,"stop":30}]})", 0, 0, req));
+    QCOMPARE(req.value("seg").toArray().size(), 4);
+}
+
 void MonitorProperties_Test::sprinkleSpansFromWledSegments()
 {
     const QByteArray state = R"({"on":true,"bri":128,"seg":[

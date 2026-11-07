@@ -20,8 +20,10 @@
 
 #include <QVector>
 #include <QVector3D>
+#include <QStringList>
 #include <QString>
 
+class QJsonObject;
 class MonitorProperties;
 class StageTarget;
 struct FixtureRigProps;
@@ -119,6 +121,22 @@ namespace PixelPath
     bool sprinkleSpansFromWled(const QByteArray &json, int spansPerPoint,
                                QVector<SprinkleSpan> &spans, int &points,
                                QString *error = nullptr, QList<int> *notReversed = nullptr);
+    /** Write Segments, the reverse: the /json/state request that makes a
+     *  WLED's segments @p spans -- one segment a span (start = firstLed - 1,
+     *  stop = lastLed, exclusive), Reverse on every second one so every span
+     *  runs inner to outer, the LEDs between spans in none (dark), and each
+     *  segment the device has now (@p state, its /json/state reply) past the
+     *  spans cleared ("stop":0). Refused (false, @p error in words, nothing
+     *  in @p request) when there are no spans, more than @p maxSegments
+     *  (info.leds.maxseg, 0 = not known), or one runs past @p deviceLeds
+     *  (info.leds.count, 0 = not known). */
+    bool sprinkleSpansToWled(const QVector<SprinkleSpan> &spans, const QByteArray &state,
+                             int maxSegments, int deviceLeds, QJsonObject &request,
+                             QString *error = nullptr);
+    /** What a WLED's /json/state reply @p state has otherwise than the
+     *  segments sprinkleSpansToWled() writes for @p spans, one line each;
+     *  empty when it matches. */
+    QStringList wledSegmentsDiffer(const QVector<SprinkleSpan> &spans, const QByteArray &state);
 
     /** The world positions of @p n LEDs of @p fid along its pixel path, in
      *  head order; empty when it has none (or its fountain is gone). */
