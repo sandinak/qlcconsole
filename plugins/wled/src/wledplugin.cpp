@@ -350,36 +350,136 @@ void WledPlugin::writeUniverse(quint32 universe, quint32 output, const QByteArra
 
 void WledPlugin::tick()
 {
-    QList<QPair<quint32, int> > due;
+    QList<QPair<quint32, int> > due, ask;
     {
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
         QMutexLocker locker(&m_mutex);
         for (auto it = m_targets.begin(); it != m_targets.end(); ++it)
         {
-            const Target &t = it.value();
+            Target &t = it.value();
             for (int i = 0; i < t.devices.size(); i++)
             {
-                const Device &d = t.devices.at(i);
+                Device &d = t.devices[i];
                 // One request at a time per device (the latest wins); one
                 // that did not answer is tried again in a moment, not every
                 // tick. Neither holds up the other devices.
-                if (d.ip.isEmpty() || d.inFlight || now < d.retryAt || !d.gateOpen)
+                if (d.ip.isEmpty() || d.inFlight || d.infoInFlight || !d.gateOpen)
+                    continue;
+                /* Its segments first: nothing is sent before they are known,
+                   so the first look reaches every one of them -- and a
+                   device not known yet is asked again, not sent to. */
+                if (d.pollDue || (!d.layoutKnown && now >= d.retryAt))
+                {
+                    d.pollDue = false;
+                    d.infoInFlight = true;
+                    ask << qMakePair(it.key(), i);
+                    continue;
+                }
+                if (!d.layoutKnown || now < d.retryAt)
                     continue;
                 const QJsonObject state = WledState::decode(t.data, t.addressOf(d),
                                                             t.channelsOf(d), m_sendInterval);
-                if (state != d.sent)
+                if (state != d.sent || d.layoutGen != d.sentLayoutGen)
                     due << qMakePair(it.key(), i);
             }
         }
     }
+    for (const auto &u : ask)
+        poll(u.first, u.second);
     for (const auto &u : due)
         send(u.first, u.second);
+}
+
+QJsonObject WledPlugin::message(const QJsonObject &state, const Device &d,
+                                QVector<QPair<int, bool> > *revs)
+{
+    if (d.segments.isEmpty())
+        return state;
+    /* One element per segment, each with its id: an element without one is
+       the segment at its INDEX in the array (WLED's json.cpp), so a lone
+       element was segment 0's alone. */
+    const QJsonObject one = state.value(QStringLiteral("seg")).toArray().first().toObject();
+    const bool hasRev = one.contains(QStringLiteral("rev"));
+    const bool flip = one.value(QStringLiteral("rev")).toBool();
+    QJsonArray segs;
+    for (const Segment &s : d.segments)
+    {
+        QJsonObject o = one;
+        o[QStringLiteral("id")] = s.id;
+        if (hasRev)
+        {
+            // Reverse turns the segment round from ITS way, not to a way.
+            const bool rev = s.layoutRev != flip;
+            o[QStringLiteral("rev")] = rev;
+            if (revs != nullptr)
+                revs->append(qMakePair(s.id, rev));
+        }
+        segs.append(o);
+    }
+    QJsonObject out = state;
+    out[QStringLiteral("seg")] = segs;
+    return out;
+}
+
+void WledPlugin::learnSegments(Device &d, const QJsonArray &seg)
+{
+    QVector<Segment> now;
+    QVector<bool> observed;
+    for (int i = 0; i < seg.size(); i++)
+    {
+        const QJsonObject o = seg.at(i).toObject();
+        Segment s;
+        s.id = o.value(QStringLiteral("id")).toInt(i);
+        s.start = o.value(QStringLiteral("start")).toInt();
+        s.stop = o.value(QStringLiteral("stop")).toInt();
+        if (s.stop <= s.start)
+            continue;                       // deleted, or not in use
+        s.layoutRev = o.value(QStringLiteral("rev")).toBool();
+        now << s;
+        observed << s.layoutRev;
+    }
+
+    bool same = d.layoutKnown && now.size() == d.segments.size();
+    for (int k = 0; same && k < now.size(); k++)
+        same = now.at(k).id == d.segments.at(k).id && now.at(k).start == d.segments.at(k).start
+               && now.at(k).stop == d.segments.at(k).stop;
+    d.layoutKnown = true;
+    if (!same)
+    {
+        /* A new layout (Write Segments, or the device's own UI): its
+           directions are its own, nothing of ours in them yet -- and a new
+           segment has none of the look, so all of it goes again. */
+        d.segments = now;
+        d.sent = QJsonObject();
+        d.layoutGen++;
+        return;
+    }
+    bool changed = false;
+    for (int k = 0; k < now.size(); k++)
+    {
+        Segment &s = d.segments[k];
+        const bool rev = observed.at(k);
+        /* Says back what it took from us: its layout is as we knew it.
+           Otherwise someone else set its direction: that is its layout. */
+        if (s.sentRev >= 0 ? rev == bool(s.sentRev) : rev == s.layoutRev)
+            continue;
+        s.layoutRev = rev;
+        s.sentRev = -1;
+        changed = true;
+    }
+    if (changed)
+    {
+        d.sent = QJsonObject();
+        d.layoutGen++;
+    }
 }
 
 void WledPlugin::send(quint32 universe, int index)
 {
     QString ip;
-    QJsonObject state;
+    QJsonObject state, body;
+    QVector<QPair<int, bool> > revs;
+    quint32 gen = 0;
     {
         QMutexLocker locker(&m_mutex);
         auto it = m_targets.find(universe);
@@ -389,21 +489,20 @@ void WledPlugin::send(quint32 universe, int index)
         Device &d = t.devices[index];
         ip = d.ip;
         state = WledState::decode(t.data, t.addressOf(d), t.channelsOf(d), m_sendInterval);
+        body = message(state, d, &revs);
+        gen = d.layoutGen;
         // Out of Art-Net/E1.31 realtime mode, the first time: a WLED still
         // listening to DMX ignores the API until its realtime timeout.
-        QJsonObject body = state;
         if (!d.liveCleared)
             body[QStringLiteral("live")] = false;
         d.inFlight = true;
-        state = body;
     }
 
     QNetworkRequest req(QUrl(QStringLiteral("http://%1/json/state").arg(ip)));
     req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     req.setTransferTimeout(2000);
-    QNetworkReply *reply = m_nam->post(req, QJsonDocument(state).toJson(QJsonDocument::Compact));
-    state.remove(QStringLiteral("live"));
-    connect(reply, &QNetworkReply::finished, this, [this, reply, universe, index, state, ip]() {
+    QNetworkReply *reply = m_nam->post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, universe, index, state, ip, revs, gen]() {
         reply->deleteLater();
         const bool ok = reply->error() == QNetworkReply::NoError;
         {
@@ -418,7 +517,13 @@ void WledPlugin::send(quint32 universe, int index)
             if (ok)
             {
                 d.sent = state;
+                d.sentLayoutGen = gen;
                 d.liveCleared = true;
+                if (gen == d.layoutGen)
+                    for (const auto &r : revs)
+                        for (Segment &s : d.segments)
+                            if (s.id == r.first)
+                                s.sentRev = r.second ? 1 : 0;
             }
             else
                 d.retryAt = QDateTime::currentMSecsSinceEpoch() + retryMs;
@@ -479,55 +584,74 @@ void WledPlugin::refreshTransmitGate()
 
 void WledPlugin::pollInfo()
 {
-    struct Ask { quint32 universe; int index; QString ip; };
-    QList<Ask> ask;
+    // Asked on the next tick, in turn with what it is sent (see tick()).
+    QMutexLocker locker(&m_mutex);
+    for (Target &t : m_targets)
+        for (Device &d : t.devices)
+            if (!d.ip.isEmpty())
+                d.pollDue = true;
+}
+
+void WledPlugin::poll(quint32 universe, int index)
+{
+    QString ip;
+    bool si = true;
     {
         QMutexLocker locker(&m_mutex);
-        for (auto it = m_targets.begin(); it != m_targets.end(); ++it)
-            for (int i = 0; i < it.value().devices.size(); i++)
-            {
-                Device &d = it.value().devices[i];
-                if (!d.ip.isEmpty() && !d.infoInFlight && d.gateOpen)
-                {
-                    d.infoInFlight = true;
-                    ask << Ask{ it.key(), i, d.ip };
-                }
-            }
+        auto it = m_targets.find(universe);
+        if (it == m_targets.end() || index >= it.value().devices.size())
+            return;
+        ip = it.value().devices.at(index).ip;
+        si = !it.value().devices.at(index).noSi;
     }
-    for (const Ask &a : ask)
-    {
-        const quint32 universe = a.universe;
-        const int index = a.index;
-        const QString ip = a.ip;
-        QNetworkRequest req(QUrl(QStringLiteral("http://%1/json/info").arg(ip)));
-        req.setTransferTimeout(2000);
-        QNetworkReply *reply = m_nam->get(req);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, universe, index, ip]() {
-            reply->deleteLater();
-            const bool ok = reply->error() == QNetworkReply::NoError;
-            const QJsonObject info = ok ? QJsonDocument::fromJson(reply->readAll()).object() : QJsonObject();
+    /* /json/si: the state (its segments) and the info in one answer -- one
+       request every few seconds, as /json/info alone was. */
+    QNetworkRequest req(QUrl(QStringLiteral("http://%1/json/%2").arg(ip, si ? QStringLiteral("si")
+                                                                              : QStringLiteral("info"))));
+    req.setTransferTimeout(2000);
+    QNetworkReply *reply = m_nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, universe, index, ip, si]() {
+        reply->deleteLater();
+        const bool ok = reply->error() == QNetworkReply::NoError;
+        // It answered, but not this (an old WLED): asked /json/info from now on.
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool oldWled = !ok && si && status >= 400;
+        const QJsonObject root = ok ? QJsonDocument::fromJson(reply->readAll()).object() : QJsonObject();
+        const QJsonObject info = root.value(QStringLiteral("info")).isObject()
+                               ? root.value(QStringLiteral("info")).toObject() : root;
+        {
+            QMutexLocker locker(&m_mutex);
+            auto it = m_targets.find(universe);
+            if (it == m_targets.end() || index >= it.value().devices.size()
+                || it.value().devices.at(index).ip != ip)
+                return;
+            Device &d = it.value().devices[index];
+            d.infoInFlight = false;
+            if (oldWled)
             {
-                QMutexLocker locker(&m_mutex);
-                auto it = m_targets.find(universe);
-                if (it == m_targets.end() || index >= it.value().devices.size()
-                    || it.value().devices.at(index).ip != ip)
-                    return;
-                Device &d = it.value().devices[index];
-                d.infoInFlight = false;
-                if (ok)
-                {
-                    d.deviceName = info.value(QStringLiteral("name")).toString();
-                    d.version = info.value(QStringLiteral("ver")).toString();
-                    d.rssi = info.value(QStringLiteral("wifi")).toObject()
-                                 .value(QStringLiteral("rssi")).toInt();
-                    d.ledCount = info.value(QStringLiteral("leds")).toObject()
-                                     .value(QStringLiteral("count")).toInt();
-                }
-                setAnswered(d, ok);
+                d.noSi = true;
+                setAnswered(d, true);
+                d.pollDue = true;
+                return;
             }
-            problemsMaybeChanged();
-        });
-    }
+            setAnswered(d, ok);
+            if (ok)
+            {
+                d.deviceName = info.value(QStringLiteral("name")).toString();
+                d.version = info.value(QStringLiteral("ver")).toString();
+                d.rssi = info.value(QStringLiteral("wifi")).toObject()
+                             .value(QStringLiteral("rssi")).toInt();
+                d.ledCount = info.value(QStringLiteral("leds")).toObject()
+                                 .value(QStringLiteral("count")).toInt();
+                learnSegments(d, root.value(QStringLiteral("state")).toObject()
+                                     .value(QStringLiteral("seg")).toArray());
+                d.pollDue = false;          // this was the answer
+            }
+            else
+                d.retryAt = QDateTime::currentMSecsSinceEpoch() + retryMs;
+        }
+        problemsMaybeChanged();
+    });
 }
 
 void WledPlugin::pollLive()
@@ -637,6 +761,7 @@ void WledPlugin::setAnswered(Device &d, bool answered)
         d.sent = QJsonObject();
         d.liveCleared = false;
         d.retryAt = 0;
+        d.pollDue = true;           // and its segments, which a reboot may have changed
     }
     d.answered = answered ? 1 : 0;
 }

@@ -32,6 +32,16 @@ private slots:
     void aDeviceThatComesBackIsSentTheLookAgain();
     void theRigViewWatchesTheFirstDeviceThatAnswers();
     void rigNetworkGateIsDecidedOffTheSendTick();
+
+    /* Segments (a fountain's string, one segment per span). */
+    void theFakeAppliesASegmentWithoutAnIdByItsIndex();
+    void anEffectReachesEverySegment();
+    void reverseTurnsEachSegmentRoundFromItsOwnWay();
+    void aNewLayoutIsLearnedAndReverseStartsOverFromIt();
+    void aSegmentTurnedRoundBySomeoneElseKeepsThatWay();
+    void aSingleSegmentDeviceIsSentAsBefore();
+    void anOldWledWithoutStateAndInfoIsSentAsBefore();
+    void backupsKeepSegmentLayoutsOfTheirOwn();
     /** Against a real WLED, when WLED_REAL_IP names one (skipped otherwise):
      *  the look reaches it, and it answers. Its state is put back after. */
     void aRealLanternShowsTheLook();

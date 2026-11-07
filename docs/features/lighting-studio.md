@@ -804,6 +804,17 @@ Segments reads the device's own limit and refuses past it); for more spans
 than that, a 2D matrix set up with Serpentine and a `ledmap.json` on the
 device may do the same job, though that hasn't been tried here.
 
+**What the show's effect does on it.** A WLED Effect fixture's effect,
+speed, intensity, palette and colours go to every segment the device has,
+so the effect plays on every span at once. Its **Option** channel's
+**Reverse** turns each segment round from the way it runs, never sets
+them all one way: with Reverse on, the spans that ran inner to outer run
+outer to inner and the reversed ones the other way, and with it off each
+runs its own way again. **Mirror** is the same on every segment. The WLED
+output reads the device's segments every few seconds, so after
+**Write Segments…** (or a change on the WLED's own page) the next look
+reaches the new segments within about 5 seconds.
+
 ### Wand
 
 A **wand** is a staff with an LED strip or fairy string wound round it,

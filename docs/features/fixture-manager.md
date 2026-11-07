@@ -219,7 +219,9 @@ Add Fixture's **Connection** is chosen per fixture:
   through WLED's own API (only when it changes), not Art-Net. The Patch
   dialog patches its universe to the WLED output, never borrowing an
   Art-Net one. A WLED that's slow to answer or on weak Wi-Fi shows up in
-  the footer by fixture name.
+  the footer by fixture name. A WLED split into segments gets the look on
+  every segment, and an effect's **Reverse** turns each one round from its
+  own way (see Sprinkle loops in [Lighting Studio](lighting-studio.md)).
 
 **The WLED's LED count.** When the show says how many LEDs a WLED fixture
 has (its **LEDs** in Fixture Properties, or its heads) and the device drives

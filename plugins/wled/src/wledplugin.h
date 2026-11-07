@@ -63,9 +63,20 @@ class QTimer;
  * a dead one never holds the others back, and one that comes back is sent
  * the look again in full.
  *
- * Each lantern is also asked /json/info every few seconds: its name, its
- * firmware, its Wi-Fi signal -- and whether it answers at all.
- * targetProblems() says which do not, or answer on a weak signal.
+ * Each lantern is also asked /json/si every few seconds -- its state and its
+ * info in one answer: its name, its firmware, its Wi-Fi signal, its
+ * SEGMENTS -- and whether it answers at all. targetProblems() says which do
+ * not, or answer on a weak signal.
+ *
+ * The look goes to every segment the device has, by id. WLED applies a
+ * "seg" array element without an id to the segment at that index, so a
+ * lone element reached segment 0 only: on a fountain's string, written as
+ * one segment per span (Write Segments), an effect played on the first span
+ * alone. The effect's Reverse is relative to each segment's own direction
+ * (its layout: every second span runs the other way), never written over
+ * it. Nothing is sent to a device before its segments are known (its first
+ * answer, one request); one that answers without segments (an old WLED with
+ * no /json/si) is sent the single element as before.
  *
  * While the rig view watches a lantern (watchTargetPixels()), it is asked
  * /json/live a few times a second -- what each LED is showing, its effect
@@ -115,17 +126,19 @@ public:
     QVector<quint32> targetPixels(quint32 universe) const override;
     int targetPixelCount(quint32 universe) const override;
 
-    /** How often a watched lantern is asked what its LEDs show (ms). */
-    void setLiveInterval(int ms);
+    /** How often a watched lantern is asked what its LEDs show (ms).
+     *  Invokable by name (QMetaObject::invokeMethod) for the UI tests,
+     *  which reach the plugin through IOPluginCache. */
+    Q_INVOKABLE void setLiveInterval(int ms);
     /** An answer older than this (ms) is not shown: the lantern stopped
      *  answering, and a frozen frame would say it was still running. */
     static const int liveStaleMs = 2000;
 
     /** How often a changed state may go out, per lantern (ms). Tests run it
      *  faster; WLED's transition matches it. */
-    void setSendInterval(int ms);
-    /** How often each lantern is asked how it is (ms). */
-    void setInfoInterval(int ms);
+    Q_INVOKABLE void setSendInterval(int ms);
+    /** How often each lantern is asked how it is, and its segments (ms). */
+    Q_INVOKABLE void setInfoInterval(int ms);
 
     /** Weaker than this (dBm) is reported: on stage Wi-Fi it will drop. */
     static const int weakSignalDbm = -75;
@@ -134,15 +147,39 @@ public:
     static const int retryMs = 1000;
 
 private:
+    /** One of a device's segments, as it last said them (/json/si). */
+    struct Segment
+    {
+        int id = 0;
+        int start = 0;
+        int stop = 0;
+        /** Its own direction -- the layout's (Write Segments reverses every
+         *  second span) -- which the effect's Reverse flips, never replaces. */
+        bool layoutRev = false;
+        /** The rev it last took from us; -1 none. It says back what it was
+         *  sent: a different rev was set by someone else (Write Segments, its
+         *  own UI), and that is its layout now. */
+        int sentRev = -1;
+    };
+
     /** One WLED the universe is sent to. */
     struct Device
     {
         QString ip;
         int address = 0;            ///< 0: the first device's
         int channels = 0;           ///< 0: the first device's
-        QJsonObject sent;           ///< last state WLED acknowledged
+        QJsonObject sent;           ///< last state WLED acknowledged (decoded, one segment)
         bool inFlight = false;
-        bool infoInFlight = false;
+        bool infoInFlight = false;  ///< /json/si (or /json/info) on its way
+        /** Asked next tick, ahead of any state. Sends and asks take turns,
+         *  one request at a time: an answer is never older than a state the
+         *  device took, so the segments' directions read in it are its own. */
+        bool pollDue = true;
+        bool layoutKnown = false;   ///< it answered once: segments (if any) known
+        bool noSi = false;          ///< an old WLED without /json/si: /json/info only
+        QVector<Segment> segments;  ///< by id; empty: the single element, as before
+        quint32 layoutGen = 0;      ///< bumped when segments or their directions change
+        quint32 sentLayoutGen = 0;  ///< layoutGen of the state WLED acknowledged
         bool liveCleared = false;   ///< realtime (Art-Net/E1.31) mode left once
         int answered = -1;          ///< -1 not asked yet, 0 no answer, 1 answered
         int rssi = 0;               ///< dBm, 0 = unknown
@@ -176,8 +213,16 @@ private:
 
     void tick();
     void pollInfo();
+    void poll(quint32 universe, int slot);
     void pollLive();
     void send(quint32 universe, int slot);
+    /** The body for @a d: @a state's one segment sent to each of its
+     *  segments by id, Reverse flipping each one's own direction; @a revs
+     *  gets the (id, rev) each is sent. No segments known: @a state as is. */
+    static QJsonObject message(const QJsonObject &state, const Device &d,
+                               QVector<QPair<int, bool> > *revs = nullptr);
+    /** What a device's answer says its segments are now. */
+    static void learnSegments(Device &d, const QJsonArray &seg);
 
     /** The rig network gate (QLCIOPlugin::setTransmitNetworks()) for one
      *  device: may anything be sent to @a host? The local address the OS

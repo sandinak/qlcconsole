@@ -29,16 +29,83 @@
 
 namespace
 {
-    /** A stand-in WLED: answers /json/state and /json/info, and keeps what
-     *  was posted to it. */
+    /** A stand-in WLED: answers /json/state, /json/info and /json/si, and
+     *  keeps what was posted to it. Its segments are WLED's own: a "seg"
+     *  array element applies to the segment its "id" names -- or, with no
+     *  id, the one at its INDEX in the array (WLED's json.cpp,
+     *  `byte id = elem["id"] | it`); an id it does not have, without a
+     *  stop, is ignored; a "seg" object without an id applies to every
+     *  selected segment (all of them, here). */
     class FakeWled : public QTcpServer
     {
     public:
         QList<QJsonObject> posts;
         int rssi = -60;
         bool hang = false;                  ///< takes connections, never answers
+        bool noSi = false;                  ///< an old WLED: /json/si is 501
         int liveAsked = 0;                  ///< GET /json/live count
+        int siAsked = 0;                    ///< GET /json/si count
         QByteArray live = "{\"leds\":[\"FF0000\",\"00FF00\",\"0000FF\",\"102030\"],\"n\":1}";
+        /** Its segments, as /json/state says them: one over all 16 LEDs. */
+        QJsonArray segs{ QJsonObject{ { "id", 0 }, { "start", 0 }, { "stop", 16 }, { "rev", false },
+                                      { "mi", false }, { "fx", 0 } } };
+
+        /** Split as a fountain's Write Segments does: @p n spans of @p len,
+         *  every second reversed. */
+        void split(int n, int len)
+        {
+            segs = QJsonArray();
+            for (int k = 0; k < n; ++k)
+                segs << QJsonObject{ { "id", k }, { "start", k * len }, { "stop", (k + 1) * len },
+                                     { "rev", k % 2 == 1 }, { "mi", false }, { "fx", 0 } };
+        }
+        QJsonObject seg(int id) const
+        {
+            for (const QJsonValue &v : segs)
+                if (v.toObject().value("id").toInt() == id)
+                    return v.toObject();
+            return QJsonObject();
+        }
+        void apply(const QJsonObject &body)
+        {
+            auto into = [this](int id, const QJsonObject &o) {
+                for (int k = 0; k < segs.size(); ++k)
+                {
+                    QJsonObject s = segs.at(k).toObject();
+                    if (s.value("id").toInt() != id)
+                        continue;
+                    for (auto it = o.begin(); it != o.end(); ++it)
+                        if (it.key() != "id")
+                            s[it.key()] = it.value();
+                    segs[k] = s;
+                    return;
+                }
+                // Not one it has: ignored without a stop (none sent here).
+            };
+            const QJsonValue v = body.value("seg");
+            if (v.isObject())
+            {
+                const QJsonObject o = v.toObject();
+                if (o.contains("id"))
+                    into(o.value("id").toInt(), o);
+                else
+                    for (const QJsonValue &s : std::as_const(segs))
+                        into(s.toObject().value("id").toInt(), o);
+            }
+            const QJsonArray a = v.toArray();
+            for (int i = 0; i < a.size(); ++i)
+            {
+                const QJsonObject o = a.at(i).toObject();
+                into(o.value("id").toInt(i), o);
+            }
+        }
+        QJsonObject state() const { return QJsonObject{ { "on", true }, { "seg", segs } }; }
+        QJsonObject info() const
+        {
+            return QJsonDocument::fromJson(QString("{\"name\":\"Lantern SL\",\"ver\":\"0.15.0\","
+                                                   "\"leds\":{\"count\":16},"
+                                                   "\"wifi\":{\"rssi\":%1}}").arg(rssi).toUtf8()).object();
+        }
 
         FakeWled()
         {
@@ -62,18 +129,34 @@ namespace
                         if (hang)
                             return;
                         QByteArray reply = "{\"success\":true}";
+                        QByteArray status = "200 OK";
                         if (req.startsWith("POST /json/state"))
+                        {
                             posts << QJsonDocument::fromJson(body).object();
+                            apply(posts.last());
+                        }
                         else if (req.startsWith("GET /json/info"))
-                            reply = QString("{\"name\":\"Lantern SL\",\"ver\":\"0.15.0\","
-                                            "\"leds\":{\"count\":16},"
-                                            "\"wifi\":{\"rssi\":%1}}").arg(rssi).toUtf8();
+                            reply = QJsonDocument(info()).toJson(QJsonDocument::Compact);
+                        else if (req.startsWith("GET /json/si"))
+                        {
+                            ++siAsked;
+                            if (noSi)
+                            {
+                                status = "501 Not Implemented";
+                                reply = "{\"error\":3}";
+                            }
+                            else
+                                reply = QJsonDocument(QJsonObject{ { "state", state() }, { "info", info() } })
+                                            .toJson(QJsonDocument::Compact);
+                        }
+                        else if (req.startsWith("GET /json/state"))
+                            reply = QJsonDocument(state()).toJson(QJsonDocument::Compact);
                         else if (req.startsWith("GET /json/live"))
                         {
                             ++liveAsked;
                             reply = live;
                         }
-                        s->write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+                        s->write("HTTP/1.1 " + status + "\r\nContent-Type: application/json\r\n"
                                  "Content-Length: " + QByteArray::number(reply.size()) + "\r\n\r\n" + reply);
                     });
                     connect(s, &QTcpSocket::disconnected, s, &QObject::deleteLater);
@@ -554,6 +637,235 @@ void Wled_Test::rigNetworkGateIsDecidedOffTheSendTick()
     plugin.setTransmitNetworks(QStringList());
     QVERIFY(open(0));
     QVERIFY(open(1));
+}
+
+namespace
+{
+    /** The fifteen Effect channels: effect @p fx at speed @p sx, option
+     *  @p option (0 plain, 1 mirror, 2 reverse, 3 both), red on blue. */
+    QByteArray effect(int fx, int sx, int option)
+    {
+        return universe({ 255, fx, sx, 128, 6, option * 64, 255, 0, 0, 0, 0, 255, 0, 0, 0 });
+    }
+
+    QList<bool> revs(const FakeWled &w)
+    {
+        QList<bool> out;
+        for (const QJsonValue &v : w.segs)
+            out << v.toObject().value("rev").toBool();
+        return out;
+    }
+
+    QList<int> effects(const FakeWled &w)
+    {
+        QList<int> out;
+        for (const QJsonValue &v : w.segs)
+            out << v.toObject().value("fx").toInt();
+        return out;
+    }
+
+    void aim(WledPlugin &plugin, quint32 universe, const FakeWled &w)
+    {
+        plugin.init();
+        plugin.setSendInterval(30);
+        plugin.setInfoInterval(60);
+        QVERIFY(plugin.openOutput(0, universe));
+        plugin.setParameter(universe, 0, QLCIOPlugin::Output, WLED_OUTPUTIP, w.ip());
+        plugin.setParameter(universe, 0, QLCIOPlugin::Output, WLED_CHANNELS, 15);
+    }
+}
+
+/* The fake is WLED's own reading of "seg", which the rest relies on: what
+   was sent before this fix -- one element, no id -- reaches segment 0 only
+   (seen on a WLED 16.0.1: segment 1 kept effect 0). */
+void Wled_Test::theFakeAppliesASegmentWithoutAnIdByItsIndex()
+{
+    FakeWled w;
+    w.split(2, 25);
+    w.apply(QJsonObject{ { "seg", QJsonArray{ QJsonObject{ { "fx", 9 } } } } });
+    QCOMPARE(effects(w), (QList<int>{ 9, 0 }));
+    w.apply(QJsonObject{ { "seg", QJsonArray{ QJsonObject{ { "id", 1 }, { "fx", 7 } } } } });
+    QCOMPARE(effects(w), (QList<int>{ 9, 7 }));
+    w.apply(QJsonObject{ { "seg", QJsonArray{ QJsonObject{ { "id", 5 }, { "fx", 3 } } } } });
+    QCOMPARE(effects(w), (QList<int>{ 9, 7 }));             // none such: ignored
+    w.apply(QJsonObject{ { "seg", QJsonObject{ { "fx", 2 } } } });
+    QCOMPARE(effects(w), (QList<int>{ 2, 2 }));             // the object: all selected
+}
+
+/* A fountain's string, one segment per span, every second reversed: the
+   effect plays on every span, each its own way, from the first state sent. */
+void Wled_Test::anEffectReachesEverySegment()
+{
+    FakeWled w;
+    w.split(4, 4);
+    QVERIFY(w.powerOn());
+    WledPlugin plugin;
+    aim(plugin, 0, w);
+    plugin.writeUniverse(0, 0, effect(9, 200, 0), true);
+    QTRY_COMPARE(w.posts.size(), 1);
+    QVERIFY(w.siAsked >= 1);                        // asked before it was sent
+    QCOMPARE(effects(w), (QList<int>{ 9, 9, 9, 9 }));
+    QCOMPARE(revs(w), (QList<bool>{ false, true, false, true }));   // the layout, kept
+    const QJsonArray sent = w.posts.first().value("seg").toArray();
+    QCOMPARE(sent.size(), 4);
+    for (int k = 0; k < 4; ++k)
+    {
+        const QJsonObject o = sent.at(k).toObject();
+        QCOMPARE(o.value("id").toInt(), k);
+        QCOMPARE(o.value("sx").toInt(), 200);
+        QCOMPARE(o.value("mi").toBool(), false);
+        QCOMPARE(o.value("col").toArray().at(1).toArray(), (QJsonArray{ 0, 0, 255 }));
+    }
+    QCOMPARE(w.seg(3).value("col").toArray().first().toArray(), (QJsonArray{ 255, 0, 0 }));
+
+    // Held: nothing more, polls or no polls.
+    QTest::qWait(300);
+    QCOMPARE(w.posts.size(), 1);
+}
+
+/* Reverse (the Option channel) turns each segment round from the way IT
+   runs; off again, each runs its own way. Mirror is the same on all. */
+void Wled_Test::reverseTurnsEachSegmentRoundFromItsOwnWay()
+{
+    FakeWled w;
+    w.split(4, 4);
+    QVERIFY(w.powerOn());
+    WledPlugin plugin;
+    aim(plugin, 0, w);
+    plugin.writeUniverse(0, 0, effect(9, 128, 2), true);            // reverse
+    QTRY_COMPARE(revs(w), (QList<bool>{ true, false, true, false }));
+    QCOMPARE(effects(w), (QList<int>{ 9, 9, 9, 9 }));
+
+    // Held through several polls: it says back what it was sent, and that
+    // is not taken for a new layout.
+    const int posts = w.posts.size();
+    const int asked = w.siAsked;
+    QTRY_VERIFY(w.siAsked >= asked + 3);
+    QCOMPARE(w.posts.size(), posts);
+    QCOMPARE(revs(w), (QList<bool>{ true, false, true, false }));
+
+    plugin.writeUniverse(0, 0, effect(9, 128, 0), true);            // plain
+    QTRY_COMPARE(revs(w), (QList<bool>{ false, true, false, true }));
+    plugin.writeUniverse(0, 0, effect(9, 128, 3), true);            // mirror and reverse
+    QTRY_COMPARE(revs(w), (QList<bool>{ true, false, true, false }));
+    for (const QJsonValue &v : std::as_const(w.segs))
+        QCOMPARE(v.toObject().value("mi").toBool(), true);
+    plugin.writeUniverse(0, 0, effect(9, 128, 1), true);            // mirror
+    QTRY_COMPARE(revs(w), (QList<bool>{ false, true, false, true }));
+}
+
+/* Write Segments again (fewer spans, other ways): the next answer says so,
+   and the look -- reversed -- goes to the new segments, from their ways. */
+void Wled_Test::aNewLayoutIsLearnedAndReverseStartsOverFromIt()
+{
+    FakeWled w;
+    w.split(4, 4);
+    QVERIFY(w.powerOn());
+    WledPlugin plugin;
+    aim(plugin, 0, w);
+    plugin.writeUniverse(0, 0, effect(9, 128, 2), true);
+    QTRY_COMPARE(revs(w), (QList<bool>{ true, false, true, false }));
+
+    // Written as three spans, the middle one reversed; their effect is
+    // WLED's new-segment default.
+    w.segs = QJsonArray{
+        QJsonObject{ { "id", 0 }, { "start", 0 }, { "stop", 5 }, { "rev", false }, { "fx", 0 } },
+        QJsonObject{ { "id", 1 }, { "start", 5 }, { "stop", 10 }, { "rev", true }, { "fx", 0 } },
+        QJsonObject{ { "id", 2 }, { "start", 10 }, { "stop", 16 }, { "rev", false }, { "fx", 0 } } };
+    QTRY_COMPARE(effects(w), (QList<int>{ 9, 9, 9 }));
+    QCOMPARE(revs(w), (QList<bool>{ true, false, true }));
+    QCOMPARE(w.posts.last().value("seg").toArray().size(), 3);
+    plugin.writeUniverse(0, 0, effect(9, 128, 0), true);
+    QTRY_COMPARE(revs(w), (QList<bool>{ false, true, false }));
+}
+
+/* The same segments, one turned round by hand (its own UI, or Write
+   Segments over the same spans): that is its way now, and Reverse flips
+   from it. */
+void Wled_Test::aSegmentTurnedRoundBySomeoneElseKeepsThatWay()
+{
+    FakeWled w;
+    w.split(2, 8);
+    QVERIFY(w.powerOn());
+    WledPlugin plugin;
+    aim(plugin, 0, w);
+    plugin.writeUniverse(0, 0, effect(9, 128, 2), true);
+    QTRY_COMPARE(revs(w), (QList<bool>{ true, false }));
+
+    // Written back to the layout over the flip: flipped again from it.
+    w.split(2, 8);
+    QCOMPARE(revs(w), (QList<bool>{ false, true }));
+    QTRY_COMPARE(revs(w), (QList<bool>{ true, false }));
+    QCOMPARE(effects(w), (QList<int>{ 9, 9 }));
+
+    // Segment 0 turned round by hand: its way is reversed now.
+    QJsonObject s0 = w.seg(0);
+    s0["rev"] = false;
+    w.segs[0] = s0;
+    const int posts = w.posts.size();
+    QTRY_VERIFY(w.posts.size() > posts);
+    QCOMPARE(revs(w), (QList<bool>{ true, false }));
+    plugin.writeUniverse(0, 0, effect(9, 128, 0), true);
+    QTRY_COMPARE(revs(w), (QList<bool>{ false, true }));
+}
+
+/* One segment, as every lantern before fountains: the same state as ever,
+   now naming segment 0; Reverse sets its way as it did. */
+void Wled_Test::aSingleSegmentDeviceIsSentAsBefore()
+{
+    FakeWled w;
+    QVERIFY(w.powerOn());
+    WledPlugin plugin;
+    aim(plugin, 0, w);
+    const QByteArray look = effect(9, 128, 2);
+    plugin.writeUniverse(0, 0, look, true);
+    QTRY_COMPARE(w.posts.size(), 1);
+    QJsonObject was = WledState::decode(look, 1, 15, 30);
+    QJsonObject one = was.value("seg").toArray().first().toObject();
+    one["id"] = 0;
+    was["seg"] = QJsonArray{ one };
+    was["live"] = false;
+    QCOMPARE(w.posts.first(), was);
+    QCOMPARE(revs(w), (QList<bool>{ true }));
+    plugin.writeUniverse(0, 0, effect(9, 128, 0), true);
+    QTRY_COMPARE(revs(w), (QList<bool>{ false }));
+}
+
+/* A WLED that has no /json/si (before 0.10) answers it with an error: it
+   is asked /json/info instead -- answering, not a problem -- and sent the
+   one element without an id, as before. */
+void Wled_Test::anOldWledWithoutStateAndInfoIsSentAsBefore()
+{
+    FakeWled w;
+    w.noSi = true;
+    QVERIFY(w.powerOn());
+    WledPlugin plugin;
+    aim(plugin, 0, w);
+    plugin.writeUniverse(0, 0, effect(9, 128, 0), true);
+    QTRY_COMPARE(w.posts.size(), 1);
+    QVERIFY(!w.posts.first().value("seg").toArray().first().toObject().contains("id"));
+    QCOMPARE(effects(w), (QList<int>{ 9 }));
+    QTRY_COMPARE(plugin.targetPixelCount(0), 16);       // its info, from /json/info
+    QCOMPARE(plugin.answering(0), qMakePair(1, 1));
+    QVERIFY(plugin.targetProblems().isEmpty());
+}
+
+/* A backup has segments of its own: each device is sent ITS segments, each
+   turned from its own way. */
+void Wled_Test::backupsKeepSegmentLayoutsOfTheirOwn()
+{
+    FakeWled primary, backup;
+    primary.split(4, 4);
+    QVERIFY(primary.powerOn() && backup.powerOn());
+    WledPlugin plugin;
+    aim(plugin, 0, primary);
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "outputIP2", backup.ip());
+    plugin.writeUniverse(0, 0, effect(9, 128, 2), true);
+    QTRY_COMPARE(revs(primary), (QList<bool>{ true, false, true, false }));
+    QTRY_COMPARE(revs(backup), (QList<bool>{ true }));
+    QCOMPARE(effects(primary), (QList<int>{ 9, 9, 9, 9 }));
+    QCOMPARE(effects(backup), (QList<int>{ 9 }));
+    QCOMPARE(backup.posts.last().value("seg").toArray().size(), 1);
 }
 
 QTEST_MAIN(Wled_Test)
