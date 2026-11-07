@@ -195,6 +195,12 @@ holds, **Used in** (the collections, chaser steps and shows that play it),
 **Stop** / **Play**. Something the Show Tree made for its cues is marked so,
 with **Show in Show Tree**; it is changed there, not here.
 
+Under Play, while a look with something in it is loaded, a grey line says
+**Record it as a cue in the Show Tree ▸**. Click it and the Show Tree comes
+up with a cue selected and **Record** ready, so what is on stage becomes a new
+cue after it. It is not shown for an empty scene, and not for a cue (Record
+is beside it in the Show Tree).
+
 **Click a row** and the editor pane edits it, at full height:
 
 | Selected | The editor pane |

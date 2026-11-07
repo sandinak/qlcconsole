@@ -651,6 +651,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     connect(m_workbench, &Workbench::guideRequested, this, &ProgrammingManager::showProgrammingGuide);
     connect(m_workbench, &Workbench::revealPaletteRequested, this, &ProgrammingManager::revealPalette);
     connect(m_workbench, &Workbench::sendToShowTreeRequested, this, &ProgrammingManager::sendToShowTree);
+    connect(m_workbench, &Workbench::recordPointerClicked, this, &ProgrammingManager::recordInShowTree);
     connect(m_workbench, &Workbench::paletteEdited, this, [this](quint32 id) {
         // A name or a value: the lists that show it. An auto-rename re-sorts
         // the tree; the palette is found again after it settles.
@@ -1963,6 +1964,14 @@ bool ProgrammingManager::sendToShowTree(quint32 chaserId)
     m_outline->rebuild();
     m_workbench->refreshAll();
     return sent;
+}
+
+bool ProgrammingManager::recordInShowTree()
+{
+    ShowTreeView *tree = ShowTreeView::instance();
+    if (tree == nullptr)
+        return false;
+    return tree->readyToRecord();
 }
 
 void ProgrammingManager::makeChaserFrom(const QList<quint32> &functionIds, const QString &folder)

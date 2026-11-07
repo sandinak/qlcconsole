@@ -107,6 +107,11 @@ private slots:
      *  rig and in the rig views' model at the next frame, not the run's
      *  look left standing under them; the run comes back on leaving. */
     void theEditIsAllThatShowsOverARunningList();
+    /** UX-61 / F-04: Build's Workbench points to the Show Tree's Record
+     *  only while a look worth recording is loaded, never on a cue, and
+     *  the link lands on the Show Tree with Record ready. WBP_SHOTS=<dir>
+     *  also takes the pictures at three sizes. */
+    void theWorkbenchPointsToRecord();
 
 private:
     quint32 dimmer(int level, const QString &name);

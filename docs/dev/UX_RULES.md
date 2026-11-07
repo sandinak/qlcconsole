@@ -718,10 +718,13 @@ Budget 6 clicks. From: course level 3 lesson 8; 2026-11-07 catch (UX-61). Rules:
 | 1 | any | Show Tree tab | the Show Tree | 1 |
 | 2 | Show Tree | the cue list's row | the list's page | 1 |
 | 3 | the list's page | Numbering (where sections come from) *(find)* | Numbering, or a line pointing to it, on the list's page | - |
-| 4 | Show Tree | right-click a cue: sections *(find)* | a section or Numbering item, or a pointer | - |
-| 5 | Show Tree | the production's row | the production's page | 1 |
-| 6 | the production's page | Numbering ▸ Show.Part.Iteration | song section rows in the tree | 2 |
-| 7 | Show Tree | a section's ▸ | its cues folded under it | 1 |
+| 4 | Show Tree | the production's row | the production's page | 1 |
+| 5 | the production's page | Numbering ▸ Show.Part.Iteration | song section rows in the tree | 2 |
+| 6 | Show Tree | a section's ▸ | its cues folded under it | 1 |
+
+A cue's right-click menu needs no sections item: the list's page points to
+Numbering (or its **Use it** sets it), and a menu item would grow the
+surface (UX-44).
 
 ### F-02 Put a key on a hit and fire it while building
 
@@ -765,7 +768,7 @@ Budget 11 clicks. From: docs/features/build.md, show-tree.md Record and duplicat
 | 2 | Build | + Scene, drag a group onto it, drop a colour *(manual)* | a look | 3 |
 | 3 | Build ▸ Scenes | a scene in the navigator | it in the Workbench | 1 |
 | 4 | the Workbench | Play | it on the rig | 1 |
-| 5 | the Workbench | record this as a cue *(find)* | a Record control, or a line pointing to the Show Tree's Record | - |
+| 5 | the Workbench | "Record it as a cue in the Show Tree ▸" *(find)* | the grey line under Play; its link opens the Show Tree with Record ready | - |
 | 6 | any | Show Tree tab | the Show Tree | 1 |
 | 7 | Show Tree | a cue | its page | 1 |
 | 8 | Show Tree | Record ▸ Everything lit ▸ Record | a new cue after it | 3 |

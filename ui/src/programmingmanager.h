@@ -122,6 +122,8 @@ public:
      *  button, a chaser row's right-click): the Show Tree's Import in
      *  place, its sheet offering to go there. Whether it was sent. */
     bool sendToShowTree(quint32 chaserId);
+    /** The Workbench's pointer line: the Show Tree, Record ready. */
+    bool recordInShowTree();
 
     /** W6: the command bar under the two panes (the Show Tree's command
      *  line through the same Operation Registry, with a Build context). */

@@ -370,6 +370,11 @@ public:
      *  with the new list selected. False: not sent
      *  (ShowTreeController::whyNotSend), or nothing was upgraded. */
     bool sendToShowTree(quint32 chaserId, QWidget *parent = nullptr);
+    /** Build's "Record it as a cue in the Show Tree ▸": the tree comes
+     *  forward with a cue selected (the selected one, else the last cue of
+     *  the current production's main list) and Record focused. False: no
+     *  cue to record after (Record stays greyed; the hint says so). */
+    bool readyToRecord();
     /** W5: Restore original for list @a listId: asks, then the list leaves
      *  the tree, the originals go back to their folders and what fires the
      *  list fires the chaser again; one undo step. */
