@@ -77,7 +77,10 @@
 #include "monitorproperties.h"
 #include "stagetarget.h"
 #include "truss.h"
+#include "followspotmover.h"
+#include "effectscriptrunner.h"
 #include <QtMath>
+#include <QLocale>
 #include <QVector3D>
 
 ProgrammerController::ProgrammerController(Doc *doc)
@@ -89,6 +92,16 @@ ProgrammerController::ProgrammerController(Doc *doc)
     m_highlightEffect = new HighlightEffect(m_doc);
     m_parkEffect = new ParkEffect(m_doc);
     m_markEffect = new MarkEffect(m_doc);
+    m_followMover = new FollowSpotMover(m_doc);
+    /* The scene the follow spot moves is going: let go of it first (the
+       MasterTimer thread steps the mover with that scene in hand). */
+    connect(m_doc, &Doc::functionRemoved, this, [this](quint32 id) {
+        if (m_followMover->sceneId() == id)
+            m_followMover->follow(UINT_MAX, UINT_MAX);
+    });
+    connect(m_doc, &Doc::clearing, this, [this]() {
+        m_followMover->follow(UINT_MAX, UINT_MAX);
+    });
     // The mark set auto-releases fixtures on reveal; surface that to the monitor.
     connect(m_markEffect, &MarkEffect::fixtureRevealed,
             this, &ProgrammerController::markChanged);
@@ -1619,6 +1632,8 @@ ProgrammerController::~ProgrammerController()
     // Quit: the pad's triggers go back to off (a pad keeps what it was told).
     if (m_padTriggersSent && m_padTriggers != PadTriggers::State())
         setPadTriggers(PadTriggers::State());
+    delete m_followMover;
+    m_followMover = nullptr;
 }
 
 void ProgrammerController::padRumble(int pulses, int lengthMs)
@@ -2661,6 +2676,11 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         m_padRun->touchClick(value > 0);
     if (role == GamepadRole::None && !active)
         return false;
+    /* A follow spot on and no tool: the right stick is its fine stick, the
+       D-pad's Up and Down its speed step (before the Run map, which has no
+       use for them and would swallow them). */
+    if (!active && !isPan && !isTilt && followSpotTakes(universe, channel, int(role), value))
+        return true;
 
     /* Board Q135, two pads: the first to press Start (a tool started on the
        laptop: any button) owns it; another is ignored, and told so. */
@@ -3000,6 +3020,7 @@ void ProgrammerController::applyDesignJoystick()
         heldTick(dt);
         applyTouch();
         m_focusSession->tick(dt);
+        m_followMover->follow(UINT_MAX, UINT_MAX);
         return;
     }
     if (m_refineSession != nullptr && m_refineSession->isActive())
@@ -3018,6 +3039,7 @@ void ProgrammerController::applyDesignJoystick()
         m_padRun->walkTick(dt);     // walking: Y held tags the cue
         applyTouch();
         m_refineSession->tick(dt);
+        m_followMover->follow(UINT_MAX, UINT_MAX);
         return;
     }
 
@@ -3033,14 +3055,20 @@ void ProgrammerController::applyDesignJoystick()
     Scene *scene = joystickScene();
     updateFollowSpotStatus(scene);
     if (!scene)
+    {
+        m_followMover->follow(UINT_MAX, UINT_MAX);
         return;
+    }
     /* A follow spot on and no stick: look again, once a second, for a
        controller patched since (in Connections, or one that woke). */
     if (m_followStatus.state == FollowSpotStatus::NoStick
         && (!m_stickRetryClock.isValid() || m_stickRetryClock.elapsed() >= 1000))
         refreshStickBinding();
     if (!m_panBound && !m_tiltBound)
+    {
+        m_followMover->follow(UINT_MAX, UINT_MAX);
         return;
+    }
 
     // The joystick drives the focused scene in BOTH modes now: it authors the
     // Aim target (Edit, persisted) or tracks it live (Operate).  Ownership, not
@@ -3068,9 +3096,17 @@ void ProgrammerController::applyDesignJoystick()
         }
         if (hasFollowspot && !hasAimTarget)
         {
-            // Free-fly: the effect flies the heads from the stick itself.
-            if (qAbs(m_panNorm - 0.5f) * 2.0f >= 0.12f || qAbs(m_tiltNorm - 0.5f) * 2.0f >= 0.12f)
+            /* Free-fly: the effect flies the heads; the motion here (the
+               MasterTimer steps it) is how fast, on the stage, and the
+               effect hears it each tick it moves. */
+            applyFollowSpotSettings(scene);
+            applyFollowSpotSticks();
+            m_followMover->follow(scene->id(), UINT_MAX);
+            m_followMover->mainTick(m_designJoyTimer != nullptr ? m_designJoyTimer->interval() / 1000.0 : 0.02);
+            const QPointF w = m_followMover->velocity();
+            if (m_followMover->isActive() && (w.x() != 0.0 || w.y() != 0.0))
                 m_followMovedClock.restart();
+            publishFollowSpotVelocity();
             return;
         }
     }
@@ -3090,7 +3126,10 @@ void ProgrammerController::applyDesignJoystick()
         }
     }
     if (workingSelection.isEmpty())
+    {
+        m_followMover->follow(UINT_MAX, UINT_MAX);
         return;
+    }
 
     // Find the controlling position palette (Aim or PanTilt, whichever is last in list).
     QLCPalette *panTiltPal = nullptr;
@@ -3129,30 +3168,23 @@ void ProgrammerController::applyDesignJoystick()
         StageTarget *tgt = mProps ? mProps->stageTarget(aimPal->stageTargetId()) : nullptr;
         if (tgt)
         {
-            if (!m_stageAimValid)
-            {
-                QVector3D pos = tgt->positionIn(mProps->liveBlocking());
-                m_stageAimX = pos.x();
-                m_stageAimY = pos.y();
-                m_stageAimValid = true;
-            }
+            /* The subject moves on the MasterTimer, once a DMX frame, by the
+               time that frame took (FollowSpotMover): moved here on this
+               20 ms timer, it drifted against the DMX clock and a quarter
+               of the frames held still while another quarter jumped two.
+               This tick only keeps the sticks and settings current and
+               says where it has got to. */
+            applyFollowSpotSettings(scene);
+            applyFollowSpotSticks();
+            m_followMover->follow(scene->id(), tgt->id());
+            m_followMover->mainTick(m_designJoyTimer != nullptr ? m_designJoyTimer->interval() / 1000.0 : 0.02);
+            if (m_followMover->takeMoves() == 0)
+                return;     // nothing moved: the heads hold, nothing churns
 
-            const float dt    = 1.0f / 50.0f;
-            const float dz    = 0.12f;   // ±6% deadzone per axis
-            const float speed = m_joystickSensitivity * 2.0f;  // m/s at full deflection
-            float xVel =  (m_panNorm  - 0.5f) * 2.0f;
-            float yVel = -(m_tiltNorm - 0.5f) * 2.0f;  // negated: stick-up → target up on stage
-            if (qAbs(xVel) < dz) xVel = 0.0f;
-            if (qAbs(yVel) < dz) yVel = 0.0f;
-
-            // Stick centred → no velocity → nothing to do. Return BEFORE
-            // resetRuntime()/emits so the 50 Hz timer doesn't churn while idle;
-            // the heads simply hold their last aimed position.
-            if (xVel == 0.0f && yVel == 0.0f)
-                return;
-
-            m_stageAimX = qBound(-50.0f, m_stageAimX + xVel * speed * dt, 50.0f);
-            m_stageAimY = qBound(-50.0f, m_stageAimY + yVel * speed * dt, 50.0f);
+            const QVector3D pos = tgt->positionIn(mProps->liveBlocking());
+            m_stageAimX = pos.x();
+            m_stageAimY = pos.y();
+            m_stageAimValid = true;
             /* A real beam position now exists (lastPosition) -- a follow
                spot's only: a plain Aim look dragged (the Workbench's) is not
                where the next cue's follow spot picks up from. */
@@ -3162,24 +3194,13 @@ void ProgrammerController::applyDesignJoystick()
                 m_beamHeldX = m_stageAimX;
                 m_beamHeldY = m_stageAimY;
             }
-            m_followMovedClock.restart();
-
-            // Across the floor at its own height: a person on a riser stays on it
-            // (z = 0 here put the subject on the floor and the beams dipped).
-            mProps->setTargetPositionIn(tgt, mProps->liveBlocking(),
-                                        QVector3D(m_stageAimX, m_stageAimY, tgt->positionIn(mProps->liveBlocking()).z()));
-
-            // Both Design and Operate modes: the scene is running (preview or
-            // operate-scene).  resetRuntime() clears the fader map so the next
-            // write() tick re-evaluates the Aim palette with the updated target
-            // position — re-aiming every head at the moved spot (convergence).
-            // A followspot.js effect on the scene defers (emits no pan/tilt when a
-            // target is present), so it does not fight this.
-            // Re-resolve ONLY the position palettes into the existing faders
-            // (requestReaim) rather than tearing down the whole map — the latter
-            // rebuilds the dimmer/colour faders every 50 Hz tick and flashes the
-            // LEDs.  requestReaim replaces pan/tilt in place at 0-time fade.
-            scene->requestReaim();
+            // Moving while a stick asks it to; the glide to a stop after is not.
+            const FollowSpotDrive::Settings fs = m_followMover->settings();
+            if (FollowSpotDrive::shape(2.0 * m_panNorm - 1.0, fs.deadzone, 0) != 0.0
+                || FollowSpotDrive::shape(2.0 * m_tiltNorm - 1.0, fs.deadzone, 0) != 0.0
+                || FollowSpotDrive::shape(2.0 * m_fineNormX - 1.0, fs.deadzone, 0) != 0.0
+                || FollowSpotDrive::shape(2.0 * m_fineNormY - 1.0, fs.deadzone, 0) != 0.0)
+                m_followMovedClock.restart();
 
             emit designPositionWritten();
             emit followSpotPinChanged(true, m_stageAimX, m_stageAimY);
@@ -3187,6 +3208,7 @@ void ProgrammerController::applyDesignJoystick()
         }
         // No stage target — fall through to baked path
     }
+    m_followMover->follow(UINT_MAX, UINT_MAX);
 
     if (panTiltPal)
     {
@@ -3437,6 +3459,7 @@ void ProgrammerController::slotDocModeChanged(Doc::Mode mode)
     // real stick event re-reads the live position.
     m_panNorm  = 0.5f;
     m_tiltNorm = 0.5f;
+    m_fineNormX = m_fineNormY = 0.5f;
     // Push the centred value into the effect-script "joystick" data channel too
     // (followspot.js reads its velocity from there), else it keeps the stale
     // deflection and drifts.
@@ -4267,6 +4290,9 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
         {
             st.sceneId = scene->id();
             st.live = scene->id() == m_liveFollowSceneId;
+            st.speed = m_followMover->multiplier();
+            st.speedShown = st.speed != 1.0
+                            || (m_followSpeedClock.isValid() && m_followSpeedClock.elapsed() < 2000);
             if (!stickPatched())
                 st.state = FollowSpotStatus::NoStick;
             else if (m_followMovedClock.isValid() && m_followMovedClock.elapsed() < 400)
@@ -4280,11 +4306,140 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
     if (st != m_followStatus)
     {
         const bool onOff = (st.state == FollowSpotStatus::Off) != (m_followStatus.state == FollowSpotStatus::Off);
+        /* The follow spot gone: its fine stick lets go (a held right stick
+           is not carried into the next one). */
+        if (onOff && st.state == FollowSpotStatus::Off)
+            m_fineNormX = m_fineNormY = 0.5f;
         m_followStatus = st;
         if (onOff)
             refreshControllerKeepAlive();
         emit followSpotStatusChanged();
     }
+}
+
+QString ProgrammerController::followSpotSpeedText(double multiplier)
+{
+    return tr("Speed ×%1").arg(QLocale().toString(multiplier, 'g', 3));
+}
+
+double ProgrammerController::followSpotTopSpeed() const
+{
+    return m_followMover->settings().topSpeed;
+}
+
+void ProgrammerController::applyFollowSpotSettings(Scene *scene)
+{
+    FollowSpotDrive::Settings s;
+    /* The profile's deadzone is a share of half the travel (0.05 is 10% of
+       the stick's -1..1); never less than the half step an 8-bit reading
+       rests off the middle (127 of 0..255). */
+    s.deadzone = qMax(0.02, 2.0 * double(m_joystickDeadzone));
+    quint32 look = UINT_MAX;
+    if (scene != nullptr)
+        for (quint32 pid : scene->palettes())
+            if (isFollowSpotPalette(m_doc->palette(pid)))
+            {
+                look = pid;
+                break;
+            }
+    if (look == UINT_MAX)
+    {
+        // A plain Aim look dragged in the Workbench: Jog speed, straight.
+        s.topSpeed = 2.0 * double(m_joystickSensitivity);
+        s.expo = 0.0;
+        m_followMover->setSettings(s);
+        return;
+    }
+    /* The follow spot's own: what its effect plays now (a cue's own value,
+       else the look's, else the script's), or the look's when it is not
+       playing yet. */
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    const QLCPalette *pal = m_doc->palette(look);
+    auto param = [&](const QString &name, double fallback) {
+        bool ok = false;
+        const double v = runner != nullptr ? runner->paramValue(look, name, &ok) : 0.0;
+        if (ok)
+            return v;
+        return pal != nullptr ? pal->effectParamValues().value(name, fallback) : fallback;
+    };
+    s.topSpeed = param(QStringLiteral("topSpeed"), FollowSpotDrive::kDefaultTopSpeed * 100.0) / 100.0;
+    s.fineShare = param(QStringLiteral("fineStick"), FollowSpotDrive::kDefaultFineShare * 100.0) / 100.0;
+    s.expo = param(QStringLiteral("responseCurve"), FollowSpotDrive::kDefaultExpo * 100.0) / 100.0;
+    m_followMover->setSettings(s);
+}
+
+void ProgrammerController::applyFollowSpotSticks()
+{
+    /* Deflection -1..1 from the 0..1 reading (0 and 255 are the ends,
+       either way the same). Pushed up -- a HID stick's 0 -- moves the
+       subject up the stage, as it always has. The HID plugin has already
+       taken out a learnt rest point (Centre Sticks). */
+    m_followMover->setSticks(2.0 * m_panNorm - 1.0, -(2.0 * m_tiltNorm - 1.0),
+                             2.0 * m_fineNormX - 1.0, -(2.0 * m_fineNormY - 1.0));
+}
+
+QVariantMap ProgrammerController::joystickData() const
+{
+    QVariantMap jd;
+    jd[QStringLiteral("pan")]  = double(m_panNorm);
+    jd[QStringLiteral("tilt")] = double(m_tiltNorm);
+    // Sensitivity and deadzone are global joystick settings (not per-effect).
+    jd[QStringLiteral("sensitivity")] = double(m_joystickSensitivity);
+    jd[QStringLiteral("deadzone")]    = double(m_joystickDeadzone);
+    /* The follow spot's speed on the stage now (metres a second, x right,
+       y up the stage), smoothed, Top Speed and the speed step in it: a
+       free-flying followspot turns it into pan and tilt. */
+    if (m_followMover != nullptr && m_followMover->isOn())
+    {
+        const QPointF v = m_followMover->velocity();
+        jd[QStringLiteral("vx")] = v.x();
+        jd[QStringLiteral("vy")] = v.y();
+        if (MonitorProperties *mp = m_doc->monitorProperties())
+        {
+            const QVector3D c = mp->stageCentre();
+            jd[QStringLiteral("cx")] = double(c.x());
+            jd[QStringLiteral("cy")] = double(c.y());
+            jd[QStringLiteral("cz")] = double(c.z());
+        }
+    }
+    return jd;
+}
+
+void ProgrammerController::publishFollowSpotVelocity()
+{
+    // While it moves, every tick; once more when it has stopped.
+    const bool active = m_followMover->isActive();
+    if (!active && !m_followVelocitySent)
+        return;
+    m_followVelocitySent = active;
+    if (EffectScriptRunner *runner = m_doc->effectScriptRunner())
+        runner->setDataChannel(QStringLiteral("joystick"), joystickData());
+}
+
+bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, int role, uchar value)
+{
+    if (m_followStatus.state == FollowSpotStatus::Off)
+        return false;
+    // A control the Control Map fires something with is that, not this.
+    if (m_doc->controlMap() != nullptr && m_doc->controlMap()->isBound(universe, channel))
+        return false;
+    if (role == GamepadRole::RightX || role == GamepadRole::RightY)
+    {
+        (role == GamepadRole::RightX ? m_fineNormX : m_fineNormY) = value / 255.0f;
+        return true;
+    }
+    if (role == GamepadRole::DpadUp || role == GamepadRole::DpadDown)
+    {
+        if (value > 0)
+        {
+            m_followMover->stepMultiplier(role == GamepadRole::DpadUp ? 1 : -1);
+            m_followSpeedClock.restart();
+            tellOperator(followSpotSpeedText(m_followMover->multiplier()), ControllerScheme::ConfirmPriority);
+            updateFollowSpotStatus(joystickScene());
+        }
+        return true;
+    }
+    return false;
 }
 
 QString ProgrammerController::followSpotStatusText() const
@@ -4310,7 +4465,9 @@ QString ProgrammerController::followSpotStatusText() const
         break;
     }
     const QString stick = followSpotStickName();
-    const QString on = stick.isEmpty() ? QString() : tr(" · %1").arg(stick);
+    QString on = stick.isEmpty() ? QString() : tr(" · %1").arg(stick);
+    if (st.speedShown)
+        on += QStringLiteral(" · ") + followSpotSpeedText(st.speed);
     if (st.state == FollowSpotStatus::Moving)
         return (who.isEmpty() ? tr("Follow spot · flying") : tr("Following %1 · moving").arg(who)) + on + persists;
     return who.isEmpty() ? tr("Follow spot%1 · holding%2 (move the stick to fly it)").arg(on, persists)

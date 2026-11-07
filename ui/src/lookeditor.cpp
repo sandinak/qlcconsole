@@ -55,6 +55,7 @@
 #include "contextmenus.h"
 #include "programmercontroller.h"
 #include "lengthspinbox.h"
+#include "speedspinbox.h"
 #include "measurementunits.h"
 #include "palettenaming.h"
 #include "paletteops.h"
@@ -115,6 +116,22 @@
 #include "wledconfigcheck.h"
 #include "spreadpreview.h"
 #include "formationeditor.h"
+
+namespace
+{
+/* A script parameter's row, Title Case from its name: "topSpeed" is Top
+   Speed, "followMode" Follow Mode (UX-07). */
+QString paramRowLabel(const QString &name)
+{
+    QString label;
+    for (const QChar c : name)
+        label += c.isUpper() && !label.isEmpty() && !label.endsWith(QLatin1Char(' '))
+                 ? QStringLiteral(" ") + c : QString(c);
+    if (!label.isEmpty())
+        label[0] = label.at(0).toUpper();
+    return label;
+}
+}
 
 // VC XY pad works in DMX space [0..256); palette pan/tilt are degrees.
 static const qreal XY_MAX = 256.0;
@@ -3260,7 +3277,7 @@ void LookEditor::rebuildEffectDynWidget()
                     m_doc->setModified();
                     emit paletteValueChanged(m_paletteId);
                 });
-                form->addRow(pd.name, pdw);
+                form->addRow(paramRowLabel(pd.name), pdw);
             }
             else if (pd.type == QLatin1String("text"))
             {
@@ -3281,7 +3298,7 @@ void LookEditor::rebuildEffectDynWidget()
                     m_doc->setModified();
                     emit paletteValueChanged(m_paletteId);
                 });
-                form->addRow(pd.name, le);
+                form->addRow(paramRowLabel(pd.name), le);
             }
             else if (pd.type == QLatin1String("image"))
             {
@@ -3346,7 +3363,7 @@ void LookEditor::rebuildEffectDynWidget()
                     }
                     store(value);
                 });
-                form->addRow(pd.name, row);
+                form->addRow(paramRowLabel(pd.name), row);
             }
             else if (pd.type == QLatin1String("direction"))
             {
@@ -3381,7 +3398,7 @@ void LookEditor::rebuildEffectDynWidget()
                     m_doc->setModified();
                     emit paletteValueChanged(m_paletteId);
                 });
-                form->addRow(pd.name, gdw);
+                form->addRow(paramRowLabel(pd.name), gdw);
             }
             else if (pd.name == QLatin1String("midiSource"))
             {
@@ -3423,7 +3440,7 @@ void LookEditor::rebuildEffectDynWidget()
                     m_doc->setModified();
                     emit paletteValueChanged(m_paletteId);
                 });
-                form->addRow(pd.name, cb);
+                form->addRow(paramRowLabel(pd.name), cb);
             }
             else if (!pd.enumValues.isEmpty())
             {
@@ -3437,7 +3454,7 @@ void LookEditor::rebuildEffectDynWidget()
                 cb->setProperty("paramName", pd.name);
                 connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
                         this, &LookEditor::slotEffectEnumParamChanged);
-                form->addRow(pd.name, cb);
+                form->addRow(paramRowLabel(pd.name), cb);
             }
             else
             {
@@ -3479,17 +3496,26 @@ void LookEditor::rebuildEffectDynWidget()
                 /* A length ("unit": "cm") shows and takes the unit Settings ->
                    Units picks -- 5' 7" with feet -- and is kept in cm. */
                 const bool isLength = pd.unit == QLatin1String("cm");   // units-ok: a script's declared unit
-                QDoubleSpinBox *val = isLength ? new LengthSpinBox(10.0, row) : new QDoubleSpinBox(row);
+                /* A speed ("unit": "cm/s", the follow spot's Top Speed): a
+                   length a second in the same unit -- 6 ft/s with feet. */
+                const bool isSpeed = pd.unit == QLatin1String("cm/s");  // units-ok: a script's declared unit
+                QDoubleSpinBox *val = isLength ? new LengthSpinBox(10.0, row)
+                                    : isSpeed ? new SpeedSpinBox(0.01, row) : new QDoubleSpinBox(row);
                 val->setObjectName(QStringLiteral("effectParam_") + pd.name);
                 val->setButtonSymbols(QAbstractSpinBox::NoButtons);
                 val->setKeyboardTracking(false);     // on Enter / leaving it, not per key
-                val->setDecimals(isLength ? 2 : pd.max - pd.min <= 2.0 ? 3 : 2);
+                val->setDecimals(isLength || isSpeed ? 2 : pd.max - pd.min <= 2.0 ? 3 : 2);
                 if (pd.max > pd.min)
                     val->setRange(pd.min, pd.max);
                 else
                     val->setRange(-1.0e6, 1.0e6);
                 val->setValue(cur);
-                val->setFixedWidth(isLength ? 78 : 64);
+                val->setFixedWidth(isLength || isSpeed ? 78 : 64);
+                if (pd.unit == QLatin1String("%"))
+                {
+                    val->setDecimals(0);
+                    val->setSuffix(QStringLiteral("%"));
+                }
                 val->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
                 if (isLength)
                 {
@@ -3499,6 +3525,14 @@ void LookEditor::rebuildEffectDynWidget()
                                              MeasurementUnits::formatLength(pd.min * 10.0, u),
                                              MeasurementUnits::formatLength(pd.max * 10.0, u),
                                              MeasurementUnits::lengthHelp(u)));
+                }
+                else if (isSpeed)
+                {
+                    const MeasurementUnits::LengthUnit u = static_cast<SpeedSpinBox *>(val)->unit();
+                    val->setToolTip(tr("%1 -- from %2 to %3.")
+                                        .arg(pd.description,
+                                             MeasurementUnits::formatSpeed(pd.min / 100.0, u),
+                                             MeasurementUnits::formatSpeed(pd.max / 100.0, u)));
                 }
                 else
                     val->setToolTip(pd.max > pd.min
@@ -3525,7 +3559,8 @@ void LookEditor::rebuildEffectDynWidget()
                 if (perBeat)
                     sl->setToolTip(tr("Cycles per beat of %1: 1 = one a beat, 0.25 = one a bar.")
                                        .arg(m_doc->speedMasters()->assignmentName(effectiveSpeed)));
-                form->addRow(perBeat ? tr("%1 (per beat)").arg(pd.name) : pd.name, row);
+                const QString label = paramRowLabel(pd.name);
+                form->addRow(perBeat ? tr("%1 (per beat)").arg(label) : label, row);
             }
         }
         dv->addLayout(form);

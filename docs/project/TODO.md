@@ -260,6 +260,27 @@ docs/design/AREA_COVER.md. Changes the DMX of existing area aims
   everyone in its path: no shadowing by the people in front.
 - No "point at the centre" option: add one only if a show needs it.
 
+## The follow spot's feel: smooth, even, Top Speed, fine stick, speed step (fix/042-followspot-feel, 2026-11-06) -- built
+
+His DS4 on macOS: "chunky", "SR seemed slower than SL", "fast enough for
+a brisk walk?", "right stick fine, left coarse, or D-pad to alter the
+speed". Measured first (`followspotfeel_test`, `QLC_FSPOT_REPORT=1`):
+the subject moved on the controller's 20 ms main-thread timer while DMX
+went out on the MasterTimer's, so on the real clocks 26% of frames held
+still and 26% stepped double (per-frame step CoV 0.73); an 8-bit head
+holds 67-93% of frames and jumps up to 0.5 m (his AT1-3z is patched in
+its 18-channel 8-bit mode; AT2-3z 21-channel has fine); the HID plugin
+cut a stick's reading down, not rounded (half push 63 left, 191 right,
+1.6% slower right); free-fly flew 513 deg/s at full stick. Now
+`FollowSpotMover` (a DMXSource while a follow spot is on) moves the
+subject once a DMX frame by the real frame time, `FollowSpotDrive`
+eases it critically damped (no overshoot), Top Speed / Fine Stick /
+Response Curve are the Followspot look's, D-pad Up/Down step x0.25..x2
+(chip: Speed x1.5). After: CoV 0.006, no skipped or double frames,
+left/right equal. Open: confirm on his DS4 + AT spots; repatch AT1-3z
+16-bit; free-fly still beats against the effect runner's own 20 ms
+timer (JS ticks on the main thread), as every effect does.
+
 ## The follow spot's stick is the patched controller (fix/04-followspot-real-stick, 2026-11-04) -- built
 
 Third report: "◎ Follow: AT-Spots ← ES-Witch · no stick" with his DS4 on

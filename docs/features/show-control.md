@@ -92,7 +92,9 @@ ARMED**. While it's held:
   takes the controller until it ends. In the Run role, View + Menu doesn't
   start Focus mode, and Menu alone walks the show (below). A focus-call
   cue's Start (Menu) still begins its calls.
-- The sticks stay the follow spot's in either role.
+- The sticks stay the follow spot's in either role. While a follow spot
+  plays, the right stick is its fine stick and **D-pad Up / Down** step its
+  speed ([How fast, and how fine](stage-targets.md#how-fast-and-how-fine)).
 
 ### Fire a hit from the pad
 
