@@ -5,7 +5,8 @@ cores and Macs, then merges it into one report.
 Every (show x Settings ▸ Units) pair is independent, and inside a pair the
 walk splits by screen group -- tabs, menus, menu items' dialogs ("actions"),
 the screen registry ("screens"), right-click menus ("context"), Show Tree
-pages, effect pickers, the command line -- with the big groups split again
+pages, effect pickers, the command line, and once the core flows of
+docs/dev/ux_flows.json on their own show -- with the big groups split again
 round-robin (--shard I/N). Each shard is one uxwalk process with its own
 settings and HOME. A queue of shards is served by workers: this Mac's (as
 many as --jobs), and each pool host's once its build of the same commit is
@@ -16,7 +17,7 @@ past that screen.
     tools/uxwalk/run.py --show A.qlcc --show B.qlcc --units feet,mm --out DIR
                         [--binary build-uxwalk/tools/uxwalk/uxwalk]
                         [--jobs N] [--hosts brm,dink | --hosts auto] [--no-local]
-                        [--rev SHA]
+                        [--rev SHA] [--no-flows | --flows-only]
 
 Remote hosts come from platforms/macos/gate-hosts.conf (or $GATE_HOSTS).
 On each: the gate pool's lock (~/gates/.gatelock via gate-lock.sh, held
@@ -313,7 +314,7 @@ def tree_of(rev):
 
 def main():
     ap = argparse.ArgumentParser(description="Walk qlcconsole's UI over shows and unit settings.")
-    ap.add_argument("--show", action="append", required=True)
+    ap.add_argument("--show", action="append", default=[])
     ap.add_argument("--units", default="feet,mm")
     ap.add_argument("--out", required=True)
     ap.add_argument("--binary", default=os.path.join(REPO, "build-uxwalk", "tools", "uxwalk", "uxwalk"))
@@ -324,9 +325,21 @@ def main():
                                                          os.path.join(REPO, "platforms", "macos", "gate-hosts.conf")))
     ap.add_argument("--rev", default="HEAD")
     ap.add_argument("--keep", action="store_true", help="keep OUT/screens from an earlier run")
+    ap.add_argument("--no-flows", action="store_true", help="leave out the core flows (docs/dev/ux_flows.json)")
+    ap.add_argument("--flows-only", action="store_true", help="only the core flows, on their own show")
     a = ap.parse_args()
 
     start = time.time()
+    # The core flows run once, on the show ux_flows.json names, in Feet.
+    flows_show = None
+    if not a.no_flows:
+        try:
+            with open(os.path.join(REPO, "docs", "dev", "ux_flows.json"), encoding="utf-8") as fh:
+                flows_show = os.path.join(REPO, json.load(fh)["show"])
+        except (OSError, ValueError, KeyError) as e:
+            log("uxwalk: no flows (%s)" % e)
+    if a.flows_only:
+        a.show = []
     shows = [os.path.abspath(s) for s in a.show]
     for s in shows:
         if not os.path.exists(s):
@@ -342,6 +355,8 @@ def main():
             for units in a.units.split(","):
                 for i in range(n):
                     q.put(Shard(show, units, groups, i, n))
+    if flows_show and os.path.exists(flows_show):
+        q.put(Shard(flows_show, "feet", "flows", 0, 1))
     total = q.qsize()
     log("uxwalk: %d shards (%d shows x %d unit settings)" % (total, len(shows), len(a.units.split(","))))
 
@@ -355,7 +370,8 @@ def main():
         for n in names:
             if n not in hosts or hosts[n]["dest"] == "local":
                 continue
-            r = Remote(hosts[n], rev, src, shows, a.out, q)
+            r = Remote(hosts[n], rev, src, shows + ([flows_show] if flows_show and flows_show not in shows else []),
+                       a.out, q)
             remotes.append(r)
             t = threading.Thread(target=r.serve, daemon=True)
             t.start()

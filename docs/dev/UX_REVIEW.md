@@ -68,6 +68,42 @@ string). It is the better fit for a large set (the walker's whole app),
 since the Workflow tool queues past its own concurrency cap and shows
 progress per packet.
 
+## The diff packet: the change itself
+
+Some rules break before any screen shows it: a feature added where nobody
+working will find it, a thing you build but can't try in Design, a help
+page with "1.2 m". With `--diff`, `plan` adds one packet of kind `diff`
+(no images, works without shots too):
+
+```sh
+git diff origin/main...HEAD > /tmp/branch.diff
+tools/uxreview/uxreview.py plan --diff /tmp/branch.diff --out ~/git/uxr/br [shots dirs...]
+```
+
+It carries the rules a diff can break (`DIFF_RULES` in uxreview.py: UX-61
+findable from where you work, UX-62 testable where it's built, UX-63 help
+lengths, UX-64 read it from the device, UX-65 Auto shows its number, UX-66
+and the complexity bar, UX-44 flat surface, UX-23, UX-12, UX-17, UX-60,
+UX-01/02; the course rules when the diff touches docs/course), the bar's
+checks C-1 to C-8 from [ux_flows.json](ux_flows.json), the forbid_regex
+hits on the diff (UX-63 reads added help lines, code spans left out), and
+`touched_flows`: the core flows whose controls (objectNames) the diff adds,
+removes or changes. The reviewer reads the diff and answers, with the
+diff's own lines as evidence:
+
+- **UX-61**: does a new feature, setting or mode have a control or a
+  pointer where the work happens (the list, the cue, the fixture), or only
+  on a page the person wouldn't be on?
+- **UX-62**: can what it builds be tried in Design, from where it's built?
+- **UX-64 / UX-65**: hand entry where the device could be read; an Auto
+  that doesn't show its number.
+- **The bar (UX-66, C-1..C-8)**: a new menu item or tab where a pointer or
+  a row would do (C-4, UX-44); a word the course doesn't use (C-5); a step
+  that needs the help page (C-6); a pro shortcut that replaced the clicks
+  (C-8); a flow made longer.
+- **touched_flows**: each one is a finding to re-walk (`make ux-walk
+  FLOWS=1`) unless the diff's change to it is obviously safe (a nit).
+
 ## What the reviewer is told
 
 - Judge the **after**; use the before only to mark a problem new
@@ -136,7 +172,8 @@ stage right" overlap), so a clean report is evidence, not proof.
    hand after an edit.
 3. If a screenshot can show the rule broken, add its ID to `CORE_RULES` (any
    screen) or a `TOPIC_RULES` line (screens whose set, name or context
-   matches) in tools/uxreview/uxreview.py, so packets carry it.
+   matches) in tools/uxreview/uxreview.py, so packets carry it. If a diff
+   can show it before any screen does, add it to `DIFF_RULES`.
 4. When the reviewer gets it wrong in a way that repeats, add one line to
    the "What is NOT a finding" or "What counts" list in
    .claude/agents/ux-reviewer.md, with the example, and rerun the packet

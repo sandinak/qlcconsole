@@ -25,7 +25,9 @@ Checks, with no build:
     the repo, and Y is a function of that test;
   - every forbid_regex compiles, matches its rule's Wrong example and does
     not match its Right one;
-  - the Markdown summary counts (per theme, main check, enforced) are true.
+  - the Markdown summary counts (per theme, main check, enforced) are true;
+  - docs/dev/ux_flows.json and the Flows section agree (ids, titles,
+    budgets, step counts) and every step is well formed.
 
 Usage: tools/uxreview/check_rules.py [--source <repo>] [--self-test]
 Exit 1 lists every problem.
@@ -261,6 +263,54 @@ def check(repo):
         want = dict(kinds, enforced=sum(1 for j in js_rules if j.get("enforced")), total=len(js_rules))
         if want != main:
             problems.append("summary: the Main check line says %s; the rules say %s" % (main, want))
+    problems += check_flows(repo)
+    return problems
+
+
+def check_flows(repo):
+    """docs/dev/ux_flows.json against the Flows section of UX_RULES.md: the
+    same flows (id, title, budget, number of steps), every step a screen,
+    control and expectation and one of do / find / manual."""
+    problems = []
+    fpath = os.path.join(repo, "docs/dev/ux_flows.json")
+    if not os.path.exists(fpath):
+        return problems
+    try:
+        with open(fpath, encoding="utf-8") as fh:
+            flows = json.load(fh).get("flows", [])
+        with open(os.path.join(repo, "docs/dev/UX_RULES.md"), encoding="utf-8") as fh:
+            md = fh.read()
+    except (OSError, ValueError) as e:
+        return ["cannot read the flows: %s" % e]
+    sec = md.split("\n## Flows\n", 1)
+    if len(sec) < 2:
+        return ["UX_RULES.md has no Flows section but ux_flows.json has %d flows" % len(flows)]
+    body = sec[1].split("\n## ", 1)[0]
+    mdf = {}
+    for m in re.finditer(r"^### (F-\d\d) (.+?)\s*\n(.*?)(?=^### |\Z)", body, re.M | re.S):
+        b = re.search(r"Budget (\d+) clicks", m.group(3))
+        rows = len(re.findall(r"^\| \d+ \|", m.group(3), re.M))
+        mdf[m.group(1)] = (m.group(2), int(b.group(1)) if b else None, rows)
+    ids = [f.get("id") for f in flows]
+    if ids != list(mdf):
+        problems.append("flows: ux_flows.json has %s, UX_RULES.md has %s" % (", ".join(map(str, ids)), ", ".join(mdf)))
+    for f in flows:
+        fid = f.get("id")
+        if fid not in mdf:
+            continue
+        title, budget, rows = mdf[fid]
+        if f.get("title") != title:
+            problems.append("%s: title differs\n    md:   %s\n    json: %s" % (fid, title, f.get("title")))
+        if f.get("budget") != budget:
+            problems.append("%s: budget %s in the JSON, %s in the Markdown" % (fid, f.get("budget"), budget))
+        if len(f.get("steps", [])) != rows:
+            problems.append("%s: %d steps in the JSON, %d in the Markdown" % (fid, len(f.get("steps", [])), rows))
+        for i, st in enumerate(f.get("steps", []), 1):
+            for k in ("screen", "control", "expect"):
+                if not st.get(k):
+                    problems.append("%s step %d: no %s" % (fid, i, k))
+            if sum(1 for k in ("do", "find", "manual") if k in st) != 1:
+                problems.append("%s step %d: needs exactly one of do, find, manual" % (fid, i))
     return problems
 
 
@@ -283,9 +333,13 @@ def self_test(repo):
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
                 shutil.copyfile(os.path.join(repo, f), dst)
 
-        def run(md, js):
+        flows_src = json.load(open(os.path.join(repo, "docs/dev/ux_flows.json"), encoding="utf-8"))
+
+        def run(md, js, fl=None):
             open(os.path.join(tmp, "docs/dev/UX_RULES.md"), "w", encoding="utf-8").write(md)
             open(os.path.join(tmp, "docs/dev/ux_rules.json"), "w", encoding="utf-8").write(json.dumps(js))
+            open(os.path.join(tmp, "docs/dev/ux_flows.json"), "w", encoding="utf-8").write(
+                json.dumps(fl if fl is not None else flows_src))
             return check(tmp)
 
         cases = []
@@ -306,9 +360,13 @@ def self_test(repo):
         withre["patterns"]["forbid_regex"] = "nothing-matches-this"
         cases.append(("regex misses its wrong example", md_src, j))
         cases.append(("summary count", md_src.replace("Main check: ", "Main check: 1", 1), js_src))
+        fl = json.loads(json.dumps(flows_src)); fl["flows"][0]["budget"] += 1
+        cases.append(("flow budget drift", md_src, js_src, fl))
+        fl = json.loads(json.dumps(flows_src)); fl["flows"][0]["steps"][0].pop("do", None)
+        cases.append(("flow step with nothing to do", md_src, js_src, fl))
         ok = True
-        for name, md, js in cases:
-            if not run(md, js):
+        for name, md, js, *fl in cases:
+            if not run(md, js, *fl):
                 print("check_rules self-test: missed %s" % name)
                 ok = False
         return ok

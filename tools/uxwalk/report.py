@@ -49,6 +49,9 @@ BUILTIN = {
                  "A representative item whose right-click opened no menu."),
     "W-CRASH": ("The walk crashed",
                 "The app crashed on this screen; the walk went on past it."),
+    "W-FLOW": ("A flow step didn't work",
+               "A step of a core flow (docs/dev/ux_flows.json) whose control isn't in this build, "
+               "or that ran but didn't do what the step says."),
     "W-CHANGED": ("A walk step changed the show",
                   "A step that should only show or ask (an item ending in \"…\" then Cancel, "
                   "a command line that was not a command) left the show modified."),
@@ -57,7 +60,7 @@ BUILTIN = {
 # Rules of the book the walker checks with code of its own (the others with
 # a forbid_regex for ui_text are applied to every text as they are).
 CODED = {"UX-01", "UX-07", "UX-08", "UX-09", "UX-20", "UX-21", "UX-23", "UX-24",
-         "UX-27", "UX-34", "UX-36", "UX-38"}
+         "UX-27", "UX-34", "UX-36", "UX-38", "UX-61", "UX-62", "UX-65", "UX-66"}
 
 
 class Finding:
@@ -403,6 +406,44 @@ def check_notes(rec, ctx):
         yield Finding("W-CHANGED", rec.get("name", ""), rec.get("text", ""), rec.get("name", ""))
 
 
+def load_flow_specs():
+    """The flows' steps as written (their rule, if a step names one)."""
+    try:
+        with open(os.path.join(REPO, "docs", "dev", "ux_flows.json"), encoding="utf-8") as fh:
+            return {f["id"]: f for f in json.load(fh).get("flows", [])}
+    except (OSError, ValueError):
+        return {}
+
+
+FLOW_SPECS = load_flow_specs()
+
+
+def check_flows(rec, ctx):
+    """A flow's result: a dead end is UX-61 (findable from where you work);
+    a step that is missing or didn't do what it says is the step's own rule
+    (UX-62, UX-64, UX-65) or W-FLOW; over the click budget is UX-66."""
+    if rec.get("kind") != "flow":
+        return
+    fid = rec.get("flow", "")
+    spec = FLOW_SPECS.get(fid, {})
+    steps = spec.get("steps", [])
+    for st in rec.get("steps", []):
+        status = st.get("status")
+        where = "%s step %d: %s" % (fid, st.get("n", 0), st.get("control", ""))
+        own = steps[st["n"] - 1].get("rule") if 0 < st.get("n", 0) <= len(steps) else None
+        if status == "deadend":
+            yield Finding("UX-61", where, "%s (%s): %s" % (rec.get("title", ""), st.get("screen", ""), st.get("detail", "")),
+                          where, sig="flow|%s|%d" % (fid, st.get("n", 0)))
+        elif status in ("missing", "expect"):
+            yield Finding(own or "W-FLOW", where, "%s: %s%s" % (rec.get("title", ""),
+                          "not in this build: " if status == "missing" else "", st.get("detail", "")),
+                          where, sig="flow|%s|%d" % (fid, st.get("n", 0)))
+    budget = rec.get("budget") or 0
+    if budget and rec.get("clicks", 0) > budget:
+        yield Finding("UX-66", fid, "%s: %d clicks, budget %d" % (rec.get("title", ""), rec["clicks"], budget),
+                      fid, sig="flow|%s|budget" % fid)
+
+
 TOOLTIP_OK = {"UX-10"}
 
 
@@ -425,7 +466,7 @@ def check_book_patterns(rec, ctx):
 CHECKS = [check_units, check_title_case, check_ellipsis, check_picker, check_plain_words,
           check_empty, check_help_topic, check_disabled_says_why, check_layout, check_elided,
           check_parent, check_dup_words, check_mojibake, check_ampersand, check_notes,
-          check_book_patterns]
+          check_book_patterns, check_flows]
 
 
 class Context:
@@ -481,7 +522,8 @@ def run(out, rules_path):
                 g["occ"].append({"id": rec.get("id"), "png": rec.get("png"), "show": rec.get("show"),
                                  "units": rec.get("units"), "screen": rec.get("name"),
                                  "group": rec.get("group"), "size": rec.get("size"), "rect": f.rect})
-    screens = [r for r in recs if r.get("kind") != "note"]
+    screens = [r for r in recs if r.get("kind") not in ("note", "flow")]
+    flows = sorted((r for r in recs if r.get("kind") == "flow"), key=lambda r: r.get("flow", ""))
     by_rule = collections.OrderedDict()
     for sig, g in groups.items():
         by_rule.setdefault(g["f"].rule, []).append(g)
@@ -496,16 +538,25 @@ def run(out, rules_path):
                              "count": len(g["occ"]), "occurrences": g["occ"]})
     with open(os.path.join(out, "findings.json"), "w", encoding="utf-8") as fh:
         json.dump({"screens": len(screens), "findings": findings,
+                   "flows": [{k: f.get(k) for k in ("flow", "title", "status", "firstFail", "clicks", "budget",
+                                                    "manualWhy", "steps")} for f in flows],
                    "rulesChecked": sorted(CODED | {r for r, _ in ctx.patterns} | set(BUILTIN)),
                    "rulesNotChecked": sorted(r for r, x in rules.items()
                                              if "walker" in json.dumps(x.get("checks", [])) + x.get("check", "")
                                              and r not in CODED and r not in {p for p, _ in ctx.patterns})},
                   fh, indent=1, ensure_ascii=False)
-    write_html(out, ctx, recs, screens, by_rule, order)
+    write_html(out, ctx, recs, screens, by_rule, order, flows)
     notes = [r for r in recs if r.get("kind") == "note" and r.get("rule") == "walker-missing"]
-    print("uxwalk: %d screens, %d findings (%d rules)%s"
+    for f in flows:
+        print("uxwalk-flow: %s %-6s %2d/%-2d clicks  %s%s" % (f.get("flow"), f.get("status"), f.get("clicks", 0),
+              f.get("budget") or 0, f.get("title", ""), ("  -- " + f["firstFail"]) if f.get("firstFail") else ""))
+    fl = ""
+    if flows:
+        c = collections.Counter(f.get("status") for f in flows)
+        fl = ", flows %d pass %d fail %d manual" % (c["pass"], c["fail"], c["manual"])
+    print("uxwalk: %d screens, %d findings (%d rules)%s%s"
           % (len(screens), len(findings), len(order),
-             ", %d steps not in these shows" % len(notes) if notes else ""))
+             ", %d steps not in these shows" % len(notes) if notes else "", fl))
 
 
 def thumb(occ, maxw=360):
@@ -522,7 +573,39 @@ def thumb(occ, maxw=360):
             % (html.escape(occ["png"]), maxw, html.escape(occ["png"]), box))
 
 
-def write_html(out, ctx, recs, screens, by_rule, order):
+FLOW_MARK = {"pass": "pass", "pointed": "pointed", "deadend": "DEAD END", "missing": "MISSING",
+             "expect": "NOT AS EXPECTED", "manual": "manual", "notreached": "not reached"}
+
+
+def flows_html(flows, recs):
+    e = html.escape
+    shots = {}
+    for r in recs:
+        if r.get("group") == "flows" and r.get("png") and r.get("step"):
+            shots.setdefault((r.get("flow"), r.get("step")), r)
+    parts = ['<h2 id="flows">Flows</h2><p class="mut">The core tasks of docs/dev/ux_flows.json, driven step by step. '
+             'A dead end: the step\'s control is not on the screen the step before left, and nothing there points to it.</p>',
+             '<table class="fl"><tr><th>Flow</th><th>Result</th><th>Clicks / budget</th><th>First failure</th></tr>']
+    for f in flows:
+        over = (f.get("budget") or 0) and f.get("clicks", 0) > f.get("budget")
+        parts.append('<tr><td><a href="#%s">%s</a> %s</td><td class="st-%s">%s</td><td>%d / %s%s</td><td>%s</td></tr>'
+                     % (e(f.get("flow", "")), e(f.get("flow", "")), e(f.get("title", "")), e(f.get("status", "")),
+                        e(f.get("status", "")), f.get("clicks", 0), f.get("budget") or "-", " (over)" if over else "",
+                        e(f.get("firstFail") or f.get("manualWhy") or "")))
+    parts.append("</table>")
+    for f in flows:
+        parts.append('<h3 id="%s">%s %s</h3><ol>' % (e(f.get("flow", "")), e(f.get("flow", "")), e(f.get("title", ""))))
+        for st in f.get("steps", []):
+            shot = shots.get((f.get("flow"), st.get("n")))
+            parts.append('<li><b>%s</b>%s · %s &rarr; %s<br><span class="st-%s">%s</span> <span class="mut">%s</span>%s</li>'
+                         % (e(st.get("control", "")), " (find)" if st.get("find") else "", e(st.get("screen", "")),
+                            e(st.get("expect", "")), e(st.get("status", "")), e(FLOW_MARK.get(st.get("status"), st.get("status", ""))),
+                            e(st.get("detail", "")), ("<br>" + thumb(shot, 320)) if shot else ""))
+        parts.append("</ol>")
+    return "\n".join(parts)
+
+
+def write_html(out, ctx, recs, screens, by_rule, order, flows=()):
     e = html.escape
     parts = ["""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -538,14 +621,19 @@ h1{font-size:22px}h2{font-size:18px;margin-top:32px;border-bottom:1px solid var(
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
 .grid figure{margin:0}.grid figcaption{font-size:12px;color:var(--mut);overflow-wrap:anywhere}
 nav a{margin-right:10px}details summary{cursor:pointer;color:var(--mut)}
+table.fl{border-collapse:collapse;width:100%}table.fl td,table.fl th{border-bottom:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}
+.st-fail,.st-deadend,.st-missing,.st-expect{color:var(--hit);font-weight:600}.st-manual,.st-notreached{color:var(--mut)}
 </style></head><body>"""]
     shows = sorted({(r.get("show"), r.get("units")) for r in screens})
     nfind = sum(len(v) for v in by_rule.values())
     parts.append("<h1>UX Walk</h1><p>%d screens of %s &middot; %d findings under %d rules</p>"
                  % (len(screens), ", ".join("%s (%s)" % (e(s or ""), e(u or "")) for s, u in shows),
                     nfind, len(order)))
-    parts.append("<nav>" + "".join('<a href="#%s">%s (%d)</a>' % (e(r), e(r), len(by_rule[r])) for r in order)
+    parts.append("<nav>" + ('<a href="#flows">Flows (%d)</a>' % len(flows) if flows else "")
+                 + "".join('<a href="#%s">%s (%d)</a>' % (e(r), e(r), len(by_rule[r])) for r in order)
                  + '<a href="#screens">All screens</a></nav>')
+    if flows:
+        parts.append(flows_html(flows, recs))
     for rid in order:
         parts.append('<h2 id="%s">%s &mdash; %s</h2><p class="mut">%s</p>'
                      % (e(rid), e(rid), e(rule_title(ctx, rid)), e(rule_text(ctx, rid))))

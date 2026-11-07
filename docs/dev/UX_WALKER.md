@@ -11,6 +11,7 @@ make ux-walk                                   # the default shows, Feet and Mil
 make ux-walk SHOW=path/show.qlcc UNITS=feet OUT=/tmp/walk
 make ux-walk HOSTS=brm,dink                    # this Mac and two pool hosts
 make ux-walk HOSTS=auto NOLOCAL=1 REV=<sha>    # only the pool, a committed SHA
+make ux-walk FLOWS=1                           # only the core flows (~40 s)
 open uxwalk-out/report.html
 ```
 
@@ -36,6 +37,7 @@ then walks one or more groups:
 | `showtree` | the Show Tree's page for a cue, a hit, and a layer with an effect, an aim and a colour |
 | `pickers` | the effect picker opened from an effect look on a mover group, a par group and a WLED group of the show, with every effect it offers |
 | `cmdline` | Build's command line with a typo line and a plain-words line (no AI provider configured), and the message it gives |
+| `flows` | the core flows of [ux_flows.json](ux_flows.json), step by step (below) |
 
 A step the show has nothing for (no hit, no WLED group) is a note, not a
 finding: the report's summary counts them as "steps not in these shows".
@@ -87,6 +89,64 @@ read as Latin-1, **W-NOMENU** a right-click that opened nothing,
 The rule book's walker rules not checked yet are listed in
 `findings.json` (`rulesNotChecked`): UX-06, UX-22, UX-26, UX-49.
 
+## Flows
+
+The `flows` group (`tools/uxwalk/uxwalkflows.inc`) drives the core tasks of
+[UX_RULES.md](UX_RULES.md#flows) as a person does them, once per walk, on
+the show `ux_flows.json` names (the course's `lesson-3-8-start.qlcc`), in
+Feet; each flow starts from the show as saved, in Design. A step is one of:
+
+| `do` | what the walker does | reachable when |
+|---|---|---|
+| `tab` | picks the main tab | the tab is in the tab bar |
+| `node` | selects the Show Tree's production, list, cue, hit or section row | the row is in the tree, the tree on screen |
+| `fold` | folds a section row | it has cues under it |
+| `plot` | selects a fixture of that model on the plot | the plot is on screen |
+| `click` | clicks the button by objectName | shown and enabled |
+| `choose` | picks a drop-down entry (regex) | shown, the entry there and enabled |
+| `context` | right-clicks a Show Tree row or `plot:<model>` and picks an item | the item is in its menu |
+| `action` | triggers a menu-bar action by objectName | in a menu, enabled |
+| `menu` | picks an item of a tool button's menu | the button shown, the item enabled |
+| `key` | presses a key, to `to` (a panel) or the focus | `to` is shown |
+| `code` | what JSON can't say: load a scene into the Workbench, open a saved show with a newer autosave beside it | |
+| `{}` | nothing; only the step's `check` | |
+
+A window the step opens gets the step's `dialog` sub-steps (the same
+kinds), then `close`: `accept`, `reject` or a button's objectName. A
+`find` step does nothing: it asks whether a control (`widget`, visible
+`text`, or a `context` item) is on the screen the person is on.
+
+**The dead-end check.** Before a step acts, its control must be on the
+screen the step before left. When it isn't, the walker reads what is on
+that screen (labels, buttons, titles, the rows of its trees and lists; not
+tooltips) for the step's `pointer` words: found, the step is `pointed`;
+not found, it is a **dead end** (UX-61); a control that is nowhere in the
+app is `missing`. After acting, the step's `check` (`visible`, `hidden`,
+`text`, `widgetText`, `comboHas`, `rows`, `folded`, `running`, `window`,
+`cues`, `menuItem`) says whether it did what the step says. The first
+failure stops the flow (later steps: `notreached`), except a `find` step,
+which is a finding and the flow goes on. A `manual` step is not driven;
+its reason is in the report.
+
+`report.py` turns flow results into findings: a dead end is UX-61; a step
+`missing` or not as expected is the step's own `rule` (UX-62, UX-64,
+UX-65) or **W-FLOW**; clicks over the flow's budget are UX-66. The report
+opens with the flow table (result, clicks against budget, first failure),
+then each flow's steps with their screenshots; `findings.json` has them
+under `flows`; the run ends with a `uxwalk-flow:` line per flow.
+
+On main at 415eafa95 (2026-11-07), about 40 s: F-05 GO, F-06 Quick Focus
+and F-08 Units pass; F-07 (follow spot) is manual; F-01 (sections from
+the cue list), F-02 (a key in Design), F-03 (Auto's number), F-04 (record
+from the Workbench), F-09 (Sprinkle loops) and F-10 (autosave offered)
+fail. Each fail is a 2026-11-07 catch or a fix still on its branch.
+
+Adding a flow: write it in both UX_RULES.md (Flows) and ux_flows.json
+(check_rules.py keeps ids, titles, budgets and step counts in step); give
+each step the objectName of its control (`grep setObjectName ui/src`) and a
+`check` that fails on the wrong result. A step that can't be driven is
+`manual` with the reason.
+
 ## Sharding: fast on the pool
 
 Every (show x units) pair is independent, and inside a pair the groups
@@ -105,6 +165,8 @@ HOME and TMPDIR. The driver puts every shard of every pair on one queue:
   incremental), builds `uxwalk`, copies the shows, and then takes shards
   from the same queue with half its performance cores; its records come
   back by rsync after each shard.
+- **the flows** are one more shard (`--no-flows` leaves them out,
+  `--flows-only` runs only them).
 
 A slow host only joins late; nobody waits for it. A crash or hang (900 s)
 costs one step, not the shard: `uxwalk` prints `uxwalk-at: N group|name`

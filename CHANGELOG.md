@@ -17,6 +17,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - For testing: `make ux-walk` walks every tab, menu, dialog and right-click
   of a real show offscreen, in feet and in millimetres, and reports what
   breaks the UI rules (docs/dev/UX_WALKER.md). Not part of the app.
+- For testing: the walker also drives ten core tasks step by step (number a
+  show into songs, a key on a hit, a wand, recording a cue, GO, focus, units,
+  sprinkle loops, autosave recovery) and reports each step whose control
+  can't be found from the screen before it (`make ux-walk FLOWS=1`;
+  docs/dev/UX_RULES.md, Flows). Not part of the app.
 
 ## [0.4.1] - 2026-11-06
 

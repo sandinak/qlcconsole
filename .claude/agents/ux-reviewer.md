@@ -1,6 +1,6 @@
 ---
 name: ux-reviewer
-description: Reviews qlcconsole screenshots (a UI branch's before/after shots, or the screen walker's output) against docs/dev/ux_rules.json and writes findings.json + findings.md. Give it one packet made by tools/uxreview/uxreview.py plan (a packet.json path), or a shots directory. Read-only apart from its two output files. Run many at once, one per packet.
+description: Reviews qlcconsole screenshots (a UI branch's before/after shots, or the screen walker's output) and a branch's diff (findability, testable where built, the complexity bar) against docs/dev/ux_rules.json and writes findings.json + findings.md. Give it one packet made by tools/uxreview/uxreview.py plan (a packet.json path), or a shots directory. Read-only apart from its two output files. Run many at once, one per packet.
 tools: Read, Glob, Grep, Bash, Write
 model: sonnet
 ---
@@ -30,6 +30,42 @@ It holds:
 Given a bare shots directory instead, check every image there against the
 rules in `docs/dev/ux_rules.json` whose violation could show on a screen, and
 write into the directory you are told (or the shots directory).
+
+## A diff packet
+
+A packet with `"kind": "diff"` has no images: `diff` is the change itself.
+Read it (Read the file; it can be long, read it all), and the rules in
+`rules`, the complexity bar in `bar`, and `touched_flows`. Judge the
+change, not the code style. What counts, with the diff's added (or
+removed) lines quoted as `evidence` and the file in `file` and `screen`:
+
+- **UX-61 findable**: a new feature, setting or mode reachable only from a
+  page the person isn't working on, with nothing (a control, a one-line
+  pointer) where the work happens. Name where the work happens.
+- **UX-62 testable where built**: something you build that only plays,
+  fires or shows in Operate or after a save.
+- **UX-63**: an added help line (docs/features) with a metric length alone;
+  feet first, metric in brackets. Confirm or reject each `regex_hits` entry
+  (a typed example in a code span or a product's size such as "24 mm tape"
+  is not one).
+- **UX-64**: a new field for typing what the device already reports, with
+  no way to read it. **UX-65**: an Auto, Default or computed value shown
+  without the number it chose.
+- **The bar (UX-66, `bar.checks` C-1..C-8)**: a new top-level menu item or
+  tab where a row, ⋯ or right-click on the thing would do (C-4, UX-44); a
+  new name for something the course or help already names (C-5,
+  docs/course/GLOSSARY.md); a step that only the help explains (C-6); a
+  keyboard or command path that replaced the clicks (C-8). Cite the check
+  id in `what` ("C-4: …"); `rule` is UX-66 unless a more specific rule fits.
+- **touched_flows**: one `nit` per flow, "re-walk F-NN (make ux-walk
+  FLOWS=1): the diff changes <controls>", unless the change is a rename
+  the flow file was updated for.
+
+Weigh it against UX-23 (nothing to say, nothing shown): a pointer that
+shows only when it has something to say is right; one that is always there
+whatever the state is clutter. Severity: `blocker` only for a core flow made
+impossible; a dead end is `fix`; the rest `fix` or `nit`. "No findings" is
+still the common answer.
 
 ## How to review
 

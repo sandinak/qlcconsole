@@ -35,10 +35,11 @@ help:
 	echo "  make pool       The full gate of a committed REV (default HEAD) on whichever Mac"; \
 	echo "                  of platforms/macos/gate-hosts.conf is idle (HOST=name to pick);"; \
 	echo "                  ends with gate=N host=... qt=... rev=...  make pool-status: who's free."; \
-	echo "  make ux-walk [SHOW=a.qlcc] [UNITS=feet|mm|feet,mm] [OUT=dir] [HOSTS=brm,dink|auto] [NOLOCAL=1]"; \
+	echo "  make ux-walk [SHOW=a.qlcc] [UNITS=feet|mm|feet,mm] [OUT=dir] [HOSTS=brm,dink|auto] [NOLOCAL=1] [FLOWS=1]"; \
 	echo "                  The UX walker (docs/dev/UX_WALKER.md): every tab, menu, dialog and"; \
 	echo "                  right-click of real shows, offscreen, recorded and checked against"; \
-	echo "                  docs/dev/ux_rules.json; OUT/report.html. Report-only, not the gate."; \
+	echo "                  docs/dev/ux_rules.json, plus the core flows (docs/dev/ux_flows.json;"; \
+	echo "                  FLOWS=1: only those); OUT/report.html. Report-only, not the gate."; \
 	echo "  make perf       The performance guard (tools/perf/guard.py, ~9 min): a Release engine"; \
 	echo "                  (build-perf/) under the stress harness at fixed loads + the hot-path"; \
 	echo "                  CPU costs, against this machine's baseline in docs/perf-data/;"; \
@@ -110,7 +111,7 @@ ux-walk:
 	    cmake -S . -B build-uxwalk -DQLC_UXWALK=ON $(UXWALK_CMAKE) > /dev/null; \
 	    nice cmake --build build-uxwalk -j$(UXWALK_JOBS) --target uxwalk; \
 	fi; \
-	python3 tools/uxwalk/run.py $(foreach s,$(or $(SHOW),$(UXWALK_SHOWS)),--show $(s)) --units $(UNITS) \
+	python3 tools/uxwalk/run.py $(if $(FLOWS),--flows-only,$(foreach s,$(or $(SHOW),$(UXWALK_SHOWS)),--show $(s))) --units $(UNITS) \
 	    --out $(OUT) $(if $(HOSTS),--hosts $(HOSTS)) $(if $(NOLOCAL),--no-local) $(if $(REV),--rev $(REV))
 
 perf:

@@ -27,7 +27,13 @@ packet, all at once. This script does the parts that need no model:
          (default 9) with only the rules that screen can show. Writes
          RUN/pNN/packet.json, RUN/packets.json (the list, also the Workflow
          script's args) and runs each forbid_regex over the walker's text and
-         the diff's added tr("...") strings (RUN/regex_hits.json).
+         the diff's added tr("...") strings (RUN/regex_hits.json). With
+         --diff, one more packet (kind "diff", no images): the change read
+         against the rules a diff can break before a screen shows it
+         (DIFF_RULES: findable, testable where built, help units, read it
+         from the device, Auto's number, the complexity bar, the flat
+         surface) and the core flows whose controls it touches. Shots are
+         optional with --diff.
 
   merge  RUN
          Reads RUN/pNN/findings.json from every reviewer, checks the fields,
@@ -63,7 +69,7 @@ CONFIDENCES = ("high", "medium", "low")
 
 # Rules a screenshot can show broken, for every packet.
 CORE_RULES = ["UX-01", "UX-04", "UX-07", "UX-08", "UX-09", "UX-10", "UX-12",
-              "UX-17", "UX-23", "UX-29", "UX-34", "UX-36", "UX-37"]
+              "UX-17", "UX-23", "UX-29", "UX-34", "UX-36", "UX-37", "UX-66"]
 # More rules when the screen, set or context is about this topic.
 TOPIC_RULES = [
     (r"show.?tree|cue|grey.?row|track|layer|tree", ["UX-13", "UX-15", "UX-18", "UX-22", "UX-46"]),
@@ -78,6 +84,8 @@ TOPIC_RULES = [
     (r"footer|chip|status|main.?bar", ["UX-33", "UX-35"]),
     (r"warn|refus|disabled|grey", ["UX-27", "UX-28", "UX-32"]),
     (r"dialog|window|picker|panel", ["UX-38"]),
+    (r"wand|pixel|auto|turns|fountain|sprinkle|wled|segment", ["UX-64", "UX-65"]),
+    (r"section|number|hint|list|hit|key|trigger|learn", ["UX-61", "UX-62"]),
     (r"operate|perform|\brun\b|cue.?runner", ["UX-49", "UX-50"]),
     (r"help|course|lesson|guide", ["UX-57", "UX-58", "UX-60"]),
     (r"selection|select", ["UX-43"]),
@@ -194,6 +202,7 @@ def diff_hits(diff_path, rules):
     txt = regex_rules(rules, ("ui_text", "docs_and_ui_text"))
     docs = regex_rules(rules, ("docs_and_ui_text",))
     course = regex_rules(rules, ("course_student",))
+    helps = regex_rules(rules, ("help",))
     hits, cur = [], ""
     for ln in lines:
         if ln.startswith("+++ "):
@@ -209,6 +218,9 @@ def diff_hits(diff_path, rules):
                 checks += [(rid, rx, lit) for rid, rx in txt]
         elif cur.endswith(".md"):
             checks += [(rid, rx, add) for rid, rx in docs]
+            if cur.startswith("docs/features/"):
+                # Help text, its code spans (typed examples) left out (UX-63).
+                checks += [(rid, rx, re.sub(r"`[^`]*`", "", add)) for rid, rx in helps]
             if "course" in cur or "class" in cur:
                 checks += [(rid, rx, add) for rid, rx in course]
         for rid, rx, s in checks:
@@ -218,11 +230,107 @@ def diff_hits(diff_path, rules):
     return hits
 
 
+# What a diff is read against (the "diff" packet): the rules a change can
+# break before any screen shows it, and the complexity bar.
+DIFF_RULES = ["UX-01", "UX-02", "UX-12", "UX-17", "UX-23", "UX-44", "UX-60",
+              "UX-61", "UX-62", "UX-63", "UX-64", "UX-65", "UX-66"]
+DIFF_COURSE_RULES = ["UX-57", "UX-58", "UX-59"]
+FLOWS_JSON = os.path.join(REPO, "docs/dev/ux_flows.json")
+
+
+def load_flows(path=FLOWS_JSON):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def flow_names(flow):
+    """The objectNames a flow's steps use (a diff that touches one may break it)."""
+    names = set()
+
+    def walk(st):
+        d = st.get("do") or {}
+        for k in ("click", "choose", "menu", "action", "to"):
+            if isinstance(d.get(k), str):
+                names.add(d[k])
+        if d.get("menu") and isinstance(d.get("item"), str):
+            names.add(d["item"])
+        f = st.get("find") or {}
+        if isinstance(f.get("widget"), str):
+            names.add(f["widget"])
+        c = st.get("check") or {}
+        for v in c.get("visible", []):
+            names.add(v)
+        for k in ("widgetText", "comboHas"):
+            if c.get(k):
+                names.add(c[k][0])
+        if isinstance(c.get("window"), str) and c["window"] != "*":
+            names.add(c["window"])
+        if isinstance(st.get("close"), str) and st["close"] not in ("accept", "reject"):
+            names.add(st["close"])
+        for sub in st.get("dialog", []):
+            walk(sub)
+    for st in flow.get("steps", []):
+        walk(st)
+    return names
+
+
+def touched_flows(diff_path, flows):
+    """Flows whose controls (objectNames) a diff adds, removes or changes."""
+    try:
+        with open(diff_path, encoding="utf-8", errors="replace") as fh:
+            changed = "\n".join(l for l in fh.read().splitlines()
+                                if l[:1] in "+-" and not l.startswith(("+++", "---")))
+    except OSError:
+        return []
+    out = []
+    for f in flows.get("flows", []):
+        hit = sorted(n for n in flow_names(f) if re.search(r"[\"']%s[\"']" % re.escape(n), changed))
+        if hit:
+            out.append({"flow": f["id"], "title": f["title"], "controls": hit})
+    return out
+
+
+def diff_packet(diff, run, pid, rules, hits):
+    """One packet for the change itself: its diff read against DIFF_RULES and
+    the complexity bar, with the core flows it touches."""
+    flows = load_flows()
+    try:
+        with open(diff, encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError:
+        text = ""
+    ids = list(DIFF_RULES)
+    if re.search(r"^\+\+\+ b/docs/course/", text, re.M):
+        ids += DIFF_COURSE_RULES
+    pdir = os.path.join(run, pid)
+    os.makedirs(pdir, exist_ok=True)
+    packet = {
+        "packet": pid,
+        "kind": "diff",
+        "set": "diff",
+        "context": "",
+        "diff": os.path.abspath(diff),
+        "out": pdir,
+        "screens": [],
+        "rules": [rule_brief(rules[r]) for r in ids if r in rules],
+        "bar": flows.get("bar", {}),
+        "touched_flows": touched_flows(diff, flows),
+        "regex_hits": hits,
+    }
+    with open(os.path.join(pdir, "packet.json"), "w", encoding="utf-8") as fh:
+        json.dump(packet, fh, indent=1, ensure_ascii=False)
+    return {"packet": pid, "path": os.path.join(pdir, "packet.json"), "set": "diff",
+            "screens": ["the diff"], "images": 0}
+
+
 def plan(dirs, out, diff=None, contexts=None, max_images=9):
     rules = load_rules()
     contexts = contexts or {}
-    groups = find_shots(dirs)
-    if not groups:
+    groups = find_shots(dirs) if dirs else {}
+    if not groups and not diff:
         raise SystemExit("uxreview plan: no .png under " + ", ".join(dirs))
     os.makedirs(out, exist_ok=True)
     by_set = {}
@@ -280,6 +388,10 @@ def plan(dirs, out, diff=None, contexts=None, max_images=9):
                       "screens": [sc for sc, _ in screens],
                       "images": sum(len(i) for _, i in screens)})
     run = os.path.abspath(out)
+    os.makedirs(run, exist_ok=True)
+    if diff:
+        index.append(diff_packet(diff, run, "p%02d" % (n + 1), rules,
+                                 [h for h in hits_all if h.get("source") == "diff"]))
     with open(os.path.join(run, "packets.json"), "w", encoding="utf-8") as fh:
         json.dump({"run": run, "agent": os.path.join(REPO, ".claude/agents/ux-reviewer.md"),
                    "merge": "python3 %s merge %s" % (os.path.join(HERE, "uxreview.py"), run),
@@ -492,6 +604,21 @@ def selftest():
         sub = [x for x in r["findings"] if x["subject"]]
         expect(len(sub), 1, "one subject on two screens folds into one finding")
         expect(sub[0]["screens"] if sub else None, ["beta", "gamma"], "the folded finding lists both screens")
+        # The diff packet: help units, a touched flow.
+        dpath = os.path.join(tmp, "change.diff")
+        with open(dpath, "w", encoding="utf-8") as fh:
+            fh.write("+++ b/docs/features/lighting-studio.md\n"
+                     "+- **Wand length**: the staff, 1.2 m unless set.\n"
+                     "+- **Wand length**: the staff, 4 ft (1.2 m) unless set; typed as `1.2 m`.\n"
+                     "+++ b/ui/src/showtreesections.cpp\n"
+                     "+    m_prodNumbering->setObjectName(\"stProdNumbering\");\n")
+        run2 = os.path.join(tmp, "run2")
+        index2, _n2, hits2 = plan([], run2, diff=dpath)
+        expect([h["rule"] for h in hits2 if h["rule"] == "UX-63"], ["UX-63"], "help: a metric-only length, once")
+        dp = json.load(open(index2[-1]["path"], encoding="utf-8"))
+        expect(dp["kind"], "diff", "the diff packet")
+        expect([t["flow"] for t in dp["touched_flows"]], ["F-01"], "a diff touching stProdNumbering touches F-01")
+        expect("UX-61" in [r["id"] for r in dp["rules"]], True, "the diff packet carries UX-61")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return ok
@@ -517,8 +644,8 @@ def main(argv):
                 k, _, v = rest[i + 1].partition("="); ctx[k] = v; i += 2
             else:
                 dirs.append(a); i += 1
-        if not dirs or not out:
-            print("usage: uxreview.py plan <shots-dir>... --out RUN [--diff FILE] [--context SET=TEXT] [--max N]")
+        if (not dirs and not diff) or not out:
+            print("usage: uxreview.py plan [<shots-dir>...] --out RUN [--diff FILE] [--context SET=TEXT] [--max N]")
             return 2
         index, notes, hits = plan(dirs, out, diff, ctx, mx)
         print("%d packets, %d images, %d pattern hits -> %s/packets.json"

@@ -32,7 +32,8 @@
  * tools/uxwalk/run.py's. This program only records.
  *
  *   uxwalk --show FILE --units feet|mm --out DIR
- *          [--groups tabs,menus,actions,screens,context,showtree,pickers,cmdline]
+ *          [--groups tabs,menus,actions,screens,context,showtree,pickers,cmdline,flows]
+ *          [--flows docs/dev/ux_flows.json]
  *          [--shard I/N]     (round-robin split of the screens inside the groups)
  *          [--list]          (print the groups and exit)
  */
@@ -87,6 +88,9 @@
 #include "effectscriptrunner.h"
 #include "measurementunits.h"
 #include "showtreemodel.h"
+#include "mastertimer.h"
+#include "scene.h"
+#include <QStandardItemModel>
 
 namespace uxwalk
 {
@@ -99,7 +103,7 @@ const QStringList kGroups = {
     QStringLiteral("tabs"), QStringLiteral("menus"), QStringLiteral("actions"),
     QStringLiteral("screens"), QStringLiteral("context"), QStringLiteral("contextdialogs"),
     QStringLiteral("showtree"),
-    QStringLiteral("pickers"), QStringLiteral("cmdline"),
+    QStringLiteral("pickers"), QStringLiteral("cmdline"), QStringLiteral("flows"),
 };
 
 const QSize kLaptop(1280, 800);
@@ -224,6 +228,16 @@ public:
     }
 
     int written() const { return m_written; }
+
+    /** A record with no picture (a flow's result). */
+    void writeRecord(QJsonObject o)
+    {
+        const QJsonObject b = base(QStringLiteral("flows"), o.value(QStringLiteral("flow")).toString());
+        for (auto it = b.begin(); it != b.end(); ++it)
+            if (!o.contains(it.key()))
+                o.insert(it.key(), it.value());
+        write(o, QPixmap());
+    }
 
     /** One state of a top-level widget: PNG + JSON. */
     void record(QWidget *top, const QString &group, const QString &name,
@@ -1548,6 +1562,8 @@ void walkCommandLine(Walker &walk, App *app)
     }
 }
 
+#include "uxwalkflows.inc"
+
 } // namespace uxwalk
 
 using namespace uxwalk;
@@ -1602,6 +1618,7 @@ int main(int argc, char **argv)
             ++i;
         }
         else if (a == QLatin1String("--skip")) { opt.skip = v.toInt(); ++i; }
+        else if (a == QLatin1String("--flows")) { flows::g_flowsFile = v; ++i; }
         else if (a == QLatin1String("--list"))
         {
             printf("%s\n", qPrintable(kGroups.join(QLatin1Char(','))));
@@ -1619,6 +1636,8 @@ int main(int argc, char **argv)
         return 2;
     }
     opt.show = QFileInfo(opt.show).absoluteFilePath();
+    if (flows::g_flowsFile.isEmpty())
+        flows::g_flowsFile = QString(QLC_TEST_RESOURCE_ROOT) + "../docs/dev/ux_flows.json";
     g_showPath = opt.show;
     QElapsedTimer clock;
     clock.start();
@@ -1668,6 +1687,8 @@ int main(int argc, char **argv)
             walkPickers(walk, app);
         else if (g == QLatin1String("cmdline"))
             walkCommandLine(walk, app);
+        else if (g == QLatin1String("flows"))
+            walkFlows(walk, app, opt);
         else
             fprintf(stderr, "uxwalk: no group %s\n", qPrintable(g));
         dismissModals();

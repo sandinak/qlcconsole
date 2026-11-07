@@ -37,7 +37,7 @@ that have one. Change both files together.
 
 | Theme | Rules | Count | Enforced |
 |---|---|---|---|
-| Units & numbers | UX-01, UX-02, UX-03, UX-04, UX-05, UX-06 | 6 | 5 |
+| Units & numbers | UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-63 | 7 | 5 |
 | Words | UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, UX-18, UX-19 | 13 | 7 |
 | Context-awareness | UX-20, UX-21, UX-22, UX-23, UX-24, UX-25 | 6 | 5 |
 | Feedback & state | UX-26, UX-27, UX-28, UX-29, UX-30, UX-31, UX-32, UX-33 | 8 | 6 |
@@ -45,8 +45,9 @@ that have one. Change both files together.
 | Consistency across views | UX-41, UX-42, UX-43, UX-44, UX-45, UX-46, UX-47, UX-48 | 8 | 6 |
 | Safety in Operate | UX-49, UX-50, UX-51, UX-52, UX-53, UX-54, UX-55, UX-56 | 8 | 6 |
 | Teaching & course voice | UX-57, UX-58, UX-59, UX-60 | 4 | 1 |
+| Ease of use | UX-61, UX-62, UX-64, UX-65, UX-66 | 5 | 0 |
 
-Main check: 41 tests, 13 review, 3 walker, 3 manual. 41 of 60 enforced.
+Main check: 41 tests, 16 review, 6 walker, 3 manual. 41 of 66 enforced.
 
 ## Units & numbers
 
@@ -103,6 +104,15 @@ A typed fade, hold or value is committed when focus leaves the field, not only o
 - **Check:** `walker`, `review` (not yet enforced)
 - **Right:** `Type 2.5 in Fade, click the tree: Fade is 2.5`
 - **Wrong:** `Type 2.5 in Fade, click the tree: Fade is back to 0`
+
+### UX-63 Help gives a length in feet first, metric in brackets
+
+A help page writes a length in feet and inches with the metric after it in brackets, 4 ft (1.2 m); never a metric length on its own.
+
+- **Why:** 2026-11-07: the Wand help said "1.2 m", "2 cm" and "25 mm" on a product whose lengths default to feet; it now reads "4 ft (1.2 m)" (feat/042-wand-spacing). Help can't follow the setting, so it gives both, feet first (UX-01).
+- **Check:** `review` (not yet enforced)
+- **Right:** `Wand length: the staff, 4 ft (1.2 m) unless set.`
+- **Wrong:** `Wand length: the staff, 1.2 m unless set.`
 
 ## Words
 
@@ -603,6 +613,247 @@ A feature lands with its help page (and a course note where it applies); every h
 - **Check:** `helpbrowser_test::everyLinkInTheGuidesGoesSomewhere`, `helpbrowser_test::everyGuideIsBundledAndLoads`, `review`, `help-shots.sh`, `manual` (enforced)
 - **Right:** `"WLED: &lt;effect&gt;" in the guide`
 - **Wrong:** `"WLED: <effect>" (the rest of the page disappears)`
+## Ease of use
+
+### UX-61 Findable from where you work
+
+A feature is reachable, or pointed to, from the place a person does that work: its control, or one line naming where it is, is on that screen.
+
+- **Why:** 2026-11-07: he looked for song sections on the cue list (right-click a cue, the list's page); they are switched on only by Numbering on the production's page, and nothing on the list pointed there. The hint on the list page is on feat/042-section-hint.
+- **Check:** `walker`, `review` (not yet enforced)
+- **Right:** `The list's page: "Sections follow the production's Numbering (None)." with a link to it`
+- **Wrong:** `The list's page with no word of sections; Numbering only on the production's page`
+
+### UX-62 Testable where it's built
+
+Anything you build can be tried from where you build it, in Design, without switching to Operate.
+
+- **Why:** 2026-11-07: he needed to test a hit's key while programming, and keys fired only in Operate; they now fire in Design when the hit is armed (the Run tab's list, or selected in the Show Tree), on feat/042-key-triggers.
+- **Check:** `walker`, `review` (not yet enforced)
+- **Right:** `A hit selected in the Show Tree, Design: F7 plays it`
+- **Wrong:** `F7 does nothing until Operate`
+
+### UX-64 Read it from the device
+
+Configuration a device already holds is read from it, not typed in by hand; typing stays as the fallback.
+
+- **Why:** 2026-11-07: a WLED fountain's sprinkle-loop spans could only be typed into a table; Read Segments now imports them from the device and Edit Spans… stays for changes (feat/042-fountain-sprinkles). "Don't make him count what the device knows."
+- **Check:** `review` (not yet enforced)
+- **Right:** `Spans: [Read Segments] (6 spans from the WLED) · Edit Spans…`
+- **Wrong:** `Spans: type First LED and Last LED for each of 6 spans`
+
+### UX-65 Auto is right for the real gear and shows its number
+
+An Auto setting works its value out from the gear as it is set up, and shows the number it chose.
+
+- **Why:** 2026-11-07: a wand's Auto turns assumed LED tape and drew half a turn for a 16 ft fairy string; Auto now works from the string's length and shows "Auto (58.5)" (feat/042-wand-spacing).
+- **Check:** `walker`, `review` (not yet enforced)
+- **Right:** `Turns: Auto (58.5)`
+- **Wrong:** `Turns: Auto  (half a turn drawn on a 16 ft string)`
+
+### UX-66 Easy to find, quick to use
+
+A student finds a core task from where they are working without being told, and a professional isn't slowed down doing it.
+
+- **Why:** 2026-11-07, approving the flows: "this tool will be used by students and professionals .. it needs some level of ease of use while being somewhat comprehensive .. if I have to explain everything all the time, even with training, then we've failed in the design." The checks are under [Complexity and ease of use](#complexity-and-ease-of-use); the tasks under [Flows](#flows).
+- **Check:** `walker`, `review` (not yet enforced)
+- **Right:** `Number a show into songs: 5 clicks, each control on the screen before it`
+- **Wrong:** `A core flow whose next control is found only in the help`
+
+## Complexity and ease of use
+
+Students and professionals use the same screens. Branson, 2026-11-07:
+"it needs some level of ease of use while being somewhat comprehensive..
+that's a tight line to walk I know .. but if I have to explain everything
+all the time, even with training, then we've failed in the design."
+
+**The bar:** a student finds it from where they're working without being
+told; a pro isn't slowed down.
+
+The checks (also in [ux_flows.json](ux_flows.json) `bar`), each one a thing
+the walker or the reviewer can say yes or no to:
+
+| | Check | How |
+|---|---|---|
+| C-1 | Every core flow has a click budget and stays within it. | walker |
+| C-2 | No dead ends: each step's control is on the screen the step before left, or something on that screen points to it. A step whose next control is neither there nor pointed to is a dead end. | walker |
+| C-3 | Defaults work for the common case: a flow changes only what it is about, and an Auto shows the number it chose (UX-65). | walker, review |
+| C-4 | Depth goes behind the thing it belongs to (More ▾, ⋯, a right-click, a row that opens), not into a new menu item or tab. | review |
+| C-5 | Controls use the course's and the help's word for the same thing ([GLOSSARY](../course/GLOSSARY.md)). | review |
+| C-6 | No core flow needs a help page to find its next step. A control found only through help counts as a dead end. | walker, review |
+| C-7 | What a flow builds can be tried in Design from where it was built (UX-62). | walker |
+| C-8 | A pro's shortcut (a key, the command line, a typed number) sits beside the clicks, never instead of them. | review |
+
+**Against UX-44 (surface flat) and UX-23 (nothing to say, nothing shown).**
+Findable does not mean a second copy of the control. The fix for a dead
+end is a pointer where the work happens: one line or a link that names
+where the setting is and goes there. A pointer is not a menu item, so the
+count UX-44 keeps stays flat. It follows UX-23 too: it shows only while it
+has something to say (sections off on a list whose numbers would make them)
+and goes once the feature is on. A pointer that is always there, whatever
+the state, is clutter, and UX-23 wins.
+
+## Flows
+
+The core end-to-end tasks, from the course and his real use. Each step is
+screen, control, what you see. **Clicks** count toward the budget (a choice
+from a drop-down is 2, typing a value is 1); a *find* step clicks nothing:
+it asks whether the next control can be found from where the person is
+(C-2). Budgets are the clicks of each path as designed on 2026-11-07,
+manual steps included; a flow that grows past its budget is a finding
+(UX-66). The walker drives the automated steps offscreen on the course show
+`docs/course/shows/lesson-3-8-start.qlcc` ([UX_WALKER.md](UX_WALKER.md#flows));
+**manual** steps say why. The machine copy is [ux_flows.json](ux_flows.json):
+change both together (check_rules.py keeps the ids, titles and budgets in step).
+
+### F-01 Number a show into songs and fold them
+
+Budget 6 clicks. From: course level 3 lesson 8; 2026-11-07 catch (UX-61). Rules: UX-61, UX-66.
+
+- **Student:** Find sections from the cue list, set Numbering once, fold a song.
+- **Pro:** The Numbering hint's Use it link sets the scheme its numbers already follow (one click).
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | any | Show Tree tab | the Show Tree | 1 |
+| 2 | Show Tree | the cue list's row | the list's page | 1 |
+| 3 | the list's page | Numbering (where sections come from) *(find)* | Numbering, or a line pointing to it, on the list's page | - |
+| 4 | Show Tree | right-click a cue: sections *(find)* | a section or Numbering item, or a pointer | - |
+| 5 | Show Tree | the production's row | the production's page | 1 |
+| 6 | the production's page | Numbering ▸ Show.Part.Iteration | song section rows in the tree | 2 |
+| 7 | Show Tree | a section's ▸ | its cues folded under it | 1 |
+
+### F-02 Put a key on a hit and fire it while building
+
+Budget 6 clicks. From: course level 3 lesson 5; 2026-11-07 catch (UX-62). Rules: UX-62, UX-61.
+
+- **Student:** Right-click the hit, Learn Trigger…, press the key; select the hit and press it.
+- **Pro:** The same key fires it in Operate; the Control Map lists every trigger.
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | any | Show Tree tab | the Show Tree | 1 |
+| 2 | Show Tree | right-click a hit ▸ Learn Trigger… | the learn dialog hears a computer key (F7) and names it | 3 |
+| 3 | Show Tree | the hit's row (arms it) | the hit selected | 1 |
+| 4 | Show Tree, Design | F7 | the hit plays, in Design | 1 |
+
+### F-03 Patch a WLED, make it a wand, see the effect from the tip
+
+Budget 15 clicks. From: 2026-11-07 (UX-64, UX-65); docs/features/lighting-studio.md Wand. Rules: UX-65, UX-61.
+
+- **Student:** Add the WLED, pick Wand as its pixel path, read Auto's turns, start it at the tip.
+- **Pro:** Type String length and Staff diameter; Auto follows them.
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | Fixtures | Add fixture ▸ WLED ▸ Lantern, Connection: Network (WLED), IP, OK *(manual)* | a WLED patched | 6 |
+| 2 | any | Lighting Studio tab | the plot | 1 |
+| 3 | Lighting Studio | right-click a WLED Lantern ▸ Fixture Properties… | its properties, with Pixel path | 2 |
+| 4 | Fixture Properties | Pixel path ▸ Wand; Turns reads Auto (58.5); First LED at ▸ Top (the tip); OK *(manual)* | a wand wound from the tip, its turns shown | 5 |
+| 5 | Lighting Studio rig view | an effect on the wand *(manual)* | it starts at the tip | 1 |
+
+### F-04 Build a look in the Workbench and record it as a cue
+
+Budget 11 clicks. From: docs/features/build.md, show-tree.md Record and duplicate; course level 2. Rules: UX-61, UX-66.
+
+- **Student:** Open a scene in Build, play it, Record it into the cue list.
+- **Pro:** Type record lit on the Show Tree's command line.
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | any | Build tab | Build | 1 |
+| 2 | Build | + Scene, drag a group onto it, drop a colour *(manual)* | a look | 3 |
+| 3 | Build ▸ Scenes | a scene in the navigator | it in the Workbench | 1 |
+| 4 | the Workbench | Play | it on the rig | 1 |
+| 5 | the Workbench | record this as a cue *(find)* | a Record control, or a line pointing to the Show Tree's Record | - |
+| 6 | any | Show Tree tab | the Show Tree | 1 |
+| 7 | Show Tree | a cue | its page | 1 |
+| 8 | Show Tree | Record ▸ Everything lit ▸ Record | a new cue after it | 3 |
+
+### F-05 GO through a show in the Run tab
+
+Budget 4 clicks. From: course level 0 lesson 8, level 1 lesson 1. Rules: UX-30, UX-66.
+
+- **Student:** Run tab, GO; the notice offers Operate; GO again.
+- **Pro:** ⌘↩ from any tab; ⌘F12 to Operate.
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | any | Run tab | the cue list, NEXT on the first cue | 1 |
+| 2 | Run | GO | the cue plays; the notice offers Operate | 1 |
+| 3 | Run | Switch to Operate (notice bar) | LIVE | 1 |
+| 4 | Run, Operate | GO | the next cue plays | 1 |
+
+### F-06 Focus calls: Quick Focus from the plot
+
+Budget 12 clicks. From: course level 3 lesson 6; docs/features/focus-calls.md. Rules: UX-61, UX-27.
+
+- **Student:** Focus ▸ Quick Focus…, Start, step with PgDn, keep with Return, Esc.
+- **Pro:** The pad: View + Menu starts it; the same keys on the pad.
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | any | Lighting Studio tab | the plot and its Focus button | 1 |
+| 2 | Lighting Studio | Focus ▸ Quick Focus… ▸ Start | the focus panel | 3 |
+| 3 | the focus panel | PgDn (next) | the panel still up | 1 |
+| 4 | the focus panel | Esc (leave) | the panel gone | 1 |
+| 5 | Venue Focus | Edit Focus Calls…, + Call, Start venue focus, Return to keep *(manual)* | a venue's correction kept | 6 |
+
+### F-07 Follow spot with a pad
+
+Budget 9 clicks. From: docs/features/stage-targets.md Follow-spot behavior; 2026-11-04 (UX-56). Rules: UX-56, UX-66.
+
+- **Student:** Patch the pad, put Followspot and an Aim on the spot, GO, walk the stick.
+- **Pro:** Fine stick and speed step on the pad (fix/042-followspot-feel).
+- **Manual:** Needs a game pad: followspotcue_test drives a virtual pad through the HID plugin, which the walker doesn't load, and the feel is checked only on his real pad (UX-56).
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | Connections | patch the pad as an input *(manual)* | the pad found | 2 |
+| 2 | Lighting Studio | Add ▸ Target (a person) *(manual)* | a target on the plot | 2 |
+| 3 | Build Workbench | + Effect ▸ Effect Palette… ▸ Followspot ▸ Make layer *(manual)* | the spot follows | 4 |
+| 4 | Run | GO, walk the left stick *(manual)* | footer: ◎ Follow … stick moving | 1 |
+
+### F-08 Set Units and see every length follow
+
+Budget 10 clicks. From: 2026-11-06 (UX-01). Rules: UX-01, UX-61.
+
+- **Student:** Settings… ▸ Units, OK; the plot's lengths change.
+- **Pro:** ⌘, opens Settings.
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | any | Settings… ▸ Units: Millimetres ▸ OK | the setting kept | 4 |
+| 2 | any | Lighting Studio tab | the plot | 1 |
+| 3 | Lighting Studio | right-click a light | Set Mounting Height… in mm | 1 |
+| 4 | any | Settings… ▸ Units: Feet and inches ▸ OK | the setting kept | 4 |
+
+### F-09 Fountain pars and sprinkle loops from Read Segments
+
+Budget 11 clicks. From: 2026-11-07 (UX-64); docs/features/lighting-studio.md Fountains. Rules: UX-64, UX-61.
+
+- **Student:** Add Fountain…, drop the pars and the WLED in, Pixel path Sprinkle loops, Read Segments.
+- **Pro:** Edit Spans… to change what was read.
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | Lighting Studio | Add ▸ Add Fountain… ▸ OK; drop pars in the base and a WLED in the gap *(manual)* | a fountain with its lights | 5 |
+| 2 | any | Lighting Studio tab | the plot | 1 |
+| 3 | Lighting Studio | right-click a WLED Lantern ▸ Fixture Properties… | Pixel path offers Sprinkle loops; Read Segments beside it | 2 |
+| 4 | Fixture Properties | Pixel path ▸ Sprinkle loops (in a fountain) *(manual)* | Points, Spans, Read Segments | 2 |
+| 5 | the fixture's fields | Read Segments *(manual)* | Read 6 segments as spans at 3 points. | 1 |
+
+### F-10 Recover after a crash (autosave)
+
+Budget 2 clicks. From: 0.4.1 Known issue; CHANGELOG; course level 3 lesson 9. Rules: UX-28, UX-61.
+
+- **Student:** Open the show; it offers the newer autosave; Recover.
+- **Pro:** The same question at start-up, in the start-up window.
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | File ▸ Open Recent | the show (a newer autosave beside it), then Recover | Recover the autosave from Show.qlcc? ▸ Recover | 2 |
+
 ## How to add a rule
 
 Every new catch by the user becomes a rule and a check, in the same change

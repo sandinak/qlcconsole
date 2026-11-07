@@ -121,6 +121,26 @@
     }
   },
   {
+    "id": "UX-63",
+    "theme": "Units & numbers",
+    "title": "Help gives a length in feet first, metric in brackets",
+    "rule": "A help page writes a length in feet and inches with the metric after it in brackets, 4 ft (1.2 m); never a metric length on its own.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: the Wand help said \"1.2 m\", \"2 cm\" and \"25 mm\" on a product whose lengths default to feet; it now reads \"4 ft (1.2 m)\" (feat/042-wand-spacing). Help can't follow the setting, so it gives both, feet first (UX-01).",
+    "example": {
+      "right": "Wand length: the staff, 4 ft (1.2 m) unless set.",
+      "wrong": "Wand length: the staff, 1.2 m unless set."
+    },
+    "patterns": {
+      "scope": "help",
+      "forbid_regex": "(?<![(\\d.])\\b\\d+(?:\\.\\d+)?\\s?(?:mm|cm|m)\\b(?![/\\w])(?![^()]*\\))"
+    }
+  },
+  {
     "id": "UX-07",
     "theme": "Words",
     "title": "Menu items are Title Case",
@@ -1117,6 +1137,90 @@
     "example": {
       "right": "\"WLED: &lt;effect&gt;\" in the guide",
       "wrong": "\"WLED: <effect>\" (the rest of the page disappears)"
+    }
+  },
+  {
+    "id": "UX-61",
+    "theme": "Ease of use",
+    "title": "Findable from where you work",
+    "rule": "A feature is reachable, or pointed to, from the place a person does that work: its control, or one line naming where it is, is on that screen.",
+    "check": "walker",
+    "checks": [
+      "walker",
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: he looked for song sections on the cue list (right-click a cue, the list's page); they are switched on only by Numbering on the production's page, and nothing on the list pointed there. The hint on the list page is on feat/042-section-hint.",
+    "example": {
+      "right": "The list's page: \"Sections follow the production's Numbering (None).\" with a link to it",
+      "wrong": "The list's page with no word of sections; Numbering only on the production's page"
+    }
+  },
+  {
+    "id": "UX-62",
+    "theme": "Ease of use",
+    "title": "Testable where it's built",
+    "rule": "Anything you build can be tried from where you build it, in Design, without switching to Operate.",
+    "check": "walker",
+    "checks": [
+      "walker",
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: he needed to test a hit's key while programming, and keys fired only in Operate; they now fire in Design when the hit is armed (the Run tab's list, or selected in the Show Tree), on feat/042-key-triggers.",
+    "example": {
+      "right": "A hit selected in the Show Tree, Design: F7 plays it",
+      "wrong": "F7 does nothing until Operate"
+    }
+  },
+  {
+    "id": "UX-64",
+    "theme": "Ease of use",
+    "title": "Read it from the device",
+    "rule": "Configuration a device already holds is read from it, not typed in by hand; typing stays as the fallback.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: a WLED fountain's sprinkle-loop spans could only be typed into a table; Read Segments now imports them from the device and Edit Spans… stays for changes (feat/042-fountain-sprinkles). \"Don't make him count what the device knows.\"",
+    "example": {
+      "right": "Spans: [Read Segments] (6 spans from the WLED) · Edit Spans…",
+      "wrong": "Spans: type First LED and Last LED for each of 6 spans"
+    }
+  },
+  {
+    "id": "UX-65",
+    "theme": "Ease of use",
+    "title": "Auto is right for the real gear and shows its number",
+    "rule": "An Auto setting works its value out from the gear as it is set up, and shows the number it chose.",
+    "check": "review",
+    "checks": [
+      "walker",
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: a wand's Auto turns assumed LED tape and drew half a turn for a 16 ft fairy string; Auto now works from the string's length and shows \"Auto (58.5)\" (feat/042-wand-spacing).",
+    "example": {
+      "right": "Turns: Auto (58.5)",
+      "wrong": "Turns: Auto  (half a turn drawn on a 16 ft string)"
+    }
+  },
+  {
+    "id": "UX-66",
+    "theme": "Ease of use",
+    "title": "Easy to find, quick to use",
+    "rule": "A student finds a core task from where they are working without being told, and a professional isn't slowed down doing it.",
+    "check": "walker",
+    "checks": [
+      "walker",
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07, approving the flows: \"this tool will be used by students and professionals .. it needs some level of ease of use while being somewhat comprehensive .. if I have to explain everything all the time, even with training, then we've failed in the design.\" The checks are under Complexity and ease of use; the flows under Flows.",
+    "example": {
+      "right": "Number a show into songs: 5 clicks, each control on the screen before it",
+      "wrong": "A core flow whose next control is found only in the help"
     }
   }
 ]
