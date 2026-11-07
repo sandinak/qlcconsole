@@ -652,13 +652,13 @@ private:
             {
                 // What is beside it that could say why: a label in the same
                 // parent, or the view's own placeholder / tooltip.
-                QStringList near;
+                QStringList beside;
                 if (QWidget *p = w->parentWidget())
                     for (QLabel *l : p->findChildren<QLabel *>(QString(), Qt::FindDirectChildrenOnly))
                         if (l->isVisibleTo(w->window()) && !l->text().trimmed().isEmpty())
-                            near << plain(l->text()).simplified();
-                if (!near.isEmpty())
-                    r.insert(QStringLiteral("emptyNote"), near.join(QStringLiteral(" | ")).left(400));
+                            beside << plain(l->text()).simplified();
+                if (!beside.isEmpty())
+                    r.insert(QStringLiteral("emptyNote"), beside.join(QStringLiteral(" | ")).left(400));
             }
         }
         return r;
