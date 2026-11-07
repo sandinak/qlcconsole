@@ -52,6 +52,14 @@ class Doc;
  * Saved with the show as <ControlMap>, only when there is a binding, so a
  * show without one saves as before; QLC+ 4 skips the element.
  *
+ * A computer key is a control too (docs/features/other-improvements.md,
+ * "Keys on the computer keyboard"): its universe is KeyboardUniverse and its
+ * channel the key with its modifiers (keyChannel()). The UI's KeyTriggers
+ * hands keys to handleKey(), which fires one only where it may: in Operate,
+ * or in Design while its target is armed (isArmed(): the Run tab's list,
+ * or what is selected in the Show Tree). Saved as a Key attribute in
+ * place of Universe/Channel, so a build without keys skips it.
+ *
  * GUI thread only: input arrives queued from the input patches, feedback
  * follows the MasterTimer's started/stopped signals queued here. With no
  * binding (and not learning) nothing is connected, so input costs nothing.
@@ -110,6 +118,18 @@ public:
     static Target cue(quint32 id) { return Target{ CueTarget, id }; }
     static Target hit(quint32 id) { return Target{ HitTarget, id }; }
 
+    /** The universe of a computer-keyboard key's binding (its channel:
+     *  keyChannel()). No input universe has this number. */
+    static constexpr quint32 KeyboardUniverse = 0xFFFFFFFE;
+    static bool isKey(const Binding &b) { return b.universe == KeyboardUniverse; }
+    /** A key and its modifiers as a binding's channel (the keypad flag
+     *  dropped, so a number is the same key either side). 0: no key, or a
+     *  modifier on its own. */
+    static quint32 keyChannel(int key, Qt::KeyboardModifiers modifiers);
+    /** A key channel in words, as the system writes it ("F5", "⇧1" on a
+     *  Mac, "Shift+1" elsewhere). */
+    static QString keyName(quint32 channel);
+
     /** The Encoder bank scheme: a MIDI controller's endless encoders
      *  driving the selection in Build (docs/features/encoder-banks.md).
      *  Saved with this map; off until a device is set up. */
@@ -139,6 +159,8 @@ public:
     bool removeBinding(const Target &target);
     /** Changes how @a target's control acts; false: no binding. */
     bool setMode(const Target &target, Mode mode);
+    /** Whether a computer key is bound. */
+    bool hasKeyBindings() const { return m_keyBindings > 0; }
     /** Drops every binding (each light off). */
     void removeAll();
 
@@ -180,6 +202,38 @@ public:
     static bool stringToMode(const QString &str, Mode *mode);
 
     /*********************************************************************
+     * Computer keys: where they may fire
+     *********************************************************************/
+public:
+    /** Key @a channel (keyChannel()) pressed or released. A press fires
+     *  its binding when keyMayFire(); a release lets go of a key that
+     *  fired (whatever the mode is now). True: it was a key trigger's (the
+     *  key is used up); false: not one, or not now. */
+    bool handleKey(quint32 channel, bool pressed);
+    /** Whether a key held down fired something (its repeats are used up). */
+    bool isKeyDown(quint32 channel) const
+    { return m_down.contains(key(KeyboardUniverse, channel)); }
+    /** Lets go of every key held (the app lost the keyboard). */
+    void releaseKeys();
+    /** A key may fire @a target now: in Operate always, in Design when
+     *  isArmed(). */
+    bool keyMayFire(const Target &target) const;
+    /** Armed for keys in Design: @a target is in the run list (the cue
+     *  list the Run tab plays: that list, its cues and the hits living in
+     *  it, its cues, its production or everywhere; and any hit whose place
+     *  is live) or selected in the Show Tree (a selected list arms itself,
+     *  its cues and its hits; a cue itself and its hits; a hit itself). A
+     *  scene or effect is never armed: its key fires in Operate only. */
+    bool isArmed(const Target &target) const;
+    /** The cue list the Run tab follows (invalid: the current production's
+     *  main cue list), and the one that is now. */
+    void setRunTabList(quint32 listId);
+    quint32 runList() const;
+    /** What is selected in the Show Tree (cue lists, cues, hits). */
+    void setSelectedTargets(const QList<Target> &targets);
+    QList<Target> selectedTargets() const { return m_selected; }
+
+    /*********************************************************************
      * Input and feedback
      *********************************************************************/
 public slots:
@@ -203,6 +257,9 @@ signals:
     void heard(quint32 universe, quint32 channel);
     /** A control fired its target: what it did, in words. */
     void fired(const QString &what);
+    /** What isArmed() says may have changed (the mode, the Run tab's
+     *  list, the Show Tree's selection, a cue list moving on). */
+    void armingChanged();
 
     /*********************************************************************
      * Load & Save
@@ -247,6 +304,10 @@ private:
     bool m_listening = false;
     bool m_learnBind = false;
     Binding m_learning;
+    /** key bindings in m_bindings */
+    int m_keyBindings = 0;
+    quint32 m_runTabList = 0xFFFFFFFF;
+    QList<Target> m_selected;
     bool m_inputConnected = false;
     bool m_feedbackConnected = false;
 };

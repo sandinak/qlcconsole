@@ -93,6 +93,7 @@
 #include "speedmastersfooter.h"
 #include "updatemanager.h"
 #include "app.h"
+#include "keytriggers.h"
 #include "selectionshape.h"
 #include "vcwidget.h"
 #include "blindeffects.h"
@@ -1346,6 +1347,8 @@ void App::initDoc()
     connect(m_doc, SIGNAL(needAutosave()), this, SLOT(slotDocAutosave()));
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged(Doc::Mode)));
     connect(m_doc, SIGNAL(loadProgress(QString,int)), this, SLOT(slotLoadProgress(QString,int)));
+    // Computer keys bound in the Control Map (watching only while one is).
+    new KeyTriggers(m_doc, this);
 #ifdef QLC_AI_ASSIST
     // AI Assist (docs/design/AI_ASSIST.md): off by default, nothing made
     // until a question; torn down on entering Operate. Anything its audit

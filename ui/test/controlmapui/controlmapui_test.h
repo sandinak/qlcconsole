@@ -40,6 +40,12 @@ private slots:
     void theShowTreeOffersLearnTrigger();
     void thePanelListsChangesAndRemoves();
     void theShowControlPageHasTheMap();
+    void theLearnDialogLearnsAComputerKey();
+    void theLearnDialogRefusesTakenKeys();
+    void aKeyFiresInOperateNotInATextField();
+    void aKeyIsArmedFromTheShowTreeAndTheRunTab();
+    void thePanelAndMenuListKeys();
+    void learnKeyShots();
 
 private:
     Scene *scene(const QString &name);

@@ -102,6 +102,16 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   outer and inner wall, a fixed light is aimed at the nearest point of the
   inner wall, half way up, instead of up at the flame, and no longer
   colours the silk. Inside the inner wall it still uplights the flame.
+### New
+
+- **A computer key can fire a hit, a cue, a cue list or a scene.** Learn
+  Trigger… now also learns a key on the keyboard, with its modifiers
+  ("Key · F5"), with the same press modes as a MIDI control, listed in the
+  Control Map and saved with the show. A key fires in Operate, and in
+  Design while what it fires is armed: in the Run tab's cue list, or
+  selected in the Show Tree. Never while a text field, the command line or
+  an editor has the keyboard; keys the app or a Virtual Console widget
+  already uses are refused, saying why.
 
 ## [0.4.1] - 2026-11-06
 

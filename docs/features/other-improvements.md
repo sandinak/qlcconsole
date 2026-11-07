@@ -1166,7 +1166,57 @@ list (GO), one cue of a list (a jump to it) or a hit.
   selection (intensity, colour, position, beam, gobo / prism, banks with
   a button): the **Encoder bank** section under the table, described in
   [Build](build.md#encoder-banks-a-midi-controller-turns-the-selection).
+- **Or a computer key.** In the same dialog, press a key on the computer
+  keyboard, with any modifiers: *"Key · F5"*, *"Key · ⇧1"*. It is learned
+  and works as a MIDI press does ([Keys on the computer
+  keyboard](#keys-on-the-computer-keyboard)).
 - **Or the QLC+ way.** A Virtual Console button, slider or cue list with
   an external input works as in QLC+, and is what you want for a fader
   that sets a level. Game pads have their own map in the focus tools
   ([The controller map](lighting-studio.md#the-controller-map)).
+
+### Keys on the computer keyboard
+
+**Learn Trigger…** also takes a key on the computer keyboard: press it
+(with ⇧, ⌥, ⌘ or ⌃ if you like) while the dialog listens. The same choices
+of how a press acts, the same **one control, one thing**, the same
+**Remove trigger**; the Control Map table lists the key (*Key · F5*); it is
+saved with the show, and deleting a scene takes its key with it. Holding
+a key is one press (auto-repeat is ignored); letting go is the release,
+so **Momentary** and **GO while held** work. A hit's key fires and lets
+go exactly as its MIDI trigger would.
+
+- **When a key fires.** In **Operate** (⌘F12, the mode chip), always. In
+  **Design** only what is **armed**, so you can try hits and cues while
+  you build:
+  - **The Run tab's cue list** arms its own key, its cues' keys and the
+    keys of the hits that live in it: hits under its cues or the list, its
+    production's hits and global hits (and any hit whose place is live,
+    as on a VC button).
+  - **What is selected in the Show Tree**: a selected hit arms its key; a
+    cue (or one of its layers) its own and its hits'; a cue list its own,
+    its cues' and the hits under them.
+  - A scene's or an effect's key (learned in Build) fires in Operate only.
+  - In Design the menu reads **Trigger: Key · F5 · Armed…**, and the
+    Control Map table says **Armed**, while a key may fire.
+- **Never while you type or edit.** A key goes to its trigger only when
+  nothing else needs the keyboard: not while a text field, a spin box, the
+  Show Tree's command line, a rename or an editor (Build, the Workbench,
+  the Look Editor, a function editor, the timeline, the Fixture Manager,
+  the Simple Desk) has the keyboard, and not while a dialog or a menu is
+  open. A key that fires is used up: the list or button with the focus
+  doesn't also act on it.
+- **Keys the app needs are refused.** The dialog says why and learns
+  nothing for a key that is already a menu shortcut (⌘S, ⌘F12, ⌘↩ …),
+  one of the edit keys (⌫, Delete, F1, F2, ⌘C / ⌘V / ⌘D / ⌘F / ⌘Z, : and
+  / in the Show Tree), or a key the dialog itself works with: Esc, Tab,
+  Return, Space and the arrows still cancel, move, OK and choose in the
+  dialog while it listens.
+- **Virtual Console keys.** A key a VC widget already has (a button's key,
+  a cue list's GO…) is refused: *"F9 is already used by Virtual Console
+  Button "House lights"."* If a VC key is set later to one a trigger has,
+  the Virtual Console wins while it has the keyboard, as in QLC+; anywhere
+  else the trigger fires.
+- **Older builds.** A key trigger is saved as a `Key` attribute; a build
+  without key triggers leaves it out and loads the rest. QLC+ 4 skips the
+  Control Map as before.

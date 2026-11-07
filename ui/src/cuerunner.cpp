@@ -53,6 +53,7 @@
 #include "focuscallcue.h"
 #include "padrun.h"
 #include "cuerunner.h"
+#include "controlmap.h"
 #include "groupmasterstrip.h"
 #include "teachingsettings.h"
 #include "teachingtips.h"
@@ -1032,6 +1033,9 @@ void CueRunner::setFollow(quint32 listId)
     if (listId == m_follow)
         return;
     m_follow = listId;
+    // The Run tab's list arms its computer keys in Design (the Control Map).
+    if (m_size == Full)
+        m_doc->controlMap()->setRunTabList(listId);
     m_treeDirty = true;
     fillFollowBox();
     refresh();

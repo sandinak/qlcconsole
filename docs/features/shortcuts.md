@@ -19,6 +19,7 @@
 | ⌥⌘↩ / ⌥⌘⇧↩ | **Sub GO** / **Sub Back**: the next / previous [sub-cue](show-control.md#sub-cues) of the cue playing |
 | ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward the view's tabs, numbered as they are on screen (⇧⌘0 the tenth). qlcconsole: Connections, Fixtures, Lighting Studio, Build, Show Tree, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)). Classic QLC+: Fixtures, Functions, Shows, Virtual Console, Simple Desk, Inputs/Outputs. Everything: Connections, Fixtures, Lighting Studio, Functions, Build, Show Tree, Shows, Virtual Console, Simple Desk, Run. They renumber when the [view](getting-started.md#views) changes; a tab the view hides has no number in the Window menu, and choosing it switches to Everything |
 | Space (in the Run tab) | **GO** for the list the Run tab plays |
+| A key learned as a trigger | Fires its hit, cue, cue list or scene: in Operate, and in Design while armed (the Run tab's list, or selected in the Show Tree); never while you type or edit ([Keys on the computer keyboard](other-improvements.md#keys-on-the-computer-keyboard)) |
 | ⇧⌘M | Lighting Studio |
 | ⌥⌘F | **Quick Focus** (View ▸ Quick Focus…) |
 | ⇧⌘R | **Rig Overview** — and again to close it when it's in front |

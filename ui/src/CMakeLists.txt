@@ -206,6 +206,7 @@ add_library(${module_name}
     showcontrolsyncpage.cpp showcontrolsyncpage.h
     qrencoder.cpp qrencoder.h
     controllearndialog.cpp controllearndialog.h
+    keytriggers.cpp keytriggers.h
     controlmappanel.cpp controlmappanel.h
     shrinkablebar.h
     universecombo.cpp universecombo.h

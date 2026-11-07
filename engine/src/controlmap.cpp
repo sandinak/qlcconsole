@@ -19,6 +19,7 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QKeySequence>
 #include <QDebug>
 #include <climits>
 
@@ -43,6 +44,7 @@
 #define KXMLTarget QStringLiteral("Target")
 #define KXMLID QStringLiteral("ID")
 #define KXMLMode QStringLiteral("Mode")
+#define KXMLKey QStringLiteral("Key")
 
 namespace
 {
@@ -69,6 +71,10 @@ ControlMap::ControlMap(Doc *doc)
     m_encoderBank->setParent(this);
     // A function deleted takes its binding with it.
     connect(m_doc, &Doc::functionRemoved, this, &ControlMap::slotFunctionRemoved);
+    // Where a key may fire follows the mode and the show's cue lists.
+    connect(m_doc, &Doc::modeChanged, this, &ControlMap::armingChanged);
+    if (m_doc->showTree() != nullptr)
+        connect(m_doc->showTree(), &ShowTreeController::hitArmingChanged, this, &ControlMap::armingChanged);
 }
 
 ControlMap::~ControlMap()
@@ -170,6 +176,8 @@ void ControlMap::reset()
     m_heldStarted.clear();
     m_listening = false;
     m_learnBind = false;
+    m_runTabList = 0xFFFFFFFF;
+    m_selected.clear();
     if (had)
         changed(false);
 }
@@ -186,8 +194,13 @@ void ControlMap::changed(bool modified)
 void ControlMap::rebuild()
 {
     m_byControl.clear();
+    m_keyBindings = 0;
     for (int i = 0; i < m_bindings.count(); ++i)
+    {
         m_byControl.insert(key(m_bindings.at(i).universe, m_bindings.at(i).channel), i);
+        if (isKey(m_bindings.at(i)))
+            ++m_keyBindings;
+    }
 }
 
 void ControlMap::updateConnections()
@@ -270,8 +283,41 @@ void ControlMap::stopListening()
  * Names
  *****************************************************************************/
 
+quint32 ControlMap::keyChannel(int key, Qt::KeyboardModifiers modifiers)
+{
+    switch (key)
+    {
+        case 0:
+        case Qt::Key_unknown:
+        case Qt::Key_Shift:
+        case Qt::Key_Control:
+        case Qt::Key_Meta:
+        case Qt::Key_Alt:
+        case Qt::Key_AltGr:
+        case Qt::Key_CapsLock:
+        case Qt::Key_NumLock:
+        case Qt::Key_Super_L:
+        case Qt::Key_Super_R:
+        case Qt::Key_Hyper_L:
+        case Qt::Key_Hyper_R:
+            return 0;
+        default:
+            break;
+    }
+    const Qt::KeyboardModifiers mods = modifiers & (Qt::ShiftModifier | Qt::ControlModifier
+                                                    | Qt::AltModifier | Qt::MetaModifier);
+    return quint32(QKeyCombination(mods, Qt::Key(key)).toCombined());
+}
+
+QString ControlMap::keyName(quint32 channel)
+{
+    return QKeySequence(QKeyCombination::fromCombined(int(channel))).toString(QKeySequence::NativeText);
+}
+
 QString ControlMap::controlName(quint32 universe, quint32 channel) const
 {
+    if (universe == KeyboardUniverse)
+        return tr("Key · %1").arg(keyName(channel));
     InputOutputMap *iom = m_doc->inputOutputMap();
     QString uni = iom == nullptr ? QString() : iom->getUniverseNameByIndex(universe);
     if (uni.isEmpty())
@@ -435,7 +481,8 @@ bool ControlMap::stringToMode(const QString &str, Mode *mode)
 
 void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
 {
-    if (m_listening && value > 0)
+    // A computer key is learned by the dialog itself, never from here.
+    if (m_listening && value > 0 && universe != KeyboardUniverse)
     {
         const bool bind = m_learnBind;
         m_listening = false;
@@ -599,6 +646,131 @@ void ControlMap::goList(const Binding &b, bool stop)
 }
 
 /*****************************************************************************
+ * Computer keys
+ *****************************************************************************/
+
+bool ControlMap::handleKey(quint32 channel, bool pressed)
+{
+    if (channel == 0)
+        return false;
+    const quint64 k = key(KeyboardUniverse, channel);
+    if (!pressed)
+    {
+        // A release lets go of what its press fired, whatever the mode or
+        // the arming is now: nothing stays held.
+        if (!m_down.contains(k))
+            return false;
+        handleInput(KeyboardUniverse, channel, 0);
+        return true;
+    }
+    if (m_down.contains(k))
+        return true;    // held: one press
+    const Binding *b = bindingOn(KeyboardUniverse, channel);
+    if (b == nullptr || !keyMayFire(b->target))
+        return false;
+    handleInput(KeyboardUniverse, channel, UCHAR_MAX);
+    return true;
+}
+
+void ControlMap::releaseKeys()
+{
+    QList<quint32> held;
+    for (quint64 k : std::as_const(m_down))
+        if (quint32(k >> 32) == KeyboardUniverse)
+            held << quint32(k & 0xFFFFFFFF);
+    for (quint32 ch : held)
+        handleInput(KeyboardUniverse, ch, 0);
+}
+
+bool ControlMap::keyMayFire(const Target &target) const
+{
+    return m_doc->mode() == Doc::Operate || isArmed(target);
+}
+
+quint32 ControlMap::runList() const
+{
+    ShowTreeController *st = m_doc->showTree();
+    if (st == nullptr)
+        return 0xFFFFFFFF;
+    if (m_runTabList != 0xFFFFFFFF && st->cueList(m_runTabList) != nullptr)
+        return m_runTabList;
+    // The Run tab's own choice: the current production's main cue list.
+    ShowControl *sc = m_doc->showControl();
+    const Chaser *ch = sc == nullptr ? nullptr : sc->cueList(QString());
+    quint32 lid = 0xFFFFFFFF;
+    if (ch != nullptr)
+        st->productionOfChaser(ch->id(), &lid);
+    return lid;
+}
+
+void ControlMap::setRunTabList(quint32 listId)
+{
+    if (listId == m_runTabList)
+        return;
+    m_runTabList = listId;
+    emit armingChanged();
+}
+
+void ControlMap::setSelectedTargets(const QList<Target> &targets)
+{
+    if (targets == m_selected)
+        return;
+    m_selected = targets;
+    emit armingChanged();
+}
+
+bool ControlMap::isArmed(const Target &target) const
+{
+    ShowTreeController *st = m_doc->showTree();
+    if (st == nullptr || target.type == FunctionTarget || !target.isValid())
+        return false;
+    if (m_selected.contains(target))
+        return true;
+    const quint32 run = runList();
+    auto listArmed = [&](quint32 listId) {
+        return listId != 0xFFFFFFFF && (listId == run || m_selected.contains(cueList(listId)));
+    };
+    auto listOf = [st](quint32 cueId) {
+        const ShowTree::CueList *l = st->listOfCue(cueId);
+        return l == nullptr ? quint32(0xFFFFFFFF) : l->id;
+    };
+    switch (target.type)
+    {
+        case CueListTarget:
+            return target.id == run;
+        case CueTarget:
+            return listArmed(listOf(target.id));
+        case HitTarget:
+        {
+            if (st->isHitArmed(target.id))
+                return true;    // its place is live, as for a VC button
+            quint32 place = 0xFFFFFFFF;
+            switch (st->hitScope(target.id, &place))
+            {
+                case ShowTree::HitScope::Global:
+                    return run != 0xFFFFFFFF;
+                case ShowTree::HitScope::Production:
+                {
+                    quint32 hitProd = 0xFFFFFFFF, runProd = 0xFFFFFFFF;
+                    st->cueList(listOf(target.id), &hitProd);
+                    if (run == 0xFFFFFFFF || st->cueList(run, &runProd) == nullptr)
+                        return false;
+                    return hitProd != 0xFFFFFFFF && hitProd == runProd;
+                }
+                case ShowTree::HitScope::List:
+                    return listArmed(place);
+                case ShowTree::HitScope::Cue:
+                    return m_selected.contains(cue(place)) || listArmed(listOf(place));
+            }
+            return false;
+        }
+        case FunctionTarget:
+            break;
+    }
+    return false;
+}
+
+/*****************************************************************************
  * Feedback
  *****************************************************************************/
 
@@ -627,8 +799,8 @@ quint32 ControlMap::feedbackFunction(const Binding &b) const
 void ControlMap::sendFeedback(const Binding &b, bool on) const
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
-    if (iom == nullptr)
-        return;
+    if (iom == nullptr || isKey(b))
+        return;     // a computer key has no light
     // The profile's own parameters for the control (a MIDI note's channel
     // and message), as a VC button's feedback takes them.
     QVariant params;
@@ -696,8 +868,17 @@ bool ControlMap::saveXML(QXmlStreamWriter *doc) const
     for (const Binding &b : m_bindings)
     {
         doc->writeStartElement(KXMLTrigger);
-        doc->writeAttribute(KXMLUniverse, QString::number(b.universe));
-        doc->writeAttribute(KXMLChannel, QString::number(b.channel));
+        if (isKey(b))
+        {
+            // Key in place of Universe/Channel: a build without keys skips it.
+            doc->writeAttribute(KXMLKey, QKeySequence(QKeyCombination::fromCombined(int(b.channel)))
+                                             .toString(QKeySequence::PortableText));
+        }
+        else
+        {
+            doc->writeAttribute(KXMLUniverse, QString::number(b.universe));
+            doc->writeAttribute(KXMLChannel, QString::number(b.channel));
+        }
         doc->writeAttribute(KXMLTarget, typeToString(b.target.type));
         doc->writeAttribute(KXMLID, QString::number(b.target.id));
         if (b.mode != Toggle)
@@ -735,8 +916,20 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
         const QXmlStreamAttributes attrs = root.attributes();
         Binding b;
         bool okU = false, okC = false, okI = false;
-        b.universe = attrs.value(KXMLUniverse).toUInt(&okU);
-        b.channel = attrs.value(KXMLChannel).toUInt(&okC);
+        if (attrs.hasAttribute(KXMLKey))
+        {
+            const QKeySequence seq = QKeySequence::fromString(attrs.value(KXMLKey).toString(),
+                                                              QKeySequence::PortableText);
+            b.universe = KeyboardUniverse;
+            b.channel = seq.count() == 1 ? keyChannel(seq[0].key(), seq[0].keyboardModifiers()) : 0;
+            okU = true;
+            okC = b.channel != 0;
+        }
+        else
+        {
+            b.universe = attrs.value(KXMLUniverse).toUInt(&okU);
+            b.channel = attrs.value(KXMLChannel).toUInt(&okC);
+        }
         b.target.id = attrs.value(KXMLID).toUInt(&okI);
         const bool okT = stringToType(attrs.value(KXMLTarget).toString(), &b.target.type);
         if (attrs.hasAttribute(KXMLMode) && !stringToMode(attrs.value(KXMLMode).toString(), &b.mode))

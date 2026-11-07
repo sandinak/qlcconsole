@@ -22,6 +22,7 @@
 
 #include <QWidget>
 
+#include "controlmap.h"
 #include "qlcui_export.h"
 
 class QTableWidget;
@@ -64,6 +65,8 @@ public:
 
 public slots:
     void refresh();
+    /** A key row's control says "· Armed" in Design while it may fire. */
+    void refreshArming();
 
 signals:
     void summaryChanged();
@@ -80,6 +83,9 @@ private slots:
     void slotEncoderLearn();
     void slotEncoderLearnMore(QAction *action);
     void slotEncoderHeard(quint32 universe, quint32 channel);
+
+private:
+    QString controlText(const ControlMap::Binding &b) const;
 
 private:
     Doc *m_doc;

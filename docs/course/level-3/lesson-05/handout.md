@@ -101,4 +101,4 @@ has its own switch, and its own PIN.
 
 ## Done early? (Extension)
 
-Press **Learn** instead of typing: with a timecode source running, the box stamps the time coming in now onto the cue. Ask: "When would you rather learn a time than type it?" (*while the sound op plays the song once and the SM calls the cues*). Then a button on a MIDI controller: right-click the cue list, or a hit, in the Show Tree → **Learn Trigger…**, and press the control. Ask why a dedicated button beats a mouse in the dark.
+Press **Learn** instead of typing: with a timecode source running, the box stamps the time coming in now onto the cue. Ask: "When would you rather learn a time than type it?" (*while the sound op plays the song once and the SM calls the cues*). Then a button on a MIDI controller: right-click the cue list, or a hit, in the Show Tree → **Learn Trigger…**, and press the control. Ask why a dedicated button beats a mouse in the dark. No controller? Press a computer key in the same dialog: select the hit in the Show Tree and its key fires it while you build; in Operate it always does.
