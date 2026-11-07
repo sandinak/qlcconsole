@@ -139,7 +139,10 @@ On main at 415eafa95 (2026-11-07), about 40 s: F-05 GO, F-06 Quick Focus
 and F-08 Units pass; F-07 (follow spot) is manual; F-01 (sections from
 the cue list), F-02 (a key in Design), F-03 (Auto's number), F-04 (record
 from the Workbench), F-09 (Sprinkle loops) and F-10 (autosave offered)
-fail. Each fail is a 2026-11-07 catch or a fix still on its branch.
+fail. Each fail is a 2026-11-07 catch or a fix still on its branch: with
+feat/042-key-triggers, fix/042-autosave-recovery and feat/042-wand-spacing
+merged on a trial branch, F-02, F-03 (Turns read "Auto (0.5)") and F-10
+pass, so those checks see the fix, not only its absence.
 
 Adding a flow: write it in both UX_RULES.md (Flows) and ux_flows.json
 (check_rules.py keeps ids, titles, budgets and step counts in step); give
