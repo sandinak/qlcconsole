@@ -1,0 +1,790 @@
+{
+  "about": "The core flows of docs/dev/UX_RULES.md (Flows), machine copy. The walker's flows group (tools/uxwalk) drives each automated step offscreen on `show`; report.py turns the results into findings. Budgets are the clicks of each flow's path as designed on 2026-11-07 (manual steps included); a flow that grows past its budget is a finding (UX-66). Change both files together.",
+  "show": "docs/course/shows/lesson-3-8-start.qlcc",
+  "bar": {
+    "said": "2026-11-07: \"this tool will be used by students and professionals .. so it needs some level of ease of use while being somewhat comprehensive.. that's a tight line to walk I know .. but if I have to explain everything all the time, even with training, then we've failed in the design.\"",
+    "bar": "A student finds it from where they're working without being told; a pro isn't slowed down.",
+    "checks": [
+      {
+        "id": "C-1",
+        "check": "Every core flow has a click budget, and stays within it.",
+        "how": "walker"
+      },
+      {
+        "id": "C-2",
+        "check": "No dead ends: each step's control is on the screen the step before left, or something on that screen points to it.",
+        "how": "walker"
+      },
+      {
+        "id": "C-3",
+        "check": "Defaults work for the common case: a flow changes only what it is about; an Auto shows the number it chose.",
+        "how": "walker, review"
+      },
+      {
+        "id": "C-4",
+        "check": "Depth goes behind the thing it belongs to (More ▾, ⋯, a right-click, a row that opens), not into a new menu item or tab.",
+        "how": "review"
+      },
+      {
+        "id": "C-5",
+        "check": "Controls use the course's and help's words for the same thing.",
+        "how": "review"
+      },
+      {
+        "id": "C-6",
+        "check": "No core flow needs a help page to find its next step.",
+        "how": "walker, review"
+      },
+      {
+        "id": "C-7",
+        "check": "What a flow builds can be tried in Design from where it was built.",
+        "how": "walker"
+      },
+      {
+        "id": "C-8",
+        "check": "A pro's shortcut (key, command line, typed number) sits beside the clicks, never instead of them.",
+        "how": "review"
+      }
+    ]
+  },
+  "flows": [
+    {
+      "id": "F-01",
+      "title": "Number a show into songs and fold them",
+      "from": "course level 3 lesson 8; 2026-11-07 catch (UX-61)",
+      "rules": [
+        "UX-61",
+        "UX-66"
+      ],
+      "budget": 6,
+      "levels": {
+        "student": "Find sections from the cue list, set Numbering once, fold a song.",
+        "pro": "The Numbering hint's Use it link sets the scheme its numbers already follow (one click)."
+      },
+      "steps": [
+        {
+          "screen": "any",
+          "control": "Show Tree tab",
+          "expect": "the Show Tree",
+          "do": {
+            "tab": "Show Tree"
+          }
+        },
+        {
+          "screen": "Show Tree",
+          "control": "the cue list's row",
+          "expect": "the list's page",
+          "do": {
+            "node": "list"
+          },
+          "check": {
+            "visible": [
+              "stListAddSection"
+            ]
+          }
+        },
+        {
+          "screen": "the list's page",
+          "control": "Numbering (where sections come from)",
+          "expect": "Numbering, or a line pointing to it, on the list's page",
+          "find": {
+            "widget": "stProdNumbering"
+          },
+          "pointer": [
+            "Numbering"
+          ]
+        },
+        {
+          "screen": "Show Tree",
+          "control": "right-click a cue: sections",
+          "expect": "a section or Numbering item, or a pointer",
+          "find": {
+            "context": "cue",
+            "item": "section|numbering"
+          },
+          "pointer": [
+            "Numbering"
+          ]
+        },
+        {
+          "screen": "Show Tree",
+          "control": "the production's row",
+          "expect": "the production's page",
+          "do": {
+            "node": "production"
+          },
+          "check": {
+            "visible": [
+              "stProdNumbering"
+            ]
+          }
+        },
+        {
+          "screen": "the production's page",
+          "control": "Numbering ▸ Show.Part.Iteration",
+          "expect": "song section rows in the tree",
+          "clicks": 2,
+          "do": {
+            "choose": "stProdNumbering",
+            "item": "^Show\\.Part\\.Iteration"
+          },
+          "check": {
+            "rows": "section"
+          }
+        },
+        {
+          "screen": "Show Tree",
+          "control": "a section's ▸",
+          "expect": "its cues folded under it",
+          "do": {
+            "fold": "section"
+          },
+          "check": {
+            "folded": "section"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F-02",
+      "title": "Put a key on a hit and fire it while building",
+      "from": "course level 3 lesson 5; 2026-11-07 catch (UX-62)",
+      "rules": [
+        "UX-62",
+        "UX-61"
+      ],
+      "budget": 6,
+      "levels": {
+        "student": "Right-click the hit, Learn Trigger…, press the key; select the hit and press it.",
+        "pro": "The same key fires it in Operate; the Control Map lists every trigger."
+      },
+      "steps": [
+        {
+          "screen": "any",
+          "control": "Show Tree tab",
+          "expect": "the Show Tree",
+          "do": {
+            "tab": "Show Tree"
+          }
+        },
+        {
+          "screen": "Show Tree",
+          "control": "right-click a hit ▸ Learn Trigger…",
+          "expect": "the learn dialog hears a computer key (F7) and names it",
+          "clicks": 3,
+          "do": {
+            "context": "hit",
+            "item": "^(Learn Trigger|Trigger:)"
+          },
+          "dialog": [
+            {
+              "control": "press F7",
+              "do": {
+                "key": "F7"
+              },
+              "check": {
+                "text": "Key . F7|F7"
+              }
+            }
+          ],
+          "close": "accept",
+          "check": {
+            "window": "controlLearnDialog"
+          },
+          "rule": "UX-62"
+        },
+        {
+          "screen": "Show Tree",
+          "control": "the hit's row (arms it)",
+          "expect": "the hit selected",
+          "do": {
+            "node": "hit"
+          }
+        },
+        {
+          "screen": "Show Tree, Design",
+          "control": "F7",
+          "expect": "the hit plays, in Design",
+          "do": {
+            "key": "F7"
+          },
+          "check": {
+            "running": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "F-03",
+      "title": "Patch a WLED, make it a wand, see the effect from the tip",
+      "from": "2026-11-07 (UX-64, UX-65); docs/features/lighting-studio.md Wand",
+      "rules": [
+        "UX-65",
+        "UX-61"
+      ],
+      "budget": 15,
+      "levels": {
+        "student": "Add the WLED, pick Wand as its pixel path, read Auto's turns, start it at the tip.",
+        "pro": "Type String length and Staff diameter; Auto follows them."
+      },
+      "steps": [
+        {
+          "screen": "Fixtures",
+          "control": "Add fixture ▸ WLED ▸ Lantern, Connection: Network (WLED), IP, OK",
+          "expect": "a WLED patched",
+          "clicks": 6,
+          "manual": "The Add Fixture dialog's model tree and typed IP aren't driven yet; the canned show already has six WLED Lanterns."
+        },
+        {
+          "screen": "any",
+          "control": "Lighting Studio tab",
+          "expect": "the plot",
+          "do": {
+            "tab": "Lighting Studio"
+          }
+        },
+        {
+          "screen": "Lighting Studio",
+          "control": "right-click a WLED Lantern ▸ Fixture Properties…",
+          "expect": "its properties, with Pixel path",
+          "clicks": 2,
+          "do": {
+            "context": "plot:Lantern",
+            "item": "^Fixture Properties"
+          },
+          "dialog": [
+            {
+              "control": "Pixel path ▸ Wand",
+              "do": {
+                "choose": "fixturePixelPath",
+                "item": "^Wand"
+              },
+              "check": {
+                "visible": [
+                  "fixturePixelTurns",
+                  "fixtureWandLength"
+                ]
+              }
+            },
+            {
+              "control": "Turns: Auto",
+              "do": {},
+              "check": {
+                "widgetText": [
+                  "fixturePixelTurns",
+                  "^Auto \\(\\d"
+                ]
+              }
+            },
+            {
+              "control": "First LED at ▸ Top (the tip)",
+              "do": {
+                "choose": "fixtureWandStart",
+                "item": "^Top"
+              }
+            }
+          ],
+          "close": "accept",
+          "check": {
+            "window": "*"
+          },
+          "rule": "UX-65"
+        },
+        {
+          "screen": "Fixture Properties",
+          "control": "Pixel path ▸ Wand; Turns reads Auto (58.5); First LED at ▸ Top (the tip); OK",
+          "expect": "a wand wound from the tip, its turns shown",
+          "clicks": 5,
+          "manual": "Driven inside the step before (its dialog); counted here."
+        },
+        {
+          "screen": "Lighting Studio rig view",
+          "control": "an effect on the wand",
+          "expect": "it starts at the tip",
+          "manual": "A person looks: the rig view's drawing is checked on his rig (UX-56)."
+        }
+      ]
+    },
+    {
+      "id": "F-04",
+      "title": "Build a look in the Workbench and record it as a cue",
+      "from": "docs/features/build.md, show-tree.md Record and duplicate; course level 2",
+      "rules": [
+        "UX-61",
+        "UX-66"
+      ],
+      "budget": 11,
+      "levels": {
+        "student": "Open a scene in Build, play it, Record it into the cue list.",
+        "pro": "Type record lit on the Show Tree's command line."
+      },
+      "steps": [
+        {
+          "screen": "any",
+          "control": "Build tab",
+          "expect": "Build",
+          "do": {
+            "tab": "Build"
+          }
+        },
+        {
+          "screen": "Build",
+          "control": "+ Scene, drag a group onto it, drop a colour",
+          "expect": "a look",
+          "clicks": 3,
+          "manual": "Drag and drop isn't driven; the next step opens a scene of the canned show instead."
+        },
+        {
+          "screen": "Build ▸ Scenes",
+          "control": "a scene in the navigator",
+          "expect": "it in the Workbench",
+          "do": {
+            "code": "workbenchLoadScene"
+          },
+          "check": {
+            "visible": [
+              "workbenchPlay"
+            ]
+          }
+        },
+        {
+          "screen": "the Workbench",
+          "control": "Play",
+          "expect": "it on the rig",
+          "do": {
+            "click": "workbenchPlay"
+          },
+          "check": {
+            "visible": [
+              "workbenchOnRig"
+            ]
+          }
+        },
+        {
+          "screen": "the Workbench",
+          "control": "record this as a cue",
+          "expect": "a Record control, or a line pointing to the Show Tree's Record",
+          "find": {
+            "text": "^Record|record .*cue"
+          },
+          "pointer": [
+            "Record"
+          ]
+        },
+        {
+          "screen": "any",
+          "control": "Show Tree tab",
+          "expect": "the Show Tree",
+          "do": {
+            "tab": "Show Tree"
+          }
+        },
+        {
+          "screen": "Show Tree",
+          "control": "a cue",
+          "expect": "its page",
+          "do": {
+            "node": "cue"
+          }
+        },
+        {
+          "screen": "Show Tree",
+          "control": "Record ▸ Everything lit ▸ Record",
+          "expect": "a new cue after it",
+          "clicks": 3,
+          "do": {
+            "click": "stRecord"
+          },
+          "dialog": [
+            {
+              "control": "Everything lit",
+              "do": {
+                "click": "stRecord:lit"
+              }
+            }
+          ],
+          "close": "accept",
+          "check": {
+            "cues": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "F-05",
+      "title": "GO through a show in the Run tab",
+      "from": "course level 0 lesson 8, level 1 lesson 1",
+      "rules": [
+        "UX-30",
+        "UX-66"
+      ],
+      "budget": 4,
+      "levels": {
+        "student": "Run tab, GO; the notice offers Operate; GO again.",
+        "pro": "⌘↩ from any tab; ⌘F12 to Operate."
+      },
+      "steps": [
+        {
+          "screen": "any",
+          "control": "Run tab",
+          "expect": "the cue list, NEXT on the first cue",
+          "do": {
+            "tab": "Run"
+          },
+          "check": {
+            "visible": [
+              "crGo"
+            ],
+            "text": "^(NEXT|▷ STANDBY)"
+          }
+        },
+        {
+          "screen": "Run",
+          "control": "GO",
+          "expect": "the cue plays; the notice offers Operate",
+          "do": {
+            "click": "crGo"
+          },
+          "check": {
+            "running": true,
+            "visible": [
+              "viewNoticeButton"
+            ]
+          }
+        },
+        {
+          "screen": "Run",
+          "control": "Switch to Operate (notice bar)",
+          "expect": "LIVE",
+          "do": {
+            "click": "viewNoticeButton"
+          },
+          "check": {
+            "widgetText": [
+              "crMode",
+              "LIVE"
+            ]
+          }
+        },
+        {
+          "screen": "Run, Operate",
+          "control": "GO",
+          "expect": "the next cue plays",
+          "do": {
+            "click": "crGo"
+          },
+          "check": {
+            "running": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "F-06",
+      "title": "Focus calls: Quick Focus from the plot",
+      "from": "course level 3 lesson 6; docs/features/focus-calls.md",
+      "rules": [
+        "UX-61",
+        "UX-27"
+      ],
+      "budget": 12,
+      "levels": {
+        "student": "Focus ▸ Quick Focus…, Start, step with PgDn, keep with Return, Esc.",
+        "pro": "The pad: View + Menu starts it; the same keys on the pad."
+      },
+      "steps": [
+        {
+          "screen": "any",
+          "control": "Lighting Studio tab",
+          "expect": "the plot and its Focus button",
+          "do": {
+            "tab": "Lighting Studio"
+          },
+          "check": {
+            "visible": [
+              "focusMenuButton"
+            ]
+          }
+        },
+        {
+          "screen": "Lighting Studio",
+          "control": "Focus ▸ Quick Focus… ▸ Start",
+          "expect": "the focus panel",
+          "clicks": 3,
+          "do": {
+            "menu": "focusMenuButton",
+            "item": "focusQuick"
+          },
+          "close": "focusStart",
+          "check": {
+            "window": "focusModeSetup",
+            "visible": [
+              "focusModePanel"
+            ]
+          }
+        },
+        {
+          "screen": "the focus panel",
+          "control": "PgDn (next)",
+          "expect": "the panel still up",
+          "do": {
+            "key": "PgDown",
+            "to": "focusModePanel"
+          },
+          "check": {
+            "visible": [
+              "focusModePanel"
+            ]
+          }
+        },
+        {
+          "screen": "the focus panel",
+          "control": "Esc (leave)",
+          "expect": "the panel gone",
+          "do": {
+            "key": "Esc",
+            "to": "focusModePanel"
+          },
+          "check": {
+            "hidden": "focusModePanel"
+          }
+        },
+        {
+          "screen": "Venue Focus",
+          "control": "Edit Focus Calls…, + Call, Start venue focus, Return to keep",
+          "expect": "a venue's correction kept",
+          "clicks": 6,
+          "manual": "Venue focus writes venues.xml beside a saved show and is checked on his rig with a pad (UX-56); focuscallsui_test covers the dialog."
+        }
+      ]
+    },
+    {
+      "id": "F-07",
+      "title": "Follow spot with a pad",
+      "from": "docs/features/stage-targets.md Follow-spot behavior; 2026-11-04 (UX-56)",
+      "rules": [
+        "UX-56",
+        "UX-66"
+      ],
+      "budget": 9,
+      "manual": "Needs a game pad: followspotcue_test drives a virtual pad through the HID plugin, which the walker doesn't load, and the feel is checked only on his real pad (UX-56).",
+      "levels": {
+        "student": "Patch the pad, put Followspot and an Aim on the spot, GO, walk the stick.",
+        "pro": "Fine stick and speed step on the pad (fix/042-followspot-feel)."
+      },
+      "steps": [
+        {
+          "screen": "Connections",
+          "control": "patch the pad as an input",
+          "expect": "the pad found",
+          "clicks": 2,
+          "manual": "hardware"
+        },
+        {
+          "screen": "Lighting Studio",
+          "control": "Add ▸ Target (a person)",
+          "expect": "a target on the plot",
+          "clicks": 2,
+          "manual": "hardware flow"
+        },
+        {
+          "screen": "Build Workbench",
+          "control": "+ Effect ▸ Effect Palette… ▸ Followspot ▸ Make layer",
+          "expect": "the spot follows",
+          "clicks": 4,
+          "manual": "hardware flow"
+        },
+        {
+          "screen": "Run",
+          "control": "GO, walk the left stick",
+          "expect": "footer: ◎ Follow … stick moving",
+          "clicks": 1,
+          "manual": "hardware"
+        }
+      ]
+    },
+    {
+      "id": "F-08",
+      "title": "Set Units and see every length follow",
+      "from": "2026-11-06 (UX-01)",
+      "rules": [
+        "UX-01",
+        "UX-61"
+      ],
+      "budget": 10,
+      "levels": {
+        "student": "Settings… ▸ Units, OK; the plot's lengths change.",
+        "pro": "⌘, opens Settings."
+      },
+      "steps": [
+        {
+          "screen": "any",
+          "control": "Settings… ▸ Units: Millimetres ▸ OK",
+          "expect": "the setting kept",
+          "clicks": 4,
+          "do": {
+            "action": "appSettings"
+          },
+          "dialog": [
+            {
+              "control": "Units: Millimetres",
+              "do": {
+                "choose": "settingsUnitsCombo",
+                "item": "^Millimetres"
+              }
+            }
+          ],
+          "close": "accept"
+        },
+        {
+          "screen": "any",
+          "control": "Lighting Studio tab",
+          "expect": "the plot",
+          "do": {
+            "tab": "Lighting Studio"
+          }
+        },
+        {
+          "screen": "Lighting Studio",
+          "control": "right-click a light",
+          "expect": "Set Mounting Height… in mm",
+          "do": {
+            "tab": "Lighting Studio"
+          },
+          "check": {
+            "menuItem": [
+              "plot:.",
+              "Mounting Height.*\\d mm"
+            ]
+          }
+        },
+        {
+          "screen": "any",
+          "control": "Settings… ▸ Units: Feet and inches ▸ OK",
+          "expect": "the setting kept",
+          "clicks": 4,
+          "do": {
+            "action": "appSettings"
+          },
+          "dialog": [
+            {
+              "control": "Units: Feet and inches",
+              "do": {
+                "choose": "settingsUnitsCombo",
+                "item": "^Feet and inches"
+              }
+            }
+          ],
+          "close": "accept",
+          "check": {
+            "menuItem": [
+              "plot:.",
+              "Mounting Height.*\\(\\d+(?:'|\")"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "F-09",
+      "title": "Fountain pars and sprinkle loops from Read Segments",
+      "from": "2026-11-07 (UX-64); docs/features/lighting-studio.md Fountains",
+      "rules": [
+        "UX-64",
+        "UX-61"
+      ],
+      "budget": 11,
+      "levels": {
+        "student": "Add Fountain…, drop the pars and the WLED in, Pixel path Sprinkle loops, Read Segments.",
+        "pro": "Edit Spans… to change what was read."
+      },
+      "steps": [
+        {
+          "screen": "Lighting Studio",
+          "control": "Add ▸ Add Fountain… ▸ OK; drop pars in the base and a WLED in the gap",
+          "expect": "a fountain with its lights",
+          "clicks": 5,
+          "manual": "Building the fountain and dropping lights into it is drag and drop on the plot; monitor_test drives it."
+        },
+        {
+          "screen": "any",
+          "control": "Lighting Studio tab",
+          "expect": "the plot",
+          "do": {
+            "tab": "Lighting Studio"
+          }
+        },
+        {
+          "screen": "Lighting Studio",
+          "control": "right-click a WLED Lantern ▸ Fixture Properties…",
+          "expect": "Pixel path offers Sprinkle loops; Read Segments beside it",
+          "clicks": 2,
+          "do": {
+            "context": "plot:Lantern",
+            "item": "^Fixture Properties"
+          },
+          "dialog": [
+            {
+              "control": "Pixel path offers Sprinkle loops",
+              "do": {},
+              "check": {
+                "comboHas": [
+                  "fixturePixelPath",
+                  "Sprinkle loops"
+                ]
+              }
+            }
+          ],
+          "close": "reject",
+          "check": {
+            "window": "*"
+          },
+          "rule": "UX-64"
+        },
+        {
+          "screen": "Fixture Properties",
+          "control": "Pixel path ▸ Sprinkle loops (in a fountain)",
+          "expect": "Points, Spans, Read Segments",
+          "clicks": 2,
+          "manual": "The entry is enabled only for a light in a fountain's gap, which the canned show has none of (built in step 1)."
+        },
+        {
+          "screen": "the fixture's fields",
+          "control": "Read Segments",
+          "expect": "Read 6 segments as spans at 3 points.",
+          "clicks": 1,
+          "manual": "Reads /json/state from a WLED on the network; monitor_test feeds it canned segments, and the walker has no device."
+        }
+      ]
+    },
+    {
+      "id": "F-10",
+      "title": "Recover after a crash (autosave)",
+      "from": "0.4.1 Known issue; CHANGELOG; course level 3 lesson 9",
+      "rules": [
+        "UX-28",
+        "UX-61"
+      ],
+      "budget": 2,
+      "levels": {
+        "student": "Open the show; it offers the newer autosave; Recover.",
+        "pro": "The same question at start-up, in the start-up window."
+      },
+      "steps": [
+        {
+          "screen": "File ▸ Open Recent",
+          "control": "the show (a newer autosave beside it), then Recover",
+          "expect": "Recover the autosave from Show.qlcc? ▸ Recover",
+          "clicks": 2,
+          "do": {
+            "code": "openWithNewerAutosave"
+          },
+          "close": "Recover",
+          "check": {
+            "window": "RecoverAutosave"
+          }
+        }
+      ]
+    }
+  ]
+}

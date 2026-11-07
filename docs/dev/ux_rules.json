@@ -1,0 +1,1226 @@
+[
+  {
+    "id": "UX-01",
+    "theme": "Units & numbers",
+    "title": "Every length follows Settings ▸ Units",
+    "rule": "Every length a person reads or types (field, label, tooltip, menu, report, CSV, web page, voice) is in the unit chosen in Settings ▸ Units, feet and inches by default.",
+    "check": "test:units_test",
+    "checks": [
+      "test:units_test::noUnitWrittenIntoAString",
+      "test:units_test::textFollowsThePreference",
+      "test:units_test::dialogsFollowThePreference",
+      "test:menuwords_test::noLengthIsMetresOnly",
+      "walker"
+    ],
+    "enforced": true,
+    "why": "2026-11-06: Set Mounting Height… asked \"Height above the floor (metres):\" on a feet show, after the same field was fixed on 2026-10-27 (Q174). About 55 call sites keyed off the grid unit; he: \"we keep finding places where it exists\".",
+    "example": {
+      "right": "Height above the floor: 12' 6\"",
+      "wrong": "Height above the floor (metres): 3.81"
+    },
+    "patterns": {
+      "scope": "ui_text",
+      "when": "Settings ▸ Units = feet and inches (the default)",
+      "forbid_regex": "\\((?:metres|meters|mm|cm|m|ft)\\)|\\b[Mm]etres?\\b|(?:^|\\s)\\d+(?:\\.\\d+)?\\s?m\\b(?!/)"
+    }
+  },
+  {
+    "id": "UX-02",
+    "theme": "Units & numbers",
+    "title": "A length field is a length field",
+    "rule": "A length is typed into a LengthSpinBox or MeasurementEdit (LengthInputDialog for a prompt) that takes any unit, never a bare number box.",
+    "check": "test:units_test",
+    "checks": [
+      "test:units_test::noBareNumberDialogForALength"
+    ],
+    "enforced": true,
+    "why": "2026-11-06: the Mounting Height prompt was a QInputDialog::getDouble labelled in metres; a number box can't say its unit or take 12' 6\".",
+    "example": {
+      "right": "A Trim field that takes 18' 0\", 18ft or 5.5 m and shows 18' 0\"",
+      "wrong": "QInputDialog::getDouble(this, tr(\"Trim\"), tr(\"Height (m)\"), ...)"
+    },
+    "patterns": {
+      "scope": "source",
+      "forbid_regex": "QInputDialog::getDouble"
+    }
+  },
+  {
+    "id": "UX-03",
+    "theme": "Units & numbers",
+    "title": "The grid's unit is only for the grid",
+    "rule": "The show grid's unit sets grid spacing only; nothing picks a display unit from it.",
+    "check": "test:units_test",
+    "checks": [
+      "test:units_test::gridUnitsOnlyForTheGrid",
+      "test:appviews_test::theGridFollowsTheUnitPreference"
+    ],
+    "enforced": true,
+    "why": "2026-11-06: the root cause of the metres-on-a-feet-show class of bugs was MonitorProperties::gridUnits() used to choose the display unit.",
+    "example": {
+      "right": "MeasurementUnits::formatLength(mm) in a label",
+      "wrong": "gridUnits() == Meters ? \"%1 m\" : \"%1 ft\""
+    },
+    "patterns": {
+      "scope": "source",
+      "forbid_regex": "\\bgridUnits\\(\\)"
+    }
+  },
+  {
+    "id": "UX-04",
+    "theme": "Units & numbers",
+    "title": "Feet and inches read like a tape measure",
+    "rule": "Imperial lengths show feet and inches to the nearest 1/8\", the fraction reduced, and the same forms are accepted when typed.",
+    "check": "test:measurementunits_test",
+    "checks": [
+      "test:measurementunits_test",
+      "test:units_test::feetAndInchesByDefault"
+    ],
+    "enforced": true,
+    "why": "2026-11-06 (5eb8b86c7): decimals of a foot are not how a crew measures or calls a trim.",
+    "example": {
+      "right": "3' 11 1/4\"  (typed as 3' 11 1/4\", 11-1/4\" or 3/8\")",
+      "wrong": "3.9375 ft  or  3' 11.25\""
+    },
+    "patterns": {
+      "scope": "ui_text",
+      "forbid_regex": "\\d+\\.\\d+\\s?ft\\b|\\d+' \\d+\\.\\d+\""
+    }
+  },
+  {
+    "id": "UX-05",
+    "theme": "Units & numbers",
+    "title": "Values in the user's terms",
+    "rule": "A setting shows its meaning, not its storage: an option's name, a switch's sense, \"per beat\" on a speed master, one cycle's seconds for a wave, lengths through Units.",
+    "check": "test:showtreeview_test::anEffectShowsWhatItRunsOnAndWhereEachValueComesFrom",
+    "checks": [
+      "test:showtreeview_test::anEffectShowsWhatItRunsOnAndWhereEachValueComesFrom",
+      "review"
+    ],
+    "enforced": true,
+    "why": "2026-11-06 (b3784b1b6): an effect in the tree showed raw script parameters; the effect rows now read like the Aim row.",
+    "example": {
+      "right": "Direction: Reverse · Speed: 2 per beat",
+      "wrong": "direction: 1 · speed: 0.5"
+    }
+  },
+  {
+    "id": "UX-06",
+    "theme": "Units & numbers",
+    "title": "A typed value stays when you click away",
+    "rule": "A typed fade, hold or value is committed when focus leaves the field, not only on Return.",
+    "check": "walker",
+    "checks": [
+      "walker",
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-10-23 (Q60, quick win 2/14): typed times were lost on a click into the tree.",
+    "example": {
+      "right": "Type 2.5 in Fade, click the tree: Fade is 2.5",
+      "wrong": "Type 2.5 in Fade, click the tree: Fade is back to 0"
+    }
+  },
+  {
+    "id": "UX-63",
+    "theme": "Units & numbers",
+    "title": "Help gives a length in feet first, metric in brackets",
+    "rule": "A help page writes a length in feet and inches with the metric after it in brackets, 4 ft (1.2 m); never a metric length on its own.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: the Wand help said \"1.2 m\", \"2 cm\" and \"25 mm\" on a product whose lengths default to feet; it now reads \"4 ft (1.2 m)\" (feat/042-wand-spacing). Help can't follow the setting, so it gives both, feet first (UX-01).",
+    "example": {
+      "right": "Wand length: the staff, 4 ft (1.2 m) unless set.",
+      "wrong": "Wand length: the staff, 1.2 m unless set."
+    },
+    "patterns": {
+      "scope": "help",
+      "forbid_regex": "(?<![(\\d.])\\b\\d+(?:\\.\\d+)?\\s?(?:mm|cm|m)\\b(?![/\\w])(?![^()]*\\))"
+    }
+  },
+  {
+    "id": "UX-07",
+    "theme": "Words",
+    "title": "Menu items are Title Case",
+    "rule": "Every menu item is Title Case: every word capitalised except a, an, the, and, or, of, to, in, on, at, by, for, from, with, as, vs, into after the first.",
+    "check": "test:menuwords_test",
+    "checks": [
+      "test:menuwords_test::everyMenuLabelIsTitleCase",
+      "test:contextmenus_test::titleCase",
+      "walker"
+    ],
+    "enforced": true,
+    "why": "2026-11-02/03 menu canon (docs/design/CONTEXT_MENUS.md §3.2): the same action was worded three ways in three menus.",
+    "example": {
+      "right": "Delete Fixture Group…",
+      "wrong": "Delete fixture group…"
+    }
+  },
+  {
+    "id": "UX-08",
+    "theme": "Words",
+    "title": "Buttons are Title Case too",
+    "rule": "Every push or tool button text is Title Case like a menu item (dialog-box answers such as \"Not now\" excepted).",
+    "check": "test:menuwords_test",
+    "checks": [
+      "test:menuwords_test::everyButtonLabelIsTitleCase",
+      "walker"
+    ],
+    "enforced": true,
+    "why": "2026-11-06: \"Show all effects\" on the effect picker; train 1106b failed on it.",
+    "example": {
+      "right": "Show All Effects",
+      "wrong": "Show all effects"
+    }
+  },
+  {
+    "id": "UX-09",
+    "theme": "Words",
+    "title": "\"…\" means a dialog follows",
+    "rule": "A label ends in the single character \"…\" exactly when a dialog (including a confirmation) follows; never three dots; an inline rename has none.",
+    "check": "test:menuwords_test",
+    "checks": [
+      "test:menuwords_test::everyMenuLabelIsTitleCase",
+      "walker"
+    ],
+    "enforced": true,
+    "why": "2026-11-02 menu canon §3.2.",
+    "example": {
+      "right": "Patch…  ·  Rename (inline)",
+      "wrong": "Patch...  ·  Rename… (inline)"
+    },
+    "patterns": {
+      "scope": "ui_text",
+      "forbid_regex": "\\.\\.\\."
+    }
+  },
+  {
+    "id": "UX-10",
+    "theme": "Words",
+    "title": "No shortcut typed into a label",
+    "rule": "A shortcut is set on the action so Qt shows it in its own column; it is never part of the text.",
+    "check": "test:menuwords_test",
+    "checks": [
+      "test:menuwords_test::everyMenuLabelIsTitleCase"
+    ],
+    "enforced": true,
+    "why": "2026-11-02 menu canon §3.2.",
+    "example": {
+      "right": "Select All     ⌘A",
+      "wrong": "Select All (Ctrl+A)"
+    },
+    "patterns": {
+      "scope": "ui_text",
+      "forbid_regex": "\\((?:Ctrl|Shift|Alt|Cmd|⌘)"
+    }
+  },
+  {
+    "id": "UX-11",
+    "theme": "Words",
+    "title": "Delete destroys, Remove takes out",
+    "rule": "\"Delete X…\" destroys the thing; \"Remove from Y\" takes it out of a container and leaves it in the show. A bare \"Remove\" is never a destroy.",
+    "check": "review",
+    "checks": [
+      "test:contextmenus_test::theCanonCatchesDrift",
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-02 menu canon §3.2: \"Remove\" meant both in different menus.",
+    "example": {
+      "right": "Remove from Truss  ·  Delete Fixture Group…",
+      "wrong": "Remove (an item that deletes the fixture group)"
+    },
+    "patterns": {
+      "scope": "ui_text",
+      "forbid_regex": "^Remove…?(?:$|\\s\\()"
+    }
+  },
+  {
+    "id": "UX-12",
+    "theme": "Words",
+    "title": "One word per idea",
+    "rule": "Each idea has one name everywhere: Hits (the busk section), Plot symbol, Operate, Hold at end, Quick Focus / Venue Focus / Focus This Cue.",
+    "check": "review",
+    "checks": [
+      "review",
+      "walker"
+    ],
+    "enforced": false,
+    "why": "2026-10-23 (Q70, Q77) and 2026-10-25 (Q149): \"look\", \"focus\" and \"stage look\" each meant several things.",
+    "example": {
+      "right": "Plot symbol · Hits · Focus This Cue",
+      "wrong": "Stage Look · Looks (the busk section) · Refine"
+    },
+    "patterns": {
+      "scope": "ui_text",
+      "forbid_regex": "Stage Look|Perform \\(Operate\\)|Hold Last Look|\\bRefine\\b"
+    }
+  },
+  {
+    "id": "UX-13",
+    "theme": "Words",
+    "title": "Release and Untrack",
+    "rule": "Ending a tracked layer is Release (plays in this cue, then lets go) or Untrack (never reaches this cue), the same words in menus, tooltips, the tracking column, help, course, command line and voice.",
+    "check": "test:showtreeview_test::releaseAndUntrackOnTheGreyRow",
+    "checks": [
+      "test:showtreeview_test::releaseAndUntrackOnTheGreyRow",
+      "review"
+    ],
+    "enforced": true,
+    "why": "2026-11-04 (Q222): he turned off the USTs' tracking and expected them gone from the cue he was on; the words had to say which.",
+    "example": {
+      "right": "Release After This Cue  ·  Untrack From This Cue",
+      "wrong": "Drop From This Cue  ·  Stop Tracking  ·  Block"
+    },
+    "patterns": {
+      "scope": "ui_text",
+      "forbid_regex": "(?:Drop|Cut|Block|Stop|Omit) (?:After|From) This Cue|Stop Tracking"
+    }
+  },
+  {
+    "id": "UX-14",
+    "theme": "Words",
+    "title": "\"Classic\" means stock QLC+",
+    "rule": "Anything labelled Classic is stock QLC+ 4 only; qlcconsole's own tools never wear the word.",
+    "check": "test:appviews_test::classicLooksLikeQlcPlus",
+    "checks": [
+      "test:appviews_test::classicLooksLikeQlcPlus",
+      "test:helpbrowser_test::noGuideSendsYouToScenesClassic"
+    ],
+    "enforced": true,
+    "why": "2026-10-23 (Q73): \"Build ▸ Scenes ▸ Classic\" was not QLC+'s.",
+    "example": {
+      "right": "View ▸ Workspace ▸ Classic QLC+ (the stock tabs and toolbars)",
+      "wrong": "Build ▸ Scenes ▸ Classic"
+    }
+  },
+  {
+    "id": "UX-15",
+    "theme": "Words",
+    "title": "A jump names where it goes",
+    "rule": "A link, Go to or Open item names its destination in the user's terms.",
+    "check": "review",
+    "checks": [
+      "review",
+      "test:showtreeview_test"
+    ],
+    "enforced": false,
+    "why": "2026-11-06 (b7cee01ad): a grey row's \"Go to\" didn't say which cue.",
+    "example": {
+      "right": "Go to 1.1.1 Setup",
+      "wrong": "Go to origin"
+    },
+    "patterns": {
+      "scope": "ui_text",
+      "forbid_regex": "^Go to (?:origin|source|target)$"
+    }
+  },
+  {
+    "id": "UX-16",
+    "theme": "Words",
+    "title": "Keys and buttons are named as on the device in hand",
+    "rule": "Shortcuts read ⌘/⌥/⇧ on macOS and Ctrl/Alt/Shift elsewhere; a game pad's buttons are named as printed on that pad (Cross, Circle, Options on PlayStation; A, B, Menu on Xbox), in text and voice.",
+    "check": "test:focusmode_test::aPlayStationPadIsCalledByItsOwnNames",
+    "checks": [
+      "test:focusmode_test::aPlayStationPadIsCalledByItsOwnNames",
+      "review",
+      "test:helpbrowser_test::keysAreSpelledForTheComputerYouAreOn"
+    ],
+    "enforced": true,
+    "why": "2026-10-27 (Q170): about 45 hard-coded Xbox strings told a DualShock user to press A. 2026-10-15 (270e59ecc): help on Windows told people to press ⌘.",
+    "example": {
+      "right": "⌘D on a Mac · \"Press ✕ to keep\" on a DualSense",
+      "wrong": "Ctrl+D in the Mac help · \"Press A to keep\" on a DualSense"
+    }
+  },
+  {
+    "id": "UX-17",
+    "theme": "Words",
+    "title": "Plain sentences, not engine terms",
+    "rule": "Explanations, warnings and errors say what happened in the operator's words and what to do next; engine terms (HTP, fader priority, function id) stay out.",
+    "check": "review",
+    "checks": [
+      "test:whyonpanel_test::plainSentencesPerGroup",
+      "test:whyonpanel_test::plainWordsInATeachingShow",
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-10-27 (Q181, Why is this on?) and the teaching shows: the answer has to be readable by a student on headset.",
+    "example": {
+      "right": "Par 3 is at 80% because cue 2.1 Verse sets it.",
+      "wrong": "Channel 37: HTP, fader priority Override, function #112"
+    },
+    "patterns": {
+      "scope": "ui_text",
+      "forbid_regex": "\\bfunction #\\d+|\\bfader priority\\b|\\bHTP\\b"
+    }
+  },
+  {
+    "id": "UX-18",
+    "theme": "Words",
+    "title": "Cue numbers and names follow his scheme",
+    "rule": "Cue numbers are {S}.{P}.{II}, period separated, any level past 9; scene names follow SS-PP.II-Description, learned from siblings when duplicating.",
+    "check": "review",
+    "checks": [
+      "test:songsections_test",
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-10-29 (Q190 and his stated scheme): song sections are derived from the number, so the format has to hold.",
+    "example": {
+      "right": "1.10.2 · 02-03.01-Chorus Wash",
+      "wrong": "1.A · 1.9 renumbered to 2.0 · \"Chorus Wash copy\""
+    }
+  },
+  {
+    "id": "UX-19",
+    "theme": "Words",
+    "title": "QLC+ 4.x is in maintenance",
+    "rule": "Text about upstream says QLC+ 4.x is in maintenance; never abandoned or dead.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-10-28 strategy (Q186): qlcconsole is a home for 4.x users, not a campaign against upstream.",
+    "example": {
+      "right": "QLC+ 4.x is in maintenance upstream.",
+      "wrong": "QLC+ 4 is abandoned."
+    },
+    "patterns": {
+      "scope": "docs_and_ui_text",
+      "forbid_regex": "(?i)(QLC\\+?\\s*4[^.]{0,40}\\b(abandon|dead)|\\b(abandon|dead)[^.]{0,40}QLC\\+?\\s*4)"
+    }
+  },
+  {
+    "id": "UX-20",
+    "theme": "Context-awareness",
+    "title": "Lists fit the fixtures in play",
+    "rule": "A picker or list offers what fits the fixtures it will act on, with a Title Case \"Show All …\" to see the rest, and never drops the item already in use.",
+    "check": "test:effectfit_test",
+    "checks": [
+      "test:effectfit_test::whatFitsWhat",
+      "test:effectfit_test::searchHidesWhatDoesNotFit",
+      "test:lookeditor_test::wledOnlyEffectsNeedAWledTarget",
+      "walker",
+      "test:effectfit_test::theEffectInUseIsNeverDropped"
+    ],
+    "enforced": true,
+    "why": "2026-11-06: effect search offered WLED effects for groups with no WLED device. 2026-11-06 (e1c558d12): the fitted effect picker had to keep a look's current effect even when it no longer fit.",
+    "example": {
+      "right": "Pars selected: colour and dimmer effects, [Show All Effects]",
+      "wrong": "Pars selected: \"WLED: Fireworks\" at the top of the list"
+    }
+  },
+  {
+    "id": "UX-21",
+    "theme": "Context-awareness",
+    "title": "Plain words just work",
+    "rule": "The command line takes commands and plain language in the same box; it decides typo vs language itself and never needs \"?\" or a prefix.",
+    "check": "test:showtree_test::commandLineTypoOrLanguage",
+    "checks": [
+      "test:showtree_test::commandLineTypoOrLanguage",
+      "test:librarybuild_test::commandBarTypoOrLanguage",
+      "test:showtreeview_test::oneCommandLineTypoOrLanguage"
+    ],
+    "enforced": true,
+    "why": "2026-11-06: the command line made him type \"?\" to reach AI Assist.",
+    "example": {
+      "right": "\"make the towers blue\" goes to AI Assist; \"dimer 50\" offers Did you mean dimmer 50",
+      "wrong": "Unknown command. Type ? to ask AI."
+    },
+    "patterns": {
+      "scope": "ui_text",
+      "forbid_regex": "(?i)type \\?|start with \\?"
+    }
+  },
+  {
+    "id": "UX-22",
+    "theme": "Context-awareness",
+    "title": "Show what it acts on and where each value comes from",
+    "rule": "A row for an effect, palette or layer shows what it runs on (and, on a mixed target, how much of it and why not the rest) and, for each value, its origin: own, from a palette or preset, script default, tracked from a cue. Like an Aim row.",
+    "check": "test:showtreeview_test::anEffectShowsWhatItRunsOnAndWhereEachValueComesFrom",
+    "checks": [
+      "test:showtreeview_test::anEffectShowsWhatItRunsOnAndWhereEachValueComesFrom",
+      "test:showtreeview_test::trackedLayersShowGreyWithWhereTheyCameFrom",
+      "walker",
+      "test:effectfit_test::aMixedSetRunsOnSome"
+    ],
+    "enforced": true,
+    "why": "2026-11-06: an effect in the Show Tree didn't show its group or its values. 2026-11-06 (b3784b1b6): a position effect on towers of movers and pars silently ran on half.",
+    "example": {
+      "right": "Runs on: Towers (2 of 4 fixtures: Pars have no pan/tilt) · Speed 2 per beat, from Effect “Chase”",
+      "wrong": "EFX 3 (no target, no values)"
+    }
+  },
+  {
+    "id": "UX-23",
+    "theme": "Context-awareness",
+    "title": "Nothing to say, nothing shown",
+    "rule": "A chip, button or column with nothing to report stays hidden until it has something: power without sources, MTC without a source, Upgrade without chasers, Productions with one production.",
+    "check": "test:mainbar_test::thePowerChipNeedsPowerSetUp",
+    "checks": [
+      "test:mainbar_test::thePowerChipNeedsPowerSetUp",
+      "walker",
+      "review"
+    ],
+    "enforced": true,
+    "why": "2026-10-23 (Q75, Q89, Q90, Q98): the footer and headers were full of \"MTC: no source\" and empty controls.",
+    "example": {
+      "right": "No MTC chip until a timecode source is set",
+      "wrong": "MTC: no source (in every show's footer)"
+    },
+    "patterns": {
+      "scope": "ui_text",
+      "forbid_regex": ":\\s*(?:no source\\b|none\\b|—)"
+    }
+  },
+  {
+    "id": "UX-24",
+    "theme": "Context-awareness",
+    "title": "F1 opens help on what's in front",
+    "rule": "Every dialog and view carries a helpTopic, so F1 opens the guide for it.",
+    "check": "test:appviews_test::helpOpensOnWhatIsInFront",
+    "checks": [
+      "test:appviews_test::helpOpensOnWhatIsInFront",
+      "walker"
+    ],
+    "enforced": true,
+    "why": "2026-10-10 in-app help: context-aware help was the ask; a new dialog without a topic drops to Getting Started.",
+    "example": {
+      "right": "F1 in Venue Focus opens focus-calls.md",
+      "wrong": "F1 in a new dialog opens getting-started.md"
+    },
+    "patterns": {
+      "scope": "widget",
+      "require": "every top-level QDialog has a non-empty helpTopic property"
+    }
+  },
+  {
+    "id": "UX-25",
+    "theme": "Context-awareness",
+    "title": "A console setting holds on every surface",
+    "rule": "A choice made on the console (feedback mode, units, view) is what the pad, voice, web page and dialogs use, without asking again.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-10-24 (Q127): \"this should default to what's set on the console and follow that thru the entire operation.\"",
+    "example": {
+      "right": "Feedback: Lights on the console; the pad gives lights, no voice",
+      "wrong": "The pad starts in Lights + Voice whatever the console says"
+    }
+  },
+  {
+    "id": "UX-26",
+    "theme": "Feedback & state",
+    "title": "Anything that waits shows it is busy",
+    "rule": "An action that can take more than a moment shows a busy sign where it was asked, what it is waiting on, how to cancel, and elapsed seconds after 2 s.",
+    "check": "test:aiassist_test::busyIndicatorWhileAsking",
+    "checks": [
+      "test:aiassist_test::busyIndicatorWhileAsking",
+      "walker"
+    ],
+    "enforced": true,
+    "why": "2026-11-06: no sign AI Assist was working.",
+    "example": {
+      "right": "⟳ Asking AI Assist (llama3)… 4 s · Esc cancels",
+      "wrong": "The line just sits there"
+    }
+  },
+  {
+    "id": "UX-27",
+    "theme": "Feedback & state",
+    "title": "A greyed control says why",
+    "rule": "Every disabled button or menu item says on hover why, and how to make it available when there is a way.",
+    "check": "walker",
+    "checks": [
+      "test:appviews_test::editUndoSaysWhereItWorks",
+      "test:cuerunner_test::noMainListGreysGoAndOffersUpgrade",
+      "walker"
+    ],
+    "enforced": false,
+    "why": "2026-10-25 (Q146): Focus mode's Start was greyed with no reason; 2026-10-23 (Q81): Undo silently did nothing.",
+    "example": {
+      "right": "Start (greyed) — \"Needs a moving head and a stage target\"",
+      "wrong": "Start (greyed), no tooltip"
+    },
+    "patterns": {
+      "scope": "widget",
+      "require": "every visible disabled QAbstractButton/QAction has a non-empty toolTip or statusTip"
+    }
+  },
+  {
+    "id": "UX-28",
+    "theme": "Feedback & state",
+    "title": "Nothing is refused silently",
+    "rule": "When the app won't do something, it says what and why where the person is looking; a drop of something compatible does what it obviously means instead of refusing (a group set on a scene adds its member groups).",
+    "check": "test:addfixture_test::aFixturePastTheUniverseLimitIsRefused",
+    "checks": [
+      "test:addfixture_test::aFixturePastTheUniverseLimitIsRefused",
+      "test:showtreeview_test::refusedDropsSayWhy",
+      "test:monitor_test::aHeadThatCanLightNothingSaysWhy",
+      "test:focusmode_test::aPausedControllerSaysWhy",
+      "review"
+    ],
+    "enforced": true,
+    "why": "2026-11-03 (Q205): Add Fixture past universe 1024 silently added nothing. 2026-10-23 (Q86): a group set dropped on a Build scene was refused with no word.",
+    "example": {
+      "right": "\"Universe 1025 is past the limit (1024). Nothing was added.\"",
+      "wrong": "Dialog closes, no fixture"
+    }
+  },
+  {
+    "id": "UX-29",
+    "theme": "Feedback & state",
+    "title": "Red is for real problems",
+    "rule": "Red means something is wrong on a real rig; \"not set up yet\" or \"nothing patched\" is neutral grey.",
+    "check": "test:appviews_test::theReadinessChipIsGreyWithNoOutputs",
+    "checks": [
+      "test:appviews_test::theReadinessChipIsGreyWithNoOutputs"
+    ],
+    "enforced": true,
+    "why": "2026-10-23 (Q64): a new show with no outputs said red Not ready.",
+    "example": {
+      "right": "grey \"No outputs: preview only\"",
+      "wrong": "red \"Not ready\" on an empty show"
+    }
+  },
+  {
+    "id": "UX-30",
+    "theme": "Feedback & state",
+    "title": "Prompts are quiet lines, once",
+    "rule": "A suggestion goes in the notice bar with a button, once per session; a modal dialog is only for a destructive or blocking choice.",
+    "check": "test:appviews_test::goInDesignOffersOperateOnce",
+    "checks": [
+      "test:appviews_test::goInDesignOffersOperateOnce",
+      "review"
+    ],
+    "enforced": true,
+    "why": "2026-10-23 (Q92): GO in Design offers Operate in the notice bar, not a dialog.",
+    "example": {
+      "right": "Notice bar: You're in Design. Switch to Operate? [Switch]",
+      "wrong": "A modal box on every GO"
+    }
+  },
+  {
+    "id": "UX-31",
+    "theme": "Feedback & state",
+    "title": "One edit, one undo; ⌘Z says where it doesn't work",
+    "rule": "Every user action is one undo step (however many objects it touches), and where ⌘Z doesn't work Edit ▸ Undo is greyed with \"Nothing to undo on this tab\".",
+    "check": "test:showtreeview_test::everyActionIsOneUndoStep",
+    "checks": [
+      "test:showtreeview_test::everyActionIsOneUndoStep",
+      "test:appviews_test::editUndoSaysWhereItWorks",
+      "test:appviews_test::editUndoFollowsTheTabInFront"
+    ],
+    "enforced": true,
+    "why": "2026-10-23 (Q81) and 2026-10-24 (Q117): ⌘Z silently did nothing on some tabs, and one Keep took two undos.",
+    "example": {
+      "right": "Dragging a cue-list clip 6 s later: one Undo puts every cue back",
+      "wrong": "Undo restores half the cues; ⌘Z on Run does nothing, silently"
+    }
+  },
+  {
+    "id": "UX-32",
+    "theme": "Feedback & state",
+    "title": "Warnings keep their state visible",
+    "rule": "A warning is open (amber), meant (green, with who, when and note on hover) or not applicable (listed in Show Review under Accepted); answered warnings don't vanish.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-03 (Q210): answered cyc warnings disappeared from the cue.",
+    "example": {
+      "right": "cyc ✓ (hover: Branson, 11-03, intended wash)",
+      "wrong": "the warning gone with no trace"
+    }
+  },
+  {
+    "id": "UX-33",
+    "theme": "Feedback & state",
+    "title": "The footer tells the state of the rig",
+    "rule": "The footer always shows what the stage is showing (LIVE, Blind, Build look, holds), the venue, and one chip listing everything overriding the rig (Park, Highlight, Flash, Solo, Focus, Blind, Hold at end) that clears them with a click.",
+    "check": "test:appviews_test::theFooterSaysWhatLightsTheStage",
+    "checks": [
+      "test:appviews_test::theFooterSaysWhatLightsTheStage",
+      "test:appviews_test::theVenueChipIsInTheFooter",
+      "test:mainbar_test::oneChipListsAndClearsOverrides",
+      "test:mainbar_test::theOverridesChipLetsGoOfHighlightAndFocusMode"
+    ],
+    "enforced": true,
+    "why": "2026-10-24 (Q129) venue chip; 2026-11-03 (b7d0d24cb) stage chip: he couldn't tell what was on the output. 2026-10-23 (Q80): overrides were spread across several indicators.",
+    "example": {
+      "right": "LIVE 2.1 Verse · Venue: Lincoln HS · Overrides: Park 2, Solo ▸ Clear All",
+      "wrong": "Blind on with nothing in the footer; a Park light here, a Solo badge there"
+    }
+  },
+  {
+    "id": "UX-34",
+    "theme": "Layout",
+    "title": "No overlap or clipping at three sizes",
+    "rule": "Every screen, editor and dialog lays out without overlapping or clipped widgets at 1024×640, 1280×800 and 1920×1080, and the tab strip fits the window with no scroll arrows.",
+    "check": "test:layoutsanity_test",
+    "checks": [
+      "test:layoutsanity_test::everyScreenIsLaidOutCleanly",
+      "walker",
+      "test:layoutsanity_test::theTabStripFitsTheWindow"
+    ],
+    "enforced": true,
+    "why": "2026-11-03 (Q207): the colour picker's \"Wheel / ring\" row lay under other widgets. 2026-11-04 (3fa7b2d9e): tabs scrolled off a laptop screen.",
+    "example": {
+      "right": "every row readable at 1024×640",
+      "wrong": "a row drawn under the one below it"
+    }
+  },
+  {
+    "id": "UX-35",
+    "theme": "Layout",
+    "title": "Footer items share one line",
+    "rule": "The footer's right-side items sit on one line, centred, at equal height and padding, and never overlap.",
+    "check": "test:layoutsanity_test::theFooterChipsNeverOverlap",
+    "checks": [
+      "test:layoutsanity_test::theFooterChipsNeverOverlap",
+      "test:appviews_test::theFooterRightSideSharesOneLine"
+    ],
+    "enforced": true,
+    "why": "2026-11-04 (d8a0acac0) and again 2026-11-06: footer chips misaligned.",
+    "example": {
+      "right": "GM · Ready · Venue chips on one baseline",
+      "wrong": "one chip 3 px lower and taller than its neighbours"
+    }
+  },
+  {
+    "id": "UX-36",
+    "theme": "Layout",
+    "title": "Words people must read are never cut",
+    "rule": "State text, cue names and anything a lesson tells students to read is shown whole at the smallest window size.",
+    "check": "test:layoutsanity_test::theShowTreeShowsCueNamesWithFreshSettings",
+    "checks": [
+      "test:layoutsanity_test::theShowTreeShowsCueNamesWithFreshSettings",
+      "walker"
+    ],
+    "enforced": true,
+    "why": "2026-10-24 (Q115): the Run tab cut \"▷ STANDBY\" to \"▷ STA…\" though lesson 1.5 says to read it.",
+    "example": {
+      "right": "▷ STANDBY",
+      "wrong": "▷ STA…"
+    },
+    "patterns": {
+      "scope": "widget",
+      "require": "no elided text in state columns, chips or buttons"
+    }
+  },
+  {
+    "id": "UX-37",
+    "theme": "Layout",
+    "title": "Readable in every theme",
+    "rule": "Text, state colours and cue colours stay readable in every theme (Default, Blue, Red Shift, QLC+ Original, dark).",
+    "check": "test:appviews_test::textColoursReadInEveryTheme",
+    "checks": [
+      "test:appviews_test::textColoursReadInEveryTheme",
+      "test:mainbar_test::blackoutAndBlindLightUpInEveryTheme",
+      "test:cuerunner_test::textColoursOnEveryLine"
+    ],
+    "enforced": true,
+    "why": "2026-10-15 (270e59ecc) Windows themes and 2026-10-22 cue colours: text vanished on some themes.",
+    "example": {
+      "right": "a yellow cue colour drawn darker on a light theme so it reads",
+      "wrong": "yellow cue text on a white row"
+    }
+  },
+  {
+    "id": "UX-38",
+    "theme": "Layout",
+    "title": "Panels open inside the main window",
+    "rule": "Pickers and helper panels dock in the main window or open in front of it; nothing opens behind it.",
+    "check": "walker",
+    "checks": [
+      "walker",
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-10-23 (Q61): pickers opened behind the main window.",
+    "example": {
+      "right": "the colour picker docks beside the Look Editor",
+      "wrong": "the picker opens behind the main window"
+    },
+    "patterns": {
+      "scope": "widget",
+      "require": "every new top-level window is a child of the main window and is raised"
+    }
+  },
+  {
+    "id": "UX-39",
+    "theme": "Layout",
+    "title": "Plot overlays line up",
+    "rule": "Rulers, readouts, handles and selection rings on the plot sit on the thing they mark at every zoom and view.",
+    "check": "test:plotalignment_test",
+    "checks": [
+      "test:plotalignment_test"
+    ],
+    "enforced": true,
+    "why": "2026-10-27 (Q179): 13 of 27 Lighting Studio overlays were off.",
+    "example": {
+      "right": "a target's readout under the target at 4× zoom",
+      "wrong": "the readout a fixture-width off at 4×"
+    }
+  },
+  {
+    "id": "UX-40",
+    "theme": "Layout",
+    "title": "A UI change shows its before and after",
+    "rule": "A change to ui/, web pages or the rig view ships with before/after shots at 1024×640, 1280×800 and 1920×1080 that he reviews before merge.",
+    "check": "manual",
+    "checks": [
+      "manual"
+    ],
+    "enforced": false,
+    "why": "2026-11-03 (Q207): \"do we not do after-patch checking to see that the result matches intended behavior?\"",
+    "example": {
+      "right": "shots-041/<agent>/before-1280x800.png, after-1280x800.png ...",
+      "wrong": "\"gate=0\" as the only evidence for a layout change"
+    }
+  },
+  {
+    "id": "UX-41",
+    "theme": "Consistency across views",
+    "title": "One object, one menu",
+    "rule": "Right-clicking an object anywhere gives the place's own items on top, one separator, then the same kind block in the fixed order Open, Kind, Selection, Organise, Edit, Remove.",
+    "check": "test:contextmenus_test",
+    "checks": [
+      "test:contextmenus_test::aPaletteHasOneMenuEverywhere",
+      "test:contextmenus_test::aFixtureHasOneMenuEverywhere",
+      "test:contextmenus_test::sectionsLayOutInOrderWithOneSeparatorBetween"
+    ],
+    "enforced": true,
+    "why": "2026-11-03: \"a line on rig view or in tree .. should still have the same paradigm where the right click can edit all the things that I can in the build\".",
+    "example": {
+      "right": "Set to ▸ · None (off here) | Edit Palette · ... · Delete Palette…",
+      "wrong": "Delete in the middle; a different palette menu in the Show Tree"
+    }
+  },
+  {
+    "id": "UX-42",
+    "theme": "Consistency across views",
+    "title": "Duplicate means one thing and works on everything",
+    "rule": "⌘D is Duplicate in every list, no two application shortcuts share a key, and every kind of list item (cue, layer, hit, cue list, production, reusable cue, palette, truss, target) offers Duplicate, Copy and Paste.",
+    "check": "test:appviews_test::noTwoApplicationShortcutsShareAKey",
+    "checks": [
+      "test:appviews_test::noTwoApplicationShortcutsShareAKey",
+      "test:appviews_test::ctrlDInBuildListsDuplicates",
+      "test:appviews_test::ctrlDOnThePlotDuplicates",
+      "test:appviews_test::ctrlDOnTheShowTreeDuplicates",
+      "test:showtreeview_test::listsProductionsAndReusableCuesDuplicateCopyAndPaste",
+      "test:monitor_test::targetsDuplicateAndCopyPaste",
+      "review"
+    ],
+    "enforced": true,
+    "why": "2026-11-04 (Q214): ⌘D meant Duplicate, Dump DMX and Delete Universe in three places. 2026-11-04 (Q215): a festival cut of a cue list meant rebuilding it.",
+    "example": {
+      "right": "⌘D duplicates the selected universe's row; ⌫ deletes it",
+      "wrong": "⌘D deletes a universe on Connections"
+    }
+  },
+  {
+    "id": "UX-43",
+    "theme": "Consistency across views",
+    "title": "One selection everywhere",
+    "rule": "The plot, Workbench, Fixtures, Flash/Park/Highlight and the pad act on one selection, like an Eos magic sheet.",
+    "check": "test:selectionsync_test",
+    "checks": [
+      "test:selectionsync_test"
+    ],
+    "enforced": true,
+    "why": "2026-11-02 (Q201): each view kept its own selection.",
+    "example": {
+      "right": "select SL towers on the plot; the Workbench shows them selected",
+      "wrong": "the Workbench still shows the previous pick"
+    }
+  },
+  {
+    "id": "UX-44",
+    "theme": "Consistency across views",
+    "title": "Surface area stays flat",
+    "rule": "A new menu item, tab, panel or mode replaces one or is justified in writing; the menu-item count is flat or falling each release; a new top-level tab or playback path needs his explicit yes.",
+    "check": "review",
+    "checks": [
+      "review",
+      "manual"
+    ],
+    "enforced": false,
+    "why": "2026-10-23 review (102-item menus, 8+ tabs), freeze Q82; 2026-11-02 (Q200): two new entries folded.",
+    "example": {
+      "right": "Calling Script… folded under More ▾",
+      "wrong": "a new top-level \"Tools\" menu"
+    }
+  },
+  {
+    "id": "UX-45",
+    "theme": "Consistency across views",
+    "title": "One GO path",
+    "rule": "Every GO (keys, Run tab, VC Cue Runner, pad, OSC, web) ends in the same call with its route, so they behave the same.",
+    "check": "test:appviews_test::everyRouteTakesTheOneGoPath",
+    "checks": [
+      "test:appviews_test::everyRouteTakesTheOneGoPath",
+      "test:padrun_test::xboxAndDualSenseSendTheSameCommands"
+    ],
+    "enforced": true,
+    "why": "2026-10-23 (Q74), built 2026-10-31: GO did slightly different things from different places.",
+    "example": {
+      "right": "pad GO and Space both fire App::runCommand()",
+      "wrong": "a VC button that steps the chaser directly"
+    }
+  },
+  {
+    "id": "UX-46",
+    "theme": "Consistency across views",
+    "title": "Solo and Play on every cue and layer page",
+    "rule": "Solo and Play are available on every cue and layer page, docked or not (greyed with a reason in Operate).",
+    "check": "test:showtreeworkbench_test::soloAndPlayStayAvailable",
+    "checks": [
+      "test:showtreeworkbench_test::soloAndPlayStayAvailable",
+      "test:showtreeworkbench_test::soloAndPlayGreyInOperate"
+    ],
+    "enforced": true,
+    "why": "2026-11-01: \"the solo in layer is working great .. that's a huge plus\"; Solo had silently gone missing from one page.",
+    "example": {
+      "right": "Solo on the docked Workbench's layer row",
+      "wrong": "Solo only on the undocked page"
+    }
+  },
+  {
+    "id": "UX-47",
+    "theme": "Consistency across views",
+    "title": "Positions relative to the stage",
+    "rule": "Where a light points is expressed against stage targets and lines (Aim, Formation) before raw pan/tilt.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-01: \"tying the layout to the targets .. that's gonna help a lot\"; Q197/Q206 split Aim (where) from Formation (how they spread).",
+    "example": {
+      "right": "Aim: DSC · Formation: pairs, crossed",
+      "wrong": "Pan 127 / Tilt 64 typed per fixture"
+    }
+  },
+  {
+    "id": "UX-48",
+    "theme": "Consistency across views",
+    "title": "QLC+ habits stay first-class",
+    "rule": "A QLC+ 4 show opens as it was and sends the same DMX; nothing nags or converts on load; upgrading is one menu item when asked.",
+    "check": "test:appviews_test::aShowWithoutAViewOpensInItsDefault",
+    "checks": [
+      "test:appviews_test::aShowWithoutAViewOpensInItsDefault",
+      "test:appviews_test::autoOpenFollowsWhoSavedTheShow",
+      "test:stockroundtrip_test"
+    ],
+    "enforced": true,
+    "why": "2026-10-22 (Q29) and 2026-10-23 (Q63, Q76): never nag, never convert on load.",
+    "example": {
+      "right": "a 4.x show opens in Classic QLC+, shutters as saved",
+      "wrong": "\"Convert this show now?\" on open"
+    }
+  },
+  {
+    "id": "UX-49",
+    "theme": "Safety in Operate",
+    "title": "Operate refuses edits from every input",
+    "rule": "In Operate, edits are refused from menus, the command line, AI Assist, the web page and the pad alike, each with a line saying so.",
+    "check": "test:aiassist_test::askInOperateSendsNothing",
+    "checks": [
+      "test:aiassist_test::askInOperateSendsNothing",
+      "test:mainbar_test::operateLocksProgrammingNotTheGrandMaster",
+      "test:mainbar_test::anOperateConsolesProgrammerFaderChangesNothing",
+      "walker"
+    ],
+    "enforced": true,
+    "why": "2026-11-03 (Q202): typed effect fades still worked in Operate.",
+    "example": {
+      "right": "\"effect fade 2\" in Operate: \"Edits are off in Operate.\"",
+      "wrong": "the fade changes during the show"
+    }
+  },
+  {
+    "id": "UX-50",
+    "theme": "Safety in Operate",
+    "title": "Esc is not a stop",
+    "rule": "Plain Esc never stops playback; Stop All is ⌘⇧Esc.",
+    "check": "test:appviews_test::plainEscIsNoPlaybackAction",
+    "checks": [
+      "test:appviews_test::plainEscIsNoPlaybackAction"
+    ],
+    "enforced": true,
+    "why": "2026-10-25 (c8f278d0b): Esc to close a panel stopped the running list.",
+    "example": {
+      "right": "Esc closes the picker; the cue keeps running",
+      "wrong": "Esc closes the picker and blacks the stage"
+    }
+  },
+  {
+    "id": "UX-51",
+    "theme": "Safety in Operate",
+    "title": "Focusing during a show is quiet",
+    "rule": "Focusing in Operate shows nothing to the audience: no blink or dim, only the running cue, and the hold lets go on GO.",
+    "check": "test:refinesession_test::operateIsQuietOnARunningList",
+    "checks": [
+      "test:refinesession_test::operateIsQuietOnARunningList"
+    ],
+    "enforced": true,
+    "why": "2026-10-24 (Q130): Refine in Operate blinked and dimmed lights live.",
+    "example": {
+      "right": "a touch-up on cue 3 changes only that light, smoothly",
+      "wrong": "every other light dims to 15% mid-song"
+    }
+  },
+  {
+    "id": "UX-52",
+    "theme": "Safety in Operate",
+    "title": "A hold never confirms a warning",
+    "rule": "Holding a pad button may act, but never answers a warning or confirmation; that takes a deliberate press.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-10-24 (Q132): a held A could confirm the shared-palette warning and change every scene.",
+    "example": {
+      "right": "hold A (1.0 s) saves; the shared-palette warning still waits for a press",
+      "wrong": "hold A saves and confirms the warning in one go"
+    }
+  },
+  {
+    "id": "UX-53",
+    "theme": "Safety in Operate",
+    "title": "Safety lines always speak",
+    "rule": "A controller dropping out or coming back is announced, and warnings, refusals, \"controller lost\" and the venue ask are spoken even when feedback is Lights only, with a distinct rumble/light pattern.",
+    "check": "test:focuscallsui_test::theVoiceNeverDropsAConfirmation",
+    "checks": [
+      "test:focuscallsui_test::theVoiceNeverDropsAConfirmation",
+      "test:focuscallsui_test::theVoiceHearsTheAnnouncements",
+      "test:appviews_test::aControllerComingAndGoingIsSaid"
+    ],
+    "enforced": true,
+    "why": "2026-10-24 (Q131): in Lights only a Start on stage got no answer. 2026-10-24 (88409a2a7, Q131): a pad going to sleep froze the session with no word.",
+    "example": {
+      "right": "Lights only: \"Controller lost\" is still said",
+      "wrong": "Lights only: silence when the pad drops"
+    }
+  },
+  {
+    "id": "UX-54",
+    "theme": "Safety in Operate",
+    "title": "Remote GO is off until the show allows it",
+    "rule": "A GO from the phone or web page is refused until Show Settings allow remote GO, and the Operate PIN still applies.",
+    "check": "test:appviews_test::aWebGoIsRefusedUntilTheShowAllowsIt",
+    "checks": [
+      "test:appviews_test::aWebGoIsRefusedUntilTheShowAllowsIt",
+      "test:appviews_test::aPinKeepsTheShowInOperate"
+    ],
+    "enforced": true,
+    "why": "2026-11-03 (Q204).",
+    "example": {
+      "right": "web GO: \"Remote GO is off for this show\"",
+      "wrong": "anyone on the Wi-Fi can GO"
+    }
+  },
+  {
+    "id": "UX-55",
+    "theme": "Safety in Operate",
+    "title": "A locked plot moves nothing",
+    "rule": "With the plot locked, nothing moves or drops, targets included, unless \"Targets stay adjustable\" is on.",
+    "check": "test:monitor_test::aLockedPlotRefusesADrag",
+    "checks": [
+      "test:monitor_test::aLockedPlotRefusesADrag",
+      "test:monitor_test::aDropOnALockedPlotIsRefused"
+    ],
+    "enforced": true,
+    "why": "2026-10-27 (Q183): a locked platform still saved where it was dropped.",
+    "example": {
+      "right": "drag on a locked plot: nothing moves, the lock flashes",
+      "wrong": "the truss snaps to where it was dropped on release"
+    }
+  },
+  {
+    "id": "UX-56",
+    "theme": "Safety in Operate",
+    "title": "Fixed means checked on his real path",
+    "rule": "A fix for something he hit on his rig is \"fixed\" only after it is checked on his show, patch and device layer; otherwise the report says exactly what was and wasn't checked.",
+    "check": "manual",
+    "checks": [
+      "manual"
+    ],
+    "enforced": false,
+    "why": "2026-11-04: the follow spot was reported fixed three times on faked input; \"DO NOT REPORT FIXED UNTIL YOU HAVE VALIDATED THAT WORKS\".",
+    "example": {
+      "right": "\"HID plugin on dink, DanceHysteria-0.6, stick moved the spot: PASS\"",
+      "wrong": "\"fixed (unit test injects stick values)\""
+    }
+  },
+  {
+    "id": "UX-57",
+    "theme": "Teaching & course voice",
+    "title": "Students are crew",
+    "rule": "Student text uses real theatre vocabulary defined once, normal sentence rhythm, and no kid-speak, cheerleading, reassurance or talk about style.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-10-21: the course's talk about tone and short sentences was \"a bit condescending\".",
+    "example": {
+      "right": "\"A cue that tracks keeps its levels until a later cue changes them.\"",
+      "wrong": "\"Great job! Don't worry, tracking is easy!\""
+    },
+    "patterns": {
+      "scope": "course_student",
+      "forbid_regex": "(?i)\\b(great job|awesome|don't worry|no worries|you've got this|short sentences|super easy)\\b|!{2,}"
+    }
+  },
+  {
+    "id": "UX-58",
+    "theme": "Teaching & course voice",
+    "title": "Why first, one idea per step",
+    "rule": "Every lesson, app lessons included, opens with why it matters; then one idea per step, splitting a long lesson rather than cutting a fundamental.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-10-29: \"they need to know the WHY of what they're doing before the HOW.\" 2026-10-28: \"the course should be simple and concise\" (handouts ran ~1,600 words).",
+    "example": {
+      "right": "\"Tracking saves re-setting every light each cue.\" then 3. Select the towers. 4. Press Aim.",
+      "wrong": "\"Step 1: click + Cue, select the towers, press Aim, choose DSC and save.\""
+    }
+  },
+  {
+    "id": "UX-59",
+    "theme": "Teaching & course voice",
+    "title": "One student link per lesson, no teacher material",
+    "rule": "A student gets one link per lesson that holds everything for it and leads nowhere near teacher guides or answer keys.",
+    "check": "manual",
+    "checks": [
+      "test:check-doc-links.py",
+      "manual"
+    ],
+    "enforced": false,
+    "why": "2026-10-28 and 2026-10-29 (Q187): the course site showed answer keys to everyone.",
+    "example": {
+      "right": "sandinak.github.io/qlcconsole/class/1-1/",
+      "wrong": "a lesson page linking to TEACHER.md"
+    },
+    "patterns": {
+      "scope": "course_student",
+      "forbid_regex": "(?i)answer key|teacher guide|TEACHER\\.md"
+    }
+  },
+  {
+    "id": "UX-60",
+    "theme": "Teaching & course voice",
+    "title": "Help ships with the feature",
+    "rule": "A feature lands with its help page (and a course note where it applies); every help link resolves, no bare <tag> eats a page, and screenshots are retaken after a UI change (tools/help-shots.sh, Blue theme) with callouts that match the key.",
+    "check": "test:helpbrowser_test",
+    "checks": [
+      "test:helpbrowser_test::everyLinkInTheGuidesGoesSomewhere",
+      "test:helpbrowser_test::everyGuideIsBundledAndLoads",
+      "review",
+      "test:help-shots.sh",
+      "manual"
+    ],
+    "enforced": true,
+    "why": "2026-10-10 in-app help; 2026-10-28 strategy guardrail 2: no \"help later\". 2026-10-23 (Q72): pictures still showed \"Programming\" and a clipped Look Editor.",
+    "example": {
+      "right": "\"WLED: &lt;effect&gt;\" in the guide",
+      "wrong": "\"WLED: <effect>\" (the rest of the page disappears)"
+    }
+  },
+  {
+    "id": "UX-61",
+    "theme": "Ease of use",
+    "title": "Findable from where you work",
+    "rule": "A feature is reachable, or pointed to, from the place a person does that work: its control, or one line naming where it is, is on that screen.",
+    "check": "walker",
+    "checks": [
+      "walker",
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: he looked for song sections on the cue list (right-click a cue, the list's page); they are switched on only by Numbering on the production's page, and nothing on the list pointed there. The hint on the list page is on feat/042-section-hint.",
+    "example": {
+      "right": "The list's page: \"Sections follow the production's Numbering (None).\" with a link to it",
+      "wrong": "The list's page with no word of sections; Numbering only on the production's page"
+    }
+  },
+  {
+    "id": "UX-62",
+    "theme": "Ease of use",
+    "title": "Testable where it's built",
+    "rule": "Anything you build can be tried from where you build it, in Design, without switching to Operate.",
+    "check": "walker",
+    "checks": [
+      "walker",
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: he needed to test a hit's key while programming, and keys fired only in Operate; they now fire in Design when the hit is armed (the Run tab's list, or selected in the Show Tree), on feat/042-key-triggers.",
+    "example": {
+      "right": "A hit selected in the Show Tree, Design: F7 plays it",
+      "wrong": "F7 does nothing until Operate"
+    }
+  },
+  {
+    "id": "UX-64",
+    "theme": "Ease of use",
+    "title": "Read it from the device",
+    "rule": "Configuration a device already holds is read from it, not typed in by hand; typing stays as the fallback.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: a WLED fountain's sprinkle-loop spans could only be typed into a table; Read Segments now imports them from the device and Edit Spans… stays for changes (feat/042-fountain-sprinkles). \"Don't make him count what the device knows.\"",
+    "example": {
+      "right": "Spans: [Read Segments] (6 spans from the WLED) · Edit Spans…",
+      "wrong": "Spans: type First LED and Last LED for each of 6 spans"
+    }
+  },
+  {
+    "id": "UX-65",
+    "theme": "Ease of use",
+    "title": "Auto is right for the real gear and shows its number",
+    "rule": "An Auto setting works its value out from the gear as it is set up, and shows the number it chose.",
+    "check": "review",
+    "checks": [
+      "walker",
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: a wand's Auto turns assumed LED tape and drew half a turn for a 16 ft fairy string; Auto now works from the string's length and shows \"Auto (58.5)\" (feat/042-wand-spacing).",
+    "example": {
+      "right": "Turns: Auto (58.5)",
+      "wrong": "Turns: Auto  (half a turn drawn on a 16 ft string)"
+    }
+  },
+  {
+    "id": "UX-66",
+    "theme": "Ease of use",
+    "title": "Easy to find, quick to use",
+    "rule": "A student finds a core task from where they are working without being told, and a professional isn't slowed down doing it.",
+    "check": "walker",
+    "checks": [
+      "walker",
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07, approving the flows: \"this tool will be used by students and professionals .. it needs some level of ease of use while being somewhat comprehensive .. if I have to explain everything all the time, even with training, then we've failed in the design.\" The checks are under Complexity and ease of use; the flows under Flows.",
+    "example": {
+      "right": "Number a show into songs: 5 clicks, each control on the screen before it",
+      "wrong": "A core flow whose next control is found only in the help"
+    }
+  }
+]

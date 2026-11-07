@@ -327,6 +327,13 @@ if(NOT QLC_NO_TESTS)
     add_subdirectory(tools/artnetprobe)
 endif()
 
+# The UX walker (docs/dev/UX_WALKER.md): every screen, menu and context menu
+# of a real show, recorded and checked. Opt-in: slow, never in the gate.
+option(QLC_UXWALK "Build the UX walker (tools/uxwalk)" OFF)
+if(QLC_UXWALK AND NOT qmlui)
+    add_subdirectory(tools/uxwalk)
+endif()
+
 # Qt Test compiles each test's main() with its build dir's ABSOLUTE path
 # (QT_TESTCASE_BUILDDIR, for QFINDTESTDATA), so every test program's main
 # source was a ccache miss in every new copy of the tree -- the gate builds in
