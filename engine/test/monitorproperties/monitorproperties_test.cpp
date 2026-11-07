@@ -3950,6 +3950,49 @@ void MonitorProperties_Test::aHeldWandMovesWithItsPerson()
     QVERIFY(qAbs(mp.fixtureRigPosition(fid).x() - 0.5f) < 1e-4f);
 }
 
+void MonitorProperties_Test::aFairyStringWandFromItsTip()
+{
+    // A 5 ft staff, 1 in across, a 16 ft fairy string of 50 LEDs from the tip.
+    MonitorProperties mp;
+    mp.setFixturePosition(5, 0, 0, QVector3D(0.0f, 0.0f, 0.0f));
+    FixtureRigProps rp;
+    rp.pixelPath = PixelPath::Wand;
+    rp.wandLength = 1.524f;
+    rp.wandStripLength = 4.877f;
+    rp.wandDiameter = 0.0254f;
+    rp.wandFromTop = true;
+    mp.setFixtureRigProps(5, rp);
+
+    // Auto turns from the string, not from LED tape (which gives half a turn).
+    const double along = 1.524 * (1.0 - double(PixelPath::kWandGrip));
+    const double want = qSqrt(4.877 * 4.877 - along * along) / (M_PI * 0.0254);
+    QVERIFY(qAbs(PixelPath::wandTurns(rp, 50) - want) < 1e-3);
+    QVERIFY(want > 55.0 && want < 62.0);
+    FixtureRigProps tape = rp;
+    tape.wandStripLength = 0.0f;
+    QCOMPARE(PixelPath::wandTurns(tape, 50), 0.5);
+    FixtureRigProps set = rp;
+    set.pixelTurns = 12.0f;
+    QCOMPARE(PixelPath::wandTurns(set, 50), 12.0);
+
+    // LED 1 at the tip, the last at the grip, wound round the staff's radius.
+    QVector3D b, t;
+    QVERIFY(PixelPath::wandEnds(&mp, 5, b, t));
+    const QVector<QVector3D> leds = PixelPath::positions(nullptr, &mp, 5, 50);
+    QCOMPARE(leds.size(), 50);
+    QVERIFY(qAbs(leds.first().z() - t.z()) < 1e-3f);
+    QVERIFY(qAbs(leds.last().z() - (b.z() + 1.524f * PixelPath::kWandGrip)) < 1e-3f);
+    for (int i = 1; i < leds.size(); ++i)
+        QVERIFY(leds.at(i).z() < leds.at(i - 1).z());
+    QVERIFY(qAbs(QVector2D(leds.at(7).x(), leds.at(7).y()).length() - (0.0127f + 0.002f)) < 1e-4f);
+
+    // From the grip (the default), the same string runs up.
+    rp.wandFromTop = false;
+    mp.setFixtureRigProps(5, rp);
+    const QVector<QVector3D> up = PixelPath::positions(nullptr, &mp, 5, 50);
+    QVERIFY(up.first().z() < up.last().z());
+}
+
 void MonitorProperties_Test::fountainPixelsAndWandsRoundTrip()
 {
     MonitorProperties mp;
@@ -3963,6 +4006,9 @@ void MonitorProperties_Test::fountainPixelsAndWandsRoundTrip()
     rp.heldBy = 3;
     rp.holdHeight = 1.1f;
     rp.holdTilt = 25.0f;
+    rp.wandStripLength = 4.877f;
+    rp.wandDiameter = 0.032f;
+    rp.wandFromTop = true;
     mp.setFixturePosition(7, 0, 0, QVector3D(1, 2, 0));
     mp.setFixtureRigProps(7, rp);
     FixtureRigProps plain;
@@ -3989,10 +4035,16 @@ void MonitorProperties_Test::fountainPixelsAndWandsRoundTrip()
     QCOMPARE(r2.heldBy, quint32(3));
     QVERIFY(qAbs(r2.holdHeight - 1.1f) < 1e-4f);
     QCOMPARE(r2.holdTilt, 25.0f);
+    QVERIFY(qAbs(r2.wandStripLength - 4.877f) < 1e-4f);
+    QVERIFY(qAbs(r2.wandDiameter - 0.032f) < 1e-4f);
+    QVERIFY(r2.wandFromTop);
     // Unset stays unset: no fire height, no path, nobody holding it.
     const FixtureRigProps r3 = mp2.fixtureRigProps(8);
     QVERIFY(r3.flameHeight < 0.0f);
     QCOMPARE(r3.pixelPath, 0);
     QVERIFY(!r3.isHeld());
     QCOMPARE(r3.wandLength, 1.2f);
+    QCOMPARE(r3.wandStripLength, 0.0f);
+    QCOMPARE(r3.wandDiameter, 0.025f);
+    QVERIFY(!r3.wandFromTop);
 }

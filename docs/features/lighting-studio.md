@@ -748,22 +748,35 @@ a fixture on a path draws no body or beam in the rig view.
 
 ### Wand
 
-A **wand** is a staff with an LED strip wound round it, driven by a WLED.
-Set a pixel fixture's **Pixel path** to **Wand (wound round a staff)**:
+A **wand** is a staff with an LED strip or fairy string wound round it,
+driven by a WLED. Set a pixel fixture's **Pixel path** to **Wand (wound round
+a staff)**. Every length below is shown and typed in your unit (Settings ▸
+Units):
 
-- **Wand length**: the staff, 1.2 m unless set.
-- **Turns**: how many times the strip goes round. Auto works it out from
-  the number of LEDs at 2 cm apart on a 25 mm staff (144 LEDs on 1.2 m is
-  about 33 turns).
+- **Wand length**: the staff, 4 ft (1.2 m) unless set.
+- **String length**: how long the lit string is, first LED to last. A fairy
+  string of 50 LEDs on 16 ft is 16 ft; with the LED count this says how far
+  apart they are. Left at **LED tape**, the LEDs are taken as tape, 2 cm
+  (¾ in) apart.
+- **Staff diameter**: how thick the staff is under the string, 1 in (25 mm)
+  unless set.
+- **First LED at**: the end the data comes in. **Top (the tip)** runs the
+  string down from the tip, so an effect starts at the top; **Bottom (the
+  grip)**, the default, runs it up.
+- **Turns**: how many times the string goes round. **Auto** works it out
+  from the string length and staff diameter, and shows its number, for
+  example **Auto (58.0)** for 16 ft of string on a 5 ft, 1 in staff. Set a
+  number to override it (count the wraps on the real staff).
 - **Held by**: a Person target. The wand is then in their hand: its middle
-  **Held at** 1.0 m above where they stand, a forearm in front of them,
-  **Leaning** 20° toward the audience, and it goes where they go. **Nobody**:
-  it stands upright where it was placed.
+  **Held at** 3 ft 3 in (1.0 m) above where they stand, a forearm in front
+  of them, **Leaning** 20° toward the audience, and it goes where they go.
+  **Nobody**: it stands upright where it was placed.
 
-The rig view draws a thin dark staff with the LEDs glowing on it in their
-live colours; the plot a short line with coloured dots. A wand throws no
-beam. Per-cue blocking positions aren't built yet: a held wand follows its
-performer's position on the plot.
+The string starts a hand's width above the bottom of the staff and runs to
+the tip. The rig view draws a thin dark staff with the LEDs glowing on it in
+their live colours; the plot a short line with coloured dots. A wand throws
+no beam. Per-cue blocking positions aren't built yet: a held wand follows
+its performer's position on the plot.
 
 ## Mounting a fixture
 

@@ -19054,6 +19054,65 @@ void Monitor_Test::aWledRingLaysItsPixelsOnTheWallTop()
     delete doc;
 }
 
+void Monitor_Test::aWandsFairyStringFieldsWorkOutItsTurns()
+{
+    // The real staff: 50 fairy LEDs on 16 ft round a 5 ft staff, data from the tip.
+    const MeasurementUnits::LengthUnit unitWas = MeasurementUnits::preferredLength();
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
+    auto restore = qScopeGuard([unitWas]() { MeasurementUnits::setPreferredLength(unitWas); });
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *wand = makeLedString(doc, 50, "Staff", 1);
+    QVERIFY(wand != nullptr);
+    props->setFixturePosition(wand->id(), 0, 0, QVector3D(1000.0f, 1000.0f, 0.0f));
+    FixtureRigProps rp = props->fixtureRigProps(wand->id());
+    rp.pixelPath = PixelPath::Wand;
+    rp.wandLength = 1.524f;
+    props->setFixtureRigProps(wand->id(), rp);
+    {
+        QWidget parent;
+        Monitor *mon = new Monitor(&parent, doc);
+        QWidget host;
+        QFormLayout *form = new QFormLayout(&host);
+        FixtureFields fields(mon, form, &host);
+        fields.setFixtures({ wand->id() }, wand->id());
+        QVERIFY(!fields.m_wandStrip->isHidden());
+        QVERIFY(!fields.m_wandDiameter->isHidden());
+        QVERIFY(!fields.m_wandStart->isHidden());
+        // Not set yet: LED tape, and Auto says the half turn that gives.
+        QCOMPARE(fields.m_wandStrip->text(), QString("LED tape"));
+        QCOMPARE(fields.m_pixelTurns->specialValueText(), QString("Auto (0.5)"));
+
+        // In feet: 16 ft of string, a 1 in staff, first LED at the tip.
+        fields.m_wandStrip->setValue(16.0);
+        fields.m_wandDiameter->setValue(1.0 / 12.0);
+        fields.m_wandStart->setCurrentIndex(fields.m_wandStart->findData(true));
+        const FixtureRigProps now = props->fixtureRigProps(wand->id());
+        QVERIFY(qAbs(now.wandStripLength - 4.8768f) < 1e-3f);
+        QVERIFY(qAbs(now.wandDiameter - 0.0254f) < 1e-4f);
+        QVERIFY(now.wandFromTop);
+        fields.reload();
+        const double turns = PixelPath::wandTurns(now, 50);
+        QVERIFY(turns > 55.0 && turns < 62.0);
+        QCOMPARE(fields.m_pixelTurns->specialValueText(),
+                 QString("Auto (%1)").arg(turns, 0, 'f', 1));
+        const QVector<QVector3D> leds = PixelPath::positions(doc, props, wand->id(), 50);
+        QVERIFY(leds.first().z() > leds.last().z());          // LED 1 at the tip
+
+        const QString shot = qEnvironmentVariable("QLC_WAND_SHOT");
+        if (!shot.isEmpty())
+            foreach (int w, QList<int>() << 320 << 420 << 560)
+            {
+                host.resize(w, host.sizeHint().height());
+                host.show();
+                QCoreApplication::processEvents();
+                host.grab().save(QString("%1-%2.png").arg(shot).arg(w));
+            }
+        delete mon;
+    }
+    delete doc;
+}
+
 void Monitor_Test::aHeldWandGoesWithItsPerformer()
 {
     Doc *doc = new Doc(this);

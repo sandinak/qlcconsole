@@ -63,8 +63,10 @@ LEDs) already have. Pixels light no stage.
 ## The wand
 
 Pixel path **Wand**: a staff `wandLength` long (1.2 m), its strip a helix of
-`pixelTurns` turns (0 = from the LED count at 2 cm spacing round a 25 mm
-staff). Drawn as a thin dark staff with the LEDs on it; in the plot a short
+`pixelTurns` turns from `kWandGrip` (8%) above the butt to the tip
+(`PixelPath::wandTurns()`; 0 = Auto: `wandStripLength` of string, or the LED
+count at 2 cm spacing as tape, round a staff `wandDiameter` across, 25 mm).
+`wandFromTop` puts LED 1 at the tip (the data end), the string running down. Drawn as a thin dark staff with the LEDs on it; in the plot a short
 line with coloured dots. No beam.
 
 **Held by** (`heldBy`, a Person target): its middle is at the person's

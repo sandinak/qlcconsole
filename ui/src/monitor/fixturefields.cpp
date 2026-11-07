@@ -574,7 +574,9 @@ void FixtureFields::hideAll()
                         m_light->lightRow(), static_cast<QWidget *>(m_light->glassCombo()),
                         m_dmxBox, static_cast<QWidget *>(m_dmxNote), m_wledBox,
                         static_cast<QWidget *>(m_pixelPath), static_cast<QWidget *>(m_pixelTurns),
-                        static_cast<QWidget *>(m_wandLength), static_cast<QWidget *>(m_heldBy),
+                        static_cast<QWidget *>(m_wandLength), static_cast<QWidget *>(m_wandStrip),
+                        static_cast<QWidget *>(m_wandDiameter), static_cast<QWidget *>(m_wandStart),
+                        static_cast<QWidget *>(m_heldBy),
                         static_cast<QWidget *>(m_holdHeight), static_cast<QWidget *>(m_holdTilt) })
         row(w, false);
 }
@@ -968,7 +970,8 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     m_pixelTurns->setDecimals(1);
     m_pixelTurns->setSpecialValueText(tr("Auto"));
     m_pixelTurns->setToolTip(tr("Turns of the strip round the flame or the staff. Auto: a wand's "
-                                "from its LEDs at %1 apart, a flame's about one every %2")
+                                "from its string length and staff diameter (no string length: "
+                                "LED tape, %1 apart), a flame's about one every %2")
                                 .arg(MeasurementUnits::formatLength(20.0), MeasurementUnits::formatLength(300.0)));
     form->addRow(tr("Turns:"), m_pixelTurns);
 
@@ -976,6 +979,31 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     m_wandLength->setObjectName(QStringLiteral("fixtureWandLength"));
     m_wandLength->setRange(0.1 * toDisp, 5.0 * toDisp);
     form->addRow(tr("Wand length:"), m_wandLength);
+
+    m_wandStrip = new FeetInchesSpinBox(isFeet, parent);
+    m_wandStrip->setObjectName(QStringLiteral("fixtureWandStrip"));
+    m_wandStrip->setRange(0.0, 50.0 * toDisp);
+    m_wandStrip->setSpecialValueText(tr("LED tape"));
+    m_wandStrip->setToolTip(tr("How long the lit string is, first LED to last (a fairy string's "
+                               "length). With the LED count it sets how far apart they are, and "
+                               "Auto turns follow. Empty: LED tape, %1 apart")
+                               .arg(MeasurementUnits::formatLength(20.0)));
+    form->addRow(tr("String length:"), m_wandStrip);
+
+    m_wandDiameter = new FeetInchesSpinBox(isFeet, parent);
+    m_wandDiameter->setObjectName(QStringLiteral("fixtureWandDiameter"));
+    m_wandDiameter->setDecimals(5);   // a fraction of an inch, kept exact
+    m_wandDiameter->setRange(0.005 * toDisp, 0.2 * toDisp);
+    m_wandDiameter->setToolTip(tr("How thick the staff is where the string is wound round it"));
+    form->addRow(tr("Staff diameter:"), m_wandDiameter);
+
+    m_wandStart = new QComboBox(parent);
+    m_wandStart->setObjectName(QStringLiteral("fixtureWandStart"));
+    m_wandStart->addItem(tr("Bottom (the grip)"), false);
+    m_wandStart->addItem(tr("Top (the tip)"), true);
+    m_wandStart->setToolTip(tr("Where the first LED is: the end the data comes in. Effects run "
+                               "from there along the string"));
+    form->addRow(tr("First LED at:"), m_wandStart);
 
     m_heldBy = new QComboBox(parent);
     m_heldBy->setObjectName(QStringLiteral("fixtureHeldBy"));
@@ -1022,6 +1050,16 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     connect(m_wandLength, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [each, toDisp](double v) {
         each(QStringLiteral("wandLength"), [v, toDisp](FixtureRigProps &rp) { rp.wandLength = float(v / toDisp); });
     });
+    connect(m_wandStrip, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [each, toDisp](double v) {
+        each(QStringLiteral("wandStripLength"), [v, toDisp](FixtureRigProps &rp) { rp.wandStripLength = float(v / toDisp); });
+    });
+    connect(m_wandDiameter, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [each, toDisp](double v) {
+        each(QStringLiteral("wandDiameter"), [v, toDisp](FixtureRigProps &rp) { rp.wandDiameter = float(v / toDisp); });
+    });
+    connect(m_wandStart, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, each](int) {
+        const bool top = m_wandStart->currentData().toBool();
+        each(QStringLiteral("wandFromTop"), [top](FixtureRigProps &rp) { rp.wandFromTop = top; });
+    });
     connect(m_heldBy, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, each](int) {
         const quint32 who = m_heldBy->currentData().toUInt();
         each(QStringLiteral("heldBy"), [who](FixtureRigProps &rp) { rp.heldBy = who; });
@@ -1052,7 +1090,8 @@ void FixtureFields::showPixelRows(quint32 fid)
             if (QStandardItem *it = model->item(k))
                 it->setEnabled(!PixelPath::needsFountain(k) || inFountain || rp.pixelPath == k);
     const QSignalBlocker b1(m_pixelPath), b2(m_pixelTurns), b3(m_wandLength), b4(m_heldBy),
-                         b5(m_holdHeight), b6(m_holdTilt);
+                         b5(m_holdHeight), b6(m_holdTilt), b7(m_wandStrip), b8(m_wandDiameter),
+                         b9(m_wandStart);
     m_pixelPath->setCurrentIndex(qMax(0, m_pixelPath->findData(rp.pixelPath)));
     row(m_pixelPath, true);
     const bool wound = rp.pixelPath == PixelPath::Wand || rp.pixelPath == PixelPath::FlameSpiral;
@@ -1061,6 +1100,20 @@ void FixtureFields::showPixelRows(quint32 fid)
     const bool wand = rp.pixelPath == PixelPath::Wand;
     m_wandLength->setValue(double(rp.wandLength) * toDisp);
     row(m_wandLength, wand);
+    m_wandStrip->setValue(double(rp.wandStripLength) * toDisp);
+    row(m_wandStrip, wand);
+    m_wandDiameter->setValue(double(rp.wandDiameter) * toDisp);
+    row(m_wandDiameter, wand);
+    m_wandStart->setCurrentIndex(rp.wandFromTop ? 1 : 0);
+    row(m_wandStart, wand);
+    if (wand && rp.pixelTurns <= 0.0f)
+    {
+        // Auto: say what it worked out, so the number can be checked on the real staff.
+        const double turns = PixelPath::wandTurns(rp, PixelPathDecor::ledCount(doc, fid));
+        m_pixelTurns->setSpecialValueText(tr("Auto (%1)").arg(turns, 0, 'f', 1));
+    }
+    else
+        m_pixelTurns->setSpecialValueText(tr("Auto"));
     m_heldBy->clear();
     m_heldBy->addItem(tr("Nobody (stands where placed)"), uint(UINT_MAX));
     foreach (StageTarget *t, props->stageTargets())

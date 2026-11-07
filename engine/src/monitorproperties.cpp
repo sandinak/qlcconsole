@@ -4076,6 +4076,12 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.pixelTurns = qMax(0.0f, a.value("PixTurns").toFloat());
             if (a.hasAttribute("WandLen"))
                 rp.wandLength = qMax(0.1f, a.value("WandLen").toFloat());
+            if (a.hasAttribute("WandStrip"))
+                rp.wandStripLength = qMax(0.0f, a.value("WandStrip").toFloat());
+            if (a.hasAttribute("WandDia"))
+                rp.wandDiameter = qMax(0.005f, a.value("WandDia").toFloat());
+            if (a.hasAttribute("WandTop"))
+                rp.wandFromTop = a.value("WandTop").toInt() != 0;
             if (a.hasAttribute("HeldBy"))
                 rp.heldBy = a.value("HeldBy").toUInt();
             if (a.hasAttribute("HoldH"))
@@ -5012,6 +5018,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
             doc->writeAttribute(QStringLiteral("PixTurns"), QString::number(double(rp.pixelTurns), 'f', 2));
         if (rp.wandLength != 1.2f)
             doc->writeAttribute(QStringLiteral("WandLen"), QString::number(double(rp.wandLength), 'f', 3));
+        if (rp.wandStripLength > 0.0f)
+            doc->writeAttribute(QStringLiteral("WandStrip"), QString::number(double(rp.wandStripLength), 'f', 3));
+        if (qAbs(rp.wandDiameter - 0.025f) > 1e-5f)
+            doc->writeAttribute(QStringLiteral("WandDia"), QString::number(double(rp.wandDiameter), 'f', 4));
+        if (rp.wandFromTop)
+            doc->writeAttribute(QStringLiteral("WandTop"), QStringLiteral("1"));
         if (rp.isHeld())
             doc->writeAttribute(QStringLiteral("HeldBy"), QString::number(rp.heldBy));
         if (rp.holdHeight != 1.0f)

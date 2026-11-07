@@ -98,13 +98,22 @@ QVector<QVector3D> PixelPath::helix(const QVector3D &from, const QVector3D &to, 
     return out;
 }
 
-double PixelPath::autoWandTurns(int n, double length)
+double PixelPath::autoWandTurns(int n, double length, double strip, double diameter)
 {
-    const double strip = n * kLedSpacing;
-    const double round = 2.0 * M_PI * kWandRadius;
+    if (strip <= 0.0)
+        strip = n * kLedSpacing;
+    const double round = M_PI * (diameter > 0.0 ? diameter : 2.0 * kWandRadius);
     if (strip <= length)
         return 0.5;
     return qMax(0.5, qSqrt(strip * strip - length * length) / round);
+}
+
+double PixelPath::wandTurns(const FixtureRigProps &rp, int n)
+{
+    if (rp.pixelTurns > 0.0f)
+        return double(rp.pixelTurns);
+    return autoWandTurns(n, double(qMax(0.1f, rp.wandLength) * (1.0f - kWandGrip)),
+                         double(rp.wandStripLength), double(rp.wandDiameter));
 }
 
 double PixelPath::autoSpiralTurns(int n, double height)
@@ -167,10 +176,13 @@ QVector<QVector3D> PixelPath::positions(const Doc *doc, MonitorProperties *props
         QVector3D b, t;
         if (!wandEnds(props, fid, b, t))
             return out;
-        const double turns = rp.pixelTurns > 0.0f ? double(rp.pixelTurns)
-                                                  : autoWandTurns(n, double((t - b).length()));
         // The strip from a hand's width above the butt to the tip.
-        return helix(b + (t - b) * 0.08f, t, kWandRadius + 0.002, turns, n);
+        const QVector3D grip = b + (t - b) * kWandGrip;
+        const double radius = rp.wandDiameter > 0.0f ? double(rp.wandDiameter) / 2.0 : kWandRadius;
+        const double turns = wandTurns(rp, n);
+        // LED 1 where the data comes in: the tip, or the grip.
+        return rp.wandFromTop ? helix(t, grip, radius + 0.002, turns, n)
+                              : helix(grip, t, radius + 0.002, turns, n);
     }
     if (!needsFountain(rp.pixelPath))
         return out;
