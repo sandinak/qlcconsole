@@ -95,6 +95,7 @@
 #include "effectdesigner.h"
 #include "effectrows.h"
 #include "lengthspinbox.h"
+#include "speedspinbox.h"
 #include "focuscallcue.h"
 #include "refinepanel.h"
 #include "focuscallsdialog.h"
@@ -5660,14 +5661,17 @@ void ShowTreeView::effectParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, 
         menu->addAction(tr("%1…").arg(EffectRows::paramLabel(def)), this, [this, def, now, set]() {
             // A length in Settings ▸ Units; anything else as the script counts it.
             const bool isLength = def.unit == QLatin1String("cm");  // units-ok: the script parameter's unit key; the value is shown through MeasurementUnits
-            QDoubleSpinBox *spin = isLength ? new LengthSpinBox(10.0) : new QDoubleSpinBox;
+            const bool isSpeed = def.unit == QLatin1String("cm/s");  // units-ok: the script parameter's unit key; shown through MeasurementUnits
+            QDoubleSpinBox *spin = isLength ? new LengthSpinBox(10.0)
+                                 : isSpeed ? new SpeedSpinBox(0.01) : new QDoubleSpinBox;
             spin->setObjectName("stPickerEffectParam");
-            spin->setDecimals(isLength ? 2 : def.max - def.min <= 2.0 ? 3 : 2);
+            spin->setDecimals(isLength || isSpeed ? 2 : def.max - def.min <= 2.0 ? 3 : 2);
             if (def.max > def.min)
                 spin->setRange(def.min, def.max);
             else
                 spin->setRange(-1.0e6, 1.0e6);
-            spin->setSingleStep(def.max > def.min ? (def.max - def.min) / 100.0 : 0.1);
+            if (!isSpeed)
+                spin->setSingleStep(def.max > def.min ? (def.max - def.min) / 100.0 : 0.1);
             spin->setValue(now);
             spin->setToolTip(def.description);
             openDockedPicker(EffectRows::paramLabel(def), spin, spin, [spin, set]() { set(spin->value()); });

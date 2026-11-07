@@ -53,6 +53,7 @@ class ControllerKeepAlive;
 class ParkEffect;
 class MarkEffect;
 class MarkPlanner;
+class FollowSpotMover;
 class QLCPalette;
 class Scene;
 class GenericFader;
@@ -480,15 +481,31 @@ public:
         quint32 paletteId = UINT_MAX;   //!< its follow-spot effect look
         quint32 targetId = UINT_MAX;    //!< the stage target it follows (UINT_MAX: free-fly)
         bool live = false;              //!< from a running cue, not the Workbench
+        /** The D-pad's speed step (x0.25 .. x2) on the follow spot's Top Speed. */
+        double speed = 1.0;
+        /** Say the speed step: it is not x1, or it changed a moment ago. */
+        bool speedShown = false;
 
         bool operator==(const FollowSpotStatus &o) const
         {
             return state == o.state && sceneId == o.sceneId && paletteId == o.paletteId
-                   && targetId == o.targetId && live == o.live;
+                   && targetId == o.targetId && live == o.live && speed == o.speed
+                   && speedShown == o.speedShown;
         }
         bool operator!=(const FollowSpotStatus &o) const { return !(*this == o); }
     };
     FollowSpotStatus followSpotStatus() const { return m_followStatus; }
+    /** "Speed ×1.5": the D-pad's speed step, as the indicators say it. */
+    static QString followSpotSpeedText(double multiplier);
+    /** The follow spot's Top Speed now, metres a second (x1). */
+    double followSpotTopSpeed() const;
+    /** The follow spot's motion (the MasterTimer steps it): its settings,
+     *  sticks and speed step. Tests reach in here. */
+    FollowSpotMover *followSpotMover() const { return m_followMover; }
+    /** What the "joystick" data channel carries to effect scripts: the
+     *  stick as read, the profile's response, and the follow spot's moving
+     *  speed on the stage (vx, vy, metres a second) with the stage centre. */
+    QVariantMap joystickData() const;
     /** "Following ES-Witch · moving" and so on: the status in words. */
     QString followSpotStatusText() const;
     /** True if @p palette is a follow-spot effect look. */
@@ -943,6 +960,22 @@ private:
     quint32 m_liveFollowScanResult = UINT_MAX;
     /** When the stick last moved the follow spot (Moving, for a moment after). */
     QElapsedTimer m_followMovedClock;
+    /** The follow spot's motion, stepped once a DMX frame on the MasterTimer. */
+    FollowSpotMover *m_followMover = nullptr;
+    /** When the D-pad last stepped the follow spot's speed (said for a moment). */
+    QElapsedTimer m_followSpeedClock;
+    /** The free-fly velocity last sent to the effect (it is sent while it moves). */
+    bool m_followVelocitySent = false;
+    /** The feel of @p scene's follow spot (its look's Top Speed, Fine
+     *  Stick and Response Curve), or a plain Aim look's (Jog speed). */
+    void applyFollowSpotSettings(Scene *scene);
+    /** The sticks as the follow spot's motion takes them. */
+    void applyFollowSpotSticks();
+    /** Free-fly: the effect hears how fast it is to fly. */
+    void publishFollowSpotVelocity();
+    /** A follow spot on and no tool: the right stick is its fine stick and
+     *  D-pad Up/Down step its speed. True if it took the event. */
+    bool followSpotTakes(quint32 universe, quint32 channel, int role, uchar value);
     FollowSpotStatus m_followStatus;
     /** Work out m_followStatus for @p scene; emit followSpotStatusChanged on a change. */
     void updateFollowSpotStatus(Scene *scene);

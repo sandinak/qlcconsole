@@ -1151,11 +1151,12 @@ void LookEditor_Test::theHostSpreadStandsInForTheEffectsOwn()
     QApplication::processEvents();
 
     auto ownRows = [&]() {
-        QStringList names;
-        foreach (QLabel *l, ed.m_effectDynWidget->findChildren<QLabel *>())
-            if (l->text() == QLatin1String("spread") || l->text() == QLatin1String("reverse"))
-                names << l->text();
-        return names.size();
+        // The script's own rows, by their fields (their labels are Title Case since 0.4.2).
+        int n = 0;
+        for (const char *name : { "effectParam_spread", "effectParam_reverse" })
+            if (ed.m_effectDynWidget->findChild<QWidget *>(QLatin1String(name)) != nullptr)
+                ++n;
+        return n;
     };
     QCOMPARE(ownRows(), 2);
     QDoubleSpinBox *amount = ed.m_effectDynWidget->findChild<QDoubleSpinBox *>("spreadAmount");

@@ -432,6 +432,40 @@ QString MeasurementUnits::formatMetres(double metres)
     return formatLength(metres * 1000.0, preferredLength());
 }
 
+MeasurementUnits::LengthUnit MeasurementUnits::speedUnitFor(LengthUnit unit)
+{
+    return isImperial(unit) ? Feet : Metres;
+}
+
+QString MeasurementUnits::speedSymbol(LengthUnit unit)
+{
+    return symbol(speedUnitFor(unit)) + QStringLiteral("/s");
+}
+
+QString MeasurementUnits::formatSpeed(double metresPerSecond, LengthUnit unit)
+{
+    const LengthUnit u = speedUnitFor(unit);
+    const int d = u == Feet ? 1 : 2;
+    const double v = roundTo(metresPerSecond * 1000.0 / mmPer(u), d);
+    return QStringLiteral("%1 %2").arg(number(v, d), speedSymbol(unit));
+}
+
+QString MeasurementUnits::formatSpeed(double metresPerSecond)
+{
+    return formatSpeed(metresPerSecond, preferredLength());
+}
+
+double MeasurementUnits::parseSpeed(const QString &text, LengthUnit unit, bool *ok)
+{
+    QString t = text.trimmed();
+    // A length a second: "/s", "/sec", " per second" off the end.
+    static const QRegularExpression perSecond(QStringLiteral("\\s*(?:/\\s*s(?:ec(?:ond)?)?|per\\s+second)$"),
+                                              QRegularExpression::CaseInsensitiveOption);
+    t.remove(perSecond);
+    const double mm = parseLength(t, speedUnitFor(unit), ok);
+    return mm / 1000.0;
+}
+
 QString MeasurementUnits::formatLength(double mm, LengthUnit unit)
 {
     // An offset (stage left of centre, below the deck) keeps its sign.

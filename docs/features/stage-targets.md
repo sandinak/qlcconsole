@@ -504,7 +504,44 @@ Let go and it holds.
 - **No controller patched**, it holds the subject where it stands, and
   says so.
 - **With no Aim look** it flies each head's angle from the stick itself
-  (free-fly); good for one head, not for several.
+  (free-fly); good for one head, not for several. The speed is the same
+  Top Speed, turned into a pan and tilt rate over each head's throw to the
+  middle of the stage, the same both ways.
+
+### How fast, and how fine
+
+A follow spot moves at the speed its look sets, measured on the stage, in
+the unit **Settings → Units** picks. Open the Followspot effect (Build's
+Workbench, or the cue's layer in the Show Tree):
+
+- **Top Speed** -- how fast the subject moves with the left stick pushed
+  all the way: a brisk walk by default (6 ft/s, 1.83 m/s). Raise it for a
+  dancer who runs, lower it for a lecture. It takes a speed typed in any
+  unit (6 ft/s, 1.8 m/s, 180 cm).
+- **Fine Stick** -- the right stick moves the subject too, at this share of
+  Top Speed at full throw (20% by default): the left stick for getting
+  there, the right for the last few inches. The two add.
+- **Response Curve** -- how much of the stick's travel is fine. At 0 the
+  speed follows the stick evenly; higher, a small push creeps and only a
+  full push reaches Top Speed (40% by default).
+- **D-pad Up and Down** step the speed while the follow spot plays: ×0.25,
+  ×0.5, ×1, ×1.5, ×2 of Top Speed. The footer says it -- *◎ Follow: … ·
+  stick · Speed ×1.5* -- while it is not ×1, and for a moment after it
+  goes back. It is for the run, not saved with the show.
+
+The beam starts and stops smoothly: it eases up to speed and eases to a
+stop (a fifth of a second either way, no overshoot), and moves every DMX
+frame by the time that frame took, so it neither steps nor stutters when
+the computer is busy. Left and right, up and down, the same push is the
+same speed.
+
+A head with 8-bit pan and tilt can only move in its own DMX steps -- on a
+540° head about 2° a step, a hand's width or more on the floor at a
+follow-spot's throw -- so it moves in small jumps however smooth the
+stick. Patch a mover in its 16-bit mode (pan and tilt fine channels) for
+a follow spot that glides. A stick that drifts off the middle when let go
+makes one direction faster than the other at a light push: centre it
+(**Centre Sticks** on the controller).
 
 Where you can see it:
 
@@ -530,7 +567,8 @@ picks (5' 7" in feet), and take a length typed in any unit: 5' 6", 5.5 ft,
 
 The follow spot's stick is also the stick [Quick focus](lighting-studio.md#quick-focus)
 uses: while Quick focus is on it nudges calibration offsets instead, with the
-same deadzone and sensitivity.
+same deadzone and sensitivity (the right stick and the D-pad are then Quick
+focus's too).
 
 A beam does **not** stop at the point it's aimed at — it passes through and
 lands on whatever real surface is actually behind it (the floor, or a

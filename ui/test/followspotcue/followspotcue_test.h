@@ -40,6 +40,7 @@ private slots:
     void everyCueSelectedShowsItsEffect();
     void hisShow();
     void everyCueFiresItsEffects();
+    void theDpadStepsTheSpeedAndTheRightStickIsFine();
 
 private:
     bool open(const QString &path);

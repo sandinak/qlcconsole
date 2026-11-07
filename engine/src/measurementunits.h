@@ -99,6 +99,21 @@ public:
     static QString formatLength(double mm);
     /** @a metres shown in preferredLength() */
     static QString formatMetres(double metres);
+    /** A speed (the follow spot's Top Speed) is a length a second in the
+     *  unit a person thinks of distance on a stage in: feet with inches or
+     *  feet, metres with the metric lengths. */
+    static LengthUnit speedUnitFor(LengthUnit unit);
+    /** "ft/s", "m/s" */
+    static QString speedSymbol(LengthUnit unit);
+    /** @a metresPerSecond shown in @a unit's speed: 6 ft/s, 1.83 m/s (ft/s
+     *  to 0.1, m/s to 0.01, no trailing zeros) */
+    static QString formatSpeed(double metresPerSecond, LengthUnit unit);
+    /** ...in preferredLength()'s */
+    static QString formatSpeed(double metresPerSecond);
+    /** A typed speed, in metres a second: a length a second ("6 ft/s",
+     *  "1.8 m/s", "6'", "180 cm") or a bare number in @a unit's speed. */
+    static double parseSpeed(const QString &text, LengthUnit unit, bool *ok);
+
     /** @a kg shown in @a unit: kg to 0.001, lb to 0.01, no trailing zeros */
     static QString formatWeight(double kg, WeightUnit unit);
 

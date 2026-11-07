@@ -284,6 +284,34 @@ void MeasurementUnits_Test::roundTripWeight()
     }
 }
 
+void MeasurementUnits_Test::speed()
+{
+    QCOMPARE(MU::formatSpeed(1.8288, MU::Feet), QString("6 ft/s"));
+    QCOMPARE(MU::formatSpeed(1.8288, MU::Inches), QString("6 ft/s"));
+    QCOMPARE(MU::formatSpeed(1.8288, MU::Metres), QString("1.83 m/s"));
+    QCOMPARE(MU::formatSpeed(1.8288, MU::Millimetres), QString("1.83 m/s"));
+    QCOMPARE(MU::formatSpeed(2.0, MU::Feet), QString("6.6 ft/s"));
+    QCOMPARE(MU::speedSymbol(MU::Centimetres), QString("m/s"));
+    bool ok = false;
+    // A bare number is in the unit's speed; any length a second is taken.
+    QVERIFY(qAbs(MU::parseSpeed("6", MU::Feet, &ok) - 1.8288) < 1e-6 && ok);
+    QVERIFY(qAbs(MU::parseSpeed("6 ft/s", MU::Metres, &ok) - 1.8288) < 1e-6 && ok);
+    QVERIFY(qAbs(MU::parseSpeed("1.8 m/s", MU::Feet, &ok) - 1.8) < 1e-6 && ok);
+    QVERIFY(qAbs(MU::parseSpeed("180 cm", MU::Feet, &ok) - 1.8) < 1e-6 && ok);
+    QVERIFY(qAbs(MU::parseSpeed("2", MU::Centimetres, &ok) - 2.0) < 1e-6 && ok);
+    QVERIFY(qAbs(MU::parseSpeed("6' per second", MU::Metres, &ok) - 1.8288) < 1e-6 && ok);
+    MU::parseSpeed("fast", MU::Feet, &ok);
+    QVERIFY(!ok);
+    // What it shows, it reads back.
+    for (double v : { 0.15, 1.8288, 3.0, 6.0 })
+        for (MU::LengthUnit u : { MU::Feet, MU::Metres })
+        {
+            const double back = MU::parseSpeed(MU::formatSpeed(v, u), u, &ok);
+            QVERIFY(ok);
+            QVERIFY2(qAbs(back - v) < (u == MU::Feet ? 0.016 : 0.006), qPrintable(MU::formatSpeed(v, u)));
+        }
+}
+
 void MeasurementUnits_Test::storedMm()
 {
     QCOMPARE(MU::toStoredMm(190.5), 191);      // 7.5": halves go up

@@ -2048,7 +2048,7 @@ void EffectInstance_Test::followSpotInARunningCueMovesWithTheStick()
     tick();
     tick();
     QList<int> last = pans();
-    for (int i = 0; i < 20; ++i)
+    for (int i = 0; i < 40; ++i)
     {
         tick();
         const QList<int> now = pans();
@@ -2199,7 +2199,11 @@ void EffectInstance_Test::followSpotKeepsItsSubjectAcrossCues()
     for (int i = 0; i < 40; ++i)
         tick();
     pc->slotControllerInputChanged(9, 0, 128, QString());
-    for (int i = 0; i < 6; ++i)
+    /* Let go: it eases to a stop (0.4.2), then holds. 31 ticks keeps the
+       cue change below off the tick the running cues are looked over on
+       (every fifth): this test's stop() and start() are a tick apart, which
+       a chaser's step never is. */
+    for (int i = 0; i < 31; ++i)
         tick();
     const QVector3D driven = who->position();
     QVERIFY((driven - home).length() > 1.0f);

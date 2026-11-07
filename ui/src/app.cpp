@@ -9303,12 +9303,21 @@ void App::updateFollowChip()
         colour = QStringLiteral("#d9534f");
         break;
     }
+    /* The D-pad's speed step, said while it is not x1 -- and for a moment
+       after any change, back to x1 too -- so the operator sees what the
+       press did. */
+    if (st.speedShown && st.state != Status::NoStick)
+        how += QStringLiteral(" · ") + ProgrammerController::followSpotSpeedText(st.speed);
     m_statusFollowLabel->setText(tr("<span style='color:%1;font-weight:bold;'>◎ Follow: %2 · %3</span>")
                                  .arg(colour, text.toHtmlEscaped(), how.toHtmlEscaped()));
     m_statusFollowLabel->setToolTip(pc->followSpotStatusText()
                                     + (st.live ? tr("\nFrom the cue playing now; the stick moves its subject "
                                                     "for this run only.")
-                                               : tr("\nFrom the scene open in the Workbench.")));
+                                               : tr("\nFrom the scene open in the Workbench."))
+                                    + (st.state == Status::NoStick ? QString()
+                                       : tr("\nThe left stick moves it at up to its Top Speed (%1), the right "
+                                            "stick finely; D-pad Up and Down step the speed.")
+                                             .arg(MeasurementUnits::formatSpeed(pc->followSpotTopSpeed()))));
     m_statusFollowLabel->show();
 }
 

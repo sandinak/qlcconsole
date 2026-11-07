@@ -164,6 +164,8 @@ add_library(${module_name} SHARED
     programmerflasher.cpp programmerflasher.h
     highlighteffect.cpp highlighteffect.h
     focussession.cpp focussession.h
+    followspotdrive.cpp followspotdrive.h
+    followspotmover.cpp followspotmover.h
     focuscalls.cpp focuscalls.h
     focuscallcue.cpp focuscallcue.h
     venuecorrections.cpp venuecorrections.h

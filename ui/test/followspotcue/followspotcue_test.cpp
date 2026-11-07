@@ -63,6 +63,13 @@
 #include "mastertimer.h"
 #include "truss.h"
 #include "doc.h"
+#include "followspotmover.h"
+#include "followspotdrive.h"
+#include "gamepadrole.h"
+#include "lookeditor.h"
+#include <QScrollArea>
+#include <QDoubleSpinBox>
+#include <QScrollBar>
 
 #include "followspotcue_test.h"
 
@@ -139,9 +146,8 @@ void shootFooter(App *app, const QString &prefix)
         return;
     QDir().mkpath(dir);
     app->setTheme(App::ThemeVSCodeDark);
-    const QSize min = app->minimumSizeHint().expandedTo(app->minimumSize());
-    const QList<QPair<QString, QSize>> sizes = { { "min", min }, { "laptop", QSize(1280, 800) },
-                                                 { "wide", QSize(1920, 1080) } };
+    const QList<QPair<QString, QSize>> sizes = { { "1024x640", QSize(1024, 640) }, { "1280x800", QSize(1280, 800) },
+                                                 { "1920x1080", QSize(1920, 1080) } };
     for (const auto &sz : sizes)
     {
         app->resize(sz.second);
@@ -856,6 +862,194 @@ void FollowSpotCue_Test::everyCueSelectedShowsItsEffect()
     tree->setCurrentItem(nullptr);
     settle(200);
     breathes_(2, "after none");
+    doc->resetModified();
+}
+
+/* "can we use the right stick for fine movement and the left for coarse
+   ... or D-pad up/down to alter the speed?" On his DS4 as the HID plugin
+   reads it: D-pad Up and Down step the follow spot's speed (x0.25 .. x2)
+   and the footer says so; the right stick moves the subject finely; the
+   look's Top Speed shows in Settings > Units. QLC_FSPOT_SHOTS=<dir> for
+   the pictures (the chip and the setting, at three window sizes). */
+void FollowSpotCue_Test::theDpadStepsTheSpeedAndTheRightStickIsFine()
+{
+    m_app->doc()->resetModified();
+    m_app->clearDocument();
+    settle(50);
+    Doc *doc = m_app->doc();
+    doc->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    ProgrammerController *pc = doc->programmer();
+    MonitorProperties *props = doc->monitorProperties();
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Feel Mover");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("ch");
+    const char *names[] = { "Pan", "Pan fine", "Tilt", "Tilt fine", "Dimmer" };
+    QLCFixtureHead head;
+    for (int k = 0; k < 5; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setGroup(k == 4 ? QLCChannel::Intensity : k >= 2 ? QLCChannel::Tilt : QLCChannel::Pan);
+        ch->setControlByte(k == 1 || k == 3 ? QLCChannel::LSB : QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(k));
+        if (k < 4)
+            head.addChannel(quint32(k));
+    }
+    mode->insertHead(-1, head);
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    FixtureGroup *spots = new FixtureGroup(doc);
+    spots->setName("FOH Spots");
+    QVERIFY(doc->addFixtureGroup(spots));
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("FOH%1").arg(i + 1));
+        f->setFixtureDefinition(def, mode);
+        f->setUniverse(0);
+        f->setAddress(quint32(10 + i * 10));
+        QVERIFY(doc->addFixture(f));
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(i == 0 ? -2 : 2, -6, 6));
+        FixtureRigProps rp;
+        rp.mountingType = Truss::TopHung;
+        props->setFixtureRigProps(f->id(), rp);
+        spots->assignFixture(f->id());
+    }
+    StageTarget *lead = props->addStageTarget();
+    lead->setName("Lead");
+    lead->setKind(StageTarget::Kind::Person);
+    const QVector3D home(0.0f, 3.0f, 0.0f);
+    lead->setPosition(home);
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("On Lead");
+    aim->setStageTargetId(lead->id());
+    QVERIFY(doc->addPalette(aim));
+    QLCPalette *follow = new QLCPalette(QLCPalette::Effect, doc);
+    follow->setName("Followspot");
+    follow->setScriptPath(doc->effectScriptRunner()->cache()->scriptPath("followspot"));
+    QVERIFY(doc->addPalette(follow));
+    Scene *scene = new Scene(doc);
+    scene->setName("Follow Lead");
+    doc->addFunction(scene);
+    scene->addFixtureGroup(spots->id());
+    scene->addPalette(aim->id());
+    scene->addPalette(follow->id());
+
+    // His DS4 is the stick; the follow spot is open in Build's Workbench.
+    pc->clearAxisBindings();
+    patchLikeHis(doc);
+    QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 2000);
+    Workbench *bench = ProgrammingManager::instance()->workbench();
+    m_app->m_tab->setCurrentWidget(ProgrammingManager::instance());
+    bench->load(scene->id());
+    settle(300);
+    QLabel *chip = m_app->followChip();
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chip->text().contains(QString::fromUtf8("FOH Spots ← Lead")), 3000);
+    QVERIFY2(!chip->text().contains("Speed"), qPrintable(chip->text()));     // x1: nothing said
+
+    // The pad's controls by their roles, as his profile names them.
+    InputPatch *ip = doc->inputOutputMap()->inputPatch(0);
+    auto deviceChannel = [&](GamepadRole::Role want) {
+        for (quint32 c = 0; c < 64; ++c)
+            if (pc->controllerRole(0, c) == want)
+                return int(ip->deviceChannel(c));
+        return -1;
+    };
+    const int up = deviceChannel(GamepadRole::DpadUp), down = deviceChannel(GamepadRole::DpadDown);
+    const int rightX = deviceChannel(GamepadRole::RightX);
+    QVERIFY2(up >= 0 && down >= 0 && rightX >= 0, qPrintable(QString("%1 %2 %3").arg(up).arg(down).arg(rightX)));
+    auto press = [&](int ch) {
+        QVERIFY(padInput(doc, quint32(ch), 255));
+        settle(30);
+        QVERIFY(padInput(doc, quint32(ch), 0));
+        settle(30);
+    };
+
+    // D-pad Up: x1.5, said on the chip (and in its tooltip).
+    press(up);
+    QCOMPARE(pc->followSpotMover()->multiplier(), 1.5);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Speed ×1.5")), 2000);
+    QVERIFY2(chip->toolTip().contains("D-pad Up and Down"), qPrintable(chip->toolTip()));
+    shootFooter(m_app, "speed-x1.5");
+    press(up);
+    QCOMPARE(pc->followSpotMover()->multiplier(), 2.0);
+    press(up);
+    QCOMPARE(pc->followSpotMover()->multiplier(), 2.0);           // the top step holds
+    for (double want : { 1.5, 1.0, 0.5 })
+    {
+        press(down);
+        QCOMPARE(pc->followSpotMover()->multiplier(), want);
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Speed ×0.5")), 2000);
+    press(up);
+    QCOMPARE(pc->followSpotMover()->multiplier(), 1.0);
+    // Back at x1 it is said a moment, then no more.
+    QVERIFY2(chip->text().contains(QString::fromUtf8("Speed ×1")), qPrintable(chip->text()));
+    QTRY_VERIFY_WITH_TIMEOUT(!chip->text().contains("Speed"), 4000);
+
+    // The right stick moves the subject, finely: slower than the left.
+    auto walk = [&](int ch, uchar v) -> float {
+        lead->setPosition(home);
+        const QVector3D from = lead->position();
+        if (!padInput(doc, quint32(ch), v))
+            return -1.0f;
+        QTest::qWait(600);
+        const float x = lead->position().x() - from.x();
+        padInput(doc, quint32(ch), 128);
+        QTest::qWait(500);
+        return x;
+    };
+    const float fine = walk(rightX, 255);
+    const float coarse = walk(0, 255);
+    qInfo() << "in 0.6 s: right stick" << fine << "m, left stick" << coarse << "m";
+    QVERIFY2(fine > 0.02f, qPrintable(QString::number(fine)));
+    QVERIFY2(fine < 0.35f * coarse, qPrintable(QString("%1 vs %2").arg(fine).arg(coarse)));
+
+    // The setting, where the follow spot look is edited: Top Speed in feet a
+    // second (the default unit), a brisk walk.
+    bench->editPalette(follow->id());
+    settle(300);
+    QDoubleSpinBox *top = nullptr;
+    QTRY_VERIFY_WITH_TIMEOUT((top = m_app->findChild<QDoubleSpinBox *>("effectParam_topSpeed")) != nullptr, 3000);
+    QCOMPARE(top->text(), QString::fromUtf8("6 ft/s"));    // units-ok: the default unit's speed, as shown
+    const QString shots = qEnvironmentVariable("QLC_FSPOT_SHOTS");
+    if (!shots.isEmpty())
+    {
+        QDir().mkpath(shots);
+        m_app->setTheme(App::ThemeVSCodeDark);
+        for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+        {
+            m_app->resize(sz);
+            settle(400);
+            for (QWidget *p = top->parentWidget(); p != nullptr; p = p->parentWidget())
+                if (QScrollArea *area = qobject_cast<QScrollArea *>(p))
+                {
+                    area->ensureWidgetVisible(top, 20, 60);
+                    area->horizontalScrollBar()->setValue(0);   // the labels, not the fields' edge
+                    break;
+                }
+            settle(200);
+            m_app->grab().save(QString("%1/top-speed-%2x%3.png").arg(shots).arg(sz.width()).arg(sz.height()));
+            qInfo().noquote() << "shot top speed" << m_app->size() << top->isVisible() << top->text();
+        }
+        m_app->resize(1280, 800);
+        settle(200);
+    }
+    // A brisker walk, typed in metres a second: the subject goes that fast.
+    top->setValue(top->valueFromText("3 m/s"));     // units-ok: typed with its own unit
+    settle(100);
+    QVERIFY(qAbs(follow->effectParamValues().value("topSpeed") - 300.0) < 0.5);
+    QTRY_VERIFY_WITH_TIMEOUT(qAbs(pc->followSpotTopSpeed() - 3.0) < 0.01, 2000);
+    bench->load(Function::invalidId());
+    settle(100);
     doc->resetModified();
 }
 
