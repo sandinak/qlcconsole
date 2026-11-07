@@ -4,6 +4,7 @@ add_executable(wled_test WIN32 MACOSX_BUNDLE
     ../src/wledstate.cpp ../src/wledstate.h
     ../src/wledplugin.cpp ../src/wledplugin.h
     wled_test.cpp wled_test.h
+    ../../../ui/test/common/testsettings.cpp
 )
 target_include_directories(wled_test PRIVATE
     ../../interfaces

@@ -101,6 +101,9 @@ private:
     QNetworkReply *get(const QString &path, int timeoutMs, const Reply &then);
     QNetworkReply *post(const QString &path, const QJsonObject &body, const Reply &then);
     void step(const QString &text);
+    /** Keeps the segments of a read-back @p state as the layout of the
+     *  device at m_ip (@p mac, its info's): the WLED output's store. */
+    void keepLayout(const QString &mac, const QByteArray &state);
     void finish(bool ok, const QString &message);
     /** Poll /json/info until it drives m_leds, rebooting once if it has to. */
     void pollLeds();

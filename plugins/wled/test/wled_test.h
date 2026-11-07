@@ -19,6 +19,9 @@ class Wled_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** Each test starts with no kept layouts (the settings are the test's own). */
+    void init();
+
     void effectChannelsAreReadAsWledReadsThem();
     void colourModesAreSolidColours();
     void onlyChangesAreSentAndBurstsCollapse();
@@ -42,6 +45,11 @@ private slots:
     void aSingleSegmentDeviceIsSentAsBefore();
     void anOldWledWithoutStateAndInfoIsSentAsBefore();
     void backupsKeepSegmentLayoutsOfTheirOwn();
+
+    /* Never left turned round: closing, quitting, crashing. */
+    void closingTheOutputPutsEachSegmentBackItsOwnWay();
+    void aRestartAfterQuittingWithReverseOnTakesTheKeptWays();
+    void aCrashWithReverseOnIsPutRightFromTheKeptWays();
     /** Against a real WLED, when WLED_REAL_IP names one (skipped otherwise):
      *  the look reaches it, and it answers. Its state is put back after. */
     void aRealLanternShowsTheLook();

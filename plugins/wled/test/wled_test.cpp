@@ -19,6 +19,7 @@
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QNetworkAccessManager>
+#include <QSettings>
 
 #include "wled_test.h"
 #include "../../../engine/test/common/stdprelude.h"
@@ -45,6 +46,7 @@ namespace
         bool noSi = false;                  ///< an old WLED: /json/si is 501
         int liveAsked = 0;                  ///< GET /json/live count
         int siAsked = 0;                    ///< GET /json/si count
+        QString mac;                        ///< info.mac, when set
         QByteArray live = "{\"leds\":[\"FF0000\",\"00FF00\",\"0000FF\",\"102030\"],\"n\":1}";
         /** Its segments, as /json/state says them: one over all 16 LEDs. */
         QJsonArray segs{ QJsonObject{ { "id", 0 }, { "start", 0 }, { "stop", 16 }, { "rev", false },
@@ -102,9 +104,12 @@ namespace
         QJsonObject state() const { return QJsonObject{ { "on", true }, { "seg", segs } }; }
         QJsonObject info() const
         {
-            return QJsonDocument::fromJson(QString("{\"name\":\"Lantern SL\",\"ver\":\"0.15.0\","
-                                                   "\"leds\":{\"count\":16},"
-                                                   "\"wifi\":{\"rssi\":%1}}").arg(rssi).toUtf8()).object();
+            QJsonObject i = QJsonDocument::fromJson(QString("{\"name\":\"Lantern SL\",\"ver\":\"0.15.0\","
+                                                            "\"leds\":{\"count\":16},"
+                                                            "\"wifi\":{\"rssi\":%1}}").arg(rssi).toUtf8()).object();
+            if (!mac.isEmpty())
+                i["mac"] = mac;
+            return i;
         }
 
         FakeWled()
@@ -190,6 +195,11 @@ namespace
             u[at + i] = char(bytes.at(i));
         return u;
     }
+}
+
+void Wled_Test::init()
+{
+    QSettings().remove("wled/layouts");
 }
 
 /* WLED's own DMX "Effect" mode, channel for channel: what the WLED Effect
@@ -866,6 +876,129 @@ void Wled_Test::backupsKeepSegmentLayoutsOfTheirOwn()
     QCOMPARE(effects(primary), (QList<int>{ 9, 9, 9, 9 }));
     QCOMPARE(effects(backup), (QList<int>{ 9 }));
     QCOMPARE(backup.posts.last().value("seg").toArray().size(), 1);
+}
+
+/* Unpatched, or the app quitting (the output closes): every segment the
+   effect's Reverse turned round is sent back its own way -- and a device
+   that takes the connection and never answers does not hold the close up
+   for more than about a second. */
+void Wled_Test::closingTheOutputPutsEachSegmentBackItsOwnWay()
+{
+    FakeWled w;
+    w.split(2, 8);
+    QVERIFY(w.powerOn());
+    {
+        WledPlugin plugin;
+        aim(plugin, 0, w);
+        plugin.writeUniverse(0, 0, effect(9, 128, 2), true);
+        QTRY_COMPARE(revs(w), (QList<bool>{ true, false }));
+        plugin.closeOutput(0, 0);
+        QTRY_COMPARE(revs(w), (QList<bool>{ false, true }));
+        QCOMPARE(effects(w), (QList<int>{ 9, 9 }));            // only the ways
+    }
+    // Quitting with it open: the same, from the plugin going away.
+    {
+        WledPlugin plugin;
+        aim(plugin, 0, w);
+        plugin.writeUniverse(0, 0, effect(9, 128, 2), true);
+        QTRY_COMPARE(revs(w), (QList<bool>{ true, false }));
+    }
+    QTRY_COMPARE(revs(w), (QList<bool>{ false, true }));
+    // Not turned round: nothing sent on the way out.
+    {
+        WledPlugin plugin;
+        aim(plugin, 0, w);
+        plugin.writeUniverse(0, 0, effect(9, 128, 0), true);
+        QTRY_VERIFY(!w.posts.isEmpty() && w.posts.last().contains("bri"));
+        QTest::qWait(150);                      // taken, and said so
+        const int posts = w.posts.size();
+        plugin.closeOutput(0, 0);
+        QTest::qWait(100);
+        QCOMPARE(w.posts.size(), posts);
+    }
+    // Gone wrong (answers nothing): the close is not held up for long.
+    {
+        WledPlugin plugin;
+        aim(plugin, 0, w);
+        plugin.writeUniverse(0, 0, effect(9, 128, 2), true);
+        QTRY_COMPARE(revs(w), (QList<bool>{ true, false }));
+        w.hang = true;
+        QElapsedTimer t;
+        t.start();
+        plugin.closeOutput(0, 0);
+        QVERIFY2(t.elapsed() < 1500, qPrintable(QString("the close took %1 ms").arg(t.elapsed())));
+        w.hang = false;
+    }
+}
+
+/* The way out did not reach it (it hung as the app quit): left turned
+   round. The next run, Reverse off, takes the layout's ways from what was
+   kept -- not the turned-round ones the device says. */
+void Wled_Test::aRestartAfterQuittingWithReverseOnTakesTheKeptWays()
+{
+    FakeWled w;
+    w.split(2, 8);
+    w.mac = "AA:BB:CC:00:11:22";
+    QVERIFY(w.powerOn());
+    {
+        WledPlugin plugin;
+        aim(plugin, 0, w);
+        plugin.writeUniverse(0, 0, effect(9, 128, 2), true);
+        QTRY_COMPARE(revs(w), (QList<bool>{ true, false }));
+        w.hang = true;                          // the way out never lands
+    }
+    QTest::qWait(100);
+    w.hang = false;
+    QCOMPARE(revs(w), (QList<bool>{ true, false }));   // left turned round
+
+    WledPlugin again;
+    aim(again, 0, w);
+    again.writeUniverse(0, 0, effect(9, 128, 0), true);
+    QTRY_COMPARE(revs(w), (QList<bool>{ false, true }));
+    again.writeUniverse(0, 0, effect(9, 128, 2), true);
+    QTRY_COMPARE(revs(w), (QList<bool>{ true, false }));
+}
+
+/* A crash mid-Reverse: no way out at all. The next run -- the device at
+   another address now, the same MAC -- takes the kept ways. */
+void Wled_Test::aCrashWithReverseOnIsPutRightFromTheKeptWays()
+{
+    FakeWled w;
+    w.split(4, 4);
+    w.mac = "aa:bb:cc:33:44:55";
+    QVERIFY(w.powerOn());
+    WledPlugin *crashed = new WledPlugin;
+    aim(*crashed, 0, w);
+    crashed->writeUniverse(0, 0, effect(9, 128, 2), true);
+    QTRY_COMPARE(revs(w), (QList<bool>{ true, false, true, false }));
+    {
+        // Gone without a word: nothing of it runs on the way out.
+        QMutexLocker locker(&crashed->m_mutex);
+        crashed->m_targets.clear();
+    }
+    delete crashed;
+    QCOMPARE(revs(w), (QList<bool>{ true, false, true, false }));
+
+    // Back on another address (DHCP), as it was left.
+    FakeWled same;
+    same.segs = w.segs;
+    same.mac = "AA-BB-CC-33-44-55";
+    QVERIFY(same.powerOn());
+    WledPlugin plugin;
+    aim(plugin, 0, same);
+    plugin.writeUniverse(0, 0, effect(9, 128, 0), true);
+    QTRY_COMPARE(revs(same), (QList<bool>{ false, true, false, true }));
+
+    // A layout not kept is taken as the device says it.
+    FakeWled other;
+    other.split(2, 8);
+    QJsonObject s0 = other.seg(0);
+    s0["rev"] = true;
+    other.segs[0] = s0;
+    QVERIFY(other.powerOn());
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "outputIP2", other.ip());
+    QTRY_VERIFY(!other.posts.isEmpty());
+    QCOMPARE(revs(other), (QList<bool>{ true, true }));
 }
 
 QTEST_MAIN(Wled_Test)

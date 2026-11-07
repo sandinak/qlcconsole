@@ -39,8 +39,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   rest kept what they had. The WLED output now reads the device's segments
   and sends the look to each one, and the effect's **Reverse** turns each
   segment round from its own way instead of setting them all one way, so
-  every second span no longer loses its direction. A WLED with one segment
-  is driven as before.
+  every second span no longer loses its direction. Quitting, unpatching or
+  crashing while Reverse plays no longer leaves the spans turned round for
+  the next run: each segment is sent back its own way as the output
+  closes, and the layout's ways are kept in the settings (from Write
+  Segments…, or as first seen) for the next run to use. A WLED with one
+  segment is driven as before.
 - **A saved show's autosave is offered when you open the show.** After a
   crash, opening the show (File ▸ Open, the recent list, or `-o` at start)
   asks **Recover the autosave from** *time*? when its autosave is newer than

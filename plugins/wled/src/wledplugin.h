@@ -26,6 +26,7 @@
 #include <QVector>
 
 #include "qlcioplugin.h"
+#include "wledlayoutstore.h"
 
 class QNetworkAccessManager;
 class QTimer;
@@ -185,6 +186,7 @@ private:
         int rssi = 0;               ///< dBm, 0 = unknown
         QString deviceName;
         QString version;
+        QString mac;                ///< from its info: what its kept layout is filed by
         int ledCount = 0;           ///< from /json/info, 0 = not known
         qint64 retryAt = 0;         ///< no answer: not sent again before (ms)
         /** The rig network gate's decision for this device, cached (see
@@ -221,8 +223,19 @@ private:
      *  gets the (id, rev) each is sent. No segments known: @a state as is. */
     static QJsonObject message(const QJsonObject &state, const Device &d,
                                QVector<QPair<int, bool> > *revs = nullptr);
-    /** What a device's answer says its segments are now. */
-    static void learnSegments(Device &d, const QJsonArray &seg);
+    /** A /json/state "seg" array as segments (the ones in use). */
+    static QVector<WledLayoutStore::Segment> segmentsOf(const QJsonArray &seg);
+    /** What a device's answer says its segments are now; @p kept, the
+     *  layout's own ways from the store when it is that layout (else
+     *  null). True when the ways it knows now are to be kept. */
+    static bool learnSegments(Device &d, const QJsonArray &seg,
+                              const QVector<WledLayoutStore::Segment> *kept);
+    /** Every segment of @p devices that plays the effect's Reverse is sent
+     *  back its own way -- the output closing, the app quitting -- so the
+     *  device is left as its layout, not turned round. Best effort, at most
+     *  about a second however many do not answer; no event loop. */
+    static void restoreDirections(const QVector<Device> &devices);
+    static const int restoreBudgetMs = 1000;
 
     /** The rig network gate (QLCIOPlugin::setTransmitNetworks()) for one
      *  device: may anything be sent to @a host? The local address the OS

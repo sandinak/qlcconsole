@@ -815,6 +815,16 @@ output reads the device's segments every few seconds, so after
 **Write Segments…** (or a change on the WLED's own page) the next look
 reaches the new segments within about 5 seconds.
 
+The fountain is never left turned round. When the WLED output closes (the
+universe unpatched, or the app quitting) while Reverse plays, each
+segment is sent back its own way first; a WLED that doesn't answer holds
+that up for about a second at most. Each segment's own way is also kept
+in this computer's settings, by the WLED and its layout (written by
+**Write Segments…**, or learned the first time the output sees that
+layout), so after a crash mid-Reverse the next run takes the ways from
+there, not the turned-round ones the WLED reports. A second computer
+driving the same WLED hasn't kept them: run Write Segments… on it once.
+
 ### Wand
 
 A **wand** is a staff with an LED strip or fairy string wound round it,

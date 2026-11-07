@@ -23,6 +23,7 @@
 #include <QSpinBox>
 #include <QStandardItemModel>
 #include <QTimer>
+#include <QSettings>
 #include <QtTest>
 
 #include "wledshow_test.h"
@@ -51,6 +52,7 @@
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
+#include "../../../plugins/wled/src/wledlayoutstore.h"
 
 namespace
 {
@@ -218,6 +220,11 @@ void WledShow_Test::anEffectFromAShowPlaysOnEverySpanOfAFountain()
     QCOMPARE(wled.segments().size(), 4);
     QCOMPARE(revs(wled), (QList<bool>{ false, true, false, true }));
     QCOMPARE(wled.segments().at(3).toObject().value("stop").toInt(), 50);
+    // Their ways kept as the spans' own, where the output looks for them:
+    // a Reverse playing when the app quits or crashes is never taken for them.
+    const QString kept = WledLayoutStore::deviceKey(QString(), wled.address());
+    QCOMPARE(QSettings().value(kept + "/segments").toString(), QString("0:0-12,1:12-25,2:25-37,3:37-50"));
+    QCOMPARE(QSettings().value(kept + "/rev").toString(), QString("0101"));
 
     /* A scene: effect 9 at speed 200, palette 6, Reverse (Option 128), red
        over blue -- played, through the universe and the WLED output. */
