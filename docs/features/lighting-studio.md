@@ -705,7 +705,7 @@ whole fountain, which drags and turns (**]** / **[**) as one, flame and all,
 and a layer or group lock holds all of it (and lifts from any of its
 pieces). Double-click a part to work on it alone (**Esc**, or a click
 outside, comes back out). Light pointed at the inner wall — pars
-in the gap, uplighting it — lands on its face.
+in the gap, washing it — lands on its face.
 
 **The fountain's editor.** Double-click the base: its editor is titled with
 the fountain's name and has a **Fire height** row, in your units, for the
@@ -724,15 +724,19 @@ fountain's layer.
 **Fixtures in the fountain.** Drag or add a fixture inside the base and it
 is mounted in the fountain — no Shift needed: on the base, or on the inner
 wall's top when you drop it on the wall. It joins the fountain's group, so
-it moves and turns with it. A par (any fixed light) put there is aimed up
-at the middle of the flame; change it in Aim & Mount. Drag it out of the
-base to take it out.
+it moves and turns with it. A par (any fixed light) put inside the inner
+wall is aimed up at the middle of the flame. One put in the **gap** between
+the outer and inner wall is aimed at the inner wall instead — at the
+nearest point of its outside face, half way up — so it washes the wall and
+leaves the silk to the pars inside. Change either in Aim & Mount. Drag it
+out of the base to take it out.
 
 **A WLED set in the fountain.** A pixel fixture mounted in it (a WLED
 string, a pixel tape) gets a **Pixel path** in its properties: **Inner wall
 top ring**, **Outer wall top ring**, **Base ring** (round the base's edge)
-or **Wrapped up the flame** (a spiral; **Turns** sets how many, Auto about
-one every 30 cm). See [Pixel paths](#pixel-paths).
+**Wrapped up the flame** (a spiral; **Turns** sets how many, Auto about
+one every 1 ft (30 cm)) or **Sprinkle loops (over the gap)**. See
+[Pixel paths](#pixel-paths) and [Sprinkle loops](#sprinkle-loops).
 
 ### Pixel paths
 
@@ -745,6 +749,45 @@ and the rig view: a small point, with a glow as big as it is bright. A WLED
 in effect mode shows its effect running along the path (see
 [Lanterns](#lanterns)). The LEDs light nothing else on the stage, and
 a fixture on a path draws no body or beam in the rig view.
+
+### Sprinkle loops
+
+A fairy string hung over a fountain's gap: at one point round the U it
+goes from the inner wall's top across to the outer wall's top, back to the
+inner, back and forth, then runs along the wall top to the next point and
+does it again. Set the string's **Pixel path** to **Sprinkle loops (over
+the gap)** (it has to be in a fountain):
+
+- **Points**: how many places round the U, spread evenly (6 unless set).
+- **Spans per point**: how many times it crosses the gap at each (4 unless
+  set). The LEDs are shared out equally between the spans.
+- **Edit Spans…**: a table of the spans for a string that isn't hung
+  evenly — each span's **First LED** and **Last LED** (counted from the
+  start of the string, the first LED is 1) and **Point at** (how far round
+  the U it hangs, 0% the stage-right end, 100% the stage-left end). LEDs in
+  no span are the runs between points: they lie along the top of the wall
+  the last span ended on. Overlapping spans, or one past the end of the
+  string, are refused. **Clear** goes back to the even spread.
+- **Read Segments** (a WLED on the network): reads the device's segments
+  and makes one span of each, in order, grouped **Spans per point** to a
+  point. It says so when the device doesn't answer, and names any segment
+  whose Reverse isn't set the way the note below says.
+
+Each span droops between the two wall tops: its middle hangs below the
+straight line between them by 30% of that distance, more for a span with
+more LEDs than the string's average and less for one with fewer. Spans at
+one point hang 2" (5 cm) apart. The LEDs are placed by their number on
+the string, so a live WLED's pixels and its effects land where they really
+are, whatever the segments' Reverse settings.
+
+**Setting up the WLED.** Make one segment per span, and leave the LEDs
+between points (the runs along the wall to the next point) out of every
+segment, so they stay dark. Tick **Reverse** on every second segment —
+the ones that run outer wall to inner — so that every span runs inner to
+outer: a Drip or Meteor effect then falls outward on all of them at once.
+WLED limits how many segments a device can have (about 32 on an ESP32);
+for more spans than that, a 2D matrix set up with Serpentine and a
+`ledmap.json` may do the same job, though that hasn't been tried here.
 
 ### Wand
 

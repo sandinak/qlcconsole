@@ -86,6 +86,22 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   at** (Top or Bottom). Auto turns now come from the real string: 50 LEDs on
   16 ft round a 5 ft staff shows about 58 turns, not half a turn. The Turns
   field shows the number Auto worked out.
+### New
+
+- **Sprinkle loops, a pixel path for a fairy string over a fountain's
+  gap**: back and forth between the inner and outer wall tops at each
+  point, drooping in between, then along the wall to the next point.
+  Points and Spans per point lay it out evenly; **Edit Spans…** takes a
+  table of which LEDs make each span and where it hangs; **Read Segments**
+  makes the spans from a WLED's own segments. Help: Lighting Studio ▸
+  Sprinkle loops, with how to set up the WLED's segments.
+
+### Changed
+
+- **A par in a fountain's gap washes the inner wall**: dropped between the
+  outer and inner wall, a fixed light is aimed at the nearest point of the
+  inner wall, half way up, instead of up at the flame, and no longer
+  colours the silk. Inside the inner wall it still uplights the flame.
 
 ## [0.4.1] - 2026-11-06
 

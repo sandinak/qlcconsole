@@ -4048,3 +4048,280 @@ void MonitorProperties_Test::fountainPixelsAndWandsRoundTrip()
     QCOMPARE(r3.wandDiameter, 0.025f);
     QVERIFY(!r3.wandFromTop);
 }
+
+/* A par in the gap between the walls washes the inner wall (the nearest
+   point of its face, half way up); inside the inner wall it still points
+   up (at the flame, or straight up with none). */
+void MonitorProperties_Test::aParInTheGapWashesTheInnerWall()
+{
+    Doc doc(this);
+    MonitorProperties *mp = doc.monitorProperties();
+    Scenery *inner = nullptr;
+    const quint32 gid = buildFountain(*mp, nullptr, &inner);
+    const Fountain::Parts f = Fountain::ofGroup(mp, gid);
+    QVERIFY(f.isValid() && f.outer != f.inner);
+    Fixture *par = new Fixture(&doc);
+    par->setName("Gap par");
+    par->setChannels(1);
+    QVERIFY(doc.addFixture(par));
+    mp->setFixturePosition(par->id(), 0, 0, QVector3D(1000.0f, 1000.0f, 0.0f));
+
+    const float mid = inner->bottom() + inner->height() / 2.0f;
+    // In the gap, in front: between the inner wall's face (y 4.016) and the outer's (4.118).
+    const QPointF front(4.9572, 4.066), side(4.6532, 3.5), inside(4.9572, 3.6);
+    QVERIFY(Fountain::inGap(f, front.x(), front.y()));
+    QVERIFY(Fountain::inGap(f, side.x(), side.y()));
+    QVERIFY(!Fountain::inGap(f, inside.x(), inside.y()));
+    QVERIFY(!Fountain::inGap(f, 4.9572, 4.3));          // outside the outer wall
+
+    for (const QPointF &at : { front, side })
+    {
+        QVERIFY(Fountain::mountIn(&doc, mp, par->id(), at.x(), at.y()));
+        const FixtureRigProps rp = mp->fixtureRigProps(par->id());
+        QVERIFY(rp.fixedAim);
+        QCOMPARE(rp.deckHeightOffset, 0.0f);
+        const QVector3D wash = Fountain::gapWashPoint(f, at.x(), at.y());
+        QVERIFY(qAbs(wash.z() - mid) < 1e-4f);
+        // The wash point is on the inner wall's outside face.
+        QVERIFY(Fountain::onInnerWall(f, wash.x(), wash.y()));
+        const QVector3D from(float(at.x()), float(at.y()), Fountain::baseTop(mp, f));
+        QVector3D dir;
+        QVERIFY(rp.fixedAimDirection(dir));
+        QVERIFY2((dir - (wash - from).normalized()).length() < 1e-3f, "not aimed at the wall");
+        // Its beam meets the inner wall first, half way up.
+        double t = 0.0;
+        QVERIFY(inner->rayHit(from, dir, t));
+        QVERIFY(qAbs((from + dir * float(t)).z() - mid) < 0.01f);
+    }
+    // In front it looks upstage at the wall; on the stage-right side, across to stage left.
+    QVERIFY(Fountain::mountIn(&doc, mp, par->id(), front.x(), front.y()));
+    QVERIFY(qAbs(qAbs(mp->fixtureRigProps(par->id()).panZeroDir) - 180.0f) < 1.0f);
+
+    // Inside the inner wall: up, as before (no flame here: straight up).
+    QVERIFY(Fountain::mountIn(&doc, mp, par->id(), inside.x(), inside.y()));
+    QVERIFY(mp->fixtureRigProps(par->id()).aimDown < -80.0f);
+}
+
+/* The distance of @p p from @p s's face (+1 outside, -1 inside), from above. */
+static double fromFace(const Scenery *s, const QVector3D &p, int side)
+{
+    double best = 1e9;
+    for (int i = 0; i <= 400; ++i)
+    {
+        const QVector3D q = s->pointAt(-1.0 + i / 200.0, 0.0, side * s->thickness() / 2.0);
+        best = qMin(best, double(QVector2D(q.x() - p.x(), q.y() - p.y()).length()));
+    }
+    return best;
+}
+
+/* Sprinkle loops, even: 6 points round the U, 4 spans each, 240 LEDs share
+   out 10 to a span. Each span droops across the gap from one wall's top to
+   the other's, back and forth. */
+void MonitorProperties_Test::sprinkleLoopsHangAcrossTheGap()
+{
+    MonitorProperties mp;
+    const quint32 gid = buildFountain(mp);
+    const Fountain::Parts f = Fountain::ofGroup(&mp, gid);
+    const quint32 fid = 21;
+    mp.setFixturePosition(fid, 0, 0, QVector3D(4957.0f, 3500.0f, 0.0f));
+    mp.setFixtureGroup(fid, gid);
+    FixtureRigProps rp;
+    rp.pixelPath = PixelPath::SprinkleLoops;
+    QVERIFY(PixelPath::needsFountain(rp.pixelPath));
+    mp.setFixtureRigProps(fid, rp);
+
+    const QVector<SprinkleSpan> layout = PixelPath::sprinkleLayout(rp, 240);
+    QCOMPARE(layout.size(), 24);
+    QCOMPARE(layout.first().firstLed, 1);
+    QCOMPARE(layout.first().lastLed, 10);
+    QCOMPARE(layout.last().lastLed, 240);
+    QVERIFY(qAbs(layout.at(0).point - 1.0f / 12.0f) < 1e-5f);
+    QCOMPARE(layout.at(3).point, layout.at(0).point);
+    QVERIFY(layout.at(4).point > layout.at(3).point);
+
+    const QVector<QVector3D> pts = PixelPath::positions(nullptr, &mp, fid, 240);
+    QCOMPARE(pts.size(), 240);
+    const float innerTop = Fountain::innerTop(f);
+    const float outerTop = f.outer->bottom() + f.outer->height();
+    const float baseTop = Fountain::baseTop(&mp, f);
+    for (int g = 0; g < 24; ++g)
+    {
+        const QVector3D a = pts.at(g * 10), b = pts.at(g * 10 + 9);
+        // Over the gap, all of it, above the base.
+        for (int k = g * 10; k < g * 10 + 10; ++k)
+        {
+            QVERIFY2(Fountain::inGap(f, pts.at(k).x(), pts.at(k).y()),
+                     qPrintable(QString("LED %1 is not over the gap").arg(k + 1)));
+            QVERIFY(pts.at(k).z() > baseTop);
+            QVERIFY(pts.at(k).z() < innerTop + 0.01f);
+        }
+        // Back and forth: the even spans start at the inner wall.
+        const QVector3D innerEnd = g % 2 == 0 ? a : b, outerEnd = g % 2 == 0 ? b : a;
+        QVERIFY2(fromFace(f.inner, innerEnd, +1) < fromFace(f.outer, innerEnd, -1),
+                 qPrintable(QString("span %1 doesn't start/end at the inner wall").arg(g + 1)));
+        QVERIFY(fromFace(f.outer, outerEnd, -1) < fromFace(f.inner, outerEnd, +1));
+        // It droops: its middle below the straight line between its ends.
+        const float mid = (pts.at(g * 10 + 4).z() + pts.at(g * 10 + 5).z()) / 2.0f;
+        QVERIFY2(mid < (a.z() + b.z()) / 2.0f - 0.01f, qPrintable(QString("mid %1, ends %2 %3").arg(mid).arg(a.z()).arg(b.z())));
+        QVERIFY(qAbs(innerEnd.z() - innerTop) < 0.05f && qAbs(outerEnd.z() - outerTop) < 0.05f);
+    }
+    // The spans at a point hang side by side, not on top of each other.
+    QVERIFY((pts.at(0) - pts.at(10 + 9)).length() > 0.02f);
+
+    // Sag: 30% of the chord at the average size, more for a longer span.
+    QVERIFY(qAbs(PixelPath::sprinkleSag(0.1, 10, 10.0) - 0.03) < 1e-9);
+    QVERIFY(PixelPath::sprinkleSag(0.1, 20, 10.0) > PixelPath::sprinkleSag(0.1, 10, 10.0));
+    QVERIFY(qAbs(PixelPath::sprinkleSag(0.1, 1, 100.0) - 0.01) < 1e-9);
+    QVERIFY(qAbs(PixelPath::sprinkleSag(0.1, 1000, 10.0) - 0.1) < 1e-9);
+
+    // Out of the fountain: nothing.
+    mp.setFixtureGroup(fid, 0);
+    QVERIFY(PixelPath::positions(nullptr, &mp, fid, 240).isEmpty());
+}
+
+/* A span table: the LEDs between spans run along the top of the wall the
+   last span ended on; physical LED order, whatever way a span runs. */
+void MonitorProperties_Test::sprinkleTableSpansAndTransits()
+{
+    MonitorProperties mp;
+    const quint32 gid = buildFountain(mp);
+    const Fountain::Parts f = Fountain::ofGroup(&mp, gid);
+    const quint32 fid = 22;
+    mp.setFixturePosition(fid, 0, 0, QVector3D(4957.0f, 3500.0f, 0.0f));
+    mp.setFixtureGroup(fid, gid);
+    FixtureRigProps rp;
+    rp.pixelPath = PixelPath::SprinkleLoops;
+    SprinkleSpan s1, s2, s3;
+    s1.firstLed = 1;  s1.lastLed = 10; s1.point = 0.25f;
+    s2.firstLed = 21; s2.lastLed = 30; s2.point = 0.25f;
+    s3.firstLed = 41; s3.lastLed = 60; s3.point = 0.75f;
+    rp.sprinkleSpans = { s3, s1, s2 };          // any order: laid out by LED
+    mp.setFixtureRigProps(fid, rp);
+    QCOMPARE(PixelPath::sprinkleLayout(rp, 70).size(), 3);
+    QCOMPARE(PixelPath::sprinkleLayout(rp, 70).first().firstLed, 1);
+    // A table running past the string is cut at its end.
+    QCOMPARE(PixelPath::sprinkleLayout(rp, 50).last().lastLed, 50);
+
+    const QVector<QVector3D> pts = PixelPath::positions(nullptr, &mp, fid, 70);
+    QCOMPARE(pts.size(), 70);
+    const float innerTop = Fountain::innerTop(f);
+    const float outerTop = f.outer->bottom() + f.outer->height();
+    // 11-20: span 1 ended on the outer wall, so along its top.
+    for (int k = 10; k < 20; ++k)
+        QVERIFY2(qAbs(pts.at(k).z() - outerTop) < 0.01f && fromFace(f.outer, pts.at(k), -1) < 0.01,
+                 qPrintable(QString("LED %1 is not on the outer wall's top").arg(k + 1)));
+    // 31-40: span 2 came back to the inner wall; 61-70 on from span 3, on the outer.
+    for (int k = 30; k < 40; ++k)
+        QVERIFY(qAbs(pts.at(k).z() - innerTop) < 0.01f && fromFace(f.inner, pts.at(k), +1) < 0.01);
+    for (int k = 60; k < 70; ++k)
+        QVERIFY(qAbs(pts.at(k).z() - outerTop) < 0.01f);
+    // The run from the first point to the second goes round the U.
+    QVERIFY((pts.at(30) - pts.at(39)).length() > 0.3f);
+    // The longer span (20 LEDs, the average 13.3) droops more.
+    float low1 = 9, low3 = 9;
+    for (int k = 0; k < 10; ++k) low1 = qMin(low1, pts.at(k).z());
+    for (int k = 40; k < 60; ++k) low3 = qMin(low3, pts.at(k).z());
+    QVERIFY(low3 < low1);
+
+    // What the table editor refuses.
+    QVERIFY(PixelPath::checkSprinkleSpans(rp.sprinkleSpans, 70).isEmpty());
+    QVERIFY(!PixelPath::checkSprinkleSpans(rp.sprinkleSpans, 50).isEmpty());   // past the end
+    SprinkleSpan bad;
+    bad.firstLed = 5; bad.lastLed = 12; bad.point = 0.5f;
+    QVERIFY(PixelPath::checkSprinkleSpans({ s1, bad }, 70).contains("overlap"));
+    bad.firstLed = 12; bad.lastLed = 11;
+    QVERIFY(!PixelPath::checkSprinkleSpans({ bad }, 70).isEmpty());
+    bad.lastLed = 14; bad.point = 1.5f;
+    QVERIFY(!PixelPath::checkSprinkleSpans({ bad }, 70).isEmpty());
+}
+
+void MonitorProperties_Test::sprinkleSpansRoundTrip()
+{
+    MonitorProperties mp;
+    buildFountain(mp);
+    FixtureRigProps rp;
+    rp.pixelPath = PixelPath::SprinkleLoops;
+    rp.sprinklePoints = 5;
+    rp.sprinkleSpansPerPoint = 3;
+    SprinkleSpan a, b;
+    a.firstLed = 1; a.lastLed = 32; a.point = 0.1f;
+    b.firstLed = 41; b.lastLed = 72; b.point = 0.3333f;
+    rp.sprinkleSpans = { a, b };
+    mp.setFixturePosition(7, 0, 0, QVector3D(1, 2, 0));
+    mp.setFixtureRigProps(7, rp);
+    FixtureRigProps plain;
+    plain.pixelPath = PixelPath::SprinkleLoops;
+    mp.setFixturePosition(8, 0, 0, QVector3D(1, 2, 0));
+    mp.setFixtureRigProps(8, plain);
+
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+    QVERIFY(buf.contains("SprSpans=\"1-32@0.1000;41-72@0.3333\""));
+    MonitorProperties mp2;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp2.loadXML(reader, nullptr));
+    const FixtureRigProps r2 = mp2.fixtureRigProps(7);
+    QCOMPARE(r2.pixelPath, int(PixelPath::SprinkleLoops));
+    QCOMPARE(r2.sprinklePoints, 5);
+    QCOMPARE(r2.sprinkleSpansPerPoint, 3);
+    QCOMPARE(r2.sprinkleSpans.size(), 2);
+    QVERIFY(r2.sprinkleSpans == rp.sprinkleSpans);
+    // The defaults write nothing and read back as the defaults.
+    const FixtureRigProps r3 = mp2.fixtureRigProps(8);
+    QCOMPARE(r3.sprinklePoints, 6);
+    QCOMPARE(r3.sprinkleSpansPerPoint, 4);
+    QVERIFY(r3.sprinkleSpans.isEmpty());
+    QCOMPARE(buf.count("SprPts"), 1);
+    // A broken entry is dropped, not misread.
+    QCOMPARE(PixelPath::sprinkleSpansFromString("1-10@0.5;x;5@1;11-20@0.6").size(), 2);
+}
+
+/* Read Segments: a WLED's /json/state segments become the spans, in LED
+   order, grouped spans-per-point to a place. No network here: canned JSON. */
+void MonitorProperties_Test::sprinkleSpansFromWledSegments()
+{
+    const QByteArray state = R"({"on":true,"bri":128,"seg":[
+        {"id":0,"start":0,"stop":30,"len":30,"rev":false},
+        {"id":2,"start":70,"stop":100,"len":30,"rev":true},
+        {"id":1,"start":30,"stop":60,"len":30,"rev":true},
+        {"id":3,"start":100,"stop":130,"len":30,"rev":false},
+        {"id":4,"start":0,"stop":0}
+    ]})";
+    QVector<SprinkleSpan> spans;
+    int points = 0;
+    QString error;
+    QList<int> notReversed;
+    QVERIFY(PixelPath::sprinkleSpansFromWled(state, 2, spans, points, &error, &notReversed));
+    QCOMPARE(spans.size(), 4);
+    QCOMPARE(points, 2);
+    QCOMPARE(spans.at(0).firstLed, 1);  QCOMPARE(spans.at(0).lastLed, 30);
+    QCOMPARE(spans.at(1).firstLed, 31); QCOMPARE(spans.at(1).lastLed, 60);
+    QCOMPARE(spans.at(2).firstLed, 71); QCOMPARE(spans.at(2).lastLed, 100);   // 61-70 run on
+    QCOMPARE(spans.at(3).firstLed, 101); QCOMPARE(spans.at(3).lastLed, 130);
+    QCOMPARE(spans.at(0).point, 0.25f);
+    QCOMPARE(spans.at(1).point, 0.25f);
+    QCOMPARE(spans.at(2).point, 0.75f);
+    // The third (70-100) is reversed and the fourth not: both the wrong way.
+    QCOMPARE(notReversed, QList<int>({ 3, 4 }));
+    QVERIFY(PixelPath::checkSprinkleSpans(spans, 130).isEmpty());
+
+    // /json carries it under "state".
+    QVERIFY(PixelPath::sprinkleSpansFromWled(QByteArray(R"({"state":{"seg":[{"start":0,"stop":10}]},"info":{}})"),
+                                             4, spans, points));
+    QCOMPARE(spans.size(), 1);
+    QCOMPARE(points, 1);
+    QCOMPARE(spans.first().point, 0.5f);
+
+    // Not a WLED, or one with nothing set up: an error, no spans.
+    QVERIFY(!PixelPath::sprinkleSpansFromWled("<html>nope</html>", 2, spans, points, &error));
+    QVERIFY(!error.isEmpty());
+    QVERIFY(spans.isEmpty());
+    error.clear();
+    QVERIFY(!PixelPath::sprinkleSpansFromWled(R"({"seg":[]})", 2, spans, points, &error));
+    QVERIFY(!error.isEmpty());
+}

@@ -530,6 +530,7 @@ private slots:
     void aFixtureInTheFountainMovesAndTurnsWithIt();
     void aResizedPlotKeepsTheFountainSelected();
     void aFountainsFlameUnlocksWhereItShowsLocked();
+    void sprinkleLoopsRowsEditAndReadSegments();
     void aWledRingLaysItsPixelsOnTheWallTop();
     void aHeldWandGoesWithItsPerformer();
     void aWandsFairyStringFieldsWorkOutItsTurns();

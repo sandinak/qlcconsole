@@ -4088,6 +4088,12 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.holdHeight = a.value("HoldH").toFloat();
             if (a.hasAttribute("HoldTilt"))
                 rp.holdTilt = a.value("HoldTilt").toFloat();
+            if (a.hasAttribute("SprPts"))
+                rp.sprinklePoints = qMax(1, a.value("SprPts").toInt());
+            if (a.hasAttribute("SprPer"))
+                rp.sprinkleSpansPerPoint = qMax(1, a.value("SprPer").toInt());
+            if (a.hasAttribute("SprSpans"))
+                rp.sprinkleSpans = PixelPath::sprinkleSpansFromString(a.value("SprSpans").toString());
             if (a.hasAttribute("Deck"))
             {
                 rp.deckPlatformId   = a.value("Deck").toUInt();
@@ -5030,6 +5036,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
             doc->writeAttribute(QStringLiteral("HoldH"), QString::number(double(rp.holdHeight), 'f', 3));
         if (rp.holdTilt != 20.0f)
             doc->writeAttribute(QStringLiteral("HoldTilt"), QString::number(double(rp.holdTilt), 'f', 1));
+        if (rp.sprinklePoints != 6)
+            doc->writeAttribute(QStringLiteral("SprPts"), QString::number(rp.sprinklePoints));
+        if (rp.sprinkleSpansPerPoint != 4)
+            doc->writeAttribute(QStringLiteral("SprPer"), QString::number(rp.sprinkleSpansPerPoint));
+        if (!rp.sprinkleSpans.isEmpty())
+            doc->writeAttribute(QStringLiteral("SprSpans"), PixelPath::sprinkleSpansToString(rp.sprinkleSpans));
         if (rp.onDeck())
         {
             doc->writeAttribute(QStringLiteral("Deck"),  QString::number(rp.deckPlatformId));

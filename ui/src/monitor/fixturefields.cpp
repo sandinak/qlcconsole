@@ -22,6 +22,11 @@
 #include <QSpinBox>
 #include <QLabel>
 #include <QStandardItemModel>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QNetworkProxy>
+#include <QPointer>
 
 #include "structurestudioview.h"
 #include "monitorgraphicsview.h"
@@ -50,6 +55,7 @@
 #include "stagetarget.h"
 #include "pixelpath.h"
 #include "fountain.h"
+#include "sprinklespansdialog.h"
 
 namespace
 {
@@ -577,7 +583,9 @@ void FixtureFields::hideAll()
                         static_cast<QWidget *>(m_wandLength), static_cast<QWidget *>(m_wandStrip),
                         static_cast<QWidget *>(m_wandDiameter), static_cast<QWidget *>(m_wandStart),
                         static_cast<QWidget *>(m_heldBy),
-                        static_cast<QWidget *>(m_holdHeight), static_cast<QWidget *>(m_holdTilt) })
+                        static_cast<QWidget *>(m_holdHeight), static_cast<QWidget *>(m_holdTilt),
+                        static_cast<QWidget *>(m_sprPoints), static_cast<QWidget *>(m_sprPer),
+                        m_sprBox, static_cast<QWidget *>(m_sprNote) })
         row(w, false);
 }
 
@@ -1024,6 +1032,42 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     m_holdTilt->setToolTip(tr("How far it leans forward, toward the audience, from upright"));
     form->addRow(tr("Leaning:"), m_holdTilt);
 
+    m_sprPoints = new QSpinBox(parent);
+    m_sprPoints->setObjectName(QStringLiteral("fixtureSprinklePoints"));
+    m_sprPoints->setRange(1, 64);
+    m_sprPoints->setToolTip(tr("How many places round the U the string loops across the gap, "
+                               "evenly spaced (when no span table says where)"));
+    form->addRow(tr("Points:"), m_sprPoints);
+
+    m_sprPer = new QSpinBox(parent);
+    m_sprPer->setObjectName(QStringLiteral("fixtureSprinkleSpans"));
+    m_sprPer->setRange(1, 32);
+    m_sprPer->setToolTip(tr("How many times the string crosses the gap at each point, "
+                            "inner wall to outer and back"));
+    form->addRow(tr("Spans per point:"), m_sprPer);
+
+    m_sprBox = new QWidget(parent);
+    QHBoxLayout *sprRow = new QHBoxLayout(m_sprBox);
+    sprRow->setContentsMargins(0, 0, 0, 0);
+    m_sprEdit = new QPushButton(tr("Edit Spans…"), m_sprBox);
+    m_sprEdit->setObjectName(QStringLiteral("fixtureSprinkleEdit"));
+    m_sprEdit->setToolTip(tr("Which LEDs make each span and where it hangs"));
+    m_sprRead = new QPushButton(tr("Read Segments"), m_sprBox);
+    m_sprRead->setObjectName(QStringLiteral("fixtureSprinkleRead"));
+    m_sprRead->setToolTip(tr("Make one span of each of the WLED's segments, read from the device"));
+    sprRow->addWidget(m_sprEdit);
+    sprRow->addWidget(m_sprRead);
+    sprRow->addStretch();
+    form->addRow(tr("Spans:"), m_sprBox);
+    connect(m_sprEdit, &QPushButton::clicked, this, &FixtureFields::editSprinkleSpans);
+    connect(m_sprRead, &QPushButton::clicked, this, &FixtureFields::readSprinkleSegments);
+
+    m_sprNote = new QLabel(parent);
+    m_sprNote->setObjectName(QStringLiteral("fixtureSprinkleNote"));
+    m_sprNote->setWordWrap(true);
+    m_sprNote->setStyleSheet(QStringLiteral("color:#b0b4c0;"));
+    form->addRow(QString(), m_sprNote);
+
     MonitorGraphicsView *gv = m_monitor->m_graphicsView;
     auto each = [this, props, gv](const QString &field,
                                   const std::function<void(FixtureRigProps &)> &set) {
@@ -1069,6 +1113,12 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     });
     connect(m_holdTilt, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [each](double v) {
         each(QStringLiteral("holdTilt"), [v](FixtureRigProps &rp) { rp.holdTilt = float(v); });
+    });
+    connect(m_sprPoints, QOverload<int>::of(&QSpinBox::valueChanged), this, [each](int v) {
+        each(QStringLiteral("sprinklePoints"), [v](FixtureRigProps &rp) { rp.sprinklePoints = v; });
+    });
+    connect(m_sprPer, QOverload<int>::of(&QSpinBox::valueChanged), this, [each](int v) {
+        each(QStringLiteral("sprinkleSpansPerPoint"), [v](FixtureRigProps &rp) { rp.sprinkleSpansPerPoint = v; });
     });
 }
 
@@ -1125,4 +1175,135 @@ void FixtureFields::showPixelRows(quint32 fid)
     row(m_holdHeight, wand && rp.isHeld());
     m_holdTilt->setValue(double(rp.holdTilt));
     row(m_holdTilt, wand && rp.isHeld());
+
+    const bool sprinkles = rp.pixelPath == PixelPath::SprinkleLoops;
+    const QSignalBlocker b7(m_sprPoints), b8(m_sprPer);
+    m_sprPoints->setValue(rp.sprinklePoints);
+    m_sprPer->setValue(rp.sprinkleSpansPerPoint);
+    // With a table, it says where each span is; the counts only group a read.
+    m_sprPoints->setEnabled(rp.sprinkleSpans.isEmpty());
+    row(m_sprPoints, sprinkles);
+    row(m_sprPer, sprinkles);
+    const bool one = m_fids.size() == 1;
+    m_sprEdit->setEnabled(one);
+    m_sprRead->setEnabled(one && WledConfigCheck::isWled(doc->fixture(fid)));
+    row(m_sprBox, sprinkles);
+    if (sprinkles && !m_sprNote->property("sprinkleReading").toBool())
+    {
+        const int leds = PixelPathDecor::ledCount(doc, fid);
+        const QVector<SprinkleSpan> spans = PixelPath::sprinkleLayout(rp, leds);
+        int inSpans = 0;
+        foreach (const SprinkleSpan &sp, spans)
+            inSpans += sp.lastLed - sp.firstLed + 1;
+        m_sprNote->setText(rp.sprinkleSpans.isEmpty()
+            ? tr("Evenly spread: %n span(s), %1 LEDs each", "", spans.size())
+                  .arg(spans.isEmpty() ? 0 : leds / spans.size())
+            : tr("From its table: %n span(s), %1 LEDs between them", "", spans.size())
+                  .arg(qMax(0, leds - inSpans)));
+    }
+    row(m_sprNote, sprinkles);
+}
+
+void FixtureFields::editSprinkleSpans()
+{
+    if (m_fids.size() != 1)
+        return;
+    const quint32 fid = m_fids.first();
+    MonitorProperties *props = m_monitor->m_props;
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const int leds = PixelPathDecor::ledCount(m_monitor->m_doc, fid);
+    // Start from what it is laid out as now, so the even spread can be adjusted.
+    SprinkleSpansDialog dlg(rp.sprinkleSpans.isEmpty() ? PixelPath::sprinkleLayout(rp, leds)
+                                                       : rp.sprinkleSpans, leds, m_parent);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    const QVector<SprinkleSpan> spans = dlg.spans();
+    if (spans == rp.sprinkleSpans)
+        return;
+    emit aboutToEdit(QStringLiteral("sprinkleSpans"));
+    FixtureRigProps now = props->fixtureRigProps(fid);
+    now.sprinkleSpans = spans;
+    props->setFixtureRigProps(fid, now);
+    if (m_monitor->m_graphicsView != nullptr)
+        m_monitor->m_graphicsView->updateFixture(fid);
+    finishEdit();
+}
+
+void FixtureFields::readSprinkleSegments()
+{
+    if (m_fids.size() != 1)
+        return;
+    const quint32 fid = m_fids.first();
+    const Fixture *fx = m_monitor->m_doc->fixture(fid);
+    if (!WledConfigCheck::isWled(fx))
+    {
+        takeWledSegments(fid, QByteArray(), false, tr("It is not a WLED on the network with an IP address."));
+        return;
+    }
+    if (m_nam == nullptr)
+    {
+        m_nam = new QNetworkAccessManager(this);
+        m_nam->setProxy(QNetworkProxy::NoProxy);    // WLEDs are on the show LAN
+    }
+    const QString ip = fx->ipAddress();
+    QNetworkRequest req(QUrl(WledConfigCheck::baseUrl(ip) + QStringLiteral("/json/state")));
+    req.setTransferTimeout(4000);
+    QNetworkReply *reply = m_nam->get(req);
+    m_sprRead->setEnabled(false);
+    m_sprNote->setProperty("sprinkleReading", true);
+    m_sprNote->setText(tr("Reading the segments from %1…").arg(ip));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, fid, ip]() {
+        reply->deleteLater();
+        const bool ok = reply->error() == QNetworkReply::NoError;
+        QString why;
+        if (!ok)
+            why = reply->error() == QNetworkReply::OperationCanceledError
+                      || reply->error() == QNetworkReply::TimeoutError
+                ? tr("%1 did not answer in time.").arg(ip)
+                : tr("%1 did not answer: %2").arg(ip, reply->errorString());
+        takeWledSegments(fid, ok ? reply->readAll() : QByteArray(), ok, why);
+    });
+}
+
+void FixtureFields::takeWledSegments(quint32 fid, const QByteArray &body, bool ok, const QString &why)
+{
+    m_sprNote->setProperty("sprinkleReading", false);
+    MonitorProperties *props = m_monitor->m_props;
+    QString error = why;
+    QVector<SprinkleSpan> spans;
+    int points = 0;
+    QList<int> notReversed;
+    if (ok && props->containsFixture(fid))
+    {
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        if (PixelPath::sprinkleSpansFromWled(body, rp.sprinkleSpansPerPoint, spans, points,
+                                             &error, &notReversed))
+        {
+            emit aboutToEdit(QStringLiteral("sprinkleSpans"));
+            rp.sprinkleSpans = spans;
+            rp.sprinklePoints = qMax(1, points);
+            props->setFixtureRigProps(fid, rp);
+            if (m_monitor->m_graphicsView != nullptr)
+                m_monitor->m_graphicsView->updateFixture(fid);
+            finishEdit();
+            QString note = tr("Read %n segment(s) as spans at %1 point(s).", "", spans.size()).arg(points);
+            if (!notReversed.isEmpty())
+            {
+                QStringList segs;
+                foreach (int k, notReversed)
+                    segs << QString::number(k);
+                note += QStringLiteral(" ")
+                      + tr("Reverse is not set as every second segment needs it on segment(s) %1.")
+                            .arg(segs.join(QStringLiteral(", ")));
+            }
+            m_sprNote->setText(note);
+            return;
+        }
+    }
+    else if (ok)
+        error = tr("The fixture is gone.");
+    if (m_fids.size() == 1 && m_fids.first() == fid)
+        m_sprRead->setEnabled(true);
+    m_sprNote->setText(tr("Couldn't read the segments: %1").arg(error));
+    m_sprNote->setVisible(true);
 }

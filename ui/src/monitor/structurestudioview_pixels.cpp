@@ -33,19 +33,24 @@
 
 QColor StructureStudioView::fountainUplight(quint32 flameFid, double *level) const
 {
-    /* What lights the silk: the lights in its fountain (its pars in the gap,
-       uplighting it), added up by colour and level. */
+    /* What lights the silk: the lights in its fountain (its pars inside the
+       inner wall, uplighting it), added up by colour and level. A par in
+       the gap between the walls washes the inner wall, not the silk. */
     MonitorProperties *props = m_doc->monitorProperties();
     const quint32 gid = props->fixtureGroup(flameFid);
     double r = 0.0, g = 0.0, b = 0.0;
     if (gid != 0)
     {
+        const Fountain::Parts parts = Fountain::ofGroup(props, gid);
         foreach (quint32 fid, props->fixtureItemsID())
         {
             if (fid == flameFid || props->fixtureGroup(fid) != gid)
                 continue;
             Fixture *fx = m_doc->fixture(fid);
             if (fx == nullptr || Fountain::isFlame(fx) || props->fixtureRigProps(fid).pixelPath != 0)
+                continue;
+            const QVector3D at = props->fixtureRigPosition(fid);
+            if (Fountain::inGap(parts, double(at.x()), double(at.y())))
                 continue;
             bool complete = true;
             const QByteArray vals = valuesForDrawing(fx, &complete);

@@ -15,6 +15,8 @@
 #include <QObject>
 #include <QList>
 
+#include "../qlcui_export.h"
+
 class StructureStudioView;
 class ColourSwatchButton;
 class QDoubleSpinBox;
@@ -41,7 +43,7 @@ class QLabel;
  * and changes nothing until it is set -- then it is set on all of them. A
  * change applies at once; aboutToEdit() comes first, for an undo snapshot.
  */
-class FixtureFields final : public QObject
+class QLC_UI_EXPORT FixtureFields final : public QObject
 {
     Q_OBJECT
 
@@ -92,6 +94,13 @@ private:
      *  (docs/design/FOUNTAIN_WAND.md): built, wired and filled. */
     void buildPixelRows(QFormLayout *form, QWidget *parent);
     void showPixelRows(quint32 fid);
+    /** Sprinkle loops: the span table, edited in its dialog. */
+    void editSprinkleSpans();
+    /** Ask the shown fixture's WLED for its segments (/json/state). */
+    void readSprinkleSegments();
+    /** A /json/state reply for @p fid's WLED (or why there is none, @p ok
+     *  false): its segments become its spans. */
+    void takeWledSegments(quint32 fid, const QByteArray &body, bool ok, const QString &why);
 
     Monitor *m_monitor;
     QFormLayout *m_form;
@@ -120,6 +129,13 @@ private:
     QComboBox *m_heldBy;        ///< a Person target, or nobody
     QDoubleSpinBox *m_holdHeight;
     QDoubleSpinBox *m_holdTilt;
+    QSpinBox *m_sprPoints;      ///< Sprinkle loops: places round the U
+    QSpinBox *m_sprPer;         ///< and spans at each
+    QWidget *m_sprBox;          ///< Edit Spans…, Read Segments
+    class QPushButton *m_sprEdit;
+    class QPushButton *m_sprRead;
+    QLabel *m_sprNote;          ///< the span table in words, or why a read failed
+    class QNetworkAccessManager *m_nam = nullptr;
     LightControls *m_light;
     QWidget *m_dmxBox;
     QSpinBox *m_dmxUni;
