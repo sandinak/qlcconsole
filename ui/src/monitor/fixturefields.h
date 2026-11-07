@@ -15,6 +15,8 @@
 #include <QObject>
 #include <QList>
 
+#include "../qlcui_export.h"
+
 class StructureStudioView;
 class ColourSwatchButton;
 class QDoubleSpinBox;
@@ -41,7 +43,7 @@ class QLabel;
  * and changes nothing until it is set -- then it is set on all of them. A
  * change applies at once; aboutToEdit() comes first, for an undo snapshot.
  */
-class FixtureFields final : public QObject
+class QLC_UI_EXPORT FixtureFields final : public QObject
 {
     Q_OBJECT
 
