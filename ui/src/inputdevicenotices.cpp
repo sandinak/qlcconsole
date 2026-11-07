@@ -256,3 +256,74 @@ void InputDeviceNotices::updateStatus(const QList<Device> &now) const
            "by itself when the device is switched on or wakes -- nothing to re-patch."),
         items);
 }
+
+/*****************************************************************************
+ * Stick rest
+ *****************************************************************************/
+
+void InputDeviceNotices::watchSticks(QLCIOPlugin *plugin)
+{
+    if (plugin == nullptr)
+        return;
+    /* By name: QLCIOPlugin is built into every plugin too, so on Windows a
+       member-pointer connection to its signals never fires. */
+    connect(plugin, SIGNAL(inputStickDrift(quint32,int,double)),
+            this, SLOT(slotStickDrift(quint32,int,double)), Qt::UniqueConnection);
+    connect(plugin, SIGNAL(inputSticksCentred(quint32,int)),
+            this, SLOT(slotSticksCentred(quint32,int)), Qt::UniqueConnection);
+}
+
+QString InputDeviceNotices::controllerName(QLCIOPlugin *plugin, quint32 input)
+{
+    const QStringList inputs = plugin != nullptr ? plugin->inputs() : QStringList();
+    QString name = int(input) < inputs.size() ? inputs.at(int(input)).trimmed() : QString();
+    const int paren = name.lastIndexOf(QLatin1String(" ("));
+    if (paren > 0 && name.endsWith(QLatin1Char(')')))
+        name.truncate(paren);
+    return name.isEmpty() ? tr("The controller") : name;
+}
+
+bool InputDeviceNotices::centreSticks(QLCIOPlugin *plugin, quint32 input)
+{
+    if (plugin == nullptr || !plugin->centreInputSticks(input))
+    {
+        emit notice(tr("%1's sticks can't be centred: its input plugin doesn't correct them.")
+                    .arg(controllerName(plugin, input)), false);
+        return false;
+    }
+    emit notice(tr("Centring %1's sticks: let go of them for a moment.")
+                .arg(controllerName(plugin, input)), false);
+    return true;
+}
+
+void InputDeviceNotices::slotStickDrift(quint32 input, int channel, double offset)
+{
+    QLCIOPlugin *plugin = qobject_cast<QLCIOPlugin *>(sender());
+    if (plugin == nullptr)
+        return;
+    const QString name = controllerName(plugin, input);
+    const QString key = plugin->name() + QLatin1Char('\n') + name;
+    if (m_driftSaid.contains(key))
+        return;
+    m_driftSaid.insert(key);
+    QString axis = plugin->inputChannelName(input, quint32(channel));
+    if (axis.isEmpty())
+        axis = tr("axis %1").arg(channel + 1);
+    const QString value = QString::asprintf("%+.2f", offset);
+    emit stickOffer(tr("%1's stick isn't resting in the middle (%2 %3): what it drives can creep. "
+                       "Let go of the sticks and centre them.").arg(name, axis, value),
+                    tr("Centre Sticks"), plugin, input);
+}
+
+void InputDeviceNotices::slotSticksCentred(quint32 input, int held)
+{
+    QLCIOPlugin *plugin = qobject_cast<QLCIOPlugin *>(sender());
+    if (plugin == nullptr)
+        return;
+    const QString name = controllerName(plugin, input);
+    if (held > 0)
+        emit notice(tr("%1: %n stick(s) were held off the middle and left as they were. "
+                       "Let go of the sticks and centre them again.", "", held).arg(name), false);
+    else
+        emit notice(tr("%1's sticks are centred.").arg(name), false);
+}

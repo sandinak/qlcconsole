@@ -26,6 +26,7 @@
 #include <QStringList>
 #include "qlcui_export.h"
 
+class QLCIOPlugin;
 class QTimer;
 class Doc;
 
@@ -94,10 +95,29 @@ signals:
     void offer(const QString &text, const QString &button, quint32 universe,
                const QString &plugin, const QString &device);
 
+    /** A controller's stick rests off the middle (a worn stick): @p text
+     *  says so, @p button offers Centre Sticks (centreSticks()). Once per
+     *  controller a session. */
+    void stickOffer(const QString &text, const QString &button, QLCIOPlugin *plugin, quint32 input);
+
 public:
     /** "Use '<pad>' for universe N (and remember it)": add it to the
      *  universe's controller slot and use it now. */
     bool adopt(quint32 universe, const QString &plugin, const QString &device);
+
+    /** Hear @p plugin's stick drift and Centre Sticks results (by name:
+     *  see App's plugin loading). */
+    void watchSticks(QLCIOPlugin *plugin);
+    /** Centre Sticks on @p plugin's @p input; says so (notice()). */
+    bool centreSticks(QLCIOPlugin *plugin, quint32 input);
+
+    /** "DUALSHOCK 4", for @p plugin's @p input: its name without the
+     *  address in brackets. */
+    static QString controllerName(QLCIOPlugin *plugin, quint32 input);
+
+private slots:
+    void slotStickDrift(quint32 input, int channel, double offset);
+    void slotSticksCentred(quint32 input, int held);
 
 private:
     void schedule();
@@ -109,6 +129,8 @@ private:
     QMap<quint32, Device> m_said;
     /** Offers made ("universe\nplugin\ndevice") while they stand. */
     QSet<QString> m_offered;
+    /** Controllers whose stick drift was said ("plugin\ndevice"). */
+    QSet<QString> m_driftSaid;
 };
 
 #endif

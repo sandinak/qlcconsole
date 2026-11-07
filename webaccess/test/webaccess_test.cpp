@@ -18,6 +18,7 @@
 /* Everything here talks to 127.0.0.1 only. */
 
 #include <QtTest>
+#include <QJSEngine>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -2189,6 +2190,39 @@ void WebAccess_Test::theGamepadTablesAreTheConsoles()
     QVERIFY(js.contains(QLatin1String("\"PageDown\":\"rt\"")));
     QVERIFY(js.contains(QLatin1String("\"]\":\"rb\"")));
     QVERIFY(!js.contains(QLatin1Char('@')));
+
+    /* A Steam Deck's (or any browser pad's) worn stick: where it rests as
+       the pad is first seen is learnt and taken out, as the HID plugin does
+       for a pad on the console (StickFilter) -- full travel still reaches
+       both ends, and a push made later is kept. */
+    QJSEngine engine;
+    const QJSValue ran = engine.evaluate(QStringLiteral(
+        "var document={addEventListener:function(){},getElementById:function(){return null}};"
+        "var window={addEventListener:function(){}};var navigator={};"
+        "function requestAnimationFrame(){}\n") + js);
+    QVERIFY2(!ran.isError(), qPrintable(ran.toString()));
+    QJSValue pad = engine.globalObject().property(QStringLiteral("QPad"));
+    QVERIFY(pad.property(QStringLiteral("track")).isCallable());
+    pad.property(QStringLiteral("reset")).call({ 0 });
+    auto track = [&](int t, double x, double y) {
+        QJSValue raw = engine.newArray(4);
+        raw.setProperty(0, x);
+        raw.setProperty(1, y);
+        raw.setProperty(2, 0.0);
+        raw.setProperty(3, 0.0);
+        return pad.property(QStringLiteral("track")).call({ t, raw });
+    };
+    QJSValue out;
+    for (int t = 0; t <= 500; t += 16)
+        out = track(t, 0.10, -0.07);
+    QVERIFY(qAbs(out.property(0).toNumber()) < 1e-9);
+    QVERIFY(qAbs(out.property(1).toNumber()) < 1e-9);
+    QCOMPARE(track(600, 1.0, -1.0).property(0).toNumber(), 1.0);
+    QCOMPARE(track(616, -1.0, 1.0).property(0).toNumber(), -1.0);
+    // Pushed and held after it has settled in: kept, not learnt.
+    for (int t = 2100; t <= 4000; t += 16)
+        out = track(t, 0.30, -0.07);
+    QVERIFY(out.property(0).toNumber() > 0.2);
 }
 
 void WebAccess_Test::theRunPageMapIsPadRun()

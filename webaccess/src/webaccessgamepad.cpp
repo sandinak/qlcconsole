@@ -63,6 +63,16 @@ static const char kScript[] = R"JS(
 var QPad=(function(){
 var BTN=@BTN@,AX=@AX@,KEYS=@KEYS@,PRESS=@PRESS@,RELEASE=@RELEASE@,DZ=@DZ@,SEND=@SEND@;
 var h={},padDown={},keyDown={},down={},axes=[0,0,0,0],vals={},pad=null,lastKey='',open=false,last=0,labels={},rtt=null,frames=0;
+var rest=[0,0,0,0],learn=null;
+function corr(v,r){var o=v>=r?(v-r)/(1-r):(v-r)/(1+r);return Math.max(-1,Math.min(1,o))}
+function reset(t){rest=[0,0,0,0];learn={until:t+2000,lo:[],hi:[],at:[],done:[]}}
+function track(t,raw){var out=[0,0,0,0];
+  for(var a=0;a<4;a++){var v=raw[a]||0;
+    if(learn){if(learn.lo[a]===undefined||Math.max(learn.hi[a],v)-Math.min(learn.lo[a],v)>0.03){learn.lo[a]=learn.hi[a]=v;learn.at[a]=t}
+      else{learn.lo[a]=Math.min(learn.lo[a],v);learn.hi[a]=Math.max(learn.hi[a],v)}
+      var m=(learn.lo[a]+learn.hi[a])/2;if(!learn.done[a]&&t-learn.at[a]>=300&&Math.abs(m)<=0.3){rest[a]=m;learn.done[a]=true}}
+    out[a]=corr(v,rest[a])}
+  if(learn&&t>=learn.until)learn=null;return out}
 function $q(i){return document.getElementById(i)}
 function set(r){var d=!!(padDown[r]||keyDown[r]);if(!!down[r]===d)return;down[r]=d;
   if(open&&d&&r==='start'){toggle(false);return}
@@ -71,7 +81,7 @@ function vel(a){var d=a/2;if(Math.abs(d)<DZ)return 0;var s=d>0?1:-1;return s*Mat
 function poll(t){
   var list=navigator.getGamepads?navigator.getGamepads():[],p=null;
   for(var i=0;i<list.length;i++){if(list[i]&&list[i].connected){p=list[i];break}}
-  if((p&&p.id)!==(pad&&pad.id)&&h.pad)h.pad(p);
+  if((p&&p.id)!==(pad&&pad.id)){reset(t);if(h.pad)h.pad(p)}
   pad=p;
   if(p){
     for(var b=0;b<p.buttons.length&&b<BTN.length;b++){
@@ -79,7 +89,7 @@ function poll(t){
       var v=p.buttons[b].value,pr=p.buttons[b].pressed;
       var val=(v>0&&v<1)?v:(pr?1:0);vals[r]=val;
       padDown[r]=padDown[r]?val>RELEASE:val>=PRESS;set(r)}
-    for(var a=0;a<4;a++)axes[a]=p.axes[a]||0}
+    axes=track(t,[p.axes[0],p.axes[1],p.axes[2],p.axes[3]])}
   else{for(var k in padDown){padDown[k]=false;set(k)}axes=[0,0,0,0]}
   var dt=last?Math.min(0.1,(t-last)/1000):0;last=t;
   if(!open&&h.frame)h.frame(dt,axes);
@@ -117,6 +127,7 @@ function toggle(on){open=on===undefined?!open:on;var t=$q('qpadtest');if(t)t.cla
 requestAnimationFrame(poll);
 window.addEventListener('gamepadconnected',function(){if(open)paint()});
 return{on:on,vel:vel,send:SEND,deadzone:DZ,toggle:toggle,isOpen:function(){return open},
+  track:track,reset:reset,rest:function(){return rest.slice()},
   labels:function(l){labels=l||{};for(var r in cells)cells[r].l.textContent=lab(r)},
   rtt:function(ms){rtt=ms;if(open)paint()},pad:function(){return pad},down:function(r){return !!down[r]}};
 function on(x){h=x||{}}

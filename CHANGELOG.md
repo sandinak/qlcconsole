@@ -12,6 +12,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Fixed
+
+- A worn or uncalibrated controller stick that rests off the middle (a
+  DualShock 4 at +0.12) no longer moves lights by itself: each stick's
+  rest is learnt as the controller arrives and taken out of what it reads,
+  full travel still reaching both ends; a stick left off the middle is said
+  once in the notice line with **Centre Sticks** (also in the Controller
+  Test window, which now shows each stick's reading, rest, deadzone and
+  output, and on the pad as View + LS / Create + L3), and the rest is
+  remembered per controller. The PlayStation profile's deadzone is 0.08,
+  and a joystick with no profile gets 0.08.
+
 ## [0.4.1] - 2026-11-06
 
 qlcconsole 0.4.1 is a stable release that hardens 0.4.0: the follow spot,

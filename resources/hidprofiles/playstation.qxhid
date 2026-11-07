@@ -13,7 +13,7 @@
        there and is not read. Windows lists these pads' own order, which
        this profile does not describe. -->
   <Vendor id="0x054C" name="Sony"/>
-  <Settings sensitivity="1.00" deadzone="0.060"/>
+  <Settings sensitivity="1.00" deadzone="0.080"/>
   <Products>
     <Product id="0x05C4" name="DualShock 4"/>
     <Product id="0x09CC" name="DualShock 4 (second model)"/>

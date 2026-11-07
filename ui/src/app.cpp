@@ -904,6 +904,11 @@ void App::init()
     /* A controller (or MIDI surface) patched as an input coming and going:
        said in the notice line, and in the footer while it is away. */
     m_inputNotices = new InputDeviceNotices(m_doc, this);
+    /* A controller whose stick rests off the middle (a worn stick): the
+       notice line says so once, with Centre Sticks. (The plugins are
+       loaded by now: initDoc().) */
+    foreach (QLCIOPlugin *plugin, m_doc->ioPluginCache()->plugins())
+        m_inputNotices->watchSticks(plugin);
     /* Settings ▸ Performance: full speed during Operate (no App Nap / power
        throttling), and a footer entry when this computer isn't set up for
        steady DMX timing then */
@@ -918,6 +923,14 @@ void App::init()
             this, &App::showInputDeviceNotice);
     /* Another pad where the show's is missing: one click uses it here and
        remembers it with the show (controller slots). */
+    connect(m_inputNotices, &InputDeviceNotices::stickOffer, this,
+            [this](const QString &text, const QString &button, QLCIOPlugin *plugin, quint32 input) {
+        QPointer<QLCIOPlugin> p(plugin);
+        showViewNotice(text, button, [this, p, input]() {
+            hideViewNotice();
+            m_inputNotices->centreSticks(p.data(), input);
+        });
+    });
     connect(m_inputNotices, &InputDeviceNotices::offer, this,
             [this](const QString &text, const QString &button, quint32 universe,
                    const QString &plugin, const QString &device) {

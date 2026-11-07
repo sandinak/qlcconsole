@@ -662,6 +662,25 @@ public:
     { Q_UNUSED(enable); return false; }
 
     /**
+     * Where input line @p input's sticks rest (a worn stick that does not
+     * come back to the middle): one map per stick axis -- "channel",
+     * "raw" (its reading, 0..255; -1 before the first), "rest" (where it
+     * rests, -1..1), "learnt" (bool), "output" (the reading with the rest
+     * taken out, 0..255, what every tool gets) and "deadzone". Empty when
+     * the plugin does not correct for it (the default).
+     */
+    virtual QVariantList inputStickAxes(quint32 input) const
+    { Q_UNUSED(input); return QVariantList(); }
+
+    /**
+     * Centre Sticks: learn where input line @p input's sticks rest again,
+     * once they are let go -- inputSticksCentred() says when it is done.
+     * False when the plugin can't (the default).
+     */
+    virtual bool centreInputSticks(quint32 input)
+    { Q_UNUSED(input); return false; }
+
+    /**
      * Set an arbitrary parameter useful for the plugin. This is similar
      * to Qt's setProperty
      *
@@ -720,6 +739,20 @@ signals:
      */
     void inputDiagnostic(quint32 input, const QString &device, const QString &connection,
                          const QString &element, int raw, int channel, int value);
+
+    /**
+     * A stick of input line @p input has sat still off the middle, past the
+     * deadzone, with nothing else on the controller touched: channel
+     * @p channel reads @p offset (-1..1). Once per controller until its
+     * sticks are centred again (centreInputSticks()). Connect by name.
+     */
+    void inputStickDrift(quint32 input, int channel, double offset);
+
+    /**
+     * Centre Sticks on input line @p input is done; @p held sticks were
+     * held off the middle and so left as they were. Connect by name.
+     */
+    void inputSticksCentred(quint32 input, int held);
 
 protected:
     /**

@@ -32,6 +32,7 @@
 #include <QDateTime>
 #include <QSysInfo>
 #include <QLabel>
+#include <QTimer>
 #include <QTime>
 #include <QDir>
 #include <QFile>
@@ -45,6 +46,7 @@
 #include "ioplugincache.h"
 #include "qlcioplugin.h"
 #include "gamepadrole.h"
+#include "inputdevicenotices.h"
 #include "qlcconfig.h"
 #include "doc.h"
 
@@ -54,6 +56,19 @@ namespace
 {
 enum Column { ColDevice, ColConnection, ColElement, ColRaw, ColRange, ColChannel, ColValue,
               ColMapsTo, ColSeen, ColCount };
+enum StickColumn { StickDevice, StickAxis, StickReads, StickRest, StickDeadzone, StickOutput,
+                   StickColCount };
+
+// A 0..255 stick reading as -1..1 (128 the middle), signed: "+0.12".
+QString stickText(double norm)
+{
+    return QString::asprintf("%+.2f", norm);
+}
+
+double stickNorm(int value)
+{
+    return value >= 128 ? (value - 128) / 127.0 : (value - 128) / 128.0;
+}
 
 const int kMaxEvents = 5000;
 }
@@ -141,6 +156,41 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
     m_tree->setColumnWidth(ColMapsTo, 260);
     vl->addWidget(m_tree, 1);
 
+    /* The sticks: where each rests (a worn stick does not come back to the
+       middle) and what every tool gets once that is taken out. */
+    QHBoxLayout *sticksHead = new QHBoxLayout;
+    m_sticksNote = new QLabel(this);
+    m_sticksNote->setObjectName(QStringLiteral("controllerTestSticksNote"));
+    m_sticksNote->setWordWrap(true);
+    m_sticksNote->setText(tr("Sticks: where each one rests is taken out of what it reads, so a "
+                             "worn stick left alone moves nothing. Let go of the sticks and "
+                             "press Centre Sticks (or hold View and click the left stick: "
+                             "Create + L3 on a PlayStation pad) to learn it again."));
+    sticksHead->addWidget(m_sticksNote, 1);
+    m_centreButton = new QPushButton(tr("Centre Sticks"), this);
+    m_centreButton->setObjectName(QStringLiteral("controllerTestCentre"));
+    m_centreButton->setToolTip(tr("Learn where every controller's sticks rest, once they are let go"));
+    sticksHead->addWidget(m_centreButton, 0, Qt::AlignTop);
+    vl->addLayout(sticksHead);
+    connect(m_centreButton, &QPushButton::clicked, this, [this]() { centreSticks(); });
+
+    m_sticks = new QTreeWidget(this);
+    m_sticks->setObjectName(QStringLiteral("controllerTestSticks"));
+    m_sticks->setRootIsDecorated(false);
+    m_sticks->setUniformRowHeights(true);
+    m_sticks->setColumnCount(StickColCount);
+    m_sticks->setHeaderLabels({ tr("Controller"), tr("Stick"), tr("Reads"), tr("Rests at"),
+                                tr("Deadzone"), tr("Tools get") });
+    // Names are read whole (two pads of a kind differ only in the address).
+    m_sticks->header()->setSectionResizeMode(StickDevice, QHeaderView::ResizeToContents);
+    m_sticks->header()->setSectionResizeMode(StickAxis, QHeaderView::ResizeToContents);
+    m_sticks->setMaximumHeight(m_sticks->fontMetrics().height() * 8);
+    vl->addWidget(m_sticks);
+    m_sticksTimer = new QTimer(this);
+    m_sticksTimer->setInterval(100);
+    connect(m_sticksTimer, &QTimer::timeout, this, &ControllerTestDialog::refreshSticks);
+    m_sticksTimer->start();
+
     m_actions = new FocusControlMap(this);
     m_actions->hide();
 
@@ -172,11 +222,14 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
             connect(plugin, SIGNAL(inputDiagnostic(quint32,QString,QString,QString,int,int,int)),
                     this, SLOT(slotInputDiagnostic(quint32,QString,QString,QString,int,int,int)));
             connect(plugin, SIGNAL(configurationChanged()), this, SLOT(refreshStatus()));
+            connect(plugin, SIGNAL(inputSticksCentred(quint32,int)),
+                    this, SLOT(slotSticksCentred(quint32,int)));
         }
     }
     connect(m_doc->programmer()->controllerKeepAlive(), &ControllerKeepAlive::heldChanged,
             this, &ControllerTestDialog::refreshStatus);
     refreshStatus();
+    refreshSticks();
 }
 
 ControllerTestDialog::~ControllerTestDialog()
@@ -434,4 +487,110 @@ void ControllerTestDialog::saveLog()
         return;
     }
     file.write(logText().toUtf8());
+}
+
+/*****************************************************************************
+ * Sticks
+ *****************************************************************************/
+
+void ControllerTestDialog::refreshSticks()
+{
+    int row = 0;
+    for (const QPointer<QLCIOPlugin> &plugin : std::as_const(m_plugins))
+    {
+        if (plugin.isNull())
+            continue;
+        const QStringList inputs = plugin->inputs();
+        const int count = inputs.size();
+        for (int i = 0; i < count; ++i)
+        {
+            const QVariantList axes = plugin->inputStickAxes(quint32(i));
+            // A controller listed once it has said anything.
+            bool read = false;
+            for (const QVariant &v : axes)
+                read = read || v.toMap().value(QStringLiteral("raw")).toInt() >= 0;
+            if (!read)
+                continue;
+            for (const QVariant &v : axes)
+            {
+                const QVariantMap m = v.toMap();
+                QTreeWidgetItem *item = m_sticks->topLevelItem(row);
+                if (item == nullptr)
+                    item = new QTreeWidgetItem(m_sticks);
+                ++row;
+                const int ch = m.value(QStringLiteral("channel")).toInt();
+                const int raw = m.value(QStringLiteral("raw")).toInt();
+                QString axis = plugin->inputChannelName(quint32(i), quint32(ch));
+                if (axis.isEmpty())
+                    axis = tr("Axis %1").arg(ch + 1);
+                // The tools' deadzone is of the 0..1 reading: twice that of -1..1 travel.
+                const double dz = 2.0 * m.value(QStringLiteral("deadzone")).toDouble();
+                const double out = stickNorm(m.value(QStringLiteral("output")).toInt());
+                // Its whole name: two pads of a kind are told apart by their address.
+                item->setText(StickDevice, inputs.at(i).trimmed());
+                item->setText(StickAxis, axis);
+                item->setText(StickReads, raw < 0 ? QStringLiteral("\u2014") : stickText(stickNorm(raw)));
+                item->setText(StickRest, m.value(QStringLiteral("learnt")).toBool()
+                                         ? stickText(m.value(QStringLiteral("rest")).toDouble())
+                                         : tr("not learnt yet"));
+                item->setText(StickDeadzone, QStringLiteral("\u00B1") + QString::number(dz, 'f', 2));
+                item->setText(StickOutput, raw < 0 ? QStringLiteral("\u2014")
+                                          : qAbs(out) <= dz ? tr("%1 (still)").arg(stickText(out))
+                                                            : stickText(out));
+            }
+        }
+    }
+    while (m_sticks->topLevelItemCount() > row)
+        delete m_sticks->takeTopLevelItem(row);
+    m_centreButton->setEnabled(row > 0);
+    m_centreButton->setToolTip(row > 0 ? tr("Learn where every controller's sticks rest, once they are let go")
+                                       : tr("No controller has sent a stick reading yet: move a stick"));
+    m_sticks->setVisible(row > 0);
+}
+
+int ControllerTestDialog::stickRowCount() const
+{
+    return m_sticks->topLevelItemCount();
+}
+
+int ControllerTestDialog::centreSticks()
+{
+    int asked = 0;
+    QStringList names;
+    for (const QPointer<QLCIOPlugin> &plugin : std::as_const(m_plugins))
+    {
+        if (plugin.isNull())
+            continue;
+        const int count = plugin->inputs().size();
+        for (int i = 0; i < count; ++i)
+        {
+            // The controllers listed: those that have said anything.
+            bool read = false;
+            for (const QVariant &v : plugin->inputStickAxes(quint32(i)))
+                read = read || v.toMap().value(QStringLiteral("raw")).toInt() >= 0;
+            if (!read || !plugin->centreInputSticks(quint32(i)))
+                continue;
+            ++asked;
+            names << InputDeviceNotices::controllerName(plugin.data(), quint32(i));
+        }
+    }
+    if (asked == 0)
+        m_sticksNote->setText(tr("No controller has sent a stick reading yet: move a stick, then "
+                                 "let go and press Centre Sticks."));
+    else
+        m_sticksNote->setText(tr("Centring the sticks of %1: let go of them for a moment.")
+                              .arg(names.join(QStringLiteral(", "))));
+    return asked;
+}
+
+void ControllerTestDialog::slotSticksCentred(quint32 input, int held)
+{
+    QLCIOPlugin *plugin = qobject_cast<QLCIOPlugin *>(sender());
+    const QString name = InputDeviceNotices::controllerName(plugin, input);
+    if (held > 0)
+        m_sticksNote->setText(tr("%1: %n stick(s) were held off the middle and left as they were. "
+                                 "Let go of the sticks and press Centre Sticks again.", "", held).arg(name));
+    else
+        m_sticksNote->setText(tr("%1's sticks are centred: where they rest now reads as the middle.").arg(name));
+    refreshSticks();
 }
