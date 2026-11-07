@@ -532,6 +532,7 @@ private slots:
     void aFountainsFlameUnlocksWhereItShowsLocked();
     void aWledRingLaysItsPixelsOnTheWallTop();
     void aHeldWandGoesWithItsPerformer();
+    void aWandsFairyStringFieldsWorkOutItsTurns();
     void beamsLandOnTheCycloramaInTheRigView();
     /** "set a gobo and projected on the cyc .. and it's not visible" /
      *  "handle prisms and rotation". What the gobo wheels, their rotation and

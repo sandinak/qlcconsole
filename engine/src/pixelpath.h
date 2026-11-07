@@ -63,12 +63,18 @@ namespace PixelPath
     QVector<QVector3D> helix(const QVector3D &from, const QVector3D &to, double radius,
                              double turns, int n);
 
-    /** A wand's staff radius and LED spacing. */
+    /** A wand's staff radius and LED spacing when they aren't set. */
     const double kWandRadius = 0.0125;
     const double kLedSpacing = 0.02;
-    /** Turns of a strip of @p n LEDs at kLedSpacing wound along a staff
-     *  @p length long at kWandRadius: at least half a turn. */
-    double autoWandTurns(int n, double length);
+    /** Turns of a strip wound along a staff @p length long: @p strip metres
+     *  of it (0 = @p n LEDs at kLedSpacing) round a staff @p diameter across
+     *  (0 = kWandRadius's). At least half a turn. */
+    double autoWandTurns(int n, double length, double strip = 0.0, double diameter = 0.0);
+    /** How far up a wand its string starts: a hand's width above the butt. */
+    const float kWandGrip = 0.08f;
+    /** The turns a wand of @p n LEDs is drawn with: its set turns, else Auto
+     *  from its string length and diameter along the staff above the grip. */
+    double wandTurns(const FixtureRigProps &rp, int n);
     /** Turns for a spiral up a flame @p height high, @p n LEDs. */
     double autoSpiralTurns(int n, double height);
 

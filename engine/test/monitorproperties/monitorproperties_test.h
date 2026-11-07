@@ -221,6 +221,7 @@ private slots:
     void aRingIsOnTheWallTopInOrder();
     void aWandHelixHasItsTurns();
     void aHeldWandMovesWithItsPerson();
+    void aFairyStringWandFromItsTip();
     void fountainPixelsAndWandsRoundTrip();
 };
 

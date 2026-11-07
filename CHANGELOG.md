@@ -79,6 +79,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   those threads could still be calling it. A test-only fault; the app
   itself never listened that way. A test program that crashes on macOS now
   prints the crashing thread's stack, so a one-off like this one says where.
+### Added
+
+- **Wands wound with a fairy string.** A wand's properties gain **String
+  length** (how long the lit string is), **Staff diameter** and **First LED
+  at** (Top or Bottom). Auto turns now come from the real string: 50 LEDs on
+  16 ft round a 5 ft staff shows about 58 turns, not half a turn. The Turns
+  field shows the number Auto worked out.
 
 ## [0.4.1] - 2026-11-06
 

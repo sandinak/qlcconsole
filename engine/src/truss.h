@@ -385,6 +385,15 @@ struct FixtureRigProps
     float            pixelTurns = 0.0f;
     /** A wand: the staff's length (metres). */
     float            wandLength = 1.2f;
+    /** A wand: how long its lit string is (metres), first LED to last; with
+     *  the LED count it gives the spacing Auto turns are worked out from.
+     *  0 = not set: LED tape at PixelPath::kLedSpacing. */
+    float            wandStripLength = 0.0f;
+    /** A wand: the staff's diameter (metres) the string is wound round. */
+    float            wandDiameter = 0.025f;
+    /** A wand: its first LED (where the data comes in) is at the tip, the
+     *  string running down to the grip. false = at the grip, running up. */
+    bool             wandFromTop = false;
     /** A wand held by a Person target (its id); UINT_MAX = not held. Held,
      *  its middle is holdHeight up, in front of them, leaning holdTilt
      *  degrees forward, and it moves with them. */

@@ -114,6 +114,9 @@ private:
     QComboBox *m_pixelPath;     ///< PixelPath::Shape
     QDoubleSpinBox *m_pixelTurns;
     QDoubleSpinBox *m_wandLength;
+    QDoubleSpinBox *m_wandStrip;     ///< the lit string's length; 0 = LED tape
+    QDoubleSpinBox *m_wandDiameter;
+    QComboBox *m_wandStart;          ///< LED 1 at the grip or the tip
     QComboBox *m_heldBy;        ///< a Person target, or nobody
     QDoubleSpinBox *m_holdHeight;
     QDoubleSpinBox *m_holdTilt;
