@@ -39,6 +39,7 @@
 #include <QSlider>
 #include <QMutex>
 #include <atomic>
+#include <memory>
 
 #include "mainbar_test.h"
 #include "showtreecontroller.h"
@@ -667,21 +668,39 @@ void MainBar_Test::blindInOperateLeavesAPlayingCuesBytesAlone()
     // and check every finished frame the universe sends out (universeWritten,
     // emitted by the universe's own thread once the frame is complete; a read
     // at tickReady would race that thread mid-frame).
-    std::atomic<int> ticks(0);
-    std::atomic<int> wrong(0);
-    QObject listening;
-    connect(doc->masterTimer(), &MasterTimer::tickReady, &listening, [&]() {
-        ++ticks;
-    }, Qt::DirectConnection);
-    connect(uni, &Universe::universeWritten, &listening, [&](quint32, const QByteArray &frame) {
-        if (addr >= frame.size() || uchar(frame.at(addr)) != 200)
-            ++wrong;
-    }, Qt::DirectConnection);
+    //
+    // Both run on those threads (DirectConnection), so neither may hang on
+    // an object this thread destroys: a context object deleted here while
+    // the other thread is inside the emit is a use-after-free in Qt's
+    // doActivate() -- this test died of SIGBUS on a GitHub macOS runner
+    // (0.4.1) when a local `QObject listening` went out of scope mid-tick.
+    // So the emitters are the contexts, the counters belong to the functors
+    // (a call still in flight after the disconnect touches nothing of this
+    // frame), and the connections go by handle, before anything else.
+    struct Seen
+    {
+        std::atomic<int> ticks{0};
+        std::atomic<int> wrong{0};
+    };
+    const auto seen = std::make_shared<Seen>();
+    const QMetaObject::Connection onTick =
+        connect(doc->masterTimer(), &MasterTimer::tickReady, doc->masterTimer(), [seen]() {
+            ++seen->ticks;
+        }, Qt::DirectConnection);
+    const QMetaObject::Connection onFrame =
+        connect(uni, &Universe::universeWritten, uni, [seen, addr](quint32, const QByteArray &frame) {
+            if (addr >= frame.size() || uchar(frame.at(addr)) != 200)
+                ++seen->wrong;
+        }, Qt::DirectConnection);
+    auto unhook = qScopeGuard([onTick, onFrame]() {
+        disconnect(onTick);
+        disconnect(onFrame);
+    });
     sc->blindButton()->click();
     QVERIFY(m_app->blindView());
     QCOMPARE(uchar(fx->channelValues().at(0)), uchar(40));     // the picture: the cue in edit
-    QTRY_VERIFY_WITH_TIMEOUT(ticks.load() >= 8, 5000);
-    QCOMPARE(wrong.load(), 0);                          // the wire: the cue playing, every tick
+    QTRY_VERIFY_WITH_TIMEOUT(seen->ticks.load() >= 8, 5000);
+    QCOMPARE(seen->wrong.load(), 0);                    // the wire: the cue playing, every tick
     QCOMPARE(int(uni->postGMValue(addr)), 200);
     QVERIFY(!doc->inputOutputMap()->outputInhibited());
 }
@@ -849,17 +868,24 @@ void MainBar_Test::fadeOneSecondAndStopFadesTheLightOut()
     // the frames are what to count: a machine that falls behind sends the
     // late ones back to back (out after 173 ms on val, 70 ms on a GitHub
     // runner), but it still sends every one of them.
-    QMutex levelsMutex;
-    QList<int> levels;
-    QObject listening;                       // gone before levels is
-    connect(uni, &Universe::universeWritten, &listening,
-            [&levelsMutex, &levels](quint32, const QByteArray &data) {
-                QMutexLocker locker(&levelsMutex);
-                levels << (data.isEmpty() ? -1 : int(uchar(data.at(0))));
-            }, Qt::DirectConnection);
-    auto framesSeen = [&levelsMutex, &levels]() {
-        QMutexLocker locker(&levelsMutex);
-        return levels;
+    // On the universe's thread (DirectConnection): the universe is the
+    // context and the frames belong to the functor, never a local object
+    // this thread destroys mid-emit (see blindInOperateLeavesAPlayingCuesBytesAlone).
+    struct Frames
+    {
+        QMutex mutex;
+        QList<int> levels;
+    };
+    const auto frames = std::make_shared<Frames>();
+    const QMetaObject::Connection onFrame =
+        connect(uni, &Universe::universeWritten, uni, [frames](quint32, const QByteArray &data) {
+            QMutexLocker locker(&frames->mutex);
+            frames->levels << (data.isEmpty() ? -1 : int(uchar(data.at(0))));
+        }, Qt::DirectConnection);
+    auto unhook = qScopeGuard([onFrame]() { disconnect(onFrame); });
+    auto framesSeen = [frames]() {
+        QMutexLocker locker(&frames->mutex);
+        return frames->levels;
     };
 
     fade1->trigger();
@@ -867,7 +893,8 @@ void MainBar_Test::fadeOneSecondAndStopFadesTheLightOut()
     // ...while the light goes out, all the way.
     QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(0)), 0, 5000);
     QTRY_VERIFY(framesSeen().contains(0));
-    disconnect(uni, &Universe::universeWritten, &listening, nullptr);
+    unhook.dismiss();
+    disconnect(onFrame);
 
     const QList<int> seen = framesSeen();
     QStringList shown;

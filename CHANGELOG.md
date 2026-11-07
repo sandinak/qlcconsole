@@ -12,6 +12,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Fixed
+
+- The test suite no longer crashes, now and then, in the main bar's Blind
+  test (SIGBUS, seen once on a GitHub macOS runner): the test listened to
+  the timer and universe threads through a local object it destroyed while
+  those threads could still be calling it. A test-only fault; the app
+  itself never listened that way.
+
 ## [0.4.1] - 2026-11-06
 
 qlcconsole 0.4.1 is a stable release that hardens 0.4.0: the follow spot,
