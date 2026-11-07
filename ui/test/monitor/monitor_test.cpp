@@ -59,6 +59,7 @@
 #include <QFormLayout>
 #include <QActionGroup>
 #include <QTableWidget>
+#include <QStandardItemModel>
 #include <QHeaderView>
 #include <QTreeWidgetItemIterator>
 #include <QtMath>
@@ -68,6 +69,7 @@
 #include "showstatus.h"
 #include "monitor.h"
 #include "fixturefields.h"
+#include "sprinklespansdialog.h"
 #include "righeads.h"
 #include "colourswatchbutton.h"
 #include "headtypesdialog.h"
@@ -18884,6 +18886,179 @@ void Monitor_Test::aFixtureInTheFountainMovesAndTurnsWithIt()
         QVERIFY(qAbs(QLineF(base->centre(), QPointF(parT.x(), parT.y())).length() - parFromBase) < 0.02);
         QVERIFY(base->containsPoint(flameT.x(), flameT.y()));
         QVERIFY(base->containsPoint(parT.x(), parT.y()));
+        delete mon;
+    }
+    delete doc;
+}
+
+/* Sprinkle loops (a WLED fairy string looped across a fountain's gap): its
+   rows show for that path only, Points and Spans per point edit it, the span
+   table refuses overlaps, and Read Segments turns a WLED's segments into
+   spans (canned JSON: no network in tests) or says why it couldn't.
+   QLC_SHOT_DIR set: the rig view of it, before (the string on the inner
+   wall's top) and after, at three sizes. */
+void Monitor_Test::sprinkleLoopsRowsEditAndReadSegments()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = silkFlameDef();
+    QVERIFY(def != nullptr);
+    QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(3, 3, 2));
+    Fixture *string = makeLedString(doc, 96, "Sprinkles", 0);
+    QVERIFY(string != nullptr);
+    Fixture *par = new Fixture(doc);
+    par->setName("Gap par");
+    par->setChannels(1);
+    par->setAddress(400);
+    QVERIFY(doc->addFixture(par));
+    props->setFixturePosition(string->id(), 0, 0, QVector3D(500.0f, 500.0f, 0.0f));
+    props->setFixturePosition(par->id(), 0, 0, QVector3D(800.0f, 500.0f, 0.0f));
+    {
+        QWidget parent;
+        parent.resize(1400, 900);
+        Monitor *mon = new Monitor(&parent, doc);
+        Fixture *flame = nullptr;
+        const quint32 gid = addTestFountain(*mon, doc, def, &flame);
+        QVERIFY(gid != 0);
+        const Fountain::Parts f = Fountain::ofGroup(props, gid);
+        QVERIFY(f.isValid() && f.outer != f.inner);
+        const QPointF c = props->platforms().first()->centre();
+        QVERIFY(Fountain::mountIn(doc, props, string->id(), c.x(), c.y()));
+        // A par in the gap, in front: it washes the inner wall.
+        const QVector3D front = f.inner->pointAt(0.0, 0.0, f.inner->thickness() / 2.0
+                                                 + (f.outer->pointAt(0.0, 0.0).y() - f.inner->pointAt(0.0, 0.0).y()
+                                                    - f.inner->thickness()) / 2.0);
+        QVERIFY(Fountain::inGap(f, front.x(), front.y()));
+        QVERIFY(Fountain::mountIn(doc, props, par->id(), front.x(), front.y()));
+        QVERIFY(props->fixtureRigProps(par->id()).aimDown > -89.0f);
+
+        QWidget host;
+        QFormLayout *form = new QFormLayout(&host);
+        FixtureFields fields(mon, form, &host);
+        fields.setFixtures({ string->id() }, string->id());
+        QVERIFY(!fields.m_pixelPath->isHidden());
+        QVERIFY(fields.m_sprPoints->isHidden());
+        const int idx = fields.m_pixelPath->findData(int(PixelPath::SprinkleLoops));
+        QVERIFY(idx >= 0);
+        auto *model = qobject_cast<QStandardItemModel *>(fields.m_pixelPath->model());
+        QVERIFY(model != nullptr && model->item(idx)->isEnabled());     // it is in a fountain
+        QSignalSpy edits(&fields, &FixtureFields::aboutToEdit);
+        fields.m_pixelPath->setCurrentIndex(idx);
+        QCOMPARE(props->fixtureRigProps(string->id()).pixelPath, int(PixelPath::SprinkleLoops));
+        QVERIFY(!fields.m_sprPoints->isHidden() && !fields.m_sprPer->isHidden() && !fields.m_sprBox->isHidden());
+        QVERIFY(fields.m_sprNote->text().contains("24"));          // 6 x 4, evenly
+        QVERIFY(fields.m_sprEdit->isEnabled());
+        QVERIFY(!fields.m_sprRead->isEnabled());                   // not a WLED on the network
+        fields.m_sprPoints->setValue(4);
+        fields.m_sprPer->setValue(3);
+        QCOMPARE(props->fixtureRigProps(string->id()).sprinklePoints, 4);
+        QCOMPARE(props->fixtureRigProps(string->id()).sprinkleSpansPerPoint, 3);
+        QVERIFY(edits.count() >= 3);
+        QCOMPARE(PixelPath::positions(doc, props, string->id(), 96).size(), 96);
+
+        // The table: an overlap is refused, in words, and the dialog stays.
+        {
+            SprinkleSpan a, b;
+            a.firstLed = 1; a.lastLed = 20; a.point = 0.2f;
+            b.firstLed = 15; b.lastLed = 30; b.point = 0.4f;
+            SprinkleSpansDialog dlg({ a, b }, 96);
+            QCOMPARE(dlg.m_table->rowCount(), 2);
+            dlg.accept();
+            QVERIFY(dlg.result() != QDialog::Accepted);
+            QVERIFY(dlg.m_error->text().contains("overlap"));
+            qobject_cast<QSpinBox *>(dlg.m_table->cellWidget(1, 1))->setValue(21);
+            dlg.accept();
+            QCOMPARE(dlg.result(), int(QDialog::Accepted));
+            QCOMPARE(dlg.spans().at(1).firstLed, 21);
+            QVERIFY(qAbs(dlg.spans().at(1).point - 0.4f) < 1e-4f);
+        }
+        // Edit Spans… starts from the even layout; OK takes it as the table.
+        driveDialog([](QWidget *w) { return qobject_cast<SprinkleSpansDialog *>(w) != nullptr; });
+        fields.editSprinkleSpans();
+        QCOMPARE(props->fixtureRigProps(string->id()).sprinkleSpans.size(), 12);
+        QVERIFY(fields.m_sprPoints->isHidden() || !fields.m_sprPoints->isEnabled());
+
+        // Read Segments: the device's segments become its spans.
+        const int before = edits.count();
+        fields.takeWledSegments(string->id(), QByteArray(R"({"seg":[{"start":0,"stop":20,"rev":false},
+            {"start":20,"stop":40,"rev":true},{"start":40,"stop":60,"rev":false},
+            {"start":70,"stop":90,"rev":true}]})"), true, QString());
+        FixtureRigProps rp = props->fixtureRigProps(string->id());
+        QCOMPARE(rp.sprinkleSpans.size(), 4);
+        QCOMPARE(rp.sprinklePoints, 2);                 // 3 spans a point
+        QCOMPARE(rp.sprinkleSpans.at(3).firstLed, 71);
+        QVERIFY(edits.count() > before);                // one undo step
+        QVERIFY2(fields.m_sprNote->text().contains("Read 4"), qPrintable(fields.m_sprNote->text()));
+        // A device that doesn't answer: said so, nothing changed.
+        fields.takeWledSegments(string->id(), QByteArray(), false, "10.0.0.9 did not answer in time.");
+        QVERIFY(fields.m_sprNote->text().contains("did not answer in time"));
+        QCOMPARE(props->fixtureRigProps(string->id()).sprinkleSpans.size(), 4);
+        fields.readSprinkleSegments();
+        QVERIFY(fields.m_sprNote->text().contains("not a WLED"));
+
+        // Pictures for review: the rig view, before and after.
+        const QByteArray shotDir = qgetenv("QLC_SHOT_DIR");
+        if (!shotDir.isEmpty())
+        {
+            QDir().mkpath(QString::fromLocal8Bit(shotDir));
+            // Every LED lit, a rainbow along the string; the par full.
+            QByteArray v(512, char(0));
+            for (int h = 0; h < 96; ++h)
+            {
+                const QColor col = QColor::fromHsv((h * 360 / 96) % 360, 255, 255);
+                v[h * 3] = char(col.red()); v[h * 3 + 1] = char(col.green()); v[h * 3 + 2] = char(col.blue());
+            }
+            string->setChannelValues(v);
+            props->removeFixture(par->id());    // a bare dimmer: drawn as a box, in the way
+            props->setGridSize(QVector3D(1.6f, 1.8f, 1.2f));
+            const QList<QPair<QSize, QString> > sizes = { { QSize(1024, 640), "1024x640" },
+                                                          { QSize(1280, 800), "1280x800" },
+                                                          { QSize(1920, 1080), "1920x1080" } };
+            for (int pass = 0; pass < 2; ++pass)
+            {
+                FixtureRigProps sp = props->fixtureRigProps(string->id());
+                sp.pixelPath = pass == 0 ? int(PixelPath::InnerWallTop) : int(PixelPath::SprinkleLoops);
+                if (pass == 1)
+                {
+                    sp.sprinkleSpans.clear();
+                    sp.sprinklePoints = 4;
+                    sp.sprinkleSpansPerPoint = 4;
+                }
+                props->setFixtureRigProps(string->id(), sp);
+                for (const auto &sz : sizes)
+                {
+                    StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+                    view.resize(sz.first);
+                    view.reload();
+                    view.setPlane(StructureStudioView::Angled);
+                    view.setAngledView(15.0, 40.0);
+                    view.setLiveValues(true);
+                    view.setBeams(true);
+                    view.show();
+                    QVERIFY(QTest::qWaitForWindowExposed(&view));
+                    view.repaint();
+                    // Closer in, round the middle, where the fountain is.
+                    StructureStudioView::Camera cam = view.camera();
+                    const QPointF mid(view.width() / 2.0, view.height() / 2.0);
+                    cam.zoomed = true;
+                    cam.origin = mid + (cam.origin - mid) * 1.8;
+                    cam.scale *= 1.8;
+                    cam.width = cam.height = 0;
+                    view.setCamera(cam);
+                    view.repaint();
+                    view.grab().save(QString::fromLocal8Bit(shotDir) + QStringLiteral("/%1-rig-%2.png")
+                                         .arg(pass == 0 ? "before-innerring" : "after-sprinkles", sz.second));
+                }
+            }
+            // The inspector's rows for it.
+            fields.setFixtures({ string->id() }, string->id());
+            host.resize(360, 520);
+            host.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&host));
+            host.grab().save(QString::fromLocal8Bit(shotDir) + QStringLiteral("/after-inspector-rows.png"));
+        }
         delete mon;
     }
     delete doc;

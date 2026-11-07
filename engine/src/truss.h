@@ -33,6 +33,7 @@
 #include <QPointF>
 #include <QString>
 #include <QColor>
+#include <QVector>
 #include <climits>
 
 class QXmlStreamReader;
@@ -263,6 +264,22 @@ private:
     float     m_sockPatternOpacity = 1.0f;    ///< 0..1, the print over the fabric
 };
 
+/** One span of a Sprinkle loops pixel path (PixelPath::SprinkleLoops): a
+ *  stretch of a fairy string hung across a fountain's gap, from one wall's
+ *  top to the other's. LEDs are the string's physical ones, 1-based and
+ *  inclusive; @c point is where along the U it hangs, 0..1 from the
+ *  stage-right end of the wall. */
+struct SprinkleSpan
+{
+    int   firstLed = 1;
+    int   lastLed  = 1;
+    float point    = 0.5f;
+    bool operator==(const SprinkleSpan &o) const
+    {
+        return firstLed == o.firstLed && lastLed == o.lastLed && qFuzzyCompare(point + 1.0f, o.point + 1.0f);
+    }
+};
+
 /** Per-fixture rig assignment.  Stored alongside MonitorProperties visual
  *  data; one entry per fixture ID. */
 struct FixtureRigProps
@@ -392,6 +409,14 @@ struct FixtureRigProps
     float            holdHeight = 1.0f;
     float            holdTilt = 20.0f;
     bool isHeld() const { return heldBy != UINT_MAX; }
+    /** Sprinkle loops (over a fountain's gap): @c sprinklePoints places
+     *  evenly round the U, @c sprinkleSpansPerPoint spans across the gap at
+     *  each, the LEDs shared out equally -- unless @c sprinkleSpans lists the
+     *  spans (by LED and place); LEDs in none run along the wall top to the
+     *  next span. */
+    int              sprinklePoints = 6;
+    int              sprinkleSpansPerPoint = 4;
+    QVector<SprinkleSpan> sprinkleSpans;
 
     /** Deck mount: a fixture standing ON TOP of a stage platform ("floor
      *  mounted"). Unlike a riser FACE mount it keeps its free XY position; only

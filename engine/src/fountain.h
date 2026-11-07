@@ -68,6 +68,13 @@ namespace Fountain
     float baseTop(MonitorProperties *props, const Parts &f);
     /** Whether @p x, @p y is on the inner wall's top (within its thickness). */
     bool onInnerWall(const Parts &f, double x, double y);
+    /** Whether @p x, @p y is in the gap between its walls: inside the outer
+     *  wall's inside face, outside the inner wall's outside face (a U is
+     *  taken closed across its open back). False with one wall. */
+    bool inGap(const Parts &f, double x, double y);
+    /** Where a light in the gap at @p x, @p y washes the inner wall: the
+     *  nearest point of its outside face, half way up it (absolute, metres). */
+    QVector3D gapWashPoint(const Parts &f, double x, double y);
 
     /** A silk flame (QLCPhysical::FlameEmission). */
     bool isFlame(const Fixture *fx);
@@ -85,7 +92,8 @@ namespace Fountain
 
     /** Mount @p fid in the fountain under @p x, @p y: on its base, or on the
      *  inner wall's top when it is over it, in its group and layer. A fixed
-     *  light is aimed up at the flame. False (nothing changed) when there is
+     *  light is aimed up at the flame -- or, in the gap between the walls,
+     *  at the inner wall (gapWashPoint()), washing it. False (nothing changed) when there is
      *  no fountain there. */
     bool mountIn(const Doc *doc, MonitorProperties *props, quint32 fid, double x, double y);
 

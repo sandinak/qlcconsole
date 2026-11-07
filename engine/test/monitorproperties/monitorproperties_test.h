@@ -222,6 +222,11 @@ private slots:
     void aWandHelixHasItsTurns();
     void aHeldWandMovesWithItsPerson();
     void fountainPixelsAndWandsRoundTrip();
+    void aParInTheGapWashesTheInnerWall();
+    void sprinkleLoopsHangAcrossTheGap();
+    void sprinkleTableSpansAndTransits();
+    void sprinkleSpansRoundTrip();
+    void sprinkleSpansFromWledSegments();
 };
 
 #endif

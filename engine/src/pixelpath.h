@@ -25,6 +25,7 @@
 class MonitorProperties;
 class StageTarget;
 struct FixtureRigProps;
+struct SprinkleSpan;
 class Doc;
 
 /** @addtogroup engine Engine
@@ -45,14 +46,18 @@ namespace PixelPath
         OuterWallTop,   ///< round its outer wall, on its top
         BaseRing,       ///< round the edge of its base
         FlameSpiral,    ///< wound up its flame
-        Wand            ///< a staff, wound round it
+        Wand,           ///< a staff, wound round it
+        SprinkleLoops   ///< a fairy string looped across a fountain's gap
     };
-    const int kShapes = int(Wand) + 1;
+    const int kShapes = int(SprinkleLoops) + 1;
 
     /** Its name for a menu ("Inner wall top ring"). */
     QString name(int shape);
     /** The paths that need a fountain. */
-    inline bool needsFountain(int shape) { return shape >= InnerWallTop && shape <= FlameSpiral; }
+    inline bool needsFountain(int shape)
+    {
+        return (shape >= InnerWallTop && shape <= FlameSpiral) || shape == SprinkleLoops;
+    }
 
     /** @p n points evenly spaced by length along @p line; a closed line
      *  runs back to its first point. Open: the middles of n equal stretches. */
@@ -78,6 +83,36 @@ namespace PixelPath
     /** A wand's two ends, as it is drawn: held (leaning holdTilt forward,
      *  centred on heldCentre()) or standing where it was placed. */
     bool wandEnds(MonitorProperties *props, quint32 fid, QVector3D &bottom, QVector3D &top);
+
+    /** Sprinkle loops: the spans a string of @p n LEDs is hung in, in LED
+     *  order -- its table (clamped to @p n, overlaps trimmed) or, with none,
+     *  rp.sprinklePoints places evenly round the U with
+     *  rp.sprinkleSpansPerPoint spans each and the LEDs shared out equally. */
+    QVector<SprinkleSpan> sprinkleLayout(const FixtureRigProps &rp, int n);
+    /** How far the middle of a span of @p leds LEDs hangs below the straight
+     *  line between its two wall tops, @p chord apart (metres, measured
+     *  straight between them): 30% of the chord for a span of
+     *  the string's average size (@p meanLeds), more for a longer one and
+     *  less for a shorter, held to 10%..100% of the chord. */
+    double sprinkleSag(double chord, int leds, double meanLeds);
+    /** Spans along the U at one place are this far apart (metres). */
+    const double kSprinklePitch = 0.05;
+
+    /** What is wrong with a span table for a string of @p leds LEDs (0 = not
+     *  known), in words; empty when it is fine. */
+    QString checkSprinkleSpans(const QVector<SprinkleSpan> &spans, int leds);
+    /** The compact form the show file keeps ("1-30@0.083;31-60@0.083"). */
+    QString sprinkleSpansToString(const QVector<SprinkleSpan> &spans);
+    QVector<SprinkleSpan> sprinkleSpansFromString(const QString &text);
+    /** A WLED's /json/state (or /json) reply as spans: one per segment
+     *  (start, stop exclusive), in LED order, grouped @p spansPerPoint to a
+     *  place; @p points gets how many places. @p notReversed lists the
+     *  segments (1-based) whose Reverse is not what makes every span run
+     *  inner to outer (every second one ticked). False, with @p error, when
+     *  it is not a reply with segments. */
+    bool sprinkleSpansFromWled(const QByteArray &json, int spansPerPoint,
+                               QVector<SprinkleSpan> &spans, int &points,
+                               QString *error = nullptr, QList<int> *notReversed = nullptr);
 
     /** The world positions of @p n LEDs of @p fid along its pixel path, in
      *  head order; empty when it has none (or its fountain is gone). */

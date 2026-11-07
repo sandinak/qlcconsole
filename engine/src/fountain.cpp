@@ -15,6 +15,7 @@
   limitations under the License.
 */
 
+#include <QPolygonF>
 #include <QtMath>
 
 #include "fountain.h"
@@ -124,6 +125,53 @@ bool Fountain::onInnerWall(const Parts &f, double x, double y)
     return false;
 }
 
+// A U wall's face, from above, closed across its open back.
+static QPolygonF faceOutline(const Scenery *s, int side)
+{
+    QPolygonF poly;
+    const int n = 64;
+    const double off = side * double(s->thickness()) / 2.0;
+    for (int i = 0; i <= n; ++i)
+    {
+        const QVector3D p = s->pointAt(-1.0 + 2.0 * i / n, 0.0, off);
+        poly << QPointF(double(p.x()), double(p.y()));
+    }
+    return poly;
+}
+
+bool Fountain::inGap(const Parts &f, double x, double y)
+{
+    if (f.inner == nullptr || f.outer == nullptr || f.outer == f.inner)
+        return false;
+    const QPointF p(x, y);
+    return faceOutline(f.outer, -1).containsPoint(p, Qt::OddEvenFill)
+        && !faceOutline(f.inner, +1).containsPoint(p, Qt::OddEvenFill);
+}
+
+QVector3D Fountain::gapWashPoint(const Parts &f, double x, double y)
+{
+    if (f.inner == nullptr)
+        return QVector3D(float(x), float(y), 0.0f);
+    const float z = f.inner->bottom() + f.inner->height() / 2.0f;
+    const QPolygonF face = faceOutline(f.inner, +1);
+    const QPointF p(x, y);
+    QPointF best = face.isEmpty() ? p : face.first();
+    double bestD = 1e18;
+    for (int i = 0; i + 1 < face.size(); ++i)
+    {
+        const QPointF a = face.at(i), ab = face.at(i + 1) - a;
+        const double len2 = QPointF::dotProduct(ab, ab);
+        const double t = len2 > 0.0 ? qBound(0.0, QPointF::dotProduct(p - a, ab) / len2, 1.0) : 0.0;
+        const QPointF h = a + ab * t, d = p - h;
+        if (QPointF::dotProduct(d, d) < bestD)
+        {
+            bestD = QPointF::dotProduct(d, d);
+            best = h;
+        }
+    }
+    return QVector3D(float(best.x()), float(best.y()), z);
+}
+
 static QLCPhysical physicalOf(const Fixture *fx)
 {
     if (fx == nullptr)
@@ -187,21 +235,29 @@ bool Fountain::mountIn(const Doc *doc, MonitorProperties *props, quint32 fid, do
     rp.deckHeightOffset = onWall ? qMax(0.0f, innerTop(f) - baseTop(props, f)) : 0.0f;
 
     /* A fixed light (a par) in a fountain uplights it: pointed at the
-       middle of the flame, straight up when there is none. */
+       middle of the flame, straight up when there is none. In the gap
+       between the walls it washes the inner wall instead: at the nearest
+       point of its face, half way up. */
     const Fixture *fx = doc != nullptr ? doc->fixture(fid) : nullptr;
     if (fx != nullptr && !isFlame(fx) && RigHeads::isFixedUnit(fx)
         && rp.pixelPath == 0)
     {
+        const bool gap = !onWall && inGap(f, x, y);
         QVector3D aim(float(x), float(y), innerTop(f) + 1.0f);
-        foreach (quint32 other, props->fixtureItemsID())
-            if (other != fid && doc != nullptr && props->fixtureGroup(other) == f.groupId
-                && isFlame(doc->fixture(other)))
-            {
-                const QVector3D at = props->fixtureRigPosition(other);
-                aim = QVector3D(at.x(), at.y(), flameBottom(doc, props, other)
-                                + flameHeight(doc, props, other) / 2.0f);
-                break;
-            }
+        if (gap)
+            aim = gapWashPoint(f, x, y);
+        else
+        {
+            foreach (quint32 other, props->fixtureItemsID())
+                if (other != fid && doc != nullptr && props->fixtureGroup(other) == f.groupId
+                    && isFlame(doc->fixture(other)))
+                {
+                    const QVector3D at = props->fixtureRigPosition(other);
+                    aim = QVector3D(at.x(), at.y(), flameBottom(doc, props, other)
+                                    + flameHeight(doc, props, other) / 2.0f);
+                    break;
+                }
+        }
         const QVector3D from(float(x), float(y), baseTop(props, f) + rp.deckHeightOffset);
         QVector3D v = aim - from;
         if (v.length() < 1e-3f)
