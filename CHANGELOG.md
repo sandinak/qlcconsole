@@ -73,6 +73,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   after Pan no longer spins it** (Cameo Movo Beam 100, Ayrton Kyalami, Robe
   Robin Spikie, GLP Impression FR1 and others): the rotation channel had
   become the head's pan, so a position went into it.
+- The test suite no longer crashes, now and then, in the main bar's Blind
+  test (SIGBUS, seen once on a GitHub macOS runner): the test listened to
+  the timer and universe threads through a local object it destroyed while
+  those threads could still be calling it. A test-only fault; the app
+  itself never listened that way. A test program that crashes on macOS now
+  prints the crashing thread's stack, so a one-off like this one says where.
 
 ## [0.4.1] - 2026-11-06
 
