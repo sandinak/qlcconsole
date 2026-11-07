@@ -228,6 +228,7 @@ private slots:
     void sprinkleTableSpansAndTransits();
     void sprinkleSpansRoundTrip();
     void sprinkleSpansFromWledSegments();
+    void sprinkleSpansToWledSegments();
 };
 
 #endif

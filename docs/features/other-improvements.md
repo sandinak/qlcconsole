@@ -513,6 +513,9 @@ settings are read from the device (`/json/cfg`) and compared:
   universe its output sends, at its patched address, in the DMX mode its
   definition's mode needs (Effect (15ch) → WLED's *Effect*, Single DRGB →
   *Single DRGB*, Single RGB → *Single RGB*).
+- Either way: it should drive as many LEDs as the show says the fixture has
+  (its **LEDs**, or its heads). Setting the count is asked for on its own,
+  with a warning ([Fixture Manager](fixture-manager.md)).
 
 What does not match is listed in the footer ("N WLEDs not set up as this
 show drives them") and on the fixture itself (a **WLED** row in the studio

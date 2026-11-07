@@ -38,6 +38,7 @@
 #include "fixturegroup.h"
 #include "apputil.h"
 #include "wledconfigcheck.h"
+#include "wleddevicewrite.h"
 #include "powerprofiledialog.h"
 #include "showsettingsdialog.h"
 #include "lightcontrols.h"
@@ -331,22 +332,40 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
     m_wledNote->setObjectName(QStringLiteral("fixtureWledNote"));
     m_wledNote->setWordWrap(true);
     m_wledNote->setStyleSheet("color:#e0a040;");
-    QToolButton *wledFix = new QToolButton(m_wledBox);
+    QToolButton *wledFix = m_wledFix = new QToolButton(m_wledBox);
     wledFix->setObjectName(QStringLiteral("fixtureWledFix"));
     wledFix->setText(tr("Fix on Device…"));
     wledFix->setToolTip(tr("Show what would change in the WLED's own settings, then write it"));
     wledRow->addWidget(m_wledNote, 1);
     wledRow->addWidget(wledFix, 0, Qt::AlignTop);
     form->addRow(tr("WLED:"), m_wledBox);
+    // A write to the device (Fix on Device's LED count): busy, then what it did.
+    m_wledWriteNote = new QLabel(parent);
+    m_wledWriteNote->setObjectName(QStringLiteral("fixtureWledWriteNote"));
+    m_wledWriteNote->setWordWrap(true);
+    m_wledWriteNote->setStyleSheet(QStringLiteral("color:#b0b4c0;"));
+    form->addRow(QString(), m_wledWriteNote);
     connect(wledFix, &QToolButton::clicked, this, [this]() {
         if (WledConfigCheck::instance() != nullptr)
             WledConfigCheck::instance()->confirmFix(m_parent, m_fids);
     });
     if (WledConfigCheck::instance() != nullptr)
+    {
         connect(WledConfigCheck::instance(), &WledConfigCheck::changed, this, [this]() {
             if (!m_fids.isEmpty())
                 reload();
         });
+        connect(WledConfigCheck::instance(), &WledConfigCheck::writeChanged, this, [this](const QString &ip) {
+            const Fixture *fx = m_fids.size() == 1 ? m_monitor->m_doc->fixture(m_fids.first()) : nullptr;
+            if (fx == nullptr || fx->ipAddress() != ip)
+                return;
+            bool busy = false;
+            const QString text = WledConfigCheck::instance()->writeStatus(ip, &busy);
+            m_wledWriteNote->setText(busy ? QStringLiteral("\u27f3 ") + text : text);
+            row(m_wledWriteNote, !text.isEmpty());
+            m_wledFix->setEnabled(!busy);
+        });
+    }
 
     /* What it draws and the most it may ("some fixtures are wattage hogs ..
        set maximum brightness per fixture .. to prevent overload"): the cap in
@@ -897,6 +916,16 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     }
     m_wledNote->setText(wled.join(QLatin1Char('\n')));
     row(m_wledBox, !wled.isEmpty());
+    {
+        bool busy = false;
+        const QString text = WledConfigCheck::instance() != nullptr && !many
+            ? WledConfigCheck::instance()->writeStatus(fx->ipAddress(), &busy) : QString();
+        m_wledWriteNote->setText(busy ? QStringLiteral("\u27f3 ") + text : text);
+        row(m_wledWriteNote, !text.isEmpty() && WledConfigCheck::isWled(fx));
+        m_wledFix->setEnabled(!busy);
+        m_wledFix->setToolTip(busy ? tr("Waiting for the device: %1").arg(text)
+                                   : tr("Show what would change in the WLED's own settings, then write it"));
+    }
 
     // The most it may draw, and what has been measured.
     {
@@ -1055,12 +1084,16 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     m_sprRead = new QPushButton(tr("Read Segments"), m_sprBox);
     m_sprRead->setObjectName(QStringLiteral("fixtureSprinkleRead"));
     m_sprRead->setToolTip(tr("Make one span of each of the WLED's segments, read from the device"));
+    m_sprWrite = new QPushButton(tr("Write Segments…"), m_sprBox);
+    m_sprWrite->setObjectName(QStringLiteral("fixtureSprinkleWrite"));
     sprRow->addWidget(m_sprEdit);
     sprRow->addWidget(m_sprRead);
+    sprRow->addWidget(m_sprWrite);
     sprRow->addStretch();
     form->addRow(tr("Spans:"), m_sprBox);
     connect(m_sprEdit, &QPushButton::clicked, this, &FixtureFields::editSprinkleSpans);
     connect(m_sprRead, &QPushButton::clicked, this, &FixtureFields::readSprinkleSegments);
+    connect(m_sprWrite, &QPushButton::clicked, this, &FixtureFields::writeSprinkleSegments);
 
     m_sprNote = new QLabel(parent);
     m_sprNote->setObjectName(QStringLiteral("fixtureSprinkleNote"));
@@ -1186,7 +1219,15 @@ void FixtureFields::showPixelRows(quint32 fid)
     row(m_sprPer, sprinkles);
     const bool one = m_fids.size() == 1;
     m_sprEdit->setEnabled(one);
-    m_sprRead->setEnabled(one && WledConfigCheck::isWled(doc->fixture(fid)));
+    const bool wled = WledConfigCheck::isWled(doc->fixture(fid));
+    const bool writing = m_wledWrite != nullptr && m_wledWrite->isBusy();
+    m_sprRead->setEnabled(one && wled && !writing);
+    m_sprWrite->setEnabled(one && wled && !writing);
+    m_sprWrite->setToolTip(!one ? tr("Select one fixture: each WLED has its own spans")
+                         : !wled ? tr("Only a WLED on the network with an IP address keeps segments")
+                         : writing ? tr("Writing to the device…")
+                         : tr("Make the WLED's segments these spans: one a span, every second one "
+                              "reversed, the LEDs between them dark. Asks first"));
     row(m_sprBox, sprinkles);
     if (sprinkles && !m_sprNote->property("sprinkleReading").toBool())
     {
@@ -1306,4 +1347,54 @@ void FixtureFields::takeWledSegments(quint32 fid, const QByteArray &body, bool o
         m_sprRead->setEnabled(true);
     m_sprNote->setText(tr("Couldn't read the segments: %1").arg(error));
     m_sprNote->setVisible(true);
+}
+
+void FixtureFields::writeSprinkleSegments()
+{
+    if (m_fids.size() != 1 || (m_wledWrite != nullptr && m_wledWrite->isBusy()))
+        return;
+    const quint32 fid = m_fids.first();
+    Doc *doc = m_monitor->m_doc;
+    const Fixture *fx = doc->fixture(fid);
+    m_sprNote->setVisible(true);
+    if (!WledConfigCheck::isWled(fx))
+    {
+        m_sprNote->setText(tr("Nothing was written: it is not a WLED on the network with an IP address."));
+        return;
+    }
+    const QString ip = fx->ipAddress();
+    const QString held = WledDeviceWrite::heldReason(doc, ip);
+    if (!held.isEmpty())
+    {
+        m_sprNote->setText(tr("Nothing was written to %1: %2").arg(WledDeviceWrite::deviceName(ip), held));
+        return;
+    }
+    const QVector<SprinkleSpan> spans =
+        PixelPath::sprinkleLayout(m_monitor->m_props->fixtureRigProps(fid), PixelPathDecor::ledCount(doc, fid));
+    if (m_wledWrite == nullptr)
+    {
+        m_wledWrite = new WledDeviceWrite(this);
+        connect(m_wledWrite, &WledDeviceWrite::progress, this, [this](const QString &text) {
+            if (text.isEmpty())
+                return;
+            m_sprNote->setProperty("sprinkleReading", true);
+            m_sprNote->setText(QStringLiteral("⟳ ") + text);
+        });
+        connect(m_wledWrite, &WledDeviceWrite::finished, this, [this](bool, const QString &message) {
+            m_sprNote->setProperty("sprinkleReading", false);
+            const bool one = m_fids.size() == 1;
+            const bool wled = one && WledConfigCheck::isWled(m_monitor->m_doc->fixture(m_fids.first()));
+            m_sprRead->setEnabled(wled);
+            m_sprWrite->setEnabled(wled);
+            m_sprNote->setText(message);
+            m_sprNote->setVisible(true);
+        });
+    }
+    m_sprRead->setEnabled(false);
+    m_sprWrite->setEnabled(false);
+    const QString name = fx->name();
+    m_wledWrite->writeSegments(ip, spans, [this, name, ip](int segments, int existing) {
+        return m_confirmWrite ? m_confirmWrite(name, ip, segments, existing)
+                              : WledDeviceWrite::confirmSegments(m_parent, name, ip, segments, existing);
+    });
 }

@@ -12,6 +12,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### New
+
+- **Write Segments… and a WLED's LED count, from the show.** A sprinkle-loop
+  string's **Write Segments…** (beside Read Segments) makes the WLED's
+  segments its spans: one a span, every second reversed, the LEDs between
+  them dark, read back afterwards ("Wrote 16 segments to WLED
+  (172.18.2.100)"). **Fix on Device…** finds a WLED that drives a different
+  number of LEDs than its fixture has and sets it, asked on its own with a
+  warning. Both ask first, show they are working, and are refused in a
+  Teaching show that holds real output. No need for the WLED's own web page.
+
 ### Fixed
 
 - **A saved show's autosave is offered when you open the show.** After a

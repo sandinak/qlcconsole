@@ -13,6 +13,7 @@
 #define FIXTUREFIELDS_H
 
 #include <QObject>
+#include <functional>
 #include <QList>
 
 #include "../qlcui_export.h"
@@ -101,6 +102,11 @@ private:
     /** A /json/state reply for @p fid's WLED (or why there is none, @p ok
      *  false): its segments become its spans. */
     void takeWledSegments(quint32 fid, const QByteArray &body, bool ok, const QString &why);
+    /** Write Segments: the shown fixture's spans to its WLED as segments,
+     *  asked first (WledDeviceWrite), busy then the result in m_sprNote. */
+    void writeSprinkleSegments();
+    /** The Write Segments confirmation (a test answers it instead). */
+    std::function<bool(const QString &name, const QString &ip, int segments, int existing)> m_confirmWrite;
 
     Monitor *m_monitor;
     QFormLayout *m_form;
@@ -134,6 +140,8 @@ private:
     QWidget *m_sprBox;          ///< Edit Spans…, Read Segments
     class QPushButton *m_sprEdit;
     class QPushButton *m_sprRead;
+    class QPushButton *m_sprWrite;
+    class WledDeviceWrite *m_wledWrite = nullptr;   ///< Write Segments in progress
     QLabel *m_sprNote;          ///< the span table in words, or why a read failed
     class QNetworkAccessManager *m_nam = nullptr;
     LightControls *m_light;
@@ -144,6 +152,8 @@ private:
     class QToolButton *m_patch;
     QWidget *m_wledBox;         ///< WLED settings that do not match, + Fix
     QLabel *m_wledNote;
+    class QToolButton *m_wledFix;
+    QLabel *m_wledWriteNote;    ///< a device write: busy, or what it did
     QDoubleSpinBox *m_maxAmps;  ///< the most it may draw (PowerProfile::maxAmps)
     QLabel *m_powerNote;        ///< what has been measured
     class QToolButton *m_copyPower; ///< readings to every fixture like it

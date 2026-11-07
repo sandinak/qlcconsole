@@ -19,6 +19,7 @@
 
 #include <QScopedPointer>
 #include <QtTest>
+#include "../common/fakewled.h"
 #include <QScrollBar>
 #include <QShortcut>
 #include <memory>
@@ -18997,6 +18998,76 @@ void Monitor_Test::sprinkleLoopsRowsEditAndReadSegments()
         QCOMPARE(props->fixtureRigProps(string->id()).sprinkleSpans.size(), 4);
         fields.readSprinkleSegments();
         QVERIFY(fields.m_sprNote->text().contains("not a WLED"));
+
+        /* Write Segments (the reverse): greyed for a string that is not a
+           WLED, saying why; on a WLED (a fake one on this computer: no
+           network in tests) it reads, asks, writes, reads back and says so;
+           Cancel writes nothing; a held classroom refuses with the reason. */
+        QVERIFY(!fields.m_sprWrite->isEnabled());
+        QVERIFY(fields.m_sprWrite->toolTip().contains("WLED on the network"));
+        fields.writeSprinkleSegments();
+        QVERIFY(fields.m_sprNote->text().startsWith("Nothing was written"));
+        {
+            FakeWled wled;
+            QVERIFY(wled.listen(QHostAddress::LocalHost));
+            wled.info["leds"] = QJsonObject{ { "count", 96 }, { "maxseg", 32 } };
+            string->setConnection(Fixture::Network);
+            string->setTransport(Fixture::WledTransport);
+            string->setIPAddress(wled.address());
+            fields.setFixtures({ string->id() }, string->id());
+            QVERIFY(fields.m_sprWrite->isEnabled());
+            QCOMPARE(fields.m_sprWrite->text(), QString("Write Segments…"));
+            QVERIFY(!fields.m_sprWrite->toolTip().contains("Only a WLED"));
+            int asked = -1;
+            bool answer = false;
+            fields.m_confirmWrite = [&](const QString &name, const QString &ip, int n, int) {
+                asked = n;
+                return answer && name == "Sprinkles" && ip == wled.address();
+            };
+            fields.m_sprWrite->click();
+            QVERIFY2(fields.m_sprNote->text().startsWith(QString::fromUtf8("⟳ Reading WLED (")),
+                     qPrintable(fields.m_sprNote->text()));         // busy, where it was asked
+            QVERIFY(!fields.m_sprWrite->isEnabled() && !fields.m_sprRead->isEnabled());
+            QTRY_COMPARE(fields.m_sprNote->text(), QString("Nothing was written."));
+            QCOMPARE(asked, 4);
+            QVERIFY(wled.posted.isEmpty());
+            QVERIFY(fields.m_sprWrite->isEnabled());
+            answer = true;
+            fields.m_sprWrite->click();
+            QTRY_COMPARE(fields.m_sprNote->text(), QString("Wrote 4 segments to WLED (%1).").arg(wled.address()));
+            QCOMPARE(wled.segments().size(), 4);
+            QCOMPARE(wled.segments().at(3).toObject().value("start").toInt(), 70);
+            QCOMPARE(wled.segments().at(3).toObject().value("rev").toBool(), true);
+            const QByteArray shotDir = qgetenv("QLC_SHOT_DIR");
+            if (!shotDir.isEmpty())
+            {
+                QDir().mkpath(QString::fromLocal8Bit(shotDir));
+                host.show();
+                const QList<QSize> sizes = { QSize(520, 640), QSize(640, 720), QSize(800, 900) };
+                for (const QSize &sz : sizes)
+                {
+                    host.resize(sz);
+                    QApplication::processEvents();
+                    host.grab().save(QString::fromLocal8Bit(shotDir) + QStringLiteral("/write-segments-note-%1x%2.png")
+                                         .arg(sz.width()).arg(sz.height()));
+                }
+                host.hide();
+            }
+            // A held classroom: refused with the reason, nothing sent.
+            doc->inputOutputMap()->setTeachingHold(true);
+            string->setIPAddress("10.255.255.1");
+            fields.setFixtures({ string->id() }, string->id());
+            asked = -1;
+            fields.m_sprWrite->click();
+            QVERIFY2(fields.m_sprNote->text().contains("Teaching mode holds real output"),
+                     qPrintable(fields.m_sprNote->text()));
+            QCOMPARE(asked, -1);
+            doc->inputOutputMap()->setTeachingHold(false);
+            fields.m_confirmWrite = nullptr;
+            string->setConnection(Fixture::Dmx);
+            string->setIPAddress(QString());
+            fields.setFixtures({ string->id() }, string->id());
+        }
 
         // Pictures for review: the rig view, before and after.
         const QByteArray shotDir = qgetenv("QLC_SHOT_DIR");

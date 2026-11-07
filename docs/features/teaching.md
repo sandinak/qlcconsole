@@ -25,7 +25,8 @@ workspace view, and Teaching never changes which tabs you see.
 - **Real network output is held.** Art-Net, sACN, OSC and WLED outputs are
   kept as patched but not opened, like a patch off the rig network, and the
   footer says "Output held — Teaching mode holds real output". A student copy
-  cannot reach the school network.
+  cannot reach the school network. Writing to a WLED's own settings
+  (**Fix on Device…**, **Write Segments…**) is refused too, with the reason.
 - **USB and other hardware outputs are held too** (an Enttec or DMX USB
   dongle, MIDI out), so a student copy sends nothing to a rig plugged into
   the computer. They are kept as patched, like the network ones. Loopback,

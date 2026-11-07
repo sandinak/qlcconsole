@@ -14,11 +14,15 @@
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QJsonDocument>
+#include <QDateTime>
+#include <QJsonArray>
 #include <QMessageBox>
 #include <QTimer>
 #include <QSet>
 
 #include "wledconfigcheck.h"
+#include "monitorproperties.h"
+#include "wleddevicewrite.h"
 #include "showstatus.h"
 #include "qlcfixturemode.h"
 #include "inputoutputmap.h"
@@ -100,6 +104,18 @@ bool WledConfigCheck::isWled(const Fixture *fx)
         return true;
     return fx->fixtureDef() != nullptr
            && fx->fixtureDef()->manufacturer().compare(QLatin1String("WLED"), Qt::CaseInsensitive) == 0;
+}
+
+int WledConfigCheck::fixtureLedCount(Doc *doc, const Fixture *fx)
+{
+    if (fx == nullptr)
+        return 0;
+    if (fx->heads() > 1)
+        return fx->heads();
+    MonitorProperties *props = doc != nullptr ? doc->monitorProperties() : nullptr;
+    if (props != nullptr)
+        return qMax(0, props->fixtureRigProps(fx->id()).lightLeds);
+    return 0;
 }
 
 WledConfigCheck::Finding WledConfigCheck::evaluate(Doc *doc, const Fixture *fx, const QJsonObject &cfg)
@@ -196,6 +212,46 @@ WledConfigCheck::Finding WledConfigCheck::evaluate(Doc *doc, const Fixture *fx, 
                               .arg(dmxModeName(mode), modeName, dmxModeName(wantMode));
             wantDmx[QStringLiteral("mode")] = wantMode;
             f.changes << tr("DMX mode: %1 → %2").arg(dmxModeName(mode), dmxModeName(wantMode));
+        }
+    }
+
+    /* The LED count: the show's against the device's, when the show says
+       one. Asked for on its own (ledFix), never folded into the fix. */
+    const int want = fixtureLedCount(doc, fx);
+    const QJsonObject hwLed = cfg.value(QStringLiteral("hw")).toObject()
+                                 .value(QStringLiteral("led")).toObject();
+    const QJsonArray ins = hwLed.value(QStringLiteral("ins")).toArray();
+    int have = hwLed.value(QStringLiteral("total")).toInt();
+    if (have <= 0)
+        for (const QJsonValue &out : ins)
+            have += out.toObject().value(QStringLiteral("len")).toInt();
+    if (want > 0 && have > 0 && want != have)
+    {
+        f.fixtureLeds = want;
+        f.deviceLeds = have;
+        f.problems << tr("the WLED drives %1 LEDs; this fixture has %2").arg(have).arg(want);
+        if (hwLed.contains(QStringLiteral("matrix")))
+            f.ledRefusal = tr("It is set up as a 2D matrix: its size is set in the WLED's own 2D "
+                              "settings, not here.");
+        else if (ins.size() != 1)
+            f.ledRefusal = tr("It drives its LEDs from %1 outputs: how many each has is set in "
+                              "the WLED's own LED settings. This show sets the count of a WLED "
+                              "with one output only.").arg(ins.size());
+        else
+        {
+            /* WLED builds its outputs from exactly what is sent (an output
+               without its pins is dropped, a setting left out goes back to
+               its default), so all of hw.led goes back as the device said it,
+               only the length and the total changed: never its LED type,
+               colour order or pins. */
+            QJsonObject out = ins.first().toObject();
+            const int start = out.value(QStringLiteral("start")).toInt();
+            out[QStringLiteral("len")] = want - start;
+            QJsonObject led = hwLed;
+            led[QStringLiteral("ins")] = QJsonArray{ out };
+            led[QStringLiteral("total")] = want;
+            if (want - start > 0)
+                f.ledFix = QJsonObject{ { QStringLiteral("hw"), QJsonObject{ { QStringLiteral("led"), led } } } };
         }
     }
 
@@ -356,6 +412,12 @@ void WledConfigCheck::fix(const QList<quint32> &fixtureIds)
         if (f.fix.isEmpty() || written.contains(f.ip))
             continue;
         written.insert(f.ip);
+        const QString held = WledDeviceWrite::heldReason(m_doc, f.ip);
+        if (!held.isEmpty())
+        {
+            noteWrite(f.ip, tr("Nothing was written to %1: %2").arg(WledDeviceWrite::deviceName(f.ip), held), false);
+            continue;
+        }
         QNetworkRequest req(QUrl(baseUrl(f.ip) + QStringLiteral("/json/cfg")));
         req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
         req.setTransferTimeout(4000);
@@ -374,13 +436,25 @@ void WledConfigCheck::fix(const QList<quint32> &fixtureIds)
 
 bool WledConfigCheck::confirmFix(QWidget *parent, const QList<quint32> &fixtureIds)
 {
-    QStringList lines;
-    QList<quint32> doable;
+    QStringList lines, refusals;
+    QList<quint32> doable, counts;
+    QSet<QString> countIps;
     foreach (quint32 fid, fixtureIds)
     {
         const Finding f = m_findings.value(fid);
         const Fixture *fx = m_doc->fixture(fid);
-        if (f.fix.isEmpty() || fx == nullptr)
+        if (fx == nullptr)
+            continue;
+        if (!f.ledFix.isEmpty() && !countIps.contains(f.ip))
+        {
+            countIps.insert(f.ip);
+            counts << fid;
+        }
+        else if (!f.ledRefusal.isEmpty())
+            refusals << QStringLiteral("<b>%1</b> (%2): %3").arg(fx->name().toHtmlEscaped(),
+                                                               f.ip.toHtmlEscaped(),
+                                                               f.ledRefusal.toHtmlEscaped());
+        if (f.fix.isEmpty())
             continue;
         doable << fid;
         QStringList changes;
@@ -390,17 +464,123 @@ bool WledConfigCheck::confirmFix(QWidget *parent, const QList<quint32> &fixtureI
                      .arg(fx->name().toHtmlEscaped(), f.ip.toHtmlEscaped(),
                           changes.join(QStringLiteral("<br>&nbsp;&nbsp;")));
     }
-    if (doable.isEmpty())
+    auto tellRefusals = [&]() {
+        if (refusals.isEmpty())
+            return;
+        QMessageBox box(QMessageBox::Information, tr("Fix on Device"),
+                        tr("The LED count can't be set from here:<br><br>%1")
+                            .arg(refusals.join(QStringLiteral("<br><br>"))),
+                        QMessageBox::Ok, parent);
+        box.setObjectName(QStringLiteral("wledLedCountRefused"));
+        box.setTextFormat(Qt::RichText);
+        box.exec();
+    };
+    if (doable.isEmpty() && counts.isEmpty())
+    {
+        tellRefusals();
         return false;
-    QMessageBox box(QMessageBox::Question, tr("Fix on Device"),
-                    tr("Change these settings on the device%1 itself, so it takes what this show "
-                       "sends?<br><br>%2").arg(doable.size() > 1 ? tr("s") : QString(),
-                                               lines.join(QStringLiteral("<br><br>"))),
-                    QMessageBox::Yes | QMessageBox::Cancel, parent);
-    box.setTextFormat(Qt::RichText);
-    box.setDefaultButton(QMessageBox::Yes);
-    if (box.exec() != QMessageBox::Yes)
+    }
+
+    // A Teaching show holding real output writes nothing to a device either.
+    foreach (quint32 fid, doable + counts)
+    {
+        const QString ip = m_findings.value(fid).ip;
+        const QString held = WledDeviceWrite::heldReason(m_doc, ip);
+        if (held.isEmpty())
+            continue;
+        const QString text = tr("Nothing was written to %1: %2").arg(WledDeviceWrite::deviceName(ip), held);
+        noteWrite(ip, text, false);
+        QMessageBox box(QMessageBox::Information, tr("Fix on Device"), text, QMessageBox::Ok, parent);
+        box.setObjectName(QStringLiteral("wledWriteHeld"));
+        box.exec();
         return false;
-    fix(doable);
+    }
+
+    bool wrote = false;
+    if (!doable.isEmpty())
+    {
+        QMessageBox box(QMessageBox::Question, tr("Fix on Device"),
+                        tr("Change these settings on the device%1 itself, so it takes what this show "
+                           "sends?<br><br>%2").arg(doable.size() > 1 ? tr("s") : QString(),
+                                                   lines.join(QStringLiteral("<br><br>"))),
+                        QMessageBox::Yes | QMessageBox::Cancel, parent);
+        box.setTextFormat(Qt::RichText);
+        box.setDefaultButton(QMessageBox::Yes);
+        if (box.exec() == QMessageBox::Yes)
+        {
+            fix(doable);
+            wrote = true;
+        }
+    }
+    // The LED count: asked on its own, with what a wrong one does.
+    foreach (quint32 fid, counts)
+    {
+        const Finding f = m_findings.value(fid);
+        const Fixture *fx = m_doc->fixture(fid);
+        if (fx != nullptr && WledDeviceWrite::confirmLedCount(parent, fx->name(), f.ip,
+                                                              f.deviceLeds, f.fixtureLeds))
+            wrote = setLedCount(fid) || wrote;
+    }
+    tellRefusals();
+    return wrote;
+}
+
+bool WledConfigCheck::setLedCount(quint32 fixtureId)
+{
+    const Finding f = m_findings.value(fixtureId);
+    if (f.ledFix.isEmpty())
+        return false;
+    const QString ip = f.ip;
+    if (m_writes.value(ip).busy)
+        return false;
+    const QString held = WledDeviceWrite::heldReason(m_doc, ip);
+    if (!held.isEmpty())
+    {
+        noteWrite(ip, tr("Nothing was written to %1: %2").arg(WledDeviceWrite::deviceName(ip), held), false);
+        return false;
+    }
+    WledDeviceWrite *w = new WledDeviceWrite(this);
+    w->setWaits(m_ledWaits[0], m_ledWaits[1], m_ledWaits[2]);
+    connect(w, &WledDeviceWrite::progress, this, [this, ip](const QString &text) {
+        if (!text.isEmpty())
+            noteWrite(ip, text, true);
+    });
+    connect(w, &WledDeviceWrite::finished, this, [this, w, ip](bool, const QString &message) {
+        noteWrite(ip, message, false);
+        w->deleteLater();
+        // Read its settings back: the finding goes when it matches.
+        QNetworkRequest back(QUrl(baseUrl(ip) + QStringLiteral("/json/cfg")));
+        back.setTransferTimeout(4000);
+        QNetworkReply *b = m_nam->get(back);
+        connect(b, &QNetworkReply::finished, this, [this, b, ip]() { replied(ip, b); });
+    });
+    w->setLedCount(ip, f.ledFix, f.fixtureLeds);
     return true;
+}
+
+void WledConfigCheck::noteWrite(const QString &ip, const QString &text, bool busy)
+{
+    Write w;
+    w.text = text;
+    w.busy = busy;
+    w.at = QDateTime::currentMSecsSinceEpoch();
+    m_writes[ip] = w;
+    emit writeChanged(ip);
+}
+
+QString WledConfigCheck::writeStatus(const QString &ip, bool *busy) const
+{
+    const Write w = m_writes.value(ip);
+    // A result is news for two minutes; then there is nothing to say.
+    const bool stale = !w.busy && QDateTime::currentMSecsSinceEpoch() - w.at > 120000;
+    if (busy != nullptr)
+        *busy = w.busy;
+    return stale ? QString() : w.text;
+}
+
+void WledConfigCheck::setLedWaits(int applyMs, int rebootMs, int pollMs)
+{
+    m_ledWaits[0] = applyMs;
+    m_ledWaits[1] = rebootMs;
+    m_ledWaits[2] = pollMs;
 }

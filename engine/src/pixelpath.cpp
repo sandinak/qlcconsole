@@ -329,6 +329,122 @@ bool PixelPath::sprinkleSpansFromWled(const QByteArray &json, int spansPerPoint,
 
 namespace
 {
+/** A /json/state (or /json) reply's state object. */
+QJsonObject wledState(const QByteArray &json)
+{
+    QJsonObject root = QJsonDocument::fromJson(json).object();
+    if (!root.contains(QStringLiteral("seg")) && root.value(QStringLiteral("state")).isObject())
+        root = root.value(QStringLiteral("state")).toObject();
+    return root;
+}
+
+/** The spans in LED order. */
+QVector<SprinkleSpan> inLedOrder(const QVector<SprinkleSpan> &spans)
+{
+    QVector<SprinkleSpan> t = spans;
+    std::stable_sort(t.begin(), t.end(), [](const SprinkleSpan &a, const SprinkleSpan &b) {
+        return a.firstLed < b.firstLed;
+    });
+    return t;
+}
+}
+
+bool PixelPath::sprinkleSpansToWled(const QVector<SprinkleSpan> &spans, const QByteArray &state,
+                                    int maxSegments, int deviceLeds, QJsonObject &request,
+                                    QString *error)
+{
+    request = QJsonObject();
+    auto refuse = [error](const QString &why) {
+        if (error != nullptr)
+            *error = why;
+        return false;
+    };
+    if (spans.isEmpty())
+        return refuse(QCoreApplication::translate("PixelPath", "There are no spans to write."));
+    if (maxSegments > 0 && spans.size() > maxSegments)
+        return refuse(QCoreApplication::translate("PixelPath",
+            "The string has %1 spans, but this WLED keeps at most %2 segments. Nothing was "
+            "written. Use fewer spans, or map the string in 2D with a ledmap on the device "
+            "(Help: Sprinkle loops).").arg(spans.size()).arg(maxSegments));
+    const QString bad = checkSprinkleSpans(spans, 0);
+    if (!bad.isEmpty())
+        return refuse(bad);
+    const QVector<SprinkleSpan> t = inLedOrder(spans);
+    if (deviceLeds > 0 && t.last().lastLed > deviceLeds)
+        return refuse(QCoreApplication::translate("PixelPath",
+            "The last span runs to LED %1, but the WLED drives %2 LEDs. Nothing was written. "
+            "Set its LED count first (Fix on Device…).").arg(t.last().lastLed).arg(deviceLeds));
+
+    QJsonArray seg;
+    for (int g = 0; g < t.size(); ++g)
+    {
+        /* Only what makes the span: where it is, which way it runs, and one
+           LED to a pixel (no grouping, spacing or offset). Its colour and
+           effect are left as they are -- the show drives them. */
+        QJsonObject o;
+        o[QStringLiteral("id")] = g;
+        o[QStringLiteral("start")] = t.at(g).firstLed - 1;
+        o[QStringLiteral("stop")] = t.at(g).lastLed;
+        o[QStringLiteral("rev")] = g % 2 == 1;   // every second span runs outer to inner
+        o[QStringLiteral("grp")] = 1;
+        o[QStringLiteral("spc")] = 0;
+        o[QStringLiteral("of")] = 0;
+        seg << o;
+    }
+    // The device's segments past the spans: cleared (WLED deletes one whose stop is 0).
+    const QJsonArray old = wledState(state).value(QStringLiteral("seg")).toArray();
+    QList<int> clear;
+    for (int k = 0; k < old.size(); ++k)
+    {
+        const int id = old.at(k).toObject().value(QStringLiteral("id")).toInt(k);
+        if (id >= t.size() && !clear.contains(id))
+            clear << id;
+    }
+    std::sort(clear.begin(), clear.end());
+    foreach (int id, clear)
+        seg << QJsonObject{ { QStringLiteral("id"), id }, { QStringLiteral("stop"), 0 } };
+    request[QStringLiteral("seg")] = seg;
+    return true;
+}
+
+QStringList PixelPath::wledSegmentsDiffer(const QVector<SprinkleSpan> &spans, const QByteArray &state)
+{
+    QStringList out;
+    const QJsonObject root = wledState(state);
+    if (!root.value(QStringLiteral("seg")).isArray())
+        return { QCoreApplication::translate("PixelPath", "It did not say what its segments are.") };
+    struct Seg { int start; int stop; bool rev; };
+    QVector<Seg> segs;
+    const QJsonArray arr = root.value(QStringLiteral("seg")).toArray();
+    for (const QJsonValue &v : arr)
+    {
+        const QJsonObject o = v.toObject();
+        const int start = o.value(QStringLiteral("start")).toInt(-1);
+        const int stop = o.value(QStringLiteral("stop")).toInt(-1);
+        if (start >= 0 && stop > start)
+            segs << Seg{ start, stop, o.value(QStringLiteral("rev")).toBool(false) };
+    }
+    std::stable_sort(segs.begin(), segs.end(), [](const Seg &a, const Seg &b) { return a.start < b.start; });
+    const QVector<SprinkleSpan> t = inLedOrder(spans);
+    if (segs.size() != t.size())
+        out << QCoreApplication::translate("PixelPath", "It has %1 segments, not %2.")
+                   .arg(segs.size()).arg(t.size());
+    for (int g = 0; g < qMin(segs.size(), t.size()); ++g)
+    {
+        const Seg &s = segs.at(g);
+        const SprinkleSpan &sp = t.at(g);
+        if (s.start != sp.firstLed - 1 || s.stop != sp.lastLed)
+            out << QCoreApplication::translate("PixelPath", "Segment %1 is LEDs %2 to %3, not %4 to %5.")
+                       .arg(g + 1).arg(s.start + 1).arg(s.stop).arg(sp.firstLed).arg(sp.lastLed);
+        else if (s.rev != (g % 2 == 1))
+            out << (s.rev ? QCoreApplication::translate("PixelPath", "Segment %1 is reversed.").arg(g + 1)
+                          : QCoreApplication::translate("PixelPath", "Segment %1 is not reversed.").arg(g + 1));
+    }
+    return out;
+}
+
+namespace
+{
 /** A wall's face along its top: @p side = +1 its outside, -1 its inside. */
 QVector<QVector3D> faceTop(const Scenery *s, float z, int side, int samples = 96)
 {
