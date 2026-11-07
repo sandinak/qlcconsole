@@ -1177,7 +1177,7 @@ void FixtureFields::showPixelRows(quint32 fid)
     row(m_holdTilt, wand && rp.isHeld());
 
     const bool sprinkles = rp.pixelPath == PixelPath::SprinkleLoops;
-    const QSignalBlocker b7(m_sprPoints), b8(m_sprPer);
+    const QSignalBlocker bSprPoints(m_sprPoints), bSprPer(m_sprPer);
     m_sprPoints->setValue(rp.sprinklePoints);
     m_sprPer->setValue(rp.sprinkleSpansPerPoint);
     // With a table, it says where each span is; the counts only group a read.
