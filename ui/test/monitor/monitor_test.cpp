@@ -19101,13 +19101,15 @@ void Monitor_Test::aWandsFairyStringFieldsWorkOutItsTurns()
 
         const QString shot = qEnvironmentVariable("QLC_WAND_SHOT");
         if (!shot.isEmpty())
-            foreach (int w, QList<int>() << 320 << 420 << 560)
+        {
+            for (int w : { 320, 420, 560 })
             {
                 host.resize(w, host.sizeHint().height());
                 host.show();
                 QCoreApplication::processEvents();
                 host.grab().save(QString("%1-%2.png").arg(shot).arg(w));
             }
+        }
         delete mon;
     }
     delete doc;
