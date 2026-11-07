@@ -112,6 +112,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   selected in the Show Tree. Never while a text field, the command line or
   an editor has the keyboard; keys the app or a Virtual Console widget
   already uses are refused, saying why.
+- Show Tree: a cue list whose show has no Numbering yet now says so on its own
+  page, beside + Section: "Its cue numbers look like Show.Part.Iteration. Use
+  it", or where to set Numbering when nothing looks like a scheme. + Section is
+  greyed, with the reason, until a scheme is set.
 
 ## [0.4.1] - 2026-11-06
 

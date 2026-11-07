@@ -1396,6 +1396,7 @@ public:
 private:
     void buildSectionPages();
     void updateNumberingRows(quint32 productionId);
+    void updateListSectionHint(quint32 listId);
     void showSectionPage(quint32 listId, const ShowTree::Section &section);
     /** The rows' key for section @a s of list @a listId (expansion, SectionRole). */
     static QString sectionRole(const ShowTree::Section &s);
@@ -1407,6 +1408,7 @@ private:
     QLabel *m_prodNumberingHint = nullptr;
     QPushButton *m_prodMerge = nullptr;
     QPushButton *m_listAddSection = nullptr;
+    QLabel *m_listSectionHint = nullptr;
     QWidget *m_sectionPage = nullptr;
     QLabel *m_sectionTitle = nullptr;
     QLineEdit *m_sectionName = nullptr;

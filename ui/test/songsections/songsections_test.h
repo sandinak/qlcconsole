@@ -36,6 +36,7 @@ private slots:
     void sectionRowsFoldInTheTree();
     void theSectionPageNamesAndBlocks();
     void theProductionPageSuggestsAScheme();
+    void theListPageSuggestsAScheme();
     void mergeThenRunShowsEverySection();
     void runningOrderReordersTheRun();
     void timecodeAnchorsOnThePages();

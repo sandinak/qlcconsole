@@ -1561,7 +1561,11 @@ and so what a section is:
 Every level is its own number, separated by dots, so a part or a song past 9
 is fine (1.10.2, 12.0.1). With no scheme yet, the production page says what
 the numbers look like (*Its cue numbers look like Show.Part.Iteration. Use
-it*); nothing changes until you click it or pick one.
+it*); nothing changes until you click it or pick one. The cue list's page
+says the same beside **+ Section** (or, when nothing looks like a scheme,
+*No song sections: set Numbering on the production's page*, with a link to
+it), so you find it where you look for sections; **+ Section** stays greyed
+until a scheme is set.
 
 **In the tree and the Run tab** each section is a header row its cues fold
 under: *1 — Everybody Scream*. Click ▸ to fold it; it stays folded while you
