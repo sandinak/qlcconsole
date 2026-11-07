@@ -85,6 +85,41 @@ reserved -- a later one is a new attribute, which an older build ignores.
 User help: docs/features/other-improvements.md, "Control Map (MIDI and OSC
 triggers)".
 
+## Computer keys (0.4.2)
+
+A computer key is one more control: `universe = ControlMap::KeyboardUniverse`
+(0xFFFFFFFE, no input universe has it), `channel` = the Qt key combination
+with its modifiers (`ControlMap::keyChannel()`, the keypad flag dropped). So
+one-control-one-thing, modes, press/release edges (`m_down`), deleting and
+the table all work unchanged; a key has no feedback. Saved as
+`<Trigger Key="Shift+1" …>` (PortableText) with no Universe/Channel, so a
+build without keys fails `okU` and skips it.
+
+- **Input** -- `ui/src/keytriggers.*`, made by the App: an application event
+  filter, installed only while a key is bound. Per key event, once (at the
+  focus widget): `focusBlocks()` (popup/modal/dialog; a QLineEdit, spin box,
+  text edit, key-sequence edit or editable combo, which covers the command
+  line and inline renames; an editor by class name; the Virtual Console,
+  which keeps its own keys), then `ControlMap::handleKey()`. A fired key is
+  used up. Auto-repeat is swallowed for a held key; a release is matched by
+  physical key (scan code / virtual key) so Shift let go first still
+  releases it, and is never gated. Losing the app's activation calls
+  `releaseKeys()`.
+- **Where** -- `ControlMap::keyMayFire()`: Operate (`Doc::mode()`), or
+  `isArmed()` in Design: the Run tab's list (`setRunTabList()`, from the
+  Full CueRunner's follow; invalid → ShowControl's main cue list) arms the
+  list, its cues and hits living in it, its production or globally (plus
+  `isHitArmed()`); the Show Tree's selection (`setSelectedTargets()`, from
+  `slotTreeSelectionChanged`) arms a list (+cues, +hits under them), a cue
+  (+its hits), a hit. Functions never arm. `armingChanged()` drives the
+  menu's / table's "Armed".
+- **Learning** -- the dialog filters its own key presses (not via
+  `handleInput`, which ignores the keyboard universe while listening);
+  `KeyTriggers::refusal()` refuses the dialog's own keys (passed on so the
+  dialog still works by keyboard), the edit keys, any registered
+  QAction/QShortcut, and any VC widget's key (matched as VC does, ⌘
+  dropped).
+
 ## Phased plan
 
 Each phase ships and is testable on `test-workspaces/surfacetesting.qxw` independently. Nothing

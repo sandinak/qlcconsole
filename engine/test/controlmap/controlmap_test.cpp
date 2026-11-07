@@ -533,4 +533,300 @@ void ControlMap_Test::namesSayWhatAControlIs()
     QCOMPARE(m, ControlMap::StartOnly);
 }
 
+/* A computer key: universe KeyboardUniverse, channel the key and its
+   modifiers; named "Key · F5"; one control, one thing, as any control. */
+void ControlMap_Test::aComputerKeyIsAControl()
+{
+    const quint32 f5 = ControlMap::keyChannel(Qt::Key_F5, Qt::NoModifier);
+    QCOMPARE(f5, quint32(Qt::Key_F5));
+    QCOMPARE(ControlMap::keyChannel(Qt::Key_1, Qt::ShiftModifier | Qt::KeypadModifier),
+             quint32(QKeyCombination(Qt::ShiftModifier, Qt::Key_1).toCombined()));
+    QCOMPARE(ControlMap::keyChannel(Qt::Key_Shift, Qt::ShiftModifier), 0u);   // a modifier alone
+    QCOMPARE(ControlMap::keyChannel(0, Qt::NoModifier), 0u);
+
+    ControlMap *cm = m_doc->controlMap();
+    QCOMPARE(cm->controlName(ControlMap::KeyboardUniverse, f5), QString("Key · F5"));
+    Scene *a = scene("Warm", 0);
+    Scene *b = scene("Cool", 1);
+    QVERIFY(!cm->hasKeyBindings());
+    cm->setBinding({ ControlMap::KeyboardUniverse, f5, ControlMap::function(a->id()), ControlMap::Toggle });
+    QVERIFY(cm->hasKeyBindings());
+    QVERIFY(ControlMap::isKey(*cm->binding(ControlMap::function(a->id()))));
+    // The same key for another: it moves.
+    cm->setBinding({ ControlMap::KeyboardUniverse, f5, ControlMap::function(b->id()), ControlMap::Toggle });
+    QCOMPARE(cm->count(), 1);
+    QVERIFY(cm->binding(ControlMap::function(a->id())) == nullptr);
+    // A key sends no light.
+    m_stub->m_feedback.clear();
+    cm->resendFeedback();
+    QVERIFY(m_stub->m_feedback.isEmpty());
+    // Deleting the function takes its key.
+    m_doc->deleteFunction(b->id());
+    QVERIFY(cm->isEmpty());
+    QVERIFY(!cm->hasKeyBindings());
+}
+
+/* A scene's key: nothing in Design, fires in Operate; held is one press;
+   the release lets go even after the mode changed. */
+void ControlMap_Test::aKeyFiresInOperateOnly()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 f5 = ControlMap::keyChannel(Qt::Key_F5, Qt::NoModifier);
+    cm->setBinding({ ControlMap::KeyboardUniverse, f5, ControlMap::function(a->id()), ControlMap::Toggle });
+
+    QCOMPARE(m_doc->mode(), Doc::Design);
+    QVERIFY(!cm->keyMayFire(ControlMap::function(a->id())));
+    QVERIFY(!cm->handleKey(f5, true));              // not used up: it goes to the widget
+    tick();
+    QVERIFY(!a->isRunning());
+    QVERIFY(!cm->handleKey(f5, false));
+
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(cm->handleKey(f5, true));
+    QVERIFY(cm->isKeyDown(f5));
+    QVERIFY(cm->handleKey(f5, true));               // held: still the one press
+    tick();
+    QVERIFY(a->isRunning());
+    QVERIFY(cm->handleKey(f5, false));
+    tick();
+    QVERIFY(a->isRunning());                        // Toggle: the release does nothing
+    QVERIFY(cm->handleKey(f5, true));
+    QVERIFY(cm->handleKey(f5, false));
+    tick(3);
+    QVERIFY(!a->isRunning());
+
+    // Momentary: on while held; back in Design the release still lets go.
+    cm->setMode(ControlMap::function(a->id()), ControlMap::Momentary);
+    QVERIFY(cm->handleKey(f5, true));
+    tick();
+    QVERIFY(a->isRunning());
+    m_doc->setMode(Doc::Design);
+    QVERIFY(cm->handleKey(f5, false));
+    tick(3);
+    QVERIFY(!a->isRunning());
+
+    // The app lost the keyboard: every key held lets go.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(cm->handleKey(f5, true));
+    tick();
+    QVERIFY(a->isRunning());
+    cm->releaseKeys();
+    tick(3);
+    QVERIFY(!a->isRunning());
+    QVERIFY(!cm->isKeyDown(f5));
+
+    // A key that isn't bound: not used up.
+    QVERIFY(!cm->handleKey(ControlMap::keyChannel(Qt::Key_F6, Qt::NoModifier), true));
+}
+
+namespace
+{
+/** A production with a cue list of two cues (each on fixture 0's group at
+ *  full) and a hit of the production. */
+struct KeyShow
+{
+    quint32 prod, list, cue1, cue2, hit;
+};
+
+KeyShow keyShow(Doc *doc)
+{
+    ShowTreeController *st = doc->showTree();
+    FixtureGroup *g = new FixtureGroup(doc);
+    g->setName("All");
+    doc->addFixtureGroup(g);
+    g->assignFixture(doc->fixtures().at(0)->id());
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, doc);
+    full->setName("Full");
+    full->setValue(255);
+    doc->addPalette(full);
+    KeyShow s;
+    s.prod = st->addProduction("Show");
+    s.list = st->addCueList(s.prod, "Act 1");
+    ShowTree::Target t;
+    t.groups << g->id();
+    s.cue1 = st->addCue(s.list, -1, "One");
+    st->setLayerLook(s.cue1, st->addLayer(s.cue1, t), st->lookForPalette(full->id()));
+    s.cue2 = st->addCue(s.list, 0, "Two");
+    st->setLayerLook(s.cue2, st->addLayer(s.cue2, t), st->lookForPalette(full->id()));
+    s.hit = st->addLook(s.prod, "Stab");
+    st->setLayerLook(s.hit, st->addLayer(s.hit, t), st->lookForPalette(full->id()));
+    return s;
+}
+}
+
+/* A hit's key does what the hit's MIDI trigger does, press for press. */
+void ControlMap_Test::aKeyHitFiresAsItsMidiTriggerDoes()
+{
+    const KeyShow show = keyShow(m_doc);
+    ControlMap *cm = m_doc->controlMap();
+    Function *coll = m_doc->function(m_doc->showTree()->cue(show.hit)->collection);
+    QVERIFY(coll != nullptr);
+    m_doc->setMode(Doc::Operate);
+    const quint32 key = ControlMap::keyChannel(Qt::Key_1, Qt::ShiftModifier);
+
+    for (ControlMap::Mode mode : { ControlMap::Toggle, ControlMap::Momentary })
+    {
+        // The MIDI note first, then the key, the same presses.
+        QList<bool> midi, keys;
+        cm->setBinding({ 0, 20, ControlMap::hit(show.hit), mode });
+        for (int i = 0; i < 2; ++i)
+        {
+            send(20, 127); tick(); midi << coll->isRunning();
+            send(20, 0); tick(3); midi << coll->isRunning();
+        }
+        coll->stop(FunctionParent::master());
+        tick(3);
+        cm->setBinding({ ControlMap::KeyboardUniverse, key, ControlMap::hit(show.hit), mode });
+        QCOMPARE(cm->count(), 1);
+        for (int i = 0; i < 2; ++i)
+        {
+            cm->handleKey(key, true); tick(); keys << coll->isRunning();
+            cm->handleKey(key, false); tick(3); keys << coll->isRunning();
+        }
+        coll->stop(FunctionParent::master());
+        tick(3);
+        QCOMPARE(keys, midi);
+        QCOMPARE(midi.first(), true);
+    }
+}
+
+/* In Design a key fires what is armed by the Run tab's list: the list,
+   its cues, the hits living in it; not another list's. */
+void ControlMap_Test::aKeyIsArmedInDesignByTheRunList()
+{
+    const KeyShow show = keyShow(m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 other = st->addCueList(show.prod, "Act 2");
+    const quint32 otherCue = st->addCue(other, -1, "Elsewhere");
+    ControlMap *cm = m_doc->controlMap();
+    QCOMPARE(m_doc->mode(), Doc::Design);
+
+    // The Run tab on Act 2: Act 1 isn't armed.
+    QSignalSpy arming(cm, &ControlMap::armingChanged);
+    cm->setRunTabList(other);
+    QCOMPARE(arming.count(), 1);
+    QCOMPARE(cm->runList(), other);
+    QVERIFY(cm->isArmed(ControlMap::cueList(other)));
+    QVERIFY(cm->isArmed(ControlMap::cue(otherCue)));
+    QVERIFY(!cm->isArmed(ControlMap::cueList(show.list)));
+    QVERIFY(!cm->isArmed(ControlMap::cue(show.cue2)));
+    QVERIFY(cm->isArmed(ControlMap::hit(show.hit)));     // the production's hit: Act 2 is in it
+    QVERIFY(!cm->isArmed(ControlMap::function(st->cue(show.cue2)->collection)));   // a scene: never
+
+    const quint32 f5 = ControlMap::keyChannel(Qt::Key_F5, Qt::NoModifier);
+    cm->setBinding({ ControlMap::KeyboardUniverse, f5, ControlMap::cue(show.cue2), ControlMap::Toggle });
+    QVERIFY(!cm->handleKey(f5, true));                   // not armed in Design: nothing
+    tick(2);
+    QCOMPARE(st->runningCue(show.list), ShowTree::invalidId());
+
+    // The Run tab on Act 1: its cue's key fires.
+    cm->setRunTabList(show.list);
+    QVERIFY(cm->isArmed(ControlMap::cue(show.cue2)));
+    QVERIFY(cm->handleKey(f5, true));
+    tick(2);
+    QCOMPARE(st->runningCue(show.list), show.cue2);
+    QVERIFY(cm->handleKey(f5, false));
+
+    // The Run tab on the production's own list: whatever ShowControl plays.
+    cm->setRunTabList(ShowTree::invalidId());
+    const Chaser *main = m_doc->showControl()->cueList(QString());
+    if (main != nullptr)
+    {
+        quint32 lid = ShowTree::invalidId();
+        st->productionOfChaser(main->id(), &lid);
+        QCOMPARE(cm->runList(), lid);
+    }
+
+    // A production hit in another production isn't armed by it.
+    const quint32 prod2 = st->addProduction("Other show");
+    const quint32 hit2 = st->addLook(prod2, "Theirs");
+    cm->setRunTabList(show.list);
+    QVERIFY(!cm->isArmed(ControlMap::hit(hit2)));
+    // A hit under a cue: armed by its cue's list.
+    const quint32 cueHit = st->addHit(ShowTree::HitScope::Cue, show.cue1, "Breathe");
+    QVERIFY(cm->isArmed(ControlMap::hit(cueHit)));
+    cm->setRunTabList(other);
+    QVERIFY(!cm->isArmed(ControlMap::hit(cueHit)));
+}
+
+/* In Design a key fires what is selected in the Show Tree: a list (with
+   its cues and hits), a cue (with its hits), a hit. */
+void ControlMap_Test::aKeyIsArmedInDesignByTheSelection()
+{
+    const KeyShow show = keyShow(m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 other = st->addCueList(show.prod, "Act 2");
+    const quint32 cueHit = st->addHit(ShowTree::HitScope::Cue, show.cue1, "Breathe");
+    ControlMap *cm = m_doc->controlMap();
+    cm->setRunTabList(other);                         // the Run tab elsewhere
+    const quint32 prod2 = st->addProduction("Other show");
+    const quint32 hit2 = st->addLook(prod2, "Theirs");
+    QVERIFY(!cm->isArmed(ControlMap::hit(hit2)));
+
+    const quint32 key = ControlMap::keyChannel(Qt::Key_H, Qt::NoModifier);
+    cm->setBinding({ ControlMap::KeyboardUniverse, key, ControlMap::hit(hit2), ControlMap::Toggle });
+    Function *coll = m_doc->function(st->cue(hit2)->collection);
+    QVERIFY(!cm->handleKey(key, true));
+    tick();
+    QVERIFY(coll == nullptr || !coll->isRunning());
+
+    QSignalSpy arming(cm, &ControlMap::armingChanged);
+    cm->setSelectedTargets({ ControlMap::hit(hit2) });
+    QCOMPARE(arming.count(), 1);
+    cm->setSelectedTargets({ ControlMap::hit(hit2) });   // the same: no signal
+    QCOMPARE(arming.count(), 1);
+    QVERIFY(cm->isArmed(ControlMap::hit(hit2)));
+    QVERIFY(cm->handleKey(key, true));
+    QVERIFY(cm->handleKey(key, false));
+
+    // A list selected: it, its cues and the hits under them.
+    cm->setSelectedTargets({ ControlMap::cueList(show.list) });
+    QVERIFY(cm->isArmed(ControlMap::cueList(show.list)));
+    QVERIFY(cm->isArmed(ControlMap::cue(show.cue2)));
+    QVERIFY(cm->isArmed(ControlMap::hit(cueHit)));
+    QVERIFY(!cm->isArmed(ControlMap::hit(hit2)));
+    // A cue selected: it and its hits, not the other cue.
+    cm->setSelectedTargets({ ControlMap::cue(show.cue1) });
+    QVERIFY(cm->isArmed(ControlMap::cue(show.cue1)));
+    QVERIFY(cm->isArmed(ControlMap::hit(cueHit)));
+    QVERIFY(!cm->isArmed(ControlMap::cue(show.cue2)));
+    QVERIFY(!cm->isArmed(ControlMap::cueList(show.list)));
+    // Nothing selected: nothing armed by it.
+    cm->setSelectedTargets({});
+    QVERIFY(!cm->isArmed(ControlMap::cue(show.cue1)));
+    // Operate: everything may fire.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(cm->keyMayFire(ControlMap::cue(show.cue1)));
+    QVERIFY(cm->keyMayFire(ControlMap::hit(hit2)));
+}
+
+/* Saved as Key="…" (no Universe: a build without keys skips it), loaded back. */
+void ControlMap_Test::keysAreSavedWithTheShow()
+{
+    Scene *a = scene("A", 0);
+    Scene *b = scene("B", 1);
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 shift1 = ControlMap::keyChannel(Qt::Key_1, Qt::ShiftModifier);
+    cm->setBinding({ ControlMap::KeyboardUniverse, shift1, ControlMap::function(a->id()), ControlMap::Momentary });
+    cm->setBinding({ 0, 7, ControlMap::function(b->id()), ControlMap::Toggle });
+    const QList<ControlMap::Binding> before = cm->bindings();
+    const QByteArray xml = saveShow(m_doc);
+    QVERIFY2(xml.contains("<Trigger Key=\"Shift+1\" Target=\"Function\""), xml.constData());
+
+    Doc *other = new Doc(this);
+    QVERIFY(loadShow(other, xml));
+    QCOMPARE(other->controlMap()->bindings(), before);
+    QVERIFY(other->controlMap()->hasKeyBindings());
+    delete other;
+
+    // A key this build can't read: left out, the rest loads.
+    QByteArray junk = xml;
+    junk.replace("Key=\"Shift+1\"", "Key=\"\"");
+    Doc *third = new Doc(this);
+    QVERIFY(loadShow(third, junk));
+    QCOMPARE(third->controlMap()->count(), 1);
+    delete third;
+}
+
 QTEST_GUILESS_MAIN(ControlMap_Test)

@@ -3908,6 +3908,26 @@ void ShowTreeView::slotTreeSelectionChanged()
 {
     if (m_reloading)
         return;
+    // What is selected arms its computer keys in Design (the Control Map):
+    // a list, a cue (a layer's row: its cue), a hit.
+    {
+        QList<ControlMap::Target> armed;
+        for (QTreeWidgetItem *it : m_tree->selectedItems())
+        {
+            const int kind = it->data(0, KindRole).toInt();
+            quint32 cueId = invalidId();
+            if (kind == ListNode)
+                armed << ControlMap::cueList(it->data(0, IdRole).toUInt());
+            else if (kind == CueNode)
+                cueId = it->data(0, IdRole).toUInt();
+            else if (kind == LayerNode || kind == TrackedLayerNode)
+                cueId = it->data(0, CueRole).toUInt();
+            const CueList *list = cueId == invalidId() ? nullptr : m_st->listOfCue(cueId);
+            if (list != nullptr)
+                armed << (list->looks ? ControlMap::hit(cueId) : ControlMap::cue(cueId));
+        }
+        m_doc->controlMap()->setSelectedTargets(armed);
+    }
     // The command line says what the selected layer holds.
     {
         QString holds;

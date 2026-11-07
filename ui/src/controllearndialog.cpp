@@ -21,13 +21,16 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QFormLayout>
+#include <QApplication>
 #include <QComboBox>
+#include <QKeyEvent>
 #include <QAction>
 #include <QLabel>
 #include <QMenu>
 
 #include "controllearndialog.h"
 #include "inputoutputmap.h"
+#include "keytriggers.h"
 #include "inputpatch.h"
 #include "doc.h"
 
@@ -47,7 +50,8 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     what->setObjectName(QStringLiteral("learnTarget"));
     lay->addWidget(what);
     QLabel *how = new QLabel(tr("Press the key, pad or button on your MIDI controller (or send the OSC "
-                                "message) that should fire it. Press another one to change your mind."), this);
+                                "message), or a key on the computer keyboard, that should fire it. "
+                                "Press another one to change your mind."), this);
     how->setWordWrap(true);
     lay->addWidget(how);
 
@@ -79,6 +83,13 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     m_note->setStyleSheet(QStringLiteral("color: gray;"));
     lay->addWidget(m_note);
 
+    m_keyNote = new QLabel(this);
+    m_keyNote->setObjectName(QStringLiteral("learnKeyNote"));
+    m_keyNote->setWordWrap(true);
+    m_keyNote->setStyleSheet(QStringLiteral("color: gray;"));
+    m_keyNote->hide();
+    lay->addWidget(m_keyNote);
+
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     m_ok = buttons->button(QDialogButtonBox::Ok);
     m_remove = buttons->addButton(tr("Remove trigger"), QDialogButtonBox::DestructiveRole);
@@ -103,16 +114,20 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     for (quint32 u = 0; iom != nullptr && u < iom->universesCount() && !anyInput; ++u)
         anyInput = iom->inputPatch(u) != nullptr;
     if (!anyInput)
-        m_note->setText(tr("No input is patched yet: patch your controller in Connections ▸ Devices "
-                           "(or Inputs/Outputs), then learn."));
+        m_note->setText(tr("No MIDI or OSC input is patched yet: press a computer key, or patch your "
+                           "controller in Connections ▸ Devices (or Inputs/Outputs), then learn."));
 
     connect(cm, &ControlMap::heard, this, &ControlLearnDialog::slotHeard);
     cm->listen();
+    // Computer keys: every key pressed in the dialog, before its buttons
+    // and the mode box see it.
+    qApp->installEventFilter(this);
     updateText();
 }
 
 ControlLearnDialog::~ControlLearnDialog()
 {
+    qApp->removeEventFilter(this);
     if (m_doc != nullptr && m_doc->controlMap() != nullptr)
         m_doc->controlMap()->stopListening();
 }
@@ -122,15 +137,22 @@ QAction *ControlLearnDialog::addTo(QMenu *menu, Doc *doc, const ControlMap::Targ
     if (menu == nullptr || doc == nullptr || !target.isValid())
         return nullptr;
     const ControlMap::Binding *b = doc->controlMap()->binding(target);
-    const QString text = b == nullptr ? tr("Learn Trigger…")
-                                      : tr("Trigger: %1…").arg(doc->controlMap()->controlName(b->universe, b->channel));
+    QString text = tr("Learn Trigger…");
+    if (b != nullptr)
+    {
+        QString control = doc->controlMap()->controlName(b->universe, b->channel);
+        // A key in Design says whether it may fire now (docs: armed).
+        if (ControlMap::isKey(*b) && doc->mode() == Doc::Design && doc->controlMap()->isArmed(target))
+            control = tr("%1 · Armed").arg(control);
+        text = tr("Trigger: %1…").arg(control);
+    }
     QAction *a = menu->addAction(text, parent, [doc, target, parent]() {
         ControlLearnDialog d(doc, target, parent);
         d.exec();
     });
     a->setObjectName(QStringLiteral("learnTrigger"));
-    a->setToolTip(tr("Fire this from a MIDI or OSC control: choose this, then press the key, pad or "
-                     "button (Control Map)"));
+    a->setToolTip(tr("Fire this from a MIDI or OSC control or a computer key: choose this, then press "
+                     "the key, pad or button (Control Map)"));
     return a;
 }
 
@@ -152,15 +174,58 @@ void ControlLearnDialog::slotHeard(quint32 universe, quint32 channel)
 {
     m_universe = universe;
     m_channel = channel;
+    m_keyNote->hide();
     updateText();
     // Still listening: another press takes its place.
     m_doc->controlMap()->listen();
+}
+
+bool ControlLearnDialog::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() != QEvent::KeyPress)
+        return false;
+    QWidget *w = qobject_cast<QWidget *>(watched);
+    QWidget *target = QApplication::focusWidget() != nullptr ? QApplication::focusWidget() : this;
+    if (w == nullptr || w != target || w->window() != this)
+        return false;
+    QKeyEvent *ke = static_cast<QKeyEvent *>(event);
+    if (ke->isAutoRepeat())
+        return ControlMap::keyChannel(ke->key(), ke->modifiers()) == m_channel;
+    return learnKey(ke->key(), ke->modifiers());
+}
+
+bool ControlLearnDialog::learnKey(int key, Qt::KeyboardModifiers modifiers)
+{
+    const quint32 channel = ControlMap::keyChannel(key, modifiers);
+    if (channel == 0)
+        return false;       // a modifier on its own: wait for the key
+    bool dialogKey = false;
+    const QString why = KeyTriggers::refusal(channel, &dialogKey);
+    if (!why.isEmpty())
+    {
+        m_keyNote->setText(why);
+        m_keyNote->show();
+        return !dialogKey;
+    }
+    m_universe = ControlMap::KeyboardUniverse;
+    m_channel = channel;
+    updateText();
+    return true;
 }
 
 void ControlLearnDialog::updateText()
 {
     ControlMap *cm = m_doc->controlMap();
     m_ok->setEnabled(hasControl());
+    if (m_universe == ControlMap::KeyboardUniverse)
+    {
+        m_keyNote->setText(m_target.type == ControlMap::FunctionTarget
+            ? tr("A key fires in Operate, when no text field, editor or dialog has the keyboard.")
+            : tr("A key fires in Operate, and in Design while this is armed: in the Run tab's cue "
+                 "list, or selected in the Show Tree. Never while a text field, editor or dialog "
+                 "has the keyboard."));
+        m_keyNote->show();
+    }
     if (!hasControl())
     {
         m_heard->setText(tr("Listening…"));

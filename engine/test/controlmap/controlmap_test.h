@@ -48,6 +48,12 @@ private slots:
     void aDeletedFunctionTakesItsBinding();
     void nothingListensWithoutBindings();
     void namesSayWhatAControlIs();
+    void aComputerKeyIsAControl();
+    void aKeyFiresInOperateOnly();
+    void aKeyHitFiresAsItsMidiTriggerDoes();
+    void aKeyIsArmedInDesignByTheRunList();
+    void aKeyIsArmedInDesignByTheSelection();
+    void keysAreSavedWithTheShow();
 
 private:
     /** A press (value) or a release (0) on @a channel of input universe 0,

@@ -12,6 +12,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### New
+
+- **A computer key can fire a hit, a cue, a cue list or a scene.** Learn
+  Trigger… now also learns a key on the keyboard, with its modifiers
+  ("Key · F5"), with the same press modes as a MIDI control, listed in the
+  Control Map and saved with the show. A key fires in Operate, and in
+  Design while what it fires is armed: in the Run tab's cue list, or
+  selected in the Show Tree. Never while a text field, the command line or
+  an editor has the keyboard; keys the app or a Virtual Console widget
+  already uses are refused, saying why.
+
 ## [0.4.1] - 2026-11-06
 
 qlcconsole 0.4.1 is a stable release that hardens 0.4.0: the follow spot,

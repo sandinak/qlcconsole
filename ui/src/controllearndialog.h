@@ -38,10 +38,13 @@ class Doc;
 
 /**
  * Learn trigger…: listens for the next MIDI note or CC, or OSC message, on
- * any input universe and binds that control to fire a function, a Show
- * Tree cue list, cue or hit (the Control Map, ControlMap). Pressing another
- * control before OK takes that one instead; the mode says how a press acts.
- * Remove trigger takes an existing binding away.
+ * any input universe -- or a key on the computer keyboard, with its
+ * modifiers -- and binds that control to fire a function, a Show Tree cue
+ * list, cue or hit (the Control Map, ControlMap). Pressing another control
+ * before OK takes that one instead; the mode says how a press acts. Remove
+ * trigger takes an existing binding away. A key the app or the dialog needs
+ * is refused, saying why (KeyTriggers::refusal()); Esc, Tab, Return, Space
+ * and the arrows keep working the dialog.
  */
 class QLC_UI_EXPORT ControlLearnDialog final : public QDialog
 {
@@ -66,6 +69,14 @@ public slots:
     void accept() override;
     void done(int r) override;
 
+    /** A key pressed in the dialog (what its key filter does; public for
+     *  the tests). True: learned or refused (used up); false: the dialog's
+     *  own key, left to work the dialog. */
+    bool learnKey(int key, Qt::KeyboardModifiers modifiers);
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 private slots:
     void slotHeard(quint32 universe, quint32 channel);
     void slotRemove();
@@ -80,6 +91,7 @@ private:
     quint32 m_channel = 0xFFFFFFFF;
     QLabel *m_heard;
     QLabel *m_note;
+    QLabel *m_keyNote;
     QComboBox *m_mode;
     QPushButton *m_ok;
     QPushButton *m_remove;

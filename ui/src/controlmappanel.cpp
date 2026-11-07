@@ -97,6 +97,8 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     ControlMap *cm = m_doc->controlMap();
     connect(cm, &ControlMap::bindingsChanged, this, &ControlMapPanel::refresh);
     connect(cm, &ControlMap::fired, this, &ControlMapPanel::slotFired);
+    // A key's "Armed" follows the mode, the Run tab and the Show Tree.
+    connect(cm, &ControlMap::armingChanged, this, &ControlMapPanel::refreshArming);
     // Names follow renames.
     connect(m_doc, &Doc::functionChanged, this, [this]() { if (isVisible()) refresh(); });
     connect(m_doc, &Doc::functionNameChanged, this, [this]() { if (isVisible()) refresh(); });
@@ -122,7 +124,7 @@ void ControlMapPanel::refresh()
     for (int r = 0; r < bindings.count(); ++r)
     {
         const ControlMap::Binding &b = bindings.at(r);
-        QTableWidgetItem *c = new QTableWidgetItem(cm->controlName(b.universe, b.channel));
+        QTableWidgetItem *c = new QTableWidgetItem(controlText(b));
         c->setData(TargetRole, b.target.id);
         c->setData(TypeRole, int(b.target.type));
         m_table->setItem(r, ControlCol, c);
@@ -155,6 +157,27 @@ void ControlMapPanel::refresh()
     m_remove->setEnabled(any && !m_table->selectionModel()->selectedRows().isEmpty());
     refreshEncoder();
     emit summaryChanged();
+}
+
+QString ControlMapPanel::controlText(const ControlMap::Binding &b) const
+{
+    ControlMap *cm = m_doc->controlMap();
+    const QString name = cm->controlName(b.universe, b.channel);
+    if (ControlMap::isKey(b) && m_doc->mode() == Doc::Design && cm->isArmed(b.target))
+        return tr("%1 · Armed").arg(name);
+    return name;
+}
+
+void ControlMapPanel::refreshArming()
+{
+    ControlMap *cm = m_doc->controlMap();
+    if (!cm->hasKeyBindings() || !isVisible())
+        return;
+    const QList<ControlMap::Binding> bindings = cm->bindings();
+    for (int r = 0; r < bindings.count() && r < m_table->rowCount(); ++r)
+        if (ControlMap::isKey(bindings.at(r)))
+            if (QTableWidgetItem *c = m_table->item(r, ControlCol))
+                c->setText(controlText(bindings.at(r)));
 }
 
 void ControlMapPanel::showEvent(QShowEvent *ev)
