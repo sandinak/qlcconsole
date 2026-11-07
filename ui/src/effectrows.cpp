@@ -25,6 +25,7 @@
 #include "paletteops.h"
 #include "qlcpalette.h"
 #include "fixture.h"
+#include "freerotation.h"
 #include "doc.h"
 
 using namespace ShowTree;
@@ -116,7 +117,8 @@ QString EffectRows::valueText(const EffectScript::ParamDef &def, double value)
     return number(value);
 }
 
-QString EffectRows::runsOnText(Doc *doc, const QString &key, const QList<Target> &targets)
+QString EffectRows::runsOnText(Doc *doc, const QString &key, const QList<Target> &targets,
+                               const QStringList &fixtureTypes)
 {
     ShowTreeController *st = doc == nullptr ? nullptr : doc->showTree();
     if (st == nullptr || targets.isEmpty())
@@ -124,13 +126,21 @@ QString EffectRows::runsOnText(Doc *doc, const QString &key, const QList<Target>
     QStringList names;
     QList<quint32> fixtures, misses;
     const QString attr = attributeOf(key);
+    // Free Spin runs on heads that turn endlessly, not on any pan/tilt.
+    const bool spins = fixtureTypes.contains(QStringLiteral("freerotate"), Qt::CaseInsensitive);
     for (const Target &t : targets)
     {
         names << st->targetLabel(t);
         for (quint32 f : st->targetFixtures(t))
             if (!fixtures.contains(f))
                 fixtures << f;
-        if (!attr.isEmpty())
+        if (spins)
+        {
+            for (quint32 f : st->targetFixtures(t))
+                if (!FreeRotation::canSpin(doc->fixture(f)) && !misses.contains(f))
+                    misses << f;
+        }
+        else if (!attr.isEmpty())
             for (quint32 f : st->lookMisses(t, attr))
                 if (!misses.contains(f))
                     misses << f;
@@ -146,7 +156,8 @@ QString EffectRows::runsOnText(Doc *doc, const QString &key, const QList<Target>
     {
         Target missed;
         missed.fixtures = misses;
-        const QString what = attr == KeyPosition ? tr("no pan/tilt")
+        const QString what = spins ? tr("no free rotation")
+                             : attr == KeyPosition ? tr("no pan/tilt")
                              : attr == KeyColour ? tr("no colour")
                              : attr == KeyBeam ? tr("no beam") : tr("no %1").arg(keyLabel(attr).toLower());
         count = tr("%1 of %2 fixtures (%3 %4 %5)")
@@ -182,7 +193,7 @@ QList<EffectRows::Row> EffectRows::rows(Doc *doc, const ResolvedLayer &layer, co
             targets = span;
         else
             targets << layer.target;
-        r.text = runsOnText(doc, key, targets);
+        r.text = runsOnText(doc, key, targets, EffectOrigin::scriptFixtureTypes(p->scriptPath()));
         QStringList contents;
         for (const Target &t : targets)
             contents << st->targetContents(t);

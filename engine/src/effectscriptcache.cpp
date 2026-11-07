@@ -123,7 +123,7 @@ QString EffectScriptCache::categoryForTypes(const QStringList &ft)
         || ft.contains(QStringLiteral("color")) || ft.contains(QStringLiteral("colorwheel")))
         return QStringLiteral("Color");
     if (ft.contains(QStringLiteral("moving")) || ft.contains(QStringLiteral("mover"))
-        || ft.contains(QStringLiteral("pantilt")))
+        || ft.contains(QStringLiteral("pantilt")) || ft.contains(QStringLiteral("freerotate")))
         return QStringLiteral("Position");
     return QStringLiteral("Other");
 }

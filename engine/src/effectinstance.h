@@ -31,6 +31,8 @@
 #include <QVector>
 
 #include "effectscript.h"
+#include "freerotation.h"
+#include <array>
 #include "scenetransition.h"
 
 class Doc;
@@ -62,6 +64,8 @@ public:
         float   depth = 1.0f;    // < 1: the effect fading in or out (depth()) -- written
                                  //      that far from what is under it to @value
                                  //      (FadeChannel::Mix); set by the runner
+        bool    snap = false;    // a value that means nothing part way (a spin speed,
+                                 // its stop): never mixed by depth, written whole
     };
 
     EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteId);
@@ -345,6 +349,9 @@ private:
         bool sceneTargetSet = false;    //!< on its cells now
         bool lastSpotSet = false;
         QVector<int> arms;              //!< AimSolver::arms(): each aimed on its own
+        /** Free rotation (FreeRotation), per head: [head][Pan/Tilt]. Empty
+         *  when no head of it spins. */
+        QVector<std::array<FreeRotation::Spin, 2>> spin;
     };
     QHash<quint32, FixtureFacts> m_facts;
     QVector<QJSValue> m_cellObjects;

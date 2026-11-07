@@ -71,6 +71,9 @@ Fixture *kind(Doc *doc, const QString &which)
     if (which == "mover")   return add(doc, "Ayrton/Ayrton-Rivale-Profile.qxf", "Standard");
     if (which == "par")     return add(doc, "Generic/Generic-Generic-RGB.qxf", "RGB");
     if (which == "bar")     return add(doc, "AFX/AFX-BARLED200-FX.qxf", "48 Channel");
+    if (which == "spinner") return add(doc, "Cameo/Cameo-Movo-Beam-100.qxf", "15 Channel");
+    if (which == "twoarm")  return add(doc, "Junman/Junman-2-Head.qxf", "16 Channel");
+    if (which == "sharpy")  return add(doc, "Clay_Paky/Clay-Paky-Sharpy.qxf", "Vector");
     if (which == "dimmer")
     {
         Fixture *d = new Fixture(doc);
@@ -130,6 +133,16 @@ void EffectFit_Test::whatFitsWhat_data()
         QTest::newRow(qPrintable(f + " / Matrix Bars")) << f << "Matrix Bars" << r.matrix;
         QTest::newRow(qPrintable(f + " / Dimmer Phaser (intensity)")) << f << "Dimmer Phaser" << (r.dimmerFx || r.position);
     }
+    // Free Spin: heads whose definition gives them free pan/tilt rotation
+    // (the Rivale has continuous rotation channels; a Sharpy's gobos and
+    // prism turn, its head doesn't).
+    QTest::newRow("spinner / Free Spin") << "spinner" << "Free Spin" << true;
+    QTest::newRow("twoarm / Free Spin") << "twoarm" << "Free Spin" << true;
+    QTest::newRow("mover / Free Spin") << "mover" << "Free Spin" << true;
+    QTest::newRow("sharpy / Free Spin") << "sharpy" << "Free Spin" << false;
+    QTest::newRow("par / Free Spin") << "par" << "Free Spin" << false;
+    QTest::newRow("wled / Free Spin") << "wled" << "Free Spin" << false;
+    QTest::newRow("bar / Free Spin") << "bar" << "Free Spin" << false;
 }
 
 void EffectFit_Test::whatFitsWhat()
@@ -175,6 +188,29 @@ void EffectFit_Test::aMixedSetRunsOnSome()
 
     r = EffectFit::fit(needOf(m_doc, "Gobo Chase"), t);
     QCOMPARE(r.runsOn, 1);                  // the mover's wheel only
+}
+
+/* Free Spin on movers that free-rotate, movers that don't and pars: it
+   runs on the ones that can, and says what the rest lack. */
+void EffectFit_Test::freeSpinRunsOnHeadsThatFreeRotate()
+{
+    Fixture *a = kind(m_doc, "spinner"), *b = kind(m_doc, "twoarm");
+    Fixture *sharpy = kind(m_doc, "sharpy"), *par = kind(m_doc, "par");
+    QVERIFY(a && b && sharpy && par);
+    const EffectFit::Targets t = EffectFit::targetsOf(m_doc, { a->id(), b->id(), sharpy->id(), par->id() });
+    const EffectFit::Need need = needOf(m_doc, "Free Spin");
+    QCOMPARE(need.types, QStringList("freerotate"));
+    const EffectFit::Result r = EffectFit::fit(need, t);
+    QVERIFY(r.fits);
+    QCOMPARE(r.runsOn, 2);
+    QCOMPARE(r.of, 4);
+    QCOMPARE(r.why, QString("Runs on 2 of 4 fixtures (2 have no free rotation)"));
+    // Filed with the movement effects.
+    QCOMPARE(EffectScriptCache::categoryForTypes(need.types), QString("Position"));
+
+    const EffectFit::Result none = EffectFit::fit(need, EffectFit::targetsOf(m_doc, { sharpy->id(), par->id() }));
+    QVERIFY(!none.fits);
+    QVERIFY2(none.why.contains("free (endless) pan or tilt rotation"), qPrintable(none.why));
 }
 
 void EffectFit_Test::noTargetsListsEverything()
@@ -309,6 +345,7 @@ void EffectFit_Test::shots()
         { "movinghead", { "mover", "mover", "mover", "mover" } },
         { "par", { "par", "par", "par", "par" } },
         { "wled", { "wled", "wled" } },
+        { "freespin", { "spinner", "spinner", "twoarm", "par" } },
     };
     for (const Group &g : groups)
     {
@@ -334,6 +371,9 @@ void EffectFit_Test::shots()
             {
                 browser->showAllButton()->setChecked(all == 1);
                 ed.openEffectPicker();
+                // Free Spin is a movement effect: show it where it is listed.
+                if (QString(g.name) == QLatin1String("freespin"))
+                    browser->search()->setText(QStringLiteral("spin"));
                 ed.m_effectPicker->resize(sz);
                 QApplication::processEvents();
                 QTest::qWait(250);

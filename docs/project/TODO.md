@@ -10,6 +10,21 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Free Spin: an effect for heads with free pan/tilt rotation (spin, 2026-11-06, 0.4.2) -- built, leftovers
+
+Built on feat/042-free-rotate: FreeRotation (engine), free-spin.js, fitted
+picker, Show Tree rows, picker preview, help + API docs.
+
+- [ ] Rig view: draw the spin. The 2D/3D views read pan back from DMX
+  (AimSolver::headDirection) and only repaint when DMX changes, so a constant
+  spin value draws a still head; it needs a per-head turned angle integrated
+  from FreeRotation::Spin::speedOf() at a nominal rpm, and a repaint timer
+  while any head spins.
+- [ ] Speed reads "60" in the Show Tree, not "60 %"; a param unit for
+  percent would say it.
+- [ ] RPM: no pan/tilt definition in the library gives rpm yet (gobo and
+  prism ones do); the parser is there for those that will.
+
 ## Cue lists on the timeline, the timeline on timecode (design, 2026-11-04) — waiting on Q216–Q221
 
 Design: [docs/design/TIMELINE_SHOWTREE.md](../design/TIMELINE_SHOWTREE.md).

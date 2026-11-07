@@ -780,6 +780,15 @@ void LookEditor_Test::previewsShowWhatEachEffectDoes()
     QCOMPARE(browser->previewFrame(cache->scriptPath("Iris Pulse")).kind, EffectBrowser::Preview::Beam);
     QCOMPARE(browser->previewFrame(cache->scriptPath("Zoom Pulse")).kind, EffectBrowser::Preview::Beam);
 
+    // Free Spin: the heads go round -- a position preview whose pan keeps
+    // moving one way (a spin, not a sweep).
+    const QString spin = cache->scriptPath("Free Spin");
+    QVERIFY(!spin.isEmpty());
+    QCOMPARE(browser->previewFrame(spin).kind, EffectBrowser::Preview::Position);
+    const QVector<QVector<QPointF> > turns = browser->samplePaths(spin);
+    QVERIFY(!turns.isEmpty() && turns.at(0).size() > 2);
+    QVERIFY2(turns.at(0).last().x() != turns.at(0).first().x(), "a spinning head turns");
+
     // A follow-spot does nothing held still: it is previewed steered.
     EffectBrowser::Preview follow;
     for (int k = 0; k < 3 && follow.kind != EffectBrowser::Preview::Position; ++k)

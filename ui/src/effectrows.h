@@ -67,8 +67,11 @@ public:
                            const QList<ShowTree::Target> &span);
 
     /** "Runs on" alone (the cue page's cue-level effects): "Left + Right ·
-     *  4 fixtures", or "· 2 of 4 fixtures (Pars have no pan/tilt)". */
-    static QString runsOnText(Doc *doc, const QString &key, const QList<ShowTree::Target> &targets);
+     *  4 fixtures", or "· 2 of 4 fixtures (Pars have no pan/tilt)". With
+     *  @p fixtureTypes "freerotate" (Free Spin) the rest are those with no
+     *  free rotation. */
+    static QString runsOnText(Doc *doc, const QString &key, const QList<ShowTree::Target> &targets,
+                              const QStringList &fixtureTypes = QStringList());
 
     /** The effect palette a look plays (null: none). */
     static QLCPalette *effectPalette(Doc *doc, const ShowTree::Look &look);

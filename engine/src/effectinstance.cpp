@@ -6,6 +6,7 @@
 */
 
 #include "effectinstance.h"
+#include "freerotation.h"
 #include "effectruns.h"
 #include "speedmasters.h"
 #include "spreadlayer.h"
@@ -969,6 +970,8 @@ QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
         for (const QString &t : types)
         {
             const QString tl = t.toLower();
+            // Heads that turn endlessly on pan or tilt (Free Spin).
+            if (tl == QLatin1String("freerotate") && FreeRotation::canSpin(fxi)) { matches = true; break; }
             // RGB variants: rgb, rgbw, rgba, rgbwa, rgbwauv, wash, color
             if ((tl == QLatin1String("rgb")      ||
                  tl == QLatin1String("rgbw")     ||
@@ -1446,6 +1449,34 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             obj.setProperty("lensMin",       double(f.lensMin));
             obj.setProperty("lensMax",       double(f.lensMax));
             obj.setProperty("pos", f.posObj);
+            // Free rotation: { pan: {reverses, band, rpm}, tilt: ... }, only
+            // the axes it spins on; absent when it spins on neither.
+            if (cell.head >= 0 && cell.head < f.spin.size())
+            {
+                QJSValue spinObj;
+                for (int a = 0; a < 2; ++a)
+                {
+                    const FreeRotation::Spin &sp = f.spin.at(cell.head)[a];
+                    if (!sp.canSpin())
+                        continue;
+                    if (spinObj.isUndefined())
+                        spinObj = engine->newObject();
+                    QJSValue ax = engine->newObject();
+                    ax.setProperty("reverses", sp.reverses());
+                    ax.setProperty("band", sp.band);
+                    const FreeRotation::Range &r = sp.cw.hasRpm() ? sp.cw : sp.ccw;
+                    if (r.hasRpm())
+                    {
+                        QJSValue rpm = engine->newArray(2);
+                        rpm.setProperty(0, r.rpmSlow);
+                        rpm.setProperty(1, r.rpmFast);
+                        ax.setProperty("rpm", rpm);
+                    }
+                    spinObj.setProperty(a == 0 ? "pan" : "tilt", ax);
+                }
+                if (!spinObj.isUndefined())
+                    obj.setProperty("spin", spinObj);
+            }
 
             // grid: this HEAD's cell for pixel-style effects. col/row = cell position
             // (from the group head layout, or a 1-D strip); cols/rows = grid size.
@@ -1606,9 +1637,17 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             };
             if (has(panCh) || has(tiltCh))
             {
-                auto frac = [this, fid](quint32 msb, quint32 lsb) {
+                const Fixture *fx = f.fixture;
+                auto frac = [this, fid, fx](quint32 msb, quint32 lsb) {
                     const int hi = sceneBaseValue(fid, msb, 128);
                     const int lo = lsb != QLCChannel::invalid() ? sceneBaseValue(fid, lsb, 0) : 0;
+                    /* Over the pointing band when the channel has one (a
+                       two-arm beam points with 0-127): 64 is half way round,
+                       not a quarter. */
+                    const QLCChannel *ch = fx->channel(msb);
+                    uchar bandLo = 0, bandHi = 255;
+                    if (ch != nullptr && Fixture::positionBand(ch, bandLo, bandHi))
+                        return Fixture::positionFraction(ch, hi + lo / 256.0, lsb != QLCChannel::invalid());
                     return double((hi << 8) | lo) / 65535.0;
                 };
                 QJSValue la = engine->newObject();
@@ -1650,9 +1689,27 @@ void EffectInstance::readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const
     f.hasPanTilt = f.hasRGB = f.hasColorWheel = f.hasDimmer = false;
     f.hasGobo = f.hasShutter = f.hasZoom = false;
     f.arms = AimSolver::arms(fxi);
+    f.spin.clear();
     const QLCFixtureMode *mode = fxi->fixtureMode();
     if (mode == nullptr)
         return;
+
+    // Free rotation, head by head: read once, here, not every tick -- and
+    // only for a fixture with pan or tilt (not every pixel of a strip).
+    if (mode->channelNumber(QLCChannel::Pan, QLCChannel::MSB) != QLCChannel::invalid()
+        || mode->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) != QLCChannel::invalid())
+    {
+        QVector<std::array<FreeRotation::Spin, 2>> spin(qMax(1, fxi->heads()));
+        bool any = false;
+        for (int h = 0; h < spin.size(); ++h)
+            for (int a = 0; a < 2; ++a)
+            {
+                spin[h][a] = FreeRotation::find(mode, h, FreeRotation::Axis(a));
+                any = any || spin[h][a].canSpin();
+            }
+        if (any)
+            f.spin = spin;
+    }
 
     const QLCPhysical &phy = mode->physical();
     const Fixture::EffectiveBeam eb = fxi->effectiveBeam();
@@ -1893,6 +1950,9 @@ QJSValue EffectInstance::buildInputsObject() const
     // The host's spread is on: read fixture.phase, not the script's own.
     QLCPalette *spreadPal = m_doc->palette(m_effectPaletteId);
     const SpreadLayer::Settings spreadNow = spreadSettings(spreadPal);
+    // How far in it is (its fade in / out): an effect whose output means
+    // nothing part way (a spin speed) eases itself by it.
+    obj.setProperty("_fade", double(m_depthFade ? depth() : m_envelope));
     obj.setProperty("_spread", spreadNow.isActive());
     obj.setProperty("_spreadAmount", spreadNow.amount);     // cycles, for effects that lay heads out by it
 
@@ -2343,6 +2403,33 @@ EffectInstance::parseIntents(const QJSValue &intents,
         if (!panVal.isUndefined())  { panDeg  = (float)panVal.toNumber();  havePan  = true; }
         const QJSValue &tiltVal = iv("tilt");
         if (!tiltVal.isUndefined()) { tiltDeg = (float)tiltVal.toNumber(); haveTilt = true; }
+
+        /* Free rotation: "clockwise at 40%" as this head's own DMX
+           (FreeRotation) -- a channel of its own, or a band on the pan
+           channel, which then spins instead of pointing. Written whole:
+           part way to what is under it is another speed, or a position. */
+        for (int a = 0; a < 2; ++a)
+        {
+            const QJSValue &sv = iv(a == 0 ? "panSpin" : "tiltSpin");
+            if (sv.isUndefined())
+                continue;
+            const auto facts = m_facts.constFind(fid);
+            if (facts == m_facts.constEnd() || head < 0 || head >= facts->spin.size())
+                continue;
+            const FreeRotation::Spin &sp = facts->spin.at(head)[a];
+            const int v = sp.value(sv.toNumber());
+            if (v < 0)
+                continue;                   // a band stopping: it points instead
+            if (sp.band)
+            {
+                // It spins rather than points: no position on that channel.
+                if (a == 0) havePan = false;
+                else haveTilt = false;
+            }
+            DmxWrite w{uniIdx, (int)fxi->address() + (int)sp.channel, uchar(v), fxi->id(), sp.channel};
+            w.snap = true;
+            writes.append(w);
+        }
 
         // Pan
         if (havePan)

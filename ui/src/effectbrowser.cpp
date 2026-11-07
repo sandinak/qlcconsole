@@ -71,6 +71,10 @@ struct EffectBrowser::Run
 {
     EffectScript script;
     QJSValue state;
+    /** A spin (panSpin / tiltSpin): where each light has turned to,
+     *  degrees, and the time it was last drawn. */
+    QVector<QPointF> turned;
+    double turnedAt = -1.0;
 };
 
 /** A row: the strip of lights running the effect, its name, what it does. */
@@ -857,6 +861,16 @@ EffectBrowser::Preview EffectBrowser::previewWith(Run *run, double t, bool steer
         target.setProperty(QStringLiteral("y"), 3.0);
         target.setProperty(QStringLiteral("z"), 0.0);
         o.setProperty(QStringLiteral("sceneTarget"), target);
+        // Each light turns endlessly both ways (Free Spin).
+        QJSValue spin = eng->newObject();
+        for (const char *axis : { "pan", "tilt" })
+        {
+            QJSValue a = eng->newObject();
+            a.setProperty(QStringLiteral("reverses"), true);
+            a.setProperty(QStringLiteral("band"), false);
+            spin.setProperty(QLatin1String(axis), a);
+        }
+        o.setProperty(QStringLiteral("spin"), spin);
         fixtures.setProperty(quint32(i), o);
     }
     QJSValue inputs = eng->newObject();
@@ -911,6 +925,36 @@ EffectBrowser::Preview EffectBrowser::previewWith(Run *run, double t, bool steer
        beam one; anything else lights. */
     const QJSValue first = result.property(0);
     const auto has = [&first](const char *k) { return first.isObject() && first.hasProperty(QLatin1String(k)); };
+    if (has("panSpin") || has("tiltSpin"))
+    {
+        /* A spin: each light turned round by its speed -- from 2 rpm at
+           the slowest to 60 at the fastest, about what such heads do. */
+        pv.kind = Preview::Position;
+        if (run->turned.size() != kLights)
+            run->turned = QVector<QPointF>(kLights, QPointF(270.0, 135.0));
+        const double dt = run->turnedAt < 0.0 ? 0.0 : qBound(0.0, t - run->turnedAt, 0.5);
+        run->turnedAt = t;
+        auto degPerSec = [](double v) {
+            if (v == 0.0)
+                return 0.0;
+            const double rpm = 2.0 + 58.0 * qMin(1.0, std::fabs(v));
+            return (v > 0 ? 1.0 : -1.0) * rpm * 6.0;
+        };
+        for (int i = 0; i < kLights; ++i)
+        {
+            const QJSValue o = result.property(quint32(i));
+            QPointF &a = run->turned[i];
+            if (o.isObject())
+            {
+                a.rx() += degPerSec(num(o.property(QStringLiteral("panSpin")))) * dt;
+                a.ry() += degPerSec(num(o.property(QStringLiteral("tiltSpin")))) * dt;
+            }
+            const double px = std::fmod(std::fmod(a.x(), 540.0) + 540.0, 540.0) / 540.0;
+            const double ty = std::fmod(std::fmod(a.y(), 270.0) + 270.0, 270.0) / 270.0;
+            pv.spots << QPointF(px, ty);
+        }
+        return pv;
+    }
     if (has("pan") || has("tilt") || has("aimX"))
     {
         pv.kind = Preview::Position;

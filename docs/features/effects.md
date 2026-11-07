@@ -265,11 +265,41 @@ where it is.
 | **Ballyhoo** | Wide, pseudo-random audience-scan sweeps |
 | **Diamond** / **Figure-8** / **Lissajous** | Shapes traced by each head |
 | **Drawn Path** | Heads follow a path you draw in the look editor |
+| **Free Spin** | Turns heads that rotate endlessly on pan or tilt round and round — see [Free Spin](#free-spin) |
 | **Fan** / **Orbit** / **Followspot** | Fan out, orbit, or follow a joystick's X/Y (see [Moving a follow spot](stage-targets.md#moving-a-follow-spot): the editor shows what it is doing with a light). Followspot can fade a head out near its pan/tilt limit (**Fade Near Limit**) or while a drape, wall or riser is between it and the subject (**Fade When Blocked** — see [Line of sight](stage-targets.md#line-of-sight)) |
 | **Pan/Tilt Phaser** | Independent pan and tilt sines, phase-spread |
 | **Stage Shape** | Heads trace the outline of a shape (circle, polygon, star, line) round the look's Aim target, on the floor or stood up as a wall. With **Spread** on, the spread decides which head takes which point — Axis *stage left to right* puts the leftmost heads on the left of the line, no beams crossing |
 | **Sweep** | A synchronised pan or tilt scan with a cascade |
 | **Wander** | Organic drift, each head on its own path |
+
+
+### Free Spin
+
+Some heads turn round and round on pan or tilt without stopping: an
+*endless*, *continuous* or *free* rotation. **Free Spin** runs them by what
+their own definition says — a channel of its own ("Endless Pan rotation")
+or a band on the pan channel (a two-arm beam whose pan points with 0–127
+and spins with 128–255) — so you set a direction and a speed, never a DMX
+value. It runs only on heads that can free-rotate: the effect picker lists
+it when at least one fixture you're working on can, and its **Runs on** row
+in the Show Tree says how many of them do ("2 of 4 fixtures (Pars have no
+free rotation)"). A gobo or prism that rotates is not the head turning: it
+is left alone.
+
+| Setting | What it does |
+|---|---|
+| **Axis** | Pan, tilt, or both. A head that only spins one way round turns on the axis it has |
+| **Speed** | From the slowest the head goes (1) to its fastest (100), each head by its own range |
+| **RPM** | Revolutions per minute, for a head whose definition gives them; 0 (off) uses Speed |
+| **Direction** | Clockwise, counter-clockwise, alternate fixtures, or **Bounce**: reverse every **Seconds between bounces**, easing through each reversal |
+| **Stagger seconds per fixture** | Each fixture starts this many seconds after the one before |
+| **Fade-in seconds** | How long it takes to come up to speed. The look's Fade Out takes the spin down the same way |
+| **When it stops** | **Hold where it stopped** sends the head's stop value; **Return to the look's position** also points it where the look does |
+
+A head that spins on its pan channel itself can only stop by pointing, so
+it returns to the look's position either way. A speed is written whole —
+never part way to what is under it, which would be another speed or a
+position.
 
 ## Beam
 

@@ -56,6 +56,23 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   a second (513°/s at full stick); it now flies at Top Speed over the
   head's throw. A head in an 8-bit mode still moves in its DMX steps (use
   its 16-bit mode for a follow spot).
+### New
+
+- **Free Spin: a movement effect for heads that rotate endlessly on pan or
+  tilt.** Set Axis, Speed (the head's slowest to fastest, or RPM where its
+  definition gives them), Direction (clockwise, counter-clockwise,
+  alternate fixtures, or bounce every N seconds), Stagger, Fade In and what
+  it does when it stops (hold, or return to the look's position) -- no more
+  raw DMX values in the rotation band of a pan channel. Each fixture gets
+  its own value from its definition; heads with no free rotation are left
+  to the look, and the effect picker lists it only when one of yours can.
+
+### Fixed
+
+- **Pointing a head whose definition lists an endless-rotation channel
+  after Pan no longer spins it** (Cameo Movo Beam 100, Ayrton Kyalami, Robe
+  Robin Spikie, GLP Impression FR1 and others): the rotation channel had
+  become the head's pan, so a position went into it.
 
 ## [0.4.1] - 2026-11-06
 

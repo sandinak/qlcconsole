@@ -23,6 +23,7 @@
 #include "doc.h"
 
 #include "wledconfigcheck.h"
+#include "freerotation.h"
 
 #define tr(s) QCoreApplication::translate("EffectFit", s)
 
@@ -36,6 +37,7 @@ EffectFit::Caps EffectFit::capsOf(const Fixture *fixture)
     if (mode == nullptr)
         return c;
     c.heads = qMax(1, mode->heads().size());
+    c.freeRotate = FreeRotation::canSpin(fixture);
     for (quint32 i = 0; i < fixture->channels(); ++i)
     {
         const QLCChannel *ch = mode->channel(i);
@@ -180,6 +182,8 @@ bool EffectFit::typesMatch(const QStringList &types, const Caps &c)
             return true;
         if (tl == QLatin1String("dimmer") && c.dimmer)
             return true;
+        if (tl == QLatin1String("freerotate") && c.freeRotate)
+            return true;
         if (tl == QLatin1String("shutter") && c.shutter)
             return true;
         if (tl == QLatin1String("colorwheel") && c.colorWheel)
@@ -221,7 +225,10 @@ EffectFit::Result EffectFit::fit(const Need &need, const Targets &targets)
 
     if (r.fits)
     {
-        if (r.runsOn < r.of)
+        if (r.runsOn < r.of && need.types == QStringList(QStringLiteral("freerotate")))
+            r.why = tr("Runs on %1 of %2 fixtures (%3 have no free rotation)")
+                    .arg(r.runsOn).arg(r.of).arg(r.of - r.runsOn);
+        else if (r.runsOn < r.of)
             r.why = tr("Runs on %1 of %2 fixtures").arg(r.runsOn).arg(r.of);
         return r;
     }
@@ -246,6 +253,8 @@ EffectFit::Result EffectFit::fit(const Need &need, const Targets &targets)
                 w = tr("pan/tilt heads");
             else if (t == QLatin1String("dimmer"))
                 w = tr("a dimmer");
+            else if (t == QLatin1String("freerotate"))
+                w = tr("free (endless) pan or tilt rotation");
             else if (t == QLatin1String("colorwheel"))
                 w = tr("a colour wheel");
             else if (t == QLatin1String("shutter"))

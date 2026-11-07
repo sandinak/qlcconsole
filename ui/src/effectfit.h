@@ -53,6 +53,7 @@ public:
         bool dimmer = false;
         bool shutter = false;
         bool uv = false;
+        bool freeRotate = false;    ///< a head turns endlessly on pan or tilt (FreeRotation)
         int heads = 1;
     };
     static Caps capsOf(const Fixture *fixture);

@@ -38,6 +38,7 @@ private slots:
     /** A mixed set fits an effect if any of it does, and says how many. */
     void aMixedSetRunsOnSome();
     /** No fixtures known: everything fits. */
+    void freeSpinRunsOnHeadsThatFreeRotate();
     void noTargetsListsEverything();
     /** A non-WLED look finds no WLED effect by name until "Show All Effects". */
     void searchHidesWhatDoesNotFit();
