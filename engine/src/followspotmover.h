@@ -27,6 +27,7 @@
 #include "dmxsource.h"
 
 class Doc;
+class Scene;
 
 /** @addtogroup engine Engine
  * @{
@@ -57,7 +58,10 @@ public:
     ~FollowSpotMover() override;
 
     /** Follow @p sceneId's subject @p targetId (UINT_MAX: free-fly, only
-     *  the velocity); @p sceneId UINT_MAX: off (unregistered). */
+     *  the velocity); @p sceneId UINT_MAX: off (unregistered). Main thread.
+     *  The scene is looked up here and kept: the controller turns this off
+     *  when Doc removes it (functionRemoved / clearing, before the delete),
+     *  so the MasterTimer thread never looks into Doc's function map. */
     void follow(quint32 sceneId, quint32 targetId);
     quint32 sceneId() const;
     quint32 targetId() const;
@@ -106,6 +110,7 @@ private:
     FollowSpotDrive m_drive;
     TickClock m_clock;
     quint32 m_sceneId = UINT_MAX;
+    Scene *m_scene = nullptr;
     quint32 m_targetId = UINT_MAX;
     bool m_registered = false;
     int m_moves = 0;

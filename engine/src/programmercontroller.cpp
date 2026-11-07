@@ -93,6 +93,15 @@ ProgrammerController::ProgrammerController(Doc *doc)
     m_parkEffect = new ParkEffect(m_doc);
     m_markEffect = new MarkEffect(m_doc);
     m_followMover = new FollowSpotMover(m_doc);
+    /* The scene the follow spot moves is going: let go of it first (the
+       MasterTimer thread steps the mover with that scene in hand). */
+    connect(m_doc, &Doc::functionRemoved, this, [this](quint32 id) {
+        if (m_followMover->sceneId() == id)
+            m_followMover->follow(UINT_MAX, UINT_MAX);
+    });
+    connect(m_doc, &Doc::clearing, this, [this]() {
+        m_followMover->follow(UINT_MAX, UINT_MAX);
+    });
     // The mark set auto-releases fixtures on reveal; surface that to the monitor.
     connect(m_markEffect, &MarkEffect::fixtureRevealed,
             this, &ProgrammerController::markChanged);

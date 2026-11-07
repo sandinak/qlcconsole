@@ -48,6 +48,7 @@ private slots:
     void topSpeedIsTheLooks();
     void aSixteenBitHeadGlides();
     void freeFlyPansAtTopSpeedBothWays();
+    void deletingTheSceneLetsGo();
 
     /* The numbers, printed (QLC_FSPOT_REPORT=1). */
     void report();

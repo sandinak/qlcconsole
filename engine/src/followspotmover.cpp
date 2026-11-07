@@ -47,6 +47,7 @@ void FollowSpotMover::follow(quint32 sceneId, quint32 targetId)
         if (targetId != m_targetId || sceneId == UINT_MAX)
             m_drive.stop();
         m_sceneId = sceneId;
+        m_scene = sceneId == UINT_MAX ? nullptr : qobject_cast<Scene *>(m_doc->function(sceneId));
         m_targetId = sceneId == UINT_MAX ? UINT_MAX : targetId;
         if (sceneId != UINT_MAX && !m_registered)
         {
@@ -178,8 +179,8 @@ void FollowSpotMover::step(double dt)
     /* Re-resolve only the position looks into the scene's faders, at 0
        time, on its next write (the next frame): the heads converge on the
        moved subject without the dimmer/colour faders being rebuilt. */
-    if (Scene *s = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
-        s->requestReaim();
+    if (m_scene != nullptr)
+        m_scene->requestReaim();
     ++m_moves;
 }
 

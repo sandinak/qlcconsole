@@ -788,6 +788,31 @@ void FollowSpotFeel_Test::freeFlyPansAtTopSpeedBothWays()
     QVERIFY2(qAbs(left + right) < 0.01 * want, qPrintable(QString("%1 vs %2").arg(left).arg(right)));
 }
 
+/* The scene being followed is deleted mid-move: the motion lets go of it
+   before it goes (the MasterTimer thread holds it), and nothing ticks on
+   into a deleted scene. */
+void FollowSpotFeel_Test::deletingTheSceneLetsGo()
+{
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    h.bind();
+    h.use(h.rig.targetScene);
+    h.stick(255);
+    for (int i = 0; i < 10; ++i)
+        h.tick();
+    FollowSpotMover *mover = h.pc->followSpotMover();
+    QCOMPARE(mover->sceneId(), h.rig.targetScene->id());
+    const quint32 id = h.rig.targetScene->id();
+    h.rig.targetScene->stop(FunctionParent::master());
+    h.frame();
+    QCoreApplication::processEvents();
+    QVERIFY(m_doc->deleteFunction(id));
+    QVERIFY(!mover->isOn());
+    for (int i = 0; i < 10; ++i)
+        h.tick();
+    h.stick(127);
+    QVERIFY(!mover->isOn());
+}
+
 void FollowSpotFeel_Test::report()
 {
     if (qEnvironmentVariableIsEmpty("QLC_FSPOT_REPORT"))
