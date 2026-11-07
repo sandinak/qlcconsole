@@ -1532,6 +1532,88 @@ void ShowTreeWorkbench_Test::theEditIsAllThatShowsOverARunningList()
     chaser->stop(FunctionParent::master());
 }
 
+void ShowTreeWorkbench_Test::theWorkbenchPointsToRecord()
+{
+    const Show s = SHOW();
+    Scene *empty = new Scene(m_doc);
+    empty->setName("Empty");
+    m_doc->addFunction(empty);
+    Scene *mine = new Scene(m_doc);
+    mine->setName("Mine");
+    m_doc->addFunction(mine);
+    mine->addFixtureGroup(s.towers->id());
+    mine->addPalette(s.half);
+
+    QWidget window;
+    window.resize(1500, 800);
+    QTabWidget *tabs = new QTabWidget(&window);
+    tabs->resize(1500, 800);
+    ProgrammingManager *pm = new ProgrammingManager(tabs, m_doc);
+    ShowTreeView *view = new ShowTreeView(tabs, m_doc);
+    tabs->addTab(pm, "Build");
+    tabs->addTab(view, "Show Tree");
+    QPointer<ProgrammingManager> buildTab(pm);
+    view->setWorkbenchLender(
+        [buildTab]() -> Workbench * { return buildTab.isNull() ? nullptr : buildTab->lendWorkbench(); },
+        [buildTab](Workbench *wb) { if (!buildTab.isNull()) buildTab->returnWorkbench(wb); });
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    Workbench *bench = pm->workbench();
+    QLabel *line = bench->recordPointer();
+    QVERIFY(line != nullptr);
+    const QString shotDir = qEnvironmentVariable("WBP_SHOTS");
+    auto shoot = [&](const QString &name) {
+        if (shotDir.isEmpty())
+            return;
+        QDir().mkpath(shotDir);
+        const QList<QSize> sizes({ QSize(1100, 700), QSize(1500, 800), QSize(1900, 1000) });
+        for (const QSize &sz : sizes)
+        {
+            window.resize(sz);
+            tabs->resize(sz);
+            QTest::qWait(150);
+            QVERIFY(window.grab().save(QDir(shotDir).filePath(QString("%1-%2x%3.png").arg(name).arg(sz.width()).arg(sz.height()))));
+        }
+    };
+
+    // Nothing worth recording: hidden (UX-23).
+    tabs->setCurrentWidget(pm);
+    pm->showFunction(empty->id());
+    QVERIFY(!bench->recordPointerWanted());
+    QVERIFY(!line->isVisible());
+    shoot("hidden");
+
+    // A look with something in it: the line, in the course's words.
+    pm->showFunction(mine->id());
+    QTRY_VERIFY(line->isVisible());
+    QVERIFY(line->text().contains("Record it as a cue in the Show Tree"));
+    shoot("shown");
+
+    // The link: the Show Tree, a cue selected, Record focused and ready.
+    QVERIFY(view->currentCueId() == invalidId());
+    QVERIFY(pm->recordInShowTree());
+    QCOMPARE(tabs->currentWidget(), view);
+    QVERIFY(view->currentCueId() != invalidId());
+    QToolButton *record = view->findChild<QToolButton *>("stRecord");
+    QVERIFY(record != nullptr && record->isEnabled());
+    QCOMPARE(view->m_record, record);
+    QVERIFY(view->m_record->hasFocus() || QApplication::focusWidget() == record || view->m_hint->text().contains("Record is ready"));
+    QVERIFY(view->m_hint->text().contains("Record is ready"));
+
+    // Through the label's link, the same.
+    tabs->setCurrentWidget(pm);
+    QTRY_VERIFY(line->isVisible());
+    emit line->linkActivated(QStringLiteral("record"));
+    QCOMPARE(tabs->currentWidget(), view);
+
+    // On a cue (the Workbench docked in the Show Tree) there is no line:
+    // Record is right beside it.
+    QVERIFY(view->openInWorkbench(s.c2));
+    QVERIFY(pm->isWorkbenchLent());
+    QVERIFY(!bench->recordPointerWanted());
+    QVERIFY(!line->isVisible());
+}
+
 void ShowTreeWorkbench_Test::shots()
 {
     const QString out = qEnvironmentVariable("W3_SHOTS");

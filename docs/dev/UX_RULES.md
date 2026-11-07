@@ -765,7 +765,7 @@ Budget 11 clicks. From: docs/features/build.md, show-tree.md Record and duplicat
 | 2 | Build | + Scene, drag a group onto it, drop a colour *(manual)* | a look | 3 |
 | 3 | Build ▸ Scenes | a scene in the navigator | it in the Workbench | 1 |
 | 4 | the Workbench | Play | it on the rig | 1 |
-| 5 | the Workbench | record this as a cue *(find)* | a Record control, or a line pointing to the Show Tree's Record | - |
+| 5 | the Workbench | "Record it as a cue in the Show Tree ▸" *(find)* | the grey line under Play; its link opens the Show Tree with Record ready | - |
 | 6 | any | Show Tree tab | the Show Tree | 1 |
 | 7 | Show Tree | a cue | its page | 1 |
 | 8 | Show Tree | Record ▸ Everything lit ▸ Record | a new cue after it | 3 |

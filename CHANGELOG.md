@@ -12,6 +12,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **Build's Workbench points to where a look is recorded.** Under Play, one
+  quiet grey line, **Record it as a cue in the Show Tree ▸**, shows while a
+  look with something in it is loaded (a scene with levels or looks, or any
+  other function; never an empty scene, never a cue, which has Record beside
+  it). The link brings up the Show Tree with a cue selected and Record
+  focused (UX-61, flow F-04).
+
 ### Fixed
 
 - **A saved show's autosave is offered when you open the show.** After a

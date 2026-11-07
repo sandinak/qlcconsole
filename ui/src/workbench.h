@@ -238,6 +238,12 @@ public:
     /** Solo: only the selected layer plays (a cue loaded); else in context. */
     void setSolo(bool solo);
     bool isSolo() const;
+    /** The pointer line to the Show Tree's Record (null label: not built).
+     *  Shown only while @a loadedFunction is a look worth recording: a
+     *  Scene with levels in it, or any other function, played from
+     *  Build -- never a Show Tree cue (the Record is already beside it). */
+    bool recordPointerWanted() const;
+    QLabel *recordPointer() const { return m_recordPointer; }
 
 signals:
     /** What is loaded changed (its function; invalid: none or not one). */
@@ -253,6 +259,8 @@ signals:
     void guideRequested();
     /** Send to Show Tree… on a loaded chaser (its header button). */
     void sendToShowTreeRequested(quint32 chaserId);
+    /** The quiet line under Play: "Record it as a cue in the Show Tree ▸". */
+    void recordPointerClicked();
 
 protected:
     void showEvent(QShowEvent *ev) override;
@@ -349,6 +357,8 @@ private:
     };
     QList<Back> m_back;
     QString m_returnLabel;
+    QLabel *m_recordPointer = nullptr;   //!< the grey line pointing to the Show Tree's Record
+    void updateRecordPointer();
     std::function<void()> m_returnTo;
 
     // Header

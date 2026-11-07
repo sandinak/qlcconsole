@@ -232,6 +232,7 @@ Workbench::Workbench(Doc *doc, QWidget *parent)
             return;
         QTimer::singleShot(0, this, [this]() {
             updateHeader();
+            updateRecordPointer();
             updateScenePage();
             if (m_page->currentWidget() == m_overviewPage)
                 updateOverview();
@@ -511,6 +512,19 @@ void Workbench::buildHeader(QWidget *column)
     connect(m_soloBtn, &QToolButton::toggled, this, [this](bool on) { setSolo(on); });
     rigRow->addWidget(m_soloBtn);
     m_headerLayout->addLayout(rigRow);
+
+    // UX-61: a look built here is recorded as a cue in the Show Tree. One
+    // quiet line says so, only while there is something to record.
+    m_recordPointer = new QLabel(head);
+    m_recordPointer->setObjectName(QStringLiteral("workbenchRecordPointer"));
+    m_recordPointer->setText(QStringLiteral("<a href=\"record\" style=\"color: palette(mid); "
+                                            "text-decoration: none;\">%1</a>")
+                                 .arg(tr("Record it as a cue in the Show Tree ▸").toHtmlEscaped()));
+    m_recordPointer->setTextFormat(Qt::RichText);
+    m_recordPointer->setToolTip(tr("Open the Show Tree with Record ready: what is on stage becomes a new cue"));
+    m_recordPointer->hide();
+    connect(m_recordPointer, &QLabel::linkActivated, this, [this]() { emit recordPointerClicked(); });
+    m_headerLayout->addWidget(m_recordPointer);
 
     col->addWidget(head);
 }
@@ -1076,8 +1090,27 @@ void Workbench::updateHeader()
     updateOnRig();
 }
 
+bool Workbench::recordPointerWanted() const
+{
+    if (m_stack == nullptr || m_stack->playsItself())
+        return false;
+    Function *f = m_doc->function(m_stack->rootFunction());
+    if (f == nullptr)
+        return false;
+    if (Scene *scene = qobject_cast<Scene *>(f))
+        return !scene->values().isEmpty() || !scene->palettes().isEmpty();
+    return true;
+}
+
+void Workbench::updateRecordPointer()
+{
+    if (m_recordPointer != nullptr)
+        m_recordPointer->setVisible(recordPointerWanted());
+}
+
 void Workbench::updateOnRig()
 {
+    updateRecordPointer();
     Function *playing = m_doc->function(m_previewFunction);
     Function *live = m_doc->function(m_operateFunction);
     const bool canPlay = m_stack != nullptr && m_stack->previewFunction() != Function::invalidId();
@@ -1962,6 +1995,7 @@ void Workbench::refreshAll()
     refreshPreview();
     updateScenePage();
     updateHeader();
+    updateRecordPointer();
     updateAddBar();
     if (m_page->currentWidget() == m_overviewPage)
         updateOverview();

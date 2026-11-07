@@ -9258,6 +9258,34 @@ bool ShowTreeView::sendToShowTree(quint32 chaserId, QWidget *parent)
     return true;
 }
 
+bool ShowTreeView::readyToRecord()
+{
+    if (currentCueId() == invalidId())
+    {
+        // No cue selected: record after the last one of the main list.
+        quint32 pick = invalidId();
+        for (const ShowTree::Production &p : m_st->productions())
+        {
+            if (p.id != m_st->currentProduction())
+                continue;
+            for (const CueList &l : p.lists)
+                if (!l.looks && !l.cues.isEmpty() && (pick == invalidId() || l.id == p.mainList))
+                    pick = l.cues.last().id;
+        }
+        if (pick != invalidId())
+            selectNode(pick);
+    }
+    bringForward();
+    if (!m_record->isEnabled())
+    {
+        m_hint->setText(tr("Record needs a cue to go after: make or select one first"));
+        return false;
+    }
+    m_record->setFocus(Qt::OtherFocusReason);
+    m_hint->setText(tr("Record is ready: it freezes what is on stage into a new cue after this one"));
+    return true;
+}
+
 int ShowTreeView::repointToList(quint32 chaserId, quint32 listId)
 {
     const CueList *list = m_st->cueList(listId);

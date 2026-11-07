@@ -368,7 +368,7 @@
             "text": "^Record|record .*cue"
           },
           "pointer": [
-            "Record"
+            "Record it as a cue"
           ]
         },
         {
