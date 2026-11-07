@@ -4322,6 +4322,7 @@ void ShowTreeView::updateInspector()
             }
             if (m_listAddSection != nullptr)
                 m_listForm->setRowVisible(m_listAddSection, true);
+            updateListSectionHint(id);
             updateListTimecodeRows(*list);
             m_listMib->setItemText(0, showMibLabel());
             m_listMib->setCurrentIndex(qMax(0, m_listMib->findData(int(list->moveInBlack))));
@@ -11531,6 +11532,8 @@ void ShowTreeView::showLooksPage(quint32 listId, const QString &folder)
     m_listForm->setRowVisible(m_listFollowTc, false);
     if (m_listAddSection != nullptr)
         m_listForm->setRowVisible(m_listAddSection, false);
+    if (m_listSectionHint != nullptr)
+        m_listForm->setRowVisible(m_listSectionHint, false);
     if (m_listTcRow != nullptr)
         m_listForm->setRowVisible(m_listTcRow, false);
     m_listConvert->hide();

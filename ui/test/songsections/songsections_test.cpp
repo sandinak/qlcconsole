@@ -237,6 +237,61 @@ void ShowTreeSectionsUi_Test::theProductionPageSuggestsAScheme()
     QVERIFY(view.findChild<QPushButton *>("stProdMerge")->isEnabled());
 }
 
+/* A show with no scheme and S.P.I numbers: the cue list's page says so, where
+   the user looks for sections; Use it sets the scheme; with nothing to
+   suggest it points at the production's page. */
+void ShowTreeSectionsUi_Test::theListPageSuggestsAScheme()
+{
+    const QList<quint32> ids = twoSongs();
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(900, 700);
+    view.reload();
+    QVERIFY(view.selectNode(ids[1]));
+    QLabel *hint = view.findChild<QLabel *>("stListSectionHint");
+    QPushButton *add = view.findChild<QPushButton *>("stListAddSection");
+    QVERIFY(hint != nullptr && add != nullptr);
+    QVERIFY(!hint->isHidden());
+    QVERIFY(hint->text().contains("Show.Part.Iteration"));
+    QVERIFY(!add->isEnabled());
+    QVERIFY(!add->toolTip().isEmpty());
+    const QString shots = QString::fromLocal8Bit(qgetenv("QLC_SECHINT_SHOTS"));
+    auto shoot = [&](const QString &name) {
+        if (shots.isEmpty())
+            return;
+        QDir().mkpath(shots);
+        for (const QSize &sz : { QSize(700, 500), QSize(1000, 700), QSize(1400, 900) })
+        {
+            view.resize(sz);
+            QTest::qWait(50);
+            QVERIFY(view.grab().save(QString("%1/%2-%3x%4.png").arg(shots, name).arg(sz.width()).arg(sz.height())));
+        }
+    };
+    shoot("hint");
+    emit hint->linkActivated("use:ShowPartIteration");
+    QCOMPARE(st->numbering(m_production), Numbering::ShowPartIteration);
+    QVERIFY(hint->isHidden());
+    QVERIFY(add->isEnabled());
+    QVERIFY(!st->sections(ids[1]).isEmpty());
+    shoot("after");
+    // One undo step puts it back.
+    m_doc->showTree()->undo();
+    QCOMPARE(st->numbering(m_production), Numbering::None);
+    QVERIFY(!hint->isHidden());
+
+    // Nothing to suggest: one quiet line, its link selects the production.
+    const quint32 lone = st->addProduction("Plain");
+    const quint32 list = st->addCueList(lone, "Cues");
+    st->addCue(list, -1, "Odd");
+    view.reload();
+    QVERIFY(view.selectNode(list));
+    QVERIFY(!hint->isHidden());
+    QVERIFY(hint->text().contains("No song sections"));
+    shoot("nosuggest");
+    emit hint->linkActivated("production");
+    QCOMPARE(view.currentId(), lone);
+}
+
 /* The user's case: a list per song, and GO / Run played only the first.
    Merge from the production page; Run then shows every section, its cues
    under it, and GO goes through the whole show. */

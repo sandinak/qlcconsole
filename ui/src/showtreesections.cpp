@@ -126,6 +126,21 @@ void ShowTreeView::buildSectionPages()
                                         "scheme (with free numbers: from the selected cue)"));
         m_listForm->addRow(QString(), m_listAddSection);
         connect(m_listAddSection, &QPushButton::clicked, this, [this]() { newSection(); });
+        m_listSectionHint = new QLabel(m_listPage);
+        m_listSectionHint->setObjectName("stListSectionHint");
+        m_listSectionHint->setWordWrap(true);
+        m_listSectionHint->setTextFormat(Qt::RichText);
+        connect(m_listSectionHint, &QLabel::linkActivated, this, [this](const QString &link) {
+            const quint32 listId = currentListId();
+            quint32 pid = invalidId();
+            if (listId == invalidId() || m_st->cueList(listId, &pid) == nullptr)
+                return;
+            if (link.startsWith(QLatin1String("use:")))
+                m_st->setNumbering(pid, stringToNumbering(link.mid(4)));
+            else if (link == QLatin1String("production"))
+                selectNode(pid);
+        });
+        m_listForm->addRow(QString(), m_listSectionHint);
     }
 
     // A section's page.
@@ -184,6 +199,35 @@ void ShowTreeView::buildSectionPages()
     h->addStretch(1);
     f->addRow(row);
     m_pages->addWidget(m_sectionPage);
+}
+
+// The list page's pointer to song sections: a show with no scheme yet gets the
+// production page's suggestion (same detection) or where to set one.
+void ShowTreeView::updateListSectionHint(quint32 listId)
+{
+    if (m_listSectionHint == nullptr)
+        return;
+    quint32 pid = invalidId();
+    const CueList *list = m_st->cueList(listId, &pid);
+    const Production *p = list == nullptr ? nullptr : m_st->production(pid);
+    const bool none = p != nullptr && !list->looks && !list->isSubCues() && p->numbering == Numbering::None;
+    m_listAddSection->setEnabled(!none);
+    m_listAddSection->setToolTip(none
+        ? tr("Song sections need a numbering scheme: set Numbering on the production's page")
+        : tr("A new song section at the end, its first cue numbered to the show's "
+             "scheme (with free numbers: from the selected cue)"));
+    QString text;
+    if (none)
+    {
+        const Numbering suggested = suggestNumbering(*p);
+        text = suggested != Numbering::None
+               ? tr("Its cue numbers look like %1. <a href=\"use:%2\">Use it</a>")
+                 .arg(numberingName(suggested).toHtmlEscaped(), numberingToString(suggested))
+               : tr("<span style=\"color:gray\">No song sections: set Numbering on the "
+                    "<a href=\"production\">production's page</a></span>");
+    }
+    m_listSectionHint->setText(text);
+    m_listForm->setRowVisible(m_listSectionHint, !text.isEmpty());
 }
 
 void ShowTreeView::updateNumberingRows(quint32 productionId)
