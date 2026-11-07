@@ -16,7 +16,7 @@
     effect.description = "Pan/tilt fixtures with joystick X/Y axes";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["moving"];
-    effect.notes = "Maps joystick X/Y axes to pan and tilt so you can fly moving heads live. This effect controls POSITION — it never touches colour, and it touches the dimmer only when Fade Near Limit or Fade When Blocked is set, so the scene's own Color/Dimmer palettes otherwise retain control. Fade Near Limit dims a head as the target nears the edge of what it can point at, reaching dark where it cannot follow, so it goes out rather than sticking lit at its limit. Fade When Blocked takes a head out, over that many milliseconds, while something solid on stage -- a closed drape, a wall, a riser, a tower -- stands between it and the subject, and brings it back once the way is clear. Size On Subject zooms each head that has a zoom so its beam is that wide where it lands on the subject, whatever the throw -- a near head zooms out, a far one in -- within the lens's range. Sensitivity and deadzone are global joystick settings (HID device profile / I/O Manager), not configured here. Person Height biases the tilt centre so the beam lands at the subject's head. Bind the followTarget slot to a stage target to seed the initial position from a pre-set Aim palette.";
+    effect.notes = "Maps joystick X/Y axes to pan and tilt so you can fly moving heads live. This effect controls POSITION — it never touches colour, and it touches the dimmer only when Fade Near Limit or Fade When Blocked is set, so the scene's own Color/Dimmer palettes otherwise retain control. Fade Near Limit dims a head as the target nears the edge of what it can point at, reaching dark where it cannot follow, so it goes out rather than sticking lit at its limit. Fade When Blocked takes a head out, over that many milliseconds, while something solid on stage -- a closed drape, a wall, a riser, a tower -- stands between it and the subject, and brings it back once the way is clear. Size On Subject zooms each head that has a zoom so its beam is that wide where it lands on the subject, whatever the throw -- a near head zooms out, a far one in -- within the lens's range. Top Speed is how fast the subject moves on the stage with the left stick at full throw (a brisk walk by default); the right stick moves it finer (Fine Stick, a share of Top Speed) and the two add; Response Curve makes the stick fine near the centre; D-pad Up and Down step the speed (x0.25 to x2) while it plays. Deadzone is the controller's (HID device profile). Person Height biases the tilt centre so the beam lands at the subject's head. Bind the followTarget slot to a stage target to seed the initial position from a pre-set Aim palette.";
 
     // The host injects joystick data automatically when a HID profile is active.
     // Manual input bindings (x / y) are kept as a fallback for non-HID controllers.
@@ -56,7 +56,12 @@
         { name: "personHeight", description: "Height of the person being followed (free-fly only) -- adjusts the tilt centre", unit: "cm", min: 50, max: 250, defaultValue: 170 },
         { name: "fadeNearLimit", description: "Fade a head out over this many degrees before its pan/tilt limit, dark where it cannot reach the target (0 = off)", min: 0, max: 45, defaultValue: 0 },
         { name: "fadeWhenBlocked", description: "Fade a head out over this many milliseconds while a drape, wall, riser or tower stands between it and the subject, back when clear (0 = off)", min: 0, max: 5000, defaultValue: 0 },
-        { name: "sizeOnSubject", description: "Zoom each head so its beam is this wide on the subject, whatever its distance (0 = off)", unit: "cm", min: 0, max: 800, defaultValue: 0 }
+        { name: "sizeOnSubject", description: "Zoom each head so its beam is this wide on the subject, whatever its distance (0 = off)", unit: "cm", min: 0, max: 800, defaultValue: 0 },
+        // The feel (the host moves the subject with these; free-fly below too).
+        // A speed is kept in cm a second and shown in Settings > Units.
+        { name: "topSpeed", description: "Top Speed (how fast the subject moves on the stage with the left stick at full throw: a brisk walk is the default)", unit: "cm/s", min: 15, max: 600, defaultValue: 182.88 },
+        { name: "fineStick", description: "Fine Stick (the right stick's full throw, as a percentage of Top Speed: for small corrections)", unit: "%", min: 5, max: 100, defaultValue: 20 },
+        { name: "responseCurve", description: "Response Curve (0 = speed follows the stick evenly; higher = fine near the centre, Top Speed only at full throw)", unit: "%", min: 0, max: 100, defaultValue: 40 }
     ];
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {
@@ -77,7 +82,8 @@
         // Applied once at initialization rather than every tick.
         var tiltBias = (170 - pH) / 300 * 0.12;  // fraction of tilt range
 
-        // Velocity from stick position: 0 at centre/deadzone, ±1 at extremes.
+        // Velocity from stick position: 0 at centre/deadzone, ±1 at extremes
+        // (the fallback, for a controller the host does not drive).
         function axisVelocity(v) {
             var delta = v - 0.5;
             if (Math.abs(delta) < dz) return 0.0;
@@ -89,8 +95,25 @@
         var xVel = axisVelocity(rawX);
         var yVel = axisVelocity(rawY);
 
-        // dt approximation for 50 Hz timer (MasterTimer default).
+        // The time this tick really took (seconds), not an assumed 20 ms: a
+        // late tick moves as far as the stick was held for. Capped, so a
+        // stall is not one big jump.
+        var now = inputs._time;
         var dt = 0.02;
+        if (now !== undefined && state.lastTime !== undefined)
+            dt = Math.max(0, Math.min(0.1, now - state.lastTime));
+        if (now !== undefined)
+            state.lastTime = now;
+
+        // The host's follow spot motion: how fast to go on the stage, in
+        // metres a second (Top Speed, the speed step, the response curve and
+        // the fine stick in it, eased in and out). Free-fly turns it into
+        // pan and tilt below.
+        var hostVel = joystick && joystick.vx !== undefined;
+        var vx = hostVel ? joystick.vx : 0;
+        var vy = hostVel ? joystick.vy : 0;
+        var centre = hostVel && joystick.cx !== undefined
+                     ? { x: joystick.cx, y: joystick.cy, z: joystick.cz } : { x: 0, y: 0, z: 0 };
 
         // Shortest-path / no-wipe between scenes is handled host-side in the
         // target case (the aim point moves in floor space, a straight line);
@@ -129,7 +152,8 @@
                     var seenKey = "seen_" + f.id;
                     if (blockFade > 0 && f.sceneTarget.blocked !== undefined) {
                         var seen = state[seenKey] !== undefined ? state[seenKey] : 1;
-                        var step = (dt * 1000) / blockFade;
+                        // A tick's worth of the fade (a 50 Hz tick, as it always was).
+                        var step = 20 / blockFade;
                         seen = f.sceneTarget.blocked ? Math.max(0, seen - step)
                                                      : Math.min(1, seen + step);
                         state[seenKey] = seen;
@@ -168,13 +192,30 @@
                     state[tiltKey] = null;
                 }
 
-                if (xVel !== 0.0 || yVel !== 0.0) {
+                // Degrees a second for each axis: the host's stage speed
+                // over the head's throw to the middle of the stage (a speed
+                // on the stage, the same both ways), else the old fallback
+                // (a whole range a second at full throw).
+                var panRate, tiltRate;
+                if (hostVel) {
+                    var p = f.pos || { x: 0, y: 0, z: 0 };
+                    var dx = p.x - centre.x, dy = p.y - centre.y, dzz = p.z - centre.z;
+                    var throwM = Math.max(1, Math.min(50, Math.sqrt(dx * dx + dy * dy + dzz * dzz)));
+                    var degPerM = 180 / Math.PI / throwM;
+                    panRate  =  vx * degPerM;
+                    tiltRate = -vy * degPerM;     // up the stage: tilt as the stick pushed up did
+                } else {
+                    panRate  = xVel * f.panRange  * sen;
+                    tiltRate = yVel * f.tiltRange * sen;
+                }
+
+                if (panRate !== 0.0 || tiltRate !== 0.0) {
                     if (state[panKey] === null) {
                         state[panKey]  = 0.5 * f.panRange;
                         state[tiltKey] = (0.5 + tiltBias) * f.tiltRange;
                     }
-                    state[panKey]  = Math.min(f.panRange,  Math.max(0, state[panKey]  + xVel * f.panRange  * sen * dt));
-                    state[tiltKey] = Math.min(f.tiltRange, Math.max(0, state[tiltKey] + yVel * f.tiltRange * sen * dt));
+                    state[panKey]  = Math.min(f.panRange,  Math.max(0, state[panKey]  + panRate  * dt));
+                    state[tiltKey] = Math.min(f.tiltRange, Math.max(0, state[tiltKey] + tiltRate * dt));
                 }
 
                 if (state[panKey] !== null) {

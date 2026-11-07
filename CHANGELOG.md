@@ -31,6 +31,31 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   output, and on the pad as View + LS / Create + L3), and the rest is
   remembered per controller. The PlayStation profile's deadzone is 0.08,
   and a joystick with no profile gets 0.08.
+### New
+
+- **The follow spot's speed on the stage, a fine stick and a speed step.**
+  The Followspot effect has **Top Speed** (how fast the subject moves at
+  full stick, in Settings ▸ Units: 6 ft/s, a brisk walk, by default),
+  **Fine Stick** (the right stick moves it at a share of that, 20% by
+  default, and adds to the left) and **Response Curve** (fine near the
+  centre, Top Speed only at full throw). **D-pad Up / Down** step the speed
+  ×0.25 … ×2 while it plays, and the footer's Follow chip says *Speed ×1.5*.
+  Effect parameter rows in the Look editor are Title Case.
+
+### Fixed
+
+- **The follow spot moves smoothly and the same speed both ways.** It used
+  to move the subject on its own 20 ms timer while DMX went out on
+  another, so about a quarter of the frames held still and a quarter
+  jumped two steps (per-frame step spread 73%); it now moves once every
+  DMX frame by the time that frame took (spread 0.6%), and eases in and
+  out instead of starting and stopping in one step. A stick's reading
+  was cut down rather than rounded, so a half push right read a step less
+  than a half push left (and the follow spot ran about 2% slower that way);
+  left and right now match. Free-fly (no Aim look) flew a whole pan range
+  a second (513°/s at full stick); it now flies at Top Speed over the
+  head's throw. A head in an 8-bit mode still moves in its DMX steps (use
+  its 16-bit mode for a follow spot).
 
 ## [0.4.1] - 2026-11-06
 

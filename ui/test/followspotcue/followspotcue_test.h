@@ -46,6 +46,7 @@ private slots:
      *  LS), and a remembered rest is used next time. */
     void aWornStickMovesNothing();
     void everyCueFiresItsEffects();
+    void theDpadStepsTheSpeedAndTheRightStickIsFine();
 
 private:
     bool open(const QString &path);

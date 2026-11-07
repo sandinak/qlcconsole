@@ -236,17 +236,10 @@ Doc::Doc(QObject* parent, int universes)
 
     // Feed real-time joystick data into the effect script data channel system.
     connect(m_programmer, &ProgrammerController::joystickUpdated,
-            this, [this](float pan, float tilt)
+            this, [this](float, float)
     {
-        QVariantMap jd;
-        jd[QStringLiteral("pan")]  = double(pan);
-        jd[QStringLiteral("tilt")] = double(tilt);
-        // Sensitivity and deadzone are global joystick settings (not per-effect):
-        // pass them through so effect scripts honour the I/O Manager / device
-        // profile instead of falling back to hard-coded defaults.
-        jd[QStringLiteral("sensitivity")] = double(m_programmer->joystickSensitivity());
-        jd[QStringLiteral("deadzone")]    = double(m_programmer->joystickDeadzone());
-        m_effectScriptRunner->setDataChannel(QStringLiteral("joystick"), jd);
+        // The stick, the profile's response and the follow spot's speed.
+        m_effectScriptRunner->setDataChannel(QStringLiteral("joystick"), m_programmer->joystickData());
     });
 
     // Relay the controller's signals as Doc's own signals so external

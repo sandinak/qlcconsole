@@ -50,6 +50,9 @@ private slots:
     void roundTripWeight();
 
     void storedMm();
+    /** A speed (the follow spot's Top Speed): ft/s with feet or inches,
+     *  m/s with the metric lengths; typed in any unit a second. */
+    void speed();
     void preference();
     /** The first show ever opened, if in feet, seeds an unset preference */
     /** The units live where every other setting does (a plain QSettings()

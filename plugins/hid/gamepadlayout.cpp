@@ -438,8 +438,11 @@ void readTouch(float x, float y, int finger, PadState *state)
 
 uchar stickToByte(int raw)
 {
+    /* Rounded, not cut down: cut down, the right half of a stick read a
+       step short of the left (half throw 63 one way, 191 the other) and
+       the follow spot went that much slower to one side. */
     const qint64 clamped = qBound(-32768, raw, 32767);
-    return uchar(((clamped + 32768) * 255) / 65535);
+    return uchar(qMin<qint64>(255, ((clamped + 32768) * 255 + 32767) / 65535));
 }
 
 uchar scaleToByte(int value, int min, int max)
