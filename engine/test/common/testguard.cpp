@@ -36,7 +36,12 @@
  *    hears of it: no dialog, and no .ips report either. QTest installs its
  *    own handler later, prints the failing function and a backtrace, and
  *    then chains to this one, so the log keeps everything. A debugger sees
- *    the signal first, as always. QLC_TEST_CRASH_REPORTS=1 keeps the
+ *    the signal first, as always. This one adds the faulting address and
+ *    the stack of the thread that took the signal: QTest's own stack dump
+ *    needs a debugger to attach, which a CI runner may not allow, and the
+ *    0.4.1 SIGBUS on a GitHub macOS runner (a timer-thread signal into a
+ *    destroyed object) left nothing but "signal 10" and an address to go
+ *    on. QLC_TEST_CRASH_REPORTS=1 keeps the
  *    system's crash reports (and its dialog) for a run that wants them.
  *    Nothing system-wide is changed.
  *
@@ -51,6 +56,7 @@
 
 #if defined(__APPLE__)
 #include <csignal>
+#include <execinfo.h>
 #include <unistd.h>
 #endif
 
@@ -73,14 +79,51 @@ void setEnv(const char *name, const char *value)
 }
 
 #if defined(__APPLE__)
-void exitWithoutCrashReport(int sig)
+void say(const char *text, size_t len)
 {
-    // Async-signal-safe only: write(2) and _exit(2).
-    static const char msg[] =
-        "testguard: fatal signal, exiting without a crash report "
-        "(QLC_TEST_CRASH_REPORTS=1 keeps them)\n";
-    ssize_t ignored = write(STDERR_FILENO, msg, sizeof(msg) - 1);
+    ssize_t ignored = write(STDERR_FILENO, text, len);
     (void)ignored;
+}
+
+/** "<label>0x<hex>", without printf, which isn't async-signal-safe. */
+void sayHex(const char *label, unsigned long value)
+{
+    char buf[64];
+    size_t n = 0;
+    while (label[n] != '\0' && n < 40)
+    {
+        buf[n] = label[n];
+        ++n;
+    }
+    buf[n++] = '0';
+    buf[n++] = 'x';
+    for (int shift = int(sizeof(value) * 8) - 4; shift >= 0; shift -= 4)
+        buf[n++] = "0123456789abcdef"[(value >> shift) & 0xf];
+    say(buf, n);
+}
+
+void exitWithoutCrashReport(int sig, siginfo_t *info, void *)
+{
+    // write(2) and _exit(2), and backtrace(3), warmed up in noCrashDialogs()
+    // so it binds nothing lazily here: on macOS it walks frame pointers and
+    // takes no lock. backtrace_symbols_fd(3) reads the symbols with
+    // dladdr(); a crash inside dyld itself could stall it there -- a hang
+    // to the gate's timeout instead of an exit, in a program that crashed
+    // anyway.
+    char num[] = "testguard: fatal signal 00";
+    num[sizeof(num) - 3] = char('0' + (sig / 10) % 10);
+    num[sizeof(num) - 2] = char('0' + sig % 10);
+    say(num, sizeof(num) - 1);
+    sayHex(" at address ", reinterpret_cast<unsigned long>(info != nullptr ? info->si_addr : nullptr));
+    static const char stack[] = ", this thread's stack:\n";
+    say(stack, sizeof(stack) - 1);
+    void *frames[64];
+    const int depth = backtrace(frames, 64);
+    backtrace_symbols_fd(frames, depth, STDERR_FILENO);
+    static const char msg[] =
+        "testguard: exiting without a crash report "
+        "(QLC_TEST_CRASH_REPORTS=1 keeps them)\n";
+    say(msg, sizeof(msg) - 1);
     _exit(128 + sig);
 }
 
@@ -94,11 +137,15 @@ void noCrashDialogs()
     ss.ss_size = sizeof(altStack);
     sigaltstack(&ss, nullptr);
 
+    // backtrace() once now, so the handler's first call binds nothing.
+    void *warm[4];
+    (void)backtrace(warm, 4);
+
     struct sigaction sa;
     std::memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = exitWithoutCrashReport;
+    sa.sa_sigaction = exitWithoutCrashReport;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_ONSTACK;
+    sa.sa_flags = SA_ONSTACK | SA_SIGINFO;
     const int fatal[] = { SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP, SIGSYS };
     for (int sig : fatal)
         sigaction(sig, &sa, nullptr);
