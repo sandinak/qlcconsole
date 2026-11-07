@@ -26,6 +26,11 @@
 #include <QMessageBox>
 #include <QAbstractButton>
 #include <QApplication>
+#include <QFileDialog>
+#include <QPushButton>
+#include <QPainter>
+#include <functional>
+#include <memory>
 
 #include "autosave_test.h"
 #include "../../../engine/test/common/stdprelude.h"
@@ -39,6 +44,7 @@
 #include "fixturegroup.h"
 #include "fixture.h"
 #include "doc.h"
+#include "startupwindow.h"
 
 void Autosave_Test::initTestCase()
 {
@@ -459,6 +465,418 @@ void Autosave_Test::savingOrDiscardingRemovesTheRecoveryCopy()
     QVERIFY(QFile::exists(copy));
     m_app->removeAutosaveFile();
     QVERIFY(!QFile::exists(copy));
+}
+
+/*****************************************************************************
+ * A saved show's autosave, offered when the show is opened
+ *****************************************************************************/
+
+/* Each time a modal window is up, hand it to @p act until act says it is
+   done (after ten seconds it closes what is up and stops, so a missing prompt
+   fails, not hangs). */
+static void onModal(std::function<bool(QWidget *)> act)
+{
+    QTimer *t = new QTimer;
+    t->setInterval(10);
+    auto ticks = std::make_shared<int>(0);
+    QObject::connect(t, &QTimer::timeout, t, [t, act, ticks]() {
+        QWidget *w = QApplication::activeModalWidget();
+        // Not again from inside act() (a shot pumps events)
+        t->stop();
+        if (w != nullptr && act(w))
+        {
+            t->deleteLater();
+        }
+        else if (++(*ticks) > 1000)
+        {
+            // Never a hang: whatever is still up is closed, and the test
+            // fails on what it then finds.
+            if (QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget()))
+                d->reject();
+            t->deleteLater();
+        }
+        else
+        {
+            t->start();
+        }
+    });
+    t->start();
+}
+
+static QByteArray contents(const QString &path)
+{
+    QFile f(path);
+    return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+}
+
+static void setModified(const QString &path, const QDateTime &when)
+{
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::ReadWrite));
+    QVERIFY(f.setFileTime(when, QFileDevice::FileModificationTime));
+    f.close();
+}
+
+/* QLC_AUTOSAVE_SHOTS (not QLC_SHOT_DIR: App runs a shot scenario of its
+   own after a load when that is set): @p prompt over @p behind (or alone on a plain "desktop"),
+   at the three sizes, as autosave-<name>-<size>.png */
+static void shootPrompt(App *app, QWidget *prompt, const QString &name, bool onTheApp)
+{
+    const QString dir = qEnvironmentVariable("QLC_AUTOSAVE_SHOTS");
+    if (dir.isEmpty())
+        return;
+    QDir().mkpath(dir);
+    const QList<QPair<QSize, QString> > sizes = { { QSize(1024, 640), "1024x640" },
+                                                  { QSize(1280, 800), "1280x800" },
+                                                  { QSize(1920, 1080), "1920x1080" } };
+    for (const auto &sz : sizes)
+    {
+        QPixmap shot(sz.first);
+        shot.fill(QColor(60, 60, 64));
+        if (onTheApp)
+        {
+            app->resize(sz.first);
+            for (int i = 0; i < 5; ++i)
+                QCoreApplication::processEvents();
+            shot = app->grab();
+        }
+        prompt->adjustSize();
+        for (int i = 0; i < 5; ++i)
+            QCoreApplication::processEvents();
+        const QPixmap box = prompt->grab();
+        QPainter p(&shot);
+        p.drawPixmap((shot.width() - box.width()) / 2, (shot.height() - box.height()) / 3, box);
+        p.end();
+        QVERIFY(shot.save(QStringLiteral("%1/autosave-%2-%3.png").arg(dir, name, sz.second)));
+    }
+}
+
+/* A saved show of one fixture, "Saved", and an autosave a minute newer that
+   also has "Since the save". The doc is left empty and unmodified. */
+static void makeShowWithNewerAutosave(App *app, const QString &show)
+{
+    Doc *doc = app->doc();
+    doc->clearContents();
+    QVERIFY(addNamedFixture(doc, "Saved", 0) != nullptr);
+    QCOMPARE(app->saveXML(show), QFile::NoError);
+    QVERIFY(addNamedFixture(doc, "Since the save", 10) != nullptr);
+    QVERIFY(doc->isModified());
+    app->slotAutosave();
+    QVERIFY(QFile::exists(show + ".autosave"));
+    const QDateTime now = QDateTime::currentDateTime();
+    setModified(show, now.addSecs(-120));
+    setModified(show + ".autosave", now.addSecs(-60));
+    doc->clearContents();
+    doc->resetModified();
+    app->setFileName(QString());
+}
+
+static QAction *recentAction(const QString &path)
+{
+    static QAction action;
+    action.setText(path);
+    return &action;
+}
+
+void Autosave_Test::aSavedShowsNewerAutosaveIsOfferedAndRecovered()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString show = dir.filePath("Recover.qlcc");
+    Doc *doc = m_app->doc();
+    App::s_askRecoveryOffscreen = true;
+    auto tidy = qScopeGuard([this, doc]() {
+        App::s_askRecoveryOffscreen = false;
+        doc->clearContents();
+        doc->resetModified();
+        m_app->setFileName(QString());
+    });
+    makeShowWithNewerAutosave(m_app, show);
+    const QByteArray copy = contents(show + ".autosave");
+
+    QString asked;
+    onModal([&asked](QWidget *w) {
+        QMessageBox *box = qobject_cast<QMessageBox *>(w);
+        if (box == nullptr || box->objectName() != QLatin1String("RecoverAutosave"))
+            return false;
+        asked = box->windowTitle() + "|" + box->text() + "|" + box->informativeText();
+        box->findChild<QPushButton *>("Recover")->click();
+        return true;
+    });
+    m_app->slotRecentFileClicked(recentAction(show));
+
+    // A message box has no title on a Mac (Qt leaves it out there)
+#ifndef Q_OS_MACOS
+    QVERIFY2(asked.startsWith("Recover Autosave|"), qPrintable(asked));
+#endif
+    QVERIFY2(asked.contains("|Recover the autosave from "), qPrintable(asked));
+    QVERIFY2(asked.contains("Recover.qlcc has changes from"), qPrintable(asked));
+    QVERIFY(asked.contains("Open the Saved Show keeps the autosave beside it as Recover.qlcc.autosave-"));
+    QCOMPARE(fixtureNames(doc), (QStringList{ "Saved", "Since the save" }));
+    QCOMPARE(m_app->fileName(), show);                  // the show, not the copy
+    QVERIFY2(doc->isModified(), "recovered work is not saved yet");
+    QCOMPARE(contents(show + ".autosave"), copy);       // kept until the save
+
+    // Save writes the show itself, and the copy goes.
+    QCOMPARE(m_app->slotFileSave(), QFile::NoError);
+    QVERIFY(!doc->isModified());
+    QVERIFY(!QFile::exists(show + ".autosave"));
+    doc->clearContents();
+    QCOMPARE(m_app->loadXML(show), QFile::NoError);
+    QCOMPARE(fixtureNames(doc), (QStringList{ "Saved", "Since the save" }));
+}
+
+void Autosave_Test::openTheSavedShowKeepsTheAutosaveAside()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString show = dir.filePath("Aside.qlcc");
+    Doc *doc = m_app->doc();
+    App::s_askRecoveryOffscreen = true;
+    auto tidy = qScopeGuard([this, doc]() {
+        App::s_askRecoveryOffscreen = false;
+        doc->clearContents();
+        doc->resetModified();
+        m_app->setFileName(QString());
+    });
+    makeShowWithNewerAutosave(m_app, show);
+    const QByteArray copy = contents(show + ".autosave");
+    const QDateTime when = QFileInfo(show + ".autosave").lastModified();
+    const QString kept = App::keptAutosaveName(show, when);
+    QCOMPARE(QFileInfo(kept).fileName(),
+             "Aside.qlcc.autosave-" + when.toString("yyyyMMdd-HHmmss"));
+
+    // The show open now, as File ▸ Open finds it
+    QVERIFY(addNamedFixture(doc, "Open now", 0) != nullptr);
+    doc->resetModified();
+
+    // File ▸ Open: the file chosen, then the question.
+    bool chosen = false;
+    bool asked = false;
+    onModal([&](QWidget *w) {
+        if (QFileDialog *fd = qobject_cast<QFileDialog *>(w))
+        {
+            // Again on the next tick if it is still up: the dialog reads
+            // its folder in the background and can refuse an early accept.
+            chosen = true;
+            fd->setDirectory(QFileInfo(show).absolutePath());
+            fd->selectFile(show);
+            static_cast<QDialog *>(fd)->accept();
+            return false;
+        }
+        QMessageBox *box = qobject_cast<QMessageBox *>(w);
+        if (box == nullptr || box->objectName() != QLatin1String("RecoverAutosave"))
+            return false;
+        asked = true;
+        shootPrompt(m_app, box, "file-open", true);
+        box->findChild<QPushButton *>("OpenSavedShow")->click();
+        return true;
+    });
+    QCOMPARE(m_app->slotFileOpen(), QFile::NoError);
+
+    QVERIFY(chosen);
+    QVERIFY(asked);
+    QCOMPARE(fixtureNames(doc), QStringList{ "Saved" });
+    QCOMPARE(m_app->fileName(), show);
+    QVERIFY(!doc->isModified());
+    QVERIFY2(!QFile::exists(show + ".autosave"), "moved aside, not written over");
+    QVERIFY(QFile::exists(kept));
+    QCOMPARE(contents(kept), copy);
+}
+
+void Autosave_Test::atStartUpItIsAskedInTheStartUpWindow()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString show = dir.filePath("StartUp.qlcc");
+    Doc *doc = m_app->doc();
+    App::s_askRecoveryOffscreen = true;
+    StartupWindow *window = new StartupWindow(3);
+    auto tidy = qScopeGuard([this, doc, window]() {
+        App::s_askRecoveryOffscreen = false;
+        m_app->m_startupWindow = nullptr;
+        delete window;
+        doc->clearContents();
+        doc->resetModified();
+        m_app->setFileName(QString());
+    });
+    makeShowWithNewerAutosave(m_app, show);
+    window->beginStep("Loading");
+    m_app->m_startupWindow = window;
+
+    // Inline: buttons in the start-up window, no second window.
+    QStringList offered;
+    QTimer poll;
+    poll.setInterval(10);
+    connect(&poll, &QTimer::timeout, this, [&]() {
+        QWidget *row = window->findChild<QWidget *>("StartupQuestion");
+        if (row == nullptr)
+            return;
+        poll.stop();
+        QVERIFY(qobject_cast<QMessageBox *>(QApplication::activeModalWidget()) == nullptr);
+        for (QPushButton *b : row->findChildren<QPushButton *>())
+            offered << b->text();
+        QLabel *label = row->findChild<QLabel *>();
+        QVERIFY(label != nullptr && label->text().startsWith("Recover the autosave from "));
+        shootPrompt(m_app, window, "startup", false);
+        for (QPushButton *b : row->findChildren<QPushButton *>())
+            if (b->text() == QLatin1String("Recover"))
+                b->click();
+    });
+    poll.start();
+    const App::RecoveryChoice choice = m_app->askAboutAutosave(show);
+    QCOMPARE(offered, (QStringList{ "Recover", "Open the Saved Show", "Cancel" }));
+    QCOMPARE(choice, App::RecoverAutosave);
+    QCOMPARE(m_app->loadShowFile(show, choice), QFile::NoError);
+    QCOMPARE(fixtureNames(doc), (QStringList{ "Saved", "Since the save" }));
+    QCOMPARE(m_app->fileName(), show);
+    QVERIFY(doc->isModified());
+}
+
+void Autosave_Test::cancelOpensNothing()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString show = dir.filePath("Cancel.qlcc");
+    const QString open = dir.filePath("Open.qlcc");
+    Doc *doc = m_app->doc();
+    App::s_askRecoveryOffscreen = true;
+    auto tidy = qScopeGuard([this, doc]() {
+        App::s_askRecoveryOffscreen = false;
+        doc->clearContents();
+        doc->resetModified();
+        m_app->setFileName(QString());
+    });
+    makeShowWithNewerAutosave(m_app, show);
+    const QByteArray copy = contents(show + ".autosave");
+    const QDateTime stamp = QFileInfo(show + ".autosave").lastModified();
+    QVERIFY(addNamedFixture(doc, "Open now", 0) != nullptr);
+    QCOMPARE(m_app->saveXML(open), QFile::NoError);
+    QCOMPARE(m_app->fileName(), open);
+
+    onModal([](QWidget *w) {
+        QMessageBox *box = qobject_cast<QMessageBox *>(w);
+        if (box == nullptr || box->objectName() != QLatin1String("RecoverAutosave"))
+            return false;
+        box->findChild<QPushButton *>("Cancel")->click();
+        return true;
+    });
+    m_app->slotRecentFileClicked(recentAction(show));
+
+    QCOMPARE(fixtureNames(doc), QStringList{ "Open now" });
+    QCOMPARE(m_app->fileName(), open);
+    QCOMPARE(contents(show + ".autosave"), copy);
+    QCOMPARE(QFileInfo(show + ".autosave").lastModified(), stamp);
+    QCOMPARE(QDir(dir.path()).entryList(QStringList() << "Cancel.qlcc.autosave-*").size(), 0);
+}
+
+void Autosave_Test::anOlderOrSameAutosaveIsNotOffered()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString show = dir.filePath("Older.qlcc");
+    Doc *doc = m_app->doc();
+    App::s_askRecoveryOffscreen = true;
+    auto tidy = qScopeGuard([this, doc]() {
+        App::s_askRecoveryOffscreen = false;
+        doc->clearContents();
+        doc->resetModified();
+        m_app->setFileName(QString());
+    });
+    // Any box that came up would be a failure: say so and close it.
+    bool boxed = false;
+    QTimer watch;
+    watch.setInterval(10);
+    connect(&watch, &QTimer::timeout, this, [&boxed]() {
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        {
+            boxed = true;
+            box->reject();
+        }
+    });
+    watch.start();
+
+    // Older than the show: saved since, not offered, left alone.
+    makeShowWithNewerAutosave(m_app, show);
+    const QDateTime now = QDateTime::currentDateTime();
+    setModified(show + ".autosave", now.addSecs(-300));
+    const QByteArray copy = contents(show + ".autosave");
+    QCOMPARE(App::pendingAutosave(show), QString());
+    QCOMPARE(m_app->askAboutAutosave(show), App::NoRecovery);
+    QCOMPARE(contents(show + ".autosave"), copy);
+
+    // Newer but the same as the show: nothing to recover, removed.
+    QVERIFY(QFile::remove(show + ".autosave"));
+    QVERIFY(QFile::copy(show, show + ".autosave"));
+    setModified(show + ".autosave", now.addSecs(60));
+    QCOMPARE(m_app->askAboutAutosave(show), App::NoRecovery);
+    QVERIFY(!QFile::exists(show + ".autosave"));
+
+    // None at all, and none for an untitled show
+    QCOMPARE(m_app->askAboutAutosave(show), App::NoRecovery);
+    QCOMPARE(m_app->askAboutAutosave(QString()), App::NoRecovery);
+
+    for (int i = 0; i < 5; ++i)
+        QCoreApplication::processEvents();
+    QVERIFY(!boxed);
+}
+
+void Autosave_Test::theAutosaveIsNotWrittenOverBeforeTheChoice()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString show = dir.filePath("Held.qlcc");
+    const QString other = dir.filePath("Other.qlcc");
+    Doc *doc = m_app->doc();
+    auto tidy = qScopeGuard([this, doc]() {
+        App::s_askRecoveryOffscreen = false;
+        m_app->m_heldAutosave.clear();
+        doc->clearContents();
+        doc->resetModified();
+        m_app->setFileName(QString());
+    });
+    makeShowWithNewerAutosave(m_app, show);
+    const QByteArray copy = contents(show + ".autosave");
+
+    // While the question is open: no autosave is written, of any show.
+    App::s_askRecoveryOffscreen = true;
+    QVERIFY(addNamedFixture(doc, "Edited while asked", 0) != nullptr);
+    m_app->setFileName(show);
+    bool keptWhileAsked = false;
+    onModal([this, &show, &copy, &keptWhileAsked](QWidget *w) {
+        QMessageBox *box = qobject_cast<QMessageBox *>(w);
+        if (box == nullptr || box->objectName() != QLatin1String("RecoverAutosave"))
+            return false;
+        m_app->slotAutosave();
+        m_app->slotDocAutosave();
+        m_app->removeAutosaveFile();
+        keptWhileAsked = contents(show + ".autosave") == copy;
+        box->findChild<QPushButton *>("Cancel")->click();
+        return true;
+    });
+    QCOMPARE(m_app->askAboutAutosave(show), App::CancelOpen);
+    QVERIFY(keptWhileAsked);
+    QCOMPARE(contents(show + ".autosave"), copy);
+
+    // Nobody to ask: the show opens, and its autosave is neither offered,
+    // written over nor removed this session.
+    App::s_askRecoveryOffscreen = false;
+    doc->clearContents();
+    doc->resetModified();
+    QCOMPARE(m_app->askAboutAutosave(show), App::NoRecovery);
+    QCOMPARE(m_app->loadShowFile(show, App::NoRecovery), QFile::NoError);
+    QCOMPARE(fixtureNames(doc), QStringList{ "Saved" });
+    QVERIFY(addNamedFixture(doc, "Edited here", 20) != nullptr);
+    m_app->slotAutosave();
+    m_app->slotDocAutosave();
+    QCOMPARE(contents(show + ".autosave"), copy);
+    m_app->removeAutosaveFile();
+    QVERIFY(QFile::exists(show + ".autosave"));
+
+    // Another show is not held: its autosave is written as always.
+    m_app->setFileName(other);
+    m_app->slotAutosave();
+    QVERIFY(QFile::exists(other + ".autosave"));
 }
 
 void Autosave_Test::aWebLoadThatIsNotAShowKeepsTheShow()

@@ -55,6 +55,23 @@ private slots:
     /** A show sent over web access (/loadProject): what is not a show
      *  leaves the open one as it was; a show replaces it and is marked as
      *  from the web, until a show is opened from a file */
+    /** Opening a saved show whose autosave is newer offers it: Recover
+     *  opens the autosave's content as the show (its own name, modified,
+     *  Save writes the show) -- from the recent list */
+    void aSavedShowsNewerAutosaveIsOfferedAndRecovered();
+    /** File ▸ Open: Open the Saved Show opens the show and keeps the
+     *  autosave beside it under a timestamped name */
+    void openTheSavedShowKeepsTheAutosaveAside();
+    /** At start-up (-o) it is asked inline in the start-up window */
+    void atStartUpItIsAskedInTheStartUpWindow();
+    /** Cancel opens nothing: the open show and the autosave as they were */
+    void cancelOpensNothing();
+    /** An autosave older than the show, or the same as it, is not offered
+     *  (the same one is removed) */
+    void anOlderOrSameAutosaveIsNotOffered();
+    /** Nothing writes over the autosave before the answer, nor at all when
+     *  nobody can be asked (which leaves the files untouched) */
+    void theAutosaveIsNotWrittenOverBeforeTheChoice();
     void aWebLoadThatIsNotAShowKeepsTheShow();
     void aWebLoadReplacesTheShowAndIsMarkedFromTheWeb();
 

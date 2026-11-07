@@ -12,6 +12,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Fixed
+
+- **A saved show's autosave is offered when you open the show.** After a
+  crash, opening the show (File ▸ Open, the recent list, or `-o` at start)
+  asks **Recover the autosave from** *time*? when its autosave is newer than
+  the saved show: **Recover** opens the unsaved work under the show's own
+  name (Save writes the show), **Open the Saved Show** keeps the autosave
+  beside it as *Show*.qlcc.autosave-*date-time*, **Cancel** opens nothing.
+  The autosave is never written over before you choose; before, only an
+  untitled show's work was offered and the next autosave replaced the rest.
+
 ## [0.4.1] - 2026-11-06
 
 qlcconsole 0.4.1 is a stable release that hardens 0.4.0: the follow spot,

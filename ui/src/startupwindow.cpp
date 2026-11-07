@@ -123,32 +123,51 @@ void StartupWindow::logDetail(const QString &text)
 
 bool StartupWindow::askYesNo(const QString &question)
 {
-    logDetail(question);
+    return ask(question, QStringList() << tr("Yes") << tr("No")) == 0;
+}
 
+int StartupWindow::ask(const QString &question, const QStringList &answers,
+                       const QString &detail)
+{
+    logDetail(detail.isEmpty() ? question : question + QLatin1Char(' ') + detail);
+
+    /* The question on a line of its own, the answers under it on the
+       right: three answers beside a wrapped question left it no room. */
     QWidget *bar = new QWidget(this);
-    QHBoxLayout *row = new QHBoxLayout(bar);
-    row->setContentsMargins(0, 0, 0, 0);
+    bar->setObjectName(QStringLiteral("StartupQuestion"));
+    QVBoxLayout *column = new QVBoxLayout(bar);
+    column->setContentsMargins(0, 0, 0, 0);
     QLabel *label = new QLabel(question, bar);
     label->setWordWrap(true);
-    QPushButton *yes = new QPushButton(tr("Yes"), bar);
-    QPushButton *no = new QPushButton(tr("No"), bar);
-    row->addWidget(label, 1);
-    row->addWidget(yes);
-    row->addWidget(no);
+    QFont bold = label->font();
+    bold.setBold(true);
+    label->setFont(bold);
+    column->addWidget(label);
+    QHBoxLayout *row = new QHBoxLayout;
+    row->addStretch(1);
+    column->addLayout(row);
+
+    int result = -1;
+    QEventLoop loop;
+    for (int i = 0; i < answers.count(); ++i)
+    {
+        QPushButton *button = new QPushButton(answers.at(i), bar);
+        row->addWidget(button);
+        if (i == 0)
+            button->setDefault(true);
+        connect(button, &QPushButton::clicked, &loop, [&result, &loop, i]() { result = i; loop.quit(); });
+    }
     // Above the progress bar, i.e. the last row before it (indices: header
     // layout, log, [this bar], bar) -- count() - 1 is the progress bar.
     m_layout->insertWidget(m_layout->count() - 1, bar);
 
-    bool result = false;
-    QEventLoop loop;
-    connect(yes, &QPushButton::clicked, &loop, [&result, &loop]() { result = true; loop.quit(); });
-    connect(no, &QPushButton::clicked, &loop, [&result, &loop]() { result = false; loop.quit(); });
     loop.exec();
 
     m_layout->removeWidget(bar);
     delete bar;
 
-    logDetail(result ? tr("-> Yes") : tr("-> No"));
+    if (result >= 0 && result < answers.count())
+        logDetail(QStringLiteral("-> %1").arg(answers.at(result)));
 
     return result;
 }

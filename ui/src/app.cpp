@@ -281,6 +281,7 @@ App::App()
     , m_dumpProperties(NULL)
     , m_videoProvider(NULL)
 
+    , m_recoveryAsking(false)
     , m_autosaveTimer(NULL)
     , m_autosaveEnabled(true)
     , m_autosaveInterval(DEFAULT_AUTOSAVE_INTERVAL)
@@ -470,7 +471,9 @@ void App::startup(const QString &workspaceFile)
     // is still alive and log into it instead of creating that dialog.
     if (workspaceFile.isEmpty() == false)
     {
-        if (loadXML(workspaceFile) == QFile::NoError)
+        /* Its newer autosave offered first, inline (Cancel: start empty). */
+        const RecoveryChoice choice = askAboutAutosave(workspaceFile);
+        if (choice != CancelOpen && loadShowFile(workspaceFile, choice) == QFile::NoError)
             updateFileOpenMenu(workspaceFile);
     }
 
@@ -478,7 +481,7 @@ void App::startup(const QString &workspaceFile)
     m_startupWindow = NULL;
 
     slotModeDesign();
-    slotDocModified(false);
+    slotDocModified(m_doc->isModified());     // a recovered autosave is unsaved
 
     // Activate FixtureManager
     setActiveWindow(FixtureManager::staticMetaObject.className());
@@ -2044,6 +2047,9 @@ void App::slotTabChanged(int index)
 
 void App::slotDocAutosave()
 {
+    /* Never over an autosave not yet offered (askAboutAutosave()) */
+    if (autosaveHeld(autoSaveFileName()))
+        return;
     saveXML(autoSaveFileName(), true);
 }
 
@@ -3737,6 +3743,11 @@ QFile::FileError App::slotFileOpen()
     if (fn.isEmpty() == true)
         return QFile::NoError;
 
+    /* A newer autosave beside it: offered before anything is cleared */
+    const RecoveryChoice choice = askAboutAutosave(fn);
+    if (choice == CancelOpen)
+        return QFile::NoError;
+
     /* Clear existing document data */
     clearDocument();
 
@@ -3745,8 +3756,8 @@ QFile::FileError App::slotFileOpen()
 #endif
 
     /* Load the file */
-    QFile::FileError error = loadXML(fn);
-    if (handleFileError(error) == true)
+    QFile::FileError error = loadShowFile(fn, choice);
+    if (handleFileError(error) == true && choice != RecoverAutosave)
         m_doc->resetModified();
 
 #ifdef DEBUG_SPEED
@@ -4281,7 +4292,7 @@ QFile::FileError App::slotFileSaveAs()
     {
         /* remove autosave file if present */
         QFile asFile(asfName);
-        if (asFile.exists())
+        if (asFile.exists() && autosaveHeld(asfName) == false)
             asFile.remove();
     }
 
@@ -6166,6 +6177,11 @@ void App::slotRecentFileClicked(QAction *recent)
         return;
     }
 
+    /* A newer autosave beside it: offered before anything is cleared */
+    const RecoveryChoice choice = askAboutAutosave(recentAbsPath);
+    if (choice == CancelOpen)
+        return;
+
     m_workingDirectory = QFileInfo(recentAbsPath).absoluteDir();
     QSettings settings;
     settings.setValue(SETTINGS_WORKINGPATH, m_workingDirectory.absolutePath());
@@ -6178,8 +6194,8 @@ void App::slotRecentFileClicked(QAction *recent)
 #endif
 
     /* Load the file */
-    QFile::FileError error = loadXML(recentAbsPath);
-    if (handleFileError(error) == true)
+    QFile::FileError error = loadShowFile(recentAbsPath, choice);
+    if (handleFileError(error) == true && choice != RecoverAutosave)
         m_doc->resetModified();
 
 #ifdef DEBUG_SPEED
@@ -6416,12 +6432,16 @@ void App::recoverUnavailableDefinitions(QWidget *parent)
                               .arg(restored).arg(still.join(QStringLiteral(", "))));
 }
 
-QFile::FileError App::loadXML(const QString& fileName)
+QFile::FileError App::loadXML(const QString& fileName, const QString &asShow)
 {
     QFile::FileError retval = QFile::NoError;
 
     if (fileName.isEmpty() == true)
         return QFile::OpenError;
+
+    /* Read from fileName; the show it is (a recovered autosave is read from
+       Show.qlcc.autosave and is Show.qlcc). */
+    const QString show = asShow.isEmpty() ? fileName : asShow;
 
     m_damagedFile.clear();
     /* A show opened from a file is the operator's, whatever came in over
@@ -6464,7 +6484,7 @@ QFile::FileError App::loadXML(const QString& fileName)
     {
         // The main window is already up by the time a -o/--open workspace is
         // read, so a big file reads as a frozen app without this.
-        createLoadProgressDialog(fileName);
+        createLoadProgressDialog(show);
 
         if (loadXML(*doc) == false)
         {
@@ -6477,12 +6497,12 @@ QFile::FileError App::loadXML(const QString& fileName)
                saved over with less (slotFileSave() goes to Save As). */
             const bool damaged = doc->hasError();
             const qint64 damagedLine = doc->lineNumber();
-            setFileName(fileName);
+            setFileName(show);
             if (damaged)
-                m_damagedFile = fileName;
+                m_damagedFile = show;
             /* The venue it was last focused for, from the file beside it:
                applied over the show's own calibration, never into it. */
-            m_doc->programmer()->venueCorrections()->setShowFile(fileName, true);
+            m_doc->programmer()->venueCorrections()->setShowFile(show, true);
             updateVenueFooter();
             if (damaged && m_noGui == false)
             {
@@ -6498,11 +6518,11 @@ QFile::FileError App::loadXML(const QString& fileName)
                the default (board Q129). Not modal, so it never holds up a
                show opened from the command line. */
             if (m_noGui == false)
-                QTimer::singleShot(0, this, [this, fileName]() {
+                QTimer::singleShot(0, this, [this, show]() {
                     /* No venue file of its own, but one beside it for the
                        same show (an earlier version, a Finder copy): offered
                        (gap 8); else, an old venue confirmed. */
-                    if (FocusCallsDialog::offerVenueImport(m_doc, this, fileName) == nullptr)
+                    if (FocusCallsDialog::offerVenueImport(m_doc, this, show) == nullptr)
                         FocusCallsDialog::confirmVenue(m_doc, this);
                 });
             retval = QFile::NoError;
@@ -7506,6 +7526,9 @@ void App::slotAutosave()
         return;
 
     QString autosavePath = autosaveFilePath();
+    /* Never over an autosave not yet offered (askAboutAutosave()) */
+    if (autosaveHeld(autosavePath))
+        return;
 
     // Ensure directory exists
     QFileInfo fi(autosavePath);
@@ -7635,10 +7658,7 @@ void App::checkAutosaveRecovery()
            leave the file alone, so a later interactive session can still
            offer the recovery. QLC_NO_RECOVERY_PROMPT forces the same
            behaviour for scripted runs on a real display. */
-        const QString platform = QGuiApplication::platformName();
-        if (platform == QLatin1String("offscreen")
-            || platform == QLatin1String("minimal")
-            || qEnvironmentVariableIsSet("QLC_NO_RECOVERY_PROMPT"))
+        if (canAskAboutRecovery() == false)
         {
             qDebug() << "[Autosave] Recovery file present but no interactive "
                         "display; left untouched:" << untitledAutosave;
@@ -7685,6 +7705,8 @@ void App::checkAutosaveRecovery()
 void App::removeAutosaveFile()
 {
     QString autosavePath = autosaveFilePath();
+    if (autosaveHeld(autosavePath))
+        return;
     QFile autosaveFile(autosavePath);
 
     if (autosaveFile.exists())
@@ -7694,6 +7716,181 @@ void App::removeAutosaveFile()
         else
             qWarning() << "[Autosave] Failed to remove autosave file:" << autosavePath;
     }
+}
+
+/*****************************************************************************
+ * Recovering a saved show's autosave
+ *****************************************************************************/
+
+bool App::s_askRecoveryOffscreen = false;
+
+bool App::canAskAboutRecovery()
+{
+    if (s_askRecoveryOffscreen)
+        return true;
+    /* A modal prompt cannot be answered where there is nobody to answer it
+       (see checkAutosaveRecovery()). */
+    const QString platform = QGuiApplication::platformName();
+    return platform != QLatin1String("offscreen")
+        && platform != QLatin1String("minimal")
+        && qEnvironmentVariableIsSet("QLC_NO_RECOVERY_PROMPT") == false;
+}
+
+bool App::autosaveHeld(const QString &path) const
+{
+    if (m_recoveryAsking)
+        return true;
+    return m_heldAutosave.isEmpty() == false && path.isEmpty() == false
+        && QFileInfo(path).absoluteFilePath() == m_heldAutosave;
+}
+
+QString App::keptAutosaveName(const QString &showFile, const QDateTime &when)
+{
+    const QString base = showFile + QStringLiteral(".autosave-")
+                         + when.toString(QStringLiteral("yyyyMMdd-HHmmss"));
+    QString name = base;
+    for (int n = 2; QFile::exists(name); ++n)
+        name = QStringLiteral("%1-%2").arg(base).arg(n);
+    return name;
+}
+
+QString App::pendingAutosave(const QString &showFile)
+{
+    if (showFile.isEmpty())
+        return QString();
+    const QString autosave = showFile + QStringLiteral(".autosave");
+    const QFileInfo copy(autosave);
+    const QFileInfo show(showFile);
+    if (copy.isFile() == false || show.isFile() == false)
+        return QString();
+    /* Older than the show: saved since, so nothing in it is lost (and the
+       next autosave replaces it). */
+    if (copy.lastModified() <= show.lastModified())
+        return QString();
+
+    /* The same as the show: nothing to recover, and nothing to keep. */
+    if (copy.size() == show.size())
+    {
+        QFile a(autosave);
+        QFile b(showFile);
+        if (a.open(QIODevice::ReadOnly) && b.open(QIODevice::ReadOnly) && a.readAll() == b.readAll())
+        {
+            a.close();
+            if (QFile::remove(autosave))
+                qDebug() << "[Autosave] Same as the saved show, removed:" << autosave;
+            return QString();
+        }
+    }
+    return autosave;
+}
+
+App::RecoveryChoice App::askAboutAutosave(const QString &showFile)
+{
+    if (showFile.isEmpty())
+        return NoRecovery;
+
+    /* Nobody to ask (offscreen, minimal, QLC_NO_RECOVERY_PROMPT): the show
+       opens and the files stay as they are -- the autosave is not compared,
+       removed or written over this session, so a session that can ask
+       still finds it. */
+    if (canAskAboutRecovery() == false)
+    {
+        const QString autosave = showFile + QStringLiteral(".autosave");
+        const QFileInfo copy(autosave);
+        if (copy.isFile() && QFileInfo(showFile).isFile()
+            && copy.lastModified() > QFileInfo(showFile).lastModified())
+        {
+            m_heldAutosave = copy.absoluteFilePath();
+            qDebug() << "[Autosave] A newer autosave beside the show, but no interactive "
+                        "display; left untouched:" << autosave;
+        }
+        return NoRecovery;
+    }
+
+    const QString autosave = pendingAutosave(showFile);
+    if (autosave.isEmpty())
+        return NoRecovery;
+
+    const QDateTime when = QFileInfo(autosave).lastModified();
+    const QString time = QLocale().toString(when, QLocale::ShortFormat);
+    const QString saved = QLocale().toString(QFileInfo(showFile).lastModified(), QLocale::ShortFormat);
+    const QString kept = keptAutosaveName(showFile, when);
+    const QString question = tr("Recover the autosave from %1?").arg(time);
+    const QString detail = tr("%1 has changes from %2 that were never saved (the show was last saved %3). "
+                              "Open the Saved Show keeps the autosave beside it as %4.")
+                               .arg(QFileInfo(showFile).fileName(), time, saved, QFileInfo(kept).fileName());
+    const QStringList answers = { tr("Recover"), tr("Open the Saved Show"), tr("Cancel") };
+
+    /* Nothing writes an autosave while the question is open: the one asked
+       about is kept as it is until it is answered. */
+    m_recoveryAsking = true;
+    int answer = 2;
+    if (m_startupWindow != NULL)
+    {
+        /* During start-up (-o): inline, in the start-up window. */
+        answer = m_startupWindow->ask(question, answers, detail);
+    }
+    else
+    {
+        QMessageBox box(this);
+        box.setObjectName(QStringLiteral("RecoverAutosave"));
+        box.setWindowTitle(tr("Recover Autosave"));
+        box.setIcon(QMessageBox::Question);
+        box.setText(question);
+        box.setInformativeText(detail);
+        QPushButton *recover = box.addButton(answers.at(0), QMessageBox::AcceptRole);
+        QPushButton *openSaved = box.addButton(answers.at(1), QMessageBox::ActionRole);
+        QPushButton *cancel = box.addButton(answers.at(2), QMessageBox::RejectRole);
+        recover->setObjectName(QStringLiteral("Recover"));
+        openSaved->setObjectName(QStringLiteral("OpenSavedShow"));
+        cancel->setObjectName(QStringLiteral("Cancel"));
+        box.setDefaultButton(recover);
+        box.setEscapeButton(cancel);
+        box.exec();
+        if (box.clickedButton() == recover)
+            answer = 0;
+        else if (box.clickedButton() == openSaved)
+            answer = 1;
+    }
+    m_recoveryAsking = false;
+
+    if (answer == 0)
+    {
+        qDebug() << "[Autosave] Recovering" << autosave << "as" << showFile;
+        return RecoverAutosave;
+    }
+    if (answer == 1)
+    {
+        /* Not lost: kept beside the show under a name of its own. */
+        if (QFile::rename(autosave, kept))
+        {
+            qDebug() << "[Autosave] Saved show opened; the autosave kept as" << kept;
+        }
+        else
+        {
+            qWarning() << "[Autosave] Could not keep" << autosave << "as" << kept
+                       << "- left where it is, and not written over";
+            m_heldAutosave = QFileInfo(autosave).absoluteFilePath();
+        }
+        return OpenSavedShow;
+    }
+    qDebug() << "[Autosave] Open cancelled; the autosave left as it is:" << autosave;
+    return CancelOpen;
+}
+
+QFile::FileError App::loadShowFile(const QString &showFile, RecoveryChoice choice)
+{
+    if (choice == RecoverAutosave)
+    {
+        /* The autosave's content, as the show: its name, folder and venue,
+           so Save writes Show.qlcc. Not saved yet, so modified; the autosave
+           stays until then. */
+        const QFile::FileError error = loadXML(showFile + QStringLiteral(".autosave"), showFile);
+        if (error == QFile::NoError)
+            m_doc->setModified();
+        return error;
+    }
+    return loadXML(showFile);
 }
 
 /*****************************************************************************
