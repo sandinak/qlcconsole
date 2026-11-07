@@ -264,6 +264,56 @@ def check(repo):
         if want != main:
             problems.append("summary: the Main check line says %s; the rules say %s" % (main, want))
     problems += check_flows(repo)
+    problems += check_help_lengths(repo)
+    return problems
+
+
+# UX-63 over whole files: a metric length in help is fine only after the
+# imperial one it converts ("4 ft (1.2 m)", "3 ft 3 in (1.0 m)") or before
+# its imperial equivalent for a metric product ("24 mm (1 in) tape").
+# Code spans (typed examples, what the app prints in a metric show) are left out.
+METRIC_LEN = re.compile(r"\b\d+(?:\.\d+)?\s?(?:mm|cm|m)\b(?![/\w])")
+IMPERIAL_BEFORE = re.compile(r"(?:\b(?:in|ft)|[\"'\u2032\u2033\u00bc\u00bd\u00be\u215b\u215c\u215d\u215e])\s*\([\d./\u00d7 \u2013-]*(?:to )?[\d.\s\u00d7]*$")
+IMPERIAL_AFTER = re.compile(r"\s\([^)]*\b(?:in|ft)\b")
+
+
+# A product named by its size, as the app's own option text spells it.
+PRODUCT_NAMES = ("*62 mm roll",)
+
+
+def help_length_hits(line, with_pos=False):
+    """The metric-only lengths in a stretch of help text (one line, or a
+    whole file: a wrapped line keeps its feet from the line before)."""
+    s = re.sub(r"`[^`]*`", lambda m: re.sub(r"\S", " ", m.group(0)), line)
+    hits = []
+    for m in METRIC_LEN.finditer(s):
+        if s[m.start() - 1:m.end() + 5] in PRODUCT_NAMES:
+            continue
+        if IMPERIAL_AFTER.match(s, m.end()):
+            continue
+        open_at = s.rfind("(", 0, m.start())
+        if open_at >= 0 and ")" not in s[open_at:m.start()] \
+                and IMPERIAL_BEFORE.search(s[:open_at + 1] + s[open_at + 1:m.start()]):
+            continue
+        hits.append((m.group(0), m.start()) if with_pos else m.group(0))
+    return hits
+
+
+def check_help_lengths(repo):
+    """UX-63 on every help page (docs/features/*.md) and course page."""
+    problems = []
+    for sub in ("docs/features", "docs/course"):
+        base = os.path.join(repo, sub)
+        for root, _dirs, files in os.walk(base):
+            for f in sorted(files):
+                if not f.endswith(".md"):
+                    continue
+                path = os.path.join(root, f)
+                with open(path, encoding="utf-8") as fh:
+                    text = fh.read()
+                for h, at in help_length_hits(text, True):
+                    problems.append("UX-63 %s:%d: metric length '%s' without its feet and inches first"
+                                    % (os.path.relpath(path, repo), text.count("\n", 0, at) + 1, h))
     return problems
 
 
@@ -319,6 +369,14 @@ def self_test(repo):
     if check(repo):
         print("check_rules self-test: the real rules do not pass; run without --self-test")
         return False
+    for text, want in (("Wand length: the staff, 4 ft (1.2 m) unless set.", 0),
+                       ("Wand length: the staff, 1.2 m unless set.", 1),
+                       ("a 24 mm (1 in) tape, 3 ft 3 in (1.0 m), 4 ft 7 in \u00d7 1 ft 8 in (1.4 \u00d7 0.5 m)", 0),
+                       ("Children 4 ft 3 in (1.30 m) or a bare (1.30 m)", 1),
+                       ("typed `0.19 m` and 6 ft/s, 1.8 m/s", 0)):
+        if len(help_length_hits(text)) != want:
+            print("check_rules self-test: help_length_hits wrong for: %s" % text)
+            return False
     tmp = tempfile.mkdtemp(prefix="uxrules-selftest-")
     try:
         os.makedirs(os.path.join(tmp, "docs/dev"))

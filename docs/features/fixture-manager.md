@@ -271,7 +271,7 @@ and the labels too, and they follow the grouping.
 | **Mode** | The mode, and how many channels it takes when the name doesn't say: "18 Channel", "165ch", "Open + Fly (2 ch)". |
 | **Connection** | DMX, or a network fixture's transport and the name its IP goes by ("WLED lantern-2"), or the IP when it has none ("WLED 172.18.2.50"). Point at it for the IP. |
 | **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) · port 1 · universe 0:0:0" — port is the socket on the node, universe its Art-Net address), or nothing; point at it for all of it when the column is narrow. |
-| **Mounted on** | The same words as Fixture Properties: "Truss FOH · 2.5 m along", "Tower T2 · shelf 3", "free / on the floor". |
+| **Mounted on** | The same words as Fixture Properties: "Truss FOH · 8' 2" along", "Tower T2 · shelf 3", "free / on the floor". |
 | **Owner** | Tour, House or Rental — only when some fixture in the show is not the tour's. |
 | **Gel** | The fixture's gel, as a swatch and its colour value ("#1E50FF") — the **Colour** set in the Lighting Studio's [Fixture Properties](lighting-studio.md#fixture-properties). Only when some fixture in the show has one, so a rig of LED fixtures gets no empty column. For a fixed light (a par, a profile) it tells the crew what to cut and drop in. |
 
@@ -295,20 +295,20 @@ and the labels too, and they follow the grouping.
 stick on each fixture (or its case) and prints it through the system's
 print dialog, or saves it as a PDF.
 
-![Fixture labels on 24 mm tape: the stock, tape width, template and cut gap, and a preview of the first label](../images/patch-labels.png)
+![Fixture labels on 24 mm (1 in) tape: the stock, tape width, template and cut gap, and a preview of the first label](../images/patch-labels.png)
 
 1. **Stock** — remembered for next time (table below). When a Brother
    PT-P710BT is set up on the Mac and you haven't chosen a stock before,
    the dialog opens on its preset, says **Brother PT-P710BT found**, and
    **Print…** goes to it. A stock you have chosen wins.
-2. **Tape** — 12 mm or 24 mm, for a tape stock.
+2. **Tape** — 12 mm (½ in) or 24 mm (1 in), for a tape stock.
 3. **Label says** — the template, remembered: **`{name} D{address}`**
    unless you change it ("Spot 3 D101"); **Default** puts it back. The
    fields: `{name}`, `{address}`, `{universe}`, `{mode}`, `{location}`,
    `{owner}`, `{group}`. A field the label doesn't know is printed as
    typed.
 4. **Cut gap** — blank tape between one label's text and the next, half at
-   each end of a label, where it is cut (4 mm unless changed).
+   each end of a label, where it is cut (5/32 in (4 mm) unless changed).
 5. The first label, as it prints.
 6. **Print…** — the system's print dialog, set to the label's size;
    **Save PDF…** saves the same pages.
@@ -320,10 +320,10 @@ over the whole show, not the fixtures you are labelling, so every label of
 a show reads the same way. A fixture still in the inventory gets "—"; one in
 an address clash, the address it asked for.
 
-On tape the label is **one line**, as tall as the tape prints (18 mm of a
-24 mm TZe tape, about 9 mm of a 12 mm one), and **as long as the longest
+On tape the label is **one line**, as tall as the tape prints — 18 mm (¾ in) of a
+24 mm (1 in) TZe tape, about 9 mm (⅜ in) of a 12 mm (½ in) one — and **as long as the longest
 label's text** needs, with the cut gap — the same length for all of them,
-25 to 150 mm; text longer than that is set smaller. On the sheets and the
+1 to 6 in (25 to 150 mm); text longer than that is set smaller. On the sheets and the
 roll the template's line is large and the mode, the universe's name, a
 network fixture's transport and name, and where it hangs follow, smaller.
 A line too long is set smaller, then cut short with "…"; nothing runs off
@@ -331,10 +331,10 @@ the edge.
 
 | Stock | What it is |
 |---|---|
-| **Continuous tape** (the default) | Label-printer tape, 12 or 24 mm: one label a page, the printer's driver cuts between them. |
-| **Brother PT-P710BT** | The same tape (24 mm unless changed) through Brother's own macOS driver (P-touch), which takes the page size as the label; **Print…** picks the PT-P710BT when it is set up on the Mac (by its name or model, PT-P710BT or PT-P710), and the dialog starts on this stock when nothing else was chosen before. Set the driver's cut option (cut each label, or chain print) in its print dialog. |
+| **Continuous tape** (the default) | Label-printer tape, 12 mm (½ in) or 24 mm (1 in): one label a page, the printer's driver cuts between them. |
+| **Brother PT-P710BT** | The same tape (24 mm (1 in) unless changed) through Brother's own macOS driver (P-touch), which takes the page size as the label; **Print…** picks the PT-P710BT when it is set up on the Mac (by its name or model, PT-P710BT or PT-P710), and the dialog starts on this stock when nothing else was chosen before. Set the driver's cut option (cut each label, or chain print) in its print dialog. |
 | **Avery 5160** | US Letter sheets, 30 labels (3 across, 10 down), each 2⅝ × 1 in. Avery's 5260, 5960, 8160 and other "30 per sheet" labels are the same layout. |
-| **62 mm roll** | A continuous 62 mm roll (Brother DK-22205 and the like), one 62 × 29 mm label a page; the printer cuts between them. |
+| **62 mm roll** | A continuous 62 mm (2.4 in) roll (Brother DK-22205 and the like), one 62 × 29 mm (2.4 × 1.1 in) label a page; the printer cuts between them. |
 
 and **which fixtures**: the list shown, or the rows selected (the default
 when some are). The dialog says how many labels that is and, on tape, how
@@ -868,15 +868,15 @@ definition. On top of stock QLC+'s editor:
   `0.19 m`; `12 kg`, `26.5 lb` (or `lbs`), `400 g`, `5 lb 4 oz`. With
   inches set, `7.5"` reads **7 1/2"** (inches and feet read like a tape
   measure, to the nearest 1/8"); with millimetres it becomes
-  **190.5 mm**. Something it can't read turns the field red, with a
+  `190.5 mm`. Something it can't read turns the field red, with a
   tooltip saying what it accepts, and the value stays as it was.
 
   The file is unchanged and still opens in stock QLC+: it keeps **whole
-  millimetres** (halves round up, so 7.5" = 190.5 mm is saved as
-  **191 mm**) and kilograms. The field's tooltip says what will be saved.
+  millimetres** (halves round up, so 7.5" = `190.5 mm` is saved as
+  `191 mm`) and kilograms. The field's tooltip says what will be saved.
   A saved size in a metric unit shows with the fewest decimals that mean
   the same millimetre; in inches or feet it reads to the nearest 1/8", so
-  191 mm reads 7 1/2" again. The Fixture
+  `191 mm` reads 7 1/2" again. The Fixture
   Manager's information panel shows sizes and weight in the same unit, and
   the Lighting Studio's grid follows it (metres or feet).
 - **Physical tab → "Look in the Lighting Studio"** — how the Lighting Studio and

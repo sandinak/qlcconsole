@@ -201,7 +201,7 @@ their house lights, relays and subs.
 - **One Mode column.** The channel count is in the Mode when its name
   doesn't say it ("Open + Fly (2 ch)").
 - **Labels on tape.** Right-click a row → **Print Label…**: "Spot 3 D101"
-  (a template you can change) on 12 or 24 mm tape, printed through the
+  (a template you can change) on 12 mm (½ in) or 24 mm (1 in) tape, printed through the
   system's print dialog — with a preset for the **Brother PT-P710BT** —
   or saved as a PDF. A PT-P710BT set up on the Mac is found and picked
   when you haven't chosen a stock. See [The patch list](fixture-manager.md#the-patch-list).
@@ -669,7 +669,7 @@ their house lights, relays and subs.
   line is found from the main drape or the proscenium; the number line is
   ticked in feet or metres out from centre, labelled CL, its long ticks only
   on numbered places; trusses and pipes over the audience say how far out
-  they hang (**FOH · 4.2 m DS of curtain line**). The full centre line
+  they hang (**FOH · 13' 9" DS of curtain line**). The full centre line
   replaces the teal centre cross's line along it. The Rig Overview draws
   the lines on its floor and lists the pieces in its **Plot Layers** menu,
   and they're saved with the show. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
@@ -686,7 +686,7 @@ their house lights, relays and subs.
 - **Where a target is, in crew terms.** Each stage target on the plot,
   each figure in the Rig Overview, and the person Quick focus stands where a
   fixed light lands has a small readout of where it is against the stage
-  marks, for example **SL 2.4 · US 3.1 m**. It follows the target as it
+  marks, for example **SR 7' 11" · US 10' 2"** (`SL 2.4 · US 3.1 m` on a metric show). It follows the target as it
   moves. Untick **Show ▸ Target positions** to hide it. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
 - **Auto fixtures as their closest symbol.** The plot's **Show** menu has
   **Show Auto fixtures as their closest plot symbol**, saved with the show.
@@ -1342,8 +1342,8 @@ their house lights, relays and subs.
   fixtures dragged in from the Inventory are placed where they land.
   ([Mounting](lighting-studio.md#mounting-a-fixture))
 - **Height counts when attaching.** A fixture mounted on something (the
-  foot of a tower, a deck) is only offered a truss or pipe within half a
-  metre of its own height — no more lights at a tower's base hung on the
+  foot of a tower, a deck) is only offered a truss or pipe within 20 in
+  (0.5 m) of its own height — no more lights at a tower's base hung on the
   bar on top.
 - **Mount on → Deck.** Stands every selected fixture on the deck under it
   (or a named one): on its top, upright, nothing floating, nudged inside a
@@ -1396,7 +1396,7 @@ their house lights, relays and subs.
   ([The patch list](fixture-manager.md#the-patch-list))
 - **A label per fixture** from the patch list: **Labels…** saves a PDF —
   the name and the address (U3 · 101) large, the universe's name, the mode
-  and channels, a network fixture's name and where it hangs small — on Avery 5160 sheets (30 to a Letter page) or a 62 mm
+  and channels, a network fixture's name and where it hangs small — on Avery 5160 sheets (30 to a Letter page) or a 62 mm (2.4 in)
   roll, for all the fixtures or the selected rows.
   ([Labels](fixture-manager.md#labels))
 - **Patch Others Like This.** Right-click a structure: the other

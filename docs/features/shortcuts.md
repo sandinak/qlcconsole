@@ -49,7 +49,7 @@ menus are unchanged; the right-click menu has each one too.
 | ⌫ / Delete | Delete what's selected; asks first where it deletes for good | cue, layer (a list or production asks) | asks, naming where it's used | asks (the toolbar's **Delete…**) | off the plot, as the plot; a layer row: the layer (its items go to Default) | **off the plot**: fixtures back to the Inventory (they stay in the show), a structure asks first; one ⌘Z puts it all back |
 | F2 | Rename in place (Return too in the lists) | ✓ | ✓ | ✓ | ✓ | the selected item's row in Plot layers |
 | ⌘C / ⌘V | Copy, then paste | cues, layers | palettes, scenes, effects (an effect palette, EFX or RGB Matrix) | a new fixture like each copied, in the Inventory; a group's copy | as the plot | trusses, decks, targets, scenery… |
-| ⌘D | Duplicate | cues, layers | palettes, scenes, effects | a new fixture like it, unpatched in the **Inventory**, named on (Front → Front #2); a group: a copy beside it | as the plot | half a metre on |
+| ⌘D | Duplicate | cues, layers | palettes, scenes, effects | a new fixture like it, unpatched in the **Inventory**, named on (Front → Front #2); a group: a copy beside it | as the plot | 20 in (0.5 m) on |
 | ⌘F | To the search | the Library's filter | Build's search | the fixture search | the tree's search | Plot layers' search |
 | Esc | Back out first (the Workbench, the Look Editor, an assembly on the plot); with nothing to back out of, **let go of the selection** | ✓ | ✓ | ✓ | ✓ (the plot too) | ✓ |
 
@@ -74,7 +74,7 @@ a universe is not duplicated.
 | ⇧-scroll | Zoom, centred on the pointer |
 | ⌘A | Select all |
 | ⌘C / ⌘V | Copy / paste trusses, decks, targets, scenery, towers, booms and stands; a truss brings its fixtures as new copies, and the paste asks: **Patch at next free addresses** (after the originals), **Leave unpatched** (**Patch Others Like This** addresses them later), **Truss only** or **Cancel**. The status line says what happened |
-| ⌘D (on the plot, something selected) | Duplicate the selection half a metre on (a target keeps its kind, size and heights, numbered on: "Soloist 2") |
+| ⌘D (on the plot, something selected) | Duplicate the selection 20 in (0.5 m) on (a target keeps its kind, size and heights, numbered on: "Soloist 2") |
 | ⌫ / Delete | Take the selection off the plot: fixtures back to the Inventory (still in the show), a structure or target asks first; one ⌘Z undoes it |
 | F2 | Rename the selected item (its row in Plot layers) |
 | ⌘F | To Plot layers' search |

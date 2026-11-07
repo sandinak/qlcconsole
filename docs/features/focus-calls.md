@@ -321,7 +321,7 @@ what was focused in the venue, light by light and call by call:
 - the call, the fixture, its type, whose it is (Tour, House or Rental)
   and where it hangs;
 - where it focuses to, with the target's place from the stage marks
-  ("SL 2.4 · US 3.1 m");
+  ("SR 7' 11" · US 10' 2"");
 - the correction from the show's own calibration ("+1.3° pan, −0.4°
   tilt"), and a lens set by hand;
 - who checked it and when (every save notes it), and the call's note;

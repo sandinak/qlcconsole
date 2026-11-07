@@ -19,11 +19,11 @@ look that aims at it re-solves automatically.
 | **None** (a plain mark) | A bare point | Amber crosshair |
 | **Person** | A standing subject of a given **Height** (5'9" unless set), drawn that tall and aimed at the chest — 80% of it | Crosshair over a lofted human silhouette |
 | **Drum Kit** | A low, wide subject | Crosshair over a footprint rectangle, aimed lower by default |
-| **Keyboard** | A keyboard on an X-stand, 1.4 × 0.5 m, aimed at 1.1 m (hands and face) | A keybed with key stripes over the stand's X; in the Rig View, a slab on an X-stand |
-| **Grand piano** | A grand, lid up, 1.5 × 1.8 m, aimed at 1.1 m | The curved case with the keybed on the house edge; in the Rig View, the case on legs with the lid propped |
-| **Upright piano** | An upright, 1.5 × 0.6 m, 1.3 m tall, aimed at 1.2 m | A box with the keyboard edge; in the Rig View, a box with the key ledge |
-| **Equipment rack** | An amp or equipment rack, 0.6 × 0.6 m, 1.2 m tall, aimed at 1.0 m | A box with rack-unit lines; in the Rig View, a box with units on its face |
-| **Speaker** | A powered speaker on casters: the box 0.55 × 0.5 m and 1.0 m tall, sitting 0.1 m up; aimed at 0.8 m | A box with the cone circle and a tick on the face it points from; in the Rig View, a cabinet on four little wheels |
+| **Keyboard** | A keyboard on an X-stand, 4 ft 7 in × 1 ft 8 in (1.4 × 0.5 m), aimed at 3 ft 7 in (1.1 m) (hands and face) | A keybed with key stripes over the stand's X; in the Rig View, a slab on an X-stand |
+| **Grand piano** | A grand, lid up, 4 ft 11 in × 5 ft 11 in (1.5 × 1.8 m), aimed at 3 ft 7 in (1.1 m) | The curved case with the keybed on the house edge; in the Rig View, the case on legs with the lid propped |
+| **Upright piano** | An upright, 4 ft 11 in × 2 ft (1.5 × 0.6 m), 4 ft 3 in (1.3 m) tall, aimed at 3 ft 11 in (1.2 m) | A box with the keyboard edge; in the Rig View, a box with the key ledge |
+| **Equipment rack** | An amp or equipment rack, 2 ft × 2 ft (0.6 × 0.6 m), 3 ft 11 in (1.2 m) tall, aimed at 3 ft 3 in (1.0 m) | A box with rack-unit lines; in the Rig View, a box with units on its face |
+| **Speaker** | A powered speaker on casters: the box 1 ft 10 in × 1 ft 8 in (0.55 × 0.5 m) and 3 ft 3 in (1.0 m) tall, sitting 4 in (0.1 m) up; aimed at 2 ft 7 in (0.8 m) | A box with the cone circle and a tick on the face it points from; in the Rig View, a cabinet on four little wheels |
 | **Area** | A region of deck, not a point: the lights aimed at it [cover it](#area-targets), each its own part | A dashed-outline footprint rectangle |
 | **Structure** | Bound to a truss/platform/steps/tower — its position *follows* whatever it's bound to | Crosshair, position always live |
 | **Line** | A curve in space — every light aimed at it gets its **own** point on it, evenly spaced | The curve, square handles at its ends, round ones at its mid points, and a crosshair at its centre |
@@ -70,7 +70,7 @@ their last position. The delete confirmation names every scene that would
 be affected before you commit.
 
 **Where a target is, in crew terms.** Beside each target the plot writes
-its place from the stage marks ("SL 2.4 · US 3.1 m": left or right of the
+its place from the stage marks ("SR 7' 11" · US 10' 2"", or `SL 2.4 · US 3.1 m` on a metric show: left or right of the
 centre line, up or downstage of the number line), live while you drag
 it. The Rig Overview writes it too, and focus calls say it ("SL 2, US
 1"). **Show ▸ Target Positions** hides it. See
@@ -111,7 +111,7 @@ at the area's own height, and the corners stayed dark.
   towers), the one that lights more of the area wins.
 - **How high.** Each light aims at its zone's centre, at subject height
   above whatever is under it there (the deck, a riser, a step's tread): a
-  person's chest, 1.4 m, or the area's aim height when you set one. Not the
+  person's chest, 4 ft 7 in (1.4 m), or the area's aim height when you set one. Not the
   area's own Z.
 - **How much it covers.** Under the layer's Position row in the Show Tree,
   the plan shows the area, each light's zone (dotted), each beam's
@@ -141,7 +141,7 @@ the last on the other and the rest evenly between — evenly *along the
 curve*, however it bends.
 
 **Making one:** right-click the floor → **Target Line Here** (or the
-Lighting Studio's **Add > Add Target Line**): a straight 4 m line across
+Lighting Studio's **Add > Add Target Line**): a straight 13 ft (4 m) line across
 the stage, centred where you clicked. An existing target becomes one by
 choosing **Line** as its Subject in the Edit Target dialog.
 
@@ -356,11 +356,11 @@ drawn on the target it is aimed at whatever the offsets are. See
 **Arms aim from where they are.** A fixture whose heads each have their
 own pan or tilt (a two-arm beam) is aimed an arm at a time, each from its
 own place on the body. Definitions say only how wide the body is and how
-many heads it has (Layout 2 × 1 on a 510 mm bar), so each arm sits in the
+many heads it has (Layout 2 × 1 on a 20 in (510 mm) bar), so each arm sits in the
 middle of its share of the width, along the body as it is turned on the
-plot — where the Lighting Studio draws it, 255 mm apart on that bar. At a
-point the arms converge, each at its own angle: a few degrees apart at a
-few metres. Heads that share one pan and tilt (a pixel bar on a yoke) are
+plot — where the Lighting Studio draws it, 10 in (255 mm) apart on that bar. At a
+point the arms converge, each at its own angle: a few degrees apart at
+10 ft (3 m). Heads that share one pan and tilt (a pixel bar on a yoke) are
 aimed as one fixture, as before.
 
 Reachability is a question of pan/tilt range against the fixture's own
@@ -404,7 +404,7 @@ head's beam to the point it's aimed at against the stage's solid features:
   opening is clear).
 - **Platforms, risers and steps** — their sides, and their deck unless it's
   clear or open.
-- **Towers**, and **trusses, pipes and stands** at least 20 cm thick (a beam
+- **Towers**, and **trusses, pipes and stands** at least 8 in (20 cm) thick (a beam
   lights round a thin pipe; a stand pole never counts at that size).
 
 On a **line target** each head is checked to its **own point on the
@@ -517,7 +517,7 @@ Workbench, or the cue's layer in the Show Tree):
 - **Top Speed** -- how fast the subject moves with the left stick pushed
   all the way: a brisk walk by default (6 ft/s, 1.83 m/s). Raise it for a
   dancer who runs, lower it for a lecture. It takes a speed typed in any
-  unit (6 ft/s, 1.8 m/s, 180 cm).
+  unit (6 ft/s, 1.8 m/s, 180 cm/s).
 - **Fine Stick** -- the right stick moves the subject too, at this share of
   Top Speed at full throw (20% by default): the left stick for getting
   there, the right for the last few inches. The two add.
@@ -563,7 +563,7 @@ Where you can see it:
 
 Person Height and Size On Subject show in the unit **Settings → Units**
 picks (5' 7" in feet), and take a length typed in any unit: 5' 6", 5.5 ft,
-66 in, 1.676 m. So do the target editor's heights.
+66 in, `1.676 m`. So do the target editor's heights.
 
 The follow spot's stick is also the stick [Quick focus](lighting-studio.md#quick-focus)
 uses: while Quick focus is on it nudges calibration offsets instead, with the

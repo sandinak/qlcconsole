@@ -427,8 +427,8 @@ worked around in the course and checked by the course test.
     panel no longer comes into it.
 
 Also: the classroom show was rebuilt from DanceHysteria-0.6 as it is now
-(the SR tower's shelves were changed after the last build: now 1.0 /
-1.524 / 2.438 m, with its spot and washes on different shelves). The bare AT-W-ALL still lights the front row
+(the SR tower's shelves were changed after the last build: now 3 ft 3 in /
+5 ft / 8 ft (1.0 / 1.524 / 2.438 m), with its spot and washes on different shelves). The bare AT-W-ALL still lights the front row
 (Lesson 1.3's first picture), and the aims still land.
 
 
