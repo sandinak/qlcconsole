@@ -28,12 +28,24 @@
 #include <QUdpSocket>
 #include <QHostAddress>
 #include <QDebug>
+#include <QElapsedTimer>
+#include <QTcpSocket>
+#include <QUrl>
 
 #include "wledplugin.h"
 #include "wledstate.h"
 
 WledPlugin::~WledPlugin()
 {
+    // The app quitting with outputs still open: the devices as their layout.
+    QVector<Device> devices;
+    {
+        QMutexLocker locker(&m_mutex);
+        for (const Target &t : std::as_const(m_targets))
+            devices << t.devices;
+        m_targets.clear();
+    }
+    restoreDirections(devices);
 }
 
 void WledPlugin::init()
@@ -124,10 +136,14 @@ void WledPlugin::closeOutput(quint32 output, quint32 universe)
     if (output != 0)
         return;
     removeFromMap(universe, output, Output);
+    QVector<Device> devices;
     {
         QMutexLocker locker(&m_mutex);
+        devices = m_targets.value(universe).devices;
         m_targets.remove(universe);
     }
+    // Unpatched (or the app quitting): nothing is turned round any more.
+    restoreDirections(devices);
     problemsMaybeChanged();
 }
 
@@ -350,36 +366,199 @@ void WledPlugin::writeUniverse(quint32 universe, quint32 output, const QByteArra
 
 void WledPlugin::tick()
 {
-    QList<QPair<quint32, int> > due;
+    QList<QPair<quint32, int> > due, ask;
     {
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
         QMutexLocker locker(&m_mutex);
         for (auto it = m_targets.begin(); it != m_targets.end(); ++it)
         {
-            const Target &t = it.value();
+            Target &t = it.value();
             for (int i = 0; i < t.devices.size(); i++)
             {
-                const Device &d = t.devices.at(i);
+                Device &d = t.devices[i];
                 // One request at a time per device (the latest wins); one
                 // that did not answer is tried again in a moment, not every
                 // tick. Neither holds up the other devices.
-                if (d.ip.isEmpty() || d.inFlight || now < d.retryAt || !d.gateOpen)
+                if (d.ip.isEmpty() || d.inFlight || d.infoInFlight || !d.gateOpen)
+                    continue;
+                /* Its segments first: nothing is sent before they are known,
+                   so the first look reaches every one of them -- and a
+                   device not known yet is asked again, not sent to. */
+                if (d.pollDue || (!d.layoutKnown && now >= d.retryAt))
+                {
+                    d.pollDue = false;
+                    d.infoInFlight = true;
+                    ask << qMakePair(it.key(), i);
+                    continue;
+                }
+                if (!d.layoutKnown || now < d.retryAt)
                     continue;
                 const QJsonObject state = WledState::decode(t.data, t.addressOf(d),
                                                             t.channelsOf(d), m_sendInterval);
-                if (state != d.sent)
+                if (state != d.sent || d.layoutGen != d.sentLayoutGen)
                     due << qMakePair(it.key(), i);
             }
         }
     }
+    for (const auto &u : ask)
+        poll(u.first, u.second);
     for (const auto &u : due)
         send(u.first, u.second);
+}
+
+QJsonObject WledPlugin::message(const QJsonObject &state, const Device &d,
+                                QVector<QPair<int, bool> > *revs)
+{
+    if (d.segments.isEmpty())
+        return state;
+    /* One element per segment, each with its id: an element without one is
+       the segment at its INDEX in the array (WLED's json.cpp), so a lone
+       element was segment 0's alone. */
+    const QJsonObject one = state.value(QStringLiteral("seg")).toArray().first().toObject();
+    const bool hasRev = one.contains(QStringLiteral("rev"));
+    const bool flip = one.value(QStringLiteral("rev")).toBool();
+    QJsonArray segs;
+    for (const Segment &s : d.segments)
+    {
+        QJsonObject o = one;
+        o[QStringLiteral("id")] = s.id;
+        if (hasRev)
+        {
+            // Reverse turns the segment round from ITS way, not to a way.
+            const bool rev = s.layoutRev != flip;
+            o[QStringLiteral("rev")] = rev;
+            if (revs != nullptr)
+                revs->append(qMakePair(s.id, rev));
+        }
+        segs.append(o);
+    }
+    QJsonObject out = state;
+    out[QStringLiteral("seg")] = segs;
+    return out;
+}
+
+QVector<WledLayoutStore::Segment> WledPlugin::segmentsOf(const QJsonArray &seg)
+{
+    QVector<WledLayoutStore::Segment> out;
+    for (int i = 0; i < seg.size(); i++)
+    {
+        const QJsonObject o = seg.at(i).toObject();
+        WledLayoutStore::Segment s;
+        s.id = o.value(QStringLiteral("id")).toInt(i);
+        s.start = o.value(QStringLiteral("start")).toInt();
+        s.stop = o.value(QStringLiteral("stop")).toInt();
+        s.rev = o.value(QStringLiteral("rev")).toBool();
+        if (s.stop > s.start)               // not deleted, in use
+            out << s;
+    }
+    return out;
+}
+
+bool WledPlugin::learnSegments(Device &d, const QJsonArray &seg,
+                               const QVector<WledLayoutStore::Segment> *kept)
+{
+    const QVector<WledLayoutStore::Segment> now = segmentsOf(seg);
+    bool same = d.layoutKnown && now.size() == d.segments.size();
+    for (int k = 0; same && k < now.size(); k++)
+        same = now.at(k).id == d.segments.at(k).id && now.at(k).start == d.segments.at(k).start
+               && now.at(k).stop == d.segments.at(k).stop;
+    d.layoutKnown = true;
+    if (!same)
+    {
+        /* A new layout (Write Segments, the device's own UI, or this app
+           starting): its own ways are the kept ones when this layout was
+           seen before -- what the device says may be a Reverse left on by
+           a run that quit or crashed mid-look -- else what it says. A new
+           segment has none of the look, so all of it goes again. */
+        const bool fromStore = kept != nullptr && kept->size() == now.size();
+        d.segments.clear();
+        for (int k = 0; k < now.size(); k++)
+        {
+            Segment s;
+            s.id = now.at(k).id;
+            s.start = now.at(k).start;
+            s.stop = now.at(k).stop;
+            s.layoutRev = fromStore ? kept->at(k).rev : now.at(k).rev;
+            /* Turned round from its kept way: a Reverse left on, taken as
+               ours (it is put right by the next state), not as someone
+               else's new way. */
+            if (fromStore && now.at(k).rev != s.layoutRev)
+                s.sentRev = now.at(k).rev ? 1 : 0;
+            d.segments << s;
+        }
+        d.sent = QJsonObject();
+        d.layoutGen++;
+        return !fromStore && !d.segments.isEmpty();
+    }
+    bool changed = false;
+    for (int k = 0; k < now.size(); k++)
+    {
+        Segment &s = d.segments[k];
+        const bool rev = now.at(k).rev;
+        /* Says back what it took from us: its layout is as we knew it.
+           Otherwise someone else set its direction: that is its layout. */
+        if (s.sentRev >= 0 ? rev == bool(s.sentRev) : rev == s.layoutRev)
+            continue;
+        s.layoutRev = rev;
+        s.sentRev = -1;
+        changed = true;
+    }
+    if (changed)
+    {
+        d.sent = QJsonObject();
+        d.layoutGen++;
+    }
+    return changed;
+}
+
+void WledPlugin::restoreDirections(const QVector<Device> &devices)
+{
+    QElapsedTimer budget;
+    budget.start();
+    for (const Device &d : devices)
+    {
+        if (d.ip.isEmpty() || !d.gateOpen || d.answered == 0)
+            continue;
+        QJsonArray segs;
+        // A state still on its way may have turned them round: put back too.
+        bool turned = d.inFlight;
+        for (const Segment &s : d.segments)
+        {
+            turned = turned || (s.sentRev >= 0 && bool(s.sentRev) != s.layoutRev);
+            segs.append(QJsonObject{ { QStringLiteral("id"), s.id },
+                                     { QStringLiteral("rev"), s.layoutRev } });
+        }
+        const int left = restoreBudgetMs - int(budget.elapsed());
+        if (!turned || left <= 50)
+            continue;
+        const QByteArray body = QJsonDocument(QJsonObject{ { QStringLiteral("seg"), segs } })
+                                    .toJson(QJsonDocument::Compact);
+        /* A plain socket waited on, not the network manager: this runs while
+           the output closes -- under InputOutputMap's lock, or as the app
+           quits -- where an event loop must not spin. */
+        const QUrl url(QStringLiteral("http://%1/").arg(d.ip));
+        QTcpSocket sock;
+        sock.connectToHost(url.host(), quint16(url.port(80)));
+        const int wait = qMax(50, left / 3);
+        if (!sock.waitForConnected(wait))
+            continue;
+        sock.write("POST /json/state HTTP/1.1\r\nHost: " + url.host().toUtf8()
+                   + "\r\nContent-Type: application/json\r\nContent-Length: "
+                   + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+        sock.waitForBytesWritten(wait);
+        sock.waitForReadyRead(wait);        // taken once it answers; sent either way
+        sock.disconnectFromHost();
+        if (sock.state() != QAbstractSocket::UnconnectedState)
+            sock.waitForDisconnected(50);
+    }
 }
 
 void WledPlugin::send(quint32 universe, int index)
 {
     QString ip;
-    QJsonObject state;
+    QJsonObject state, body;
+    QVector<QPair<int, bool> > revs;
+    quint32 gen = 0;
     {
         QMutexLocker locker(&m_mutex);
         auto it = m_targets.find(universe);
@@ -389,21 +568,20 @@ void WledPlugin::send(quint32 universe, int index)
         Device &d = t.devices[index];
         ip = d.ip;
         state = WledState::decode(t.data, t.addressOf(d), t.channelsOf(d), m_sendInterval);
+        body = message(state, d, &revs);
+        gen = d.layoutGen;
         // Out of Art-Net/E1.31 realtime mode, the first time: a WLED still
         // listening to DMX ignores the API until its realtime timeout.
-        QJsonObject body = state;
         if (!d.liveCleared)
             body[QStringLiteral("live")] = false;
         d.inFlight = true;
-        state = body;
     }
 
     QNetworkRequest req(QUrl(QStringLiteral("http://%1/json/state").arg(ip)));
     req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     req.setTransferTimeout(2000);
-    QNetworkReply *reply = m_nam->post(req, QJsonDocument(state).toJson(QJsonDocument::Compact));
-    state.remove(QStringLiteral("live"));
-    connect(reply, &QNetworkReply::finished, this, [this, reply, universe, index, state, ip]() {
+    QNetworkReply *reply = m_nam->post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, universe, index, state, ip, revs, gen]() {
         reply->deleteLater();
         const bool ok = reply->error() == QNetworkReply::NoError;
         {
@@ -418,7 +596,13 @@ void WledPlugin::send(quint32 universe, int index)
             if (ok)
             {
                 d.sent = state;
+                d.sentLayoutGen = gen;
                 d.liveCleared = true;
+                if (gen == d.layoutGen)
+                    for (const auto &r : revs)
+                        for (Segment &s : d.segments)
+                            if (s.id == r.first)
+                                s.sentRev = r.second ? 1 : 0;
             }
             else
                 d.retryAt = QDateTime::currentMSecsSinceEpoch() + retryMs;
@@ -479,55 +663,95 @@ void WledPlugin::refreshTransmitGate()
 
 void WledPlugin::pollInfo()
 {
-    struct Ask { quint32 universe; int index; QString ip; };
-    QList<Ask> ask;
+    // Asked on the next tick, in turn with what it is sent (see tick()).
+    QMutexLocker locker(&m_mutex);
+    for (Target &t : m_targets)
+        for (Device &d : t.devices)
+            if (!d.ip.isEmpty())
+                d.pollDue = true;
+}
+
+void WledPlugin::poll(quint32 universe, int index)
+{
+    QString ip;
+    bool si = true;
     {
         QMutexLocker locker(&m_mutex);
-        for (auto it = m_targets.begin(); it != m_targets.end(); ++it)
-            for (int i = 0; i < it.value().devices.size(); i++)
-            {
-                Device &d = it.value().devices[i];
-                if (!d.ip.isEmpty() && !d.infoInFlight && d.gateOpen)
-                {
-                    d.infoInFlight = true;
-                    ask << Ask{ it.key(), i, d.ip };
-                }
-            }
+        auto it = m_targets.find(universe);
+        if (it == m_targets.end() || index >= it.value().devices.size())
+            return;
+        ip = it.value().devices.at(index).ip;
+        si = !it.value().devices.at(index).noSi;
     }
-    for (const Ask &a : ask)
-    {
-        const quint32 universe = a.universe;
-        const int index = a.index;
-        const QString ip = a.ip;
-        QNetworkRequest req(QUrl(QStringLiteral("http://%1/json/info").arg(ip)));
-        req.setTransferTimeout(2000);
-        QNetworkReply *reply = m_nam->get(req);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, universe, index, ip]() {
-            reply->deleteLater();
-            const bool ok = reply->error() == QNetworkReply::NoError;
-            const QJsonObject info = ok ? QJsonDocument::fromJson(reply->readAll()).object() : QJsonObject();
+    /* /json/si: the state (its segments) and the info in one answer -- one
+       request every few seconds, as /json/info alone was. */
+    QNetworkRequest req(QUrl(QStringLiteral("http://%1/json/%2").arg(ip, si ? QStringLiteral("si")
+                                                                              : QStringLiteral("info"))));
+    req.setTransferTimeout(2000);
+    QNetworkReply *reply = m_nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, universe, index, ip, si]() {
+        reply->deleteLater();
+        const bool ok = reply->error() == QNetworkReply::NoError;
+        // It answered, but not this (an old WLED): asked /json/info from now on.
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool oldWled = !ok && si && status >= 400;
+        const QJsonObject root = ok ? QJsonDocument::fromJson(reply->readAll()).object() : QJsonObject();
+        const QJsonObject info = root.value(QStringLiteral("info")).isObject()
+                               ? root.value(QStringLiteral("info")).toObject() : root;
+        const QJsonArray seg = root.value(QStringLiteral("state")).toObject()
+                                   .value(QStringLiteral("seg")).toArray();
+        const QString mac = info.value(QStringLiteral("mac")).toString();
+        // The layout's own ways, if this layout was seen before (the
+        // settings, read before the lock: writeUniverse() waits on it).
+        QVector<WledLayoutStore::Segment> kept = segmentsOf(seg);
+        const bool haveKept = ok && WledLayoutStore::load(mac, ip, kept);
+        QVector<WledLayoutStore::Segment> keep;
+        {
+            QMutexLocker locker(&m_mutex);
+            auto it = m_targets.find(universe);
+            if (it == m_targets.end() || index >= it.value().devices.size()
+                || it.value().devices.at(index).ip != ip)
+                return;
+            Device &d = it.value().devices[index];
+            d.infoInFlight = false;
+            if (oldWled)
             {
-                QMutexLocker locker(&m_mutex);
-                auto it = m_targets.find(universe);
-                if (it == m_targets.end() || index >= it.value().devices.size()
-                    || it.value().devices.at(index).ip != ip)
-                    return;
-                Device &d = it.value().devices[index];
-                d.infoInFlight = false;
-                if (ok)
-                {
-                    d.deviceName = info.value(QStringLiteral("name")).toString();
-                    d.version = info.value(QStringLiteral("ver")).toString();
-                    d.rssi = info.value(QStringLiteral("wifi")).toObject()
-                                 .value(QStringLiteral("rssi")).toInt();
-                    d.ledCount = info.value(QStringLiteral("leds")).toObject()
-                                     .value(QStringLiteral("count")).toInt();
-                }
-                setAnswered(d, ok);
+                d.noSi = true;
+                setAnswered(d, true);
+                d.pollDue = true;
+                return;
             }
-            problemsMaybeChanged();
-        });
-    }
+            setAnswered(d, ok);
+            if (ok)
+            {
+                d.deviceName = info.value(QStringLiteral("name")).toString();
+                d.version = info.value(QStringLiteral("ver")).toString();
+                d.rssi = info.value(QStringLiteral("wifi")).toObject()
+                             .value(QStringLiteral("rssi")).toInt();
+                d.ledCount = info.value(QStringLiteral("leds")).toObject()
+                                 .value(QStringLiteral("count")).toInt();
+                d.mac = mac;
+                if (learnSegments(d, seg, haveKept ? &kept : nullptr))
+                    for (const Segment &s : std::as_const(d.segments))
+                    {
+                        WledLayoutStore::Segment k;
+                        k.id = s.id;
+                        k.start = s.start;
+                        k.stop = s.stop;
+                        k.rev = s.layoutRev;
+                        keep << k;
+                    }
+                d.pollDue = false;          // this was the answer
+            }
+            else
+                d.retryAt = QDateTime::currentMSecsSinceEpoch() + retryMs;
+        }
+        // Its layout's own ways, kept: a run that ends mid-Reverse (a crash)
+        // does not leave the next one taking the turned-round ways for them.
+        if (!keep.isEmpty())
+            WledLayoutStore::save(mac, ip, keep);
+        problemsMaybeChanged();
+    });
 }
 
 void WledPlugin::pollLive()
@@ -637,6 +861,7 @@ void WledPlugin::setAnswered(Device &d, bool answered)
         d.sent = QJsonObject();
         d.liveCleared = false;
         d.retryAt = 0;
+        d.pollDue = true;           // and its segments, which a reboot may have changed
     }
     d.answered = answered ? 1 : 0;
 }

@@ -22,6 +22,7 @@
 #include <QUrl>
 
 #include "wleddevicewrite.h"
+#include "../../plugins/wled/src/wledlayoutstore.h"
 #include "wledconfigcheck.h"
 #include "inputoutputmap.h"
 #include "pixelpath.h"
@@ -35,6 +36,14 @@ const int kTimeoutMs = 4000;
 QString hostOf(const QString &ip)
 {
     return QUrl(WledConfigCheck::baseUrl(ip)).host();
+}
+
+QJsonObject infoOf(const QByteArray &info)
+{
+    QJsonObject root = QJsonDocument::fromJson(info).object();
+    if (root.value(QStringLiteral("info")).isObject())       // /json carries it under "info"
+        root = root.value(QStringLiteral("info")).toObject();
+    return root;
 }
 
 QJsonObject leds(const QByteArray &info)
@@ -173,8 +182,9 @@ void WledDeviceWrite::writeSegments(const QString &ip, const QVector<SprinkleSpa
         const QJsonObject l = leds(info);
         const int maxSeg = l.value(QStringLiteral("maxseg")).toInt();
         const int count = l.value(QStringLiteral("count")).toInt();
+        const QString mac = infoOf(info).value(QStringLiteral("mac")).toString();
         get(QStringLiteral("/json/state"), kTimeoutMs,
-            [this, spans, confirm, maxSeg, count](bool ok, const QByteArray &state, const QString &why) {
+            [this, spans, confirm, maxSeg, count, mac](bool ok, const QByteArray &state, const QString &why) {
             if (!ok)
                 return finish(false, why);
             QJsonObject request;
@@ -195,25 +205,49 @@ void WledDeviceWrite::writeSegments(const QString &ip, const QVector<SprinkleSpa
                 return finish(false, tr("Nothing was written."));
             step(spans.size() == 1 ? tr("Writing 1 segment to %1").arg(deviceName(m_ip))
                                     : tr("Writing %1 segments to %2").arg(spans.size()).arg(deviceName(m_ip)));
-            post(QStringLiteral("/json/state"), request, [this, spans](bool ok, const QByteArray &, const QString &why) {
+            post(QStringLiteral("/json/state"), request, [this, spans, mac](bool ok, const QByteArray &, const QString &why) {
                 if (!ok)
                     return finish(false, why);
                 // Read back: what it says now is what counts.
                 step(tr("Checking %1").arg(deviceName(m_ip)));
-                get(QStringLiteral("/json/state"), kTimeoutMs, [this, spans](bool ok, const QByteArray &now, const QString &why) {
+                get(QStringLiteral("/json/state"), kTimeoutMs, [this, spans, mac](bool ok, const QByteArray &now, const QString &why) {
                     if (!ok)
                         return finish(false, tr("Written, but it could not be read back: %1").arg(why));
                     const QStringList differ = PixelPath::wledSegmentsDiffer(spans, now);
                     if (differ.isEmpty())
+                    {
+                        keepLayout(mac, now);
                         return finish(true, spans.size() == 1
                             ? tr("Wrote 1 segment to %1.").arg(deviceName(m_ip))
                             : tr("Wrote %1 segments to %2.").arg(spans.size()).arg(deviceName(m_ip)));
+                    }
                     finish(false, tr("Wrote to %1, but it reads back otherwise: %2")
                                       .arg(deviceName(m_ip), differ.join(QLatin1Char(' '))));
                 });
             });
         });
     });
+}
+
+void WledDeviceWrite::keepLayout(const QString &mac, const QByteArray &state)
+{
+    /* The ways just written are the spans' own: kept where the WLED output
+       looks for them (plugins/wled/src/wledlayoutstore.h), so a Reverse
+       playing when the app quits or crashes is never taken for them. */
+    QVector<WledLayoutStore::Segment> segs;
+    const QJsonArray seg = QJsonDocument::fromJson(state).object().value(QStringLiteral("seg")).toArray();
+    for (int i = 0; i < seg.size(); i++)
+    {
+        const QJsonObject o = seg.at(i).toObject();
+        WledLayoutStore::Segment s;
+        s.id = o.value(QStringLiteral("id")).toInt(i);
+        s.start = o.value(QStringLiteral("start")).toInt();
+        s.stop = o.value(QStringLiteral("stop")).toInt();
+        s.rev = o.value(QStringLiteral("rev")).toBool();
+        if (s.stop > s.start)
+            segs << s;
+    }
+    WledLayoutStore::save(mac, m_ip, segs);
 }
 
 /*********************************************************************

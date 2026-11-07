@@ -20,13 +20,19 @@
 #include <QHash>
 #include <QList>
 #include <QPair>
+#include <algorithm>
 #include <utility>
 
 /* A WLED on this computer for the tests (no network in the gate): it
-   answers /json/cfg, /json/info and /json/state with what it holds, and
-   takes a POST the way WLED does -- a partial config merged in (a new
-   hw.led rebuilds the outputs, the count taking at once or only after a
-   reboot), segments by id (stop 0 deletes one), "rb" a reboot. */
+   answers /json/cfg, /json/info, /json/state and /json/si (state and info
+   in one, what the WLED output asks) with what it holds, and takes a POST
+   the way WLED does -- a partial config merged in (a new hw.led rebuilds
+   the outputs, the count taking at once or only after a reboot), "rb" a
+   reboot, and segments as WLED's json.cpp reads "seg": an array element
+   applies to the segment its "id" names or, with no id, the one at its
+   INDEX in the array (`byte id = elem["id"] | it`); an id it does not have
+   makes a new segment only with a stop, and stop 0 deletes one; a "seg"
+   OBJECT without an id applies to every selected segment (all, here). */
 class FakeWled : public QTcpServer
 {
 public:
@@ -96,6 +102,26 @@ private:
                 into[it.key()] = it.value();
         }
     }
+    /** Merges @p o into the segment @p id; a new one only with a stop. */
+    static void takeSegment(QJsonArray &segs, int id, const QJsonObject &o)
+    {
+        for (int k = 0; k < segs.size(); ++k)
+        {
+            if (segs.at(k).toObject().value("id").toInt() != id)
+                continue;
+            QJsonObject s = segs.at(k).toObject();
+            merge(s, o);
+            s["id"] = id;
+            segs[k] = s;
+            return;
+        }
+        if (o.value("stop").toInt() <= 0)
+            return;                 // none such, nothing to make: ignored
+        QJsonObject s{ { "id", id }, { "start", 0 }, { "stop", 0 }, { "rev", false }, { "fx", 0 } };
+        merge(s, o);
+        s["id"] = id;
+        segs << s;
+    }
     void takeState(const QJsonObject &body)
     {
         if (body.value("rb").toBool())
@@ -103,32 +129,43 @@ private:
             ++reboots;
             setCount(ledTotal());
         }
-        if (!body.value("seg").isArray())
-            return;
+        for (auto it = body.begin(); it != body.end(); ++it)
+            if (it.key() == "on" || it.key() == "bri")
+                state[it.key()] = it.value();
         QJsonArray segs = segments();
-        const QJsonArray sent = body.value("seg").toArray();
-        for (const QJsonValue &v : sent)
+        const QJsonValue v = body.value("seg");
+        if (v.isObject())
         {
             const QJsonObject o = v.toObject();
-            int id = o.value("id").toInt();
-            if (id >= segs.size())
-            {
-                if (o.value("stop").toInt() <= 0)
-                    continue;
-                id = segs.size();
-                segs << QJsonObject{ { "id", id }, { "start", 0 }, { "stop", 0 }, { "rev", false } };
-            }
-            QJsonObject s = segs.at(id).toObject();
-            merge(s, o);
-            s["id"] = id;
-            segs[id] = s;
+            if (o.contains("id"))
+                takeSegment(segs, o.value("id").toInt(), o);
+            else
+                for (const QJsonValue &each : segments())
+                    takeSegment(segs, each.toObject().value("id").toInt(), o);
         }
+        else if (v.isArray())
+        {
+            const QJsonArray sent = v.toArray();
+            for (int i = 0; i < sent.size(); ++i)
+            {
+                const QJsonObject o = sent.at(i).toObject();
+                takeSegment(segs, o.value("id").toInt(i), o);
+            }
+        }
+        else
+            return;
         // Deleted ones are gone from what it says (WLED lists the active only).
-        QJsonArray active;
-        for (const QJsonValue &v : std::as_const(segs))
-            if (v.toObject().value("stop").toInt() > v.toObject().value("start").toInt())
-                active << v;
-        state["seg"] = active;
+        QList<QJsonObject> active;
+        for (const QJsonValue &each : std::as_const(segs))
+            if (each.toObject().value("stop").toInt() > each.toObject().value("start").toInt())
+                active << each.toObject();
+        std::sort(active.begin(), active.end(), [](const QJsonObject &a, const QJsonObject &b) {
+            return a.value("id").toInt() < b.value("id").toInt();
+        });
+        QJsonArray out;
+        for (const QJsonObject &each : std::as_const(active))
+            out << each;
+        state["seg"] = out;
     }
 
     void serve(QTcpSocket *s)
@@ -169,6 +206,8 @@ private:
             out = QJsonDocument(info).toJson(QJsonDocument::Compact);
         else if (path.endsWith("/json/state"))
             out = QJsonDocument(state).toJson(QJsonDocument::Compact);
+        else if (path.endsWith("/json/si"))
+            out = QJsonDocument(QJsonObject{ { "state", state }, { "info", info } }).toJson(QJsonDocument::Compact);
         else
             out = QJsonDocument(cfg).toJson(QJsonDocument::Compact);
         s->write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n"
