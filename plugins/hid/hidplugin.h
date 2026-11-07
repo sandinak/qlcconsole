@@ -24,8 +24,11 @@
 #include <QList>
 #include <QDir>
 #include <QSet>
+#include <QHash>
+#include <QElapsedTimer>
 
 #include "qlcioplugin.h"
+#include "stickfilter.h"
 
 class HIDPoller;
 class HIDDevice;
@@ -103,7 +106,8 @@ public:
     /** @reimp — returns sensitivity from the device's matched HID profile, or 1.0. */
     float inputProfileSensitivity(quint32 input) const override;
 
-    /** @reimp — returns deadzone from the device's matched HID profile, or 0.05. */
+    /** @reimp — the device's HID profile's deadzone; with none, 0.05 for a
+     *  game pad this plugin knows and 0.08 for any other joystick. */
     float inputProfileDeadzone(quint32 input) const override;
 
     /** @reimp */
@@ -116,6 +120,12 @@ public:
 
     /** @reimp — starts every joystick (patched or not) reporting raw input. */
     bool setInputDiagnostics(bool enable) override;
+
+    /** @reimp — each stick axis: its reading, rest, output and deadzone. */
+    QVariantList inputStickAxes(quint32 input) const override;
+
+    /** @reimp — Centre Sticks: learn the rests again once let go. */
+    bool centreInputSticks(quint32 input) override;
 
     /*********************************************************************
      * Outputs
@@ -211,6 +221,10 @@ public slots:
 
 private slots:
     void slotRawInput(quint32 line, const QString &element, int raw, int channel, int value);
+    /** Every reading of every device: its sticks' rest taken out
+     *  (StickFilter), then sent on if the device is patched. */
+    void slotDeviceValue(quint32 universe, quint32 line, quint32 channel, uchar value);
+    void slotStickTick();
 
 private:
     /** Rescan a moment from now, once however often it is asked. */
@@ -219,6 +233,28 @@ private:
     void setupDiagnostics(HIDDevice *dev);
     /** True if @p line is patched as an input. */
     bool isPatchedInput(quint32 line) const;
+
+    /*********************************************************************
+     * Stick rest (a worn stick that does not come back to the middle)
+     *********************************************************************/
+    /** Who @p dev is, across rescans and runs: vendor, product and name
+     *  (a Bluetooth pad's name carries its address). */
+    static QString stickKey(const HIDDevice *dev);
+    /** @p dev's StickFilter, made (its sticks, deadzone and remembered
+     *  rests) the first time; nullptr for a device with no sticks. */
+    StickFilter *stickFilter(const HIDDevice *dev);
+    /** The stick axes of @p dev: by its profile's roles, else the pad
+     *  layout's, else a joystick's first two axes (X and Y). */
+    QList<int> stickAxes(const HIDDevice *dev) const;
+    /** The deadzone the tools apply for @p dev: its profile's, else 0.05
+     *  for a known game pad and 0.08 for any other joystick. */
+    float deviceDeadzone(const HIDDevice *dev) const;
+    void rememberRests(const QString &key, const StickFilter &f) const;
+    void ensureStickTimer();
+
+    QHash<QString, StickFilter> m_sticks;
+    QTimer *m_stickTimer = nullptr;
+    QElapsedTimer m_stickClock;
 
     QTimer *m_rescanTimer = nullptr;
     /** Asks every few seconds whether a device has gone unannounced. */
