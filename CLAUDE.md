@@ -48,6 +48,19 @@ header, a plugin's test; everything if CMake files or the runner changed.
 It is not the gate — run the full one before pushing. One test dir by hand:
 `QLC_TEST_ONLY="ui/test/workbench" ./check-all.sh --quick`.
 
+**Gate cadence** (adopted 2026-11-07: velocity per change, diligence per
+release):
+
+| When | What |
+|---|---|
+| each change / branch | `make quick` only |
+| merging to main | branches go into a train; `make quick` on the merged train (catches merge-only breaks), then **one full gate** on the train's SHA (`gate=0` + `linux=0`), then push that SHA. A failure's test names the branch; if it doesn't, gate the suspects in parallel |
+| a lone hotfix | its own full gate |
+| every push to main | CI: macOS, Linux, coverage, Windows; a red Windows run blocks the next merge |
+| a release | the full matrix: Windows box, Pi, a spread of Qt versions, clean-machine DMG, `make perf` once, notarize (docs/dev/RELEASE.md) |
+
+Train at least daily, so quick-only branches don't sit unmerged.
+
 Tests never touch the real screen: every test.sh and every test program
 (`engine/test/common/testguard.cpp`, linked into each by the top-level
 CMakeLists) force `QT_QPA_PLATFORM=offscreen`, and on macOS a crashing test
