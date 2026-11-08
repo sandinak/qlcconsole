@@ -45,10 +45,10 @@ that have one. Change both files together.
 | Consistency across views | UX-41, UX-42, UX-43, UX-44, UX-45, UX-46, UX-47, UX-48 | 8 | 6 |
 | Safety in Operate | UX-49, UX-50, UX-51, UX-52, UX-53, UX-54, UX-55, UX-56 | 8 | 6 |
 | Teaching & course voice | UX-57, UX-58, UX-59, UX-60 | 4 | 1 |
-| Ease of use | UX-61, UX-62, UX-64, UX-65, UX-66 | 5 | 0 |
+| Ease of use | UX-61, UX-62, UX-64, UX-65, UX-66, UX-76 | 6 | 0 |
 | Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 0 |
 
-Main check: 41 tests, 25 review, 6 walker, 3 manual. 41 of 75 enforced.
+Main check: 41 tests, 26 review, 6 walker, 3 manual. 41 of 76 enforced.
 
 ## Units & numbers
 
@@ -745,6 +745,15 @@ An end-to-end test drives the same dialogs and menus the person uses, not the en
 - **Check:** `review` (not yet enforced)
 - **Right:** `A test that opens Add Fixture, picks the WLED and the connection, and clicks OK`
 - **Wrong:** `A test that calls the patch planner and checks its result`
+
+### UX-76 Keep it simple for the operator (KISS)
+
+Where a change can make the operator's job simpler, that counts for it: it raises the change, and a feature is weighed by how much it saves the person running the desk.
+
+- **Why:** 2026-11-07, on WLEDs found on the network and patched with one right-click instead of typing an IP and counting channels: "lets add that to our rules .. KISS ... Keep It Simple Stupid .. where we can make it easier for the operator that should raise the consideration of the change or feature."
+- **Check:** `review` (not yet enforced)
+- **Right:** `A WLED on the network shows in the Inventory: right-click ▸ Patch, done`
+- **Wrong:** `Add Fixture, pick the model, type the IP, count the LEDs, then patch a universe to it`
 
 ## Complexity and ease of use
 
