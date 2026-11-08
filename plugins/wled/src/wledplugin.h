@@ -19,6 +19,7 @@
 #define WLEDPLUGIN_H
 
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QMutex>
 #include <QAtomicInt>
 #include <QHash>
@@ -197,6 +198,7 @@ private:
         QString deviceName;
         QString version;
         QString mac;                ///< from its info: what its kept layout is filed by
+        bool palettesAsked = false; ///< its colour palettes fetched (or kept) once this run
         int ledCount = 0;           ///< from /json/info, 0 = not known
         qint64 retryAt = 0;         ///< no answer: not sent again before (ms)
         qint64 postedAt = 0;        ///< when the last state went (ms)
@@ -249,6 +251,10 @@ private:
     static bool windowChanged(const QByteArray &old, const QByteArray &data, int offset, int count);
     void pollInfo();
     void poll(quint32 universe, int slot);
+    /** Its palette names and colour stops (/json/pal, /json/palx), kept per
+     *  device for the UI's palette strips; once, when none are kept yet. */
+    void fetchPalettes(const QString &ip, const QString &mac, const QJsonArray &names = QJsonArray(),
+                       const QJsonObject &palx = QJsonObject(), int page = -1);
     void pollLive();
     void send(quint32 universe, int slot);
     /** The body for @a d: @a state's one segment sent to each of its

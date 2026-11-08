@@ -43,6 +43,10 @@ public:
     QJsonObject state{ { "on", true },
                        { "seg", QJsonArray{ QJsonObject{ { "id", 0 }, { "start", 0 }, { "stop", 30 },
                                                          { "rev", false } } } } };
+    /** Its colour palettes: /json/pal (names) and /json/palx?page=N (the
+     *  stops, 8 a page, "m" the last page) when seeded; else 404-ish empty. */
+    QJsonArray pal;
+    QJsonObject palx;
     /** Every POST: its path and body. */
     QList<QPair<QByteArray, QJsonObject> > posted;
     /** When each of them came (ms since the epoch), for a check of what
@@ -219,6 +223,19 @@ private:
                 takeState(body);
             out = "{\"success\":true}";
         }
+        else if (path.contains("/json/palx") && !palx.isEmpty())
+        {
+            const int page = path.contains("page=") ? path.mid(path.indexOf("page=") + 5).toInt() : 0;
+            QJsonObject p;
+            const QJsonObject all = palx.value("p").toObject();
+            for (int id = page * 8; id < page * 8 + 8; ++id)
+                if (all.contains(QString::number(id)))
+                    p.insert(QString::number(id), all.value(QString::number(id)));
+            out = QJsonDocument(QJsonObject{ { "m", (all.size() - 1) / 8 }, { "p", p } })
+                      .toJson(QJsonDocument::Compact);
+        }
+        else if (path.endsWith("/json/pal") && !pal.isEmpty())
+            out = QJsonDocument(pal).toJson(QJsonDocument::Compact);
         else if (path.endsWith("/json/info"))
             out = QJsonDocument(info).toJson(QJsonDocument::Compact);
         else if (path.endsWith("/json/state"))

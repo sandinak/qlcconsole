@@ -33,6 +33,7 @@
 #include <QUrl>
 
 #include "wledplugin.h"
+#include "../../../engine/src/wledpalettes.h"
 #include "wledstate.h"
 
 WledPlugin::~WledPlugin()
@@ -850,6 +851,7 @@ void WledPlugin::poll(quint32 universe, int index)
         QVector<WledLayoutStore::Segment> kept = segmentsOf(seg);
         const bool haveKept = ok && WledLayoutStore::load(mac, ip, kept);
         QVector<WledLayoutStore::Segment> keep;
+        bool askPalettes = false;
         {
             QMutexLocker locker(&m_mutex);
             auto it = m_targets.find(universe);
@@ -886,6 +888,11 @@ void WledPlugin::poll(quint32 universe, int index)
                         keep << k;
                     }
                 d.pollDue = false;          // this was the answer
+                if (!d.palettesAsked)
+                {
+                    d.palettesAsked = true;
+                    askPalettes = !WledPalettes::has(mac, ip);
+                }
             }
             else
                 d.retryAt = QDateTime::currentMSecsSinceEpoch() + retryMs;
@@ -894,10 +901,45 @@ void WledPlugin::poll(quint32 universe, int index)
         // does not leave the next one taking the turned-round ways for them.
         if (!keep.isEmpty())
             WledLayoutStore::save(mac, ip, keep);
+        if (askPalettes)
+            fetchPalettes(ip, mac);
         // A state that waited on the answer goes now.
         if (ok)
             kick();
         problemsMaybeChanged();
+    });
+}
+
+void WledPlugin::fetchPalettes(const QString &ip, const QString &mac, const QJsonArray &names,
+                               const QJsonObject &palx, int page)
+{
+    /* The names (page -1), then the stops a page at a time (WLED answers 8 a
+       page and says in "m" how many pages there are). Any failure: nothing is
+       kept and the UI draws its bundled copy of WLED's built-in palettes. */
+    const QString path = page < 0 ? QStringLiteral("http://%1/json/pal").arg(ip)
+                                  : QStringLiteral("http://%1/json/palx?page=%2").arg(ip).arg(page);
+    QNetworkRequest req{ QUrl(path) };
+    req.setTransferTimeout(4000);
+    QNetworkReply *reply = m_nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, ip, mac, names, palx, page]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError)
+            return;
+        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        if (page < 0)
+        {
+            fetchPalettes(ip, mac, doc.array(), QJsonObject(), 0);
+            return;
+        }
+        const QJsonObject got = doc.object();
+        if (!got.contains(QStringLiteral("p")))
+            return;
+        QJsonObject all = palx;
+        WledPalettes::mergePage(all, got);
+        if (page < qMin(got.value(QStringLiteral("m")).toInt(), 40))
+            fetchPalettes(ip, mac, names, all, page + 1);
+        else
+            WledPalettes::save(mac, ip, all, names);
     });
 }
 

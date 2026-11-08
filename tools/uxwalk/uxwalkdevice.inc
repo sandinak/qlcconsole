@@ -46,6 +46,8 @@ public:
         }
         const QString dir = QString(QLC_TEST_RESOURCE_ROOT) + "../tools/uxwalk/data/wled-office/";
         m_fake.seed(readJson(dir + "info.json"), readJson(dir + "state.json"), readJson(dir + "cfg.json"));
+        m_fake.pal = readArray(dir + "pal.json");
+        m_fake.palx = readJson(dir + "palx.json");
         m_fake.listen(QHostAddress::LocalHost);
     }
 
@@ -102,6 +104,14 @@ public:
             post(QStringLiteral("/json/state"), st);
         }
         qInfo().noquote() << "uxwalk: the WLED at" << m_real << "put back as it was found";
+    }
+
+    static QJsonArray readArray(const QString &path)
+    {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly))
+            return QJsonArray();
+        return QJsonDocument::fromJson(f.readAll()).array();
     }
 
     static QJsonObject readJson(const QString &path)

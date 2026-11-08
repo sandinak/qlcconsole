@@ -31,6 +31,7 @@
 #include <QCollator>
 #include <QSlider>
 #include <QLabel>
+#include <QAbstractItemView>
 #include <QComboBox>
 #include <QSpinBox>
 #include <QDoubleSpinBox>
@@ -644,6 +645,63 @@ void LookEditor_Test::aSwappedSlotShowsItsOwnGlass()
     }
     delete spot;
     GoboLibrary::setUserDirectoryOverride(QString());
+}
+
+void LookEditor_Test::aWledPaletteIsPickedByNameWithItsStrip()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Lantern.qxf"),
+             QFile::NoError);
+    Fixture *lantern = new Fixture(&doc);
+    lantern->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+    QVERIFY(doc.addFixture(lantern));
+
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("New Effect");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    browser->search()->setText("chase");
+    QListWidgetItem *chase = nullptr;
+    for (int i = 0; i < browser->list()->count(); ++i)
+    {
+        QListWidgetItem *it = browser->list()->item(i);
+        if (it->text() == "Chase"
+            && browser->m_entries.at(it->data(Qt::UserRole + 10).toInt()).category == "WLED")
+            chase = it;
+    }
+    QVERIFY(chase != nullptr);
+    emit browser->list()->itemClicked(chase);
+
+    QComboBox *pal = ed.m_effectDynWidget->findChild<QComboBox *>("effectParam_palette");
+    QVERIFY2(pal != nullptr, "the palette is a dropdown, not a number");
+    QCOMPARE(pal->count(), 72);                         // WLED's built-ins, offline
+    QCOMPARE(pal->itemText(6), QString("Party"));
+    QVERIFY(!pal->itemIcon(6).isNull());
+    pal->setCurrentIndex(6);
+    QCOMPARE(look->effectParamValues().value("palette"), 6.0);
+
+    if (!qEnvironmentVariableIsEmpty("QLC_SHOTS_DIR"))
+    {
+        const QString dir = qEnvironmentVariable("QLC_SHOTS_DIR");
+        QDir().mkpath(dir);
+        const QString tag = qEnvironmentVariable("QLC_SHOTS_TAG", "after");
+        const QSize sizes[] = { QSize(900, 700), QSize(1280, 900), QSize(1680, 1050) };
+        for (const QSize &sz : sizes)
+        {
+            ed.resize(sz);
+            ed.show();
+            QTest::qWait(150);
+            QVERIFY(ed.grab().save(QString("%1/lookeditor-%2-%3x%4.png").arg(dir, tag).arg(sz.width()).arg(sz.height())));
+        }
+        pal->showPopup();
+        QTest::qWait(150);
+        QVERIFY(pal->view()->window()->grab().save(QString("%1/palette-list-%2.png").arg(dir, tag)));
+        pal->hidePopup();
+    }
 }
 
 void LookEditor_Test::effectsArePickedFromABrowserWithWledsOwn()

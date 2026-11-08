@@ -14,6 +14,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Each WLED palette shows its colours.** An effect's palette is still picked by name, but every name now has a strip
+  of the colours it would use, in the list and on the closed box. The strips are the device's own (read once when it first
+  answers, kept by its hardware address, so they work with it off), else WLED's built-in palettes; Color 1, Colors 1&2 and
+  the like follow the look's colours 1-3. See [WLED effects](docs/features/build.md#wled-effects).
 - **A fixture in no group is in the Show Tree's Library.** Under All, **Loose fixtures** lists them (a WLED just added, a spare), found by
   name or model in the filter; drag one onto a cue for a layer on just that fixture.
   It leaves the list once it joins a group.

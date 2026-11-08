@@ -62,6 +62,9 @@ private slots:
     /** "when selecting an effect we need a better way than a drop down ...
      *  AND for WLED based fixtures we should be selecting WLED effects". */
     void effectsArePickedFromABrowserWithWledsOwn();
+    /** A WLED effect's palette is a dropdown of names, each with its strip;
+     *  colour-slot palettes take the look's colours; picking sets the number. */
+    void aWledPaletteIsPickedByNameWithItsStrip();
     /** "can we put the sets in alpha order?" */
     void anEffectsTextIsTypedIn();
     /** Q95: New script… / Edit script… under one Script ▾. */
