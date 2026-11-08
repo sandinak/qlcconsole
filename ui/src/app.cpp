@@ -2119,10 +2119,12 @@ void App::slotUniverseWritten(quint32 idx, const QByteArray &ua)
         return;
     foreach (Fixture *fixture, m_doc->fixtures())
     {
-        if (!fixture->isPatched() || fixture->universe() != idx)
+        if (!fixture->isPatched())
             continue;
-
-        fixture->setChannelValues(ua);
+        if (fixture->universe() == idx)
+            fixture->setChannelValues(ua);
+        else if (fixture->crossUniverse() && fixture->universe() < idx)
+            fixture->setUniverseChannelValues(idx, ua);   // its later universes
     }
 }
 

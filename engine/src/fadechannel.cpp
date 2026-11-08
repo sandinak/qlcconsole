@@ -216,6 +216,16 @@ quint32 FadeChannel::universe() const
         return Universe::invalid();
     if (m_universe == Universe::invalid())
         return address() / UNIVERSE_SIZE;
+    /* A fixture that runs on over universes (cross-universe: a WLED patched
+       as its LEDs): a channel past its first universe's end is in the next
+       one, at addressInUniverse(). Any other fixture's channels are all in
+       its own (address() < 512). */
+    if (m_address != QLCChannel::invalid())
+    {
+        const quint32 addr = address();
+        if (addr != QLCChannel::invalid() && addr >= UNIVERSE_SIZE)
+            return m_universe + addr / UNIVERSE_SIZE;
+    }
     return m_universe;
 }
 

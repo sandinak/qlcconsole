@@ -120,6 +120,15 @@ public:
     static int connectionKey(Fixture::Connection c, Fixture::Transport t);
     QString ipAddress() const;
 
+    /** A WLED patched as its LEDs (the "Pixels (Multi RGB)" mode offered for
+     *  a WLED definition on Network (ArtNet/sACN)): how many LEDs, each a
+     *  head of its own; 0 for any other mode. mode() is then a preview of
+     *  that many -- FixtureCreator makes each fixture its own
+     *  (WledFixture::applyPixels()). */
+    int pixelLeds() const;
+    /** Whether that pixel mode has a white channel per LED (Multi RGBW). */
+    bool pixelRgbw() const;
+
 protected:
     const Doc* m_doc;
     QLCFixtureDef* m_fixtureDef;
@@ -146,6 +155,29 @@ protected:
     bool ownUniverse() const;
     /** Universe, address and gap on or off for what is picked. */
     void updateAddressFields();
+
+    /** The pixel mode: its LED count (read from the device, or typed), the
+     *  definition it previews (this dialog's), and what the device said. */
+    class QLabel *m_ledsLabel = nullptr;
+    class QSpinBox *m_ledsSpin = nullptr;
+    class QPushButton *m_ledsReadButton = nullptr;
+    class QLabel *m_ledsInfoLabel = nullptr;
+    /** The same device already in the show the other way (its API vs
+     *  Art-Net/sACN): both can't drive it at once. */
+    class QLabel *m_ipConflictLabel = nullptr;
+    QLCFixtureDef *m_pixelDef = nullptr;
+    class QNetworkAccessManager *m_nam = nullptr;
+    QString m_ledsAskedIp;          ///< the IP last asked for its LED count
+    class QTimer *m_ledsReadTimer = nullptr;    ///< asks once the IP stops changing
+    /** Whether the mode combo's current entry is a pixel mode (and which). */
+    bool pixelModePicked(bool *rgbw = nullptr) const;
+    /** Make the preview of the pixel mode for the count now in the spin. */
+    void buildPixelPreview();
+    /** Ask the WLED at the IP how many LEDs it drives (/json/info). */
+    void readLedsFromDevice();
+    /** The pixel rows shown for a pixel mode only. */
+    void updatePixelRows();
+    void updateIpConflict();
 
     /*********************************************************************
      * Fillers

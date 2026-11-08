@@ -67,6 +67,7 @@
 #include "showtreecontroller.h"
 #include "paletteops.h"
 #include "changejournal.h"
+#include "wledfixture.h"
 #include "doc.h"
 #include "powerlimiter.h"
 #include "groupmasters.h"
@@ -1471,10 +1472,13 @@ bool Doc::canPatchFixtures(const QList<FixturePatch> &patches, QString *why,
     {
         Fixture *fxi = fixture(p.fixtureId);
         const quint32 n = channels.value(p.fixtureId, fxi->channels());
-        if (n == 0 || p.address + n > 512)
+        /* One that runs on over universes (a WLED patched as its LEDs) fits
+           from any address; the universes it reaches are checked below. */
+        if (n == 0 || (!fxi->crossUniverse() && p.address + n > 512))
             return refuse(QStringLiteral("%1 (%2 ch) does not fit at universe %3, address %4")
                               .arg(fxi->name()).arg(n).arg(p.universe + 1).arg(p.address + 1));
-        if (p.universe >= InputOutputMap::maxUniverses())
+        if (p.universe >= InputOutputMap::maxUniverses()
+            || ((quint64(p.universe) << 9) + p.address + n - 1) >> 9 >= InputOutputMap::maxUniverses())
             return refuse(QStringLiteral("%1: universe %2 is past the limit of %3 universes")
                               .arg(fxi->name()).arg(p.universe + 1).arg(InputOutputMap::maxUniverses()));
         const quint32 base = (p.universe << 9) | p.address;
@@ -1530,7 +1534,7 @@ bool Doc::patchFixtures(const QList<FixturePatch> &patches, QString *why)
         const quint32 base = (p.universe << 9) | p.address;
         for (quint32 i = base; i < base + fxi->channels(); i++)
             m_addresses[i] = p.fixtureId;
-        applyFixtureToUniverses(fxi, false);
+        applyFixtureToUniverses(fxi, fxi->crossUniverse());
     }
 
     m_changeJournal->noteArea(ChangeJournal::Fixture, tr("Patched fixtures (%1)").arg(patches.count()));
@@ -1732,6 +1736,12 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
         {
             // Generic dimmers just need to know the number of channels
             newFixture->setChannels(fixture->channels());
+        }
+        else if (WledFixture::isPixelDefinition(fixture->fixtureDef()))
+        {
+            // A WLED pixel definition is its fixture's own: the copy gets one.
+            newFixture->setFixtureDefinition(fixture->fixtureDef(), fixture->fixtureMode());
+            newFixture->setCrossUniverse(fixture->crossUniverse());
         }
         else if (fixture->fixtureDef() == NULL ||
             (fixture->fixtureDef()->manufacturer() == KXMLFixtureGeneric &&

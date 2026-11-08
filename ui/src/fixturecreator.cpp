@@ -14,6 +14,7 @@
 #include <QSet>
 
 #include "fixturecreator.h"
+#include "wledfixture.h"
 #include "inputoutputmap.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
@@ -94,8 +95,9 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
        aimed at its IP: each gets a universe of its own (the dialog says so
        and leaves the universe and address alone), so it is added unpatched
        and patched there below. */
+    const int pixelLeds = af.pixelLeds();
     const bool ownUniverse = !inventory && af.connection() == Fixture::Network
-                             && af.transport() == Fixture::WledTransport;
+                             && (af.transport() == Fixture::WledTransport || pixelLeds > 0);
 
     /* Add the rest (if any) WITH address gap */
     for (int i = 0; i < af.amount(); i++)
@@ -148,7 +150,12 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
         /* Set a fixture definition & mode if they were
            selected. Otherwise create a fixture definition
            and mode for a generic dimmer. */
-        if (fixtureDef != NULL && mode != NULL)
+        if (fixtureDef != NULL && pixelLeds > 0)
+        {
+            // A WLED as its LEDs: a definition of its own, that many heads.
+            WledFixture::applyPixels(fxi, fixtureDef, pixelLeds, af.pixelRgbw());
+        }
+        else if (fixtureDef != NULL && mode != NULL)
         {
             fxi->setFixtureDefinition(fixtureDef, mode);
         }

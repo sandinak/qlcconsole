@@ -414,7 +414,8 @@ void FixtureRemap::slotAddTargetFixture()
         /* Set a fixture definition & mode if they were selected.
            Otherwise assign channels to a generic dimmer. */
         if (fixtureDef != NULL && mode != NULL)
-            fxi->setFixtureDefinition(fixtureDef, mode);
+            // A WLED as its LEDs: the dialog's preview is copied for each.
+            fxi->setFixtureDefinition(af.pixelLeds() > 0 ? mode->fixtureDef() : fixtureDef, mode);
         else
         {
             /* Each its own: a generic dimmer's definition belongs to its

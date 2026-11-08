@@ -70,6 +70,7 @@
 #include "inputoutputmap.h"
 #include "outputpatch.h"
 #include "patchplanner.h"
+#include "wledfixture.h"
 #include "universe.h"
 #include "qlcfixturedefcache.h"
 
@@ -947,12 +948,24 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
                                                   "to its IP %4")
                           .arg(fx->name(), uni, detail, fx->ipAddress());
                 break;
+            case PatchPlanner::WledOutOfOrder:
+                line = QCoreApplication::translate("AppUtil", "%1 spans %2 universes, which go out as "
+                                                   "universes %3: the WLED takes them one after another")
+                           .arg(fx->name()).arg(WledFixture::universeCount(fx)).arg(detail);
+                break;
             default:
                 line = QCoreApplication::translate("AppUtil", "%1: its universe sends other channels "
                                                    "than its own (its mode or address changed)")
                            .arg(fx->name());
                 break;
             }
+            /* Patched as its LEDs, it is the other way round: it hears
+               Art-Net or sACN, never the WLED output. */
+            if (WledFixture::isPixelMode(fx) && r == PatchPlanner::WledOtherOutput
+                && detail == QLatin1String("WLED"))
+                line = QCoreApplication::translate("AppUtil", "%1 is patched as its LEDs, but %2 goes out "
+                                                   "through WLED's API: it needs Art-Net or sACN")
+                           .arg(fx->name(), uni);
             items << line;
             ids << fx->id();
         }
@@ -963,8 +976,10 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
                 QCoreApplication::translate("AppUtil", "%n WLED(s) on a universe that doesn't reach them",
                                             "", items.count()),
                 QCoreApplication::translate("AppUtil", "A WLED driven by its own API hears only a "
-                                            "universe sent to its IP through the WLED output. Give "
-                                            "It Its Own Universe moves each to one (one undo)."),
+                                            "universe sent to its IP through the WLED output; one "
+                                            "patched as its LEDs, only Art-Net or sACN universes sent "
+                                            "to it, one after another. Give It Its Own Universe moves "
+                                            "each to its own (one undo)."),
                 items, ids);
     }
 

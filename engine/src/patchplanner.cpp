@@ -39,6 +39,7 @@
 #include "patchundo.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
+#include "wledfixture.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -988,6 +989,39 @@ bool isWledByApi(const Fixture *fx)
            && fx->transport() == Fixture::WledTransport && !fx->ipAddress().isEmpty();
 }
 
+/* A WLED patched as its LEDs, sent to as Art-Net or sACN at its IP. */
+bool isWledPixels(const Fixture *fx)
+{
+    return fx != NULL && fx->connection() == Fixture::Network
+           && fx->transport() != Fixture::WledTransport && !fx->ipAddress().isEmpty()
+           && WledFixture::isPixelMode(fx);
+}
+
+/* The unicast IP a network output patch sends to, empty when it broadcasts
+   (Art-Net's default) or multicasts (sACN's). */
+QString patchTarget(OutputPatch *op)
+{
+    const QMap<QString, QVariant> pp = op->getPluginParameters();
+    if (op->pluginName() == QLatin1String("E1.31"))
+        return pp.value(QStringLiteral("multicast"), 1).toInt() == 0
+               ? pp.value(QStringLiteral("ucastIP")).toString() : QString();
+    return pp.value(QStringLiteral("outputIP")).toString();
+}
+
+bool isBroadcast(const QString &ip)
+{
+    return ip.isEmpty() || ip.endsWith(QLatin1String(".255"));
+}
+
+/* How many universes a pixel WLED needs, patched or not: as it would lie
+   from address 1 when it is not patched yet. */
+int pixelUniverses(const Fixture *fx)
+{
+    if (fx->isPatched())
+        return WledFixture::universeCount(fx);
+    return WledFixture::universeSpan(fx->heads(), WledFixture::isRgbw(fx), 0).leds.size();
+}
+
 /* Everything patched on @p fx's universe is a WLED by its API at its IP:
    the universe is that WLED's own. */
 bool ownsUniverse(Doc *doc, const Fixture *fx)
@@ -1003,8 +1037,87 @@ bool ownsUniverse(Doc *doc, const Fixture *fx)
 }
 }
 
+int PatchPlanner::networkUniverseNumber(Doc *doc, quint32 universe, QString *plugin)
+{
+    if (doc == NULL)
+        return -1;
+    InputOutputMap *io = doc->inputOutputMap();
+    for (int i = 0; i < io->outputPatchesCount(universe); i++)
+    {
+        OutputPatch *op = io->outputPatch(universe, i);
+        if (op == NULL || !isNetworkPlugin(op->pluginName()))
+            continue;
+        if (plugin != NULL)
+            *plugin = op->pluginName();
+        const QMap<QString, QVariant> pp = op->getPluginParameters();
+        if (op->pluginName() == QLatin1String("E1.31"))
+            return pp.value(QStringLiteral("universe"), int(universe) + 1).toInt();
+        return pp.value(QStringLiteral("outputUni"), int(universe)).toInt();
+    }
+    return -1;
+}
+
 PatchPlanner::WledRoute PatchPlanner::wledRoute(Doc *doc, const Fixture *fx, QString *detail)
 {
+    if (doc != NULL && isWledPixels(fx))
+    {
+        /* As its LEDs: every universe it reaches out as Art-Net or sACN, to
+           it (or to everyone), one run of universe numbers. */
+        if (!fx->isPatched())
+            return WledNotPatched;
+        InputOutputMap *io = doc->inputOutputMap();
+        const int n = WledFixture::universeCount(fx);
+        QStringList numbers;
+        QString firstPlugin;
+        int firstNumber = -1;
+        bool inOrder = true;
+        for (int k = 0; k < n; ++k)
+        {
+            const quint32 u = fx->universe() + quint32(k);
+            if (u >= io->universesCount() || io->outputPatchesCount(u) == 0 || io->outputPatch(u) == NULL)
+                return WledNoOutput;
+            OutputPatch *net = NULL;
+            QString other;
+            for (int i = 0; i < io->outputPatchesCount(u) && net == NULL; i++)
+            {
+                OutputPatch *op = io->outputPatch(u, i);
+                if (op != NULL && isNetworkPlugin(op->pluginName()))
+                    net = op;
+                else if (op != NULL && other.isEmpty())
+                    other = op->pluginName();
+            }
+            if (net == NULL)
+            {
+                if (detail != NULL)
+                    *detail = other;
+                return WledOtherOutput;
+            }
+            const QString target = patchTarget(net);
+            if (!isBroadcast(target) && target != fx->ipAddress())
+            {
+                if (detail != NULL)
+                    *detail = target;
+                return WledOtherIp;
+            }
+            QString plugin;
+            const int number = networkUniverseNumber(doc, u, &plugin);
+            numbers << QString::number(number);
+            if (k == 0)
+            {
+                firstPlugin = plugin;
+                firstNumber = number;
+            }
+            else if (plugin != firstPlugin || number != firstNumber + k)
+                inOrder = false;
+        }
+        if (!inOrder)
+        {
+            if (detail != NULL)
+                *detail = numbers.join(QStringLiteral(", "));
+            return WledOutOfOrder;
+        }
+        return WledRouted;
+    }
     if (doc == NULL || !isWledByApi(fx))
         return WledRouted;
     if (!fx->isPatched())
@@ -1073,6 +1186,22 @@ int PatchPlanner::routeWled(const QList<quint32> &fixtureIds, QStringList *probl
 {
     InputOutputMap *io = m_doc->inputOutputMap();
 
+    /* WLEDs patched as their LEDs first: their own run of universes, out as
+       Art-Net or sACN to them. */
+    int pixelsDone = 0;
+    std::function<void()> pixelsUndo;
+    {
+        QList<quint32> pixels;
+        foreach (quint32 fid, fixtureIds)
+        {
+            Fixture *fx = m_doc->fixture(fid);
+            if (isWledPixels(fx) && !pixels.contains(fid) && wledRoute(m_doc, fx) != WledRouted)
+                pixels << fid;
+        }
+        if (!pixels.isEmpty())
+            pixelsDone = routeWledPixels(pixels, problems, undo != NULL ? &pixelsUndo : NULL);
+    }
+
     QList<Fixture *> todo;
     foreach (quint32 fid, fixtureIds)
     {
@@ -1082,7 +1211,11 @@ int PatchPlanner::routeWled(const QList<quint32> &fixtureIds, QStringList *probl
         todo << fx;
     }
     if (todo.isEmpty())
-        return 0;
+    {
+        if (undo != NULL && pixelsDone > 0)
+            *undo = pixelsUndo;
+        return pixelsDone;
+    }
 
     const quint32 universesBefore = io->universesCount();
     QHash<quint32, QPair<quint32, quint32> > was;   // patched ones: where they were
@@ -1172,10 +1305,267 @@ int PatchPlanner::routeWled(const QList<quint32> &fixtureIds, QStringList *probl
             back << Doc::FixturePatch{ it.key(), it.value().first, it.value().second };
         if (!back.isEmpty())
             m_doc->patchFixtures(back);
-        return 0;
+        if (undo != NULL && pixelsDone > 0)
+            *undo = pixelsUndo;
+        return pixelsDone;
     }
     if (undo != NULL)
-        *undo = putBack;
+    {
+        if (pixelsDone > 0)
+            *undo = [putBack, pixelsUndo]() { putBack(); pixelsUndo(); };
+        else
+            *undo = putBack;
+    }
+    return done + pixelsDone;
+}
+
+int PatchPlanner::routeWledPixels(const QList<quint32> &fixtureIds, QStringList *problems,
+                                  std::function<void()> *undo)
+{
+    InputOutputMap *io = m_doc->inputOutputMap();
+    const quint32 universesBefore = io->universesCount();
+    QList<std::function<void()> > undos;
+    int done = 0;
+
+    foreach (quint32 fid, fixtureIds)
+    {
+        Fixture *fx = m_doc->fixture(fid);
+        if (!isWledPixels(fx))
+            continue;
+        const int n = pixelUniverses(fx);
+
+        /* Its universes already when nothing else is on them and they go
+           out no other way than the network: only the outputs are aimed.
+           Anything else: a run of free universes of its own. */
+        bool alone = fx->isPatched();
+        for (int k = 0; alone && k < n; ++k)
+        {
+            const quint32 u = fx->universe() + quint32(k);
+            foreach (Fixture *other, m_doc->fixtures())
+            {
+                if (other == NULL || other == fx || !other->isPatched())
+                    continue;
+                const quint32 a = other->universe();
+                const quint32 b = quint32(other->universeAddress() + qMax(1u, other->channels()) - 1) >> 9;
+                if (u >= a && u <= b)
+                    alone = false;
+            }
+            if (u < io->universesCount())
+                for (int i = 0; i < io->outputPatchesCount(u); i++)
+                {
+                    OutputPatch *op = io->outputPatch(u, i);
+                    if (op == NULL)
+                        continue;
+                    if (!isNetworkPlugin(op->pluginName()) && op->pluginName() != QLatin1String("WLED"))
+                        alone = false;
+                    // Sent to another device: someone else's universe.
+                    const QString target = isNetworkPlugin(op->pluginName()) ? patchTarget(op) : QString();
+                    if (!isBroadcast(target) && target != fx->ipAddress())
+                        alone = false;
+                }
+        }
+
+        quint32 first = alone ? fx->universe() : 0;
+        if (!alone)
+        {
+            QSet<quint32> busy;
+            foreach (Fixture *other, m_doc->fixtures())
+            {
+                if (other == NULL || other == fx || !other->isPatched())
+                    continue;
+                const quint32 a = other->universe();
+                const quint32 b = quint32(other->universeAddress() + qMax(1u, other->channels()) - 1) >> 9;
+                for (quint32 u = a; u <= b; ++u)
+                    busy.insert(u);
+            }
+            foreach (const NetworkNode &node, m_doc->networkTopology()->nodes())
+                foreach (const NetworkPort &port, node.ports)
+                    if (port.universe != InputOutputMap::invalidUniverse())
+                        busy.insert(port.universe);
+            for (quint32 u = 0; u < io->universesCount(); ++u)
+                if (io->outputPatch(u) != NULL)
+                    busy.insert(u);
+            // The first run of n free universes, else new ones after the last.
+            first = io->universesCount();
+            for (quint32 u = 0; u + quint32(n) <= io->universesCount(); ++u)
+            {
+                bool free = true;
+                for (int k = 0; free && k < n; ++k)
+                    free = !busy.contains(u + quint32(k));
+                if (free)
+                {
+                    first = u;
+                    break;
+                }
+            }
+            if (first + quint32(n) > InputOutputMap::maxUniverses())
+            {
+                if (problems != NULL)
+                    *problems << QStringLiteral("%1 needs %2 universes of its own and the show "
+                                                "has no room for them").arg(fx->name()).arg(n);
+                continue;
+            }
+        }
+
+        // What puts it back: where it was, its outputs, its definition.
+        const bool wasPatched = fx->isPatched();
+        const quint32 wasUni = fx->universe(), wasAddr = fx->address();
+        QList<quint32> touched;
+        QHash<quint32, QString> names;
+        for (int k = 0; k < n; ++k)
+        {
+            const quint32 u = first + quint32(k);
+            if (u < universesBefore)
+            {
+                touched << u;
+                names.insert(u, io->getUniverseNameByID(u));
+            }
+        }
+        std::shared_ptr<PatchUndo> before = std::make_shared<PatchUndo>(io);
+        before->capture(touched, QString());
+
+        if (!alone)
+        {
+            if (fx->isPatched())
+                m_doc->unpatchFixture(fid);
+            fx->setAddress(0);
+            WledFixture::refitPixels(fx);           // laid out from channel 1
+            QString why;
+            if (!m_doc->patchFixtures({ Doc::FixturePatch{ fid, first, 0 } }, &why))
+            {
+                if (problems != NULL)
+                    *problems << QStringLiteral("%1 could not be patched: %2").arg(fx->name(), why);
+                if (wasPatched)
+                {
+                    fx->setAddress(wasAddr);
+                    WledFixture::refitPixels(fx);
+                    m_doc->patchFixtures({ Doc::FixturePatch{ fid, wasUni, wasAddr } });
+                }
+                continue;
+            }
+        }
+        while (io->universesCount() < first + quint32(n))
+            io->addUniverse();
+
+        /* Each of its universes out as Art-Net (or the sACN its first one
+           already has), to its IP, numbered on from its first. */
+        QString plugin;
+        int number = networkUniverseNumber(m_doc, first, &plugin);
+        if (number < 0)
+            number = int(first);
+        for (int k = 0; k < n; ++k)
+        {
+            const quint32 u = first + quint32(k);
+            OutputPatch *op = NULL;
+            for (int i = 0; i < io->outputPatchesCount(u) && op == NULL; i++)
+                if (io->outputPatch(u, i) != NULL && isNetworkPlugin(io->outputPatch(u, i)->pluginName()))
+                    op = io->outputPatch(u, i);
+            if (op == NULL)
+            {
+                // The line a network universe of this show goes out on, else
+                // Art-Net's on the WLED's own subnet.
+                QString refPlugin, refLine;
+                quint32 refOutput = QLCIOPlugin::invalidLine();
+                for (quint32 r = 0; r < io->universesCount() && refPlugin.isEmpty(); r++)
+                {
+                    OutputPatch *ref = io->outputPatch(r);
+                    if (r != u && ref != NULL && isNetworkPlugin(ref->pluginName())
+                        && (plugin.isEmpty() || ref->pluginName() == plugin))
+                    {
+                        refPlugin = ref->pluginName();
+                        refLine = ref->outputName();
+                        refOutput = ref->output();
+                    }
+                }
+                if (refPlugin.isEmpty())
+                {
+                    QLCIOPlugin *artnet = m_doc->ioPluginCache()->plugin(QStringLiteral("ArtNet"));
+                    if (artnet != NULL && !artnet->outputs().isEmpty())
+                    {
+                        const QStringList lines = artnet->outputs();
+                        const QString net = fx->ipAddress().section(QLatin1Char('.'), 0, 2) + QLatin1Char('.');
+                        int pick = 0;
+                        for (int i = 0; i < lines.size(); ++i)
+                            if (lines.at(i).startsWith(net))
+                                pick = i;
+                        refPlugin = QStringLiteral("ArtNet");
+                        refLine = lines.at(pick);
+                        refOutput = quint32(pick);
+                    }
+                }
+                if (refPlugin.isEmpty())
+                    break;
+                // Its own universe: the network output in the place of what was
+                // there (a WLED output, from when it was driven by its API).
+                io->setOutputPatch(u, refPlugin, refLine, refOutput);
+                op = io->outputPatch(u);
+                if (plugin.isEmpty())
+                    plugin = refPlugin;
+            }
+            if (op == NULL || !isNetworkPlugin(op->pluginName()))
+                break;
+            if (op->pluginName() == QLatin1String("E1.31"))
+            {
+                op->setPluginParameter(QStringLiteral("multicast"), 0);
+                op->setPluginParameter(QStringLiteral("ucastIP"), fx->ipAddress());
+                op->setPluginParameter(QStringLiteral("universe"), number + k);
+            }
+            else
+            {
+                op->setPluginParameter(QStringLiteral("outputIP"), fx->ipAddress());
+                op->setPluginParameter(QStringLiteral("outputUni"), number + k);
+            }
+            const QString now = io->getUniverseNameByID(u);
+            if (now.isEmpty() || now == QStringLiteral("Universe %1").arg(u + 1))
+            {
+                const QString want = universeNameFor(m_doc, u);
+                if (!want.isEmpty())
+                    io->setUniverseName(int(u), n > 1 ? QStringLiteral("%1-%2").arg(want).arg(k + 1) : want);
+            }
+        }
+
+        if (wledRoute(m_doc, fx) != WledRouted && problems != NULL)
+            *problems << QStringLiteral("%1: its universes could not all be sent to %2 as Art-Net; "
+                                        "set them in Connections").arg(fx->name(), fx->ipAddress());
+        ++done;
+
+        Doc *doc = m_doc;
+        undos << [doc, io, fid, wasPatched, wasUni, wasAddr, before, names]() {
+            Fixture *f = doc->fixture(fid);
+            if (f == NULL)
+                return;
+            if (f->isPatched())
+                doc->unpatchFixture(fid);
+            if (before->canUndo())
+                before->undo();
+            for (auto it = names.constBegin(); it != names.constEnd(); ++it)
+                if (it.key() < io->universesCount())
+                    io->setUniverseName(int(it.key()), it.value());
+            f->setAddress(wasAddr);
+            WledFixture::refitPixels(f);
+            if (wasPatched)
+                doc->patchFixtures({ Doc::FixturePatch{ fid, wasUni, wasAddr } });
+        };
+    }
+
+    if (undo != NULL && done > 0)
+    {
+        *undo = [undos, io, doc = m_doc, universesBefore]() {
+            for (int i = undos.size() - 1; i >= 0; --i)
+                undos.at(i)();
+            // The universes it made, from the end, while nothing is on them.
+            while (io->universesCount() > universesBefore)
+            {
+                const quint32 last = io->universesCount() - 1;
+                bool carries = false;
+                foreach (Fixture *fx, doc->fixtures())
+                    carries = carries || (fx != NULL && fx->isPatched()
+                                          && quint32(fx->universeAddress() + qMax(1u, fx->channels()) - 1) >> 9 >= last);
+                if (carries || !io->removeUniverse(int(last)))
+                    break;
+            }
+        };
+    }
     return done;
 }
 
