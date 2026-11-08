@@ -160,6 +160,7 @@
 #include "monitorfixture.h"
 #include "monitorlayout.h"
 #include "universe.h"
+#include "wledfixture.h"
 #include "inputoutputmap.h"
 #include "outputpatch.h"
 #include "qlccapability.h"
@@ -9757,23 +9758,68 @@ static void appendFixtureLocateValues(Fixture *fxi, QList<SceneValue> &svs,
 }
 
 /** Locate flash — no blackout; just overrides the fixture's intensity + shutter
- *  so it pops up over any running scene.  Call setOn(false/true) to strobe. */
+ *  so it pops up over any running scene.  Call setOn(false/true) to strobe,
+ *  restore() when done.
+ *
+ *  At Universe::Flash ("a fixture flashed to identify it"), with Override:
+ *  over everything that plays, the effect scripts' own fader included. A
+ *  WLED look's device settings (EffectInstance::wledDeviceWrites) go out
+ *  through that fader, on top of every Override one, and own their channels
+ *  -- at plain Override a Locate on a WLED playing Fireworks Starburst only
+ *  ever reached its dimmer, which the look already had at full: nothing
+ *  showed on the device.
+ *
+ *  A WLED that runs effects on the device is told Solid (Effect 0) as well,
+ *  dark between flashes rather than its effect: the colours alone would only
+ *  tint whatever the effect draws. */
 class FixtureLocate
 {
 public:
     FixtureLocate(Fixture *fxi, Doc *doc) : m_fxi(fxi), m_doc(doc)
     {
+        appendFixtureLocateValues(m_fxi, m_onValues,
+                                  Monitor::locateColor(), Monitor::locateIntensity());
+        if (WledFixture::runsEffects(m_fxi))
+        {
+            const int effect = WledFixture::channel(m_fxi, QStringLiteral("Effect"));
+            const int option = WledFixture::channel(m_fxi, QStringLiteral("Effect Option"));
+            const int dimmer = WledFixture::channel(m_fxi, QStringLiteral("Master Dimmer"));
+            if (effect >= 0)
+                m_onValues << SceneValue(m_fxi->id(), quint32(effect), 0);     // Solid
+            if (option >= 0)
+                m_onValues << SceneValue(m_fxi->id(), quint32(option), 0);     // not mirrored
+            // Off between flashes: still Solid, dark -- not the effect again.
+            for (const SceneValue &sv : std::as_const(m_onValues))
+                m_offValues << SceneValue(sv.fxi, sv.channel,
+                                          uchar(int(sv.channel) == dimmer ? 0 : sv.value));
+        }
+
         QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
         quint32 fxUni = fxi->universe();
         if (fxUni < quint32(ua.size()))
         {
             m_universe = ua[int(fxUni)];
-            m_fader = m_universe->requestFader(Universe::Override);
+            /* What the channels that hold their value (LTP: a WLED's Effect,
+               a shutter) say now, for restore(): nothing writes them back
+               when the fader goes, and with no look playing a WLED would be
+               left on Solid. Intensity channels are worked out afresh every
+               frame and need nothing. */
+            const QList<int> forcedHTP = m_fxi->forcedHTPChannels();
+            const QList<int> forcedLTP = m_fxi->forcedLTPChannels();
+            for (const SceneValue &sv : std::as_const(m_onValues))
+            {
+                const QLCChannel *ch = m_fxi->channel(sv.channel);
+                const bool htp = forcedHTP.contains(int(sv.channel))
+                    || (ch != nullptr && ch->group() == QLCChannel::Intensity
+                        && !forcedLTP.contains(int(sv.channel)));
+                if (!htp)
+                    m_heldValues << SceneValue(sv.fxi, sv.channel,
+                        m_universe->preGMValue(int(m_fxi->address() + sv.channel)));
+            }
+            m_fader = m_universe->requestFader(Universe::Flash);
             m_fader->setName(QStringLiteral("FixtureLocate"));
         }
         m_doc->inputOutputMap()->releaseUniverses(false);
-        appendFixtureLocateValues(m_fxi, m_onValues,
-                                  Monitor::locateColor(), Monitor::locateIntensity());
         setOn(true);
     }
 
@@ -9785,27 +9831,44 @@ public:
 
     void setOn(bool on)
     {
-        if (m_fader.isNull()) return;
-        // Swapped in whole, never emptied first (see setDegrees).
-        QList<FadeChannel> fcs;
-        if (on)
-            for (const SceneValue &sv : m_onValues)
-            {
-                FadeChannel fc(m_doc, sv.fxi, sv.channel);
-                fc.setTarget(sv.value);
-                fc.setCurrent(sv.value);
-                fc.setFadeTime(0);
-                fcs << fc;
-            }
-        m_fader->replaceAll(fcs);
+        write(on ? m_onValues : m_offValues);
+    }
+
+    /** The held channels as they were before the flashing; the rest to what
+     *  plays under it. Kept a frame or two before the fader goes. */
+    void restore()
+    {
+        write(m_heldValues);
     }
 
 private:
+    void write(const QList<SceneValue> &values)
+    {
+        if (m_fader.isNull()) return;
+        // Swapped in whole, never emptied first (see setDegrees).
+        QList<FadeChannel> fcs;
+        for (const SceneValue &sv : values)
+        {
+            FadeChannel fc(m_doc, sv.fxi, sv.channel);
+            fc.setTarget(sv.value);
+            fc.setCurrent(sv.value);
+            fc.setFadeTime(0);
+            // Its own values, not merged (HTP) with the look's.
+            fc.addFlag(FadeChannel::Override);
+            fcs << fc;
+        }
+        m_fader->replaceAll(fcs);
+    }
+
     Fixture      *m_fxi;
     Doc          *m_doc;
     Universe     *m_universe = nullptr;
     QSharedPointer<GenericFader> m_fader;
     QList<SceneValue>            m_onValues;
+    /** Between flashes: nothing (what plays shows through), or a WLED's
+     *  Solid at dimmer 0. */
+    QList<SceneValue>            m_offValues;
+    QList<SceneValue>            m_heldValues;
 };
 
 // ---------------------------------------------------------------------------
@@ -9815,6 +9878,27 @@ struct Monitor::LocateSession
     std::shared_ptr<FixtureLocate> src;
     QTimer *timer = nullptr;
     int step = 0;
+    /** Flashing done: the held channels put back, the fader let go next. */
+    bool restoring = false;
+
+    ~LocateSession()
+    {
+        // Each one's own: left running, every finished Locate ticked on.
+        if (timer != nullptr)
+        {
+            timer->stop();
+            timer->deleteLater();
+        }
+    }
+
+    /** Puts back what the flashing changed and ends a frame or two later. */
+    void finish()
+    {
+        restoring = true;
+        src->restore();
+        timer->start(kLocateRestoreMs);
+    }
+    static constexpr int kLocateRestoreMs = 150;
 };
 
 void Monitor::cancelAllLocateSessions()
@@ -9830,8 +9914,8 @@ void Monitor::locateFixture(quint32 fxId)
     auto it = m_locateSessions.find(fxId);
     if (it != m_locateSessions.end())
     {
-        delete it.value();
-        m_locateSessions.erase(it);
+        if (!it.value()->restoring)
+            it.value()->finish();
         return;
     }
 
@@ -9854,6 +9938,12 @@ void Monitor::locateFixture(quint32 fxId)
         if (sit == m_locateSessions.end())
             return;
         LocateSession *s = sit.value();
+        if (s->restoring)
+        {
+            m_locateSessions.erase(sit);
+            delete s;
+            return;
+        }
         ++s->step;
         /* Odd steps are on (300 ms), even are off (150 ms), so N flashes take
            2N steps and the run ends on the step after the last off. The count
@@ -9861,8 +9951,7 @@ void Monitor::locateFixture(quint32 fxId)
            three full-intensity flashes is a lot of light to stand next to. */
         if (s->step > 2 * Monitor::locateFlashes())
         {
-            m_locateSessions.erase(sit);
-            delete s;
+            s->finish();
             return;
         }
         const bool isOn = (s->step % 2 == 1);
@@ -12121,9 +12210,13 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     connect(locateBtn, &QPushButton::clicked, [&]() {
         if (locateTimer->isActive())
         {
-            locateTimer->stop();
-            locateSrc.reset();
-            locateBtn->setEnabled(true);
+            // Stopped early: what it changed put back, then let go.
+            if (locateStep <= 6 && locateSrc)
+            {
+                locateSrc->restore();
+                locateStep = 7;
+                locateTimer->setInterval(150);
+            }
             return;
         }
         if (!fxi) return;
@@ -12136,8 +12229,15 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     });
     connect(locateTimer, &QTimer::timeout, [&]() {
         ++locateStep;
-        // Steps 1,3,5 = on (300 ms); steps 2,4,6 = off (150 ms); step 7 = done
-        if (locateStep > 6)
+        // Steps 1,3,5 = on (300 ms); steps 2,4,6 = off (150 ms); step 7 =
+        // what it changed put back (FixtureLocate::restore); step 8 = done
+        if (locateStep == 7 && locateSrc)
+        {
+            locateSrc->restore();
+            locateTimer->setInterval(150);
+            return;
+        }
+        if (locateStep > 7)
         {
             locateTimer->stop();
             locateSrc.reset();

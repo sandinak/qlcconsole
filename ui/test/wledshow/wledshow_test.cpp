@@ -51,6 +51,8 @@
 #include "mastertimer.h"
 #include "fixture.h"
 #include "scene.h"
+#include "qlcpalette.h"
+#include "universe.h"
 #include "doc.h"
 #include "../../../plugins/wled/src/wledlayoutstore.h"
 
@@ -104,6 +106,138 @@ QList<bool> revs(const FakeWled &w)
     QList<bool> out;
     for (const QJsonValue &v : w.segments())
         out << v.toObject().value("rev").toBool();
+    return out;
+}
+
+/* One WLED Effect Mode (15ch) on the network by WLED's API, patched to a
+   universe out through the real WLED output at @p wled, and a Monitor --
+   the Locate the app's right-click and Fixtures & Groups both drive. */
+struct LocateRig
+{
+    FakeWled wled;
+    Doc doc;
+    QWidget parent;
+    Monitor *mon = nullptr;
+    quint32 fid = 0;
+    QLCFixtureDef *def = nullptr;
+
+    LocateRig() : doc(nullptr) {}
+    ~LocateRig()
+    {
+        doc.masterTimer()->stop();
+        delete mon;
+    }
+
+    bool setUp()
+    {
+        if (!wled.listen(QHostAddress::LocalHost))
+            return false;
+        // Locate as it comes: white, full, three flashes.
+        QSettings().remove("monitor/locate");
+        doc.ioPluginCache()->load(QDir(TEST_PLUGINS_DIR, "*wled*"));
+        QLCIOPlugin *plugin = doc.ioPluginCache()->plugin("WLED");
+        if (plugin == nullptr)
+            return false;
+        // A state every 50 ms -- with the glide that pace sets (a tenth of a
+        // second) wherever a step does not take it off; the device asked
+        // seldom, so the asks do not take the sends' turns.
+        QMetaObject::invokeMethod(plugin, "setSendInterval", Q_ARG(int, 50));
+        QMetaObject::invokeMethod(plugin, "setInfoInterval", Q_ARG(int, 5000));
+
+        def = new QLCFixtureDef();
+        if (def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Effect-Mode.qxf")
+            != QFile::NoError || !doc.fixtureDefCache()->addFixtureDef(def))
+            return false;
+        QLCFixtureMode *mode = nullptr;
+        for (QLCFixtureMode *each : def->modes())
+            if (each->name() == "Effect (15ch)")
+                mode = each;
+        if (mode == nullptr)
+            return false;
+        Fixture *fx = new Fixture(&doc);
+        fx->setName("Sprinkles");
+        fx->setFixtureDefinition(def, mode);
+        fx->setConnection(Fixture::Network);
+        fx->setTransport(Fixture::WledTransport);
+        fx->setIPAddress(wled.address());
+        fx->setPatched(false);
+        if (!doc.addFixture(fx))
+            return false;
+        fid = fx->id();
+        PatchPlanner planner(&doc);
+        QStringList problems;
+        if (planner.apply(planner.plan({ fid }), &problems) != 1 || !problems.isEmpty())
+            return false;
+        OutputPatch *op = doc.inputOutputMap()->outputPatch(fx->universe());
+        if (op == nullptr || op->pluginName() != "WLED")
+            return false;
+
+        parent.resize(1400, 900);
+        mon = new Monitor(&parent, &doc);
+        doc.setMode(Doc::Operate);
+        doc.inputOutputMap()->startUniverses();
+        doc.masterTimer()->start();
+        return true;
+    }
+
+    /** A look: Fireworks Starburst on the device, red. */
+    Scene *starburst()
+    {
+        QLCPalette *fx = new QLCPalette(QLCPalette::Effect, &doc);
+        fx->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/wled-fireworks-starburst.js");
+        fx->setWledEffect("Fireworks Starburst");
+        fx->setEffectParamValue("speed", 200);
+        fx->setEffectParamValue("palette", 6);
+        doc.addPalette(fx);
+        QLCPalette *red = new QLCPalette(QLCPalette::Color, &doc);
+        red->setValue(QColor(255, 0, 0));
+        doc.addPalette(red);
+        Scene *scene = new Scene(&doc);
+        doc.addFunction(scene);
+        scene->addFixture(fid);
+        scene->setValue(fid, 0, 255);           // the dimmer up
+        scene->addPalette(fx->id());
+        scene->addPalette(red->id());
+        return scene;
+    }
+
+    /** The device's segment 0 as it now stands. */
+    QJsonObject seg() const { return wled.segments().at(0).toObject(); }
+    bool showsStarburst() const
+    {
+        return seg().value("fx").toInt() == 89
+               && seg().value("col").toArray().at(0).toArray() == QJsonArray({ 255, 0, 0 });
+    }
+};
+
+struct Sent
+{
+    int whites = 0, darks = 0, others = 0, glided = 0;
+    QStringList seen;
+};
+
+/** What the device was sent from post @p from on, Locate's way: Solid white
+ *  at full, dark, or anything else; and how many asked for a glide. */
+Sent sentSince(const FakeWled &wled, int from)
+{
+    Sent out;
+    for (int i = from; i < wled.posted.size(); ++i)
+    {
+        if (!wled.posted.at(i).first.endsWith("/json/state"))
+            continue;
+        const QJsonObject b = wled.posted.at(i).second;
+        const QJsonObject s = b.value("seg").toArray().at(0).toObject();
+        out.seen << QString::fromUtf8(QJsonDocument(b).toJson(QJsonDocument::Compact));
+        if (b.value("transition").toInt(-1) != 0)
+            ++out.glided;
+        if (!b.value("on").toBool())
+            ++out.darks;
+        else if (s.value("fx").toInt() == 0 && b.value("bri").toInt() == 255
+                 && s.value("col").toArray().at(0).toArray() == QJsonArray({ 255, 255, 255 }))
+            ++out.whites;
+        else
+            ++out.others;
+    }
     return out;
 }
 }
@@ -280,6 +414,100 @@ void WledShow_Test::anEffectFromAShowPlaysOnEverySpanOfAFountain()
     doc.masterTimer()->stop();
     delete mon;
     qInfo().noquote() << "the whole path took" << took.elapsed() << "ms";
+}
+
+void WledShow_Test::locateFlashesAWledPlayingAnEffectSolidWhiteAndGivesTheLookBack()
+{
+    LocateRig rig;
+    QVERIFY(rig.setUp());
+
+    // A plain dimmer on a universe of its own, located in the same go.
+    Fixture *dim = new Fixture(&rig.doc);
+    dim->setName("Dimmer");
+    QLCFixtureDef *dimDef = dim->genericDimmerDef(1);
+    dim->setFixtureDefinition(dimDef, dim->genericDimmerMode(dimDef, 1));
+    Fixture *wledFx = rig.doc.fixture(rig.fid);
+    dim->setUniverse(wledFx->universe() == 0 ? 1 : 0);
+    dim->setAddress(0);
+    QVERIFY(rig.doc.addFixture(dim));
+
+    Scene *scene = rig.starburst();
+    scene->start(rig.doc.masterTimer(), FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(rig.showsStarburst(), 5000);
+    QCOMPARE(rig.wled.state.value("on").toBool(), true);
+
+    auto dimmerLevel = [&rig, dim]() {
+        QList<Universe *> ua = rig.doc.inputOutputMap()->claimUniverses();
+        const uchar v = ua.at(int(dim->universe()))->preGMValue(0);
+        rig.doc.inputOutputMap()->releaseUniverses(false);
+        return int(v);
+    };
+    QCOMPARE(dimmerLevel(), 0);
+
+    const int from = int(rig.wled.posted.size());
+    bool dimmerFlashed = false;
+    rig.mon->locateFixtures({ rig.fid, dim->id() });
+    QVERIFY(rig.mon->m_locateSessions.contains(rig.fid));
+    QVERIFY(rig.mon->m_locateSessions.contains(dim->id()));
+    // Over the look: Solid white at full on the device itself.
+    QTRY_VERIFY_WITH_TIMEOUT((dimmerFlashed = dimmerFlashed || dimmerLevel() == 255,
+                              rig.seg().value("fx").toInt() == 0
+                              && rig.seg().value("col").toArray().at(0).toArray()
+                                     == QJsonArray({ 255, 255, 255 })), 2000);
+    QCOMPARE(rig.wled.state.value("bri").toInt(), 255);
+    QTRY_VERIFY_WITH_TIMEOUT((dimmerFlashed = dimmerFlashed || dimmerLevel() == 255,
+                              rig.mon->m_locateSessions.isEmpty()), 5000);
+    QVERIFY2(dimmerFlashed, "the plain dimmer located with the WLED never came up");
+
+    // Then the look again, effect and colour, at full.
+    QTRY_VERIFY_WITH_TIMEOUT(rig.showsStarburst(), 3000);
+    QCOMPARE(rig.wled.state.value("on").toBool(), true);
+    QCOMPARE(rig.wled.state.value("bri").toInt(), 255);
+    QTRY_COMPARE(dimmerLevel(), 0);
+
+    /* What the device was sent: a flash, dark, a flash ... -- each a step
+       (transition 0), the first flash too and the look coming back -- and
+       nothing in between but the look. */
+    const Sent sent = sentSince(rig.wled, from);
+    const QString all = sent.seen.join("\n");
+    QVERIFY2(sent.whites >= 2 && sent.whites <= 3, qPrintable(all));
+    QVERIFY2(sent.darks >= 2 && sent.darks <= 3, qPrintable(all));
+    QVERIFY2(sent.glided == 0, qPrintable(all));
+    QVERIFY2(sent.others >= 1, qPrintable(all));          // the look again
+    const QJsonObject last = sent.seen.isEmpty() ? QJsonObject()
+        : QJsonDocument::fromJson(sent.seen.last().toUtf8()).object();
+    QCOMPARE(last.value("seg").toArray().at(0).toObject().value("fx").toInt(), 89);
+
+    scene->stop(FunctionParent::master());
+}
+
+void WledShow_Test::locateLeavesAWledNothingPlaysOnAsItWas()
+{
+    LocateRig rig;
+    QVERIFY(rig.setUp());
+
+    // A look played and let go of: the device off, still on its effect.
+    Scene *scene = rig.starburst();
+    scene->start(rig.doc.masterTimer(), FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(rig.showsStarburst(), 5000);
+    scene->stop(FunctionParent::master());
+    QTRY_VERIFY(!scene->isRunning());
+    QTRY_VERIFY_WITH_TIMEOUT(!rig.wled.state.value("on").toBool(true), 3000);
+    QTest::qWait(200);
+    const int effectBefore = rig.seg().value("fx").toInt();
+
+    const int from = int(rig.wled.posted.size());
+    rig.mon->locateFixture(rig.fid);
+    QTRY_VERIFY_WITH_TIMEOUT(rig.wled.state.value("on").toBool()
+                             && rig.seg().value("fx").toInt() == 0, 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(rig.mon->m_locateSessions.isEmpty(), 5000);
+    QTest::qWait(300);
+
+    // As it was: off, and its effect what the look had left, not Solid.
+    QCOMPARE(rig.wled.state.value("on").toBool(), false);
+    QCOMPARE(rig.seg().value("fx").toInt(), effectBefore);
+    const Sent sent = sentSince(rig.wled, from);
+    QVERIFY2(sent.whites >= 2 && sent.glided == 0, qPrintable(sent.seen.join("\n")));
 }
 
 QTEST_MAIN(WledShow_Test)

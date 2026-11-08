@@ -286,6 +286,57 @@ void Wled_Test::onlyChangesAreSentAndBurstsCollapse()
     QVERIFY(plugin.targetProblems().isEmpty());
 }
 
+void Wled_Test::aStepGoesAtOnceAndOnlyAFadeGlides()
+{
+    // The rule itself, at a send every 100 ms (a glide of a tenth).
+    const QJsonObject lit = WledState::decode(universe({ 255, 9, 128, 128, 0, 0, 255, 0, 0 }), 1, 15, 100);
+    QCOMPARE(lit.value("transition").toInt(), 1);
+    QCOMPARE(WledPlugin::paced(lit, QJsonObject(), 0, 1000, 100).value("transition").toInt(), 0);
+    const QJsonObject dimmer = WledState::decode(universe({ 200, 9, 128, 128, 0, 0, 255, 0, 0 }), 1, 15, 100);
+    QCOMPARE(WledPlugin::paced(dimmer, lit, 900, 1000, 100).value("transition").toInt(), 1);   // a fade
+    QCOMPARE(WledPlugin::paced(dimmer, lit, 500, 1000, 100).value("transition").toInt(), 0);   // after a stand
+    const QJsonObject solid = WledState::decode(universe({ 255, 0, 128, 128, 0, 0, 255, 255, 255 }), 1, 15, 100);
+    QCOMPARE(WledPlugin::paced(solid, lit, 950, 1000, 100).value("transition").toInt(), 0);    // another effect
+    const QJsonObject dark = WledState::decode(universe({ 0, 0, 128, 128, 0, 0, 255, 255, 255 }), 1, 15, 100);
+    QCOMPARE(WledPlugin::paced(dark, solid, 950, 1000, 100).value("transition").toInt(), 0);   // off
+    QCOMPARE(WledPlugin::paced(solid, dark, 950, 1000, 100).value("transition").toInt(), 0);   // on
+    QVERIFY(WledPlugin::sameLook(WledPlugin::paced(lit, QJsonObject(), 0, 1000, 100), lit));
+
+    // On the wire: a look held, then a quick flash off and on, then a fade.
+    FakeWled wled;
+    QVERIFY(wled.listen(QHostAddress::LocalHost));
+    WledPlugin plugin;
+    plugin.init();
+    plugin.setSendInterval(100);
+    QVERIFY(plugin.openOutput(0, 0));
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, WLED_OUTPUTIP,
+                        QString("127.0.0.1:%1").arg(wled.serverPort()));
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, WLED_CHANNELS, 15);
+    plugin.writeUniverse(0, 0, universe({ 255, 9, 128, 128, 0, 0, 255, 0, 0 }), true);
+    QTRY_COMPARE(wled.posts.size(), 1);
+    QTest::qWait(300);
+    plugin.writeUniverse(0, 0, universe({ 0, 9, 128, 128, 0, 0, 255, 0, 0 }), true);
+    QTRY_COMPARE(wled.posts.size(), 2);
+    plugin.writeUniverse(0, 0, universe({ 255, 9, 128, 128, 0, 0, 255, 0, 0 }), true);
+    QTRY_COMPARE(wled.posts.size(), 3);
+    for (int i = 0; i < 3; ++i)
+        QCOMPARE(wled.posts.at(i).value("transition").toInt(-1), 0);
+    QTest::qWait(300);
+    // Held, the same look is not sent again for its transition alone.
+    QCOMPARE(wled.posts.size(), 3);
+    for (int v = 1; v <= 40; ++v)
+    {
+        plugin.writeUniverse(0, 0, universe({ 255 - v * 2, 9, 128, 128, 0, 0, 255, 0, 0 }), true);
+        QTest::qWait(10);
+    }
+    QTest::qWait(300);
+    int glided = 0;
+    for (int i = 3; i < wled.posts.size(); ++i)
+        glided += wled.posts.at(i).value("transition").toInt() == 1 ? 1 : 0;
+    QVERIFY2(glided >= 1, qPrintable(QString("%1 of %2 fade states glided")
+                                         .arg(glided).arg(wled.posts.size() - 3)));
+}
+
 void Wled_Test::aWeakOrSilentLanternIsAProblem()
 {
     FakeWled wled;

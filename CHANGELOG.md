@@ -33,6 +33,16 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Locate shows on a WLED.** Locate on a WLED in Effect mode that was
+  playing a device effect (Fireworks Starburst, say) changed nothing you
+  could see: the look's effect settings were written over Locate's, and the
+  device went on running its effect. Locate now goes over everything that
+  plays, sets the WLED to Solid in the Locate colour at the Locate level
+  (white, full by default), dark between flashes, each flash sent at once
+  rather than with WLED's transition, over WLED's API or Art-Net/sACN
+  alike; afterwards the look comes back, or the device is left as it was.
+  Locate's colour is now its own on every fixture, not mixed with the
+  look's. A finished Locate no longer leaves a timer running.
 - **A WLED effect plays on every segment, not just the first.** A WLED
   split into segments (a fountain's string after **Write Segments…**, one
   segment a span) showed the show's effect on its first segment only; the

@@ -189,6 +189,7 @@ private:
         QString mac;                ///< from its info: what its kept layout is filed by
         int ledCount = 0;           ///< from /json/info, 0 = not known
         qint64 retryAt = 0;         ///< no answer: not sent again before (ms)
+        qint64 postedAt = 0;        ///< when the last state went (ms)
         /** The rig network gate's decision for this device, cached (see
          *  routeAllowed()): worked out when its address is set and by
          *  refreshTransmitGate(), only read by the send/poll ticks. */
@@ -224,6 +225,15 @@ private:
     static QJsonObject message(const QJsonObject &state, const Device &d,
                                QVector<QPair<int, bool> > *revs = nullptr);
     /** A /json/state "seg" array as segments (the ones in use). */
+    /** @p state, to go to a device that last took @p sent at @p postedAt:
+     *  with no transition when it is a step rather than part of a fade --
+     *  it turns the device on or off, changes its effect, or comes after the
+     *  look stood still for two sends (a Locate's flashes, a cut). Only a
+     *  level or colour moving send after send glides. */
+    static QJsonObject paced(QJsonObject state, const QJsonObject &sent,
+                             qint64 postedAt, qint64 now, int intervalMs);
+    /** Whether @p a and @p b set the same look (their transitions aside). */
+    static bool sameLook(QJsonObject a, QJsonObject b);
     static QVector<WledLayoutStore::Segment> segmentsOf(const QJsonArray &seg);
     /** What a device's answer says its segments are now; @p kept, the
      *  layout's own ways from the store when it is that layout (else

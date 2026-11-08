@@ -26,6 +26,16 @@ private slots:
     /** The effect a scene sets ends up on every span of the fountain, each
      *  turned by Reverse from its own way. */
     void anEffectFromAShowPlaysOnEverySpanOfAFountain();
+
+    /** Locate on a WLED playing a device effect (Fireworks Starburst): the
+     *  device is sent Solid white at full and dark in turn, each at once
+     *  (transition 0), and the look again after -- a normal fixture located
+     *  with it in the same go flashes too. */
+    void locateFlashesAWledPlayingAnEffectSolidWhiteAndGivesTheLookBack();
+
+    /** Locate on a WLED a look had played and let go of: afterwards it is
+     *  as it was -- off, its effect still the look's, not left on Solid. */
+    void locateLeavesAWledNothingPlaysOnAsItWas();
 };
 
 #endif
