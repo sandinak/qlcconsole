@@ -1959,20 +1959,50 @@ void App::slotDocModified(bool state)
 
     if (m_statusDirtyLabel != NULL)
     {
+        /* Every edit says modified(true) again: only a change re-styles the
+           chip (setStyleSheet() re-polishes it and the footer lays out). */
+        const QString text = state ? tr("● Unsaved changes") : tr("✓ Saved");
+        const QString sheet = state ? QStringLiteral("QLabel { color: #d08020; font-weight: bold; }")
+                                    : QStringLiteral("QLabel { color: gray; }");
+        if (m_statusDirtyLabel->text() != text)
+            m_statusDirtyLabel->setText(text);
+        if (m_statusDirtyLabel->styleSheet() != sheet)
+            m_statusDirtyLabel->setStyleSheet(sheet);
         if (state == true)
         {
-            m_statusDirtyLabel->setText(tr("● Unsaved changes"));
-            m_statusDirtyLabel->setStyleSheet("QLabel { color: #d08020; font-weight: bold; }");
             m_statusDirtyLabel->setCursor(Qt::PointingHandCursor);
         }
         else
         {
-            m_statusDirtyLabel->setText(tr("✓ Saved"));
-            m_statusDirtyLabel->setStyleSheet("QLabel { color: gray; }");
             m_statusDirtyLabel->unsetCursor();
             m_statusDirtyLabel->setToolTip(QString());
         }
+        /* One width for all it says: "✓ Saved" is a third of "● Unsaved
+           changes", and the room a save freed went to the next chip the
+           footer had squeezed (the Next cue), pushing the power chip out --
+           and back on the next edit. */
+        reserveStatusChipWidth(m_statusDirtyLabel,
+            { tr("● Unsaved changes"), tr("✓ Saved"), tr("Autosaved %1").arg(QStringLiteral("00:00:00")),
+              tr("⚠ Autosave failed") });
     }
+}
+
+void App::reserveStatusChipWidth(QLabel *chip, const QStringList &texts)
+{
+    if (chip == nullptr)
+        return;
+    QFont bold = chip->font();      // the widest state is bold
+    bold.setBold(true);
+    const QFontMetrics fm(bold);
+    int widest = 0;
+    for (const QString &t : texts)
+        widest = qMax(widest, fm.horizontalAdvance(t));
+    const QMargins m = chip->contentsMargins();
+    const int px = widest + m.left() + m.right() + 2 * chip->margin() + 2;
+    if (chip->property("statusSqueezed").toBool())
+        chip->setProperty("statusMinWidth", px);    // fitStatusBar() puts it back
+    else if (chip->minimumWidth() != px)
+        chip->setMinimumWidth(px);
 }
 
 void App::slotShowUnsavedChanges()
@@ -5021,10 +5051,15 @@ void App::fitStatusBar()
     {
         if (!w->isVisibleTo(sb))
             continue;
-        const int want = qMax(qMax(w->sizeHint().width(), w->minimumSizeHint().width()), w->minimumWidth());
+        // The minimum width too, and a squeezed chip's own (kept aside while
+        // it is 0): measured at 0, a chip of a fixed or reserved width came
+        // back, did not fit at its real width, was squeezed again -- and the
+        // footer flickered between the two.
+        const bool squeezed = w->property("statusSqueezed").toBool();
+        const int minW = squeezed ? w->property("statusMinWidth").toInt() : w->minimumWidth();
+        const int want = qMax(qMax(w->sizeHint().width(), w->minimumSizeHint().width()), minW);
         const bool fits = want + gap <= room;
         room -= fits ? want + gap : gap;
-        const bool squeezed = w->property("statusSqueezed").toBool();
         if (fits && squeezed)
         {
             // Back as it was (a chip of a fixed width has both ends set).
@@ -8410,7 +8445,7 @@ void App::initStatusBar()
     // Programmer dirty indicator. Hidden when clean, red bullet + text
     // when dirty. Mirrors the in-frame SaveProgrammer button highlight.
     m_statusProgrammerLabel = new QLabel(this);
-    m_statusProgrammerLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_statusProgrammerLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);   // its room is its widest text's
     m_statusProgrammerLabel->hide();
     sb->addPermanentWidget(m_statusProgrammerLabel);
 
@@ -8422,7 +8457,7 @@ void App::initStatusBar()
     // now lives in m_statusModeLabel's own slot (far left, see
     // updateOutputReadiness()), not a chip here.
     m_statusDirtyLabel = new QLabel(this);
-    m_statusDirtyLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_statusDirtyLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);   // its room is its widest text's
     sb->addPermanentWidget(m_statusDirtyLabel);
     m_statusDirtyLabel->installEventFilter(this);       // a click lists the changes
     slotDocModified(m_doc != NULL ? m_doc->isModified() : false);
@@ -8444,6 +8479,8 @@ void App::initStatusBar()
                 l->setContentsMargins(6, 0, 6, 0);
         }
     }
+    // Unsaved/Saved's width counts the margins just set.
+    slotDocModified(m_doc != NULL ? m_doc->isModified() : false);
 
     if (m_doc != NULL)
     {
@@ -9565,6 +9602,10 @@ void App::slotProgrammerDirtyChanged(bool dirty)
        saved and the only thing outstanding is the ability to revert. Values
        captured in the programmer but not yet stored anywhere are always red,
        saved document or not -- those really would be lost. */
+    /* Saved or not, the same width: saving turns the red line into the
+       longer grey one, and must not move the footer (see slotDocModified()). */
+    reserveStatusChipWidth(m_statusProgrammerLabel,
+        { tr("● Programmer: %1").arg(detail), tr("◍ Programmer: %1 (saved, revertable)").arg(detail) });
     const bool docDirty = m_doc->isModified();
     if (docDirty || hasNew)
     {
