@@ -59,7 +59,7 @@ namespace WledPalettes
         for (auto it = add.constBegin(); it != add.constEnd(); ++it)
             p.insert(it.key(), it.value());
         acc.insert(QStringLiteral("p"), p);
-        acc.insert(QStringLiteral("m"), page.value(QStringLiteral("m")).toInt());
+        acc.insert(QStringLiteral("m"), page.value(QStringLiteral("m")).toInt());   // units-ok: the JSON key for the last page
     }
 
     inline Palette parseOne(const QJsonArray &arr)
