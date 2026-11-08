@@ -17,12 +17,18 @@
 #include <QDateTime>
 #include <QJsonArray>
 #include <QMessageBox>
+#include <QPushButton>
+#include <QPointer>
+#include <memory>
 #include <QTimer>
 #include <QSet>
 
 #include "wledconfigcheck.h"
 #include "monitorproperties.h"
+#include "truss.h"
 #include "wleddevicewrite.h"
+#include "powerdistribution.h"
+#include "wleddiscovery.h"
 #include "showstatus.h"
 #include "qlcfixturemode.h"
 #include "inputoutputmap.h"
@@ -56,6 +62,65 @@ QString dmxModeName(int mode)
     case 6: return QObject::tr("Multi RGBW");
     default: return QObject::tr("mode %1").arg(mode);
     }
+}
+
+/** @p from merged into @p into, object by object. */
+void mergeJson(QJsonObject &into, const QJsonObject &from)
+{
+    for (auto it = from.begin(); it != from.end(); ++it)
+    {
+        if (it.value().isObject() && into.value(it.key()).isObject())
+        {
+            QJsonObject sub = into.value(it.key()).toObject();
+            mergeJson(sub, it.value().toObject());
+            into[it.key()] = sub;
+        }
+        else
+            into[it.key()] = it.value();
+    }
+}
+
+/** What of @p sent @p now does not say, in words ("id.name"). */
+QStringList jsonDiffers(const QJsonObject &sent, const QJsonObject &now, const QString &at = QString())
+{
+    QStringList out;
+    for (auto it = sent.begin(); it != sent.end(); ++it)
+    {
+        const QString path = at.isEmpty() ? it.key() : at + QLatin1Char('.') + it.key();
+        if (it.value().isObject())
+            out << jsonDiffers(it.value().toObject(), now.value(it.key()).toObject(), path);
+        else if (it.value() != now.value(it.key()))
+            out << path;
+    }
+    return out;
+}
+
+/** The setting-up findings @p s folded into @p f (one fix, one list). */
+void mergeSetUp(WledConfigCheck::Finding &f, const WledConfigCheck::Finding &s)
+{
+    f.problems << s.problems;
+    f.changes << s.changes;
+    f.notes << s.notes;
+    mergeJson(f.fix, s.fix);
+    /* A new LED count sends all of hw.led back as the device said it: with
+       the limiter it is about to get, or the count would undo it. */
+    const QJsonObject sLed = s.fix.value(QStringLiteral("hw")).toObject().value(QStringLiteral("led")).toObject();
+    if (f.ledFix.isEmpty() || !sLed.contains(QStringLiteral("maxpwr")))
+        return;
+    QJsonObject hw = f.ledFix.value(QStringLiteral("hw")).toObject();
+    QJsonObject led = hw.value(QStringLiteral("led")).toObject();
+    const QJsonValue ma = sLed.value(QStringLiteral("maxpwr"));
+    led[QStringLiteral("maxpwr")] = ma;
+    QJsonArray ins = led.value(QStringLiteral("ins")).toArray();
+    if (ins.size() == 1)
+    {
+        QJsonObject out = ins.first().toObject();
+        out[QStringLiteral("maxpwr")] = ma;
+        ins[0] = out;
+        led[QStringLiteral("ins")] = ins;
+    }
+    hw[QStringLiteral("led")] = led;
+    f.ledFix[QStringLiteral("hw")] = hw;
 }
 
 QString protocolName(int port)
@@ -263,6 +328,7 @@ WledConfigCheck::Finding WledConfigCheck::evaluate(Doc *doc, const Fixture *fx, 
         wantIf[QStringLiteral("live")] = wantLive;
         f.fix[QStringLiteral("if")] = wantIf;
     }
+    mergeSetUp(f, setUpFor(doc, fx, cfg, false));
     return f;
 }
 
@@ -583,4 +649,322 @@ void WledConfigCheck::setLedWaits(int applyMs, int rebootMs, int pollMs)
     m_ledWaits[0] = applyMs;
     m_ledWaits[1] = rebootMs;
     m_ledWaits[2] = pollMs;
+}
+
+/*********************************************************************
+ * Set up: what the show keeps on every WLED it drives
+ *********************************************************************/
+
+int WledConfigCheck::limiterMilliamps(Doc *doc, const Fixture *fx, double *volts)
+{
+    if (fx == nullptr || fx->powerProfile().maxAmps <= 0.0 || doc == nullptr)
+        return 0;
+    /* WLED's limit is the current of its LED supply; a Max draw is read at
+       the wall. Without the supply's voltage nothing is worked out. */
+    const double supply = doc->monitorProperties() != nullptr
+                        ? double(doc->monitorProperties()->fixtureRigProps(fx->id()).ledSupplyVolts) : 0.0;
+    if (supply <= 0.0)
+        return 0;
+    // Its circuit's voltage, else its source's, else 120 V (as the power figure).
+    double v = 120.0;
+    if (doc->powerDistribution() != nullptr)
+    {
+        const PowerDistribution *pd = doc->powerDistribution();
+        int s = -1, c = -1;
+        pd->circuitOf(fx->id(), s, c);
+        if (s >= 0 && c >= 0)
+        {
+            const double cv = pd->sources().at(s).circuits.at(c).effectiveVoltage(pd->sources().at(s).voltage);
+            if (cv > 0.0)
+                v = cv;
+        }
+    }
+    if (volts != nullptr)
+        *volts = v;
+    return int(qBound(1.0, fx->powerProfile().maxAmps * v / supply * 1000.0, 65000.0) + 0.5);
+}
+
+WledConfigCheck::Finding WledConfigCheck::setUpFor(Doc *doc, const Fixture *fx, const QJsonObject &cfg,
+                                                    bool setUp)
+{
+    Finding f;
+    if (fx == nullptr)
+        return f;
+    f.fixtureId = fx->id();
+    f.ip = fx->ipAddress();
+
+    // Its name, and its name on the network (staff-l.local).
+    if (cfg.value(QStringLiteral("id")).isObject())
+    {
+        const QJsonObject id = cfg.value(QStringLiteral("id")).toObject();
+        const QString name = id.value(QStringLiteral("name")).toString();
+        const QString host = id.value(QStringLiteral("mdns")).toString();
+        const QString wantHost = WledDiscovery::hostName(fx->name());
+        QJsonObject want;
+        if (name != fx->name())
+        {
+            f.problems << tr("is called \"%1\" on the device, \"%2\" in this show").arg(name, fx->name());
+            want[QStringLiteral("name")] = fx->name();
+            f.changes << tr("Name: %1").arg(fx->name());
+        }
+        if (!wantHost.isEmpty() && host != wantHost && (setUp || name != fx->name()))
+        {
+            want[QStringLiteral("mdns")] = wantHost;
+            f.changes << tr("Network name: %1.local").arg(wantHost);
+        }
+        if (!want.isEmpty())
+            f.fix[QStringLiteral("id")] = want;
+    }
+
+    /* WLED sync: a WLED takes brightness, colour, effect and palette from
+       the others in its sync group, out of the box. On stage one WLED's
+       button or app would change the rest; the show drives each itself. */
+    const QJsonObject sync = cfg.value(QStringLiteral("if")).toObject().value(QStringLiteral("sync")).toObject();
+    QJsonObject wantSync;
+    if (sync.value(QStringLiteral("recv")).isObject())
+    {
+        const QJsonObject recv = sync.value(QStringLiteral("recv")).toObject();
+        const QList<QPair<QString, QString> > kinds = {
+            { QStringLiteral("bri"), tr("brightness") }, { QStringLiteral("col"), tr("colour") },
+            { QStringLiteral("fx"), tr("effect") }, { QStringLiteral("pal"), tr("palette") } };
+        QStringList takes;
+        QJsonObject wantRecv;
+        for (const auto &k : kinds)
+            if (recv.value(k.first).toBool())
+            {
+                takes << k.second;
+                wantRecv[k.first] = false;
+            }
+        if (!takes.isEmpty())
+        {
+            f.problems << tr("takes its %1 from other WLEDs (sync group %2): one WLED's button or "
+                             "app would change it").arg(takes.join(QStringLiteral(", ")))
+                                                    .arg(recv.value(QStringLiteral("grp")).toInt());
+            wantSync[QStringLiteral("recv")] = wantRecv;
+            f.changes << tr("Sync: takes nothing from other WLEDs");
+        }
+    }
+    if (sync.value(QStringLiteral("send")).toObject().value(QStringLiteral("en")).toBool())
+    {
+        f.problems << tr("sends its own changes to other WLEDs");
+        wantSync[QStringLiteral("send")] = QJsonObject{ { QStringLiteral("en"), false } };
+        f.changes << tr("Sync: sends nothing to other WLEDs");
+    }
+    if (!wantSync.isEmpty())
+        f.fix[QStringLiteral("if")] = QJsonObject{ { QStringLiteral("sync"), wantSync } };
+
+    // At power-on: dark until the show drives it.
+    const QJsonObject def = cfg.value(QStringLiteral("def")).toObject();
+    if (def.value(QStringLiteral("on")).toBool())
+    {
+        const int bri = def.value(QStringLiteral("bri")).toInt();
+        f.problems << tr("lights up when it powers on (%1 %), before the show drives it")
+                          .arg(qRound(bri * 100.0 / 255.0));
+        f.fix[QStringLiteral("def")] = QJsonObject{ { QStringLiteral("on"), false } };
+        f.changes << tr("Power-on: dark until the show drives it");
+    }
+
+    /* The brightness limit, from the fixture's Max draw and its LED supply.
+       All of hw.led goes back as the device said it (WLED rebuilds its
+       outputs from what is sent), only the limits changed. */
+    const QJsonObject hwLed = cfg.value(QStringLiteral("hw")).toObject().value(QStringLiteral("led")).toObject();
+    const int ma = limiterMilliamps(doc, fx);
+    if (hwLed.contains(QStringLiteral("maxpwr")) && fx->powerProfile().maxAmps > 0.0 && ma <= 0)
+        f.notes << tr("Brightness limit: not set from the show (LED supply voltage unknown); the "
+                      "WLED's own is %1 mA").arg(hwLed.value(QStringLiteral("maxpwr")).toInt());
+    if (ma > 0 && hwLed.contains(QStringLiteral("maxpwr")))
+    {
+        const int have = hwLed.value(QStringLiteral("maxpwr")).toInt();
+        QJsonArray ins = hwLed.value(QStringLiteral("ins")).toArray();
+        const bool perOutput = ins.size() == 1
+                               && ins.first().toObject().contains(QStringLiteral("maxpwr"))
+                               && ins.first().toObject().value(QStringLiteral("maxpwr")).toInt() != ma;
+        if (have != ma || perOutput)
+        {
+            f.problems << tr("its brightness limit is %1 mA; this fixture's Max draw is %2 mA of LEDs")
+                              .arg(have).arg(ma);
+            QJsonObject led = hwLed;
+            led[QStringLiteral("maxpwr")] = ma;
+            if (ins.size() == 1)
+            {
+                QJsonObject out = ins.first().toObject();
+                out[QStringLiteral("maxpwr")] = ma;
+                ins[0] = out;
+                led[QStringLiteral("ins")] = ins;
+            }
+            else
+                led.remove(QStringLiteral("ins"));     // several: the total only
+            f.fix[QStringLiteral("hw")] = QJsonObject{ { QStringLiteral("led"), led } };
+            f.changes << tr("Brightness limit: %1 mA").arg(ma);
+        }
+    }
+    return f;
+}
+
+bool WledConfigCheck::confirmSetUp(QWidget *parent, const QList<SetUpItem> &items)
+{
+    if (items.isEmpty())
+        return false;
+    QString text = items.size() == 1
+        ? tr("Set up “%1” (%2) the way this show drives it?")
+              .arg(items.first().fixtureName.toHtmlEscaped(),
+                   WledDeviceWrite::deviceName(items.first().ip).toHtmlEscaped())
+        : tr("Set up these %1 WLEDs the way this show drives them?").arg(items.size());
+    foreach (const SetUpItem &item, items)
+    {
+        text += QStringLiteral("<br><br>");
+        if (items.size() > 1)
+            text += QStringLiteral("<b>%1</b> (%2)<br>").arg(item.fixtureName.toHtmlEscaped(),
+                                                            WledDeviceWrite::deviceName(item.ip).toHtmlEscaped());
+        QStringList lines;
+        foreach (const QString &c, item.changes)
+            lines << QStringLiteral("&nbsp;&nbsp;• ") + c.toHtmlEscaped();
+        foreach (const QString &n, item.notes)
+            lines << QStringLiteral("&nbsp;&nbsp;<i>%1</i>").arg(n.toHtmlEscaped());
+        text += lines.join(QStringLiteral("<br>"));
+    }
+    text += QStringLiteral("<br><br>")
+            + tr("Wi-Fi, LED type, pins and colour order stay as they are. This changes the "
+                 "device itself; Undo can't take it back.");
+    QMessageBox box(QMessageBox::Question, tr("Set Up WLED"), text,
+                    QMessageBox::Yes | QMessageBox::Cancel, parent);
+    box.setObjectName(QStringLiteral("wledSetUpConfirm"));
+    box.setTextFormat(Qt::RichText);
+    box.button(QMessageBox::Yes)->setText(items.size() == 1 ? tr("Set Up Device")
+                                                            : tr("Set Up %1 Devices").arg(items.size()));
+    box.button(QMessageBox::Cancel)->setText(tr("Not Now"));
+    box.setDefaultButton(QMessageBox::Yes);
+    return box.exec() == QMessageBox::Yes;
+}
+
+void WledConfigCheck::offerSetUp(QWidget *parent, quint32 fixtureId)
+{
+    offerSetUp(parent, QList<quint32>{ fixtureId });
+}
+
+void WledConfigCheck::offerSetUp(QWidget *parent, const QList<quint32> &fixtureIds)
+{
+    /* Every device read first; then one question for all of them. */
+    struct Round
+    {
+        QPointer<QWidget> over;
+        QList<quint32> ids;                 // in order, one per device
+        QHash<quint32, QJsonObject> cfg;    // the ones that answered
+        int pending = 0;
+    };
+    auto round = std::make_shared<Round>();
+    round->over = parent;
+    QSet<QString> ips;
+    foreach (quint32 fid, fixtureIds)
+    {
+        const Fixture *fx = m_doc->fixture(fid);
+        if (!isWled(fx) || ips.contains(fx->ipAddress()))
+            continue;
+        const QString ip = fx->ipAddress();
+        ips.insert(ip);
+        const QString held = WledDeviceWrite::heldReason(m_doc, ip);
+        if (!held.isEmpty())
+        {
+            noteWrite(ip, tr("Nothing was written to %1: %2").arg(WledDeviceWrite::deviceName(ip), held), false);
+            continue;
+        }
+        round->ids << fid;
+    }
+    round->pending = round->ids.size();
+
+    auto ask = [this, round]() {
+        QList<SetUpItem> items;
+        QList<QPair<QString, QJsonObject> > writes;
+        foreach (quint32 fid, round->ids)
+        {
+            const Fixture *fx = m_doc->fixture(fid);
+            if (fx == nullptr || !round->cfg.contains(fid))
+                continue;
+            const QString ip = fx->ipAddress();
+            const Finding s = setUpFor(m_doc, fx, round->cfg.value(fid), true);
+            if (s.fix.isEmpty())
+            {
+                noteWrite(ip, tr("%1 is set up the way this show drives it.")
+                                  .arg(WledDeviceWrite::deviceName(ip)), false);
+                continue;
+            }
+            // Read, not written: an obvious mismatch is said, never changed here.
+            SetUpItem item;
+            item.fixtureName = fx->name();
+            item.ip = ip;
+            item.changes = s.changes;
+            item.notes = s.notes;
+            const Finding all = finding(fid);
+            if (all.fixtureLeds > 0 && all.deviceLeds > 0)
+                item.notes << tr("It drives %1 LEDs, this fixture has %2: Fix on Device sets the count.")
+                                  .arg(all.deviceLeds).arg(all.fixtureLeds);
+            items << item;
+            writes << qMakePair(ip, s.fix);
+        }
+        if (items.isEmpty() || !confirmSetUp(round->over.data(), items))
+            return;
+        for (const auto &w : std::as_const(writes))
+            writeSetUp(w.first, w.second);
+    };
+
+    foreach (quint32 fid, round->ids)
+    {
+        const QString ip = m_doc->fixture(fid)->ipAddress();
+        QNetworkRequest req(QUrl(baseUrl(ip) + QStringLiteral("/json/cfg")));
+        req.setTransferTimeout(4000);
+        QNetworkReply *r = m_nam->get(req);
+        connect(r, &QNetworkReply::finished, this, [this, r, ip, fid, round, ask]() {
+            r->deleteLater();
+            if (r->error() != QNetworkReply::NoError)
+                noteWrite(ip, tr("%1 did not answer, so it was not set up. Fix on Device offers it "
+                                 "once it answers.").arg(WledDeviceWrite::deviceName(ip)), false);
+            else
+            {
+                const QByteArray body = r->readAll();
+                receive(ip, body, true);
+                const QJsonObject cfg = QJsonDocument::fromJson(body).object();
+                if (!cfg.isEmpty())
+                    round->cfg.insert(fid, cfg);
+            }
+            if (--round->pending == 0)
+                ask();
+        });
+    }
+}
+
+void WledConfigCheck::writeSetUp(const QString &ip, const QJsonObject &fix)
+{
+    noteWrite(ip, tr("Setting up %1…").arg(WledDeviceWrite::deviceName(ip)), true);
+    QNetworkRequest post(QUrl(baseUrl(ip) + QStringLiteral("/json/cfg")));
+    post.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    post.setTransferTimeout(4000);
+    QNetworkReply *p = m_nam->post(post, QJsonDocument(fix).toJson(QJsonDocument::Compact));
+    connect(p, &QNetworkReply::finished, this, [this, p, ip, fix]() {
+        p->deleteLater();
+        if (p->error() != QNetworkReply::NoError)
+        {
+            noteWrite(ip, tr("%1 did not take it: %2").arg(WledDeviceWrite::deviceName(ip), p->errorString()), false);
+            return;
+        }
+        // Read it back: what it says now is what counts.
+        QNetworkRequest back(QUrl(baseUrl(ip) + QStringLiteral("/json/cfg")));
+        back.setTransferTimeout(4000);
+        QNetworkReply *b = m_nam->get(back);
+        connect(b, &QNetworkReply::finished, this, [this, b, ip, fix]() {
+            b->deleteLater();
+            if (b->error() != QNetworkReply::NoError)
+            {
+                noteWrite(ip, tr("Written to %1, but it could not be read back.")
+                                  .arg(WledDeviceWrite::deviceName(ip)), false);
+                return;
+            }
+            const QByteArray now = b->readAll();
+            const QStringList differ = jsonDiffers(fix, QJsonDocument::fromJson(now).object());
+            noteWrite(ip, differ.isEmpty()
+                ? tr("Set up %1 the way this show drives it.").arg(WledDeviceWrite::deviceName(ip))
+                : tr("Wrote to %1, but it reads back otherwise: %2")
+                      .arg(WledDeviceWrite::deviceName(ip), differ.join(QStringLiteral(", "))), false);
+            receive(ip, now, true);
+        });
+    });
 }

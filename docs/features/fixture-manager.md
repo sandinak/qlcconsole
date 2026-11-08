@@ -259,6 +259,45 @@ more than one LED output, or set up as a 2D matrix, is not changed: it says
 to set those counts in the WLED's own settings. Writing to the device can't
 be undone from here, and a Teaching show that holds real output refuses it.
 
+**WLEDs found on the network.** Every WLED says it is there on the
+network (mDNS), so there is no IP to type. The Fixture Manager looks every
+minute and as it opens, and WLEDs the show doesn't have yet are listed at
+the top of the **Inventory**, greyed, under **Found on the network**: "Staff
+L — WLED (172.18.2.100) · 50 LEDs", with the WLED's own name. Select one to
+see its address, network name, LED count, hardware address and version.
+Right-click ▸ **Patch** makes it a WLED fixture (WLED Effect Mode, its
+Effect mode, Network (WLED)) named after the device, with its IP, its LED
+count and a universe of its own sent to it: one **Undo** takes it back out.
+**Look for WLEDs Again** asks the network at once. While the show's rig
+networks hold output elsewhere (Show Settings), only those networks are
+asked.
+
+A WLED is known by its hardware address, so one that comes back at another
+IP (a new Wi-Fi lease) is still the same fixture: the footer says "WLED Test
+is now at .105 (was 172.18.2.100)", and **Follow It** sends the fixture and
+its universe there (one undo). A WLED in the show that isn't answering is
+the footer's "not answering or on weak Wi-Fi" line.
+
+**Set Up WLED.** After Patch, or adding a WLED with Add Fixture, the show
+offers once to set the device up the way it drives it, listing exactly what
+changes: its **name** becomes the fixture's, and its network name to match
+(Staff L → staff-l.local, from when it next starts); it stops **taking
+brightness, colour, effect and palette from other WLEDs** and sending its
+own (WLED sync: out of the box one WLED's button or app changes the others);
+it stays **dark at power-on** until the show drives it; and, when the
+fixture has a **Max draw** and its **LED supply** is set (Fixture Properties,
+the voltage its LEDs run on: 5 V, 12 V, 24 V), its brightness limit follows
+them (the Max draw's watts at the circuit's voltage, over the LED supply's).
+With the LED supply not known nothing is guessed: the confirmation says the
+limit is not set from the show and what the WLED's own is. Patching or
+adding several WLEDs at once asks **once**, listing each device's changes
+under its name. **Set Up Device** writes only those, then reads them back;
+**Not Now** writes nothing. Its Wi-Fi, LED
+type, pins and colour order are never changed. A WLED that drifts from this
+later (renamed, sync turned back on, lit at power-on) is a **Fix on
+Device…** finding in the footer like any other. A Teaching show that holds
+real output is not asked.
+
 Adding a batch of network fixtures gives them **one IP each, counting up**
 from the one you type (…60, …61, …62, carrying past .255), and the dialog
 shows the range under the IP field — "One each: 172.18.2.60 to

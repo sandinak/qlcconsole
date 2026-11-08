@@ -79,6 +79,9 @@
 #include "addrgbpanel.h"
 #include "addfixture.h"
 #include "patchinventorydialog.h"
+#include "wleddiscovery.h"
+#include "wledconfigcheck.h"
+#include <QShowEvent>
 #include "fixturecreator.h"
 #include "patchplanner.h"
 #include "rdmmanager.h"
@@ -558,6 +561,11 @@ void FixtureManager::initDataView()
                         FixtureTreeWidget::ShowPower;
 
     m_fixtures_tree = new FixtureTreeWidget(m_doc, treeFlags, this);
+    /* WLEDs found on the network and not in the show: in the Inventory,
+       patched with a right-click. Looked for again as the tab opens. */
+    m_fixtures_tree->setShowFound(true);
+    if (WledDiscovery *found = WledDiscovery::instance())
+        connect(found, &WledDiscovery::changed, this, &FixtureManager::updateView, Qt::UniqueConnection);
     /* ⌫ / Delete on the list: the toolbar's Delete… (it asks first), as in
        the Show Tree, Build and the Library. On the tree only, so a rename's
        editor keeps its keys. */
@@ -690,6 +698,16 @@ void FixtureManager::initDataView()
     createInfo();
 
     slotSelectionChanged();
+}
+
+void FixtureManager::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    if (WledDiscovery *found = WledDiscovery::instance())
+    {
+        connect(found, &WledDiscovery::changed, this, &FixtureManager::updateView, Qt::UniqueConnection);
+        found->browseSoon();
+    }
 }
 
 void FixtureManager::updateView()
@@ -1058,6 +1076,40 @@ void FixtureManager::slotSelectionChanged()
     if (anyPower)
     {
         showPower();
+        slotModeChanged(m_doc->mode());
+        return;
+    }
+
+    // A WLED found on the network → what it said, and how to patch it.
+    if (selectedCount == 1 && items.first()->data(KColumnName, PROP_FOUND).isValid()
+        && WledDiscovery::instance() != NULL)
+    {
+        if (m_info == NULL)
+            createInfo();
+        const QString key = items.first()->data(KColumnName, PROP_FOUND).toString();
+        const WledDiscovery::Device d = WledDiscovery::instance()->device(key);
+        QString html = QStringLiteral("<HTML><BODY>");
+        if (key.isEmpty() || WledDiscovery::keyOf(d).isEmpty())
+            html += tr("<H1>Found on the network</H1><P>WLEDs answering on the network that this "
+                       "show does not have yet. Right-click one ▸ <B>Patch</B> to add it.</P>");
+        else
+        {
+            html += QStringLiteral("<H1>%1</H1>").arg((d.name.isEmpty() ? WledDiscovery::describe(d) : d.name).toHtmlEscaped());
+            html += tr("<P>On the network, not in this show. Right-click ▸ <B>Patch</B> makes it a "
+                       "WLED fixture (WLED Effect Mode) with a universe of its own, sent to it.</P>");
+            html += QStringLiteral("<TABLE>");
+            auto row = [&html](const QString &k, const QString &v) {
+                if (!v.isEmpty())
+                    html += QStringLiteral("<TR><TD><B>%1</B></TD><TD>%2</TD></TR>").arg(k.toHtmlEscaped(), v.toHtmlEscaped());
+            };
+            row(tr("Address"), d.ip);
+            row(tr("Network name"), d.host.isEmpty() ? QString() : d.host + QStringLiteral(".local"));
+            row(tr("LEDs"), d.leds > 0 ? QString::number(d.leds) : QString());
+            row(tr("Hardware address"), d.mac);
+            row(tr("WLED version"), d.version);
+            html += QStringLiteral("</TABLE>");
+        }
+        m_info->setText(html + QStringLiteral("</BODY></HTML>"));
         slotModeChanged(m_doc->mode());
         return;
     }
@@ -2621,6 +2673,7 @@ bool FixtureManager::editDefinitionAndMode(QWidget *parent, Doc *doc, quint32 fi
             if (fxi->ipAddress() != af.ipAddress())
             {
                 fxi->setIPAddress(af.ipAddress());
+                fxi->setMacAddress(QString());     // another device: found again by its IP
                 changed = true;
             }
             if (fxi->transport() != af.transport())
@@ -3128,6 +3181,65 @@ void FixtureManager::copySelectionIntoGroup(FixtureGroup* target,
     m_doc->setModified();
 }
 
+void FixtureManager::foundContextMenu(QTreeWidgetItem *clicked)
+{
+    WledDiscovery *found = WledDiscovery::instance();
+    if (found == NULL)
+        return;
+    // The rows picked out (the folder stands for all of them).
+    QStringList keys;
+    auto take = [&keys](QTreeWidgetItem *item) {
+        const QString key = item->data(KColumnName, PROP_FOUND).toString();
+        if (!key.isEmpty() && !keys.contains(key))
+            keys << key;
+        for (int i = 0; i < item->childCount(); i++)
+            if (!item->child(i)->data(KColumnName, PROP_FOUND).toString().isEmpty()
+                && !keys.contains(item->child(i)->data(KColumnName, PROP_FOUND).toString()))
+                keys << item->child(i)->data(KColumnName, PROP_FOUND).toString();
+    };
+    if (clicked->isSelected())
+        foreach (QTreeWidgetItem *item, m_fixtures_tree->selectedItems())
+            if (item->data(KColumnName, PROP_FOUND).isValid())
+                take(item);
+    if (keys.isEmpty())
+        take(clicked);
+
+    QMenu menu(this);
+    ContextMenu cm(&menu);
+    QAction *patch = NULL;
+    if (!keys.isEmpty())
+        patch = cm.add(ContextMenu::Kind, keys.size() == 1 ? tr("Patch") : tr("Patch %1 WLEDs").arg(keys.size()),
+                       std::function<void()>(), QStringLiteral("fmPatchFound"));
+    QAction *again = cm.add(ContextMenu::View, tr("Look for WLEDs Again"), std::function<void()>(),
+                            QStringLiteral("fmLookAgain"));
+    cm.finish();
+    QAction *chosen = menu.exec(QCursor::pos());
+    if (chosen == again)
+    {
+        found->browseNow();
+        return;
+    }
+    if (chosen == NULL || chosen != patch)
+        return;
+    if (!ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Patch WLEDs found on the network")))
+        return;
+    quint32 last = Fixture::invalidId();
+    QList<quint32> made;
+    foreach (const QString &key, keys)
+    {
+        const quint32 fid = found->patch(this, key, false);
+        if (fid != Fixture::invalidId())
+            made << (last = fid);
+    }
+    // One Set Up question for all of them.
+    if (WledConfigCheck *check = WledConfigCheck::instance())
+        if (!made.isEmpty())
+            check->offerSetUp(this, made);
+    updateView();
+    if (QTreeWidgetItem *row = m_fixtures_tree->fixtureItem(last))
+        m_fixtures_tree->setCurrentItem(row);
+}
+
 void FixtureManager::slotContextMenuRequested(const QPoint &pos)
 {
     // Which universe was the click in? A universe row carries PROP_UNIVERSE; a
@@ -3135,6 +3247,14 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     // menu below) reads m_ctxUniverse to default the dialog to that universe.
     // ctxIsUniverseRow distinguishes the direct hit (offer "Delete universe…")
     // from a fixture merely living in that universe (don't).
+    /* A WLED found on the network (or their folder): Patch it. */
+    if (QTreeWidgetItem *clicked = m_fixtures_tree->itemAt(pos))
+        if (clicked->data(KColumnName, PROP_FOUND).isValid())
+        {
+            foundContextMenu(clicked);
+            return;
+        }
+
     m_ctxUniverse = InputOutputMap::invalidUniverse();
     bool ctxIsUniverseRow = false;
     // A right-click on the Inventory root is a request to work on the inventory:

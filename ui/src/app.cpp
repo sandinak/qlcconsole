@@ -152,6 +152,7 @@
 #include "legacysettings.h"
 #include "apputil.h"
 #include "wledconfigcheck.h"
+#include "wleddiscovery.h"
 #include "controlsurfaceengine.h"
 #include "pmjoverlay.h"
 #include "showstatus.h"
@@ -1436,6 +1437,21 @@ void App::initDoc()
        or a fixture changes (a patch, a mode), and every so often anyway. */
     WledConfigCheck *wledCheck = new WledConfigCheck(m_doc, this);
 
+    /* WLEDs found on the network (mDNS): the Inventory's "found" rows, one
+       right-click from patched, and a fixture whose WLED answers at a new
+       IP. Not on the offscreen/minimal platforms (the tests, CI) unless
+       QLC_WLED_DISCOVERY=1: nothing there to find, nobody to patch it. */
+    WledDiscovery *wledDiscovery = new WledDiscovery(m_doc, this);
+    {
+        const QString platform = QGuiApplication::platformName();
+        if ((platform != QLatin1String("offscreen") && platform != QLatin1String("minimal"))
+            || qEnvironmentVariableIntValue("QLC_WLED_DISCOVERY") == 1)
+            QTimer::singleShot(2000, wledDiscovery, &WledDiscovery::start);
+        if (FixtureManager *fm = FixtureManager::instance())
+            connect(wledDiscovery, &WledDiscovery::changed, fm, &FixtureManager::updateView,
+                    Qt::UniqueConnection);
+    }
+
     /* Cues fired from outside (QLab): OSC on a port of our own, MSC on a
        patched MIDI input (docs/design/SHOW_CONTROL_DESIGN.md). */
     m_showControlListener = new ShowControlListener(m_doc, this);
@@ -1486,6 +1502,13 @@ void App::initDoc()
                 ids << v.toUInt();
             if (WledConfigCheck::instance() != nullptr)
                 WledConfigCheck::instance()->confirmFix(parent, ids);
+        });
+    /* A WLED found at another IP than the show has: sent there (one undo). */
+    ShowStatus::instance()->setAction("wled.moved", tr("Follow It"),
+        [](QWidget *parent, const QVariantList &items) {
+            if (WledDiscovery *found = WledDiscovery::instance())
+                foreach (const QVariant &v, items)
+                    found->follow(parent, v.toUInt());
         });
     /* A WLED by its own API on a universe that doesn't reach it: a
        universe of its own, sent to its IP (one undo). */

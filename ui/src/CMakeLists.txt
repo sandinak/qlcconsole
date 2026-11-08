@@ -47,6 +47,7 @@ add_library(${module_name}
     stagecolourpicker.cpp stagecolourpicker.h
     wledconfigcheck.cpp wledconfigcheck.h
     wleddevicewrite.cpp wleddevicewrite.h
+    wleddiscovery.cpp wleddiscovery.h
     wleddevicesdialog.cpp wleddevicesdialog.h
     clickandgoslider.cpp clickandgoslider.h
     clickandgowidget.cpp clickandgowidget.h

@@ -44,6 +44,7 @@ class Doc;
 #define PROP_CLASHES  Qt::UserRole + 10 //!< marks the "Address clashes" root
 #define PROP_DUPLICATES Qt::UserRole + 11 //!< marks the "Duplicate names" root and its rows
 #define PROP_LOOK     Qt::UserRole + 12 //!< a fixture row's stage look when its icon was set (int)
+#define PROP_FOUND    Qt::UserRole + 13 //!< a WLED found on the network, not in the show: its key (WledDiscovery::keyOf()); the folder holds ""
 
 class FixtureTreeWidget final : public QTreeWidget
 {
@@ -84,6 +85,12 @@ public:
      *  expanding every fixture's heads would bury the tree for anything with
      *  a large head count (a 96-head pixel bar, say). Rebuilds the tree. */
     void setShowHeads(bool on);
+
+    /** List the WLEDs found on the network and not in the show
+     *  (WledDiscovery::notInShow()) in the Inventory, greyed, under "Found
+     *  on the network": the Fixture Manager's tree, where they are patched.
+     *  Rebuilds the tree. */
+    void setShowFound(bool on);
 
     /** Get a QTreeWidgetItem whose fixture ID is $id */
     QTreeWidgetItem* fixtureItem(quint32 id) const;
@@ -240,6 +247,7 @@ private:
     int m_manufColumn;
     int m_modelColumn;
     bool m_showGroups;
+    bool m_showFound = false;
     bool m_showHeads;
     bool m_channelSelection;
     bool m_showPower;

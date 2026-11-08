@@ -1635,6 +1635,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     bool patched = true;
     Connection connection = Dmx;
     QString ipAddress;
+    QString macAddress;
     Transport transport = ArtNetTransport;
     StageLook stageLook = AutoLook;
     quint32 channels = 0;
@@ -1698,6 +1699,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         }
         else if (xmlDoc.name() == KXMLFixtureIPAddress)
         {
+            macAddress = xmlDoc.attributes().value(KXMLFixtureMacAddress).toString();
             ipAddress = xmlDoc.readElementText();
         }
         else if (xmlDoc.name() == KXMLFixturePower)
@@ -1925,6 +1927,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     setPatched(patched);
     setConnection(connection);
     setIPAddress(ipAddress);
+    setMacAddress(macAddress);
     setTransport(transport);
     m_stageLook.store(int(stageLook), std::memory_order_relaxed);
     setName(name);
@@ -2002,7 +2005,13 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
     if (m_connection == Network)
         doc->writeTextElement(KXMLFixtureConnection, QStringLiteral("Network"));
     if (!m_ipAddress.isEmpty())
-        doc->writeTextElement(KXMLFixtureIPAddress, m_ipAddress);
+    {
+        doc->writeStartElement(KXMLFixtureIPAddress);
+        if (!m_macAddress.isEmpty())
+            doc->writeAttribute(KXMLFixtureMacAddress, m_macAddress);
+        doc->writeCharacters(m_ipAddress);
+        doc->writeEndElement();
+    }
     if (m_transport == WledTransport)
         doc->writeTextElement(KXMLFixtureTransport, QStringLiteral("WLED"));
     /* Upstream QLC+ skips a tag it does not know, so a show with looks set

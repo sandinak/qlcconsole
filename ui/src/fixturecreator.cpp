@@ -19,6 +19,7 @@
 #include "qlcfixturemode.h"
 #include "fixturegroup.h"
 #include "patchplanner.h"
+#include "wledconfigcheck.h"
 #include "addfixture.h"
 #include "monitor.h"
 #include "apputil.h"
@@ -176,7 +177,13 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
     }
 
     if (ownUniverse && !created.isEmpty())
+    {
         routeWled(parent, doc, created, true);
+        /* Set them up on the devices the way the show drives them (name,
+           no WLED sync, dark at power-on): one question for the batch. */
+        if (WledConfigCheck *check = WledConfigCheck::instance())
+            check->offerSetUp(parent, created);
+    }
 
     if (pastLimit)
     {

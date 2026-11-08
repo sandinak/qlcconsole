@@ -1733,6 +1733,7 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
         newFixture->setPatched(fixture->isPatched());
         newFixture->setConnection(fixture->connection());
         newFixture->setIPAddress(fixture->ipAddress());
+        newFixture->setMacAddress(fixture->macAddress());
         newFixture->setTransport(fixture->transport());
         newFixture->setStageLook(fixture->stageLook());
         newFixture->setOwner(fixture->owner());

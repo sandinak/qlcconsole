@@ -17,6 +17,20 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **A fixture in no group is in the Show Tree's Library.** Under All, **Loose fixtures** lists them (a WLED just added, a spare), found by
   name or model in the filter; drag one onto a cue for a layer on just that fixture.
   It leaves the list once it joins a group.
+- **WLEDs found on the network, patched with a right-click.** WLEDs
+  announce themselves (mDNS); the ones the show doesn't have are greyed in
+  the Fixture Manager's Inventory ("Staff L — WLED (172.18.2.100) · 50
+  LEDs"). Right-click ▸ **Patch** makes the WLED fixture, named from the
+  device, with its IP, LED count and a universe of its own (one undo). A
+  WLED that comes back at a new IP is found by its hardware address: "WLED
+  Test is now at .105", **Follow It**. Then **Set Up WLED** offers once to
+  give the device the fixture's name, stop WLED sync with other WLEDs, keep
+  it dark at power-on and set its brightness limit from Max draw and the
+  new **LED supply** voltage (left alone while that is not known); a batch
+  asks once for all of them; only
+  those settings are written, read back, and a drift later is a Fix on
+  Device finding (UX-76).
+
 - **Build's Workbench points to where a look is recorded.** Under Play, one
   quiet grey line, **Record it as a cue in the Show Tree ▸**, shows while a
   look with something in it is loaded (a scene with levels or looks, or any

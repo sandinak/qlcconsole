@@ -29,6 +29,7 @@
 #include <QTreeWidgetItemIterator>
 
 #include <QMap>
+#include <QFont>
 #include "fixturetreewidget.h"
 #include "monitor.h"
 #include "monitor/fixturevisualtraits.h"
@@ -43,6 +44,7 @@
 #include "outputpatch.h"
 #include "powerdistribution.h"
 #include "outputrulekeeper.h"
+#include "wleddiscovery.h"
 
 // Short output-destination description for a universe (by ID), e.g.
 // "ArtNet: 172.18.2.221 U:0", or the plugin name for non-network outputs.
@@ -1544,6 +1546,43 @@ void FixtureTreeWidget::updateTree()
         refreshInventoryCounts();
     }
 
+    /* WLEDs on the network that the show does not have: greyed, first in
+       the Inventory, each patched with a right-click (FixtureManager). */
+    const QList<WledDiscovery::Device> found = (m_showFound && m_showGroups && !m_channelSelection
+                                                && WledDiscovery::instance() != NULL)
+        ? WledDiscovery::instance()->notInShow() : QList<WledDiscovery::Device>();
+    if (!found.isEmpty())
+    {
+        blockSignals(true);
+        QTreeWidgetItem *root = ensureInventoryRoot();
+        QTreeWidgetItem *folder = new QTreeWidgetItem;
+        root->insertChild(0, folder);
+        folder->setText(KColumnName, tr("Found on the network (%1)").arg(found.size()));
+        folder->setIcon(KColumnName, QIcon(":/folder.png"));
+        folder->setData(KColumnName, PROP_FOUND, QString());
+        folder->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        folder->setToolTip(KColumnName, tr("WLEDs answering on the network that this show does not "
+                                           "have yet. Right-click one ▸ Patch to add it."));
+        const QBrush grey(palette().color(QPalette::Disabled, QPalette::Text));
+        foreach (const WledDiscovery::Device &d, found)
+        {
+            QTreeWidgetItem *row = new QTreeWidgetItem(folder);
+            row->setText(KColumnName, d.name.isEmpty() ? WledDiscovery::describe(d)
+                                                       : tr("%1 — %2").arg(d.name, WledDiscovery::describe(d)));
+            row->setData(KColumnName, PROP_FOUND, WledDiscovery::keyOf(d));
+            row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            row->setForeground(KColumnName, grey);
+            QFont f = row->font(KColumnName);
+            f.setItalic(true);
+            row->setFont(KColumnName, f);
+            row->setToolTip(KColumnName, tr("On the network, not in this show. Right-click ▸ Patch "
+                                            "makes it a WLED fixture with a universe of its own."));
+        }
+        blockSignals(false);
+        folder->setExpanded(true);
+        root->setExpanded(true);
+    }
+
     /* Names more than one fixture has -- a show from before names were
        unique, or merged with another ("two AT1-3z lights .. one in the upper
        left corner"). Listed at the top, a row per name, to be numbered apart
@@ -1592,6 +1631,14 @@ void FixtureTreeWidget::updateTree()
     restoreSelection(keep);
 }
 
+void FixtureTreeWidget::setShowFound(bool on)
+{
+    if (m_showFound == on)
+        return;
+    m_showFound = on;
+    updateTree();
+}
+
 void FixtureTreeWidget::refreshInventoryCounts()
 {
     QTreeWidgetItem *root = NULL;
@@ -1605,6 +1652,8 @@ void FixtureTreeWidget::refreshInventoryCounts()
     for (int m = root->childCount() - 1; m >= 0; m--)
     {
         QTreeWidgetItem *mNode = root->child(m);
+        if (mNode->data(KColumnName, PROP_FOUND).isValid())
+            continue;                   // found on the network: not in the show
         int manufTotal = 0;
         for (int d = mNode->childCount() - 1; d >= 0; d--)
         {

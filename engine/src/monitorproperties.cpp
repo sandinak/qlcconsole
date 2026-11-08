@@ -4078,6 +4078,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.wandLength = qMax(0.1f, a.value("WandLen").toFloat());
             if (a.hasAttribute("WandStrip"))
                 rp.wandStripLength = qMax(0.0f, a.value("WandStrip").toFloat());
+            if (a.hasAttribute("LedSupplyV"))
+                rp.ledSupplyVolts = qMax(0.0f, a.value("LedSupplyV").toFloat());
             if (a.hasAttribute("WandDia"))
                 rp.wandDiameter = qMax(0.005f, a.value("WandDia").toFloat());
             if (a.hasAttribute("WandTop"))
@@ -5028,6 +5030,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
             doc->writeAttribute(QStringLiteral("WandLen"), QString::number(double(rp.wandLength), 'f', 3));
         if (rp.wandStripLength > 0.0f)
             doc->writeAttribute(QStringLiteral("WandStrip"), QString::number(double(rp.wandStripLength), 'f', 3));
+        if (rp.ledSupplyVolts > 0.0f)
+            doc->writeAttribute(QStringLiteral("LedSupplyV"), QString::number(double(rp.ledSupplyVolts), 'f', 1));
         if (qAbs(rp.wandDiameter - 0.025f) > 1e-5f)
             doc->writeAttribute(QStringLiteral("WandDia"), QString::number(double(rp.wandDiameter), 'f', 4));
         if (rp.wandFromTop)
