@@ -233,7 +233,9 @@ def diff_hits(diff_path, rules):
 # What a diff is read against (the "diff" packet): the rules a change can
 # break before any screen shows it, and the complexity bar.
 DIFF_RULES = ["UX-01", "UX-02", "UX-12", "UX-17", "UX-23", "UX-44", "UX-60",
-              "UX-61", "UX-62", "UX-63", "UX-64", "UX-65", "UX-66"]
+              "UX-61", "UX-62", "UX-63", "UX-64", "UX-65", "UX-66",
+              "UX-67", "UX-68", "UX-69", "UX-70", "UX-71", "UX-72", "UX-73",
+              "UX-74", "UX-75"]
 DIFF_COURSE_RULES = ["UX-57", "UX-58", "UX-59"]
 FLOWS_JSON = os.path.join(REPO, "docs/dev/ux_flows.json")
 

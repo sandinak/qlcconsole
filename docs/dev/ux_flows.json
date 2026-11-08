@@ -774,6 +774,160 @@
           }
         }
       ]
+    },
+    {
+      "id": "F-11",
+      "title": "Add a WLED string and play its effects",
+      "from": "2026-11-07 his office WLED test (UX-67 to UX-72)",
+      "rules": [
+        "UX-67",
+        "UX-68",
+        "UX-70",
+        "UX-72",
+        "UX-66"
+      ],
+      "budget": 26,
+      "levels": {
+        "student": "Add the WLED with its IP, fix it on the device, build a Starburst cue that runs once, then a colour cue, then Locate.",
+        "pro": "Add Fixture takes the IP and puts the WLED on its own universe in one dialog; the cue's Runs and At the end are in the Look Editor."
+      },
+      "steps": [
+        {
+          "screen": "any",
+          "control": "Fixtures tab",
+          "expect": "Fixture Manager",
+          "clicks": 1,
+          "manual": "Needs his WLED and the Add Fixture dialog's model tree; not driven by the walker yet."
+        },
+        {
+          "screen": "Fixtures",
+          "control": "Add Fixture ▸ WLED ▸ Effect Mode / Effect (15ch)",
+          "expect": "the Add Fixture dialog with the WLED model",
+          "clicks": 3,
+          "manual": "The model tree isn't driven yet."
+        },
+        {
+          "screen": "Add Fixture",
+          "control": "Connection ▸ Network (WLED, JSON over Wi-Fi)",
+          "expect": "an IP field; no universe or patch step",
+          "clicks": 2,
+          "manual": "A dialog combo the walker doesn't drive yet."
+        },
+        {
+          "screen": "Add Fixture",
+          "control": "the IP (172.18.2.100), OK",
+          "expect": "the WLED on its own universe with the WLED output, sent to its IP (UX-67)",
+          "clicks": 2,
+          "manual": "Needs a real WLED at the IP."
+        },
+        {
+          "screen": "footer",
+          "control": "the finding chip ▸ Fix on Device… ▸ OK",
+          "expect": "the footer finding gone; the device settings fixed",
+          "clicks": 2,
+          "manual": "Writes to the real device."
+        },
+        {
+          "screen": "any",
+          "control": "Show Tree tab",
+          "expect": "the Show Tree",
+          "clicks": 1,
+          "manual": "Follows a device step; checked on his rig."
+        },
+        {
+          "screen": "Show Tree",
+          "control": "+ Cue List, + Cue",
+          "expect": "a cue list with one cue",
+          "clicks": 2,
+          "manual": "Part of the same device run."
+        },
+        {
+          "screen": "Show Tree",
+          "control": "the layer on the WLED",
+          "expect": "its Look Editor",
+          "clicks": 1,
+          "manual": "Part of the same device run."
+        },
+        {
+          "screen": "Look Editor",
+          "control": "Effect ▸ Fireworks Starburst",
+          "expect": "the WLED effect chosen",
+          "clicks": 2,
+          "manual": "The effect shows on the device only."
+        },
+        {
+          "screen": "Look Editor",
+          "control": "Runs ▸ Once; At the end ▸ Hold",
+          "expect": "Runs: Once and At the end: Hold, working on the device (UX-68)",
+          "clicks": 4,
+          "manual": "Whether it runs once is seen on the device."
+        },
+        {
+          "screen": "Show Tree, Design",
+          "control": "GO on the armed cue",
+          "expect": "the effect plays once on the WLED, in Design (UX-62)",
+          "clicks": 1,
+          "manual": "Seen on the device."
+        },
+        {
+          "screen": "Show Tree",
+          "control": "+ Cue, a colour only",
+          "expect": "a second cue with a colour and no effect; the WLED goes to solid colour (UX-70)",
+          "clicks": 3,
+          "manual": "Seen on the device."
+        },
+        {
+          "screen": "Show Tree",
+          "control": "right-click the WLED ▸ Locate",
+          "expect": "solid white flashes over whatever plays; all back after (UX-72)",
+          "clicks": 2,
+          "manual": "Seen on the device."
+        }
+      ]
+    },
+    {
+      "id": "F-12",
+      "title": "Duplicate a cue and change only the copy",
+      "from": "2026-11-07 catch (UX-69); docs/features/show-tree.md Record and duplicate",
+      "rules": [
+        "UX-69",
+        "UX-66"
+      ],
+      "budget": 4,
+      "levels": {
+        "student": "Select the cue, Duplicate, change the copy, check the original.",
+        "pro": "Duplicate with ⌘D beside the clicks."
+      },
+      "steps": [
+        {
+          "screen": "Show Tree",
+          "control": "a cue",
+          "expect": "its page",
+          "clicks": 1,
+          "manual": "Part of the walker's cue run once the course show has two looks on a layer; for now a person checks the original."
+        },
+        {
+          "screen": "Show Tree",
+          "control": "Duplicate (⌘D)",
+          "expect": "a copy of the cue after it (UX-42)",
+          "clicks": 1,
+          "manual": "Part of the walker's cue run once the course show has two looks on a layer; for now a person checks the original."
+        },
+        {
+          "screen": "Look Editor",
+          "control": "change the copy's effect or colour",
+          "expect": "the copy changes; the Look Editor says what, if anything, is still shared (UX-69)",
+          "clicks": 1,
+          "manual": "Part of the walker's cue run once the course show has two looks on a layer; for now a person checks the original."
+        },
+        {
+          "screen": "Show Tree",
+          "control": "the original cue",
+          "expect": "unchanged (UX-69)",
+          "clicks": 1,
+          "manual": "Part of the walker's cue run once the course show has two looks on a layer; for now a person checks the original."
+        }
+      ]
     }
   ]
 }
