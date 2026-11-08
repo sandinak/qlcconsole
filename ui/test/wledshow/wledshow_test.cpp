@@ -18,6 +18,7 @@
 #include <QElapsedTimer>
 #include <QFormLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
@@ -33,6 +34,7 @@
 #define protected public
 #include "monitor.h"
 #include "fixturefields.h"
+#include "addfixture.h"
 #undef protected
 #undef private
 #include "monitorproperties.h"
@@ -41,7 +43,9 @@
 #include "pixelpath.h"
 #include "truss.h"
 #include "wledconfigcheck.h"
+#include "fixturecreator.h"
 #include "ioplugincache.h"
+#include "iopluginstub.h"
 #include "inputoutputmap.h"
 #include "outputpatch.h"
 #include "patchplanner.h"
@@ -100,6 +104,24 @@ private:
     QStringList m_accept;
     QTimer m_timer;
 };
+
+/* Run @p fill on the Add Fixture dialog once it is up, then press OK: the
+   dialog is modal and blocks addFromDialog(), so this comes from a timer. */
+void driveAddDialog(std::function<void(AddFixture *)> fill)
+{
+    auto poll = std::make_shared<std::function<void()>>();
+    *poll = [fill, poll]() {
+        AddFixture *dlg = qobject_cast<AddFixture *>(QApplication::activeModalWidget());
+        if (dlg == nullptr)
+        {
+            QTimer::singleShot(10, *poll);
+            return;
+        }
+        fill(dlg);
+        dlg->m_buttonBox->button(QDialogButtonBox::Ok)->click();
+    };
+    QTimer::singleShot(0, *poll);
+}
 
 QList<bool> revs(const FakeWled &w)
 {
@@ -264,39 +286,80 @@ void WledShow_Test::anEffectFromAShowPlaysOnEverySpanOfAFountain()
     QVERIFY(QMetaObject::invokeMethod(plugin, "setSendInterval", Q_ARG(int, 30)));
     QVERIFY(QMetaObject::invokeMethod(plugin, "setInfoInterval", Q_ARG(int, 80)));
 
-    // Add Fixture: a WLED Effect Mode, 15 channels, on the network by WLED's API.
+    // A WLED Effect Mode definition, as the fixture library has it.
     QLCFixtureDef *def = new QLCFixtureDef();
     QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Effect-Mode.qxf"),
              QFile::NoError);
     QVERIFY(doc.fixtureDefCache()->addFixtureDef(def));
-    QLCFixtureMode *mode = nullptr;
-    for (QLCFixtureMode *each : def->modes())
-        if (each->name() == "Effect (15ch)")
-            mode = each;
-    QVERIFY(mode != nullptr);
-    Fixture *fx = new Fixture(&doc);
-    fx->setName("Sprinkles");
-    fx->setFixtureDefinition(def, mode);
-    fx->setConnection(Fixture::Network);
-    fx->setTransport(Fixture::WledTransport);
-    fx->setIPAddress(wled.address());
-    fx->setPatched(false);                      // staged: Patch puts it somewhere
-    QVERIFY(doc.addFixture(fx));
+
+    /* The show already sends universe 1 as Art-Net to a node, with a dimmer
+       on it: the WLED must not land there (it never hears Art-Net). */
+    QLCIOPlugin *artnet = nullptr;
+    {
+        doc.ioPluginCache()->load(QDir(TEST_STUB_DIR, "*iopluginstub*"));
+        foreach (QLCIOPlugin *p, doc.ioPluginCache()->plugins())
+            if (p->name() != "WLED")
+                artnet = p;
+        QVERIFY2(artnet != nullptr, "the I/O plugin stub did not load");
+        static_cast<IOPluginStub *>(artnet)->m_nameOverride = "ArtNet";   // never sends anywhere
+    }
+    QVERIFY(doc.inputOutputMap()->setOutputPatch(0, "ArtNet", QString(), 0));
+    doc.inputOutputMap()->outputPatch(0)->setPluginParameter("outputIP", "10.255.255.10");
+    doc.inputOutputMap()->setUniverseName(0, "U01-Office");
+    Fixture *dimmer = new Fixture(&doc);
+    dimmer->setName("Desk Lamp");
+    dimmer->setChannels(1);
+    dimmer->setUniverse(0);
+    dimmer->setAddress(0);
+    QVERIFY(doc.addFixture(dimmer));
+
+    /* Add Fixture, as the Fixture Manager runs it, opened in that universe:
+       Effect (15ch), Network (WLED, JSON over Wi-Fi), its IP. Universe and
+       address are not asked: it gets a universe of its own. */
+    bool fieldsOff = false;
+    QString said;
+    driveAddDialog([&](AddFixture *dlg) {
+        dlg->fillTree("WLED", "Effect Mode");
+        const int m = dlg->m_modeCombo->findText("Effect (15ch)");
+        dlg->m_modeCombo->setCurrentIndex(m);
+        dlg->slotModeActivated(m);
+        dlg->m_nameEdit->setText("Sprinkles");
+        dlg->slotNameEdited("Sprinkles");
+        dlg->m_connectionCombo->setCurrentIndex(dlg->m_connectionCombo->findData(
+            AddFixture::connectionKey(Fixture::Network, Fixture::WledTransport)));
+        dlg->m_ipEdit->setText(wled.address());
+        fieldsOff = !dlg->m_universeCombo->isEnabled() && !dlg->m_addressSpin->isEnabled();
+        said = dlg->m_ownUniverseLabel->isHidden() ? QString() : dlg->m_ownUniverseLabel->text();
+    });
+    const QList<quint32> made = FixtureCreator::addFromDialog(nullptr, &doc, false, 0, nullptr);
+    QVERIFY(fieldsOff);
+    QCOMPARE(said, QString("Gets a universe of its own, sent to its IP."));
+    QCOMPARE(made.size(), 1);
+    Fixture *fx = doc.fixture(made.first());
+    QVERIFY(fx != nullptr);
+    QCOMPARE(fx->channels(), 15u);
+    QCOMPARE(fx->transport(), Fixture::WledTransport);
     const quint32 fid = fx->id();
     MonitorProperties *props = doc.monitorProperties();
     FixtureRigProps rp = props->fixtureRigProps(fid);
     rp.lightLeds = 50;                          // Fixture Properties ▸ LEDs: the string as built
     props->setFixtureRigProps(fid, rp);
 
-    // Patch: the universe goes out through the WLED output, at the device.
-    PatchPlanner planner(&doc);
-    QStringList problems;
-    QCOMPARE(planner.apply(planner.plan({ fid }), &problems), 1);
-    QVERIFY2(problems.isEmpty(), qPrintable(problems.join("; ")));
+    // Patched already: on a universe of its own, out through the WLED output, at the device.
+    QVERIFY(fx->isPatched());
+    QVERIFY(fx->universe() != 0);
+    QCOMPARE(PatchPlanner::wledRoute(&doc, fx), PatchPlanner::WledRouted);
     OutputPatch *op = doc.inputOutputMap()->outputPatch(fx->universe());
     QVERIFY(op != nullptr);
     QCOMPARE(op->pluginName(), QString("WLED"));
     QCOMPARE(op->getPluginParameters().value("outputIP").toString(), wled.address());
+    QCOMPARE(op->getPluginParameters().value("wledAddress").toInt(), int(fx->address()) + 1);
+    QCOMPARE(op->getPluginParameters().value("wledChannels").toInt(), 15);
+    // The Art-Net universe is as it was.
+    QCOMPARE(doc.inputOutputMap()->outputPatch(0)->pluginName(), QString("ArtNet"));
+    QCOMPARE(doc.inputOutputMap()->outputPatch(0)->getPluginParameters().value("outputIP").toString(),
+             QString("10.255.255.10"));
+    QCOMPARE(doc.inputOutputMap()->getUniverseNameByID(0), QString("U01-Office"));
 
     // The settings check finds what is wrong with it, and Fix on Device puts it right.
     WledConfigCheck check(&doc);

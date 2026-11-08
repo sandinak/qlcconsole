@@ -144,6 +144,9 @@ private slots:
      *  channel) has "Beam (lens set to)" in Fixture Properties; setting it
      *  sets the light's lens, which is what its beam is drawn at. */
     void aLensSetInFixturePropertiesIsTheLights();
+    /** A WLED's string of LEDs shows what a string has, none of a hung
+     *  light's aim rows; a mover keeps them (shots with QLC_SHOT_DIR). */
+    void aWledStringIsNotAimedInFixtureProperties();
     void theStageStaysCentredWithFixturesOffIt();
     /** "can't c/p stage features": scenery, towers, booms and stands copy
      *  and paste, one undo step. */

@@ -23,7 +23,9 @@
 #include <QStringList>
 #include <QList>
 #include <QHash>
+#include <functional>
 
+class Fixture;
 class Doc;
 class QLCFixtureMode;
 
@@ -171,6 +173,39 @@ public:
      *  onto that node port. Returns how many were patched; anything that could
      *  not be done is described in @p problems. */
     int apply(const QList<Assignment> &assignments, QStringList *problems = NULL);
+
+    /*********************************************************************
+     * WLED by its own API
+     *********************************************************************/
+
+    /** Where a WLED driven by its own API (Network, WLED transport) stands:
+     *  it is only heard when its universe goes out through the WLED output,
+     *  aimed at its IP. */
+    enum WledRoute
+    {
+        WledRouted,         //!< as it should be (or not a WLED by its API, or no IP)
+        WledNotPatched,     //!< in the inventory: Patch gives it a universe
+        WledNoOutput,       //!< its universe has no output
+        WledOtherOutput,    //!< its universe goes out another way (Art-Net, sACN...)
+        WledOtherIp,        //!< through the WLED output, but to another IP
+        WledStale           //!< aimed right, but reading other channels than its own
+    };
+    /** @p fx's route. @p detail: the other output's plugin (WledOtherOutput)
+     *  or the IP it goes to instead (WledOtherIp). */
+    static WledRoute wledRoute(Doc *doc, const Fixture *fx, QString *detail = NULL);
+
+    /** Put each of @p fixtureIds that is a WLED by its own API and not
+     *  routed (wledRoute()) where it is heard: a universe of its own for its
+     *  IP -- or the one already sent to that IP -- patched to the WLED output
+     *  with its address and channels. Unpatched ones (just added) are
+     *  patched; patched ones move, except one alone on a WLED universe that
+     *  only needs its output re-aimed, which stays. A universe carrying other
+     *  fixtures or going out another way is never repatched: the fixture
+     *  leaves it. Returns how many were put right; @p problems as apply().
+     *  @p undo, when given, is set to what puts it all back (the universes
+     *  it touched and made, and where each fixture was) -- one step. */
+    int routeWled(const QList<quint32> &fixtureIds, QStringList *problems = NULL,
+                  std::function<void()> *undo = NULL);
 
     /** The name the show's own universe naming gives @p universe for what is
      *  on it now. The scheme is learned from the names it has -- "U17-US1-1",

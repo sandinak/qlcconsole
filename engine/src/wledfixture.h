@@ -30,6 +30,15 @@ namespace WledFixture
      *  effect is RUN ON rather than computed for. */
     bool runsEffects(const Fixture *fx);
 
+    /** Whether @p fx is a string of LEDs run by a WLED -- driven by WLED's
+     *  own API, or a WLED definition -- rather than a light that is hung and
+     *  aimed. Fixture Properties shows such a string what a string has
+     *  (connection, LEDs, string length, pixel path) and hides the mounted
+     *  light's rows (aim, tilt, beam, masking, orientation), keeping their
+     *  stored values. A WLED driving something that pans or tilts is a
+     *  mounted light again: that is the way back in for one that drives one. */
+    bool isPixelString(const Fixture *fx);
+
     /** The index of @p fx's channel called @p name, -1 when its mode has
      *  none. */
     int channel(const Fixture *fx, const QString &name);

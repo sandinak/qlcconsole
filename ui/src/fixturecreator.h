@@ -58,6 +58,18 @@ public:
                                         quint32 preselectUniverse, FixtureGroup *addToGroup,
                                         const Fixture *like = NULL,
                                         const QString &manufacturer = QString());
+
+    /**
+     * Give each WLED driven by its own API among @p fixtureIds a universe of
+     * its own for its IP, sent there through the WLED output
+     * (PatchPlanner::routeWled()), as one undo step on the rig (Cmd/Ctrl+Z
+     * on the Fixtures tab or the plot). @p deleteOnUndo: the fixtures were
+     * just added, and the undo takes them out again too. What could not be
+     * done is said in a box over @p parent (none when @p parent is NULL).
+     * @return how many were put right
+     */
+    static int routeWled(QWidget *parent, Doc *doc, const QList<quint32> &fixtureIds,
+                         bool deleteOnUndo);
 };
 
 /** @} */

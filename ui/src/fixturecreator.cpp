@@ -18,7 +18,9 @@
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "fixturegroup.h"
+#include "patchplanner.h"
 #include "addfixture.h"
+#include "monitor.h"
 #include "apputil.h"
 #include "fixture.h"
 #include "doc.h"
@@ -88,6 +90,12 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
     }
 
     bool pastLimit = false;
+    /* A WLED driven by its own API is heard only through the WLED output,
+       aimed at its IP: each gets a universe of its own (the dialog says so
+       and leaves the universe and address alone), so it is added unpatched
+       and patched there below. */
+    const bool ownUniverse = !inventory && af.connection() == Fixture::Network
+                             && af.transport() == Fixture::WledTransport;
 
     /* Add the rest (if any) WITH address gap */
     for (int i = 0; i < af.amount(); i++)
@@ -117,7 +125,7 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
 
         /* Assign the next address AFTER the previous fixture
            address space plus gap. */
-        if (inventory)
+        if (inventory || ownUniverse)
         {
             // Staged, not patched: the 0/0 is a placeholder that Doc::addFixture()
             // never registers and no DMX path ever writes.
@@ -167,6 +175,9 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
         }
     }
 
+    if (ownUniverse && !created.isEmpty())
+        routeWled(parent, doc, created, true);
+
     if (pastLimit)
     {
         QMessageBox msg(QMessageBox::Warning, tr("Fixture not added"),
@@ -181,3 +192,45 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
     return created;
 }
 
+
+int FixtureCreator::routeWled(QWidget *parent, Doc *doc, const QList<quint32> &fixtureIds,
+                              bool deleteOnUndo)
+{
+    if (doc == NULL)
+        return 0;
+    PatchPlanner planner(doc);
+    QStringList problems;
+    std::function<void()> undo;
+    const int done = planner.routeWled(fixtureIds, &problems, &undo);
+
+    if (done > 0 && undo)
+    {
+        if (deleteOnUndo)
+        {
+            const QList<quint32> added = fixtureIds;
+            undo = [doc, added, putBack = undo]() {
+                foreach (quint32 id, added)
+                    if (doc->fixture(id) != NULL)
+                        doc->deleteFixture(id);
+                putBack();
+            };
+        }
+        if (Monitor *mon = Monitor::instance())
+            mon->pushUndoCallback(undo);
+    }
+
+    if (!problems.isEmpty() && parent != NULL)
+    {
+        QMessageBox msg(QMessageBox::Warning, tr("WLED universe"),
+                        done > 0 ? tr("Things to look at:\n\n%1").arg(problems.join(QStringLiteral("\n")))
+                                 : (deleteOnUndo
+                                    ? tr("It could not get a universe of its own, so it waits in the "
+                                         "inventory:\n\n%1")
+                                    : tr("It could not get a universe of its own, so it stays where "
+                                         "it was:\n\n%1")).arg(problems.join(QStringLiteral("\n"))),
+                        QMessageBox::Ok, parent);
+        msg.setObjectName(QStringLiteral("wledRouteBox"));
+        msg.exec();
+    }
+    return done;
+}

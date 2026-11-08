@@ -216,12 +216,35 @@ Add Fixture's **Connection** is chosen per fixture:
 - **Network (ArtNet/sACN)** — the fixture is its own endpoint, sent Art-Net
   at its own IP.
 - **Network (WLED, JSON over Wi-Fi)** — a WLED device, sent its look's state
-  through WLED's own API (only when it changes), not Art-Net. The Patch
-  dialog patches its universe to the WLED output, never borrowing an
-  Art-Net one. A WLED that's slow to answer or on weak Wi-Fi shows up in
+  through WLED's own API (only when it changes), not Art-Net. Added this
+  way, each WLED **gets a universe of its own**, sent to its IP through the
+  WLED output, at once: the dialog greys Universe and Address and says
+  "Gets a universe of its own, sent to its IP." A batch with counting-up IPs
+  gets a universe each; a WLED whose IP already has its universe goes back
+  on it. A universe that goes out as Art-Net, or carries other fixtures, is
+  never changed. One **Undo** (Cmd/Ctrl+Z on the Fixtures tab) takes the
+  fixture and its universe back out. The Patch dialog patches a staged WLED
+  the same way, never borrowing an Art-Net universe. A WLED that's slow to answer or on weak Wi-Fi shows up in
   the footer by fixture name. A WLED split into segments gets the look on
   every segment, and an effect's **Reverse** turns each one round from its
   own way (see Sprinkle loops in [Lighting Studio](lighting-studio.md)).
+
+**A WLED on a universe that doesn't reach it.** A WLED (by its own API) on a
+universe that goes out as Art-Net or sACN, has no output, or is sent to
+another IP never hears its looks. The footer says so by name: "WLED Test is
+on U01-Office, which goes out as Art-Net: nothing reaches the WLED".
+**Give It Its Own Universe** moves it to a universe of its own as above,
+leaving the universe it was on as it was (one undo). Changing a fixture to
+WLED in Fixture Properties, or its IP or mode, does this by itself.
+
+**A WLED string isn't aimed.** A string of LEDs run by a WLED (sent by
+WLED's own API, or a WLED definition) isn't hung and pointed like a light,
+so its **Fixture Properties** shows what a string has: its connection and
+IP, its LEDs, its string length and its pixel path. The aiming rows are
+hidden: Aim, Tilt in yoke, Beam, Masking, Orientation, Face, Tilt, the icon
+rotation and the facing diagram (Aim & Mount reads **Mount**). Anything
+already set in them is kept, not cleared. A WLED driving something that
+pans or tilts is aimed as a light again.
 
 **The WLED's LED count.** When the show says how many LEDs a WLED fixture
 has (its **LEDs** in Fixture Properties, or its heads) and the device drives
