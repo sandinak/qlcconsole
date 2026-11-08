@@ -9101,7 +9101,8 @@ void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
         {
             m_shapeCursor = over != StageShape::NoHandle;
             if (m_shapeCursor)
-                viewport()->setCursor(over == StageShape::RotateKnob ? Qt::OpenHandCursor : Qt::SizeAllCursor);
+                viewport()->setCursor(over == StageShape::RotateKnob ? Qt::OpenHandCursor
+                                                                    : AppUtil::nativeCursorShape(Qt::SizeAllCursor));
             else
                 viewport()->unsetCursor();
         }
