@@ -485,6 +485,8 @@ void ShowTreeView_Test::trackedLayersShowGreyWithWhereTheyCameFrom()
     QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
 }
 
+static QTreeWidgetItem *libraryItem(QTreeWidget *lib, const QString &text);
+
 void ShowTreeView_Test::groupsDroppedOnACueBecomeLayers()
 {
     FixtureGroup *towers = group("Towers", 0, 2);
@@ -507,6 +509,71 @@ void ShowTreeView_Test::groupsDroppedOnACueBecomeLayers()
     QCOMPARE(st->cue(c1)->layers.count(), 4);
     QCOMPARE(st->cue(c1)->layers.last().target.fixtures.count(), 2);
     QVERIFY(view.recentItems().first().startsWith("USTs"));
+}
+
+void ShowTreeView_Test::aFixtureInNoGroupIsInTheLibraryAndMakesALayer()
+{
+    group("Towers", 0, 2);                       // Dim 1 and 2 are in a group
+    ShowTreeView view(nullptr, m_doc);
+    QTreeWidgetItem *loose = libraryItem(view.library(), "Loose fixtures");
+    QVERIFY(loose != nullptr);
+    QStringList rows;
+    for (int i = 0; i < loose->childCount(); ++i)
+        rows << loose->child(i)->text(0);
+    QCOMPARE(rows, QStringList({ "Dim 3", "Dim 4", "Dim 5", "Dim 6" }));
+
+    // The filter finds one by name.
+    QLineEdit *filter = view.findChild<QLineEdit *>("stLibraryFilter");
+    filter->setText("dim 5");
+    QVERIFY(!loose->child(2)->isHidden());
+    QVERIFY(loose->child(0)->isHidden());
+    filter->setText(QString());
+
+    // Dropped on a cue it is a layer on just that fixture.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    QCOMPARE(loose->child(2)->data(0, ShowTreeView::KindRole).toInt(), int(ShowTreeView::LibFixture));
+    const quint32 fid = loose->child(2)->data(0, ShowTreeView::IdRole).toUInt();
+    QVERIFY(view.dropTargets(c1, {}, { fid }));
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    QCOMPARE(st->cue(c1)->layers.first().target.fixtures, QList<quint32>({ fid }));
+
+    // Put in a group, it leaves the list.
+    group("Rest", 2, 4);
+    QCoreApplication::processEvents();
+    QVERIFY(libraryItem(view.library(), "Loose fixtures") == nullptr);
+}
+
+void ShowTreeView_Test::libraryFixturesShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    group("Towers", 0, 2);
+    group("Spots", 2, 2);
+    ShowTreeView view(nullptr, m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    st->addCue(st->addCueList(st->addProduction("Demo"), "Main", ListMode::Tracking), -1, "Opening");
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QDir().mkpath(dir);
+    QTreeWidgetItem *all = libraryItem(view.library(), "All");
+    QTreeWidgetItem *loose = libraryItem(view.library(), "Loose fixtures");
+    QVERIFY(all != nullptr && loose != nullptr);
+    all->setExpanded(true);
+    for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        view.resize(sz);
+        for (const bool before : { true, false })
+        {
+            loose->setHidden(before);       // "before": the section as it was, absent
+            loose->setExpanded(!before);
+            QTest::qWait(50);
+            QVERIFY(view.grab().save(QString("%1/library-%2-%3x%4.png").arg(dir, before ? "before" : "after")
+                                         .arg(sz.width()).arg(sz.height())));
+        }
+    }
 }
 
 void ShowTreeView_Test::groupsDroppedOnALayerJoinIt()

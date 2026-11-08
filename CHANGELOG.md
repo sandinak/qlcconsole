@@ -14,6 +14,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **A fixture in no group is in the Show Tree's Library.** Under All, **Loose fixtures** lists them (a WLED just added, a spare), found by
+  name or model in the filter; drag one onto a cue for a layer on just that fixture.
+  It leaves the list once it joins a group.
 - **Build's Workbench points to where a look is recorded.** Under Play, one
   quiet grey line, **Record it as a cue in the Show Tree ▸**, shows while a
   look with something in it is loaded (a scene with levels or looks, or any
