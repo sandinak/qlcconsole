@@ -94,8 +94,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   but every non-intensity channel kept its last value: a fog machine kept
   pumping, gobos and WLED effects stayed. Stop all (the button, ⌘⇧Esc, a
   Virtual Console Stop All button) now also puts every fixture at rest:
-  fog and haze off, each channel at its default. After Fade and stop, once
-  the fade is over.
+  fog and haze off, each channel at its default, but pan and tilt stay
+  where they are (a default of 0 would swing every head). After Fade and
+  stop, once the fade is over.
 - **Identify and Reset put the channel back.** The test dialog's buttons
   (and the right-click Reset) left the fixture in identify or resetting
   until a scene set that channel. They hold the value about 3 s, then

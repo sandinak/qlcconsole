@@ -46,9 +46,14 @@ namespace FixtureRest
      *  hazer, fogger, fan or laser and on any fog or haze channel. */
     QLC_ENGINE_EXPORT uchar restValue(const Fixture *fx, quint32 channel);
 
+    /** A pan or tilt channel (coarse or fine): Stop ALL leaves it where
+     *  it is, so no head swings to its definition's default. */
+    QLC_ENGINE_EXPORT bool holdsPosition(const QLCChannel *ch);
+
     /** Every patched fixture's channels to their rest value, in the
      *  universes, for whatever no longer drives them: fog and haze off,
-     *  effects stopped, gobos and colour wheels back to open. What plays
+     *  effects stopped, gobos and colour wheels back to open; pan and tilt
+     *  are left where they are (holdsPosition()). What plays
      *  still drives its own channels the next frame. Returns how many
      *  channels were written. */
     QLC_ENGINE_EXPORT int putAllAtRest(Doc *doc);

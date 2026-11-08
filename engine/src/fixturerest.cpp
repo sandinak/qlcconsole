@@ -52,6 +52,12 @@ bool FixtureRest::isAtmosphereChannel(const QLCChannel *ch)
         || n.contains(QLatin1String("smoke"));
 }
 
+bool FixtureRest::holdsPosition(const QLCChannel *ch)
+{
+    return ch != nullptr
+        && (ch->group() == QLCChannel::Pan || ch->group() == QLCChannel::Tilt);
+}
+
 uchar FixtureRest::restValue(const Fixture *fx, quint32 channel)
 {
     const QLCChannel *ch = fx != nullptr ? fx->channel(channel) : nullptr;
@@ -81,6 +87,11 @@ int FixtureRest::putAllAtRest(Doc *doc)
             const int uni = int(abs >> 9);
             if (uni >= unis.size() || unis.at(uni) == nullptr)
                 break;
+            /* Pan and tilt stay where they are: a definition's default is
+               usually 0, one end of travel, and a panic button must not
+               swing every head across the stage. */
+            if (holdsPosition(fx->channel(i)))
+                continue;
             unis.at(uni)->setChannelDefaultValue(ushort(abs & 511), restValue(fx, i));
             ++written;
         }

@@ -837,8 +837,8 @@ static Universe *universeAt(Doc *doc, int index)
 }
 
 /* A fog machine pumping and a mover on a gobo, then Stop all: the fog
-   stops and the gobo comes out (its channel to its default), the pan back
-   to the channel's default. Before, every non-intensity channel kept the
+   stops and the gobo comes out (its channel to its default), and the pan
+   stays where it was: its default (128 here, often 0) would swing the head. Before, every non-intensity channel kept the
    last value sent: the fog machine kept pumping after Stop all. */
 void MainBar_Test::stopAllTurnsTheFogOffAndPutsTheGoboBack()
 {
@@ -911,12 +911,13 @@ void MainBar_Test::stopAllTurnsTheFogOffAndPutsTheGoboBack()
     QTRY_VERIFY_WITH_TIMEOUT(!scene->isRunning(), 5000);
     QTRY_COMPARE_WITH_TIMEOUT(int(uni->preGMValue(10)), 0, 2000);     // fog off
     QTRY_COMPARE_WITH_TIMEOUT(int(uni->preGMValue(21)), 0, 2000);     // gobo out
-    QTRY_COMPARE_WITH_TIMEOUT(int(uni->preGMValue(20)), 128, 2000);   // pan home
     QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(22)), 0, 2000);    // dark
-    // And it stays so: nothing writes the old values back.
+    // And it stays so: nothing writes the old values back, and the pan
+    // never went to its default.
     QTest::qWait(200);
     QCOMPARE(int(uni->preGMValue(10)), 0);
     QCOMPARE(int(uni->preGMValue(21)), 0);
+    QCOMPARE(int(uni->preGMValue(20)), 30);
 }
 
 void MainBar_Test::fadeOneSecondAndStopFadesTheLightOut()
