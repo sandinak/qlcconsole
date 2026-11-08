@@ -51,6 +51,7 @@
 #include "apputil.h"
 #include "placementcheck.h"
 #include "showreview.h"
+#include "showreviewcontext.h"
 #include <QSet>
 #include "qlcfile.h"
 #include "qlcconfig.h"
@@ -577,6 +578,10 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
         return;
 
     QList<Fixture *> unpatched;
+    // Only a fixture a cue or function uses is a problem: a staged one in the
+    // inventory is waiting, not broken (the Show Review notes those).
+    ReviewContext usage(doc, ShowReview::Options());
+    const QSet<quint32> &inUse = usage.usedFixtures();
     struct SilentType { QString file; int fixtures = 0; };
     QMap<QString, SilentType> silentTypes;      // "Maker Model (mode)" -> its file, fixtures
     foreach (Fixture *fx, doc->fixtures())
@@ -584,7 +589,7 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
         if (fx == NULL)
             continue;
         // A clash is listed as a clash (below), not as merely unpatched.
-        if (fx->isPatched() == false && fx->addressClash() == false)
+        if (fx->isPatched() == false && fx->addressClash() == false && inUse.contains(fx->id()))
             unpatched << fx;
         const QLCFixtureMode *mode = fx->fixtureMode();
         // A curtain or a hazer declares no light output because it has
@@ -621,10 +626,10 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
             ids << fx->id();
         }
         status->setStatus("fixtures.unpatched", ShowStatus::Warning,
-            QCoreApplication::translate("AppUtil", "%n fixture(s) not patched: they send no DMX",
+            QCoreApplication::translate("AppUtil", "%n fixture(s) in cues have no address: they send no DMX",
                                         "", unpatched.count()),
-            QCoreApplication::translate("AppUtil", "They show in the Lighting Studio only. Select "
-                                        "them and Patch."),
+            QCoreApplication::translate("AppUtil", "A cue or function uses them, but they have no "
+                                        "universe and address. Select them and Patch."),
             items, ids);
     }
 

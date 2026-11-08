@@ -514,8 +514,14 @@ void ShowTreeView_Test::groupsDroppedOnACueBecomeLayers()
 void ShowTreeView_Test::aFixtureInNoGroupIsInTheLibraryAndMakesALayer()
 {
     group("Towers", 0, 2);                       // Dim 1 and 2 are in a group
+    // A staged fixture (inventory, no address) is in no group either, but is not listed.
+    Fixture *staged = new Fixture(m_doc);
+    staged->setName("Staged 1");
+    staged->setChannels(1);
+    staged->setPatched(false);
+    QVERIFY(m_doc->addFixture(staged));
     ShowTreeView view(nullptr, m_doc);
-    QTreeWidgetItem *loose = libraryItem(view.library(), "Loose fixtures");
+    QTreeWidgetItem *loose = libraryItem(view.library(), "Ungrouped");
     QVERIFY(loose != nullptr);
     QStringList rows;
     for (int i = 0; i < loose->childCount(); ++i)
@@ -542,7 +548,7 @@ void ShowTreeView_Test::aFixtureInNoGroupIsInTheLibraryAndMakesALayer()
     // Put in a group, it leaves the list.
     group("Rest", 2, 4);
     QCoreApplication::processEvents();
-    QVERIFY(libraryItem(view.library(), "Loose fixtures") == nullptr);
+    QVERIFY(libraryItem(view.library(), "Ungrouped") == nullptr);
 }
 
 void ShowTreeView_Test::libraryFixturesShots()
@@ -559,7 +565,7 @@ void ShowTreeView_Test::libraryFixturesShots()
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QDir().mkpath(dir);
     QTreeWidgetItem *all = libraryItem(view.library(), "All");
-    QTreeWidgetItem *loose = libraryItem(view.library(), "Loose fixtures");
+    QTreeWidgetItem *loose = libraryItem(view.library(), "Ungrouped");
     QVERIFY(all != nullptr && loose != nullptr);
     all->setExpanded(true);
     for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })

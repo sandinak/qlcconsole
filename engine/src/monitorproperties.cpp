@@ -5030,7 +5030,7 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
             doc->writeAttribute(QStringLiteral("WandLen"), QString::number(double(rp.wandLength), 'f', 3));
         if (rp.wandStripLength > 0.0f)
             doc->writeAttribute(QStringLiteral("WandStrip"), QString::number(double(rp.wandStripLength), 'f', 3));
-        if (rp.ledSupplyVolts > 0.0f)
+        if (qAbs(rp.ledSupplyVolts - 5.0f) > 1e-5f)   // 5 V is the default; 0 (not known) is written
             doc->writeAttribute(QStringLiteral("LedSupplyV"), QString::number(double(rp.ledSupplyVolts), 'f', 1));
         if (qAbs(rp.wandDiameter - 0.025f) > 1e-5f)
             doc->writeAttribute(QStringLiteral("WandDia"), QString::number(double(rp.wandDiameter), 'f', 4));

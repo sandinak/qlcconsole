@@ -1585,9 +1585,18 @@ void ProgrammingManager_Test::unpatchedAndSilentFixturesAreInTheFooter()
                 return e;
         return ShowStatus::Entry();
     };
+    // Staged and unused: waiting in the inventory, not a footer finding.
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY(entry("fixtures.unpatched").key.isEmpty());
+    // Used by a scene: it lights nothing, so the footer says so.
+    Scene *uses = new Scene(m_doc);
+    uses->setName("Uses staged");
+    uses->setValue(staged->id(), 0, 255);
+    QVERIFY(m_doc->addFunction(uses));
     AppUtil::updateFixtureReadiness(m_doc);
     const ShowStatus::Entry unpatched = entry("fixtures.unpatched");
-    QVERIFY2(unpatched.summary.contains("1 fixture"), qPrintable(unpatched.summary));
+    QVERIFY2(unpatched.summary.contains("1 fixture") && unpatched.summary.contains("no address"),
+             qPrintable(unpatched.summary));
     QCOMPARE(unpatched.items, QStringList() << "FART-SL-9");
     const ShowStatus::Entry silent = entry("fixtures.output");
     QVERIFY2(silent.summary.contains("1 fixture type"), qPrintable(silent.summary));
