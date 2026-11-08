@@ -1372,5 +1372,21 @@
       "right": "A test that opens Add Fixture, picks the WLED and the connection, and clicks OK",
       "wrong": "A test that calls the patch planner and checks its result"
     }
+  },
+  {
+    "id": "UX-76",
+    "theme": "Ease of use",
+    "title": "Keep it simple for the operator (KISS)",
+    "rule": "Where a change can make the operator's job simpler, that counts for it: it raises the change, and a feature is weighed by how much it saves the person running the desk.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07, on WLEDs found on the network and patched with one right-click instead of typing an IP and counting channels: \"lets add that to our rules .. KISS ... Keep It Simple Stupid .. where we can make it easier for the operator that should raise the consideration of the change or feature.\"",
+    "example": {
+      "right": "A WLED on the network shows in the Inventory: right-click ▸ Patch, done",
+      "wrong": "Add Fixture, pick the model, type the IP, count the LEDs, then patch a universe to it"
+    }
   }
 ]
