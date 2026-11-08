@@ -55,8 +55,8 @@ QString Scenery::kindName(int kind)
 {
     switch (kind)
     {
-        case BackWall:  return tr("Back wall");
-        case MainDrape: return tr("Main drape");
+        case BackWall:  return tr("Back Wall");
+        case MainDrape: return tr("Main Drape");
         case Leg:       return tr("Leg");
         case Border:    return tr("Border");
         case Traveler:  return tr("Traveler");

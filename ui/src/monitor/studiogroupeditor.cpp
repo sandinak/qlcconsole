@@ -52,6 +52,7 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     , m_doc(doc)
     , m_groupId(groupId)
 {
+    setProperty("helpTopic", QStringLiteral("other-improvements.md#studio-groups-fixture-studio"));
     Q_ASSERT(m_doc != nullptr);
     MonitorProperties *props = m_doc->monitorProperties();
     const MonitorProperties::MonitorGroup g = props->group(m_groupId);

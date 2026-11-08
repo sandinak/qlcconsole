@@ -38,6 +38,7 @@ NetworkReportDialog::NetworkReportDialog(Doc *doc, QWidget *parent)
     , m_report(NetworkReport::build(doc))
     , m_unit(MeasurementUnits::preferredLength())
 {
+    setProperty("helpTopic", QStringLiteral("lighting-studio.md#network-nodes-and-cable-runs"));
     setWindowTitle(tr("Network Report"));
     resize(640, 520);
 
@@ -51,7 +52,7 @@ NetworkReportDialog::NetworkReportDialog(Doc *doc, QWidget *parent)
     QDialogButtonBox *btns = new QDialogButtonBox(QDialogButtonBox::Close, this);
     m_copyBtn = btns->addButton(tr("Copy"), QDialogButtonBox::ActionRole);
     m_copyBtn->setToolTip(tr("Copy the summary to the clipboard"));
-    m_saveBtn = btns->addButton(tr("Save CSV..."), QDialogButtonBox::ActionRole);
+    m_saveBtn = btns->addButton(tr("Save CSV…"), QDialogButtonBox::ActionRole);
     m_saveBtn->setToolTip(tr("Save the ports and network fixtures as a spreadsheet"));
     root->addWidget(btns);
 

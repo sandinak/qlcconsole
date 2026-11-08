@@ -1650,7 +1650,7 @@ void FocusCallsUi_Test::practiceExplainsTheScramble()
     QVERIFY(!d.findChild<QPushButton *>("fcPractice")->isHidden());
     QCOMPARE(d.windowTitle(), QString("Venue Focus"));
     QCOMPARE(d.findChild<QPushButton *>("fcPractice")->toolTip(), text);
-    QCOMPARE(d.findChild<QPushButton *>("fcStart")->text(), QString("Start venue focus"));
+    QCOMPARE(d.findChild<QPushButton *>("fcStart")->text(), QString("Start Venue Focus"));
 }
 
 void FocusCallsUi_Test::voiceDetailIsOneSettingOnEveryPanel()

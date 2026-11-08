@@ -64,6 +64,7 @@ FunctionWizard::FunctionWizard(QWidget* parent, Doc* doc)
     : QDialog(parent)
     , m_doc(doc)
 {
+    setProperty("helpTopic", QStringLiteral("build.md"));
     Q_ASSERT(doc != NULL);
     setupUi(this);
 

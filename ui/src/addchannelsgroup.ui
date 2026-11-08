@@ -91,14 +91,14 @@
      <item>
       <widget class="QPushButton" name="m_collapseButton">
        <property name="text">
-        <string>Collapse all</string>
+        <string>Collapse All</string>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QPushButton" name="m_expandButton">
        <property name="text">
-        <string>Expand all</string>
+        <string>Expand All</string>
        </property>
       </widget>
      </item>

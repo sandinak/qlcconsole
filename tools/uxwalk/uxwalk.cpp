@@ -389,7 +389,12 @@ private:
     {
         QJsonObject o;
         o.insert(QStringLiteral("show"), QFileInfo(m_opt.show).fileName());
-        o.insert(QStringLiteral("units"), m_opt.units);
+        // The unit in force now: a flow (F-08) switches Settings ▸ Units
+        // part-way, and what it then shows is checked against the new one.
+        const MeasurementUnits::LengthUnit unit = MeasurementUnits::preferredLength();
+        o.insert(QStringLiteral("units"), unit == MeasurementUnits::Millimetres ? QStringLiteral("mm")
+                                          : unit == MeasurementUnits::Feet     ? QStringLiteral("feet")
+                                                                               : MeasurementUnits::key(unit));
         o.insert(QStringLiteral("group"), group);
         o.insert(QStringLiteral("name"), name);
         o.insert(QStringLiteral("tag"), m_tag);

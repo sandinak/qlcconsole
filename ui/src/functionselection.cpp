@@ -56,6 +56,7 @@ FunctionSelection::FunctionSelection(QWidget* parent, Doc* doc)
     , m_constFilter(false)
     , m_stickyMode(false)
 {
+    setProperty("helpTopic", QStringLiteral("build.md"));
     Q_ASSERT(doc != NULL);
 
     setupUi(this);

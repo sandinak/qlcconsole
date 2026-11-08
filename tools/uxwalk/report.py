@@ -167,8 +167,8 @@ NOT_LENGTH = re.compile(r"\d\s?ms\b|\d\s?(?:MB|KB|GB)\b|\bm/s\b")
 def check_units(rec, ctx):
     units = rec.get("units")
     for kind, where, text, rect in texts(rec):
-        if LENGTH_HELP.search(text):
-            continue
+        if LENGTH_HELP.search(text) or "settingsUnitsCombo" in where:
+            continue                    # the Units setting names its own options
         t = NOT_LENGTH.sub("", text)
         # A text that shows both kinds is about the units themselves (the
         # Units setting's help, a field's list of what it takes).
@@ -197,17 +197,30 @@ DATA_MENUS = re.compile(r"Open Recent|New from Template|Recent|Add to Group|Move
 SKIP_TITLE_MENUS = DATA_MENUS
 
 
+# UX-07/UX-08 are about commands (what happens when you pick it). A word that
+# is a value or a state is written as the thing is called (2026-11-07 run):
+# a checkable menu item is a choice's value ("Moving head spot", "N times…",
+# "List default (Track)"), a checkable button is a filter's name ("This show"),
+# and a button whose text reports a state is not asked to do anything
+# ("Beat off", the beat menu's own label).
+STATE_BUTTONS = {"beatMenu"}
+
+
 def check_title_case(rec, ctx):
     if rec.get("kind") == "menu":
         if SKIP_TITLE_MENUS.search(rec.get("name", "")):
             return
         for it in rec.get("items", []):
+            if "checked" in it:
+                continue                # a value in a choice list
             if it.get("titleCase"):
                 yield Finding("UX-07", it["text"], it["titleCase"],
                               "%s ▸ %s" % (rec.get("name"), it["text"]), it.get("rect"),
                               sig="UX-07|%s" % it["text"])
         return
     for w in rec.get("widgets", []):
+        if "checked" in w or w.get("objectName") in STATE_BUTTONS:
+            continue                    # a toggle's name or a state, not a command
         if w.get("titleCase"):
             yield Finding("UX-08", w.get("text", ""), w["titleCase"], w.get("path", ""), w.get("rect"),
                           sig="UX-08|%s" % w.get("text", ""))
@@ -447,6 +460,27 @@ def check_flows(rec, ctx):
 
 TOOLTIP_OK = {"UX-10"}
 
+# UX-10: macOS's native menu has no column for a second or unbound key, so
+# App::menuTextWithKeys() writes them into the text there ("Undo (⌘Z / ⌥⌫)",
+# New's "(⇧⌘N)"), on purpose; anywhere else the shortcut is the action's.
+NATIVE_KEYS = re.compile(r"^(?:Undo|Redo|New)\b[^()]* \([⇧⌥⌃⌘][^()]*\)$")
+# UX-11: a bare "Remove" on the button beside a list's Add (it has a tooltip
+# saying what is taken out) is the list-editor convention; the rule is about
+# a menu item that destroys.
+# UX-17: HTP/LTP as the name of a setting's value, or a description naming
+# the pair for the person who is switching them, is expert surface (below).
+EXPERT_TERMS = re.compile(r"\bHTP\b.{0,3}\bLTP\b|\bHTP\b/|\(HTP\)$|^HTP$")
+
+
+def pattern_allowed(rid, where, text, rec):
+    if rid == "UX-10" and NATIVE_KEYS.match(text):
+        return True
+    if rid == "UX-11" and rec.get("kind") != "menu":
+        return any(w.get("path") == where and w.get("tooltip") for w in rec.get("widgets", []))
+    if rid == "UX-17" and EXPERT_TERMS.search(text):
+        return True
+    return False
+
 
 def check_book_patterns(rec, ctx):
     """Every rule of the book with a forbid_regex over the UI's text, as it
@@ -459,7 +493,7 @@ def check_book_patterns(rec, ctx):
             if rid in TOOLTIP_OK and re.search(r"\((tooltip|statusTip|whatsThis)\)$", where):
                 continue
             m = rx.search(text)
-            if m:
+            if m and not pattern_allowed(rid, where, text, rec):
                 yield Finding(rid, text, "matches the rule's pattern: \"%s\"" % m.group(0), where, rect,
                               sig="%s|%s|%s" % (rid, where, m.group(0)))
 

@@ -46,6 +46,7 @@ ChannelsSelection::ChannelsSelection(Doc *doc, QWidget *parent, ChannelSelection
     , m_doc(doc)
     , m_mode(mode)
 {
+    setProperty("helpTopic", QStringLiteral("fixture-manager.md"));
     Q_ASSERT(doc != NULL);
 
     setupUi(this);
@@ -210,7 +211,7 @@ void ChannelsSelection::updateFixturesTree()
                 QPushButton *button = new QPushButton();
                 ChannelModifier *mod = fxi->channelModifier(c);
                 if (mod == NULL)
-                    button->setText("...");
+                    button->setText(QStringLiteral("…"));
                 else
                     button->setText(mod->name());
                 button->setProperty("treeItem", QVariant::fromValue((void *)item));
@@ -340,7 +341,7 @@ void ChannelsSelection::slotModifierButtonClicked()
     if (cme.exec() == QDialog::Rejected)
         return; // User pressed cancel
 
-    QString displayName = "...";
+    QString displayName = QStringLiteral("…");
     ChannelModifier *modif = cme.selectedModifier();
     if (modif != NULL)
         displayName = modif->name();

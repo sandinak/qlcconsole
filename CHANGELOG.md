@@ -115,6 +115,20 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   or RGB Matrix in a collection or chase ignored the collection's or
   chase's Speed. Both now run at the master's tempo (as made at 120 BPM)
   or, for a WLED, at the look's Own speed.
+- **Words and F1 from the screen walker's first full run.** The Aim & Mount
+  and Position & Orientation boxes no longer show an underlined space for
+  the &; "..." is the single "…" on the patch list's, cue sheet's and
+  network report's Save buttons, the Fixtures menu and the speed-master
+  Inputs button; Stop All, Collapse All, Expand All, Start Venue Focus,
+  Save Calls and Back to the Cue are Title Case; the Run tab's tooltip says
+  Focus This Cue, not Refine. F1 opens a page from 20 more dialogs
+  (Settings, About, Show readiness, Add Fixture, Palettes, Power
+  Distribution and others). Remove PIN, Use This Computer's for All
+  Compatible, a cue's Rename… for its blocking, Move Up and Down in the
+  Show Tree and Show readiness's Fix… say why they are greyed. The Library's
+  "Functions (played as they are)" row is "Functions", with the rest in its
+  tooltip.
+
 - **A WLED snaps with the stage (UX-73).** On a snap cue a WLED on its
   own API lagged the DMX fixtures by about 150 to 340 ms: it waited for a
   100 ms send tick, then glided. A change now goes when the engine writes

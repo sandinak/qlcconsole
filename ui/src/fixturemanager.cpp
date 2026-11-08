@@ -1740,11 +1740,11 @@ void FixtureManager::initActions()
 {
     // Fixture actions
     m_addAction = new QAction(QIcon(":/edit_add.png"),
-                              tr("Add fixture..."), this);
+                              tr("Add Fixture…"), this);
     connect(m_addAction, &QAction::triggered, this, &FixtureManager::addFixture);
 
     m_addInventoryAction = new QAction(QIcon(":/edit_add.png"),
-                              tr("Add to inventory..."), this);
+                              tr("Add to Inventory…"), this);
     m_addInventoryAction->setToolTip(tr("Stage a fixture in the inventory: it can be placed and "
                                         "grouped in the Studio now and given a universe and "
                                         "address later"));
@@ -1760,7 +1760,7 @@ void FixtureManager::initActions()
     connect(m_patchInventoryAction, &QAction::triggered, this, [this]() { patchInventory(); });
 
     m_addRGBAction = new QAction(QIcon(":/rgbpanel.png"),
-                              tr("Add RGB panel..."), this);
+                              tr("Add RGB Panel…"), this);
     connect(m_addRGBAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddRGBPanel()));
 
@@ -1768,7 +1768,7 @@ void FixtureManager::initActions()
     // (see m_addChannelsGroupAction's declaration) so the toolbar never
     // shows the wrong label for the active tab.
     m_addChannelsGroupAction = new QAction(QIcon(":/edit_add.png"),
-                              tr("Add Channel Group..."), this);
+                              tr("Add Channel Group…"), this);
     connect(m_addChannelsGroupAction, &QAction::triggered, this, &FixtureManager::addChannelsGroup);
 
     m_removeAction = new QAction(QIcon(":/edit_remove.png"),
@@ -1813,7 +1813,7 @@ void FixtureManager::initActions()
 
     // Group actions
     m_groupAction = new QAction(QIcon(":/group.png"),
-                                tr("Add fixture to group..."), this);
+                                tr("Add Fixture to Group…"), this);
     m_groupAction->setToolTip(tr(
         "Add the selected fixture(s) to an existing group, or create a new "
         "one — click the dropdown arrow and pick \"New Group...\" at the "
@@ -1827,30 +1827,30 @@ void FixtureManager::initActions()
     m_newGroupAction = new QAction(tr("New Group…"), this);
 
     m_moveUpAction = new QAction(QIcon(":/up.png"),
-                                 tr("Move channel group up..."), this);
+                                 tr("Move Channel Group Up…"), this);
     m_moveUpAction->setEnabled(false);
     connect(m_moveUpAction, SIGNAL(triggered(bool)),
             this, SLOT(slotMoveGroupUp()));
 
     m_moveDownAction = new QAction(QIcon(":/down.png"),
-                                 tr("Move channel group down..."), this);
+                                 tr("Move Channel Group Down…"), this);
     m_moveDownAction->setEnabled(false);
     connect(m_moveDownAction, SIGNAL(triggered(bool)),
             this, SLOT(slotMoveGroupDown()));
 
     m_importAction = new QAction(QIcon(":/fileimport.png"),
-                                 tr("Import fixtures..."), this);
+                                 tr("Import Fixtures…"), this);
     connect(m_importAction, SIGNAL(triggered(bool)),
             this, SLOT(slotImport()));
 
     m_exportAction = new QAction(QIcon(":/fileexport.png"),
-                                 tr("Export fixtures..."), this);
+                                 tr("Export Fixtures…"), this);
 
     connect(m_exportAction, SIGNAL(triggered(bool)),
             this, SLOT(slotExport()));
 
     m_remapAction = new QAction(QIcon(":/remap.png"),
-                               tr("Remap fixtures..."), this);
+                               tr("Remap Fixtures…"), this);
     connect(m_remapAction, SIGNAL(triggered(bool)),
             this, SLOT(slotRemap()));
 
@@ -2894,7 +2894,7 @@ void FixtureManager::slotRemap()
 {
     if (!ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Remap fixtures")))
         return;
-    FixtureRemap fxr(m_doc);
+    FixtureRemap fxr(m_doc, this);
     if (fxr.exec() == QDialog::Rejected)
         return; // User pressed cancel
 

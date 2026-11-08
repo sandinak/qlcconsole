@@ -871,9 +871,9 @@ void FixtureManager_Test::rightClickOnInventoryOffersInventoryActionsNotAGeneric
     QVERIFY2(!texts.isEmpty(), "the context menu never appeared");
     QVERIFY2(texts.contains("Add to Inventory…"), qPrintable(texts.join(" | ")));
     QVERIFY2(texts.contains("Patch Inventory…"), qPrintable(texts.join(" | ")));
-    QVERIFY2(!texts.contains("Add fixture..."),
+    QVERIFY2(!texts.contains("Add Fixture…"),
              qPrintable("the generic Add fixture offer is still there: " + texts.join(" | ")));
-    QVERIFY2(!texts.contains("Add RGB panel..."), qPrintable(texts.join(" | ")));
+    QVERIFY2(!texts.contains("Add RGB Panel…"), qPrintable(texts.join(" | ")));
 }
 
 void FixtureManager_Test::rightClickOnUniversesStillOffersAFixtureAdd()
@@ -887,7 +887,7 @@ void FixtureManager_Test::rightClickOnUniversesStillOffersAFixtureAdd()
     QVERIFY(uni != nullptr);
 
     const QStringList texts = contextMenuTexts(mgr, uni);
-    QVERIFY2(texts.contains("Add fixture..."), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Add Fixture…"), qPrintable(texts.join(" | ")));
     QVERIFY2(!texts.contains("Add to Inventory…"), qPrintable(texts.join(" | ")));
 }
 
@@ -966,7 +966,7 @@ void FixtureManager_Test::returnToInventoryIsOfferedForPatchedFixturesOnly()
         QVERIFY2(at > last, qPrintable(QString("%1 out of place: %2").arg(t, rt.join(" | "))));
         last = at;
     }
-    const QStringList gone = { "Copy into group", "Add fixture to group...", "Re-address...",
+    const QStringList gone = { "Copy into group", "Add Fixture to Group…", "Re-address...",
                                "Remove fixture from group", "Create group from selection…" };
     for (const QString &g : gone)
         QVERIFY2(!rt.contains(g), qPrintable(QString("%1 still at the top: %2").arg(g, rt.join(" | "))));
@@ -1014,7 +1014,7 @@ void FixtureManager_Test::rightClickOnAnInventoryFolderOffersToPatchWhatIsInIt()
     QVERIFY2(texts.contains("Patch 3 Fixtures…"), qPrintable(texts.join(" | ")));
     // A manufacturer's folder adds that manufacturer's fixtures.
     QVERIFY2(texts.contains("Add Generic Fixtures to Inventory…"), qPrintable(texts.join(" | ")));
-    QVERIFY2(!texts.contains("Add fixture..."), qPrintable(texts.join(" | ")));
+    QVERIFY2(!texts.contains("Add Fixture…"), qPrintable(texts.join(" | ")));
 
     // A model's folder adds more of that model; the root, anything.
     QTreeWidgetItem *model = manuf->child(0);                    // "Dimmer, 4 ch (3)"

@@ -31,6 +31,7 @@ PowerDistributionDialog::PowerDistributionDialog(Doc *doc, QWidget *parent)
     : QDialog(parent)
     , m_doc(doc)
 {
+    setProperty("helpTopic", QStringLiteral("other-improvements.md#power-distribution"));
     setWindowTitle(tr("Power Distribution"));
     resize(940, 520);
 

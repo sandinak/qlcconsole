@@ -111,6 +111,8 @@ ShowDifferencesDialog::ShowDifferencesDialog(Doc *doc, QWidget *parent, bool eve
     m_use->setToolTip(tr("The show switches to this computer's copy now, and carries it "
                          "from the next save"));
     m_useAll = box->addButton(tr("Use This Computer's for All Compatible"), QDialogButtonBox::ActionRole);
+    m_useAll->setToolTip(tr("Switch every difference this computer's copy can replace in one go. "
+                            "Greyed while no row in the list can be switched that way."));
     m_keep = box->addButton(tr("Keep the Show's"), QDialogButtonBox::ActionRole);
     m_keep->setToolTip(tr("Stop warning about it (remembered in the show)"));
     m_install = box->addButton(tr("Install the Show's"), QDialogButtonBox::ActionRole);

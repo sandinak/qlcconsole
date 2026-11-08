@@ -38,6 +38,7 @@ LiveCaptureDialog::LiveCaptureDialog(Doc* doc, QWidget* parent)
     , m_applyButton(nullptr)
     , m_saveAsNewButton(nullptr)
 {
+    setProperty("helpTopic", QStringLiteral("getting-started.md"));
     Q_ASSERT(doc != nullptr);
     setWindowTitle(tr("Live Edit Captures"));
     resize(720, 480);

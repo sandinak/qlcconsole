@@ -259,7 +259,7 @@ SpeedMastersPanel *SpeedMastersPanel::open(Doc *doc, QWidget *parent, int focus)
 
 QString SpeedMastersPanel::inputsText(int mapped)
 {
-    return mapped == 0 ? tr("Inputs...") : tr("Inputs (%1)").arg(mapped);
+    return mapped == 0 ? tr("Inputs…") : tr("Inputs (%1)").arg(mapped);
 }
 
 void SpeedMastersPanel::editInputs(int index)

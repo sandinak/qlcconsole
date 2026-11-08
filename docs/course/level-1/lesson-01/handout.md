@@ -110,7 +110,7 @@ later), and **(6)** the tabs.
 
 8. In the Library, open **All → Groups → Trusses** and drag **TrussC-RGB**
    onto the dashed box under **Layers** (3).
-   - While you drag, the note in the top bar, just left of **Stop all**,
+   - While you drag, the note in the top bar, just left of **Stop All**,
      reads *"a new layer on TrussC-RGB in 1.0.0 Pose"*. It tells you
      where a drop will land, so read it before you let go.
    - *You should see:* a **TrussC-RGB** row under Layers.

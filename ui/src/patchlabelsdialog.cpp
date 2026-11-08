@@ -198,10 +198,10 @@ PatchLabelsDialog::PatchLabelsDialog(const QList<PatchList::Row> &all,
     root->addWidget(m_printerFound);
 
     QDialogButtonBox *btns = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
-    QPushButton *save = btns->addButton(tr("Save PDF..."), QDialogButtonBox::ActionRole);
+    QPushButton *save = btns->addButton(tr("Save PDF…"), QDialogButtonBox::ActionRole);
     save->setObjectName(QStringLiteral("saveLabelsPdf"));
     save->setToolTip(tr("Save the labels as a PDF to print later (at 100%, actual size)"));
-    QPushButton *printBtn = btns->addButton(tr("Print..."), QDialogButtonBox::AcceptRole);
+    QPushButton *printBtn = btns->addButton(tr("Print…"), QDialogButtonBox::AcceptRole);
     printBtn->setObjectName(QStringLiteral("printLabels"));
     printBtn->setToolTip(tr("Print the labels through the system's print dialog"));
     printBtn->setDefault(true);

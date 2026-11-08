@@ -40,6 +40,7 @@ FixtureSelection::FixtureSelection(QWidget* parent, Doc* doc)
     , m_doc(doc)
     , m_selectionMode(Fixtures)
 {
+    setProperty("helpTopic", QStringLiteral("fixture-manager.md"));
     Q_ASSERT(doc != NULL);
 
     setupUi(this);
@@ -59,7 +60,7 @@ FixtureSelection::FixtureSelection(QWidget* parent, Doc* doc)
     // Type to find: name, manufacturer or model.
     m_search = new QLineEdit(this);
     m_search->setObjectName("fixtureSearch");
-    m_search->setPlaceholderText(tr("Search fixtures (name, manufacturer, model)..."));
+    m_search->setPlaceholderText(tr("Search fixtures (name, manufacturer, model)…"));
     m_search->setClearButtonEnabled(true);
     m_search->installEventFilter(this);
     m_mainLayout->addWidget(m_search);

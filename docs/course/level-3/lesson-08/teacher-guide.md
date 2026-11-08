@@ -33,7 +33,7 @@ Students can:
 
 ## Vocabulary (introduce in this order)
 
-**section**, **Block at section start**, **group master**, **override hit**, **cue sheet**, **tracking sheet**, **Blackout**, **Stop all**. Each is in the handout's word table and the [Glossary](../../GLOSSARY.md).
+**section**, **Block at section start**, **group master**, **override hit**, **cue sheet**, **tracking sheet**, **Blackout**, **Stop All**. Each is in the handout's word table and the [Glossary](../../GLOSSARY.md).
 
 ## Timing
 

@@ -32,6 +32,7 @@ OutputRulesDialog::OutputRulesDialog(Doc *doc, const QList<quint32> &fixtureIds,
     : QDialog(parent)
     , m_doc(doc)
 {
+    setProperty("helpTopic", QStringLiteral("fixture-manager.md#output-rules"));
     setObjectName(QStringLiteral("outputRulesDialog"));
     foreach (quint32 id, fixtureIds)
         if (m_doc->fixture(id) != nullptr && m_fixtures.contains(id) == false)

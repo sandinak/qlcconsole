@@ -89,7 +89,7 @@ handout up so they can read ahead):
    out the **⇢** under **M** beside it (hover: a tracking list) and that the `01` numbers the cues 1.0.0, 1.0.1…
 2. **+ Cue** → type `Pose`, Return.
 3. Library → **All → Groups → Trusses → TrussC-RGB**: drag it onto the
-   dashed box under **Layers**. Read the note in the top bar (just left of **Stop all**) aloud while dragging
+   dashed box under **Layers**. Read the note in the top bar (just left of **Stop All**) aloud while dragging
    (*"a new layer on TrussC-RGB in 1.0.0 Pose"*). "A **layer** is one group
    doing one thing in this cue."
 4. **Blue** then **Full** onto the row. Watch the cyc turn blue.

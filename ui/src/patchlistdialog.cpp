@@ -130,17 +130,17 @@ PatchListDialog::PatchListDialog(Doc *doc, QWidget *parent)
     QPushButton *copyBtn = btns->addButton(tr("Copy"), QDialogButtonBox::ActionRole);
     copyBtn->setObjectName(QStringLiteral("patchListCopy"));
     copyBtn->setToolTip(tr("Copy the list shown to the clipboard, ready to paste into a spreadsheet"));
-    QPushButton *csvBtn = btns->addButton(tr("Save CSV..."), QDialogButtonBox::ActionRole);
+    QPushButton *csvBtn = btns->addButton(tr("Save CSV…"), QDialogButtonBox::ActionRole);
     csvBtn->setObjectName(QStringLiteral("patchListCsv"));
     csvBtn->setToolTip(tr("Save the list shown, every column, as a spreadsheet (CSV)"));
-    QPushButton *xlsxBtn = btns->addButton(tr("Save XLSX..."), QDialogButtonBox::ActionRole);
+    QPushButton *xlsxBtn = btns->addButton(tr("Save XLSX…"), QDialogButtonBox::ActionRole);
     xlsxBtn->setObjectName(QStringLiteral("patchListXlsx"));
     xlsxBtn->setToolTip(tr("Save the list shown, every column, as an Excel workbook "
                            "(Numbers and Google Sheets open it too)"));
-    QPushButton *pdfBtn = btns->addButton(tr("Save PDF..."), QDialogButtonBox::ActionRole);
+    QPushButton *pdfBtn = btns->addButton(tr("Save PDF…"), QDialogButtonBox::ActionRole);
     pdfBtn->setObjectName(QStringLiteral("patchListPdf"));
     pdfBtn->setToolTip(tr("Save a printable list of what is shown, a table per group"));
-    QPushButton *labelsBtn = btns->addButton(tr("Print Labels..."), QDialogButtonBox::ActionRole);
+    QPushButton *labelsBtn = btns->addButton(tr("Print Labels…"), QDialogButtonBox::ActionRole);
     labelsBtn->setObjectName(QStringLiteral("patchListLabels"));
     labelsBtn->setToolTip(tr("Print a label per fixture shown (or the selected rows), or save them as a PDF"));
     root->addWidget(btns);

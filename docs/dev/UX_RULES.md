@@ -56,7 +56,7 @@ Main check: 44 tests, 23 review, 6 walker, 3 manual. 44 of 76 enforced.
 
 Every length a person reads or types (field, label, tooltip, menu, report, CSV, web page, voice) is in the unit chosen in Settings ▸ Units, feet and inches by default.
 
-- **Why:** 2026-11-06: Set Mounting Height… asked "Height above the floor (metres):" on a feet show, after the same field was fixed on 2026-10-27 (Q174). About 55 call sites keyed off the grid unit; he: "we keep finding places where it exists".
+- **Why:** 2026-11-06: Set Mounting Height… asked "Height above the floor (metres):" on a feet show, after the same field was fixed on 2026-10-27 (Q174). About 55 call sites keyed off the grid unit; he: "we keep finding places where it exists". 2026-11-07: the walker once checked flow F-08 step 3 ("Set Mounting Height… (0 mm)") against the unit the shard started in; F-08 step 1 switches Units to Millimetres, so "0 mm" was right. The walker now records the unit in force at each screen.
 - **Check:** `units_test::noUnitWrittenIntoAString`, `units_test::textFollowsThePreference`, `units_test::dialogsFollowThePreference`, `menuwords_test::noLengthIsMetresOnly`, `walker` (enforced)
 - **Right:** `Height above the floor: 12' 6"`
 - **Wrong:** `Height above the floor (metres): 3.81`
@@ -119,18 +119,18 @@ A help page writes a length in feet and inches with the metric after it in brack
 
 ### UX-07 Menu items are Title Case
 
-Every menu item is Title Case: every word capitalised except a, an, the, and, or, of, to, in, on, at, by, for, from, with, as, vs, into after the first.
+Every menu command is Title Case: every word capitalised except a, an, the, and, or, of, to, in, on, at, by, for, from, with, as, vs, into after the first. A checkable item is a value in a choice list and is written as the thing is called ("Moving head spot", "N times…").
 
-- **Why:** 2026-11-02/03 menu canon (docs/design/CONTEXT_MENUS.md §3.2): the same action was worded three ways in three menus.
+- **Why:** 2026-11-02/03 menu canon (docs/design/CONTEXT_MENUS.md §3.2): the same action was worded three ways in three menus. Revised 2026-11-07 (walker run on e33b934e4, 21 hits in the shows, 1 in the flows): every hit was a value in a choice list (the Plot Symbol menu, Runs: N times…, Mode: List default), which the walker reads as a checkable item; all were correct uses, so the rule is about commands.
 - **Check:** `menuwords_test::everyMenuLabelIsTitleCase`, `contextmenus_test::titleCase`, `walker` (enforced)
 - **Right:** `Delete Fixture Group…`
 - **Wrong:** `Delete fixture group…`
 
 ### UX-08 Buttons are Title Case too
 
-Every push or tool button text is Title Case like a menu item (dialog-box answers such as "Not now" excepted).
+Every push or tool button that does something is Title Case like a menu item (dialog-box answers such as "Not now" excepted); a toggle that names a filter ("This show") or a button that reports a state ("Beat off") is written as the thing is called.
 
-- **Why:** 2026-11-06: "Show all effects" on the effect picker; train 1106b failed on it.
+- **Why:** 2026-11-06: "Show all effects" on the effect picker; train 1106b failed on it. Revised 2026-11-07 (walker run on e33b934e4): of 8 hits, "This show" (a checkable origin filter, 24 screens) and "Beat off" (the beat menu's state label, 24 screens) were correct; the other six (Collapse all, Expand all, Stop all, Back to the cue, Start venue focus, Save calls) were commands and were fixed.
 - **Check:** `menuwords_test::everyButtonLabelIsTitleCase`, `walker` (enforced)
 - **Right:** `Show All Effects`
 - **Wrong:** `Show all effects`
@@ -139,14 +139,14 @@ Every push or tool button text is Title Case like a menu item (dialog-box answer
 
 A label ends in the single character "…" exactly when a dialog (including a confirmation) follows; never three dots; an inline rename has none.
 
-- **Why:** 2026-11-02 menu canon §3.2.
+- **Why:** 2026-11-02 menu canon §3.2. Revised 2026-11-07 (walker run on e33b934e4: 4 hits on Undo, 4 on Redo, all correct): App::menuTextWithKeys() writes the keys into the text on macOS only, on purpose, because the native menu cannot draw them; the pattern now leaves Undo, Redo and New in that form alone.
 - **Check:** `menuwords_test::everyMenuLabelIsTitleCase`, `walker` (enforced)
 - **Right:** `Patch…  ·  Rename (inline)`
 - **Wrong:** `Patch...  ·  Rename… (inline)`
 
 ### UX-10 No shortcut typed into a label
 
-A shortcut is set on the action so Qt shows it in its own column; it is never part of the text.
+A shortcut is set on the action so Qt shows it in its own column; it is never part of the text, except on macOS, whose native menu has no column for a second or unbound key (Undo (⌘Z / ⌥⌫), New (⇧⌘N)).
 
 - **Why:** 2026-11-02 menu canon §3.2.
 - **Check:** `menuwords_test::everyMenuLabelIsTitleCase` (enforced)
@@ -155,9 +155,9 @@ A shortcut is set on the action so Qt shows it in its own column; it is never pa
 
 ### UX-11 Delete destroys, Remove takes out
 
-"Delete X…" destroys the thing; "Remove from Y" takes it out of a container and leaves it in the show. A bare "Remove" is never a destroy.
+"Delete X…" destroys the thing; "Remove from Y" takes it out of a container and leaves it in the show. A bare "Remove" is never a destroy; on a list editor's button beside its Add, with a tooltip saying what is taken out, it is the list's convention and is allowed.
 
-- **Why:** 2026-11-02 menu canon §3.2: "Remove" meant both in different menus.
+- **Why:** 2026-11-02 menu canon §3.2: "Remove" meant both in different menus. Revised 2026-11-07 (walker run on e33b934e4: 4 findings, 128 screens): every bare "Remove" was the button beside a list's Add (layers in the Workbench, triggers in the control map, focus calls, network topology) with a tooltip saying what goes; none was a menu item and none destroyed a function. The pattern now fires on a bare Remove without that tooltip, and on any menu item.
 - **Check:** `contextmenus_test::theCanonCatchesDrift`, `review` (not yet enforced)
 - **Right:** `Remove from Truss  ·  Delete Fixture Group…`
 - **Wrong:** `Remove (an item that deletes the fixture group)`
@@ -166,7 +166,7 @@ A shortcut is set on the action so Qt shows it in its own column; it is never pa
 
 Each idea has one name everywhere: Hits (the busk section), Plot symbol, Operate, Hold at end, Quick Focus / Venue Focus / Focus This Cue.
 
-- **Why:** 2026-10-23 (Q70, Q77) and 2026-10-25 (Q149): "look", "focus" and "stage look" each meant several things.
+- **Why:** 2026-10-23 (Q70, Q77) and 2026-10-25 (Q149): "look", "focus" and "stage look" each meant several things. 2026-11-07 (walker run on e33b934e4: 1 finding, 8 screens): not a rule error. The Run tab's "Pad: Tools" tooltip still said "Refine", which Q105-Q108 renamed Focus This Cue; the tooltip was fixed, the rule stands.
 - **Check:** `review`, `walker` (not yet enforced)
 - **Right:** `Plot symbol · Hits · Focus This Cue`
 - **Wrong:** `Stage Look · Looks (the busk section) · Refine`
@@ -209,9 +209,9 @@ Shortcuts read ⌘/⌥/⇧ on macOS and Ctrl/Alt/Shift elsewhere; a game pad's b
 
 ### UX-17 Plain sentences, not engine terms
 
-Explanations, warnings and errors say what happened in the operator's words and what to do next; engine terms (HTP, fader priority, function id) stay out.
+Explanations, warnings and errors say what happened in the operator's words and what to do next; engine terms (HTP, fader priority, function id) stay out. HTP and LTP may be the name of a setting's value on an expert surface (the channel behaviour dialog, a blend-mode drop-down) and in the description of the setting that switches them off.
 
-- **Why:** 2026-10-27 (Q181, Why is this on?) and the teaching shows: the answer has to be readable by a student on headset.
+- **Why:** 2026-10-27 (Q181, Why is this on?) and the teaching shows: the answer has to be readable by a student on headset. Revised 2026-11-07 (walker run on e33b934e4: 6 findings, 84 screens): the rule's target is a sentence to a person who did not ask about merging. All six were the settings themselves: the channel flags drop-down (54), "Default (HTP)" in the RGB Matrix blend mode, the channel behaviour dialog's description (HTP/LTP) and the Plain words checkbox that hides the words. They are expert controls (docs/features/troubleshooting.md and venues.md use them the same way; the glossary has no plain word for them), so the pattern leaves a value named HTP or HTP/LTP alone and still fires in a Why panel's sentence.
 - **Check:** `whyonpanel_test::plainSentencesPerGroup`, `whyonpanel_test::plainWordsInATeachingShow`, `review` (not yet enforced)
 - **Right:** `Par 3 is at 80% because cue 2.1 Verse sets it.`
 - **Wrong:** `Channel 37: HTP, fader priority Override, function #112`

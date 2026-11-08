@@ -307,7 +307,7 @@ void MainBar_Test::theShowControlsWorkInBothPlacements()
         QCOMPARE(sc->blindButton()->defaultAction(), m_app->m_controlBlindAction);
         QCOMPARE(m_app->m_controlPanicAction->shortcut(), QKeySequence("CTRL+SHIFT+ESC"));
         QCOMPARE(m_app->m_modeToggleAction->shortcut(), QKeySequence("CTRL+F12"));
-        QCOMPARE(sc->stopAllButton()->text(), QStringLiteral("Stop all"));
+        QCOMPARE(sc->stopAllButton()->text(), QStringLiteral("Stop All"));
         QCOMPARE(sc->blackoutButton()->text(), QStringLiteral("Blackout"));
         QCOMPARE(sc->blindButton()->text(), QStringLiteral("Blind"));
         for (QWidget *w : QList<QWidget *>{ sc->stopAllButton(), sc->blackoutButton(), sc->blindButton(),
