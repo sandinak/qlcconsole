@@ -42,6 +42,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A WLED snaps with the stage (UX-73).** On a snap cue a WLED on its
+  own API lagged the DMX fixtures by about 150 to 340 ms: it waited for a
+  100 ms send tick, then glided. A change now goes when the engine writes
+  it (a burst in one frame is one request, one in flight per device),
+  steps with no transition, fades as the show's own steps. On the office
+  WLED the POST now leaves 23 ms after the Art-Net bytes reach the Pi
+  (was 62 to 105 ms). A held look still sends nothing.
+- **Move in black presets a dark WLED.** Its next look's effect, speed,
+  palette and colours come from the WLED look, which Move in black never
+  saw. They are now sent while it is dark, even when the cue it is dark in
+  sets it Solid, so the GO is just its brightness. Only what changed is
+  sent to a WLED.
 - **Locate shows on a WLED.** Locate on a WLED in Effect mode that was
   playing a device effect (Fireworks Starburst, say) changed nothing you
   could see: the look's effect settings were written over Locate's, and the

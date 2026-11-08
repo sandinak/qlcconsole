@@ -46,9 +46,9 @@ that have one. Change both files together.
 | Safety in Operate | UX-49, UX-50, UX-51, UX-52, UX-53, UX-54, UX-55, UX-56 | 8 | 6 |
 | Teaching & course voice | UX-57, UX-58, UX-59, UX-60 | 4 | 1 |
 | Ease of use | UX-61, UX-62, UX-64, UX-65, UX-66, UX-76 | 6 | 0 |
-| Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 0 |
+| Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 1 |
 
-Main check: 41 tests, 26 review, 6 walker, 3 manual. 41 of 76 enforced.
+Main check: 42 tests, 25 review, 6 walker, 3 manual. 42 of 76 enforced.
 
 ## Units & numbers
 
@@ -723,8 +723,8 @@ Locate is unmistakable on the device (solid, full, white, sharp flashes) over wh
 
 A network device follows a snap within the network's own time: it is sent at once with no glide; fades use the cue's time.
 
-- **Why:** 2026-11-07, measured on ender: a WLED over its JSON API reacts about 150 to 340 ms after DMX fixtures on a snap cue (a 100 ms send tick, about 50 ms Wi-Fi with a max of 140, and a 100 ms glide). His spell cue snaps the stage to black with the staff (a WLED) still on. A responsiveness test is to come with the snap and Move in Black work for WLED.
-- **Check:** `review`, `manual` (not yet enforced)
+- **Why:** 2026-11-07, measured on ender: a WLED over its JSON API reacts about 150 to 340 ms after DMX fixtures on a snap cue (a 100 ms send tick, about 50 ms Wi-Fi with a max of 140, and a 100 ms glide). His spell cue snaps the stage to black with the staff (a WLED) still on. Fixed (feat/042-wled-snap): a change goes at once, a step with no glide, and Move in Black presets a dark WLED's next effect so the GO is its brightness alone; on the office WLED the POST now leaves 23 ms after the Art-Net bytes reach the Pi (was 62 to 105) and the WLED has it 61 ms after (was 129, max 264).
+- **Check:** `wledshow_test::aSnapCueReachesTheStaffWithTheStage`, `wled_test::aSnapGoesAtOnceNotOnTheNextTick`, `markplanner_test::aDarkWledIsMovedInBlackToItsNextLook`, `manual` (enforced)
 - **Right:** `A snap cue: the WLED changes with the DMX fixtures, within the Wi-Fi's own delay`
 - **Wrong:** `A snap cue: the WLED glides in 100 ms after the others, so the staff stays on`
 

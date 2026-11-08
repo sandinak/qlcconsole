@@ -456,7 +456,24 @@ void WledPlugin::tick(bool kicked)
                 const QJsonObject state = WledState::decode(t.data, t.addressOf(d),
                                                             t.channelsOf(d), m_sendInterval);
                 if (sameLook(state, d.sent) && d.layoutGen == d.sentLayoutGen)
+                {
+                    d.darkSince = 0;
                     continue;
+                }
+                // Dark before and after: unseen, so it waits for the rest.
+                const QString on = QStringLiteral("on");
+                if (!d.sent.isEmpty() && d.layoutGen == d.sentLayoutGen
+                    && !state.value(on).toBool() && !d.sent.value(on).toBool())
+                {
+                    if (d.darkSince == 0)
+                        d.darkSince = now;
+                    const qint64 left = darkHoldMs - (now - d.darkSince);
+                    if (left > 0)
+                    {
+                        wait = wait < 0 ? left : qMin(wait, left);
+                        continue;
+                    }
+                }
                 /* A step goes at once; a fade's next frame waits out the pace
                    (at most one a send interval), woken for it then. */
                 const qint64 pace = qint64(m_sendInterval) * 3 / 4;
@@ -689,6 +706,7 @@ void WledPlugin::send(quint32 universe, int index)
                       d.sent, d.postedAt, now, m_sendInterval);
         const bool sameLayout = d.layoutGen == d.sentLayoutGen;
         d.postedAt = now;
+        d.darkSince = 0;
         body = trimmed(message(state, d, &revs), state, d.sent, sameLayout);
         if (!body.contains(QStringLiteral("seg")))
             revs.clear();                   // none sent: the ways it has stand

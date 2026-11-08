@@ -2856,6 +2856,13 @@ left alone, so nobody sees it move. Each light is let go as its cue lights
 it. A next cue closer than the **lead time** (0.8 s for a new show) is too
 soon to move in black, so nothing new is sent for it.
 
+A **WLED** that runs effects is moved in black too. While it is dark, its
+next look's effect, speed, palette and colours are sent to the device
+(off). The GO then only turns it on at its brightness, which is the
+smallest request and the quickest. This holds even when the cue it is
+dark in sets it to Solid. A WLED's settings come from its WLED look, not
+the scene, and Move in black reads them from that look as it will play.
+
 It is one setting of the show. Its switch is the Show Tree's **MIB**
 button; Build's **Move in Black ▾** shows and changes the same setting:
 

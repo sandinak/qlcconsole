@@ -200,6 +200,10 @@ private:
         int ledCount = 0;           ///< from /json/info, 0 = not known
         qint64 retryAt = 0;         ///< no answer: not sent again before (ms)
         qint64 postedAt = 0;        ///< when the last state went (ms)
+        /** When a change it would not show (dark before and after: a look
+         *  moved in black, an effect set a frame before its dimmer) was
+         *  first seen, 0 none waiting (see darkHoldMs). */
+        qint64 darkSince = 0;
         /** The rig network gate's decision for this device, cached (see
          *  routeAllowed()): worked out when its address is set and by
          *  refreshTransmitGate(), only read by the send/poll ticks. */
@@ -234,6 +238,12 @@ private:
     /** On the plugin's thread: the sender wakes in @p ms. */
     void kickIn(int ms);
     static const int kickCoalesceMs = 2;
+    /** A change to a dark device that leaves it dark waits this long (ms)
+     *  for more: nobody sees it, and sent at once it held up -- one
+     *  request in flight -- the brightness the engine wrote a frame later
+     *  (an effect's settings land a frame before its dimmer), a Wi-Fi round
+     *  trip after the stage. Waited, the two go as one. */
+    static const int darkHoldMs = 50;
     /** Whether @p data's @p count bytes from @p offset differ from @p old's
      *  (a byte past the end of either is 0). */
     static bool windowChanged(const QByteArray &old, const QByteArray &data, int offset, int count);

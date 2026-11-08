@@ -492,11 +492,23 @@ own, aimed at its IP address** — add the fixture with the connection
 WLED output rather than borrowing Art-Net.
 
 - It sends WLED's own JSON state, not a DMX stream, and only **when the look
-  actually changes** — at most about ten times a second per device, with a
-  matching WLED transition so the steps blend. A held look is sent once; a
-  long fade goes as a handful of states ending on the last one. This keeps
-  Wi-Fi traffic small. A step — on or off, another effect, a change after
-  the look stood still — goes at once, without the transition.
+  actually changes**. A held look is sent once and then nothing more. This
+  keeps Wi-Fi traffic small.
+- **A snap is a snap.** A change goes to the device the moment the engine
+  writes it, not on a send tick. A step (on or off, another effect, a
+  change after the look stood still) goes with no WLED transition, so a
+  WLED cuts with the DMX fixtures on the same GO: a few milliseconds after
+  the Art-Net bytes leave, plus the Wi-Fi's own delay (about 40 ms on the
+  office WLED).
+- **A fade** goes as the show's own steps, at most about ten a second per
+  device, each with a short WLED transition so they blend. That follows
+  the cue's own time and curve, and a pause or a crossfade with another
+  cue. The device is sent DMX levels, not the cue, so it never does the
+  fade by itself.
+- Only what changed goes. When the device's effect, palette and colours
+  are already right, it is sent just its brightness. A change it can't
+  show (it is dark before and after) waits a moment to go out with the
+  brightness that usually follows it in the next frame.
 - **Locate** on a WLED that runs an effect turns it Solid, in the Locate
   colour (white unless Preferences ▸ Locate says otherwise), flashing on and
   off over whatever look is playing; afterwards the device is back on that

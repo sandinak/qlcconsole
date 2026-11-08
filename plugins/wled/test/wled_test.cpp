@@ -443,6 +443,28 @@ void Wled_Test::aLookMovedInBlackGoesOnWithItsBrightnessAlone()
     // The device shows the look all the same.
     QCOMPARE(wled.seg(0).value("fx").toInt(), 89);
     QCOMPARE(wled.seg(0).value("col").toArray().at(0).toArray(), (QJsonArray{ 255, 0, 0 }));
+
+    /* Not moved in black: an effect set a frame before its dimmer (as the
+       engine writes a WLED look). The dark change waits for the brightness
+       and both go as one -- sent alone, it would hold the brightness up for
+       a Wi-Fi round trip (one request in flight). */
+    plugin.writeUniverse(0, 0, universe({ 0, 89, 200, 128, 6, 0, 255, 0, 0, 0, 0, 255 }), true);
+    QTRY_COMPARE(wled.posts.size(), 4);
+    QTest::qWait(250);
+    QElapsedTimer frame;
+    frame.start();
+    plugin.writeUniverse(0, 0, universe({ 0, 42, 200, 128, 6, 0, 0, 0, 255 }), true);
+    QTest::qWait(20);
+    plugin.writeUniverse(0, 0, universe({ 255, 42, 200, 128, 6, 0, 0, 0, 255 }), true);
+    const bool inOneFrame = frame.elapsed() < 40;  // a loaded machine may take longer
+    QTRY_VERIFY(!wled.posts.isEmpty() && wled.posts.last().value("on").toBool());
+    QTest::qWait(200);
+    QCOMPARE(wled.seg(0).value("fx").toInt(), 42);
+    if (inOneFrame)
+    {
+        QCOMPARE(wled.posts.size(), 5);
+        QCOMPARE(wled.posts.last().value("seg").toArray().first().toObject().value("fx").toInt(), 42);
+    }
 }
 
 void Wled_Test::aWeakOrSilentLanternIsAProblem()
