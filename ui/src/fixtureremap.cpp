@@ -530,6 +530,7 @@ void FixtureRemap::slotCloneSourceFixture()
     tgtFix->setPatched(srcFix->isPatched());
     tgtFix->setConnection(srcFix->connection());
     tgtFix->setIPAddress(srcFix->ipAddress());
+    tgtFix->setMacAddress(srcFix->macAddress());
     tgtFix->setTransport(srcFix->transport());
     tgtFix->setStageLook(srcFix->stageLook());
     tgtFix->setOwner(srcFix->owner());

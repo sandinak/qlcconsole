@@ -156,6 +156,14 @@ private:
     /** The manager's own toolbar (add/remove/group/move/import/export/...) */
     QToolBar* m_toolbar;
 
+private:
+    /** The right-click on a WLED found on the network: Patch it. */
+    void foundContextMenu(class QTreeWidgetItem *clicked);
+
+protected:
+    /** Looks for WLEDs on the network again as the tab opens. */
+    void showEvent(QShowEvent *event) override;
+
     /********************************************************************
      * Doc signal handlers
      ********************************************************************/

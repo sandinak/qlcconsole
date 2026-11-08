@@ -120,6 +120,32 @@ public:
     /** How long a new LED count is waited for (tests make it quick). */
     void setLedWaits(int applyMs, int rebootMs, int pollMs);
 
+    /** The settings this show keeps on every WLED it drives, against its
+     *  /json/cfg @p cfg (pure, no network): its name (and mDNS name) the
+     *  fixture's, nothing taken from or sent to other WLEDs (WLED sync),
+     *  dark at power-on, and its brightness limiter from the fixture's Max
+     *  draw when it has one. Never Wi-Fi, LED type, pins or colour order.
+     *  A setting the device does not say is left alone. @p setUp: for Set
+     *  Up (offerSetUp()), where the mDNS name is set with the name; as a
+     *  finding (evaluate()) it is only put right with a name that differs. */
+    static Finding setUpFor(Doc *doc, const Fixture *fx, const QJsonObject &cfg, bool setUp);
+
+    /** The brightness limiter (mA, what WLED's hw.led.maxpwr holds) that
+     *  @p fx's Max draw allows: its watts at its circuit's voltage (@p volts,
+     *  120 V when it has none) on a 5 V LED supply. 0: no Max draw. */
+    static int limiterMilliamps(Doc *doc, const Fixture *fx, double *volts = nullptr);
+
+    /** Offer, once, to set @p fixtureId's WLED up as this show drives it
+     *  (setUpFor()): read its settings, ask with exactly what would change
+     *  (confirmSetUp()), write only those, read them back. Asynchronous; how
+     *  it went is writeStatus(). Nothing is asked when a Teaching show holds
+     *  real output, the device does not answer, or nothing needs changing. */
+    void offerSetUp(QWidget *parent, quint32 fixtureId);
+
+    /** The one confirmation: "Set up 'Staff L' on the device: …". */
+    static bool confirmSetUp(QWidget *parent, const QString &fixtureName, const QString &ip,
+                             const QStringList &changes, const QStringList &notes);
+
     /** How often it reads them again, ms (tests make it quick). */
     void setInterval(int ms);
 

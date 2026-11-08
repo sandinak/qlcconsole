@@ -57,6 +57,7 @@ class Doc;
 #define KXMLFixturePatched          QStringLiteral("Patched")
 #define KXMLFixtureConnection       QStringLiteral("Connection")
 #define KXMLFixtureIPAddress        QStringLiteral("IPAddress")
+#define KXMLFixtureMacAddress       QStringLiteral("MAC")
 #define KXMLFixtureTransport        QStringLiteral("Transport")
 #define KXMLFixtureID               QStringLiteral("ID")
 #define KXMLFixtureGeneric          QStringLiteral("Generic")
@@ -210,6 +211,14 @@ public:
     /** Unicast target of a Network fixture; empty when unset or DMX. */
     QString ipAddress() const { return m_ipAddress; }
     void setIPAddress(const QString &ip) { m_ipAddress = ip; }
+
+    /** The hardware (MAC) address of the device at ipAddress(), as it said
+     *  it ("e08cfef992e0"), when known: a WLED found on the network is
+     *  matched by it, so one that came back at another IP is still this
+     *  fixture. Saved as an attribute of its IPAddress, which older builds
+     *  ignore; empty when not known. */
+    QString macAddress() const { return m_macAddress; }
+    void setMacAddress(const QString &mac) { m_macAddress = mac; }
 
     /** How a Network fixture is sent to: Art-Net (or sACN) DMX, or WLED's
      *  own JSON API -- its look's state, sent only when it changes, for WLED
@@ -458,6 +467,7 @@ protected:
 
     int m_connection;
     QString m_ipAddress;
+    QString m_macAddress;
     int m_transport = ArtNetTransport;
     PowerProfile m_powerProfile;
     /** OutputRules; read by the fader thread (FadeChannel), set on the UI's */
