@@ -35,3 +35,9 @@ webaccess/test
 # next to a gate's other tests, six "cheap" frames settled at 127 ms between
 # frames where a quiet Mac gets 40.
 ui/test/renderperf
+
+# aGoOnTheBarWaitsForTheBar reads where the beat clock (wall time at 240 BPM)
+# stood when a GO quantised to the bar moved the chase, and wants it within
+# 0.1 bar (100 ms) of the bar line; under a loaded gate (Werror leg, and
+# newaudio 2026-11-07) a 10 ms wait stretched past that and it read 0.13.
+engine/test/speedmasters
