@@ -43,6 +43,7 @@ QString PixelPath::name(int shape)
         case FlameSpiral:  return QCoreApplication::translate("PixelPath", "Wrapped up the flame");
         case Wand:         return QCoreApplication::translate("PixelPath", "Wand (wound round a staff)");
         case SprinkleLoops: return QCoreApplication::translate("PixelPath", "Sprinkle loops (over the gap)");
+        case FreeString:   return QCoreApplication::translate("PixelPath", "Free string (anchors)");
         default:           return QCoreApplication::translate("PixelPath", "As its heads (none)");
     }
 }
@@ -351,7 +352,7 @@ QVector<SprinkleSpan> inLedOrder(const QVector<SprinkleSpan> &spans)
 
 bool PixelPath::sprinkleSpansToWled(const QVector<SprinkleSpan> &spans, const QByteArray &state,
                                     int maxSegments, int deviceLeds, QJsonObject &request,
-                                    QString *error)
+                                    QString *error, const QVector<bool> &reverse)
 {
     request = QJsonObject();
     auto refuse = [error](const QString &why) {
@@ -385,7 +386,8 @@ bool PixelPath::sprinkleSpansToWled(const QVector<SprinkleSpan> &spans, const QB
         o[QStringLiteral("id")] = g;
         o[QStringLiteral("start")] = t.at(g).firstLed - 1;
         o[QStringLiteral("stop")] = t.at(g).lastLed;
-        o[QStringLiteral("rev")] = g % 2 == 1;   // every second span runs outer to inner
+        // Every second span runs outer to inner -- or as a free string's own says.
+        o[QStringLiteral("rev")] = reverse.size() == t.size() ? reverse.at(g) : g % 2 == 1;
         o[QStringLiteral("grp")] = 1;
         o[QStringLiteral("spc")] = 0;
         o[QStringLiteral("of")] = 0;
@@ -407,7 +409,8 @@ bool PixelPath::sprinkleSpansToWled(const QVector<SprinkleSpan> &spans, const QB
     return true;
 }
 
-QStringList PixelPath::wledSegmentsDiffer(const QVector<SprinkleSpan> &spans, const QByteArray &state)
+QStringList PixelPath::wledSegmentsDiffer(const QVector<SprinkleSpan> &spans, const QByteArray &state,
+                                          const QVector<bool> &reverse)
 {
     QStringList out;
     const QJsonObject root = wledState(state);
@@ -436,9 +439,255 @@ QStringList PixelPath::wledSegmentsDiffer(const QVector<SprinkleSpan> &spans, co
         if (s.start != sp.firstLed - 1 || s.stop != sp.lastLed)
             out << QCoreApplication::translate("PixelPath", "Segment %1 is LEDs %2 to %3, not %4 to %5.")
                        .arg(g + 1).arg(s.start + 1).arg(s.stop).arg(sp.firstLed).arg(sp.lastLed);
-        else if (s.rev != (g % 2 == 1))
+        else if (s.rev != (reverse.size() == t.size() ? reverse.at(g) : g % 2 == 1))
             out << (s.rev ? QCoreApplication::translate("PixelPath", "Segment %1 is reversed.").arg(g + 1)
                           : QCoreApplication::translate("PixelPath", "Segment %1 is not reversed.").arg(g + 1));
+    }
+    return out;
+}
+
+/*********************************************************************
+ * Free string (anchors)
+ *********************************************************************/
+
+double PixelPath::freeStringSpacing(const FixtureRigProps &rp, int n)
+{
+    if (rp.wandStripLength > 0.0f && n > 1)
+        return double(rp.wandStripLength) / (n - 1);
+    return kLedSpacing;
+}
+
+double PixelPath::freeStringLength(const FixtureRigProps &rp, int n)
+{
+    return n > 1 ? freeStringSpacing(rp, n) * (n - 1) : 0.0;
+}
+
+QVector<StringAnchor> PixelPath::defaultStringAnchors(const QVector3D &at, double length)
+{
+    // A forearm downstage of the controller, running across the stage.
+    const float len = float(qMax(0.3048, length));
+    StringAnchor a, b;
+    a.x = at.x();
+    a.y = at.y() + 0.3f;
+    a.z = at.z();
+    b = a;
+    b.x = a.x + len;
+    return { a, b };
+}
+
+QVector<StringAnchor> PixelPath::freeStringAnchors(const FixtureRigProps &rp, const QVector3D &at, int n)
+{
+    if (rp.stringAnchors.size() >= 2)
+        return rp.stringAnchors;
+    const double len = freeStringLength(rp, n);
+    if (rp.stringAnchors.size() == 1)
+    {
+        QVector<StringAnchor> one = defaultStringAnchors(rp.stringAnchors.first().pos(), len);
+        one[0] = rp.stringAnchors.first();
+        one[1].y = one[0].y;
+        one[1].z = one[0].z;
+        one[1].pin = 0;
+        one[1].reverse = false;
+        return one;
+    }
+    return defaultStringAnchors(at, len);
+}
+
+double PixelPath::anchorLineLength(const QVector<StringAnchor> &anchors)
+{
+    double len = 0.0;
+    for (int i = 1; i < anchors.size(); ++i)
+        len += double((anchors.at(i).pos() - anchors.at(i - 1).pos()).length());
+    return len;
+}
+
+namespace
+{
+/** The line through a free string's anchors, by length along it. */
+struct AnchorLine
+{
+    QVector<QVector3D> pts;
+    QVector<double> cum;        ///< length to each anchor
+    double total() const { return cum.isEmpty() ? 0.0 : cum.last(); }
+
+    explicit AnchorLine(const QVector<StringAnchor> &anchors)
+    {
+        for (const StringAnchor &a : anchors)
+        {
+            cum << (pts.isEmpty() ? 0.0 : cum.last() + double((a.pos() - pts.last()).length()));
+            pts << a.pos();
+        }
+    }
+    /** Way out of the first span (backwards) or the last (onwards). */
+    QVector3D dirAt(int from, int to) const
+    {
+        const QVector3D d = pts.at(to) - pts.at(from);
+        return d.length() > 1e-6f ? d.normalized() : QVector3D(1, 0, 0);
+    }
+    /** The point @p s along it; before its start and past its end, straight on. */
+    QVector3D at(double s) const
+    {
+        if (pts.size() == 1)
+            return pts.first();
+        if (s <= 0.0)
+            return pts.first() + dirAt(1, 0) * float(-s);
+        if (s >= total())
+            return pts.last() + dirAt(pts.size() - 2, pts.size() - 1) * float(s - total());
+        int i = 1;
+        while (i < pts.size() - 1 && cum.at(i) < s)
+            ++i;
+        const double l = cum.at(i) - cum.at(i - 1);
+        const double t = l > 0.0 ? (s - cum.at(i - 1)) / l : 0.0;
+        return pts.at(i - 1) + (pts.at(i) - pts.at(i - 1)) * float(t);
+    }
+};
+
+/** Where each of @p n LEDs is along the line, as length from its start. */
+QVector<double> freeStringArcs(const QVector<StringAnchor> &anchors, const AnchorLine &line,
+                               int n, double spacing)
+{
+    QVector<double> arcs;
+    if (n <= 0 || anchors.isEmpty())
+        return arcs;
+    // What is known: LED index (0-based) -> length along. Pins that rise only.
+    QVector<QPair<int, double> > known;
+    for (int i = 0; i < anchors.size(); ++i)
+    {
+        const int pin = anchors.at(i).pin;
+        if (pin < 1 || pin > n || (!known.isEmpty() && pin - 1 <= known.last().first))
+            continue;
+        known << qMakePair(pin - 1, line.cum.at(i));
+    }
+    // LED 1 at the first anchor, unless a pin puts it somewhere else.
+    if (known.isEmpty() || (known.first().first > 0 && anchors.first().pin <= 0))
+        known.prepend(qMakePair(0, 0.0));
+    arcs.resize(n);
+    int k = 0;
+    for (int led = 0; led < n; ++led)
+    {
+        while (k + 1 < known.size() && known.at(k + 1).first <= led)
+            ++k;
+        const QPair<int, double> &a = known.at(k);
+        if (led < a.first)                      // before the first pin
+            arcs[led] = a.second - (a.first - led) * spacing;
+        else if (k + 1 < known.size())          // between two: spread evenly
+        {
+            const QPair<int, double> &b = known.at(k + 1);
+            arcs[led] = a.second + (b.second - a.second) * double(led - a.first) / (b.first - a.first);
+        }
+        else                                    // past the last: its own spacing
+            arcs[led] = a.second + (led - a.first) * spacing;
+    }
+    return arcs;
+}
+}
+
+QVector<QVector3D> PixelPath::freeStringPositions(const QVector<StringAnchor> &anchors, int n, double spacing)
+{
+    QVector<QVector3D> out;
+    if (n <= 0 || anchors.isEmpty())
+        return out;
+    const AnchorLine line(anchors);
+    const QVector<double> arcs = freeStringArcs(anchors, line, n, spacing);
+    out.reserve(n);
+    for (double s : arcs)
+        out << line.at(s);
+    return out;
+}
+
+QVector<PixelPath::FreeSpan> PixelPath::freeStringSpans(const QVector<StringAnchor> &anchors, int n,
+                                                       double spacing)
+{
+    QVector<FreeSpan> out;
+    if (n <= 0 || anchors.size() < 2)
+        return out;
+    const AnchorLine line(anchors);
+    const QVector<double> arcs = freeStringArcs(anchors, line, n, spacing);
+    const int last = anchors.size() - 2;
+    for (int led = 0; led < n; ++led)
+    {
+        // The span it lies on: the last anchor at or before it.
+        int span = 0;
+        while (span < last && line.cum.at(span + 1) <= arcs.at(led) + 1e-6)
+            ++span;
+        if (!out.isEmpty() && out.last().anchor == span)
+        {
+            out.last().lastLed = led + 1;
+            continue;
+        }
+        FreeSpan fs;
+        fs.anchor = span;
+        fs.firstLed = fs.lastLed = led + 1;
+        fs.reverse = anchors.at(span).reverse;
+        out << fs;
+    }
+    return out;
+}
+
+void PixelPath::freeSpansAsSegments(const QVector<FreeSpan> &free, QVector<SprinkleSpan> &spans,
+                                    QVector<bool> &reverse)
+{
+    spans.clear();
+    reverse.clear();
+    for (const FreeSpan &fs : free)
+    {
+        SprinkleSpan sp;
+        sp.firstLed = fs.firstLed;
+        sp.lastLed = fs.lastLed;
+        spans << sp;
+        reverse << fs.reverse;
+    }
+}
+
+QString PixelPath::checkStringAnchors(const QVector<StringAnchor> &anchors, int leds)
+{
+    int lastPin = 0, lastAt = 0;
+    for (int i = 0; i < anchors.size(); ++i)
+    {
+        const int pin = anchors.at(i).pin;
+        if (pin <= 0)
+            continue;
+        if (leds > 0 && pin > leds)
+            return QCoreApplication::translate("PixelPath", "Anchor %1 pins LED %2, past the last LED (%3).")
+                .arg(i + 1).arg(pin).arg(leds);
+        if (pin <= lastPin)
+            return QCoreApplication::translate("PixelPath",
+                "Anchor %1 pins LED %2, but anchor %3 before it pins LED %4: pinned LEDs have to "
+                "count up along the string.").arg(i + 1).arg(pin).arg(lastAt).arg(lastPin);
+        lastPin = pin;
+        lastAt = i + 1;
+    }
+    return QString();
+}
+
+QString PixelPath::stringAnchorsToString(const QVector<StringAnchor> &anchors)
+{
+    QStringList parts;
+    for (const StringAnchor &a : anchors)
+        parts << QStringLiteral("%1,%2,%3,%4,%5")
+                     .arg(double(a.x), 0, 'f', 4).arg(double(a.y), 0, 'f', 4).arg(double(a.z), 0, 'f', 4)
+                     .arg(qMax(0, a.pin)).arg(a.reverse ? 1 : 0);
+    return parts.join(QLatin1Char(';'));
+}
+
+QVector<StringAnchor> PixelPath::stringAnchorsFromString(const QString &text)
+{
+    QVector<StringAnchor> out;
+    foreach (const QString &part, text.split(QLatin1Char(';'), Qt::SkipEmptyParts))
+    {
+        const QStringList f = part.split(QLatin1Char(','));
+        if (f.size() < 3)
+            continue;
+        bool okX = false, okY = false, okZ = false;
+        StringAnchor a;
+        a.x = f.at(0).trimmed().toFloat(&okX);
+        a.y = f.at(1).trimmed().toFloat(&okY);
+        a.z = f.at(2).trimmed().toFloat(&okZ);
+        if (!okX || !okY || !okZ)
+            continue;
+        a.pin = f.size() > 3 ? qMax(0, f.at(3).trimmed().toInt()) : 0;
+        a.reverse = f.size() > 4 && f.at(4).trimmed().toInt() != 0;
+        out << a;
     }
     return out;
 }
@@ -597,6 +846,9 @@ QVector<QVector3D> PixelPath::positions(const Doc *doc, MonitorProperties *props
         return rp.wandFromTop ? helix(t, grip, radius + 0.002, turns, n)
                               : helix(grip, t, radius + 0.002, turns, n);
     }
+    if (rp.pixelPath == FreeString)
+        return freeStringPositions(freeStringAnchors(rp, props->fixtureRigPosition(fid), n), n,
+                                   freeStringSpacing(rp, n));
     if (!needsFountain(rp.pixelPath))
         return out;
     Fountain::Parts f = Fountain::ofFixture(props, fid);

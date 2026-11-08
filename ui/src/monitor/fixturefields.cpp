@@ -58,6 +58,10 @@
 #include "pixelpath.h"
 #include "fountain.h"
 #include "sprinklespansdialog.h"
+#include "stringanchorsdialog.h"
+#include "freestringhandles.h"
+#include "measurementunits.h"
+#include <QDialog>
 
 namespace
 {
@@ -605,7 +609,8 @@ void FixtureFields::hideAll()
                         static_cast<QWidget *>(m_heldBy),
                         static_cast<QWidget *>(m_holdHeight), static_cast<QWidget *>(m_holdTilt),
                         static_cast<QWidget *>(m_sprPoints), static_cast<QWidget *>(m_sprPer),
-                        m_sprBox, static_cast<QWidget *>(m_sprNote) })
+                        m_sprBox, static_cast<QWidget *>(m_sprNote),
+                        m_strBox, static_cast<QWidget *>(m_strNote) })
         row(w, false);
 }
 
@@ -1003,7 +1008,8 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     for (int k = 0; k < PixelPath::kShapes; ++k)
         m_pixelPath->addItem(PixelPath::name(k), k);
     m_pixelPath->setToolTip(tr("Where its LEDs are: round a fountain's wall or base, wound up "
-                               "its flame, or round a wand -- in the order of its heads"));
+                               "its flame, round a wand, or laid anywhere through anchors you "
+                               "place on the plan -- in the order of its heads"));
     form->addRow(tr("Pixel path:"), m_pixelPath);
 
     m_pixelTurns = new QDoubleSpinBox(parent);
@@ -1106,6 +1112,46 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     m_sprNote->setStyleSheet(QStringLiteral("color:#b0b4c0;"));
     form->addRow(QString(), m_sprNote);
 
+    // Free string (anchors): laid on the plan through the anchors placed there.
+    m_strBox = new QWidget(parent);
+    m_strBox->setObjectName(QStringLiteral("fixtureStringBox"));
+    QVBoxLayout *strCol = new QVBoxLayout(m_strBox);
+    strCol->setContentsMargins(0, 0, 0, 0);
+    QHBoxLayout *strRow = new QHBoxLayout;
+    strRow->setContentsMargins(0, 0, 0, 0);
+    m_strCount = new QLabel(m_strBox);
+    m_strCount->setObjectName(QStringLiteral("fixtureStringCount"));
+    m_strAdd = new QPushButton(tr("Add Anchor"), m_strBox);
+    m_strAdd->setObjectName(QStringLiteral("fixtureStringAdd"));
+    m_strAdd->setToolTip(tr("Then click on the plan where the string goes: each click is the next "
+                            "anchor, after the last. Esc or a right-click ends"));
+    m_strEdit = new QPushButton(tr("Edit Anchors…"), m_strBox);
+    m_strEdit->setObjectName(QStringLiteral("fixtureStringEdit"));
+    m_strEdit->setToolTip(tr("Every anchor as a table: where it is, how high, the LED pinned there "
+                             "and which way its span runs"));
+    strRow->addWidget(m_strCount);
+    strRow->addWidget(m_strAdd);
+    strRow->addWidget(m_strEdit);
+    strRow->addStretch();
+    strCol->addLayout(strRow);
+    QHBoxLayout *strRow2 = new QHBoxLayout;
+    strRow2->setContentsMargins(0, 0, 0, 0);
+    m_strWrite = new QPushButton(tr("Write Segments…"), m_strBox);
+    m_strWrite->setObjectName(QStringLiteral("fixtureStringWrite"));
+    strRow2->addWidget(m_strWrite);
+    strRow2->addStretch();
+    strCol->addLayout(strRow2);
+    form->addRow(tr("Anchors:"), m_strBox);
+    connect(m_strAdd, &QPushButton::clicked, this, &FixtureFields::addStringAnchor);
+    connect(m_strEdit, &QPushButton::clicked, this, &FixtureFields::editStringAnchors);
+    connect(m_strWrite, &QPushButton::clicked, this, [this]() { writeSegmentsFor(true); });
+
+    m_strNote = new QLabel(parent);
+    m_strNote->setObjectName(QStringLiteral("fixtureStringNote"));
+    m_strNote->setWordWrap(true);
+    m_strNote->setStyleSheet(QStringLiteral("color:#b0b4c0;"));
+    form->addRow(QString(), m_strNote);
+
     MonitorGraphicsView *gv = m_monitor->m_graphicsView;
     auto each = [this, props, gv](const QString &field,
                                   const std::function<void(FixtureRigProps &)> &set) {
@@ -1189,8 +1235,9 @@ void FixtureFields::showPixelRows(quint32 fid)
     const bool wand = rp.pixelPath == PixelPath::Wand;
     m_wandLength->setValue(double(rp.wandLength) * toDisp);
     row(m_wandLength, wand);
+    const bool freeString = rp.pixelPath == PixelPath::FreeString;
     m_wandStrip->setValue(double(rp.wandStripLength) * toDisp);
-    row(m_wandStrip, wand);
+    row(m_wandStrip, wand || freeString);
     m_wandDiameter->setValue(double(rp.wandDiameter) * toDisp);
     row(m_wandDiameter, wand);
     m_wandStart->setCurrentIndex(rp.wandFromTop ? 1 : 0);
@@ -1249,6 +1296,100 @@ void FixtureFields::showPixelRows(quint32 fid)
                   .arg(qMax(0, leds - inSpans)));
     }
     row(m_sprNote, sprinkles);
+
+    // Free string: how many anchors, the buttons, and what to do first.
+    const int own = rp.stringAnchors.size();
+    m_strCount->setText(own >= 2 ? tr("%1 anchors").arg(own) : tr("None placed"));
+    const bool onPlot = m_monitor->m_graphicsView != nullptr
+                        && m_monitor->m_graphicsView->fixtureItemForId(fid) != nullptr;
+    m_strAdd->setEnabled(one && onPlot);
+    m_strAdd->setToolTip(!one ? tr("Select one fixture: each string has its own anchors")
+                         : !onPlot ? tr("Put the fixture on the plot first: anchors are placed there")
+                         : tr("Then click on the plan where the string goes: each click is the "
+                              "next anchor, after the last. Esc or a right-click ends"));
+    m_strEdit->setEnabled(one);
+    m_strWrite->setEnabled(one && wled && !writing);
+    m_strWrite->setToolTip(!one ? tr("Select one fixture: each WLED has its own segments")
+                         : !wled ? tr("Only a WLED on the network with an IP address keeps segments")
+                         : writing ? tr("Writing to the device…")
+                         : tr("Make the WLED's segments the string's spans: one from each anchor to "
+                              "the next, reversed where the anchor says. Asks first"));
+    row(m_strBox, freeString);
+    if (freeString && !m_strNote->property("stringBusy").toBool())
+        m_strNote->setText(stringNote(fid));
+    row(m_strNote, freeString);
+}
+
+QString FixtureFields::stringNote(quint32 fid) const
+{
+    MonitorProperties *props = m_monitor->m_props;
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    if (rp.stringAnchors.size() < 2)
+        return tr("Click Add Anchor, then click on the plan where the string goes.");
+    const int leds = PixelPathDecor::ledCount(m_monitor->m_doc, fid);
+    const QString bad = PixelPath::checkStringAnchors(rp.stringAnchors, leds);
+    if (!bad.isEmpty())
+        return bad;
+    const double string = PixelPath::freeStringLength(rp, leds);
+    const double run = PixelPath::anchorLineLength(rp.stringAnchors);
+    QString note = (leds == 1 ? tr("1 LED on %1 of string; its anchors run %2.")
+                              : tr("%1 LEDs on %2 of string; its anchors run %3.").arg(leds))
+                       .arg(MeasurementUnits::formatLength(string * 1000.0),
+                            MeasurementUnits::formatLength(run * 1000.0));
+    bool pinned = false;
+    for (const StringAnchor &a : rp.stringAnchors)
+        pinned = pinned || a.pin > 0;
+    const double gap = PixelPath::freeStringSpacing(rp, leds);
+    if (!pinned && string > run + gap)
+        note += QStringLiteral(" ") + tr("The last %1 runs on past the last anchor.")
+                                          .arg(MeasurementUnits::formatLength((string - run) * 1000.0));
+    else if (!pinned && string + gap < run)
+        note += QStringLiteral(" ") + tr("It ends %1 short of the last anchor.")
+                                          .arg(MeasurementUnits::formatLength((run - string) * 1000.0));
+    note += QStringLiteral(" ") + tr("Drag an anchor on the plan to move it; right-click one to "
+                                     "pin an LED there or reverse its span.");
+    return note;
+}
+
+void FixtureFields::addStringAnchor()
+{
+    MonitorGraphicsView *gv = m_monitor->m_graphicsView;
+    if (m_fids.size() != 1 || gv == nullptr)
+        return;
+    const quint32 fid = m_fids.first();
+    gv->beginAddAnchors(fid);
+    /* The plan is under a dialog this sits in (Fixture Properties, a
+       structure's editor): it closes, keeping what was set, so the plan can
+       be clicked. */
+    if (QDialog *dlg = qobject_cast<QDialog *>(m_parent->window()))
+        dlg->accept();
+}
+
+void FixtureFields::editStringAnchors()
+{
+    if (m_fids.size() != 1)
+        return;
+    const quint32 fid = m_fids.first();
+    MonitorProperties *props = m_monitor->m_props;
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const int leds = PixelPathDecor::ledCount(m_monitor->m_doc, fid);
+    const QVector3D at = props->fixtureRigPosition(fid);
+    // Start from what it is drawn with: its own, or the two in front of it.
+    StringAnchorsDialog dlg(rp.stringAnchors.size() >= 2 ? rp.stringAnchors
+                                                         : PixelPath::freeStringAnchors(rp, at, leds),
+                            leds, at.z(), m_parent);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    const QVector<StringAnchor> anchors = dlg.anchors();
+    if (anchors == rp.stringAnchors)
+        return;
+    emit aboutToEdit(QStringLiteral("stringAnchors"));
+    FixtureRigProps now = props->fixtureRigProps(fid);
+    now.stringAnchors = anchors;
+    props->setFixtureRigProps(fid, now);
+    if (m_monitor->m_graphicsView != nullptr)
+        m_monitor->m_graphicsView->updateFixture(fid);
+    finishEdit();
 }
 
 void FixtureFields::editSprinkleSpans()
@@ -1357,50 +1498,83 @@ void FixtureFields::takeWledSegments(quint32 fid, const QByteArray &body, bool o
 
 void FixtureFields::writeSprinkleSegments()
 {
+    writeSegmentsFor(false);
+}
+
+void FixtureFields::writeSegmentsFor(bool freeString)
+{
     if (m_fids.size() != 1 || (m_wledWrite != nullptr && m_wledWrite->isBusy()))
         return;
     const quint32 fid = m_fids.first();
     Doc *doc = m_monitor->m_doc;
     const Fixture *fx = doc->fixture(fid);
-    m_sprNote->setVisible(true);
+    QLabel *note = freeString ? m_strNote : m_sprNote;
+    note->setVisible(true);
     if (!WledConfigCheck::isWled(fx))
     {
-        m_sprNote->setText(tr("Nothing was written: it is not a WLED on the network with an IP address."));
+        note->setText(tr("Nothing was written: it is not a WLED on the network with an IP address."));
         return;
     }
     const QString ip = fx->ipAddress();
     const QString held = WledDeviceWrite::heldReason(doc, ip);
     if (!held.isEmpty())
     {
-        m_sprNote->setText(tr("Nothing was written to %1: %2").arg(WledDeviceWrite::deviceName(ip), held));
+        note->setText(tr("Nothing was written to %1: %2").arg(WledDeviceWrite::deviceName(ip), held));
         return;
     }
-    const QVector<SprinkleSpan> spans =
-        PixelPath::sprinkleLayout(m_monitor->m_props->fixtureRigProps(fid), PixelPathDecor::ledCount(doc, fid));
+    const FixtureRigProps rp = m_monitor->m_props->fixtureRigProps(fid);
+    const int leds = PixelPathDecor::ledCount(doc, fid);
+    QVector<SprinkleSpan> spans;
+    QVector<bool> reverse;
+    if (freeString)
+    {
+        // One segment from each anchor to the next, by the LEDs laid on it.
+        const QString bad = PixelPath::checkStringAnchors(rp.stringAnchors, leds);
+        if (!bad.isEmpty())
+        {
+            note->setText(tr("Nothing was written: %1").arg(bad));
+            return;
+        }
+        const QVector<StringAnchor> anchors =
+            PixelPath::freeStringAnchors(rp, m_monitor->m_props->fixtureRigPosition(fid), leds);
+        PixelPath::freeSpansAsSegments(PixelPath::freeStringSpans(anchors, leds,
+                                                                  PixelPath::freeStringSpacing(rp, leds)),
+                                       spans, reverse);
+    }
+    else
+        spans = PixelPath::sprinkleLayout(rp, leds);
+    m_writeNote = note;
     if (m_wledWrite == nullptr)
     {
         m_wledWrite = new WledDeviceWrite(this);
         connect(m_wledWrite, &WledDeviceWrite::progress, this, [this](const QString &text) {
-            if (text.isEmpty())
+            if (text.isEmpty() || m_writeNote == nullptr)
                 return;
-            m_sprNote->setProperty("sprinkleReading", true);
-            m_sprNote->setText(QStringLiteral("⟳ ") + text);
+            m_writeNote->setProperty(m_writeNote == m_strNote ? "stringBusy" : "sprinkleReading", true);
+            m_writeNote->setText(QStringLiteral("⟳ ") + text);
         });
         connect(m_wledWrite, &WledDeviceWrite::finished, this, [this](bool, const QString &message) {
             m_sprNote->setProperty("sprinkleReading", false);
+            m_strNote->setProperty("stringBusy", false);
             const bool one = m_fids.size() == 1;
             const bool wled = one && WledConfigCheck::isWled(m_monitor->m_doc->fixture(m_fids.first()));
             m_sprRead->setEnabled(wled);
             m_sprWrite->setEnabled(wled);
-            m_sprNote->setText(message);
-            m_sprNote->setVisible(true);
+            m_strWrite->setEnabled(wled);
+            if (m_writeNote != nullptr)
+            {
+                m_writeNote->setText(message);
+                m_writeNote->setVisible(true);
+            }
         });
     }
     m_sprRead->setEnabled(false);
     m_sprWrite->setEnabled(false);
+    m_strWrite->setEnabled(false);
     const QString name = fx->name();
-    m_wledWrite->writeSegments(ip, spans, [this, name, ip](int segments, int existing) {
+    m_wledWrite->writeSegments(ip, spans, [this, name, ip, freeString](int segments, int existing) {
         return m_confirmWrite ? m_confirmWrite(name, ip, segments, existing)
-                              : WledDeviceWrite::confirmSegments(m_parent, name, ip, segments, existing);
-    });
+                              : WledDeviceWrite::confirmSegments(m_parent, name, ip, segments, existing,
+                                                                 freeString);
+    }, reverse);
 }

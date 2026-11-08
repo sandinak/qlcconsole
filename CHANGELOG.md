@@ -22,6 +22,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   focused (UX-61, flow F-04).
 ### New
 
+- **Free string (anchors): a fairy string laid anywhere.** A new **Pixel
+  path** for any pixel fixture, no fountain needed: **Add Anchor**, then
+  click on the plan where the string starts, each place it is tied and
+  where it ends. Its LEDs follow the line through the anchors by the
+  **String length** (heights too); drag an anchor to move it, right-click
+  one to **Pin LED Here…**, **Reverse This Span**, insert or delete it, or
+  set exact values in **Edit Anchors…** (in Settings' units). **Write
+  Segments…** makes a WLED's segments its spans, one anchor to the next,
+  each reversed as its anchor says.
 - **Write Segments… and a WLED's LED count, from the show.** A sprinkle-loop
   string's **Write Segments…** (beside Read Segments) makes the WLED's
   segments its spans: one a span, every second reversed, the LEDs between

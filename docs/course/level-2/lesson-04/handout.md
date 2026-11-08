@@ -179,6 +179,19 @@ master**, so one tap moves everything on it together.
    Grand Master. The wave now counts in beats of that master.
 4. Which effects in a show would you put on the same master, and why?
 
+**A string that goes where the set goes.** A fairy string tied along a
+railing or swagged over a doorway isn't a straight bar. If the plot draws
+it as one, a chase that looks right on the plot runs the other way on
+stage. Lay it where it really is, on a copy of your show, with any pixel
+fixture:
+
+1. Double-click it on the plot. Set **Pixel path** to **Free string
+   (anchors)** and its **String length**.
+2. Click **Add Anchor**, then click the plan where the string starts, each
+   place it is tied, and where it ends. **Esc** ends.
+3. Right-click an anchor → **Pin LED Here…** when you know which LED sits
+   there. Which way does the wave run along it now?
+
 **An effect fades with its cue.** Click **1.0.6 Dance Break** and select
 the **Steps** layer. An effect made now fades in with its cue, and out with
 the fade out of the cue that replaces it, while the layer's colour fades as

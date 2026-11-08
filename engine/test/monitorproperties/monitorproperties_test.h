@@ -229,6 +229,11 @@ private slots:
     void sprinkleSpansRoundTrip();
     void sprinkleSpansFromWledSegments();
     void sprinkleSpansToWledSegments();
+    void aFreeStringSpreadsItsLedsAlongItsAnchors();
+    void pinnedLedsHoldAFreeStringAtItsAnchors();
+    void aFreeStringWithoutAnchorsStartsInFrontOfItsFixture();
+    void aFreeStringsAnchorsRoundTrip();
+    void aFreeStringsSpansBecomeSegmentsWithTheirOwnReverse();
 };
 
 #endif

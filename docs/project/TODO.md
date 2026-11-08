@@ -19,6 +19,18 @@ Write Segments… (sprinkle loops) and Fix on Device's LED count are built.
   Same shape as the LED count: a finding, asked on its own, all of hw.led
   sent back.
 
+## Free string (anchors) pixel path (feat/042-free-string, 2026-11-07) -- built, leftovers
+
+A fairy string laid anywhere through anchors on the plot: Add Anchor and
+clicks, drag, the anchor's menu (pin, reverse, insert, delete), Edit
+Anchors…, Write Segments… with each span's own Reverse.
+
+- [ ] Not verified on a real WLED string on the show VLAN (fake WLED only).
+- [ ] Anchors are absolute stage points: moving or duplicating the fixture
+  (the controller) leaves them where they are. Moving them with it, when
+  wanted, is not built.
+- [ ] Read Segments for a free string (pins from the device's segments).
+
 ## Free Spin: an effect for heads with free pan/tilt rotation (spin, 2026-11-06, 0.4.2) -- built, leftovers
 
 Built on feat/042-free-rotate: FreeRotation (engine), free-spin.js, fitted

@@ -105,6 +105,16 @@ private:
     /** Write Segments: the shown fixture's spans to its WLED as segments,
      *  asked first (WledDeviceWrite), busy then the result in m_sprNote. */
     void writeSprinkleSegments();
+    /** Free string (anchors): Add Anchor (the plot then takes clicks on the
+     *  plan; a dialog this sits in closes, keeping what was set) and the
+     *  anchor table, edited in its dialog. */
+    void addStringAnchor();
+    void editStringAnchors();
+    /** The free string's note: what to do first, or how it lies. */
+    QString stringNote(quint32 fid) const;
+    /** Write Segments for a sprinkle loop or a free string (@p freeString):
+     *  its spans to its WLED, asked first, busy then the result in its note. */
+    void writeSegmentsFor(bool freeString);
     /** The Write Segments confirmation (a test answers it instead). */
     std::function<bool(const QString &name, const QString &ip, int segments, int existing)> m_confirmWrite;
 
@@ -143,6 +153,13 @@ private:
     class QPushButton *m_sprWrite;
     class WledDeviceWrite *m_wledWrite = nullptr;   ///< Write Segments in progress
     QLabel *m_sprNote;          ///< the span table in words, or why a read failed
+    QWidget *m_strBox;          ///< Free string: its anchors, Add Anchor, Edit Anchors…
+    QLabel *m_strCount;
+    class QPushButton *m_strAdd;
+    class QPushButton *m_strEdit;
+    class QPushButton *m_strWrite;
+    QLabel *m_strNote;          ///< what to do first, how it lies, or a write's progress
+    QLabel *m_writeNote = nullptr;  ///< the note the write in progress reports in
     class QNetworkAccessManager *m_nam = nullptr;
     LightControls *m_light;
     QWidget *m_dmxBox;

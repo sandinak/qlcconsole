@@ -147,6 +147,9 @@ add_library(${module_name}
     monitor/fixturevisualtraits.cpp monitor/fixturevisualtraits.h
     monitor/lanternpixels.cpp monitor/lanternpixels.h
     monitor/pixelpathdecor.cpp monitor/pixelpathdecor.h
+    monitor/freestringhandles.cpp monitor/freestringhandles.h
+    monitor/monitorgraphicsview_freestring.cpp
+    monitor/stringanchorsdialog.cpp monitor/stringanchorsdialog.h
     monitor/sprinklespansdialog.cpp monitor/sprinklespansdialog.h
     monitor/structurestudioview_pixels.cpp
     monitor/lightcontrols.cpp monitor/lightcontrols.h
