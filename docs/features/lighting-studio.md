@@ -828,6 +828,18 @@ layout), so after a crash mid-Reverse the next run takes the ways from
 there, not the turned-round ones the WLED reports. A second computer
 driving the same WLED hasn't kept them: run Write Segments… on it once.
 
+### Pixel paths on a WLED's own LEDs
+
+A pixel path draws **LEDs**. A WLED driven through its API (Network (WLED,
+JSON over Wi-Fi)) runs its own effects: the Studio draws its live pixels, or
+the effect's port, along the path. A WLED patched as its LEDs (**Pixels
+(Multi RGB)** over Art-Net/sACN, in [Fixture Manager](fixture-manager.md))
+has a head for each LED, and **each head is its LED on the path**: a pixel
+effect or RGB Matrix lights the LED the Studio shows lit, wound round the
+wand, along the sprinkle loops or the free string, or in a straight run with
+no path. Choose JSON for the device's effects with little traffic; Pixels
+for per-LED looks in step with the rest of the show (more traffic).
+
 ### Wand
 
 A **wand** is a staff with an LED strip or fairy string wound round it,

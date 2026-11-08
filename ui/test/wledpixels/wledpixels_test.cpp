@@ -777,4 +777,75 @@ void WledPixels_Test::aRealOlaProbeSeesTheChase()
     QVERIFY(seen.size() >= 5);
 }
 
+void WledPixels_Test::shotsOfAddFixtureAndFixOnDevice()
+{
+    /* For review, by hand: WLEDPIXELS_SHOTS=<dir> grabs Add Fixture in the
+       Pixels mode at three sizes and Fix on Device's confirmation. */
+    const QString dir = qEnvironmentVariable("WLEDPIXELS_SHOTS");
+    if (dir.isEmpty())
+        QSKIP("WLEDPIXELS_SHOTS not set");
+    QDir().mkpath(dir);
+
+    FakeWled wled;
+    QVERIFY(wled.listen(QHostAddress::LocalHost));
+    wled.info["leds"] = QJsonObject{ { "count", 400 }, { "lc", 1 }, { "maxseg", 32 } };
+    QJsonObject cfg = liveCfg(false, 5568, 1, 1, 3);
+    QJsonObject live = cfg["if"].toObject()["live"].toObject();
+    live["maxbri"] = false;
+    cfg["if"] = QJsonObject{ { "live", live } };
+    wled.cfg = cfg;
+
+    Doc doc(this);
+    doc.ioPluginCache()->load(QDir(TEST_PLUGINS_DIR, "*artnet*"));
+    QVERIFY(lanternDef(&doc) != nullptr);
+
+    const QList<QSize> sizes = { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) };
+    for (const QSize &sz : sizes)
+    {
+        AddFixture af(nullptr, &doc);
+        af.resize(qMin(sz.width(), 1100), sz.height() - 60);
+        const QList<QTreeWidgetItem *> found = af.m_tree->findItems("Lantern", Qt::MatchExactly | Qt::MatchRecursive);
+        QVERIFY(!found.isEmpty());
+        af.m_tree->setCurrentItem(found.first());
+        af.m_connectionCombo->setCurrentIndex(af.m_connectionCombo->findData(
+            AddFixture::connectionKey(Fixture::Network, Fixture::ArtNetTransport)));
+        af.m_ipEdit->setText(wled.address());
+        const int idx = af.m_modeCombo->findText("Pixels (Multi RGB)");
+        af.m_modeCombo->setCurrentIndex(idx);
+        af.slotModeActivated(idx);
+        af.show();
+        QTRY_COMPARE(af.m_ledsSpin->value(), 400);
+        QTest::qWait(50);
+        af.grab().save(QDir(dir).filePath(QString("addfixture-pixels-%1x%2.png").arg(sz.width()).arg(sz.height())));
+    }
+
+    // Fix on Device: read from the device, the changes shown before a write.
+    Fixture *fx = pixelWled(&doc, 400, false, wled.address());
+    QVERIFY(fx != nullptr);
+    fx->setPatched(false);
+    QVERIFY(doc.addFixture(fx));
+    PatchPlanner planner(&doc);
+    QVERIFY(planner.routeWled({ fx->id() }) == 1);
+    WledConfigCheck check(&doc);
+    check.checkNow();
+    QTRY_VERIFY(!check.finding(fx->id()).problems.isEmpty());
+    QWidget parent;
+    parent.resize(1280, 800);
+    int n = 0;
+    QTimer grabber;
+    grabber.setInterval(30);
+    connect(&grabber, &QTimer::timeout, [&]() {
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        {
+            QTest::qWait(30);
+            box->grab().save(QDir(dir).filePath(QString("fixondevice-pixels-%1.png").arg(++n)));
+            box->reject();
+        }
+    });
+    grabber.start();
+    check.confirmFix(&parent, { fx->id() });
+    qInfo().noquote() << "shots in" << dir << "finding:" << check.finding(fx->id()).changes.join("; ");
+    QVERIFY(n >= 1);
+}
+
 QTEST_MAIN(WledPixels_Test)

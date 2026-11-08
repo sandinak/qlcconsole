@@ -726,6 +726,37 @@ QList<Screen> screens()
     list << screen(QStringLiteral("Add Fixture"), [](App *app) -> QWidget * {
                 return new AddFixture(nullptr, docOf(app));
             })
+         << screen(QStringLiteral("Add Fixture WLED pixels"), [](App *app) -> QWidget * {
+                /* A WLED Lantern on Network (ArtNet/sACN) in its Pixels mode,
+                   400 LEDs: the LEDs row, what the device said and the
+                   universes it takes. */
+                Doc *doc = docOf(app);
+                if (doc->fixtureDefCache()->fixtureDef("WLED", "Lantern") == nullptr)
+                {
+                    QLCFixtureDef *def = new QLCFixtureDef();
+                    if (def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Lantern.qxf")
+                            != QFile::NoError || !doc->fixtureDefCache()->addFixtureDef(def))
+                        delete def;
+                }
+                AddFixture *af = new AddFixture(nullptr, doc);
+                const QList<QTreeWidgetItem *> found =
+                    af->m_tree->findItems("Lantern", Qt::MatchExactly | Qt::MatchRecursive);
+                if (found.isEmpty())
+                    return af;
+                af->m_tree->setCurrentItem(found.first());
+                af->m_connectionCombo->setCurrentIndex(af->m_connectionCombo->findData(
+                    AddFixture::connectionKey(Fixture::Network, Fixture::ArtNetTransport)));
+                af->m_ledsAskedIp = QStringLiteral("172.18.2.100");     // not asked here
+                af->m_ipEdit->setText(QStringLiteral("172.18.2.100"));
+                const int idx = af->m_modeCombo->findText(QStringLiteral("Pixels (Multi RGB)"));
+                if (idx >= 0)
+                {
+                    af->m_ledsSpin->setValue(400);
+                    af->m_modeCombo->setCurrentIndex(idx);
+                    af->slotModeActivated(idx);
+                }
+                return af;
+            })
          << screen(QStringLiteral("Patch inventory"), [](App *app) -> QWidget * {
                 return new PatchInventoryDialog(docOf(app), someFixtures(docOf(app)));
             })

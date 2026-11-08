@@ -14,6 +14,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **A WLED patched as its LEDs.** With a WLED definition and Connection
+  **Network (ArtNet/sACN)**, Add Fixture offers **Pixels (Multi RGB)** and
+  **Pixels (Multi RGBW)**: one head per LED, the count read from the device
+  (or typed), so pixel effects, RGB Matrix and the pixel paths (Wand,
+  Sprinkle loops, Free string) run on every LED on the master timer. Over 170
+  LEDs (128 RGBW) it spans consecutive universes the way WLED does, and gets
+  its own run of Art-Net universes sent to its IP. **Fix on Device…** sets the
+  WLED to Multi RGB/RGBW, its universe and address, streams on, every segment,
+  full brightness and a 2.5 s timeout; the footer finds one whose universes
+  don't reach it, and the same device added both ways is said, never flipped.
+
 - **Build's Workbench points to where a look is recorded.** Under Play, one
   quiet grey line, **Record it as a cue in the Show Tree ▸**, shows while a
   look with something in it is loaded (a scene with levels or looks, or any

@@ -37,6 +37,7 @@ private slots:
     void addFixtureOffersPixelsAndReadsTheLedCountFromTheDevice();
     void aChaseGoesOutAsArtNetBytesPerLedAcrossTwoUniverses();
     void aRealOlaProbeSeesTheChase();
+    void shotsOfAddFixtureAndFixOnDevice();
 };
 
 #endif
