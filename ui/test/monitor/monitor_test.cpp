@@ -21182,7 +21182,9 @@ void Monitor_Test::anLedBarOnATrussRollsByItsTiltHandle()
     // Alt frees it: 52° is 52°.
     const StructureStudioView::RotateHandle h3 = rig.view->rotateHandle();
     studioMouseDrag(rig.view, h3.knob, { knobAt(48.0), knobAt(52.0) }, Qt::AltModifier);
-    QCOMPARE(double(props->fixtureRigProps(fid).studioTilt), 52.0);
+    // (the pointer is whole pixels, so within a degree or two of 52, and off the 15° steps)
+    const double freed = double(props->fixtureRigProps(fid).studioTilt);
+    QVERIFY2(qAbs(freed - 52.0) <= 2.0 && qAbs(freed - 45.0) >= 3.0, qPrintable(QString::number(freed)));
 
     // Facing its mount face instead, the same bar spins its run.
     rig.view->setPlane(StructureStudioView::Front);
