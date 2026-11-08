@@ -319,6 +319,10 @@ private:
      *  sent -- the effect, its controls and the look's colours, on their own
      *  channels. They run it; the script never sees them. */
     QList<DmxWrite> wledDeviceWrites() const;
+    /** Their run has ended (Once, N times): @p release lets go of them,
+     *  else they hold their last settings -- and a WLED on its own API
+     *  freezes on its frame (WledFixture::kFreezeOption). */
+    void endDeviceRun(QList<DmxWrite> &device, bool release) const;
     QJSValue buildParamsObject() const;
     QJSValue buildDataChannelsObject() const;
 

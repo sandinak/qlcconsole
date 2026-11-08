@@ -79,3 +79,25 @@ QStringList WledFixture::effectNames(const Fixture *fx)
     }
     return out;
 }
+
+bool WledFixture::canFreeze(const Fixture *fx)
+{
+    return runsEffects(fx) && fx->transport() == Fixture::WledTransport;
+}
+
+QList<QPair<int, int> > WledFixture::settingsAtRest(const Fixture *fx)
+{
+    QList<QPair<int, int> > out;
+    if (!runsEffects(fx))
+        return out;
+    static const struct { const char *name; int value; } rest[] = {
+        { "Effect", 0 }, { "Effect Speed", 128 }, { "Effect Intensity", 128 },
+        { "Palette", 0 }, { "Effect Option", 0 } };
+    for (const auto &r : rest)
+    {
+        const int ch = channel(fx, QLatin1String(r.name));
+        if (ch >= 0)
+            out << qMakePair(ch, r.value);
+    }
+    return out;
+}

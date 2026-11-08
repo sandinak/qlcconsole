@@ -1037,6 +1037,16 @@ device's firmware still lists them. WLED's 2D effects, and Copy Segment,
 Image and Slow Transition (which need the device's other segments, its
 stored images or its colour history), run on WLED devices only.
 
+**Runs** and **At the end** apply on the device too. Once runs WLED's
+effect for one run's Length (Fireworks Starburst keeps launching bursts
+until then), then Release lets go and Hold freezes the WLED on its frame.
+Only a WLED connected as Network (WLED) can freeze; over Art-Net or E1.31
+it keeps running. See [How many times it runs](effects.md#how-many-times-it-runs).
+
+A look on a WLED that sets no WLED effect (a Colour look, or a dimmer and
+a colour) puts the WLED on **Solid** in that colour. The effect from an
+earlier cue doesn't stay on once its look has gone.
+
 A WLED effect with no port runs on a WLED device and nowhere else, so the
 browser only offers it when the look's targets include a WLED device;
 otherwise the WLED tab lists just the ported ones. (An effect the look

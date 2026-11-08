@@ -13,6 +13,8 @@
 #define WLEDFIXTURE_H
 
 #include <QStringList>
+#include <QPair>
+#include <QList>
 
 class Fixture;
 
@@ -49,6 +51,28 @@ namespace WledFixture
 
     /** The effects @p fx's Effect channel offers, in its order. */
     QStringList effectNames(const Fixture *fx);
+
+    /** The "freeze" bit of the Effect Option channel: set, a WLED driven
+     *  by its own API (Network (WLED)) stops its effect on the frame it is
+     *  showing (every segment's "frz"), clear it runs again. WLED's own
+     *  DMX reads only the top two bits of that channel (mirror, reverse),
+     *  so over Art-Net / E1.31 it is ignored. The definitions name the
+     *  ranges ("..., frozen"); the WLED output (WledState) reads them. */
+    constexpr int kFreezeOption = 0x20;
+
+    /** Whether Effect Option value @p option asks a WLED to freeze. */
+    inline bool freezes(int option) { return (option & kFreezeOption) != 0; }
+
+    /** A WLED's effect settings at rest -- Effect 0 (Solid), speed and
+     *  intensity 128, palette 0, option 0 -- as (channel index, value) for
+     *  the ones @p fx's mode has; empty when it runs no effects. A scene
+     *  on it sets them under its own values, so a look that sets only a
+     *  colour shows that colour solid, not the last effect latched on. */
+    QList<QPair<int, int> > settingsAtRest(const Fixture *fx);
+
+    /** Whether Hold can freeze @p fx at the end of a run: a WLED that runs
+     *  effects, driven by its own API. Over DMX it keeps running. */
+    bool canFreeze(const Fixture *fx);
 }
 
 /** @} */

@@ -27,7 +27,8 @@
  * so the WLED Effect and WLED Lantern definitions drive it unchanged:
  *
  *   15 channels: dimmer, effect, speed, intensity, palette, option
- *                (/64: 0 plain, 1 mirror, 2 reverse, 3 both), then the
+ *                (/64: 0 plain, 1 mirror, 2 reverse, 3 both; bit 5,
+ *                32: freeze -- "frz", which WLED's own DMX has not), then the
  *                primary, secondary and tertiary colour (R, G, B each)
  *    4 channels: dimmer, red, green, blue (a solid colour)
  *    3 channels: red, green, blue at full

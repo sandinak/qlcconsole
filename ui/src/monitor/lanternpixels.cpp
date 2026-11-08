@@ -24,6 +24,7 @@
 #include "qlccapability.h"
 #include "qlcchannel.h"
 #include "lanternpixels.h"
+#include "wledfixture.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -220,6 +221,23 @@ bool LanternPixels::runScript(Fixture *fx, const QByteArray &vals, const QString
         m_stateScript.insert(fid, path);
     }
 
+    /* Frozen (an effect run Once that holds, WledFixture::kFreezeOption):
+       the device stopped on its frame, so the picture stops on its last.
+       Only on WLED's own API -- over DMX the device runs on, and so does
+       this. */
+    const int option = wledValue(fx, vals, QStringLiteral("Effect Option"));
+    const bool frozen = option >= 0 && WledFixture::freezes(option)
+                        && fx->transport() == Fixture::WledTransport;
+    if (frozen)
+    {
+        auto held = m_frozen.constFind(fid);
+        if (held != m_frozen.constEnd() && held.value().leds.size() == count)
+        {
+            f = held.value();
+            return true;
+        }
+    }
+
     // The LEDs as a string of fixtures, the first first.
     QJSValue fixtures = eng->newArray(uint(count));
     for (int i = 0; i < count; ++i)
@@ -292,6 +310,10 @@ bool LanternPixels::runScript(Fixture *fx, const QByteArray &vals, const QString
         };
         f.leds[i] = o.isObject() ? QColor(ch("r"), ch("g"), ch("b")) : QColor(Qt::black);
     }
+    // The frame a freeze stops on (the first, if it froze unseen).
+    m_frozen.insert(fid, f);
+    if (frozen)
+        return true;                    // nothing moves: no redraws for it
     m_scriptRan = true;
     if (!m_animate->isActive())
         m_animate->start();

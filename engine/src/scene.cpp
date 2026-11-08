@@ -37,6 +37,7 @@
 #include "doc.h"
 #include "effectscriptrunner.h"
 #include "aimsolver.h"
+#include "wledfixture.h"
 #include "qlcchannel.h"
 #include "bus.h"
 
@@ -1805,6 +1806,24 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 else
                     stack[at.value()] = qMakePair(scv, fade);
             };
+            /* A WLED in effect mode: its effect settings are LTP and would
+               latch on the last effect sent (a colour cue after a Fireworks
+               Starburst kept the bursts). Under everything this scene sets,
+               they are at rest -- Solid -- so a look that sets only a colour
+               shows it solid, and an effect that lets go (Release) leaves
+               Solid. They snap: an effect number part way is another effect. */
+            {
+                QList<quint32> on = fixtures();
+                for (quint32 gid : fixtureGroups())
+                    if (FixtureGroup *g = doc()->fixtureGroup(gid))
+                        on << g->fixtureList();
+                for (quint32 fid : std::as_const(on))
+                {
+                    const QList<QPair<int, int> > rest = WledFixture::settingsAtRest(doc()->fixture(fid));
+                    for (const QPair<int, int> &r : rest)
+                        put(SceneValue(fid, quint32(r.first), uchar(r.second)), 0);
+                }
+            }
             QMapIterator <SceneValue, uchar> it(m_values);
             while (it.hasNext() == true)
             {

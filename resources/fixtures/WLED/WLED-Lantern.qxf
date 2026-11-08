@@ -322,7 +322,14 @@
  </Channel>
  <Channel Name="Effect Option">
   <Group Byte="0">Effect</Group>
-  <Capability Min="0" Max="255">Effect option / segment macro (see WLED docs)</Capability>
+  <Capability Min="0" Max="31">Plain</Capability>
+  <Capability Min="32" Max="63">Plain, frozen (Network (WLED) only)</Capability>
+  <Capability Min="64" Max="95">Mirror</Capability>
+  <Capability Min="96" Max="127">Mirror, frozen (Network (WLED) only)</Capability>
+  <Capability Min="128" Max="159">Reverse</Capability>
+  <Capability Min="160" Max="191">Reverse, frozen (Network (WLED) only)</Capability>
+  <Capability Min="192" Max="223">Mirror + reverse</Capability>
+  <Capability Min="224" Max="255">Mirror + reverse, frozen (Network (WLED) only)</Capability>
  </Channel>
  <Channel Name="Red" Preset="IntensityRed"/>
  <Channel Name="Green" Preset="IntensityGreen"/>

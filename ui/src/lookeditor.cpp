@@ -1202,6 +1202,23 @@ EffectFit::Targets LookEditor::lookTargets() const
     return EffectFit::targetsOf(m_doc, fids);
 }
 
+bool LookEditor::lookHasWledOverDmx() const
+{
+    if (m_contextScene == nullptr)
+        return false;
+    QList<quint32> fids = m_contextScene->fixtures();
+    foreach (quint32 gid, m_contextScene->fixtureGroups())
+        if (FixtureGroup *g = m_doc->fixtureGroup(gid))
+            fids << g->fixtureList();
+    for (quint32 fid : std::as_const(fids))
+    {
+        const Fixture *fx = m_doc->fixture(fid);
+        if (WledFixture::runsEffects(fx) && !WledFixture::canFreeze(fx))
+            return true;
+    }
+    return false;
+}
+
 bool LookEditor::lookHasWledTarget() const
 {
     const EffectFit::Targets t = lookTargets();
@@ -2941,7 +2958,10 @@ void LookEditor::rebuildEffectDynWidget()
         const bool spreadKey = gp && SpreadLayer::fromParams(gp->effectParamValues()).isActive();
         const QString buildKey = QString::number(m_paletteId) + QLatin1Char('|') + gScriptPath
                                  + QLatin1Char('|') + QString::number(speedKey)
-                                 + QLatin1Char('|') + QString::number(int(spreadKey));
+                                 + QLatin1Char('|') + QString::number(int(spreadKey))
+                                 // a WLED over DMX among its fixtures: the Hold note
+                                 + QLatin1Char('|') + QString::number(int(gp && !gp->wledEffect().isEmpty()
+                                                                         && lookHasWledOverDmx()));
         qDebug() << "[LE-DIAG] buildKey=" << buildKey
                  << "cached=" << m_effectBuildKey
                  << "hasLayout=" << (m_effectDynWidget->layout() != nullptr);
@@ -3867,12 +3887,22 @@ void LookEditor::rebuildEffectDynWidget()
         endBox->addStretch(1);
         rl->addWidget(endLabel, 1, 0);
         rl->addLayout(endBox, 1, 1);
+        /* A WLED's own effect on a WLED over DMX: Hold can only keep its
+           settings there (WLED's DMX has no freeze), so it says so. */
+        QLabel *holdNote = new QLabel(tr("Hold can't freeze a WLED over DMX; it keeps running. "
+                                         "Use Release, or connect it as Network (WLED)."), row);
+        holdNote->setObjectName(QStringLiteral("effectAtEndNote"));
+        holdNote->setWordWrap(true);
+        holdNote->setStyleSheet(QStringLiteral("color: palette(mid); font-style: italic;"));
+        rl->addWidget(holdNote, 2, 1);
+        const bool wledOverDmx = !p->wledEffect().isEmpty() && lookHasWledOverDmx();
         rl->setColumnStretch(1, 1);
-        auto showEnd = [endLabel, atEnd, lenLabel, len, count, runs]() {
+        auto showEnd = [endLabel, atEnd, lenLabel, len, count, runs, holdNote, wledOverDmx]() {
             const bool once = runs->currentIndex() != 0;
             for (QWidget *w : std::initializer_list<QWidget *>{ endLabel, atEnd, lenLabel, len })
                 w->setVisible(once);
             count->setVisible(runs->currentIndex() == 2);
+            holdNote->setVisible(once && wledOverDmx && atEnd->currentIndex() == 0);
         };
         showEnd();
         auto write = [this, runs, count, atEnd, len, showEnd]() {
