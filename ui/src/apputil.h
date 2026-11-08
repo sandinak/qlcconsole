@@ -26,6 +26,7 @@
 #include <QSize>
 
 #include <QHash>
+#include <functional>
 class QWidget;
 class QTreeWidgetItem;
 class QLCFixtureDef;
@@ -211,9 +212,10 @@ namespace AppUtil
 
     /** The "artnet.ports" fix: each of @p universes still sent to a node on a
      *  port it doesn't listen to goes out on a free one of its ports
-     *  (PatchPlanner::artNetPortMismatches()), one undo on the rig.
-     *  Returns how many changed. */
-    int sendOnNodePorts(Doc *doc, const QVariantList &universes);
+     *  (PatchPlanner::artNetPortMismatches()). @p undo, when given, is set
+     *  to what puts them back (one step). Returns how many changed. */
+    int sendOnNodePorts(Doc *doc, const QVariantList &universes,
+                        std::function<void()> *undo = NULL);
 
     /** Just "fixtures.buried" and "fixtures.offrow" (a warning: a light on the
      *  floor whose row stands on a deck, FIX-16; also part of updateFixtureReadiness()): cheap

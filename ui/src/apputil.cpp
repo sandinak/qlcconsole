@@ -69,7 +69,6 @@
 #include "fixturedefcheck.h"
 #include "inputoutputmap.h"
 #include "outputpatch.h"
-#include "monitor.h"
 #include "patchplanner.h"
 #include "universe.h"
 #include "qlcfixturedefcache.h"
@@ -524,7 +523,7 @@ void AppUtil::updatePlacementStatus(Doc *doc)
     updateRowStatus(doc);
 }
 
-int AppUtil::sendOnNodePorts(Doc *doc, const QVariantList &universes)
+int AppUtil::sendOnNodePorts(Doc *doc, const QVariantList &universes, std::function<void()> *undo)
 {
     if (doc == NULL)
         return 0;
@@ -550,10 +549,9 @@ int AppUtil::sendOnNodePorts(Doc *doc, const QVariantList &universes)
             break;
         }
     }
-    if (!before.isEmpty())
+    if (!before.isEmpty() && undo != NULL)
     {
-        if (Monitor *mon = Monitor::instance())
-            mon->pushUndoCallback([io, before]() {
+        *undo = [io, before]() {
                 for (const QPair<quint32, QVariant> &b : before)
                 {
                     for (int i = 0; i < io->outputPatchesCount(b.first); i++)
@@ -567,7 +565,7 @@ int AppUtil::sendOnNodePorts(Doc *doc, const QVariantList &universes)
                         break;
                     }
                 }
-            });
+            };
     }
     return before.size();
 }

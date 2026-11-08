@@ -1517,7 +1517,10 @@ void App::initDoc()
         [this](QWidget *parent, const QVariantList &items) {
             if (!ShowSettingsDialog::confirmPatchChange(m_doc, parent, tr("Send on the node's port")))
                 return;
-            AppUtil::sendOnNodePorts(m_doc, items);
+            std::function<void()> undo;
+            if (AppUtil::sendOnNodePorts(m_doc, items, &undo) > 0 && undo)
+                if (Monitor *mon = Monitor::instance())
+                    mon->pushUndoCallback(undo);
             AppUtil::updateFixtureReadiness(m_doc);
         });
     ShowStatus::instance()->setAction("fixtures.unpatched", tr("Patch…"),

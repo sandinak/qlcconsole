@@ -1105,16 +1105,15 @@ void FixtureCreator_Test::aNodeListeningOnAnotherPortIsAFindingWithAFix()
     // The Office universe, sent to a node not heard, is not flagged.
     QCOMPARE(found.items.size(), 1);
 
-    QWidget parent;
-    Monitor *mon = new Monitor(&parent, m_doc);
-    QCOMPARE(AppUtil::sendOnNodePorts(m_doc, found.itemData), 1);
+    std::function<void()> undo;
+    QCOMPARE(AppUtil::sendOnNodePorts(m_doc, found.itemData, &undo), 1);
+    QVERIFY(bool(undo));
     QCOMPARE(io->outputPatch(1)->getPluginParameters().value("outputUni").toUInt(), 15u);
     AppUtil::updateFixtureReadiness(m_doc);
     QVERIFY2(findingFor("artnet.ports").key.isEmpty(), "fixed, the finding goes");
 
-    mon->undo();
+    undo();
     QCOMPARE(io->outputPatch(1)->getPluginParameters().value("outputUni", 1).toUInt(), 1u);
-    delete mon;
     ShowStatus::instance()->clearStatus("artnet.ports");
 }
 
