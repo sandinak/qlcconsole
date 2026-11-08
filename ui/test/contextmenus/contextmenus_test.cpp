@@ -17,6 +17,8 @@
   limitations under the License.
 */
 
+#include <QPainter>
+#include <QtMath>
 #include <QApplication>
 #include <QInputDialog>
 #include <QMessageBox>
@@ -33,8 +35,6 @@
 #define protected public
 #include "fixturemanager.h"
 #include "fixturegroupsource.h"
-#include <QPainter>
-#include <QtMath>
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
