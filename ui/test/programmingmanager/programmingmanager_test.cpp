@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include <QDir>
 #include <QStackedWidget>
 #include <QMenu>
 #include <QLineEdit>
@@ -73,7 +74,6 @@
 #include "showstatus.h"
 #include "qlcfixturedefcache.h"
 #include "showstatusdialog.h"
-#include <QDir>
 #include "doc.h"
 #include "paletteops.h"
 #include "showtreecontroller.h"
