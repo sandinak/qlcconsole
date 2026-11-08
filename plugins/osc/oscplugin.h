@@ -92,6 +92,9 @@ public:
     /** @reimp */
     void writeUniverse(quint32 universe, quint32 output, const QByteArray& data, bool dataChanged) override;
 
+    /** @reimp: an output with no target IP sends nowhere (UX-67) */
+    QStringList outputProblems(quint32 output, quint32 universe) const override;
+
     /*************************************************************************
      * Inputs
      *************************************************************************/

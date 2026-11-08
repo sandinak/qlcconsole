@@ -52,6 +52,9 @@ private slots:
     /** Show control out: a ready packet leaves the line's socket for the
      *  address and port given, byte for byte; nothing for a bad target. */
     void aShowControlPacketLeavesTheLineToTheTarget();
+    /** An output on a real interface with no target IP sends nowhere, and
+     *  says so (outputProblems(), the footer) until a target is set. */
+    void anOutputWithNoTargetSaysSo();
     /** What the plugin keeps for the show file: only what differs from
      *  the default; its writes and feedback reach the controller */
     void pluginKeepsOnlyWhatDiffersFromTheDefault();

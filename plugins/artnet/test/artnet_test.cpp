@@ -866,7 +866,11 @@ void ArtNet_Test::controllerReportsAndClearsProblems()
         ctrl->m_testNowMs += kPollMs;
     }
     QVERIFY(ctrl->outputProblems().isEmpty());
-    QCOMPARE(changed.count(), 0);
+    /* Once, for the node first heard: what it listens on is new, so the
+       console checks again what reaches it (PatchPlanner, the footer). The
+       same ports again say nothing. */
+    QCOMPARE(changed.count(), 1);
+    changed.clear();
 
     // A short on that port, in two replies
     for (int i = 0; i < 2; i++)

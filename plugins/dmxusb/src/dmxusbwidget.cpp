@@ -646,3 +646,13 @@ bool DMXUSBWidget::writeUniverse(quint32 universe, quint32 output, const QByteAr
 
     return false;
 }
+
+/****************************************************************************
+ * Write health
+ ****************************************************************************/
+
+void DMXUSBWidget::recordWrite(bool ok)
+{
+    if (m_writeHealth.record(ok) && m_problemNotify)
+        m_problemNotify();
+}

@@ -936,7 +936,9 @@ void EnttecDMXUSBPro::run()
                 //qDebug() << "DATA" << QString::number(request.at(5)) << QString::number(request.at(6)) << QString::number(request.at(7));
 
                 /* Write "Output Only Send DMX Packet Request" message */
-                if (iface()->write(request) == false)
+                const bool sent = iface()->write(request);
+                recordWrite(sent);
+                if (sent == false)
                 {
                     qWarning() << Q_FUNC_INFO << name() << "will not accept DMX data";
                     continue;

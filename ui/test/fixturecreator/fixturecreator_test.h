@@ -23,6 +23,7 @@
 #include <QObject>
 
 class Doc;
+class IOPluginStub;
 
 /** Drives the real "Add to inventory" dialog end to end and checks what it
  *  creates and where that shows up. */
@@ -81,7 +82,38 @@ private slots:
      *  (main's widgets) and after, at three sizes, for review. */
     void wledShotsForReview();
 
+    /* Art-Net / sACN network fixtures (UX-67), through the same Add Fixture. */
+    /** Added on a universe unicast to another IP, it goes on a universe sent
+     *  to its own IP, at the address typed -- and the dialog says so. */
+    void anArtNetFixtureGoesWhereItIsHeard();
+    /** Added on the universe that already goes to its IP, it stays there. */
+    void anArtNetFixtureTheUniverseReachesStaysPut();
+    /** One Cmd/Ctrl+Z takes it back: the fixture and the universe it got. */
+    void addingANetworkFixtureElsewhereIsOneUndo();
+    /** sACN really unicasts: multicast off and the receiver's IP, not the
+     *  "outputIP" E1.31 never reads. */
+    void anSacnFixtureIsReallyUnicast();
+    /** One moved by hand onto a universe that doesn't reach it is a footer
+     *  finding; its fix puts it on one that does (one undo). */
+    void aNetworkFixtureOnTheWrongUniverseIsAFindingWithAFix();
+    /** A universe sent to a node on a port it doesn't listen to is a footer
+     *  finding; Send on Its Port fixes it (one undo). */
+    void aNodeListeningOnAnotherPortIsAFindingWithAFix();
+    /** Added at a node that answers, it is sent on a port the node listens to. */
+    void anArtNetFixtureIsSentOnThePortItsNodeListensTo();
+    /** QLC_SHOT_DIR set: the dialog and the two findings, at three sizes. */
+    void networkShotsForReview();
+    /** QLC_REAL_WIRE_PROBE=<ip> set (an OLA probe with Art-Net 0:0:15 and
+     *  sACN universe 15 on its universe 15): Add Fixture's Art-Net and sACN
+     *  universes, sent for real, for the probe to read back. Never 0:0:0 to
+     *  anything but the probe; skipped otherwise. */
+    void realWireToTheProbe();
+
 private:
+    /** A stub named @p plugin (it sends nowhere) loaded into m_doc;
+     *  universe 1 "U01-Office" goes out as it, unicast to 172.18.2.10,
+     *  with a 60-channel bar on it -- his office, as the stub sees it. */
+    IOPluginStub *networkShow(const QString &plugin);
     /** The WLED output and a stub named ArtNet (it sends nowhere), loaded
      *  into m_doc; universe 1 "U01-Office" goes out as that Art-Net with a
      *  60-channel bar on it, as in the show that found the bug. */

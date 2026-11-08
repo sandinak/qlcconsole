@@ -202,6 +202,15 @@ UniverseInfo* OSCController::getUniverseInfo(quint32 universe)
     return NULL;
 }
 
+bool OSCController::outputHasNoTarget(quint32 universe)
+{
+    QMutexLocker locker(&m_dataMutex);
+    if (m_universeMap.contains(universe) == false)
+        return false;
+    const UniverseInfo &info = m_universeMap[universe];
+    return (info.type & Output) && info.outputAddress.isNull();
+}
+
 OSCController::Type OSCController::type() const
 {
     int type = Unknown;

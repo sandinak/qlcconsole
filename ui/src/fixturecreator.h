@@ -70,6 +70,12 @@ public:
      */
     static int routeWled(QWidget *parent, Doc *doc, const QList<quint32> &fixtureIds,
                          bool deleteOnUndo);
+
+    /** The same for Art-Net/sACN network fixtures whose universe doesn't
+     *  reach their IP (PatchPlanner::routeNetwork()): on the universe sent
+     *  to that IP, or one of its own, at the same address -- one undo. */
+    static int routeNetwork(QWidget *parent, Doc *doc, const QList<quint32> &fixtureIds,
+                            bool deleteOnUndo);
 };
 
 /** @} */

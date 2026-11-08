@@ -73,6 +73,21 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   stay shared and reusable layers and cues stay linked, as before. A show
   saved with such a shared one-off is put right when it opens: the first
   cue keeps it, every other cue gets its own copy.
+- **Adding an Art-Net or sACN network fixture reaches it (UX-67).** Add
+  Fixture with **Network (ArtNet/sACN)** and an IP left the fixture on the
+  dialog's universe even when that universe was unicast to another node, so
+  nothing reached it. Now, when the universe doesn't reach the IP, the
+  dialog says so and the fixture goes on the universe already sent to that
+  IP, or one of its own sent there, at the address typed (one undo). sACN
+  is really unicast now: the planner set "outputIP", which E1.31 never
+  reads, so it kept multicasting while saying "unicast"; it now turns
+  multicast off and sets the receiver's IP. An Art-Net node already heard
+  is sent on a port it listens to. Two new footer lines with one-click
+  fixes: a network fixture on a universe that doesn't reach it (**Send to
+  Its IP**), and a universe sent to an Art-Net node on a port it doesn't
+  listen to (**Send on Its Port**). An OSC output with no target IP, and a
+  DMX USB widget that stops taking data mid-session, now say so in the
+  footer and in Connections instead of only in the log.
 - **Adding a WLED reaches the WLED, in one go.** Add Fixture with
   **Network (WLED, JSON over Wi-Fi)** put the WLED on the universe the
   dialog showed (an Art-Net one, say), so its looks went to the Art-Net node

@@ -250,11 +250,14 @@ void EuroliteUSBDMXPro::run()
         if (m_file.write(request) == false)
 #endif
         {
+            recordWrite(false);
             qWarning() << Q_FUNC_INFO << name() << "will not accept DMX data";
 #ifdef QTSERIAL
             iface()->purgeBuffers();
 #endif
         }
+        else
+            recordWrite(true);
 framesleep:
         int timetoSleep = m_frameTimeUs - (timer.nsecsElapsed() / 1000);
         if (timetoSleep < 0)

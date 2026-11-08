@@ -30,6 +30,7 @@
 #include <QMutex>
 #include <QElapsedTimer>
 #include <QTimer>
+#include <QSet>
 #include <QMap>
 #include <QSet>
 #include <QPair>
@@ -290,6 +291,9 @@ private:
 
     /** Map of the ArtNet nodes discovered with ArtPoll */
     QHash<QHostAddress, ArtNetNodeInfo> m_nodesList;
+    /** Every output Port-Address each node has said it listens on: a new
+     *  one is announced (problemsChanged), so what reaches it is checked again. */
+    QHash<QHostAddress, QSet<int> > m_portsHeard;
 
     /** Each node's RDM capability, held steady across its replies (a junk
      *  Status1 made the Devices row flicker) and proven by ArtTodData */

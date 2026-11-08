@@ -29,6 +29,7 @@
 #include <QComboBox>
 #include <QSpinBox>
 #include <QLabel>
+#include <QHostAddress>
 #include <QDebug>
 #include <QAction>
 #include <QSet>
@@ -42,6 +43,7 @@
 #include <QVBoxLayout>
 #include "addfixture.h"
 #include "apputil.h"
+#include "patchplanner.h"
 #include "doc.h"
 
 #define SETTINGS_GEOMETRY "addfixture/geometry"
@@ -127,7 +129,10 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
                 updateIpRange();
                 updateAddressFields();
             });
-    connect(m_ipEdit, &QLineEdit::textChanged, this, [this]() { updateIpRange(); });
+    connect(m_ipEdit, &QLineEdit::textChanged, this, [this]() {
+        updateIpRange();
+        updateAddressFields();
+    });
 
     QAction* action = new QAction(this);
     action->setShortcut(QKeySequence(QKeySequence::Close));
@@ -292,20 +297,60 @@ bool AddFixture::ownUniverse() const
            && transport() == Fixture::WledTransport;
 }
 
+bool AddFixture::routesElsewhere() const
+{
+    if (m_inventoryMode || connection() != Fixture::Network
+        || transport() != Fixture::ArtNetTransport)
+        return false;
+    const QString first = ipAddress();
+    if (QHostAddress(first).protocol() != QAbstractSocket::IPv4Protocol)
+        return false;
+    const int n = qMax(1, m_amountValue);
+    for (int i = 0; i < n; i++)
+    {
+        const QString ip = n > 1 ? AppUtil::nthAddress(first, i) : first;
+        if (ip.isEmpty())
+            break;
+        if (PatchPlanner::universeReaches(const_cast<Doc *>(m_doc), m_universeValue, ip) != PatchPlanner::NetRouted)
+            return true;
+    }
+    return false;
+}
+
 void AddFixture::updateAddressFields()
 {
     QTreeWidgetItem *item = m_tree->currentItem();
     const bool picked = item != NULL && item->parent() != NULL;
     const bool own = ownUniverse();
+    const bool elsewhere = !own && routesElsewhere();
     m_universeCombo->setEnabled(picked && !own);
     m_addressSpin->setEnabled(picked && !own);
     m_diptoolButton->setEnabled(!own);
-    m_gapSpin->setEnabled(picked && !own);
-    m_gapLabel->setEnabled(!own);
+    // Each device is its own universe there, at the address given.
+    m_gapSpin->setEnabled(picked && !own && !elsewhere);
+    m_gapLabel->setEnabled(!own && !elsewhere);
     m_universeLabel->setEnabled(!own);
     m_addressLabel->setEnabled(!own);
     if (m_ownUniverseLabel != NULL)
-        m_ownUniverseLabel->setVisible(own);
+    {
+        if (own)
+            m_ownUniverseLabel->setText(tr("Gets a universe of its own, sent to its IP."));
+        else if (elsewhere)
+        {
+            QString detail;
+            const PatchPlanner::NetRoute r =
+                PatchPlanner::universeReaches(const_cast<Doc *>(m_doc), m_universeValue, ipAddress(), &detail);
+            const QString uni = m_universeCombo->currentText();
+            m_ownUniverseLabel->setText(r == PatchPlanner::NetNoOutput
+                ? tr("%1 has no output yet: it gets one, sent to its IP.").arg(uni)
+                : r == PatchPlanner::NetOtherIp && !detail.isEmpty()
+                ? tr("%1 goes to %2, not this IP: it goes on a universe sent to its IP, "
+                     "at this address.").arg(uni, detail)
+                : tr("%1 doesn't reach this IP: it goes on a universe sent to its IP, "
+                     "at this address.").arg(uni));
+        }
+        m_ownUniverseLabel->setVisible(own || elsewhere);
+    }
     checkOverlapping();
 }
 
@@ -696,6 +741,7 @@ void AddFixture::slotUniverseActivated(int universe)
         m_addressSpin->setValue((addr & 0x01FF) + 1);
     else
         m_addressSpin->setValue(1);
+    updateAddressFields();      // does this universe reach a network fixture's IP?
 }
 
 void AddFixture::slotAddressChanged(int value)
@@ -757,6 +803,7 @@ void AddFixture::slotAmountSpinChanged(int value)
 {
     m_amountValue = value;
     updateIpRange();
+    updateAddressFields();
 
     checkOverlapping();
     checkNameConflict();
@@ -974,10 +1021,11 @@ void AddFixture::slotDiptoolButtonClicked()
 
 void AddFixture::checkOverlapping()
 {
-    if (m_inventoryMode || ownUniverse())
+    if (m_inventoryMode || ownUniverse() || routesElsewhere())
     {
         // Staged fixtures hold no address, so there is nothing to overlap;
-        // a WLED by its API is placed on a universe of its own.
+        // a WLED by its API is placed on a universe of its own, and so is a
+        // network fixture this universe doesn't reach.
         m_addrErrorLabel->hide();
         m_invalidAddressFlag = false;
         return;

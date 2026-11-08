@@ -2664,6 +2664,12 @@ bool FixtureManager::editDefinitionAndMode(QWidget *parent, Doc *doc, quint32 fi
             if (fxi->isPatched()
                 && PatchPlanner::wledRoute(doc, fxi) != PatchPlanner::WledRouted)
                 FixtureCreator::routeWled(parent, doc, { fid }, false);
+            /* The same for an Art-Net/sACN network fixture its universe no
+               longer reaches (the dialog said it goes elsewhere): onto the
+               universe sent to its IP, or one of its own, same address. */
+            else if (fxi->isPatched()
+                     && PatchPlanner::networkRoute(doc, fxi) != PatchPlanner::NetRouted)
+                FixtureCreator::routeNetwork(parent, doc, { fid }, false);
 
             if (FixtureManager *fm = FixtureManager::instance())
             {

@@ -69,6 +69,7 @@
 #include "fixturedefcheck.h"
 #include "inputoutputmap.h"
 #include "outputpatch.h"
+#include "monitor.h"
 #include "patchplanner.h"
 #include "universe.h"
 #include "qlcfixturedefcache.h"
@@ -523,6 +524,54 @@ void AppUtil::updatePlacementStatus(Doc *doc)
     updateRowStatus(doc);
 }
 
+int AppUtil::sendOnNodePorts(Doc *doc, const QVariantList &universes)
+{
+    if (doc == NULL)
+        return 0;
+    InputOutputMap *io = doc->inputOutputMap();
+    QList<QPair<quint32, QVariant> > before;        // universe -> its "outputUni" (or none)
+    QSet<quint32> want;
+    foreach (const QVariant &v, universes)
+        want.insert(v.toUInt());
+    foreach (const PatchPlanner::PortMismatch &m, PatchPlanner::artNetPortMismatches(doc))
+    {
+        if (!want.contains(m.universe) || m.suggest < 0)
+            continue;
+        for (int i = 0; i < io->outputPatchesCount(m.universe); i++)
+        {
+            OutputPatch *op = io->outputPatch(m.universe, i);
+            if (op == NULL || op->pluginName() != QLatin1String("ArtNet"))
+                continue;
+            const QMap<QString, QVariant> pp = op->getPluginParameters();
+            if (pp.value(QStringLiteral("outputIP")).toString().trimmed() != m.nodeIp)
+                continue;
+            before << qMakePair(m.universe, pp.value(QStringLiteral("outputUni")));
+            op->setPluginParameter(QStringLiteral("outputUni"), quint32(m.suggest));
+            break;
+        }
+    }
+    if (!before.isEmpty())
+    {
+        if (Monitor *mon = Monitor::instance())
+            mon->pushUndoCallback([io, before]() {
+                for (const QPair<quint32, QVariant> &b : before)
+                {
+                    for (int i = 0; i < io->outputPatchesCount(b.first); i++)
+                    {
+                        OutputPatch *op = io->outputPatch(b.first, i);
+                        if (op == NULL || op->pluginName() != QLatin1String("ArtNet"))
+                            continue;
+                        // None set was the universe's own number (Art-Net's default).
+                        op->setPluginParameter(QStringLiteral("outputUni"),
+                                               b.second.isValid() ? b.second : QVariant(b.first));
+                        break;
+                    }
+                }
+            });
+    }
+    return before.size();
+}
+
 void AppUtil::updateFixtureReadiness(Doc *doc)
 {
     if (doc == NULL)
@@ -966,6 +1015,101 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
                                             "universe sent to its IP through the WLED output. Give "
                                             "It Its Own Universe moves each to one (one undo)."),
                 items, ids);
+    }
+
+    /* An Art-Net or sACN network fixture on a universe that doesn't reach
+       its IP (UX-67): a universe unicast somewhere else, sent by DMX USB,
+       OSC or WLED, or broadcast on another network -- moved there by hand,
+       or left from before Add Fixture sent it where it is heard. */
+    {
+        InputOutputMap *io = doc->inputOutputMap();
+        QStringList items;
+        QVariantList ids;
+        foreach (Fixture *fx, doc->fixtures())
+        {
+            QString detail;
+            const PatchPlanner::NetRoute r = PatchPlanner::networkRoute(doc, fx, &detail);
+            if (r == PatchPlanner::NetRouted || r == PatchPlanner::NetNotPatched)
+                continue;
+            QString uni = io->getUniverseNameByID(fx->universe());
+            if (uni.isEmpty())
+                uni = QCoreApplication::translate("AppUtil", "Universe %1").arg(fx->universe() + 1);
+            const QString ip = fx->ipAddress().trimmed();
+            QString line;
+            switch (r)
+            {
+            case PatchPlanner::NetNoOutput:
+                line = QCoreApplication::translate("AppUtil", "%1 is on %2, which has no output: "
+                                                   "nothing reaches %3").arg(fx->name(), uni, ip);
+                break;
+            case PatchPlanner::NetOtherOutput:
+                line = QCoreApplication::translate("AppUtil", "%1 is on %2, which goes out as %3: "
+                                                   "nothing reaches %4")
+                           .arg(fx->name(), uni, detail, ip);
+                break;
+            case PatchPlanner::NetOtherIp:
+                line = detail.isEmpty()
+                    ? QCoreApplication::translate("AppUtil", "%1 is on %2, which doesn't reach %3")
+                          .arg(fx->name(), uni, ip)
+                    : QCoreApplication::translate("AppUtil", "%1 is on %2, which is sent to %3, not "
+                                                  "to its IP %4").arg(fx->name(), uni, detail, ip);
+                break;
+            default:
+                line = QCoreApplication::translate("AppUtil", "%1 is on %2, which goes out on %3: "
+                                                   "it doesn't reach %4").arg(fx->name(), uni, detail, ip);
+                break;
+            }
+            items << line;
+            ids << fx->id();
+        }
+        if (items.isEmpty())
+            status->clearStatus("network.route");
+        else
+            status->setStatus("network.route", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n network fixture(s) on a universe that "
+                                            "doesn't reach them", "", items.count()),
+                QCoreApplication::translate("AppUtil", "It hears only a universe sent to its IP or "
+                                            "broadcast on its network. Send to Its IP fixes it "
+                                            "(one undo)."),
+                items, ids);
+    }
+
+    /* A universe unicast to an Art-Net node that answers, on a Port-Address
+       none of its ports listens to (a new universe 17 goes out on 0:1:1;
+       the node listens on 0:0:0): the node takes nothing. */
+    {
+        InputOutputMap *io = doc->inputOutputMap();
+        QStringList items;
+        QVariantList universes;
+        foreach (const PatchPlanner::PortMismatch &m, PatchPlanner::artNetPortMismatches(doc))
+        {
+            QString uni = io->getUniverseNameByID(m.universe);
+            if (uni.isEmpty())
+                uni = QCoreApplication::translate("AppUtil", "Universe %1").arg(m.universe + 1);
+            QStringList listens;
+            foreach (quint32 pa, m.listens)
+                listens << PatchPlanner::portAddressText(pa);
+            const QString node = m.nodeName.isEmpty() ? m.nodeIp
+                                                      : QString("%1 (%2)").arg(m.nodeName, m.nodeIp);
+            QString line = QCoreApplication::translate("AppUtil", "%1 goes to %2 on %3, but its "
+                                                       "ports listen on %4")
+                               .arg(uni, node, PatchPlanner::portAddressText(m.sends),
+                                    listens.join(QStringLiteral(", ")));
+            if (m.suggest < 0)
+                line += QCoreApplication::translate("AppUtil", " (each is taken by another universe)");
+            items << line;
+            universes << m.universe;
+        }
+        if (items.isEmpty())
+            status->clearStatus("artnet.ports");
+        else
+            status->setStatus("artnet.ports", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n universe(s) sent to an Art-Net node on a "
+                                            "port it doesn't listen to", "", items.count()),
+                QCoreApplication::translate("AppUtil", "An Art-Net node takes only the "
+                                            "Port-Addresses (Net:Sub:Universe) its ports are set "
+                                            "to. Send on Its Port sends each on a free one."),
+                items, universes);
     }
 
     /* Effect looks that cannot run: no effect chosen, a script that is not

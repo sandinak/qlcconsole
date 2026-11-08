@@ -223,7 +223,9 @@ void Stageprofi::run()
             }
             fastTrans.append(val);
 
-            if (iface()->write(fastTrans) == false)
+            const bool sent = iface()->write(fastTrans);
+            recordWrite(sent);
+            if (sent == false)
             {
                 qWarning() << Q_FUNC_INFO << name() << "will not accept DMX data";
                 iface()->purgeBuffers();

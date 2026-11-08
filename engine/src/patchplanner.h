@@ -23,6 +23,8 @@
 #include <QStringList>
 #include <QList>
 #include <QHash>
+#include <QMap>
+#include <QVariant>
 #include <functional>
 
 class Fixture;
@@ -206,6 +208,75 @@ public:
      *  it touched and made, and where each fixture was) -- one step. */
     int routeWled(const QList<quint32> &fixtureIds, QStringList *problems = NULL,
                   std::function<void()> *undo = NULL);
+
+    /*********************************************************************
+     * Art-Net / sACN network fixtures
+     *********************************************************************/
+
+    /** Where a network fixture that speaks Art-Net or sACN itself (Network,
+     *  not WLED by its API) stands: it hears its universe only when an
+     *  Art-Net or sACN output of that universe reaches its IP -- unicast to
+     *  it, or broadcast / multicast on its network. */
+    enum NetRoute
+    {
+        NetRouted,          //!< as it should be (or not such a fixture, or no IP)
+        NetNotPatched,      //!< in the inventory
+        NetNoOutput,        //!< its universe has no output
+        NetOtherOutput,     //!< its universe goes out another way (DMX USB, OSC, WLED...)
+        NetOtherIp,         //!< unicast to another IP
+        NetOtherNetwork     //!< broadcast / multicast on a network its IP isn't on
+    };
+    /** @p fx's route. @p detail: the other output's plugin (NetOtherOutput),
+     *  the IP it goes to instead (NetOtherIp), or the network it goes out on
+     *  (NetOtherNetwork). */
+    static NetRoute networkRoute(Doc *doc, const Fixture *fx, QString *detail = NULL);
+    /** The same for whatever is on @p universe, sent to @p ip. */
+    static NetRoute universeReaches(Doc *doc, quint32 universe, const QString &ip,
+                                    QString *detail = NULL);
+
+    /** Does an output of @p plugin on the line called @p lineName, with
+     *  plugin parameters @p params, reach @p ip? NetRouted when it does;
+     *  else why not, with @p detail as for networkRoute(). */
+    static NetRoute outputReaches(const QString &plugin, const QString &lineName,
+                                  const QMap<QString, QVariant> &params, const QString &ip,
+                                  QString *detail = NULL);
+
+    /** Aim @p universe's output at @p ip, as each protocol does it: Art-Net
+     *  "outputIP"; sACN unicast ("multicast" off, "ucastIP") -- E1.31 has no
+     *  "outputIP". An Art-Net node already heard at @p ip (ArtPollReply) also
+     *  sets the Port-Address to one its ports listen on. A universe with no
+     *  Art-Net or sACN output borrows the plugin and interface of one that
+     *  has, else takes the Art-Net interface on @p ip's network. Returns
+     *  false (and says why in @p problem) when there is nothing to send it
+     *  with. */
+    bool aimUniverseAt(quint32 universe, const QString &ip, QString *problem = NULL);
+
+    /** Put each of @p fixtureIds that is an Art-Net/sACN network fixture
+     *  and not routed (networkRoute()) where it is heard, keeping its DMX
+     *  address (the device listens there): on the universe already sent to
+     *  its IP when that one has room, else re-aiming its own universe when
+     *  everything on it is at that IP, else on a universe of its own sent
+     *  to it. Unpatched ones are left alone (Patch does that). Returns how
+     *  many were put right; @p problems and @p undo as routeWled(). */
+    int routeNetwork(const QList<quint32> &fixtureIds, QStringList *problems = NULL,
+                     std::function<void()> *undo = NULL);
+
+    /** A universe sent to an Art-Net node that answers, on a Port-Address
+     *  none of its output ports listens to: the node takes nothing. */
+    struct PortMismatch
+    {
+        quint32 universe = 0;
+        QString nodeIp;
+        QString nodeName;
+        quint32 sends = 0;          //!< the Port-Address the universe goes out on
+        QList<quint32> listens;     //!< the node's output ports' Port-Addresses
+        /** A port none of the other universes sent to that node uses, or -1 */
+        int suggest = -1;
+    };
+    /** Every such universe, from what the Art-Net plugin has heard. */
+    static QList<PortMismatch> artNetPortMismatches(Doc *doc);
+    /** "0:0:15" for Port-Address 15. */
+    static QString portAddressText(quint32 portAddress);
 
     /** The name the show's own universe naming gives @p universe for what is
      *  on it now. The scheme is learned from the names it has -- "U17-US1-1",

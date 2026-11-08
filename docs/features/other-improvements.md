@@ -398,6 +398,8 @@ and By universe), and the log. Each clears by itself once it is fixed.
 | **Art-Net node CR041R (172.18.2.10): stopped answering since 20:14** | A node this session has heard from has missed three polls in a row (about 9 s). Unplugged, powered off, or its cable/switch is down. |
 | **Art-Net node CR041R (172.18.2.10), port 2 (0:0:1): DMX output short since 20:14** | The node reports a short on the DMX line of the port carrying this universe — a bad cable, connector or fixture on that run. |
 | **Art-Net node …, port 2 (0:0:1): not outputting DMX since 20:14** | That port was outputting earlier and has stopped, though the console is still sending to it. |
+| **OSC output has no target IP: nothing is sent. Set one in Connections** | An OSC output on a network interface has nowhere to send until it is given an IP. |
+| **DMX USB … : not taking data since 20:14:05** | A DMX USB widget has refused every frame for a second or more: unplugged, or its driver gave up. It clears once frames have gone through for 3 seconds. |
 
 They are judged, not echoed, so they don't flicker:
 
@@ -660,6 +662,17 @@ problem can be fixed on the spot. It checks for:
 - **network outputs in trouble** (see
   [When an output is in trouble](#when-an-output-is-in-trouble)), one line
   per problem with the universes it hits, and **Open Connections**;
+- **network fixtures on a universe that doesn't reach them** — an Art-Net
+  or sACN fixture whose universe is unicast to another IP, broadcast on
+  another network, sent another way (DMX USB, OSC, WLED) or not sent at
+  all: "Fence is on U01-Office, which is sent to 172.18.2.10, not to its IP
+  172.18.2.50". **Send to Its IP** puts each on the universe already sent to
+  its IP, or one of its own sent there, at the same address (one undo);
+- **universes sent to an Art-Net node on a port it doesn't listen to** — the
+  node answers, but none of its ports is set to that Port-Address: "U02-Probe
+  goes to OLA Probe (172.18.2.218) on 0:0:1, but its ports listen on
+  0:0:15". **Send on Its Port** sends each on a port of the node no other
+  universe uses (one undo);
 - **WLED devices not answering**, or on weak Wi-Fi;
 - **WLEDs not set up as the show drives them** (see WLED output), with
   **Fix on Device…**;
@@ -692,7 +705,8 @@ everything under it) and use the fix offered for that problem:
 **Patch…**, **Re-patch…** (clashes), **Edit Definition…**, **Repair in
 Fixture Editor…**, **Move to Trash…**, **Number Them** (gives duplicates
 "#2", "#3", keeping the name on the patched one), **Open Connections**,
-**Download Now**, or **Fetch Definitions**. The list updates as each fix
+**Download Now**, **Fetch Definitions**, **Send to Its IP**, or **Send on
+Its Port**. The list updates as each fix
 lands.
 
 "Repair in Fixture Editor…" opens the broken file in the Fixture Editor's

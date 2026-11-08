@@ -115,6 +115,10 @@ public:
     /** Return the specific information for the given universe */
     UniverseInfo* getUniverseInfo(quint32 universe);
 
+    /** Whether @p universe is open for output here with nowhere to send
+     *  (no target IP on a real interface): every packet would fail. */
+    bool outputHasNoTarget(quint32 universe);
+
     /** Return the global type of this controller */
     Type type() const;
 

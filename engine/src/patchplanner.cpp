@@ -34,6 +34,7 @@
 #include "ioplugincache.h"
 #include "monitorproperties.h"
 #include "networktopology.h"
+#include "networkroute.h"
 #include "inputoutputmap.h"
 #include "outputpatch.h"
 #include "patchundo.h"
@@ -931,34 +932,12 @@ int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *probl
         }
 
         // Point the universe's output at this fixture's IP.
-        OutputPatch *op = io->outputPatch(a.universe);
-        if (op == NULL || !isNetworkPlugin(op->pluginName()))
-        {
-            // Borrow the plugin and interface of an existing network universe.
-            for (quint32 u = 0; u < io->universesCount(); u++)
-            {
-                OutputPatch *ref = io->outputPatch(u);
-                if (u != a.universe && ref != NULL && isNetworkPlugin(ref->pluginName()))
-                {
-                    io->setOutputPatch(a.universe, ref->pluginName(), ref->outputName(), ref->output());
-                    break;
-                }
-            }
-            op = io->outputPatch(a.universe);
-        }
-        if (op == NULL || !isNetworkPlugin(op->pluginName()))
-        {
-            if (problems != NULL)
-                *problems << QStringLiteral("Universe %1 carries network fixture %2 but has no ArtNet/sACN "
-                                            "output; set one in Connections%3")
-                                 .arg(a.universe + 1).arg(name)
-                                 .arg(fx->ipAddress().isEmpty() ? QString()
-                                                                : QStringLiteral(" (unicast to %1)").arg(fx->ipAddress()));
-        }
-        else if (!fx->ipAddress().isEmpty())
-        {
-            op->setPluginParameter(QStringLiteral("outputIP"), fx->ipAddress());
-        }
+        if (!aimUniverseAt(a.universe, fx->ipAddress()) && problems != NULL)
+            *problems << QStringLiteral("Universe %1 carries network fixture %2 but has no ArtNet/sACN "
+                                        "output; set one in Connections%3")
+                             .arg(a.universe + 1).arg(name)
+                             .arg(fx->ipAddress().isEmpty() ? QString()
+                                                            : QStringLiteral(" (unicast to %1)").arg(fx->ipAddress()));
     }
 
     /* A universe patched onto that is still "Universe N" is named the way
@@ -1177,6 +1156,533 @@ int PatchPlanner::routeWled(const QList<quint32> &fixtureIds, QStringList *probl
     if (undo != NULL)
         *undo = putBack;
     return done;
+}
+
+/*********************************************************************
+ * Art-Net / sACN network fixtures
+ *********************************************************************/
+
+namespace
+{
+/* A network fixture sent Art-Net or sACN DMX at its own IP. */
+bool isNetByDmx(const Fixture *fx)
+{
+    return fx != NULL && fx->connection() == Fixture::Network
+           && fx->transport() != Fixture::WledTransport && !fx->ipAddress().trimmed().isEmpty();
+}
+
+/* A broadcast target ("172.18.255.255", "255.255.255.255") as the network
+   it covers ("172.18.0.0/16"; empty for every network). False when
+   @p target is an ordinary address. */
+bool broadcastNetwork(const QString &target, QString *net)
+{
+    const QHostAddress a(target);
+    if (a.protocol() != QAbstractSocket::IPv4Protocol)
+        return false;
+    const quint32 v = a.toIPv4Address();
+    if (v == 0xFFFFFFFFu)
+    {
+        net->clear();
+        return true;
+    }
+    int octets = 0;
+    while (octets < 3 && ((v >> (8 * octets)) & 0xFF) == 0xFF)
+        ++octets;
+    if (octets == 0)
+        return false;
+    *net = NetworkRoute::networkOf(a, 32 - 8 * octets);
+    return true;
+}
+
+/* @p ip is on @p net ("a.b.c.d/p"); an empty (unknown) network counts, so
+   a line this computer can't place is never called wrong. */
+bool onNetwork(const QString &ip, const QString &net)
+{
+    if (net.isEmpty())
+        return true;
+    return QHostAddress(ip).isInSubnet(QHostAddress::parseSubnet(net));
+}
+
+/* The Art-Net Port-Address an output of @p universe goes out on. */
+quint32 artNetPortAddress(const QMap<QString, QVariant> &params, quint32 universe)
+{
+    return params.value(QStringLiteral("outputUni"), universe).toUInt();
+}
+
+/* The output Port-Addresses of the Art-Net node(s) heard at @p ip, and its
+   name; empty when nothing has answered from there. */
+QList<quint32> nodePorts(Doc *doc, const QString &ip, QString *name = NULL)
+{
+    QList<quint32> ports;
+    QLCIOPlugin *art = doc->ioPluginCache() != NULL
+                     ? doc->ioPluginCache()->plugin(QStringLiteral("ArtNet")) : NULL;
+    if (art == NULL)
+        return ports;
+    foreach (const QLCIOPlugin::Device &d, art->discoveredDevices())
+    {
+        if (d.address != ip)
+            continue;
+        if (name != NULL && name->isEmpty())
+            *name = d.name;
+        foreach (quint32 pa, d.portUniverses)
+            if (!ports.contains(pa))
+                ports << pa;
+    }
+    return ports;
+}
+
+/* The Port-Addresses other universes than @p universe unicast to @p ip. */
+QSet<quint32> portsSentTo(Doc *doc, const QString &ip, quint32 universe)
+{
+    QSet<quint32> out;
+    InputOutputMap *io = doc->inputOutputMap();
+    for (quint32 u = 0; u < io->universesCount(); u++)
+    {
+        if (u == universe)
+            continue;
+        for (int i = 0; i < io->outputPatchesCount(u); i++)
+        {
+            OutputPatch *op = io->outputPatch(u, i);
+            if (op == NULL || op->pluginName() != QLatin1String("ArtNet"))
+                continue;
+            const QMap<QString, QVariant> pp = op->getPluginParameters();
+            if (pp.value(QStringLiteral("outputIP")).toString().trimmed() == ip)
+                out.insert(artNetPortAddress(pp, u));
+        }
+    }
+    return out;
+}
+
+/* Put back what a route change did: the moved fixtures where they were,
+   the touched universes' patches and names, and the universes it made
+   (from the end, while nothing is on them). */
+std::function<void()> putBackRoute(Doc *doc, const QHash<quint32, QPair<quint32, quint32> > &was,
+                                   const QList<quint32> &unpatched, quint32 universesBefore,
+                                   const QHash<quint32, QString> &names,
+                                   std::shared_ptr<PatchUndo> patchBefore)
+{
+    InputOutputMap *io = doc->inputOutputMap();
+    return [doc, io, was, unpatched, universesBefore, names, patchBefore]() {
+        foreach (quint32 fid, was.keys() + unpatched)
+            if (doc->fixture(fid) != NULL && doc->fixture(fid)->isPatched())
+                doc->unpatchFixture(fid);
+        if (patchBefore->canUndo())
+            patchBefore->undo();
+        for (auto it = names.constBegin(); it != names.constEnd(); ++it)
+            if (it.key() < io->universesCount())
+                io->setUniverseName(int(it.key()), it.value());
+        while (io->universesCount() > universesBefore)
+        {
+            const quint32 last = io->universesCount() - 1;
+            bool carries = false;
+            foreach (Fixture *fx, doc->fixtures())
+                carries = carries || (fx != NULL && fx->isPatched() && fx->universe() == last);
+            if (carries || !io->removeUniverse(int(last)))
+                break;
+        }
+        QList<Doc::FixturePatch> back;
+        for (auto it = was.constBegin(); it != was.constEnd(); ++it)
+            if (doc->fixture(it.key()) != NULL)
+                back << Doc::FixturePatch{ it.key(), it.value().first, it.value().second };
+        if (!back.isEmpty())
+            doc->patchFixtures(back);
+    };
+}
+}
+
+PatchPlanner::NetRoute PatchPlanner::outputReaches(const QString &plugin, const QString &lineName,
+                                                   const QMap<QString, QVariant> &params,
+                                                   const QString &ip, QString *detail)
+{
+    QString d;
+    NetRoute r = NetRouted;
+    if (plugin == QLatin1String("ArtNet"))
+    {
+        const QString target = params.value(QStringLiteral("outputIP")).toString().trimmed();
+        QString net;
+        if (target.isEmpty())
+            net = NetworkRoute::networkForLine(lineName);   // broadcast on its line
+        if (target.isEmpty() || broadcastNetwork(target, &net))
+        {
+            if (!onNetwork(ip, net))
+            {
+                r = NetOtherNetwork;
+                d = net;
+            }
+        }
+        else if (target != ip)
+        {
+            r = NetOtherIp;
+            d = target;
+        }
+    }
+    else if (plugin == QLatin1String("E1.31"))
+    {
+        if (params.value(QStringLiteral("multicast"), 1).toInt() != 0)
+        {
+            const QString net = NetworkRoute::networkForLine(lineName);
+            if (!onNetwork(ip, net))
+            {
+                r = NetOtherNetwork;
+                d = net;
+            }
+        }
+        else
+        {
+            const QString target = params.value(QStringLiteral("ucastIP")).toString().trimmed();
+            if (target != ip)
+            {
+                r = NetOtherIp;
+                d = target;
+            }
+        }
+    }
+    else
+    {
+        r = NetOtherOutput;
+        d = plugin;
+    }
+    if (detail != NULL)
+        *detail = d;
+    return r;
+}
+
+PatchPlanner::NetRoute PatchPlanner::networkRoute(Doc *doc, const Fixture *fx, QString *detail)
+{
+    if (doc == NULL || !isNetByDmx(fx))
+        return NetRouted;
+    if (!fx->isPatched())
+        return NetNotPatched;
+
+    return universeReaches(doc, fx->universe(), fx->ipAddress().trimmed(), detail);
+}
+
+PatchPlanner::NetRoute PatchPlanner::universeReaches(Doc *doc, quint32 universe, const QString &ip,
+                                                     QString *detail)
+{
+    InputOutputMap *io = doc->inputOutputMap();
+    NetRoute first = NetRouted;
+    QString firstDetail, otherPlugin;
+    for (int i = 0; universe < io->universesCount() && i < io->outputPatchesCount(universe); i++)
+    {
+        OutputPatch *op = io->outputPatch(universe, i);
+        if (op == NULL)
+            continue;
+        QString d;
+        const NetRoute r = outputReaches(op->pluginName(), op->outputName(),
+                                         op->getPluginParameters(), ip, &d);
+        if (r == NetRouted)
+            return NetRouted;
+        if (r == NetOtherOutput)
+        {
+            if (otherPlugin.isEmpty())
+                otherPlugin = d;
+            continue;
+        }
+        if (first == NetRouted)
+        {
+            first = r;
+            firstDetail = d;
+        }
+    }
+    if (first == NetRouted)
+    {
+        first = otherPlugin.isEmpty() ? NetNoOutput : NetOtherOutput;
+        firstDetail = otherPlugin;
+    }
+    if (detail != NULL)
+        *detail = firstDetail;
+    return first;
+}
+
+bool PatchPlanner::aimUniverseAt(quint32 universe, const QString &ipIn, QString *problem)
+{
+    InputOutputMap *io = m_doc->inputOutputMap();
+    const QString ip = ipIn.trimmed();
+    OutputPatch *op = io->outputPatch(universe);
+    if (op == NULL || !isNetworkPlugin(op->pluginName()))
+    {
+        // Borrow the plugin and interface of an existing network universe.
+        bool done = false;
+        for (quint32 u = 0; u < io->universesCount() && !done; u++)
+        {
+            OutputPatch *ref = io->outputPatch(u);
+            if (u != universe && ref != NULL && isNetworkPlugin(ref->pluginName()))
+                done = io->setOutputPatch(universe, ref->pluginName(), ref->outputName(), ref->output());
+        }
+        /* None in the show: the Art-Net (else sACN) interface on the
+           fixture's network. */
+        IOPluginCache *cache = m_doc->ioPluginCache();
+        const char *const names[] = { "ArtNet", "E1.31" };
+        for (int n = 0; n < 2 && !done && !ip.isEmpty() && cache != NULL; n++)
+        {
+            QLCIOPlugin *p = cache->plugin(QLatin1String(names[n]));
+            const int line = p != NULL ? p->lineOnSameSubnet(ip) : -1;
+            if (line >= 0 && line < p->outputs().size())
+                done = io->setOutputPatch(universe, p->name(), p->outputs().at(line), quint32(line));
+        }
+        op = io->outputPatch(universe);
+    }
+    if (op == NULL || !isNetworkPlugin(op->pluginName()))
+    {
+        if (problem != NULL)
+            *problem = QStringLiteral("Universe %1 has no Art-Net or sACN output to send it with")
+                           .arg(universe + 1);
+        return false;
+    }
+    if (ip.isEmpty())
+        return true;
+
+    if (op->pluginName() == QLatin1String("E1.31"))
+    {
+        /* sACN's unicast: E1.31 reads "multicast" and "ucastIP", never
+           "outputIP" (which only a warning in the log ever saw). */
+        op->setPluginParameter(QStringLiteral("multicast"), 0);
+        op->setPluginParameter(QStringLiteral("ucastIP"), ip);
+        if (op->getPluginParameters().contains(QStringLiteral("outputIP")))
+            op->unSetPluginParameter(QStringLiteral("outputIP"));
+        return true;
+    }
+
+    op->setPluginParameter(QStringLiteral("outputIP"), ip);
+    /* A node heard at that IP listens on its own Port-Addresses: send on one
+       of those, not on the universe's number. */
+    const QList<quint32> ports = nodePorts(m_doc, ip);
+    const quint32 sends = artNetPortAddress(op->getPluginParameters(), universe);
+    if (!ports.isEmpty() && !ports.contains(sends))
+    {
+        const QSet<quint32> taken = portsSentTo(m_doc, ip, universe);
+        foreach (quint32 pa, ports)
+        {
+            if (taken.contains(pa))
+                continue;
+            op->setPluginParameter(QStringLiteral("outputUni"), pa);
+            break;
+        }
+    }
+    return true;
+}
+
+int PatchPlanner::routeNetwork(const QList<quint32> &fixtureIds, QStringList *problems,
+                               std::function<void()> *undo)
+{
+    InputOutputMap *io = m_doc->inputOutputMap();
+
+    QList<Fixture *> todo;
+    foreach (quint32 fid, fixtureIds)
+    {
+        Fixture *fx = m_doc->fixture(fid);
+        if (!isNetByDmx(fx) || todo.contains(fx))
+            continue;
+        // Unpatched: just added, waiting at the address it was given.
+        if (fx->isPatched() && networkRoute(m_doc, fx) == NetRouted)
+            continue;
+        todo << fx;
+    }
+    if (todo.isEmpty())
+        return 0;
+
+    const quint32 universesBefore = io->universesCount();
+    QSet<quint32> moving;
+    foreach (Fixture *fx, todo)
+        moving.insert(fx->id());
+
+    /* What stays where it is: channels taken, and what each universe carries. */
+    QHash<quint32, QBitArray> used;
+    QHash<quint32, QSet<QString> > ipsOn;           // network fixtures' IPs, per universe
+    QSet<quint32> otherOn;                          // anything else on it
+    QSet<quint32> anyOn;                            // anything at all, moving too
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (fx == NULL || !fx->isPatched())
+            continue;
+        anyOn.insert(fx->universe());
+        if (moving.contains(fx->id()))
+            continue;
+        if (!used.contains(fx->universe()))
+            used[fx->universe()] = QBitArray(UNI_SIZE);
+        mark(used[fx->universe()], fx->address(), fx->channels());
+        if (isNetByDmx(fx))
+            ipsOn[fx->universe()].insert(fx->ipAddress().trimmed());
+        else
+            otherOn.insert(fx->universe());
+    }
+    QSet<quint32> portUnis;
+    foreach (const NetworkNode &node, m_doc->networkTopology()->nodes())
+        foreach (const NetworkPort &port, node.ports)
+            if (port.universe != InputOutputMap::invalidUniverse())
+                portUnis.insert(port.universe);
+    QList<quint32> freeUnis;
+    for (quint32 u = 0; u < universesBefore; u++)
+        if (!anyOn.contains(u) && io->outputPatchesCount(u) == 0 && !portUnis.contains(u))
+            freeUnis << u;
+    quint32 nextNew = universesBefore;
+
+    auto fits = [&used](quint32 u, quint32 addr, quint32 n) {
+        if (addr + n > UNI_SIZE)
+            return false;
+        if (!used.contains(u))
+            return true;
+        for (quint32 i = addr; i < addr + n; i++)
+            if (used[u].testBit(int(i)))
+                return false;
+        return true;
+    };
+    auto unicastTo = [io](quint32 u, const QString &ip) {
+        for (int i = 0; i < io->outputPatchesCount(u); i++)
+        {
+            OutputPatch *op = io->outputPatch(u, i);
+            if (op == NULL || !isNetworkPlugin(op->pluginName()))
+                continue;
+            const QMap<QString, QVariant> pp = op->getPluginParameters();
+            const QString t = op->pluginName() == QLatin1String("E1.31")
+                ? (pp.value(QStringLiteral("multicast"), 1).toInt() == 0
+                   ? pp.value(QStringLiteral("ucastIP")).toString().trimmed() : QString())
+                : pp.value(QStringLiteral("outputIP")).toString().trimmed();
+            if (t == ip)
+                return true;
+        }
+        return false;
+    };
+
+    QHash<QString, quint32> forIp;                  // decided in this run
+    QList<Assignment> assignments;
+    foreach (Fixture *fx, todo)
+    {
+        const QString ip = fx->ipAddress().trimmed();
+        const quint32 n = fx->channels();
+        const quint32 addr = fx->address();
+        quint32 target = InputOutputMap::invalidUniverse();
+
+        /* The universe already sent to its IP, carrying only fixtures at it. */
+        QList<quint32> sentThere;
+        if (forIp.contains(ip))
+            sentThere << forIp.value(ip);
+        for (quint32 u = 0; u < universesBefore; u++)
+            if (!sentThere.contains(u) && !otherOn.contains(u) && unicastTo(u, ip)
+                && (ipsOn.value(u).isEmpty() || ipsOn.value(u) == QSet<QString>{ ip }))
+                sentThere << u;
+        foreach (quint32 u, sentThere)
+        {
+            if (fits(u, addr, n))
+            {
+                target = u;
+                break;
+            }
+        }
+        /* Its own universe, when everything else on it is at its IP: only
+           the output is re-aimed. */
+        if (target == InputOutputMap::invalidUniverse() && fx->isPatched()
+            && !otherOn.contains(fx->universe()) && !forIp.values().contains(fx->universe())
+            && (ipsOn.value(fx->universe()).isEmpty()
+                || ipsOn.value(fx->universe()) == QSet<QString>{ ip })
+            && fits(fx->universe(), addr, n))
+            target = fx->universe();
+        /* Else a universe of its own: a free one first, then a new one. */
+        if (target == InputOutputMap::invalidUniverse())
+            target = freeUnis.isEmpty() ? nextNew++ : freeUnis.takeFirst();
+
+        if (!used.contains(target))
+            used[target] = QBitArray(UNI_SIZE);
+        mark(used[target], addr, n);
+        ipsOn[target].insert(ip);
+        forIp.insert(ip, target);
+
+        Assignment a;
+        a.fixtureId = fx->id();
+        a.universe = target;
+        a.address = addr;
+        a.newUniverse = target >= universesBefore;
+        assignments << a;
+    }
+
+    // What the change touches, as it is now.
+    QList<quint32> touched;
+    QHash<quint32, QString> names;
+    foreach (const Assignment &a, assignments)
+    {
+        if (a.universe < universesBefore && !touched.contains(a.universe))
+        {
+            touched << a.universe;
+            names.insert(a.universe, io->getUniverseNameByID(a.universe));
+        }
+    }
+    std::shared_ptr<PatchUndo> patchBefore = std::make_shared<PatchUndo>(io);
+    patchBefore->capture(touched, QString());
+
+    // Off where they are, so apply() patches each and aims its universe.
+    QHash<quint32, QPair<quint32, quint32> > was;
+    QList<quint32> unpatched;
+    foreach (Fixture *fx, todo)
+    {
+        if (fx->isPatched())
+        {
+            was.insert(fx->id(), qMakePair(fx->universe(), fx->address()));
+            m_doc->unpatchFixture(fx->id());
+        }
+        else
+            unpatched << fx->id();
+    }
+
+    const int done = apply(assignments, problems);
+    if (done == 0)
+    {
+        QList<Doc::FixturePatch> back;
+        for (auto it = was.constBegin(); it != was.constEnd(); ++it)
+            back << Doc::FixturePatch{ it.key(), it.value().first, it.value().second };
+        if (!back.isEmpty())
+            m_doc->patchFixtures(back);
+        return 0;
+    }
+    if (undo != NULL)
+        *undo = putBackRoute(m_doc, was, unpatched, universesBefore, names, patchBefore);
+    return done;
+}
+
+QString PatchPlanner::portAddressText(quint32 pa)
+{
+    return QStringLiteral("%1:%2:%3").arg((pa >> 8) & 0x7f).arg((pa >> 4) & 0x0f).arg(pa & 0x0f);
+}
+
+QList<PatchPlanner::PortMismatch> PatchPlanner::artNetPortMismatches(Doc *doc)
+{
+    QList<PortMismatch> out;
+    if (doc == NULL || doc->ioPluginCache() == NULL
+        || doc->ioPluginCache()->plugin(QStringLiteral("ArtNet")) == NULL)
+        return out;
+    InputOutputMap *io = doc->inputOutputMap();
+    for (quint32 u = 0; u < io->universesCount(); u++)
+    {
+        for (int i = 0; i < io->outputPatchesCount(u); i++)
+        {
+            OutputPatch *op = io->outputPatch(u, i);
+            if (op == NULL || op->pluginName() != QLatin1String("ArtNet"))
+                continue;
+            const QMap<QString, QVariant> pp = op->getPluginParameters();
+            const QString ip = pp.value(QStringLiteral("outputIP")).toString().trimmed();
+            QString net;
+            if (ip.isEmpty() || broadcastNetwork(ip, &net))
+                continue;           // broadcast: every node takes what it listens to
+            PortMismatch m;
+            m.listens = nodePorts(doc, ip, &m.nodeName);
+            m.sends = artNetPortAddress(pp, u);
+            if (m.listens.isEmpty() || m.listens.contains(m.sends))
+                continue;
+            m.universe = u;
+            m.nodeIp = ip;
+            const QSet<quint32> taken = portsSentTo(doc, ip, u);
+            foreach (quint32 pa, m.listens)
+            {
+                if (!taken.contains(pa))
+                {
+                    m.suggest = int(pa);
+                    break;
+                }
+            }
+            out << m;
+        }
+    }
+    return out;
 }
 
 namespace

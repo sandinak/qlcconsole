@@ -200,7 +200,9 @@ void VinceUSBDMX512::run()
             request.append(m_portsInfo[0].m_universeData);
             request.append(VINCE_END_OF_MSG);                   // Stop byte
 
-            if (iface()->write(request) == false)
+            const bool sent = iface()->write(request);
+            recordWrite(sent);
+            if (sent == false)
                 qWarning() << Q_FUNC_INFO << name() << "Will not accept DMX data";
             else
             {

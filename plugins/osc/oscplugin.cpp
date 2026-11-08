@@ -189,6 +189,7 @@ bool OSCPlugin::openOutput(quint32 output, quint32 universe)
 
     m_IOmapping[output].controller->addUniverse(universe, OSCController::Output);
     addToMap(universe, output, Output);
+    emit targetProblemsChanged();       // no target yet: the footer says so
 
     return true;
 }
@@ -208,7 +209,19 @@ void OSCPlugin::closeOutput(quint32 output, quint32 universe)
             delete m_IOmapping[output].controller;
             m_IOmapping[output].controller = NULL;
         }
+        emit targetProblemsChanged();
     }
+}
+
+QStringList OSCPlugin::outputProblems(quint32 output, quint32 universe) const
+{
+    QStringList out;
+    if (output >= quint32(m_IOmapping.count()))
+        return out;
+    OSCController *controller = m_IOmapping.at(output).controller;
+    if (controller != NULL && controller->outputHasNoTarget(universe))
+        out << tr("OSC output has no target IP: nothing is sent. Set one in Connections");
+    return out;
 }
 
 void OSCPlugin::writeUniverse(quint32 universe, quint32 output, const QByteArray &data, bool dataChanged)
@@ -389,6 +402,9 @@ void OSCPlugin::setParameter(quint32 universe, quint32 line, Capability type,
         QLCIOPlugin::unSetParameter(universe, line, type, name);
     else
         QLCIOPlugin::setParameter(universe, line, type, name, value);
+
+    if (name == OSC_OUTPUTIP)
+        emit targetProblemsChanged();
 }
 
 QList<OSCIO> OSCPlugin::getIOMapping() const

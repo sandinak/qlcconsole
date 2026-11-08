@@ -847,7 +847,10 @@ void Inventory_Test::applyBorrowsTheOutputOfAnotherNetworkUniverse()
     QVERIFY(op != nullptr);
     QCOMPARE(op->pluginName(), QString("E1.31"));      // same plugin and interface as universe 1
     QCOMPARE(op->output(), quint32(1));
-    QCOMPARE(sacn->m_params.value(uni).value("outputIP").toString(), QString("172.18.2.42"));
+    // sACN unicast is E1.31's own: multicast off and "ucastIP" (it never reads "outputIP").
+    QCOMPARE(sacn->m_params.value(uni).value("multicast").toInt(), 0);
+    QCOMPARE(sacn->m_params.value(uni).value("ucastIP").toString(), QString("172.18.2.42"));
+    QVERIFY(!sacn->m_params.value(uni).contains("outputIP"));
 }
 
 void Inventory_Test::applyAsksForAnOutputWhenNoNetworkUniverseExists()
