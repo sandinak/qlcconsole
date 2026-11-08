@@ -153,6 +153,12 @@ protected:
     class QLabel *m_ownUniverseLabel = nullptr;
     /** Adding or patching a WLED by its own API (not staging it). */
     bool ownUniverse() const;
+public:
+    /** An Art-Net/sACN network fixture whose IP the picked universe doesn't
+     *  reach (UX-67): FixtureCreator puts it on a universe that does, at
+     *  the address given, and the dialog says so where the universe is. */
+    bool routesElsewhere() const;
+private:
     /** Universe, address and gap on or off for what is picked. */
     void updateAddressFields();
 

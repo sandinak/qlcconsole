@@ -214,7 +214,18 @@ Add Fixture's **Connection** is chosen per fixture:
 
 - **DMX** — hangs off a node or a wireless receiver.
 - **Network (ArtNet/sACN)** — the fixture is its own endpoint, sent Art-Net
-  at its own IP.
+  (or sACN) at its own IP. If the universe the dialog shows already reaches
+  that IP (unicast to it, or broadcast on its network) it goes there as
+  ever. If it doesn't, the dialog says so under Address ("U01-Office goes to
+  172.18.2.10, not this IP: it goes on a universe sent to its IP, at this
+  address"), and the fixture goes on the universe already sent to its IP,
+  or one of its own sent there, **at the address you typed** (the device
+  listens there; a batch takes it on each one's universe). Art-Net is sent
+  to the IP; sACN is sent unicast (multicast off, to the receiver's IP). An
+  Art-Net node already heard at that IP is sent on a Port-Address one of
+  its ports listens to (0:0:15, say), not the universe's own number. One
+  **Undo** takes the fixture and its universe back out; Fixture Properties
+  does the same when the universe no longer reaches the IP.
 - **Network (WLED, JSON over Wi-Fi)** — a WLED device, sent its look's state
   through WLED's own API (only when it changes), not Art-Net. Added this
   way, each WLED **gets a universe of its own**, sent to its IP through the
@@ -280,6 +291,14 @@ no output, is sent to another IP, or spans universes that don't go out one
 after another ("spans 3 universes, which go out as universes 20, 9, 22").
 The same button gives it its own run of Art-Net universes. Changing a fixture to
 WLED in Fixture Properties, or its IP or mode, does this by itself.
+
+**An Art-Net or sACN fixture on a universe that doesn't reach it.** The
+same for a network fixture moved by hand: the footer says "Fence is on
+U01-Office, which is sent to 172.18.2.10, not to its IP 172.18.2.50" (or
+"goes out as DMX USB", "has no output", "goes out on 10.0.0.0/24"), and
+**Send to Its IP** puts it where it is heard, same address, one undo. A
+universe sent to an Art-Net node on a Port-Address none of its ports
+listens to is a footer line of its own, with **Send on Its Port**.
 
 **A WLED string isn't aimed.** A string of LEDs run by a WLED (sent by
 WLED's own API, or a WLED definition) isn't hung and pointed like a light,

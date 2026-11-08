@@ -24,6 +24,9 @@
 #include <QByteArray>
 #include <QElapsedTimer>
 #include <QVector>
+#include <functional>
+
+#include "writehealth.h"
 
 #if defined(FTD2XX)
   #include "ftd2xx-interface.h"
@@ -265,6 +268,23 @@ public:
      * @return true if the values were sent successfully, otherwise false
      */
     virtual bool writeUniverse(quint32 universe, quint32 output, const QByteArray& data, bool dataChanged);
+
+    /********************************************************************
+     * Write health
+     ********************************************************************/
+public:
+    /** One frame written to the device (true) or refused (false), from
+     *  whichever thread writes; tells the notifier when the widget starts
+     *  or stops taking data. */
+    void recordWrite(bool ok);
+    /** "not taking data since 20:14:05" while it isn't, else empty. */
+    QString writeProblem() const { return m_writeHealth.problem(); }
+    /** Called (from the writing thread) when writeProblem() changes. */
+    void setProblemNotifier(std::function<void()> notify) { m_problemNotify = notify; }
+
+private:
+    WriteHealth m_writeHealth;
+    std::function<void()> m_problemNotify;
 };
 
 #endif

@@ -1542,6 +1542,30 @@ void App::initDoc()
             FixtureCreator::routeWled(parent, m_doc, ids, false);
             AppUtil::updateFixtureReadiness(m_doc);
         });
+    /* An Art-Net/sACN network fixture on a universe that doesn't reach its
+       IP: onto the universe sent there, or one of its own (one undo). */
+    ShowStatus::instance()->setAction("network.route", tr("Send to Its IP"),
+        [this](QWidget *parent, const QVariantList &items) {
+            QList<quint32> ids;
+            foreach (const QVariant &v, items)
+                ids << v.toUInt();
+            if (!ShowSettingsDialog::confirmPatchChange(m_doc, parent, tr("Send network fixtures to their IP")))
+                return;
+            FixtureCreator::routeNetwork(parent, m_doc, ids, false);
+            AppUtil::updateFixtureReadiness(m_doc);
+        });
+    /* A universe sent to an Art-Net node on a Port-Address it doesn't
+       listen to: send on a free one of its ports (one undo). */
+    ShowStatus::instance()->setAction("artnet.ports", tr("Send on Its Port"),
+        [this](QWidget *parent, const QVariantList &items) {
+            if (!ShowSettingsDialog::confirmPatchChange(m_doc, parent, tr("Send on the node's port")))
+                return;
+            std::function<void()> undo;
+            if (AppUtil::sendOnNodePorts(m_doc, items, &undo) > 0 && undo)
+                if (Monitor *mon = Monitor::instance())
+                    mon->pushUndoCallback(undo);
+            AppUtil::updateFixtureReadiness(m_doc);
+        });
     ShowStatus::instance()->setAction("fixtures.unpatched", tr("Patch…"),
         [this](QWidget *parent, const QVariantList &items) {
             QList<quint32> ids;

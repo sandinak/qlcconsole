@@ -28,6 +28,8 @@
 #include <memory>
 #include <QSpinBox>
 #include <QTimer>
+#include <QElapsedTimer>
+#include <QDateTime>
 #include <QMessageBox>
 #include <QTreeWidgetItemIterator>
 #include <QLabel>
@@ -835,6 +837,514 @@ void FixtureCreator_Test::wledShotsForReview()
         QVERIFY(QTest::qWaitForWindowExposed(&dlg));
         grab(&dlg, "before-finding");
     }
+}
+
+/*****************************************************************************
+ * Art-Net / sACN network fixtures (UX-67)
+ *****************************************************************************/
+
+namespace
+{
+/* Test devices sit on loopback addresses: nothing leaves this computer
+   (and the stub sends nothing anyway). */
+const char *const NetIp = "127.0.0.50";
+
+void pickNetwork(AddFixture *dlg, const QString &ip, int address = 0)
+{
+    dlg->m_connectionCombo->setCurrentIndex(dlg->m_connectionCombo->findData(
+        AddFixture::connectionKey(Fixture::Network, Fixture::ArtNetTransport)));
+    dlg->m_ipEdit->setText(ip);
+    if (address > 0)
+        dlg->m_addressSpin->setValue(address);
+}
+
+int nodePortsHeard(QLCIOPlugin *art, const QString &ip)
+{
+    int n = 0;
+    foreach (const QLCIOPlugin::Device &d, art->discoveredDevices())
+        if (d.address == ip)
+            n = qMax(n, int(d.portUniverses.size()));
+    return n;
+}
+
+ShowStatus::Entry findingFor(const QString &key)
+{
+    foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+        if (e.key == key)
+            return e;
+    return ShowStatus::Entry();
+}
+} // namespace
+
+IOPluginStub *FixtureCreator_Test::networkShow(const QString &plugin)
+{
+    m_doc->ioPluginCache()->load(QDir(TEST_STUB_DIR, "*iopluginstub*"));
+    IOPluginStub *stub = nullptr;
+    foreach (QLCIOPlugin *p, m_doc->ioPluginCache()->plugins())
+        if (IOPluginStub *s = qobject_cast<IOPluginStub *>(p))
+            stub = s;
+    if (stub == nullptr)
+        return nullptr;
+    stub->m_nameOverride = plugin;
+    stub->m_devices.clear();
+
+    InputOutputMap *io = m_doc->inputOutputMap();
+    io->setOutputPatch(0, plugin, QString(), 0);
+    if (plugin == "E1.31")
+    {
+        io->outputPatch(0)->setPluginParameter("multicast", 0);
+        io->outputPatch(0)->setPluginParameter("ucastIP", "172.18.2.10");
+    }
+    else
+        io->outputPatch(0)->setPluginParameter("outputIP", "172.18.2.10");
+    io->setUniverseName(0, "U01-Office");
+    Fixture *bar = new Fixture(m_doc);
+    bar->setName("Office Bar");
+    bar->setChannels(60);
+    bar->setUniverse(0);
+    bar->setAddress(0);
+    m_doc->addFixture(bar);
+    return stub;
+}
+
+void FixtureCreator_Test::anArtNetFixtureGoesWhereItIsHeard()
+{
+    QVERIFY(networkShow("ArtNet") != nullptr);
+    InputOutputMap *io = m_doc->inputOutputMap();
+    const quint32 barId = m_doc->fixtureForAddress(0);
+
+    QString said;
+    bool addressOn = false, gapOff = false;
+    driveAddDialog([&](AddFixture *dlg) {
+        dlg->m_nameEdit->setText("Fence");
+        dlg->slotNameEdited("Fence");
+        // Address 1, where the Office Bar is: on its own universe, no clash.
+        pickNetwork(dlg, NetIp, 1);
+        said = dlg->m_ownUniverseLabel->isHidden() ? QString() : dlg->m_ownUniverseLabel->text();
+        addressOn = dlg->m_addressSpin->isEnabled() && dlg->m_universeCombo->isEnabled();
+        gapOff = !dlg->m_gapSpin->isEnabled();
+    });
+    const QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, false, 0, nullptr);
+    QCOMPARE(said, QString("U01-Office goes to 172.18.2.10, not this IP: it goes on a universe "
+                           "sent to its IP, at this address."));
+    QVERIFY2(addressOn, "the device listens at an address: it is still asked");
+    QVERIFY(gapOff);
+
+    QCOMPARE(made.size(), 1);
+    Fixture *fx = m_doc->fixture(made.first());
+    QVERIFY(fx->isPatched());
+    QVERIFY2(fx->universe() != 0, "never left on a universe sent to another IP");
+    QCOMPARE(fx->address(), 0u);                        // the address typed
+    OutputPatch *op = io->outputPatch(fx->universe());
+    QVERIFY(op != nullptr);
+    QCOMPARE(op->pluginName(), QString("ArtNet"));
+    QCOMPARE(op->getPluginParameters().value("outputIP").toString(), QString(NetIp));
+    QCOMPARE(PatchPlanner::networkRoute(m_doc, fx), PatchPlanner::NetRouted);
+
+    // The Office universe is as it was.
+    QCOMPARE(io->outputPatch(0)->getPluginParameters().value("outputIP").toString(), QString("172.18.2.10"));
+    QCOMPARE(io->getUniverseNameByID(0), QString("U01-Office"));
+    QCOMPARE(m_doc->fixture(barId)->universe(), 0u);
+
+    // A second one at the same IP joins it, at its own address.
+    driveAddDialog([](AddFixture *dlg) { pickNetwork(dlg, NetIp, 101); });
+    const QList<quint32> more = FixtureCreator::addFromDialog(nullptr, m_doc, false, 0, nullptr);
+    QCOMPARE(more.size(), 1);
+    QCOMPARE(m_doc->fixture(more.first())->universe(), fx->universe());
+    QCOMPARE(m_doc->fixture(more.first())->address(), 100u);
+}
+
+void FixtureCreator_Test::anArtNetFixtureTheUniverseReachesStaysPut()
+{
+    QVERIFY(networkShow("ArtNet") != nullptr);
+    const int universes = int(m_doc->inputOutputMap()->universesCount());
+    bool labelHidden = false;
+    driveAddDialog([&labelHidden](AddFixture *dlg) {
+        pickNetwork(dlg, "172.18.2.10", 61);
+        labelHidden = dlg->m_ownUniverseLabel->isHidden();
+    });
+    const QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, false, 0, nullptr);
+    QVERIFY(labelHidden);
+    QCOMPARE(made.size(), 1);
+    QCOMPARE(m_doc->fixture(made.first())->universe(), 0u);
+    QCOMPARE(m_doc->fixture(made.first())->address(), 60u);
+    QCOMPARE(int(m_doc->inputOutputMap()->universesCount()), universes);
+}
+
+void FixtureCreator_Test::addingANetworkFixtureElsewhereIsOneUndo()
+{
+    QVERIFY(networkShow("ArtNet") != nullptr);
+    InputOutputMap *io = m_doc->inputOutputMap();
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, m_doc);
+    const int universes = int(io->universesCount());
+    const int fixtures = m_doc->fixtures().size();
+
+    driveAddDialog([](AddFixture *dlg) { pickNetwork(dlg, NetIp, 1); });
+    const QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, false, 0, nullptr);
+    QCOMPARE(made.size(), 1);
+    const quint32 uni = m_doc->fixture(made.first())->universe();
+    QVERIFY(uni != 0);
+    QVERIFY(mon->canUndo());
+
+    mon->undo();
+    QVERIFY(m_doc->fixture(made.first()) == nullptr);
+    QCOMPARE(m_doc->fixtures().size(), fixtures);
+    QCOMPARE(int(io->universesCount()), universes);
+    if (uni < io->universesCount())
+        QVERIFY(io->outputPatch(uni) == nullptr);
+    QCOMPARE(io->outputPatch(0)->getPluginParameters().value("outputIP").toString(), QString("172.18.2.10"));
+    delete mon;
+}
+
+void FixtureCreator_Test::anSacnFixtureIsReallyUnicast()
+{
+    QVERIFY(networkShow("E1.31") != nullptr);
+    InputOutputMap *io = m_doc->inputOutputMap();
+    driveAddDialog([](AddFixture *dlg) { pickNetwork(dlg, NetIp, 1); });
+    const QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, false, 0, nullptr);
+    QCOMPARE(made.size(), 1);
+    Fixture *fx = m_doc->fixture(made.first());
+    QVERIFY(fx->universe() != 0);
+    OutputPatch *op = io->outputPatch(fx->universe());
+    QVERIFY(op != nullptr);
+    QCOMPARE(op->pluginName(), QString("E1.31"));
+    const QMap<QString, QVariant> pp = op->getPluginParameters();
+    QCOMPARE(pp.value("multicast").toInt(), 0);
+    QCOMPARE(pp.value("ucastIP").toString(), QString(NetIp));
+    QVERIFY2(!pp.contains("outputIP"), "E1.31 has no outputIP: it would only warn and multicast");
+    QCOMPARE(PatchPlanner::networkRoute(m_doc, fx), PatchPlanner::NetRouted);
+
+    // Multicast on again (by hand): its IP is no longer the target.
+    op->setPluginParameter("multicast", 1);
+    QCOMPARE(PatchPlanner::networkRoute(m_doc, fx), PatchPlanner::NetRouted);   // multicast reaches its network
+    op->setPluginParameter("multicast", 0);
+    op->setPluginParameter("ucastIP", "127.0.0.99");
+    QString detail;
+    QCOMPARE(PatchPlanner::networkRoute(m_doc, fx, &detail), PatchPlanner::NetOtherIp);
+    QCOMPARE(detail, QString("127.0.0.99"));
+}
+
+void FixtureCreator_Test::aNetworkFixtureOnTheWrongUniverseIsAFindingWithAFix()
+{
+    QVERIFY(networkShow("ArtNet") != nullptr);
+    InputOutputMap *io = m_doc->inputOutputMap();
+    // Moved by hand onto the Office universe, which goes to 172.18.2.10.
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("Fence");
+    fx->setChannels(3);
+    fx->setUniverse(0);
+    fx->setAddress(100);
+    fx->setConnection(Fixture::Network);
+    fx->setIPAddress(NetIp);
+    QVERIFY(m_doc->addFixture(fx));
+    const quint32 fid = fx->id();
+
+    AppUtil::updateFixtureReadiness(m_doc);
+    ShowStatus::Entry found = findingFor("network.route");
+    QCOMPARE(found.severity, ShowStatus::Warning);
+    QCOMPARE(found.items, QStringList({ "Fence is on U01-Office, which is sent to 172.18.2.10, "
+                                        "not to its IP 127.0.0.50" }));
+    QCOMPARE(found.itemData, QVariantList() << fid);
+
+    // A universe with no output at all says so too.
+    io->addUniverse();
+    QVERIFY(m_doc->patchFixtures({ Doc::FixturePatch{ fid, 1, 100 } }));
+    AppUtil::updateFixtureReadiness(m_doc);
+    QCOMPARE(findingFor("network.route").items,
+             QStringList({ "Fence is on Universe 2, which has no output: nothing reaches 127.0.0.50" }));
+    QVERIFY(m_doc->patchFixtures({ Doc::FixturePatch{ fid, 0, 100 } }));
+
+    // The footer's fix (App's action calls this helper): a universe sent to
+    // its IP, same address; the Office universe as it was.
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, m_doc);
+    QCOMPARE(FixtureCreator::routeNetwork(nullptr, m_doc, { fid }, false), 1);
+    QVERIFY(fx->universe() != 0);
+    QCOMPARE(fx->address(), 100u);
+    QCOMPARE(PatchPlanner::networkRoute(m_doc, fx), PatchPlanner::NetRouted);
+    QCOMPARE(io->outputPatch(0)->getPluginParameters().value("outputIP").toString(), QString("172.18.2.10"));
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY2(findingFor("network.route").key.isEmpty(), "fixed, the finding goes");
+
+    // Nothing more to do the second time; one undo puts it back.
+    QCOMPARE(FixtureCreator::routeNetwork(nullptr, m_doc, { fid }, false), 0);
+    QVERIFY(mon->canUndo());
+    mon->undo();
+    QCOMPARE(fx->universe(), 0u);
+    QCOMPARE(fx->address(), 100u);
+    QCOMPARE(PatchPlanner::networkRoute(m_doc, fx), PatchPlanner::NetOtherIp);
+    delete mon;
+    ShowStatus::instance()->clearStatus("network.route");
+}
+
+void FixtureCreator_Test::aNodeListeningOnAnotherPortIsAFindingWithAFix()
+{
+    IOPluginStub *stub = networkShow("ArtNet");
+    QVERIFY(stub != nullptr);
+    InputOutputMap *io = m_doc->inputOutputMap();
+    // A node that answers at .218 with one port on 0:0:15 (the OLA probe's).
+    QLCIOPlugin::Device node;
+    node.name = "OLA Probe";
+    node.address = "127.0.0.218";
+    node.portLabels << "0:0:15";
+    node.portUniverses << 15;
+    stub->m_devices << node;
+    // Universe 2 sent to it, on the Port-Address its number gives: 0:0:1.
+    io->addUniverse();
+    QVERIFY(io->setOutputPatch(1, "ArtNet", QString(), 0));
+    io->outputPatch(1)->setPluginParameter("outputIP", "127.0.0.218");
+    io->setUniverseName(1, "U02-Probe");
+
+    AppUtil::updateFixtureReadiness(m_doc);
+    ShowStatus::Entry found = findingFor("artnet.ports");
+    QCOMPARE(found.severity, ShowStatus::Warning);
+    QCOMPARE(found.items, QStringList({ "U02-Probe goes to OLA Probe (127.0.0.218) on 0:0:1, "
+                                        "but its ports listen on 0:0:15" }));
+    QCOMPARE(found.itemData, QVariantList() << 1u);
+    // The Office universe, sent to a node not heard, is not flagged.
+    QCOMPARE(found.items.size(), 1);
+
+    std::function<void()> undo;
+    QCOMPARE(AppUtil::sendOnNodePorts(m_doc, found.itemData, &undo), 1);
+    QVERIFY(bool(undo));
+    QCOMPARE(io->outputPatch(1)->getPluginParameters().value("outputUni").toUInt(), 15u);
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY2(findingFor("artnet.ports").key.isEmpty(), "fixed, the finding goes");
+
+    undo();
+    QCOMPARE(io->outputPatch(1)->getPluginParameters().value("outputUni", 1).toUInt(), 1u);
+    ShowStatus::instance()->clearStatus("artnet.ports");
+}
+
+void FixtureCreator_Test::anArtNetFixtureIsSentOnThePortItsNodeListensTo()
+{
+    IOPluginStub *stub = networkShow("ArtNet");
+    QVERIFY(stub != nullptr);
+    QLCIOPlugin::Device node;
+    node.name = "OLA Probe";
+    node.address = "127.0.0.218";
+    node.portUniverses << 15;
+    stub->m_devices << node;
+
+    driveAddDialog([](AddFixture *dlg) { pickNetwork(dlg, "127.0.0.218", 1); });
+    const QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, false, 0, nullptr);
+    QCOMPARE(made.size(), 1);
+    Fixture *fx = m_doc->fixture(made.first());
+    OutputPatch *op = m_doc->inputOutputMap()->outputPatch(fx->universe());
+    QVERIFY(op != nullptr);
+    QCOMPARE(op->getPluginParameters().value("outputIP").toString(), QString("127.0.0.218"));
+    QCOMPARE(op->getPluginParameters().value("outputUni").toUInt(), 15u);
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY(findingFor("artnet.ports").key.isEmpty());
+    QVERIFY(findingFor("network.route").key.isEmpty());
+    stub->m_devices.clear();
+}
+
+void FixtureCreator_Test::networkShotsForReview()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set: no shots");
+    QDir().mkpath(dir);
+    IOPluginStub *stub = networkShow("ArtNet");
+    QVERIFY(stub != nullptr);
+    const QList<QSize> sizes = { QSize(760, 560), QSize(960, 680), QSize(1280, 860) };
+    auto grab = [&dir, &sizes](QWidget *w, const QString &name) {
+        for (const QSize &sz : sizes)
+        {
+            w->resize(sz);
+            QApplication::processEvents();
+            w->grab().save(QStringLiteral("%1/%2-%3x%4.png").arg(dir, name).arg(sz.width()).arg(sz.height()));
+        }
+    };
+
+    // Add Fixture, Network (Art-Net/sACN) at an IP the universe doesn't reach.
+    {
+        AddFixture dlg(nullptr, m_doc);
+        dlg.preselectUniverse(0);
+        dlg.m_nameEdit->setText("Fence");
+        dlg.slotNameEdited("Fence");
+        pickNetwork(&dlg, NetIp, 1);
+        dlg.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&dlg));
+        grab(&dlg, "after-addfixture-artnet");
+        // As main left it: no word, the gap on, and the address a clash.
+        dlg.m_ownUniverseLabel->hide();
+        dlg.m_gapSpin->setEnabled(true);
+        dlg.m_gapLabel->setEnabled(true);
+        dlg.m_addrErrorLabel->show();
+        grab(&dlg, "before-addfixture-artnet");
+    }
+
+    // The two findings, on the office show.
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("Fence");
+    fx->setChannels(3);
+    fx->setUniverse(0);
+    fx->setAddress(100);
+    fx->setConnection(Fixture::Network);
+    fx->setIPAddress(NetIp);
+    QVERIFY(m_doc->addFixture(fx));
+    QLCIOPlugin::Device node;
+    node.name = "OLA Probe";
+    node.address = "127.0.0.218";
+    node.portUniverses << 15;
+    stub->m_devices << node;
+    InputOutputMap *io = m_doc->inputOutputMap();
+    io->addUniverse();
+    QVERIFY(io->setOutputPatch(1, "ArtNet", QString(), 0));
+    io->outputPatch(1)->setPluginParameter("outputIP", "127.0.0.218");
+    io->setUniverseName(1, "U02-Probe");
+
+    ShowStatus *status = ShowStatus::instance();
+    status->setAction("network.route", "Send to Its IP", [](QWidget *, const QVariantList &) {});
+    status->setAction("artnet.ports", "Send on Its Port", [](QWidget *, const QVariantList &) {});
+    AppUtil::updateFixtureReadiness(m_doc);
+    foreach (const QString &key, QStringList({ "network.route", "artnet.ports" }))
+    {
+        const ShowStatus::Entry found = findingFor(key);
+        QVERIFY(!found.items.isEmpty());
+        ShowStatusDialog dlg;
+        dlg.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&dlg));
+        const QList<QTreeWidgetItem *> rows = dlg.tree()->findItems(found.items.value(0),
+                                                                   Qt::MatchExactly | Qt::MatchRecursive);
+        QVERIFY(!rows.isEmpty());
+        rows.first()->setSelected(true);
+        dlg.tree()->setCurrentItem(rows.first());
+        grab(&dlg, QStringLiteral("after-finding-%1").arg(QString(key).replace('.', '-')));
+    }
+    status->clearStatus("network.route");
+    status->clearStatus("artnet.ports");
+    {
+        ShowStatusDialog dlg;
+        dlg.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&dlg));
+        grab(&dlg, "before-finding-network");
+    }
+    stub->m_devices.clear();
+}
+
+void FixtureCreator_Test::realWireToTheProbe()
+{
+    const QString probe = qEnvironmentVariable("QLC_REAL_WIRE_PROBE");
+    if (probe.isEmpty())
+        QSKIP("QLC_REAL_WIRE_PROBE not set: nothing goes on the wire");
+    m_doc->ioPluginCache()->load(QDir(TEST_PLUGINS_DIR, "*artnet*"));
+    m_doc->ioPluginCache()->load(QDir(TEST_PLUGINS_DIR, "*e131*"));
+    QLCIOPlugin *art = m_doc->ioPluginCache()->plugin("ArtNet");
+    QLCIOPlugin *sacn = m_doc->ioPluginCache()->plugin("E1.31");
+    QVERIFY(art != nullptr && sacn != nullptr);
+    InputOutputMap *io = m_doc->inputOutputMap();
+    const int line = art->lineOnSameSubnet(probe);
+    QVERIFY2(line >= 0, "no interface on the probe's network");
+
+    auto send = [&io](quint32 uni, const QList<int> &values, int ms) {
+        QByteArray data(512, 0);
+        for (int i = 0; i < values.size(); i++)
+            data[i] = char(values.at(i));
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < ms)
+        {
+            io->universes().at(int(uni))->dumpOutput(data, true);
+            QTest::qWait(50);
+        }
+    };
+
+    /* Art-Net. Universe 1 is already unicast to the probe on 0:0:0 (its
+       other port), so polling has heard it; Add Fixture's universe should
+       go to it on the port left: 0:0:15. */
+    QVERIFY(io->setOutputPatch(0, "ArtNet", art->outputs().at(line), quint32(line)));
+    io->outputPatch(0)->setPluginParameter("outputIP", probe);
+    io->outputPatch(0)->setPluginParameter("outputUni", 0);
+    Fixture *bar = new Fixture(m_doc);
+    bar->setName("Probe 0");
+    bar->setChannels(4);
+    bar->setUniverse(0);
+    bar->setAddress(0);
+    QVERIFY(m_doc->addFixture(bar));
+    // Universe 2: a DMX bar with no output -- where Add Fixture is opened.
+    io->addUniverse();
+    Fixture *dmxBar = new Fixture(m_doc);
+    dmxBar->setName("Bench");
+    dmxBar->setChannels(4);
+    dmxBar->setUniverse(1);
+    dmxBar->setAddress(0);
+    QVERIFY(m_doc->addFixture(dmxBar));
+    for (int i = 0; i < 80 && nodePortsHeard(art, probe) < 2; i++)
+        QTest::qWait(100);
+    qInfo().noquote() << "heard at" << probe << ":" << nodePortsHeard(art, probe) << "port(s)";
+
+    driveAddDialog([&probe](AddFixture *dlg) {
+        dlg->m_channelsSpin->setValue(4);
+        pickNetwork(dlg, probe, 1);
+    });
+    QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, false, 1, nullptr);
+    QCOMPARE(made.size(), 1);
+    Fixture *fx = m_doc->fixture(made.first());
+    QVERIFY(fx->universe() != 0);
+    QMap<QString, QVariant> pp = io->outputPatch(fx->universe())->getPluginParameters();
+    qInfo().noquote() << "ARTNET universe" << fx->universe() + 1 << "plugin"
+                      << io->outputPatch(fx->universe())->pluginName() << "outputIP"
+                      << pp.value("outputIP").toString() << "outputUni"
+                      << pp.value("outputUni").toString();
+    QCOMPARE(pp.value("outputIP").toString(), probe);
+    QCOMPARE(pp.value("outputUni").toUInt(), 15u);
+    qInfo() << "PHASE artnet 11 22 33 44" << QDateTime::currentDateTime().toString("HH:mm:ss");
+    send(fx->universe(), { 11, 22, 33, 44 }, 6000);
+    send(fx->universe(), { 0, 0, 0, 0 }, 500);
+    const QString artLine = art->outputs().at(line);
+
+    // A show of its own for sACN: nothing of the Art-Net one to borrow.
+    delete m_doc;
+    m_doc = new Doc(this);
+    m_doc->ioPluginCache()->load(QDir(TEST_PLUGINS_DIR, "*e131*"));
+    sacn = m_doc->ioPluginCache()->plugin("E1.31");
+    QVERIFY(sacn != nullptr);
+    io = m_doc->inputOutputMap();
+
+    /* sACN. Universe 1 goes out as sACN unicast to another IP (loopback);
+       Add Fixture's universe borrows it and should unicast to the probe. A
+       multicast group the probe doesn't join proves it is unicast; the
+       probe reads sACN universe 15 (set as in Connections). */
+    Fixture *loopBar = new Fixture(m_doc);
+    loopBar->setName("Loop");
+    loopBar->setChannels(4);
+    loopBar->setUniverse(0);
+    loopBar->setAddress(0);
+    QVERIFY(m_doc->addFixture(loopBar));
+    const QStringList sl = sacn->outputs();
+    const int sline = sl.indexOf(artLine);
+    QVERIFY2(sline >= 0, "no sACN line on the probe's network");
+    QVERIFY(io->setOutputPatch(0, "E1.31", sl.at(sline), quint32(sline)));
+    io->outputPatch(0)->setPluginParameter("multicast", 0);
+    io->outputPatch(0)->setPluginParameter("ucastIP", "127.0.0.1");
+    driveAddDialog([&probe](AddFixture *dlg) {
+        dlg->m_channelsSpin->setValue(4);
+        pickNetwork(dlg, probe, 1);
+    });
+    made = FixtureCreator::addFromDialog(nullptr, m_doc, false, 0, nullptr);
+    QCOMPARE(made.size(), 1);
+    fx = m_doc->fixture(made.first());
+    OutputPatch *op = io->outputPatch(fx->universe());
+    QCOMPARE(op->pluginName(), QString("E1.31"));
+    op->setPluginParameter("universe", 15);
+    op->setPluginParameter("mcastFullIP", "239.255.0.99");
+    pp = op->getPluginParameters();
+    qInfo().noquote() << "SACN universe" << fx->universe() + 1 << "multicast"
+                      << pp.value("multicast").toString() << "ucastIP" << pp.value("ucastIP").toString()
+                      << "outputIP" << pp.value("outputIP").toString();
+    QCOMPARE(pp.value("multicast").toInt(), 0);
+    QCOMPARE(pp.value("ucastIP").toString(), probe);
+    qInfo() << "PHASE sacn-unicast 55 66 77 88" << QDateTime::currentDateTime().toString("HH:mm:ss");
+    send(fx->universe(), { 55, 66, 77, 88 }, 6000);
+    // Multicast on (to the group nobody joined): the probe must hear nothing new.
+    op->setPluginParameter("multicast", 1);
+    qInfo() << "PHASE sacn-multicast 99 99 99 99" << QDateTime::currentDateTime().toString("HH:mm:ss");
+    send(fx->universe(), { 99, 99, 99, 99 }, 6000);
+    qInfo() << "PHASE done" << QDateTime::currentDateTime().toString("HH:mm:ss");
 }
 
 QTEST_MAIN(FixtureCreator_Test)

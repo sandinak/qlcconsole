@@ -65,6 +65,12 @@ bool DMXUSB::rescanWidgets()
         delete m_widgets.takeFirst();
 
     m_widgets = DMXUSBWidget::widgets();
+    /* A widget that stops taking data says so in the footer: the write
+       threads tell the GUI thread, which asks outputProblems() again. */
+    foreach (DMXUSBWidget *widget, m_widgets)
+        widget->setProblemNotifier([this]() {
+            QMetaObject::invokeMethod(this, "targetProblemsChanged", Qt::QueuedConnection);
+        });
 
     foreach (DMXUSBWidget* widget, m_widgets)
     {
@@ -196,7 +202,26 @@ QString DMXUSB::outputInfo(quint32 output)
 void DMXUSB::writeUniverse(quint32 universe, quint32 output, const QByteArray &data, bool dataChanged)
 {
     if (output < quint32(m_outputs.size()))
-        m_outputs.at(output)->writeUniverse(universe, output, data, dataChanged);
+    {
+        DMXUSBWidget *widget = m_outputs.at(output);
+        // Not open (it went away, or never opened): nothing reaches the rig.
+        if (widget->writeUniverse(universe, output, data, dataChanged) == false
+            && widget->isOpen() == false)
+            widget->recordWrite(false);
+    }
+}
+
+QStringList DMXUSB::outputProblems(quint32 output, quint32 universe) const
+{
+    Q_UNUSED(universe)
+    QStringList out;
+    if (output >= quint32(m_outputs.size()))
+        return out;
+    DMXUSBWidget *widget = m_outputs.at(output);
+    const QString problem = widget->writeProblem();
+    if (!problem.isEmpty())
+        out << tr("DMX USB %1: %2").arg(widget->uniqueName(), problem);
+    return out;
 }
 
 /****************************************************************************

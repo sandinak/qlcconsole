@@ -119,6 +119,7 @@ bool UsbdmxLegacy::writeUniverse(quint32 universe, quint32 output, const QByteAr
         oldVal = newVal;
     }
 
+    recordWrite(result);
     return result;
 }
 

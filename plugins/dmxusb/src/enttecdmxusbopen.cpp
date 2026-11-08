@@ -206,7 +206,11 @@ void EnttecDMXUSBOpen::run()
             usleep(DMX_MAB);
 
         if (iface()->write(m_portsInfo[0].m_universeData) == false)
+        {
+            recordWrite(false);
             goto framesleep;
+        }
+        recordWrite(true);
 
 framesleep:
         // Sleep for the remainder of the DMX frame time

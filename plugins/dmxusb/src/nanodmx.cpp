@@ -331,6 +331,7 @@ void NanoDMX::run()
             if (m_file.write(fastTrans) <= 0)
 #endif
             {
+                recordWrite(false);
                 qWarning() << Q_FUNC_INFO << name() << "will not accept DMX data";
 #ifdef QTSERIAL
                 iface()->purgeBuffers();
@@ -339,6 +340,7 @@ void NanoDMX::run()
             }
             else
             {
+                recordWrite(true);
                 m_portsInfo[0].m_compareData[i] = val;
 #ifdef QTSERIAL
                 if (checkReply() == false)

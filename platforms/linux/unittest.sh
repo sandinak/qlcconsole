@@ -247,6 +247,7 @@ list_tests()
     echo plugins/artnet/test
     echo plugins/E1.31/test
     echo plugins/osc/test
+    echo plugins/dmxusb/test
     echo plugins/wled/test
     if [ "$TARGET" != "qmlui" ]; then
         echo webaccess/test

@@ -574,3 +574,41 @@ void OSC_Test::aShowControlPacketLeavesTheLineToTheTarget()
     QVERIFY(!plugin.sendShowControl(0, QByteArray(), "127.0.0.1", rx.localPort()));
     QVERIFY(nextDatagram(rx, 50).isEmpty());
 }
+
+void OSC_Test::anOutputWithNoTargetSaysSo()
+{
+    OSCPlugin plugin;
+    OSCIO lan;
+    lan.IPAddress = "172.18.2.219";         // a real interface: no default target
+    lan.controller = nullptr;
+    OSCIO loop;
+    loop.IPAddress = "127.0.0.1";           // loopback: the default target is itself
+    loop.controller = nullptr;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(lan);
+    plugin.m_IOmapping.append(loop);
+    plugin.m_ifaceWaitTime = 0;
+    typedef QLCIOPlugin P;
+    QSignalSpy said(&plugin, SIGNAL(targetProblemsChanged()));
+
+    QVERIFY(plugin.outputProblems(0, 3).isEmpty());     // not open: nothing to say
+    QVERIFY(plugin.openOutput(0, 3));
+    QVERIFY(said.count() >= 1);
+    QCOMPARE(plugin.outputProblems(0, 3),
+             QStringList({ "OSC output has no target IP: nothing is sent. Set one in Connections" }));
+
+    said.clear();
+    plugin.setParameter(3, 0, P::Output, OSC_OUTPUTIP, "127.0.0.5");
+    QCOMPARE(said.count(), 1);
+    QVERIFY(plugin.outputProblems(0, 3).isEmpty());
+    plugin.setParameter(3, 0, P::Output, OSC_OUTPUTIP, "");
+    QCOMPARE(plugin.outputProblems(0, 3).size(), 1);
+
+    QVERIFY(plugin.openOutput(1, 4));
+    QVERIFY(plugin.outputProblems(1, 4).isEmpty());
+    QVERIFY(plugin.outputProblems(7, 4).isEmpty());     // no such line
+
+    plugin.closeOutput(0, 3);
+    QVERIFY(plugin.outputProblems(0, 3).isEmpty());
+    plugin.closeOutput(1, 4);
+}

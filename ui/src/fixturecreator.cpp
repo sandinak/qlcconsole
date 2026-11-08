@@ -99,6 +99,12 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
     const int pixelLeds = af.pixelLeds();
     const bool ownUniverse = !inventory && af.connection() == Fixture::Network
                              && (af.transport() == Fixture::WledTransport || pixelLeds > 0);
+    /* An Art-Net/sACN network fixture whose IP the dialog's universe
+       doesn't reach (UX-67) goes where it is heard: added unpatched at the
+       address given (the device listens there) and put on the universe sent
+       to its IP, or one of its own, below. Each is its own device, so a
+       batch takes that address on each one's universe. */
+    const bool elsewhere = !inventory && !ownUniverse && af.routesElsewhere();
 
     /* Add the rest (if any) WITH address gap */
     for (int i = 0; i < af.amount(); i++)
@@ -134,6 +140,12 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
             // never registers and no DMX path ever writes.
             fxi->setPatched(false);
             fxi->setAddress(0);
+            fxi->setUniverse(0);
+        }
+        else if (elsewhere)
+        {
+            fxi->setPatched(false);
+            fxi->setAddress(address);
             fxi->setUniverse(0);
         }
         else
@@ -191,6 +203,8 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
         if (WledConfigCheck *check = WledConfigCheck::instance())
             check->offerSetUp(parent, created);
     }
+    if (elsewhere && !created.isEmpty())
+        routeNetwork(parent, doc, created, true);
 
     if (pastLimit)
     {
@@ -244,6 +258,49 @@ int FixtureCreator::routeWled(QWidget *parent, Doc *doc, const QList<quint32> &f
                                          "it was:\n\n%1")).arg(problems.join(QStringLiteral("\n"))),
                         QMessageBox::Ok, parent);
         msg.setObjectName(QStringLiteral("wledRouteBox"));
+        msg.exec();
+    }
+    return done;
+}
+
+
+int FixtureCreator::routeNetwork(QWidget *parent, Doc *doc, const QList<quint32> &fixtureIds,
+                                 bool deleteOnUndo)
+{
+    if (doc == NULL)
+        return 0;
+    PatchPlanner planner(doc);
+    QStringList problems;
+    std::function<void()> undo;
+    const int done = planner.routeNetwork(fixtureIds, &problems, &undo);
+
+    if (done > 0 && undo)
+    {
+        if (deleteOnUndo)
+        {
+            const QList<quint32> added = fixtureIds;
+            undo = [doc, added, putBack = undo]() {
+                foreach (quint32 id, added)
+                    if (doc->fixture(id) != NULL)
+                        doc->deleteFixture(id);
+                putBack();
+            };
+        }
+        if (Monitor *mon = Monitor::instance())
+            mon->pushUndoCallback(undo);
+    }
+
+    if (!problems.isEmpty() && parent != NULL)
+    {
+        QMessageBox msg(QMessageBox::Warning, tr("Network universe"),
+                        done > 0 ? tr("Things to look at:\n\n%1").arg(problems.join(QStringLiteral("\n")))
+                                 : (deleteOnUndo
+                                    ? tr("It could not get a universe sent to its IP, so it waits in the "
+                                         "inventory:\n\n%1")
+                                    : tr("It could not get a universe sent to its IP, so it stays where "
+                                         "it was:\n\n%1")).arg(problems.join(QStringLiteral("\n"))),
+                        QMessageBox::Ok, parent);
+        msg.setObjectName(QStringLiteral("networkRouteBox"));
         msg.exec();
     }
     return done;

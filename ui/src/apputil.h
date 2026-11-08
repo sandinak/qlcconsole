@@ -26,6 +26,7 @@
 #include <QSize>
 
 #include <QHash>
+#include <functional>
 class QWidget;
 class QTreeWidgetItem;
 class QLCFixtureDef;
@@ -202,9 +203,19 @@ namespace AppUtil
      * fixtures are patched on with no output (universe indexes);
      * "outputs.problems" -- network outputs their plugins report in trouble
      * (QLCIOPlugin::outputProblems()), one per problem (the first universe
-     * each hits).
+     * each hits); "network.route" -- Art-Net/sACN network fixtures whose
+     * universe doesn't reach their IP (fixture ids); "artnet.ports" --
+     * universes sent to an Art-Net node on a Port-Address none of its ports
+     * listens to (universe indexes).
      */
     void updateFixtureReadiness(Doc *doc);
+
+    /** The "artnet.ports" fix: each of @p universes still sent to a node on a
+     *  port it doesn't listen to goes out on a free one of its ports
+     *  (PatchPlanner::artNetPortMismatches()). @p undo, when given, is set
+     *  to what puts them back (one step). Returns how many changed. */
+    int sendOnNodePorts(Doc *doc, const QVariantList &universes,
+                        std::function<void()> *undo = NULL);
 
     /** Just "fixtures.buried" and "fixtures.offrow" (a warning: a light on the
      *  floor whose row stands on a deck, FIX-16; also part of updateFixtureReadiness()): cheap

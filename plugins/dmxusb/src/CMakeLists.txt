@@ -106,6 +106,7 @@ target_sources(${module_name} PRIVATE
     dmxusbconfig.cpp dmxusbconfig.h
     dmxusbopenrx.cpp dmxusbopenrx.h
     dmxusbwidget.cpp dmxusbwidget.h
+    writehealth.cpp writehealth.h
     enttecdmxusbopen.cpp enttecdmxusbopen.h
     enttecdmxusbpro.cpp enttecdmxusbpro.h
     stageprofi.cpp stageprofi.h

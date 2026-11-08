@@ -483,6 +483,22 @@ bool ArtNetController::handleArtNetPollReply(QByteArray const& datagram, QHostAd
     ArtNetRdmFlag &rdm = m_rdmFlags[senderAddress];
     rdm.replyHeard(newNode.status1);
     newNode.rdmCapable = rdm.rdmCapable();
+    /* A node first heard, or listening on other Port-Addresses than before:
+       the console checks again what reaches it (a universe sent to it on a
+       port it doesn't listen to is a footer finding, PatchPlanner). */
+    bool portsChanged = !m_nodesList.contains(senderAddress);
+    QSet<int> &seen = m_portsHeard[senderAddress];      // over every bindIndex's reply
+    for (int p = 0; p < qMin(newNode.portsNumber, 4); p++)
+    {
+        if ((newNode.portTypes[p] & 0x80) == 0)
+            continue;
+        const int pa = (newNode.netSwitch << 8) | (newNode.subSwitch << 4) | newNode.swOut[p];
+        if (!seen.contains(pa))
+        {
+            seen.insert(pa);
+            portsChanged = true;
+        }
+    }
     m_nodesList[senderAddress] = newNode;
 
     ++m_packetReceived;
@@ -492,6 +508,8 @@ bool ArtNetController::handleArtNetPollReply(QByteArray const& datagram, QHostAd
         logNodeIssueChanges();
         emit problemsChanged();
     }
+    else if (portsChanged)
+        emit problemsChanged();
     return true;
 }
 
