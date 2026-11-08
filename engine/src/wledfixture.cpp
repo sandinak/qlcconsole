@@ -32,6 +32,21 @@ bool WledFixture::runsEffects(const Fixture *fx)
            && effectChannel(fx) != nullptr;
 }
 
+bool WledFixture::isPixelString(const Fixture *fx)
+{
+    if (fx == nullptr)
+        return false;
+    const bool wled = (fx->connection() == Fixture::Network && fx->transport() == Fixture::WledTransport)
+                      || (fx->fixtureDef() != nullptr
+                          && fx->fixtureDef()->manufacturer().compare(QLatin1String("WLED"),
+                                                                      Qt::CaseInsensitive) == 0);
+    if (!wled)
+        return false;
+    // Driving a moving light: aimed like one.
+    return fx->channelNumber(QLCChannel::Pan, QLCChannel::MSB, 0) == QLCChannel::invalid()
+           && fx->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, 0) == QLCChannel::invalid();
+}
+
 int WledFixture::channel(const Fixture *fx, const QString &name)
 {
     const QLCFixtureMode *mode = (fx != nullptr) ? fx->fixtureMode() : nullptr;

@@ -80,6 +80,7 @@
 #include "addfixture.h"
 #include "patchinventorydialog.h"
 #include "fixturecreator.h"
+#include "patchplanner.h"
 #include "rdmmanager.h"
 #include "universe.h"
 #include "patchundo.h"
@@ -2656,6 +2657,13 @@ bool FixtureManager::editDefinitionAndMode(QWidget *parent, Doc *doc, quint32 fi
             // Emit changed signal
             if (changed)
                 fxi->setID(fxi->id());
+
+            /* Made a WLED driven by its own API (or its IP, mode or address
+               changed): it is heard only on a universe sent to its IP through
+               the WLED output, so it goes to one of its own -- one undo. */
+            if (fxi->isPatched()
+                && PatchPlanner::wledRoute(doc, fxi) != PatchPlanner::WledRouted)
+                FixtureCreator::routeWled(parent, doc, { fid }, false);
 
             if (FixtureManager *fm = FixtureManager::instance())
             {

@@ -12540,8 +12540,23 @@ void MonitorGraphicsView::pushRigUndo(const QByteArray &before)
     pushUndo(e);
 }
 
+void MonitorGraphicsView::pushUndoCallback(const std::function<void()> &undo)
+{
+    if (!undo)
+        return;
+    UndoEntry e;
+    e.type = UndoEntry::Callback;
+    e.callback = undo;
+    pushUndo(e);
+}
+
 void MonitorGraphicsView::undoOne(const UndoEntry &entry)
 {
+    if (entry.type == UndoEntry::Callback)
+    {
+        entry.callback();
+        return;
+    }
     if (entry.type == UndoEntry::RigEdit)
     {
         if (m_rigRestorer)

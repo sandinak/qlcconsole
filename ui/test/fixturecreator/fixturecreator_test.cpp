@@ -30,15 +30,26 @@
 #include <QTimer>
 #include <QMessageBox>
 #include <QTreeWidgetItemIterator>
+#include <QLabel>
+#include <QDir>
+#include <QTreeWidget>
 
 #include "../../../engine/test/common/stdprelude.h"
 #define private public
 #define protected public
 #include "addfixture.h"
 #include "fixturetreewidget.h"
+#include "fixturemanager.h"
 #undef protected
 #undef private
 #include "fixturecreator.h"
+#include "iopluginstub.h"
+#include "ioplugincache.h"
+#include "patchplanner.h"
+#include "outputpatch.h"
+#include "showstatus.h"
+#include "showstatusdialog.h"
+#include "monitor.h"
 #include "apputil.h"
 #include "qlcfixturedefcache.h"
 #include "qlcfixturemode.h"
@@ -452,6 +463,378 @@ void FixtureCreator_Test::aSingleAddWithATakenNameIsNumbered()
     QCOMPARE(m_doc->fixture(made.first())->name(), QString("AT1-3z #2"));
     QCOMPARE(existing->name(), QString("AT1-3z"));
     QVERIFY(m_doc->duplicateFixtureNames().isEmpty());
+}
+
+/*****************************************************************************
+ * WLED by its own API
+ *****************************************************************************/
+
+namespace
+{
+/* Test WLEDs sit on loopback addresses: nothing leaves this computer. */
+const char *const WledIp = "127.0.0.100";
+
+/* Answers the next message box (or none), keeping what it said. */
+void answerBoxes(QStringList *said)
+{
+    auto poll = std::make_shared<std::function<void()>>();
+    auto left = std::make_shared<int>(200);
+    *poll = [said, poll, left]() {
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        {
+            *said << box->text();
+            box->accept();
+            return;
+        }
+        if (--*left > 0)
+            QTimer::singleShot(10, *poll);
+    };
+    QTimer::singleShot(0, *poll);
+}
+
+void pickWled(AddFixture *dlg, const QString &ip, int amount = 1)
+{
+    dlg->m_connectionCombo->setCurrentIndex(dlg->m_connectionCombo->findData(
+        AddFixture::connectionKey(Fixture::Network, Fixture::WledTransport)));
+    dlg->m_ipEdit->setText(ip);
+    if (amount > 1)
+        dlg->m_amountSpin->setValue(amount);
+}
+} // namespace
+
+void FixtureCreator_Test::officeShow()
+{
+    m_doc->ioPluginCache()->load(QDir(TEST_PLUGINS_DIR, "*wled*"));
+    m_doc->ioPluginCache()->load(QDir(TEST_STUB_DIR, "*iopluginstub*"));
+    QLCIOPlugin *wled = m_doc->ioPluginCache()->plugin("WLED");
+    QVERIFY2(wled != nullptr, "the WLED output plugin did not load");
+    // It never gets round to asking or sending in a test.
+    QVERIFY(QMetaObject::invokeMethod(wled, "setSendInterval", Q_ARG(int, 3600000)));
+    QVERIFY(QMetaObject::invokeMethod(wled, "setInfoInterval", Q_ARG(int, 3600000)));
+    QLCIOPlugin *stub = nullptr;
+    foreach (QLCIOPlugin *p, m_doc->ioPluginCache()->plugins())
+        if (p != wled)
+            stub = p;
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    static_cast<IOPluginStub *>(stub)->m_nameOverride = "ArtNet";
+
+    InputOutputMap *io = m_doc->inputOutputMap();
+    QVERIFY(io->setOutputPatch(0, "ArtNet", QString(), 0));
+    io->outputPatch(0)->setPluginParameter("outputIP", "172.18.2.10");
+    io->setUniverseName(0, "U01-Office");
+    Fixture *bar = new Fixture(m_doc);
+    bar->setName("Office Bar");
+    bar->setChannels(60);
+    bar->setUniverse(0);
+    bar->setAddress(0);
+    QVERIFY(m_doc->addFixture(bar));
+}
+
+void FixtureCreator_Test::aWledGetsAUniverseOfItsOwn()
+{
+    officeShow();
+    InputOutputMap *io = m_doc->inputOutputMap();
+    const quint32 barId = m_doc->fixtureForAddress(0);
+
+    bool fieldsOff = false, offBefore = true;
+    QString said;
+    driveAddDialog([&](AddFixture *dlg) {
+        offBefore = !dlg->m_universeCombo->isEnabled() || !dlg->m_ownUniverseLabel->isHidden();
+        dlg->m_nameEdit->setText("WLED Test");
+        dlg->slotNameEdited("WLED Test");
+        pickWled(dlg, WledIp);
+        fieldsOff = !dlg->m_universeCombo->isEnabled() && !dlg->m_addressSpin->isEnabled()
+                    && !dlg->m_gapSpin->isEnabled();
+        said = dlg->m_ownUniverseLabel->isHidden() ? QString() : dlg->m_ownUniverseLabel->text();
+    });
+    // Opened in the Office universe, as a right-click there does.
+    const QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, false, 0, nullptr);
+    QVERIFY2(!offBefore, "DMX picked: the universe and address are asked as ever");
+    QVERIFY(fieldsOff);
+    QCOMPARE(said, QString("Gets a universe of its own, sent to its IP."));
+
+    QCOMPARE(made.size(), 1);
+    Fixture *fx = m_doc->fixture(made.first());
+    QVERIFY(fx->isPatched());
+    QVERIFY2(fx->universe() != 0, "a WLED must never land on the Art-Net universe");
+    OutputPatch *op = io->outputPatch(fx->universe());
+    QVERIFY(op != nullptr);
+    QCOMPARE(op->pluginName(), QString("WLED"));
+    QCOMPARE(op->getPluginParameters().value("outputIP").toString(), QString(WledIp));
+    QCOMPARE(op->getPluginParameters().value("wledAddress").toInt(), int(fx->address()) + 1);
+    QCOMPARE(op->getPluginParameters().value("wledChannels").toInt(), int(fx->channels()));
+    QCOMPARE(PatchPlanner::wledRoute(m_doc, fx), PatchPlanner::WledRouted);
+
+    // The Office universe is untouched: its output, its name, its bar.
+    QCOMPARE(io->outputPatch(0)->pluginName(), QString("ArtNet"));
+    QCOMPARE(io->outputPatch(0)->getPluginParameters().value("outputIP").toString(), QString("172.18.2.10"));
+    QCOMPARE(io->getUniverseNameByID(0), QString("U01-Office"));
+    QCOMPARE(m_doc->fixture(barId)->universe(), 0u);
+    QCOMPARE(m_doc->fixture(barId)->address(), 0u);
+}
+
+void FixtureCreator_Test::aBatchOfWledsGetsAUniverseEach()
+{
+    officeShow();
+    InputOutputMap *io = m_doc->inputOutputMap();
+    driveAddDialog([](AddFixture *dlg) { pickWled(dlg, WledIp, 4); });
+    const QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, false, 0, nullptr);
+    QCOMPARE(made.size(), 4);
+    QSet<quint32> universes;
+    QStringList sentTo;
+    foreach (quint32 id, made)
+    {
+        Fixture *fx = m_doc->fixture(id);
+        QVERIFY(fx->isPatched());
+        QVERIFY(fx->universe() != 0);
+        universes.insert(fx->universe());
+        OutputPatch *op = io->outputPatch(fx->universe());
+        QVERIFY(op != nullptr && op->pluginName() == "WLED");
+        QCOMPARE(op->getPluginParameters().value("outputIP").toString(), fx->ipAddress());
+        sentTo << fx->ipAddress();
+    }
+    QCOMPARE(universes.size(), 4);
+    sentTo.sort();
+    QCOMPARE(sentTo, QStringList({ "127.0.0.100", "127.0.0.101", "127.0.0.102", "127.0.0.103" }));
+    QCOMPARE(io->outputPatch(0)->pluginName(), QString("ArtNet"));
+}
+
+void FixtureCreator_Test::aWledReusesTheUniverseSentToItsIp()
+{
+    officeShow();
+    InputOutputMap *io = m_doc->inputOutputMap();
+    driveAddDialog([](AddFixture *dlg) { pickWled(dlg, WledIp); });
+    QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, false, 0, nullptr);
+    QCOMPARE(made.size(), 1);
+    const quint32 uni = m_doc->fixture(made.first())->universe();
+    const int count = int(io->universesCount());
+    QVERIFY(m_doc->deleteFixture(made.first()));
+
+    // Added again (another mode, say): back on the universe already sent there.
+    driveAddDialog([](AddFixture *dlg) { pickWled(dlg, WledIp); });
+    made = FixtureCreator::addFromDialog(nullptr, m_doc, false, 0, nullptr);
+    QCOMPARE(made.size(), 1);
+    QCOMPARE(m_doc->fixture(made.first())->universe(), uni);
+    QCOMPARE(int(io->universesCount()), count);
+}
+
+void FixtureCreator_Test::aWledNeverFollowsItsIpOntoArtNet()
+{
+    officeShow();
+    // Left by the old Add Fixture on the Office universe, at the same IP.
+    Fixture *old = new Fixture(m_doc);
+    old->setName("WLED Test");
+    old->setChannels(15);
+    old->setUniverse(0);
+    old->setAddress(60);
+    old->setConnection(Fixture::Network);
+    old->setTransport(Fixture::WledTransport);
+    old->setIPAddress(WledIp);
+    QVERIFY(m_doc->addFixture(old));
+
+    driveAddDialog([](AddFixture *dlg) { pickWled(dlg, WledIp); });
+    const QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, false, 0, nullptr);
+    QCOMPARE(made.size(), 1);
+    QVERIFY(m_doc->fixture(made.first())->universe() != 0);
+    QCOMPARE(PatchPlanner::wledRoute(m_doc, m_doc->fixture(made.first())), PatchPlanner::WledRouted);
+    QCOMPARE(old->universe(), 0u);                      // left for the finding to say
+    QCOMPARE(m_doc->inputOutputMap()->outputPatch(0)->pluginName(), QString("ArtNet"));
+}
+
+void FixtureCreator_Test::addingAWledIsOneUndo()
+{
+    officeShow();
+    InputOutputMap *io = m_doc->inputOutputMap();
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, m_doc);
+    const int universes = int(io->universesCount());
+    const int fixtures = m_doc->fixtures().size();
+
+    driveAddDialog([](AddFixture *dlg) { pickWled(dlg, WledIp); });
+    const QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, false, 0, nullptr);
+    QCOMPARE(made.size(), 1);
+    const quint32 uni = m_doc->fixture(made.first())->universe();
+    QVERIFY(io->outputPatch(uni) != nullptr);
+    QVERIFY(mon->canUndo());
+
+    mon->undo();
+    QVERIFY(m_doc->fixture(made.first()) == nullptr);
+    QCOMPARE(m_doc->fixtures().size(), fixtures);
+    QCOMPARE(int(io->universesCount()), universes);
+    if (uni < io->universesCount())
+        QVERIFY(io->outputPatch(uni) == nullptr);       // a free universe, free again
+    QCOMPARE(io->outputPatch(0)->pluginName(), QString("ArtNet"));
+    delete mon;
+}
+
+void FixtureCreator_Test::aWledOnAnArtNetUniverseIsAFindingWithAFix()
+{
+    officeShow();
+    InputOutputMap *io = m_doc->inputOutputMap();
+    // As the old Add Fixture left it: on the Office universe at 61.
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("WLED Test");
+    fx->setChannels(15);
+    fx->setUniverse(0);
+    fx->setAddress(60);
+    fx->setConnection(Fixture::Network);
+    fx->setTransport(Fixture::WledTransport);
+    fx->setIPAddress(WledIp);
+    QVERIFY(m_doc->addFixture(fx));
+    const quint32 fid = fx->id();
+
+    QString detail;
+    QCOMPARE(PatchPlanner::wledRoute(m_doc, fx, &detail), PatchPlanner::WledOtherOutput);
+    QCOMPARE(detail, QString("ArtNet"));
+
+    AppUtil::updateFixtureReadiness(m_doc);
+    ShowStatus::Entry found;
+    foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+        if (e.key == "wled.route")
+            found = e;
+    QCOMPARE(found.severity, ShowStatus::Warning);
+    QCOMPARE(found.items, QStringList({ "WLED Test is on U01-Office, which goes out as Art-Net: "
+                                        "nothing reaches the WLED" }));
+    QCOMPARE(found.itemData, QVariantList() << fid);
+
+    // The fix: a universe of its own; the Office universe as it was.
+    PatchPlanner planner(m_doc);
+    QStringList problems;
+    std::function<void()> undo;
+    QCOMPARE(planner.routeWled({ fid }, &problems, &undo), 1);
+    QVERIFY2(problems.isEmpty(), qPrintable(problems.join("; ")));
+    QVERIFY(fx->universe() != 0);
+    QCOMPARE(PatchPlanner::wledRoute(m_doc, fx), PatchPlanner::WledRouted);
+    QCOMPARE(io->outputPatch(fx->universe())->pluginName(), QString("WLED"));
+    QCOMPARE(io->outputPatch(0)->pluginName(), QString("ArtNet"));
+    QCOMPARE(io->outputPatch(0)->getPluginParameters().value("outputIP").toString(), QString("172.18.2.10"));
+    QCOMPARE(m_doc->fixture(m_doc->fixtureForAddress(0))->name(), QString("Office Bar"));
+    AppUtil::updateFixtureReadiness(m_doc);
+    foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+        QVERIFY2(e.key != "wled.route", "fixed, the finding goes");
+
+    // Nothing more to do the second time.
+    QCOMPARE(planner.routeWled({ fid }), 0);
+
+    // Undo: back on the Office universe at 61, as it was.
+    const quint32 madeUni = fx->universe();
+    undo();
+    QCOMPARE(fx->universe(), 0u);
+    QCOMPARE(fx->address(), 60u);
+    QVERIFY(madeUni >= io->universesCount() || io->outputPatch(madeUni) == nullptr);
+    QCOMPARE(PatchPlanner::wledRoute(m_doc, fx), PatchPlanner::WledOtherOutput);
+
+    // The footer's own action does the same, through the app's helper.
+    QCOMPARE(FixtureCreator::routeWled(nullptr, m_doc, { fid }, false), 1);
+    QCOMPARE(PatchPlanner::wledRoute(m_doc, fx), PatchPlanner::WledRouted);
+    ShowStatus::instance()->clearStatus("wled.route");
+}
+
+void FixtureCreator_Test::propertiesMakingItAWledMovesIt()
+{
+    officeShow();
+    InputOutputMap *io = m_doc->inputOutputMap();
+    // A plain dimmer on the Office universe at 61, then made a WLED by its API.
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("Corner");
+    fx->setChannels(1);
+    fx->setUniverse(0);
+    fx->setAddress(60);
+    QVERIFY(m_doc->addFixture(fx));
+    const quint32 fid = fx->id();
+
+    bool fieldsOff = false;
+    driveAddDialog([&fieldsOff](AddFixture *dlg) {
+        pickWled(dlg, WledIp);
+        fieldsOff = !dlg->m_universeCombo->isEnabled() && !dlg->m_addressSpin->isEnabled();
+    });
+    QStringList said;
+    answerBoxes(&said);
+    QVERIFY(FixtureManager::editDefinitionAndMode(nullptr, m_doc, fid));
+    QVERIFY(fieldsOff);
+    QCOMPARE(fx->transport(), Fixture::WledTransport);
+    QVERIFY(fx->isPatched());
+    QVERIFY(fx->universe() != 0);
+    QCOMPARE(PatchPlanner::wledRoute(m_doc, fx), PatchPlanner::WledRouted);
+    QCOMPARE(io->outputPatch(0)->pluginName(), QString("ArtNet"));
+    QVERIFY2(said.isEmpty(), qPrintable(said.join(" | ")));
+}
+
+void FixtureCreator_Test::wledShotsForReview()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set: no shots");
+    QDir().mkpath(dir);
+    officeShow();
+    const QList<QSize> sizes = { QSize(760, 560), QSize(960, 680), QSize(1280, 860) };
+    auto grab = [&dir, &sizes](QWidget *w, const QString &name) {
+        for (const QSize &sz : sizes)
+        {
+            w->resize(sz);
+            QApplication::processEvents();
+            w->grab().save(QStringLiteral("%1/%2-%3x%4.png").arg(dir, name).arg(sz.width()).arg(sz.height()));
+        }
+    };
+
+    // Add Fixture, WLED picked: before (as main left the fields) and after.
+    {
+        AddFixture dlg(nullptr, m_doc);
+        dlg.preselectUniverse(0);
+        dlg.m_nameEdit->setText("WLED Test");
+        dlg.slotNameEdited("WLED Test");
+        pickWled(&dlg, WledIp);
+        dlg.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&dlg));
+        grab(&dlg, "after-addfixture-wled");
+        dlg.m_universeCombo->setEnabled(true);
+        dlg.m_addressSpin->setEnabled(true);
+        dlg.m_diptoolButton->setEnabled(true);
+        dlg.m_gapSpin->setEnabled(true);
+        dlg.m_gapLabel->setEnabled(true);
+        dlg.m_universeLabel->setEnabled(true);
+        dlg.m_addressLabel->setEnabled(true);
+        dlg.m_ownUniverseLabel->hide();
+        grab(&dlg, "before-addfixture-wled");
+    }
+
+    // The finding, on a show like the one that found it.
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("WLED Test");
+    fx->setChannels(15);
+    fx->setUniverse(0);
+    fx->setAddress(60);
+    fx->setConnection(Fixture::Network);
+    fx->setTransport(Fixture::WledTransport);
+    fx->setIPAddress(WledIp);
+    QVERIFY(m_doc->addFixture(fx));
+    ShowStatus *status = ShowStatus::instance();
+    status->setAction("wled.route", "Give It Its Own Universe", [](QWidget *, const QVariantList &) {});
+    AppUtil::updateFixtureReadiness(m_doc);
+    const ShowStatus::Entry found = [status]() {
+        foreach (const ShowStatus::Entry &e, status->allEntries())
+            if (e.key == "wled.route")
+                return e;
+        return ShowStatus::Entry();
+    }();
+    {
+        ShowStatusDialog dlg;
+        dlg.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&dlg));
+        const QList<QTreeWidgetItem *> rows = dlg.tree()->findItems(found.items.value(0),
+                                                                   Qt::MatchExactly | Qt::MatchRecursive);
+        QVERIFY(!rows.isEmpty());
+        rows.first()->setSelected(true);
+        dlg.tree()->setCurrentItem(rows.first());
+        grab(&dlg, "after-finding");
+    }
+    status->clearStatus("wled.route");
+    {
+        ShowStatusDialog dlg;
+        dlg.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&dlg));
+        grab(&dlg, "before-finding");
+    }
 }
 
 QTEST_MAIN(FixtureCreator_Test)

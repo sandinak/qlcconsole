@@ -235,6 +235,9 @@ public:
     void restoreRig(const QByteArray &snap);
     /** One undo step back to @p before, if the rig is not as it was. */
     void pushRigUndo(const QByteArray &before);
+    /** One undo step that @p undo puts back (fixtures added with their
+     *  universes, say: more than a rig snapshot holds). */
+    void pushUndoCallback(const std::function<void()> &undo);
     /** Undo the rig's last change -- a move, a dialog's edit, a patch. */
     void undo();
     /** Something to undo on the rig (Edit ▸ Undo, Q81). */

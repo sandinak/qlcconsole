@@ -39,6 +39,7 @@
 
 #include "addresstool.h"
 #include <QGridLayout>
+#include <QVBoxLayout>
 #include "addfixture.h"
 #include "apputil.h"
 #include "doc.h"
@@ -95,8 +96,37 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
         m_ipRangeLabel->hide();
         pg->addWidget(m_ipRangeLabel, row + 2, 2);
     }
+    /* WLED by its own API: a universe of its own, sent to its IP -- said
+       where the universe and address are, which don't apply. */
+    if (QGridLayout *pg = qobject_cast<QGridLayout *>(m_propertiesGroup->layout()))
+    {
+        const int at = pg->indexOf(m_addrErrorLabel);
+        if (at >= 0)
+        {
+            int row, col, rowSpan, colSpan;
+            pg->getItemPosition(at, &row, &col, &rowSpan, &colSpan);
+            delete pg->takeAt(at);
+            QVBoxLayout *box = new QVBoxLayout();
+            box->setContentsMargins(0, 0, 0, 0);
+            box->setSpacing(0);
+            m_ownUniverseLabel = new QLabel(tr("Gets a universe of its own, sent to its IP."),
+                                            m_propertiesGroup);
+            m_ownUniverseLabel->setObjectName(QStringLiteral("m_ownUniverseLabel"));
+            m_ownUniverseLabel->setStyleSheet("QLabel { color: #909090; }");
+            m_ownUniverseLabel->setWordWrap(true);
+            m_ownUniverseLabel->hide();
+            box->addWidget(m_ownUniverseLabel);
+            box->addWidget(m_addrErrorLabel);
+            pg->addLayout(box, row, col, rowSpan, colSpan);
+        }
+    }
     connect(m_connectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            [this](int) { m_ipEdit->setEnabled(connection() == Fixture::Network); updateIpRange(); });
+            [this](int) {
+                m_ipEdit->setEnabled(connection() == Fixture::Network);
+                updateMaximumAmount();
+                updateIpRange();
+                updateAddressFields();
+            });
     connect(m_ipEdit, &QLineEdit::textChanged, this, [this]() { updateIpRange(); });
 
     QAction* action = new QAction(this);
@@ -256,6 +286,29 @@ quint32 AddFixture::channels() const
     return m_channelsValue;
 }
 
+bool AddFixture::ownUniverse() const
+{
+    return !m_inventoryMode && connection() == Fixture::Network
+           && transport() == Fixture::WledTransport;
+}
+
+void AddFixture::updateAddressFields()
+{
+    QTreeWidgetItem *item = m_tree->currentItem();
+    const bool picked = item != NULL && item->parent() != NULL;
+    const bool own = ownUniverse();
+    m_universeCombo->setEnabled(picked && !own);
+    m_addressSpin->setEnabled(picked && !own);
+    m_diptoolButton->setEnabled(!own);
+    m_gapSpin->setEnabled(picked && !own);
+    m_gapLabel->setEnabled(!own);
+    m_universeLabel->setEnabled(!own);
+    m_addressLabel->setEnabled(!own);
+    if (m_ownUniverseLabel != NULL)
+        m_ownUniverseLabel->setVisible(own);
+    checkOverlapping();
+}
+
 void AddFixture::setInventoryMode(bool inventory)
 {
     m_inventoryMode = inventory;
@@ -280,6 +333,7 @@ void AddFixture::setInventoryMode(bool inventory)
         m_invalidAddressFlag = false;
     }
     updateMaximumAmount();
+    updateAddressFields();
 }
 
 int AddFixture::connectionKey(Fixture::Connection c, Fixture::Transport t)
@@ -531,8 +585,9 @@ void AddFixture::updateMaximumAmount()
        universe has nothing to do with how many can be added. That limit,
        read off the hidden address, held a 165-channel fixture to ONE ("why
        can't I add more than 1 fixture here?"). */
-    if (m_inventoryMode)
+    if (m_inventoryMode || ownUniverse())
     {
+        // A WLED by its API takes a universe each: the address doesn't limit it.
         m_amountSpin->setRange(1, 999);
         return;
     }
@@ -796,6 +851,7 @@ void AddFixture::slotSelectionChanged()
         m_nameErrorLabel->hide();
 
         m_buttonBox->setStandardButtons(QDialogButtonBox::Cancel);
+        updateAddressFields();
 
         return;
     }
@@ -898,6 +954,7 @@ void AddFixture::slotSelectionChanged()
                                     QDialogButtonBox::Cancel);
 
     checkNameConflict();
+    updateAddressFields();
 }
 
 void AddFixture::slotTreeDoubleClicked(QTreeWidgetItem* item)
@@ -917,9 +974,10 @@ void AddFixture::slotDiptoolButtonClicked()
 
 void AddFixture::checkOverlapping()
 {
-    if (m_inventoryMode)
+    if (m_inventoryMode || ownUniverse())
     {
-        // Staged fixtures hold no address, so there is nothing to overlap.
+        // Staged fixtures hold no address, so there is nothing to overlap;
+        // a WLED by its API is placed on a universe of its own.
         m_addrErrorLabel->hide();
         m_invalidAddressFlag = false;
         return;

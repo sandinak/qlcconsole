@@ -140,6 +140,7 @@
 #undef private
 
 #include "monitor_test.h"
+#include "wledfixture.h"
 #include "contextmenus.h"
 #include "fixturepower.h"
 #include "powerlimiter.h"
@@ -2682,6 +2683,117 @@ void Monitor_Test::aDoubleClickEditsTheWholeSelection()
                     Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(rig.gv->viewport(), &dbl);
     QCOMPARE(selectedThen, 2);
+}
+
+/* "the fixture properties dialog treats wled as a mounted fixture with
+   directional attributes.. not sure that is how that should work for
+   strings connected to it" -- a WLED string has no aim, tilt in yoke, beam,
+   masking, orientation, face or facing diagram; its stored values stay. A
+   mover (pan and tilt) keeps every one. */
+void Monitor_Test::aWledStringIsNotAimedInFixtureProperties()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(8000, 8000, 0)));
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    auto makeDef = [](const QString &maker, const QString &model, bool mover) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer(maker); def->setModel(model);
+        def->setType(mover ? QLCFixtureDef::MovingHead : QLCFixtureDef::LEDBarPixels);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("Mode");
+        QLCChannel *dim = new QLCChannel();
+        dim->setName("Dimmer"); dim->setPreset(QLCChannel::IntensityMasterDimmer);
+        def->addChannel(dim); mode->insertChannel(dim, 0);
+        if (mover)
+        {
+            QLCChannel *pan = new QLCChannel();
+            pan->setName("Pan"); pan->setPreset(QLCChannel::PositionPan);
+            QLCChannel *tilt = new QLCChannel();
+            tilt->setName("Tilt"); tilt->setPreset(QLCChannel::PositionTilt);
+            def->addChannel(pan); mode->insertChannel(pan, 1);
+            def->addChannel(tilt); mode->insertChannel(tilt, 2);
+        }
+        QLCPhysical ph;
+        ph.setLensDegreesMin(15); ph.setLensDegreesMax(35);
+        mode->setPhysical(ph);
+        def->addMode(mode);
+        return std::make_pair(def, mode);
+    };
+    struct Seen { bool lens = false, preview = false, orientation = false, face = false,
+                  panOffset = false, aim = false, connection = false, pixelPath = false,
+                  leds = false; };
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    auto open = [&](const QString &shot) {
+        Seen seen;
+        driveDialog([&](QWidget *dlg) {
+            auto shown = [dlg](const char *name) {
+                QWidget *w = dlg->findChild<QWidget *>(name);
+                return w != nullptr && w->isVisibleTo(dlg);
+            };
+            seen.lens = shown("fixtureLensSetTo");
+            seen.preview = shown("fixtureFacingPreview");
+            seen.orientation = shown("fixtureOrientation");
+            seen.face = shown("fixtureFace");
+            seen.connection = shown("fixtureConnection");
+            for (QLabel *l : dlg->findChildren<QLabel *>())
+            {
+                if (!l->isVisibleTo(dlg))
+                    continue;
+                seen.panOffset = seen.panOffset || l->text() == "Pan offset (cal):";
+                seen.pixelPath = seen.pixelPath || l->text() == "Pixel path:";
+                seen.leds = seen.leds || l->text() == "Light:";
+                seen.aim = seen.aim || l->text().startsWith("Aim") || l->text().startsWith("Points");
+            }
+            if (!shots.isEmpty())
+            {
+                QDir().mkpath(shots);
+                for (const QSize &sz : { QSize(560, 640), QSize(720, 820), QSize(900, 1000) })
+                {
+                    dlg->resize(sz);
+                    QApplication::processEvents();
+                    dlg->grab().save(QStringLiteral("%1/%2-%3x%4.png").arg(shots, shot)
+                                         .arg(sz.width()).arg(sz.height()));
+                }
+            }
+            return true;
+        }, false);
+        rig.mon->showFixtureItemEditor(rig.fxi->id());
+        return seen;
+    };
+
+    // A WLED string, sent by WLED's own API, a lens angle once set on it.
+    auto wled = makeDef("WLED", "Test String", false);
+    rig.fxi->setFixtureDefinition(wled.first, wled.second);
+    rig.fxi->setConnection(Fixture::Network);
+    rig.fxi->setTransport(Fixture::WledTransport);
+    rig.fxi->setIPAddress("127.0.0.100");
+    FixtureRigProps rp = props->fixtureRigProps(rig.fxi->id());
+    rp.lensDeg = 22.0f;
+    props->setFixtureRigProps(rig.fxi->id(), rp);
+    QVERIFY(WledFixture::isPixelString(rig.fxi));
+    Seen s = open("after-properties-wled");
+    QVERIFY(!s.lens && !s.preview && !s.orientation && !s.face && !s.panOffset && !s.aim);
+    QVERIFY(s.connection && s.pixelPath && s.leds);     // what a string has
+    QCOMPARE(props->fixtureRigProps(rig.fxi->id()).lensDeg, 22.0f);   // kept, only hidden
+
+    // Its Art-Net cousin from another maker is a fixed light, aimed as one.
+    auto par = makeDef("Test", "Pixel Par", false);
+    rig.fxi->setFixtureDefinition(par.first, par.second);
+    rig.fxi->setConnection(Fixture::Dmx);
+    rig.fxi->setTransport(Fixture::ArtNetTransport);
+    QVERIFY(!WledFixture::isPixelString(rig.fxi));
+    s = open("before-properties-wled-as-par");
+    QVERIFY(s.lens && s.aim);
+
+    // A mover keeps all of it -- and a WLED driving one is aimed again.
+    auto mover = makeDef("WLED", "Mover", true);
+    rig.fxi->setFixtureDefinition(mover.first, mover.second);
+    rig.fxi->setConnection(Fixture::Network);
+    rig.fxi->setTransport(Fixture::WledTransport);
+    QVERIFY(!WledFixture::isPixelString(rig.fxi));
+    s = open("properties-mover");
+    QVERIFY(s.orientation && s.panOffset && s.aim);
 }
 
 /* "Fixture Properties edits every selected fixture: double-clicking one of
