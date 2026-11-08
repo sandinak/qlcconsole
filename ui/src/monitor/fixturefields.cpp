@@ -34,6 +34,7 @@
 #include "colourswatchbutton.h"
 #include "monitorproperties.h"
 #include "fixturefields.h"
+#include "wledfixture.h"
 #include "rigowner.h"
 #include "fixturegroup.h"
 #include "apputil.h"
@@ -783,7 +784,10 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     comboMixed(m_orientation, differs([props, rp](quint32 f) {
         return props->fixtureRigProps(f).mountingType == rp.mountingType; }));
     m_orientation->blockSignals(false);
-    row(m_orientation, !linear || onTower || pansOrTilts);
+    /* A string of LEDs run by a WLED is not hung and aimed (WledFixture::
+       isPixelString()): no Orientation, Face or Tilt, values kept. */
+    const bool string = WledFixture::isPixelString(fx);
+    row(m_orientation, (!linear || onTower || pansOrTilts) && !string);
 
     // Face, Angle
     /* A FIXED light (a par, a laser: no pan or tilt, not a strip) has a Face
@@ -804,7 +808,7 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     if (differs([shownFace, face0](quint32 f) { return shownFace(f) == face0; }))
         comboMixed(m_face, true);
     m_face->blockSignals(false);
-    row(m_face, (linear || frame || fixedUnit) && !onTower);
+    row(m_face, (linear || frame || fixedUnit) && !onTower && !string);
 
     m_angle->blockSignals(true);
     spinMixed(m_angle, differs([props, rp](quint32 f) {
@@ -830,7 +834,7 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     m_tilt->blockSignals(false);
     /* A fixed light tips in its yoke (Tilt in yoke, in Aim & Mount), not by
        rolling its body; the row stays only to clear a roll it already has. */
-    row(m_tilt, !fixedUnit || !qFuzzyIsNull(rp.studioTilt));
+    row(m_tilt, (!fixedUnit || !qFuzzyIsNull(rp.studioTilt)) && !string);
     showPixelRows(m_shown);
 
     // Its place on a tower: the one shown (a place is one fixture's).
@@ -867,7 +871,8 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     QList<const Fixture *> fixtures;
     foreach (quint32 fid, m_fids)
         fixtures << doc->fixture(fid);
-    const bool lit = LightControls::relevant(fx);
+    // A WLED string always has its LEDs to say (how many it drives).
+    const bool lit = LightControls::relevant(fx) || WledFixture::isPixelString(fx);
     if (lit)
         m_light->load(doc, fixtures);
     row(m_light->lightRow(), lit);
@@ -1161,7 +1166,8 @@ void FixtureFields::showPixelRows(quint32 fid)
     MonitorProperties *props = m_monitor->m_props;
     const FixtureRigProps rp = props->fixtureRigProps(fid);
     // A string of LEDs (heads, or a WLED device's LEDs), or one already laid out.
-    const bool pixels = PixelPathDecor::ledCount(doc, fid) > 1 || rp.pixelPath != PixelPath::None;
+    const bool pixels = PixelPathDecor::ledCount(doc, fid) > 1 || rp.pixelPath != PixelPath::None
+                        || WledFixture::isPixelString(doc->fixture(fid));
     if (!pixels)
         return;
     const double toDisp = FeetInchesSpinBox::valuesInFeet() ? 3.28084 : 1.0;   // the fields' numbers

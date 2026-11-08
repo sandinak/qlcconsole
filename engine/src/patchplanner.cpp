@@ -26,6 +26,7 @@
 #include <QRegularExpression>
 #include <algorithm>
 #include <climits>
+#include <memory>
 
 #include "naturalcompare.h"
 #include "patchplanner.h"
@@ -35,6 +36,7 @@
 #include "networktopology.h"
 #include "inputoutputmap.h"
 #include "outputpatch.h"
+#include "patchundo.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "fixture.h"
@@ -100,10 +102,47 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
         if (fx->connection() == Fixture::Network)
         {
             networkUnis.insert(uni);
-            if (!fx->ipAddress().isEmpty() && !uniForIp.contains(fx->ipAddress()))
+            // A WLED driven by its own API is sent to through the WLED
+            // output, not Art-Net: it has its own map (below).
+            if (fx->transport() != Fixture::WledTransport
+                && !fx->ipAddress().isEmpty() && !uniForIp.contains(fx->ipAddress()))
                 uniForIp.insert(fx->ipAddress(), uni);
         }
     }
+
+    /* WLED by its own API: the universe already sent through the WLED output
+       to that IP, and carrying nothing else -- never one that goes out as
+       Art-Net or sACN, which the WLED would never hear. */
+    QHash<QString, quint32> wledUniForIp;
+    {
+        InputOutputMap *io = m_doc->inputOutputMap();
+        QHash<quint32, QSet<QString> > wledIpsOn;   // universe -> WLED IPs on it
+        QSet<quint32> otherOn;                      // universes carrying anything else
+        foreach (Fixture *fx, m_doc->fixtures())
+        {
+            if (fx == NULL || !fx->isPatched())
+                continue;
+            if (fx->connection() == Fixture::Network && fx->transport() == Fixture::WledTransport)
+                wledIpsOn[fx->universe()].insert(fx->ipAddress());
+            else
+                otherOn.insert(fx->universe());
+        }
+        for (quint32 u = 0; u < io->universesCount(); u++)
+        {
+            OutputPatch *op = io->outputPatch(u);
+            if (op == NULL || op->pluginName() != QLatin1String("WLED") || otherOn.contains(u))
+                continue;
+            const QString ip = op->getPluginParameters().value(QStringLiteral("outputIP")).toString();
+            if (ip.isEmpty() || wledUniForIp.contains(ip))
+                continue;
+            const QSet<QString> on = wledIpsOn.value(u);
+            if (on.isEmpty() || (on.size() == 1 && on.contains(ip)))
+                wledUniForIp.insert(ip, u);
+        }
+    }
+    auto ipMapFor = [&uniForIp, &wledUniForIp](const Fixture *f) -> QHash<QString, quint32> & {
+        return f->transport() == Fixture::WledTransport ? wledUniForIp : uniForIp;
+    };
 
     quint32 nextNew = m_doc->inputOutputMap()->universesCount();
     const quint32 existing = nextNew;
@@ -152,11 +191,13 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
         {
             if (f->connection() != Fixture::Network)
                 continue;
+            const QString key = (f->transport() == Fixture::WledTransport ? QStringLiteral("wled:")
+                                                                           : QString()) + f->ipAddress();
             if (f->ipAddress().isEmpty())
                 ++needed;
-            else if (!uniForIp.contains(f->ipAddress()) && !newIps.contains(f->ipAddress()))
+            else if (!ipMapFor(f).contains(f->ipAddress()) && !newIps.contains(key))
             {
-                newIps.insert(f->ipAddress());
+                newIps.insert(key);
                 ++needed;
             }
         }
@@ -257,9 +298,12 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
         if (fx->connection() == Fixture::Network)
         {
             const QString ip = fx->ipAddress();
-            if (!ip.isEmpty() && uniForIp.contains(ip))
+            QHash<QString, quint32> &forIp = ipMapFor(fx);
+            if (!ip.isEmpty() && forIp.contains(ip))
             {
-                const quint32 uni = uniForIp.value(ip);
+                const quint32 uni = forIp.value(ip);
+                if (!used.contains(uni))
+                    used[uni] = QBitArray(UNI_SIZE);
                 const int addr = firstFree(used[uni], n);
                 if (addr >= 0)
                 {
@@ -277,7 +321,7 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
                 mark(used[uni], 0, n);
                 networkUnis.insert(uni);
                 if (!ip.isEmpty())
-                    uniForIp.insert(ip, uni);
+                    forIp.insert(ip, uni);
                 a.universe = uni;
                 a.address = 0;
                 a.newUniverse = (a.universe >= existing);
@@ -934,6 +978,205 @@ int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *probl
             io->setUniverseName(int(a.universe), want);
     }
     return todo.size();
+}
+
+namespace
+{
+bool isWledByApi(const Fixture *fx)
+{
+    return fx != NULL && fx->connection() == Fixture::Network
+           && fx->transport() == Fixture::WledTransport && !fx->ipAddress().isEmpty();
+}
+
+/* Everything patched on @p fx's universe is a WLED by its API at its IP:
+   the universe is that WLED's own. */
+bool ownsUniverse(Doc *doc, const Fixture *fx)
+{
+    foreach (Fixture *other, doc->fixtures())
+    {
+        if (other == NULL || !other->isPatched() || other->universe() != fx->universe())
+            continue;
+        if (!isWledByApi(other) || other->ipAddress() != fx->ipAddress())
+            return false;
+    }
+    return true;
+}
+}
+
+PatchPlanner::WledRoute PatchPlanner::wledRoute(Doc *doc, const Fixture *fx, QString *detail)
+{
+    if (doc == NULL || !isWledByApi(fx))
+        return WledRouted;
+    if (!fx->isPatched())
+        return WledNotPatched;
+
+    InputOutputMap *io = doc->inputOutputMap();
+    const int count = io->outputPatchesCount(fx->universe());
+    if (count == 0 || io->outputPatch(fx->universe()) == NULL)
+        return WledNoOutput;
+
+    OutputPatch *wled = NULL;
+    QString otherPlugin, otherIp;
+    for (int i = 0; i < count; i++)
+    {
+        OutputPatch *op = io->outputPatch(fx->universe(), i);
+        if (op == NULL)
+            continue;
+        if (op->pluginName() != QLatin1String("WLED"))
+        {
+            if (otherPlugin.isEmpty())
+                otherPlugin = op->pluginName();
+            continue;
+        }
+        // Its IP as the primary or as a backup lantern ("outputIP2"...).
+        const QMap<QString, QVariant> pp = op->getPluginParameters();
+        for (auto it = pp.constBegin(); it != pp.constEnd() && wled == NULL; ++it)
+            if (it.key().startsWith(QLatin1String("outputIP")) && it.value().toString() == fx->ipAddress())
+                wled = op;
+        if (wled == NULL && otherIp.isEmpty())
+            otherIp = pp.value(QStringLiteral("outputIP")).toString();
+    }
+    if (wled == NULL)
+    {
+        if (!otherIp.isEmpty() || otherPlugin.isEmpty())
+        {
+            if (detail != NULL)
+                *detail = otherIp;
+            return WledOtherIp;
+        }
+        if (detail != NULL)
+            *detail = otherPlugin;
+        return WledOtherOutput;
+    }
+
+    /* Alone on it: the output reads its channels where they are now (a mode
+       or address changed since patching moves them). Several on one IP share
+       the universe, and the output's window is the patch's to say. */
+    int onIt = 0;
+    foreach (Fixture *other, doc->fixtures())
+        if (other != NULL && other->isPatched() && other->universe() == fx->universe())
+            ++onIt;
+    if (onIt == 1)
+    {
+        const QMap<QString, QVariant> pp = wled->getPluginParameters();
+        const QVariant addr = pp.value(QStringLiteral("wledAddress"));
+        const QVariant chans = pp.value(QStringLiteral("wledChannels"));
+        if ((addr.isValid() && addr.toUInt() != fx->address() + 1)
+            || (chans.isValid() && chans.toUInt() != fx->channels()))
+            return WledStale;
+    }
+    return WledRouted;
+}
+
+int PatchPlanner::routeWled(const QList<quint32> &fixtureIds, QStringList *problems,
+                            std::function<void()> *undo)
+{
+    InputOutputMap *io = m_doc->inputOutputMap();
+
+    QList<Fixture *> todo;
+    foreach (quint32 fid, fixtureIds)
+    {
+        Fixture *fx = m_doc->fixture(fid);
+        if (!isWledByApi(fx) || todo.contains(fx) || wledRoute(m_doc, fx) == WledRouted)
+            continue;
+        todo << fx;
+    }
+    if (todo.isEmpty())
+        return 0;
+
+    const quint32 universesBefore = io->universesCount();
+    QHash<quint32, QPair<quint32, quint32> > was;   // patched ones: where they were
+    QList<Assignment> inPlace;
+    QList<quint32> toPlan;
+    foreach (Fixture *fx, todo)
+    {
+        if (!fx->isPatched())
+        {
+            toPlan << fx->id();
+            continue;
+        }
+        was.insert(fx->id(), qMakePair(fx->universe(), fx->address()));
+        const WledRoute r = wledRoute(m_doc, fx);
+        OutputPatch *op = io->outputPatch(fx->universe());
+        if ((r == WledOtherIp || r == WledStale) && op != NULL
+            && op->pluginName() == QLatin1String("WLED") && ownsUniverse(m_doc, fx))
+        {
+            // Its own universe already: only the output is re-aimed.
+            Assignment a;
+            a.fixtureId = fx->id();
+            a.universe = fx->universe();
+            a.address = fx->address();
+            inPlace << a;
+        }
+        else
+            toPlan << fx->id();
+    }
+
+    // Off where they are (inventory for a moment), so plan() places them.
+    for (auto it = was.constBegin(); it != was.constEnd(); ++it)
+        m_doc->unpatchFixture(it.key());
+
+    const QList<Assignment> assignments = inPlace + plan(toPlan);
+
+    // What the change touches, as it is now: the universes it lands on.
+    QList<quint32> touched;
+    QHash<quint32, QString> names;
+    foreach (const Assignment &a, assignments)
+    {
+        if (a.universe < universesBefore && !touched.contains(a.universe))
+        {
+            touched << a.universe;
+            names.insert(a.universe, io->getUniverseNameByID(a.universe));
+        }
+    }
+    std::shared_ptr<PatchUndo> patchBefore = std::make_shared<PatchUndo>(io);
+    patchBefore->capture(touched, QString());
+
+    const int done = apply(assignments, problems);
+
+    auto putBack = [doc = m_doc, io, was, universesBefore, names, patchBefore]() {
+        foreach (quint32 fid, was.keys())
+            if (doc->fixture(fid) != NULL && doc->fixture(fid)->isPatched())
+                doc->unpatchFixture(fid);
+        if (patchBefore->canUndo())
+            patchBefore->undo();
+        for (auto it = names.constBegin(); it != names.constEnd(); ++it)
+            if (it.key() < io->universesCount())
+                io->setUniverseName(int(it.key()), it.value());
+        /* The universes it made, from the end, while nothing is on them and
+           they go nowhere or to a WLED. */
+        while (io->universesCount() > universesBefore)
+        {
+            const quint32 last = io->universesCount() - 1;
+            bool carries = false;
+            foreach (Fixture *fx, doc->fixtures())
+                carries = carries || (fx != NULL && fx->isPatched() && fx->universe() == last);
+            OutputPatch *op = io->outputPatch(last);
+            if (carries || (op != NULL && op->pluginName() != QLatin1String("WLED"))
+                || !io->removeUniverse(int(last)))
+                break;
+        }
+        QList<Doc::FixturePatch> back;
+        for (auto it = was.constBegin(); it != was.constEnd(); ++it)
+            if (doc->fixture(it.key()) != NULL)
+                back << Doc::FixturePatch{ it.key(), it.value().first, it.value().second };
+        if (!back.isEmpty())
+            doc->patchFixtures(back);
+    };
+
+    if (done == 0)
+    {
+        // Nothing changed (apply() is all or none): back where they were.
+        QList<Doc::FixturePatch> back;
+        for (auto it = was.constBegin(); it != was.constEnd(); ++it)
+            back << Doc::FixturePatch{ it.key(), it.value().first, it.value().second };
+        if (!back.isEmpty())
+            m_doc->patchFixtures(back);
+        return 0;
+    }
+    if (undo != NULL)
+        *undo = putBack;
+    return done;
 }
 
 namespace

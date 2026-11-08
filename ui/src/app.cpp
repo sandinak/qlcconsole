@@ -159,6 +159,7 @@
 #include "showembedding.h"
 #include "showdifferencesdialog.h"
 #include "showsettingsdialog.h"
+#include "fixturecreator.h"
 #include "showoperate.h"
 #include "teachingsettings.h"
 #include "showreviewpanel.h"
@@ -1485,6 +1486,18 @@ void App::initDoc()
                 ids << v.toUInt();
             if (WledConfigCheck::instance() != nullptr)
                 WledConfigCheck::instance()->confirmFix(parent, ids);
+        });
+    /* A WLED by its own API on a universe that doesn't reach it: a
+       universe of its own, sent to its IP (one undo). */
+    ShowStatus::instance()->setAction("wled.route", tr("Give It Its Own Universe"),
+        [this](QWidget *parent, const QVariantList &items) {
+            QList<quint32> ids;
+            foreach (const QVariant &v, items)
+                ids << v.toUInt();
+            if (!ShowSettingsDialog::confirmPatchChange(m_doc, parent, tr("Give WLEDs a universe of their own")))
+                return;
+            FixtureCreator::routeWled(parent, m_doc, ids, false);
+            AppUtil::updateFixtureReadiness(m_doc);
         });
     ShowStatus::instance()->setAction("fixtures.unpatched", tr("Patch…"),
         [this](QWidget *parent, const QVariantList &items) {

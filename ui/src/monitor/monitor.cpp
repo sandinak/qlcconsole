@@ -164,6 +164,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "wledfixture.h"
 #include "contextmenus.h"
 #include "selectionmenu.h"
 #include "selectionhintchip.h"
@@ -1844,6 +1845,12 @@ void Monitor::pushRigUndo(const QByteArray &before)
 {
     if (m_graphicsView != nullptr && !before.isEmpty() && rigSnapshot() != before)
         m_graphicsView->pushRigUndo(before);
+}
+
+void Monitor::pushUndoCallback(const std::function<void()> &undo)
+{
+    if (m_graphicsView != nullptr)
+        m_graphicsView->pushUndoCallback(undo);
 }
 
 void Monitor::showGraphicsView()
@@ -11777,6 +11784,20 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     QFormLayout *fixtureForm = new QFormLayout(fixtureBox);
     FixtureFields *fields = new FixtureFields(this, fixtureForm, fixtureBox);
     fields->setFixtures({ fxId }, fxId);
+    /* A WLED string: how it is reached, with its LEDs and pixel path (the
+       Fixture rows). Changed in Definition & Mode. */
+    if (WledFixture::isPixelString(fxi))
+    {
+        QLabel *conn = new QLabel(fxi->connection() == Fixture::Network
+                                      ? (fxi->transport() == Fixture::WledTransport
+                                             ? tr("WLED on the network, at %1").arg(fxi->ipAddress())
+                                             : tr("Art-Net / sACN, at %1").arg(fxi->ipAddress()))
+                                      : tr("DMX"), fixtureBox);
+        conn->setObjectName(QStringLiteral("fixtureConnection"));
+        conn->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        conn->setToolTip(tr("Definition & Mode… changes how it is reached"));
+        fixtureForm->insertRow(0, tr("Connection:"), conn);
+    }
     vl->addWidget(fixtureBox);
 
     // Its mount's fine-tuning, its aim and calibration, testing it.
@@ -12028,6 +12049,20 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         hideRow(aimDownSpin);
     if (!lensByHand)
         hideRow(lensSpin);
+    /* A string of LEDs run by a WLED is not hung and aimed: no aim, tilt,
+       beam, masking or pan/tilt rows (their stored values are kept). What
+       a string has -- connection, LEDs, length, pixel path -- is in the
+       Fixture rows above. */
+    const bool pixelString = WledFixture::isPixelString(fxi);
+    if (pixelString)
+    {
+        rigBox->setTitle(tr("Mount"));
+        for (QWidget *w : std::initializer_list<QWidget *>{ panZeroSpin, aimDownSpin, lensSpin,
+                                                           maskSpin[0]->parentWidget(), laserClassCb,
+                                                           panOffsetSpin, tiltOffsetSpin, invertRow,
+                                                           testRowWidget })
+            hideRow(w);
+    }
     bool aimTouched = rp.fixedAim;
     bool lensTouched = false;
 
@@ -12340,6 +12375,16 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                 preview, &FacingPreviewWidget::setFacing);
         connect(rotSpin, QOverload<int>::of(&QSpinBox::valueChanged),
                 [preview](int v) { preview->setIconRotation(v); });
+    }
+
+    // A string: where it is, not which way it faces.
+    if (pixelString)
+    {
+        posBox->setTitle(tr("Position"));
+        rotSpin->setVisible(false);
+        if (QWidget *l = posForm->labelForField(rotSpin)) l->setVisible(false);
+        if (QWidget *pv = posBox->findChild<QWidget *>(QStringLiteral("fixtureFacingPreview")))
+            pv->setVisible(false);
     }
 
     // Insert the Position & Orientation box directly above Rig Assignment.

@@ -59,7 +59,33 @@ private slots:
     void aFixtureTheDocRefusesIsNotLeaked();
     void aSingleAddWithATakenNameIsNumbered();
 
+    /* WLED by its own API: one shot from Add Fixture (docs/features/fixture-manager.md). */
+    /** It gets a universe of its own sent to its IP -- never the Art-Net
+     *  universe the dialog was opened in -- and the dialog says so. */
+    void aWledGetsAUniverseOfItsOwn();
+    /** Four at once, counting-up IPs: a universe each. */
+    void aBatchOfWledsGetsAUniverseEach();
+    /** The universe already sent to its IP (its fixture deleted) is reused. */
+    void aWledReusesTheUniverseSentToItsIp();
+    /** Another fixture at its IP on the Art-Net universe does not draw it there. */
+    void aWledNeverFollowsItsIpOntoArtNet();
+    /** One Cmd/Ctrl+Z takes the add back: the fixture and its universe. */
+    void addingAWledIsOneUndo();
+    /** A show like the one that found it: the WLED on the Art-Net universe
+     *  is a footer finding, and its fix moves it (one undo). */
+    void aWledOnAnArtNetUniverseIsAFindingWithAFix();
+    /** Fixture Properties turning a fixture into a WLED by its API moves it
+     *  the same way. */
+    void propertiesMakingItAWledMovesIt();
+    /** QLC_SHOT_DIR set: the dialog with WLED picked and the finding, before
+     *  (main's widgets) and after, at three sizes, for review. */
+    void wledShotsForReview();
+
 private:
+    /** The WLED output and a stub named ArtNet (it sends nowhere), loaded
+     *  into m_doc; universe 1 "U01-Office" goes out as that Art-Net with a
+     *  60-channel bar on it, as in the show that found the bug. */
+    void officeShow();
     Doc *m_doc;
 };
 

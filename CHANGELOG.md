@@ -33,6 +33,21 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Adding a WLED reaches the WLED, in one go.** Add Fixture with
+  **Network (WLED, JSON over Wi-Fi)** put the WLED on the universe the
+  dialog showed (an Art-Net one, say), so its looks went to the Art-Net node
+  and the WLED never changed. Now each WLED gets a universe of its own, sent
+  to its IP through the WLED output, as it is added (a batch: one each; one
+  undo); the dialog greys Universe and Address and says why. A show saved
+  with a WLED on such a universe says so in the footer ("WLED Test is on
+  U01-Office, which goes out as Art-Net: nothing reaches the WLED") with
+  **Give It Its Own Universe**; Fixture Properties changing a fixture to
+  WLED moves it the same way.
+- **A WLED string isn't treated as a hung light.** Fixture Properties for a
+  string of LEDs run by a WLED no longer offers a light's aim, tilt in yoke,
+  beam, masking, orientation, face or facing diagram; it shows the string's
+  connection, LEDs, length and pixel path. Values set before are kept. A
+  WLED driving something that pans or tilts is aimed as before.
 - **A WLED effect plays on every segment, not just the first.** A WLED
   split into segments (a fountain's string after **Write Segments…**, one
   segment a span) showed the show's effect on its first segment only; the

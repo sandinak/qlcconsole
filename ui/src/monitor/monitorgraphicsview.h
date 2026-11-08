@@ -1085,6 +1085,9 @@ public:
     /** Record the rig as it was before an edit (a dialog's, a studio's) so
      *  one Ctrl+Z puts it back. @p before is a Monitor::rigSnapshot(). */
     void pushRigUndo(const QByteArray &before);
+    /** Record an edit whose way back is @p undo (what the rig snapshot does
+     *  not hold: fixtures added, universes made and patched) as one step. */
+    void pushUndoCallback(const std::function<void()> &undo);
     /** Who puts a rig snapshot back: the Monitor, which owns the rebuild. */
     void setRigRestorer(std::function<void(const QByteArray &)> fn) { m_rigRestorer = fn; }
     /** Who takes one (Monitor::rigSnapshot()), for edits made here. */
@@ -1561,7 +1564,9 @@ private:
                     DuplicateSetup,
                     /** Targets moved in a blocking set (BLOCKING.md): their
                      *  override in blockingSet as it was. */
-                    TargetBlock } type;
+                    TargetBlock,
+                    /** Put back by its own function (callback). */
+                    Callback } type;
         /** Entries recorded by ONE drag share a batch (0 = on its own), and
          *  one Ctrl+Z undoes the whole batch -- a Select All drag records one
          *  entry per kind it moved. */
@@ -1581,6 +1586,7 @@ private:
         QList<quint32> pastedPaletteIds;
         QList<quint32> pastedFixtureIds;
         QByteArray rigBefore;                       ///< type == RigEdit
+        std::function<void()> callback;             ///< type == Callback
         StructureDuplicate::Undo dupUndo;           ///< type == DuplicateSetup
         quint32 blockingSet = 0;                    ///< type == TargetBlock
         QHash<quint32, StageTarget::Blocked> targetBlocked; ///< type == TargetBlock

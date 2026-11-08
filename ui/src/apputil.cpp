@@ -69,6 +69,7 @@
 #include "fixturedefcheck.h"
 #include "inputoutputmap.h"
 #include "outputpatch.h"
+#include "patchplanner.h"
 #include "universe.h"
 #include "qlcfixturedefcache.h"
 
@@ -905,6 +906,66 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
                 QCoreApplication::translate("AppUtil", "What they send goes nowhere. Give each "
                                             "an output in Connections."),
                 items, universes);
+    }
+
+    /* A WLED driven by its own API on a universe that doesn't reach it (an
+       Art-Net one, say, from before Add Fixture gave it a universe of its
+       own): its looks go somewhere else and the WLED never changes. */
+    {
+        InputOutputMap *io = doc->inputOutputMap();
+        QStringList items;
+        QVariantList ids;
+        foreach (Fixture *fx, doc->fixtures())
+        {
+            QString detail;
+            const PatchPlanner::WledRoute r = PatchPlanner::wledRoute(doc, fx, &detail);
+            if (r == PatchPlanner::WledRouted || r == PatchPlanner::WledNotPatched)
+                continue;
+            QString uni = io->getUniverseNameByID(fx->universe());
+            if (uni.isEmpty())
+                uni = QCoreApplication::translate("AppUtil", "Universe %1").arg(fx->universe() + 1);
+            QString line;
+            switch (r)
+            {
+            case PatchPlanner::WledNoOutput:
+                line = QCoreApplication::translate("AppUtil", "%1 is on %2, which has no output: "
+                                                   "nothing reaches the WLED").arg(fx->name(), uni);
+                break;
+            case PatchPlanner::WledOtherOutput:
+                line = QCoreApplication::translate("AppUtil", "%1 is on %2, which goes out as %3: "
+                                                   "nothing reaches the WLED")
+                           .arg(fx->name(), uni,
+                                detail == QLatin1String("ArtNet") ? QStringLiteral("Art-Net")
+                                : detail == QLatin1String("E1.31") ? QStringLiteral("sACN")
+                                                                   : detail);
+                break;
+            case PatchPlanner::WledOtherIp:
+                line = detail.isEmpty()
+                    ? QCoreApplication::translate("AppUtil", "%1 is on %2, which is sent to another "
+                                                  "WLED, not to %3").arg(fx->name(), uni, fx->ipAddress())
+                    : QCoreApplication::translate("AppUtil", "%1 is on %2, which is sent to %3, not "
+                                                  "to its IP %4")
+                          .arg(fx->name(), uni, detail, fx->ipAddress());
+                break;
+            default:
+                line = QCoreApplication::translate("AppUtil", "%1: its universe sends other channels "
+                                                   "than its own (its mode or address changed)")
+                           .arg(fx->name());
+                break;
+            }
+            items << line;
+            ids << fx->id();
+        }
+        if (items.isEmpty())
+            status->clearStatus("wled.route");
+        else
+            status->setStatus("wled.route", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n WLED(s) on a universe that doesn't reach them",
+                                            "", items.count()),
+                QCoreApplication::translate("AppUtil", "A WLED driven by its own API hears only a "
+                                            "universe sent to its IP through the WLED output. Give "
+                                            "It Its Own Universe moves each to one (one undo)."),
+                items, ids);
     }
 
     /* Effect looks that cannot run: no effect chosen, a script that is not

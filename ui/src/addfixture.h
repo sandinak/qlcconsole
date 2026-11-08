@@ -139,6 +139,13 @@ protected:
     class QLineEdit *m_ipEdit;
     class QLabel *m_ipRangeLabel = nullptr;     ///< "One each: .60 to .63"
     void updateIpRange();
+    /** A WLED by its own API gets a universe of its own (FixtureCreator):
+     *  the universe and address fields don't apply, and this says so. */
+    class QLabel *m_ownUniverseLabel = nullptr;
+    /** Adding or patching a WLED by its own API (not staging it). */
+    bool ownUniverse() const;
+    /** Universe, address and gap on or off for what is picked. */
+    void updateAddressFields();
 
     /*********************************************************************
      * Fillers
