@@ -51,6 +51,24 @@ removed) lines quoted as `evidence` and the file in `file` and `screen`:
 - **UX-64**: a new field for typing what the device already reports, with
   no way to read it. **UX-65**: an Auto, Default or computed value shown
   without the number it chose.
+- **UX-67**: a new fixture kind or connection added with no output route
+  for it and no footer finding when it can't be reached (a default universe
+  that ignores the connection). **UX-68**: a control (Runs, At the end, a
+  menu item) offered for a fixture type whose code path skips it, with no
+  greyed reason. **UX-69**: a Duplicate, Copy or Paste path that copies ids
+  of objects the source owns (inline looks) instead of cloning them, or a
+  shared object with no "Used by" and no Own Copy.
+- **UX-70**: an effect or device path that writes non-intensity channels
+  (effect, speed, mode) with no reset when it stops or the next cue
+  doesn't set them. **UX-71**: a Fixture Properties row shown whatever the
+  fixture kind (pan/tilt, orientation, beam on a pixel string).
+  **UX-72**: Locate that skips a fixture kind or doesn't override what
+  plays and restore it after.
+- **UX-73**: a new device send path with a fixed delay, tick or transition
+  that applies to snaps too. **UX-74**: a footer chip set twice in one
+  update (cleared, then set), or one refreshed on save when nothing
+  changed. **UX-75**: an end-to-end test that calls engine or planner
+  functions instead of driving the dialog or menu the person uses.
 - **The bar (UX-66, `bar.checks` C-1..C-8)**: a new top-level menu item or
   tab where a row, ⋯ or right-click on the thing would do (C-4, UX-44); a
   new name for something the course or help already names (C-5,

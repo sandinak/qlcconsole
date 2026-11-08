@@ -46,8 +46,9 @@ that have one. Change both files together.
 | Safety in Operate | UX-49, UX-50, UX-51, UX-52, UX-53, UX-54, UX-55, UX-56 | 8 | 6 |
 | Teaching & course voice | UX-57, UX-58, UX-59, UX-60 | 4 | 1 |
 | Ease of use | UX-61, UX-62, UX-64, UX-65, UX-66 | 5 | 0 |
+| Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 0 |
 
-Main check: 41 tests, 16 review, 6 walker, 3 manual. 41 of 66 enforced.
+Main check: 41 tests, 25 review, 6 walker, 3 manual. 41 of 75 enforced.
 
 ## Units & numbers
 
@@ -660,6 +661,91 @@ A student finds a core task from where they are working without being told, and 
 - **Right:** `Number a show into songs: 5 clicks, each control on the screen before it`
 - **Wrong:** `A core flow whose next control is found only in the help`
 
+## Does what it says
+
+Caught 2026-11-07 on his office WLED test (branches fix/042-wled-*, fix/042-duplicate-own-looks, fix/042-footer-save-flash; not on main yet). The flows are F-11 and F-12.
+
+### UX-67 A device you add is reachable
+
+Adding a network fixture leaves it on an output that reaches it; one that can't be reached says so in the footer, with a one-click fix.
+
+- **Why:** 2026-11-07: he added a WLED (Connection: Network (WLED), IP 172.18.2.100) through Add Fixture. It landed on universe 1, whose output is Art-Net to his node, so nothing reached the WLED; moving it by hand to universe 2 left that universe with no output at all (fix/042-wled-add-patch).
+- **Check:** `review`, `walker` (not yet enforced)
+- **Right:** `Add Fixture (WLED) → its own universe, WLED output, sent to its IP`
+- **Wrong:** `WLED on U01-Office (Art-Net to 172.18.2.10), no warning`
+
+### UX-68 A control shown works on that fixture, or says why not
+
+A control is offered only where it does something for that fixture; where it can't, it is greyed with the reason (UX-27).
+
+- **Why:** 2026-11-07: Runs (Once / N times) and At the end (Hold / Release) were offered for a WLED device effect and did nothing. "When I set it to once .. it does the entire thing once .. and then does it again"; "hold and release don't appear to do much" (fix/042-wled-runs).
+- **Check:** `review`, `walker` (not yet enforced)
+- **Right:** `Runs: Once on a WLED effect → it plays once, then holds`
+- **Wrong:** `Runs: Once offered on a WLED effect; it loops anyway`
+
+### UX-69 A copy is a copy
+
+Duplicate, Copy and Paste never leave a hidden link; anything still shared says where else it is used and offers Own Copy.
+
+- **Why:** 2026-11-07: duplicating a cue shared the layer's own (inline) looks, so "all the edits to the layer go to both cues", and the Look Editor showed no "Used by" for them (fix/042-duplicate-own-looks).
+- **Check:** `review`, `walker` (not yet enforced)
+- **Right:** `Duplicate a cue, change the copy's colour: the original keeps its colour`
+- **Wrong:** `Duplicate a cue, change the copy: both cues change, and the Look Editor says nothing is shared`
+
+### UX-70 A cue shows what it asks for
+
+Nothing carries in from earlier cues except tracked values, and what tracks is visible; a cue's look is what it says.
+
+- **Why:** 2026-11-07, his words: "unless tracked .. new cue should apply all new values to meet the required look". A colour-only cue after a Fireworks Starburst cue left the WLED still running Starburst: its effect setting latched, because non-intensity channels keep their last value (fix/042-wled-runs).
+- **Check:** `review`, `walker` (not yet enforced)
+- **Right:** `A colour-only cue after Starburst: the WLED goes to solid colour`
+- **Wrong:** `A colour-only cue after Starburst: the WLED keeps running Starburst`
+
+### UX-71 Properties fit the kind of device
+
+A fixture's properties show what that kind of device has: a pixel string shows string things (connection, IP, LED count, length, pixel path), not a mounted light's.
+
+- **Why:** 2026-11-07: Fixture Properties showed a WLED fairy string as a mounted light (orientation, pan/tilt, beam). "Not sure that is how that should work for strings connected to it (we may do other things in the future that utilize this idea .. but not yet)" (fix/042-wled-add-patch).
+- **Check:** `review` (not yet enforced)
+- **Right:** `WLED string: Connection, IP, LED count, String length, Pixel path`
+- **Wrong:** `WLED string: Orientation, Pan/Tilt, Beam angle`
+
+### UX-72 Locate works on every patched fixture
+
+Locate is unmistakable on the device (solid, full, white, sharp flashes) over whatever is playing, and everything is back after.
+
+- **Why:** 2026-11-07: "locate doesn't appear to work" on a WLED (fix/042-wled-locate).
+- **Check:** `review`, `manual` (not yet enforced)
+- **Right:** `Locate on a WLED mid-effect: solid white flashes, then the effect resumes`
+- **Wrong:** `Locate on a WLED: nothing visible, the effect keeps running`
+
+### UX-73 Snap means snap on every connection
+
+A network device follows a snap within the network's own time: it is sent at once with no glide; fades use the cue's time.
+
+- **Why:** 2026-11-07, measured on ender: a WLED over its JSON API reacts about 150 to 340 ms after DMX fixtures on a snap cue (a 100 ms send tick, about 50 ms Wi-Fi with a max of 140, and a 100 ms glide). His spell cue snaps the stage to black with the staff (a WLED) still on. A responsiveness test is to come with the snap and Move in Black work for WLED.
+- **Check:** `review`, `manual` (not yet enforced)
+- **Right:** `A snap cue: the WLED changes with the DMX fixtures, within the Wi-Fi's own delay`
+- **Wrong:** `A snap cue: the WLED glides in 100 ms after the others, so the staff stays on`
+
+### UX-74 Status doesn't flash
+
+A save or a routine update changes a footer chip at most once, never on and off.
+
+- **Why:** 2026-11-07: "when I save sometimes the power and current cue in the bottom flash hard" (fix/042-footer-save-flash).
+- **Check:** `review` (not yet enforced)
+- **Right:** `Save: the power and cue chips stay steady, or change once`
+- **Wrong:** `Save: the power and cue chips blink off and on`
+
+### UX-75 Tested through the path the person uses
+
+An end-to-end test drives the same dialogs and menus the person uses, not the engine call under them. (A rule for reviewing tests.)
+
+- **Why:** 2026-11-07: the WLED end-to-end test called the patch planner directly, so it passed while the real Add Fixture path put the WLED on an Art-Net universe (UX-67). It also bears on UX-56.
+- **Check:** `review` (not yet enforced)
+- **Right:** `A test that opens Add Fixture, picks the WLED and the connection, and clicks OK`
+- **Wrong:** `A test that calls the patch planner and checks its result`
+
 ## Complexity and ease of use
 
 Students and professionals use the same screens. Branson, 2026-11-07:
@@ -856,6 +942,42 @@ Budget 2 clicks. From: 0.4.1 Known issue; CHANGELOG; course level 3 lesson 9. Ru
 | # | Screen | Control | You see | Clicks |
 |---|---|---|---|---|
 | 1 | File ▸ Open Recent | the show (a newer autosave beside it), then Recover | Recover the autosave from Show.qlcc? ▸ Recover | 2 |
+### F-11 Add a WLED string and play its effects
+
+Budget 26 clicks. From: 2026-11-07 his office WLED test (UX-67 to UX-72). Rules: UX-67, UX-68, UX-70, UX-72, UX-66.
+
+- **Student:** Add the WLED with its IP, fix it on the device, build a Starburst cue that runs once, then a colour cue, then Locate.
+- **Pro:** Add Fixture takes the IP and puts the WLED on its own universe in one dialog; the cue's Runs and At the end are in the Look Editor.
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | any | Fixtures tab *(manual)* | Fixture Manager | 1 |
+| 2 | Fixtures | Add Fixture ▸ WLED ▸ Effect Mode / Effect (15ch) *(manual)* | the Add Fixture dialog with the WLED model | 3 |
+| 3 | Add Fixture | Connection ▸ Network (WLED, JSON over Wi-Fi) *(manual)* | an IP field; no universe or patch step | 2 |
+| 4 | Add Fixture | the IP (172.18.2.100), OK *(manual)* | the WLED on its own universe with the WLED output, sent to its IP (UX-67) | 2 |
+| 5 | footer | the finding chip ▸ Fix on Device… ▸ OK *(manual)* | the footer finding gone; the device settings fixed | 2 |
+| 6 | any | Show Tree tab *(manual)* | the Show Tree | 1 |
+| 7 | Show Tree | + Cue List, + Cue *(manual)* | a cue list with one cue | 2 |
+| 8 | Show Tree | the layer on the WLED *(manual)* | its Look Editor | 1 |
+| 9 | Look Editor | Effect ▸ Fireworks Starburst *(manual)* | the WLED effect chosen | 2 |
+| 10 | Look Editor | Runs ▸ Once; At the end ▸ Hold *(manual)* | Runs: Once and At the end: Hold, working on the device (UX-68) | 4 |
+| 11 | Show Tree, Design | GO on the armed cue *(manual)* | the effect plays once on the WLED, in Design (UX-62) | 1 |
+| 12 | Show Tree | + Cue, a colour only *(manual)* | a second cue with a colour and no effect; the WLED goes to solid colour (UX-70) | 3 |
+| 13 | Show Tree | right-click the WLED ▸ Locate *(manual)* | solid white flashes over whatever plays; all back after (UX-72) | 2 |
+
+### F-12 Duplicate a cue and change only the copy
+
+Budget 4 clicks. From: 2026-11-07 catch (UX-69); docs/features/show-tree.md Record and duplicate. Rules: UX-69, UX-66.
+
+- **Student:** Select the cue, Duplicate, change the copy, check the original.
+- **Pro:** Duplicate with ⌘D beside the clicks.
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | Show Tree | a cue *(manual)* | its page | 1 |
+| 2 | Show Tree | Duplicate (⌘D) *(manual)* | a copy of the cue after it (UX-42) | 1 |
+| 3 | Look Editor | change the copy's effect or colour *(manual)* | the copy changes; the Look Editor says what, if anything, is still shared (UX-69) | 1 |
+| 4 | Show Tree | the original cue *(manual)* | unchanged (UX-69) | 1 |
 
 ## How to add a rule
 

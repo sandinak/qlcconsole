@@ -82,7 +82,7 @@ tools/uxreview/uxreview.py plan --diff /tmp/branch.diff --out ~/git/uxr/br [shot
 
 It carries the rules a diff can break (`DIFF_RULES` in uxreview.py: UX-61
 findable from where you work, UX-62 testable where it's built, UX-63 help
-lengths, UX-64 read it from the device, UX-65 Auto shows its number, UX-66
+lengths, UX-64 read it from the device, UX-65 Auto shows its number, UX-67 to UX-75 (does what it says), UX-66
 and the complexity bar, UX-44 flat surface, UX-23, UX-12, UX-17, UX-60,
 UX-01/02; the course rules when the diff touches docs/course), the bar's
 checks C-1 to C-8 from [ux_flows.json](ux_flows.json), the forbid_regex

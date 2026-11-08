@@ -1222,5 +1222,155 @@
       "right": "Number a show into songs: 5 clicks, each control on the screen before it",
       "wrong": "A core flow whose next control is found only in the help"
     }
+  },
+  {
+    "id": "UX-67",
+    "theme": "Does what it says",
+    "title": "A device you add is reachable",
+    "rule": "Adding a network fixture leaves it on an output that reaches it; one that can't be reached says so in the footer, with a one-click fix.",
+    "check": "review",
+    "checks": [
+      "review",
+      "walker"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: he added a WLED (Connection: Network (WLED), IP 172.18.2.100) through Add Fixture. It landed on universe 1, whose output is Art-Net to his node, so nothing reached the WLED; moving it by hand to universe 2 left that universe with no output at all (fix/042-wled-add-patch).",
+    "example": {
+      "right": "Add Fixture (WLED) → its own universe, WLED output, sent to its IP",
+      "wrong": "WLED on U01-Office (Art-Net to 172.18.2.10), no warning"
+    }
+  },
+  {
+    "id": "UX-68",
+    "theme": "Does what it says",
+    "title": "A control shown works on that fixture, or says why not",
+    "rule": "A control is offered only where it does something for that fixture; where it can't, it is greyed with the reason (UX-27).",
+    "check": "review",
+    "checks": [
+      "review",
+      "walker"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: Runs (Once / N times) and At the end (Hold / Release) were offered for a WLED device effect and did nothing. \"When I set it to once .. it does the entire thing once .. and then does it again\"; \"hold and release don't appear to do much\" (fix/042-wled-runs).",
+    "example": {
+      "right": "Runs: Once on a WLED effect → it plays once, then holds",
+      "wrong": "Runs: Once offered on a WLED effect; it loops anyway"
+    }
+  },
+  {
+    "id": "UX-69",
+    "theme": "Does what it says",
+    "title": "A copy is a copy",
+    "rule": "Duplicate, Copy and Paste never leave a hidden link; anything still shared says where else it is used and offers Own Copy.",
+    "check": "review",
+    "checks": [
+      "review",
+      "walker"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: duplicating a cue shared the layer's own (inline) looks, so \"all the edits to the layer go to both cues\", and the Look Editor showed no \"Used by\" for them (fix/042-duplicate-own-looks).",
+    "example": {
+      "right": "Duplicate a cue, change the copy's colour: the original keeps its colour",
+      "wrong": "Duplicate a cue, change the copy: both cues change, and the Look Editor says nothing is shared"
+    }
+  },
+  {
+    "id": "UX-70",
+    "theme": "Does what it says",
+    "title": "A cue shows what it asks for",
+    "rule": "Nothing carries in from earlier cues except tracked values, and what tracks is visible; a cue's look is what it says.",
+    "check": "review",
+    "checks": [
+      "review",
+      "walker"
+    ],
+    "enforced": false,
+    "why": "2026-11-07, his words: \"unless tracked .. new cue should apply all new values to meet the required look\". A colour-only cue after a Fireworks Starburst cue left the WLED still running Starburst: its effect setting latched, because non-intensity channels keep their last value (fix/042-wled-runs).",
+    "example": {
+      "right": "A colour-only cue after Starburst: the WLED goes to solid colour",
+      "wrong": "A colour-only cue after Starburst: the WLED keeps running Starburst"
+    }
+  },
+  {
+    "id": "UX-71",
+    "theme": "Does what it says",
+    "title": "Properties fit the kind of device",
+    "rule": "A fixture's properties show what that kind of device has: a pixel string shows string things (connection, IP, LED count, length, pixel path), not a mounted light's.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: Fixture Properties showed a WLED fairy string as a mounted light (orientation, pan/tilt, beam). \"Not sure that is how that should work for strings connected to it (we may do other things in the future that utilize this idea .. but not yet)\" (fix/042-wled-add-patch).",
+    "example": {
+      "right": "WLED string: Connection, IP, LED count, String length, Pixel path",
+      "wrong": "WLED string: Orientation, Pan/Tilt, Beam angle"
+    }
+  },
+  {
+    "id": "UX-72",
+    "theme": "Does what it says",
+    "title": "Locate works on every patched fixture",
+    "rule": "Locate is unmistakable on the device (solid, full, white, sharp flashes) over whatever is playing, and everything is back after.",
+    "check": "review",
+    "checks": [
+      "review",
+      "manual"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: \"locate doesn't appear to work\" on a WLED (fix/042-wled-locate).",
+    "example": {
+      "right": "Locate on a WLED mid-effect: solid white flashes, then the effect resumes",
+      "wrong": "Locate on a WLED: nothing visible, the effect keeps running"
+    }
+  },
+  {
+    "id": "UX-73",
+    "theme": "Does what it says",
+    "title": "Snap means snap on every connection",
+    "rule": "A network device follows a snap within the network's own time: it is sent at once with no glide; fades use the cue's time.",
+    "check": "review",
+    "checks": [
+      "review",
+      "manual"
+    ],
+    "enforced": false,
+    "why": "2026-11-07, measured on ender: a WLED over its JSON API reacts about 150 to 340 ms after DMX fixtures on a snap cue (a 100 ms send tick, about 50 ms Wi-Fi with a max of 140, and a 100 ms glide). His spell cue snaps the stage to black with the staff (a WLED) still on. A responsiveness test is to come with the snap and Move in Black work for WLED.",
+    "example": {
+      "right": "A snap cue: the WLED changes with the DMX fixtures, within the Wi-Fi's own delay",
+      "wrong": "A snap cue: the WLED glides in 100 ms after the others, so the staff stays on"
+    }
+  },
+  {
+    "id": "UX-74",
+    "theme": "Does what it says",
+    "title": "Status doesn't flash",
+    "rule": "A save or a routine update changes a footer chip at most once, never on and off.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: \"when I save sometimes the power and current cue in the bottom flash hard\" (fix/042-footer-save-flash).",
+    "example": {
+      "right": "Save: the power and cue chips stay steady, or change once",
+      "wrong": "Save: the power and cue chips blink off and on"
+    }
+  },
+  {
+    "id": "UX-75",
+    "theme": "Does what it says",
+    "title": "Tested through the path the person uses",
+    "rule": "An end-to-end test drives the same dialogs and menus the person uses, not the engine call under them. (A rule for reviewing tests.)",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-07: the WLED end-to-end test called the patch planner directly, so it passed while the real Add Fixture path put the WLED on an Art-Net universe (UX-67). It also bears on UX-56.",
+    "example": {
+      "right": "A test that opens Add Fixture, picks the WLED and the connection, and clicks OK",
+      "wrong": "A test that calls the patch planner and checks its result"
+    }
   }
 ]
