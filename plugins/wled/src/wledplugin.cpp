@@ -395,7 +395,7 @@ void WledPlugin::tick()
                     continue;
                 const QJsonObject state = WledState::decode(t.data, t.addressOf(d),
                                                             t.channelsOf(d), m_sendInterval);
-                if (state != d.sent || d.layoutGen != d.sentLayoutGen)
+                if (!sameLook(state, d.sent) || d.layoutGen != d.sentLayoutGen)
                     due << qMakePair(it.key(), i);
             }
         }
@@ -435,6 +435,32 @@ QJsonObject WledPlugin::message(const QJsonObject &state, const Device &d,
     QJsonObject out = state;
     out[QStringLiteral("seg")] = segs;
     return out;
+}
+
+QJsonObject WledPlugin::paced(QJsonObject state, const QJsonObject &sent,
+                              qint64 postedAt, qint64 now, int intervalMs)
+{
+    const QString fx = QStringLiteral("fx");
+    const QString on = QStringLiteral("on");
+    const QJsonObject seg = state.value(QStringLiteral("seg")).toArray().at(0).toObject();
+    const QJsonObject was = sent.value(QStringLiteral("seg")).toArray().at(0).toObject();
+    /* WLED's transition is there to smooth a fade sent ten times a second.
+       On a step it smears it: a Locate's 150 ms dark between flashes came
+       out as a dip, and its effect went over to Solid as a blend. */
+    const bool step = sent.isEmpty()
+                      || state.value(on) != sent.value(on)
+                      || seg.value(fx) != was.value(fx)
+                      || now - postedAt > 2 * qint64(intervalMs);
+    if (step)
+        state[QStringLiteral("transition")] = 0;
+    return state;
+}
+
+bool WledPlugin::sameLook(QJsonObject a, QJsonObject b)
+{
+    a.remove(QStringLiteral("transition"));
+    b.remove(QStringLiteral("transition"));
+    return a == b;
 }
 
 QVector<WledLayoutStore::Segment> WledPlugin::segmentsOf(const QJsonArray &seg)
@@ -567,7 +593,10 @@ void WledPlugin::send(quint32 universe, int index)
         Target &t = it.value();
         Device &d = t.devices[index];
         ip = d.ip;
-        state = WledState::decode(t.data, t.addressOf(d), t.channelsOf(d), m_sendInterval);
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        state = paced(WledState::decode(t.data, t.addressOf(d), t.channelsOf(d), m_sendInterval),
+                      d.sent, d.postedAt, now, m_sendInterval);
+        d.postedAt = now;
         body = message(state, d, &revs);
         gen = d.layoutGen;
         // Out of Art-Net/E1.31 realtime mode, the first time: a WLED still

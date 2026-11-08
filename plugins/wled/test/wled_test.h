@@ -25,6 +25,9 @@ private slots:
     void effectChannelsAreReadAsWledReadsThem();
     void colourModesAreSolidColours();
     void onlyChangesAreSentAndBurstsCollapse();
+    /** A step (on or off, another effect, a change after the look stood
+     *  still) goes at once; only a fade, send after send, glides. */
+    void aStepGoesAtOnceAndOnlyAFadeGlides();
     void aWeakOrSilentLanternIsAProblem();
     void aWatchedLanternSaysWhatItsLedsShow();
 

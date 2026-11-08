@@ -495,7 +495,12 @@ WLED output rather than borrowing Art-Net.
   actually changes** — at most about ten times a second per device, with a
   matching WLED transition so the steps blend. A held look is sent once; a
   long fade goes as a handful of states ending on the last one. This keeps
-  Wi-Fi traffic small.
+  Wi-Fi traffic small. A step — on or off, another effect, a change after
+  the look stood still — goes at once, without the transition.
+- **Locate** on a WLED that runs an effect turns it Solid, in the Locate
+  colour (white unless Preferences ▸ Locate says otherwise), flashing on and
+  off over whatever look is playing; afterwards the device is back on that
+  look, or as it was if nothing plays.
 - Every few seconds it checks in with each device. Any that **don't answer,
   or answer on weak Wi-Fi** (weaker than -75 dBm), are listed by fixture name
   in the [readiness footer](#readiness-footer).
