@@ -540,11 +540,14 @@ bool ShowTreeController::edit(const QString &label,
     {
         // Part of a command: applied now, baked and recorded once at the end.
         QList<Production> work = m_productions;
+        const QList<ReusableLayer> layersBefore = m_reusableLayers;
+        const QList<ReusableCue> cuesBefore = m_reusableCues;
         if (!change(work))
             return false;
         normalizeLooks(work);
         resolveAllTimecodes(work);
         syncReusables(m_productions, work);
+        ownOneOffs(work, &m_productions, &layersBefore, &cuesBefore);
         syncCueNotes(work);             // Q212: a cue's note is its first entry
         m_productions = work;
         m_batchChanged = true;
@@ -553,6 +556,8 @@ bool ShowTreeController::edit(const QString &label,
 
     const QByteArray before = snapshotXml();
     QList<Production> work = m_productions;
+    const QList<ReusableLayer> layersBefore = m_reusableLayers;
+    const QList<ReusableCue> cuesBefore = m_reusableCues;
     if (!change(work))
         return false;
     normalizeLooks(work);
@@ -560,6 +565,9 @@ bool ShowTreeController::edit(const QString &label,
 
     // A reusable's use edited: every use (P4).
     syncReusables(m_productions, work);
+    // A one-off now in a second place (a duplicate, a paste, a copy, an
+    // unlink): that place's own copy, in this same step (fix/042).
+    ownOneOffs(work, &m_productions, &layersBefore, &cuesBefore);
     const int notesBefore = m_notes.count();
     syncCueNotes(work);                 // Q212: a cue's note is its first entry
     m_productions = work;
@@ -5219,6 +5227,179 @@ void ShowTreeController::dropUnusedInlinePalettes()
         if (m_doc->palette(id) != nullptr)
             m_doc->deletePalette(id);
     }
+}
+
+/* Where a look lives, for one-offs (fix/042): a cue's own looks, a layer,
+   or a reusable -- the reusable and every use of it are one place, kept the
+   same (P4). Ids come from one counter, so a cue's and a layer's never
+   collide; the reusables are told apart by a tag in the high word. */
+static const quint32 kOneOffCueLooks = 0xFFFFFFFF;
+static const quint32 kOneOffReusableLayer = 0xFFFFFFFE;
+static const quint32 kOneOffReusableCue = 0xFFFFFFFD;
+
+static inline quint64 oneOffPlace(quint32 hi, quint32 lo)
+{
+    return (quint64(hi) << 32) | lo;
+}
+
+/* Every list of looks in the tree with its place: @a fn(place, looks).
+   Const or not, as the lists given are. */
+template <typename Productions, typename Layers, typename Cues, typename Fn>
+static void forEachLookPlace(Productions &ps, Layers &rls, Cues &rcs, Fn fn)
+{
+    for (auto &p : ps)
+        for (auto &l : p.lists)
+            for (auto &c : l.cues)
+            {
+                const bool cueUse = c.reusable != ShowTree::invalidId();
+                fn(cueUse ? oneOffPlace(kOneOffReusableCue, c.reusable) : oneOffPlace(c.id, kOneOffCueLooks),
+                   c.looks);
+                for (auto &layer : c.layers)
+                    fn(cueUse ? oneOffPlace(kOneOffReusableCue, c.reusable)
+                       : layer.reusable != ShowTree::invalidId()
+                           ? oneOffPlace(kOneOffReusableLayer, layer.reusable)
+                           : oneOffPlace(c.id, layer.id),
+                       layer.looks);
+            }
+    for (auto &r : rls)
+        fn(oneOffPlace(kOneOffReusableLayer, r.id), r.looks);
+    for (auto &r : rcs)
+    {
+        fn(oneOffPlace(kOneOffReusableCue, r.id), r.looks);
+        for (auto &layer : r.layers)
+            fn(oneOffPlace(kOneOffReusableCue, r.id), layer.looks);
+    }
+}
+
+quint32 ShowTreeController::cloneOneOff(quint32 paletteId, QHash<quint32, quint32> &made)
+{
+    if (made.contains(paletteId))
+        return made.value(paletteId);
+    QLCPalette *p = m_doc->palette(paletteId);
+    if (p == nullptr || !m_inlinePalettes.contains(paletteId))
+        return paletteId;
+    // Everything it plays, its name and folder too (a one-off's name says
+    // what it is: "Blue-ish · 1.0.1 Towers").
+    QLCPalette *copy = p->createCopy();
+    quint32 id = 0;
+    for (const QLCPalette *other : m_doc->palettes())
+        id = qMax(id, other->id() + 1);
+    m_inlinePalettes.insert(id);
+    if (!m_doc->addPalette(copy, id))
+    {
+        m_inlinePalettes.remove(id);
+        delete copy;
+        return paletteId;
+    }
+    made.insert(paletteId, id);
+    // An effect's slots bound to one-offs: this copy's own as well.
+    const QMap<QString, quint32> bound = copy->effectPaletteBindings();
+    for (auto it = bound.constBegin(); it != bound.constEnd(); ++it)
+        if (m_inlinePalettes.contains(it.value()))
+            copy->setEffectPaletteBinding(it.key(), cloneOneOff(it.value(), made));
+    return id;
+}
+
+int ShowTreeController::ownOneOffs(QList<Production> &work, const QList<Production> *before,
+                                   const QList<ReusableLayer> *beforeLayers,
+                                   const QList<ReusableCue> *beforeCues)
+{
+    if (m_inlinePalettes.isEmpty())
+        return 0;
+
+    // 1. The one-offs in more than one place (the usual case: none -- one
+    //    pass, nothing else).
+    QHash<quint32, quint64> firstPlace;
+    QSet<quint32> shared;
+    forEachLookPlace(std::as_const(work), std::as_const(m_reusableLayers), std::as_const(m_reusableCues),
+                     [&](quint64 place, const QList<Look> &looks) {
+        for (const Look &l : looks)
+            for (const QList<quint32> *ids : { &l.palettes, &l.own })
+                for (quint32 pid : *ids)
+                {
+                    if (!m_inlinePalettes.contains(pid))
+                        continue;
+                    auto it = firstPlace.constFind(pid);
+                    if (it == firstPlace.constEnd())
+                        firstPlace.insert(pid, place);
+                    else if (it.value() != place)
+                        shared.insert(pid);
+                }
+    });
+    if (shared.isEmpty())
+        return 0;
+
+    // 2. Their places, in tree order, now and before.
+    auto placesOf = [&shared](auto &ps, auto &rls, auto &rcs) {
+        QHash<quint32, QList<quint64>> out;
+        forEachLookPlace(ps, rls, rcs, [&](quint64 place, const QList<Look> &looks) {
+            for (const Look &l : looks)
+                for (const QList<quint32> *ids : { &l.palettes, &l.own })
+                    for (quint32 pid : *ids)
+                        if (shared.contains(pid) && !out.value(pid).contains(place))
+                            out[pid] << place;
+        });
+        return out;
+    };
+    const QHash<quint32, QList<quint64>> now = placesOf(std::as_const(work), std::as_const(m_reusableLayers),
+                                                        std::as_const(m_reusableCues));
+    const QList<Production> noProductions;
+    const QList<ReusableLayer> noLayers;
+    const QList<ReusableCue> noCues;
+    const QHash<quint32, QList<quint64>> had = placesOf(before != nullptr ? *before : noProductions,
+                                                        beforeLayers != nullptr ? *beforeLayers : noLayers,
+                                                        beforeCues != nullptr ? *beforeCues : noCues);
+
+    // 3. A copy for each place that is new to it.
+    QHash<quint64, QHash<quint32, quint32>> remap;
+    QList<quint32> ids = shared.values();
+    std::sort(ids.begin(), ids.end());
+    int copies = 0;
+    for (quint32 pid : ids)
+    {
+        const QList<quint64> places = now.value(pid);
+        QList<quint64> keep;
+        for (quint64 place : places)
+            if (had.value(pid).contains(place))
+                keep << place;
+        if (keep.isEmpty())
+            keep << places.first();
+        for (quint64 place : places)
+        {
+            if (keep.contains(place))
+                continue;
+            QHash<quint32, quint32> &made = remap[place];
+            const int was = int(made.count());
+            if (cloneOneOff(pid, made) != pid)
+                copies += int(made.count()) - was;
+        }
+    }
+    if (remap.isEmpty())
+        return copies;
+
+    // 4. Each place's looks on its copies.
+    forEachLookPlace(work, m_reusableLayers, m_reusableCues, [&remap](quint64 place, QList<Look> &looks) {
+        const auto it = remap.constFind(place);
+        if (it == remap.constEnd())
+            return;
+        const QHash<quint32, quint32> &made = it.value();
+        for (Look &l : looks)
+        {
+            for (quint32 &pid : l.palettes)
+                pid = made.value(pid, pid);
+            for (quint32 &pid : l.own)
+                pid = made.value(pid, pid);
+        }
+    });
+    return copies;
+}
+
+int ShowTreeController::splitSharedOneOffs()
+{
+    const int copies = ownOneOffs(m_productions, nullptr, nullptr, nullptr);
+    if (copies > 0)
+        qInfo() << "Show Tree: one-offs shared by more than one place split:" << copies << "copies";
+    return copies;
 }
 
 quint32 ShowTreeController::detachLayer(quint32 cueId, quint32 layerId)

@@ -1141,6 +1141,13 @@ public:
     quint32 createInlinePalette(QLCPalette::PaletteType type, const QVariantList &values,
                                 const QString &label);
     bool isInlinePalette(quint32 paletteId) const { return m_inlinePalettes.contains(paletteId); }
+    /** A one-off is one place's (a cue's looks, a layer, a reusable with
+     *  all its uses): an older show where a duplicate or a paste left one
+     *  in several places gets a copy of it in each place after the first,
+     *  so editing one no longer edits the others. Returns how many copies
+     *  were made. Run once after a show is loaded (Doc::loadXML); no undo
+     *  step. Every edit keeps it so (edit()). */
+    int splitSharedOneOffs();
     /** Make an inline palette an ordinary named one (Make reusable): one
      *  undo step (D22) -- undo makes it a one-off again, as it was. */
     bool makeReusable(quint32 paletteId, const QString &name, const QString &path);
@@ -1415,6 +1422,17 @@ private:
     static QString sceneSignature(const ShowTree::Target &target, const QList<quint32> &palettes);
     void deleteUnused(const QSet<quint32> &keep, QSet<quint32> &generated);
     void dropUnusedInlinePalettes();
+    /** After an edit (@a work, and the reusables as they are now): a
+     *  one-off now in more than one place (a duplicate, a paste, a copy, an
+     *  unlink, a value brought into a cue) stays with the places that had
+     *  it before (@a before*; none: the first) and every other place gets
+     *  its own copy, remapped in its looks. Returns the copies made. */
+    int ownOneOffs(QList<ShowTree::Production> &work, const QList<ShowTree::Production> *before,
+                   const QList<ShowTree::ReusableLayer> *beforeLayers,
+                   const QList<ShowTree::ReusableCue> *beforeCues);
+    /** A new one-off as @a paletteId is (an effect's bound one-offs copied
+     *  too), recorded in @a made (original -> copy). */
+    quint32 cloneOneOff(quint32 paletteId, QHash<quint32, quint32> &made);
 
     QSet<quint32> m_generatedScenes;
     QSet<quint32> m_generatedCollections;

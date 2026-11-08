@@ -1391,6 +1391,14 @@ running) asks instead. Typing `record selected`, `record running` or
 **Duplicate** (right-click a cue, ⌘D, or `dup`) copies the cue's own
 content, not what tracks into it. It is never the base cue.
 
+**What a copy shares.** Duplicate, Copy / Paste (cues, layers, hits, lists,
+productions) and Unlink here give the copy its *own* one-off values (a
+colour, level or effect set right on a layer, with an effect's own colours),
+so an edit to the copy never changes the original. Named palettes from the
+Library stay shared, and a reusable layer or cue stays linked: editing those
+changes every cue that uses them, as it is meant to. A show saved before
+this was so gets each cue its own one-offs again when it is opened.
+
 **Duplicate and paste a cue list, a production or a reusable cue.** The
 same **Copy**, **Paste** and **Duplicate** (**⌘C**, **⌘V**, **⌘D**) work on
 a cue list's row, a production's row and a reusable cue in the Library. A

@@ -2719,6 +2719,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
     // Palette folders from an older show, now the whole show is read.
     QLCPalette::migrateLegacyPaths(palettes());
 
+    // A one-off an older duplicate or paste left in two cues: each its own
+    // again (fix/042), now every palette is read.
+    m_showTree->splitSharedOneOffs();
+
     postLoad();
 
     /* An object's lock is its own again, beside its layer's: a show from
