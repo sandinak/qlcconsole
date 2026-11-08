@@ -521,6 +521,8 @@ void WledPixels_Test::universesOutOfOrderOrThroughTheWledOutputAreFound()
     QString detail;
     QCOMPARE(PatchPlanner::wledRoute(&doc, fx, &detail), PatchPlanner::WledOutOfOrder);
     QCOMPARE(detail, QString("20, 9"));
+    // Said once, by wled.route: never also as an Art-Net fixture (network.route).
+    QCOMPARE(PatchPlanner::networkRoute(&doc, fx), PatchPlanner::NetRouted);
     io->outputPatch(3)->setPluginParameter("outputUni", 21);
     QCOMPARE(PatchPlanner::wledRoute(&doc, fx), PatchPlanner::WledRouted);
     io->outputPatch(3)->setPluginParameter("outputIP", "10.99.0.99");
