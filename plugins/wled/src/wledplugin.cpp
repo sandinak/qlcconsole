@@ -57,8 +57,16 @@ void WledPlugin::init()
     m_nam->setProxy(QNetworkProxy::NoProxy);
     m_sendTimer = new QTimer(this);
     m_sendTimer->setInterval(m_sendInterval);
-    connect(m_sendTimer, &QTimer::timeout, this, &WledPlugin::tick);
+    connect(m_sendTimer, &QTimer::timeout, this, [this]() { tick(false); });
     m_sendTimer->start();
+    // A change goes now, not on the next send tick (UX-73).
+    m_kickTimer = new QTimer(this);
+    m_kickTimer->setSingleShot(true);
+    m_kickTimer->setTimerType(Qt::PreciseTimer);
+    connect(m_kickTimer, &QTimer::timeout, this, [this]() {
+        m_kickPending.storeRelease(0);
+        tick(true);
+    });
     m_infoTimer = new QTimer(this);
     m_infoTimer->setInterval(5000);
     connect(m_infoTimer, &QTimer::timeout, this, &WledPlugin::pollInfo);
@@ -356,17 +364,66 @@ void WledPlugin::writeUniverse(quint32 universe, quint32 output, const QByteArra
     Q_UNUSED(dataChanged)
     if (output != 0)
         return;
-    // Universe threads: only keep the bytes. tick() (the plugin's thread)
-    // turns them into a state and sends it.
-    QMutexLocker locker(&m_mutex);
-    auto it = m_targets.find(universe);
-    if (it != m_targets.end())
-        it.value().data = data;
+    /* Universe threads: only keep the bytes. tick() (the plugin's thread)
+       turns them into a state and sends it -- woken at once when a device's
+       own channels changed (a few bytes compared, every frame; nothing else
+       on a held look). */
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_mutex);
+        auto it = m_targets.find(universe);
+        if (it == m_targets.end())
+            return;
+        Target &t = it.value();
+        for (const Device &d : std::as_const(t.devices))
+            if (!d.ip.isEmpty() && windowChanged(t.data, data, t.addressOf(d) - 1, t.channelsOf(d)))
+            {
+                changed = true;
+                break;
+            }
+        t.data = data;
+    }
+    if (changed)
+        kick();
 }
 
-void WledPlugin::tick()
+bool WledPlugin::windowChanged(const QByteArray &old, const QByteArray &data, int offset, int count)
+{
+    for (int i = offset; i < offset + count; ++i)
+    {
+        const char a = (i >= 0 && i < old.size()) ? old.at(i) : char(0);
+        const char b = (i >= 0 && i < data.size()) ? data.at(i) : char(0);
+        if (a != b)
+            return true;
+    }
+    return false;
+}
+
+void WledPlugin::kick()
+{
+    // One wake-up however many universes change in the frame.
+    if (!m_kickPending.testAndSetOrdered(0, 1))
+        return;
+    QMetaObject::invokeMethod(this, [this]() { kickIn(kickCoalesceMs); }, Qt::QueuedConnection);
+}
+
+void WledPlugin::kickIn(int ms)
+{
+    if (m_kickTimer == nullptr)
+    {
+        m_kickPending.storeRelease(0);
+        return;
+    }
+    // Sooner wins: a change does not wait out a fade's paced send.
+    if (m_kickTimer->isActive() && m_kickTimer->remainingTime() <= ms)
+        return;
+    m_kickTimer->start(qMax(0, ms));
+}
+
+void WledPlugin::tick(bool kicked)
 {
     QList<QPair<quint32, int> > due, ask;
+    qint64 wait = -1;                   // a paced state's time to go, soonest
     {
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
         QMutexLocker locker(&m_mutex);
@@ -384,7 +441,10 @@ void WledPlugin::tick()
                 /* Its segments first: nothing is sent before they are known,
                    so the first look reaches every one of them -- and a
                    device not known yet is asked again, not sent to. */
-                if (d.pollDue || (!d.layoutKnown && now >= d.retryAt))
+                /* Woken by a change, a device that knows its segments is
+                   sent first; its routine ask waits for the next tick. */
+                if ((d.pollDue && (!kicked || !d.layoutKnown))
+                    || (!d.layoutKnown && now >= d.retryAt))
                 {
                     d.pollDue = false;
                     d.infoInFlight = true;
@@ -395,8 +455,19 @@ void WledPlugin::tick()
                     continue;
                 const QJsonObject state = WledState::decode(t.data, t.addressOf(d),
                                                             t.channelsOf(d), m_sendInterval);
-                if (!sameLook(state, d.sent) || d.layoutGen != d.sentLayoutGen)
-                    due << qMakePair(it.key(), i);
+                if (sameLook(state, d.sent) && d.layoutGen == d.sentLayoutGen)
+                    continue;
+                /* A step goes at once; a fade's next frame waits out the pace
+                   (at most one a send interval), woken for it then. */
+                const qint64 pace = qint64(m_sendInterval) * 3 / 4;
+                if (d.layoutGen == d.sentLayoutGen && now - d.postedAt < pace
+                    && !isStep(state, d.sent, d.postedAt, now, m_sendInterval))
+                {
+                    const qint64 left = pace - (now - d.postedAt);
+                    wait = wait < 0 ? left : qMin(wait, left);
+                    continue;
+                }
+                due << qMakePair(it.key(), i);
             }
         }
     }
@@ -404,6 +475,8 @@ void WledPlugin::tick()
         poll(u.first, u.second);
     for (const auto &u : due)
         send(u.first, u.second);
+    if (wait >= 0)
+        kickIn(int(wait));
 }
 
 QJsonObject WledPlugin::message(const QJsonObject &state, const Device &d,
@@ -440,20 +513,38 @@ QJsonObject WledPlugin::message(const QJsonObject &state, const Device &d,
 QJsonObject WledPlugin::paced(QJsonObject state, const QJsonObject &sent,
                               qint64 postedAt, qint64 now, int intervalMs)
 {
-    const QString fx = QStringLiteral("fx");
-    const QString on = QStringLiteral("on");
-    const QJsonObject seg = state.value(QStringLiteral("seg")).toArray().at(0).toObject();
-    const QJsonObject was = sent.value(QStringLiteral("seg")).toArray().at(0).toObject();
     /* WLED's transition is there to smooth a fade sent ten times a second.
        On a step it smears it: a Locate's 150 ms dark between flashes came
-       out as a dip, and its effect went over to Solid as a blend. */
-    const bool step = sent.isEmpty()
-                      || state.value(on) != sent.value(on)
-                      || seg.value(fx) != was.value(fx)
-                      || now - postedAt > 2 * qint64(intervalMs);
-    if (step)
+       out as a dip, and its effect went over to Solid as a blend -- and a
+       snap cue's WLED glided in after the DMX fixtures had cut (UX-73). */
+    if (isStep(state, sent, postedAt, now, intervalMs))
         state[QStringLiteral("transition")] = 0;
     return state;
+}
+
+bool WledPlugin::isStep(const QJsonObject &state, const QJsonObject &sent,
+                        qint64 postedAt, qint64 now, int intervalMs)
+{
+    const QString fx = QStringLiteral("fx");
+    const QString on = QStringLiteral("on");
+    const QString seg = QStringLiteral("seg");
+    return sent.isEmpty()
+           || state.value(on) != sent.value(on)
+           || state.value(seg).toArray().at(0).toObject().value(fx)
+                  != sent.value(seg).toArray().at(0).toObject().value(fx)
+           || now - postedAt > 2 * qint64(intervalMs);
+}
+
+QJsonObject WledPlugin::trimmed(QJsonObject body, const QJsonObject &state,
+                                const QJsonObject &sent, bool sameLayout)
+{
+    /* Its segments as it took them: only the rest goes -- a GO into a look
+       moved in black (MarkPlanner) is its brightness alone, the smallest
+       request and the least for the device to do. */
+    const QString seg = QStringLiteral("seg");
+    if (sameLayout && !sent.isEmpty() && state.value(seg) == sent.value(seg))
+        body.remove(seg);
+    return body;
 }
 
 bool WledPlugin::sameLook(QJsonObject a, QJsonObject b)
@@ -596,8 +687,11 @@ void WledPlugin::send(quint32 universe, int index)
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
         state = paced(WledState::decode(t.data, t.addressOf(d), t.channelsOf(d), m_sendInterval),
                       d.sent, d.postedAt, now, m_sendInterval);
+        const bool sameLayout = d.layoutGen == d.sentLayoutGen;
         d.postedAt = now;
-        body = message(state, d, &revs);
+        body = trimmed(message(state, d, &revs), state, d.sent, sameLayout);
+        if (!body.contains(QStringLiteral("seg")))
+            revs.clear();                   // none sent: the ways it has stand
         gen = d.layoutGen;
         // Out of Art-Net/E1.31 realtime mode, the first time: a WLED still
         // listening to DMX ignores the API until its realtime timeout.
@@ -636,6 +730,9 @@ void WledPlugin::send(quint32 universe, int index)
             else
                 d.retryAt = QDateTime::currentMSecsSinceEpoch() + retryMs;
         }
+        // What changed while it was on its way goes now, not next tick.
+        if (ok)
+            kick();
         problemsMaybeChanged();
     });
 }
@@ -779,6 +876,9 @@ void WledPlugin::poll(quint32 universe, int index)
         // does not leave the next one taking the turned-round ways for them.
         if (!keep.isEmpty())
             WledLayoutStore::save(mac, ip, keep);
+        // A state that waited on the answer goes now.
+        if (ok)
+            kick();
         problemsMaybeChanged();
     });
 }

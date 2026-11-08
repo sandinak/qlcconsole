@@ -59,6 +59,11 @@ private slots:
     /** A chaser step that holds for GO is always ahead; a show-clocked
      *  chaser is the Show's to answer for; past the horizon is nothing */
     void theLookaheadOfAChaser();
+    /** UX-73: a dark WLED's next look -- its effect, speed, palette and
+     *  colours, which come from the WLED look, not the scene -- is moved
+     *  in black like a mover's position, so the GO sends its brightness
+     *  alone. The looks are kept from tick to tick and let go of. */
+    void aDarkWledIsMovedInBlackToItsNextLook();
 
 private:
     Doc *m_doc = nullptr;
