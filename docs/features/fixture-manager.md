@@ -285,9 +285,14 @@ changes: its **name** becomes the fixture's, and its network name to match
 brightness, colour, effect and palette from other WLEDs** and sending its
 own (WLED sync: out of the box one WLED's button or app changes the others);
 it stays **dark at power-on** until the show drives it; and, when the
-fixture has a **Max draw**, its brightness limiter follows it (its watts at
-the circuit's voltage, on a 5 V LED supply). **Set Up Device** writes only
-those, then reads them back; **Not Now** writes nothing. Its Wi-Fi, LED
+fixture has a **Max draw** and its **LED supply** is set (Fixture Properties,
+the voltage its LEDs run on: 5 V, 12 V, 24 V), its brightness limit follows
+them (the Max draw's watts at the circuit's voltage, over the LED supply's).
+With the LED supply not known nothing is guessed: the confirmation says the
+limit is not set from the show and what the WLED's own is. Patching or
+adding several WLEDs at once asks **once**, listing each device's changes
+under its name. **Set Up Device** writes only those, then reads them back;
+**Not Now** writes nothing. Its Wi-Fi, LED
 type, pins and colour order are never changed. A WLED that drifts from this
 later (renamed, sync turned back on, lit at power-on) is a **Fix on
 Device…** finding in the footer like any other. A Teaching show that holds

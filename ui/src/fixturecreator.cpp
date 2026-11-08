@@ -179,11 +179,10 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
     if (ownUniverse && !created.isEmpty())
     {
         routeWled(parent, doc, created, true);
-        /* Set up each on the device the way the show drives it (its name,
-           no WLED sync, dark at power-on), asked once with what changes. */
+        /* Set them up on the devices the way the show drives them (name,
+           no WLED sync, dark at power-on): one question for the batch. */
         if (WledConfigCheck *check = WledConfigCheck::instance())
-            foreach (quint32 id, created)
-                check->offerSetUp(parent, id);
+            check->offerSetUp(parent, created);
     }
 
     if (pastLimit)

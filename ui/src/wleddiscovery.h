@@ -146,10 +146,12 @@ public:
 
     /** Make a WLED fixture of @p key's device -- WLED Effect Mode, its name,
      *  IP, MAC and LED count -- and give it a universe of its own sent to it
-     *  (FixtureCreator::routeWled()), as one undo step; then offer to set
-     *  the device up (WledConfigCheck::offerSetUp()) when the app checks
-     *  WLEDs. Problems are said over @p parent. 0 when it could not. */
-    quint32 patch(QWidget *parent, const QString &key);
+     *  (FixtureCreator::routeWled()), as one undo step; then, with
+     *  @p offerSetUp, offer to set the device up (WledConfigCheck::
+     *  offerSetUp()) when the app checks WLEDs -- a batch passes false and
+     *  asks once for all of them. Problems are said over @p parent.
+     *  Fixture::invalidId() when it could not. */
+    quint32 patch(QWidget *parent, const QString &key, bool offerSetUp = true);
 
     /** Send fixture @p fixtureId to the IP its WLED answers at now: its IP,
      *  and its universe's output aimed there, as one undo step. */

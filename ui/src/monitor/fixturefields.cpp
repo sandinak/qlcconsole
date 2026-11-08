@@ -605,6 +605,7 @@ void FixtureFields::hideAll()
                         m_dmxBox, static_cast<QWidget *>(m_dmxNote), m_wledBox,
                         static_cast<QWidget *>(m_pixelPath), static_cast<QWidget *>(m_pixelTurns),
                         static_cast<QWidget *>(m_wandLength), static_cast<QWidget *>(m_wandStrip),
+                        static_cast<QWidget *>(m_ledSupply),
                         static_cast<QWidget *>(m_wandDiameter), static_cast<QWidget *>(m_wandStart),
                         static_cast<QWidget *>(m_heldBy),
                         static_cast<QWidget *>(m_holdHeight), static_cast<QWidget *>(m_holdTilt),
@@ -1038,6 +1039,17 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
                                .arg(MeasurementUnits::formatLength(20.0)));
     form->addRow(tr("String length:"), m_wandStrip);
 
+    m_ledSupply = new QDoubleSpinBox(parent);
+    m_ledSupply->setObjectName(QStringLiteral("fixtureLedSupply"));
+    m_ledSupply->setRange(0.0, 48.0);
+    m_ledSupply->setDecimals(1);
+    m_ledSupply->setSuffix(tr(" V"));
+    m_ledSupply->setSpecialValueText(tr("Not known"));
+    m_ledSupply->setToolTip(tr("The voltage of the power supply its LEDs run on (5 V, 12 V, 24 V). "
+                               "With its Max draw it sets the WLED's brightness limit; not known: "
+                               "the limit is left as the WLED has it"));
+    form->addRow(tr("LED supply:"), m_ledSupply);
+
     m_wandDiameter = new FeetInchesSpinBox(isFeet, parent);
     m_wandDiameter->setObjectName(QStringLiteral("fixtureWandDiameter"));
     m_wandDiameter->setDecimals(5);   // a fraction of an inch, kept exact
@@ -1181,6 +1193,9 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     connect(m_wandStrip, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [each, toDisp](double v) {
         each(QStringLiteral("wandStripLength"), [v, toDisp](FixtureRigProps &rp) { rp.wandStripLength = float(v / toDisp); });
     });
+    connect(m_ledSupply, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [each](double v) {
+        each(QStringLiteral("ledSupplyVolts"), [v](FixtureRigProps &rp) { rp.ledSupplyVolts = float(v); });
+    });
     connect(m_wandDiameter, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [each, toDisp](double v) {
         each(QStringLiteral("wandDiameter"), [v, toDisp](FixtureRigProps &rp) { rp.wandDiameter = float(v / toDisp); });
     });
@@ -1226,7 +1241,7 @@ void FixtureFields::showPixelRows(quint32 fid)
                 it->setEnabled(!PixelPath::needsFountain(k) || inFountain || rp.pixelPath == k);
     const QSignalBlocker b1(m_pixelPath), b2(m_pixelTurns), b3(m_wandLength), b4(m_heldBy),
                          b5(m_holdHeight), b6(m_holdTilt), b7(m_wandStrip), b8(m_wandDiameter),
-                         b9(m_wandStart);
+                         b9(m_wandStart), b10(m_ledSupply);
     m_pixelPath->setCurrentIndex(qMax(0, m_pixelPath->findData(rp.pixelPath)));
     row(m_pixelPath, true);
     const bool wound = rp.pixelPath == PixelPath::Wand || rp.pixelPath == PixelPath::FlameSpiral;
@@ -1238,6 +1253,8 @@ void FixtureFields::showPixelRows(quint32 fid)
     const bool freeString = rp.pixelPath == PixelPath::FreeString;
     m_wandStrip->setValue(double(rp.wandStripLength) * toDisp);
     row(m_wandStrip, wand || freeString);
+    m_ledSupply->setValue(double(rp.ledSupplyVolts));
+    row(m_ledSupply, WledConfigCheck::isWled(doc->fixture(fid)));
     m_wandDiameter->setValue(double(rp.wandDiameter) * toDisp);
     row(m_wandDiameter, wand);
     m_wandStart->setCurrentIndex(rp.wandFromTop ? 1 : 0);

@@ -580,11 +580,11 @@ void WledDiscovery::publish()
  * Patch, Follow It
  *********************************************************************/
 
-quint32 WledDiscovery::patch(QWidget *parent, const QString &key)
+quint32 WledDiscovery::patch(QWidget *parent, const QString &key, bool offerSetUp)
 {
     const Device d = m_devices.value(key);
     if (keyOf(d).isEmpty() || fixtureFor(d) != nullptr)
-        return 0;
+        return Fixture::invalidId();
     QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef(QStringLiteral("WLED"), QStringLiteral("Effect Mode"));
     QLCFixtureMode *mode = nullptr;
     if (def != nullptr)
@@ -601,7 +601,7 @@ quint32 WledDiscovery::patch(QWidget *parent, const QString &key)
             box.setObjectName(QStringLiteral("wledPatchNoDefinition"));
             box.exec();
         }
-        return 0;
+        return Fixture::invalidId();
     }
 
     Fixture *fx = new Fixture(m_doc);
@@ -617,7 +617,7 @@ quint32 WledDiscovery::patch(QWidget *parent, const QString &key)
     if (!m_doc->addFixture(fx))
     {
         delete fx;
-        return 0;
+        return Fixture::invalidId();
     }
     const quint32 fid = fx->id();
     if (d.leds > 0)
@@ -632,8 +632,9 @@ quint32 WledDiscovery::patch(QWidget *parent, const QString &key)
     m_doc->setModified();
     reconcile();
 
-    if (WledConfigCheck *check = WledConfigCheck::instance())
-        check->offerSetUp(parent, fid);
+    if (offerSetUp)
+        if (WledConfigCheck *check = WledConfigCheck::instance())
+            check->offerSetUp(parent, fid);
     return fid;
 }
 

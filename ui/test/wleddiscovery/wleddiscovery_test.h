@@ -52,6 +52,9 @@ private slots:
      *  them back; Not Now writes nothing. */
     void setUpAsksOnceWritesTheKeysAndReadsBack();
     /** A Teaching show holding real output is not asked and writes nothing. */
+    /** Several patched at once: one question, each device under its name,
+     *  each written. */
+    void aBatchIsSetUpWithOneQuestion();
     void aHeldClassroomIsNotSetUp();
     /** The real network, by hand only (QLC_WLED_LIVE_BROWSE=1): asks, reads
      *  each WLED's info, writes nothing. Skipped in the gate. */

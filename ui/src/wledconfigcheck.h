@@ -78,6 +78,10 @@ public:
         QJsonObject ledFix;
         /** Why the count can't be set from here (several outputs). */
         QString ledRefusal;
+
+        /** What the show leaves alone and says so, for Set Up ("Brightness
+         *  limit: not set from the show (LED supply voltage unknown); ..."). */
+        QStringList notes;
     };
 
     /** The fixtures whose WLED is not set up as the show drives it. */
@@ -130,9 +134,11 @@ public:
      *  finding (evaluate()) it is only put right with a name that differs. */
     static Finding setUpFor(Doc *doc, const Fixture *fx, const QJsonObject &cfg, bool setUp);
 
-    /** The brightness limiter (mA, what WLED's hw.led.maxpwr holds) that
-     *  @p fx's Max draw allows: its watts at its circuit's voltage (@p volts,
-     *  120 V when it has none) on a 5 V LED supply. 0: no Max draw. */
+    /** The brightness limit (mA of its LED supply, what WLED's hw.led.maxpwr
+     *  holds) that @p fx's Max draw allows: its watts at its circuit's
+     *  voltage (@p volts, 120 V when it has none) over its LED supply's
+     *  voltage (Fixture Properties ▸ LED supply). 0: no Max draw, or its LED
+     *  supply is not known -- nothing is guessed. */
     static int limiterMilliamps(Doc *doc, const Fixture *fx, double *volts = nullptr);
 
     /** Offer, once, to set @p fixtureId's WLED up as this show drives it
@@ -141,10 +147,22 @@ public:
      *  it went is writeStatus(). Nothing is asked when a Teaching show holds
      *  real output, the device does not answer, or nothing needs changing. */
     void offerSetUp(QWidget *parent, quint32 fixtureId);
+    /** The same for several (a batch added or patched at once): every
+     *  device is read first, then ONE confirmation lists each one's changes
+     *  under its name. */
+    void offerSetUp(QWidget *parent, const QList<quint32> &fixtureIds);
 
-    /** The one confirmation: "Set up 'Staff L' on the device: …". */
-    static bool confirmSetUp(QWidget *parent, const QString &fixtureName, const QString &ip,
-                             const QStringList &changes, const QStringList &notes);
+    /** One device in the Set Up confirmation. */
+    struct SetUpItem
+    {
+        QString fixtureName;
+        QString ip;
+        QStringList changes;
+        QStringList notes;
+    };
+    /** The one confirmation: "Set up 'Staff L' (WLED 172.18.2.100) …", or
+     *  for several, each under its name. */
+    static bool confirmSetUp(QWidget *parent, const QList<SetUpItem> &items);
 
     /** How often it reads them again, ms (tests make it quick). */
     void setInterval(int ms);
@@ -166,6 +184,8 @@ private:
     void receive(const QString &ip, const QByteArray &body, bool ok);
     /** Keep @p text as what the write at @p ip says now. */
     void noteWrite(const QString &ip, const QString &text, bool busy);
+    /** Write @p fix (Set Up's) to the device at @p ip, then read it back. */
+    void writeSetUp(const QString &ip, const QJsonObject &fix);
     /** The footer's "wled.config" entry, from the findings. */
     void publish();
 

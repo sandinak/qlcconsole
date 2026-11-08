@@ -22,7 +22,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   WLED that comes back at a new IP is found by its hardware address: "WLED
   Test is now at .105", **Follow It**. Then **Set Up WLED** offers once to
   give the device the fixture's name, stop WLED sync with other WLEDs, keep
-  it dark at power-on and set its brightness limiter from Max draw; only
+  it dark at power-on and set its brightness limit from Max draw and the
+  new **LED supply** voltage (left alone while that is not known); a batch
+  asks once for all of them; only
   those settings are written, read back, and a drift later is a Fix on
   Device finding (UX-76).
 

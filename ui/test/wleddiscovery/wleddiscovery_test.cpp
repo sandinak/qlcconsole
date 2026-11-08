@@ -576,13 +576,32 @@ void WledDiscovery_Test::driftIsAFixOnDeviceFinding()
     QVERIFY2(WledConfigCheck::evaluate(m_doc, fx, right).problems.isEmpty(),
              qPrintable(WledConfigCheck::evaluate(m_doc, fx, right).problems.join("; ")));
 
-    // A Max draw: the limiter, all of hw.led as it said with only the limits.
+    // A Max draw, its LED supply not known: nothing guessed, only said.
     PowerProfile pp = fx->powerProfile();
-    pp.maxAmps = 0.25;                              // 30 W at 120 V: 6 A of 5 V LEDs
+    pp.maxAmps = 0.25;                              // 30 W at 120 V
     fx->setPowerProfile(pp);
-    QCOMPARE(WledConfigCheck::limiterMilliamps(m_doc, fx), 6000);
+    QCOMPARE(WledConfigCheck::limiterMilliamps(m_doc, fx), 0);
+    const WledConfigCheck::Finding u = WledConfigCheck::evaluate(m_doc, fx, right);
+    QVERIFY(u.problems.isEmpty());
+    QVERIFY(u.fix.isEmpty());
+    QCOMPARE(u.notes, QStringList({ "Brightness limit: not set from the show (LED supply voltage "
+                                    "unknown); the WLED's own is 850 mA" }));
+
+    // Its LED supply known (5 V): the limit, all of hw.led as it said with
+    // only the limits changed.
+    FixtureRigProps supply = m_doc->monitorProperties()->fixtureRigProps(fx->id());
+    supply.ledSupplyVolts = 5.0f;
+    m_doc->monitorProperties()->setFixtureRigProps(fx->id(), supply);
+    QCOMPARE(WledConfigCheck::limiterMilliamps(m_doc, fx), 6000);   // 30 W of 5 V LEDs: 6 A
+    supply.ledSupplyVolts = 12.0f;
+    m_doc->monitorProperties()->setFixtureRigProps(fx->id(), supply);
+    QCOMPARE(WledConfigCheck::limiterMilliamps(m_doc, fx), 2500);   // of 12 V LEDs: 2.5 A
+    supply.ledSupplyVolts = 5.0f;
+    m_doc->monitorProperties()->setFixtureRigProps(fx->id(), supply);
     const WledConfigCheck::Finding p = WledConfigCheck::evaluate(m_doc, fx, right);
-    QCOMPARE(p.problems, QStringList({ "its brightness limiter is 850 mA; this fixture's Max draw is 6000 mA of LEDs" }));
+    QCOMPARE(p.problems, QStringList({ "its brightness limit is 850 mA; this fixture's Max draw is 6000 mA of LEDs" }));
+    QCOMPARE(p.changes, QStringList({ "Brightness limit: 6000 mA" }));
+    QVERIFY(p.notes.isEmpty());
     QJsonObject led = FakeWled::ledCfg(50).value("led").toObject();
     led["maxpwr"] = 6000;
     QJsonArray ins = led["ins"].toArray();
@@ -617,6 +636,11 @@ void WledDiscovery_Test::setUpAsksOnceWritesTheKeysAndReadsBack()
     over.resize(1280, 800);
     over.show();
 
+    // A Max draw but no LED supply: said in the question, never written.
+    PowerProfile pp = fx->powerProfile();
+    pp.maxAmps = 0.25;
+    fx->setPowerProfile(pp);
+
     // Not Now: nothing written.
     QString text;
     answerBox("Not Now", &text);
@@ -629,13 +653,15 @@ void WledDiscovery_Test::setUpAsksOnceWritesTheKeysAndReadsBack()
     answerBox("Set Up Device", &text, "setup-confirm");
     check.offerSetUp(&over, fx->id());
     QVERIFY(waitFor([&wled]() { return wled.posted.size() == 1; }));
-    QVERIFY2(text.contains(QString("Set up “Staff L” on the device, WLED (%1), the way this show drives it?")
+    QVERIFY2(text.contains(QString("Set up “Staff L” (WLED (%1)) the way this show drives it?")
                                .arg(wled.address())), qPrintable(text));
-    QVERIFY2(text.contains("Name: WLED → Staff L"), qPrintable(text));
-    QVERIFY2(text.contains("Network name: wled-f992e0.local → staff-l.local"), qPrintable(text));
-    QVERIFY2(text.contains("Take brightness, colour, effect, palette from other WLEDs: on → off"), qPrintable(text));
-    QVERIFY2(text.contains("At power-on: lit → dark until the show drives it"), qPrintable(text));
-    QVERIFY2(text.contains("Wi-Fi, LED type, pins and colour order are left as they are"), qPrintable(text));
+    QVERIFY2(text.contains("• Name: Staff L<"), qPrintable(text));
+    QVERIFY2(text.contains("• Network name: staff-l.local<"), qPrintable(text));
+    QVERIFY2(text.contains("• Sync: takes nothing from other WLEDs<"), qPrintable(text));
+    QVERIFY2(text.contains("• Power-on: dark until the show drives it<"), qPrintable(text));
+    QVERIFY2(text.contains("Brightness limit: not set from the show (LED supply voltage unknown); "
+                           "the WLED's own is 850 mA"), qPrintable(text));
+    QVERIFY2(text.contains("Wi-Fi, LED type, pins and colour order stay as they are"), qPrintable(text));
     QCOMPARE(wled.posted.first().first, QByteArray("/json/cfg"));
     const QJsonObject sent = wled.posted.first().second;
     QCOMPARE(sent, QJsonObject({
@@ -662,6 +688,78 @@ void WledDiscovery_Test::setUpAsksOnceWritesTheKeysAndReadsBack()
     QCOMPARE(wled.posted.size(), 1);
     QCOMPARE(check.writeStatus(wled.address()),
              QString("WLED (%1) is set up the way this show drives it.").arg(wled.address()));
+}
+
+void WledDiscovery_Test::aBatchIsSetUpWithOneQuestion()
+{
+    FakeWled left, right;
+    QVERIFY(left.listen(QHostAddress::LocalHost));
+    QVERIFY(right.listen(QHostAddress::LocalHost));
+    left.info = QJsonObject{ { "name", "Staff L" }, { "mac", "aa0000000001" }, { "leds", QJsonObject{ { "count", 50 } } } };
+    right.info = QJsonObject{ { "name", "Staff R" }, { "mac", "aa0000000002" }, { "leds", QJsonObject{ { "count", 50 } } } };
+    left.cfg = realCfg(50);
+    right.cfg = realCfg(50);
+
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, m_doc);
+    WledConfigCheck check(m_doc);
+    WledDiscovery found(m_doc);
+    found.setSender([](const QByteArray &) {});
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.resize(1280, 800);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    found.receive(answer("wled-000001", "127.0.0.1", left.serverPort(), "aa0000000001"), QHostAddress::LocalHost);
+    found.receive(answer("wled-000002", "127.0.0.1", right.serverPort(), "aa0000000002"), QHostAddress::LocalHost);
+    QVERIFY(waitFor([&found]() { return found.notInShow().size() == 2; }));
+
+    // The folder stands for both: one Patch, one question naming each.
+    QTreeWidgetItem *folder = foundRow(mgr, true);
+    QVERIFY(folder != nullptr);
+    int boxes = 0;
+    QString text;
+    auto poll = std::make_shared<std::function<void()> >();
+    auto left_ = std::make_shared<int>(400);
+    *poll = [&boxes, &text, poll, left_]() {
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        {
+            ++boxes;
+            text = box->text();
+            const QByteArray dir = qgetenv("QLC_SHOT_DIR");
+            if (!dir.isEmpty())
+                for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+                {
+                    if (QWidget *over = box->parentWidget())
+                        over->window()->resize(sz);
+                    QApplication::processEvents();
+                    box->grab().save(QString::fromLocal8Bit(dir) + QStringLiteral("/setup-confirm-batch-%1x%2.png")
+                                         .arg(sz.width()).arg(sz.height()));
+                }
+            QAbstractButton *hit = nullptr;
+            for (QAbstractButton *b : box->buttons())
+                if (b->text() == "Set Up 2 Devices")
+                    hit = b;
+            if (hit != nullptr)
+                hit->click();
+            else
+                box->reject();
+        }
+        if (--*left_ > 0)
+            QTimer::singleShot(10, *poll);
+    };
+    const QStringList texts = rightClick(mgr, folder, "Patch 2 WLEDs");
+    QVERIFY2(texts.contains("Patch 2 WLEDs"), qPrintable(texts.join(" | ")));
+    QTimer::singleShot(0, *poll);
+    QVERIFY(waitFor([&left, &right]() { return left.posted.size() == 1 && right.posted.size() == 1; }));
+    QTest::qWait(300);
+    QCOMPARE(boxes, 1);
+    QVERIFY2(text.startsWith("Set up these 2 WLEDs the way this show drives them?"), qPrintable(text));
+    QVERIFY2(text.contains(QString("<b>Staff L</b> (WLED (%1))").arg(left.address())), qPrintable(text));
+    QVERIFY2(text.contains(QString("<b>Staff R</b> (WLED (%1))").arg(right.address())), qPrintable(text));
+    QCOMPARE(left.posted.first().second["id"].toObject()["name"].toString(), QString("Staff L"));
+    QCOMPARE(right.posted.first().second["id"].toObject()["mdns"].toString(), QString("staff-r"));
+    QCOMPARE(m_doc->fixtures().size(), 2);
+    delete mon;
 }
 
 void WledDiscovery_Test::aHeldClassroomIsNotSetUp()

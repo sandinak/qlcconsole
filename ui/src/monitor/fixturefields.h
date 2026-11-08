@@ -141,6 +141,7 @@ private:
     QDoubleSpinBox *m_wandLength;
     QDoubleSpinBox *m_wandStrip;     ///< the lit string's length; 0 = LED tape
     QDoubleSpinBox *m_wandDiameter;
+    QDoubleSpinBox *m_ledSupply = nullptr;  ///< a WLED string's LED supply (V); 0 = not known
     QComboBox *m_wandStart;          ///< LED 1 at the grip or the tip
     QComboBox *m_heldBy;        ///< a Person target, or nobody
     QDoubleSpinBox *m_holdHeight;

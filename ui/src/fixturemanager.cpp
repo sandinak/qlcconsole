@@ -80,6 +80,7 @@
 #include "addfixture.h"
 #include "patchinventorydialog.h"
 #include "wleddiscovery.h"
+#include "wledconfigcheck.h"
 #include <QShowEvent>
 #include "fixturecreator.h"
 #include "patchplanner.h"
@@ -3223,12 +3224,17 @@ void FixtureManager::foundContextMenu(QTreeWidgetItem *clicked)
     if (!ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Patch WLEDs found on the network")))
         return;
     quint32 last = Fixture::invalidId();
+    QList<quint32> made;
     foreach (const QString &key, keys)
     {
-        const quint32 fid = found->patch(this, key);
-        if (fid != 0)
-            last = fid;
+        const quint32 fid = found->patch(this, key, false);
+        if (fid != Fixture::invalidId())
+            made << (last = fid);
     }
+    // One Set Up question for all of them.
+    if (WledConfigCheck *check = WledConfigCheck::instance())
+        if (!made.isEmpty())
+            check->offerSetUp(this, made);
     updateView();
     if (QTreeWidgetItem *row = m_fixtures_tree->fixtureItem(last))
         m_fixtures_tree->setCurrentItem(row);
