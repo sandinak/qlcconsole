@@ -46,9 +46,9 @@ that have one. Change both files together.
 | Safety in Operate | UX-49, UX-50, UX-51, UX-52, UX-53, UX-54, UX-55, UX-56 | 8 | 6 |
 | Teaching & course voice | UX-57, UX-58, UX-59, UX-60 | 4 | 1 |
 | Ease of use | UX-61, UX-62, UX-64, UX-65, UX-66, UX-76 | 6 | 0 |
-| Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 2 |
+| Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 3 |
 
-Main check: 43 tests, 24 review, 6 walker, 3 manual. 43 of 76 enforced.
+Main check: 44 tests, 23 review, 6 walker, 3 manual. 44 of 76 enforced.
 
 ## Units & numbers
 
@@ -733,7 +733,7 @@ A network device follows a snap within the network's own time: it is sent at onc
 A save or a routine update changes a footer chip at most once, never on and off.
 
 - **Why:** 2026-11-07: "when I save sometimes the power and current cue in the bottom flash hard" (fix/042-footer-save-flash).
-- **Check:** `footersave_test::routineUpdatesChangeNoChipAndMoveNone`, `anAutosaveDoesNotTurnTheDirtyChipOverAndBack`, `theLoadAndNextChipsKeepTheirRoom`, `savingLeavesTheFooterWhereItWas`
+- **Check:** `footersave_test::routineUpdatesChangeNoChipAndMoveNone`, `footersave_test::anAutosaveDoesNotTurnTheDirtyChipOverAndBack`, `footersave_test::theLoadAndNextChipsKeepTheirRoom`, `footersave_test::savingLeavesTheFooterWhereItWas` (enforced)
 - **Right:** `Save: the power and cue chips stay steady, or change once`
 - **Wrong:** `Save: the power and cue chips blink off and on`
 
