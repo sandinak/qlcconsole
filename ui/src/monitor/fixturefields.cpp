@@ -1046,8 +1046,8 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     m_ledSupply->setSuffix(tr(" V"));
     m_ledSupply->setSpecialValueText(tr("Not known"));
     m_ledSupply->setToolTip(tr("The voltage of the power supply its LEDs run on (5 V, 12 V, 24 V). "
-                               "With its Max draw it sets the WLED's brightness limit; not known: "
-                               "the limit is left as the WLED has it"));
+                               "With its Max draw it sets the WLED's brightness limit; 5 V unless "
+                               "you change it; Not known: the limit is left as the WLED has it"));
     form->addRow(tr("LED supply:"), m_ledSupply);
 
     m_wandDiameter = new FeetInchesSpinBox(isFeet, parent);
