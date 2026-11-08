@@ -56,6 +56,8 @@ class NetworkRunItem;
 class QTimer;
 class TargetItem;
 class MonitorImageItem;
+class FreeStringHandles;
+struct StringAnchor;
 class Doc;
 
 /** \addtogroup ui_mon DMX Monitor
@@ -1092,6 +1094,33 @@ public:
     /** Is there anything for Ctrl+Z to undo? */
     bool canUndo() const { return !m_moveUndo.isEmpty(); }
 
+    /* ---- Free string anchors (PixelPath::FreeString, on the plot) ---- */
+    /** Arm "click to add an anchor" for @p fid: each left click on the plan
+     *  adds one after its last (the first click of a string with none of
+     *  its own starts it), one undo step each, until Esc, a right-click or
+     *  endAddAnchors(). Top, Front or Side. */
+    void beginAddAnchors(quint32 fid);
+    void endAddAnchors();
+    bool addingAnchors() const { return m_addAnchorFid != UINT_MAX; }
+    quint32 addingAnchorsTo() const { return m_addAnchorFid; }
+    /** The handles of the free string selected (or being laid), or nullptr
+     *  when none is shown. */
+    FreeStringHandles *stringHandles() const;
+    /** Draw them again for what is selected now. */
+    void refreshStringHandles();
+    /** One anchor edit, one undo step each (the handle's right-click menu). */
+    void addStringAnchorAt(quint32 fid, const QPointF &scenePos);
+    void insertStringAnchor(quint32 fid, int before);
+    void deleteStringAnchor(quint32 fid, int index);
+    void setStringAnchorPin(quint32 fid, int index, int led);
+    void setStringAnchorReverse(quint32 fid, int index, bool on);
+    /** Drag anchor @p index of @p fid to @p scenePos (Shift: along one axis);
+     *  stringDragEnd() makes the drag one undo step. */
+    void stringDragTo(quint32 fid, int index, const QPointF &scenePos, Qt::KeyboardModifiers mods);
+    void stringDragEnd();
+    /** The LED (1-based) nearest anchor @p index, as the string is laid now. */
+    int stringLedNearAnchor(quint32 fid, int index) const;
+
     /** Update a fixture item's real position (mm) and reposition it on the canvas.
      *  Call this after programmatically changing a fixture's truss offset. */
     void moveFixtureTo(quint32 fid, QPointF mmPos);
@@ -1234,6 +1263,8 @@ signals:
     /** A drag was refused because what it grabbed is held still; @p why is
      *  for the status line ("Plot locked — Edit Plot to move"). */
     void dragRefused(const QString &why);
+    /** Something to tell the operator on the status line (adding anchors). */
+    void notice(const QString &text);
 
     /** Signal emitted when a platform is moved (new origin in metres). */
     void platformMoved(quint32 id, QPointF originMetres);
@@ -1811,6 +1842,34 @@ private:
 
     /** True while a "click to place 0,0" pick is armed (beginPickOrigin). */
     bool m_pickingOrigin = false;
+
+    /** Free string anchors: the handles (made once, hidden when unused), the
+     *  string being laid, a handle drag in progress, the rig before it. */
+    FreeStringHandles *m_stringHandles = nullptr;
+    quint32 m_addAnchorFid = UINT_MAX;
+    quint32 m_stringDragFid = UINT_MAX;
+    int m_stringDragIndex = -1;
+    bool m_stringDragMoved = false;
+    QPointF m_stringDragStartScene;
+    QByteArray m_stringDragBefore;
+    bool m_stringCursor = false;
+    bool m_swallowContextMenu = false;
+    QElapsedTimer m_lastAnchorAdd;     ///< a click that placed an anchor, and where
+    QPoint m_lastAnchorAddPos;
+    /** A press on the plot that is the free string's: placing an anchor,
+     *  or a handle grabbed. True when it took it. */
+    bool stringPress(QMouseEvent *event);
+    /** The free string's anchors to edit: its own, or the default ones it
+     *  is drawn with until it has some (they become its own). */
+    QVector<StringAnchor> editableAnchors(quint32 fid) const;
+    /** Set them, redraw, and (with @p before) record one undo step. */
+    void putAnchors(quint32 fid, const QVector<StringAnchor> &anchors, const QByteArray &before);
+    /** The handle under @p scenePos of the free string shown, or -1. */
+    int stringHandleAt(const QPointF &scenePos) const;
+    /** May its anchors be moved now (plot and layer locks, Top/Front/Side)? */
+    bool stringEditable(quint32 fid) const;
+    /** The right-click menu of handle @p index. */
+    void stringHandleMenu(int index, const QPoint &globalPos);
 
     /** "Stage view" — hide fixtures/targets/power, keep only stage features. */
     bool m_stageOnly = false;

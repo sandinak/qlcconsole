@@ -280,6 +280,28 @@ struct SprinkleSpan
     }
 };
 
+/** One anchor of a Free string pixel path (PixelPath::FreeString): a point
+ *  a fairy string is tied to or runs through, on the stage seen from above
+ *  (x, y) at a height (z), metres, in the order the string runs. @c pin, when
+ *  above 0, is the LED (1-based) that sits at this anchor; @c reverse turns
+ *  the span from this anchor to the next round when it is written to a WLED
+ *  as a segment. */
+struct StringAnchor
+{
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    int   pin = 0;          ///< the LED here, 1-based; 0 = not pinned
+    bool  reverse = false;  ///< the span starting here runs the other way
+    QVector3D pos() const { return QVector3D(x, y, z); }
+    bool operator==(const StringAnchor &o) const
+    {
+        return qAbs(x - o.x) < 1e-5f && qAbs(y - o.y) < 1e-5f && qAbs(z - o.z) < 1e-5f
+            && pin == o.pin && reverse == o.reverse;
+    }
+    bool operator!=(const StringAnchor &o) const { return !(*this == o); }
+};
+
 /** Per-fixture rig assignment.  Stored alongside MonitorProperties visual
  *  data; one entry per fixture ID. */
 struct FixtureRigProps
@@ -426,6 +448,10 @@ struct FixtureRigProps
     int              sprinklePoints = 6;
     int              sprinkleSpansPerPoint = 4;
     QVector<SprinkleSpan> sprinkleSpans;
+    /** Free string (anchors): where the string runs, first anchor first.
+     *  Its length is @c wandStripLength (0 = LED tape). Fewer than two =
+     *  not laid out yet: drawn from its own place (PixelPath::freeStringAnchors()). */
+    QVector<StringAnchor> stringAnchors;
 
     /** Deck mount: a fixture standing ON TOP of a stage platform ("floor
      *  mounted"). Unlike a riser FACE mount it keeps its free XY position; only

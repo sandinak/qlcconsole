@@ -4094,6 +4094,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.sprinkleSpansPerPoint = qMax(1, a.value("SprPer").toInt());
             if (a.hasAttribute("SprSpans"))
                 rp.sprinkleSpans = PixelPath::sprinkleSpansFromString(a.value("SprSpans").toString());
+            if (a.hasAttribute("StrAnchors"))
+                rp.stringAnchors = PixelPath::stringAnchorsFromString(a.value("StrAnchors").toString());
             if (a.hasAttribute("Deck"))
             {
                 rp.deckPlatformId   = a.value("Deck").toUInt();
@@ -5042,6 +5044,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
             doc->writeAttribute(QStringLiteral("SprPer"), QString::number(rp.sprinkleSpansPerPoint));
         if (!rp.sprinkleSpans.isEmpty())
             doc->writeAttribute(QStringLiteral("SprSpans"), PixelPath::sprinkleSpansToString(rp.sprinkleSpans));
+        if (!rp.stringAnchors.isEmpty())
+            doc->writeAttribute(QStringLiteral("StrAnchors"), PixelPath::stringAnchorsToString(rp.stringAnchors));
         if (rp.onDeck())
         {
             doc->writeAttribute(QStringLiteral("Deck"),  QString::number(rp.deckPlatformId));

@@ -1824,6 +1824,212 @@ void MonitorProperties_Test::anOldBackgroundStaysRelativeToTheShow()
     QVERIFY(!buf.contains(folder.path().toUtf8()));
 }
 
+/*********************************************************************
+ * Free string (anchors)
+ *********************************************************************/
+
+namespace
+{
+StringAnchor anchorAt(float x, float y, float z, int pin = 0, bool rev = false)
+{
+    StringAnchor a;
+    a.x = x; a.y = y; a.z = z; a.pin = pin; a.reverse = rev;
+    return a;
+}
+}
+
+void MonitorProperties_Test::aFreeStringSpreadsItsLedsAlongItsAnchors()
+{
+    // 50 fairy LEDs on 16 ft (4.877 m): 49 gaps, LED 1 at the first anchor.
+    FixtureRigProps rp;
+    rp.pixelPath = PixelPath::FreeString;
+    rp.wandStripLength = 4.877f;
+    const double gap = PixelPath::freeStringSpacing(rp, 50);
+    QVERIFY(qAbs(gap - 4.877 / 49.0) < 1e-7);
+    QVERIFY(qAbs(PixelPath::freeStringLength(rp, 50) - 4.877) < 1e-6);
+    // Unset: LED tape.
+    FixtureRigProps tape;
+    QCOMPARE(PixelPath::freeStringSpacing(tape, 50), PixelPath::kLedSpacing);
+
+    // An L: 3 m across, then 1.877 m up a pole -- exactly as long as the string.
+    const QVector<StringAnchor> el = { anchorAt(0, 0, 1), anchorAt(3, 0, 1), anchorAt(3, 0, 2.877f) };
+    QVERIFY(qAbs(PixelPath::anchorLineLength(el) - 4.877) < 1e-5);
+    const QVector<QVector3D> leds = PixelPath::freeStringPositions(el, 50, gap);
+    QCOMPARE(leds.size(), 50);
+    QVERIFY((leds.first() - QVector3D(0, 0, 1)).length() < 1e-4f);
+    QVERIFY((leds.last() - QVector3D(3, 0, 2.877f)).length() < 1e-3f);
+    for (int i = 1; i < leds.size(); ++i)                    // even along the line
+    {
+        const double d = double((leds.at(i) - leds.at(i - 1)).length());
+        QVERIFY2(d <= gap + 1e-4, qPrintable(QString::number(d)));
+    }
+    // Heights follow the anchors: flat along the first leg, rising up the pole.
+    QVERIFY(qAbs(leds.at(20).z() - 1.0f) < 1e-4f);
+    QVERIFY(leds.at(45).z() > 1.5f && qAbs(leds.at(45).x() - 3.0f) < 1e-4f);
+
+    // A string shorter than its anchors stops where it runs out ...
+    const QVector<StringAnchor> wide = { anchorAt(0, 0, 0), anchorAt(10, 0, 0) };
+    const QVector<QVector3D> shortRun = PixelPath::freeStringPositions(wide, 50, gap);
+    QVERIFY(qAbs(shortRun.last().x() - 4.877f) < 1e-3f);
+    // ... and one longer runs on straight past the last anchor.
+    const QVector<StringAnchor> tight = { anchorAt(0, 0, 0), anchorAt(0, 2, 0) };
+    const QVector<QVector3D> longRun = PixelPath::freeStringPositions(tight, 50, gap);
+    QVERIFY(qAbs(longRun.last().y() - 4.877f) < 1e-3f && qAbs(longRun.last().x()) < 1e-5f);
+
+    // Through a doc's fixture: positions() lays it on its anchors.
+    MonitorProperties mp;
+    mp.setFixturePosition(4, 0, 0, QVector3D(500, 500, 0));
+    rp.stringAnchors = el;
+    mp.setFixtureRigProps(4, rp);
+    QCOMPARE(PixelPath::positions(nullptr, &mp, 4, 50), leds);
+    QVERIFY(!PixelPath::needsFountain(PixelPath::FreeString));
+    QCOMPARE(PixelPath::name(PixelPath::FreeString), QString("Free string (anchors)"));
+}
+
+void MonitorProperties_Test::pinnedLedsHoldAFreeStringAtItsAnchors()
+{
+    // 0 -> 2 m -> 3 m along X; LED 30 tied at the middle anchor.
+    QVector<StringAnchor> a = { anchorAt(0, 0, 0), anchorAt(2, 0, 0, 30), anchorAt(3, 0, 0) };
+    const double gap = 0.05;
+    QVector<QVector3D> leds = PixelPath::freeStringPositions(a, 60, gap);
+    QCOMPARE(leds.size(), 60);
+    QVERIFY(qAbs(leds.at(0).x()) < 1e-5f);                   // LED 1 at the first
+    QVERIFY(qAbs(leds.at(29).x() - 2.0f) < 1e-5f);           // LED 30 at the pin
+    QVERIFY(qAbs(leds.at(14).x() - 2.0f * 14 / 29) < 1e-4f); // even between them
+    QVERIFY(qAbs(leds.at(59).x() - (2.0f + 30 * 0.05f)) < 1e-4f);   // its gap after the last pin
+
+    // Two pins: the LEDs between them shared out evenly, whatever the gap says.
+    a[2].pin = 40;
+    leds = PixelPath::freeStringPositions(a, 60, gap);
+    QVERIFY(qAbs(leds.at(39).x() - 3.0f) < 1e-5f);
+    QVERIFY(qAbs(leds.at(34).x() - 2.5f) < 1e-4f);
+    QVERIFY(qAbs(leds.at(59).x() - (3.0f + 20 * 0.05f)) < 1e-4f);   // runs on past the end
+
+    // A first anchor that pins LED 5: LEDs 1 to 4 hang back before it.
+    QVector<StringAnchor> b = { anchorAt(1, 0, 0, 5), anchorAt(2, 0, 0) };
+    leds = PixelPath::freeStringPositions(b, 10, 0.1);
+    QVERIFY(qAbs(leds.at(4).x() - 1.0f) < 1e-5f);
+    QVERIFY(qAbs(leds.at(0).x() - 0.6f) < 1e-4f);
+
+    // Pins that go backwards are refused in words, and ignored when laid.
+    a[2].pin = 20;
+    QVERIFY(PixelPath::checkStringAnchors(a, 60).contains("count up"));
+    leds = PixelPath::freeStringPositions(a, 60, gap);
+    QVERIFY(qAbs(leds.at(29).x() - 2.0f) < 1e-5f);
+    a[2].pin = 70;
+    QVERIFY(PixelPath::checkStringAnchors(a, 60).contains("past the last LED (60)"));
+    a[2].pin = 0;
+    QVERIFY(PixelPath::checkStringAnchors(a, 60).isEmpty());
+}
+
+void MonitorProperties_Test::aFreeStringWithoutAnchorsStartsInFrontOfItsFixture()
+{
+    MonitorProperties mp;
+    mp.setFixturePosition(9, 0, 0, QVector3D(2000, 1000, 0));
+    FixtureRigProps rp;
+    rp.pixelPath = PixelPath::FreeString;
+    rp.wandStripLength = 3.0f;
+    mp.setFixtureRigProps(9, rp);
+    const QVector3D at = mp.fixtureRigPosition(9);
+    const QVector<StringAnchor> two = PixelPath::freeStringAnchors(rp, at, 31);
+    QCOMPARE(two.size(), 2);
+    QVERIFY(two.at(0).y > at.y());                            // in front: downstage
+    QVERIFY(qAbs(two.at(0).z - at.z()) < 1e-5f);              // at its own height
+    QVERIFY(qAbs(PixelPath::anchorLineLength(two) - 3.0) < 1e-5);
+    const QVector<QVector3D> leds = PixelPath::positions(nullptr, &mp, 9, 31);
+    QCOMPARE(leds.size(), 31);
+    QVERIFY((leds.last() - two.at(1).pos()).length() < 1e-4f);
+    // One anchor: from it, a string length on.
+    rp.stringAnchors = { anchorAt(5, 5, 1.5f) };
+    const QVector<StringAnchor> one = PixelPath::freeStringAnchors(rp, at, 31);
+    QCOMPARE(one.size(), 2);
+    QCOMPARE(one.at(0), rp.stringAnchors.first());
+    QVERIFY(qAbs(one.at(1).z - 1.5f) < 1e-5f && qAbs(one.at(1).x - 8.0f) < 1e-4f);
+}
+
+void MonitorProperties_Test::aFreeStringsAnchorsRoundTrip()
+{
+    const QVector<StringAnchor> a = { anchorAt(1.25f, -0.5f, 2.0f), anchorAt(3.0f, 0.75f, 0.3f, 25, true),
+                                      anchorAt(4.5f, 1.0f, 0.0f) };
+    QCOMPARE(PixelPath::stringAnchorsFromString(PixelPath::stringAnchorsToString(a)), a);
+    // A short or broken entry is skipped; pin and reverse may be left off.
+    const QVector<StringAnchor> loose = PixelPath::stringAnchorsFromString("1,2,3;oops;4,5");
+    QCOMPARE(loose.size(), 1);
+    QCOMPARE(loose.first().pin, 0);
+    QVERIFY(!loose.first().reverse);
+
+    MonitorProperties mp;
+    FixtureRigProps rp;
+    rp.pixelPath = PixelPath::FreeString;
+    rp.wandStripLength = 4.877f;
+    rp.stringAnchors = a;
+    mp.setFixturePosition(7, 0, 0, QVector3D(1, 2, 0));
+    mp.setFixtureRigProps(7, rp);
+    mp.setFixturePosition(8, 0, 0, QVector3D(1, 2, 0));
+    mp.setFixtureRigProps(8, FixtureRigProps());
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+    QCOMPARE(buf.count("StrAnchors="), 1);                   // only the one that has them
+    MonitorProperties mp2;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp2.loadXML(reader, nullptr));
+    const FixtureRigProps r2 = mp2.fixtureRigProps(7);
+    QCOMPARE(r2.pixelPath, int(PixelPath::FreeString));
+    QCOMPARE(r2.stringAnchors, a);
+    QVERIFY(qAbs(r2.wandStripLength - 4.877f) < 1e-4f);
+    QVERIFY(mp2.fixtureRigProps(8).stringAnchors.isEmpty());
+}
+
+void MonitorProperties_Test::aFreeStringsSpansBecomeSegmentsWithTheirOwnReverse()
+{
+    // Three anchors 1 m apart, LED 21 pinned at the middle one; the second span reversed.
+    const QVector<StringAnchor> a = { anchorAt(0, 0, 0), anchorAt(1, 0, 0, 21, true), anchorAt(2, 0, 0) };
+    const QVector<PixelPath::FreeSpan> spans = PixelPath::freeStringSpans(a, 40, 0.05);
+    QCOMPARE(spans.size(), 2);
+    QCOMPARE(spans.at(0).firstLed, 1);
+    QCOMPARE(spans.at(0).lastLed, 20);
+    QVERIFY(!spans.at(0).reverse);
+    QCOMPARE(spans.at(1).anchor, 1);
+    QCOMPARE(spans.at(1).firstLed, 21);
+    QCOMPARE(spans.at(1).lastLed, 40);
+    QVERIFY(spans.at(1).reverse);
+
+    // No pins: by the even spread. 0.1 m apart over 1 m spans: 10 + the rest.
+    const QVector<StringAnchor> even = { anchorAt(0, 0, 0), anchorAt(1, 0, 0), anchorAt(2, 0, 0) };
+    const QVector<PixelPath::FreeSpan> e = PixelPath::freeStringSpans(even, 15, 0.1);
+    QCOMPARE(e.size(), 2);
+    QCOMPARE(e.at(0).lastLed, 10);
+    QCOMPARE(e.at(1).firstLed, 11);
+    QCOMPARE(e.at(1).lastLed, 15);
+    // A string that never reaches a span: that span is left out.
+    QCOMPARE(PixelPath::freeStringSpans(even, 5, 0.1).size(), 1);
+
+    // As segments: one a span, each with its own Reverse, and read back the same.
+    QVector<SprinkleSpan> segs;
+    QVector<bool> rev;
+    PixelPath::freeSpansAsSegments(spans, segs, rev);
+    QCOMPARE(rev, QVector<bool>({ false, true }));
+    QJsonObject req;
+    QVERIFY(PixelPath::sprinkleSpansToWled(segs, R"({"seg":[{"id":0,"start":0,"stop":40}]})", 32, 40,
+                                           req, nullptr, rev));
+    const QJsonArray seg = req.value("seg").toArray();
+    QCOMPARE(seg.size(), 2);
+    QCOMPARE(seg.at(0).toObject().value("rev").toBool(), false);
+    QCOMPARE(seg.at(1).toObject().value("start").toInt(), 20);
+    QCOMPARE(seg.at(1).toObject().value("stop").toInt(), 40);
+    QCOMPARE(seg.at(1).toObject().value("rev").toBool(), true);
+    QVERIFY(PixelPath::wledSegmentsDiffer(segs, QJsonDocument(QJsonObject{ { "seg", seg } }).toJson(), rev).isEmpty());
+    // Both the same way: the second now reads back "not reversed".
+    const QVector<bool> same = { false, false };
+    QCOMPARE(PixelPath::wledSegmentsDiffer(segs, QJsonDocument(QJsonObject{ { "seg", seg } }).toJson(), same),
+             QStringList({ "Segment 2 is reversed." }));
+}
+
 QTEST_GUILESS_MAIN(MonitorProperties_Test)
 
 /* A hanger is rigging, like a bar: put on a tower truss part way up, its

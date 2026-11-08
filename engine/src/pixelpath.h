@@ -28,6 +28,7 @@ class MonitorProperties;
 class StageTarget;
 struct FixtureRigProps;
 struct SprinkleSpan;
+struct StringAnchor;
 class Doc;
 
 /** @addtogroup engine Engine
@@ -49,9 +50,10 @@ namespace PixelPath
         BaseRing,       ///< round the edge of its base
         FlameSpiral,    ///< wound up its flame
         Wand,           ///< a staff, wound round it
-        SprinkleLoops   ///< a fairy string looped across a fountain's gap
+        SprinkleLoops,  ///< a fairy string looped across a fountain's gap
+        FreeString      ///< a fairy string laid anywhere, through its anchors
     };
-    const int kShapes = int(SprinkleLoops) + 1;
+    const int kShapes = int(FreeString) + 1;
 
     /** Its name for a menu ("Inner wall top ring"). */
     QString name(int shape);
@@ -129,14 +131,68 @@ namespace PixelPath
      *  spans cleared ("stop":0). Refused (false, @p error in words, nothing
      *  in @p request) when there are no spans, more than @p maxSegments
      *  (info.leds.maxseg, 0 = not known), or one runs past @p deviceLeds
-     *  (info.leds.count, 0 = not known). */
+     *  (info.leds.count, 0 = not known). @p reverse, when it has a flag for
+     *  each span (in LED order), says which are reversed instead of every
+     *  second one: a free string's own Reverse per span. */
     bool sprinkleSpansToWled(const QVector<SprinkleSpan> &spans, const QByteArray &state,
                              int maxSegments, int deviceLeds, QJsonObject &request,
-                             QString *error = nullptr);
+                             QString *error = nullptr,
+                             const QVector<bool> &reverse = QVector<bool>());
     /** What a WLED's /json/state reply @p state has otherwise than the
      *  segments sprinkleSpansToWled() writes for @p spans, one line each;
-     *  empty when it matches. */
-    QStringList wledSegmentsDiffer(const QVector<SprinkleSpan> &spans, const QByteArray &state);
+     *  empty when it matches. @p reverse as there. */
+    QStringList wledSegmentsDiffer(const QVector<SprinkleSpan> &spans, const QByteArray &state,
+                                   const QVector<bool> &reverse = QVector<bool>());
+
+    /** Free string (anchors): the gap between its LEDs, metres -- its String
+     *  length (rp.wandStripLength, first LED to last) shared out over the
+     *  @p n - 1 gaps, or with none set, LED tape (kLedSpacing). */
+    double freeStringSpacing(const FixtureRigProps &rp, int n);
+    /** How long a string of @p n LEDs is, first LED to last. */
+    double freeStringLength(const FixtureRigProps &rp, int n);
+    /** Where a new free string goes before it has anchors: two, a little in
+     *  front of (downstage of) @p at, the fixture's own place, at its height,
+     *  @p length apart across the stage (at least a foot). */
+    QVector<StringAnchor> defaultStringAnchors(const QVector3D &at, double length);
+    /** The anchors a free string is laid through: its own, or while it has
+     *  fewer than two, defaultStringAnchors() from @p at (one anchor: that one
+     *  and a string length on from it). */
+    QVector<StringAnchor> freeStringAnchors(const FixtureRigProps &rp, const QVector3D &at, int n);
+    /** @p n LEDs along the line through @p anchors, LED 1 first, @p spacing
+     *  apart by length along it. LED 1 sits at the first anchor. An anchor
+     *  that pins an LED holds that LED there; the LEDs between two pins are
+     *  spread evenly between them (along the line). Before the first pin and
+     *  after the last the LEDs keep @p spacing: a string shorter than its
+     *  anchors stops where it runs out, one longer runs on straight past the
+     *  last anchor. Pins that do not rise along the string are ignored
+     *  (checkStringAnchors() says why). */
+    QVector<QVector3D> freeStringPositions(const QVector<StringAnchor> &anchors, int n, double spacing);
+    /** One stretch of a free string, anchor to anchor, by its LEDs. */
+    struct FreeSpan
+    {
+        int  anchor = 0;        ///< the anchor it starts at (0-based)
+        int  firstLed = 1;      ///< 1-based, inclusive
+        int  lastLed = 1;
+        bool reverse = false;   ///< its anchor's Reverse
+    };
+    /** Which LEDs lie on each span between two anchors, as
+     *  freeStringPositions() lays them (LEDs before the first anchor count
+     *  with the first span, past the last with the last). A span no LED
+     *  lies on is left out. */
+    QVector<FreeSpan> freeStringSpans(const QVector<StringAnchor> &anchors, int n, double spacing);
+    /** The free string's spans as WLED segments: @p spans for
+     *  sprinkleSpansToWled(), @p reverse each one's Reverse. */
+    void freeSpansAsSegments(const QVector<FreeSpan> &free, QVector<SprinkleSpan> &spans,
+                             QVector<bool> &reverse);
+    /** How long the line through @p anchors is, metres. */
+    double anchorLineLength(const QVector<StringAnchor> &anchors);
+    /** What is wrong with @p anchors' pins for a string of @p leds LEDs (0 =
+     *  not known), in words; empty when they are fine. */
+    QString checkStringAnchors(const QVector<StringAnchor> &anchors, int leds);
+    /** The compact form the show file keeps ("1.000,2.000,0.500,0,0;..."):
+     *  x, y, height (metres), pinned LED (0 none), reversed (0 or 1). */
+    QString stringAnchorsToString(const QVector<StringAnchor> &anchors);
+    QVector<StringAnchor> stringAnchorsFromString(const QString &text);
 
     /** The world positions of @p n LEDs of @p fid along its pixel path, in
      *  head order; empty when it has none (or its fountain is gone). */

@@ -75,6 +75,8 @@
 #include "ledlayouteditor.h"
 #include "monitorfixtureitem.h"
 #include "pixelpathdecor.h"
+#include "freestringhandles.h"
+#include "pixelpath.h"
 #include "fountain.h"
 #include "trussitem.h"
 #include "studiogroupeditor.h"
@@ -271,6 +273,15 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     connect(m_scene, &QGraphicsScene::selectionChanged, this, [this]() {
         if (!m_itemsRebuilding)    // the scene says so while items are torn down
             stackTargetReadouts();
+    });
+    // A free string selected on its own shows its anchors; a zoom resizes them.
+    connect(m_scene, &QGraphicsScene::selectionChanged, this, [this]() {
+        if (!m_itemsRebuilding)
+            refreshStringHandles();
+    });
+    connect(this, &MonitorGraphicsView::rulersChanged, this, [this]() {
+        if (stringHandles() != nullptr)
+            refreshStringHandles();
     });
     /* RC8: what lit lasers and star lasers throw, on the Top plot: about 15
        times a second while any could be lit (rebuildEmissionOverlay()). */
@@ -489,6 +500,10 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
     m_dragRefused = false;
     m_dragRefusedNoted = false;
     m_pressOnLockedLayer = false;
+
+    // Laying a free string, or one of its anchors grabbed: the string's.
+    if (stringPress(event))
+        return;
 
     /* A no-light zone is dragged by its outline or centre handle, nothing
        else: the plot under its inside stays selectable. Something drawn on
@@ -4302,6 +4317,9 @@ void MonitorGraphicsView::updateFixture(quint32 id)
 
     // Its LEDs along a path, a wand's staff, a flame's silk.
     PixelPathDecor::apply(this, m_doc, item, id);
+    // A free string's anchors, when it is the one selected.
+    if (m_stringHandles != nullptr || frp.pixelPath == PixelPath::FreeString)
+        refreshStringHandles();
 
     /* The grid layout unions this too, but it runs before any item exists (and
        again on resize), so a fixture placed OUTSIDE the grid afterwards would
@@ -4451,6 +4469,11 @@ void MonitorGraphicsView::clearFixtures()
     foreach (MonitorFixtureItem *item, m_fixtures)
         delete item;
     m_fixtures.clear();
+    m_addAnchorFid = UINT_MAX;
+    m_stringDragIndex = -1;
+    m_stringDragFid = UINT_MAX;
+    if (m_stringHandles != nullptr)
+        m_stringHandles->hide();
 }
 
 void MonitorGraphicsView::updateImages()
@@ -4778,6 +4801,13 @@ bool MonitorGraphicsView::event(QEvent *e)
 
 void MonitorGraphicsView::keyPressEvent(QKeyEvent *event)
 {
+    if (event->key() == Qt::Key_Escape && m_addAnchorFid != UINT_MAX)
+    {
+        endAddAnchors();
+        emit notice(tr("Done adding anchors."));
+        event->accept();
+        return;
+    }
     if (isDuplicateKey(event) && !m_scene->selectedItems().isEmpty())
     {
         if (Monitor *mon = Monitor::instance())
@@ -8827,6 +8857,17 @@ void MonitorGraphicsView::scrollContentsBy(int dx, int dy)
 
 void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
 {
+    if (m_stringDragIndex >= 0 && e->button() == Qt::LeftButton)
+    {
+        stringDragEnd();
+        e->accept();
+        return;
+    }
+    if (m_addAnchorFid != UINT_MAX && e->button() == Qt::LeftButton)
+    {
+        e->accept();            // the press placed an anchor; nothing to select
+        return;
+    }
     if (m_zoneDragId != UINT_MAX && e->button() == Qt::LeftButton)
     {
         const quint32 zid = m_zoneDragId;
@@ -9015,6 +9056,29 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
 
 void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
 {
+    if (m_stringDragIndex >= 0 && m_stringDragFid != UINT_MAX && (event->buttons() & Qt::LeftButton))
+    {
+        // A free string's anchor, dragged: past the drag distance, it moves.
+        if (m_stringDragMoved
+            || (event->pos() - m_pressViewPos).manhattanLength() >= QApplication::startDragDistance())
+            stringDragTo(m_stringDragFid, m_stringDragIndex, mapToScene(event->pos()), event->modifiers());
+        emit cursorReadout(viewportToReadout(event->pos()));
+        event->accept();
+        return;
+    }
+    if (event->buttons() == Qt::NoButton && m_addAnchorFid == UINT_MAX && !m_pickingOrigin)
+    {
+        // Over an anchor's handle: it can be grabbed.
+        const bool over = stringHandleAt(mapToScene(event->pos())) >= 0;
+        if (over != m_stringCursor)
+        {
+            m_stringCursor = over;
+            if (over)
+                viewport()->setCursor(Qt::OpenHandCursor);
+            else
+                viewport()->unsetCursor();
+        }
+    }
     if (m_zoneDragId != UINT_MAX)
     {
         // The zone follows the pointer; the show changes on release.
@@ -9114,6 +9178,23 @@ void MonitorGraphicsView::clickAgainToPickOut(QGraphicsItem *item)
 
 void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
 {
+    // A quick second click while laying a string is the next anchor.
+    if (m_addAnchorFid != UINT_MAX && event->button() == Qt::LeftButton)
+    {
+        // Unless its press already placed one there (Qt sends both).
+        const bool placed = m_lastAnchorAdd.isValid()
+                            && m_lastAnchorAdd.elapsed() < QApplication::doubleClickInterval()
+                            && (event->pos() - m_lastAnchorAddPos).manhattanLength() < 4;
+        if (!placed)
+            addStringAnchorAt(m_addAnchorFid, mapToScene(event->pos()));
+        event->accept();
+        return;
+    }
+    if (stringHandleAt(mapToScene(event->pos())) >= 0)
+    {
+        event->accept();
+        return;
+    }
     // Suppress the viewClicked that would fire on the release following this
     // double-click (which would immediately close whatever the double-click opened).
     m_suppressNextViewClick = true;
@@ -9354,6 +9435,19 @@ void MonitorGraphicsView::finishFixtureDrop(quint32 fid)
 void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
 {
     QPointF sp = mapToScene(event->pos());
+    if (m_swallowContextMenu)
+    {
+        m_swallowContextMenu = false;   // the right-click that ended laying a string
+        event->accept();
+        return;
+    }
+    // A free string's anchor: its own menu.
+    if (const int handle = stringHandleAt(sp); handle >= 0)
+    {
+        stringHandleMenu(handle, event->globalPos());
+        event->accept();
+        return;
+    }
     QGraphicsItem *it = topPickableAt(sp);
     while (it && it->parentItem())
         it = it->parentItem();
@@ -10394,6 +10488,15 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
         });
         mask->setToolTip(tr("Tape off part of this light's beam or scan window: top, bottom, "
                             "left and right, in degrees"));
+        /* A free string is laid on the plan: click where it goes. */
+        if (rp.pixelPath == PixelPath::FreeString)
+        {
+            QAction *add = menu->addAction(tr("Add Anchor"), this, [this, fid]() { beginAddAnchors(fid); });
+            add->setObjectName(QStringLiteral("plotAddStringAnchor"));
+            add->setToolTip(tr("Click on the plan for each anchor after the last: where the string "
+                               "is tied or runs through"));
+            add->setEnabled(stringEditable(fid));
+        }
     }
 
     // Mounting.
