@@ -21173,11 +21173,16 @@ void Monitor_Test::anLedBarOnATrussRollsByItsTiltHandle()
     studioMouseDrag(rig.view, h.knob, { knobAt(15.0), knobAt(30.0) });
     QCOMPARE(double(props->fixtureRigProps(fid).studioTilt), 30.0);
 
-    // Shift snaps to 15° steps: 52° lands on 45°.
+    // It snaps to 15° steps by default: 52° lands on 45°.
     const StructureStudioView::RotateHandle h2 = rig.view->rotateHandle();
     QVERIFY(QLineF(h2.knob, knobAt(30.0)).length() < 1.0);   // knob followed the roll
-    studioMouseDrag(rig.view, h2.knob, { knobAt(41.0), knobAt(52.0) }, Qt::ShiftModifier);
+    studioMouseDrag(rig.view, h2.knob, { knobAt(41.0), knobAt(52.0) });
     QCOMPARE(double(props->fixtureRigProps(fid).studioTilt), 45.0);
+
+    // Alt frees it: 52° is 52°.
+    const StructureStudioView::RotateHandle h3 = rig.view->rotateHandle();
+    studioMouseDrag(rig.view, h3.knob, { knobAt(48.0), knobAt(52.0) }, Qt::AltModifier);
+    QCOMPARE(double(props->fixtureRigProps(fid).studioTilt), 52.0);
 
     // Facing its mount face instead, the same bar spins its run.
     rig.view->setPlane(StructureStudioView::Front);
@@ -29992,7 +29997,7 @@ void Monitor_Test::newFolderFromALayersMenu()
         QCOMPARE(props->groups().size(), before + 1);
         MonitorProperties::MonitorGroup made;
         foreach (const MonitorProperties::MonitorGroup &g, props->groups())
-            if (g.name == QStringLiteral("New Folder"))
+            if (g.name == QStringLiteral("New Group"))
                 made = g;
         QVERIFY(made.id != 0);
         QCOMPARE(made.layerId, rig);

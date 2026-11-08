@@ -82,7 +82,7 @@ a universe is not duplicated.
 | ⌘Z | Undo the last move, paste or edit |
 | ] / [ | Turn the selection 15° clockwise / anticlockwise |
 | } / { | Turn it 1° |
-| ⌘G / ⇧⌘G | New group of the selection (asks a name) / ungroup it |
+| ⌘G / ⇧⌘G | New group of the selection (made at once, its name ready to type in Plot layers) / ungroup it |
 | Pinch | Zoom |
 | Click a footer box (View, Overlay) | Its next choice; its arrow lists them all |
 | ⇧-drag / ⌥-drag a line target's handle | Keep it level or upright / extend an end along the line |
@@ -91,7 +91,7 @@ a universe is not duplicated.
 canvas to pan (in 45°, to swing), scroll or pinch to zoom, ⌘- or ⇧-click
 to add to the selection, double-click to edit, ⌘Z undoes the editor's
 last change, a selected bar's ring rotates it (⇧ snaps to 15°), Return or
-F2 renames a folder in its list. **⌘W closes it as Cancel**, putting back
+F2 renames a layer or group in its list. **⌘W closes it as Cancel**, putting back
 everything it did.
 
 **In Plot layers:** Return or F2 renames a row, Esc cancels; drag a

@@ -14,6 +14,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Ctrl/⌘+G groups at once.** No name prompt: the group is made as "Group 3" and its name is ready to type over in Plot layers. **Snapping is the same everywhere**: a bar's rotation knob snaps to 15° by default and **Alt/⌥** frees it. In Plot layers the plot's folders are now called **groups**.
+
 - **The footer names fixtures cues use that have no address.** "2 fixtures in cues have no address", **Patch…** opens them; a staged fixture nothing uses no longer nags (the Show Review still notes it).
 
 - **A fixture in no group is in the Show Tree's Library.** Under All, **Ungrouped** lists the patched ones (a WLED just added, a spare; a fixture still in the inventory is not listed), found by

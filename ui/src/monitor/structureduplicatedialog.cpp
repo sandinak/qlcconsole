@@ -123,12 +123,12 @@ StructureDuplicateDialog::StructureDuplicateDialog(Doc *doc, const QString &sour
                              int(SD::ParallelGroups));
     m_mapGroups = new QComboBox(groups);
     m_mapGroups->setObjectName(QStringLiteral("duplicateMapGroups"));
-    m_mapGroups->addItem(tr("Add the copies to the same folders"), int(SD::AddToGroups));
-    m_mapGroups->addItem(tr("Make a parallel folder for each structure (T2 Spots)"),
+    m_mapGroups->addItem(tr("Add the copies to the same groups"), int(SD::AddToGroups));
+    m_mapGroups->addItem(tr("Make a parallel group for each structure (T2 Spots)"),
                          int(SD::ParallelGroups));
     m_mapGroups->setCurrentIndex(1);
     gl->addRow(tr("Fixture groups:"), m_fixtureGroups);
-    gl->addRow(tr("Plot folders:"), m_mapGroups);
+    gl->addRow(tr("Plot groups:"), m_mapGroups);
     QLabel *named = new QLabel(tr("A group named for %1 always gets a parallel group.").arg(name), groups);
     named->setWordWrap(true);
     gl->addRow(named);

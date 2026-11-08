@@ -11133,7 +11133,7 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
     }
     if (m_rotate.mode != RotateHandle::None)
     {
-        if (rotateDragTo(e->pos(), e->modifiers() & Qt::ShiftModifier))
+        if (rotateDragTo(e->pos(), !(e->modifiers() & Qt::AltModifier)))
             m_dragged = true;
         return;
     }

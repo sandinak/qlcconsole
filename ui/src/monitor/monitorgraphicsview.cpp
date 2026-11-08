@@ -225,7 +225,7 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     // Cmd/Ctrl+G groups the selection; Cmd/Ctrl+Shift+G ungroups it.
     QShortcut *groupSc = new QShortcut(QKeySequence(tr("Ctrl+G")), this);
     groupSc->setContext(Qt::WidgetWithChildrenShortcut);
-    connect(groupSc, &QShortcut::activated, this, [this]() { newGroupAsking(selectedMapObjects()); });
+    connect(groupSc, &QShortcut::activated, this, [this]() { newGroupNow(selectedMapObjects()); });
     QShortcut *ungroupSc = new QShortcut(QKeySequence(tr("Ctrl+Shift+G")), this);
     ungroupSc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(ungroupSc, &QShortcut::activated, this, [this]() { ungroupSelectedItems(); });

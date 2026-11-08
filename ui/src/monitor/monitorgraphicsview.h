@@ -1373,6 +1373,8 @@ signals:
     /** Emitted when the group structure changes (group / ungroup), so the
      *  Layers tree can rebuild its folders. */
     void mapStructureChanged();
+    /** A group was just made by newGroupNow(): the panel puts its name in rename. */
+    void groupCreated(quint32 groupId);
 
     /** Signal re-emitted from TrussItem: add a fixture at offset metres on truss. */
     void addFixtureToTrussRequested(quint32 trussId, float offsetMetres);
@@ -1932,7 +1934,7 @@ public:
     /* Group ▸ (docs/features/lighting-studio.md "Grouping stage features"):
        the plot's own groups -- folders in Plot layers -- from a right-click
        on the plot, an object, or a Studio canvas. */
-    /** Fill @p menu (the Group submenu) for @p objects: New Group… (Ctrl+G),
+    /** Fill @p menu (the Group submenu) for @p objects: New Group (Ctrl+G),
      *  the groups on their layer to add them to, Remove from Group. What a
      *  locked group, layer or plot stops is greyed with the reason. */
     void fillGroupMenu(class QMenu *menu, const QList<QPair<QString, quint32> > &objects);
@@ -1952,8 +1954,9 @@ public:
      *  structure goes with what is on it, a folder chosen whole nests
      *  whole. One undo step. */
     quint32 newGroupFrom(const QList<QPair<QString, quint32> > &objects, const QString &name);
-    /** Ask a name, then newGroupFrom() (Ctrl+G, Group ▸ New Group…). */
-    quint32 newGroupAsking(const QList<QPair<QString, quint32> > &objects);
+    /** newGroupFrom() with an automatic name, no dialog (Ctrl+G, Group ▸ New
+     *  Group); emits groupCreated() so Plot layers can rename it in place. */
+    quint32 newGroupNow(const QList<QPair<QString, quint32> > &objects);
     /** Add @p objects to group @p gid; how many moved. One undo step. */
     int addToGroup(const QList<QPair<QString, quint32> > &objects, quint32 gid);
     /** Take @p objects out of the group they are in (one level out, on the
