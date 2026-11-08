@@ -1301,14 +1301,15 @@ void EffectInstance_Test::aLoopingWledLookIsNeverFrozen()
 }
 
 /* What a scene sets under its own values on a WLED in effect mode, so
-   the last effect sent never latches on: Solid, speeds at half, no
-   palette, no option. A WLED in a colour mode, or anything else, none. */
+   the last effect sent never latches on: each setting at its default,
+   Solid. A WLED in a colour mode, or anything else, none. */
 void EffectInstance_Test::aWledsEffectSettingsAtRestAreSolid()
 {
     Fixture *lantern = aWledLantern(m_doc, Fixture::WledTransport, 100);
     QVERIFY(lantern != nullptr);
     const QList<QPair<int, int> > rest = WledFixture::settingsAtRest(lantern);
-    QCOMPARE(rest, (QList<QPair<int, int> >{ { 1, 0 }, { 2, 128 }, { 3, 128 }, { 4, 0 }, { 5, 0 } }));
+    // Each at its default (what an untouched universe holds): Solid.
+    QCOMPARE(rest, (QList<QPair<int, int> >{ { 1, 0 }, { 2, 0 }, { 3, 0 }, { 4, 0 }, { 5, 0 } }));
     QVERIFY(WledFixture::settingsAtRest(m_doc->fixture(m_fixtureIds.first())).isEmpty());
     lantern->setFixtureDefinition(lantern->fixtureDef(), lantern->fixtureDef()->mode("Single DRGB (4ch)"));
     QVERIFY(WledFixture::settingsAtRest(lantern).isEmpty());

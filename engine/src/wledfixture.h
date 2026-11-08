@@ -54,11 +54,13 @@ namespace WledFixture
     /** Whether Effect Option value @p option asks a WLED to freeze. */
     inline bool freezes(int option) { return (option & kFreezeOption) != 0; }
 
-    /** A WLED's effect settings at rest -- Effect 0 (Solid), speed and
-     *  intensity 128, palette 0, option 0 -- as (channel index, value) for
-     *  the ones @p fx's mode has; empty when it runs no effects. A scene
-     *  on it sets them under its own values, so a look that sets only a
-     *  colour shows that colour solid, not the last effect latched on. */
+    /** A WLED's effect settings at rest -- Effect, Speed, Intensity,
+     *  Palette and Option each at its channel's default (0: Solid), as
+     *  (channel index, value) for the ones @p fx's mode has; empty when it
+     *  runs no effects. A scene on it sets them under its own values, so a
+     *  look that sets only a colour shows that colour solid, not the last
+     *  effect latched on; at the default, so a cue is the same however it
+     *  is reached (run to, or jumped back to). */
     QList<QPair<int, int> > settingsAtRest(const Fixture *fx);
 
     /** Whether Hold can freeze @p fx at the end of a run: a WLED that runs

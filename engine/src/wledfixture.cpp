@@ -75,14 +75,17 @@ QList<QPair<int, int> > WledFixture::settingsAtRest(const Fixture *fx)
     QList<QPair<int, int> > out;
     if (!runsEffects(fx))
         return out;
-    static const struct { const char *name; int value; } rest[] = {
-        { "Effect", 0 }, { "Effect Speed", 128 }, { "Effect Intensity", 128 },
-        { "Palette", 0 }, { "Effect Option", 0 } };
-    for (const auto &r : rest)
+    /* Each at its channel's default -- what the universe holds before
+       anything is sent (Effect 0 is Solid). Not "a sensible speed": a
+       value at rest that differs from the default would latch on and make
+       a cue look different when jumped back to than when run to. */
+    static const char *const settings[] = {
+        "Effect", "Effect Speed", "Effect Intensity", "Palette", "Effect Option" };
+    for (const char *name : settings)
     {
-        const int ch = channel(fx, QLatin1String(r.name));
+        const int ch = channel(fx, QLatin1String(name));
         if (ch >= 0)
-            out << qMakePair(ch, r.value);
+            out << qMakePair(ch, int(fx->fixtureMode()->channels().at(ch)->defaultValue()));
     }
     return out;
 }

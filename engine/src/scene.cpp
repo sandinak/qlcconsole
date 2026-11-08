@@ -1809,7 +1809,7 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             /* A WLED in effect mode: its effect settings are LTP and would
                latch on the last effect sent (a colour cue after a Fireworks
                Starburst kept the bursts). Under everything this scene sets,
-               they are at rest -- Solid -- so a look that sets only a colour
+               they are at rest -- their defaults, Solid -- so a look that sets only a colour
                shows it solid, and an effect that lets go (Release) leaves
                Solid. They snap: an effect number part way is another effect. */
             {
