@@ -73,6 +73,7 @@
 #include "showstatus.h"
 #include "qlcfixturedefcache.h"
 #include "showstatusdialog.h"
+#include <QDir>
 #include "doc.h"
 #include "paletteops.h"
 #include "showtreecontroller.h"
@@ -1597,6 +1598,21 @@ void ProgrammingManager_Test::unpatchedAndSilentFixturesAreInTheFooter()
     const ShowStatus::Entry unpatched = entry("fixtures.unpatched");
     QVERIFY2(unpatched.summary.contains("1 fixture") && unpatched.summary.contains("no address"),
              qPrintable(unpatched.summary));
+    // QLC_SHOT_DIR: the finding as the Not ready list shows it, at three sizes.
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shotDir.isEmpty())
+    {
+        QDir().mkpath(shotDir);
+        ShowStatusDialog dlg;
+        dlg.show();
+        dlg.tree()->expandAll();
+        for (const QSize &sz : { QSize(640, 400), QSize(900, 600), QSize(1280, 800) })
+        {
+            dlg.resize(sz);
+            QTest::qWait(50);
+            QVERIFY(dlg.grab().save(QString("%1/footer-after-%2x%3.png").arg(shotDir).arg(sz.width()).arg(sz.height())));
+        }
+    }
     QCOMPARE(unpatched.items, QStringList() << "FART-SL-9");
     const ShowStatus::Entry silent = entry("fixtures.output");
     QVERIFY2(silent.summary.contains("1 fixture type"), qPrintable(silent.summary));

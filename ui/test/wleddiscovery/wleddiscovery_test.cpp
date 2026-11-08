@@ -645,6 +645,9 @@ void WledDiscovery_Test::setUpAsksOnceWritesTheKeysAndReadsBack()
     PowerProfile pp = fx->powerProfile();
     pp.maxAmps = 0.25;
     fx->setPowerProfile(pp);
+    FixtureRigProps noSupply = m_doc->monitorProperties()->fixtureRigProps(fx->id());
+    noSupply.ledSupplyVolts = 0.0f;                 // "Not known" (the default is 5 V)
+    m_doc->monitorProperties()->setFixtureRigProps(fx->id(), noSupply);
 
     // Not Now: nothing written.
     QString text;
