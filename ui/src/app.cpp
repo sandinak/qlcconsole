@@ -1527,8 +1527,10 @@ void App::initDoc()
     ShowStatus::instance()->setAction("wled.moved", tr("Follow It"),
         [](QWidget *parent, const QVariantList &items) {
             if (WledDiscovery *found = WledDiscovery::instance())
+            {
                 foreach (const QVariant &v, items)
                     found->follow(parent, v.toUInt());
+            }
         });
     /* A WLED by its own API on a universe that doesn't reach it: a
        universe of its own, sent to its IP (one undo). */
