@@ -49,10 +49,20 @@ class QTimer;
  * the next change, and a fade is dozens of packets a second per lantern.
  * Driven in WLED's effect mode -- the effect runs ON the lantern -- what it
  * needs is its STATE: brightness, effect, speed, palette, colours. So this
- * sends that, as JSON over HTTP (/json/state): only when it changes, at most
- * ten times a second per lantern with WLED's own transition gliding between,
- * one request in flight per lantern (the latest wins). A held look sends
+ * sends that, as JSON over HTTP (/json/state): only when it changes, one
+ * request in flight per lantern (the latest wins). A held look sends
  * nothing at all.
+ *
+ * A snap goes at once (UX-73): a change in a lantern's channels wakes the
+ * sender (kick()) a couple of milliseconds later -- a burst written in one
+ * engine frame is one request -- with no transition when it is a step (on,
+ * off, another effect, or the first change after the look stood still).
+ * A fade is the app's own frames, sent at most once a send interval (ten a
+ * second) with WLED's transition gliding between: the plugin is handed DMX,
+ * not the cue, and the frames follow the cue's own time and curve, a
+ * crossfade, a pause. Only what changed goes: the segments are left out
+ * when they are as the lantern took them, so a GO into a look moved in
+ * black is only its brightness.
  *
  * One universe per lantern, aimed at its IP ("outputIP", as Art-Net's); the
  * lantern's channels are read at "wledAddress" (1-based, default 1),
@@ -190,6 +200,10 @@ private:
         int ledCount = 0;           ///< from /json/info, 0 = not known
         qint64 retryAt = 0;         ///< no answer: not sent again before (ms)
         qint64 postedAt = 0;        ///< when the last state went (ms)
+        /** When a change it would not show (dark before and after: a look
+         *  moved in black, an effect set a frame before its dimmer) was
+         *  first seen, 0 none waiting (see darkHoldMs). */
+        qint64 darkSince = 0;
         /** The rig network gate's decision for this device, cached (see
          *  routeAllowed()): worked out when its address is set and by
          *  refreshTransmitGate(), only read by the send/poll ticks. */
@@ -214,7 +228,25 @@ private:
         int liveSlot() const;
     };
 
-    void tick();
+    /** Every device due a state is sent it, every one due an ask is asked.
+     *  @p kicked: woken by a change (kick()), not the send timer -- a state
+     *  goes before an ask then, and nothing is asked. */
+    void tick(bool kicked = false);
+    /** A change in some lantern's channels (writeUniverse(), any thread):
+     *  the sender wakes in kickCoalesceMs. */
+    void kick();
+    /** On the plugin's thread: the sender wakes in @p ms. */
+    void kickIn(int ms);
+    static const int kickCoalesceMs = 2;
+    /** A change to a dark device that leaves it dark waits this long (ms)
+     *  for more: nobody sees it, and sent at once it held up -- one
+     *  request in flight -- the brightness the engine wrote a frame later
+     *  (an effect's settings land a frame before its dimmer), a Wi-Fi round
+     *  trip after the stage. Waited, the two go as one. */
+    static const int darkHoldMs = 50;
+    /** Whether @p data's @p count bytes from @p offset differ from @p old's
+     *  (a byte past the end of either is 0). */
+    static bool windowChanged(const QByteArray &old, const QByteArray &data, int offset, int count);
     void pollInfo();
     void poll(quint32 universe, int slot);
     void pollLive();
@@ -232,6 +264,15 @@ private:
      *  level or colour moving send after send glides. */
     static QJsonObject paced(QJsonObject state, const QJsonObject &sent,
                              qint64 postedAt, qint64 now, int intervalMs);
+    /** Whether @p state, after @p sent at @p postedAt, is a step (see
+     *  paced()): it goes at once, whatever the pace. */
+    static bool isStep(const QJsonObject &state, const QJsonObject &sent,
+                       qint64 postedAt, qint64 now, int intervalMs);
+    /** The body for @p state to a device that took @p sent: without its
+     *  segments when they are as it took them (@p sameLayout: its segments
+     *  have not changed since). */
+    static QJsonObject trimmed(QJsonObject body, const QJsonObject &state,
+                               const QJsonObject &sent, bool sameLayout);
     /** Whether @p a and @p b set the same look (their transitions aside). */
     static bool sameLook(QJsonObject a, QJsonObject b);
     static QVector<WledLayoutStore::Segment> segmentsOf(const QJsonArray &seg);
@@ -270,6 +311,8 @@ private:
 
     QNetworkAccessManager *m_nam = nullptr;
     QTimer *m_sendTimer = nullptr;
+    QTimer *m_kickTimer = nullptr;      ///< single shot: a change goes now
+    QAtomicInt m_kickPending;           ///< 1 = a kick is queued already
     QTimer *m_infoTimer = nullptr;
     QTimer *m_liveTimer = nullptr;
     int m_sendInterval = 100;

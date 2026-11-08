@@ -36,6 +36,14 @@ private slots:
     /** Locate on a WLED a look had played and let go of: afterwards it is
      *  as it was -- off, its effect still the look's, not left on Solid. */
     void locateLeavesAWledNothingPlaysOnAsItWas();
+
+    /** UX-73, his spell cue: the stage snaps to black but for the staff (a
+     *  WLED on its own API) and the steps' effect. Each GO, through the
+     *  Show Tree as the person fires it, reaches the staff within a few
+     *  milliseconds of the DMX frame that snaps the stage, with no glide --
+     *  and, moved in black while it was dark, the spell's GO sends the
+     *  staff its brightness alone. */
+    void aSnapCueReachesTheStaffWithTheStage();
 };
 
 #endif

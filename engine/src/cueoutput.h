@@ -14,10 +14,44 @@
 #define CUEOUTPUT_H
 
 #include <QHash>
+#include <QPair>
+#include <memory>
+
+#include "qlcengine_export.h"
 
 class Doc;
 
-class CueOutput
+/** What a WLED look (QLCPalette::wledEffect()) sends the WLED fixtures it
+ *  plays on -- the effect, its speed, intensity, palette, option and three
+ *  colours, and the Master Dimmer -- as the EffectInstance that plays it
+ *  works them out (EffectInstance::wledDeviceWrites()), so a cue moved in
+ *  black is the cue played. An instance loads its script, so they are kept
+ *  from ask to ask, built again only when the look's effect or settings
+ *  change, and let go of when a pass did not ask for them. Main thread. */
+class QLC_ENGINE_EXPORT WledLookCache
+{
+public:
+    WledLookCache();
+    ~WledLookCache();
+    WledLookCache(const WledLookCache &) = delete;
+    WledLookCache &operator=(const WledLookCache &) = delete;
+
+    /** fixture → (channel → value) look @p paletteId sends in scene
+     *  @p sceneId; empty when it is not a WLED look or plays on none. */
+    QHash<quint32, QHash<quint32, uchar>> settings(Doc *doc, quint32 sceneId, quint32 paletteId);
+
+    /** A pass of asks starts / ends: what it did not ask for is let go. */
+    void beginPass();
+    void endPass();
+    /** How many looks are kept (for the tests). */
+    int size() const { return int(m_entries.size()); }
+
+private:
+    struct Entry;
+    QHash<QPair<quint32, quint32>, std::shared_ptr<Entry>> m_entries;
+};
+
+class QLC_ENGINE_EXPORT CueOutput
 {
 public:
     /** Per-fixture summary of an upcoming cue. */
@@ -40,6 +74,14 @@ public:
      *  (what a mark holds). Fixtures with no master-intensity channel report
      *  lit=false — they're not move-in-black candidates. */
     static QHash<quint32, FixtureCue> computeCues(Doc *doc, quint32 functionId);
+
+    /** As computeCues(), with what its WLED looks send their WLED fixtures
+     *  (@p wled): the effect settings and colours as non-intensity, the
+     *  look's Master Dimmer as the intensity (highest wins with the
+     *  scene's) -- and a WLED in a scene is at rest (Solid, the defaults:
+     *  WledFixture::settingsAtRest()) under what the scene sets, as
+     *  Scene::write lays it out. A dark WLED can then be moved in black. */
+    static QHash<quint32, FixtureCue> computeCues(Doc *doc, quint32 functionId, WledLookCache *wled);
 };
 
 #endif // CUEOUTPUT_H

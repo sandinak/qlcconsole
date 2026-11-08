@@ -87,7 +87,7 @@ QList<quint32> MarkPlanner::dangleFixtures() const
     for (const CueLookahead::UpcomingCue &cue : cues)
     {
         const QHash<quint32, CueOutput::FixtureCue> cueOut =
-            CueOutput::computeCues(m_doc, cue.functionId);
+            CueOutput::computeCues(m_doc, cue.functionId, &m_wledLooks);
         for (auto it = cueOut.constBegin(); it != cueOut.constEnd(); ++it)
             if (it.value().lit)
                 litSoon.insert(it.key());
@@ -113,7 +113,9 @@ void MarkPlanner::updateDangleDetection()
 void MarkPlanner::evaluate()
 {
     const QSet<quint32> before = m_planned;
+    m_wledLooks.beginPass();
     evaluatePlan();
+    m_wledLooks.endPass();
     if (m_planned != before)
         emit plannedChanged(int(m_planned.size()));
 }
@@ -164,8 +166,11 @@ void MarkPlanner::evaluatePlan()
     if (cue.fireInMs < m_darkGapMs)
         return;
 
+    /* A WLED's next effect, speed, palette and colours are the look's
+       (WledLookCache), not the scene's: moved in black too, so the GO is
+       its brightness alone (UX-73). */
     const QHash<quint32, CueOutput::FixtureCue> cueOut =
-        CueOutput::computeCues(m_doc, cue.functionId);
+        CueOutput::computeCues(m_doc, cue.functionId, &m_wledLooks);
 
     QList<Universe*> unis = m_doc->inputOutputMap()->claimUniverses();
 

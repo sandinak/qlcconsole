@@ -1329,13 +1329,15 @@
     "theme": "Does what it says",
     "title": "Snap means snap on every connection",
     "rule": "A network device follows a snap within the network's own time: it is sent at once with no glide; fades use the cue's time.",
-    "check": "review",
+    "check": "test:wledshow_test::aSnapCueReachesTheStaffWithTheStage",
     "checks": [
-      "review",
+      "test:wledshow_test::aSnapCueReachesTheStaffWithTheStage",
+      "test:wled_test::aSnapGoesAtOnceNotOnTheNextTick",
+      "test:markplanner_test::aDarkWledIsMovedInBlackToItsNextLook",
       "manual"
     ],
-    "enforced": false,
-    "why": "2026-11-07, measured on ender: a WLED over its JSON API reacts about 150 to 340 ms after DMX fixtures on a snap cue (a 100 ms send tick, about 50 ms Wi-Fi with a max of 140, and a 100 ms glide). His spell cue snaps the stage to black with the staff (a WLED) still on. A responsiveness test is to come with the snap and Move in Black work for WLED.",
+    "enforced": true,
+    "why": "2026-11-07, measured on ender: a WLED over its JSON API reacts about 150 to 340 ms after DMX fixtures on a snap cue (a 100 ms send tick, about 50 ms Wi-Fi with a max of 140, and a 100 ms glide). His spell cue snaps the stage to black with the staff (a WLED) still on. Fixed (feat/042-wled-snap): a change goes at once, a step with no glide, and Move in Black presets a dark WLED's next effect so the GO is its brightness alone; on the office WLED the POST now leaves 23 ms after the Art-Net bytes reach the Pi (was 62 to 105) and the WLED has it 61 ms after (was 129, max 264).",
     "example": {
       "right": "A snap cue: the WLED changes with the DMX fixtures, within the Wi-Fi's own delay",
       "wrong": "A snap cue: the WLED glides in 100 ms after the others, so the staff stays on"

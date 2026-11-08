@@ -63,6 +63,9 @@ public:
     void unmarkAll();
 
     bool isMarked(quint32 fixtureId) const;
+    /** What the mark on @p fixtureId was asked to hold (channel → value):
+     *  intensities are never written (see rebuild()). Empty if unmarked. */
+    QHash<quint32, uchar> markedValues(quint32 fixtureId) const { return m_marked.value(fixtureId); }
     QList<quint32> markedFixtures() const;
     bool isEmpty() const;
 
@@ -111,6 +114,13 @@ private:
 
     /** Where the held values go out (Universe::Hold, named "Mark") */
     OutputLayer m_layer;
+    /** A dark WLED's held settings: over the running cues (Override's
+       place, merged like any function -- no Override flag), since a cue
+       that has it dark still sets its effect settings at rest (Solid,
+       Scene::write) and would beat a mark laid under everything. It is
+       dark all the while (its Master Dimmer is never held), and let go of
+       the moment a cue lights it. */
+    OutputLayer m_wledLayer;
 };
 
 #endif // MARKEFFECT_H

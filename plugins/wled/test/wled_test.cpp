@@ -15,6 +15,7 @@
 #include <QTcpSocket>
 #include <QPointer>
 #include <QElapsedTimer>
+#include <QDateTime>
 #include <QtTest>
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -41,6 +42,7 @@ namespace
     {
     public:
         QList<QJsonObject> posts;
+        QList<qint64> postedAt;             ///< when each came (ms since the epoch)
         int rssi = -60;
         bool hang = false;                  ///< takes connections, never answers
         bool noSi = false;                  ///< an old WLED: /json/si is 501
@@ -138,6 +140,7 @@ namespace
                         if (req.startsWith("POST /json/state"))
                         {
                             posts << QJsonDocument::fromJson(body).object();
+                            postedAt << QDateTime::currentMSecsSinceEpoch();
                             apply(posts.last());
                         }
                         else if (req.startsWith("GET /json/info"))
@@ -335,6 +338,133 @@ void Wled_Test::aStepGoesAtOnceAndOnlyAFadeGlides()
         glided += wled.posts.at(i).value("transition").toInt() == 1 ? 1 : 0;
     QVERIFY2(glided >= 1, qPrintable(QString("%1 of %2 fade states glided")
                                          .arg(glided).arg(wled.posts.size() - 3)));
+}
+
+namespace
+{
+    /** Waits (up to @p ms) for @p wled's post @p n, in 1 ms steps rather
+     *  than QTRY's 50: how long it took to come, -1 if it never did. */
+    qint64 waitForPost(const FakeWled &wled, int n, qint64 since, int ms = 2000)
+    {
+        QElapsedTimer t;
+        t.start();
+        while (wled.posts.size() <= n && t.elapsed() < ms)
+            QTest::qWait(1);
+        return wled.posts.size() > n ? wled.postedAt.at(n) - since : -1;
+    }
+}
+
+/* UX-73: a snap reaches the device when it happens, not on the next send
+   tick. The tick is a second here: anything it delivered would take
+   hundreds of milliseconds. */
+void Wled_Test::aSnapGoesAtOnceNotOnTheNextTick()
+{
+    FakeWled wled;
+    QVERIFY(wled.powerOn());
+    WledPlugin plugin;
+    plugin.init();
+    plugin.setSendInterval(1000);
+    plugin.setInfoInterval(100000);
+    QVERIFY(plugin.openOutput(0, 0));
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, WLED_OUTPUTIP, wled.ip());
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, WLED_CHANNELS, 15);
+
+    // The first look: its segments asked, then it -- both at once.
+    qint64 at = QDateTime::currentMSecsSinceEpoch();
+    plugin.writeUniverse(0, 0, universe({ 255, 9, 128, 128, 0, 0, 255, 0, 0 }), true);
+    qint64 took = waitForPost(wled, 0, at);
+    QVERIFY2(took >= 0 && took < 400, qPrintable(QString("the first look took %1 ms").arg(took)));
+
+    /* Snaps: dark, lit, another effect, dark... each one at once, with no
+       glide. The slowest has room for a loaded machine; the middle one is
+       what a snap costs. */
+    QList<qint64> took5;
+    const QList<QList<int> > snaps{ { 0, 9, 128, 128, 0, 0, 255, 0, 0 },
+                                    { 255, 9, 128, 128, 0, 0, 255, 0, 0 },
+                                    { 255, 42, 128, 128, 0, 0, 0, 0, 255 },
+                                    { 0, 42, 128, 128, 0, 0, 0, 0, 255 },
+                                    { 255, 0, 128, 128, 0, 0, 255, 255, 255 } };
+    for (int k = 0; k < snaps.size(); ++k)
+    {
+        QTest::qWait(20);
+        const int n = wled.posts.size();
+        at = QDateTime::currentMSecsSinceEpoch();
+        plugin.writeUniverse(0, 0, universe(snaps.at(k)), true);
+        took = waitForPost(wled, n, at);
+        QVERIFY2(took >= 0 && took < 250, qPrintable(QString("snap %1 took %2 ms").arg(k).arg(took)));
+        QCOMPARE(wled.posts.at(n).value("transition").toInt(-1), 0);
+        took5 << took;
+    }
+    std::sort(took5.begin(), took5.end());
+    qInfo() << "snap to the device, ms:" << took5;
+    QVERIFY2(took5.at(2) <= 30, qPrintable(QString("a snap takes %1 ms").arg(took5.at(2))));
+
+    // A burst in one frame is one request; a held look, none.
+    QTest::qWait(50);
+    const int n = wled.posts.size();
+    for (int i = 0; i < 5; ++i)
+        plugin.writeUniverse(0, 0, universe({ 0, 0, 128, 128, 0, 0, 255, 255, 255 }), true);
+    QVERIFY(waitForPost(wled, n, 0) >= 0);
+    QTest::qWait(300);
+    QCOMPARE(wled.posts.size(), n + 1);
+}
+
+/* A look moved in black (MarkPlanner): its effect, palette and colours went
+   while it was off. The GO is then its brightness alone. */
+void Wled_Test::aLookMovedInBlackGoesOnWithItsBrightnessAlone()
+{
+    FakeWled wled;
+    QVERIFY(wled.powerOn());
+    WledPlugin plugin;
+    plugin.init();
+    plugin.setSendInterval(100);
+    plugin.setInfoInterval(100000);
+    QVERIFY(plugin.openOutput(0, 0));
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, WLED_OUTPUTIP, wled.ip());
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, WLED_CHANNELS, 15);
+
+    plugin.writeUniverse(0, 0, universe({ 0, 0, 128, 128, 0, 0, 255, 255, 255 }), true);
+    QTRY_COMPARE(wled.posts.size(), 1);
+    QTest::qWait(250);
+    // Moved in black: the next look's effect and colours, still off.
+    plugin.writeUniverse(0, 0, universe({ 0, 89, 200, 128, 6, 0, 255, 0, 0, 0, 0, 255 }), true);
+    QTRY_COMPARE(wled.posts.size(), 2);
+    QCOMPARE(wled.posts.at(1).value("on").toBool(true), false);
+    QCOMPARE(wled.posts.at(1).value("seg").toArray().first().toObject().value("fx").toInt(), 89);
+    QTest::qWait(250);
+    // GO.
+    plugin.writeUniverse(0, 0, universe({ 255, 89, 200, 128, 6, 0, 255, 0, 0, 0, 0, 255 }), true);
+    QTRY_COMPARE(wled.posts.size(), 3);
+    const QJsonObject go = wled.posts.at(2);
+    QCOMPARE(go.value("on").toBool(), true);
+    QCOMPARE(go.value("bri").toInt(), 255);
+    QCOMPARE(go.value("transition").toInt(-1), 0);
+    QVERIFY2(!go.contains("seg"), QJsonDocument(go).toJson(QJsonDocument::Compact).constData());
+    // The device shows the look all the same.
+    QCOMPARE(wled.seg(0).value("fx").toInt(), 89);
+    QCOMPARE(wled.seg(0).value("col").toArray().at(0).toArray(), (QJsonArray{ 255, 0, 0 }));
+
+    /* Not moved in black: an effect set a frame before its dimmer (as the
+       engine writes a WLED look). The dark change waits for the brightness
+       and both go as one -- sent alone, it would hold the brightness up for
+       a Wi-Fi round trip (one request in flight). */
+    plugin.writeUniverse(0, 0, universe({ 0, 89, 200, 128, 6, 0, 255, 0, 0, 0, 0, 255 }), true);
+    QTRY_COMPARE(wled.posts.size(), 4);
+    QTest::qWait(250);
+    QElapsedTimer frame;
+    frame.start();
+    plugin.writeUniverse(0, 0, universe({ 0, 42, 200, 128, 6, 0, 0, 0, 255 }), true);
+    QTest::qWait(20);
+    plugin.writeUniverse(0, 0, universe({ 255, 42, 200, 128, 6, 0, 0, 0, 255 }), true);
+    const bool inOneFrame = frame.elapsed() < 40;  // a loaded machine may take longer
+    QTRY_VERIFY(!wled.posts.isEmpty() && wled.posts.last().value("on").toBool());
+    QTest::qWait(200);
+    QCOMPARE(wled.seg(0).value("fx").toInt(), 42);
+    if (inOneFrame)
+    {
+        QCOMPARE(wled.posts.size(), 5);
+        QCOMPARE(wled.posts.last().value("seg").toArray().first().toObject().value("fx").toInt(), 42);
+    }
 }
 
 void Wled_Test::aWeakOrSilentLanternIsAProblem()

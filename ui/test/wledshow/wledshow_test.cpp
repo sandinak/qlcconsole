@@ -61,6 +61,13 @@
 #include "qlcpalette.h"
 #include "universe.h"
 #include "doc.h"
+#include "fixturegroup.h"
+#include "programmercontroller.h"
+#include "showcontrol.h"
+#include "showtreecontroller.h"
+#include "showtreemodel.h"
+#include <atomic>
+#include <algorithm>
 #include "../../../plugins/wled/src/wledlayoutstore.h"
 
 namespace
@@ -242,16 +249,22 @@ struct Sent
 };
 
 /** What the device was sent from post @p from on, Locate's way: Solid white
- *  at full, dark, or anything else; and how many asked for a glide. */
+ *  at full, dark, or anything else; and how many asked for a glide. A post
+ *  without segments leaves them as the device had them (only what changed
+ *  is sent), so each is read against the last segments sent before it. */
 Sent sentSince(const FakeWled &wled, int from)
 {
     Sent out;
-    for (int i = from; i < wled.posted.size(); ++i)
+    QJsonObject s;
+    for (int i = 0; i < wled.posted.size(); ++i)
     {
         if (!wled.posted.at(i).first.endsWith("/json/state"))
             continue;
         const QJsonObject b = wled.posted.at(i).second;
-        const QJsonObject s = b.value("seg").toArray().at(0).toObject();
+        if (b.contains("seg"))
+            s = b.value("seg").toArray().at(0).toObject();
+        if (i < from)
+            continue;
         out.seen << QString::fromUtf8(QJsonDocument(b).toJson(QJsonDocument::Compact));
         if (b.value("transition").toInt(-1) != 0)
             ++out.glided;
@@ -661,6 +674,237 @@ void WledShow_Test::locateLeavesAWledNothingPlaysOnAsItWas()
     QCOMPARE(rig.seg().value("fx").toInt(), effectBefore);
     const Sent sent = sentSince(rig.wled, from);
     QVERIFY2(sent.whites >= 2 && sent.glided == 0, qPrintable(sent.seen.join("\n")));
+}
+
+void WledShow_Test::aSnapCueReachesTheStaffWithTheStage()
+{
+    FakeWled wled;
+    QVERIFY(wled.listen(QHostAddress::LocalHost));
+    Doc doc(this);
+    doc.ioPluginCache()->load(QDir(TEST_PLUGINS_DIR, "*wled*"));
+    QLCIOPlugin *plugin = doc.ioPluginCache()->plugin("WLED");
+    QVERIFY2(plugin != nullptr, "the WLED output plugin did not load");
+    /* The send tick at a second: a state it delivered would come hundreds
+       of milliseconds after the DMX. A snap must not wait for it. */
+    QVERIFY(QMetaObject::invokeMethod(plugin, "setSendInterval", Q_ARG(int, 1000)));
+    QVERIFY(QMetaObject::invokeMethod(plugin, "setInfoInterval", Q_ARG(int, 60000)));
+
+    // The stage's DMX: Art-Net, as on his rig (a stub that sends nothing).
+    QLCIOPlugin *artnet = nullptr;
+    doc.ioPluginCache()->load(QDir(TEST_STUB_DIR, "*iopluginstub*"));
+    foreach (QLCIOPlugin *p, doc.ioPluginCache()->plugins())
+        if (p->name() != "WLED")
+            artnet = p;
+    QVERIFY2(artnet != nullptr, "the I/O plugin stub did not load");
+    static_cast<IOPluginStub *>(artnet)->m_nameOverride = "ArtNet";
+    QVERIFY(doc.inputOutputMap()->setOutputPatch(0, "ArtNet", QString(), 0));
+
+    auto dimmers = [&doc](const QString &name, int count, quint32 address) {
+        FixtureGroup *g = new FixtureGroup(&doc);
+        g->setName(name);
+        doc.addFixtureGroup(g);
+        for (int i = 0; i < count; ++i)
+        {
+            Fixture *f = new Fixture(&doc);
+            f->setName(QString("%1 %2").arg(name).arg(i + 1));
+            f->setChannels(1);
+            f->setUniverse(0);
+            f->setAddress(address + quint32(i));
+            doc.addFixture(f);
+            g->assignFixture(f->id());
+        }
+        return g->id();
+    };
+    const quint32 wash = dimmers("Wash", 4, 0);         // the stage: black at the spell
+    const quint32 steps = dimmers("Steps", 6, 10);      // the steps: an effect from her
+
+    // The staff: a WLED on its own API, its own universe, at the device.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Effect-Mode.qxf"),
+             QFile::NoError);
+    QVERIFY(doc.fixtureDefCache()->addFixtureDef(def));
+    Fixture *fx = new Fixture(&doc);
+    fx->setName("Staff");
+    fx->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+    fx->setConnection(Fixture::Network);
+    fx->setTransport(Fixture::WledTransport);
+    fx->setIPAddress(wled.address());
+    fx->setPatched(false);
+    QVERIFY(doc.addFixture(fx));
+    {
+        PatchPlanner planner(&doc);
+        QStringList problems;
+        QCOMPARE(planner.apply(planner.plan({ fx->id() }), &problems), 1);
+    }
+    QCOMPARE(doc.inputOutputMap()->outputPatch(fx->universe())->pluginName(), QString("WLED"));
+    FixtureGroup *staffGroup = new FixtureGroup(&doc);
+    staffGroup->setName("Staff");
+    doc.addFixtureGroup(staffGroup);
+    staffGroup->assignFixture(fx->id());
+    const quint32 staff = staffGroup->id();
+    const int starburst = WledFixture::effectValue(fx, "Fireworks Starburst");
+
+    auto dimmerLook = [&doc](int level) {
+        QLCPalette *p = new QLCPalette(QLCPalette::Dimmer, &doc);
+        p->setValue(level);
+        doc.addPalette(p);
+        return p->id();
+    };
+    const quint32 zero = dimmerLook(0), full = dimmerLook(255);
+    QLCPalette *burst = new QLCPalette(QLCPalette::Effect, &doc);
+    burst->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/wled-fireworks-starburst.js");
+    burst->setWledEffect("Fireworks Starburst");
+    burst->setEffectParamValue("speed", 200);
+    doc.addPalette(burst);
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, &doc);
+    red->setValue(QColor(255, 0, 0));
+    doc.addPalette(red);
+    QLCPalette *phaser = new QLCPalette(QLCPalette::Effect, &doc);
+    phaser->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/dimmer-phaser.js");
+    doc.addPalette(phaser);
+
+    // The cue list: preshow, the spell, preshow, the spell...
+    ShowTreeController *st = doc.showTree();
+    const quint32 prod = st->addProduction("Spell");
+    const quint32 list = st->addCueList(prod, "Act 1");
+    auto target = [](quint32 g) { ShowTree::Target t; t.groups << g; return t; };
+    auto off = [st](quint32 pid) { ShowTree::Look l = st->lookForPalette(pid); l.palettes.clear(); l.none = true; return l; };
+    const int goes = 6;
+    for (int k = 0; k < goes; ++k)
+    {
+        const bool spell = k % 2 == 1;
+        const quint32 cue = st->addCue(list, k - 1, spell ? "Spell" : "Preshow");
+        QVERIFY(cue != 0);
+        QVERIFY(st->setTargetLook(cue, target(wash), st->lookForPalette(spell ? zero : full)));
+        QVERIFY(st->setTargetLook(cue, target(steps), st->lookForPalette(spell ? full : zero)));
+        QVERIFY(st->setTargetLook(cue, target(steps), spell ? st->lookForPalette(phaser->id()) : off(phaser->id())));
+        QVERIFY(st->setTargetLook(cue, target(staff), st->lookForPalette(spell ? full : zero)));
+        QVERIFY(st->setTargetLook(cue, target(staff), st->lookForPalette(red->id())));
+        QVERIFY(st->setTargetLook(cue, target(staff), spell ? st->lookForPalette(burst->id()) : off(burst->id())));
+    }
+    QVERIFY(st->setCurrentProduction(prod));
+    doc.programmer()->setAutoMoveInBlack(true);
+    doc.programmer()->setMoveInBlackDarkGapMs(0);
+
+    /* When each frame went out: a universe written, on the engine's own
+       thread -- the frame the wash (DMX), the steps' effect (DMX) and the
+       staff's own universe (handed to the WLED output) first show what the
+       cue asks. */
+    std::atomic<bool> spellNext{ false }, armed{ false };
+    std::atomic<qint64> washAt{ 0 }, stepsAt{ 0 }, staffAt{ 0 };
+    Universe *stage = doc.inputOutputMap()->universes().at(0);
+    connect(stage, &Universe::universeWritten, stage, [&](quint32, const QByteArray &data) {
+        if (!armed.load() || data.size() < 11)
+            return;
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (washAt.load() == 0 && uchar(data.at(0)) == (spellNext.load() ? 0 : 255))
+            washAt.store(now);
+        if (stepsAt.load() == 0 && (uchar(data.at(10)) > 0) == spellNext.load())
+            stepsAt.store(now);
+    }, Qt::DirectConnection);
+    Universe *own = doc.inputOutputMap()->universes().at(int(fx->universe()));
+    const int master = int(fx->address());
+    connect(own, &Universe::universeWritten, own, [&](quint32, const QByteArray &data) {
+        if (armed.load() && staffAt.load() == 0 && data.size() > master
+            && (uchar(data.at(master)) > 0) == spellNext.load())
+            staffAt.store(QDateTime::currentMSecsSinceEpoch());
+    }, Qt::DirectConnection);
+
+    doc.setMode(Doc::Operate);
+    doc.inputOutputMap()->startUniverses();
+    doc.masterTimer()->start();
+    QTest::qWait(200);
+
+    auto statePosts = [&wled]() {
+        QList<int> out;
+        for (int i = 0; i < wled.posted.size(); ++i)
+            if (wled.posted.at(i).first.endsWith("/json/state"))
+                out << i;
+        return out;
+    };
+    QList<qint64> ownLag, stageLag, stepsLag;
+    int brightnessOnly = 0;
+    for (int k = 0; k < goes; ++k)
+    {
+        const bool spell = k % 2 == 1;
+        if (spell)
+        {
+            // Dark, the staff is already on the spell's look (moved in black).
+            QTRY_VERIFY_WITH_TIMEOUT(!wled.state.value("on").toBool()
+                                         && wled.segments().at(0).toObject().value("fx").toInt() == starburst,
+                                     3000);
+            QTest::qWait(50);
+        }
+        const int before = statePosts().size();
+        armed.store(false);
+        washAt.store(0);
+        stepsAt.store(0);
+        staffAt.store(0);
+        spellNext.store(spell);
+        armed.store(true);
+        ShowControl::Request go;
+        go.command = ShowControl::Go;
+        QVERIFY(doc.showControl()->run(go, ShowControl::RouteOther));
+        // The staff told what this cue makes it: on for the spell, off for preshow.
+        int post = -1;
+        QElapsedTimer waited;
+        waited.start();
+        while (waited.elapsed() < 3000)
+        {
+            const QList<int> p = statePosts();
+            for (int i = before; i < p.size() && post < 0; ++i)
+                if (wled.posted.at(p.at(i)).second.value("on").toBool(!spell) == spell)
+                    post = p.at(i);
+            if (post >= 0 && washAt.load() != 0 && stepsAt.load() != 0 && staffAt.load() != 0)
+                break;
+            QTest::qWait(1);
+        }
+        QVERIFY2(washAt.load() != 0 && stepsAt.load() != 0 && staffAt.load() != 0,
+                 qPrintable(QString("GO %1: a universe never showed the cue").arg(k)));
+        QVERIFY2(post >= 0, qPrintable(QString("GO %1: the staff was never sent it").arg(k)));
+        const QJsonObject body = wled.posted.at(post).second;
+        const qint64 at = wled.postedAt.at(post);
+        ownLag << at - staffAt.load();
+        stageLag << at - washAt.load();
+        stepsLag << at - stepsAt.load();
+        QVERIFY2(at - washAt.load() < 250,
+                 qPrintable(QString("GO %1: the staff came %2 ms after the stage").arg(k).arg(at - washAt.load())));
+        QCOMPARE(body.value("transition").toInt(-1), 0);       // a snap, no glide
+        if (spell && !body.contains("seg"))
+            ++brightnessOnly;
+        QTest::qWait(150);
+    }
+    armed.store(false);
+    auto median = [](QList<qint64> l) { std::sort(l.begin(), l.end()); return l.at(l.size() / 2); };
+    qInfo() << "the staff's POST after its own universe's frame, ms:" << ownLag;
+    qInfo() << "after the steps' effect frame (DMX):" << stepsLag;
+    qInfo() << "after the wash's frame (DMX):" << stageLag;
+    /* The WLED output's part: the frame handed to it to the device having
+       it. Loopback has no Wi-Fi in it; what is left is the wake-up (2 ms
+       coalescing), the event loop's turn and the HTTP request -- about
+       6 ms on an idle desk machine. 30 leaves five times that for a loaded
+       gate machine; the middle of six GOs, so one stalled turn does not
+       fail it. The old send tick (here a second) would be hundreds. */
+    QVERIFY2(median(ownLag) <= 30,
+             qPrintable(QString("a snap reaches the staff %1 ms after its frame").arg(median(ownLag))));
+    /* Against the stage: the staff comes with the steps' effect -- both
+       effect layers, which draw their first frame on the event loop, a
+       frame (20 ms) after a plain layer like the wash. Each comes within
+       the same 30 ms of the steps, and within two frames more of the wash. */
+    QVERIFY2(median(stepsLag) <= 30,
+             qPrintable(QString("the staff comes %1 ms after the steps' effect").arg(median(stepsLag))));
+    QVERIFY2(median(stageLag) <= 70,
+             qPrintable(QString("the staff comes %1 ms after the stage").arg(median(stageLag))));
+    // Moved in black: every spell GO was its brightness alone.
+    QCOMPARE(brightnessOnly, goes / 2);
+    QCOMPARE(wled.segments().at(0).toObject().value("fx").toInt(), starburst);
+    QCOMPARE(wled.state.value("on").toBool(), true);
+
+    doc.programmer()->setAutoMoveInBlack(false);
+    for (Function *f : doc.functions())
+        f->stop(FunctionParent::master());
+    QTest::qWait(100);
+    doc.masterTimer()->stop();
 }
 
 QTEST_MAIN(WledShow_Test)

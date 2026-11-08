@@ -40,6 +40,9 @@
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
 #include "showtreemodel.h"
+#include "cueoutput.h"
+#include "qlcpalette.h"
+#include "wledfixture.h"
 #include <QBuffer>
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
@@ -564,3 +567,100 @@ void MarkPlanner_Test::theLookaheadOfAChaser()
 }
 
 QTEST_GUILESS_MAIN(MarkPlanner_Test)
+
+void MarkPlanner_Test::aDarkWledIsMovedInBlackToItsNextLook()
+{
+    // A WLED lantern in Effect mode on its own API, dark now.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Lantern.qxf"),
+             QFile::NoError);
+    Fixture *staff = new Fixture(m_doc);
+    staff->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+    staff->setUniverse(0);
+    staff->setAddress(100);
+    staff->setTransport(Fixture::WledTransport);
+    QVERIFY(m_doc->addFixture(staff));
+    QVERIFY(WledFixture::runsEffects(staff));
+    const quint32 sid = staff->id();
+    const int effectCh = WledFixture::channel(staff, "Effect");
+    const int speedCh = WledFixture::channel(staff, "Effect Speed");
+    const int paletteCh = WledFixture::channel(staff, "Palette");
+    const int redCh = WledFixture::channel(staff, "Red");
+    const quint32 master = staff->masterIntensityChannel();
+    QVERIFY(effectCh >= 0 && redCh >= 0 && master != QLCChannel::invalid());
+
+    // The spell: Fireworks Starburst at speed 200, palette 6, in red.
+    QLCPalette *burst = new QLCPalette(QLCPalette::Effect, m_doc);
+    burst->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/wled-fireworks-starburst.js");
+    burst->setWledEffect("Fireworks Starburst");
+    burst->setEffectParamValue("speed", 200);
+    burst->setEffectParamValue("palette", 6);
+    m_doc->addPalette(burst);
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setValue(QColor(255, 0, 0));
+    m_doc->addPalette(red);
+    Scene *spell = new Scene(m_doc);
+    spell->setName("Spell");
+    spell->addFixture(sid);
+    spell->addPalette(burst->id());
+    spell->addPalette(red->id());
+    m_doc->addFunction(spell);
+
+    // The cue's own peek has no idea: the settings are the look's.
+    QVERIFY(!CueOutput::computeCues(m_doc, spell->id()).value(sid).lit);
+    // As the look plays them: lit, and its effect, speed, palette and red.
+    WledLookCache looks;
+    looks.beginPass();
+    const CueOutput::FixtureCue fc = CueOutput::computeCues(m_doc, spell->id(), &looks).value(sid);
+    looks.endPass();
+    QVERIFY(fc.lit);
+    QCOMPARE(int(fc.intensity), 255);
+    QCOMPARE(int(fc.nonIntensity.value(quint32(effectCh))),
+             WledFixture::effectValue(staff, "Fireworks Starburst"));
+    QCOMPARE(int(fc.nonIntensity.value(quint32(speedCh))), 200);
+    QCOMPARE(int(fc.nonIntensity.value(quint32(paletteCh))), 6);
+    QCOMPARE(int(fc.nonIntensity.value(quint32(redCh))), 255);
+    QVERIFY(!fc.nonIntensity.contains(master));
+    QCOMPARE(looks.size(), 1);
+    // A pass that does not ask for it lets it go.
+    looks.beginPass();
+    looks.endPass();
+    QCOMPARE(looks.size(), 0);
+
+    // A colour cue on it is Solid: its effect at rest, not the last one.
+    Scene *plain = new Scene(m_doc);
+    plain->addFixture(sid);
+    plain->setValue(sid, master, 255);
+    plain->setValue(sid, quint32(redCh), 255);
+    m_doc->addFunction(plain);
+    QCOMPARE(int(CueOutput::computeCues(m_doc, plain->id(), &looks).value(sid)
+                     .nonIntensity.value(quint32(effectCh), 99)), 0);
+
+    // A cue list: now (the staff dark), then the spell.
+    Scene *now = new Scene(m_doc);
+    m_doc->addFunction(now);
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setDuration(MasterTimer::tick() * 10);
+    chaser->addStep(now->id());
+    chaser->addStep(spell->id());
+    m_doc->addFunction(chaser);
+    MasterTimer timer(m_doc);
+    chaser->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    QCOMPARE(chaser->computeNextStep(chaser->currentStepIndex()), 1);
+
+    MarkPlanner planner(m_doc, m_mark);
+    planner.setDarkGapMs(0);
+    // Off: nothing pre-set.
+    QMetaObject::invokeMethod(&planner, "evaluate");
+    QVERIFY(!m_mark->isMarked(sid));
+    planner.setEnabled(true);
+    QVERIFY(m_mark->isMarked(sid));
+    const QHash<quint32, uchar> held = m_mark->markedValues(sid);
+    QCOMPARE(int(held.value(quint32(effectCh))), WledFixture::effectValue(staff, "Fireworks Starburst"));
+    QCOMPARE(int(held.value(quint32(redCh))), 255);
+    QVERIFY(!held.contains(master));            // dark: the GO brings the brightness
+    // Not into this cue (released when the planner is switched off).
+    planner.setEnabled(false);
+    QVERIFY(!m_mark->isMarked(sid));
+}

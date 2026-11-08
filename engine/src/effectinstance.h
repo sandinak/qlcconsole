@@ -281,6 +281,12 @@ public:
      *  looks don't drive that channel. */
     uchar sceneBaseValue(quint32 fid, quint32 channel, uchar dflt) const;
 
+    /** A WLED look (QLCPalette::wledEffect()): what WLED fixtures in it are
+     *  sent -- the effect, its controls and the look's colours, on their own
+     *  channels. They run it; the script never sees them. Public for the
+     *  move-in-black peek (WledLookCache): what a cue will send them. */
+    QList<DmxWrite> wledDeviceWrites() const;
+
 private:
     QJSValue buildFixturesArray(const QList<EffectCell> &cells, int gridCols, int gridRows);
     struct FixtureFacts;
@@ -315,10 +321,6 @@ private:
     /** @p fxIds less WLED fixtures that run it themselves, filtered by the
      *  script's fixtureTypes. */
     QList<quint32> typeFiltered(QList<quint32> fxIds) const;
-    /** A WLED look (QLCPalette::wledEffect()): what WLED fixtures in it are
-     *  sent -- the effect, its controls and the look's colours, on their own
-     *  channels. They run it; the script never sees them. */
-    QList<DmxWrite> wledDeviceWrites() const;
     /** Their run has ended (Once, N times): @p release lets go of them,
      *  else they hold their last settings -- and a WLED on its own API
      *  freezes on its frame (WledFixture::kFreezeOption). */

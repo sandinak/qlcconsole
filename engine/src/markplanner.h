@@ -29,6 +29,7 @@
 #include <QString>
 
 #include "cuelookahead.h"
+#include "cueoutput.h"
 
 class Doc;
 class MarkEffect;
@@ -99,6 +100,10 @@ private:
     int         m_darkGapMs = defaultDarkGapMs();   //!< lead time; tune on a rig
     QSet<quint32> m_planned;            //!< fixtures WE marked (vs manual marks)
     QList<quint32> m_lastDangling;      //!< last emitted dangleFixturesChanged() value
+    /** The upcoming cues' WLED looks, as they play (their settings come
+     *  from the look, not the scene): kept from tick to tick, let go of
+     *  when no upcoming cue has them. */
+    mutable WledLookCache m_wledLooks;
 
     static const int DARK_LEVEL = 8;    //!< master intensity ≤ this = dark
     static const int TICK_MS   = 300;   //!< coarse re-plan cadence

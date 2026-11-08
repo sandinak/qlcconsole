@@ -28,6 +28,10 @@ private slots:
     /** A step (on or off, another effect, a change after the look stood
      *  still) goes at once; only a fade, send after send, glides. */
     void aStepGoesAtOnceAndOnlyAFadeGlides();
+    /** UX-73: a change goes when it happens, not on the next send tick. */
+    void aSnapGoesAtOnceNotOnTheNextTick();
+    /** After a move in black, the GO sends only the brightness. */
+    void aLookMovedInBlackGoesOnWithItsBrightnessAlone();
     void aWeakOrSilentLanternIsAProblem();
     void aWatchedLanternSaysWhatItsLedsShow();
 
