@@ -41,6 +41,7 @@ namespace
 ShowStatusDialog::ShowStatusDialog(QWidget *parent)
     : QDialog(parent)
 {
+    setProperty("helpTopic", QStringLiteral("other-improvements.md#readiness-footer"));
     setWindowTitle(tr("Show readiness"));
     QVBoxLayout *lay = new QVBoxLayout(this);
 
@@ -266,6 +267,7 @@ void ShowStatusDialog::updateActionButton()
         b->setText(label);
         b->setVisible(true);
         b->setEnabled(offered);
+        b->setToolTip(offered ? QString() : tr("Pick a problem in the list to fix it."));
     }
 }
 

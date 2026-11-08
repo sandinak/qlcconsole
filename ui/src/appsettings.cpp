@@ -62,6 +62,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     Q_ASSERT(app != nullptr);
 
     setWindowTitle(tr("Application Settings"));
+    setProperty("helpTopic", QStringLiteral("other-improvements.md#appearance-settings"));
     setMinimumWidth(400);
 
     // Three tabs: General, what everyone sets; Appearance, how the window
@@ -342,7 +343,9 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     QGroupBox *scGroupBox = new QGroupBox(tr("Show Controls"), this);
     scGroupBox->setProperty("helpTopic", QStringLiteral("getting-started.md#finding-your-way-around"));
     QHBoxLayout *showCtlLayout = new QHBoxLayout(scGroupBox);
-    showCtlLayout->addWidget(new QLabel(tr("Stop all, Blackout, Blind and Design | Operate:"), scGroupBox));
+    QLabel *showCtlLabel = new QLabel(tr("Stop all, Blackout, Blind and Design | Operate:"), scGroupBox);
+    showCtlLabel->setWordWrap(true);
+    showCtlLayout->addWidget(showCtlLabel);
     m_showControlsCombo = new QComboBox(scGroupBox);
     m_showControlsCombo->setObjectName(QStringLiteral("settingsShowControls"));
     m_showControlsCombo->addItem(tr("In the top bar, beside the tab's tools"), App::ShowControlsInTopBar);

@@ -1137,7 +1137,7 @@ void CueRunner::refreshPadRun()
         ? QStringLiteral("QToolButton { color: black; background: %1; }").arg(PadRun::armedColour().name())
         : QString());
     m_padRunBtn->setToolTip(
-        tr("<p><b>The game controller's role.</b> Tools: Focus mode, Venue focus, Refine and the "
+        tr("<p><b>The game controller's role.</b> Tools: Focus mode, Venue focus, Focus This Cue and the "
            "follow spot, as before. Run: the controller runs the show &mdash; nothing moves it "
            "unless %1 is held. Click to switch, or hold %3 + %4 on the controller for a second.</p>"
            "<p>%2</p>")

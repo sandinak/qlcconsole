@@ -106,9 +106,9 @@ you are in Design. Click **Operate**.
 On paper, before the house opens: the show open and saved; **Operate**; the
 Run tab on the first cue; Stage Power and the house lights as in
 [Lesson 3.7](../3-7/); every group master at full; the pad, phone and QLab
-as the plan says; a hand on **Blackout** (top right) and **Stop all**
+as the plan says; a hand on **Blackout** (top right) and **Stop All**
 (⌘⇧Esc). Blackout takes every light that doesn't ignore it to zero, and
-**Stop all** lets go of every cue and hit. Neither is an edit.
+**Stop All** lets go of every cue and hit. Neither is an edit.
 
 ## Exit ticket
 

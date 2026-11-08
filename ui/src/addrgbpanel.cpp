@@ -33,6 +33,7 @@ AddRGBPanel::AddRGBPanel(QWidget *parent, const Doc *doc)
     : QDialog(parent)
     , m_doc(doc)
 {
+    setProperty("helpTopic", QStringLiteral("effects.md#pixels-and-grids"));
     setupUi(this);
 
     /* The physical size in Settings > Units, typed in any unit (the form's

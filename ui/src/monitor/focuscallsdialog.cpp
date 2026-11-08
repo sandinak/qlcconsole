@@ -270,9 +270,9 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     vl->addWidget(m_venueNote);
 
     QDialogButtonBox *bb = new QDialogButtonBox(this);
-    m_start = bb->addButton(tr("Start venue focus"), QDialogButtonBox::AcceptRole);
+    m_start = bb->addButton(tr("Start Venue Focus"), QDialogButtonBox::AcceptRole);
     m_start->setObjectName(QStringLiteral("fcStart"));
-    QPushButton *save = bb->addButton(tr("Save calls"), QDialogButtonBox::ApplyRole);
+    QPushButton *save = bb->addButton(tr("Save Calls"), QDialogButtonBox::ApplyRole);
     save->setObjectName(QStringLiteral("fcSave"));
     bb->addButton(QDialogButtonBox::Cancel);
     vl->addWidget(bb);

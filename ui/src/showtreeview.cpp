@@ -2009,6 +2009,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             bl->addWidget(nb);
             m_cueBlockingRename = new QPushButton(tr("Rename\u2026"), m_cueBlockingRow);
             m_cueBlockingRename->setObjectName("stCueBlockingRename");
+            m_cueBlockingRename->setToolTip(tr("Rename the blocking this cue uses. Greyed while the cue has none of its own (it plays Default)."));
             bl->addWidget(m_cueBlockingRename);
             connect(m_cueBlocking, QOverload<int>::of(&QComboBox::activated), this, [this](int i) {
                 if (m_inspectorUpdating || m_pageCue == invalidId())
@@ -9045,10 +9046,14 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
                 dropCues(cues, list->cues.at(first - 1).id, false);
             }, QStringLiteral("stMoveCueUp"));
             up->setEnabled(first > 0);
+            if (first <= 0)
+                up->setToolTip(tr("Already first in its list"));
             QAction *down = menu.add(ContextMenu::Organise, single ? tr("Move Down") : (hit ? tr("Move %1 Hits Down") : tr("Move %1 Cues Down")).arg(cues.count()), [this, list, cues, last]() {
                 dropCues(cues, list->cues.at(last + 1).id, true);
             }, QStringLiteral("stMoveCueDown"));
             down->setEnabled(last + 1 < list->cues.count());
+            if (last + 1 >= list->cues.count())
+                down->setToolTip(tr("Already last in its list"));
         }
 
         /* ---- 7. Clipboard and a copy ---- */
@@ -10321,7 +10326,8 @@ void ShowTreeView::reloadLibrary()
     // Palettes (R2): by type with the folders under each, or folders first.
     buildLibraryPalettes(all, add);
 
-    QTreeWidgetItem *funcs = folder(all, tr("Functions (played as they are)"));
+    QTreeWidgetItem *funcs = folder(all, tr("Functions"));
+    funcs->setToolTip(0, tr("Played as they are: a layer each, not taken apart into groups and palettes"));
     QList<Function *> fl;
     for (Function *f : m_doc->functions())
         if (f->isVisible() && !m_st->isGenerated(f->id()) && f->type() != Function::ChaserType)

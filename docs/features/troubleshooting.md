@@ -347,7 +347,7 @@ back; see [Reordering and numbering](show-tree.md#reordering-and-numbering).
 
 **Esc didn't stop anything.** Plain Esc backs out of an editor (a palette,
 a group's layout, the effect bench, the Workbench docked in the Show
-Tree) to what was showing before. **Stop all** is **⌘⇧Esc**
+Tree) to what was showing before. **Stop All** is **⌘⇧Esc**
 ([Keyboard and mouse](shortcuts.md)).
 
 **A shortcut does nothing.** Check [Keyboard and mouse](shortcuts.md):

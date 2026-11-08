@@ -149,6 +149,7 @@ ShowSettingsDialog::ShowSettingsDialog(Doc *doc, QWidget *parent)
     pinRow->addWidget(m_setPin);
     m_removePin = new QPushButton(tr("Remove PIN"), pbox);
     m_removePin->setObjectName(QStringLiteral("showSettingsRemovePin"));
+    m_removePin->setToolTip(tr("Take the PIN off the show. Greyed while the show has no PIN."));
     connect(m_removePin, &QPushButton::clicked, this, &ShowSettingsDialog::slotRemovePin);
     pinRow->addWidget(m_removePin);
     pl->addLayout(pinRow);

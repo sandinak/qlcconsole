@@ -2711,7 +2711,7 @@ void App::initActions()
     m_controlPanicAction->setShortcut(QKeySequence("CTRL+SHIFT+ESC"));
     // The show controls' button says the short form (iconText); the Control
     // menu keeps the full name.
-    m_controlPanicAction->setIconText(tr("Stop all"));
+    m_controlPanicAction->setIconText(tr("Stop All"));
     m_controlPanicAction->setToolTip(tr("Stop ALL functions (%1). Hold for Fade and stop.")
             .arg(m_controlPanicAction->shortcut().toString(QKeySequence::NativeText)));
     connect(m_controlPanicAction, SIGNAL(triggered(bool)), this, SLOT(slotControlPanic()));

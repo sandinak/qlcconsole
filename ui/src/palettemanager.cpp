@@ -42,6 +42,7 @@ PaletteManager::PaletteManager(Doc *doc, QWidget *parent)
     : QDialog(parent)
     , m_doc(doc)
 {
+    setProperty("helpTopic", QStringLiteral("build.md#palettes-here-and-in-the-show-tree"));
     setWindowTitle(tr("Palettes"));
     resize(560, 380);
 

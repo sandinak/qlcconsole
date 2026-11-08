@@ -30,7 +30,7 @@ focus calls…** opens the list.
 - **Note** — a word for the crew, shown on the panel while the call runs
   ("cut off the proscenium").
 
-**Save calls** keeps them in the show (they are saved with it).
+**Save Calls** keeps them in the show (they are saved with it).
 
 **No calls yet?** Venue focus, and a venue focus cue, build them for you
 from the show's own targets: one call per stage target that a layer in
@@ -38,7 +38,7 @@ any cue list or hit aims at (an Aim look, or a line aim), with the groups
 whose layers aim there, every owner (tour, house or rental), named "From
 the show: DH Tspots → DSC". They are rebuilt each time you start while you
 have not changed them, appear in **Edit Focus Calls…**, and are saved with
-the show only when you edit them or press **Save calls** (starting does
+the show only when you edit them or press **Save Calls** (starting does
 not save). A light no layer aims at a target is in no call: it still gets
 its correction through calibration (the venue's pan/tilt offsets, a
 Quick focus). When there is nothing to build from, the cue page and the
@@ -154,7 +154,7 @@ package](venues.md).
 **Focus ▸ Venue Focus…** on the Lighting Studio toolbar, or **Venue
 focus…** on the Run tab, runs the calls for the venue applied. With no
 venue applied it opens the list first, so you say which room this is
-before anything is saved. In the list, **Start venue focus** runs them.
+before anything is saved. In the list, **Start Venue Focus** runs them.
 Both are greyed until there is something to focus, and the tooltip says
 why: no focus calls yet, or none with a light placed on the plot.
 
@@ -392,7 +392,7 @@ are one checklist:
    Press Start to begin." and the cue page, the Run tab and the footer say
    **Venue focus: waiting for the controller**.
 3. When the crew is ready, press **Start** (Menu) on the controller — or
-   **Start venue focus** on the Run tab, or **⌘↩** (GO's key: while the calls
+   **Start Venue Focus** on the Run tab, or **⌘↩** (GO's key: while the calls
    wait, it begins them rather than going on). The first call comes up,
    blinking, as the voice says it. First the laptop confirms the venue
    (for a show that has been saved: a venue lives beside the show file): "Still at Lincoln HS? Answer on the laptop, or wait for a new

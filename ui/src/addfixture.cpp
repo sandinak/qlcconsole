@@ -53,6 +53,7 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
     : QDialog(parent)
     , m_doc(doc)
 {
+    setProperty("helpTopic", QStringLiteral("fixture-manager.md#patching-the-patch-dialog"));
     m_addressValue = 0;
     m_universeValue = 0;
     m_amountValue = 1;

@@ -36,6 +36,7 @@ MonitorBackgroundSelection::MonitorBackgroundSelection(QWidget *parent, Doc *doc
     : QDialog(parent)
     , m_doc(doc)
 {
+    setProperty("helpTopic", QStringLiteral("lighting-studio.md#stage-structures"));
     Q_ASSERT(doc != NULL);
     setupUi(this);
 

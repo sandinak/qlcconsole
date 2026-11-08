@@ -64,6 +64,7 @@ FixtureRemap::FixtureRemap(Doc *doc, QWidget *parent)
     : QDialog(parent)
     , m_doc(doc)
 {
+    setProperty("helpTopic", QStringLiteral("fixture-manager.md"));
     Q_ASSERT(doc != NULL);
 
     setupUi(this);

@@ -43,6 +43,7 @@
 CreateFixtureGroup::CreateFixtureGroup(QWidget* parent)
     : QDialog(parent)
 {
+    setProperty("helpTopic", QStringLiteral("fixture-manager.md#create-fixture-group-from-selection"));
     setupUi(this);
 
     QSettings settings;

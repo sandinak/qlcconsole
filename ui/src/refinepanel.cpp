@@ -260,7 +260,7 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
         // The pad's own names (Q170): "Keep (Cross)" on a PlayStation pad.
         const PadNames::Family family = pad.present ? pad.family : PadNames::Xbox;
         keep->setText(PadNames::expand(tr("Keep ({A})"), family));
-        back->setText(PadNames::expand(tr("Back to the cue ({B})"), family));
+        back->setText(PadNames::expand(tr("Back to the Cue ({B})"), family));
         m_map->setControls(pad.controls);
         m_map->setFamily(pad.present ? pad.family : PadNames::Xbox);
         m_device->setText(!pc->controllerOwnerName().isEmpty()

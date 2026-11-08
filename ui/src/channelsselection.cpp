@@ -46,6 +46,7 @@ ChannelsSelection::ChannelsSelection(Doc *doc, QWidget *parent, ChannelSelection
     , m_doc(doc)
     , m_mode(mode)
 {
+    setProperty("helpTopic", QStringLiteral("fixture-manager.md"));
     Q_ASSERT(doc != NULL);
 
     setupUi(this);

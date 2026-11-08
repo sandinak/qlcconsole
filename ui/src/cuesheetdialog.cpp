@@ -69,12 +69,12 @@ CueSheetDialog::CueSheetDialog(Doc *doc, quint32 productionId, QWidget *parent)
     QDialogButtonBox *btns = new QDialogButtonBox(QDialogButtonBox::Close, this);
     struct Save { const char *name; QString text; QString tip; void (CueSheetDialog::*slot)(); };
     const Save saves[] = {
-        { "cueSheetCsv", tr("Save CSV..."), tr("Save the sheet shown as a spreadsheet (CSV)"),
+        { "cueSheetCsv", tr("Save CSV…"), tr("Save the sheet shown as a spreadsheet (CSV)"),
           &CueSheetDialog::slotSaveCsv },
-        { "cueSheetXlsx", tr("Save XLSX..."), tr("Save the sheet shown as an Excel workbook "
+        { "cueSheetXlsx", tr("Save XLSX…"), tr("Save the sheet shown as an Excel workbook "
                                                   "(Numbers and Google Sheets open it too)"),
           &CueSheetDialog::slotSaveXlsx },
-        { "cueSheetPdf", tr("Save PDF..."), tr("Save the sheet shown as a printable PDF (landscape Letter)"),
+        { "cueSheetPdf", tr("Save PDF…"), tr("Save the sheet shown as a printable PDF (landscape Letter)"),
           &CueSheetDialog::slotSavePdf },
     };
     for (const Save &s : saves)
@@ -86,7 +86,7 @@ CueSheetDialog::CueSheetDialog(Doc *doc, quint32 productionId, QWidget *parent)
     }
     // The production's script or lyrics with its cues placed on the lines:
     // a window of its own, opened by whoever opened this.
-    QPushButton *script = btns->addButton(tr("Calling Script..."), QDialogButtonBox::ActionRole);
+    QPushButton *script = btns->addButton(tr("Calling Script…"), QDialogButtonBox::ActionRole);
     script->setObjectName(QStringLiteral("cueSheetCallingScript"));
     script->setToolTip(tr("The production's script or lyrics with its cues placed on the lines: "
                           "standby and GO in the margin, following the show as it runs"));

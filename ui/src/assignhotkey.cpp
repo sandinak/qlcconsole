@@ -36,6 +36,7 @@
 AssignHotKey::AssignHotKey(QWidget* parent, const QKeySequence& keySequence)
     : QDialog(parent)
 {
+    setProperty("helpTopic", QStringLiteral("shortcuts.md"));
     setupUi(this);
 
 #if defined(__APPLE__) || defined(WIN32)

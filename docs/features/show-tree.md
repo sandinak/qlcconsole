@@ -2138,7 +2138,7 @@ again what it opened.
     this on?**, **Patch…** and **Output Rules…**;
   - **Palettes**, by type with your folders under each, or folders first
     ([Palettes in the Library](#palettes-in-the-library));
-  - **Functions (played as they are)**: not chasers, and not what the tree
+  - **Functions** (played as they are): not chasers, and not what the tree
     made. Right-click a scene → **Adopt as a Hit** ([Hits](#hits-busking)).
 
 Select several items (⌘- or ⇧-click) to drag them together or use **+
@@ -2523,7 +2523,7 @@ called them looks; they open as they were.)
   **override** (hover for what it does).
   - **Two overrides on one channel:** the last fired wins; let it go and
     the earlier override is back. Firing one again puts it on top.
-  - **Stop all** (⌘⇧Esc) and **ALL OFF** (OSC or MSC show control) let go of
+  - **Stop All** (⌘⇧Esc) and **ALL OFF** (OSC or MSC show control) let go of
     overrides with everything else.
   - **The Blind view** draws an override hit over the cue in edit only
     while the hit is live on stage, since it would win over that cue too;
@@ -2684,7 +2684,7 @@ Console widget is the same runner on a VC page.
   why, while there is nothing to focus). With a
   [venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show) armed, a
   line says *Venue focus: waiting for the controller — press Start*, with
-  **Start venue focus**.
+  **Start Venue Focus**.
 - **The list:** every cue, its sub-cues under it, each with its state —
   **▶** running (with its fade's progress), **▷ STANDBY** (loaded), **NEXT**,
   **SUB NEXT** — its timing (fade; *with GO*, *Sub GO* or *auto 0.5s*) and

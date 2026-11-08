@@ -37,6 +37,7 @@ QString AboutBox::versionText()
 
 AboutBox::AboutBox(QWidget* parent) : QDialog (parent)
 {
+    setProperty("helpTopic", QStringLiteral("whats-new.md"));
     setupUi(this);
 
     QAction* action = new QAction(this);

@@ -89,6 +89,7 @@ StageGroupDialog::StageGroupDialog(Doc *doc, const QList<quint32> &fixtureIds,
     , m_ids(fixtureIds)
     , m_groupIds(groupIds)
 {
+    setProperty("helpTopic", QStringLiteral("other-improvements.md#studio-groups-fixture-studio"));
     setWindowTitle(tr("New Fixture Group"));
     QVBoxLayout *root = new QVBoxLayout(this);
     QFormLayout *form = new QFormLayout;

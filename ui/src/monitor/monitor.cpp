@@ -11891,7 +11891,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     vl->addWidget(fixtureBox);
 
     // Its mount's fine-tuning, its aim and calibration, testing it.
-    QGroupBox *rigBox = new QGroupBox(tr("Aim & Mount"), &dlg);
+    QGroupBox *rigBox = new QGroupBox(tr("Aim && Mount"), &dlg);
     QFormLayout *rigForm = new QFormLayout(rigBox);
 
     const bool isFeet_fx = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
@@ -12364,7 +12364,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
 
     // Position & Orientation  (placed above Rig Assignment, per user request).
     // Spinboxes on the left, live facing preview on the right to save height.
-    QGroupBox *posBox = new QGroupBox(tr("Position & Orientation"), &dlg);
+    QGroupBox *posBox = new QGroupBox(tr("Position && Orientation"), &dlg);
     QHBoxLayout *posRow = new QHBoxLayout(posBox);
     QFormLayout *posForm = new QFormLayout;
     posRow->addLayout(posForm, 1);
