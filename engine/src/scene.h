@@ -379,6 +379,11 @@ public:
      *  palettes/effects in. Returns true if the order actually changed. */
     bool reorderPalettes(const QList<quint32> &orderedIds);
 
+    /** Each look in @a map played by its new id instead, in the same place
+     *  (order, fade, what it leaves out, what it lays out over): a copy that
+     *  owns copies of its looks (UX-69). Ids not in @a map stay. */
+    void remapPalettes(const QHash<quint32, quint32> &map);
+
     /** Per-look fade override (milliseconds), separate fade-IN and fade-OUT.
      *  A palette applied to this scene fades its channels over the step/scene
      *  fade by default; an explicit override here applies ONLY to that

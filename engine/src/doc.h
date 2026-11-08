@@ -486,6 +486,14 @@ public:
      */
     QString nextDuplicateName(const Function *src) const;
 
+    /** Function Manager ▸ Clone and every Duplicate (UX-69: a copy is a
+     *  copy): a copy of @a fid named on from it (nextDuplicateName()) that
+     *  is all its own -- its own one-offs, its own copy of a Sequence's
+     *  bound scene, plain copies of what the Show Tree made inside it
+     *  (ShowTreeController::plainCopy()). Every function made goes into
+     *  @a made, the copy first. nullptr if it couldn't be made. */
+    Function *duplicateFunction(quint32 fid, QList<quint32> *made = nullptr);
+
     /**
      * Pattern-agnostic unique-name generator shared by every "increment the
      * last number" caller (function duplication, fixture multi-add, …).

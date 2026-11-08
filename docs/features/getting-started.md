@@ -458,7 +458,11 @@ it is; each entry's file dialog shows only that kind:
 - **From a show file**
   - **QLC+ / qlcconsole Workspace (.qxw, .qlcc)…** — pick the fixtures,
     groups, functions and palettes to bring in from another show. Clashing
-    IDs and addresses are sorted out for you.
+    IDs and addresses are sorted out for you, and everything brought in
+    points at what came with it: a scene at its groups and palettes, a
+    Sequence at its scene, an effect at its bound palettes. An aim keeps
+    its target when this show has one of the same name; otherwise the
+    summary says to pick it again.
   - **ETC Eos Show (ASCII .asc)…** — see
     [Importing an Eos show](#importing-an-eos-show) below.
 - **Fixtures &amp; patch**

@@ -1293,34 +1293,12 @@ void FunctionManager::slotTreeContextMenuRequested()
 
 void FunctionManager::copyFunction(quint32 fid)
 {
-    Function* function = m_doc->function(fid);
-    Q_ASSERT(function != NULL);
-
-    /* Attempt to create a copy of the function to Doc */
-    Function* copy = function->createCopy(m_doc);
+    // Smart-incremented name ("Verse 1" -> "Verse 2"), and all its own: a
+    // Sequence's bound scene, the one-offs it plays and what the Show Tree
+    // made inside it are copied too (UX-69: a copy is a copy).
+    Function *copy = m_doc->duplicateFunction(fid);
     if (copy != NULL)
     {
-        // Smart-increment the source name (e.g. "Verse 1" → "Verse 2",
-        // "01-01.02-Reville" → "01-01.03-Reville") instead of the
-        // generic "(Copy)" suffix. nextDuplicateName checks for
-        // collisions against other functions on the same Path.
-        copy->setName(m_doc->nextDuplicateName(function));
-
-        /* If the cloned Function is a Sequence,
-         * clone the bound Scene too */
-        if (function->type() == Function::SequenceType)
-        {
-            Sequence *sequence = qobject_cast<Sequence *>(copy);
-            quint32 sceneID = sequence->boundSceneID();
-            Function *scene = m_doc->function(sceneID);
-            if (scene != NULL)
-            {
-                Function *sceneCopy = scene->createCopy(m_doc);
-                if (sceneCopy != NULL)
-                    sequence->setBoundSceneID(sceneCopy->id());
-            }
-        }
-
         QTreeWidgetItem* item = m_tree->functionItem(copy);
         m_tree->setCurrentItem(item);
     }

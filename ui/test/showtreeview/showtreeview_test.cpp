@@ -10472,6 +10472,229 @@ void ShowTreeView_Test::duplicateGivesTheCopyItsOwnOneOffValues()
     QCOMPARE(st->cue(c1)->layer(l1)->look(KeyColour)->palettes.first(), red);
 }
 
+/* UX-69: a copy is a copy. Detach to Plain Scene (the layer's right-click)
+   copies what the layer plays now, the colour tracked in from cue 1 too:
+   the plain scene plays its own copy of that one-off, so editing either
+   leaves the other alone. Undo takes the plain scene away and leaves cue 1
+   as it was. */
+void ShowTreeView_Test::aDetachedLayersSceneHasItsOwnLooks()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(towers->id()));
+    const quint32 red = st->createInlinePalette(QLCPalette::Color, { "#ff0000" }, "Red-ish · 1 Towers");
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(red)));
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 l2 = st->addLayer(c2, groupTarget(towers->id()));
+    QVERIFY(st->setLayerLook(c2, l2, st->lookForPalette(full)));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    QVERIFY(view.selectNode(l2, c2));
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, view.tree()->currentItem());
+        QAction *detach = menu.findChild<QAction *>("stDetachLayer");
+        QVERIFY(detach != nullptr);
+        detach->trigger();
+    }
+    const quint32 sid = st->cue(c2)->layer(l2)->target.function;
+    Scene *plain = qobject_cast<Scene *>(m_doc->function(sid));
+    QVERIFY(plain != nullptr);
+    QVERIFY(!st->isGenerated(sid));
+    QVERIFY(plain->palettes().contains(full));                   // a named palette stays shared
+    QVERIFY(!plain->palettes().contains(red));
+    quint32 own = invalidId();
+    for (quint32 pid : plain->palettes())
+        if (m_doc->palette(pid) != nullptr && m_doc->palette(pid)->type() == QLCPalette::Color)
+            own = pid;
+    QVERIFY(own != invalidId());
+    QCOMPARE(m_doc->palette(own)->value().toString(), QString("#ff0000"));
+
+    // Editing the copy leaves the original alone, and the other way round.
+    m_doc->palette(own)->setValue(QString("#0000ff"));
+    QCOMPARE(m_doc->palette(red)->value().toString(), QString("#ff0000"));
+    m_doc->palette(red)->setValue(QString("#00ff00"));
+    QCOMPARE(m_doc->palette(own)->value().toString(), QString("#0000ff"));
+    QCOMPARE(st->cue(c1)->layer(l1)->look(KeyColour)->palettes.first(), red);
+
+    QVERIFY(st->undo());
+    QVERIFY(m_doc->function(sid) == nullptr);
+    QCOMPARE(st->cue(c2)->layer(l2)->target.groups, QList<quint32>({ towers->id() }));
+    QCOMPARE(st->cue(c1)->layer(l1)->look(KeyColour)->palettes.first(), red);
+}
+
+/* UX-69: two lists play one reusable layer, so one generated scene. Detach
+   to Plain Chaser (the list's right-click) on one: its chaser plays its own
+   copy of the reusable's one-off, now a palette of the show's; the other
+   list keeps the one-off, still a one-off. Editing the chaser's leaves the
+   other list's look alone. */
+void ShowTreeView_Test::aListDetachedToAChaserLeavesTheOtherListsLooksAlone()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 la = st->addCueList(prod, "A", ListMode::Tracking);
+    const quint32 a1 = st->addCue(la, -1, "One");
+    const quint32 al = st->addLayer(a1, groupTarget(towers->id()));
+    const quint32 red = st->createInlinePalette(QLCPalette::Color, { "#ff0000" }, "Red-ish · 1 Towers");
+    QVERIFY(st->setLayerLook(a1, al, st->lookForPalette(red)));
+    const quint32 rid = st->makeLayerReusable(a1, al, "Warm towers");
+    QVERIFY(rid != invalidId());
+    const quint32 lb = st->addCueList(prod, "B", ListMode::Tracking);
+    const quint32 b1 = st->addCue(lb, -1, "One");
+    QVERIFY(st->insertReusableLayer(b1, rid) != invalidId());
+    QVERIFY(st->isInlinePalette(red));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.setConfirm([](const QString &, const QString &, const QString &) { return true; });
+
+    const quint32 chaserId = st->cueList(la)->chaser;
+    QVERIFY(view.selectNode(la));
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, view.tree()->currentItem());
+        QAction *detach = menu.findChild<QAction *>("stDetachList");
+        QVERIFY(detach != nullptr);
+        detach->trigger();
+    }
+    QVERIFY(st->cueList(la) == nullptr);
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(chaserId));
+    QVERIFY(chaser != nullptr && !st->isGenerated(chaserId));
+    const Collection *cue = qobject_cast<const Collection *>(m_doc->function(chaser->steps().first().fid));
+    QVERIFY(cue != nullptr);
+    quint32 own = invalidId();
+    for (quint32 fid : cue->functions())
+        if (const Scene *s = qobject_cast<const Scene *>(m_doc->function(fid)))
+        {
+            QVERIFY(!st->isGenerated(fid));
+            for (quint32 pid : s->palettes())
+                own = pid;
+        }
+    QVERIFY(own != invalidId());
+    QVERIFY(own != red);
+    QVERIFY(!st->isInlinePalette(own));                          // the show's palette now
+    QVERIFY(st->isInlinePalette(red));                           // still list B's one-off
+    QCOMPARE(m_doc->palette(own)->value().toString(), QString("#ff0000"));
+
+    // Editing the copy leaves the original alone.
+    m_doc->palette(own)->setValue(QString("#0000ff"));
+    QCOMPARE(m_doc->palette(red)->value().toString(), QString("#ff0000"));
+    QCOMPARE(st->cueList(lb)->cues.first().layers.first().look(KeyColour)->palettes.first(), red);
+
+    // One undo step: the list is back, and its one-off with it.
+    QVERIFY(st->undo());
+    QVERIFY(st->cueList(la) != nullptr);
+    QVERIFY(st->isGenerated(chaserId));
+    QVERIFY(st->isInlinePalette(red));
+}
+
+/* UX-69, and a clone you can see: Function Manager ▸ Clone on a cue list's
+   chaser makes a plain chaser of the show's own -- its cues' collections
+   and scenes plain copies, each scene playing its own copy of the cue's
+   one-off. A clone of a hidden generated scene is listed (not hidden, not
+   generated). Editing the copy leaves the original alone. */
+void ShowTreeView_Test::cloningACueListsChaserMakesAPlainChaserOfItsOwn()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(towers->id()));
+    const quint32 red = st->createInlinePalette(QLCPalette::Color, { "#ff0000" }, "Red-ish · 1 Towers");
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(red)));
+    const quint32 chaserId = st->cueList(list)->chaser;
+    const quint32 collId = st->cue(c1)->collection;
+    quint32 sceneId = invalidId();
+    for (quint32 fid : qobject_cast<Collection *>(m_doc->function(collId))->functions())
+        sceneId = fid;
+    QVERIFY(st->isGenerated(sceneId));
+    QVERIFY(!m_doc->function(sceneId)->isVisible());
+
+    FunctionManager fm(nullptr, m_doc);
+    FunctionsTreeWidget *ftree = fm.findChild<FunctionsTreeWidget *>();
+    QVERIFY(ftree != nullptr);
+    const bool wasShown = fm.showTreeFunctionsShown();
+    auto restore = qScopeGuard([&fm, wasShown]() { fm.setShowTreeFunctionsShown(wasShown); });
+    QAction *showOwn = fm.findChild<QAction *>("fmShowTreeFunctions");
+    QAction *duplicate = nullptr;                               // Clone: "Duplicate" on its menu
+    for (QAction *a : fm.findChildren<QAction *>())
+        if (a->text() == FunctionManager::tr("D&uplicate"))
+            duplicate = a;
+    QVERIFY(showOwn != nullptr && duplicate != nullptr);
+    showOwn->setChecked(true);                                  // the Show Tree's own, listed
+    auto cloneRow = [&](quint32 fid) {
+        QList<quint32> before;
+        for (Function *f : m_doc->functions())
+            before << f->id();
+        ftree->clearSelection();
+        QTreeWidgetItem *row = ftree->functionItem(m_doc->function(fid));
+        if (row == nullptr)
+            return QList<quint32>();
+        row->setSelected(true);
+        ftree->setCurrentItem(row);
+        if (!duplicate->isEnabled())
+            return QList<quint32>();
+        duplicate->trigger();
+        QList<quint32> made;
+        for (Function *f : m_doc->functions())
+            if (!before.contains(f->id()))
+                made << f->id();
+        std::sort(made.begin(), made.end());
+        return made;
+    };
+
+    // The chaser: a plain chaser, a plain collection, a plain scene.
+    const QList<quint32> made = cloneRow(chaserId);
+    QCOMPARE(int(made.count()), 3);
+    Chaser *copy = nullptr;
+    for (quint32 fid : made)
+    {
+        QVERIFY(!st->isGenerated(fid));
+        QVERIFY(m_doc->function(fid)->isVisible());
+        if (Chaser *c = qobject_cast<Chaser *>(m_doc->function(fid)))
+            copy = c;
+    }
+    QVERIFY(copy != nullptr);
+    const quint32 stepId = copy->steps().first().fid;
+    QVERIFY(stepId != collId && made.contains(stepId));
+    const quint32 sceneCopy = qobject_cast<Collection *>(m_doc->function(stepId))->functions().first();
+    QVERIFY(sceneCopy != sceneId && made.contains(sceneCopy));
+    const quint32 own = qobject_cast<Scene *>(m_doc->function(sceneCopy))->palettes().first();
+    QVERIFY(own != red);
+    QCOMPARE(m_doc->palette(own)->value().toString(), QString("#ff0000"));
+
+    // Editing the copy leaves the original alone; the tree's rebake leaves
+    // the copy alone.
+    m_doc->palette(own)->setValue(QString("#0000ff"));
+    QCOMPARE(m_doc->palette(red)->value().toString(), QString("#ff0000"));
+    const quint32 green = st->createInlinePalette(QLCPalette::Color, { "#00ff00" }, "Green-ish · 1 Towers");
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(green)));
+    QCOMPARE(copy->steps().first().fid, stepId);
+    QCOMPARE(qobject_cast<Collection *>(m_doc->function(stepId))->functions().first(), sceneCopy);
+    QCOMPARE(qobject_cast<Scene *>(m_doc->function(sceneCopy))->palettes(), QList<quint32>({ own }));
+    QCOMPARE(m_doc->palette(own)->value().toString(), QString("#0000ff"));
+    for (quint32 fid : qobject_cast<Collection *>(m_doc->function(st->cue(c1)->collection))->functions())
+        sceneId = fid;                                          // the cue's scene now
+
+    // The hidden scene: its clone is listed, the show's own.
+    const QList<quint32> one = cloneRow(sceneId);
+    QCOMPARE(int(one.count()), 1);
+    QVERIFY(m_doc->function(one.first())->isVisible());
+    QVERIFY(!st->isGenerated(one.first()));
+    QVERIFY(ftree->functionItem(m_doc->function(one.first())) != nullptr);
+    QVERIFY(!qobject_cast<Scene *>(m_doc->function(one.first()))->palettes().contains(green));
+}
+
 /* Q215: a cue list, a production and a reusable cue have Copy / Paste /
    Duplicate in their menus and on the keys, one undo step each. */
 void ShowTreeView_Test::listsProductionsAndReusableCuesDuplicateCopyAndPaste()

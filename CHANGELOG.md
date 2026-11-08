@@ -80,6 +80,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   stay shared and reusable layers and cues stay linked, as before. A show
   saved with such a shared one-off is put right when it opens: the first
   cue keeps it, every other cue gets its own copy.
+- **Detach, Duplicate and Import make copies of their own** (UX-69).
+  Detach to Plain Scene kept the cue's one-off values (and ones tracked in
+  from earlier cues) shared with the tree, and Detach to Plain Chaser made
+  a one-off another list still played into a palette both used, so an edit
+  to either showed in the other. Functions ▸ Duplicate of a Show Tree
+  cue's scene, collection or chaser made a copy that shared the cue's
+  one-offs and functions, and one of a hidden scene came out hidden. Build's
+  Duplicate of a Sequence shared its bound scene. File ▸ Import left a
+  Sequence on the wrong scene, an effect on the wrong palettes, an aim on
+  the wrong target, and dropped a scene's groups and what each look left
+  out. Each copy now has its own; a duplicate of a cue's function is a
+  plain function you can see.
 - **Adding a WLED reaches the WLED, in one go.** Add Fixture with
   **Network (WLED, JSON over Wi-Fi)** put the WLED on the universe the
   dialog showed (an Art-Net one, say), so its looks went to the Art-Net node

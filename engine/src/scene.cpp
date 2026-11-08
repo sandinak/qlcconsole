@@ -22,6 +22,7 @@
 #include <QXmlStreamWriter>
 #include <QDebug>
 #include <algorithm>
+#include <type_traits>
 #include <QSet>
 #include <cmath>
 #include <QList>
@@ -663,6 +664,36 @@ bool Scene::reorderPalettes(const QList<quint32> &orderedIds)
         return false;
     m_palettes = reordered;
     return true;
+}
+
+void Scene::remapPalettes(const QHash<quint32, quint32> &map)
+{
+    if (map.isEmpty())
+        return;
+    bool changedIt = false;
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        for (quint32 &pid : m_palettes)
+        {
+            const quint32 to = map.value(pid, pid);
+            if (to != pid)
+            {
+                pid = to;
+                changedIt = true;
+            }
+        }
+        auto rekey = [&map](auto &hash) {
+            std::remove_reference_t<decltype(hash)> out;
+            for (auto it = hash.constBegin(); it != hash.constEnd(); ++it)
+                out.insert(map.value(it.key(), it.key()), it.value());
+            hash = out;
+        };
+        rekey(m_paletteFade);
+        rekey(m_excluded);
+        rekey(m_layoutSpans);
+    }
+    if (changedIt)
+        emit changed(this->id());
 }
 
 void Scene::setPaletteFade(quint32 paletteId, int fadeInMs, int fadeOutMs)

@@ -2294,7 +2294,9 @@ brings any of them back.
 
 **Detach to Plain Scene** turns a layer into an ordinary, visible scene
 named after the cue and layer. The layer then plays that scene as it is, and
-the tree no longer edits its looks. It is one undo step.
+the tree no longer edits its looks. The scene has its own copy of each
+one-off value it plays, a value tracked in from an earlier cue too, so
+editing it leaves the rest of the tree alone. It is one undo step.
 
 ## Reusable layers and cues
 
@@ -2388,7 +2390,9 @@ the rule would change, and reusable uses. A list that tracks already says
 - the **scenes** only this list plays go with them; a scene another list
   still plays is **copied**, and the chaser plays the copy, so it is all
   its own from the start (the tree keeps its scene for the other list);
-- one-off values those scenes play become ordinary palettes;
+- one-off values those scenes play become ordinary palettes; one the
+  rest of the tree still plays (a reusable layer's, say) is copied first,
+  so editing the chaser's leaves the other lists as they are;
 - the list **leaves the tree**. VC widgets and show control that play the
   chaser keep playing it, unchanged.
 

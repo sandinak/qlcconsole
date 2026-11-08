@@ -170,6 +170,9 @@ private slots:
     /** ⌘C ⌘V and Duplicate: a copy beside the original, its values and
      *  looks, the next name in the pattern; one ⌘Z takes it away. */
     void duplicateAndCopyPasteFileACopyBesideIt();
+    /** UX-69: Duplicate of a Sequence gives the copy its own bound scene;
+     *  editing the copy leaves the original alone. */
+    void aDuplicatedSequencePlaysItsOwnScene();
     /** Beat ▸ Tap: four taps 500 ms apart -- 120 BPM, on the Beat button. */
     void fourTapsHalfASecondApartShow120Bpm();
     /** Build's search spans the sections: matches from Palettes, Effects
