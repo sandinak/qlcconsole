@@ -20,6 +20,8 @@
 #include <QApplication>
 #include <QStatusBar>
 #include <QToolButton>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QLabel>
 #include <QElapsedTimer>
 #include <QScopeGuard>
@@ -35,6 +37,11 @@
 #include "powerdistribution.h"
 #include "programmingmanager.h"
 #include "doc.h"
+#include "showtreecontroller.h"
+#include "showtreeview.h"
+#include "fixturegroup.h"
+#include "qlcpalette.h"
+#include "previewkeep.h"
 #include "footersave_test.h"
 
 namespace
@@ -121,6 +128,189 @@ void FooterSave_Test::savingWithEditsInTheProgrammerLeavesTheFooterWhereItWas()
     QVERIFY(m_app->m_statusProgrammerLabel->isVisibleTo(m_app->statusBar()));
     sweepSaves();
     QVERIFY(m_app->m_statusProgrammerLabel->text().contains(QStringLiteral("saved, revertable")));
+}
+
+namespace
+{
+/* Counts what a chip does to the footer: a style change is a re-polish. */
+class StyleCounter : public QObject
+{
+public:
+    QHash<QObject *, int> styles;
+    void watch(QWidget *w) { if (w != nullptr) { w->installEventFilter(this); styles[w] = 0; } }
+    void reset() { for (auto it = styles.begin(); it != styles.end(); ++it) it.value() = 0; }
+    bool eventFilter(QObject *o, QEvent *e) override
+    {
+        if (e->type() == QEvent::StyleChange)
+            ++styles[o];
+        return false;
+    }
+};
+}
+
+void FooterSave_Test::routineUpdatesChangeNoChipAndMoveNone()
+{
+    m_app->m_showFooterLoad = true;
+    m_app->m_statusLoadLabel->setVisible(true);
+    m_app->resize(1280, 800);
+    settle(300);
+    StyleCounter count;
+    const QList<QWidget *> chips = { m_app->m_statusModeLabel, m_app->m_statusRigNetLabel, m_app->m_statusReviewLabel,
+                                     m_app->m_statusTimelineLabel, m_app->m_statusLoadLabel, m_app->m_statusDirtyLabel,
+                                     m_app->m_statusStandby };
+    for (QWidget *w : chips)
+        count.watch(w);
+    auto routine = [this]() {
+        m_app->slotUpdateHealthFooter();
+        m_app->updateStatusBar();
+        m_app->updateRigNetworkFooter();
+        m_app->updateReviewStatus();
+        m_app->slotTimelineControlChanged();
+        m_app->slotUpdateStandby();
+        m_app->slotDocModified(m_app->doc()->isModified());
+    };
+    routine();                  // the first reading may set each chip once
+    settle(100);
+    const QStringList before = footer(m_app);
+    QStringList texts;
+    for (QWidget *w : chips)
+        if (QLabel *l = qobject_cast<QLabel *>(w))
+            texts << l->text();
+    count.reset();
+    for (int i = 0; i < 6; ++i)
+    {
+        routine();
+        settle(60);
+    }
+    for (QWidget *w : chips)
+        QVERIFY2(count.styles.value(w) == 0,
+                 qPrintable(QStringLiteral("%1 was restyled %2 times by routine updates")
+                            .arg(w->objectName().isEmpty() ? QString::fromLatin1(w->metaObject()->className())
+                                                           : w->objectName()).arg(count.styles.value(w))));
+    QCOMPARE(footer(m_app), before);
+}
+
+void FooterSave_Test::anAutosaveDoesNotTurnTheDirtyChipOverAndBack()
+{
+    m_app->resize(1280, 800);
+    m_app->doc()->setModified();
+    settle(100);
+    StyleCounter count;
+    count.watch(m_app->m_statusDirtyLabel);
+    const QString unsaved = QString::fromUtf8("● Unsaved changes");
+    QCOMPARE(m_app->m_statusDirtyLabel->text(), unsaved);
+    const QStringList before = footer(m_app);
+    QStringList seen;
+    for (int cycle = 0; cycle < 3; ++cycle)
+    {
+        m_app->slotAutosave();
+        seen << m_app->m_statusDirtyLabel->text();
+        m_app->doc()->setModified();    // the next edit
+        seen << m_app->m_statusDirtyLabel->text();
+        settle(50);
+    }
+    QCOMPARE(seen, QStringList() << unsaved << unsaved << unsaved << unsaved << unsaved << unsaved);
+    QCOMPARE(count.styles.value(m_app->m_statusDirtyLabel), 0);
+    QCOMPARE(footer(m_app), before);
+    QVERIFY(!m_app->m_lastAutosaveTime.isEmpty());      // it did autosave
+    m_app->doc()->resetModified();
+}
+
+void FooterSave_Test::theLoadAndNextChipsKeepTheirRoom()
+{
+    m_app->m_showFooterLoad = true;
+    m_app->m_statusLoadLabel->setVisible(true);
+    const QFont f = m_app->m_statusLoadLabel->font();
+    const int stallText = QFontMetrics(f).horizontalAdvance(
+        QStringLiteral("Load: 123.45 / 20 ms (100%)  stall 100 ms"));
+    m_app->resize(2400, 800);       // room for every chip
+    settle(300);
+    QVERIFY2(m_app->m_statusLoadLabel->width() >= stallText,
+             qPrintable(QStringLiteral("Load chip %1 px, its stall text %2 px")
+                        .arg(m_app->m_statusLoadLabel->width()).arg(stallText)));
+
+    // A production named at length: the Next chip names it in front of the cue.
+    ShowTreeController *st = m_app->doc()->showTree();
+    const QString longName = QString(260, QLatin1Char('W'));
+    const quint32 prod = st->addProduction(longName);
+    const quint32 was = st->currentProduction();
+    QVERIFY(st->setCurrentProduction(prod));
+    const quint32 list = st->addCueList(prod, "Main", ShowTree::ListMode::Tracking);
+    QVERIFY(st->addCue(list, -1, "One") != 0);
+    for (int width = 1500; width >= 900; width -= 150)
+    {
+        m_app->resize(width, 800);
+        settle(60);
+        m_app->slotUpdateStandby();
+        settle(60);
+        if (!m_app->m_statusStandby->isVisibleTo(m_app->statusBar()))
+            continue;
+        QVERIFY2(m_app->m_statusStandby->width() <= qMax(480, width / 4) + 40,
+                 qPrintable(QStringLiteral("Next cue chip %1 px at window %2")
+                            .arg(m_app->m_statusStandby->width()).arg(width)));
+        if (qEnvironmentVariableIsSet("FOOTER_SHOTS"))   // before/after pictures, on request
+            m_app->statusBar()->grab().save(QStringLiteral("%1/footer-%2.png")
+                                            .arg(qEnvironmentVariable("FOOTER_SHOTS")).arg(width));
+        QVERIFY(m_app->m_statusStandby->text().endsWith(QString::fromUtf8("…")));
+        QVERIFY(m_app->m_statusStandby->toolTip().contains(longName));
+    }
+    if (was != ShowTree::invalidId())
+        st->setCurrentProduction(was);
+}
+
+void FooterSave_Test::aLookingJumpKeepsThePreviewPlaying()
+{
+    Doc *doc = m_app->doc();
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    QVERIFY(!doc->fixtureGroups().isEmpty() || !doc->fixtures().isEmpty());
+    FixtureGroup *g = new FixtureGroup(doc);
+    g->setName("Preview group");
+    doc->addFixtureGroup(g);
+    g->assignFixture(doc->fixtures().first()->id());
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, doc);
+    red->setName("Preview red");
+    red->setValue(QColor(255, 0, 0));
+    QVERIFY(doc->addPalette(red));
+    ShowTree::Target target;
+    target.groups << g->id();
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction("Jumps");
+    const quint32 list = st->addCueList(prod, "Jumps", ShowTree::ListMode::Tracking);
+    const quint32 cue = st->addCue(list, -1, "Red");
+    QVERIFY(st->setTargetLook(cue, target, st->lookForPalette(red->id())));
+    QVERIFY(st->setCurrentProduction(prod));
+    doc->setMode(Doc::Design);
+    m_app->showContext(QStringLiteral("Show Tree"));
+    settle(100);
+    bool picked = false;
+    for (QTreeWidgetItemIterator it(view->tree()); *it && !picked; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+            && (*it)->data(0, ShowTreeView::IdRole).toUInt() == cue)
+        {
+            view->tree()->setCurrentItem(*it);
+            picked = true;
+        }
+    QVERIFY(picked);
+    QTRY_COMPARE_WITH_TIMEOUT(st->previewState(), ShowTreeController::PreviewState::Playing, 3000);
+
+    // The Show Status "Show" jump, the Review line, the Why-on line: look only.
+    m_app->showContextKeepingPreview(QStringLiteral("Lighting Studio"));
+    settle(100);
+    QVERIFY(!view->isVisible());
+    QCOMPARE(st->previewState(), ShowTreeController::PreviewState::Playing);
+    // Back on the Show Tree it plays on, the same cue.
+    m_app->showContext(QStringLiteral("Show Tree"));
+    settle(100);
+    QCOMPARE(st->previewedCue(), cue);
+    QCOMPARE(st->previewState(), ShowTreeController::PreviewState::Playing);
+
+    // Any other way out of the tab still lets go of the stage.
+    m_app->showContext(QStringLiteral("Lighting Studio"));
+    settle(100);
+    QVERIFY(st->previewState() != ShowTreeController::PreviewState::Playing);
+    m_app->showContext(QStringLiteral("Show Tree"));
+    st->stopPreview();
 }
 
 void FooterSave_Test::sweepSaves()

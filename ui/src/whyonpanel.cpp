@@ -34,6 +34,7 @@
 #include <QLabel>
 
 #include "whyonpanel.h"
+#include "previewkeep.h"
 #include "virtualconsole.h"
 #include "showtreecontroller.h"
 #include "teachingsettings.h"
@@ -57,9 +58,11 @@ WhyOnPanel::Jump s_jumpOverride;
 QList<quint32> s_selection;
 const int kRowRole = Qt::UserRole + 1;
 
-/** Its tab forward, and its window */
+/** Its tab forward, and its window. The jump only looks: a Show Tree or
+ *  Workbench preview keeps playing across it (PreviewKeep). */
 void bringForward(QWidget *w)
 {
+    PreviewKeep keep;
     if (w == nullptr)
         return;
     for (QWidget *p = w->parentWidget(); p != nullptr; p = p->parentWidget())

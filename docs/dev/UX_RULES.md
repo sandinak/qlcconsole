@@ -733,7 +733,7 @@ A network device follows a snap within the network's own time: it is sent at onc
 A save or a routine update changes a footer chip at most once, never on and off.
 
 - **Why:** 2026-11-07: "when I save sometimes the power and current cue in the bottom flash hard" (fix/042-footer-save-flash).
-- **Check:** `review` (not yet enforced)
+- **Check:** `footersave_test::routineUpdatesChangeNoChipAndMoveNone`, `anAutosaveDoesNotTurnTheDirtyChipOverAndBack`, `theLoadAndNextChipsKeepTheirRoom`, `savingLeavesTheFooterWhereItWas`
 - **Right:** `Save: the power and cue chips stay steady, or change once`
 - **Wrong:** `Save: the power and cue chips blink off and on`
 
