@@ -85,6 +85,7 @@ private slots:
     /** Runs: Loop | Once | N times, At the end: Hold | Release, Length --
      *  on every effect, kept on the look. */
     void anyEffectRunsOnceOrNTimes();
+    void aWledOverDmxSaysHoldCannotFreezeIt();
     void anEffectSettingTakesATypedValue();
     void aLengthShowsAndTakesTheChosenUnit();
     void theFollowSpotEditorSaysWhatItIsDoing();

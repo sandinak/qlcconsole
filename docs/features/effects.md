@@ -124,6 +124,19 @@ Build ▸ Effects (**Runs ▸**):
   waits for Go). With neither, the effect's own length applies. Set a
   time to fix it.
 
+On a **WLED's own effect** (picked from the WLED tab), the WLED fixtures
+run the effect themselves, and Runs sets how long they run it: Once is one
+run's Length, not one cycle of the effect. A WLED effect that keeps
+launching, like Fireworks Starburst, keeps launching bursts for the whole
+run, then the run ends. At the end, **Release** stops sending the effect,
+so the WLED goes back to the look's own values. **Hold** freezes the WLED
+on the frame it is showing, on every segment, when it is connected as
+**Network (WLED)**. A WLED on Art-Net or E1.31 can't freeze: Hold keeps its
+settings and the effect keeps running, and the At the end row says so. Use
+Release there, or connect it as Network (WLED). Firing the cue again
+unfreezes it and starts the run over. The Lighting Studio shows the same
+thing: the frozen frame, or the look's own values after a Release.
+
 A **wave** (Breathe, Dimmer Phaser, Colour Phaser, the pulses) runs in
 whole cycles instead. Once is one cycle: a Breathe rises from its floor,
 peaks and comes back down, and it ends on its floor rather than wherever

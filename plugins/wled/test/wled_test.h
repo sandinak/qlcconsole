@@ -42,6 +42,8 @@ private slots:
     /* Segments (a fountain's string, one segment per span). */
     void theFakeAppliesASegmentWithoutAnIdByItsIndex();
     void anEffectReachesEverySegment();
+    void theOptionsFreezeBitIsReadAsFrz();
+    void aFreezeReachesEverySegmentAndLetsGoAgain();
     void reverseTurnsEachSegmentRoundFromItsOwnWay();
     void aNewLayoutIsLearnedAndReverseStartsOverFromIt();
     void aSegmentTurnedRoundBySomeoneElseKeepsThatWay();

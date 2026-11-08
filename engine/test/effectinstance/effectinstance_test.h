@@ -104,6 +104,13 @@ private slots:
     void wledPortsRunAsWledDoes();
     void everyWledPortRuns();
     void aWledLookRunsOnTheDeviceAndThePortElsewhere();
+    void aWledRunOnceThatReleasesLetsGoOfTheDevice();
+    void aWledRunOnceThatHoldsFreezesItOnItsOwnApiOnly();
+    void aWledRunThreeTimesEndsAfterThreeRunLengths();
+    void aWledBesideOtherFixturesEndsItsRunWithThem();
+    void startingTheLookAgainUnfreezesTheWled();
+    void aLoopingWledLookIsNeverFrozen();
+    void aWledsEffectSettingsAtRestAreSolid();
     void bothFiresAreOfferedAndEachComesBackAsItself();
     void anEffectArrivesByItsScenesTransition();
     void anEffectRunsOnUnpatchedFixturesToo();

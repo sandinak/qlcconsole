@@ -82,6 +82,19 @@ def caps(names):
         out.append(f'  <Capability Min="{last+1}" Max="255">Reserved (clamps to {escape(names[last])})</Capability>')
     return "\n".join(out)
 
+def option_caps():
+    """Effect Option: WLED's DMX reads its top two bits (64 mirror, 128
+    reverse). Bit 5 (32) is qlcconsole's freeze: a WLED driven by its own
+    API (Network (WLED)) holds the frame it is on -- an effect that ran Once
+    and holds. WLED's DMX ignores it."""
+    ways = ['Plain', 'Mirror', 'Reverse', 'Mirror + reverse']
+    out = []
+    for i, way in enumerate(ways):
+        lo = i * 64
+        out.append(f'  <Capability Min="{lo}" Max="{lo+31}">{way}</Capability>')
+        out.append(f'  <Capability Min="{lo+32}" Max="{lo+63}">{way}, frozen (Network (WLED) only)</Capability>')
+    return "\n".join(out)
+
 def main():
     eff, pal = EFFECTS, PALETTES
     if len(sys.argv) == 3 and sys.argv[1] == "--device":
@@ -146,7 +159,7 @@ def definition(model, phys, eff, pal):
  </Channel>
  <Channel Name="Effect Option">
   <Group Byte="0">Effect</Group>
-  <Capability Min="0" Max="255">Effect option / segment macro (see WLED docs)</Capability>
+{option_caps()}
  </Channel>
  <Channel Name="Red" Preset="IntensityRed"/>
  <Channel Name="Green" Preset="IntensityGreen"/>

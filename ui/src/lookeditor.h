@@ -384,6 +384,9 @@ public:
     /** The look's targets include a WLED device (or there's no scene to
      *  tell: then true). */
     bool lookHasWledTarget() const;
+    /** A WLED that runs effects among the look's fixtures, driven over
+     *  Art-Net / E1.31 rather than WLED's own API: Hold cannot freeze it. */
+    bool lookHasWledOverDmx() const;
     /** The fixtures the look is worked on (none known: the picker lists every effect). */
     EffectFit::Targets lookTargets() const;
 private:

@@ -79,3 +79,28 @@ QStringList WledFixture::effectNames(const Fixture *fx)
     }
     return out;
 }
+
+bool WledFixture::canFreeze(const Fixture *fx)
+{
+    return runsEffects(fx) && fx->transport() == Fixture::WledTransport;
+}
+
+QList<QPair<int, int> > WledFixture::settingsAtRest(const Fixture *fx)
+{
+    QList<QPair<int, int> > out;
+    if (!runsEffects(fx))
+        return out;
+    /* Each at its channel's default -- what the universe holds before
+       anything is sent (Effect 0 is Solid). Not "a sensible speed": a
+       value at rest that differs from the default would latch on and make
+       a cue look different when jumped back to than when run to. */
+    static const char *const settings[] = {
+        "Effect", "Effect Speed", "Effect Intensity", "Palette", "Effect Option" };
+    for (const char *name : settings)
+    {
+        const int ch = channel(fx, QLatin1String(name));
+        if (ch >= 0)
+            out << qMakePair(ch, int(fx->fixtureMode()->channels().at(ch)->defaultValue()));
+    }
+    return out;
+}
