@@ -71,6 +71,8 @@ private slots:
     /** Stop all's menu, Fade 1 second and stop: the scene stops and its
      *  light fades out over the second rather than snapping off */
     void fadeOneSecondAndStopFadesTheLightOut();
+    /** UX-70: Stop all leaves no fog machine pumping and no gobo in */
+    void stopAllTurnsTheFogOffAndPutsTheGoboBack();
     /** Q80: Show-mode Lock is part of Operate (no menu item, no ⌘L):
      *  Operate makes the Shows timeline read-only and drops programmer
      *  parameter faders, while a console GM fader still works; Design

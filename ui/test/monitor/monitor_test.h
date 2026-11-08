@@ -581,6 +581,12 @@ private slots:
      *  locked layer included -- draws red and won't drag. */
     void anObjectAndItsLayerEachHaveALock();
     void aStagedFixturesTestDialogOffersNoDmxActions();
+    /** UX-70: Identify and Reset are held, then put back */
+    void identifyAndResetPutTheChannelBackAfterHolding();
+    /** UX-72: every dimmer of a dimmer pack flashes, not the first */
+    void locateFlashesEveryDimmerOfADimmerPack();
+    /** UX-72: a hazer and a laser are never fired; a strobe at a quarter */
+    void locateNeverFiresAHazerOrALaserAndTamesAStrobe();
     void aStagedFixtureOnThePlotCannotBeTestedOrLocated();
     void theDmxViewHasNoTileForAStagedFixture();
     /** Integration test for the target/aim workflow: add a fixture, add a

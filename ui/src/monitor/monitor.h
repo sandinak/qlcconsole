@@ -353,11 +353,25 @@ public:
      *  both drive it. */
     void locateFixtures(const QList<quint32> &ids);
 
+    /** Why Locate leaves @p fxi alone, empty when it flashes it: a hazer,
+     *  fogger or fan (its output would fire) or a laser. A strobe light is
+     *  located at a quarter of the Locate level; a dimmer pack or a bar
+     *  flashes every dimmer. */
+    static QString locateRefusal(const Fixture *fxi);
+
     /** Send a fixture's "reset" Maintenance-channel capability once -- same
      *  detection the old Fixture Test quick-dialog uses, but callable directly
      *  (e.g. from a right-click). No-op if the fixture has no Maintenance-group
      *  capability whose name contains "reset". */
     void resetFixture(quint32 fxId);
+
+    /** A Maintenance value (Identify, Reset) sent to @p fxId's channel
+     *  @p channel, held maintenanceHoldMs() and then put back to what was
+     *  there before -- unless something has set that channel since. */
+    void sendMaintenance(quint32 fxId, int channel, uchar value);
+    /** How long a Maintenance value is held: 3 s. Settable for tests. */
+    static int maintenanceHoldMs();
+    static void setMaintenanceHoldMs(int ms);
 
 protected:
     /** Dismiss any open fixture property editor (no-op with popup design). */
@@ -396,6 +410,8 @@ public:
 protected:
 
 private:
+    static int s_maintenanceHoldMs;
+
     /** The Rig Overview (Q79): a dock on the main window -- docked beside
      *  the tabs, or dragged out to float on top -- never a window that falls
      *  behind. Kept so a second click raises it rather than stacking

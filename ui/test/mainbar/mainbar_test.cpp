@@ -836,6 +836,89 @@ static Universe *universeAt(Doc *doc, int index)
     return index < unis.size() ? unis.at(index) : nullptr;
 }
 
+/* A fog machine pumping and a mover on a gobo, then Stop all: the fog
+   stops and the gobo comes out (its channel to its default), the pan back
+   to the channel's default. Before, every non-intensity channel kept the
+   last value sent: the fog machine kept pumping after Stop all. */
+void MainBar_Test::stopAllTurnsTheFogOffAndPutsTheGoboBack()
+{
+    auto tidy = qScopeGuard([this]() { removeAddedFunctionsAndFixtures(); });
+    Doc *doc = m_app->doc();
+    ShowControls *sc = m_app->m_showControls;
+    QVERIFY(sc != nullptr);
+
+    QLCFixtureDef *fogDef = new QLCFixtureDef();
+    QCOMPARE(fogDef->loadXML(QString(QLC_TEST_RESOURCE_ROOT)
+                             + "fixtures/American_DJ/American-DJ-Fog-Fury-Jett.qxf"),
+             QFile::NoError);
+    QCOMPARE(int(fogDef->type()), int(QLCFixtureDef::Smoke));
+    Fixture *fog = new Fixture(doc);
+    fog->setName("Fogger");
+    fog->setFixtureDefinition(fogDef, fogDef->mode("2 Channel"));
+    fog->setUniverse(2);
+    fog->setAddress(10);
+    QVERIFY(doc->addFixture(fog));
+    m_addedFixtures << fog->id();
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Gobo spot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Std");
+    QLCChannel *pan = new QLCChannel();
+    pan->setName("Pan");
+    pan->setGroup(QLCChannel::Pan);
+    pan->setDefaultValue(128);
+    QLCChannel *gobo = new QLCChannel();
+    gobo->setName("Gobo");
+    gobo->setGroup(QLCChannel::Gobo);
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer");
+    dim->setGroup(QLCChannel::Intensity);
+    def->addChannel(pan);
+    def->addChannel(gobo);
+    def->addChannel(dim);
+    mode->insertChannel(pan, 0);
+    mode->insertChannel(gobo, 1);
+    mode->insertChannel(dim, 2);
+    def->addMode(mode);
+    Fixture *spot = new Fixture(doc);
+    spot->setName("Spot");
+    spot->setFixtureDefinition(def, mode);
+    spot->setUniverse(2);
+    spot->setAddress(20);
+    QVERIFY(doc->addFixture(spot));
+    m_addedFixtures << spot->id();
+
+    Scene *scene = new Scene(doc);
+    scene->setName("Smoky gobo");
+    scene->setValue(fog->id(), 0, 255);     // Max Fog
+    scene->setValue(spot->id(), 0, 30);     // Pan
+    scene->setValue(spot->id(), 1, 100);    // a gobo in
+    scene->setValue(spot->id(), 2, 255);
+    doc->addFunction(scene);
+    m_addedFunctions << scene->id();
+
+    Universe *uni = universeAt(doc, 2);
+    QVERIFY(uni != nullptr);
+    scene->start(doc->masterTimer(), FunctionParent::master());
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->preGMValue(10)), 255, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->preGMValue(21)), 100, 5000);
+    QTRY_VERIFY(sc->stopAllButton()->isEnabled());
+
+    sc->stopAllButton()->click();
+    QTRY_VERIFY_WITH_TIMEOUT(!scene->isRunning(), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->preGMValue(10)), 0, 2000);     // fog off
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->preGMValue(21)), 0, 2000);     // gobo out
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->preGMValue(20)), 128, 2000);   // pan home
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(22)), 0, 2000);    // dark
+    // And it stays so: nothing writes the old values back.
+    QTest::qWait(200);
+    QCOMPARE(int(uni->preGMValue(10)), 0);
+    QCOMPARE(int(uni->preGMValue(21)), 0);
+}
+
 void MainBar_Test::fadeOneSecondAndStopFadesTheLightOut()
 {
     auto tidy = qScopeGuard([this]() { removeAddedFunctionsAndFixtures(); });

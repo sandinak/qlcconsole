@@ -2168,6 +2168,27 @@ QList<EffectInstance::DmxWrite> EffectInstance::wledDeviceWrites() const
     auto param = [this](const char *name, int fallback) {
         return qBound(0, qRound(m_paramValues.value(QLatin1String(name), fallback)), 255);
     };
+    /* Its speed is the device's: the look's Speed setting, times the rate
+       it runs at -- on the main clock or a speed master, the master's tempo
+       over 120 BPM (its tap, rate fader and pause move it; paused, WLED's
+       slowest); off one, the look's Own speed. Both were read only by the
+       port's clock, which a look of WLEDs alone never runs (UX-68). */
+    double speedRate = 1.0;
+    {
+        const int assignment = speedAssignment();
+        double pos = 0, bpm = 0;
+        if (assignment != SpeedMasters::Free && assignment != SpeedMasters::Inherit
+            && m_doc->speedMasters()->clockFor(assignment, &pos, &bpm))
+            speedRate = qMax(0.0, bpm) / SpeedMasters::ReferenceBpm;
+        else if (QLCPalette *pal = m_doc->palette(m_effectPaletteId))
+        {
+            const QMap<QString, double> &pp = pal->effectParamValues();
+            auto it = pp.constFind(QStringLiteral("__ownRate"));
+            if (it != pp.constEnd() && it.value() > 0)
+                speedRate = it.value();
+        }
+    }
+    const int deviceSpeed = qBound(0, qRound(double(param("speed", 128)) * speedRate), 255);
     for (quint32 fid : lookFixtureIds())
     {
         Fixture *fx = m_doc->fixture(fid);
@@ -2191,7 +2212,7 @@ QList<EffectInstance::DmxWrite> EffectInstance::wledDeviceWrites() const
         };
         // Settings, not levels: they replace whatever the scene has.
         put(QStringLiteral("Effect"), effect, true);
-        put(QStringLiteral("Effect Speed"), param("speed", 128), true);
+        put(QStringLiteral("Effect Speed"), deviceSpeed, true);
         put(QStringLiteral("Effect Intensity"), param("intensity", 128), true);
         put(QStringLiteral("Palette"), param("palette", 0), true);
         // Its own freeze bit is the run's to set (endDeviceRun()), not the setting's.

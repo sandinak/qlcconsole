@@ -43,6 +43,8 @@ private slots:
 
     void aFixtureGroupHasOneMenuEverywhere();
     void aFixtureHasOneMenuEverywhere();
+    /** UX-72: Locate is greyed on a hazer, and says why */
+    void locateIsGreyedOnAHazerAndSaysWhy();
     void theFixtureGroupItemsWork();
     void buildMenusFollowTheCanon();
     void theLibraryMenusFollowTheCanon();

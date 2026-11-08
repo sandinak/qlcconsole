@@ -19,6 +19,7 @@
 #define protected public
 #define private public
 #include "mastertimer.h"
+#include "universe.h"
 #undef protected
 #undef private
 
@@ -43,6 +44,8 @@
 #include "cueoutput.h"
 #include "qlcpalette.h"
 #include "wledfixture.h"
+#include "chaseraction.h"
+#include "inputoutputmap.h"
 #include <QBuffer>
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
@@ -663,4 +666,69 @@ void MarkPlanner_Test::aDarkWledIsMovedInBlackToItsNextLook()
     // Not into this cue (released when the planner is switched off).
     planner.setEnabled(false);
     QVERIFY(!m_mark->isMarked(sid));
+}
+
+/* A cue list: now (A dark, its pan left at 10 by an earlier cue), next
+   (lights A, pan 128), later (lights only B). A is moved in black to pan 128
+   for next -- then the operator jumps from now straight to later. Next never
+   plays, so A's pan goes back to 10: a later cue that only brings A's level
+   up would otherwise show next's look, which never played (UX-70). */
+void MarkPlanner_Test::aPresetIsPutBackWhenItsCueIsJumpedPast()
+{
+    Scene *now = new Scene(m_doc);
+    now->setName("Now");
+    now->setValue(m_fixtureB, 1, 100);
+    m_doc->addFunction(now);
+    Scene *next = new Scene(m_doc);
+    next->setName("Next");
+    next->setValue(m_fixtureA, 1, 200);     // Dimmer
+    next->setValue(m_fixtureA, 0, 128);     // Pan
+    m_doc->addFunction(next);
+    Scene *later = new Scene(m_doc);
+    later->setName("Later");
+    later->setValue(m_fixtureB, 1, 255);
+    m_doc->addFunction(later);
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setDuration(MasterTimer::tick() * 10);
+    chaser->addStep(now->id());
+    chaser->addStep(next->id());
+    chaser->addStep(later->id());
+    m_doc->addFunction(chaser);
+
+    Universe *uni = m_doc->inputOutputMap()->universes().first();
+    uni->setChannelDefaultValue(0, 10);     // A's pan, as an earlier cue left it
+    auto panA = [uni]() { uni->processFaders(); return int(uni->preGMValue(0)); };
+    QCOMPARE(panA(), 10);
+
+    MasterTimer timer(m_doc);
+    chaser->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    QCOMPARE(chaser->currentStepIndex(), 0);
+
+    MarkPlanner planner(m_doc, m_mark);
+    planner.setDarkGapMs(0);
+    planner.setEnabled(true);
+    QVERIFY(m_mark->isMarked(m_fixtureA));
+    QCOMPARE(panA(), 128);                  // moved in black for next
+
+    ChaserAction jump;
+    jump.m_action = ChaserSetStepIndex;
+    jump.m_stepIndex = 2;
+    jump.m_masterIntensity = 1.0;
+    jump.m_stepIntensity = 1.0;
+    jump.m_fadeMode = Chaser::FromFunction;
+    chaser->setAction(jump);
+    for (int i = 0; i < 4; ++i)
+        timer.timerTick();
+    QCOMPARE(chaser->currentStepIndex(), 2);
+
+    QMetaObject::invokeMethod(&planner, "evaluate");
+    QVERIFY(!m_mark->isMarked(m_fixtureA));
+    QCOMPARE(planner.plannedCount(), 0);
+    QCOMPARE(panA(), 10);                   // as before the pre-set
+    QCOMPARE(panA(), 10);                   // and it stays
+
+    chaser->stop(FunctionParent::master());
+    for (int i = 0; i < 4; ++i)
+        timer.timerTick();
 }

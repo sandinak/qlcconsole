@@ -2863,6 +2863,11 @@ smallest request and the quickest. This holds even when the cue it is
 dark in sets it to Solid. A WLED's settings come from its WLED look, not
 the scene, and Move in black reads them from that look as it will play.
 
+If the cue it was moved for never plays (you jump past it, or GO a cue
+that doesn't use it), the light goes back to what it had before. A later
+cue that only brings its level up shows that, never the look of the cue
+you skipped.
+
 It is one setting of the show. Its switch is the Show Tree's **MIB**
 button; Build's **Move in Black ▾** shows and changes the same setting:
 

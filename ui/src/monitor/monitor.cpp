@@ -161,6 +161,7 @@
 #include "monitorlayout.h"
 #include "universe.h"
 #include "wledfixture.h"
+#include "fixturerest.h"
 #include "inputoutputmap.h"
 #include "outputpatch.h"
 #include "qlccapability.h"
@@ -9711,20 +9712,35 @@ static void appendFixtureLocateValues(Fixture *fxi, QList<SceneValue> &svs,
                                       const QColor &colour, int level)
 {
     if (!fxi->fixtureMode()) return;
+    // A hazer, fogger, fan or laser is never fired to find it (UX-72).
+    if (!Monitor::locateRefusal(fxi).isEmpty()) return;
+    /* A strobe light at full is a blinding burst a metre away: it is found
+       at a quarter of the Locate level, steady (its strobe channels are
+       left alone, as on every fixture). */
+    if (fxi->fixtureDef() != nullptr && fxi->fixtureDef()->type() == QLCFixtureDef::Strobe)
+        level = qMax(1, level / 4);
 
     quint32 mi = fxi->masterIntensityChannel();
-    if (mi == QLCChannel::invalid())
+    /* Every dimmer, not the first: a dimmer pack or a bar with a dimmer a
+       head flashed only its first channel. A master and the heads' own
+       dimmers all go to the level. Never one that runs fog or haze (a
+       moving light with a fog channel in its Intensity group). */
+    bool anyDimmer = false;
+    for (quint32 c = 0; c < fxi->channels(); ++c)
     {
-        for (quint32 c = 0; c < fxi->channels(); ++c)
+        QLCChannel *ch = fxi->fixtureMode()->channel(c);
+        if (ch && ch->group() == QLCChannel::Intensity
+            && ch->controlByte() == QLCChannel::MSB
+            && ch->colour() == QLCChannel::NoColour
+            && !FixtureRest::isAtmosphereChannel(ch))
         {
-            QLCChannel *ch = fxi->fixtureMode()->channel(c);
-            if (ch && ch->group() == QLCChannel::Intensity
-                && ch->controlByte() == QLCChannel::MSB
-                && ch->colour() == QLCChannel::NoColour)
-            { mi = c; break; }
+            svs << SceneValue(fxi->id(), c, uchar(level));
+            anyDimmer = true;
+            if (mi == QLCChannel::invalid())
+                mi = c;
         }
     }
-    if (mi != QLCChannel::invalid())
+    if (mi != QLCChannel::invalid() && !anyDimmer)
         svs << SceneValue(fxi->id(), mi, uchar(level));
 
     /* A fixture with no dimmer channel has to be dimmed through its emitters,
@@ -9934,6 +9950,9 @@ void Monitor::locateFixture(quint32 fxId)
     // happens to sit at the placeholder universe 1 / address 1.
     if (!fxi->isPatched())
         return;
+    // Smoke and lasers are not flashed (locateRefusal()).
+    if (!locateRefusal(fxi).isEmpty())
+        return;
 
     LocateSession *session = new LocateSession;
     session->src = std::make_shared<FixtureLocate>(fxi, m_doc);
@@ -9968,6 +9987,18 @@ void Monitor::locateFixture(quint32 fxId)
     });
     m_locateSessions.insert(fxId, session);
     session->timer->start();
+}
+
+QString Monitor::locateRefusal(const Fixture *fxi)
+{
+    /* Locate flashes light. A hazer or fogger's "intensity" is its output
+       (an Entour Faze's Output Volume): flashing it filled the room. A
+       laser's beam is not something to fire at someone to find it. */
+    if (FixtureRest::makesAtmosphere(fxi))
+        return tr("Locate doesn't flash a hazer, fogger or fan: it would fire its output");
+    if (FixtureRest::isLaser(fxi))
+        return tr("Locate doesn't fire a laser");
+    return QString();
 }
 
 void Monitor::locateFixtures(const QList<quint32> &ids)
@@ -10012,16 +10043,63 @@ void Monitor::resetFixture(quint32 fxId)
     if (resetCh < 0)
         return;
 
+    sendMaintenance(fxId, resetCh, resetVal);
+}
+
+/* Held a few seconds (a reset or an identify needs the value there that
+   long), then put back: written straight to the universe, nothing else
+   ever wrote it back, and the fixture stayed in identify or kept resetting
+   until a scene happened to set that channel (UX-70). */
+int Monitor::s_maintenanceHoldMs = 3000;
+
+int Monitor::maintenanceHoldMs()
+{
+    return s_maintenanceHoldMs;
+}
+
+void Monitor::setMaintenanceHoldMs(int ms)
+{
+    s_maintenanceHoldMs = qMax(1, ms);
+}
+
+void Monitor::sendMaintenance(quint32 fxId, int channel, uchar value)
+{
+    Fixture *fxi = m_doc->fixture(fxId);
+    if (fxi == nullptr || !fxi->isPatched() || channel < 0 || quint32(channel) >= fxi->channels())
+        return;
+    const quint32 abs = fxi->universeAddress() + quint32(channel);
+    const int u = int(abs >> 9);
+    const int addr = int(abs & 511);
+
+    bool sent = false;
+    uchar before = 0;
     QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
-    const quint32 u = fxi->universe();
-    if (u < quint32(ua.size()))
+    if (u < ua.size() && ua[u] != nullptr)
     {
-        Universe *uni = ua[int(u)];
-        uni->write(int(fxi->address()) + resetCh, resetVal);
+        Universe *uni = ua[u];
+        before = uni->preGMValue(addr);
+        uni->write(addr, value, true);
         const QByteArray pg = uni->postGMValues()->mid(0, uni->usedChannels());
         uni->dumpOutput(pg, true);
+        sent = true;
     }
     m_doc->inputOutputMap()->releaseUniverses(false);
+    if (!sent)
+        return;
+
+    Doc *doc = m_doc;
+    QTimer::singleShot(maintenanceHoldMs(), doc, [doc, u, addr, value, before]() {
+        QList<Universe*> ua = doc->inputOutputMap()->claimUniverses();
+        // Something that set it since (a cue) keeps its value.
+        if (u < ua.size() && ua[u] != nullptr && ua[u]->preGMValue(addr) == value)
+        {
+            Universe *uni = ua[u];
+            uni->write(addr, before, true);
+            const QByteArray pg = uni->postGMValues()->mid(0, uni->usedChannels());
+            uni->dumpOutput(pg, true);
+        }
+        doc->inputOutputMap()->releaseUniverses(false);
+    });
 }
 
 class TrussStripWidget : public QWidget
@@ -11294,18 +11372,9 @@ void Monitor::showFixturePropertiesById(quint32 fxId)
                 connect(btn, &QPushButton::clicked, [=]() {
                     if (!fxi->isPatched())
                         return;
-                    QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
-                    quint32 u = fxi->universe();
-                    if (u < quint32(ua.size()))
-                    {
-                        Universe *uni = ua[int(u)];
-                        uni->write(int(fxi->address()) + ch, val);
-                        const QByteArray pg = uni->postGMValues()->mid(0, uni->usedChannels());
-                        uni->dumpOutput(pg, true);
-                    }
-                    m_doc->inputOutputMap()->releaseUniverses(false);
+                    sendMaintenance(fxi->id(), ch, val);
                     btn->setEnabled(false); btn->setText(sentLabel);
-                    QTimer::singleShot(3000, btn, [btn, label]() {
+                    QTimer::singleShot(maintenanceHoldMs(), btn, [btn, label]() {
                         btn->setEnabled(true); btn->setText(label);
                     });
                 });
@@ -12589,19 +12658,10 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                 dmxHl->addWidget(identBtn);
                 const int iCh = identifyCh; const uchar iVal = identifyVal;
                 connect(identBtn, &QPushButton::clicked, [&, iCh, iVal]() {
-                    QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
-                    quint32 fxUni = fxi->universe();
-                    if (fxUni < quint32(ua.size()))
-                    {
-                        Universe *uni = ua[int(fxUni)];
-                        uni->write(int(fxi->address()) + iCh, iVal);
-                        const QByteArray postGM = uni->postGMValues()->mid(0, uni->usedChannels());
-                        uni->dumpOutput(postGM, true);
-                    }
-                    m_doc->inputOutputMap()->releaseUniverses(false);
+                    sendMaintenance(fxi->id(), iCh, iVal);
                     identBtn->setEnabled(false);
                     identBtn->setText(tr("Identifying…"));
-                    QTimer::singleShot(3000, identBtn, [identBtn]() {
+                    QTimer::singleShot(maintenanceHoldMs(), identBtn, [identBtn]() {
                         identBtn->setEnabled(true);
                         identBtn->setText(tr("Identify"));
                     });
@@ -12616,19 +12676,10 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                 dmxHl->addWidget(resetBtn);
                 const int rCh = resetCh; const uchar rVal = resetVal;
                 connect(resetBtn, &QPushButton::clicked, [&, rCh, rVal]() {
-                    QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
-                    quint32 fxUni = fxi->universe();
-                    if (fxUni < quint32(ua.size()))
-                    {
-                        Universe *uni = ua[int(fxUni)];
-                        uni->write(int(fxi->address()) + rCh, rVal);
-                        const QByteArray postGM = uni->postGMValues()->mid(0, uni->usedChannels());
-                        uni->dumpOutput(postGM, true);
-                    }
-                    m_doc->inputOutputMap()->releaseUniverses(false);
+                    sendMaintenance(fxi->id(), rCh, rVal);
                     resetBtn->setEnabled(false);
                     resetBtn->setText(tr("Resetting…"));
-                    QTimer::singleShot(3000, resetBtn, [resetBtn]() {
+                    QTimer::singleShot(maintenanceHoldMs(), resetBtn, [resetBtn]() {
                         resetBtn->setEnabled(true);
                         resetBtn->setText(tr("Reset"));
                     });

@@ -42,6 +42,31 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Stop all leaves nothing running (UX-70).** It stopped the functions
+  but every non-intensity channel kept its last value: a fog machine kept
+  pumping, gobos and WLED effects stayed. Stop all (the button, ⌘⇧Esc, a
+  Virtual Console Stop All button) now also puts every fixture at rest:
+  fog and haze off, each channel at its default. After Fade and stop, once
+  the fade is over.
+- **Identify and Reset put the channel back.** The test dialog's buttons
+  (and the right-click Reset) left the fixture in identify or resetting
+  until a scene set that channel. They hold the value about 3 s, then
+  restore what was there.
+- **Move in black lets go when its cue is skipped.** A light moved in
+  black for a cue you jumped past kept that cue's position and gobo, and a
+  later level-only cue showed a look that never played. It goes back to
+  what it had.
+- **Locate flashes every dimmer, and never fires smoke or a laser
+  (UX-72).** A dimmer pack or a bar with a dimmer per head flashed only its
+  first channel. A hazer or fogger (its level is its output) was flashed,
+  filling the room. Now every dimmer flashes; hazers, foggers, fans and
+  lasers are left alone and Locate is greyed for them with the reason; a
+  strobe light flashes at a quarter of the Locate level.
+- **Speed masters reach WLED effects, EFX and RGB Matrix (UX-68).** A
+  WLED effect on the device ignored Own speed and its speed master; an EFX
+  or RGB Matrix in a collection or chase ignored the collection's or
+  chase's Speed. Both now run at the master's tempo (as made at 120 BPM)
+  or, for a WLED, at the look's Own speed.
 - **A WLED snaps with the stage (UX-73).** On a snap cue a WLED on its
   own API lagged the DMX fixtures by about 150 to 340 ms: it waited for a
   100 ms send tick, then glided. A change now goes when the engine writes

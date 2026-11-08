@@ -109,6 +109,7 @@
 #include <atomic>
 #include <QProgressDialog>
 #include "doc.h"
+#include "fixturerest.h"
 #include "shutterautoopen.h"
 #include "fixture.h"
 #include "qlcchannel.h"
@@ -2712,7 +2713,8 @@ void App::initActions()
     // The show controls' button says the short form (iconText); the Control
     // menu keeps the full name.
     m_controlPanicAction->setIconText(tr("Stop all"));
-    m_controlPanicAction->setToolTip(tr("Stop ALL functions (%1). Hold for Fade and stop.")
+    m_controlPanicAction->setToolTip(tr("Stop ALL functions (%1) and put every fixture at rest: "
+                                        "fog and haze off, effects stopped. Hold for Fade and stop.")
             .arg(m_controlPanicAction->shortcut().toString(QKeySequence::NativeText)));
     connect(m_controlPanicAction, SIGNAL(triggered(bool)), this, SLOT(slotControlPanic()));
 
@@ -5117,7 +5119,9 @@ void App::slotFooterGrandMasterValueChanged(uchar value)
 
 void App::slotControlPanic()
 {
-    m_doc->masterTimer()->stopAllFunctions();
+    /* Stopped, and put at rest: a fog machine, a gobo or a WLED effect
+       kept the last value sent to it after its scene had stopped (UX-70). */
+    FixtureRest::stopAll(m_doc);
 }
 
 void App::slotFadeAndStopAll()
@@ -5125,7 +5129,7 @@ void App::slotFadeAndStopAll()
     QAction *action = (QAction *)sender();
     int timeout = action->data().toInt();
 
-    m_doc->masterTimer()->fadeAndStopAll(timeout);
+    FixtureRest::stopAll(m_doc, timeout);
 }
 
 void App::slotRunningFunctionsChanged()

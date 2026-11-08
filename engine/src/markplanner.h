@@ -26,6 +26,7 @@
 #include "qlcengine_export.h"
 #include <QTimer>
 #include <QSet>
+#include <QHash>
 #include <QString>
 
 #include "cuelookahead.h"
@@ -88,8 +89,14 @@ private:
 private:
     /** Live pre-Grand-Master value at a fixture's absolute channel (0 if off-range). */
     uchar liveValue(const class QList<class Universe*> &unis, int uni, int absAddr) const;
-    /** Drop every mark the planner owns. */
+    /** Drop every mark the planner owns, each put back (putBack()). */
     void clearPlanned();
+    /** A pre-set let go of before its cue lit the fixture -- the cue was
+     *  jumped past, or it is no longer moved in black into: its channels go
+     *  back to what they were before the pre-set, so a later cue that sets
+     *  only a level does not reveal a look that never played (UX-70). What
+     *  plays on them now writes over that the next frame. */
+    void putBack(quint32 fid);
     /** Re-run dangleFixtures() and emit dangleFixturesChanged() on change. */
     void updateDangleDetection();
 
@@ -99,6 +106,10 @@ private:
     bool        m_enabled = false;
     int         m_darkGapMs = defaultDarkGapMs();   //!< lead time; tune on a rig
     QSet<quint32> m_planned;            //!< fixtures WE marked (vs manual marks)
+    /** What each pre-set channel was before the planner held it (channel →
+     *  value), for putBack(); and the cue each pre-set is for. */
+    QHash<quint32, QHash<quint32, uchar>> m_before;
+    QHash<quint32, quint32> m_plannedFor;
     QList<quint32> m_lastDangling;      //!< last emitted dangleFixturesChanged() value
     /** The upcoming cues' WLED looks, as they play (their settings come
      *  from the look, not the scene): kept from tick to tick, let go of

@@ -1053,6 +1053,12 @@ public:
     /** What it actually runs on: its own setting, else the inherited one --
      *  the innermost explicit choice wins (docs/design/SPEED_SPREAD_DESIGN.md, S2). */
     int effectiveSpeedMaster() const;
+    /** How fast a function that keeps its own time (an EFX's loop, an RGB
+     *  Matrix's steps) runs on what it is on: 1 off a master (Inherit,
+     *  Free), else the master's tempo over SpeedMasters::ReferenceBpm --
+     *  so a collection's or chase's Speed moves its EFX and RGB Matrix
+     *  members too, not only their effects (UX-68). 0 while paused. */
+    double speedMasterRate() const;
 
 private:
     Universe::BlendMode m_blendMode;

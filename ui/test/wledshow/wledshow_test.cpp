@@ -56,6 +56,7 @@
 #include "fixture.h"
 #include "effectruns.h"
 #include "qlcpalette.h"
+#include "speedmasters.h"
 #include "wledfixture.h"
 #include "scene.h"
 #include "qlcpalette.h"
@@ -649,6 +650,42 @@ void WledShow_Test::locateFlashesAWledPlayingAnEffectSolidWhiteAndGivesTheLookBa
     QCOMPARE(last.value("seg").toArray().at(0).toObject().value("fx").toInt(), 89);
 
     scene->stop(FunctionParent::master());
+}
+
+/* A look of Fireworks Starburst at Speed 100 on the WLED: Own speed ×2
+   sends it twice as fast, on a speed master at 60 BPM half (at 120, as
+   set), and the master's tempo moves it while it plays. Before, the device
+   got the look's Speed whatever Own speed or the master said. */
+void WledShow_Test::aWledEffectFollowsItsOwnSpeedAndItsSpeedMaster()
+{
+    LocateRig rig;
+    QVERIFY(rig.setUp());
+    Scene *scene = rig.starburst();
+    QLCPalette *burst = nullptr;
+    for (quint32 pid : scene->palettes())
+        if (QLCPalette *p = rig.doc.palette(pid))
+            if (p->type() == QLCPalette::Effect)
+                burst = p;
+    QVERIFY(burst != nullptr);
+    burst->setEffectParamValue("speed", 100);
+    burst->setEffectParamValue("__ownRate", 2.0);
+    auto speed = [&rig]() { return rig.seg().value("sx").toInt(); };
+
+    scene->start(rig.doc.masterTimer(), FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(rig.seg().value("fx").toInt() == 89, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(speed(), 200, 3000);          // Own speed ×2
+
+    SpeedMasters *sm = rig.doc.speedMasters();
+    sm->setBpm(0, 60);
+    burst->setEffectParamValue("__speedMaster", SpeedMasters::Master1);
+    QTRY_COMPARE_WITH_TIMEOUT(speed(), 50, 3000);           // on the master, at 60
+    sm->setBpm(0, 180);
+    QTRY_COMPARE_WITH_TIMEOUT(speed(), 150, 3000);          // it follows the tempo
+    sm->setBpm(0, 120);
+    QTRY_COMPARE_WITH_TIMEOUT(speed(), 100, 3000);          // as set
+
+    scene->stop(FunctionParent::master());
+    QTRY_VERIFY(!scene->isRunning());
 }
 
 void WledShow_Test::locateLeavesAWledNothingPlaysOnAsItWas()

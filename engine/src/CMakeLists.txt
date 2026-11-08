@@ -116,6 +116,7 @@ add_library(${module_name} SHARED
     pixelpath.cpp pixelpath.h
     hanger.cpp hanger.h
     wledfixture.cpp wledfixture.h
+    fixturerest.cpp fixturerest.h
     scenetransition.cpp scenetransition.h
     fixturedefcheck.cpp fixturedefcheck.h
     networkgearcatalog.cpp networkgearcatalog.h
