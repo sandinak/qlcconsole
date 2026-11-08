@@ -236,6 +236,11 @@ private slots:
     void theHitPageFadeBoxesSetTheHitsFades();
     void listsProductionsAndReusableCuesDuplicateCopyAndPaste();
     void duplicateGivesTheCopyItsOwnOneOffValues();
+    /** UX-69 (sweep 2026-11-07, #10-#12): Detach and Clone make copies of
+     *  their own. */
+    void aDetachedLayersSceneHasItsOwnLooks();
+    void aListDetachedToAChaserLeavesTheOtherListsLooksAlone();
+    void cloningACueListsChaserMakesAPlainChaserOfItsOwn();
 
     /** 0.4.1 (fxrows): an effect's rows on the layer page, as a line aim's
      *  under Position -- what it runs on ("2 of 4 fixtures (Pars have no

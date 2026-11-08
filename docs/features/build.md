@@ -640,7 +640,10 @@ out.) It is one step on the shared history: **⌘Z** brings each function back
 with its id, in its place in every collection, chaser and show track, and on
 the VC buttons and cue lists that played it; **⇧⌘Z** deletes it again.
 **Duplicate**, **⌘D** and **⌘C ⌘V** are one step too: ⌘Z takes the copies
-away. ⌘D works in Palettes, Effects and Scenes on what is selected (with
+away. A copy is all its own: a Sequence's copy plays its own copy of the
+bound scene, and a copy of a Show Tree cue's scene, collection or chaser
+(Functions ▸ Duplicate) is a plain, listed function with its own copies of
+what the cue made, so editing either leaves the other alone. ⌘D works in Palettes, Effects and Scenes on what is selected (with
 nothing selected it does nothing; Dump DMX is ⌥⌘D); in Effects ⌘C ⌘V copies the
 effect palette, EFX or RGB Matrix. **Esc** backs the Workbench out first,
 then lets go of the selection

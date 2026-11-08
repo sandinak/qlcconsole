@@ -39,6 +39,7 @@ class QXmlStreamReader;
 class QXmlStreamWriter;
 class QTimer;
 class Scene;
+class Function;
 class Doc;
 
 #define KXMLQLCShowTree QStringLiteral("ShowTree")
@@ -1148,6 +1149,17 @@ public:
      *  were made. Run once after a show is loaded (Doc::loadXML); no undo
      *  step. Every edit keeps it so (edit()). */
     int splitSharedOneOffs();
+    /** A copy is a copy (UX-69): a copy of function @a fid that is the
+     *  show's own and all its own, for Function Manager ▸ Clone and Build's
+     *  Duplicate. Visible and not generated, whatever @a fid is; a scene
+     *  plays its own copy of each one-off it plays; a collection or chaser
+     *  plays plain copies of the tree's functions it holds; a Sequence its
+     *  own copy of its bound scene. Added to the Doc under @a fid's name;
+     *  every function made goes into @a made, the copy first. */
+    Function *plainCopy(quint32 fid, QList<quint32> *made = nullptr);
+    /** @a scene, a copy made outside the tree's edits, plays its own copy
+     *  of every one-off it plays. Returns how many were copied. */
+    int ownCopyOneOffs(Scene *scene);
     /** Make an inline palette an ordinary named one (Make reusable): one
      *  undo step (D22) -- undo makes it a one-off again, as it was. */
     bool makeReusable(quint32 paletteId, const QString &name, const QString &path);
@@ -1433,6 +1445,7 @@ private:
     /** A new one-off as @a paletteId is (an effect's bound one-offs copied
      *  too), recorded in @a made (original -> copy). */
     quint32 cloneOneOff(quint32 paletteId, QHash<quint32, quint32> &made);
+    Function *plainCopy(quint32 fid, QList<quint32> *made, int depth);
 
     QSet<quint32> m_generatedScenes;
     QSet<quint32> m_generatedCollections;
@@ -1880,6 +1893,12 @@ private:
     bool m_snapshotHasDetachedLists = false;
     /** Hand generated function @a id over to the show (no longer the tree's). */
     void handOver(quint32 id);
+    /** handOver() but its one-offs: releaseOneOffs() once for all. */
+    void handOverOnly(quint32 id);
+    /** Scenes @a ids, handed over, make the one-offs they play the show's
+     *  palettes: the same ones where the tree (@a after, and the scenes it
+     *  still generates) no longer plays them, else their own copies. */
+    void releaseOneOffs(const QList<quint32> &ids, const QList<ShowTree::Production> &after);
     /** Detach (open 19): a scene of @a collectionId another list still
      *  plays is copied, and the copy put in its place, so the detached
      *  chaser is its own from the start. The copies' ids into @a made. */

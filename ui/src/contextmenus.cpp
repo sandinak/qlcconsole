@@ -1035,14 +1035,7 @@ void ContextMenus::function(ContextMenu &menu, Doc *doc, const QList<quint32> &f
             doc->paletteOps()->functionStep(ContextMenu::tr("Duplicate"), QList<quint32>(),
                                             [&](QList<quint32> &made) {
                 for (quint32 id : fids)
-                {
-                    Function *src = doc->function(id);
-                    Function *copy = src == nullptr ? nullptr : src->createCopy(doc);
-                    if (copy == nullptr)
-                        continue;
-                    copy->setName(doc->nextDuplicateName(src));
-                    made << copy->id();
-                }
+                    doc->duplicateFunction(id, &made);   // all its own (UX-69)
                 return !made.isEmpty();
             });
             if (changed)

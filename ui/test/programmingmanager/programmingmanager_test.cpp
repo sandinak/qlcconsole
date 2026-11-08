@@ -64,6 +64,8 @@
 #include "fixturegroupsource.h"
 #include "lookeditor.h"
 #include "scene.h"
+#include "sequence.h"
+#include "chaserstep.h"
 #include "fixture.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
@@ -3266,6 +3268,64 @@ void ProgrammingManager_Test::undoingADeleteHandsItBackToItsVcWidgets()
     QVERIFY(m_doc->function(walkId) == nullptr);
     QCOMPARE(btn->function(), Function::invalidId());
     QCOMPARE(list->chaserID(), Function::invalidId());
+}
+
+void ProgrammingManager_Test::aDuplicatedSequencePlaysItsOwnScene()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    Fixture *par = new Fixture(m_doc);
+    par->setName("Par");
+    par->setChannels(3);
+    QVERIFY(m_doc->addFixture(par));
+    Scene *bound = new Scene(m_doc);
+    bound->setName("Chase base");
+    bound->setValue(par->id(), 0, 0);
+    QVERIFY(m_doc->addFunction(bound));
+    bound->setVisible(false);                   // as a Sequence's scene is
+    Sequence *seq = new Sequence(m_doc);
+    seq->setName("01-01.02-Chase");
+    QVERIFY(m_doc->addFunction(seq));
+    seq->setBoundSceneID(bound->id());
+    ChaserStep step(bound->id());
+    step.values << SceneValue(par->id(), 0, 200);
+    QVERIFY(seq->addStep(step));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    ProgrammingOutline *o = mgr.m_outline;
+    o->rebuild();
+    QList<quint32> before;
+    for (Function *f : m_doc->functions())
+        before << f->id();
+
+    // Duplicate (the outline's right-click).
+    emit o->duplicateRequested({ seq->id() });
+    Sequence *copy = nullptr;
+    Scene *copyScene = nullptr;
+    for (Function *f : m_doc->functions())
+        if (!before.contains(f->id()))
+        {
+            if (Sequence *s = qobject_cast<Sequence *>(f))
+                copy = s;
+            else
+                copyScene = qobject_cast<Scene *>(f);
+        }
+    QVERIFY(copy != nullptr && copyScene != nullptr);
+    QCOMPARE(copy->name(), QString("01-01.03-Chase"));
+    QCOMPARE(copy->boundSceneID(), copyScene->id());
+    QCOMPARE(copy->steps().first().fid, copyScene->id());
+    QCOMPARE(seq->boundSceneID(), bound->id());
+
+    // Editing the copy leaves the original alone.
+    copyScene->setValue(par->id(), 1, 90);
+    QCOMPARE(bound->values().count(), 1);
+
+    // One ⌘Z takes both away.
+    const quint32 copyId = copy->id();
+    const quint32 copySceneId = copyScene->id();
+    mgr.slotUndo();
+    QVERIFY(m_doc->function(copyId) == nullptr);
+    QVERIFY(m_doc->function(copySceneId) == nullptr);
+    QCOMPARE(m_doc->functions().count(), before.count());
 }
 
 void ProgrammingManager_Test::duplicateAndCopyPasteFileACopyBesideIt()

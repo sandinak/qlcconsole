@@ -51,6 +51,7 @@
 #include "universe.h"
 #include "fixture.h"
 #include "chaser.h"
+#include "sequence.h"
 #include "scene.h"
 #include "doc.h"
 #include "programmercontroller.h"
@@ -5402,6 +5403,109 @@ int ShowTreeController::splitSharedOneOffs()
     return copies;
 }
 
+/* A copy is a copy (UX-69): what is made from a scene outside edit() --
+   Detach layer, Function Manager ▸ Clone, Build's Duplicate -- plays its own
+   copy of every one-off it plays, as a new place does inside edit()
+   (ownOneOffs). The copies are one-offs too, the copy's own. */
+int ShowTreeController::ownCopyOneOffs(Scene *scene)
+{
+    if (scene == nullptr || m_inlinePalettes.isEmpty())
+        return 0;
+    QHash<quint32, quint32> made;
+    for (quint32 pid : scene->palettes())
+        cloneOneOff(pid, made);
+    scene->remapPalettes(made);
+    return int(made.count());
+}
+
+Function *ShowTreeController::plainCopy(quint32 fid, QList<quint32> *made)
+{
+    return plainCopy(fid, made, 0);
+}
+
+Function *ShowTreeController::plainCopy(quint32 fid, QList<quint32> *made, int depth)
+{
+    Function *src = m_doc->function(fid);
+    if (src == nullptr || depth > 8)
+        return nullptr;
+    Function *copy = src->createCopy(m_doc, false);
+    if (copy == nullptr)
+        return nullptr;
+    // The show's own: a hidden generated function's copy is neither hidden
+    // nor generated, so it is listed where it was made (visible before it
+    // is added, as the lists add it).
+    copy->setVisible(true);
+    if (!m_doc->addFunction(copy))
+    {
+        delete copy;
+        return nullptr;
+    }
+    if (made != nullptr)
+        *made << copy->id();
+
+    // What it plays that the tree rebakes (or a one-off of a cue) is copied
+    // too, so nothing it holds changes under it.
+    if (Scene *scene = qobject_cast<Scene *>(copy))
+    {
+        ownCopyOneOffs(scene);
+    }
+    else if (Sequence *seq = qobject_cast<Sequence *>(copy))
+    {
+        // A Sequence's bound scene is its own (as the Function Manager has
+        // always copied it).
+        Function *bound = plainCopy(seq->boundSceneID(), made, depth + 1);
+        if (bound != nullptr)
+        {
+            seq->setBoundSceneID(bound->id());
+            const QList<ChaserStep> steps = seq->steps();
+            for (int i = 0; i < steps.count(); ++i)
+            {
+                ChaserStep step = steps.at(i);
+                step.fid = bound->id();
+                seq->replaceStep(step, i);
+            }
+        }
+    }
+    else if (Chaser *chaser = qobject_cast<Chaser *>(copy))
+    {
+        const QList<ChaserStep> steps = chaser->steps();
+        QHash<quint32, quint32> copied;
+        for (int i = 0; i < steps.count(); ++i)
+        {
+            ChaserStep step = steps.at(i);
+            if (!isGenerated(step.fid))
+                continue;
+            if (!copied.contains(step.fid))
+            {
+                Function *member = plainCopy(step.fid, made, depth + 1);
+                copied.insert(step.fid, member != nullptr ? member->id() : step.fid);
+            }
+            step.fid = copied.value(step.fid);
+            chaser->replaceStep(step, i);
+        }
+    }
+    else if (Collection *coll = qobject_cast<Collection *>(copy))
+    {
+        const QList<quint32> members = coll->functions();
+        QList<quint32> mine;
+        bool changedIt = false;
+        for (quint32 mid : members)
+        {
+            Function *member = isGenerated(mid) ? plainCopy(mid, made, depth + 1) : nullptr;
+            mine << (member != nullptr ? member->id() : mid);
+            changedIt = changedIt || member != nullptr;
+        }
+        if (changedIt)
+        {
+            for (quint32 mid : members)
+                coll->removeFunction(mid);
+            for (quint32 mid : mine)
+                coll->addFunction(mid);
+        }
+    }
+    return copy;
+}
+
 quint32 ShowTreeController::detachLayer(quint32 cueId, quint32 layerId)
 {
     const CueList *list = listOfCue(cueId);
@@ -5449,6 +5553,9 @@ quint32 ShowTreeController::detachLayer(quint32 cueId, quint32 layerId)
             if (m_doc->palette(p) != nullptr)
                 scene->addPalette(p);
     }
+    // Its own copies of the one-offs it plays: the cue's, and any tracked
+    // in from an earlier cue or a reusable's, which stay the tree's.
+    ownCopyOneOffs(scene);
     scene->setName(QStringLiteral("%1 · %2").arg(cueLabel(*list, index),
                                                       layer->name.isEmpty() ? targetLabel(layer->target)
                                                                             : layer->name));

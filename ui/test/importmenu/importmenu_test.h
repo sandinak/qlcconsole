@@ -59,6 +59,13 @@ private slots:
      *  fixtures to the show. */
     void fixtureListImportAddsFixtures();
 
+    /** UX-69: File ▸ Import of a workspace whose ids are taken here: the
+     *  imported scene plays the imported group, looks and exclusions, the
+     *  Sequence its imported scene, the effect the imported palette, the
+     *  aim the same-named target. Editing the copy leaves the original
+     *  alone. */
+    void importedCopiesPointAtTheImportedObjects();
+
 private:
     QAction *entry(const QString &key) const;
 

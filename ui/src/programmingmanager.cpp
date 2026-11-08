@@ -1605,13 +1605,10 @@ QMenu *ProgrammingManager::effectsContextMenu(QTreeWidgetItem *clicked, QWidget 
             m_doc->paletteOps()->functionStep(tr("Duplicate"), QList<quint32>(), [&](QList<quint32> &made) {
                 for (quint32 fid : ids)
                 {
-                    Function *src = m_doc->function(fid);
-                    Function *copy = src == nullptr ? nullptr : src->createCopy(m_doc);
-                    if (copy == nullptr)
-                        continue;
-                    copy->setName(m_doc->nextDuplicateName(src));
-                    made << copy->id();
-                    copyId = copy->id();
+                    // All its own (UX-69): a Sequence's bound scene too.
+                    Function *copy = m_doc->duplicateFunction(fid, &made);
+                    if (copy != nullptr)
+                        copyId = copy->id();
                 }
                 return !made.isEmpty();
             });
@@ -2786,20 +2783,13 @@ void ProgrammingManager::duplicateFunctions(const QList<quint32> &fids)
                                       QList<quint32>(), [&](QList<quint32> &made) {
         for (quint32 fid : fids)
         {
-            Function *src = m_doc->function(fid);
-            if (src == NULL)
-                continue;
-
-            Function *copy = src->createCopy(m_doc);
-            if (copy == NULL)
-                continue;
-
             // Smart-increment the source name ("Verse 1" -> "Verse 2",
             // "01-01.02-Reville" -> "01-01.03-Reville"), same as the Function
-            // Manager, rather than a generic "(Copy)" suffix.
-            copy->setName(m_doc->nextDuplicateName(src));
-            made << copy->id();
-            last = copy->id();
+            // Manager, and all its own (UX-69): a Sequence's bound scene and
+            // the one-offs it plays are copied with it.
+            Function *copy = m_doc->duplicateFunction(fid, &made);
+            if (copy != NULL)
+                last = copy->id();
         }
         return !made.isEmpty();
     });

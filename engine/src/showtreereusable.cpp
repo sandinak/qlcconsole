@@ -549,6 +549,12 @@ bool ShowTreeController::usedOutsideTree(quint32 id)
 
 void ShowTreeController::handOver(quint32 id)
 {
+    handOverOnly(id);
+    releaseOneOffs(QList<quint32>{ id }, m_productions);
+}
+
+void ShowTreeController::handOverOnly(quint32 id)
+{
     Function *f = m_doc->function(id);
     m_generatedScenes.remove(id);
     m_generatedCollections.remove(id);
@@ -557,12 +563,74 @@ void ShowTreeController::handOver(quint32 id)
     m_detachedLists.insert(id);
     if (f != nullptr && f->type() != Function::ChaserType)
         f->setVisible(true);
-    // One-off values it plays are the show's palettes now (they stay where
-    // they are, under their names).
-    if (const Scene *s = qobject_cast<const Scene *>(f))
+}
+
+void ShowTreeController::releaseOneOffs(const QList<quint32> &ids, const QList<Production> &after)
+{
+    // What the tree still plays once they have gone: its looks (as @a after
+    // has them) and the scenes it still generates.
+    QSet<quint32> treeUses;
+    auto addLooks = [&treeUses](const QList<Look> &looks) {
+        for (const Look &l : looks)
+        {
+            for (quint32 pid : l.palettes)
+                treeUses.insert(pid);
+            for (quint32 pid : l.own)
+                treeUses.insert(pid);
+        }
+    };
+    for (const Production &p : after)
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+            {
+                addLooks(c.looks);
+                for (const Layer &layer : c.layers)
+                    addLooks(layer.looks);
+            }
+    for (const ReusableLayer &r : m_reusableLayers)
+        addLooks(r.looks);
+    for (const ReusableCue &r : m_reusableCues)
+    {
+        addLooks(r.looks);
+        for (const Layer &layer : r.layers)
+            addLooks(layer.looks);
+    }
+    for (quint32 sid : m_generatedScenes)
+        if (const Scene *s = qobject_cast<const Scene *>(m_doc->function(sid)))
+            for (quint32 pid : s->palettes())
+                treeUses.insert(pid);
+
+    // One-off values they play are the show's palettes now, under their
+    // names: the very ones when the tree no longer plays them, else copies
+    // (UX-69), so editing the detached cue's look leaves the tree's alone.
+    // Scenes handed over together share a copy, as they shared the one-off.
+    QHash<quint32, quint32> made;
+    for (quint32 id : ids)
+    {
+        Scene *s = qobject_cast<Scene *>(m_doc->function(id));
+        if (s == nullptr)
+            continue;
+        QHash<quint32, quint32> remap;
+        for (quint32 pid : s->palettes())
+        {
+            if (!m_inlinePalettes.contains(pid))
+                continue;
+            if (treeUses.contains(pid))
+            {
+                const quint32 copy = cloneOneOff(pid, made);
+                if (copy != pid)
+                    remap.insert(pid, copy);
+            }
+        }
+        s->remapPalettes(remap);
         for (quint32 pid : s->palettes())
             if (m_inlinePalettes.remove(pid))
                 m_madeReusable.insert(pid);
+    }
+    // An effect copied with its bound one-offs: those are the show's too.
+    for (quint32 copy : made)
+        if (m_inlinePalettes.remove(copy))
+            m_madeReusable.insert(copy);
 }
 
 void ShowTreeController::copySharedScenes(quint32 collectionId, QList<quint32> *made)
@@ -623,10 +691,12 @@ void ShowTreeController::applyDetachedLists()
     QList<quint32> again = m_snapshotDetachedLists.values();
     std::sort(again.begin(), again.end());
     QList<quint32> collections;
+    QList<quint32> handed;
     for (quint32 id : again)
         if (!m_detachedLists.contains(id) && m_doc->function(id) != nullptr)
         {
-            handOver(id);
+            handOverOnly(id);
+            handed << id;
             if (m_doc->function(id)->type() == Function::CollectionType)
                 collections << id;
         }
@@ -637,8 +707,12 @@ void ShowTreeController::applyDetachedLists()
         QList<quint32> made;
         copySharedScenes(id, &made);
         for (quint32 c : made)
-            handOver(c);
+        {
+            handOverOnly(c);
+            handed << c;
+        }
     }
+    releaseOneOffs(handed, m_productions);
 }
 
 quint32 ShowTreeController::detachList(quint32 listId)
@@ -682,7 +756,7 @@ quint32 ShowTreeController::detachList(quint32 listId)
                 {
                     // Handed over before the bake below would find them unused.
                     for (quint32 id : going)
-                        handOver(id);
+                        handOverOnly(id);
                     // A scene another list still plays: copied (open 19),
                     // so the chaser is all its own from the start.
                     QList<quint32> made;
@@ -691,8 +765,11 @@ quint32 ShowTreeController::detachList(quint32 listId)
                             && m_doc->function(id)->type() == Function::CollectionType)
                             copySharedScenes(id, &made);
                     for (quint32 id : made)
-                        handOver(id);
+                        handOverOnly(id);
                     p.lists.removeAt(i);
+                    // Their one-offs: the chaser's own, copied where the
+                    // rest of the tree still plays them (UX-69).
+                    releaseOneOffs(going + made, ps);
                     return true;
                 }
         return false;

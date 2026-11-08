@@ -30,6 +30,7 @@
 #include "grouphead.h"
 #include "function.h"
 #include "monitorproperties.h"
+#include "stagetarget.h"
 #include "powerdistribution.h"
 #include "qlcpalette.h"
 #include "scene.h"
@@ -331,6 +332,41 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
         {
             foreach (quint32 pid, sc->palettes())
                 allPalettes.insert(pid);
+            // What it plays its looks on, and over: its groups and fixtures
+            // (a look-only scene has no values to find them by), its
+            // scope's group, each look's layout span.
+            foreach (quint32 gid, sc->fixtureGroups())
+                allGroups.insert(gid);
+            foreach (quint32 fxi, sc->fixtures())
+                allFixtures.insert(fxi);
+            if (sc->lookScope() == Scene::ScopeGroup)
+                allGroups.insert(sc->lookScopeGroupId());
+            const QHash<quint32, Scene::LayoutSpan> spans = sc->layoutSpans();
+            for (auto it = spans.constBegin(); it != spans.constEnd(); ++it)
+            {
+                foreach (quint32 gid, it.value().groups)
+                    allGroups.insert(gid);
+                foreach (quint32 fxi, it.value().fixtures)
+                    allFixtures.insert(fxi);
+            }
+        }
+    }
+    // An effect palette plays the palettes bound to its slots: they come too
+    // (and theirs), or the copy plays whatever has those ids here.
+    {
+        QList<quint32> todo = allPalettes.values();
+        while (!todo.isEmpty())
+        {
+            const QLCPalette *p = sourceDoc->palette(todo.takeLast());
+            if (p == NULL)
+                continue;
+            const QMap<QString, quint32> bound = p->effectPaletteBindings();
+            for (auto it = bound.constBegin(); it != bound.constEnd(); ++it)
+                if (!allPalettes.contains(it.value()) && sourceDoc->palette(it.value()) != NULL)
+                {
+                    allPalettes.insert(it.value());
+                    todo << it.value();
+                }
         }
     }
 
@@ -443,9 +479,10 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
         result.fixtureGroupsImported++;
     }
 
-    /*** 3b. Clone palettes. Standalone -- nothing inside a palette refers to a
-     *       fixture or function, so this only needs its own ID space remapped;
-     *       the Scenes that reference them are fixed up in step 5. ***/
+    /*** 3b. Clone palettes, in their own ID space. What a palette refers
+     *       to -- the palettes an effect's slots are bound to, the stage
+     *       target an Aim or an effect's target slot aims at -- is fixed up
+     *       just below; the Scenes that reference them in step 5. ***/
     foreach (quint32 oldId, allPalettes)
     {
         QLCPalette *src = sourceDoc->palette(oldId);
@@ -470,6 +507,55 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
             result.idsRemapped++;
         paletteMap.insert(oldId, copy->id());
         result.palettesImported++;
+    }
+
+    // A copy points at the copies, never at whatever has the source's ids
+    // here (UX-69). Stage targets aren't imported: one of the same name
+    // here is the one it aims at, else it aims at nothing and says so.
+    {
+        MonitorProperties *srcMon = sourceDoc->monitorProperties();
+        MonitorProperties *dstMon = targetDoc->monitorProperties();
+        auto mapTarget = [&](quint32 srcTarget, const QLCPalette *copy) -> quint32 {
+            if (srcTarget == StageTarget::invalidId())
+                return srcTarget;
+            const StageTarget *t = srcMon != NULL ? srcMon->stageTarget(srcTarget) : NULL;
+            if (t != NULL && dstMon != NULL)
+            {
+                foreach (StageTarget *have, dstMon->stageTargets())
+                {
+                    if (have->name() == t->name())
+                        return have->id();
+                }
+            }
+            result.warnings << QObject::tr("Look \"%1\" aims at \"%2\", which this show doesn't have: "
+                                           "pick its target again.")
+                                .arg(copy->name(), t != NULL ? t->name() : QObject::tr("a stage target"));
+            return StageTarget::invalidId();
+        };
+        for (auto it = paletteMap.constBegin(); it != paletteMap.constEnd(); ++it)
+        {
+            QLCPalette *copy = targetDoc->palette(it.value());
+            if (copy == NULL)
+                continue;
+            const QMap<QString, quint32> bound = copy->effectPaletteBindings();
+            for (auto b = bound.constBegin(); b != bound.constEnd(); ++b)
+            {
+                if (paletteMap.contains(b.value()))
+                    copy->setEffectPaletteBinding(b.key(), paletteMap.value(b.value()));
+                else
+                    copy->clearEffectPaletteBinding(b.key());
+            }
+            const QMap<QString, quint32> targets = copy->effectTargetBindings();
+            for (auto b = targets.constBegin(); b != targets.constEnd(); ++b)
+            {
+                const quint32 to = mapTarget(b.value(), copy);
+                if (to == StageTarget::invalidId())
+                    copy->clearEffectTargetBinding(b.key());
+                else
+                    copy->setEffectTargetBinding(b.key(), to);
+            }
+            copy->setStageTargetId(mapTarget(copy->stageTargetId(), copy));
+        }
     }
 
     /*** 3c. Carry each imported fixture's 2D-map placement and power feed.
@@ -645,15 +731,53 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
         {
             Scene *scene = qobject_cast<Scene *>(f);
             QList<SceneValue> values = scene->values();
-            // Capture BEFORE clear(): it wipes m_palettes and m_paletteFade
-            // along with the values.
+            // Capture BEFORE clear(): it wipes the fixtures, groups,
+            // m_palettes and m_paletteFade along with the values.
+            const QList<quint32> oldFixtures = scene->fixtures();
+            const QList<quint32> oldGroups = scene->fixtureGroups();
             const QList<quint32> oldPalettes = scene->palettes();
             const QHash<quint32, Scene::PaletteFade> oldFades = scene->paletteFades();
+            const QHash<quint32, QList<quint32> > oldExcluded = scene->excludedFixtures();
+            const QHash<quint32, Scene::LayoutSpan> oldSpans = scene->layoutSpans();
+            auto fixturesOf = [&fixtureMap](const QList<quint32> &ids) {
+                QList<quint32> out;
+                foreach (quint32 fxi, ids)
+                    out << fixtureMap.value(fxi, fxi);
+                return out;
+            };
+            auto groupsOf = [&groupMap](const QList<quint32> &ids) {
+                QList<quint32> out;
+                foreach (quint32 gid, ids)
+                    out << groupMap.value(gid, gid);
+                return out;
+            };
             scene->clear();
+            foreach (quint32 fxi, fixturesOf(oldFixtures))
+                scene->addFixture(fxi);
+            foreach (quint32 gid, groupsOf(oldGroups))
+                scene->addFixtureGroup(gid);
+            if (scene->lookScope() == Scene::ScopeGroup)
+                scene->setLookScope(Scene::ScopeGroup,
+                                    groupMap.value(scene->lookScopeGroupId(), scene->lookScopeGroupId()));
             foreach (const SceneValue &scv, values)
             {
                 SceneValue remapped(fixtureMap.value(scv.fxi, scv.fxi), scv.channel, scv.value);
                 scene->setValue(remapped);
+            }
+            // What each look leaves out and lays out over: the imported
+            // fixtures and groups, under the imported look.
+            for (auto it = oldExcluded.constBegin(); it != oldExcluded.constEnd(); ++it)
+                scene->setExcludedFixtures(it.key(), QList<quint32>());
+            for (auto it = oldSpans.constBegin(); it != oldSpans.constEnd(); ++it)
+                scene->setLayoutSpan(it.key(), Scene::LayoutSpan());
+            for (auto it = oldExcluded.constBegin(); it != oldExcluded.constEnd(); ++it)
+                scene->setExcludedFixtures(paletteMap.value(it.key(), it.key()), fixturesOf(it.value()));
+            for (auto it = oldSpans.constBegin(); it != oldSpans.constEnd(); ++it)
+            {
+                Scene::LayoutSpan span;
+                span.groups = groupsOf(it.value().groups);
+                span.fixtures = fixturesOf(it.value().fixtures);
+                scene->setLayoutSpan(paletteMap.value(it.key(), it.key()), span);
             }
 
             // Palette references, and the per-palette fade overrides keyed by
@@ -689,6 +813,10 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
         case Function::SequenceType:
         {
             Chaser *chaser = qobject_cast<Chaser *>(f);
+            // A Sequence plays its own bound scene: the imported one.
+            if (Sequence *seq = qobject_cast<Sequence *>(f))
+                if (functionMap.contains(seq->boundSceneID()))
+                    seq->setBoundSceneID(functionMap.value(seq->boundSceneID()));
             QList<ChaserStep> steps = chaser->steps();
             for (int i = 0; i < steps.size(); i++)
             {

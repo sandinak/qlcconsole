@@ -885,6 +885,19 @@ int Doc::makeFixtureNamesUnique(const QStringList &only)
     return renamed;
 }
 
+Function *Doc::duplicateFunction(quint32 fid, QList<quint32> *made)
+{
+    const Function *src = function(fid);
+    if (src == NULL || m_showTree == NULL)
+        return NULL;
+    // Named before the copy is in the Doc, so it doesn't count itself.
+    const QString name = nextDuplicateName(src);
+    Function *copy = m_showTree->plainCopy(fid, made);
+    if (copy != NULL)
+        copy->setName(name);
+    return copy;
+}
+
 QString Doc::nextDuplicateName(const Function *src) const
 {
     if (src == NULL)
