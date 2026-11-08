@@ -65,6 +65,7 @@
 #include "effectbrowser.h"
 #include "qlcfixturedefcache.h"
 #include "wledfixture.h"
+#include "effectinstance.h"
 #include "wledpalettestrips.h"
 #include "pathdrawwidget.h"
 #include "gradientdirectionwidget.h"
@@ -3482,27 +3483,9 @@ void LookEditor::rebuildEffectDynWidget()
                 QRgb slot[3] = { qRgb(0xFF, 0xAA, 0x00), qRgb(0, 0, 0), qRgb(0, 0, 0) };   // WLED's own
                 if (m_contextScene != nullptr)
                 {
-                    const QList<quint32> pals = m_contextScene->runtimePalettes();
-                    QList<QColor> own, base;
-                    bool underThis = false;
-                    foreach (quint32 pid, pals)
-                    {
-                        QLCPalette *q = m_doc->palette(pid);
-                        if (q == nullptr)
-                            continue;
-                        if (q->type() == QLCPalette::Effect)
-                        {
-                            underThis = (pid == m_paletteId);
-                            continue;
-                        }
-                        if (q->type() != QLCPalette::Color)
-                            continue;
-                        const bool scoped = QLCPalette::isEffectScoped(m_doc, pals, pid);
-                        if (scoped && !underThis)
-                            continue;
-                        (scoped ? own : base).append(q->colorValue());
-                    }
-                    const QList<QColor> use = own.isEmpty() ? base : own;
+                    QList<QColor> use;
+                    double dim = 1.0;
+                    EffectInstance::sceneLookColours(m_doc, m_contextScene->id(), m_paletteId, use, dim);
                     for (int k = 0; k < 3 && k < use.size(); ++k)
                         slot[k] = use.at(k).rgb();
                 }

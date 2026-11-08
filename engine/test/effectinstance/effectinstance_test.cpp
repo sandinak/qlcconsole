@@ -5086,3 +5086,41 @@ void EffectInstance_Test::outOfRangeRunSettingsAreClamped()
 }
 
 QTEST_GUILESS_MAIN(EffectInstance_Test)
+
+void EffectInstance_Test::theEditorAndTheInstanceShareTheLooksColours()
+{
+    QLCPalette *a = new QLCPalette(QLCPalette::Effect, m_doc);
+    QVERIFY(m_doc->addPalette(a));
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setValue(QColor(255, 0, 0));
+    QVERIFY(m_doc->addPalette(red));
+    QLCPalette *b = new QLCPalette(QLCPalette::Effect, m_doc);
+    QVERIFY(m_doc->addPalette(b));
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setValue(QColor(0, 0, 255));
+    QVERIFY(m_doc->addPalette(blue));
+    QLCPalette *dim = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    dim->setValue(128);
+    QVERIFY(m_doc->addPalette(dim));
+    Scene *scene = new Scene(m_doc);
+    QVERIFY(m_doc->addFunction(scene));
+    scene->addPalette(a->id());
+    scene->addPalette(red->id());
+    scene->addPalette(b->id());
+    scene->addPalette(blue->id());
+    scene->addPalette(dim->id());
+
+    for (QLCPalette *eff : { a, b })
+    {
+        EffectInstance inst(m_doc, scene->id(), eff->id());
+        QList<QColor> own, shared;
+        double ownDim = 0, sharedDim = 0;
+        bool ownHave = false, sharedHave = false;
+        inst.lookColours(own, ownDim, &ownHave);
+        EffectInstance::sceneLookColours(m_doc, scene->id(), eff->id(), shared, sharedDim, &sharedHave);
+        QVERIFY(!shared.isEmpty());
+        QCOMPARE(own, shared);
+        QCOMPARE(ownDim, sharedDim);
+        QCOMPARE(ownHave, sharedHave);
+    }
+}
