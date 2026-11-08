@@ -188,10 +188,20 @@ public:
         WledNoOutput,       //!< its universe has no output
         WledOtherOutput,    //!< its universe goes out another way (Art-Net, sACN...)
         WledOtherIp,        //!< through the WLED output, but to another IP
-        WledStale           //!< aimed right, but reading other channels than its own
+        WledStale,          //!< aimed right, but reading other channels than its own
+        WledOutOfOrder      //!< a WLED patched as its LEDs: its universes go out
+                            //!< as Art-Net/sACN universes that are not one run
     };
     /** @p fx's route. @p detail: the other output's plugin (WledOtherOutput)
-     *  or the IP it goes to instead (WledOtherIp). */
+     *  or the IP it goes to instead (WledOtherIp).
+     *
+     *  A WLED patched as its LEDs (a pixel mode, Network (Art-Net/sACN):
+     *  WledFixture::isPixelMode()) is the other way round: it hears Art-Net
+     *  or sACN, so each universe it reaches has to go out that way, to its IP
+     *  (or broadcast), as consecutive universe numbers -- WLED takes the ones
+     *  after its start universe for the LEDs past the first. Through the WLED
+     *  output it is WledOtherOutput ("WLED"). @p detail for WledOutOfOrder:
+     *  the numbers they go out as. */
     static WledRoute wledRoute(Doc *doc, const Fixture *fx, QString *detail = NULL);
 
     /** Put each of @p fixtureIds that is a WLED by its own API and not
@@ -206,6 +216,19 @@ public:
      *  it touched and made, and where each fixture was) -- one step. */
     int routeWled(const QList<quint32> &fixtureIds, QStringList *problems = NULL,
                   std::function<void()> *undo = NULL);
+
+    /** The WLEDs among @p fixtureIds patched as their LEDs (Art-Net or
+     *  sACN): each on a run of universes of its own -- the ones it is on when
+     *  nothing else is on them, else the first free run (no fixture, no
+     *  output, no node port), else new ones -- from channel 1, each out as
+     *  Art-Net (or the sACN its first already has) to its IP, numbered on
+     *  from its first. routeWled() does this for them. */
+    int routeWledPixels(const QList<quint32> &fixtureIds, QStringList *problems = NULL,
+                        std::function<void()> *undo = NULL);
+
+    /** The Art-Net (or sACN) universe number universe @p universe goes out
+     *  as, -1 when it has no such output. */
+    static int networkUniverseNumber(Doc *doc, quint32 universe, QString *plugin = NULL);
 
     /** The name the show's own universe naming gives @p universe for what is
      *  on it now. The scheme is learned from the names it has -- "U17-US1-1",

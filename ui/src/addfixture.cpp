@@ -17,6 +17,14 @@
   limitations under the License.
 */
 
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QNetworkProxy>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QHBoxLayout>
+#include <QTimer>
 #include <QDialogButtonBox>
 #include <QTreeWidgetItem>
 #include <QTreeWidget>
@@ -37,6 +45,8 @@
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 
+#include "wledconfigcheck.h"
+#include "wledfixture.h"
 #include "addresstool.h"
 #include <QGridLayout>
 #include <QVBoxLayout>
@@ -72,6 +82,7 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
     /* Connection: DMX (through a converter node / wireless receiver) or
        Network (the fixture speaks ArtNet/sACN itself and takes a unicast IP). */
     m_connectionCombo = new QComboBox(m_propertiesGroup);
+    m_connectionCombo->setObjectName(QStringLiteral("m_connectionCombo"));
     m_connectionCombo->addItem(tr("DMX"), connectionKey(Fixture::Dmx, Fixture::ArtNetTransport));
     m_connectionCombo->addItem(tr("Network (ArtNet/sACN)"), connectionKey(Fixture::Network, Fixture::ArtNetTransport));
     m_connectionCombo->addItem(tr("Network (WLED, JSON over Wi-Fi)"), connectionKey(Fixture::Network, Fixture::WledTransport));
@@ -95,6 +106,57 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
         m_ipRangeLabel->setStyleSheet("QLabel { color: #909090; }");
         m_ipRangeLabel->hide();
         pg->addWidget(m_ipRangeLabel, row + 2, 2);
+
+        /* A WLED as its LEDs: how many, read from the device (or typed). */
+        m_ledsLabel = new QLabel(tr("LEDs:"), m_propertiesGroup);
+        m_ledsSpin = new QSpinBox(m_propertiesGroup);
+        m_ledsSpin->setObjectName(QStringLiteral("m_ledsSpin"));
+        m_ledsSpin->setRange(1, WledFixture::MaxPixels);
+        m_ledsSpin->setValue(50);
+        m_ledsSpin->setToolTip(tr("How many LEDs the WLED drives: each is a head of its own, "
+                                  "so pixel effects and RGB Matrix run on every LED."));
+        m_ledsReadButton = new QPushButton(tr("Read from WLED"), m_propertiesGroup);
+        m_ledsReadButton->setObjectName(QStringLiteral("m_ledsReadButton"));
+        m_ledsReadButton->setToolTip(tr("Ask the WLED at the IP address how many LEDs it drives, "
+                                        "and whether they have a white channel."));
+        QHBoxLayout *ledRow = new QHBoxLayout();
+        ledRow->setContentsMargins(0, 0, 0, 0);
+        ledRow->addWidget(m_ledsSpin, 1);
+        ledRow->addWidget(m_ledsReadButton);
+        pg->addWidget(m_ledsLabel, row + 3, 0);
+        pg->addLayout(ledRow, row + 3, 2);
+        m_ledsInfoLabel = new QLabel(m_propertiesGroup);
+        m_ledsInfoLabel->setObjectName(QStringLiteral("m_ledsInfoLabel"));
+        m_ledsInfoLabel->setStyleSheet("QLabel { color: #909090; }");
+        m_ledsInfoLabel->setWordWrap(true);
+        pg->addWidget(m_ledsInfoLabel, row + 4, 2);
+        m_ipConflictLabel = new QLabel(m_propertiesGroup);
+        m_ipConflictLabel->setObjectName(QStringLiteral("m_ipConflictLabel"));
+        m_ipConflictLabel->setStyleSheet("QLabel { color: #e08000; }");
+        m_ipConflictLabel->setWordWrap(true);
+        m_ipConflictLabel->hide();
+        pg->addWidget(m_ipConflictLabel, row + 5, 2);
+        m_ledsLabel->hide();
+        m_ledsSpin->hide();
+        m_ledsReadButton->hide();
+        m_ledsInfoLabel->hide();
+    }
+    m_nam = new QNetworkAccessManager(this);
+    m_nam->setProxy(QNetworkProxy::NoProxy);        // WLEDs are on the show LAN
+    m_ledsReadTimer = new QTimer(this);
+    m_ledsReadTimer->setSingleShot(true);
+    m_ledsReadTimer->setInterval(700);
+    connect(m_ledsReadTimer, &QTimer::timeout, this, [this]() {
+        if (pixelModePicked() && !ipAddress().isEmpty() && ipAddress() != m_ledsAskedIp)
+            readLedsFromDevice();
+    });
+    if (m_ledsSpin != NULL)
+    {
+        connect(m_ledsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) {
+            if (pixelModePicked())
+                buildPixelPreview();
+        });
+        connect(m_ledsReadButton, &QPushButton::clicked, this, [this]() { readLedsFromDevice(); });
     }
     /* WLED by its own API: a universe of its own, sent to its IP -- said
        where the universe and address are, which don't apply. */
@@ -123,11 +185,29 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
     connect(m_connectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [this](int) {
                 m_ipEdit->setEnabled(connection() == Fixture::Network);
+                // The pixel modes are offered on Network (ArtNet/sACN) only.
+                if (m_fixtureDef != NULL)
+                {
+                    const QString was = m_modeCombo->currentText();
+                    fillModeCombo();
+                    const int idx = m_modeCombo->findText(was);
+                    if (idx > 0)
+                    {
+                        m_modeCombo->setCurrentIndex(idx);
+                        slotModeActivated(idx);
+                    }
+                }
                 updateMaximumAmount();
                 updateIpRange();
                 updateAddressFields();
+                updateIpConflict();
             });
-    connect(m_ipEdit, &QLineEdit::textChanged, this, [this]() { updateIpRange(); });
+    connect(m_ipEdit, &QLineEdit::textChanged, this, [this]() {
+        updateIpRange();
+        updateIpConflict();
+        if (pixelModePicked())
+            m_ledsReadTimer->start();
+    });
 
     QAction* action = new QAction(this);
     action->setShortcut(QKeySequence(QKeySequence::Close));
@@ -195,6 +275,15 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
         slotNameEdited(fxi->name());
         m_nameEdit->setModified(true); // Prevent auto-naming
 
+        // A WLED as its LEDs: as many as it has (not asked again).
+        if (WledFixture::isPixelMode(fxi) && m_ledsSpin != NULL)
+        {
+            m_ledsAskedIp = fxi->ipAddress();
+            m_ledsSpin->blockSignals(true);
+            m_ledsSpin->setValue(fxi->heads());
+            m_ledsSpin->blockSignals(false);
+        }
+
         // Mode
         int index = m_modeCombo->findText(fxi->fixtureMode()->name());
         if (index != -1)
@@ -224,6 +313,7 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
 
 AddFixture::~AddFixture()
 {
+    delete m_pixelDef;
     QSettings settings;
     settings.setValue(SETTINGS_GEOMETRY, saveGeometry());
 
@@ -289,7 +379,151 @@ quint32 AddFixture::channels() const
 bool AddFixture::ownUniverse() const
 {
     return !m_inventoryMode && connection() == Fixture::Network
-           && transport() == Fixture::WledTransport;
+           && (transport() == Fixture::WledTransport || pixelModePicked());
+}
+
+int AddFixture::pixelLeds() const
+{
+    return (pixelModePicked() && m_ledsSpin != NULL) ? m_ledsSpin->value() : 0;
+}
+
+bool AddFixture::pixelRgbw() const
+{
+    bool rgbw = false;
+    return pixelModePicked(&rgbw) && rgbw;
+}
+
+bool AddFixture::pixelModePicked(bool *rgbw) const
+{
+    const int data = m_modeCombo->currentData().toInt();
+    if (m_fixtureDef == NULL || data >= 0 || !m_modeCombo->currentData().isValid())
+        return false;
+    if (rgbw != NULL)
+        *rgbw = data == -2;
+    return true;
+}
+
+void AddFixture::buildPixelPreview()
+{
+    bool rgbw = false;
+    if (!pixelModePicked(&rgbw) || m_ledsSpin == NULL)
+        return;
+    const int leds = m_ledsSpin->value();
+    QLCFixtureDef *def = WledFixture::pixelDefinition(m_fixtureDef, leds, rgbw, 0);
+    m_mode = def->modes().first();
+    delete m_pixelDef;
+    m_pixelDef = def;
+
+    const int channels = m_mode->channels().size();
+    m_channelsValue = quint32(channels);
+    m_channelsSpin->blockSignals(true);
+    m_channelsSpin->setMaximum(qMax(1000, channels));   // all of them, as many as there are
+    m_channelsSpin->setValue(channels);
+    m_channelsSpin->blockSignals(false);
+
+    // The channels: the first LEDs, not thousands of rows.
+    m_channelList->clear();
+    const int shown = qMin(channels, 12);
+    for (int i = 0; i < shown; i++)
+        new QListWidgetItem(QString("%1: %2").arg(i + 1).arg(m_mode->channel(quint32(i))->name()),
+                            m_channelList);
+    if (shown < channels)
+        new QListWidgetItem(tr("… %1 channels in all, %2 per LED").arg(channels).arg(rgbw ? 4 : 3),
+                            m_channelList);
+
+    // Where they go: one universe, or a run of them as WLED takes them.
+    const WledFixture::UniverseSpan span = WledFixture::universeSpan(leds, rgbw, 0);
+    if (span.leds.size() > 1)
+        m_ledsInfoLabel->setText(tr("%1 channels: %2 universes of its own, one after another, "
+                                    "%3 LEDs each from channel 1 (the last %4), as WLED takes them.")
+                                     .arg(channels).arg(span.leds.size())
+                                     .arg(WledFixture::ledsPerUniverse(rgbw)).arg(span.leds.last()));
+    else
+        m_ledsInfoLabel->setText(tr("%1 channels: one universe of its own.").arg(channels));
+    updateAddressFields();
+}
+
+void AddFixture::updatePixelRows()
+{
+    if (m_ledsSpin == NULL)
+        return;
+    const bool pixels = pixelModePicked();
+    m_ledsLabel->setVisible(pixels);
+    m_ledsSpin->setVisible(pixels);
+    m_ledsReadButton->setVisible(pixels);
+    m_ledsInfoLabel->setVisible(pixels);
+    m_ledsReadButton->setEnabled(!ipAddress().isEmpty());
+}
+
+void AddFixture::readLedsFromDevice()
+{
+    const QString ip = ipAddress();
+    if (ip.isEmpty() || m_nam == NULL)
+        return;
+    m_ledsAskedIp = ip;
+    m_ledsInfoLabel->setText(tr("Asking %1 how many LEDs it drives…").arg(ip));
+    QNetworkRequest req(QUrl(WledConfigCheck::baseUrl(ip) + QStringLiteral("/json/info")));
+    req.setTransferTimeout(3000);
+    QNetworkReply *r = m_nam->get(req);
+    connect(r, &QNetworkReply::finished, this, [this, r, ip]() {
+        r->deleteLater();
+        if (ip != ipAddress())
+            return;                 // asked about another one since
+        const QJsonObject leds = r->error() == QNetworkReply::NoError
+            ? QJsonDocument::fromJson(r->readAll()).object().value(QStringLiteral("leds")).toObject()
+            : QJsonObject();
+        const int count = leds.value(QStringLiteral("count")).toInt();
+        if (count <= 0)
+        {
+            m_ledsInfoLabel->setText(tr("%1 did not answer: type how many LEDs it has.").arg(ip));
+            return;
+        }
+        /* White: "rgbw" (older firmware) or the light capabilities' white
+           bit (lc, bit 1). */
+        const bool white = leds.value(QStringLiteral("rgbw")).toBool()
+                           || (leds.value(QStringLiteral("lc")).toInt() & 0x02) != 0;
+        const int want = m_modeCombo->findData(white ? -2 : -1);
+        if (want >= 0 && want != m_modeCombo->currentIndex())
+        {
+            m_modeCombo->setCurrentIndex(want);
+            slotModeActivated(want);
+        }
+        m_ledsSpin->setValue(qMin(count, WledFixture::MaxPixels));
+        buildPixelPreview();
+        m_ledsInfoLabel->setText(tr("Read from the WLED: %1 LEDs, %2. ").arg(count)
+                                     .arg(white ? tr("RGBW") : tr("RGB"))
+                                 + m_ledsInfoLabel->text());
+    });
+}
+
+void AddFixture::updateIpConflict()
+{
+    if (m_ipConflictLabel == NULL)
+        return;
+    const QString ip = ipAddress();
+    const bool wledHere = transport() == Fixture::WledTransport
+        || (m_fixtureDef != NULL
+            && m_fixtureDef->manufacturer().compare(QLatin1String("WLED"), Qt::CaseInsensitive) == 0);
+    QString text;
+    if (!ip.isEmpty() && wledHere)
+    {
+        const bool api = transport() == Fixture::WledTransport;
+        foreach (Fixture *other, m_doc->fixtures())
+        {
+            if (other == NULL || other->id() == m_fixtureID || other->ipAddress() != ip
+                || other->connection() != Fixture::Network
+                || !WledConfigCheck::isWled(other)
+                || (other->transport() == Fixture::WledTransport) == api)
+                continue;
+            text = api ? tr("%1 is already %2, sent to as Art-Net/sACN: while that streams, the WLED "
+                            "ignores this one's looks. Use one of the two.").arg(ip, other->name())
+                       : tr("%1 is already %2, driven through WLED's API: while this streams, the WLED "
+                            "ignores that one's looks. Use one of the two.").arg(ip, other->name());
+            break;
+        }
+    }
+    m_ipConflictLabel->setText(text);
+    m_ipConflictLabel->setVisible(!text.isEmpty());
 }
 
 void AddFixture::updateAddressFields()
@@ -305,7 +539,19 @@ void AddFixture::updateAddressFields()
     m_universeLabel->setEnabled(!own);
     m_addressLabel->setEnabled(!own);
     if (m_ownUniverseLabel != NULL)
+    {
+        bool rgbw = false;
+        if (pixelModePicked(&rgbw) && m_ledsSpin != NULL)
+        {
+            const int n = WledFixture::universeSpan(m_ledsSpin->value(), rgbw, 0).leds.size();
+            m_ownUniverseLabel->setText(n > 1 ? tr("Gets %1 universes of its own, one after another, "
+                                                   "sent to its IP as Art-Net.").arg(n)
+                                              : tr("Gets a universe of its own, sent to its IP as Art-Net."));
+        }
+        else
+            m_ownUniverseLabel->setText(tr("Gets a universe of its own, sent to its IP."));
         m_ownUniverseLabel->setVisible(own);
+    }
     checkOverlapping();
 }
 
@@ -490,8 +736,24 @@ void AddFixture::fillModeCombo(const QString& text)
         m_modeCombo->setEnabled(true);
 
         QListIterator <QLCFixtureMode*> it(m_fixtureDef->modes());
+        int index = 0;
         while (it.hasNext() == true)
-            m_modeCombo->addItem(it.next()->name());
+            m_modeCombo->addItem(it.next()->name(), index++);
+
+        /* A WLED on the network by Art-Net or sACN can be patched as its
+           LEDs: a head per LED, as many as it drives. */
+        if (m_fixtureDef->manufacturer().compare(QLatin1String("WLED"), Qt::CaseInsensitive) == 0
+            && connection() == Fixture::Network && transport() == Fixture::ArtNetTransport)
+        {
+            m_modeCombo->addItem(WledFixture::pixelModeName(false), -1);
+            m_modeCombo->setItemData(m_modeCombo->count() - 1,
+                tr("One RGB head per LED (WLED's DMX mode Multi RGB): pixel effects, RGB Matrix "
+                   "and pixel paths run on every LED, on this show's timing."), Qt::ToolTipRole);
+            m_modeCombo->addItem(WledFixture::pixelModeName(true), -2);
+            m_modeCombo->setItemData(m_modeCombo->count() - 1,
+                tr("One RGBW head per LED (WLED's DMX mode Multi RGBW), for LEDs with a white "
+                   "channel."), Qt::ToolTipRole);
+        }
 
         /* Select the first mode by default */
         m_modeCombo->setCurrentIndex(0);
@@ -619,7 +881,22 @@ void AddFixture::slotModeActivated(int modeIndex)
     if (m_fixtureDef == NULL || m_fixtureDef->modes().isEmpty())
         return;
 
+    if (pixelModePicked())
+    {
+        buildPixelPreview();
+        updatePixelRows();
+        updateMaximumAmount();
+        if (!ipAddress().isEmpty() && ipAddress() != m_ledsAskedIp)
+            readLedsFromDevice();
+        return;
+    }
+    updatePixelRows();
+    updateAddressFields();
+    if (modeIndex < 0 || modeIndex >= m_fixtureDef->modes().size())
+        return;
+
     m_mode = m_fixtureDef->modes().at(modeIndex);
+    m_channelsSpin->setMaximum(1000);
     if (m_mode == NULL)
     {
         /* Generic dimmers don't have modes, so bail out */
@@ -628,6 +905,7 @@ void AddFixture::slotModeActivated(int modeIndex)
     }
 
     m_channelsSpin->setValue(m_mode->channels().size());
+    m_channelsValue = quint32(m_mode->channels().size());
 
     /* Show all selected mode channels in the list */
     m_channelList->clear();

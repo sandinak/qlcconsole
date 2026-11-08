@@ -17,6 +17,7 @@
 #include "qlcchannel.h"
 #include "qlcphysical.h"
 #include "headlayout.h"
+#include "pixelpath.h"
 #include "righeads.h"
 #include "fixture.h"
 #include "truss.h"
@@ -329,8 +330,18 @@ QVector<QVector3D> RigHeads::headPositions(Doc *doc, quint32 fid)
         return out;
     MonitorProperties *props = doc->monitorProperties();
     const FixtureRigProps rp = props->fixtureRigProps(fid);
-    const QVector3D c = fixtureCentre(doc, fid);
     const int heads = qMax(1, fx->heads());
+    /* A string laid out on a pixel path (a wand, sprinkle loops, a free
+       string): each head is its LED there, where the rig view draws it
+       (PixelPathDecor, drawPixelPath()), so an effect lights the LED the
+       view shows lit. */
+    if (heads > 1 && rp.pixelPath != PixelPath::None)
+    {
+        const QVector<QVector3D> along = PixelPath::positions(doc, props, fid, heads);
+        if (along.size() == heads)
+            return along;
+    }
+    const QVector3D c = fixtureCentre(doc, fid);
 
     // The body the rig view builds (StructureStudioView::fixtureBoxCorners()).
     float physW = 0.0f, physH = 0.0f, physD = 0.0f;

@@ -507,6 +507,11 @@ public:
      *  read them from the fixture's address on, past their end. */
     bool setOwnChannelValues(const QByteArray &values);
 
+    /** The same from universe @p universe's values @p values: for a fixture
+     *  that runs on over universes, the part of it that universe carries.
+     *  False when it carries none of it or nothing changed. */
+    bool setUniverseChannelValues(quint32 universe, const QByteArray &values);
+
     /** What an UNPATCHED fixture would show: a value for channel @p channel,
      *  for display only (the rig view, the plot) -- it has no address, so
      *  nothing goes out. The engine hands these over in place of the DMX it
@@ -549,6 +554,12 @@ public:
      */
     void setFixtureDefinition(QLCFixtureDef *fixtureDef,
                               QLCFixtureMode *fixtureMode);
+
+    /** The same for a definition made for this fixture alone (a WLED pixel
+     *  definition, WledFixture::pixelDefinition()): it is this fixture's
+     *  from now on, deleted with it or when replaced. setFixtureDefinition()
+     *  given such a definition of another fixture's takes a copy instead. */
+    void adoptFixtureDefinition(QLCFixtureDef *fixtureDef, QLCFixtureMode *fixtureMode);
 
     /**
      * Get the fixture definition that this fixture instance is based on.
@@ -749,6 +760,8 @@ protected:
      *  it is given: the destructor must not ask a definition, which may be
      *  a cached one already deleted with the Doc's cache. */
     bool m_ownsFixtureDef = false;
+    /** adoptFixtureDefinition() is giving the next one: kept, not copied. */
+    bool m_adoptNext = false;
 
     /*********************************************************************
      * Generic Dimmer

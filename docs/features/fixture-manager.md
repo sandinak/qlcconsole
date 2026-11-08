@@ -229,12 +229,56 @@ Add Fixture's **Connection** is chosen per fixture:
   every segment, and an effect's **Reverse** turns each one round from its
   own way (see Sprinkle loops in [Lighting Studio](lighting-studio.md)).
 
+**A WLED as its LEDs (Art-Net or sACN).** Pick a WLED definition (WLED
+Lantern, WLED Effect Mode) with Connection **Network (ArtNet/sACN)** and the
+Mode list also offers **Pixels (Multi RGB)** and **Pixels (Multi RGBW)**:
+the WLED is patched as its LEDs, **one RGB (or RGBW) head per LED**, so
+pixel effects, RGB Matrix and the pixel paths (Wand, Sprinkle loops, Free
+string, a straight run) light each LED on this show's own timing. The
+**LEDs** row is read from the device as soon as its IP is typed (**Read
+from WLED** asks again; "Read from the WLED: 50 LEDs, RGB."), and it picks
+RGBW when the device says its LEDs have white; a device that doesn't answer
+leaves the count to type. A string of more than 170 LEDs (128 RGBW) takes
+more than one universe, as WLED does: the first from its start address, as
+many whole LEDs as fit up to channel 512, every next one from channel 1,
+170 (128) LEDs each. The dialog says how many: "Gets 3 universes of its
+own, one after another, sent to its IP as Art-Net." It gets them at once, a
+run of free universes, each sent to its IP as Art-Net with consecutive
+universe numbers; a universe carrying other fixtures, or sent to another
+device, is never changed. One **Undo** takes it back out.
+
+Then set the WLED itself with **Fix on Device…**: DMX mode Multi RGB (or
+Multi RGBW), the start universe and address, Art-Net or E1.31, **Receive
+realtime streams** on, every segment (not the main segment only), full
+brightness (not dimmed again by its own), and a realtime timeout of
+2.5 s. It reads the device first, shows the changes, and writes them on one
+**Yes**, then reads them back.
+
+**Which way to drive a WLED.** Use **Network (WLED, JSON over Wi-Fi)** when
+the device should run its **own effects** (sent a look's state only when it
+changes): little traffic, fine on Wi-Fi, but each LED is the device's to
+work out. Use **Pixels** over Art-Net/sACN when the show should light **each
+LED** itself, in step with the master timer and every other fixture: a full
+frame for every LED, many times a second, so it wants a good network (wired,
+or strong Wi-Fi). A WLED receiving a stream **ignores its own effects** and
+its API looks until the stream stops for the realtime timeout. So one
+device is one or the other: adding the same IP the other way says so in the
+dialog ("172.18.2.100 is already Sprinkles, driven through WLED's API ...
+Use one of the two."), and Fix on Device then leaves Receive realtime
+streams as it is, so it never flips between them.
+
 **A WLED on a universe that doesn't reach it.** A WLED (by its own API) on a
 universe that goes out as Art-Net or sACN, has no output, or is sent to
 another IP never hears its looks. The footer says so by name: "WLED Test is
 on U01-Office, which goes out as Art-Net: nothing reaches the WLED".
 **Give It Its Own Universe** moves it to a universe of its own as above,
-leaving the universe it was on as it was (one undo). Changing a fixture to
+leaving the universe it was on as it was (one undo). A WLED patched as its
+LEDs is the other way round: it hears only Art-Net or sACN. The footer finds
+one whose universe goes out through the WLED output ("is patched as its
+LEDs, but U03 goes out through WLED's API: it needs Art-Net or sACN"), has
+no output, is sent to another IP, or spans universes that don't go out one
+after another ("spans 3 universes, which go out as universes 20, 9, 22").
+The same button gives it its own run of Art-Net universes. Changing a fixture to
 WLED in Fixture Properties, or its IP or mode, does this by itself.
 
 **A WLED string isn't aimed.** A string of LEDs run by a WLED (sent by

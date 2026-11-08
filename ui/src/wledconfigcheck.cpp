@@ -34,6 +34,7 @@
 #include "inputoutputmap.h"
 #include "qlcfixturedef.h"
 #include "outputpatch.h"
+#include "wledfixture.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -45,9 +46,14 @@ const int ArtNetPort = 6454;
 const int E131Port = 5568;
 
 /* WLED's own DMX modes (WLED const.h), the ones a definition here drives. */
-const int DmxSingleRgb = 1;
-const int DmxSingleDrgb = 2;
-const int DmxEffect = 3;
+const int DmxSingleRgb = WledFixture::DmxSingleRgb;
+const int DmxSingleDrgb = WledFixture::DmxSingleDrgb;
+const int DmxEffect = WledFixture::DmxEffect;
+
+/* A realtime timeout (tenths of a second) that holds a stream between the
+   show's frames and hands the WLED back to its own effects soon after the
+   show stops sending. */
+const int TimeoutMin = 10, TimeoutMax = 100, TimeoutWant = 25;
 
 QString dmxModeName(int mode)
 {
@@ -204,11 +210,31 @@ WledConfigCheck::Finding WledConfigCheck::evaluate(Doc *doc, const Fixture *fx, 
     QJsonObject wantLive;
     QJsonObject wantDmx;
 
+    /* The same device in this show twice, once through WLED's API and once
+       as Art-Net/sACN (its LEDs, say): the one wants streams off, the other
+       on, and either way one of them is ignored. Said, and the setting left
+       alone, so Fix on Device never flips it back and forth. */
+    QString both;
+    if (doc != nullptr)
+        foreach (Fixture *other, doc->fixtures())
+            if (other != fx && isWled(other) && other->ipAddress() == fx->ipAddress()
+                && (other->transport() == Fixture::WledTransport) != (fx->transport() == Fixture::WledTransport))
+            {
+                both = other->name();
+                break;
+            }
+    if (!both.isEmpty())
+        f.problems << (fx->transport() == Fixture::WledTransport
+            ? tr("is also %1 in this show, sent to as Art-Net/sACN: while that streams, the WLED "
+                 "ignores these looks. Keep one of the two").arg(both)
+            : tr("is also %1 in this show, driven through WLED's API: while this streams, the "
+                 "WLED ignores that one's looks. Keep one of the two").arg(both));
+
     if (fx->transport() == Fixture::WledTransport)
     {
         /* Driven through WLED's own API: a stream arriving on its universe
            would take it over, and the look would be ignored meanwhile. */
-        if (realtime)
+        if (realtime && both.isEmpty())
         {
             f.problems << tr("receives %1 streams (universe %2): one would take it over from "
                              "this show for %3 s at a time").arg(protocolName(port)).arg(uni)
@@ -242,11 +268,9 @@ WledConfigCheck::Finding WledConfigCheck::evaluate(Doc *doc, const Fixture *fx, 
             }
         }
         const QString modeName = fx->fixtureMode() != nullptr ? fx->fixtureMode()->name() : QString();
-        const int wantMode = modeName.startsWith(QLatin1String("Effect")) ? DmxEffect
-                           : modeName.startsWith(QLatin1String("Single DRGB")) ? DmxSingleDrgb
-                           : modeName.startsWith(QLatin1String("Single RGB")) ? DmxSingleRgb : -1;
+        const int wantMode = WledFixture::dmxModeFor(fx);
 
-        if (!realtime)
+        if (!realtime && both.isEmpty())
         {
             f.problems << tr("does not listen for Art-Net or sACN at all");
             wantLive[QStringLiteral("en")] = true;
@@ -277,6 +301,33 @@ WledConfigCheck::Finding WledConfigCheck::evaluate(Doc *doc, const Fixture *fx, 
                               .arg(dmxModeName(mode), modeName, dmxModeName(wantMode));
             wantDmx[QStringLiteral("mode")] = wantMode;
             f.changes << tr("DMX mode: %1 → %2").arg(dmxModeName(mode), dmxModeName(wantMode));
+        }
+        if (WledFixture::isPixelMode(fx))
+        {
+            /* Its LEDs from this show, frame by frame: every LED (not its
+               main segment's only), at the level sent (not dimmed again by
+               its own brightness), and back to its own effects soon after
+               the show stops sending -- not before the next frame. */
+            if (live.value(QStringLiteral("mso")).toBool())
+            {
+                f.problems << tr("takes streams on its main segment only: the LEDs of its other "
+                                 "segments stay dark");
+                wantLive[QStringLiteral("mso")] = false;
+                f.changes << tr("Use main segment only: on → off");
+            }
+            if (live.contains(QStringLiteral("maxbri")) && !live.value(QStringLiteral("maxbri")).toBool())
+            {
+                f.problems << tr("dims what this show sends by its own brightness");
+                wantLive[QStringLiteral("maxbri")] = true;
+                f.changes << tr("Force max brightness: off → on");
+            }
+            if (live.contains(QStringLiteral("timeout")) && (timeout < TimeoutMin || timeout > TimeoutMax))
+            {
+                f.problems << tr("waits %1 s after the last frame before it plays its own effects "
+                                 "again").arg(timeout / 10.0);
+                wantLive[QStringLiteral("timeout")] = TimeoutWant;
+                f.changes << tr("Realtime timeout: %1 s → %2 s").arg(timeout / 10.0).arg(TimeoutWant / 10.0);
+            }
         }
     }
 

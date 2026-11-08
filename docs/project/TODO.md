@@ -10,6 +10,21 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## WLED pixels over Art-Net/sACN (feat/042-wled-pixels, 2026-11-07) -- built, leftovers
+
+Pixels (Multi RGB/RGBW) mode: a head per LED, the count read from the
+device, universes spanned as WLED lays them out, its own run of Art-Net
+universes, Fix on Device for Multi RGB, the route finding, both-ways said.
+
+- [ ] Not checked on the real WLED 16.0.1 (172.18.2.100): Branson's check.
+- [ ] DDP (WLED's own pixel protocol, UDP 4048) as its own connection,
+  "Network (WLED pixels, DDP)": one fixture, N heads, no universes. Plugs in
+  at WledFixture::sendsUniverses() (false: pixelDefinition() gets one run)
+  and a DDP output plugin reading the fixture's channels; Fix on Device needs
+  only Receive realtime streams on.
+- [ ] A pixel WLED in the inventory: the Patch dialog's planner places
+  fixtures within one universe; patch it with Give It Its Own Universe.
+
 ## WLED setup from the show (feat/042-wled-write, 2026-11-07) -- built, one deferred
 
 Write Segments… (sprinkle loops) and Fix on Device's LED count are built.

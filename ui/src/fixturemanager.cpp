@@ -65,6 +65,7 @@
 #include "addchannelsgroup.h"
 #include <functional>
 #include "fixturemanager.h"
+#include "wledfixture.h"
 #include "contextmenus.h"
 #include "selectionmenu.h"
 #include "selectionhintchip.h"
@@ -2695,8 +2696,21 @@ bool FixtureManager::editDefinitionAndMode(QWidget *parent, Doc *doc, quint32 fi
                         fxi->setFixtureDefinition(fixtureDef, fixtureMode);
                     }
                 }
+                else if (af.pixelLeds() > 0)
+                {
+                    // A WLED as its LEDs: made again when its count, white
+                    // channel or model changed.
+                    if (!WledFixture::isPixelMode(fxi) || fxi->heads() != af.pixelLeds()
+                        || WledFixture::isRgbw(fxi) != af.pixelRgbw()
+                        || fxi->fixtureDef()->model() != af.fixtureDef()->model())
+                        WledFixture::applyPixels(fxi, af.fixtureDef(), af.pixelLeds(), af.pixelRgbw());
+                    else
+                        WledFixture::refitPixels(fxi);          // its address moved
+                }
                 else
                 {
+                    if (WledFixture::isPixelDefinition(fxi->fixtureDef()))
+                        fxi->setCrossUniverse(false);
                     fxi->setFixtureDefinition(af.fixtureDef(), af.mode());
                 }
             }

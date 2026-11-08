@@ -36,6 +36,7 @@
 #include "qlcfile.h"
 #include "inputoutputmap.h"
 
+#include "wledfixture.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -719,6 +720,37 @@ bool Fixture::setChannelValues(const QByteArray &values)
     return changed;
 }
 
+bool Fixture::setUniverseChannelValues(quint32 universe, const QByteArray &values)
+{
+    if (universe == this->universe())
+        return setChannelValues(values);
+    const quint32 first = universeAddress();
+    const quint32 n = channels();
+    const quint32 from = universe << 9;
+    if (n == 0 || from + 512 <= first || from >= first + n)
+        return false;
+    // Its channels in this universe: from (its index there) on.
+    const int offset = int(from - first);
+    const int chNum = qMin(values.size(), int(qMin(quint32(512), first + n - from)));
+    bool changed = false;
+    for (int i = 0; i < chNum; i++)
+    {
+        const int idx = offset + i;
+        if (idx >= m_values.size())
+            break;
+        if (m_values.at(idx) != values.at(i))
+        {
+            changed = true;
+            QMutexLocker locker(&m_channelsInfoMutex);
+            m_values[idx] = values.at(i);
+            checkAlias(idx, m_values[idx]);
+        }
+    }
+    if (changed)
+        emit valuesChanged();
+    return changed;
+}
+
 bool Fixture::setOwnChannelValues(const QByteArray &values)
 {
     const int chNum = qMin(int(values.size()), int(m_values.size()));
@@ -811,6 +843,21 @@ void Fixture::setFixtureDefinition(QLCFixtureDef* fixtureDef,
     m_unavailableMode.clear();
     m_movesCache = -1;
 
+    /* A WLED pixel definition is made for one fixture: another's is copied
+       (a duplicate, a remap), never shared -- each deletes its own. */
+    const bool adopting = m_adoptNext;
+    m_adoptNext = false;
+    if (!adopting && fixtureDef != NULL && fixtureMode != NULL && fixtureDef != m_fixtureDef
+        && WledFixture::isPixelDefinition(fixtureDef))
+    {
+        QLCFixtureDef *copy = WledFixture::copyPixelDefinition(fixtureDef);
+        if (copy != NULL)
+        {
+            fixtureDef = copy;
+            fixtureMode = copy->modes().first();
+        }
+    }
+
     if (fixtureDef != NULL && fixtureMode != NULL)
     {
         int i, chNum;
@@ -821,9 +868,10 @@ void Fixture::setFixtureDefinition(QLCFixtureDef* fixtureDef,
         m_fixtureDef = fixtureDef;
         m_fixtureMode = fixtureMode;
         // One made by genericDimmerDef(): never a definition from a file
-        m_ownsFixtureDef = fixtureDef->manufacturer() == KXMLFixtureGeneric &&
-                           fixtureDef->model() == KXMLFixtureGeneric &&
-                           fixtureDef->definitionSourceFile().isEmpty();
+        m_ownsFixtureDef = (fixtureDef->manufacturer() == KXMLFixtureGeneric &&
+                            fixtureDef->model() == KXMLFixtureGeneric &&
+                            fixtureDef->definitionSourceFile().isEmpty())
+                           || WledFixture::isPixelDefinition(fixtureDef);
         chNum = fixtureMode->channels().size();
 
         // If there are no head entries in the mode, create one that contains
@@ -839,6 +887,13 @@ void Fixture::setFixtureDefinition(QLCFixtureDef* fixtureDef,
         }
 
         m_aliasInfo.resize(chNum);
+
+        /* Its values are the new mode's: appended to the old ones, a fixture
+           whose mode changed reported its old channels first. */
+        {
+            QMutexLocker locker(&m_channelsInfoMutex);
+            m_values.clear();
+        }
 
         for (i = 0; i < chNum; i++)
         {
@@ -874,6 +929,12 @@ void Fixture::setFixtureDefinition(QLCFixtureDef* fixtureDef,
     m_autoStageLook.store(int(computeAutoStageLook()), std::memory_order_relaxed);
     m_hasDimmer.store(computeHasDimmer(), std::memory_order_relaxed);
     emit changed(m_id);
+}
+
+void Fixture::adoptFixtureDefinition(QLCFixtureDef *fixtureDef, QLCFixtureMode *fixtureMode)
+{
+    m_adoptNext = true;
+    setFixtureDefinition(fixtureDef, fixtureMode);
 }
 
 QLCFixtureDef* Fixture::fixtureDef() const
@@ -1623,6 +1684,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
 {
     QLCFixtureDef* fixtureDef = NULL;
     QLCFixtureMode* fixtureMode = NULL;
+    QLCFixtureDef* pixelDef = NULL;     // a WLED pixel definition made here: this fixture's
     QString manufacturer;
     QString model;
     QString modeName;
@@ -1815,6 +1877,21 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         {
             /* Find the given fixture mode */
             fixtureMode = fixtureDef->mode(modeName);
+            bool pixelsRgbw = false;
+            if (fixtureMode == NULL && channels > 0
+                && fixtureDef->manufacturer().compare(QLatin1String("WLED"), Qt::CaseInsensitive) == 0
+                && WledFixture::isPixelModeName(modeName, &pixelsRgbw))
+            {
+                /* A WLED patched as its LEDs: the definition is made for
+                   it again, as many LEDs as its channels hold, laid over
+                   universes from its address as it was saved. */
+                const bool universes = connection != Network || transport != WledTransport;
+                const int leds = WledFixture::ledsForChannels(int(channels), pixelsRgbw, address, universes);
+                pixelDef = WledFixture::pixelDefinition(fixtureDef, leds, pixelsRgbw,
+                                                        universes ? int(address) : -1);
+                fixtureDef = pixelDef;
+                fixtureMode = pixelDef->modes().first();
+            }
             if (fixtureMode == NULL)
             {
                 doc->appendToErrorLog(QString("Fixture mode <b>%1</b> not found for <b>%2</b> <b>%3</b>")
@@ -1878,7 +1955,10 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     if (fixtureDef != NULL && fixtureMode != NULL)
     {
         /* Assign fixtureDef & mode only if BOTH are not NULL */
-        setFixtureDefinition(fixtureDef, fixtureMode);
+        if (fixtureDef == pixelDef)
+            adoptFixtureDefinition(fixtureDef, fixtureMode);
+        else
+            setFixtureDefinition(fixtureDef, fixtureMode);
     }
     else
     {
