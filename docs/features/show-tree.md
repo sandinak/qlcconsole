@@ -60,9 +60,9 @@ Left to right: **the Library**, **the tree**, **the page** — so a drag
 from the Library lands in the tree right beside it.
 
 - **Left: the [Library](#the-library).** It holds groups, group sets,
-  targets, palettes and functions to drag in (and, under All, **Loose
-  fixtures**: a fixture just added, such as a WLED, is a row there until it
-  joins a group; drag it onto a cue for a layer on just that fixture, or find
+  targets, palettes and functions to drag in (and, under All, **Ungrouped**:
+  a patched fixture just added, such as a WLED, is a row there until it
+  joins a group; one still in the inventory is not; drag it onto a cue for a layer on just that fixture, or find
   it with the filter by name or model), or to add with Return (see
   [Adding layers](#adding-layers)). It is one widget shared with
   [Build](build.md#the-library-and-the-command-bar): Build borrows it while

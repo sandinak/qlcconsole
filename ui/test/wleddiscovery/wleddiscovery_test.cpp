@@ -580,6 +580,11 @@ void WledDiscovery_Test::driftIsAFixOnDeviceFinding()
     PowerProfile pp = fx->powerProfile();
     pp.maxAmps = 0.25;                              // 30 W at 120 V
     fx->setPowerProfile(pp);
+    // A new fixture's LED supply starts at 5 V; "Not known" is the user's choice.
+    QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(fx->id()).ledSupplyVolts, 5.0f);
+    FixtureRigProps unknown = m_doc->monitorProperties()->fixtureRigProps(fx->id());
+    unknown.ledSupplyVolts = 0.0f;
+    m_doc->monitorProperties()->setFixtureRigProps(fx->id(), unknown);
     QCOMPARE(WledConfigCheck::limiterMilliamps(m_doc, fx), 0);
     const WledConfigCheck::Finding u = WledConfigCheck::evaluate(m_doc, fx, right);
     QVERIFY(u.problems.isEmpty());
@@ -640,6 +645,9 @@ void WledDiscovery_Test::setUpAsksOnceWritesTheKeysAndReadsBack()
     PowerProfile pp = fx->powerProfile();
     pp.maxAmps = 0.25;
     fx->setPowerProfile(pp);
+    FixtureRigProps noSupply = m_doc->monitorProperties()->fixtureRigProps(fx->id());
+    noSupply.ledSupplyVolts = 0.0f;                 // "Not known" (the default is 5 V)
+    m_doc->monitorProperties()->setFixtureRigProps(fx->id(), noSupply);
 
     // Not Now: nothing written.
     QString text;

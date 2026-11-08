@@ -10326,8 +10326,9 @@ void ShowTreeView::reloadLibrary()
         add(groupFolder(groupPath(g)), LibGroup, g->id());
 
     // Fixtures in no group (a WLED just added, a spare): a row each, so a
-    // layer can target one without a group made first. Only the ungrouped
-    // ones, to keep this short; a grouped fixture is reached by its group.
+    // layer can target one without a group made first. Only the patched,
+    // ungrouped ones, to keep this short; a grouped fixture is reached by
+    // its group, a staged one waits in the Fixture Manager's inventory.
     {
         QSet<quint32> grouped;
         for (const FixtureGroup *g : m_doc->fixtureGroups())
@@ -10335,16 +10336,18 @@ void ShowTreeView::reloadLibrary()
                 grouped.insert(fid);
         QList<Fixture *> loose;
         for (Fixture *f : m_doc->fixtures())
-            if (!grouped.contains(f->id()))
+        {
+            if (f->isPatched() && !grouped.contains(f->id()))
                 loose << f;
+        }
         if (!loose.isEmpty())
         {
             std::sort(loose.begin(), loose.end(), [](const Fixture *x, const Fixture *y) {
                 return x->name().compare(y->name(), Qt::CaseInsensitive) < 0;
             });
-            QTreeWidgetItem *fx = folder(all, tr("Loose fixtures"));
+            QTreeWidgetItem *fx = folder(all, tr("Ungrouped"));
             fx->setData(0, PathRole, QStringLiteral("Fixtures"));
-            fx->setToolTip(0, tr("Fixtures that are in no group. Drag one onto a cue like a group: the layer "
+            fx->setToolTip(0, tr("Patched fixtures that are in no group. Drag one onto a cue like a group: the layer "
                                  "is just that fixture. Type a name or model in the filter to find one."));
             for (const Fixture *f : loose)
                 if (QTreeWidgetItem *it = add(fx, LibFixture, f->id()))

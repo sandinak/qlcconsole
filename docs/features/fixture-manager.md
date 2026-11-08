@@ -73,7 +73,9 @@ it real addresses, guided by which node actually serves that part of the rig.
 An unpatched fixture is a full member of the show — it can be placed on the
 plot, mounted, grouped and used in looks, and the Lighting Studio shows what it
 would do — it just sends no DMX until it's patched. The footer's "Not
-ready" list counts unpatched fixtures, and a Build-tab look warns when
+ready" list names the unpatched fixtures a cue or function uses ("2
+fixtures in cues have no address", with **Patch…**); one still waiting
+unused in the inventory is not a finding. A Build-tab look warns when
 any of its targets are unpatched.
 
 ### Adding to the inventory
@@ -348,10 +350,10 @@ changes: its **name** becomes the fixture's, and its network name to match
 brightness, colour, effect and palette from other WLEDs** and sending its
 own (WLED sync: out of the box one WLED's button or app changes the others);
 it stays **dark at power-on** until the show drives it; and, when the
-fixture has a **Max draw** and its **LED supply** is set (Fixture Properties,
-the voltage its LEDs run on: 5 V, 12 V, 24 V), its brightness limit follows
+fixture has a **Max draw** and its **LED supply** is known (Fixture Properties,
+the voltage its LEDs run on: 5 V unless you change it, 12 V, 24 V), its brightness limit follows
 them (the Max draw's watts at the circuit's voltage, over the LED supply's).
-With the LED supply not known nothing is guessed: the confirmation says the
+With the LED supply set to Not known nothing is guessed: the confirmation says the
 limit is not set from the show and what the WLED's own is. Patching or
 adding several WLEDs at once asks **once**, listing each device's changes
 under its name. **Set Up Device** writes only those, then reads them back;

@@ -431,7 +431,7 @@ struct FixtureRigProps
     /** A string of LEDs: the voltage of its LED power supply (5, 12, 24 V),
      *  which a WLED's brightness limit (mA of that supply) is worked out
      *  from with its Max draw. 0 = not known: nothing is worked out. */
-    float            ledSupplyVolts = 0.0f;
+    float            ledSupplyVolts = 5.0f;   // 0 = not known (the user can set it)
     /** A wand: the staff's diameter (metres) the string is wound round. */
     float            wandDiameter = 0.025f;
     /** A wand: its first LED (where the data comes in) is at the tip, the

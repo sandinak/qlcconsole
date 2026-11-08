@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include <QDir>
 #include <QStackedWidget>
 #include <QMenu>
 #include <QLineEdit>
@@ -1585,9 +1586,33 @@ void ProgrammingManager_Test::unpatchedAndSilentFixturesAreInTheFooter()
                 return e;
         return ShowStatus::Entry();
     };
+    // Staged and unused: waiting in the inventory, not a footer finding.
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY(entry("fixtures.unpatched").key.isEmpty());
+    // Used by a scene: it lights nothing, so the footer says so.
+    Scene *uses = new Scene(m_doc);
+    uses->setName("Uses staged");
+    uses->setValue(staged->id(), 0, 255);
+    QVERIFY(m_doc->addFunction(uses));
     AppUtil::updateFixtureReadiness(m_doc);
     const ShowStatus::Entry unpatched = entry("fixtures.unpatched");
-    QVERIFY2(unpatched.summary.contains("1 fixture"), qPrintable(unpatched.summary));
+    QVERIFY2(unpatched.summary.contains("1 fixture") && unpatched.summary.contains("no address"),
+             qPrintable(unpatched.summary));
+    // QLC_SHOT_DIR: the finding as the Not ready list shows it, at three sizes.
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shotDir.isEmpty())
+    {
+        QDir().mkpath(shotDir);
+        ShowStatusDialog dlg;
+        dlg.show();
+        dlg.tree()->expandAll();
+        for (const QSize &sz : { QSize(640, 400), QSize(900, 600), QSize(1280, 800) })
+        {
+            dlg.resize(sz);
+            QTest::qWait(50);
+            QVERIFY(dlg.grab().save(QString("%1/footer-after-%2x%3.png").arg(shotDir).arg(sz.width()).arg(sz.height())));
+        }
+    }
     QCOMPARE(unpatched.items, QStringList() << "FART-SL-9");
     const ShowStatus::Entry silent = entry("fixtures.output");
     QVERIFY2(silent.summary.contains("1 fixture type"), qPrintable(silent.summary));

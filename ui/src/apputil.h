@@ -192,7 +192,8 @@ namespace AppUtil
     /**
      * Declare (or clear) the footer's rig problems in ShowStatus, each
      * item carrying what it is for the entry's fix (App sets the actions):
-     * "fixtures.unpatched" -- fixtures that send no DMX (fixture ids);
+     * "fixtures.unpatched" -- fixtures a cue or function uses that have no
+     * address, so send no DMX (fixture ids; staged unused ones are not listed);
      * "fixtures.output" -- fixture types whose definition declares no light
      * output (QLCPhysical::declaresOutput()), drawn at a guess (files);
      * "fixtures.clash" -- fixtures that loaded unpatched because their

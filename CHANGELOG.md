@@ -14,7 +14,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
-- **A fixture in no group is in the Show Tree's Library.** Under All, **Loose fixtures** lists them (a WLED just added, a spare), found by
+- **The footer names fixtures cues use that have no address.** "2 fixtures in cues have no address", **Patch…** opens them; a staged fixture nothing uses no longer nags (the Show Review still notes it).
+
+- **A fixture in no group is in the Show Tree's Library.** Under All, **Ungrouped** lists the patched ones (a WLED just added, a spare; a fixture still in the inventory is not listed), found by
   name or model in the filter; drag one onto a cue for a layer on just that fixture.
   It leaves the list once it joins a group.
 - **WLEDs found on the network, patched with a right-click.** WLEDs
@@ -26,7 +28,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Test is now at .105", **Follow It**. Then **Set Up WLED** offers once to
   give the device the fixture's name, stop WLED sync with other WLEDs, keep
   it dark at power-on and set its brightness limit from Max draw and the
-  new **LED supply** voltage (left alone while that is not known); a batch
+  new **LED supply** voltage (5 V until you change it; left alone if you set it to Not known); a batch
   asks once for all of them; only
   those settings are written, read back, and a drift later is a Fix on
   Device finding (UX-76).
