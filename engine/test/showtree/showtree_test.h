@@ -153,6 +153,12 @@ private slots:
     void updateCueWhereATrackedValueWasSet();
     void recordAsNewCueFreezesTheStage();
     void duplicateACue();
+    void duplicatingACueGivesTheCopyItsOwnOneOffs();
+    void pastingCuesAndLayersGivesEachItsOwnOneOffs();
+    void namedPalettesStaySharedWhenACueIsCopied();
+    void aReusableLayerStaysLinkedWhenItsCueIsDuplicated();
+    void unlinkingAReusableLayerGivesItItsOwnOneOffs();
+    void anOlderShowsSharedOneOffIsSplitWhenItLoads();
     void usageInAList();
     void previewShowsTheTrackedState();
     void convertAnImportToTracking();

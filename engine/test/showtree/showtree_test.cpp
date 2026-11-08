@@ -4486,6 +4486,240 @@ void ShowTree_Test::duplicateACue()
     QCOMPARE(list->indexOf(c2), 2);
 }
 
+/* fix/042: a one-off (inline) value is its cue's own. A duplicate gets
+   copies of the original's one-offs -- a colour, an effect and the effect's
+   own dimmer -- so an edit to the copy leaves the original as it was; one
+   undo takes the copies away with the cue. */
+void ShowTree_Test::duplicatingACueGivesTheCopyItsOwnOneOffs()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
+    const quint32 red = st->createInlinePalette(QLCPalette::Color, { "#ff0000" }, "Red-ish · 1 A");
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(red)));
+    const quint32 fx = st->createInlinePalette(QLCPalette::Effect, {}, "Chase · 1 A");
+    m_doc->palette(fx)->setEffectParamValue("speed", 2.0);
+    const quint32 dim = st->createInlinePalette(QLCPalette::Dimmer, { 128 }, "50% · 1 A");
+    Look fxLook = st->lookForPalette(fx);
+    QVERIFY(!fxLook.key.isEmpty());
+    fxLook.own << dim;
+    QVERIFY(st->setLayerLook(c1, l1, fxLook));
+    const int palettesBefore = int(m_doc->palettes().count());
+
+    const quint32 d = st->duplicateCue(c1);
+    QVERIFY(d != invalidId());
+    const Layer &orig = st->cue(c1)->layers.first();
+    const Layer &copy = st->cue(d)->layers.first();
+    const quint32 copyRed = copy.look(KeyColour)->palettes.first();
+    const quint32 copyFx = copy.look(fxLook.key)->palettes.first();
+    const quint32 copyDim = copy.look(fxLook.key)->own.first();
+    // The original keeps its own; the copy has new ones, one-offs too.
+    QCOMPARE(orig.look(KeyColour)->palettes, QList<quint32>({ red }));
+    QCOMPARE(orig.look(fxLook.key)->palettes, QList<quint32>({ fx }));
+    QCOMPARE(orig.look(fxLook.key)->own, QList<quint32>({ dim }));
+    for (quint32 pid : { copyRed, copyFx, copyDim })
+    {
+        QVERIFY(pid != red && pid != fx && pid != dim);
+        QVERIFY(st->isInlinePalette(pid));
+    }
+    QCOMPARE(int(m_doc->palettes().count()), palettesBefore + 3);
+    // ...that play what the original's do.
+    QCOMPARE(m_doc->palette(copyRed)->values(), m_doc->palette(red)->values());
+    QCOMPARE(m_doc->palette(copyRed)->name(), m_doc->palette(red)->name());
+    QCOMPARE(m_doc->palette(copyFx)->effectParamValues(), m_doc->palette(fx)->effectParamValues());
+    QCOMPARE(m_doc->palette(copyDim)->value().toInt(), 128);
+
+    // An edit to the copy's colour and its effect: the original's stay.
+    m_doc->palette(copyRed)->setValue(QString("#00ff00"));
+    m_doc->palette(copyFx)->setEffectParamValue("speed", 5.0);
+    m_doc->palette(copyDim)->setValue(255);
+    QCOMPARE(m_doc->palette(red)->value().toString(), QString("#ff0000"));
+    QCOMPARE(m_doc->palette(fx)->effectParamValues().value("speed"), 2.0);
+    QCOMPARE(m_doc->palette(dim)->value().toInt(), 128);
+
+    // One undo step: the cue and its copies go; redo brings both back.
+    QVERIFY(st->undo());
+    QVERIFY(st->cue(d) == nullptr);
+    for (quint32 pid : { copyRed, copyFx, copyDim })
+        QVERIFY(m_doc->palette(pid) == nullptr);
+    QVERIFY(m_doc->palette(red) != nullptr && m_doc->palette(fx) != nullptr && m_doc->palette(dim) != nullptr);
+    QVERIFY(st->redo());
+    QVERIFY(st->cue(d) != nullptr);
+    QCOMPARE(st->cue(d)->layers.first().look(KeyColour)->palettes, QList<quint32>({ copyRed }));
+    QVERIFY(m_doc->palette(copyRed) != nullptr);
+    QVERIFY(st->isInlinePalette(copyRed));
+}
+
+/* fix/042: Paste (in the list, into another list) and a layer's
+   Duplicate / Paste copy one-offs as Duplicate does. */
+void ShowTree_Test::pastingCuesAndLayersGivesEachItsOwnOneOffs()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 listA = st->addCueList(prod, "A", ListMode::NonTracking);
+    const quint32 listB = st->addCueList(prod, "B", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listA, -1, "One");
+    const quint32 b1 = st->addCue(listB, -1, "Walk");
+    const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
+    const quint32 dim = st->createInlinePalette(QLCPalette::Dimmer, { 77 }, "30% · 1 A");
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(dim)));
+    auto dimmerOf = [st](quint32 cueId, int layer) {
+        return st->cue(cueId)->layers.at(layer).look(KeyDimmer)->palettes.first();
+    };
+
+    // Paste in the same list, and into another list.
+    const QList<quint32> same = st->pasteCues({ c1 }, c1);
+    QCOMPARE(same.count(), 1);
+    const QList<quint32> other = st->pasteCues({ c1 }, b1);
+    QCOMPARE(other.count(), 1);
+    QSet<quint32> seen { dim };
+    for (quint32 cid : { same.first(), other.first() })
+    {
+        const quint32 pid = dimmerOf(cid, 0);
+        QVERIFY(!seen.contains(pid));
+        seen.insert(pid);
+        QVERIFY(st->isInlinePalette(pid));
+        QCOMPARE(m_doc->palette(pid)->value().toInt(), 77);
+        m_doc->palette(pid)->setValue(10);
+    }
+    QCOMPARE(m_doc->palette(dim)->value().toInt(), 77);
+    QCOMPARE(dimmerOf(c1, 0), dim);
+
+    // A layer pasted into another cue, and duplicated in its own cue (onto
+    // another target): each its own.
+    const QList<quint32> layers = st->pasteLayers({ qMakePair(c1, l1) }, b1);
+    QCOMPARE(layers.count(), 1);
+    const quint32 pasted = st->cue(b1)->layer(layers.first())->look(KeyDimmer)->palettes.first();
+    QVERIFY(!seen.contains(pasted));
+    seen.insert(pasted);
+    QVERIFY(st->isInlinePalette(pasted));
+    const quint32 lb = st->addLayer(c1, groupTarget(b->id()));
+    QVERIFY(lb != invalidId());
+    Look again = *st->cue(c1)->layer(l1)->look(KeyDimmer);     // the look carried to a second layer
+    QVERIFY(st->setLayerLook(c1, lb, again));
+    const quint32 second = st->cue(c1)->layer(lb)->look(KeyDimmer)->palettes.first();
+    QVERIFY(!seen.contains(second));
+    QVERIFY(st->isInlinePalette(second));
+    QCOMPARE(dimmerOf(c1, 0), dim);                             // the first keeps its own
+
+    // A whole list duplicated: its cues' one-offs are the copy's own.
+    const quint32 dupList = st->duplicateCueList(listA);
+    QVERIFY(dupList != invalidId());
+    const quint32 inCopy = dimmerOf(st->cueList(dupList)->cues.first().id, 0);
+    QVERIFY(!seen.contains(inCopy) && inCopy != second);
+    QVERIFY(st->isInlinePalette(inCopy));
+}
+
+/* fix/042: a named (library) palette stays one palette in every cue that
+   uses it -- that's what it is for (Eos-style); only one-offs are copied. */
+void ShowTree_Test::namedPalettesStaySharedWhenACueIsCopied()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    const quint32 blue = colour("Blue");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(blue)));
+    const int palettesBefore = int(m_doc->palettes().count());
+    const quint32 d = st->duplicateCue(c1);
+    const QList<quint32> pasted = st->pasteCues({ c1 }, d);
+    QCOMPARE(pasted.count(), 1);
+    QCOMPARE(st->cue(d)->layers.first().look(KeyColour)->palettes, QList<quint32>({ blue }));
+    QCOMPARE(st->cue(pasted.first())->layers.first().look(KeyColour)->palettes, QList<quint32>({ blue }));
+    QCOMPARE(int(m_doc->palettes().count()), palettesBefore);
+}
+
+/* fix/042: a use of a reusable layer stays linked when its cue is
+   duplicated -- an edit to one use is an edit to all (P4) -- and its
+   one-offs stay the reusable's. */
+void ShowTree_Test::aReusableLayerStaysLinkedWhenItsCueIsDuplicated()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
+    const quint32 dim = st->createInlinePalette(QLCPalette::Dimmer, { 77 }, "30% · 1 A");
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(dim)));
+    const quint32 rid = st->makeLayerReusable(c1, l1, "Wash");
+    QVERIFY(rid != invalidId());
+    const quint32 d = st->duplicateCue(c1);
+    QVERIFY(d != invalidId());
+    QCOMPARE(st->cue(d)->layers.first().reusable, rid);
+    QCOMPARE(st->cue(d)->layers.first().look(KeyDimmer)->palettes, QList<quint32>({ dim }));
+    QCOMPARE(st->reusableLayer(rid)->looks.first().palettes, QList<quint32>({ dim }));
+    QCOMPARE(st->reusableUses(rid).count(), 2);
+}
+
+/* fix/042: Unlink here makes a plain layer of a use: its one-offs are its
+   own from then on, the reusable keeps its. */
+void ShowTree_Test::unlinkingAReusableLayerGivesItItsOwnOneOffs()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
+    const quint32 dim = st->createInlinePalette(QLCPalette::Dimmer, { 77 }, "30% · 1 A");
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(dim)));
+    const quint32 rid = st->makeLayerReusable(c1, l1, "Wash");
+    const quint32 l2 = st->insertReusableLayer(c2, rid);
+    QVERIFY(l2 != invalidId());
+    QVERIFY(st->unlinkLayer(c2, l2));
+    const quint32 own = st->cue(c2)->layer(l2)->look(KeyDimmer)->palettes.first();
+    QVERIFY(own != dim);
+    QVERIFY(st->isInlinePalette(own));
+    QCOMPARE(st->reusableLayer(rid)->looks.first().palettes, QList<quint32>({ dim }));
+    QCOMPARE(st->cue(c1)->layer(l1)->look(KeyDimmer)->palettes, QList<quint32>({ dim }));
+}
+
+/* fix/042: a show saved before the fix, where Duplicate left one one-off in
+   two cues: on load the first cue keeps it and the other gets its own
+   copy, so an edit to one no longer edits both. */
+void ShowTree_Test::anOlderShowsSharedOneOffIsSplitWhenItLoads()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
+    const quint32 l2 = st->addLayer(c2, groupTarget(a->id()));
+    const quint32 p1 = st->createInlinePalette(QLCPalette::Color, { "#ff0000" }, "Red-ish · 1 A");
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(p1)));
+    const quint32 p2 = st->createInlinePalette(QLCPalette::Color, { "#00ff00" }, "Green-ish · 2 A");
+    QVERIFY(st->setLayerLook(c2, l2, st->lookForPalette(p2)));
+    // As an older build saved it: cue 2's layer on cue 1's one-off.
+    QByteArray xml = engineXml(m_doc);
+    const QByteArray from = QStringLiteral("Palettes=\"%1\"").arg(p2).toUtf8();
+    QCOMPARE(xml.count(from), 1);
+    xml.replace(from, QStringLiteral("Palettes=\"%1\"").arg(p1).toUtf8());
+
+    Doc *other = new Doc(this);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other->loadXML(r, false));
+    ShowTreeController *ost = other->showTree();
+    const quint32 first = ost->cue(c1)->layer(l1)->look(KeyColour)->palettes.first();
+    const quint32 second = ost->cue(c2)->layer(l2)->look(KeyColour)->palettes.first();
+    QCOMPARE(first, p1);                                // the first keeps it
+    QVERIFY(second != p1);
+    QVERIFY(ost->isInlinePalette(second));
+    QCOMPARE(other->palette(second)->value().toString(), QString("#ff0000"));
+    QVERIFY(!ost->canUndo());                            // a repair, not a step
+    other->palette(second)->setValue(QString("#0000ff"));
+    QCOMPARE(other->palette(p1)->value().toString(), QString("#ff0000"));
+    // A show with nothing shared loads as it was.
+    QCOMPARE(ost->splitSharedOneOffs(), 0);
+    delete other;
+}
+
 /* D20: "In this cue list" -- what the list's cues use, with counts. */
 void ShowTree_Test::usageInAList()
 {

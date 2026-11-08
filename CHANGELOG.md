@@ -43,6 +43,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   alike; afterwards the look comes back, or the device is left as it was.
   Locate's colour is now its own on every fixture, not mixed with the
   look's. A finished Locate no longer leaves a timer running.
+- **A duplicated cue no longer shares its one-off values with the
+  original.** Duplicate (⌘D), Copy / Paste of cues, layers, hits, lists and
+  productions, and Unlink here kept the copy pointing at the original's
+  one-off colours, levels and effects, so an edit to a layer in one cue
+  showed in both, released or not, with nothing saying they were linked.
+  Each copy now gets its own one-offs in the same undo step; named palettes
+  stay shared and reusable layers and cues stay linked, as before. A show
+  saved with such a shared one-off is put right when it opens: the first
+  cue keeps it, every other cue gets its own copy.
 - **A WLED effect plays on every segment, not just the first.** A WLED
   split into segments (a fountain's string after **Write Segments…**, one
   segment a span) showed the show's effect on its first segment only; the

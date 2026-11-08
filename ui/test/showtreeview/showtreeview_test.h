@@ -235,6 +235,7 @@ private slots:
     void releaseTakesAFunctionLayer();
     void theHitPageFadeBoxesSetTheHitsFades();
     void listsProductionsAndReusableCuesDuplicateCopyAndPaste();
+    void duplicateGivesTheCopyItsOwnOneOffValues();
 
     /** 0.4.1 (fxrows): an effect's rows on the layer page, as a line aim's
      *  under Position -- what it runs on ("2 of 4 fixtures (Pars have no

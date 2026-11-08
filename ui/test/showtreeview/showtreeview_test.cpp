@@ -10427,6 +10427,51 @@ void ShowTreeView_Test::theHitPageFadeBoxesSetTheHitsFades()
     QCOMPARE(treeState(m_doc), before);
 }
 
+/* fix/042 (a real show): Duplicate (the key) on a cue, then a layer pasted
+   into the copy, give the copy its own one-off values -- an edit to the copy's colour leaves the
+   original as it was, released or not. */
+void ShowTreeView_Test::duplicateGivesTheCopyItsOwnOneOffValues()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(towers->id()));
+    const quint32 red = st->createInlinePalette(QLCPalette::Color, { "#ff0000" }, "Red-ish · 1 Towers");
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(red)));
+    QVERIFY(st->setTargetRelease(c1, groupTarget(towers->id()), true));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    QVERIFY(view.selectNode(c1));
+    QVERIFY(view.duplicateSelection());
+    const CueList *l = st->cueList(list);
+    QCOMPARE(l->cues.count(), 2);
+    const Cue &copy = l->cues.at(1);
+    const quint32 copyId = copy.id;
+    QVERIFY(copyId != c1);
+    const quint32 own = copy.layers.first().look(KeyColour)->palettes.first();
+    QVERIFY(own != red);
+    QVERIFY(st->isInlinePalette(own));
+    m_doc->palette(own)->setValue(QString("#0000ff"));
+    QCOMPARE(m_doc->palette(red)->value().toString(), QString("#ff0000"));
+
+    // A layer copied from the first cue and pasted into the copy (⌘C, ⌘V):
+    // the pasted look's one-off is the copy's own too.
+    QVERIFY(view.selectNode(l1, c1));
+    QVERIFY(view.copySelection());
+    QVERIFY(view.selectNode(copyId));
+    QVERIFY(view.pasteClipboard());
+    const quint32 pasted = st->cue(copyId)->layers.first().look(KeyColour)->palettes.first();
+    QVERIFY(pasted != red);
+    QVERIFY(st->isInlinePalette(pasted));
+    QCOMPARE(m_doc->palette(pasted)->value().toString(), QString("#ff0000"));
+    QCOMPARE(st->cue(c1)->layer(l1)->look(KeyColour)->palettes.first(), red);
+}
+
 /* Q215: a cue list, a production and a reusable cue have Copy / Paste /
    Duplicate in their menus and on the keys, one undo step each. */
 void ShowTreeView_Test::listsProductionsAndReusableCuesDuplicateCopyAndPaste()
