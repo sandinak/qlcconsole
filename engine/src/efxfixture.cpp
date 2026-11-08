@@ -22,6 +22,7 @@
 #include <QXmlStreamWriter>
 #include <QDebug>
 #include <math.h>
+#include <cmath>
 
 #include "genericfader.h"
 #include "fadechannel.h"
@@ -80,6 +81,7 @@ void EFXFixture::copyFrom(const EFXFixture* ef)
     m_done = ef->m_done;
     m_started = ef->m_started;
     m_elapsed = ef->m_elapsed;
+    m_elapsedCarry = ef->m_elapsedCarry;
     m_currentAngle = ef->m_currentAngle;
 }
 
@@ -366,6 +368,7 @@ void EFXFixture::reset()
     m_runTimeDirection = m_direction;
     m_started = false;
     m_elapsed = 0;
+    m_elapsedCarry = 0.0;
     m_currentAngle = 0;
 }
 
@@ -456,7 +459,18 @@ void EFXFixture::nextStep(QList<Universe *> universes, QSharedPointer<GenericFad
     if (m_done == true || isValid() == false)
         return;
 
-    m_elapsed += MasterTimer::tick();
+    /* On a speed master (its own, or a collection's or chase's handed
+       down) the loop runs at the master's tempo: as made at 120 BPM. */
+    const double rate = m_parent->speedMasterRate();
+    if (rate == 1.0)
+        m_elapsed += MasterTimer::tick();
+    else
+    {
+        const double step = double(MasterTimer::tick()) * rate + m_elapsedCarry;
+        const uint whole = uint(qMax(0.0, std::floor(step)));
+        m_elapsedCarry = step - double(whole);
+        m_elapsed += whole;
+    }
 
     // Check time wrapping
     if (m_elapsed > m_parent->loopDuration())

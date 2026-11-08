@@ -779,6 +779,22 @@ stage target or structure each have one menu of their own the same way.
 | Name | **Rename** (in place) or **Rename…** | **Rename** (in place) or **Rename…** |
 | Last | **Delete Fixture Group…**: it asks first, and the fixtures stay | |
 
+**What Locate does.** It flashes the light over whatever is playing, in the
+Locate colour and level (Preferences ▸ Locate), then gives back what was
+there. Every dimmer flashes: a dimmer pack's every channel, a bar's every
+head. Some kinds are handled their own way:
+
+- A **hazer, fogger or fan** is never flashed. Its level is its output, so a
+  flash would fill the room. Locate is greyed for it, and says why.
+- A **laser** is never fired to find it. Locate is greyed for it too.
+- A **strobe light** flashes at a quarter of the Locate level, steady, not
+  as a full burst. Its strobe channels are left as they are.
+- A channel named for fog or haze on any other light (a moving light with a
+  fog channel) is left alone.
+
+With several fixtures picked, Locate flashes the ones it can and its tip
+says the hazers, foggers, fans and lasers are left alone.
+
 A place leaves out only what makes no sense there:
 
 - **The Fixtures tab** adds on top: Definition & Mode…, Change

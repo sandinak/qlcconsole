@@ -1035,6 +1035,9 @@ not, in three boxes:
   to)**, the angle a lens zoomed by hand is set to (see
   [The beam](#the-beam)); the [calibration offsets](#calibration-offsets);
   **Invert pan** / **Invert tilt**; **Test orientation**; and **Identify**.
+  **Identify** and **Reset** send the fixture's own value, hold it about
+  3 seconds, then put the channel back as it was. A cue that sets that
+  channel in the meantime keeps its value.
 - **Position &amp; Orientation**: X, Y and icon rotation on the plot, and
   **Stage position**, where the light really is once its mount is counted.
   A fixture not on the plot has these greyed, *Not on the plot*.

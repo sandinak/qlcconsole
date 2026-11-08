@@ -180,6 +180,9 @@ private:
 
     /** Elapsed milliseconds since last reset() */
     uint m_elapsed;
+    /** The part of a millisecond a speed master's rate left over from the
+     *  last tick (EFX::speedMasterRate()), carried to the next. */
+    double m_elapsedCarry = 0.0;
 
     /** 0..M_PI*2, current position, recomputed on each timer tick; depends on elapsed() and parent->duration() */
     float m_currentAngle;

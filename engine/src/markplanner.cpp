@@ -56,8 +56,33 @@ void MarkPlanner::clearPlanned()
 {
     for (quint32 fid : m_planned)
         if (m_mark != nullptr && m_mark->isMarked(fid))
+        {
             m_mark->unmarkFixture(fid);
+            putBack(fid);
+        }
     m_planned.clear();
+    m_before.clear();
+    m_plannedFor.clear();
+}
+
+void MarkPlanner::putBack(quint32 fid)
+{
+    const QHash<quint32, uchar> before = m_before.take(fid);
+    m_plannedFor.remove(fid);
+    Fixture *fxi = m_doc != nullptr ? m_doc->fixture(fid) : nullptr;
+    if (fxi == nullptr || !fxi->isPatched() || before.isEmpty())
+        return;
+    /* The mark's fader no longer has them (unmarkFixture() takes them out
+       at once), so nothing writes them back: written here, between two
+       frames, as a patch writes a channel's default. */
+    const QList<Universe *> unis = m_doc->inputOutputMap()->universes();
+    for (auto it = before.constBegin(); it != before.constEnd(); ++it)
+    {
+        const quint32 abs = fxi->universeAddress() + it.key();
+        const int uni = int(abs >> 9);
+        if (uni < unis.size() && unis.at(uni) != nullptr)
+            unis.at(uni)->setChannelDefaultValue(ushort(abs & 511), it.value());
+    }
 }
 
 uchar MarkPlanner::liveValue(const QList<Universe*> &unis, int uni, int absAddr) const
@@ -143,9 +168,26 @@ void MarkPlanner::evaluatePlan()
         return;
     }
 
-    // A mark auto-releases on reveal; prune those from our owned set first.
-    const QList<quint32> stillMarked = m_mark->markedFixtures();
-    m_planned.intersect(QSet<quint32>(stillMarked.begin(), stillMarked.end()));
+    /* A mark auto-releases on reveal; prune those from our owned set
+       first. Revealed by the cue it was for, that cue has its values now.
+       Revealed by another -- a jump straight to a cue that lights it --
+       what the pre-set held is not that cue's: put back. */
+    const QList<quint32> stillMarkedList = m_mark->markedFixtures();
+    const QSet<quint32> stillMarked(stillMarkedList.begin(), stillMarkedList.end());
+    QSet<quint32> letGo = m_planned;
+    letGo.subtract(stillMarked);
+    for (quint32 fid : std::as_const(letGo))
+    {
+        Function *forCue = m_doc->function(m_plannedFor.value(fid, Function::invalidId()));
+        if (forCue != nullptr && forCue->isRunning())
+        {
+            m_before.remove(fid);
+            m_plannedFor.remove(fid);
+        }
+        else
+            putBack(fid);
+    }
+    m_planned.intersect(stillMarked);
 
     const QList<CueLookahead::UpcomingCue> cues =
         CueLookahead::upcoming(m_doc, HORIZON_MS);
@@ -176,6 +218,19 @@ void MarkPlanner::evaluatePlan()
 
     QSet<quint32> desired;
     QHash<quint32, QHash<quint32, uchar>> holdValues;
+    /* What each channel a pre-set is about to hold reads now, before it
+       does (for putBack()); a channel it already holds keeps its first. */
+    auto noteBefore = [&](quint32 fid, Fixture *fxi, const QHash<quint32, uchar> &values) {
+        QHash<quint32, uchar> &was = m_before[fid];
+        for (auto vit = values.constBegin(); vit != values.constEnd(); ++vit)
+        {
+            if (was.contains(vit.key()))
+                continue;
+            const quint32 abs = fxi->universeAddress() + vit.key();
+            was.insert(vit.key(), liveValue(unis, int(abs >> 9), int(abs & 511)));
+        }
+        m_plannedFor.insert(fid, cue.functionId);
+    };
 
     for (auto it = cueOut.constBegin(); it != cueOut.constEnd(); ++it)
     {
@@ -198,6 +253,7 @@ void MarkPlanner::evaluatePlan()
         {
             desired.insert(fid);
             holdValues.insert(fid, fc.nonIntensity);
+            noteBefore(fid, fxi, fc.nonIntensity);
             continue;
         }
 
@@ -220,6 +276,7 @@ void MarkPlanner::evaluatePlan()
 
         desired.insert(fid);
         holdValues.insert(fid, fc.nonIntensity);
+        noteBefore(fid, fxi, fc.nonIntensity);
     }
 
     m_doc->inputOutputMap()->releaseUniverses(false);
@@ -229,7 +286,10 @@ void MarkPlanner::evaluatePlan()
     toRelease.subtract(desired);
     for (quint32 fid : toRelease)
         if (m_mark->isMarked(fid))
+        {
             m_mark->unmarkFixture(fid);
+            putBack(fid);
+        }
 
     // Apply / refresh the desired pre-sets.
     for (quint32 fid : desired)

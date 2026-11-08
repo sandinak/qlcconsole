@@ -24,7 +24,19 @@
 
 #include <cmath>
 
+#include "../common/stdprelude.h"
+#define private public
+#include "efxfixture.h"
+#undef private
+
 #include "mastertimer.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturedef.h"
+#include "qlcchannel.h"
+#include "rgbmatrix.h"
+#include "fixturegroup.h"
+#include "fixture.h"
+#include "efx.h"
 #include "speedmasters.h"
 #include "qlcpalette.h"
 #include "chaserstep.h"
@@ -346,6 +358,93 @@ void SpeedMasters_Test::aCollectionHandsItsMasterToItsMembers()
     QCOMPARE(seenA, int(SpeedMasters::MainClock));
     QCOMPARE(seenOwn, int(SpeedMasters::Free));      // its own choice wins
     col->stop(FunctionParent::master());
+    for (int i = 0; i < 10; ++i)
+        timer->timerTick();
+}
+
+/* A collection on Speed 1 at 240 BPM: its EFX member's loop runs twice as
+   fast as made (at 120), at 60 half as fast, and holds while the master is
+   paused. Its RGB Matrix member is on the same rate. Before, both kept
+   their own speed whatever the collection's Speed said (UX-68). */
+void SpeedMasters_Test::anEfxInACollectionRunsAtItsMastersTempo()
+{
+    MasterTimer *timer = m_doc->masterTimer();
+    SpeedMasters *sm = m_doc->speedMasters();
+
+    // A mover: pan and tilt.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Mover");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Std");
+    QLCChannel *pan = new QLCChannel();
+    pan->setName("Pan");
+    pan->setGroup(QLCChannel::Pan);
+    QLCChannel *tilt = new QLCChannel();
+    tilt->setName("Tilt");
+    tilt->setGroup(QLCChannel::Tilt);
+    def->addChannel(pan);
+    def->addChannel(tilt);
+    mode->insertChannel(pan, 0);
+    mode->insertChannel(tilt, 1);
+    def->addMode(mode);
+    mode->cacheHeads();
+    Fixture *fx = new Fixture(m_doc);
+    fx->setFixtureDefinition(def, mode);
+    fx->setAddress(0);
+    QVERIFY(m_doc->addFixture(fx));
+
+    EFX *efx = new EFX(m_doc);
+    efx->setDuration(20000);                 // a slow circle: never wraps here
+    EFXFixture *ef = new EFXFixture(efx);
+    ef->setHead(GroupHead(fx->id(), 0));
+    QVERIFY(efx->addFixture(ef));
+    m_doc->addFunction(efx);
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    QVERIFY(m_doc->addFixtureGroup(grp));
+    grp->setSize(QSize(1, 1));
+    QVERIFY(grp->assignFixture(fx->id()));
+    RGBMatrix *matrix = new RGBMatrix(m_doc);
+    matrix->setFixtureGroup(grp->id());
+    m_doc->addFunction(matrix);
+    Collection *col = new Collection(m_doc);
+    col->addFunction(efx->id());
+    col->addFunction(matrix->id());
+    col->setSpeedMaster(SpeedMasters::Master1);
+    m_doc->addFunction(col);
+    sm->setBpm(0, 240);
+
+    col->start(timer, FunctionParent::master());
+    for (int i = 0; i < 10 && !(efx->isRunning() && ef->m_started); ++i)
+        timer->timerTick();
+    QVERIFY(efx->isRunning() && ef->m_started);
+    QCOMPARE(matrix->speedMasterRate(), 2.0);
+
+    auto run = [&](int ticks) {
+        const uint from = ef->m_elapsed;
+        for (int i = 0; i < ticks; ++i)
+            timer->timerTick();
+        return ef->m_elapsed - from;
+    };
+    const uint tick = MasterTimer::tick();
+    QCOMPARE(run(10), 20 * tick);            // 240 BPM: twice as fast
+    sm->setBpm(0, 60);
+    QCOMPARE(matrix->speedMasterRate(), 0.5);
+    QCOMPARE(run(10), 5 * tick);             // 60: half
+    sm->setPaused(0, true);
+    QCOMPARE(run(10), 0u);                   // paused: holds
+    sm->setPaused(0, false);
+    col->stop(FunctionParent::master());
+    for (int i = 0; i < 10; ++i)
+        timer->timerTick();
+
+    // On its own (no master): as made.
+    QCOMPARE(efx->speedMasterRate(), 1.0);
+    efx->start(timer, FunctionParent::master());
+    for (int i = 0; i < 10 && !ef->m_started; ++i)
+        timer->timerTick();
+    QCOMPARE(run(10), 10 * tick);
+    efx->stop(FunctionParent::master());
     for (int i = 0; i < 10; ++i)
         timer->timerTick();
 }

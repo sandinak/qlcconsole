@@ -81,6 +81,7 @@
 #include "apputil.h"
 #include "chaser.h"
 #include "doc.h"
+#include "fixturerest.h"
 #include "lastlookeffect.h"
 #include "showmanager.h"
 
@@ -1758,10 +1759,8 @@ void VCButton::pressFunction()
     }
     else if (m_action == StopAll)
     {
-        if (stopAllFadeTime() == 0)
-            m_doc->masterTimer()->stopAllFunctions();
-        else
-            m_doc->masterTimer()->fadeAndStopAll(stopAllFadeTime());
+        // Stopped and put at rest, as the main Stop ALL (UX-70).
+        FixtureRest::stopAll(m_doc, stopAllFadeTime());
     }
     else if (m_action == SelectFixtures)
     {

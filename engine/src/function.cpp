@@ -1569,6 +1569,20 @@ int Function::effectiveSpeedMaster() const
     return m_speedMaster != SpeedMasters::Inherit ? m_speedMaster : m_inheritedSpeedMaster;
 }
 
+double Function::speedMasterRate() const
+{
+    const int assignment = effectiveSpeedMaster();
+    if (assignment == SpeedMasters::Inherit || assignment == SpeedMasters::Free)
+        return 1.0;
+    Doc *d = doc();
+    if (d == nullptr || d->speedMasters() == nullptr)
+        return 1.0;
+    double pos = 0, bpm = 0;
+    if (!d->speedMasters()->clockFor(assignment, &pos, &bpm))
+        return 1.0;
+    return qMax(0.0, bpm) / SpeedMasters::ReferenceBpm;
+}
+
 void Function::setFadePriority(int priority)
 {
     m_fadePriority = priority;

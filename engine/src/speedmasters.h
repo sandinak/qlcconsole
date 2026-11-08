@@ -79,6 +79,10 @@ public:
          *  main clock. */
         ShowTimeline = 98
     };
+    /** The tempo a function with a speed of its own (an EFX, an RGB
+     *  Matrix, a WLED's effect) runs at as made: on a master at 240 BPM it
+     *  runs twice as fast, at 60 half, paused it stops. */
+    static constexpr double ReferenceBpm = 120.0;
     static bool isMaster(int assignment) { return assignment >= Master1 && assignment < Master1 + MaxCount; }
     /** "Inherit", "Free", "Main", "1".."4" (XML) and back. */
     static QString assignmentToString(int assignment);

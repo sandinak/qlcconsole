@@ -64,6 +64,8 @@ private slots:
      *  in black like a mover's position, so the GO sends its brightness
      *  alone. The looks are kept from tick to tick and let go of. */
     void aDarkWledIsMovedInBlackToItsNextLook();
+    /** A cue jumped past: what was moved in black for it goes back. */
+    void aPresetIsPutBackWhenItsCueIsJumpedPast();
 
 private:
     Doc *m_doc = nullptr;

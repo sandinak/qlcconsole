@@ -17,6 +17,8 @@
   limitations under the License.
 */
 
+#include <QPainter>
+#include <QtMath>
 #include <QApplication>
 #include <QInputDialog>
 #include <QMessageBox>
@@ -33,6 +35,9 @@
 #define protected public
 #include "fixturemanager.h"
 #include "fixturegroupsource.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcchannel.h"
 #include "programmingoutline.h"
 #include "programmingmanager.h"
 #include "functionmanager.h"
@@ -420,6 +425,102 @@ void ContextMenus_Test::aFixtureGroupHasOneMenuEverywhere()
         QCOMPARE(canonItems(&menu), without({ "selectAllSimilar", "ctxMoveToFolder", "ctxDeleteGroup" }));
         QVERIFY(menu.findChild<QAction *>("outlineRemoveFromScene") != nullptr);
         QCOMPARE(menu.actions().first()->objectName(), QString("outlineRemoveFromScene"));
+    }
+}
+
+/* Pictures for the record (CONTEXTMENUS_SHOTS=dir): the menu as drawn,
+   with its tooltip under it. */
+static void saveMenuShot(QMenu *menu, const QString &name)
+{
+    const QString dir = qEnvironmentVariable("CONTEXTMENUS_SHOTS");
+    if (dir.isEmpty())
+        return;
+    menu->ensurePolished();
+    menu->adjustSize();
+    const QPixmap pm = menu->grab();
+    QAction *locate = menu->findChild<QAction *>("ctxLocate");
+    const QString tip = locate != nullptr ? QStringLiteral("Locate tip: ") + locate->toolTip() : QString();
+    QFont f = menu->font();
+    const QFontMetrics fm(f);
+    const QSize logical = pm.deviceIndependentSize().toSize();
+    const int w = qMax(logical.width(), fm.horizontalAdvance(tip) + 16);
+    const qreal dpr = pm.devicePixelRatio();
+    QPixmap out(qCeil(w * dpr), qCeil((logical.height() + fm.height() + 12) * dpr));
+    out.setDevicePixelRatio(dpr);
+    out.fill(Qt::white);
+    QPainter p(&out);
+    p.drawPixmap(0, 0, pm);
+    p.setFont(f);
+    p.setPen(Qt::black);
+    p.drawText(QRect(8, logical.height() + 4, w - 16, fm.height() + 4), Qt::AlignLeft, tip);
+    p.end();
+    QDir().mkpath(dir);
+    const QString scale = qEnvironmentVariable("QT_SCALE_FACTOR", "1");
+    out.save(QDir(dir).filePath(name + "-x" + scale + ".png"));
+}
+
+/* Build ▸ Groups & fixtures, right-click a hazer: Locate is there, greyed,
+   and its tip says why -- flashing a hazer fires its output. With a light
+   beside it, Locate flashes the light and says the hazer is left alone. */
+void ContextMenus_Test::locateIsGreyedOnAHazerAndSaysWhy()
+{
+    QWidget host;
+    Monitor mon(&host, m_doc);
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Hazer");
+    def->setType(QLCFixtureDef::Hazer);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Std");
+    QLCChannel *out = new QLCChannel();
+    out->setName("Output Volume");
+    out->setGroup(QLCChannel::Intensity);
+    def->addChannel(out);
+    mode->insertChannel(out, 0);
+    def->addMode(mode);
+    Fixture *hazer = new Fixture(m_doc);
+    hazer->setFixtureDefinition(def, mode);
+    hazer->setName("Hazer");
+    hazer->setAddress(300);
+    QVERIFY(m_doc->addFixture(hazer));
+    const quint32 hid = hazer->id();
+    auto drop = qScopeGuard([this, hid]() { m_doc->deleteFixture(hid); });
+
+    FixtureGroupSource src(m_doc);
+    src.reload();
+    auto rowOf = [&src](quint32 fid) {
+        return findRow(&src, [fid](QTreeWidgetItem *it) {
+            return it->data(0, FixtureGroupSource::KindRole).toInt() == FixtureGroupSource::FixtureNode
+                   && it->data(0, FixtureGroupSource::IdRole).toUInt() == fid;
+        });
+    };
+    QTreeWidgetItem *row = rowOf(hid);
+    QVERIFY(row != nullptr);
+    selectOnly(&src, row);
+    {
+        QMenu menu;
+        src.fillContextMenu(&menu, row);
+        QAction *locate = menu.findChild<QAction *>("ctxLocate");
+        QVERIFY(locate != nullptr);
+        QVERIFY(!locate->isEnabled());
+        QVERIFY2(locate->toolTip().contains("hazer"), qPrintable(locate->toolTip()));
+        saveMenuShot(&menu, "locate-hazer");
+    }
+
+    // With a dimmer too: Locate works, and says the hazer is left alone.
+    QTreeWidgetItem *dimRow = rowOf(m_fixtures.first());
+    QVERIFY(dimRow != nullptr);
+    src.clearSelection();
+    row->setSelected(true);
+    dimRow->setSelected(true);
+    {
+        QMenu menu;
+        src.fillContextMenu(&menu, row);
+        QAction *locate = menu.findChild<QAction *>("ctxLocate");
+        QVERIFY(locate != nullptr);
+        QVERIFY(locate->isEnabled());
+        QVERIFY2(locate->toolTip().contains("left alone"), qPrintable(locate->toolTip()));
+        saveMenuShot(&menu, "locate-hazer-and-dimmer");
     }
 }
 

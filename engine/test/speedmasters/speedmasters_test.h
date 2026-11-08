@@ -44,6 +44,8 @@ private slots:
     void theInnermostChoiceWins();
     void aChaseHandsItsMasterToItsSteps();
     void aCollectionHandsItsMasterToItsMembers();
+    /** UX-68: a collection's Speed moves its EFX and RGB Matrix members. */
+    void anEfxInACollectionRunsAtItsMastersTempo();
     void aBeatChaseStepsOnItsMastersBeats();
     void aGoLandsOnTheNextBeat();
     void aGoOnTheBarWaitsForTheBar();

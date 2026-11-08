@@ -553,7 +553,10 @@ Steps, towers and booms usually come in sets that should all be the same:
   the list of changes to write into those scenes, and **Undo Last Store**
   takes the last one back.
 - **Stop all** (⌘⇧Esc), or its menu's **Fade and stop** (hold the button),
-  is the panic button.
+  is the panic button. It stops everything and puts every fixture at
+  rest: fog and haze off, gobos, prisms and WLED effects out, each channel
+  at its default (a mover's pan and tilt too). After **Fade and stop** that
+  happens once the fade is over, unless something was started meanwhile.
 - **From QLab**: QLab (or anything that speaks MIDI Show Control or OSC)
   can GO a chase's cues by number. See
   [Show control (QLab)](show-control.md).

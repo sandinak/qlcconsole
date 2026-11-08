@@ -36,6 +36,8 @@ private slots:
     /** Locate on a WLED a look had played and let go of: afterwards it is
      *  as it was -- off, its effect still the look's, not left on Solid. */
     void locateLeavesAWledNothingPlaysOnAsItWas();
+    /** UX-68: a WLED effect runs at its Own speed and on its speed master */
+    void aWledEffectFollowsItsOwnSpeedAndItsSpeedMaster();
 
     /** UX-72, F-11: a Tracking list whose cue plays Fireworks Starburst
      *  Runs Once, At the end Hold (the device frozen on its last frame),

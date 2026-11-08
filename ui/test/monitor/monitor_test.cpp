@@ -20017,6 +20017,157 @@ void Monitor_Test::aStagedFixturesTestDialogOffersNoDmxActions()
     m_doc->inputOutputMap()->releaseUniverses(false);
 }
 
+/* The fixture's test dialog (Fixture Properties' DMX buttons): Identify
+ * and Reset send their value, hold it, then put the channel back as it was.
+ * Before, the value stayed: the fixture was left identifying (or resetting)
+ * until some scene happened to set that channel. */
+void Monitor_Test::identifyAndResetPutTheChannelBackAfterHolding()
+{
+    FixtureCleanup cleanup(m_doc);
+    Fixture *f = stagedWithMaintenance(m_doc, &cleanup);
+    QVERIFY(f != nullptr);
+    QVERIFY(m_doc->patchFixture(f->id(), 0, 440));
+    QVERIFY(f->isPatched());
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    const int held = Monitor::maintenanceHoldMs();
+    Monitor::setMaintenanceHoldMs(150);
+    auto restoreHold = qScopeGuard([held]() { Monitor::setMaintenanceHoldMs(held); });
+
+    Universe *uni = m_doc->inputOutputMap()->universes().first();
+    const int control = int(f->address()) + 1;
+    QCOMPARE(int(uni->preGMValue(control)), 0);
+
+    for (const QString &label : { QStringLiteral("Identify"), QStringLiteral("Reset") })
+    {
+        int sent = -1;
+        inspectModal([&](QWidget *dlg) {
+            foreach (QPushButton *b, dlg->findChildren<QPushButton *>())
+                if (b->text() == label)
+                {
+                    QVERIFY(b->isEnabled());
+                    b->click();
+                    sent = int(uni->preGMValue(control));
+                }
+        });
+        rig.mon->showFixturePropertiesById(f->id());
+        QVERIFY2(sent >= 0, qPrintable("no " + label + " button"));
+        QCOMPARE(sent, label == "Identify" ? 214 : 204);    // the capability's middle
+        QTRY_COMPARE_WITH_TIMEOUT(int(uni->preGMValue(control)), 0, 2000);   // put back
+    }
+
+    // Fixture Manager's and the plot's right-click Reset: the same.
+    rig.mon->resetFixture(f->id());
+    QCOMPARE(int(uni->preGMValue(control)), 204);
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->preGMValue(control)), 0, 2000);
+
+    // A cue that set the channel meanwhile keeps its value.
+    rig.mon->resetFixture(f->id());
+    uni->write(control, 77, true);
+    QTest::qWait(300);
+    QCOMPARE(int(uni->preGMValue(control)), 77);
+    uni->write(control, 0, true);
+}
+
+namespace
+{
+/* What Locate's fader holds on @p f's channels (channel -> value). */
+QHash<quint32, int> locateLevels(Doc *doc, Fixture *f)
+{
+    QHash<quint32, int> out;
+    Universe *uni = doc->inputOutputMap()->universes().value(int(f->universe()));
+    if (uni == nullptr)
+        return out;
+    for (const QSharedPointer<GenericFader> &fader : uni->faders())
+    {
+        if (fader.isNull() || fader->name() != QLatin1String("FixtureLocate"))
+            continue;
+        for (quint32 c = 0; c < f->channels(); ++c)
+        {
+            quint32 v = 0;
+            if (fader->currentValue(f->id(), c, &v))
+                out.insert(c, int(v));
+        }
+    }
+    return out;
+}
+
+Fixture *typedFixture(Doc *doc, FixtureCleanup *cleanup, QLCFixtureDef::FixtureType type,
+                      const QString &model, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel(model);
+    def->setType(type);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Std");
+    QLCChannel *out = new QLCChannel();
+    out->setName(type == QLCFixtureDef::Hazer ? "Output Volume" : "Dimmer");
+    out->setGroup(QLCChannel::Intensity);
+    def->addChannel(out);
+    mode->insertChannel(out, 0);
+    def->addMode(mode);
+    Fixture *f = new Fixture(doc);
+    f->setFixtureDefinition(def, mode);
+    f->setName(model);
+    f->setAddress(address);
+    if (!doc->addFixture(f))
+        return nullptr;
+    cleanup->ids << f->id();
+    return f;
+}
+}
+
+/* A four-way dimmer pack: Locate flashes all four. It flashed the first
+ * only, so a pack or a bar with a dimmer a head was hard to find. */
+void Monitor_Test::locateFlashesEveryDimmerOfADimmerPack()
+{
+    QSettings().remove("monitor/locate");          // white, full, three flashes
+    FixtureCleanup cleanup(m_doc);
+    Fixture *pack = new Fixture(m_doc);
+    pack->setName("Dimmer pack");
+    pack->setChannels(4);
+    pack->setAddress(460);
+    QVERIFY(m_doc->addFixture(pack));
+    cleanup.ids << pack->id();
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    rig.mon->locateFixture(pack->id());
+    QVERIFY(rig.mon->m_locateSessions.contains(pack->id()));
+    const QHash<quint32, int> on = locateLevels(m_doc, pack);
+    for (quint32 c = 0; c < 4; ++c)
+        QVERIFY2(on.value(c, -1) == 255, qPrintable(QString("dimmer %1 at %2").arg(c + 1).arg(on.value(c, -1))));
+    rig.mon->cancelAllLocateSessions();
+}
+
+/* A hazer's Intensity channel is its output: Locate filled the room. Now
+ * it, a laser and a fan are left alone and say why; a strobe light is
+ * found at a quarter of the Locate level, not a blinding burst. */
+void Monitor_Test::locateNeverFiresAHazerOrALaserAndTamesAStrobe()
+{
+    QSettings().remove("monitor/locate");
+    FixtureCleanup cleanup(m_doc);
+    Fixture *hazer = typedFixture(m_doc, &cleanup, QLCFixtureDef::Hazer, "Hazer", 470);
+    Fixture *laser = typedFixture(m_doc, &cleanup, QLCFixtureDef::Laser, "Laser", 472);
+    Fixture *strobe = typedFixture(m_doc, &cleanup, QLCFixtureDef::Strobe, "Strobe", 474);
+    QVERIFY(hazer != nullptr && laser != nullptr && strobe != nullptr);
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    QVERIFY(Monitor::locateRefusal(hazer).contains("hazer"));
+    QVERIFY(Monitor::locateRefusal(laser).contains("laser"));
+    QVERIFY(Monitor::locateRefusal(strobe).isEmpty());
+
+    rig.mon->locateFixtures({ hazer->id(), laser->id(), strobe->id() });
+    QVERIFY(!rig.mon->m_locateSessions.contains(hazer->id()));
+    QVERIFY(!rig.mon->m_locateSessions.contains(laser->id()));
+    QVERIFY(locateLevels(m_doc, hazer).isEmpty());
+    QVERIFY(rig.mon->m_locateSessions.contains(strobe->id()));
+    QCOMPARE(locateLevels(m_doc, strobe).value(0, -1), 255 / 4);
+    rig.mon->cancelAllLocateSessions();
+}
+
 void Monitor_Test::aFixtureIsRenamedFromItsEditDialogAndEverywhere()
 {
     FixtureCleanup cleanup(m_doc);

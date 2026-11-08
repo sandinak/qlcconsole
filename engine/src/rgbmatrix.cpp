@@ -824,7 +824,12 @@ void RGBMatrix::write(MasterTimer *timer, QList<Universe *> universes)
          *    next beat is less than 1/16 of the step beat duration in ms, then defer the step
          *    change to case #2, to resync the matrix to the next beat
          */
-        if (tempoType() == Time && elapsed() >= duration())
+        /* On a speed master (its own, or a collection's or chase's handed
+           down) a step lasts its time at 120 BPM and follows the master's
+           tempo: twice as fast at 240, held while it is paused. */
+        const double rate = tempoType() == Time ? speedMasterRate() : 1.0;
+        if (tempoType() == Time && (rate == 1.0 ? elapsed() >= duration()
+                                                : double(elapsed()) * rate >= double(duration())))
         {
             roundCheck();
         }

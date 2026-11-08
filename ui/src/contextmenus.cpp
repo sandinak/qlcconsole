@@ -473,10 +473,35 @@ void ContextMenus::rig(ContextMenu &menu, Doc *doc, const QList<quint32> &groupI
 
     /* ---- 2. What it does: find it, ask about it, address it, its rules ---- */
     if (!members.isEmpty() && Monitor::instance() != nullptr)
-        menu.add(ContextMenu::Kind, locateText(), [doc, members, parent]() {
+    {
+        QAction *la = menu.add(ContextMenu::Kind, locateText(), [doc, members, parent]() {
             locate(doc, members, parent);
-        }, QStringLiteral("ctxLocate"))
-            ->setToolTip(ContextMenu::tr("Flash it on the rig to find it"));
+        }, QStringLiteral("ctxLocate"));
+        la->setToolTip(ContextMenu::tr("Flash it on the rig to find it"));
+        /* Hazers, foggers, fans and lasers are never flashed (UX-72): with
+           only those, it says why; with some, what it leaves alone. */
+        QString refusal;
+        int refused = 0;
+        for (quint32 fid : members)
+        {
+            const QString why = Monitor::locateRefusal(doc->fixture(fid));
+            if (!why.isEmpty())
+            {
+                refusal = why;
+                ++refused;
+            }
+        }
+        if (refused == members.size())
+        {
+            la->setEnabled(false);
+            la->setToolTip(members.size() == 1
+                ? refusal
+                : ContextMenu::tr("Locate doesn't flash hazers, foggers, fans or lasers"));
+        }
+        else if (refused > 0)
+            la->setToolTip(ContextMenu::tr("Flash it on the rig to find it. Its hazers, foggers, "
+                                           "fans and lasers are left alone"));
+    }
     /* Why is this on: about the light, or a group's first light. */
     quint32 whyFid = 0xFFFFFFFF;
     if (onlyFixtures && fixtures.size() == 1)

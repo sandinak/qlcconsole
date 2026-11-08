@@ -608,6 +608,18 @@ Matrix Sparkle), and it multiplies the effect's own speed when it has one.
 A change never jumps the effect. On the main clock or a master the master
 sets the pace instead, and the setting is hidden.
 
+**A WLED effect** that runs on the device follows both too. Own speed
+multiplies the look's **Speed** that is sent to the WLED (×2 sends twice
+the speed, up to the WLED's top speed). On the main clock or a master the
+Speed is as set at 120 BPM: twice it at 240, half at 60, and it moves with
+the master's tap and rate fader. The device runs its effect on its own
+clock, so it follows the tempo but not the beat itself.
+
+**An EFX or RGB Matrix** in a collection or a chase follows the
+collection's or chase's **Speed** the same way: as made at 120 BPM, twice
+as fast at 240, held while the master is paused. Off a master it keeps its
+own speed.
+
 A look's **Speed** and its **Spread** belong to the look, not to the
 effect: trying other effects in the look editor's picker — a click or a
 double-click on a tile — keeps them, so you can audition effects without
