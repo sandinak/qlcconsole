@@ -43,6 +43,10 @@ private slots:
     void newHereMakesTheNextThing();
     void trackedLayersShowGreyWithWhereTheyCameFrom();
     void groupsDroppedOnACueBecomeLayers();
+    /** A fixture in no group is a Library row (All > Fixtures) and a cue drop makes a one-fixture layer. */
+    void aFixtureInNoGroupIsInTheLibraryAndMakesALayer();
+    /** With QLC_SHOT_DIR: the Library without / with the Fixtures section, three sizes. */
+    void libraryFixturesShots();
     void groupsDroppedOnALayerJoinIt();
     void aPaletteOnTheCueIsACueLookAndTheHintSaysWhatItReaches();
     void layerRowsShowOwnAndInheritedValues();

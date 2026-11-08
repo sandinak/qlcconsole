@@ -10318,6 +10318,38 @@ void ShowTreeView::reloadLibrary()
     for (const FixtureGroup *g : gl)
         add(groupFolder(groupPath(g)), LibGroup, g->id());
 
+    // Fixtures in no group (a WLED just added, a spare): a row each, so a
+    // layer can target one without a group made first. Only the ungrouped
+    // ones, to keep this short; a grouped fixture is reached by its group.
+    {
+        QSet<quint32> grouped;
+        for (const FixtureGroup *g : m_doc->fixtureGroups())
+            for (quint32 fid : g->fixtureList())
+                grouped.insert(fid);
+        QList<Fixture *> loose;
+        for (Fixture *f : m_doc->fixtures())
+            if (!grouped.contains(f->id()))
+                loose << f;
+        if (!loose.isEmpty())
+        {
+            std::sort(loose.begin(), loose.end(), [](const Fixture *x, const Fixture *y) {
+                return x->name().compare(y->name(), Qt::CaseInsensitive) < 0;
+            });
+            QTreeWidgetItem *fx = folder(all, tr("Loose fixtures"));
+            fx->setData(0, PathRole, QStringLiteral("Fixtures"));
+            fx->setToolTip(0, tr("Fixtures that are in no group. Drag one onto a cue like a group: the layer "
+                                 "is just that fixture. Type a name or model in the filter to find one."));
+            for (const Fixture *f : loose)
+                if (QTreeWidgetItem *it = add(fx, LibFixture, f->id()))
+                {
+                    const QString model = f->fixtureDef() == nullptr || f->fixtureDef()->manufacturer() == QLatin1String("Generic")
+                                              ? QString() : f->fixtureDef()->model();
+                    if (!model.isEmpty() && !it->text(0).contains(model, Qt::CaseInsensitive))
+                        it->setText(0, tr("%1 (%2)").arg(it->text(0), model));
+                }
+        }
+    }
+
     // Palettes (R2): by type with the folders under each, or folders first.
     buildLibraryPalettes(all, add);
 
