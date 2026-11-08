@@ -527,12 +527,21 @@ void WledPixels_Test::universesOutOfOrderOrThroughTheWledOutputAreFound()
     QCOMPARE(PatchPlanner::wledRoute(&doc, fx, &detail), PatchPlanner::WledOtherIp);
     QCOMPARE(detail, QString("10.99.0.99"));
 
-    // Routed: in place (nothing else is on them), the second re-aimed.
+    /* A universe sent to another device is never re-aimed: it moves to a run
+       of its own (universes 1 and 2 here, free), and that one is left. */
     PatchPlanner planner(&doc);
     QCOMPARE(planner.routeWled({ fx->id() }), 1);
-    QCOMPARE(fx->universe(), quint32(2));
+    QCOMPARE(fx->universe(), quint32(0));
     QCOMPARE(PatchPlanner::wledRoute(&doc, fx), PatchPlanner::WledRouted);
-    QCOMPARE(PatchPlanner::networkUniverseNumber(&doc, 3), 21);
+    QCOMPARE(io->outputPatch(3)->getPluginParameters().value("outputIP").toString(), QString("10.99.0.99"));
+
+    // Its own run with one out of order: put right where it is.
+    io->outputPatch(1)->setPluginParameter("outputUni", 40);
+    QCOMPARE(PatchPlanner::wledRoute(&doc, fx), PatchPlanner::WledOutOfOrder);
+    QCOMPARE(planner.routeWled({ fx->id() }), 1);
+    QCOMPARE(fx->universe(), quint32(0));
+    QCOMPARE(PatchPlanner::networkUniverseNumber(&doc, 1), PatchPlanner::networkUniverseNumber(&doc, 0) + 1);
+    QCOMPARE(PatchPlanner::wledRoute(&doc, fx), PatchPlanner::WledRouted);
 }
 
 void WledPixels_Test::addFixtureOffersPixelsAndReadsTheLedCountFromTheDevice()

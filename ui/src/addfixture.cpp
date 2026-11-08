@@ -82,6 +82,7 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
     /* Connection: DMX (through a converter node / wireless receiver) or
        Network (the fixture speaks ArtNet/sACN itself and takes a unicast IP). */
     m_connectionCombo = new QComboBox(m_propertiesGroup);
+    m_connectionCombo->setObjectName(QStringLiteral("m_connectionCombo"));
     m_connectionCombo->addItem(tr("DMX"), connectionKey(Fixture::Dmx, Fixture::ArtNetTransport));
     m_connectionCombo->addItem(tr("Network (ArtNet/sACN)"), connectionKey(Fixture::Network, Fixture::ArtNetTransport));
     m_connectionCombo->addItem(tr("Network (WLED, JSON over Wi-Fi)"), connectionKey(Fixture::Network, Fixture::WledTransport));
@@ -416,7 +417,8 @@ void AddFixture::buildPixelPreview()
     const int channels = m_mode->channels().size();
     m_channelsValue = quint32(channels);
     m_channelsSpin->blockSignals(true);
-    m_channelsSpin->setValue(qMin(channels, m_channelsSpin->maximum()));
+    m_channelsSpin->setMaximum(qMax(1000, channels));   // all of them, as many as there are
+    m_channelsSpin->setValue(channels);
     m_channelsSpin->blockSignals(false);
 
     // The channels: the first LEDs, not thousands of rows.
@@ -894,6 +896,7 @@ void AddFixture::slotModeActivated(int modeIndex)
         return;
 
     m_mode = m_fixtureDef->modes().at(modeIndex);
+    m_channelsSpin->setMaximum(1000);
     if (m_mode == NULL)
     {
         /* Generic dimmers don't have modes, so bail out */

@@ -744,16 +744,17 @@ QList<Screen> screens()
                 if (found.isEmpty())
                     return af;
                 af->m_tree->setCurrentItem(found.first());
-                af->m_connectionCombo->setCurrentIndex(af->m_connectionCombo->findData(
-                    AddFixture::connectionKey(Fixture::Network, Fixture::ArtNetTransport)));
-                af->m_ledsAskedIp = QStringLiteral("172.18.2.100");     // not asked here
-                af->m_ipEdit->setText(QStringLiteral("172.18.2.100"));
+                if (QComboBox *conn = af->findChild<QComboBox *>("m_connectionCombo"))
+                    conn->setCurrentIndex(conn->findData(
+                        AddFixture::connectionKey(Fixture::Network, Fixture::ArtNetTransport)));
+                // No IP: nothing is asked of a device from here.
                 const int idx = af->m_modeCombo->findText(QStringLiteral("Pixels (Multi RGB)"));
                 if (idx >= 0)
                 {
-                    af->m_ledsSpin->setValue(400);
+                    if (QSpinBox *leds = af->findChild<QSpinBox *>("m_ledsSpin"))
+                        leds->setValue(400);
                     af->m_modeCombo->setCurrentIndex(idx);
-                    af->slotModeActivated(idx);
+                    QMetaObject::invokeMethod(af, "slotModeActivated", Q_ARG(int, idx));
                 }
                 return af;
             })
