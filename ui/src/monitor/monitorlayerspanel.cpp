@@ -255,7 +255,7 @@ static QString bareNodeName(QString text, QString badge)
     badge = badge.trimmed();
     if (!badge.isEmpty() && text.endsWith(badge))
         text = text.left(text.size() - badge.size()).trimmed();
-    const int bulb = text.indexOf(QStringLiteral("\xF0\x9F\x92\xA1"));
+    const int bulb = text.indexOf(QStringLiteral("💡"));
     if (bulb >= 0)
         text = text.left(bulb).trimmed();
     return text;
@@ -1040,17 +1040,17 @@ QIcon MonitorLayersPanel::kindIcon(const QString &kind, const QColor &color) con
     if (kind == QStringLiteral("fixture"))  return QIcon(":/fixture.png");
     // NOT :/group.png -- that is the Fixture Group icon, and a truss wearing it
     // made the two kinds indistinguishable in the tree.
-    if (kind == QStringLiteral("truss"))    return glyphIcon(QStringLiteral("\xF0\x9F\x8F\x97"), QColor(150, 200, 235)); // ð truss
+    if (kind == QStringLiteral("truss"))    return glyphIcon(QStringLiteral("🏗"), QColor(150, 200, 235)); // ð truss
     if (kind == QStringLiteral("platform")) return swatchIcon(color);           // colour-coded riser
-    if (kind == QStringLiteral("pipe"))     return glyphIcon(QStringLiteral("\xF0\x9F\x8E\xA4"), QColor(150, 200, 235)); // 🎤 boom
-    if (kind == QStringLiteral("stand"))    return glyphIcon(QStringLiteral("\xF0\x9F\x93\x8D"), QColor(150, 200, 235)); // 📍 stand
-    if (kind == QStringLiteral("tower"))    return glyphIcon(QStringLiteral("\xF0\x9F\x8F\xAF"), QColor(150, 200, 235)); // 🏯 tower
-    if (kind == QStringLiteral("hanger"))   return glyphIcon(QStringLiteral("\xF0\x9F\xAA\x9D"), QColor(150, 200, 235)); // 🪝 hanger
-    if (kind == QStringLiteral("power"))    return glyphIcon(QStringLiteral("\xE2\x9A\xA1"), QColor(235, 185, 0));       // ⚡
-    if (kind == QStringLiteral("network"))  return glyphIcon(QStringLiteral("\xF0\x9F\x8C\x90"), QColor(70, 140, 220));  // 🌐 network node
-    if (kind == QStringLiteral("target"))   return glyphIcon(QStringLiteral("\xF0\x9F\x8E\xAF"), QColor(255, 180, 0));    // 🎯 aim target
+    if (kind == QStringLiteral("pipe"))     return glyphIcon(QStringLiteral("🎤"), QColor(150, 200, 235)); // 🎤 boom
+    if (kind == QStringLiteral("stand"))    return glyphIcon(QStringLiteral("📍"), QColor(150, 200, 235)); // 📍 stand
+    if (kind == QStringLiteral("tower"))    return glyphIcon(QStringLiteral("🏯"), QColor(150, 200, 235)); // 🏯 tower
+    if (kind == QStringLiteral("hanger"))   return glyphIcon(QStringLiteral("🪝"), QColor(150, 200, 235)); // 🪝 hanger
+    if (kind == QStringLiteral("power"))    return glyphIcon(QStringLiteral("⚡"), QColor(235, 185, 0));       // ⚡
+    if (kind == QStringLiteral("network"))  return glyphIcon(QStringLiteral("🌐"), QColor(70, 140, 220));  // 🌐 network node
+    if (kind == QStringLiteral("target"))   return glyphIcon(QStringLiteral("🎯"), QColor(255, 180, 0));    // 🎯 aim target
     if (kind == QStringLiteral("image"))    return QIcon(":/image.png");
-    if (kind == QStringLiteral("stage"))    return glyphIcon(QStringLiteral("\xF0\x9F\x93\x90"), QColor(240, 210, 110)); // 📐 stage piece
+    if (kind == QStringLiteral("stage"))    return glyphIcon(QStringLiteral("📐"), QColor(240, 210, 110)); // 📐 stage piece
     if (kind == QStringLiteral("scenery"))  return swatchIcon(color.isValid() ? color : QColor(226, 228, 236)); // the cloth
     return style()->standardIcon(QStyle::SP_FileIcon);
 }
@@ -1135,7 +1135,7 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
            its own origin and rotation, whose members hold group-local offsets --
            and until now the only one with no visual identity at all. */
         setNodeLabel(node, g.name, tr("  \xc2\xb7 frame"));
-        node->setIcon(0, glyphIcon(QStringLiteral("\xF0\x9F\x93\xA6"), QColor(200, 175, 235))); // ð¦ rigid body
+        node->setIcon(0, glyphIcon(QStringLiteral("📦"), QColor(200, 175, 235))); // ð¦ rigid body
     }
     else
     {
@@ -1583,13 +1583,13 @@ void MonitorLayersPanel::reload()
         }
         // ▾ / ▸: narrow enough for the 20 px button in any font (⊟ / ⊞ came
         // out as "…" on a Mac whose font drew them wider).
-        coll->setText(QStringLiteral("\xE2\x96\xBE"));   // ▾ (layers build expanded)
+        coll->setText(QStringLiteral("▾"));   // ▾ (layers build expanded)
         h->addWidget(coll);
         connect(coll, &QToolButton::clicked, this, [layerNode, coll]() {
             const bool nowExpanded = !layerNode->isExpanded();
             setSubtreeExpanded(layerNode, nowExpanded);
-            coll->setText(nowExpanded ? QStringLiteral("\xE2\x96\xBE")
-                                      : QStringLiteral("\xE2\x96\xB8"));
+            coll->setText(nowExpanded ? QStringLiteral("▾")
+                                      : QStringLiteral("▸"));
         });
 
         QToolButton *eye = new QToolButton(row);

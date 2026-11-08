@@ -20,6 +20,10 @@
 #include <QApplication>
 #include <QStatusBar>
 #include <QToolButton>
+#include <QAbstractButton>
+#include <QTabBar>
+#include <QDirIterator>
+#include <QRegularExpression>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
 #include <QLabel>
@@ -311,6 +315,51 @@ void FooterSave_Test::aLookingJumpKeepsThePreviewPlaying()
     QVERIFY(st->previewState() != ShowTreeController::PreviewState::Playing);
     m_app->showContext(QStringLiteral("Show Tree"));
     st->stopPreview();
+}
+
+void FooterSave_Test::noTextIsUtf8ReadAsLatin1()
+{
+    /* UTF-8 bytes seen as Latin-1: a lead byte (Â Ã â ð) then a 0x80-0xBF
+       code point -- no real text has that pair. */
+    const QRegularExpression bad(QStringLiteral("[\u00C2\u00C3\u00E2\u00F0][\u0080-\u00BF]"));
+    QStringList found;
+    auto check = [&](const QString &what, const QString &text) {
+        if (bad.match(text).hasMatch())
+            found << what + QStringLiteral(": ") + text;
+    };
+    for (QWidget *w : m_app->findChildren<QWidget *>())
+    {
+        const QString name = QString::fromLatin1(w->metaObject()->className()) + QLatin1Char('#') + w->objectName();
+        if (auto *b = qobject_cast<QAbstractButton *>(w))
+            check(name, b->text());
+        if (auto *l = qobject_cast<QLabel *>(w))
+            check(name, l->text());
+        if (auto *tb = qobject_cast<QTabBar *>(w))
+            for (int i = 0; i < tb->count(); ++i)
+                check(name, tb->tabText(i));
+        if (auto *tree = qobject_cast<QTreeWidget *>(w))
+            for (QTreeWidgetItemIterator it(tree); *it; ++it)
+                for (int c = 0; c < tree->columnCount(); ++c)
+                    check(name, (*it)->text(c));
+        check(name + QStringLiteral(" tooltip"), w->toolTip());
+    }
+    QVERIFY2(found.isEmpty(), qPrintable(found.join(QLatin1Char('\n'))));
+
+    /* The same, at the source: a QStringLiteral / QLatin1String holding
+       UTF-8 escape bytes is read as Latin-1 (Qt 6 puts the bytes in a u""
+       literal), which is how the Plot layers' "▾" came out as "â–¾". */
+    const QRegularExpression literal(QStringLiteral(
+        "(QStringLiteral|QLatin1String|QLatin1StringView)\\(\"[^\"\\n]*\\\\x[eEfF][0-9a-fA-F]\\\\x[89a-bA-B][0-9a-fA-F]"));
+    QStringList sources;
+    QDirIterator it(QStringLiteral(FOOTERSAVE_UI_SRC), { "*.cpp", "*.h" }, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext())
+    {
+        QFile f(it.next());
+        if (f.open(QIODevice::ReadOnly) && literal.match(QString::fromUtf8(f.readAll())).hasMatch())
+            sources << f.fileName();
+    }
+    QVERIFY2(sources.isEmpty(), qPrintable(QStringLiteral("UTF-8 escape bytes in a Latin-1 literal: ")
+                                           + sources.join(QStringLiteral(", "))));
 }
 
 void FooterSave_Test::sweepSaves()

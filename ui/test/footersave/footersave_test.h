@@ -53,6 +53,11 @@ private slots:
      *  tab any other way stops it, as it always did */
     void aLookingJumpKeepsThePreviewPlaying();
 
+    /** No text a person reads is UTF-8 read as Latin-1 ("â–¾" for "▾"):
+     *  what the main window's widgets say, and no source that would make it
+     *  (a QStringLiteral with \\xE2\\x96... bytes is Latin-1 in a QString) */
+    void noTextIsUtf8ReadAsLatin1();
+
 private:
     void sweepSaves();
 

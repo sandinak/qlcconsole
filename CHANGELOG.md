@@ -51,6 +51,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   and the Workbench's "On the rig" line restyle only when they change. An
   autosave keeps "Unsaved changes" (the hover says when it autosaved)
   instead of turning it over and back on the next edit.
+- **Plot layers' collapse arrows and layer icons read right.** The ▾ / ▸
+  button on each layer and the truss, mic stand, tower, hanger, power,
+  network, target, stage and rigid-body icons were UTF-8 bytes in a
+  QStringLiteral, which Qt reads as Latin-1: "â–¾" and the like. A test now
+  fails on such text in the main window and on such a literal in the source.
 - **A jump that only looks keeps your cue playing.** Show Status "Show",
   the Review plot / fixtures / power lines, Why is this on, the footer
   Not ready / No outputs chips and Unsaved Changes' fixture and function
