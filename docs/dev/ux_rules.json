@@ -1312,13 +1312,15 @@
     "theme": "Does what it says",
     "title": "Locate works on every patched fixture",
     "rule": "Locate is unmistakable on the device (solid, full, white, sharp flashes) over whatever is playing, and everything is back after.",
-    "check": "review",
+    "check": "test:wledshow_test::locateGivesBackAHeldTrackedEffectWithItsNewColour",
     "checks": [
-      "review",
+      "test:wledshow_test::locateGivesBackAHeldTrackedEffectWithItsNewColour",
+      "test:wledshow_test::locateFlashesAWledPlayingAnEffectSolidWhiteAndGivesTheLookBack",
+      "walker",
       "manual"
     ],
-    "enforced": false,
-    "why": "2026-11-07: \"locate doesn't appear to work\" on a WLED (fix/042-wled-locate).",
+    "enforced": true,
+    "why": "2026-11-07: \"locate doesn't appear to work\" on a WLED (fix/042-wled-locate). Then the walker (F-11): Locate from the Show Tree's right-click went to the Lighting Studio tab, which stopped the Show Tree's preview, so the cue being built (a held Starburst in amber) went dark under the flashes and never came back. Fixed (fix/042-f11-locate-tracking): Locate flashes from where it was asked.",
     "example": {
       "right": "Locate on a WLED mid-effect: solid white flashes, then the effect resumes",
       "wrong": "Locate on a WLED: nothing visible, the effect keeps running"

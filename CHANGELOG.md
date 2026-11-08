@@ -64,6 +64,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   alike; afterwards the look comes back, or the device is left as it was.
   Locate's colour is now its own on every fixture, not mixed with the
   look's. A finished Locate no longer leaves a timer running.
+- **Locate from the Show Tree gives back the cue you are building.**
+  Right-click ▸ Locate in the Show Tree (its Library, a layer, the tree)
+  switched to the Lighting Studio tab, which stopped the Show Tree's
+  preview: the cue on stage went dark under the flashes and stayed dark (a
+  WLED's held Starburst in its new colour came back black). Locate now
+  flashes from where you asked, on the page you are on, and afterwards
+  everything is as it was (UX-72).
 - **A duplicated cue no longer shares its one-off values with the
   original.** Duplicate (⌘D), Copy / Paste of cues, layers, hits, lists and
   productions, and Unlink here kept the copy pointing at the original's

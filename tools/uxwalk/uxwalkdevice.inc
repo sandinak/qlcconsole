@@ -206,7 +206,7 @@ QString segText(const QJsonObject &seg)
  *  - "cfg": {path: value}: its settings ("if.live.en": false);
  *  - "got": {key: value}: some state POST since the step began set every
  *    segment so (the Locate flash), and "after": the segments back as they
- *    were before the step (fx and col) once it is over;
+ *    were before the step (fx, col and frz) once it is over;
  *  - "what": the words before what it got ("after the colour cue"). */
 QString deviceProblem(const QJsonObject &c, qint64 stepStartMs, const QJsonObject &stateBefore)
 {
@@ -269,7 +269,7 @@ QString deviceProblem(const QJsonObject &c, qint64 stepStartMs, const QJsonObjec
         const QJsonArray was = stateBefore.value(QStringLiteral("seg")).toArray();
         const QJsonArray now = g_device->state().value(QStringLiteral("seg")).toArray();
         for (int i = 0; i < was.size() && i < now.size(); ++i)
-            for (const char *k : { "fx", "col" })
+            for (const char *k : { "fx", "col", "frz" })
                 if (!segWants(QLatin1String(k), now.at(i).toObject().value(QLatin1String(k)),
                               QLatin1String(k) == QLatin1String("col")
                                   ? was.at(i).toObject().value(QLatin1String(k)).toArray().at(0)

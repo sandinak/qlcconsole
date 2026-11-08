@@ -261,7 +261,8 @@ namespace ContextMenus
 
     /** The head-layout editor of @p groupId in a dialog */
     QLC_UI_EXPORT void editGroupLayout(Doc *doc, quint32 groupId, QWidget *parent);
-    /** Flash @p fixtureIds on the rig (the Plot's Locate) */
+    /** Flash @p fixtureIds on the rig (the Plot's Locate), staying where
+     *  it was asked: no tab changes, so a Show Tree preview plays on. */
     QLC_UI_EXPORT void locate(Doc *doc, const QList<quint32> &fixtureIds, QWidget *parent);
     /** Ask, then delete @p groupIds (their fixtures stay). True when deleted. */
     QLC_UI_EXPORT bool deleteGroups(Doc *doc, const QList<quint32> &groupIds, QWidget *parent);

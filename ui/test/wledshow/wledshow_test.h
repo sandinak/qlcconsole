@@ -37,6 +37,15 @@ private slots:
      *  as it was -- off, its effect still the look's, not left on Solid. */
     void locateLeavesAWledNothingPlaysOnAsItWas();
 
+    /** UX-72, F-11: a Tracking list whose cue plays Fireworks Starburst
+     *  Runs Once, At the end Hold (the device frozen on its last frame),
+     *  then a cue that sets only a colour (amber; the burst tracks into
+     *  it), previewed in Design from the Show Tree. Right-click ▸ Locate
+     *  (ContextMenus::locate) flashes it without leaving the Show Tree,
+     *  and then gives back exactly what was showing: the same effect,
+     *  colour, freeze and brightness, the preview still playing. */
+    void locateGivesBackAHeldTrackedEffectWithItsNewColour();
+
     /** UX-73, his spell cue: the stage snaps to black but for the staff (a
      *  WLED on its own API) and the steps' effect. Each GO, through the
      *  Show Tree as the person fires it, reaches the staff within a few
