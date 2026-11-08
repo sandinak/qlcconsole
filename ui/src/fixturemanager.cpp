@@ -3218,9 +3218,11 @@ void FixtureManager::foundContextMenu(QTreeWidgetItem *clicked)
                 keys << item->child(i)->data(KColumnName, PROP_FOUND).toString();
     };
     if (clicked->isSelected())
+    {
         foreach (QTreeWidgetItem *item, m_fixtures_tree->selectedItems())
             if (item->data(KColumnName, PROP_FOUND).isValid())
                 take(item);
+    }
     if (keys.isEmpty())
         take(clicked);
 

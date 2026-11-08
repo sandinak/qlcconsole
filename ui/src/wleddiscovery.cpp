@@ -588,9 +588,11 @@ quint32 WledDiscovery::patch(QWidget *parent, const QString &key, bool offerSetU
     QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef(QStringLiteral("WLED"), QStringLiteral("Effect Mode"));
     QLCFixtureMode *mode = nullptr;
     if (def != nullptr)
+    {
         foreach (QLCFixtureMode *m, def->modes())
             if (mode == nullptr && m->name().startsWith(QLatin1String("Effect")))
                 mode = m;
+    }
     if (mode == nullptr)
     {
         if (parent != nullptr)

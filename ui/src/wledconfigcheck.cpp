@@ -216,6 +216,7 @@ WledConfigCheck::Finding WledConfigCheck::evaluate(Doc *doc, const Fixture *fx, 
        alone, so Fix on Device never flips it back and forth. */
     QString both;
     if (doc != nullptr)
+    {
         foreach (Fixture *other, doc->fixtures())
             if (other != fx && isWled(other) && other->ipAddress() == fx->ipAddress()
                 && (other->transport() == Fixture::WledTransport) != (fx->transport() == Fixture::WledTransport))
@@ -223,6 +224,7 @@ WledConfigCheck::Finding WledConfigCheck::evaluate(Doc *doc, const Fixture *fx, 
                 both = other->name();
                 break;
             }
+    }
     if (!both.isEmpty())
         f.problems << (fx->transport() == Fixture::WledTransport
             ? tr("is also %1 in this show, sent to as Art-Net/sACN: while that streams, the WLED "
