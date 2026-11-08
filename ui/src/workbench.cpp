@@ -35,6 +35,7 @@
 #include <QDebug>
 
 #include "workbench.h"
+#include "previewkeep.h"
 #include "whyonpanel.h"
 #include "blindstyle.h"
 #include "shrinkablebar.h"
@@ -1108,6 +1109,14 @@ void Workbench::updateRecordPointer()
         m_recordPointer->setVisible(recordPointerWanted());
 }
 
+namespace
+{
+/* "On the rig" is set on a change only: updateOnRig() runs from many places,
+   and setStyleSheet() re-polishes the label even for the same sheet (UX-74). */
+void onRigText(QLabel *l, const QString &t) { if (l->text() != t) l->setText(t); }
+void onRigStyle(QLabel *l, const QString &t) { if (l->styleSheet() != t) l->setStyleSheet(t); }
+}
+
 void Workbench::updateOnRig()
 {
     updateRecordPointer();
@@ -1133,8 +1142,8 @@ void Workbench::updateOnRig()
     if (m_ownPreview && m_stack != nullptr && m_stack->ownPreviewHeld())
     {
         // RC8: a list runs and GO took the stage -- Play previews instead.
-        m_onRig->setText(m_stack->ownPreviewText());
-        m_onRig->setStyleSheet(QString());
+        onRigText(m_onRig, m_stack->ownPreviewText());
+        onRigStyle(m_onRig, QString());
         m_playBtn->setText(tr("Play"));
         m_playBtn->setToolTip(tr("Preview this instead of the running show (it runs on, unseen)"));
         m_playBtn->setVisible(true);
@@ -1144,8 +1153,8 @@ void Workbench::updateOnRig()
     {
         // W3: the back end says what plays (the Show Tree's words).
         const QString text = m_stack->ownPreviewText();
-        m_onRig->setText(text.isEmpty() ? tr("▶ On the rig: %1").arg(m_stack->title()) : text);
-        m_onRig->setStyleSheet(QStringLiteral("QLabel { color: #6cc08f; }"));
+        onRigText(m_onRig, text.isEmpty() ? tr("▶ On the rig: %1").arg(m_stack->title()) : text);
+        onRigStyle(m_onRig, QStringLiteral("QLabel { color: #6cc08f; }"));
         m_playBtn->setText(tr("Stop"));
         m_playBtn->setToolTip(tr("Stop the preview (it plays again when you Play or load something)"));
         m_playBtn->setVisible(true);
@@ -1153,36 +1162,36 @@ void Workbench::updateOnRig()
     }
     if (playing != nullptr)
     {
-        m_onRig->setText(tr("▶ On the rig: %1").arg(playing->name()));
-        m_onRig->setStyleSheet(QStringLiteral("QLabel { color: #6cc08f; }"));
+        onRigText(m_onRig, tr("▶ On the rig: %1").arg(playing->name()));
+        onRigStyle(m_onRig, QStringLiteral("QLabel { color: #6cc08f; }"));
         m_playBtn->setText(tr("Stop"));
         m_playBtn->setToolTip(tr("Stop the preview (it plays again when you Play or load something)"));
         m_playBtn->setVisible(true);
     }
     else if (live != nullptr)
     {
-        m_onRig->setText(tr("▶ Live: %1").arg(live->name()));
-        m_onRig->setStyleSheet(QStringLiteral("QLabel { color: #6cc08f; }"));
+        onRigText(m_onRig, tr("▶ Live: %1").arg(live->name()));
+        onRigStyle(m_onRig, QStringLiteral("QLabel { color: #6cc08f; }"));
         m_playBtn->setVisible(false);
     }
     else
     {
-        m_onRig->setStyleSheet(QString());
+        onRigStyle(m_onRig, QString());
         if (!canPlay)
-            m_onRig->setText(QString());
+            onRigText(m_onRig, QString());
         else if (m_doc->mode() != Doc::Design && m_stack->playsItself())
         {
             // Operate: only the run is live; a cue edited here is blind
             // (docs/design/LIVE_BLIND.md) -- blue, as Blind is everywhere.
-            m_onRig->setText(tr("Blind: edits reach the stage on GO"));
-            m_onRig->setStyleSheet(BlindStyle::labelSheet());
+            onRigText(m_onRig, tr("Blind: edits reach the stage on GO"));
+            onRigStyle(m_onRig, BlindStyle::labelSheet());
         }
         else if (m_doc->mode() != Doc::Design)
-            m_onRig->setText(tr("Operate: nothing previews here"));
+            onRigText(m_onRig, tr("Operate: nothing previews here"));
         else if (m_heldByRun)
-            m_onRig->setText(tr("■ Held — GO took the stage. Play to preview over the show."));
+            onRigText(m_onRig, tr("■ Held — GO took the stage. Play to preview over the show."));
         else
-            m_onRig->setText(tr("■ Not playing"));
+            onRigText(m_onRig, tr("■ Not playing"));
         m_playBtn->setText(tr("Play"));
         m_playBtn->setToolTip(m_heldByRun ? tr("Preview this over the running show")
                                           : tr("Play what is loaded on the rig (Design mode)"));
@@ -2474,9 +2483,13 @@ void Workbench::playPicked()
 
 void Workbench::hideEvent(QHideEvent *ev)
 {
-    // Leaving the tab (or the dock): nothing left playing from here.
-    stopPreview();
-    stopOperate();
+    // Leaving the tab (or the dock): nothing left playing from here -- unless
+    // the jump only looks at something, and the person keeps seeing the look.
+    if (!PreviewKeep::active())
+    {
+        stopPreview();
+        stopOperate();
+    }
     scheduleEncoderRings();     // the controller's rings go dark
     QWidget::hideEvent(ev);
 }

@@ -93,6 +93,7 @@
 #include "speedmastersfooter.h"
 #include "updatemanager.h"
 #include "app.h"
+#include "previewkeep.h"
 #include "keytriggers.h"
 #include "selectionshape.h"
 #include "vcwidget.h"
@@ -303,6 +304,24 @@ App::App()
     QCoreApplication::setOrganizationDomain("qlcplus.org");
     QCoreApplication::setApplicationName(APPNAME);
     installSettingsTitle();
+}
+
+namespace
+{
+/* A footer chip is set only on a change: setStyleSheet() re-polishes the
+   label (and can re-lay the footer) even when handed the same sheet, and
+   setText() repaints it (UX-74). */
+void setChipText(QLabel *chip, const QString &text)
+{
+    if (chip != nullptr && chip->text() != text)
+        chip->setText(text);
+}
+
+void setChipStyle(QLabel *chip, const QString &sheet)
+{
+    if (chip != nullptr && chip->styleSheet() != sheet)
+        chip->setStyleSheet(sheet);
+}
 }
 
 namespace
@@ -1590,7 +1609,7 @@ void App::initDoc()
             QList<quint32> ids;
             foreach (const QVariant &v, items)
                 ids << v.toUInt();
-            showContext(tr("Lighting Studio"));
+            showContextKeepingPreview(tr("Lighting Studio"));
             if (Monitor::instance() != NULL)
                 Monitor::instance()->highlightFixtures(ids);
         });
@@ -1599,7 +1618,7 @@ void App::initDoc()
             QList<quint32> ids;
             foreach (const QVariant &v, items)
                 ids << v.toUInt();
-            showContext(tr("Lighting Studio"));
+            showContextKeepingPreview(tr("Lighting Studio"));
             if (Monitor::instance() != NULL)
                 Monitor::instance()->highlightFixtures(ids);
         });
@@ -2077,12 +2096,12 @@ void App::slotUnsavedJump(const ChangeJournal::Subject &subject)
     case ChangeJournal::ToFunction:
         if (FunctionManager::instance() != NULL)
         {
-            showContext(tr("Functions"));
+            showContextKeepingPreview(tr("Functions"));
             FunctionManager::instance()->selectFunction(subject.id);
         }
         break;
     case ChangeJournal::ToFixture:
-        showContext(tr("Fixtures"));
+        showContextKeepingPreview(tr("Fixtures"));
         if (FixtureManager::instance() != NULL)
             FixtureManager::instance()->selectFixture(subject.id);
         break;
@@ -5888,6 +5907,12 @@ bool App::offerConsoleViewAfterUpgrade()
     return true;
 }
 
+void App::showContextKeepingPreview(const QString &tabLabel)
+{
+    PreviewKeep keep;
+    showContext(tabLabel);
+}
+
 void App::showContext(const QString &tabLabel)
 {
     /* Still docked? Switch to it and bring the main window forward.
@@ -7601,9 +7626,9 @@ void App::autosaveFailed(const QString &why)
     // exists. The chip says it failed until the next autosave or save.
     if (m_statusDirtyLabel == NULL)
         return;
-    m_statusDirtyLabel->setText(tr("⚠ Autosave failed"));
+    setChipText(m_statusDirtyLabel, tr("⚠ Autosave failed"));
     m_statusDirtyLabel->setToolTip(tr("Autosave failed: %1. Save the show (⌘S) to keep your changes.").arg(why));
-    m_statusDirtyLabel->setStyleSheet("QLabel { color: #d04040; font-weight: bold; }");
+    setChipStyle(m_statusDirtyLabel, QStringLiteral("QLabel { color: #d04040; font-weight: bold; }"));
 }
 
 void App::slotAutosave()
@@ -7710,9 +7735,14 @@ void App::slotAutosave()
     m_lastAutosaveTime = QTime::currentTime().toString("hh:mm:ss");
     if (m_statusDirtyLabel != NULL)
     {
-        m_statusDirtyLabel->setText(tr("Autosaved %1").arg(m_lastAutosaveTime));
-        m_statusDirtyLabel->setStyleSheet("QLabel { color: gray; }");
-        m_statusDirtyLabel->setToolTip(QString());
+        /* The chip keeps saying "Unsaved changes" -- they are, an autosave is
+           a recovery copy -- and the autosave goes in its tooltip: turning
+           the text to "Autosaved" and back on the next edit was two changes
+           per cycle (UX-74). After a failed autosave this puts it right. */
+        setChipText(m_statusDirtyLabel, tr("● Unsaved changes"));
+        setChipStyle(m_statusDirtyLabel, QStringLiteral("QLabel { color: #d08020; font-weight: bold; }"));
+        m_statusDirtyLabel->setCursor(Qt::PointingHandCursor);
+        m_statusDirtyLabel->setToolTip(QString());     // the hover adds the autosave time
     }
 
     qDebug() << "[Autosave] Successfully saved to" << autosavePath;
@@ -8274,7 +8304,7 @@ void App::initStatusBar()
     // Fixed width sized to the widest reading, so the % / ms changing never
     // shifts the MTC chip left/right.
     m_statusLoadLabel->setFixedWidth(
-        QFontMetrics(chipFont).horizontalAdvance(QStringLiteral("Load: 00.00 / 00 ms (000%)")) + 14);
+        QFontMetrics(chipFont).horizontalAdvance(QStringLiteral("Load: 00.00 / 00 ms (000%)  stall 000 ms")) + 14);
     m_statusLoadLabel->setToolTip(tr("Engine tick compute time vs the per-tick "
         "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
     m_statusLoadLabel->setVisible(m_showFooterLoad);   // Settings ▸ Appearance
@@ -8600,7 +8630,12 @@ bool App::eventFilter(QObject *watched, QEvent *event)
     if (watched == m_statusDirtyLabel && m_statusDirtyLabel != NULL && m_doc != NULL && m_doc->isModified())
     {
         if (event->type() == QEvent::ToolTip)
-            m_statusDirtyLabel->setToolTip(m_doc->changeJournal()->tooltip());
+        {
+            QString tip = m_doc->changeJournal()->tooltip();
+            if (!m_lastAutosaveTime.isEmpty())
+                tip += QStringLiteral("\n\n") + tr("Autosaved %1 (a recovery copy).").arg(m_lastAutosaveTime);
+            m_statusDirtyLabel->setToolTip(tip);
+        }
         else if (event->type() == QEvent::MouseButtonRelease
                  && static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton)
             slotShowUnsavedChanges();
@@ -8874,7 +8909,7 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         // giving a universe an output.
         if (m_statusModeLabel->property("previewOnly").toBool()
             && ShowStatus::instance()->allEntries().isEmpty())
-            showContext(tr("Connections"));
+            showContextKeepingPreview(tr("Connections"));
         else
             showStatusDetails();
         return true;
@@ -9157,8 +9192,20 @@ void App::slotUpdateStandby()
     // The Show Tree's current production (P5): whose GO this is.
     if (const ShowTree::Production *prod = m_doc->showTree()->production(m_doc->currentProduction()))
         text = prod->name + QStringLiteral(" \u25b8 ") + text;
-    if (m_statusStandby->text() != text)
-        m_statusStandby->setText(text);
+    /* A long cue name must not push the chips after it (the rig-network
+       warning among them) out of the footer: it shortens to a share of the
+       window like the stage chip, and the tooltip keeps all of it (UX-74). */
+    if (m_statusStandby->property("baseTip").isNull())
+        m_statusStandby->setProperty("baseTip", m_statusStandby->toolTip());
+    QFont chipFont = m_statusStandby->font();
+    const int room = qBound(150, width() / 4, 480);
+    const QString shown = QFontMetrics(chipFont).elidedText(text, Qt::ElideRight, room - 16);
+    if (m_statusStandby->text() != shown)
+        m_statusStandby->setText(shown);
+    const QString base = m_statusStandby->property("baseTip").toString();
+    const QString tip = shown == text ? base : text + QStringLiteral("\n\n") + base;
+    if (m_statusStandby->toolTip() != tip)
+        m_statusStandby->setToolTip(tip);
     m_statusStandby->show();
 }
 
@@ -9385,14 +9432,26 @@ void App::slotUpdateHealthFooter()
         // A tick that took far longer in wall time than it spent on CPU was
         // stalled by the scheduler, not by us.
         double stallMs = haveCpu ? (wallMs - cpuMs) : 0.0;
-        const bool stalled = stallMs >= 2.0;
-        if (stalled)
-            m_statusLoadLabel->setText(tr("Load: %1 / %2 ms (%3%)  stall %4 ms")
-                                       .arg(loadMs, 0, 'f', 2).arg(int(budget))
-                                       .arg(pct).arg(stallMs, 0, 'f', 0));
+        /* Hysteresis: a busy machine sits on the 60 % line, and a chip that
+           flips amber/green and grows a "stall" word every 500 ms is a flash
+           (UX-74). Enter amber at 60 %, leave below 50 %; red at 100 %, leave
+           below 90 %; a stall is shown for 2 s after the last one. */
+        if (stallMs >= 2.0)
+        {
+            m_loadStallMs = stallMs;
+            m_loadStallUntil.start();
+        }
+        const bool stalled = m_loadStallUntil.isValid() && m_loadStallUntil.elapsed() < 2000;
+        if (pct >= 100 || (m_loadLevel == 2 && pct >= 90))
+            m_loadLevel = 2;
+        else if (pct >= 60 || (m_loadLevel >= 1 && pct >= 50))
+            m_loadLevel = 1;
         else
-            m_statusLoadLabel->setText(tr("Load: %1 / %2 ms (%3%)")
-                                       .arg(loadMs, 0, 'f', 2).arg(int(budget)).arg(pct));
+            m_loadLevel = 0;
+        QString loadText = tr("Load: %1 / %2 ms (%3%)").arg(loadMs, 0, 'f', 2).arg(int(budget)).arg(pct);
+        if (stalled)
+            loadText += tr("  stall %1 ms").arg(m_loadStallMs, 0, 'f', 0);
+        setChipText(m_statusLoadLabel, loadText);
         m_statusLoadLabel->setToolTip(
             tr("Engine load: %1 ms of CPU per tick against a %2 ms budget.\n"
                "Worst tick wall time: %3 ms.\n"
@@ -9405,10 +9464,8 @@ void App::slotUpdateHealthFooter()
         // Only on a change: setStyleSheet() re-polishes the label (and can
         // re-lay the status bar) even when handed the same sheet, and this
         // runs twice a second for as long as the app is open.
-        const QString sheet = QString::fromLatin1(pct >= 100 ? red
-                                                  : ((pct >= 60 || stalled) ? amber : green));
-        if (m_statusLoadLabel->styleSheet() != sheet)
-            m_statusLoadLabel->setStyleSheet(sheet);
+        setChipStyle(m_statusLoadLabel, QString::fromLatin1(m_loadLevel == 2 ? red
+                                                  : ((m_loadLevel == 1 || stalled) ? amber : green)));
     }
 
     // Safety refresh for the timecode chip between watchdog transitions.
@@ -9439,14 +9496,14 @@ void App::slotTimelineControlChanged()
         const char *amber = "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; font-weight:bold; }";
         if (active)
         {
-            m_statusTimelineLabel->setText(tr("● UNDER TIMELINE CONTROL"));
-            m_statusTimelineLabel->setStyleSheet(green);
+            setChipText(m_statusTimelineLabel, tr("● UNDER TIMELINE CONTROL"));
+            setChipStyle(m_statusTimelineLabel, green);
             m_statusTimelineLabel->show();
         }
         else if (suspended)
         {
-            m_statusTimelineLabel->setText(tr("❚❚ TIMELINE SUSPENDED — VC control"));
-            m_statusTimelineLabel->setStyleSheet(amber);
+            setChipText(m_statusTimelineLabel, tr("❚❚ TIMELINE SUSPENDED — VC control"));
+            setChipStyle(m_statusTimelineLabel, amber);
             m_statusTimelineLabel->show();
         }
         else
@@ -9700,15 +9757,15 @@ void App::updateStatusBar()
                     toCheck << e;
             if (toCheck.isEmpty() && m_statusMessage.isEmpty() == false)
             {
-                m_statusModeLabel->setText(m_statusMessage);
-                m_statusModeLabel->setStyleSheet(QString());
+                setChipText(m_statusModeLabel, m_statusMessage);
+                setChipStyle(m_statusModeLabel, QString());
             }
             else
             {
-                m_statusModeLabel->setText(toCheck.isEmpty()
+                setChipText(m_statusModeLabel, toCheck.isEmpty()
                     ? tr("No outputs: preview only")
                     : tr("No outputs: preview only · %n to check", "", toCheck.count()));
-                m_statusModeLabel->setStyleSheet("QLabel { color: #909090; }");
+                setChipStyle(m_statusModeLabel, "QLabel { color: #909090; }");
             }
             m_statusModeLabel->setCursor(Qt::PointingHandCursor);
             QStringList lines;
@@ -9727,10 +9784,10 @@ void App::updateStatusBar()
         m_statusModeLabel->setProperty("previewOnly", false);
         if (entries.isEmpty() && !notes.isEmpty())
         {
-            m_statusModeLabel->setText(m_statusMessage.isEmpty()
+            setChipText(m_statusModeLabel, m_statusMessage.isEmpty()
                 ? tr("Ready · %n note(s)", "", notes.count())
                 : m_statusMessage + QStringLiteral(" · ") + tr("%n note(s)", "", notes.count()));
-            m_statusModeLabel->setStyleSheet(QString());
+            setChipStyle(m_statusModeLabel, QString());
             m_statusModeLabel->setCursor(Qt::PointingHandCursor);
             QStringList lines;
             foreach (const ShowStatus::Entry &e, notes)
@@ -9740,10 +9797,10 @@ void App::updateStatusBar()
         }
         else if (entries.isEmpty() == false)
         {
-            m_statusModeLabel->setText(entries.count() == 1
+            setChipText(m_statusModeLabel, entries.count() == 1
                 ? tr("Not ready")
                 : tr("Not ready (%1)").arg(entries.count()));
-            m_statusModeLabel->setStyleSheet("QLabel { color: #e04030; font-weight: bold; }");
+            setChipStyle(m_statusModeLabel, "QLabel { color: #e04030; font-weight: bold; }");
             m_statusModeLabel->setCursor(Qt::PointingHandCursor);
 
             QStringList lines;
@@ -9754,13 +9811,13 @@ void App::updateStatusBar()
         }
         else
         {
-            m_statusModeLabel->setStyleSheet(QString());
+            setChipStyle(m_statusModeLabel, QString());
             m_statusModeLabel->setToolTip(QString());
             m_statusModeLabel->setCursor(Qt::ArrowCursor);
             if (m_statusMessage.isEmpty())
-                m_statusModeLabel->setText(tr("Ready"));
+                setChipText(m_statusModeLabel, tr("Ready"));
             else
-                m_statusModeLabel->setText(m_statusMessage);
+                setChipText(m_statusModeLabel, m_statusMessage);
         }
     }
 }
@@ -9815,8 +9872,8 @@ void App::updateRigNetworkFooter()
         m_statusRigNetLabel->hide();
         return;
     }
-    m_statusRigNetLabel->setText(text);
-    m_statusRigNetLabel->setStyleSheet(alarm
+    setChipText(m_statusRigNetLabel, text);
+    setChipStyle(m_statusRigNetLabel, alarm
         ? QStringLiteral("QLabel { color: #e60000; font-weight: bold; }")
         : QStringLiteral("QLabel { color: #d08000; font-weight: bold; }"));
     QStringList tip = st.reasons;
@@ -9842,8 +9899,8 @@ void App::updateReviewStatus()
     const int accepted = r.accepted[0] + r.accepted[1] + r.accepted[2];
     if (blockers + warnings == 0)
     {
-        m_statusReviewLabel->setText(tr("Reviewed"));
-        m_statusReviewLabel->setStyleSheet(QStringLiteral("QLabel { color: #909090; }"));
+        setChipText(m_statusReviewLabel, tr("Reviewed"));
+        setChipStyle(m_statusReviewLabel, QStringLiteral("QLabel { color: #909090; }"));
     }
     else
     {
@@ -9852,8 +9909,8 @@ void App::updateReviewStatus()
             parts << tr("%1 ⛔").arg(blockers);
         if (warnings > 0)
             parts << tr("%1 ⚠").arg(warnings);
-        m_statusReviewLabel->setText(tr("Review · %1").arg(parts.join(QLatin1Char(' '))));
-        m_statusReviewLabel->setStyleSheet(blockers > 0 ? QStringLiteral("QLabel { color: #c0392b; font-weight: bold; }")
+        setChipText(m_statusReviewLabel, tr("Review · %1").arg(parts.join(QLatin1Char(' '))));
+        setChipStyle(m_statusReviewLabel, blockers > 0 ? QStringLiteral("QLabel { color: #c0392b; font-weight: bold; }")
                                                         : QStringLiteral("QLabel { color: #b9770e; }"));
     }
     const QString summary = tr("Show Review: %1 blockers, %2 warnings, %3 notes open; %4 marked Not a Problem. "
@@ -9925,7 +9982,7 @@ bool App::reviewJump(QWidget *parent, const QString &jump, const QVariantList &d
     }
     if (jump == QLatin1String("plot"))
     {
-        showContext(tr("Lighting Studio"));
+        showContextKeepingPreview(tr("Lighting Studio"));
         return true;
     }
     if (jump == QLatin1String("palette"))
@@ -9953,7 +10010,7 @@ bool App::reviewJump(QWidget *parent, const QString &jump, const QVariantList &d
     }
     if (jump == QLatin1String("fixtures") || jump == QLatin1String("power"))
     {
-        showContext(tr("Fixtures"));
+        showContextKeepingPreview(tr("Fixtures"));
         return true;
     }
     return false;

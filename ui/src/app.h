@@ -734,6 +734,9 @@ public slots:
      *  to its tab if it is docked, or raise its own window if it has been
      *  detached. */
     void showContext(const QString &tabLabel);
+    /** showContext() for a jump that only looks (Show, Review, Why on, the
+     *  footer): a Show Tree or Workbench preview keeps playing across it. */
+    void showContextKeepingPreview(const QString &tabLabel);
     /** Window → Functions: the Functions tab (the QLC+ Function Manager);
      *  from a view without it, showContext() switches view as it does for
      *  any hidden tab. */
@@ -1252,6 +1255,9 @@ private:
     QLabel* m_statusTimecodeLabel;
     class QToolButton* m_statusStandby = nullptr;   ///< "Next: 12.5 — ..."
     QLabel* m_statusLoadLabel;
+    int m_loadLevel = 0;                // the Load chip's colour, with hysteresis (UX-74)
+    QElapsedTimer m_loadStallUntil;     // started at the last stall: shown 2 s
+    double m_loadStallMs = 0.0;
     QLabel* m_statusPowerLabel = nullptr;
     // Whether the engine-load / power-estimate / GM-fader footer chips are
     // shown at all, set in Settings ▸ Appearance and persisted

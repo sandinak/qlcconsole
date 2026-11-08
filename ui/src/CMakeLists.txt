@@ -226,6 +226,7 @@ add_library(${module_name}
     workbenchstack.cpp workbenchstack.h
     selectionmenu.cpp selectionmenu.h
     selectionhintchip.cpp selectionhintchip.h
+    previewkeep.h
     showtreeview.cpp showtreeview.h
     blockingview.cpp blockingview.h
     refinepanel.cpp refinepanel.h

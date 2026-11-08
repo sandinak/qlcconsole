@@ -1350,11 +1350,14 @@
     "theme": "Does what it says",
     "title": "Status doesn't flash",
     "rule": "A save or a routine update changes a footer chip at most once, never on and off.",
-    "check": "review",
+    "check": "test:footersave_test::routineUpdatesChangeNoChipAndMoveNone",
     "checks": [
-      "review"
+      "test:footersave_test::routineUpdatesChangeNoChipAndMoveNone",
+      "test:footersave_test::anAutosaveDoesNotTurnTheDirtyChipOverAndBack",
+      "test:footersave_test::theLoadAndNextChipsKeepTheirRoom",
+      "test:footersave_test::savingLeavesTheFooterWhereItWas"
     ],
-    "enforced": false,
+    "enforced": true,
     "why": "2026-11-07: \"when I save sometimes the power and current cue in the bottom flash hard\" (fix/042-footer-save-flash).",
     "example": {
       "right": "Save: the power and cue chips stay steady, or change once",

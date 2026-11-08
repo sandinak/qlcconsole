@@ -8,7 +8,8 @@ add_executable(${module_name} WIN32 MACOSX_BUNDLE
 
 # A real show to save (copied before use: the original is never written).
 target_compile_definitions(${module_name} PRIVATE
-    FOOTERSAVE_SHOW="${CMAKE_SOURCE_DIR}/test-workspaces/help-demo.qxw")
+    FOOTERSAVE_SHOW="${CMAKE_SOURCE_DIR}/test-workspaces/help-demo.qxw"
+    FOOTERSAVE_UI_SRC="${CMAKE_SOURCE_DIR}/ui/src")
 
 target_include_directories(${module_name} PRIVATE
     ../../../engine/src

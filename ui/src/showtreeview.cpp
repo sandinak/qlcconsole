@@ -102,6 +102,7 @@
 #include "focuscallsdialog.h"
 #include "focusmenu.h"
 #include "showtreeview.h"
+#include "previewkeep.h"
 #include "editkeys.h"
 #include "changejournal.h"
 #include "contextmenus.h"
@@ -4015,7 +4016,8 @@ void ShowTreeView::hideEvent(QHideEvent *ev)
 {
     // Don't leave a cue on the rig when the tab is left (unless the Doc,
     // and the preview with it, is already gone).
-    if (!m_st.isNull())
+    // A jump that only looks (PreviewKeep) leaves it playing.
+    if (!m_st.isNull() && !PreviewKeep::active())
         m_st->stopPreview();
     // W3: Build gets its Workbench back while the tab is away.
     suspendWorkbench();

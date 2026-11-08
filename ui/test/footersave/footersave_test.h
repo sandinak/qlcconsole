@@ -41,6 +41,23 @@ private slots:
      *  turns from red to grey "(saved, revertable)" */
     void savingWithEditsInTheProgrammerLeavesTheFooterWhereItWas();
 
+    /** Routine updates (the poll, a Ready check, the rig network, Review,
+     *  Timeline) restyle no chip and move none: each changes only on a change */
+    void routineUpdatesChangeNoChipAndMoveNone();
+    /** An autosave leaves "Unsaved changes" as it was: the hover says when */
+    void anAutosaveDoesNotTurnTheDirtyChipOverAndBack();
+    /** The Load chip has room for its stall text, and the Next cue shortens
+     *  to a share of the window, so neither pushes the chips after it out */
+    void theLoadAndNextChipsKeepTheirRoom();
+    /** A jump that only looks keeps the Show Tree's cue playing; leaving the
+     *  tab any other way stops it, as it always did */
+    void aLookingJumpKeepsThePreviewPlaying();
+
+    /** No text a person reads is UTF-8 read as Latin-1 ("â–¾" for "▾"):
+     *  what the main window's widgets say, and no source that would make it
+     *  (a QStringLiteral with \\xE2\\x96... bytes is Latin-1 in a QString) */
+    void noTextIsUtf8ReadAsLatin1();
+
 private:
     void sweepSaves();
 

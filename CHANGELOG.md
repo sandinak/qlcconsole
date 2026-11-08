@@ -59,6 +59,27 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **The footer stays steady (UX-74).** The Load chip no longer flips
+  amber/green every half second on a busy machine (amber from 60 %, back
+  below 50 %; red from 100 %, back below 90 %; a "stall" word stays 2 s)
+  and has room for its stall text. The Next cue shortens a long name to a
+  share of the window (the tooltip has all of it) instead of pushing the
+  rig-network warning out. Ready / Not ready, rig network, Review, Timeline
+  and the Workbench's "On the rig" line restyle only when they change. An
+  autosave keeps "Unsaved changes" (the hover says when it autosaved)
+  instead of turning it over and back on the next edit.
+- **Plot layers' collapse arrows and layer icons read right.** The ▾ / ▸
+  button on each layer and the truss, mic stand, tower, hanger, power,
+  network, target, stage and rigid-body icons were UTF-8 bytes in a
+  QStringLiteral, which Qt reads as Latin-1: "â–¾" and the like. A test now
+  fails on such text in the main window and on such a literal in the source.
+- **A jump that only looks keeps your cue playing.** Show Status "Show",
+  the Review plot / fixtures / power lines, Why is this on, the footer
+  Not ready / No outputs chips and Unsaved Changes' fixture and function
+  rows no longer stop the Show Tree or Workbench preview as they leave the
+  tab: you see the cue you are building where the jump took you. Opening a
+  scene from Used By still hands the preview to Build's Workbench.
+
 - **A WLED snaps with the stage (UX-73).** On a snap cue a WLED on its
   own API lagged the DMX fixtures by about 150 to 340 ms: it waited for a
   100 ms send tick, then glided. A change now goes when the engine writes
