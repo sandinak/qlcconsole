@@ -960,19 +960,19 @@ Budget 26 clicks. From: 2026-11-07 his office WLED test (UX-67 to UX-72). Rules:
 
 | # | Screen | Control | You see | Clicks |
 |---|---|---|---|---|
-| 1 | any | Fixtures tab *(manual)* | Fixture Manager | 1 |
-| 2 | Fixtures | Add Fixture ▸ WLED ▸ Effect Mode / Effect (15ch) *(manual)* | the Add Fixture dialog with the WLED model | 3 |
-| 3 | Add Fixture | Connection ▸ Network (WLED, JSON over Wi-Fi) *(manual)* | an IP field; no universe or patch step | 2 |
-| 4 | Add Fixture | the IP (172.18.2.100), OK *(manual)* | the WLED on its own universe with the WLED output, sent to its IP (UX-67) | 2 |
-| 5 | footer | the finding chip ▸ Fix on Device… ▸ OK *(manual)* | the footer finding gone; the device settings fixed | 2 |
-| 6 | any | Show Tree tab *(manual)* | the Show Tree | 1 |
-| 7 | Show Tree | + Cue List, + Cue *(manual)* | a cue list with one cue | 2 |
-| 8 | Show Tree | the layer on the WLED *(manual)* | its Look Editor | 1 |
-| 9 | Look Editor | Effect ▸ Fireworks Starburst *(manual)* | the WLED effect chosen | 2 |
-| 10 | Look Editor | Runs ▸ Once; At the end ▸ Hold *(manual)* | Runs: Once and At the end: Hold, working on the device (UX-68) | 4 |
-| 11 | Show Tree, Design | GO on the armed cue *(manual)* | the effect plays once on the WLED, in Design (UX-62) | 1 |
-| 12 | Show Tree | + Cue, a colour only *(manual)* | a second cue with a colour and no effect; the WLED goes to solid colour (UX-70) | 3 |
-| 13 | Show Tree | right-click the WLED ▸ Locate *(manual)* | solid white flashes over whatever plays; all back after (UX-72) | 2 |
+| 1 | any | Fixtures tab | Fixture Manager | 1 |
+| 2 | Fixtures | Add Fixture ▸ WLED ▸ Effect Mode / Effect (15ch) | the Add Fixture dialog with the WLED model | 3 |
+| 3 | Add Fixture | Connection ▸ Network (WLED, JSON over Wi-Fi) | an IP field; no universe or patch step | 2 |
+| 4 | Add Fixture | the IP (172.18.2.100), OK | the WLED on its own universe with the WLED output, sent to its IP (UX-67) | 2 |
+| 5 | footer | the finding chip ▸ Fix on Device… ▸ OK | the footer finding gone; the device settings fixed | 2 |
+| 6 | any | Show Tree tab | the Show Tree | 1 |
+| 7 | Show Tree | + Cue List, + Cue | a cue list with one cue | 2 |
+| 8 | Show Tree | the layer on the WLED | its Look Editor | 1 |
+| 9 | Look Editor | Effect ▸ Fireworks Starburst | the WLED effect chosen | 2 |
+| 10 | Look Editor | Runs ▸ Once; At the end ▸ Hold | Runs: Once and At the end: Hold, working on the device (UX-68) | 4 |
+| 11 | Show Tree, Design | GO on the armed cue | the effect plays once on the WLED, in Design (UX-62) | 1 |
+| 12 | Show Tree | + Cue, a colour only | a second cue with a colour and no effect; the WLED goes to solid colour (UX-70) | 3 |
+| 13 | Show Tree | right-click the WLED ▸ Locate | solid white flashes over whatever plays; all back after (UX-72) | 2 |
 
 ### F-12 Duplicate a cue and change only the copy
 
@@ -983,10 +983,10 @@ Budget 4 clicks. From: 2026-11-07 catch (UX-69); docs/features/show-tree.md Reco
 
 | # | Screen | Control | You see | Clicks |
 |---|---|---|---|---|
-| 1 | Show Tree | a cue *(manual)* | its page | 1 |
-| 2 | Show Tree | Duplicate (⌘D) *(manual)* | a copy of the cue after it (UX-42) | 1 |
-| 3 | Look Editor | change the copy's effect or colour *(manual)* | the copy changes; the Look Editor says what, if anything, is still shared (UX-69) | 1 |
-| 4 | Show Tree | the original cue *(manual)* | unchanged (UX-69) | 1 |
+| 1 | Show Tree | a cue | its page | 1 |
+| 2 | Show Tree | Duplicate (⌘D) | a copy of the cue after it (UX-42) | 1 |
+| 3 | Look Editor | change the copy's effect or colour | the copy changes; the Look Editor says what, if anything, is still shared (UX-69) | 1 |
+| 4 | Show Tree | the original cue | unchanged (UX-69) | 1 |
 
 ## How to add a rule
 

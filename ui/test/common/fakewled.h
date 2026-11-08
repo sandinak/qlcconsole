@@ -15,6 +15,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QDateTime>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QHash>
@@ -44,6 +45,9 @@ public:
                                                          { "rev", false } } } } };
     /** Every POST: its path and body. */
     QList<QPair<QByteArray, QJsonObject> > posted;
+    /** When each of them came (ms since the epoch), for a check of what
+     *  the device showed when (the UX walker's Locate flash). */
+    QList<qint64> postedAt;
     /** A new LED count takes only on a reboot (an old WLED). */
     bool countNeedsReboot = false;
     int reboots = 0;
@@ -76,6 +80,18 @@ public:
     }
 
     QJsonArray segments() const { return state.value("seg").toArray(); }
+
+    /** As a real device answered (its /json/info, /json/state, /json/cfg
+     *  as captured): the UX walker's office WLED. */
+    void seed(const QJsonObject &i, const QJsonObject &st, const QJsonObject &c)
+    {
+        if (!i.isEmpty())
+            info = i;
+        if (!st.isEmpty())
+            state = st;
+        if (!c.isEmpty())
+            cfg = c;
+    }
 
 private:
     int ledTotal() const
@@ -192,6 +208,7 @@ private:
         {
             const QJsonObject body = QJsonDocument::fromJson(req.mid(head + 4, length)).object();
             posted << qMakePair(path, body);
+            postedAt << QDateTime::currentMSecsSinceEpoch();
             if (path.contains("cfg"))
             {
                 merge(cfg, body);

@@ -108,8 +108,26 @@ Feet; each flow starts from the show as saved, in Design. A step is one of:
 | `action` | triggers a menu-bar action by objectName | in a menu, enabled |
 | `menu` | picks an item of a tool button's menu | the button shown, the item enabled |
 | `key` | presses a key, to `to` (a panel) or the focus | `to` is shown |
+| `type` | types `text` into a line edit (`${WLED}`: the flow's WLED's address) | shown, enabled |
+| `pick` | picks a row of a tree (`path`: a regex per level, or `item`) or a list (`item`) | the row is there |
+| `popup` | clicks a button whose menu pops up (a row's ⋯) and picks `item` (`A ▸ B` for a submenu) | the item enabled |
+| `colour` | sets a colour picker (`value`, `#rrggbb`) | shown |
 | `code` | what JSON can't say: load a scene into the Workbench, open a saved show with a newer autosave beside it | |
 | `{}` | nothing; only the step's `check` | |
+
+`do` may be a list, done in order. A control is named by objectName or a
+selector: `text:<regex>` (a button or label reading so),
+`placeholder:<regex>`, `class:<Class>`, `label:<text>` (the field beside
+that label), `a > b` (b inside a), `a ~ b` (b in a's grid row, e.g.
+`stRow:Colour ~ text:✎`). `node` also takes `library:<regex>`,
+`layer:<regex>` (a layer of the selected cue first) and `remembered`.
+`answer` (a list of button texts) answers the message boxes the step brings
+up; `keep` leaves the window the step opened up for the next steps, which
+say `"in": "dialog"` (the one with `close` closes it and is checked after);
+`waitFor` is a check that has to hold before it acts; `within` (ms) asks
+its check again until it holds; `onFail: "continue"` and `recover` (a code
+step: what a person stuck there would do) let the steps after still run; a
+flow's `setup` is done before step 1.
 
 A window the step opens gets the step's `dialog` sub-steps (the same
 kinds), then `close`: `accept`, `reject` or a button's objectName. A
@@ -128,6 +146,24 @@ failure stops the flow (later steps: `notreached`), except a `find` step,
 which is a finding and the flow goes on. A `manual` step is not driven;
 its reason is in the report.
 
+**The device (F-11).** A flow that adds a WLED talks to one: by default
+the tests' WLED (`ui/test/common/fakewled.h`) on 127.0.0.1, seeded from his
+office WLED's captured `/json/info`, `/json/state` and `/json/cfg`
+(`tools/uxwalk/data/wled-office/`, Wi-Fi names and keys scrubbed), through
+the real WLED output plugin (`libwled`, loaded from the build). Checks ask
+what the DEVICE has or got, besides the screen: `device` (`seg`: every
+segment has these fx / frz / col / on; `cfg`: its settings; `got`: some
+state sent since the step began had these, the Locate flash; `after`: the
+segments back as before), `wledPatch` (UX-67: its own universe, the WLED
+output at its IP), `status` / `statusGone` (a footer entry), `copyOwn` and
+`sameAs` (F-12: the copy has its own looks, the original is unchanged). A
+failing check that names a `rule` says it first ("UX-70: after the colour
+cue the WLED still has fx 89"), and the finding is that rule.
+`QLC_WALK_WLED=<ip> make ux-walk FLOWS=1` aims it at a real WLED instead
+(JSON API only; a Teaching show's hold is lifted for it): its state and its
+realtime-receive settings are read first and put back when the walk ends.
+The gate never sets it.
+
 `report.py` turns flow results into findings: a dead end is UX-61; a step
 `missing` or not as expected is the step's own `rule` (UX-62, UX-64,
 UX-65) or **W-FLOW**; clicks over the flow's budget are UX-66. The report
@@ -143,6 +179,16 @@ fail. Each fail is a 2026-11-07 catch or a fix still on its branch: with
 feat/042-key-triggers, fix/042-autosave-recovery and feat/042-wand-spacing
 merged on a trial branch, F-02, F-03 (Turns read "Auto (0.5)") and F-10
 pass, so those checks see the fix, not only its absence.
+
+F-11 and F-12 (2026-11-07, on the catches' base, before their fixes):
+F-11 fails at step 4 (UX-67: the WLED lands on universe 1 with the
+course rig, its output not the WLED one; the walker then patches it as
+Patch… does), step 8 (UX-61: a fixture in no group has no row in the
+Show Tree's Library; the walker drops it on the cue as from the plot), 11
+(UX-68: no frz after Runs Once + Hold), 12 (UX-70: fx 89 stays under the
+colour cue) and 13 (UX-72: Locate sends white with fx 89, no solid flash);
+F-12 fails at 3 and 4 (UX-69: the copy shares the original's own colour,
+and the Look Editor says "used by 1 scene(s)").
 
 Adding a flow: write it in both UX_RULES.md (Flows) and ux_flows.json
 (check_rules.py keeps ids, titles, budgets and step counts in step); give

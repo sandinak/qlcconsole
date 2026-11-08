@@ -26,6 +26,7 @@ include_ui_header(${module_name})
 target_link_libraries(${module_name} PRIVATE
     Qt6::Core
     Qt6::Gui
+    Qt6::Network
     Qt6::Test
     Qt6::Widgets
     qlcplusengine
@@ -36,4 +37,11 @@ target_compile_definitions(${module_name} PRIVATE
     QLC_TEST_RESOURCE_ROOT="${CMAKE_SOURCE_DIR}/resources/"
     COURSE_DIR="${CMAKE_SOURCE_DIR}/docs/course"
     TEST_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/engine/test/common/fixtures/"
+    # The WLED output the flows add a WLED through (libwled, built beside it).
+    UXWALK_PLUGINS_DIR="${CMAKE_BINARY_DIR}/plugins"
 )
+
+# F-11 drives a WLED through the real WLED output plugin.
+if(TARGET wled)
+    add_dependencies(${module_name} wled)
+endif()

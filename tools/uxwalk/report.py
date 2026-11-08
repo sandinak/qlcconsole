@@ -430,7 +430,8 @@ def check_flows(rec, ctx):
     for st in rec.get("steps", []):
         status = st.get("status")
         where = "%s step %d: %s" % (fid, st.get("n", 0), st.get("control", ""))
-        own = steps[st["n"] - 1].get("rule") if 0 < st.get("n", 0) <= len(steps) else None
+        # The rule its failing check names (a device check's) first, else the step's.
+        own = st.get("rule") or (steps[st["n"] - 1].get("rule") if 0 < st.get("n", 0) <= len(steps) else None)
         if status == "deadend":
             yield Finding("UX-61", where, "%s (%s): %s" % (rec.get("title", ""), st.get("screen", ""), st.get("detail", "")),
                           where, sig="flow|%s|%d" % (fid, st.get("n", 0)))

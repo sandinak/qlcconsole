@@ -1,0 +1,72 @@
+{
+ "ver": "16.0.1",
+ "vid": 2606300,
+ "cn": "Niji",
+ "release": "ESP32",
+ "repo": "wled/WLED",
+ "deviceId": "",
+ "leds": {
+  "count": 30,
+  "pwr": 520,
+  "fps": 43,
+  "maxpwr": 850,
+  "maxseg": 32,
+  "bootps": 0,
+  "seglc": [
+   1
+  ],
+  "lc": 1,
+  "rgbw": false,
+  "wv": 0,
+  "cct": 0
+ },
+ "str": false,
+ "name": "WLED",
+ "udpport": 21324,
+ "simplifiedui": false,
+ "live": false,
+ "liveseg": -1,
+ "lm": "",
+ "lip": "",
+ "ws": 1,
+ "fxcount": 220,
+ "palcount": 72,
+ "cpalcount": 0,
+ "umpalcount": 0,
+ "cpalmax": 129,
+ "maps": [
+  {
+   "id": 0
+  }
+ ],
+ "wifi": {
+  "bssid": "00:00:00:00:00:00",
+  "rssi": -41,
+  "signal": 100,
+  "channel": 3,
+  "ap": false
+ },
+ "fs": {
+  "u": 16,
+  "t": 983,
+  "pmt": 0
+ },
+ "ndc": 0,
+ "arch": "esp32",
+ "core": "4.4.8.240628",
+ "clock": 240,
+ "flash": 4,
+ "lwip": 0,
+ "bootloaderSHA256": "cb0d5304552dc2c817a30ce40a9524e266dee844fef2803dc7e49f69b6aadfba",
+ "freeheap": 126088,
+ "uptime": 335,
+ "time": "1970-1-1, 00:05:35",
+ "um": [
+  32
+ ],
+ "opt": 79,
+ "brand": "WLED",
+ "product": "FOSS",
+ "mac": "000000000000",
+ "ip": "127.0.0.1"
+}

@@ -92,6 +92,22 @@
 #include "scene.h"
 #include <QStandardItemModel>
 
+// The flows' WLED (uxwalkdevice.inc): the tests' WLED on this computer, and
+// what a real one is asked with.
+#include <QEventLoop>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QMessageBox>
+#include <QColorDialog>
+#include "../../ui/test/common/fakewled.h"
+#include "inputoutputmap.h"
+#include "ioplugincache.h"
+#include "outputpatch.h"
+#include "patchplanner.h"
+#include "qlcpalette.h"
+#include "showstatus.h"
+
 namespace uxwalk
 {
 
