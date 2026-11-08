@@ -636,6 +636,7 @@ void Monitor::initGraphicsView()
     }
     // A drag on something held still says why on the status line (Q178).
     connect(m_graphicsView, &MonitorGraphicsView::dragRefused, this, &Monitor::showNotice);
+    connect(m_graphicsView, &MonitorGraphicsView::notice, this, &Monitor::showNotice);
     m_graphicsView->setRenderHint(QPainter::Antialiasing);
     m_graphicsView->setAcceptDrops(true);
     // No frame border so the rulers (aligned to the widget edge) line up

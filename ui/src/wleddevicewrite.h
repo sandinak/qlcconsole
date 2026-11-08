@@ -64,9 +64,12 @@ public:
     typedef std::function<bool(int segments, int existing)> SegmentsConfirm;
 
     /** Read the device at @p ip (info, then state), refuse what it cannot
-     *  keep, ask @p confirm, write @p spans as its segments, read back. */
+     *  keep, ask @p confirm, write @p spans as its segments, read back.
+     *  @p reverse: each span's own Reverse (a free string's), else every
+     *  second one (PixelPath::sprinkleSpansToWled()). */
     void writeSegments(const QString &ip, const QVector<SprinkleSpan> &spans,
-                       const SegmentsConfirm &confirm);
+                       const SegmentsConfirm &confirm,
+                       const QVector<bool> &reverse = QVector<bool>());
 
     /** Write @p cfgFix (the /json/cfg settings that set the count) to the
      *  device at @p ip, then wait for it to drive @p leds LEDs: WLED 0.14
@@ -86,7 +89,7 @@ public:
 
     /** The confirmations, as the inspector and Fix on Device show them. */
     static bool confirmSegments(QWidget *parent, const QString &fixtureName, const QString &ip,
-                                int segments, int existing);
+                                int segments, int existing, bool freeString = false);
     static bool confirmLedCount(QWidget *parent, const QString &fixtureName, const QString &ip,
                                 int now, int leds);
 

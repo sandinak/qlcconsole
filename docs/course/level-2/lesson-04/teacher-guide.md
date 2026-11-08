@@ -125,6 +125,14 @@ what it costs the faces: nothing is aimed at them, but it takes the eye
 from the story. White pixels in the truss boxes light from a colour's
 white.
 
+A string that goes where the set goes (handout): a pixel fixture's
+**Pixel path → Free string (anchors)**, laid with **Add Anchor** and clicks
+on the plan. The point to draw out: an effect runs in LED order, so the
+plot is only a preview if the LEDs are drawn where they hang. Have them
+pin one LED they can count on the real string. Do it on a copy: it
+changes the rig. See
+[Free string (anchors)](https://github.com/sandinak/qlcconsole/blob/main/docs/features/lighting-studio.md#free-string-anchors).
+
 From the handout: the Truss Wave on a **speed master** (the Look
 Editor's **Speed: Main Speed**); the footer shows **Main Speed 120**.
 

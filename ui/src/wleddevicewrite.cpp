@@ -169,14 +169,14 @@ QNetworkReply *WledDeviceWrite::post(const QString &path, const QJsonObject &bod
  *********************************************************************/
 
 void WledDeviceWrite::writeSegments(const QString &ip, const QVector<SprinkleSpan> &spans,
-                                    const SegmentsConfirm &confirm)
+                                    const SegmentsConfirm &confirm, const QVector<bool> &reverse)
 {
     if (isBusy())
         return;
     m_ip = ip;
     step(tr("Reading %1").arg(deviceName(ip)));
     // What it can keep, then what it has.
-    get(QStringLiteral("/json/info"), kTimeoutMs, [this, spans, confirm](bool ok, const QByteArray &info, const QString &why) {
+    get(QStringLiteral("/json/info"), kTimeoutMs, [this, spans, confirm, reverse](bool ok, const QByteArray &info, const QString &why) {
         if (!ok)
             return finish(false, why);
         const QJsonObject l = leds(info);
@@ -184,12 +184,12 @@ void WledDeviceWrite::writeSegments(const QString &ip, const QVector<SprinkleSpa
         const int count = l.value(QStringLiteral("count")).toInt();
         const QString mac = infoOf(info).value(QStringLiteral("mac")).toString();
         get(QStringLiteral("/json/state"), kTimeoutMs,
-            [this, spans, confirm, maxSeg, count, mac](bool ok, const QByteArray &state, const QString &why) {
+            [this, spans, confirm, reverse, maxSeg, count, mac](bool ok, const QByteArray &state, const QString &why) {
             if (!ok)
                 return finish(false, why);
             QJsonObject request;
             QString error;
-            if (!PixelPath::sprinkleSpansToWled(spans, state, maxSeg, count, request, &error))
+            if (!PixelPath::sprinkleSpansToWled(spans, state, maxSeg, count, request, &error, reverse))
                 return finish(false, error);
             int existing = 0;
             const QJsonArray had = QJsonDocument::fromJson(state).object()
@@ -205,15 +205,15 @@ void WledDeviceWrite::writeSegments(const QString &ip, const QVector<SprinkleSpa
                 return finish(false, tr("Nothing was written."));
             step(spans.size() == 1 ? tr("Writing 1 segment to %1").arg(deviceName(m_ip))
                                     : tr("Writing %1 segments to %2").arg(spans.size()).arg(deviceName(m_ip)));
-            post(QStringLiteral("/json/state"), request, [this, spans, mac](bool ok, const QByteArray &, const QString &why) {
+            post(QStringLiteral("/json/state"), request, [this, spans, reverse, mac](bool ok, const QByteArray &, const QString &why) {
                 if (!ok)
                     return finish(false, why);
                 // Read back: what it says now is what counts.
                 step(tr("Checking %1").arg(deviceName(m_ip)));
-                get(QStringLiteral("/json/state"), kTimeoutMs, [this, spans, mac](bool ok, const QByteArray &now, const QString &why) {
+                get(QStringLiteral("/json/state"), kTimeoutMs, [this, spans, reverse, mac](bool ok, const QByteArray &now, const QString &why) {
                     if (!ok)
                         return finish(false, tr("Written, but it could not be read back: %1").arg(why));
-                    const QStringList differ = PixelPath::wledSegmentsDiffer(spans, now);
+                    const QStringList differ = PixelPath::wledSegmentsDiffer(spans, now, reverse);
                     if (differ.isEmpty())
                     {
                         keepLayout(mac, now);
@@ -312,15 +312,19 @@ void WledDeviceWrite::pollLeds()
  *********************************************************************/
 
 bool WledDeviceWrite::confirmSegments(QWidget *parent, const QString &fixtureName, const QString &ip,
-                                      int segments, int existing)
+                                      int segments, int existing, bool freeString)
 {
     QMessageBox box(QMessageBox::Question, tr("Write Segments"),
         (segments == 1 ? tr("Write 1 segment to the WLED at %1?").arg(ip.toHtmlEscaped())
                        : tr("Write %1 segments to the WLED at %2?").arg(segments).arg(ip.toHtmlEscaped()))
         + QStringLiteral("<br><br>")
-        + tr("One segment for each span of %1, every second one reversed so each span "
-             "runs from the inner wall to the outer. LEDs between spans are left out, dark.")
-              .arg(fixtureName.toHtmlEscaped())
+        + (freeString
+           ? tr("One segment for each span of %1, from one anchor to the next, each reversed "
+                "where its anchor says Reverse. Every LED is in a segment.")
+                 .arg(fixtureName.toHtmlEscaped())
+           : tr("One segment for each span of %1, every second one reversed so each span "
+                "runs from the inner wall to the outer. LEDs between spans are left out, dark.")
+                 .arg(fixtureName.toHtmlEscaped()))
         + QStringLiteral(" ")
         + (existing == 1 ? tr("They replace the 1 segment it has now.")
                          : tr("They replace the %1 segments it has now.").arg(existing))

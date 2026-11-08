@@ -744,6 +744,9 @@ A pixel fixture's LEDs are normally where its body is. **Pixel path** (in
 its properties, for any fixture with more than one LED) lays them out along
 a path instead, in the order of its heads, the first LED at the start: the
 ring paths start at one end of the U (stage right) and run round the front.
+Two need no fountain: [Wand](#wand) and [Free string
+(anchors)](#free-string-anchors), a string laid anywhere through points you
+place on the plot.
 Each LED is drawn where the path puts it, in its live colour, in the plot
 and the rig view: a small point, with a glow as big as it is bright. A WLED
 in effect mode shows its effect running along the path (see
@@ -856,6 +859,65 @@ the tip. The rig view draws a thin dark staff with the LEDs glowing on it in
 their live colours; the plot a short line with coloured dots. A wand throws
 no beam. Per-cue blocking positions aren't built yet: a held wand follows
 its performer's position on the plot.
+
+### Free string (anchors)
+
+A fairy string or pixel tape that isn't in a fountain or on a staff: tied
+along a railing, swagged across a doorway, run up a column and over an
+arch. Drawn as a bar, its LEDs sit in the wrong places and a chase that
+looks right on the plot runs the wrong way on stage. Set its **Pixel path**
+to **Free string (anchors)** (any pixel fixture; no fountain needed) and
+lay it on the plot through **anchors**: the points it is tied to or runs
+through, in the order the string runs from its first LED.
+
+- **Add Anchor** (in its properties, or right-click the fixture on the
+  plot): then click on the plan for each anchor, after the last one. The
+  first click of a string with no anchors yet is where it starts. Each
+  click is one undo step; **Esc** or a right-click ends. Clicked from
+  Fixture Properties, the dialog closes first so you can click the plan.
+  From above an anchor takes the fixture's own height; in **Front** or
+  **Side** the click sets its height too.
+- **Drag an anchor** (select the string; its anchors show as numbered
+  handles): from above it moves across and up or down stage and keeps its
+  height; in Front or Side it moves across (or in depth) and up or down.
+  **Shift** holds the drag to one direction. One drag is one undo step.
+  The fixture itself (the controller box) stays where it is.
+- **Right-click an anchor**: **Insert Anchor Before** (half way back to the
+  one before), **Pin LED Here…** (which LED is tied at this anchor),
+  **Unpin LED**, **Reverse This Span** (the span from this anchor to the
+  next) and **Delete Anchor**.
+- **Edit Anchors…**: every anchor as a table for exact values: **Across**
+  and **Depth** (as on the plot's rulers) and **Height**, in your unit
+  (Settings ▸ Units), the **Pinned LED** and **Reverse**. Pins that don't
+  count up along the string, or one past its last LED, are refused, in
+  words.
+- **String length**: as for a wand, the lit string first LED to last. A
+  fairy string of 50 LEDs on 16 ft is 16 ft (4.9 m); left at **LED tape**,
+  the LEDs are ¾ in (2 cm) apart.
+
+**Where the LEDs go.** LED 1 is at the first anchor and the rest follow
+along the line through the anchors, the String length apart, heights and
+all. A string shorter than its anchors stops where it runs out (the note
+under the buttons says how far short); one longer runs on straight past the
+last anchor (the note says how much). A pinned LED sits on its anchor, and
+the LEDs between two pins are spread evenly between them, whatever the
+String length says: pin the LEDs you can count on the real string and the
+plot matches it. Until it has anchors of its own the string is drawn from
+a little in front of its fixture, a String length across the stage, with
+hollow handles: drag one, or click **Add Anchor**, and they become its own.
+
+The plot draws the line through the anchors faintly, an arrow on each span
+the way its data runs (turned round where the span is reversed), and the
+LEDs on it in their live colours; the rig view draws the LEDs where they
+are. A live WLED's pixels land where they really are.
+
+**Write Segments…** (a WLED on the network): one segment for each span from
+one anchor to the next, by the LEDs that lie on it as laid out above, each
+with **Reverse** set the way its anchor says. Every LED is in a segment. It
+reads the device, asks first, writes, reads them back and says what came
+back, as for [Sprinkle loops](#sprinkle-loops), and keeps each segment's
+own way in this computer's settings the same way, so a Reverse playing when
+the app quits is never taken for it. Pins that don't count up are refused with nothing written.
 
 ## Mounting a fixture
 
