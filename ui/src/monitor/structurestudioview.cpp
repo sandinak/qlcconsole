@@ -3216,6 +3216,27 @@ QColor StructureStudioView::overlapAwareEdgeColor(quint32 fid, const QColor &bas
     return m_overlappingFixtures.contains(fid) ? kOverlapWarning : fixtureEdgeColor(base);
 }
 
+bool StructureStudioView::boomResizeLocked(const Pipe *pipe) const
+{
+    /* The view's own lock, and every saved one that holds the boom still:
+       the plot's, its layer's, its folder's, its own and its stand's. */
+    if (m_locked || pipe == nullptr)
+        return true;
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == nullptr)
+        return false;
+    if (props->layoutLocked() || pipe->locked())
+        return true;
+    if (props->layer(pipe->layerId()).locked || props->groupChainLocked(pipe->groupId()))
+        return true;
+    if (const Stand *st = props->stand(pipe->standId()))
+    {
+        if (st->locked() || props->layer(st->layerId()).locked || props->groupChainLocked(st->groupId()))
+            return true;
+    }
+    return false;
+}
+
 bool StructureStudioView::fixtureMovementLocked(quint32 fid) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
@@ -3560,11 +3581,11 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
         p.setPen(QPen(steel, 2.5));
         p.drawLine(w2s(QVector3D(s->originX(), s->originY(), 0)), w2s(s->topPos()));
         // Booms/bars on it — draw a grab handle at each boom TOP (drag = resize
-        // the hangable length).
+        // the hangable length), only while it can be dragged.
         foreach (const Pipe *pipe, standPipes(id))
         {
             drawPipe(p, pipe);
-            if (pipe->isVertical())
+            if (pipe->isVertical() && !boomResizeLocked(pipe))
             {
                 const QPointF top = w2s(pipe->positionAt(pipe->length()));
                 p.setPen(QPen(QColor(0, 190, 255), 1.4));
@@ -10910,7 +10931,7 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
         {
             foreach (const Pipe *pipe, standPipes(m_id))
             {
-                if (!pipe->isVertical()) continue;
+                if (!pipe->isVertical() || boomResizeLocked(pipe)) continue;
                 if (QLineF(w2s(pipe->positionAt(pipe->length())), e->pos()).length() <= 7.0)
                 {
                     m_resizeBoom = pipe->id() + 1;

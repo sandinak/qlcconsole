@@ -82,7 +82,7 @@ a universe is not duplicated.
 | ⌘Z | Undo the last move, paste or edit |
 | ] / [ | Turn the selection 15° clockwise / anticlockwise |
 | } / { | Turn it 1° |
-| ⌘G / ⇧⌘G | Group / ungroup the selection |
+| ⌘G / ⇧⌘G | New group of the selection (asks a name) / ungroup it |
 | Pinch | Zoom |
 | Click a footer box (View, Overlay) | Its next choice; its arrow lists them all |
 | ⇧-drag / ⌥-drag a line target's handle | Keep it level or upright / extend an end along the line |
