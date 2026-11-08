@@ -1129,6 +1129,11 @@ private:
     void fitStatusBar();
     /** The footer's chips, most important first. */
     QList<QWidget *> statusChipsByPriority() const;
+    /** A footer chip that says one of several things keeps the width of the
+     *  widest, so saving (Unsaved -> Saved) moves nothing beside it and
+     *  never gives a squeezed chip its room back for one save (or takes it
+     *  away again on the next edit). Kept while the chip is squeezed too. */
+    void reserveStatusChipWidth(QLabel *chip, const QStringList &texts);
 
     /** Update the status bar display */
     void updateStatusBar();

@@ -84,6 +84,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   A look on a WLED now sets those to Solid underneath its own values, so
   a colour-only look is a solid colour and a released effect goes back to
   Solid. They change at once, not over the fade.
+- **Saving no longer makes the footer jump.** "● Unsaved changes" turning
+  into the much shorter "✓ Saved" moved the stage chip and handed the room
+  it freed to a chip the footer had put away for lack of room, so on a save
+  the Next cue appeared and the power chip vanished (or the reverse) -- and
+  swapped back at the next edit. The Unsaved/Saved chip and the
+  programmer's chip now keep the width of their widest wording, so a save
+  changes their words and nothing else; and a squeezed chip of a fixed
+  width is measured at that width, so the footer no longer flickers
+  between showing and hiding it.
 - **A WLED effect plays on every segment, not just the first.** A WLED
   split into segments (a fountain's string after **Write Segments…**, one
   segment a span) showed the show's effect on its first segment only; the
