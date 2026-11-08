@@ -155,6 +155,9 @@ private slots:
     /** Runs and length from a show file are clamped before they become ints:
      *  1e30, -1e30 and NaN were cast straight to int (undefined). */
     void outOfRangeRunSettingsAreClamped();
+    /** The Look Editor's palette strips and an instance read the look's
+     *  colours from the one call (EffectInstance::sceneLookColours). */
+    void theEditorAndTheInstanceShareTheLooksColours();
 
 private:
     Doc          *m_doc = nullptr;

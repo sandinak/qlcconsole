@@ -312,6 +312,14 @@ private:
      *  -1 when it has none. */
     void ownLook(QList<QColor> &colours, double &dimmer) const;
     void lookColours(QList<QColor> &colours, double &dimmer, bool *haveDimmer = nullptr) const;
+public:
+    /** The look's colours (and dimmer) the effect @p effectPaletteId in scene
+     *  @p sceneId sees: its own, else the look's static ones. What an
+     *  instance reads, and what the Look Editor's palette strips draw, from
+     *  this one rule (no live overrides). */
+    static void sceneLookColours(Doc *doc, quint32 sceneId, quint32 effectPaletteId,
+                                 QList<QColor> &colours, double &dimmer, bool *haveDimmer = nullptr);
+private:
     /** The fixtures and groups the look is on, before any type filter:
      *  what this scene writes (less any it leaves out for this effect). */
     QList<quint32> lookFixtureIds() const;

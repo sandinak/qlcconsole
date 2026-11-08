@@ -2093,10 +2093,9 @@ void EffectInstance::ownLook(QList<QColor> &colours, double &dimmer) const
     }
 }
 
-void EffectInstance::lookColours(QList<QColor> &colours, double &dimmer, bool *haveDimmer) const
+void EffectInstance::sceneLookColours(Doc *doc, quint32 sceneId, quint32 effectPaletteId,
+                                      QList<QColor> &colours, double &dimmer, bool *haveDimmer)
 {
-    double lookDimmer = 1.0;
-    bool   haveLookDimmer = false;
     /* The same rule the scene paints by (QLCPalette::isEffectScoped()): the
        Colour/Dimmer under this effect are its own; with none of its own it
        takes the look's static ones -- never another effect's. Read top to
@@ -2104,23 +2103,23 @@ void EffectInstance::lookColours(QList<QColor> &colours, double &dimmer, bool *h
     QList<QColor> ownColors;     // colours under this effect, its own
     QList<QColor> baseColors;    // the look's static colours (fallback)
     double ownDimmer = -1.0, baseDimmer = -1.0;
-    if (Scene *scene = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
+    if (Scene *scene = qobject_cast<Scene *>(doc->function(sceneId)))
     {
         const QList<quint32> pals = scene->runtimePalettes();
         bool underThis = false;
         foreach (quint32 pid, pals)
         {
-            QLCPalette *p = m_doc->palette(pid);
+            QLCPalette *p = doc->palette(pid);
             if (!p)
                 continue;
             if (p->type() == QLCPalette::Effect)
             {
-                underThis = (pid == m_effectPaletteId);
+                underThis = (pid == effectPaletteId);
                 continue;
             }
             if (p->type() != QLCPalette::Color && p->type() != QLCPalette::Dimmer)
                 continue;
-            const bool scoped = QLCPalette::isEffectScoped(m_doc, pals, pid);
+            const bool scoped = QLCPalette::isEffectScoped(doc, pals, pid);
             if (scoped && !underThis)
                 continue;                       // another effect's
             if (p->type() == QLCPalette::Color)
@@ -2130,6 +2129,15 @@ void EffectInstance::lookColours(QList<QColor> &colours, double &dimmer, bool *h
         }
     }
     colours = ownColors.isEmpty() ? baseColors : ownColors;
+    const bool have = ownDimmer >= 0.0 || baseDimmer >= 0.0;
+    dimmer = have ? (ownDimmer >= 0.0 ? ownDimmer : baseDimmer) : 1.0;
+    if (haveDimmer != nullptr)
+        *haveDimmer = have;
+}
+
+void EffectInstance::lookColours(QList<QColor> &colours, double &dimmer, bool *haveDimmer) const
+{
+    sceneLookColours(m_doc, m_sceneId, m_effectPaletteId, colours, dimmer, haveDimmer);
     // Colour 1's hue turned by a live override (a VC control).
     if (!m_overrides.isEmpty())
     {
@@ -2147,14 +2155,6 @@ void EffectInstance::lookColours(QList<QColor> &colours, double &dimmer, bool *h
             }
         }
     }
-    if (ownDimmer >= 0.0 || baseDimmer >= 0.0)
-    {
-        lookDimmer = ownDimmer >= 0.0 ? ownDimmer : baseDimmer;
-        haveLookDimmer = true;
-    }
-    dimmer = lookDimmer;
-    if (haveDimmer != nullptr)
-        *haveDimmer = haveLookDimmer;
 }
 
 QList<EffectInstance::DmxWrite> EffectInstance::wledDeviceWrites() const

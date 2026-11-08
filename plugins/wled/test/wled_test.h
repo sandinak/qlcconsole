@@ -62,6 +62,8 @@ private slots:
     /** Against a real WLED, when WLED_REAL_IP names one (skipped otherwise):
      *  the look reaches it, and it answers. Its state is put back after. */
     void aRealLanternShowsTheLook();
+    /** Its colour palettes are fetched once and kept by MAC. */
+    void itsColourPalettesAreKeptByMacAndAskedOnce();
 };
 
 #endif

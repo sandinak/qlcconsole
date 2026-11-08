@@ -174,5 +174,7 @@
         <file alias="xypad-point-yellow.png">../../resources/icons/png/xypad-point-yellow.png</file>
         <file alias="xypad.png">../../resources/icons/png/xypad.png</file>
         <file alias="style/default.qss">../../resources/qss/default.qss</file>
+        <file alias="wled/pal.json">../../resources/wled/pal.json</file>
+        <file alias="wled/palx.json">../../resources/wled/palx.json</file>
     </qresource>
 </RCC>

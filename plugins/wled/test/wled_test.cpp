@@ -28,6 +28,7 @@
 #include "wledplugin.h"
 #undef private
 #include "wledstate.h"
+#include "../../../engine/src/wledpalettes.h"
 
 namespace
 {
@@ -48,6 +49,7 @@ namespace
         bool noSi = false;                  ///< an old WLED: /json/si is 501
         int liveAsked = 0;                  ///< GET /json/live count
         int siAsked = 0;                    ///< GET /json/si count
+        int palxAsked = 0;                  ///< GET /json/palx count
         QString mac;                        ///< info.mac, when set
         QByteArray live = "{\"leds\":[\"FF0000\",\"00FF00\",\"0000FF\",\"102030\"],\"n\":1}";
         /** Its segments, as /json/state says them: one over all 16 LEDs. */
@@ -143,6 +145,16 @@ namespace
                             postedAt << QDateTime::currentMSecsSinceEpoch();
                             apply(posts.last());
                         }
+                        else if (req.startsWith("GET /json/palx"))
+                        {
+                            ++palxAsked;
+                            const int page = req.contains("page=1") ? 1 : 0;
+                            reply = page == 0
+                                ? "{\"m\":1,\"p\":{\"0\":[[0,255,0,0],[255,0,0,255]],\"1\":[\"c1\",\"c2\"]}}"
+                                : "{\"m\":1,\"p\":{\"2\":[\"r\"]}}";
+                        }
+                        else if (req.startsWith("GET /json/pal"))
+                            reply = "[\"Default\",\"* Color 1&2\",\"Rand\"]";
                         else if (req.startsWith("GET /json/info"))
                             reply = QJsonDocument(info()).toJson(QJsonDocument::Compact);
                         else if (req.startsWith("GET /json/si"))
@@ -203,6 +215,7 @@ namespace
 void Wled_Test::init()
 {
     QSettings().remove("wled/layouts");
+    QSettings().remove("wled/palettes");
 }
 
 /* WLED's own DMX "Effect" mode, channel for channel: what the WLED Effect
@@ -1314,4 +1327,35 @@ void Wled_Test::aRealLanternShowsTheLook()
     restore["bri"] = before.value("bri");
     restore["seg"] = before.value("seg");
     httpJson(nam, QString("http://%1/json/state").arg(ip), QJsonDocument(restore).toJson());
+}
+
+/* Its colour palettes (names, and the stops a page at a time) are fetched
+   once, kept by MAC for the UI's palette strips, and not asked again. */
+void Wled_Test::itsColourPalettesAreKeptByMacAndAskedOnce()
+{
+    FakeWled w;
+    w.mac = "AA:BB:CC:55:66:77";
+    QVERIFY(w.powerOn());
+    {
+        WledPlugin plugin;
+        aim(plugin, 0, w);
+        plugin.writeUniverse(0, 0, effect(9, 128, 0), true);
+        QTRY_VERIFY(WledPalettes::has("aa:bb:cc:55:66:77", QString()));
+    }
+    QCOMPARE(w.palxAsked, 2);                           // pages 0 and 1
+    QSettings s;
+    const QString key = WledPalettes::storeKey("AA:BB:CC:55:66:77", QString());
+    QCOMPARE(key, QString("wled/palettes/aabbcc556677"));
+    const QVector<WledPalettes::Palette> pals =
+        WledPalettes::parsePalx(s.value(key + "/palx").toString().toUtf8());
+    QCOMPARE(pals.size(), 3);
+    QCOMPARE(pals.at(1).at(0).kind, WledPalettes::Stop::Colour1);
+    QCOMPARE(QJsonDocument::fromJson(s.value(key + "/pal").toString().toUtf8()).array().size(), 3);
+
+    WledPlugin again;
+    aim(again, 0, w);
+    again.writeUniverse(0, 0, effect(9, 128, 0), true);
+    QTRY_VERIFY(w.siAsked >= 1);
+    QTest::qWait(200);
+    QCOMPARE(w.palxAsked, 2);                           // kept: not asked again
 }

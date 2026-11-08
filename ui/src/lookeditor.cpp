@@ -65,6 +65,8 @@
 #include "effectbrowser.h"
 #include "qlcfixturedefcache.h"
 #include "wledfixture.h"
+#include "effectinstance.h"
+#include "wledpalettestrips.h"
 #include "pathdrawwidget.h"
 #include "gradientdirectionwidget.h"
 #include "matriximage.h"
@@ -3460,6 +3462,43 @@ void LookEditor::rebuildEffectDynWidget()
                     m_doc->setModified();
                     emit paletteValueChanged(m_paletteId);
                 });
+                form->addRow(paramRowLabel(pd.name), cb);
+            }
+            else if (pd.name == QLatin1String("palette")
+                     && pd.description.startsWith(QLatin1String("Palette (WLED")))
+            {
+                /* A WLED colour palette: its name with the strip of colours it
+                   would use, from the device's own (kept) or WLED's built-ins.
+                   Palettes that read the effect's colours 1-3 show the look's. */
+                QList<quint32> fids;
+                if (m_contextScene != nullptr)
+                {
+                    fids = m_contextScene->fixtures();
+                    foreach (quint32 gid, m_contextScene->fixtureGroups())
+                        if (FixtureGroup *g = m_doc->fixtureGroup(gid))
+                        {
+                            fids << g->fixtureList();
+                        }
+                }
+                QRgb slot[3] = { qRgb(0xFF, 0xAA, 0x00), qRgb(0, 0, 0), qRgb(0, 0, 0) };   // WLED's own
+                if (m_contextScene != nullptr)
+                {
+                    QList<QColor> use;
+                    double dim = 1.0;
+                    EffectInstance::sceneLookColours(m_doc, m_contextScene->id(), m_paletteId, use, dim);
+                    for (int k = 0; k < 3 && k < use.size(); ++k)
+                        slot[k] = use.at(k).rgb();
+                }
+                QComboBox *cb = new QComboBox(m_effectDynWidget);
+                cb->setObjectName(QStringLiteral("effectParam_") + pd.name);
+                cb->setMaxVisibleItems(16);
+                WledPaletteStrips::fill(cb, WledPaletteStrips::forFixtures(m_doc, fids),
+                                        slot[0], slot[1], slot[2]);
+                cb->setCurrentIndex(qBound(0, int(cur), cb->count() - 1));
+                cb->setToolTip(pd.description);
+                cb->setProperty("paramName", pd.name);
+                connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                        this, &LookEditor::slotEffectEnumParamChanged);
                 form->addRow(paramRowLabel(pd.name), cb);
             }
             else if (!pd.enumValues.isEmpty())

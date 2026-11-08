@@ -1040,6 +1040,17 @@ device's firmware still lists them. WLED's 2D effects, and Copy Segment,
 Image and Slow Transition (which need the device's other segments, its
 stored images or its colour history), run on WLED devices only.
 
+**Palette strips.** An effect's **palette** is picked by name, and each name
+has a strip of the colours that palette would use, in the list and on the
+closed box. The strips come from the WLED itself: the first time a WLED
+answers, its palettes (names and colours) are read once and kept by its
+hardware address, so they match its firmware and work with the device off.
+A show with no WLED kept yet (or one that has never answered) shows WLED's
+built-in palettes. The palettes that follow the effect's colours (Color 1,
+Colors 1&2, Color Gradient, Colors Only) are drawn in the look's own
+colours 1 to 3, and change as you change them; Random Cycle is drawn as a
+soft rainbow, as it is a different set of colours every time.
+
 **Runs** and **At the end** apply on the device too. Once runs WLED's
 effect for one run's Length (Fireworks Starburst keeps launching bursts
 until then), then Release lets go and Hold freezes the WLED on its frame.
