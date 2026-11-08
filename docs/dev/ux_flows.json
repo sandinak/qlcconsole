@@ -786,9 +786,9 @@
         "UX-72",
         "UX-66"
       ],
-      "budget": 26,
+      "budget": 28,
       "levels": {
-        "student": "Add the WLED with its IP, fix it on the device, build a Starburst cue that runs once, then a colour cue, then Locate.",
+        "student": "Add the WLED with its IP, fix it on the device, build a Starburst cue that runs once, then a colour cue (the list tracks, so the Starburst carries in), Locate, then turn the Starburst off in the colour cue.",
         "pro": "Add Fixture takes the IP and puts the WLED on its own universe in one dialog; the cue's Runs and At the end are in the Look Editor."
       },
       "steps": [
@@ -1079,7 +1079,7 @@
         {
           "screen": "Show Tree",
           "control": "+ Cue, a colour only",
-          "expect": "a second cue with a colour and no effect; the WLED goes to solid colour (UX-70)",
+          "expect": "a second cue that sets only a colour; in a Tracking list the Starburst carries in, held, and its row says \"tracked from\" (UX-70)",
           "clicks": 3,
           "do": [
             {
@@ -1097,11 +1097,22 @@
           "onFail": "continue",
           "rule": "UX-70",
           "check": {
+            "widgetText": [
+              "stRow:Effect.Color",
+              "Starburst.*tracked from"
+            ],
+            "rule": "UX-70",
             "device": {
               "seg": {
-                "fx": 0
+                "fx": 89,
+                "frz": true,
+                "col": [
+                  255,
+                  176,
+                  0
+                ]
               },
-              "what": "after the colour cue",
+              "what": "after the colour cue (the Starburst tracked, held, in the new colour)",
               "rule": "UX-70"
             }
           }
@@ -1109,7 +1120,7 @@
         {
           "screen": "Show Tree",
           "control": "right-click the WLED ▸ Locate",
-          "expect": "solid white flashes over whatever plays; all back after (UX-72)",
+          "expect": "solid white flashes over whatever plays; all back after, the held Starburst in the new colour (UX-72)",
           "clicks": 2,
           "do": {
             "context": "library:Effect Mode",
@@ -1138,6 +1149,34 @@
                 "rule": "UX-72"
               }
             ]
+          }
+        },
+        {
+          "screen": "Show Tree",
+          "control": "the Effect row's ⋯ ▸ None (off here)",
+          "expect": "the Starburst stops in this cue: the WLED goes to solid colour, not frozen (UX-70)",
+          "clicks": 2,
+          "do": {
+            "popup": "stMore:Effect.Color",
+            "item": "^None \\(off here\\)"
+          },
+          "within": 6000,
+          "onFail": "continue",
+          "rule": "UX-70",
+          "check": {
+            "device": {
+              "seg": {
+                "fx": 0,
+                "frz": false,
+                "col": [
+                  255,
+                  176,
+                  0
+                ]
+              },
+              "what": "after None (off here)",
+              "rule": "UX-70"
+            }
           }
         }
       ]

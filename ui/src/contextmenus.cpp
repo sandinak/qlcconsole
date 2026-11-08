@@ -354,9 +354,16 @@ void ContextMenus::editGroupLayout(Doc *doc, quint32 groupId, QWidget *parent)
 
 void ContextMenus::locate(Doc *doc, const QList<quint32> &fixtureIds, QWidget *parent)
 {
+    Q_UNUSED(doc)
+    Q_UNUSED(parent)
     if (fixtureIds.isEmpty() || Monitor::instance() == nullptr)
         return;
-    Monitor::createAndShow(parent, doc);
+    /* It flashes on the rig from where it was asked: the person stays on
+       their page. Going to the Lighting Studio tab hid the Show Tree, whose
+       preview stops when it is left -- so the cue being built (a WLED's
+       held effect in its new colour) went dark under the flashes and never
+       came back (UX-72, F-11). The flashing needs no tab: the Monitor is
+       always there. */
     Monitor::instance()->locateFixtures(fixtureIds);
 }
 

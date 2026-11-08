@@ -66,6 +66,10 @@
 #include "showcontrol.h"
 #include "showtreecontroller.h"
 #include "showtreemodel.h"
+#include "showtreeview.h"
+#include "contextmenus.h"
+#include <QTabWidget>
+#include <QTreeWidget>
 #include <atomic>
 #include <algorithm>
 #include "../../../plugins/wled/src/wledlayoutstore.h"
@@ -674,6 +678,114 @@ void WledShow_Test::locateLeavesAWledNothingPlaysOnAsItWas()
     QCOMPARE(rig.seg().value("fx").toInt(), effectBefore);
     const Sent sent = sentSince(rig.wled, from);
     QVERIFY2(sent.whites >= 2 && sent.glided == 0, qPrintable(sent.seen.join("\n")));
+}
+
+void WledShow_Test::locateGivesBackAHeldTrackedEffectWithItsNewColour()
+{
+    LocateRig rig;
+    QVERIFY(rig.setUp());
+    Doc &doc = rig.doc;
+    const int starburst = WledFixture::effectValue(doc.fixture(rig.fid), "Fireworks Starburst");
+    QVERIFY(starburst > 0);
+
+    // As F-11 builds it: the burst, Runs Once, At the end Hold.
+    QLCPalette *burst = new QLCPalette(QLCPalette::Effect, &doc);
+    burst->setName("WLED Fireworks Starburst");
+    burst->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/wled-fireworks-starburst.js");
+    burst->setWledEffect("Fireworks Starburst");
+    burst->setEffectParamValue(EffectRuns::runsKey(), 1);
+    burst->setEffectParamValue(EffectRuns::atEndKey(), 0);
+    burst->setEffectParamValue(EffectRuns::lengthKey(), 600);
+    QVERIFY(doc.addPalette(burst));
+    QLCPalette *amber = new QLCPalette(QLCPalette::Color, &doc);
+    amber->setName("Amber");
+    amber->setValue(QColor(255, 176, 0));
+    QVERIFY(doc.addPalette(amber));
+
+    FixtureGroup *g = new FixtureGroup(&doc);
+    g->setName("Sprinkles");
+    doc.addFixtureGroup(g);
+    g->assignFixture(rig.fid);
+    ShowTree::Target target;
+    target.groups << g->id();
+
+    // A Tracking list: the burst in cue 1, a colour only in cue 2.
+    ShowTreeController *st = doc.showTree();
+    const quint32 prod = st->addProduction("Office");
+    const quint32 list = st->addCueList(prod, "WLED test", ShowTree::ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "Burst");
+    const quint32 c2 = st->addCue(list, 0, "Amber");
+    QVERIFY(c1 != 0 && c2 != 0);
+    QVERIFY(st->setTargetLook(c1, target, st->lookForPalette(burst->id())));
+    QVERIFY(st->setTargetLook(c2, target, st->lookForPalette(amber->id())));
+    QVERIFY(st->setCurrentProduction(prod));
+
+    /* The app's tabs, as the person has them: the Show Tree, and the
+       Lighting Studio (the Monitor) beside it. In Design the cue selected
+       plays (the preview). */
+    doc.setMode(Doc::Design);
+    QTabWidget tabs;
+    ShowTreeView *view = new ShowTreeView(&tabs, &doc);
+    tabs.addTab(view, "Show Tree");
+    tabs.addTab(rig.mon, "Lighting Studio");
+    // The Monitor is the rig's: given back before the tabs go, pass or fail.
+    struct GiveBack
+    {
+        QTabWidget *tabs; LocateRig *rig;
+        ~GiveBack() { tabs->removeTab(tabs->indexOf(rig->mon)); rig->mon->setParent(&rig->parent); }
+    } giveBack{ &tabs, &rig };
+    tabs.setCurrentWidget(view);
+    tabs.resize(1400, 900);
+    tabs.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tabs));
+    auto select = [view](quint32 cueId) {
+        for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+                && (*it)->data(0, ShowTreeView::IdRole).toUInt() == cueId)
+            {
+                view->tree()->setCurrentItem(*it);
+                return true;
+            }
+        return false;
+    };
+    auto col = [&rig]() { return rig.seg().value("col").toArray().at(0).toArray(); };
+    const QJsonArray amberCol({ 255, 176, 0 });
+
+    QTRY_VERIFY(select(c1));
+    QTRY_VERIFY_WITH_TIMEOUT(rig.seg().value("fx").toInt() == starburst
+                             && rig.seg().value("frz").toBool(), 5000);
+    QVERIFY(select(c2));
+    // The burst tracks into the colour cue: it plays in amber, then holds.
+    QTRY_VERIFY2_WITH_TIMEOUT(col() == amberCol && rig.seg().value("frz").toBool(),
+                              qPrintable(QString::fromUtf8(QJsonDocument(rig.seg()).toJson(QJsonDocument::Compact))), 5000);
+    QTest::qWait(300);
+    const QJsonObject before = rig.seg();
+    const QJsonObject stateBefore = rig.wled.state;
+    QCOMPARE(before.value("fx").toInt(), starburst);
+    QCOMPARE(st->previewState(), ShowTreeController::PreviewState::Playing);
+
+    // Right-click ▸ Locate, as the Show Tree's Library and tree offer it.
+    ContextMenus::locate(&doc, { rig.fid }, view);
+    QTRY_VERIFY_WITH_TIMEOUT(rig.seg().value("fx").toInt() == 0
+                             && col() == QJsonArray({ 255, 255, 255 }), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(rig.mon->m_locateSessions.isEmpty(), 5000);
+
+    // Exactly what was showing: the held burst in amber, frozen, at full.
+    QTRY_VERIFY2_WITH_TIMEOUT(rig.seg().value("fx").toInt() == starburst && col() == amberCol,
+                              qPrintable(QString::fromUtf8(QJsonDocument(rig.seg()).toJson(QJsonDocument::Compact))), 3000);
+    QTest::qWait(300);
+    const QJsonObject after = rig.seg();
+    QCOMPARE(after.value("fx").toInt(), before.value("fx").toInt());
+    QCOMPARE(after.value("col").toArray(), before.value("col").toArray());
+    QCOMPARE(after.value("frz").toBool(), before.value("frz").toBool());
+    QCOMPARE(after.value("pal").toInt(), before.value("pal").toInt());
+    QCOMPARE(rig.wled.state.value("on").toBool(), stateBefore.value("on").toBool());
+    QCOMPARE(rig.wled.state.value("bri").toInt(), stateBefore.value("bri").toInt());
+    // From where it was asked: the Show Tree stays, and so does its cue.
+    QCOMPARE(tabs.currentWidget(), static_cast<QWidget *>(view));
+    QCOMPARE(st->previewState(), ShowTreeController::PreviewState::Playing);
+
+    st->stopPreview();
 }
 
 void WledShow_Test::aSnapCueReachesTheStaffWithTheStage()

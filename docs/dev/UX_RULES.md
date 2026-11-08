@@ -46,9 +46,9 @@ that have one. Change both files together.
 | Safety in Operate | UX-49, UX-50, UX-51, UX-52, UX-53, UX-54, UX-55, UX-56 | 8 | 6 |
 | Teaching & course voice | UX-57, UX-58, UX-59, UX-60 | 4 | 1 |
 | Ease of use | UX-61, UX-62, UX-64, UX-65, UX-66, UX-76 | 6 | 0 |
-| Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 1 |
+| Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 2 |
 
-Main check: 42 tests, 25 review, 6 walker, 3 manual. 42 of 76 enforced.
+Main check: 43 tests, 24 review, 6 walker, 3 manual. 43 of 76 enforced.
 
 ## Units & numbers
 
@@ -714,8 +714,8 @@ A fixture's properties show what that kind of device has: a pixel string shows s
 
 Locate is unmistakable on the device (solid, full, white, sharp flashes) over whatever is playing, and everything is back after.
 
-- **Why:** 2026-11-07: "locate doesn't appear to work" on a WLED (fix/042-wled-locate).
-- **Check:** `review`, `manual` (not yet enforced)
+- **Why:** 2026-11-07: "locate doesn't appear to work" on a WLED (fix/042-wled-locate). Then the walker (F-11): Locate from the Show Tree's right-click went to the Lighting Studio tab, which stopped the Show Tree's preview, so the cue being built (a held Starburst in amber) went dark under the flashes and never came back. Fixed (fix/042-f11-locate-tracking): Locate flashes from where it was asked.
+- **Check:** `wledshow_test::locateGivesBackAHeldTrackedEffectWithItsNewColour`, `wledshow_test::locateFlashesAWledPlayingAnEffectSolidWhiteAndGivesTheLookBack`, `walker`, `manual` (enforced)
 - **Right:** `Locate on a WLED mid-effect: solid white flashes, then the effect resumes`
 - **Wrong:** `Locate on a WLED: nothing visible, the effect keeps running`
 
@@ -953,9 +953,9 @@ Budget 2 clicks. From: 0.4.1 Known issue; CHANGELOG; course level 3 lesson 9. Ru
 | 1 | File ▸ Open Recent | the show (a newer autosave beside it), then Recover | Recover the autosave from Show.qlcc? ▸ Recover | 2 |
 ### F-11 Add a WLED string and play its effects
 
-Budget 26 clicks. From: 2026-11-07 his office WLED test (UX-67 to UX-72). Rules: UX-67, UX-68, UX-70, UX-72, UX-66.
+Budget 28 clicks. From: 2026-11-07 his office WLED test (UX-67 to UX-72). Rules: UX-67, UX-68, UX-70, UX-72, UX-66.
 
-- **Student:** Add the WLED with its IP, fix it on the device, build a Starburst cue that runs once, then a colour cue, then Locate.
+- **Student:** Add the WLED with its IP, fix it on the device, build a Starburst cue that runs once, then a colour cue (the list tracks, so the Starburst carries in), Locate, then turn the Starburst off in the colour cue.
 - **Pro:** Add Fixture takes the IP and puts the WLED on its own universe in one dialog; the cue's Runs and At the end are in the Look Editor.
 
 | # | Screen | Control | You see | Clicks |
@@ -971,8 +971,9 @@ Budget 26 clicks. From: 2026-11-07 his office WLED test (UX-67 to UX-72). Rules:
 | 9 | Look Editor | Effect ▸ Fireworks Starburst | the WLED effect chosen | 2 |
 | 10 | Look Editor | Runs ▸ Once; At the end ▸ Hold | Runs: Once and At the end: Hold, working on the device (UX-68) | 4 |
 | 11 | Show Tree, Design | GO on the armed cue | the effect plays once on the WLED, in Design (UX-62) | 1 |
-| 12 | Show Tree | + Cue, a colour only | a second cue with a colour and no effect; the WLED goes to solid colour (UX-70) | 3 |
-| 13 | Show Tree | right-click the WLED ▸ Locate | solid white flashes over whatever plays; all back after (UX-72) | 2 |
+| 12 | Show Tree | + Cue, a colour only | a second cue that sets only a colour; in a Tracking list the Starburst carries in, held, and its row says "tracked from" (UX-70) | 3 |
+| 13 | Show Tree | right-click the WLED ▸ Locate | solid white flashes over whatever plays; all back after, the held Starburst in the new colour (UX-72) | 2 |
+| 14 | Show Tree | the Effect row's ⋯ ▸ None (off here) | the Starburst stops in this cue: the WLED goes to solid colour, not frozen (UX-70) | 2 |
 
 ### F-12 Duplicate a cue and change only the copy
 

@@ -512,7 +512,9 @@ WLED output rather than borrowing Art-Net.
 - **Locate** on a WLED that runs an effect turns it Solid, in the Locate
   colour (white unless Preferences ▸ Locate says otherwise), flashing on and
   off over whatever look is playing; afterwards the device is back on that
-  look, or as it was if nothing plays.
+  look, or as it was if nothing plays. Locate from a right-click flashes it
+  where you are: from the Show Tree, the cue you are building stays on
+  stage (a held effect in its new colour comes back as it was).
 - Every few seconds it checks in with each device. Any that **don't answer,
   or answer on weak Wi-Fi** (weaker than -75 dBm), are listed by fixture name
   in the [readiness footer](#readiness-footer).
