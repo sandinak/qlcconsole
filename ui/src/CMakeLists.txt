@@ -150,6 +150,8 @@ add_library(${module_name}
     monitor/pixelpathdecor.cpp monitor/pixelpathdecor.h
     monitor/freestringhandles.cpp monitor/freestringhandles.h
     monitor/monitorgraphicsview_freestring.cpp
+    monitor/monitorgraphicsview_shapes.cpp
+    monitor/shapehandles.cpp monitor/shapehandles.h
     monitor/stringanchorsdialog.cpp monitor/stringanchorsdialog.h
     monitor/sprinklespansdialog.cpp monitor/sprinklespansdialog.h
     monitor/structurestudioview_pixels.cpp

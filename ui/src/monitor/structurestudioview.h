@@ -720,6 +720,10 @@ private:
      *  saved lock state ("if I have a fixture tied to a truss and the truss
      *  is locked .. I can still move it from the studio view"). */
     bool fixtureMovementLocked(quint32 fid) const;
+    /** Whether a boom's top cannot be dragged to resize it now: this view
+     *  locked, or a saved lock on the boom or its stand (its own, its
+     *  folder's, its layer's, the plot's). Its handle is not drawn then. */
+    bool boomResizeLocked(const class Pipe *pipe) const;
 
     /** Unit vector from the scene toward the camera, taken from viewDepth()'s
      *  own gradient so there is no second copy of the projection to drift. */

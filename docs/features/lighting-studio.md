@@ -403,6 +403,59 @@ structure, and a double-click edits it. When the show is saved, a picture
 from outside the show's folder is copied into its **images** folder, as
 truss and tower pictures are (see [Truss socks](#truss-socks)).
 
+### Stretch and turn by hand
+
+![A riser being stretched on the plot: a box at each end, side and corner, the knob above it to turn it, the dashed shape it will take and its size by the pointer](../images/lighting-studio-shape-handles.png)
+
+Select a **platform** (a deck, a riser, steps), a **truss** or a piece of
+**scenery** on its own in the Top view and it gets handles:
+
+- **A square at each end and side** (and the corners, on a deck): drag
+  one to stretch it from there; the opposite side stays where it is. A
+  truss and scenery stretch along their length only, a flight of steps
+  only across its treads (its depth is its steps).
+- **The round knob** off its upstage edge turns it about its middle, and
+  everything on it turns with it, as **Rotate** does.
+- **While you drag**, a dashed outline shows the shape it will take and a
+  readout by the pointer gives its size in your units (`16' × 8'`, or
+  **Length 30'**) or the way it will face (**45° (+45°)**).
+- **Snapping:** a stretch goes in steps of the plot's **Snap** (off when
+  Snap is off) and a turn in 15° steps; hold **Alt/⌥** while you drag to go
+  freely.
+- **One drag is one undo step.** A truss stretched at its near end keeps
+  its lights, bars and hangers where they hang on the stage.
+- **A cyc only stretches** (it hangs square across the back); other
+  scenery turns too. Trusses on a stand and bars on a truss follow what
+  they are on and have no handles.
+- **Several selected** (a group, or a deck and a truss picked together):
+  the knob alone, on the box round them, turns them all about their middle.
+
+The handles are there **only while nothing holds it still**: not with its
+own lock on, its group's, its layer's or the plot's (**Edit Plot**), not in
+Operate and not in Front or Side. Lift the lock and they come back.
+
+### Grouping stage features
+
+![Group ▸ on the plot's right-click menu: New Group…, the groups on the layer, Remove from Group](../images/lighting-studio-group-menu.png)
+
+Two risers and the steps up to them, the band's decks, a set of legs:
+file them as one group and they select and move as one. Right-click the
+plot, any of them, or a structure's Studio canvas ▸ **Group**:
+
+- **New Group…** (Ctrl/⌘+G on the plot) asks a name and files what is
+  selected in a new group, on their layer (inside the group they already
+  share, if they share one). A truss or deck goes with what is on it, and a
+  whole group selected goes in whole.
+- **The groups on that layer** follow, by name: pick one to add what is
+  selected to it. One they are all in already is ticked.
+- **Remove from Group** takes them out of the group they are in, one level
+  out; they stay where they are, on the same layer.
+- **Ungroup** (Ctrl/⌘+Shift+G, on the plot's menu) dissolves a whole group.
+
+Each is one undo step. A locked group, a locked layer or a locked plot
+greys what it stops, and the item says why (**Group “Band” is locked:
+unlock it in Plot layers**). In Plot layers the groups are the folders.
+
 ### People on the stage
 
 A choir on its risers or a band across the apron shows what the light does
@@ -1132,6 +1185,11 @@ when its length lies flat in the view, Tilt when you're looking down its
 length). Shift snaps to 15°; one Ctrl/⌘+Z undoes the whole drag. Movers and
 pars don't get handles.
 
+**A boom's top.** In a stand's editor, unlocked, a dot on top of the boom
+drags it taller or shorter. It is only there while the boom can move: not
+with the editor locked, nor with the boom, its stand, its layer or the plot
+locked.
+
 **Mount on acts on the selection.** Right-click one of several selected
 fixtures → **Mount on → Truss**, **Boom**, **Hanger**, **Tower** or **Deck**
 and every selected fixture goes there.
@@ -1477,9 +1535,9 @@ props, images and nodes:
 - **A group is selected as a group**: click its row in **Plot Layers**, or
   right-click a member ▸ **Select Group “name”**. Drag any of it and all
   of it moves; click one member again (no drag) to pick it out.
-- Groups are kept as they were: **Group** and **Ungroup** still make and
-  split them, and locks hold as before. **Group** on one member and
-  something else moves that member into the new group (the rest of its
+- Groups are kept as they were: **Group ▸ New Group…** and **Ungroup**
+  make and split them, and locks hold as before. A new group of one member
+  and something else moves that member into the new group (the rest of its
   group stays); a whole group selected nests inside the new one.
   **Move Selection Here** in Plot layers does the same: a whole group goes
   to the layer, one member leaves its group.
@@ -1500,9 +1558,11 @@ props, images and nodes:
   snaps by its **centre**, the point its light comes from. A grouped
   selection moves by the same amount as the piece you drag, so it keeps
   its shape.
-- **Group** (Ctrl/⌘+G) files the selection as one group, which Plot
-  layers lists as a folder and selects (and moves) as one from its row or
-  **Select Group**; **Ungroup** (Ctrl/⌘+Shift+G) splits it again.
+- **Group ▸** (right-click the plot, any object, or a structure's Studio
+  canvas) files things in the plot's groups, which Plot layers lists as
+  folders and which select and move as one from a row or **Select Group**.
+  See [Grouping stage features](#grouping-stage-features).
+  **Ungroup** (Ctrl/⌘+Shift+G) dissolves a whole group.
 - **Align Fixtures ▸** (two or more selected) and **Distribute Fixtures
   ▸** (three or more) are on the plot's right-click menu. They work on
   what the plot draws: **Same X** and **Same Y** line up the fixtures'

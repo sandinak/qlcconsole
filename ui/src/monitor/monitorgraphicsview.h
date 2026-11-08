@@ -38,6 +38,7 @@
 #include "function.h"
 #include "structureduplicate.h"
 #include "stagetarget.h"
+#include "shapehandles.h"
 
 class ContextMenu;
 class MonitorProperties;
@@ -642,9 +643,14 @@ public:
      *  selected: every item's place and its own facing, and everything
      *  mounted on what turns -- its fixtures, its hangers, what stands on a
      *  deck. One undo step. Returns how many items turned. */
-    int rotateSelectedItems(double deg);
-    /** The middle that rotateSelectedItems() turns about (world metres). */
+    int rotateSelectedItems(double deg, const QPointF *about = nullptr);
+    /** The middle that rotateSelectedItems() turns about (world metres),
+     *  unless it is told another (@a about: a stage feature's own middle,
+     *  when its rotate knob turns it). */
     QPointF selectionPivot() const;
+    /** The plan box (world metres) round what is selected; null when
+     *  nothing with a place is. */
+    QRectF selectionBox() const;
 
     /** Dissolve a specific group by one level: its child groups and items are
      *  promoted to the group's parent. Used by the Layers-tree context menu. */
@@ -1876,6 +1882,88 @@ private:
     bool stringEditable(quint32 fid) const;
     /** The right-click menu of handle @p index. */
     void stringHandleMenu(int index, const QPoint &globalPos);
+
+    /* Stretch and rotate handles (shapehandles.h): on a platform, a truss
+       or a piece of scenery selected on its own, from above, a box at each
+       end and side and a knob to turn it; on a group, the knob alone. Shown
+       only while nothing holds the selection still (itemHolds()). One drag
+       is one undo step. */
+    ShapeHandles *m_shapeHandles = nullptr;
+    StageShape::Handle m_shapeDragHandle = StageShape::NoHandle;
+    StageShape m_shapeDragStart;        ///< the shape at the press
+    StageShape m_shapeDragNow;          ///< what the drag makes it
+    double m_shapeLastAngle = 0.0;      ///< the pointer's angle at the last move
+    double m_shapeTurned = 0.0;         ///< degrees turned since the press, unwrapped
+    bool m_shapeDragMoved = false;
+    bool m_shapeCursor = false;
+    bool m_shapeRefreshPending = false;  ///< a look again after a rebuild is on its way
+public:
+    /** The handles shown now, or null. */
+    ShapeHandles *shapeHandles() const;
+    /** What the handles stand for: the one stage feature selected (its
+     *  footprint, with ends and sides that stretch), a whole selection of
+     *  several (kind "selection": its box, turned only), or invalid when
+     *  there are none -- nothing selected that turns, an elevation, Operate,
+     *  or something in the selection held still by its own lock, its
+     *  folder's, its layer's or the plot's. @a why gets the reason. */
+    StageShape shapeTarget(QString *why = nullptr) const;
+    /** Show, move or hide the handles for the selection as it is now. */
+    void refreshShapeHandles();
+    /** The readout while a handle is dragged, in Settings' unit: the size
+     *  it will be, or the angle it will face. */
+    QString shapeReadout(const StageShape &s, bool turning) const;
+private:
+    /** A press on a handle: the drag is the handle's. True when it took it. */
+    bool shapePress(QMouseEvent *event);
+    void shapeDragTo(const QPointF &scenePos, Qt::KeyboardModifiers mods);
+    void shapeDragEnd(Qt::KeyboardModifiers mods);
+    /** The angle the knob, dragged by @p turned degrees, leaves it at:
+     *  15-degree steps of where it faces (of the turn, for a selection),
+     *  unless @p free (Alt held). */
+    double shapeTurnTarget(double turned, bool free) const;
+    /** Metres a stretch rounds to: the plot's Snap step, 0 with Alt held. */
+    double shapeSnapStep(Qt::KeyboardModifiers mods) const;
+    /** World metres to the plot's scene, and back, from above. */
+    QPointF planToScene(const QPointF &m) const;
+    QPointF sceneToPlan(const QPointF &sp) const;
+    QPolygonF planToScene(const QPolygonF &poly) const;
+
+public:
+    /* Group ▸ (docs/features/lighting-studio.md "Grouping stage features"):
+       the plot's own groups -- folders in Plot layers -- from a right-click
+       on the plot, an object, or a Studio canvas. */
+    /** Fill @p menu (the Group submenu) for @p objects: New Group… (Ctrl+G),
+     *  the groups on their layer to add them to, Remove from Group. What a
+     *  locked group, layer or plot stops is greyed with the reason. */
+    void fillGroupMenu(class QMenu *menu, const QList<QPair<QString, quint32> > &objects);
+    /** Why @p objects cannot be regrouped now (the plot, or one of their
+     *  layers or folders, locked), or empty. */
+    QString groupingBlocked(const QList<QPair<QString, quint32> > &objects) const;
+    /** Why @p objects cannot go into group @p gid (it, a folder above it or
+     *  its layer locked), or empty. */
+    QString groupTargetBlocked(quint32 gid) const;
+    /** The layer @p objects are on (the most of them; the active one when
+     *  none is known). */
+    quint32 objectsLayer(const QList<QPair<QString, quint32> > &objects) const;
+    /** The groups @p objects can be added to: on their layer, not an
+     *  assembly, not one under what is being moved. */
+    QList<quint32> groupsToAddTo(const QList<QPair<QString, quint32> > &objects) const;
+    /** Put @p objects in a new group named @p name; its id, or 0. A
+     *  structure goes with what is on it, a folder chosen whole nests
+     *  whole. One undo step. */
+    quint32 newGroupFrom(const QList<QPair<QString, quint32> > &objects, const QString &name);
+    /** Ask a name, then newGroupFrom() (Ctrl+G, Group ▸ New Group…). */
+    quint32 newGroupAsking(const QList<QPair<QString, quint32> > &objects);
+    /** Add @p objects to group @p gid; how many moved. One undo step. */
+    int addToGroup(const QList<QPair<QString, quint32> > &objects, quint32 gid);
+    /** Take @p objects out of the group they are in (one level out, on the
+     *  same layer); how many moved. One undo step. */
+    int removeFromGroup(const QList<QPair<QString, quint32> > &objects);
+    /** The group @p kind / @p id is filed in, as Plot layers shows it. */
+    quint32 filedGroupOf(const QString &kind, quint32 id) const;
+private:
+    /** addToGroup() without the undo step or the redraw. */
+    int fileInGroup(const QList<QPair<QString, quint32> > &objects, quint32 gid);
 
     /** "Stage view" — hide fixtures/targets/power, keep only stage features. */
     bool m_stageOnly = false;

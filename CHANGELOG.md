@@ -49,6 +49,20 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   focused (UX-61, flow F-04).
 ### New
 
+- **Stretch and turn stage features by hand.** Select a platform, a truss or
+  a piece of scenery on the plot (Top) and it has a box at each end and side
+  to stretch it and a knob to turn it; a group picked together turns as one.
+  A dashed outline shows what it will become and the readout gives its size
+  in Settings' unit or its angle; stretches go in Snap steps and turns in
+  15° (Alt/⌥ for free); one drag is one undo. The handles are only there
+  while nothing holds it: its own lock, its group's, its layer's and the
+  plot's each take them away. A cyc stretches only.
+- **Group ▸ on the plot, on every object and in the Studio.** Right-click ▸
+  **Group ▸ New Group…** (Ctrl/⌘+G, asks a name), any group already on that
+  layer to add the selection to, or **Remove from Group**; Ungroup still
+  dissolves a whole group. One undo each; a locked group, layer or plot
+  greys what it stops and says why. It replaces **Group Selected**, **New
+  Folder from Selection…** and **Remove from Folder**.
 - **Free string (anchors): a fairy string laid anywhere.** A new **Pixel
   path** for any pixel fixture, no fountain needed: **Add Anchor**, then
   click on the plan where the string starts, each place it is tied and
@@ -69,6 +83,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A locked stand's boom no longer shows a resize dot.** The dot on a
+  boom's top in a stand's editor is drawn only while it can be dragged:
+  not with the editor, the boom, its stand, its layer or the plot locked.
 - **The footer stays steady (UX-74).** The Load chip no longer flips
   amber/green every half second on a busy machine (amber from 60 %, back
   below 50 %; red from 100 %, back below 90 %; a "stall" word stays 2 s)

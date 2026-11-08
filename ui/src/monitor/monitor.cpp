@@ -318,7 +318,10 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     // mode (editable while designing, frozen in a show).
     connect(m_doc, &Doc::modeChanged, this, [this](Doc::Mode) {
         if (m_graphicsView != NULL)
+        {
             m_graphicsView->updateTargets();
+            m_graphicsView->refreshShapeHandles();    // stretched and turned in Design only
+        }
     });
 
     /* Item 10: the targets in scope follow what plays (a list's GO, a
@@ -2444,8 +2447,8 @@ void Monitor::initGraphicsToolbar()
 
     // Group / ungroup the selection (also Cmd/Ctrl+G, Cmd/Ctrl+Shift+G, and the
     // right-click menu). Enabled state is driven by the current selection.
-    m_groupAction = new QAction(QIcon(":/group.png"), tr("Group"), this);
-    m_groupAction->setToolTip(tr("Group the selected items so they select and move together (Ctrl+G)"));
+    m_groupAction = new QAction(QIcon(":/group.png"), tr("New Group…"), this);
+    m_groupAction->setToolTip(tr("Put the selected items in a new group so they select and move together (Ctrl+G)"));
     m_groupAction->setEnabled(false);
     connect(m_groupAction, SIGNAL(triggered()), this, SLOT(slotGroupItems()));
     moreMenu->addAction(m_groupAction);
@@ -3596,7 +3599,7 @@ void Monitor::slotPOVChanged(int index)
 void Monitor::slotGroupItems()
 {
     if (m_graphicsView != NULL)
-        m_graphicsView->groupSelectedItems();
+        m_graphicsView->newGroupAsking(m_graphicsView->selectedMapObjects());
 }
 
 void Monitor::slotRotateSelection()
@@ -3624,7 +3627,7 @@ void Monitor::slotMapSelectionChanged()
     if (m_graphicsView == NULL)
         return;
     if (m_groupAction != NULL)
-        m_groupAction->setEnabled(m_graphicsView->selectionGroupable());
+        m_groupAction->setEnabled(m_graphicsView->hasSelection());
     if (m_ungroupAction != NULL)
         m_ungroupAction->setEnabled(m_graphicsView->selectionHasGroup());
     /* Focus calls running (Q140): a light clicked on the plot is the one
@@ -5624,6 +5627,31 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         const QList<quint32> selNow = selectedFids();
         QAction *aNew = selNow.isEmpty() ? nullptr
             : (m.addSeparator(), m.addAction(tr("New Fixture Group from Selection…")));
+        /* Group ▸ for the structure this editor is of, as on the plot: a
+           new group, one on its layer, or out of the one it is in. */
+        const QString studioKind = kind == 0 ? QStringLiteral("stand")
+                                 : kind == 1 ? QStringLiteral("tower")
+                                 : kind == 2 ? QStringLiteral("truss")
+                                 : kind == 3 ? QStringLiteral("platform")
+                                 : kind == 4 ? QStringLiteral("pipe")
+                                 : kind == 7 ? QStringLiteral("scenery") : QString();
+        bool onPlot = false;
+        if (!studioKind.isEmpty())
+            m_graphicsView->objectLayerId(studioKind, id, &onPlot);
+        if (onPlot && m_doc->mode() == Doc::Design)
+        {
+            m.addSeparator();
+            QMenu *groupMenu = m.addMenu(QIcon(":/group.png"), tr("Group"));
+            groupMenu->setObjectName(QStringLiteral("studioGroupMenu"));
+            groupMenu->menuAction()->setObjectName(QStringLiteral("studioGroup"));
+            m_graphicsView->fillGroupMenu(groupMenu, { qMakePair(studioKind, id) });
+            // Ctrl+G is the plot's: not offered where it does nothing.
+            for (QAction *a : groupMenu->actions())
+            {
+                if (a->objectName() == QLatin1String("plotNewGroup"))
+                    a->setShortcut(QKeySequence());
+            }
+        }
         QAction *ch = m.exec(globalPos);
         if (ch == aFix) { pushUndo(); studioAddFixture(kind, id, view); rebuildTree(); rebuildSource(); }
         else if (ch == aGrp) { pushUndo(); studioAddGroup(kind, id, view); rebuildTree(); rebuildSource(); }
@@ -9371,10 +9399,18 @@ void Monitor::fillCanvasMenu(QMenu *out, QPointF scenePos)
         ->setObjectName(QStringLiteral("plotSaveBlocking"));
 
     // Shortcuts are on the actions (Qt shows them), not typed into the names.
-    QAction *groupAct = cm.add(ContextMenu::Organise, tr("Group Selected"), [this]() { slotGroupItems(); });
-    groupAct->setIcon(QIcon(":/group.png"));
-    groupAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
-    groupAct->setEnabled(m_graphicsView != NULL && m_graphicsView->selectionGroupable());
+    /* Group ▸: a new group (Ctrl+G), a group already on the layer to add
+       the selection to, or out of the one it is in. */
+    if (m_graphicsView != NULL)
+    {
+        const QList<QPair<QString, quint32> > picked = m_graphicsView->selectedMapObjects();
+        QMenu *groupMenu = cm.addMenu(ContextMenu::Organise, tr("Group"), QStringLiteral("plotGroup"));
+        groupMenu->setObjectName(QStringLiteral("plotGroupMenu"));
+        groupMenu->menuAction()->setObjectName(QStringLiteral("plotGroup"));
+        groupMenu->setIcon(QIcon(":/group.png"));
+        m_graphicsView->fillGroupMenu(groupMenu, picked);
+        groupMenu->menuAction()->setEnabled(!picked.isEmpty());
+    }
     QAction *ungroupAct = cm.add(ContextMenu::Organise, tr("Ungroup"), [this]() { slotUngroupItems(); });
     ungroupAct->setIcon(QIcon(":/ungroup.png"));
     ungroupAct->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_G));

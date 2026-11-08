@@ -225,7 +225,7 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     // Cmd/Ctrl+G groups the selection; Cmd/Ctrl+Shift+G ungroups it.
     QShortcut *groupSc = new QShortcut(QKeySequence(tr("Ctrl+G")), this);
     groupSc->setContext(Qt::WidgetWithChildrenShortcut);
-    connect(groupSc, &QShortcut::activated, this, [this]() { groupSelectedItems(); });
+    connect(groupSc, &QShortcut::activated, this, [this]() { newGroupAsking(selectedMapObjects()); });
     QShortcut *ungroupSc = new QShortcut(QKeySequence(tr("Ctrl+Shift+G")), this);
     ungroupSc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(ungroupSc, &QShortcut::activated, this, [this]() { ungroupSelectedItems(); });
@@ -282,6 +282,13 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     connect(this, &MonitorGraphicsView::rulersChanged, this, [this]() {
         if (stringHandles() != nullptr)
             refreshStringHandles();
+        if (m_shapeHandles != nullptr)
+            refreshShapeHandles();
+    });
+    // A stage feature selected on its own shows its stretch and rotate handles.
+    connect(m_scene, &QGraphicsScene::selectionChanged, this, [this]() {
+        if (!m_itemsRebuilding)
+            refreshShapeHandles();
     });
     /* RC8: what lit lasers and star lasers throw, on the Top plot: about 15
        times a second while any could be lit (rebuildEmissionOverlay()). */
@@ -503,6 +510,9 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
 
     // Laying a free string, or one of its anchors grabbed: the string's.
     if (stringPress(event))
+        return;
+    // A stage feature's stretch or rotate handle: the drag is the handle's.
+    if (shapePress(event))
         return;
 
     /* A no-light zone is dragged by its outline or centre handle, nothing
@@ -2374,6 +2384,12 @@ void MonitorGraphicsView::openStudioGroupEditor(quint32 groupId)
 
 QPointF MonitorGraphicsView::selectionPivot() const
 {
+    const QRectF box = selectionBox();
+    return box.isNull() ? QPointF() : box.center();
+}
+
+QRectF MonitorGraphicsView::selectionBox() const
+{
     MonitorProperties *props = m_doc->monitorProperties();
     double x0 = 1e18, y0 = 1e18, x1 = -1e18, y1 = -1e18;
     auto add = [&](double x, double y) {
@@ -2443,18 +2459,19 @@ QPointF MonitorGraphicsView::selectionPivot() const
         }
     }
     if (x0 > x1)
-        return QPointF();
-    return QPointF((x0 + x1) / 2.0, (y0 + y1) / 2.0);
+        return QRectF();
+    // A single point still has a middle: a box too small to see, not null.
+    return QRectF(QPointF(x0, y0), QPointF(qMax(x1, x0 + 1e-6), qMax(y1, y0 + 1e-6)));
 }
 
-int MonitorGraphicsView::rotateSelectedItems(double deg)
+int MonitorGraphicsView::rotateSelectedItems(double deg, const QPointF *about)
 {
     MonitorProperties *props = m_doc->monitorProperties();
     const QList<QGraphicsItem *> sel = m_scene->selectedItems();
     if (sel.isEmpty() || qFuzzyIsNull(deg))
         return 0;
 
-    const QPointF c = selectionPivot();
+    const QPointF c = about != nullptr ? *about : selectionPivot();
     const double r = qDegreesToRadians(deg);
     const double cs = qCos(r), sn = qSin(r);
     // A plan point turned about the middle of the selection.
@@ -3461,6 +3478,7 @@ void MonitorGraphicsView::refreshItemLayerState()
         hgi->setVisible(props->layer(lid).visible && props->layer(h ? h->layerId() : 0).visible);
     }
     updateStageMarks();         // the stage pieces, on their own layer
+    refreshShapeHandles();      // shown only while nothing holds it
     emit layerStateChanged();   // the rig view follows what is shown here
 }
 
@@ -5308,6 +5326,7 @@ void MonitorGraphicsView::updatePlatforms()
        with them, however this returns. */
     auto marks = qScopeGuard([this]() {
         updateStageMarks();
+        refreshShapeHandles();      // the platform or scenery may have changed
         // A target's readout gives the deck it stands on.
         foreach (TargetItem *ti, m_targetItems)
             ti->refreshPositionReadout();
@@ -8857,6 +8876,12 @@ void MonitorGraphicsView::scrollContentsBy(int dx, int dy)
 
 void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
 {
+    if (m_shapeDragHandle != StageShape::NoHandle && e->button() == Qt::LeftButton)
+    {
+        shapeDragEnd(e->modifiers());
+        e->accept();
+        return;
+    }
     if (m_stringDragIndex >= 0 && e->button() == Qt::LeftButton)
     {
         stringDragEnd();
@@ -9056,6 +9081,31 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
 
 void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
 {
+    if (m_shapeDragHandle != StageShape::NoHandle && (event->buttons() & Qt::LeftButton))
+    {
+        // A stretch or rotate handle, dragged: past the drag distance, it shows what it makes.
+        if (m_shapeDragMoved
+            || (event->pos() - m_pressViewPos).manhattanLength() >= QApplication::startDragDistance())
+            shapeDragTo(mapToScene(event->pos()), event->modifiers());
+        emit cursorReadout(viewportToReadout(event->pos()));
+        event->accept();
+        return;
+    }
+    if (event->buttons() == Qt::NoButton && m_shapeHandles != nullptr && m_addAnchorFid == UINT_MAX)
+    {
+        // Over a handle: it can be grabbed.
+        const ShapeHandles *sh = shapeHandles();
+        const StageShape::Handle over = sh != nullptr ? sh->handleAt(mapToScene(event->pos()))
+                                                      : StageShape::NoHandle;
+        if ((over != StageShape::NoHandle) != m_shapeCursor)
+        {
+            m_shapeCursor = over != StageShape::NoHandle;
+            if (m_shapeCursor)
+                viewport()->setCursor(over == StageShape::RotateKnob ? Qt::OpenHandCursor : Qt::SizeAllCursor);
+            else
+                viewport()->unsetCursor();
+        }
+    }
     if (m_stringDragIndex >= 0 && m_stringDragFid != UINT_MAX && (event->buttons() & Qt::LeftButton))
     {
         // A free string's anchor, dragged: past the drag distance, it moves.
@@ -9497,28 +9547,6 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
     buildItemMenu(&menu, kind, id, place, sp);
     if (!menu.isEmpty())
         menu.exec(event->globalPos());
-}
-
-/* The graphics item standing for kind/id, if the plot has one. */
-static QGraphicsItem *mapItemFor(const QString &kind, quint32 id,
-                                 const QHash<quint32, MonitorFixtureItem *> &fixtures,
-                                 const QHash<quint32, TrussItem *> &trusses,
-                                 const QHash<quint32, PlatformItem *> &platforms,
-                                 const QHash<quint32, PipeItem *> &pipes,
-                                 const QHash<quint32, StandItem *> &stands,
-                                 const QHash<quint32, TowerItem *> &towers,
-                                 const QHash<quint32, TargetItem *> &targets,
-                                 const QHash<quint32, SceneryItem *> &sceneries)
-{
-    if (kind == QLatin1String("fixture"))  return fixtures.value(id, nullptr);
-    if (kind == QLatin1String("truss"))    return trusses.value(id, nullptr);
-    if (kind == QLatin1String("platform")) return platforms.value(id, nullptr);
-    if (kind == QLatin1String("pipe"))     return pipes.value(id, nullptr);
-    if (kind == QLatin1String("stand"))    return stands.value(id, nullptr);
-    if (kind == QLatin1String("tower"))    return towers.value(id, nullptr);
-    if (kind == QLatin1String("target"))   return targets.value(id, nullptr);
-    if (kind == QLatin1String("scenery"))  return sceneries.value(id, nullptr);
-    return nullptr;
 }
 
 static QString itemNameOf(Doc *doc, const QString &kind, quint32 id);
@@ -10035,59 +10063,12 @@ void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
     if (!menu->isEmpty())
         menu->addSeparator();
 
-    auto groupOf = [this](const QString &kind, quint32 id) -> quint32 {
-        QGraphicsItem *gi = mapItemFor(kind, id, m_fixtures, m_trussItems, m_platformItems,
-                                       m_pipeItems, m_standItems, m_towerItems, m_targetItems,
-                                       m_sceneryItems);
-        if (gi != nullptr)
-            return itemGroupId(gi);
-        return (kind == QLatin1String("fixture")) ? m_doc->monitorProperties()->fixtureGroup(id) : 0;
-    };
-
-    // Folders.
-    QList<QPair<QString, quint32> > inFolder;
-    for (const auto &o : objects)
-        if (groupOf(o.first, o.second) != 0
-            && props->assemblyOf(groupOf(o.first, o.second)) == 0)   // an assembly's parts stay in it
-            inFolder << o;
-    if (!inFolder.isEmpty())
-        menu->addAction(inFolder.size() > 1 ? tr("Remove %1 Items from Folder").arg(inFolder.size())
-                                            : tr("Remove from Folder"),
-                        this, [this, inFolder]() {
-            removeFromFolder(inFolder);
-        });
-    if (objects.size() >= 2)
-        menu->addAction(tr("New Folder from Selection…"), this, [this, objects, groupOf]() {
-            /* Nested inside the folder they already share, if they share one;
-               otherwise a folder of its own on the first object's layer. */
-            quint32 parent = groupOf(objects.first().first, objects.first().second);
-            for (const auto &o : objects)
-                if (groupOf(o.first, o.second) != parent)
-                {
-                    parent = 0;
-                    break;
-                }
-            MonitorProperties *p = m_doc->monitorProperties();
-            quint32 layer = p->activeLayerId();
-            if (parent != 0)
-                layer = p->group(parent).layerId;
-            else if (QGraphicsItem *gi = mapItemFor(objects.first().first, objects.first().second,
-                                                    m_fixtures, m_trussItems, m_platformItems,
-                                                    m_pipeItems, m_standItems, m_towerItems,
-                                                    m_targetItems, m_sceneryItems))
-                layer = itemLayerId(gi);
-            const quint32 gid = p->nextGroupId();
-            bool ok = false;
-            const QString name = QInputDialog::getText(this, tr("New Folder"), tr("Folder name:"),
-                                                       QLineEdit::Normal, tr("Folder %1").arg(gid),
-                                                       &ok).trimmed();
-            if (!ok || name.isEmpty())
-                return;
-            p->createGroup(gid, name, layer, parent);
-            reparentToGroup(objects, gid);
-            m_doc->setModified();
-            emit mapStructureChanged();
-        });
+    /* Groups: the plot's own (folders in Plot layers) -- a new one, one
+       already on the layer, or out of the one they are in. */
+    QMenu *groupMenu = menu->addMenu(QIcon(":/group.png"), tr("Group"));
+    groupMenu->setObjectName(QStringLiteral("plotGroupMenu"));
+    groupMenu->menuAction()->setObjectName(QStringLiteral("plotGroup"));
+    fillGroupMenu(groupMenu, objects);
 
     // Fixture Groups: the lighting control groups, not folders.
     QList<quint32> fixtures;
