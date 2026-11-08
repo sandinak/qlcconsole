@@ -1705,6 +1705,90 @@ void LookEditor_Test::anyEffectRunsOnceOrNTimes()
     QCOMPARE(atEnd->currentText(), QString("Release"));
 }
 
+/* WLED's own effect on a WLED over Art-Net / E1.31: Hold cannot freeze it
+   there (WLED's DMX has no freeze), and the At the end row says so -- only
+   then. On WLED's own API (Network (WLED)) Hold freezes it: no note. */
+void LookEditor_Test::aWledOverDmxSaysHoldCannotFreezeIt()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Effect-Mode.qxf"),
+             QFile::NoError);
+    QVERIFY(doc.fixtureDefCache()->addFixtureDef(def));
+    Fixture *wled = new Fixture(&doc);
+    wled->setName("Sprinkles");
+    wled->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+    wled->setConnection(Fixture::Network);
+    wled->setTransport(Fixture::WledTransport);
+    QVERIFY(doc.addFixture(wled));
+
+    Scene *scene = new Scene(&doc);
+    scene->addFixture(wled->id());
+    doc.addFunction(scene);
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("WLED Fireworks Starburst");
+    look->setScriptPath(doc.effectScriptRunner()->cache()->scriptPathForWled("Fireworks Starburst"));
+    look->setWledEffect("Fireworks Starburst");
+    look->setEffectParamValue("__runs", 1);
+    QVERIFY(doc.addPalette(look));
+    scene->addPalette(look->id());
+
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    ed.show();
+    ed.setContextScene(scene);
+    ed.setPalette(look->id());
+    // The settings are built again for each look: the last one, not one on its way out.
+    auto note = [&ed]() {
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        return ed.findChild<QLabel *>("effectAtEndNote");
+    };
+    auto shoot = [&ed](const QString &name) {
+        const QByteArray dir = qgetenv("QLC_SHOT_DIR");
+        if (dir.isEmpty())
+            return;
+        QDir().mkpath(QString::fromLocal8Bit(dir));
+        for (const QSize &sz : { QSize(520, 640), QSize(800, 720), QSize(1280, 900) })
+        {
+            ed.resize(sz);
+            QApplication::processEvents();
+            QWidget *row = ed.findChild<QWidget *>("effectRunsRow");
+            for (QScrollArea *sa : ed.findChildren<QScrollArea *>())
+                if (row != nullptr && sa->widget() != nullptr && sa->widget()->isAncestorOf(row))
+                    sa->ensureWidgetVisible(row, 0, 40);
+            QApplication::processEvents();
+            ed.grab().save(QString::fromLocal8Bit(dir) + QStringLiteral("/%1-%2x%3.png")
+                               .arg(name).arg(sz.width()).arg(sz.height()));
+        }
+    };
+    QVERIFY(note() != nullptr);
+    QVERIFY2(note()->isHidden(), "on WLED's own API Hold freezes it");
+    shoot("before-hold-network-wled");
+
+    // The same WLED over Art-Net: Hold keeps it running, and says so.
+    wled->setTransport(Fixture::ArtNetTransport);
+    ed.setPalette(look->id());
+    QVERIFY(!note()->isHidden());
+    QCOMPARE(note()->text(), QString("Hold can't freeze a WLED over DMX; it keeps running. "
+                                     "Use Release, or connect it as Network (WLED)."));
+    shoot("after-hold-wled-over-dmx");
+    QComboBox *atEnd = ed.findChild<QComboBox *>("effectAtEnd");
+    atEnd->setCurrentIndex(1);                          // Release: nothing to say
+    QVERIFY(note()->isHidden());
+    atEnd->setCurrentIndex(0);
+    QVERIFY(!note()->isHidden());
+    QComboBox *runs = ed.findChild<QComboBox *>("effectRuns");
+    runs->setCurrentIndex(0);                           // Loop: there is no end
+    QVERIFY(note()->isHidden());
+
+    // Not one of WLED's own (an ordinary effect): no note.
+    look->setWledEffect(QString());
+    look->setEffectParamValue("__runs", 1);
+    ed.setPalette(look->id());
+    QVERIFY(note()->isHidden());
+}
+
 /* A Breathe on the Dimmer Phaser, as resources/effectpresets/Breathe.json
    has it. */
 static QLCPalette *aBreathe(Doc &doc)

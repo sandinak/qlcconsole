@@ -42,6 +42,11 @@ QJsonObject WledState::decode(const QByteArray &universe, int address, int chann
         const int option = at(5) / 64;
         seg[QStringLiteral("mi")]  = (option == 1 || option == 3);
         seg[QStringLiteral("rev")] = (option == 2 || option == 3);
+        /* Bit 5 (32) of the option: freeze on the frame it is showing -- a
+           look's effect that ran Once and holds (EffectInstance). WLED's
+           DMX ignores the bit; here it is every segment's "frz", and clear
+           it runs again. Always sent, so a freeze never outlives its look. */
+        seg[QStringLiteral("frz")] = (at(5) & 0x20) != 0;
         seg[QStringLiteral("col")] = QJsonArray{ colour(6), colour(9), colour(12) };
     }
     else

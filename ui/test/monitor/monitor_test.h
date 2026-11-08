@@ -222,6 +222,7 @@ private slots:
     void aBarHungOnATrussShinesOutOfItsFace();
     void aLanternHangsOffATowerAndGlowsAllRound();
     void aWledLanternShowsItsEffectLedByLed();
+    void aFrozenWledLanternStopsOnItsFrame();
     void aSockedTrussGlowsWithTheBarsInsideIt();
     void aTowerWearsItsFacesPlainOrPrinted();
     void ledsGlowInTheHaze();

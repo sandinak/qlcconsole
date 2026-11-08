@@ -400,7 +400,7 @@ void EffectInstance::runTick()
 
     // WLED fixtures in a WLED look run the effect themselves: theirs is a
     // handful of settings, not a frame.
-    const QList<DmxWrite> device = wledDeviceWrites();
+    QList<DmxWrite> device = wledDeviceWrites();
 
     int gridCols = 1, gridRows = 1;
     QList<EffectCell> cells = effectiveCells(gridCols, gridRows);
@@ -410,6 +410,20 @@ void EffectInstance::runTick()
             clearResults();
         else
         {
+            /* Only devices: they run it, but how many times is still the
+               look's (EffectRuns). Their run ends on the same clock the
+               port's does -- runs × one run's length. */
+            const EffectRuns::Settings runs = EffectRuns::resolve(m_paramValues, m_script.isOneShot(),
+                                                                  m_scriptRelease);
+            if (!runs.loops())
+            {
+                m_runLenMs = resolvedDurationMs();
+                if (m_runLenMs <= 0 || nowMs() >= qint64(m_runLenMs) * runs.runs)
+                {
+                    m_oneShotDone = true;
+                    endDeviceRun(device, runs.release);
+                }
+            }
             QMutexLocker locker(&m_mutex);
             m_lastResults = device;
             m_lastFrameEmpty = false;
@@ -535,6 +549,7 @@ void EffectInstance::runTick()
             m_oneShotDone = true;
             if (runs.release)
                 writes.clear();
+            endDeviceRun(device, runs.release);
         }
     }
 
@@ -2179,7 +2194,8 @@ QList<EffectInstance::DmxWrite> EffectInstance::wledDeviceWrites() const
         put(QStringLiteral("Effect Speed"), param("speed", 128), true);
         put(QStringLiteral("Effect Intensity"), param("intensity", 128), true);
         put(QStringLiteral("Palette"), param("palette", 0), true);
-        put(QStringLiteral("Effect Option"), param("option", 0), true);
+        // Its own freeze bit is the run's to set (endDeviceRun()), not the setting's.
+        put(QStringLiteral("Effect Option"), param("option", 0) & ~WledFixture::kFreezeOption, true);
         static const char *const names[3][3] = {
             { "Red", "Green", "Blue" },
             { "Secondary Red", "Secondary Green", "Secondary Blue" },
@@ -2196,6 +2212,27 @@ QList<EffectInstance::DmxWrite> EffectInstance::wledDeviceWrites() const
         put(QStringLiteral("Master Dimmer"), qRound(255.0 * dimmer * double(envelopeFor(fid, -1))), false);
     }
     return out;
+}
+
+void EffectInstance::endDeviceRun(QList<DmxWrite> &device, bool release) const
+{
+    // Release: they let go too -- the look's own values (or what is under
+    // it) come back on their channels.
+    if (release)
+    {
+        device.clear();
+        return;
+    }
+    /* Hold: the last settings stay. A WLED on its own API is also told to
+       freeze (WledFixture::kFreezeOption), so the frame it is on stays --
+       over DMX there is no such thing, and it runs on. */
+    for (DmxWrite &w : device)
+    {
+        Fixture *fx = m_doc->fixture(w.fixtureId);
+        if (WledFixture::canFreeze(fx)
+            && int(w.channel) == WledFixture::channel(fx, QStringLiteral("Effect Option")))
+            w.value = uchar(w.value | WledFixture::kFreezeOption);
+    }
 }
 
 QString EffectInstance::error() const

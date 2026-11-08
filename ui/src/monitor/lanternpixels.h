@@ -104,6 +104,7 @@ private:
     QHash<QString, QSharedPointer<EffectScript> > m_scripts;   ///< by path; null = would not load
     QHash<quint32, QJSValue> m_states;                         ///< by fixture: its run's state
     QHash<quint32, QString> m_stateScript;                     ///< ...and which script it is for
+    QHash<quint32, Frame> m_frozen;     ///< by fixture: its last script frame, held while it is frozen
     QElapsedTimer m_clock;
     QTimer *m_animate = nullptr;    ///< redraws while a script is running
     bool m_scriptRan = false;

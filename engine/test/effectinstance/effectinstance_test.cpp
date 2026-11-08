@@ -1060,6 +1060,260 @@ void EffectInstance_Test::aWledLookRunsOnTheDeviceAndThePortElsewhere()
     QCOMPARE(back.wledEffect(), QString("Chase"));
 }
 
+namespace
+{
+/* A WLED lantern in Effect mode at @p address, driven by WLED's API
+   (Network (WLED)) or over Art-Net / E1.31. */
+Fixture *aWledLantern(Doc *doc, Fixture::Transport transport, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    if (def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Lantern.qxf") != QFile::NoError)
+        return nullptr;
+    Fixture *fx = new Fixture(doc);
+    fx->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+    fx->setUniverse(0);
+    fx->setAddress(address);
+    fx->setTransport(transport);
+    doc->addFixture(fx);
+    return fx;
+}
+
+/* WLED's Fireworks Starburst on @p fixtures, run @p runs times of one
+   second each (0 = Loop), held or released at the end. */
+QLCPalette *aStarburst(Doc *doc, Scene *scene, int runs, bool release)
+{
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, doc);
+    look->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/wled-fireworks-starburst.js");
+    look->setWledEffect("Fireworks Starburst");
+    look->setEffectParamValue("option", 128);           // Reverse
+    look->setEffectParamValue(EffectRuns::runsKey(), runs);
+    look->setEffectParamValue(EffectRuns::atEndKey(), release ? 1.0 : 0.0);
+    look->setEffectParamValue(EffectRuns::lengthKey(), 1000);
+    doc->addPalette(look);
+    scene->addPalette(look->id());
+    return look;
+}
+
+/* What @p inst sends @p fx, by channel: -1 for a channel it does not. */
+QHash<quint32, int> sentTo(const EffectInstance &inst, const Fixture *fx)
+{
+    QHash<quint32, int> out;
+    for (const EffectInstance::DmxWrite &w : inst.dmxWrites())
+        if (w.fixtureId == fx->id())
+            out.insert(w.channel, w.value);
+    return out;
+}
+
+const quint32 kOption = 5;     // the Effect Option channel of the 15
+}
+
+void EffectInstance_Test::aWledRunOnceThatReleasesLetsGoOfTheDevice()
+{
+    Fixture *lantern = aWledLantern(m_doc, Fixture::WledTransport, 100);
+    QVERIFY(lantern != nullptr);
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(lantern->id());
+    QLCPalette *look = aStarburst(m_doc, scene, 1, true);
+
+    EffectInstance inst(m_doc, scene->id(), look->id());
+    QVERIFY(inst.isValid());
+    inst.setOffStageClock(500);                         // half way through its one run
+    inst.runTick();
+    QHash<quint32, int> sent = sentTo(inst, lantern);
+    QCOMPARE(sent.value(1), WledFixture::effectValue(lantern, "Fireworks Starburst"));
+    QCOMPARE(sent.value(kOption), 128);
+    QVERIFY(!inst.runDone());
+
+    inst.setOffStageClock(1000);                        // the run is over: it lets go
+    inst.runTick();
+    QVERIFY(inst.runDone());
+    QVERIFY(sentTo(inst, lantern).isEmpty());
+    inst.setOffStageClock(5000);                        // and stays let go
+    inst.runTick();
+    QVERIFY(sentTo(inst, lantern).isEmpty());
+}
+
+void EffectInstance_Test::aWledRunOnceThatHoldsFreezesItOnItsOwnApiOnly()
+{
+    Fixture *api = aWledLantern(m_doc, Fixture::WledTransport, 100);
+    QVERIFY(api != nullptr);
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(api->id());
+    // A setting that happens to carry the freeze bit does not freeze it.
+    QLCPalette *look = aStarburst(m_doc, scene, 1, false);
+    look->setEffectParamValue("option", 128 + 40);
+
+    EffectInstance inst(m_doc, scene->id(), look->id());
+    inst.setOffStageClock(200);
+    inst.runTick();
+    QCOMPARE(sentTo(inst, api).value(kOption), 128 + 8);
+    QVERIFY(!WledFixture::freezes(sentTo(inst, api).value(kOption)));
+
+    // The run is over: everything it was sent stays, and it freezes.
+    const QHash<quint32, int> running = sentTo(inst, api);
+    inst.setOffStageClock(1200);
+    inst.runTick();
+    QVERIFY(inst.runDone());
+    QHash<quint32, int> held = sentTo(inst, api);
+    QVERIFY(WledFixture::freezes(held.value(kOption)));
+    QCOMPARE(held.value(kOption) & 0xC0, 128);          // still Reverse
+    QCOMPARE(held.value(kOption) & ~WledFixture::kFreezeOption, running.value(kOption));
+    held.remove(kOption);
+    QHash<quint32, int> was = running;
+    was.remove(kOption);
+    QCOMPARE(held, was);
+
+    // Over DMX: WLED has no freeze. It keeps its settings and runs on.
+    Fixture *dmx = aWledLantern(m_doc, Fixture::ArtNetTransport, 200);
+    QVERIFY(dmx != nullptr);
+    QVERIFY(!WledFixture::canFreeze(dmx) && WledFixture::canFreeze(api));
+    Scene *scene2 = new Scene(m_doc);
+    m_doc->addFunction(scene2);
+    scene2->addFixture(dmx->id());
+    QLCPalette *look2 = aStarburst(m_doc, scene2, 1, false);
+    EffectInstance inst2(m_doc, scene2->id(), look2->id());
+    inst2.setOffStageClock(1200);
+    inst2.runTick();
+    QVERIFY(inst2.runDone());
+    const QHash<quint32, int> kept = sentTo(inst2, dmx);
+    QCOMPARE(kept.value(1), WledFixture::effectValue(dmx, "Fireworks Starburst"));
+    QCOMPARE(kept.value(kOption), 128);
+}
+
+void EffectInstance_Test::aWledRunThreeTimesEndsAfterThreeRunLengths()
+{
+    Fixture *lantern = aWledLantern(m_doc, Fixture::WledTransport, 100);
+    QVERIFY(lantern != nullptr);
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(lantern->id());
+    QLCPalette *look = aStarburst(m_doc, scene, 3, false);
+
+    EffectInstance inst(m_doc, scene->id(), look->id());
+    for (qint64 ms : { 0, 1000, 2000, 2999 })
+    {
+        inst.setOffStageClock(ms);
+        inst.runTick();
+        QVERIFY2(!inst.runDone(), qPrintable(QString("done at %1 ms").arg(ms)));
+        QVERIFY(!WledFixture::freezes(sentTo(inst, lantern).value(kOption)));
+    }
+    inst.setOffStageClock(3000);
+    inst.runTick();
+    QVERIFY(inst.runDone());
+    QVERIFY(WledFixture::freezes(sentTo(inst, lantern).value(kOption)));
+}
+
+void EffectInstance_Test::aWledBesideOtherFixturesEndsItsRunWithThem()
+{
+    Fixture *lantern = aWledLantern(m_doc, Fixture::WledTransport, 100);
+    QVERIFY(lantern != nullptr);
+    // An RGB par beside it, which runs the port.
+    QLCFixtureDef *parDef = new QLCFixtureDef();
+    parDef->setManufacturer("Test"); parDef->setModel("RGB");
+    QLCFixtureMode *parMode = new QLCFixtureMode(parDef);
+    const QLCChannel::Preset rgb[3] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                        QLCChannel::IntensityBlue };
+    QLCFixtureHead parHead;
+    for (int i = 0; i < 3; ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("c%1").arg(i));
+        ch->setPreset(rgb[i]);
+        parDef->addChannel(ch);
+        parMode->insertChannel(ch, quint32(i));
+        parHead.addChannel(quint32(i));
+    }
+    parMode->insertHead(-1, parHead);
+    parMode->cacheHeads();
+    parDef->addMode(parMode);
+    Fixture *par = new Fixture(m_doc);
+    par->setFixtureDefinition(parDef, parMode);
+    par->setUniverse(0);
+    par->setAddress(300);
+    QVERIFY(m_doc->addFixture(par));
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(lantern->id());
+    scene->addFixture(par->id());
+    QLCPalette *look = aStarburst(m_doc, scene, 1, true);
+
+    EffectInstance inst(m_doc, scene->id(), look->id());
+    QCOMPARE(inst.effectiveFixtureIds(), QList<quint32>() << par->id());
+    inst.setOffStageClock(500);
+    inst.runTick();
+    QVERIFY(!sentTo(inst, lantern).isEmpty());
+    QVERIFY(!sentTo(inst, par).isEmpty());
+    inst.setOffStageClock(1000);
+    inst.runTick();
+    QVERIFY(inst.runDone());
+    // Both let go: the par's port and the lantern's own effect.
+    QVERIFY(inst.dmxWrites().isEmpty());
+}
+
+void EffectInstance_Test::startingTheLookAgainUnfreezesTheWled()
+{
+    Fixture *lantern = aWledLantern(m_doc, Fixture::WledTransport, 100);
+    QVERIFY(lantern != nullptr);
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(lantern->id());
+    QLCPalette *look = aStarburst(m_doc, scene, 1, false);
+
+    EffectInstance inst(m_doc, scene->id(), look->id());
+    inst.setOffStageClock(1500);
+    inst.runTick();
+    QVERIFY(inst.runDone());
+    QVERIFY(WledFixture::freezes(sentTo(inst, lantern).value(kOption)));
+
+    // The cue fired again: the run starts over, running.
+    inst.sceneStarted();
+    inst.setOffStageClock(0);
+    inst.runTick();
+    QVERIFY(!inst.runDone());
+    QCOMPARE(sentTo(inst, lantern).value(kOption), 128);
+    // ...and ends again, a run later.
+    inst.setOffStageClock(1000);
+    inst.runTick();
+    QVERIFY(inst.runDone());
+    QVERIFY(WledFixture::freezes(sentTo(inst, lantern).value(kOption)));
+}
+
+void EffectInstance_Test::aLoopingWledLookIsNeverFrozen()
+{
+    Fixture *lantern = aWledLantern(m_doc, Fixture::WledTransport, 100);
+    QVERIFY(lantern != nullptr);
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(lantern->id());
+    QLCPalette *look = aStarburst(m_doc, scene, 0, false);
+
+    EffectInstance inst(m_doc, scene->id(), look->id());
+    for (qint64 ms : { 0, 999, 1000, 60000, 3600000 })
+    {
+        inst.setOffStageClock(ms);
+        inst.runTick();
+        QVERIFY(!inst.runDone());
+        QCOMPARE(sentTo(inst, lantern).value(kOption), 128);
+        QCOMPARE(sentTo(inst, lantern).value(1), WledFixture::effectValue(lantern, "Fireworks Starburst"));
+    }
+}
+
+/* What a scene sets under its own values on a WLED in effect mode, so
+   the last effect sent never latches on: Solid, speeds at half, no
+   palette, no option. A WLED in a colour mode, or anything else, none. */
+void EffectInstance_Test::aWledsEffectSettingsAtRestAreSolid()
+{
+    Fixture *lantern = aWledLantern(m_doc, Fixture::WledTransport, 100);
+    QVERIFY(lantern != nullptr);
+    const QList<QPair<int, int> > rest = WledFixture::settingsAtRest(lantern);
+    QCOMPARE(rest, (QList<QPair<int, int> >{ { 1, 0 }, { 2, 128 }, { 3, 128 }, { 4, 0 }, { 5, 0 } }));
+    QVERIFY(WledFixture::settingsAtRest(m_doc->fixture(m_fixtureIds.first())).isEmpty());
+    lantern->setFixtureDefinition(lantern->fixtureDef(), lantern->fixtureDef()->mode("Single DRGB (4ch)"));
+    QVERIFY(WledFixture::settingsAtRest(lantern).isEmpty());
+}
+
 /* "Do we have a fire effect that goes from the bottom up?" We did -- the RGB
    Matrix Fire -- but an effect script called Fire hid it, and both are
    fire.js, so a look saved with one could come back as the other. */

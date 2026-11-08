@@ -50,6 +50,9 @@
 #include "qlcfixturemode.h"
 #include "mastertimer.h"
 #include "fixture.h"
+#include "effectruns.h"
+#include "qlcpalette.h"
+#include "wledfixture.h"
 #include "scene.h"
 #include "doc.h"
 #include "../../../plugins/wled/src/wledlayoutstore.h"
@@ -275,8 +278,95 @@ void WledShow_Test::anEffectFromAShowPlaysOnEverySpanOfAFountain()
     scene->start(doc.masterTimer(), FunctionParent::master());
     QTRY_VERIFY_WITH_TIMEOUT(revs(wled) == (QList<bool>{ false, true, false, true }), 5000);
     QVERIFY(played());
-
     scene->stop(FunctionParent::master());
+    QTRY_VERIFY(!scene->isRunning());
+
+    /* A WLED look, as the Look Editor makes it: WLED's own Fireworks
+       Starburst, Runs: Once (0.6 s), At the end: Hold. The device runs it
+       for the run, then every segment freezes on its frame -- it does not
+       go round again. */
+    QLCPalette *burst = new QLCPalette(QLCPalette::Effect, &doc);
+    burst->setName("WLED Fireworks Starburst");
+    burst->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/wled-fireworks-starburst.js");
+    burst->setWledEffect("Fireworks Starburst");
+    burst->setEffectParamValue(EffectRuns::runsKey(), 1);
+    burst->setEffectParamValue(EffectRuns::atEndKey(), 0);
+    burst->setEffectParamValue(EffectRuns::lengthKey(), 600);
+    QVERIFY(doc.addPalette(burst));
+    Scene *look = new Scene(&doc);
+    QVERIFY(doc.addFunction(look));
+    look->addFixture(fid);
+    // The look's own, under the effect: full, red -- no effect settings.
+    look->setValue(fid, 0, 255);
+    look->setValue(fid, 6, 255);
+    look->addPalette(burst->id());
+    const int starburst = WledFixture::effectValue(fx, "Fireworks Starburst");
+    QVERIFY(starburst > 0);
+    auto every = [&wled](const char *key, const QJsonValue &want) {
+        const QJsonArray segs = wled.segments();
+        if (segs.size() != 4)
+            return false;
+        for (const QJsonValue &v : segs)
+            if (v.toObject().value(QLatin1String(key)) != want)
+                return false;
+        return true;
+    };
+    look->start(doc.masterTimer(), FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(every("fx", starburst) && every("frz", false), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(every("frz", true), 5000);
+    QVERIFY(every("fx", starburst));                    // held: still the burst, stopped
+    QCOMPARE(wled.state.value("on").toBool(), true);
+    QCOMPARE(revs(wled), (QList<bool>{ false, true, false, true }));   // each its own way still
+
+    // Fired again: it runs again, unfrozen -- and freezes at the end again.
+    look->stop(FunctionParent::master());
+    QTRY_VERIFY(!look->isRunning());
+    look->start(doc.masterTimer(), FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(every("fx", starburst) && every("frz", false), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(every("frz", true), 5000);
+
+    // At the end: Release. After its run it lets go: the look's own red
+    // comes back, solid (its effect settings at rest, not latched on the
+    // burst), nothing frozen.
+    look->stop(FunctionParent::master());
+    QTRY_VERIFY(!look->isRunning());
+    burst->setEffectParamValue(EffectRuns::atEndKey(), 1);
+    look->start(doc.masterTimer(), FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(every("fx", starburst) && every("frz", false), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(every("fx", 0), 5000);
+    QVERIFY(every("frz", false));
+    for (const QJsonValue &v : wled.segments())
+        QCOMPARE(v.toObject().value("col").toArray().at(0).toArray(), QJsonArray({ 255, 0, 0 }));
+    QVERIFY(every("pal", 0));
+    look->stop(FunctionParent::master());
+    QTRY_VERIFY(!look->isRunning());
+
+    /* The next cue sets only a colour (amber, a Colour look), and the burst
+       before it lets go: the WLED goes solid amber -- the burst does not
+       stay on with the new colour. */
+    burst->setEffectParamValue(EffectRuns::runsKey(), 0);         // Loop
+    burst->setEffectParamValue("palette", 35);
+    look->start(doc.masterTimer(), FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(every("fx", starburst) && every("pal", 35), 5000);
+    QLCPalette *amber = new QLCPalette(QLCPalette::Color, &doc);
+    amber->setName("Amber");
+    amber->setValue(QColor(255, 176, 0));
+    QVERIFY(doc.addPalette(amber));
+    Scene *colour = new Scene(&doc);
+    QVERIFY(doc.addFunction(colour));
+    colour->addFixture(fid);
+    colour->setValue(fid, 0, 255);
+    colour->addPalette(amber->id());
+    colour->start(doc.masterTimer(), FunctionParent::master());
+    QTest::qWait(200);
+    QVERIFY(every("fx", starburst));                    // the burst is still on top
+    look->stop(FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(every("fx", 0), 5000);
+    QVERIFY(every("pal", 0));
+    QVERIFY(every("frz", false));
+    for (const QJsonValue &v : wled.segments())
+        QCOMPARE(v.toObject().value("col").toArray().at(0).toArray(), QJsonArray({ 255, 176, 0 }));
+    colour->stop(FunctionParent::master());
     doc.masterTimer()->stop();
     delete mon;
     qInfo().noquote() << "the whole path took" << took.elapsed() << "ms";

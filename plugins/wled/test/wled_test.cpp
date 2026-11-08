@@ -733,6 +733,72 @@ void Wled_Test::anEffectReachesEverySegment()
     QCOMPARE(w.posts.size(), 1);
 }
 
+/* Bit 5 of the Option channel (32): a look's effect that ran Once and
+   holds -- WLED stops on its frame ("frz"). The top bits keep their way;
+   clear, it runs again (always said, so no freeze outlives its look). */
+void Wled_Test::theOptionsFreezeBitIsReadAsFrz()
+{
+    auto segOf = [](int option) {
+        return WledState::decode(universe({ 255, 9, 128, 64, 6, option, 255, 0, 0 }), 1, 15)
+            .value("seg").toArray().first().toObject();
+    };
+    QCOMPARE(segOf(0).value("frz").toBool(true), false);
+    QCOMPARE(segOf(31).value("frz").toBool(true), false);
+    QCOMPARE(segOf(32).value("frz").toBool(), true);
+    QCOMPARE(segOf(63).value("frz").toBool(), true);
+    const QJsonObject held = segOf(128 + 32);           // Reverse, frozen
+    QCOMPARE(held.value("frz").toBool(), true);
+    QCOMPARE(held.value("rev").toBool(), true);
+    QCOMPARE(held.value("mi").toBool(), false);
+    QCOMPARE(held.value("fx").toInt(), 9);
+    QCOMPARE(segOf(224).value("mi").toBool(), true);    // Mirror + reverse, frozen
+    QCOMPARE(segOf(224).value("rev").toBool(), true);
+    // A solid colour mode has no option channel: nothing about freezing.
+    QVERIFY(!WledState::decode(universe({ 128, 10, 20, 30 }), 1, 4)
+                 .value("seg").toArray().first().toObject().contains("frz"));
+}
+
+void Wled_Test::aFreezeReachesEverySegmentAndLetsGoAgain()
+{
+    FakeWled w;
+    w.split(4, 4);
+    QVERIFY(w.powerOn());
+    WledPlugin plugin;
+    aim(plugin, 0, w);
+    auto frozen = [&w]() {
+        QList<bool> out;
+        for (const QJsonValue &v : std::as_const(w.segs))
+            out << v.toObject().value("frz").toBool();
+        return out;
+    };
+    QByteArray u = effect(9, 200, 2);                   // reverse
+    plugin.writeUniverse(0, 0, u, true);
+    QTRY_COMPARE(effects(w), (QList<int>{ 9, 9, 9, 9 }));
+    QCOMPARE(frozen(), (QList<bool>{ false, false, false, false }));
+    QCOMPARE(revs(w), (QList<bool>{ true, false, true, false }));
+
+    // Held at the end of its run: every segment stops on its frame, each
+    // still turned its own way, and nothing else changes.
+    u[5] = char(128 + 32);
+    plugin.writeUniverse(0, 0, u, true);
+    QTRY_COMPARE(frozen(), (QList<bool>{ true, true, true, true }));
+    QCOMPARE(revs(w), (QList<bool>{ true, false, true, false }));
+    QCOMPARE(effects(w), (QList<int>{ 9, 9, 9, 9 }));
+    const QJsonArray sent = w.posts.last().value("seg").toArray();
+    QCOMPARE(sent.size(), 4);
+    for (int k = 0; k < 4; ++k)
+    {
+        QCOMPARE(sent.at(k).toObject().value("id").toInt(), k);
+        QCOMPARE(sent.at(k).toObject().value("frz").toBool(), true);
+    }
+
+    // Started again: it runs.
+    u[5] = char(128);
+    plugin.writeUniverse(0, 0, u, true);
+    QTRY_COMPARE(frozen(), (QList<bool>{ false, false, false, false }));
+    QCOMPARE(effects(w), (QList<int>{ 9, 9, 9, 9 }));
+}
+
 /* Reverse (the Option channel) turns each segment round from the way IT
    runs; off again, each runs its own way. Mirror is the same on all. */
 void Wled_Test::reverseTurnsEachSegmentRoundFromItsOwnWay()

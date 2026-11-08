@@ -85,6 +85,7 @@
 #include "rhiraster.h"
 #include "mastertimer.h"
 #include "lanternpixels.h"
+#include "wledfixture.h"
 #include "itemlock.h"
 #include "pixelpath.h"
 #include "fountain.h"
@@ -22827,6 +22828,53 @@ void Monitor_Test::aPixelBarsLightComesFromItsLitPixels()
 /* A WLED lantern on a bracket off the side of a tower: drawn as a lantern,
    hung where its hanger puts it, and lit all round -- no cone; what is near
    it is lit, falling off with the square of the distance. */
+/* An effect run Once that holds freezes a WLED on its own API (the freeze
+   bit of its Option channel): the rig view stops on the frame it was
+   showing, as the device does. Over DMX the device runs on, and so does
+   the picture. */
+void Monitor_Test::aFrozenWledLanternStopsOnItsFrame()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Lantern.qxf"),
+             QFile::NoError);
+    Doc *doc = new Doc(this);
+    doc->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    Fixture *lantern = new Fixture(doc);
+    lantern->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+    lantern->setTransport(Fixture::WledTransport);
+    QVERIFY(doc->addFixture(lantern));
+    // A fast chase: red with a block of blue going round.
+    QByteArray running(15, char(0));
+    running[0] = char(255); running[1] = char(28); running[2] = char(255); running[3] = char(128);
+    running[6] = char(255); running[10] = char(255); running[14] = char(255);
+    QByteArray frozen = running;
+    frozen[5] = char(WledFixture::kFreezeOption);
+    LanternPixels lp(doc);
+
+    auto moves = [&](const QByteArray &vals) {
+        const QVector<QColor> first = lp.frame(lantern, vals, 16, Qt::red, 1.0, true).leds;
+        for (int i = 0; i < 40; ++i)
+        {
+            QTest::qWait(25);
+            if (lp.frame(lantern, vals, 16, Qt::red, 1.0, true).leds != first)
+                return true;
+        }
+        return false;
+    };
+    QVERIFY2(moves(running), "a chase at full speed goes round");
+    const QVector<QColor> last = lp.frame(lantern, running, 16, Qt::red, 1.0, true).leds;
+    LanternPixels::Frame f = lp.frame(lantern, frozen, 16, Qt::red, 1.0, true);
+    QCOMPARE(f.source, LanternPixels::Script);
+    QCOMPARE(f.leds, last);                             // the frame it was on
+    QVERIFY2(!moves(frozen), "frozen, it stays on that frame");
+    QVERIFY(moves(running));                            // let go: it runs again
+
+    // Over DMX: WLED has no freeze, so the picture runs on.
+    lantern->setTransport(Fixture::ArtNetTransport);
+    QVERIFY(moves(frozen));
+    delete doc;
+}
+
 /* A WLED lantern in effect mode: the console sends "Chase", the lantern
    works out every LED. The rig view draws each of its sixteen LEDs -- by the
    port of that effect where there is one, else in colour 1 with the effect

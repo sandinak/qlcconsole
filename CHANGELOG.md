@@ -33,6 +33,23 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Runs: Once and At the end work on a WLED's own effects.** WLED's own
+  effects (Fireworks Starburst and the rest of the WLED tab) looped on the
+  device forever, whatever Runs said. Now the device runs the effect for the run's Length (Once is one run, not
+  one burst), then **Release** lets go and the look's own values come
+  back, and **Hold** freezes every segment on its frame (WLED's "frz") for
+  a WLED connected as Network (WLED). Firing the cue again unfreezes it.
+  Over Art-Net or E1.31 WLED can't freeze, so Hold keeps it running and the
+  At the end row says so. The Lighting Studio shows the same frozen frame
+  or released look. The WLED definitions name the freeze in their Effect
+  Option channel.
+- **A colour cue after a WLED effect shows the colour, solid.** A WLED's
+  effect settings (effect, speed, intensity, palette, option) kept the
+  last effect sent after its look let go, so a later cue that set only a
+  colour played the old effect (a Fireworks Starburst) in the new colour.
+  A look on a WLED now sets those to Solid underneath its own values, so
+  a colour-only look is a solid colour and a released effect goes back to
+  Solid. They change at once, not over the fade.
 - **A WLED effect plays on every segment, not just the first.** A WLED
   split into segments (a fountain's string after **Write Segments…**, one
   segment a span) showed the show's effect on its first segment only; the
