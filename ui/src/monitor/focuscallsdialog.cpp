@@ -95,6 +95,7 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     add->setObjectName(QStringLiteral("fcAdd"));
     QPushButton *remove = new QPushButton(tr("Remove"), this);
     remove->setObjectName(QStringLiteral("fcRemove"));
+    remove->setToolTip(tr("Take the selected call out of the list; nothing else in the show changes"));
     QPushButton *up = new QPushButton(tr("Up"), this);
     QPushButton *down = new QPushButton(tr("Down"), this);
     for (QPushButton *b : { add, remove, up, down })

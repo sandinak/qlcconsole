@@ -2821,7 +2821,7 @@ void FixtureManager::slotRemap()
 {
     if (!ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Remap fixtures")))
         return;
-    FixtureRemap fxr(m_doc);
+    FixtureRemap fxr(m_doc, this);
     if (fxr.exec() == QDialog::Rejected)
         return; // User pressed cancel
 

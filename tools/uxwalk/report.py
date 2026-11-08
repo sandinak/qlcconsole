@@ -167,8 +167,8 @@ NOT_LENGTH = re.compile(r"\d\s?ms\b|\d\s?(?:MB|KB|GB)\b|\bm/s\b")
 def check_units(rec, ctx):
     units = rec.get("units")
     for kind, where, text, rect in texts(rec):
-        if LENGTH_HELP.search(text):
-            continue
+        if LENGTH_HELP.search(text) or "settingsUnitsCombo" in where:
+            continue                    # the Units setting names its own options
         t = NOT_LENGTH.sub("", text)
         # A text that shows both kinds is about the units themselves (the
         # Units setting's help, a field's list of what it takes).
