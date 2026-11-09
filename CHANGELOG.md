@@ -12,14 +12,6 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
-### Added
-
-- **Blocking in the Library.** The Show Tree's Library lists **Blocking** (Default and each saved set) under All: drag one onto a cue, or onto the selected cues, and it uses it from there on, exactly as the cue page's Blocking does. See [Blocking](docs/features/show-tree.md#blocking).
-
-### Fixed
-
-- **Formation palettes have their own Library heading.** They were missing from the Library's Palettes list (no heading took them); they now sit under **Formation**, ready to drag onto a cue or a layer, and a Save as Formation… shows there at once.
-
 ## [0.4.2] - 2026-11-09
 
 ### Added
@@ -78,6 +70,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   other function; never an empty scene, never a cue, which has Record beside
   it). The link brings up the Show Tree with a cue selected and Record
   focused (UX-61, flow F-04).
+- **Blocking in the Library.** The Show Tree's Library lists **Blocking** (Default and each saved set) under All: drag one onto a cue, or onto the selected cues, and it uses it from there on, exactly as the cue page's Blocking does. See [Blocking](docs/features/show-tree.md#blocking).
 ### New
 
 - **Stretch and turn stage features by hand.** Select a platform, a truss or
@@ -315,6 +308,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   output, and on the pad as View + LS / Create + L3), and the rest is
   remembered per controller. The PlayStation profile's deadzone is 0.08,
   and a joystick with no profile gets 0.08.
+- **Formation palettes have their own Library heading.** They were missing from the Library's Palettes list (no heading took them); they now sit under **Formation**, ready to drag onto a cue or a layer, and a Save as Formation… shows there at once.
 ### New
 
 - **The follow spot's speed on the stage, a fine stick and a speed step.**

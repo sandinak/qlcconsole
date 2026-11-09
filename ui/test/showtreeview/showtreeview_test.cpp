@@ -8785,7 +8785,7 @@ void ShowTreeView_Test::libraryFormationBlockingShots()
     QDir().mkpath(dir);
     QTreeWidget *lib = view.library();
     QTest::qWait(50);
-    for (const QString &open : { "All", "Blocking", "Palettes", "Formation", "Dimmer" })
+    for (const QString &open : QStringList{ "All", "Blocking", "Palettes", "Formation", "Dimmer" })
         if (QTreeWidgetItem *it = libraryItem(lib, open))
             it->setExpanded(true);
     for (const auto &sz : QList<QPair<QString, QSize>> { { "min", view.minimumSizeHint() },
