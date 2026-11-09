@@ -466,7 +466,7 @@ private:
         int need = -1;
         const QFontMetrics fm = w->fontMetrics();
         QJsonArray items;
-        bool view = false, empty = false;
+        bool view = false, empty = false, noSelection = false;
         // A mnemonic "&" before a space or at the end: Qt underlines a
         // space and drops the "&" ("Position & Orientation" shows as
         // "Position _Orientation"); it needs "&&".
@@ -480,7 +480,8 @@ private:
         {
             text = plain(l->text());
             if (!text.isEmpty() && !l->wordWrap() && !text.contains(QLatin1Char('\n'))
-                && l->sizePolicy().horizontalPolicy() != QSizePolicy::Ignored)
+                && l->sizePolicy().horizontalPolicy() != QSizePolicy::Ignored
+                && !l->property("layoutSanityElides").toBool())   // elides on purpose, whole text in a tooltip
             {
                 QString t = text;
                 if (l->buddy() != nullptr)
@@ -578,6 +579,7 @@ private:
             if (qobject_cast<QHeaderView *>(v) != nullptr)
                 return QJsonObject();
             view = true;
+            noSelection = v->selectionModel() == nullptr || !v->selectionModel()->hasSelection();
             QAbstractItemModel *m = v->model();
             if (m != nullptr)
             {
@@ -669,6 +671,8 @@ private:
         if (view || qobject_cast<QComboBox *>(w))
         {
             r.insert(QStringLiteral("empty"), empty);
+            if (noSelection)
+                r.insert(QStringLiteral("noSelection"), true);
             if (empty)
             {
                 // What is beside it that could say why: a label in the same

@@ -171,6 +171,9 @@ QList<Label> buttonLabels()
         "(new (QPushButton|QToolButton)\\(\\s*|\\b(dropDown|tool|button|makeButton)\\(\\s*|"
         "\\b\\w*([bB]tn|[bB]utton)\\w*(->|\\.)setText\\(\\s*)"
         "tr\\(\"((?:[^\"\\\\]|\\\\.)*)\""));
+    // By name only (...Btn / ...Button): a variable called m_next in one class
+    // must not make every m_next in the code a button.
+    const QRegularExpression ternary(QStringLiteral("\\b\\w*[bB](?:tn|utton)\\w*(?:->|\\.)setText\\((?=[^;]*\\?)"));
     QList<Label> out;
     for (const auto &src : sources())
     {
@@ -180,6 +183,25 @@ QList<Label> buttonLabels()
             QRegularExpressionMatchIterator t = call.globalMatch(lines.at(i));
             while (t.hasNext())
                 out << Label{ src.first, i + 1, unescape(t.next().captured(6)) };
+            // setText(cond ? tr("A") : tr("B")): both sides are the button's text.
+            const QRegularExpressionMatch tern = ternary.match(lines.at(i));
+            if (tern.hasMatch())
+            {
+                QString rest = lines.at(i).mid(tern.capturedEnd());
+                const int tip = rest.indexOf(QLatin1String("setToolTip"));
+                if (tip >= 0)
+                    rest = rest.left(tip);
+                QRegularExpressionMatchIterator t2 = trRe().globalMatch(rest);
+                while (t2.hasNext())
+                {
+                    const QString text = unescape(t2.next().captured(1));
+                    bool dup = false;
+                    for (const Label &o : out)
+                        dup = dup || (o.file == src.first && o.line == i + 1 && o.text == text);
+                    if (!dup)
+                        out << Label{ src.first, i + 1, text };
+                }
+            }
             if (!names.isEmpty())
             {
                 QRegularExpressionMatchIterator n = byName.globalMatch(lines.at(i));
@@ -249,6 +271,12 @@ void MenuWords_Test::theReaderFindsLabels()
     for (const Label &l : buttonLabels())
         addSource = addSource || l.text == QStringLiteral("Add Source");
     QVERIFY(addSource);
+    // A ternary's both sides ("Pick an effect…" was one, and went unread).
+    bool pick = false;
+    for (const Label &l : buttonLabels())
+        pick = pick || l.text == QStringLiteral("Change Effect…");
+    QVERIFY(pick);
+    QVERIFY(!problemsOf(QStringLiteral("Pick an effect…")).isEmpty());
     QVERIFY(!problemsOf(QStringLiteral("Remove selected")).isEmpty());
     QVERIFY(problemsOf(QStringLiteral("Focus This Cue…")).isEmpty());
 

@@ -18,6 +18,9 @@
 */
 
 #include <QTreeWidgetItemIterator>
+#include <QStyledItemDelegate>
+#include <QApplication>
+#include <QStyle>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
@@ -72,6 +75,54 @@
 
 static const quint32 kInvalid = 0xFFFFFFFF;
 
+/* The empty-state line is a sentence, so it wraps to the pane (a tree row
+   would cut it at the edge: UX-34 / UX-77). Every other row is the style's. */
+class HintWrapDelegate final : public QStyledItemDelegate
+{
+public:
+    explicit HintWrapDelegate(ProgrammingOutline *view) : QStyledItemDelegate(view), m_view(view) {}
+
+    QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override
+    {
+        if (index.data(ProgrammingOutline::KindRole).toInt() != ProgrammingOutline::HintRow)
+            return QStyledItemDelegate::sizeHint(option, index);
+        /* Measure in the rectangle the style paints the text into: the row
+           starts after the tree's indent, and the style's margins (and any
+           icon) come off that again. Measuring the bare viewport wrapped one
+           line short on a narrow pane and cut the last line off. */
+        const int indent = m_view->rootIsDecorated() ? m_view->indentation() : 0;
+        const int rowW = qMax(40, m_view->viewport()->width() - indent);
+        QStyleOptionViewItem opt = option;
+        initStyleOption(&opt, index);
+        opt.features |= QStyleOptionViewItem::WrapText;
+        opt.rect = QRect(0, 0, rowW, opt.fontMetrics.height() * 2);
+        QStyle *st = m_view->style();
+        const QRect textRect = st->subElementRect(QStyle::SE_ItemViewItemText, &opt, m_view);
+        const int textW = qMax(20, textRect.width());
+        const QRect r = opt.fontMetrics.boundingRect(QRect(0, 0, textW, 100000), Qt::TextWordWrap,
+                                                     index.data(Qt::DisplayRole).toString());
+        return QSize(rowW, r.height() + (opt.rect.height() - textRect.height()) + 8);
+    }
+    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
+    {
+        if (index.data(ProgrammingOutline::KindRole).toInt() != ProgrammingOutline::HintRow)
+        {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+        QStyleOptionViewItem opt = option;
+        initStyleOption(&opt, index);
+        opt.features |= QStyleOptionViewItem::WrapText;
+        opt.displayAlignment = Qt::AlignLeft | Qt::AlignTop;
+        opt.textElideMode = Qt::ElideNone;
+        QStyle *st = opt.widget != nullptr ? opt.widget->style() : QApplication::style();
+        st->drawControl(QStyle::CE_ItemViewItem, &opt, painter, opt.widget);
+    }
+
+private:
+    ProgrammingOutline *m_view;
+};
+
 ProgrammingOutline::ProgrammingOutline(Doc *doc, QWidget *parent)
     : QTreeWidget(parent)
     , m_doc(doc)
@@ -90,6 +141,7 @@ ProgrammingOutline::ProgrammingOutline(Doc *doc, QWidget *parent)
     setUniformRowHeights(true);
     setAllColumnsShowFocus(true);
     setTextElideMode(Qt::ElideRight);
+    setItemDelegate(new HintWrapDelegate(this));
     // F2 (keyPressEvent) or a slow second click renames.
     setEditTriggers(QAbstractItemView::SelectedClicked);
     setContextMenuPolicy(Qt::CustomContextMenu);
@@ -659,6 +711,11 @@ void ProgrammingOutline::rebuild()
     else
         rebuildNavigator(scenes);
 
+    // A lone sentence wraps to the pane, so its row is as tall as that
+    // takes; a long list keeps the fast uniform rows.
+    m_hintOnly = topLevelItemCount() == 1 && topLevelItem(0)->data(NameCol, KindRole).toInt() == HintRow;
+    setUniformRowHeights(!m_hintOnly);
+
     // As it was left: open rows, selection, scroll.
     for (QTreeWidgetItemIterator it(this); *it; ++it)
     {
@@ -809,6 +866,8 @@ void ProgrammingOutline::rebuildNavigator(QList<Scene *> &scenes)
         it->setData(NameCol, KeyRole, rowKey(HintRow, kInvalid, kInvalid));
         it->setFlags(Qt::ItemIsEnabled);
         it->setForeground(NameCol, grey);
+        it->setToolTip(NameCol, it->text(NameCol));
+        it->setFirstColumnSpanned(true);
     }
 }
 
@@ -823,6 +882,7 @@ void ProgrammingOutline::rebuildStack()
         it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsDropEnabled);
         it->setForeground(NameCol, grey);
         it->setToolTip(NameCol, text);
+        it->setFirstColumnSpanned(true);
     };
     if (m_stack == nullptr)
     {
@@ -976,6 +1036,8 @@ void ProgrammingOutline::resizeEvent(QResizeEvent *event)
 {
     QTreeWidget::resizeEvent(event);
     fitColumns();
+    if (m_hintOnly)
+        scheduleDelayedItemsLayout();       // the sentence wraps to the new width
 }
 
 void ProgrammingOutline::fitColumns()

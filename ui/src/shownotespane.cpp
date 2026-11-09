@@ -196,8 +196,13 @@ void ShowNotesPane::refresh()
     while (m_entries->count() > 2)
     {
         QLayoutItem *it = m_entries->takeAt(1);
+        // Hidden now, deleted later: until then it would still be drawn
+        // where it was, over the empty-state line.
         if (it->widget() != nullptr)
+        {
+            it->widget()->hide();
             it->widget()->deleteLater();
+        }
         delete it;
     }
     m_shown.clear();

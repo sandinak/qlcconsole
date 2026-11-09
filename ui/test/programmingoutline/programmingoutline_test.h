@@ -41,6 +41,9 @@ private slots:
      *  it; a chaser in a scene folder greyed; nothing yet: one line saying so;
      *  the line over the outline says what it is. */
     void everySceneAndWhatIsInItIsARow();
+    /** The empty-state sentence wraps to the pane's width instead of
+     *  being cut at its edge. */
+    void anEmptyStateSentenceWrapsToThePane();
     /** Badges: ⚠ with what is wrong on hover, ▣ raw values, ⇄ a transition,
      *  ⏱ a speed master; a look's own fade. */
     void badgesSayWhatAndHoverSaysWhy();

@@ -155,9 +155,9 @@ A shortcut is set on the action so Qt shows it in its own column; it is never pa
 
 ### UX-11 Delete destroys, Remove takes out
 
-"Delete X…" destroys the thing; "Remove from Y" takes it out of a container and leaves it in the show. A bare "Remove" is never a destroy; on a list editor's button beside its Add, with a tooltip saying what is taken out, it is the list's convention and is allowed.
+"Delete X…" destroys the thing; "Remove from Y" takes it out of a container and leaves it in the show. A bare "Remove" is never a destroy; on a list editor's button beside its Add it is the list's convention and is allowed (a tooltip saying what is taken out is better, not required); a menu item named Remove is not.
 
-- **Why:** 2026-11-02 menu canon §3.2: "Remove" meant both in different menus. Revised 2026-11-07 (walker run on e33b934e4: 4 findings, 128 screens): every bare "Remove" was the button beside a list's Add (layers in the Workbench, triggers in the control map, focus calls, network topology) with a tooltip saying what goes; none was a menu item and none destroyed a function. The pattern now fires on a bare Remove without that tooltip, and on any menu item.
+- **Why:** 2026-11-02 menu canon §3.2: "Remove" meant both in different menus. Revised 2026-11-07 (walker run on e33b934e4: 4 findings, 128 screens): every bare "Remove" was the button beside a list's Add (layers in the Workbench, triggers in the control map, focus calls, network topology) with a tooltip saying what goes; none was a menu item and none destroyed a function. The pattern now fires on a bare Remove without that tooltip, and on any menu item. Revised 2026-11-08 (e7a0cff33: 64 occurrences of one plain Remove button, none a destroy): the tooltip is no longer required on a push or tool button; the pattern still fires on a menu item.
 - **Check:** `contextmenus_test::theCanonCatchesDrift`, `review` (not yet enforced)
 - **Right:** `Remove from Truss  ·  Delete Fixture Group…`
 - **Wrong:** `Remove (an item that deletes the fixture group)`
@@ -303,9 +303,9 @@ An action that can take more than a moment shows a busy sign where it was asked,
 
 ### UX-27 A greyed control says why
 
-Every disabled button or menu item says on hover why, and how to make it available when there is a way.
+Every disabled button or menu item says on hover why, and how to make it available when there is a way. Two need no tooltip: a placeholder item that is its own explanation ("No Groups on This Layer Yet"), and a verb that acts on a chosen row (Edit, Remove, Rename, Apply) greyed beside a list with nothing chosen.
 
-- **Why:** 2026-10-25 (Q146): Focus mode's Start was greyed with no reason; 2026-10-23 (Q81): Undo silently did nothing.
+- **Why:** 2026-10-25 (Q146): Focus mode's Start was greyed with no reason; 2026-10-23 (Q81): Undo silently did nothing. Revised 2026-11-08 (walker run on e7a0cff33: 35 findings, none fixed in a day, most of them Edit/Remove/Rename/Apply greyed in a dialog only because nothing was chosen, plus the "No Groups on This Layer Yet" placeholder): those two are exempt in the walker; a button greyed while the thing it acts on is chosen still shows.
 - **Check:** `appviews_test::editUndoSaysWhereItWorks`, `cuerunner_test::noMainListGreysGoAndOffersUpgrade`, `walker` (not yet enforced)
 - **Right:** `Start (greyed) — "Needs a moving head and a stage target"`
 - **Wrong:** `Start (greyed), no tooltip`

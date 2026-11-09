@@ -265,6 +265,7 @@ private:
     WorkbenchStack *m_stack = nullptr;
     QTimer *m_rebuildTimer;
     bool m_building = false;
+    bool m_hintOnly = false;    //!< only the empty-state sentence is shown
     bool m_dirty = true;
     QString m_filter;
     QVariantMap m_expanded;      //!< row key -> open, as last left

@@ -26,6 +26,7 @@
 #include <QDataStream>
 #include <QSplitter>
 #include <QLabel>
+#include <QStyle>
 #include <QPushButton>
 #include <QToolButton>
 #include <QFile>
@@ -225,6 +226,51 @@ FixtureGroup *ProgrammingOutline_Test::group(const QString &name, int count)
         g->assignFixture(f->id(), QLCPoint(i, 0));
     }
     return g;
+}
+
+void ProgrammingOutline_Test::anEmptyStateSentenceWrapsToThePane()
+{
+    // The walker's UX-34/UX-77: "Nothing loaded: click a scene, collection or
+    // chaser on the left." and "No scenes yet: + New above..." were one tree
+    // row each, cut at the pane's edge. Each wraps to the width it has.
+    for (const bool stack : { false, true })
+    {
+        ProgrammingOutline o(m_doc);
+        if (stack)
+            o.setStack(nullptr);
+        o.resize(200, 300);
+        o.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&o));
+        o.rebuild();
+        QCoreApplication::processEvents();
+        QCOMPARE(o.topLevelItemCount(), 1);
+        QTreeWidgetItem *hint = o.topLevelItem(0);
+        QCOMPARE(hint->data(0, ProgrammingOutline::KindRole).toInt(), int(ProgrammingOutline::HintRow));
+        const QString text = hint->text(0);
+        const QFontMetrics fm = o.fontMetrics();
+        QVERIFY(fm.horizontalAdvance(text) > o.viewport()->width());   // a single line would be cut
+        const QRect row = o.visualItemRect(hint);
+        QVERIFY2(row.height() >= 2 * fm.lineSpacing(),
+                 qPrintable(QStringLiteral("%1: the row is %2 px high, one line is %3")
+                                .arg(text).arg(row.height()).arg(fm.lineSpacing())));
+        QVERIFY(row.width() <= o.viewport()->width());
+        // Every wrapped line fits: measured in the row less the style's text
+        // margins (the row sized off the bare viewport cut the last one).
+        auto fitsAll = [&](const QRect &r) {
+            const int margin = o.style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, &o) + 1;
+            const QRect need = fm.boundingRect(QRect(0, 0, r.width() - 2 * margin, 100000),
+                                               Qt::TextWordWrap, text);
+            return r.height() >= need.height();
+        };
+        QVERIFY2(fitsAll(row), qPrintable(QStringLiteral("%1: last line cut at %2 px wide")
+                                              .arg(text).arg(row.width())));
+        // Narrower: taller, not cut.
+        const int was = row.height();
+        o.resize(120, 300);
+        QCoreApplication::processEvents();
+        QTRY_VERIFY(o.visualItemRect(hint).height() > was);
+        QVERIFY(fitsAll(o.visualItemRect(hint)));
+    }
 }
 
 void ProgrammingOutline_Test::everySceneAndWhatIsInItIsARow()

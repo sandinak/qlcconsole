@@ -96,6 +96,8 @@ public:
 private:
     void applyCount();
     void tick();
+    /** Layout the footer and its bar now, not on their next pass. */
+    void relayoutNow();
 
     Doc *m_doc;
     QList<SpeedMasterButton *> m_buttons;

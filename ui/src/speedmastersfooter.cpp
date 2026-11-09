@@ -159,10 +159,32 @@ void SpeedMastersFooter::applyCount()
     // Only the masters something is on: an unused one neither shows nor
     // flashes ("If the masters are not used .. they should not fire or be
     // visible").
+    const quint32 before = m_used;
     m_used = m_doc->speedMasters()->usedMask();
     m_playing = m_doc->speedMasters()->playingMask();
     for (int i = 0; i < m_buttons.size(); ++i)
         m_buttons.at(i)->setVisible((m_used >> i) & 1u);
+    if (m_used != before)
+        relayoutNow();
+}
+
+void SpeedMastersFooter::relayoutNow()
+{
+    /* A button that shows (or reads a new tempo) changes what the footer
+       needs, but the status bar re-reads that on its next layout pass: until
+       then the button was shown at no width at all (UX-34, the walker's
+       "0 px" Main Speed buttons). Do the passes now. */
+    layout()->invalidate();
+    layout()->activate();
+    updateGeometry();
+    if (!isVisible())
+        return;                 // not on screen yet: its first pass will do
+    if (QWidget *p = parentWidget())
+        if (p->layout() != nullptr)
+        {
+            p->layout()->invalidate();
+            p->layout()->activate();
+        }
 }
 
 void SpeedMastersFooter::tick()
@@ -179,6 +201,7 @@ void SpeedMastersFooter::tick()
            changes them (the View menu) calls reloadBeatOptions(). */
     }
     SpeedMasters *sm = m_doc->speedMasters();
+    bool wider = false;
     for (int i = 0; i < sm->count() && i < m_buttons.size(); ++i)
     {
         if (!((m_used >> i) & 1u))
@@ -195,6 +218,7 @@ void SpeedMastersFooter::tick()
         // jiggle the footer.
         if (b->text() != text)
         {
+            wider = wider || b->text().size() != text.size();
             b->setText(text);
             b->setToolTip(tr("%1: %2 BPM. Click for the speed masters.")
                           .arg(sm->name(i)).arg(sm->bpm(i), 0, 'f', 1));
@@ -225,4 +249,6 @@ void SpeedMastersFooter::tick()
             style = SpeedMasterButton::NoBeat;
         b->setState(style, pos - std::floor(pos), rate / 2.0, levelAlpha);
     }
+    if (wider)
+        relayoutNow();
 }

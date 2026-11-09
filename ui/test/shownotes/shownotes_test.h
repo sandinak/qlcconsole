@@ -34,6 +34,7 @@ private slots:
     void cleanup();
 
     void thePaneFollowsTheSelection();
+    void anEmptiedPaneDrawsNoOldNoteOverItsEmptyLine();
     void addTickAndUndoFromThePane();
     void rowsWithNotesAreMarked();
     void snapshotAndShowMe();

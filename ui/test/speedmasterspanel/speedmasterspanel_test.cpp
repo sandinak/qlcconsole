@@ -36,7 +36,11 @@
 #include "chasereditor.h"
 #undef private
 #include "speedmasterspanel.h"
+#define private public
 #include "speedmastersfooter.h"
+#undef private
+#include <QMainWindow>
+#include <QStatusBar>
 #include "inputselectionwidget.h"
 #include "qlcinputsource.h"
 #include "inputoutputmap.h"
@@ -292,6 +296,40 @@ void SpeedMastersPanel_Test::theFooterShowsEachMastersTempo()
 }
 
 /* "in the windows have mapping to midi targets" */
+/* UX-34 (the walker's "0 px" Main Speed buttons): a master that comes into use
+   shows its button at its width at once, in the status bar that holds the
+   footer, not after the bar's next layout pass. */
+void SpeedMastersPanel_Test::aMasterThatComesIntoUseIsShownAtItsWidth()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setName(0, "Main Speed");
+    sm->setBpm(0, 56);
+    QMainWindow win;
+    win.resize(900, 200);
+    SpeedMastersFooter *footer = new SpeedMastersFooter(m_doc);
+    win.statusBar()->addWidget(footer, 0);
+    win.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&win));
+    QCoreApplication::processEvents();
+    QVERIFY(!footer->button(0)->isVisible());
+
+    Scene *look = new Scene(m_doc);
+    m_doc->addFunction(look);
+    look->setSpeedMaster(SpeedMasters::Master1);
+    // The footer's own look-again, and its tick, with no event pass between
+    // them and the check.
+    footer->applyCount();
+    footer->tick();
+    SpeedMasterButton *b = footer->button(0);
+    QVERIFY(b->isVisible());
+    QCOMPARE(b->text(), QString("Main Speed 56"));
+    QVERIFY2(b->width() >= b->fontMetrics().horizontalAdvance(b->text()),
+             qPrintable(QStringLiteral("the button is %1 px wide, its words need %2")
+                            .arg(b->width()).arg(b->fontMetrics().horizontalAdvance(b->text()))));
+    QVERIFY(b->height() > 0);
+    QVERIFY(footer->width() >= b->width());
+}
+
 void SpeedMastersPanel_Test::aMastersInputsAreMappedInItsWindow()
 {
     SpeedMasters *sm = m_doc->speedMasters();
