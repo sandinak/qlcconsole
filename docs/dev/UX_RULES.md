@@ -48,7 +48,7 @@ that have one. Change both files together.
 | Ease of use | UX-61, UX-62, UX-64, UX-65, UX-66, UX-76 | 6 | 0 |
 | Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 3 |
 
-Main check: 45 tests, 23 review, 6 walker, 3 manual. 45 of 77 enforced.
+Main check: 46 tests, 23 review, 6 walker, 3 manual. 46 of 78 enforced.
 
 ## Units & numbers
 
