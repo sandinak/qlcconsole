@@ -55,7 +55,7 @@ check_source()
     grep -q "$MARK" "$root/ui/test/common/testsettings.cpp" \
         || { echo "check-test-settings: testsettings.cpp does not set $MARK"; bad=1; }
     grep -q 'PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ui/test/common/testsettings.cpp' "$root/CMakeLists.txt" \
-        || { echo "check-test-settings: the top-level CMakeLists.txt no longer adds qlc_test_settings to every test program"; bad=1; }
+        || { echo "check-test-settings: the top-level CMakeLists.txt no longer adds testsettings.cpp to every test program"; bad=1; }
     [ "$bad" -eq 0 ] && echo "check-test-settings: the CMake wiring is in place."
     return "$bad"
 }
