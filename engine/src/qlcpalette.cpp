@@ -26,6 +26,7 @@
 #include <QDebug>
 
 #include "monitorproperties.h"
+#include "fixtureglass.h"
 #include "effectscriptrunner.h"
 #include "aimsolver.h"
 #include "areacover.h"
@@ -2318,6 +2319,21 @@ QLCPalette::GoboResolution QLCPalette::resolveGobo(const Fixture *fixture) const
     if (goboCh == QLCChannel::invalid())
         return r;
 
+    /* The glass this unit has loaded under that name ("Moon" in AT-2 3's
+       slot 3, slot 5 in another unit) comes first: it is the very glass
+       asked for, wherever this unit carries it. */
+    const Doc *doc = FixtureGlass::docOf(fixture);
+    if (!m_goboName.isEmpty())
+    {
+        const int loaded = FixtureGlass::loadedValue(doc, fixture, goboCh, m_goboName);
+        if (loaded >= 0)
+        {
+            r.value = loaded;
+            r.how = GoboLoaded;
+            return r;
+        }
+    }
+
     const QString def = definitionKey(fixture);
     if (!def.isEmpty() && m_goboValues.contains(def))
     {
@@ -2345,6 +2361,14 @@ QLCPalette::GoboResolution QLCPalette::resolveGobo(const Fixture *fixture) const
     QList<QStringList> gobos;
     for (QLCCapability *cap : caps)
     {
+        /* A slot this unit has other glass loaded in, named: that glass is
+           what is there now, not the definition's. */
+        const QString loaded = FixtureGlass::loadedName(doc, fixture->id(), goboCh, cap);
+        if (!loaded.isEmpty())
+        {
+            gobos << QStringList(loaded);
+            continue;
+        }
         QStringList names(cap->name());
         if (cap->presetType() == QLCCapability::Picture)
         {

@@ -647,6 +647,69 @@ void LookEditor_Test::aSwappedSlotShowsItsOwnGlass()
     GoboLibrary::setUserDirectoryOverride(QString());
 }
 
+void LookEditor_Test::aLoadedGlassIsCalledByItsName()
+{
+    QLCFixtureDef *spot = wheelDef("Spot", { "Open", "Star", "Ring" });
+    {
+        Doc doc(this);
+        Fixture *a = addOf(doc, spot);
+        Fixture *b = addOf(doc, spot);
+        QVERIFY(a != nullptr && b != nullptr);
+        MonitorProperties *mp = doc.monitorProperties();
+        mp->setGoboName(a->id(), 0, 20, "Moon");             // in Star's slot of A only
+        QLCPalette *gobo = new QLCPalette(QLCPalette::Gobo, &doc);
+        gobo->setValue(9);
+        QVERIFY(doc.addPalette(gobo));
+
+        LookEditor ed(&doc);
+        ed.setPalette(gobo->id());
+        // Two units of the type, one carries it: said so.
+        QCOMPARE(itemsOf(ed.m_singleCombo),
+                 QStringList({ "Open", QString::fromUtf8("Star — Moon loaded in 1 of 2"), "Ring" }));
+
+        // A look on A alone: the slot is the moon.
+        Scene *look = new Scene(&doc);
+        QVERIFY(doc.addFunction(look));
+        look->addFixture(a->id());
+        ed.setContextScene(look);
+        ed.setPalette(gobo->id());
+        QCOMPARE(itemsOf(ed.m_singleCombo), QStringList({ "Open", "Moon", "Ring" }));
+
+        // Picked there, the look is "Moon" -- by name, so each unit finds its
+        // own slot -- with no value pinned for the type.
+        ed.m_singleCombo->setCurrentIndex(1);
+        ed.slotSingleCapabilityPicked(1);
+        QCOMPARE(gobo->goboName(), QString("Moon"));
+        QCOMPARE(gobo->name(), QString("Moon"));            // named after the glass too
+        QVERIFY(gobo->goboValues().isEmpty());
+        QCOMPARE(gobo->goboValueFor(a), 29);
+        QCOMPARE(gobo->goboValueFor(b), -1);
+        mp->setGoboName(b->id(), 0, 40, "Moon");             // B has it in Ring's slot
+        QCOMPARE(gobo->goboValueFor(b), 49);
+        ed.setPalette(gobo->id());
+        QVERIFY2(ed.m_goboMatches->text().contains("Moon (the glass loaded in it)"),
+                 qPrintable(ed.m_goboMatches->text()));
+        // LOOKEDITOR_SHOTS=dir: the gobo picker with the moon, three sizes.
+        const QString shots = qEnvironmentVariable("LOOKEDITOR_SHOTS");
+        if (!shots.isEmpty())
+        {
+            QDir().mkpath(shots);
+            ed.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&ed));
+            for (const QSize &sz : { QSize(420, 520), QSize(560, 700), QSize(760, 900) })
+            {
+                ed.resize(sz);
+                QCoreApplication::processEvents();
+                QVERIFY(ed.grab().save(QDir(shots).absoluteFilePath(
+                    QString("gobo-picker-after-%1x%2.png").arg(sz.width()).arg(sz.height()))));
+            }
+            ed.hide();
+        }
+        ed.setContextScene(nullptr);
+    }
+    delete spot;
+}
+
 void LookEditor_Test::aWledPaletteIsPickedByNameWithItsStrip()
 {
     Doc doc(this);

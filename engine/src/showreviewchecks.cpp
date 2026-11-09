@@ -30,6 +30,7 @@
 #include <QFile>
 #include <QDir>
 #include <QMap>
+#include <QSet>
 #include <QVector>
 #include <algorithm>
 
@@ -57,6 +58,7 @@
 #include "focuscalls.h"
 #include "collection.h"
 #include "gobolibrary.h"
+#include "fixtureglass.h"
 #include "fixture.h"
 #include "scene.h"
 #include "video.h"
@@ -424,6 +426,81 @@ static void fix17(ReviewContext &ctx, QList<ReviewFinding> &out)
             text.arg(it.key()).arg(it.value().count()),
             fixtureKeys(it.value()), it.key().toUtf8() + ':' + QByteArray::number(n),
             QStringLiteral("gobowheels"), QVariantList() << it.value().first());
+    }
+}
+
+/** A Gobo look named after glass a unit has loaded ("Moon", Gobo Wheels…)
+ *  that reaches a light without it: that light ignores the look. One finding
+ *  per look, naming the lights; resolved once per look and light. */
+static void fix19(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    Doc *doc = ctx.doc();
+    // Every name some unit has loaded; nothing loaded, nothing to check.
+    QStringList loaded;
+    for (Fixture *fx : doc->fixtures())
+        loaded += FixtureGlass::loadedNames(doc, fx->id());
+    if (loaded.isEmpty())
+        return;
+    QMap<quint32, QSet<quint32>> reached;     // look -> the lights its cues give it
+    for (Function *f : doc->functionsByType(Function::SceneType))
+    {
+        Scene *sc = qobject_cast<Scene *>(f);
+        if (sc == nullptr)
+            continue;
+        QList<quint32> pids;
+        for (quint32 pid : sc->palettes())
+        {
+            const QLCPalette *p = doc->palette(pid);
+            if (p == nullptr || !p->isGoboByName())
+                continue;
+            for (const QString &n : loaded)
+            {
+                if (QLCPalette::sameGoboName(n, p->goboName()))
+                {
+                    pids << pid;
+                    break;
+                }
+            }
+        }
+        if (pids.isEmpty())
+            continue;
+        const QList<quint32> direct = sc->fixtures();
+        QSet<quint32> fids(direct.begin(), direct.end());
+        for (quint32 gid : sc->fixtureGroups())
+        {
+            if (const FixtureGroup *g = doc->fixtureGroup(gid))
+            {
+                for (quint32 id : g->fixtureList())
+                    fids.insert(id);
+            }
+        }
+        for (quint32 pid : pids)
+            reached[pid].unite(fids);
+    }
+    for (auto it = reached.constBegin(); it != reached.constEnd(); ++it)
+    {
+        const QLCPalette *p = doc->palette(it.key());
+        QList<quint32> missing;
+        for (quint32 id : it.value())
+        {
+            const Fixture *fx = doc->fixture(id);
+            // Only lights with a gobo wheel to load it in.
+            if (fx == nullptr || fx->fixtureMode() == nullptr
+                || fx->fixtureMode()->channelNumber(QLCChannel::Gobo, QLCChannel::MSB) == QLCChannel::invalid())
+                continue;
+            if (p->goboValueFor(fx) < 0)
+                missing << id;
+        }
+        if (missing.isEmpty())
+            continue;
+        std::sort(missing.begin(), missing.end());
+        out << ReviewContext::make(QStringLiteral("FIX-19"), ReviewFinding::Warning,
+            trn("Gobo look '%1' asks for loaded glass %2 fixture(s) don't have: %3. They ignore it. "
+                "Load it in their Gobo Wheels, or take them out of the look.", int(missing.count()))
+                .arg(ctx.paletteName(it.key()), p->goboName(), nameList(ctx, missing)),
+            fixtureKeys(missing) << QStringLiteral("pal:%1").arg(it.key()),
+            QByteArray::number(it.key()) + ':' + idBytes(missing),
+            QStringLiteral("gobowheels"), QVariantList() << missing.first());
     }
 }
 
@@ -1475,6 +1552,10 @@ QList<ShowReview::Check> ShowReviewChecks::showChecks()
           tr("A light on the floor beside a deck whose row-mates (the same fixture type in its group, "
              "its name series or its line) stand on it is probably one left behind. Sit it on the "
              "deck, or accept the warning if the floor is deliberate."), fix16 },
+        { QStringLiteral("FIX-19"), tr("Loaded gobo missing from a light"), S::Fixtures,
+          tr("A Gobo look named after glass you loaded in some lights (Gobo Wheels) finds it in "
+             "whichever slot each light carries it. A light in the look that has no glass of that "
+             "name ignores it. Load the glass in that light too, or take it out of the look."), fix19 },
         { QStringLiteral("FIX-18"), tr("No beam angle or pan/tilt range"), S::Fixtures,
           tr("A definition that says 0 for its lens or its pan/tilt range gives the rig view nothing to "
              "draw and the aim solver nothing to turn. They assume a default by fixture type (a moving "

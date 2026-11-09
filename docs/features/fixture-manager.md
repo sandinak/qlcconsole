@@ -838,7 +838,7 @@ stage target or structure each have one menu of their own the same way.
 | | A fixture group | A fixture |
 |---|---|---|
 | Editor | **Edit Head Layout…** | **Fixture Properties…** (several at once too) |
-| What it does | **Locate**, **Why is this on?** (its first light), **Output Rules…**, [Split by Head Type…](#split-by-head-type), [Lay Out from the Stage…](#lay-out-from-the-stage) | **Locate**, **Why is this on?**, **Patch…** ("Patch N Fixtures…"), [LED Layout…](#led-layout), **Gobo Wheels…**, **Output Rules…**, **Split by Head Type…** |
+| What it does | **Locate**, **Why is this on?** (its first light), **Gobo Wheels…** (all its members), **Output Rules…**, [Split by Head Type…](#split-by-head-type), [Lay Out from the Stage…](#lay-out-from-the-stage) | **Locate**, **Why is this on?**, **Patch…** ("Patch N Fixtures…"), [LED Layout…](#led-layout), **Gobo Wheels…** (several of one kind too), **Output Rules…**, **Split by Head Type…** |
 | More like it | **Select All Similar** | **Select All Similar** |
 | Filing | **Create Fixture Group from Selection…** (several groups, each a block), **Move to Folder ▸** | **Create Fixture Group from Selection…** |
 | Name | **Rename** (in place) or **Rename…** | **Rename** (in place) or **Rename…** |

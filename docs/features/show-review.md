@@ -175,6 +175,12 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   many slots and whether they "have no picture" or "point at a folder, not
   a picture". **Fix** opens Gobo Wheels; once every slot has a fitted
   picture the note goes.
+- **FIX-19** Loaded gobo missing from a light: a Gobo look named after
+  glass you loaded and named in some lights (Gobo Wheels, "Moon") reaches a
+  light that has no glass of that name, so that light ignores it. A warning,
+  once per look, naming the lights. **Fix** opens Gobo Wheels for the first
+  of them; load and name the glass there (or take the light out of the
+  look) and it goes.
 - **FIX-15** A light buried in the stage: its body (the Physical Dimensions
   box the rig view draws) is inside a deck, riser or step with a solid top.
   Says *"UST-2 is inside Deck SR. Sit it on Deck SR (2')."* The same

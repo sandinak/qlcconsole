@@ -861,13 +861,17 @@ lists, per type, what each one plays.
   helps when the names differ ("Dot Ring" on one, "Dots" on the other).
 - **Gobo name** changes the name. Each type finds its gobo by the first of
   these that finds anything:
-  1. a slot **picked** for that type;
-  2. the **same name**, where case, spaces, `-` and `_` don't matter. A
+  1. glass **loaded** in that very light under the same name (a "Moon" you
+     named in [Gobo Wheels](lighting-studio.md), in whichever slot that
+     light carries it: slot 3 in one, slot 5 in another);
+  2. a slot **picked** for that type;
+  3. the **same name**, where case, spaces, `-` and `_` don't matter. A
      gobo's picture names it too, with its folder: `ClayPaky/gobo00006` (a
-     picture name only ever matches that picture);
-  3. **singular or plural**, ignoring the word "gobo" and numbers: "Dot",
+     picture name only ever matches that picture). A slot with named glass
+     loaded in it goes by that name, not the definition's;
+  4. **singular or plural**, ignoring the word "gobo" and numbers: "Dot",
      "Dots" and "Gobo 3 Dots" are the same;
-  4. the **one** slot whose name starts with or contains it, for 3 letters or
+  5. the **one** slot whose name starts with or contains it, for 3 letters or
      more ("Breakup" finds "Breakup Rotating").
 - If a step finds **more than one** gobo on a type ("Dots" when the wheel has
   only "Dots Shake" and "Dots Rotating"), nothing is guessed:

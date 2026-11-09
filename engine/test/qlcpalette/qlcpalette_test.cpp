@@ -36,6 +36,8 @@
 #include "qlcfixturedefcache.h"
 #include "qlccapability.h"
 #include "qlcfile.h"
+#include "monitorproperties.h"
+#include "fixtureglass.h"
 
 void QLCPalette_Test::initialization()
 {
@@ -323,6 +325,86 @@ void QLCPalette_Test::aGoboLookReachesTheGoboChannel()
     QCOMPARE(int(vals.first().value), 49);
 
     spot->setFixtureDefinition(nullptr, nullptr);   // def is on the stack
+}
+
+void QLCPalette_Test::aLoadedGlassIsFoundByNamePerUnit()
+{
+    QLCFixtureDef def;
+    def.setManufacturer("Test");
+    def.setModel("AT-2");
+    QLCFixtureMode *mode = new QLCFixtureMode(&def);
+    mode->setName("2ch");
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer");
+    dim->setGroup(QLCChannel::Intensity);
+    def.addChannel(dim);
+    mode->insertChannel(dim, 0);
+    QLCChannel *wheel = new QLCChannel();
+    wheel->setName("Gobo");
+    wheel->setGroup(QLCChannel::Gobo);
+    const char *slotNames[] = { "Open", "Star", "Dots", "Flower", "Ring", "Cone" };
+    for (int i = 0; i < 6; i++)
+        wheel->addCapability(new QLCCapability(uchar(i * 10), uchar(i * 10 + 9), slotNames[i]));
+    def.addChannel(wheel);
+    mode->insertChannel(wheel, 1);
+    def.addMode(mode);
+
+    Doc doc(this);
+    QList<Fixture *> units;
+    for (int i = 0; i < 3; i++)
+    {
+        Fixture *f = new Fixture(&doc);
+        f->setName(QString("AT-2 %1").arg(i + 1));
+        f->setFixtureDefinition(&def, mode);
+        f->setAddress(quint32(i * 4));
+        QVERIFY(doc.addFixture(f));
+        units << f;
+    }
+    MonitorProperties *mp = doc.monitorProperties();
+    // The moon in unit A's slot 3, in unit B's slot 5; unit C has none.
+    mp->setGoboName(units[0]->id(), 1, 20, "Moon");
+    mp->setGoboName(units[1]->id(), 1, 40, "Moon");
+
+    QLCPalette moon(QLCPalette::Gobo);
+    moon.setGoboName("moon");                        // case does not matter
+    QCOMPARE(moon.goboValueFor(units[0]), 24);
+    QCOMPARE(moon.resolveGobo(units[0]).how, QLCPalette::GoboLoaded);
+    QCOMPARE(moon.goboValueFor(units[1]), 44);
+    QCOMPARE(moon.goboValueFor(units[2]), -1);      // nothing of that name: ignores it
+
+    // Built into a scene's values per unit: each its own slot.
+    const QList<SceneValue> vals = moon.valuesFromFixtures(&doc,
+        QList<quint32>() << units[0]->id() << units[1]->id() << units[2]->id());
+    QCOMPARE(vals.size(), 2);
+    QCOMPARE(int(vals.at(0).value), 24);
+    QCOMPARE(int(vals.at(1).value), 44);
+
+    // Loaded glass wins over the slot picked for the type; the unit
+    // without it still plays the pick.
+    moon.setGoboValue(QLCPalette::definitionKey(units[0]), 14);
+    QCOMPARE(moon.goboValueFor(units[0]), 24);
+    QCOMPARE(moon.goboValueFor(units[2]), 14);
+
+    // Looks that never named loaded glass play as they did; the slot that
+    // has other glass in it is no longer its old gobo on that unit.
+    QLCPalette star(QLCPalette::Gobo);
+    star.setGoboName("Star");
+    QCOMPARE(star.goboValueFor(units[0]), 14);
+    QLCPalette dots(QLCPalette::Gobo);
+    dots.setGoboName("Dots");
+    QCOMPARE(dots.goboValueFor(units[0]), -1);      // the moon is in its slot
+    QCOMPARE(dots.goboValueFor(units[1]), 24);
+    QLCPalette raw(QLCPalette::Gobo);
+    raw.setValue(33);
+    QCOMPARE(raw.goboValueFor(units[0]), 33);
+
+    // The slot's name for that unit, from the one helper.
+    QCOMPARE(FixtureGlass::slotName(&doc, units[0]->id(), 1, uchar(25)), QString("Moon"));
+    QCOMPARE(FixtureGlass::slotName(&doc, units[1]->id(), 1, uchar(25)), QString("Dots"));
+    QCOMPARE(FixtureGlass::loadedNames(&doc, units[1]->id()), QStringList() << "Moon");
+
+    for (Fixture *f : units)
+        f->setFixtureDefinition(nullptr, nullptr);  // def is on the stack
 }
 
 // 0.4.0 "Based on QLC+ 4.14.4": a Dimmer palette's fractional value is read from the

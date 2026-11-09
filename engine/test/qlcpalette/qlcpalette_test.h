@@ -55,6 +55,9 @@ private slots:
      *  plural, then a unique prefix/contains; several in a tier: none. */
     void goboNamesMatchInTiers_data();
     void goboNamesMatchInTiers();
+    /** Glass a unit has loaded under a name ("Moon", Gobo Wheels…): a Gobo
+     *  look of that name finds the slot THAT unit carries it in. */
+    void aLoadedGlassIsFoundByNamePerUnit();
 
     /** A colour ring (Branson's "LED Movinghead+Circle"): a colour picks
      *  the nearest named slot -- by hue, black is "off", white/grey is

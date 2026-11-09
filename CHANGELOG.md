@@ -14,6 +14,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Name the gobo you loaded.** Load your own glass in a light (the moon in AT-2 3's slot 3) and name it in
+  **Gobo Wheels…** (**Name…**, a picture optional): that light's slot is called "Moon" in the Look Editor, the channel
+  console and the gobo look's lines, and a Gobo look named "Moon" finds it in whichever slot each light carries it.
+  Gobo Wheels… now opens on several lights of one kind at once, or a fixture group (one undo step; greyed, with the
+  reason, when their wheels differ). Show Review **FIX-19** names the lights in a "Moon" look that have no moon loaded.
+  See [Gobos and prisms](docs/features/lighting-studio.md).
 - **The footer names fixtures cues use that have no address.** "2 fixtures in cues have no address", **Patch…** opens them; a staged fixture nothing uses no longer nags (the Show Review still notes it).
 
 - **A fixture in no group is in the Show Tree's Library.** Under All, **Ungrouped** lists the patched ones (a WLED just added, a spare; a fixture still in the inventory is not listed), found by

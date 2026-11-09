@@ -31,8 +31,11 @@
 #include <QComboBox>
 #include <QPainter>
 #include <QPainterPath>
+#include <QScopedValueRollback>
+#include <QTreeWidgetItemIterator>
 
 #include "gobowheelsdialog.h"
+#include "monitor.h"
 #include "beamoptics.h"
 #include "gobolibrary.h"
 #include "monitorproperties.h"
@@ -47,6 +50,7 @@
 #define COL_SLOT  0
 #define COL_GLASS 1
 #define COL_SUGGEST 2
+#define COL_NAME  3
 #define ROLE_CHANNEL (Qt::UserRole)
 #define ROLE_MIN     (Qt::UserRole + 1)
 
@@ -258,14 +262,98 @@ QStringList GoboWheelsDialog::suggestPictures(const Doc *doc, const QString &slo
     return out;
 }
 
+namespace
+{
+    /** The gobo channels of @p fx, in order. */
+    QList<quint32> goboChannels(const Fixture *fx)
+    {
+        QList<quint32> out;
+        for (quint32 i = 0; fx != nullptr && i < fx->channels(); ++i)
+        {
+            const QLCChannel *ch = fx->channel(i);
+            if (ch != nullptr && ch->group() == QLCChannel::Gobo)
+                out << i;
+        }
+        return out;
+    }
+
+    /** What makes two units' gobo wheels the same: each wheel's slots and
+     *  their pictures, in order (two modes of one definition, or two
+     *  definitions of one unit, share them). */
+    QString wheelKey(const Fixture *fx)
+    {
+        QStringList parts;
+        for (quint32 i : goboChannels(fx))
+        {
+            QStringList wheelSlots;
+            foreach (const QLCCapability *cap, fx->channel(i)->capabilities())
+                wheelSlots << QStringLiteral("%1-%2:%3:%4").arg(cap->min()).arg(cap->max()).arg(cap->name(),
+                             const_cast<QLCCapability *>(cap)->resource(0).toString());
+            parts << wheelSlots.join(QLatin1Char(','));
+        }
+        return parts.join(QLatin1Char('|'));
+    }
+}
+
+QList<quint32> GoboWheelsDialog::withGoboWheels(const Doc *doc, const QList<quint32> &fixtureIds)
+{
+    QList<quint32> out;
+    if (doc == nullptr)
+        return out;
+    for (quint32 id : fixtureIds)
+    {
+        if (!out.contains(id) && hasGoboWheels(const_cast<Doc *>(doc)->fixture(id)))
+            out << id;
+    }
+    return out;
+}
+
+QString GoboWheelsDialog::whyNot(const Doc *doc, const QList<quint32> &fixtureIds)
+{
+    const QList<quint32> ids = withGoboWheels(doc, fixtureIds);
+    if (ids.isEmpty())
+        return tr("None of these has a gobo wheel");
+    const Fixture *first = const_cast<Doc *>(doc)->fixture(ids.first());
+    const QString key = wheelKey(first);
+    for (quint32 id : ids)
+    {
+        const Fixture *fx = const_cast<Doc *>(doc)->fixture(id);
+        if (wheelKey(fx) != key)
+            return tr("%1 and %2 have different gobo wheels. Pick lights of one kind.")
+                   .arg(first->name(), fx->name());
+    }
+    return QString();
+}
+
 GoboWheelsDialog::GoboWheelsDialog(Doc *doc, quint32 fixtureId, QWidget *parent)
     : QDialog(parent)
     , m_doc(doc)
     , m_fid(fixtureId)
 {
+    m_fids << fixtureId;
+    init();
+}
+
+GoboWheelsDialog::GoboWheelsDialog(Doc *doc, const QList<quint32> &fixtureIds, QWidget *parent)
+    : QDialog(parent)
+    , m_doc(doc)
+    , m_fid(Fixture::invalidId())
+{
+    m_fids = withGoboWheels(doc, fixtureIds);
+    if (!m_fids.isEmpty())
+        m_fid = m_fids.first();
+    init();
+}
+
+void GoboWheelsDialog::init()
+{
     Fixture *fx = m_doc->fixture(m_fid);
-    setWindowTitle(tr("Gobo Wheels — %1").arg(fx != nullptr ? fx->name() : QString()));
-    resize(560, 460);
+    const bool many = m_fids.size() > 1;
+    if (many)
+        setWindowTitle(tr("Gobo Wheels — %1 fixtures").arg(m_fids.size()));
+    else
+        setWindowTitle(tr("Gobo Wheels — %1").arg(fx != nullptr ? fx->name() : QString()));
+    resize(640, 480);
 
     pickImage = [](QWidget *parent) {
         return QFileDialog::getOpenFileName(parent, tr("Fit a gobo"),
@@ -274,29 +362,62 @@ GoboWheelsDialog::GoboWheelsDialog(Doc *doc, quint32 fixtureId, QWidget *parent)
     };
 
     if (fx != nullptr)
+    {
         m_swaps = m_doc->monitorProperties()->goboSwaps(m_fid);
+        m_names = m_doc->monitorProperties()->goboNames(m_fid);
+    }
 
     QVBoxLayout *root = new QVBoxLayout(this);
-    QLabel *intro = new QLabel(tr("The glass in each slot of this unit. Replace a slot with "
-                                  "your own picture — black blocks the light, clear or white "
-                                  "lets it through. The fixture definition is not changed."), this);
+    QString text;
+    if (many)
+    {
+        QStringList names;
+        for (int i = 0; i < m_fids.size() && i < 4; ++i)
+        {
+            if (const Fixture *f = m_doc->fixture(m_fids.at(i)))
+                names << f->name();
+        }
+        if (m_fids.size() > 4)
+            names << tr("%n more", nullptr, int(m_fids.size()) - 4);
+        text = tr("The glass in each slot of these %n fixtures (%1). A slot you change is changed in "
+                  "every one; the slots you leave alone keep each unit's own glass.", nullptr,
+                  int(m_fids.size())).arg(names.join(QStringLiteral(", ")));
+    }
+    else
+    {
+        text = tr("The glass in each slot of this unit.");
+    }
+    text += QLatin1Char(' ') + tr("Name the glass you loaded (\"Moon\") so every list calls the slot "
+                                  "that, and a Gobo look of that name finds it in each unit. Replace "
+                                  "a slot's picture with your own: black blocks the light, clear or "
+                                  "white lets it through. The fixture definition is not changed.");
+    QLabel *intro = new QLabel(text, this);
+    intro->setObjectName(QStringLiteral("goboWheelsIntro"));
     intro->setWordWrap(true);
     root->addWidget(intro);
 
     m_tree = new QTreeWidget(this);
-    m_tree->setColumnCount(3);
-    m_tree->setHeaderLabels(QStringList() << tr("Slot") << tr("Glass") << tr("Suggested"));
+    m_tree->setColumnCount(4);
+    m_tree->setHeaderLabels(QStringList() << tr("Slot") << tr("Glass") << tr("Suggested") << tr("Loaded glass"));
+    m_tree->headerItem()->setToolTip(COL_NAME, tr("What the glass in this slot is called. Double-click to "
+                                                  "name it."));
     m_tree->setIconSize(QSize(32, 32));
     m_tree->setRootIsDecorated(true);
+    m_tree->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_tree->header()->setSectionResizeMode(COL_SLOT, QHeaderView::Stretch);
     m_tree->header()->setSectionResizeMode(COL_GLASS, QHeaderView::ResizeToContents);
     m_tree->header()->setSectionResizeMode(COL_SUGGEST, QHeaderView::ResizeToContents);
+    m_tree->header()->setSectionResizeMode(COL_NAME, QHeaderView::ResizeToContents);
     root->addWidget(m_tree, 1);
 
     QHBoxLayout *row = new QHBoxLayout();
+    m_name = new QPushButton(tr("Name…"), this);
+    m_name->setToolTip(tr("Name the glass loaded in this slot (\"Moon\"). A picture is optional."));
     m_replace = new QPushButton(tr("Replace…"), this);
     m_restore = new QPushButton(tr("Restore"), this);
+    m_restore->setToolTip(tr("Put the definition's own glass back in this slot: its picture and its name"));
     QPushButton *folder = new QPushButton(tr("Open Gobo Folder"), this);
+    row->addWidget(m_name);
     row->addWidget(m_replace);
     row->addWidget(m_restore);
     m_fitSuggested = new QPushButton(tr("Fit Suggested Pictures"), this);
@@ -308,7 +429,7 @@ GoboWheelsDialog::GoboWheelsDialog(Doc *doc, quint32 fixtureId, QWidget *parent)
     root->addLayout(row);
 
     int sameType = 0;
-    if (fx != nullptr)
+    if (fx != nullptr && !many)
     {
         foreach (Fixture *other, m_doc->fixtures())
             if (other->fixtureDef() == fx->fixtureDef() && other->fixtureMode() == fx->fixtureMode())
@@ -322,14 +443,27 @@ GoboWheelsDialog::GoboWheelsDialog(Doc *doc, quint32 fixtureId, QWidget *parent)
     root->addWidget(bb);
     connect(bb, &QDialogButtonBox::accepted, this, &GoboWheelsDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, this, &GoboWheelsDialog::reject);
+    connect(m_name, &QPushButton::clicked, this, &GoboWheelsDialog::slotName);
     connect(m_replace, &QPushButton::clicked, this, &GoboWheelsDialog::slotReplace);
     connect(m_restore, &QPushButton::clicked, this, &GoboWheelsDialog::slotRestore);
     connect(m_fitSuggested, &QPushButton::clicked, this, &GoboWheelsDialog::slotFitSuggested);
     connect(folder, &QPushButton::clicked, this, &GoboWheelsDialog::slotOpenFolder);
     connect(m_tree, &QTreeWidget::currentItemChanged, this, &GoboWheelsDialog::refreshButtons);
-    connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item) {
-        if (item != nullptr && item->parent() != nullptr)
+    connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item, int column) {
+        if (item == nullptr || item->parent() == nullptr)
+            return;
+        if (column == COL_NAME)
+            slotName();
+        else
             slotReplace();
+    });
+    connect(m_tree, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem *item, int column) {
+        // The "Loaded glass" cell typed in.
+        if (m_building || column != COL_NAME || item == nullptr || item->parent() == nullptr)
+            return;
+        m_tree->setCurrentItem(item);
+        const QString typed = item->text(COL_NAME).trimmed();
+        QMetaObject::invokeMethod(this, [this, typed]() { setSlotName(typed); }, Qt::QueuedConnection);
     });
 
     rebuild();
@@ -376,6 +510,31 @@ QList<const QLCCapability *> GoboWheelsDialog::sameGlass(const QLCChannel *ch, c
     return out;
 }
 
+GoboWheelsDialog::SlotKey GoboWheelsDialog::keyOn(const Fixture *to, const SlotKey &key) const
+{
+    if (to == nullptr || to->id() == m_fid)
+        return key;
+    const int k = goboChannels(m_doc->fixture(m_fid)).indexOf(key.first);
+    const QList<quint32> theirs = goboChannels(to);
+    return (k >= 0 && k < theirs.size()) ? SlotKey(theirs.at(k), key.second) : key;
+}
+
+bool GoboWheelsDialog::varies(const SlotKey &key) const
+{
+    if (m_fids.size() < 2 || m_touched.contains(key))
+        return false;
+    const MonitorProperties *props = m_doc->monitorProperties();
+    const QString swap = m_swaps.value(key), name = m_names.value(key);
+    for (quint32 id : m_fids)
+    {
+        const SlotKey k = keyOn(m_doc->fixture(id), key);
+        if (props->goboSwap(id, k.first, uchar(k.second)) != swap
+            || props->goboName(id, k.first, uchar(k.second)) != name)
+            return true;
+    }
+    return false;
+}
+
 QString GoboWheelsDialog::effectiveImage(quint32 channel, const QLCCapability *cap) const
 {
     const QString swap = m_swaps.value(qMakePair(channel, int(cap->min())));
@@ -390,6 +549,7 @@ QString GoboWheelsDialog::effectiveImage(quint32 channel, const QLCCapability *c
 
 void GoboWheelsDialog::rebuild()
 {
+    QScopedValueRollback<bool> building(m_building, true);
     m_tree->clear();
     Fixture *fx = m_doc->fixture(m_fid);
     if (fx == nullptr)
@@ -416,12 +576,15 @@ void GoboWheelsDialog::rebuild()
                 wheel->setFirstColumnSpanned(true);
                 wheel->setExpanded(true);
             }
+            const SlotKey key(i, int(cap->min()));
             QTreeWidgetItem *slot = new QTreeWidgetItem(wheel);
+            slot->setFlags(slot->flags() | Qt::ItemIsEditable);
             slot->setData(COL_SLOT, ROLE_CHANNEL, i);
             slot->setData(COL_SLOT, ROLE_MIN, int(cap->min()));
             slot->setText(COL_SLOT, glass.size() > 1 ? tr("%1 (and its shake)").arg(cap->name())
                                                      : cap->name());
-            const QString swap = m_swaps.value(qMakePair(i, int(cap->min())));
+            const QString swap = m_swaps.value(key);
+            const QString name = m_names.value(key);
             const QString img = effectiveImage(i, cap);
             if (img.isEmpty())
             {
@@ -429,26 +592,28 @@ void GoboWheelsDialog::rebuild()
                 const QImage m = BeamOptics::standInMask(cap->name(),
                     qMax(0, GoboLibrary::standInIndex(ch, cap)));
                 slot->setIcon(COL_SLOT, lightIcon(m));
-                if (swap.isEmpty())
-                {
-                    const QStringList sug = suggestionsFor(cap);
-                    if (!sug.isEmpty())
-                    {
-                        // Up to three, best first; Fit takes the one chosen.
-                        QComboBox *box = new QComboBox(m_tree);
-                        box->setObjectName(QStringLiteral("suggestions"));
-                        box->setIconSize(QSize(28, 28));
-                        foreach (const QString &name, sug)
-                            box->addItem(lightIcon(BeamOptics::goboMask(GoboLibrary::resolve(name))),
-                                         QFileInfo(name).completeBaseName(), name);
-                        m_tree->setItemWidget(slot, COL_SUGGEST, box);
-                    }
-                }
             }
             else
             {
                 const QIcon lit = lightIcon(BeamOptics::goboMask(img));
                 slot->setIcon(COL_SLOT, lit.isNull() ? QIcon(img) : lit);
+            }
+            // Pictures offered for it: a bare slot by its own name, any slot
+            // you named and gave no picture by that name.
+            if (swap.isEmpty() && (img.isEmpty() || !name.isEmpty()))
+            {
+                const QStringList sug = suggestionsFor(cap, key);
+                if (!sug.isEmpty())
+                {
+                    // Up to three, best first; Fit takes the one chosen.
+                    QComboBox *box = new QComboBox(m_tree);
+                    box->setObjectName(QStringLiteral("suggestions"));
+                    box->setIconSize(QSize(28, 28));
+                    foreach (const QString &pic, sug)
+                        box->addItem(lightIcon(BeamOptics::goboMask(GoboLibrary::resolve(pic))),
+                                     QFileInfo(pic).completeBaseName(), pic);
+                    m_tree->setItemWidget(slot, COL_SUGGEST, box);
+                }
             }
             slot->setText(COL_GLASS, swap.isEmpty() ? (img.isEmpty() ? tr("no picture (stand-in)") : tr("as built"))
                                                     : QFileInfo(swap).fileName());
@@ -460,13 +625,34 @@ void GoboWheelsDialog::rebuild()
                 if (GoboLibrary::resolve(swap).isEmpty())
                     slot->setText(COL_GLASS, tr("%1 (missing)").arg(swap));
             }
+            slot->setText(COL_NAME, name);
+            if (!name.isEmpty())
+            {
+                QFont f = slot->font(COL_NAME);
+                f.setBold(true);
+                slot->setFont(COL_NAME, f);
+            }
+            slot->setToolTip(COL_NAME, tr("What the glass in this slot is called. Double-click to name it."));
+            if (varies(key))
+            {
+                // Left alone, each unit keeps its own.
+                QFont f = slot->font(COL_GLASS);
+                f.setItalic(true);
+                slot->setFont(COL_GLASS, f);
+                slot->setText(COL_GLASS, tr("varies"));
+                slot->setText(COL_NAME, name.isEmpty() ? tr("varies") : tr("%1 (varies)").arg(name));
+                slot->setToolTip(COL_GLASS, tr("The units differ in this slot. Leave it, and each keeps its own."));
+            }
         }
     }
 }
 
-QStringList GoboWheelsDialog::suggestionsFor(const QLCCapability *cap) const
+QStringList GoboWheelsDialog::suggestionsFor(const QLCCapability *cap, const SlotKey &key) const
 {
-    return cap != nullptr ? suggestPictures(m_doc, GoboLibrary::slotBaseName(cap->name())) : QStringList();
+    if (cap == nullptr)
+        return QStringList();
+    const QString name = m_names.value(key);
+    return suggestPictures(m_doc, name.isEmpty() ? GoboLibrary::slotBaseName(cap->name()) : name);
 }
 
 void GoboWheelsDialog::slotFitSuggested()
@@ -490,7 +676,10 @@ void GoboWheelsDialog::slotFitSuggested()
                 continue;
             const QString name = box->currentData().toString();
             for (const QLCCapability *g : sameGlass(ch, cap))
+            {
                 m_swaps.insert(qMakePair(chn, int(g->min())), name);
+                m_touched.insert(qMakePair(chn, int(g->min())));
+            }
         }
     rebuild();
     refreshButtons();
@@ -506,27 +695,37 @@ void GoboWheelsDialog::refreshButtons()
 {
     QTreeWidgetItem *slot = currentSlot();
     m_replace->setEnabled(slot != nullptr);
+    m_name->setEnabled(slot != nullptr);
     if (m_fitSuggested != nullptr)
     {
-        bool any = false, standIns = false;
+        // Offered where there are suggestions: bare slots, named ones.
+        bool any = false, offered = false;
+        for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
+        {
+            if (m_tree->itemWidget(*it, COL_SUGGEST) != nullptr)
+                any = true;
+        }
         Fixture *fx = m_doc->fixture(m_fid);
-        for (quint32 i = 0; fx != nullptr && i < fx->channels(); ++i)
-            foreach (QLCCapability *cap, GoboLibrary::standInCaps(fx->channel(i)))
-            {
-                standIns = true;
-                if (!any && !m_swaps.contains(qMakePair(i, int(cap->min()))) && !suggestionsFor(cap).isEmpty())
-                    any = true;
-            }
-        m_fitSuggested->setVisible(standIns);
+        for (quint32 i = 0; fx != nullptr && i < fx->channels() && !offered; ++i)
+        {
+            if (!GoboLibrary::standInCaps(fx->channel(i)).isEmpty())
+                offered = true;
+        }
+        offered = offered || any;
+        m_fitSuggested->setVisible(offered);
         m_fitSuggested->setEnabled(any);
-        m_tree->setColumnHidden(COL_SUGGEST, !standIns);
+        m_tree->setColumnHidden(COL_SUGGEST, !offered);
     }
-    m_restore->setEnabled(slot != nullptr
-        && m_swaps.contains(qMakePair(slot->data(COL_SLOT, ROLE_CHANNEL).toUInt(),
-                                      slot->data(COL_SLOT, ROLE_MIN).toInt())));
+    bool restorable = false;
+    if (slot != nullptr)
+    {
+        const SlotKey key(slot->data(COL_SLOT, ROLE_CHANNEL).toUInt(), slot->data(COL_SLOT, ROLE_MIN).toInt());
+        restorable = m_swaps.contains(key) || m_names.contains(key) || varies(key);
+    }
+    m_restore->setEnabled(restorable);
 }
 
-void GoboWheelsDialog::setSlot(QTreeWidgetItem *item, const QString &image)
+void GoboWheelsDialog::setSlotGlass(QTreeWidgetItem *item, const QString *image, const QString *name)
 {
     Fixture *fx = m_doc->fixture(m_fid);
     if (fx == nullptr || item == nullptr)
@@ -538,10 +737,22 @@ void GoboWheelsDialog::setSlot(QTreeWidgetItem *item, const QString &image)
     // The slot and its shake: the same piece of glass.
     for (const QLCCapability *g : sameGlass(ch, cap))
     {
-        if (image.isEmpty())
-            m_swaps.remove(qMakePair(chn, int(g->min())));
-        else
-            m_swaps.insert(qMakePair(chn, int(g->min())), image);
+        const SlotKey key(chn, int(g->min()));
+        m_touched.insert(key);
+        if (image != nullptr)
+        {
+            if (image->isEmpty())
+                m_swaps.remove(key);
+            else
+                m_swaps.insert(key, *image);
+        }
+        if (name != nullptr)
+        {
+            if (name->trimmed().isEmpty())
+                m_names.remove(key);
+            else
+                m_names.insert(key, name->trimmed());
+        }
     }
     const int min = item->data(COL_SLOT, ROLE_MIN).toInt();
     rebuild();
@@ -554,6 +765,31 @@ void GoboWheelsDialog::setSlot(QTreeWidgetItem *item, const QString &image)
                 m_tree->setCurrentItem(it);
         }
     refreshButtons();
+}
+
+void GoboWheelsDialog::setSlot(QTreeWidgetItem *item, const QString &image)
+{
+    setSlotGlass(item, &image, nullptr);
+}
+
+void GoboWheelsDialog::setSlotName(const QString &name)
+{
+    const QString n = name.trimmed();
+    setSlotGlass(currentSlot(), nullptr, &n);
+}
+
+void GoboWheelsDialog::slotName()
+{
+    QTreeWidgetItem *slot = currentSlot();
+    if (slot == nullptr)
+        return;
+    // Typed in place: the cell shows the glass's name, not "varies".
+    {
+        QScopedValueRollback<bool> building(m_building, true);
+        const SlotKey key(slot->data(COL_SLOT, ROLE_CHANNEL).toUInt(), slot->data(COL_SLOT, ROLE_MIN).toInt());
+        slot->setText(COL_NAME, m_names.value(key));
+    }
+    m_tree->editItem(slot, COL_NAME);
 }
 
 void GoboWheelsDialog::slotReplace()
@@ -576,7 +812,9 @@ void GoboWheelsDialog::slotReplace()
 
 void GoboWheelsDialog::slotRestore()
 {
-    setSlot(currentSlot(), QString());
+    // The definition's own glass: no picture of yours, no name.
+    const QString none;
+    setSlotGlass(currentSlot(), &none, &none);
 }
 
 void GoboWheelsDialog::slotOpenFolder()
@@ -589,23 +827,44 @@ void GoboWheelsDialog::accept()
     Fixture *fx = m_doc->fixture(m_fid);
     if (fx != nullptr)
     {
+        // One rig undo step (⌘Z in the Fixture Manager or the 2D view),
+        // however many units it changes.
+        Monitor *mon = Monitor::instance();
+        const QByteArray before = mon != nullptr ? mon->rigSnapshot() : QByteArray();
         MonitorProperties *props = m_doc->monitorProperties();
-        QList<quint32> targets;
         if (!m_allOfType->isHidden() && m_allOfType->isChecked())
         {
+            // Every unit of the type made like this one, every slot.
             foreach (Fixture *other, m_doc->fixtures())
-                if (other->fixtureDef() == fx->fixtureDef() && other->fixtureMode() == fx->fixtureMode())
-                    targets << other->id();
+            {
+                if (other->fixtureDef() != fx->fixtureDef() || other->fixtureMode() != fx->fixtureMode())
+                    continue;
+                props->clearGoboSwaps(other->id());
+                for (auto it = m_swaps.constBegin(); it != m_swaps.constEnd(); ++it)
+                    props->setGoboSwap(other->id(), it.key().first, uchar(it.key().second), it.value());
+                for (auto it = m_names.constBegin(); it != m_names.constEnd(); ++it)
+                    props->setGoboName(other->id(), it.key().first, uchar(it.key().second), it.value());
+            }
         }
         else
-            targets << m_fid;
-        foreach (quint32 t, targets)
         {
-            props->clearGoboSwaps(t);
-            for (auto it = m_swaps.constBegin(); it != m_swaps.constEnd(); ++it)
-                props->setGoboSwap(t, it.key().first, uchar(it.key().second), it.value());
+            // The slots changed here, in every unit; the rest as each has it.
+            for (quint32 id : m_fids)
+            {
+                const Fixture *unit = m_doc->fixture(id);
+                if (unit == nullptr)
+                    continue;
+                for (const SlotKey &key : m_touched)
+                {
+                    const SlotKey k = keyOn(unit, key);
+                    props->setGoboSwap(id, k.first, uchar(k.second), m_swaps.value(key));
+                    props->setGoboName(id, k.first, uchar(k.second), m_names.value(key));
+                }
+            }
         }
         m_doc->setModified();
+        if (mon != nullptr)
+            mon->pushRigUndo(before);
     }
     QDialog::accept();
 }

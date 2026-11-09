@@ -1328,10 +1328,24 @@ public:
     QString goboSwap(quint32 fid, quint32 channel, uchar slotMin) const;
     /** Every swap on @p fid: (channel, slotMin) -> image. */
     QMap<QPair<quint32, int>, QString> goboSwaps(quint32 fid) const;
-    void clearGoboSwaps(quint32 fid) { m_goboSwaps.remove(fid); }
+    /** Drop every swap AND every loaded glass name of @p fid. */
+    void clearGoboSwaps(quint32 fid);
+
+    /** What the glass loaded in that slot is called ("Moon"), with or
+     *  without a picture of it; an empty @p name forgets it. Shown for that
+     *  unit's slot everywhere a gobo is named (FixtureGlass::slotName()), and
+     *  a Gobo look of that name finds it there (QLCPalette::resolveGobo()). */
+    void setGoboName(quint32 fid, quint32 channel, uchar slotMin, const QString &name);
+    QString goboName(quint32 fid, quint32 channel, uchar slotMin) const;
+    /** Every named slot on @p fid: (channel, slotMin) -> name. */
+    QMap<QPair<quint32, int>, QString> goboNames(quint32 fid) const;
 
 private:
     QMap<quint32, QMap<QPair<quint32, int>, QString> > m_goboSwaps;
+    /** Guarded: a Gobo look resolves the names when a scene starts, on the
+     *  DMX thread (QLCPalette::resolveGobo()). */
+    QMap<quint32, QMap<QPair<quint32, int>, QString> > m_goboNames;
+    mutable QMutex m_goboNameMutex;
 
     /********************************************************************
      * LED maps (HeadLayout): which head of a model sits in which cell.

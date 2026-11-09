@@ -454,7 +454,8 @@ public:
         GoboExact,          //!< same name (case, space, '-' and '_' ignored)
         GoboSingular,       //!< "Dot" = "Dots" = "Gobo 3 Dots"
         GoboPartial,        //!< the one slot whose name starts with/contains it
-        GoboAmbiguous       //!< a tier found several: not guessed, ignored
+        GoboAmbiguous,      //!< a tier found several: not guessed, ignored
+        GoboLoaded          //!< the glass this unit has loaded under that name (Gobo Wheels…)
     };
 
     struct GoboResolution
