@@ -12,6 +12,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-09
+
 ### Added
 
 - **Effect parameters read as names, not sentences.** In the Show Tree's effect rows (and the Look Editor) a Follow Spot row says **Follow Mode: Hold Last Position** (not "On scene change: hold the last beam position, or snap to the bound followTarget"); the full sentence is the tooltip. Scripts can give a parameter a `label` and its list a `valueLabels`; a long label or value wraps instead of running off the edge. A test guards every bundled effect (UX-77).
