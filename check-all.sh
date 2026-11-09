@@ -440,11 +440,16 @@ elif [ "$QUICK" = 1 ]; then
     # plugin's test for its sources; everything when the build or the test
     # runner changed. Committed, staged, unstaged and untracked all count.
     BASE="${QUICK_BASE:-origin/main}"
-    if ! MB=$(git -C "$REPO" merge-base "$BASE" HEAD 2>/dev/null); then
+    if [ -n "${QUICK_CHANGED_FILE:-}" ] && [ -f "$REPO/$QUICK_CHANGED_FILE" ]; then
+        # A pool copy (no .git): the pool sent what changed since $BASE.
+        CHANGED=$(sort -u "$REPO/$QUICK_CHANGED_FILE")
+    elif ! MB=$(git -C "$REPO" merge-base "$BASE" HEAD 2>/dev/null); then
         echo "--quick needs a git checkout with $BASE (set QUICK_BASE); testing everything"
         QUICK_TESTS=ALL
     else
         CHANGED=$( (git -C "$REPO" diff --name-only "$MB"; git -C "$REPO" ls-files --others --exclude-standard) | sort -u)
+    fi
+    if [ "$QUICK_TESTS" != ALL ]; then
         for f in $CHANGED; do
             case "$f" in
                 CMakeLists.txt|*.cmake|unittest.sh|platforms/linux/unittest*|*/test/CMakeLists.txt|engine/test/common/*|ui/test/common/*)

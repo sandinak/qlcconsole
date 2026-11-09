@@ -231,6 +231,24 @@ else
     git -C "$REPO" archive "$SHA" | ssh "${SSHOPT[@]}" "${DEST[H]}" "tar -x -C \"\$HOME/gates/$ID\""
 fi || { on $H <<<"rm -rf \"\$HOME/gates/$ID\" \"\$HOME/gates/$ID.running\"" >/dev/null 2>&1; fail 99 "copy failed"; }
 
+# --quick picks its tests from what changed since QUICK_BASE, but the copy
+# has no .git: work the list out here and send it along (without it every
+# remote quick ran ALL of the Qt6 leg's tests). QLC_TEST_ONLY rides too.
+QENV=""
+case " ${ARGS[*]-} " in *" --quick "*)
+    if [ -n "${QLC_TEST_ONLY:-}" ]; then
+        QENV="QLC_TEST_ONLY=$(printf '%q' "$QLC_TEST_ONLY")"
+    elif QMB=$(git -C "$REPO" merge-base "${QUICK_BASE:-origin/main}" "$SHA" 2>/dev/null); then
+        git -C "$REPO" diff --name-only "$QMB" "$SHA" > "$PROBES/quick-changed"
+        if [ "${DEST[H]}" = local ]; then
+            cp "$PROBES/quick-changed" "$HOME/gates/$ID/.quick-changed"
+        else
+            ssh "${SSHOPT[@]}" "${DEST[H]}" "cat > \"\$HOME/gates/$ID/.quick-changed\"" < "$PROBES/quick-changed"
+        fi || fail 99 "copy failed"
+        QENV="QUICK_CHANGED_FILE=.quick-changed"
+    fi ;;
+esac
+
 # The run script, with this end's values written in: check-all.sh in the
 # copy, then the small logs kept and the copy removed, whatever this end
 # does meanwhile.
@@ -239,6 +257,7 @@ RUN="$PROBES/run.sh"
     echo 'G="$HOME/gates"'
     echo "cd \"\$G/$ID\" || exit 1"
     echo "export PATH=\"$XP\$PATH\" QT6_PREFIX=\"$QT\" GATE_HOST=$NAME GATE_REV=$SHA"
+    [ -z "$QENV" ] || echo "export $QENV"
     printf './check-all.sh'; for a in ${ARGS[@]+"${ARGS[@]}"}; do printf ' %q' "$a"; done
     echo " > \"\$G/$ID.log\" 2>&1"
     echo 'rc=$?'
