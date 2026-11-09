@@ -258,7 +258,9 @@ void ProgrammingOutline_Test::anEmptyStateSentenceWrapsToThePane()
         // margins (the row sized off the bare viewport cut the last one).
         auto fitsAll = [&](const QRect &r) {
             const int margin = o.style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, &o) + 1;
-            const QRect need = fm.boundingRect(QRect(0, 0, r.width() - 2 * margin, 100000),
+            // The painter insets the text by a margin each side (QCommonStyle).
+            const int indent = o.rootIsDecorated() ? o.indentation() : 0;
+            const QRect need = fm.boundingRect(QRect(0, 0, r.width() - indent - 2 * margin, 100000),
                                                Qt::TextWordWrap, text);
             return r.height() >= need.height();
         };
@@ -269,7 +271,46 @@ void ProgrammingOutline_Test::anEmptyStateSentenceWrapsToThePane()
         o.resize(120, 300);
         QCoreApplication::processEvents();
         QTRY_VERIFY(o.visualItemRect(hint).height() > was);
-        QVERIFY(fitsAll(o.visualItemRect(hint)));
+        // Whatever the width (one fixed width can happen to fit a font),
+        // no line is cut.
+        for (int w = 110; w <= 420; w += 7)
+        {
+            o.resize(w, 300);
+            QCoreApplication::processEvents();
+            QTRY_VERIFY2(fitsAll(o.visualItemRect(hint)),
+                         qPrintable(QStringLiteral("%1 px wide: last line cut").arg(w)));
+        }
+    }
+}
+
+void ProgrammingOutline_Test::theWorkbenchsEmptyLineIsNeverCut()
+{
+    // The Workbench's own outline (indented, unlike a bare one): at its
+    // smallest the sentence wrapped to one more line than its row held
+    // ("on the left." cut in half). Every width, every line fits.
+    Workbench wb(m_doc);
+    wb.resize(700, 400);
+    wb.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wb));
+    ProgrammingOutline *o = wb.findChild<ProgrammingOutline *>();
+    QVERIFY(o != nullptr);
+    QTRY_COMPARE(o->topLevelItemCount(), 1);
+    QTreeWidgetItem *hint = o->topLevelItem(0);
+    QCOMPARE(hint->data(0, ProgrammingOutline::KindRole).toInt(), int(ProgrammingOutline::HintRow));
+    const QFontMetrics fm(hint->font(0));
+    const int margin = o->style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, o) + 1;
+    for (int w = 200; w <= 900; w += 11)
+    {
+        wb.resize(w, 400);
+        QCoreApplication::processEvents();
+        const QRect r = o->visualItemRect(hint);
+        // The row's rect takes in the tree's indent; the text starts after it.
+        const int indent = o->rootIsDecorated() ? o->indentation() : 0;
+        const QRect need = fm.boundingRect(QRect(0, 0, r.width() - indent - 2 * margin, 100000),
+                                           Qt::TextWordWrap, hint->text(0));
+        QTRY_VERIFY2(o->visualItemRect(hint).height() >= need.height(),
+                     qPrintable(QStringLiteral("Workbench %1 px wide: row %2 px for %3 px of text")
+                                    .arg(w).arg(o->visualItemRect(hint).height()).arg(need.height())));
     }
 }
 

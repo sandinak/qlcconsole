@@ -98,7 +98,10 @@ public:
         opt.rect = QRect(0, 0, rowW, opt.fontMetrics.height() * 2);
         QStyle *st = m_view->style();
         const QRect textRect = st->subElementRect(QStyle::SE_ItemViewItemText, &opt, m_view);
-        const int textW = qMax(20, textRect.width());
+        // The style insets the text again inside that rectangle when it
+        // draws it (QCommonStyle: PM_FocusFrameHMargin + 1 each side).
+        const int textMargin = st->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, m_view) + 1;
+        const int textW = qMax(20, textRect.width() - 2 * textMargin);
         const QRect r = opt.fontMetrics.boundingRect(QRect(0, 0, textW, 100000), Qt::TextWordWrap,
                                                      index.data(Qt::DisplayRole).toString());
         return QSize(rowW, r.height() + (opt.rect.height() - textRect.height()) + 8);
@@ -1037,7 +1040,7 @@ void ProgrammingOutline::resizeEvent(QResizeEvent *event)
     QTreeWidget::resizeEvent(event);
     fitColumns();
     if (m_hintOnly)
-        scheduleDelayedItemsLayout();       // the sentence wraps to the new width
+        doItemsLayout();                    // the sentence wraps to the new width, now
 }
 
 void ProgrammingOutline::fitColumns()

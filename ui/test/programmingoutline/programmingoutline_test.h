@@ -44,6 +44,7 @@ private slots:
     /** The empty-state sentence wraps to the pane's width instead of
      *  being cut at its edge. */
     void anEmptyStateSentenceWrapsToThePane();
+    void theWorkbenchsEmptyLineIsNeverCut();
     /** Badges: ⚠ with what is wrong on hover, ▣ raw values, ⇄ a transition,
      *  ⏱ a speed master; a look's own fade. */
     void badgesSayWhatAndHoverSaysWhy();
