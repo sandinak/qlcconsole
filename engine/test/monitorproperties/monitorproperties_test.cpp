@@ -1398,6 +1398,67 @@ void MonitorProperties_Test::goboSwapsAreKeptPerFixtureAndSaved()
     QVERIFY(back.monitorProperties()->goboSwaps(aId).isEmpty());
 }
 
+void MonitorProperties_Test::loadedGlassNamesAreKeptAndSaved()
+{
+    // "the moon in AT-2 3": a name for one unit's slot, with or without a
+    // picture, saved beside the picture and read back.
+    Doc doc(this);
+    Fixture *a = new Fixture(&doc);
+    a->setChannels(4);
+    QVERIFY(doc.addFixture(a));
+    Fixture *b = new Fixture(&doc);
+    b->setChannels(4);
+    b->setAddress(10);
+    QVERIFY(doc.addFixture(b));
+    MonitorProperties *mp = doc.monitorProperties();
+
+    mp->setGoboName(a->id(), 0, 30, "  Moon ");          // trimmed
+    mp->setGoboSwap(a->id(), 0, 40, "logo.png");
+    mp->setGoboName(a->id(), 0, 40, "Our Logo");          // a picture and a name
+    QCOMPARE(mp->goboName(a->id(), 0, 30), QString("Moon"));
+    QVERIFY(mp->goboSwap(a->id(), 0, 30).isEmpty());      // a name alone: no picture
+    QCOMPARE(mp->goboNames(a->id()).size(), 2);
+    QVERIFY(mp->goboNames(b->id()).isEmpty());
+    QVERIFY(mp->goboName(b->id(), 0, 30).isEmpty());       // only that unit
+
+    QByteArray ws;
+    QXmlStreamWriter ww(&ws);
+    ww.writeStartDocument();
+    QVERIFY(doc.saveXML(&ww));
+    ww.writeEndDocument();
+    QVERIFY(ws.contains("Name=\"Moon\""));
+    Doc back(this);
+    QXmlStreamReader rr(ws);
+    while (rr.readNextStartElement() && rr.name() != QStringLiteral("Engine"))
+        ;
+    QVERIFY(back.loadXML(rr));
+    MonitorProperties *bp = back.monitorProperties();
+    QCOMPARE(bp->goboName(a->id(), 0, 30), QString("Moon"));
+    QVERIFY(bp->goboSwap(a->id(), 0, 30).isEmpty());
+    QCOMPARE(bp->goboName(a->id(), 0, 40), QString("Our Logo"));
+    QCOMPARE(bp->goboSwap(a->id(), 0, 40), QString("logo.png"));
+
+    // An older show's swap (no Name) loads as it did.
+    {
+        Doc old(this);
+        QByteArray x("<Monitor DisplayMode=\"0\"><GoboSwap Fixture=\"0\" Channel=\"0\" Slot=\"10\" Image=\"logo.png\"/></Monitor>");
+        QXmlStreamReader r(x);
+        r.readNextStartElement();
+        QVERIFY(old.monitorProperties()->loadXML(r, &old));
+        QCOMPARE(old.monitorProperties()->goboSwap(0, 0, 10), QString("logo.png"));
+        QVERIFY(old.monitorProperties()->goboNames(0).isEmpty());
+    }
+
+    // An empty name forgets it; deleting the unit takes its names.
+    mp->setGoboName(a->id(), 0, 40, QString());
+    QCOMPARE(mp->goboNames(a->id()).size(), 1);
+    const quint32 aId = a->id();
+    QVERIFY(doc.deleteFixture(aId));
+    QVERIFY(mp->goboNames(aId).isEmpty());
+    bp->reset();
+    QVERIFY(bp->goboNames(aId).isEmpty());
+}
+
 void MonitorProperties_Test::theGoboLibraryImportsAndResolves()
 {
     QTemporaryDir home;

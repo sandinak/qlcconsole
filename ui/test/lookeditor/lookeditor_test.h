@@ -62,6 +62,9 @@ private slots:
     /** A slot a unit has fitted with other glass (Gobo Wheels…) is listed
      *  as that glass, by name, with its picture. */
     void aSwappedSlotShowsItsOwnGlass();
+    /** A slot a unit has loaded named glass in ("Moon") is called that for
+     *  that unit; a Gobo look picked there is named after it. */
+    void aLoadedGlassIsCalledByItsName();
     /** "when selecting an effect we need a better way than a drop down ...
      *  AND for WLED based fixtures we should be selecting WLED effects". */
     void effectsArePickedFromABrowserWithWledsOwn();

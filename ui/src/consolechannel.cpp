@@ -35,6 +35,7 @@
 #include "doc.h"
 #include "fixture.h"
 #include "apputil.h"
+#include "fixtureglass.h"
 #include "consolechannel.h"
 
 /*****************************************************************************
@@ -509,8 +510,11 @@ void ConsoleChannel::initCapabilityMenu(const QLCChannel* ch)
     {
         cap = it.next();
 
-        // Set the value range and name as the menu item's name
-        s = QString("%1: %2 - %3").arg(cap->name())
+        // Set the value range and name as the menu item's name: a gobo
+        // slot by the glass this unit has loaded in it, if it is named.
+        const QString capName = ch->group() == QLCChannel::Gobo
+            ? FixtureGlass::slotName(m_doc, m_fixture, m_chIndex, cap) : cap->name();
+        s = QString("%1: %2 - %3").arg(capName)
             .arg(cap->min()).arg(cap->max());
 
         if (cap->max() - cap->min() > 0)

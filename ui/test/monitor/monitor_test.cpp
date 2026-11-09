@@ -17894,6 +17894,145 @@ void Monitor_Test::goboWheelsSuggestsPicturesForBareSlots()
     QVERIFY(doc.monitorProperties()->goboSwap(fx->id(), 0, 80).endsWith("gobo10.svg"));
 }
 
+void Monitor_Test::goboWheelsNamesLoadedGlassInSeveralUnits()
+{
+    QLCFixtureDef *bare = standInDef();
+    // Another kind: one slot of its wheel is other glass. (No pictures here:
+    // GoboLibrary caches whether a resource name has one.)
+    QLCFixtureDef *other = standInDef();
+    other->setModel("Other Spot");
+    other->channels().first()->capabilities().at(4)->setName("Triangles");
+    Doc *doc = new Doc(this);
+    QList<Fixture *> units;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("AT-2 %1").arg(i + 1));
+        f->setFixtureDefinition(bare, bare->modes().first());
+        f->setAddress(quint32(i * 4));
+        QVERIFY(doc->addFixture(f));
+        units << f;
+    }
+    Fixture *odd = new Fixture(doc);
+    odd->setName("Mac 1");
+    odd->setFixtureDefinition(other, other->modes().first());
+    odd->setAddress(40);
+    QVERIFY(doc->addFixture(odd));
+    QList<quint32> ids;
+    for (Fixture *f : units)
+        ids << f->id();
+    MonitorProperties *props = doc->monitorProperties();
+    QWidget parent;
+    Monitor mon(&parent, doc);                       // for the rig's undo
+
+    // Same wheels: one dialog for all three; mixed: refused, saying why.
+    QVERIFY(GoboWheelsDialog::whyNot(doc, ids).isEmpty());
+    const QString why = GoboWheelsDialog::whyNot(doc, QList<quint32>(ids) << odd->id());
+    QVERIFY2(why.contains("AT-2 1") && why.contains("Mac 1") && why.contains("different"), qPrintable(why));
+
+    {
+        GoboWheelsDialog dlg(doc, ids);
+        QVERIFY2(dlg.windowTitle().contains("3 fixtures"), qPrintable(dlg.windowTitle()));
+        QLabel *intro = dlg.findChild<QLabel *>("goboWheelsIntro");
+        QVERIFY(intro != nullptr && intro->text().contains("AT-2 1, AT-2 2, AT-2 3"));
+        QVERIFY(dlg.m_allOfType->isHidden());          // the selection is the set
+        QTreeWidgetItem *spots = dlg.m_tree->topLevelItem(0)->child(2);   // 3 Spots, 30-39
+        QVERIFY(spots->text(0).startsWith("3 Spots"));
+        dlg.m_tree->setCurrentItem(spots);
+        QVERIFY(dlg.m_name->isEnabled());
+        dlg.setSlotName("Moon");
+        QCOMPARE(dlg.m_tree->currentItem()->text(3), QString("Moon"));
+        QVERIFY(dlg.m_restore->isEnabled());
+        QVERIFY(props->goboNames(units.first()->id()).isEmpty());   // not until OK
+        // GOBOWHEELS_SHOTS=dir: the dialog at three sizes, for review.
+        const QString shots = qEnvironmentVariable("GOBOWHEELS_SHOTS");
+        if (!shots.isEmpty())
+        {
+            QDir().mkpath(shots);
+            dlg.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&dlg));
+            for (const QSize &sz : { QSize(560, 420), QSize(760, 540), QSize(1000, 700) })
+            {
+                dlg.resize(sz);
+                QCoreApplication::processEvents();
+                QVERIFY(dlg.grab().save(QDir(shots).absoluteFilePath(
+                    QString("gobowheels-after-%1x%2.png").arg(sz.width()).arg(sz.height()))));
+            }
+        }
+        dlg.accept();
+    }
+    for (Fixture *f : units)
+    {
+        QCOMPARE(props->goboName(f->id(), 0, 30), QString("Moon"));
+        QVERIFY(props->goboSwap(f->id(), 0, 30).isEmpty());          // a name, no picture
+    }
+    QVERIFY(props->goboNames(odd->id()).isEmpty());
+    // One undo step takes it out of all three.
+    QVERIFY(mon.canUndo());
+    mon.undo();
+    for (Fixture *f : units)
+        QVERIFY(props->goboNames(f->id()).isEmpty());
+
+    // Units that differ: each keeps its own where nothing is changed.
+    props->setGoboName(units.at(1)->id(), 0, 40, "Moon");          // B's moon in Tetris's slot
+    {
+        GoboWheelsDialog dlg(doc, QList<quint32>() << units.at(0)->id() << units.at(1)->id());
+        QTreeWidgetItem *tetris = dlg.m_tree->topLevelItem(0)->child(3);
+        QCOMPARE(tetris->text(1), QString("varies"));
+        dlg.m_tree->setCurrentItem(dlg.m_tree->topLevelItem(0)->child(1));
+        dlg.setSlotName("Star");
+        dlg.accept();
+    }
+    QCOMPARE(props->goboName(units.at(1)->id(), 0, 40), QString("Moon"));
+    QVERIFY(props->goboName(units.at(0)->id(), 0, 40).isEmpty());
+    QCOMPARE(props->goboName(units.at(0)->id(), 0, 20), QString("Star"));
+    QCOMPARE(props->goboName(units.at(1)->id(), 0, 20), QString("Star"));
+    // One unit: its name is in the column.
+    {
+        GoboWheelsDialog dlg(doc, units.at(1)->id());
+        QCOMPARE(dlg.m_tree->topLevelItem(0)->child(3)->text(3), QString("Moon"));
+        dlg.m_tree->setCurrentItem(dlg.m_tree->topLevelItem(0)->child(3));
+        dlg.slotRestore();                             // the definition's glass again
+        QVERIFY(dlg.m_tree->currentItem()->text(3).isEmpty());
+        dlg.reject();
+    }
+    QCOMPARE(props->goboName(units.at(1)->id(), 0, 40), QString("Moon"));   // Cancel keeps it
+
+    // The menu: a group of the three offers it; with the odd one in, greyed
+    // with the reason.
+    FixtureGroup *grp = new FixtureGroup(doc);
+    grp->setName("AT-2s");
+    doc->addFixtureGroup(grp);
+    for (Fixture *f : units)
+        grp->assignFixture(f->id());
+    ContextMenus::RigPlace place;
+    place.parent = &parent;
+    {
+        QMenu menu;
+        ContextMenu cm(&menu);
+        ContextMenus::rig(cm, doc, { grp->id() }, QList<quint32>(), place);
+        cm.finish();
+        QAction *ga = menu.findChild<QAction *>("ctxGoboWheels");
+        QVERIFY(ga != nullptr);
+        QVERIFY(ga->isEnabled());
+    }
+    {
+        QMenu menu;
+        ContextMenu cm(&menu);
+        ContextMenus::rig(cm, doc, QList<quint32>(), QList<quint32>(ids) << odd->id(), place);
+        cm.finish();
+        QAction *ga = menu.findChild<QAction *>("ctxGoboWheels");
+        QVERIFY(ga != nullptr);
+        QVERIFY(!ga->isEnabled());
+        QVERIFY(ga->toolTip().contains("different gobo wheels"));
+    }
+
+    doc->clearContents();
+    delete doc;
+    delete bare;
+    delete other;
+}
+
 void Monitor_Test::goboWheelsFitsYourOwnGlassInOneUnit()
 {
     QTemporaryDir dir;

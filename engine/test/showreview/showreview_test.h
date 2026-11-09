@@ -50,6 +50,7 @@ private slots:
     void fix05();
     void fix07();
     void fix17();
+    void fix19();
     void fix14();
     void fix15();
     void fix15Geometry();

@@ -110,6 +110,7 @@ add_library(${module_name} SHARED
     scenery.cpp scenery.h
     stockqlccheck.cpp stockqlccheck.h
     gobolibrary.cpp gobolibrary.h
+    fixtureglass.cpp fixtureglass.h
     headlayout.cpp headlayout.h
     righeads.cpp righeads.h
     fountain.cpp fountain.h

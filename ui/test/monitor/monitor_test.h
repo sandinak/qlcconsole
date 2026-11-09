@@ -567,6 +567,10 @@ private slots:
      *  shaking and spinning animate; Gobo Wheels suggests library pictures. */
     void aGoboWithNoPictureDrawsAStandIn();
     void goboWheelsSuggestsPicturesForBareSlots();
+    /** Name the glass loaded in a slot ("Moon"), in several units of one
+     *  kind at once (a selection, a group): one undo step; a mixed
+     *  selection is refused with a reason. */
+    void goboWheelsNamesLoadedGlassInSeveralUnits();
     void aGoboWhosePictureIsAFolderDrawsAStandIn();
     void selectAllTakesEverythingSelectable();
     void aDecksCountBubbleMovesWithIt();

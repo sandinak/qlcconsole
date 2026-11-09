@@ -511,6 +511,60 @@ void ShowReview_Test::fix17()
     QCOMPARE(findings("FIX-17").size(), 1);
 }
 
+
+void ShowReview_Test::fix19()
+{
+    // Gobo look "Moon": the moon is loaded in AT-2 1 and AT-2 2 (other
+    // slots), not in AT-2 3.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QLCChannel *g = new QLCChannel();
+    g->setName(QStringLiteral("Gobo"));
+    g->setGroup(QLCChannel::Gobo);
+    const char *names[] = { "Open", "Star", "Dots", "Flower", "Ring" };
+    for (int i = 0; i < 5; i++)
+        g->addCapability(new QLCCapability(uchar(i * 10), uchar(i * 10 + 9), names[i]));
+    def->addChannel(g);
+    Fixture *a = make(m_doc, "AT-2 1", "AT-2", QLCFixtureDef::MovingHead, def,
+                      { g, chan(def, "Dimmer", QLCChannel::IntensityMasterDimmer) }, 200, 0, 0);
+    QVERIFY(a != nullptr);
+    QList<Fixture *> units{ a };
+    for (int i = 1; i < 3; i++)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(QStringLiteral("AT-2 %1").arg(i + 1));
+        f->setFixtureDefinition(def, def->modes().first());
+        f->setAddress(quint32(10 * i));
+        QVERIFY(m_doc->addFixture(f));
+        units << f;
+    }
+    QLCPalette *moon = new QLCPalette(QLCPalette::Gobo, m_doc);
+    moon->setName(QStringLiteral("Moon"));
+    moon->setGoboName(QStringLiteral("Moon"));
+    QVERIFY(m_doc->addPalette(moon));
+    Scene *s = new Scene(m_doc);
+    for (Fixture *f : units)
+        s->addFixture(f->id());
+    s->addPalette(moon->id());
+    m_doc->addFunction(s);
+    QVERIFY(quiet("FIX-19"));                       // nothing loaded: not this check's business
+
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGoboName(units[0]->id(), 0, 20, QStringLiteral("Moon"));
+    mp->setGoboName(units[1]->id(), 0, 40, QStringLiteral("Moon"));
+    QVERIFY(fires("FIX-19"));
+    QCOMPARE(findings("FIX-19").size(), 1);
+    const ReviewFinding f = findings("FIX-19").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY2(f.message.contains("AT-2 3") && !f.message.contains("AT-2 1"), qPrintable(f.message));
+    QVERIFY2(f.message.contains("Moon"), qPrintable(f.message));
+    QCOMPARE(f.jump, QStringLiteral("gobowheels"));
+    QCOMPARE(f.jumpData.value(0).toUInt(), units[2]->id());
+
+    // Loading it in the third clears it.
+    mp->setGoboName(units[2]->id(), 0, 10, QStringLiteral("moon"));
+    QVERIFY(quiet("FIX-19"));
+}
+
 namespace
 {
 /* A 510 x 205 x 102 mm bar lying flat on the floor (the UST-2 of the show this

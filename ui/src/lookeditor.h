@@ -212,6 +212,14 @@ private:
      *  of the browsed type that has one, its name in @p swapName), else the
      *  definition's. */
     QString slotPicture(class QLCCapability *cap, QString *swapName = nullptr) const;
+    /** What @p cap's slot is called for the units of @p src: the glass they
+     *  have loaded there under a name (FixtureGlass), "Dots — Moon loaded in
+     *  1 of 3" when only some do, else the definition's name. @p loaded: the
+     *  loaded glass's name, if any unit has one there. */
+    QString slotLabel(const ChannelSource &src, const class QLCCapability *cap, QString *loaded = nullptr) const;
+    /** The name a Gobo/Shutter look's value @p v goes by on the wheel being
+     *  browsed: a loaded glass's name, else capabilityNameAt(). */
+    QString singleSlotNameAt(int v) const;
 
     /** True if any target fixture has the given QLCChannel::PrimaryColour
      *  emitter channel (White/Amber/UV). */

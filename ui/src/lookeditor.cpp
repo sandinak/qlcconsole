@@ -77,6 +77,7 @@
 #include "monitorproperties.h"
 #include "performerfill.h"
 #include "gobolibrary.h"
+#include "fixtureglass.h"
 #include "stagetarget.h"
 #include "linespread.h"
 #include "linespreadpreview.h"
@@ -1882,7 +1883,7 @@ void LookEditor::maybeAutoName(QLCPalette *p)
         break;
     case QLCPalette::Gobo:
     case QLCPalette::Shutter:
-        autoName = capabilityNameAt(m_singleChannel, p->intValue1());
+        autoName = singleSlotNameAt(p->intValue1());
         break;
     case QLCPalette::Effect:
     {
@@ -1947,7 +1948,7 @@ LookEditor::ValueBefore LookEditor::valueBefore(const QLCPalette *p) const
     else if (!p->values().isEmpty())
         b.value = p->intValue1();
     if (p->type() == QLCPalette::Gobo || p->type() == QLCPalette::Shutter)
-        b.capability = capabilityNameAt(m_singleChannel, b.value);
+        b.capability = singleSlotNameAt(b.value);
     return b;
 }
 
@@ -1980,7 +1981,7 @@ void LookEditor::followName(QLCPalette *p, const ValueBefore &before)
     case QLCPalette::Gobo:
     case QLCPalette::Shutter:
         name = PaletteNaming::followPart(p->name(), before.capability,
-                                         capabilityNameAt(m_singleChannel, p->intValue1()));
+                                         singleSlotNameAt(p->intValue1()));
         break;
     default:
         return;
@@ -2554,7 +2555,18 @@ void LookEditor::slotSingleValueChanged(int v)
                         return cap->name();
                 return QString();
             };
-            if (!def.isEmpty())
+            // Glass the units have loaded there under a name ("Moon"): the
+            // look is named after it, and each unit finds its own slot.
+            QString loaded;
+            if (src >= 0 && src < m_singleSources.size() && m_singleChannel != NULL)
+                slotLabel(m_singleSources.at(src), m_singleChannel->searchCapability(uchar(qBound(0, v, 255))), &loaded);
+            if (!def.isEmpty() && !loaded.isEmpty())
+            {
+                p->setGoboName(loaded);
+                m_goboNameEdit->setText(loaded);
+                p->removeGoboValue(def);
+            }
+            else if (!def.isEmpty())
             {
                 const QString was = capName(p->goboValues().value(def, -1));
                 const QString now = capName(v);
@@ -2623,9 +2635,10 @@ void LookEditor::updateGoboMatches()
             QString cap;
             for (const QLCCapability *c : src.channel->capabilities())
                 if (v >= c->min() && v <= c->max())
-                    cap = c->name();
+                    cap = slotLabel(src, c);
             switch (r.how)
             {
+                case QLCPalette::GoboLoaded: what = tr("%1 (the glass loaded in it)").arg(cap); break;
                 case QLCPalette::GoboPicked: what = tr("%1 (picked for this type)").arg(cap); break;
                 case QLCPalette::GoboSingular: what = tr("%1 (by name, singular/plural)").arg(cap); break;
                 case QLCPalette::GoboPartial: what = tr("%1 (closest name)").arg(cap); break;
@@ -2659,6 +2672,35 @@ QString LookEditor::slotPicture(QLCCapability *cap, QString *swapName) const
         }
     }
     return cap->presetType() == QLCCapability::Picture ? cap->resource(0).toString() : QString();
+}
+
+QString LookEditor::slotLabel(const ChannelSource &src, const QLCCapability *cap, QString *loaded) const
+{
+    if (loaded != NULL)
+        loaded->clear();
+    if (cap == NULL)
+        return QString();
+    QString first;
+    int carrying = 0;
+    bool same = true;
+    for (quint32 fid : src.fixtures)
+    {
+        const QString n = FixtureGlass::loadedName(m_doc, fid, src.channelIndex, cap);
+        if (n.isEmpty())
+            continue;
+        if (first.isEmpty())
+            first = n;
+        else if (!QLCPalette::sameGoboName(first, n))
+            same = false;
+        ++carrying;
+    }
+    if (carrying == 0)
+        return cap->name();
+    if (loaded != NULL)
+        *loaded = first;
+    if (same && carrying == src.fixtures.size())
+        return first;
+    return tr("%1 — %2 loaded in %3 of %4").arg(cap->name(), first).arg(carrying).arg(src.fixtures.size());
 }
 
 void LookEditor::updateSinglePreview(int v)
@@ -2742,10 +2784,15 @@ void LookEditor::fillSingleCapabilities(int v)
         /* Show a gobo/effect thumbnail next to each named capability -- the
            glass actually fitted: a slot a unit has swapped (Gobo Wheels…)
            shows that picture, and says so. */
-        QString swapName;
+        QString swapName, loaded;
         const QString picture = slotPicture(cap, &swapName);
-        const QString name = swapName.isEmpty() ? cap->name()
-                                                : tr("%1 — %2").arg(cap->name(), swapName);
+        const int src = m_singleSourceCombo->currentIndex();
+        const QString label = (src >= 0 && src < m_singleSources.size()
+                               && m_singleSources.at(src).channel == m_singleChannel)
+            ? slotLabel(m_singleSources.at(src), cap, &loaded) : cap->name();
+        // A named glass is its own name; a picture alone says what it is.
+        const QString name = (swapName.isEmpty() || !loaded.isEmpty()) ? label
+                                                : tr("%1 — %2").arg(label, swapName);
         QIcon icon;
         if (!picture.isEmpty())
         {
@@ -2912,6 +2959,23 @@ const QLCChannel *LookEditor::representativeChannel(int group) const
         }
     }
     return NULL;
+}
+
+QString LookEditor::singleSlotNameAt(int v) const
+{
+    // A gobo slot goes by the glass the units have loaded in it, if named.
+    if (m_singleChannel != NULL && m_singleChannel->group() == QLCChannel::Gobo)
+    {
+        const int src = m_singleSourceCombo->currentIndex();
+        if (src >= 0 && src < m_singleSources.size() && m_singleSources.at(src).channel == m_singleChannel)
+        {
+            QString loaded;
+            slotLabel(m_singleSources.at(src), m_singleChannel->searchCapability(uchar(qBound(0, v, 255))), &loaded);
+            if (!loaded.isEmpty())
+                return loaded;
+        }
+    }
+    return capabilityNameAt(m_singleChannel, v);
 }
 
 QString LookEditor::capabilityNameAt(const QLCChannel *ch, int v) const

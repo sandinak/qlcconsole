@@ -1098,6 +1098,10 @@ void MonitorProperties::reset()
     m_calibrationBase.clear();
     m_goboSwaps.clear();
     {
+        QMutexLocker lock(&m_goboNameMutex);
+        m_goboNames.clear();
+    }
+    {
         QMutexLocker lock(&m_headLayoutMutex);
         m_headLayouts.clear();
     }
@@ -1194,6 +1198,45 @@ void MonitorProperties::setGoboSwap(quint32 fid, quint32 channel, uchar slotMin,
         return;
     }
     m_goboSwaps[fid].insert(key, image);
+}
+
+void MonitorProperties::setGoboName(quint32 fid, quint32 channel, uchar slotMin,
+                                    const QString &name)
+{
+    const QPair<quint32, int> key(channel, int(slotMin));
+    const QString n = name.trimmed();
+    QMutexLocker lock(&m_goboNameMutex);
+    if (n.isEmpty())
+    {
+        auto it = m_goboNames.find(fid);
+        if (it == m_goboNames.end())
+            return;
+        it.value().remove(key);
+        if (it.value().isEmpty())
+            m_goboNames.erase(it);
+        return;
+    }
+    m_goboNames[fid].insert(key, n);
+}
+
+QString MonitorProperties::goboName(quint32 fid, quint32 channel, uchar slotMin) const
+{
+    QMutexLocker lock(&m_goboNameMutex);
+    auto it = m_goboNames.constFind(fid);
+    return it == m_goboNames.constEnd() ? QString() : it.value().value(qMakePair(channel, int(slotMin)));
+}
+
+QMap<QPair<quint32, int>, QString> MonitorProperties::goboNames(quint32 fid) const
+{
+    QMutexLocker lock(&m_goboNameMutex);
+    return m_goboNames.value(fid);
+}
+
+void MonitorProperties::clearGoboSwaps(quint32 fid)
+{
+    m_goboSwaps.remove(fid);
+    QMutexLocker lock(&m_goboNameMutex);
+    m_goboNames.remove(fid);
 }
 
 QString MonitorProperties::goboSwap(quint32 fid, quint32 channel, uchar slotMin) const
@@ -4002,8 +4045,13 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                     image = beside;
             }
             if (slot >= 0 && slot <= 255)
+            {
                 setGoboSwap(a.value("Fixture").toUInt(), a.value("Channel").toUInt(),
                             uchar(slot), image);
+                // What the loaded glass is called (newer shows; optional).
+                setGoboName(a.value("Fixture").toUInt(), a.value("Channel").toUInt(),
+                            uchar(slot), a.value("Name").toString());
+            }
             root.skipCurrentElement();
         }
         else if (root.name() == QStringLiteral("FixtureRig"))
@@ -4901,20 +4949,35 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
         doc->writeEndElement();
     }
 
-    // Gobo swaps
+    // Gobo swaps: a slot's own picture and/or what its glass is called.
+    QMap<quint32, QSet<QPair<quint32, int> > > goboSlots;
     for (auto fit = m_goboSwaps.constBegin(); fit != m_goboSwaps.constEnd(); ++fit)
         for (auto sit = fit.value().constBegin(); sit != fit.value().constEnd(); ++sit)
+            goboSlots[fit.key()].insert(sit.key());
+    QMap<quint32, QMap<QPair<quint32, int>, QString> > names;
+    {
+        QMutexLocker lock(&m_goboNameMutex);
+        names = m_goboNames;
+    }
+    for (auto fit = names.constBegin(); fit != names.constEnd(); ++fit)
+        for (auto sit = fit.value().constBegin(); sit != fit.value().constEnd(); ++sit)
+            goboSlots[fit.key()].insert(sit.key());
+    for (auto fit = goboSlots.constBegin(); fit != goboSlots.constEnd(); ++fit)
+    {
+        if (venueOnly(fit.key()))
+            continue;
+        QList<QPair<quint32, int> > keys = fit.value().values();
+        std::sort(keys.begin(), keys.end());
+        for (const QPair<quint32, int> &key : keys)
         {
-            if (venueOnly(fit.key()))
-                continue;
             doc->writeStartElement(QStringLiteral("GoboSwap"));
             doc->writeAttribute(QStringLiteral("Fixture"), QString::number(fit.key()));
-            doc->writeAttribute(QStringLiteral("Channel"), QString::number(sit.key().first));
-            doc->writeAttribute(QStringLiteral("Slot"),    QString::number(sit.key().second));
+            doc->writeAttribute(QStringLiteral("Channel"), QString::number(key.first));
+            doc->writeAttribute(QStringLiteral("Slot"),    QString::number(key.second));
             /* A name in the gobo library stays a name. A file is written
                relative to the show when it is beside it -- and, in Collect
                for Transfer's copy, as the copy that goes with it. */
-            QString image = sit.value();
+            QString image = goboSwap(fit.key(), key.first, uchar(key.second));
             if (mainDocument != NULL && !image.isEmpty())
             {
                 /* Only a file that is there: a path that isn't stays exactly as
@@ -4926,8 +4989,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
                     image = mainDocument->normalizeComponentPath(file);
             }
             doc->writeAttribute(QStringLiteral("Image"),   image);
+            const QString name = names.value(fit.key()).value(key);
+            if (!name.isEmpty())
+                doc->writeAttribute(QStringLiteral("Name"), name);
             doc->writeEndElement();
         }
+    }
 
     // LED maps the show uses (see HeadLayout), by key for a stable file.
     {

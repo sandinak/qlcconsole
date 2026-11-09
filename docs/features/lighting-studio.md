@@ -1706,6 +1706,22 @@ the Rig Overview show what it's actually doing, not just where it sits:
   the cyc, and dims the haze by how much light the gobo passes. Your own gobo
   pictures go in a slot per fixture: right-click a fixture on the plot →
   **Gobo Wheels…**, optionally for every fixture of its type.
+  **Loaded gobos.** When you load your own glass in a light (the moon in
+  AT-2 3's slot 3), name it: in **Gobo Wheels…** pick the slot and press
+  **Name…** (or double-click its **Loaded glass** cell) and type "Moon". A
+  picture is optional; a named slot with no picture of yours gets library
+  pictures suggested by that name. From then on that light's slot is called
+  "Moon" everywhere a gobo is named for it: the Look Editor's wheel list,
+  the channel console's value menu, the Gobo look's "what each type plays"
+  lines. A Gobo look named "Moon" finds it in **whichever slot each light
+  carries it**, so AT-2 3 can have it in slot 3 and AT-2 5 in slot 5. A
+  light in the look with no moon loaded ignores it, and Show Review says so
+  (**FIX-19**). **Gobo Wheels…** works on several lights at once (select
+  them on the plot, in the Fixture Manager or the Show Tree, or right-click
+  a fixture group): the lights must have the same gobo wheels (if they
+  don't, the item is greyed with the reason). A slot you change is changed
+  in every one of them; a slot you leave alone keeps each light's own glass
+  ("varies" shows where they differ). OK is one undo step.
   A definition that **names its gobo slots but has no picture for them**
   (no Res, a bare folder, a file that isn't there) still shows a gobo: the
   rig view draws a **stand-in** for each slot, from what its name says

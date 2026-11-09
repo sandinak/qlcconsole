@@ -10,6 +10,19 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Loaded gobos by name (feat/043-loaded-gobos, 2026-11-08) -- built, leftovers
+
+"I need to be able to configure some of the lights with a loaded gobo ..
+like the moon in AT-2 3." Gobo Wheels… names a slot's loaded glass
+(MonitorProperties::setGoboName, `Name=` on `<GoboSwap>`), opens on a
+selection or a group of one kind (one rig undo), and a Gobo look of that
+name finds it per unit (QLCPalette::resolveGobo → FixtureGlass). Names
+route through FixtureGlass::slotName (Look Editor, channel console). FIX-19.
+- [ ] Function Wizard's "Gobo macros" scenes still take the definition's
+  slot names (one scene per slot across a type).
+- [ ] A running scene keeps the slot it resolved at start; a name loaded
+  while it plays takes effect on its next start.
+
 ## WLED pixels over Art-Net/sACN (feat/042-wled-pixels, 2026-11-07) -- built, leftovers
 
 Pixels (Multi RGB/RGBW) mode: a head per LED, the count read from the

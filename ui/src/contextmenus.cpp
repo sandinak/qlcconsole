@@ -533,7 +533,7 @@ void ContextMenus::rig(ContextMenu &menu, Doc *doc, const QList<quint32> &groupI
         pa->setToolTip(ContextMenu::tr("Give a universe and address, or move to another -- as a block "
                                        "keeping their spacing, or packed -- reviewed before it is applied"));
     }
-    /* One fixture: where each of its heads is, and its own glass. */
+    /* One fixture: where each of its heads is. */
     if (onlyFixtures && fixtures.size() == 1)
     {
         const quint32 fid = fixtures.first();
@@ -541,18 +541,30 @@ void ContextMenus::rig(ContextMenu &menu, Doc *doc, const QList<quint32> &groupI
             menu.add(ContextMenu::Kind, ContextMenu::tr("LED Layout…"), [doc, fid, parent]() {
                 LedLayoutDialog::edit(doc, fid, parent);
             }, QStringLiteral("ledLayoutAction"));
-        if (GoboWheelsDialog::hasGoboWheels(doc->fixture(fid)))
-            menu.add(ContextMenu::Kind, ContextMenu::tr("Gobo Wheels…"), [doc, fid, parent, changed]() {
-                GoboWheelsDialog dlg(doc, fid, parent);
-                if (dlg.exec() != QDialog::Accepted)
-                    return;
-                // Every open rig view draws the new glass.
-                foreach (QWidget *w, QApplication::allWidgets())
-                    if (StructureStudioView *sv = qobject_cast<StructureStudioView *>(w))
-                        sv->update();
-                if (changed)
-                    changed();
-            }, QStringLiteral("ctxGoboWheels"));
+    }
+    /* Their own glass: one unit, a selection or a group's members, as long
+       as their gobo wheels are the same. */
+    const QList<quint32> gobos = GoboWheelsDialog::withGoboWheels(doc, members);
+    if (!gobos.isEmpty())
+    {
+        QAction *ga = menu.add(ContextMenu::Kind, ContextMenu::tr("Gobo Wheels…"), [doc, gobos, parent, changed]() {
+            GoboWheelsDialog dlg(doc, gobos, parent);
+            if (dlg.exec() != QDialog::Accepted)
+                return;
+            // Every open rig view draws the new glass.
+            foreach (QWidget *w, QApplication::allWidgets())
+            {
+                if (StructureStudioView *sv = qobject_cast<StructureStudioView *>(w))
+                    sv->update();
+            }
+            if (changed)
+                changed();
+        }, QStringLiteral("ctxGoboWheels"));
+        const QString why = GoboWheelsDialog::whyNot(doc, gobos);
+        ga->setEnabled(why.isEmpty());
+        ga->setToolTip(why.isEmpty()
+            ? ContextMenu::tr("See and name the glass loaded in each gobo slot, or fit your own picture")
+            : why);
     }
     menu.add(ContextMenu::Kind, OutputRulesDialog::actionText(), [doc, groups, fixtures, parent, changed]() {
         if (OutputRulesDialog::edit(parent, doc, groups, fixtures) && changed)

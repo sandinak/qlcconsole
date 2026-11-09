@@ -132,6 +132,7 @@
 #include "universeoutputview.h"
 #include "venuerigdialog.h"
 #include "whyonpanel.h"
+#include "gobowheelsdialog.h"
 #include "workbench.h"
 #include "creategroupsdialog.h"
 #include "headtypesdialog.h"
@@ -760,6 +761,17 @@ QList<Screen> screens()
             })
          << screen(QStringLiteral("Patch inventory"), [](App *app) -> QWidget * {
                 return new PatchInventoryDialog(docOf(app), someFixtures(docOf(app)));
+            })
+         << screen(QStringLiteral("Gobo Wheels"), [](App *app) -> QWidget * {
+                // As a right-click on several lights of one kind opens it.
+                Doc *doc = docOf(app);
+                QList<quint32> ids;
+                for (quint32 id : GoboWheelsDialog::withGoboWheels(doc, someFixtures(doc, 1000)))
+                {
+                    if (GoboWheelsDialog::whyNot(doc, QList<quint32>(ids) << id).isEmpty() && ids.size() < 3)
+                        ids << id;
+                }
+                return ids.isEmpty() ? nullptr : new GoboWheelsDialog(doc, ids);
             })
          << screen(QStringLiteral("Patch list"), [](App *app) -> QWidget * {
                 return new PatchListDialog(docOf(app));
