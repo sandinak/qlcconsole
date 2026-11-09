@@ -829,6 +829,9 @@ every line target, stacked with whatever Aim palette a layer uses (see
 - **Make one:** Palettes → right-click → **New Formation**, or type
   `palette formation "Pairs crossed" spread 0 group pairs cross mirror`.
   It is filed, renamed, duplicated, moved and deleted like any palette.
+  Or build the look in the Show Tree on a layer (or cue) and keep it:
+  **Save as Formation…** on its Spread / Grouping / Cross **⋯**
+  ([Formation palettes](show-tree.md#formation-palettes)).
 - **Set it:** tick **Spread**, **Grouping** or **Cross** to set it; untick it
   and the Formation leaves it to the cue's formation, else the Aim look's
   own. Each change is one undo step, and every cue using the Formation

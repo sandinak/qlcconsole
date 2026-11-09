@@ -1041,6 +1041,13 @@ cue's formation, beside an Aim palette. Make and edit them in Build
   mirror)*), and each row it sets says so: *"Pairs — from Formation 'Pairs
   crossed'"*. The row's **⋯**, and the cue's **Line ⋯ ▸ Formation**, set or
   clear it.
+- **Keep a layer's own rows as one.** **Save as Formation…** (on the Spread,
+  Grouping, Cross or Formation row's **⋯**, and the cue's **Line ⋯ ▸
+  Formation**) asks a name (suggested from the values, *Pairs crossed*),
+  makes a Formation with exactly the rows set here, links the layer (or cue)
+  to it and clears its own rows, so it reads *"Pairs — from Formation 'Pairs
+  crossed'"*. One undo step takes it all back. Greyed when no row is set;
+  typed: `Towers formation save "Pairs crossed"`.
 - **It tracks** row by row, as the rows do: a later cue's Formation changes
   only what it sets; the rest carries on.
 - **It is shared.** Editing the palette changes every cue that uses it.

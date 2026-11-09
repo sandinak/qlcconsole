@@ -5799,6 +5799,34 @@ void ShowTreeView::lineParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, co
             setLineParam(cueId, layerId, key, QString(), target);
         });
     };
+    // Save as Formation…: what is set here, kept as a Formation palette this
+    // layer (or the cue) then uses; one undo step.
+    auto saveAction = [&](QMenu *m) {
+        m->addSeparator();
+        QAction *act = m->addAction(tr("Save as Formation…"));
+        act->setObjectName(QStringLiteral("stSaveAsFormation"));
+        const QList<Look> rows = (layerId == invalidId() && !target.isEmpty()) ? QList<Look>()
+                                                                            : m_st->formationToSave(cueId, layerId);
+        if (rows.isEmpty())
+        {
+            act->setEnabled(false);
+            act->setToolTip(tr("Nothing to save: set a Spread, Grouping or Cross here first"));
+            return;
+        }
+        act->setToolTip(tr("Keep this as a Formation palette (%1) and use it here instead of the rows")
+                            .arg(ShowTreeController::formationNameFor(rows)));
+        connect(act, &QAction::triggered, this, [this, cueId, layerId, rows]() {
+            bool ok = false;
+            const QString name = QInputDialog::getText(this, tr("Save as Formation"),
+                                                       tr("Name for the Formation palette"), QLineEdit::Normal,
+                                                       ShowTreeController::formationNameFor(rows), &ok);
+            if (!ok)
+                return;
+            QString why;
+            if (m_st->saveAsFormation(cueId, layerId, name, &why) == QLCPalette::invalidId())
+                QMessageBox::information(this, tr("Save as Formation"), why);
+        });
+    };
     const QList<QPair<QString, QStringList>> all = {
         { KeySpread, { "5", "2.5", "0", "-2.5", "-5" } },
         { KeyGrouping, { "each", "pairs", "threes", "fours", "halves" } },
@@ -5833,6 +5861,7 @@ void ShowTreeView::lineParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, co
             l.key = KeyFormation;
             applyLook(cueId, layerId, target, l);
         });
+        saveAction(fm);
         if (onlyKey == KeyFormation)
             return;
     }
@@ -5842,6 +5871,8 @@ void ShowTreeView::lineParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, co
             continue;
         add(onlyKey.isEmpty() ? menu->addMenu(keyLabel(k.first)) : menu, k.first, k.second);
     }
+    if (!onlyKey.isEmpty())
+        saveAction(menu);
 }
 
 QString ShowTreeView::updateSourceLabel(quint32 cueId, const Target &target, const QString &key) const

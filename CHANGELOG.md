@@ -14,6 +14,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Save as Formation…** A layer's (or a cue's) own Spread / Grouping / Cross rows can be kept as a Formation palette: the row's **⋯**
+  or the cue's **Line ⋯ ▸ Formation** asks a name (suggested from the values, e.g. *Pairs crossed*), makes the palette with exactly
+  the rows that are set, links the layer to it and clears its own rows, in one undo step. Typed: `Towers formation save "Pairs crossed"`.
+  Greyed when no row is set. See [Formation palettes](docs/features/show-tree.md#formation-palettes).
+
 - **The footer names fixtures cues use that have no address.** "2 fixtures in cues have no address", **Patch…** opens them; a staged fixture nothing uses no longer nags (the Show Review still notes it).
 
 - **A fixture in no group is in the Show Tree's Library.** Under All, **Ungrouped** lists the patched ones (a WLED just added, a spare; a fixture still in the inventory is not listed), found by

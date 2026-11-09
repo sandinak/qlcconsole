@@ -118,6 +118,18 @@ public:
      *  undo step, then bake: every cue that uses it changes. False: no
      *  such Formation, or @a value doesn't read. */
     bool setFormationValue(quint32 paletteId, const QString &key, const QString &value);
+    /** The Spread / Grouping / Cross rows set on layer @a layerId of cue
+     *  @a cueId (@a layerId invalid: on the cue itself), with the Formation
+     *  palette linked there (if any) underneath: what Save as Formation
+     *  keeps. Empty: nothing is set. */
+    QList<ShowTree::Look> formationToSave(quint32 cueId, quint32 layerId) const;
+    /** "Pairs crossed": a name for a Formation that sets @a rows. */
+    static QString formationNameFor(const QList<ShowTree::Look> &rows);
+    /** Save formationToSave() as a new Formation palette named @a name (made
+     *  unique), link the layer (or the cue) to it and clear its own rows:
+     *  ONE undo step, palette included. The palette's id; invalid with
+     *  *@a why filled: nothing set, or no such layer. */
+    quint32 saveAsFormation(quint32 cueId, quint32 layerId, const QString &name, QString *why = nullptr);
 
     /************************************************************************
      * Productions (P5): which one is current -- what GO, the footer, VC

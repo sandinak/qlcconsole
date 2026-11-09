@@ -183,11 +183,13 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
         add("cross", "looks", "<groups> cross swap|mirror | none | clear",
             "A line aim's Cross, below spread 0: groups swap sides keeping their order, or each group "
             "flips in place.", { "Towers cross mirror" }, { "spread", "group" }, {}, true);
-        add("formation", "looks", "<groups> formation <Formation palette> | none | clear",
+        add("formation", "looks", "<groups> formation <Formation palette> | save [\"name\"] | none | clear",
             "A Formation palette (Spread / Grouping / Cross, any of them) stacked with the layer's Aim: "
             "a layer's own Spread / Grouping / Cross rows still win over it. On the cue it is the cue's "
-            "formation, reaching only layers aiming at a line.",
-            { "Towers formation \"Pairs crossed\"", "cue look formation \"Pairs crossed\"" },
+            "formation, reaching only layers aiming at a line. save keeps the layer's (or the cue's) own "
+            "Spread / Grouping / Cross as a new Formation palette it then uses.",
+            { "Towers formation \"Pairs crossed\"", "cue look formation \"Pairs crossed\"",
+              "Towers formation save \"Pairs crossed\"" },
             { "aim", "spread", "group", "cross" }, {}, true);
         add("gobo", "looks", "<groups> gobo <palette> | none | clear",
             "The Gobo look (by name per fixture type).", { "Towers gobo Breakup", "Towers gobo none" },
@@ -1453,6 +1455,23 @@ ShowTreeCommand::Result ShowTreeCommand::runParsed(const QString &line, const Co
                     l.none = !clear;
                     setLook(l);
                 }
+                effect.clear();
+                ++n;
+                continue;
+            }
+
+            if (key == KeyFormation && next == QLatin1String("save"))
+            {
+                // formation save ["Name"]: the Spread / Grouping / Cross set on
+                // this layer (or the cue) kept as a Formation palette it then uses.
+                r.word();
+                const QString nm = r.quoted();
+                if (layers.size() > 1)
+                    return tr("formation save: one layer at a time (it makes one palette).");
+                QString why;
+                if (m_st->saveAsFormation(ctx.cue, layers.isEmpty() ? invalidId() : layers.first(), nm, &why)
+                    == QLCPalette::invalidId())
+                    return why;
                 effect.clear();
                 ++n;
                 continue;
