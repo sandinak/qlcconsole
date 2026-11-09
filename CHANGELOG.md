@@ -12,6 +12,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **Blocking in the Library.** The Show Tree's Library lists **Blocking** (Default and each saved set) under All: drag one onto a cue, or onto the selected cues, and it uses it from there on, exactly as the cue page's Blocking does. See [Blocking](docs/features/show-tree.md#blocking).
+
+### Fixed
+
+- **Formation palettes have their own Library heading.** They were missing from the Library's Palettes list (no heading took them); they now sit under **Formation**, ready to drag onto a cue or a layer, and a Save as Formation… shows there at once.
+
 ## [0.4.2] - 2026-11-09
 
 ### Added
