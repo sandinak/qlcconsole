@@ -23,7 +23,7 @@
      shown only while nothing holds them still; a drag shows the shape it
      will take and its size or angle in Settings' unit, and lands as one
      undo step;
-   - Group ▸: New Group…, add to a group already on the layer, Remove from
+   - Group ▸: New Group (no prompt), add to a group already on the layer, Remove from
      Group -- greyed, with the reason, when a lock stops it. */
 
 #include <QApplication>
@@ -557,7 +557,7 @@ quint32 MonitorGraphicsView::newGroupFrom(const QList<QPair<QString, quint32> > 
     return gid;
 }
 
-quint32 MonitorGraphicsView::newGroupAsking(const QList<QPair<QString, quint32> > &objects)
+quint32 MonitorGraphicsView::newGroupNow(const QList<QPair<QString, quint32> > &objects)
 {
     if (objects.isEmpty())
         return 0;
@@ -567,14 +567,13 @@ quint32 MonitorGraphicsView::newGroupAsking(const QList<QPair<QString, quint32> 
         emit dragRefused(blocked);
         return 0;
     }
+    /* No dialog: the group is made at once as "Group N", and the Plot layers
+       list (when it is open) puts the name in place to type over. */
     MonitorProperties *props = m_doc->monitorProperties();
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, tr("New Group"), tr("Group name:"),
-                                               QLineEdit::Normal,
-                                               tr("Group %1").arg(props->nextGroupId()), &ok).trimmed();
-    if (!ok || name.isEmpty())
-        return 0;
-    return newGroupFrom(objects, name);
+    const quint32 gid = newGroupFrom(objects, tr("Group %1").arg(props->nextGroupId()));
+    if (gid != 0)
+        emit groupCreated(gid);
+    return gid;
 }
 
 int MonitorGraphicsView::addToGroup(const QList<QPair<QString, quint32> > &objects, quint32 gid)
@@ -652,8 +651,8 @@ void MonitorGraphicsView::fillGroupMenu(QMenu *menu, const QList<QPair<QString, 
     const QString blocked = objects.isEmpty() ? tr("Select what to group first")
                                               : groupingBlocked(objects);
 
-    QAction *made = menu->addAction(QIcon(":/group.png"), tr("New Group…"), this, [this, objects]() {
-        newGroupAsking(objects);
+    QAction *made = menu->addAction(QIcon(":/group.png"), tr("New Group"), this, [this, objects]() {
+        newGroupNow(objects);
     });
     made->setObjectName(QStringLiteral("plotNewGroup"));
     made->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));

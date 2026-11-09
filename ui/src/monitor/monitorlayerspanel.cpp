@@ -464,8 +464,8 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     });
     vbox->addWidget(m_tree, 1);
 
-    QLabel *hint = new QLabel(tr("Enter/F2 renames a layer or folder. Multi-select "
-                                 "items, then right-click to make a folder or move."), this);
+    QLabel *hint = new QLabel(tr("Enter/F2 renames a layer or group. Multi-select "
+                                 "items, then right-click to make a group or move."), this);
     hint->setWordWrap(true);
     QFont hf = hint->font();
     hf.setPointSizeF(hf.pointSizeF() - 1.0);
@@ -884,8 +884,8 @@ QString MonitorLayersPanel::holdText(const QString &kind, quint32 id) const
         while (gid != 0 && m_props->hasGroup(gid) && !m_props->group(gid).locked)
             gid = m_props->group(gid).parentGroupId;
         lines << (gid != 0 && m_props->hasGroup(gid)
-                  ? tr("Held by folder “%1”'s lock").arg(m_props->group(gid).name)
-                  : tr("Held by its folder's lock"));
+                  ? tr("Held by group “%1”'s lock").arg(m_props->group(gid).name)
+                  : tr("Held by its group's lock"));
     }
     if (h & ItemLock::HeldLayer)
         lines << tr("Held by layer “%1”'s lock")
@@ -1464,9 +1464,14 @@ void MonitorLayersPanel::addFolder(quint32 layerId, quint32 parentGroupId)
     if (!m_editable || !m_props->hasLayer(layerId))
         return;
     const quint32 gid = m_props->nextGroupId();
-    m_props->createGroup(gid, tr("New Folder"), layerId, parentGroupId);
+    m_props->createGroup(gid, tr("New Group"), layerId, parentGroupId);
     m_doc->setModified();
     reload();
+    editGroupName(gid);
+}
+
+void MonitorLayersPanel::editGroupName(quint32 gid)
+{
     // Its name, ready to type.
     for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
     {
@@ -2414,8 +2419,8 @@ void MonitorLayersPanel::buildContextMenu(QMenu *out, QTreeWidgetItem *item)
                 }
             const int n = folders.count();
             const bool locked = g.locked;
-            menu.addAction(n > 1 ? (locked ? tr("Unlock %1 Folders").arg(n) : tr("Lock %1 Folders").arg(n))
-                                 : (locked ? tr("Unlock Folder Position") : tr("Lock Folder Position")),
+            menu.addAction(n > 1 ? (locked ? tr("Unlock %1 Groups").arg(n) : tr("Lock %1 Groups").arg(n))
+                                 : (locked ? tr("Unlock Group Position") : tr("Lock Group Position")),
                            this, [this, folders, locked]() {
                 for (quint32 f : folders)
                     m_props->setGroupLocked(f, !locked);
@@ -2423,18 +2428,18 @@ void MonitorLayersPanel::buildContextMenu(QMenu *out, QTreeWidgetItem *item)
                 if (m_view) m_view->refreshItemLayerState();
                 reload();
             });
-            menu.addAction(g.hasFrame ? tr("Rename…") : tr("Rename Folder…"),
+            menu.addAction(g.hasFrame ? tr("Rename…") : tr("Rename Group…"),
                            this, [this, item]() {
                 m_tree->editItem(item, 0);
             });
-            menu.addAction(n > 1 ? tr("Dissolve %1 Folders").arg(n)
-                                 : g.hasFrame ? tr("Ungroup") : tr("Dissolve Folder"),
+            menu.addAction(n > 1 ? tr("Dissolve %1 Groups").arg(n)
+                                 : g.hasFrame ? tr("Ungroup") : tr("Dissolve Group"),
                            this, [this, folders]() {
                 if (m_view)
                     for (quint32 f : folders)
                         m_view->ungroupById(f);
             });
-            QAction *sub = menu.addAction(tr("New Folder Inside"), this, [this, id]() {
+            QAction *sub = menu.addAction(tr("New Group Inside"), this, [this, id]() {
                 addFolder(m_props->group(id).layerId, id);
             });
             sub->setObjectName(QStringLiteral("layersNewSubFolder"));
@@ -2454,7 +2459,7 @@ void MonitorLayersPanel::buildContextMenu(QMenu *out, QTreeWidgetItem *item)
         });
         menu.addAction(tr("New Layer"), this, &MonitorLayersPanel::slotAddLayer);
         // A folder to file things into, on this layer.
-        QAction *folder = menu.addAction(tr("New Folder"), this, [this, id]() { addFolder(id, 0); });
+        QAction *folder = menu.addAction(tr("New Group"), this, [this, id]() { addFolder(id, 0); });
         folder->setObjectName(QStringLiteral("layersNewFolder"));
         if (id != MonitorProperties::defaultLayerId && id != m_props->stageLayerId())
             menu.addAction(tr("Delete Layer"), this, &MonitorLayersPanel::slotRemoveLayer);

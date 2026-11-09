@@ -436,14 +436,16 @@ Operate and not in Front or Side. Lift the lock and they come back.
 
 ### Grouping stage features
 
-![Group ▸ on the plot's right-click menu: New Group…, the groups on the layer, Remove from Group](../images/lighting-studio-group-menu.png)
+![Group ▸ on the plot's right-click menu: New Group, the groups on the layer, Remove from Group](../images/lighting-studio-group-menu.png)
 
 Two risers and the steps up to them, the band's decks, a set of legs:
 file them as one group and they select and move as one. Right-click the
 plot, any of them, or a structure's Studio canvas ▸ **Group**:
 
-- **New Group…** (Ctrl/⌘+G on the plot) asks a name and files what is
-  selected in a new group, on their layer (inside the group they already
+- **New Group** (Ctrl/⌘+G on the plot) makes the group at once, named
+  "Group 3" and the like, and puts the name in place in Plot layers to type
+  over (when that list is open). It files what is
+  selected in the new group, on their layer (inside the group they already
   share, if they share one). A truss or deck goes with what is on it, and a
   whole group selected goes in whole.
 - **The groups on that layer** follow, by name: pick one to add what is
@@ -454,7 +456,7 @@ plot, any of them, or a structure's Studio canvas ▸ **Group**:
 
 Each is one undo step. A locked group, a locked layer or a locked plot
 greys what it stops, and the item says why (**Group “Band” is locked:
-unlock it in Plot layers**). In Plot layers the groups are the folders.
+unlock it in Plot layers**). In Plot layers they are groups too.
 
 ### People on the stage
 
@@ -1130,7 +1132,7 @@ its own **Edit …**, **Add ▸**, **Used By ▸** (a target: the Aim palettes
 pointing at it), **Rename** and **Delete …** below.
 
 **Working on several fixtures at once.** Every row applies to every
-selected fixture (select a folder row — a group or "Ungrouped" — to take
+selected fixture (select a group row, or "Ungrouped" — to take
 everything in it; ⌘-click or ⇧-click on the canvas to add or remove). A row
 they differ on reads **mixed** and changes nothing until you set it — then
 it is set on all of them. **Fixture Properties…** with several selected
@@ -1182,7 +1184,7 @@ undo once you press OK; Cancel puts back everything it did.
 **Rotation handles.** Select one bar or strip in an unlocked structure
 editor and it gets a ring with a knob: drag it round to turn the bar (Angle
 when its length lies flat in the view, Tilt when you're looking down its
-length). Shift snaps to 15°; one Ctrl/⌘+Z undoes the whole drag. Movers and
+length). They snap to 15° as you turn; hold **Alt/⌥** to turn freely; one Ctrl/⌘+Z undoes the whole drag. Movers and
 pars don't get handles.
 
 **A boom's top.** In a stand's editor, unlocked, a dot on top of the boom
@@ -1274,13 +1276,13 @@ pressing **Duplicate**:
   taken, off the end of the universe or kept by the venue is left unpatched
   and says why in the preview. *Leave them unpatched* puts them in the
   inventory.
-- **Groups.** Fixture groups (Fixture Manager) and plot folders are
+- **Groups.** Fixture groups (Fixture Manager) and plot groups are
   decided separately: **add the copies to the same groups**, or **make a
   parallel group** for each structure ("T2 All Spots"). A group named for
   the structure ("T1 Spots") always gets a parallel group, since adding T2's
   lights to T1's group would be wrong; T1's own plot group is swapped for the
   target's.
-  *Decided, can change:* fixture groups default to adding, plot folders to
+  *Decided, can change:* fixture groups default to adding, plot groups to
   parallel.
 - **A target that already has fixtures** is asked about, target by target:
   **Skip it** (the default; nothing is removed or doubled), **Add
@@ -1406,7 +1408,7 @@ Either one is enough.
 |---|---|---|
 | **Object lock** | An object's right-click menu → **Lock Position** / **Unlock Position** (**Lock Their Positions** for several), or a power source's or network node's own toggle | That one object. It stays selectable, so you can unlock it again; its Plot layers row shows a padlock |
 | **Layer lock** | An object's right-click menu → **Lock Layer "Rig"** (named for its layer), or the layer's padlock in the Plot layers panel | Everything on that layer. On the plot it is click-through: a click, a rubber band or Select All passes it by and reaches what is under it. Select it from the Plot layers tree to inspect it (Properties and the right-click menu work); it still can't be moved or deleted |
-| **Folder ("group") position lock** | The Plot layers panel / group properties | Every member's position, but they stay selectable (locking a parent folder locks its children too) |
+| **Group position lock** | The Plot layers panel / group properties | Every member's position, but they stay selectable (locking a parent group locks its children too) |
 | **Global layout lock** | The 🔒 "Edit Plot" toolbar button | The whole plot at once, aim targets included, still selectable. **Targets Stay Adjustable**, beside the button while the plot is locked, lets aim targets be dragged anyway. The arrow on the button opens **Always Start with the Plot Locked** |
 
 **Dragging something locked** moves nothing and says why on the plot's
@@ -1444,10 +1446,10 @@ outline. A row's own lock is the padlock as always.
 4. **Held by its layer** (or the plot): a stage piece's lock is drawn held
    from above while the Stage layer or the plot holds it. An object row
    shows **↑🔒** after its name when its own lock is off but its layer or a
-   folder holds it.
+   group holds it.
 
 Each object's tooltip lists everything holding it, nearest first:
-**Locked on its own**, **Held by folder "Booms"'s lock**, **Held by layer
+**Locked on its own**, **Held by group "Booms"'s lock**, **Held by layer
 "Rig"'s lock**, **Held by the plot lock**. The plot's lock isn't repeated
 as a ↑🔒 on every object: the layer rows show it. On the plot, an object's
 right-click menu says **Held by the plot lock — Edit Plot to move** while the
@@ -1471,7 +1473,7 @@ layer locked, it offers only Unlock or Cancel.
 its layer's, and opening a show that had objects locked on their own moved
 them onto a locked layer named **"Locked"** -- which is where that layer came
 from. Opening such a show now takes it apart: each object on it keeps its
-lock as its own, and goes back to the layer its folder, its fixtures or what
+lock as its own, and goes back to the layer its group, its fixtures or what
 it is mounted on are on. When nothing is left on "Locked" it is removed;
 when the show doesn't say where something came from, it stays there, on an
 ordinary unlocked layer you can rename or empty. Locks that only repeated a
@@ -1535,7 +1537,7 @@ props, images and nodes:
 - **A group is selected as a group**: click its row in **Plot Layers**, or
   right-click a member ▸ **Select Group “name”**. Drag any of it and all
   of it moves; click one member again (no drag) to pick it out.
-- Groups are kept as they were: **Group ▸ New Group…** and **Ungroup**
+- Groups are kept as they were: **Group ▸ New Group** and **Ungroup**
   make and split them, and locks hold as before. A new group of one member
   and something else moves that member into the new group (the rest of its
   group stays); a whole group selected nests inside the new one.
@@ -1560,7 +1562,7 @@ props, images and nodes:
   its shape.
 - **Group ▸** (right-click the plot, any object, or a structure's Studio
   canvas) files things in the plot's groups, which Plot layers lists as
-  folders and which select and move as one from a row or **Select Group**.
+  groups and which select and move as one from a row or **Select Group**.
   See [Grouping stage features](#grouping-stage-features).
   **Ungroup** (Ctrl/⌘+Shift+G) dissolves a whole group.
 - **Align Fixtures ▸** (two or more selected) and **Distribute Fixtures
@@ -1649,7 +1651,7 @@ props, images and nodes:
 
 1. **Selected only** (the funnel; off to start with): the list shows just
    what is selected and what holds it -- its layer, its structure, its
-   folder -- and follows the plot as you pick.
+   group -- and follows the plot as you pick.
 2. **Picked on the plot, picked here.** The list opens only the branches
    holding what you picked and scrolls to the first; a fixture is picked
    where it hangs, not again under each fixture group that lists it.
@@ -1666,12 +1668,12 @@ props, images and nodes:
    is where you reach it to read its properties.
 
 Select several rows with Cmd/Ctrl-click or Shift-click: the plot selects
-all of them, not just the last one clicked. Click a folder's row (a group,
+all of them, not just the last one clicked. Click a group's row (a group,
 a fill's set) to select everything in it; on the plot a click picks one
 member at a time.
 
-Right-click a layer for **New Folder** (named in place) or **New Layer**;
-right-click a folder for **New Folder Inside**. **Move to Layer** on a
+Right-click a layer for **New Group** (named in place) or **New Layer**;
+right-click a group for **New Group Inside**. **Move to Layer** on a
 truss, tower or riser that carries things moves it with everything on it.
 
 ## Beams, footprint, and coverage
@@ -2507,7 +2509,7 @@ Two small but load-bearing visual cues:
 | **Placement: Inside** | A fixture centred in its host structure's volume rather than seated on its face/top — for fixtures rigged inside a truss or under a see-through platform top. |
 | **Face** | Which way a mounted fixture faces — Top, Bottom, Front, Back, Stage left, or Stage right — has to agree with how it's actually attached. |
 | **Layer lock** | Holds everything on a layer; nothing on it can be selected. An object's own lock (**Lock Position**) is separate and leaves it selectable. Both draw red. |
-| **Position lock** | A folder-level lock that freezes every member's position but leaves them selectable. |
+| **Position lock** | A group-level lock that freezes every member's position but leaves them selectable. |
 | **Hanger** | Rigging on a truss or tower — clamp, arm, and chain to one hook a fixture hangs from. |
 | **Sock / Faces** | Fabric over a truss that bars inside glow through / opaque panels on a tower's sides. |
 | **Haze** | How visible beams are in the air (None/Light/Medium/Heavy) — doesn't change where light lands. |

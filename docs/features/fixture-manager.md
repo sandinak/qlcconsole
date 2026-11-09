@@ -871,7 +871,7 @@ A place leaves out only what makes no sense there:
 - **A Build scene** lists a group or fixture as part of that scene. It
   adds **Remove from Scene** and **Focus This Look…** on top, and has no
   Delete, Move to Folder or Select All Similar.
-- **Plot Layers** adds the Plot's own folders and layers (Group ▸, Move to
+- **Plot Layers** adds the Plot's own groups and layers (Group ▸, Move to
   Layer ▸) on top, so it has no Move to Folder ▸. It
   adds **Remove from “Truss”** for a group listed under a truss, tower or
   boom.

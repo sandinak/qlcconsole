@@ -711,6 +711,12 @@ void Monitor::initGraphicsView()
         if (m_layersPanel != nullptr)
             m_layersPanel->followMapSelection(objects);
     });
+    connect(m_graphicsView, &MonitorGraphicsView::groupCreated, this, [this](quint32 gid) {
+        if (m_layersPanel == nullptr || !m_layersPanel->isVisible())
+            return;
+        m_layersPanel->reload();
+        m_layersPanel->editGroupName(gid);
+    });
     connect(m_graphicsView, &MonitorGraphicsView::revealInLayersRequested, this,
             [this](const QString &kind, quint32 id) {
         if (m_layersPanel == nullptr)
@@ -2447,7 +2453,7 @@ void Monitor::initGraphicsToolbar()
 
     // Group / ungroup the selection (also Cmd/Ctrl+G, Cmd/Ctrl+Shift+G, and the
     // right-click menu). Enabled state is driven by the current selection.
-    m_groupAction = new QAction(QIcon(":/group.png"), tr("New Group…"), this);
+    m_groupAction = new QAction(QIcon(":/group.png"), tr("New Group"), this);
     m_groupAction->setToolTip(tr("Put the selected items in a new group so they select and move together (Ctrl+G)"));
     m_groupAction->setEnabled(false);
     connect(m_groupAction, SIGNAL(triggered()), this, SLOT(slotGroupItems()));
@@ -3599,7 +3605,7 @@ void Monitor::slotPOVChanged(int index)
 void Monitor::slotGroupItems()
 {
     if (m_graphicsView != NULL)
-        m_graphicsView->newGroupAsking(m_graphicsView->selectedMapObjects());
+        m_graphicsView->newGroupNow(m_graphicsView->selectedMapObjects());
 }
 
 void Monitor::slotRotateSelection()

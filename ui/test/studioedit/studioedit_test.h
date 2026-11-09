@@ -42,9 +42,11 @@ private slots:
     void aCycStretchesButDoesNotTurnAndAGroupTurnsAsOne();
     void groupMenuMakesAddsToAndRemovesFromGroupsOneUndoEach();
     void groupMenuIsGreyedWithTheReasonWhenALockStopsIt();
+    void ctrlGGroupsAtOnceAndPlotLayersSaysGroupNotFolder();
     void theCanvasMenuHasGroupInPlaceOfGroupSelected();
     void aStudioCanvasOffersGroupForItsStructure();
     void theBoomTopHandleIsHiddenWhileLocked();
+    void groupFollowupPictures();
     void picturesForReview();
 };
 

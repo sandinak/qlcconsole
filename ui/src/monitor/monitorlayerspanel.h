@@ -158,6 +158,9 @@ public:
      *  a group can be listed in several places), and their fixtures on the
      *  plot. */
     void selectFixtureGroups(const QList<quint32> &ids);
+    /** Select group @p gid's row and put its name in place to type over. */
+    void editGroupName(quint32 gid);
+
 
 signals:
     /** Emitted when the in-panel close/hide button is clicked. */
@@ -291,6 +294,7 @@ private:
     void reorderLayer(int row, int delta);
     /** Select and scroll to the top-level layer node with the given id. */
     void selectLayerNode(quint32 layerId);
+
     void updateButtons();
     void toggleVisible(quint32 layerId, bool visible);
     void toggleLocked(quint32 layerId, bool locked);

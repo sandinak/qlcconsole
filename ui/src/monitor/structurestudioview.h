@@ -1320,7 +1320,7 @@ private:
     void drawRotateHandle(QPainter &p) const;
     /** Angle of @p px about @p centre in plane coordinates, degrees. */
     double planeAngleAround(const QPointF &centre, const QPointF &px) const;
-    /** Turn the fixture being rotated to follow the pointer. @p snap = 15° steps. */
+    /** Turn the fixture being rotated to follow the pointer. @p snap = 15° steps (the default; Alt frees it). */
     bool rotateDragTo(const QPointF &px, bool snap);
 
     /** For the anchor platform: which local component the given face pins, and to

@@ -23,6 +23,10 @@
 #include <QPainter>
 #include <QMenu>
 #include <QTimer>
+#include <QShortcut>
+#include <QLabel>
+#include <QSignalSpy>
+#include <QTreeWidget>
 #include <QDir>
 #include <QtTest>
 #include "../../../engine/test/common/stdprelude.h"
@@ -30,6 +34,7 @@
 #define private public
 #include "monitor.h"
 #include "monitorgraphicsview.h"
+#include "monitorlayerspanel.h"
 #include "structurestudioview.h"
 #include "shapehandles.h"
 #include "platformitem.h"
@@ -507,24 +512,21 @@ void StudioEdit_Test::groupMenuMakesAddsToAndRemovesFromGroupsOneUndoEach()
     QVERIFY(ContextMenu::checkCanon(&menu).isEmpty());
     QAction *made = actionNamed(group, QStringLiteral("plotNewGroup"));
     QVERIFY(made != nullptr && made->isEnabled());
-    QCOMPARE(made->text(), QString("New Group…"));
+    QCOMPARE(made->text(), QString("New Group"));
     QCOMPARE(made->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_G));
     QVERIFY(actionNamed(group, QStringLiteral("plotNoGroups")) != nullptr);
     QVERIFY(actionNamed(group, QStringLiteral("plotRemoveFromGroup")) == nullptr);   // in none yet
 
-    // New Group… asks a name.
-    QTimer::singleShot(50, []() {
-        if (QInputDialog *d = qobject_cast<QInputDialog *>(QApplication::activeModalWidget()))
-        {
-            d->setTextValue(QStringLiteral("Band Risers"));
-            d->accept();
-        }
-    });
+    // New Group makes it at once, named "Group N": no dialog, one undo.
+    QSignalSpy created(rig.gv, SIGNAL(groupCreated(quint32)));
     made->trigger();
+    QVERIFY(QApplication::activeModalWidget() == nullptr);
+    QCOMPARE(created.count(), 1);
     const quint32 gid = a->groupId();
     QVERIFY(gid != 0);
     QCOMPARE(b->groupId(), gid);
-    QCOMPARE(props->group(gid).name, QString("Band Risers"));
+    QVERIFY(props->group(gid).name.startsWith(QStringLiteral("Group ")));
+    QCOMPARE(created.first().first().toUInt(), gid);
     QCOMPARE(c->groupId(), 0u);
     QVERIFY(rig.gv->canUndo());
     rig.gv->undoLastMove();
@@ -642,6 +644,60 @@ void StudioEdit_Test::groupMenuIsGreyedWithTheReasonWhenALockStopsIt()
     }
     rig.gv->setLayoutLocked(false);
     QVERIFY(rig.gv->addToGroup({ Obj("platform", c->id()) }, band) > 0);
+}
+
+/* Ctrl+G groups what is selected at once: no dialog, an automatic name, one
+   undo; and no menu or tooltip in Plot layers still says "Folder". */
+void StudioEdit_Test::ctrlGGroupsAtOnceAndPlotLayersSaysGroupNotFolder()
+{
+    Rig rig;
+    QVERIFY(rig.build());
+    StagePlatform *a = rig.platform(2, 2, 2, 1, "A");
+    StagePlatform *b = rig.platform(6, 2, 2, 1, "B");
+    typedef QPair<QString, quint32> Obj;
+    rig.gv->selectMapItems({ Obj("platform", a->id()), Obj("platform", b->id()) });
+    QShortcut *sc = nullptr;
+    for (QShortcut *c : rig.gv->findChildren<QShortcut *>())
+    {
+        if (c->key() == QKeySequence(QStringLiteral("Ctrl+G")))
+            sc = c;
+    }
+    QVERIFY(sc != nullptr);
+    QSignalSpy created(rig.gv, SIGNAL(groupCreated(quint32)));
+    emit sc->activated();
+    QVERIFY(QApplication::activeModalWidget() == nullptr);
+    QCOMPARE(created.count(), 1);
+    const quint32 gid = created.first().first().toUInt();
+    MonitorProperties *props = rig.props();
+    QVERIFY(gid != 0);
+    QVERIFY(props->group(gid).name.startsWith(QStringLiteral("Group ")));
+    QCOMPARE(props->platform(a->id())->groupId(), gid);
+    QCOMPARE(props->platform(b->id())->groupId(), gid);
+    QVERIFY(rig.gv->canUndo());
+    rig.gv->undoLastMove();                       // one undo takes it all back
+    QVERIFY(!rig.gv->canUndo());
+    QCOMPARE(props->platform(a->id())->groupId(), 0u);
+
+    // Plot layers: every menu on every row, and its hint, say Group.
+    QVERIFY(rig.gv->newGroupFrom({ Obj("platform", a->id()) }, QStringLiteral("Band")) != 0u);
+    MonitorLayersPanel panel(rig.doc, rig.gv);
+    panel.resize(320, 400);
+    panel.show();
+    panel.reload();
+    QStringList texts;
+    for (QTreeWidgetItemIterator it(panel.m_tree); *it != nullptr; ++it)
+    {
+        QMenu m;
+        panel.buildContextMenu(&m, *it);
+        const QList<QAction *> all = m.findChildren<QAction *>();
+        for (QAction *act : all)
+            texts << act->text() << act->toolTip();
+    }
+    for (QLabel *l : panel.findChildren<QLabel *>())
+        texts << l->text() << l->toolTip();
+    QVERIFY2(texts.join(' ').contains(QStringLiteral("Group")), "no group text seen");
+    for (const QString &t : texts)
+        QVERIFY2(!t.contains(QStringLiteral("older"), Qt::CaseSensitive), qPrintable(t));
 }
 
 /* The empty plot's menu: Group ▸ where Group Selected was, Ungroup kept --
@@ -785,6 +841,67 @@ void StudioEdit_Test::theBoomTopHandleIsHiddenWhileLocked()
     QCOMPARE(picture(), free);
     props->setLayoutLocked(true);
     QCOMPARE(picture(), held);
+}
+
+/* Before/after pictures of the Plot layers panel's menus and the Group ▸
+   submenu, three sizes (QLC_SHOT_DIR; offscreen grabs only). */
+void StudioEdit_Test::groupFollowupPictures()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    const QString tag = qEnvironmentVariable("QLC_SHOT_TAG", QStringLiteral("after"));
+    typedef QPair<QString, quint32> Obj;
+    const QList<QSize> sizes = { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) };
+    for (const QSize &sz : sizes)
+    {
+        Rig rig;
+        QVERIFY(rig.build());
+        QVERIFY(rig.show());
+        StagePlatform *a = rig.platform(2, 2, 2, 1, "Drum riser");
+        StagePlatform *b = rig.platform(6, 2, 2, 1, "Keys riser");
+        const QList<Obj> ab = { Obj("platform", a->id()), Obj("platform", b->id()) };
+        const quint32 gid = rig.gv->newGroupFrom(ab, QStringLiteral("Band"));
+        QVERIFY(gid != 0);
+        rig.parent.resize(sz);
+        rig.mon->resize(sz);
+        rig.mon->m_layersPanel->setVisible(true);
+        rig.mon->m_layersPanel->reload();
+        QApplication::processEvents();
+        const QString suffix = QString("%1x%2").arg(sz.width()).arg(sz.height());
+        rig.parent.grab().save(QString("%1/panel-%2-%3.png").arg(dir, tag, suffix));
+
+        MonitorLayersPanel &panel = *rig.mon->m_layersPanel;
+        QTreeWidgetItem *groupRow = nullptr;
+        QTreeWidgetItem *layerRow = nullptr;
+        for (QTreeWidgetItemIterator it(panel.m_tree); *it != nullptr; ++it)
+        {
+            if ((*it)->data(0, 0).toString().startsWith(QStringLiteral("Band")))
+                groupRow = *it;
+            else if (layerRow == nullptr && (*it)->parent() == nullptr)
+                layerRow = *it;
+        }
+        QMenu gm;
+        if (groupRow != nullptr)
+            panel.buildContextMenu(&gm, groupRow);
+        gm.adjustSize();
+        gm.grab().save(QString("%1/panel-group-menu-%2-%3.png").arg(dir, tag, suffix));
+        QMenu lm;
+        if (layerRow != nullptr)
+            panel.buildContextMenu(&lm, layerRow);
+        lm.adjustSize();
+        lm.grab().save(QString("%1/panel-layer-menu-%2-%3.png").arg(dir, tag, suffix));
+
+        QMenu menu;
+        MonitorGraphicsView::MenuPlace place;
+        place.selection = ab;
+        rig.gv->buildItemMenu(&menu, QStringLiteral("platform"), a->id(), place);
+        QMenu *group = submenuNamed(&menu, QStringLiteral("plotGroup"));
+        QVERIFY(group != nullptr);
+        group->adjustSize();
+        group->grab().save(QString("%1/group-submenu-%2-%3.png").arg(dir, tag, suffix));
+    }
 }
 
 void StudioEdit_Test::picturesForReview()
