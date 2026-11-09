@@ -7376,6 +7376,105 @@ void ShowTree_Test::formationSharedEditChangesEveryCue()
     QVERIFY(!st->setFormationValue(form, KeyGrouping, "sevens"));
 }
 
+/* Save as Formation: a layer's own Spread + Grouping become a Formation
+   palette (Cross stays unticked), the layer uses it and its own rows are
+   clear, and ONE undo takes all of it back; redo does it again. */
+void ShowTree_Test::saveAsFormationKeepsTheRowsAndLinksTheLayer()
+{
+    Fixture *left = placedSpot(m_doc, "Left", -4), *right = placedSpot(m_doc, "Right", 4);
+    FixtureGroup *pair = group("Pair", { left->id(), right->id() });
+    StageTarget *edge = lineTarget(m_doc, "Edge");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c = st->addCue(listId, -1, "C");
+    const quint32 l = st->addLayer(c, groupTarget(pair->id()));
+    QVERIFY(st->setLayerLook(c, l, st->lookForPalette(st->aimPaletteFor(edge->id()))));
+    QVERIFY(st->setLayerLook(c, l, lineRow(KeySpread, "0")));
+    QVERIFY(st->setLayerLook(c, l, lineRow(KeyGrouping, "pairs")));
+
+    QCOMPARE(ShowTreeController::formationNameFor(st->formationToSave(c, l)), QStringLiteral("Pairs, spread 0"));
+    int palettesBefore = 0;
+    for (const QLCPalette *p : m_doc->palettes())
+        palettesBefore += p->type() == QLCPalette::Formation ? 1 : 0;
+
+    QString why;
+    const quint32 pid = st->saveAsFormation(c, l, "Pairs centred", &why);
+    QVERIFY2(pid != QLCPalette::invalidId(), qPrintable(why));
+    const QLCPalette *pal = m_doc->palette(pid);
+    QCOMPARE(pal->type(), QLCPalette::Formation);
+    QCOMPARE(pal->name(), QStringLiteral("Pairs centred"));
+    QVERIFY(pal->formationHas(QLCPalette::FormationSpread));
+    QCOMPARE(pal->formationValue(QLCPalette::FormationSpread), 0.0);
+    QVERIFY(pal->formationHas(QLCPalette::FormationGroup));
+    QCOMPARE(pal->formationValue(QLCPalette::FormationGroup), 2.0);
+    QVERIFY(!pal->formationHas(QLCPalette::FormationCross));
+
+    const Layer *lay = st->cue(c)->layer(l);
+    QVERIFY(lay->look(KeySpread) == nullptr);
+    QVERIFY(lay->look(KeyGrouping) == nullptr);
+    QVERIFY(lay->look(KeyFormation) != nullptr);
+    QCOMPARE(lay->look(KeyFormation)->palettes, QList<quint32>({ pid }));
+
+    // A second save of the same name is made unique, not refused.
+    QVERIFY(st->setLayerLook(c, l, lineRow(KeyCross, "mirror")));
+    const quint32 pid2 = st->saveAsFormation(c, l, "Pairs centred", &why);
+    QVERIFY2(pid2 != QLCPalette::invalidId(), qPrintable(why));
+    QCOMPARE(m_doc->palette(pid2)->name(), QStringLiteral("Pairs centred 2"));
+    // It keeps what the layer got from the first Formation, too.
+    QVERIFY(m_doc->palette(pid2)->formationHas(QLCPalette::FormationGroup));
+    QVERIFY(m_doc->palette(pid2)->formationHas(QLCPalette::FormationCross));
+    QVERIFY(st->undoShared());
+    QVERIFY(m_doc->palette(pid2) == nullptr);
+    QCOMPARE(st->cue(c)->layer(l)->look(KeyFormation)->palettes, QList<quint32>({ pid }));
+    QVERIFY(st->cue(c)->layer(l)->look(KeyCross) != nullptr);
+
+    // One undo takes the first one back whole: the palette, the link, the rows.
+    QVERIFY(st->undoShared());   // the Cross row
+    QVERIFY(st->undoShared());   // the save
+    QVERIFY(m_doc->palette(pid) == nullptr);
+    lay = st->cue(c)->layer(l);
+    QVERIFY(lay->look(KeyFormation) == nullptr);
+    QVERIFY(lay->look(KeySpread) != nullptr);
+    QVERIFY(lay->look(KeyGrouping) != nullptr);
+    int palettesNow = 0;
+    for (const QLCPalette *p : m_doc->palettes())
+        palettesNow += p->type() == QLCPalette::Formation ? 1 : 0;
+    QCOMPARE(palettesNow, palettesBefore);
+
+    // Redo: the palette comes back with its id and the layer uses it.
+    QVERIFY(st->redoShared());
+    QVERIFY(m_doc->palette(pid) != nullptr);
+    QCOMPARE(m_doc->palette(pid)->name(), QStringLiteral("Pairs centred"));
+    QVERIFY(m_doc->palette(pid)->formationHas(QLCPalette::FormationGroup));
+    lay = st->cue(c)->layer(l);
+    QCOMPARE(lay->look(KeyFormation)->palettes, QList<quint32>({ pid }));
+    QVERIFY(lay->look(KeySpread) == nullptr);
+}
+
+/* On the cue itself, and greyed (nothing to save) when no row is set. */
+void ShowTree_Test::saveAsFormationOnTheCueAndWithNothingSet()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c = st->addCue(listId, -1, "C");
+    QVERIFY(st->formationToSave(c, ShowTree::invalidId()).isEmpty());
+    QString why;
+    QCOMPARE(st->saveAsFormation(c, ShowTree::invalidId(), QString(), &why), QLCPalette::invalidId());
+    QVERIFY(!why.isEmpty());
+
+    QVERIFY(st->setCueLook(c, lineRow(KeyCross, "mirror")));
+    QVERIFY(st->setCueLook(c, lineRow(KeyGrouping, "pairs")));
+    const quint32 pid = st->saveAsFormation(c, ShowTree::invalidId(), QString(), &why);
+    QVERIFY2(pid != QLCPalette::invalidId(), qPrintable(why));
+    QCOMPARE(m_doc->palette(pid)->name(), QStringLiteral("Pairs crossed"));
+    QVERIFY(!m_doc->palette(pid)->formationHas(QLCPalette::FormationSpread));
+    QVERIFY(st->cue(c)->look(KeyCross) == nullptr);
+    QCOMPARE(st->cue(c)->look(KeyFormation)->palettes, QList<quint32>({ pid }));
+    QVERIFY(st->undoShared());
+    QVERIFY(m_doc->palette(pid) == nullptr);
+    QVERIFY(st->cue(c)->look(KeyCross) != nullptr);
+}
+
 /* A Formation on the cue is the cue's formation: it reaches every layer
    aiming at a line, as one formation across them. */
 void ShowTree_Test::formationOnTheCue()

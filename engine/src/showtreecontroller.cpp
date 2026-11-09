@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <memory>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QDataStream>
@@ -372,6 +373,148 @@ bool ShowTreeController::setFormationValue(quint32 paletteId, const QString &key
     return true;
 }
 
+static Cue *cueIn(QList<Production> &productions, quint32 cueId, CueList **listOut = nullptr);
+
+QList<Look> ShowTreeController::formationToSave(quint32 cueId, quint32 layerId) const
+{
+    const Cue *c = cue(cueId);
+    if (c == nullptr)
+        return {};
+    const QList<Look> *looks = &c->looks;
+    if (layerId != invalidId())
+    {
+        const Layer *l = c->layer(layerId);
+        if (l == nullptr)
+            return {};
+        looks = &l->looks;
+    }
+    QList<Look> own;
+    for (const Look &l : *looks)
+        if (isLineParamKey(l.key) && !l.value.isEmpty())
+            own << l;
+    if (own.isEmpty())
+        return {};
+    // What the linked Formation sets, for the rows the layer leaves to it.
+    QList<Look> out;
+    for (const Look &l : *looks)
+        if (l.key == KeyFormation && !l.none && !l.palettes.isEmpty())
+            out = formationLooks(m_doc->palette(l.palettes.first()));
+    for (const Look &o : own)
+    {
+        bool had = false;
+        for (Look &l : out)
+            if (l.key == o.key)
+            {
+                l = o;
+                had = true;
+            }
+        if (!had)
+            out << o;
+    }
+    return out;
+}
+
+QString ShowTreeController::formationNameFor(const QList<Look> &rows)
+{
+    QString group, cross, spread;
+    for (const Look &l : rows)
+    {
+        if (l.key == KeyGrouping)
+            group = l.value == QLatin1String("each") ? tr("Each") : lineParamText(l.key, l.value);
+        else if (l.key == KeyCross)
+            cross = l.value == QLatin1String("mirror") ? tr("crossed") : tr("swapped");
+        else if (l.key == KeySpread)
+            spread = tr("spread %1").arg(lineParamText(l.key, l.value));
+    }
+    QStringList head;
+    if (!group.isEmpty())
+        head << group;
+    if (!cross.isEmpty())
+        head << cross;
+    QString name = head.join(QLatin1Char(' '));
+    if (!spread.isEmpty())
+        name = name.isEmpty() ? spread.left(1).toUpper() + spread.mid(1) : name + QStringLiteral(", ") + spread;
+    return name.isEmpty() ? tr("New Formation") : name;
+}
+
+quint32 ShowTreeController::saveAsFormation(quint32 cueId, quint32 layerId, const QString &name, QString *why)
+{
+    auto fail = [why](const QString &text) {
+        if (why != nullptr)
+            *why = text;
+        return QLCPalette::invalidId();
+    };
+    const QList<Look> rows = formationToSave(cueId, layerId);
+    if (rows.isEmpty())
+        return fail(tr("No Spread, Grouping or Cross is set here to save."));
+
+    QString nm = name.trimmed().isEmpty() ? formationNameFor(rows) : name.trimmed();
+    auto taken = [this](const QString &n) {
+        for (const QLCPalette *o : m_doc->palettes())
+            if (o->type() == QLCPalette::Formation && o->name().compare(n, Qt::CaseInsensitive) == 0)
+                return true;
+        return false;
+    };
+    if (taken(nm))
+    {
+        int k = 2;
+        while (taken(QStringLiteral("%1 %2").arg(nm).arg(k)))
+            ++k;
+        nm = QStringLiteral("%1 %2").arg(nm).arg(k);
+    }
+    QLCPalette *p = new QLCPalette(QLCPalette::Formation, m_doc);
+    p->setName(nm);
+    p->setPath(suggestPaletteFolder(QLCPalette::Formation));
+    for (const Look &l : rows)
+        applyFormationLook(p, l);
+    if (!m_doc->addPalette(p))
+    {
+        delete p;
+        return fail(tr("Couldn't make the palette."));
+    }
+    const quint32 pid = p->id();
+    const std::shared_ptr<QLCPalette> keep(p->createCopy());
+
+    const bool ok = edit(tr("Save as Formation “%1”").arg(nm), [&](QList<Production> &ps) {
+        Cue *c = cueIn(ps, cueId);
+        Layer *l = (c == nullptr || layerId == invalidId()) ? nullptr : c->layer(layerId);
+        if (c == nullptr || (layerId != invalidId() && l == nullptr))
+            return false;
+        auto set = [&](const Look &look) {
+            if (l != nullptr)
+                l->setLook(look);
+            else
+                c->setLook(look);
+        };
+        for (const QString &k : { KeySpread, KeyGrouping, KeyCross })
+        {
+            Look clear;
+            clear.key = k;
+            set(clear);
+        }
+        set(lookForPalette(pid));
+        return true;
+    });
+    if (!ok)
+    {
+        m_doc->deletePalette(pid);
+        return fail(tr("Couldn't save the Formation here."));
+    }
+    // Outside the tree, in this step: undo takes the palette away after the
+    // tree is back; redo makes it again, with its id, before the tree.
+    Doc *doc = m_doc;
+    attachToLastStep([doc, pid, keep](bool undone) {
+        if (undone)
+        {
+            doc->deletePalette(pid);
+            return;
+        }
+        if (doc->palette(pid) == nullptr)
+            doc->addPalette(keep->createCopy(), pid);
+    }, true);
+    return pid;
+}
+
 QList<ResolvedCue> ShowTreeController::resolved(const CueList &list) const
 {
     // Sub-cues (P6): the first starts from what its cue puts on stage.
@@ -392,7 +535,7 @@ QList<ResolvedCue> ShowTreeController::resolved(const CueList &list) const
     return resolve(list, lineAimTest(), nullptr, formationRows());
 }
 
-static Cue *cueIn(QList<Production> &productions, quint32 cueId, CueList **listOut = nullptr)
+static Cue *cueIn(QList<Production> &productions, quint32 cueId, CueList **listOut)
 {
     for (Production &p : productions)
         for (CueList &l : p.lists)

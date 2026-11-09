@@ -4070,6 +4070,37 @@ void ShowTreeView_Test::formationRowsSayWhereTheyComeFrom()
     QVERIFY(formRow->toolTip().contains("isn't aimed at a line"));
 }
 
+void ShowTreeView_Test::saveAsFormationIsOnTheRowMenuAndGreyedWhenNothingIsSet()
+{
+    FixtureGroup *all = new FixtureGroup(m_doc);
+    all->setName("All");
+    m_doc->addFixtureGroup(all);
+    all->assignFixture(placedSpot(m_doc, "L1", -4)->id());
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << all->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    ShowTreeView view(nullptr, m_doc);
+
+    auto saveAction = [&](const QString &key) {
+        QMenu menu;
+        view.lineParamMenu(&menu, c1, l1, Target(), key);
+        QAction *a = nullptr;
+        for (QAction *x : menu.actions())
+            if (x->objectName() == QLatin1String("stSaveAsFormation"))
+                a = x;
+        return a == nullptr ? QStringLiteral("missing") : a->isEnabled() ? QStringLiteral("on") : QStringLiteral("grey");
+    };
+    // On every row's menu; greyed with nothing set.
+    for (const QString &key : { KeySpread, KeyGrouping, KeyCross })
+        QCOMPARE(saveAction(key), QStringLiteral("grey"));
+    QVERIFY(st->setLayerLook(c1, l1, ShowTreeController::lineParamLook(KeyGrouping, "pairs")));
+    QCOMPARE(saveAction(KeyCross), QStringLiteral("on"));
+    QCOMPARE(saveAction(KeyFormation), QStringLiteral("on"));
+}
+
 void ShowTreeView_Test::planViewOfAnAreaAim()
 {
     // Three spots over a 6 x 3 m area (AREA_COVER.md): a zone each, a gap left.

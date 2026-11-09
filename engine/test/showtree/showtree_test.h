@@ -214,6 +214,8 @@ private slots:
     void anEffectFadesWithItsCue();
     void cueSpreadReachesOnlyLineAims();
     void aCueAimIsOneFormationByPosition();
+    void saveAsFormationKeepsTheRowsAndLinksTheLayer();
+    void saveAsFormationOnTheCueAndWithNothingSet();
     void aLayerOfHungAndStandingGroupsIsOneLineFormation();
     void layersWithTheSameLineAimEachSpreadEndToEnd();
     void aSpreadChangeFadesOverTheCueFade();
