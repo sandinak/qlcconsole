@@ -52,6 +52,7 @@
 #include <QSignalBlocker>
 #include <cmath>
 #include "lookeditor.h"
+#include "effectrows.h"
 #include "contextmenus.h"
 #include "programmercontroller.h"
 #include "lengthspinbox.h"
@@ -121,20 +122,11 @@
 
 namespace
 {
-/* A script parameter's row, Title Case from its name: "topSpeed" is Top
-   Speed, "followMode" Follow Mode (UX-07). */
+// One name for a script parameter on every surface: the Show Tree's rows use
+// the same EffectRows::paramLabel (UX-77).
 QString paramRowLabel(const EffectScript::ParamDef &pd)
 {
-    if (!pd.label.trimmed().isEmpty())
-        return pd.label.trimmed();
-    const QString &name = pd.name;
-    QString label;
-    for (const QChar c : name)
-        label += c.isUpper() && !label.isEmpty() && !label.endsWith(QLatin1Char(' '))
-                 ? QStringLiteral(" ") + c : QString(c);
-    if (!label.isEmpty())
-        label[0] = label.at(0).toUpper();
-    return label;
+    return LookEditor::paramLabel(pd);
 }
 }
 
@@ -5098,4 +5090,9 @@ void LookEditor::slotEffectBindInput()
     if (!btn) return;
     btn->setText(tr("(waiting for input…)"));
     // Actual binding stored when input event arrives — wired in full implementation.
+}
+
+QString LookEditor::paramLabel(const EffectScript::ParamDef &pd)
+{
+    return EffectRows::paramLabel(pd);
 }

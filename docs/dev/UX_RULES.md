@@ -760,7 +760,8 @@ Where a change can make the operator's job simpler, that counts for it: it raise
 A row, field or form label is a short name (a few words, no identifier, no sentence); the long explanation is its tooltip, and a value that is still long wraps instead of running off the edge.
 
 - **Why:** 2026-11-08: the Show Tree's followspot rows read "On scene change: hold the last beam position, or snap to the bound followTarget" and ran off the right edge, clipped; a combo showed "lastPosition".
-- **Check:** `effectinstance_test::everyBundledParamHasAShortReadableLabel` (enforced)
+- **Check:** `effectinstance_test::everyBundledParamHasAShortReadableLabel`, `lookeditor_test::aParamReadsTheSameInTheLookEditorAndTheShowTree` (enforced)
+- **Not yet checked:** the Look Editor's palette-slot rows, and the wrap-instead-of-clip layout half.
 - **Right:** `Follow Mode: Hold Last Position (the sentence in the tooltip)`
 - **Wrong:** `On scene change: hold the last beam position, or snap to the bound followTarget`
 

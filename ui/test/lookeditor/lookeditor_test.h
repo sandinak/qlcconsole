@@ -27,6 +27,9 @@ class LookEditor_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** A script parameter reads the same in the Look Editor as in the Show
+     *  Tree's rows, for every bundled effect (UX-77). */
+    void aParamReadsTheSameInTheLookEditorAndTheShowTree();
     /** A position or zoom look on lights that can't do it says so */
     void aLookTheTargetsCantDoIsSaid();
     /** An Aim look on a line shows the line's Spread; the slider and the

@@ -43,6 +43,8 @@
 #include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "lookeditor.h"
+#include "effectrows.h"
+#include "effectscript.h"
 #include "programmercontroller.h"
 #include "matriximage.h"
 #include "effectbrowser.h"
@@ -2945,3 +2947,22 @@ void LookEditor_Test::theFollowSpotEditorSaysWhatItIsDoing()
     QVERIFY(say->text().contains("Not playing"));
 }
 
+
+void LookEditor_Test::aParamReadsTheSameInTheLookEditorAndTheShowTree()
+{
+    const QDir dir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/");
+    int checked = 0;
+    for (const QString &f : dir.entryList(QStringList() << "*.js", QDir::Files))
+    {
+        EffectScript es;
+        if (!es.load(dir.filePath(f)))
+            continue;
+        for (const EffectScript::ParamDef &pd : es.paramDefs())
+        {
+            ++checked;
+            QCOMPARE(LookEditor::paramLabel(pd), EffectRows::paramLabel(pd));
+            QVERIFY(!LookEditor::paramLabel(pd).isEmpty());
+        }
+    }
+    QVERIFY(checked > 100);
+}
