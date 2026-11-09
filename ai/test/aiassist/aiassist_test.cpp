@@ -968,6 +968,25 @@ void AiAssist_Test::operateUnloadsALocalModel()
     QVERIFY(AiResources::live().isEmpty());
 }
 
+/* Ollama's answer arrives after the AiAssist that asked is gone (a test's
+   own, a workspace closed): nothing to tell, and it must not be told. */
+void AiAssist_Test::aLateUnloadAfterTheAssistIsGoneIsHarmless()
+{
+    enable();
+    m_server->queueJson(kChat, textReply("Hi."));
+    m_server->queueDelayed("/api/generate", "{\"done\":true}", 100);
+    m_server->queueJson("/api/ps", "{\"models\":[]}");
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(m_ai->ask("hello", ShowTreeCommand::Context()));
+    QVERIFY(answered.wait(5000));
+    m_doc->setMode(Doc::Operate);
+    QTRY_COMPARE(m_server->count("/api/generate"), 1);   // asked; its answer is 100 ms off
+    delete m_ai;
+    m_ai = nullptr;
+    QTRY_COMPARE(m_server->count("/api/ps"), 1);
+    QTest::qWait(100);                  // the reply to /api/ps lands
+}
+
 void AiAssist_Test::modelStillResidentIsAnError()
 {
     enable();

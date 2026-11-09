@@ -108,6 +108,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A rare AI Assist crash.** Ollama answering the unload after AI Assist had been closed could crash the app.
 - **A turned plot reads right.** Turned 90°, 180° or 270°, the Lighting Studio plot keeps every label level and at the targets' size: a blocking's "(Default)" names no longer lie on their side at three times the size, the fixture-count bubbles' numbers, a shape handle's readout, the stairs' "UP", a free string's LED numbers and the light-footprint names stay upright, and the revealed-fixture tags stay a column. The follow spot's ring, lines and "following ·" label stay on the subject (they were left where the unturned plot had them, off the stage), in a blocking too.
 - **Running the tests no longer switches the app to metres.** Engine test programs wrote Settings ▸ Units (and any other setting) into the real preferences on every Mac that ran the gate; they now keep their own, as the UI tests do. If target heights still read "m", set Settings ▸ Units back to feet and inches once.
 - **A locked stand's boom no longer shows a resize dot.** The dot on a
