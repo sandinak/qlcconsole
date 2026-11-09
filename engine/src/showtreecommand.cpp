@@ -3100,6 +3100,12 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
                 r.word();
                 continue;
             }
+            if (key == KeyFormation && next == QLatin1String("save"))
+            {
+                r.word();
+                r.quoted();
+                continue;
+            }
             if (isLineParamKey(key))
             {
                 if (ShowTreeController::lineParamValue(key, r.word()).isEmpty())
