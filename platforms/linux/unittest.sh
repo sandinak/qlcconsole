@@ -267,7 +267,16 @@ if [ "$PHASE" != "serial" ]; then
     echo "A test could open a window on the real screen. This is not a pass."
     exit 1
   fi
+  if ! ./check-test-settings.sh --build . $ALL_TESTS; then
+    echo "A test could change the real preferences. This is not a pass."
+    exit 1
+  fi
 fi
+# On macOS the real preferences are a plist the tests' private HOME does not
+# reach: snapshot them now and compare after the run (a catch-all for a test
+# that wrote them any way at all). Skipped where there is no `defaults`.
+PREFS_SNAP="$TMPBASE/prefs.before"
+./check-test-settings.sh --defaults-before "$PREFS_SNAP"
 if [ -n "${QLC_TEST_ONLY:-}" ]; then
     SELECTED=""
     for t in $ALL_TESTS; do
@@ -426,6 +435,11 @@ if [ -z "${QLC_TEST_ONLY:-}" ] && [ "$PHASE" != "serial" ]; then
         echo "No UI test programs were run (is ui/test in the build dir?). This is not a pass."
         exit 1
     fi
+fi
+
+if ! ./check-test-settings.sh --defaults-after "$PREFS_SNAP"; then
+    echo "The tests changed the real preferences. This is not a pass."
+    exit 1
 fi
 
 echo "Unit tests passed."

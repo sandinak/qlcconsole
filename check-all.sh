@@ -240,6 +240,18 @@ if ! GUARD_OUT=$("$REPO/platforms/linux/check-test-guard.sh" --self-test 2>&1 \
     exit 1
 fi
 
+# No test may touch the real preferences (macOS: the plist, whatever HOME
+# says): the CMake wiring that isolates every test program must be in place
+# (each leg's unittest.sh checks the built programs and, on macOS, that the
+# run left `defaults export` unchanged). The check's own test first.
+if ! TS_OUT=$("$REPO/platforms/linux/check-test-settings.sh" --self-test 2>&1 \
+        && "$REPO/platforms/linux/check-test-settings.sh" --source "$REPO" 2>&1); then
+    echo >&2 "$TS_OUT"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "check-test-settings.sh failed: a test could change the real preferences. Nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
+fi
+
 # <windows.h> defines `near` and `far` as empty macros: a name like that
 # builds here and breaks only CI's Windows (MinGW) build, which no leg runs.
 if ! WINMAC_OUT=$("$REPO/platforms/linux/check-win-macros.sh" --source "$REPO" 2>&1); then

@@ -29,6 +29,20 @@ foreach(_reorder_flag -Werror=reorder-ctor -Werror=reorder)
     endif()
 endforeach()
 
+# -Wdangling-else and -Wmisleading-indentation: both are in the gate's -Werror
+# set (check-all.sh WERROR_SET), but only the Werror and Linux legs saw them, so
+# a mistake that `make quick` and the default leg built clean broke the gate
+# twice on 2026-11-08. Always on as plain warnings: they show where the edit is
+# made; the Werror leg still turns them into errors. Probed, since clang and
+# GCC differ on what they accept (both take these names). C++ only.
+foreach(_warn_flag -Wdangling-else -Wmisleading-indentation)
+    string(MAKE_C_IDENTIFIER "HAVE${_warn_flag}" _warn_var)
+    check_cxx_compiler_flag("${_warn_flag}" ${_warn_var})
+    if(${_warn_var})
+        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:${_warn_flag}>)
+    endif()
+endforeach()
+
 # Set Release build type by default
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
@@ -357,6 +371,15 @@ qlc_skip_testcase_dirs("${CMAKE_CURRENT_SOURCE_DIR}")
 # into every executable defined under a test/ directory or linking Qt Test.
 # platforms/linux/check-test-guard.sh checks the built programs for it.
 add_library(qlc_test_guard OBJECT engine/test/common/testguard.cpp)
+# And none may read or write the person's real preferences: on macOS a
+# QSettings in the native format is the real org.qlcplus.qlcconsole file
+# whatever HOME says. ui/test/common/testsettings.cpp points QSettings at a
+# temporary INI folder; a program that doesn't already list it (the engine, UI,
+# webaccess and wled test dirs do) gets it here, so a test dir nobody
+# remembered -- a plugin's -- is isolated too.
+# platforms/linux/check-test-settings.sh checks the built programs for it.
+add_library(qlc_test_settings OBJECT ui/test/common/testsettings.cpp)
+target_link_libraries(qlc_test_settings PRIVATE Qt${QT_VERSION_MAJOR}::Core)
 function(qlc_guard_test_programs dir)
     get_property(targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
     foreach(t IN LISTS targets)
@@ -369,6 +392,10 @@ function(qlc_guard_test_programs dir)
         if(srcdir MATCHES "/test(/|$)" OR libs MATCHES "Qt[0-9]*::Test")
             target_sources(${t} PRIVATE $<TARGET_OBJECTS:qlc_test_guard>)
             set_property(GLOBAL APPEND PROPERTY QLC_TEST_GUARDED ${t})
+            get_target_property(srcs ${t} SOURCES)
+            if(NOT srcs MATCHES "testsettings\\.cpp")
+                target_sources(${t} PRIVATE $<TARGET_OBJECTS:qlc_test_settings>)
+            endif()
         endif()
     endforeach()
     get_property(subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)

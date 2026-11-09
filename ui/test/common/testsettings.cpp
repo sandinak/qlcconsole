@@ -17,7 +17,10 @@
   limitations under the License.
 */
 
-/* Linked into every UI test program (ui/test/CMakeLists.txt).
+/* Linked into every test program: ui/test/CMakeLists.txt, the engine, webaccess
+ * and wled test dirs, and the top-level CMakeLists.txt for any other
+ * (qlc_test_settings). platforms/linux/check-test-settings.sh fails the gate
+ * on a built test program without it.
  *
  * Settings of the test's own, never the user's. The tests ran on
  * QSettings() with no organization name, which:
@@ -50,6 +53,9 @@ namespace
             qFatal("no temporary folder for the test's settings");
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir.path());
         qputenv("QLC_NO_RECOVERY_PROMPT", "1");
+        // Says to the program, and to the gate's check, that this ran
+        // (platforms/linux/check-test-settings.sh looks for this name).
+        qputenv("QLC_TEST_SETTINGS_ISOLATED", "1");
         // QLC+ 4's settings (LegacySettings): an empty file of the test's.
         qputenv("QLC_QLCPLUS_SETTINGS", QSettings(QSettings::IniFormat, QSettings::UserScope,
                     QStringLiteral("qlcconsole-test"), QStringLiteral("qlcplus4")).fileName().toLocal8Bit());
