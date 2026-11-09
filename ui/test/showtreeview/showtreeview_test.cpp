@@ -4036,14 +4036,14 @@ void ShowTreeView_Test::saveAsFormationIsOnTheRowMenuAndGreyedWhenNothingIsSet()
         for (QAction *x : menu.actions())
             if (x->objectName() == QLatin1String("stSaveAsFormation"))
                 a = x;
-        return a == nullptr ? QPair<bool, bool>(false, false) : QPair<bool, bool>(true, a->isEnabled());
+        return a == nullptr ? QStringLiteral("missing") : a->isEnabled() ? QStringLiteral("on") : QStringLiteral("grey");
     };
     // On every row's menu; greyed with nothing set.
     for (const QString &key : { KeySpread, KeyGrouping, KeyCross })
-        QCOMPARE(saveAction(key), QPair<bool, bool>(true, false));
+        QCOMPARE(saveAction(key), QStringLiteral("grey"));
     QVERIFY(st->setLayerLook(c1, l1, ShowTreeController::lineParamLook(KeyGrouping, "pairs")));
-    QCOMPARE(saveAction(KeyCross), QPair<bool, bool>(true, true));
-    QCOMPARE(saveAction(KeyFormation), QPair<bool, bool>(true, true));
+    QCOMPARE(saveAction(KeyCross), QStringLiteral("on"));
+    QCOMPARE(saveAction(KeyFormation), QStringLiteral("on"));
 }
 
 void ShowTreeView_Test::planViewOfAnAreaAim()
