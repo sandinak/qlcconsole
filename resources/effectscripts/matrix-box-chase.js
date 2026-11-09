@@ -20,7 +20,7 @@
     effect.notes = "Each box (each fixture: a box, a bar, a par) lights as a whole, in turn, left to right as they hang. Order: left to right, right to left, bounce, out from the middle, in to the middle, odd then even, or random. Lit: how many are on at once. Timing: a step on the beat (Division: how often) or free at Speed steps a second. Fade: how long a box takes to go out after its turn. Colours: the look's colours, one a step. Flash: a white hit as a box comes on (the accent). With one box, its five vertical slices take the turns. With the look's Spread on, the spread decides the order instead.";
 
     effect.parameters = [
-        { name: "timing",   description: "Step on the beat, or free at Speed", defaultValue: 0, values: MATRIX.TIMINGS },
+        { name: "timing",   label: "Timing", description: "Step on the beat, or free at Speed", defaultValue: 0, values: MATRIX.TIMINGS },
         { name: "division", description: "On the beat: how often it steps", defaultValue: 2, values: MATRIX.DIVISIONS },
         { name: "speed",    description: "Free: steps a second (per beat on a speed master)", min: 0.2, max: 16, defaultValue: 4 },
         { name: "order",    description: "Which box goes next", defaultValue: 0,

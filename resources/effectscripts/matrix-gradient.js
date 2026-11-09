@@ -20,8 +20,8 @@
         { name: "width", description: "One run through the colours (canvas lengths)", min: 0.1, max: 4, defaultValue: 1 },
         { name: "speed", description: "Runs a second sweeping past (minus = the other way)", min: -2, max: 2, defaultValue: 0.25 },
         { name: "blend", description: "Smooth, or bands of colour", defaultValue: 0, values: ["Smooth", "Bands"] },
-        { name: "sheen", description: "A line of white riding the sweep, once a run", min: 0, max: 1, defaultValue: 0.4 },
-        { name: "scope", description: "Across the whole canvas, or in each box", defaultValue: 0, values: MATRIX.SCOPES }
+        { name: "sheen", label: "Sheen", description: "A line of white riding the sweep, once a run", min: 0, max: 1, defaultValue: 0.4 },
+        { name: "scope", label: "Scope", description: "Across the whole canvas, or in each box", defaultValue: 0, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

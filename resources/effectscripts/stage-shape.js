@@ -68,7 +68,7 @@
           min: -2.0, max: 2.0, defaultValue: 0.0 },
         { name: "plane",    description: "Orientation",
           defaultValue: 0, values: ["Floor", "Wall"] },
-        { name: "height",   description: "Lift off the target along the plane (metres)",
+        { name: "height",   label: "Height", description: "Lift off the target along the plane (metres)",
           min: -5.0, max: 10.0, defaultValue: 0.0 }
     ];
 

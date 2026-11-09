@@ -22,7 +22,7 @@
         { name: "trails",  description: "How long a streak each leaves", min: 0, max: 1, defaultValue: 0.5 },
         { name: "centre",  description: "Where the stars come from", defaultValue: 0,
           values: ["Middle", "Left edge", "Right edge", "Top", "Bottom", "Wandering"] },
-        { name: "scope",   description: "One starfield across the canvas, or one in each box", defaultValue: 1, values: MATRIX.SCOPES }
+        { name: "scope",   label: "Scope", description: "One starfield across the canvas, or one in each box", defaultValue: 1, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

@@ -25,13 +25,13 @@
         { name: "image",    description: "The picture or animated GIF", type: "image" },
         { name: "fit",      description: "How it is scaled onto the canvas", defaultValue: 0,
           values: ["Fit (the whole picture)", "Fill (cropped)", "Stretch"] },
-        { name: "timing",   description: "A GIF at its own pace, or a frame on the beat", defaultValue: 0,
+        { name: "timing",   label: "Timing", description: "A GIF at its own pace, or a frame on the beat", defaultValue: 0,
           values: ["Its own timing", "A frame on the beat"] },
         { name: "division", description: "On the beat: how often it steps", defaultValue: 2, values: MATRIX.DIVISIONS },
         { name: "speed",    description: "Its own timing: how fast (1 = as made)", min: 0.1, max: 4, defaultValue: 1 },
-        { name: "tint",     description: "Blend towards the look's first colour", min: 0, max: 1, defaultValue: 0 },
-        { name: "highlights", description: "The picture's near-white parts as accents (on the white pixels)", min: 0, max: 1, defaultValue: 0.5 },
-        { name: "scope",    description: "One picture across the canvas, or one in each box", defaultValue: 0, values: MATRIX.SCOPES }
+        { name: "tint",     label: "Tint", description: "Blend towards the look's first colour", min: 0, max: 1, defaultValue: 0 },
+        { name: "highlights", label: "Highlights", description: "The picture's near-white parts as accents (on the white pixels)", min: 0, max: 1, defaultValue: 0.5 },
+        { name: "scope",    label: "Scope", description: "One picture across the canvas, or one in each box", defaultValue: 0, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     function imageOf(params) {

@@ -31,7 +31,7 @@
     ];
 
     effect.parameters = [
-        { name: "rate",   description: "Pulses per second across the group", type: "float", min: 0.1, max: 30,  defaultValue: 3 },
+        { name: "rate",   label: "Rate", description: "Pulses per second across the group", type: "float", min: 0.1, max: 30,  defaultValue: 3 },
         { name: "rest",   description: "Level between pulses (x the look's level)", type: "float", min: 0, max: 1, defaultValue: 0.35 },
         { name: "peak",   description: "Pulse level (x the look's level)",   type: "float", min: 0, max: 1,  defaultValue: 1.0 },
         { name: "attack", description: "Snap up time (s)",                   type: "float", min: 0.005, max: 0.5, defaultValue: 0.03 },

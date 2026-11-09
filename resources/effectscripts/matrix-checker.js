@@ -16,14 +16,14 @@
     effect.notes = "A checkerboard of the look's first two colours (or the first and dark) that swaps squares. Swap: colours trade places, the lit squares and the dark ones trade, or a smooth crossfade. Timing: on the beat (Division: how often) or free at Speed swaps a second. Square: its size in pixels. Fade: how much of each step the change takes. Scope: squares counted from each box's corner, or across the whole canvas. Flash: a white flash on each change (the accent). Each box, staggered: the same in every box, each a little behind the last, so it rolls across the rig -- Stagger order: left to right, right to left, out from the middle or random; Stagger: how far behind, as a fraction of a swap and back.";
 
     effect.parameters = [
-        { name: "timing",   description: "Swap on the beat, or free at Speed", defaultValue: 0, values: MATRIX.TIMINGS },
+        { name: "timing",   label: "Timing", description: "Swap on the beat, or free at Speed", defaultValue: 0, values: MATRIX.TIMINGS },
         { name: "division", description: "On the beat: how often it swaps", defaultValue: 2, values: MATRIX.DIVISIONS },
         { name: "speed",    description: "Free: swaps a second (per beat on a speed master)", min: 0.1, max: 12, defaultValue: 2 },
         { name: "swap",     description: "What swaps", defaultValue: 0, values: ["Colours", "On and off", "Crossfade"] },
         { name: "square",   description: "Square size (pixels)", min: 1, max: 8, defaultValue: 2 },
-        { name: "fade",     description: "How much of each step the change takes", min: 0, max: 1, defaultValue: 0.1 },
+        { name: "fade",     label: "Fade", description: "How much of each step the change takes", min: 0, max: 1, defaultValue: 0.1 },
         { name: "flash",    description: "White flash on each change", min: 0, max: 1, defaultValue: 0.5 },
-        { name: "scope",    description: "Squares from each box's corner, or across the canvas", defaultValue: 1, values: MATRIX.SCOPES }
+        { name: "scope",    label: "Scope", description: "Squares from each box's corner, or across the canvas", defaultValue: 1, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

@@ -14,6 +14,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Effect parameters read as names, not sentences.** In the Show Tree's effect rows (and the Look Editor) a Follow Spot row says **Follow Mode: Hold Last Position** (not "On scene change: hold the last beam position, or snap to the bound followTarget"); the full sentence is the tooltip. Scripts can give a parameter a `label` and its list a `valueLabels`; a long label or value wraps instead of running off the edge. A test guards every bundled effect (UX-77).
+
 - **The footer names fixtures cues use that have no address.** "2 fixtures in cues have no address", **Patch…** opens them; a staged fixture nothing uses no longer nags (the Show Review still notes it).
 
 - **A fixture in no group is in the Show Tree's Library.** Under All, **Ungrouped** lists the patched ones (a WLED just added, a spare; a fixture still in the inventory is not listed), found by

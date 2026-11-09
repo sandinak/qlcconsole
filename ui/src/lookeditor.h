@@ -23,6 +23,7 @@
 #include <functional>
 #include "qlcui_export.h"
 #include "effectfit.h"
+#include "effectscript.h"
 
 class QStackedWidget;
 class QColorDialog;
@@ -223,6 +224,11 @@ private:
     void updateColorWarning();
 
 public:
+    /** The label of a script parameter's row: the same name the Show Tree's
+     *  effect rows show (EffectRows::paramLabel), whether or not the script
+     *  sets a `label`. */
+    static QString paramLabel(const EffectScript::ParamDef &pd);
+
     /** What to tell the user about a colour look this dark, or an empty
      *  string when it is bright enough to need no comment. A colour look is a
      *  LEVEL on every fixture that mixes colour -- the dimmer scales it, it

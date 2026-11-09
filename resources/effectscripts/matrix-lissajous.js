@@ -17,12 +17,12 @@
 
     effect.parameters = [
         { name: "speed", description: "Times round a second (per beat on a speed master)", min: 0.02, max: 2, defaultValue: 0.25 },
-        { name: "xFreq", description: "Crossings left and right each time round", min: 1, max: 5, defaultValue: 1 },
-        { name: "yFreq", description: "Crossings up and down each time round", min: 1, max: 5, defaultValue: 2 },
+        { name: "xFreq", label: "Across Cycles", description: "Crossings left and right each time round", min: 1, max: 5, defaultValue: 1 },
+        { name: "yFreq", label: "Up-Down Cycles", description: "Crossings up and down each time round", min: 1, max: 5, defaultValue: 2 },
         { name: "phase", description: "Turns the figure (fraction of a cycle)", min: 0, max: 1, defaultValue: 0.25 },
         { name: "lineWidth", description: "The line's width (pixels)", min: 0.5, max: 3, defaultValue: 1 },
-        { name: "trail", description: "How much of the figure the trail covers", min: 0, max: 1, defaultValue: 0.35 },
-        { name: "scope", description: "A figure in each box, or one across the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
+        { name: "trail", label: "Trail", description: "How much of the figure the trail covers", min: 0, max: 1, defaultValue: 0.35 },
+        { name: "scope", label: "Scope", description: "A figure in each box, or one across the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

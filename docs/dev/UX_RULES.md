@@ -38,7 +38,7 @@ that have one. Change both files together.
 | Theme | Rules | Count | Enforced |
 |---|---|---|---|
 | Units & numbers | UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-63 | 7 | 5 |
-| Words | UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, UX-18, UX-19 | 13 | 7 |
+| Words | UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, UX-18, UX-19, UX-77 | 14 | 8 |
 | Context-awareness | UX-20, UX-21, UX-22, UX-23, UX-24, UX-25 | 6 | 5 |
 | Feedback & state | UX-26, UX-27, UX-28, UX-29, UX-30, UX-31, UX-32, UX-33 | 8 | 6 |
 | Layout | UX-34, UX-35, UX-36, UX-37, UX-38, UX-39, UX-40 | 7 | 5 |
@@ -48,7 +48,7 @@ that have one. Change both files together.
 | Ease of use | UX-61, UX-62, UX-64, UX-65, UX-66, UX-76 | 6 | 0 |
 | Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 3 |
 
-Main check: 44 tests, 23 review, 6 walker, 3 manual. 44 of 76 enforced.
+Main check: 45 tests, 23 review, 6 walker, 3 manual. 45 of 77 enforced.
 
 ## Units & numbers
 
@@ -754,6 +754,16 @@ Where a change can make the operator's job simpler, that counts for it: it raise
 - **Check:** `review` (not yet enforced)
 - **Right:** `A WLED on the network shows in the Inventory: right-click ▸ Patch, done`
 - **Wrong:** `Add Fixture, pick the model, type the IP, count the LEDs, then patch a universe to it`
+
+### UX-77 Labels are names, descriptions are tooltips
+
+A row, field or form label is a short name (a few words, no identifier, no sentence); the long explanation is its tooltip, and a value that is still long wraps instead of running off the edge.
+
+- **Why:** 2026-11-08: the Show Tree's followspot rows read "On scene change: hold the last beam position, or snap to the bound followTarget" and ran off the right edge, clipped; a combo showed "lastPosition".
+- **Check:** `effectinstance_test::everyBundledParamHasAShortReadableLabel`, `lookeditor_test::aParamReadsTheSameInTheLookEditorAndTheShowTree` (enforced)
+- **Not yet checked:** the Look Editor's palette-slot rows, and the wrap-instead-of-clip layout half.
+- **Right:** `Follow Mode: Hold Last Position (the sentence in the tooltip)`
+- **Wrong:** `On scene change: hold the last beam position, or snap to the bound followTarget`
 
 ## Complexity and ease of use
 

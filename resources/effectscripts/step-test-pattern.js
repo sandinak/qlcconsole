@@ -34,8 +34,8 @@
         { name: "brightness", description: "Level of the front pattern (0-1)", min: 0.0, max: 1.0, defaultValue: 0.6 },
         { name: "dotLevel",   description: "Level of the dot on the tops (0-1)", min: 0.0, max: 1.0, defaultValue: 0.25 },
         { name: "speed",      description: "Dot speed, pixels a second",        min: 1.0, max: 40.0, defaultValue: 8.0 },
-        { name: "topPixels",  description: "Colour pixels at the start of a top bar", min: 1, max: 64, defaultValue: 16 },
-        { name: "mirror",     description: "Count the front from the other end (0/1)", min: 0, max: 1, defaultValue: 0 }
+        { name: "topPixels",  label: "Top Pixels", description: "Colour pixels at the start of a top bar", min: 1, max: 64, defaultValue: 16 },
+        { name: "mirror",     label: "Mirror", description: "Count the front from the other end (0/1)", min: 0, max: 1, defaultValue: 0 }
     ];
 
     // A 5 x 7 font: what a step name needs.

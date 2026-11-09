@@ -22,8 +22,8 @@
         { name: "speed",      description: "Cycles a second (per beat on a speed master)", min: 0.05, max: 4, defaultValue: 0.4 },
         { name: "shape",      description: "The opening's shape", defaultValue: 0, values: ["Eye", "Circle", "Box", "Vertical slit"] },
         { name: "edge",       description: "Rim softness", min: 0, max: 1, defaultValue: 0.3 },
-        { name: "background", description: "A glow of the second colour outside", min: 0, max: 0.5, defaultValue: 0 },
-        { name: "scope",      description: "In each box, or one across the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
+        { name: "background", label: "Background", description: "A glow of the second colour outside", min: 0, max: 0.5, defaultValue: 0 },
+        { name: "scope",      label: "Scope", description: "In each box, or one across the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

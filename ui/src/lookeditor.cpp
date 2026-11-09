@@ -52,6 +52,7 @@
 #include <QSignalBlocker>
 #include <cmath>
 #include "lookeditor.h"
+#include "effectrows.h"
 #include "contextmenus.h"
 #include "programmercontroller.h"
 #include "lengthspinbox.h"
@@ -121,17 +122,11 @@
 
 namespace
 {
-/* A script parameter's row, Title Case from its name: "topSpeed" is Top
-   Speed, "followMode" Follow Mode (UX-07). */
-QString paramRowLabel(const QString &name)
+// One name for a script parameter on every surface: the Show Tree's rows use
+// the same EffectRows::paramLabel (UX-77).
+QString paramRowLabel(const EffectScript::ParamDef &pd)
 {
-    QString label;
-    for (const QChar c : name)
-        label += c.isUpper() && !label.isEmpty() && !label.endsWith(QLatin1Char(' '))
-                 ? QStringLiteral(" ") + c : QString(c);
-    if (!label.isEmpty())
-        label[0] = label.at(0).toUpper();
-    return label;
+    return LookEditor::paramLabel(pd);
 }
 }
 
@@ -3299,7 +3294,7 @@ void LookEditor::rebuildEffectDynWidget()
                     m_doc->setModified();
                     emit paletteValueChanged(m_paletteId);
                 });
-                form->addRow(paramRowLabel(pd.name), pdw);
+                form->addRow(paramRowLabel(pd), pdw);
             }
             else if (pd.type == QLatin1String("text"))
             {
@@ -3320,7 +3315,7 @@ void LookEditor::rebuildEffectDynWidget()
                     m_doc->setModified();
                     emit paletteValueChanged(m_paletteId);
                 });
-                form->addRow(paramRowLabel(pd.name), le);
+                form->addRow(paramRowLabel(pd), le);
             }
             else if (pd.type == QLatin1String("image"))
             {
@@ -3385,7 +3380,7 @@ void LookEditor::rebuildEffectDynWidget()
                     }
                     store(value);
                 });
-                form->addRow(paramRowLabel(pd.name), row);
+                form->addRow(paramRowLabel(pd), row);
             }
             else if (pd.type == QLatin1String("direction"))
             {
@@ -3420,7 +3415,7 @@ void LookEditor::rebuildEffectDynWidget()
                     m_doc->setModified();
                     emit paletteValueChanged(m_paletteId);
                 });
-                form->addRow(paramRowLabel(pd.name), gdw);
+                form->addRow(paramRowLabel(pd), gdw);
             }
             else if (pd.name == QLatin1String("midiSource"))
             {
@@ -3462,7 +3457,7 @@ void LookEditor::rebuildEffectDynWidget()
                     m_doc->setModified();
                     emit paletteValueChanged(m_paletteId);
                 });
-                form->addRow(paramRowLabel(pd.name), cb);
+                form->addRow(paramRowLabel(pd), cb);
             }
             else if (pd.name == QLatin1String("palette")
                      && pd.description.startsWith(QLatin1String("Palette (WLED")))
@@ -3499,7 +3494,7 @@ void LookEditor::rebuildEffectDynWidget()
                 cb->setProperty("paramName", pd.name);
                 connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
                         this, &LookEditor::slotEffectEnumParamChanged);
-                form->addRow(paramRowLabel(pd.name), cb);
+                form->addRow(paramRowLabel(pd), cb);
             }
             else if (!pd.enumValues.isEmpty())
             {
@@ -3513,7 +3508,7 @@ void LookEditor::rebuildEffectDynWidget()
                 cb->setProperty("paramName", pd.name);
                 connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
                         this, &LookEditor::slotEffectEnumParamChanged);
-                form->addRow(paramRowLabel(pd.name), cb);
+                form->addRow(paramRowLabel(pd), cb);
             }
             else
             {
@@ -3618,7 +3613,7 @@ void LookEditor::rebuildEffectDynWidget()
                 if (perBeat)
                     sl->setToolTip(tr("Cycles per beat of %1: 1 = one a beat, 0.25 = one a bar.")
                                        .arg(m_doc->speedMasters()->assignmentName(effectiveSpeed)));
-                const QString label = paramRowLabel(pd.name);
+                const QString label = paramRowLabel(pd);
                 form->addRow(perBeat ? tr("%1 (per beat)").arg(label) : label, row);
             }
         }
@@ -5095,4 +5090,9 @@ void LookEditor::slotEffectBindInput()
     if (!btn) return;
     btn->setText(tr("(waiting for input…)"));
     // Actual binding stored when input event arrives — wired in full implementation.
+}
+
+QString LookEditor::paramLabel(const EffectScript::ParamDef &pd)
+{
+    return EffectRows::paramLabel(pd);
 }

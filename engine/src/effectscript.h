@@ -181,6 +181,8 @@ public:
     };
     struct ParamDef {
         QString name, description;
+        QString label;          // optional short name for a row or form (<= ~32 chars);
+                                // description stays the long explanation (tooltip)
         QString type;           // "" or "path" (XY drawn path) or "text" (words to show)
                                 // or "image" (a picture kept in the show: MatrixImage);
                                 // "path", "text" and "image" params ignore min/max
@@ -190,6 +192,13 @@ public:
                                 // typed in the unit Settings -> Units picks
         QStringList enumValues; // non-empty → render as dropdown; value is integer index
         QStringList aliases;    // former names; stored values under an alias map to this param
+
+        /** What a person reads for this parameter: a name, never a sentence or
+         *  an identifier. The script's own `label`; else the description up to a
+         *  "(", " -- " or ":" when that is short; else the name, "panRate" ->
+         *  "Pan Rate". The whole description is the tooltip. */
+        QString displayLabel() const;
+        static constexpr int maxLabelLength = 32;
     };
 
     QList<InputDef>   inputDefs()       const { return m_inputs;          }

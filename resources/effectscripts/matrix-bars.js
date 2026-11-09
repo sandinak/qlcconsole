@@ -23,7 +23,7 @@
         { name: "bars",      description: "Bars on the canvas", min: 1, max: 8, defaultValue: 1 },
         { name: "width",     description: "Bar width (pixels)", min: 1, max: 20, defaultValue: 2 },
         { name: "tail",      description: "Trail behind each bar (0 = a hard bar, 1 = to the next)", min: 0, max: 1, defaultValue: 0.3 },
-        { name: "scope",     description: "Across the whole canvas, or in each box", defaultValue: 0, values: MATRIX.SCOPES }
+        { name: "scope",     label: "Scope", description: "Across the whole canvas, or in each box", defaultValue: 0, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

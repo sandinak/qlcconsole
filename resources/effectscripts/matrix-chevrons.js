@@ -20,10 +20,10 @@
         { name: "speed",     description: "Chevrons a second (per beat on a speed master)", min: 0.1, max: 8, defaultValue: 1.5 },
         { name: "direction", description: "Which way they point and go", defaultValue: 0,
           values: ["Right", "Left", "Up", "Down", "Out from the middle", "In to the middle"] },
-        { name: "spacing",   description: "Pixels from one chevron to the next", min: 3, max: 30, defaultValue: 6 },
-        { name: "thickness", description: "How much of the spacing each fills", min: 0.1, max: 0.9, defaultValue: 0.4 },
+        { name: "spacing",   label: "Spacing", description: "Pixels from one chevron to the next", min: 3, max: 30, defaultValue: 6 },
+        { name: "thickness", label: "Thickness", description: "How much of the spacing each fills", min: 0.1, max: 0.9, defaultValue: 0.4 },
         { name: "angle",     description: "Sharpness of the point (pixels across per pixel up)", min: 0, max: 3, defaultValue: 1 },
-        { name: "scope",     description: "The middle of the whole canvas, or of each box", defaultValue: 0, values: MATRIX.SCOPES }
+        { name: "scope",     label: "Scope", description: "The middle of the whole canvas, or of each box", defaultValue: 0, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

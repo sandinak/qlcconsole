@@ -37,13 +37,13 @@
 
     effect.parameters = [
         { name: "path",
-          description: "Movement path — draw in the canvas below",
+          label: "Path", description: "Movement path — draw in the canvas below",
           type: "path" },
         { name: "speed",
           description: "Cycle speed (cycles per second)",
           min: 0.01, max: 2.0, defaultValue: 0.25 },
         { name: "spread",
-          description: "Phase spread between adjacent fixtures (0 = all together, 1 = spread across full path)",
+          label: "Spread", description: "Phase spread between adjacent fixtures (0 = all together, 1 = spread across full path)",
           min: 0.0, max: 1.0, defaultValue: 0.5 }
     ];
 

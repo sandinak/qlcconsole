@@ -20,7 +20,7 @@
     effect.palettes = [];
     effect.parameters = [
         { name: "text",     description: "The words to show", type: "text", defaultValue: "HELLO" },
-        { name: "style",    description: "Scroll across, or still in the middle", type: "enum", values: ["Scroll", "Still"], defaultValue: 0 },
+        { name: "style",    label: "Style", description: "Scroll across, or still in the middle", type: "enum", values: ["Scroll", "Still"], defaultValue: 0 },
         { name: "speed",    description: "Scroll speed, pixels a second", min: 1.0, max: 60.0, defaultValue: 12.0 },
         { name: "size",     description: "Pixels for each dot of a letter", min: 1, max: 4, defaultValue: 1 },
         { name: "level",    description: "Brightness (0-1)", min: 0.0, max: 1.0, defaultValue: 1.0 },

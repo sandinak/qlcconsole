@@ -30,7 +30,7 @@
           values: ["Bottom", "Middle, up and down", "Left", "Middle, left and right"] },
         { name: "colours", description: "Colouring", defaultValue: 0,
           values: ["Green to red", "Look colours up the meter", "A look colour each box"] },
-        { name: "scope",   description: "A meter in each box, or one across the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
+        { name: "scope",   label: "Scope", description: "A meter in each box, or one across the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(1));
 
     var GYR = [{ r: 0, g: 255, b: 0 }, { r: 255, g: 220, b: 0 }, { r: 255, g: 0, b: 0 }];

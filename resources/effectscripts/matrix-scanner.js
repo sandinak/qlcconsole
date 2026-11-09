@@ -22,7 +22,7 @@
         { name: "width",     description: "The bar's width (pixels)", min: 0.5, max: 4, defaultValue: 1.5 },
         { name: "tail",      description: "How long the tail lasts (part of a sweep)", min: 0, max: 1, defaultValue: 0.35 },
         { name: "motion",    description: "How it moves", defaultValue: 0, values: ["Smooth (eases at the ends)", "Straight"] },
-        { name: "scope",     description: "In each box, or one sweep across the canvas", defaultValue: 1, values: MATRIX.SCOPES }
+        { name: "scope",     label: "Scope", description: "In each box, or one sweep across the canvas", defaultValue: 1, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {
