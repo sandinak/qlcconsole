@@ -166,7 +166,7 @@ public:
 
     /** Library item kinds. */
     enum LibraryKind { LibSection = 100, LibFolder, LibGroup, LibFixture, LibPalette, LibFunction, LibSet, LibTarget,
-                       LibReusable, LibPaletteFolder };
+                       LibReusable, LibPaletteFolder, LibBlocking };
 
     QTreeWidget *tree() const { return m_tree; }
     QTreeWidget *library() const { return m_library; }
@@ -287,6 +287,17 @@ public:
     /** Reusables dropped on cue @a cueId: each reusable layer a use in it,
      *  each reusable cue a new cue (a use) after it. One undo step. */
     bool dropReusables(quint32 cueId, const QList<quint32> &reusableIds);
+    /** MIME type of blocking sets dragged from the Library (a stream of
+     *  ids; 0 is Default): dropped on a cue, the cue's blocking. */
+    static const char *blockingMimeType();
+    /** Blocking set @a set dropped on cue @a cueId: that cue (or, when it
+     *  is one of the selected cues, every selected cue) uses it from there
+     *  on, as the cue page's Blocking does. One undo step. */
+    bool dropBlocking(quint32 cueId, quint32 set);
+    /** The selected cues a drop of Formation @a palettes on @a cueId sets;
+     *  empty for a drop that isn't on one of several selected cues. */
+    QList<quint32> formationCues(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                                 const QList<quint32> &palettes) const;
 
     /************************************************************************
      * Reusable layers and cues; Detach a list; Convert to tracking (P4)

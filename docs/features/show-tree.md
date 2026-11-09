@@ -1036,6 +1036,9 @@ works with any line: drop *Pairs crossed* on a layer, or on a cue for the
 cue's formation, beside an Aim palette. Make and edit them in Build
 ([Formation palettes](build.md#formation-palettes)); typed:
 `Towers formation "Pairs crossed"`, `cue look formation "Pairs crossed"`.
+They are in the Library under **Palettes ▸ Formation**: drag one onto a cue
+or a layer, the same as the **⋯ ▸ Formation** menu. Dropped on one of several
+selected cues, it sets all of them, as one undo.
 
 - **Who wins**, setting by setting: the layer's own Spread / Grouping /
   Cross row, else a Formation on the layer, else the cue's formation (its
@@ -1319,6 +1322,11 @@ rank downstage, and every look aimed at them follows, with no second look.
   the targets stand in this cue now (a formation) and uses it from this
   cue on; **Rename…** renames the one
   the cue plays.
+- **From the Library.** **All ▸ Blocking** lists Default and every set. Drag
+  one onto a cue (onto one of several selected cues: all of them) and it
+  uses it from there on, the same as the cue page; **Return**, a double-click
+  or right-click ▸ **Use from This Cue On** does it for the selected cue. A
+  new or renamed set shows there at once.
 - **It tracks.** An unset cue keeps the blocking of the cue before it; the
   first cue starts from Default; a skipped cue passes nothing on. A cue
   that changes blocking says **blocking: Apron number** among its flags.
@@ -2142,6 +2150,8 @@ again what it opened.
   computer.
 - **All**:
   - **Targets**: the stage's points, areas and lines ([Line aims](#line-aims));
+  - **Blocking**: **Default** and each saved set ([Blocking](#blocking)).
+    Drag one onto a cue, or onto the selected cues;
   - **Group sets** ([Group sets](#group-sets)): right-click groups → **Make Set…**;
   - **Reusable**: the [reusable layers and cues](#reusable-layers-and-cues),
     each with how many use it (hover: *Used by*);

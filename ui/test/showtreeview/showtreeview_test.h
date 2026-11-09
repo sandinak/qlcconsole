@@ -168,6 +168,17 @@ private slots:
     void followSpotFlagInTheTree();
     void moveInBlackPerListAndCueInTheTree();
     void theCuePagePicksTheBlocking();
+    /** The Library offers Formation palettes under a Formation heading
+     *  (not Effects) and the blocking sets under Blocking; dropped on a
+     *  cue, a layer or the selected cues they set the formation / the
+     *  blocking, and a save shows there with no refresh. */
+    void theLibraryOffersFormationsAndBlocking();
+    void aFormationDroppedOnSelectedCuesSetsThemAll();
+    void theBlockingButtonDoesNotSayFormation();
+    void theLibraryShowsNewFormationsAndBlockings();
+    /** QLC_SHOT_DIR: the Library with a Formation and two blocking sets,
+     *  at three sizes (the visual check). */
+    void libraryFormationBlockingShots();
     void cuesAtATimecodeAreSetOnTheCueAndListPages();
     /** A picture of a real show with cues skipped: QLC_SKIPCUE_SHOW (a
      *  .qlcc, read only) and QLC_SKIPCUE_SHOT (a .png). */
