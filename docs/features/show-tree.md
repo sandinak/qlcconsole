@@ -2119,7 +2119,7 @@ again what it opened.
 
 - **Recent**: the last ten groups, palettes and functions you used in this
   session, one-off values included.
-- **In this song — 1 — Entrance**: the same, for the song (section) the
+- **In this song: 1 — Entrance**: the same, for the song (section) the
   selected cue is in, above the cue list's, so a song's own vocabulary is at
   hand. It follows the selection to another song; it isn't there when a
   list or production is selected, or the show has no song sections

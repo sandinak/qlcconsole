@@ -10236,7 +10236,7 @@ void ShowTreeView::reloadLibrary()
         if (listId != invalidId() && currentSection(&sec))
         {
             m_librarySection = sectionKey(listId, sec);
-            QTreeWidgetItem *inSong = section(tr("In this song \u2014 %1").arg(sectionTitle(sec)), 4);
+            QTreeWidgetItem *inSong = section(tr("In this song: %1").arg(sectionTitle(sec)), 4);
             inSong->setData(0, PathRole, QStringLiteral("In this song"));
             inSong->setToolTip(0, tr("What this song section of the cue list uses, most used first."));
             fillUsage(inSong, m_st->usageInSection(listId, sec));
