@@ -175,6 +175,7 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
             this, &MonitorGraphicsView::updateStageMarks);
     // A fixture's label and halo are screen-sized: their areas follow a zoom.
     connect(this, &MonitorGraphicsView::rulersChanged, this, &MonitorGraphicsView::refreshFixtureViewHints);
+    connect(this, &MonitorGraphicsView::rulersChanged, this, &MonitorGraphicsView::refreshFollowSpotLabel);
 
     /* A new or opened show deletes every stage structure (MonitorProperties::
        reset()) before the view is rebuilt, and each structure's item only
@@ -421,23 +422,73 @@ void MonitorGraphicsView::refreshFixtureViewHints()
             mfi->setViewHint(scale, 90.0 * m_viewRotation);
 }
 
+namespace
+{
+    /* setData() key of an item kept upright AS A WHOLE (keepUpright()). */
+    constexpr int kUprightKey = 0x55707269;
+
+    /* Drawn in screen space: the item, or something it hangs off, ignores the
+       view's transform. The view's turn never reaches it, so it is upright
+       already -- counter-rotating it as well turned it the other way (the
+       blocking's "(Default)" ghosts, the count badges' numbers, a stretch
+       handle's readout all lay on their side at 90 degrees). */
+    bool drawnInScreenSpace(const QGraphicsItem *it)
+    {
+        for (const QGraphicsItem *p = it; p != nullptr; p = p->parentItem())
+            if (p->flags() & QGraphicsItem::ItemIgnoresTransformations)
+                return true;
+        return false;
+    }
+
+    bool insideUprightHost(const QGraphicsItem *it)
+    {
+        for (const QGraphicsItem *p = it->parentItem(); p != nullptr; p = p->parentItem())
+            if (p->data(kUprightKey).toBool())
+                return true;
+        return false;
+    }
+}
+
+void MonitorGraphicsView::keepUpright(QGraphicsItem *item)
+{
+    if (item != nullptr)
+        item->setData(kUprightKey, true);
+}
+
+/* "Text stays upright and the same size when the view turns" (UX rule book).
+ * One rule, for every label the plot has:
+ *  - a label drawn in screen space (ItemIgnoresTransformations on it or on
+ *    what carries it) is left unturned: the view's rotation never reaches it;
+ *  - a label on a backing (keepUpright(): a plate, a pill) turns back as a
+ *    whole, so the text never leaves its plate;
+ *  - any other text item is turned back by the view's turn (and by its
+ *    platform's or tower's own; a truss's name runs along it, as it always
+ *    has). */
 void MonitorGraphicsView::refreshLabelRotations()
 {
     refreshFixtureViewHints();
     const qreal counter = -90.0 * m_viewRotation;
     foreach (QGraphicsItem *it, m_scene->items())
     {
-        if (it->type() == QGraphicsSimpleTextItem::Type || it->type() == QGraphicsTextItem::Type)
+        const bool text = it->type() == QGraphicsSimpleTextItem::Type
+                          || it->type() == QGraphicsTextItem::Type;
+        const bool host = it->data(kUprightKey).toBool();
+        if (!text && !host)
+            continue;
+        if (drawnInScreenSpace(it) || (text && insideUprightHost(it)))
         {
-            // A turned platform's or tower's name stays upright too (a truss's
-            // runs along it, as it always has).
-            qreal parentTurn = 0.0;
-            QGraphicsItem *host = it->parentItem();
-            if (dynamic_cast<PlatformItem *>(host) != nullptr || dynamic_cast<TowerItem *>(host) != nullptr)
-                parentTurn = host->rotation();
-            it->setTransformOriginPoint(it->boundingRect().center());
-            it->setRotation(counter - parentTurn);
+            if (it->rotation() != 0.0)
+                it->setRotation(0.0);
+            continue;
         }
+        // A turned platform's or tower's name stays upright too (a truss's
+        // runs along it, as it always has).
+        qreal parentTurn = 0.0;
+        QGraphicsItem *parent = it->parentItem();
+        if (dynamic_cast<PlatformItem *>(parent) != nullptr || dynamic_cast<TowerItem *>(parent) != nullptr)
+            parentTurn = parent->rotation();
+        it->setTransformOriginPoint(it->boundingRect().center());
+        it->setRotation(counter - parentTurn);
     }
 }
 
@@ -543,8 +594,10 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
         bool onReveal = false;
         foreach (QGraphicsItem *gi, m_revealTags)
         {
+            // In screen pixels: the tag is drawn in screen space.
             if (dynamic_cast<RevealTagItem *>(gi) != nullptr
-                && gi->mapRectToScene(gi->boundingRect()).contains(sp))
+                && gi->deviceTransform(viewportTransform()).mapRect(gi->boundingRect())
+                       .contains(QPointF(event->pos())))
             { onReveal = true; break; }
         }
         if (!onReveal)
@@ -1042,6 +1095,16 @@ void MonitorGraphicsView::refreshAllItems()
     updateTrussAnchorLines();
     // cell pixels / offsets may have changed: refresh snapping
     applySnapToAllItems();
+    /* The overlays drawn from those items' places, placed again with them:
+       a quarter turn refits the grid (it is laid out along the other axis),
+       and the follow spot's ring and lines stayed where the old scale had
+       put them -- off the stage, its lines running off the plot. */
+    updateFollowSpotOverlay();
+    if (m_emissionTimer != nullptr)          // set up once the view is
+        rebuildEmissionOverlay();
+    rebuildRevealTags();
+    // And the labels the rebuild brought, upright before anything is drawn.
+    refreshLabelRotations();
 }
 
 void MonitorGraphicsView::keepMapSelection(const QList<QPair<QString, quint32> > &selected)
@@ -6839,10 +6902,16 @@ void MonitorGraphicsView::updateBlockingGhosts()
         ring->setToolTip(tr("%1 in Default").arg(t->name()));
         QGraphicsLineItem *link = m_scene->addLine(QLineF(a, b), pen);
         link->setZValue(ti->zValue() - 1);
-        QGraphicsSimpleTextItem *label = m_scene->addSimpleText(tr("%1 (Default)").arg(t->name()));
+        /* Written as the targets' own names are: in the plot's scale and
+           turned back with the view (refreshLabelRotations()). It ignored the
+           view's transform, so it came out in the application's font -- three
+           times a target's name when zoomed out -- and the counter-turn meant
+           for scene text then laid it on its side. */
+        QGraphicsSimpleTextItem *label = m_scene->addSimpleText(tr("%1 (Default)").arg(t->name()),
+                                                                TargetItem::labelFont());
         label->setBrush(QColor(170, 200, 255, 220));
-        label->setFlag(QGraphicsItem::ItemIgnoresTransformations);
         label->setPos(a.x() + r, a.y() + r);
+        label->setData(0, QStringLiteral("ghostLabel"));
         label->setZValue(ti->zValue() - 1);
         m_blockingGhosts << ring << link << label;
     }
@@ -7747,9 +7816,12 @@ void MonitorGraphicsView::updateFollowSpotOverlay()
     const QColor colour = st.state == Status::Moving ? QColor(0x3e, 0xc4, 0x6d)
                         : st.state == Status::Holding ? QColor(0xe0, 0xa8, 0x20)
                                                       : QColor(0xd9, 0x53, 0x4f);
-    const QVector3D at = tgt->position();
-    // Where its marker is drawn (repositionTargetItems()), moved with it.
-    const QPointF tgtPx = realPositionToPixels(double(at.x()) * 1000.0, double(at.y()) * 1000.0);
+    /* Where its marker is drawn, worked out the way the marker is
+       (updateTargets()): in the blocking shown, through this view's
+       projection. It was the Top view's maths on the Default position. */
+    const QVector3D at = tgt->isLine() ? props->targetAimPoint(tgt) : props->targetPosition(tgt);
+    const QPointF tgtPx = projectMm(double(at.x()) * 1000.0, double(at.y()) * 1000.0,
+                                    double(at.z()) * 1000.0);
     const QString tip = pc->followSpotStatusText();
 
     QList<quint32> heads = scene->fixtures();
@@ -7785,27 +7857,31 @@ void MonitorGraphicsView::updateFollowSpotOverlay()
     ring->setData(0, QStringLiteral("followRing"));
     m_followItems << ring;
 
-    QGraphicsSimpleTextItem *label = m_scene->addSimpleText(
+    /* Above the ring on SCREEN, however the plot is turned (the target's own
+       name is beside it): a stage-mark label, drawn in screen space on its
+       own dark plate. It was scene text with a scene plate under it, so a
+       turn stood the plate on end under upright text, and put the label
+       beside the ring instead of over it. */
+    StageMarkLabel *label = new StageMarkLabel(
         st.state == Status::Moving ? tr("following · moving")
-        : st.state == Status::Holding ? tr("following · holding") : tr("following · no stick"));
-    QFont lf = label->font();
-    lf.setBold(true);
-    label->setFont(lf);
-    label->setBrush(colour);
-    // Above the ring: the target's own name is beside it.
-    label->setPos(tgtPx.x() - label->boundingRect().width() / 2.0,
-                  tgtPx.y() - r - 2.0 - label->boundingRect().height());
+        : st.state == Status::Holding ? tr("following · holding") : tr("following · no stick"),
+        colour, Qt::AlignHCenter | Qt::AlignBottom);
+    label->setPos(tgtPx);
+    label->setStackOffset(-(r * viewScale() + 2.0));
     label->setZValue(99.5);
-    label->setAcceptedMouseButtons(Qt::NoButton);
     label->setToolTip(tip);
     label->setData(0, QStringLiteral("followLabel"));
-    // A dark plate under it, so it reads over a busy plot.
-    QGraphicsRectItem *plate = m_scene->addRect(label->sceneBoundingRect().adjusted(-3, -1, 3, 1),
-                                                Qt::NoPen, QColor(0, 0, 0, 170));
-    plate->setZValue(99.4);
-    plate->setAcceptedMouseButtons(Qt::NoButton);
-    plate->setData(0, QStringLiteral("followPlate"));
-    m_followItems << plate << label;
+    label->setData(1, r);
+    m_scene->addItem(label);
+    m_followItems << label;
+}
+
+void MonitorGraphicsView::refreshFollowSpotLabel()
+{
+    // Over the ring, which grows with the zoom while the label does not.
+    for (QGraphicsItem *it : std::as_const(m_followItems))
+        if (it->data(0).toString() == QLatin1String("followLabel"))
+            static_cast<StageMarkLabel *>(it)->setStackOffset(-(it->data(1).toReal() * viewScale() + 2.0));
 }
 
 void MonitorGraphicsView::setFollowSpotPin(bool visible, float xMeters, float yMeters)
@@ -8849,8 +8925,7 @@ void MonitorGraphicsView::resizeEvent(QResizeEvent *event)
     m_fittedGrid = m_gridExtent;
     m_fittedUnit = m_unitValue;
     updateGrid();
-    refreshAllItems();
-    updateFollowSpotOverlay();     // drawn in pixels: placed again at the new scale
+    refreshAllItems();             // the follow spot's overlay with it
     centerOnGrid();
     emit rulersChanged();
 }
@@ -11277,11 +11352,16 @@ void MonitorGraphicsView::rebuildRevealTags()
     f.setPointSizeF(8.5);
     const QFontMetricsF fm(f);
 
+    /* Laid out in SCREEN pixels, each tag drawn in screen space from the
+       stack (ItemIgnoresTransformations): the column of names stays a column
+       of upright names, the same size, at any zoom and any turn of the plot.
+       Laid out in the scene, a quarter turn stood the column on its side and
+       the pills overlapped. */
     const double rowH = fm.height() + 6.0;
     const double gap = 3.0;
     const double totalH = m_revealOrder.count() * (rowH + gap) - gap;
-    double y = anchor.y() - totalH * 0.5;
-    const double x = anchor.x() + 18.0;
+    double y = -totalH * 0.5;
+    const double x = 18.0;
 
     MonitorProperties *props = m_doc ? m_doc->monitorProperties() : nullptr;
 
@@ -11294,11 +11374,12 @@ void MonitorGraphicsView::rebuildRevealTags()
         const double swatch = 8.0;
         const double w = fm.horizontalAdvance(name) + swatch + 16.0;
         QPainterPath p;
-        p.addRoundedRect(QRectF(0, 0, w, rowH), 3.0, 3.0);
+        p.addRoundedRect(QRectF(x, y, w, rowH), 3.0, 3.0);
 
         RevealTagItem *tag = new RevealTagItem(fid, this);
         tag->setPath(p);
-        tag->setPos(x, y);
+        tag->setPos(anchor);
+        tag->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
         tag->setZValue(3.1);                  // above the fixtures it points at
         tag->setBrush(QBrush(picked ? QColor(40, 110, 220) : QColor(24, 32, 44, 235)));
         tag->setPen(QPen(picked ? QColor(235, 244, 255) : QColor(120, 160, 215), 1.0));
@@ -11308,7 +11389,7 @@ void MonitorGraphicsView::rebuildRevealTags()
         if (!gel.isValid() || gel == QColor(Qt::black))
             gel = QColor(200, 210, 225);
         QGraphicsRectItem *chip = new QGraphicsRectItem(
-            QRectF(5.0, (rowH - swatch) * 0.5, swatch, swatch), tag);
+            QRectF(x + 5.0, y + (rowH - swatch) * 0.5, swatch, swatch), tag);
         chip->setBrush(QBrush(gel));
         chip->setPen(QPen(QColor(15, 20, 28), 0.8));
         chip->setAcceptedMouseButtons(Qt::NoButton);
@@ -11316,13 +11397,14 @@ void MonitorGraphicsView::rebuildRevealTags()
         QGraphicsSimpleTextItem *label = new QGraphicsSimpleTextItem(name, tag);
         label->setFont(f);
         label->setBrush(QBrush(picked ? Qt::white : QColor(225, 234, 245)));
-        label->setPos(5.0 + swatch + 5.0, (rowH - fm.height()) * 0.5);
+        label->setPos(x + 5.0 + swatch + 5.0, y + (rowH - fm.height()) * 0.5);
         label->setAcceptedMouseButtons(Qt::NoButton);
 
         // The leader: this tag belongs to THAT stack, not to the deck under it.
-        QGraphicsLineItem *lead = new QGraphicsLineItem(
-            QLineF(anchor, QPointF(x, y + rowH * 0.5)));
+        QGraphicsLineItem *lead = new QGraphicsLineItem(QLineF(QPointF(0.0, 0.0), QPointF(x, y + rowH * 0.5)));
         lead->setPen(QPen(QColor(120, 160, 215, 170), 0.8, Qt::DotLine));
+        lead->setPos(anchor);
+        lead->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
         lead->setZValue(3.05);
         lead->setAcceptedMouseButtons(Qt::NoButton);
         m_scene->addItem(lead);
@@ -11661,6 +11743,9 @@ void MonitorGraphicsView::rebuildEmissionOverlay()
     else
         m_emissionTimer->stop();
 
+    // Drawn in scene pixels: a new scale or offset (a refit, a turn) is a change too.
+    if (!sig.isEmpty())
+        sig += QStringLiteral("@%1,%2,%3").arg(m_cellPixels).arg(m_xOffset).arg(m_yOffset);
     if (!turning && sig == m_emissionSignature && (sig.isEmpty() == m_emissionItems.isEmpty()))
         return;
     m_emissionSignature = sig;
@@ -11914,6 +11999,7 @@ void MonitorGraphicsView::rebuildProjectionOverlay()
             holder->setPen(QPen(QColor(190, 160, 80), 1.0));
             holder->setZValue(1.75);
             holder->setAcceptedMouseButtons(Qt::NoButton);
+            keepUpright(holder);              // the note and its plate turn back together
             QGraphicsSimpleTextItem *nt = new QGraphicsSimpleTextItem(note, holder);
             nt->setFont(nf);
             nt->setBrush(QBrush(QColor(240, 224, 190)));
@@ -11960,6 +12046,7 @@ void MonitorGraphicsView::rebuildProjectionOverlay()
         back->setBrush(QBrush(QColor(12, 18, 26, 190)));
         back->setPen(QPen(col, 0.8));
         back->setAcceptedMouseButtons(Qt::NoButton);
+        keepUpright(back);                    // the name and its plate turn back together
         QGraphicsSimpleTextItem *tag = new QGraphicsSimpleTextItem(name, back);
         tag->setFont(lf);
         tag->setBrush(QBrush(QColor(235, 242, 250)));

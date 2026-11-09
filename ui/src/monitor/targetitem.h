@@ -18,6 +18,7 @@
 
 #include <QGraphicsItem>
 #include <QPainterPath>
+#include <QFont>
 #include <QPolygonF>
 #include <QVector>
 #include <QStringList>
@@ -117,6 +118,14 @@ public:
      *  a head), as figurePath() draws one. */
     static QPainterPath figureOutline(const QPointF &feet, const QPointF &crown,
                                       double pxPerMetre, bool sideOn);
+    /** The font a target's name is written in on the plot. Anything that
+     *  labels a target there (a blocking's "(Default)" ghost) uses it too, so
+     *  it reads the same size at every zoom and turn. */
+    static QFont labelFont();
+    /** The name label's text, for tests. */
+    QString labelText() const;
+    /** The name label itself, for tests. */
+    const QGraphicsItem *labelItem() const;
     /** The people on a performer line: each one's feet and crown, in item
      *  coordinates. */
     void setPerformers(const QVector<QPair<QPointF, QPointF> > &feetCrowns,

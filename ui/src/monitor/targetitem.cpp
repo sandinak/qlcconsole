@@ -55,9 +55,24 @@ TargetItem::TargetItem(StageTarget *target, Doc *doc, float pxX, float pxY,
     QColor textColor = target->color().isValid() ? target->color().lighter(160)
                                                  : QColor(255, 220, 80);
     m_label->setDefaultTextColor(textColor);
-    m_label->setFont(QFont("Arial", 7));
+    m_label->setFont(labelFont());
     m_label->setZValue(0.1);
     m_label->setPos(kRadius + 3, -kRadius);
+}
+
+QFont TargetItem::labelFont()
+{
+    return QFont(QStringLiteral("Arial"), 7);
+}
+
+QString TargetItem::labelText() const
+{
+    return m_label != nullptr ? m_label->toPlainText() : QString();
+}
+
+const QGraphicsItem *TargetItem::labelItem() const
+{
+    return m_label;
 }
 
 quint32 TargetItem::targetId() const

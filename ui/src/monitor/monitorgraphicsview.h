@@ -593,7 +593,14 @@ public:
     void updateFollowSpotOverlay();
     /** The overlay's items (a ring, a label, a line a head): for tests. */
     QList<QGraphicsItem *> followSpotOverlayItems() const { return m_followItems; }
+    /** The blocking's "(Default)" rings, links and labels: for tests. */
+    QList<QGraphicsItem *> blockingGhostItems() const { return m_blockingGhosts; }
+    /** Keep @p item -- a label on a backing, its text a child of it -- upright
+     *  as a whole while the view is turned (refreshLabelRotations()). */
+    static void keepUpright(QGraphicsItem *item);
     void clearFollowSpotOverlay();
+    /** Keep the follow spot's label over its ring at the current zoom. */
+    void refreshFollowSpotLabel();
 
     /** Rebuild the thin tether lines from a truss-bound fixture back to its
      *  anchor point on the truss centreline — shown only when the fixture is
