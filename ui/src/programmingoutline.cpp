@@ -86,10 +86,22 @@ public:
     {
         if (index.data(ProgrammingOutline::KindRole).toInt() != ProgrammingOutline::HintRow)
             return QStyledItemDelegate::sizeHint(option, index);
-        const int w = qMax(40, m_view->viewport()->width() - 12);
-        const QRect r = option.fontMetrics.boundingRect(QRect(0, 0, w, 100000), Qt::TextWordWrap,
-                                                        index.data(Qt::DisplayRole).toString());
-        return QSize(w, r.height() + 8);
+        /* Measure in the rectangle the style paints the text into: the row
+           starts after the tree's indent, and the style's margins (and any
+           icon) come off that again. Measuring the bare viewport wrapped one
+           line short on a narrow pane and cut the last line off. */
+        const int indent = m_view->rootIsDecorated() ? m_view->indentation() : 0;
+        const int rowW = qMax(40, m_view->viewport()->width() - indent);
+        QStyleOptionViewItem opt = option;
+        initStyleOption(&opt, index);
+        opt.features |= QStyleOptionViewItem::WrapText;
+        opt.rect = QRect(0, 0, rowW, opt.fontMetrics.height() * 2);
+        QStyle *st = m_view->style();
+        const QRect textRect = st->subElementRect(QStyle::SE_ItemViewItemText, &opt, m_view);
+        const int textW = qMax(20, textRect.width());
+        const QRect r = opt.fontMetrics.boundingRect(QRect(0, 0, textW, 100000), Qt::TextWordWrap,
+                                                     index.data(Qt::DisplayRole).toString());
+        return QSize(rowW, r.height() + (opt.rect.height() - textRect.height()) + 8);
     }
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
     {
