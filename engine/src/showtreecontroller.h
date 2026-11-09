@@ -409,6 +409,7 @@ public:
                                         QString *why = nullptr) const;
     bool renumberLevel(quint32 cueId, int start = 1, int step = 1, QString *why = nullptr);
 private:
+    Usage usageOfCues(const CueList &list, int first, int last) const;
     /** Run @a op (a move or renumber in cue @a cueId's list) keeping what
      *  show control has LOADed on the list's chaser on the same cue. */
     bool keepingStandby(quint32 cueId, const std::function<bool()> &op);
@@ -868,6 +869,9 @@ public:
         QHash<quint32, int> sets;
     };
     Usage usageInList(quint32 listId) const;
+    /** The same over one song section of the list (Library "In this song"):
+     *  its cues (index first..last) and their sub-cues. */
+    Usage usageInSection(quint32 listId, const ShowTree::Section &section) const;
     bool renameNode(quint32 nodeId, const QString &name);
     bool removeCueList(quint32 listId);
     bool removeProduction(quint32 productionId);

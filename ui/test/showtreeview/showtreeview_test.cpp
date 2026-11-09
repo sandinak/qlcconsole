@@ -2011,6 +2011,61 @@ void ShowTreeView_Test::theLibraryShowsWhatTheListUses()
     QVERIFY(shown);
 }
 
+/* The Library's "In this song": what the song section the selection is in
+   uses, above "In this cue list"; it follows the selection to another song and
+   is absent outside one. */
+void ShowTreeView_Test::theLibraryShowsWhatTheSongUses()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "A", ListMode::Tracking);
+    QVERIFY(st->setNumbering(prod, ShowTree::Numbering::ShowPartIteration));
+    const quint32 s1 = st->addSection(list, "Entrance");
+    const quint32 s1b = st->addCue(list, 0, "Entrance b");
+    const quint32 s2 = st->addSection(list, "Finale");
+    st->setLayerLook(s1, st->addLayer(s1, groupTarget(towers->id())), st->lookForPalette(full));
+    st->setLayerLook(s1b, st->addLayer(s1b, groupTarget(towers->id())), st->lookForPalette(full));
+    st->setLayerLook(s2, st->addLayer(s2, groupTarget(usts->id())), st->lookForPalette(half));
+
+    ShowTreeView view(nullptr, m_doc);
+    QString header;
+    QVERIFY(view.inSongItems(&header).isEmpty());   // nothing selected
+    QVERIFY(header.isEmpty());
+    QVERIFY(view.selectNode(list));                 // a list is in no song
+    QCoreApplication::processEvents();
+    QVERIFY(view.inSongItems(&header).isEmpty());
+    QVERIFY(header.isEmpty());
+
+    QVERIFY(view.selectNode(s1b));
+    QCoreApplication::processEvents();
+    QCOMPARE(view.inSongItems(&header), QStringList({ "Towers (2) ×2", "Full ×2" }));
+    QVERIFY(header.startsWith("In this song"));
+    QVERIFY(header.contains("Entrance"));
+    // Above "In this cue list", which still counts both songs.
+    QCOMPARE(view.inListItems(), QStringList({ "Towers (2) ×2", "Full ×2", "USTs (2) ×1", "Half ×1" }));
+    QStringList heads;
+    for (int i = 0; i < view.library()->topLevelItemCount(); ++i)
+        heads << view.library()->topLevelItem(i)->text(0);
+    QVERIFY(heads.indexOf(header) >= 0 && heads.indexOf(header) < heads.indexOf("In this cue list"));
+
+    // Another cue in the same song: no rebuild needed; another song: it follows.
+    QVERIFY(view.selectNode(s1));
+    QCoreApplication::processEvents();
+    QCOMPARE(view.inSongItems(), QStringList({ "Towers (2) ×2", "Full ×2" }));
+    QVERIFY(view.selectNode(s2));
+    QCoreApplication::processEvents();
+    QCOMPARE(view.inSongItems(&header), QStringList({ "USTs (2) ×1", "Half ×1" }));
+    QVERIFY(header.contains("Finale"));
+    // An edit in the song counts at once.
+    st->setLayerLook(s2, st->addLayer(s2, groupTarget(towers->id())), st->lookForPalette(half));
+    QCoreApplication::processEvents();
+    QCOMPARE(view.inSongItems(), QStringList({ "Half ×2", "Towers (2) ×1", "USTs (2) ×1" }));
+}
+
 void ShowTreeView_Test::theCommandLine()
 {
     FixtureGroup *towers = group("Towers", 0, 2);

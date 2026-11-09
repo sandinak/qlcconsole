@@ -49,6 +49,7 @@ private slots:
     void controllerSectionsAndBlock();
     void mergeInTheShowPlaysEveryList();
     void sectionsSaveAndLoad();
+    void usageInASection();
 
     // Tonight's running order (ro)
     void runningOrderPureRules();

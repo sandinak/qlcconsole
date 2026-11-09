@@ -2523,10 +2523,20 @@ bool ShowTreeController::updateSource(quint32 cueId, const Target &target, const
 
 ShowTreeController::Usage ShowTreeController::usageInList(quint32 listId) const
 {
-    Usage u;
     const CueList *list = cueList(listId);
-    if (list == nullptr)
-        return u;
+    return list == nullptr ? Usage() : usageOfCues(*list, 0, list->cues.count() - 1);
+}
+
+ShowTreeController::Usage ShowTreeController::usageInSection(quint32 listId, const ShowTree::Section &section) const
+{
+    const CueList *list = cueList(listId);
+    return list == nullptr ? Usage() : usageOfCues(*list, section.first, section.last);
+}
+
+ShowTreeController::Usage ShowTreeController::usageOfCues(const CueList &listRef, int first, int last) const
+{
+    Usage u;
+    const CueList *list = &listRef;
     auto looks = [&u](const QList<Look> &ls) {
         for (const Look &l : ls)
         {
@@ -2538,13 +2548,19 @@ ShowTreeController::Usage ShowTreeController::usageInList(quint32 listId) const
     };
     // Its cues' sub-cues are part of the song too (P6).
     QList<const Cue *> cues;
-    for (const Cue &c : list->cues)
-        cues << &c;
+    for (int i = qMax(0, first); i <= last && i < list->cues.count(); ++i)
+        cues << &list->cues.at(i);
     for (const Production &p : m_productions)
+    {
         for (const CueList &s : p.lists)
-            if (s.isSubCues() && list->indexOf(s.subOf) >= 0)
-                for (const Cue &c : s.cues)
-                    cues << &c;
+        {
+            const int at = s.isSubCues() ? list->indexOf(s.subOf) : -1;
+            if (at < first || at > last)
+                continue;
+            for (const Cue &c : s.cues)
+                cues << &c;
+        }
+    }
     for (const Cue *cp : cues)
     {
         const Cue &c = *cp;

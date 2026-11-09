@@ -731,6 +731,8 @@ public:
     /** The Library's "In this cue list" items, most used first, as text
      *  ("Towers ×6"). */
     QStringList inListItems() const;
+    /** "In this song": its rows (empty and @a header cleared when none). */
+    QStringList inSongItems(QString *header = nullptr) const;
 
     /** "Next cue receives", as the cue page shows it. */
     QString nextCueText() const;
@@ -1255,6 +1257,8 @@ private:
     QTimer *m_libraryTimer = nullptr;
     QString m_targetSig;   //!< ids, names and kinds of the Library's Targets: rebuild only when they change
     quint32 m_libraryList = 0xFFFFFFFF;    //!< the list "In this cue list" shows
+    QStringList usageItems(int order, QString *header) const;
+    QString m_librarySection;               //!< the song section "In this song" shows (list:key; empty: none)
 
     // Command line
     QWidget *m_commandBar = nullptr;
@@ -1405,6 +1409,8 @@ private:
     void showSectionPage(quint32 listId, const ShowTree::Section &section);
     /** The rows' key for section @a s of list @a listId (expansion, SectionRole). */
     static QString sectionRole(const ShowTree::Section &s);
+    static QString sectionKey(quint32 listId, const ShowTree::Section &s);
+    QString currentSectionKey() const;
     MergePicker m_mergePicker;
     OrderPicker m_orderPicker;
     QPushButton *m_prodOrder = nullptr;
