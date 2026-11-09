@@ -373,6 +373,8 @@ bool ShowTreeController::setFormationValue(quint32 paletteId, const QString &key
     return true;
 }
 
+static Cue *cueIn(QList<Production> &productions, quint32 cueId, CueList **listOut = nullptr);
+
 QList<Look> ShowTreeController::formationToSave(quint32 cueId, quint32 layerId) const
 {
     const Cue *c = cue(cueId);
@@ -533,7 +535,7 @@ QList<ResolvedCue> ShowTreeController::resolved(const CueList &list) const
     return resolve(list, lineAimTest(), nullptr, formationRows());
 }
 
-static Cue *cueIn(QList<Production> &productions, quint32 cueId, CueList **listOut = nullptr)
+static Cue *cueIn(QList<Production> &productions, quint32 cueId, CueList **listOut)
 {
     for (Production &p : productions)
         for (CueList &l : p.lists)
