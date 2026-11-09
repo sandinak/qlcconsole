@@ -378,11 +378,9 @@ add_library(qlc_test_guard OBJECT engine/test/common/testguard.cpp)
 # webaccess and wled test dirs do) gets it here, so a test dir nobody
 # remembered -- a plugin's -- is isolated too.
 # platforms/linux/check-test-settings.sh checks the built programs for it.
-add_library(qlc_test_settings OBJECT ui/test/common/testsettings.cpp)
-target_link_libraries(qlc_test_settings PRIVATE Qt${QT_VERSION_MAJOR}::Core)
-# Not the source root as an include dir: its VERSION file is found for Qt's
-# <version> on a case-insensitive filesystem.
-set_target_properties(qlc_test_settings PROPERTIES INCLUDE_CURRENT_DIR OFF)
+# (Added as a source of the program itself, not as an object library: a target
+# of this top-level dir gets the source root as an include dir, where the
+# VERSION file stands in for Qt's <version> on a case-insensitive filesystem.)
 function(qlc_guard_test_programs dir)
     get_property(targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
     foreach(t IN LISTS targets)
@@ -397,7 +395,7 @@ function(qlc_guard_test_programs dir)
             set_property(GLOBAL APPEND PROPERTY QLC_TEST_GUARDED ${t})
             get_target_property(srcs ${t} SOURCES)
             if(NOT srcs MATCHES "testsettings\\.cpp")
-                target_sources(${t} PRIVATE $<TARGET_OBJECTS:qlc_test_settings>)
+                target_sources(${t} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ui/test/common/testsettings.cpp)
             endif()
         endif()
     endforeach()

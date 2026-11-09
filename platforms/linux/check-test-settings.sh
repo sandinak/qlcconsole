@@ -7,8 +7,7 @@
 #
 #  - every test program carries ui/test/common/testsettings.cpp, which points
 #    QSettings at a temporary INI folder before main(). The top-level
-#    CMakeLists.txt adds it to every program under a test/ dir (target
-#    qlc_test_settings). Its mark in a binary: QLC_TEST_SETTINGS_ISOLATED.
+#    CMakeLists.txt adds it to every program under a test/ dir. Its mark in a binary: QLC_TEST_SETTINGS_ISOLATED.
 #  - platforms/linux/unittest.sh on macOS compares `defaults export` of the
 #    app's domain before and after the run (--defaults-before / --defaults-after).
 #
@@ -55,7 +54,7 @@ check_source()
     [ -f "$root/ui/test/common/testsettings.cpp" ] || { echo "check-test-settings: no ui/test/common/testsettings.cpp in $root"; return 1; }
     grep -q "$MARK" "$root/ui/test/common/testsettings.cpp" \
         || { echo "check-test-settings: testsettings.cpp does not set $MARK"; bad=1; }
-    grep -q 'TARGET_OBJECTS:qlc_test_settings' "$root/CMakeLists.txt" \
+    grep -q 'PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ui/test/common/testsettings.cpp' "$root/CMakeLists.txt" \
         || { echo "check-test-settings: the top-level CMakeLists.txt no longer adds qlc_test_settings to every test program"; bad=1; }
     [ "$bad" -eq 0 ] && echo "check-test-settings: the CMake wiring is in place."
     return "$bad"
@@ -158,11 +157,11 @@ self_test()
 
     mkdir -p "$tmp/src/ui/test/common"
     printf '// %s\n' "$MARK" > "$tmp/src/ui/test/common/testsettings.cpp"
-    printf 'target_sources(x PRIVATE $<TARGET_OBJECTS:qlc_test_settings>)\n' > "$tmp/src/CMakeLists.txt"
+    printf 'target_sources(x PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ui/test/common/testsettings.cpp)\n' > "$tmp/src/CMakeLists.txt"
     expect 0 "source: wired" check_source "$tmp/src"
     printf 'nothing\n' > "$tmp/src/CMakeLists.txt"
     expect 1 "source: CMake wiring gone" check_source "$tmp/src"
-    printf 'target_sources(x PRIVATE $<TARGET_OBJECTS:qlc_test_settings>)\n' > "$tmp/src/CMakeLists.txt"
+    printf 'target_sources(x PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ui/test/common/testsettings.cpp)\n' > "$tmp/src/CMakeLists.txt"
     printf '// nothing\n' > "$tmp/src/ui/test/common/testsettings.cpp"
     expect 1 "source: mark gone" check_source "$tmp/src"
 
