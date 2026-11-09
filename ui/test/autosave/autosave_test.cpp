@@ -665,7 +665,11 @@ void Autosave_Test::openTheSavedShowKeepsTheAutosaveAside()
             // again on the next tick.
             fd->setDirectory(QFileInfo(show).absolutePath());
             fd->selectFile(show);
-            if (fd->selectedFiles().value(0) != show)
+            // Compared as canonical paths: a temp folder under /var is
+            // /private/var to the dialog once it has read it.
+            const QString picked = fd->selectedFiles().value(0);
+            if (picked.isEmpty()
+                || QFileInfo(picked).canonicalFilePath() != QFileInfo(show).canonicalFilePath())
                 return false;
             chosen = true;
             static_cast<QDialog *>(fd)->accept();
