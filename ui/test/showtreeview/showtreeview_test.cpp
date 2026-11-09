@@ -124,6 +124,7 @@
 #include "lineplanview.h"
 #include "lineformation.h"
 #include "monitorproperties.h"
+#include "blockingview.h"
 #include "stagetarget.h"
 #include "qlcphysical.h"
 #include "lookeditor.h"
@@ -8622,6 +8623,180 @@ void ShowTreeView_Test::theCuePagePicksTheBlocking()
     QCOMPARE(st->cueBlocking(c[2]), apron);
     QVERIFY(st->undo());
     QCOMPARE(st->cueOwnBlocking(c[1]), ShowTree::invalidId());
+}
+
+/* The Library's row @a text under heading @a heading (nullptr if not there). */
+static QTreeWidgetItem *libraryRowUnder(QTreeWidget *lib, const QString &heading, const QString &text)
+{
+    for (QTreeWidgetItemIterator it(lib); *it; ++it)
+        if ((*it)->text(0) == text && (*it)->parent() != nullptr && (*it)->parent()->text(0) == heading)
+            return *it;
+    return nullptr;
+}
+
+/* What dragging Library row @a row carries. */
+static QMimeData *libraryDrag(ShowTreeView &view, QTreeWidgetItem *row)
+{
+    view.library()->clearSelection();
+    row->setSelected(true);
+    return view.librarySelectionMime();
+}
+
+void ShowTreeView_Test::theLibraryOffersFormationsAndBlocking()
+{
+    FixtureGroup *all = new FixtureGroup(m_doc);
+    all->setName("All");
+    m_doc->addFixtureGroup(all);
+    all->assignFixture(placedSpot(m_doc, "L1", -4)->id());
+    all->assignFixture(placedSpot(m_doc, "R1", 4)->id());
+    const quint32 form = m_doc->paletteOps()->create(QLCPalette::Formation, QString(), "Pairs crossed",
+                                                     QVariantList(), [](QLCPalette *p) {
+                                                         p->setFormationValue(QLCPalette::FormationGroup, 2);
+                                                     });
+    MonitorProperties *mp = m_doc->monitorProperties();
+    const quint32 apron = mp->addBlockingSet("Apron");
+    const quint32 finale = mp->addBlockingSet("Finale");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 4; ++i)
+        c << st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    Target t;
+    t.groups << all->id();
+    const quint32 l1 = st->addLayer(c[0], t);
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *lib = view.library();
+    lib->expandAll();
+
+    // A Formation has its own heading, not Effects.
+    QTreeWidgetItem *formRow = libraryRowUnder(lib, "Formation", "Pairs crossed");
+    QVERIFY2(formRow != nullptr, "no Pairs crossed under Library ▸ Palettes ▸ Formation");
+    QVERIFY(libraryRowUnder(lib, "Effects", "Pairs crossed") == nullptr);
+    QCOMPARE(formRow->data(0, ShowTreeView::KindRole).toInt(), int(ShowTreeView::LibPalette));
+
+    // Dropped on a layer, and on a cue: their formation, as ⋯ ▸ Formation.
+    QScopedPointer<QMimeData> fm(libraryDrag(view, formRow));
+    QVERIFY(!fm.isNull());
+    QVERIFY(view.dropMime(c[0], l1, fm.data()));
+    const Look *ll = st->cue(c[0])->layer(l1)->look(KeyFormation);
+    QVERIFY(ll != nullptr && ll->palettes == QList<quint32>({ form }));
+    QVERIFY(view.dropMime(c[1], ShowTree::invalidId(), fm.data()));
+    const Look *cl = st->cue(c[1])->look(KeyFormation);
+    QVERIFY(cl != nullptr && cl->palettes == QList<quint32>({ form }));
+
+    // Blocking: Default and each set.
+    QTreeWidgetItem *blocking = libraryItem(lib, "Blocking");
+    QVERIFY2(blocking != nullptr, "no Library ▸ All ▸ Blocking");
+    QCOMPARE(blocking->childCount(), 3);
+    QCOMPARE(blocking->child(0)->text(0), QString("Default"));
+    QCOMPARE(blocking->child(1)->text(0), QString("Apron"));
+    QCOMPARE(blocking->child(2)->text(0), QString("Finale"));
+
+    // Dropped on one of two selected cues: both, and the cue after tracks.
+    QTreeWidget *tree = view.tree();
+    tree->expandAll();
+    tree->clearSelection();
+    cueRow(tree, c[1])->setSelected(true);
+    cueRow(tree, c[2])->setSelected(true);
+    QScopedPointer<QMimeData> bm(libraryDrag(view, libraryRowUnder(lib, "Blocking", "Apron")));
+    QVERIFY(!bm.isNull());
+    QVERIFY(view.acceptsDrop(c[1], ShowTree::invalidId(), bm.data(), Target()));
+    QVERIFY2(view.dropHint(c[1], ShowTree::invalidId(), bm.data()).contains("2 selected cues"),
+             qPrintable(view.dropHint(c[1], ShowTree::invalidId(), bm.data())));
+    QVERIFY(view.dropMime(c[1], ShowTree::invalidId(), bm.data()));
+    QCOMPARE(st->cueOwnBlocking(c[1]), apron);
+    QCOMPARE(st->cueOwnBlocking(c[2]), apron);
+    QCOMPARE(st->cueOwnBlocking(c[3]), ShowTree::invalidId());
+    QCOMPARE(st->cueBlocking(c[3]), apron);
+    QCOMPARE(st->cueBlocking(c[0]), quint32(MonitorProperties::defaultBlocking()));
+    QCOMPARE(st->undoText(), QString("Set blocking of 2 cues"));
+    // Again: nothing changes, and the drop says so.
+    QVERIFY(view.dropRefusal(c[1], ShowTree::invalidId(), bm.data(), Target()).contains("Already"));
+
+    // On a cue not selected: only that one.
+    tree->clearSelection();
+    QScopedPointer<QMimeData> fin(libraryDrag(view, libraryRowUnder(lib, "Blocking", "Finale")));
+    QVERIFY(view.dropMime(c[3], ShowTree::invalidId(), fin.data()));
+    QCOMPARE(st->cueOwnBlocking(c[3]), finale);
+    QCOMPARE(st->cueOwnBlocking(c[2]), apron);
+    // Default, as the cue page's Default.
+    QScopedPointer<QMimeData> def(libraryDrag(view, libraryRowUnder(lib, "Blocking", "Default")));
+    QVERIFY(view.dropMime(c[2], ShowTree::invalidId(), def.data()));
+    QCOMPARE(st->cueOwnBlocking(c[2]), quint32(MonitorProperties::defaultBlocking()));
+    QCOMPARE(st->cueOwnBlocking(c[1]), apron);
+}
+
+void ShowTreeView_Test::theLibraryShowsNewFormationsAndBlockings()
+{
+    FixtureGroup *all = new FixtureGroup(m_doc);
+    all->setName("All");
+    m_doc->addFixtureGroup(all);
+    all->assignFixture(placedSpot(m_doc, "L1", -4)->id());
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << all->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    QVERIFY(st->setLayerLook(c1, l1, ShowTreeController::lineParamLook(KeyGrouping, "pairs")));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *lib = view.library();
+
+    // Save as Formation…: under Formation, no refresh.
+    QVERIFY(st->saveAsFormation(c1, l1, "Pairs") != QLCPalette::invalidId());
+    QTRY_VERIFY(libraryRowUnder(lib, "Formation", "Pairs") != nullptr);
+
+    // Save Positions as Blocking…: under Blocking, no refresh; a rename too.
+    const quint32 encore = BlockingView::savePositionsAs(m_doc, "Encore", MonitorProperties::defaultBlocking());
+    QVERIFY(m_doc->monitorProperties()->hasBlockingSet(encore));
+    QTRY_VERIFY(libraryRowUnder(lib, "Blocking", "Encore") != nullptr);
+    QVERIFY(m_doc->monitorProperties()->renameBlockingSet(encore, "Bows"));
+    QTRY_VERIFY(libraryRowUnder(lib, "Blocking", "Bows") != nullptr);
+    QVERIFY(libraryRowUnder(lib, "Blocking", "Encore") == nullptr);
+}
+
+void ShowTreeView_Test::libraryFormationBlockingShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    group("Towers", 0, 2);
+    dimmer(127, "Half");
+    m_doc->paletteOps()->create(QLCPalette::Formation, QString(), "Pairs crossed", QVariantList(), [](QLCPalette *p) {
+        p->setFormationValue(QLCPalette::FormationGroup, 2);
+    });
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->addBlockingSet("Apron number");
+    mp->addBlockingSet("Finale");
+    ShowTreeController *st = m_doc->showTree();
+    st->addCue(st->addCueList(st->addProduction("Demo"), "Main", ListMode::Tracking), -1, "Opening");
+    ShowTreeView view(nullptr, m_doc);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QDir().mkpath(dir);
+    QTreeWidget *lib = view.library();
+    QTest::qWait(50);
+    for (const QString &open : QStringList{ "All", "Blocking", "Palettes", "Formation", "Dimmer" })
+        if (QTreeWidgetItem *it = libraryItem(lib, open))
+            it->setExpanded(true);
+    for (const auto &sz : QList<QPair<QString, QSize>> { { "min", view.minimumSizeHint() },
+                                                         { "laptop", QSize(1280, 800) },
+                                                         { "wide", QSize(1920, 1080) } })
+    {
+        view.resize(sz.second);
+        QTest::qWait(100);
+        QVERIFY(view.grab().save(QString("%1/library-%2.png").arg(dir, sz.first)));
+        QVERIFY(lib->grab().save(QString("%1/library-%2-pane.png").arg(dir, sz.first)));
+    }
 }
 
 void ShowTreeView_Test::moveInBlackPerListAndCueInTheTree()

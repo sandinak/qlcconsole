@@ -754,12 +754,12 @@ public:
 protected:
     QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const override
     {
-        QByteArray grp, fx, pal, fn, set, tgt, reu;
+        QByteArray grp, fx, pal, fn, set, tgt, reu, blk;
         QDataStream gs(&grp, QIODevice::WriteOnly), xs(&fx, QIODevice::WriteOnly),
                     ps(&pal, QIODevice::WriteOnly), fs(&fn, QIODevice::WriteOnly),
                     ss(&set, QIODevice::WriteOnly), ts(&tgt, QIODevice::WriteOnly),
-                    rs(&reu, QIODevice::WriteOnly);
-        int g = 0, x = 0, p = 0, f = 0, t = 0, a = 0, u = 0;
+                    rs(&reu, QIODevice::WriteOnly), bs(&blk, QIODevice::WriteOnly);
+        int g = 0, x = 0, p = 0, f = 0, t = 0, a = 0, u = 0, b = 0;
         for (QTreeWidgetItem *item : items)
         {
             const quint32 id = item->data(0, ShowTreeView::IdRole).toUInt();
@@ -772,10 +772,11 @@ protected:
                 case ShowTreeView::LibSet: ss << id; ++t; break;
                 case ShowTreeView::LibTarget: ts << id; ++a; break;
                 case ShowTreeView::LibReusable: rs << id; ++u; break;
+                case ShowTreeView::LibBlocking: bs << id; ++b; break;
                 default: break;
             }
         }
-        if (g + x + p + f + t + a + u == 0)
+        if (g + x + p + f + t + a + u + b == 0)
             return nullptr;
         QMimeData *mime = new QMimeData();
         if (g > 0)
@@ -792,6 +793,8 @@ protected:
             mime->setData(QLatin1String(ShowTreeView::targetMimeType()), tgt);
         if (u > 0)
             mime->setData(QLatin1String(ShowTreeView::reusableMimeType()), reu);
+        if (b > 0)
+            mime->setData(QLatin1String(ShowTreeView::blockingMimeType()), blk);
         return mime;
     }
 };
@@ -2664,6 +2667,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     connect(m_doc, &Doc::fixtureGroupChanged, m_libraryTimer, kickTimer);
     connect(m_doc, &Doc::paletteAdded, m_libraryTimer, kickTimer);
     connect(m_doc, &Doc::paletteRemoved, m_libraryTimer, kickTimer);
+    if (m_doc->monitorProperties() != nullptr)
+        connect(m_doc->monitorProperties(), &MonitorProperties::blockingSetsChanged, m_libraryTimer, kickTimer);
     /* Targets come from the Lighting Studio (MonitorProperties): one signal for
        add, remove, rename and kind. The Studio also fires it while a target is
        dragged, so rebuild only when the Targets list itself changed. */
@@ -7067,6 +7072,24 @@ const char *ShowTreeView::reusableMimeType()
     return "application/x-qlcconsole-showtree-reusables";
 }
 
+const char *ShowTreeView::blockingMimeType()
+{
+    return "application/x-qlcconsole-showtree-blocking";
+}
+
+bool ShowTreeView::dropBlocking(quint32 cueId, quint32 set)
+{
+    const MonitorProperties *mp = m_doc->monitorProperties();
+    if (mp == nullptr || (set != MonitorProperties::defaultBlocking() && !mp->hasBlockingSet(set))
+        || m_st->cueBlocking(cueId) == invalidId())
+        return false;
+    // Onto one of the selected cues: all of them, as one step.
+    QList<quint32> cues = selectedCues();
+    if (!cues.contains(cueId))
+        cues = { cueId };
+    return m_st->setCuesBlocking(cues, set);
+}
+
 bool ShowTreeView::splitLayer(quint32 cueId, quint32 layerId, QString *why)
 {
     QList<quint32> made;
@@ -7436,6 +7459,9 @@ bool ShowTreeView::acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *
     // Reusables: a use in the cue (a layer), or after it (a cue).
     if (mime->hasFormat(QLatin1String(reusableMimeType())))
         return !child;
+    // A blocking set: the cue's (on one of its layers, too).
+    if (mime->hasFormat(QLatin1String(blockingMimeType())))
+        return !child && m_st->cueBlocking(cueId) != invalidId();
     const bool targets = mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureGroupMimeType()))
                          || mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureMimeType()))
                          || mime->hasFormat(QLatin1String(setMimeType()));
@@ -7470,6 +7496,25 @@ QString ShowTreeView::dropRefusal(quint32 cueId, quint32 layerId, const QMimeDat
 {
     if (mime == nullptr)
         return QString();
+    if (mime->hasFormat(QLatin1String(blockingMimeType())))
+    {
+        if (cueId == invalidId() || m_st->cue(cueId) == nullptr)
+            return tr("✕ Drop it on a cue: the blocking it uses from there on");
+        if (m_st->cueBlocking(cueId) == invalidId())
+            return tr("✕ A hit has no blocking: drop it on a cue of a cue list");
+        if (child)
+            return tr("✕ Blocking goes on the cue: let go without ⇧");
+        const QList<quint32> ids = idsFromMime(mime, blockingMimeType());
+        QList<quint32> cues = selectedCues();
+        if (!cues.contains(cueId))
+            cues = { cueId };
+        bool changes = false;
+        for (quint32 c : cues)
+            changes |= !ids.isEmpty() && m_st->cueOwnBlocking(c) != ids.first();
+        if (!changes)
+            return tr("✕ Already uses that blocking");
+        return QString();
+    }
     const bool reusables = mime->hasFormat(QLatin1String(reusableMimeType()));
     const QList<quint32> groups = idsFromMime(mime, FixtureGroupSource::fixtureGroupMimeType());
     const QList<quint32> fixtures = idsFromMime(mime, FixtureGroupSource::fixtureMimeType());
@@ -7591,6 +7636,11 @@ bool ShowTreeView::dropMime(quint32 cueId, quint32 layerId, const QMimeData *mim
         return false;
     if (mime->hasFormat(QLatin1String(reusableMimeType())))
         return dropReusables(cueId, idsFromMime(mime, reusableMimeType()));
+    if (mime->hasFormat(QLatin1String(blockingMimeType())))
+    {
+        const QList<quint32> ids = idsFromMime(mime, blockingMimeType());
+        return !ids.isEmpty() && dropBlocking(cueId, ids.first());
+    }
     QList<quint32> pals = idsFromMime(mime, FunctionsTreeWidget::paletteDragMimeType());
     // A target dropped: the Aim palette pointing at it (reused, or made).
     for (quint32 tid : idsFromMime(mime, targetMimeType()))
@@ -7677,6 +7727,17 @@ QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *
     if (list == nullptr || cue == nullptr)
         return QString();
     const QString cueText = m_st->cueLabel(*list, list->indexOf(cueId));
+    const QList<quint32> blockings = idsFromMime(mime, blockingMimeType());
+    if (!blockings.isEmpty())
+    {
+        const MonitorProperties *mp = m_doc->monitorProperties();
+        const QString name = mp == nullptr ? QString() : mp->blockingName(blockings.first());
+        const QList<quint32> sel = selectedCues();
+        if (sel.count() > 1 && sel.contains(cueId))
+            return tr("Blocking %1 → the %2 selected cues, and the cues after each track it")
+                .arg(name).arg(sel.count());
+        return tr("Blocking %1 → %2 and the cues after it, until one sets its own").arg(name, cueText);
+    }
     const QList<quint32> reusables = idsFromMime(mime, reusableMimeType());
     if (!reusables.isEmpty())
     {
@@ -10201,6 +10262,15 @@ void ShowTreeView::reloadLibrary()
                    .arg(m_st->reusableUses(id).count());
             icon = QIcon(isLayer ? ":/group.png" : ":/collection.png");
         }
+        else if (kind == LibBlocking)
+        {
+            // Default (0) and the show's blocking sets (BLOCKING.md).
+            const MonitorProperties *mp = m_doc->monitorProperties();
+            if (mp == nullptr || (id != MonitorProperties::defaultBlocking() && !mp->hasBlockingSet(id)))
+                return nullptr;
+            text = mp->blockingName(id);
+            icon = QIcon(":/xypad.png");
+        }
         QTreeWidgetItem *item = new QTreeWidgetItem(parent);
         item->setText(0, text);
         item->setIcon(0, icon);
@@ -10309,6 +10379,26 @@ void ShowTreeView::reloadLibrary()
                                             "spreads the lights along it (Spread, Grouping, Cross)."));
             for (const StageTarget *t : tl)
                 add(targetsFolder, LibTarget, t->id());
+        }
+    }
+
+    // Blocking (BLOCKING.md): Default and the show's sets; dropped on a
+    // cue (or the selected cues), where the targets stand from it on.
+    {
+        const MonitorProperties *mp = m_doc->monitorProperties();
+        if (mp != nullptr)
+        {
+            QTreeWidgetItem *blocking = folder(all, tr("Blocking"));
+            blocking->setData(0, PathRole, QStringLiteral("Blocking"));
+            blocking->setToolTip(0, tr("Where the stage targets stand. Drop one on a cue (or on the selected "
+                                       "cues): it uses it from there on, as the cue page's Blocking does. "
+                                       "Save Positions as Blocking… in the Studio makes one."));
+            const QString useTip = tr("%1: drop on a cue to use it from there on");
+            if (QTreeWidgetItem *row = add(blocking, LibBlocking, MonitorProperties::defaultBlocking()))
+                row->setToolTip(0, useTip.arg(row->text(0)));
+            for (const MonitorProperties::BlockingSet &b : mp->blockingSets())
+                if (QTreeWidgetItem *row = add(blocking, LibBlocking, b.id))
+                    row->setToolTip(0, useTip.arg(row->text(0)));
         }
     }
 
@@ -10565,6 +10655,16 @@ void ShowTreeView::fillLibraryMenu(QMenu *out, QTreeWidgetItem *item)
             menu.add(ContextMenu::Remove, tr("Delete Folder"), [this]() { deleteLibrarySelection(); })
                 ->setToolTip(tr("Its palettes move up a level; none is deleted"));
         }
+        return;
+    }
+    if (kind == LibBlocking)
+    {
+        // The cue page's Blocking, from here: the selected cue(s) on.
+        menu.add(ContextMenu::Place, tr("Use from This Cue On"), [this, id]() {
+            const quint32 cue = currentCueId();
+            if (cue == invalidId() || !dropBlocking(cue, id))
+                m_hint->setText(tr("Select a cue of a cue list in the tree first"));
+        }, QStringLiteral("stUseBlocking"));
         return;
     }
     if (kind == LibReusable)
@@ -10873,13 +10973,14 @@ void ShowTreeView::buildLibraryPalettes(QTreeWidgetItem *all,
     makeFolders(root, QStringLiteral("*"), empty);
     const QList<QPair<QString, QString>> kinds = {
         { KeyColour, tr("Colour") }, { KeyDimmer, tr("Dimmer") }, { KeyPosition, tr("Position") },
-        { KeyGobo, tr("Gobo") }, { KeyZoom, tr("Zoom") }, { KeyBeam, tr("Focus / Frost / Iris") },
+        { KeyFormation, tr("Formation") }, { KeyGobo, tr("Gobo") }, { KeyZoom, tr("Zoom") }, { KeyBeam, tr("Focus / Frost / Iris") },
         { KeyShutter, tr("Shutter") }, { KeyEffectPrefix, tr("Effects") } };
     QHash<QString, QList<const QLCPalette *>> byKind;
     for (const QLCPalette *p : pl)
     {
         QString key = m_st->keyForPalette(p->id());
-        if (isEffectKey(key) || !attributeKeys().contains(key))
+        // A Formation (Q197) has a heading of its own, next to Position.
+        if (key != KeyFormation && (isEffectKey(key) || !attributeKeys().contains(key)))
             key = isEffectKey(key) || key.isEmpty() ? KeyEffectPrefix : key;
         byKind[key] << p;
     }
