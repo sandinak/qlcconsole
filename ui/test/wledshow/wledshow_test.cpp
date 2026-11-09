@@ -1042,9 +1042,9 @@ void WledShow_Test::aSnapCueReachesTheStaffWithTheStage()
        effect layers, which draw their first frame on the event loop, a
        frame (20 ms) after a plain layer like the wash. Each comes within
        the same 30 ms of the steps, and within two frames more of the wash. */
-    QVERIFY2(median(stepsLag) <= 30,
+    QVERIFY2(median(stepsLag) <= lagLimit,
              qPrintable(QString("the staff comes %1 ms after the steps' effect").arg(median(stepsLag))));
-    QVERIFY2(median(stageLag) <= 70,
+    QVERIFY2(median(stageLag) <= lagLimit + 40,
              qPrintable(QString("the staff comes %1 ms after the stage").arg(median(stageLag))));
     // Moved in black: every spell GO was its brightness alone.
     QCOMPARE(brightnessOnly, goes / 2);
