@@ -512,6 +512,7 @@ QWidget *speedMastersInTheStatusBar(App *)
     }
     doc->speedMasters()->setName(0, QStringLiteral("Main Speed"));
     QMainWindow *win = new QMainWindow;
+    win->setMinimumSize(900, 120);      // a window of the app's size, not a postage stamp
     win->setCentralWidget(new QLabel(QStringLiteral("The window above its status bar")));
     win->statusBar()->addWidget(new QLabel(QStringLiteral("GM 100%")), 0);
     win->statusBar()->addWidget(new SpeedMastersFooter(doc, win), 0);

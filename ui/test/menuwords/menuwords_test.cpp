@@ -171,9 +171,9 @@ QList<Label> buttonLabels()
         "(new (QPushButton|QToolButton)\\(\\s*|\\b(dropDown|tool|button|makeButton)\\(\\s*|"
         "\\b\\w*([bB]tn|[bB]utton)\\w*(->|\\.)setText\\(\\s*)"
         "tr\\(\"((?:[^\"\\\\]|\\\\.)*)\""));
-    const QRegularExpression ternary(QStringLiteral("\\b(?:%1|\\w*[bB]tn\\w*|\\w*[bB]utton\\w*)(?:->|\\.)setText\\((?=[^;]*\\?)")
-                                         .arg(names.isEmpty() ? QStringLiteral("zzNoButton")
-                                                              : QStringList(names.begin(), names.end()).join(QLatin1Char('|'))));
+    // By name only (...Btn / ...Button): a variable called m_next in one class
+    // must not make every m_next in the code a button.
+    const QRegularExpression ternary(QStringLiteral("\\b\\w*[bB](?:tn|utton)\\w*(?:->|\\.)setText\\((?=[^;]*\\?)"));
     QList<Label> out;
     for (const auto &src : sources())
     {
