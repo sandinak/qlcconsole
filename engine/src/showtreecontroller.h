@@ -868,6 +868,12 @@ public:
         QHash<quint32, int> sets;
     };
     Usage usageInList(quint32 listId) const;
+    /** The same over one song section of the list (Library "In this song"):
+     *  its cues (index first..last) and their sub-cues. */
+    Usage usageInSection(quint32 listId, const ShowTree::Section &section) const;
+private:
+    Usage usageOfCues(const ShowTree::CueList &list, int first, int last) const;
+public:
     bool renameNode(quint32 nodeId, const QString &name);
     bool removeCueList(quint32 listId);
     bool removeProduction(quint32 productionId);

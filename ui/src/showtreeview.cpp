@@ -3965,7 +3965,7 @@ void ShowTreeView::slotTreeSelectionChanged()
     if (isPick && !isWorkbenchDocked())
         m_st->pickCue(picked);
     syncPreview();
-    if (currentListId() != m_libraryList)
+    if (currentListId() != m_libraryList || currentSectionKey() != m_librarySection)
         m_libraryTimer->start();
     workbenchFollowTree();
     if (isPick && isWorkbenchDocked())
@@ -3983,6 +3983,18 @@ void ShowTreeView::pickCurrentCue()
         bench->playPicked();
     else
         m_st->pickCue(cueId);
+}
+
+QString ShowTreeView::sectionKey(quint32 listId, const ShowTree::Section &s)
+{
+    return QStringLiteral("%1:%2").arg(listId).arg(sectionRole(s));
+}
+
+QString ShowTreeView::currentSectionKey() const
+{
+    ShowTree::Section sec;
+    const quint32 listId = currentListId();
+    return listId != invalidId() && currentSection(&sec) ? sectionKey(listId, sec) : QString();
 }
 
 quint32 ShowTreeView::currentListId() const
@@ -9999,12 +10011,26 @@ QStringList ShowTreeView::recentItems() const
 
 QStringList ShowTreeView::inListItems() const
 {
+    return usageItems(3, nullptr);
+}
+
+QStringList ShowTreeView::inSongItems(QString *header) const
+{
+    return usageItems(4, header);
+}
+
+QStringList ShowTreeView::usageItems(int order, QString *header) const
+{
     QStringList out;
+    if (header != nullptr)
+        header->clear();
     for (int i = 0; i < m_library->topLevelItemCount(); ++i)
     {
         QTreeWidgetItem *section = m_library->topLevelItem(i);
-        if (section->data(0, IdRole).toUInt() != 3)
+        if (section->data(0, IdRole).toUInt() != quint32(order))
             continue;
+        if (header != nullptr)
+            *header = section->text(0);
         for (int k = 0; k < section->childCount(); ++k)
             if (section->child(k)->data(0, KindRole).toInt() != LibFolder)
                 out << section->child(k)->text(0);
@@ -10158,13 +10184,9 @@ void ShowTreeView::reloadLibrary()
     for (const auto &r : m_recent)
         add(recent, r.first, r.second);
 
-    // In this cue list (D20): what the selected list already uses, most
-    // used first -- a song mostly reuses its own vocabulary.
-    m_libraryList = currentListId();
-    if (m_libraryList != invalidId())
-    {
-        QTreeWidgetItem *inList = section(tr("In this cue list"), 3);
-        const ShowTreeController::Usage u = m_st->usageInList(m_libraryList);
+    // Fills a Library section with what @a u counts: most used first, then
+    // by kind (groups, then values) and name.
+    auto fillUsage = [&add](QTreeWidgetItem *into, const ShowTreeController::Usage &u) {
         struct Entry { int kind; quint32 id; int count; };
         QList<Entry> entries;
         for (auto it = u.sets.constBegin(); it != u.sets.constEnd(); ++it)
@@ -10179,7 +10201,7 @@ void ShowTreeView::reloadLibrary()
             entries << Entry { LibFunction, it.key(), it.value() };
         QList<QPair<Entry, QTreeWidgetItem *>> made;
         for (const Entry &e : entries)
-            if (QTreeWidgetItem *item = add(inList, e.kind, e.id))
+            if (QTreeWidgetItem *item = add(into, e.kind, e.id))
             {
                 item->setText(0, tr("%1 ×%2").arg(item->text(0)).arg(e.count));
                 made << qMakePair(e, item);
@@ -10194,17 +10216,39 @@ void ShowTreeView::reloadLibrary()
             return a.second->text(0).compare(b.second->text(0), Qt::CaseInsensitive) < 0;
         });
         for (const auto &m : made)
-            inList->removeChild(m.second);
+            into->removeChild(m.second);
         for (const auto &m : made)
-            inList->addChild(m.second);
+            into->addChild(m.second);
         if (made.isEmpty())
         {
-            QTreeWidgetItem *none = new QTreeWidgetItem(inList);
+            QTreeWidgetItem *none = new QTreeWidgetItem(into);
             none->setText(0, tr("(nothing yet)"));
             none->setFlags(Qt::ItemIsEnabled);
             none->setData(0, KindRole, LibFolder);
         }
+    };
+
+    // In this song: what the song section the selection is in uses -- the
+    // same rows as below, over that section only, to keep a song's context.
+    m_librarySection.clear();
+    {
+        ShowTree::Section sec;
+        const quint32 listId = currentListId();
+        if (listId != invalidId() && currentSection(&sec))
+        {
+            m_librarySection = sectionKey(listId, sec);
+            QTreeWidgetItem *inSong = section(tr("In this song: %1").arg(sectionTitle(sec)), 4);
+            inSong->setData(0, PathRole, QStringLiteral("In this song"));
+            inSong->setToolTip(0, tr("What this song section of the cue list uses, most used first."));
+            fillUsage(inSong, m_st->usageInSection(listId, sec));
+        }
     }
+
+    // In this cue list (D20): what the selected list already uses, most
+    // used first -- a song mostly reuses its own vocabulary.
+    m_libraryList = currentListId();
+    if (m_libraryList != invalidId())
+        fillUsage(section(tr("In this cue list"), 3), m_st->usageInList(m_libraryList));
     QTreeWidgetItem *pinned = section(tr("Pinned"), 1);
     for (const auto &p : m_pinned)
         add(pinned, p.first, p.second);

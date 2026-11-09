@@ -658,4 +658,50 @@ void ShowTreeSections_Test::runningOrderSavesLoadsAndResets()
     QCOMPARE(productionXml(back), xml);
 }
 
+/* Library "In this song": the same counts as usageInList, over one section
+   (its cues and their sub-cues); the list's own total is unchanged. */
+void ShowTreeSections_Test::usageInASection()
+{
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName("Front");
+    m_doc->addFixtureGroup(g);
+    g->assignFixture(m_fixtures[0]);
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setName("Red");
+    red->setValue(QLCPalette::colorToString(QColor(Qt::red), QColor(Qt::black)));
+    m_doc->addPalette(red);
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setName("Blue");
+    blue->setValue(QLCPalette::colorToString(QColor(Qt::blue), QColor(Qt::black)));
+    m_doc->addPalette(blue);
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Show");
+    const quint32 list = st->addCueList(prod, "Show");
+    QVERIFY(st->setNumbering(prod, Numbering::ShowPartIteration));
+    const quint32 a1 = st->addSection(list, "One");
+    const quint32 a2 = st->addCue(list, 0, "One b");
+    const quint32 b1 = st->addSection(list, "Two");
+    QList<Section> secs = st->sections(list);
+    QCOMPARE(secs.count(), 2);
+    st->setTargetLook(a1, groupTarget(g->id()), st->lookForPalette(red->id()));
+    st->setTargetLook(a2, groupTarget(g->id()), st->lookForPalette(red->id()));
+    st->setTargetLook(b1, groupTarget(g->id()), st->lookForPalette(blue->id()));
+
+    const ShowTreeController::Usage one = st->usageInSection(list, secs.at(0));
+    const ShowTreeController::Usage two = st->usageInSection(list, secs.at(1));
+    QCOMPARE(one.palettes.value(red->id()), 2);
+    QCOMPARE(one.palettes.value(blue->id()), 0);
+    QCOMPARE(one.groups.value(g->id()), 2);
+    QCOMPARE(two.palettes.value(blue->id()), 1);
+    QCOMPARE(two.palettes.value(red->id()), 0);
+    QCOMPARE(two.groups.value(g->id()), 1);
+    // The list is both songs together.
+    const ShowTreeController::Usage all = st->usageInList(list);
+    QCOMPARE(all.palettes.value(red->id()), 2);
+    QCOMPARE(all.palettes.value(blue->id()), 1);
+    QCOMPARE(all.groups.value(g->id()), 3);
+    QVERIFY(st->usageInSection(invalidId(), secs.at(0)).groups.isEmpty());
+}
+
 QTEST_GUILESS_MAIN(ShowTreeSections_Test)

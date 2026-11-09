@@ -80,6 +80,7 @@ private slots:
     void updateCueWhereATrackedValueWasSet();
     void recordAsNewCueFromTheHeader();
     void theLibraryShowsWhatTheListUses();
+    void theLibraryShowsWhatTheSongUses();
     void theCommandLine();
     // P2 answers (2026-10-17)
     void recordAsksWhenTheChoicesDiffer();
