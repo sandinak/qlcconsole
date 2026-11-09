@@ -141,3 +141,20 @@ add_subdirectory(universe)
 add_subdirectory(video)
 add_subdirectory(whyon)
 add_subdirectory(iopluginstub)
+
+# Every engine test program gets settings of its own, never the user's, as
+# the UI tests do (ui/test/common/testsettings.cpp says why). On macOS a
+# QSettings in the native format is the person's real preferences file
+# whatever HOME says (unittest.sh's own HOME does not reach cfprefsd), so a
+# test that set Settings > Units to metres -- showreview_test does, in every
+# init() -- left the real app reading metres on every Mac that ran the gate.
+get_property(_engine_test_dirs DIRECTORY PROPERTY SUBDIRECTORIES)
+foreach(_dir ${_engine_test_dirs})
+    get_property(_targets DIRECTORY ${_dir} PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(_target ${_targets})
+        get_target_property(_type ${_target} TYPE)
+        if(_type STREQUAL "EXECUTABLE")
+            target_sources(${_target} PRIVATE ${CMAKE_SOURCE_DIR}/ui/test/common/testsettings.cpp)
+        endif()
+    endforeach()
+endforeach()

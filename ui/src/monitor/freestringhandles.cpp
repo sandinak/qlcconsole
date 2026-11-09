@@ -23,6 +23,7 @@
 #include <utility>
 
 #include "freestringhandles.h"
+#include "uprighttext.h"
 
 FreeStringHandles::FreeStringHandles(quint32 fid)
     : m_fid(fid)
@@ -124,11 +125,11 @@ void FreeStringHandles::paint(QPainter *painter, const QStyleOptionGraphicsItem 
         painter->drawEllipse(p, m_radius, m_radius);
         painter->setPen(pinned ? QColor(30, 30, 30) : m_own ? QColor(30, 30, 30) : line);
         const QRectF box(p.x() - m_radius, p.y() - m_radius, 2 * m_radius, 2 * m_radius);
-        painter->drawText(box, Qt::AlignCenter, QString::number(i + 1));
+        UprightText::draw(painter, box, Qt::AlignCenter, QString::number(i + 1));
         if (pinned)
         {
             painter->setPen(line);
-            painter->drawText(QRectF(p.x() + m_radius * 1.3, p.y() - m_radius * 2.6, m_radius * 9, m_radius * 2),
+            UprightText::draw(painter, QRectF(p.x() + m_radius * 1.3, p.y() - m_radius * 2.6, m_radius * 9, m_radius * 2),
                               Qt::AlignLeft | Qt::AlignVCenter,
                               QCoreApplication::translate("FreeStringHandles", "LED %1").arg(m_pins.value(i)));
         }

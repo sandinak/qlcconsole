@@ -787,6 +787,22 @@
     }
   },
   {
+    "id": "UX-78",
+    "theme": "Layout",
+    "title": "Text stays upright and the same size when the view turns",
+    "rule": "Turning the plot (or any view that turns) turns the drawing, never the words: every label, readout and badge reads level and at the size of the plot's other labels at every quarter turn and every zoom, and what marks a thing stays on that thing.",
+    "check": "test:monitor_test::plotTextStaysUprightAtEveryTurn",
+    "checks": [
+      "test:monitor_test::plotTextStaysUprightAtEveryTurn"
+    ],
+    "enforced": true,
+    "why": "2026-11-08, the Lighting Studio plot turned 90°: \"this doesn't look right\". The blocking's \"Performers row 7 (Default)\" labels lay on their side at three times the size of the targets' names, and the follow spot's \"following · no stick\" ring and lines sat off the stage, left of the grid.",
+    "example": {
+      "right": "Turned 90°: \"Performers row 7 (Default)\" level, in the targets' size, beside its dashed ring",
+      "wrong": "Turned 90°: the ghost label on its side, three times the size, over the targets"
+    }
+  },
+  {
     "id": "UX-41",
     "theme": "Consistency across views",
     "title": "One object, one menu",

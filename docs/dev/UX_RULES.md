@@ -41,7 +41,7 @@ that have one. Change both files together.
 | Words | UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, UX-18, UX-19, UX-77 | 14 | 8 |
 | Context-awareness | UX-20, UX-21, UX-22, UX-23, UX-24, UX-25 | 6 | 5 |
 | Feedback & state | UX-26, UX-27, UX-28, UX-29, UX-30, UX-31, UX-32, UX-33 | 8 | 6 |
-| Layout | UX-34, UX-35, UX-36, UX-37, UX-38, UX-39, UX-40 | 7 | 5 |
+| Layout | UX-34, UX-35, UX-36, UX-37, UX-38, UX-39, UX-40, UX-78 | 8 | 6 |
 | Consistency across views | UX-41, UX-42, UX-43, UX-44, UX-45, UX-46, UX-47, UX-48 | 8 | 6 |
 | Safety in Operate | UX-49, UX-50, UX-51, UX-52, UX-53, UX-54, UX-55, UX-56 | 8 | 6 |
 | Teaching & course voice | UX-57, UX-58, UX-59, UX-60 | 4 | 1 |
@@ -428,6 +428,15 @@ A change to ui/, web pages or the rig view ships with before/after shots at 1024
 - **Check:** `manual` (not yet enforced)
 - **Right:** `shots-041/<agent>/before-1280x800.png, after-1280x800.png ...`
 - **Wrong:** `"gate=0" as the only evidence for a layout change`
+
+### UX-78 Text stays upright and the same size when the view turns
+
+Turning the plot (or any view that turns) turns the drawing, never the words: every label, readout and badge reads level and at the size of the plot's other labels at every quarter turn and every zoom, and what marks a thing stays on that thing.
+
+- **Why:** 2026-11-08, the Lighting Studio plot turned 90°: "this doesn't look right". The blocking's "Performers row 7 (Default)" labels lay on their side at three times the size of the targets' names, and the follow spot's "following · no stick" ring and lines sat off the stage, left of the grid.
+- **Check:** `monitor_test::plotTextStaysUprightAtEveryTurn` (enforced)
+- **Right:** `Turned 90°: "Performers row 7 (Default)" level, in the targets' size, beside its dashed ring`
+- **Wrong:** `Turned 90°: the ghost label on its side, three times the size, over the targets`
 
 ## Consistency across views
 

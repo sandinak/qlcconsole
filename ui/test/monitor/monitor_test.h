@@ -819,6 +819,8 @@ private slots:
     void onlyTheTargetsTheCueUsesAreDrawn();
     void aTargetSaysWhichHeadsCannotReachIt();
     void theFollowSpotIsDrawnOnThePlot();
+    void plotOverlaysAtEveryTurnShots();
+    void plotTextStaysUprightAtEveryTurn();
     void aBlockedBeamIsTracedToWhatBlocksIt();
     void theLineOfSightMenuSetsWhatBlocks();
     void theReachOverlayShadesWhereASpotCannotAim();

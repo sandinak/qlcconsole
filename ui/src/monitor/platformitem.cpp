@@ -23,6 +23,7 @@
 
 #include "itemlock.h"
 #include "platformitem.h"
+#include "uprighttext.h"
 #include "stageplatform.h"
 #include "monitorproperties.h"
 #include "doc.h"
@@ -187,7 +188,7 @@ void PlatformItem::paintSteps(QPainter *painter, const QColor &fill, const QColo
         painter->drawLine(head1);
         painter->drawLine(head2);
         QFont f = painter->font(); f.setPixelSize(9); painter->setFont(f);
-        painter->drawText(QRectF(a.x() - 20, a.y() - 14, 40, 12), Qt::AlignCenter, tr("UP"));
+        UprightText::draw(painter, QRectF(a.x() - 20, a.y() - 14, 40, 12), Qt::AlignCenter, tr("UP"));
         return;
     }
 

@@ -136,6 +136,7 @@
 #include "trussitem.h"
 #include "powerdistribution.h"
 #include "targetitem.h"
+#include "stagemarklabel.h"
 #include "performerfill.h"
 #undef protected
 #undef private
@@ -10309,15 +10310,227 @@ void Monitor_Test::theFollowSpotIsDrawnOnThePlot()
 
     set(Status::Holding);
     for (QGraphicsItem *it : view.followSpotOverlayItems())
-        if (QGraphicsSimpleTextItem *t = qgraphicsitem_cast<QGraphicsSimpleTextItem *>(it))
-            QCOMPARE(t->text(), QString("following · holding"));
+        if (it->data(0).toString() == "followLabel")
+            QCOMPARE(static_cast<StageMarkLabel *>(it)->text(), QString("following · holding"));
     set(Status::NoStick);
     for (QGraphicsItem *it : view.followSpotOverlayItems())
-        if (QGraphicsSimpleTextItem *t = qgraphicsitem_cast<QGraphicsSimpleTextItem *>(it))
-            QCOMPARE(t->text(), QString("following · no stick"));
+        if (it->data(0).toString() == "followLabel")
+            QCOMPARE(static_cast<StageMarkLabel *>(it)->text(), QString("following · no stick"));
     set(Status::Off);
     QVERIFY(view.followSpotOverlayItems().isEmpty());
     pc->m_followStatus = Status();
+}
+
+/* The plot turned ("this doesn't look right", 2026-11-08). One show at all
+   four quarter turns: two targets, one moved in a blocking (its "(Default)"
+   ghost), a follow spot on the other. Every label reads upright and in the
+   targets' size, and the follow spot's ring, lines and label sit on its
+   subject. QLC_SHOT_DIR set: a picture at each turn. */
+namespace
+{
+    struct TurnedPlot
+    {
+        Doc *doc = nullptr;
+        StageTarget *row = nullptr;      // moved in the blocking
+        StageTarget *lead = nullptr;     // followed, 1.3 m up
+        Scene *scene = nullptr;
+        Fixture *spot = nullptr;
+        quint32 apron = 0;
+
+        void build(QObject *parent)
+        {
+            doc = new Doc(parent);
+            MonitorProperties *props = doc->monitorProperties();
+            spot = makeMover(doc, 14.0, 0, "FOH Spot", QVector3D(1.0f, 1.0f, 4.0f));
+            row = props->addStageTarget();
+            row->setName("Performers row 7");
+            row->setPosition(QVector3D(2.0f, 2.0f, 0.0f));
+            lead = props->addStageTarget();
+            lead->setName("Lead");
+            lead->setPosition(QVector3D(6.0f, 4.0f, 1.3f));
+            apron = props->addBlockingSet("Apron");
+            props->setTargetPositionIn(row, apron, QVector3D(4.0f, 5.0f, 0.0f));
+            scene = new Scene(doc);
+            scene->addFixture(spot->id());
+            doc->addFunction(scene);
+        }
+        void follow()
+        {
+            using Status = ProgrammerController::FollowSpotStatus;
+            Status st;
+            st.state = Status::NoStick;
+            st.sceneId = scene->id();
+            st.targetId = lead->id();
+            doc->programmer()->m_followStatus = st;
+            emit doc->programmer()->followSpotStatusChanged();
+        }
+        void unfollow()
+        {
+            doc->programmer()->m_followStatus = ProgrammerController::FollowSpotStatus();
+        }
+    };
+
+    qreal screenTurn(const QGraphicsView &view, const QGraphicsItem *it)
+    {
+        const QTransform t = it->deviceTransform(view.viewportTransform());
+        return qRadiansToDegrees(std::atan2(t.m12(), t.m11()));
+    }
+    qreal screenScale(const QGraphicsView &view, const QGraphicsItem *it)
+    {
+        const QTransform t = it->deviceTransform(view.viewportTransform());
+        return std::hypot(t.m11(), t.m12());
+    }
+}
+
+void Monitor_Test::plotOverlaysAtEveryTurnShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
+    TurnedPlot p;
+    p.build(this);
+    BlockingView *bv = BlockingView::of(p.doc);
+    {
+        MonitorGraphicsView view(p.doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.addFixture(p.spot->id(), QPointF(1000.0, 1000.0));
+        view.show();
+        view.updateTargets();
+        bv->setPick(p.apron);
+        view.blockingChanged();
+        p.follow();
+        for (int turns = 0; turns < 4; ++turns)
+        {
+            view.setViewRotation(turns);
+            view.centerOn(view.sceneRect().center());
+            QApplication::processEvents();
+            p.follow();              // the programmer settles its own status on events
+            view.grab().save(QStringLiteral("%1/plot-turn%2.png").arg(dir).arg(turns * 90));
+        }
+        view.setViewRotation(0);
+        p.unfollow();
+        bv->setPick(MonitorProperties::defaultBlocking());
+    }
+    delete p.doc;
+}
+
+void Monitor_Test::plotTextStaysUprightAtEveryTurn()
+{
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
+    TurnedPlot p;
+    p.build(this);
+    BlockingView *bv = BlockingView::of(p.doc);
+    QVERIFY(bv != nullptr);
+    {
+        MonitorGraphicsView view(p.doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.addFixture(p.spot->id(), QPointF(1000.0, 1000.0));
+        view.updateTargets();
+        bv->setPick(p.apron);
+        view.blockingChanged();
+        p.follow();
+
+        for (int turns = 0; turns < 4; ++turns)
+        {
+            for (const qreal zoom : { 0.5, 1.0, 2.0 })
+            {
+                view.setViewRotation(0);
+                view.scale(zoom / view.viewScale(), zoom / view.viewScale());
+                view.setViewRotation(turns);
+                const QString at = QStringLiteral("turn %1, zoom %2").arg(turns * 90).arg(zoom);
+
+                TargetItem *rowItem = view.m_targetItems.value(p.row->id(), nullptr);
+                TargetItem *leadItem = view.m_targetItems.value(p.lead->id(), nullptr);
+                QVERIFY(rowItem != nullptr && leadItem != nullptr);
+                const QGraphicsItem *nameLabel = leadItem->labelItem();
+                QVERIFY(nameLabel != nullptr);
+                QVERIFY2(qAbs(screenTurn(view, nameLabel)) < 0.5,
+                         qPrintable(QStringLiteral("%1: a target's name turned %2").arg(at).arg(screenTurn(view, nameLabel))));
+
+                // The blocking's "(Default)" ghost: upright, and as big as a target's name.
+                QGraphicsSimpleTextItem *ghost = nullptr;
+                for (QGraphicsItem *g : view.blockingGhostItems())
+                    if (g->data(0).toString() == QLatin1String("ghostLabel"))
+                        ghost = qgraphicsitem_cast<QGraphicsSimpleTextItem *>(g);
+                QVERIFY2(ghost != nullptr, qPrintable(at));
+                QCOMPARE(ghost->text(), QString("Performers row 7 (Default)"));
+                QCOMPARE(ghost->font(), TargetItem::labelFont());
+                QVERIFY2(qAbs(screenTurn(view, ghost)) < 0.5,
+                         qPrintable(QStringLiteral("%1: the ghost label turned %2").arg(at).arg(screenTurn(view, ghost))));
+                QVERIFY2(qAbs(screenScale(view, ghost) - screenScale(view, nameLabel)) < 1e-6,
+                         qPrintable(QStringLiteral("%1: ghost drawn at %2x, a target's name at %3x")
+                                    .arg(at).arg(screenScale(view, ghost)).arg(screenScale(view, nameLabel))));
+
+                // Every text item on the plot reads upright, whatever carries it.
+                foreach (QGraphicsItem *it, view.m_scene->items())
+                {
+                    if (it->type() != QGraphicsSimpleTextItem::Type && it->type() != QGraphicsTextItem::Type)
+                        continue;
+                    if (dynamic_cast<TrussItem *>(it->parentItem()) != nullptr || !it->isVisible())
+                        continue;                   // a truss's name runs along it
+                    QVERIFY2(qAbs(screenTurn(view, it)) < 0.5,
+                             qPrintable(QStringLiteral("%1: text turned %2").arg(at).arg(screenTurn(view, it))));
+                }
+
+                // The follow spot: on its subject's marker, its label over the ring on screen.
+                const QPoint subject = view.mapFromScene(leadItem->scenePos());
+                QGraphicsEllipseItem *ring = nullptr;
+                StageMarkLabel *label = nullptr;
+                QList<QGraphicsLineItem *> lines;
+                for (QGraphicsItem *it : view.followSpotOverlayItems())
+                {
+                    if (it->data(0).toString() == QLatin1String("followRing"))
+                        ring = qgraphicsitem_cast<QGraphicsEllipseItem *>(it);
+                    else if (it->data(0).toString() == QLatin1String("followLabel"))
+                        label = dynamic_cast<StageMarkLabel *>(it);
+                    else if (it->data(0).toString() == QLatin1String("followLine"))
+                        lines << qgraphicsitem_cast<QGraphicsLineItem *>(it);
+                }
+                QVERIFY2(ring != nullptr && label != nullptr && lines.size() == 1, qPrintable(at));
+                const QPoint ringAt = view.mapFromScene(ring->rect().center());
+                QVERIFY2((ringAt - subject).manhattanLength() <= 3,
+                         qPrintable(QStringLiteral("%1: ring at (%2,%3), subject at (%4,%5)").arg(at)
+                                    .arg(ringAt.x()).arg(ringAt.y()).arg(subject.x()).arg(subject.y())));
+                QCOMPARE(label->text(), QString("following · no stick"));
+                QVERIFY2(qAbs(screenTurn(view, label)) < 0.5, qPrintable(at));
+                const QRectF onScreen = label->deviceTransform(view.viewportTransform()).mapRect(label->boundingRect());
+                const qreal ringR = ring->rect().width() / 2.0 * view.viewScale();
+                QVERIFY2(qAbs(onScreen.center().x() - subject.x()) < 3.0
+                         && onScreen.bottom() < subject.y() - ringR + 1.0,
+                         qPrintable(QStringLiteral("%1: label not over the ring").arg(at)));
+                MonitorFixtureItem *mfi = view.m_fixtures.value(p.spot->id());
+                QVERIFY(mfi != nullptr);
+                const QLineF beam = lines.first()->line();
+                QVERIFY2(QLineF(beam.p1(), mfi->iconCentreScene()).length() < 1.0
+                         && (view.mapFromScene(beam.p2()) - subject).manhattanLength() <= 3,
+                         qPrintable(QStringLiteral("%1: the follow line is not from the head to the subject").arg(at)));
+            }
+        }
+        view.setViewRotation(0);
+
+        // In Settings > Units: feet and inches, then metres.
+        TargetItem *leadItem = view.m_targetItems.value(p.lead->id(), nullptr);
+        QVERIFY2(leadItem->labelText().contains("(Z: 4' 3\")"), qPrintable(leadItem->labelText()));
+        QVERIFY2(!leadItem->positionReadout().contains(" m"), qPrintable(leadItem->positionReadout()));
+        QVERIFY2(leadItem->positionReadout().contains('\'') || leadItem->positionReadout().contains('"'),
+                 qPrintable(leadItem->positionReadout()));
+        MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
+        view.updateTargets();
+        leadItem = view.m_targetItems.value(p.lead->id(), nullptr);
+        QVERIFY2(leadItem->labelText().contains("(Z: 1.3 m)"), qPrintable(leadItem->labelText()));
+        QVERIFY2(leadItem->positionReadout().endsWith(" m"), qPrintable(leadItem->positionReadout()));
+        MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
+
+        p.unfollow();
+        bv->setPick(MonitorProperties::defaultBlocking());
+    }
+    delete p.doc;
 }
 
 void Monitor_Test::aTargetSaysWhichHeadsCannotReachIt()

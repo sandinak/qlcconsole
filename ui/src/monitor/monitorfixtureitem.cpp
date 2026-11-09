@@ -38,6 +38,7 @@
 #include <QtMath>
 #include "headlayout.h"
 #include "monitorfixtureitem.h"
+#include "uprighttext.h"
 #include "lengthinputdialog.h"
 #include "measurementunits.h"
 #include "contextmenus.h"
@@ -1329,7 +1330,7 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         f.setBold(true);
         painter->setFont(f);
         painter->setPen(QColor(255, 255, 255));
-        painter->drawText(QRectF(at.x() - 6.0, at.y() - 6.0, 12.0, 12.0), Qt::AlignCenter, QStringLiteral("!"));
+        UprightText::draw(painter, QRectF(at.x() - 6.0, at.y() - 6.0, 12.0, 12.0), Qt::AlignCenter, QStringLiteral("!"));
         painter->setFont(keepFont);
         painter->setPen(keep);
     }
@@ -1377,7 +1378,7 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         f.setBold(true);
         painter->setFont(f);
         painter->setPen(QColor(30, 15, 0));
-        painter->drawText(QRectF(at.x() - 6.0, at.y() - 6.0, 12.0, 12.0), Qt::AlignCenter, QStringLiteral("!"));
+        UprightText::draw(painter, QRectF(at.x() - 6.0, at.y() - 6.0, 12.0, 12.0), Qt::AlignCenter, QStringLiteral("!"));
         painter->setFont(keepFont);
         painter->setPen(keep);
     }
