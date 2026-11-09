@@ -701,7 +701,8 @@ void MainBar_Test::blindInOperateLeavesAPlayingCuesBytesAlone()
     QCOMPARE(uchar(fx->channelValues().at(0)), uchar(40));     // the picture: the cue in edit
     QTRY_VERIFY_WITH_TIMEOUT(seen->ticks.load() >= 8, 5000);
     QCOMPARE(seen->wrong.load(), 0);                    // the wire: the cue playing, every tick
-    QCOMPARE(int(uni->postGMValue(addr)), 200);
+    // Each tick zeroes the buffer before it writes it: a read can land in between.
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(addr)), 200, 1000);
     QVERIFY(!doc->inputOutputMap()->outputInhibited());
 }
 

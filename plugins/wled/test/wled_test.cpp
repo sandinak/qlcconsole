@@ -410,7 +410,10 @@ void Wled_Test::aSnapGoesAtOnceNotOnTheNextTick()
     }
     std::sort(took5.begin(), took5.end());
     qInfo() << "snap to the device, ms:" << took5;
-    QVERIFY2(took5.at(2) <= 30, qPrintable(QString("a snap takes %1 ms").arg(took5.at(2))));
+    /* CI's shared runners measured 32 ms (Windows' timers are 15.6 ms
+       apart). 100 is still well clear of the one-second tick. */
+    const qint64 snapLimit = qEnvironmentVariableIsSet("CI") ? 100 : 30;
+    QVERIFY2(took5.at(2) <= snapLimit, qPrintable(QString("a snap takes %1 ms").arg(took5.at(2))));
 
     // A burst in one frame is one request; a held look, none.
     QTest::qWait(50);
