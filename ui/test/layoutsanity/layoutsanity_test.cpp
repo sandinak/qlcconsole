@@ -64,6 +64,7 @@
 #include "app.h"
 #include "refinepanel.h"
 #include "speedmastersfooter.h"
+#include "shownotespane.h"
 #include "speedmasters.h"
 #include "programmingoutline.h"
 #undef protected
@@ -667,6 +668,22 @@ QList<Screen> screens()
                                 return;
                             }
             })
+         << tab(QStringLiteral("Show Tree"), [](App *app, QWidget *) {
+                // Notes: a note on one cue, then a cue with none (the walker's
+                // UX-34: "No notes yet" drawn under the note just taken down).
+                ShowTreeController *st = docOf(app)->showTree();
+                QList<quint32> cues;
+                for (const ShowTree::Production &p : st->productions())
+                    for (const ShowTree::CueList &l : p.lists)
+                        for (const ShowTree::Cue &c : l.cues)
+                            cues << c.id;
+                if (cues.size() < 2)
+                    return;
+                ShowTreeView *view = ShowTreeView::instance();
+                view->selectNode(cues.at(0));
+                view->notesPane()->addNote(QStringLiteral("Half reads hot on the chorus"));
+                view->selectNode(cues.at(1));
+            })
          << tab(QStringLiteral("Functions"))
          << tab(QStringLiteral("Shows"))
          << tab(QStringLiteral("Virtual Console"))
@@ -676,6 +693,7 @@ QList<Screen> screens()
     list[4].name += QStringLiteral(" scene open");
     list[6].name += QStringLiteral(" cue");
     list[7].name += QStringLiteral(" layer");
+    list[8].name += QStringLiteral(" notes emptied");
 
 
     // The Look Editor, page by page (in the Workbench, as Build shows it).
