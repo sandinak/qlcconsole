@@ -842,8 +842,11 @@ void AiAssist::teardown()
     // another machine nothing here holds it: skip, audit what is ours.
     if (m_usedModel && m_settings.isLocalOllama())
     {
-        new AiUnloader(m_settings, [this](bool resident, const QString &problem) {
-            audit(resident, problem);
+        // Ollama can answer after this AiAssist is gone: then no one is told.
+        const QPointer<AiAssist> self(this);
+        new AiUnloader(m_settings, [self](bool resident, const QString &problem) {
+            if (self)
+                self->audit(resident, problem);
         });
         return;
     }

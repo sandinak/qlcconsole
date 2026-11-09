@@ -71,6 +71,7 @@ private slots:
     // Design / Operate (section 5a)
     void operateDuringARequest();
     void operateUnloadsALocalModel();
+    void aLateUnloadAfterTheAssistIsGoneIsHarmless();
     void modelStillResidentIsAnError();
     void askInOperateSendsNothing();
     void leakedObjectRaisesTheError();
