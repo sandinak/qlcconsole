@@ -1250,7 +1250,8 @@ void FollowSpotCue_Test::theDpadStepsTheSpeedAndTheRightStickIsFine()
     bench->editPalette(follow->id());
     settle(300);
     QDoubleSpinBox *top = nullptr;
-    QTRY_VERIFY_WITH_TIMEOUT((top = m_app->findChild<QDoubleSpinBox *>("effectParam_topSpeed")) != nullptr, 3000);
+    // 10 s: building the Look Editor took over 3 under load on a Pi 5.
+    QTRY_VERIFY_WITH_TIMEOUT((top = m_app->findChild<QDoubleSpinBox *>("effectParam_topSpeed")) != nullptr, 10000);
     QCOMPARE(top->text(), QString::fromUtf8("6 ft/s"));    // units-ok: the default unit's speed, as shown
     const QString shots = qEnvironmentVariable("QLC_FSPOT_SHOTS");
     if (!shots.isEmpty())
