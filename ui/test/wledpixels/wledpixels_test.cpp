@@ -663,7 +663,14 @@ void WledPixels_Test::aChaseGoesOutAsArtNetBytesPerLedAcrossTwoUniverses()
     QByteArray last16;
     QElapsedTimer t;
     t.start();
-    while (t.elapsed() < 2000)
+    // At least two seconds, and on a loaded machine until the chase and the
+    // second universe's lit LED have both been seen (up to 20 s): a frame
+    // count in a fixed window is a measure of the machine, not the output.
+    auto seenEnough = [&]() {
+        return frames15 > 5 && chased.size() >= 5 && last16.size() >= 33
+               && uchar(last16.at(32)) == 255;
+    };
+    while (t.elapsed() < 2000 || (!seenEnough() && t.elapsed() < 20000))
     {
         QTest::qWait(10);
         while (sink.hasPendingDatagrams())

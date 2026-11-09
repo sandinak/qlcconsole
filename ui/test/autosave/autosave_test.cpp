@@ -472,14 +472,16 @@ void Autosave_Test::savingOrDiscardingRemovesTheRecoveryCopy()
  *****************************************************************************/
 
 /* Each time a modal window is up, hand it to @p act until act says it is
-   done (after ten seconds it closes what is up and stops, so a missing prompt
+   done (after a minute of wall-clock time -- not a tick count, which a loaded
+   machine stretches -- it closes what is up and stops, so a missing prompt
    fails, not hangs). */
 static void onModal(std::function<bool(QWidget *)> act)
 {
     QTimer *t = new QTimer;
     t->setInterval(10);
-    auto ticks = std::make_shared<int>(0);
-    QObject::connect(t, &QTimer::timeout, t, [t, act, ticks]() {
+    auto clock = std::make_shared<QElapsedTimer>();
+    clock->start();
+    QObject::connect(t, &QTimer::timeout, t, [t, act, clock]() {
         QWidget *w = QApplication::activeModalWidget();
         // Not again from inside act() (a shot pumps events)
         t->stop();
@@ -487,7 +489,7 @@ static void onModal(std::function<bool(QWidget *)> act)
         {
             t->deleteLater();
         }
-        else if (++(*ticks) > 1000)
+        else if (clock->hasExpired(60000))
         {
             // Never a hang: whatever is still up is closed, and the test
             // fails on what it then finds.
@@ -656,11 +658,16 @@ void Autosave_Test::openTheSavedShowKeepsTheAutosaveAside()
     onModal([&](QWidget *w) {
         if (QFileDialog *fd = qobject_cast<QFileDialog *>(w))
         {
-            // Again on the next tick if it is still up: the dialog reads
-            // its folder in the background and can refuse an early accept.
-            chosen = true;
+            // The dialog reads its folder in the background, and an accept
+            // before it holds our file takes whatever else it holds (under
+            // load, a different file with no autosave beside it). So accept
+            // only once it reports the show as the selection, else try
+            // again on the next tick.
             fd->setDirectory(QFileInfo(show).absolutePath());
             fd->selectFile(show);
+            if (fd->selectedFiles().value(0) != show)
+                return false;
+            chosen = true;
             static_cast<QDialog *>(fd)->accept();
             return false;
         }
