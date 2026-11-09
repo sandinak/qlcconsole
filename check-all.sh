@@ -291,6 +291,16 @@ if ! PP_OUT=$("$REPO/platforms/linux/check-private-public.sh" --self-test 2>&1 \
     exit 1
 fi
 
+# near and far are macros on Windows: a variable with either name passes
+# every Mac and Linux leg and breaks CI's Windows build (2026-11-09).
+if ! WN_OUT=$("$REPO/platforms/linux/check-windows-names.sh" --self-test 2>&1 \
+        && "$REPO/platforms/linux/check-windows-names.sh" --source "$REPO" 2>&1); then
+    echo >&2 "$WN_OUT"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "check-windows-names.sh failed: near or far used as a name. Nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
+fi
+
 # No relative link in a Markdown file (docs, README, the help, the course)
 # may point at a file that isn't there.
 if ! LINKS_OUT=$(python3 "$REPO/tools/check-doc-links.py" "$REPO" 2>&1); then

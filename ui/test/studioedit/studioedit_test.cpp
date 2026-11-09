@@ -196,14 +196,14 @@ void StudioEdit_Test::aShapeStretchesFromTheOppositeSideAndSnaps()
     s.stretchU = s.stretchV = s.canRotate = true;
     QCOMPARE(s.handles().size(), 9);
     // Turned 90: its length runs along +Y.
-    const QPointF far = s.handlePoint(StageShape::EndPlusU);
-    QVERIFY(qAbs(far.x() - 5.0) < 1e-9 && qAbs(far.y() - 7.0) < 1e-9);
-    const QPointF near = s.handlePoint(StageShape::EndMinusU);
+    const QPointF plusEnd = s.handlePoint(StageShape::EndPlusU);
+    QVERIFY(qAbs(plusEnd.x() - 5.0) < 1e-9 && qAbs(plusEnd.y() - 7.0) < 1e-9);
+    const QPointF minusEnd = s.handlePoint(StageShape::EndMinusU);
 
     StageShape t = s.stretched(StageShape::EndPlusU, QPointF(5.3, 8.0));
     QVERIFY(qAbs(t.length - 5.0) < 1e-9);
     QVERIFY(qAbs(t.width - 2.0) < 1e-9);             // the side it was not dragged by
-    QVERIFY(QLineF(t.handlePoint(StageShape::EndMinusU), near).length() < 1e-9);
+    QVERIFY(QLineF(t.handlePoint(StageShape::EndMinusU), minusEnd).length() < 1e-9);
     QVERIFY(qAbs(t.centre.y() - 5.5) < 1e-9);
 
     // A corner: both at once, the opposite corner stays.

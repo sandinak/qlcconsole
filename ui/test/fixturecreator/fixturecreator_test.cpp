@@ -881,8 +881,8 @@ IOPluginStub *FixtureCreator_Test::networkShow(const QString &plugin)
     m_doc->ioPluginCache()->load(QDir(TEST_STUB_DIR, "*iopluginstub*"));
     IOPluginStub *stub = nullptr;
     foreach (QLCIOPlugin *p, m_doc->ioPluginCache()->plugins())
-        if (IOPluginStub *s = qobject_cast<IOPluginStub *>(p))
-            stub = s;
+        if (p->inherits("IOPluginStub"))    // not qobject_cast: the stub's DLL doesn't export its metaobject
+            stub = static_cast<IOPluginStub *>(p);
     if (stub == nullptr)
         return nullptr;
     stub->m_nameOverride = plugin;
