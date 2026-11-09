@@ -88,6 +88,7 @@ class ShowTreeView final : public QWidget
     Q_OBJECT
     Q_DISABLE_COPY(ShowTreeView)
     friend class TreeCueStack;
+    friend class ShowTreeView_Test;
 
 public:
     ShowTreeView(QWidget *parent, Doc *doc);
