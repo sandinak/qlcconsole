@@ -85,6 +85,8 @@ cp $SOURCE_DIR/platforms/linux/unittest.sh $DEST_DIR/
 cp $SOURCE_DIR/platforms/linux/unittest-serial.txt $DEST_DIR/
 # The check that every test.sh and test program keeps off the real screen.
 cp $SOURCE_DIR/platforms/linux/check-test-guard.sh $DEST_DIR/
+# And the check that every test program keeps off the real preferences.
+cp $SOURCE_DIR/platforms/linux/check-test-settings.sh $DEST_DIR/
 
 # Propagate the runner's exit status. Without capturing it, this script's exit
 # status is popd's -- always 0 -- so "make check" reported failures in its
