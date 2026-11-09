@@ -26,6 +26,7 @@
 #include <QDataStream>
 #include <QSplitter>
 #include <QLabel>
+#include <QStyle>
 #include <QPushButton>
 #include <QToolButton>
 #include <QFile>
@@ -253,11 +254,22 @@ void ProgrammingOutline_Test::anEmptyStateSentenceWrapsToThePane()
                  qPrintable(QStringLiteral("%1: the row is %2 px high, one line is %3")
                                 .arg(text).arg(row.height()).arg(fm.lineSpacing())));
         QVERIFY(row.width() <= o.viewport()->width());
+        // Every wrapped line fits: measured in the row less the style's text
+        // margins (the row sized off the bare viewport cut the last one).
+        auto fitsAll = [&](const QRect &r) {
+            const int margin = o.style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, &o) + 1;
+            const QRect need = fm.boundingRect(QRect(0, 0, r.width() - 2 * margin, 100000),
+                                               Qt::TextWordWrap, text);
+            return r.height() >= need.height();
+        };
+        QVERIFY2(fitsAll(row), qPrintable(QStringLiteral("%1: last line cut at %2 px wide")
+                                              .arg(text).arg(row.width())));
         // Narrower: taller, not cut.
         const int was = row.height();
         o.resize(120, 300);
         QCoreApplication::processEvents();
         QTRY_VERIFY(o.visualItemRect(hint).height() > was);
+        QVERIFY(fitsAll(o.visualItemRect(hint)));
     }
 }
 
