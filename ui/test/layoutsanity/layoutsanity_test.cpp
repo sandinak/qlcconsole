@@ -63,6 +63,9 @@
 #define protected public
 #include "app.h"
 #include "refinepanel.h"
+#include "speedmastersfooter.h"
+#include "speedmasters.h"
+#include "programmingoutline.h"
 #undef protected
 #undef private
 
@@ -352,6 +355,7 @@ QList<Finding> inspect(QWidget *top)
                 || (l->textFormat() == Qt::AutoText && !Qt::mightBeRichText(l->text()));
             if (!l->text().isEmpty() && !l->wordWrap() && plain
                 && l->sizePolicy().horizontalPolicy() != QSizePolicy::Ignored
+                && !l->property("layoutSanityElides").toBool()      // elides on purpose, the whole text in a tooltip
                 && !l->text().contains(QLatin1Char('\n')))
             {
                 const QMargins m = l->contentsMargins();
@@ -483,6 +487,38 @@ const Known *knownFor(const QString &screen, const QString &size, const QString 
 Doc *docOf(App *app) { return app->doc(); }
 
 Doc *g_ringDoc = nullptr;
+/** Shows of their own for the screens below (an empty one, one with speed
+ *  masters in use), deleted with the test. */
+QList<Doc *> g_extraDocs;
+
+Doc *extraDoc()
+{
+    Doc *d = new Doc(nullptr);
+    g_extraDocs << d;
+    return d;
+}
+
+/** The status bar as the app has it, with the speed masters' footer in it
+ *  and Main Speed (and two more) in use. */
+QWidget *speedMastersInTheStatusBar(App *)
+{
+    Doc *doc = extraDoc();
+    for (int i = 0; i < 3; ++i)
+    {
+        Scene *s = new Scene(doc);
+        doc->addFunction(s);
+        s->setSpeedMaster(SpeedMasters::Master1 + i);
+        doc->speedMasters()->setBpm(i, 56 + 30 * i);
+    }
+    doc->speedMasters()->setName(0, QStringLiteral("Main Speed"));
+    QMainWindow *win = new QMainWindow;
+    win->setCentralWidget(new QLabel(QStringLiteral("The window above its status bar")));
+    win->statusBar()->addWidget(new QLabel(QStringLiteral("GM 100%")), 0);
+    win->statusBar()->addWidget(new SpeedMastersFooter(doc, win), 0);
+    win->statusBar()->addWidget(new QLabel(QStringLiteral("Selected: StepTops (24)")), 1);
+    return win;
+}
+
 
 template <typename T>
 T *firstFunction(Doc *doc, Function::Type type)
@@ -654,6 +690,21 @@ QList<Screen> screens()
          << lookScreen(QStringLiteral("beam"), QLCPalette::Beam)
          << lookScreen(QStringLiteral("effect"), QLCPalette::Effect)
          << lookScreen(QStringLiteral("formation"), QLCPalette::Formation);
+
+    // The empty states (UX-34, UX-77: a sentence wraps, never cut), the
+    // speed masters in the status bar (UX-34: none shown at no width).
+    list << screen(QStringLiteral("Workbench nothing loaded"), [](App *app) -> QWidget * {
+                return new Workbench(docOf(app));
+            })
+         << screen(QStringLiteral("Build scenes none yet"), [](App *) -> QWidget * {
+                QWidget *w = new QWidget;
+                QVBoxLayout *v = new QVBoxLayout(w);
+                v->addWidget(new ProgrammingOutline(extraDoc()));
+                w->setMinimumSize(220, 160);
+                return w;
+            })
+         << screen(QStringLiteral("Speed masters in the status bar"), speedMastersInTheStatusBar,
+                   [](App *, QWidget *) { QTest::qWait(80); });
 
     // Workbench with a scene, and the stock function editors.
     list << screen(QStringLiteral("Workbench scene"), [](App *app) -> QWidget * {
@@ -969,6 +1020,8 @@ void LayoutSanity_Test::cleanupTestCase()
     }
     delete g_ringDoc;
     g_ringDoc = nullptr;
+    qDeleteAll(g_extraDocs);
+    g_extraDocs.clear();
     if (m_app != nullptr)
     {
         m_app->doc()->resetModified();

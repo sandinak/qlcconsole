@@ -1397,7 +1397,7 @@ void LookEditor::updateEffectHeader()
                       || (p->scriptPath().isEmpty() && p->wledEffect().isEmpty());
     m_effectPickedLabel->setText(none ? tr("No effect yet")
                                       : m_effectScriptCombo->currentText().trimmed());
-    m_effectChangeButton->setText(none ? tr("Pick an effect…") : tr("Change Effect…"));
+    m_effectChangeButton->setText(none ? tr("Pick an Effect…") : tr("Change Effect…"));
     updateBasedOn();
     if (none)
     {

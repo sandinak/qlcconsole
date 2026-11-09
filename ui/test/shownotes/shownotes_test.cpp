@@ -166,6 +166,27 @@ void ShowNotes_Test::thePaneFollowsTheSelection()
     QCOMPARE(pane->shownNotes().count(), 1);
 }
 
+void ShowNotes_Test::anEmptiedPaneDrawsNoOldNoteOverItsEmptyLine()
+{
+    // The walker's UX-34: "No notes yet" lay under a note's check box, its
+    // line and its ⋯, which were taken out of the layout but deleted only
+    // later and so still drawn where they were. Only the processed events
+    // of one pass are between the two selections here, as in a click.
+    ShowTreeView view(nullptr, m_doc);
+    ShowNotesPane *pane = view.notesPane();
+    QVERIFY(view.selectNode(m_cue3));
+    QVERIFY(pane->addNote("A note for the cue") != invalidId());
+    QCOMPARE(pane->shownNotes().count(), 1);
+
+    QVERIFY(view.selectNode(m_cue1));
+    QVERIFY(pane->shownNotes().isEmpty());
+    QLabel *empty = pane->findChild<QLabel *>("stNotesEmpty");
+    QVERIFY(empty != nullptr);
+    QVERIFY(!empty->isHidden());
+    for (QWidget *w : pane->findChildren<QWidget *>("stNoteEntry"))
+        QVERIFY2(w->isHidden(), "a taken-down note is still shown");
+}
+
 void ShowNotes_Test::addTickAndUndoFromThePane()
 {
     ShowTreeController *st = m_doc->showTree();

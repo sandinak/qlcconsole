@@ -159,7 +159,12 @@ CueRunner::Size CueRunner::stringToSize(const QString &str)
 class CueRunnerLabel final : public QLabel
 {
 public:
-    explicit CueRunnerLabel(QWidget *parent) : QLabel(parent) {}
+    explicit CueRunnerLabel(QWidget *parent) : QLabel(parent)
+    {
+        // Elides on purpose (the whole text comes up on hover): not a cut-off
+        // for the layout checks (layoutsanity_test, the UX walker).
+        setProperty("layoutSanityElides", true);
+    }
 
     int maxLines() const { return m_maxLines; }
     void setMaxLines(int lines)

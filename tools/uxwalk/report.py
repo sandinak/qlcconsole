@@ -295,6 +295,19 @@ def check_help_topic(rec, ctx):
 
 # Self-explaining when greyed: there is nothing to undo, copy, paste.
 SELF_EXPLAINED = re.compile(r"^(Undo|Redo|Cut|Copy|Paste|Select All|Delete)\b")
+# UX-27 exemptions (2026-11-08 gaps report: 35 findings, nothing fell in a day):
+# a "No Groups on This Layer Yet" placeholder is its own explanation; and a
+# verb that acts on a chosen row ("Rename…", "Remove", "Edit…", "Apply"),
+# greyed in a window whose list has nothing chosen (or nothing in it), says
+# why by its place. A greyed button beside a chosen row still shows.
+PLACEHOLDER = re.compile(r"^No\b")
+NEEDS_A_CHOICE = re.compile(r"^(Edit|Remove|Rename|Replace|Restore|Convert|Apply|Reopen|Why\?|Stamp|"
+                            r"Assign|Fixture Properties)\b")
+
+
+def nothing_chosen(rec):
+    return any(w.get("noSelection") or w.get("empty") for w in rec.get("widgets", [])
+               if w.get("items") is not None or w.get("class", "").endswith(("View", "Widget")))
 
 
 def check_disabled_says_why(rec, ctx):
@@ -308,7 +321,7 @@ def check_disabled_says_why(rec, ctx):
             if it.get("text", "").startswith("("):
                 continue
             t = it.get("text", "")
-            if SELF_EXPLAINED.match(t) or it.get("tooltip") or it.get("statusTip"):
+            if SELF_EXPLAINED.match(t) or PLACEHOLDER.match(t) or it.get("tooltip") or it.get("statusTip"):
                 continue
             yield Finding("UX-27", t, "a greyed menu item with no tooltip saying why",
                           "%s ▸ %s" % (rec.get("name"), t), it.get("rect"), sig="UX-27|menu|%s" % t)
@@ -327,6 +340,8 @@ def check_disabled_says_why(rec, ctx):
             continue
         t = w.get("text", "") or w.get("path", "")
         if SELF_EXPLAINED.match(w.get("text", "")):
+            continue
+        if NEEDS_A_CHOICE.match(w.get("text", "")) and nothing_chosen(rec):
             continue
         yield Finding("UX-27", t, "a greyed button with no tooltip saying why",
                       w.get("path", ""), w.get("rect"), sig="UX-27|button|%s|%s" % (w.get("path"), t))
@@ -476,7 +491,10 @@ def pattern_allowed(rid, where, text, rec):
     if rid == "UX-10" and NATIVE_KEYS.match(text):
         return True
     if rid == "UX-11" and rec.get("kind") != "menu":
-        return any(w.get("path") == where and w.get("tooltip") for w in rec.get("widgets", []))
+        # A plain Remove button is the list editor's: only a menu item can
+        # destroy under that word (gaps report: 64 hits, none real).
+        return bool(re.search(r'Q(?:Push|Tool)Button(?:#\w+)? "[^"]*"$', where)) \
+            or any(w.get("path") == where and w.get("tooltip") for w in rec.get("widgets", []))
     if rid == "UX-17" and EXPERT_TERMS.search(text):
         return True
     return False

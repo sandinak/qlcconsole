@@ -40,6 +40,7 @@ private slots:
     void aCollectionIsGivenAMaster();
     void theCountShowsTheMastersInUse();
     void theFooterShowsEachMastersTempo();
+    void aMasterThatComesIntoUseIsShownAtItsWidth();
     void aMastersInputsAreMappedInItsWindow();
     void theBeatIsABlinkABarOrNothingAlwaysOrWhilePlaying();
     void doubleClickingAMasterChangesNothing();

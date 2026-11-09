@@ -4460,7 +4460,7 @@ void ShowTreeView::showProductionPage(quint32 productionId)
     const Production *p = m_st->production(productionId);
     const bool current = m_st->currentProduction() == productionId;
     m_prodTitle->setText(p->name);
-    m_prodCurrent->setText(current ? tr("▶ Current — click to unset") : tr("Make current"));
+    m_prodCurrent->setText(current ? tr("▶ Current (click to unset)") : tr("Make Current"));
     // One production (Q75): it plays on GO; nothing to make current, and a
     // main list only to pick with two lists.
     const bool single = singleProduction();
