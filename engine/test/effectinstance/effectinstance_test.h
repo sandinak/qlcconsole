@@ -148,6 +148,9 @@ private slots:
     /** A script that leaves out notes, lifecycle and the rest: empty and
      *  the defaults -- not the word "undefined" shown under the effect. */
     void aScriptsMissingTextIsEmptyNotUndefined();
+    /** Labels are names, descriptions are tooltips: every bundled script's
+     *  parameter reads as a short name, and no list shows an identifier. */
+    void everyBundledParamHasAShortReadableLabel();
     /** Input on the note range updates the "midi" data channel once per
      *  tick, not once per value: a busy Art-Net input landed there too and
      *  rebuilt it ~90,000 times a second on the GUI thread (pb5). */

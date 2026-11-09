@@ -5602,6 +5602,7 @@ int ShowTreeView::addEffectRows(int row, const CueList &list, quint32 cueId, qui
     for (const EffectRows::Row &r : EffectRows::rows(m_doc, rl, key, v, originText(list, v), span))
     {
         QLabel *label = new QLabel(QStringLiteral("   ") + r.label, m_rowsHost);     // the effect's children
+        label->setWordWrap(true);       // a long name wraps; it never runs off the edge
         QLabel *value = new QLabel(r.origin.isEmpty() ? r.text : QStringLiteral("%1 — %2").arg(r.text, r.origin),
                                    m_rowsHost);
         value->setObjectName(QStringLiteral("stRow:%1/%2").arg(key, r.id));

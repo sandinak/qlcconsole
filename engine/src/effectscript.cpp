@@ -329,6 +329,7 @@ bool EffectScript::parseMeta()
             ParamDef def;
             def.name         = jsText(item.property("name"));
             def.description  = jsText(item.property("description"));
+            def.label        = jsText(item.property("label"));
             def.type         = jsText(item.property("type"));
             def.unit         = jsText(item.property("unit"));
             def.min          = (float)item.property("min").toNumber();
@@ -342,6 +343,14 @@ bool EffectScript::parseMeta()
                 int vlen = vals.property("length").toInt();
                 for (int vi = 0; vi < vlen; ++vi)
                     def.enumValues << vals.property(vi).toString();
+            }
+            // valueLabels: what a person reads for each value, when the script's own
+            // value names are identifiers ("lastPosition" -> "Hold last position").
+            QJSValue valLabels = item.property("valueLabels");
+            if (valLabels.isArray() && valLabels.property("length").toInt() == def.enumValues.size())
+            {
+                for (int vi = 0; vi < def.enumValues.size(); ++vi)
+                    def.enumValues[vi] = valLabels.property(vi).toString();
             }
             QJSValue aliases = item.property("aliases");
             if (aliases.isArray())
@@ -534,4 +543,29 @@ QJSValue EffectScript::callTick(const QJSValue &fixtures,
 QJSValue EffectScript::newState()
 {
     return m_engine.newObject();
+}
+
+QString EffectScript::ParamDef::displayLabel() const
+{
+    if (!label.trimmed().isEmpty())
+        return label.trimmed();
+    QString l = description;
+    for (const QString &cut : { QStringLiteral("("), QStringLiteral(" -- "), QStringLiteral(":") })
+    {
+        const int at = l.indexOf(cut);
+        if (at > 0)
+            l = l.left(at);
+    }
+    l = l.trimmed();
+    if (!l.isEmpty() && l.size() <= maxLabelLength)
+        return l;
+    // "panRate" -> "Pan Rate"
+    QString n;
+    for (const QChar c : name)
+    {
+        if (c.isUpper() && !n.isEmpty() && !n.endsWith(QLatin1Char(' ')))
+            n += QLatin1Char(' ');
+        n += n.isEmpty() || n.endsWith(QLatin1Char(' ')) ? c.toUpper() : c;
+    }
+    return n;
 }

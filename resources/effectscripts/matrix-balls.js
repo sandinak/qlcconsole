@@ -22,8 +22,8 @@
         { name: "count",   description: "How many balls", min: 1, max: 8, defaultValue: 3 },
         { name: "size",    description: "Each ball's radius (pixels)", min: 0.5, max: 4, defaultValue: 1 },
         { name: "trail",   description: "How long a trail follows each", min: 0, max: 1, defaultValue: 0.3 },
-        { name: "gravity", description: "Float free, or drop and bounce on the floor", defaultValue: 1, values: ["Off", "On"] },
-        { name: "scope",   description: "Balls in each box, or across the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
+        { name: "gravity", label: "Gravity", description: "Float free, or drop and bounce on the floor", defaultValue: 1, values: ["Off", "On"] },
+        { name: "scope",   label: "Scope", description: "Balls in each box, or across the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     // 0..L..0..: a back-and-forth along a length L, at u.

@@ -52,11 +52,11 @@
     //   "snapToTarget" — snap to the bound followTarget's pre-aimed position on
     //       every transition (ignores the last spot position).
     effect.parameters = [
-        { name: "followMode",   description: "On scene change: hold the last beam position, or snap to the bound followTarget", values: ["lastPosition", "snapToTarget"], defaultValue: 0 },
-        { name: "personHeight", description: "Height of the person being followed (free-fly only) -- adjusts the tilt centre", unit: "cm", min: 50, max: 250, defaultValue: 170 },
-        { name: "fadeNearLimit", description: "Fade a head out over this many degrees before its pan/tilt limit, dark where it cannot reach the target (0 = off)", min: 0, max: 45, defaultValue: 0 },
-        { name: "fadeWhenBlocked", description: "Fade a head out over this many milliseconds while a drape, wall, riser or tower stands between it and the subject, back when clear (0 = off)", min: 0, max: 5000, defaultValue: 0 },
-        { name: "sizeOnSubject", description: "Zoom each head so its beam is this wide on the subject, whatever its distance (0 = off)", unit: "cm", min: 0, max: 800, defaultValue: 0 },
+        { name: "followMode",   label: "Follow Mode", description: "On scene change: hold the last beam position, or snap to the bound followTarget", values: ["lastPosition", "snapToTarget"], valueLabels: ["Hold Last Position", "Snap to Target"], defaultValue: 0 },
+        { name: "personHeight", label: "Person Height", description: "Height of the person being followed (free-fly only) -- adjusts the tilt centre", unit: "cm", min: 50, max: 250, defaultValue: 170 },
+        { name: "fadeNearLimit", label: "Fade Near Limit", description: "Fade a head out over this many degrees before its pan/tilt limit, dark where it cannot reach the target (0 = off)", min: 0, max: 45, defaultValue: 0 },
+        { name: "fadeWhenBlocked", label: "Fade When Blocked", description: "Fade a head out over this many milliseconds while a drape, wall, riser or tower stands between it and the subject, back when clear (0 = off)", min: 0, max: 5000, defaultValue: 0 },
+        { name: "sizeOnSubject", label: "Size on Subject", description: "Zoom each head so its beam is this wide on the subject, whatever its distance (0 = off)", unit: "cm", min: 0, max: 800, defaultValue: 0 },
         // The feel (the host moves the subject with these; free-fly below too).
         // A speed is kept in cm a second and shown in Settings > Units.
         { name: "topSpeed", description: "Top Speed (how fast the subject moves on the stage with the left stick at full throw: a brisk walk is the default)", unit: "cm/s", min: 15, max: 600, defaultValue: 182.88 },

@@ -24,7 +24,7 @@
         { name: "sparks",   description: "Sparks a burst throws", min: 3, max: 24, defaultValue: 12 },
         { name: "size",     description: "How far the sparks fly (pixels)", min: 1, max: 15, defaultValue: 5 },
         { name: "fade",     description: "Seconds the sparks last", min: 0.2, max: 3, defaultValue: 1.1 },
-        { name: "scope",    description: "Across the whole canvas, or in each box", defaultValue: 0, values: MATRIX.SCOPES }
+        { name: "scope",    label: "Scope", description: "Across the whole canvas, or in each box", defaultValue: 0, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

@@ -23,7 +23,7 @@
         { name: "speed",   description: "How fast it shifts (per beat on a speed master)", min: 0.02, max: 2, defaultValue: 0.3 },
         { name: "spin",    description: "Turns a second (minus = the other way)", min: -1, max: 1, defaultValue: 0.05 },
         { name: "scale",   description: "Size of the pattern's pieces (pixels)", min: 1, max: 12, defaultValue: 4 },
-        { name: "scope",   description: "A kaleidoscope in each box, or one across the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
+        { name: "scope",   label: "Scope", description: "A kaleidoscope in each box, or one across the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     var FOLDS = [2, 4, 6, 8];

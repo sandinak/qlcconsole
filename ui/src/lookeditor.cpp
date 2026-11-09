@@ -123,8 +123,11 @@ namespace
 {
 /* A script parameter's row, Title Case from its name: "topSpeed" is Top
    Speed, "followMode" Follow Mode (UX-07). */
-QString paramRowLabel(const QString &name)
+QString paramRowLabel(const EffectScript::ParamDef &pd)
 {
+    if (!pd.label.trimmed().isEmpty())
+        return pd.label.trimmed();
+    const QString &name = pd.name;
     QString label;
     for (const QChar c : name)
         label += c.isUpper() && !label.isEmpty() && !label.endsWith(QLatin1Char(' '))
@@ -3299,7 +3302,7 @@ void LookEditor::rebuildEffectDynWidget()
                     m_doc->setModified();
                     emit paletteValueChanged(m_paletteId);
                 });
-                form->addRow(paramRowLabel(pd.name), pdw);
+                form->addRow(paramRowLabel(pd), pdw);
             }
             else if (pd.type == QLatin1String("text"))
             {
@@ -3320,7 +3323,7 @@ void LookEditor::rebuildEffectDynWidget()
                     m_doc->setModified();
                     emit paletteValueChanged(m_paletteId);
                 });
-                form->addRow(paramRowLabel(pd.name), le);
+                form->addRow(paramRowLabel(pd), le);
             }
             else if (pd.type == QLatin1String("image"))
             {
@@ -3385,7 +3388,7 @@ void LookEditor::rebuildEffectDynWidget()
                     }
                     store(value);
                 });
-                form->addRow(paramRowLabel(pd.name), row);
+                form->addRow(paramRowLabel(pd), row);
             }
             else if (pd.type == QLatin1String("direction"))
             {
@@ -3420,7 +3423,7 @@ void LookEditor::rebuildEffectDynWidget()
                     m_doc->setModified();
                     emit paletteValueChanged(m_paletteId);
                 });
-                form->addRow(paramRowLabel(pd.name), gdw);
+                form->addRow(paramRowLabel(pd), gdw);
             }
             else if (pd.name == QLatin1String("midiSource"))
             {
@@ -3462,7 +3465,7 @@ void LookEditor::rebuildEffectDynWidget()
                     m_doc->setModified();
                     emit paletteValueChanged(m_paletteId);
                 });
-                form->addRow(paramRowLabel(pd.name), cb);
+                form->addRow(paramRowLabel(pd), cb);
             }
             else if (pd.name == QLatin1String("palette")
                      && pd.description.startsWith(QLatin1String("Palette (WLED")))
@@ -3499,7 +3502,7 @@ void LookEditor::rebuildEffectDynWidget()
                 cb->setProperty("paramName", pd.name);
                 connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
                         this, &LookEditor::slotEffectEnumParamChanged);
-                form->addRow(paramRowLabel(pd.name), cb);
+                form->addRow(paramRowLabel(pd), cb);
             }
             else if (!pd.enumValues.isEmpty())
             {
@@ -3513,7 +3516,7 @@ void LookEditor::rebuildEffectDynWidget()
                 cb->setProperty("paramName", pd.name);
                 connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
                         this, &LookEditor::slotEffectEnumParamChanged);
-                form->addRow(paramRowLabel(pd.name), cb);
+                form->addRow(paramRowLabel(pd), cb);
             }
             else
             {
@@ -3618,7 +3621,7 @@ void LookEditor::rebuildEffectDynWidget()
                 if (perBeat)
                     sl->setToolTip(tr("Cycles per beat of %1: 1 = one a beat, 0.25 = one a bar.")
                                        .arg(m_doc->speedMasters()->assignmentName(effectiveSpeed)));
-                const QString label = paramRowLabel(pd.name);
+                const QString label = paramRowLabel(pd);
                 form->addRow(perBeat ? tr("%1 (per beat)").arg(label) : label, row);
             }
         }

@@ -20,8 +20,8 @@
     effect.parameters = [
         { name: "density",    description: "How many pixels twinkle", min: 0.02, max: 1, defaultValue: 0.25 },
         { name: "decay",      description: "Fade time (seconds; beats on a speed master)", min: 0.05, max: 2, defaultValue: 0.5 },
-        { name: "flashes",    description: "How often the white flashes go off", min: 0, max: 1, defaultValue: 0.4 },
-        { name: "background", description: "A glow of the first colour under it all", min: 0, max: 0.5, defaultValue: 0 }
+        { name: "flashes",    label: "Flash Rate", description: "How often the white flashes go off", min: 0, max: 1, defaultValue: 0.4 },
+        { name: "background", label: "Background", description: "A glow of the first colour under it all", min: 0, max: 0.5, defaultValue: 0 }
     ].concat(MATRIX.whiteParams(0));
 
     // Each pixel lives in slots of SLOT seconds; in a slot it may spark once,

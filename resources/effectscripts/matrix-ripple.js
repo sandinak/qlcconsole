@@ -17,15 +17,15 @@
     effect.notes = "Rings spread out from a point, each in the next of the look's colours, fading as they go. Origin: the middle, an edge, or a new place for every ring. Timing: rings on the beat (Division sets how often) or free at Speed rings a second. Spacing: how far a ring travels before the next starts; Width: a ring's thickness; Fade: how much it fades by the edge. Scope: from the middle of each box, or of the whole canvas. The accent is the newest ring. Each box, staggered: the same in every box, each a little behind the last, so it rolls across the rig -- Stagger order: left to right, right to left, out from the middle or random; Stagger: how far behind, as a fraction of a ring.";
 
     effect.parameters = [
-        { name: "timing",   description: "A ring on the beat, or free at Speed", defaultValue: 1, values: MATRIX.TIMINGS },
+        { name: "timing",   label: "Timing", description: "A ring on the beat, or free at Speed", defaultValue: 1, values: MATRIX.TIMINGS },
         { name: "division", description: "On the beat: how often a ring starts", defaultValue: 2, values: MATRIX.DIVISIONS },
         { name: "speed",    description: "Free: rings a second (per beat on a speed master)", min: 0.1, max: 6, defaultValue: 1 },
-        { name: "spacing",  description: "Pixels a ring travels before the next starts", min: 1, max: 30, defaultValue: 4 },
+        { name: "spacing",  label: "Spacing", description: "Pixels a ring travels before the next starts", min: 1, max: 30, defaultValue: 4 },
         { name: "width",    description: "Ring thickness (pixels)", min: 0.5, max: 6, defaultValue: 1.2 },
-        { name: "fade",     description: "How much a ring fades by the edge", min: 0, max: 1, defaultValue: 0.6 },
+        { name: "fade",     label: "Fade", description: "How much a ring fades by the edge", min: 0, max: 1, defaultValue: 0.6 },
         { name: "origin",   description: "Where the rings start", defaultValue: 0,
           values: ["Middle", "Left", "Right", "Top", "Bottom", "Anywhere"] },
-        { name: "scope",    description: "From the middle of each box, or of the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
+        { name: "scope",    label: "Scope", description: "From the middle of each box, or of the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

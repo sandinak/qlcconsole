@@ -17,14 +17,14 @@
     effect.notes = "The canvas dissolves from one of the look's colours to the next, pixel by random pixel, or to black and back again. Timing: a dissolve on the beat (Division: how often) or free at Speed dissolves a second. Mode: colour to colour, or to and from black. Grain: the size of the pieces (pixels). Fade: how long each piece takes to turn, as a part of the dissolve (0 = it snaps). Glint: a flash of white as a piece turns (the accent). Scope: one dissolve across the whole canvas, or the same in each box; Each box, staggered: each box a little behind the last (Stagger order; Stagger: how far, as a fraction of a dissolve).";
 
     effect.parameters = [
-        { name: "timing",   description: "A dissolve on the beat, or free at Speed", defaultValue: 1, values: MATRIX.TIMINGS },
+        { name: "timing",   label: "Timing", description: "A dissolve on the beat, or free at Speed", defaultValue: 1, values: MATRIX.TIMINGS },
         { name: "division", description: "On the beat: how often", defaultValue: 1, values: MATRIX.DIVISIONS },
         { name: "speed",    description: "Free: dissolves a second (per beat on a speed master)", min: 0.05, max: 4, defaultValue: 0.5 },
         { name: "mode",     description: "What it dissolves between", defaultValue: 0, values: ["Colour to colour", "To and from black"] },
         { name: "grain",    description: "Size of the pieces (pixels)", min: 1, max: 4, defaultValue: 1 },
         { name: "fade",     description: "How long a piece takes to turn (part of the dissolve)", min: 0, max: 1, defaultValue: 0.2 },
-        { name: "glint",    description: "A flash of white as a piece turns", min: 0, max: 1, defaultValue: 0.3 },
-        { name: "scope",    description: "One dissolve across the canvas, or the same in each box", defaultValue: 0, values: MATRIX.SCOPES }
+        { name: "glint",    label: "Glint", description: "A flash of white as a piece turns", min: 0, max: 1, defaultValue: 0.3 },
+        { name: "scope",    label: "Scope", description: "One dissolve across the canvas, or the same in each box", defaultValue: 0, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

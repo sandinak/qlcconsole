@@ -18,14 +18,14 @@
     effect.notes = "A flash on every step: on the beat (Division: how often) or free at Speed flashes a second. Pattern: the whole canvas, alternate boxes, a random box, random blocks of pixels, the left half then the right, or a row at a time. Colour: white (the white pixels and white on the RGB ones), the look's colours (one a flash), or the look's colours with the white pixels hitting white over them. Flash length: how much of each step it stays on; Decay: a hard cut or a fade.";
 
     effect.parameters = [
-        { name: "timing",   description: "Flash on the beat, or free at Speed", defaultValue: 0, values: MATRIX.TIMINGS },
+        { name: "timing",   label: "Timing", description: "Flash on the beat, or free at Speed", defaultValue: 0, values: MATRIX.TIMINGS },
         { name: "division", description: "On the beat: how often it flashes", defaultValue: 2, values: MATRIX.DIVISIONS },
         { name: "speed",    description: "Free: flashes a second (per beat on a speed master)", min: 0.5, max: 20, defaultValue: 6 },
         { name: "pattern",  description: "What flashes", defaultValue: 0,
           values: ["Whole canvas", "Alternate boxes", "Random box", "Random blocks", "Halves", "Rows"] },
         { name: "colour",   description: "Flash colour", defaultValue: 0,
           values: ["White", "Look colours", "Look colours + white pixels"] },
-        { name: "length",   description: "How much of each step the flash lasts", min: 0.05, max: 0.9, defaultValue: 0.25 },
+        { name: "length",   label: "Length", description: "How much of each step the flash lasts", min: 0.05, max: 0.9, defaultValue: 0.25 },
         { name: "decay",    description: "Hard cut (0) or fade (1)", min: 0, max: 1, defaultValue: 0.2 }
     ].concat(MATRIX.whiteParams(0));
 

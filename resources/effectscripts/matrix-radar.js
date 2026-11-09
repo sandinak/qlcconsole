@@ -22,7 +22,7 @@
         { name: "width",     description: "Line width (degrees)", min: 2, max: 90, defaultValue: 14 },
         { name: "wake",      description: "Wake behind the line (degrees)", min: 0, max: 330, defaultValue: 120 },
         { name: "direction", description: "Which way it turns", defaultValue: 0, values: ["Clockwise", "Anticlockwise"] },
-        { name: "scope",     description: "Round the middle of each box, or of the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
+        { name: "scope",     label: "Scope", description: "Round the middle of each box, or of the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

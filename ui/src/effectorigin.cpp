@@ -152,7 +152,7 @@ QStringList EffectOrigin::compare(Doc *doc, const QString &scriptPath, const QSt
     const Defs &d = defsFor(scriptPath);
     for (const EffectScript::ParamDef &pd : d.params)
     {
-        const QString label = pd.description.isEmpty() ? pd.name : pd.description;
+        const QString label = pd.displayLabel();
         if (pd.type == QLatin1String("path") || pd.type == QLatin1String("text")
             || pd.type == QLatin1String("image"))
         {

@@ -25,7 +25,7 @@
         { name: "radius",   description: "Range fraction of pan/tilt total (0-1)",  min: 0.01, max: 1.0,   defaultValue: 0.3  },
         { name: "center",   description: "Pan centre (0=left, 0.5=mid, 1=right)",   min: 0.0,  max: 1.0,   defaultValue: 0.5  },
         { name: "tcenter",  description: "Tilt centre (0=up, 0.5=mid, 1=down)",     min: 0.0,  max: 1.0,   defaultValue: 0.5  },
-        { name: "diverge",  description: "Phase spread so fixtures don't clump",    min: 0.0,  max: 1.0,   defaultValue: 1.0  }
+        { name: "diverge",  label: "Diverge", description: "Phase spread so fixtures don't clump",    min: 0.0,  max: 1.0,   defaultValue: 1.0  }
     ];
 
     // Sum of three incommensurable sines → smooth pseudo-random drift −1..+1

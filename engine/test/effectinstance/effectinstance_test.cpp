@@ -5124,3 +5124,49 @@ void EffectInstance_Test::theEditorAndTheInstanceShareTheLooksColours()
         QCOMPARE(ownHave, sharedHave);
     }
 }
+
+void EffectInstance_Test::everyBundledParamHasAShortReadableLabel()
+{
+    const QDir dir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/");
+    const QStringList files = dir.entryList(QStringList() << "*.js", QDir::Files);
+    QVERIFY(files.size() > 20);
+    // an identifier: a lower-case letter followed by a capital ("followTarget")
+    const QRegularExpression camel(QStringLiteral("[a-z][A-Z]"));
+    QStringList bad;
+    int checked = 0;
+    for (const QString &f : files)
+    {
+        EffectScript es;
+        if (!es.load(dir.filePath(f)))
+            continue;       // helpers without a tick are not effects
+        for (const EffectScript::ParamDef &pd : es.paramDefs())
+        {
+            ++checked;
+            const QString l = pd.displayLabel();
+            if (pd.label.isEmpty() && l != pd.description.section(QRegularExpression(QStringLiteral("\\(| -- |:")), 0, 0).trimmed())
+                bad << QStringLiteral("%1 %2: a long description needs a `label`").arg(f, pd.name);
+            if (l.isEmpty() || l.size() > EffectScript::ParamDef::maxLabelLength || camel.match(l).hasMatch()
+                || l.contains(QLatin1Char('(')))
+                bad << QStringLiteral("%1 %2: label \"%3\"").arg(f, pd.name, l);
+            for (const QString &v : pd.enumValues)
+                if (v.isEmpty() || camel.match(v).hasMatch())
+                    bad << QStringLiteral("%1 %2: value \"%3\"").arg(f, pd.name, v);
+        }
+    }
+    QVERIFY(checked > 100);
+    QVERIFY2(bad.isEmpty(), qPrintable(bad.join(QLatin1Char('\n'))));
+
+    // The script's own label wins; the long description stays the tooltip.
+    EffectScript fs;
+    QVERIFY(fs.load(dir.filePath("followspot.js")));
+    bool sawMode = false;
+    for (const EffectScript::ParamDef &pd : fs.paramDefs())
+        if (pd.name == QLatin1String("followMode"))
+        {
+            sawMode = true;
+            QCOMPARE(pd.displayLabel(), QStringLiteral("Follow Mode"));
+            QVERIFY(pd.description.size() > 40);
+            QCOMPARE(pd.enumValues.value(0), QStringLiteral("Hold Last Position"));
+        }
+    QVERIFY(sawMode);
+}

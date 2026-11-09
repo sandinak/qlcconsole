@@ -23,9 +23,9 @@
         { name: "speed",    description: "How fast it changes (per beat on a speed master)", min: 0.02, max: 3, defaultValue: 0.3 },
         { name: "scale",    description: "Cloud size (pixels)", min: 1, max: 30, defaultValue: 6 },
         { name: "drift",    description: "Slide across (pixels a second)", min: -10, max: 10, defaultValue: 1.5 },
-        { name: "contrast", description: "Soft and even, or punchy with dark gaps", min: 0, max: 1, defaultValue: 0.4 },
+        { name: "contrast", label: "Contrast", description: "Soft and even, or punchy with dark gaps", min: 0, max: 1, defaultValue: 0.4 },
         { name: "palette",  description: "Colouring", defaultValue: 0, values: ["Look colours", "Rainbow", "Fire", "Ocean"] },
-        { name: "glints",   description: "White glints where the field peaks", min: 0, max: 0.3, defaultValue: 0.06 }
+        { name: "glints",   label: "Glints", description: "White glints where the field peaks", min: 0, max: 0.3, defaultValue: 0.06 }
     ].concat(MATRIX.whiteParams(0));
 
     var FIRE  = [{ r: 0, g: 0, b: 0 }, { r: 180, g: 0, b: 0 }, { r: 255, g: 90, b: 0 }, { r: 255, g: 200, b: 40 }];

@@ -76,20 +76,7 @@ QLCPalette *EffectRows::effectPalette(Doc *doc, const Look &look)
 
 QString EffectRows::paramLabel(const EffectScript::ParamDef &def)
 {
-    QString l = def.description;
-    const int paren = l.indexOf(QLatin1Char('('));
-    if (paren > 0)
-        l = l.left(paren);
-    l = l.trimmed();
-    if (l.isEmpty())
-    {
-        // "panRate" -> "Pan rate"
-        for (const QChar c : def.name)
-            l += c.isUpper() && !l.isEmpty() ? QStringLiteral(" ") + c.toLower() : QString(c);
-        if (!l.isEmpty())
-            l[0] = l.at(0).toUpper();
-    }
-    return l;
+    return def.displayLabel();
 }
 
 QString EffectRows::valueText(const EffectScript::ParamDef &def, double value)

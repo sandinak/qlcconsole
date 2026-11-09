@@ -21,10 +21,10 @@
         { name: "speed",   description: "Pixels a second (per beat on a speed master)", min: 1, max: 80, defaultValue: 20 },
         { name: "path",    description: "The way through the pixels", defaultValue: 0,
           values: ["Along the rows", "Up and down the columns", "Spiral in", "Round the edge"] },
-        { name: "snakes",  description: "Snakes following each other round", min: 1, max: 6, defaultValue: 2 },
+        { name: "snakes",  label: "Snakes", description: "Snakes following each other round", min: 1, max: 6, defaultValue: 2 },
         { name: "length",  description: "Each snake's length (pixels)", min: 1, max: 40, defaultValue: 8 },
         { name: "colours", description: "Colouring", defaultValue: 0, values: ["A look colour each", "Rainbow along the body"] },
-        { name: "scope",   description: "A path in each box, or through the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
+        { name: "scope",   label: "Scope", description: "A path in each box, or through the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     // Each pixel's place along the path through a w x h area, -1 when the

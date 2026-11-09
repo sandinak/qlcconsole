@@ -26,7 +26,7 @@
         { name: "cycle",     description: "What happens each time round", defaultValue: 0,
           values: ["Fill, then empty the same way", "Fill, then empty back", "Each colour over the last"] },
         { name: "edge",      description: "Softness of the wipe's edge", min: 0, max: 1, defaultValue: 0.15 },
-        { name: "scope",     description: "Across the whole canvas, or in each box", defaultValue: 0, values: MATRIX.SCOPES }
+        { name: "scope",     label: "Scope", description: "Across the whole canvas, or in each box", defaultValue: 0, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

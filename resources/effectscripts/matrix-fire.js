@@ -23,7 +23,7 @@
         { name: "intensity", description: "How hot it burns", min: 0.1, max: 1, defaultValue: 0.8 },
         { name: "cooling",   description: "How quickly the tongues die away", min: 0, max: 1, defaultValue: 0.45 },
         { name: "palette",   description: "Colouring", defaultValue: 0, values: ["Look colours (fire without)", "Classic fire", "Blue fire"] },
-        { name: "scope",     description: "One fire across the canvas, or one in each box", defaultValue: 0, values: MATRIX.SCOPES }
+        { name: "scope",     label: "Scope", description: "One fire across the canvas, or one in each box", defaultValue: 0, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     var CLASSIC = [{ r: 110, g: 0, b: 0 }, { r: 220, g: 25, b: 0 }, { r: 255, g: 90, b: 0 },

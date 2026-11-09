@@ -18,10 +18,10 @@
     effect.parameters = [
         { name: "speed",     description: "Turns a second (per beat on a speed master)", min: 0.05, max: 3, defaultValue: 0.3 },
         { name: "arms",      description: "How many arms", min: 1, max: 6, defaultValue: 2 },
-        { name: "tightness", description: "Times an arm winds round, middle to edge", min: 0, max: 4, defaultValue: 1 },
-        { name: "width",     description: "How much of the space between arms each fills", min: 0.1, max: 0.9, defaultValue: 0.5 },
+        { name: "tightness", label: "Tightness", description: "Times an arm winds round, middle to edge", min: 0, max: 4, defaultValue: 1 },
+        { name: "width",     label: "Width", description: "How much of the space between arms each fills", min: 0.1, max: 0.9, defaultValue: 0.5 },
         { name: "direction", description: "Which way it turns", defaultValue: 0, values: ["Clockwise", "Anticlockwise"] },
-        { name: "scope",     description: "Round the middle of each box, or of the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
+        { name: "scope",     label: "Scope", description: "Round the middle of each box, or of the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

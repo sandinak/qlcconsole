@@ -27,7 +27,7 @@
         { name: "from",     description: "Where the bars grow from", defaultValue: 0, values: ["Bottom", "Middle"] },
         { name: "colours",  description: "Colouring", defaultValue: 0,
           values: ["Green to red", "Look colours up the bar", "Look colours across", "Rainbow across"] },
-        { name: "scope",    description: "An equaliser in each box, or one across the canvas", defaultValue: 1, values: MATRIX.SCOPES }
+        { name: "scope",    label: "Scope", description: "An equaliser in each box, or one across the canvas", defaultValue: 1, values: MATRIX.SCOPES }
     ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(1));
 
     var GYR = [{ r: 0, g: 255, b: 0 }, { r: 255, g: 220, b: 0 }, { r: 255, g: 0, b: 0 }];
