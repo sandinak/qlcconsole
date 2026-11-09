@@ -2533,7 +2533,7 @@ ShowTreeController::Usage ShowTreeController::usageInSection(quint32 listId, con
     return list == nullptr ? Usage() : usageOfCues(*list, section.first, section.last);
 }
 
-ShowTreeController::Usage ShowTreeController::usageOfCues(const CueList &listRef, int first, int last) const
+ShowTreeController::Usage ShowTreeController::usageOfCues(const ShowTree::CueList &listRef, int first, int last) const
 {
     Usage u;
     const CueList *list = &listRef;
