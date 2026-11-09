@@ -1032,8 +1032,8 @@ void FollowSpotCue_Test::aWornStickMovesNothing()
     QVERIFY(padInput(doc, quint32(view), 255, kWorn));
     settle(50);    // a press and its release are never in the same instant
     QVERIFY(padInput(doc, quint32(ls), 255, kWorn));
-    settle(50);
-    QVERIFY(pc->m_centreChord);
+    // The press reaches the controller from the input thread, when it can.
+    QTRY_VERIFY_WITH_TIMEOUT(pc->m_centreChord, 2000);
     QVERIFY(padInput(doc, quint32(ls), 0, kWorn));
     settle(50);
     QVERIFY(padInput(doc, quint32(view), 0, kWorn));

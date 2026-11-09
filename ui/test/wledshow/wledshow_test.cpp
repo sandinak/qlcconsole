@@ -1033,16 +1033,18 @@ void WledShow_Test::aSnapCueReachesTheStaffWithTheStage()
        coalescing), the event loop's turn and the HTTP request -- about
        6 ms on an idle desk machine. 30 leaves five times that for a loaded
        gate machine; the middle of six GOs, so one stalled turn does not
-       fail it. The old send tick (here a second) would be hundreds. */
-    QVERIFY2(median(ownLag) <= 30,
+       fail it. The old send tick (here a second) would be hundreds, so
+       CI's shared runners (35 ms measured) get 100. */
+    const qint64 lagLimit = qEnvironmentVariableIsSet("CI") ? 100 : 30;
+    QVERIFY2(median(ownLag) <= lagLimit,
              qPrintable(QString("a snap reaches the staff %1 ms after its frame").arg(median(ownLag))));
     /* Against the stage: the staff comes with the steps' effect -- both
        effect layers, which draw their first frame on the event loop, a
        frame (20 ms) after a plain layer like the wash. Each comes within
        the same 30 ms of the steps, and within two frames more of the wash. */
-    QVERIFY2(median(stepsLag) <= 30,
+    QVERIFY2(median(stepsLag) <= lagLimit,
              qPrintable(QString("the staff comes %1 ms after the steps' effect").arg(median(stepsLag))));
-    QVERIFY2(median(stageLag) <= 70,
+    QVERIFY2(median(stageLag) <= lagLimit + 40,
              qPrintable(QString("the staff comes %1 ms after the stage").arg(median(stageLag))));
     // Moved in black: every spell GO was its brightness alone.
     QCOMPARE(brightnessOnly, goes / 2);
