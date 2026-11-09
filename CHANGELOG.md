@@ -70,6 +70,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   other function; never an empty scene, never a cue, which has Record beside
   it). The link brings up the Show Tree with a cue selected and Record
   focused (UX-61, flow F-04).
+- **A Formation dropped on selected cues sets them all.** Drop it on one of several selected cues in the Show Tree: every one takes it, as one undo, as Blocking already did.
 - **Blocking in the Library.** The Show Tree's Library lists **Blocking** (Default and each saved set) under All: drag one onto a cue, or onto the selected cues, and it uses it from there on, exactly as the cue page's Blocking does. See [Blocking](docs/features/show-tree.md#blocking).
 ### New
 

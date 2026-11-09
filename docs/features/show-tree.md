@@ -1037,7 +1037,8 @@ cue's formation, beside an Aim palette. Make and edit them in Build
 ([Formation palettes](build.md#formation-palettes)); typed:
 `Towers formation "Pairs crossed"`, `cue look formation "Pairs crossed"`.
 They are in the Library under **Palettes ▸ Formation**: drag one onto a cue
-or a layer, the same as the **⋯ ▸ Formation** menu.
+or a layer, the same as the **⋯ ▸ Formation** menu. Dropped on one of several
+selected cues, it sets all of them, as one undo.
 
 - **Who wins**, setting by setting: the layer's own Spread / Grouping /
   Cross row, else a Formation on the layer, else the cue's formation (its

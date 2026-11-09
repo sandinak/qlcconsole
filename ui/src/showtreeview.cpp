@@ -2007,9 +2007,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             bl->addWidget(m_cueBlocking, 1);
             QPushButton *nb = new QPushButton(BlockingView::saveActionText(), m_cueBlockingRow);
             nb->setObjectName("stCueBlockingNew");
-            nb->setToolTip(tr("Store where the stage targets stand in this cue now as a new blocking "
-                              "(a formation: where the people stand for a number), used from this cue "
-                              "on. Move them for it in the Lighting Studio."));
+            nb->setToolTip(tr("Store where the stage targets stand in this cue now as a new blocking, "
+                              "used from this cue on. Move them for it in the Lighting Studio."));
             bl->addWidget(nb);
             m_cueBlockingRename = new QPushButton(tr("Rename\u2026"), m_cueBlockingRow);
             m_cueBlockingRename->setObjectName("stCueBlockingRename");
@@ -7077,6 +7076,18 @@ const char *ShowTreeView::blockingMimeType()
     return "application/x-qlcconsole-showtree-blocking";
 }
 
+QList<quint32> ShowTreeView::formationCues(quint32 cueId, quint32 layerId, const Target &target,
+                                           const QList<quint32> &palettes) const
+{
+    if (layerId != invalidId() || !target.isEmpty() || palettes.isEmpty())
+        return {};
+    for (quint32 pid : palettes)
+        if (m_st->keyForPalette(pid) != KeyFormation)
+            return {};
+    const QList<quint32> cues = selectedCues();
+    return cues.count() > 1 && cues.contains(cueId) ? cues : QList<quint32>();
+}
+
 bool ShowTreeView::dropBlocking(quint32 cueId, quint32 set)
 {
     const MonitorProperties *mp = m_doc->monitorProperties();
@@ -7665,6 +7676,14 @@ bool ShowTreeView::dropMime(quint32 cueId, quint32 layerId, const QMimeData *mim
             m_hint->setText(m_lastDropFailure);
         }
     }
+    else if (const QList<quint32> cues = formationCues(cueId, layerId, target, pals); !cues.isEmpty())
+    {
+        // Onto one of the selected cues: all of them, as one step (as Blocking).
+        m_st->beginBatch(tr("Set Formation on %1 cues").arg(cues.count()));
+        for (quint32 c : cues)
+            done |= dropPalettes(c, invalidId(), pals);
+        m_st->endBatch(done);
+    }
     else if (!pals.isEmpty())
         done = dropPalettes(cueId, layerId, pals, layerId == invalidId() ? target : Target());
     else if (targets && layerId != invalidId())
@@ -7758,6 +7777,9 @@ QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *
         return out.join(QStringLiteral("; "));
     }
     const QList<quint32> pals = idsFromMime(mime, FunctionsTreeWidget::paletteDragMimeType());
+    if (!child && acceptsDrop(cueId, layerId, mime, target))
+        if (const QList<quint32> several = formationCues(cueId, layerId, target, pals); !several.isEmpty())
+            return tr("Formation %1 → the %2 selected cues").arg(paletteName(pals.last())).arg(several.count());
     const QList<quint32> stageTargets = idsFromMime(mime, targetMimeType());
     if (!stageTargets.isEmpty() && !child)
     {

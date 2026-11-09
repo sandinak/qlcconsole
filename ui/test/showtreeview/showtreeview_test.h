@@ -173,6 +173,8 @@ private slots:
      *  cue, a layer or the selected cues they set the formation / the
      *  blocking, and a save shows there with no refresh. */
     void theLibraryOffersFormationsAndBlocking();
+    void aFormationDroppedOnSelectedCuesSetsThemAll();
+    void theBlockingButtonDoesNotSayFormation();
     void theLibraryShowsNewFormationsAndBlockings();
     /** QLC_SHOT_DIR: the Library with a Formation and two blocking sets,
      *  at three sizes (the visual check). */

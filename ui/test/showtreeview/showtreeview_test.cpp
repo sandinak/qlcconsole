@@ -8731,6 +8731,66 @@ void ShowTreeView_Test::theLibraryOffersFormationsAndBlocking()
     QCOMPARE(st->cueOwnBlocking(c[1]), apron);
 }
 
+void ShowTreeView_Test::aFormationDroppedOnSelectedCuesSetsThemAll()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 pid = m_doc->paletteOps()->create(QLCPalette::Formation, QString(), "Pairs", QVariantList(),
+                                                    [](QLCPalette *p) { p->setFormationValue(QLCPalette::FormationGroup, 2); });
+    QVERIFY(pid != QLCPalette::invalidId());
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    QList<quint32> c;
+    for (const char *name : { "One", "Two", "Three" })
+        c << st->addCue(list, -1, name);
+    auto formationOf = [&](quint32 cue) {
+        for (const Look &l : st->cue(cue)->looks)
+            if (l.key == KeyFormation)
+                return true;
+        return false;
+    };
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *lib = view.library();
+    QTreeWidget *tree = view.tree();
+    tree->expandAll();
+    tree->clearSelection();
+    cueRow(tree, c[0])->setSelected(true);
+    cueRow(tree, c[1])->setSelected(true);
+    QScopedPointer<QMimeData> m(libraryDrag(view, libraryRowUnder(lib, "Formation", "Pairs")));
+    QVERIFY(!m.isNull());
+    QVERIFY2(view.dropHint(c[0], ShowTree::invalidId(), m.data()).contains("2 selected cues"),
+             qPrintable(view.dropHint(c[0], ShowTree::invalidId(), m.data())));
+    QVERIFY(view.dropMime(c[0], ShowTree::invalidId(), m.data()));
+    QVERIFY(formationOf(c[0]));
+    QVERIFY(formationOf(c[1]));
+    QVERIFY(!formationOf(c[2]));
+    QCOMPARE(st->undoText(), QString("Set Formation on 2 cues"));
+    QVERIFY(st->undo());
+    QVERIFY(!formationOf(c[0]));
+    QVERIFY(!formationOf(c[1]));
+
+    // On a cue outside the selection: only that one.
+    QVERIFY(view.dropMime(c[2], ShowTree::invalidId(), m.data()));
+    QVERIFY(formationOf(c[2]));
+    QVERIFY(!formationOf(c[0]));
+}
+
+void ShowTreeView_Test::theBlockingButtonDoesNotSayFormation()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 c1 = st->addCue(st->addCueList(st->addProduction("P"), "L"), -1, "One");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.selectNode(c1));
+    QPushButton *b = view.findChild<QPushButton *>(QStringLiteral("stCueBlockingNew"));
+    QVERIFY(b != nullptr);
+    QVERIFY2(!b->toolTip().contains("formation", Qt::CaseInsensitive), qPrintable(b->toolTip()));
+}
+
 void ShowTreeView_Test::theLibraryShowsNewFormationsAndBlockings()
 {
     FixtureGroup *all = new FixtureGroup(m_doc);

@@ -294,6 +294,10 @@ public:
      *  is one of the selected cues, every selected cue) uses it from there
      *  on, as the cue page's Blocking does. One undo step. */
     bool dropBlocking(quint32 cueId, quint32 set);
+    /** The selected cues a drop of Formation @a palettes on @a cueId sets;
+     *  empty for a drop that isn't on one of several selected cues. */
+    QList<quint32> formationCues(quint32 cueId, quint32 layerId, const Target &target,
+                                 const QList<quint32> &palettes) const;
 
     /************************************************************************
      * Reusable layers and cues; Detach a list; Convert to tracking (P4)
