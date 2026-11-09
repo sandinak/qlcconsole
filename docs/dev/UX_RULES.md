@@ -38,7 +38,7 @@ that have one. Change both files together.
 | Theme | Rules | Count | Enforced |
 |---|---|---|---|
 | Units & numbers | UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-63 | 7 | 5 |
-| Words | UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, UX-18, UX-19, UX-77 | 14 | 8 |
+| Words | UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, UX-18, UX-19, UX-77, UX-79 | 15 | 8 |
 | Context-awareness | UX-20, UX-21, UX-22, UX-23, UX-24, UX-25 | 6 | 5 |
 | Feedback & state | UX-26, UX-27, UX-28, UX-29, UX-30, UX-31, UX-32, UX-33 | 8 | 6 |
 | Layout | UX-34, UX-35, UX-36, UX-37, UX-38, UX-39, UX-40, UX-78 | 8 | 6 |
@@ -48,7 +48,7 @@ that have one. Change both files together.
 | Ease of use | UX-61, UX-62, UX-64, UX-65, UX-66, UX-76 | 6 | 0 |
 | Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 3 |
 
-Main check: 46 tests, 23 review, 6 walker, 3 manual. 46 of 78 enforced.
+Main check: 46 tests, 24 review, 6 walker, 3 manual. 46 of 79 enforced.
 
 ## Units & numbers
 
@@ -770,9 +770,18 @@ A row, field or form label is a short name (a few words, no identifier, no sente
 
 - **Why:** 2026-11-08: the Show Tree's followspot rows read "On scene change: hold the last beam position, or snap to the bound followTarget" and ran off the right edge, clipped; a combo showed "lastPosition".
 - **Check:** `effectinstance_test::everyBundledParamHasAShortReadableLabel`, `lookeditor_test::aParamReadsTheSameInTheLookEditorAndTheShowTree` (enforced)
-- **Not yet checked:** the Look Editor's palette-slot rows, and the wrap-instead-of-clip layout half.
+- **Not yet checked:** the Look Editor's palette-slot rows, and the wrap-instead-of-clip layout half. The walker's UX-36 already reports every clipped sentence it meets (2026-11-08 run: "Nothing loaded: click a scene, collection or chaser on the left." in the Workbench rows, "No scenes yet: + New above to start one..." in Build, the cue list's NEXT line); a walker check that names a clipped line of eight or more words as UX-77 is the missing half.
 - **Right:** `Follow Mode: Hold Last Position (the sentence in the tooltip)`
 - **Wrong:** `On scene change: hold the last beam position, or snap to the bound followTarget`
+
+### UX-79 A Group acts, a Folder files
+
+A Group is a set of things you act on together (move, lock, aim, play); a Folder only files things away to find them. Each idea keeps its one word on every screen, and no screen calls a Group a Folder or the reverse.
+
+- **Why:** 2026-11-08 (8c79699d4): the Lighting Studio's Plot layers called a set of stands, trusses and scenery you move and lock together a Folder, while the Fixture Manager, Build and the Show Tree use Folder for filing scenes, palettes and fixture groups away; the Plot layers' menus, hints and lock tooltips were changed to Group. The other screens were not swept for the same split, and no check says which Folder strings file and which group.
+- **Check:** `review` (not yet enforced)
+- **Right:** `Plot layers: New Group, Ungroup, Lock Group; Build: New Folder, Move to Folder (scenes, palettes)`
+- **Wrong:** `Plot layers: Lock Folder (a set of stands moving together); Library: a Group of scenes that only files them`
 
 ## Complexity and ease of use
 

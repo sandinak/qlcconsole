@@ -1428,5 +1428,21 @@
       "right": "Follow Mode: Hold Last Position (the sentence in the tooltip)",
       "wrong": "On scene change: hold the last beam position, or snap to the bound followTarget"
     }
+  },
+  {
+    "id": "UX-79",
+    "theme": "Words",
+    "title": "A Group acts, a Folder files",
+    "rule": "A Group is a set of things you act on together (move, lock, aim, play); a Folder only files things away to find them. Each idea keeps its one word on every screen, and no screen calls a Group a Folder or the reverse.",
+    "check": "review",
+    "checks": [
+      "review"
+    ],
+    "enforced": false,
+    "why": "2026-11-08 (8c79699d4): the Lighting Studio's Plot layers called a set of stands, trusses and scenery you move and lock together a Folder, while the Fixture Manager, Build and the Show Tree use Folder for filing scenes, palettes and fixture groups away; the Plot layers' menus, hints and lock tooltips were changed to Group. The other screens were not swept for the same split, and no check says which Folder strings file and which group.",
+    "example": {
+      "right": "Plot layers: New Group, Ungroup, Lock Group; Build: New Folder, Move to Folder (scenes, palettes)",
+      "wrong": "Plot layers: Lock Folder (a set of stands moving together); Library: a Group of scenes that only files them"
+    }
   }
 ]
