@@ -179,7 +179,7 @@ room, a new venue, then the focus calls*)
 
 The handout's extensions: Say the light, Feedback and Voice; a
 Medium scramble compared with the Easy one; the venue's **Rig and
-universes…** page. For the last, ask what a house fixture is and where
+Universes…** page. For the last, ask what a house fixture is and where
 it is saved (*the room's own light; saved in that venue's file, not the
 show*).
 
@@ -213,7 +213,7 @@ On the theatre's rig, with the real movers patched:
   A tag says *that* a cue needs work; a tech note says *what*. Have the
   laptop student write it in the notes pane under the cue page, with
   **Snapshot the View** so the note keeps what the rig looked like, then
-  work through **All notes…** filtered to **Open**, ticking each one done.
+  work through **All Notes…** filtered to **Open**, ticking each one done.
   Two fixes need **LB held**. LB + LT / RT sets the level. LB + the
   sticks zeroes a light that misses its target in every cue, because it
   hangs twisted. Fixing the light once is better than fixing each cue:

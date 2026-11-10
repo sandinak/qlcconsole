@@ -120,8 +120,8 @@ controller?** Every step gives the keys too.
 
 ### B. Write the focus calls
 
-6. On the Lighting Studio's toolbar click **Focus ▾**, then **Edit focus
-   calls…**.
+6. On the Lighting Studio's toolbar click **Focus ▾**, then **Edit Focus
+   Calls…**.
 7. Click **+ Call**. Under **Groups** tick **Truss-Spots**; set **Focus
    to** **Center**.
    - *You should see:* **1. Truss-Spots → Center** in the list.
@@ -223,8 +223,8 @@ press **OK**.
 
     - *You should see:* a cue **1 Solo** with a layer on **AT-Spots**:
       White, Full, Aim Soloist DS.
-22. On the cue's page click **Focus ▾** (top right), then **Focus this
-    cue…**.
+22. On the cue's page click **Focus ▾** (top right), then **Focus This
+    Cue…**.
 23. Press **,** twice (spot down), then **Return**.
     - *You should see:* the laptop says the change was kept in cue 1. The
       cue's AT-Spots layer now has a **Zoom** row. That is the cue's own

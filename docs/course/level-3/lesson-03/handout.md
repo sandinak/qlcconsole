@@ -59,8 +59,8 @@ our rig). Switch roles after each correction.
 
 ### Let the app guess
 
-3. On the plot's bar, click **Show** and tick **Show Auto fixtures as
-   their closest plot symbol**.
+3. On the plot's bar, click **Show** and tick **Show Auto Fixtures as
+   Their Closest Plot Symbol**.
    - *You should see:* the truss spots, the audience-tower spots and the
      upstage beams drawn as moving heads, the step strips, step tops and
      truss boxes as bar washes, and the lanterns as LED PARs.
@@ -110,5 +110,5 @@ before; their definitions don't change.
 
 1. The **TrussC-RGB** boxes light the cyc. Which symbol says that best?
    Set it, and say why.
-2. Untick **Show Auto fixtures as their closest plot symbol**. Which lights
+2. Untick **Show Auto Fixtures as Their Closest Plot Symbol**. Which lights
    keep their new symbol, and why?

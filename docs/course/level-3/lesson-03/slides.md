@@ -26,7 +26,7 @@ teacher says. It can be turned into a deck as it is.*
 ## 3. Our plot
 
 - The Lighting Studio plot: trusses, towers, risers, from above.
-- **Show ▸ Show Auto fixtures as their closest plot symbol**: the app's
+- **Show ▸ Show Auto Fixtures as Their Closest Plot Symbol**: the app's
   guesses.
 
 ## 4. Correcting the guesses

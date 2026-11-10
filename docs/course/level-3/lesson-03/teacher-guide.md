@@ -63,8 +63,8 @@ meetings, so each symbol has to say what the light *is*.
 1. **Lighting Studio** tab: the plot is the stage from above. Point out
    the trusses, the towers and the risers. Every light is drawn by its
    type; the lanterns look like any other LED fixture.
-2. The plot's **Show** button → **Show Auto fixtures as their closest
-   plot symbol**. Each light is now drawn as the symbol the app guesses from
+2. The plot's **Show** button → **Show Auto Fixtures as Their Closest
+   Plot Symbol**. Each light is now drawn as the symbol the app guesses from
    its definition: the spots with a yoke, the step lights as bars.
 3. "Which guesses are wrong?" Lead them to the **AT-W-ALL** washes (drawn
    as spots) and the **Lanterns** (drawn as LED PARs).

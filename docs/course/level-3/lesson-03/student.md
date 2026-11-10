@@ -37,8 +37,8 @@ Switch after each correction.
 
 1. **File → Open** → `ShowChoir-Classroom.qlcc`.
 2. Click the **Lighting Studio** tab (⇧⌘3): the stage from above.
-3. On the plot's bar, click **Show** and tick **Show Auto fixtures as
-   their closest plot symbol**.
+3. On the plot's bar, click **Show** and tick **Show Auto Fixtures as
+   Their Closest Plot Symbol**.
 4. With the Designer, write down two guesses that are wrong for our rig.
 5. Click the **Fixtures** tab (⇧⌘2). Right-click the group **AT-W-ALL**
    (folder **AT**) → **Plot Symbol ▸**. The first item, **Auto (Moving
