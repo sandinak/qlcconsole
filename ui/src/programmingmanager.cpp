@@ -1816,6 +1816,8 @@ QString ProgrammingManager::newHereLabel() const
     {
     case EffectsSection:
         return tr("New Effect");
+    case PalettesSection:
+        return m_paletteTree != nullptr && m_doc->paletteOps() != nullptr ? newPaletteLabel() : QString();
     case ScenesSection:
     {
         const QString folder = m_outline->folderFor(m_outline->currentItem());
@@ -1836,6 +1838,28 @@ bool ProgrammingManager::newHere()
         return m_workbench->newHere() != Function::invalidId();
     if (section() == EffectsSection)
         return designEffect(QLCPalette::invalidId());
+    if (section() == PalettesSection)
+    {
+        // The kind and folder you are on; one palette undo step, selected
+        // and open in the Workbench (as New Palette ▸ makes it).
+        if (m_doc->paletteOps() == nullptr)
+            return false;
+        QLCPalette::PaletteType type = QLCPalette::Color;
+        QString path;
+        paletteNewPlace(&type, &path);
+        const int before = m_doc->palettes().size();
+        createPalette(type);
+        if (m_doc->palettes().size() <= before)
+            return false;
+        // Named in place, as F2 would.
+        QTreeWidgetItem *cur = m_paletteTree->currentItem();
+        if (cur != nullptr && m_paletteTree->itemPaletteId(cur) != QLCPalette::invalidId())
+        {
+            m_paletteTree->setFocus(Qt::ShortcutFocusReason);
+            m_paletteTree->editItem(cur, 0);
+        }
+        return true;
+    }
     if (section() != ScenesSection || m_doc->paletteOps() == nullptr)
         return false;
     // As + Scene makes one, but one undo step: ⌘Z takes it away again.
@@ -2153,33 +2177,62 @@ void ProgrammingManager::removeFunctionFolder(const QString &path)
     m_outline->rebuild();
 }
 
+/* Where a new palette goes: unfiled, unless a folder (or a palette in one)
+   is selected: then there. Folders hold any palette type; the type is the
+   palette's own. @p type is what a palette or a type heading selected says
+   it is (it stays as given otherwise). */
+void ProgrammingManager::paletteNewPlace(QLCPalette::PaletteType *type, QString *path) const
+{
+    path->clear();
+    const QList<QTreeWidgetItem*> sel = m_paletteTree->selectedItems();
+    if (sel.isEmpty())
+        return;
+    const QString cp = sel.first()->text(1); // folder COL_PATH ("Palettes/…")
+    if (cp.isEmpty())
+    {
+        QLCPalette *sp = m_doc->palette(m_paletteTree->itemPaletteId(sel.first()));
+        if (sp != NULL)
+        {
+            *path = sp->path();
+            *type = sp->type();
+        }
+        return;
+    }
+    // A tree folder (by type: under its type heading) to the stored,
+    // type-independent path.
+    const QString stored = m_paletteTree->paletteStorePath(cp);
+    if (stored != QLatin1String("Palettes"))
+        *path = stored + QLatin1Char('/');
+    if (m_paletteTree->paletteTypesFirst())
+    {
+        const QStringList segs = cp.split(QLatin1Char('/'));
+        if (segs.size() >= 2 && QLCPalette::isTypeFolderName(segs.at(1)))
+            *type = QLCPalette::stringToType(segs.at(1));
+    }
+}
+
+QString ProgrammingManager::newPaletteLabel() const
+{
+    QLCPalette::PaletteType type = QLCPalette::Color;
+    QString path;
+    paletteNewPlace(&type, &path);
+    // The folder as the tree shows it: no leading category, no trailing slash.
+    if (path.startsWith(QLatin1String("Palettes/")))
+        path.remove(0, 9);
+    while (path.endsWith(QLatin1Char('/')))
+        path.chop(1);
+    const QString kind = QLCPalette::typeToString(type);
+    return path.isEmpty() ? tr("New %1 Palette").arg(kind) : tr("New %1 Palette in %2").arg(kind, path);
+}
+
 void ProgrammingManager::createPalette(int paletteType)
 {
     const QLCPalette::PaletteType type =
         static_cast<QLCPalette::PaletteType>(paletteType);
 
-    // Unfiled, unless a folder (or a palette in one) is selected: then there.
-    // Folders hold any palette type; the type is the palette's own.
+    QLCPalette::PaletteType here = type;
     QString path;
-    const QList<QTreeWidgetItem*> sel = m_paletteTree->selectedItems();
-    if (sel.isEmpty() == false)
-    {
-        const QString cp = sel.first()->text(1); // folder COL_PATH ("Palettes/…")
-        if (cp.isEmpty())
-        {
-            QLCPalette *sp = m_doc->palette(m_paletteTree->itemPaletteId(sel.first()));
-            if (sp != NULL)
-                path = sp->path();
-        }
-        else
-        {
-            // A tree folder (by type: under its type heading) to the
-            // stored, type-independent path.
-            const QString stored = m_paletteTree->paletteStorePath(cp);
-            if (stored != QLatin1String("Palettes"))
-                path = stored + QLatin1Char('/');
-        }
-    }
+    paletteNewPlace(&here, &path);
 
     // The shared operation (PaletteOps, as the Show Tree's Library): a
     // start value so it is valid and saves, one palette undo step.

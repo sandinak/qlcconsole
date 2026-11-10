@@ -27,6 +27,7 @@
 #include <QElapsedTimer>
 #include <functional>
 #include "function.h"
+#include "qlcpalette.h"
 #include "powerdistribution.h"
 #include "qlcui_export.h"
 
@@ -167,8 +168,10 @@ public:
      *  it (a collection a new scene layer, a chaser a new step:
      *  Workbench::newHere()); else by the section -- Scenes: a new scene in
      *  the folder of the row selected (one undo step), selected, loaded and
-     *  renaming in place; Effects: a new effect in the designer. False:
-     *  nothing made (the Palettes section). */
+     *  renaming in place; Effects: a new effect in the designer;
+     *  Palettes: a new palette of the kind (palette or type heading
+     *  selected) in the folder you are on, open in the Workbench, renaming
+     *  in place. False: nothing made. */
     bool newHere();
     /** What newHere() would make now ("New Scene in Act 1"; empty:
      *  nothing) -- the Edit menu's text. */
@@ -323,6 +326,11 @@ private:
     /** Create a new palette of the given QLCPalette::PaletteType in the
      *  selected palette folder and open it in the look editor. */
     void createPalette(int paletteType);
+    /** Where New here / New Palette puts a palette: its folder path, and
+     *  its kind when a palette or a type heading is selected. */
+    void paletteNewPlace(QLCPalette::PaletteType *type, QString *path) const;
+    /** "New Color Palette in Act 1" for the Palettes section. */
+    QString newPaletteLabel() const;
     /** Select and scroll the palette list to @p paletteId (the Palettes
      *  section shows). */
     void revealPalette(quint32 paletteId);

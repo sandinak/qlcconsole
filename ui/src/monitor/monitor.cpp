@@ -286,6 +286,12 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
 
     m_props = m_doc->monitorProperties();
 
+    /* ⇧⌘N: a new target at the pointer (Edit ▸ New names it). */
+    QShortcut *newHereSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N), this);
+    newHereSc->setObjectName(QStringLiteral("studioNewHere"));
+    newHereSc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(newHereSc, &QShortcut::activated, this, [this]() { newHere(); });
+
     /* Master layout for toolbar and scroll area */
     new QVBoxLayout(this);
 
@@ -7166,7 +7172,43 @@ void Monitor::slotTargetDoubleClicked(quint32 tid)
 
 void Monitor::slotAddTarget()
 {
-    addTarget(false);
+    addTarget(false, true);
+}
+
+QString Monitor::newHereLabel() const
+{
+    if (m_graphicsView == nullptr || m_props == nullptr || m_doc->mode() != Doc::Design
+        || m_props->layoutLocked() || m_props->layer(m_props->activeLayerId()).locked)
+        return QString();
+    return tr("New Target Position");
+}
+
+quint32 Monitor::newHere()
+{
+    if (newHereLabel().isEmpty())
+        return StageTarget::invalidId();
+    /* Where the pointer is on the plot, else the middle of the view. */
+    QWidget *vp = m_graphicsView->viewport();
+    const QPoint local = vp->mapFromGlobal(QCursor::pos());
+    m_pendingAddScenePos = m_graphicsView->mapToScene(vp->rect().contains(local) ? local : vp->rect().center());
+    const quint32 tid = addTarget(false, false);
+    m_pendingAddScenePos = QPointF();
+    if (tid == StageTarget::invalidId())
+        return tid;
+    // One undo step: the target and its Aim palette go together.
+    pushUndoCallback([this, tid]() {
+        foreach (QLCPalette *p, m_doc->palettes())
+            if (p != nullptr && p->stageTargetId() == tid)
+                m_doc->deletePalette(p->id());
+        m_props->removeStageTarget(tid);
+        m_graphicsView->updateTargets();
+        if (m_layersPanel) m_layersPanel->reload();
+        m_doc->setModified();
+    });
+    // Selected, and its name open in Plot layers (as F2 does).
+    m_graphicsView->selectMapItem(QStringLiteral("target"), tid);
+    renameSelected();
+    return tid;
 }
 
 void Monitor::slotAddTargetLine()
@@ -7174,12 +7216,12 @@ void Monitor::slotAddTargetLine()
     addTarget(true);
 }
 
-void Monitor::addTarget(bool line)
+quint32 Monitor::addTarget(bool line, bool edit)
 {
     quint32 layer = 0;
     if (!askPlacementLayer(&layer))
     {
-        return;
+        return StageTarget::invalidId();
     }
     StageTarget *t = m_props->addStageTarget();
     if (line)
@@ -7212,12 +7254,13 @@ void Monitor::addTarget(bool line)
 
     // Open the edit dialog; if confirmed, auto-create a linked PanTilt palette.
     quint32 tid = t->id();
-    slotEditTarget(tid);
+    if (edit)
+        slotEditTarget(tid);
 
     // slotEditTarget returns after the dialog. Re-fetch in case cancelled/renamed.
     StageTarget *updated = m_props->stageTarget(tid);
     if (!updated)
-        return;   // user may have removed it (shouldn't happen, but guard anyway)
+        return StageTarget::invalidId();   // user may have removed it (shouldn't happen, but guard anyway)
 
     /* Auto-create an AIM palette linked to this target, unless one already
        exists. It was creating a PanTilt palette, which is the wrong thing in
@@ -7242,6 +7285,7 @@ void Monitor::addTarget(bool line)
         m_doc->addPalette(pal);
         m_doc->setModified();
     }
+    return tid;
 }
 
 void Monitor::slotAddPerson()
