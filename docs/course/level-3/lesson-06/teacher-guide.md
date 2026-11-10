@@ -43,7 +43,7 @@ Students can:
   job at the show, not in this lesson.
 - [ ] Sound on the projector computer: the laptop's voice is part of the
   lesson. For Part 3, the voice into the headset system (**Voice to:** in
-  the focus calls list, **Focus ▸ Edit focus calls…**, picks the output).
+  the focus calls list, **Focus ▸ Edit Focus Calls…**, picks the output).
 - [ ] On the projector: the show saved as `Lesson3-6-demo.qlcc`, the
   **Lighting Studio** tab, **View → Rig Overview** beside it.
 - [ ] **Teaching mode** on in the show the students use: the scramble is
@@ -131,7 +131,7 @@ room, a new venue, then the focus calls*)
    move. Read Soloist DS aloud from the plot: "SL 1, DS 1."
    Point out that DS here means downstage of the number line, and the ↑
    on Center is its height on the riser.
-2. **Focus ▸ Edit focus calls…** (the **Focus** drop-down on the
+2. **Focus ▸ Edit Focus Calls…** (the **Focus** drop-down on the
    Lighting Studio toolbar holds every focus tool): build the three calls of the handout in front of
    the class. Name the venue `Classroom` and say why the show was saved
    first.

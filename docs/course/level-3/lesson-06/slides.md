@@ -43,7 +43,7 @@ teacher says. It can be turned into a deck as it is.*
 
 - A call is some lights and their point: **Truss-Spots → Center**.
 - The show keeps the calls in order; every room is focused the same way.
-- Lighting Studio ▸ **Focus ▸ Edit focus calls…**, then **Start venue focus**.
+- Lighting Studio ▸ **Focus ▸ Edit Focus Calls…**, then **Start venue focus**.
 
 ## 6. The venue keeps the corrections
 

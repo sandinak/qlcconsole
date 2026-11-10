@@ -81,6 +81,7 @@ agree on one number, and it has to be true on every one of the rig's lights.
 | You see | Likely cause | Say |
 |---|---|---|
 | Add ▾ is greyed | They are in Operate | "Click **Design** at the top right." |
+| "What is a WLED?" | The Lantern is a WLED light | "An LED light run by a WLED controller. Here its **Connection** stays DMX; on a real network it takes an IP." |
 | They can't find **Lantern** | They are looking under Generic | "It's under **WLED**." |
 | They look for "Universe 5" in the Patch dialog | Its list is by name | "Universes are named for what is on them: **Step fronts 1** is Universe 5." |
 | "I patched Lantern 7 and now there are seven" | Expected | "Delete it or leave it: it's your copy." |

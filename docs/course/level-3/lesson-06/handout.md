@@ -95,7 +95,7 @@ controller?** Every step gives the keys too.
 
 4. In the **Plot Layers** panel on the left of the plot, find the **Stage**
    layer. Click the eye on **Centre line / DSC mark**, **Curtain line** and
-   **Number line** to show them. (**Show ▸ Target positions**, on the plot's
+   **Number line** to show them. (**Show ▸ Target Positions**, on the plot's
    bar, is ticked already.)
    - *You should see:* the **Curtain line** in red across the stage, at
      the main drape; the number line in yellow along the front of the
@@ -245,7 +245,7 @@ press **OK**.
 | The keys do nothing | Click the Focus panel first so it has the keyboard. |
 | A light won't spot down | It has no zoom: the truss spots don't, the AT spots do. |
 | Focus this cue says it can't move the layer | It's aimed at a target. Pick one spot (**G** until **Fixture**) or move the target. |
-| The score dialog closed | **Focus ▸ Edit focus calls…**, pick the practice venue, **Export Focus Report…**. |
+| The score dialog closed | **Focus ▸ Edit Focus Calls…**, pick the practice venue, **Export Focus Report…**. |
 
 ## Done early? (Extension)
 

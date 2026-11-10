@@ -104,6 +104,13 @@ Switch roles after each part.
    - *You should see:* the app has chosen the first universe, **Spots,
      washes, beams, lanterns**, and **Address** 358: the first free channel
      after the last light. Click **OK**.
+
+   The Lantern is a WLED: an LED light run by a small WLED controller. Add
+   Fixture's **Connection** list has **DMX** (the default, and what the
+   classroom show uses), **Network (ArtNet/sACN)** and **Network (WLED, JSON
+   over Wi-Fi)**. On a real network the last two take the light's **IP
+   address** and give it a universe of its own, sent to that IP. Leave it on
+   **DMX** here.
 8. Open **Add ▾ → Add Fixture…** again, the same Lantern and mode, and
    type **Address** `365`.
    - *You should see:* a red **ERROR: Address already used!** Lantern 7
