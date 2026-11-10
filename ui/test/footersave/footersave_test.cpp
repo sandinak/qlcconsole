@@ -39,6 +39,7 @@
 #undef protected
 #undef private
 #include "powerdistribution.h"
+#include "showreview.h"
 #include "programmingmanager.h"
 #include "doc.h"
 #include "showtreecontroller.h"
@@ -85,6 +86,23 @@ void settle(int ms)
     do
         QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
     while (t.elapsed() < ms);
+}
+
+/* Until two looks at the footer a beat apart agree (at most 5 s): what a
+   chip's own timer or a queued fit changes has landed. */
+void footerStill(App *app)
+{
+    QElapsedTimer still;
+    still.start();
+    QStringList was = footer(app);
+    do
+    {
+        settle(60);
+        const QStringList now = footer(app);
+        if (now == was)
+            return;
+        was = now;
+    } while (still.elapsed() < 5000);
 }
 
 }
@@ -437,19 +455,14 @@ void FooterSave_Test::sweepSaves()
     emit ProgrammingManager::instance()->powerEstimateChanged(12.5, 1.4, false, QString());
     m_app->doc()->setModified();        // what the estimate reads changed: its next tick reads it
     QTRY_VERIFY_WITH_TIMEOUT(readings.count() >= 2, 10000);
+    /* The Show Review runs 2 s after the show last changed: the sweep's
+       edits keep putting it off, until one step takes longer than that on
+       a busy host -- and its chip came on mid-sweep (gate 043j, newaudio).
+       Its findings now, so a later run only says the same. */
+    m_app->m_reviewTimer->stop();
+    m_app->doc()->showReview()->run();
     m_app->slotUpdateStandby();
-    // Then the footer as those leave it: two looks a beat apart the same.
-    QElapsedTimer still;
-    still.start();
-    QStringList was = footer(m_app);
-    do
-    {
-        settle(100);
-        const QStringList now = footer(m_app);
-        if (now == was)
-            break;
-        was = now;
-    } while (still.elapsed() < 5000);
+    footerStill(m_app);                 // then the footer as those leave it
     QVERIFY(m_app->m_statusPowerLabel->isVisibleTo(m_app->statusBar()));
 
     // Wide to narrow, through where the footer squeezes one chip after another.
@@ -458,7 +471,7 @@ void FooterSave_Test::sweepSaves()
         m_app->resize(width, 800);
         settle(30);
         m_app->doc()->setModified();
-        settle(30);
+        footerStill(m_app);             // laid out at this width, under load too
         const QStringList unsaved = footer(m_app);
         // Settled: fitting the footer again changes nothing (a chip squeezed
         // at one fit and back at the next is the footer flickering).
