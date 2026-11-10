@@ -462,7 +462,7 @@ bool AimSolver::aimDegrees(Doc *doc, const GroupHead &member, const QVector3D &t
 }
 
 QVector3D AimSolver::aimPointFor(Doc *doc, const GroupHead &member, const StageTarget *target,
-                                 bool subjectMode)
+                                 bool subjectMode, bool framed)
 {
     MonitorProperties *mProps = (doc != nullptr) ? doc->monitorProperties() : nullptr;
     if (mProps == nullptr || target == nullptr)
@@ -472,11 +472,11 @@ QVector3D AimSolver::aimPointFor(Doc *doc, const GroupHead &member, const StageT
     if (fx == nullptr || !frameFor(doc, member, frame))
         return mProps->targetAimPoint(target, subjectMode);
     return mProps->targetAimPointFor(target, subjectMode, frame.position,
-                                     RigHeads::beamAngle(fx, fx->channelValues()));
+                                     RigHeads::beamAngle(fx, fx->channelValues()), framed);
 }
 
 QVector3D AimSolver::aimPointFor(Doc *doc, quint32 fixtureId, const StageTarget *target,
-                                 bool subjectMode)
+                                 bool subjectMode, bool framed)
 {
     MonitorProperties *mProps = (doc != nullptr) ? doc->monitorProperties() : nullptr;
     if (mProps == nullptr || target == nullptr)
@@ -486,7 +486,7 @@ QVector3D AimSolver::aimPointFor(Doc *doc, quint32 fixtureId, const StageTarget 
     if (fx == nullptr || !frameFor(doc, fixtureId, frame))
         return mProps->targetAimPoint(target, subjectMode);
     return mProps->targetAimPointFor(target, subjectMode, frame.position,
-                                     RigHeads::beamAngle(fx, fx->channelValues()));
+                                     RigHeads::beamAngle(fx, fx->channelValues()), framed);
 }
 
 bool AimSolver::sceneFollowsSubject(Doc *doc, const Scene *scene)
@@ -499,6 +499,20 @@ bool AimSolver::sceneFollowsSubject(Doc *doc, const Scene *scene)
         QLCPalette *p = doc->palette(pid);
         if (p != NULL && p->type() == QLCPalette::Effect &&
             p->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive))
+            return true;
+    }
+    return false;
+}
+
+bool AimSolver::sceneFramesSubject(Doc *doc, const Scene *scene)
+{
+    if (doc == NULL || scene == NULL)
+        return false;
+    for (quint32 pid : scene->palettes())
+    {
+        const QLCPalette *p = doc->palette(pid);
+        if (p != NULL && p->type() == QLCPalette::Effect && p->followSizesBeam()
+            && p->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive))
             return true;
     }
     return false;
@@ -756,6 +770,7 @@ static QList<AimSolver::SceneAim> collectAims(Doc *doc, const Scene *scene, bool
         return out;
 
     const bool subject = AimSolver::sceneFollowsSubject(doc, scene);
+    const bool framed = subject && AimSolver::sceneFramesSubject(doc, scene);
     BeamOcclusion::ModelPtr sightModel;
     foreach (quint32 pid, scene->runtimePalettes())   // a tried-on Aim draws too
     {
@@ -790,7 +805,8 @@ static QList<AimSolver::SceneAim> collectAims(Doc *doc, const Scene *scene, bool
             const QVector3D point = tgt->isLine()
                     ? onLine.value(m, mProps->targetAimPoint(tgt))
                     : onArea.contains(m) ? onArea.value(m)
-                                         : AimSolver::aimPointFor(doc, m, tgt, subject);
+                                         : AimSolver::aimPointFor(doc, m, tgt, subject,
+                                                                          framed);
             AimSolver::SceneAim aim;
             aim.fixtureId = fid;
             aim.head = m.head;
@@ -841,7 +857,7 @@ static void forEachBlockedDimmed(Doc *doc, const Scene *scene, F blocked)
     if (mProps == NULL)
         return;
     BeamOcclusion::ModelPtr sightModel;
-    bool subjectKnown = false, subject = false;
+    bool subjectKnown = false, subject = false, framed = false;
     const QList<quint32> pals = scene->runtimePalettes();   // a tried-on Aim draws too
     for (quint32 pid : pals)
     {
@@ -859,6 +875,7 @@ static void forEachBlockedDimmed(Doc *doc, const Scene *scene, F blocked)
         if (!subjectKnown)
         {
             subject = AimSolver::sceneFollowsSubject(doc, scene);
+            framed = subject && AimSolver::sceneFramesSubject(doc, scene);
             subjectKnown = true;
         }
         // As aimMembers(doc, scene, pid) and aimMembers(doc, writtenFixtures).
@@ -888,7 +905,8 @@ static void forEachBlockedDimmed(Doc *doc, const Scene *scene, F blocked)
             const QVector3D point = tgt->isLine()
                     ? onLine.value(m, mProps->targetAimPoint(tgt))
                     : onArea.contains(m) ? onArea.value(m)
-                                         : AimSolver::aimPointFor(doc, m, tgt, subject);
+                                         : AimSolver::aimPointFor(doc, m, tgt, subject,
+                                                                          framed);
             // AimSolver::lineOfSight(), with the mounts in the scratch.
             if (sightModel->isEmpty())
                 continue;                       // nothing to block it: clear

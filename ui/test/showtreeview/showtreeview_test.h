@@ -166,6 +166,7 @@ private slots:
     /** Needs work (Q192): the cue page's box, the row's flag and note. */
     void needsWorkInTheTree();
     void followSpotFlagInTheTree();
+    void followSpotRowsTheFramingDecidesAreGreyed();
     void moveInBlackPerListAndCueInTheTree();
     void theCuePagePicksTheBlocking();
     /** The Library offers Formation palettes under a Formation heading

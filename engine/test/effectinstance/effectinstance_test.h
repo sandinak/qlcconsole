@@ -133,6 +133,27 @@ private slots:
     /** Size On Subject zooms a head so its beam is that wide where it lands,
      *  whatever the throw, within the lens's range. */
     void followSpotZoomsToHoldSizeOnSubject();
+    /** Framing sizes the beam from the followed Person's Height (head &
+     *  shoulders, waist up, full body), each head from its own throw and
+     *  lens, and the aim keeps the beam's top just over the head -- at a
+     *  near and a far throw. */
+    void followSpotFramesThePerson_data();
+    void followSpotFramesThePerson();
+    /** The pad's change (a Framing's scale, a Custom width, a beam angle)
+     *  sizes the beam for the run, apart from the look and its overrides. */
+    void followSpotLiveSizeAndBeamAngle();
+    /** The effect's beam-size re-aim keeps whatever moves the heads: a
+     *  running fade its time (not cut, not restarted), a wipe its order, a
+     *  manual crossfade its morph. A blocking re-aim (no follow spot) still
+     *  takes the new cue's fade. */
+    void followSpotSizeReaimKeepsARunningFade();
+    void followSpotSizeReaimKeepsAWipe();
+    void followSpotSizeReaimKeepsACrossfade();
+    void aBlockingReaimStillTakesTheNewCuesFade();
+    void framingStraightDownIsTheSteepest();
+    /** A live control on the follow spot's Framing aims framed: set,
+     *  cleared, the look edited under it, faded out and brought back. */
+    void followSpotLiveFramingAimsFramed();
     /** A follow spot on an Aim look: two heads in different places both
      *  land on the follow-spot point, and moving the point moves both to
      *  the same new place (they converge; the effect leaves pan/tilt alone). */

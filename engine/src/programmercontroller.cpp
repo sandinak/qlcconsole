@@ -46,6 +46,10 @@
 #include "doc.h"
 #include "fixture.h"
 #include "fixturegroup.h"
+#include "measurementunits.h"
+#include "righeads.h"
+#include "aimsolver.h"
+#include "paletteops.h"
 #include "function.h"
 #include "scene.h"
 #include "scenevalue.h"
@@ -2677,8 +2681,9 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     if (role == GamepadRole::None && !active)
         return false;
     /* A follow spot on and no tool: the right stick is its fine stick, the
-       D-pad's Up and Down its speed step (before the Run map, which has no
-       use for them and would swallow them). */
+       D-pad's Up and Down its speed step, Left and Right its beam size
+       (before the Run map, which has no use for them and would swallow
+       them). */
     if (!active && !isPan && !isTilt && followSpotTakes(universe, channel, int(role), value))
         return true;
 
@@ -3425,6 +3430,10 @@ void ProgrammerController::writeChannelLive(quint32 fixtureId, quint32 channel, 
 
 void ProgrammerController::commitDesignJoystick()
 {
+    // The beam size the pad set while following (the Workbench's follow
+    // spot or a running cue's): into its look.
+    keepFollowSpotSize();
+
     if (m_focusedSceneId == Function::invalidId()) return;
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId));
     if (!scene) return;
@@ -4293,6 +4302,29 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
             st.speed = m_followMover->multiplier();
             st.speedShown = st.speed != 1.0
                             || (m_followSpeedClock.isValid() && m_followSpeedClock.elapsed() < 2000);
+            /* The size: worked out again five times a second, or at once
+               when the pad or Save Positions changed it (one runner look-up
+               each time), else as it was. */
+            if (st.paletteId != m_followStatus.paletteId || st.targetId != m_followStatus.targetId
+                || m_followSizeDirty || --m_followSizeScanTicks <= 0)
+            {
+                fillFollowSpotSize(st);
+                m_followSizeScanTicks = 10;
+                m_followSizeDirty = false;
+            }
+            else
+            {
+                st.framing = m_followStatus.framing;
+                st.scalePct = m_followStatus.scalePct;
+                st.sizeCm = m_followStatus.sizeCm;
+                st.beamDeg = m_followStatus.beamDeg;
+                st.padSet = m_followStatus.padSet;
+            }
+            const bool stepped = m_followSizeClock.isValid() && m_followSizeClock.elapsed() < 2000;
+            st.sizeShown = st.padSet || stepped;
+            st.limit = stepped || st.padSet ? m_followLimit : 0;
+            if (m_followSavedClock.isValid() && m_followSavedClock.elapsed() < 3000)
+                st.saved = m_followSaved;
             if (!stickPatched())
                 st.state = FollowSpotStatus::NoStick;
             else if (m_followMovedClock.isValid() && m_followMovedClock.elapsed() < 400)
@@ -4320,6 +4352,316 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
 QString ProgrammerController::followSpotSpeedText(double multiplier)
 {
     return tr("Speed ×%1").arg(QLocale().toString(multiplier, 'g', 3));
+}
+
+QString ProgrammerController::followSpotSizeText(const FollowSpotStatus &st)
+{
+    QString text;
+    if (st.framing != FollowSpotFraming::Custom)
+        text = tr("%1 %2%").arg(FollowSpotFraming::framingName(st.framing),
+                                QLocale().toString(qRound(st.scalePct)));
+    else if (st.sizeCm > 0.0)
+        text = tr("Width %1").arg(MeasurementUnits::formatLength(st.sizeCm * 10.0));
+    else if (st.beamDeg > 0.0)
+        text = tr("Beam %1°").arg(QLocale().toString(qRound(st.beamDeg)));
+    else
+        return QString();
+    if (st.limit > 0)
+        text += tr(" (widest)");
+    else if (st.limit < 0)
+        text += tr(" (narrowest)");
+    return text;
+}
+
+QString ProgrammerController::followSpotSavedText(const FollowSpotStatus &st)
+{
+    if (st.framing != FollowSpotFraming::Custom)
+        return tr("Saved: %1 at %2%").arg(FollowSpotFraming::framingName(st.framing),
+                                          QLocale().toString(qRound(st.scalePct)));
+    if (st.sizeCm > 0.0)
+        return tr("Saved: Width %1").arg(MeasurementUnits::formatLength(st.sizeCm * 10.0));
+    if (st.beamDeg > 0.0)
+        return tr("Saved: Beam %1°").arg(QLocale().toString(qRound(st.beamDeg)));
+    return QString();
+}
+
+bool ProgrammerController::followSpotLook(quint32 look, FollowSpotFraming::Look &l,
+                                          FollowSpotFraming::Pad &pad) const
+{
+    /* What the effect plays now (a live control over the look's) and the
+       pad's change for the run, one look-up; the look's own when it is not
+       playing. */
+    pad = FollowSpotFraming::Pad();
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    if (runner != nullptr && runner->followSpotSize(look, l, pad))
+        return true;
+    const QLCPalette *pal = m_doc->palette(look);
+    l = pal != nullptr ? FollowSpotFraming::fromParams(pal->effectParamValues()) : FollowSpotFraming::Look();
+    return false;
+}
+
+FollowSpotFraming::Mode ProgrammerController::followSpotMode(const FollowSpotFraming::Look &l,
+                                                             quint32 targetId)
+{
+    // A size on the subject needs a subject (free-fly has no throw to it).
+    if (targetId != UINT_MAX && l.framing != FollowSpotFraming::Custom)
+        return FollowSpotFraming::ScaleMode;
+    if (targetId != UINT_MAX && l.widthCm > 0.0)
+        return FollowSpotFraming::WidthMode;
+    return FollowSpotFraming::BeamMode;
+}
+
+void ProgrammerController::fillFollowSpotSize(FollowSpotStatus &st) const
+{
+    FollowSpotFraming::Look l;
+    FollowSpotFraming::Pad pad;
+    followSpotLook(st.paletteId, l, pad);
+    st.framing = FollowSpotFraming::Custom;
+    st.scalePct = 100.0;
+    st.sizeCm = st.beamDeg = 0.0;
+    switch (followSpotMode(l, st.targetId))
+    {
+    case FollowSpotFraming::ScaleMode:
+        st.framing = l.framing;
+        st.scalePct = l.scale * pad.scale * 100.0;
+        break;
+    case FollowSpotFraming::WidthMode:
+        st.sizeCm = pad.widthCm > 0.0 ? pad.widthCm : l.widthCm;
+        break;
+    default:
+        st.beamDeg = FollowSpotFraming::beamDeg(l, pad);
+        break;
+    }
+    st.padSet = pad.isSet();
+}
+
+QList<Fixture *> ProgrammerController::followSpotZoomHeads(const Scene *scene) const
+{
+    QList<Fixture *> out;
+    if (scene == nullptr)
+        return out;
+    QList<quint32> fids = scene->fixtures();
+    for (quint32 gid : scene->fixtureGroups())
+        if (const FixtureGroup *g = m_doc->fixtureGroup(gid))
+            fids << g->fixtureList();
+    for (quint32 fid : fids)
+    {
+        Fixture *fx = m_doc->fixture(fid);
+        double lo = 0.0, hi = 0.0;
+        if (fx != nullptr && !out.contains(fx) && RigHeads::hasZoomChannel(fx) && RigHeads::lensRange(fx, lo, hi))
+            out << fx;
+    }
+    return out;
+}
+
+int ProgrammerController::followSpotLensLimit(const Scene *scene, quint32 targetId,
+                                              const FollowSpotFraming::Look &l,
+                                              const FollowSpotFraming::Pad &pad, double beamDeg) const
+{
+    /* Where the heads' lenses are with this size: +1 every head is at its
+       widest (it asks for wider), -1 every one at its narrowest, 0 one or
+       more can still go either way -- each from its own throw (the same
+       FollowSpotFraming the effect sizes it with). */
+    const QList<Fixture *> heads = followSpotZoomHeads(scene);
+    MonitorProperties *mp = m_doc->monitorProperties();
+    const StageTarget *t = mp != nullptr && targetId != UINT_MAX ? mp->stageTarget(targetId) : nullptr;
+    int wide = 0, narrow = 0, counted = 0;
+    for (Fixture *fx : heads)
+    {
+        double lo = 0.0, hi = 0.0;
+        RigHeads::lensRange(fx, lo, hi);
+        double want = beamDeg;
+        if (beamDeg <= 0.0)
+        {
+            AimSolver::Frame frame;
+            if (t == nullptr || !AimSolver::frameFor(m_doc, fx->id(), frame))
+                continue;
+            const QVector3D subject = mp->targetAimPoint(t, true);
+            const QVector3D to = subject - frame.position;
+            const double dist = double(to.length());
+            const double level = dist > 0.01 ? std::hypot(double(to.x()), double(to.y())) / dist : 1.0;
+            want = FollowSpotFraming::angleFor(
+                       FollowSpotFraming::widthM(l, pad, double(mp->targetFigureHeight(t)), level), dist);
+        }
+        if (want <= 0.0)
+            continue;
+        ++counted;
+        if (want >= hi - 1e-6)
+            ++wide;
+        if (want <= lo + 1e-6)
+            ++narrow;
+    }
+    if (counted == 0)
+        return 0;
+    return wide == counted ? 1 : narrow == counted ? -1 : 0;
+}
+
+bool ProgrammerController::stepFollowSpotSize(int dir)
+{
+    const FollowSpotStatus &st = m_followStatus;
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    if (st.state == FollowSpotStatus::Off || st.paletteId == UINT_MAX || runner == nullptr
+        || !runner->isPlaying(st.paletteId))
+        return false;
+    const Scene *scene = qobject_cast<const Scene *>(m_doc->function(st.sceneId));
+    FollowSpotFraming::Look l;
+    FollowSpotFraming::Pad pad;
+    followSpotLook(st.paletteId, l, pad);
+    const FollowSpotFraming::Mode mode = followSpotMode(l, st.targetId);
+    const int dirSign = dir > 0 ? 1 : -1;
+    FollowSpotFraming::Pad to = pad;
+    if (mode == FollowSpotFraming::BeamMode)
+    {
+        // The angle: the pad's, the look's, else what the heads have now.
+        double beam = FollowSpotFraming::beamDeg(l, pad);
+        const QList<Fixture *> heads = followSpotZoomHeads(scene);
+        if (heads.isEmpty())
+            return false;       // nothing to zoom
+        double lo = 1.0e9, hi = 0.0;
+        for (Fixture *fx : heads)
+        {
+            double a = 0.0, b = 0.0;
+            RigHeads::lensRange(fx, a, b);
+            lo = qMin(lo, a);
+            hi = qMax(hi, b);
+            if (beam <= 0.0)
+                beam = RigHeads::beamAngle(fx, fx->channelValues());
+        }
+        beam = qBound(lo, beam, hi);
+        // A whole degree, at least one a step, and only as far as a lens goes.
+        double next = std::round(beam * (dirSign > 0 ? kFollowSizeStep : 1.0 / kFollowSizeStep));
+        if (dirSign > 0 && next < beam + 0.5)
+            next = std::round(beam) + 1.0;
+        else if (dirSign < 0 && next > beam - 0.5)
+            next = std::round(beam) - 1.0;
+        next = qBound(qMax(lo, kFollowBeamMinDeg), next, qMin(hi, kFollowBeamMaxDeg));
+        m_followLimit = next >= hi - 1e-6 ? 1 : next <= lo + 1e-6 ? -1 : 0;
+        if (qAbs(next - beam) < 0.01)
+            return false;
+        to.beamDeg = next;
+    }
+    else
+    {
+        // Nothing to zoom: no step that would change nothing.
+        if (followSpotZoomHeads(scene).isEmpty())
+            return false;
+        // At the lens's limit for every head already: no further that way.
+        const int now = followSpotLensLimit(scene, st.targetId, l, pad, 0.0);
+        if (now == dirSign)
+        {
+            m_followLimit = now;
+            return false;
+        }
+        if (mode == FollowSpotFraming::ScaleMode)
+        {
+            // Ten points of the Framing Size a step (on the look's own).
+            // To the next ten up or down (105% -> 110% or 100%).
+            const double total = l.scale * pad.scale * 100.0;
+            double next = dirSign > 0 ? std::floor(total / 10.0 + 1e-6) * 10.0 + 10.0
+                                      : std::ceil(total / 10.0 - 1e-6) * 10.0 - 10.0;
+            next = qBound(kFollowScaleMinPct, next, kFollowScaleMaxPct);
+            if (qAbs(next - total) < 0.01)
+                return false;
+            to.scale = next / (l.scale * 100.0);
+        }
+        else
+        {
+            /* To the unit's own grain (a whole inch in feet and inches, a
+               whole centimetre in metric), at least one a step, and the
+               limits on the grain too. */
+            const double width = pad.widthCm > 0.0 ? pad.widthCm : l.widthCm;
+            const MeasurementUnits::LengthUnit u = MeasurementUnits::preferredLength();
+            const double grain = u == MeasurementUnits::Feet || u == MeasurementUnits::Inches ? 2.54 : 1.0;
+            double next = std::round(width * (dirSign > 0 ? kFollowSizeStep : 1.0 / kFollowSizeStep) / grain) * grain;
+            if (dirSign > 0 && next < width + grain * 0.5)
+                next = std::round(width / grain) * grain + grain;
+            else if (dirSign < 0 && next > width - grain * 0.5)
+                next = std::round(width / grain) * grain - grain;
+            next = qBound(std::ceil(kFollowSizeMinCm / grain) * grain, next,
+                          std::floor(kFollowSizeMaxCm / grain) * grain);
+            if (qAbs(next - width) < 0.01)
+                return false;
+            to.widthCm = next;
+        }
+        m_followLimit = followSpotLensLimit(scene, st.targetId, l, to, 0.0);
+    }
+    return runner->setFollowSpotPad(st.paletteId, to);
+}
+
+bool ProgrammerController::keepFollowSpotSize()
+{
+    /* The pad's change, into the look it was made on -- the follow spot the
+       stick has (a running cue's or the Workbench's) and any in the
+       Workbench's scene -- as one undo step. The Framing stays: its size is
+       kept as the Framing Size. */
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    if (runner == nullptr)
+        return false;
+    QList<quint32> looks;
+    if (m_followStatus.paletteId != UINT_MAX)
+        looks << m_followStatus.paletteId;
+    if (const Scene *bench = qobject_cast<const Scene *>(m_doc->function(m_focusedSceneId)))
+        for (quint32 pid : bench->palettes())
+            if (!looks.contains(pid) && isFollowSpotPalette(m_doc->palette(pid)))
+                looks << pid;
+    QList<quint32> kept;
+    QString said;
+    for (quint32 pid : looks)
+    {
+        FollowSpotFraming::Look l;
+        FollowSpotFraming::Pad pad;
+        if (!followSpotLook(pid, l, pad) || !pad.isSet())
+            continue;
+        kept << pid;
+        FollowSpotStatus st;
+        st.targetId = pid == m_followStatus.paletteId ? m_followStatus.targetId : UINT_MAX;
+        if (pid != m_followStatus.paletteId)
+            if (const Scene *bench = qobject_cast<const Scene *>(m_doc->function(m_focusedSceneId)))
+                for (quint32 q : bench->palettes())
+                    if (const QLCPalette *a = m_doc->palette(q))
+                        if (a->type() == QLCPalette::Aim)
+                            st.targetId = a->stageTargetId();
+        st.paletteId = pid;
+        fillFollowSpotSize(st);
+        if (said.isEmpty())
+            said = followSpotSavedText(st);
+    }
+    if (kept.isEmpty())
+        return false;
+    auto change = [this, runner, kept]() {
+        for (quint32 pid : kept)
+        {
+            QLCPalette *look = m_doc->palette(pid);
+            FollowSpotFraming::Look l;
+            FollowSpotFraming::Pad pad;
+            if (look == nullptr || !followSpotLook(pid, l, pad))
+                continue;
+            if (pad.scale != 1.0)
+                look->setEffectParamValue(FollowSpotFraming::scaleKey(), std::round(l.scale * pad.scale * 100.0));
+            if (pad.widthCm > 0.0)
+                look->setEffectParamValue(FollowSpotFraming::widthKey(), pad.widthCm);
+            if (pad.beamDeg > 0.0)
+                look->setEffectParamValue(FollowSpotFraming::beamKey(), pad.beamDeg);
+            runner->setFollowSpotPad(pid, FollowSpotFraming::Pad());
+            runner->updateEffectParams(pid);
+        }
+    };
+    if (m_doc->paletteOps() != nullptr)
+        m_doc->paletteOps()->effectParamStep(tr("Keep the follow spot's size"), kept, change);
+    else
+    {
+        change();
+        m_doc->setModified();
+    }
+    m_followSaved = said;
+    m_followSavedClock.restart();
+    m_followSizeDirty = true;
+    if (!said.isEmpty())
+        tellOperator(said, ControllerScheme::ConfirmPriority);
+    for (quint32 pid : kept)
+        emit followSpotLookKept(pid);
+    updateFollowSpotStatus(joystickScene());
+    return true;
 }
 
 double ProgrammerController::followSpotTopSpeed() const
@@ -4439,6 +4781,29 @@ bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, in
         }
         return true;
     }
+    /* D-pad Right and Left: open and close the beam, as a spot operator
+       works the iris while following -- its size on the subject, or its
+       beam angle with no size set. For the run; Save Positions keeps it. */
+    if (role == GamepadRole::DpadRight || role == GamepadRole::DpadLeft)
+    {
+        if (value > 0)
+        {
+            const bool changed = stepFollowSpotSize(role == GamepadRole::DpadRight ? 1 : -1);
+            m_followSizeClock.restart();
+            m_followSavedClock.invalidate();
+            m_followSizeDirty = true;
+            updateFollowSpotStatus(joystickScene());
+            const bool zooms = !followSpotZoomHeads(qobject_cast<const Scene *>(
+                                   m_doc->function(m_followStatus.sceneId))).isEmpty();
+            const QString said = followSpotSizeText(m_followStatus);
+            tellOperator(zooms && !said.isEmpty() ? said : tr("No zoom to size the beam with"),
+                         ControllerScheme::ConfirmPriority);
+            // Something for Save Positions to keep.
+            if (changed)
+                emit designPositionWritten();
+        }
+        return true;
+    }
     return false;
 }
 
@@ -4468,6 +4833,10 @@ QString ProgrammerController::followSpotStatusText() const
     QString on = stick.isEmpty() ? QString() : tr(" · %1").arg(stick);
     if (st.speedShown)
         on += QStringLiteral(" · ") + followSpotSpeedText(st.speed);
+    if (!st.saved.isEmpty())
+        on += QStringLiteral(" · ") + st.saved;
+    else if (st.sizeShown && !followSpotSizeText(st).isEmpty())
+        on += QStringLiteral(" · ") + followSpotSizeText(st);
     if (st.state == FollowSpotStatus::Moving)
         return (who.isEmpty() ? tr("Follow spot · flying") : tr("Following %1 · moving").arg(who)) + on + persists;
     return who.isEmpty() ? tr("Follow spot%1 · holding%2 (move the stick to fly it)").arg(on, persists)

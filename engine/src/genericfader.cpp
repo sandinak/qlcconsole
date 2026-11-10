@@ -144,6 +144,32 @@ bool GenericFader::currentValue(quint32 fixtureID, quint32 channel, quint32 *out
     return true;
 }
 
+bool GenericFader::runningFade(quint32 fixtureID, quint32 channel, RunningFade &out) const
+{
+    const quint32 hash = channelHash(fixtureID, channel);
+    std::lock_guard<ChannelsLock> l(m_channelsLock);
+    auto it = m_channels.constFind(hash);
+    if (it == m_channels.constEnd())
+        return false;
+    const FadeChannel &fc = it.value();
+    out.current = fc.current();
+    out.start = fc.start();
+    out.crossFade = (fc.flags() & FadeChannel::CrossFade) && fc.fadeTime() == 0;
+    out.delayLeft = out.fadeLeft = 0;
+    if (out.crossFade || fc.current() == fc.target())
+        return true;
+    // The delay counts in elapsed (FadeChannel::calculateCurrent()).
+    const uint elapsed = fc.elapsed();
+    if (elapsed < fc.delay())
+    {
+        out.delayLeft = fc.delay() - elapsed;
+        out.fadeLeft = fc.fadeTime();
+    }
+    else if (fc.delay() + fc.fadeTime() > elapsed)
+        out.fadeLeft = fc.delay() + fc.fadeTime() - elapsed;
+    return true;
+}
+
 void GenericFader::remove(FadeChannel *ch)
 {
     if (ch == NULL)

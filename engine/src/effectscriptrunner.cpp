@@ -271,6 +271,8 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
             {
                 existing->cancelFadeOut();
                 existing->rebindToScene(sceneId);
+                // Back with its live controls: its Aim looks aim for them.
+                syncFollowSizesLive(existing);
                 // With a depth fade: back up from where it had got to.
                 const int in = effectFade(scene, pid, true, m_doc);
                 if (in >= 0)
@@ -392,7 +394,7 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
     // Collect cleanup work under the lock, then release before touching
     // MasterTimer or universes.
     bool shouldUnregister = false;
-    QList<quint32> stopped;
+    QList<quint32> stopped, overridesGone;
 
     {
         QMutexLocker locker(&m_instanceMutex);
@@ -437,6 +439,7 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
                 stopped << inst->effectPaletteId();
             // A live override is for this run only: parked, it plays as stored.
             inst->clearOverrides();
+            overridesGone << inst->effectPaletteId();
 
             // A persistent look is PARKED rather than destroyed: hold the engine
             // (and the script state inside it) so the next scene using this same
@@ -462,6 +465,11 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
         }
     } // release m_instanceMutex before touching MasterTimer
 
+    /* Its live controls went with it -- only where they did: one fading out
+       still plays them, and may be brought back (cancelFadeOut). */
+    for (quint32 pid : overridesGone)
+        if (QLCPalette *pal = m_doc->palette(pid))
+            pal->setFollowSizesBeamLive(-1);
     for (quint32 pid : stopped)
         emit effectStopped(pid);
 
@@ -622,6 +630,9 @@ void EffectScriptRunner::slotTick()
             if (inst->fadeOutDone())
             {
                 rit.remove();
+                // Gone at the end of its fade out: its live controls with it.
+                if (QLCPalette *pal = m_doc->palette(inst->effectPaletteId()))
+                    pal->setFollowSizesBeamLive(-1);
                 delete inst;
                 reaped = true;
             }
@@ -686,7 +697,11 @@ void EffectScriptRunner::updateEffectParams(quint32 paletteId)
     // (main thread — same thread runTick() runs on, so no lock vs. the tick). No
     // instance recreation, so the effect keeps its JS state.
     if (EffectInstance *inst = instanceForPalette(paletteId))
+    {
         inst->reloadParamsFromPalette();
+        // An override held over a changed look: what it plays now.
+        syncFollowSizesLive(inst);
+    }
 }
 
 bool EffectScriptRunner::isPlaying(quint32 paletteId) const
@@ -701,8 +716,30 @@ bool EffectScriptRunner::setParamOverride(quint32 paletteId, const QString &para
     if (inst == nullptr || inst->isFadingOut())
         return false;
     inst->setOverride(param, value);
+    syncFollowSizesLive(inst);
     emit overridesChanged(paletteId);
     return true;
+}
+
+void EffectScriptRunner::syncFollowSizesLive(EffectInstance *inst)
+{
+    /* A follow spot whose Framing or Width on Subject a live control has:
+       its Aim looks aim for the size it plays (AimSolver::sceneFramesSubject). */
+    if (inst == nullptr || !inst->isFollowSpot())
+        return;
+    QLCPalette *pal = m_doc->palette(inst->effectPaletteId());
+    if (pal == nullptr)
+        return;
+    const QHash<QString, double> &over = inst->overrides();
+    if (!over.contains(FollowSpotFraming::framingKey()) && !over.contains(FollowSpotFraming::widthKey()))
+    {
+        pal->setFollowSizesBeamLive(-1);
+        return;
+    }
+    QHash<QString, double> values;
+    for (const QString &k : { FollowSpotFraming::framingKey(), FollowSpotFraming::widthKey() })
+        values.insert(k, inst->paramValue(k));
+    pal->setFollowSizesBeamLive(FollowSpotFraming::sizesBeam(FollowSpotFraming::fromParams(values)) ? 1 : 0);
 }
 
 void EffectScriptRunner::clearParamOverride(quint32 paletteId, const QString &param)
@@ -711,6 +748,7 @@ void EffectScriptRunner::clearParamOverride(quint32 paletteId, const QString &pa
     if (inst == nullptr || !inst->overrides().contains(param))
         return;
     inst->clearOverride(param);
+    syncFollowSizesLive(inst);
     emit overridesChanged(paletteId);
 }
 
@@ -730,6 +768,35 @@ double EffectScriptRunner::paramValue(quint32 paletteId, const QString &param, b
         return 0.0;
     }
     return inst->paramValue(param, ok);
+}
+
+bool EffectScriptRunner::setFollowSpotPad(quint32 paletteId, const FollowSpotFraming::Pad &pad)
+{
+    EffectInstance *inst = instanceForPalette(paletteId);
+    if (inst == nullptr || inst->isFadingOut() || !inst->isFollowSpot())
+        return false;
+    inst->setFollowSpotPad(pad);
+    return true;
+}
+
+bool EffectScriptRunner::followSpotPad(quint32 paletteId, FollowSpotFraming::Pad &pad) const
+{
+    const EffectInstance *inst = instanceForPalette(paletteId);
+    if (inst == nullptr || !inst->isFollowSpot())
+        return false;
+    pad = inst->followSpotPad();
+    return true;
+}
+
+bool EffectScriptRunner::followSpotSize(quint32 paletteId, FollowSpotFraming::Look &look,
+                                        FollowSpotFraming::Pad &pad) const
+{
+    const EffectInstance *inst = instanceForPalette(paletteId);
+    if (inst == nullptr || !inst->isFollowSpot())
+        return false;
+    look = inst->followSpotLook();
+    pad = inst->followSpotPad();
+    return true;
 }
 
 QList<EffectScript::ParamDef> EffectScriptRunner::paramDefs(quint32 paletteId) const

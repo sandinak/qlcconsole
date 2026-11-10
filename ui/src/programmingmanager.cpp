@@ -316,6 +316,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                                     .arg(MeasurementUnits::formatLength(2000.0)));
 
         m_saveBtn = new QPushButton(tr("Save Positions"), this);
+        m_saveBtn->setObjectName(QStringLiteral("savePositions"));
         m_saveBtn->setEnabled(false);
         m_saveBtn->setToolTip(tr(
             "Finalize joystick-driven pan/tilt/aim edits and save the workspace.\n"
@@ -582,6 +583,12 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                     this, &ProgrammingManager::slotButtonAction);
             connect(pc, &ProgrammerController::designPositionWritten,
                     this, &ProgrammingManager::slotDesignPositionWritten);
+            // Save Positions kept the pad's beam size: the open look shows it.
+            connect(pc, &ProgrammerController::followSpotLookKept, this, [this](quint32 pid) {
+                LookEditor *le = m_workbench != nullptr ? m_workbench->lookEditor() : nullptr;
+                if (le != nullptr && le->paletteId() == pid)
+                    le->refreshEffectParams();
+            });
             connect(pc, &ProgrammerController::followSpotPinChanged,
                     this, &ProgrammingManager::slotFollowSpotPinChanged);
         }

@@ -168,6 +168,7 @@ add_library(${module_name} SHARED
     highlighteffect.cpp highlighteffect.h
     focussession.cpp focussession.h
     followspotdrive.cpp followspotdrive.h
+    followspotframing.cpp followspotframing.h
     followspotmover.cpp followspotmover.h
     focuscalls.cpp focuscalls.h
     focuscallcue.cpp focuscallcue.h

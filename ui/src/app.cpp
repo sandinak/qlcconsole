@@ -9697,6 +9697,13 @@ void App::updateFollowChip()
        press did. */
     if (st.speedShown && st.state != Status::NoStick)
         how += QStringLiteral(" · ") + ProgrammerController::followSpotSpeedText(st.speed);
+    /* The beam's size (Settings > Units), or its angle with no size: while
+       the D-pad has it for this run, and a moment after any step. */
+    const QString size = ProgrammerController::followSpotSizeText(st);
+    if (!st.saved.isEmpty())
+        how += QStringLiteral(" · ") + st.saved;
+    else if (st.sizeShown && st.state != Status::NoStick && !size.isEmpty())
+        how += QStringLiteral(" · ") + size;
     m_statusFollowLabel->setText(tr("<span style='color:%1;font-weight:bold;'>◎ Follow: %2 · %3</span>")
                                  .arg(colour, text.toHtmlEscaped(), how.toHtmlEscaped()));
     m_statusFollowLabel->setToolTip(pc->followSpotStatusText()
@@ -9705,8 +9712,10 @@ void App::updateFollowChip()
                                                : tr("\nFrom the scene open in the Workbench."))
                                     + (st.state == Status::NoStick ? QString()
                                        : tr("\nThe left stick moves it at up to its Top Speed (%1), the right "
-                                            "stick finely; D-pad Up and Down step the speed.")
-                                             .arg(MeasurementUnits::formatSpeed(pc->followSpotTopSpeed()))));
+                                            "stick finely; D-pad Up and Down step the speed, Left and Right "
+                                            "close and open the beam (Save Positions keeps it).")
+                                             .arg(MeasurementUnits::formatSpeed(pc->followSpotTopSpeed())))
+                                    + (size.isEmpty() ? QString() : tr("\nBeam: %1.").arg(size)));
     m_statusFollowLabel->show();
 }
 

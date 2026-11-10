@@ -38,6 +38,7 @@
 #include "padnames.h"
 #include "touchpadgesture.h"
 #include "padtriggers.h"
+#include "followspotframing.h"
 #include "scenevalue.h"
 #include "doc.h"
 
@@ -485,12 +486,29 @@ public:
         double speed = 1.0;
         /** Say the speed step: it is not x1, or it changed a moment ago. */
         bool speedShown = false;
+        /** The beam's size now, as the pad steps it: a Framing (its name
+         *  and size, %), else the Width on Subject (cm), else the beam
+         *  angle (degrees; 0: the scene's own zoom). */
+        int framing = 0;
+        double scalePct = 100.0;
+        double sizeCm = 0.0;
+        double beamDeg = 0.0;
+        /** The pad has changed it for this run (Save Positions keeps it). */
+        bool padSet = false;
+        /** Say the size: the pad changed it, or a moment ago. */
+        bool sizeShown = false;
+        /** Every head's lens at its widest (+1) or narrowest (-1). */
+        int limit = 0;
+        /** "Saved: Waist Up at 110%", for a moment after Save Positions. */
+        QString saved;
 
         bool operator==(const FollowSpotStatus &o) const
         {
             return state == o.state && sceneId == o.sceneId && paletteId == o.paletteId
                    && targetId == o.targetId && live == o.live && speed == o.speed
-                   && speedShown == o.speedShown;
+                   && speedShown == o.speedShown && framing == o.framing && scalePct == o.scalePct
+                   && sizeCm == o.sizeCm && beamDeg == o.beamDeg && padSet == o.padSet
+                   && sizeShown == o.sizeShown && limit == o.limit && saved == o.saved;
         }
         bool operator!=(const FollowSpotStatus &o) const { return !(*this == o); }
     };
@@ -499,6 +517,31 @@ public:
     static QString followSpotSpeedText(double multiplier);
     /** The follow spot's Top Speed now, metres a second (x1). */
     double followSpotTopSpeed() const;
+    /** "Waist Up 110%", "Width 4' 6\"" (Settings > Units) or "Beam 13°",
+     *  with " (widest)" / " (narrowest)" at the lens's limit: the follow
+     *  spot's beam as the indicators say it. */
+    static QString followSpotSizeText(const FollowSpotStatus &st);
+    /** "Saved: Waist Up at 110%", "Saved: Width 4' 6\"", "Saved: Beam 13°":
+     *  what Save Positions kept, in the footer's words. */
+    static QString followSpotSavedText(const FollowSpotStatus &st);
+    /** D-pad Right (+1) / Left (-1) while a follow spot plays: open or close
+     *  its beam a step for this run -- its Framing Size (ten points), its
+     *  Width on Subject (12%, to a whole inch or centimetre) or, with no
+     *  size or no subject, its beam angle (a degree or more) -- never past
+     *  what the heads' lenses can do. Save Positions keeps it in the look.
+     *  False when nothing changed. */
+    bool stepFollowSpotSize(int dir);
+    /** Save Positions: the pad's change into the look it was made on, one
+     *  undo step; false when there was none. */
+    bool keepFollowSpotSize();
+    /** The step's ratio, and the limits it holds to. */
+    static constexpr double kFollowSizeStep = 1.12;
+    static constexpr double kFollowSizeMinCm = 10.0;
+    static constexpr double kFollowSizeMaxCm = 800.0;
+    static constexpr double kFollowBeamMinDeg = 1.0;
+    static constexpr double kFollowBeamMaxDeg = 90.0;
+    static constexpr double kFollowScaleMinPct = 25.0;
+    static constexpr double kFollowScaleMaxPct = 300.0;
     /** The follow spot's motion (the MasterTimer steps it): its settings,
      *  sticks and speed step. Tests reach in here. */
     FollowSpotMover *followSpotMover() const { return m_followMover; }
@@ -649,6 +692,9 @@ signals:
      *  pan/tilt values (to scene or to a PanTilt palette).  The UI uses
      *  this to enable the Save button. */
     void designPositionWritten();
+    /** Save Positions wrote the pad's beam size into follow-spot look
+     *  @p paletteId: an editor showing it shows the new values. */
+    void followSpotLookKept(quint32 paletteId);
 
     /** Emitted whenever the followspot beam position changes in Design mode.
      *  @p visible is false when no floor position is computable (hide pin).
@@ -970,6 +1016,20 @@ private:
     FollowSpotMover *m_followMover = nullptr;
     /** When the D-pad last stepped the follow spot's speed (said for a moment). */
     QElapsedTimer m_followSpeedClock;
+    QElapsedTimer m_followSizeClock;    ///< the last D-pad size step
+    QElapsedTimer m_followSavedClock;   ///< the last Save Positions that kept a size
+    QString m_followSaved;              ///< what it kept, in words
+    int m_followLimit = 0;              ///< the lens limit the last step reached
+    int m_followSizeScanTicks = 0;      ///< ticks until the size is looked up again
+    bool m_followSizeDirty = true;      ///< the pad or a save changed it: look now
+    /** Follow-spot look @p look as it plays (and the pad's change); false
+     *  when it doesn't play (the look's own then, no pad). */
+    bool followSpotLook(quint32 look, FollowSpotFraming::Look &l, FollowSpotFraming::Pad &pad) const;
+    static FollowSpotFraming::Mode followSpotMode(const FollowSpotFraming::Look &l, quint32 targetId);
+    void fillFollowSpotSize(FollowSpotStatus &st) const;
+    QList<Fixture *> followSpotZoomHeads(const Scene *scene) const;
+    int followSpotLensLimit(const Scene *scene, quint32 targetId, const FollowSpotFraming::Look &l,
+                            const FollowSpotFraming::Pad &pad, double beamDeg) const;
     /** The free-fly velocity last sent to the effect (it is sent while it moves). */
     bool m_followVelocitySent = false;
     /** The feel of @p scene's follow spot (its look's Top Speed, Fine

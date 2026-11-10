@@ -206,10 +206,11 @@ namespace AimSolver
      *  and its beam as wide as its zoom and iris have it now -- a wider beam
      *  following a person aims lower, so it covers them without top wash. */
     QVector3D aimPointFor(Doc *doc, quint32 fixtureId, const StageTarget *target,
-                          bool subjectMode);
-    /** The same for one member, from its own origin. */
+                          bool subjectMode, bool framed = false);
+    /** The same for one member, from its own origin. @p framed: the follow
+     *  spot sizes its beam (AimSolver::sceneFramesSubject()). */
     QVector3D aimPointFor(Doc *doc, const GroupHead &member, const StageTarget *target,
-                          bool subjectMode);
+                          bool subjectMode, bool framed = false);
 
     /** The heads an Aim look in @p scene points, in LOOK ORDER: each of the
      *  scene's groups' members in the group's head order, then the scene's
@@ -276,6 +277,11 @@ namespace AimSolver
      *  Aim look in it track a SUBJECT (chest height above the deck) rather
      *  than the target's own point. */
     bool sceneFollowsSubject(Doc *doc, const Scene *scene);
+    /** @p scene's follow spot sizes its beam on the subject (a look with a
+     *  Framing or a Custom width, QLCPalette::followSizesBeam()): its Aim
+     *  looks keep each head's beam top just over the person's head at any
+     *  size. From the looks' own settings, so Edit and Run aim the same. */
+    bool sceneFramesSubject(Doc *doc, const Scene *scene);
 
     /** Line of sight from head @p fixtureId to @p point: whether a solid
      *  feature of the stage stands between its beam origin and the point, and

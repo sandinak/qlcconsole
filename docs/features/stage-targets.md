@@ -463,6 +463,11 @@ with an Aim look:
   at most. Each head works from its own throw and its own beam, read live
   from its zoom and iris channels, so a near head and a far one land the
   same way. The Lighting Studio and the Rig Overview draw the same thing.
+  With a size on the subject (a **Framing**, or a **Width on Subject**,
+  below), the top stays just over the head at any size: a tight
+  head-and-shoulders beam rises above the chest to keep the head in. It
+  aims that way from the look's own settings, in Edit and preview as in a
+  run.
 - Movement stays **target-converged**: the effect moves the shared aim
   point, and the scene's Aim look re-aims every head at it — which is what
   keeps multiple heads genuinely converged on the same spot, rather than
@@ -529,6 +534,45 @@ Workbench, or the cue's layer in the Show Tree):
   stick · Speed ×1.5* -- while it is not ×1, and for a moment after it
   goes back. It is for the run, not saved with the show.
 
+### How big: framing and the iris
+
+A spot operator opens and closes the beam while following: tight for a
+ballad, wider when the dancer moves. On the Followspot effect:
+
+- **Framing** -- how much of the person the beam takes, sized from the
+  followed Person's **Height** (the target's, in the target editor):
+  **Head & Shoulders**, **Waist Up** or **Full Body**. Each head works out
+  its own zoom from its own throw and lens, so a near head and a far one
+  make the same picture; and each is aimed so the top of its beam sits
+  just over the head -- the wall behind stays dark. A head that comes in
+  steeply needs less beam for the same height on the person, and never
+  less than the shoulders. A lens that cannot get that tight (or that
+  wide) does what it can, and its aim follows the beam it really has.
+  Framing needs the scene's **Aim** look on the person: with none (free
+  fly) there is no throw to size on, and only the Beam Angle counts.
+- **Framing Size** -- the Framing a little looser or tighter: 100% as it
+  is, 110% a tenth wider.
+- **Custom** -- the **Width on Subject**: the beam this wide on the
+  subject, whatever the throw.
+- **Beam Angle** -- with no size on the subject, the angle every head zooms
+  to (0: the scene's own zoom).
+
+A row the Framing decides is greyed, and says why when you point at it:
+*Set by Framing: Waist Up*.
+
+**D-pad Right and Left** open and close the beam while the follow spot
+plays, a step at a time: the **Framing Size** ten points a step, the
+**Width on Subject** about an eighth (to a whole inch or centimetre), or
+the **Beam Angle** a degree or more. Never past what the lenses can do:
+when every head is at its widest (or narrowest) the footer says so --
+*◎ Follow: … · stick · Width 9' (widest)* -- and the pad goes no further
+that way. The footer says the size in the unit **Settings → Units** picks
+(*Waist Up 110%*, *Width 4' 6"*, *Beam 13°*). It is for the run.
+**Save Positions** (enabled by the pad's change alone) keeps it in the look
+it was made on -- the Workbench's, or a running cue's -- as one undo step:
+the Framing stays and its size becomes the Framing Size; the footer says
+*Saved: Waist Up at 110%*.
+
 The beam starts and stops smoothly: it eases up to speed and eases to a
 stop (a fifth of a second either way, no overshoot), and moves every DMX
 frame by the time that frame took, so it neither steps nor stutters when
@@ -561,7 +605,7 @@ Where you can see it:
 - **The Show Tree**: **follow** under Flags on the cue and its layer, lit
   green while it follows.
 
-Person Height and Size On Subject show in the unit **Settings → Units**
+Person Height, Width on Subject and the footer's size show in the unit **Settings → Units**
 picks (5' 7" in feet), and take a length typed in any unit: 5' 6", 5.5 ft,
 66 in, `1.676 m`. So do the target editor's heights.
 

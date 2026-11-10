@@ -20,6 +20,7 @@
 #ifndef QLCPALETTE_H
 #define QLCPALETTE_H
 
+#include <atomic>
 #include <climits>
 #include <QColor>
 #include <QObject>
@@ -614,15 +615,29 @@ public:
     QMap<QString, double> effectParamValues() const
         { return m_effectParamValues; }
     void setEffectParamValue(const QString &name, double value)
-        { m_effectParamValues[name] = value; }
+        { m_effectParamValues[name] = value; syncFollowSizesBeam(); }
     void removeEffectParamValue(const QString &name)
-        { m_effectParamValues.remove(name); }
+        { m_effectParamValues.remove(name); syncFollowSizesBeam(); }
     /** Replace ALL numeric param overrides at once (used when stamping a
      *  preset). String/path params are cleared too so nothing stale lingers. */
     void setEffectParamValues(const QMap<QString, double> &values)
-        { m_effectParamValues = values; m_effectStringParams.clear(); }
+        { m_effectParamValues = values; m_effectStringParams.clear(); syncFollowSizesBeam(); }
     void clearEffectParamValues()
-        { m_effectParamValues.clear(); m_effectStringParams.clear(); }
+        { m_effectParamValues.clear(); m_effectStringParams.clear(); syncFollowSizesBeam(); }
+
+    /** A follow-spot look that sizes its beam on the subject (a Framing, or
+     *  a Custom width: FollowSpotFraming::sizesBeam()), kept as its
+     *  parameters change: read where an Aim look resolves, on any thread,
+     *  so Edit, preview and Run aim the same whether the effect plays. */
+    bool followSizesBeam() const
+    {
+        const int live = m_followSizesBeamLive.load(std::memory_order_relaxed);
+        return live >= 0 ? live > 0 : m_followSizesBeam.load(std::memory_order_relaxed);
+    }
+    /** The same while a live control (a VC Effect Control) overrides the
+     *  look's Framing or Width on Subject on its playing effect: what it
+     *  plays, not what it keeps (EffectScriptRunner). -1: none. */
+    void setFollowSizesBeamLive(int live) { m_followSizesBeamLive.store(live, std::memory_order_relaxed); }
 
     /** String parameter overrides (e.g. type:"path" XY path JSON). */
     QMap<QString, QString> effectStringParams() const
@@ -646,6 +661,9 @@ private:
     QMap<QString, quint32>               m_effectTargetBindings;
     QMap<QString, double>                m_effectParamValues;
     QMap<QString, QString>               m_effectStringParams;
+    std::atomic<bool>                    m_followSizesBeam { false };
+    std::atomic<int>                     m_followSizesBeamLive { -1 };
+    void syncFollowSizesBeam();
 
     /************************************************************************
      * Load & Save

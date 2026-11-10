@@ -27,6 +27,7 @@
 #include <QSharedPointer>
 #include <QVariantMap>
 
+#include "followspotframing.h"
 #include "dmxsource.h"
 #include "effectinstance.h"   // EffectInstance::DmxWrite is held by value below
 #include "effectscriptcache.h"
@@ -122,6 +123,15 @@ public:
     /** What @p param plays at now; @p ok false when it doesn't play or has
      *  no such param. */
     double paramValue(quint32 paletteId, const QString &param, bool *ok = nullptr) const;
+    /** The follow spot's beam as the pad has it for this run (a playing
+     *  followspot effect @p paletteId; EffectInstance::setFollowSpotPad()).
+     *  False when it doesn't play. Main thread. */
+    bool setFollowSpotPad(quint32 paletteId, const FollowSpotFraming::Pad &pad);
+    bool followSpotPad(quint32 paletteId, FollowSpotFraming::Pad &pad) const;
+    /** A playing follow spot's size as it plays (its look's values, any
+     *  live control's over them) and the pad's, in one look-up. False when
+     *  it doesn't play. */
+    bool followSpotSize(quint32 paletteId, FollowSpotFraming::Look &look, FollowSpotFraming::Pad &pad) const;
     /** The script's params of a playing effect (empty: not playing). */
     QList<EffectScript::ParamDef> paramDefs(quint32 paletteId) const;
     /** The scene a playing effect plays in (invalid: not playing). */
@@ -168,6 +178,8 @@ signals:
 
 private:
     void createInstancesForScene(quint32 sceneId);
+    /** A follow spot's live Framing / Width on Subject onto its look. */
+    void syncFollowSizesLive(EffectInstance *inst);
     /** @a release false: an edit, not a scene leaving -- no release fade,
      *  so the old script is never picked up again by the create after. */
     void destroyInstancesForScene(quint32 sceneId, bool release = true);

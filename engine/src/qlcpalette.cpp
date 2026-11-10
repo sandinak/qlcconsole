@@ -34,6 +34,7 @@
 #include <QFile>
 #include <QHash>
 #include "qlcpalette.h"
+#include "followspotframing.h"
 #include "fixture.h"
 #include "grouphead.h"
 #include "effectscriptcache.h"
@@ -414,6 +415,12 @@ void QLCPalette::setValues(QVariantList values)
 void QLCPalette::resetValues()
 {
     m_values.clear();
+}
+
+void QLCPalette::syncFollowSizesBeam()
+{
+    m_followSizesBeam.store(FollowSpotFraming::sizesBeam(FollowSpotFraming::fromParams(m_effectParamValues)),
+                            std::memory_order_relaxed);
 }
 
 /** True if @a scene carries a follow-spot effect palette, which is what makes
@@ -824,10 +831,11 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                 // GUI callers with no scene context: it copies Doc's whole
                 // function map and dereferences every Function, which races
                 // addFunction/deleteFunction if it ever runs on the DMX thread.
-                bool subjectMode = false;
+                bool subjectMode = false, framed = false;
                 if (owner != nullptr)
                 {
                     subjectMode = sceneHasFollowSpot(doc, owner);
+                    framed = subjectMode && AimSolver::sceneFramesSubject(doc, owner);
                 }
                 else
                 {
@@ -839,6 +847,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                         if (sceneHasFollowSpot(doc, sc))
                         {
                             subjectMode = true;
+                            framed = AimSolver::sceneFramesSubject(doc, sc);
                             break;
                         }
                     }
@@ -877,7 +886,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     const GroupHead member(id, arms.isEmpty() ? -1 : arms.at(ai));
                     const QVector3D tgtPos = tgt->isLine() || linePts.contains(member)
                             ? linePts.value(member, mProps->targetAimPoint(tgt))
-                            : AimSolver::aimPointFor(doc, member, tgt, subjectMode);
+                            : AimSolver::aimPointFor(doc, member, tgt, subjectMode, framed);
 
                     // Shared aim geometry — identical to the follow-spot effect's, so
                     // a fixture points the same way in Edit and Run.
@@ -1870,7 +1879,10 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 QString name = doc.attributes().value("name").toString();
                 double  val  = doc.attributes().value("value").toDouble();
                 if (!name.isEmpty())
+                {
                     m_effectParamValues[name] = val;
+                    syncFollowSizesBeam();
+                }
                 doc.skipCurrentElement();
             }
             else if (doc.name() == QLatin1String("EffectStringParam"))
@@ -1909,7 +1921,10 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
             {
                 const QString name = doc.attributes().value("name").toString();
                 if (!name.isEmpty())
+                {
                     m_effectParamValues[name] = doc.attributes().value("value").toDouble();
+                    syncFollowSizesBeam();
+                }
             }
             doc.skipCurrentElement();
         }

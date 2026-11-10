@@ -3008,7 +3008,7 @@ quint32 MonitorProperties::currentBlocking() const
 }
 
 QVector3D MonitorProperties::targetAimPointFor(const StageTarget *t, bool subjectMode,
-                                               const QVector3D &from, double beamDeg) const
+                                               const QVector3D &from, double beamDeg, bool framed) const
 {
     const QVector3D chest = targetAimPoint(t, subjectMode);
     if (t == nullptr || !subjectMode || t->kind() != StageTarget::Kind::Person || beamDeg <= 0.0)
@@ -3029,8 +3029,11 @@ QVector3D MonitorProperties::targetAimPointFor(const StageTarget *t, bool subjec
     const double level = std::hypot(double(toSubject.x()), double(toSubject.y())) / dist;
     const double halfHeight = radius / qMax(0.25, level);
     // Its top edge a little over the head, and no lower than the waist.
+    // Framed (head and shoulders, waist up, full body): at any size, so a
+    // tight beam rises above the chest to the head; else no higher than
+    // the chest.
     const double top = foot + tall * 1.05;
-    const double z = qBound(waist, top - halfHeight, double(chest.z()));
+    const double z = qBound(waist, top - halfHeight, framed ? foot + tall : double(chest.z()));
     return QVector3D(chest.x(), chest.y(), float(z));
 }
 

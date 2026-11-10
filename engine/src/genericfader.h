@@ -112,6 +112,20 @@ public:
     /** The current value of channel @p channel of @p fixtureID, in @p out;
      *  false when this fader has no such channel. No allocation. */
     bool currentValue(quint32 fixtureID, quint32 channel, quint32 *out) const;
+    /** Where channel @p channel of @p fixtureID is in its fade: its value
+     *  now, where it started, how long it still waits (a transition's
+     *  delay) and then fades (ms; both 0 at its target), and whether a
+     *  manual crossfade morphs it. False when this fader has no such
+     *  channel. No allocation. */
+    struct RunningFade
+    {
+        quint32 current = 0;
+        quint32 start = 0;
+        uint delayLeft = 0;
+        uint fadeLeft = 0;
+        bool crossFade = false;
+    };
+    bool runningFade(quint32 fixtureID, quint32 channel, RunningFade &out) const;
 
     /** The doc its channels' fixtures are in -- for an UNPATCHED fixture's
      *  channels, whose values go to the fixture for display (no address).

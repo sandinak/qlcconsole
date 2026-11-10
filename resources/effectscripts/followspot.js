@@ -16,7 +16,7 @@
     effect.description = "Pan/tilt fixtures with joystick X/Y axes";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["moving"];
-    effect.notes = "Maps joystick X/Y axes to pan and tilt so you can fly moving heads live. This effect controls POSITION — it never touches colour, and it touches the dimmer only when Fade Near Limit or Fade When Blocked is set, so the scene's own Color/Dimmer palettes otherwise retain control. Fade Near Limit dims a head as the target nears the edge of what it can point at, reaching dark where it cannot follow, so it goes out rather than sticking lit at its limit. Fade When Blocked takes a head out, over that many milliseconds, while something solid on stage -- a closed drape, a wall, a riser, a tower -- stands between it and the subject, and brings it back once the way is clear. Size On Subject zooms each head that has a zoom so its beam is that wide where it lands on the subject, whatever the throw -- a near head zooms out, a far one in -- within the lens's range. Top Speed is how fast the subject moves on the stage with the left stick at full throw (a brisk walk by default); the right stick moves it finer (Fine Stick, a share of Top Speed) and the two add; Response Curve makes the stick fine near the centre; D-pad Up and Down step the speed (x0.25 to x2) while it plays. Deadzone is the controller's (HID device profile). Person Height biases the tilt centre so the beam lands at the subject's head. Bind the followTarget slot to a stage target to seed the initial position from a pre-set Aim palette.";
+    effect.notes = "Maps joystick X/Y axes to pan and tilt so you can fly moving heads live. This effect controls POSITION — it never touches colour, and it touches the dimmer only when Fade Near Limit or Fade When Blocked is set, so the scene's own Color/Dimmer palettes otherwise retain control. Fade Near Limit dims a head as the target nears the edge of what it can point at, reaching dark where it cannot follow, so it goes out rather than sticking lit at its limit. Fade When Blocked takes a head out, over that many milliseconds, while something solid on stage -- a closed drape, a wall, a riser, a tower -- stands between it and the subject, and brings it back once the way is clear. Framing sizes the beam from the followed Person's Height -- Head & Shoulders, Waist Up or Full Body -- and keeps the top of the beam just over their head; Framing Size makes it looser or tighter; Custom uses the Width On Subject, which zooms each head that has a zoom so its beam is that wide where it lands on the subject, whatever the throw -- a near head zooms out, a far one in -- within the lens's range. D-pad Left and Right close and open the beam while it plays (the Framing Size, the Width on Subject, or the beam angle when no size is set); Save Positions keeps it. Top Speed is how fast the subject moves on the stage with the left stick at full throw (a brisk walk by default); the right stick moves it finer (Fine Stick, a share of Top Speed) and the two add; Response Curve makes the stick fine near the centre; D-pad Up and Down step the speed (x0.25 to x2) while it plays. Deadzone is the controller's (HID device profile). Person Height biases the tilt centre so the beam lands at the subject's head. Bind the followTarget slot to a stage target to seed the initial position from a pre-set Aim palette.";
 
     // The host injects joystick data automatically when a HID profile is active.
     // Manual input bindings (x / y) are kept as a fallback for non-HID controllers.
@@ -56,7 +56,13 @@
         { name: "personHeight", label: "Person Height", description: "Height of the person being followed (free-fly only) -- adjusts the tilt centre", unit: "cm", min: 50, max: 250, defaultValue: 170 },
         { name: "fadeNearLimit", label: "Fade Near Limit", description: "Fade a head out over this many degrees before its pan/tilt limit, dark where it cannot reach the target (0 = off)", min: 0, max: 45, defaultValue: 0 },
         { name: "fadeWhenBlocked", label: "Fade When Blocked", description: "Fade a head out over this many milliseconds while a drape, wall, riser or tower stands between it and the subject, back when clear (0 = off)", min: 0, max: 5000, defaultValue: 0 },
-        { name: "sizeOnSubject", label: "Size on Subject", description: "Zoom each head so its beam is this wide on the subject, whatever its distance (0 = off)", unit: "cm", min: 0, max: 800, defaultValue: 0 },
+        // Framing: how much of the person the beam takes, sized from the
+        // followed Person's Height, each head from its own throw and lens
+        // (the host's FollowSpotFraming). Custom is the Width on Subject.
+        { name: "framing", label: "Framing", description: "How much of the followed person the beam takes, from their Height: head and shoulders, waist up, the full body, or Custom (the Width on Subject)", values: ["custom", "headShoulders", "waistUp", "fullBody"], valueLabels: ["Custom", "Head & Shoulders", "Waist Up", "Full Body"], defaultValue: 0 },
+        { name: "framingSize", label: "Framing Size", description: "The Framing a little looser or tighter: 100% as it is, 110% a tenth wider. D-pad Left and Right step it while the follow spot plays; Save Positions keeps it", unit: "%", min: 25, max: 300, defaultValue: 100, activeWhen: [{ param: "framing", not: [0] }] },
+        { name: "sizeOnSubject", label: "Width on Subject", description: "Custom: zoom each head so its beam is this wide on the subject, whatever its distance (0 = off). D-pad Left and Right step it while the follow spot plays", unit: "cm", min: 0, max: 800, defaultValue: 0, activeWhen: [{ param: "framing", is: [0] }] },
+        { name: "beamAngle", label: "Beam Angle", description: "With no size on the subject: the beam angle every head zooms to, in degrees (0 = the scene's own zoom). D-pad Left and Right step it while the follow spot plays", unit: "°", min: 0, max: 90, defaultValue: 0, activeWhen: [{ param: "framing", is: [0] }, { param: "sizeOnSubject", is: [0] }] },
         // The feel (the host moves the subject with these; free-fly below too).
         // A speed is kept in cm a second and shown in Settings > Units.
         { name: "topSpeed", description: "Top Speed (how fast the subject moves on the stage with the left stick at full throw: a brisk walk is the default)", unit: "cm/s", min: 15, max: 600, defaultValue: 182.88 },
@@ -115,6 +121,16 @@
         var centre = hostVel && joystick.cx !== undefined
                      ? { x: joystick.cx, y: joystick.cy, z: joystick.cz } : { x: 0, y: 0, z: 0 };
 
+        // With no size on the subject: the beam angle (the look's, or the
+        // pad's for this run -- the host hands it over as beamAngle).
+        var angle = params.beamAngle !== undefined ? params.beamAngle : 0;
+
+        // A beam angle on this head's lens, 0..1 of its zoom.
+        function zoomFor(f, deg) {
+            var span = f.lensMax - f.lensMin;
+            return Math.min(1, Math.max(0, (deg - f.lensMin) / span));
+        }
+
         // Shortest-path / no-wipe between scenes is handled host-side in the
         // target case (the aim point moves in floor space, a straight line);
         // free-fly below simply integrates the stick from centre.
@@ -164,17 +180,23 @@
                     if (level < 1)
                         intent.dimmer = level;
 
-                    // Size on subject: the angle that makes the beam this wide
+                    // Width on subject: the angle that makes the beam this wide
                     // at this distance, placed within what the lens can do. A
                     // subject closer than the lens's narrowest can make small
                     // gets the narrowest; one further than its widest can make
                     // big gets the widest.
-                    var size = params.sizeOnSubject !== undefined ? params.sizeOnSubject : 0;
+                    // The width wanted on the subject from this head
+                    // (metres): the host works it out (FollowSpotFraming --
+                    // the Framing from the person's height and this head's
+                    // throw, or the Width on Subject; the pad's change in
+                    // it). None: the beam angle, if one is set.
+                    var width = f.sceneTarget.beamWidth !== undefined ? f.sceneTarget.beamWidth : 0;
                     var dist = f.sceneTarget.distance;
-                    if (size > 0 && f.hasZoom && dist !== undefined && dist > 0.05) {
-                        var want = 2 * Math.atan((size / 100) / 2 / dist) * 180 / Math.PI;
-                        var span = f.lensMax - f.lensMin;
-                        intent.zoom = Math.min(1, Math.max(0, (want - f.lensMin) / span));
+                    if (width > 0 && f.hasZoom && dist !== undefined && dist > 0.05) {
+                        var want = 2 * Math.atan(width / 2 / dist) * 180 / Math.PI;
+                        intent.zoom = zoomFor(f, want);
+                    } else if (width <= 0 && f.hasZoom && angle > 0) {
+                        intent.zoom = zoomFor(f, angle);
                     }
                     return intent;
                 }
@@ -222,6 +244,9 @@
                     intent.pan  = state[panKey];
                     intent.tilt = state[tiltKey];
                 }
+                // No subject to size on: the beam angle alone, if set.
+                if (f.hasZoom && angle > 0)
+                    intent.zoom = zoomFor(f, angle);
             }
 
             // Position only here: no colour or dimmer in the intent, so the

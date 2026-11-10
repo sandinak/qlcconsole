@@ -61,6 +61,7 @@ EffectInstance::EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteI
     }
 
     m_wledEffect = pal->wledEffect();
+    m_isFollowSpot = pal->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive);
 
     // Load the script
     if (!m_script.load(pal->scriptPath()))
@@ -283,7 +284,12 @@ void EffectInstance::clearOverride(const QString &name)
     }
     for (const EffectScript::ParamDef &d : m_script.paramDefs())
         if (d.name == name)
+        {
             m_paramValues[name] = d.defaultValue;
+            return;
+        }
+    // Not the look's nor the script's (the follow spot's live size): gone.
+    m_paramValues.remove(name);
 }
 
 void EffectInstance::clearOverrides()
@@ -386,6 +392,8 @@ void EffectInstance::runTick()
         m_transitionOut = sc->transitionOut();
         m_sceneRunning = sc->isRunning() && m_offStageMs < 0;
         m_sceneElapsed = sc->elapsed();
+        if (m_isFollowSpot)
+            syncFollowBeam(sc);
         if (m_transitionIn.isActive() && !m_transitionMapInBuilt)
         {
             m_transitionMapIn = TransitionMap(m_doc, sc->transitionFixtures(), m_transitionIn.shape);
@@ -1835,6 +1843,42 @@ QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalet
     return aimAt;
 }
 
+void EffectInstance::syncFollowBeam(Scene *sc)
+{
+    m_followLook = FollowSpotFraming::fromParams(m_paramValues);
+    m_framed = AimSolver::sceneFramesSubject(m_doc, sc);
+    const double now[7] = { double(m_followLook.framing), m_followLook.scale, m_followLook.widthCm,
+                            m_followLook.beamDeg, m_followPad.scale, m_followPad.widthCm,
+                            m_followPad.beamDeg };
+    /* What sizes the beam changed: the heads re-aim at the beam they get.
+       Starting, only when the look sizes the beam (the scene resolved its
+       aim with the zoom it had before the effect wrote one); one that
+       leaves the zoom alone changes nothing to re-aim for. Whatever moves
+       the heads keeps going as it was (a cue's fade, a wipe's stagger, a
+       manual crossfade): Scene::requestReaim(.., true). */
+    const bool starting = m_beamSig[0] < 0.0;
+    bool changed = false;
+    for (int i = 0; i < 7; ++i)
+        if (now[i] != m_beamSig[i])
+        {
+            m_beamSig[i] = now[i];
+            changed = true;
+        }
+    if (changed && (!starting || FollowSpotFraming::sizesBeam(m_followLook)
+                    || FollowSpotFraming::beamDeg(m_followLook, m_followPad) > 0.0))
+        m_reaimTicks = 3;
+    if (m_reaimTicks > 0)
+    {
+        --m_reaimTicks;
+        // Every scene it plays in: the same look on another layer, the next
+        // cue's during a crossfade (it carries on there).
+        sc->requestReaim(kFollowBeamReaimMs, true);
+        for (quint32 other : m_alsoScenes)
+            if (Scene *also = qobject_cast<Scene *>(m_doc->function(other)))
+                also->requestReaim(kFollowBeamReaimMs, true);
+    }
+}
+
 QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
                                            const BeamOcclusion::Model &sight, int head)
 {
@@ -1861,7 +1905,7 @@ QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
     // Pointed where its beam covers the subject best; sized
     // at the subject itself (its chest), so the size it asks
     // the zoom for does not move with the aim it gets.
-    const QVector3D tp = AimSolver::aimPointFor(m_doc, member, st, true);
+    const QVector3D tp = AimSolver::aimPointFor(m_doc, member, st, true, m_framed);
     const QVector3D subject = mp->targetAimPoint(st, true);
     AimSolver::Frame frame;
     if (AimSolver::frameFor(m_doc, member, frame))
@@ -1871,6 +1915,19 @@ QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
         so.setProperty("tilt", double(sol.tiltDeg));
         so.setProperty("reachMargin", double(sol.marginDeg));
         so.setProperty("distance", double((subject - frame.position).length()));
+        // level: how flat the throw comes in (1 straight on, toward 0 from
+        // overhead) -- a beam stretches down an upright body by 1 / level;
+        // height: the person's own (metres), 0 for anything but a Person.
+        const QVector3D toSubject = subject - frame.position;
+        const double len = double(toSubject.length());
+        const double level = len > 0.01 ? std::hypot(double(toSubject.x()), double(toSubject.y())) / len : 1.0;
+        const double height = double(mp->targetFigureHeight(st));
+        so.setProperty("level", level);
+        so.setProperty("height", height);
+        // The follow spot's width on this subject from this head (metres,
+        // 0: none): FollowSpotFraming, the pad's size in it.
+        if (m_isFollowSpot)
+            so.setProperty("beamWidth", FollowSpotFraming::widthM(m_followLook, m_followPad, height, level));
         // blocked / blockedBy / clearance: whether anything solid on stage
         // stands between the head and the point it is aimed at.
         setSight(so, AimSolver::lineOfSight(m_doc, sight, fid, frame.position, tp));
@@ -2290,6 +2347,9 @@ QJSValue EffectInstance::buildParamsObject() const
     // Scalar params
     for (auto it = m_paramValues.constBegin(); it != m_paramValues.constEnd(); ++it)
         obj.setProperty(it.key(), it.value());
+    // The pad's beam angle for this run, over the look's.
+    if (m_isFollowSpot && m_followPad.beamDeg > 0.0)
+        obj.setProperty(FollowSpotFraming::beamKey(), m_followPad.beamDeg);
 
     // Determine which params are path-typed so we can emit JS arrays for them
     // (and which are pictures, handed over decoded)

@@ -399,10 +399,12 @@ void Scene::requestPaletteRefresh()
     m_repaletteRequested = true;
 }
 
-void Scene::requestReaim(uint fadeMs)
+void Scene::requestReaim(uint fadeMs, bool keepRunningFades)
 {
     QMutexLocker locker(&m_valueListMutex);
-    // Several before the next write: the slowest asked wins.
+    // Several before the next write: the slowest asked wins, and a running
+    // fade is kept only if every one of them asked for that.
+    m_reaimKeepFades = m_reaimRequested ? (m_reaimKeepFades && keepRunningFades) : keepRunningFades;
     m_reaimFade = m_reaimRequested ? qMax(m_reaimFade, fadeMs) : fadeMs;
     m_reaimRequested = true;
 }
@@ -1956,9 +1958,11 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             //               palette, since any type may have changed.
             const bool positionsOnly = !m_repaletteRequested;
             const uint reaimFade = positionsOnly ? m_reaimFade : 0;
+            const bool keepFades = positionsOnly && m_reaimKeepFades;
             m_reaimRequested = false;
             m_repaletteRequested = false;
             m_reaimFade = 0;
+            m_reaimKeepFades = false;
 
             const int lookDim = QLCPalette::lookDimmerValue(doc(), runtimePalettes());
             auto replaceOne = [&](const SceneValue &scv) {
@@ -1971,15 +1975,37 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 if (m_sightDimmed.contains(scv.fxi) && sightDimChannels(fixture).contains(scv.channel))
                     v = 0;
                 FadeChannel fc(doc(), scv.fxi, scv.channel);
-                quint32 from = v;
                 /* A blocking change moves the heads over the cue's fade in,
                    from where they are now (BLOCKING.md). */
-                if (reaimFade == 0 || !m_fadersMap[universe]->currentValue(scv.fxi, scv.channel, &from))
-                    from = v;
+                GenericFader::RunningFade rf;
+                const bool running = reaimFade > 0
+                                     && m_fadersMap[universe]->runningFade(scv.fxi, scv.channel, rf);
+                quint32 from = running ? rf.current : v;
+                quint32 current = from;
+                uint fade = from == v ? 0 : reaimFade, delay = 0;
+                /* The follow spot's beam-size re-aim (requestReaim(..., true)):
+                   whatever moves the heads now keeps going as it was -- a
+                   fade its time left, a transition's head its wait, a manual
+                   crossfade its morph -- only toward the new aim. */
+                if (running && keepFades)
+                {
+                    if (rf.crossFade)
+                    {
+                        from = rf.start;
+                        fade = 0;
+                        fc.addFlag(FadeChannel::CrossFade);
+                    }
+                    else if (rf.delayLeft > 0 || rf.fadeLeft > 0)
+                    {
+                        delay = rf.delayLeft;
+                        fade = rf.fadeLeft;
+                    }
+                }
                 fc.setStart(from);
                 fc.setTarget(v);
-                fc.setCurrent(from);
-                fc.setFadeTime(from == v ? 0 : reaimFade);
+                fc.setCurrent(current);
+                fc.setFadeTime(fade);
+                fc.setDelay(delay);         // after: setFadeTime() clears it
                 if (m_editOverrideApplied)
                     fc.addFlag(FadeChannel::Override | FadeChannel::EditOverride);
                 m_fadersMap[universe]->replace(fc);
