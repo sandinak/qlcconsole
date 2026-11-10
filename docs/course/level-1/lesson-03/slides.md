@@ -54,10 +54,16 @@ teacher says. It can be turned into a deck as it is.*
 - Colour · level · position. The shutter opens by itself.
 - Pictures: `rig-solo-floor.png`, `rig-solo.png`.
 
-## 9. Your turn
+## 9. Mark the spots
 
-- Handout Part 2, steps 1–12.
+- A mover that opens before it has turned swings in, in view.
+- Turn it in the dark first: **AT-Spots**, **Out**, **Soloist DS** in the
+  Pose. The aim tracks on to the Solo.
 
-## 10. Exit ticket
+## 10. Your turn
+
+- Handout Part 2, steps 1–13.
+
+## 11. Exit ticket
 
 - Four questions on paper.

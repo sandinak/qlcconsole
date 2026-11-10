@@ -77,20 +77,20 @@ Switch roles after each part.
 ### Read the chorus
 
 3. Click **1.0.2 Chorus**.
-   - *You should see:* under it, the Steps (its own layer) and three grey
-     ⤳ rows: TrussC-RGB from **1.0.0**, StepTops and AT-W-ALL from
-     **1.0.1**. On its row, **1** under **S** and **3** under **T**: the
-     chorus sets one layer, three track in. The step tops are still
+   - *You should see:* under it, the Steps (its own layer) and four grey
+     ⤳ rows: TrussC-RGB and AT-Spots from **1.0.0**, StepTops and
+     AT-W-ALL from **1.0.1**. On its row, **1** under **S** and **4**
+     under **T**: the chorus sets one layer, four track in. The step tops are still
      lavender on stage.
 
 ![What tracks into the chorus](../../images/lesson-2-1/chorus-tracking.png)
 
-   **(1)** the chorus sets 1 layer, 3 track in, and **(2)** the grey
+   **(1)** the chorus sets 1 layer, 4 track in, and **(2)** the grey
    rows on its page.
 
 4. Scroll down the chorus's page.
    - *You should see:* **Tracked in**, each grey layer with where it came
-     from and its values, and **Next cue receives**: all four layers.
+     from and its values, and **Next cue receives**: all five layers.
 
 ![Tracked in and Next cue receives](../../images/lesson-2-1/chorus-receives.png)
 
@@ -114,9 +114,9 @@ the lines under it.
    grey).
 7. Tick **Release after this cue (back to the base cue, else dark)**.
    - *You should see:* the top bar reads **Changed: 1.0.2 Chorus, 1.0.3
-     Scream**, and the verse's row reads **1** under **S**, **T** and
-     **R**: it sets AT-W-ALL, the cyc tracks in, and it releases the step
-     tops.
+     Scream**, and the verse's row reads **1** under **S**, **2** under
+     **T** and **1** under **R**: it sets AT-W-ALL, the cyc and the spots
+     track in, and it releases the step tops.
 
 ![Release on the verse's step tops](../../images/lesson-2-1/release.png)
 

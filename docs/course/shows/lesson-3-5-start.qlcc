@@ -7519,25 +7519,25 @@
    <SpeedModes FadeIn="PerStep" FadeOut="PerStep" Duration="PerStep"/>
    <Step Number="0" FadeIn="3000" Hold="4294967294" FadeOut="0" Cue="1.0.0">1</Step>
    <Step Number="1" FadeIn="2000" Hold="4294967294" FadeOut="0" Cue="1.0.1">4</Step>
-   <Step Number="2" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.2" SubCues="SubGoFollow">30</Step>
+   <Step Number="2" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.2" SubCues="SubGoFollow">24</Step>
    <Step Number="3" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.2.5">2</Step>
-   <Step Number="4" FadeIn="0" Hold="2000" FadeOut="3000" Cue="1.0.3">6</Step>
-   <Step Number="5" FadeIn="3000" Hold="4294967294" FadeOut="0" Cue="1.0.4">13</Step>
-   <Step Number="6" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.5">9</Step>
-   <Step Number="7" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.6">16</Step>
-   <Step Number="8" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.7">18</Step>
-   <Step Number="9" FadeIn="1000" Hold="4294967294" FadeOut="0" Cue="1.0.8">29</Step>
+   <Step Number="4" FadeIn="0" Hold="2000" FadeOut="3000" Cue="1.0.3">11</Step>
+   <Step Number="5" FadeIn="3000" Hold="4294967294" FadeOut="0" Cue="1.0.4">8</Step>
+   <Step Number="6" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.5">5</Step>
+   <Step Number="7" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.6">9</Step>
+   <Step Number="8" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.7">19</Step>
+   <Step Number="9" FadeIn="1000" Hold="4294967294" FadeOut="0" Cue="1.0.8">32</Step>
   </Function>
   <Function ID="1" Type="Collection" Name="1.0.0-Pose" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Step Number="0">3</Step>
-   <Step Number="1">37</Step>
+   <Step Number="1">18</Step>
   </Function>
   <Function ID="2" Type="Collection" Name="1.0.2.5-Flash" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Step Number="0">37</Step>
-   <Step Number="1">10</Step>
-   <Step Number="2">8</Step>
-   <Step Number="3">15</Step>
-   <Step Number="4">14</Step>
+   <Step Number="0">18</Step>
+   <Step Number="1">6</Step>
+   <Step Number="2">13</Step>
+   <Step Number="3">17</Step>
+   <Step Number="4">12</Step>
   </Function>
   <Function ID="3" Type="Scene" Name="1.0.0-Pose · TrussC-RGB" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
@@ -7547,93 +7547,99 @@
   </Function>
   <Function ID="4" Type="Collection" Name="1.0.1-Verse" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Step Number="0">3</Step>
-   <Step Number="1">37</Step>
-   <Step Number="2">5</Step>
-   <Step Number="3">10</Step>
+   <Step Number="1">18</Step>
+   <Step Number="2">10</Step>
+   <Step Number="3">6</Step>
   </Function>
-  <Function ID="5" Type="Scene" Name="1.0.1-Verse · StepTops" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
-   <FixtureGroup ID="4"/>
-   <Palette ID="8"/>
-   <Palette ID="20"/>
+  <Function ID="5" Type="Collection" Name="1.0.5-Bridge" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Step Number="0">20</Step>
+   <Step Number="1">21</Step>
+   <Step Number="2">26</Step>
+   <Step Number="3">27</Step>
   </Function>
-  <Function ID="6" Type="Collection" Name="1.0.3-Scream" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Step Number="0">37</Step>
-   <Step Number="1">10</Step>
-   <Step Number="2">8</Step>
-   <Step Number="3">15</Step>
-   <Step Number="4">11</Step>
-   <Step Number="5">12</Step>
-  </Function>
-  <Function ID="7" Type="Collection" Name="1.0.2-Chorus" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Step Number="0">37</Step>
-   <Step Number="1">10</Step>
-   <Step Number="2">8</Step>
-   <Step Number="3">15</Step>
-  </Function>
-  <Function ID="8" Type="Scene" Name="1.0.2.1-Chorus · Steps" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
-   <FixtureGroup ID="0"/>
-   <Palette ID="21"/>
-   <Palette ID="10"/>
-  </Function>
-  <Function ID="9" Type="Collection" Name="1.0.5-Bridge" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Step Number="0">19</Step>
-   <Step Number="1">20</Step>
-   <Step Number="2">25</Step>
-   <Step Number="3">26</Step>
-  </Function>
-  <Function ID="10" Type="Scene" Name="1.0.2.1-Chorus · AT-W-ALL" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="6" Type="Scene" Name="1.0.2.1-Chorus · AT-W-ALL" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="15"/>
    <Palette ID="1"/>
    <Palette ID="10"/>
    <Palette ID="18"/>
   </Function>
-  <Function ID="11" Type="Scene" Name="1.0.3-Scream · TrussW-RGB" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="7" Type="Collection" Name="1.0.2-Chorus" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Step Number="0">18</Step>
+   <Step Number="1">6</Step>
+   <Step Number="2">13</Step>
+   <Step Number="3">17</Step>
+  </Function>
+  <Function ID="8" Type="Collection" Name="1.0.4-Solo" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Step Number="0">16</Step>
+  </Function>
+  <Function ID="9" Type="Collection" Name="1.0.6-Dance Break" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Step Number="0">28</Step>
+   <Step Number="1">22</Step>
+   <Step Number="2">29</Step>
+   <Step Number="3">31</Step>
+  </Function>
+  <Function ID="10" Type="Scene" Name="1.0.1-Verse · StepTops" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
-   <FixtureGroup ID="9"/>
-   <Palette ID="2"/>
-   <Palette ID="10"/>
+   <FixtureGroup ID="4"/>
+   <Palette ID="8"/>
+   <Palette ID="20"/>
   </Function>
-  <Function ID="12" Type="Scene" Name="1.0.3-Scream · Lanterns" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
-   <FixtureGroup ID="16"/>
-   <Palette ID="2"/>
-   <Palette ID="10"/>
+  <Function ID="11" Type="Collection" Name="1.0.3-Scream" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Step Number="0">18</Step>
+   <Step Number="1">6</Step>
+   <Step Number="2">13</Step>
+   <Step Number="3">17</Step>
+   <Step Number="4">14</Step>
+   <Step Number="5">15</Step>
   </Function>
-  <Function ID="13" Type="Collection" Name="1.0.4-Solo" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Step Number="0">17</Step>
-  </Function>
-  <Function ID="14" Type="Scene" Name="1.0.2.5-Flash · StepTops" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="12" Type="Scene" Name="1.0.2.5-Flash · StepTops" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="4"/>
    <Palette ID="0"/>
    <Palette ID="10"/>
   </Function>
-  <Function ID="15" Type="Scene" Name="1.0.2.1-Chorus · TrussC-RGB" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="13" Type="Scene" Name="1.0.2.1-Chorus · Steps" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
-   <FixtureGroup ID="11"/>
+   <FixtureGroup ID="0"/>
    <Palette ID="21"/>
    <Palette ID="10"/>
   </Function>
-  <Function ID="16" Type="Collection" Name="1.0.6-Dance Break" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Step Number="0">27</Step>
-   <Step Number="1">21</Step>
-   <Step Number="2">28</Step>
-   <Step Number="3">41</Step>
+  <Function ID="14" Type="Scene" Name="1.0.3-Scream · TrussW-RGB" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="9"/>
+   <Palette ID="2"/>
+   <Palette ID="10"/>
   </Function>
-  <Function ID="17" Type="Scene" Name="1.0.4-Solo · AT-Spots" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="15" Type="Scene" Name="1.0.3-Scream · Lanterns" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="16"/>
+   <Palette ID="2"/>
+   <Palette ID="10"/>
+  </Function>
+  <Function ID="16" Type="Scene" Name="1.0.4-Solo · AT-Spots" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="14"/>
    <Palette ID="0"/>
    <Palette ID="10"/>
    <Palette ID="17"/>
   </Function>
-  <Function ID="18" Type="Collection" Name="1.0.7-Fan" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Step Number="0">24</Step>
+  <Function ID="17" Type="Scene" Name="1.0.2.1-Chorus · TrussC-RGB" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="11"/>
+   <Palette ID="21"/>
+   <Palette ID="10"/>
   </Function>
-  <Function ID="19" Type="Scene" Name="1.0.5-Bridge · Truss Sides" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="18" Type="Scene" Name="1.0.2.1-Chorus · AT-Spots" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="14"/>
+   <Palette ID="15"/>
+   <Palette ID="17"/>
+  </Function>
+  <Function ID="19" Type="Collection" Name="1.0.7-Fan" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Step Number="0">25</Step>
+  </Function>
+  <Function ID="20" Type="Scene" Name="1.0.5-Bridge · Truss Sides" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="6"/>
    <FixtureGroup ID="7"/>
@@ -7641,31 +7647,37 @@
    <Palette ID="10"/>
    <Exclude Palette="7" Fixtures="0,7,190,196,199,200"/>
   </Function>
-  <Function ID="20" Type="Scene" Name="1.0.5-Bridge · Trusses SR" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="21" Type="Scene" Name="1.0.5-Bridge · Trusses SR" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="6"/>
    <Palette ID="3"/>
   </Function>
-  <Function ID="21" Type="Scene" Name="1.0.6-Dance Break · StepTops" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="22" Type="Scene" Name="1.0.6-Dance Break · StepTops" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="4"/>
    <Palette ID="7"/>
    <Palette ID="13"/>
   </Function>
-  <Function ID="22" Type="Collection" Name="Red Stab" Path="Productions/Spring Show/Hits">
-   <Step Number="0">11</Step>
+  <Function ID="23" Type="Collection" Name="Red Stab" Path="Productions/Spring Show/Hits">
+   <Step Number="0">14</Step>
   </Function>
-  <Function ID="23" Type="Collection" Name="Glow" Path="Productions/Spring Show/Hits">
-   <Step Number="0">32</Step>
+  <Function ID="24" Type="Chaser" Name="1.0.2 Chorus · sub-cues" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <Direction>Forward</Direction>
+   <RunOrder>SingleShot</RunOrder>
+   <SpeedModes FadeIn="PerStep" FadeOut="PerStep" Duration="PerStep"/>
+   <Step Number="0" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.2.1">33</Step>
+   <Step Number="1" FadeIn="0" Hold="500" FadeOut="0" Cue="1.0.2.2">37</Step>
+   <Step Number="2" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.2.3">41</Step>
   </Function>
-  <Function ID="24" Type="Scene" Name="1.0.7-Fan · Truss-Spots" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="25" Type="Scene" Name="1.0.7-Fan · Truss-Spots" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="8"/>
    <Palette ID="0"/>
    <Palette ID="10"/>
    <Palette ID="19"/>
   </Function>
-  <Function ID="25" Type="Scene" Name="1.0.5-Bridge · Steps" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="26" Type="Scene" Name="1.0.5-Bridge · Steps" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="0"/>
    <Palette ID="7"/>
@@ -7673,105 +7685,93 @@
    <Exclude Palette="7" Fixtures="10,28,38,48"/>
    <Exclude Palette="13" Fixtures="10,28,38,48"/>
   </Function>
-  <Function ID="26" Type="Scene" Name="1.0.5-Bridge · US" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="27" Type="Scene" Name="1.0.5-Bridge · US" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="1"/>
    <Palette ID="0"/>
    <Palette ID="10"/>
   </Function>
-  <Function ID="27" Type="Scene" Name="1.0.6-Dance Break · Steps" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="28" Type="Scene" Name="1.0.6-Dance Break · Steps" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="0"/>
    <Palette ID="21"/>
    <Palette ID="10"/>
-   <Palette ID="22"/>
+   <Palette ID="22" FadeIn="-2" FadeOut="-2"/>
    <Palette ID="0"/>
   </Function>
-  <Function ID="28" Type="Scene" Name="1.0.6-Dance Break · TrussW-RGB" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="29" Type="Scene" Name="1.0.6-Dance Break · TrussW-RGB" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="9"/>
    <Palette ID="7"/>
    <Palette ID="10"/>
-   <Palette ID="23"/>
+   <Palette ID="23" FadeIn="-2" FadeOut="-2"/>
   </Function>
-  <Function ID="29" Type="Collection" Name="1.0.8-Button" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Step Number="0">31</Step>
+  <Function ID="30" Type="Collection" Name="Glow" Path="Productions/Spring Show/Hits">
+   <Step Number="0">35</Step>
   </Function>
-  <Function ID="30" Type="Chaser" Name="1.0.2 Chorus · sub-cues" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="31" Type="Scene" Name="1.0.6-Dance Break · Truss-Spots" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
-   <Direction>Forward</Direction>
-   <RunOrder>SingleShot</RunOrder>
-   <SpeedModes FadeIn="PerStep" FadeOut="PerStep" Duration="PerStep"/>
-   <Step Number="0" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.2.1">34</Step>
-   <Step Number="1" FadeIn="0" Hold="500" FadeOut="0" Cue="1.0.2.2">35</Step>
-   <Step Number="2" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.2.3">39</Step>
+   <FixtureGroup ID="8"/>
+   <Palette ID="15"/>
+   <Palette ID="19"/>
   </Function>
-  <Function ID="31" Type="Scene" Name="1.0.8-Button · Truss-Spots" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="32" Type="Collection" Name="1.0.8-Button" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Step Number="0">34</Step>
+  </Function>
+  <Function ID="33" Type="Collection" Name="1.0.2.1-Chorus" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Step Number="0">18</Step>
+   <Step Number="1">6</Step>
+   <Step Number="2">13</Step>
+   <Step Number="3">17</Step>
+  </Function>
+  <Function ID="34" Type="Scene" Name="1.0.8-Button · Truss-Spots" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="8"/>
    <Palette ID="2"/>
    <Palette ID="10"/>
    <Palette ID="24"/>
   </Function>
-  <Function ID="32" Type="Scene" Name="Glow · Lanterns" Hidden="True" Path="Productions/Spring Show/Hits">
+  <Function ID="35" Type="Scene" Name="Glow · Lanterns" Hidden="True" Path="Productions/Spring Show/Hits">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="16"/>
    <Palette ID="3"/>
    <Palette ID="10"/>
   </Function>
-  <Function ID="33" Type="Collection" Name="Faces" Path="Productions/Spring Show/Hits">
-   <Step Number="0">36</Step>
+  <Function ID="36" Type="Collection" Name="Faces" Path="Productions/Spring Show/Hits">
+   <Step Number="0">39</Step>
   </Function>
-  <Function ID="34" Type="Collection" Name="1.0.2.1-Chorus" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Step Number="0">37</Step>
-   <Step Number="1">10</Step>
-   <Step Number="2">8</Step>
-   <Step Number="3">15</Step>
+  <Function ID="37" Type="Collection" Name="1.0.2.2-Stomp" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Step Number="0">18</Step>
+   <Step Number="1">6</Step>
+   <Step Number="2">13</Step>
+   <Step Number="3">17</Step>
+   <Step Number="4">40</Step>
   </Function>
-  <Function ID="35" Type="Collection" Name="1.0.2.2-Stomp" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Step Number="0">37</Step>
-   <Step Number="1">10</Step>
-   <Step Number="2">8</Step>
-   <Step Number="3">15</Step>
-   <Step Number="4">38</Step>
-  </Function>
-  <Function ID="36" Type="Scene" Name="Faces · AT-W-ALL" Hidden="True" Path="Productions/Spring Show/Hits">
+  <Function ID="39" Type="Scene" Name="Faces · AT-W-ALL" Hidden="True" Path="Productions/Spring Show/Hits">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="15"/>
    <Palette ID="0"/>
    <Palette ID="10"/>
    <Palette ID="18"/>
   </Function>
-  <Function ID="37" Type="Scene" Name="1.0.2.1-Chorus · AT-Spots" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
-   <FixtureGroup ID="14"/>
-   <Palette ID="15"/>
-   <Palette ID="17"/>
-  </Function>
-  <Function ID="38" Type="Scene" Name="1.0.2.2-Stomp · Lanterns" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="40" Type="Scene" Name="1.0.2.2-Stomp · Lanterns" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="16"/>
    <Palette ID="0"/>
    <Palette ID="10"/>
   </Function>
-  <Function ID="39" Type="Collection" Name="1.0.2.3-Stomp Out" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Step Number="0">37</Step>
-   <Step Number="1">10</Step>
-   <Step Number="2">8</Step>
-   <Step Number="3">15</Step>
-   <Step Number="4">40</Step>
+  <Function ID="41" Type="Collection" Name="1.0.2.3-Stomp Out" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Step Number="0">18</Step>
+   <Step Number="1">6</Step>
+   <Step Number="2">13</Step>
+   <Step Number="3">17</Step>
+   <Step Number="4">42</Step>
   </Function>
-  <Function ID="40" Type="Scene" Name="1.0.2.3-Stomp Out · Lanterns" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="42" Type="Scene" Name="1.0.2.3-Stomp Out · Lanterns" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="16"/>
    <Palette ID="0"/>
    <Palette ID="15"/>
-  </Function>
-  <Function ID="41" Type="Scene" Name="1.0.6-Dance Break · Truss-Spots" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
-   <FixtureGroup ID="8"/>
-   <Palette ID="15"/>
-   <Palette ID="19"/>
   </Function>
   <SpeedMasters>
    <Master Index="0" Name="Main Speed" Mode="Own" BPM="120"/>
@@ -7782,7 +7782,7 @@
   <ShutterAutoOpen Enabled="1"/>
   <ShowControl MainCueList="0"/>
   <ShowTree NextId="47" Current="1">
-   <GroupSet ID="19" Name="Truss Sides" Groups="6,7"/>
+   <GroupSet ID="20" Name="Truss Sides" Groups="6,7"/>
    <Production ID="1" Name="Spring Show">
     <CueList ID="2" Name="01-Everybody Scream" Mode="Tracking" Chaser="0">
      <Cue ID="3" Number="1.0.0" Name="Pose" FadeIn="3000" FadeOut="0" Hold="4294967294" Collection="1">
@@ -7790,7 +7790,7 @@
        <Look Key="Colour" Palettes="7"/>
        <Look Key="Dimmer" Palettes="10"/>
       </Layer>
-      <Layer ID="45" Groups="14">
+      <Layer ID="15" Groups="14">
        <Look Key="Dimmer" Palettes="15"/>
        <Look Key="Position" Palettes="17"/>
       </Layer>
@@ -7811,109 +7811,109 @@
        <Look Key="Colour" Palettes="21"/>
        <Look Key="Dimmer" Palettes="10"/>
       </Layer>
-      <Layer ID="17" Groups="11">
+      <Layer ID="18" Groups="11">
        <Look Key="Colour" Palettes="21"/>
       </Layer>
      </Cue>
-     <Cue ID="15" Number="1.0.2.5" Name="Flash" Mode="CueOnly" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="2">
-      <Layer ID="16" Groups="4">
+     <Cue ID="16" Number="1.0.2.5" Name="Flash" Mode="CueOnly" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="2">
+      <Layer ID="17" Groups="4">
        <Look Key="Colour" Palettes="0"/>
        <Look Key="Dimmer" Palettes="10"/>
       </Layer>
      </Cue>
-     <Cue ID="9" Number="1.0.3" Name="Scream" FadeIn="0" FadeOut="3000" Hold="2000" Collection="6">
+     <Cue ID="9" Number="1.0.3" Name="Scream" FadeIn="0" FadeOut="3000" Hold="2000" Collection="11">
       <Look Key="Colour" Palettes="2"/>
       <Look Key="Dimmer" Palettes="10"/>
       <Layer ID="10" Groups="9"/>
       <Layer ID="11" Groups="16"/>
      </Cue>
-     <Cue ID="13" Number="1.0.4" Name="Solo" Mode="Block" FadeIn="3000" FadeOut="0" Hold="4294967294" Collection="13">
+     <Cue ID="13" Number="1.0.4" Name="Solo" Mode="Block" FadeIn="3000" FadeOut="0" Hold="4294967294" Collection="8">
       <Layer ID="14" Groups="14">
        <Look Key="Colour" Palettes="0"/>
        <Look Key="Dimmer" Palettes="10"/>
        <Look Key="Position" Palettes="17"/>
       </Layer>
      </Cue>
-     <Cue ID="18" Number="1.0.5" Name="Bridge" Mode="Block" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="9">
-      <Layer ID="20" Sets="19">
+     <Cue ID="19" Number="1.0.5" Name="Bridge" Mode="Block" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="5">
+      <Layer ID="21" Sets="20">
        <Look Key="Colour" Palettes="7"/>
        <Look Key="Dimmer" Palettes="10"/>
       </Layer>
-      <Layer ID="21" Groups="6" Parent="20">
+      <Layer ID="22" Groups="6" Parent="21">
        <Look Key="Colour" Palettes="3"/>
       </Layer>
-      <Layer ID="22" Groups="0">
+      <Layer ID="23" Groups="0">
        <Look Key="Colour" Palettes="7"/>
        <Look Key="Dimmer" Palettes="13"/>
       </Layer>
-      <Layer ID="23" Groups="1" Parent="22">
+      <Layer ID="24" Groups="1" Parent="23">
        <Look Key="Colour" Palettes="0"/>
        <Look Key="Dimmer" Palettes="10"/>
       </Layer>
      </Cue>
-     <Cue ID="24" Number="1.0.6" Name="Dance Break" Mode="Block" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="16">
-      <Layer ID="25" Groups="0">
+     <Cue ID="25" Number="1.0.6" Name="Dance Break" Mode="Block" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="9">
+      <Layer ID="26" Groups="0">
        <Look Key="Colour" Palettes="21"/>
        <Look Key="Dimmer" Palettes="10"/>
-       <Look Key="Effect.Dimmer" Palettes="22" Own="0"/>
+       <Look Key="Effect.Dimmer" Palettes="22" Own="0" FadeIn="cue" FadeOut="cue"/>
       </Layer>
-      <Layer ID="26" Groups="4">
+      <Layer ID="27" Groups="4">
        <Look Key="Colour" Palettes="7"/>
        <Look Key="Dimmer" Palettes="13"/>
       </Layer>
-      <Layer ID="27" Groups="9">
+      <Layer ID="28" Groups="9">
        <Look Key="Colour" Palettes="7"/>
        <Look Key="Dimmer" Palettes="10"/>
-       <Look Key="Effect.Color" Palettes="23"/>
+       <Look Key="Effect.Color" Palettes="23" FadeIn="cue" FadeOut="cue"/>
       </Layer>
-      <Layer ID="46" Groups="8">
+      <Layer ID="31" Groups="8">
        <Look Key="Dimmer" Palettes="15"/>
        <Look Key="Position" Palettes="19"/>
       </Layer>
      </Cue>
-     <Cue ID="28" Number="1.0.7" Name="Fan" Mode="Block" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="18">
-      <Layer ID="29" Groups="8">
+     <Cue ID="29" Number="1.0.7" Name="Fan" Mode="Block" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="19">
+      <Layer ID="30" Groups="8">
        <Look Key="Colour" Palettes="0"/>
        <Look Key="Dimmer" Palettes="10"/>
        <Look Key="Position" Palettes="19"/>
       </Layer>
      </Cue>
-     <Cue ID="30" Number="1.0.8" Name="Button" FadeIn="1000" FadeOut="0" Hold="4294967294" Collection="29">
-      <Layer ID="31" Groups="8">
+     <Cue ID="32" Number="1.0.8" Name="Button" FadeIn="1000" FadeOut="0" Hold="4294967294" Collection="32">
+      <Layer ID="33" Groups="8">
        <Look Key="Position.Spread" Value="-5"/>
        <Look Key="Colour" Palettes="2"/>
       </Layer>
      </Cue>
     </CueList>
-    <SubCues ID="40" Name="Sub-cues" Cue="7" Chaser="30">
-     <Cue ID="39" Number="1" Name="Chorus" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="34"/>
-     <Cue ID="41" Number="2" Name="Stomp" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="35">
-      <Layer ID="42" Groups="16">
+    <SubCues ID="42" Name="Sub-cues" Cue="7" Chaser="24">
+     <Cue ID="41" Number="1" Name="Chorus" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="33"/>
+     <Cue ID="43" Number="2" Name="Stomp" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="37">
+      <Layer ID="44" Groups="16">
        <Look Key="Colour" Palettes="0"/>
        <Look Key="Dimmer" Palettes="10"/>
       </Layer>
      </Cue>
-     <Cue ID="43" Number="3" Name="Stomp Out" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="39" Follow="Auto" Wait="500">
-      <Layer ID="44" Groups="16">
+     <Cue ID="45" Number="3" Name="Stomp Out" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="41" Follow="Auto" Wait="500">
+      <Layer ID="46" Groups="16">
        <Look Key="Dimmer" Palettes="15"/>
       </Layer>
      </Cue>
     </SubCues>
-    <Looks ID="32" Name="Hits">
-     <Cue ID="33" Number="1" Name="Red Stab" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="22">
-      <Layer ID="34" Groups="9">
+    <Looks ID="34" Name="Hits">
+     <Cue ID="35" Number="1" Name="Red Stab" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="23">
+      <Layer ID="36" Groups="9">
        <Look Key="Colour" Palettes="2"/>
        <Look Key="Dimmer" Palettes="10"/>
       </Layer>
      </Cue>
-     <Cue ID="35" Number="2" Name="Glow" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="23">
-      <Layer ID="36" Groups="16">
+     <Cue ID="37" Number="2" Name="Glow" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="30">
+      <Layer ID="38" Groups="16">
        <Look Key="Colour" Palettes="3"/>
        <Look Key="Dimmer" Palettes="10"/>
       </Layer>
      </Cue>
-     <Cue ID="37" Number="3" Name="Faces" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="33">
-      <Layer ID="38" Groups="15">
+     <Cue ID="39" Number="3" Name="Faces" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="36">
+      <Layer ID="40" Groups="15">
        <Look Key="Colour" Palettes="0"/>
        <Look Key="Dimmer" Palettes="10"/>
        <Look Key="Position" Palettes="18"/>
@@ -7921,9 +7921,9 @@
      </Cue>
     </Looks>
    </Production>
-   <Generated Scenes="3,5,8,10,11,12,14,15,17,19,20,21,24,25,26,27,28,31,32,36,37,38,40,41" Collections="1,2,4,6,7,9,13,16,18,22,23,29,33,34,35,39" Chasers="0,30"/>
+   <Generated Scenes="3,6,10,12,13,14,15,16,17,18,20,21,22,25,26,27,28,29,31,34,35,39,40,42" Collections="1,2,4,5,7,8,9,11,19,23,30,32,33,36,37,41" Chasers="0,24"/>
    <InlinePalettes IDs="24"/>
-   <LookVCPage List="32" Folder="" Frame="0" Buttons="1,2,3"/>
+   <LookVCPage List="34" Folder="" Frame="0" Buttons="1,2,3"/>
   </ShowTree>
   <MoveInBlack Auto="0" DarkGapMs="800"/>
   <Monitor DisplayMode="1" ShowLabels="0" SnapDivisions="1" AimSubjectHeight="1.62458" ItemLocks="1">
@@ -8202,7 +8202,7 @@
       <BackgroundImage>None</BackgroundImage>
       <Font>Default</Font>
      </Appearance>
-     <Function ID="22"/>
+     <Function ID="23" Hit="35"/>
      <Action>Toggle</Action>
      <Intensity Adjust="False">100</Intensity>
     </Button>
@@ -8215,7 +8215,7 @@
       <BackgroundImage>None</BackgroundImage>
       <Font>Default</Font>
      </Appearance>
-     <Function ID="23"/>
+     <Function ID="30" Hit="37"/>
      <Action>Toggle</Action>
      <Intensity Adjust="False">100</Intensity>
     </Button>
@@ -8228,7 +8228,7 @@
       <BackgroundImage>None</BackgroundImage>
       <Font>Default</Font>
      </Appearance>
-     <Function ID="33"/>
+     <Function ID="36" Hit="39"/>
      <Action>Toggle</Action>
      <Intensity Adjust="False">100</Intensity>
     </Button>

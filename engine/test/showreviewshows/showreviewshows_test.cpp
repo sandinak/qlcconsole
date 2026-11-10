@@ -49,10 +49,10 @@ struct Expect
    - PWR-12 (warning), from 1.3: the audience-tower washes' cones clip the cyc
      (16-22%) in Verse; real spill. The Truss Cyc boxes carry the Cyc stage look,
      so their light on the cyc counts as meant.
-   - No MOV-08: the Pose (AT-Spots at Soloist DS, from 1.3) and before
-     the Fan (Truss-Spots at the Riser Line, from 2.5) carries a dark preset, so
-     those Block cues don't swing their movers in lit. Fails here if a rebuilt
-     show loses it (courseshow_test markTheMoversInTheShows puts it back).
+   - No MOV-08: lesson 1.3 marks the AT-Spots in the Pose (aimed at Soloist DS, level
+     Out) and lesson 2.5 the Truss-Spots in 1.0.6 Dance Break (Riser Line), so the
+     Solo and the Fan don't swing their movers in lit. The course test builds the
+     shows from those steps; a rebuilt show that loses them fails here.
    - CUE-08 (note), from 2.1: Verse releases layers with no base cue.
    - CUE-15 (note), from 2.7: sub-cues on Sub GO, no widget sends it yet.
    - TEACH-01 (note): 3.6's start is the teaching-mode lesson.

@@ -14,7 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
-- **The course shows no longer trip Show Review's MOV-08.** From 1.3 on, the Pose carries a dark preset (AT-Spots aimed at Soloist DS, dimmer Out) and, from 2.5, the cue before the Fan does too (Truss-Spots at the Riser Line), so the movers are in place before those Block cues light them. `showreviewshows_test` no longer expects MOV-08 on any show.
+- **The course shows no longer trip Show Review's MOV-08, and the course teaches the mark.** Lesson 1.3 now has a step that aims the AT-Spots in the Pose at level Out, and Lesson 2.5 one that does the same for the Truss-Spots in 1.0.6 Dance Break, so the movers turn in the dark before the Solo and Fan open them. The shipped shows are rebuilt from the lessons' steps (course test) and `showreviewshows_test` no longer expects MOV-08.
 
 ## [0.4.2] - 2026-11-09
 

@@ -126,6 +126,7 @@ brackets.
 | **Stage target** | A named place on stage (Soloist DS, Center) that moving lights can aim at. Library → All → Targets. [1.3] |
 | **Aim** | Point moving lights at a stage target: drop the target on the layer. The Position row then says *Aim Center*. [1.3] |
 | **Block cue** | A cue that starts from a dark stage, with nothing tracking into it (Mode: Block; **B** in the tree's **M** column). [1.3] |
+| **Mark (preset)** | Turning a moving light to its place in a cue where it is dark, so the audience never sees it swing in. In a cue: the light aimed, at the dimmer **Out**. Show Review's **MOV-08** warns when a Block cue lights movers nothing has positioned. [1.3] |
 | **Fade** | How long a change takes. **Fade in**: how long a cue takes to arrive; **fade out**: how long its lights take to go when the next cue takes over. [1.4] |
 | **Hold / follow** | How long a cue waits before the next one plays by itself (∞: waits for GO). A cue that plays by itself **follows**. [1.4] |
 | **Tracked in / Next cue receives** | On a cue's page: each layer tracking into the cue, where from and its values / what the cue after it starts from. [2.1] |

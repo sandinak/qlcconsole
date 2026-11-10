@@ -8,14 +8,14 @@
 | `lesson-1-1-finish.qlcc` | Lesson 1.1 done: *Spring Show / 01-Everybody Scream*, cues Pose, Verse, Chorus, made current. Lesson 0.8 opens it too. |
 | `lesson-1-2-start.qlcc` | Lesson 1.2's start (the same as 1.1's finish). |
 | `lesson-1-2-finish.qlcc` | 1.2 done: the verse Lavender at 40%, and 1.0.3 *Scream* with cue looks Red, Full. |
-| `lesson-1-3-start.qlcc` · `lesson-1-3-finish.qlcc` | 1.3: AT-W-ALL Warm White, Full, Aim Center in the verse; 1.0.4 *Solo* (Block) with the AT-Spots White, Full, Aim Soloist DS (their shutter opens by itself). |
+| `lesson-1-3-start.qlcc` · `lesson-1-3-finish.qlcc` | 1.3: AT-W-ALL Warm White, Full, Aim Center in the verse; 1.0.4 *Solo* (Block) with the AT-Spots White, Full, Aim Soloist DS (their shutter opens by itself); the AT-Spots marked in the Pose (Out, Aim Soloist DS). |
 | `lesson-1-4-start.qlcc` · `lesson-1-4-finish.qlcc` | 1.4: fades and a hold (Pose fade in 3 s, Verse 2 s, Scream hold 2 s and fade out 3 s, Solo fade in 3 s). |
 | `lesson-1-5-start.qlcc` | 1.5 runs the show: 1.4's finish. Nothing is built, so there is no finish file. |
 | `lesson-2-1-start.qlcc` · `lesson-2-1-finish.qlcc` | 2.1 (from 1.4's finish): the verse's StepTops released; 1.0.2.5 *Flash* (Cue-only) with StepTops White, Full. |
 | `lesson-2-2-start.qlcc` · `lesson-2-2-finish.qlcc` | 2.2: *Chorus Colour* (a copy of Magenta, violet after the note) in the palette folder *01-Everybody Scream*, on the chorus's Steps and TrussC-RGB. |
 | `lesson-2-3-start.qlcc` · `lesson-2-3-finish.qlcc` | 2.3: 1.0.5 *Bridge* (Block): the group set *Truss Sides* Blue, Full with a child Trusses SR in Amber; Steps Blue, 25% with a child US in White, Full. |
 | `lesson-2-4-start.qlcc` · `lesson-2-4-finish.qlcc` | 2.4: 1.0.6 *Dance Break* (Block): Steps in Chorus Colour with *Step Sparkle* in White; StepTops Blue, 25%; TrussW-RGB Blue with *Truss Wave* (effect palettes in *01-Everybody Scream*). |
-| `lesson-2-5-start.qlcc` · `lesson-2-5-finish.qlcc` | 2.5: 1.0.7 *Fan* (Block): Truss-Spots White, Full, aimed at the Riser Line; 1.0.8 *Button*: Spread −5, Red, fade in 1 s. |
+| `lesson-2-5-start.qlcc` · `lesson-2-5-finish.qlcc` | 2.5: 1.0.7 *Fan* (Block): Truss-Spots White, Full, aimed at the Riser Line, marked in 1.0.6 Dance Break (Out, Aim Riser Line); 1.0.8 *Button*: Spread −5, Red, fade in 1 s. |
 | `lesson-2-6-start.qlcc` · `lesson-2-6-finish.qlcc` | 2.6: the Hits section (*Red Stab*, *Glow*, *Faces*) and its Virtual Console page, a Toggle button each. |
 | `lesson-2-7-start.qlcc` · `lesson-2-7-finish.qlcc` | 2.7: the chorus's sub-cues 1.0.2.1 *Chorus*, 1.0.2.2 *Stomp* (Lanterns White, Full; Sub GO), 1.0.2.3 *Stomp Out* (Out; auto-follow 0.5 s). |
 | `lesson-3-5-start.qlcc` · `lesson-3-5-finish.qlcc` | 3.5 (from 2.7's finish): the list follows timecode, with a time on every cue but the Flash (Pose 00:00:02:00 … Button 00:02:20:00). |

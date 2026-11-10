@@ -52,7 +52,7 @@ Should the scream still have the white flash? Why?
    a hard start.
 6. Click **1.0.1 Verse**, then its **StepTops** row.
 7. Tick **Release after this cue**. The verse reads **1** under
-   **S**, **T** and **R**.
+   **S**, **2** under **T** and **1** under **R**.
 
    ![Release](../../images/lesson-2-1/release.png)
 

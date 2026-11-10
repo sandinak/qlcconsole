@@ -142,8 +142,8 @@ and modes.
 - **Exit ticket:** 1 — everything that tracks in: layers set by earlier
   cues that no cue since has changed or released (unless the cue is a
   Block cue). 2 — **S** counts the layers the chorus sets itself (1: the
-  Steps); **T** the layers tracking in (2: TrussC-RGB from the Pose and
-  AT-W-ALL from the verse). 3 — the step tops leave when the verse ends,
+  Steps); **T** the layers tracking in (3: TrussC-RGB and AT-Spots from the Pose,
+  and AT-W-ALL from the verse). 3 — the step tops leave when the verse ends,
   so they're dark in the chorus; the lavender is the verse's colour and
   muddied the chorus's magenta (one look per idea). 4 — (a) Block: the
   solo starts from a dark stage, a hard start, so the eye goes to the

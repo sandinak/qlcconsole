@@ -89,13 +89,23 @@ Switch roles after each part.
    **(1)** the aim, **(2)** Spread, **(3)** the order strip, **(4)** the
    plan view.
 
+### Mark the spots
+
+7. The Fan is a **Block** cue, so nothing tracks into it, and the spots
+   would swing onto the line lit (Lesson 1.3's mark). So turn them in the
+   cue before it, in the dark. Click **1.0.6 Dance Break**. Drag
+   **Truss-Spots** onto the dashed box, then **Out** and **Riser Line**,
+   each onto the **Truss-Spots** row.
+   - *You should see:* a **Truss-Spots** layer in the Dance Break, aimed
+     and dark. When the Fan opens them they are already on the line.
+
 ### The button
 
-7. Click **1.0.7 Fan**, then **+ Cue**, type `Button` and press
+8. Click **1.0.7 Fan**, then **+ Cue**, type `Button` and press
    **Return**.
    - *You should see:* **1.0.8 Button**, with a grey **⤳ Truss-Spots**
      row: the fan tracks in.
-8. Click the grey **Truss-Spots** row. On its **Spread** row, click **⋯ →
+9. Click the grey **Truss-Spots** row. On its **Spread** row, click **⋯ →
    −5**.
    - *You should see:* **Spread: −5**, the layer is the Button's own now,
      and the top bar reads **Changed: 1.0.8 Button**. The beams cross. In
@@ -105,20 +115,20 @@ Switch roles after each part.
      **Cross** acts only below Spread 0, and the plan says when it doesn't.
 
 ![The plan at Spread −5](../../images/lesson-2-5/line-cross.png)
-9. Click **1.0.8 Button** and drag **Red** onto the **Truss-Spots** row.
+10. Click **1.0.8 Button** and drag **Red** onto the **Truss-Spots** row.
    - *You should see:* red beams. The spots have no colour mixing: their
      colour wheel and their colour ring each turn to the slot nearest
      red.
-10. Type `1` in **Fade in** and press **Return**: on GO, the beams sweep
+11. Type `1` in **Fade in** and press **Return**: on GO, the beams sweep
     from the fan into the cross over one second.
 
 ![The button](../../images/lesson-2-5/rig-button.png)
 
 ### Save
 
-11. Save with **File ▸ Save As** → `Lesson2-5-yourname.qlcc` in
+12. Save with **File ▸ Save As** → `Lesson2-5-yourname.qlcc` in
     **Documents → qlcconsole**.
-12. Optional: play it. In the **Run** tab, click **1.0.7 Fan** to load it,
+13. Optional: play it. In the **Run** tab, click **1.0.7 Fan** to load it,
     press **GO**, then **GO** again for the button.
 
 ## Stuck?
@@ -126,6 +136,7 @@ Switch roles after each part.
 | Problem | Try |
 |---|---|
 | The beams don't move onto the line | Drop **Riser Line** on the **Truss-Spots** row, not the dashed box. |
+| The spots swing onto the line when the Fan plays | Mark them (step 7), in the cue before the Fan. |
 | The fan crossed too | You set −5 in the Fan. Undo (⌘Z), click **1.0.8 Button**, and set it there. |
 | No **Spread** row | It shows only under a Position that aims at a line. Check the row says **Aim Riser Line**. |
 | The spots are hard to see | In the Rig Overview, set **Room** to **Dim**. |
