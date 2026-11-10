@@ -89,6 +89,7 @@ private slots:
     /** Q145: the Rig Overview's controls are in a footer bar like the plot's. */
     void theRigOverviewHasAFooterBar();
     void hoveringThePlotKeepsItStill();
+    void theFooterReadoutNeverCoversTheViewControls();
     void initTestCase();
     void init();
     void cleanupTestCase();

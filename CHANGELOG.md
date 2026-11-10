@@ -19,6 +19,31 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 ### Added
 
 - **⇧⌘N (New here) works in Build ▸ Palettes and the Lighting Studio.** Palettes: a new palette of the kind you are on, in the folder you are on, open in the Workbench with its name ready to type (*New Gobo Palette in Act 1*). Lighting Studio: a Target Position at the pointer with its Aim palette, selected and ready to name. Same Edit ▸ New item and key, one undo step each.
+### New
+
+- **Plot handles: pipes, and a line's end swings.** A free electric
+  (horizontal pipe) gets end handles and the knob, as a truss has. Drag the
+  end of a truss, pipe or wall and that end goes where you put it while the
+  other stays, so it lengthens and turns at once; it stays straight within
+  3° of its line, catches another line's end or a deck's corner nearby,
+  Shift keeps it to 15°, otherwise it lands on the Snap grid; Alt/⌥ on any
+  handle goes free of every snap. A hover over a handle says what it does.
+  The readout gives the length in Settings' unit and the angle; one drag is
+  one undo, and the lights on it keep their place from the end that stayed.
+  A locked object you select shows its outline in red and what holds it
+  instead of handles. See
+  [Stretch and turn by hand](docs/features/lighting-studio.md#stretch-and-turn-by-hand).
+
+### Fixed
+
+- **The ruler's corner follows Settings ▸ Units.** It said "(m)" on a metre
+  grid with feet chosen; now it names your unit when a grid square is one of
+  it, and otherwise what a square is in your unit ("SR | SL (1 = 3' 3 3/8")").
+- **The plot's pointer readout is whole in a narrow window.** It sits at the
+  right of the footer, outside the part that scrolls, and is as wide as its
+  longest reading in feet and inches (it was cut to "Y: 8' 3"). Where the
+  footer has no room for it beside View and the turn button (a 1024-wide
+  window), it takes a line of its own under them, so they stay whole.
 
 ## [0.4.2] - 2026-11-09
 

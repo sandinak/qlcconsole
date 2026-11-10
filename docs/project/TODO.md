@@ -1620,13 +1620,17 @@ shutter in and out and turns its angle. Needs: a model for four cuts per
 light (in/out, angle), drawing them on the beam's footprint and in 3D, and
 what a definition can tell us. Hard; after the freeze.
 
-## Lighting Studio: handles on the plot (future, asked 2026-10-23)
+## Lighting Studio: handles on the plot (asked 2026-10-23)
 
 With the plot unlocked, objects get handles instead of only the editor:
 drag a wall's, truss's or pipe's **ends** to lengthen it, **⌥-drag an end**
-to rotate it about the other end, and so on for decks and scenery. After
-the feature freeze; needs a design pass (which objects, which handles, snap,
-undo as one step, how it reads in Front/Side).
+to rotate it about the other end, and so on for decks and scenery.
+**DONE 2026-11-10 (feat/043-plot-handles, docs/design/PLOT_HANDLES.md)**:
+pipes get handles, a line's end dragged swings it about the other (snaps
+to other ends, a 3° straight detent, Shift 15°, else the grid; ⌥ free),
+hover tips on the handles, a locked selection says what holds it.
+Open: handles in Front/Side (heights, trims), a boom's or stand's height on
+the plan, a plain stretch snapping to an end on its line, keyboard nudge.
 
 ## Eos import (docs/design/EOS_IMPORT_DESIGN.md)
 

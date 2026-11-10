@@ -48,6 +48,14 @@ private slots:
     void theBoomTopHandleIsHiddenWhileLocked();
     void groupFollowupPictures();
     void picturesForReview();
+
+    // Plot handles: pipes, ⌥ on a line's end, a held selection (PLOT_HANDLES.md)
+    void aLineEndSwingsAboutTheOtherEndAndSnaps();
+    void aPipeHasHandlesAndAltSwingsItsEndOneUndo();
+    void aSwungWallEndCatchesAnotherWallsEnd();
+    void aLockedLineShowsWhyAndNoHandles();
+    void aLineEndsHoverTipNamesTheSwingAndItsKeys();
+    void plotHandlesPictures();
 };
 
 #endif

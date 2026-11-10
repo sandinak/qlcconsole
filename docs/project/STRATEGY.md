@@ -447,7 +447,7 @@ Notes:
 | Duplicate a structure's setup (T1 → T2, T3) | 3 | 4 | Patch Others Like This | 4 | L | M | 3 | BUILT (0.4, sdup, 2026-11-01): Duplicate Setup to… in the plot's structure menu; hangers and child bars later |
 | W6 shared Library + command bar in Build | 3 | 4 | Show Tree Library, ShowTreeCommand | 4 | M | M | 2.4 | BUILT (0.4, w6, 2026-11-01): the Library lent to Build, a Command bar through the Operation Registry |
 | Show Review v1 (59 checks, CLI, panel) | 4 | 5 | ShowStatus, LookStackCheck, tracking | 8 | L | M | 2.5 | BUILT (0.5, rev, 2026-10-31): registry, accept with a note, `--review` CLI, chip and panel, 59 checks; open checks in TODO |
-| Plot handles (drag ends, ⌥-rotate) | 3 | 4 | Lighting Studio | 5 | M | M | 1.9 | LATER |
+| Plot handles (drag ends, ⌥-rotate) | 3 | 4 | Lighting Studio | 5 | M | M | 1.9 | BUILT (2026-11-10): pipes, a dragged line end swings with snaps (⌥ free), locked selection says why; Front/Side later |
 | Stage and inventory across show files | 3 | 4 | inventory, structures | 5 | M | M | 1.9 | LATER |
 | RDM find-and-address in the Patch dialog | 4 | 5 | RDM manager, Patch dialog | 6 | H | H | 2 | LATER (needs the rig) |
 | Signalling: stand-by/go cue lights, curtain | 3 | 4 | curtain fixture, cues | 6 | M | M | 1.6 | LATER |

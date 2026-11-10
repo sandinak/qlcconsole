@@ -26,6 +26,7 @@
 #include "scenery.h"
 #include "hanger.h"
 #include "truss.h"
+#include "pipe.h"
 
 /*********************************************************************
  * StageShape
@@ -127,6 +128,73 @@ StageShape StageShape::stretched(Handle h, const QPointF &pointer, double snapSt
     return s;
 }
 
+StageShape StageShape::swung(Handle h, const QPointF &endPoint) const
+{
+    if (h != EndPlusU && h != EndMinusU)
+        return *this;
+    StageShape s = *this;
+    const bool plus = (h == EndPlusU);
+    const QPointF fixed = handlePoint(plus ? EndMinusU : EndPlusU);
+    // Its length still runs from the minus end to the plus end.
+    const QPointF d = plus ? endPoint - fixed : fixed - endPoint;
+    const double l = qSqrt(d.x() * d.x() + d.y() * d.y());
+    const QPointF dir = l > 1e-9 ? d / l : u();
+    s.length = qMax(minLength, l);
+    s.angle = normalised(qRadiansToDegrees(qAtan2(dir.y(), dir.x())));
+    s.centre = plus ? fixed + dir * (s.length / 2.0) : fixed - dir * (s.length / 2.0);
+    return s;
+}
+
+StageShape StageShape::swungSnapped(Handle h, const QPointF &pointer, const QVector<QPointF> &otherEnds,
+                                    double magnet, double snapStep, bool constrain, double detentDeg,
+                                    bool *caught) const
+{
+    if (caught != nullptr)
+        *caught = false;
+    // Another end within reach: onto it exactly.
+    double best = magnet;
+    int hit = -1;
+    for (int i = 0; i < otherEnds.size(); ++i)
+    {
+        const double dist = QLineF(otherEnds.at(i), pointer).length();
+        if (dist <= best)
+        {
+            best = dist;
+            hit = i;
+        }
+    }
+    if (hit >= 0)
+    {
+        if (caught != nullptr)
+            *caught = true;
+        return swung(h, otherEnds.at(hit));
+    }
+    if (constrain)
+    {
+        const bool plus = (h == EndPlusU);
+        const QPointF fixed = handlePoint(plus ? EndMinusU : EndPlusU);
+        const QPointF d = plus ? pointer - fixed : fixed - pointer;
+        const double a = qRound(qRadiansToDegrees(qAtan2(d.y(), d.x())) / 15.0) * 15.0;
+        const QPointF dir(qCos(qDegreesToRadians(a)), qSin(qDegreesToRadians(a)));
+        double l = d.x() * dir.x() + d.y() * dir.y();
+        l = qMax(minLength, snapped(l, snapStep));
+        return swung(h, plus ? fixed + dir * l : fixed - dir * l);
+    }
+    if (detentDeg > 0.0)
+    {
+        // Near enough the way it faces now: it stays straight, as a stretch.
+        const bool plus = (h == EndPlusU);
+        const QPointF fixed = handlePoint(plus ? EndMinusU : EndPlusU);
+        const QPointF d = plus ? pointer - fixed : fixed - pointer;
+        const double a = qRadiansToDegrees(qAtan2(d.y(), d.x()));
+        if (qAbs(normalised(a - angle)) <= detentDeg)
+            return stretched(h, pointer, snapStep);
+    }
+    if (snapStep > 0.0)
+        return swung(h, QPointF(snapped(pointer.x(), snapStep), snapped(pointer.y(), snapStep)));
+    return swung(h, pointer);
+}
+
 StageShape StageShape::turnedTo(double angleDeg) const
 {
     StageShape s = *this;
@@ -200,6 +268,27 @@ StageShape StageShape::of(MonitorProperties *props, const QString &kind, quint32
         s.angle = qRadiansToDegrees(qAtan2(dir.y(), dir.x()));
         s.stretchU = true;
         s.canRotate = true;
+        s.canSwing = true;
+        return s;
+    }
+    if (kind == QLatin1String("pipe"))
+    {
+        const Pipe *b = props->pipe(id);
+        // A boom stands up; one hung on a truss, a stand or a pipe follows it.
+        if (b == nullptr || b->isVertical() || b->isTrussHung() || b->isStandMounted()
+            || b->isBarOnPipe())
+            return s;
+        const double r = qDegreesToRadians(double(b->runAngle()));
+        const QPointF dir(qCos(r), qSin(r));
+        s.kind = kind;
+        s.id = id;
+        s.length = double(b->length());
+        s.width = qMax(0.05, double(b->diameter()));
+        s.centre = QPointF(double(b->originX()), double(b->originY())) + dir * (s.length / 2.0);
+        s.angle = normalised(double(b->runAngle()));
+        s.stretchU = true;
+        s.canRotate = true;
+        s.canSwing = true;
         return s;
     }
     if (kind == QLatin1String("scenery"))
@@ -218,6 +307,7 @@ StageShape StageShape::of(MonitorProperties *props, const QString &kind, quint32
         s.stretchU = true;
         // A cyc hangs square across the back of the stage: it only stretches.
         s.canRotate = sc->kind() != Scenery::Cyclorama;
+        s.canSwing = s.canRotate;
         return s;
     }
     return s;
@@ -245,13 +335,13 @@ bool StageShape::apply(MonitorProperties *props) const
         if (t == nullptr)
             return false;
         const QPointF oldO(double(t->origin().x()), double(t->origin().y()));
-        const QPointF oldDir = t->direction();
         const QPointF dir = u();
         const QPointF o = centre - dir * (length / 2.0);
-        /* What hangs on it is placed by how far along it is: when the near
-           end moves, each keeps its place on the stage by the same shift. */
-        const QPointF moved = o - oldO;
-        const float shift = float(moved.x() * oldDir.x() + moved.y() * oldDir.y());
+        /* What hangs on it is placed by how far along it is from the near
+           end: when that end moves (stretched or swung about the far end),
+           each keeps its distance from the far end, which stayed put. */
+        const float shift = QLineF(o, oldO).length() > 1e-6
+                          ? t->length() - float(length) : 0.0f;
         t->setOrigin(QVector3D(float(o.x()), float(o.y()), t->origin().z()));
         t->setDirection(dir);
         t->setLength(float(length));
@@ -273,6 +363,38 @@ bool StageShape::apply(MonitorProperties *props) const
             foreach (Hanger *h, props->hangers())
                 if (h != nullptr && h->parentKind() == Hanger::OnTruss && h->parentId() == id)
                     h->setAlong(qBound(0.0f, h->along() - shift, float(length)));
+        }
+        return true;
+    }
+    if (kind == QLatin1String("pipe"))
+    {
+        Pipe *b = props->pipe(id);
+        if (b == nullptr)
+            return false;
+        const QPointF oldO(double(b->originX()), double(b->originY()));
+        const QPointF o = centre - u() * (length / 2.0);
+        // As a truss: its lights and bars keep their distance from the far end.
+        const float shift = QLineF(o, oldO).length() > 1e-6
+                          ? b->length() - float(length) : 0.0f;
+        b->setOriginX(float(o.x()));
+        b->setOriginY(float(o.y()));
+        b->setRunAngle(float(angle));
+        b->setLength(float(length));
+        if (!qFuzzyIsNull(shift))
+        {
+            foreach (quint32 fid, props->fixtureItemsID())
+            {
+                if (!props->hasFixtureRigProps(fid))
+                    continue;
+                FixtureRigProps rp = props->fixtureRigProps(fid);
+                if (rp.pipeId != id)
+                    continue;
+                rp.pipeOffset = qBound(0.0f, rp.pipeOffset - shift, float(length));
+                props->setFixtureRigProps(fid, rp);
+            }
+            foreach (Pipe *bar, props->pipes())
+                if (bar != nullptr && bar->parentPipeId() == id)
+                    bar->setParentPipeOffset(qBound(0.0f, bar->parentPipeOffset() - shift, float(length)));
         }
         return true;
     }
@@ -321,9 +443,51 @@ void ShapeHandles::setShape(const StageShape &shape, const QPolygonF &outline,
     m_outline = outline;
     m_points = points;
     m_pivot = pivot;
+    m_held.clear();
     m_radius = qMax(0.5, radius);
+    recomputePens();
     recomputeBounds();
     update();
+}
+
+void ShapeHandles::setHeld(const StageShape &shape, const QPolygonF &outline, const QString &reason,
+                           const QPointF &at, qreal radius)
+{
+    prepareGeometryChange();
+    m_shape = shape;
+    m_outline = outline;
+    m_points.clear();
+    m_ghost.clear();
+    m_pivot = QPointF();
+    m_held = reason;
+    m_radius = qMax(0.5, radius);
+    recomputePens();
+    recomputeBounds();
+    m_label->setText(reason);
+    m_label->setPos(at);
+    m_label->setVisible(!reason.isEmpty());
+    update();
+}
+
+void ShapeHandles::recomputePens()
+{
+    const QColor accent(0, 190, 255);
+    const QColor ink(20, 20, 20);
+    const QColor ghost(255, 210, 60);
+    const qreal w = m_radius / 3.5;
+    m_edgePen = QPen(accent, w * 0.7);
+    m_ghostPen = QPen(ghost, w);
+    m_ghostPen.setStyle(Qt::DashLine);
+    m_stemPen = QPen(accent, w * 0.6);
+    m_handlePen = QPen(ink, w);
+    m_arcPen = QPen(ink, w * 0.8);
+    // The lock red the plot draws a held object in (ItemLock).
+    m_heldPen = QPen(QColor(220, 70, 70), w * 0.8);
+    m_heldPen.setStyle(Qt::DashLine);
+    m_accentBrush = QBrush(accent);
+    m_ghostBrush = QBrush(QColor(255, 210, 60, 40));
+    m_handleBrush = QBrush(QColor(255, 255, 255));
+    m_arc = QRectF(-m_radius * 0.6, -m_radius * 0.6, m_radius * 1.2, m_radius * 1.2);
 }
 
 void ShapeHandles::recomputeBounds()
@@ -365,7 +529,7 @@ void ShapeHandles::setPreview(const QPolygonF &ghost, const QString &readout, co
     recomputeBounds();
     if (ghost.isEmpty() || readout.isEmpty())
     {
-        m_label->hide();
+        m_label->setVisible(!m_held.isEmpty());
     }
     else
     {
@@ -378,7 +542,7 @@ void ShapeHandles::setPreview(const QPolygonF &ghost, const QString &readout, co
 
 QString ShapeHandles::readout() const
 {
-    return m_label->isVisible() ? m_label->text() : QString();
+    return m_label->isVisible() && m_held.isEmpty() ? m_label->text() : QString();
 }
 
 QRectF ShapeHandles::boundingRect() const
@@ -388,51 +552,50 @@ QRectF ShapeHandles::boundingRect() const
 
 void ShapeHandles::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *)
 {
+    /* Pens and brushes are the item's, made when its shape was set: nothing
+       here allocates, however often the plot repaints. */
+    if (!m_held.isEmpty())
+    {
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        painter->setPen(m_heldPen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawPolygon(m_outline);
+        return;
+    }
     if (m_points.isEmpty())
         return;
     painter->setRenderHint(QPainter::Antialiasing, true);
-    const QColor accent(0, 190, 255);
-    const qreal w = m_radius / 3.5;
 
     // Its footprint, and while dragging, the one it will take.
-    QPen edge(accent, w * 0.7);
-    painter->setPen(edge);
+    painter->setPen(m_edgePen);
     painter->setBrush(Qt::NoBrush);
     painter->drawPolygon(m_outline);
     if (!m_ghost.isEmpty())
     {
-        QPen dash(QColor(255, 210, 60), w);
-        dash.setStyle(Qt::DashLine);
-        painter->setPen(dash);
-        painter->setBrush(QColor(255, 210, 60, 40));
+        painter->setPen(m_ghostPen);
+        painter->setBrush(m_ghostBrush);
         painter->drawPolygon(m_ghost);
-    }
-
-    // The knob's stem from the edge it stands off.
-    const QPointF knob = handlePos(StageShape::RotateKnob);
-    if (!knob.isNull())
-    {
-        painter->setPen(QPen(accent, w * 0.6));
-        painter->drawLine(m_pivot, knob);
     }
 
     for (const auto &p : std::as_const(m_points))
     {
-        painter->setPen(QPen(QColor(20, 20, 20), w));
         if (p.first == StageShape::RotateKnob)
         {
-            painter->setBrush(accent);
+            // The knob's stem from the edge it stands off.
+            painter->setPen(m_stemPen);
+            painter->drawLine(m_pivot, p.second);
+            painter->setPen(m_handlePen);
+            painter->setBrush(m_accentBrush);
             painter->drawEllipse(p.second, m_radius * 1.1, m_radius * 1.1);
             // A turning arrow on it, so it reads as "turn" and not "stretch".
-            painter->setPen(QPen(QColor(20, 20, 20), w * 0.8));
+            painter->setPen(m_arcPen);
             painter->setBrush(Qt::NoBrush);
-            const QRectF arc(p.second.x() - m_radius * 0.6, p.second.y() - m_radius * 0.6,
-                             m_radius * 1.2, m_radius * 1.2);
-            painter->drawArc(arc, 30 * 16, 280 * 16);
+            painter->drawArc(m_arc.translated(p.second), 30 * 16, 280 * 16);
         }
         else
         {
-            painter->setBrush(QColor(255, 255, 255));
+            painter->setPen(m_handlePen);
+            painter->setBrush(m_handleBrush);
             const qreal s = (p.first >= StageShape::CornerPP) ? m_radius * 0.8 : m_radius;
             painter->drawRect(QRectF(p.second.x() - s, p.second.y() - s, 2 * s, 2 * s));
         }

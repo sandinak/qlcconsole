@@ -70,6 +70,7 @@
 #define private public
 #include "showstatus.h"
 #include "monitor.h"
+#include "measurementunits.h"
 #include "fixturefields.h"
 #include "sprinklespansdialog.h"
 #include "righeads.h"
@@ -1323,10 +1324,14 @@ void Monitor_Test::hoveringThePlotKeepsItStill()
     MonitorGraphicsView *gv = mon.m_graphicsView;
     QLabel *readout = mon.m_readoutLabel;
     QVERIFY(gv != nullptr && readout != nullptr);
+    // The readout is pinned beside the footer's bar, not in it (UX-36).
     ShrinkableBar *bar = nullptr;
-    for (QWidget *w = readout->parentWidget(); w != nullptr && bar == nullptr; w = w->parentWidget())
-        bar = dynamic_cast<ShrinkableBar *>(w);
+    if (readout->parentWidget() != nullptr)
+        for (QObject *o : readout->parentWidget()->children())
+            if (bar == nullptr)
+                bar = dynamic_cast<ShrinkableBar *>(o);
     QVERIFY(bar != nullptr);
+    QVERIFY(!bar->isAncestorOf(readout));
 
     // The label takes the same room whatever it reads.
     const QString was = readout->text();
@@ -1410,12 +1415,58 @@ void Monitor_Test::hoveringThePlotKeepsItStill()
        the row is never squashed under the scroll bar (where the notice it
        just showed can't be read). */
     mon.showNotice(QString("A long notice that the row can only hold by scrolling sideways ").repeated(3));
-    QApplication::processEvents();
-    QApplication::processEvents();
+    for (int i = 0; i < 5; ++i)     // the bar, its row (with the readout), the page: a layout pass each
+        QApplication::processEvents();
     QVERIFY(bar->horizontalScrollBar()->maximum() > 0);
     QVERIFY2(bar->viewport()->height() >= bar->widget()->sizeHint().height(),
              qPrintable(QString("row %1 px tall in a %2 px viewport").arg(bar->widget()->sizeHint().height())
                         .arg(bar->viewport()->height())));
+}
+
+/* UX-34: at the smallest supported window (1024x640) the footer's View
+   combo, the turn button and the pointer readout are each whole and none
+   covers another: the readout takes a line of its own when the row has no
+   room for it beside them. Wide, it sits beside them on the one line. */
+void Monitor_Test::theFooterReadoutNeverCoversTheViewControls()
+{
+    for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        QScopedPointer<Doc> docOwner(new Doc(this));
+        QWidget parent;
+        Monitor mon(&parent, docOwner.data());
+        parent.resize(sz);
+        mon.resize(sz);
+        parent.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&parent));
+        for (int i = 0; i < 5; ++i)
+            QApplication::processEvents();
+        QLabel *readout = mon.m_readoutLabel;
+        QComboBox *view = mon.m_povCombo;
+        QToolButton *turn = mon.findChild<QToolButton *>(QStringLiteral("plotRotate"));
+        QVERIFY(readout != nullptr && view != nullptr && turn != nullptr && mon.m_footerBar != nullptr);
+        // A long reading, in Settings' unit (feet and inches by default).
+        readout->setText(QString("SL %1   Y: -%2").arg(MeasurementUnits::formatLength(37769.0),
+                                                       MeasurementUnits::formatLength(27120.9)));
+        QApplication::processEvents();
+
+        auto onWindow = [&parent](QWidget *w) { return QRect(w->mapTo(&parent, QPoint(0, 0)), w->size()); };
+        const QRect vp = onWindow(mon.m_footerBar->viewport());
+        const QRect r = onWindow(readout), v = onWindow(view), t = onWindow(turn);
+        const QString where = QString("%1x%2: view %3 turn %4 readout %5 bar viewport %6")
+            .arg(sz.width()).arg(sz.height())
+            .arg(QString("%1,%2 %3x%4").arg(v.x()).arg(v.y()).arg(v.width()).arg(v.height()))
+            .arg(QString("%1,%2 %3x%4").arg(t.x()).arg(t.y()).arg(t.width()).arg(t.height()))
+            .arg(QString("%1,%2 %3x%4").arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height()))
+            .arg(QString("%1,%2 %3x%4").arg(vp.x()).arg(vp.y()).arg(vp.width()).arg(vp.height()));
+        // Whole: on the window, inside the bar's visible part, at their full size.
+        QVERIFY2(vp.contains(v) && vp.contains(t), qPrintable(where));
+        QVERIFY2(QRect(QPoint(0, 0), parent.size()).contains(r), qPrintable(where));
+        QVERIFY2(view->width() >= view->minimumSizeHint().width(), qPrintable(where));
+        QVERIFY2(turn->width() >= turn->sizeHint().width(), qPrintable(where));
+        QVERIFY2(readout->width() >= readout->fontMetrics().horizontalAdvance(readout->text()), qPrintable(where));
+        // None over another.
+        QVERIFY2(!r.intersects(v) && !r.intersects(t) && !r.intersects(vp), qPrintable(where));
+    }
 }
 
 /* Q145: the Rig Overview's controls are in a footer bar under the picture,
