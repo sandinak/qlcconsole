@@ -310,6 +310,16 @@ if ! LINKS_OUT=$(python3 "$REPO/tools/check-doc-links.py" "$REPO" 2>&1); then
     exit 1
 fi
 
+# Every UI name a lesson tells students to click must exist in the app
+# (tools/check-course-ui-names.py): the course drifted to old wording once.
+if ! CUN_OUT=$(python3 -I "$REPO/tools/check-course-ui-names.py" --self-test 2>&1 \
+        && python3 -I "$REPO/tools/check-course-ui-names.py" "$REPO" 2>&1); then
+    echo >&2 "$CUN_OUT"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "tools/check-course-ui-names.py failed: a lesson names UI the app doesn't have. Nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
+fi
+
 # The performance guard's own logic (baselines, tolerances, verdicts): its
 # self-test, not a benchmark -- no build, under a second.
 if ! PERF_OUT=$(python3 "$REPO/tools/perf/guard.py" --self-test 2>&1); then

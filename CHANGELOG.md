@@ -12,6 +12,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Tooling
+
+- **The course can't name a button the app doesn't have.** `tools/check-course-ui-names.py` (in the gate and CI, next to the
+  doc-link check) reads the bold UI names and menu paths in every lesson (**File ▸ Open**, **Add Fixture…**), case and
+  trailing "…" included, and fails on any with no matching string in the app, listing file:line and the nearest app string.
+  Keys, show content and real-world names are in its commented allowlist; stale text found but not yet fixed is in two
+  short lists in the script.
+
 ## [0.4.2] - 2026-11-09
 
 ### Added
