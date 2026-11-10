@@ -485,12 +485,22 @@ public:
         double speed = 1.0;
         /** Say the speed step: it is not x1, or it changed a moment ago. */
         bool speedShown = false;
+        /** The beam's width on the subject now, centimetres (the D-pad's
+         *  live size, else the Framing's from the person's height, else Size
+         *  on Subject); 0: none set. */
+        double sizeCm = 0.0;
+        /** With no size: the beam angle (degrees; 0: the scene's own zoom). */
+        double beamDeg = 0.0;
+        /** Say the size: the D-pad changed it for this run (the look does
+         *  not have it yet), or a moment ago. */
+        bool sizeShown = false;
 
         bool operator==(const FollowSpotStatus &o) const
         {
             return state == o.state && sceneId == o.sceneId && paletteId == o.paletteId
                    && targetId == o.targetId && live == o.live && speed == o.speed
-                   && speedShown == o.speedShown;
+                   && speedShown == o.speedShown && sizeCm == o.sizeCm && beamDeg == o.beamDeg
+                   && sizeShown == o.sizeShown;
         }
         bool operator!=(const FollowSpotStatus &o) const { return !(*this == o); }
     };
@@ -499,6 +509,25 @@ public:
     static QString followSpotSpeedText(double multiplier);
     /** The follow spot's Top Speed now, metres a second (x1). */
     double followSpotTopSpeed() const;
+    /** "Size 4' 0\"" (Settings > Units) or, with no size, "Beam 24°": the
+     *  follow spot's beam as the indicators say it. */
+    static QString followSpotSizeText(double sizeCm, double beamDeg);
+    /** D-pad Right (+1) / Left (-1) while a follow spot plays: open or close
+     *  its beam a step (12%, to a whole inch, centimetre or degree) for this
+     *  run -- its size on the subject, or its beam angle when it has no
+     *  size. Save Positions keeps it in the look.
+     *  False when nothing changed (no follow spot playing, at a limit, no
+     *  zoom to step). */
+    bool stepFollowSpotSize(int dir);
+    /** The step's ratio, and the limits it holds to. */
+    static constexpr double kFollowSizeStep = 1.12;
+    static constexpr double kFollowSizeMinCm = 10.0;
+    static constexpr double kFollowSizeMaxCm = 800.0;
+    static constexpr double kFollowBeamMinDeg = 1.0;
+    static constexpr double kFollowBeamMaxDeg = 90.0;
+    /** Framing's width on a person @p heightM metres tall, straight on
+     *  (centimetres): what followspot.js asks a level head for. 0: Custom. */
+    static double followSpotFramingWidthCm(int framing, double heightM);
     /** The follow spot's motion (the MasterTimer steps it): its settings,
      *  sticks and speed step. Tests reach in here. */
     FollowSpotMover *followSpotMover() const { return m_followMover; }
@@ -649,6 +678,9 @@ signals:
      *  pan/tilt values (to scene or to a PanTilt palette).  The UI uses
      *  this to enable the Save button. */
     void designPositionWritten();
+    /** Save Positions wrote the pad's beam size into follow-spot look
+     *  @p paletteId: an editor showing it shows the new values. */
+    void followSpotLookKept(quint32 paletteId);
 
     /** Emitted whenever the followspot beam position changes in Design mode.
      *  @p visible is false when no floor position is computable (hide pin).
@@ -970,6 +1002,13 @@ private:
     FollowSpotMover *m_followMover = nullptr;
     /** When the D-pad last stepped the follow spot's speed (said for a moment). */
     QElapsedTimer m_followSpeedClock;
+    QElapsedTimer m_followSizeClock;    ///< the last D-pad size step
+    /** The follow spot's beam now: size (cm) or angle (deg), and whether the
+     *  pad has it for this run (an override on the playing effect). */
+    void followSpotBeam(quint32 look, quint32 sceneId, quint32 targetId,
+                        double &sizeCm, double &beamDeg, bool &live) const;
+    /** Save Positions: the pad's size or angle into the look itself. */
+    void keepFollowSpotSize(Scene *scene);
     /** The free-fly velocity last sent to the effect (it is sent while it moves). */
     bool m_followVelocitySent = false;
     /** The feel of @p scene's follow spot (its look's Top Speed, Fine

@@ -61,6 +61,7 @@ EffectInstance::EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteI
     }
 
     m_wledEffect = pal->wledEffect();
+    m_isFollowSpot = pal->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive);
 
     // Load the script
     if (!m_script.load(pal->scriptPath()))
@@ -283,7 +284,12 @@ void EffectInstance::clearOverride(const QString &name)
     }
     for (const EffectScript::ParamDef &d : m_script.paramDefs())
         if (d.name == name)
+        {
             m_paramValues[name] = d.defaultValue;
+            return;
+        }
+    // Not the look's nor the script's (the follow spot's live size): gone.
+    m_paramValues.remove(name);
 }
 
 void EffectInstance::clearOverrides()
@@ -386,6 +392,8 @@ void EffectInstance::runTick()
         m_transitionOut = sc->transitionOut();
         m_sceneRunning = sc->isRunning() && m_offStageMs < 0;
         m_sceneElapsed = sc->elapsed();
+        if (m_isFollowSpot)
+            syncFollowFraming(sc);
         if (m_transitionIn.isActive() && !m_transitionMapInBuilt)
         {
             m_transitionMapIn = TransitionMap(m_doc, sc->transitionFixtures(), m_transitionIn.shape);
@@ -1835,6 +1843,33 @@ QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalet
     return aimAt;
 }
 
+void EffectInstance::syncFollowFraming(Scene *sc)
+{
+    const double now[4] = { m_paramValues.value(QStringLiteral("framing"), 0.0),
+                            m_paramValues.value(QStringLiteral("sizeOnSubject"), 0.0),
+                            m_paramValues.value(QStringLiteral("liveSize"), 0.0),
+                            m_paramValues.value(QStringLiteral("liveBeam"), 0.0)
+                            + m_paramValues.value(QStringLiteral("beamAngle"), 0.0) * 1000.0 };
+    m_framed = now[0] >= 0.5;
+    if (!m_framedSent || sc->followFramed() != m_framed)
+    {
+        sc->setFollowFramed(m_framed);
+        m_framedSent = true;
+        m_reaimTicks = 3;
+    }
+    for (int i = 0; i < 4; ++i)
+        if (now[i] != m_beamSig[i])
+        {
+            m_beamSig[i] = now[i];
+            m_reaimTicks = 3;
+        }
+    if (m_reaimTicks > 0)
+    {
+        --m_reaimTicks;
+        sc->requestReaim();
+    }
+}
+
 QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
                                            const BeamOcclusion::Model &sight, int head)
 {
@@ -1861,7 +1896,7 @@ QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
     // Pointed where its beam covers the subject best; sized
     // at the subject itself (its chest), so the size it asks
     // the zoom for does not move with the aim it gets.
-    const QVector3D tp = AimSolver::aimPointFor(m_doc, member, st, true);
+    const QVector3D tp = AimSolver::aimPointFor(m_doc, member, st, true, m_framed);
     const QVector3D subject = mp->targetAimPoint(st, true);
     AimSolver::Frame frame;
     if (AimSolver::frameFor(m_doc, member, frame))
@@ -1871,6 +1906,14 @@ QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
         so.setProperty("tilt", double(sol.tiltDeg));
         so.setProperty("reachMargin", double(sol.marginDeg));
         so.setProperty("distance", double((subject - frame.position).length()));
+        // level: how flat the throw comes in (1 straight on, toward 0 from
+        // overhead) -- a beam stretches down an upright body by 1 / level;
+        // height: the person's own (metres), 0 for anything but a Person.
+        // The followspot's Framing sizes from these.
+        const QVector3D toSubject = subject - frame.position;
+        const double len = double(toSubject.length());
+        so.setProperty("level", len > 0.01 ? std::hypot(double(toSubject.x()), double(toSubject.y())) / len : 1.0);
+        so.setProperty("height", double(mp->targetFigureHeight(st)));
         // blocked / blockedBy / clearance: whether anything solid on stage
         // stands between the head and the point it is aimed at.
         setSight(so, AimSolver::lineOfSight(m_doc, sight, fid, frame.position, tp));

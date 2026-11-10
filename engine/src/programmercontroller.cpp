@@ -46,6 +46,8 @@
 #include "doc.h"
 #include "fixture.h"
 #include "fixturegroup.h"
+#include "measurementunits.h"
+#include "righeads.h"
 #include "function.h"
 #include "scene.h"
 #include "scenevalue.h"
@@ -2677,8 +2679,9 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     if (role == GamepadRole::None && !active)
         return false;
     /* A follow spot on and no tool: the right stick is its fine stick, the
-       D-pad's Up and Down its speed step (before the Run map, which has no
-       use for them and would swallow them). */
+       D-pad's Up and Down its speed step, Left and Right its beam size
+       (before the Run map, which has no use for them and would swallow
+       them). */
     if (!active && !isPan && !isTilt && followSpotTakes(universe, channel, int(role), value))
         return true;
 
@@ -3428,6 +3431,9 @@ void ProgrammerController::commitDesignJoystick()
     if (m_focusedSceneId == Function::invalidId()) return;
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId));
     if (!scene) return;
+
+    // The beam size the pad set while following: into the look.
+    keepFollowSpotSize(scene);
 
     // Aim palette: the target was already updated live on every joystick tick.
     // Just finalize (mark edited if not already) and reset stage-aim state.
@@ -4293,6 +4299,9 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
             st.speed = m_followMover->multiplier();
             st.speedShown = st.speed != 1.0
                             || (m_followSpeedClock.isValid() && m_followSpeedClock.elapsed() < 2000);
+            bool padSize = false;
+            followSpotBeam(st.paletteId, st.sceneId, st.targetId, st.sizeCm, st.beamDeg, padSize);
+            st.sizeShown = padSize || (m_followSizeClock.isValid() && m_followSizeClock.elapsed() < 2000);
             if (!stickPatched())
                 st.state = FollowSpotStatus::NoStick;
             else if (m_followMovedClock.isValid() && m_followMovedClock.elapsed() < 400)
@@ -4320,6 +4329,177 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
 QString ProgrammerController::followSpotSpeedText(double multiplier)
 {
     return tr("Speed ×%1").arg(QLocale().toString(multiplier, 'g', 3));
+}
+
+QString ProgrammerController::followSpotSizeText(double sizeCm, double beamDeg)
+{
+    if (sizeCm > 0.0)
+        return tr("Size %1").arg(MeasurementUnits::formatLength(sizeCm * 10.0));
+    if (beamDeg > 0.0)
+        return tr("Beam %1°").arg(QLocale().toString(beamDeg, 'f', 0));
+    return QString();
+}
+
+double ProgrammerController::followSpotFramingWidthCm(int framing, double heightM)
+{
+    /* followspot.js's FRAMES, for a head that comes in level: the share of
+       the person's height from just over the head down. */
+    switch (framing)
+    {
+    case 1: return 40.0 * heightM;      // head & shoulders
+    case 2: return 60.0 * heightM;      // waist up
+    case 3: return 110.0 * heightM;     // full body
+    default: return 0.0;
+    }
+}
+
+void ProgrammerController::followSpotBeam(quint32 look, quint32 sceneId, quint32 targetId,
+                                          double &sizeCm, double &beamDeg, bool &live) const
+{
+    sizeCm = beamDeg = 0.0;
+    live = false;
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    const QLCPalette *pal = m_doc->palette(look);
+    auto param = [&](const QString &name, bool *fromRunner) {
+        bool ok = false;
+        const double v = runner != nullptr ? runner->paramValue(look, name, &ok) : 0.0;
+        if (fromRunner != nullptr)
+            *fromRunner = ok;
+        if (ok)
+            return v;
+        return pal != nullptr ? pal->effectParamValues().value(name, 0.0) : 0.0;
+    };
+    bool padSize = false, padBeam = false;
+    const double liveSize = param(QStringLiteral("liveSize"), &padSize);
+    const double liveBeam = param(QStringLiteral("liveBeam"), &padBeam);
+    if (padSize && liveSize > 0.0)
+    {
+        sizeCm = liveSize;
+        live = true;
+        return;
+    }
+    const int framing = int(std::lround(param(QStringLiteral("framing"), nullptr)));
+    if (framing > 0)
+    {
+        double h = StageTarget::defaultPersonHeight();
+        if (MonitorProperties *mp = m_doc->monitorProperties())
+            if (const StageTarget *t = mp->stageTarget(targetId))
+                if (mp->targetFigureHeight(t) > 0.0f)
+                    h = mp->targetFigureHeight(t);
+        sizeCm = followSpotFramingWidthCm(framing, h);
+        return;
+    }
+    const double custom = param(QStringLiteral("sizeOnSubject"), nullptr);
+    if (custom > 0.0)
+    {
+        sizeCm = custom;
+        return;
+    }
+    if (padBeam && liveBeam > 0.0)
+    {
+        beamDeg = liveBeam;
+        live = true;
+        return;
+    }
+    beamDeg = param(QStringLiteral("beamAngle"), nullptr);
+}
+
+bool ProgrammerController::stepFollowSpotSize(int dir)
+{
+    const FollowSpotStatus &st = m_followStatus;
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    if (st.state == FollowSpotStatus::Off || st.paletteId == UINT_MAX || runner == nullptr
+        || !runner->isPlaying(st.paletteId))
+        return false;
+    double sizeCm = 0.0, beamDeg = 0.0;
+    bool live = false;
+    followSpotBeam(st.paletteId, st.sceneId, st.targetId, sizeCm, beamDeg, live);
+    const double k = dir > 0 ? kFollowSizeStep : 1.0 / kFollowSizeStep;
+    if (sizeCm > 0.0)
+    {
+        /* To the unit's own grain (a whole inch in feet and inches, a whole
+           centimetre in metric), so the footer reads 4' 6", not 4' 5 3/4";
+           at least one grain a step. */
+        const MeasurementUnits::LengthUnit u = MeasurementUnits::preferredLength();
+        const double grain = u == MeasurementUnits::Feet || u == MeasurementUnits::Inches ? 2.54 : 1.0;
+        double to = std::round(sizeCm * k / grain) * grain;
+        if (dir > 0 && to < sizeCm + grain * 0.5)
+            to = std::round(sizeCm / grain) * grain + grain;
+        else if (dir < 0 && to > sizeCm - grain * 0.5)
+            to = std::round(sizeCm / grain) * grain - grain;
+        to = qBound(kFollowSizeMinCm, to, kFollowSizeMaxCm);
+        if (qAbs(to - sizeCm) < 0.01)
+            return false;
+        return runner->setParamOverride(st.paletteId, QStringLiteral("liveSize"), to);
+    }
+    if (beamDeg <= 0.0)
+    {
+        // The beam the heads have now: the first with a lens that zooms.
+        if (const Scene *scene = qobject_cast<const Scene *>(m_doc->function(st.sceneId)))
+        {
+            QList<quint32> fids = scene->fixtures();
+            for (quint32 gid : scene->fixtureGroups())
+                if (const FixtureGroup *g = m_doc->fixtureGroup(gid))
+                    fids << g->fixtureList();
+            for (quint32 fid : fids)
+            {
+                Fixture *fx = m_doc->fixture(fid);
+                if (fx == nullptr || !RigHeads::hasZoomChannel(fx))
+                    continue;
+                beamDeg = RigHeads::beamAngle(fx, fx->channelValues());
+                if (beamDeg > 0.0)
+                    break;
+            }
+        }
+        if (beamDeg <= 0.0)
+            return false;       // nothing to zoom
+    }
+    // A whole degree, and at least one a step.
+    double to = std::round(beamDeg * k);
+    if (dir > 0 && to < beamDeg + 0.5)
+        to = std::round(beamDeg) + 1.0;
+    else if (dir < 0 && to > beamDeg - 0.5)
+        to = std::round(beamDeg) - 1.0;
+    to = qBound(kFollowBeamMinDeg, to, kFollowBeamMaxDeg);
+    if (qAbs(to - beamDeg) < 0.01)
+        return false;
+    return runner->setParamOverride(st.paletteId, QStringLiteral("liveBeam"), to);
+}
+
+void ProgrammerController::keepFollowSpotSize(Scene *scene)
+{
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    if (scene == nullptr || runner == nullptr)
+        return;
+    for (quint32 pid : scene->palettes())
+    {
+        QLCPalette *look = m_doc->palette(pid);
+        if (!isFollowSpotPalette(look))
+            continue;
+        const QHash<QString, double> over = runner->paramOverrides(pid);
+        bool changed = false;
+        if (over.value(QStringLiteral("liveSize"), 0.0) > 0.0)
+        {
+            // The width the pad set, as a Custom Width (the framing it
+            // started from is the person's height, not this).
+            look->setEffectParamValue(QStringLiteral("sizeOnSubject"), over.value(QStringLiteral("liveSize")));
+            look->setEffectParamValue(QStringLiteral("framing"), 0.0);
+            runner->clearParamOverride(pid, QStringLiteral("liveSize"));
+            changed = true;
+        }
+        if (over.value(QStringLiteral("liveBeam"), 0.0) > 0.0)
+        {
+            look->setEffectParamValue(QStringLiteral("beamAngle"), over.value(QStringLiteral("liveBeam")));
+            runner->clearParamOverride(pid, QStringLiteral("liveBeam"));
+            changed = true;
+        }
+        if (changed)
+        {
+            runner->updateEffectParams(pid);
+            m_doc->setModified();
+            emit followSpotLookKept(pid);
+        }
+    }
 }
 
 double ProgrammerController::followSpotTopSpeed() const
@@ -4439,6 +4619,22 @@ bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, in
         }
         return true;
     }
+    /* D-pad Right and Left: open and close the beam, as a spot operator
+       works the iris while following -- its size on the subject, or its
+       beam angle with no size set. For the run; Save Positions keeps it. */
+    if (role == GamepadRole::DpadRight || role == GamepadRole::DpadLeft)
+    {
+        if (value > 0)
+        {
+            const bool changed = stepFollowSpotSize(role == GamepadRole::DpadRight ? 1 : -1);
+            m_followSizeClock.restart();
+            updateFollowSpotStatus(joystickScene());
+            const QString said = followSpotSizeText(m_followStatus.sizeCm, m_followStatus.beamDeg);
+            tellOperator(changed || !said.isEmpty() ? said : tr("No zoom to size the beam with"),
+                         ControllerScheme::ConfirmPriority);
+        }
+        return true;
+    }
     return false;
 }
 
@@ -4468,6 +4664,8 @@ QString ProgrammerController::followSpotStatusText() const
     QString on = stick.isEmpty() ? QString() : tr(" · %1").arg(stick);
     if (st.speedShown)
         on += QStringLiteral(" · ") + followSpotSpeedText(st.speed);
+    if (st.sizeShown && (st.sizeCm > 0.0 || st.beamDeg > 0.0))
+        on += QStringLiteral(" · ") + followSpotSizeText(st.sizeCm, st.beamDeg);
     if (st.state == FollowSpotStatus::Moving)
         return (who.isEmpty() ? tr("Follow spot · flying") : tr("Following %1 · moving").arg(who)) + on + persists;
     return who.isEmpty() ? tr("Follow spot%1 · holding%2 (move the stick to fly it)").arg(on, persists)

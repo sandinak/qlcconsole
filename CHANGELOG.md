@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **A follow spot's size, live from the pad, and framed from the person's height.** While a follow spot plays, **D-pad Right and Left** open and close its beam a step at a time (its Size on Subject, or the zoom when no size is set); the footer says it in **Settings → Units** (*· Size 4' 6"*) and **Save Positions** keeps it. The Followspot effect has a **Framing** choice -- **Head & Shoulders**, **Waist Up**, **Full Body** or **Custom Width** (Size on Subject, as before) -- sized from the followed Person's Height, each head from its own throw and lens, aimed so the top of the beam stays just over the head. See [How big: framing and the iris](docs/features/stage-targets.md#how-big-framing-and-the-iris).
+
 ## [0.4.2] - 2026-11-09
 
 ### Added

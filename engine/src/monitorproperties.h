@@ -1037,9 +1037,12 @@ public:
      *  for target @p t. A follow spot on a Person: the chest while the beam is
      *  narrow; as it widens, lower -- so its top edge stays just over the
      *  head, covering more of them without washing the wall above -- down to
-     *  the waist at most. Anything else: targetAimPoint(). */
+     *  the waist at most. @p framed (the follow spot frames its subject,
+     *  Scene::followFramed()): the top edge just over the head at any size,
+     *  above the chest too when the beam is tight (head and shoulders).
+     *  Anything else: targetAimPoint(). */
     QVector3D targetAimPointFor(const class StageTarget *t, bool subjectMode,
-                                const QVector3D &from, double beamDeg) const;
+                                const QVector3D &from, double beamDeg, bool framed = false) const;
 
     /** How far above its footing @p t is aimed. A per-target override wins;
      *  otherwise a Person is aimed at the follow-spot subject height -- the

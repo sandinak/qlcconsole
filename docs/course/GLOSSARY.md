@@ -63,6 +63,7 @@ brackets.
 | **Special** | A light for one person or one place: the soloist downstage centre. [0.3] |
 | **Background** | What is behind the performers; ours is the cyc, which carries most of the stage's colour. [0.3] |
 | **Spot** | A narrow, hard-edged light, often following one person. [1.3] |
+| **Follow spot framing** | How much of the person a follow spot takes: **head and shoulders** for a ballad or a speech, **waist up** for most singing, **full body** for dance. The spot op keeps the top of the beam just over the head so the wall behind stays dark, and opens or closes the beam as the moment changes. In qlcconsole: the Followspot effect's **Framing**, sized from the person's height, and the controller's D-pad left and right while it plays. |
 | **Shutter** | A spot's built-in shutter blocks the beam: while it's closed, no light comes out, however high the level. Our AT-Spots' shutter opens by itself when they're lit; Shutter palettes still close it or strobe it. [1.3] |
 | **Position / pan / tilt** | Where a moving light points: it pans (turns left and right) and tilts (up and down). [1.3] |
 | **Mover / moving light** | A fixture that can be pointed (panned and tilted) from the console. [1.3] |

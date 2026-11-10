@@ -579,6 +579,12 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                     this, &ProgrammingManager::slotButtonAction);
             connect(pc, &ProgrammerController::designPositionWritten,
                     this, &ProgrammingManager::slotDesignPositionWritten);
+            // Save Positions kept the pad's beam size: the open look shows it.
+            connect(pc, &ProgrammerController::followSpotLookKept, this, [this](quint32 pid) {
+                LookEditor *le = m_workbench != nullptr ? m_workbench->lookEditor() : nullptr;
+                if (le != nullptr && le->paletteId() == pid)
+                    le->refreshEffectParams();
+            });
             connect(pc, &ProgrammerController::followSpotPinChanged,
                     this, &ProgrammingManager::slotFollowSpotPinChanged);
         }

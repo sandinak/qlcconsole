@@ -47,6 +47,7 @@ private slots:
     void aWornStickMovesNothing();
     void everyCueFiresItsEffects();
     void theDpadStepsTheSpeedAndTheRightStickIsFine();
+    void theDpadSizesTheBeamAndSavePositionsKeepsIt();
 
 private:
     bool open(const QString &path);

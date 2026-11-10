@@ -824,10 +824,11 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                 // GUI callers with no scene context: it copies Doc's whole
                 // function map and dereferences every Function, which races
                 // addFunction/deleteFunction if it ever runs on the DMX thread.
-                bool subjectMode = false;
+                bool subjectMode = false, framed = false;
                 if (owner != nullptr)
                 {
                     subjectMode = sceneHasFollowSpot(doc, owner);
+                    framed = subjectMode && owner->followFramed();
                 }
                 else
                 {
@@ -839,6 +840,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                         if (sceneHasFollowSpot(doc, sc))
                         {
                             subjectMode = true;
+                            framed = sc->followFramed();
                             break;
                         }
                     }
@@ -877,7 +879,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     const GroupHead member(id, arms.isEmpty() ? -1 : arms.at(ai));
                     const QVector3D tgtPos = tgt->isLine() || linePts.contains(member)
                             ? linePts.value(member, mProps->targetAimPoint(tgt))
-                            : AimSolver::aimPointFor(doc, member, tgt, subjectMode);
+                            : AimSolver::aimPointFor(doc, member, tgt, subjectMode, framed);
 
                     // Shared aim geometry — identical to the follow-spot effect's, so
                     // a fixture points the same way in Edit and Run.

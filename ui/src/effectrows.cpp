@@ -89,6 +89,8 @@ QString EffectRows::valueText(const EffectScript::ParamDef &def, double value)
         return MeasurementUnits::formatSpeed(value / 100.0);
     if (def.unit == QLatin1String("%"))
         return number(value) + QStringLiteral("%");
+    if (def.unit == QString(QChar(0x00B0)))     // an angle
+        return number(value) + QString(QChar(0x00B0));
     // A switch the script spells out: "Reverse direction (0=fwd, 1=rev)".
     static const QRegularExpression pair(QStringLiteral("(-?\\d+)\\s*=\\s*([A-Za-z][\\w-]*)"));
     if (same(value, std::round(value)))

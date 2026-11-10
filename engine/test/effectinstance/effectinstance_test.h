@@ -133,6 +133,15 @@ private slots:
     /** Size On Subject zooms a head so its beam is that wide where it lands,
      *  whatever the throw, within the lens's range. */
     void followSpotZoomsToHoldSizeOnSubject();
+    /** Framing sizes the beam from the followed Person's Height (head &
+     *  shoulders, waist up, full body), each head from its own throw and
+     *  lens, and the aim keeps the beam's top just over the head -- at a
+     *  near and a far throw. */
+    void followSpotFramesThePerson_data();
+    void followSpotFramesThePerson();
+    /** The pad's live size wins over the framing; with no size, the beam
+     *  angle (the pad's, else the look's Beam Angle) sets the zoom. */
+    void followSpotLiveSizeAndBeamAngle();
     /** A follow spot on an Aim look: two heads in different places both
      *  land on the follow-spot point, and moving the point moves both to
      *  the same new place (they converge; the effect leaves pan/tilt alone). */

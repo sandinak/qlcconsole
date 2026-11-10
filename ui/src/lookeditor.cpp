@@ -2992,6 +2992,12 @@ QString LookEditor::capabilityNameAt(const QLCChannel *ch, int v) const
 // Effect page
 // ---------------------------------------------------------------------------
 
+void LookEditor::refreshEffectParams()
+{
+    m_effectBuildKey.clear();
+    rebuildEffectDynWidget();
+}
+
 void LookEditor::rebuildEffectDynWidget()
 {
     updateEffectHeader();
@@ -3564,6 +3570,7 @@ void LookEditor::rebuildEffectDynWidget()
             {
                 // Enum param → dropdown
                 QComboBox *cb = new QComboBox(m_effectDynWidget);
+                cb->setObjectName(QStringLiteral("effectParam_") + pd.name);
                 for (const QString &v : pd.enumValues)
                     cb->addItem(v);
                 int idx = qBound(0, int(cur), cb->count() - 1);
@@ -3633,6 +3640,11 @@ void LookEditor::rebuildEffectDynWidget()
                 {
                     val->setDecimals(0);
                     val->setSuffix(QStringLiteral("%"));
+                }
+                else if (pd.unit == QString(QChar(0x00B0)))    // an angle (the follow spot's Beam Angle)
+                {
+                    val->setDecimals(1);
+                    val->setSuffix(QString(QChar(0x00B0)));
                 }
                 val->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
                 if (isLength)

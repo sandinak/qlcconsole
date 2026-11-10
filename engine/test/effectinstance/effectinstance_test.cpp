@@ -1992,6 +1992,216 @@ void EffectInstance_Test::followSpotZoomsToHoldSizeOnSubject()
     QCOMPARE(zoomWrite(value), 0);
 }
 
+namespace
+{
+/* A follow spot on a Person from a front-of-house pipe 6 m up: one head
+   with a 4-50 degree zoom (channel 3), its Aim look and the followspot. */
+struct FramingRig
+{
+    Fixture *spot = nullptr;
+    StageTarget *who = nullptr;
+    QLCPalette *follow = nullptr;
+    Scene *scene = nullptr;
+};
+
+FramingRig framingRig(Doc *doc)
+{
+    FramingRig r;
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *pipe = props->addTruss();
+    pipe->setType(Truss::Horizontal);
+    pipe->setOrigin(QVector3D(-3.0f, 0.0f, 6.0f));
+    pipe->setDirection(QPointF(1.0, 0.0));
+    pipe->setLength(6.0f);
+    pipe->setWidth(0.29f);
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Framing Spot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("4ch");
+    const char *names[] = { "Pan", "Tilt", "Dimmer", "Zoom" };
+    for (int k = 0; k < 4; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        if (k == 0) ch->setGroup(QLCChannel::Pan);
+        else if (k == 1) ch->setGroup(QLCChannel::Tilt);
+        else if (k == 2) ch->setGroup(QLCChannel::Intensity);
+        else { ch->setGroup(QLCChannel::Beam); ch->setPreset(QLCChannel::BeamZoomSmallBig); }
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    ph.setLensDegreesMin(4);
+    ph.setLensDegreesMax(50);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    head.addChannel(0); head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    r.spot = new Fixture(doc);
+    r.spot->setName("FOH Spot");
+    r.spot->setFixtureDefinition(def, mode);
+    r.spot->setAddress(200);
+    doc->addFixture(r.spot);
+    FixtureRigProps rp;
+    rp.trussId = pipe->id();
+    rp.trussOffset = 3.0f;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(r.spot->id(), rp);
+
+    r.who = props->addStageTarget();
+    r.who->setName("Lead");
+    r.who->setKind(StageTarget::Kind::Person);
+    r.who->setPersonHeight(1.80f);
+
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setStageTargetId(r.who->id());
+    doc->addPalette(aim);
+    r.follow = new QLCPalette(QLCPalette::Effect, doc);
+    r.follow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/followspot.js");
+    doc->addPalette(r.follow);
+
+    r.scene = new Scene(doc);
+    r.scene->setName("Follow Lead");
+    doc->addFunction(r.scene);
+    r.scene->addFixture(r.spot->id());
+    r.scene->addPalette(aim->id());
+    r.scene->addPalette(r.follow->id());
+    return r;
+}
+
+int zoomWritten(EffectInstance &inst, quint32 fid)
+{
+    int value = -1;
+    foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+        if (w.fixtureId == fid && w.channel == 3)
+            value = w.value;
+    return value;
+}
+}
+
+void EffectInstance_Test::followSpotFramesThePerson_data()
+{
+    QTest::addColumn<int>("framing");
+    QTest::addColumn<float>("throwY");
+    QTest::addColumn<double>("span");
+    // The share of the height from just over the head down (followspot.js).
+    QTest::newRow("head & shoulders, near") << 1 << 4.0f << 0.40;
+    QTest::newRow("head & shoulders, far") << 1 << 12.0f << 0.40;
+    QTest::newRow("waist up, near") << 2 << 4.0f << 0.60;
+    QTest::newRow("waist up, far") << 2 << 12.0f << 0.60;
+    QTest::newRow("full body, near") << 3 << 4.0f << 1.10;
+    QTest::newRow("full body, far") << 3 << 12.0f << 1.10;
+}
+
+void EffectInstance_Test::followSpotFramesThePerson()
+{
+    QFETCH(int, framing);
+    QFETCH(float, throwY);
+    QFETCH(double, span);
+    const FramingRig r = framingRig(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    r.who->setPosition(QVector3D(0.0f, throwY, 0.0f));
+
+    EffectInstance inst(m_doc, r.scene->id(), r.follow->id());
+    QVERIFY2(inst.isValid(), "followspot.js did not load");
+    inst.setParamValue("framing", framing);
+    inst.runTick();
+    QVERIFY2(r.scene->followFramed(), "a framing tells the scene to aim for it");
+
+    // The width wanted: that share of 1.80 m, less where the head comes in
+    // from above (the beam stretches down the body), never under the
+    // shoulders (0.30 of the height).
+    AimSolver::Frame frame;
+    QVERIFY(AimSolver::frameFor(m_doc, r.spot->id(), frame));
+    const QVector3D chest = props->targetAimPoint(r.who, true);
+    const QVector3D to = chest - frame.position;
+    const double dist = double(to.length());
+    const double level = std::hypot(double(to.x()), double(to.y())) / dist;
+    const double h = 1.80;
+    const double width = qMax(0.30 * h, span * h * qMin(1.0, level));
+    const double want = 2.0 * qRadiansToDegrees(qAtan(width / 2.0 / dist));
+    const int expected = int(qBound(0.0, (want - 4.0) / 46.0, 1.0) * 255);
+    const int zoom = zoomWritten(inst, r.spot->id());
+    qInfo().noquote() << QString("framing %1 at %2 m: width %3 m, %4 deg, zoom %5 (expected %6)")
+                         .arg(framing).arg(dist, 0, 'f', 2).arg(width, 0, 'f', 2).arg(want, 0, 'f', 1)
+                         .arg(zoom).arg(expected);
+    QVERIFY2(qAbs(zoom - expected) <= 1, qPrintable(QString("zoom %1, expected %2").arg(zoom).arg(expected)));
+
+    // The aim, with the beam the lens can really make: its top edge just
+    // over the head (1.05 of the height), whatever the size -- never at the
+    // chest only, and no lower than the waist.
+    const double beamDeg = 4.0 + 46.0 * zoom / 255.0;
+    const QVector3D framed = props->targetAimPointFor(r.who, true, frame.position, beamDeg, true);
+    const double radius = dist * qTan(qDegreesToRadians(beamDeg * 0.5));
+    const double top = double(framed.z()) + radius / qMax(0.25, level);
+    const double waist = 0.5 * h;
+    QVERIFY2(double(framed.z()) >= waist - 0.01, qPrintable(QString::number(framed.z())));
+    if (double(framed.z()) > waist + 0.01)
+        QVERIFY2(qAbs(top - 1.05 * h) < 0.02,
+                 qPrintable(QString("top of the beam at %1 m, wanted %2").arg(top).arg(1.05 * h)));
+    else
+        QVERIFY2(top >= 1.05 * h - 0.02, qPrintable(QString("top of the beam at %1 m").arg(top)));
+    // Head and shoulders is a tight beam: framed it rises over the chest
+    // to keep the head in, where unframed it stayed on the chest (when the
+    // lens can make it that tight: far off, its narrowest is wider).
+    const QVector3D plain = props->targetAimPointFor(r.who, true, frame.position, beamDeg, false);
+    const double plainTop = double(plain.z()) + radius / qMax(0.25, level);
+    if (framing == 1 && plainTop < 1.05 * h - 0.02)
+        QVERIFY2(framed.z() > plain.z() + 0.01f && framed.z() > chest.z(),
+                 qPrintable(QString("framed %1, unframed %2, chest %3").arg(framed.z()).arg(plain.z()).arg(chest.z())));
+
+    // Custom Width again: the scene aims as it did.
+    inst.setParamValue("framing", 0);
+    inst.runTick();
+    QVERIFY(!r.scene->followFramed());
+}
+
+void EffectInstance_Test::followSpotLiveSizeAndBeamAngle()
+{
+    const FramingRig r = framingRig(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    r.who->setPosition(QVector3D(0.0f, 8.0f, 0.0f));
+    EffectInstance inst(m_doc, r.scene->id(), r.follow->id());
+    QVERIFY(inst.isValid());
+    AimSolver::Frame frame;
+    QVERIFY(AimSolver::frameFor(m_doc, r.spot->id(), frame));
+    const double dist = double((props->targetAimPoint(r.who, true) - frame.position).length());
+    auto forWidth = [&](double w) {
+        return int(qBound(0.0, (2.0 * qRadiansToDegrees(qAtan(w / 2.0 / dist)) - 4.0) / 46.0, 1.0) * 255);
+    };
+
+    // Nothing set: the zoom is the scene's.
+    inst.runTick();
+    QCOMPARE(zoomWritten(inst, r.spot->id()), -1);
+
+    // The pad's size (an override, centimetres) wins over the framing.
+    inst.setParamValue("framing", 3);
+    inst.setOverride("liveSize", 120.0);
+    inst.runTick();
+    QVERIFY(qAbs(zoomWritten(inst, r.spot->id()) - forWidth(1.20)) <= 1);
+    inst.clearOverride("liveSize");
+
+    // No size at all: the beam angle -- the look's, then the pad's over it.
+    inst.setParamValue("framing", 0);
+    inst.setParamValue("beamAngle", 20.0);
+    inst.runTick();
+    QVERIFY(qAbs(zoomWritten(inst, r.spot->id()) - int((20.0 - 4.0) / 46.0 * 255)) <= 1);
+    inst.setOverride("liveBeam", 30.0);
+    inst.runTick();
+    QVERIFY(qAbs(zoomWritten(inst, r.spot->id()) - int((30.0 - 4.0) / 46.0 * 255)) <= 1);
+    // A Custom Width takes over from the angle.
+    inst.setParamValue("sizeOnSubject", 150.0);
+    inst.runTick();
+    QVERIFY(qAbs(zoomWritten(inst, r.spot->id()) - forWidth(1.50)) <= 1);
+}
+
 void EffectInstance_Test::followSpotMovesEveryHeadToTheSamePoint()
 {
     MonitorProperties *props = m_doc->monitorProperties();

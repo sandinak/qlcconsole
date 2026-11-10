@@ -481,6 +481,18 @@ private:
     float m_envelope = 1.0f; //!< host-scene actuation level, applied per tick
     QString m_wledEffect;    //!< QLCPalette::wledEffect(), at construction
 
+    /* The follow spot (followspot.js): its Framing tells its scene how to
+       aim (Scene::setFollowFramed()), and a change to what sizes its beam
+       re-aims the heads for a few ticks -- each head's aim follows the beam
+       it has (MonitorProperties::targetAimPointFor()), a frame or two after
+       the zoom is written. Main thread, no allocation. */
+    void syncFollowFraming(Scene *sc);
+    bool m_isFollowSpot = false;
+    bool m_framed = false;
+    bool m_framedSent = false;
+    double m_beamSig[4] = { -1.0, -1.0, -1.0, -1.0 };
+    int m_reaimTicks = 0;
+
     /* The scene's transitions, for each cell: a look arriving by a wipe brings
        its effect in by the same wipe (envelopeFor()). */
     float envelopeFor(quint32 fid, int head) const;

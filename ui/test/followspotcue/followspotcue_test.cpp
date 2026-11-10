@@ -71,6 +71,8 @@
 #include "followspotdrive.h"
 #include "gamepadrole.h"
 #include "lookeditor.h"
+#include "measurementunits.h"
+#include <QComboBox>
 #include <QScrollArea>
 #include <QDoubleSpinBox>
 #include <QScrollBar>
@@ -1281,6 +1283,224 @@ void FollowSpotCue_Test::theDpadStepsTheSpeedAndTheRightStickIsFine()
     settle(100);
     QVERIFY(qAbs(follow->effectParamValues().value("topSpeed") - 300.0) < 0.5);
     QTRY_VERIFY_WITH_TIMEOUT(qAbs(pc->followSpotTopSpeed() - 3.0) < 0.01, 2000);
+    bench->load(Function::invalidId());
+    settle(100);
+    doc->resetModified();
+}
+
+/* A spot operator opens and closes the iris while following. On his DS4:
+   D-pad Right and Left step the follow spot's size on the subject while it
+   plays, the footer says it in Settings > Units (feet and inches), and
+   Save Positions keeps it in the look; with no size set they step the
+   beam angle instead. The Followspot editor offers the Framing.
+   QLC_FSPOT_SHOTS=<dir>: the chip and the editor's rows at three sizes. */
+void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
+{
+    m_app->doc()->resetModified();
+    m_app->clearDocument();
+    settle(50);
+    Doc *doc = m_app->doc();
+    doc->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    ProgrammerController *pc = doc->programmer();
+    MonitorProperties *props = doc->monitorProperties();
+    QCOMPARE(int(MeasurementUnits::preferredLength()), int(MeasurementUnits::Feet));
+
+    // Two zoom spots on a pipe out front, a 10-40 degree lens each.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Zoom Mover");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("ch");
+    const char *names[] = { "Pan", "Pan fine", "Tilt", "Tilt fine", "Dimmer", "Zoom" };
+    QLCFixtureHead head;
+    for (int k = 0; k < 6; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        if (k == 5)
+        {
+            ch->setGroup(QLCChannel::Beam);
+            ch->setPreset(QLCChannel::BeamZoomSmallBig);
+        }
+        else
+            ch->setGroup(k == 4 ? QLCChannel::Intensity : k >= 2 ? QLCChannel::Tilt : QLCChannel::Pan);
+        ch->setControlByte(k == 1 || k == 3 ? QLCChannel::LSB : QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(k));
+        if (k < 4)
+            head.addChannel(quint32(k));
+    }
+    mode->insertHead(-1, head);
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    ph.setLensDegreesMin(10);
+    ph.setLensDegreesMax(40);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    FixtureGroup *spots = new FixtureGroup(doc);
+    spots->setName("FOH Spots");
+    QVERIFY(doc->addFixtureGroup(spots));
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("FOH%1").arg(i + 1));
+        f->setFixtureDefinition(def, mode);
+        f->setUniverse(0);
+        f->setAddress(quint32(10 + i * 10));
+        QVERIFY(doc->addFixture(f));
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(i == 0 ? -2 : 2, -6, 6));
+        FixtureRigProps rp;
+        rp.mountingType = Truss::TopHung;
+        props->setFixtureRigProps(f->id(), rp);
+        spots->assignFixture(f->id());
+    }
+    StageTarget *lead = props->addStageTarget();
+    lead->setName("Lead");
+    lead->setKind(StageTarget::Kind::Person);
+    lead->setPersonHeight(1.80f);
+    lead->setPosition(QVector3D(0.0f, 3.0f, 0.0f));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("On Lead");
+    aim->setStageTargetId(lead->id());
+    QVERIFY(doc->addPalette(aim));
+    QLCPalette *follow = new QLCPalette(QLCPalette::Effect, doc);
+    follow->setName("Followspot");
+    follow->setScriptPath(doc->effectScriptRunner()->cache()->scriptPath("followspot"));
+    follow->setEffectParamValue("sizeOnSubject", 4.0 * 12.0 * 2.54);    // 4 ft on the subject
+    QVERIFY(doc->addPalette(follow));
+    Scene *scene = new Scene(doc);
+    scene->setName("Follow Lead");
+    doc->addFunction(scene);
+    scene->addFixtureGroup(spots->id());
+    scene->addPalette(aim->id());
+    scene->addPalette(follow->id());
+
+    pc->clearAxisBindings();
+    patchLikeHis(doc);
+    QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 2000);
+    Workbench *bench = ProgrammingManager::instance()->workbench();
+    m_app->m_tab->setCurrentWidget(ProgrammingManager::instance());
+    bench->load(scene->id());
+    settle(300);
+    EffectScriptRunner *runner = doc->effectScriptRunner();
+    QTRY_VERIFY_WITH_TIMEOUT(runner->isPlaying(follow->id()), 3000);
+    QLabel *chip = m_app->followChip();
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chip->text().contains(QString::fromUtf8("FOH Spots ← Lead")), 3000);
+    QVERIFY2(!chip->text().contains("Size"), qPrintable(chip->text()));    // the look's own: not said
+
+    InputPatch *ip = doc->inputOutputMap()->inputPatch(0);
+    auto deviceChannel = [&](GamepadRole::Role want) {
+        for (quint32 c = 0; c < 64; ++c)
+            if (pc->controllerRole(0, c) == want)
+                return int(ip->deviceChannel(c));
+        return -1;
+    };
+    const int right = deviceChannel(GamepadRole::DpadRight), left = deviceChannel(GamepadRole::DpadLeft);
+    QVERIFY2(right >= 0 && left >= 0, qPrintable(QString("%1 %2").arg(right).arg(left)));
+    auto press = [&](int ch) {
+        QVERIFY(padInput(doc, quint32(ch), 255));
+        settle(30);
+        QVERIFY(padInput(doc, quint32(ch), 0));
+        settle(30);
+    };
+    auto liveSize = [&]() { return runner->paramOverrides(follow->id()).value("liveSize", 0.0); };
+    const double inch = 2.54;
+
+    // Right opens it a step, to a whole inch: 4' to 4' 6", in feet and inches.
+    press(right);
+    QVERIFY2(qAbs(liveSize() - 54 * inch) < 0.01, qPrintable(QString::number(liveSize())));
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Size 4' 6\"").toHtmlEscaped()), 2000);
+    QVERIFY2(chip->toolTip().contains("Left and Right"), qPrintable(chip->toolTip()));
+    QCOMPARE(follow->effectParamValues().value("sizeOnSubject"), 48 * inch);     // the look: not yet
+    shootFooter(m_app, "size-4ft6");
+    // Left closes it, a step at a time.
+    press(left);
+    QVERIFY2(qAbs(liveSize() - 48 * inch) < 0.01, qPrintable(QString::number(liveSize())));
+    press(left);
+    QVERIFY2(qAbs(liveSize() - 43 * inch) < 0.01, qPrintable(QString::number(liveSize())));
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Size 3' 7\"").toHtmlEscaped()), 2000);
+    QVERIFY2(pc->followSpotStatusText().contains(QString::fromUtf8("Size 3' 7\"")),
+             qPrintable(pc->followSpotStatusText()));
+
+    // Save Positions keeps it in the look, and the run's own goes.
+    pc->commitDesignJoystick();
+    settle(50);
+    QVERIFY(qAbs(follow->effectParamValues().value("sizeOnSubject") - 43 * inch) < 0.01);
+    QCOMPARE(follow->effectParamValues().value("framing", 0.0), 0.0);
+    QCOMPARE(liveSize(), 0.0);
+    QVERIFY(doc->isModified());
+    bool ok = false;
+    QVERIFY(qAbs(runner->paramValue(follow->id(), "sizeOnSubject", &ok) - 43 * inch) < 0.01 && ok);
+
+    // No size set: the D-pad steps the beam angle, from the zoom the heads
+    // have now, a whole degree at a time; Save Positions keeps that too.
+    follow->setEffectParamValue("sizeOnSubject", 0.0);
+    runner->updateEffectParams(follow->id());
+    settle(100);
+    press(right);
+    const double beam = runner->paramOverrides(follow->id()).value("liveBeam", 0.0);
+    QVERIFY2(beam >= 11.0 && beam == std::round(beam), qPrintable(QString::number(beam)));
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Beam %1°").arg(beam)), 2000);
+    pc->commitDesignJoystick();
+    QCOMPARE(follow->effectParamValues().value("beamAngle"), beam);
+    QVERIFY(!runner->paramOverrides(follow->id()).contains("liveBeam"));
+
+    // The editor: Framing, and the size and angle beside it. (Read again:
+    // an earlier test's document had a look with this same id open.)
+    bench->editPalette(follow->id());
+    settle(300);
+    if (LookEditor *le = bench->lookEditor())
+        le->refreshEffectParams();
+    settle(100);
+    // The editor open now (an earlier one's rows may linger, hidden, until deleted).
+    auto shown = [&](auto *dummy, const char *name) {
+        using W = std::remove_pointer_t<decltype(dummy)>;
+        W *found = nullptr;
+        for (W *w : m_app->findChildren<W *>(name))
+            if (w->isVisibleTo(m_app))
+                found = w;
+        return found;
+    };
+    QComboBox *framing = nullptr;
+    QTRY_VERIFY_WITH_TIMEOUT((framing = shown((QComboBox *)nullptr, "effectParam_framing")) != nullptr, 10000);
+    QStringList items;
+    for (int i = 0; i < framing->count(); ++i)
+        items << framing->itemText(i);
+    QCOMPARE(items, QStringList({ "Custom Width", "Head & Shoulders", "Waist Up", "Full Body" }));
+    QDoubleSpinBox *size = shown((QDoubleSpinBox *)nullptr, "effectParam_sizeOnSubject");
+    QDoubleSpinBox *angle = shown((QDoubleSpinBox *)nullptr, "effectParam_beamAngle");
+    QVERIFY(size != nullptr && angle != nullptr);
+    QCOMPARE(angle->text(), QString::fromUtf8("%1.0°").arg(beam));
+    framing->setCurrentIndex(2);    // waist up
+    settle(100);
+    QCOMPARE(follow->effectParamValues().value("framing"), 2.0);
+    // The footer's size is then the person's: waist up on 1.80 m, 0.6 of it.
+    QTRY_VERIFY_WITH_TIMEOUT(qAbs(pc->followSpotStatus().sizeCm - 108.0) < 0.5, 2000);
+    const QString shots = qEnvironmentVariable("QLC_FSPOT_SHOTS");
+    if (!shots.isEmpty())
+    {
+        QDir().mkpath(shots);
+        m_app->setTheme(App::ThemeVSCodeDark);
+        for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+        {
+            m_app->resize(sz);
+            settle(400);
+            for (QWidget *p = framing->parentWidget(); p != nullptr; p = p->parentWidget())
+                if (QScrollArea *area = qobject_cast<QScrollArea *>(p))
+                {
+                    area->ensureWidgetVisible(angle, 20, 60);
+                    area->horizontalScrollBar()->setValue(0);
+                    break;
+                }
+            settle(200);
+            m_app->grab().save(QString("%1/framing-rows-%2x%3.png").arg(shots).arg(sz.width()).arg(sz.height()));
+            qInfo().noquote() << "shot framing rows" << m_app->size() << framing->isVisible() << angle->text();
+        }
+        m_app->resize(1280, 800);
+        settle(200);
+    }
     bench->load(Function::invalidId());
     settle(100);
     doc->resetModified();

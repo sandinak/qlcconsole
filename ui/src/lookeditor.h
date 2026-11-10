@@ -120,6 +120,10 @@ public:
 public slots:
     /** Edit the given palette; invalidId() shows the empty page. */
     void setPalette(quint32 paletteId);
+    /** The effect's parameter rows read again from the look: something
+     *  outside the editor changed its values (Save Positions keeping the
+     *  follow spot's pad size). */
+    void refreshEffectParams();
 
 signals:
     /** The edited palette's value changed (may affect name/icon — triggers full

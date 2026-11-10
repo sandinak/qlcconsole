@@ -206,10 +206,11 @@ namespace AimSolver
      *  and its beam as wide as its zoom and iris have it now -- a wider beam
      *  following a person aims lower, so it covers them without top wash. */
     QVector3D aimPointFor(Doc *doc, quint32 fixtureId, const StageTarget *target,
-                          bool subjectMode);
-    /** The same for one member, from its own origin. */
+                          bool subjectMode, bool framed = false);
+    /** The same for one member, from its own origin. @p framed: the follow
+     *  spot frames its subject (Scene::followFramed()). */
     QVector3D aimPointFor(Doc *doc, const GroupHead &member, const StageTarget *target,
-                          bool subjectMode);
+                          bool subjectMode, bool framed = false);
 
     /** The heads an Aim look in @p scene points, in LOOK ORDER: each of the
      *  scene's groups' members in the group's head order, then the scene's
