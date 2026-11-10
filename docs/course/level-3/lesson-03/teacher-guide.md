@@ -127,4 +127,4 @@ The course test (`ui/test/courseshow`, `lessonStageLooks`) runs it
 offscreen on the real app: the Show menu's item by its name, the Plot
 Symbol menu's six sections, **Auto (Moving head spot)** on AT-W-ALL and
 **Moving head round wash**, and **Lantern** under Practicals on the
-Lanterns group. It does not take pictures for this lesson yet.
+Lanterns group. Its picture is taken by `levelThreeMorePictures`.

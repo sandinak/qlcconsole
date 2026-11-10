@@ -76,6 +76,8 @@ Switch roles after each fixture.
    Blackout** and **Ignore the Grand Master**, then **OK**.
    - *You should see:* a small amber badge on its icon. Hover it to read
      its rules.
+
+     ![The Output Rules dialog for Stage Power](../../images/lesson-3-7/output-rules.png)
 6. The same for **Work Lights**.
 7. Right-click **Stage Power** → **Output Rules…**. Tick **Switch
    (relay)**, **Ignore Blackout**, **Ignore the Grand Master** and **On

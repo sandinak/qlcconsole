@@ -115,6 +115,21 @@ private slots:
      *  Master, and the relay comes on at Operate. */
     void lessonHouseLights();
 
+    /** Lesson 3.1, DMX, universes and patching: Universe 1's usage, a light's
+     *  address and DIP pattern, Add fixture's proposal and clash, the Patch
+     *  dialog moving the Lanterns (and Undo), the patch list and its labels. */
+    void lessonDmxAndPatching();
+
+    /** Lesson 3.2, fixtures and definitions: the XL-450's three modes and
+     *  heads, Definition & Mode, the groups made of heads, the definitions
+     *  the show carries, the Fixtures menu's Fixture Editor. */
+    void lessonFixturesAndDefinitions();
+
+    /** Lesson 3.4, building the rig on the Lighting Studio: a boom, a wall
+     *  with a door, a par mounted on the boom and faced stage left, Plot
+     *  layers showing it hangs under the boom, a layer's lock. */
+    void lessonBuildingTheRig();
+
     /** Lesson 3.6, focus and calibration, on the classroom show saved as a
      *  student's own: the stage marks and where Soloist DS and Center read,
      *  three focus calls and a venue, the calls run on the keys (a nudge, a
@@ -188,6 +203,8 @@ private slots:
      *  lesson's only). Skipped otherwise. */
     void levelTwoPictures();
     void levelThreePictures();
+    /** 3.1, 3.2, 3.3, 3.4, 3.7 and 3.10's pictures (COURSE_SHOTS). */
+    void levelThreeMorePictures();
 
     /** The features of 0.4 where Level 2 has room for them: "Why is this
      *  on?" on the chorus's dark step tops (2.1), Solo on a layer of the

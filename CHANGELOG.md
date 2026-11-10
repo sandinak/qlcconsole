@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- Course: Level 3 lessons 3.1 (DMX, universes and patching), 3.2 (fixtures and definitions) and 3.4 (building the rig), checked by the course test, with a Part 3 for the real rig; pictures for 3.1 to 3.4, 3.7 and 3.10.
+
 ## [0.4.2] - 2026-11-09
 
 ### Added

@@ -245,8 +245,7 @@ Branson reviews it, checks the steps on the app, and merges it.
 | [Level 0](level-0/index.md): 0.1–0.7 lighting concepts (*Why we light a show*, *What light does*, *Building a look*, *What the audience reads*, *Lighting a song*, *Anticipation and momentum*, *Running a show*), 0.8 *The virtual stage* (with the Level 0 check in two parts) | written |
 | [Level 1](level-1/index.md): 1.1–1.5, the [Level 1 check and rubric](level-1/lesson-05/level-check.md) | written |
 | [Level 2](level-2/index.md): 2.1–2.7 and the Level 2 check | written |
-| [Level 3](level-3/index.md): 3.3, 3.5, 3.6, 3.7, 3.8, 3.9, 3.10 (optional) | written; 3.5, 3.6, 3.8 and 3.9 have pictures, 3.3, 3.7 and 3.10 none yet |
-| Level 3: 3.1, 3.2, 3.4 | outlined in the [course plan](COURSE_PLAN.md#2-levels-and-lessons); wait on the real rig |
+| [Level 3](level-3/index.md): 3.1 to 3.9, 3.10 (optional) | written, with pictures; photos of real hardware (3.1, 3.2, 3.4 Part 3) still to take on the rig |
 | Slide decks made from the slide outlines | to make |
 
 Good first jobs for you:

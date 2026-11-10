@@ -152,4 +152,4 @@ Operate and on after it, the preshow list typed as in the handout,
 Blackout taking the cyc to zero while House Lights and Stage Power keep
 full, the Grand Master at zero doing the same, and the house going to
 half and out with the cues. It doesn't drive the Add fixture dialog
-itself, and takes no pictures for this lesson yet.
+itself, and its pictures are taken by `levelThreeMorePictures`.

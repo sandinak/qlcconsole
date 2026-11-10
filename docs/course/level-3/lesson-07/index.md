@@ -18,4 +18,6 @@ Master and Blind should and shouldn't touch.
 | Students | [Handout](handout.md) · [Exit ticket](exit-ticket.md) · [At home](at-home.md) |
 | Show files | [`ShowChoir-Classroom.qlcc`](../../shows/ShowChoir-Classroom.qlcc) (students save their own copy) |
 
-<!-- PICTURE: the Output Rules dialog for Stage Power, and the amber badge on the three fixtures in the Fixtures tab -->
+![The Output Rules dialog for Stage Power](../../images/lesson-3-7/output-rules.png)
+
+![The amber badge on the three fixtures in the Fixtures tab](../../images/lesson-3-7/fixtures-badges.png)

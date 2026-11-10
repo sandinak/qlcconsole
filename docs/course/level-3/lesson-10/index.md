@@ -19,4 +19,4 @@ relays, and map what they know from Eos onto the Show Tree. Any time after
 | Students | [Handout](handout.md) · [Exit ticket](exit-ticket.md) · [At home](at-home.md) |
 | Show files | [`classroom-eos.asc`](../../shows/classroom-eos.asc) (an Eos USITT ASCII export, made for this lesson) |
 
-<!-- PICTURE: the import wizard's Special circuits page with Cyc Blue set back to Normal -->
+![The import wizard's Special circuits page with Cyc Blue set back to Normal](../../images/lesson-3-10/special-circuits.png)
