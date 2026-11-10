@@ -2556,6 +2556,13 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         // selected) and adds it; ↓ goes into the list.
         m_filter->installEventFilter(this);
         v->addWidget(m_library, 1);
+        /* UX-36: never so narrow its headings are cut ("Ungrou.", "For..")
+           and a Blocking reads "…": the longest heading two levels in, with
+           its arrows and an icon, fits. */
+        int headings = 0;
+        for (const QString &h : { tr("Ungrouped"), tr("Reusables"), tr("Formation"), tr("Functions"), tr("Blocking") })
+            headings = qMax(headings, m_library->fontMetrics().horizontalAdvance(h));
+        lib->setMinimumWidth(headings + 3 * m_library->indentation() + m_library->iconSize().width() + 24);
     }
     split->insertWidget(0, lib);
     split->insertWidget(1, m_tree);

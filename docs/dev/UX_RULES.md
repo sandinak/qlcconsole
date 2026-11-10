@@ -422,9 +422,9 @@ Rulers, readouts, handles and selection rings on the plot sit on the thing they 
 
 ### UX-40 A UI change shows its before and after
 
-A change to ui/, web pages or the rig view ships with before/after shots at 1024×640, 1280×800 and 1920×1080 that he reviews before merge.
+A change to ui/, web pages or the rig view ships with before/after shots at 1024×640, 1280×800 and 1920×1080, signed off by the independent ux-reviewer before merge (not by Branson).
 
-- **Why:** 2026-11-03 (Q207): "do we not do after-patch checking to see that the result matches intended behavior?"
+- **Why:** 2026-11-03 (Q207): "do we not do after-patch checking to see that the result matches intended behavior?" 2026-11-09: "I am kinda done approving screenshots.. just have an independent evaluator do that work .. it's blocking too many things".
 - **Check:** `manual` (not yet enforced)
 - **Right:** `shots-041/<agent>/before-1280x800.png, after-1280x800.png ...`
 - **Wrong:** `"gate=0" as the only evidence for a layout change`
