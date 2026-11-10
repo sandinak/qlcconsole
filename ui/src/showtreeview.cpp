@@ -3882,6 +3882,7 @@ void ShowTreeView::buildTree()
     applyBackwashMarks();
     refreshFollowBadges();
     applyNoteMarks();
+    measureInfoColumn();
     fitTreeColumns();          // the info column follows what is in it
     m_reloading = false;
 }
@@ -4983,6 +4984,20 @@ QString ShowTreeView::cueTrackingTip(quint32 cueId) const
     return out.join(QStringLiteral("\n"));
 }
 
+void ShowTreeView::measureInfoColumn()
+{
+    m_infoNeeds = 0;
+    if (m_tree == nullptr)
+        return;
+    const QFontMetrics fm = m_tree->fontMetrics();
+    for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
+    {
+        const QString text = (*it)->text(InfoCol);
+        if (!text.isEmpty())
+            m_infoNeeds = qMax(m_infoNeeds, fm.horizontalAdvance(text) + 12);
+    }
+}
+
 void ShowTreeView::fitTreeColumns()
 {
     if (m_tree == nullptr)
@@ -5025,16 +5040,7 @@ void ShowTreeView::fitTreeColumns()
        set -- and, until its width is set by hand, InfoCol is no wider than
        the widest text in it: empty, it gave a layer's name nothing ("Tow…"
        at 1024 wide, UX-36). */
-    int infoWant = m_badgeWidth;
-    if (!m_badgeChosen)
-    {
-        int infoNeeds = 0;
-        const QFontMetrics itemFm = m_tree->fontMetrics();
-        for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
-            if (!(*it)->text(InfoCol).isEmpty())
-                infoNeeds = qMax(infoNeeds, itemFm.horizontalAdvance((*it)->text(InfoCol)) + 12);
-        infoWant = qMin(m_badgeWidth, qMax(24, infoNeeds));
-    }
+    const int infoWant = m_badgeChosen ? m_badgeWidth : qMin(m_badgeWidth, qMax(24, m_infoNeeds));
     const int badges = qBound(24, infoWant, qMax(24, room * 2 / 5));
     m_tree->header()->resizeSection(NameCol, qMax(40, room - badges));
     m_tree->header()->resizeSection(InfoCol, badges);

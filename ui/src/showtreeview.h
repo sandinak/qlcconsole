@@ -1068,6 +1068,10 @@ private:
     QString carriedDetail(const ShowTree::ResolvedLayer &layer) const;
     /** The tree's columns: the names get all but the badge column. */
     void fitTreeColumns();
+    /** The info column's widest text, measured when the tree is built (it
+     *  is the only place that text is set): fitTreeColumns() runs on every
+     *  resize and doesn't walk the tree. */
+    void measureInfoColumn();
     QString paletteName(quint32 id) const;
     /** The Look Editor changed @a paletteId (@a full: its name/icon too). */
     void paletteEdited(quint32 paletteId, bool full);
@@ -1120,6 +1124,7 @@ private:
     QSet<int> m_hiddenColumns;      ///< flag columns hidden from the header menu (Q104)
     int m_badgeWidth = 0;               //!< the badge column's width
     bool m_badgeChosen = false;         //!< ...set by hand: kept, even with nothing in it
+    int m_infoNeeds = 0;                //!< the info column's widest text (measureInfoColumn())
     bool m_fittingColumns = false;
 
     // Inspector

@@ -26,6 +26,9 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
+#include <QWheelEvent>
+#include <QScrollBar>
+#include <QDoubleSpinBox>
 #include <QDialogButtonBox>
 #include <QMenu>
 #include <QStyleOptionToolButton>
@@ -282,8 +285,16 @@ struct Finding
 int menuArrowNeeds(QWidget *w)
 {
     QToolButton *tb = qobject_cast<QToolButton *>(w);
-    if (tb == nullptr || tb->menu() == nullptr || tb->popupMode() == QToolButton::MenuButtonPopup)
+    if (tb == nullptr || tb->menu() == nullptr || tb->popupMode() != QToolButton::InstantPopup)
         return 0;
+    /* Drawn by a style sheet's rule (the main toolbar's, or one of its own):
+       the sheet sizes and draws it, not the app style, so its room for the
+       arrow is the sheet's padding -- not this check's. */
+    if (!tb->styleSheet().isEmpty())
+        return 0;
+    for (QWidget *p = tb->parentWidget(); p != nullptr; p = p->parentWidget())
+        if (p->objectName() == QLatin1String("MainToolBar"))
+            return 0;
     QString t = tb->text();
     t.remove(QLatin1Char('&'));
     if (t.isEmpty() || t.contains(QLatin1Char('\n'))
@@ -1205,7 +1216,26 @@ void LayoutSanity_Test::theShowTreeShowsCueNamesWithFreshSettings()
         QVERIFY2(split->sizes().at(2) >= 400, qPrintable(what));
         /* A cue's own layer, a level further in: its name whole too, when
            the info column beside it has nothing to say (UX-36). */
+        /* What a layer row shows of its name: column 0's own rect (past the
+           indent), less its icon and the item's margins, elided as the view
+           elides it. Equal to the name: whole. */
+        auto shownName = [tree](QTreeWidgetItem *item) {
+            QList<int> rows;
+            for (QTreeWidgetItem *it = item; it != nullptr; it = it->parent())
+                rows.prepend(it->parent() != nullptr ? it->parent()->indexOfChild(it)
+                                                      : tree->indexOfTopLevelItem(it));
+            QModelIndex index;
+            for (int row : rows)
+                index = tree->model()->index(row, ShowTreeView::NameCol, index);
+            const QRect r = tree->visualRect(index);
+            const int icon = item->icon(0).isNull() ? 0
+                : (tree->iconSize().isValid() ? tree->iconSize().width()
+                                              : tree->style()->pixelMetric(QStyle::PM_SmallIconSize, nullptr, tree)) + 4;
+            const int margins = 2 * (tree->style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, tree) + 1);
+            return tree->fontMetrics().elidedText(item->text(0), Qt::ElideRight, r.width() - icon - margins);
+        };
         int layersSeen = 0;
+        QTreeWidgetItem *aLayer = nullptr;
         for (QTreeWidgetItem *cue : cues.mid(0, 1))
         {
             cue->setExpanded(true);
@@ -1217,17 +1247,27 @@ void LayoutSanity_Test::theShowTreeShowsCueNamesWithFreshSettings()
                     || !layer->text(ShowTreeView::InfoCol).isEmpty() || layer->text(0).size() > 14)
                     continue;
                 ++layersSeen;
-                // Column 0 past the indent: the icon, then the name.
-                const QRect r = tree->visualItemRect(layer);
-                const int need = tree->fontMetrics().horizontalAdvance(layer->text(0))
-                                 + tree->iconSize().width() + 12;
-                QVERIFY2(r.width() >= need,
-                         qPrintable(QStringLiteral("%1x%2: layer \"%3\" needs %4 px, it has %5")
-                                        .arg(z.width()).arg(z.height()).arg(layer->text(0)).arg(need)
-                                        .arg(r.width())));
+                aLayer = layer;
+                QVERIFY2(shownName(layer) == layer->text(0),
+                         qPrintable(QStringLiteral("%1x%2: layer \"%3\" shows as \"%4\"")
+                                        .arg(z.width()).arg(z.height()).arg(layer->text(0), shownName(layer))));
             }
         }
         QVERIFY2(layersSeen > 0, "no layer under the first cue to look at");
+        // The check sees a cut: the names' column squeezed, the name is "…".
+        {
+            const int was = tree->header()->sectionSize(ShowTreeView::NameCol);
+            view->m_fittingColumns = true;          // not a user's drag
+            tree->header()->resizeSection(ShowTreeView::NameCol, tree->indentation() * 5 + 30);
+            view->m_fittingColumns = false;
+            settle();
+            const QString squeezed = shownName(aLayer);
+            view->fitTreeColumns();
+            settle();
+            QVERIFY2(squeezed != aLayer->text(0),
+                     qPrintable(QStringLiteral("a squeezed column still shows \"%1\" whole (was %2 px)")
+                                    .arg(squeezed).arg(was)));
+        }
 
         /* A show whose rows have nothing in the info column (no "main",
            nothing carried): the column gives the names its room, as a pane
@@ -1241,10 +1281,12 @@ void LayoutSanity_Test::theShowTreeShowsCueNamesWithFreshSettings()
                     info.insert(*it, (*it)->text(ShowTreeView::InfoCol));
                     (*it)->setText(ShowTreeView::InfoCol, QString());
                 }
+            view->measureInfoColumn();
             view->fitTreeColumns();
             const int infoWidth = tree->header()->sectionSize(ShowTreeView::InfoCol);
             for (auto it = info.constBegin(); it != info.constEnd(); ++it)
                 it.key()->setText(ShowTreeView::InfoCol, it.value());
+            view->measureInfoColumn();
             view->fitTreeColumns();
             QVERIFY2(infoWidth <= tree->header()->minimumSectionSize(),
                      qPrintable(QStringLiteral("an empty info column keeps %1 px").arg(infoWidth)));
@@ -1404,34 +1446,35 @@ void LayoutSanity_Test::menuButtonsKeepTheirArrowOffTheText()
     QCOMPARE(AppUtil::menuArrowRoom(&opt, split->style(), split), 0);   // its arrow has a part of its own
     QVERIFY(inspect(&top).isEmpty());
 
-    /* Drawn: the text where it is on the plain button, nothing of it in the
-       arrow's corner. Compare columns of ink: the menu button's text ends
-       left of where its arrow starts. */
-    auto inkColumns = [](QToolButton *b) {
-        b->resize(b->sizeHint());
-        const QImage img = b->grab().toImage();
-        QList<int> cols;
-        const QColor bg = img.pixelColor(2, img.height() / 2);
-        for (int x = 0; x < img.width(); ++x)
-            for (int y = img.height() / 4; y < img.height() * 3 / 4; ++y)
+    /* Drawn, with its menu: the text centred in the part of the button the
+       arrow leaves free, its ink nowhere in the arrow's corner. Ink is read
+       from the upper half of the text's rows (the arrow is drawn in the
+       bottom-right corner) and inside the button's frame. Without the
+       style's drawControl() the text is centred on the whole button: half
+       an arrow further right, onto the arrow. */
+    menu->resize(menu->sizeHint());
+    settle();
+    const QImage img = menu->grab().toImage();
+    const int w = img.width(), h = img.height();
+    const QColor bg = img.pixelColor(3, h / 2);
+    int inkLeft = -1, inkRight = -1;
+    for (int x = 3; x < w - 3; ++x)
+        for (int y = h / 4; y <= h / 2; ++y)
+            if (qAbs(img.pixelColor(x, y).lightness() - bg.lightness()) > 90)
             {
-                const QColor c = img.pixelColor(x, y);
-                if (qAbs(c.lightness() - bg.lightness()) > 90)
-                {
-                    cols << x;
-                    break;
-                }
+                if (inkLeft < 0)
+                    inkLeft = x;
+                inkRight = x;
+                break;
             }
-        return cols;
-    };
-    menu->setMenu(nullptr);
-    const QList<int> textOnly = inkColumns(menu);         // same button, no arrow drawn
-    menu->setMenu(new QMenu(menu));
-    QVERIFY(!textOnly.isEmpty());
-    const int textRight = textOnly.last();
-    const int arrowLeft = menu->sizeHint().width() - arrow;
-    QVERIFY2(textRight < arrowLeft,
-             qPrintable(QStringLiteral("the text runs to x=%1, the arrow starts at x=%2").arg(textRight).arg(arrowLeft)));
+    QVERIFY2(inkLeft >= 0, "no text drawn on the button");
+    const QString where = QStringLiteral("text ink x=%1..%2 on a button %3 wide, arrow %4")
+                              .arg(inkLeft).arg(inkRight).arg(w).arg(arrow);
+    QVERIFY2(inkRight < w - arrow, qPrintable(where + QStringLiteral(": the text runs into the arrow's corner")));
+    const double centre = (inkLeft + inkRight) / 2.0;
+    QVERIFY2(qAbs(centre - (w - arrow) / 2.0) <= 3.0,
+             qPrintable(where + QStringLiteral(": the text is not centred left of the arrow (centre %1, want %2)")
+                                    .arg(centre).arg((w - arrow) / 2.0)));
 
     // The checker: a menu button squeezed to its text alone is found.
     QWidget bad;
@@ -1480,6 +1523,68 @@ void LayoutSanity_Test::theSceneGroupLooksShowNamesAtTheSmallest()
                                 .arg(it->text(0)).arg(need).arg(list->header()->sectionSize(0))
                                 .arg(looks.width()).arg(looks.height())));
     }
+}
+
+void LayoutSanity_Test::scrollingBodiesTakeTheWheel()
+{
+    QWidget top;
+    QVBoxLayout *outer = new QVBoxLayout(&top);
+    QWidget *body = new QWidget;
+    QVBoxLayout *rows = new QVBoxLayout(body);
+    QList<QDoubleSpinBox *> spins;
+    QList<QComboBox *> combos;
+    for (int i = 0; i < 20; ++i)
+    {
+        QDoubleSpinBox *sp = new QDoubleSpinBox;
+        sp->setRange(0.0, 100.0);
+        sp->setValue(50.0);
+        rows->addWidget(sp);
+        spins << sp;
+        QComboBox *cb = new QComboBox;
+        cb->addItems({ QStringLiteral("One"), QStringLiteral("Two"), QStringLiteral("Three") });
+        cb->setCurrentIndex(1);
+        rows->addWidget(cb);
+        combos << cb;
+    }
+    QScrollArea *area = AppUtil::verticalScroller(body, &top);
+    outer->addWidget(area);
+    QPushButton *ok = new QPushButton(QStringLiteral("OK"));
+    outer->addWidget(ok);
+    // A row added later is guarded too.
+    QDoubleSpinBox *late = new QDoubleSpinBox;
+    late->setRange(0.0, 100.0);
+    late->setValue(50.0);
+    rows->addWidget(late);
+    top.resize(300, 240);
+    top.show();
+    top.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&top));
+    settle();
+    QVERIFY(area->verticalScrollBar()->maximum() > 0);
+    QCOMPARE(area->focusPolicy(), Qt::NoFocus);
+
+    auto wheel = [](QWidget *w) {
+        const QPointF at(w->width() / 2.0, w->height() / 2.0);
+        QWheelEvent ev(at, w->mapToGlobal(at), QPoint(), QPoint(0, -120), Qt::NoButton, Qt::NoModifier,
+                       Qt::NoScrollPhase, false);
+        QCoreApplication::sendEvent(w, &ev);
+    };
+    ok->setFocus();
+    const int scrolled = area->verticalScrollBar()->value();
+    wheel(spins.at(1));
+    wheel(combos.at(1));
+    wheel(late);
+    QCOMPARE(spins.at(1)->value(), 50.0);
+    QCOMPARE(combos.at(1)->currentIndex(), 1);
+    QCOMPARE(late->value(), 50.0);
+    QVERIFY2(area->verticalScrollBar()->value() > scrolled, "the wheel didn't scroll the body");
+    QVERIFY(!spins.at(1)->hasFocus());
+
+    // The field being edited takes it.
+    spins.at(1)->setFocus();
+    QVERIFY(spins.at(1)->hasFocus());
+    wheel(spins.at(1));
+    QVERIFY(spins.at(1)->value() != 50.0);
 }
 
 void LayoutSanity_Test::theFooterChipsNeverOverlap()

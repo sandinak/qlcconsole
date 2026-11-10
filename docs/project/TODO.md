@@ -10,6 +10,20 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Laptop fit (fix/043-laptop-fit, 2026-11-10) -- built, leftovers
+
+The first UX review's findings at 1024x640 (UX-34/36): scrolling Studio
+editors and tall dialogs, menu arrows clear of their text, nothing cut.
+Left from the code review:
+- [ ] The edge-label test (`theStudioEditorsFitALaptop`) is brittle: a label
+  with nowhere clear goes back home and the test fails for that fixed rig;
+  labels don't avoid each other or the plane badge.
+- [ ] "Shown outside the layout" looks one layout deep: a dialog child in a
+  nested layout would be a false finding. Walk the layout tree.
+- [ ] The off-screen dialog rule (1024x590 against `minimumSizeHint`) depends
+  on fonts: a dialog near the limit on macOS can fail only on Linux (DejaVu
+  is wider). Give it a margin or measure per platform.
+
 ## Loaded gobos by name (feat/043-loaded-gobos, 2026-11-08) -- built, leftovers
 
 "I need to be able to configure some of the lights with a loaded gobo ..

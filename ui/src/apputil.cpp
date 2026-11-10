@@ -32,6 +32,8 @@
 #include <QStyle>
 #include <QProxyStyle>
 #include <QScrollArea>
+#include <QScrollBar>
+#include <QAbstractSpinBox>
 #include <QStyleOptionToolButton>
 #include <QRect>
 #include <QFile>
@@ -279,9 +281,11 @@ int AppUtil::menuArrowRoom(const QStyleOptionToolButton *option, const QStyle *s
 {
     if (option == nullptr || style == nullptr)
         return 0;
+    // A menu that opens on a click (InstantPopup): not a split button's
+    // arrow, in a part of its own, nor a press-and-hold one (DelayedPopup).
     if (!(option->features & QStyleOptionToolButton::HasMenu)
-        || (option->features & QStyleOptionToolButton::MenuButtonPopup))
-        return 0;                   // no arrow, or one in a part of its own
+        || (option->features & (QStyleOptionToolButton::MenuButtonPopup | QStyleOptionToolButton::PopupDelay)))
+        return 0;
     // Text drawn: a button with no icon, or one set to show its text.
     if (option->text.isEmpty()
         || (!option->icon.isNull() && option->toolButtonStyle == Qt::ToolButtonIconOnly))
@@ -338,11 +342,34 @@ void AppUtil::installAppStyle()
 namespace
 {
 /* Never narrower than its contents (nothing in it is cut at the side), and
-   as short as a few rows: the rest scrolls. */
+   as short as a few rows: the rest scrolls.
+
+   The wheel scrolls it, also over a spin box or a choice: one that does not
+   have the keyboard focus passes the wheel to the area instead of changing
+   its value. Without that, scrolling down the Studio inspector over a
+   fixture's height moved the rig (an edit, an undo step), and Settings'
+   numbers changed as they went by. A field that has the focus, clicked or
+   tabbed into, takes the wheel as it always has. */
 class VerticalScroller final : public QScrollArea
 {
 public:
     explicit VerticalScroller(QWidget *parent) : QScrollArea(parent) {}
+
+    /** Every spin box and choice in it, now and as rows are added. */
+    void guardWheels()
+    {
+        if (widget() == nullptr)
+            return;
+        const QList<QWidget *> fields = widget()->findChildren<QWidget *>();
+        for (QWidget *w : fields)
+        {
+            if (qobject_cast<QAbstractSpinBox *>(w) == nullptr && qobject_cast<QComboBox *>(w) == nullptr)
+                continue;
+            if (w->focusPolicy() == Qt::WheelFocus)
+                w->setFocusPolicy(Qt::StrongFocus);     // a wheel over it doesn't take the focus
+            w->installEventFilter(this);                // once: a second install only reorders
+        }
+    }
 
     QSize minimumSizeHint() const override
     {
@@ -360,9 +387,22 @@ public:
 protected:
     bool eventFilter(QObject *o, QEvent *e) override
     {
-        // Its contents changed: so may the width it needs.
+        // Its contents changed: so may the width it needs, and its fields.
         if (o == widget() && e->type() == QEvent::LayoutRequest)
+        {
             updateGeometry();
+            guardWheels();
+        }
+        if (e->type() == QEvent::Wheel && o != widget())
+        {
+            QWidget *field = qobject_cast<QWidget *>(o);
+            if (field != nullptr && !field->hasFocus()
+                && (qobject_cast<QAbstractSpinBox *>(field) != nullptr || qobject_cast<QComboBox *>(field) != nullptr))
+            {
+                QCoreApplication::sendEvent(verticalScrollBar(), e);
+                return true;
+            }
+        }
         return QScrollArea::eventFilter(o, e);
     }
 
@@ -386,6 +426,10 @@ QScrollArea *AppUtil::verticalScroller(QWidget *content, QWidget *parent)
     area->setWidgetResizable(true);
     area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     area->setWidget(content);
+    area->guardWheels();
+    // Not a Tab stop of its own (a Tab into a field below the fold still
+    // scrolls to it).
+    area->setFocusPolicy(Qt::NoFocus);
     // The page's own colour, not the viewport's base.
     area->viewport()->setAutoFillBackground(false);
     content->setAutoFillBackground(false);

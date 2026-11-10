@@ -65,6 +65,11 @@ private slots:
      *  letter beside the fades (UX-36). */
     void theSceneGroupLooksShowNamesAtTheSmallest();
 
+    /** A body that scrolls (AppUtil::verticalScroller): the wheel over a
+     *  spin box or choice without the focus scrolls the body and leaves its
+     *  value; one with the focus takes the wheel; the area is no Tab stop. */
+    void scrollingBodiesTakeTheWheel();
+
     /** The footer at 1024 wide and at the window's own minimum: no two
      *  chips overlap, the stage chip and Unsaved stay (wfaudit W1-30). */
     void theFooterChipsNeverOverlap();

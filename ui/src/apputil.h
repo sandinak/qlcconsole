@@ -143,7 +143,9 @@ namespace AppUtil
      ************************************************************************/
     /** @a content in a frameless scroll area that scrolls up and down only,
      *  never narrower than @a content needs: a dialog's form taller than a
-     *  laptop's screen scrolls, and the buttons under it stay in view. */
+     *  laptop's screen scrolls, and the buttons under it stay in view. The
+     *  wheel scrolls it, also over a spin box or choice that doesn't have
+     *  the focus (it changes only the one that does); not a Tab stop. */
     QScrollArea *verticalScroller(QWidget *content, QWidget *parent = nullptr);
 
     /*********************************************************************

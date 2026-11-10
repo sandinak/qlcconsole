@@ -1001,7 +1001,8 @@ see.
 
 On a small laptop screen the editor still fits: the geometry column on the
 left and the fixture panel on the right scroll up and down, and **OK** and
-**Cancel** stay at the bottom. The **stage right** / **stage left** labels
+**Cancel** stay at the bottom. The mouse wheel scrolls a column, also over
+a number or a choice; the field you have clicked into takes the wheel. The **stage right** / **stage left** labels
 on the preview move along their edge, clear of the **max** height and the
 dimensions drawn there.
 

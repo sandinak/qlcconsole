@@ -52,9 +52,9 @@
 #include "speedmastersfooter.h"
 #include "legacysettings.h"
 #include "systemtuningpage.h"
+#include "apputil.h"
 #ifdef QLC_AI_ASSIST
 #include "aisettingspage.h"
-#include "apputil.h"
 #endif
 
 AppSettings::AppSettings(App *app, QWidget *parent)
