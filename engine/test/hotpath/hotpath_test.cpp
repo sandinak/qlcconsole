@@ -799,11 +799,14 @@ void HotPath_Test::aBeamSizeReaimAddsNoFadersAndReadsFadesFree()
     pos->setName("Follow position");
     pos->setValue(120, 60);
     doc->addPalette(pos);
-    // A follow spot's look on it (what makes the scene a follow spot's);
-    // the script's own work is not what is measured here.
+    /* A follow spot's look on it (what makes the scene a follow spot's).
+       No script behind it: what is measured is Scene::write, not the
+       effect -- and here the MasterTimer ticks on the test's own thread,
+       where a playing effect's stop would claim the universes the tick
+       already holds (in the app the timer has its own thread). */
     QLCPalette *follow = new QLCPalette(QLCPalette::Effect, doc);
     follow->setName("Followspot");
-    follow->setScriptPath(QString(INTERNAL_FIXTUREDIR) + "../effectscripts/followspot.js");
+    follow->setScriptPath(QStringLiteral("followspot-not-loaded.js"));
     follow->setEffectParamValue("framing", 2);
     doc->addPalette(follow);
     Scene *look = new Scene(doc);
@@ -827,6 +830,11 @@ void HotPath_Test::aBeamSizeReaimAddsNoFadersAndReadsFadesFree()
         if (g->runningFade(head->id(), pan, probe))
             f = g;
     QVERIFY(!f.isNull());
+    // The first re-aim settles the channels a position look's re-aim
+    // writes (more of each head than its start built); after that, re-aims
+    // add nothing.
+    look->requestReaim(1, true);
+    frame(doc, 1);
     const int faders = uni->m_faders.size();
     const int channels = f->channels().size();
     GenericFader::RunningFade before;
