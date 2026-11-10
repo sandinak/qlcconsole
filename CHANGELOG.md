@@ -34,7 +34,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   it, and otherwise what a square is in your unit ("SR | SL (1 = 3' 3 3/8")").
 - **The plot's pointer readout is whole in a narrow window.** It sits at the
   right of the footer, outside the part that scrolls, and is as wide as its
-  longest reading in feet and inches (it was cut to "Y: 8' 3").
+  longest reading in feet and inches (it was cut to "Y: 8' 3"). Where the
+  footer has no room for it beside View and the turn button (a 1024-wide
+  window), it takes a line of its own under them, so they stay whole.
 
 ## [0.4.2] - 2026-11-09
 

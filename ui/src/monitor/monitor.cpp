@@ -1365,6 +1365,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
        quarter turns keep stage left/right truthful, with the edge labels
        turning to match. */
     QToolButton *plotRotBtn = new QToolButton(footer);
+    plotRotBtn->setObjectName(QStringLiteral("plotRotate"));
     plotRotBtn->setToolTip(tr("Turn the plot 90° clockwise. A view setting "
                               "only — nothing in the workspace moves."));
     fl->addWidget(plotRotBtn);
@@ -1463,15 +1464,25 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
        was cut off on the right when the window was made narrower anyway. */
     /* The readout is pinned at the right, beside the bar rather than in it:
        inside it, a narrow window scrolled the readout half out of sight
-       ("Y: 8' 3") (UX-36). */
+       ("Y: 8' 3") (UX-36). Where the row has no room for it beside the
+       bar's controls, it takes a line of its own under them, so it never
+       squeezes the View combo or the turn button off the row (UX-34);
+       fitFooterReadout() decides, on a resize only, so a hover never moves
+       the plot. */
     QWidget *footRow = new QWidget(gcontainer);
+    footRow->setObjectName(QStringLiteral("plotFooterRow"));
     footRow->setAutoFillBackground(true);
     footRow->setPalette(footer->palette());
-    QHBoxLayout *frl = new QHBoxLayout(footRow);
+    QGridLayout *frl = new QGridLayout(footRow);
     frl->setContentsMargins(0, 0, 6, 0);
-    frl->setSpacing(6);
-    frl->addWidget(new ShrinkableBar(footer, footRow), 1);
-    frl->addWidget(m_readoutLabel);
+    frl->setHorizontalSpacing(6);
+    frl->setVerticalSpacing(0);
+    m_footerBar = new ShrinkableBar(footer, footRow);
+    frl->addWidget(m_footerBar, 0, 0);
+    frl->setColumnStretch(0, 1);
+    frl->addWidget(m_readoutLabel, 0, 1);
+    m_footerRow = footRow;
+    footRow->installEventFilter(this);
     qobject_cast<QVBoxLayout *>(gcontainer->layout())->addWidget(footRow);
 
     // Restore ruler visibility (default on).
@@ -1509,8 +1520,36 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     updateModeIndicator();
 }
 
+void Monitor::fitFooterReadout()
+{
+    if (m_footerRow == nullptr || m_footerBar == nullptr || m_readoutLabel == nullptr
+        || m_footerBar->widget() == nullptr)
+        return;
+    QGridLayout *g = qobject_cast<QGridLayout *>(m_footerRow->layout());
+    if (g == nullptr)
+        return;
+    // Beside the controls when they all fit whole, else on its own line.
+    const int room = m_footerRow->width() - g->contentsMargins().left() - g->contentsMargins().right()
+                   - g->horizontalSpacing() - m_footerBar->widget()->minimumSizeHint().width();
+    const bool beside = room >= m_readoutLabel->width();
+    int row = 0, col = 0, rs = 0, cs = 0;
+    const int at = g->indexOf(m_readoutLabel);
+    if (at >= 0)
+        g->getItemPosition(at, &row, &col, &rs, &cs);
+    if (at >= 0 && beside == (row == 0))
+        return;
+    g->removeWidget(m_readoutLabel);
+    if (beside)
+        g->addWidget(m_readoutLabel, 0, 1);
+    else
+        g->addWidget(m_readoutLabel, 1, 0, 1, 2, Qt::AlignRight);
+}
+
 bool Monitor::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == m_footerRow && event->type() == QEvent::Resize)
+        fitFooterReadout();
+
     /* Clicking the BOX cycles to the next item; the drop-down ARROW still opens
        the full list. Opted into with a "cycleOnClick" property rather than by
        naming specific combos, so the feature editors and the rig overview get

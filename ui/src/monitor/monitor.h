@@ -756,6 +756,11 @@ protected:
     class MonitorRuler *m_vRuler = nullptr;  ///< left ruler
     QWidget   *m_rulerCorner = nullptr;      ///< top-left corner filler
     QLabel    *m_readoutLabel = nullptr;     ///< live X/Y coordinate readout
+    QWidget   *m_footerRow = nullptr;        ///< the footer's bar and the readout
+    class ShrinkableBar *m_footerBar = nullptr;
+    /** The readout beside the footer's controls when they all fit whole,
+     *  else on a line of its own under them (UX-34). */
+    void fitFooterReadout();
     /** The footer's status line: what an edit did that the plot can't show
      *  (fixtures pasted unpatched). Clears itself after a while. */
     QLabel    *m_noticeLabel = nullptr;
