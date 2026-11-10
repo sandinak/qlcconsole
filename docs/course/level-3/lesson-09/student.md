@@ -56,9 +56,10 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
 5. Select **VC-03**, a hit called *Spare* that no button fires. **Not a Problem…**,
    write `Kept for the encore`, your name, **OK**. Show **Not a Problem**.
    - *You should see:* the finding moves to Not a Problem, with your note.
-6. Leave the two **MOV-08** warnings and the notes. They are about the
-   real rig's moving lights, and about the classroom having no outputs.
-   Tell your partner which you would fix first on the real rig, and why.
+6. Leave the notes and the one warning left (the washes' light on the
+   cyc). They are about the real rig's fixtures, and about the classroom
+   having no outputs. Tell your partner which you would fix first on the
+   real rig, and why.
 7. Click **2.0.1 Slow Dance**. The Lanterns should be amber at full, and in
    the Rig Overview they are dark. Right-click a lantern → **Why is this
    on?** (or select it and press ⌘I).

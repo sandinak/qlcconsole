@@ -204,6 +204,7 @@ private slots:
     void levelThreeWithTheMouse();
     /** COURSE_BUILD=1 (COURSE_LESSON=3.N: one lesson): makes Level 3's show files. */
     void buildLevelThreeShows();
+    void markTheMoversInTheShows();
     /** 3.5, played: timecode takes the list to each cue at its time; the
      *  phone Run page's GO is refused until the show allows it. */
     void lessonThreeFiveFollowsTheTimecode();

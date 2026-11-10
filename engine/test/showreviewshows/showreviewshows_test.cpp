@@ -49,8 +49,10 @@ struct Expect
    - PWR-12 (warning), from 1.3: the audience-tower washes' cones clip the cyc
      (16-22%) in Verse; real spill. The Truss Cyc boxes carry the Cyc stage look,
      so their light on the cyc counts as meant.
-   - MOV-08 (warning), from 1.3: Solo / Fan cues light movers before any cue sets
-     their position; real, and what the lesson's preset cues come after.
+   - No MOV-08: the Pose (AT-Spots at Soloist DS, from 1.3) and before
+     the Fan (Truss-Spots at the Riser Line, from 2.5) carries a dark preset, so
+     those Block cues don't swing their movers in lit. Fails here if a rebuilt
+     show loses it (courseshow_test markTheMoversInTheShows puts it back).
    - CUE-08 (note), from 2.1: Verse releases layers with no base cue.
    - CUE-15 (note), from 2.7: sub-cues on Sub GO, no widget sends it yet.
    - TEACH-01 (note): 3.6's start is the teaching-mode lesson.
@@ -62,32 +64,32 @@ const Expect kExpected[] = {
     { "lesson-1-1-start.qlcc", "FIX-17,FIX-18,PAT-06" },
     { "lesson-1-2-finish.qlcc", "FIX-17,FIX-18,PAT-06" },
     { "lesson-1-2-start.qlcc", "FIX-17,FIX-18,PAT-06" },
-    { "lesson-1-3-finish.qlcc", "FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
+    { "lesson-1-3-finish.qlcc", "FIX-17,FIX-18,PAT-06,PWR-12" },
     { "lesson-1-3-start.qlcc", "FIX-17,FIX-18,PAT-06" },
-    { "lesson-1-4-finish.qlcc", "FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-1-4-start.qlcc", "FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-1-5-start.qlcc", "FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-1-finish.qlcc", "CUE-08,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-1-start.qlcc", "FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-2-finish.qlcc", "CUE-08,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-2-start.qlcc", "CUE-08,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-3-finish.qlcc", "CUE-08,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-3-start.qlcc", "CUE-08,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-4-finish.qlcc", "CUE-08,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-4-start.qlcc", "CUE-08,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-5-finish.qlcc", "CUE-08,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-5-start.qlcc", "CUE-08,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-6-finish.qlcc", "CUE-08,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-6-start.qlcc", "CUE-08,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-7-finish.qlcc", "CUE-08,CUE-15,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-2-7-start.qlcc", "CUE-08,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-3-5-finish.qlcc", "CUE-08,CUE-15,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-3-5-start.qlcc", "CUE-08,CUE-15,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
+    { "lesson-1-4-finish.qlcc", "FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-1-4-start.qlcc", "FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-1-5-start.qlcc", "FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-1-finish.qlcc", "CUE-08,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-1-start.qlcc", "FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-2-finish.qlcc", "CUE-08,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-2-start.qlcc", "CUE-08,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-3-finish.qlcc", "CUE-08,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-3-start.qlcc", "CUE-08,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-4-finish.qlcc", "CUE-08,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-4-start.qlcc", "CUE-08,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-5-finish.qlcc", "CUE-08,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-5-start.qlcc", "CUE-08,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-6-finish.qlcc", "CUE-08,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-6-start.qlcc", "CUE-08,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-7-finish.qlcc", "CUE-08,CUE-15,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-2-7-start.qlcc", "CUE-08,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-3-5-finish.qlcc", "CUE-08,CUE-15,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-3-5-start.qlcc", "CUE-08,CUE-15,FIX-17,FIX-18,PAT-06,PWR-12" },
     { "lesson-3-6-start.qlcc", "FIX-17,FIX-18,PAT-06,TEACH-01" },
-    { "lesson-3-8-finish.qlcc", "CUE-08,CUE-15,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-3-8-start.qlcc", "CUE-08,CUE-15,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-3-9-finish.qlcc", "CUE-08,CUE-15,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12" },
-    { "lesson-3-9-start.qlcc", "CUE-01,CUE-02,CUE-08,CUE-15,FIX-17,FIX-18,MOV-08,PAT-06,PWR-12,VC-03" },
+    { "lesson-3-8-finish.qlcc", "CUE-08,CUE-15,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-3-8-start.qlcc", "CUE-08,CUE-15,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-3-9-finish.qlcc", "CUE-08,CUE-15,FIX-17,FIX-18,PAT-06,PWR-12" },
+    { "lesson-3-9-start.qlcc", "CUE-01,CUE-02,CUE-08,CUE-15,FIX-17,FIX-18,PAT-06,PWR-12,VC-03" },
     { "Sample.qxw", "FIX-07,FIX-17,FIX-18,PAT-06" },
 };
 

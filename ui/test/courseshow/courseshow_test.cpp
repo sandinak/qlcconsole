@@ -1533,6 +1533,50 @@ static bool lessonFourByMouse(Doc *doc, ShowTreeView *view)
     return true;
 }
 
+static const CueList *listNamed(Doc *doc, const QString &name)
+{
+    for (const Production &p : doc->showTree()->productions())
+        for (const CueList &l : p.lists)
+            if (l.name == name)
+                return &l;
+    return nullptr;
+}
+
+/* The preset the shipped shows carry (MOV-08): a Block cue that lights movers
+   needs their position set before it, or Show Review warns they swing in
+   lit. The cue before @a before (by name) aims @a group at @a target with the
+   dimmer Out, so the heads sit in place dark and the Block cue only opens
+   them; typed on the command line, as a programmer would. The preset goes
+   in the song's first cue (@a inFirstCue: the Pose, which tracks on to the
+   Solo) unless a Block cue sits between, which stops what tracks in; then
+   the cue right before it carries it (the Fan follows the Dance Break). The
+   lessons' own steps don't have it, so a student's show differs from the file
+   by this one layer. A show that has it already is left as it is. */
+static bool markTheMovers(Doc *doc, ShowTreeView *view, const QString &before, const QString &group,
+                          const QString &target, bool inFirstCue)
+{
+    const CueList *song = listNamed(doc, QStringLiteral("01-Everybody Scream"));
+    LESSON_STEP(song != nullptr, "no 01-Everybody Scream");
+    quint32 cueId = 0;
+    const Cue *prev = nullptr;
+    for (const Cue &c : song->cues)
+    {
+        if (c.name == before && prev != nullptr)
+            cueId = inFirstCue ? song->cues.first().id : prev->id;
+        prev = &c;
+    }
+    LESSON_STEP(cueId != 0, "no cue before " + before);
+    for (const Layer &ly : doc->showTree()->cue(cueId)->layers)
+        if (doc->showTree()->targetLabel(ly.target) == group)
+            return true;
+    LESSON_STEP(view->selectNode(cueId), "select the cue before " + before);
+    settle(50);
+    const QString cmd = QStringLiteral("%1 dimmer Out aim \"%2\"").arg(group, target);
+    LESSON_STEP(view->runCommand(cmd), cmd + ": " + view->commandMessage());
+    settle(100);
+    return true;
+}
+
 void CourseShow_Test::buildLessonShows()
 {
     if (qEnvironmentVariableIsEmpty("COURSE_BUILD"))
@@ -1795,6 +1839,7 @@ void CourseShow_Test::aMouseBuiltShowSavesOpensAndPlays()
     QVERIFY(lessonTwoByMouse(m_app->doc(), showTree()));
     QVERIFY(lessonThreeByMouse(m_app->doc(), showTree()));
     QVERIFY(lessonFourByMouse(m_app->doc(), showTree()));
+    QVERIFY2(markTheMovers(m_app->doc(), showTree(), "Solo", "AT-Spots", "Soloist DS", true), qPrintable(s_lessonWhy));
     const QStringList built = describeAll(m_app->doc());
     QVERIFY(!built.isEmpty());
 
@@ -1838,6 +1883,9 @@ void CourseShow_Test::lessonsOneTwoToOneFourWithTheMouse()
             QCOMPARE(describeAll(m_app->doc()), before);
         s_lessonWhy.clear();
         QVERIFY2(l.byMouse(m_app->doc(), showTree()), qPrintable(l.start + QStringLiteral(": ") + s_lessonWhy));
+        if (l.start != kL2Start)    // the shipped shows carry the movers' preset from 1.3 on
+            QVERIFY2(markTheMovers(m_app->doc(), showTree(), "Solo", "AT-Spots", "Soloist DS", true),
+                     qPrintable(s_lessonWhy));
         const QStringList built = describeAll(m_app->doc());
         m_app->doc()->resetModified();
         QVERIFY(open(l.finish));
@@ -5134,6 +5182,9 @@ void CourseShow_Test::levelTwoWithTheMouse()
         QCOMPARE(describeAll(m_app->doc()), before);
         s_lessonWhy.clear();
         QVERIFY2(l.byMouse(m_app->doc(), showTree(), QString()), qPrintable(levelTwoStart(l.n) + QStringLiteral(": ") + s_lessonWhy));
+        if (l.n == 5)               // the shipped shows carry the Fan's preset from 2.5 on
+            QVERIFY2(markTheMovers(m_app->doc(), showTree(), "Fan", "Truss-Spots", "Riser Line", false),
+                     qPrintable(s_lessonWhy));
         const QStringList built = describeAll(m_app->doc());
         qInfo().noquote() << "[2." + QString::number(l.n) + "] built:" << built.join(" || ");
         m_app->doc()->resetModified();
@@ -5179,14 +5230,6 @@ void CourseShow_Test::buildLevelTwoShows()
    Show files lesson-3-N-start / -finish: 3.5 starts from Lesson 2.7's finish,
    3.8 from 3.5's finish, 3.9 from 3.8's finish with three faults put in. */
 
-static const CueList *listNamed(Doc *doc, const QString &name)
-{
-    for (const Production &p : doc->showTree()->productions())
-        for (const CueList &l : p.lists)
-            if (l.name == name)
-                return &l;
-    return nullptr;
-}
 
 /* What Level 3's lessons set: timecode, numbering, sections, masters, override hits. */
 static QStringList describeControl(Doc *doc)
@@ -5474,6 +5517,36 @@ void CourseShow_Test::buildLevelThreeShows()
         s_lessonWhy.clear();
         QVERIFY2(l.byMouse(m_app->doc(), showTree(), QString()), qPrintable(s_lessonWhy));
         QCOMPARE(m_app->saveXML(levelThreeFile(l.n, "finish")), QFile::NoError);
+        m_app->doc()->resetModified();
+    }
+}
+
+/* Maintenance, not a lesson: puts the movers' preset (markTheMovers) into the
+   shipped shows that need it, in place: AT-Spots (in the Pose) for the Solo from 1.3's
+   finish on, Truss-Spots (before the Fan) from 2.5's finish on. Run once, after
+   the shows are rebuilt (docs/course/shows/README.md). */
+void CourseShow_Test::markTheMoversInTheShows()
+{
+    if (qEnvironmentVariableIsEmpty("COURSE_BUILD"))
+        QSKIP("set COURSE_BUILD=1 to put the movers' preset into the shipped show files");
+    struct F { QString file; bool fan; };
+    QList<F> files = { { kL3Finish, false }, { kL4Start, false }, { kL4Finish, false }, { kL5Start, false },
+                       { levelTwoStart(1), false }, { levelTwoFinish(1), false } };
+    for (int n = 2; n <= 7; ++n)
+    {
+        files << F{ levelTwoStart(n), n >= 6 } << F{ levelTwoFinish(n), n >= 5 };
+    }
+    for (int n : { 5, 8, 9 })
+        files << F{ levelThreeFile(n, "start"), true } << F{ levelThreeFile(n, "finish"), true };
+    for (const F &f : files)
+    {
+        QVERIFY2(open(f.file), qPrintable(f.file));
+        s_lessonWhy.clear();
+        QVERIFY2(markTheMovers(m_app->doc(), showTree(), "Solo", "AT-Spots", "Soloist DS", true), qPrintable(f.file + " " + s_lessonWhy));
+        if (f.fan)
+            QVERIFY2(markTheMovers(m_app->doc(), showTree(), "Fan", "Truss-Spots", "Riser Line", false),
+                     qPrintable(f.file + " " + s_lessonWhy));
+        QCOMPARE(m_app->saveXML(f.file), QFile::NoError);
         m_app->doc()->resetModified();
     }
 }

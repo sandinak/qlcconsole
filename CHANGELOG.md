@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Fixed
+
+- **The course shows no longer trip Show Review's MOV-08.** From 1.3 on, the Pose carries a dark preset (AT-Spots aimed at Soloist DS, dimmer Out) and, from 2.5, the cue before the Fan does too (Truss-Spots at the Riser Line), so the movers are in place before those Block cues light them. `showreviewshows_test` no longer expects MOV-08 on any show.
+
 ## [0.4.2] - 2026-11-09
 
 ### Added
