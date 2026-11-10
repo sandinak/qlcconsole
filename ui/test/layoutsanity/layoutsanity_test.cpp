@@ -1696,6 +1696,28 @@ void LayoutSanity_Test::theSceneGroupLooksShowNamesAtTheSmallest()
                                 .arg(it->text(0)).arg(need).arg(list->header()->sectionSize(0))
                                 .arg(looks.width()).arg(looks.height())));
     }
+    /* ...and asks for no more than that: the list's floor is the Workbench
+       editor pane's, which must stay narrow (Windows CI 043j: 76 characters,
+       from a floor that counted the branch line twice, two spare letters and
+       24 px of slack on top). Fourteen characters, the fades, a
+       scroll bar, the frame, and less than a character over. */
+    const int icon = list->iconSize().isValid() ? list->iconSize().width()
+                                                : list->style()->pixelMetric(QStyle::PM_SmallIconSize, nullptr, list);
+    const int bar = list->style()->styleHint(QStyle::SH_ScrollBar_Transient, nullptr, list)
+                        ? 0 : list->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, list);
+    // A fade column: its heading, or the widest of the times it shows.
+    const int margins = 2 * (list->style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, list) + 1);
+    int cell = 0;
+    for (const QString &t : { QStringLiteral("scene"), QStringLiteral("snap"), QStringLiteral("10.5 s"),
+                              QStringLiteral("\u2014") })
+        cell = qMax(cell, fm.horizontalAdvance(t) + margins);
+    const int fades = qMax(cell, qMax(list->header()->sectionSize(1), list->header()->sectionSizeHint(1)))
+                      + qMax(cell, qMax(list->header()->sectionSize(2), list->header()->sectionSizeHint(2)));
+    const int fits = fm.horizontalAdvance(QStringLiteral("Full Colour Wash").left(14)) + list->indentation() + icon + 12
+                     + fades + bar + 2 * list->frameWidth();
+    QVERIFY2(list->minimumWidth() < fits + fm.averageCharWidth(),
+             qPrintable(QStringLiteral("the looks list asks for %1 px, %2 hold fourteen characters and the fades")
+                            .arg(list->minimumWidth()).arg(fits)));
 }
 
 void LayoutSanity_Test::scrollingBodiesTakeTheWheel()

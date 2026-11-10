@@ -396,10 +396,13 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     m_lookList = new QTreeWidget(this);
     m_lookList->setObjectName("sceneLooks");
     m_lookList->setColumnCount(LookColCount);
-    m_lookList->setHeaderLabels(QStringList() << tr("Look") << tr("Fade In") << tr("Fade Out"));
+    /* "In" / "Out", the fade times as a cue sheet heads them: "Fade In" and
+       "Fade Out" made the two columns wider than any time they hold, and the
+       Workbench editor pane that much harder to narrow (CI 043j). */
+    m_lookList->setHeaderLabels(QStringList() << tr("Look") << tr("In") << tr("Out"));
     if (QTreeWidgetItem *hdr = m_lookList->headerItem())
     {
-        const QString fadeTip = tr("Per-look fade time (this look's channels only).\n"
+        const QString fadeTip = tr("Per-look fade time, in and out (this look's channels only).\n"
                                    "0 = snap instantly; \"step\" = follow the chaser step / scene fade.\n"
                                    "Double-click a cell to edit; right-click a row to reset to \"step\".");
         hdr->setToolTip(LookColIn,  fadeTip);
@@ -417,15 +420,30 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     m_lookList->header()->setSectionResizeMode(LookColIn, QHeaderView::ResizeToContents);
     m_lookList->header()->setSectionResizeMode(LookColOut, QHeaderView::ResizeToContents);
     /* Room for a look's name beside the fades: at its smallest the list gave
-       the names one letter ("B…", "F…", UX-36). About fourteen characters,
-       past the branch lines, the swatch and the two fade columns. */
+       the names one letter ("B…", "F…", UX-36). Fourteen characters past the
+       branch line and the swatch, each fade column as wide as its heading or
+       a time, and a scroll bar -- and no more: this floor is the Workbench
+       editor pane's too, and a wider one kept the pane from narrowing
+       (Windows' fonts put it past 75 characters, CI 043j). */
     {
         const QFontMetrics fm = m_lookList->fontMetrics();
-        const int fades = m_lookList->header()->sectionSizeHint(LookColIn)
-                          + m_lookList->header()->sectionSizeHint(LookColOut);
-        m_lookList->setMinimumWidth(2 * m_lookList->indentation() + m_lookList->iconSize().width()
-                                    + fm.horizontalAdvance(QStringLiteral("Full Colour Wash")) + fades
-                                    + 2 * m_lookList->frameWidth() + 24);
+        QStyle *st = m_lookList->style();
+        // A cell's own margins, as the view sizes a column to its contents.
+        const int margins = 2 * (st->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, m_lookList) + 1);
+        int cell = 0;
+        for (const QString &t : { tr("scene"), tr("snap"), FadeTimeSpin::text(10500, QString()),
+                                  QStringLiteral("\u2014") })
+            cell = qMax(cell, fm.horizontalAdvance(t) + margins);
+        const int fades = qMax(cell, m_lookList->header()->sectionSizeHint(LookColIn))
+                          + qMax(cell, m_lookList->header()->sectionSizeHint(LookColOut));
+        const int swatch = m_lookList->iconSize().isValid()
+                               ? m_lookList->iconSize().width()
+                               : st->pixelMetric(QStyle::PM_SmallIconSize, nullptr, m_lookList);
+        const int bar = st->styleHint(QStyle::SH_ScrollBar_Transient, nullptr, m_lookList)
+                            ? 0 : st->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, m_lookList);
+        m_lookList->setMinimumWidth(m_lookList->indentation() + swatch
+                                    + fm.horizontalAdvance(QStringLiteral("Full Colour Wash").left(14)) + 12
+                                    + fades + bar + 2 * m_lookList->frameWidth());
     }
     // Double-click an In/Out cell to give that look its own fade time.
     m_lookList->setItemDelegate(new FadeSpinDelegate(m_lookList));
@@ -441,7 +459,7 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
            "and master); looks at the top level light the fixtures directly.\n"
            "Drag a colour onto an effect to feed it, or out to the top level to "
            "make it a static base. Order still sets precedence among siblings.\n"
-           "Double-click Fade In / Fade Out to set a per-look fade time. "
+           "Double-click In / Out to set a per-look fade time. "
            "0 = snap instantly; \"step\" = follow the chaser step / scene fade "
            "(spin below 0, or right-click → Reset, to return to \"step\")."));
     lookCol->addWidget(m_lookList);
