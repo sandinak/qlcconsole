@@ -18,6 +18,8 @@
 */
 
 #include <QDirIterator>
+#include <QFileInfo>
+#include <QHash>
 #include <QRegularExpression>
 #include <QFile>
 #include <QtTest>
@@ -150,10 +152,10 @@ QList<Label> buttonLabels()
     /* The variables declared as a push, tool or abstract button anywhere in
        ui/src (headers too), whatever they are called: setText(tr("…")) on
        one of them is a button text. */
-    QSet<QString> names;
+    QHash<QString, QSet<QString>> namesByStem;   // file stem -> variables declared in its .cpp / .h
     static const QRegularExpression decl(QStringLiteral(
-        "\\bQ(?:PushButton|ToolButton|AbstractButton)\\s*\\*\\s*(\\w+)|"
-        "\\bauto\\s*\\*?\\s*(\\w+)\\s*=\\s*new Q(?:PushButton|ToolButton)\\b"));
+        "\\bQ(?:PushButton|ToolButton|AbstractButton|Action)\\s*\\*\\s*(\\w+)|"
+        "\\bauto\\s*\\*?\\s*(\\w+)\\s*=\\s*(?:new Q(?:PushButton|ToolButton|Action)\\b|[\\w.>()-]*addAction\\()"));
     for (const auto &src : sources({ QStringLiteral("*.cpp"), QStringLiteral("*.h") }))
         for (const QString &l : src.second)
         {
@@ -161,23 +163,31 @@ QList<Label> buttonLabels()
             while (d.hasNext())
             {
                 const QRegularExpressionMatch m = d.next();
-                names.insert(m.captured(1).isEmpty() ? m.captured(2) : m.captured(1));
+                namesByStem[QFileInfo(src.first).completeBaseName()].insert(
+                    m.captured(1).isEmpty() ? m.captured(2) : m.captured(1));
             }
         }
-    names.remove(QString());
-    const QRegularExpression byName(QStringLiteral("\\b(?:%1)(?:->|\\.)setText\\(\\s*tr\\(\"((?:[^\"\\\\]|\\\\.)*)\"")
-                                        .arg(QStringList(names.begin(), names.end()).join(QLatin1Char('|'))));
     static const QRegularExpression call(QStringLiteral(
         "(new (QPushButton|QToolButton)\\(\\s*|\\b(dropDown|tool|button|makeButton)\\(\\s*|"
-        "\\b\\w*([bB]tn|[bB]utton)\\w*(->|\\.)setText\\(\\s*)"
+        "\\b\\w*([bB]tn|[bB]utton)\\w*(->|\\.)setText\\(\\s*|"
+        "\\bQ(?:PushButton|ToolButton)\\s+\\w+\\(\\s*)"
         "tr\\(\"((?:[^\"\\\\]|\\\\.)*)\""));
-    // By name only (...Btn / ...Button): a variable called m_next in one class
-    // must not make every m_next in the code a button.
+    // By name only (...Btn / ...Button).
     const QRegularExpression ternary(QStringLiteral("\\b\\w*[bB](?:tn|utton)\\w*(?:->|\\.)setText\\((?=[^;]*\\?)"));
     QList<Label> out;
     for (const auto &src : sources())
     {
         const QStringList &lines = src.second;
+        // Only the variables this file (or its header) declares: m_next in one
+        // class must not make every m_next in the code a button.
+        const QSet<QString> &names = namesByStem[QFileInfo(src.first).completeBaseName()];
+        QRegularExpression byName, byNameTernary;
+        if (!names.isEmpty())
+        {
+            const QString alt = QStringList(names.begin(), names.end()).join(QLatin1Char('|'));
+            byName.setPattern(QStringLiteral("\\b(?:%1)(?:->|\\.)setText\\(\\s*tr\\(\"((?:[^\"\\\\]|\\\\.)*)\"").arg(alt));
+            byNameTernary.setPattern(QStringLiteral("\\b(?:%1)(?:->|\\.)setText\\((?=[^;]*\\?)").arg(alt));
+        }
         for (int i = 0; i < lines.size(); ++i)
         {
             QRegularExpressionMatchIterator t = call.globalMatch(lines.at(i));
@@ -204,6 +214,25 @@ QList<Label> buttonLabels()
             }
             if (!names.isEmpty())
             {
+                // setText(cond ? tr("A") : tr("B")) on a declared button / action.
+                const QRegularExpressionMatch nt = byNameTernary.match(lines.at(i));
+                if (nt.hasMatch())
+                {
+                    QString rest = lines.at(i).mid(nt.capturedEnd());
+                    const int tip = rest.indexOf(QLatin1String("setToolTip"));
+                    if (tip >= 0)
+                        rest = rest.left(tip);
+                    QRegularExpressionMatchIterator t3 = trRe().globalMatch(rest);
+                    while (t3.hasNext())
+                    {
+                        const QString text = unescape(t3.next().captured(1));
+                        bool dup = false;
+                        for (const Label &o : out)
+                            dup = dup || (o.file == src.first && o.line == i + 1 && o.text == text);
+                        if (!dup)
+                            out << Label{ src.first, i + 1, text };
+                    }
+                }
                 QRegularExpressionMatchIterator n = byName.globalMatch(lines.at(i));
                 while (n.hasNext())
                 {
@@ -271,6 +300,12 @@ void MenuWords_Test::theReaderFindsLabels()
     for (const Label &l : buttonLabels())
         addSource = addSource || l.text == QStringLiteral("Add Source");
     QVERIFY(addSource);
+    // A QAction given its text through a name that says nothing of buttons
+    // (m_lockAction->setText(tr("Lock Item")) was read by nothing).
+    bool lock = false;
+    for (const Label &l : buttonLabels())
+        lock = lock || l.text == QStringLiteral("Lock Item");
+    QVERIFY(lock);
     // A ternary's both sides ("Pick an effect…" was one, and went unread).
     bool pick = false;
     for (const Label &l : buttonLabels())

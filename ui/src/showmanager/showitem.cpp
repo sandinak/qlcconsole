@@ -88,12 +88,12 @@ QList<QAction *> ShowItem::getDefaultActions() const
 
     if (isLocked())
     {
-        m_lockAction->setText(tr("Unlock item"));
+        m_lockAction->setText(tr("Unlock Item"));
         m_lockAction->setIcon(QIcon(":/unlock.png"));
     }
     else
     {
-        m_lockAction->setText(tr("Lock item"));
+        m_lockAction->setText(tr("Lock Item"));
         m_lockAction->setIcon(QIcon(":/lock.png"));
     }
     actions.append(m_lockAction);
@@ -393,12 +393,12 @@ void ShowItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     menu.addAction(m_alignToCursor);
     if (isLocked())
     {
-        m_lockAction->setText(tr("Unlock item"));
+        m_lockAction->setText(tr("Unlock Item"));
         m_lockAction->setIcon(QIcon(":/unlock.png"));
     }
     else
     {
-        m_lockAction->setText(tr("Lock item"));
+        m_lockAction->setText(tr("Lock Item"));
         m_lockAction->setIcon(QIcon(":/lock.png"));
     }
     menu.addAction(m_lockAction);

@@ -5063,7 +5063,7 @@ void ShowTreeView::includesMenu(QMenu *menu, quint32 cueId)
         {
             a->setEnabled(false);
             a->setToolTip(why);
-            a->setText(tr("%1 — would loop").arg(a->text()));
+            a->setText(tr("%1 — Would Loop").arg(a->text()));
         }
         connect(a, &QAction::toggled, this, [this, cueId, other](bool checked) {
             if (checked)
