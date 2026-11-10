@@ -1119,6 +1119,7 @@ private:
     QTreeWidget *m_tree = nullptr;
     QSet<int> m_hiddenColumns;      ///< flag columns hidden from the header menu (Q104)
     int m_badgeWidth = 0;               //!< the badge column's width
+    bool m_badgeChosen = false;         //!< ...set by hand: kept, even with nothing in it
     bool m_fittingColumns = false;
 
     // Inspector

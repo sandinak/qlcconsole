@@ -1675,6 +1675,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_tree->header()->setStretchLastSection(false);
     m_tree->header()->setSectionResizeMode(QHeaderView::Interactive);
     m_tree->header()->setMinimumSectionSize(24);
+    m_badgeChosen = QSettings().contains(SETTINGS_BADGE_COLUMN);
     m_badgeWidth = QSettings().value(SETTINGS_BADGE_COLUMN,
                                      m_tree->fontMetrics().horizontalAdvance(QStringLiteral("main  ▸ MIB"))
                                      + 12).toInt();
@@ -1692,6 +1693,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                 flags += m_tree->header()->sectionSize(c);
         m_badgeWidth = qMax(24, section == 0 ? m_tree->viewport()->width() - flags - size : size);
         QSettings().setValue(SETTINGS_BADGE_COLUMN, m_badgeWidth);
+        m_badgeChosen = true;
         fitTreeColumns();
     });
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -5020,14 +5022,20 @@ void ShowTreeView::fitTreeColumns()
         room -= w;
     }
     /* The names keep at least 60% of what is left, however wide InfoCol was
-       set -- and InfoCol is no wider than the widest text in it: empty, it
-       gave a layer's name nothing ("Tow…" at 1024 wide, UX-36). */
-    int infoNeeds = 0;
-    const QFontMetrics itemFm = m_tree->fontMetrics();
-    for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
-        if (!(*it)->text(InfoCol).isEmpty())
-            infoNeeds = qMax(infoNeeds, itemFm.horizontalAdvance((*it)->text(InfoCol)) + 12);
-    const int badges = qBound(24, qMin(m_badgeWidth, qMax(24, infoNeeds)), qMax(24, room * 2 / 5));
+       set -- and, until its width is set by hand, InfoCol is no wider than
+       the widest text in it: empty, it gave a layer's name nothing ("Tow…"
+       at 1024 wide, UX-36). */
+    int infoWant = m_badgeWidth;
+    if (!m_badgeChosen)
+    {
+        int infoNeeds = 0;
+        const QFontMetrics itemFm = m_tree->fontMetrics();
+        for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
+            if (!(*it)->text(InfoCol).isEmpty())
+                infoNeeds = qMax(infoNeeds, itemFm.horizontalAdvance((*it)->text(InfoCol)) + 12);
+        infoWant = qMin(m_badgeWidth, qMax(24, infoNeeds));
+    }
+    const int badges = qBound(24, infoWant, qMax(24, room * 2 / 5));
     m_tree->header()->resizeSection(NameCol, qMax(40, room - badges));
     m_tree->header()->resizeSection(InfoCol, badges);
     m_fittingColumns = false;
