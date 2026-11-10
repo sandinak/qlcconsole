@@ -156,9 +156,9 @@ Measure the room and correct the plot.
 1. Copy the boom: right-click it → **Copy Selected**, then right-click the
    plot in the other wing → **Paste Here**. Name it `SL Boom`.
 <!-- PLOT-HANDLES (hidden from students; depends on branch feat/043-plot-handles, drop if it has not landed)
-2. Hold **⌥** (Alt on Windows and Linux) and drag the end of the **Door Wall**
-   to swing it about its other end; hold **Shift** to step by 15°. It
-   catches the end of another wall or truss so corners close.
+2. Drag the end of the **Door Wall** to stretch or swing it; it catches the
+   next wall's end so corners close. Hold **Shift** for 15° steps, **⌥**
+   (Alt on Windows and Linux) for no snapping.
 -->
 3. Right-click **SR Boom Par** → **Show Light Footprint**. Set **Tilt in yoke**
    to `45 down`, then to `10 down`. How does the pool of light move, and which
