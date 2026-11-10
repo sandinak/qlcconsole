@@ -57,6 +57,9 @@ button:disabled{opacity:.35}
 #go:active{background:var(--go2)}
 .row{display:flex;gap:10px;margin-bottom:10px}
 #stop.armed{background:var(--stop);border-color:#e57368;color:#fff}
+.notes div{font-size:15px;padding:2px 0;color:var(--dim)}
+.notes b{color:var(--fg)}
+.notes .done{text-decoration:line-through}
 #subrow{display:none}
 #masters{display:none}
 .mrow{display:flex;align-items:center;gap:10px;margin:6px 0}
@@ -95,9 +98,9 @@ button:disabled{opacity:.35}
 <div id="section"></div>
 <div id="statusline"></div>
 <main>
-<div class="card" id="now"><small>On now</small><div class="num" id="nnum">&mdash;</div><div class="name" id="nname"></div></div>
+<div class="card" id="now"><small>On now</small><div class="num" id="nnum">&mdash;</div><div class="name" id="nname"></div><div id="nnotes"></div></div>
 <div id="sub"></div>
-<div class="card" id="next"><small>Next</small><div class="num" id="xnum">&mdash;</div><div class="name" id="xname"></div></div>
+<div class="card" id="next"><small>Next</small><div class="num" id="xnum">&mdash;</div><div class="name" id="xname"></div><div id="xnotes"></div></div>
 <div class="card" id="status"><small>Show status</small><div id="slist"></div></div>
 <div class="card" id="masters"><small>Masters</small><div id="mlist"></div></div>
 </main>
@@ -124,7 +127,11 @@ function msg(t){$('msg').textContent=t||''}
 function cue(n,o,sub){
   var x=o||{},num=x.num||'—',name=x.name||'';
   if(sub&&sub.num){name=(name?name+' · ':'')+sub.num+(sub.name?' '+sub.name:'')}
-  $(n+'num').textContent=num;$(n+'name').textContent=name}
+  $(n+'num').textContent=num;$(n+'name').textContent=name;
+  var h=$(n+'notes');h.className='notes';h.textContent='';
+  (x.notes||[]).forEach(function(e){var d=document.createElement('div'),b=document.createElement('b');
+    b.textContent=e.kind+': ';d.appendChild(b);d.appendChild(document.createTextNode(e.text));
+    if(e.done)d.className='done';h.appendChild(d)})}
 function canSend(){return st.remote&&st.hasList&&(unlocked||!st.pin)}
 function paint(){
   $('where').textContent=st.hasList?((st.production?st.production+' · ':'')+st.list):(st.remote===undefined?'Connecting…':'No main cue list');

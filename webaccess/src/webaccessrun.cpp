@@ -21,6 +21,7 @@
 #include "webaccessrun.h"
 #include "showtreecontroller.h"
 #include "teachingsettings.h"
+#include "cuesheet.h"
 #include "showcontrol.h"
 #include "showoperate.h"
 #include "groupmasters.h"
@@ -300,6 +301,18 @@ static QJsonObject cueObject(Doc *doc, Chaser *ch, quint32 listId, int step, int
         const int idx = l->indexOf(cueId);
         o[QStringLiteral("num")] = st->cueNumber(*l, idx);
         o[QStringLiteral("name")] = idx >= 0 && idx < l->cues.count() ? l->cues.at(idx).name : QString();
+        // Every entry of the Notes pane for this cue, each with its kind.
+        QJsonArray notes;
+        for (const CueSheet::NoteLine &n : CueSheet::noteLinesOf(st, cueId))
+        {
+            QJsonObject no;
+            no[QStringLiteral("kind")] = n.kind;
+            no[QStringLiteral("text")] = n.text;
+            no[QStringLiteral("done")] = n.done;
+            notes << no;
+        }
+        if (!notes.isEmpty())
+            o[QStringLiteral("notes")] = notes;
         return o;
     }
     if (sub >= 0)

@@ -1714,7 +1714,9 @@ Nothing is stored; change a cue and open it again. The dialog's
   each cue under it with its sub-cues indented. Columns: the number (the
   production's `{S}.{P}.{II}` or hundreds numbering), name, **Fade in**,
   **Fade out**, **Follow / wait** (`GO`, `auto after 4s`, a sub-cue's `Sub
-  GO`), notes, and the **hits armed here** — the hits under that cue. The
+  GO`), **Notes** (every entry the Notes pane holds for the cue, one a
+  line with its kind: `Note: Call the follow spot`, `Layer Towers (done):
+  Slow the fade`, the cue's own note among them, in the pane's order), and the **hits armed here** — the hits under that cue. The
   hits armed the whole time (the list's, the production's and the global
   ones) are listed once under the list's name. A skipped cue, or a cue of a
   song left out tonight, is marked `SKIPPED`; tonight's running order

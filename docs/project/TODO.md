@@ -676,7 +676,7 @@ rig views, a warned cyc outlined. Leftovers, not built:
   output, not a cue).
 - A live hint in the Workbench while building a layer (nothing live exists
   for zones either; the Show Tree mark follows the re-check a moment later).
-- The Cue Sheet's notes column.
+- ~~The Cue Sheet's notes column.~~ Done: the Notes column lists every Notes pane entry of the cue; so does the web Run page.
 - "Keep unmeant light off" per cyc: it would clamp output in the runtime
   (per-frame, per-fixture geometry or a baked mask on the GO path) -- not
   built; the cost is a new playback path and hot-path work.

@@ -23,7 +23,9 @@ network. The Wi-Fi only carries small control messages.
   (**Lighting Studio ▸ Focus**), because the venue it saves to is the
   console's question.
 - **Run page**: **http://&lt;address&gt;:9999/run**. The cue on now and the
-  next one, with GO, BACK, HOLD and STOP and the group masters. It now also
+  next one, each with the entries of its Notes pane (`Note: Call the follow
+  spot`, ticked ones struck through), with GO, BACK, HOLD and STOP and the
+  group masters. It now also
   lists the **Show status** warnings (the footer chip's lines) and offers
   **Focus ›** while a focus runs on the console. On a screen 1280 pixels
   wide or more held sideways (the Deck), it is in two columns: the cues on

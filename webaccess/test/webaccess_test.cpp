@@ -2454,6 +2454,41 @@ void WebAccess_Test::focusRoundTripOnLoopback()
     s->stop();
 }
 
+void WebAccess_Test::theRunStateCarriesEveryNoteOfTheCue()
+{
+    runShow();
+    ShowTreeController *st = m_doc->showTree();
+    WebAccessRun run(m_doc);
+    // Each cue of the list holds a note, a second entry and a ticked one.
+    QList<quint32> ids;
+    for (const ShowTree::Production &p : st->productions())
+        for (const ShowTree::CueList &l : p.lists)
+            for (const ShowTree::Cue &c : l.cues)
+                ids << c.id;
+    for (quint32 id : ids)
+    {
+        QVERIFY(st->addNote(ShowTree::NoteKind::Cue, id, QStringLiteral("Call the spot")) != 0xFFFFFFFF);
+        const quint32 done = st->addNote(ShowTree::NoteKind::Cue, id, QStringLiteral("Dim the house"));
+        QVERIFY(st->setNoteDone(done, true));
+    }
+    const QJsonObject state = QJsonDocument::fromJson(run.stateJson()).object();
+    QJsonObject cue = state.value("next").toObject();
+    if (cue.isEmpty())
+        cue = state.value("now").toObject();
+    const QJsonArray notes = cue.value("notes").toArray();
+    QCOMPARE(notes.count(), 2);
+    QCOMPARE(notes.at(0).toObject().value("kind").toString(), QStringLiteral("Note"));
+    QStringList texts;
+    for (const QJsonValue &v : notes)
+        texts << v.toObject().value("text").toString();
+    QVERIFY(texts.contains(QStringLiteral("Call the spot")));
+    QVERIFY(texts.contains(QStringLiteral("Dim the house")));
+    bool anyDone = false;
+    for (const QJsonValue &v : notes)
+        anyDone = anyDone || v.toObject().value("done").toBool();
+    QVERIFY(anyDone);
+}
+
 void WebAccess_Test::theRunStateCarriesShowStatusAndFocus()
 {
     runShow();

@@ -28,6 +28,7 @@
 #include "qlcengine_export.h"
 
 class Doc;
+class ShowTreeController;
 
 /** @addtogroup engine Engine
  * @{
@@ -53,6 +54,20 @@ class Doc;
 class QLC_ENGINE_EXPORT CueSheet
 {
 public:
+    /** One entry of a cue's Notes pane: its kind ("Note", "Layer Towers"),
+     *  the text, and whether it is ticked done. */
+    struct NoteLine
+    {
+        QString kind;
+        QString text;
+        bool done = false;
+        /** "Note: Watch the door", "Layer Towers (done): Slow it". */
+        QString display() const;
+    };
+    /** Every entry the Notes pane holds for cue @a cueId, in the pane's
+     *  order, each with its kind (the cue sheet and the web remote). */
+    static QList<NoteLine> noteLinesOf(ShowTreeController *st, quint32 cueId);
+
     /** One row of the cue sheet. */
     struct Row
     {
@@ -65,7 +80,8 @@ public:
         QString fadeIn;                 //!< "2s"
         QString fadeOut;
         QString follow;                 //!< "GO", "auto after 4s", a sub-cue's "Sub GO"
-        QString note;
+        QString note;                   //!< the cue's own note
+        QList<NoteLine> notes;          //!< all of the Notes pane's entries for the cue
         QString hits;                   //!< the hits under this cue, ", "-separated
         bool    skipped = false;        //!< left out of GO (Cue::skip), or its song is tonight
         bool    needsWork = false;      //!< tagged Needs work (Cue::needsWork), from the stage or the cue page

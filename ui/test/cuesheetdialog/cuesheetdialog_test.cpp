@@ -95,6 +95,30 @@ void CueSheetDialog_Test::showsTheCueSheetAndTheTrackingSheet()
     QCOMPARE(dlg.findChild<QComboBox *>("cueSheetPage")->currentIndex(), 1);
 }
 
+void CueSheetDialog_Test::theNotesColumnHoldsEveryNotesPaneEntry()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 walk = st->productions().first().lists.first().cues.at(1).id;
+    QVERIFY(st->addNote(ShowTree::NoteKind::Cue, walk, "Call the follow spot") != invalidId());
+    QVERIFY(st->addNote(ShowTree::NoteKind::Cue, walk, "Dim the house") != invalidId());
+    CueSheetDialog dlg(m_doc, m_prod);
+    QTextBrowser *view = dlg.findChild<QTextBrowser *>("cueSheetView");
+    QVERIFY(view != nullptr);
+    QVERIFY(view->toPlainText().contains("Note: Call the follow spot"));
+    QVERIFY(view->toPlainText().contains("Note: Dim the house"));
+
+    // QLC_SHOT_DIR: the dialog at the three sizes.
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!dir.isEmpty())
+        for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+        {
+            dlg.resize(sz);
+            dlg.show();
+            QTest::qWait(100);
+            QVERIFY(dlg.grab().save(QString("%1/cuesheet-%2x%3.png").arg(dir).arg(sz.width()).arg(sz.height())));
+        }
+}
+
 void CueSheetDialog_Test::savesWhatIsShown()
 {
     CueSheetDialog dlg(m_doc, m_prod);

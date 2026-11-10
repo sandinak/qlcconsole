@@ -16,6 +16,7 @@ private slots:
 
     void cueSheetRowsFollowTheRunningOrder();
     void subCuesHitsAndTimes();
+    void everyNotesPaneEntryIsOnTheSheet();
     void needsWorkIsAColumn();
     void trackingMarksWhatChanges();
     void runningOrderMovesSongsNotTracking();

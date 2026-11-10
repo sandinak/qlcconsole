@@ -219,6 +219,16 @@ QList<Note> ShowTreeController::notes(NoteKind kind, quint32 target) const
     return out;
 }
 
+QList<Note> ShowTreeController::notesOfCue(quint32 cueId) const
+{
+    QList<Note> layers;
+    for (const Note &n : m_notes)
+        if (n.kind == NoteKind::Layer && n.cue == cueId && noteTargetExists(n))
+            layers << n;
+    std::sort(layers.begin(), layers.end(), noteNewerThan);
+    return notes(NoteKind::Cue, cueId) + layers;
+}
+
 QList<Note> ShowTreeController::allNotes() const
 {
     QList<Note> out;
