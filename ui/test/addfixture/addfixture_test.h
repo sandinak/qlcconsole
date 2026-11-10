@@ -37,6 +37,7 @@ private slots:
     void findAddressIgnoresUnpatchedFixtures();
     void inventoryQuantityIsNotLimitedByAUniverse();
     void addingMoreStartsOnTheSameModelAndMode();
+    void modelColumnShowsWholeNames();
     void initialNoFixture();
     void initialDimmer();
     void initialScanner();

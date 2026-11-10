@@ -676,6 +676,12 @@ void AddFixture::fillTree(const QString& selectManufacturer,
     const QHash<QString, QLCFixtureDef *> defs = AppUtil::definitionsByName(m_doc->fixtureDefCache());
     m_tree->setColumnCount(2);
     m_tree->setHeaderLabels(QStringList() << tr("Fixture Model") << tr("Source"));
+    // The model column takes what the Source column leaves, never the
+    // other way round (it was cut to "Generic RG…").
+    m_tree->setMinimumWidth(320);
+    m_tree->header()->setStretchLastSection(false);
+    m_tree->header()->setSectionResizeMode(KColumnName, QHeaderView::Stretch);
+    m_tree->header()->setSectionResizeMode(KColumnSource, QHeaderView::ResizeToContents);
 
     /* Add all known fixture definitions to the tree */
     QStringListIterator it(m_doc->fixtureDefCache()->manufacturers());
