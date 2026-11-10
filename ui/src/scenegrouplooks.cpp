@@ -420,11 +420,12 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     m_lookList->header()->setSectionResizeMode(LookColIn, QHeaderView::ResizeToContents);
     m_lookList->header()->setSectionResizeMode(LookColOut, QHeaderView::ResizeToContents);
     /* Room for a look's name beside the fades: at its smallest the list gave
-       the names one letter ("B…", "F…", UX-36). Fourteen characters past the
-       branch line and the swatch, each fade column as wide as its heading or
-       a time, and a scroll bar -- and no more: this floor is the Workbench
-       editor pane's too, and a wider one kept the pane from narrowing
-       (Windows' fonts put it past 75 characters, CI 043j). */
+       the names one letter ("B…", "F…", UX-36). Fourteen characters and the
+       … of a longer name, past the branch line and the swatch; each fade
+       column as wide as its heading or a time; a scroll bar -- and no more:
+       this floor is the Workbench editor pane's too, and a wider one kept
+       the pane from narrowing (Windows' fonts put it past 75 characters,
+       CI 043j). */
     {
         const QFontMetrics fm = m_lookList->fontMetrics();
         QStyle *st = m_lookList->style();
@@ -442,7 +443,7 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
         const int bar = st->styleHint(QStyle::SH_ScrollBar_Transient, nullptr, m_lookList)
                             ? 0 : st->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, m_lookList);
         m_lookList->setMinimumWidth(m_lookList->indentation() + swatch
-                                    + fm.horizontalAdvance(QStringLiteral("Full Colour Wash").left(14)) + 12
+                                    + fm.horizontalAdvance(QStringLiteral("Full Colour Wash").left(14) + QChar(0x2026)) + 12
                                     + fades + bar + 2 * m_lookList->frameWidth());
     }
     // Double-click an In/Out cell to give that look its own fade time.

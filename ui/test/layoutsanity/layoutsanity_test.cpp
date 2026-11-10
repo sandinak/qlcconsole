@@ -1700,7 +1700,7 @@ void LayoutSanity_Test::theSceneGroupLooksShowNamesAtTheSmallest()
        editor pane's, which must stay narrow (Windows CI 043j: 76 characters,
        from a floor that counted the branch line twice, two spare letters and
        24 px of slack on top). Fourteen characters, the fades, a
-       scroll bar, the frame, and less than a character over. */
+       scroll bar, the frame, and a pixel or two of rounding. */
     const int icon = list->iconSize().isValid() ? list->iconSize().width()
                                                 : list->style()->pixelMetric(QStyle::PM_SmallIconSize, nullptr, list);
     const int bar = list->style()->styleHint(QStyle::SH_ScrollBar_Transient, nullptr, list)
@@ -1713,9 +1713,9 @@ void LayoutSanity_Test::theSceneGroupLooksShowNamesAtTheSmallest()
         cell = qMax(cell, fm.horizontalAdvance(t) + margins);
     const int fades = qMax(cell, qMax(list->header()->sectionSize(1), list->header()->sectionSizeHint(1)))
                       + qMax(cell, qMax(list->header()->sectionSize(2), list->header()->sectionSizeHint(2)));
-    const int fits = fm.horizontalAdvance(QStringLiteral("Full Colour Wash").left(14)) + list->indentation() + icon + 12
+    const int fits = fm.horizontalAdvance(QStringLiteral("Full Colour Wash").left(14) + QChar(0x2026)) + list->indentation() + icon + 12
                      + fades + bar + 2 * list->frameWidth();
-    QVERIFY2(list->minimumWidth() < fits + fm.averageCharWidth(),
+    QVERIFY2(list->minimumWidth() <= fits + 2,
              qPrintable(QStringLiteral("the looks list asks for %1 px, %2 hold fourteen characters and the fades")
                             .arg(list->minimumWidth()).arg(fits)));
 }
