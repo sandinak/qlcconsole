@@ -213,6 +213,10 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     m_table->verticalHeader()->hide();
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->horizontalHeader()->setSectionResizeMode(COL_NAME, QHeaderView::Stretch);
+    /* The mode and universe are combo boxes: each column is as wide as its longest
+       name, so no row reads "Effect (15ch". */
+    m_table->horizontalHeader()->setSectionResizeMode(COL_MODE, QHeaderView::ResizeToContents);
+    m_table->horizontalHeader()->setSectionResizeMode(COL_UNI, QHeaderView::ResizeToContents);
     m_table->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     root->addWidget(m_table, 1);
