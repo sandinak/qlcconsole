@@ -774,13 +774,13 @@
     "id": "UX-40",
     "theme": "Layout",
     "title": "A UI change shows its before and after",
-    "rule": "A change to ui/, web pages or the rig view ships with before/after shots at 1024×640, 1280×800 and 1920×1080 that he reviews before merge.",
+    "rule": "A change to ui/, web pages or the rig view ships with before/after shots at 1024×640, 1280×800 and 1920×1080, signed off by the independent ux-reviewer before merge (not by Branson).",
     "check": "manual",
     "checks": [
       "manual"
     ],
     "enforced": false,
-    "why": "2026-11-03 (Q207): \"do we not do after-patch checking to see that the result matches intended behavior?\"",
+    "why": "2026-11-03 (Q207): \"do we not do after-patch checking to see that the result matches intended behavior?\" 2026-11-09: \"I am kinda done approving screenshots.. just have an independent evaluator do that work .. it's blocking too many things\".",
     "example": {
       "right": "shots-041/<agent>/before-1280x800.png, after-1280x800.png ...",
       "wrong": "\"gate=0\" as the only evidence for a layout change"

@@ -253,16 +253,25 @@ def flow_names(flow):
     names = set()
 
     def walk(st):
+        if isinstance(st, list):
+            for sub in st:
+                walk(sub)
+            return
+        if not isinstance(st, dict):
+            return
         d = st.get("do") or {}
+        d = d if isinstance(d, dict) else {}
         for k in ("click", "choose", "menu", "action", "to"):
             if isinstance(d.get(k), str):
                 names.add(d[k])
         if d.get("menu") and isinstance(d.get("item"), str):
             names.add(d["item"])
         f = st.get("find") or {}
+        f = f if isinstance(f, dict) else {}
         if isinstance(f.get("widget"), str):
             names.add(f["widget"])
         c = st.get("check") or {}
+        c = c if isinstance(c, dict) else {}
         for v in c.get("visible", []):
             names.add(v)
         for k in ("widgetText", "comboHas"):

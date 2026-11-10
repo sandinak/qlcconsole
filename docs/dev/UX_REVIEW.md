@@ -1,16 +1,17 @@
 # AI UX review
 
-Branson looks at every UI branch's screenshots before it merges
-([UX-40](UX_RULES.md#ux-40-a-ui-change-shows-its-before-and-after)) and keeps
-catching the same obvious things: a metres label on a feet show, a button not
-in Title Case, a dialog that runs off a laptop screen. The AI UX review looks
-at the same shots first, against his written rules
-([UX_RULES.md](UX_RULES.md), machine copy [ux_rules.json](ux_rules.json)), so
-what reaches him has already been through one careful pass.
+Every UI branch's before/after screenshots are signed off by this review
+before the branch merges
+([UX-40](UX_RULES.md#ux-40-a-ui-change-shows-its-before-and-after)). Since
+2026-11-09 it **replaces** Branson's own look: he used to catch the same
+obvious things by hand (a metres label on a feet show, a button not in Title
+Case, a dialog that runs off a laptop screen), and waiting on him blocked
+merges. The reviewer reads the shots against his written rules
+([UX_RULES.md](UX_RULES.md), machine copy [ux_rules.json](ux_rules.json)).
+Never ask him to approve shots.
 
-It does not replace his look, a gate test or the walker's live-widget checks.
-It is the `review` check in the rules: the one that reads pixels the way he
-does.
+It does not replace a gate test or the walker's live-widget checks. It is
+the `review` check in the rules: the one that reads pixels the way he does.
 
 ## The loop
 
@@ -26,7 +27,9 @@ does.
 4. **The author fixes** what the report calls `blocker` or `fix` (or says
    in the hand-off why a finding is wrong), retakes the shots and reruns
    the review until it is clean or only nits and known follow-ups remain.
-5. **Only then Branson** gets the shots, with the report beside them.
+5. **Signed off:** clean, or only nits and known follow-ups, and the branch
+   may go into a train. The report goes in the morning report; Branson is
+   not asked to look.
 
 ## Running it
 
