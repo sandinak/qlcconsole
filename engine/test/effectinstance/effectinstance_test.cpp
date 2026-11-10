@@ -2343,18 +2343,7 @@ void EffectInstance_Test::followSpotSizeReaimKeepsARunningFade()
         r.spot->setOwnChannelValues(own);
     };
 
-    // Where the cue takes the head with the tight beam, the aim never redone.
     zoom(0);
-    int tightTilt = -1;
-    {
-        Player q(m_doc);
-        r.scene->start(&q.timer, FunctionParent::master());
-        q.play(250);
-        tightTilt = q.dmx(tiltAt);
-        r.scene->stop(FunctionParent::master());
-        q.timer.timerTick();
-        q.play(2);
-    }
     const QVector3D tightAim = AimSolver::aimPointFor(m_doc, r.spot->id(), r.who, true, true);
 
     Player p(m_doc);
@@ -2373,11 +2362,17 @@ void EffectInstance_Test::followSpotSizeReaimKeepsARunningFade()
     const int atEnd = p.dmx(tiltAt);
     p.play(200);
     const int settled = p.dmx(tiltAt);
+    // The aim it went to is the wide beam's: back to the tight beam, the
+    // head goes elsewhere.
+    zoom(0);
+    r.scene->requestReaim();
+    p.play(5);
+    const int tightTilt = p.dmx(tiltAt);
     qInfo() << "tilt: 0.2 s" << early << "0.5 s" << mid << "3.1 s" << atEnd << "settled" << settled
-            << "| tight beam's" << tightTilt;
+            << "| the tight beam's" << tightTilt;
     QVERIFY2(settled != early, "the heads should move in the fade");
     QVERIFY2(qAbs(settled - tightTilt) >= 1,
-             qPrintable(QString("the head settled on the old aim (%1)").arg(settled)));
+             qPrintable(QString("the wide beam's aim is the tight one's (%1)").arg(settled)));
     QVERIFY2(qAbs(mid - settled) > 2, qPrintable(QString("the re-aim cut the cue's fade: %1 already").arg(mid)));
     QVERIFY2(qAbs(atEnd - settled) <= 1,
              qPrintable(QString("the fade started again: %1 at 3.1 s, %2 settled").arg(atEnd).arg(settled)));
@@ -2482,7 +2477,7 @@ void EffectInstance_Test::followSpotLiveFramingAimsFramed()
        plays -- set and cleared, the look edited under it, the effect
        fading out and brought back -- and the look's own once it is gone. */
     const FramingRig r = framingRig(m_doc);
-    r.who->setPosition(QVector3D(0.0f, 12.0f, 0.0f));     // a long, flat throw
+    r.who->setPosition(QVector3D(0.0f, 8.0f, 0.0f));      // a long, flat-ish throw
     MonitorProperties *props = m_doc->monitorProperties();
     const float chest = props->targetAimPoint(r.who, true).z();
     // Where the scene aims the head with its tightest beam (zoom 0, 4 degrees).

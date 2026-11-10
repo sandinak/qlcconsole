@@ -778,9 +778,23 @@ void HotPath_Test::whoLetGoAddsNoAllocationPerFrame()
    allocates nothing. */
 void HotPath_Test::aBeamSizeReaimAddsNoFadersAndReadsFadesFree()
 {
-    Doc *doc = rig();
-    const QList<Fixture *> movers = rigFixtures(doc, "Mover");
-    QVERIFY(movers.size() >= 4);
+    // Four movers of the mixed rig's kind, on a universe of their own.
+    Doc *doc = m_doc;
+    QLCFixtureDef *def = doc->fixtureDefCache()->fixtureDef("Martin", "ERA 300 Profile");
+    QVERIFY(def != nullptr);
+    QLCFixtureMode *mode = def->mode("21 Channel");
+    QVERIFY(mode != nullptr);
+    QList<Fixture *> movers;
+    for (int i = 0; i < 4; ++i)
+    {
+        Fixture *fx = new Fixture(doc);
+        fx->setName(QString("Follow mover %1").arg(i + 1));
+        fx->setFixtureDefinition(def, mode);
+        fx->setUniverse(2);
+        fx->setAddress(quint32(i * 21));
+        QVERIFY(doc->addFixture(fx));
+        movers << fx;
+    }
     QLCPalette *pos = new QLCPalette(QLCPalette::PanTilt, doc);
     pos->setName("Follow position");
     pos->setValue(120, 60);
@@ -846,6 +860,11 @@ void HotPath_Test::aBeamSizeReaimAddsNoFadersAndReadsFadesFree()
     QCOMPARE(n, 0L);
     look->stop(FunctionParent::master());
     frame(doc, 3);
+    doc->deleteFunction(look->id());
+    doc->deletePalette(pos->id());
+    doc->deletePalette(follow->id());
+    for (Fixture *fx : movers)
+        doc->deleteFixture(fx->id());
 }
 
 /* An EFX on moving heads drives pan and tilt with 16-bit precision: the fine
