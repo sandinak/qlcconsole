@@ -1332,6 +1332,13 @@ void LayoutSanity_Test::theStudioEditorsFitALaptop()
                 for (const Finding &f : found)
                     problems << QStringLiteral("%1 @ %2x%3: %4").arg(name).arg(dlg->width()).arg(dlg->height())
                                     .arg(f.text);
+                // Nothing left lying on the dialog outside its layout (a
+                // Pipe's unused Run angle box sat over the Geometry title).
+                for (QWidget *c : dlg->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
+                    if (c->isVisibleTo(dlg) && !c->isWindow() && dlg->layout() != nullptr
+                        && dlg->layout()->indexOf(c) < 0 && !isFloating(c))
+                        problems << QStringLiteral("%1 @ %2x%3: %4 is shown outside the layout")
+                                        .arg(name).arg(dlg->width()).arg(dlg->height()).arg(pathOf(c, dlg));
                 // OK and Cancel in the dialog, whole.
                 QDialogButtonBox *bb = dlg->findChild<QDialogButtonBox *>();
                 if (bb == nullptr || !bb->isVisible()

@@ -8865,6 +8865,8 @@ void Monitor::slotEditPipe(quint32 bid)
     runSpin->setValue(double(b->runAngle()));
     if (horiz)
         form->addRow(tr("Run angle:"), runSpin);
+    else
+        runSpin->hide();            // not in the form: it sat over the Geometry box's title
 
     // Crossbar on a boom: how far up the parent boom it attaches. When set, the
     // base position/stand/truss controls below are derived and don't apply.
