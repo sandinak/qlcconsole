@@ -45,7 +45,7 @@ Roles: Driver, Navigator, Designer. Switch after each part.
    first one, **Spots, washes, beams, lanterns** (Universe 1): the grid and
    **357 / 512 addresses used (69%)**.
 3. Click **SR Truss Spot 1**: **Address Range** 214 - 225, **Channels** 12,
-   **Binary Address (DIP)**. Click **Spot 2**: why does it start at 226?
+   **Binary Address (DIP)**. Click **SR Truss Spot 2**: why does it start at 226?
 4. Click **Truss pixel boxes 1** (Universe 2): 495 of 512. Why isn't a fourth XL-450 in it?
 5. **Add ▾ → Add Fixture…**: **WLED → Lantern**, **Mode** **Effect (15ch)**,
    **Name** `Lantern 7`. The app picks Universe 1, address 358. **OK**.
@@ -69,7 +69,7 @@ next free address. **Apply** greyed: read the summary line.
 1. What is a universe, and what is an address?
 2. A new light takes 12 channels and the last light ends at 357. Where
    does it start and end?
-3. What does Add fixture say if two lights overlap, and what goes wrong on
+3. What does **Add Fixture…** say if two lights overlap, and what goes wrong on
    stage if it is ignored?
 4. Who uses the patch list and labels, and for what?
 
