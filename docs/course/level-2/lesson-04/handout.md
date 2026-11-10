@@ -101,8 +101,7 @@ Switch roles after each part.
     **Steps** row.
     - *You should see:* the steps twinkle, pixel by pixel.
 11. Click **↩ Back** to close the Look Editor, then click the **Steps**
-    row. On its **Dimmer effect** row, click **⋯ → Its own colour /
-    dimmer → White**.
+    row. On its **Dimmer effect** row, click **⋯ → Its Own Colour / Dimmer → White**.
     - *You should see:* the row reads **Step Sparkle in White**: white
       glints over the violet steps.
 

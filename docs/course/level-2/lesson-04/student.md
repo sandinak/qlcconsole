@@ -58,7 +58,7 @@ Which lights move, and which stay still?
 8. Click **1.0.6 Dance Break**; drag **Step Sparkle** onto the **Steps**
    row. The steps twinkle.
 9. Click **↩ Back**, then the **Steps** row. On **Dimmer effect**: **⋯ →
-   Its own colour / dimmer → White**.
+   Its Own Colour / Dimmer → White**.
 
    ![Its own colour](../../images/lesson-2-4/sparkle-row.png)
 
