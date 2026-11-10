@@ -10,6 +10,19 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Follow spot size and framing (feat/043-followspot-size-framing, 2026-11-10) -- built, leftovers
+
+D-pad Left/Right size a playing follow spot (Framing Size / Width on
+Subject / beam angle), Framing from the person's height, Save Positions
+keeps it (FollowSpotFraming, Scene::requestReaim(.., keepRunningFades)).
+- [ ] The re-aim after a size change runs 3 ticks (EffectInstance::
+  syncFollowBeam): a zoom still moving after that (an effect depth
+  fade-in, a fixture's own zoom smoothing, a slow tick) leaves the aim
+  for an in-between beam until something else re-aims. Re-aim until the
+  heads' beam angle stops changing instead (review round 3, finding 6).
+- [ ] Not checked on a real rig: a follow spot framed on a person with
+  real zoom heads (Branson's check).
+
 ## Loaded gobos by name (feat/043-loaded-gobos, 2026-11-08) -- built, leftovers
 
 "I need to be able to configure some of the lights with a loaded gobo ..

@@ -271,6 +271,8 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
             {
                 existing->cancelFadeOut();
                 existing->rebindToScene(sceneId);
+                // Back with its live controls: its Aim looks aim for them.
+                syncFollowSizesLive(existing);
                 // With a depth fade: back up from where it had got to.
                 const int in = effectFade(scene, pid, true, m_doc);
                 if (in >= 0)
@@ -392,7 +394,7 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
     // Collect cleanup work under the lock, then release before touching
     // MasterTimer or universes.
     bool shouldUnregister = false;
-    QList<quint32> stopped;
+    QList<quint32> stopped, overridesGone;
 
     {
         QMutexLocker locker(&m_instanceMutex);
@@ -437,6 +439,7 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
                 stopped << inst->effectPaletteId();
             // A live override is for this run only: parked, it plays as stored.
             inst->clearOverrides();
+            overridesGone << inst->effectPaletteId();
 
             // A persistent look is PARKED rather than destroyed: hold the engine
             // (and the script state inside it) so the next scene using this same
@@ -462,12 +465,13 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
         }
     } // release m_instanceMutex before touching MasterTimer
 
-    for (quint32 pid : stopped)
-    {
+    /* Its live controls went with it -- only where they did: one fading out
+       still plays them, and may be brought back (cancelFadeOut). */
+    for (quint32 pid : overridesGone)
         if (QLCPalette *pal = m_doc->palette(pid))
-            pal->setFollowSizesBeamLive(-1);    // its live controls went with it
+            pal->setFollowSizesBeamLive(-1);
+    for (quint32 pid : stopped)
         emit effectStopped(pid);
-    }
 
     // Republish immediately: the destroyed instances' writes are still sitting in
     // m_publishedWrites, and writeDMX() would keep asserting that dead frame until
@@ -626,6 +630,9 @@ void EffectScriptRunner::slotTick()
             if (inst->fadeOutDone())
             {
                 rit.remove();
+                // Gone at the end of its fade out: its live controls with it.
+                if (QLCPalette *pal = m_doc->palette(inst->effectPaletteId()))
+                    pal->setFollowSizesBeamLive(-1);
                 delete inst;
                 reaped = true;
             }
@@ -690,7 +697,11 @@ void EffectScriptRunner::updateEffectParams(quint32 paletteId)
     // (main thread — same thread runTick() runs on, so no lock vs. the tick). No
     // instance recreation, so the effect keeps its JS state.
     if (EffectInstance *inst = instanceForPalette(paletteId))
+    {
         inst->reloadParamsFromPalette();
+        // An override held over a changed look: what it plays now.
+        syncFollowSizesLive(inst);
+    }
 }
 
 bool EffectScriptRunner::isPlaying(quint32 paletteId) const

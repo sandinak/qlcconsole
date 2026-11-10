@@ -151,6 +151,9 @@ private slots:
     void followSpotSizeReaimKeepsACrossfade();
     void aBlockingReaimStillTakesTheNewCuesFade();
     void framingStraightDownIsTheSteepest();
+    /** A live control on the follow spot's Framing aims framed: set,
+     *  cleared, the look edited under it, faded out and brought back. */
+    void followSpotLiveFramingAimsFramed();
     /** A follow spot on an Aim look: two heads in different places both
      *  land on the follow-spot point, and moving the point moves both to
      *  the same new place (they converge; the effect leaves pan/tilt alone). */

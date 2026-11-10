@@ -186,7 +186,6 @@ public:
      *  edit on every one of the 50 ticks per second. */
     void requestPaletteRefresh();
 
-
 signals:
     void valueChanged(SceneValue scv);
 

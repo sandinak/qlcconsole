@@ -2327,28 +2327,57 @@ struct Player
 
 void EffectInstance_Test::followSpotSizeReaimKeepsARunningFade()
 {
-    /* A follow-spot cue fading its heads in over 3 s: the effect starting
-       (its Framing sizes the beam) re-aims them for the beam it gives, and
-       the cue's fade keeps its time -- neither cut short nor started again. */
+    /* A follow-spot cue fading its heads in over 3 s, and the beam opening
+       wide part way in (the zoom published to the head, as a running
+       effect's is): the effect's re-aim takes the heads to the aim for the
+       new beam -- lower on the person -- and the cue's fade keeps its time,
+       neither cut short nor started again. */
     const FramingRig r = framingRig(m_doc);
     r.who->setPosition(QVector3D(1.5f, 8.0f, 0.0f));
     r.follow->setEffectParamValue("framing", 2);
     r.scene->setFadeInSpeed(3000);
+    const quint32 tiltAt = r.spot->address() + 1;
+    auto zoom = [&](int v) {
+        QByteArray own(4, 0);
+        own[3] = char(v);
+        r.spot->setOwnChannelValues(own);
+    };
+
+    // Where the cue takes the head with the tight beam, the aim never redone.
+    zoom(0);
+    int tightTilt = -1;
+    {
+        Player q(m_doc);
+        r.scene->start(&q.timer, FunctionParent::master());
+        q.play(250);
+        tightTilt = q.dmx(tiltAt);
+        r.scene->stop(FunctionParent::master());
+        q.timer.timerTick();
+        q.play(2);
+    }
+    const QVector3D tightAim = AimSolver::aimPointFor(m_doc, r.spot->id(), r.who, true, true);
+
     Player p(m_doc);
     r.scene->start(&p.timer, FunctionParent::master());
     p.play(10);                                     // 0.2 s in
-    const int early = p.dmx(r.spot->address());
+    const int early = p.dmx(tiltAt);
+    zoom(255);                                      // the beam wide open (50 degrees)
+    const QVector3D wideAim = AimSolver::aimPointFor(m_doc, r.spot->id(), r.who, true, true);
+    QVERIFY2(wideAim.z() < tightAim.z() - 0.05f, "a wide beam aims lower on the person");
     EffectInstance inst(m_doc, r.scene->id(), r.follow->id());
     QVERIFY(inst.isValid());
     inst.runTick();                                 // the effect's own re-aim request
     p.play(15);                                     // 0.5 s in
-    const int mid = p.dmx(r.spot->address());
+    const int mid = p.dmx(tiltAt);
     p.play(int(2600 / MasterTimer::tick()));        // 3.1 s in: the cue's fade is over
-    const int atEnd = p.dmx(r.spot->address());
+    const int atEnd = p.dmx(tiltAt);
     p.play(200);
-    const int settled = p.dmx(r.spot->address());
-    qInfo() << "pan: 0.2 s" << early << "0.5 s" << mid << "3.1 s" << atEnd << "settled" << settled;
+    const int settled = p.dmx(tiltAt);
+    qInfo() << "tilt: 0.2 s" << early << "0.5 s" << mid << "3.1 s" << atEnd << "settled" << settled
+            << "| tight beam's" << tightTilt;
     QVERIFY2(settled != early, "the heads should move in the fade");
+    QVERIFY2(qAbs(settled - tightTilt) >= 1,
+             qPrintable(QString("the head settled on the old aim (%1)").arg(settled)));
     QVERIFY2(qAbs(mid - settled) > 2, qPrintable(QString("the re-aim cut the cue's fade: %1 already").arg(mid)));
     QVERIFY2(qAbs(atEnd - settled) <= 1,
              qPrintable(QString("the fade started again: %1 at 3.1 s, %2 settled").arg(atEnd).arg(settled)));
@@ -2444,6 +2473,67 @@ void EffectInstance_Test::aBlockingReaimStillTakesTheNewCuesFade()
              qPrintable(QString("the move took the old fade's time: %1 at 1.1 s, %2 settled").arg(atOne).arg(settled)));
     r.scene->stop(FunctionParent::master());
     p.timer.timerTick();
+}
+
+void EffectInstance_Test::followSpotLiveFramingAimsFramed()
+{
+    /* A live control (a VC Effect Control: an override on the playing
+       effect) on a follow spot's Framing: the Aim looks aim for what it
+       plays -- set and cleared, the look edited under it, the effect
+       fading out and brought back -- and the look's own once it is gone. */
+    const FramingRig r = framingRig(m_doc);
+    r.who->setPosition(QVector3D(0.0f, 12.0f, 0.0f));     // a long, flat throw
+    MonitorProperties *props = m_doc->monitorProperties();
+    const float chest = props->targetAimPoint(r.who, true).z();
+    // Where the scene aims the head with its tightest beam (zoom 0, 4 degrees).
+    auto aimedZ = [&]() { return sceneAimPoint(m_doc, r.scene, r.spot, 0).z(); };
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    const quint32 pid = r.follow->id();
+
+    runner->createInstancesForScene(r.scene->id());
+    QVERIFY(runner->isPlaying(pid));
+    QVERIFY(!r.follow->followSizesBeam());              // Custom, no width
+    QCOMPARE(aimedZ(), chest);                          // a tight beam aims at the chest
+
+    // Framed live: over the chest, the top of the beam over the head.
+    QVERIFY(runner->setParamOverride(pid, "framing", 1));
+    QVERIFY(r.follow->followSizesBeam());
+    QVERIFY2(aimedZ() > chest + 0.01f, qPrintable(QString("%1 vs chest %2").arg(aimedZ()).arg(chest)));
+    runner->clearParamOverride(pid, "framing");
+    QVERIFY(!r.follow->followSizesBeam());
+    QCOMPARE(aimedZ(), chest);
+
+    // The look edited while a live control holds another of its settings:
+    // what it plays now (Width on Subject held at 0, the look turned to
+    // Waist Up: framed).
+    QVERIFY(runner->setParamOverride(pid, "sizeOnSubject", 0.0));
+    QVERIFY(!r.follow->followSizesBeam());
+    r.follow->setEffectParamValue("framing", 2);
+    runner->updateEffectParams(pid);
+    QVERIFY(r.follow->followSizesBeam());
+    r.follow->setEffectParamValue("framing", 0);
+    runner->updateEffectParams(pid);
+    QVERIFY(!r.follow->followSizesBeam());
+    runner->clearParamOverride(pid, "sizeOnSubject");
+
+    // Fading out it still plays its live control; GO again in the fade
+    // brings it back with it, still framed.
+    QVERIFY(runner->setParamOverride(pid, "framing", 3));
+    r.scene->setPaletteFade(pid, 0, 2000);
+    runner->destroyInstancesForScene(r.scene->id(), true);
+    QVERIFY(runner->instanceForPalette(pid) != nullptr && runner->instanceForPalette(pid)->isFadingOut());
+    QVERIFY(r.follow->followSizesBeam());
+    runner->createInstancesForScene(r.scene->id());
+    QVERIFY(runner->isPlaying(pid));
+    QVERIFY(r.follow->followSizesBeam());
+    QVERIFY(aimedZ() > chest + 0.01f);
+
+    // Stopped for good (no fade): its live control goes, the look's own again.
+    r.scene->setPaletteFade(pid, 0, 0);
+    runner->destroyInstancesForScene(r.scene->id(), false);
+    QVERIFY(runner->instanceForPalette(pid) == nullptr);
+    QVERIFY(!r.follow->followSizesBeam());
+    QCOMPARE(aimedZ(), chest);
 }
 
 void EffectInstance_Test::framingStraightDownIsTheSteepest()

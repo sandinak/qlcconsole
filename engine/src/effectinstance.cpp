@@ -1870,7 +1870,12 @@ void EffectInstance::syncFollowBeam(Scene *sc)
     if (m_reaimTicks > 0)
     {
         --m_reaimTicks;
+        // Every scene it plays in: the same look on another layer, the next
+        // cue's during a crossfade (it carries on there).
         sc->requestReaim(kFollowBeamReaimMs, true);
+        for (quint32 other : m_alsoScenes)
+            if (Scene *also = qobject_cast<Scene *>(m_doc->function(other)))
+                also->requestReaim(kFollowBeamReaimMs, true);
     }
 }
 

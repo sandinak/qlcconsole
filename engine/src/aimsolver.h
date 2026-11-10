@@ -276,12 +276,12 @@ namespace AimSolver
     /** True if @p scene carries a follow-spot effect, which is what makes an
      *  Aim look in it track a SUBJECT (chest height above the deck) rather
      *  than the target's own point. */
+    bool sceneFollowsSubject(Doc *doc, const Scene *scene);
     /** @p scene's follow spot sizes its beam on the subject (a look with a
      *  Framing or a Custom width, QLCPalette::followSizesBeam()): its Aim
      *  looks keep each head's beam top just over the person's head at any
      *  size. From the looks' own settings, so Edit and Run aim the same. */
     bool sceneFramesSubject(Doc *doc, const Scene *scene);
-    bool sceneFollowsSubject(Doc *doc, const Scene *scene);
 
     /** Line of sight from head @p fixtureId to @p point: whether a solid
      *  feature of the stage stands between its beam origin and the point, and

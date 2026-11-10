@@ -766,47 +766,87 @@ void HotPath_Test::whoLetGoAddsNoAllocationPerFrame()
     QVERIFY(uni->m_departed.size() == 32);
 }
 
-/* The follow spot's beam-size re-aim (Scene::requestReaim(.., true)) goes
-   through Scene::write's re-aim and reads each moving channel's fade
-   (GenericFader::runningFade()): asked every frame on a rig mid-fade, it
-   adds no faders and no channels, and the read allocates nothing. */
+/*****************************************************************************
+ * The mixed rig
+ *****************************************************************************/
+
+/* The follow spot's beam-size re-aim (Scene::requestReaim(.., true)), asked
+   every frame of a follow-spot scene still fading its movers in: each goes
+   through Scene::write's position re-aim -- every head's pan and tilt
+   replaced, its running fade read (GenericFader::runningFade()) and kept --
+   adds no faders and no channels, keeps the fade going, and the fade read
+   allocates nothing. */
 void HotPath_Test::aBeamSizeReaimAddsNoFadersAndReadsFadesFree()
 {
-    Scene *look = makeLook(0, kFixturesPerUniverse, 200);
+    Doc *doc = rig();
+    const QList<Fixture *> movers = rigFixtures(doc, "Mover");
+    QVERIFY(movers.size() >= 4);
+    QLCPalette *pos = new QLCPalette(QLCPalette::PanTilt, doc);
+    pos->setName("Follow position");
+    pos->setValue(120, 60);
+    doc->addPalette(pos);
+    // A follow spot's look on it (what makes the scene a follow spot's);
+    // the script's own work is not what is measured here.
+    QLCPalette *follow = new QLCPalette(QLCPalette::Effect, doc);
+    follow->setName("Followspot");
+    follow->setScriptPath(QString(INTERNAL_FIXTUREDIR) + "../effectscripts/followspot.js");
+    follow->setEffectParamValue("framing", 2);
+    doc->addPalette(follow);
+    Scene *look = new Scene(doc);
+    look->setName("Follow movers");
+    doc->addFunction(look);
+    for (int i = 0; i < 4; ++i)
+        look->addFixture(movers.at(i)->id());
+    look->addPalette(pos->id());
+    look->addPalette(follow->id());
+    QVERIFY(AimSolver::sceneFollowsSubject(doc, look));
     look->setFadeInSpeed(5000);
-    look->start(m_doc->masterTimer(), FunctionParent::master());
-    frame(5);
-    Universe *uni = m_doc->inputOutputMap()->universes().at(0);
+    look->start(doc->masterTimer(), FunctionParent::master());
+    frame(doc, 5);
+
+    Fixture *head = movers.first();
+    const quint32 pan = head->channelNumber(QLCChannel::Pan, QLCChannel::MSB);
+    Universe *uni = doc->inputOutputMap()->universes().at(int(head->universe()));
+    QSharedPointer<GenericFader> f;
+    GenericFader::RunningFade probe;
+    for (const QSharedPointer<GenericFader> &g : uni->m_faders)
+        if (g->runningFade(head->id(), pan, probe))
+            f = g;
+    QVERIFY(!f.isNull());
     const int faders = uni->m_faders.size();
-    QSharedPointer<GenericFader> f = uni->m_faders.last();
     const int channels = f->channels().size();
+    GenericFader::RunningFade before;
+    QVERIFY(f->runningFade(head->id(), pan, before));
+    QVERIFY2(before.fadeLeft > 0, "the movers are still fading in");
     for (int i = 0; i < 50; ++i)
     {
         look->requestReaim(1, true);
-        frame(1);
+        frame(doc, 1);
     }
     QCOMPARE(uni->m_faders.size(), faders);
     QCOMPARE(f->channels().size(), channels);
+    GenericFader::RunningFade after;
+    QVERIFY(f->runningFade(head->id(), pan, after));
+    // The re-aims kept the fade: a second less to go, not a fresh 5 s, not cut.
+    QVERIFY2(after.fadeLeft > 0 && after.fadeLeft < before.fadeLeft,
+             qPrintable(QString("%1 ms left, %2 before").arg(after.fadeLeft).arg(before.fadeLeft)));
+
     GenericFader::RunningFade rf;
-    const quint32 fid = m_fixtures[0].first();
-    QVERIFY(f->runningFade(fid, 0, rf));
-    QVERIFY2(rf.fadeLeft > 0, "the look is still fading in");
     uint sink = 0;
     const long n = allocationsIn([&]() {
         for (int i = 0; i < 1000; ++i)
         {
-            f->runningFade(fid, uint(i % 3), rf);
+            f->runningFade(head->id(), pan, rf);
             sink += rf.fadeLeft + rf.current;
         }
     });
     QVERIFY(sink > 0);
-    qInfo("beam-size re-aim: %ld allocations in 1000 fade reads", n);
+    qInfo("beam-size re-aim: %ld allocations in 1000 fade reads; %u ms of the fade left after 50 re-aims",
+          n, after.fadeLeft);
     QCOMPARE(n, 0L);
+    look->stop(FunctionParent::master());
+    frame(doc, 3);
 }
-
-/*****************************************************************************
- * The mixed rig
- *****************************************************************************/
 
 /* An EFX on moving heads drives pan and tilt with 16-bit precision: the fine
    channels move too. A position EFX that wrote only the coarse bytes would
