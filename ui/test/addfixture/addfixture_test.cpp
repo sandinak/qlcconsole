@@ -220,7 +220,7 @@ void AddFixture_Test::modelColumnShowsWholeNames()
     af.resize(af.minimumSizeHint().expandedTo(QSize(640, 480)));
     af.show();
     af.m_tree->expandAll();
-    QTest::qWaitForWindowExposed(&af);
+    QVERIFY(QTest::qWaitForWindowExposed(&af));
     QApplication::processEvents();
     const QFontMetrics fm(af.m_tree->font());
     const int avail = af.m_tree->columnWidth(0) - 2 * af.m_tree->indentation();
