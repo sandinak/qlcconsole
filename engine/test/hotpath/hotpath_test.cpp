@@ -801,9 +801,11 @@ void HotPath_Test::aBeamSizeReaimAddsNoFadersAndReadsFadesFree()
     doc->addPalette(pos);
     /* A follow spot's look on it (what makes the scene a follow spot's).
        No script behind it: what is measured is Scene::write, not the
-       effect -- and here the MasterTimer ticks on the test's own thread,
-       where a playing effect's stop would claim the universes the tick
-       already holds (in the app the timer has its own thread). */
+       effect -- and a playing effect would run into a known deadlock: a
+       stop signalled while the universes are claimed (functionStopped ->
+       EffectScriptRunner::destroyInstancesForScene claiming them again).
+       That is on main too and is fixed separately
+       (fix/043-delete-running-deadlock); this test stays clear of it. */
     QLCPalette *follow = new QLCPalette(QLCPalette::Effect, doc);
     follow->setName("Followspot");
     follow->setScriptPath(QStringLiteral("followspot-not-loaded.js"));
