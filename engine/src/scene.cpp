@@ -1972,14 +1972,16 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                     v = 0;
                 FadeChannel fc(doc(), scv.fxi, scv.channel);
                 quint32 from = v;
+                uint left = 0;
                 /* A blocking change moves the heads over the cue's fade in,
-                   from where they are now (BLOCKING.md). */
-                if (reaimFade == 0 || !m_fadersMap[universe]->currentValue(scv.fxi, scv.channel, &from))
+                   from where they are now (BLOCKING.md); a fade already
+                   running (the cue's own) keeps the time it has left. */
+                if (reaimFade == 0 || !m_fadersMap[universe]->currentValue(scv.fxi, scv.channel, &from, &left))
                     from = v;
                 fc.setStart(from);
                 fc.setTarget(v);
                 fc.setCurrent(from);
-                fc.setFadeTime(from == v ? 0 : reaimFade);
+                fc.setFadeTime(from == v ? 0 : qMax(reaimFade, left));
                 if (m_editOverrideApplied)
                     fc.addFlag(FadeChannel::Override | FadeChannel::EditOverride);
                 m_fadersMap[universe]->replace(fc);

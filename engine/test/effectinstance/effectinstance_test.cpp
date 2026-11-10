@@ -62,6 +62,8 @@
 #include "truss.h"
 #include "scenery.h"
 #include "aimsolver.h"
+#include "followspotframing.h"
+#include <tuple>
 #include <QtMath>
 #include <cmath>
 #include <QVector2D>
@@ -2086,18 +2088,44 @@ int zoomWritten(EffectInstance &inst, quint32 fid)
 }
 }
 
+namespace
+{
+/* The width the Framing wants, written out here on its own (not through
+   FollowSpotFraming), so the test checks the rule, not the code. */
+double framedWidth(double span, double h, double level, double scale = 1.0)
+{
+    const double lvl = qBound(0.25, level, 1.0);
+    return qMax(0.30 * h, span * h * lvl) * scale;
+}
+
+/* Where the scene aims head @p fid now -- AimSolver::sceneAims(), what
+   Scene::write resolves -- with its zoom channel at @p zoom. */
+QVector3D sceneAimPoint(Doc *doc, Scene *scene, Fixture *spot, int zoom)
+{
+    QByteArray own(4, 0);
+    own[3] = char(zoom);
+    spot->setOwnChannelValues(own);
+    for (const AimSolver::SceneAim &a : AimSolver::sceneAims(doc, scene))
+        if (a.fixtureId == spot->id())
+            return a.point;
+    return QVector3D(-99, -99, -99);
+}
+}
+
 void EffectInstance_Test::followSpotFramesThePerson_data()
 {
     QTest::addColumn<int>("framing");
     QTest::addColumn<float>("throwY");
     QTest::addColumn<double>("span");
-    // The share of the height from just over the head down (followspot.js).
-    QTest::newRow("head & shoulders, near") << 1 << 4.0f << 0.40;
-    QTest::newRow("head & shoulders, far") << 1 << 12.0f << 0.40;
-    QTest::newRow("waist up, near") << 2 << 4.0f << 0.60;
-    QTest::newRow("waist up, far") << 2 << 12.0f << 0.60;
-    QTest::newRow("full body, near") << 3 << 4.0f << 1.10;
-    QTest::newRow("full body, far") << 3 << 12.0f << 1.10;
+    // The share of the height from just over the head down.
+    for (const auto &f : { std::make_tuple(1, "head & shoulders", 0.40), std::make_tuple(2, "waist up", 0.60),
+                           std::make_tuple(3, "full body", 1.10) })
+    {
+        QTest::newRow(qPrintable(QString("%1, near").arg(std::get<1>(f)))) << std::get<0>(f) << 4.0f << std::get<2>(f);
+        QTest::newRow(qPrintable(QString("%1, far").arg(std::get<1>(f)))) << std::get<0>(f) << 12.0f << std::get<2>(f);
+        // Almost under the pipe: the throw comes in steeper than 0.25 level.
+        QTest::newRow(qPrintable(QString("%1, steep").arg(std::get<1>(f)))) << std::get<0>(f) << 0.6f << std::get<2>(f);
+    }
 }
 
 void EffectInstance_Test::followSpotFramesThePerson()
@@ -2108,59 +2136,51 @@ void EffectInstance_Test::followSpotFramesThePerson()
     const FramingRig r = framingRig(m_doc);
     MonitorProperties *props = m_doc->monitorProperties();
     r.who->setPosition(QVector3D(0.0f, throwY, 0.0f));
+    r.follow->setEffectParamValue("framing", framing);
+    QVERIFY(AimSolver::sceneFramesSubject(m_doc, r.scene));    // from the look itself, playing or not
 
     EffectInstance inst(m_doc, r.scene->id(), r.follow->id());
     QVERIFY2(inst.isValid(), "followspot.js did not load");
-    inst.setParamValue("framing", framing);
     inst.runTick();
-    QVERIFY2(r.scene->followFramed(), "a framing tells the scene to aim for it");
 
-    // The width wanted: that share of 1.80 m, less where the head comes in
-    // from above (the beam stretches down the body), never under the
-    // shoulders (0.30 of the height).
     AimSolver::Frame frame;
     QVERIFY(AimSolver::frameFor(m_doc, r.spot->id(), frame));
     const QVector3D chest = props->targetAimPoint(r.who, true);
     const QVector3D to = chest - frame.position;
     const double dist = double(to.length());
     const double level = std::hypot(double(to.x()), double(to.y())) / dist;
+    if (throwY < 1.0f)
+        QVERIFY2(level < 0.25, qPrintable(QString::number(level)));
     const double h = 1.80;
-    const double width = qMax(0.30 * h, span * h * qMin(1.0, level));
+    const double width = framedWidth(span, h, level);
     const double want = 2.0 * qRadiansToDegrees(qAtan(width / 2.0 / dist));
     const int expected = int(qBound(0.0, (want - 4.0) / 46.0, 1.0) * 255);
     const int zoom = zoomWritten(inst, r.spot->id());
-    qInfo().noquote() << QString("framing %1 at %2 m: width %3 m, %4 deg, zoom %5 (expected %6)")
-                         .arg(framing).arg(dist, 0, 'f', 2).arg(width, 0, 'f', 2).arg(want, 0, 'f', 1)
-                         .arg(zoom).arg(expected);
+    qInfo().noquote() << QString("framing %1 at %2 m, level %3: width %4 m, %5 deg, zoom %6 (expected %7)")
+                         .arg(framing).arg(dist, 0, 'f', 2).arg(level, 0, 'f', 2).arg(width, 0, 'f', 2)
+                         .arg(want, 0, 'f', 1).arg(zoom).arg(expected);
     QVERIFY2(qAbs(zoom - expected) <= 1, qPrintable(QString("zoom %1, expected %2").arg(zoom).arg(expected)));
 
-    // The aim, with the beam the lens can really make: its top edge just
-    // over the head (1.05 of the height), whatever the size -- never at the
-    // chest only, and no lower than the waist.
+    // The aim the scene resolves, with the zoom the effect wrote: the top
+    // of the beam just over the head (1.05 of the height), whatever the
+    // size, no lower than the waist.
     const double beamDeg = 4.0 + 46.0 * zoom / 255.0;
-    const QVector3D framed = props->targetAimPointFor(r.who, true, frame.position, beamDeg, true);
+    const QVector3D aimed = sceneAimPoint(m_doc, r.scene, r.spot, zoom);
     const double radius = dist * qTan(qDegreesToRadians(beamDeg * 0.5));
-    const double top = double(framed.z()) + radius / qMax(0.25, level);
+    const double top = double(aimed.z()) + radius / qMax(0.25, level);
     const double waist = 0.5 * h;
-    QVERIFY2(double(framed.z()) >= waist - 0.01, qPrintable(QString::number(framed.z())));
-    if (double(framed.z()) > waist + 0.01)
+    QVERIFY2(double(aimed.z()) >= waist - 0.01, qPrintable(QString::number(aimed.z())));
+    if (double(aimed.z()) > waist + 0.01)
         QVERIFY2(qAbs(top - 1.05 * h) < 0.02,
                  qPrintable(QString("top of the beam at %1 m, wanted %2").arg(top).arg(1.05 * h)));
     else
         QVERIFY2(top >= 1.05 * h - 0.02, qPrintable(QString("top of the beam at %1 m").arg(top)));
-    // Head and shoulders is a tight beam: framed it rises over the chest
-    // to keep the head in, where unframed it stayed on the chest (when the
-    // lens can make it that tight: far off, its narrowest is wider).
-    const QVector3D plain = props->targetAimPointFor(r.who, true, frame.position, beamDeg, false);
-    const double plainTop = double(plain.z()) + radius / qMax(0.25, level);
-    if (framing == 1 && plainTop < 1.05 * h - 0.02)
-        QVERIFY2(framed.z() > plain.z() + 0.01f && framed.z() > chest.z(),
-                 qPrintable(QString("framed %1, unframed %2, chest %3").arg(framed.z()).arg(plain.z()).arg(chest.z())));
-
-    // Custom Width again: the scene aims as it did.
-    inst.setParamValue("framing", 0);
-    inst.runTick();
-    QVERIFY(!r.scene->followFramed());
+    // Head and shoulders is a tight beam: it rises over the chest to keep
+    // the head in (where the lens can make it that tight).
+    const double chestTop = double(chest.z()) + radius / qMax(0.25, level);
+    if (framing == 1 && chestTop < 1.05 * h - 0.02)
+        QVERIFY2(aimed.z() > chest.z() + 0.01f,
+                 qPrintable(QString("aimed %1, chest %2").arg(aimed.z()).arg(chest.z())));
 }
 
 void EffectInstance_Test::followSpotLiveSizeAndBeamAngle()
@@ -2172,34 +2192,136 @@ void EffectInstance_Test::followSpotLiveSizeAndBeamAngle()
     QVERIFY(inst.isValid());
     AimSolver::Frame frame;
     QVERIFY(AimSolver::frameFor(m_doc, r.spot->id(), frame));
-    const double dist = double((props->targetAimPoint(r.who, true) - frame.position).length());
+    const QVector3D to = props->targetAimPoint(r.who, true) - frame.position;
+    const double dist = double(to.length());
+    const double level = std::hypot(double(to.x()), double(to.y())) / dist;
     auto forWidth = [&](double w) {
         return int(qBound(0.0, (2.0 * qRadiansToDegrees(qAtan(w / 2.0 / dist)) - 4.0) / 46.0, 1.0) * 255);
     };
 
-    // Nothing set: the zoom is the scene's.
+    // Nothing set: the zoom is the scene's, and the aim the old rule's.
     inst.runTick();
     QCOMPARE(zoomWritten(inst, r.spot->id()), -1);
+    QVERIFY(!AimSolver::sceneFramesSubject(m_doc, r.scene));
 
-    // The pad's size (an override, centimetres) wins over the framing.
-    inst.setParamValue("framing", 3);
-    inst.setOverride("liveSize", 120.0);
+    // The pad's scale on a Framing: that much wider, from this head's own throw.
+    inst.setParamValue("framing", 2);
+    r.follow->setEffectParamValue("framing", 2);
+    FollowSpotFraming::Pad pad;
+    pad.scale = 1.2;
+    inst.setFollowSpotPad(pad);
     inst.runTick();
-    QVERIFY(qAbs(zoomWritten(inst, r.spot->id()) - forWidth(1.20)) <= 1);
-    inst.clearOverride("liveSize");
+    QVERIFY(qAbs(zoomWritten(inst, r.spot->id()) - forWidth(framedWidth(0.60, 1.80, level, 1.2))) <= 1);
+    // ...and the look's own Framing Size times it.
+    inst.setParamValue("framingSize", 50.0);
+    inst.runTick();
+    QVERIFY(qAbs(zoomWritten(inst, r.spot->id()) - forWidth(framedWidth(0.60, 1.80, level, 0.6))) <= 1);
 
-    // No size at all: the beam angle -- the look's, then the pad's over it.
+    // A Custom width: the pad's width over the look's. Custom follows the
+    // person the same way (the beam top over the head).
     inst.setParamValue("framing", 0);
-    inst.setParamValue("beamAngle", 20.0);
-    inst.runTick();
-    QVERIFY(qAbs(zoomWritten(inst, r.spot->id()) - int((20.0 - 4.0) / 46.0 * 255)) <= 1);
-    inst.setOverride("liveBeam", 30.0);
-    inst.runTick();
-    QVERIFY(qAbs(zoomWritten(inst, r.spot->id()) - int((30.0 - 4.0) / 46.0 * 255)) <= 1);
-    // A Custom Width takes over from the angle.
+    r.follow->setEffectParamValue("framing", 0);
+    r.follow->setEffectParamValue("sizeOnSubject", 150.0);
+    QVERIFY(AimSolver::sceneFramesSubject(m_doc, r.scene));
     inst.setParamValue("sizeOnSubject", 150.0);
+    inst.setFollowSpotPad(FollowSpotFraming::Pad());
     inst.runTick();
     QVERIFY(qAbs(zoomWritten(inst, r.spot->id()) - forWidth(1.50)) <= 1);
+    pad = FollowSpotFraming::Pad();
+    pad.widthCm = 120.0;
+    inst.setFollowSpotPad(pad);
+    inst.runTick();
+    QVERIFY(qAbs(zoomWritten(inst, r.spot->id()) - forWidth(1.20)) <= 1);
+
+    // No size at all: the beam angle -- the look's, then the pad's over it.
+    inst.setParamValue("sizeOnSubject", 0.0);
+    inst.setParamValue("beamAngle", 20.0);
+    inst.setFollowSpotPad(FollowSpotFraming::Pad());
+    inst.runTick();
+    QVERIFY(qAbs(zoomWritten(inst, r.spot->id()) - int((20.0 - 4.0) / 46.0 * 255)) <= 1);
+    pad = FollowSpotFraming::Pad();
+    pad.beamDeg = 30.0;
+    inst.setFollowSpotPad(pad);
+    inst.runTick();
+    QVERIFY(qAbs(zoomWritten(inst, r.spot->id()) - int((30.0 - 4.0) / 46.0 * 255)) <= 1);
+    // The pad's values are not the look's, nor an override (a VC store
+    // never takes them).
+    QVERIFY(!r.follow->effectParamValues().contains("liveBeam"));
+    QVERIFY(inst.overrides().isEmpty());
+
+    // A framed look read back from the show aims framed at once -- before
+    // its effect ever plays (Edit, preview and Run the same).
+    r.follow->setEffectParamValue("framing", 1);
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    {
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        QVERIFY(r.follow->saveXML(&w));
+        w.writeEndDocument();
+    }
+    buf.close();
+    QLCPalette *loaded = new QLCPalette(QLCPalette::Effect, m_doc);
+    buf.open(QIODevice::ReadOnly);
+    QXmlStreamReader rd(&buf);
+    rd.readNextStartElement();
+    QVERIFY(loaded->loadXML(rd));
+    QVERIFY(loaded->followSizesBeam());
+    // Two follow-spot looks in one scene, one framed: the scene aims framed,
+    // the same answer every time it is asked (no flag for them to fight over).
+    QLCPalette *second = new QLCPalette(QLCPalette::Effect, m_doc);
+    second->setScriptPath(r.follow->scriptPath());
+    QVERIFY(m_doc->addPalette(second));
+    r.scene->addPalette(second->id());
+    EffectInstance other(m_doc, r.scene->id(), second->id());
+    for (int k = 0; k < 5; ++k)
+    {
+        inst.runTick();
+        other.runTick();
+        QVERIFY(AimSolver::sceneFramesSubject(m_doc, r.scene));
+    }
+    delete loaded;
+}
+
+void EffectInstance_Test::followSpotSizeReaimKeepsARunningFade()
+{
+    /* A follow-spot cue fading its heads in over 3 s: the re-aim a beam
+       size asks for (EffectInstance::kFollowBeamReaimMs) keeps the time the
+       fade has left, rather than snapping the heads there. */
+    const FramingRig r = framingRig(m_doc);
+    r.who->setPosition(QVector3D(1.5f, 8.0f, 0.0f));
+    r.follow->setEffectParamValue("framing", 2);
+    r.scene->setFadeInSpeed(3000);
+    MasterTimer timer(m_doc);
+    auto play = [&](int ticks) {
+        for (int k = 0; k < ticks; ++k)
+        {
+            timer.timerTick();
+            QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+            ua.first()->processFaders();
+            m_doc->inputOutputMap()->releaseUniverses(false);
+        }
+    };
+    auto pan = [&]() {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(int(r.spot->address())));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    r.scene->start(&timer, FunctionParent::master());
+    play(10);
+    const int early = pan();
+    r.scene->requestReaim(EffectInstance::kFollowBeamReaimMs);
+    play(int(EffectInstance::kFollowBeamReaimMs / MasterTimer::tick()) + 10);
+    const int afterReaim = pan();
+    play(200);
+    const int settled = pan();
+    qInfo() << "pan: early" << early << "after the re-aim" << afterReaim << "settled" << settled;
+    QVERIFY2(settled != early, "the heads should move in the fade");
+    QVERIFY2(qAbs(afterReaim - settled) > 2,
+             qPrintable(QString("the re-aim cut the cue's fade: %1 already at %2").arg(afterReaim).arg(settled)));
+    r.scene->stop(FunctionParent::master());
+    timer.timerTick();
 }
 
 void EffectInstance_Test::followSpotMovesEveryHeadToTheSamePoint()

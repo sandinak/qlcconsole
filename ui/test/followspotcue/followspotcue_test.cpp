@@ -72,6 +72,11 @@
 #include "gamepadrole.h"
 #include "lookeditor.h"
 #include "measurementunits.h"
+#include "followspotframing.h"
+#include "paletteops.h"
+#include "aimsolver.h"
+#include <QPainter>
+#include <QToolTip>
 #include <QComboBox>
 #include <QScrollArea>
 #include <QDoubleSpinBox>
@@ -1305,7 +1310,7 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     MonitorProperties *props = doc->monitorProperties();
     QCOMPARE(int(MeasurementUnits::preferredLength()), int(MeasurementUnits::Feet));
 
-    // Two zoom spots on a pipe out front, a 10-40 degree lens each.
+    // Two zoom spots on a pipe out front, a 4-30 degree lens each.
     QLCFixtureDef *def = new QLCFixtureDef();
     def->setManufacturer("Test");
     def->setModel("Zoom Mover");
@@ -1335,8 +1340,8 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     QLCPhysical ph;
     ph.setFocusPanMax(540);
     ph.setFocusTiltMax(270);
-    ph.setLensDegreesMin(10);
-    ph.setLensDegreesMax(40);
+    ph.setLensDegreesMin(4);
+    ph.setLensDegreesMax(30);
     mode->setPhysical(ph);
     def->addMode(mode);
     FixtureGroup *spots = new FixtureGroup(doc);
@@ -1405,56 +1410,133 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
         QVERIFY(padInput(doc, quint32(ch), 0));
         settle(30);
     };
-    auto liveSize = [&]() { return runner->paramOverrides(follow->id()).value("liveSize", 0.0); };
+    auto pad = [&]() {
+        FollowSpotFraming::Pad p;
+        runner->followSpotPad(follow->id(), p);
+        return p;
+    };
+    // The first head's zoom as it goes out.
+    Fixture *foh1 = doc->fixture(spots->fixtureList().first());
+    auto zoomOut = [&]() {
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(int(foh1->address()) + 5));
+        doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    // The look's own values, as the effect plays them.
+    auto setLook = [&](const QString &name, double v) {
+        follow->setEffectParamValue(name, v);
+        runner->updateEffectParams(follow->id());
+        settle(150);
+    };
+    QPushButton *save = m_app->findChild<QPushButton *>("savePositions");
+    QVERIFY(save != nullptr);
+    QTemporaryDir tmp;
+    m_app->setFileName(tmp.filePath("follow.qxw"));
+    auto savePositions = [&]() {
+        QTRY_VERIFY_WITH_TIMEOUT(save->isEnabled(), 2000);    // the pad's change alone enables it
+        save->click();                                        // armed
+        save->click();                                        // confirmed
+        settle(100);
+    };
     const double inch = 2.54;
 
-    // Right opens it a step, to a whole inch: 4' to 4' 6", in feet and inches.
+    // A Custom width: Right opens it a step, to a whole inch -- 4' to 4' 6",
+    // in feet and inches -- for the run, not the look.
     press(right);
-    QVERIFY2(qAbs(liveSize() - 54 * inch) < 0.01, qPrintable(QString::number(liveSize())));
+    QVERIFY2(qAbs(pad().widthCm - 54 * inch) < 0.01, qPrintable(QString::number(pad().widthCm)));
     QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Size 4' 6\"").toHtmlEscaped()), 2000);
     QVERIFY2(chip->toolTip().contains("Left and Right"), qPrintable(chip->toolTip()));
-    QCOMPARE(follow->effectParamValues().value("sizeOnSubject"), 48 * inch);     // the look: not yet
+    QCOMPARE(follow->effectParamValues().value("sizeOnSubject"), 48 * inch);
+    QVERIFY(runner->paramOverrides(follow->id()).isEmpty());     // not an override (a VC store never takes it)
     shootFooter(m_app, "size-4ft6");
-    // Left closes it, a step at a time.
     press(left);
-    QVERIFY2(qAbs(liveSize() - 48 * inch) < 0.01, qPrintable(QString::number(liveSize())));
     press(left);
-    QVERIFY2(qAbs(liveSize() - 43 * inch) < 0.01, qPrintable(QString::number(liveSize())));
+    QVERIFY2(qAbs(pad().widthCm - 43 * inch) < 0.01, qPrintable(QString::number(pad().widthCm)));
     QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Size 3' 7\"").toHtmlEscaped()), 2000);
-    QVERIFY2(pc->followSpotStatusText().contains(QString::fromUtf8("Size 3' 7\"")),
-             qPrintable(pc->followSpotStatusText()));
 
-    // Save Positions keeps it in the look, and the run's own goes.
-    pc->commitDesignJoystick();
-    settle(50);
+    // Save Positions -- the button, enabled by the pad's change alone --
+    // keeps it in the look, as one undo step, and says so.
+    savePositions();
     QVERIFY(qAbs(follow->effectParamValues().value("sizeOnSubject") - 43 * inch) < 0.01);
-    QCOMPARE(follow->effectParamValues().value("framing", 0.0), 0.0);
-    QCOMPARE(liveSize(), 0.0);
-    QVERIFY(doc->isModified());
-    bool ok = false;
-    QVERIFY(qAbs(runner->paramValue(follow->id(), "sizeOnSubject", &ok) - 43 * inch) < 0.01 && ok);
+    QVERIFY(!pad().isSet());
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Saved: Width on Subject 3' 7\"").toHtmlEscaped()), 2000);
+    QVERIFY(doc->paletteOps()->undo());
+    QCOMPARE(follow->effectParamValues().value("sizeOnSubject"), 48 * inch);
 
-    // No size set: the D-pad steps the beam angle, from the zoom the heads
-    // have now, a whole degree at a time; Save Positions keeps that too.
-    follow->setEffectParamValue("sizeOnSubject", 0.0);
-    runner->updateEffectParams(follow->id());
-    settle(100);
+    // A Framing, from a head that comes in from above (level < 1): Left
+    // closes it -- the zoom goes narrower, not wider -- ten points a step.
+    setLook("framing", 2);
+    QTRY_VERIFY_WITH_TIMEOUT(pc->followSpotStatus().framing == 2, 2000);
+    {
+        AimSolver::Frame frame;
+        QVERIFY(AimSolver::frameFor(doc, foh1->id(), frame));
+        const QVector3D to = props->targetAimPoint(lead, true) - frame.position;
+        QVERIFY(std::hypot(double(to.x()), double(to.y())) / double(to.length()) < 0.9);
+    }
+    settle(300);
+    const int framedZoom = zoomOut();
+    press(left);
+    QCOMPARE(pad().scale, 0.9);
+    QTRY_VERIFY_WITH_TIMEOUT(zoomOut() < framedZoom, 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains("Waist Up 90%"), 2000);
     press(right);
-    const double beam = runner->paramOverrides(follow->id()).value("liveBeam", 0.0);
-    QVERIFY2(beam >= 11.0 && beam == std::round(beam), qPrintable(QString::number(beam)));
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Beam %1°").arg(beam)), 2000);
-    pc->commitDesignJoystick();
-    QCOMPARE(follow->effectParamValues().value("beamAngle"), beam);
-    QVERIFY(!runner->paramOverrides(follow->id()).contains("liveBeam"));
+    press(right);
+    QCOMPARE(pad().scale, 1.1);
+    QTRY_VERIFY_WITH_TIMEOUT(zoomOut() > framedZoom, 2000);
+    savePositions();
+    QCOMPARE(follow->effectParamValues().value("framing"), 2.0);          // the Framing stays
+    QCOMPARE(follow->effectParamValues().value("framingSize"), 110.0);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains("Saved: Waist Up at 110%"), 2000);
+    QVERIFY2(pc->followSpotStatusText().contains("Saved: Waist Up at 110%"), qPrintable(pc->followSpotStatusText()));
+    QVERIFY(AimSolver::sceneFramesSubject(doc, scene));                   // aimed as it was live
+    settle(2500);
 
-    // The editor: Framing, and the size and angle beside it. (Read again:
-    // an earlier test's document had a look with this same id open.)
+    // At the lens's limit: the footer says so and the pad goes no further.
+    setLook("framing", 0);
+    {
+        // A width a few steps short of the lens's widest (30 degrees) here.
+        AimSolver::Frame frame;
+        QVERIFY(AimSolver::frameFor(doc, foh1->id(), frame));
+        const double dist = double((props->targetAimPoint(lead, true) - frame.position).length());
+        setLook("sizeOnSubject", 100.0 * 2.0 * dist * std::tan(qDegreesToRadians(11.0)));
+    }
+    int presses = 0;
+    while (!chip->text().contains("(widest)") && presses++ < 12)
+    {
+        press(right);
+    }
+    QVERIFY2(chip->text().contains("(widest)"), qPrintable(chip->text()));
+    const double widest = pad().widthCm;
+    press(right);
+    QCOMPARE(pad().widthCm, widest);
+    QVERIFY2(chip->text().contains("(widest)"), qPrintable(chip->text()));
+    press(left);
+    QVERIFY(pad().widthCm < widest);
+    QTRY_VERIFY_WITH_TIMEOUT(!chip->text().contains("(widest)"), 2000);
+
+    // No size: the beam angle, a whole degree a step, down to the lens's
+    // narrowest (4 degrees) and no further.
+    setLook("sizeOnSubject", 0.0);
+    runner->setFollowSpotPad(follow->id(), FollowSpotFraming::Pad());
+    presses = 0;
+    while (!chip->text().contains("(narrowest)") && presses++ < 40)
+        press(left);
+    QVERIFY2(chip->text().contains(QString::fromUtf8("Beam 4° (narrowest)")), qPrintable(chip->text()));
+    QCOMPARE(pad().beamDeg, 4.0);
+    press(left);
+    QCOMPARE(pad().beamDeg, 4.0);
+    press(right);
+    QCOMPARE(pad().beamDeg, 5.0);
+    savePositions();
+    QCOMPARE(follow->effectParamValues().value("beamAngle"), 5.0);
+
+    // The editor: Framing, and the rows it decides greyed with the reason.
     bench->editPalette(follow->id());
     settle(300);
     if (LookEditor *le = bench->lookEditor())
-        le->refreshEffectParams();
+        le->refreshEffectParams();      // an earlier test's look had this id
     settle(100);
-    // The editor open now (an earlier one's rows may linger, hidden, until deleted).
     auto shown = [&](auto *dummy, const char *name) {
         using W = std::remove_pointer_t<decltype(dummy)>;
         W *found = nullptr;
@@ -1468,16 +1550,21 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     QStringList items;
     for (int i = 0; i < framing->count(); ++i)
         items << framing->itemText(i);
-    QCOMPARE(items, QStringList({ "Custom Width", "Head & Shoulders", "Waist Up", "Full Body" }));
-    QDoubleSpinBox *size = shown((QDoubleSpinBox *)nullptr, "effectParam_sizeOnSubject");
+    QCOMPARE(items, QStringList({ "Custom", "Head & Shoulders", "Waist Up", "Full Body" }));
+    QDoubleSpinBox *width = shown((QDoubleSpinBox *)nullptr, "effectParam_sizeOnSubject");
     QDoubleSpinBox *angle = shown((QDoubleSpinBox *)nullptr, "effectParam_beamAngle");
-    QVERIFY(size != nullptr && angle != nullptr);
-    QCOMPARE(angle->text(), QString::fromUtf8("%1.0°").arg(beam));
+    QDoubleSpinBox *fsize = shown((QDoubleSpinBox *)nullptr, "effectParam_framingSize");
+    QVERIFY(width != nullptr && angle != nullptr && fsize != nullptr);
+    QCOMPARE(angle->text(), QString::fromUtf8("5.0°"));
+    // Custom, no width: the angle counts, the Framing Size doesn't.
+    QVERIFY(angle->isEnabled() && width->isEnabled() && !fsize->isEnabled());
+    QVERIFY2(fsize->toolTip().startsWith("Not used with Framing: Custom"), qPrintable(fsize->toolTip()));
     framing->setCurrentIndex(2);    // waist up
     settle(100);
     QCOMPARE(follow->effectParamValues().value("framing"), 2.0);
-    // The footer's size is then the person's: waist up on 1.80 m, 0.6 of it.
-    QTRY_VERIFY_WITH_TIMEOUT(qAbs(pc->followSpotStatus().sizeCm - 108.0) < 0.5, 2000);
+    QVERIFY(!width->isEnabled() && !angle->isEnabled() && fsize->isEnabled());
+    QVERIFY2(width->toolTip().startsWith("Set by Framing: Waist Up"), qPrintable(width->toolTip()));
+    QVERIFY2(angle->toolTip().startsWith("Set by Framing: Waist Up"), qPrintable(angle->toolTip()));
     const QString shots = qEnvironmentVariable("QLC_FSPOT_SHOTS");
     if (!shots.isEmpty())
     {
@@ -1491,18 +1578,48 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
                 if (QScrollArea *area = qobject_cast<QScrollArea *>(p))
                 {
                     area->ensureWidgetVisible(angle, 20, 60);
-                    area->horizontalScrollBar()->setValue(0);
                     break;
                 }
             settle(200);
-            m_app->grab().save(QString("%1/framing-rows-%2x%3.png").arg(shots).arg(sz.width()).arg(sz.height()));
-            qInfo().noquote() << "shot framing rows" << m_app->size() << framing->isVisible() << angle->text();
+            QPixmap pic = m_app->grab();
+            pic.save(QString("%1/framing-rows-%2x%3.png").arg(shots).arg(sz.width()).arg(sz.height()));
+            if (sz.width() == 1280)
+            {
+                // The greyed row with its tooltip, drawn where it shows.
+                const QPoint at = width->mapTo(m_app, QPoint(width->width() / 2, width->height()));
+                QToolTip::showText(width->mapToGlobal(QPoint(width->width() / 2, width->height())),
+                                   width->toolTip(), width);
+                settle(300);
+                QPainter painter(&pic);
+                for (QWidget *w : QApplication::topLevelWidgets())
+                    if (w->inherits("QTipLabel") && w->isVisible())
+                        painter.drawPixmap(qMin(at.x(), m_app->width() - w->width()), at.y() + 4, w->grab());
+                painter.end();
+                pic.save(QString("%1/framing-greyed-tooltip-1280x800.png").arg(shots));
+                QToolTip::hideText();
+            }
+            qInfo().noquote() << "shot framing rows" << m_app->size() << framing->isVisible() << width->toolTip();
         }
         m_app->resize(1280, 800);
         settle(200);
     }
-    bench->load(Function::invalidId());
+
+    // A running cue's follow spot (nothing in the Workbench): the pad sizes
+    // it, and Save Positions keeps it in its look too.
+    bench->clear();
     settle(100);
+    setLook("framing", 3);
+    if (!scene->isRunning())
+        scene->start(doc->masterTimer(), FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(pc->followSpotStatus().live && runner->isPlaying(follow->id()), 3000);
+    press(right);
+    QVERIFY(pad().isSet());
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains("Full Body 120%"), 2000);
+    savePositions();
+    QCOMPARE(follow->effectParamValues().value("framingSize"), 120.0);   // 110% on the look, a step more
+    QCOMPARE(follow->effectParamValues().value("framing"), 3.0);
+    scene->stop(FunctionParent::master());
+    settle(200);
     doc->resetModified();
 }
 

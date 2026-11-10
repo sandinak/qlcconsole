@@ -19,6 +19,8 @@
 #define LOOKEDITOR_H
 
 #include <QWidget>
+#include <QFormLayout>
+#include <QPointer>
 #include <QColor>
 #include <functional>
 #include "qlcui_export.h"
@@ -272,6 +274,17 @@ private:
     //!< a redundant rebuild (selection often emits twice) is skipped — rebuilding
     //!< in place left a ghost set of sliders painted under the live ones.
     QString m_effectBuildKey;
+    /** The effect's parameter rows as built: each param's field, for
+     *  greying one that doesn't count now (EffectScript activeWhen: the
+     *  follow spot's Width on Subject under a Framing). */
+    QList<EffectScript::ParamDef> m_shownParamDefs;
+    QHash<QString, QPointer<QWidget>> m_paramFields;
+    QPointer<QFormLayout> m_paramForm;
+public:
+    /** Grey the parameter rows that don't count with the look's values
+     *  now, each saying why ("Set by Framing: Waist Up"). */
+    void updateEffectParamActivity();
+private:
 
     QLineEdit *m_nameEdit;   //!< editable palette name
     QLabel    *m_title;      //!< "used by N scene(s)" info line

@@ -732,6 +732,24 @@ double EffectScriptRunner::paramValue(quint32 paletteId, const QString &param, b
     return inst->paramValue(param, ok);
 }
 
+bool EffectScriptRunner::setFollowSpotPad(quint32 paletteId, const FollowSpotFraming::Pad &pad)
+{
+    EffectInstance *inst = instanceForPalette(paletteId);
+    if (inst == nullptr || inst->isFadingOut() || !inst->isFollowSpot())
+        return false;
+    inst->setFollowSpotPad(pad);
+    return true;
+}
+
+bool EffectScriptRunner::followSpotPad(quint32 paletteId, FollowSpotFraming::Pad &pad) const
+{
+    const EffectInstance *inst = instanceForPalette(paletteId);
+    if (inst == nullptr || !inst->isFollowSpot())
+        return false;
+    pad = inst->followSpotPad();
+    return true;
+}
+
 QList<EffectScript::ParamDef> EffectScriptRunner::paramDefs(quint32 paletteId) const
 {
     const EffectInstance *inst = instanceForPalette(paletteId);

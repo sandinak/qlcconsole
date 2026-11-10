@@ -359,6 +359,26 @@ bool EffectScript::parseMeta()
                 for (int ai = 0; ai < alen; ++ai)
                     def.aliases << aliases.property(ai).toString();
             }
+            QJSValue when = item.property("activeWhen");
+            if (when.isArray())
+            {
+                const int wlen = when.property("length").toInt();
+                for (int wi = 0; wi < wlen; ++wi)
+                {
+                    QJSValue cj = when.property(wi);
+                    ParamDef::Condition c;
+                    c.param = jsText(cj.property("param"));
+                    for (const char *key : { "is", "not" })
+                    {
+                        QJSValue arr = cj.property(key);
+                        const int n = arr.isArray() ? arr.property("length").toInt() : 0;
+                        for (int k = 0; k < n; ++k)
+                            (key[0] == 'i' ? c.is : c.notIn) << arr.property(k).toNumber();
+                    }
+                    if (!c.param.isEmpty())
+                        def.activeWhen << c;
+                }
+            }
             if (!def.name.isEmpty())
                 m_params.append(def);
         }

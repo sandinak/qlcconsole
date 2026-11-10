@@ -181,14 +181,6 @@ public:
      *  edit on every one of the 50 ticks per second. */
     void requestPaletteRefresh();
 
-    /** The follow spot playing in this scene frames its subject (its
-     *  Followspot effect's Framing is Head & Shoulders, Waist Up or Full
-     *  Body, not Custom Width): the Aim look keeps each head's beam top just
-     *  over the person's head at any size, not at the chest while it is
-     *  narrow (MonitorProperties::targetAimPointFor()). Set by the effect on
-     *  the main thread, read where the aim resolves (the MasterTimer's). */
-    bool followFramed() const { return m_followFramed.load(std::memory_order_relaxed); }
-    void setFollowFramed(bool on) { m_followFramed.store(on, std::memory_order_relaxed); }
 
 signals:
     void valueChanged(SceneValue scv);
@@ -199,7 +191,6 @@ protected:
     // Guards BOTH m_values and m_fadersMap against the MasterTimer thread.
     mutable QMutex m_valueListMutex;
     bool m_reaimRequested = false;
-    std::atomic<bool> m_followFramed { false };    ///< followFramed()
     uint m_reaimFade = 0;           ///< requestReaim(fadeMs); guarded by m_valueListMutex
     bool m_repaletteRequested = false;
 

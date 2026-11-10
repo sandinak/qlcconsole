@@ -34,6 +34,7 @@
 #include <QFile>
 #include <QHash>
 #include "qlcpalette.h"
+#include "followspotframing.h"
 #include "fixture.h"
 #include "grouphead.h"
 #include "effectscriptcache.h"
@@ -414,6 +415,12 @@ void QLCPalette::setValues(QVariantList values)
 void QLCPalette::resetValues()
 {
     m_values.clear();
+}
+
+void QLCPalette::syncFollowSizesBeam()
+{
+    m_followSizesBeam.store(FollowSpotFraming::sizesBeam(FollowSpotFraming::fromParams(m_effectParamValues)),
+                            std::memory_order_relaxed);
 }
 
 /** True if @a scene carries a follow-spot effect palette, which is what makes
@@ -828,7 +835,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                 if (owner != nullptr)
                 {
                     subjectMode = sceneHasFollowSpot(doc, owner);
-                    framed = subjectMode && owner->followFramed();
+                    framed = subjectMode && AimSolver::sceneFramesSubject(doc, owner);
                 }
                 else
                 {
@@ -840,7 +847,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                         if (sceneHasFollowSpot(doc, sc))
                         {
                             subjectMode = true;
-                            framed = sc->followFramed();
+                            framed = AimSolver::sceneFramesSubject(doc, sc);
                             break;
                         }
                     }
@@ -1873,6 +1880,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 double  val  = doc.attributes().value("value").toDouble();
                 if (!name.isEmpty())
                     m_effectParamValues[name] = val;
+                    syncFollowSizesBeam();
                 doc.skipCurrentElement();
             }
             else if (doc.name() == QLatin1String("EffectStringParam"))
@@ -1912,6 +1920,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 const QString name = doc.attributes().value("name").toString();
                 if (!name.isEmpty())
                     m_effectParamValues[name] = doc.attributes().value("value").toDouble();
+                    syncFollowSizesBeam();
             }
             doc.skipCurrentElement();
         }

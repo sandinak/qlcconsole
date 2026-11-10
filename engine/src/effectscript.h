@@ -97,6 +97,8 @@
 #include <QJSEngine>
 #include <QJSValue>
 #include <QString>
+#include <QCoreApplication>
+#include <functional>
 #include <QList>
 #include <QStringList>
 
@@ -193,6 +195,18 @@ public:
         QStringList enumValues; // non-empty → render as dropdown; value is integer index
         QStringList aliases;    // former names; stored values under an alias map to this param
 
+        /** activeWhen: the row only counts while another param has (or
+         *  hasn't) one of these values -- the follow spot's Width on Subject
+         *  only with Framing: Custom. An editor greys it otherwise and says
+         *  why (inactiveReason()). Every condition must hold. */
+        struct Condition
+        {
+            QString param;
+            QList<double> is;       ///< it has one of these...
+            QList<double> notIn;    ///< ...or none of these
+        };
+        QList<Condition> activeWhen;
+
         /** What a person reads for this parameter: a name, never a sentence or
          *  an identifier. The script's own `label`; else the description up to a
          *  "(", " -- " or ":" when that is short; else the name, "panRate" ->
@@ -200,6 +214,40 @@ public:
         QString displayLabel() const;
         static constexpr int maxLabelLength = 32;
     };
+
+    /** Why @p def (one of @p defs) doesn't count with these @p values (each param's value,
+     *  its default where @p values has none): "Set by Framing: Waist Up",
+     *  "Not used with Framing: Custom", "Set by Width on Subject: 4'". Empty:
+     *  it counts. @p valueText says a value as the UI shows it (a "cm"
+     *  param in Settings > Units, an enum by its label). */
+    template <typename Map>
+    static QString inactiveReason(const QList<ParamDef> &defs, const ParamDef &def, const Map &values,
+                                  const std::function<QString(const ParamDef &, double)> &valueText)
+    {
+        for (const ParamDef::Condition &c : def.activeWhen)
+        {
+            const ParamDef *by = nullptr;
+            for (const ParamDef &d : defs)
+                if (d.name == c.param)
+                    by = &d;
+            if (by == nullptr)
+                continue;
+            const double v = values.value(c.param, double(by->defaultValue));
+            auto has = [v](const QList<double> &list) {
+                for (double x : list)
+                    if (qAbs(x - v) < 1e-6)
+                        return true;
+                return false;
+            };
+            if (!c.is.isEmpty() && !has(c.is))
+                return QCoreApplication::translate("EffectScript", "Set by %1: %2")
+                       .arg(by->displayLabel(), valueText(*by, v));
+            if (has(c.notIn))
+                return QCoreApplication::translate("EffectScript", "Not used with %1: %2")
+                       .arg(by->displayLabel(), valueText(*by, v));
+        }
+        return QString();
+    }
 
     QList<InputDef>   inputDefs()       const { return m_inputs;          }
     QList<PaletteDef> paletteDefs()    const { return m_palettes;        }

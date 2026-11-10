@@ -9685,8 +9685,10 @@ void App::updateFollowChip()
         how += QStringLiteral(" · ") + ProgrammerController::followSpotSpeedText(st.speed);
     /* The beam's size (Settings > Units), or its angle with no size: while
        the D-pad has it for this run, and a moment after any step. */
-    const QString size = ProgrammerController::followSpotSizeText(st.sizeCm, st.beamDeg);
-    if (st.sizeShown && st.state != Status::NoStick && !size.isEmpty())
+    const QString size = ProgrammerController::followSpotSizeText(st);
+    if (!st.saved.isEmpty())
+        how += QStringLiteral(" · ") + st.saved;
+    else if (st.sizeShown && st.state != Status::NoStick && !size.isEmpty())
         how += QStringLiteral(" · ") + size;
     m_statusFollowLabel->setText(tr("<span style='color:%1;font-weight:bold;'>◎ Follow: %2 · %3</span>")
                                  .arg(colour, text.toHtmlEscaped(), how.toHtmlEscaped()));

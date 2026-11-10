@@ -316,6 +316,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                                     .arg(MeasurementUnits::formatLength(2000.0)));
 
         m_saveBtn = new QPushButton(tr("Save Positions"), this);
+        m_saveBtn->setObjectName(QStringLiteral("savePositions"));
         m_saveBtn->setEnabled(false);
         m_saveBtn->setToolTip(tr(
             "Finalize joystick-driven pan/tilt/aim edits and save the workspace.\n"

@@ -139,9 +139,11 @@ private slots:
      *  near and a far throw. */
     void followSpotFramesThePerson_data();
     void followSpotFramesThePerson();
-    /** The pad's live size wins over the framing; with no size, the beam
-     *  angle (the pad's, else the look's Beam Angle) sets the zoom. */
+    /** The pad's change (a Framing's scale, a Custom width, a beam angle)
+     *  sizes the beam for the run, apart from the look and its overrides. */
     void followSpotLiveSizeAndBeamAngle();
+    /** A fade already running keeps its time over a beam-size re-aim. */
+    void followSpotSizeReaimKeepsARunningFade();
     /** A follow spot on an Aim look: two heads in different places both
      *  land on the follow-spot point, and moving the point moves both to
      *  the same new place (they converge; the effect leaves pan/tilt alone). */

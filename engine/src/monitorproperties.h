@@ -1038,7 +1038,7 @@ public:
      *  narrow; as it widens, lower -- so its top edge stays just over the
      *  head, covering more of them without washing the wall above -- down to
      *  the waist at most. @p framed (the follow spot frames its subject,
-     *  Scene::followFramed()): the top edge just over the head at any size,
+     *  AimSolver::sceneFramesSubject()): the top edge just over the head at any size,
      *  above the chest too when the beam is tight (head and shoulders).
      *  Anything else: targetAimPoint(). */
     QVector3D targetAimPointFor(const class StageTarget *t, bool subjectMode,

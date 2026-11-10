@@ -208,7 +208,7 @@ namespace AimSolver
     QVector3D aimPointFor(Doc *doc, quint32 fixtureId, const StageTarget *target,
                           bool subjectMode, bool framed = false);
     /** The same for one member, from its own origin. @p framed: the follow
-     *  spot frames its subject (Scene::followFramed()). */
+     *  spot sizes its beam (AimSolver::sceneFramesSubject()). */
     QVector3D aimPointFor(Doc *doc, const GroupHead &member, const StageTarget *target,
                           bool subjectMode, bool framed = false);
 
@@ -276,6 +276,11 @@ namespace AimSolver
     /** True if @p scene carries a follow-spot effect, which is what makes an
      *  Aim look in it track a SUBJECT (chest height above the deck) rather
      *  than the target's own point. */
+    /** @p scene's follow spot sizes its beam on the subject (a look with a
+     *  Framing or a Custom width, QLCPalette::followSizesBeam()): its Aim
+     *  looks keep each head's beam top just over the person's head at any
+     *  size. From the looks' own settings, so Edit and Run aim the same. */
+    bool sceneFramesSubject(Doc *doc, const Scene *scene);
     bool sceneFollowsSubject(Doc *doc, const Scene *scene);
 
     /** Line of sight from head @p fixtureId to @p point: whether a solid

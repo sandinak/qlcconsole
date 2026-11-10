@@ -35,6 +35,8 @@
 #include <array>
 #include "scenetransition.h"
 
+#include "followspotframing.h"
+
 class Doc;
 class Scene;
 class Fixture;
@@ -186,6 +188,18 @@ public:
     void clearOverride(const QString &name);
     void clearOverrides();
     const QHash<QString, double> &overrides() const { return m_overrides; }
+
+    /** The follow spot's beam as the pad has it for this run (D-pad Left /
+     *  Right), kept apart from the look's parameters and the overrides (a
+     *  VC control's store never takes it): gone when the effect stops. */
+    void setFollowSpotPad(const FollowSpotFraming::Pad &pad) { m_followPad = pad; }
+    FollowSpotFraming::Pad followSpotPad() const { return m_followPad; }
+    bool isFollowSpot() const { return m_isFollowSpot; }
+    /** The fade a beam-size re-aim asks for (ms): next to none -- the heads
+     *  go straight to the aim for the new beam -- but not 0, so a fade
+     *  already running (the cue's own) keeps the time it has left
+     *  (Scene::write's re-aim) instead of being cut. */
+    static constexpr uint kFollowBeamReaimMs = 1;
     /** What @p name plays at now (override, palette or default); @p ok false
      *  when the script has no such param. Host keys: their current value. */
     double paramValue(const QString &name, bool *ok = nullptr) const;
@@ -481,16 +495,19 @@ private:
     float m_envelope = 1.0f; //!< host-scene actuation level, applied per tick
     QString m_wledEffect;    //!< QLCPalette::wledEffect(), at construction
 
-    /* The follow spot (followspot.js): its Framing tells its scene how to
-       aim (Scene::setFollowFramed()), and a change to what sizes its beam
-       re-aims the heads for a few ticks -- each head's aim follows the beam
-       it has (MonitorProperties::targetAimPointFor()), a frame or two after
-       the zoom is written. Main thread, no allocation. */
-    void syncFollowFraming(Scene *sc);
+    /* The follow spot (followspot.js): each head's beam width on its
+       subject (FollowSpotFraming, the one formula the pad and footer use)
+       goes to the script as sceneTarget.beamWidth, and a change to what
+       sizes the beam re-aims the heads for a few ticks -- each head's aim
+       follows the beam it has (MonitorProperties::targetAimPointFor()), a
+       frame or two after the zoom is written -- never cutting a fade
+       already running. Main thread, no allocation. */
+    void syncFollowBeam(Scene *sc);
     bool m_isFollowSpot = false;
-    bool m_framed = false;
-    bool m_framedSent = false;
-    double m_beamSig[4] = { -1.0, -1.0, -1.0, -1.0 };
+    bool m_framed = false;          ///< AimSolver::sceneFramesSubject(), this tick
+    FollowSpotFraming::Look m_followLook;
+    FollowSpotFraming::Pad m_followPad;
+    double m_beamSig[7] = { -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0 };
     int m_reaimTicks = 0;
 
     /* The scene's transitions, for each cell: a look arriving by a wipe brings

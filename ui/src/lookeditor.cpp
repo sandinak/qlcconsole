@@ -979,6 +979,8 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_effectBasedOnLabel->hide();
     efv->addWidget(m_effectBasedOnLabel);
     connect(this, &LookEditor::paletteValueChanged, this, [this](quint32) { updateBasedOn(); });
+    // A param that another one decides (activeWhen) greys or comes back.
+    connect(this, &LookEditor::paletteValueChanged, this, [this](quint32) { updateEffectParamActivity(); });
 
     QScrollArea *detailScroll = new QScrollArea(effectPage);
     detailScroll->setObjectName(QStringLiteral("effectDetails"));
@@ -2992,6 +2994,36 @@ QString LookEditor::capabilityNameAt(const QLCChannel *ch, int v) const
 // Effect page
 // ---------------------------------------------------------------------------
 
+void LookEditor::updateEffectParamActivity()
+{
+    const QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == nullptr || m_paramForm.isNull())
+        return;
+    const QMap<QString, double> values = p->effectParamValues();
+    for (const EffectScript::ParamDef &pd : m_shownParamDefs)
+    {
+        if (pd.activeWhen.isEmpty())
+            continue;
+        QWidget *field = m_paramFields.value(pd.name);
+        if (field == nullptr)
+            continue;
+        const QString why = EffectScript::inactiveReason(m_shownParamDefs, pd, values,
+                                                         [](const EffectScript::ParamDef &d, double v) {
+                                                             return EffectRows::valueText(d, v);
+                                                         });
+        field->setEnabled(why.isEmpty());
+        QWidget *label = m_paramForm->labelForField(field);
+        if (label != nullptr)
+            label->setEnabled(why.isEmpty());
+        const QString tip = why.isEmpty() ? pd.description : why + QStringLiteral("\n") + pd.description;
+        field->setToolTip(tip);
+        for (QWidget *w : field->findChildren<QWidget *>())
+            w->setToolTip(tip);
+        if (label != nullptr)
+            label->setToolTip(tip);
+    }
+}
+
 void LookEditor::refreshEffectParams()
 {
     m_effectBuildKey.clear();
@@ -3342,6 +3374,10 @@ void LookEditor::rebuildEffectDynWidget()
 
         QFormLayout *form = new QFormLayout();
         form->setContentsMargins(0, 0, 0, 0);
+        /* The pane beside the list is narrow (UX-34): a row that doesn't fit
+           beside its name goes under it, never off the side. */
+        form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+        form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
         for (const EffectScript::ParamDef &pd : pdefs)
         {
             if (supersededBySpread.contains(pd.name))
@@ -3571,6 +3607,8 @@ void LookEditor::rebuildEffectDynWidget()
                 // Enum param → dropdown
                 QComboBox *cb = new QComboBox(m_effectDynWidget);
                 cb->setObjectName(QStringLiteral("effectParam_") + pd.name);
+                cb->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+                cb->setMinimumContentsLength(10);
                 for (const QString &v : pd.enumValues)
                     cb->addItem(v);
                 int idx = qBound(0, int(cur), cb->count() - 1);
@@ -3694,6 +3732,28 @@ void LookEditor::rebuildEffectDynWidget()
             }
         }
         dv->addLayout(form);
+        // Each row's field by its param (its own or its child's objectName,
+        // "effectParam_<name>"), for updateEffectParamActivity().
+        m_shownParamDefs = pdefs;
+        m_paramFields.clear();
+        m_paramForm = form;
+        for (int r = 0; r < form->rowCount(); ++r)
+        {
+            QLayoutItem *item = form->itemAt(r, QFormLayout::FieldRole);
+            QWidget *field = item != nullptr ? item->widget() : nullptr;
+            if (field == nullptr)
+                continue;
+            QString name = field->objectName();
+            if (!name.startsWith(QLatin1String("effectParam_")))
+            {
+                const QList<QWidget *> inner = field->findChildren<QWidget *>(QRegularExpression(QStringLiteral("^effectParam_")));
+                if (!inner.isEmpty())
+                    name = inner.first()->objectName();
+            }
+            if (name.startsWith(QLatin1String("effectParam_")))
+                m_paramFields.insert(name.mid(12), field);
+        }
+        updateEffectParamActivity();
 
         // "Learn range" — offered when the script has both note-range params.
         // Plays live: click, play your lowest & highest key, click again to lock.
@@ -3835,12 +3895,16 @@ void LookEditor::rebuildEffectDynWidget()
     // choice (which a chase step, chase or collection may hand down), its own
     // speed, the main beat clock, or a speed master.
     {
+        /* Speed over Own speed, each with its name beside it: side by side
+           they ran off a narrow pane (UX-34). */
         QWidget *row = new QWidget(m_effectDynWidget);
-        QHBoxLayout *rl = new QHBoxLayout(row);
+        QGridLayout *rl = new QGridLayout(row);
         rl->setContentsMargins(0, 6, 0, 0);
-        rl->addWidget(new QLabel(tr("Speed:"), row));
+        rl->addWidget(new QLabel(tr("Speed:"), row), 0, 0);
         QComboBox *cb = new QComboBox(row);
         cb->setObjectName(QStringLiteral("effectSpeedMaster"));
+        cb->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        cb->setMinimumContentsLength(12);
         SpeedMasters *sm = m_doc->speedMasters();
         cb->addItem(lookSpeed == SpeedMasters::Inherit
                         ? tr("As the look (own speed unless a chase sets one)")
@@ -3866,7 +3930,8 @@ void LookEditor::rebuildEffectDynWidget()
             // combo's own signal: the rebuild deletes it).
             QTimer::singleShot(0, this, &LookEditor::rebuildEffectDynWidget);
         });
-        rl->addWidget(cb);
+        rl->addWidget(cb, 0, 1);
+        rl->setColumnStretch(1, 1);
         // Own speed (off a master): how fast the effect runs, ×1 as made.
         // Every effect has one, also those with no speed setting of their
         // own ("when selecting own speed on an effect there should be a
@@ -3896,11 +3961,9 @@ void LookEditor::rebuildEffectDynWidget()
                 m_doc->setModified();
                 emit paletteValueChanged(m_paletteId);
             });
-            rl->addSpacing(8);
-            rl->addWidget(ownLabel);
-            rl->addWidget(own);
+            rl->addWidget(ownLabel, 1, 0);
+            rl->addWidget(own, 1, 1, Qt::AlignLeft);
         }
-        rl->addStretch(1);
         dv->addWidget(row);
     }
 

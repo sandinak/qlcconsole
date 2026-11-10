@@ -504,6 +504,20 @@ bool AimSolver::sceneFollowsSubject(Doc *doc, const Scene *scene)
     return false;
 }
 
+bool AimSolver::sceneFramesSubject(Doc *doc, const Scene *scene)
+{
+    if (doc == NULL || scene == NULL)
+        return false;
+    for (quint32 pid : scene->palettes())
+    {
+        const QLCPalette *p = doc->palette(pid);
+        if (p != NULL && p->type() == QLCPalette::Effect && p->followSizesBeam()
+            && p->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive))
+            return true;
+    }
+    return false;
+}
+
 /* aimable() into @a heads, cleared first. */
 static void aimableInto(Doc *doc, const QList<quint32> &fixtures, QList<quint32> &heads)
 {
@@ -791,7 +805,7 @@ static QList<AimSolver::SceneAim> collectAims(Doc *doc, const Scene *scene, bool
                     ? onLine.value(m, mProps->targetAimPoint(tgt))
                     : onArea.contains(m) ? onArea.value(m)
                                          : AimSolver::aimPointFor(doc, m, tgt, subject,
-                                                                          subject && scene->followFramed());
+                                                                          subject && AimSolver::sceneFramesSubject(doc, scene));
             AimSolver::SceneAim aim;
             aim.fixtureId = fid;
             aim.head = m.head;
@@ -890,7 +904,7 @@ static void forEachBlockedDimmed(Doc *doc, const Scene *scene, F blocked)
                     ? onLine.value(m, mProps->targetAimPoint(tgt))
                     : onArea.contains(m) ? onArea.value(m)
                                          : AimSolver::aimPointFor(doc, m, tgt, subject,
-                                                                          subject && scene->followFramed());
+                                                                          subject && AimSolver::sceneFramesSubject(doc, scene));
             // AimSolver::lineOfSight(), with the mounts in the scratch.
             if (sightModel->isEmpty())
                 continue;                       // nothing to block it: clear

@@ -393,7 +393,7 @@ void EffectInstance::runTick()
         m_sceneRunning = sc->isRunning() && m_offStageMs < 0;
         m_sceneElapsed = sc->elapsed();
         if (m_isFollowSpot)
-            syncFollowFraming(sc);
+            syncFollowBeam(sc);
         if (m_transitionIn.isActive() && !m_transitionMapInBuilt)
         {
             m_transitionMapIn = TransitionMap(m_doc, sc->transitionFixtures(), m_transitionIn.shape);
@@ -1843,21 +1843,17 @@ QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalet
     return aimAt;
 }
 
-void EffectInstance::syncFollowFraming(Scene *sc)
+void EffectInstance::syncFollowBeam(Scene *sc)
 {
-    const double now[4] = { m_paramValues.value(QStringLiteral("framing"), 0.0),
-                            m_paramValues.value(QStringLiteral("sizeOnSubject"), 0.0),
-                            m_paramValues.value(QStringLiteral("liveSize"), 0.0),
-                            m_paramValues.value(QStringLiteral("liveBeam"), 0.0)
-                            + m_paramValues.value(QStringLiteral("beamAngle"), 0.0) * 1000.0 };
-    m_framed = now[0] >= 0.5;
-    if (!m_framedSent || sc->followFramed() != m_framed)
-    {
-        sc->setFollowFramed(m_framed);
-        m_framedSent = true;
-        m_reaimTicks = 3;
-    }
-    for (int i = 0; i < 4; ++i)
+    m_followLook = FollowSpotFraming::fromParams(m_paramValues);
+    m_framed = AimSolver::sceneFramesSubject(m_doc, sc);
+    const double now[7] = { double(m_followLook.framing), m_followLook.scale, m_followLook.widthCm,
+                            m_followLook.beamDeg, m_followPad.scale, m_followPad.widthCm,
+                            m_followPad.beamDeg };
+    /* What sizes the beam changed (or it just started): the heads re-aim
+       at the beam they get -- a fade already running (the cue's own) keeps
+       its time (kFollowBeamReaimMs). */
+    for (int i = 0; i < 7; ++i)
         if (now[i] != m_beamSig[i])
         {
             m_beamSig[i] = now[i];
@@ -1866,7 +1862,7 @@ void EffectInstance::syncFollowFraming(Scene *sc)
     if (m_reaimTicks > 0)
     {
         --m_reaimTicks;
-        sc->requestReaim();
+        sc->requestReaim(kFollowBeamReaimMs);
     }
 }
 
@@ -1909,11 +1905,16 @@ QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
         // level: how flat the throw comes in (1 straight on, toward 0 from
         // overhead) -- a beam stretches down an upright body by 1 / level;
         // height: the person's own (metres), 0 for anything but a Person.
-        // The followspot's Framing sizes from these.
         const QVector3D toSubject = subject - frame.position;
         const double len = double(toSubject.length());
-        so.setProperty("level", len > 0.01 ? std::hypot(double(toSubject.x()), double(toSubject.y())) / len : 1.0);
-        so.setProperty("height", double(mp->targetFigureHeight(st)));
+        const double level = len > 0.01 ? std::hypot(double(toSubject.x()), double(toSubject.y())) / len : 1.0;
+        const double height = double(mp->targetFigureHeight(st));
+        so.setProperty("level", level);
+        so.setProperty("height", height);
+        // The follow spot's width on this subject from this head (metres,
+        // 0: none): FollowSpotFraming, the pad's size in it.
+        if (m_isFollowSpot)
+            so.setProperty("beamWidth", FollowSpotFraming::widthM(m_followLook, m_followPad, height, level));
         // blocked / blockedBy / clearance: whether anything solid on stage
         // stands between the head and the point it is aimed at.
         setSight(so, AimSolver::lineOfSight(m_doc, sight, fid, frame.position, tp));
@@ -2333,6 +2334,9 @@ QJSValue EffectInstance::buildParamsObject() const
     // Scalar params
     for (auto it = m_paramValues.constBegin(); it != m_paramValues.constEnd(); ++it)
         obj.setProperty(it.key(), it.value());
+    // The pad's beam angle for this run, over the look's.
+    if (m_isFollowSpot && m_followPad.beamDeg > 0.0)
+        obj.setProperty(FollowSpotFraming::beamKey(), m_followPad.beamDeg);
 
     // Determine which params are path-typed so we can emit JS arrays for them
     // (and which are pictures, handed over decoded)

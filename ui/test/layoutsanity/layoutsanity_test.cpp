@@ -86,6 +86,7 @@
 #include "showtreecontroller.h"
 #include "showtreemodel.h"
 #include "effectscriptcache.h"
+#include "effectscriptrunner.h"
 #include "inputoutputmap.h"
 
 #include "aboutbox.h"
@@ -248,6 +249,8 @@ struct Item
     QRect seen;       // that, cut to every ancestor's rect: what is on screen
     bool scrolled;    // inside a scroll area's viewport: may run past it
     bool placed;      // put where the user dropped it (a Virtual Console widget)
+    bool noSideways;  // ...but one that never scrolls sideways (its bar off): a
+                      // width past it is cut, with no way to reach it (UX-34)
 };
 
 /** True when @a w can't be seen in @a top though it says it is visible: a
@@ -273,7 +276,7 @@ QList<Finding> inspect(QWidget *top)
     {
         if (!shown(w, top) || isFloating(w))
             continue;
-        bool skip = false, scrolled = false, placed = w->inherits("VCWidget");
+        bool skip = false, scrolled = false, placed = w->inherits("VCWidget"), noSideways = false;
         QRect seen(w->mapTo(top, QPoint(0, 0)), w->size());
         const QRect full = seen;
         for (QWidget *p = w->parentWidget(); p != nullptr && p != top; p = p->parentWidget())
@@ -289,12 +292,22 @@ QList<Finding> inspect(QWidget *top)
             if (p->parentWidget() != nullptr
                 && qobject_cast<QAbstractScrollArea *>(p->parentWidget()) != nullptr
                 && static_cast<QAbstractScrollArea *>(p->parentWidget())->viewport() == p)
+            {
+                /* The nearest scroll area decides (an inner one may scroll).
+                   At the sizes the app is used at (a window from the
+                   smallest supported up): a standalone pane squeezed to its
+                   own minimum is a sliver no row fits. */
+                if (!scrolled)
+                    noSideways = static_cast<QAbstractScrollArea *>(p->parentWidget())->horizontalScrollBarPolicy()
+                                 == Qt::ScrollBarAlwaysOff
+                                 && top->width() >= kSmallestWindow.width();
                 scrolled = true;
+            }
         }
         if (skip)
             continue;
         seen &= top->rect();
-        items << Item{ w, full, seen, scrolled, placed };
+        items << Item{ w, full, seen, scrolled, placed, noSideways };
     }
 
     QList<Finding> out;
@@ -345,6 +358,11 @@ QList<Finding> inspect(QWidget *top)
         // Cut off by its window or a parent, with no scroll bar to reach the rest.
         if (!it.scrolled && (it.full.width() - it.seen.width() > kTol
                              || it.full.height() - it.seen.height() > kTol))
+            out << Finding{ QStringLiteral("clipped %1 %2 shows %3")
+                                .arg(pathOf(w, top), rectText(it.full), rectText(it.seen)), it.full };
+        // In a scroll area that only scrolls up and down, cut at its side.
+        else if (it.scrolled && it.noSideways && !it.seen.isEmpty()
+                 && it.full.width() - it.seen.width() > kTol)
             out << Finding{ QStringLiteral("clipped %1 %2 shows %3")
                                 .arg(pathOf(w, top), rectText(it.full), rectText(it.seen)), it.full };
 
@@ -710,6 +728,31 @@ QList<Screen> screens()
          << lookScreen(QStringLiteral("beam"), QLCPalette::Beam)
          << lookScreen(QStringLiteral("effect"), QLCPalette::Effect)
          << lookScreen(QStringLiteral("formation"), QLCPalette::Formation);
+
+    /* The Followspot effect's editor in Build, in the app window: its rows
+       fit the pane at 1024 and 1280 wide, none cut at the side (UX-34). */
+    {
+        Screen fs = tab(QStringLiteral("Build"), [](App *app, QWidget *) {
+            Doc *doc = docOf(app);
+            QLCPalette *follow = new QLCPalette(QLCPalette::Effect, doc);
+            follow->setName(QStringLiteral("Layout Followspot"));
+            follow->setScriptPath(doc->effectScriptRunner()->cache()->scriptPath(QStringLiteral("followspot")));
+            follow->setEffectParamValue(QStringLiteral("framing"), 2);
+            doc->addPalette(follow);
+            Scene *scene = new Scene(doc);
+            scene->setName(QStringLiteral("Layout Follow"));
+            doc->addFunction(scene);
+            for (quint32 fid : someFixtures(doc, 2))
+                scene->addFixture(fid);
+            scene->addPalette(follow->id());
+            ProgrammingManager::openFunction(scene->id());
+            QCoreApplication::processEvents();
+            if (ProgrammingManager *pm = ProgrammingManager::instance())
+                pm->workbench()->editPalette(follow->id());
+        });
+        fs.name += QStringLiteral(" followspot editor");
+        list << fs;
+    }
 
     // The empty states (UX-34, UX-77: a sentence wraps, never cut), the
     // speed masters in the status bar (UX-34: none shown at no width).
