@@ -3140,11 +3140,24 @@ void CourseShow_Test::lessonPictures()
                     solo = *it;
             QVERIFY(solo != nullptr);
             QListWidget *rows = v->cueLayerList();
+            // Taller than the lesson's window: Mode (1) and the layer (2)
+            // are far apart on this page, and both must be on show.
+            const QSize was = m_app->size();
+            m_app->resize(was.width(), was.height() + 160);
+            settle(200);
             HelpShots::Frame f = showTreeFrame(m_app, v);
+            if (QScrollArea *page = qobject_cast<QScrollArea *>(v->m_cuePage))
+            {
+                page->ensureWidgetVisible(stFind<QComboBox>(v, "stCueMode"), 0, 8);
+                page->horizontalScrollBar()->setValue(0);
+            }
+            settle(100);
             f.callouts << mark(stFind<QComboBox>(v, "stCueMode"), 1)
                        << markRect(rows->viewport(), rows->visualItemRect(cueRow(v, "AT-Spots")), m_app, 2)
                        << markRect(v->tree()->viewport(), v->tree()->visualItemRect(solo), m_app, 3);
             QVERIFY(shoot(f, d, "solo-cue"));
+            m_app->resize(was);
+            settle(200);
         }
         QVERIFY(clickCueRow(v, "AT-Spots"));
         settle(100);
