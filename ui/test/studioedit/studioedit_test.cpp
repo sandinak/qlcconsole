@@ -1178,8 +1178,8 @@ void StudioEdit_Test::aSwungWallEndCatchesAnotherWallsEnd()
     QCOMPARE(h->count(), 3);
     QString readout;
     // A hair (a few pixels) off the other wall's near end.
-    const QPoint near = rig.viewAt(10.0, 5.0) + QPoint(3, -2);
-    rig.drag(rig.view(h->handlePos(StageShape::EndPlusU)), near, Qt::AltModifier, &readout);
+    const QPoint offEnd = rig.viewAt(10.0, 5.0) + QPoint(3, -2);
+    rig.drag(rig.view(h->handlePos(StageShape::EndPlusU)), offEnd, Qt::AltModifier, &readout);
     const StageShape now = StageShape::of(props, QStringLiteral("scenery"), a->id());
     QVERIFY2(QLineF(now.endPoint(StageShape::EndPlusU), QPointF(10.0, 5.0)).length() < 1e-4,
              qPrintable(QString("%1,%2").arg(now.endPoint(StageShape::EndPlusU).x())
