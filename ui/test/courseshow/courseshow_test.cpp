@@ -3597,7 +3597,7 @@ static bool lessonTwoOneByMouse(Doc *doc, ShowTreeView *view, const QString &sho
     qInfo().noquote() << "[2.1] chorus next receives:" << nextReceives(view);
     for (const char *n : { "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4" })
         qInfo().noquote() << "[2.1] counts" << n << cueCounts(view, n);
-    LESSON_STEP(cueCounts(view, "1.0.2") == QStringLiteral("S1 T3 R0 M-"), cueCounts(view, "1.0.2"));
+    LESSON_STEP(cueCounts(view, "1.0.2") == QStringLiteral("S1 T4 R0 M-"), cueCounts(view, "1.0.2"));
     LESSON_STEP(cueRow(view, "⤳ StepTops") != nullptr && cueRow(view, "⤳ AT-W-ALL") != nullptr
                 && cueRow(view, "⤳ TrussC-RGB") != nullptr, view->cueLayerItems().join(" | "));
     LESSON_STEP(waitUntil([doc]() { return !dark(doc, "US Step 1 Top SR"); }), "step tops dark in the chorus");
@@ -3616,8 +3616,8 @@ static bool lessonTwoOneByMouse(Doc *doc, ShowTreeView *view, const QString &sho
     settle(100);
     qInfo().noquote() << "[2.1] after Release:" << hintOf(view)->text() << "| verse" << cueCounts(view, "1.0.1")
                       << "| chorus" << cueCounts(view, "1.0.2");
-    LESSON_STEP(cueCounts(view, "1.0.1") == QStringLiteral("S1 T1 R1 M-"), cueCounts(view, "1.0.1"));
-    LESSON_STEP(cueCounts(view, "1.0.2") == QStringLiteral("S1 T2 R0 M-"), cueCounts(view, "1.0.2"));
+    LESSON_STEP(cueCounts(view, "1.0.1") == QStringLiteral("S1 T2 R1 M-"), cueCounts(view, "1.0.1"));
+    LESSON_STEP(cueCounts(view, "1.0.2") == QStringLiteral("S1 T3 R0 M-"), cueCounts(view, "1.0.2"));
     LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.1")), "select 1.0.1");
     settle(50);
     qInfo().noquote() << "[2.1] verse next receives:" << nextReceives(view);
@@ -3655,7 +3655,7 @@ static bool lessonTwoOneByMouse(Doc *doc, ShowTreeView *view, const QString &sho
     settle(100);
     qInfo().noquote() << "[2.1] scream rows" << view->cueLayerItems().join(" | ") << "| counts" << cueCounts(view, "1.0.3");
     LESSON_STEP(cueRow(view, "⤳ StepTops") == nullptr, view->cueLayerItems().join(" | "));
-    LESSON_STEP(cueCounts(view, "1.0.3") == QStringLiteral("S2 T3 R0 M-"), cueCounts(view, "1.0.3"));
+    LESSON_STEP(cueCounts(view, "1.0.3") == QStringLiteral("S2 T4 R0 M-"), cueCounts(view, "1.0.3"));
     LESSON_STEP(waitUntil([doc]() { return dark(doc, "US Step 1 Top SR")
                                            && uchar(sends(doc, "SR Truss Wash 1").at(0)) == 255; }),
                 QString::fromLatin1(sends(doc, "US Step 1 Top SR", 6).toHex(' ')));
