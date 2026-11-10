@@ -69,8 +69,8 @@ struct QLC_UI_EXPORT StageShape
     bool stretchU = false;      ///< its length can be stretched
     bool stretchV = false;      ///< its width can be stretched
     bool canRotate = false;
-    /** A line on the plan (a truss, a pipe, a wall): ⌥ on an end swings it
-     *  about the other end (swung()). */
+    /** A line on the plan (a truss, a pipe, a wall): dragging an end moves
+     *  it where it is put, the other end staying (swung()). */
     bool canSwing = false;
     double minLength = 0.1;     ///< metres: the shortest it can be made
 
@@ -96,12 +96,13 @@ struct QLC_UI_EXPORT StageShape
     StageShape swung(Handle h, const QPointF &endPoint) const;
 
     /** What swung() makes of a pointer at @p pointer, snapped: onto one of
-     *  @p otherEnds within @p magnet metres first (@p caught says so), else
+     *  @p otherEnds within @p magnet metres first (@p caught says so); else
      *  with @p constrain its angle in 15° steps and its length in
-     *  @p snapStep metres, else the end on the nearest @p snapStep grid
-     *  point (0 = free). */
+     *  @p snapStep metres; else, within @p detentDeg of the way it faces
+     *  now, kept straight and stretched along itself (stretched()); else
+     *  the end on the nearest @p snapStep grid point (0 = free). */
     StageShape swungSnapped(Handle h, const QPointF &pointer, const QVector<QPointF> &otherEnds,
-                            double magnet, double snapStep, bool constrain,
+                            double magnet, double snapStep, bool constrain, double detentDeg,
                             bool *caught = nullptr) const;
     /** Where end @p h is (world). */
     QPointF endPoint(Handle h) const { return handlePoint(h); }

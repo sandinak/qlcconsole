@@ -102,6 +102,21 @@ QString MonitorGraphicsView::shapeHeldReason() const
                                                                      : QString();
 }
 
+QString MonitorGraphicsView::shapeHandleTip(const QPoint &viewPos) const
+{
+    const ShapeHandles *h = shapeHandles();
+    if (h == nullptr)
+        return QString();
+    const StageShape::Handle over = h->handleAt(mapToScene(viewPos));
+    if (over == StageShape::NoHandle)
+        return QString();
+    if (over == StageShape::RotateKnob)
+        return tr("Drag to turn · ⌥: no 15° steps");
+    if (h->stageShape().canSwing && (over == StageShape::EndPlusU || over == StageShape::EndMinusU))
+        return tr("Drag to stretch or swing · Shift: 15° steps · ⌥: no snap");
+    return tr("Drag to stretch · ⌥: no snap");
+}
+
 StageShape MonitorGraphicsView::shapeTarget(QString *why, StageShape *held) const
 {
     auto refuse = [why](const QString &reason) {
@@ -266,7 +281,9 @@ QString MonitorGraphicsView::shapeReadout(const StageShape &s, bool turning) con
                                 .arg(by >= 0 ? QStringLiteral("+") : QString())
                                 .arg(by, 0, 'f', 0);
     }
-    if (m_shapeSwinging)
+    // A line kept straight reads as a stretch; turned, it adds the way it faces.
+    if (m_shapeSwinging && (m_shapeCaught
+                            || qAbs(StageShape::normalised(s.angle - m_shapeDragStart.angle)) >= 0.05))
         return tr("Length %1 · %2°%3").arg(MeasurementUnits::formatMetres(s.length))
                                       .arg(StageShape::normalised(s.angle), 0, 'f', 0)
                                       .arg(m_shapeCaught ? tr(" → end") : QString());
@@ -351,19 +368,29 @@ void MonitorGraphicsView::shapeDragTo(const QPointF &scenePos, Qt::KeyboardModif
         m_shapeLastAngle = a;
         m_shapeDragNow = m_shapeDragStart.turnedTo(shapeTurnTarget(m_shapeTurned, mods & Qt::AltModifier));
     }
-    else if ((mods & Qt::AltModifier) && m_shapeDragStart.canSwing
+    else if (m_shapeDragStart.canSwing
              && (m_shapeDragHandle == StageShape::EndPlusU || m_shapeDragHandle == StageShape::EndMinusU))
     {
-        /* ⌥ on a line's end: the end goes with the pointer and the far end
-           stays, so it lengthens and turns at once. It catches another end
-           near it, Shift keeps it to 15°, else it lands on the Snap grid. */
-        const double scale = viewScale() > 0.0 ? viewScale() : 1.0;
-        const double perMetre = QLineF(planToScene(QPointF(0, 0)), planToScene(QPointF(1, 0))).length();
-        const double magnet = perMetre > 0.0 ? (10.0 / scale) / perMetre : 0.0;
+        /* A line's end goes where it is put and the far end stays, so it
+           lengthens and turns at once. It catches another end near it,
+           keeps straight within a few degrees of the way it faced, Shift
+           keeps it to 15°, else it lands on the Snap grid; ⌥ lets it go
+           free of all of them. */
         m_shapeSwinging = true;
-        m_shapeDragNow = m_shapeDragStart.swungSnapped(m_shapeDragHandle, p, m_shapeOtherEnds, magnet,
-                                                       shapeSnapStep(Qt::NoModifier),
-                                                       mods & Qt::ShiftModifier, &m_shapeCaught);
+        if (mods & Qt::AltModifier)
+        {
+            m_shapeCaught = false;
+            m_shapeDragNow = m_shapeDragStart.swung(m_shapeDragHandle, p);
+        }
+        else
+        {
+            const double scale = viewScale() > 0.0 ? viewScale() : 1.0;
+            const double perMetre = QLineF(planToScene(QPointF(0, 0)), planToScene(QPointF(1, 0))).length();
+            const double magnet = perMetre > 0.0 ? (10.0 / scale) / perMetre : 0.0;
+            m_shapeDragNow = m_shapeDragStart.swungSnapped(m_shapeDragHandle, p, m_shapeOtherEnds, magnet,
+                                                           shapeSnapStep(Qt::NoModifier),
+                                                           mods & Qt::ShiftModifier, 3.0, &m_shapeCaught);
+        }
     }
     else
     {

@@ -1904,7 +1904,7 @@ private:
     double m_shapeLastAngle = 0.0;      ///< the pointer's angle at the last move
     double m_shapeTurned = 0.0;         ///< degrees turned since the press, unwrapped
     bool m_shapeDragMoved = false;
-    bool m_shapeSwinging = false;       ///< ⌥ on a line's end: it swings about the other end
+    bool m_shapeSwinging = false;       ///< a line's end dragged: it can turn about the other end
     bool m_shapeCaught = false;         ///< the swung end sits on another end
     QVector<QPointF> m_shapeOtherEnds;  ///< plan metres: the ends a swung end snaps to
     bool m_shapeCursor = false;
@@ -1928,6 +1928,9 @@ public:
     /** The lock line under a selected structure that a lock holds still,
      *  or empty. */
     QString shapeHeldReason() const;
+    /** The hover tip of the handle under viewport point @p viewPos: what a
+     *  drag on it does and its keys; empty off the handles. */
+    QString shapeHandleTip(const QPoint &viewPos) const;
 private:
     /** Plan metres: every other line's ends and every deck's corners, for a
      *  swung end to snap to. */

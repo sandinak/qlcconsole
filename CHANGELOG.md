@@ -14,15 +14,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### New
 
-- **Plot handles: pipes, and ⌥ to swing a line's end.** A free electric
-  (horizontal pipe) gets end handles and the knob, as a truss has. Alt/⌥ on
-  the end of a truss, pipe or wall moves that end where you put it while the
-  other end stays, so it lengthens and turns at once; it catches another
-  line's end or a deck's corner nearby, Shift keeps it to 15°, otherwise it
-  lands on the Snap grid. The readout gives the length in Settings' unit and
-  the angle; one drag is one undo, and the lights on it keep their place
-  from the end that stayed. A locked object you select shows its outline in
-  red and what holds it instead of handles. See
+- **Plot handles: pipes, and a line's end swings.** A free electric
+  (horizontal pipe) gets end handles and the knob, as a truss has. Drag the
+  end of a truss, pipe or wall and that end goes where you put it while the
+  other stays, so it lengthens and turns at once; it stays straight within
+  3° of its line, catches another line's end or a deck's corner nearby,
+  Shift keeps it to 15°, otherwise it lands on the Snap grid; Alt/⌥ on any
+  handle goes free of every snap. A hover over a handle says what it does.
+  The readout gives the length in Settings' unit and the angle; one drag is
+  one undo, and the lights on it keep their place from the end that stayed.
+  A locked object you select shows its outline in red and what holds it
+  instead of handles. See
   [Stretch and turn by hand](docs/features/lighting-studio.md#stretch-and-turn-by-hand).
 
 ## [0.4.2] - 2026-11-09

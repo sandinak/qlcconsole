@@ -417,19 +417,18 @@ on its own in the Top view and it gets handles:
   only across its treads (its depth is its steps).
 - **The round knob** off its upstage edge turns it about its middle, and
   everything on it turns with it, as **Rotate** does.
-- **Alt/⌥ on an end** of a truss, pipe or wall: the end goes where you put
-  it and the other end stays, so it lengthens, shortens and turns at once
-  (it swings about the other end). It catches another truss's, pipe's or
-  wall's end, or a deck's corner, when it comes near one, so two walls meet
-  exactly; hold **Shift** as well to keep it to 15° steps; otherwise the
-  end lands on the **Snap** grid. The readout adds the way it faces
-  (**Length 12' 6" · 45°**, and **→ end** when it has caught one).
-- **While you drag**, a dashed outline shows the shape it will take and a
-  readout by the pointer gives its size in your units (`16' × 8'`, or
-  **Length 30'**) or the way it will face (**45° (+45°)**).
+- **The end of a truss, pipe or wall** goes where you drag it and the other
+  end stays, so it lengthens, shortens and turns at once (it swings about
+  the other end). Near its own line it stays straight (within 3°); it
+  catches another truss's, pipe's or wall's end, or a deck's corner, when
+  it comes near one, so two walls meet exactly; hold **Shift** to keep it
+  to 15° steps; otherwise the end lands on the **Snap** grid. The readout
+  adds the way it faces once it turns (**Length 12' 6" · 45°**, and
+  **→ end** when it has caught one). Hover over a handle to see what it
+  does and its keys.
 - **Snapping:** a stretch goes in steps of the plot's **Snap** (off when
-  Snap is off) and a turn in 15° steps; hold **Alt/⌥** on a deck's handle
-  or the knob to go freely (on a line's end ⌥ swings it, above).
+  Snap is off) and a turn in 15° steps; hold **Alt/⌥** on any handle to go
+  freely, with no grid, no 15° steps and no catching another end.
 - **One drag is one undo step.** A truss or pipe stretched or swung at one
   end keeps its lights, bars and hangers where they are from the other end.
 - **A cyc only stretches** (it hangs square across the back); other

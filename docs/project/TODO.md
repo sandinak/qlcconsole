@@ -1626,8 +1626,9 @@ With the plot unlocked, objects get handles instead of only the editor:
 drag a wall's, truss's or pipe's **ends** to lengthen it, **⌥-drag an end**
 to rotate it about the other end, and so on for decks and scenery.
 **DONE 2026-11-10 (feat/043-plot-handles, docs/design/PLOT_HANDLES.md)**:
-pipes get handles, ⌥ swings a line's end about the other (snaps to other
-ends, Shift 15°, else the grid), a locked selection says what holds it.
+pipes get handles, a line's end dragged swings it about the other (snaps
+to other ends, a 3° straight detent, Shift 15°, else the grid; ⌥ free),
+hover tips on the handles, a locked selection says what holds it.
 Open: handles in Front/Side (heights, trims), a boom's or stand's height on
 the plan, a plain stretch snapping to an end on its line, keyboard nudge.
 

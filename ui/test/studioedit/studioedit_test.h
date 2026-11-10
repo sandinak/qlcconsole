@@ -54,6 +54,7 @@ private slots:
     void aPipeHasHandlesAndAltSwingsItsEndOneUndo();
     void aSwungWallEndCatchesAnotherWallsEnd();
     void aLockedLineShowsWhyAndNoHandles();
+    void aLineEndsHoverTipNamesTheSwingAndItsKeys();
     void plotHandlesPictures();
 };
 

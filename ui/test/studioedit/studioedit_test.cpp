@@ -28,6 +28,8 @@
 #include <QSignalSpy>
 #include <QTreeWidget>
 #include <QDir>
+#include <QToolTip>
+#include <QHelpEvent>
 #include <QtTest>
 #include "../../../engine/test/common/stdprelude.h"
 #define protected public
@@ -1025,10 +1027,11 @@ void StudioEdit_Test::picturesForReview()
     }
 }
 
-/* The geometry of ⌥ on a line's end: the far end stays, the dragged one
+/* The geometry of a line's end dragged: the far end stays, the dragged one
    goes where it is put, so the line lengthens and turns at once; snapped,
    it catches another end first, then Shift keeps it to 15° and its length
-   to the step, else the end lands on the grid. */
+   to the step, then within 3° of the way it faced it stays straight, else
+   the end lands on the grid. */
 void StudioEdit_Test::aLineEndSwingsAboutTheOtherEndAndSnaps()
 {
     StageShape s;
@@ -1057,25 +1060,36 @@ void StudioEdit_Test::aLineEndSwingsAboutTheOtherEndAndSnaps()
     // Another end within reach: exactly on it, and it says so.
     bool caught = false;
     const QVector<QPointF> ends = { QPointF(10.0, 5.0), QPointF(30.0, 30.0) };
-    t = s.swungSnapped(StageShape::EndPlusU, QPointF(10.2, 4.9), ends, 0.3, 0.5, false, &caught);
+    t = s.swungSnapped(StageShape::EndPlusU, QPointF(10.2, 4.9), ends, 0.3, 0.5, false, 3.0, &caught);
     QVERIFY(caught);
     QVERIFY(QLineF(t.endPoint(StageShape::EndPlusU), QPointF(10.0, 5.0)).length() < 1e-9);
     // Out of reach: the grid.
-    t = s.swungSnapped(StageShape::EndPlusU, QPointF(9.2, 4.9), ends, 0.3, 0.5, false, &caught);
+    t = s.swungSnapped(StageShape::EndPlusU, QPointF(9.2, 4.9), ends, 0.3, 0.5, false, 3.0, &caught);
     QVERIFY(!caught);
     QVERIFY(QLineF(t.endPoint(StageShape::EndPlusU), QPointF(9.0, 5.0)).length() < 1e-9);
     // Shift: 15° steps and the length in steps.
     t = s.swungSnapped(StageShape::EndPlusU, QPointF(2.0 + 4.1 * qCos(qDegreesToRadians(47.0)),
                                                      2.0 + 4.1 * qSin(qDegreesToRadians(47.0))),
-                       ends, 0.3, 0.5, true, &caught);
+                       ends, 0.3, 0.5, true, 3.0, &caught);
     QVERIFY2(qAbs(t.angle - 45.0) < 1e-9, qPrintable(QString::number(t.angle)));
     QVERIFY2(qAbs(t.length - 4.0) < 1e-9, qPrintable(QString::number(t.length)));
+
+    // Within 3° of the way it faced: straight, stretched along itself (in steps).
+    t = s.swungSnapped(StageShape::EndPlusU, QPointF(10.1, 2.2), ends, 0.3, 0.5, false, 3.0, &caught);
+    QVERIFY2(qAbs(t.angle) < 1e-9, qPrintable(QString::number(t.angle)));
+    QVERIFY2(qAbs(t.length - 8.0) < 1e-9, qPrintable(QString::number(t.length)));
+    QVERIFY(QLineF(t.endPoint(StageShape::EndMinusU), QPointF(2.0, 2.0)).length() < 1e-9);
+    // Past it, it turns.
+    t = s.swungSnapped(StageShape::EndPlusU, QPointF(10.0, 3.0), ends, 0.3, 0.0, false, 3.0, &caught);
+    QVERIFY(t.angle > 5.0);
 }
 
-/* A free electric (a horizontal pipe) gets two ends and the knob. ⌥ on its
-   near end swings it about the far end: its light keeps its place from the
-   far end, the readout gives the length in Settings' unit and the angle,
-   and it is one undo step. A boom has none. */
+/* A free electric (a horizontal pipe) gets two ends and the knob. Its near
+   end dragged off its line swings it about the far end: its light keeps its
+   place from the far end, the readout gives the length in Settings' unit and
+   the angle, and it is one undo step. Dragged near its line it stays
+   straight; with Snap on the end lands on the grid, and ⌥ lets it go free.
+   A boom has none. */
 void StudioEdit_Test::aPipeHasHandlesAndAltSwingsItsEndOneUndo()
 {
     Rig rig;
@@ -1109,7 +1123,7 @@ void StudioEdit_Test::aPipeHasHandlesAndAltSwingsItsEndOneUndo()
 
     QString readout;
     rig.drag(rig.view(h->handlePos(StageShape::EndMinusU)), rig.viewAt(10.0, -1.0),
-             Qt::AltModifier, &readout);
+             Qt::NoModifier, &readout);
     QVERIFY2(qAbs(b->length() - 4.0f) < 0.05f, qPrintable(QString::number(b->length())));
     QVERIFY2(qAbs(b->runAngle() - 90.0f) < 0.5f, qPrintable(QString::number(b->runAngle())));
     QVERIFY(qAbs(b->positionAt(b->length()).x() - 10.0f) < 0.05f);   // the far end stayed
@@ -1131,15 +1145,41 @@ void StudioEdit_Test::aPipeHasHandlesAndAltSwingsItsEndOneUndo()
     QVERIFY(qAbs(props->fixtureRigProps(fx->id()).pipeOffset - 5.0f) < 1e-4f);
     QVERIFY(!rig.gv->canUndo());
 
-    // Without ⌥ its end only stretches along it, in metres when Settings says so.
+    // Dragged near its own line it stays straight, in metres when Settings says so.
     MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
     rig.select(QStringLiteral("pipe"), b->id());
     h = rig.gv->shapeHandles();
     QVERIFY(h != nullptr);
-    rig.drag(rig.view(h->handlePos(StageShape::EndPlusU)), rig.viewAt(12.0, 4.0), Qt::NoModifier, &readout);
+    rig.drag(rig.view(h->handlePos(StageShape::EndPlusU)), rig.viewAt(12.0, 3.2), Qt::NoModifier, &readout);
     QVERIFY2(qAbs(b->length() - 8.0f) < 0.05f, qPrintable(QString::number(b->length())));
     QVERIFY(qAbs(b->runAngle()) < 1e-4f);
     QCOMPARE(readout, QString("Length %1").arg(MeasurementUnits::formatMetres(double(b->length()))));
+    rig.gv->undoLastMove();
+    b = props->pipe(b->id());
+
+    // Snap on (half a metre): the end lands on the grid; ⌥ lets it go free.
+    rig.gv->setSnapDivisions(2);
+    rig.select(QStringLiteral("pipe"), b->id());
+    h = rig.gv->shapeHandles();
+    QVERIFY(h != nullptr);
+    const QPoint plusEnd = rig.view(h->handlePos(StageShape::EndPlusU));
+    rig.drag(plusEnd, rig.viewAt(9.3, 6.2));
+    QPointF end = StageShape::of(props, QStringLiteral("pipe"), b->id()).endPoint(StageShape::EndPlusU);
+    QVERIFY2(QLineF(end, QPointF(9.5, 6.0)).length() < 1e-3,
+             qPrintable(QString("%1,%2").arg(end.x()).arg(end.y())));
+    rig.gv->undoLastMove();
+    b = props->pipe(b->id());
+    rig.select(QStringLiteral("pipe"), b->id());
+    h = rig.gv->shapeHandles();
+    QVERIFY(h != nullptr);
+    rig.drag(rig.view(h->handlePos(StageShape::EndPlusU)), rig.viewAt(9.3, 6.2), Qt::AltModifier);
+    end = StageShape::of(props, QStringLiteral("pipe"), b->id()).endPoint(StageShape::EndPlusU);
+    QVERIFY2(QLineF(end, QPointF(9.3, 6.2)).length() < 0.05,
+             qPrintable(QString("%1,%2").arg(end.x()).arg(end.y())));
+    QVERIFY(QLineF(end, QPointF(9.5, 6.0)).length() > 0.1);
+    rig.gv->undoLastMove();
+    b = props->pipe(b->id());
+    rig.gv->setSnapDivisions(0);
 
     // A boom stands up: no handles.
     Pipe *boom = props->addPipe();
@@ -1151,8 +1191,8 @@ void StudioEdit_Test::aPipeHasHandlesAndAltSwingsItsEndOneUndo()
     QVERIFY(rig.gv->shapeHandles() == nullptr);
 }
 
-/* Two walls: ⌥ on one's end, let go near the other's end, and they meet
-   exactly; the readout says it caught it. */
+/* Two walls: one's end dragged and let go near the other's end, and they
+   meet exactly; the readout says it caught it. With ⌥ it does not catch. */
 void StudioEdit_Test::aSwungWallEndCatchesAnotherWallsEnd()
 {
     Rig rig;
@@ -1179,7 +1219,7 @@ void StudioEdit_Test::aSwungWallEndCatchesAnotherWallsEnd()
     QString readout;
     // A hair (a few pixels) off the other wall's near end.
     const QPoint offEnd = rig.viewAt(10.0, 5.0) + QPoint(3, -2);
-    rig.drag(rig.view(h->handlePos(StageShape::EndPlusU)), offEnd, Qt::AltModifier, &readout);
+    rig.drag(rig.view(h->handlePos(StageShape::EndPlusU)), offEnd, Qt::NoModifier, &readout);
     const StageShape now = StageShape::of(props, QStringLiteral("scenery"), a->id());
     QVERIFY2(QLineF(now.endPoint(StageShape::EndPlusU), QPointF(10.0, 5.0)).length() < 1e-4,
              qPrintable(QString("%1,%2").arg(now.endPoint(StageShape::EndPlusU).x())
@@ -1189,6 +1229,49 @@ void StudioEdit_Test::aSwungWallEndCatchesAnotherWallsEnd()
     rig.gv->undoLastMove();
     a = props->scenery(a->id());
     QVERIFY(qAbs(a->rotation()) < 1e-4f && qAbs(a->width() - 4.0f) < 1e-4f);
+
+    rig.select(QStringLiteral("scenery"), a->id());
+    h = rig.gv->shapeHandles();
+    QVERIFY(h != nullptr);
+    rig.drag(rig.view(h->handlePos(StageShape::EndPlusU)), offEnd, Qt::AltModifier, &readout);
+    const StageShape free = StageShape::of(props, QStringLiteral("scenery"), a->id());
+    QVERIFY(QLineF(free.endPoint(StageShape::EndPlusU), QPointF(10.0, 5.0)).length() > 1e-3);
+    QVERIFY2(!readout.contains(QString::fromUtf8("→")), qPrintable(readout));
+}
+
+/* "Nothing says the swing exists": the hover tip on a line's end says what
+   a drag does and its keys; a deck's square and the knob say theirs. */
+void StudioEdit_Test::aLineEndsHoverTipNamesTheSwingAndItsKeys()
+{
+    Rig rig;
+    QVERIFY(rig.build());
+    QVERIFY(rig.show());
+    Truss *t = rig.props()->addTruss();
+    t->setOrigin(QVector3D(4.0f, 2.0f, 6.0f));
+    t->setLength(6.0f);
+    rig.gv->updateTrusses();
+    rig.select(QStringLiteral("truss"), t->id());
+    ShapeHandles *h = rig.gv->shapeHandles();
+    QVERIFY(h != nullptr);
+    QCOMPARE(rig.gv->shapeHandleTip(rig.view(h->handlePos(StageShape::EndPlusU))),
+             QString("Drag to stretch or swing · Shift: 15° steps · ⌥: no snap"));
+    QCOMPARE(rig.gv->shapeHandleTip(rig.view(h->handlePos(StageShape::RotateKnob))),
+             QString("Drag to turn · ⌥: no 15° steps"));
+    QVERIFY(rig.gv->shapeHandleTip(rig.viewAt(15.0, 10.0)).isEmpty());
+
+    // The tip is what a hover shows.
+    const QPoint at = rig.view(h->handlePos(StageShape::EndMinusU));
+    QHelpEvent he(QEvent::ToolTip, at, rig.gv->viewport()->mapToGlobal(at));
+    QApplication::sendEvent(rig.gv->viewport(), &he);
+    QCOMPARE(QToolTip::text(), QString("Drag to stretch or swing · Shift: 15° steps · ⌥: no snap"));
+    QToolTip::hideText();
+
+    StagePlatform *p = rig.platform(10, 6, 2, 1);
+    rig.select(QStringLiteral("platform"), p->id());
+    h = rig.gv->shapeHandles();
+    QVERIFY(h != nullptr);
+    QCOMPARE(rig.gv->shapeHandleTip(rig.view(h->handlePos(StageShape::EndPlusU))),
+             QString("Drag to stretch · ⌥: no snap"));
 }
 
 /* Selected but held: no squares, no knob, its outline and one line saying
@@ -1214,7 +1297,7 @@ void StudioEdit_Test::aLockedLineShowsWhyAndNoHandles()
     QVERIFY(rig.gv->shapeHandles() == nullptr);
     QCOMPARE(rig.gv->shapeHeldReason(), QString("Layer locked — unlock it in Plot layers"));
     QVERIFY(rig.gv->m_shapeHandles->readout().isEmpty());
-    rig.drag(end, end + QPoint(120, 40), Qt::AltModifier);
+    rig.drag(end, end + QPoint(120, 40), Qt::NoModifier);
     QVERIFY(qAbs(t->length() - 6.0f) < 1e-4f);
     QVERIFY(qAbs(t->origin().x() - 4.0f) < 1e-4f);
     QVERIFY(!rig.gv->canUndo());
@@ -1233,7 +1316,7 @@ void StudioEdit_Test::aLockedLineShowsWhyAndNoHandles()
 }
 
 /* Shots for review (QLC_SHOT_DIR): a selected truss with its handles, an
-   ⌥-drag of its end mid-swing with the readout, a selected wall, and a
+   drag of its end mid-swing with the readout, the hover tip on its end, a selected wall, and a
    locked truss selected. Uses only what the plot had before this work, so
    the same function shoots "before" on main. */
 void StudioEdit_Test::plotHandlesPictures()
@@ -1277,12 +1360,29 @@ void StudioEdit_Test::plotHandlesPictures()
         if (ShapeHandles *h = rig.gv->shapeHandles())
         {
             const QPoint from = rig.view(h->handlePos(StageShape::EndPlusU));
-            QTest::mousePress(rig.gv->viewport(), Qt::LeftButton, Qt::AltModifier, from);
-            rig.move(from + QPoint(10, 10), Qt::AltModifier);
-            rig.move(rig.viewAt(13.0, 8.3), Qt::AltModifier);
-            shoot(QStringLiteral("truss-alt-drag-end"));
+            QTest::mousePress(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, from);
+            rig.move(from + QPoint(10, 10), Qt::NoModifier);
+            rig.move(rig.viewAt(13.0, 8.3), Qt::NoModifier);
+            shoot(QStringLiteral("truss-drag-end"));
             rig.gv->m_shapeDragMoved = false;   // let go without keeping it
-            QTest::mouseRelease(rig.gv->viewport(), Qt::LeftButton, Qt::AltModifier, from);
+            QTest::mouseRelease(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, from);
+        }
+        if (ShapeHandles *h = rig.gv->shapeHandles())
+        {
+            // The hover tip on its end, drawn where it opens.
+            const QPoint at = rig.view(h->handlePos(StageShape::EndPlusU));
+            QHelpEvent he(QEvent::ToolTip, at, rig.gv->viewport()->mapToGlobal(at));
+            QApplication::sendEvent(rig.gv->viewport(), &he);
+            QApplication::processEvents();
+            QImage canvas = rig.parent.grab().toImage();
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (w->inherits("QTipLabel") && w->isVisible())
+                {
+                    QPainter pt(&canvas);
+                    pt.drawPixmap(rig.parent.mapFromGlobal(w->geometry().topLeft()), w->grab());
+                }
+            canvas.save(QString("%1/truss-end-hover-tip-%2x%3.png").arg(dir).arg(sz.width()).arg(sz.height()));
+            QToolTip::hideText();
         }
 
         rig.select(QStringLiteral("scenery"), wall->id());

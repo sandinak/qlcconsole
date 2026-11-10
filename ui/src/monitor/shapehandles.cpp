@@ -146,7 +146,8 @@ StageShape StageShape::swung(Handle h, const QPointF &endPoint) const
 }
 
 StageShape StageShape::swungSnapped(Handle h, const QPointF &pointer, const QVector<QPointF> &otherEnds,
-                                    double magnet, double snapStep, bool constrain, bool *caught) const
+                                    double magnet, double snapStep, bool constrain, double detentDeg,
+                                    bool *caught) const
 {
     if (caught != nullptr)
         *caught = false;
@@ -178,6 +179,16 @@ StageShape StageShape::swungSnapped(Handle h, const QPointF &pointer, const QVec
         double l = d.x() * dir.x() + d.y() * dir.y();
         l = qMax(minLength, snapped(l, snapStep));
         return swung(h, plus ? fixed + dir * l : fixed - dir * l);
+    }
+    if (detentDeg > 0.0)
+    {
+        // Near enough the way it faces now: it stays straight, as a stretch.
+        const bool plus = (h == EndPlusU);
+        const QPointF fixed = handlePoint(plus ? EndMinusU : EndPlusU);
+        const QPointF d = plus ? pointer - fixed : fixed - pointer;
+        const double a = qRadiansToDegrees(qAtan2(d.y(), d.x()));
+        if (qAbs(normalised(a - angle)) <= detentDeg)
+            return stretched(h, pointer, snapStep);
     }
     if (snapStep > 0.0)
         return swung(h, QPointF(snapped(pointer.x(), snapStep), snapped(pointer.y(), snapStep)));

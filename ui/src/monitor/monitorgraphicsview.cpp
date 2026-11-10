@@ -20,6 +20,8 @@
 #include <QContextMenuEvent>
 #include <QCursor>
 #include <QApplication>
+#include <QToolTip>
+#include <QHelpEvent>
 #include <QTimer>
 #include <QPointer>
 #include <QSettings>
@@ -510,6 +512,17 @@ bool MonitorGraphicsView::viewportEvent(QEvent *event)
                 scale(target / cur, target / cur);
                 emit rulersChanged();
             }
+            return true;
+        }
+    }
+    // Over a stretch or turn handle: what a drag does, and its keys.
+    if (event->type() == QEvent::ToolTip)
+    {
+        QHelpEvent *he = static_cast<QHelpEvent *>(event);
+        const QString tip = shapeHandleTip(he->pos());
+        if (!tip.isEmpty())
+        {
+            QToolTip::showText(he->globalPos(), tip, viewport());
             return true;
         }
     }

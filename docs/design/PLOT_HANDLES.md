@@ -32,39 +32,50 @@ end to other ends**, and **saying why a locked object has none**.
 
 A truss or pipe hung on something else follows its parent and has no handles.
 
-## The end of a line: stretch, or ⌥ to swing
+## The end of a line: drag to stretch or swing
 
-A truss, pipe or piece of scenery is a **line** on the plan. Its end squares:
+A truss, pipe or piece of scenery is a **line** on the plan. Drag an end
+square and the end goes where the pointer is while the other end stays
+put, so the line lengthens, shortens and **re-angles** in one drag (it
+swings about the far end). The knob still turns it about its middle.
 
-- **Drag** (as today): stretch or shorten along its own line; the far end
-  stays put.
-- **⌥/Alt-drag** **(new)**: the end goes where the pointer is and the far
-  end stays put, so it lengthens, shortens and **re-angles** at once (it
-  swings about the far end). This is the "⌥-rotate" of the ask: the knob
-  turns about the middle, ⌥ on an end turns about the other end.
+**⌥/Alt has one meaning on every handle: free of the snaps.** On a deck's
+squares and the knob that was already so; on a line's end it lifts the
+grid, the straight-line detent and the catch on another end. (A first cut
+used ⌥ on an end to mean "swing"; the UX review (UX-66) took it back so ⌥
+never means two things.)
 
-⌥ on a platform's squares and on the knob keeps its old meaning (free, no
-Snap steps); a cyc's ends have no swing (it cannot turn), so ⌥ there is
-free too. To stretch a line without Snap steps, turn Snap off.
+A cyc's ends only stretch (it hangs square across the back and cannot
+turn).
+
+A hover over a handle says what a drag does and its keys: on a line's end
+"Drag to stretch or swing · Shift: 15° steps · ⌥: no snap" (UX-61), on a
+deck's square "Drag to stretch · ⌥: no snap", on the knob "Drag to turn ·
+⌥: no 15° steps".
 
 ## Snap
 
-- A **stretch** goes in Snap steps (plot ▸ Snap); off with Snap off.
-- A **swung end** snaps, first match wins:
+- A deck's **stretch** goes in Snap steps (plot ▸ Snap); off with Snap off
+  or with ⌥.
+- A **line's end** snaps, first match wins (none of them with ⌥):
   1. **to another end** within about 10 px on screen: the ends of every
      other truss, pipe and piece of scenery and a deck's corners, so a wall
      meets a wall and a pipe meets a truss end exactly;
   2. **Shift**: the angle in 15° steps, the length in Snap steps;
-  3. otherwise **to the grid**: the end on the nearest Snap point (free with
+  3. **straight**: within 3° of the way it faced, it keeps its angle and
+     stretches along itself in Snap steps (a detent, so a stretch stays a
+     stretch);
+  4. otherwise **to the grid**: the end on the nearest Snap point (free with
      Snap off).
-- The knob turns in 15° steps (⌥ free), as today.
+- The knob turns in 15° steps (⌥ free), as before.
 
 ## The readout
 
 While dragging, a readout by the pointer gives the length in **Settings ▸
 Units** through `MeasurementUnits::formatMetres()` (`Length 30'`,
-`16' × 8'`); a swing adds the way it faces (`Length 12' 6" · 45°`), and
-"→ end" when it has caught another end. Never a hard-coded unit.
+`16' × 8'`); a line turned off its own angle adds the way it faces
+(`Length 12' 6" · 45°`), and "→ end" when it has caught another end. Never
+a hard-coded unit.
 
 ## Undo
 
