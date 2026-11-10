@@ -49,7 +49,8 @@ there. One test dir: `QLC_TEST_ONLY="ui/test/workbench" ./check-all.sh
 single-target build (`cmake --build build --target X -j2`) runs; a
 PreToolUse hook (`~/.claude/hooks/distribute-builds.sh`, decided 2026-11-10)
 blocks whole-tree builds, `-j` above 2, `make quick`/`make check` and
-`check-all.sh` without `--remote` there, for every session and agent.
+`check-all.sh` without `--remote` there, for every session and agent, while a
+pool host answers. Undocked (no pool host reachable), ender builds locally.
 
 `--quick` builds only the Qt6 leg and runs only the tests your change touches
 since `origin/main` (`QUICK_BASE` to change): the test's own dir, tests that
