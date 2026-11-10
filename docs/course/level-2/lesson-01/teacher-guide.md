@@ -83,7 +83,7 @@ are how a designer says *not this one*.
 On the projector:
 
 1. Click **1.0.2 Chorus**. Point at the grey rows under it and the
-   **S 1 / T 3** on its row; hover the **T** header to show its name.
+   **S 1 / T 4** on its row; hover the **T** header to show its name.
    Scroll the page down to **Tracked in** and **Next cue receives**.
 2. Click **1.0.1 Verse** → its **StepTops** row → tick **Release**. Read
    the top bar aloud: *"Changed: 1.0.2 Chorus, 1.0.3 Scream"*. Click the
@@ -108,8 +108,8 @@ On the projector:
 
 ## 4. Check for understanding (while circulating)
 
-- "What does T 2 on the chorus mean?" (*Two layers track into it: the cyc
-  from the Pose and the front light from the verse.*)
+- "What does T 3 on the chorus mean?" (*Three layers track into it: the cyc
+  and the spots from the Pose, and the front light from the verse.*)
 - "Where does a released layer go?" (*Back to the base cue, or dark if
   the base cue doesn't light it.*)
 - "Why not make the Flash a Block cue?" (*Block starts from nothing: the

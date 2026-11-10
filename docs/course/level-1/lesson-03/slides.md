@@ -58,7 +58,8 @@ teacher says. It can be turned into a deck as it is.*
 
 - A mover that opens before it has turned swings in, in view.
 - Turn it in the dark first: **AT-Spots**, **Out**, **Soloist DS** in the
-  Pose. The aim tracks on to the Solo.
+  Pose. The aim tracks through the Scream, so the heads are already on
+  the singer; the Solo (a Block cue) sets its own aim and opens them.
 
 ## 10. Your turn
 

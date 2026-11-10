@@ -147,8 +147,8 @@ Switch roles after each part.
     box, then **Out** (a level of zero), then **Soloist DS** (All →
     Targets), each onto the **AT-Spots** row.
     - *You should see:* an **AT-Spots** layer in the Pose, aimed and
-      dark. The aim tracks on through the Scream, so the spots are
-      already on the singer when the Solo opens them.
+      dark. The aim tracks through the Scream, so the heads are
+      already on the singer; the Solo sets its own aim and opens them.
 
 ### Save
 

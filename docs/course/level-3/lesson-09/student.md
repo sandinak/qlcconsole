@@ -40,7 +40,7 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
    now, on this computer.
 3. Click **Review** in the footer.
    - *You should see:* findings, worst first. Hover a row for why it
-     matters. Look for **CUE-02**, and for four **CUE-01** under it.
+     matters. Look for **CUE-02**, and for the four **CUE-01** just above it.
 
    ![Show Review's findings](../../images/lesson-3-9/show-review.png)
 

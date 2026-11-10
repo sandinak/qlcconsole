@@ -49,7 +49,7 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
      it is on (**⚠ cyc**): hover the mark for the detail, right-click it to
      answer it there (**I Meant It** turns it green, **Not a Problem…** hides it, **Not Meant: Show Me the Layer**,
      **Open in Show Review**). Hover a row for why it
-     matters. Look for **CUE-02**, and for four **CUE-01** under it.
+     matters. Look for **CUE-02**, and for the four **CUE-01** just above it.
 
    ![Show Review's findings](../../images/lesson-3-9/show-review.png)
 4. Select **CUE-02** and click **Fix ▸**. It takes you to the second song.

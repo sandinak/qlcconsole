@@ -42,8 +42,8 @@ Should the scream still have the white flash? Why?
 1. **File ▸ Open** → `lesson-2-1-start.qlcc`.
 2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
-3. Click **1.0.2 Chorus**. Three grey ⤳ rows track in; its row reads
-   **1** under **S**, **3** under **T**.
+3. Click **1.0.2 Chorus**. Four grey ⤳ rows track in; its row reads
+   **1** under **S**, **4** under **T**.
 
    ![What tracks into the chorus](../../images/lesson-2-1/chorus-tracking.png)
 
@@ -56,7 +56,7 @@ Should the scream still have the white flash? Why?
 
    ![Release](../../images/lesson-2-1/release.png)
 
-8. Click **1.0.2 Chorus**: **2** under **T**, and the step tops are dark.
+8. Click **1.0.2 Chorus**: **3** under **T**, and the step tops are dark.
 
    ![The chorus, step tops released](../../images/lesson-2-1/rig-chorus-released.png)
 
@@ -85,7 +85,7 @@ A grey row's right-click also has **Bring Into This Cue** (make it this cue's ow
 
 1. In a tracking cue list, what does a cue play besides the layers it
    sets itself?
-2. After the release, the chorus reads **S 1, T 2**. What do the numbers
+2. After the release, the chorus reads **S 1, T 3**. What do the numbers
    count, and which layers are they?
 3. What did **Release** on the verse's StepTops change in the chorus, and
    why did the director want it?

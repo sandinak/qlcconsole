@@ -46,6 +46,8 @@
 #include <QFileInfo>
 #include <QElapsedTimer>
 #include <QLabel>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QTimer>
 #include <QCheckBox>
 #include <QRegularExpression>
@@ -2547,6 +2549,8 @@ HelpShots::Frame showTreeFrame(App *app, ShowTreeView *v)
             if (QWidget *zone = v->findChild<QWidget *>(QStringLiteral("stCueDropZone")))
                 if (zone->isVisible())
                     page->ensureWidgetVisible(zone, 0, 8);
+            // Never scrolled sideways: the label column stays on show.
+            page->horizontalScrollBar()->setValue(0);
         }
     return f;
 }
@@ -3086,6 +3090,18 @@ void CourseShow_Test::lessonPictures()
         QVERIFY(open(kL3Finish));
         Doc *dc = m_app->doc();
         ShowTreeView *v = showTree();
+        // These three pictures come before step 12 (the mark): the Pose has
+        // no AT-Spots layer yet, as the student's own show doesn't.
+        {
+            const quint32 pose = cueNumbered(dc, "1.0.0");
+            quint32 mark = 0xFFFFFFFF;
+            for (const Layer &ly : dc->showTree()->cue(pose)->layers)
+                if (dc->showTree()->targetLabel(ly.target) == QLatin1String("AT-Spots"))
+                    mark = ly.id;
+            QVERIFY(mark != 0xFFFFFFFF);
+            QVERIFY(dc->showTree()->removeLayer(pose, mark));
+            settle(100);
+        }
         for (QTreeWidgetItemIterator it(v->tree()); *it; ++it)
             (*it)->setExpanded(true);
         QVERIFY(v->selectNode(cueNumbered(dc, "1.0.1")));
@@ -4283,10 +4299,13 @@ static bool lessonTwoFiveByMouse(Doc *doc, ShowTreeView *view, const QString &sh
         QWidget *strip = view->findChild<QWidget *>(QStringLiteral("stLineStrip"));
         QWidget *plan = view->findChild<QWidget *>(QStringLiteral("stLinePlan"));
         QLabel *spread = stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(KeySpread));
+        // The page at its top-left: Position and Spread's rows, the strip and
+        // the plan all on show, with the label column.
         for (QWidget *w = spread; w != nullptr; w = w->parentWidget())
             if (QScrollArea *area = qobject_cast<QScrollArea *>(w))
             {
-                area->ensureWidgetVisible(plan != nullptr ? plan : spread, 0, 10);
+                area->verticalScrollBar()->setValue(0);
+                area->horizontalScrollBar()->setValue(0);
                 break;
             }
         settle(100);
@@ -5891,7 +5910,10 @@ void CourseShow_Test::levelTwoPictures()
             QVERIFY(shoot(f, d, "chorus-tracking"));
             // Scrolled down: Tracked in and Next cue receives.
             if (QScrollArea *page = qobject_cast<QScrollArea *>(v->m_cuePage))
+            {
                 page->ensureWidgetVisible(v->m_cueNext, 0, 8);
+                page->horizontalScrollBar()->setValue(0);
+            }
             settle(100);
             HelpShots::Frame g;
             g.grab = m_app;
@@ -5931,7 +5953,10 @@ void CourseShow_Test::levelTwoPictures()
             HelpShots::Frame f = showTreeFrame(m_app, v);
             // The Mode box is near the top of the page: scrolled back to it.
             if (QScrollArea *page = qobject_cast<QScrollArea *>(v->m_cuePage))
+            {
                 page->ensureWidgetVisible(stFind<QComboBox>(v, "stCueMode"), 0, 60);
+                page->horizontalScrollBar()->setValue(0);
+            }
             settle(100);
             f.callouts << mark(stFind<QComboBox>(v, "stCueMode"), 1) << countsOf(v, flash, m_app, 2);
             QVERIFY(shoot(f, d, "flash-cue"));

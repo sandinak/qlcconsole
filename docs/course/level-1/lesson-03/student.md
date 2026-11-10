@@ -81,8 +81,9 @@ In the solo, where will the audience look, and why?
 12. A spot that opens before it has turned swings across the stage in
     view. Turn it in the dark first (a **mark**): click **1.0.0 Pose**,
     drag **AT-Spots** onto the dashed box, then **Out** and **Soloist DS**
-    onto the **AT-Spots** row. The aim tracks on, so the spots are
-    already on the singer when the Solo opens them.
+    onto the **AT-Spots** row. The aim tracks through the Scream, so the
+    heads are already on the singer; the Solo sets its own aim and opens
+    them.
 13. **File ▸ Save As** → `Lesson1-3-yourname.qlcc`.
 
 **Stuck?** No targets: type `Center` in **Filter the Library**. The Solo
