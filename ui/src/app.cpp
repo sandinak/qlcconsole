@@ -5138,11 +5138,21 @@ void App::fitStatusBar()
         return;
     const QList<QWidget *> chips = statusChipsByPriority();
     const int gap = 6;                  // QStatusBar's spacing between items
-    int room = sb->width() - 2 * gap - (sb->isSizeGripEnabled() ? 20 : 0);
-    // What is not on the list (the Run controls, the spacers) keeps its place.
+    int room = sb->width() - 2 * gap;
+    // What is not on the list (the Run controls, the spacers, the size grip)
+    // keeps its place.
     for (QWidget *w : sb->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
-        if (!chips.contains(w) && w->isVisibleTo(sb) && !qobject_cast<QSizeGrip *>(w))
+        if (!chips.contains(w) && w->isVisibleTo(sb))
             room -= qMax(w->sizeHint().width(), w->minimumWidth()) + gap;
+    /* A squeezed chip is 0 wide but still an item of the bar's layout, with
+       the spacing beside it: every shown chip's gap first, then the widths.
+       Counted as each chip was decided, the gaps of the squeezed ones after
+       the last that fitted took room it had been given -- the readiness chip
+       was laid out 6 px short of its text at 1024 with the Follow chip on
+       (gate 043j, Linux fonts). */
+    for (QWidget *w : chips)
+        if (w->isVisibleTo(sb))
+            room -= gap;
     // A size hint does not move with the maximum width, so a squeezed chip
     // is measured as it would be drawn: this is the same answer every time
     // the sizes have not changed, and then nothing is touched.
@@ -5157,8 +5167,9 @@ void App::fitStatusBar()
         const bool squeezed = w->property("statusSqueezed").toBool();
         const int minW = squeezed ? w->property("statusMinWidth").toInt() : w->minimumWidth();
         const int want = qMax(qMax(w->sizeHint().width(), w->minimumSizeHint().width()), minW);
-        const bool fits = want + gap <= room;
-        room -= fits ? want + gap : gap;
+        const bool fits = want <= room;
+        if (fits)
+            room -= want;
         if (fits && squeezed)
         {
             // Back as it was (a chip of a fixed width has both ends set).

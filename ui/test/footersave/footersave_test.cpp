@@ -220,6 +220,53 @@ void FooterSave_Test::anAutosaveDoesNotTurnTheDirtyChipOverAndBack()
     m_app->doc()->resetModified();
 }
 
+void FooterSave_Test::aChipTheFooterKeepsIsLaidOutWhole()
+{
+    /* Low-priority chips on, so that at each width some are squeezed after
+       the last one that fits: their gaps are still in the bar's layout. */
+    QStatusBar *sb = m_app->statusBar();
+    QList<QLabel *> extra = { m_app->m_statusTeachingLabel, m_app->m_statusRigNetLabel,
+                              m_app->m_statusUpdateLabel, m_app->m_statusTimecodeLabel };
+    QList<QPair<QLabel *, QString>> was;
+    for (QLabel *l : extra)
+    {
+        QVERIFY(l != nullptr);
+        was << qMakePair(l, l->isVisibleTo(sb) ? l->text() : QString());
+        if (l->text().isEmpty())
+            l->setText(QStringLiteral("A chip"));
+        l->show();
+    }
+    auto tidy = qScopeGuard([&]() {
+        for (const auto &w : std::as_const(was))
+        {
+            w.first->setText(w.second);
+            w.first->setVisible(!w.second.isEmpty());
+        }
+        m_app->resize(1280, 800);
+        settle(60);
+    });
+    QStringList cut;
+    for (int width = 1400; width >= 820; width -= 10)
+    {
+        m_app->resize(width, 800);
+        settle(40);
+        m_app->fitStatusBar();
+        settle(40);
+        for (QWidget *w : m_app->statusChipsByPriority())
+        {
+            if (!w->isVisibleTo(sb) || w->property("statusSqueezed").toBool())
+                continue;
+            const int want = qMin(qMax(w->sizeHint().width(), w->minimumSizeHint().width()),
+                                  w->maximumWidth());
+            if (w->width() < want)
+                cut << QStringLiteral("window %1: %2 %3 is %4 wide, wants %5")
+                           .arg(width).arg(QString::fromLatin1(w->metaObject()->className()))
+                           .arg(w->objectName()).arg(w->width()).arg(want);
+        }
+    }
+    QVERIFY2(cut.isEmpty(), qPrintable(cut.mid(0, 8).join(QLatin1Char('\n'))));
+}
+
 void FooterSave_Test::theLoadAndNextChipsKeepTheirRoom()
 {
     m_app->m_showFooterLoad = true;
@@ -369,8 +416,28 @@ void FooterSave_Test::sweepSaves()
     if (power->sources().isEmpty())
         power->sources().append(PowerSource());
     m_app->m_showFooterPower = true;
+    /* Every chip as the app's own timers leave it, BEFORE the first reading:
+       the rig's real estimate ("0.3 A", a character shorter than this one)
+       and the Next chip come on timers (500 and 250 ms). A fixed wait for
+       them lost the race on a busy Mac, and the reading that came late,
+       mid-sweep, was taken for the save moving the footer (gate 043j). */
+    QSignalSpy readings(ProgrammingManager::instance(), &ProgrammingManager::powerEstimateChanged);
     emit ProgrammingManager::instance()->powerEstimateChanged(12.5, 1.4, false, QString());
-    settle(600);        // the estimate's own first reading
+    m_app->doc()->setModified();        // what the estimate reads changed: its next tick reads it
+    QTRY_VERIFY_WITH_TIMEOUT(readings.count() >= 2, 10000);
+    m_app->slotUpdateStandby();
+    // Then the footer as those leave it: two looks a beat apart the same.
+    QElapsedTimer still;
+    still.start();
+    QStringList was = footer(m_app);
+    do
+    {
+        settle(100);
+        const QStringList now = footer(m_app);
+        if (now == was)
+            break;
+        was = now;
+    } while (still.elapsed() < 5000);
     QVERIFY(m_app->m_statusPowerLabel->isVisibleTo(m_app->statusBar()));
 
     // Wide to narrow, through where the footer squeezes one chip after another.

@@ -16,6 +16,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **Words gate reads every button and action text.** The menu-words test now also catches texts set on any declared button or action (not just `...Btn` names) and on stack buttons; it found three off-canon labels, now Title Case: **Lock Item** / **Unlock Item** (Show Manager), **… — Would Loop** and **… — In Its Own Window** (menu lines).
 - **Screen-walk leftovers.** Add Fixture's model column takes the width the Source column doesn't need, so "Generic RGBW" is no longer cut short; the Build bar's reply wraps under the line instead of widening the window.
+- **The footer keeps what it shows whole at 1024.** Fitting the footer now counts the room a squeezed chip's spacing takes, so the readiness chip ("No outputs: preview only · 1 to check") is no longer cut at the smallest window with the Follow chip on; the Grand Master steps aside first, as its lower place in the footer's order says.
+- **A crash in a test build without AI Assist.** The Build command bar is the same size with and without AI Assist built in; a program built without it (a test) wrote past it.
 ### Added
 
 - **⇧⌘N (New here) works in Build ▸ Palettes and the Lighting Studio.** Palettes: a new palette of the kind you are on, in the folder you are on, open in the Workbench with its name ready to type (*New Gobo Palette in Act 1*). Lighting Studio: a Target Position at the pointer with its Aim palette, selected and ready to name. Same Edit ▸ New item and key, one undo step each.

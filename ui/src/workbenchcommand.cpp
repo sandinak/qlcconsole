@@ -113,6 +113,8 @@ BuildCommandBar::BuildCommandBar(Doc *doc, const Host &host, QWidget *parent)
     m_ai->setPlainWords(true);
     m_ai->setSelectionProvider([]() { return ShowTreeCommand::Context(); });
     m_ai->setLineRunner([this](const QString &command) { return runLine(command); });
+#else
+    m_ai = nullptr;                     // AI Assist not built in
 #endif
     v->addLayout(h);
     v->addWidget(m_message);

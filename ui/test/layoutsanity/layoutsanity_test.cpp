@@ -270,10 +270,17 @@ struct Item
 };
 
 /** True when @a w can't be seen in @a top though it says it is visible: a
- *  hidden ancestor, a page of a stack not on show. */
+ *  hidden ancestor, a page of a stack not on show, a footer chip the
+ *  footer squeezed for want of room (App::fitStatusBar(): 0 wide on
+ *  purpose, its parts with it -- the Grand Master's "GM", slider, value). */
 bool shown(const QWidget *w, const QWidget *top)
 {
-    return w->isVisibleTo(top) && !w->isWindow();
+    if (!w->isVisibleTo(top) || w->isWindow())
+        return false;
+    for (const QWidget *p = w; p != nullptr && p != top; p = p->parentWidget())
+        if (p->property("statusSqueezed").toBool())
+            return false;
+    return true;
 }
 
 /** One finding: its kind, the screen-independent text a known-issue row

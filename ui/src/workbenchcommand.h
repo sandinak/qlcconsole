@@ -34,9 +34,7 @@ class QLineEdit;
 class QMimeData;
 class QLabel;
 class Doc;
-#ifdef QLC_AI_ASSIST
 class AiCommandLine;
-#endif
 
 /** @addtogroup ui_functions
  * @{
@@ -118,9 +116,12 @@ private:
     QLabel *m_syntax = nullptr;
     QToolButton *m_syntaxButton = nullptr;
     QTextBrowser *m_help = nullptr;
-#ifdef QLC_AI_ASSIST
+    /* AI Assist in the line (null without QLC_AI_ASSIST). Declared either
+       way: QLC_AI_ASSIST is the ui library's own define, so a test built
+       without it saw a smaller class, and the bar it made on its stack was
+       written past -- glibc's "double free or corruption" in layoutsanity
+       on Linux (gate 043j). */
     AiCommandLine *m_ai = nullptr;
-#endif
     QStringList m_history;
     int m_historyAt = -1;
     /** "Did you mean": what was typed, and the fix put in its place (Esc

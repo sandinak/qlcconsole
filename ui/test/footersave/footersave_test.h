@@ -46,6 +46,10 @@ private slots:
     void routineUpdatesChangeNoChipAndMoveNone();
     /** An autosave leaves "Unsaved changes" as it was: the hover says when */
     void anAutosaveDoesNotTurnTheDirtyChipOverAndBack();
+    /** A chip the footer keeps is laid out whole: the squeezed chips' gaps
+     *  are counted before the room is given out, so the readiness chip is
+     *  not cut at 1024 with the Follow chip on (gate 043j) */
+    void aChipTheFooterKeepsIsLaidOutWhole();
     /** The Load chip has room for its stall text, and the Next cue shortens
      *  to a share of the window, so neither pushes the chips after it out */
     void theLoadAndNextChipsKeepTheirRoom();
