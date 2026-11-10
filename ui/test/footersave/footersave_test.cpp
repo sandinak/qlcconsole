@@ -227,17 +227,17 @@ void FooterSave_Test::aChipTheFooterKeepsIsLaidOutWhole()
     QStatusBar *sb = m_app->statusBar();
     QList<QLabel *> extra = { m_app->m_statusTeachingLabel, m_app->m_statusRigNetLabel,
                               m_app->m_statusUpdateLabel, m_app->m_statusTimecodeLabel };
-    QList<QPair<QLabel *, QString>> was;
+    QList<QPair<QLabel *, QString>> before;
     for (QLabel *l : extra)
     {
         QVERIFY(l != nullptr);
-        was << qMakePair(l, l->isVisibleTo(sb) ? l->text() : QString());
+        before << qMakePair(l, l->isVisibleTo(sb) ? l->text() : QString());
         if (l->text().isEmpty())
             l->setText(QStringLiteral("A chip"));
         l->show();
     }
     auto tidy = qScopeGuard([&]() {
-        for (const auto &w : std::as_const(was))
+        for (const auto &w : std::as_const(before))
         {
             w.first->setText(w.second);
             w.first->setVisible(!w.second.isEmpty());
@@ -249,9 +249,21 @@ void FooterSave_Test::aChipTheFooterKeepsIsLaidOutWhole()
     for (int width = 1400; width >= 820; width -= 10)
     {
         m_app->resize(width, 800);
-        settle(40);
-        m_app->fitStatusBar();
-        settle(40);
+        /* Fitted and still: a chip's own timer (Next, the Follow chip, the
+           power estimate) can change it after a fit, and the fit that
+           follows is queued -- under load, after a fixed wait. */
+        QElapsedTimer still;
+        still.start();
+        QStringList was;
+        do
+        {
+            m_app->fitStatusBar();
+            settle(40);
+            const QStringList now = footer(m_app);
+            if (now == was)
+                break;
+            was = now;
+        } while (still.elapsed() < 3000);
         for (QWidget *w : m_app->statusChipsByPriority())
         {
             if (!w->isVisibleTo(sb) || w->property("statusSqueezed").toBool())
