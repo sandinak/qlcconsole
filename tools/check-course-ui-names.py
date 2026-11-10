@@ -68,21 +68,11 @@ ALLOW_RE = re.compile(r"^(\d+(\.\d+)+ .+|[−+-]?\d+%?)$")
 # Stale lesson text that this check found and that no course branch fixes
 # yet. Fix the lesson, then delete the entry (the check fails once an entry
 # no longer occurs in the lessons).
-STALE_UNFIXED = {
-    "All notes…",       # the app says All Notes…
-    "Show Auto fixtures as their closest plot symbol",  # ...Fixtures as Their...
-    "Focus this cue…",  # Focus This Cue (no "…")
-    "Rig and universes…",  # Rig and Universes…
-}
+STALE_UNFIXED = set()
 
-# Known-wrong lesson text whose fix is on docs/043-course-level3 or
-# fix/043-course-mov08. TEMPORARY, for "until the course branches land":
-# delete each entry when its branch merges.
-EXPECTED_STALE = {
-    "Add fixture…",       # Add Fixture…
-    "Edit focus calls…",  # Edit Focus Calls…
-    "Target positions",   # Target Positions
-}
+# Known-wrong lesson text whose fix is on a course branch not yet merged.
+# Delete each entry when its branch merges.
+EXPECTED_STALE = set()
 
 SEP = re.compile(r"\s*[▸→]\s*")
 BOLD = re.compile(r"\*\*((?:(?!\n[ \t]*\n).)+?)\*\*", re.S)
