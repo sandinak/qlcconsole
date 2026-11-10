@@ -194,11 +194,13 @@ public:
      *  VC control's store never takes it): gone when the effect stops. */
     void setFollowSpotPad(const FollowSpotFraming::Pad &pad) { m_followPad = pad; }
     FollowSpotFraming::Pad followSpotPad() const { return m_followPad; }
+    /** Its look's size as it plays (live controls in it), as of now. */
+    FollowSpotFraming::Look followSpotLook() const { return FollowSpotFraming::fromParams(m_paramValues); }
     bool isFollowSpot() const { return m_isFollowSpot; }
-    /** The fade a beam-size re-aim asks for (ms): next to none -- the heads
-     *  go straight to the aim for the new beam -- but not 0, so a fade
-     *  already running (the cue's own) keeps the time it has left
-     *  (Scene::write's re-aim) instead of being cut. */
+    /** The fade a beam-size re-aim asks for (ms): next to none for a head
+     *  that is still -- it goes straight to the aim for the new beam -- while
+     *  one that is moving keeps going as it was (Scene::requestReaim(..,
+     *  true)). */
     static constexpr uint kFollowBeamReaimMs = 1;
     /** What @p name plays at now (override, palette or default); @p ok false
      *  when the script has no such param. Host keys: their current value. */

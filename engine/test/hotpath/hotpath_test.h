@@ -59,6 +59,7 @@ private slots:
     void aMatrixComputesAMapPerStepNotPerTick();
     void aGroupMasterAddsNoAllocationPerFrame();
     void whoLetGoAddsNoAllocationPerFrame();
+    void aBeamSizeReaimAddsNoFadersAndReadsFadesFree();
     void anAreaAimThatDimsWorksOutItsZonesOnce();
 
     void resolvingABlockedTargetAllocatesNothing();

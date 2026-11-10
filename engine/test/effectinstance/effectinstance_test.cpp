@@ -2001,12 +2001,13 @@ namespace
 struct FramingRig
 {
     Fixture *spot = nullptr;
+    Fixture *spot2 = nullptr;   ///< framingRig(doc, true): a second head, 2.5 m stage right of it
     StageTarget *who = nullptr;
     QLCPalette *follow = nullptr;
     Scene *scene = nullptr;
 };
 
-FramingRig framingRig(Doc *doc)
+FramingRig framingRig(Doc *doc, bool two = false)
 {
     FramingRig r;
     MonitorProperties *props = doc->monitorProperties();
@@ -2056,6 +2057,17 @@ FramingRig framingRig(Doc *doc)
     rp.trussOffset = 3.0f;
     rp.mountingType = Truss::TopHung;
     props->setFixtureRigProps(r.spot->id(), rp);
+    if (two)
+    {
+        r.spot2 = new Fixture(doc);
+        r.spot2->setName("FOH Spot 2");
+        r.spot2->setFixtureDefinition(def, mode);
+        r.spot2->setAddress(220);
+        doc->addFixture(r.spot2);
+        FixtureRigProps rp2 = rp;
+        rp2.trussOffset = 0.5f;
+        props->setFixtureRigProps(r.spot2->id(), rp2);
+    }
 
     r.who = props->addStageTarget();
     r.who->setName("Lead");
@@ -2073,6 +2085,8 @@ FramingRig framingRig(Doc *doc)
     r.scene->setName("Follow Lead");
     doc->addFunction(r.scene);
     r.scene->addFixture(r.spot->id());
+    if (r.spot2 != nullptr)
+        r.scene->addFixture(r.spot2->id());
     r.scene->addPalette(aim->id());
     r.scene->addPalette(r.follow->id());
     return r;
@@ -2283,45 +2297,165 @@ void EffectInstance_Test::followSpotLiveSizeAndBeamAngle()
     delete loaded;
 }
 
+namespace
+{
+/* The MasterTimer and universe round a scene plays in, one tick at a time. */
+struct Player
+{
+    Doc *doc;
+    MasterTimer timer;
+    explicit Player(Doc *d) : doc(d), timer(d) {}
+    void play(int ticks)
+    {
+        for (int k = 0; k < ticks; ++k)
+        {
+            timer.timerTick();
+            QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+            ua.first()->processFaders();
+            doc->inputOutputMap()->releaseUniverses(false);
+        }
+    }
+    int dmx(quint32 address)
+    {
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(int(address)));
+        doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    }
+};
+}
+
 void EffectInstance_Test::followSpotSizeReaimKeepsARunningFade()
 {
-    /* A follow-spot cue fading its heads in over 3 s: the re-aim a beam
-       size asks for (EffectInstance::kFollowBeamReaimMs) keeps the time the
-       fade has left, rather than snapping the heads there. */
+    /* A follow-spot cue fading its heads in over 3 s: the effect starting
+       (its Framing sizes the beam) re-aims them for the beam it gives, and
+       the cue's fade keeps its time -- neither cut short nor started again. */
     const FramingRig r = framingRig(m_doc);
     r.who->setPosition(QVector3D(1.5f, 8.0f, 0.0f));
     r.follow->setEffectParamValue("framing", 2);
     r.scene->setFadeInSpeed(3000);
-    MasterTimer timer(m_doc);
-    auto play = [&](int ticks) {
-        for (int k = 0; k < ticks; ++k)
-        {
-            timer.timerTick();
-            QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
-            ua.first()->processFaders();
-            m_doc->inputOutputMap()->releaseUniverses(false);
-        }
-    };
-    auto pan = [&]() {
-        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
-        const int v = uchar(ua.first()->preGMValues().at(int(r.spot->address())));
-        m_doc->inputOutputMap()->releaseUniverses(false);
-        return v;
-    };
-    r.scene->start(&timer, FunctionParent::master());
-    play(10);
-    const int early = pan();
-    r.scene->requestReaim(EffectInstance::kFollowBeamReaimMs);
-    play(int(EffectInstance::kFollowBeamReaimMs / MasterTimer::tick()) + 10);
-    const int afterReaim = pan();
-    play(200);
-    const int settled = pan();
-    qInfo() << "pan: early" << early << "after the re-aim" << afterReaim << "settled" << settled;
+    Player p(m_doc);
+    r.scene->start(&p.timer, FunctionParent::master());
+    p.play(10);                                     // 0.2 s in
+    const int early = p.dmx(r.spot->address());
+    EffectInstance inst(m_doc, r.scene->id(), r.follow->id());
+    QVERIFY(inst.isValid());
+    inst.runTick();                                 // the effect's own re-aim request
+    p.play(15);                                     // 0.5 s in
+    const int mid = p.dmx(r.spot->address());
+    p.play(int(2600 / MasterTimer::tick()));        // 3.1 s in: the cue's fade is over
+    const int atEnd = p.dmx(r.spot->address());
+    p.play(200);
+    const int settled = p.dmx(r.spot->address());
+    qInfo() << "pan: 0.2 s" << early << "0.5 s" << mid << "3.1 s" << atEnd << "settled" << settled;
     QVERIFY2(settled != early, "the heads should move in the fade");
-    QVERIFY2(qAbs(afterReaim - settled) > 2,
-             qPrintable(QString("the re-aim cut the cue's fade: %1 already at %2").arg(afterReaim).arg(settled)));
+    QVERIFY2(qAbs(mid - settled) > 2, qPrintable(QString("the re-aim cut the cue's fade: %1 already").arg(mid)));
+    QVERIFY2(qAbs(atEnd - settled) <= 1,
+             qPrintable(QString("the fade started again: %1 at 3.1 s, %2 settled").arg(atEnd).arg(settled)));
     r.scene->stop(FunctionParent::master());
-    timer.timerTick();
+    p.timer.timerTick();
+}
+
+void EffectInstance_Test::followSpotSizeReaimKeepsAWipe()
+{
+    /* A follow-spot cue arriving by a wipe: each head waits its turn. The
+       effect's re-aim keeps the wait -- the late head does not start early. */
+    const FramingRig r = framingRig(m_doc, true);
+    r.who->setPosition(QVector3D(0.0f, 8.0f, 0.0f));
+    r.follow->setEffectParamValue("framing", 2);
+    SceneTransition wipe;
+    wipe.shape = SceneTransition::WipeToStageLeft;
+    wipe.time = 3000;
+    wipe.softness = 0.2;
+    r.scene->setTransitionIn(wipe);
+    Player p(m_doc);
+    r.scene->start(&p.timer, FunctionParent::master());
+    p.play(3);
+    EffectInstance inst(m_doc, r.scene->id(), r.follow->id());
+    QVERIFY(inst.isValid());
+    for (int k = 0; k < 4; ++k)
+    {
+        inst.runTick();
+        p.play(1);
+    }
+    p.play(5);                                      // ~0.25 s in
+    const int a = p.dmx(r.spot->address()), b = p.dmx(r.spot2->address());
+    p.play(300);
+    const int aEnd = p.dmx(r.spot->address()), bEnd = p.dmx(r.spot2->address());
+    qInfo() << "0.25 s in: head 1" << a << "->" << aEnd << ", head 2" << b << "->" << bEnd;
+    // One head is on its way, the other still waiting where it started.
+    const bool aWaits = a == 0 && aEnd != 0, bWaits = b == 0 && bEnd != 0;
+    QVERIFY2(aWaits != bWaits, qPrintable(QString("the wipe's order is gone: %1 and %2").arg(a).arg(b)));
+    r.scene->stop(FunctionParent::master());
+    p.timer.timerTick();
+}
+
+void EffectInstance_Test::followSpotSizeReaimKeepsACrossfade()
+{
+    /* A follow spot as a step crossfaded by hand (a blend scene, the
+       intensity half way): the re-aim keeps the morph, not a jump. */
+    const FramingRig r = framingRig(m_doc);
+    r.who->setPosition(QVector3D(1.5f, 8.0f, 0.0f));
+    r.follow->setEffectParamValue("framing", 2);
+    Scene *from = new Scene(m_doc);
+    m_doc->addFunction(from);
+    from->setValue(r.spot->id(), 0, 0);             // pan at 0 there
+    r.scene->setBlendFunctionID(from->id());
+    r.scene->adjustAttribute(0.5, Function::Intensity);
+    Player p(m_doc);
+    r.scene->start(&p.timer, FunctionParent::master());
+    p.play(5);
+    const int before = p.dmx(r.spot->address());
+    EffectInstance inst(m_doc, r.scene->id(), r.follow->id());
+    QVERIFY(inst.isValid());
+    inst.runTick();
+    p.play(5);
+    const int after = p.dmx(r.spot->address());
+    r.scene->adjustAttribute(1.0, Function::Intensity);
+    p.play(5);
+    const int full = p.dmx(r.spot->address());
+    qInfo() << "crossfade half way: pan" << before << "-> after the re-aim" << after << ", at full" << full;
+    QVERIFY2(before > 0 && before < full, "the crossfade should be half way");
+    QVERIFY2(qAbs(after - before) <= 2, qPrintable(QString("the re-aim jumped the crossfade: %1 -> %2").arg(before).arg(after)));
+    r.scene->stop(FunctionParent::master());
+    p.timer.timerTick();
+}
+
+void EffectInstance_Test::aBlockingReaimStillTakesTheNewCuesFade()
+{
+    /* No follow spot: a GO into a new blocking re-aims a scene still in an
+       older 10 s fade over the new cue's 1 s (BLOCKING.md), not the old
+       fade's time left. */
+    const FramingRig r = framingRig(m_doc);
+    r.scene->removePalette(r.follow->id());
+    r.who->setPosition(QVector3D(1.5f, 8.0f, 0.0f));
+    r.scene->setFadeInSpeed(10000);
+    Player p(m_doc);
+    r.scene->start(&p.timer, FunctionParent::master());
+    p.play(10);
+    r.who->setPosition(QVector3D(-1.5f, 6.0f, 0.0f));
+    r.scene->requestReaim(1000);                    // Blocking::reaimRunning
+    p.play(int(1100 / MasterTimer::tick()));
+    const int atOne = p.dmx(r.spot->address());
+    p.play(600);
+    const int settled = p.dmx(r.spot->address());
+    qInfo() << "blocking re-aim: pan at 1.1 s" << atOne << ", settled" << settled;
+    QVERIFY2(qAbs(atOne - settled) <= 1,
+             qPrintable(QString("the move took the old fade's time: %1 at 1.1 s, %2 settled").arg(atOne).arg(settled)));
+    r.scene->stop(FunctionParent::master());
+    p.timer.timerTick();
+}
+
+void EffectInstance_Test::framingStraightDownIsTheSteepest()
+{
+    // A head straight over the person (level 0) frames as the steepest
+    // throw does (0.25), never as a level one (the full span).
+    FollowSpotFraming::Look l;
+    l.framing = FollowSpotFraming::FullBody;
+    const FollowSpotFraming::Pad pad;
+    QCOMPARE(FollowSpotFraming::widthM(l, pad, 1.8, 0.0), FollowSpotFraming::widthM(l, pad, 1.8, 0.25));
+    QVERIFY(FollowSpotFraming::widthM(l, pad, 1.8, 0.0) < FollowSpotFraming::widthM(l, pad, 1.8, 1.0));
+    QCOMPARE(FollowSpotFraming::widthM(l, pad, 1.8, -1.0), FollowSpotFraming::widthM(l, pad, 1.8, 1.0));
 }
 
 void EffectInstance_Test::followSpotMovesEveryHeadToTheSamePoint()

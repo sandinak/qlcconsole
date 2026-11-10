@@ -629,7 +629,15 @@ public:
      *  a Custom width: FollowSpotFraming::sizesBeam()), kept as its
      *  parameters change: read where an Aim look resolves, on any thread,
      *  so Edit, preview and Run aim the same whether the effect plays. */
-    bool followSizesBeam() const { return m_followSizesBeam.load(std::memory_order_relaxed); }
+    bool followSizesBeam() const
+    {
+        const int live = m_followSizesBeamLive.load(std::memory_order_relaxed);
+        return live >= 0 ? live > 0 : m_followSizesBeam.load(std::memory_order_relaxed);
+    }
+    /** The same while a live control (a VC Effect Control) overrides the
+     *  look's Framing or Width on Subject on its playing effect: what it
+     *  plays, not what it keeps (EffectScriptRunner). -1: none. */
+    void setFollowSizesBeamLive(int live) { m_followSizesBeamLive.store(live, std::memory_order_relaxed); }
 
     /** String parameter overrides (e.g. type:"path" XY path JSON). */
     QMap<QString, QString> effectStringParams() const
@@ -654,6 +662,7 @@ private:
     QMap<QString, double>                m_effectParamValues;
     QMap<QString, QString>               m_effectStringParams;
     std::atomic<bool>                    m_followSizesBeam { false };
+    std::atomic<int>                     m_followSizesBeamLive { -1 };
     void syncFollowSizesBeam();
 
     /************************************************************************

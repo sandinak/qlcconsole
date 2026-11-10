@@ -43,7 +43,8 @@ double FollowSpotFraming::span(int framing)
 
 double FollowSpotFraming::level(double level)
 {
-    if (!(level > 0.0))
+    // Not known (negative, NaN): straight on. Straight down (0): steepest.
+    if (!(level >= 0.0))
         return 1.0;
     return qBound(0.25, level, 1.0);
 }

@@ -180,7 +180,7 @@
                     if (level < 1)
                         intent.dimmer = level;
 
-                    // Size on subject: the angle that makes the beam this wide
+                    // Width on subject: the angle that makes the beam this wide
                     // at this distance, placed within what the lens can do. A
                     // subject closer than the lens's narrowest can make small
                     // gets the narrowest; one further than its widest can make

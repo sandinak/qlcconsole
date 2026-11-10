@@ -766,6 +766,44 @@ void HotPath_Test::whoLetGoAddsNoAllocationPerFrame()
     QVERIFY(uni->m_departed.size() == 32);
 }
 
+/* The follow spot's beam-size re-aim (Scene::requestReaim(.., true)) goes
+   through Scene::write's re-aim and reads each moving channel's fade
+   (GenericFader::runningFade()): asked every frame on a rig mid-fade, it
+   adds no faders and no channels, and the read allocates nothing. */
+void HotPath_Test::aBeamSizeReaimAddsNoFadersAndReadsFadesFree()
+{
+    Scene *look = makeLook(0, kFixturesPerUniverse, 200);
+    look->setFadeInSpeed(5000);
+    look->start(m_doc->masterTimer(), FunctionParent::master());
+    frame(5);
+    Universe *uni = m_doc->inputOutputMap()->universes().at(0);
+    const int faders = uni->m_faders.size();
+    QSharedPointer<GenericFader> f = uni->m_faders.last();
+    const int channels = f->channels().size();
+    for (int i = 0; i < 50; ++i)
+    {
+        look->requestReaim(1, true);
+        frame(1);
+    }
+    QCOMPARE(uni->m_faders.size(), faders);
+    QCOMPARE(f->channels().size(), channels);
+    GenericFader::RunningFade rf;
+    const quint32 fid = m_fixtures[0].first();
+    QVERIFY(f->runningFade(fid, 0, rf));
+    QVERIFY2(rf.fadeLeft > 0, "the look is still fading in");
+    uint sink = 0;
+    const long n = allocationsIn([&]() {
+        for (int i = 0; i < 1000; ++i)
+        {
+            f->runningFade(fid, uint(i % 3), rf);
+            sink += rf.fadeLeft + rf.current;
+        }
+    });
+    QVERIFY(sink > 0);
+    qInfo("beam-size re-aim: %ld allocations in 1000 fade reads", n);
+    QCOMPARE(n, 0L);
+}
+
 /*****************************************************************************
  * The mixed rig
  *****************************************************************************/

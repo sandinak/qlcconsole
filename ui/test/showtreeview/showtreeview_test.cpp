@@ -8543,6 +8543,81 @@ void ShowTreeView_Test::followSpotFlagInTheTree()
     st->stopPreview();
 }
 
+/* UX-68 in the Show Tree: a follow spot's rows that its Framing decides --
+   Width on Subject, Beam Angle -- read greyed in the layer's effect rows,
+   saying why, as the Look Editor shows them. QLC_FSPOT_ST_SHOTS=<dir>: the
+   rows at three window sizes. */
+void ShowTreeView_Test::followSpotRowsTheFramingDecidesAreGreyed()
+{
+    FixtureGroup *spots = group("AT-Spots", 0, 2);
+    QLCPalette *follow = new QLCPalette(QLCPalette::Effect, m_doc);
+    follow->setName("Follow Spot");
+    follow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/followspot.js");
+    follow->setEffectParamValue("framing", 2);      // Waist Up
+    QVERIFY(m_doc->addPalette(follow));
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "Main");
+    const quint32 c1 = st->addCue(list, -1, "Solo");
+    Target t;
+    t.groups << spots->id();
+    const quint32 layer = st->addLayer(c1, t);
+    QVERIFY(st->setLayerLook(c1, layer, st->lookForPalette(follow->id())));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 800);
+    view.show();
+    QVERIFY(view.selectNode(layer, c1));
+    QCoreApplication::processEvents();
+    auto row = [&](const QString &param) -> QLabel * {
+        for (QLabel *l : view.findChildren<QLabel *>())
+            if (l->objectName().startsWith("stRow:") && l->objectName().endsWith("/" + param) && l->isVisibleTo(&view))
+                return l;
+        return nullptr;
+    };
+    const QString shots = qEnvironmentVariable("QLC_FSPOT_ST_SHOTS");
+    if (!shots.isEmpty())
+    {
+        QDir().mkpath(shots);
+        for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+        {
+            view.resize(sz);
+            QTest::qWait(200);
+            QLabel *any = row("topSpeed");
+            if (any != nullptr)
+                for (QWidget *p = any->parentWidget(); p != nullptr; p = p->parentWidget())
+                    if (QScrollArea *area = qobject_cast<QScrollArea *>(p))
+                    {
+                        area->ensureWidgetVisible(any, 20, 120);
+                        break;
+                    }
+            QTest::qWait(100);
+            view.grab().save(QString("%1/st-effect-rows-%2x%3.png").arg(shots).arg(sz.width()).arg(sz.height()));
+        }
+        view.resize(1280, 800);
+    }
+    QLabel *width = row("sizeOnSubject"), *angle = row("beamAngle"), *size = row("framingSize");
+    QVERIFY(width != nullptr && angle != nullptr && size != nullptr);
+    QVERIFY(!width->isEnabled() && !angle->isEnabled() && size->isEnabled());
+    QVERIFY2(width->toolTip().startsWith("Set by Framing: Waist Up"), qPrintable(width->toolTip()));
+    QVERIFY2(width->text().contains("Set by Framing: Waist Up"), qPrintable(width->text()));
+    QVERIFY2(angle->toolTip().startsWith("Set by Framing: Waist Up"), qPrintable(angle->toolTip()));
+    bool listed = false;
+    for (const QString &r : view.attributeRows())
+        listed = listed || (r.startsWith("Width on Subject |") && r.endsWith("Set by Framing: Waist Up"));
+    QVERIFY2(listed, qPrintable(view.attributeRows().join("\n")));
+
+    // Custom: the width counts again, the Framing Size doesn't.
+    follow->setEffectParamValue("framing", 0);
+    QVERIFY(view.selectNode(c1));
+    QVERIFY(view.selectNode(layer, c1));
+    QCoreApplication::processEvents();
+    width = row("sizeOnSubject");
+    size = row("framingSize");
+    QVERIFY(width != nullptr && size != nullptr);
+    QVERIFY(width->isEnabled() && !size->isEnabled());
+    QVERIFY2(size->toolTip().startsWith("Not used with Framing: Custom"), qPrintable(size->toolTip()));
+}
+
 /* Blocking (Q211, docs/design/BLOCKING.md) on the cue page: Tracks (...),
    Default and the show's sets; picking one sets the cue's, the cue after
    tracks it, the tree flags where it changes; New... makes a set and uses

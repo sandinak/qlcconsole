@@ -517,11 +517,12 @@ public:
     static QString followSpotSpeedText(double multiplier);
     /** The follow spot's Top Speed now, metres a second (x1). */
     double followSpotTopSpeed() const;
-    /** "Waist Up 110%", "Size 4' 6\"" (Settings > Units) or "Beam 13°",
+    /** "Waist Up 110%", "Width 4' 6\"" (Settings > Units) or "Beam 13°",
      *  with " (widest)" / " (narrowest)" at the lens's limit: the follow
      *  spot's beam as the indicators say it. */
     static QString followSpotSizeText(const FollowSpotStatus &st);
-    /** "Saved: Waist Up at 110%": what Save Positions kept. */
+    /** "Saved: Waist Up at 110%", "Saved: Width 4' 6\"", "Saved: Beam 13°":
+     *  what Save Positions kept, in the footer's words. */
     static QString followSpotSavedText(const FollowSpotStatus &st);
     /** D-pad Right (+1) / Left (-1) while a follow spot plays: open or close
      *  its beam a step for this run -- its Framing Size (ten points), its
@@ -1019,6 +1020,8 @@ private:
     QElapsedTimer m_followSavedClock;   ///< the last Save Positions that kept a size
     QString m_followSaved;              ///< what it kept, in words
     int m_followLimit = 0;              ///< the lens limit the last step reached
+    int m_followSizeScanTicks = 0;      ///< ticks until the size is looked up again
+    bool m_followSizeDirty = true;      ///< the pad or a save changed it: look now
     /** Follow-spot look @p look as it plays (and the pad's change); false
      *  when it doesn't play (the look's own then, no pad). */
     bool followSpotLook(quint32 look, FollowSpotFraming::Look &l, FollowSpotFraming::Pad &pad) const;

@@ -4302,7 +4302,24 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
             st.speed = m_followMover->multiplier();
             st.speedShown = st.speed != 1.0
                             || (m_followSpeedClock.isValid() && m_followSpeedClock.elapsed() < 2000);
-            fillFollowSpotSize(st);
+            /* The size: worked out again five times a second, or at once
+               when the pad or Save Positions changed it (one runner look-up
+               each time), else as it was. */
+            if (st.paletteId != m_followStatus.paletteId || st.targetId != m_followStatus.targetId
+                || m_followSizeDirty || --m_followSizeScanTicks <= 0)
+            {
+                fillFollowSpotSize(st);
+                m_followSizeScanTicks = 10;
+                m_followSizeDirty = false;
+            }
+            else
+            {
+                st.framing = m_followStatus.framing;
+                st.scalePct = m_followStatus.scalePct;
+                st.sizeCm = m_followStatus.sizeCm;
+                st.beamDeg = m_followStatus.beamDeg;
+                st.padSet = m_followStatus.padSet;
+            }
             const bool stepped = m_followSizeClock.isValid() && m_followSizeClock.elapsed() < 2000;
             st.sizeShown = st.padSet || stepped;
             st.limit = stepped || st.padSet ? m_followLimit : 0;
@@ -4344,7 +4361,7 @@ QString ProgrammerController::followSpotSizeText(const FollowSpotStatus &st)
         text = tr("%1 %2%").arg(FollowSpotFraming::framingName(st.framing),
                                 QLocale().toString(qRound(st.scalePct)));
     else if (st.sizeCm > 0.0)
-        text = tr("Size %1").arg(MeasurementUnits::formatLength(st.sizeCm * 10.0));
+        text = tr("Width %1").arg(MeasurementUnits::formatLength(st.sizeCm * 10.0));
     else if (st.beamDeg > 0.0)
         text = tr("Beam %1°").arg(QLocale().toString(qRound(st.beamDeg)));
     else
@@ -4362,39 +4379,25 @@ QString ProgrammerController::followSpotSavedText(const FollowSpotStatus &st)
         return tr("Saved: %1 at %2%").arg(FollowSpotFraming::framingName(st.framing),
                                           QLocale().toString(qRound(st.scalePct)));
     if (st.sizeCm > 0.0)
-        return tr("Saved: Width on Subject %1").arg(MeasurementUnits::formatLength(st.sizeCm * 10.0));
+        return tr("Saved: Width %1").arg(MeasurementUnits::formatLength(st.sizeCm * 10.0));
     if (st.beamDeg > 0.0)
-        return tr("Saved: Beam Angle %1°").arg(QLocale().toString(qRound(st.beamDeg)));
+        return tr("Saved: Beam %1°").arg(QLocale().toString(qRound(st.beamDeg)));
     return QString();
 }
 
 bool ProgrammerController::followSpotLook(quint32 look, FollowSpotFraming::Look &l,
                                           FollowSpotFraming::Pad &pad) const
 {
-    /* What the effect plays now (a cue's own value, else the look's) and
-       the pad's change for the run; the look's when it is not playing. One
-       pass over the runner. */
+    /* What the effect plays now (a live control over the look's) and the
+       pad's change for the run, one look-up; the look's own when it is not
+       playing. */
     pad = FollowSpotFraming::Pad();
     EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    if (runner != nullptr && runner->followSpotSize(look, l, pad))
+        return true;
     const QLCPalette *pal = m_doc->palette(look);
-    if (pal == nullptr)
-        return false;
-    QMap<QString, double> values = pal->effectParamValues();
-    bool playing = false;
-    if (runner != nullptr && runner->followSpotPad(look, pad))
-    {
-        playing = true;
-        for (const QString &k : { FollowSpotFraming::framingKey(), FollowSpotFraming::scaleKey(),
-                                  FollowSpotFraming::widthKey(), FollowSpotFraming::beamKey() })
-        {
-            bool ok = false;
-            const double v = runner->paramValue(look, k, &ok);
-            if (ok)
-                values.insert(k, v);
-        }
-    }
-    l = FollowSpotFraming::fromParams(values);
-    return playing;
+    l = pal != nullptr ? FollowSpotFraming::fromParams(pal->effectParamValues()) : FollowSpotFraming::Look();
+    return false;
 }
 
 FollowSpotFraming::Mode ProgrammerController::followSpotMode(const FollowSpotFraming::Look &l,
@@ -4539,6 +4542,9 @@ bool ProgrammerController::stepFollowSpotSize(int dir)
     }
     else
     {
+        // Nothing to zoom: no step that would change nothing.
+        if (followSpotZoomHeads(scene).isEmpty())
+            return false;
         // At the lens's limit for every head already: no further that way.
         const int now = followSpotLensLimit(scene, st.targetId, l, pad, 0.0);
         if (now == dirSign)
@@ -4549,10 +4555,10 @@ bool ProgrammerController::stepFollowSpotSize(int dir)
         if (mode == FollowSpotFraming::ScaleMode)
         {
             // Ten points of the Framing Size a step (on the look's own).
+            // To the next ten up or down (105% -> 110% or 100%).
             const double total = l.scale * pad.scale * 100.0;
-            double next = std::round(total / 10.0) * 10.0 + 10.0 * dirSign;
-            if (dirSign > 0 && next <= total + 0.5)
-                next += 10.0;
+            double next = dirSign > 0 ? std::floor(total / 10.0 + 1e-6) * 10.0 + 10.0
+                                      : std::ceil(total / 10.0 - 1e-6) * 10.0 - 10.0;
             next = qBound(kFollowScaleMinPct, next, kFollowScaleMaxPct);
             if (qAbs(next - total) < 0.01)
                 return false;
@@ -4649,6 +4655,7 @@ bool ProgrammerController::keepFollowSpotSize()
     }
     m_followSaved = said;
     m_followSavedClock.restart();
+    m_followSizeDirty = true;
     if (!said.isEmpty())
         tellOperator(said, ControllerScheme::ConfirmPriority);
     for (quint32 pid : kept)
@@ -4784,9 +4791,12 @@ bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, in
             const bool changed = stepFollowSpotSize(role == GamepadRole::DpadRight ? 1 : -1);
             m_followSizeClock.restart();
             m_followSavedClock.invalidate();
+            m_followSizeDirty = true;
             updateFollowSpotStatus(joystickScene());
+            const bool zooms = !followSpotZoomHeads(qobject_cast<const Scene *>(
+                                   m_doc->function(m_followStatus.sceneId))).isEmpty();
             const QString said = followSpotSizeText(m_followStatus);
-            tellOperator(!said.isEmpty() ? said : tr("No zoom to size the beam with"),
+            tellOperator(zooms && !said.isEmpty() ? said : tr("No zoom to size the beam with"),
                          ControllerScheme::ConfirmPriority);
             // Something for Save Positions to keep.
             if (changed)

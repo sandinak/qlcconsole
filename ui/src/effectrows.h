@@ -56,6 +56,10 @@ public:
         bool editable = false;
         EffectScript::ParamDef def;
         double value = 0.0;
+        /** Why it doesn't count now (another of its settings decides --
+         *  "Set by Framing: Waist Up", EffectScript activeWhen); empty: it
+         *  does. Shown greyed with this, as the Look Editor shows it. */
+        QString inactive;
     };
 
     /** The rows under effect @p v (an Effect look, resolved) on @p layer.

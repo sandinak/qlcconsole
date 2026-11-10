@@ -142,8 +142,15 @@ private slots:
     /** The pad's change (a Framing's scale, a Custom width, a beam angle)
      *  sizes the beam for the run, apart from the look and its overrides. */
     void followSpotLiveSizeAndBeamAngle();
-    /** A fade already running keeps its time over a beam-size re-aim. */
+    /** The effect's beam-size re-aim keeps whatever moves the heads: a
+     *  running fade its time (not cut, not restarted), a wipe its order, a
+     *  manual crossfade its morph. A blocking re-aim (no follow spot) still
+     *  takes the new cue's fade. */
     void followSpotSizeReaimKeepsARunningFade();
+    void followSpotSizeReaimKeepsAWipe();
+    void followSpotSizeReaimKeepsACrossfade();
+    void aBlockingReaimStillTakesTheNewCuesFade();
+    void framingStraightDownIsTheSteepest();
     /** A follow spot on an Aim look: two heads in different places both
      *  land on the follow-spot point, and moving the point moves both to
      *  the same new place (they converge; the effect leaves pan/tilt alone). */

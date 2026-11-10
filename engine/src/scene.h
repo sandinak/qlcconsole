@@ -169,8 +169,13 @@ public:
      *  Unlike resetRuntime() this does NOT tear down dimmer/colour faders, so a
      *  live target move (joystick, 50 Hz) re-aims without flashing the LEDs.
      *  @p fadeMs: the heads move there over that time (a cue that changes
-     *  the blocking, docs/design/BLOCKING.md); 0 = at once. */
-    void requestReaim(uint fadeMs = 0);
+     *  the blocking, docs/design/BLOCKING.md); 0 = at once.
+     *  @p keepRunningFades (the follow spot's beam-size re-aim): a head that
+     *  is moving keeps doing so as it was -- a fade its time left, a
+     *  transition's wait, a manual crossfade's morph -- toward the new aim;
+     *  @p fadeMs only for one that is still. Every request since the last
+     *  write must ask it. */
+    void requestReaim(uint fadeMs = 0, bool keepRunningFades = false);
 
     /** Re-resolve ALL (non-Effect) palettes into the EXISTING fader map on the
      *  next write(), replacing their channels in place at 0-time.
@@ -192,6 +197,7 @@ protected:
     mutable QMutex m_valueListMutex;
     bool m_reaimRequested = false;
     uint m_reaimFade = 0;           ///< requestReaim(fadeMs); guarded by m_valueListMutex
+    bool m_reaimKeepFades = false;  ///< requestReaim(.., keepRunningFades); the same
     bool m_repaletteRequested = false;
 
     /** A group the scene plays on changed its members (any group: the

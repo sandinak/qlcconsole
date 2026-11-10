@@ -463,7 +463,11 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
     } // release m_instanceMutex before touching MasterTimer
 
     for (quint32 pid : stopped)
+    {
+        if (QLCPalette *pal = m_doc->palette(pid))
+            pal->setFollowSizesBeamLive(-1);    // its live controls went with it
         emit effectStopped(pid);
+    }
 
     // Republish immediately: the destroyed instances' writes are still sitting in
     // m_publishedWrites, and writeDMX() would keep asserting that dead frame until
@@ -701,8 +705,30 @@ bool EffectScriptRunner::setParamOverride(quint32 paletteId, const QString &para
     if (inst == nullptr || inst->isFadingOut())
         return false;
     inst->setOverride(param, value);
+    syncFollowSizesLive(inst);
     emit overridesChanged(paletteId);
     return true;
+}
+
+void EffectScriptRunner::syncFollowSizesLive(EffectInstance *inst)
+{
+    /* A follow spot whose Framing or Width on Subject a live control has:
+       its Aim looks aim for the size it plays (AimSolver::sceneFramesSubject). */
+    if (inst == nullptr || !inst->isFollowSpot())
+        return;
+    QLCPalette *pal = m_doc->palette(inst->effectPaletteId());
+    if (pal == nullptr)
+        return;
+    const QHash<QString, double> &over = inst->overrides();
+    if (!over.contains(FollowSpotFraming::framingKey()) && !over.contains(FollowSpotFraming::widthKey()))
+    {
+        pal->setFollowSizesBeamLive(-1);
+        return;
+    }
+    QHash<QString, double> values;
+    for (const QString &k : { FollowSpotFraming::framingKey(), FollowSpotFraming::widthKey() })
+        values.insert(k, inst->paramValue(k));
+    pal->setFollowSizesBeamLive(FollowSpotFraming::sizesBeam(FollowSpotFraming::fromParams(values)) ? 1 : 0);
 }
 
 void EffectScriptRunner::clearParamOverride(quint32 paletteId, const QString &param)
@@ -711,6 +737,7 @@ void EffectScriptRunner::clearParamOverride(quint32 paletteId, const QString &pa
     if (inst == nullptr || !inst->overrides().contains(param))
         return;
     inst->clearOverride(param);
+    syncFollowSizesLive(inst);
     emit overridesChanged(paletteId);
 }
 
@@ -746,6 +773,17 @@ bool EffectScriptRunner::followSpotPad(quint32 paletteId, FollowSpotFraming::Pad
     const EffectInstance *inst = instanceForPalette(paletteId);
     if (inst == nullptr || !inst->isFollowSpot())
         return false;
+    pad = inst->followSpotPad();
+    return true;
+}
+
+bool EffectScriptRunner::followSpotSize(quint32 paletteId, FollowSpotFraming::Look &look,
+                                        FollowSpotFraming::Pad &pad) const
+{
+    const EffectInstance *inst = instanceForPalette(paletteId);
+    if (inst == nullptr || !inst->isFollowSpot())
+        return false;
+    look = inst->followSpotLook();
     pad = inst->followSpotPad();
     return true;
 }

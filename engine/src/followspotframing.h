@@ -100,7 +100,8 @@ namespace FollowSpotFraming
     /** The least width, as a share of the height (the shoulders). */
     constexpr double kLeast = 0.30;
     /** The level a beam is read at: no flatter than straight on, and no
-     *  steeper than 0.25 (the aim rule's own limit). */
+     *  steeper than 0.25 (the aim rule's own limit) -- straight down (0)
+     *  too; an unknown one (negative) is straight on. */
     double level(double level);
 
     /** The width wanted on the subject (metres) for a head whose throw

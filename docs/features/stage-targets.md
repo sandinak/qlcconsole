@@ -565,9 +565,9 @@ plays, a step at a time: the **Framing Size** ten points a step, the
 **Width on Subject** about an eighth (to a whole inch or centimetre), or
 the **Beam Angle** a degree or more. Never past what the lenses can do:
 when every head is at its widest (or narrowest) the footer says so --
-*◎ Follow: … · stick · Size 9' (widest)* -- and the pad goes no further
+*◎ Follow: … · stick · Width 9' (widest)* -- and the pad goes no further
 that way. The footer says the size in the unit **Settings → Units** picks
-(*Waist Up 110%*, *Size 4' 6"*, *Beam 13°*). It is for the run.
+(*Waist Up 110%*, *Width 4' 6"*, *Beam 13°*). It is for the run.
 **Save Positions** (enabled by the pad's change alone) keeps it in the look
 it was made on -- the Workbench's, or a running cue's -- as one undo step:
 the Framing stays and its size becomes the Framing Size; the footer says
@@ -605,7 +605,7 @@ Where you can see it:
 - **The Show Tree**: **follow** under Flags on the cue and its layer, lit
   green while it follows.
 
-Person Height, Size On Subject and the footer's size show in the unit **Settings → Units**
+Person Height, Width on Subject and the footer's size show in the unit **Settings → Units**
 picks (5' 7" in feet), and take a length typed in any unit: 5' 6", 5.5 ft,
 66 in, `1.676 m`. So do the target editor's heights.
 

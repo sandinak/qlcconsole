@@ -5642,6 +5642,13 @@ int ShowTreeView::addEffectRows(int row, const CueList &list, quint32 cueId, qui
             f.setItalic(true);
             value->setFont(f);
         }
+        // Another of its settings decides it (UX-68): greyed, saying why.
+        if (!r.inactive.isEmpty())
+        {
+            label->setEnabled(false);
+            value->setEnabled(false);
+            value->setText(QStringLiteral("%1 — %2").arg(r.text, r.inactive));
+        }
         m_rows->addWidget(label, row, 0);
         m_rows->addWidget(value, row, 1, 1, r.editable ? 3 : 4);
         if (r.editable)
@@ -5659,7 +5666,9 @@ int ShowTreeView::addEffectRows(int row, const CueList &list, quint32 cueId, qui
             });
             m_rows->addWidget(more, row, 4);
         }
-        m_rowText << QStringLiteral("%1 | %2 | %3").arg(r.label, r.text, r.origin);
+        m_rowText << (r.inactive.isEmpty() ? QStringLiteral("%1 | %2 | %3").arg(r.label, r.text, r.origin)
+                                           : QStringLiteral("%1 | %2 | %3 | %4").arg(r.label, r.text, r.origin,
+                                                                                r.inactive));
         ++row;
     }
     return row;

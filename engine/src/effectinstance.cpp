@@ -1850,19 +1850,27 @@ void EffectInstance::syncFollowBeam(Scene *sc)
     const double now[7] = { double(m_followLook.framing), m_followLook.scale, m_followLook.widthCm,
                             m_followLook.beamDeg, m_followPad.scale, m_followPad.widthCm,
                             m_followPad.beamDeg };
-    /* What sizes the beam changed (or it just started): the heads re-aim
-       at the beam they get -- a fade already running (the cue's own) keeps
-       its time (kFollowBeamReaimMs). */
+    /* What sizes the beam changed: the heads re-aim at the beam they get.
+       Starting, only when the look sizes the beam (the scene resolved its
+       aim with the zoom it had before the effect wrote one); one that
+       leaves the zoom alone changes nothing to re-aim for. Whatever moves
+       the heads keeps going as it was (a cue's fade, a wipe's stagger, a
+       manual crossfade): Scene::requestReaim(.., true). */
+    const bool starting = m_beamSig[0] < 0.0;
+    bool changed = false;
     for (int i = 0; i < 7; ++i)
         if (now[i] != m_beamSig[i])
         {
             m_beamSig[i] = now[i];
-            m_reaimTicks = 3;
+            changed = true;
         }
+    if (changed && (!starting || FollowSpotFraming::sizesBeam(m_followLook)
+                    || FollowSpotFraming::beamDeg(m_followLook, m_followPad) > 0.0))
+        m_reaimTicks = 3;
     if (m_reaimTicks > 0)
     {
         --m_reaimTicks;
-        sc->requestReaim(kFollowBeamReaimMs);
+        sc->requestReaim(kFollowBeamReaimMs, true);
     }
 }
 

@@ -1879,8 +1879,10 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 QString name = doc.attributes().value("name").toString();
                 double  val  = doc.attributes().value("value").toDouble();
                 if (!name.isEmpty())
+                {
                     m_effectParamValues[name] = val;
                     syncFollowSizesBeam();
+                }
                 doc.skipCurrentElement();
             }
             else if (doc.name() == QLatin1String("EffectStringParam"))
@@ -1919,8 +1921,10 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
             {
                 const QString name = doc.attributes().value("name").toString();
                 if (!name.isEmpty())
+                {
                     m_effectParamValues[name] = doc.attributes().value("value").toDouble();
                     syncFollowSizesBeam();
+                }
             }
             doc.skipCurrentElement();
         }

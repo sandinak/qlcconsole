@@ -262,7 +262,8 @@ QList<EffectRows::Row> EffectRows::rows(Doc *doc, const ResolvedLayer &layer, co
         : tr("Change it here and it becomes this cue's own: a one-off copy of “%1” for this cue -- the "
              "palette and its other cues keep theirs. One undo step. (✎ on the effect's row edits the "
              "palette itself, everywhere.)").arg(p->name());
-    for (const EffectScript::ParamDef &pd : EffectOrigin::scriptParams(p->scriptPath()))
+    const QList<EffectScript::ParamDef> defs = EffectOrigin::scriptParams(p->scriptPath());
+    for (const EffectScript::ParamDef &pd : defs)
     {
         if (pd.name.startsWith(QLatin1String("__")) || pd.type == QLatin1String("path")
             || pd.type == QLatin1String("image"))
@@ -327,6 +328,10 @@ QList<EffectRows::Row> EffectRows::rows(Doc *doc, const ResolvedLayer &layer, co
                                               MeasurementUnits::formatSpeed(pd.max / 100.0));
         r.tip = QStringLiteral("%1.%2\n%3\n%4").arg(pd.description.isEmpty() ? pd.name : pd.description,
                                                     range, why.trimmed(), becomesOwn);
+        // Decided by another of its settings (the Look Editor greys it the same).
+        r.inactive = EffectScript::inactiveReason(defs, pd, values, &EffectRows::valueText);
+        if (!r.inactive.isEmpty())
+            r.tip = r.inactive + QStringLiteral("\n") + r.tip;
         r.editable = true;
         out << r;
     }

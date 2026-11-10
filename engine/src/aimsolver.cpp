@@ -770,6 +770,7 @@ static QList<AimSolver::SceneAim> collectAims(Doc *doc, const Scene *scene, bool
         return out;
 
     const bool subject = AimSolver::sceneFollowsSubject(doc, scene);
+    const bool framed = subject && AimSolver::sceneFramesSubject(doc, scene);
     BeamOcclusion::ModelPtr sightModel;
     foreach (quint32 pid, scene->runtimePalettes())   // a tried-on Aim draws too
     {
@@ -805,7 +806,7 @@ static QList<AimSolver::SceneAim> collectAims(Doc *doc, const Scene *scene, bool
                     ? onLine.value(m, mProps->targetAimPoint(tgt))
                     : onArea.contains(m) ? onArea.value(m)
                                          : AimSolver::aimPointFor(doc, m, tgt, subject,
-                                                                          subject && AimSolver::sceneFramesSubject(doc, scene));
+                                                                          framed);
             AimSolver::SceneAim aim;
             aim.fixtureId = fid;
             aim.head = m.head;
@@ -856,7 +857,7 @@ static void forEachBlockedDimmed(Doc *doc, const Scene *scene, F blocked)
     if (mProps == NULL)
         return;
     BeamOcclusion::ModelPtr sightModel;
-    bool subjectKnown = false, subject = false;
+    bool subjectKnown = false, subject = false, framed = false;
     const QList<quint32> pals = scene->runtimePalettes();   // a tried-on Aim draws too
     for (quint32 pid : pals)
     {
@@ -874,6 +875,7 @@ static void forEachBlockedDimmed(Doc *doc, const Scene *scene, F blocked)
         if (!subjectKnown)
         {
             subject = AimSolver::sceneFollowsSubject(doc, scene);
+            framed = subject && AimSolver::sceneFramesSubject(doc, scene);
             subjectKnown = true;
         }
         // As aimMembers(doc, scene, pid) and aimMembers(doc, writtenFixtures).
@@ -904,7 +906,7 @@ static void forEachBlockedDimmed(Doc *doc, const Scene *scene, F blocked)
                     ? onLine.value(m, mProps->targetAimPoint(tgt))
                     : onArea.contains(m) ? onArea.value(m)
                                          : AimSolver::aimPointFor(doc, m, tgt, subject,
-                                                                          subject && AimSolver::sceneFramesSubject(doc, scene));
+                                                                          framed);
             // AimSolver::lineOfSight(), with the mounts in the scratch.
             if (sightModel->isEmpty())
                 continue;                       // nothing to block it: clear
