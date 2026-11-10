@@ -607,11 +607,12 @@ names it first, for example *New Scene in Act 1 (⇧⌘N)*.
 | The Workbench, a collection loaded | A new empty scene as a layer, as **+ Scene ▸ New Empty Scene** |
 | The Workbench, a chaser loaded | A new empty scene as the step after the one you are on, filed with the chaser, and walks to it |
 | Effects | A new effect, in the designer |
-| Palettes | Nothing: use **+ New** there |
+| Palettes | A new palette of the kind you are on (a palette, or a type heading when grouped by type; else a Color) in that folder, open in the Workbench, its name open to type. *New Gobo Palette in Act 1* |
 
 Each is one undo step, and the new row's name is open as **F2** opens it.
-The same key works in the [Show Tree](show-tree.md#new-here) and the
-[Fixtures tab](fixture-manager.md).
+The same key works in the [Show Tree](show-tree.md#new-here), the
+[Fixtures tab](fixture-manager.md) and the
+[Lighting Studio](lighting-studio.md#selecting-and-undo-on-the-plot).
 
 ## Filing into folders
 

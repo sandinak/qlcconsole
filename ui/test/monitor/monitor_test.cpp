@@ -19,6 +19,7 @@
 
 #include <QScopedPointer>
 #include <QtTest>
+#include <QShortcut>
 #include "../common/fakewled.h"
 #include <QScrollBar>
 #include <QShortcut>
@@ -402,6 +403,41 @@ void Monitor_Test::addTargetEditCancelled()
     QVERIFY(t->name().startsWith("Target"));
 
     m_doc->monitorProperties()->removeStageTarget(t->id());
+}
+
+void Monitor_Test::newHereMakesATargetAtTheView()
+{
+    // ⇧⌘N on the Studio: a target and its Aim palette, no dialog (the test
+    // would hang on one), selected, one undo step.
+    QWidget parent;
+    Monitor mon(&parent, m_doc);
+    QShortcut *sc = mon.findChild<QShortcut *>(QStringLiteral("studioNewHere"));
+    QVERIFY(sc != nullptr);
+    QCOMPARE(sc->key(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N));
+    QCOMPARE(mon.newHereLabel(), QString("New Target Position"));
+
+    // Earlier tests leave Aim palettes behind that a reused target id would meet.
+    foreach (QLCPalette *p, m_doc->palettes())
+        if (p->stageTargetId() != StageTarget::invalidId())
+            m_doc->deletePalette(p->id());
+    const int targets = m_doc->monitorProperties()->stageTargets().count();
+    const int palettes = m_doc->palettes().count();
+    const quint32 tid = mon.newHere();
+    QVERIFY(tid != StageTarget::invalidId());
+    QCOMPARE(m_doc->monitorProperties()->stageTargets().count(), targets + 1);
+    QCOMPARE(m_doc->palettes().count(), palettes + 1);
+    QVERIFY(mon.canUndo());
+
+    // One undo takes the target and its palette away.
+    mon.undo();
+    QCOMPARE(m_doc->monitorProperties()->stageTargets().count(), targets);
+    QCOMPARE(m_doc->palettes().count(), palettes);
+
+    // A locked plot makes nothing, and the menu says so.
+    m_doc->monitorProperties()->setLayoutLocked(true);
+    QCOMPARE(mon.newHereLabel(), QString());
+    QCOMPARE(mon.newHere(), StageTarget::invalidId());
+    m_doc->monitorProperties()->setLayoutLocked(false);
 }
 
 void Monitor_Test::addPlatformEditCancelled()

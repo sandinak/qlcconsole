@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **⇧⌘N (New here) works in Build ▸ Palettes and the Lighting Studio.** Palettes: a new palette of the kind you are on, in the folder you are on, open in the Workbench with its name ready to type (*New Gobo Palette in Act 1*). Lighting Studio: a Target Position at the pointer with its Aim palette, selected and ready to name. Same Edit ▸ New item and key, one undo step each.
+
 ## [0.4.2] - 2026-11-09
 
 ### Added

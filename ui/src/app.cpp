@@ -3234,7 +3234,7 @@ void App::initMenuBar()
 
         /* ⇧⌘N, New (here): named for what it would make where you are
            ("New Cue After 0.0.3"). The key is each tab's own (Show Tree,
-           Build, Fixtures -- broken out into a window too), as ⌘Z is: a
+           Build, Fixtures, the Lighting Studio -- broken out into a window too), as ⌘Z is: a
            binding here would clash with the Virtual Console's ⇧⌘N. */
         editMenu->addSeparator();
         QAction *newHere = editMenu->addAction(tr("New"));
@@ -3244,19 +3244,21 @@ void App::initMenuBar()
         auto newHereHost = [current]() -> QWidget * {
             for (QWidget *w = QApplication::focusWidget(); w != nullptr; w = w->parentWidget())
                 if (qobject_cast<ShowTreeView *>(w) != nullptr || qobject_cast<ProgrammingManager *>(w) != nullptr
-                    || qobject_cast<FixtureManager *>(w) != nullptr)
+                    || qobject_cast<FixtureManager *>(w) != nullptr || qobject_cast<Monitor *>(w) != nullptr)
                     return w;
             QWidget *w = current();
             if (w == nullptr)
                 return nullptr;
             if (qobject_cast<ShowTreeView *>(w) != nullptr || qobject_cast<ProgrammingManager *>(w) != nullptr
-                || qobject_cast<FixtureManager *>(w) != nullptr)
+                || qobject_cast<FixtureManager *>(w) != nullptr || qobject_cast<Monitor *>(w) != nullptr)
                 return w;
             if (ShowTreeView *v = w->findChild<ShowTreeView *>())
                 return v;
             if (ProgrammingManager *pm = w->findChild<ProgrammingManager *>())
                 return pm;
-            return w->findChild<FixtureManager *>();
+            if (FixtureManager *fm = w->findChild<FixtureManager *>())
+                return fm;
+            return w->findChild<Monitor *>();
         };
         connect(editMenu, &QMenu::aboutToShow, this, [newHere, newHereHost]() {
             QWidget *host = newHereHost();
@@ -3267,6 +3269,8 @@ void App::initMenuBar()
                 label = pm->newHereLabel();
             else if (FixtureManager *fm = qobject_cast<FixtureManager *>(host))
                 label = fm->newHereLabel();
+            else if (Monitor *m = qobject_cast<Monitor *>(host))
+                label = m->newHereLabel();
             const QString key = QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N).toString(QKeySequence::NativeText);
             newHere->setText(label.isEmpty() ? tr("New (%1)").arg(key) : tr("%1 (%2)").arg(label, key));
             newHere->setEnabled(!label.isEmpty());
@@ -3279,6 +3283,8 @@ void App::initMenuBar()
                 pm->newHere();
             else if (FixtureManager *fm = qobject_cast<FixtureManager *>(host))
                 fm->newHere();
+            else if (Monitor *m = qobject_cast<Monitor *>(host))
+                m->newHere();
         });
     }
 

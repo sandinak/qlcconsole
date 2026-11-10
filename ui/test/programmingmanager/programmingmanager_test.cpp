@@ -2267,12 +2267,40 @@ void ProgrammingManager_Test::newHereMakesASceneInTheFolder()
     QVERIFY(m_doc->showTree()->undoShared());
     QVERIFY(m_doc->function(madeId) == nullptr);
 
-    // The Effects section: a new effect; Palettes: nothing.
+    // The Effects section: a new effect.
     mgr.setSection(ProgrammingManager::EffectsSection);
     QCOMPARE(mgr.newHereLabel(), QString("New Effect"));
+
+    // Palettes: the kind and folder you are on (nothing selected: a Color,
+    // unfiled).
     mgr.setSection(ProgrammingManager::PalettesSection);
-    QCOMPARE(mgr.newHereLabel(), QString());
-    QVERIFY(!mgr.newHere());
+    QCOMPARE(mgr.newHereLabel(), QString("New Color Palette"));
+    QLCPalette *gobo = new QLCPalette(QLCPalette::Gobo);
+    gobo->setName("Spiral");
+    gobo->setPath("Palettes/Act 1/");
+    QVERIFY(m_doc->addPalette(gobo));
+    mgr.m_paletteTree->updateTree();
+    QTreeWidgetItem *goboRow = mgr.m_paletteTree->paletteItem(gobo);
+    QVERIFY(goboRow != nullptr);
+    mgr.m_paletteTree->clearSelection();
+    mgr.m_paletteTree->setCurrentItem(goboRow);
+    goboRow->setSelected(true);
+    QCOMPARE(mgr.newHereLabel(), QString("New Gobo Palette in Act 1"));
+    const int palettes = m_doc->palettes().size();
+    QVERIFY(mgr.newHere());
+    QCOMPARE(m_doc->palettes().size(), palettes + 1);
+    QLCPalette *madePal = nullptr;
+    for (QLCPalette *p : m_doc->palettes())
+        if (p != gobo)
+            madePal = p;
+    QVERIFY(madePal != nullptr);
+    QCOMPARE(madePal->type(), QLCPalette::Gobo);
+    QCOMPARE(madePal->path(), QString("Palettes/Act 1/"));
+    // Selected after, and one undo step.
+    QCOMPARE(mgr.m_paletteTree->itemPaletteId(mgr.m_paletteTree->currentItem()), madePal->id());
+    const quint32 madePalId = madePal->id();
+    QVERIFY(m_doc->showTree()->undoShared());
+    QVERIFY(m_doc->palette(madePalId) == nullptr);
 }
 
 void ProgrammingManager_Test::aFolderRenamesWithWhatIsInIt()

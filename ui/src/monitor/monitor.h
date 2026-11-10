@@ -687,7 +687,7 @@ protected slots:
 
 private:
     /** slotAddTarget() and slotAddTargetLine(): place, edit, link an Aim. */
-    void addTarget(bool line);
+    quint32 addTarget(bool line, bool edit = true);
 
 protected slots:
 
@@ -904,6 +904,14 @@ public:
      *  False: nothing came off (nothing selected, or the question was
      *  cancelled). */
     bool removeSelectionWithUndo();
+    /** ⇧⌘N on the Lighting Studio: a new Target Position (Add Here ▸ Target
+     *  Position, without the dialog) at the pointer, else mid-view, on the
+     *  active layer with its Aim palette; selected, its name open in Plot
+     *  layers; one undo step. StageTarget::invalidId(): nothing made. */
+    quint32 newHere();
+    /** What newHere() would make ("New Target Position"; empty: the plot is
+     *  locked or not being edited) -- the Edit menu's text. */
+    QString newHereLabel() const;
     /** F2 on the plot: rename the (first) selected item in Plot layers. */
     void renameSelected();
     /** ⌘F on the plot: to Plot layers' search box (the panel opens). */

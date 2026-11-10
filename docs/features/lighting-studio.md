@@ -1645,6 +1645,13 @@ props, images and nodes:
 - Count badges follow their structure through drags and undo, and keep one
   screen size at any zoom, so zooming in uncovers what's under them.
 
+**⇧⌘N (New here)** makes a **Target Position** where the pointer is on the
+plot (mid-view if the pointer is elsewhere), on the active layer, with its
+Aim palette, as **Add Here ▸ Target Position** does but without the dialog.
+It is selected and its name is open in Plot layers. The **Edit** menu reads
+*New Target Position (⇧⌘N)*, and is off while the plot is locked. One
+undo step takes the target and its palette away together.
+
 ## Plot layers
 
 ![Plot layers: Selected only, a fixture picked on the plot, a bar under its truss and a hanger under its tower, a layer's lock](../images/lighting-studio-plot-layers.png)

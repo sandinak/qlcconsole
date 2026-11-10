@@ -97,6 +97,7 @@ private slots:
     void addTrussCancelled();
     void addTargetAccepted();
     void addTargetEditCancelled();
+    void newHereMakesATargetAtTheView();
     void addPlatformEditCancelled();
     void removeSelectedTruss();
     void removeSelectedCancelled();
