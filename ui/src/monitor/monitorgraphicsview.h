@@ -979,7 +979,8 @@ public:
      *  Y or Z (height in elevation views). */
     QString axisName(bool horizontal) const;
 
-    /** Unit suffix for readouts ("m" or "ft"), derived from the grid metric. */
+    /** The rulers' unit, in Settings ▸ Units: its symbol ("ft", "m") when a
+     *  grid cell is one of it, else what one cell is ("1 = 3' 3 3/8\""). */
     QString unitSuffix() const;
 
     /** Convert a viewport point to the display coordinate pair (horizontal,

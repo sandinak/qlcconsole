@@ -27,6 +27,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   instead of handles. See
   [Stretch and turn by hand](docs/features/lighting-studio.md#stretch-and-turn-by-hand).
 
+### Fixed
+
+- **The ruler's corner follows Settings ▸ Units.** It said "(m)" on a metre
+  grid with feet chosen; now it names your unit when a grid square is one of
+  it, and otherwise what a square is in your unit ("SR | SL (1 = 3' 3 3/8")").
+
 ## [0.4.2] - 2026-11-09
 
 ### Added

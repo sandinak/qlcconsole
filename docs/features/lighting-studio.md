@@ -74,6 +74,10 @@ and counts out to each side; its corner says which side is which (**SR | SL**,
 or **SL | SR** with the plot turned round). The footer's readout does the
 same: **SR 3.20**, **CL**, **SL 1.50**. That's the same zero as the target
 readouts below. Set a **⌖ 0,0** and the rulers count from your point instead.
+The rulers count grid squares; the corner names your unit from **Settings ▸
+Units** when a square is one of it (**ft**), or says what a square is in it
+when the grid is in another unit (**1 = 3' 3 3/8"** for a metre grid read
+in feet).
 
 ### Stage marks: centre line, curtain line, number line
 

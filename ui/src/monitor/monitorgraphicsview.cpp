@@ -8149,8 +8149,14 @@ qreal MonitorGraphicsView::originUnitsV() const
 
 QString MonitorGraphicsView::unitSuffix() const
 {
-    // The ruler counts the grid's cells, so it names the grid's unit.
-    return MeasurementUnits::symbol(m_unitValue > 500.0 ? MeasurementUnits::Metres : MeasurementUnits::Feet);
+    /* The ruler counts the grid's cells (its ticks sit on the grid lines).
+       When a cell is one of Settings ▸ Units' unit, it names that unit;
+       otherwise it says what one cell is, in that unit, so a metre grid
+       read in feet says "1 = 3' 3 3/8"" rather than a unit nobody chose. */
+    const MeasurementUnits::LengthUnit unit = MeasurementUnits::preferredLength();
+    if (qAbs(double(m_unitValue) - MeasurementUnits::mmPer(unit)) < 0.5)
+        return MeasurementUnits::symbol(unit);
+    return tr("1 = %1").arg(MeasurementUnits::formatLength(double(m_unitValue), unit));
 }
 
 QString MonitorGraphicsView::axisName(bool horizontal) const
