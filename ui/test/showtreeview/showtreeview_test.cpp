@@ -8777,6 +8777,39 @@ void ShowTreeView_Test::aFormationDroppedOnSelectedCuesSetsThemAll()
     QVERIFY(!formationOf(c[0]));
 }
 
+/* UX-36: at the view's smallest size the Library was ~90 px wide and its
+   headings read "Ungrou.", "For..", a Blocking only "…". */
+void ShowTreeView_Test::theLibrarysNamesAreWholeAtTheSmallestSize()
+{
+    ShowTreeController *st = m_doc->showTree();
+    st->addCue(st->addCueList(st->addProduction("Demo"), "Main", ListMode::Tracking), -1, "Opening");
+    QVERIFY(m_doc->paletteOps()->create(QLCPalette::Formation, QString(), "Pairs", QVariantList(),
+                                        [](QLCPalette *p) { p->setFormationValue(QLCPalette::FormationGroup, 2); })
+            != QLCPalette::invalidId());
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(view.minimumSizeHint());
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *lib = view.library();
+    lib->expandAll();
+    QTest::qWait(50);
+    const int room = lib->viewport()->width();
+    int checked = 0;
+    for (QTreeWidgetItemIterator it(lib); *it; ++it)
+    {
+        QTreeWidgetItem *item = *it;
+        // The headings: rows with rows under them, at most two levels in.
+        if (item->childCount() == 0 || (item->parent() != nullptr && item->parent()->parent() != nullptr))
+            continue;
+        const QRect r = lib->visualItemRect(item);
+        const int icon = item->icon(0).isNull() ? 0 : lib->iconSize().width() + 4;
+        const int need = r.left() + icon + lib->fontMetrics().horizontalAdvance(item->text(0)) + 8;
+        QVERIFY2(need <= room, qPrintable(QString("\"%1\" needs %2 px of %3").arg(item->text(0)).arg(need).arg(room)));
+        ++checked;
+    }
+    QVERIFY(checked >= 5);
+}
+
 void ShowTreeView_Test::theBlockingButtonDoesNotSayFormation()
 {
     ShowTreeController *st = m_doc->showTree();

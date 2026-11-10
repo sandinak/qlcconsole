@@ -175,6 +175,7 @@ private slots:
     void theLibraryOffersFormationsAndBlocking();
     void aFormationDroppedOnSelectedCuesSetsThemAll();
     void theBlockingButtonDoesNotSayFormation();
+    void theLibrarysNamesAreWholeAtTheSmallestSize();
     void theLibraryShowsNewFormationsAndBlockings();
     /** QLC_SHOT_DIR: the Library with a Formation and two blocking sets,
      *  at three sizes (the visual check). */
