@@ -116,6 +116,7 @@ private slots:
     void anEffectRunsOnUnpatchedFixturesToo();
     void aRainbowOnRgbwWithNoDimmerIsAHueNotWhite();
     void aRainbowWithALookColourSweepsThatColour();
+    void deletingAPlayingSceneWithTheOnlyEffectDoesNotHang();
     void effectsOnOneChannelLayerAsADeskDoes();
     void aMovementEffectMovesRoundWhereTheLookPoints();
     void aDimmerInTheHeadBreathesAndTheWheelHoldsItsColour();

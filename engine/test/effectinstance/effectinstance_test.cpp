@@ -18,6 +18,10 @@
 #include <QBuffer>
 #include <QCryptographicHash>
 #include <QImage>
+#include <QSemaphore>
+#include <QThread>
+#include <cstdio>
+#include <cstdlib>
 #include <functional>
 #if defined(Q_OS_UNIX)
 #include <time.h>
@@ -3231,6 +3235,65 @@ void EffectInstance_Test::aRainbowOnRgbwWithNoDimmerIsAHueNotWhite()
 }
 
 /* "If I set a color on the entire set I see the color sweep but no rainbow" */
+/* Deleting a scene that is playing, whose look holds the only running JS
+   effect (Function Manager > Delete, Build > delete, an Undo). The delete is on
+   the main thread: MasterTimer::removeFunction() stopped the scene and emitted
+   functionStopped while it still held the universes, the runner's stop slot
+   was called directly, and tearing down its last effect claimed the universes
+   again -- a non-recursive mutex, so the app froze for good (and the DMX
+   output with it). A watchdog turns that hang into a failure. */
+void EffectInstance_Test::deletingAPlayingSceneWithTheOnlyEffectDoesNotHang()
+{
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(m_group->id());
+    QTemporaryDir dir;
+    QFile js(dir.filePath("glow.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Glow';"
+             " e.tick = function(fixtures) {"
+             "   return fixtures.map(function() { return { dimmer: 1.0 }; }); };"
+             " return e; })()");
+    js.close();
+    m_palette->setScriptPath(js.fileName());
+    scene->addPalette(m_palette->id());
+
+    // Ticked once on this (the runner's) thread: the scene plays, and its
+    // start reaches the runner, which starts the effect.
+    MasterTimer *timer = m_doc->masterTimer();
+    scene->start(timer, FunctionParent::master());
+    timer->timerTick();
+    QVERIFY(scene->isRunning());
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    QVERIFY(runner->instanceForPalette(m_palette->id()) != nullptr);
+    QCOMPARE(runner->m_instances.size(), 1);
+    QVERIFY(runner->m_registered);
+
+    // No stop and no tick before the delete: removeFunction() stops it.
+    QSemaphore done;
+    QThread *watchdog = QThread::create([&done]() {
+        if (!done.tryAcquire(1, 10000))
+        {
+            std::fprintf(stderr, "FAIL!  : EffectInstance_Test::"
+                         "deletingAPlayingSceneWithTheOnlyEffectDoesNotHang() "
+                         "Doc::deleteFunction() hung (universe mutex deadlock)\n");
+            std::fflush(stderr);
+            std::_Exit(1);
+        }
+    });
+    watchdog->start();
+    const bool deleted = m_doc->deleteFunction(scene->id());
+    done.release();
+    watchdog->wait();
+    delete watchdog;
+
+    QVERIFY(deleted);
+    QVERIFY(runner->m_instances.isEmpty());
+    QVERIFY(!runner->m_registered);
+    // The universes are free: the next tick runs.
+    timer->timerTick();
+}
+
 void EffectInstance_Test::aRainbowWithALookColourSweepsThatColour()
 {
     QLCFixtureDef *def = new QLCFixtureDef();
