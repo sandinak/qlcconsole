@@ -1287,10 +1287,14 @@ void Monitor_Test::hoveringThePlotKeepsItStill()
     MonitorGraphicsView *gv = mon.m_graphicsView;
     QLabel *readout = mon.m_readoutLabel;
     QVERIFY(gv != nullptr && readout != nullptr);
+    // The readout is pinned beside the footer's bar, not in it (UX-36).
     ShrinkableBar *bar = nullptr;
-    for (QWidget *w = readout->parentWidget(); w != nullptr && bar == nullptr; w = w->parentWidget())
-        bar = dynamic_cast<ShrinkableBar *>(w);
+    if (readout->parentWidget() != nullptr)
+        for (QObject *o : readout->parentWidget()->children())
+            if (bar == nullptr)
+                bar = dynamic_cast<ShrinkableBar *>(o);
     QVERIFY(bar != nullptr);
+    QVERIFY(!bar->isAncestorOf(readout));
 
     // The label takes the same room whatever it reads.
     const QString was = readout->text();
@@ -1374,8 +1378,8 @@ void Monitor_Test::hoveringThePlotKeepsItStill()
        the row is never squashed under the scroll bar (where the notice it
        just showed can't be read). */
     mon.showNotice(QString("A long notice that the row can only hold by scrolling sideways ").repeated(3));
-    QApplication::processEvents();
-    QApplication::processEvents();
+    for (int i = 0; i < 5; ++i)     // the bar, its row (with the readout), the page: a layout pass each
+        QApplication::processEvents();
     QVERIFY(bar->horizontalScrollBar()->maximum() > 0);
     QVERIFY2(bar->viewport()->height() >= bar->widget()->sizeHint().height(),
              qPrintable(QString("row %1 px tall in a %2 px viewport").arg(bar->widget()->sizeHint().height())
