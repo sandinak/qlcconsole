@@ -2530,9 +2530,24 @@ bool shoot(const HelpShots::Frame &f, const QString &dir, const QString &name)
    the window's top bar, which holds the tab's header (+ Production, + Cue,
    Undo, the hint) while the Show Tree is the tab on show. The grab is the
    whole window, cropped to those two. */
+/* The page has the editor column's whole height, as a student's window
+   gives it when the notes pane is shut: a saved splitter state of this
+   machine's (notes pane open) must not decide what a picture shows. */
+void fullPage(ShowTreeView *v)
+{
+    if (QSplitter *vs = v->findChild<QSplitter *>(QStringLiteral("stVSplitter")))
+    {
+        QList<int> sizes;
+        for (int i = 0; i < vs->count(); ++i)
+            sizes << (i == 0 ? vs->height() : 0);
+        vs->setSizes(sizes);
+        settle(50);
+    }
+}
 HelpShots::Frame showTreeFrame(App *app, ShowTreeView *v)
 {
     HelpShots::Frame f;
+    fullPage(v);
     f.grab = app;
     QRect r(v->mapTo(app, QPoint(0, 0)), v->size());
     if (app->m_toolbar != nullptr && app->m_toolbar->isVisible())
@@ -4296,6 +4311,7 @@ static bool lessonTwoFiveByMouse(Doc *doc, ShowTreeView *view, const QString &sh
                       << "| plan" << (view->findChild<QWidget *>("stLinePlan") != nullptr);
     if (!shots.isEmpty())
     {
+        fullPage(view);
         QWidget *strip = view->findChild<QWidget *>(QStringLiteral("stLineStrip"));
         QWidget *plan = view->findChild<QWidget *>(QStringLiteral("stLinePlan"));
         QLabel *spread = stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(KeySpread));
