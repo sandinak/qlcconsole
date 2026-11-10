@@ -11,7 +11,8 @@ The console knows what a light's channels do from its **definition**: a
 file that lists the channels, the modes a light can be set to, and the
 heads it is made of. Students read the definitions behind the classroom
 rig, compare a pixel box's three modes, see how the groups are made of
-heads, and open the Fixture Editor to look at one definition.
+heads, and open the Fixture Editor to look at one definition. The last part, on the
+real rig with Branson, compares a light's own mode menu with the console's.
 
 | For | File |
 |---|---|

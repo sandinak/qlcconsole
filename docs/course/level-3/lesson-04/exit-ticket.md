@@ -14,8 +14,8 @@ Name: ______________________
 
    ____________________________________________________________
 
-2. A par's **Points** reads 270. Which way does it point, and what does
-   **Tilt in yoke** say about it?
+2. A par's **Points** reads 270 and its **Tilt in yoke** reads 20 down.
+   Which way does it throw, and how steeply?
 
    ____________________________________________________________
 

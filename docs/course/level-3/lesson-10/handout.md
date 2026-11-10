@@ -71,7 +71,7 @@ Switch roles at each page of the wizard.
      and **14 Backstage Blue** as **Backstage / hall**, and also **5 Cyc
      Blue** as **Backstage / hall**.
 
-     ![The Special circuits page](../../images/lesson-3-10/special-circuits.png)
+     ![The Special circuits page as the wizard reads it](../../images/lesson-3-10/special-circuits.png)
 5. Channel 5 is the cyc's blue: a stage light. In its row, change
    **Role** to **Normal**. Then **Finish**.
 6. The next window lists everything that comes in, all ticked. Click

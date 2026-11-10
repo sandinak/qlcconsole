@@ -65,7 +65,7 @@ and the console must not dim or black them out by accident.
 
 ## 2. Teacher demo (10 min)
 
-1. **Fixtures** tab: **Add ▾ → Add fixture…**, **Generic → Generic**,
+1. **Fixtures** tab: **Add ▾ → Add Fixture…**, **Generic → Generic**,
    Name `House Lights`, OK. "A house light is one dimmer channel."
 2. Right-click it → **Output Rules…**: read the four rules aloud. Tick
    **Ignore Blackout** and **Ignore the Grand Master**, OK. Point out the

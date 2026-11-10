@@ -50,8 +50,8 @@ Students can:
 
 Give the numbers of Part 1: a spot 18' up, aimed at a mark 12' away on the
 floor. Let them find 56° (tangent 1.5). Then hang it 16' up: the console
-still sends 56° down, and the beam lands 10' 8" away: 1' 4" short, on the
-singer's chest instead of the face of the singer standing on the mark.
+still sends 56° down, and the beam lands 10' 8" away: 1' 4" short of the
+mark: the pool sits in front of the singer's toes and the singer stands in its far edge.
 Ask: "What did the console get wrong?" (*nothing: the plot did*).
 
 **Key idea to land:** the console is only as right as the plot. Every aim
@@ -74,7 +74,7 @@ is arithmetic from the plot's numbers.
 
 - Roles: **Driver / Navigator / Designer**, switching every part.
 - Students without a laptop: the **design station**: draw the SR wing on a
-  paper plan, put the boom 4' off the stage edge with a par on it, and
+  paper plan, put the boom about 4' off the stage edge with a par on it, and
   write its Face, Points and Tilt in yoke.
 
 ### What to watch for
@@ -104,7 +104,7 @@ Each group says its par's **Points** and **Tilt in yoke** and what the beam does
 
 ## Extension (fast groups)
 
-Copy and paste the boom to the other wing; **Show Light Footprint** with two different **Tilt in yoke** values. Ask: "Which tilt lights faces, and which lights the floor?" (*steeper: the floor; shallow: faces and the back wall*).
+Copy and paste the boom to the other wing; **Show Light Footprint** with two different **Tilt in yoke** values. Ask: "Which tilt lights faces, and which lights the floor?" (*steeper: the floor; shallow: faces and the back wall*): a steep beam lands near the light's own feet; a shallow one reaches the people.
 
 ## Part 3 — On the real rig (with Branson)
 
@@ -123,7 +123,7 @@ At the rig with a tape measure and a laser measure:
 ## Answer key
 
 - **Handout Part 1:** the beam lands at 16 ÷ 1.5 = 10' 8" (10.67') from the light, 1' 4" short of the mark. The truss height, and how far the mark is from the truss: a tape or a laser measure.
-- **Exit ticket:** 1: the plot's numbers decide the angles; wrong numbers aim every light on that structure wrong. 2: 270: toward stage left; Tilt in yoke is how far down from level. 3: a layer's lock holds everything on that layer; an object's lock holds that one object. 4: Face; Points; Tilt in yoke.
+- **Exit ticket:** 1: the plot's numbers decide the angles; wrong numbers aim every light on that structure wrong. 2: toward stage left, 20 degrees below level. 3: a layer's lock holds everything on that layer; an object's lock holds that one object. 4: Face; Points; Tilt in yoke.
 
 ## How this lesson was checked
 

@@ -35,7 +35,7 @@ teacher says. It can be turned into a deck as it is.*
 ## 5. Patch it in qlcconsole
 
 - Fixtures tab ▸ Universes ▸ a universe: the grid.
-- Add ▾ → Add fixture…: the app picks the next free address.
+- Add ▾ → Add Fixture…: the app picks the next free address.
 - Right-click → Patch N Fixtures…: the Patch dialog, reviewed before **Apply**.
 
 ## 6. Over the network

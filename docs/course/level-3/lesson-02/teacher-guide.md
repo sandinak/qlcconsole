@@ -64,8 +64,8 @@ touches the light is wrong.
    165ch, **Type**, **Definition** Local, and the channel table.
 2. Right-click → **Definition & Mode…**, open **Mode**, step through the
    three modes, then **Cancel**.
-3. **Fixture Groups ▸ Trusses ▸ TrussC-RGB** then **TrussC-W**: the cells
-   tagged **[RGB]** and **[W]**.
+3. **Fixture Groups ▸ Trusses ▸ TrussC-RGB** then **TrussC-W**: a cell's
+   tooltip, tagged **[RGB]** and **[W]**.
 4. Right-click **SR Truss Cyc 1** → **Edit Fixture Definition…**: **Modes**
    tab, then close.
 
@@ -105,7 +105,7 @@ Each group names one light from the rig, its mode, its channel count, and how ma
 **SR AT Spot** and **SL AT Spot** are the same model in different modes
 (18 and 21 channels). Open **Definition & Mode…** on each and read the
 modes. Ask: "What would change if both were patched in the larger mode?"
-(*three more channels each; the cues are the same*).
+(*three more channels each; the cues are the same*). Handout extension 2: a UST uses the Junman Two Arm LED Beam: **9 Channel** has 1 head, **15 Channel** (ours) has 2 heads.
 
 ## Part 3 — On the real rig (with Branson)
 

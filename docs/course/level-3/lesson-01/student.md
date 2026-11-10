@@ -47,9 +47,9 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 3. Click **SR Truss Spot 1**: **Address Range** 214 - 225, **Channels** 12,
    **Binary Address (DIP)**. Click **Spot 2**: why does it start at 226?
 4. Click **Truss pixel boxes 1** (Universe 2): 495 of 512. Why isn't a fourth XL-450 in it?
-5. **Add ▾ → Add fixture…**: **WLED → Lantern**, **Mode** **Effect (15ch)**,
+5. **Add ▾ → Add Fixture…**: **WLED → Lantern**, **Mode** **Effect (15ch)**,
    **Name** `Lantern 7`. The app picks Universe 1, address 358. **OK**.
-6. **Add ▾ → Add fixture…** again, the same Lantern, **Address** `365`:
+6. **Add ▾ → Add Fixture…** again, the same Lantern, **Address** `365`:
    the red **ERROR: Address already used!** **Cancel**.
 7. Click **Lantern 1**, ⇧-click **Lantern 6**, right-click → **Patch 6
    Fixtures…**. Set **Place selected at universe** to **Step fronts 1**

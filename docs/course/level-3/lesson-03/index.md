@@ -18,4 +18,4 @@ practicals.
 | Students | [Handout](handout.md) · [Exit ticket](exit-ticket.md) · [At home](at-home.md) |
 | Show files | [`ShowChoir-Classroom.qlcc`](../../shows/ShowChoir-Classroom.qlcc) (nothing to hand in: save your own copy) |
 
-![The plot with the lanterns drawn as lanterns and the AT washes as round washes](../../images/lesson-3-3/plot-symbols.png)
+![The Fixtures tab: the audience-tower washes drawn as round washes and the lanterns as lanterns](../../images/lesson-3-3/symbols-fixtures.png)

@@ -63,7 +63,7 @@ Switch roles after each fixture.
 
 ### Add the three circuits
 
-3. Click **Add ▾ → Add fixture…**. In **Fixture Model**, open **Generic**
+3. Click **Add ▾ → Add Fixture…**. In **Fixture Model**, open **Generic**
    and pick **Generic** (a plain dimmer). Type the **Name** `House Lights`,
    leave **Channels** at 1 and click **OK**.
    - *You should see:* **House Lights** in the fixture list, at a free
@@ -77,11 +77,13 @@ Switch roles after each fixture.
    - *You should see:* a small amber badge on its icon. Hover it to read
      its rules.
 
-     ![The Output Rules dialog for Stage Power](../../images/lesson-3-7/output-rules.png)
+     ![The Output Rules dialog for House Lights](../../images/lesson-3-7/output-rules-house.png)
 6. The same for **Work Lights**.
 7. Right-click **Stage Power** → **Output Rules…**. Tick **Switch
    (relay)**, **Ignore Blackout**, **Ignore the Grand Master** and **On
    when not in use**, then **OK**.
+
+   ![The Output Rules dialog for Stage Power](../../images/lesson-3-7/output-rules.png)
 8. Open **Settings** (⌘,) → **Advanced**. Under **Output (saved with this
    show)**, read **"On when not in use" fixtures come on:** — leave it at
    **When you switch to Operate**, and close Settings.

@@ -30,7 +30,7 @@ which, and where its cable goes.
 |---|---|
 | **DMX** | The signal that tells real lights what to do: 512 **channels**, each set from 0 to 255 (Out to Full). |
 | **Channel** | One thing a light can be told: its intensity, its red, its pan. |
-| **Universe** | One DMX line of 512 channels. A big rig has many; ours has 13. |
+| **Universe** | One DMX line of 512 channels. A big rig has many; ours uses 13. |
 | **Address** | The channel where a light's channels start in its universe. |
 | **Footprint** | How many channels a light takes in the mode it is set to. A light at address 214 with 12 channels uses 214 to 225. |
 | **Patch** | The list of which light is at which universe and address. |
@@ -80,7 +80,7 @@ Switch roles after each part.
    Universe 1.
    - *You should see:* the heading **Spots, washes, beams, lanterns —
      Address Usage**, a grid of 512 cells, one colour per light, and a line
-     under it: **357 / 512 addresses used (69%)**. The pale cells are free:
+     under it: **357 / 512 addresses used (69%)**. The dark cells are free:
      358 to 512.
 
    ![Universe 1's address usage](../../images/lesson-3-1/universe-usage.png)
@@ -92,24 +92,27 @@ Switch roles after each part.
 5. Click **SR Truss Spot 2**. *Which address does it start at, and why
    there?* (It starts right after Spot 1 ends: 226.)
 6. Click the second universe, **Truss pixel boxes 1**, and read its usage: 495 of 512. Three XL-450 pixel
-   boxes at 165 channels each fill it. *Why isn't a fourth there?*
+   boxes at 165 channels each fill it. *Why isn't a fourth there?* Then
+   Designer: *where would a fourth 165-channel box go in this show: which
+   universe, and which address?* (Read the usage of each universe.)
 
 ### Add a light and meet a clash
 
-7. Click **Add ▾ → Add fixture…**. In **Fixture Model**, open **WLED** and
+7. Click **Add ▾ → Add Fixture…**. In **Fixture Model**, open **WLED** and
    pick **Lantern**; set **Mode** to **Effect (15ch)** and the **Name** to
    `Lantern 7`.
    - *You should see:* the app has chosen the first universe, **Spots,
      washes, beams, lanterns**, and **Address** 358: the first free channel
      after the last light. Click **OK**.
-8. Open **Add ▾ → Add fixture…** again, the same Lantern and mode, and
+8. Open **Add ▾ → Add Fixture…** again, the same Lantern and mode, and
    type **Address** `365`.
    - *You should see:* a red **ERROR: Address already used!** Lantern 7
      has 358 to 372, and a second light can't start inside it. Click
      **Cancel**.
 
-   An address clash isn't an error the console can fix for you: two
-   lights on the same channels both follow every cue meant for one.
+   An address clash isn't something the console can fix for you. Where the
+   channels overlap, one light's colour or position channel is the other's
+   strobe or dimmer, so cues drive both lights wrong. The app stops you.
 
 ### Move a block with the Patch dialog
 
@@ -123,7 +126,7 @@ Switch roles after each part.
     - *You should see:* the six lanterns at addresses 385, 400 … 460, each
       **Status** *moves from 1.1*, *moves from 1.16* and so on (universe,
       then address). **Step fronts 1** already holds 384 channels; the six
-      lanterns take 90 more. The summary reads *6 fixture(s) to patch or
+      lanterns take 90 more (474 of 512). The summary reads *6 fixture(s) to patch or
       move, 0 new universe(s), 0 conflict(s)*.
 
     ![The Patch dialog placing the lanterns](../../images/lesson-3-1/patch-dialog.png)
@@ -161,14 +164,18 @@ Switch roles after each part.
 ## Part 3 — On the real rig (with Branson)
 
 The classroom show has no outputs: nothing leaves this computer. On the
-rig, Branson walks the class through where a universe goes.
+rig, Branson walks the class through where a universe goes. The console's
+universe numbers start at 1; Art-Net's and the node's start at 0, and
+Branson shows the mapping at the node.
 
 1. **Connections ▸ Devices**: the network nodes the console hears, each
-   with its ports. A universe is sent to one port; **Edit connection…** on a
-   universe sets protocol (Art-Net or sACN), the node and its port.
+   with its ports. A universe is sent to one port; **Edit Connection…** on a
+   universe sets protocol (Art-Net or sACN), the node and its port. Read it
+   and **Cancel**: the network settings are Branson's.
 2. At a light: set its DIP switches from the pattern in the Fixtures tab's
    **Binary Address (DIP)**, then check it answers the console.
-3. Read a label off the patch list and find the light it names.
+3. Print labels for a few lights from **Fixtures → Patch List…**, put them on
+   the cable ends, and find the light a label names.
 
 ## Stuck?
 

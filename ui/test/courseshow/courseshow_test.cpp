@@ -20,6 +20,8 @@
 #include <QDockWidget>
 #include <QMenuBar>
 #include <QTextBrowser>
+#include <QToolTip>
+#include <QPainter>
 #include <QTreeWidgetItemIterator>
 #include <QApplication>
 #include <QScreen>
@@ -129,6 +131,7 @@
 #include "showcontrol.h"
 #include "universeusagewidget.h"
 #include "righeads.h"
+#include "monitorfixtureitem.h"
 #include "scenery.h"
 #include "pipe.h"
 #include "fixturetreewidget.h"
@@ -6487,7 +6490,11 @@ void CourseShow_Test::levelThreeMorePictures()
             x.place = HelpShots::Corner;
             HelpShots::Callout l = mark(dlg.findChild<QPushButton *>("patchListLabels"), 4);
             l.place = HelpShots::Corner;
-            QVERIFY(shootDialog(&dlg, { g, mark(dlg.tree(), 2), x, l }, d, "patch-list"));
+            dlg.show();
+            settle(300);
+            QTreeWidgetItem *head = dlg.tree()->topLevelItem(0);
+            HelpShots::Callout rows = markRect(dlg.tree()->viewport(), dlg.tree()->visualItemRect(head), &dlg, 2, HelpShots::Right);
+            QVERIFY(shootDialog(&dlg, { g, rows, x, l }, d, "patch-list"));
         }
         doc->resetModified();
     }
@@ -6541,10 +6548,30 @@ void CourseShow_Test::levelThreeMorePictures()
             settle(300);
             FixtureGroupEditor *ed = fm->findChild<FixtureGroupEditor *>();
             QVERIFY(ed != nullptr && ed->isVisible());
-            HelpShots::Frame f;
-            f.grab = m_app;
-            f.callouts << mark(ed, 1);
-            QVERIFY(shoot(f, d, "group-heads"));
+            // The top-left of the grid, with the tooltip of a head showing.
+            QTableWidgetItem *cell = nullptr;
+            for (int r = 0; r < ed->m_table->rowCount() && cell == nullptr; ++r)
+                for (int c = 0; c < ed->m_table->columnCount() && cell == nullptr; ++c)
+                    if (ed->m_table->item(r, c) != nullptr)
+                        cell = ed->m_table->item(r, c);
+            QVERIFY(cell != nullptr);
+            const QRect cr = ed->m_table->visualItemRect(cell);
+            const QPoint at = ed->m_table->viewport()->mapToGlobal(cr.center());
+            QToolTip::showText(at, cell->toolTip(), ed->m_table->viewport(), cr);
+            settle(300);
+            QWidget *tip = nullptr;
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (w->isVisible() && QLatin1String(w->metaObject()->className()) == QLatin1String("QTipLabel"))
+                    tip = w;
+            QVERIFY2(tip != nullptr, "the head's tooltip is on show");
+            QImage img = m_app->grab().toImage();
+            {
+                QPainter pt(&img);
+                pt.drawImage(m_app->mapFromGlobal(tip->mapToGlobal(QPoint(0, 0))), tip->grab().toImage());
+            }
+            const QPoint top = ed->mapTo(m_app, QPoint(0, 0));
+            QVERIFY(save(img.copy(QRect(top.x(), top.y(), 760, 300)), d, "group-heads"));
+            QToolTip::hideText();
         }
         doc->resetModified();
     }
@@ -6575,15 +6602,30 @@ void CourseShow_Test::levelThreeMorePictures()
         FixtureManager::setStageLook(doc, lanterns, Fixture::LanternLook);
         FixtureManager::setStageLook(doc, washes, Fixture::MovingRoundWashLook);
         settle(400);
-        QToolButton *show = nullptr;
-        for (QToolButton *b : mon->findChildren<QToolButton *>())
-            if (b->text() == QLatin1String("Show") && b->isVisible())
-                show = b;
-        QVERIFY(show != nullptr);
-        HelpShots::Frame f;
-        f.grab = m_app;
-        f.callouts << mark(show, 1);
-        QVERIFY(shoot(f, d, "plot-symbols"));
+        // The Fixtures tab: the AT-W-ALL washes and the Lanterns with their new icons.
+        FixtureManager *fm = FixtureManager::instance();
+        toTab(fm);
+        QTreeWidget *tree = fm->m_fixtures_tree;
+        QTreeWidgetItem *firstLantern = nullptr;
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        {
+            QTreeWidgetItem *n = *it;
+            const QString name = n->text(0);
+            if (n->data(0, PROP_GROUP).isValid() && (name == QLatin1String("AT-W-ALL") || name == QLatin1String("Lanterns")))
+            {
+                for (QTreeWidgetItem *up = n->parent(); up != nullptr; up = up->parent())
+                    up->setExpanded(true);
+                n->setExpanded(true);
+                if (name == QLatin1String("Lanterns"))
+                    firstLantern = n;
+            }
+            else if (n->parent() != nullptr && n->parent()->text(0) == QLatin1String("Fixture Groups"))
+                n->setExpanded(n->text(0) == QLatin1String("AT") || n->text(0) == QLatin1String("Lanterns"));
+        }
+        QVERIFY(firstLantern != nullptr);
+        tree->scrollToItem(tree->topLevelItem(0));
+        settle(300);
+        QVERIFY(save(tree->grab().toImage(), d, "symbols-fixtures"));
         doc->resetModified();
     }
 
@@ -6700,6 +6742,17 @@ void CourseShow_Test::levelThreeMorePictures()
         QVERIFY(rules(ids["House Lights"], { Fixture::ExemptBlackout, Fixture::ExemptGrandMaster }));
         QVERIFY(rules(ids["Work Lights"], { Fixture::ExemptBlackout, Fixture::ExemptGrandMaster }));
         {
+            OutputRulesDialog dlg(doc, { ids["House Lights"] }, m_app);
+            for (Fixture::OutputRule r : { Fixture::ExemptBlackout, Fixture::ExemptGrandMaster })
+                dlg.box(r)->setChecked(true);
+            QList<HelpShots::Callout> marks;
+            int n = 0;
+            for (Fixture::OutputRule r : { Fixture::ExemptBlackout, Fixture::ExemptGrandMaster })
+                marks << mark(dlg.box(r), ++n, HelpShots::Right);
+            dlg.resize(560, dlg.sizeHint().height());
+            QVERIFY(shootDialog(&dlg, marks, d, "output-rules-house"));
+        }
+        {
             OutputRulesDialog dlg(doc, { ids["Stage Power"] }, m_app);
             for (Fixture::OutputRule r : { Fixture::Switch, Fixture::ExemptBlackout, Fixture::ExemptGrandMaster, Fixture::OnAtOpen })
                 dlg.box(r)->setChecked(true);
@@ -6745,12 +6798,14 @@ void CourseShow_Test::levelThreeMorePictures()
         w.next();
         w.next();
         settle(300);
-        w.setCircuitRoles({ 5 }, EosCircuit::Normal);
-        settle(300);
         QVERIFY(w.currentPage() != nullptr);
         qInfo().noquote() << "[3.10] wizard page:" << w.currentPage()->title();
         QCOMPARE(w.currentPage()->title(), QStringLiteral("Special circuits"));
-        QVERIFY(shootDialog(&w, { mark(w.currentPage()->findChild<QTableWidget *>(), 1, HelpShots::Right), mark(w.currentPage()->findChild<QComboBox *>(), 2, HelpShots::Above) }, d, "special-circuits"));
+        // As step 4 has it (Cyc Blue read as Backstage / hall), then as step 5 leaves it.
+        QVERIFY(shootDialog(&w, { mark(w.currentPage()->findChild<QTableWidget *>(), 1, HelpShots::Right) }, d, "special-circuits"));
+        w.setCircuitRoles({ 5 }, EosCircuit::Normal);
+        settle(300);
+        QVERIFY(shootDialog(&w, { mark(w.currentPage()->findChild<QTableWidget *>(), 1, HelpShots::Right), mark(w.currentPage()->findChild<QComboBox *>(), 2, HelpShots::Above) }, d, "special-circuits-normal"));
         doc->resetModified();
     }
 }

@@ -13,9 +13,11 @@ nav_order: 2
 
 Front light shows faces and side light sculpts
 ([Lesson 0.3](../../level-0/lesson-03/handout.md)), and which one a light
-gives depends on where it hangs and which way it faces. The console aims a
-moving light by angles it works out from the plot, so a plot that doesn't
-match the room aims every light a little wrong. In the stage words of
+gives depends on where it hangs and which way it faces. A moving head's aim
+is computed from the plot's heights and distances; a fixed light is pointed
+by you, and the plot has to be right so that what you set is where it
+really lands. A plot that doesn't match the room aims every light a little
+wrong. In the stage words of
 [Lesson 0.8](../../level-0/lesson-08/handout.md): the plot is the room, as
 the console has it.
 
@@ -30,7 +32,7 @@ the console has it.
 
 | Word | Means |
 |---|---|
-| **Boom** | A vertical pipe that lights are mounted up. On a stand, or hung from a truss. |
+| **Boom** | A vertical pipe that lights are mounted up, standing on a base. Ours stands in the wing. |
 | **Mount** | What a light hangs or stands on: a truss, boom, tower, riser or the floor. |
 | **Face** | Which side of its mount a light is on, and so which way it throws: Top, Bottom, Front (downstage), Back (upstage), Stage left, Stage right. |
 | **Points** | Which way a fixed light points, seen from above, in degrees from downstage: 0 downstage, 90 stage right, 180 upstage, 270 stage left. |
@@ -74,7 +76,7 @@ the room). Switch roles after each part.
 
 3. Right-click an empty part of the plot off the stage-right edge of the stage
    (the left of the plot, with the audience at the bottom), in the wing, and
-   choose **Add Here ▸ Boom**.
+   choose **Add Here ▸ Boom**. Put it about 4' off the stage edge.
    - *You should see:* a box, **Place on which layer?**, because the active
      layer, House, is locked. Open the list, pick **Towers**, and click **Place
      on this layer**.
@@ -135,7 +137,9 @@ Measure the room and correct the plot.
    boom stands from the stage edge, the width and depth of the stage.
 2. Write them against the plot's numbers. Where they differ, double-click
    the structure on the plot and type the real value.
-3. Fire a **Soloist DS** aim and see if the beam lands on the mark.
+3. Fire a **Soloist DS** aim and see if the beam lands on the mark. If it
+   doesn't, check the plot's numbers again before touching the light: a tape
+   or a laser measure settles each one.
 
 ## Stuck?
 
@@ -151,11 +155,11 @@ Measure the room and correct the plot.
 
 1. Copy the boom: right-click it → **Copy Selected**, then right-click the
    plot in the other wing → **Paste Here**. Name it `SL Boom`.
-<!-- PLOT-HANDLES: depends on branch feat/043-plot-handles; drop this item if it has not landed -->
+<!-- PLOT-HANDLES (hidden from students; depends on branch feat/043-plot-handles, drop if it has not landed)
 2. Hold **⌥** (Alt on Windows and Linux) and drag the end of the **Door Wall**
    to swing it about its other end; hold **Shift** to step by 15°. It
    catches the end of another wall or truss so corners close.
-<!-- /PLOT-HANDLES -->
+-->
 3. Right-click **SR Boom Par** → **Show Light Footprint**. Set **Tilt in yoke**
    to `45 down`, then to `10 down`. How does the pool of light move, and which
    is the better front light for a face?

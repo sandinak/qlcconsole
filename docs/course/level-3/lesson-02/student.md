@@ -49,8 +49,9 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 4. Right-click **SR Truss Cyc 1** → **Definition & Mode…**. Pick each **Mode**
    and read **Channels**: 165, 135, 30. **Cancel**.
 5. How many boxes fit in a universe in each mode (165ch, 135ch RGB, 30ch White)?
-6. Click **TrussC-RGB**: each cell is a head, with the box's name, **H:**,
-   **A:**, **U:** and the tag **[RGB]**. Click **TrussC-W**: the tag is **[W]**.
+6. Click **TrussC-RGB**: each cell is a head: point at one and its tooltip reads
+   the box's name, **H:**, **A:**, **U:** and the tag **[RGB]**. Click
+   **TrussC-W**: the tag is **[W]**.
 7. Right-click **SR Truss Cyc 1** → **Edit Fixture Definition…**. In the Fixture
    Editor click **Modes**: **Name**, **Channels**, **Heads** (75, 45 and 30
    heads). Close it **without saving**.
@@ -65,8 +66,8 @@ is slow: it is its own program and may open behind.
 
 1. What does a fixture definition tell the console?
 2. What is a mode, and what two things does it decide?
-3. Which of our groups holds the XL-450's colour pixels, and what does a
-   colour on it do to the white ones?
+3. The XL-450 has 45 colour pixels and 30 white pixels. Which of our groups
+   holds the colour ones, and what does a colour on it do to the white pixels?
 4. The XL-450 reads Local. What does that mean, and why does the show still
    open on another computer?
 

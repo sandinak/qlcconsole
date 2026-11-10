@@ -31,7 +31,7 @@ green, or the light sits dark waiting for a dimmer channel nobody sends.
 | **Fixture definition** | The file that tells the app what each channel of a light does. |
 | **Mode** | One way a light can be set up: a list of its channels in order. The mode on the console has to be the mode set on the light. |
 | **Head** | One lit part of a fixture: a pixel box has many; a mover has one. A head can have its own colour channels. |
-| **Included / Local** | Where a definition file comes from: **Included** with the app, or **Local**, one the app doesn't ship (yours, or the show's). |
+| **Included / Local** | Where a definition file comes from: **Included** with the app, or **Local**, one the app doesn't ship (yours, or the show's); a third source is Downloadable. |
 | **Fixture Editor** | The tool for reading and writing definitions. |
 
 ## Part 1 — Pick the mode (on paper, everyone)
@@ -46,7 +46,7 @@ A par comes with three modes. Its manual's DMX chart:
 
 Answer:
 
-- Which modes can make Half dim the whole colour from the light itself?
+- Which modes can make a level of 50% dim the whole colour from the light itself?
 - How many lights of each mode fit in one universe, patched end to end?
 - The light's own menu is set to **5ch** but the console is patched as **3ch**.
   Which channel does the light wait on for its dimmer, and what does the
@@ -91,8 +91,10 @@ Switch roles after each part.
 
    ![The modes of the XL-450](../../images/lesson-3-2/definition-modes.png)
 
-   Click **Cancel**. Changing the mode changes how many channels the light
-   takes, and what it does; on a real rig it changes the light too.
+   Click **Cancel**. Changing the mode here changes how many channels the
+   console gives the light, and what it sends on each. It does not change the
+   light: on a real rig you also set the same mode on the light's own menu,
+   or the two disagree.
 6. Work out how many boxes fit in one universe in each mode, and fill in the
    table:
 
@@ -105,11 +107,13 @@ Switch roles after each part.
 ### Find the heads
 
 7. Open **Fixture Groups ▸ Trusses** and click **TrussC-RGB**.
-   - *You should see:* the group's grid. Each cell is one head: the box's
-     name, **H:** the head number, **A:** its address, **U:** its universe,
-     and a tag, **[RGB]**.
+   - *You should see:* the group's grid, a row of small cells for each box,
+     one cell per head. Point at a cell: its tooltip reads the box's name,
+     **H:** the head number, **A:** its address, **U:** its universe, and a
+     tag, **[RGB]**.
 8. Click **TrussC-W**.
-   - *You should see:* the same four boxes, but the cells carry the tag **[W]**.
+   - *You should see:* the same four boxes, but a cell's tooltip carries the
+     tag **[W]**.
      The box has 45 colour pixels and 30 white pixels: the colour pixels are
      in **TrussC-RGB**, the white ones in **TrussC-W**. A colour on
      TrussC-RGB doesn't light the white pixels.
@@ -136,6 +140,16 @@ Switch roles after each part.
 13. **File → Save As** → `Lesson3-2-yourname.qlcc` in **Documents →
     qlcconsole**.
 
+## Part 3 — On the real rig (with Branson)
+
+The classroom show sends nothing. At the rig, with the Fixtures tab open
+beside a real light:
+
+1. Find the light's model on its label and the same model in the Fixtures
+   tab. Read its **Mode**.
+2. On the light's own menu, read its mode: it has to be the console's mode,
+   channel for channel. Change nothing unless Branson says to.
+
 ## Stuck?
 
 | Problem | Try |
@@ -150,4 +164,4 @@ Switch roles after each part.
 1. Find the mode of **SR AT Spot** and **SL AT Spot**. They are the same
    model: why do their channel counts differ (18 and 21)?
 2. Which definition does a **UST** use, and how many heads does each of its
-   modes have?
+   modes have? (Look at its **Modes** tab in the Fixture Editor.)

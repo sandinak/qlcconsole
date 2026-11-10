@@ -84,6 +84,8 @@ our rig). Switch roles after each correction.
      (from above, their base). A lantern throws no beam: when it is lit,
      its glow spreads round it. Their icons in the Fixtures tab changed
      too.
+
+     ![The Fixtures tab: the washes and the lanterns with their new icons](../../images/lesson-3-3/symbols-fixtures.png)
 8. Click the **Show Tree** tab (⇧⌘5) and open the Library's groups.
    - *You should see:* the same icons there: the app uses one icon per
      fixture everywhere.

@@ -61,10 +61,10 @@ agree on one number, and it has to be true on every one of the rig's lights.
 ## 2. Teacher demo (10 min)
 
 1. **Fixtures** tab, **Universes ▸ Spots, washes, beams, lanterns** (Universe 1): the grid. "The coloured
-   cells are used, the pale ones free. 357 of 512."
+   cells are used, the dark ones free. 357 of 512."
 2. **SR Truss Spot 1**: **Address Range** 214 - 225 and the **Binary
    Address (DIP)** pattern. "That is what is set on the light itself."
-3. **Add ▾ → Add fixture…** with the Lantern: the app picks 358. Type 365:
+3. **Add ▾ → Add Fixture…** with the Lantern: the app picks 358. Type 365:
    the red error.
 4. Select Lanterns 1 to 6 → right-click → **Patch 6 Fixtures…**: read the
    columns and the **Status**; cancel.
@@ -104,15 +104,15 @@ Each group says the universe and address the next 165-channel box would take in 
 
 ## Extension (fast groups)
 
-The Patch dialog's **one universe each, counting up**: the first lantern on one universe and the next on the universe after … each at the address typed. Ask: "When does a rig want that?" (*a row of lights, each on its own node port*).
+The Patch dialog's **one universe each, counting up**: the first lantern on one universe and the next on the universe after … each at the address typed. Ask: "When does a rig want that?" (*a row of lights, each on its own node port*). Handout extension 2: the 135-channel mode fits 3 (405 channels; four would be 540) and the 30-channel white mode fits 17 (510 channels).
 
 ## Part 3 — On the real rig (with Branson)
 
-The classroom show sends nothing. On the rig:
+The classroom show sends nothing. On the rig, say first that the console's universe numbers start at 1 and Art-Net's and the node's at 0; Branson shows the mapping at the node.
 
 1. **Connections ▸ Devices**: the nodes the console hears, and their ports. Point at a node on the truss and at its **port 1**.
-2. Pick one universe in the rig's show: **Edit connection…** (right-click, or double-click). Read protocol, node and port; **Cancel**. Don't change anything unless the teacher asks.
-3. At a light on a ladder: read its address from its display or DIP switches, and against the Fixtures tab's **Binary Address (DIP)**.
+2. Pick one universe in the rig's show: **Edit Connection…** (right-click, or double-click). Read protocol, node and port; **Cancel**. Don't change anything unless the teacher asks.
+3. At a light on a ladder: set its DIP switches from the Fixtures tab's **Binary Address (DIP)** pattern, then check it answers the console. Students set the switches; the Art-Net and sACN settings stay with Branson.
 4. Print labels for a few lights from **Fixtures → Patch List…** and put them on the cable ends.
 
 <!-- PICTURE (real hardware): a light's DIP switches set to a patched address; a node's front panel with the ports numbered -->
@@ -125,8 +125,8 @@ Leave Art-Net and sACN settings to Branson: a wrong universe on a live network c
 
 ## Answer key
 
-- **Handout Part 1:** dimmer 1 to 1; par A 2 to 4; par B 5 to 7; mover A 8 to 19; mover B 20 to 31. Mover B on par B's start: both follow the same channels, so a cue for one drives the other. 42 movers (504 channels). A light that doesn't fit in the free channels goes in another universe whole; a light can't be split.
-- **Exit ticket:** 1: a universe is one DMX line of 512 channels; an address is the channel a light starts at. 2: it starts at 358, the first free channel after 357, and ends at 369 (12 channels). 3: the red **ERROR: Address already used!**, or Apply greyed in the Patch dialog; two lights following the same channels. 4: the crew hanging and labelling the rig; the electrician at the light.
+- **Handout Part 1:** dimmer 1 to 1; par A 2 to 4; par B 5 to 7; mover A 8 to 19; mover B 20 to 31. Mover B starting on par B's start overlaps par B's three channels (and mover A's), so a cue for one drives the other's dimmer, colour or strobe wrongly. 42 movers (504 channels). A light that doesn't fit in the free channels goes in another universe whole; a light can't be split.
+- **Exit ticket:** 1: a universe is one DMX line of 512 channels; an address is the channel a light starts at. 2: it starts at 358, the first free channel after 357, and ends at 369 (12 channels). 3: the red **ERROR: Address already used!**, or Apply greyed in the Patch dialog; two lights read some of the same channels, so a cue for one drives part of the other (the wrong parameter, if they start at different addresses). 4: the crew hanging and labelling the rig; the electrician at the light.
 
 ## How this lesson was checked
 

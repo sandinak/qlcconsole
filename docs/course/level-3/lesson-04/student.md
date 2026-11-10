@@ -69,8 +69,8 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 
 1. A spot hangs 2' lower than the plot says. Why do its beams land in the
    wrong place when the console is working correctly?
-2. A par's **Points** reads 270. Which way does it point, and what does
-   **Tilt in yoke** say?
+2. A par's **Points** reads 270 and its **Tilt in yoke** reads 20 down.
+   Which way does it throw, and how steeply?
 3. What is the difference between a layer's lock and an object's own lock?
 4. Name the three settings that point a fixed light.
 

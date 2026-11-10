@@ -155,6 +155,7 @@ brackets.
 | Word | Means |
 |---|---|
 | **DMX** | The signal that tells real lights what to do: 512 channels per **universe**. [3.1] |
+| **Universe** | One DMX line of 512 channels. [3.1] |
 | **Address** | Where a light's channels start in its universe. [3.1] |
 | **Footprint** | How many channels a light takes in the mode it is set to. [3.1] |
 | **DIP switches** | Small switches on a light that set its address in binary; the Fixtures tab shows the pattern. [3.1] |
@@ -164,8 +165,11 @@ brackets.
 | **Art-Net / sACN** | DMX sent over a network cable. [3.1] |
 | **Fixture definition** | The file that tells the app what each channel of a light does. [3.2] |
 | **Mode** | One way a light can be set up: a list of its channels in order. It decides how many channels the light takes. [3.2] |
+| **Included / Local** | Where a definition file comes from: shipped with the app, or not (yours, or the show's). [3.2] |
+| **Fixture Editor** | The tool for reading and writing fixture definitions. [3.2] |
 | **Head** | One lit part of a fixture: a pixel box has many, a mover has one. [3.2] |
-| **Boom** | A vertical pipe that lights are mounted up. [3.4] |
+| **Boom** | A vertical pipe that lights are mounted up, standing on a base. [3.4] |
+| **Mount** | What a light hangs or stands on: a truss, boom, tower, riser or the floor. [3.4] |
 | **Face / Points / Tilt in yoke** | How a fixed light is pointed: the side of its mount it throws from; its bearing seen from above (0 downstage, 270 stage left); how far it is tipped down from level. [3.4] |
 | **Plot layer** | A group of things on the plot you can hide or lock together. [3.4] |
 | **Plot symbol** | What a fixture looks like on the plot and in the studio: a moving head, a PAR can, an LED bar, a lantern… Set per fixture; **Auto** draws it from its type. [3.3] |
