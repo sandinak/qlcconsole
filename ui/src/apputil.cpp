@@ -31,6 +31,8 @@
 #include <QDebug>
 #include <QStyle>
 #include <QProxyStyle>
+#include <QScrollArea>
+#include <QStyleOptionToolButton>
 #include <QRect>
 #include <QFile>
 #include <QDir>
@@ -211,27 +213,95 @@ QStyle* AppUtil::saneStyle()
  * Scroll bars
  *****************************************************************************/
 
-/* The app's own style, but scroll bars that never hide: macOS overlay
-   ("transient") scroll bars are a style hint. A proxy over the style, not a
-   style sheet: a QScrollBar rule would redraw every scroll bar the sheet's
-   way, and only on what the sheet reaches. */
-class PersistentScrollBarStyle final : public QProxyStyle
+/* The app's own style, with what every widget in the app needs from it:
+
+   - a tool button whose menu opens on a click (InstantPopup, "+ Effect ▾")
+     gets room for its arrow: styles draw that arrow in the button's
+     bottom-right corner but leave it out of the button's size, so it sat on
+     the text's last letter ("+ Effec▾", UX-34). The button is as much wider
+     as the arrow, and its text is centred in what is left of it;
+   - with Settings ▸ Appearance ▸ "Always show scroll bars", scroll bars that
+     never hide: macOS overlay ("transient") scroll bars are a style hint.
+
+   A proxy over the style, not a style sheet: a rule would redraw every
+   button or scroll bar the sheet's way, and only on what the sheet reaches. */
+class AppStyle final : public QProxyStyle
 {
 public:
-    explicit PersistentScrollBarStyle(QStyle *base) : QProxyStyle(base) {}
+    AppStyle(QStyle *base, bool persistentScrollBars)
+        : QProxyStyle(base), m_persistentScrollBars(persistentScrollBars) {}
+
+    bool persistentScrollBars() const { return m_persistentScrollBars; }
 
     int styleHint(StyleHint hint, const QStyleOption *option, const QWidget *widget,
                   QStyleHintReturn *returnData) const override
     {
-        if (hint == QStyle::SH_ScrollBar_Transient)
+        if (hint == QStyle::SH_ScrollBar_Transient && m_persistentScrollBars)
             return 0;
         return QProxyStyle::styleHint(hint, option, widget, returnData);
     }
+
+    QSize sizeFromContents(ContentsType type, const QStyleOption *option, const QSize &size,
+                           const QWidget *widget) const override
+    {
+        QSize sz = QProxyStyle::sizeFromContents(type, option, size, widget);
+        if (type == CT_ToolButton)
+            if (const int room = AppUtil::menuArrowRoom(qstyleoption_cast<const QStyleOptionToolButton *>(option),
+                                                        this, widget))
+                sz.rwidth() += room;
+        return sz;
+    }
+
+    void drawControl(ControlElement element, const QStyleOption *option, QPainter *painter,
+                     const QWidget *widget) const override
+    {
+        if (element == CE_ToolButtonLabel)
+        {
+            const QStyleOptionToolButton *tb = qstyleoption_cast<const QStyleOptionToolButton *>(option);
+            if (const int room = AppUtil::menuArrowRoom(tb, this, widget))
+            {
+                // The text in the part of the button the arrow leaves free.
+                QStyleOptionToolButton label = *tb;
+                label.rect.adjust(label.direction == Qt::RightToLeft ? room : 0, 0,
+                                  label.direction == Qt::RightToLeft ? 0 : -room, 0);
+                QProxyStyle::drawControl(element, &label, painter, widget);
+                return;
+            }
+        }
+        QProxyStyle::drawControl(element, option, painter, widget);
+    }
+
+private:
+    bool m_persistentScrollBars;
 };
+
+int AppUtil::menuArrowRoom(const QStyleOptionToolButton *option, const QStyle *style, const QWidget *widget)
+{
+    if (option == nullptr || style == nullptr)
+        return 0;
+    if (!(option->features & QStyleOptionToolButton::HasMenu)
+        || (option->features & QStyleOptionToolButton::MenuButtonPopup))
+        return 0;                   // no arrow, or one in a part of its own
+    // Text drawn: a button with no icon, or one set to show its text.
+    if (option->text.isEmpty()
+        || (!option->icon.isNull() && option->toolButtonStyle == Qt::ToolButtonIconOnly))
+        return 0;                   // an icon: the arrow sits on its corner, as it always has
+    return style->pixelMetric(QStyle::PM_MenuButtonIndicator, option, widget);
+}
+
+static AppStyle *appStyle()
+{
+    return dynamic_cast<AppStyle *>(QApplication::style());
+}
 
 bool AppUtil::alwaysShowScrollBars()
 {
-    return dynamic_cast<PersistentScrollBarStyle *>(QApplication::style()) != nullptr;
+    return appStyle() != nullptr && appStyle()->persistentScrollBars();
+}
+
+bool AppUtil::hasAppStyle()
+{
+    return appStyle() != nullptr;
 }
 
 QString AppUtil::styleName()
@@ -245,17 +315,81 @@ QString AppUtil::styleName()
 
 void AppUtil::setAlwaysShowScrollBars(bool on)
 {
-    if (on == alwaysShowScrollBars())
+    if (appStyle() != nullptr && on == alwaysShowScrollBars())
         return;
     // A new style of the same kind each way: the old one goes with
     // QApplication::setStyle(). saneStyle() is its own instance, not this.
     QStyle *base = QStyleFactory::create(styleName());
     if (base == nullptr)
         return;
-    if (on)
-        QApplication::setStyle(new PersistentScrollBarStyle(base));
-    else
-        QApplication::setStyle(base);
+    QApplication::setStyle(new AppStyle(base, on));
+}
+
+void AppUtil::installAppStyle()
+{
+    if (appStyle() == nullptr)
+        setAlwaysShowScrollBars(false);
+}
+
+/*****************************************************************************
+ * A body that scrolls up and down
+ *****************************************************************************/
+
+namespace
+{
+/* Never narrower than its contents (nothing in it is cut at the side), and
+   as short as a few rows: the rest scrolls. */
+class VerticalScroller final : public QScrollArea
+{
+public:
+    explicit VerticalScroller(QWidget *parent) : QScrollArea(parent) {}
+
+    QSize minimumSizeHint() const override
+    {
+        const int h = qMin(200, widget() != nullptr ? widget()->minimumSizeHint().height() : 0);
+        return QSize(contentWidth(true), h + 2 * frameWidth());
+    }
+
+    QSize sizeHint() const override
+    {
+        if (widget() == nullptr)
+            return QScrollArea::sizeHint();
+        return QSize(contentWidth(false), widget()->sizeHint().height() + 2 * frameWidth());
+    }
+
+protected:
+    bool eventFilter(QObject *o, QEvent *e) override
+    {
+        // Its contents changed: so may the width it needs.
+        if (o == widget() && e->type() == QEvent::LayoutRequest)
+            updateGeometry();
+        return QScrollArea::eventFilter(o, e);
+    }
+
+private:
+    int contentWidth(bool least) const
+    {
+        if (widget() == nullptr)
+            return 0;
+        const int w = least ? widget()->minimumSizeHint().width() : widget()->sizeHint().width();
+        return w + style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, this) + 2 * frameWidth();
+    }
+};
+} // namespace
+
+QScrollArea *AppUtil::verticalScroller(QWidget *content, QWidget *parent)
+{
+    VerticalScroller *area = new VerticalScroller(parent);
+    area->setObjectName(content->objectName().isEmpty() ? QStringLiteral("verticalScroller")
+                                                        : content->objectName() + QStringLiteral("Scroller"));
+    area->setFrameShape(QFrame::NoFrame);
+    area->setWidgetResizable(true);
+    area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    area->setWidget(content);
+    // The page's own colour, not the viewport's base.
+    area->viewport()->setAutoFillBackground(false);
+    content->setAutoFillBackground(false);
+    return area;
 }
 
 /*********************************************************************

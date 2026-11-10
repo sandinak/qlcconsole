@@ -416,6 +416,17 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     m_lookList->header()->setSectionResizeMode(LookColName, QHeaderView::Stretch);
     m_lookList->header()->setSectionResizeMode(LookColIn, QHeaderView::ResizeToContents);
     m_lookList->header()->setSectionResizeMode(LookColOut, QHeaderView::ResizeToContents);
+    /* Room for a look's name beside the fades: at its smallest the list gave
+       the names one letter ("B…", "F…", UX-36). About fourteen characters,
+       past the branch lines, the swatch and the two fade columns. */
+    {
+        const QFontMetrics fm = m_lookList->fontMetrics();
+        const int fades = m_lookList->header()->sectionSizeHint(LookColIn)
+                          + m_lookList->header()->sectionSizeHint(LookColOut);
+        m_lookList->setMinimumWidth(2 * m_lookList->indentation() + m_lookList->iconSize().width()
+                                    + fm.horizontalAdvance(QStringLiteral("Full Colour Wash")) + fades
+                                    + 2 * m_lookList->frameWidth() + 24);
+    }
     // Double-click an In/Out cell to give that look its own fade time.
     m_lookList->setItemDelegate(new FadeSpinDelegate(m_lookList));
     m_lookList->setEditTriggers(QAbstractItemView::DoubleClicked);

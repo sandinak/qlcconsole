@@ -15,6 +15,7 @@
   limitations under the License.
 */
 
+#include <QScrollArea>
 #include <QDialogButtonBox>
 #include <QStackedWidget>
 #include <QFormLayout>
@@ -40,6 +41,7 @@
 #include "patchundo.h"
 #include "universe.h"
 #include "doc.h"
+#include "apputil.h"
 
 #define ROLE_PLUGIN (Qt::UserRole)
 #define ROLE_LINE   (Qt::UserRole + 1)
@@ -106,7 +108,11 @@ ConnectionEditor::Kind ConnectionEditor::kindOf(const QLCIOPlugin *plugin)
 
 void ConnectionEditor::buildForm()
 {
-    QVBoxLayout *vl = new QVBoxLayout(this);
+    /* The form scrolls up and down, OK and Cancel stay under it: it was
+       taller than a laptop's screen (UX-34). */
+    QWidget *body = new QWidget(this);
+    QVBoxLayout *vl = new QVBoxLayout(body);
+    vl->setContentsMargins(0, 0, 0, 0);
 
     // ---- Which universe, which protocol, which interface ----
     QFormLayout *top = new QFormLayout;
@@ -353,7 +359,9 @@ void ConnectionEditor::buildForm()
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &ConnectionEditor::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &ConnectionEditor::reject);
-    vl->addWidget(buttons);
+    QVBoxLayout *dialogLayout = new QVBoxLayout(this);
+    dialogLayout->addWidget(AppUtil::verticalScroller(body, this), 1);
+    dialogLayout->addWidget(buttons);
 
     connect(m_universeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &ConnectionEditor::slotUniverseChanged);

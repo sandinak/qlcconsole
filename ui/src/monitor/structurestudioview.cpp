@@ -9873,8 +9873,12 @@ void StructureStudioView::drawDimensions(QPainter &p) const
         p.drawLine(QPointF(sMinX, y), QPointF(sMaxX, y));
         p.drawLine(QPointF(sMinX, y - 4), QPointF(sMinX, y + 4));
         p.drawLine(QPointF(sMaxX, y - 4), QPointF(sMaxX, y + 4));
-        p.drawText(QRectF(sMinX, y + 2, sMaxX - sMinX, 14), Qt::AlignCenter,
-                   MonitorProperties::formatStageDistance(float(wSpan)));
+        const QString text = MonitorProperties::formatStageDistance(float(wSpan));
+        const QRectF box(sMinX, y + 2, sMaxX - sMinX, 14);
+        p.drawText(box, Qt::AlignCenter, text);
+        const double tw = QFontMetricsF(p.font()).horizontalAdvance(text);
+        m_callouts << QRectF(box.center().x() - tw / 2.0, box.top(), tw, box.height())
+                   << QRectF(sMinX, y - 4.0, sMaxX - sMinX, 8.0);      // its line
     }
     // Vertical dimension, just left of the structure -- and left of a
     // tower's shelf labels, which are drawn on that side.
@@ -9887,9 +9891,13 @@ void StructureStudioView::drawDimensions(QPainter &p) const
         p.save();
         p.translate(x - 4, (sMinY + sMaxY) / 2.0);
         p.rotate(-90);
-        p.drawText(QRectF(-40, -12, 80, 12), Qt::AlignCenter,
-                   MonitorProperties::formatStageDistance(float(hSpan)));
+        const QString text = MonitorProperties::formatStageDistance(float(hSpan));
+        p.drawText(QRectF(-40, -12, 80, 12), Qt::AlignCenter, text);
         p.restore();
+        // Turned on its side: as tall as the text is wide.
+        const double tw = QFontMetricsF(p.font()).horizontalAdvance(text);
+        m_callouts << QRectF(x - 16.0, (sMinY + sMaxY) / 2.0 - tw / 2.0, 12.0, tw)
+                   << QRectF(x - 4.0, sMinY, 8.0, sMaxY - sMinY);      // its line
     }
 }
 
@@ -10076,7 +10084,10 @@ void StructureStudioView::drawRulers(QPainter &p) const
             p.setBrush(mk);
             QPolygonF tri; tri << QPointF(GW + 1, sy) << QPointF(GW + 8, sy - 4) << QPointF(GW + 8, sy + 4);
             p.drawPolygon(tri);
-            p.drawText(QPointF(GW + 11, sy - 3), tr("max %1").arg(MonitorProperties::formatStageDistance(float(topZ))));
+            const QString maxText = tr("max %1").arg(MonitorProperties::formatStageDistance(float(topZ)));
+            p.drawText(QPointF(GW + 11, sy - 3), maxText);
+            const QFontMetricsF fm(p.font());
+            m_callouts << QRectF(GW + 11, sy - 3 - fm.ascent(), fm.horizontalAdvance(maxText), fm.height());
         }
     }
 
@@ -10356,31 +10367,49 @@ void StructureStudioView::drawOrientationLabels(QPainter &p) const
     QFont f = p.font(); f.setPixelSize(9); p.setFont(f);
     p.setPen(QColor(120, 160, 220, 190));      // the rulers' axis blue
 
-    /* The LEFT label sits vertical-centred right next to the height ruler's
-       own "max H ft" callout (drawRulers(), same corner, same GW+.. x) --
-       when the view is framed tight around one short structure (a per-bar
-       editor is exactly this: the whole visible Z range is a couple of
-       feet), the structure's top and the view's vertical centre land
-       within a few pixels of each other and the two texts print on top of
-       one another ("scale isn't right" -- what actually made it unreadable
-       was this, not the numbers themselves). Nudge the left label clear of
-       that line when they would collide; nothing else in this frame sits
-       in that corner, so nothing else needs to move. */
-    QRectF leftArea = area;
-    if (m_plane != Top)
-    {
-        const double topZ = structureTopZ();
-        if (topZ > 0.01)
+    /* Each label in the middle of its edge -- unless a measurement is drawn
+       there: the height ruler's "max H" callout, a tower's height dimension
+       on its left, the width under it. When the view is framed tight around
+       one structure, those land in the middle of the left edge, and the
+       texts printed on top of one another ("stage right" under "max 18'",
+       UX-34). Then the label slides along its edge, a line at a time, to the
+       nearest place clear of all of them. */
+    const QFontMetricsF fm(p.font());
+    auto place = [&](const QString &text, Qt::Alignment align) {
+        const QSizeF sz(fm.horizontalAdvance(text) + 2.0, fm.height());
+        const bool alongY = (align & (Qt::AlignLeft | Qt::AlignRight)) != 0;
+        QRectF r(QPointF(0, 0), sz);
+        if (align & Qt::AlignLeft)        r.moveLeft(area.left());
+        else if (align & Qt::AlignRight)  r.moveRight(area.right());
+        else                              r.moveLeft(area.center().x() - sz.width() / 2.0);
+        if (align & Qt::AlignTop)         r.moveTop(area.top());
+        else if (align & Qt::AlignBottom) r.moveBottom(area.bottom());
+        else                              r.moveTop(area.center().y() - sz.height() / 2.0);
+        const QRectF home = r;
+        const double step = alongY ? sz.height() + 2.0 : 24.0;
+        auto clear = [this](const QRectF &c) {
+            for (const QRectF &o : std::as_const(m_callouts))
+                if (o.intersects(c))
+                    return false;
+            return true;
+        };
+        for (int i = 1; !clear(r) && i < 40; ++i)
         {
-            const double maxY = w2s(axisWorldPoint(!(m_rotation & 1), topZ)).y();
-            if (qAbs(area.center().y() - maxY) < 16.0)
-                leftArea.translate(0.0, 16.0);
+            // Nearest first: one step one way, then the other, then two...
+            const double off = step * ((i + 1) / 2) * ((i & 1) ? 1.0 : -1.0);
+            const QRectF c = alongY ? home.translated(0.0, off) : home.translated(off, 0.0);
+            if (area.contains(c))
+                r = c;
         }
-    }
-    p.drawText(leftArea, Qt::AlignVCenter | Qt::AlignLeft, QStringLiteral("◀ ") + leftLbl);
-    p.drawText(area, Qt::AlignVCenter | Qt::AlignRight, rightLbl + QStringLiteral(" ▶"));
-    p.drawText(area, Qt::AlignHCenter | Qt::AlignTop,    QStringLiteral("▲ ") + topLbl);
-    p.drawText(area, Qt::AlignHCenter | Qt::AlignBottom, QStringLiteral("▼ ") + bottomLbl);
+        if (!clear(r))
+            r = home;               // nowhere clear: where it always was
+        p.drawText(r, Qt::AlignCenter, text);
+        m_edgeLabels << r;
+    };
+    place(QStringLiteral("◀ ") + leftLbl, Qt::AlignVCenter | Qt::AlignLeft);
+    place(rightLbl + QStringLiteral(" ▶"), Qt::AlignVCenter | Qt::AlignRight);
+    place(QStringLiteral("▲ ") + topLbl, Qt::AlignHCenter | Qt::AlignTop);
+    place(QStringLiteral("▼ ") + bottomLbl, Qt::AlignHCenter | Qt::AlignBottom);
 }
 
 /* The values this frame is drawn from.
@@ -10617,6 +10646,8 @@ bool StructureStudioView::liveTick()
 void StructureStudioView::paintEvent(QPaintEvent *)
 {
     ++m_paintCount;
+    m_callouts.clear();
+    m_edgeLabels.clear();
     /* The frame budget. While values change fast (a value-driven frame close
        on the last one) the rig is drawn without supersampling -- a third of
        the work -- and one full-quality frame follows when they stop. Still

@@ -28,6 +28,9 @@
 #include <QHash>
 #include <functional>
 class QWidget;
+class QScrollArea;
+class QStyle;
+class QStyleOptionToolButton;
 class QTreeWidgetItem;
 class QLCFixtureDef;
 class QLCFixtureDefCache;
@@ -125,6 +128,23 @@ namespace AppUtil
     /** The app style's name ("fusion", "macos"), under the scroll-bar
      *  style setAlwaysShowScrollBars() puts over it. */
     QString styleName();
+    /** The app's own style (see setAlwaysShowScrollBars()) over the
+     *  platform's, as App::startup() puts it; idempotent. */
+    void installAppStyle();
+    bool hasAppStyle();
+    /** How much wider the app style makes a tool button whose menu opens
+     *  on a click (its arrow drawn in its corner), so the arrow never sits
+     *  on its text; 0 for any other button, or one showing only an icon. */
+    int menuArrowRoom(const QStyleOptionToolButton *option, const QStyle *style,
+                      const QWidget *widget = nullptr);
+
+    /************************************************************************
+     * A body that scrolls
+     ************************************************************************/
+    /** @a content in a frameless scroll area that scrolls up and down only,
+     *  never narrower than @a content needs: a dialog's form taller than a
+     *  laptop's screen scrolls, and the buttons under it stay in view. */
+    QScrollArea *verticalScroller(QWidget *content, QWidget *parent = nullptr);
 
     /*********************************************************************
      * Stylesheets

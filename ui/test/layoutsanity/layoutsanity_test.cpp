@@ -26,6 +26,9 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
+#include <QDialogButtonBox>
+#include <QMenu>
+#include <QStyleOptionToolButton>
 #include <QDir>
 #include <QFocusFrame>
 #include <QGroupBox>
@@ -67,6 +70,8 @@
 #include "shownotespane.h"
 #include "speedmasters.h"
 #include "programmingoutline.h"
+#include "monitor.h"
+#include "showtreeview.h"
 #undef protected
 #undef private
 
@@ -129,7 +134,6 @@
 #include "showreviewpanel.h"
 #include "showsettingsdialog.h"
 #include "showstatusdialog.h"
-#include "showtreeview.h"
 #include "simpledesk.h"
 #include "speedmasterspanel.h"
 #include "structurestudioview.h"
@@ -150,6 +154,13 @@
 #include "outputrulesdialog.h"
 #include "powerprofiledialog.h"
 #include "monitorbackgroundselection.h"
+#include "monitorproperties.h"
+#include "structurestudioview.h"
+#include "apputil.h"
+#include "truss.h"
+#include "tower.h"
+#include "stageplatform.h"
+#include "pipe.h"
 
 #include "layoutsanity_test.h"
 
@@ -264,6 +275,30 @@ struct Finding
     QString text;
     QRect mark;
 };
+
+/** The width a tool button needs for its text and, beside it, the arrow of
+ *  a menu that opens on a click (the style draws it in the button's
+ *  bottom-right corner): 0 for any other widget. */
+int menuArrowNeeds(QWidget *w)
+{
+    QToolButton *tb = qobject_cast<QToolButton *>(w);
+    if (tb == nullptr || tb->menu() == nullptr || tb->popupMode() == QToolButton::MenuButtonPopup)
+        return 0;
+    QString t = tb->text();
+    t.remove(QLatin1Char('&'));
+    if (t.isEmpty() || t.contains(QLatin1Char('\n'))
+        || (!tb->icon().isNull() && tb->toolButtonStyle() == Qt::ToolButtonIconOnly))
+        return 0;
+    int need = tb->fontMetrics().horizontalAdvance(t) + 8
+               + tb->style()->pixelMetric(QStyle::PM_MenuButtonIndicator, nullptr, tb);
+    if (!tb->icon().isNull() && tb->toolButtonStyle() == Qt::ToolButtonTextBesideIcon)
+        need += tb->iconSize().width() + 2;
+    return need;
+}
+
+/** A dialog's smallest size fits a 1024x640 laptop, less its title bar and
+ *  the menu bar above it: else OK and Cancel are under the screen's edge. */
+const QSize kLaptopRoom(1024, 640 - 50);
 
 QList<Finding> inspect(QWidget *top)
 {
@@ -391,6 +426,12 @@ QList<Finding> inspect(QWidget *top)
         {
             needH = fm.height() - 2;            // the text's own height, at least
         }
+        // A menu's arrow drawn in the corner of a button with text: it sits
+        // on the text unless the button has room for both (UX-34).
+        if (const int arrow = menuArrowNeeds(w))
+            if (w->width() + kTol < arrow)
+                out << Finding{ QStringLiteral("menu-arrow-over-text %1 is %2 wide, needs %3")
+                                    .arg(pathOf(w, top)).arg(w->width()).arg(arrow), it.full };
         if (needW > 0 && w->width() + kTol < needW)
             out << Finding{ QStringLiteral("text-cut %1 is %2 wide, needs %3")
                                 .arg(pathOf(w, top)).arg(w->width()).arg(needW), it.full };
@@ -1162,9 +1203,276 @@ void LayoutSanity_Test::theShowTreeShowsCueNamesWithFreshSettings()
         }
         // ...and the page is not starved to give it.
         QVERIFY2(split->sizes().at(2) >= 400, qPrintable(what));
+        /* A cue's own layer, a level further in: its name whole too, when
+           the info column beside it has nothing to say (UX-36). */
+        int layersSeen = 0;
+        for (QTreeWidgetItem *cue : cues.mid(0, 1))
+        {
+            cue->setExpanded(true);
+            settle();
+            for (int i = 0; i < cue->childCount(); ++i)
+            {
+                QTreeWidgetItem *layer = cue->child(i);
+                if (layer->data(0, ShowTreeView::KindRole).toInt() != ShowTreeView::LayerNode
+                    || !layer->text(ShowTreeView::InfoCol).isEmpty() || layer->text(0).size() > 14)
+                    continue;
+                ++layersSeen;
+                // Column 0 past the indent: the icon, then the name.
+                const QRect r = tree->visualItemRect(layer);
+                const int need = tree->fontMetrics().horizontalAdvance(layer->text(0))
+                                 + tree->iconSize().width() + 12;
+                QVERIFY2(r.width() >= need,
+                         qPrintable(QStringLiteral("%1x%2: layer \"%3\" needs %4 px, it has %5")
+                                        .arg(z.width()).arg(z.height()).arg(layer->text(0)).arg(need)
+                                        .arg(r.width())));
+            }
+        }
+        QVERIFY2(layersSeen > 0, "no layer under the first cue to look at");
+
+        /* A show whose rows have nothing in the info column (no "main",
+           nothing carried): the column gives the names its room, as a pane
+           that showed "Tow…" for a layer needed (UX-36). */
+        if (z.width() == 1024)
+        {
+            QHash<QTreeWidgetItem *, QString> info;
+            for (QTreeWidgetItemIterator it(tree); *it != nullptr; ++it)
+                if (!(*it)->text(ShowTreeView::InfoCol).isEmpty())
+                {
+                    info.insert(*it, (*it)->text(ShowTreeView::InfoCol));
+                    (*it)->setText(ShowTreeView::InfoCol, QString());
+                }
+            view->fitTreeColumns();
+            const int infoWidth = tree->header()->sectionSize(ShowTreeView::InfoCol);
+            for (auto it = info.constBegin(); it != info.constEnd(); ++it)
+                it.key()->setText(ShowTreeView::InfoCol, it.value());
+            view->fitTreeColumns();
+            QVERIFY2(infoWidth <= tree->header()->minimumSectionSize(),
+                     qPrintable(QStringLiteral("an empty info column keeps %1 px").arg(infoWidth)));
+        }
     }
     m_app->resize(1280, 800);
     settle();
+}
+
+void LayoutSanity_Test::theStudioEditorsFitALaptop()
+{
+    /* One of each, as units_test builds them, in the app's show (its plot
+       is the one Monitor there is), taken out again at the end. */
+    Doc *doc = docOf(m_app);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *truss = props->addTruss();
+    truss->setName(QStringLiteral("FOH"));
+    truss->setLength(6.0f);
+    truss->setOrigin(QVector3D(2.0f, 3.0f, 5.5f));
+    Tower *tower = props->addTower();
+    tower->setName(QStringLiteral("Tower A"));
+    tower->setOriginX(8.0f);
+    tower->setOriginY(4.0f);
+    tower->setHeight(3.5f);
+    tower->setShelves({ 1.2f, 2.4f });
+    StagePlatform *deck = props->addPlatform();
+    deck->setName(QStringLiteral("Riser"));
+    deck->setWidth(2.4f);
+    deck->setDepth(1.2f);
+    deck->setHeight(0.4f);
+    Pipe *pipe = props->addPipe();
+    pipe->setName(QStringLiteral("Boom"));
+    pipe->setHeight(3.0f);
+
+    QWidget window;
+    window.resize(1280, 800);
+    Monitor *mon = Monitor::s_instance != nullptr ? Monitor::s_instance : new Monitor(&window, doc);
+    auto takeOut = qScopeGuard([props, truss, tower, deck, pipe, doc]() {
+        props->removeTruss(truss->id());
+        props->removeTower(tower->id());
+        props->removePlatform(deck->id());
+        props->removePipe(pipe->id());
+        doc->resetModified();
+    });
+    const QList<QPair<QString, std::function<void()>>> editors = {
+        { QStringLiteral("Tower"), [mon, tower]() { mon->slotEditTower(tower->id()); } },
+        { QStringLiteral("Truss"), [mon, truss]() { mon->slotEditTruss(truss->id()); } },
+        { QStringLiteral("Platform"), [mon, deck]() { mon->slotEditPlatform(deck->id()); } },
+        { QStringLiteral("Pipe"), [mon, pipe]() { mon->slotEditPipe(pipe->id()); } },
+    };
+
+    QStringList problems;
+    for (const auto &e : editors)
+    {
+        const QString name = e.first;
+        bool seen = false;
+        QTimer poll;
+        poll.setInterval(5);
+        int tries = 0;
+        connect(&poll, &QTimer::timeout, this, [&]() {
+            QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            if (dlg == nullptr)
+            {
+                if (++tries > 400)
+                    poll.stop();
+                return;
+            }
+            poll.stop();
+            seen = true;
+            // Its smallest fits the laptop, as a window manager would make it.
+            const QSize least = dlg->minimumSizeHint().expandedTo(dlg->minimumSize());
+            if (least.width() > kLaptopRoom.width() || least.height() > kLaptopRoom.height())
+                problems << QStringLiteral("%1: off-screen dialog, at least %2x%3, a laptop has %4x%5")
+                                .arg(name).arg(least.width()).arg(least.height())
+                                .arg(kLaptopRoom.width()).arg(kLaptopRoom.height());
+            for (const QSize &sz : { kLaptopRoom, QSize(1280, 800), QSize(1920, 1080) })
+            {
+                dlg->resize(sz.boundedTo(QSize(qMax(least.width(), 940), sz.height())));
+                settle();
+                QTest::qWait(30);
+                settle();
+                const QList<Finding> found = inspect(dlg);
+                saveShot(dlg, QStringLiteral("Studio ") + name, QStringLiteral("%1x%2").arg(sz.width()).arg(sz.height()),
+                         found);
+                for (const Finding &f : found)
+                    problems << QStringLiteral("%1 @ %2x%3: %4").arg(name).arg(dlg->width()).arg(dlg->height())
+                                    .arg(f.text);
+                // OK and Cancel in the dialog, whole.
+                QDialogButtonBox *bb = dlg->findChild<QDialogButtonBox *>();
+                if (bb == nullptr || !bb->isVisible()
+                    || !dlg->rect().contains(QRect(bb->mapTo(dlg, QPoint(0, 0)), bb->size())))
+                    problems << QStringLiteral("%1 @ %2x%3: OK / Cancel out of view")
+                                    .arg(name).arg(dlg->width()).arg(dlg->height());
+                // The plot's edge labels clear of its measurements.
+                for (StructureStudioView *view : dlg->findChildren<StructureStudioView *>())
+                {
+                    view->grab();
+                    for (const QRectF &l : view->drawnEdgeLabels())
+                        for (const QRectF &c : view->drawnCallouts())
+                            if (l.intersects(c))
+                                problems << QStringLiteral("%1 @ %2x%3: an edge label (%4,%5) is drawn over a "
+                                                           "measurement (%6,%7)")
+                                                .arg(name).arg(dlg->width()).arg(dlg->height())
+                                                .arg(l.x()).arg(l.y()).arg(c.x()).arg(c.y());
+                }
+            }
+            dlg->reject();
+        });
+        poll.start();
+        e.second();
+        poll.stop();
+        if (!seen)
+            problems << name + QStringLiteral(": did not open");
+    }
+    QVERIFY2(problems.isEmpty(), qPrintable(QLatin1Char('\n') + problems.join(QLatin1Char('\n'))));
+}
+
+void LayoutSanity_Test::menuButtonsKeepTheirArrowOffTheText()
+{
+    QVERIFY2(AppUtil::hasAppStyle(), "the app's style is not installed");
+    QWidget top;
+    QHBoxLayout *row = new QHBoxLayout(&top);
+    QToolButton *plain = new QToolButton;
+    plain->setText(QStringLiteral("+ Effect"));
+    QToolButton *menu = new QToolButton;
+    menu->setText(QStringLiteral("+ Effect"));
+    menu->setMenu(new QMenu(menu));
+    menu->setPopupMode(QToolButton::InstantPopup);
+    QToolButton *split = new QToolButton;
+    split->setText(QStringLiteral("+ Layer"));
+    split->setMenu(new QMenu(split));
+    split->setPopupMode(QToolButton::MenuButtonPopup);
+    row->addWidget(plain);
+    row->addWidget(menu);
+    row->addWidget(split);
+    row->addStretch(1);
+    top.show();
+    settle();
+
+    // As wide as its text and its arrow; the arrow's room is the style's.
+    const int arrow = menu->style()->pixelMetric(QStyle::PM_MenuButtonIndicator, nullptr, menu);
+    QVERIFY(arrow > 0);
+    QVERIFY2(menu->sizeHint().width() >= plain->sizeHint().width() + arrow,
+             qPrintable(QStringLiteral("%1 wide, %2 without its menu, the arrow %3")
+                            .arg(menu->sizeHint().width()).arg(plain->sizeHint().width()).arg(arrow)));
+    QStyleOptionToolButton opt;
+    opt.initFrom(split);
+    opt.features = QStyleOptionToolButton::HasMenu | QStyleOptionToolButton::MenuButtonPopup;
+    opt.text = split->text();
+    QCOMPARE(AppUtil::menuArrowRoom(&opt, split->style(), split), 0);   // its arrow has a part of its own
+    QVERIFY(inspect(&top).isEmpty());
+
+    /* Drawn: the text where it is on the plain button, nothing of it in the
+       arrow's corner. Compare columns of ink: the menu button's text ends
+       left of where its arrow starts. */
+    auto inkColumns = [](QToolButton *b) {
+        b->resize(b->sizeHint());
+        const QImage img = b->grab().toImage();
+        QList<int> cols;
+        const QColor bg = img.pixelColor(2, img.height() / 2);
+        for (int x = 0; x < img.width(); ++x)
+            for (int y = img.height() / 4; y < img.height() * 3 / 4; ++y)
+            {
+                const QColor c = img.pixelColor(x, y);
+                if (qAbs(c.lightness() - bg.lightness()) > 90)
+                {
+                    cols << x;
+                    break;
+                }
+            }
+        return cols;
+    };
+    menu->setMenu(nullptr);
+    const QList<int> textOnly = inkColumns(menu);         // same button, no arrow drawn
+    menu->setMenu(new QMenu(menu));
+    QVERIFY(!textOnly.isEmpty());
+    const int textRight = textOnly.last();
+    const int arrowLeft = menu->sizeHint().width() - arrow;
+    QVERIFY2(textRight < arrowLeft,
+             qPrintable(QStringLiteral("the text runs to x=%1, the arrow starts at x=%2").arg(textRight).arg(arrowLeft)));
+
+    // The checker: a menu button squeezed to its text alone is found.
+    QWidget bad;
+    QToolButton *squeezed = new QToolButton(&bad);
+    squeezed->setText(QStringLiteral("+ Effect"));
+    squeezed->setMenu(new QMenu(squeezed));
+    squeezed->setPopupMode(QToolButton::InstantPopup);
+    squeezed->setGeometry(0, 0, squeezed->fontMetrics().horizontalAdvance(squeezed->text()) + 8, 24);
+    bad.resize(200, 40);
+    bad.show();
+    settle();
+    QStringList t;
+    for (const Finding &f : inspect(&bad))
+        t << f.text;
+    QVERIFY2(t.join(QLatin1Char('\n')).contains(QStringLiteral("menu-arrow-over-text")), qPrintable(t.join('\n')));
+}
+
+void LayoutSanity_Test::theSceneGroupLooksShowNamesAtTheSmallest()
+{
+    Doc *doc = docOf(m_app);
+    Scene *scene = nullptr;
+    for (Function *f : doc->functions())
+        if (Scene *s = qobject_cast<Scene *>(f))
+            if (scene == nullptr && !s->palettes().isEmpty())
+                scene = s;
+    if (scene == nullptr)
+        QSKIP("no scene with looks in the show");
+    SceneGroupLooks looks(scene, doc);
+    looks.show();
+    settle();
+    looks.resize(looks.minimumSizeHint());
+    settle();
+    QTreeWidget *list = looks.findChild<QTreeWidget *>(QStringLiteral("sceneLooks"));
+    QVERIFY(list != nullptr);
+    QVERIFY(list->topLevelItemCount() > 0);
+    const QFontMetrics fm = list->fontMetrics();
+    for (int i = 0; i < list->topLevelItemCount(); ++i)
+    {
+        QTreeWidgetItem *it = list->topLevelItem(i);
+        const QString text = it->text(0).left(14);
+        const int icon = list->iconSize().isValid() ? list->iconSize().width()
+                                                    : list->style()->pixelMetric(QStyle::PM_SmallIconSize, nullptr, list);
+        const int need = fm.horizontalAdvance(text) + list->indentation() + icon + 12;
+        QVERIFY2(list->header()->sectionSize(0) >= need,
+                 qPrintable(QStringLiteral("\"%1\" needs %2 px, its column has %3 at %4x%5")
+                                .arg(it->text(0)).arg(need).arg(list->header()->sectionSize(0))
+                                .arg(looks.width()).arg(looks.height())));
+    }
 }
 
 void LayoutSanity_Test::theFooterChipsNeverOverlap()
@@ -1363,6 +1671,21 @@ void LayoutSanity_Test::everyScreenIsLaidOutCleanly()
     }
 
     QStringList failures;
+    // A dialog no laptop can show whole: its buttons are off the screen.
+    if (s.owned && qobject_cast<QDialog *>(top) != nullptr)
+    {
+        const QSize least = top->minimumSizeHint().expandedTo(top->minimumSize());
+        if (least.width() > kLaptopRoom.width() || least.height() > kLaptopRoom.height())
+        {
+            const QString line = QStringLiteral("%1: off-screen dialog, at least %2x%3, a laptop has %4x%5")
+                                     .arg(s.name).arg(least.width()).arg(least.height())
+                                     .arg(kLaptopRoom.width()).arg(kLaptopRoom.height());
+            if (const Known *k = knownFor(s.name, QString(), line))
+                qInfo().noquote() << "known (" << k->todo << "):" << line;
+            else
+                failures << line;
+        }
+    }
     for (const Size &z : sizes())
     {
         QSize want = z.size;

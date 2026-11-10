@@ -3880,6 +3880,7 @@ void ShowTreeView::buildTree()
     applyBackwashMarks();
     refreshFollowBadges();
     applyNoteMarks();
+    fitTreeColumns();          // the info column follows what is in it
     m_reloading = false;
 }
 
@@ -5018,8 +5019,15 @@ void ShowTreeView::fitTreeColumns()
         m_tree->header()->resizeSection(it.key(), w);
         room -= w;
     }
-    // The names keep at least 60% of what is left, however wide InfoCol was set.
-    const int badges = qBound(24, m_badgeWidth, qMax(24, room * 2 / 5));
+    /* The names keep at least 60% of what is left, however wide InfoCol was
+       set -- and InfoCol is no wider than the widest text in it: empty, it
+       gave a layer's name nothing ("Tow…" at 1024 wide, UX-36). */
+    int infoNeeds = 0;
+    const QFontMetrics itemFm = m_tree->fontMetrics();
+    for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
+        if (!(*it)->text(InfoCol).isEmpty())
+            infoNeeds = qMax(infoNeeds, itemFm.horizontalAdvance((*it)->text(InfoCol)) + 12);
+    const int badges = qBound(24, qMin(m_badgeWidth, qMax(24, infoNeeds)), qMax(24, room * 2 / 5));
     m_tree->header()->resizeSection(NameCol, qMax(40, room - badges));
     m_tree->header()->resizeSection(InfoCol, badges);
     m_fittingColumns = false;
