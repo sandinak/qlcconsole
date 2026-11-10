@@ -245,6 +245,12 @@ void ShowTreeView::applyBackwashMarks()
         item->setToolTip(FlagsCol, tip);
         item->setData(FlagsCol, BackwashKeyRole, found.at(hits.isEmpty() ? meantHits.first() : hits.first()).key());
     }
+    // The F column follows what it now says (buildTree() measures after).
+    if (!m_reloading)
+    {
+        measureInfoColumn();
+        fitTreeColumns();
+    }
 }
 
 QString ShowTreeView::backwashFindingKey(quint32 cueId) const

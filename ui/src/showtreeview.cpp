@@ -1672,6 +1672,11 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     // between the columns sets it, remembered. Text too long for either
     // column ends in "…", never over the other.
     m_tree->setTextElideMode(Qt::ElideRight);
+    /* A layer is five levels in (production, song, list, part, cue): at
+       the style's 20 px a level, 100 px went before its name, and at
+       1280 wide "TrussC-RGB" read "TrussC-…" (UX-36). 14 px still holds
+       the branch arrow. */
+    m_tree->setIndentation(14);
     m_tree->header()->setStretchLastSection(false);
     m_tree->header()->setSectionResizeMode(QHeaderView::Interactive);
     m_tree->header()->setMinimumSectionSize(24);
@@ -4987,6 +4992,7 @@ QString ShowTreeView::cueTrackingTip(quint32 cueId) const
 void ShowTreeView::measureInfoColumn()
 {
     m_infoNeeds = 0;
+    m_flagsNeeds = 0;
     if (m_tree == nullptr)
         return;
     const QFontMetrics fm = m_tree->fontMetrics();
@@ -4995,6 +5001,9 @@ void ShowTreeView::measureInfoColumn()
         const QString text = (*it)->text(InfoCol);
         if (!text.isEmpty())
             m_infoNeeds = qMax(m_infoNeeds, fm.horizontalAdvance(text) + 12);
+        const QString flags = (*it)->text(FlagsCol);
+        if (!flags.isEmpty())
+            m_flagsNeeds = qMax(m_flagsNeeds, fm.horizontalAdvance(flags) + 12);
     }
 }
 
@@ -5015,8 +5024,10 @@ void ShowTreeView::fitTreeColumns()
             m_tree->header()->hideSection(c);
         else
         {
-            // T holds "⤳ 12" on a carried row (Q222).
-            const int w = (c == FlagsCol) ? 80
+            /* T holds "⤳ 12" on a carried row (Q222). F is as wide as what
+               it says, up to 80 ("skip, no MIB" ends in "…", the tooltip
+               has it all): a fixed 80 cut a layer's name at 1280 (UX-36). */
+            const int w = (c == FlagsCol) ? qBound(24, m_flagsNeeds, 80)
                           : qMax(24, fm.horizontalAdvance(c == TracksCol ? QStringLiteral("⤳ 99")
                                                                          : QStringLiteral("99")) + 12);
             want.insert(c, w);
