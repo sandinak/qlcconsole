@@ -1379,6 +1379,8 @@ void LayoutSanity_Test::aLongBuildBarReplyWrapsAndLeavesTheLine()
     QVERIFY(msg->geometry().top() >= line->geometry().bottom());
     QVERIFY(msg->height() >= 2 * msg->fontMetrics().height());
     QVERIFY2(bar.minimumSizeHint().width() < 700, qPrintable(QString::number(bar.minimumSizeHint().width())));
+}
+
 void LayoutSanity_Test::theStudioEditorsFitALaptop()
 {
     /* One of each, as units_test builds them, in the app's show (its plot
