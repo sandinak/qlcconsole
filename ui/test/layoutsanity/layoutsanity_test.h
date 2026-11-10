@@ -53,6 +53,7 @@ private slots:
     /** The footer at 1024 wide and at the window's own minimum: no two
      *  chips overlap, the stage chip and Unsaved stay (wfaudit W1-30). */
     void theFooterChipsNeverOverlap();
+    void aLongBuildBarReplyWrapsAndLeavesTheLine();
 
     /** The tab strip in Auto mode, in each tool view at 1920 to the window's
      *  minimum: every tab whole (no scroll buttons, no elision), Run in

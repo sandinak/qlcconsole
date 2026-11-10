@@ -123,6 +123,7 @@
 #include "patchlistdialog.h"
 #include "powerdistributiondialog.h"
 #include "programmingmanager.h"
+#include "workbenchcommand.h"
 #include "rgbmatrixeditor.h"
 #include "sceneeditor.h"
 #include "showdifferencesdialog.h"
@@ -794,7 +795,18 @@ QList<Screen> screens()
             });
 
     // Dialogs.
-    list << screen(QStringLiteral("Add Fixture"), [](App *app) -> QWidget * {
+    list << screen(QStringLiteral("Build command bar long reply"), [](App *app) -> QWidget * {
+                /* The bar's answer to a line it cannot run, as long as the
+                   longest the command line gives: it wraps under the line,
+                   it does not widen the window or run off the edge. */
+                BuildCommandBar::Host host;
+                BuildCommandBar *bar = new BuildCommandBar(docOf(app), host);
+                bar->findChild<QLabel *>(QStringLiteral("buildCommandMessage"))->setText(QStringLiteral("Don't know \u201cmake\u201d. Did you mean \u201cmain\u201d? (help main) "
+                                               "Start with a group or a fixture, then what to set: Towers colour "
+                                               "Blue dimmer 45. Type help for every word, with examples."));
+                return bar;
+            })
+         << screen(QStringLiteral("Add Fixture"), [](App *app) -> QWidget * {
                 return new AddFixture(nullptr, docOf(app));
             })
          << screen(QStringLiteral("Add Fixture WLED pixels"), [](App *app) -> QWidget * {
@@ -1165,6 +1177,25 @@ void LayoutSanity_Test::theShowTreeShowsCueNamesWithFreshSettings()
     }
     m_app->resize(1280, 800);
     settle();
+}
+
+void LayoutSanity_Test::aLongBuildBarReplyWrapsAndLeavesTheLine()
+{
+    BuildCommandBar::Host host;
+    BuildCommandBar bar(docOf(m_app), host);
+    QLabel *msg = bar.findChild<QLabel *>(QStringLiteral("buildCommandMessage"));
+    QLineEdit *line = bar.findChild<QLineEdit *>(QStringLiteral("buildCommand"));
+    QVERIFY(msg != nullptr && line != nullptr);
+    msg->setText(QString(QStringLiteral("Don't know this word, but here is a long answer. ")).repeated(6));
+    bar.resize(700, 200);
+    bar.show();
+    settle();
+    // The line keeps most of the bar, the reply sits under it whole, and the
+    // bar's own minimum does not grow with the text.
+    QVERIFY2(line->width() >= 300, qPrintable(QString::number(line->width())));
+    QVERIFY(msg->geometry().top() >= line->geometry().bottom());
+    QVERIFY(msg->height() >= 2 * msg->fontMetrics().height());
+    QVERIFY2(bar.minimumSizeHint().width() < 700, qPrintable(QString::number(bar.minimumSizeHint().width())));
 }
 
 void LayoutSanity_Test::theFooterChipsNeverOverlap()

@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Fixed
+
+- **Screen-walk leftovers.** Add Fixture's model column takes the width the Source column doesn't need, so "Generic RGBW" is no longer cut short; the Build bar's reply wraps under the line instead of widening the window.
+
 ## [0.4.2] - 2026-11-09
 
 ### Added

@@ -212,6 +212,34 @@ void AddFixture_Test::initialNoFixture()
     QCOMPARE(af.m_amountSpin->value(), 1);
 }
 
+void AddFixture_Test::modelColumnShowsWholeNames()
+{
+    // The Source column takes only what it needs; every model name is shown
+    // whole, not cut to "Generic RG…" (screen walk, 0.4.1 RC).
+    AddFixture af(NULL, m_doc);
+    af.resize(af.minimumSizeHint().expandedTo(QSize(640, 480)));
+    af.show();
+    af.m_tree->expandAll();
+    QTest::qWaitForWindowExposed(&af);
+    QApplication::processEvents();
+    const QFontMetrics fm(af.m_tree->font());
+    const int avail = af.m_tree->columnWidth(0) - 2 * af.m_tree->indentation();
+    QVERIFY(af.m_tree->topLevelItemCount() > 0);
+    for (int i = 0; i < af.m_tree->topLevelItemCount(); ++i)
+    {
+        QTreeWidgetItem *top = af.m_tree->topLevelItem(i);
+        for (int c = 0; c < top->childCount(); ++c)
+        {
+            const QString name = top->child(c)->text(0);
+            if (name.size() > 18)
+                continue;           // a long one is the user's to widen the column for
+            QVERIFY2(fm.horizontalAdvance(name) <= avail,
+                     qPrintable(QString("%1 is cut: %2 > %3").arg(name)
+                                .arg(fm.horizontalAdvance(name)).arg(avail)));
+        }
+    }
+}
+
 void AddFixture_Test::initialDimmer()
 {
     Fixture* fxi = new Fixture(m_doc);

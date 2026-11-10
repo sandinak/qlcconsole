@@ -100,7 +100,11 @@ BuildCommandBar::BuildCommandBar(Doc *doc, const Host &host, QWidget *parent)
     h->addWidget(m_syntaxButton);
     m_message = new QLabel(this);
     m_message->setObjectName(QStringLiteral("buildCommandMessage"));
-    h->addWidget(m_message);
+    // A reply can be a sentence or three: it wraps in a row of its own under
+    // the line (never squeezing the line to a sliver or widening the window).
+    m_message->setWordWrap(true);
+    m_message->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
 #ifdef QLC_AI_ASSIST
     // "? question", and a line in plain words: AI Assist's, as in the
     // tree. What it proposes runs as lines of this bar, onto the scene.
@@ -111,6 +115,7 @@ BuildCommandBar::BuildCommandBar(Doc *doc, const Host &host, QWidget *parent)
     m_ai->setLineRunner([this](const QString &command) { return runLine(command); });
 #endif
     v->addLayout(h);
+    v->addWidget(m_message);
     m_syntax = new QLabel(grammar(), this);
     m_syntax->setObjectName(QStringLiteral("buildCommandHint"));
     m_syntax->setWordWrap(true);
