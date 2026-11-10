@@ -50,6 +50,8 @@
 #include <QFileInfo>
 #include <QElapsedTimer>
 #include <QLabel>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QTimer>
 #include <QCheckBox>
 #include <QRegularExpression>
@@ -1497,6 +1499,23 @@ static bool lessonThreeByMouse(Doc *doc, ShowTreeView *view, const QString &shot
     qInfo() << "[L3] aimed AT spot pan/tilt" << panTilt(doc, "SR AT Spot") << panTilt(doc, "SL AT Spot");
     LESSON_STEP(waitUntil([doc]() { return panTilt(doc, "SR AT Spot") != qMakePair(0, 0); }), "the spot didn't move");
     shot(QStringLiteral("rig-solo"));
+    // The preset: the spots turn to the soloist in the dark, in the Pose, so
+    // the audience never sees them swing in lit (Show Review's MOV-08).
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.0")), "select 1.0.0");
+    settle(50);
+    {
+        const QString said = dropGroupOnZone(doc, view, "AT-Spots");
+        LESSON_STEP(said == QStringLiteral("a new layer on AT-Spots in 1.0.0 Pose"), said);
+    }
+    {
+        const QString said = dropPaletteOnRow(doc, view, "AT-Spots", "Out");
+        LESSON_STEP(said.startsWith(QStringLiteral("Out → layer AT-Spots in 1.0.0 Pose")), said);
+    }
+    {
+        const QString said = dropTargetOnRow(doc, view, "AT-Spots", "Soloist DS");
+        LESSON_STEP(said.startsWith(QStringLiteral("Aim at Soloist DS → layer AT-Spots in 1.0.0 Pose")), said);
+    }
+    settle(300);
     qInfo().noquote() << "[L3] solo rows:" << view->cueLayerItems().join(" | ");
     return true;
 }
@@ -1547,6 +1566,15 @@ static bool lessonFourByMouse(Doc *doc, ShowTreeView *view)
             rows << (*it)->text(0) + " / " + (*it)->text(1);
     qInfo().noquote() << "[L4] tree:" << rows.join(" | ");
     return true;
+}
+
+static const CueList *listNamed(Doc *doc, const QString &name)
+{
+    for (const Production &p : doc->showTree()->productions())
+        for (const CueList &l : p.lists)
+            if (l.name == name)
+                return &l;
+    return nullptr;
 }
 
 void CourseShow_Test::buildLessonShows()
@@ -2958,9 +2986,24 @@ bool shoot(const HelpShots::Frame &f, const QString &dir, const QString &name)
    the window's top bar, which holds the tab's header (+ Production, + Cue,
    Undo, the hint) while the Show Tree is the tab on show. The grab is the
    whole window, cropped to those two. */
+/* The page has the editor column's whole height, as a student's window
+   gives it when the notes pane is shut: a saved splitter state of this
+   machine's (notes pane open) must not decide what a picture shows. */
+void fullPage(ShowTreeView *v)
+{
+    if (QSplitter *vs = v->findChild<QSplitter *>(QStringLiteral("stVSplitter")))
+    {
+        QList<int> sizes;
+        for (int i = 0; i < vs->count(); ++i)
+            sizes << (i == 0 ? vs->height() : 0);
+        vs->setSizes(sizes);
+        settle(50);
+    }
+}
 HelpShots::Frame showTreeFrame(App *app, ShowTreeView *v)
 {
     HelpShots::Frame f;
+    fullPage(v);
     f.grab = app;
     QRect r(v->mapTo(app, QPoint(0, 0)), v->size());
     if (app->m_toolbar != nullptr && app->m_toolbar->isVisible())
@@ -2977,6 +3020,8 @@ HelpShots::Frame showTreeFrame(App *app, ShowTreeView *v)
             if (QWidget *zone = v->findChild<QWidget *>(QStringLiteral("stCueDropZone")))
                 if (zone->isVisible())
                     page->ensureWidgetVisible(zone, 0, 8);
+            // Never scrolled sideways: the label column stays on show.
+            page->horizontalScrollBar()->setValue(0);
         }
     return f;
 }
@@ -3516,6 +3561,18 @@ void CourseShow_Test::lessonPictures()
         QVERIFY(open(kL3Finish));
         Doc *dc = m_app->doc();
         ShowTreeView *v = showTree();
+        // These three pictures come before step 12 (the mark): the Pose has
+        // no AT-Spots layer yet, as the student's own show doesn't.
+        {
+            const quint32 pose = cueNumbered(dc, "1.0.0");
+            quint32 mark = 0xFFFFFFFF;
+            for (const Layer &ly : dc->showTree()->cue(pose)->layers)
+                if (dc->showTree()->targetLabel(ly.target) == QLatin1String("AT-Spots"))
+                    mark = ly.id;
+            QVERIFY(mark != 0xFFFFFFFF);
+            QVERIFY(dc->showTree()->removeLayer(pose, mark));
+            settle(100);
+        }
         for (QTreeWidgetItemIterator it(v->tree()); *it; ++it)
             (*it)->setExpanded(true);
         QVERIFY(v->selectNode(cueNumbered(dc, "1.0.1")));
@@ -3539,11 +3596,24 @@ void CourseShow_Test::lessonPictures()
                     solo = *it;
             QVERIFY(solo != nullptr);
             QListWidget *rows = v->cueLayerList();
+            // Taller than the lesson's window: Mode (1) and the layer (2)
+            // are far apart on this page, and both must be on show.
+            const QSize was = m_app->size();
+            m_app->resize(was.width(), was.height() + 160);
+            settle(200);
             HelpShots::Frame f = showTreeFrame(m_app, v);
+            if (QScrollArea *page = qobject_cast<QScrollArea *>(v->m_cuePage))
+            {
+                page->ensureWidgetVisible(stFind<QComboBox>(v, "stCueMode"), 0, 8);
+                page->horizontalScrollBar()->setValue(0);
+            }
+            settle(100);
             f.callouts << mark(stFind<QComboBox>(v, "stCueMode"), 1)
                        << markRect(rows->viewport(), rows->visualItemRect(cueRow(v, "AT-Spots")), m_app, 2)
                        << markRect(v->tree()->viewport(), v->tree()->visualItemRect(solo), m_app, 3);
             QVERIFY(shoot(f, d, "solo-cue"));
+            m_app->resize(was);
+            settle(200);
         }
         QVERIFY(clickCueRow(v, "AT-Spots"));
         settle(100);
@@ -4005,7 +4075,7 @@ static bool lessonTwoOneByMouse(Doc *doc, ShowTreeView *view, const QString &sho
     qInfo().noquote() << "[2.1] chorus next receives:" << nextReceives(view);
     for (const char *n : { "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4" })
         qInfo().noquote() << "[2.1] counts" << n << cueCounts(view, n);
-    LESSON_STEP(cueCounts(view, "1.0.2") == QStringLiteral("S1 T3 R0 M-"), cueCounts(view, "1.0.2"));
+    LESSON_STEP(cueCounts(view, "1.0.2") == QStringLiteral("S1 T4 R0 M-"), cueCounts(view, "1.0.2"));
     LESSON_STEP(cueRow(view, "⤳ StepTops") != nullptr && cueRow(view, "⤳ AT-W-ALL") != nullptr
                 && cueRow(view, "⤳ TrussC-RGB") != nullptr, view->cueLayerItems().join(" | "));
     LESSON_STEP(waitUntil([doc]() { return !dark(doc, "US Step 1 Top SR"); }), "step tops dark in the chorus");
@@ -4024,8 +4094,8 @@ static bool lessonTwoOneByMouse(Doc *doc, ShowTreeView *view, const QString &sho
     settle(100);
     qInfo().noquote() << "[2.1] after Release:" << hintOf(view)->text() << "| verse" << cueCounts(view, "1.0.1")
                       << "| chorus" << cueCounts(view, "1.0.2");
-    LESSON_STEP(cueCounts(view, "1.0.1") == QStringLiteral("S1 T1 R1 M-"), cueCounts(view, "1.0.1"));
-    LESSON_STEP(cueCounts(view, "1.0.2") == QStringLiteral("S1 T2 R0 M-"), cueCounts(view, "1.0.2"));
+    LESSON_STEP(cueCounts(view, "1.0.1") == QStringLiteral("S1 T2 R1 M-"), cueCounts(view, "1.0.1"));
+    LESSON_STEP(cueCounts(view, "1.0.2") == QStringLiteral("S1 T3 R0 M-"), cueCounts(view, "1.0.2"));
     LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.1")), "select 1.0.1");
     settle(50);
     qInfo().noquote() << "[2.1] verse next receives:" << nextReceives(view);
@@ -4063,7 +4133,7 @@ static bool lessonTwoOneByMouse(Doc *doc, ShowTreeView *view, const QString &sho
     settle(100);
     qInfo().noquote() << "[2.1] scream rows" << view->cueLayerItems().join(" | ") << "| counts" << cueCounts(view, "1.0.3");
     LESSON_STEP(cueRow(view, "⤳ StepTops") == nullptr, view->cueLayerItems().join(" | "));
-    LESSON_STEP(cueCounts(view, "1.0.3") == QStringLiteral("S2 T3 R0 M-"), cueCounts(view, "1.0.3"));
+    LESSON_STEP(cueCounts(view, "1.0.3") == QStringLiteral("S2 T4 R0 M-"), cueCounts(view, "1.0.3"));
     LESSON_STEP(waitUntil([doc]() { return dark(doc, "US Step 1 Top SR")
                                            && uchar(sends(doc, "SR Truss Wash 1").at(0)) == 255; }),
                 QString::fromLatin1(sends(doc, "US Step 1 Top SR", 6).toHex(' ')));
@@ -4710,13 +4780,17 @@ static bool lessonTwoFiveByMouse(Doc *doc, ShowTreeView *view, const QString &sh
                       << "| plan" << (view->findChild<QWidget *>("stLinePlan") != nullptr);
     if (!shots.isEmpty())
     {
+        fullPage(view);
         QWidget *strip = view->findChild<QWidget *>(QStringLiteral("stLineStrip"));
         QWidget *plan = view->findChild<QWidget *>(QStringLiteral("stLinePlan"));
         QLabel *spread = stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(KeySpread));
+        // The page at its top-left: Position and Spread's rows, the strip and
+        // the plan all on show, with the label column.
         for (QWidget *w = spread; w != nullptr; w = w->parentWidget())
             if (QScrollArea *area = qobject_cast<QScrollArea *>(w))
             {
-                area->ensureWidgetVisible(plan != nullptr ? plan : spread, 0, 10);
+                area->verticalScrollBar()->setValue(0);
+                area->horizontalScrollBar()->setValue(0);
                 break;
             }
         settle(100);
@@ -4732,6 +4806,29 @@ static bool lessonTwoFiveByMouse(Doc *doc, ShowTreeView *view, const QString &sh
     const int wheelWhite = channelValue(doc, "SR Truss Spot 1", "Color wheel");
     LESSON_STEP(view->selectNode(fan), "select the fan");
     rig(QStringLiteral("rig-fan"));
+
+    // The preset: the spots turn to the line in the dark, in the cue before
+    // the Fan (a Block cue starts from nothing, so the Pose can't carry it).
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.6")), "select 1.0.6");
+    settle(50);
+    {
+        const QString said = dropGroupOnZone(doc, view, "Truss-Spots");
+        LESSON_STEP(said == QStringLiteral("a new layer on Truss-Spots in 1.0.6 Dance Break"), said);
+    }
+    {
+        const QString said = dropPaletteOnRow(doc, view, "Truss-Spots", "Out");
+        LESSON_STEP(said.startsWith(QStringLiteral("Out → layer Truss-Spots in 1.0.6 Dance Break")), said);
+    }
+    {
+        const QString said = dropTargetOnRow(doc, view, "Truss-Spots", "Riser Line");
+        LESSON_STEP(said.startsWith(QStringLiteral("Aim at Riser Line → layer Truss-Spots in 1.0.6 Dance Break")), said);
+    }
+    settle(300);
+    if (QToolButton *back = view->findChild<QToolButton *>(QStringLiteral("lookBack")))
+        if (back->isVisible())
+            back->click();
+    LESSON_STEP(view->selectNode(fan), "select the fan again");
+    settle(50);
 
     // 1.0.8 Button: crossed and red, a 1 s fade.
     LESSON_STEP(newCueNamed(view, "Button"), "new cue Button");
@@ -5635,14 +5732,6 @@ void CourseShow_Test::buildLevelTwoShows()
    Show files lesson-3-N-start / -finish: 3.5 starts from Lesson 2.7's finish,
    3.8 from 3.5's finish, 3.9 from 3.8's finish with three faults put in. */
 
-static const CueList *listNamed(Doc *doc, const QString &name)
-{
-    for (const Production &p : doc->showTree()->productions())
-        for (const CueList &l : p.lists)
-            if (l.name == name)
-                return &l;
-    return nullptr;
-}
 
 /* What Level 3's lessons set: timecode, numbering, sections, masters, override hits. */
 static QStringList describeControl(Doc *doc)
@@ -6305,15 +6394,25 @@ void CourseShow_Test::levelTwoPictures()
             f.callouts << c << markRect(rows->viewport(), grey, m_app, 2);
             QVERIFY(shoot(f, d, "chorus-tracking"));
             // Scrolled down: Tracked in and Next cue receives.
+            // A wider window, so the page holds the whole value.
+            const QSize was = m_app->size();
+            m_app->resize(was.width() + 260, was.height());
+            layOutForShot(v);
+            settle(200);
             if (QScrollArea *page = qobject_cast<QScrollArea *>(v->m_cuePage))
+            {
                 page->ensureWidgetVisible(v->m_cueNext, 0, 8);
+                page->horizontalScrollBar()->setValue(0);
+            }
             settle(100);
             HelpShots::Frame g;
             g.grab = m_app;
             QRect r(v->mapTo(m_app, QPoint(0, 0)), v->size());
             g.crop = r;
-            g.callouts << mark(v->m_cueTracked, 1) << mark(v->m_cueNext, 2);
+            g.callouts << mark(v->m_cueTracked, 1, HelpShots::Above) << mark(v->m_cueNext, 2, HelpShots::Above);
             QVERIFY(shoot(g, d, "chorus-receives"));
+            m_app->resize(was);
+            settle(200);
             dc->resetModified();
         }
         QVERIFY(open(levelTwoStart(1)));
@@ -6346,7 +6445,10 @@ void CourseShow_Test::levelTwoPictures()
             HelpShots::Frame f = showTreeFrame(m_app, v);
             // The Mode box is near the top of the page: scrolled back to it.
             if (QScrollArea *page = qobject_cast<QScrollArea *>(v->m_cuePage))
+            {
                 page->ensureWidgetVisible(stFind<QComboBox>(v, "stCueMode"), 0, 60);
+                page->horizontalScrollBar()->setValue(0);
+            }
             settle(100);
             f.callouts << mark(stFind<QComboBox>(v, "stCueMode"), 1) << countsOf(v, flash, m_app, 2);
             QVERIFY(shoot(f, d, "flash-cue"));

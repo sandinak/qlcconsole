@@ -54,8 +54,12 @@ A snap or a quick sweep for the button? Why?
 
    ![The line on the layer's page](../../images/lesson-2-5/line-layer.png)
 
-7. Click **1.0.7 Fan**, **+ Cue**, type `Button`, **Return**.
-8. Click the grey **Truss-Spots** row; **Spread ⋯ → −5**: the beams cross.
+7. The Fan is a Block cue, so the spots would swing onto the line lit.
+   Mark them in the cue before it: click **1.0.6 Dance Break**, drag
+   **Truss-Spots** onto the dashed box, then **Out** and **Riser Line**
+   onto the **Truss-Spots** row.
+8. Click **1.0.7 Fan**, **+ Cue**, type `Button`, **Return**.
+9. Click the grey **Truss-Spots** row; **Spread ⋯ → −5**: the beams cross.
    In the plan view (from above, downstage at the bottom) each beam is a
    line from where its light hangs to its point on the line, so a cross
    shows as lines that cross. Read the caption under it. With Grouping set,
@@ -64,8 +68,8 @@ A snap or a quick sweep for the button? Why?
    with Spread below 0; at +5 or 0 the plan says so.
 
    ![The plan at Spread −5: the beams cross](../../images/lesson-2-5/line-cross.png)
-9. Click **1.0.8 Button**; drag **Red** onto the **Truss-Spots** row.
-10. Type `1` in **Fade in**, **Return**.
+10. Click **1.0.8 Button**; drag **Red** onto the **Truss-Spots** row.
+11. Type `1` in **Fade in**, **Return**.
 
     ![The button](../../images/lesson-2-5/rig-button.png)
 

@@ -14,7 +14,7 @@ Name: ______________________
 
    ____________________________________________________________
 
-2. After the release, the chorus row reads **S 1, T 2**. What do the two
+2. After the release, the chorus row reads **S 1, T 3**. What do the two
    numbers count, and which layers are they?
 
    ____________________________________________________________

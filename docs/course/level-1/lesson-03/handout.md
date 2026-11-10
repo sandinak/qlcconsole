@@ -39,6 +39,7 @@ one singer out of the choir
 | **Spot** | A narrow, hard-edged light for one performer, like our two **AT-Spots**. |
 | **Shutter** | A spot's built-in shutter blocks the beam. While it's closed, no light comes out, however high the level. Ours opens by itself when the spot is given a level. |
 | **Block cue** | A cue that starts from a dark stage, with nothing tracking into it: only what you put in it is on. |
+| **Mark (preset)** | Turning a moving light to its place in a cue where it is dark, so the audience never sees it swing in. |
 
 ## Part 1 — Design it (on paper, everyone)
 
@@ -138,9 +139,20 @@ Switch roles after each part.
    opens by itself; a **Shutter** palette on this row would set it
    instead.
 
+### Mark the spots
+
+12. A moving light that opens before it has turned swings across the
+    stage in front of the audience. A crew turns it in the dark first:
+    a **mark**. Click **1.0.0 Pose**. Drag **AT-Spots** onto the dashed
+    box, then **Out** (a level of zero), then **Soloist DS** (All →
+    Targets), each onto the **AT-Spots** row.
+    - *You should see:* an **AT-Spots** layer in the Pose, aimed and
+      dark. The aim tracks through the Scream, so the heads are
+      already on the singer; the Solo sets its own aim and opens them.
+
 ### Save
 
-12. Save with **File → Save As** → `Lesson1-3-yourname.qlcc` in
+13. Save with **File → Save As** → `Lesson1-3-yourname.qlcc` in
     **Documents → qlcconsole**.
 
 ## Stuck?
@@ -151,6 +163,7 @@ Switch roles after each part.
 | The Solo still shows the red scream | Set its **Mode** to **Block**. |
 | The spots are dark at Full | Check that **Settings → Advanced → Auto-open shutters** is on. |
 | The spots light the floor by the towers | They need a position: drop **Soloist DS** on their row. |
+| The spots swing in when the Solo plays | Mark them: step 12, in the Pose. |
 | The spots are hard to see | In the Rig Overview, set **Room** to **Dim**. |
 | Something else went wrong | Undo (⌘Z) one step at a time. |
 

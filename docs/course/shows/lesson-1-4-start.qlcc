@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Workspace>
-<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="ShowTreeView">
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="ShowTreeView" View="qlcconsole">
  <Creator>
   <Name>qlcconsole</Name>
-  <Version>4.14.2+qlcconsole.1817</Version>
+  <Version>4.14.4+qlcconsole.3347</Version>
   <Author>branson</Author>
  </Creator>
  <Embedded>
@@ -2405,6 +2405,7 @@
  <Engine>
   <InputOutputMap>
    <BeatGenerator BeatType="Disabled" BPM="0"/>
+   <NetworkServer Type="Native" AutoStart="False" Name="" Password=""/>
    <Universe Name="Spots, washes, beams, lanterns" ID="0"/>
    <Universe Name="Truss pixel boxes 1" ID="1"/>
    <Universe Name="Truss pixel boxes 2" ID="2"/>
@@ -7509,11 +7510,12 @@
    <Step Number="0" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.0">1</Step>
    <Step Number="1" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.1">4</Step>
    <Step Number="2" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.2">7</Step>
-   <Step Number="3" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.3">6</Step>
-   <Step Number="4" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.4">13</Step>
+   <Step Number="3" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.3">11</Step>
+   <Step Number="4" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.0.4">8</Step>
   </Function>
   <Function ID="1" Type="Collection" Name="1.0.0-Pose" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Step Number="0">3</Step>
+   <Step Number="1">18</Step>
   </Function>
   <Function ID="3" Type="Scene" Name="1.0.0-Pose · TrussC-RGB" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
@@ -7523,28 +7525,26 @@
   </Function>
   <Function ID="4" Type="Collection" Name="1.0.1-Verse" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Step Number="0">3</Step>
-   <Step Number="1">5</Step>
+   <Step Number="1">18</Step>
    <Step Number="2">10</Step>
+   <Step Number="3">6</Step>
   </Function>
-  <Function ID="5" Type="Scene" Name="1.0.1-Verse · StepTops" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="6" Type="Scene" Name="1.0.1-Verse · AT-W-ALL" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
-   <FixtureGroup ID="4"/>
-   <Palette ID="8"/>
-   <Palette ID="20"/>
-  </Function>
-  <Function ID="6" Type="Collection" Name="1.0.3-Scream" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Step Number="0">3</Step>
-   <Step Number="1">5</Step>
-   <Step Number="2">10</Step>
-   <Step Number="3">9</Step>
-   <Step Number="4">11</Step>
-   <Step Number="5">12</Step>
+   <FixtureGroup ID="15"/>
+   <Palette ID="1"/>
+   <Palette ID="10"/>
+   <Palette ID="18"/>
   </Function>
   <Function ID="7" Type="Collection" Name="1.0.2-Chorus" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Step Number="0">3</Step>
-   <Step Number="1">5</Step>
+   <Step Number="1">18</Step>
    <Step Number="2">10</Step>
-   <Step Number="3">9</Step>
+   <Step Number="3">6</Step>
+   <Step Number="4">9</Step>
+  </Function>
+  <Function ID="8" Type="Collection" Name="1.0.4-Solo" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Step Number="0">16</Step>
   </Function>
   <Function ID="9" Type="Scene" Name="1.0.2-Chorus · Steps" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
@@ -7552,33 +7552,44 @@
    <Palette ID="9"/>
    <Palette ID="10"/>
   </Function>
-  <Function ID="10" Type="Scene" Name="1.0.1-Verse · AT-W-ALL" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="10" Type="Scene" Name="1.0.1-Verse · StepTops" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
-   <FixtureGroup ID="15"/>
-   <Palette ID="1"/>
-   <Palette ID="10"/>
-   <Palette ID="18"/>
+   <FixtureGroup ID="4"/>
+   <Palette ID="8"/>
+   <Palette ID="20"/>
   </Function>
-  <Function ID="11" Type="Scene" Name="1.0.3-Scream · TrussW-RGB" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="11" Type="Collection" Name="1.0.3-Scream" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Step Number="0">3</Step>
+   <Step Number="1">18</Step>
+   <Step Number="2">10</Step>
+   <Step Number="3">6</Step>
+   <Step Number="4">9</Step>
+   <Step Number="5">14</Step>
+   <Step Number="6">15</Step>
+  </Function>
+  <Function ID="14" Type="Scene" Name="1.0.3-Scream · TrussW-RGB" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="9"/>
    <Palette ID="2"/>
    <Palette ID="10"/>
   </Function>
-  <Function ID="12" Type="Scene" Name="1.0.3-Scream · Lanterns" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="15" Type="Scene" Name="1.0.3-Scream · Lanterns" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="16"/>
    <Palette ID="2"/>
    <Palette ID="10"/>
   </Function>
-  <Function ID="13" Type="Collection" Name="1.0.4-Solo" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
-   <Step Number="0">17</Step>
-  </Function>
-  <Function ID="17" Type="Scene" Name="1.0.4-Solo · AT-Spots" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+  <Function ID="16" Type="Scene" Name="1.0.4-Solo · AT-Spots" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="14"/>
    <Palette ID="0"/>
    <Palette ID="10"/>
+   <Palette ID="17"/>
+  </Function>
+  <Function ID="18" Type="Scene" Name="1.0.0-Pose · AT-Spots" Hidden="True" Path="Productions/Spring Show/01-Everybody Scream">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="14"/>
+   <Palette ID="15"/>
    <Palette ID="17"/>
   </Function>
   <SpeedMasters>
@@ -7587,14 +7598,19 @@
    <Master Index="2" Mode="Own" BPM="120"/>
    <Master Index="3" Mode="Own" BPM="120"/>
   </SpeedMasters>
+  <ShutterAutoOpen Enabled="1"/>
   <ShowControl MainCueList="0"/>
-  <ShowTree NextId="15" Current="1">
+  <ShowTree NextId="16" Current="1">
    <Production ID="1" Name="Spring Show">
     <CueList ID="2" Name="01-Everybody Scream" Mode="Tracking" Chaser="0">
      <Cue ID="3" Number="1.0.0" Name="Pose" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="1">
       <Layer ID="4" Groups="11">
        <Look Key="Colour" Palettes="7"/>
        <Look Key="Dimmer" Palettes="10"/>
+      </Layer>
+      <Layer ID="15" Groups="14">
+       <Look Key="Dimmer" Palettes="15"/>
+       <Look Key="Position" Palettes="17"/>
       </Layer>
      </Cue>
      <Cue ID="5" Number="1.0.1" Name="Verse" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="4">
@@ -7614,13 +7630,13 @@
        <Look Key="Dimmer" Palettes="10"/>
       </Layer>
      </Cue>
-     <Cue ID="9" Number="1.0.3" Name="Scream" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="6">
+     <Cue ID="9" Number="1.0.3" Name="Scream" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="11">
       <Look Key="Colour" Palettes="2"/>
       <Look Key="Dimmer" Palettes="10"/>
       <Layer ID="10" Groups="9"/>
       <Layer ID="11" Groups="16"/>
      </Cue>
-     <Cue ID="13" Number="1.0.4" Name="Solo" Mode="Block" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="13">
+     <Cue ID="13" Number="1.0.4" Name="Solo" Mode="Block" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="8">
       <Layer ID="14" Groups="14">
        <Look Key="Colour" Palettes="0"/>
        <Look Key="Dimmer" Palettes="10"/>
@@ -7629,11 +7645,11 @@
      </Cue>
     </CueList>
    </Production>
-   <Generated Scenes="3,5,9,10,11,12,17" Collections="1,4,6,7,13" Chasers="0"/>
+   <Generated Scenes="3,6,9,10,14,15,16,18" Collections="1,4,7,8,11" Chasers="0"/>
    <InlinePalettes IDs=""/>
   </ShowTree>
   <MoveInBlack Auto="0" DarkGapMs="800"/>
-  <Monitor DisplayMode="1" ShowLabels="0" SnapDivisions="1" AimSubjectHeight="1.62458">
+  <Monitor DisplayMode="1" ShowLabels="0" SnapDivisions="1" AimSubjectHeight="1.62458" ItemLocks="1">
    <Font>.AppleSystemUIFont,13,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0</Font>
    <ChannelStyle>0</ChannelStyle>
    <ValueStyle>0</ValueStyle>
@@ -7642,7 +7658,7 @@
    <FxItem ID="4" XPos="251.3" YPos="8336.7" ZPos="2.6825" LayerId="7" GroupId="3"/>
    <FxItem ID="5" XPos="1325.8" YPos="4957.7" LayerId="3" GroupId="4"/>
    <FxItem ID="6" XPos="2544.8" YPos="4957.7" LayerId="3" GroupId="4"/>
-   <FxItem ID="7" XPos="3502.2" YPos="3682.15" ZPos="2.535" FixedZoom="1091074785" LayerId="8" GroupId="2"/>
+   <FxItem ID="7" XPos="3502.2" YPos="3682.15" ZPos="2.535" LayerId="8" GroupId="2"/>
    <FxItem ID="9" XPos="3173.69" YPos="3678.75" LayerId="2"/>
    <FxItem ID="10" XPos="1370.3" YPos="5079.7" LayerId="3" GroupId="4"/>
    <FxItem ID="18" XPos="4269.75" YPos="3676.55" LayerId="2"/>
@@ -7687,20 +7703,20 @@
    <FxItem ID="128" XPos="8670.3" YPos="7511.7" LayerId="3" GroupId="16"/>
    <FxItem ID="142" XPos="11654.3" YPos="8363.7" LayerId="7" GroupId="19"/>
    <FxItem ID="143" XPos="0" YPos="0" LayerId="4"/>
-   <FxItem ID="176" XPos="11653.3" YPos="8458.2" ZPos="0.45" FixedZoom="1863023940" LayerId="7" GroupId="19"/>
-   <FxItem ID="177" XPos="11659.3" YPos="8458.2" FixedZoom="1863023940" LayerId="7" GroupId="19"/>
-   <FxItem ID="179" XPos="249.3" YPos="8431.2" FixedZoom="1863023940" LayerId="7" GroupId="3"/>
-   <FxItem ID="180" XPos="257.168" YPos="8431.95" FixedZoom="1863023940" LayerId="7" GroupId="3"/>
-   <FxItem ID="190" XPos="6184" YPos="3626" ZPos="2.90321" FixedZoom="1803753892" LayerId="8" GroupId="5"/>
-   <FxItem ID="192" XPos="8723" YPos="3641" ZPos="2.96976" FixedZoom="1803753892" LayerId="8" GroupId="17"/>
-   <FxItem ID="194" XPos="11902.2" YPos="3643.88" ZPos="2.88324" FixedZoom="1842436612" LayerId="8" GroupId="18"/>
-   <FxItem ID="196" XPos="4761.51" YPos="3464.29" FixedZoom="1799711012" LayerId="8" GroupId="5"/>
-   <FxItem ID="197" XPos="7278.51" YPos="3640.06" ZPos="1.524" FixedZoom="1799711012" LayerId="8" GroupId="17"/>
-   <FxItem ID="198" XPos="10485.1" YPos="3480.82" FixedZoom="1799711492" LayerId="8" GroupId="18"/>
-   <FxItem ID="199" XPos="3505.2" YPos="3340.15" ZPos="1.524" FixedZoom="1794943268" LayerId="8" GroupId="2"/>
-   <FxItem ID="200" XPos="4755" YPos="3463" ZPos="1.524" FixedZoom="1794943268" LayerId="8" GroupId="5"/>
-   <FxItem ID="201" XPos="7286.51" YPos="3477.06" ZPos="1.524" FixedZoom="1794943268" LayerId="8" GroupId="17"/>
-   <FxItem ID="202" XPos="10485" YPos="3481" ZPos="1.524" FixedZoom="1794943268" LayerId="8" GroupId="18"/>
+   <FxItem ID="176" XPos="11653.3" YPos="8458.2" ZPos="0.45" LayerId="7" GroupId="19"/>
+   <FxItem ID="177" XPos="11659.3" YPos="8458.2" LayerId="7" GroupId="19"/>
+   <FxItem ID="179" XPos="249.3" YPos="8431.2" LayerId="7" GroupId="3"/>
+   <FxItem ID="180" XPos="257.168" YPos="8431.95" LayerId="7" GroupId="3"/>
+   <FxItem ID="190" XPos="6184" YPos="3626" ZPos="2.90321" LayerId="8" GroupId="5"/>
+   <FxItem ID="192" XPos="8723" YPos="3641" ZPos="2.96976" LayerId="8" GroupId="17"/>
+   <FxItem ID="194" XPos="11902.2" YPos="3643.88" ZPos="2.88324" LayerId="8" GroupId="18"/>
+   <FxItem ID="196" XPos="4761.51" YPos="3464.29" LayerId="8" GroupId="5"/>
+   <FxItem ID="197" XPos="7278.51" YPos="3640.06" ZPos="1.524" LayerId="8" GroupId="17"/>
+   <FxItem ID="198" XPos="10485.1" YPos="3480.82" LayerId="8" GroupId="18"/>
+   <FxItem ID="199" XPos="3505.2" YPos="3340.15" ZPos="1.524" LayerId="8" GroupId="2"/>
+   <FxItem ID="200" XPos="4755" YPos="3463" ZPos="1.524" LayerId="8" GroupId="5"/>
+   <FxItem ID="201" XPos="7286.51" YPos="3477.06" ZPos="1.524" LayerId="8" GroupId="17"/>
+   <FxItem ID="202" XPos="10485" YPos="3481" ZPos="1.524" LayerId="8" GroupId="18"/>
    <FxItem ID="203" XPos="3759.2" YPos="3149.6" LayerId="7" GroupId="20"/>
    <FxItem ID="204" XPos="0" YPos="0" LayerId="8" GroupId="17"/>
    <FxItem ID="205" XPos="0" YPos="0" LayerId="4"/>
@@ -7746,18 +7762,18 @@
    <Truss ID="5" Name="SR Truss 2 Top Bar" Type="Horizontal" Profile="Square" Length="1.000" Width="0.049" OriginX="7.115" OriginY="3.626" OriginZ="3.014" DirX="-1.000000" DirY="0.000000" LayerId="8" GroupId="5" ParentTruss="2" ParentOffset="3.014" BarFace="2" BarStandoff="0.000" BarRun="1" BarCross="-0.013"/>
    <Truss ID="6" Name="SL Truss 2 Top Bar" Type="Horizontal" Profile="Square" Length="1.000" Width="0.049" OriginX="9.635" OriginY="3.641" OriginZ="2.996" DirX="-1.000000" DirY="0.000000" LayerId="8" GroupId="17" ParentTruss="3" ParentOffset="2.996" BarFace="2" BarStandoff="0.000" BarRun="1"/>
    <Truss ID="7" Name="SL Truss 1 Top Bar" Type="Horizontal" Profile="Square" Length="1.000" Width="0.049" OriginX="12.818" OriginY="3.644" OriginZ="3.008" DirX="-1.000000" DirY="0.000000" LayerId="8" GroupId="18" ParentTruss="4" ParentOffset="3.008" BarFace="2" BarStandoff="0.000" BarRun="1" BarCross="0.014"/>
-   <StagePlatform ID="0" Name="US Riser 1" OriginX="3.047" OriginY="3.624" Width="2.438" Depth="1.219" Height="0.610" Color="#26262b" Locked="true" GroupId="1"/>
-   <StagePlatform ID="1" Name="US Riser 2" OriginX="5.485" OriginY="3.624" Width="2.438" Depth="1.219" Height="0.610" Color="#26262b" Locked="true" GroupId="1"/>
-   <StagePlatform ID="2" Name="US Riser 3" OriginX="7.923" OriginY="3.624" Width="2.438" Depth="1.219" Height="0.610" Color="#26262b" Locked="true" GroupId="1"/>
-   <StagePlatform ID="3" Name="US Riser 4" OriginX="10.362" OriginY="3.624" Width="2.438" Depth="1.219" Height="0.610" Color="#26262b" Locked="true" GroupId="1"/>
-   <StagePlatform ID="4" Name="CS Riser 1" OriginX="3.047" OriginY="4.843" Width="2.438" Depth="1.219" Height="0.396" Color="#26262b" Locked="true" GroupId="1"/>
-   <StagePlatform ID="5" Name="CS Riser 2" OriginX="5.485" OriginY="4.843" Width="2.438" Depth="1.219" Height="0.396" Color="#26262b" Locked="true" GroupId="1"/>
-   <StagePlatform ID="6" Name="CS Riser 3" OriginX="7.923" OriginY="4.843" Width="2.438" Depth="1.219" Height="0.396" Color="#26262b" Locked="true" GroupId="1"/>
-   <StagePlatform ID="7" Name="CS Riser 4" OriginX="10.362" OriginY="4.843" Width="2.438" Depth="1.219" Height="0.396" Color="#26262b" Locked="true" GroupId="1"/>
-   <StagePlatform ID="8" Name="DS Riser 1" OriginX="3.037" OriginY="6.070" Width="2.438" Depth="1.219" Height="0.183" Color="#26262b" Locked="true" GroupId="1"/>
-   <StagePlatform ID="9" Name="DS Riser 2" OriginX="5.485" OriginY="6.061" Width="2.438" Depth="1.219" Height="0.183" Color="#26262b" Locked="true" GroupId="1"/>
-   <StagePlatform ID="10" Name="DS Riser 3" OriginX="7.923" OriginY="6.061" Width="2.438" Depth="1.219" Height="0.183" Color="#26262b" Locked="true" GroupId="1"/>
-   <StagePlatform ID="11" Name="DS Riser 4" OriginX="10.371" OriginY="6.052" Width="2.438" Depth="1.219" Height="0.183" Color="#26262b" Locked="true" GroupId="1"/>
+   <StagePlatform ID="0" Name="US Riser 1" OriginX="3.047" OriginY="3.624" Width="2.438" Depth="1.219" Height="0.610" Color="#26262b" GroupId="1"/>
+   <StagePlatform ID="1" Name="US Riser 2" OriginX="5.485" OriginY="3.624" Width="2.438" Depth="1.219" Height="0.610" Color="#26262b" GroupId="1"/>
+   <StagePlatform ID="2" Name="US Riser 3" OriginX="7.923" OriginY="3.624" Width="2.438" Depth="1.219" Height="0.610" Color="#26262b" GroupId="1"/>
+   <StagePlatform ID="3" Name="US Riser 4" OriginX="10.362" OriginY="3.624" Width="2.438" Depth="1.219" Height="0.610" Color="#26262b" GroupId="1"/>
+   <StagePlatform ID="4" Name="CS Riser 1" OriginX="3.047" OriginY="4.843" Width="2.438" Depth="1.219" Height="0.396" Color="#26262b" GroupId="1"/>
+   <StagePlatform ID="5" Name="CS Riser 2" OriginX="5.485" OriginY="4.843" Width="2.438" Depth="1.219" Height="0.396" Color="#26262b" GroupId="1"/>
+   <StagePlatform ID="6" Name="CS Riser 3" OriginX="7.923" OriginY="4.843" Width="2.438" Depth="1.219" Height="0.396" Color="#26262b" GroupId="1"/>
+   <StagePlatform ID="7" Name="CS Riser 4" OriginX="10.362" OriginY="4.843" Width="2.438" Depth="1.219" Height="0.396" Color="#26262b" GroupId="1"/>
+   <StagePlatform ID="8" Name="DS Riser 1" OriginX="3.037" OriginY="6.070" Width="2.438" Depth="1.219" Height="0.183" Color="#26262b" GroupId="1"/>
+   <StagePlatform ID="9" Name="DS Riser 2" OriginX="5.485" OriginY="6.061" Width="2.438" Depth="1.219" Height="0.183" Color="#26262b" GroupId="1"/>
+   <StagePlatform ID="10" Name="DS Riser 3" OriginX="7.923" OriginY="6.061" Width="2.438" Depth="1.219" Height="0.183" Color="#26262b" GroupId="1"/>
+   <StagePlatform ID="11" Name="DS Riser 4" OriginX="10.371" OriginY="6.052" Width="2.438" Depth="1.219" Height="0.183" Color="#26262b" GroupId="1"/>
    <StagePlatform ID="12" Name="US Riser 1 Front" OriginX="3.065" OriginY="4.906" Width="2.438" Depth="0.204" Height="0.204" TopMaterial="1" Color="#1c1c20" Stackable="true" LayerId="3" GroupId="4"/>
    <StagePlatform ID="13" Name="US Riser 2 Front" OriginX="5.492" OriginY="4.897" Width="2.438" Depth="0.204" Height="0.204" TopMaterial="1" Color="#1c1c20" Stackable="true" LayerId="3" GroupId="6"/>
    <StagePlatform ID="14" Name="US Riser 3 Front" OriginX="7.921" OriginY="4.897" Width="2.438" Depth="0.204" Height="0.204" TopMaterial="1" Color="#1c1c20" Stackable="true" LayerId="3" GroupId="7"/>
@@ -7770,6 +7786,12 @@
    <StagePlatform ID="21" Name="DS Riser 2 Front" OriginX="5.492" OriginY="7.338" Width="2.438" Depth="0.204" Height="0.204" TopMaterial="1" Color="#1c1c20" Stackable="true" LayerId="3" GroupId="14"/>
    <StagePlatform ID="22" Name="DS Riser 3 Front" OriginX="7.913" OriginY="7.354" Width="2.438" Depth="0.204" Height="0.204" TopMaterial="1" Color="#1c1c20" Stackable="true" LayerId="3" GroupId="15"/>
    <StagePlatform ID="23" Name="DS Riser 4 Front" OriginX="10.365" OriginY="7.338" Width="2.438" Depth="0.204" Height="0.204" TopMaterial="1" Color="#1c1c20" Stackable="true" LayerId="3" GroupId="16"/>
+   <StagePieces Layer="1">
+    <StagePiece Kind="Centre" Visible="0" Mark="1" Line="0"/>
+    <StagePiece Kind="Curtain" Visible="0"/>
+    <StagePiece Kind="Number" Visible="0"/>
+    <StagePiece Kind="Apron" Visible="0" Auto="1"/>
+   </StagePieces>
    <Tower ID="0" Name="AT2 (SL audience tower)" OriginX="14.198" OriginY="8.508" Width="0.405" Depth="0.405" Height="2.438" Color="#7088c0" LayerId="7" GroupId="19" Faces="1" FacesColour="#18181a" FacesFrom="0.000">
     <Shelf Z="0.600"/>
     <Shelf Z="1.000"/>
@@ -7790,8 +7812,8 @@
    <Hanger ID="5" Name="Hanger 6" Parent="truss" ParentId="4" Along="2.512" Angle="270.0" Arm="0.299" Drop="0.061" LayerId="8"/>
    <Hanger ID="6" Name="Hanger 7" Parent="tower" ParentId="0" Along="1.829" Angle="270.0" Arm="0.299" Drop="0.061" LayerId="7"/>
    <Scenery ID="0" Name="Cyc" Kind="0" OriginX="7.968" OriginY="1.237" Width="11.192" Height="6.002" Color="#e2e4ec" LayerId="7"/>
-   <Scenery ID="1" Name="Main drape" Kind="2" OriginX="7.888" OriginY="7.891" Width="16.764" Height="6.002" State="Open" OpeningWidth="12.192" Color="#761622" Locked="true" LayerId="9"/>
-   <Scenery ID="2" Name="Proscenium" Kind="8" OriginX="7.816" OriginY="8.086" Width="17.239" Height="7.001" Thickness="0.399" OpeningWidth="14.740" OpeningHeight="5.499" Color="#2e2c32" Locked="true" LayerId="9"/>
+   <Scenery ID="1" Name="Main drape" Kind="2" OriginX="7.888" OriginY="7.891" Width="16.764" Height="6.002" State="Open" OpeningWidth="12.192" Color="#761622" LayerId="9"/>
+   <Scenery ID="2" Name="Proscenium" Kind="8" OriginX="7.816" OriginY="8.086" Width="17.239" Height="7.001" Thickness="0.399" OpeningWidth="14.740" OpeningHeight="5.499" Color="#2e2c32" LayerId="9"/>
    <StageTarget ID="0" Name="Soloist DS" X="7.920" Y="7.600" Z="0.000" Color="#ffb400" LayerId="6" Kind="person" PersonHeight="1.650"/>
    <StageTarget ID="1" Name="Center" X="7.920" Y="5.450" Z="0.396" Color="#ffb400" LayerId="6" Kind="person" PersonHeight="1.650"/>
    <StageTarget ID="2" Name="Riser Line" X="7.920" Y="5.450" Z="0.396" Color="#3cb4ff" LayerId="6" Kind="line">

@@ -83,7 +83,7 @@ are how a designer says *not this one*.
 On the projector:
 
 1. Click **1.0.2 Chorus**. Point at the grey rows under it and the
-   **S 1 / T 3** on its row; hover the **T** header to show its name.
+   **S 1 / T 4** on its row; hover the **T** header to show its name.
    Scroll the page down to **Tracked in** and **Next cue receives**.
 2. Click **1.0.1 Verse** → its **StepTops** row → tick **Release**. Read
    the top bar aloud: *"Changed: 1.0.2 Chorus, 1.0.3 Scream"*. Click the
@@ -108,8 +108,8 @@ On the projector:
 
 ## 4. Check for understanding (while circulating)
 
-- "What does T 2 on the chorus mean?" (*Two layers track into it: the cyc
-  from the Pose and the front light from the verse.*)
+- "What does T 3 on the chorus mean?" (*Three layers track into it: the cyc
+  and the spots from the Pose, and the front light from the verse.*)
 - "Where does a released layer go?" (*Back to the base cue, or dark if
   the base cue doesn't light it.*)
 - "Why not make the Flash a Block cue?" (*Block starts from nothing: the
@@ -142,8 +142,8 @@ and modes.
 - **Exit ticket:** 1 — everything that tracks in: layers set by earlier
   cues that no cue since has changed or released (unless the cue is a
   Block cue). 2 — **S** counts the layers the chorus sets itself (1: the
-  Steps); **T** the layers tracking in (2: TrussC-RGB from the Pose and
-  AT-W-ALL from the verse). 3 — the step tops leave when the verse ends,
+  Steps); **T** the layers tracking in (3: TrussC-RGB and AT-Spots from the Pose,
+  and AT-W-ALL from the verse). 3 — the step tops leave when the verse ends,
   so they're dark in the chorus; the lavender is the verse's colour and
   muddied the chorus's magenta (one look per idea). 4 — (a) Block: the
   solo starts from a dark stage, a hard start, so the eye goes to the

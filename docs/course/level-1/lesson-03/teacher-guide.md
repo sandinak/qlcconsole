@@ -48,7 +48,7 @@ cue**. Each is in the handout's word table and the
 |---|---|---|
 | 0–10 | **Design idea** (no computers) | A torch on a face: four directions |
 | 10–20 | **Teacher demo** (projector) | Front light on the verse; Aim Center |
-| 20–40 | **Hands-on** (pairs/triads, roles) | Handout Part 2, steps 1–12 |
+| 20–40 | **Hands-on** (pairs/triads, roles) | Handout Part 2, steps 1–13 |
 | 40–45 | **Check / share** | Two groups show their solo |
 | 45–50 | **Exit ticket** | On paper |
 
@@ -106,6 +106,7 @@ On the projector:
 | The Solo has all the earlier lights in it | Mode isn't **Block** | "Set **Mode** to **Block** on the Solo's page." |
 | Two pools of light on the floor by the towers | Expected: no position yet | "Where are they pointing? Give them a place to aim at." |
 | Hard to see the spots | Busy stage, or Room is bright | "Set **Room** to **Dim** in the Rig Overview." |
+| The spots swing in when the Solo plays | No mark (step 12) | "Aim them in the Pose, at level **Out**: they turn in the dark and wait." |
 
 ## 4. Check for understanding (while circulating)
 
@@ -141,6 +142,10 @@ a solo on paper.
   itself when the light is given a level (auto-open, on by default); a
   Shutter palette on the layer would set it instead. 4 — Block: the cue starts from a dark stage, with
   only its own layers, so the eye goes to the soloist.
+- **The mark (step 12):** a mover that opens before it has turned is seen
+  swinging in. The Pose aims the spots at level **Out**; the aim tracks
+  through the Scream, so the Solo only opens them. Show Review's **MOV-08**
+  warns when a Block cue lights movers nothing has positioned (Lesson 3.9).
 - **Extension:** a blue back light makes an outline round the soloist and
   separates her from the dark risers.
 

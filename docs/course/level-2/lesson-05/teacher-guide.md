@@ -46,7 +46,7 @@ table and the [Glossary](../../GLOSSARY.md).
 |---|---|---|
 | 0–10 | **Design idea** (no computers) | Four torches: a fan, a point, a cross |
 | 10–20 | **Teacher demo** (projector) | The fan on the Riser Line |
-| 20–40 | **Hands-on** (pairs/triads, roles) | Handout Part 2, steps 1–11 |
+| 20–40 | **Hands-on** (pairs/triads, roles) | Handout Part 2, steps 1–13 |
 | 40–45 | **Check / share** | Two groups play Fan → Button |
 | 45–50 | **Exit ticket** | On paper |
 
@@ -76,7 +76,10 @@ On the projector:
 2. Drop **Riser Line** on the row: the fan. Click the row: show the
    order strip and the plan view, then the **Spread** row's **⋯** menu
    without choosing.
-3. Leave the button for the students.
+3. Show the mark: **1.0.6 Dance Break**, drop **Truss-Spots**, **Out**,
+   **Riser Line**. Say why: the Fan is a Block cue, so the spots must be
+   on the line, dark, before it opens them.
+4. Leave the button for the students.
 
 ## 3. Hands-on (20 min)
 
@@ -89,6 +92,7 @@ On the projector:
 
 | You see | Likely cause | Say |
 |---|---|---|
+| The spots swing onto the line | No mark (step 7) | "Which cue is just before the Fan?" |
 | The fan crossed | −5 set in the Fan, not the Button | "Which cue is the button?" |
 | No Spread row | The aim isn't on a line | "What does the Position row say?" |
 | The button is white | Red dropped on the Fan | "Undo; click 1.0.8 first." |

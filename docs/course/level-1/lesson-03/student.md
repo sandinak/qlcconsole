@@ -25,6 +25,8 @@ words:
     means: "Blocks a spot's beam. Ours opens by itself when the spot gets a level."
   - term: Block cue
     means: "A cue that starts from a dark stage: nothing tracks into it."
+  - term: Mark (preset)
+    means: "Turning a moving light to its place in a cue where it is dark, so nobody sees it swing in."
 ---
 
 ## Why
@@ -76,10 +78,17 @@ In the solo, where will the audience look, and why?
 
     ![What a spot needs](../../images/lesson-1-3/spot-layer.png)
 
-12. **File ▸ Save As** → `Lesson1-3-yourname.qlcc`.
+12. A spot that opens before it has turned swings across the stage in
+    view. Turn it in the dark first (a **mark**): click **1.0.0 Pose**,
+    drag **AT-Spots** onto the dashed box, then **Out** and **Soloist DS**
+    onto the **AT-Spots** row. The aim tracks through the Scream, so the
+    heads are already on the singer; the Solo sets its own aim and opens
+    them.
+13. **File ▸ Save As** → `Lesson1-3-yourname.qlcc`.
 
 **Stuck?** No targets: type `Center` in **Filter the Library**. The Solo
-is still red: set **Mode** to **Block**. Spots hard to see: in the Rig
+is still red: set **Mode** to **Block**. The spots swing in: mark them
+(step 12). Spots hard to see: in the Rig
 Overview set **Room** to **Dim**.
 
 ## Exit ticket

@@ -44,10 +44,15 @@ teacher says. It can be turned into a deck as it is.*
 
 - No colour mixing: named slots. Red picks the nearest.
 
-## 7. Your turn
+## 7. Mark the spots
 
-- Handout Part 2, steps 1–12.
+- The Fan is a Block cue: nothing tracks in.
+- Turn the spots in the dark in the cue before it: **Out**, **Riser Line**.
 
-## 8. Exit ticket
+## 8. Your turn
+
+- Handout Part 2, steps 1–13.
+
+## 9. Exit ticket
 
 - Four questions on paper.
