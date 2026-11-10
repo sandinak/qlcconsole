@@ -41,12 +41,22 @@ log); a skipped leg (no Qt at `QT6_PREFIX` / `brew --prefix qt6`) fails it
 unless `ALLOW_SKIP=1`. A test that fails only under load is an isolation bug
 to fix; add it to the serial list only if it measures wall-clock time.
 
-For iterating, **`make quick`** (= `./check-all.sh --quick`) builds only the
-Qt6 leg and runs only the tests your change touches since `origin/main`
-(`QUICK_BASE` to change): the test's own dir, tests that `#include` a changed
-header, a plugin's test; everything if CMake files or the runner changed.
-It is not the gate — run the full one before pushing. One test dir by hand:
-`QLC_TEST_ONLY="ui/test/workbench" ./check-all.sh --quick`.
+**Builds run on the pool, not ender.** Iterate by committing (a WIP is fine)
+and running `./check-all.sh --quick --remote auto --rev <SHA>`: the pool
+picks the least-loaded Mac (dink, brm, newaudio, ender) and copies the SHA
+there. One test dir: `QLC_TEST_ONLY="ui/test/workbench" ./check-all.sh
+--quick --remote auto --rev <SHA>`. On ender itself only a tiny incremental
+single-target build (`cmake --build build --target X -j2`) runs; a
+PreToolUse hook (`~/.claude/hooks/distribute-builds.sh`, decided 2026-11-10)
+blocks whole-tree builds, `-j` above 2, `make quick`/`make check` and
+`check-all.sh` without `--remote` there, for every session and agent, while a
+pool host answers. Undocked (no pool host reachable), ender builds locally.
+
+`--quick` builds only the Qt6 leg and runs only the tests your change touches
+since `origin/main` (`QUICK_BASE` to change): the test's own dir, tests that
+`#include` a changed header, a plugin's test; everything if CMake files or
+the runner changed. It is not the gate — run the full one before pushing.
+An agent brief says all this in its first lines, not as a later correction.
 
 **Gate cadence** (adopted 2026-11-07: velocity per change, diligence per
 release):
@@ -126,10 +136,12 @@ non-interactive `PATH` there; prefix with `export PATH=/opt/homebrew/bin:$PATH`.
 # Reconfigure only when CMakeLists/sources are added or removed:
 cmake -S . -B build
 
-# Incremental build (parallel). Run after editing sources: performance cores
-# only, not hw.ncpu — on Apple Silicon that also counts efficiency cores,
-# which saturating slows down everything else running on the machine.
-cmake --build build -j"$(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null || sysctl -n hw.ncpu)"
+# Build + test: on the pool (see "Builds run on the pool" above).
+./check-all.sh --quick --remote auto --rev "$(git rev-parse HEAD)"
+
+# A local incremental build is only for a single target on a Mac that is
+# not a shared agent host (on ender the hook allows -j2 at most):
+cmake --build build --target qlcconsole -j2
 
 # Run. ALWAYS pass -o to open a workspace; positional args are ignored and
 # can overwrite the .qxw with an empty file (see memory: qlcplus-cli).
