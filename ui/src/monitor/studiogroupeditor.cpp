@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QScrollArea>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QTableWidget>
@@ -46,6 +47,7 @@
 #include "fixturegroup.h"
 #include "grouphead.h"
 #include "stageplatform.h"
+#include "apputil.h"
 
 StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     : QDialog(parent)
@@ -80,8 +82,14 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
             this, &StudioGroupEditor::syncHighlight);
     connect(addFxBtn, &QPushButton::clicked, this, &StudioGroupEditor::addFixtures);
 
-    QVBoxLayout *root = new QVBoxLayout;
-    outer->addLayout(root, 1);
+    /* Its settings scroll up and down, OK and Cancel stay under them: the
+       whole column was taller than a laptop's screen (UX-34). */
+    QVBoxLayout *rightCol = new QVBoxLayout;
+    outer->addLayout(rightCol, 1);
+    QWidget *rootBody = new QWidget(this);
+    QVBoxLayout *root = new QVBoxLayout(rootBody);
+    root->setContentsMargins(0, 0, 0, 0);
+    rightCol->addWidget(AppUtil::verticalScroller(rootBody, this), 1);
 
     // --- Frame (rigid move/rotate of the whole unit) -----------------------
     QGroupBox *frameBox = new QGroupBox(tr("Frame"), this);
@@ -249,7 +257,7 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     QPushButton *saveTplBtn = bb->addButton(tr("Save as Component…"),
                                             QDialogButtonBox::ActionRole);
     saveTplBtn->setToolTip(tr("Save this layout to the browsable component library"));
-    root->addWidget(bb);
+    rightCol->addWidget(bb);
 
     connect(saveTplBtn, &QPushButton::clicked, this, [this]() {
         // Save into the shared library under a display name, so it shows up in the

@@ -9,6 +9,7 @@
       http://www.apache.org/licenses/LICENSE-2.0.txt
 */
 
+#include <QScrollArea>
 #include <QLayout>
 #include <QDialogButtonBox>
 #include <QPushButton>
@@ -33,6 +34,7 @@
 #include "fixturegroup.h"
 #include "fixture.h"
 #include "doc.h"
+#include "apputil.h"
 
 /*****************************************************************************
  * HeadTypesDialog
@@ -138,7 +140,11 @@ HeadTypesDialog::HeadTypesDialog(Doc *doc, const QList<quint32> &fixtureIds,
         m_like.insert(key, fid);
     }
 
-    QVBoxLayout *root = new QVBoxLayout(this);
+    /* The body scrolls up and down, the buttons stay under it: it was
+       taller than a laptop's screen (UX-34). */
+    QWidget *body = new QWidget(this);
+    QVBoxLayout *root = new QVBoxLayout(body);
+    root->setContentsMargins(0, 0, 0, 0);
     QLabel *intro = new QLabel(tr("These fixtures have more than one kind of head. Check where each "
                                   "head really is -- the LED layout -- then make a fixture group per "
                                   "kind. The layout is kept in this show (and, below, as your "
@@ -199,7 +205,9 @@ HeadTypesDialog::HeadTypesDialog(Doc *doc, const QList<quint32> &fixtureIds,
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
     bb->addButton(tr("Make Groups"), QDialogButtonBox::AcceptRole);
-    root->addWidget(bb);
+    QVBoxLayout *dialogLayout = new QVBoxLayout(this);
+    dialogLayout->addWidget(AppUtil::verticalScroller(body, this), 1);
+    dialogLayout->addWidget(bb);
 
     connect(m_modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &HeadTypesDialog::slotModelChanged);

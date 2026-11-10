@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QScrollArea>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGroupBox>
@@ -51,6 +52,7 @@
 #include "speedmastersfooter.h"
 #include "legacysettings.h"
 #include "systemtuningpage.h"
+#include "apputil.h"
 #ifdef QLC_AI_ASSIST
 #include "aisettingspage.h"
 #endif
@@ -71,7 +73,9 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     QVBoxLayout *dialogLayout = new QVBoxLayout(this);
     m_tabs = new QTabWidget(this);
     m_tabs->setObjectName(QStringLiteral("settingsTabs"));
-    dialogLayout->addWidget(m_tabs);
+    /* The tabs scroll up and down, OK and Cancel stay under them: General
+       was taller than a laptop's screen (UX-34). */
+    dialogLayout->addWidget(AppUtil::verticalScroller(m_tabs, this), 1);
     QWidget *generalPage = new QWidget(m_tabs);
     generalPage->setObjectName(QStringLiteral("settingsGeneral"));
     QVBoxLayout *mainLayout = new QVBoxLayout(generalPage);

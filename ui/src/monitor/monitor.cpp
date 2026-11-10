@@ -4786,6 +4786,14 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         gv->addWidget(geometryForm);
         connect(geoBox, &QGroupBox::toggled, geometryForm, &QWidget::setVisible);
         lv->addWidget(geoBox);
+        /* A choice as wide as its longest item ("(none — its own length and
+           direction)") made the column wider than a laptop has room for;
+           shown shorter, it ends in "…" and the list shows it whole. */
+        for (QComboBox *cb : geometryForm->findChildren<QComboBox *>())
+        {
+            cb->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+            cb->setMinimumContentsLength(14);
+        }
     }
     lv->addWidget(new QLabel(kind == 2 ? tr("Fixtures and bars on this object:")
                                        : tr("Fixtures on this object:"), left));
@@ -4818,7 +4826,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         });
     }
     lv->addWidget(tree, 1);
-    left->setMinimumWidth(220);
+    left->setObjectName(QStringLiteral("studioLeft"));
     // (The drag-source panel was retired — adding fixtures is a right-click on the
     //  tree OR the canvas: "Add Fixtures…" opens a multi-select picker.)
 
@@ -4999,7 +5007,6 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     fullBtn->setObjectName(QStringLiteral("inspectorFullProperties"));
     iv->addWidget(fullBtn);
     iv->addStretch();
-    insp->setMinimumWidth(190);
 
     /* Ctrl+Z here: the fixtures' rig and colours as they were before each
        change -- a drag, an inspector field, a layout action. A run of steps
@@ -5155,9 +5162,15 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             editFixtureProperties(*curFid);
     });
 
-    body->addWidget(left);
+    /* The two side columns scroll up and down: on a laptop's screen
+       (1024 x 640) the geometry form and the fixture list are taller than
+       the editor, which ran off the bottom with OK and Cancel (UX-34).
+       Each is as wide as its rows need, so none is cut at the side. */
+    body->addWidget(AppUtil::verticalScroller(left, body));
     body->addWidget(center);
-    body->addWidget(insp);
+    body->addWidget(AppUtil::verticalScroller(insp, body));
+    for (int i = 0; i < body->count(); ++i)
+        body->setCollapsible(i, false);
     body->setStretchFactor(0, 0);
     body->setStretchFactor(1, 1);
     body->setStretchFactor(2, 0);
@@ -8634,9 +8647,15 @@ void Monitor::slotEditTower(quint32 tid)
 
     /* Faces: opaque panels on its sides -- a black facade, or a printed one --
        on the sides ticked, over the stretch of its height given. */
+    /* Two lines: on one, the editor's left column was wider than a laptop
+       has room for (UX-34). */
     QWidget *facesRow = new QWidget(&dlg);
-    QHBoxLayout *facesLay = new QHBoxLayout(facesRow);
-    facesLay->setContentsMargins(0, 0, 0, 0);
+    QVBoxLayout *facesCol = new QVBoxLayout(facesRow);
+    facesCol->setContentsMargins(0, 0, 0, 0);
+    QHBoxLayout *facesLay = new QHBoxLayout;
+    QHBoxLayout *facesRangeLay = new QHBoxLayout;
+    facesCol->addLayout(facesLay);
+    facesCol->addLayout(facesRangeLay);
     QCheckBox *facesCb = new QCheckBox(tr("Faces"), facesRow);
     facesCb->setChecked(t->hasFaces());
     facesCb->setToolTip(tr("Opaque panels over the tower's sides"));
@@ -8650,13 +8669,15 @@ void Monitor::slotEditTower(quint32 tid)
     facesToSpin->setToolTip(tr("How high they go -- its top covers the whole tower"));
     facesLay->addWidget(facesCb);
     facesLay->addWidget(facesColourBtn);
-    facesLay->addWidget(new QLabel(tr("from"), facesRow));
-    facesLay->addWidget(facesFromSpin);
-    facesLay->addWidget(new QLabel(tr("to"), facesRow));
-    facesLay->addWidget(facesToSpin);
+    facesLay->addStretch(1);
+    facesRangeLay->addWidget(new QLabel(tr("from"), facesRow));
+    facesRangeLay->addWidget(facesFromSpin, 1);
+    facesRangeLay->addWidget(new QLabel(tr("to"), facesRow));
+    facesRangeLay->addWidget(facesToSpin, 1);
     form->addRow(tr("Faces:"), facesRow);
+    // Two by two: four in a row were cut to "Fro Bac Sta Sta" (UX-36).
     QWidget *sidesRow = new QWidget(&dlg);
-    QHBoxLayout *sidesLay = new QHBoxLayout(sidesRow);
+    QGridLayout *sidesLay = new QGridLayout(sidesRow);
     sidesLay->setContentsMargins(0, 0, 0, 0);
     QList<QPair<QCheckBox *, int> > sideCbs;
     for (const auto &sd : { qMakePair(tr("Front"), int(Tower::FrontSide)),
@@ -8666,10 +8687,10 @@ void Monitor::slotEditTower(quint32 tid)
     {
         QCheckBox *cb = new QCheckBox(sd.first, sidesRow);
         cb->setChecked(t->facesSides() & sd.second);
-        sidesLay->addWidget(cb);
+        sidesLay->addWidget(cb, sideCbs.size() / 2, sideCbs.size() % 2);
         sideCbs << qMakePair(cb, sd.second);
     }
-    sidesLay->addStretch(1);
+    sidesLay->setColumnStretch(2, 1);
     form->addRow(tr("On sides:"), sidesRow);
     QString *facesPattern = new QString(t->facesPattern());
     float *facesOpacity = new float(t->facesPatternOpacity());
@@ -8697,6 +8718,10 @@ void Monitor::slotEditTower(quint32 tid)
     QDoubleSpinBox *newShelf = new FeetInchesSpinBox(isFeet, &dlg);
     newShelf->setRange(0.0, hMax);
     newShelf->setValue(1.0 * toDisp);
+    // Room for a height with a fraction ("3' 3 3/8\""): sized for its range's
+    // ends ("40'"), it showed "3' 3 3/" (UX-36).
+    newShelf->setMinimumWidth(newShelf->sizeHint().width()
+                              + newShelf->fontMetrics().horizontalAdvance(QStringLiteral(" 11 15/16\"")));
     QPushButton *addShelfBtn = new QPushButton(tr("Add Shelf"), &dlg);
     QPushButton *delShelfBtn = new QPushButton(tr("Remove Selected"), &dlg);
     shelfBtns->addWidget(newShelf);
@@ -8943,6 +8968,8 @@ void Monitor::slotEditPipe(quint32 bid)
     runSpin->setValue(double(b->runAngle()));
     if (horiz)
         form->addRow(tr("Run angle:"), runSpin);
+    else
+        runSpin->hide();            // not in the form: it sat over the Geometry box's title
 
     // Crossbar on a boom: how far up the parent boom it attaches. When set, the
     // base position/stand/truss controls below are derived and don't apply.
@@ -9308,19 +9335,21 @@ void Monitor::slotEditPlatform(quint32 pid)
     });
 
     // No-overlap collision properties.
-    QCheckBox *solidChk = new QCheckBox(tr("Solid — can't overlap other solid platforms"), &dlg);
+    // Short words, the rest in the tooltips: the long ones were cut (UX-34).
+    QCheckBox *solidChk = new QCheckBox(tr("Solid (no overlap)"), &dlg);
     solidChk->setChecked(p->solid());
     /* Say what this is NOT: it reads like "is this thing solid or hollow", and
        it is only about whether two platforms may be dragged through each other.
        To rig a light inside a step you set the fixture's Placement, not this. */
-    solidChk->setToolTip(tr("A layout rule only: it stops two solid platforms "
+    solidChk->setToolTip(tr("Solid: it can't overlap other solid platforms. "
+                            "A layout rule only: it stops two solid platforms "
                             "being dragged through each other. It does not make "
                             "the step hollow — to rig a fixture inside one, set "
                             "that fixture's Placement to \"Inside\"."));
     form->addRow(tr("Collision:"), solidChk);
-    QCheckBox *stackChk = new QCheckBox(tr("Stackable — may sit on top (step / riser)"), &dlg);
+    QCheckBox *stackChk = new QCheckBox(tr("Stackable (sits on top)"), &dlg);
     stackChk->setChecked(p->stackable());
-    stackChk->setToolTip(tr("A stackable platform is exempt from the no-overlap rule, "
+    stackChk->setToolTip(tr("Stackable: it may sit on top of another, a step or a riser. A stackable platform is exempt from the no-overlap rule, "
                             "so it can be placed on top of a solid deck."));
     form->addRow(QString(), stackChk);
     /* A fountain's flame: how high the silk rises above the inner wall's
@@ -10815,7 +10844,7 @@ void Monitor::slotEditTruss(quint32 tid)
        (a goal post), its run and length following them. */
     QComboBox *endStandCb = new QComboBox(&editDlg);
     endStandCb->setObjectName(QStringLiteral("trussEndStand"));
-    endStandCb->addItem(tr("(none — its own length and direction)"), quint32(Stand::invalidId()));
+    endStandCb->addItem(tr("(none — own length)"), quint32(Stand::invalidId()));
     for (Stand *st : m_props->stands())
     {
         endStandCb->addItem(st->name().isEmpty() ? tr("Stand %1").arg(st->id()) : st->name(), st->id());
@@ -10844,9 +10873,15 @@ void Monitor::slotEditTruss(quint32 tid)
     /* A sock: diffusing fabric over the truss, for LED bars rigged Inside it
        to glow through. Its colour (white unless told otherwise) and the
        stretch of the truss it covers. */
+    /* Two lines, as a tower's faces: on one, the colour button was drawn
+       over the box beside it (UX-34). */
     QWidget *sockRow = new QWidget(&editDlg);
-    QHBoxLayout *sockLay = new QHBoxLayout(sockRow);
-    sockLay->setContentsMargins(0, 0, 0, 0);
+    QVBoxLayout *sockCol = new QVBoxLayout(sockRow);
+    sockCol->setContentsMargins(0, 0, 0, 0);
+    QHBoxLayout *sockLay = new QHBoxLayout;
+    QHBoxLayout *sockRangeLay = new QHBoxLayout;
+    sockCol->addLayout(sockLay);
+    sockCol->addLayout(sockRangeLay);
     QCheckBox *sockCb = new QCheckBox(tr("Sock"), sockRow);
     sockCb->setChecked(t->hasSock());
     sockCb->setToolTip(tr("A diffusing fabric sleeve over the truss: LED bars rigged "
@@ -10868,10 +10903,11 @@ void Monitor::slotEditTruss(quint32 tid)
     sockToSpin->setToolTip(tr("Where along the truss it ends -- its far end covers the whole truss"));
     sockLay->addWidget(sockCb);
     sockLay->addWidget(sockColourBtn);
-    sockLay->addWidget(new QLabel(tr("from"), sockRow));
-    sockLay->addWidget(sockFromSpin);
-    sockLay->addWidget(new QLabel(tr("to"), sockRow));
-    sockLay->addWidget(sockToSpin);
+    sockLay->addStretch(1);
+    sockRangeLay->addWidget(new QLabel(tr("from"), sockRow));
+    sockRangeLay->addWidget(sockFromSpin, 1);
+    sockRangeLay->addWidget(new QLabel(tr("to"), sockRow));
+    sockRangeLay->addWidget(sockToSpin, 1);
     form->addRow(tr("Sock:"), sockRow);
     QString *sockPattern = new QString(t->sockPattern());
     float *sockOpacity = new float(t->sockPatternOpacity());

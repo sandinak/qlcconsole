@@ -400,19 +400,25 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
     measureBtn->setText(tr("Measure…"));
     measureBtn->setToolTip(tr("Light it a step at a time and enter what the meter reads"));
     powerRow->addWidget(m_maxAmps, 1);
+    /* The buttons under the box, not beside it: four in one row were cut
+       to "Mea…re…" and "Cop…es…" in the Studio editors' inspector (UX-36). */
+    QHBoxLayout *powerBtns = new QHBoxLayout;
+    powerBtns->setSpacing(4);
     m_copyPower = new QToolButton(powerBox);
     m_copyPower->setObjectName(QStringLiteral("fixtureCopyPower"));
     m_copyPower->setText(tr("Copy to Same Fixtures…"));
     m_copyPower->setToolTip(tr("Give its readings to every fixture of the same make, model and mode "
                                "in this show -- each keeps its own maximum"));
-    powerRow->addWidget(profileBtn);
-    powerRow->addWidget(measureBtn);
-    powerRow->addWidget(m_copyPower);
+    powerBtns->addWidget(profileBtn);
+    powerBtns->addWidget(measureBtn);
+    powerBtns->addStretch(1);
     m_powerNote = new QLabel(powerBox);
     m_powerNote->setObjectName(QStringLiteral("fixturePowerNote"));
     m_powerNote->setWordWrap(true);
     m_powerNote->setStyleSheet("color:#8a8e99;");
     powerCol->addLayout(powerRow);
+    powerCol->addLayout(powerBtns);
+    powerCol->addWidget(m_copyPower, 0, Qt::AlignLeft);
     powerCol->addWidget(m_powerNote);
     form->addRow(tr("Max draw:"), powerBox);
     connect(m_maxAmps, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) {

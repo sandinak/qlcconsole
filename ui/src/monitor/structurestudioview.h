@@ -455,6 +455,8 @@ public:
     void layersChanged() { rigMayHaveMoved(); update(); }
 private:
     mutable QList<QVector3D> m_floorPoints;
+    mutable QList<QRectF> m_callouts;      ///< this frame's measurement texts (drawnCallouts())
+    mutable QList<QRectF> m_edgeLabels;    ///< ...and the edge labels, put clear of them
     mutable QImage m_floorImage;    ///< the angled floor grid, drawn once (drawGrid())
     mutable QString m_floorKey;     ///< the view it was drawn for
     mutable QElapsedTimer m_floorPointsAge;
@@ -810,6 +812,13 @@ private:
      *  left/right, upstage/downstage, up/floor) -- the plane badge alone does
      *  not say how the projection is oriented. */
     void drawOrientationLabels(QPainter &p) const;
+public:
+    /** The last frame's measurements and callouts (the "max" height, the
+     *  dimensions) and the edge labels drawn clear of them, in widget
+     *  coordinates: what a test reads to see none is drawn over another. */
+    QList<QRectF> drawnCallouts() const { return m_callouts; }
+    QList<QRectF> drawnEdgeLabels() const { return m_edgeLabels; }
+private:
 
     /** The three stage axes as a small labelled tripod, for the angled view
      *  where no single screen edge corresponds to one stage direction. */

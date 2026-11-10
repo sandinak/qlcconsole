@@ -1014,6 +1014,13 @@ let go in every view, the 2D plot agreeing: a free or deck-standing fixture
 no longer jumps half its size, or creeps along the axis Front or Side can't
 see.
 
+On a small laptop screen the editor still fits: the geometry column on the
+left and the fixture panel on the right scroll up and down, and **OK** and
+**Cancel** stay at the bottom. The mouse wheel scrolls a column, also over
+a number or a choice; the field you have clicked into takes the wheel. The **stage right** / **stage left** labels
+on the preview move along their edge, clear of the **max** height and the
+dimensions drawn there.
+
 ### Front, Back and Side
 
 ![The same truss's editor in the Back view: looking downstage, stage left on the left](../images/lighting-studio-truss-editor-back.png)

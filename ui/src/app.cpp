@@ -525,6 +525,14 @@ void App::init()
 {
     QSettings settings;
 
+    // The app's style, as startup() puts it (an App made without startup(),
+    // a test's, gets it too): a menu button's arrow beside its text.
+    if (!AppUtil::hasAppStyle())
+    {
+        AppUtil::installAppStyle();
+        applyTheme();
+    }
+
     if (m_startupWindow != NULL)
         m_startupWindow->beginStep(tr("Restoring window state"));
 

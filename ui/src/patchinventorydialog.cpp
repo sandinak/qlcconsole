@@ -146,13 +146,16 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
                               "each gives the first row that universe, the next the one after, "
                               "and so on -- each at that address (a row of lanterns, a node's "
                               "ports)."));
-    placeRow->addWidget(m_placeHow);
+    /* How, in what order and Place on a line of their own: on one, the row
+       was wider than a laptop's screen (UX-34). */
+    QHBoxLayout *placeHowRow = new QHBoxLayout;
+    placeHowRow->addWidget(m_placeHow);
     QPushButton *place = new QPushButton(tr("Place"), this);
     /* One addressing scheme, the same every time ("we need a clean way to
        set the addressing scheme consistent"): the rows show it, and Place
        addresses them in it. */
-    placeRow->addSpacing(12);
-    placeRow->addWidget(new QLabel(tr("in order"), this));
+    placeHowRow->addSpacing(12);
+    placeHowRow->addWidget(new QLabel(tr("in order"), this));
     m_order = new QComboBox(this);
     m_order->setObjectName(QStringLiteral("addressOrder"));
     m_order->addItem(tr("by name"), int(PatchPlanner::ByName));
@@ -169,10 +172,12 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
         m_order->setCurrentIndex(qMax(0, i));
     }
     place->setToolTip(tr("Move the selected rows -- every row when none is selected"));
-    placeRow->addWidget(m_order);
-    placeRow->addWidget(place);
+    placeHowRow->addWidget(m_order);
+    placeHowRow->addWidget(place);
+    placeHowRow->addStretch();
     placeRow->addStretch();
     root->addLayout(placeRow);
+    root->addLayout(placeHowRow);
 
     /* Like structures patched alike ("the lights on T1, 2, 3, 4 .. should all
        be addressed the same in the single U"): offered when these fixtures

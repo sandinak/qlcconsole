@@ -1672,9 +1672,15 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     // between the columns sets it, remembered. Text too long for either
     // column ends in "…", never over the other.
     m_tree->setTextElideMode(Qt::ElideRight);
+    /* A layer is five levels in (production, song, list, part, cue): at
+       the style's 20 px a level, 100 px went before its name, and at
+       1280 wide "TrussC-RGB" read "TrussC-…" (UX-36). 14 px still holds
+       the branch arrow. */
+    m_tree->setIndentation(14);
     m_tree->header()->setStretchLastSection(false);
     m_tree->header()->setSectionResizeMode(QHeaderView::Interactive);
     m_tree->header()->setMinimumSectionSize(24);
+    m_badgeChosen = QSettings().contains(SETTINGS_BADGE_COLUMN);
     m_badgeWidth = QSettings().value(SETTINGS_BADGE_COLUMN,
                                      m_tree->fontMetrics().horizontalAdvance(QStringLiteral("main  ▸ MIB"))
                                      + 12).toInt();
@@ -1692,6 +1698,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                 flags += m_tree->header()->sectionSize(c);
         m_badgeWidth = qMax(24, section == 0 ? m_tree->viewport()->width() - flags - size : size);
         QSettings().setValue(SETTINGS_BADGE_COLUMN, m_badgeWidth);
+        m_badgeChosen = true;
         fitTreeColumns();
     });
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -3880,6 +3887,8 @@ void ShowTreeView::buildTree()
     applyBackwashMarks();
     refreshFollowBadges();
     applyNoteMarks();
+    measureInfoColumn();
+    fitTreeColumns();          // the info column follows what is in it
     m_reloading = false;
 }
 
@@ -4980,6 +4989,24 @@ QString ShowTreeView::cueTrackingTip(quint32 cueId) const
     return out.join(QStringLiteral("\n"));
 }
 
+void ShowTreeView::measureInfoColumn()
+{
+    m_infoNeeds = 0;
+    m_flagsNeeds = 0;
+    if (m_tree == nullptr)
+        return;
+    const QFontMetrics fm = m_tree->fontMetrics();
+    for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
+    {
+        const QString text = (*it)->text(InfoCol);
+        if (!text.isEmpty())
+            m_infoNeeds = qMax(m_infoNeeds, fm.horizontalAdvance(text) + 12);
+        const QString flags = (*it)->text(FlagsCol);
+        if (!flags.isEmpty())
+            m_flagsNeeds = qMax(m_flagsNeeds, fm.horizontalAdvance(flags) + 12);
+    }
+}
+
 void ShowTreeView::fitTreeColumns()
 {
     if (m_tree == nullptr)
@@ -4997,8 +5024,10 @@ void ShowTreeView::fitTreeColumns()
             m_tree->header()->hideSection(c);
         else
         {
-            // T holds "⤳ 12" on a carried row (Q222).
-            const int w = (c == FlagsCol) ? 80
+            /* T holds "⤳ 12" on a carried row (Q222). F is as wide as what
+               it says, up to 80 ("skip, no MIB" ends in "…", the tooltip
+               has it all): a fixed 80 cut a layer's name at 1280 (UX-36). */
+            const int w = (c == FlagsCol) ? qBound(24, m_flagsNeeds, 80)
                           : qMax(24, fm.horizontalAdvance(c == TracksCol ? QStringLiteral("⤳ 99")
                                                                          : QStringLiteral("99")) + 12);
             want.insert(c, w);
@@ -5018,8 +5047,12 @@ void ShowTreeView::fitTreeColumns()
         m_tree->header()->resizeSection(it.key(), w);
         room -= w;
     }
-    // The names keep at least 60% of what is left, however wide InfoCol was set.
-    const int badges = qBound(24, m_badgeWidth, qMax(24, room * 2 / 5));
+    /* The names keep at least 60% of what is left, however wide InfoCol was
+       set -- and, until its width is set by hand, InfoCol is no wider than
+       the widest text in it: empty, it gave a layer's name nothing ("Tow…"
+       at 1024 wide, UX-36). */
+    const int infoWant = m_badgeChosen ? m_badgeWidth : qMin(m_badgeWidth, qMax(24, m_infoNeeds));
+    const int badges = qBound(24, infoWant, qMax(24, room * 2 / 5));
     m_tree->header()->resizeSection(NameCol, qMax(40, room - badges));
     m_tree->header()->resizeSection(InfoCol, badges);
     m_fittingColumns = false;
