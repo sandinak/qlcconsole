@@ -32,6 +32,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **The ruler's corner follows Settings ▸ Units.** It said "(m)" on a metre
   grid with feet chosen; now it names your unit when a grid square is one of
   it, and otherwise what a square is in your unit ("SR | SL (1 = 3' 3 3/8")").
+- **The plot's pointer readout is whole in a narrow window.** It sits at the
+  right of the footer, outside the part that scrolls, and is as wide as its
+  longest reading in feet and inches (it was cut to "Y: 8' 3").
 
 ## [0.4.2] - 2026-11-09
 

@@ -1442,21 +1442,37 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     {
         const QFontMetrics fm(rf);
         int w = 160;
-        // 888' 11.88" (270 m) in whichever unit the readout is in.
-        const QString farText = MeasurementUnits::formatLength(270968.0);
-        foreach (const QString &widest, QStringList() << tr("%1   %2").arg(tr("%1 %2").arg(tr("SL"), farText),
-                                                                       tr("%1 %2").arg(tr("DS"), farText))
-                                                      << tr("%1   %2").arg(tr("%1: %2").arg("X", "-" + farText),
-                                                                           tr("%1: %2").arg("Y", "-" + farText)))
-            w = qMax(w, fm.horizontalAdvance(widest) + 8);
+        /* About 270 m in whichever unit the readout is in, with the most
+           digits it can show: 270968 mm reads "889'" in feet, far narrower
+           than "888' 11 7/8"", so a few nearby lengths are tried and the
+           widest kept (UX-36). */
+        for (const double mm : { 270968.0, 270951.0, 270932.7, 270921.1, 270837.9 })
+        {
+            const QString farText = MeasurementUnits::formatLength(mm);
+            foreach (const QString &widest, QStringList() << tr("%1   %2").arg(tr("%1 %2").arg(tr("SL"), farText),
+                                                                           tr("%1 %2").arg(tr("DS"), farText))
+                                                          << tr("%1   %2").arg(tr("%1: %2").arg("X", "-" + farText),
+                                                                               tr("%1: %2").arg("Y", "-" + farText)))
+                w = qMax(w, fm.horizontalAdvance(widest) + 8);
+        }
         m_readoutLabel->setFixedWidth(w);
     }
-    fl->addWidget(m_readoutLabel);
 
     /* In a ShrinkableBar: the row is ~780 px of controls, and as a plain row
        it held the Lighting Studio (and the window) at least that wide, or
        was cut off on the right when the window was made narrower anyway. */
-    qobject_cast<QVBoxLayout *>(gcontainer->layout())->addWidget(new ShrinkableBar(footer, gcontainer));
+    /* The readout is pinned at the right, beside the bar rather than in it:
+       inside it, a narrow window scrolled the readout half out of sight
+       ("Y: 8' 3") (UX-36). */
+    QWidget *footRow = new QWidget(gcontainer);
+    footRow->setAutoFillBackground(true);
+    footRow->setPalette(footer->palette());
+    QHBoxLayout *frl = new QHBoxLayout(footRow);
+    frl->setContentsMargins(0, 0, 6, 0);
+    frl->setSpacing(6);
+    frl->addWidget(new ShrinkableBar(footer, footRow), 1);
+    frl->addWidget(m_readoutLabel);
+    qobject_cast<QVBoxLayout *>(gcontainer->layout())->addWidget(footRow);
 
     // Restore ruler visibility (default on).
     QSettings settings;
