@@ -130,8 +130,8 @@ void EffectScriptRunner::slotFunctionStarted(quint32 fid)
 
 void EffectScriptRunner::slotFunctionStopped(quint32 fid)
 {
-    // Deliberately NOT gated on Doc::function(fid) still resolving. This slot
-    // is queued, so by the time it runs the function may already be gone from
+    // Deliberately NOT gated on Doc::function(fid) still resolving. From a
+    // tick this slot is queued, so by the time it runs the function may already be gone from
     // the Doc (workspace cleared, or the scene deleted while running) — and an
     // early return there would strand the instance forever: it keeps ticking,
     // keeps re-asserting its last frame into an Override-priority fader, and
@@ -214,9 +214,9 @@ bool EffectScriptRunner::restartOneShots(quint32 fid)
 
 void EffectScriptRunner::slotFunctionRemoved(quint32 fid)
 {
-    // Doc::deleteFunction() removes the function from the MasterTimer's list
-    // WITHOUT emitting functionStopped, so deleting a running scene would
-    // otherwise never tear its effect instances down.
+    // Doc::deleteFunction() emits functionStopped only for a function the
+    // MasterTimer was ticking; one started outside it (or only queued) would
+    // otherwise never have its effect instances torn down.
     destroyInstancesForScene(fid);
 }
 

@@ -211,9 +211,11 @@ Doc::Doc(QObject* parent, int universes)
             timecodeSource(), SLOT(updateTimeCode(quint32,quint32,uchar)));
 
     // Effect script runner — drives JS effect instances for scenes that
-    // reference Effect-type palettes. Queued connections are fine here
-    // because the runner only needs to know about starts/stops to create
-    // or destroy instances; the actual DMX work is driven by its QTimer.
+    // reference Effect-type palettes. These are AUTO connections: queued for
+    // the ticks (emitted on the MasterTimer's own thread), direct for
+    // MasterTimer::removeFunction() (emitted here, on the main thread, after
+    // it has released the universes -- the stop slot may claim them). The
+    // three stay alike so a start and a stop are never delivered out of order.
     m_effectScriptRunner = new EffectScriptRunner(this);
     m_showEmbedding = new ShowEmbedding(this);
     connect(m_masterTimer, SIGNAL(functionStarted(quint32)),

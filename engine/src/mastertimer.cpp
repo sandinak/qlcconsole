@@ -369,10 +369,17 @@ void MasterTimer::removeFunction(Function* function)
        dismiss them, and the last thing it sent hung on the fixtures ("every
        time I run a function and then remove it .. the last thing sent hangs").
        The universes are claimed before the list lock, in the tick's own order. */
+    /* functionStopped is emitted only AFTER the universes are released. This
+       runs on the caller's (main) thread, so its main-thread listeners are
+       called directly, and one of them (EffectScriptRunner, tearing down the
+       last playing effect) claims the universes itself: emitted with them
+       held, it blocked on the non-recursive universe mutex for good -- the UI
+       froze, then the timer thread and the DMX output with it. */
     Doc *doc = qobject_cast<Doc *>(parent());
     QList<Universe *> universes;
     if (doc != nullptr)
         universes = doc->inputOutputMap()->claimUniverses();
+    bool stopped = false;
     {
         QMutexLocker locker(&m_functionListMutex);
         const bool ticking = m_functionList.contains(function);
@@ -382,11 +389,13 @@ void MasterTimer::removeFunction(Function* function)
         {
             function->stop(FunctionParent::master());
             function->postRun(this, universes);
-            emit functionStopped(function->id());
+            stopped = true;
         }
     }
     if (doc != nullptr)
         doc->inputOutputMap()->releaseUniverses();
+    if (stopped)
+        emit functionStopped(function->id());
 }
 
 void MasterTimer::stopAllFunctions()

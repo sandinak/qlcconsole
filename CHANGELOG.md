@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Fixed
+
+- Deleting a playing scene that held the only running effect froze the app.
+
 ## [0.4.2] - 2026-11-09
 
 ### Added
