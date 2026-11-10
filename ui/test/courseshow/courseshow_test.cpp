@@ -5953,7 +5953,7 @@ void CourseShow_Test::levelTwoPictures()
             g.grab = m_app;
             QRect r(v->mapTo(m_app, QPoint(0, 0)), v->size());
             g.crop = r;
-            g.callouts << mark(v->m_cueTracked, 1, HelpShots::Corner) << mark(v->m_cueNext, 2, HelpShots::Corner);
+            g.callouts << mark(v->m_cueTracked, 1, HelpShots::Above) << mark(v->m_cueNext, 2, HelpShots::Above);
             QVERIFY(shoot(g, d, "chorus-receives"));
             m_app->resize(was);
             settle(200);
