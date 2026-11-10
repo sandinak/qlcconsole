@@ -16,7 +16,7 @@ Do **one** of these.
 2. Click **1.0.6 Dance Break**, then its **Steps** row.
 3. On the **Dimmer effect** row, click **⋯ → Its Own Colour / Dimmer →
    Amber**. Watch the steps in the Rig Overview.
-4. Then **⋯ → Its Own Colour / Dimmer → None of its own**: the sparkle
+4. Then **⋯ → Its Own Colour / Dimmer → None of Its Own**: the sparkle
    in the steps' own colour.
 5. Which of the three (white, amber, none) suits the dance break best,
    and why? Set it back to that one, save as

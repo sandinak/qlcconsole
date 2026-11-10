@@ -52,6 +52,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **A follow spot's size, live from the pad, and framed from the person's height.** The Followspot effect has a **Framing** -- **Head & Shoulders**, **Waist Up**, **Full Body** or **Custom** (the **Width on Subject**, which was Size on Subject) -- sized from the followed Person's Height, each head from its own throw, steepness and lens, and aimed so the top of the beam stays just over the head (a Custom width aims that way too); **Framing Size** makes it looser or tighter. While it plays, **D-pad Right and Left** open and close the beam a step at a time -- the Framing Size, the Width on Subject, or the beam angle with no size -- never past the lenses (*· Width 9' (widest)*); the footer says it in **Settings → Units**. **Save Positions** keeps it in the look (Workbench or running cue), as one undo step, the Framing kept (*Saved: Waist Up at 110%*). Rows the Framing decides are greyed with the reason, and the Followspot editor now fits its pane at 1024 and 1280 wide (rows wrap under their names). See [How big: framing and the iris](docs/features/stage-targets.md#how-big-framing-and-the-iris).
 - Deleting a playing scene that held the only running effect froze the app.
+### Tooling
+
+- **The course can't name a button the app doesn't have.** `tools/check-course-ui-names.py` (in the gate and CI, next to the
+  doc-link check) reads the bold UI names and menu paths in every lesson (**File ▸ Open**, **Add Fixture…**), case and
+  trailing "…" included, and fails on any with no matching string in the app, listing file:line and the nearest app string.
+  Keys, show content and real-world names are in its commented allowlist; stale text found but not yet fixed is in two
+  short lists in the script.
 
 ## [0.4.2] - 2026-11-09
 

@@ -73,8 +73,7 @@ Switch roles after each part.
 ### Both sides as one: a group set
 
 4. In the Library, open **All → Groups → Trusses**. Click **Trusses SR**,
-   then **⌘-click** **Trusses SL**. Right-click one of them → **Make
-   set…**, type `Truss Sides` and click **OK**.
+   then **⌘-click** **Trusses SL**. Right-click one of them → **Make Set…**, type `Truss Sides` and click **OK**.
    - *You should see:* **All → Group sets → Truss Sides (Trusses SR +
      Trusses SL)**.
 

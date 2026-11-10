@@ -139,6 +139,13 @@ Ctrl+S on Windows). The footer reads **✓ Saved**.
   (`/class/basics/`, linked from every student page's footer) has them
   all in one table. `tools/student-pages.py` checks each box has `do` and
   a path or a shortcut.
+- **Every bold UI name is checked against the app.** The gate runs
+  `python3 tools/check-course-ui-names.py`: each bold name and each
+  segment of a **File ▸ Open** path must be a string the app shows, with
+  its capitals and its "…" (**Add Fixture…**, not "Add fixture…"). It
+  prints file:line and the nearest app string. Bold that isn't the app
+  (a cue, group or fixture name, a key) goes in the script's `ALLOW`
+  list with a reason; ask rather than add for anything else.
 
 ### Style rules
 

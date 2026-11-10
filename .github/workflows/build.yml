@@ -69,6 +69,10 @@ jobs:
         # No relative link in a tracked .md may point at a missing file.
         run: python3 tools/check-doc-links.py
 
+      - name: Course UI names
+        # Every UI name a lesson tells students to click must exist in the app.
+        run: python3 tools/check-course-ui-names.py
+
       - name: Set General ENV variables
         run: |
           echo "PACKAGES_V4=$(echo ${PACKAGES_BASE})" >> $GITHUB_ENV
