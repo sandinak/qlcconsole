@@ -990,3 +990,43 @@ void PatchInventoryDialog_Test::aVenueClashIsNamedInTheSummary()
     PatchInventoryDialog off(m_doc);
     QVERIFY2(!off.m_summary->text().contains("clashes"), qPrintable(off.m_summary->text()));
 }
+
+void PatchInventoryDialog_Test::theModeColumnFitsItsLongestName()
+{
+    // A mode name like "Effect (15ch)" was cut to "Effect (15ch" by a narrow
+    // column: the Mode and Universe columns are as wide as their combo boxes.
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
+    Fixture *f = stagedTwoMode(m_doc, 3, 15, 1, &basic, &ext);
+    QVERIFY(f != nullptr);
+    ext->setName(QStringLiteral("Effect with a long name (15ch)"));
+    PatchInventoryDialog dlg(m_doc, { f->id() });
+    dlg.resize(900, 400);
+    dlg.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dlg));
+    QApplication::processEvents();
+    QComboBox *mode = qobject_cast<QComboBox *>(dlg.m_table->cellWidget(0, 2));
+    QVERIFY(mode != nullptr);
+    QVERIFY2(dlg.m_table->columnWidth(2) >= mode->sizeHint().width(),
+             qPrintable(QStringLiteral("column %1 < combo %2").arg(dlg.m_table->columnWidth(2)).arg(mode->sizeHint().width())));
+    QWidget *uni = dlg.m_table->cellWidget(0, 5);
+    QVERIFY(uni != nullptr);
+    QVERIFY(dlg.m_table->columnWidth(5) >= uni->sizeHint().width());
+}
+
+void PatchInventoryDialog_Test::theIntroIsWholeAtTheSmallestSize()
+{
+    // At the dialog's smallest size the intro's last line was half hidden:
+    // the label must be as tall as its wrapped text.
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
+    Fixture *f = stagedTwoMode(m_doc, 3, 15, 1, &basic, &ext);
+    QVERIFY(f != nullptr);
+    PatchInventoryDialog dlg(m_doc, { f->id() });
+    dlg.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dlg));
+    dlg.resize(dlg.minimumSizeHint().expandedTo(QSize(1024, 640)));
+    QApplication::processEvents();
+    QLabel *intro = dlg.findChild<QLabel *>(QStringLiteral("patchIntro"));
+    QVERIFY(intro != nullptr);
+    QVERIFY2(intro->height() >= intro->heightForWidth(intro->width()),
+             qPrintable(QStringLiteral("%1 < %2").arg(intro->height()).arg(intro->heightForWidth(intro->width()))));
+}

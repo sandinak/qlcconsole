@@ -73,6 +73,8 @@ private slots:
 
     /** With a venue applied that clashes, the summary line names it. */
     void aVenueClashIsNamedInTheSummary();
+    void theModeColumnFitsItsLongestName();
+    void theIntroIsWholeAtTheSmallestSize();
 
 private:
     Doc *m_doc;

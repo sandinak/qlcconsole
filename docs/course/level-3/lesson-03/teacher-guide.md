@@ -63,8 +63,8 @@ meetings, so each symbol has to say what the light *is*.
 1. **Lighting Studio** tab: the plot is the stage from above. Point out
    the trusses, the towers and the risers. Every light is drawn by its
    type; the lanterns look like any other LED fixture.
-2. The plot's **Show** button → **Show Auto fixtures as their closest
-   plot symbol**. Each light is now drawn as the symbol the app guesses from
+2. The plot's **Show** button → **Show Auto Fixtures as Their Closest
+   Plot Symbol**. Each light is now drawn as the symbol the app guesses from
    its definition: the spots with a yoke, the step lights as bars.
 3. "Which guesses are wrong?" Lead them to the **AT-W-ALL** washes (drawn
    as spots) and the **Lanterns** (drawn as LED PARs).
@@ -127,4 +127,4 @@ The course test (`ui/test/courseshow`, `lessonStageLooks`) runs it
 offscreen on the real app: the Show menu's item by its name, the Plot
 Symbol menu's six sections, **Auto (Moving head spot)** on AT-W-ALL and
 **Moving head round wash**, and **Lantern** under Practicals on the
-Lanterns group. It does not take pictures for this lesson yet.
+Lanterns group. Its picture is taken by `levelThreeMorePictures`.

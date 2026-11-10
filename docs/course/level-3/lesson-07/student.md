@@ -40,7 +40,7 @@ Roles: Driver, Navigator, Designer. Switch after each fixture.
 
 1. **File → Open** → `ShowChoir-Classroom.qlcc`.
 2. Click the **Fixtures** tab (⇧⌘2); open **View → Rig Overview** (⇧⌘R).
-3. **Add ▾ → Add fixture…** → **Generic → Generic**. **Name**
+3. **Add ▾ → Add Fixture…** → **Generic → Generic**. **Name**
    `House Lights`, **Channels** 1, **OK**.
 4. The same for `Work Lights` and `Stage Power`.
 5. Right-click **House Lights** → **Output Rules…**: tick **Ignore

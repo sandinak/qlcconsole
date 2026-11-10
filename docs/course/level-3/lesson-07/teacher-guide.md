@@ -65,7 +65,7 @@ and the console must not dim or black them out by accident.
 
 ## 2. Teacher demo (10 min)
 
-1. **Fixtures** tab: **Add ▾ → Add fixture…**, **Generic → Generic**,
+1. **Fixtures** tab: **Add ▾ → Add Fixture…**, **Generic → Generic**,
    Name `House Lights`, OK. "A house light is one dimmer channel."
 2. Right-click it → **Output Rules…**: read the four rules aloud. Tick
    **Ignore Blackout** and **Ignore the Grand Master**, OK. Point out the
@@ -152,4 +152,4 @@ Operate and on after it, the preshow list typed as in the handout,
 Blackout taking the cyc to zero while House Lights and Stage Power keep
 full, the Grand Master at zero doing the same, and the house going to
 half and out with the cues. It doesn't drive the Add fixture dialog
-itself, and takes no pictures for this lesson yet.
+itself, and its pictures are taken by `levelThreeMorePictures`.

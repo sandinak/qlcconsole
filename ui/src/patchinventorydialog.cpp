@@ -90,15 +90,15 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     setWindowTitle(anyPatched ? tr("Patch / Re-address") : tr("Patch Inventory"));
 
     QVBoxLayout *root = new QVBoxLayout(this);
-    QLabel *intro = new QLabel(tr("Proposed homes for the fixtures staged in the inventory. A DMX "
-                                  "fixture on the plot goes to the nearest node port with room (the "
-                                  "Via column); the rest are packed into the first free channels; "
-                                  "each network fixture IP gets a universe of its own (unicast). Pick each "
-                                  "fixture's mode here -- it sets the DMX footprint -- and edit any "
-                                  "universe or address, then Apply. A fixture that a scene sets "
-                                  "channel-by-channel keeps its mode. Fixtures already patched start "
-                                  "where they are; Place moves the selected rows (or all of them) "
-                                  "as a block, and Apply moves everything at once."), this);
+    /* Short enough to be whole in the dialog's smallest size: the layout's
+       smallest height for a wrapped label is a line or so under its text. */
+    QLabel *intro = new QLabel(tr("Proposed homes for the staged fixtures. A DMX fixture on the plot goes to "
+                                  "the nearest node port with room (Via); the rest fill the first free "
+                                  "channels; each network fixture IP gets a universe of its own (unicast). "
+                                  "Pick each mode (it sets the DMX footprint), edit any universe or address, "
+                                  "then Apply. Fixtures already patched start where they are. Place moves "
+                                  "the selected rows as a block."), this);
+    intro->setObjectName(QStringLiteral("patchIntro"));
     intro->setWordWrap(true);
     root->addWidget(intro);
 
@@ -218,6 +218,11 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     m_table->verticalHeader()->hide();
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->horizontalHeader()->setSectionResizeMode(COL_NAME, QHeaderView::Stretch);
+    /* Every column but the name is as wide as its longest entry (the mode and
+       universe are combo boxes), so no row reads "Effect (15ch" and the
+       status is not cut. */
+    for (int col : { COL_MODEL, COL_MODE, COL_CH, COL_CONN, COL_UNI, COL_ADDR, COL_VIA, COL_STATUS })
+        m_table->horizontalHeader()->setSectionResizeMode(col, QHeaderView::ResizeToContents);
     m_table->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     root->addWidget(m_table, 1);

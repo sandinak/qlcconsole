@@ -24,6 +24,7 @@ private slots:
     void choicesGoToTheMapper();
     void loadsWithTheChoices();
     void specialCircuitsPage();
+    void circuitsPageExplanationWraps();
     void subFaders();
     void showFromSampleDir();
 

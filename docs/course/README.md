@@ -13,13 +13,10 @@ virtual copy of a show choir stage.
 > **Status (2026-11-02):** **Level 0** (8 lessons: seven short lighting
 > concepts lessons, then the virtual stage), **Level 1** (5 lessons and
 > the Level 1 check), **Level 2** (7 lessons and the Level 2 check) and
-> seven of the ten **Level 3** lessons (3.3, 3.5, 3.6, 3.7, 3.8, 3.9 and
-> the optional 3.10) are written. 3.1, 3.2 and 3.4 are outlined in the
-> [course plan](https://github.com/sandinak/qlcconsole/blob/main/docs/course/COURSE_PLAN.md)
-> and wait on the real rig. Every app step of the written lessons is
+> all ten **Level 3** lessons (3.1 to 3.9 and
+> the optional 3.10) are written; 3.1, 3.2 and 3.4 have a Part 3 that waits on the real rig. Every app step of the written lessons is
 > checked by the course test on qlcconsole 0.4.0. The pictures of Levels
-> 0, 1 and 2 and of Lessons 3.5, 3.6, 3.8 and 3.9 were taken on it; 3.3,
-> 3.7 and 3.10 have none yet.
+> 0, 1, 2 and 3 were taken on it; photos of real hardware are marked in the lessons.
 
 ## Start here
 
@@ -97,7 +94,7 @@ The lessons are checked against the app: `ui/test/courseshow` opens the
 teaching show offscreen, does every step of Lessons 0.8, 1.1–1.5 and
 Level 2's written lessons with the mouse (and 1.1 typed), plays them with
 GO in the Run tab, does Level 3's 3.5, 3.8 and 3.9 with the mouse, runs the others
-(3.3, 3.6, 3.7, 3.10) through the app's own code, and checks
+(3.1, 3.2, 3.3, 3.4, 3.6, 3.7, 3.10) through the app's own code, and checks
 the shows can't send DMX. It runs with
 the rest of the app's tests. If the app changes so a lesson step stops
 working, that test fails. The pictures are taken by the same test (see

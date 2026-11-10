@@ -8,6 +8,7 @@
 #include <QtTest>
 
 #include <QTemporaryDir>
+#include <QLabel>
 
 #include "eosimportwizard.h"
 #include "virtualconsole.h"
@@ -294,3 +295,31 @@ void EosImportWizard_Test::showFromSampleDir()
 }
 
 QTEST_MAIN(EosImportWizard_Test)
+
+void EosImportWizard_Test::circuitsPageExplanationWraps()
+{
+    // The page's explanation ran to several lines and was cut mid-sentence at
+    // the header's height: it is a wrapped label, tall enough for its text.
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath("wrap.asc");
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("Ident 3:0\n$Patch 1 0 1 0 1\n Text Relay FOH\n");
+    f.close();
+    EosImportWizard w(nullptr, m_doc, path);
+    w.setRemember(false);
+    w.resize(760, 560);
+    w.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+    w.next();
+    w.next();
+    QApplication::processEvents();
+    QLabel *about = w.currentPage()->findChild<QLabel *>(QStringLiteral("eosCircuitsAbout"));
+    QVERIFY(about != nullptr);
+    QVERIFY(about->wordWrap());
+    QVERIFY(about->isVisible());
+    QVERIFY2(about->height() >= about->heightForWidth(about->width()),
+             qPrintable(QStringLiteral("%1 < %2").arg(about->height()).arg(about->heightForWidth(about->width()))));
+    QVERIFY(about->text().endsWith(QLatin1String("cues.")));
+}

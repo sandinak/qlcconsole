@@ -137,4 +137,4 @@ fixtures in the new show with the rules each role gives, the groups
 **Eos/Front**, **Eos/House & Work**, **Eos/Power relays** and
 **Eos/Backstage**, the cue list's four cues in the Show Tree, and *Sub 1
 Work* as a fader in **Eos subs**. It drives the wizard's pages through
-their code rather than by clicks, and takes no pictures yet.
+their code rather than by clicks, and its picture is taken by `levelThreeMorePictures`.

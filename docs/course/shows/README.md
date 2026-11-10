@@ -103,6 +103,9 @@ would save:
    python3 tools/png-colour-chunks.py docs/course/images   # from the repo root
    ```
 
+   Lessons 3.1, 3.2, 3.3, 3.4, 3.7 and 3.10's pictures are taken by
+   `levelThreeMorePictures`, with the same `COURSE_SHOTS` set.
+
    Lesson 3.6's pictures (`images/lesson-3-6/`) are taken by its own test,
    `lessonFocusAndCalibration`, with the same `COURSE_SHOTS` set; Level
    2's by `levelTwoPictures` (`COURSE_LESSON=2.N` for one lesson's).

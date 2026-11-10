@@ -85,7 +85,7 @@ softer.
 5. Copy down where **Soloist DS** and **Center** are. "SL 1' · DS 1' 1""
    is 1 foot stage left of CL and just over a foot downstage of the number
    line.
-6. **Focus ▾ → Edit focus calls…**.
+6. **Focus ▾ → Edit Focus Calls…**.
 7. **+ Call**: tick **Truss-Spots**, **Focus to** **Center**.
 8. **+ Call**: **AT-Spots** only, to **Soloist DS**; **Note**
    `Off the proscenium`.

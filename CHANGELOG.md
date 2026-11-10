@@ -59,6 +59,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   trailing "…" included, and fails on any with no matching string in the app, listing file:line and the nearest app string.
   Keys, show content and real-world names are in its commented allowlist; stale text found but not yet fixed is in two
   short lists in the script.
+- The Patch dialog's Mode and Universe columns fit their longest name: a mode like "Effect (15ch)" was cut to "Effect (15ch".
+- The Eos import's Special circuits page shows its whole explanation, wrapped, instead of cutting it off mid-sentence.
+
+### Added
+
+- Course: Level 3 lessons 3.1 (DMX, universes and patching), 3.2 (fixtures and definitions) and 3.4 (building the rig), checked by the course test, with a Part 3 for the real rig; pictures for 3.1 to 3.4, 3.7 and 3.10.
 
 ## [0.4.2] - 2026-11-09
 

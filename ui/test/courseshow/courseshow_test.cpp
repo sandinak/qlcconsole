@@ -18,6 +18,10 @@
 */
 
 #include <QDockWidget>
+#include <QMenuBar>
+#include <QTextBrowser>
+#include <QToolTip>
+#include <QPainter>
 #include <QTreeWidgetItemIterator>
 #include <QApplication>
 #include <QScreen>
@@ -62,6 +66,11 @@
 #include "mainbar.h"
 #include "showtreeview.h"
 #include "addfixture.h"
+#include "patchlistdialog.h"
+#include "patchinventorydialog.h"
+#include "patchlabelsdialog.h"
+#include "showdifferencesdialog.h"
+#include "universecombo.h"
 #undef protected
 #undef private
 #include "structurestudioview.h"
@@ -120,6 +129,13 @@
 #include "lineplanview.h"
 #include "timecodesource.h"
 #include "showcontrol.h"
+#include "universeusagewidget.h"
+#include "righeads.h"
+#include "monitorfixtureitem.h"
+#include "scenery.h"
+#include "pipe.h"
+#include "fixturetreewidget.h"
+#include "patchlabels.h"
 
 #include "courseshow_test.h"
 #include "../common/dragpos.h"
@@ -2262,6 +2278,446 @@ void CourseShow_Test::lessonHouseLights()
     QVERIFY(view->selectNode(cueNumbered(doc, "0.0.2")));
     QVERIFY2(waitUntil([&out]() { return out("House Lights") == 0; }, 2 * kRigWait),
              qPrintable(QStringLiteral("House Lights %1 in 0.0.2").arg(out("House Lights"))));
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonDmxAndPatching()
+{
+    // Lesson 3.1, on the classroom show: Universe 1's usage, one light's
+    // address and DIP pattern, Add fixture's proposed address and the clash
+    // message, the Patch dialog moving the Lanterns, the patch list and
+    // its labels.
+    QVERIFY(open(kClassroom));
+    Doc *doc = m_app->doc();
+    QCOMPARE(doc->inputOutputMap()->universesCount(), 13u);
+    Fixture *spot1 = nullptr, *spot2 = nullptr;
+    int used = 0;
+    for (Fixture *f : doc->fixtures())
+    {
+        if (f->name() == QLatin1String("SR Truss Spot 1")) spot1 = f;
+        if (f->name() == QLatin1String("SR Truss Spot 2")) spot2 = f;
+        if (f->universe() == 0) used += int(f->channels());
+    }
+    QVERIFY(spot1 != nullptr && spot2 != nullptr);
+    QCOMPARE(used, 357);
+    QCOMPARE(int(spot1->address()) + 1, 214);
+    QCOMPARE(int(spot1->channels()), 12);
+    QCOMPARE(int(spot2->address()) + 1, 226);
+
+    // The Fixtures tab: Universe 1's usage widget, and the fixture's info.
+    {
+        UniverseUsageWidget w(doc, 0);
+        QStringList text;
+        for (QLabel *l : w.findChildren<QLabel *>())
+            text << l->text();
+        qInfo().noquote() << "[3.1] usage:" << text.join(" | ").left(300);
+        QVERIFY2(text.join("\n").contains("357 / 512 addresses used (69%)"), qPrintable(text.join("|")));
+    }
+    {
+        FixtureManager *fm = FixtureManager::instance();
+        QVERIFY(fm != nullptr);
+        const QString info = fm->fixtureInfo(spot1);
+        QVERIFY(info.contains("12 Channel"));
+        QVERIFY(info.contains("Address Range"));
+        QVERIFY(info.contains("214 - 225"));
+        QVERIFY(info.contains("Binary Address (DIP)"));
+        // The tree names a universe the way the handout says.
+        QStringList universes;
+        for (QTreeWidgetItemIterator it(fm->m_fixtures_tree); *it; ++it)
+            if ((*it)->text(0).startsWith(QLatin1String("Universe")) || (*it)->text(0).contains(QLatin1String("Spots, washes")))
+                universes << (*it)->text(0);
+        qInfo().noquote() << "[3.1] tree universe rows:" << universes.join(" | ");
+        { QStringList t; for (QTreeWidgetItemIterator it(fm->m_fixtures_tree); *it; ++it) { QStringList c; for (int k = 0; k < (*it)->columnCount(); ++k) c << (*it)->text(k); t << QString(qMin(4, int(0)), QChar(32)) + c.join("/"); if (t.size() > 140) break; } qInfo().noquote() << "[3.1] tree:" << t.join(" | "); }
+        QVERIFY(!universes.isEmpty());
+    }
+    // Universe 2 is full of three boxes; a 165-channel box goes to Universe 4, address 331.
+    {
+        int u2 = 0;
+        for (Fixture *f : doc->fixtures())
+            if (f->universe() == 1)
+                u2 += int(f->channels());
+        QCOMPARE(u2, 495);
+        const quint32 at = AddFixture::findAddress(165, doc->fixtures(), doc->inputOutputMap()->universesCount());
+        QCOMPARE(int(at >> 9) + 1, 4);
+        QCOMPARE(int(at & 0x1FF) + 1, 331);
+    }
+
+    // Add fixture: WLED > Lantern, Effect (15ch): Universe 1, address 358.
+    {
+        AddFixture dlg(nullptr, doc);
+        QTreeWidgetItem *lantern = nullptr;
+        for (int i = 0; i < dlg.m_tree->topLevelItemCount(); ++i)
+        {
+            QTreeWidgetItem *man = dlg.m_tree->topLevelItem(i);
+            if (man->text(0) != QLatin1String("WLED"))
+                continue;
+            for (int j = 0; j < man->childCount(); ++j)
+                if (man->child(j)->text(0) == QLatin1String("Lantern"))
+                    lantern = man->child(j);
+        }
+        QVERIFY2(lantern != nullptr, "WLED > Lantern is in the Add fixture list");
+        dlg.m_tree->setCurrentItem(lantern);
+        const int mode = dlg.m_modeCombo->findText(QStringLiteral("Effect (15ch)"));
+        QVERIFY(mode >= 0);
+        dlg.m_modeCombo->setCurrentIndex(mode);
+        dlg.slotModeActivated(mode);
+        settle(50);
+        qInfo().noquote() << "[3.1] Add fixture proposes: universe" << dlg.m_universeCombo->currentIndex() + 1
+                          << "address" << dlg.m_addressSpin->value();
+        QCOMPARE(dlg.m_universeCombo->currentIndex(), 0);
+        QCOMPARE(dlg.m_addressSpin->value(), 358);
+        QVERIFY(dlg.m_addrErrorLabel->isHidden());
+        // Lantern 7 goes in (as OK does), then 365 clashes with it.
+        Fixture *seven = new Fixture(doc);
+        seven->setName(QStringLiteral("Lantern 7"));
+        seven->setUniverse(0);
+        seven->setAddress(357);
+        seven->setChannels(15);
+        QVERIFY(doc->addFixture(seven));
+    }
+    // A second dialog, with Lantern 7 in the show: the clash on 365.
+    {
+        AddFixture dlg(nullptr, doc);
+        QTreeWidgetItem *lantern = nullptr;
+        for (int i = 0; i < dlg.m_tree->topLevelItemCount(); ++i)
+            if (dlg.m_tree->topLevelItem(i)->text(0) == QLatin1String("WLED"))
+                for (int j = 0; j < dlg.m_tree->topLevelItem(i)->childCount(); ++j)
+                    if (dlg.m_tree->topLevelItem(i)->child(j)->text(0) == QLatin1String("Lantern"))
+                        lantern = dlg.m_tree->topLevelItem(i)->child(j);
+        QVERIFY(lantern != nullptr);
+        dlg.m_tree->setCurrentItem(lantern);
+        const int mode = dlg.m_modeCombo->findText(QStringLiteral("Effect (15ch)"));
+        dlg.m_modeCombo->setCurrentIndex(mode);
+        dlg.slotModeActivated(mode);
+        QCOMPARE(dlg.m_addressSpin->value(), 373);       // Lantern 7 now takes 358 to 372
+        dlg.m_addressSpin->setValue(365);
+        settle(50);
+        QVERIFY(!dlg.m_addrErrorLabel->isHidden());
+        QVERIFY(dlg.m_addrErrorLabel->text().contains("Address already used"));
+    }
+    // Lantern 7 was only for that; take it back out.
+    for (Fixture *f : doc->fixtures())
+        if (f->name() == QLatin1String("Lantern 7"))
+        {
+            doc->deleteFixture(f->id());
+            break;
+        }
+
+    // The Patch dialog: Lanterns 1 to 6 to Universe 5 from 385.
+    QList<quint32> lanterns;
+    for (int n = 1; n <= 6; ++n)
+        for (Fixture *f : doc->fixtures())
+            if (f->name() == QStringLiteral("Lantern %1").arg(n))
+                lanterns << f->id();
+    QCOMPARE(lanterns.count(), 6);
+    {
+        PatchInventoryDialog dlg(doc, lanterns);
+        QCOMPARE(dlg.windowTitle(), QStringLiteral("Patch / Re-address"));
+        { QStringList names; for (int i = 0; i < dlg.m_placeUni->count(); ++i) names << dlg.m_placeUni->itemText(i); qInfo().noquote() << "[3.1] place combo:" << names.join(" | "); }
+        dlg.m_placeUni->setUniverse(4);
+        dlg.m_placeAddr->setValue(385);
+        dlg.slotPlace();
+        QStringList rows;
+        for (int r = 0; r < dlg.m_table->rowCount(); ++r)
+        {
+            QStringList cells;
+            for (int c = 0; c < dlg.m_table->columnCount(); ++c)
+                cells << (dlg.m_table->item(r, c) != nullptr ? dlg.m_table->item(r, c)->text()
+                          : dlg.m_table->cellWidget(r, c) != nullptr
+                                && qobject_cast<QSpinBox *>(dlg.m_table->cellWidget(r, c)) != nullptr
+                              ? QString::number(qobject_cast<QSpinBox *>(dlg.m_table->cellWidget(r, c))->value())
+                              : QStringLiteral("?"));
+            rows << cells.join(",");
+        }
+        qInfo().noquote() << "[3.1] patch table:" << rows.join(" | ");
+        qInfo().noquote() << "[3.1] patch summary:" << dlg.m_summary->text();
+        QVERIFY(dlg.m_summary->text().contains("0 conflict(s)"));
+        QVERIFY(dlg.m_apply->isEnabled());
+        dlg.accept();
+    }
+    settle(100);
+    QStringList where;
+    for (quint32 id : lanterns)
+        where << QStringLiteral("%1.%2").arg(doc->fixture(id)->universe() + 1).arg(doc->fixture(id)->address() + 1);
+    qInfo().noquote() << "[3.1] lanterns now:" << where.join(" ");
+    QCOMPARE(where, QStringList({ "5.385", "5.400", "5.415", "5.430", "5.445", "5.460" }));
+    // Undo, as ⌘Z on the Fixtures tab does.
+    QVERIFY(Monitor::instance()->m_undoAction->isEnabled());
+    Monitor::instance()->m_undoAction->trigger();
+    settle(100);
+    where.clear();
+    for (quint32 id : lanterns)
+        where << QStringLiteral("%1.%2").arg(doc->fixture(id)->universe() + 1).arg(doc->fixture(id)->address() + 1);
+    QCOMPARE(where, QStringList({ "1.1", "1.16", "1.31", "1.46", "1.61", "1.76" }));
+
+    // The patch list: three groupings, the XLSX, the labels.
+    {
+        PatchListDialog dlg(doc);
+        QStringList heads;
+        for (PatchList::GroupBy by : { PatchList::ByLocation, PatchList::ByUniverse, PatchList::ByType })
+        {
+            dlg.setGroupBy(by);
+            QStringList top;
+            for (int i = 0; i < dlg.tree()->topLevelItemCount(); ++i)
+                top << dlg.tree()->topLevelItem(i)->text(0);
+            heads << PatchList::groupByName(by) + ": " + top.mid(0, 4).join("; ");
+            QVERIFY(!top.isEmpty());
+        }
+        qInfo().noquote() << "[3.1] patch list groups:" << heads.join(" || ");
+        QTemporaryDir out;
+        const QString path = out.filePath(QStringLiteral("patch.xlsx"));
+        QString err;
+        QVERIFY2(dlg.saveXlsx(path, &err), qPrintable(err));
+        QVERIFY(QFileInfo(path).size() > 1000);
+        const PatchList pl = PatchList::build(doc);
+        QString label;
+        for (const PatchList::Row &r : pl.rows())
+            if (r.name == QLatin1String("SR Truss Spot 1"))
+                label = PatchLabels::render(PatchLabels::defaultTemplate(), r, pl.multiUniverse());
+        qInfo().noquote() << "[3.1] label:" << label;
+        QCOMPARE(label, QStringLiteral("SR Truss Spot 1 D1.214"));
+    }
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonFixturesAndDefinitions()
+{
+    // Lesson 3.2, on the classroom show: a pixel box's definition, its three
+    // modes, the heads the groups are made of, the definitions the show
+    // carries, and where the Fixture Editor is opened from.
+    QVERIFY(open(kClassroom));
+    Doc *doc = m_app->doc();
+    Fixture *cyc = nullptr, *spot = nullptr;
+    for (Fixture *f : doc->fixtures())
+    {
+        if (f->name() == QLatin1String("SR Truss Cyc 1")) cyc = f;
+        if (f->name() == QLatin1String("SR Truss Spot 1")) spot = f;
+    }
+    QVERIFY(cyc != nullptr && spot != nullptr);
+    FixtureManager *fm = FixtureManager::instance();
+    QVERIFY(fm != nullptr);
+    const QString cycInfo = fm->fixtureInfo(cyc);
+    qInfo().noquote() << "[3.2] cyc definition source:" << cyc->fixtureDef()->sourceDescription();
+    for (const char *want : { "Warmdance", "XL-450", "165ch", "LED Bar (Pixels)", "Definition", "Red 1", "Green 1", "Blue 1" })
+        QVERIFY2(cycInfo.contains(QLatin1String(want)), want);
+    QCOMPARE(int(cyc->channels()), 165);
+    const QString spotInfo = fm->fixtureInfo(spot);
+    for (const char *want : { "LED Movinghead+Circle", "12 Channel", "Moving Head", ">Pan<", ">Tilt<", ">Dimmer<" })
+        QVERIFY2(spotInfo.contains(QLatin1String(want)), want);
+
+    // The modes: name, channels, heads (the Fixture Editor's Modes tab).
+    QStringList modes;
+    for (QLCFixtureMode *m : cyc->fixtureDef()->modes())
+        modes << QStringLiteral("%1/%2/%3").arg(m->name()).arg(m->channels().size()).arg(m->heads().size());
+    qInfo().noquote() << "[3.2] XL-450 modes:" << modes.join(" | ");
+    QCOMPARE(modes, QStringList({ "165ch/165/75", "135ch RGB/135/45", "30ch White/30/30" }));
+
+    // Definition & Mode…: the mode list and its channel count.
+    {
+        AddFixture dlg(nullptr, doc, cyc);
+        QStringList shown;
+        for (int i = 0; i < dlg.m_modeCombo->count(); ++i)
+        {
+            dlg.m_modeCombo->setCurrentIndex(i);
+            dlg.slotModeActivated(i);
+            shown << QStringLiteral("%1=%2").arg(dlg.m_modeCombo->itemText(i)).arg(dlg.m_channelsSpin->value());
+        }
+        qInfo().noquote() << "[3.2] Definition & Mode:" << shown.join(" | ");
+        QCOMPARE(shown, QStringList({ "165ch=165", "135ch RGB=135", "30ch White=30" }));
+    }
+
+    // Edit Fixture Definition… is offered for a light whose definition has a file here.
+    {
+        int count = 0;
+        const QString path = FixtureManager::sharedDefinitionSourceFile(doc, { cyc->id() }, &count);
+        qInfo().noquote() << "[3.2] XL-450 definition file:" << path << count;
+        QVERIFY2(!path.isEmpty(), "Edit Fixture Definition… is offered on the XL-450");
+        QVERIFY(!FixtureManager::sharedDefinitionSourceFile(doc, { spot->id() }, &count).isEmpty());
+    }
+
+    // The groups are made of heads: the colour pixels and the white pixels.
+    QMap<QString, QPair<int, int>> heads;
+    for (const char *g : { "TrussC-RGB", "TrussC-W", "TrussW-RGB", "TrussW-W", "Truss-Spots" })
+        if (FixtureGroup *grp = groupNamed(doc, QString::fromLatin1(g)))
+            heads[QString::fromLatin1(g)] = qMakePair(grp->fixtureList().count(), grp->headList().count());
+    qInfo().noquote() << "[3.2] group fixtures/heads:" << [&heads]() {
+        QStringList l; for (auto it = heads.begin(); it != heads.end(); ++it) l << QStringLiteral("%1=%2/%3").arg(it.key()).arg(it.value().first).arg(it.value().second); return l.join(" "); }();
+    QCOMPARE(heads["TrussC-RGB"], qMakePair(4, 180));
+    QCOMPARE(heads["TrussC-W"], qMakePair(4, 120));
+    QCOMPARE(heads["TrussW-RGB"], qMakePair(4, 180));
+    QCOMPARE(heads["Truss-Spots"].first, 4);
+
+    // The group's grid: a cell's tooltip names the box, head, address, universe and kind of head.
+    {
+        QStringList tips;
+        for (const char *g : { "TrussC-RGB", "TrussC-W" })
+        {
+            QTreeWidgetItem *grp = nullptr;
+            for (QTreeWidgetItemIterator it(fm->m_fixtures_tree); *it; ++it)
+                if ((*it)->data(0, PROP_GROUP).isValid() && (*it)->text(0) == QLatin1String(g))
+                    grp = *it;
+            QVERIFY(grp != nullptr);
+            for (QTreeWidgetItem *up = grp->parent(); up != nullptr; up = up->parent())
+                up->setExpanded(true);
+            fm->m_fixtures_tree->setCurrentItem(grp);
+            fm->slotSelectionChanged();
+            settle(100);
+            FixtureGroupEditor *ed = fm->findChild<FixtureGroupEditor *>();
+            QVERIFY(ed != nullptr);
+            QString tip;
+            for (int r = 0; r < ed->m_table->rowCount() && tip.isEmpty(); ++r)
+                for (int c = 0; c < ed->m_table->columnCount() && tip.isEmpty(); ++c)
+                    if (ed->m_table->item(r, c) != nullptr)
+                        tip = ed->m_table->item(r, c)->toolTip();
+            tips << tip.replace('\n', ' ');
+        }
+        qInfo().noquote() << "[3.2] cell tooltips:" << tips.join(" | ");
+        QVERIFY(tips.at(0).contains("[RGB]") && tips.at(0).contains("H:1") && tips.at(0).contains("A:") && tips.at(0).contains("U:"));
+        QVERIFY(tips.at(1).contains("[W]"));
+    }
+
+    // The show carries its own definitions: File ▸ Show Definitions….
+    {
+        QAction *showDefs = m_app->findChild<QAction *>(QStringLiteral("fileShowDefinitions"));
+        QVERIFY(showDefs != nullptr);
+        QCOMPARE(showDefs->text().remove('&'), QStringLiteral("Show Definitions…"));
+        ShowDifferencesDialog dlg(doc, nullptr, true);
+        QStringList rows;
+        for (QTreeWidgetItemIterator it(dlg.m_tree); *it; ++it)
+            rows << (*it)->text(0);
+        qInfo().noquote() << "[3.2] Show Definitions:" << rows.join(" | ");
+        QVERIFY(rows.count() >= 5);
+        QCOMPARE(dlg.windowTitle(), QStringLiteral("Show Definitions"));
+    }
+    // Fixtures ▸ Fixture Editor…
+    {
+        QStringList items;
+        for (QAction *a : m_app->menuBar()->actions())
+            if (a->text().remove('&') == QLatin1String("Fixtures") && a->menu() != nullptr)
+                for (QAction *m : a->menu()->actions())
+                    items << m->text();
+        qInfo().noquote() << "[3.2] Fixtures menu:" << items.join(" | ");
+        QVERIFY(items.contains(QStringLiteral("Fixture Editor…")));
+        QVERIFY(items.contains(QStringLiteral("Patch List…")));
+    }
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonBuildingTheRig()
+{
+    // Lesson 3.4, in the classroom show on the Lighting Studio: a boom, a
+    // wall with a door, a par mounted on the boom and faced across the
+    // stage, what the Plot layers list says hangs on what, a lock.
+    QVERIFY(open(kClassroom));
+    Doc *doc = m_app->doc();
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon != nullptr && mon->m_props != nullptr && mon->m_graphicsView != nullptr);
+    MonitorProperties *props = mon->m_props;
+    MonitorGraphicsView *gv = mon->m_graphicsView;
+
+    // The menus the handout names: the toolbar's Add and Plot Layers, the right-click Add Here.
+    QStringList toolbar;
+    for (QToolButton *b : mon->findChildren<QToolButton *>())
+        toolbar << b->text();
+    qInfo().noquote() << "[3.4] toolbar buttons:" << toolbar.join(" | ");
+    QVERIFY(toolbar.contains(QStringLiteral("Add")));
+    QVERIFY(mon->m_layersAction != nullptr);
+    QCOMPARE(mon->m_layersAction->text(), QStringLiteral("Plot Layers"));
+    QCOMPARE(mon->m_lockAction->text(), QStringLiteral("Edit Plot"));
+    QStringList sceneryKinds;
+    for (int kind : Scenery::kinds())
+        sceneryKinds << Scenery::kindName(kind);
+    QVERIFY(sceneryKinds.contains(QStringLiteral("Wall")));
+
+    // A boom, stage right (+X is stage left).
+    const int pipesBefore = props->pipes().count();
+    Pipe *boom = props->addPipe();
+    boom->setName(QStringLiteral("SR Boom"));
+    boom->setOriginX(-1.0f);
+    boom->setOriginY(2.0f);
+    {
+        QStringList state;
+        for (const MonitorProperties::MonitorLayer &l : props->layers())
+            state << QStringLiteral("%1%2%3").arg(l.name, l.locked ? " (locked)" : "", l.id == props->activeLayerId() ? " (active)" : "");
+        qInfo().noquote() << "[3.4] layers at the start:" << state.join(" | ") << "plot locked:" << props->layoutLocked();
+        QVERIFY(props->layer(props->activeLayerId()).locked);       // so a new object asks where it goes
+        quint32 towers = props->activeLayerId();
+        for (const MonitorProperties::MonitorLayer &l : props->layers())
+            if (l.name == QLatin1String("Towers"))
+                towers = l.id;
+        QVERIFY(!props->layer(towers).locked);
+        boom->setLayerId(towers);
+    }
+    gv->updatePlatforms();
+    QCOMPARE(props->pipes().count(), pipesBefore + 1);
+
+    // A wall with a door: 3' wide, 7' high (1 ft = 0.3048 m).
+    Scenery *wall = props->addScenery();
+    wall->setKind(Scenery::Wall);
+    wall->setName(QStringLiteral("Door Wall"));
+    wall->setDoorWidth(0.9144f);
+    wall->setDoorHeight(2.1336f);
+    QVERIFY(wall->doorWidth() > 0.0f);
+
+    // A par on the boom.
+    QLCFixtureDef *def = doc->fixtureDefCache()->fixtureDef(QStringLiteral("Chauvet"), QStringLiteral("COREpar 40 USB"));
+    QVERIFY2(def != nullptr, "the COREpar 40 USB is in the app's definitions");
+    QStringList modeNames;
+    for (QLCFixtureMode *m : def->modes())
+        modeNames << QStringLiteral("%1 (%2 ch)").arg(m->name()).arg(m->channels().size());
+    qInfo().noquote() << "[3.4] COREpar modes:" << modeNames.join(" | ");
+    QLCFixtureMode *mode = def->modes().first();
+    const quint32 at = AddFixture::findAddress(mode->channels().size(), doc->fixtures(), doc->inputOutputMap()->universesCount());
+    Fixture *par = new Fixture(doc);
+    par->setName(QStringLiteral("SR Boom Par"));
+    par->setUniverse(at >> 9);
+    par->setAddress(at & 0x01FF);
+    par->setFixtureDefinition(def, mode);
+    QVERIFY(doc->addFixture(par));
+    const quint32 fid = par->id();
+    QVERIFY(RigHeads::isFixedUnit(par));
+    props->setFixturePosition(fid, 0, 0, QVector3D(-1.0f, 2.0f, 0.0f));
+    gv->addFixture(fid, QPointF(0, 0));
+    gv->attachFixtureToPipe(fid, boom->id());
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    QCOMPARE(rp.pipeId, boom->id());
+
+    // Face: Stage left, as the Face row does; Points and Tilt in yoke follow.
+    props->setFixtureFace(rp, FixtureRigProps::FaceStageLeft);
+    props->setFixtureRigProps(fid, rp);
+    rp = props->fixtureRigProps(fid);
+    RigHeads::aimAtFace(rp);
+    qInfo().noquote() << "[3.4] after Face Stage left: Points" << rp.panZeroDir << "Tilt in yoke (down)" << rp.aimDown;
+    QVERIFY(qAbs(rp.panZeroDir - 270.0f) < 1.0f || qAbs(rp.panZeroDir - 90.0f) < 1.0f);
+    rp.aimDown = 20.0f;
+    props->setFixtureRigProps(fid, rp);
+    QCOMPARE(props->fixtureRigProps(fid).aimDown, 20.0f);
+
+    // Plot layers: the par hangs under the boom.
+    mon->m_layersPanel->reload();
+    QStringList rows;
+    QString parentOfPar;
+    for (QTreeWidgetItemIterator it(mon->m_layersPanel->findChild<QTreeWidget *>()); *it; ++it)
+    {
+        rows << (*it)->text(0);
+        if ((*it)->text(0).startsWith(QLatin1String("SR Boom Par")) && (*it)->parent() != nullptr)
+            parentOfPar = (*it)->parent()->text(0);
+    }
+    qInfo().noquote() << "[3.4] layers tree (first rows):" << rows.mid(0, 24).join(" | ");
+    qInfo().noquote() << "[3.4] SR Boom Par hangs under:" << parentOfPar;
+    QVERIFY2(parentOfPar.startsWith(QLatin1String("SR Boom")), qPrintable(parentOfPar));
+    QStringList layerNames;
+    for (const MonitorProperties::MonitorLayer &l : props->layers())
+        layerNames << l.name;
+    qInfo().noquote() << "[3.4] layers:" << layerNames.join(" | ");
+
+    // A layer's lock holds what is on it.
+    const quint32 layer = boom->layerId();
+    props->setLayerLocked(layer, true);
+    QVERIFY(props->layer(layer).locked);
+    props->setLayerLocked(layer, false);
+    QVERIFY(!props->layer(layer).locked);
+
     doc->resetModified();
 }
 
@@ -5951,6 +6407,406 @@ void CourseShow_Test::levelTwoPictures()
         QVERIFY(open(levelTwoStart(7)));
         QVERIFY(lessonTwoSevenByMouse(m_app->doc(), showTree(), d));
         m_app->doc()->resetModified();
+    }
+}
+
+void CourseShow_Test::levelThreeMorePictures()
+{
+    // Lessons 3.1, 3.2, 3.3, 3.4, 3.7 and 3.10's pictures, taken at the steps
+    // their pages number; set COURSE_SHOTS to docs/course/images.
+    const QString root = qEnvironmentVariable("COURSE_SHOTS");
+    if (root.isEmpty())
+        QSKIP("set COURSE_SHOTS to the course's images folder");
+    m_app->setTheme(App::ThemeBlue);
+    m_app->resize(1280, 800);
+    auto toTab = [this](QWidget *w) {
+        m_app->m_tab->setCurrentWidget(w);
+        settle(300);
+    };
+    auto fixtureNamed = [](Doc *doc, const QString &name) -> Fixture * {
+        for (Fixture *f : doc->fixtures())
+            if (f->name() == name)
+                return f;
+        return nullptr;
+    };
+    auto shootDialog = [&](QWidget *dlg, const QList<HelpShots::Callout> &marks, const QString &dir, const QString &name) {
+        dlg->show();
+        settle(300);
+        HelpShots::Frame f;
+        f.grab = dlg;
+        f.callouts = marks;
+        for (const HelpShots::Callout &c : marks)
+            if (c.widget.isNull() || !c.widget->isVisible())
+                qWarning() << name << "callout" << c.number << "has nothing on show";
+        return save(HelpShots::annotate(dlg->grab().toImage(), f), dir, name);
+    };
+
+    // --- 3.1: Universe 1's usage, the Patch dialog, the patch list.
+    {
+        const QString d = root + QStringLiteral("/lesson-3-1");
+        QVERIFY(open(kClassroom));
+        Doc *doc = m_app->doc();
+        FixtureManager *fm = FixtureManager::instance();
+        toTab(fm);
+        QTreeWidgetItem *uni = nullptr;
+        for (QTreeWidgetItemIterator it(fm->m_fixtures_tree); *it; ++it)
+            if ((*it)->text(0) == QLatin1String("Spots, washes, beams, lanterns") && (*it)->parent() != nullptr
+                    && (*it)->parent()->text(0) == QLatin1String("Universes"))
+                uni = *it;
+        QVERIFY(uni != nullptr);
+        for (QTreeWidgetItem *up = uni->parent(); up != nullptr; up = up->parent())
+            up->setExpanded(true);
+        fm->m_fixtures_tree->setCurrentItem(uni);
+        fm->slotSelectionChanged();
+        settle(300);
+        QVERIFY(fm->m_universeUsage != nullptr);
+        {
+            HelpShots::Frame f;
+            f.grab = m_app;
+            f.callouts << mark(fm->m_universeUsage, 1);
+            QVERIFY(shoot(f, d, "universe-usage"));
+        }
+        QList<quint32> lanterns;
+        for (int n = 1; n <= 6; ++n)
+            lanterns << fixtureNamed(doc, QStringLiteral("Lantern %1").arg(n))->id();
+        {
+            PatchInventoryDialog dlg(doc, lanterns, m_app);
+            dlg.resize(1100, 520);
+            dlg.m_placeUni->setUniverse(4);
+            dlg.m_placeAddr->setValue(385);
+            dlg.slotPlace();
+            HelpShots::Callout c1 = mark(dlg.m_placeUni, 1, HelpShots::Above);
+            HelpShots::Callout c2 = mark(dlg.m_placeAddr, 2, HelpShots::Above);
+            HelpShots::Callout c5 = mark(dlg.m_apply, 5, HelpShots::Above);
+            QVERIFY(shootDialog(&dlg, { c1, c2, mark(dlg.m_table, 3), mark(dlg.m_summary, 4, HelpShots::Right), c5 }, d, "patch-dialog"));
+        }
+        {
+            PatchListDialog dlg(doc, m_app);
+            dlg.setGroupBy(PatchList::ByUniverse);
+            dlg.resize(1100, 560);
+            HelpShots::Callout g = mark(dlg.findChild<QComboBox *>("patchListGroupBy"), 1);
+            g.place = HelpShots::Corner;
+            HelpShots::Callout x = mark(dlg.findChild<QPushButton *>("patchListXlsx"), 3);
+            x.place = HelpShots::Corner;
+            HelpShots::Callout l = mark(dlg.findChild<QPushButton *>("patchListLabels"), 4);
+            l.place = HelpShots::Corner;
+            dlg.show();
+            settle(300);
+            QTreeWidgetItem *head = dlg.tree()->topLevelItem(0);
+            HelpShots::Callout rows = markRect(dlg.tree()->viewport(), dlg.tree()->visualItemRect(head), &dlg, 2, HelpShots::Right);
+            QVERIFY(shootDialog(&dlg, { g, rows, x, l }, d, "patch-list"));
+        }
+        doc->resetModified();
+    }
+
+    // --- 3.2: a definition, its modes, the heads of a group.
+    {
+        const QString d = root + QStringLiteral("/lesson-3-2");
+        QVERIFY(open(kClassroom));
+        Doc *doc = m_app->doc();
+        FixtureManager *fm = FixtureManager::instance();
+        toTab(fm);
+        Fixture *cyc = fixtureNamed(doc, QStringLiteral("SR Truss Cyc 1"));
+        QVERIFY(cyc != nullptr);
+        QTreeWidgetItem *row = nullptr;
+        for (QTreeWidgetItemIterator it(fm->m_fixtures_tree); *it; ++it)
+            if ((*it)->data(0, PROP_ID).isValid() && (*it)->data(0, PROP_ID).toUInt() == cyc->id()
+                    && !(*it)->data(0, PROP_HEAD).isValid() && (*it)->parent() != nullptr && (*it)->parent()->text(0) == QLatin1String("Trusses"))
+                row = *it;
+        QVERIFY(row != nullptr);
+        for (QTreeWidgetItem *up = row->parent(); up != nullptr; up = up->parent())
+            up->setExpanded(true);
+        fm->m_fixtures_tree->setCurrentItem(row);
+        fm->slotSelectionChanged();
+        settle(300);
+        QVERIFY(fm->m_info != nullptr);
+        {
+            HelpShots::Frame f;
+            f.grab = m_app;
+            f.callouts << mark(fm->findChild<QTextBrowser *>(), 1);
+            QVERIFY(shoot(f, d, "definition-info"));
+        }
+        {
+            AddFixture dlg(m_app, doc, cyc);
+            dlg.setWindowTitle(QStringLiteral("Change fixture properties"));
+            dlg.m_modeCombo->setCurrentIndex(1);
+            dlg.slotModeActivated(1);
+            dlg.resize(900, 600);
+            QVERIFY(shootDialog(&dlg, { mark(dlg.m_modeCombo, 1, HelpShots::Above), mark(dlg.m_channelsSpin, 2, HelpShots::Above) },
+                                d, "definition-modes"));
+        }
+        {
+            QTreeWidgetItem *grp = nullptr;
+            for (QTreeWidgetItemIterator it(fm->m_fixtures_tree); *it; ++it)
+                if ((*it)->data(0, PROP_GROUP).isValid() && (*it)->text(0) == QLatin1String("TrussC-RGB"))
+                    grp = *it;
+            QVERIFY(grp != nullptr);
+            for (QTreeWidgetItem *up = grp->parent(); up != nullptr; up = up->parent())
+                up->setExpanded(true);
+            fm->m_fixtures_tree->setCurrentItem(grp);
+            fm->slotSelectionChanged();
+            settle(300);
+            FixtureGroupEditor *ed = fm->findChild<FixtureGroupEditor *>();
+            QVERIFY(ed != nullptr && ed->isVisible());
+            // The top-left of the grid, with the tooltip of a head showing.
+            QTableWidgetItem *cell = nullptr;
+            for (int r = 0; r < ed->m_table->rowCount() && cell == nullptr; ++r)
+                for (int c = 0; c < ed->m_table->columnCount() && cell == nullptr; ++c)
+                    if (ed->m_table->item(r, c) != nullptr)
+                        cell = ed->m_table->item(r, c);
+            QVERIFY(cell != nullptr);
+            const QRect cr = ed->m_table->visualItemRect(cell);
+            const QPoint at = ed->m_table->viewport()->mapToGlobal(cr.center());
+            QToolTip::showText(at, cell->toolTip(), ed->m_table->viewport(), cr);
+            settle(300);
+            QWidget *tip = nullptr;
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (w->isVisible() && QLatin1String(w->metaObject()->className()) == QLatin1String("QTipLabel"))
+                    tip = w;
+            QVERIFY2(tip != nullptr, "the head's tooltip is on show");
+            QImage img = m_app->grab().toImage();
+            {
+                QPainter pt(&img);
+                pt.drawImage(m_app->mapFromGlobal(tip->mapToGlobal(QPoint(0, 0))), tip->grab().toImage());
+            }
+            const QPoint top = ed->mapTo(m_app, QPoint(0, 0));
+            QVERIFY(save(img.copy(QRect(top.x(), top.y(), 760, 300)), d, "group-heads"));
+            QToolTip::hideText();
+        }
+        doc->resetModified();
+    }
+
+    // --- 3.3: the plot with Auto symbols on, the lanterns as lanterns, the washes round.
+    {
+        const QString d = root + QStringLiteral("/lesson-3-3");
+        QVERIFY(open(kClassroom));
+        Doc *doc = m_app->doc();
+        Monitor *mon = Monitor::instance();
+        QVERIFY(mon != nullptr);
+        toTab(mon);
+        QAction *autoLooks = nullptr;
+        for (QAction *a : mon->findChildren<QAction *>())
+            if (a->text() == QLatin1String("Show Auto Fixtures as Their Closest Plot Symbol"))
+                autoLooks = a;
+        QVERIFY(autoLooks != nullptr);
+        autoLooks->trigger();
+        settle(100);
+        QList<quint32> lanterns, washes;
+        for (Fixture *f : doc->fixtures())
+        {
+            if (f->name().startsWith(QLatin1String("Lantern ")))
+                lanterns << f->id();
+            if (f->name().contains(QLatin1String(" AT Wash ")))
+                washes << f->id();
+        }
+        FixtureManager::setStageLook(doc, lanterns, Fixture::LanternLook);
+        FixtureManager::setStageLook(doc, washes, Fixture::MovingRoundWashLook);
+        settle(400);
+        // The Fixtures tab: the AT-W-ALL washes and the Lanterns with their new icons.
+        FixtureManager *fm = FixtureManager::instance();
+        toTab(fm);
+        QTreeWidget *tree = fm->m_fixtures_tree;
+        QTreeWidgetItem *firstLantern = nullptr;
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        {
+            QTreeWidgetItem *n = *it;
+            const QString name = n->text(0);
+            if (n->data(0, PROP_GROUP).isValid() && (name == QLatin1String("AT-W-ALL") || name == QLatin1String("Lanterns")))
+            {
+                for (QTreeWidgetItem *up = n->parent(); up != nullptr; up = up->parent())
+                    up->setExpanded(true);
+                n->setExpanded(true);
+                if (name == QLatin1String("Lanterns"))
+                    firstLantern = n;
+            }
+            else if (n->parent() != nullptr && n->parent()->text(0) == QLatin1String("Fixture Groups"))
+                n->setExpanded(n->text(0) == QLatin1String("AT") || n->text(0) == QLatin1String("Lanterns"));
+        }
+        QVERIFY(firstLantern != nullptr);
+        tree->scrollToItem(tree->topLevelItem(0));
+        settle(300);
+        QVERIFY(save(tree->grab().toImage(), d, "symbols-fixtures"));
+        doc->resetModified();
+    }
+
+    // --- 3.4: the boom, the par on it, Plot layers; the par's Aim & Mount.
+    {
+        const QString d = root + QStringLiteral("/lesson-3-4");
+        QVERIFY(open(kClassroom));
+        Doc *doc = m_app->doc();
+        Monitor *mon = Monitor::instance();
+        MonitorProperties *props = mon->m_props;
+        MonitorGraphicsView *gv = mon->m_graphicsView;
+        toTab(mon);
+        if (mon->m_layersAction != nullptr)
+            mon->m_layersAction->setChecked(true);
+        quint32 towers = props->activeLayerId();
+        for (const MonitorProperties::MonitorLayer &l : props->layers())
+            if (l.name == QLatin1String("Towers"))
+                towers = l.id;
+        // The boom off the stage-right edge (the left of the plot), a par on it.
+        Pipe *boom = props->addPipe();
+        boom->setName(QStringLiteral("SR Boom"));
+        boom->setOriginX(0.9f);
+        boom->setOriginY(5.5f);
+        boom->setHeight(4.2672f);       // 14'
+        boom->setLayerId(towers);
+        gv->updatePlatforms();
+        QLCFixtureDef *def = doc->fixtureDefCache()->fixtureDef(QStringLiteral("Chauvet"), QStringLiteral("COREpar 40 USB"));
+        QVERIFY(def != nullptr);
+        QLCFixtureMode *mode = def->modes().first();
+        const quint32 at = AddFixture::findAddress(mode->channels().size(), doc->fixtures(), doc->inputOutputMap()->universesCount());
+        Fixture *par = new Fixture(doc);
+        par->setName(QStringLiteral("SR Boom Par"));
+        par->setUniverse(at >> 9);
+        par->setAddress(at & 0x01FF);
+        par->setFixtureDefinition(def, mode);
+        QVERIFY(doc->addFixture(par));
+        props->setFixturePosition(par->id(), 0, 0, QVector3D(0.9f, 5.5f, 0.0f));
+        gv->addFixture(par->id(), QPointF(0, 0));
+        gv->attachFixtureToPipe(par->id(), boom->id());
+        FixtureRigProps rp = props->fixtureRigProps(par->id());
+        props->setFixtureFace(rp, FixtureRigProps::FaceStageLeft);
+        RigHeads::aimAtFace(rp);
+        rp.aimDown = 20.0f;
+        props->setFixtureRigProps(par->id(), rp);
+        gv->updateFixture(par->id());
+        gv->selectMapItem(QStringLiteral("fixture"), par->id());
+        mon->m_layersPanel->reload();
+        for (QToolButton *b : mon->m_layersPanel->findChildren<QToolButton *>())
+            if (b->toolTip().startsWith(QLatin1String("Selected only")) && b->isCheckable() && !b->isChecked())
+                b->click();
+        settle(500);
+        {
+            HelpShots::Frame f;
+            f.grab = m_app;
+            f.callouts << mark(mon->m_layersPanel, 1);
+            QVERIFY(shoot(f, d, "plot-boom"));
+        }
+        // Fixture Properties, as the student opens it: Aim & Mount.
+        QString err;
+        QTimer::singleShot(400, [this, &err, d]() {
+            for (QWidget *w : QApplication::topLevelWidgets())
+            {
+                QDialog *dlg = qobject_cast<QDialog *>(w);
+                if (dlg == nullptr || !dlg->isVisible() || !dlg->windowTitle().startsWith(QLatin1String("Fixture Properties")))
+                    continue;
+                dlg->resize(640, 900);
+                settle(200);
+                HelpShots::Frame f;
+                f.grab = dlg;
+                for (const char *name : { "fixtureFace", "fixtureAim", "fixtureAimDown" })
+                {
+                    QWidget *c = dlg->findChild<QWidget *>(QString::fromLatin1(name));
+                    if (c == nullptr || !c->isVisible())
+                        err += QStringLiteral(" %1").arg(QLatin1String(name));
+                    else
+                        f.callouts << mark(c, f.callouts.size() + 1, HelpShots::Right);
+                }
+                f.pad = QMargins(0, 0, 36, 0);
+                save(HelpShots::annotate(dlg->grab().toImage(), f), d, "aim-mount");
+                dlg->accept();
+                return;
+            }
+            err = QStringLiteral(" no dialog");
+        });
+        mon->editFixturesProperties({ par->id() });
+        QVERIFY2(err.isEmpty(), qPrintable(err));
+        doc->resetModified();
+    }
+
+    // --- 3.7: Stage Power's Output Rules, and the badges on the three fixtures.
+    {
+        const QString d = root + QStringLiteral("/lesson-3-7");
+        QVERIFY(open(kClassroom));
+        Doc *doc = m_app->doc();
+        QMap<QString, quint32> ids;
+        for (const QString &name : { QStringLiteral("House Lights"), QStringLiteral("Work Lights"),
+                                     QStringLiteral("Stage Power") })
+        {
+            const quint32 at = AddFixture::findAddress(1, doc->fixtures(), doc->inputOutputMap()->universesCount());
+            Fixture *f = new Fixture(doc);
+            f->setName(name);
+            f->setUniverse(at >> 9);
+            f->setAddress(at & 0x01FF);
+            f->setChannels(1);
+            QVERIFY(doc->addFixture(f));
+            ids[name] = f->id();
+        }
+        auto rules = [doc](quint32 id, QList<Fixture::OutputRule> on) {
+            OutputRulesDialog dlg(doc, { id });
+            for (Fixture::OutputRule r : on)
+                dlg.box(r)->setChecked(true);
+            return dlg.apply();
+        };
+        QVERIFY(rules(ids["House Lights"], { Fixture::ExemptBlackout, Fixture::ExemptGrandMaster }));
+        QVERIFY(rules(ids["Work Lights"], { Fixture::ExemptBlackout, Fixture::ExemptGrandMaster }));
+        {
+            OutputRulesDialog dlg(doc, { ids["House Lights"] }, m_app);
+            for (Fixture::OutputRule r : { Fixture::ExemptBlackout, Fixture::ExemptGrandMaster })
+                dlg.box(r)->setChecked(true);
+            QList<HelpShots::Callout> marks;
+            int n = 0;
+            for (Fixture::OutputRule r : { Fixture::ExemptBlackout, Fixture::ExemptGrandMaster })
+                marks << mark(dlg.box(r), ++n, HelpShots::Right);
+            dlg.resize(560, dlg.sizeHint().height());
+            QVERIFY(shootDialog(&dlg, marks, d, "output-rules-house"));
+        }
+        {
+            OutputRulesDialog dlg(doc, { ids["Stage Power"] }, m_app);
+            for (Fixture::OutputRule r : { Fixture::Switch, Fixture::ExemptBlackout, Fixture::ExemptGrandMaster, Fixture::OnAtOpen })
+                dlg.box(r)->setChecked(true);
+            QList<HelpShots::Callout> marks;
+            int n = 0;
+            for (Fixture::OutputRule r : { Fixture::ExemptBlackout, Fixture::ExemptGrandMaster, Fixture::Switch, Fixture::OnAtOpen })
+                marks << mark(dlg.box(r), ++n, HelpShots::Right);
+            dlg.resize(560, dlg.sizeHint().height());
+            QVERIFY(shootDialog(&dlg, marks, d, "output-rules"));
+            QVERIFY(dlg.apply());
+        }
+        FixtureManager *fm = FixtureManager::instance();
+        toTab(fm);
+        fm->updateView();
+        settle(200);
+        QTreeWidgetItem *row = fm->m_fixtures_tree->fixtureItem(ids["Stage Power"]);
+        QVERIFY(row != nullptr);
+        for (QTreeWidgetItem *up = row->parent(); up != nullptr; up = up->parent())
+            up->setExpanded(true);
+        fm->m_fixtures_tree->setCurrentItem(row);
+        fm->m_fixtures_tree->scrollToItem(row);
+        fm->slotSelectionChanged();
+        settle(300);
+        HelpShots::Frame f;
+        f.grab = m_app;
+        f.callouts << markRect(fm->m_fixtures_tree->viewport(), fm->m_fixtures_tree->visualItemRect(row), m_app, 1);
+        QVERIFY(shoot(f, d, "fixtures-badges"));
+        doc->resetModified();
+    }
+
+    // --- 3.10: the wizard's Special circuits page, Cyc Blue set back to Normal.
+    {
+        const QString d = root + QStringLiteral("/lesson-3-10");
+        m_app->doc()->resetModified();
+        m_app->clearDocument();
+        settle(50);
+        Doc *doc = m_app->doc();
+        EosImportWizard w(m_app, doc, kShows + QStringLiteral("/classroom-eos.asc"));
+        w.setRemember(false);
+        w.resize(900, 620);
+        w.show();
+        settle(200);
+        w.next();
+        w.next();
+        settle(300);
+        QVERIFY(w.currentPage() != nullptr);
+        qInfo().noquote() << "[3.10] wizard page:" << w.currentPage()->title();
+        QCOMPARE(w.currentPage()->title(), QStringLiteral("Special circuits"));
+        // As step 4 has it (Cyc Blue read as Backstage / hall), then as step 5 leaves it.
+        QVERIFY(shootDialog(&w, { mark(w.currentPage()->findChild<QTableWidget *>(), 1, HelpShots::Right) }, d, "special-circuits"));
+        w.setCircuitRoles({ 5 }, EosCircuit::Normal);
+        settle(300);
+        QVERIFY(shootDialog(&w, { mark(w.currentPage()->findChild<QTableWidget *>(), 1, HelpShots::Right), mark(w.currentPage()->findChild<QComboBox *>(), 2, HelpShots::Above) }, d, "special-circuits-normal"));
+        doc->resetModified();
     }
 }
 
