@@ -23,6 +23,7 @@
 #include <QLayout>
 
 #include "mainbar.h"
+#include "apputil.h"
 #include "blindstyle.h"
 #include "doc.h"
 
@@ -47,7 +48,10 @@ ShowControls::ShowControls(Doc *doc, QAction *stopAll, QAction *blackout, QActio
 
     m_stopAll = buttonFor(stopAll, "showStopAll");
     if (m_stopAll != nullptr)
+    {
         m_stopAll->setPopupMode(QToolButton::DelayedPopup);  // click = stop, hold = fade menu
+        AppUtil::giveMenuArrowRoom(m_stopAll);                // its arrow beside "Stop All", not on it
+    }
     m_blackout = buttonFor(blackout, "showBlackout");
     m_blind = buttonFor(blind, "showBlind");
 

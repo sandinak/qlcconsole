@@ -286,7 +286,9 @@ struct Finding
 int menuArrowNeeds(QWidget *w)
 {
     QToolButton *tb = qobject_cast<QToolButton *>(w);
-    if (tb == nullptr || tb->menu() == nullptr || tb->popupMode() != QToolButton::InstantPopup)
+    if (tb == nullptr || tb->menu() == nullptr
+        || (tb->popupMode() != QToolButton::InstantPopup
+            && !(tb->popupMode() == QToolButton::DelayedPopup && tb->property("menuArrowRoom").toBool())))
         return 0;
     /* Drawn by a style sheet's rule (the main toolbar's, or one of its own):
        the sheet sizes and draws it, not the app style, so its room for the
@@ -1461,29 +1463,92 @@ void LayoutSanity_Test::menuButtonsKeepTheirArrowOffTheText()
        bottom-right corner) and inside the button's frame. Without the
        style's drawControl() the text is centred on the whole button: half
        an arrow further right, onto the arrow. */
+    auto inkOf = [](QToolButton *b) {
+        const QImage img = b->grab().toImage();
+        const int w = img.width(), h = img.height();
+        // The face: the commonest shade where the text is read.
+        QHash<int, int> shades;
+        for (int x = 3; x < w - 3; ++x)
+            for (int y = h / 4; y <= h / 2; ++y)
+                ++shades[img.pixelColor(x, y).lightness()];
+        int face = 0, most = -1;
+        for (auto it = shades.constBegin(); it != shades.constEnd(); ++it)
+            if (it.value() > most)
+            {
+                most = it.value();
+                face = it.key();
+            }
+        int left = -1, right = -1;
+        for (int x = 3; x < w - 3; ++x)
+            for (int y = h / 4; y <= h / 2; ++y)
+                // 40: also a greyed button's text (Stop All with nothing running).
+                if (qAbs(img.pixelColor(x, y).lightness() - face) > 40)
+                {
+                    if (left < 0)
+                        left = x;
+                    right = x;
+                    break;
+                }
+        return qMakePair(left, right);
+    };
+    auto clearOfArrow = [&](QToolButton *b, bool centred) -> QString {
+        const QPair<int, int> ink = inkOf(b);
+        const int w = b->width();
+        const QString where = QStringLiteral("\"%1\": text ink x=%2..%3 on a button %4 wide, arrow %5")
+                                  .arg(b->text()).arg(ink.first).arg(ink.second).arg(w).arg(arrow);
+        if (ink.first < 0)
+            return where + QStringLiteral(": no text drawn");
+        if (ink.second >= w - arrow)
+            return where + QStringLiteral(": the text runs into the arrow's corner");
+        const double centre = (ink.first + ink.second) / 2.0;
+        if (centred && qAbs(centre - (w - arrow) / 2.0) > 3.0)
+            return where + QStringLiteral(": the text is not centred left of the arrow (centre %1, want %2)")
+                               .arg(centre).arg((w - arrow) / 2.0);
+        return QString();
+    };
     menu->resize(menu->sizeHint());
     settle();
-    const QImage img = menu->grab().toImage();
-    const int w = img.width(), h = img.height();
-    const QColor bg = img.pixelColor(3, h / 2);
-    int inkLeft = -1, inkRight = -1;
-    for (int x = 3; x < w - 3; ++x)
-        for (int y = h / 4; y <= h / 2; ++y)
-            if (qAbs(img.pixelColor(x, y).lightness() - bg.lightness()) > 90)
-            {
-                if (inkLeft < 0)
-                    inkLeft = x;
-                inkRight = x;
-                break;
-            }
-    QVERIFY2(inkLeft >= 0, "no text drawn on the button");
-    const QString where = QStringLiteral("text ink x=%1..%2 on a button %3 wide, arrow %4")
-                              .arg(inkLeft).arg(inkRight).arg(w).arg(arrow);
-    QVERIFY2(inkRight < w - arrow, qPrintable(where + QStringLiteral(": the text runs into the arrow's corner")));
-    const double centre = (inkLeft + inkRight) / 2.0;
-    QVERIFY2(qAbs(centre - (w - arrow) / 2.0) <= 3.0,
-             qPrintable(where + QStringLiteral(": the text is not centred left of the arrow (centre %1, want %2)")
-                                    .arg(centre).arg((w - arrow) / 2.0)));
+    {
+        const QString bad = clearOfArrow(menu, true);
+        QVERIFY2(bad.isEmpty(), qPrintable(bad));
+    }
+
+    /* Press-and-hold (DelayedPopup) buttons keep their size, unless one
+       asks (giveMenuArrowRoom()): Stop All, the most used of them. */
+    QToolButton *held = new QToolButton;
+    held->setText(QStringLiteral("Stop All"));
+    held->setMenu(new QMenu(held));
+    held->setPopupMode(QToolButton::DelayedPopup);
+    QToolButton *heldPlain = new QToolButton;
+    heldPlain->setText(QStringLiteral("Stop All"));
+    row->addWidget(held);
+    row->addWidget(heldPlain);
+    settle();
+    QVERIFY2(held->sizeHint().width() < heldPlain->sizeHint().width() + arrow,
+             "a DelayedPopup button is widened without asking");
+    AppUtil::giveMenuArrowRoom(held);
+    held->resize(held->sizeHint());
+    settle();
+    QVERIFY(held->sizeHint().width() >= heldPlain->sizeHint().width() + arrow);
+    {
+        const QString bad = clearOfArrow(held, true);
+        QVERIFY2(bad.isEmpty(), qPrintable(bad));
+    }
+    // The app's own, in the main bar (an icon at its left: not centred).
+    QToolButton *stopAll = m_app->findChild<QToolButton *>(QStringLiteral("showStopAll"));
+    QVERIFY(stopAll != nullptr);
+    QVERIFY(stopAll->property("menuArrowRoom").toBool());
+    m_app->resize(kSmallestWindow);
+    settle();
+    QVERIFY2(stopAll->isVisible() && stopAll->width() >= menuArrowNeeds(stopAll) - kTol,
+             qPrintable(QStringLiteral("Stop All is %1 wide, needs %2").arg(stopAll->width()).arg(menuArrowNeeds(stopAll))));
+    {
+        const QString bad = clearOfArrow(stopAll, false);
+        QVERIFY2(bad.isEmpty(), qPrintable(bad));
+    }
+    saveShot(m_app, QStringLiteral("Main bar"), QStringLiteral("1024x640"), {});
+    m_app->resize(1280, 800);
+    settle();
 
     // The checker: a menu button squeezed to its text alone is found.
     QWidget bad;

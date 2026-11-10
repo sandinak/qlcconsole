@@ -32,6 +32,7 @@
 #include <QStyle>
 #include <QProxyStyle>
 #include <QScrollArea>
+#include <QToolButton>
 #include <QScrollBar>
 #include <QAbstractSpinBox>
 #include <QStyleOptionToolButton>
@@ -282,15 +283,31 @@ int AppUtil::menuArrowRoom(const QStyleOptionToolButton *option, const QStyle *s
     if (option == nullptr || style == nullptr)
         return 0;
     // A menu that opens on a click (InstantPopup): not a split button's
-    // arrow, in a part of its own, nor a press-and-hold one (DelayedPopup).
+    // arrow, in a part of its own, nor a press-and-hold one (DelayedPopup)
+    // unless that button asked (giveMenuArrowRoom(): Stop All).
     if (!(option->features & QStyleOptionToolButton::HasMenu)
-        || (option->features & (QStyleOptionToolButton::MenuButtonPopup | QStyleOptionToolButton::PopupDelay)))
+        || (option->features & QStyleOptionToolButton::MenuButtonPopup))
+        return 0;
+    if ((option->features & QStyleOptionToolButton::PopupDelay)
+        && (widget == nullptr || !widget->property("menuArrowRoom").toBool()))
         return 0;
     // Text drawn: a button with no icon, or one set to show its text.
     if (option->text.isEmpty()
         || (!option->icon.isNull() && option->toolButtonStyle == Qt::ToolButtonIconOnly))
         return 0;                   // an icon: the arrow sits on its corner, as it always has
     return style->pixelMetric(QStyle::PM_MenuButtonIndicator, option, widget);
+}
+
+void AppUtil::giveMenuArrowRoom(QToolButton *button)
+{
+    if (button == nullptr)
+        return;
+    button->setProperty("menuArrowRoom", true);
+    // The button keeps its size hint until its style changes: as good as.
+    QEvent restyle(QEvent::StyleChange);
+    QCoreApplication::sendEvent(button, &restyle);
+    button->updateGeometry();
+    button->update();
 }
 
 static AppStyle *appStyle()

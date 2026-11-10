@@ -31,6 +31,7 @@ class QWidget;
 class QScrollArea;
 class QStyle;
 class QStyleOptionToolButton;
+class QToolButton;
 class QTreeWidgetItem;
 class QLCFixtureDef;
 class QLCFixtureDefCache;
@@ -137,6 +138,9 @@ namespace AppUtil
      *  on its text; 0 for any other button, or one showing only an icon. */
     int menuArrowRoom(const QStyleOptionToolButton *option, const QStyle *style,
                       const QWidget *widget = nullptr);
+    /** The same room for a press-and-hold (DelayedPopup) button with text,
+     *  whose arrow styles draw in its corner too: opted in one by one. */
+    void giveMenuArrowRoom(QToolButton *button);
 
     /************************************************************************
      * A body that scrolls
