@@ -32,6 +32,7 @@
 #include <QDialogButtonBox>
 #include <QMenu>
 #include <QStyleOptionToolButton>
+#include <QStyleOptionViewItem>
 #include <QDir>
 #include <QFocusFrame>
 #include <QGroupBox>
@@ -1217,8 +1218,9 @@ void LayoutSanity_Test::theShowTreeShowsCueNamesWithFreshSettings()
         /* A cue's own layer, a level further in: its name whole too, when
            the info column beside it has nothing to say (UX-36). */
         /* What a layer row shows of its name: column 0's own rect (past the
-           indent), less its icon and the item's margins, elided as the view
-           elides it. Equal to the name: whole. */
+           indent) against the room its icon and name need, as the view's
+           own delegate measures them; short of that, the name is drawn
+           elided, and this returns it as drawn. Equal to the name: whole. */
         auto shownName = [tree](QTreeWidgetItem *item) {
             QList<int> rows;
             for (QTreeWidgetItem *it = item; it != nullptr; it = it->parent())
@@ -1228,11 +1230,18 @@ void LayoutSanity_Test::theShowTreeShowsCueNamesWithFreshSettings()
             for (int row : rows)
                 index = tree->model()->index(row, ShowTreeView::NameCol, index);
             const QRect r = tree->visualRect(index);
-            const int icon = item->icon(0).isNull() ? 0
-                : (tree->iconSize().isValid() ? tree->iconSize().width()
-                                              : tree->style()->pixelMetric(QStyle::PM_SmallIconSize, nullptr, tree)) + 4;
-            const int margins = 2 * (tree->style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, tree) + 1);
-            return tree->fontMetrics().elidedText(item->text(0), Qt::ElideRight, r.width() - icon - margins);
+            QStyleOptionViewItem opt;
+            opt.initFrom(tree->viewport());
+            opt.font = tree->font();
+            opt.fontMetrics = tree->fontMetrics();
+            const int iconPx = tree->iconSize().isValid()
+                ? tree->iconSize().width() : tree->style()->pixelMetric(QStyle::PM_SmallIconSize, nullptr, tree);
+            opt.decorationSize = QSize(iconPx, iconPx);
+            const int need = tree->itemDelegateForIndex(index)->sizeHint(opt, index).width();
+            if (r.width() >= need)
+                return item->text(0);
+            const int textNeeds = tree->fontMetrics().horizontalAdvance(item->text(0));
+            return tree->fontMetrics().elidedText(item->text(0), Qt::ElideRight, textNeeds - (need - r.width()));
         };
         int layersSeen = 0;
         QTreeWidgetItem *aLayer = nullptr;
