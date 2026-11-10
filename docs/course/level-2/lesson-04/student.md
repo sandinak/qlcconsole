@@ -93,7 +93,7 @@ Do one:
 
 - **App:** download [`lesson-2-4-finish.qlcc`](../../shows/lesson-2-4-finish.qlcc).
   On the dance break's Steps, set the sparkle's own colour to **Amber**,
-  then **None of its own**. Which suits it best, and why? Bring in
+  then **None of Its Own**. Which suits it best, and why? Bring in
   `Lesson2-4-Home-yourname.qlcc` set that way.
 - **Paper:** list our stage's lights; for each write still or moves (and
   how), keep the lights on the dancers still, and say how fast each

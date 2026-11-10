@@ -183,7 +183,7 @@ Look Editor's Name, **⋯ → Its Own Colour / Dimmer**, and what the rig
 sends: the steps still, then twinkling, with white pixels among them;
 the truss boxes still, then a moving wave; the step tops still
 throughout. The extension's Speed and the footer's **Main Speed 120**,
-and the at-home Amber and *None of its own*, are checked the same way.
+and the at-home Amber and *None of Its Own*, are checked the same way.
 
 The extension's Color Chase is run too (`lessonTwoFourStageChase`): the
 chase dropped on **1.0.2 Chorus** in the tree says "reaches 2 of 2
