@@ -213,10 +213,11 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     m_table->verticalHeader()->hide();
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->horizontalHeader()->setSectionResizeMode(COL_NAME, QHeaderView::Stretch);
-    /* The mode and universe are combo boxes: each column is as wide as its longest
-       name, so no row reads "Effect (15ch". */
-    m_table->horizontalHeader()->setSectionResizeMode(COL_MODE, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(COL_UNI, QHeaderView::ResizeToContents);
+    /* Every column but the name is as wide as its longest entry (the mode and
+       universe are combo boxes), so no row reads "Effect (15ch" and the
+       status is not cut. */
+    for (int col : { COL_MODEL, COL_MODE, COL_CH, COL_CONN, COL_UNI, COL_ADDR, COL_VIA, COL_STATUS })
+        m_table->horizontalHeader()->setSectionResizeMode(col, QHeaderView::ResizeToContents);
     m_table->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     root->addWidget(m_table, 1);
