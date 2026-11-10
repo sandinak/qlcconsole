@@ -1948,6 +1948,10 @@ public:
     /** The notes on @a kind @a target, newest first (a cue's own note, from
      *  before notes had dates, last). */
     QList<ShowTree::Note> notes(ShowTree::NoteKind kind, quint32 target) const;
+    /** What the Notes pane shows for a cue and a printout of it should
+     *  too: the notes on the cue itself (its own note among them), then
+     *  those on its layers, each group newest first. */
+    QList<ShowTree::Note> notesOfCue(quint32 cueId) const;
     /** Every note on something that is still there, newest first. */
     QList<ShowTree::Note> allNotes() const;
     const ShowTree::Note *note(quint32 noteId) const;

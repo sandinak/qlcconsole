@@ -191,6 +191,43 @@ void CueSheet_Test::cueSheetRowsFollowTheRunningOrder()
     QCOMPARE(column(t, 1).at(3), QString("1 — Everybody Scream"));
 }
 
+void CueSheet_Test::everyNotesPaneEntryIsOnTheSheet()
+{
+    buildShow();
+    ShowTreeController *st = m_doc->showTree();
+    Cue c = *st->cue(m_cues[2]);
+    c.note = "Strobes at the drop";
+    QVERIFY(st->setCue(c));
+    const quint32 layer = st->cue(m_cues[2])->layers.first().id;
+    QVERIFY(st->addNote(ShowTree::NoteKind::Cue, m_cues[2], "Call the follow spot", ShowTree::NoteView(),
+                        0xFFFFFFFF, "Ann") != 0xFFFFFFFF);
+    const quint32 ln = st->addNote(ShowTree::NoteKind::Layer, layer, "Slow the fade", ShowTree::NoteView(),
+                                   m_cues[2], "Ann");
+    QVERIFY(ln != 0xFFFFFFFF);
+    QVERIFY(st->setNoteDone(ln, true));
+
+    const CueSheet sheet = CueSheet::build(m_doc, m_prod);
+    const CueSheet::Row &hit = sheet.lists().first().rows.at(4);
+    QCOMPARE(hit.cueId, m_cues[2]);
+    QStringList shown;
+    for (const CueSheet::NoteLine &l : hit.notes)
+        shown << l.display();
+    QCOMPARE(shown.count(), 3);
+    QVERIFY(shown.contains("Note: Strobes at the drop"));
+    QVERIFY(shown.contains("Note: Call the follow spot"));
+    QVERIFY(shown.last().startsWith("Layer "));
+    QVERIFY(shown.last().contains("(done): Slow the fade"));
+
+    // The same entries, in the pane's order, in the table and the page.
+    const QString cell = column(sheet.cueTable(), 7).at(3);
+    QCOMPARE(cell.split('\n'), shown);
+    const QString html = sheet.cueHtml("Cues");
+    QVERIFY(html.contains("<b>Note:</b> Call the follow spot<br>"));
+    QVERIFY(html.contains("(done):</b> Slow the fade"));
+    // A cue without notes has an empty cell.
+    QCOMPARE(column(sheet.cueTable(), 7).at(1), QString());
+}
+
 void CueSheet_Test::needsWorkIsAColumn()
 {
     buildShow();
@@ -390,7 +427,7 @@ void CueSheet_Test::csvAndXlsxAndPdf()
     QCOMPARE(lines.count(), 5);
     QVERIFY(lines.first().startsWith("Cue list,Song,Cue,Name"));
     // Defused and quoted, as the other reports do.
-    QVERIFY(lines.last().contains("\"'=SUM(A1), \"\"quoted\"\"\""));
+    QVERIFY(lines.last().contains("\"Note: =SUM(A1), \"\"quoted\"\"\""));
 
     const QString tcsv = sheet.trackingCsv();
     QVERIFY(tcsv.contains("(Red) · Half"));

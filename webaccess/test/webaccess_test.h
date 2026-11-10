@@ -124,6 +124,7 @@ private slots:
     void focusFollowsTheRemoteGoAndPinRules();
     void aBurstOfNudgesIsOneMove();
     void focusRoundTripOnLoopback();
+    void theRunStateCarriesEveryNoteOfTheCue();
     void theRunStateCarriesShowStatusAndFocus();
 
     /* Many clients: a phone per crew member (make perf, "web") */

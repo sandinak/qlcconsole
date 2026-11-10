@@ -204,6 +204,7 @@ CueSheet CueSheet::build(Doc *doc, quint32 productionId)
             r.follow = cue.hold == Function::infiniteSpeed() ? QObject::tr("GO")
                                                               : QObject::tr("auto after %1").arg(timeText(cue.hold));
             r.note = cue.note;
+            r.notes = noteLinesOf(st, cue.id);
             r.hits = joinNames(st, st->hitsAt(HitScope::Cue, cue.id));
             r.skipped = cue.skip || (i < songSkipped.count() && songSkipped.at(i));
             r.needsWork = cue.needsWork;
@@ -225,6 +226,7 @@ CueSheet CueSheet::build(Doc *doc, quint32 productionId)
                     sr.follow = sub.follow ? QObject::tr("auto after %1").arg(timeText(sub.wait))
                                            : QObject::tr("Sub GO");
                     sr.note = sub.note;
+                    sr.notes = noteLinesOf(st, sub.id);
                     sr.hits = joinNames(st, st->hitsAt(HitScope::Cue, sub.id));
                     sr.skipped = r.skipped || sub.skip;
                     block.rows << sr;
@@ -308,6 +310,63 @@ CueSheet CueSheet::build(Doc *doc, quint32 productionId)
     return sheet;
 }
 
+QString CueSheet::NoteLine::display() const
+{
+    return QStringLiteral("%1%2: %3").arg(kind, done ? QObject::tr(" (done)") : QString(), text);
+}
+
+QList<CueSheet::NoteLine> CueSheet::noteLinesOf(ShowTreeController *st, quint32 cueId)
+{
+    QList<NoteLine> out;
+    if (st == nullptr)
+        return out;
+    for (const ShowTree::Note &n : st->notesOfCue(cueId))
+    {
+        NoteLine l;
+        // A cue's own note is ticked unless the cue Needs work: not news.
+        l.done = n.done && !n.cueNote;
+        l.text = n.text.isEmpty() ? QObject::tr("(snapshot)") : n.text;
+        if (n.kind == ShowTree::NoteKind::Layer)
+        {
+            QString name;
+            if (const ShowTree::Cue *c = st->cue(n.cue))
+                if (const ShowTree::Layer *layer = c->layer(n.target))
+                    name = layer->name.isEmpty() ? st->targetLabel(layer->target) : layer->name;
+            l.kind = QObject::tr("Layer %1").arg(name).trimmed();
+        }
+        else
+        {
+            l.kind = QObject::tr("Note");
+        }
+        out << l;
+    }
+    // The cue's own note is an entry once the pane has seen it; before
+    // that, it is the first line all the same.
+    if (const ShowTree::Cue *c = st->cue(cueId))
+    {
+        bool have = c->note.isEmpty();
+        for (const NoteLine &l : out)
+            have = have || l.text == c->note;
+        if (!have)
+            out.prepend(NoteLine{ QObject::tr("Note"), c->note, false });
+    }
+    return out;
+}
+
+/** The cell text of a row's notes: one entry a line, with its kind; a
+ *  skipped cue says so first. */
+static QStringList noteCellLines(const CueSheet::Row &r)
+{
+    QStringList lines;
+    if (r.skipped)
+        lines << QObject::tr("SKIPPED");
+    for (const CueSheet::NoteLine &l : r.notes)
+        lines << l.display();
+    if (r.notes.isEmpty() && !r.note.isEmpty())
+        lines << r.note;
+    return lines;
+}
+
 QStringList CueSheet::header()
 {
     return { QObject::tr("Cue list"), QObject::tr("Song"), QObject::tr("Cue"), QObject::tr("Name"),
@@ -324,9 +383,7 @@ QList<QStringList> CueSheet::cueTable() const
         {
             if (r.kind == Row::Section)
                 continue;
-            QString note = r.note;
-            if (r.skipped)
-                note = note.isEmpty() ? QObject::tr("SKIPPED") : QObject::tr("SKIPPED. %1").arg(note);
+            const QString note = noteCellLines(r).join(QLatin1Char('\n'));
             t << QStringList{ b.name, r.section, r.number, r.name, r.fadeIn, r.fadeOut, r.follow, note,
                               r.hits, r.needsWork ? QObject::tr("yes") : QString() };
         }
@@ -429,9 +486,15 @@ QString CueSheet::cueHtml(const QString &title) const
                                                               : QString());
                 continue;
             }
-            QString note = r.note.toHtmlEscaped();
+            QStringList noteHtml;
             if (r.skipped)
-                note = QStringLiteral("<b>%1</b> %2").arg(QObject::tr("SKIPPED").toHtmlEscaped(), note);
+                noteHtml << QStringLiteral("<b>%1</b>").arg(QObject::tr("SKIPPED").toHtmlEscaped());
+            for (const NoteLine &l : r.notes)
+                noteHtml << QStringLiteral("<b>%1</b> %2").arg((l.kind + (l.done ? QObject::tr(" (done)") : QString()) + QLatin1Char(':')).toHtmlEscaped(),
+                                                               l.text.toHtmlEscaped());
+            if (r.notes.isEmpty() && !r.note.isEmpty())
+                noteHtml << r.note.toHtmlEscaped();
+            const QString note = noteHtml.join(QStringLiteral("<br>"));
             const QString indent = r.kind == Row::SubCue ? QStringLiteral("&nbsp;&nbsp;") : QString();
             h += QStringLiteral("<tr><td>%1%2</td><td>%1%3</td><td>%4</td><td>%5</td><td>%6</td><td>%7</td>"
                                 "<td>%8</td><td>%9</td></tr>")

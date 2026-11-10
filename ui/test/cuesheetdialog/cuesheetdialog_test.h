@@ -14,6 +14,7 @@ private slots:
     void cleanup();
 
     void showsTheCueSheetAndTheTrackingSheet();
+    void theNotesColumnHoldsEveryNotesPaneEntry();
     void savesWhatIsShown();
     void itOffersTheCallingScript();
     void theShowTreeMoreMenuOpensIt();
