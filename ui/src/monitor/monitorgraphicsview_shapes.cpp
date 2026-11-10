@@ -47,6 +47,10 @@
 #include "toweritem.h"
 #include "standitem.h"
 #include "pipeitem.h"
+#include "scenery.h"
+#include "pipe.h"
+#include "truss.h"
+#include "stageplatform.h"
 #include "itemlock.h"
 #include "doc.h"
 
@@ -88,10 +92,17 @@ QPointF MonitorGraphicsView::sceneToPlan(const QPointF &sp) const
 
 ShapeHandles *MonitorGraphicsView::shapeHandles() const
 {
-    return m_shapeHandles != nullptr && m_shapeHandles->isVisible() ? m_shapeHandles : nullptr;
+    return m_shapeHandles != nullptr && m_shapeHandles->isVisible() && m_shapeHandles->count() > 0
+               ? m_shapeHandles : nullptr;
 }
 
-StageShape MonitorGraphicsView::shapeTarget(QString *why) const
+QString MonitorGraphicsView::shapeHeldReason() const
+{
+    return m_shapeHandles != nullptr && m_shapeHandles->isVisible() ? m_shapeHandles->heldReason()
+                                                                     : QString();
+}
+
+StageShape MonitorGraphicsView::shapeTarget(QString *why, StageShape *held) const
 {
     auto refuse = [why](const QString &reason) {
         if (why != nullptr)
@@ -112,10 +123,13 @@ StageShape MonitorGraphicsView::shapeTarget(QString *why) const
     {
         if (o.first == QLatin1String("stage"))
             return refuse(QString());           // the stage marks have their own drags
-        const int held = itemHolds(o.first, o.second);
-        if (held != ItemLock::NotHeld)
+        const int holds = itemHolds(o.first, o.second);
+        if (holds != ItemLock::NotHeld)
         {
-            switch (ItemLock::primaryHold(held))
+            // Picked on its own: what it would have, to draw it held.
+            if (held != nullptr && sel.size() == 1 && isStructureKind(o.first))
+                *held = StageShape::of(props, o.first, o.second);
+            switch (ItemLock::primaryHold(holds))
             {
                 case ItemLock::HeldPlot:   return refuse(tr("Plot locked — Edit Plot to change it"));
                 case ItemLock::HeldLayer:  return refuse(tr("Layer locked — unlock it in Plot layers"));
@@ -169,7 +183,31 @@ void MonitorGraphicsView::refreshShapeHandles()
     }
     if (m_shapeDragHandle != StageShape::NoHandle)
         return;                                 // the drag's own until it lets go
-    const StageShape s = shapeTarget();
+    QString why;
+    StageShape held;
+    const StageShape s = shapeTarget(&why, &held);
+    const double scale = viewScale() > 0.0 ? viewScale() : 1.0;
+    if (!s.isValid() && held.isValid() && !why.isEmpty())
+    {
+        /* Selected, but a lock holds it: its outline in the lock colour and
+           what holds it, so a grab that does nothing says why. */
+        if (m_shapeHandles == nullptr)
+        {
+            m_shapeHandles = new ShapeHandles();
+            m_scene->addItem(m_shapeHandles);
+        }
+        const QPolygonF outline = planToScene(held.outline());
+        const QRectF box = outline.boundingRect();
+        m_shapeHandles->setHeld(held, outline, why,
+                                QPointF(box.left(), box.bottom() + 6.0 / scale), kHandlePx / scale);
+        m_shapeHandles->show();
+        if (m_shapeCursor)
+        {
+            m_shapeCursor = false;
+            viewport()->unsetCursor();
+        }
+        return;
+    }
     if (!s.isValid())
     {
         if (m_shapeHandles != nullptr)
@@ -186,7 +224,6 @@ void MonitorGraphicsView::refreshShapeHandles()
         m_shapeHandles = new ShapeHandles();
         m_scene->addItem(m_shapeHandles);
     }
-    const double scale = viewScale() > 0.0 ? viewScale() : 1.0;
     // Scene units for a metre, from above.
     const double perMetre = QLineF(planToScene(QPointF(0, 0)), planToScene(QPointF(1, 0))).length();
     const double knobGap = perMetre > 0.0 ? (kKnobGapPx / scale) / perMetre : 0.5;
@@ -229,6 +266,10 @@ QString MonitorGraphicsView::shapeReadout(const StageShape &s, bool turning) con
                                 .arg(by >= 0 ? QStringLiteral("+") : QString())
                                 .arg(by, 0, 'f', 0);
     }
+    if (m_shapeSwinging)
+        return tr("Length %1 · %2°%3").arg(MeasurementUnits::formatMetres(s.length))
+                                      .arg(StageShape::normalised(s.angle), 0, 'f', 0)
+                                      .arg(m_shapeCaught ? tr(" → end") : QString());
     if (s.kind == QLatin1String("platform"))
         return tr("%1 × %2").arg(MeasurementUnits::formatMetres(s.length),
                                  MeasurementUnits::formatMetres(s.width));
@@ -254,10 +295,47 @@ bool MonitorGraphicsView::shapePress(QMouseEvent *event)
     m_shapeDragStart = s;
     m_shapeDragNow = s;
     m_shapeDragMoved = false;
+    m_shapeSwinging = false;
+    m_shapeCaught = false;
+    m_shapeOtherEnds = s.canSwing ? shapeSnapEnds(s) : QVector<QPointF>();
     m_shapeTurned = 0.0;
     m_shapeLastAngle = s.angleTo(sceneToPlan(sp));
     event->accept();
     return true;
+}
+
+QVector<QPointF> MonitorGraphicsView::shapeSnapEnds(const StageShape &except) const
+{
+    QVector<QPointF> ends;
+    MonitorProperties *props = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
+    if (props == nullptr)
+        return ends;
+    auto addLine = [&](const QString &kind, quint32 id) {
+        if (kind == except.kind && id == except.id)
+            return;
+        const StageShape o = StageShape::of(props, kind, id);
+        if (!o.isValid())
+            return;
+        ends << o.endPoint(StageShape::EndPlusU) << o.endPoint(StageShape::EndMinusU);
+    };
+    foreach (Truss *t, props->trusses())
+        if (t != nullptr)
+            addLine(QStringLiteral("truss"), t->id());
+    foreach (Pipe *b, props->pipes())
+        if (b != nullptr)
+            addLine(QStringLiteral("pipe"), b->id());
+    foreach (Scenery *sc, props->sceneries())
+        if (sc != nullptr)
+            addLine(QStringLiteral("scenery"), sc->id());
+    foreach (StagePlatform *pl, props->platforms())
+    {
+        if (pl == nullptr)
+            continue;
+        const StageShape o = StageShape::of(props, QStringLiteral("platform"), pl->id());
+        if (o.isValid())
+            ends << o.outline();
+    }
+    return ends;
 }
 
 void MonitorGraphicsView::shapeDragTo(const QPointF &scenePos, Qt::KeyboardModifiers mods)
@@ -273,8 +351,24 @@ void MonitorGraphicsView::shapeDragTo(const QPointF &scenePos, Qt::KeyboardModif
         m_shapeLastAngle = a;
         m_shapeDragNow = m_shapeDragStart.turnedTo(shapeTurnTarget(m_shapeTurned, mods & Qt::AltModifier));
     }
+    else if ((mods & Qt::AltModifier) && m_shapeDragStart.canSwing
+             && (m_shapeDragHandle == StageShape::EndPlusU || m_shapeDragHandle == StageShape::EndMinusU))
+    {
+        /* ⌥ on a line's end: the end goes with the pointer and the far end
+           stays, so it lengthens and turns at once. It catches another end
+           near it, Shift keeps it to 15°, else it lands on the Snap grid. */
+        const double scale = viewScale() > 0.0 ? viewScale() : 1.0;
+        const double perMetre = QLineF(planToScene(QPointF(0, 0)), planToScene(QPointF(1, 0))).length();
+        const double magnet = perMetre > 0.0 ? (10.0 / scale) / perMetre : 0.0;
+        m_shapeSwinging = true;
+        m_shapeDragNow = m_shapeDragStart.swungSnapped(m_shapeDragHandle, p, m_shapeOtherEnds, magnet,
+                                                       shapeSnapStep(Qt::NoModifier),
+                                                       mods & Qt::ShiftModifier, &m_shapeCaught);
+    }
     else
     {
+        m_shapeSwinging = false;
+        m_shapeCaught = false;
         m_shapeDragNow = m_shapeDragStart.stretched(m_shapeDragHandle, p, shapeSnapStep(mods));
     }
     m_shapeDragMoved = true;
@@ -293,6 +387,9 @@ void MonitorGraphicsView::shapeDragEnd(Qt::KeyboardModifiers)
     const bool moved = m_shapeDragMoved;
     m_shapeDragHandle = StageShape::NoHandle;
     m_shapeDragMoved = false;
+    m_shapeSwinging = false;
+    m_shapeCaught = false;
+    m_shapeOtherEnds.clear();
     auto refresh = qScopeGuard([this]() { refreshShapeHandles(); });
     if (!moved || !start.isValid())
         return;
@@ -311,7 +408,8 @@ void MonitorGraphicsView::shapeDragEnd(Qt::KeyboardModifiers)
 
     // Let go where it started (to the millimetre): nothing to change.
     if (qAbs(now.length - start.length) < 5e-4 && qAbs(now.width - start.width) < 5e-4
-        && QLineF(now.centre, start.centre).length() < 5e-4)
+        && QLineF(now.centre, start.centre).length() < 5e-4
+        && qAbs(StageShape::normalised(now.angle - start.angle)) < 0.01)
         return;
     const QList<QPair<QString, quint32> > selected = selectedMapObjects();
     const QByteArray before = m_rigSnapshotter ? m_rigSnapshotter() : QByteArray();
@@ -319,6 +417,7 @@ void MonitorGraphicsView::shapeDragEnd(Qt::KeyboardModifiers)
         return;
     props->recomputeAnchoredFrames();
     props->recomputeChildTrusses();
+    props->recomputePipeAnchors();
     props->recomputeHangers();
     if (!before.isEmpty())
         pushRigUndo(before);
@@ -335,6 +434,13 @@ void MonitorGraphicsView::shapeDragEnd(Qt::KeyboardModifiers)
     {
         updatePlatforms();
         refreshRiserFixtures();
+        if (now.kind == QLatin1String("pipe"))
+        {
+            // Its lights, and those on the bars it carries, ride it.
+            foreach (quint32 fid, props->fixtureItemsID())
+                if (props->hasFixtureRigProps(fid) && props->fixtureRigProps(fid).onPipe())
+                    updateFixture(fid);
+        }
     }
     keepMapSelection(selected);
     m_doc->setModified();

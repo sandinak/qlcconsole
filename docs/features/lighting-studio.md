@@ -407,8 +407,9 @@ truss and tower pictures are (see [Truss socks](#truss-socks)).
 
 ![A riser being stretched on the plot: a box at each end, side and corner, the knob above it to turn it, the dashed shape it will take and its size by the pointer](../images/lighting-studio-shape-handles.png)
 
-Select a **platform** (a deck, a riser, steps), a **truss** or a piece of
-**scenery** on its own in the Top view and it gets handles:
+Select a **platform** (a deck, a riser, steps), a **truss**, a free
+**pipe** (an electric) or a piece of **scenery** (a wall, a flat, a leg)
+on its own in the Top view and it gets handles:
 
 - **A square at each end and side** (and the corners, on a deck): drag
   one to stretch it from there; the opposite side stays where it is. A
@@ -416,23 +417,34 @@ Select a **platform** (a deck, a riser, steps), a **truss** or a piece of
   only across its treads (its depth is its steps).
 - **The round knob** off its upstage edge turns it about its middle, and
   everything on it turns with it, as **Rotate** does.
+- **Alt/⌥ on an end** of a truss, pipe or wall: the end goes where you put
+  it and the other end stays, so it lengthens, shortens and turns at once
+  (it swings about the other end). It catches another truss's, pipe's or
+  wall's end, or a deck's corner, when it comes near one, so two walls meet
+  exactly; hold **Shift** as well to keep it to 15° steps; otherwise the
+  end lands on the **Snap** grid. The readout adds the way it faces
+  (**Length 12' 6" · 45°**, and **→ end** when it has caught one).
 - **While you drag**, a dashed outline shows the shape it will take and a
   readout by the pointer gives its size in your units (`16' × 8'`, or
   **Length 30'**) or the way it will face (**45° (+45°)**).
 - **Snapping:** a stretch goes in steps of the plot's **Snap** (off when
-  Snap is off) and a turn in 15° steps; hold **Alt/⌥** while you drag to go
-  freely.
-- **One drag is one undo step.** A truss stretched at its near end keeps
-  its lights, bars and hangers where they hang on the stage.
+  Snap is off) and a turn in 15° steps; hold **Alt/⌥** on a deck's handle
+  or the knob to go freely (on a line's end ⌥ swings it, above).
+- **One drag is one undo step.** A truss or pipe stretched or swung at one
+  end keeps its lights, bars and hangers where they are from the other end.
 - **A cyc only stretches** (it hangs square across the back); other
-  scenery turns too. Trusses on a stand and bars on a truss follow what
-  they are on and have no handles.
+  scenery turns too. Trusses on a stand, bars on a truss or pipe, booms and
+  stands follow what they are on or stand up, and have no handles: drag
+  them to move them.
 - **Several selected** (a group, or a deck and a truss picked together):
   the knob alone, on the box round them, turns them all about their middle.
 
 The handles are there **only while nothing holds it still**: not with its
 own lock on, its group's, its layer's or the plot's (**Edit Plot**), not in
-Operate and not in Front or Side. Lift the lock and they come back.
+Operate and not in Front or Side. Lift the lock and they come back. A
+locked one you select shows its outline dashed in red and a line under it
+saying what holds it and where to lift it (**Layer locked — unlock it in
+Plot layers**).
 
 ### Grouping stage features
 

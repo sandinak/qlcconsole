@@ -1904,6 +1904,9 @@ private:
     double m_shapeLastAngle = 0.0;      ///< the pointer's angle at the last move
     double m_shapeTurned = 0.0;         ///< degrees turned since the press, unwrapped
     bool m_shapeDragMoved = false;
+    bool m_shapeSwinging = false;       ///< ⌥ on a line's end: it swings about the other end
+    bool m_shapeCaught = false;         ///< the swung end sits on another end
+    QVector<QPointF> m_shapeOtherEnds;  ///< plan metres: the ends a swung end snaps to
     bool m_shapeCursor = false;
     bool m_shapeRefreshPending = false;  ///< a look again after a rebuild is on its way
 public:
@@ -1914,14 +1917,21 @@ public:
      *  several (kind "selection": its box, turned only), or invalid when
      *  there are none -- nothing selected that turns, an elevation, Operate,
      *  or something in the selection held still by its own lock, its
-     *  folder's, its layer's or the plot's. @a why gets the reason. */
-    StageShape shapeTarget(QString *why = nullptr) const;
+     *  folder's, its layer's or the plot's. @a why gets the reason, and
+     *  @a held the one structure selected when only a lock stops it. */
+    StageShape shapeTarget(QString *why = nullptr, StageShape *held = nullptr) const;
     /** Show, move or hide the handles for the selection as it is now. */
     void refreshShapeHandles();
     /** The readout while a handle is dragged, in Settings' unit: the size
      *  it will be, or the angle it will face. */
     QString shapeReadout(const StageShape &s, bool turning) const;
+    /** The lock line under a selected structure that a lock holds still,
+     *  or empty. */
+    QString shapeHeldReason() const;
 private:
+    /** Plan metres: every other line's ends and every deck's corners, for a
+     *  swung end to snap to. */
+    QVector<QPointF> shapeSnapEnds(const StageShape &except) const;
     /** A press on a handle: the drag is the handle's. True when it took it. */
     bool shapePress(QMouseEvent *event);
     void shapeDragTo(const QPointF &scenePos, Qt::KeyboardModifiers mods);

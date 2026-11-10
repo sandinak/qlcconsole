@@ -19,6 +19,8 @@
 #define SHAPEHANDLES_H
 
 #include <QGraphicsItem>
+#include <QBrush>
+#include <QPen>
 #include <QPolygonF>
 #include <QPointF>
 #include <QString>
@@ -67,6 +69,9 @@ struct QLC_UI_EXPORT StageShape
     bool stretchU = false;      ///< its length can be stretched
     bool stretchV = false;      ///< its width can be stretched
     bool canRotate = false;
+    /** A line on the plan (a truss, a pipe, a wall): ⌥ on an end swings it
+     *  about the other end (swung()). */
+    bool canSwing = false;
     double minLength = 0.1;     ///< metres: the shortest it can be made
 
     bool isValid() const { return !kind.isEmpty(); }
@@ -85,6 +90,22 @@ struct QLC_UI_EXPORT StageShape
      *  opposite stays where it is. @p snapStep (metres, 0 = none) rounds the
      *  new length or width to a whole number of steps. */
     StageShape stretched(Handle h, const QPointF &pointer, double snapStep = 0.0) const;
+    /** A line's end @p h (EndPlusU or EndMinusU) put at @p endPoint (world):
+     *  the other end stays where it is, so its length and the way it faces
+     *  both follow. Never shorter than minLength. */
+    StageShape swung(Handle h, const QPointF &endPoint) const;
+
+    /** What swung() makes of a pointer at @p pointer, snapped: onto one of
+     *  @p otherEnds within @p magnet metres first (@p caught says so), else
+     *  with @p constrain its angle in 15° steps and its length in
+     *  @p snapStep metres, else the end on the nearest @p snapStep grid
+     *  point (0 = free). */
+    StageShape swungSnapped(Handle h, const QPointF &pointer, const QVector<QPointF> &otherEnds,
+                            double magnet, double snapStep, bool constrain,
+                            bool *caught = nullptr) const;
+    /** Where end @p h is (world). */
+    QPointF endPoint(Handle h) const { return handlePoint(h); }
+
     /** The same shape turned to @p angleDeg about its middle. */
     StageShape turnedTo(double angleDeg) const;
 
@@ -127,6 +148,13 @@ public:
     QPointF handlePos(StageShape::Handle h) const;
     int count() const { return m_points.size(); }
 
+    /** Selected but held still by a lock: its outline dashed in the lock
+     *  colour, no handles, and @p reason (what holds it, where to lift it)
+     *  at @p at. */
+    void setHeld(const StageShape &shape, const QPolygonF &outline, const QString &reason,
+                 const QPointF &at, qreal radius);
+    QString heldReason() const { return m_held; }
+
     /** While dragging: the shape it will become (scene polygon) and the
      *  readout by the pointer. An empty polygon ends it. */
     void setPreview(const QPolygonF &ghost, const QString &readout, const QPointF &at);
@@ -144,8 +172,14 @@ private:
     qreal m_radius = 5.0;
     QPolygonF m_ghost;
     QGraphicsSimpleTextItem *m_label = nullptr;
+    QString m_held;             ///< non-empty: locked, outline only
     QRectF m_bounds;
+    // Made when the shape or its size changes, never in paint().
+    QPen m_edgePen, m_ghostPen, m_stemPen, m_handlePen, m_arcPen, m_heldPen;
+    QBrush m_accentBrush, m_ghostBrush, m_handleBrush;
+    QRectF m_arc;               ///< the knob's turning arrow, about its middle
     void recomputeBounds();
+    void recomputePens();
 };
 
 /** @} */
