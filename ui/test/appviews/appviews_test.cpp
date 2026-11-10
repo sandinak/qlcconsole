@@ -268,7 +268,7 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
         if (a->data().toString() == label)
             jump = a;
     QVERIFY(jump != nullptr);
-    QVERIFY2(jump->text().contains("in its own window"), qPrintable(jump->text()));
+    QVERIFY2(jump->text().contains("In Its Own Window"), qPrintable(jump->text()));
     QVERIFY(m_app->m_windowDockMenu->isEnabled());
     QCOMPARE(m_app->m_windowDockMenu->actions().size(), 1);
     QCOMPARE(m_app->m_windowDockMenu->actions().first()->text(), label);
@@ -278,7 +278,7 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
     QCOMPARE(tabs->count(), views);
     QCOMPARE(tabs->tabBar()->tabData(tabs->currentIndex()).toString(), label);
     m_app->updateWindowMenu();
-    QVERIFY(!jump->text().contains("in its own window"));
+    QVERIFY(!jump->text().contains("In Its Own Window"));
     QVERIFY(!m_app->m_windowDockAll->isEnabled());
 
     // Two out, all put back at once.
@@ -2570,7 +2570,7 @@ void AppViews_Test::windowShortcutsFollowTheView()
     QTabWidget *tabs = m_app->m_tab;
     m_app->slotDetachContext(tabs->indexOf(VirtualConsole::instance()));
     QStringList shown = windowJumpsAsShown(m_app);
-    QCOMPARE(shown.value(5), QString("Virtual Console — in its own window 6"));
+    QCOMPARE(shown.value(5), QString("Virtual Console — In Its Own Window 6"));
     QCOMPARE(shown.value(6), QString("Simple Desk 7"));
     reattach(m_app, "Virtual Console");
     QCOMPARE(windowJumpsAsShown(m_app).value(5), QString("Virtual Console 6"));

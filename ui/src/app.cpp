@@ -6078,7 +6078,7 @@ void App::updateWindowMenu()
     {
         const QString label = jump->data().toString();
         const QString shown = tabDisplayLabel(label);
-        jump->setText(away.contains(label) ? tr("%1 — in its own window").arg(shown) : shown);
+        jump->setText(away.contains(label) ? tr("%1 — In Its Own Window").arg(shown) : shown);
     }
     if (m_windowDockMenu != NULL)
     {

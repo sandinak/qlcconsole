@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Fixed
+
+- **Words gate reads every button and action text.** The menu-words test now also catches texts set on any declared button or action (not just `...Btn` names) and on stack buttons; it found three off-canon labels, now Title Case: **Lock Item** / **Unlock Item** (Show Manager), **… — Would Loop** and **… — In Its Own Window** (menu lines).
+
 ## [0.4.2] - 2026-11-09
 
 ### Added
