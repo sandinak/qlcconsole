@@ -3234,7 +3234,6 @@ void EffectInstance_Test::aRainbowOnRgbwWithNoDimmerIsAHueNotWhite()
     QVERIFY2(redWritten, "red at 0 left to the look");
 }
 
-/* "If I set a color on the entire set I see the color sweep but no rainbow" */
 /* Deleting a scene that is playing, whose look holds the only running JS
    effect (Function Manager > Delete, Build > delete, an Undo). The delete is on
    the main thread: MasterTimer::removeFunction() stopped the scene and emitted
@@ -3294,6 +3293,7 @@ void EffectInstance_Test::deletingAPlayingSceneWithTheOnlyEffectDoesNotHang()
     timer->timerTick();
 }
 
+/* "If I set a color on the entire set I see the color sweep but no rainbow" */
 void EffectInstance_Test::aRainbowWithALookColourSweepsThatColour()
 {
     QLCFixtureDef *def = new QLCFixtureDef();

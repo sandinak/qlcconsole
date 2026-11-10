@@ -79,9 +79,9 @@ public slots:
     /** Start the finished Once / N-times effects of @p fid again -- a toggle
      *  button pressed after its breath ended. Returns true when any restarted. */
     bool restartOneShots(quint32 fid);
-    /** A Function was deleted from the Doc. Doc::deleteFunction() does not
-        emit functionStopped, so without this a deleted-while-running scene
-        would strand its effect instances (leak + stuck Override DMX). */
+    /** A Function was deleted from the Doc. A running one was stopped first
+        (functionStopped); this covers one that was not being ticked, which
+        would otherwise strand its effect instances (leak + stuck Override DMX). */
     void slotFunctionRemoved(quint32 fid);
     /** Workspace cleared — drop every instance. */
     void slotDocCleared();

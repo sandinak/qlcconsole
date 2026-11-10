@@ -119,6 +119,9 @@ opens on a proposal, which you review and edit before anything changes:
   channels, **Connection**, **Universe**, **Address**, **Via** (the node port
   that will feed it) and **Status** (ok / new universe / moves from U.A /
   CONFLICT). Conflicts are flagged live and Apply stays off while any remain.
+- A fixture that a scene sets channel-by-channel keeps its mode: the scene
+  stores channel numbers, so another mode would put its values on the wrong
+  channels.
   The universe is picked **by name** from a list of the show's universes in
   name order (numbers in names count as numbers, so U3 comes before U12),
   followed by **New universe N** for the ones a patch can open.

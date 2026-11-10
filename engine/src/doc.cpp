@@ -224,11 +224,13 @@ Doc::Doc(QObject* parent, int universes)
             m_effectScriptRunner, SLOT(slotFunctionStopped(quint32)));
     connect(m_masterTimer, SIGNAL(functionStartedAgain(quint32,quint32)),
             m_effectScriptRunner, SLOT(slotFunctionStartedAgain(quint32,quint32)));
-    // deleteFunction() removes the function from the MasterTimer without
-    // emitting functionStopped, and clearContents() deletes every function at
-    // once — neither would tear down the effect instances, which then leak a
-    // QJSEngine each and keep pinning their last frame onto the output at
-    // Override priority. Both are emitted before the functions are destroyed.
+    // deleteFunction() stops a running function through the MasterTimer, which
+    // emits functionStopped only for one it was ticking (not one started
+    // outside it, or only queued), and clearContents() deletes every function
+    // at once without stopping them: neither would tear down the remaining
+    // effect instances, which then leak a QJSEngine each and keep pinning
+    // their last frame onto the output at Override priority. functionRemoved
+    // and cleared are emitted before the functions are destroyed.
     connect(this, SIGNAL(functionRemoved(quint32)),
             m_effectScriptRunner, SLOT(slotFunctionRemoved(quint32)));
     connect(this, SIGNAL(cleared()),
