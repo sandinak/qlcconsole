@@ -8619,6 +8619,10 @@ void Monitor::slotEditTower(quint32 tid)
     QDoubleSpinBox *newShelf = new FeetInchesSpinBox(isFeet, &dlg);
     newShelf->setRange(0.0, hMax);
     newShelf->setValue(1.0 * toDisp);
+    // Room for a height with a fraction ("3' 3 3/8\""): sized for its range's
+    // ends ("40'"), it showed "3' 3 3/" (UX-36).
+    newShelf->setMinimumWidth(newShelf->sizeHint().width()
+                              + newShelf->fontMetrics().horizontalAdvance(QStringLiteral(" 11 15/16\"")));
     QPushButton *addShelfBtn = new QPushButton(tr("Add Shelf"), &dlg);
     QPushButton *delShelfBtn = new QPushButton(tr("Remove Selected"), &dlg);
     shelfBtns->addWidget(newShelf);
@@ -10741,7 +10745,7 @@ void Monitor::slotEditTruss(quint32 tid)
        (a goal post), its run and length following them. */
     QComboBox *endStandCb = new QComboBox(&editDlg);
     endStandCb->setObjectName(QStringLiteral("trussEndStand"));
-    endStandCb->addItem(tr("(none — its own length and direction)"), quint32(Stand::invalidId()));
+    endStandCb->addItem(tr("(none — own length)"), quint32(Stand::invalidId()));
     for (Stand *st : m_props->stands())
     {
         endStandCb->addItem(st->name().isEmpty() ? tr("Stand %1").arg(st->id()) : st->name(), st->id());

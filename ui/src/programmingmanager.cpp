@@ -438,7 +438,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         mirror(moreMenu->menu(), m_snapshotBtn, tr("Snapshot live output into the scene"));
         fieldAction(moreMenu->menu(), tr("Jog speed"), m_speedSpin);
 
-        // Highlight, Flash | Park, Move in black ... Beat, Tap | More, Save Positions
+        // Highlight, Flash | Park, Move in black ... Beat, Tap | Save Positions, More
         while (toolbar->count() > 0)
             delete toolbar->takeAt(0);                 // the items, not the widgets
         delete toolbar;
@@ -463,8 +463,11 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         }
         bar->addWidget(beatMenu);
         bar->addWidget(m_tapBtn);
-        bar->addWidget(moreMenu);
+        /* Save Positions before More: a toolbar folds its last items into
+           » first, and More is the least used; at 1024 wide Save Positions
+           went into » (UX-36). */
         bar->addWidget(m_saveBtn);
+        bar->addWidget(moreMenu);
 
         root->addWidget(bar);
         MainBar::registerTabTools(this, bar);

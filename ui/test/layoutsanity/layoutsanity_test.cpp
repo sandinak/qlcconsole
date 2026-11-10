@@ -1392,6 +1392,19 @@ void LayoutSanity_Test::theStudioEditorsFitALaptop()
                         && dlg->layout()->indexOf(c) < 0 && !isFloating(c))
                         problems << QStringLiteral("%1 @ %2x%3: %4 is shown outside the layout")
                                         .arg(name).arg(dlg->width()).arg(dlg->height()).arg(pathOf(c, dlg));
+                // Every number box shows its whole value (a shelf height
+                // read "3' 3 3/").
+                for (QAbstractSpinBox *sp : dlg->findChildren<QAbstractSpinBox *>())
+                {
+                    QLineEdit *edit = sp->findChild<QLineEdit *>();
+                    if (!sp->isVisibleTo(dlg) || edit == nullptr || sp->text().isEmpty())
+                        continue;
+                    const int need = edit->fontMetrics().horizontalAdvance(sp->text()) + 4;
+                    if (edit->width() + kTol < need)
+                        problems << QStringLiteral("%1 @ %2x%3: %4 shows \"%5\" in %6 px, needs %7")
+                                        .arg(name).arg(dlg->width()).arg(dlg->height()).arg(pathOf(sp, dlg))
+                                        .arg(sp->text()).arg(edit->width()).arg(need);
+                }
                 // OK and Cancel in the dialog, whole.
                 QDialogButtonBox *bb = dlg->findChild<QDialogButtonBox *>();
                 if (bb == nullptr || !bb->isVisible()
@@ -1445,7 +1458,12 @@ void LayoutSanity_Test::menuButtonsKeepTheirArrowOffTheText()
     settle();
 
     // As wide as its text and its arrow; the arrow's room is the style's.
-    const int arrow = menu->style()->pixelMetric(QStyle::PM_MenuButtonIndicator, nullptr, menu);
+    // The room the app style makes: the arrow glyph's, at most 8 px.
+    QStyleOptionToolButton roomOpt;
+    roomOpt.initFrom(menu);
+    roomOpt.features = QStyleOptionToolButton::HasMenu;
+    roomOpt.text = menu->text();
+    const int arrow = AppUtil::menuArrowRoom(&roomOpt, menu->style(), menu);
     QVERIFY(arrow > 0);
     QVERIFY2(menu->sizeHint().width() >= plain->sizeHint().width() + arrow,
              qPrintable(QStringLiteral("%1 wide, %2 without its menu, the arrow %3")
@@ -1659,6 +1677,67 @@ void LayoutSanity_Test::scrollingBodiesTakeTheWheel()
     QVERIFY(spins.at(1)->hasFocus());
     wheel(spins.at(1));
     QVERIFY(spins.at(1)->value() != 50.0);
+}
+
+void LayoutSanity_Test::primaryActionsStayOnTheBarAt1024()
+{
+    struct Primary { const char *tab; const char *text; };
+    static const Primary primaries[] = {
+        { "Build", "Save Positions" },
+    };
+    for (const Primary &pa : primaries)
+    {
+        const Screen s = tab(QString::fromLatin1(pa.tab));
+        QWidget *top = s.make(m_app);
+        QVERIFY2(top != nullptr, pa.tab);
+        m_app->resize(kSmallestWindow);
+        settle();
+        QTest::qWait(50);
+        settle();
+        QAbstractButton *button = nullptr;
+        for (QAbstractButton *b : m_app->findChildren<QAbstractButton *>())
+            if (b->text() == QLatin1String(pa.text) && qobject_cast<QToolBar *>(b->parentWidget()) != nullptr)
+                button = b;
+        QVERIFY2(button != nullptr, qPrintable(QStringLiteral("no \"%1\" on a toolbar").arg(pa.text)));
+        QToolBar *bar = qobject_cast<QToolBar *>(button->parentWidget());
+        // On the bar: shown, and inside it (the » menu holds what isn't).
+        const QRect onBar(button->mapTo(bar, QPoint(0, 0)), button->size());
+        QVERIFY2(button->isVisible() && bar->rect().contains(onBar),
+                 qPrintable(QStringLiteral("%1: \"%2\" is folded into the toolbar's » at %3x%4")
+                                .arg(pa.tab, pa.text).arg(m_app->width()).arg(m_app->height())));
+    }
+    m_app->resize(1280, 800);
+    settle();
+}
+
+void LayoutSanity_Test::smallThingsStayReadable()
+{
+    // The Effects navigator's filter at the page's smallest.
+    {
+        EffectsPage page(docOf(m_app));
+        page.show();
+        settle();
+        page.resize(page.minimumSizeHint());
+        settle();
+        QLineEdit *filter = page.findChild<QLineEdit *>(QStringLiteral("effectsFilter"));
+        QVERIFY(filter != nullptr);
+        const int need = filter->fontMetrics().horizontalAdvance(filter->placeholderText()) + 16;
+        QVERIFY2(filter->width() >= need,
+                 qPrintable(QStringLiteral("the filter is %1 wide, \"%2\" needs %3")
+                                .arg(filter->width()).arg(filter->placeholderText()).arg(need)));
+    }
+    // The beat lights, before any event has been processed.
+    {
+        SpeedMastersPanel panel(docOf(m_app));
+        int lights = 0;
+        for (QLabel *l : panel.findChildren<QLabel *>())
+            if (l->size() == QSize(14, 14) && l->text().isEmpty() && !l->isHidden())
+            {
+                ++lights;
+                QVERIFY2(!l->pixmap().isNull(), "a speed master's beat light is blank until the first tick");
+            }
+        QVERIFY(lights > 0);
+    }
 }
 
 void LayoutSanity_Test::theFooterChipsNeverOverlap()

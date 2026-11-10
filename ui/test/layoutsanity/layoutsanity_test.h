@@ -70,6 +70,15 @@ private slots:
      *  value; one with the focus takes the wheel; the area is no Tab stop. */
     void scrollingBodiesTakeTheWheel();
 
+    /** At 1024x640 the primary actions of a tab's toolbar are on it, not
+     *  folded into its » menu: Build's Save Positions (UX-36). */
+    void primaryActionsStayOnTheBarAt1024();
+
+    /** Small things that must be there at a screen's smallest: the Effects
+     *  navigator's filter reads "Filter…", each speed master shows its beat
+     *  light from the moment the panel is built. */
+    void smallThingsStayReadable();
+
     /** The footer at 1024 wide and at the window's own minimum: no two
      *  chips overlap, the stage chip and Unsaved stay (wfaudit W1-30). */
     void theFooterChipsNeverOverlap();

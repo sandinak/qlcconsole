@@ -65,6 +65,9 @@ EffectsPage::EffectsPage(Doc *doc, QWidget *parent)
     m_filter->setObjectName(QStringLiteral("effectsFilter"));
     m_filter->setPlaceholderText(tr("Filter…"));
     m_filter->setClearButtonEnabled(true);
+    // Readable at the navigator's narrowest: the button beside it doesn't
+    // take its room ("…" instead of "Filter…", UX-36).
+    m_filter->setMinimumWidth(m_filter->fontMetrics().horizontalAdvance(m_filter->placeholderText()) + 40);
     top->addWidget(m_filter, 1);
     m_newBtn = new QToolButton(left);
     m_newBtn->setObjectName(QStringLiteral("effectsNew"));

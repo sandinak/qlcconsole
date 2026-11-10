@@ -295,7 +295,10 @@ int AppUtil::menuArrowRoom(const QStyleOptionToolButton *option, const QStyle *s
     if (option->text.isEmpty()
         || (!option->icon.isNull() && option->toolButtonStyle == Qt::ToolButtonIconOnly))
         return 0;                   // an icon: the arrow sits on its corner, as it always has
-    return style->pixelMetric(QStyle::PM_MenuButtonIndicator, option, widget);
+    /* The arrow itself: Fusion's indicator metric (12) is a split button's
+       whole arrow part, the glyph in the corner is 6 wide; 8 clears it and
+       keeps a toolbar of menu buttons from spilling into its » at 1024. */
+    return qMin(8, style->pixelMetric(QStyle::PM_MenuButtonIndicator, option, widget));
 }
 
 void AppUtil::giveMenuArrowRoom(QToolButton *button)

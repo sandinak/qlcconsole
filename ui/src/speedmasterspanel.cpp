@@ -217,6 +217,9 @@ SpeedMastersPanel::SpeedMastersPanel(Doc *doc, QWidget *parent)
     m_lightTimer->setInterval(30);
     connect(m_lightTimer, &QTimer::timeout, this, &SpeedMastersPanel::tickLights);
     m_lightTimer->start();
+    // The lights from the start, not from the first tick: shown before it,
+    // the rows had a blank where each light goes.
+    tickLights();
 }
 
 SpeedMastersPanel::~SpeedMastersPanel()
