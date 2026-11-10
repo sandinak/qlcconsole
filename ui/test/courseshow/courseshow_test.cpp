@@ -5938,10 +5938,11 @@ void CourseShow_Test::levelTwoPictures()
             f.callouts << c << markRect(rows->viewport(), grey, m_app, 2);
             QVERIFY(shoot(f, d, "chorus-tracking"));
             // Scrolled down: Tracked in and Next cue receives.
-            // A narrower tree, so the page is wide enough for the whole value.
-            if (QSplitter *split = stFind<QSplitter>(v, "stSplitter"))
-                split->setSizes(QList<int>() << 220 << 330 << split->width() - 550);
-            settle(100);
+            // A wider window, so the page holds the whole value.
+            const QSize was = m_app->size();
+            m_app->resize(was.width() + 260, was.height());
+            layOutForShot(v);
+            settle(200);
             if (QScrollArea *page = qobject_cast<QScrollArea *>(v->m_cuePage))
             {
                 page->ensureWidgetVisible(v->m_cueNext, 0, 8);
@@ -5954,6 +5955,8 @@ void CourseShow_Test::levelTwoPictures()
             g.crop = r;
             g.callouts << mark(v->m_cueTracked, 1, HelpShots::Corner) << mark(v->m_cueNext, 2, HelpShots::Corner);
             QVERIFY(shoot(g, d, "chorus-receives"));
+            m_app->resize(was);
+            settle(200);
             dc->resetModified();
         }
         QVERIFY(open(levelTwoStart(1)));
