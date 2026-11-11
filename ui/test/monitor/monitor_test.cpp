@@ -1508,7 +1508,7 @@ void Monitor_Test::theRigOverviewHasAFooterBar()
     QVERIFY(combos.size() >= 2);
     QCOMPARE(combos.at(0)->objectName(), QStringLiteral("rigView"));
     QCOMPARE(combos.at(1)->objectName(), QStringLiteral("rigRoom"));
-    // View on the right, Show on the left, as on the plot.
+    // Show first, View beside it, where a laptop's window still shows it.
     QWidget *show = footer->findChild<QWidget *>(QStringLiteral("rigShow"));
     QWidget *viewCombo = footer->findChild<QWidget *>(QStringLiteral("rigView"));
     QVERIFY(show->geometry().x() < viewCombo->geometry().x());

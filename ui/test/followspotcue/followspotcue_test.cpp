@@ -1869,6 +1869,16 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
     QVERIFY2(moved.length() > 0.1f && QVector3D::dotProduct(moved.normalized(), fwd) > 0.98f,
              qPrintable(QString("%1, %2").arg(double(moved.x())).arg(double(moved.y()))));
 
+    // The View list is in sight without scrolling the bar, at the smallest window.
+    rigDock->show();
+    rigDock->resize(1024, 640);
+    settle(300);
+    {
+        const QRect at(rigView->mapTo(rigDock, QPoint(0, 0)), rigView->size());
+        QVERIFY2(rigView->isVisible() && at.right() < rigDock->width() && at.left() >= 0,
+                 qPrintable(QString("View at %1..%2 of %3").arg(at.left()).arg(at.right()).arg(rigDock->width())));
+    }
+
     // The Rig Overview: from the operator, and the plan turned to them.
     const double az = rig->angledAzimuth(), el = rig->angledElevation();
     rigView->setCurrentIndex(rigView->findText("Operator"));

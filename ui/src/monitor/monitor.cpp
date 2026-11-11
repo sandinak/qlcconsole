@@ -3298,8 +3298,9 @@ void Monitor::showStageOverview()
         bar->addWidget(sep);
     };
 
-    /* Made first, placed last (right-justified, as the plot's View is): it
-       stays the first combo in the window, then Room. */
+    /* Made first (the first combo in the window, then Room) and placed
+       first, beside Show: the bar is wider than a laptop's window, and the
+       point of view -- the operator's among them -- is what is reached for. */
     QComboBox *planeCombo = new QComboBox(footer);
     planeCombo->setObjectName(QStringLiteral("rigView"));
     fillStudioPlanes(planeCombo, false);
@@ -3429,6 +3430,11 @@ void Monitor::showStageOverview()
         });
     }
     bar->addWidget(showBtn);
+    bar->addWidget(new QLabel(tr("View:"), footer));
+    // As wide as the planes' names need: a long one (Operator plan) is cut in the box, whole in the list.
+    planeCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    planeCombo->setMinimumContentsLength(8);
+    bar->addWidget(planeCombo);
 
     /* Layers, from here: show or hide one without the Studio open. The same
        switch as the Studio's eye (saved with the show), so the two agree --
@@ -3678,9 +3684,6 @@ void Monitor::showStageOverview()
     bar->addStretch(1);
     // How to move round it: on the picture itself, not a row of the bar.
     view->setToolTip(tr("Drag to swing · shift-drag to pan · wheel to zoom · read-only"));
-    addSep();
-    bar->addWidget(new QLabel(tr("View:"), footer));
-    bar->addWidget(planeCombo);
 
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(0);

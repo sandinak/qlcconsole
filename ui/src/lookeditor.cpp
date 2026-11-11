@@ -353,7 +353,9 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // Info line: "used by N scene(s)" — updated when a palette is selected
     m_title = new QLabel(tr("Look editor"), this);
     m_title->setObjectName("lookTitle");
-    m_title->setStyleSheet("color: palette(mid); font-size: small;");
+    /* Grey, not palette(mid): on a dark theme mid is all but the panel's
+       own colour, and the line read as hidden under the Name row. */
+    m_title->setStyleSheet("color: gray; font-size: small;");
     root->addWidget(m_title);
 
     m_warning = new QLabel(this);
