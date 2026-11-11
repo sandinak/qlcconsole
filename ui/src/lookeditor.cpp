@@ -3317,8 +3317,9 @@ void LookEditor::rebuildEffectDynWidget()
            The controller's and the venue's, not this look's. */
         QWidget *opRow = new QWidget(m_effectDynWidget);
         opRow->setObjectName(QStringLiteral("followSpotOperator"));
-        QHBoxLayout *opl = new QHBoxLayout(opRow);
+        QGridLayout *opl = new QGridLayout(opRow);
         opl->setContentsMargins(0, 2, 0, 2);
+        opl->setHorizontalSpacing(6);
         QLabel *opLabel = new QLabel(LookEditor::tr("Operator:"), opRow);
         QComboBox *where = new QComboBox(opRow);
         where->setObjectName(QStringLiteral("followSpotOperatorPreset"));
@@ -3343,13 +3344,18 @@ void LookEditor::rebuildEffectDynWidget()
         QLabel *forWho = new QLabel(opRow);
         forWho->setObjectName(QStringLiteral("followSpotOperatorFor"));
         forWho->setStyleSheet(QStringLiteral("color: gray;"));
-        opl->addWidget(opLabel);
-        opl->addWidget(where);
-        opl->addWidget(new QLabel(LookEditor::tr("facing"), opRow));
-        opl->addWidget(facing);
-        opl->addWidget(new QLabel(LookEditor::tr("eye"), opRow));
-        opl->addWidget(eye);
-        opl->addWidget(forWho, 1);
+        // Two short lines, so a narrow editor pane shows all of it.
+        where->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        facing->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        forWho->setWordWrap(true);
+        opl->addWidget(opLabel, 0, 0, Qt::AlignRight);
+        opl->addWidget(where, 0, 1);
+        opl->addWidget(forWho, 0, 2, 1, 2);
+        opl->addWidget(new QLabel(LookEditor::tr("Facing:"), opRow), 1, 0, Qt::AlignRight);
+        opl->addWidget(facing, 1, 1);
+        opl->addWidget(new QLabel(LookEditor::tr("Eye:"), opRow), 1, 2, Qt::AlignRight);
+        opl->addWidget(eye, 1, 3);
+        opl->setColumnStretch(4, 1);
         dv->addWidget(opRow);
 
         auto fill = [pc, where, facing, eye, forWho]() {

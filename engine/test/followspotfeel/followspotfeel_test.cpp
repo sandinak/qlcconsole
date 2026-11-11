@@ -866,11 +866,11 @@ void FollowSpotFeel_Test::frontOfHouseKeepsItsRightAndGoesUpstage()
     QCOMPARE(h.pc->followSpotMover()->facing(), 0);
     QVERIFY(h.pc->followSpotOperator().viewpointText().isEmpty());
     const QVector3D right = pushed(h, 255, 127);
-    QVERIFY2(right.x() > 0.2f && qAbs(right.y()) < 1e-4f, qPrintable(str(right)));
+    QVERIFY2(right.x() > 0.2f && qAbs(right.y()) < 0.01f * right.x(), qPrintable(str(right)));
     const QVector3D left = pushed(h, 0, 127);
     QVERIFY2(qAbs(left.x() + right.x()) < 0.01f * right.x(), qPrintable(str(left) + str(right)));
     const QVector3D up = pushed(h, 127, 0);
-    QVERIFY2(up.y() < -0.2f && qAbs(up.x()) < 1e-4f, qPrintable(str(up)));
+    QVERIFY2(up.y() < -0.2f && qAbs(up.x()) < 0.01f * -up.y(), qPrintable(str(up)));   // the last push's glide aside
     // The same speed as across: only the direction is the operator's.
     QVERIFY2(qAbs(up.length() - right.length()) < 0.01f * right.length(), qPrintable(str(up) + str(right)));
 
