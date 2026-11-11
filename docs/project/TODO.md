@@ -612,6 +612,11 @@ Pi 5 by the perf runs). Help: docs/features/system-tuning.md.
   behaviour, as ControllerKeepAlive does.
 - Timer slack (PR_SET_TIMERSLACK) measured on Linux: no effect within the
   run-to-run noise, not added.
+- Host checks (perf/host-leverage, 2026-11-09, unmerged): architecture, measured
+  late frames, universe threads, power, heat, Wi-Fi on every OS, Local Network,
+  screen lock, backups/sync, updates, other programs, memory/disk, rig settings,
+  rechecked during Operate. Open: Windows items unmeasured; KDE and other Linux
+  desktops report no screen lock; no screen-awake hold on Linux; thresholds beyond the Pi's unproven.
 
 ## Performance page: precise limits and jitter — built, leftovers (perfprec, 2026-11-03)
 

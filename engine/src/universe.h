@@ -527,6 +527,9 @@ public:
     static constexpr int kSendLatencyBuckets = 161;
     static constexpr int kSendLatencyBucketUs = 250;
     QVector<quint32> sendLatencyHistogram() const;
+    /** What the universe threads got from the system (QLC_UNIVERSE_SCHED) */
+    enum ThreadScheduling { ThreadsNormal, ThreadsElevated, ThreadsRealtime, ThreadsRefused };
+    static ThreadScheduling threadScheduling();
     void resetSendLatency();
 
 public slots:

@@ -22,6 +22,11 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSettings>
+#include <QElapsedTimer>
+#include <QMutex>
+#include <QThread>
+#include <QThreadPool>
+#include <QDeadlineTimer>
 
 #include "systemtuning_test.h"
 #include "systemtuningpage.h"
@@ -285,14 +290,14 @@ void SystemTuning_Test::theRealProbeKnowsThisSystem()
 void SystemTuning_Test::settingsDefaultsAndAreRemembered()
 {
     QCOMPARE(SystemTuning::fullSpeedInOperate(), true);
-    QCOMPARE(SystemTuning::keepDisplayAwakeInOperate(), false);
+    QCOMPARE(SystemTuning::keepDisplayAwakeInOperate(), true);
     QCOMPARE(SystemTuning::warnInOperate(), true);
 
     SystemTuning::setFullSpeedInOperate(false);
-    SystemTuning::setKeepDisplayAwakeInOperate(true);
+    SystemTuning::setKeepDisplayAwakeInOperate(false);
     SystemTuning::setWarnInOperate(false);
     QCOMPARE(SystemTuning::fullSpeedInOperate(), false);
-    QCOMPARE(SystemTuning::keepDisplayAwakeInOperate(), true);
+    QCOMPARE(SystemTuning::keepDisplayAwakeInOperate(), false);
     QCOMPARE(SystemTuning::warnInOperate(), false);
     QCOMPARE(QSettings().value(QStringLiteral("tuning/fullSpeedInOperate")).toBool(), false);
 }
@@ -313,7 +318,7 @@ void SystemTuning_Test::fullSpeedIsHeldOnlyDuringOperate()
     m_doc->setMode(Doc::Operate);
     QCOMPARE(tuning.isHeld(), true);
     QCOMPARE(calls.count(), 1);
-    QCOMPARE(calls.last(), qMakePair(true, false));
+    QCOMPARE(calls.last(), qMakePair(true, true));
 
     m_doc->setMode(Doc::Design);
     QCOMPARE(tuning.isHeld(), false);
@@ -330,7 +335,7 @@ void SystemTuning_Test::fullSpeedIsHeldOnlyDuringOperate()
     SystemTuning::setFullSpeedInOperate(true);
     tuning.apply();
     QCOMPARE(tuning.isHeld(), true);
-    QCOMPARE(calls.last(), qMakePair(true, false));
+    QCOMPARE(calls.last(), qMakePair(true, true));
     m_doc->setMode(Doc::Design);
 }
 
@@ -449,7 +454,7 @@ void SystemTuning_Test::thePageSavesItsSettings()
 
     SystemTuningPage page(m_doc);
     QCOMPARE(page.fullSpeedCheck()->isChecked(), true);
-    QCOMPARE(page.displayCheck()->isChecked(), false);
+    QCOMPARE(page.displayCheck()->isChecked(), true);
     QCOMPARE(page.warnCheck()->isChecked(), true);
     page.fullSpeedCheck()->setChecked(false);
     page.warnCheck()->setChecked(false);
@@ -488,6 +493,548 @@ void SystemTuning_Test::theFullSpeedBoxUpdatesTheList()
     page.fullSpeedCheck()->setChecked(false);
     row = fullSpeedRow();
     QCOMPARE(row->text(0), SystemTuning::statusText(SystemTuning::CanImprove));
+}
+
+/****************************************************************************
+ * What else is going on
+ ****************************************************************************/
+
+namespace
+{
+SystemTuning::Probe macProbe()
+{
+    SystemTuning::Probe p;
+    p.os = SystemTuning::OsMac;
+    p.scheduling = MasterTimer::SchedulingRealtime;
+    p.fullSpeedSupported = true;
+    p.lowPowerMode = 0;
+    return p;
+}
+
+SystemProbe::ProcessUse proc(const char *name, double cpu)
+{
+    SystemProbe::ProcessUse use;
+    use.name = QString::fromUtf8(name);
+    use.cpu = cpu;
+    return use;
+}
+}
+
+void SystemTuning_Test::toolOutputIsRead()
+{
+    const QList<SystemProbe::ProcessUse> table = SystemProbe::parseProcessTable(
+        QStringLiteral("  PID  %CPU COMM\n    1   1.8 launchd\n  255   0,5 Google Chrome\n 4242  90.0 me\n"), 4242);
+    QCOMPARE(table.size(), 2);
+    QCOMPARE(table.at(1).name, QStringLiteral("Google Chrome"));
+    QCOMPARE(table.at(1).cpu, 0.5);
+
+    QCOMPARE(SystemProbe::parseScreenLock(QStringLiteral("2026-11-09 sysadminctl[1] screenLock delay is immediate")), 1);
+    QCOMPARE(SystemProbe::parseScreenLock(QStringLiteral("x screenLock delay is 300 seconds")), 1);
+    QCOMPARE(SystemProbe::parseScreenLock(QStringLiteral("x screenLock is off")), 0);
+    QCOMPARE(SystemProbe::parseScreenLock(QString()), -1);
+
+    QCOMPARE(SystemProbe::parseIdleMinutes(QStringLiteral(" disksleep  10\n displaysleep         120\n")), 120);
+    QCOMPARE(SystemProbe::parseIdleMinutes(QStringLiteral(" disksleep  10\n")), -1);
+
+    QCOMPARE(SystemProbe::parseBackupRunning(QStringLiteral("{\n    Percent = \"-1\";\n    Running = 0;\n}")), 0);
+    QCOMPARE(SystemProbe::parseBackupRunning(QStringLiteral("    Running = 1;")), 1);
+    QCOMPARE(SystemProbe::parseBackupRunning(QString()), -1);
+
+    QCOMPARE(SystemProbe::parseThrottled(QStringLiteral("throttled=0x0\n")), 0);
+    QCOMPARE(SystemProbe::parseThrottled(QStringLiteral("throttled=0x50005\n")), 0x50005);
+    QCOMPARE(SystemProbe::parseThrottled(QStringLiteral("VCHI failed")), -1);
+
+    QString name;
+    qint64 ticks = 0;
+    QVERIFY(SystemProbe::parseProcStat(
+        QStringLiteral("77 (tmux: (server) x) S 1 77 77 0 -1 4194560 1 0 0 0 30 12 0 0 20 0"), &name, &ticks));
+    QCOMPARE(name, QStringLiteral("tmux: (server) x"));
+    QCOMPARE(ticks, qint64(42));
+    QVERIFY(SystemProbe::parseProcStat(QStringLiteral("garbage"), &name, &ticks) == false);
+}
+
+void SystemTuning_Test::frameTimingCountsLateAndDropped()
+{
+    Doc doc(nullptr);
+    MasterTimer *timer = doc.masterTimer();
+    const uint period = MasterTimer::tick();
+
+    /* The first frame has nothing to be late against */
+    timer->timerTick(true);
+    QCOMPARE(timer->frameTiming().frames, quint64(0));
+
+    /* Sleeps only overshoot, so a gap is never shorter than asked: at least
+       this many, and a busy host may make the first one dropped as well */
+    QTest::qSleep(int(period) * 2);
+    timer->timerTick(true);
+    MasterTimer::FrameTiming t = timer->frameTiming();
+    QCOMPARE(t.frames, quint64(1));
+    QCOMPARE(t.late, quint64(1));
+
+    QTest::qSleep(int(period) * 3);
+    timer->timerTick(true);
+    t = timer->frameTiming();
+    QCOMPARE(t.frames, quint64(2));
+    QCOMPARE(t.late, quint64(2));
+    QVERIFY(t.dropped >= 1);
+
+    /* A direct call is not a frame */
+    timer->timerTick();
+    QCOMPARE(timer->frameTiming().frames, quint64(2));
+}
+
+void SystemTuning_Test::measuredItemFollowsTheLateFrames()
+{
+    SystemTuning::Probe p = macProbe();
+    p.frames.frames = 100;
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("measured"))->status, SystemTuning::Advice);
+
+    p.frames.frames = 10000;
+    p.frames.late = 2;
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("measured"))->status, SystemTuning::Good);
+
+    p.frames.late = 50;
+    QList<SystemTuning::Item> items = SystemTuning::check(p);
+    QCOMPARE(find(items, QStringLiteral("measured"))->status, SystemTuning::CanImprove);
+    QVERIFY(find(items, QStringLiteral("measured"))->important == false);
+
+    p.frames.late = 200;
+    p.frames.dropped = 3;
+    p.sendP99Ms = 6.25;
+    items = SystemTuning::check(p);
+    QVERIFY(find(items, QStringLiteral("measured"))->important);
+    QVERIFY(find(items, QStringLiteral("measured"))->state.contains(QLatin1String("200 late of 10000 (2.00%), 3 dropped")));
+    QVERIFY(find(items, QStringLiteral("measured"))->state.contains(QLatin1String("6.2 ms"))
+            || find(items, QStringLiteral("measured"))->state.contains(QLatin1String("6.3 ms")));
+}
+
+void SystemTuning_Test::universeThreadsAdviceFollowsTheNumbers()
+{
+    /* Measured on Linux only: only there does it say to change something */
+    SystemTuning::Probe p = linuxProbe();
+    p.scheduling = MasterTimer::SchedulingRealtime;
+    p.patchedUniverses = 128;
+    p.binary = QStringLiteral("/opt/qlcconsole");
+    const QList<SystemTuning::Item> items = SystemTuning::check(p);
+    const SystemTuning::Item *u = find(items, QStringLiteral("universes"));
+    QCOMPARE(u->status, SystemTuning::CanImprove);
+    QVERIFY(u->command.startsWith(QLatin1String("QLC_UNIVERSE_SCHED=rt '/opt/qlcconsole'")));
+    QVERIFY(u->important == false);
+
+    p.patchedUniverses = 8;
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("universes"))->status, SystemTuning::Good);
+
+    SystemTuning::Probe mac = macProbe();
+    mac.patchedUniverses = 128;
+    QCOMPARE(find(SystemTuning::check(mac), QStringLiteral("universes"))->status, SystemTuning::Advice);
+
+    p.universeScheduling = Universe::ThreadsRealtime;
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("universes"))->status, SystemTuning::Good);
+    p.universeScheduling = Universe::ThreadsRefused;
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("universes"))->status, SystemTuning::CanImprove);
+}
+
+void SystemTuning_Test::theMachineItemKnowsTheArchitecture()
+{
+    SystemTuning::Probe p = macProbe();
+    p.arch = p.buildArch = QStringLiteral("arm64");
+    p.cpuName = QStringLiteral("Apple M4 Max");
+    p.performanceCores = 10;
+    p.logicalCores = 14;
+    QList<SystemTuning::Item> items = SystemTuning::check(p);
+    const SystemTuning::Item *m = find(items, QStringLiteral("machine"));
+    QCOMPARE(m->status, SystemTuning::Good);
+    QCOMPARE(m->state, QStringLiteral("Apple M4 Max, 10 performance + 4 efficiency cores, arm64"));
+    QVERIFY(m->what.contains(QLatin1String("Apple silicon")));
+
+    p.arch = p.buildArch = QStringLiteral("x86_64");
+    p.performanceCores = p.logicalCores = 12;
+    items = SystemTuning::check(p);
+    QVERIFY(find(items, QStringLiteral("machine"))->what.contains(QLatin1String("Intel Mac")));
+
+    /* Rosetta reports the translated architecture, so it is its own flag */
+    p.translated = true;
+    items = SystemTuning::check(p);
+    QCOMPARE(find(items, QStringLiteral("machine"))->status, SystemTuning::CanImprove);
+    QVERIFY(find(items, QStringLiteral("machine"))->important);
+    QVERIFY(find(items, QStringLiteral("machine"))->howTo.contains(QLatin1String("Rosetta")));
+
+    /* A 32-bit build on a 64-bit Pi */
+    SystemTuning::Probe pi = linuxProbe();
+    pi.arch = QStringLiteral("arm64");
+    pi.buildArch = QStringLiteral("arm");
+    items = SystemTuning::check(pi);
+    QCOMPARE(find(items, QStringLiteral("machine"))->status, SystemTuning::CanImprove);
+    QVERIFY(find(items, QStringLiteral("machine"))->howTo.contains(QLatin1String("arm64")));
+}
+
+void SystemTuning_Test::batteryAndHeatAndThePi()
+{
+    SystemTuning::Probe p = macProbe();
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("power"))->status, SystemTuning::NotAvailable);
+    p.onBattery = 1;
+    p.batteryPercent = 42;
+    p.thermal = 2;
+    QList<SystemTuning::Item> items = SystemTuning::check(p);
+    QCOMPARE(find(items, QStringLiteral("power"))->state, QStringLiteral("on battery, 42%"));
+    QVERIFY(find(items, QStringLiteral("power"))->important);
+    QVERIFY(find(items, QStringLiteral("thermal"))->important);
+
+    p.onBattery = 0;
+    p.thermal = 1;
+    items = SystemTuning::check(p);
+    QCOMPARE(find(items, QStringLiteral("power"))->status, SystemTuning::Good);
+    QCOMPARE(find(items, QStringLiteral("thermal"))->status, SystemTuning::Advice);
+
+    SystemTuning::Probe pi = linuxProbe();
+    pi.model = QStringLiteral("Raspberry Pi 5 Model B Rev 1.0");
+    pi.piThrottled = 0;
+    QCOMPARE(find(SystemTuning::check(pi), QStringLiteral("pi"))->status, SystemTuning::Good);
+    pi.piThrottled = 0x50000;
+    items = SystemTuning::check(pi);
+    QCOMPARE(find(items, QStringLiteral("pi"))->status, SystemTuning::CanImprove);
+    QVERIFY(find(items, QStringLiteral("pi"))->important == false);
+    pi.piThrottled = 0x50005;
+    items = SystemTuning::check(pi);
+    QVERIFY(find(items, QStringLiteral("pi"))->important);
+    QVERIFY(find(items, QStringLiteral("pi"))->state.contains(QLatin1String("power supply")));
+}
+
+void SystemTuning_Test::wifiMattersMostWhenItCarriesDmx()
+{
+    SystemTuning::Probe p = macProbe();
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("wifi"))->status, SystemTuning::Good);
+
+    p.wirelessUp << QStringLiteral("en0");
+    p.wirelessAddresses << QStringLiteral("192.168.1.20");
+    p.dmxAddresses << QStringLiteral("172.18.2.40");
+    QList<SystemTuning::Item> items = SystemTuning::check(p);
+    QCOMPARE(find(items, QStringLiteral("wifi"))->status, SystemTuning::CanImprove);
+    QVERIFY(find(items, QStringLiteral("wifi"))->important == false);
+    QVERIFY(find(items, QStringLiteral("wifi"))->command.isEmpty());
+
+    p.dmxAddresses << QStringLiteral("192.168.1.20");
+    items = SystemTuning::check(p);
+    QVERIFY(find(items, QStringLiteral("wifi"))->important);
+    QVERIFY(find(items, QStringLiteral("wifi"))->state.startsWith(QLatin1String("carrying DMX")));
+}
+
+void SystemTuning_Test::localNetworkOnlyWhenEveryOutputFails()
+{
+    SystemTuning::Probe p = macProbe();
+    QVERIFY(find(SystemTuning::check(p), QStringLiteral("localnetwork")) == nullptr);
+    p.networkOutputs = 4;
+    p.failingOutputs = 1;
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("localnetwork"))->status, SystemTuning::Good);
+    p.failingOutputs = 4;
+    const QList<SystemTuning::Item> items = SystemTuning::check(p);
+    QVERIFY(find(items, QStringLiteral("localnetwork"))->important);
+    QVERIFY(find(items, QStringLiteral("localnetwork"))->howTo.contains(QLatin1String("Local Network")));
+
+    SystemTuning::Probe lin = linuxProbe();
+    lin.networkOutputs = lin.failingOutputs = 4;
+    QVERIFY(find(SystemTuning::check(lin), QStringLiteral("localnetwork")) == nullptr);
+}
+
+void SystemTuning_Test::screenLockFollowsKeepDisplayAwake()
+{
+    SystemTuning::Probe p = macProbe();
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("screenlock"))->status, SystemTuning::Advice);
+
+    p.screenLock = 1;
+    p.idleMinutes = 10;
+    QList<SystemTuning::Item> items = SystemTuning::check(p);
+    const SystemTuning::Item *s = find(items, QStringLiteral("screenlock"));
+    QCOMPARE(s->status, SystemTuning::CanImprove);
+    QVERIFY(s->important);
+    QCOMPARE(s->state, QStringLiteral("locks after 10 min idle"));
+    QVERIFY(s->howTo.contains(QLatin1String("Keep the display awake")));
+
+    /* Sleeps without a password: worth fixing, not an emergency */
+    p.screenLock = 0;
+    items = SystemTuning::check(p);
+    QVERIFY(find(items, QStringLiteral("screenlock"))->important == false);
+
+    p.screenLock = 1;
+    p.idleMinutes = 0;
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("screenlock"))->status, SystemTuning::Good);
+
+    p.idleMinutes = 10;
+    p.keepDisplayAwake = true;
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("screenlock"))->status, SystemTuning::Good);
+
+    /* The hold goes with full speed: without it the box does nothing */
+    p.fullSpeedInOperate = false;
+    items = SystemTuning::check(p);
+    QCOMPARE(find(items, QStringLiteral("screenlock"))->status, SystemTuning::CanImprove);
+    QVERIFY(find(items, QStringLiteral("screenlock"))->howTo.contains(QLatin1String("Run at full speed")));
+
+    /* Linux has no hold: the box can't help, so it says what will */
+    SystemTuning::Probe lin = linuxProbe();
+    lin.screenLock = 1;
+    lin.idleMinutes = 5;
+    lin.keepDisplayAwake = true;
+    items = SystemTuning::check(lin);
+    QCOMPARE(find(items, QStringLiteral("screenlock"))->status, SystemTuning::CanImprove);
+    QVERIFY(find(items, QStringLiteral("screenlock"))->command.contains(QLatin1String("lock-enabled false")));
+}
+
+void SystemTuning_Test::theKeepAwakeBoxUpdatesTheList()
+{
+    SystemTuningPage page(m_doc);
+    page.setProbe([]() {
+        SystemTuning::Probe p = macProbe();
+        p.screenLock = 1;
+        p.idleMinutes = 10;
+        return p;
+    });
+    QTreeWidget *tree = page.itemsTree();
+    auto status = [tree]() {
+        for (int i = 0; i < tree->topLevelItemCount(); i++)
+            if (tree->topLevelItem(i)->data(0, Qt::UserRole).toString() == QLatin1String("screenlock"))
+                return tree->topLevelItem(i)->text(0);
+        return QString();
+    };
+    /* On by default */
+    QCOMPARE(status(), SystemTuning::statusText(SystemTuning::Good));
+    page.displayCheck()->setChecked(false);
+    QVERIFY(status().contains(SystemTuning::statusText(SystemTuning::CanImprove)));
+    page.displayCheck()->setChecked(true);
+    QCOMPARE(status(), SystemTuning::statusText(SystemTuning::Good));
+}
+
+void SystemTuning_Test::backupsRunningIdleAndBuiltIn()
+{
+    SystemTuning::Probe p = macProbe();
+    p.processesKnown = true;
+    /* iCloud is on every Mac: idle, it is not worth a line */
+    p.processes << proc("bird", 0.1);
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("backups"))->status, SystemTuning::Good);
+
+    p.processes << proc("SynologyDriveFileProvider", 0.2);
+    QList<SystemTuning::Item> items = SystemTuning::check(p);
+    QCOMPARE(find(items, QStringLiteral("backups"))->status, SystemTuning::CanImprove);
+    QVERIFY(find(items, QStringLiteral("backups"))->important == false);
+    QCOMPARE(find(items, QStringLiteral("backups"))->state, QStringLiteral("idle, could start: Synology Drive"));
+
+    p.backupScheduled = 1;
+    items = SystemTuning::check(p);
+    QVERIFY(find(items, QStringLiteral("backups"))->state.contains(QLatin1String("Time Machine")));
+    QVERIFY(find(items, QStringLiteral("backups"))->howTo.contains(QLatin1String("Back up frequency")));
+
+    /* Working now */
+    p.processes << proc("bird", 40.0) << proc("bztransmit64", 12.0);
+    items = SystemTuning::check(p);
+    QVERIFY(find(items, QStringLiteral("backups"))->important);
+    QVERIFY(find(items, QStringLiteral("backups"))->state.contains(QLatin1String("iCloud Drive")));
+    QVERIFY(find(items, QStringLiteral("backups"))->state.contains(QLatin1String("Backblaze")));
+
+    /* rsync only exists while it works; case and .exe don't matter */
+    SystemTuning::Probe win;
+    win.os = SystemTuning::OsWindows;
+    win.processesKnown = true;
+    win.processes << proc("rclone.exe", 0.0) << proc("OneDrive.exe", 0.0);
+    items = SystemTuning::check(win);
+    QCOMPARE(find(items, QStringLiteral("backups"))->state, QStringLiteral("running now: rclone"));
+
+    SystemTuning::Probe tm = macProbe();
+    tm.backupRunning = 1;
+    items = SystemTuning::check(tm);
+    QVERIFY(find(items, QStringLiteral("backups"))->important);
+    QCOMPARE(find(items, QStringLiteral("backups"))->command, QStringLiteral("tmutil stopbackup"));
+}
+
+void SystemTuning_Test::updatesPendingRunningAndScheduled()
+{
+    SystemTuning::Probe win;
+    win.os = SystemTuning::OsWindows;
+    QCOMPARE(find(SystemTuning::check(win), QStringLiteral("updates"))->status, SystemTuning::Advice);
+    win.rebootPending = true;
+    QVERIFY(find(SystemTuning::check(win), QStringLiteral("updates"))->important);
+
+    SystemTuning::Probe mac = macProbe();
+    mac.processesKnown = true;
+    mac.processes << proc("softwareupdated", 0.1);
+    QCOMPARE(find(SystemTuning::check(mac), QStringLiteral("updates"))->status, SystemTuning::Good);
+    mac.autoUpdates = 1;
+    QList<SystemTuning::Item> items = SystemTuning::check(mac);
+    QCOMPARE(find(items, QStringLiteral("updates"))->status, SystemTuning::CanImprove);
+    QVERIFY(find(items, QStringLiteral("updates"))->howTo.contains(QLatin1String("Software Update")));
+    mac.processes << proc("softwareupdated", 30.0);
+    QVERIFY(find(SystemTuning::check(mac), QStringLiteral("updates"))->important);
+
+    SystemTuning::Probe lin = linuxProbe();
+    lin.autoUpdates = 1;
+    QVERIFY(find(SystemTuning::check(lin), QStringLiteral("updates"))->command.contains(QLatin1String("apt-daily")));
+
+    /* Debian's unattended-upgrade-shutdown sits there all day, doing nothing */
+    SystemTuning::Probe deb = linuxProbe();
+    deb.processesKnown = true;
+    deb.processes << proc("unattended-upgr", 0.0);
+    QCOMPARE(find(SystemTuning::check(deb), QStringLiteral("updates"))->status, SystemTuning::Good);
+}
+
+void SystemTuning_Test::otherProgramsAddUpByName()
+{
+    SystemTuning::Probe p = macProbe();
+    p.performanceCores = 4;
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("load"))->status, SystemTuning::NotAvailable);
+
+    p.processesKnown = true;
+    p.processes << proc("launchd", 1.0);
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("load"))->status, SystemTuning::Good);
+
+    p.processes << proc("moc", 40.0) << proc("moc", 40.0) << proc("mds_stores", 60.0);
+    QList<SystemTuning::Item> items = SystemTuning::check(p);
+    QCOMPARE(find(items, QStringLiteral("load"))->state, QStringLiteral("moc 80%, Spotlight indexing 60%"));
+    QVERIFY(find(items, QStringLiteral("load"))->important == false);
+
+    /* Half the performance cores: the show will feel it */
+    p.processes << proc("clang", 120.0);
+    items = SystemTuning::check(p);
+    QVERIFY(find(items, QStringLiteral("load"))->important);
+    QVERIFY(find(items, QStringLiteral("load"))->state.startsWith(QLatin1String("clang 120%")));
+}
+
+void SystemTuning_Test::memoryDiskAndRigSettings()
+{
+    SystemTuning::Probe p = macProbe();
+    p.memory = 0;
+    p.diskFreeMb = 100000;
+    QList<SystemTuning::Item> items = SystemTuning::check(p);
+    QCOMPARE(find(items, QStringLiteral("memory"))->status, SystemTuning::Good);
+    QCOMPARE(find(items, QStringLiteral("appsettings"))->status, SystemTuning::Good);
+
+    p.memory = 2;
+    p.diskFreeMb = 512;
+    p.rigOperateFps = 60;
+    p.rigSupersample = 4;
+    p.rigGpu = false;
+    items = SystemTuning::check(p);
+    QVERIFY(find(items, QStringLiteral("memory"))->important);
+    QVERIFY(find(items, QStringLiteral("memory"))->state.contains(QLatin1String("512 MB")));
+    QCOMPARE(find(items, QStringLiteral("appsettings"))->status, SystemTuning::CanImprove);
+    QVERIFY(find(items, QStringLiteral("appsettings"))->state.contains(QLatin1String("60 frames")));
+    QVERIFY(find(items, QStringLiteral("appsettings"))->state.contains(QLatin1String("graphics card")));
+}
+
+void SystemTuning_Test::theLookRunsBelowTheShow()
+{
+    SystemTuning tuning(m_doc);
+    tuning.setHold([](bool, bool) {});
+    tuning.setProbe([]() { return macProbe(); });
+
+    QAtomicInt priority(-1);
+    tuning.setHostGather([&priority](SystemTuning::Probe *p, bool deep) {
+        priority.storeRelaxed(int(QThread::currentThread()->priority()));
+        p->deepLooked = deep;
+    });
+    m_doc->setMode(Doc::Operate);
+    QTRY_COMPARE(priority.loadRelaxed(), int(QThread::LowestPriority));
+    m_doc->setMode(Doc::Design);
+    QThreadPool::globalInstance()->waitForDone(2000);
+
+#if defined(Q_OS_WIN)
+    QSKIP("Windows runs no tools");
+#else
+    /* What a real tool gets: the highest niceness the system allows */
+    bool ok = false;
+    const int nice = SystemProbe::runTool(QStringLiteral("/bin/sh"),
+                                          QStringList() << QStringLiteral("-c")
+                                                        << QStringLiteral("ps -o nice= -p $$"),
+                                          QDeadlineTimer(5000)).trimmed().toInt(&ok);
+    QVERIFY(ok);
+    QVERIFY2(nice >= 19, qPrintable(QString::number(nice)));
+#endif
+}
+
+void SystemTuning_Test::hostLookRunsOffTheUiThread()
+{
+    SystemTuning tuning(m_doc);
+    tuning.setHold([](bool, bool) {});
+    tuning.setProbe([]() { return macProbe(); });
+
+    QAtomicPointer<QThread> ranOn(nullptr);
+    tuning.setHostGather([&ranOn](SystemTuning::Probe *p, bool deep) {
+        ranOn.storeRelaxed(QThread::currentThread());
+        p->deepLooked = deep;
+        p->onBattery = 1;
+    });
+
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(hasStatus(SystemTuning::statusKey()) == false); /* not yet: it is on the worker */
+    QTRY_VERIFY(hasStatus(SystemTuning::statusKey()));
+    QVERIFY(ranOn.loadRelaxed() != nullptr);
+    QVERIFY(ranOn.loadRelaxed() != QThread::currentThread());
+    QVERIFY(statusEntry(SystemTuning::statusKey()).items.first().startsWith(QLatin1String("Mains power")));
+
+    /* An answer that lands after the show left Operate says nothing */
+    tuning.recheckNow(true);
+    m_doc->setMode(Doc::Design);
+    QVERIFY(hasStatus(SystemTuning::statusKey()) == false);
+    QTest::qWait(100);
+    QVERIFY(hasStatus(SystemTuning::statusKey()) == false);
+}
+
+void SystemTuning_Test::aLightLookKeepsTheDeepAnswers()
+{
+    SystemTuning tuning(m_doc);
+    tuning.setHold([](bool, bool) {});
+    tuning.setProbe([]() { return macProbe(); });
+    tuning.setHostGather([](SystemTuning::Probe *p, bool deep) {
+        p->deepLooked = deep;
+        if (deep)
+            p->backupRunning = 1;
+    });
+
+    m_doc->setMode(Doc::Operate);
+    const QString key = SystemTuning::statusKey();
+    QTRY_VERIFY(hasStatus(key));
+
+    /* A light look doesn't run tmutil. Not knowing isn't "it stopped". */
+    tuning.recheckNow(false);
+    QTest::qWait(150);
+    QVERIFY(hasStatus(key));
+    QVERIFY(statusEntry(key).items.first().contains(QLatin1String("Time Machine")));
+    m_doc->setMode(Doc::Design);
+}
+
+void SystemTuning_Test::theRealLookIsBounded()
+{
+    QElapsedTimer t;
+    t.start();
+    const SystemTuning::Probe p = SystemTuning::probe(m_doc);
+    /* The look's own limit plus the first CPU sample's wait, with slack for
+       a loaded gate host; a hung tool must not hold the Settings dialog */
+    QVERIFY2(t.elapsed() < 5000, qPrintable(QString::number(t.elapsed())));
+    QVERIFY(p.arch.isEmpty() == false);
+    QVERIFY(p.deepLooked);
+    QVERIFY(p.logicalCores >= p.performanceCores);
+    QVERIFY(SystemProbe::parseScreenLock(QString()) == -1);
+    /* QLC_TUNING_DUMP=dir: what this machine really answers, by hand, and
+       the page at three sizes for a visual check. Never in the gate. */
+    const QString dump = qEnvironmentVariable("QLC_TUNING_DUMP");
+    if (dump.isEmpty() == false)
+    {
+        qInfo("%lld ms", qint64(t.elapsed()));
+        for (const SystemTuning::Item &it : SystemTuning::check(p))
+            qInfo("%-13s %-13s %s%s", qPrintable(it.key), qPrintable(SystemTuning::statusText(it.status)),
+                  qPrintable(it.state), (it.important && it.status == SystemTuning::CanImprove) ? " [important]" : "");
+        SystemTuningPage page(m_doc);
+        page.setProbe([p]() { return p; });
+        page.show();
+        for (const QSize &size : { QSize(640, 520), QSize(900, 640), QSize(1400, 900) })
+        {
+            page.resize(size);
+            QApplication::processEvents();
+            page.grab().save(QStringLiteral("%1/performance-%2.png").arg(dump).arg(size.width()));
+        }
+    }
+#if defined(Q_OS_MACOS)
+    QVERIFY(p.thermal >= 0);
+    QVERIFY(p.onBattery >= 0);
+    QVERIFY(p.memory >= 0);
+#endif
 }
 
 QTEST_MAIN(SystemTuning_Test)

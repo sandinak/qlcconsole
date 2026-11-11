@@ -23,6 +23,9 @@
 
 #include "qlcengine_export.h"
 
+#include <QDeadlineTimer>
+#include <QList>
+
 /** @addtogroup engine Engine
  * @{
  */
@@ -77,6 +80,63 @@ namespace SystemProbe
      *  QThread::idealThreadCount() where none of that can be read. At
      *  least 1, worked out once. */
     QLC_ENGINE_EXPORT int performanceCores();
+
+    /*********************************************************************
+     * What else is going on: for Settings ▸ Performance. Each is safe on
+     * any thread. The ones that take a deadline run a system tool (never
+     * through a shell, by absolute path) and give up when it passes.
+     *********************************************************************/
+
+    /** The processor's marketing name; empty when the system doesn't say */
+    QLC_ENGINE_EXPORT QString cpuName();
+    /** This build is being translated for another processor (Rosetta) */
+    QLC_ENGINE_EXPORT bool translated();
+
+    /** 1 running on battery, 0 on mains or there is no battery, -1 unknown.
+     *  @a percent, when not null: charge, or -1. */
+    QLC_ENGINE_EXPORT int onBattery(int *percent = nullptr);
+    /** 0 nominal, 1 warm, 2 slowing down, 3 critical, -1 the system doesn't say */
+    QLC_ENGINE_EXPORT int thermalState();
+    /** 0 fine, 1 low, 2 critical, -1 unknown */
+    QLC_ENGINE_EXPORT int memoryPressure();
+
+    struct ProcessUse
+    {
+        QString name;
+        double cpu = 0;     ///< percent of one core
+    };
+    /** Every other process, with what it has used lately */
+    QLC_ENGINE_EXPORT QList<ProcessUse> processes(const QDeadlineTimer &deadline);
+
+    /** Whether the screen asks for a password after sitting idle: 1, 0, -1
+     *  unknown. @a idleMinutes: how long it stays on, 0 never, -1 unknown. */
+    QLC_ENGINE_EXPORT int screenLock(int *idleMinutes, const QDeadlineTimer &deadline);
+    /** 1 a Time Machine backup is running now, 0 not, -1 not macOS / unknown */
+    QLC_ENGINE_EXPORT int backupRunning(const QDeadlineTimer &deadline);
+    /** 1 the system backs up by itself, 0 it doesn't, -1 unknown */
+    QLC_ENGINE_EXPORT int backupScheduled();
+    /** 1 the system installs updates by itself, 0 it doesn't, -1 unknown */
+    QLC_ENGINE_EXPORT int autoUpdates();
+    /** Windows: an update is waiting for a restart */
+    QLC_ENGINE_EXPORT bool rebootPending();
+    /** Raspberry Pi: vcgencmd get_throttled as a number, -1 unknown */
+    QLC_ENGINE_EXPORT int piThrottled(const QDeadlineTimer &deadline);
+#if !defined(Q_OS_WIN)
+    /** A tool's output (stdout and stderr together), empty when it failed or
+     *  the deadline passed. It runs at the lowest priority the system has.
+     *  No shell; the caller gives the absolute path. */
+    QLC_ENGINE_EXPORT QString runTool(const QString &program, const QStringList &args,
+                                      const QDeadlineTimer &deadline);
+#endif
+
+    /* What the tools print, read: separate so a test can feed them */
+    QLC_ENGINE_EXPORT QList<ProcessUse> parseProcessTable(const QString &ps, qint64 selfPid);
+    QLC_ENGINE_EXPORT int parseScreenLock(const QString &sysadminctl);
+    QLC_ENGINE_EXPORT int parseIdleMinutes(const QString &pmset);
+    QLC_ENGINE_EXPORT int parseBackupRunning(const QString &tmutil);
+    QLC_ENGINE_EXPORT int parseThrottled(const QString &vcgencmd);
+    /** A /proc/<pid>/stat line: its command and CPU ticks; false if malformed */
+    QLC_ENGINE_EXPORT bool parseProcStat(const QString &stat, QString *name, qint64 *ticks);
 }
 
 /** @} */

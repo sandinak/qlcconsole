@@ -10,6 +10,16 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Added
+
+- **Settings ▸ Performance checks much more, per computer.** It now tells Apple silicon, Intel Macs, ARM boards and PCs apart, and looks for what gets in the way of a show: on battery, overheating, Wi-Fi carrying DMX, the macOS Local Network permission, a screen that will lock, backups and file sync, system updates, other busy programs, low memory or disk, and heavy rig view settings. It also shows how many frames really left late with this show. During Operate it looks again every 15 seconds and says so in the footer. See [Tuning your computer](docs/features/system-tuning.md).
+
+### Changed
+
+- **Operate keeps the screen awake by default,** so the console doesn't sleep or lock mid-show (macOS and Windows). Turn it off in Settings ▸ Performance.
+
 ## [0.4.3] - 2026-11-10
 
 qlcconsole 0.4.3 is a stable release after 0.4.1. 0.4.2 was built but never

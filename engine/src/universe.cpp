@@ -487,6 +487,13 @@ void Universe::resetSendLatency()
    is real-time. QLC_UNIVERSE_SCHED: empty (as ever), "qos" (macOS: user
    interactive) or "rt" (macOS: time constraint; Linux: SCHED_FIFO one level
    under the timer's, when granted). */
+static std::atomic<int> s_universeThreadScheduling { Universe::ThreadsNormal };
+
+Universe::ThreadScheduling Universe::threadScheduling()
+{
+    return ThreadScheduling(s_universeThreadScheduling.load(std::memory_order_relaxed));
+}
+
 static void applyUniverseThreadScheduling()
 {
     const QByteArray mode = qgetenv("QLC_UNIVERSE_SCHED");
@@ -496,6 +503,8 @@ static void applyUniverseThreadScheduling()
     if (mode == "qos")
     {
         const int rc = pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        s_universeThreadScheduling.store(rc == 0 ? Universe::ThreadsElevated : Universe::ThreadsRefused,
+                                         std::memory_order_relaxed);
         if (rc != 0)
             qWarning() << "Universe: user-interactive QoS refused:" << rc;
     }
@@ -514,6 +523,8 @@ static void applyUniverseThreadScheduling()
                                                    THREAD_TIME_CONSTRAINT_POLICY,
                                                    reinterpret_cast<thread_policy_t>(&policy),
                                                    THREAD_TIME_CONSTRAINT_POLICY_COUNT);
+        s_universeThreadScheduling.store(kr == KERN_SUCCESS ? Universe::ThreadsRealtime : Universe::ThreadsRefused,
+                                         std::memory_order_relaxed);
         if (kr != KERN_SUCCESS)
             qWarning() << "Universe: time-constraint policy refused:" << kr;
     }
@@ -523,6 +534,8 @@ static void applyUniverseThreadScheduling()
         struct sched_param sp;
         sp.sched_priority = qMax(1, sched_get_priority_max(SCHED_FIFO) - 11);
         const int rc = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+        s_universeThreadScheduling.store(rc == 0 ? Universe::ThreadsRealtime : Universe::ThreadsRefused,
+                                         std::memory_order_relaxed);
         if (rc != 0)
             qWarning() << "Universe: SCHED_FIFO refused:" << rc;
     }

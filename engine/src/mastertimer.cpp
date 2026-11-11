@@ -146,6 +146,8 @@ MasterTimer::~MasterTimer()
 void MasterTimer::start()
 {
     Q_ASSERT(d_ptr != NULL);
+    /* The thread isn't running: the time it was stopped isn't a late frame */
+    m_lastFrameNs = 0;
     d_ptr->start();
 }
 
@@ -167,6 +169,23 @@ void MasterTimer::timerTick(bool wakeUniverses)
 {
     Doc *doc = qobject_cast<Doc*> (parent());
     Q_ASSERT(doc != NULL);
+
+    /* frameTiming(): only a real frame, not a test's direct call */
+    if (wakeUniverses)
+    {
+        const qint64 now = m_clock.nsecsElapsed();
+        if (m_lastFrameNs != 0)
+        {
+            const qint64 period = 1000000000LL / qint64(s_frequency);
+            const qint64 gap = now - m_lastFrameNs;
+            m_framesSeen.fetch_add(1, std::memory_order_relaxed);
+            if (gap > period + period / 2)
+                m_framesLate.fetch_add(1, std::memory_order_relaxed);
+            if (gap > period * 2 + period / 2)
+                m_framesDropped.fetch_add(1, std::memory_order_relaxed);
+        }
+        m_lastFrameNs = now;
+    }
 
 #ifdef DEBUG_MASTERTIMER
     qDebug() << "[MasterTimer] *********** tick:" << ticksCount++ << "**********";
@@ -327,6 +346,15 @@ void MasterTimer::setTimerScheduling(TimerScheduling scheduling, const QString &
     QMutexLocker locker(&m_schedulingMutex);
     m_scheduling = scheduling;
     m_schedulingText = text;
+}
+
+MasterTimer::FrameTiming MasterTimer::frameTiming() const
+{
+    FrameTiming t;
+    t.frames = m_framesSeen.load(std::memory_order_relaxed);
+    t.late = m_framesLate.load(std::memory_order_relaxed);
+    t.dropped = m_framesDropped.load(std::memory_order_relaxed);
+    return t;
 }
 
 double MasterTimer::tickCpuPeakMs()

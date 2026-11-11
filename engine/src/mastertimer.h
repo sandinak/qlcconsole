@@ -103,6 +103,19 @@ public:
      *  peak. This is what a load indicator should display. */
     double tickCpuPeakMs();
 
+    /** Frames the timer has started so far, counted against the time between
+     *  them: "late" came more than half a period after it was due, "dropped"
+     *  more than one and a half, so a whole frame never went out. Cumulative
+     *  since the app started: whoever reads it keeps its own baseline.
+     *  Lock-free; written by the timer thread only. */
+    struct FrameTiming
+    {
+        quint64 frames = 0;
+        quint64 late = 0;
+        quint64 dropped = 0;
+    };
+    FrameTiming frameTiming() const;
+
     /** How the operating system schedules the timer thread. Set once each
      *  time the thread starts -- never per tick. */
     enum TimerScheduling
@@ -138,6 +151,7 @@ private:
     /** The tests drive ticks by hand; a friend instead of a test-side
      *  `#define private public`, which breaks standard headers. */
     friend class PadRun_Test;
+    friend class SystemTuning_Test;
     friend class ShowTree_Test;
     friend class SpeedMasters_Test;
 
@@ -159,6 +173,12 @@ private:
      *  it (read = reset). Same threading contract as the wall-clock pair. */
     QAtomicInteger<quint32> m_tickCpuUs;
     QAtomicInteger<quint32> m_tickCpuPeakUs;
+
+    /** frameTiming(). m_lastFrameNs belongs to the timer thread (0: none yet) */
+    qint64 m_lastFrameNs = 0;
+    std::atomic<quint64> m_framesSeen { 0 };
+    std::atomic<quint64> m_framesLate { 0 };
+    std::atomic<quint64> m_framesDropped { 0 };
 
     /** setTimerScheduling(): written by the timer thread as it starts, read
      *  by the UI whenever it asks */
