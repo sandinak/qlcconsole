@@ -513,6 +513,49 @@ Let go and it holds.
   Top Speed, turned into a pan and tilt rate over each head's throw to the
   middle of the stage, the same both ways.
 
+### Where the operator stands
+
+A spot operator is not always out front: a side tower, a balcony rail, a
+bridge upstage. Tell qlcconsole where they stand and the stick turns with
+them: pushed up, the subject goes the way they face -- away from them --
+and right is their right. Nobody turns the picture round in their head.
+
+- **Set it** on the Followspot effect (Build's Workbench, or the cue's
+  layer in the Show Tree), on the **Operator** row: **Front of house** (the
+  default), **SL tower**, **SR tower**, **Upstage** or **Back of house**.
+  Each one sets where they stand, which way they face and a usual eye
+  height. Change **facing** in 15° steps for an operator who stands at an
+  angle (0° looks upstage, 90° toward stage left), and **eye** for their
+  height above the stage floor, in the unit **Settings → Units** picks. The
+  row says whose it is: *(DUALSHOCK 4 in Main Hall)*.
+- **From the pad**: hold the **left stick click (LS, L3)** and push either
+  stick toward centre stage as you stand, then let go of the click. The
+  facing is set from the push, to the nearest 15° (*Facing 285°*). The
+  subject holds still while you do it. **View + LS** is still Centre Sticks.
+- **Kept per controller and per venue**, with the show: a DualSense in the
+  SL tower and a DUALSHOCK 4 out front each keep their own, and each venue
+  its own (one set for the venue with no controller named is used for any
+  controller). A venue renamed keeps its. Shows from before load as front of
+  house.
+- **Only the subject is turned.** With no Aim look (free-fly) the stick
+  flies the head's own pan and tilt, from wherever you stand, as before.
+- **Front of house** has the stick pushed up going upstage and right going
+  stage left (the operator's right as they look at the stage).
+
+Where you see it:
+
+- **The footer** adds where they stand when it isn't front of house:
+  *◎ Follow: AT-Spots ← ES-Witch · DUALSHOCK 4 · from SL tower · stick*.
+- **The Lighting Studio plot** marks the operator with an arrow the way they
+  face, labelled *spot op · SL tower*, just off the edge of the stage
+  (front of house and back of house are further out than it draws them).
+- **The Rig Overview's View** list has **Operator**, the rig from the
+  operator's side, looking the way they face and down from their eye height
+  to centre stage, and **Operator plan**, the plan turned so they are at the
+  bottom edge: the stick pushed up goes up the screen. The plan turns in
+  quarter turns, so a facing between them shows the nearest one. Back to any
+  other view puts back the angle you had.
+
 ### How fast, and how fine
 
 A follow spot moves at the speed its look sets, measured on the stage, in
@@ -591,7 +634,8 @@ Where you can see it:
 
 - **The footer**, on every tab (Show Tree, Run, Operate): **◎ Follow:
   AT-Spots ← ES-Witch · DUALSHOCK 4 · stick moving** while one is on --
-  which lights follow whom, with which controller, green while the stick
+  which lights follow whom, with which controller (and *· from SL tower*
+  when the operator isn't front of house), green while the stick
   moves them, amber (*· DUALSHOCK 4 · stick*) while it holds, red (*· no
   stick*) with no controller patched as an input. Gone when no follow
   spot plays. Hover it for the whole sentence.
