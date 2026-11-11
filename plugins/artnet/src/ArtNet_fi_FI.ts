@@ -4,22 +4,22 @@
 <context>
     <name>ArtNetController</name>
     <message>
-        <location filename="artnetcontroller.cpp" line="922"/>
+        <location filename="artnetcontroller.cpp" line="940"/>
         <source>Art-Net to %1: not reachable since %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetcontroller.cpp" line="938"/>
+        <location filename="artnetcontroller.cpp" line="956"/>
         <source>Art-Net node %1: stopped answering since %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetcontroller.cpp" line="941"/>
+        <location filename="artnetcontroller.cpp" line="959"/>
         <source>Art-Net node %1, port %2 (%3): DMX output short since %4</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetcontroller.cpp" line="945"/>
+        <location filename="artnetcontroller.cpp" line="963"/>
         <source>Art-Net node %1, port %2 (%3): not outputting DMX since %4</source>
         <translation type="unfinished"></translation>
     </message>

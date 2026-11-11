@@ -90,13 +90,13 @@ Please fix it before confirming.</source>
     </message>
     <message>
         <location filename="oscplugin.cpp" line="160"/>
-        <location filename="oscplugin.cpp" line="293"/>
+        <location filename="oscplugin.cpp" line="306"/>
         <source>Status: Not open</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="oscplugin.cpp" line="163"/>
-        <location filename="oscplugin.cpp" line="296"/>
+        <location filename="oscplugin.cpp" line="309"/>
         <source>Status: Open</source>
         <translation type="unfinished"></translation>
     </message>
@@ -106,7 +106,12 @@ Please fix it before confirming.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="298"/>
+        <location filename="oscplugin.cpp" line="223"/>
+        <source>OSC output has no target IP: nothing is sent. Set one in Connections</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="oscplugin.cpp" line="311"/>
         <source>Packets received: </source>
         <translation type="unfinished"></translation>
     </message>
@@ -116,7 +121,7 @@ Please fix it before confirming.</source>
         <translation>Saída</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="289"/>
+        <location filename="oscplugin.cpp" line="302"/>
         <source>Input</source>
         <translation>Entrada</translation>
     </message>

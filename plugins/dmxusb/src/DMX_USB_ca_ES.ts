@@ -4,41 +4,51 @@
 <context>
     <name>DMXUSB</name>
     <message>
-        <location filename="dmxusb.cpp" line="152"/>
+        <location filename="dmxusb.cpp" line="158"/>
         <source>This plugin provides DMX output support for</source>
         <translation>Aquest plugin proveeix suport de sortida DMX per</translation>
     </message>
     <message>
-        <location filename="dmxusb.cpp" line="156"/>
+        <location filename="dmxusb.cpp" line="162"/>
         <source>and compatible devices.</source>
         <translation>i dispositius compatibles.</translation>
     </message>
     <message>
-        <location filename="dmxusb.cpp" line="170"/>
+        <location filename="dmxusb.cpp" line="176"/>
         <source>No output support available.</source>
         <translation>Suport de Sortida no disponible.</translation>
     </message>
     <message>
-        <location filename="dmxusb.cpp" line="172"/>
+        <location filename="dmxusb.cpp" line="178"/>
         <source>Make sure that you have your hardware firmly plugged in. NOTE: FTDI VCP interface is not supported by this plugin.</source>
         <translation>Asegureu-vos que teniu el vostre harware ben connectat. NOTA: les interfícies FTDI VCP no estàn suportades per aquest plugin.</translation>
     </message>
     <message>
-        <location filename="dmxusb.cpp" line="181"/>
-        <location filename="dmxusb.cpp" line="280"/>
+        <location filename="dmxusb.cpp" line="187"/>
+        <location filename="dmxusb.cpp" line="305"/>
         <source>Device is operating correctly.</source>
         <translation>El dispositiu està funcionant correctament.</translation>
     </message>
     <message>
-        <location filename="dmxusb.cpp" line="183"/>
-        <location filename="dmxusb.cpp" line="282"/>
+        <location filename="dmxusb.cpp" line="189"/>
+        <location filename="dmxusb.cpp" line="307"/>
         <source>Driver in use: %1</source>
         <translation>Controlador en ús: %1</translation>
     </message>
     <message>
-        <location filename="dmxusb.cpp" line="267"/>
+        <location filename="dmxusb.cpp" line="223"/>
+        <source>DMX USB %1: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="dmxusb.cpp" line="292"/>
         <source>No input support available.</source>
         <translation>Suport d&apos;Entrada no disponible.</translation>
+    </message>
+    <message>
+        <location filename="writehealth.cpp" line="74"/>
+        <source>not taking data since %1</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -200,8 +210,8 @@
         <location filename="euroliteusbdmxpro.cpp" line="171"/>
         <location filename="nanodmx.cpp" line="236"/>
         <location filename="stageprofi.cpp" line="141"/>
-        <location filename="usbdmxlegacy.cpp" line="133"/>
-        <location filename="vinceusbdmx512.cpp" line="233"/>
+        <location filename="usbdmxlegacy.cpp" line="134"/>
+        <location filename="vinceusbdmx512.cpp" line="235"/>
         <source>Protocol</source>
         <translation>Protocol</translation>
     </message>
@@ -209,8 +219,8 @@
         <location filename="euroliteusbdmxpro.cpp" line="173"/>
         <location filename="nanodmx.cpp" line="238"/>
         <location filename="stageprofi.cpp" line="143"/>
-        <location filename="usbdmxlegacy.cpp" line="134"/>
-        <location filename="vinceusbdmx512.cpp" line="235"/>
+        <location filename="usbdmxlegacy.cpp" line="135"/>
+        <location filename="vinceusbdmx512.cpp" line="237"/>
         <source>Output</source>
         <translation>Sortida</translation>
     </message>
@@ -227,8 +237,8 @@
         <location filename="euroliteusbdmxpro.cpp" line="178"/>
         <location filename="nanodmx.cpp" line="243"/>
         <location filename="stageprofi.cpp" line="148"/>
-        <location filename="usbdmxlegacy.cpp" line="136"/>
-        <location filename="vinceusbdmx512.cpp" line="237"/>
+        <location filename="usbdmxlegacy.cpp" line="137"/>
+        <location filename="vinceusbdmx512.cpp" line="239"/>
         <source>Serial number</source>
         <translation>Nombre de Sèrie</translation>
     </message>

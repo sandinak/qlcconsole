@@ -91,13 +91,13 @@ Prosím opravte zadání před potvrzením.</translation>
     </message>
     <message>
         <location filename="oscplugin.cpp" line="160"/>
-        <location filename="oscplugin.cpp" line="293"/>
+        <location filename="oscplugin.cpp" line="306"/>
         <source>Status: Not open</source>
         <translation>Stav: Není otevřen</translation>
     </message>
     <message>
         <location filename="oscplugin.cpp" line="163"/>
-        <location filename="oscplugin.cpp" line="296"/>
+        <location filename="oscplugin.cpp" line="309"/>
         <source>Status: Open</source>
         <translation>Stav: Otevřen</translation>
     </message>
@@ -107,7 +107,12 @@ Prosím opravte zadání před potvrzením.</translation>
         <translation>Poslaných paketů:</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="298"/>
+        <location filename="oscplugin.cpp" line="223"/>
+        <source>OSC output has no target IP: nothing is sent. Set one in Connections</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="oscplugin.cpp" line="311"/>
         <source>Packets received: </source>
         <translation>Přijatých paketů:</translation>
     </message>
@@ -117,7 +122,7 @@ Prosím opravte zadání před potvrzením.</translation>
         <translation>Výstup</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="289"/>
+        <location filename="oscplugin.cpp" line="302"/>
         <source>Input</source>
         <translation>Vstup</translation>
     </message>

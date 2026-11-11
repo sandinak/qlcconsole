@@ -91,13 +91,13 @@ E&apos; necessario sistemare prima di confermare.</translation>
     </message>
     <message>
         <location filename="oscplugin.cpp" line="160"/>
-        <location filename="oscplugin.cpp" line="293"/>
+        <location filename="oscplugin.cpp" line="306"/>
         <source>Status: Not open</source>
         <translation>Stato: Non aperto</translation>
     </message>
     <message>
         <location filename="oscplugin.cpp" line="163"/>
-        <location filename="oscplugin.cpp" line="296"/>
+        <location filename="oscplugin.cpp" line="309"/>
         <source>Status: Open</source>
         <translation>Stato: Aperto</translation>
     </message>
@@ -107,7 +107,12 @@ E&apos; necessario sistemare prima di confermare.</translation>
         <translation>Pacchetti inviati: </translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="298"/>
+        <location filename="oscplugin.cpp" line="223"/>
+        <source>OSC output has no target IP: nothing is sent. Set one in Connections</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="oscplugin.cpp" line="311"/>
         <source>Packets received: </source>
         <translation>Pacchetti ricevuti: </translation>
     </message>
@@ -117,7 +122,7 @@ E&apos; necessario sistemare prima di confermare.</translation>
         <translation>Uscita</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="289"/>
+        <location filename="oscplugin.cpp" line="302"/>
         <source>Input</source>
         <translation>Ingresso</translation>
     </message>
