@@ -527,7 +527,7 @@ and right is their right. Nobody turns the picture round in their head.
   height. Change **facing** in 15° steps for an operator who stands at an
   angle (0° looks upstage, 90° toward stage left), and **eye** for their
   height above the stage floor, in the unit **Settings → Units** picks. The
-  row says whose it is: *(DUALSHOCK 4 in Main Hall)*.
+  row says whose it is: *For DUALSHOCK 4 in Main Hall*.
 - **From the pad**: hold the **left stick click (LS, L3)** and push either
   stick toward centre stage as you stand, then let go of the click. The
   facing is set from the push, to the nearest 15° (*Facing 285°*). The

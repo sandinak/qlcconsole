@@ -3319,9 +3319,10 @@ void LookEditor::rebuildEffectDynWidget()
            The controller's and the venue's, not this look's. */
         QWidget *opRow = new QWidget(m_effectDynWidget);
         opRow->setObjectName(QStringLiteral("followSpotOperator"));
-        QGridLayout *opl = new QGridLayout(opRow);
+        QFormLayout *opl = new QFormLayout(opRow);
         opl->setContentsMargins(0, 2, 0, 2);
-        opl->setHorizontalSpacing(6);
+        opl->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        opl->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
         QLabel *opLabel = new QLabel(LookEditor::tr("Operator:"), opRow);
         QComboBox *where = new QComboBox(opRow);
         where->setObjectName(QStringLiteral("followSpotOperatorPreset"));
@@ -3346,18 +3347,20 @@ void LookEditor::rebuildEffectDynWidget()
         QLabel *forWho = new QLabel(opRow);
         forWho->setObjectName(QStringLiteral("followSpotOperatorFor"));
         forWho->setStyleSheet(QStringLiteral("color: gray;"));
-        // Two short lines, so a narrow editor pane shows all of it.
-        where->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-        facing->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        /* A row each, the fields as narrow as the pane: the editor pane is
+           a third of a 1024-wide window. The lists show the whole names. */
+        for (QComboBox *cb : { where, facing })
+        {
+            cb->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+            cb->setMinimumContentsLength(6);
+        }
+        eye->setSizePolicy(QSizePolicy::Ignored, eye->sizePolicy().verticalPolicy());
+        eye->setMinimumWidth(eye->fontMetrics().horizontalAdvance(QStringLiteral("00' 00 1/2\"")) + 30);
         forWho->setWordWrap(true);
-        opl->addWidget(opLabel, 0, 0, Qt::AlignRight);
-        opl->addWidget(where, 0, 1);
-        opl->addWidget(forWho, 0, 2, 1, 2);
-        opl->addWidget(new QLabel(LookEditor::tr("Facing:"), opRow), 1, 0, Qt::AlignRight);
-        opl->addWidget(facing, 1, 1);
-        opl->addWidget(new QLabel(LookEditor::tr("Eye:"), opRow), 1, 2, Qt::AlignRight);
-        opl->addWidget(eye, 1, 3);
-        opl->setColumnStretch(4, 1);
+        opl->addRow(opLabel, where);
+        opl->addRow(LookEditor::tr("Facing:"), facing);
+        opl->addRow(LookEditor::tr("Eye:"), eye);
+        opl->addRow(forWho);
         dv->addWidget(opRow);
 
         auto fill = [pc, where, facing, eye, forWho]() {
@@ -3369,10 +3372,10 @@ void LookEditor::rebuildEffectDynWidget()
             const QString stick = pc->followSpotStickName();
             const QString venue = pc->venueCorrections() != nullptr ? pc->venueCorrections()->activeVenue()
                                                                     : QString();
-            QString text = stick.isEmpty() ? LookEditor::tr("any controller") : stick;
+            QString text = stick.isEmpty() ? LookEditor::tr("Any controller") : stick;
             if (!venue.isEmpty())
                 text = LookEditor::tr("%1 in %2").arg(text, venue);
-            forWho->setText(LookEditor::tr("(%1)").arg(text));
+            forWho->setText(LookEditor::tr("For %1").arg(text));
         };
         fill();
         connect(pc, &ProgrammerController::followSpotOperatorChanged, opRow, fill);
