@@ -17,7 +17,7 @@ user, as ordinary upstream contributions.
 | Forked from | `QLC+_4.14.2` (2026, the original fork point) |
 | Upstream master merged | 9a0deb5cf (2026-02-01), in 1f8d28a5f / d875a4313 |
 | Code reviewed up to | upstream master 4cd37df23 (2026-10-29), 2026-10-30 |
-| Fixture definitions synced to | upstream master 87b988ac2 (2026-11-05), by `tools/sync-fixtures.py` |
+| Fixture definitions synced to | upstream master 167da4814 (2026-11-10), by `tools/sync-fixtures.py` |
 
 The build string is `<QLC_BASE_VERSION>+qlcconsole.<N>`
 ([variables.cmake](../../variables.cmake)): the base is 4.14.4, and `N` is
@@ -28,6 +28,12 @@ as cherry-picks, so `git rev-list QLC+_4.14.4..HEAD` would count the
 February sync's upstream commits out and drop `N` by about 550.
 
 ## Intake log
+
+### 2026-11-10: fixture definitions (qlcconsole 0.4.3)
+
+`tools/sync-fixtures.py` against upstream master 167da4814 (2026-11-10):
+0 definitions taken or changed; the base moves to 167da4814. scripts/check:
+1791 definitions, 0 errors. No change to the library.
 
 ### 2026-11-06: fixture definitions (qlcconsole 0.4.1)
 
