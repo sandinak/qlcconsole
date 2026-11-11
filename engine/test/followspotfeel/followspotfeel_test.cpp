@@ -956,14 +956,11 @@ void FollowSpotFeel_Test::theOperatorIsKeptPerStickAndVenue()
 
     // A venue renamed keeps its operators.
     VenueCorrections *vc = pc->venueCorrections();
-    vc->m_venues.clear();
-    VenueCorrections::Venue v;
-    v.name = "Hall";
-    vc->m_venues << v;
+    QCOMPARE(vc->addVenue("Hall"), QStringLiteral("Hall"));
     QVERIFY(vc->renameVenue("Hall", "Main Hall"));
     QCOMPARE(pc->followSpotOperatorFor("Main Hall", "DUALSHOCK 4"), sl);
     QVERIFY(pc->followSpotOperatorFor("Hall", "DUALSHOCK 4").isFrontOfHouse());
-    vc->m_venues.clear();
+    QVERIFY(vc->removeVenue("Main Hall"));
 
     // A new show has none.
     m_doc->clearContents();

@@ -48,6 +48,10 @@ private slots:
     void everyCueFiresItsEffects();
     void theDpadStepsTheSpeedAndTheRightStickIsFine();
     void theDpadSizesTheBeamAndSavePositionsKeepsIt();
+    /** Where the operator stands: the Followspot editor's Operator row, the
+     *  pad's LS-and-push recalibration, the footer's "from SL tower", the
+     *  stick turned, and the Rig Overview's Operator views. */
+    void theOperatorViewpointTurnsTheStick();
 
 private:
     bool open(const QString &path);
