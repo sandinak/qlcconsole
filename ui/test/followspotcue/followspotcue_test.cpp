@@ -27,6 +27,7 @@
 #include <QPushButton>
 #include <QFile>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QtTest>
 
 #include "../../../engine/test/common/stdprelude.h"
@@ -1012,7 +1013,8 @@ void FollowSpotCue_Test::aWornStickMovesNothing()
         // A slow push, held still once the pad has settled in, is kept.
         QTest::qWait(2100);
         QVERIFY(padInput(doc, 0, stickAt(0.4), uid));
-        QTest::qWait(600);
+        QTRY_VERIFY2_WITH_TIMEOUT(pc->m_panNorm > 0.6f, qPrintable(QString::number(pc->m_panNorm)), 2000);
+        QTest::qWait(600);                    // and still there after
         QVERIFY2(pc->m_panNorm > 0.6f, qPrintable(QString::number(pc->m_panNorm)));
         QVERIFY(FocusSession::stickVelocity(pc->m_panNorm, pc->joystickDeadzone()) > 0.0f);
         QVERIFY(padInput(doc, 0, stickAt(0.12), uid));
@@ -1028,11 +1030,19 @@ void FollowSpotCue_Test::aWornStickMovesNothing()
     QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound(), 2000);
     QTest::qWait(2200);                       // past the time it learns by itself
     m_app->hideViewNotice();
+    QElapsedTimer pushed;
+    pushed.start();
     QVERIFY(padInput(doc, 0, stickAt(0.42), kWorn));
+    QTRY_VERIFY_WITH_TIMEOUT(pc->m_panNorm > 0.6f, 2000);           // not swallowed
     QTest::qWait(600);
-    QVERIFY(pc->m_panNorm > 0.6f);           // not swallowed
-    QVERIFY(!m_app->m_viewNotice->isVisible());
-    QTRY_VERIFY_WITH_TIMEOUT(m_app->m_viewNotice->isVisible(), 3000);
+    /* Not said early: only while the 1.5 s it must sit there can't have
+       passed -- a loaded runner's 600 ms wait can be longer than that. */
+    if (pushed.elapsed() < 1500)
+        QVERIFY(!m_app->m_viewNotice->isVisible());
+    /* Said once the plugin's stick timer sees it has sat 1.5 s: that tick
+       and its queued signal come late on a loaded runner, so waited for
+       generously (it failed so under load with 3 s). The notice stays 8 s. */
+    QTRY_VERIFY_WITH_TIMEOUT(m_app->m_viewNotice->isVisible(), 15000);
     const QString said = m_app->m_viewNoticeText->text();
     qInfo().noquote() << "drift notice:" << said;
     QVERIFY2(said.contains(QStringLiteral("DUALSHOCK 4 Wireless Controller's stick isn't resting in the middle (Left Stick X +0.")),
