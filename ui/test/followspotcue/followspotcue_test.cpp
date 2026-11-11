@@ -41,6 +41,7 @@
 #include "programmingmanager.h"
 #include "controllertestdialog.h"
 #include "workbench.h"
+#include "inputdevicenotices.h"
 #undef protected
 #undef private
 #include "showtreecontroller.h"
@@ -1025,6 +1026,12 @@ void FollowSpotCue_Test::aWornStickMovesNothing()
        re-centres it by itself, but once it has sat there 3 s (1.5 s in
        this test) with nothing
        else touched, the notice line says so -- once -- with Centre Sticks. */
+    /* Said once a session per controller: on a loaded runner a step above
+       (the slow push, full travel) can sit 1.5 s before the next and be
+       said already -- right, but then this one never is (1 of 6 copies
+       failed so under load). Not said yet, as this part starts. */
+    QVERIFY(m_app->m_inputNotices != nullptr);
+    m_app->m_inputNotices->m_driftSaid.clear();
     const int worn = hid->inputs().indexOf(QString::fromUtf8(kWorn));
     QVERIFY(iom->setInputPatch(0, QStringLiteral("HID"), QString(), quint32(worn)));
     QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound(), 2000);
