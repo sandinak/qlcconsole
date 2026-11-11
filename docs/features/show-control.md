@@ -245,6 +245,68 @@ Hold LB is the modifier for level and for the light itself, so a tap of LB
 steps back a layer when it is let go. The sticks without LB stay the cue's.
 The light itself works on one light at a time, at Fixture scope.
 
+### Check it on a real pad
+
+A morning check of Pad Run on each pad you will use: an Xbox One pad, a
+PS4 DualShock 4 and a PS5 DualSense, one after the other in one sitting.
+
+**Before you start.** Open a show with:
+
+- a main cue list of at least three cues, and a second cue list;
+- a [scoped hit](show-tree.md) under the main list's first cue;
+- a [focus-call cue](focus-calls.md) at the top of a third list (Pre-show).
+
+Put the show in **Operate**, turn the voice on, and set the Run tab's
+button to **Pad: Run**. Connect one pad at a time, and check that
+**Settings → Advanced → Game controllers → Controller Test…** sees it.
+
+**For each pad**, in this order (Xbox name first, PlayStation second):
+
+1. Press **A** (Cross) without LB. *Expected:* nothing plays; the voice
+   says "Hold LB to arm."
+2. Hold **LB** (L1). *Expected:* the Run tab's button says **Pad:
+   ARMED**; on a PlayStation pad the light bar turns orange.
+3. Still holding LB, press **A** (Cross). *Expected:* the main list goes
+   to its first cue; a short buzz; on a PlayStation pad the light bar
+   flashes blue, then goes back to orange.
+4. Hold LB + **Y** (Triangle). *Expected:* Sub GO runs the cue's next
+   sub-cue; with none, a long buzz and the voice says there was nothing
+   to play.
+5. Hold LB + **A**, then LB + **B** (Circle). *Expected:* GO moves to the
+   second cue, Back returns to the first; a short buzz each.
+6. Hold LB + **X** (Square). *Expected:* the list stops; a short buzz;
+   no blue flash.
+7. Let go of LB. *Expected:* **Pad: Run** again; the light bar goes dark.
+8. GO the main list's first cue again (LB + A), then hold LB + **RB**
+   (R1). *Expected:* the hit under that cue plays and the voice says its
+   name. LB + RB again: it lets go ("… off.").
+9. Press **RT** (R2), no arm. *Expected:* the voice names the second
+   list. Press **LT** (L2) to come back to the main list.
+10. Press RT until the voice names the Pre-show list, then hold LB + A.
+    *Expected:* the focus-call cue arms ("Venue focus ready. Press Start
+    to begin."); nothing steps.
+11. Press **Menu** (Options). *Expected:* the focus calls begin and the
+    laptop asks about the venue. Answer it on the laptop, then press Menu
+    again to leave the calls.
+12. Hold **View + Menu** (Create + Options) for a second. *Expected:* the
+    voice says "Tools role." and the button says **Pad: Tools**. Hold them
+    again: "Run role. …" and **Pad: Run**.
+13. Start the same hold and press A before the second is up. *Expected:*
+    the role does not change.
+
+**What differs by pad:**
+
+- **Xbox One:** no light bar, so steps 2, 3 and 7 are checked on the Run
+  tab's button and by the buzz.
+- **PS4 DualShock 4:** watch the light bar and the buzz: neither has been
+  checked on a real pad yet. No adaptive triggers.
+- **PS5 DualSense:** as the DualShock 4, plus: while LB is held (step 2)
+  R2 pushes back firmly, and it is loose again in step 7 (see
+  [DualSense extras](#dualsense-extras-triggers-and-swipes)).
+
+Write down any step that did not give its expected result, with the pad
+and how it was connected (USB or Bluetooth).
+
 ## Sub-cues
 
 A cue can have cues inside it: cue 4 brings up a look, and **4.1, 4.2,
