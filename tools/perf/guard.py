@@ -130,6 +130,7 @@ METRICS = {
     "tick_p99_ms": ("ms", 0.25, 0.5),
     "tick_cpu_ms": ("ms", 0.15, 0.05),
     "frame_p99_ms": ("ms", 0.08, 2.0),
+    "send_p99_ms": ("ms", 0.25, 1.0),
     "cpu_pct": ("%", 0.15, 5.0),
     "rss_mb": ("MB", 0.10, 8.0),
     "rss_mb_per_universe": ("MB", 0.10, 0.15),
@@ -144,7 +145,11 @@ def metric_kind(metric):
 
 def metrics_of(result):
     """qlcstress's RESULT JSON -> the guard's metrics for one point."""
+    extra = {}
+    if result.get("send", {}).get("count"):     # older qlcstress: no such figure
+        extra["send_p99_ms"] = result["send"]["p99"]
     return {
+        **extra,
         "tick_p50_ms": result["compute"]["p50"],
         "tick_p99_ms": result["compute"]["p99"],
         "tick_cpu_ms": result["tickCpu"]["mean"],

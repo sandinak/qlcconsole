@@ -520,6 +520,15 @@ public:
      *  preview has the stage (ShowTreeController::runHeldOffStage()). */
     void setFunctionsHeld(const QSet<quint32> &functionIDs);
 
+    /** Time from the timer's tick to this universe's frame having gone to its
+     *  outputs, as counts per kSendLatencyBucketUs microseconds (the last
+     *  bucket holds everything longer). The tick is only timed from the timer
+     *  thread's side, so this is what the universe threads add to the frame. */
+    static constexpr int kSendLatencyBuckets = 161;
+    static constexpr int kSendLatencyBucketUs = 250;
+    QVector<quint32> sendLatencyHistogram() const;
+    void resetSendLatency();
+
 public slots:
     void tick();
 
@@ -763,6 +772,8 @@ signals:
 
 protected:
     QSemaphore m_semaphore;
+    std::atomic<qint64> m_tickedNs { 0 };
+    std::unique_ptr<std::atomic<quint32>[]> m_sendLatency;
 
     /** Indicated if the DMX writer worker thread is running. Atomic: set
      *  by the thread, cleared by the destructor on another one. */

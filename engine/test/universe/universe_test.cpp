@@ -375,6 +375,27 @@ void Universe_Test::applyGM()
     }
 }
 
+void Universe_Test::sendLatencyCountsATickedFrameOnly()
+{
+    auto total = [this]() {
+        quint64 n = 0;
+        for (quint32 c : m_uni->sendLatencyHistogram())
+            n += c;
+        return n;
+    };
+    QCOMPARE(m_uni->sendLatencyHistogram().size(), Universe::kSendLatencyBuckets);
+
+    m_uni->processFaders();             // never ticked: nothing to time from
+    QCOMPARE(total(), quint64(0));
+
+    m_uni->tick();
+    m_uni->processFaders();
+    QCOMPARE(total(), quint64(1));
+
+    m_uni->resetSendLatency();
+    QCOMPARE(total(), quint64(0));
+}
+
 /* The value of a 16-bit pair at channels 0 and 1, going out */
 static quint32 pairOut(Universe *uni)
 {

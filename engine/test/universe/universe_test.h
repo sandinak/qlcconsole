@@ -48,6 +48,7 @@ private slots:
     void grandMasterAllChannelsReduce();
     void grandMasterAllChannelsLimit();
     void applyGM();
+    void sendLatencyCountsATickedFrameOnly();
     void pairMovesEvenlyUnderTheGrandMaster();
     void pairLimitedAsOneValue();
     void pairMovesEvenlyUnderAGroupMaster();

@@ -20,7 +20,18 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QDebug>
+#include <chrono>
 #include <math.h>
+
+#if defined(Q_OS_MACOS)
+#include <mach/mach_time.h>
+#include <mach/thread_policy.h>
+#include <mach/thread_act.h>
+#include <pthread.h>
+#elif defined(Q_OS_LINUX)
+#include <pthread.h>
+#include <sched.h>
+#endif
 
 #include "channelmodifier.h"
 #include "inputoutputmap.h"
@@ -73,6 +84,8 @@ Universe::Universe(quint32 id, GrandMaster *gm, QObject *parent)
     m_pastGMFrame.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
     m_groupMaster.reset(new std::atomic<quint8>[UNIVERSE_SIZE]);
     m_pairRole.reset(new std::atomic<quint8>[UNIVERSE_SIZE]);
+    m_sendLatency.reset(new std::atomic<quint32>[kSendLatencyBuckets]);
+    resetSendLatency();
     m_letGoBy.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
     m_letGoFrame.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
     for (int i = 0; i < UNIVERSE_SIZE; i++)
@@ -443,9 +456,77 @@ void Universe::setFunctionsHeld(const QSet<quint32> &functionIDs)
     m_heldFunctions = functionIDs;
 }
 
+static qint64 sendClockNs()
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
 void Universe::tick()
 {
+    m_tickedNs.store(sendClockNs(), std::memory_order_relaxed);
     m_semaphore.release(1);
+}
+
+QVector<quint32> Universe::sendLatencyHistogram() const
+{
+    QVector<quint32> counts(kSendLatencyBuckets);
+    for (int i = 0; i < kSendLatencyBuckets; i++)
+        counts[i] = m_sendLatency[i].load(std::memory_order_relaxed);
+    return counts;
+}
+
+void Universe::resetSendLatency()
+{
+    for (int i = 0; i < kSendLatencyBuckets; i++)
+        m_sendLatency[i].store(0, std::memory_order_relaxed);
+}
+
+/* The A/B of how universe threads are scheduled, for measuring only: they do
+   the sending, but start at ordinary priority while the timer that wakes them
+   is real-time. QLC_UNIVERSE_SCHED: empty (as ever), "qos" (macOS: user
+   interactive) or "rt" (macOS: time constraint; Linux: SCHED_FIFO one level
+   under the timer's, when granted). */
+static void applyUniverseThreadScheduling()
+{
+    const QByteArray mode = qgetenv("QLC_UNIVERSE_SCHED");
+    if (mode.isEmpty())
+        return;
+#if defined(Q_OS_MACOS)
+    if (mode == "qos")
+    {
+        const int rc = pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        if (rc != 0)
+            qWarning() << "Universe: user-interactive QoS refused:" << rc;
+    }
+    else if (mode == "rt")
+    {
+        mach_timebase_info_data_t tb;
+        if (mach_timebase_info(&tb) != KERN_SUCCESS || tb.numer == 0)
+            return;
+        const double toAbs = double(tb.denom) / double(tb.numer);
+        thread_time_constraint_policy_data_t policy;
+        policy.period = uint32_t(1.0e9 / MasterTimer::frequency() * toAbs);
+        policy.computation = uint32_t(500000.0 * toAbs);   /* 0.5 ms */
+        policy.constraint = uint32_t(5000000.0 * toAbs);   /* 5 ms */
+        policy.preemptible = 1;
+        const kern_return_t kr = thread_policy_set(pthread_mach_thread_np(pthread_self()),
+                                                   THREAD_TIME_CONSTRAINT_POLICY,
+                                                   reinterpret_cast<thread_policy_t>(&policy),
+                                                   THREAD_TIME_CONSTRAINT_POLICY_COUNT);
+        if (kr != KERN_SUCCESS)
+            qWarning() << "Universe: time-constraint policy refused:" << kr;
+    }
+#elif defined(Q_OS_LINUX)
+    if (mode == "rt")
+    {
+        struct sched_param sp;
+        sp.sched_priority = qMax(1, sched_get_priority_max(SCHED_FIFO) - 11);
+        const int rc = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+        if (rc != 0)
+            qWarning() << "Universe: SCHED_FIFO refused:" << rc;
+    }
+#endif
 }
 
 void Universe::processFaders()
@@ -510,6 +591,14 @@ void Universe::processFaders()
         dataChanged = true;
     }
     dumpOutput(postGM, dataChanged);
+    const qint64 ticked = m_tickedNs.load(std::memory_order_relaxed);
+    if (ticked != 0)
+    {
+        const qint64 tookUs = (sendClockNs() - ticked) / 1000;
+        const int bucket = int(qBound(qint64(0), tookUs / kSendLatencyBucketUs,
+                                      qint64(kSendLatencyBuckets - 1)));
+        m_sendLatency[bucket].fetch_add(1, std::memory_order_relaxed);
+    }
     frameLocker.unlock();
 
     if (dataChanged)
@@ -801,6 +890,7 @@ void Universe::applyAutoOpen()
 
 void Universe::run()
 {
+    applyUniverseThreadScheduling();
     m_running = true;
     int timeout = int(MasterTimer::tick()) * 2;
 
