@@ -1457,10 +1457,17 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     QVERIFY(save != nullptr);
     QTemporaryDir tmp;
     m_app->setFileName(tmp.filePath("follow.qxw"));
+    /* What the chip and its tooltip said the moment the save was confirmed.
+       "Saved: ..." is shown for three seconds by the wall clock and the save
+       says it at once; read later, a loaded runner can be past those three
+       seconds before the check runs (it failed so under load). */
+    QString savedChip, savedStatus;
     auto savePositions = [&]() {
         QTRY_VERIFY_WITH_TIMEOUT(save->isEnabled(), 2000);    // the pad's change alone enables it
         save->click();                                        // armed
         save->click();                                        // confirmed
+        savedChip = chip->text();
+        savedStatus = pc->followSpotStatusText();
         settle(100);
     };
     const double inch = 2.54;
@@ -1484,7 +1491,7 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     savePositions();
     QVERIFY(qAbs(follow->effectParamValues().value("sizeOnSubject") - 43 * inch) < 0.01);
     QVERIFY(!pad().isSet());
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Saved: Width 3' 7\"").toHtmlEscaped()), 2000);
+    QVERIFY2(savedChip.contains(QString::fromUtf8("Saved: Width 3' 7\"").toHtmlEscaped()), qPrintable(savedChip));
     QVERIFY(doc->paletteOps()->undo());
     QCOMPARE(follow->effectParamValues().value("sizeOnSubject"), 48 * inch);
 
@@ -1525,8 +1532,8 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     savePositions();
     QCOMPARE(follow->effectParamValues().value("framing"), 1.0);          // the Framing stays
     QCOMPARE(follow->effectParamValues().value("framingSize"), 110.0);
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString("Saved: Head & Shoulders at 110%").toHtmlEscaped()), 2000);
-    QVERIFY2(pc->followSpotStatusText().contains("Saved: Head & Shoulders at 110%"), qPrintable(pc->followSpotStatusText()));
+    QVERIFY2(savedChip.contains(QString("Saved: Head & Shoulders at 110%").toHtmlEscaped()), qPrintable(savedChip));
+    QVERIFY2(savedStatus.contains("Saved: Head & Shoulders at 110%"), qPrintable(savedStatus));
     QVERIFY(AimSolver::sceneFramesSubject(doc, scene));
     settle(300);
     QVERIFY2(qAbs(aimedZ() - liveZ) < 0.005f,
