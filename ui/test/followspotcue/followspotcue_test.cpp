@@ -593,6 +593,7 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
     };
     QLabel *chip = m_app->followChip();
     QVERIFY(chip != nullptr);
+    const int kGlideMs = 15000;
     /* His DS4 patched as U01-Office's input, as his show has it -- and
        nothing else: no stick bound by hand, the Build tab not shown (before
        0.4.0 only showing it bound a stick, so a show run from the Show Tree
@@ -624,10 +625,20 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
         QTRY_VERIFY2_WITH_TIMEOUT(witch->position().x() > from.x() + 0.2f,
                                   qPrintable(QString("%1: the subject did not move (%2 -> %3)").arg(how)
                                              .arg(from.x()).arg(witch->position().x())), 8000);
-        QTest::qWait(200);
+        /* Every head's pan written, and the chip saying so, while the stick
+           is still held: waited for, not a fixed wait. Both arrive on the
+           follow spot's own ticks, which a loaded runner delays. */
+        auto allFollowed = [&]() {
+            const QList<int> now = pans();
+            for (int i = 0; i < movers.size(); ++i)
+                if (now.at(i) == before.at(i))
+                    return false;
+            return true;
+        };
+        QTRY_VERIFY2_WITH_TIMEOUT(allFollowed(), qPrintable(how + ": not every head followed"), 8000);
         const QList<int> after = pans();
-        QVERIFY2(chip->text().contains(QString::fromUtf8("DUALSHOCK 4 · stick moving")),
-                 qPrintable(how + ": " + chip->text()));
+        QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("DUALSHOCK 4 · stick moving")),
+                                  qPrintable(how + ": " + chip->text()), 8000);
         qInfo().noquote() << how << "pan" << before << "->" << after << "| x" << from.x() << "->"
                           << witch->position().x() << "|" << chip->text();
         QVERIFY(padInput(doc, 0, 128));
@@ -638,8 +649,9 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
         for (int i = 0; i < movers.size(); ++i)
             QVERIFY2(after.at(i) != before.at(i),
                      qPrintable(QString("%1: %2 did not follow (%3)").arg(how, movers.at(i)->name()).arg(after.at(i))));
-        QTest::qWait(600);
-        QVERIFY2(!chip->text().contains("moving"), qPrintable(how + ": " + chip->text()));
+        /* Let go: "moving" goes once the stick has been still 400 ms, said
+           on the next follow-spot tick -- waited for, not a fixed 600 ms. */
+        QTRY_VERIFY2_WITH_TIMEOUT(!chip->text().contains("moving"), qPrintable(how + ": " + chip->text()), 8000);
     };
 
     // Selected in the Show Tree.
@@ -661,10 +673,13 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
     tree->setCurrentItem(row);
     movesWithTheStick("selected");
 
-    // Away from it: she glides back where the show has her, the chip goes.
+    /* Away from it: she glides back where the show has her, the chip goes.
+       The glide steps one timer interval per follow-spot tick (not by the
+       wall clock), so on a loaded runner it takes longer than its fade:
+       waited for generously, still failing if she never gets home. */
     tree->setCurrentItem(row1);
-    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, 3000);
-    QTRY_VERIFY_WITH_TIMEOUT(chip->isHidden(), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, kGlideMs);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isHidden(), 5000);
 
     // GO in Run, in Design.
     const quint32 chaser = st->cueList(list)->chaser;
@@ -676,7 +691,7 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
     movesWithTheStick("GO in Design");
     QVERIFY(doc->function(chaser)->isRunning());
     doc->masterTimer()->stopAllFunctions();
-    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, kGlideMs);
 
     // GO in Operate.
     doc->setMode(Doc::Operate);
@@ -686,7 +701,7 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
     doc->masterTimer()->stopAllFunctions();
     doc->setMode(Doc::Design);
     settle(200);
-    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, kGlideMs);
 
     // The DS4 switched off: no stick, and the chip says so.
     doc->inputOutputMap()->setInputSlot(0, QList<Universe::InputSlotDevice>());
@@ -695,7 +710,7 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
     QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chip->text().contains("no stick"), 3000);
     QTRY_VERIFY_WITH_TIMEOUT(!pc->isPanBound(), 3000);
     tree->setCurrentItem(row1);
-    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, kGlideMs);
     doc->resetModified();
 }
 
@@ -709,6 +724,15 @@ void FollowSpotCue_Test::theStickIsWhicheverPadIsPatched()
     InputOutputMap *iom = doc->inputOutputMap();
     QLCIOPlugin *hid = hidPlugin(doc);
     QVERIFY(hid != nullptr);
+    /* No pad left patched by an earlier test (the one before unpatches its
+       DS4 only when it passes): each pad below must be the only one. */
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        iom->setInputSlot(u, QList<Universe::InputSlotDevice>());
+        if (iom->inputPatch(u) != nullptr)
+            QVERIFY(iom->setInputPatch(u, KInputNone, QString(), QLCIOPlugin::invalidLine()));
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(!pc->isPanBound(), 2000);
     pc->clearAxisBindings();
     struct Pad { const char *uid; const char *name; quint32 universe; };
     for (const Pad &pad : { Pad { kDualSense, "DualSense", 1 }, Pad { kXbox, "Xbox", 2 },
