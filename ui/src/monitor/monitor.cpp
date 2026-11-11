@@ -226,6 +226,10 @@ namespace {
    its StructureStudioView::Plane, so the list order is free to read well --
    Back sits beside Front although its enum value came last. @p withKeys adds
    the Ctrl+1.. numbers the editors bind (see makeStudioPane()). */
+/* The Rig Overview's follow-spot operator views (its View list), past the planes. */
+const int kOperatorView = 100;
+const int kOperatorPlan = 101;
+
 void fillStudioPlanes(QComboBox *cb, bool withKeys)
 {
     typedef StructureStudioView SSV;
@@ -3299,13 +3303,71 @@ void Monitor::showStageOverview()
     QComboBox *planeCombo = new QComboBox(footer);
     planeCombo->setObjectName(QStringLiteral("rigView"));
     fillStudioPlanes(planeCombo, false);
+    /* The follow-spot operator's own views (where they stand is set on the
+       follow-spot look): the rig from their eye, looking the way they face,
+       and the plan turned so they are at its bottom edge -- the stick pushed
+       up then goes up the screen. */
+    planeCombo->addItem(tr("Operator"), kOperatorView);
+    planeCombo->setItemData(planeCombo->count() - 1,
+                            tr("From where the follow-spot operator stands, at their eye height, looking "
+                               "the way they face (set on the follow-spot look)."), Qt::ToolTipRole);
+    planeCombo->addItem(tr("Operator plan"), kOperatorPlan);
+    planeCombo->setItemData(planeCombo->count() - 1,
+                            tr("The plan turned so the follow-spot operator is at the bottom: the stick "
+                               "pushed up goes up the screen."), Qt::ToolTipRole);
     planeCombo->setCurrentIndex(planeCombo->findData(int(StructureStudioView::Angled)));
     planeCombo->setProperty("cycleOnClick", true);   // same as the plot's View
     planeCombo->installEventFilter(this);
     planeCombo->setToolTip(tr("Point of view — click to cycle, arrow for the full list"));
+    /* Going back from an Operator view puts back the angles and the turn
+       it had before. */
+    struct Before { bool operatorView = false; double az = 0.0, el = 0.0; int turns = 0; };
+    QSharedPointer<Before> before(new Before);
+    auto applyOperatorView = [this, view](int which) {
+        ProgrammerController *pc = m_doc->programmer();
+        const FollowSpotOperator op = pc != nullptr ? pc->followSpotOperator() : FollowSpotOperator();
+        if (which == kOperatorView)
+        {
+            view->setRotation(0);
+            view->setAngledView(FollowSpotOperator::viewAzimuth(op.facing),
+                                op.viewElevation(m_doc->monitorProperties()));
+            view->setPlane(StructureStudioView::Angled);
+        }
+        else
+        {
+            view->setPlane(StructureStudioView::Top);
+            view->setRotation(FollowSpotOperator::planTurns(op.facing));
+        }
+    };
+    if (m_doc->programmer() != nullptr)
+        connect(m_doc->programmer(), &ProgrammerController::followSpotOperatorChanged, &dlg,
+                [planeCombo, applyOperatorView]() {
+            const int d = planeCombo->currentData().toInt();
+            if (d == kOperatorView || d == kOperatorPlan)
+                applyOperatorView(d);
+        });
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
-            [view, planeCombo](int i) {
-        view->setPlane(StructureStudioView::Plane(planeCombo->itemData(i).toInt()));
+            [view, planeCombo, before, applyOperatorView](int i) {
+        const int d = planeCombo->itemData(i).toInt();
+        if (d == kOperatorView || d == kOperatorPlan)
+        {
+            if (!before->operatorView)
+            {
+                before->operatorView = true;
+                before->az = view->angledAzimuth();
+                before->el = view->angledElevation();
+                before->turns = view->rotation();
+            }
+            applyOperatorView(d);
+            return;
+        }
+        if (before->operatorView)
+        {
+            before->operatorView = false;
+            view->setAngledView(before->az, before->el);
+            view->setRotation(before->turns);
+        }
+        view->setPlane(StructureStudioView::Plane(d));
     });
 
     /* How much light is in the ROOM. Without it the rendered colours are as

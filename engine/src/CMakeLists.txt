@@ -170,6 +170,7 @@ add_library(${module_name} SHARED
     followspotdrive.cpp followspotdrive.h
     followspotframing.cpp followspotframing.h
     followspotmover.cpp followspotmover.h
+    followspotoperator.cpp followspotoperator.h
     focuscalls.cpp focuscalls.h
     focuscallcue.cpp focuscallcue.h
     venuecorrections.cpp venuecorrections.h

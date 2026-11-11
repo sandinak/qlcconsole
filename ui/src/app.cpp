@@ -8623,6 +8623,9 @@ void App::initStatusBar()
             // Which controller is the stick: named on the chip.
             connect(m_doc->programmer(), &ProgrammerController::axisBindingChanged,
                     this, &App::updateFollowChip);
+            // Where its operator stands: "from SL tower".
+            connect(m_doc->programmer(), &ProgrammerController::followSpotOperatorChanged,
+                    this, &App::updateFollowChip);
         }
         updateFollowChip();
     }
@@ -9686,7 +9689,12 @@ void App::updateFollowChip()
     QString how, colour;
     // The controller that is the stick, by name: "DUALSHOCK 4 · stick moving".
     const QString stick = pc->followSpotStickName();
-    const QString pad = stick.isEmpty() ? QString() : stick + QStringLiteral(" · ");
+    QString pad = stick.isEmpty() ? QString() : stick + QStringLiteral(" · ");
+    /* Where the operator stands, when it isn't front of house: "from SL
+       tower". Only a subject's moves are turned by it (free-fly is not). */
+    const QString from = st.targetId != UINT_MAX ? pc->followSpotOperator().viewpointText() : QString();
+    if (!from.isEmpty())
+        pad += from + QStringLiteral(" · ");
     switch (st.state)
     {
     case Status::Moving:
@@ -9724,7 +9732,8 @@ void App::updateFollowChip()
                                     + (st.state == Status::NoStick ? QString()
                                        : tr("\nThe left stick moves it at up to its Top Speed (%1), the right "
                                             "stick finely; D-pad Up and Down step the speed, Left and Right "
-                                            "close and open the beam (Save Positions keeps it).")
+                                            "close and open the beam (Save Positions keeps it). Hold the left stick click and "
+                                            "push toward centre stage to turn the stick to where you stand.")
                                              .arg(MeasurementUnits::formatSpeed(pc->followSpotTopSpeed())))
                                     + (size.isEmpty() ? QString() : tr("\nBeam: %1.").arg(size)));
     m_statusFollowLabel->show();

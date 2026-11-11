@@ -389,6 +389,9 @@ public:
 signals:
     void activeVenueChanged(const QString &name);
     void venuesChanged();
+    /** renameVenue(): before activeVenueChanged(), so what is kept by the
+     *  name follows it first. */
+    void venueRenamed(const QString &from, const QString &to);
     /** confirmVenue(): "Still at <venue>?" answered (the venue chip). */
     void confirmedChanged();
     void correctionsChanged();

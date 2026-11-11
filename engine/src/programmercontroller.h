@@ -39,6 +39,7 @@
 #include "touchpadgesture.h"
 #include "padtriggers.h"
 #include "followspotframing.h"
+#include "followspotoperator.h"
 #include "scenevalue.h"
 #include "doc.h"
 
@@ -358,6 +359,34 @@ public:
 
     bool saveMoveInBlackXML(QXmlStreamWriter *doc) const;
     bool loadMoveInBlackXML(QXmlStreamReader &root);
+
+    /*********************************************************************
+     * Follow spot: where the operator stands
+     *********************************************************************/
+public:
+    /** Where the follow-spot operator stands and faces, for the stick bound
+     *  now (followSpotStickName()) in the venue applied now: the one set for
+     *  both, else for the venue with any stick, else front of house. */
+    FollowSpotOperator followSpotOperator() const;
+    /** Set it for the stick bound now in the venue applied now (no venue:
+     *  the show's own; no stick: any stick). The stick is turned at once. */
+    void setFollowSpotOperator(const FollowSpotOperator &op);
+    /** The same, for a stick and venue named (tests, a venue renamed). */
+    FollowSpotOperator followSpotOperatorFor(const QString &venue, const QString &stick) const;
+    void setFollowSpotOperatorFor(const QString &venue, const QString &stick, const FollowSpotOperator &op);
+    /** Every one set, by venue then stick. */
+    QMap<QPair<QString, QString>, FollowSpotOperator> followSpotOperators() const { return m_operators; }
+    /** Where the operator stands now, world metres (its preset's place on this stage). */
+    QPointF followSpotOperatorPosition() const;
+    /** Hold LS while a follow spot plays and push a stick toward centre
+     *  stage: on LS's release the facing is set from it (15-degree steps).
+     *  True while LS is held for it. */
+    bool isRecalibratingFacing() const { return m_recalHeld; }
+    /** A new show's: none set (Doc::clearContents). */
+    void resetFollowSpotOperators();
+
+    bool saveFollowSpotOperatorsXML(QXmlStreamWriter *doc) const;
+    bool loadFollowSpotOperatorsXML(QXmlStreamReader &root);
 
 signals:
     /** Emitted when the mark set changes (add/remove/auto-release) so the 2D
@@ -704,6 +733,10 @@ signals:
     /** The follow spot's status changed (see followSpotStatus()). */
     void followSpotStatusChanged();
 
+    /** Where the operator stands changed: set, recalibrated from the pad,
+     *  another stick bound, another venue applied, a show loaded. */
+    void followSpotOperatorChanged();
+
     /** Emitted when joystick sensitivity changes. */
     void joystickSensitivityChanged(float s);
 
@@ -1043,6 +1076,16 @@ private:
      *  D-pad Up/Down step its speed. True if it took the event. */
     bool followSpotTakes(quint32 universe, quint32 channel, int role, uchar value);
     FollowSpotStatus m_followStatus;
+    /** The operators set, by (venue, stick); empty names: none / any. */
+    QMap<QPair<QString, QString>, FollowSpotOperator> m_operators;
+    /** Turn the stick for the operator in force now; emits followSpotOperatorChanged on a change. */
+    void applyFollowSpotOperator();
+    FollowSpotOperator m_operatorApplied;
+    bool m_recalHeld = false;           ///< LS held to set the facing
+    double m_recalX = 0.0;              ///< ...the furthest push seen, x right
+    double m_recalY = 0.0;              ///< ...and up
+    /** LS released: the facing from the push. */
+    void finishFacingRecalibration();
     /** Work out m_followStatus for @p scene; emit followSpotStatusChanged on a change. */
     void updateFollowSpotStatus(Scene *scene);
 

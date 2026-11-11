@@ -115,6 +115,21 @@ ProgrammerController::ProgrammerController(Doc *doc)
        Refine -- the same controller on a cue's own values. */
     m_venues = new VenueCorrections(m_doc, this);
     m_focusSession->setVenues(m_venues);
+    /* Where the follow-spot operator stands is the stick's and the venue's:
+       another of either, and the stick turns to it. A venue renamed takes
+       its operators with it. */
+    connect(m_venues, &VenueCorrections::venueRenamed, this, [this](const QString &from, const QString &to) {
+        QMap<QPair<QString, QString>, FollowSpotOperator> moved;
+        for (auto it = m_operators.constBegin(); it != m_operators.constEnd(); ++it)
+            moved.insert(it.key().first == from ? qMakePair(to, it.key().second) : it.key(), it.value());
+        if (moved != m_operators)
+        {
+            m_operators = moved;
+            m_doc->setModified();
+        }
+    });
+    connect(m_venues, &VenueCorrections::activeVenueChanged, this, [this]() { applyFollowSpotOperator(); });
+    connect(this, &ProgrammerController::axisBindingChanged, this, [this]() { applyFollowSpotOperator(); });
     m_focusCalls = new FocusCalls(m_doc, this);
     m_refineSession = new RefineSession(m_doc, this);
     // The light itself, from the walk (Q192): its corrections go where Focus mode's do.
@@ -2081,6 +2096,138 @@ bool ProgrammerController::loadMoveInBlackXML(QXmlStreamReader &root)
 }
 
 /*****************************************************************************
+ * Follow spot: where the operator stands
+ *****************************************************************************/
+
+FollowSpotOperator ProgrammerController::followSpotOperatorFor(const QString &venue, const QString &stick) const
+{
+    auto it = m_operators.constFind(qMakePair(venue, stick));
+    if (it != m_operators.constEnd())
+        return it.value();
+    // This venue's for any stick, else as it always was.
+    it = m_operators.constFind(qMakePair(venue, QString()));
+    return it != m_operators.constEnd() ? it.value() : FollowSpotOperator();
+}
+
+void ProgrammerController::setFollowSpotOperatorFor(const QString &venue, const QString &stick,
+                                                    const FollowSpotOperator &op)
+{
+    FollowSpotOperator o = op;
+    o.facing = FollowSpotOperator::snapFacing(o.facing);
+    o.eyeMm = qBound(0, o.eyeMm, 100000);
+    const QPair<QString, QString> key(venue, stick);
+    const FollowSpotOperator was = followSpotOperatorFor(venue, stick);
+    /* Kept only when it says something the fallback doesn't: a show that
+       never moves its operator saves as it always did. */
+    m_operators.remove(key);
+    if (followSpotOperatorFor(venue, stick) != o)
+        m_operators.insert(key, o);
+    if (was != o)
+        m_doc->setModified();
+    applyFollowSpotOperator();
+}
+
+FollowSpotOperator ProgrammerController::followSpotOperator() const
+{
+    return followSpotOperatorFor(m_venues != nullptr ? m_venues->activeVenue() : QString(),
+                                 followSpotStickName());
+}
+
+void ProgrammerController::setFollowSpotOperator(const FollowSpotOperator &op)
+{
+    setFollowSpotOperatorFor(m_venues != nullptr ? m_venues->activeVenue() : QString(),
+                             followSpotStickName(), op);
+}
+
+QPointF ProgrammerController::followSpotOperatorPosition() const
+{
+    return followSpotOperator().position(m_doc->monitorProperties());
+}
+
+void ProgrammerController::applyFollowSpotOperator()
+{
+    const FollowSpotOperator op = followSpotOperator();
+    m_followMover->setFacing(op.facing);
+    if (op == m_operatorApplied)
+        return;
+    m_operatorApplied = op;
+    emit followSpotOperatorChanged();
+}
+
+void ProgrammerController::resetFollowSpotOperators()
+{
+    m_operators.clear();
+    applyFollowSpotOperator();
+}
+
+void ProgrammerController::finishFacingRecalibration()
+{
+    m_recalHeld = false;
+    const MonitorProperties *mp = m_doc->monitorProperties();
+    const QPointF centre = mp != nullptr ? QPointF(mp->stageCentre().x(), mp->stageCentre().y()) : QPointF();
+    FollowSpotOperator op = followSpotOperator();
+    const int f = FollowSpotOperator::facingFromPush(op.position(mp), centre, m_recalX, m_recalY);
+    m_recalX = m_recalY = 0.0;
+    applyFollowSpotSticks();
+    if (f < 0)
+    {
+        tellOperator(tr("Facing unchanged: hold the left stick click and push a stick toward centre stage."),
+                     ControllerScheme::ConfirmPriority);
+        return;
+    }
+    op.facing = f;
+    setFollowSpotOperator(op);
+    tellOperator(tr("Facing %1").arg(FollowSpotOperator::facingName(f)), ControllerScheme::ConfirmPriority);
+}
+
+bool ProgrammerController::saveFollowSpotOperatorsXML(QXmlStreamWriter *doc) const
+{
+    if (m_operators.isEmpty())
+        return true;
+    doc->writeStartElement(KXMLQLCFollowSpotOperators);
+    for (auto it = m_operators.constBegin(); it != m_operators.constEnd(); ++it)
+    {
+        doc->writeStartElement(QStringLiteral("Operator"));
+        if (!it.key().first.isEmpty())
+            doc->writeAttribute(QStringLiteral("Venue"), it.key().first);
+        if (!it.key().second.isEmpty())
+            doc->writeAttribute(QStringLiteral("Stick"), it.key().second);
+        doc->writeAttribute(QStringLiteral("Preset"), FollowSpotOperator::presetKey(it.value().preset));
+        doc->writeAttribute(QStringLiteral("Facing"), QString::number(it.value().facing));
+        doc->writeAttribute(QStringLiteral("Eye"), QString::number(it.value().eyeMm));   // millimetres
+        doc->writeEndElement();
+    }
+    doc->writeEndElement();
+    return true;
+}
+
+bool ProgrammerController::loadFollowSpotOperatorsXML(QXmlStreamReader &root)
+{
+    m_operators.clear();
+    while (root.readNextStartElement())
+    {
+        if (root.name() == QLatin1String("Operator"))
+        {
+            const QXmlStreamAttributes a = root.attributes();
+            FollowSpotOperator op = FollowSpotOperator::fromPreset(
+                FollowSpotOperator::presetFromKey(a.value(QStringLiteral("Preset")).toString()));
+            bool ok = false;
+            const int facing = a.value(QStringLiteral("Facing")).toInt(&ok);
+            if (ok)
+                op.facing = FollowSpotOperator::snapFacing(facing);
+            const int eye = a.value(QStringLiteral("Eye")).toInt(&ok);
+            if (ok && eye >= 0)
+                op.eyeMm = eye;
+            m_operators.insert(qMakePair(a.value(QStringLiteral("Venue")).toString(),
+                                         a.value(QStringLiteral("Stick")).toString()), op);
+        }
+        root.skipCurrentElement();
+    }
+    applyFollowSpotOperator();
+    return true;
+}
+
+/*****************************************************************************
  * Followspot effect
  *****************************************************************************/
 
@@ -2442,12 +2589,16 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     if (m_panBound && universe == m_panUniverse && channel == m_panChannel)
     {
         m_panNorm = norm;
+        if (m_recalHeld)
+            applyFollowSpotSticks();    // the push that sets the facing
         emit joystickUpdated(m_panNorm, m_tiltNorm);
         return;
     }
     if (m_tiltBound && universe == m_tiltUniverse && channel == m_tiltChannel)
     {
         m_tiltNorm = norm;
+        if (m_recalHeld)
+            applyFollowSpotSticks();
         emit joystickUpdated(m_panNorm, m_tiltNorm);
         return;
     }
@@ -4341,7 +4492,10 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
         /* The follow spot gone: its fine stick lets go (a held right stick
            is not carried into the next one). */
         if (onOff && st.state == FollowSpotStatus::Off)
+        {
             m_fineNormX = m_fineNormY = 0.5f;
+            m_recalHeld = false;    // nor an unfinished facing push
+        }
         m_followStatus = st;
         if (onOff)
             refreshControllerKeepAlive();
@@ -4716,8 +4870,24 @@ void ProgrammerController::applyFollowSpotSticks()
        either way the same). Pushed up -- a HID stick's 0 -- moves the
        subject up the stage, as it always has. The HID plugin has already
        taken out a learnt rest point (Centre Sticks). */
-    m_followMover->setSticks(2.0 * m_panNorm - 1.0, -(2.0 * m_tiltNorm - 1.0),
-                             2.0 * m_fineNormX - 1.0, -(2.0 * m_fineNormY - 1.0));
+    const double cx = 2.0 * m_panNorm - 1.0, cy = -(2.0 * m_tiltNorm - 1.0);
+    const double fx = 2.0 * m_fineNormX - 1.0, fy = -(2.0 * m_fineNormY - 1.0);
+    if (m_recalHeld)
+    {
+        /* LS held to set the facing: the furthest push of either stick is
+           where centre stage is; the subject holds meanwhile. */
+        for (const QPointF &p : { QPointF(cx, cy), QPointF(fx, fy) })
+            if (std::hypot(p.x(), p.y()) > std::hypot(m_recalX, m_recalY))
+            {
+                m_recalX = p.x();
+                m_recalY = p.y();
+            }
+        m_followMover->setSticks(0.0, 0.0, 0.0, 0.0);
+        return;
+    }
+    /* The operator's right and up: the mover turns them by the way the
+       operator faces (setFollowSpotOperator()). */
+    m_followMover->setSticks(cx, cy, fx, fy);
 }
 
 QVariantMap ProgrammerController::joystickData() const
@@ -4768,6 +4938,28 @@ bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, in
     if (role == GamepadRole::RightX || role == GamepadRole::RightY)
     {
         (role == GamepadRole::RightX ? m_fineNormX : m_fineNormY) = value / 255.0f;
+        if (m_recalHeld)
+            applyFollowSpotSticks();
+        return true;
+    }
+    /* Hold LS (L3) and push a stick toward centre stage: on its release the
+       facing is set from the push, to 15 degrees -- the operator turns the
+       stick to where they really stand without leaving the pad. View + LS
+       stays Centre Sticks. */
+    if (role == GamepadRole::LS && !m_heldRoles.contains(GamepadRole::Back) && !m_centreChord)
+    {
+        if (value > 0 && !m_recalHeld)
+        {
+            m_recalHeld = true;
+            m_recalX = m_recalY = 0.0;
+            applyFollowSpotSticks();
+            tellOperator(tr("Push a stick toward centre stage, then let go of the stick click."),
+                         ControllerScheme::ConfirmPriority);
+        }
+        else if (value == 0 && m_recalHeld)
+        {
+            finishFacingRecalibration();
+        }
         return true;
     }
     if (role == GamepadRole::DpadUp || role == GamepadRole::DpadDown)
@@ -4831,6 +5023,10 @@ QString ProgrammerController::followSpotStatusText() const
     }
     const QString stick = followSpotStickName();
     QString on = stick.isEmpty() ? QString() : tr(" · %1").arg(stick);
+    // Where the operator stands, when it isn't front of house (the subject's moves only).
+    const QString from = st.targetId != UINT_MAX ? followSpotOperator().viewpointText() : QString();
+    if (!from.isEmpty())
+        on += QStringLiteral(" · ") + from;
     if (st.speedShown)
         on += QStringLiteral(" · ") + followSpotSpeedText(st.speed);
     if (!st.saved.isEmpty())

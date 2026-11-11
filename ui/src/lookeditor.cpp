@@ -55,6 +55,7 @@
 #include "effectrows.h"
 #include "contextmenus.h"
 #include "programmercontroller.h"
+#include "venuecorrections.h"
 #include "lengthspinbox.h"
 #include "speedspinbox.h"
 #include "measurementunits.h"
@@ -3309,6 +3310,80 @@ void LookEditor::rebuildEffectDynWidget()
         };
         show();
         connect(pc, &ProgrammerController::followSpotStatusChanged, say, show);
+        connect(pc, &ProgrammerController::followSpotOperatorChanged, say, show);
+
+        /* Where the operator stands (one setting, its presets): the stick
+           is turned to it, so pushed up the subject goes the way they face.
+           The controller's and the venue's, not this look's. */
+        QWidget *opRow = new QWidget(m_effectDynWidget);
+        opRow->setObjectName(QStringLiteral("followSpotOperator"));
+        QHBoxLayout *opl = new QHBoxLayout(opRow);
+        opl->setContentsMargins(0, 2, 0, 2);
+        QLabel *opLabel = new QLabel(LookEditor::tr("Operator:"), opRow);
+        QComboBox *where = new QComboBox(opRow);
+        where->setObjectName(QStringLiteral("followSpotOperatorPreset"));
+        for (FollowSpotOperator::Preset pr : FollowSpotOperator::presets())
+            where->addItem(FollowSpotOperator::presetName(pr), int(pr));
+        where->setToolTip(LookEditor::tr("Where the follow-spot operator stands. The stick is turned to "
+                                         "face the way they do: pushed up, the subject goes away from "
+                                         "them; right is their right."));
+        QComboBox *facing = new QComboBox(opRow);
+        facing->setObjectName(QStringLiteral("followSpotOperatorFacing"));
+        for (int f = 0; f < 360; f += FollowSpotOperator::kStep)
+            facing->addItem(FollowSpotOperator::facingName(f), f);
+        facing->setToolTip(LookEditor::tr("Which way they face, seen from above. On the pad: hold the left "
+                                          "stick click and push toward centre stage."));
+        LengthSpinBox *eye = new LengthSpinBox(1.0, opRow);      // millimetres
+        eye->setObjectName(QStringLiteral("followSpotOperatorEye"));
+        eye->setRange(0.0, 30000.0);
+        eye->setSingleStep(100.0);
+        eye->setToolTip(LookEditor::tr("Their eye height above the stage floor: where the rig view's "
+                                       "Operator view looks from.\n%1")
+                            .arg(MeasurementUnits::lengthHelp(eye->unit())));
+        QLabel *forWho = new QLabel(opRow);
+        forWho->setObjectName(QStringLiteral("followSpotOperatorFor"));
+        forWho->setStyleSheet(QStringLiteral("color: gray;"));
+        opl->addWidget(opLabel);
+        opl->addWidget(where);
+        opl->addWidget(new QLabel(LookEditor::tr("facing"), opRow));
+        opl->addWidget(facing);
+        opl->addWidget(new QLabel(LookEditor::tr("eye"), opRow));
+        opl->addWidget(eye);
+        opl->addWidget(forWho, 1);
+        dv->addWidget(opRow);
+
+        auto fill = [pc, where, facing, eye, forWho]() {
+            const FollowSpotOperator op = pc->followSpotOperator();
+            const QSignalBlocker b1(where), b2(facing), b3(eye);
+            where->setCurrentIndex(qMax(0, where->findData(int(op.preset))));
+            facing->setCurrentIndex(qMax(0, facing->findData(op.facing)));
+            eye->setValue(op.eyeMm);
+            const QString stick = pc->followSpotStickName();
+            const QString venue = pc->venueCorrections() != nullptr ? pc->venueCorrections()->activeVenue()
+                                                                    : QString();
+            QString text = stick.isEmpty() ? LookEditor::tr("any controller") : stick;
+            if (!venue.isEmpty())
+                text = LookEditor::tr("%1 in %2").arg(text, venue);
+            forWho->setText(LookEditor::tr("(%1)").arg(text));
+        };
+        fill();
+        connect(pc, &ProgrammerController::followSpotOperatorChanged, opRow, fill);
+        connect(pc, &ProgrammerController::axisBindingChanged, opRow, fill);
+        connect(where, QOverload<int>::of(&QComboBox::currentIndexChanged), opRow, [pc, where]() {
+            // A preset is its place, its facing and a typical eye height.
+            pc->setFollowSpotOperator(FollowSpotOperator::fromPreset(
+                FollowSpotOperator::Preset(where->currentData().toInt())));
+        });
+        connect(facing, QOverload<int>::of(&QComboBox::currentIndexChanged), opRow, [pc, facing]() {
+            FollowSpotOperator op = pc->followSpotOperator();
+            op.facing = facing->currentData().toInt();
+            pc->setFollowSpotOperator(op);
+        });
+        connect(eye, &QDoubleSpinBox::editingFinished, opRow, [pc, eye]() {
+            FollowSpotOperator op = pc->followSpotOperator();
+            op.eyeMm = int(std::lround(eye->value()));
+            pc->setFollowSpotOperator(op);
+        });
     }
 
     // --- Target bindings ---
