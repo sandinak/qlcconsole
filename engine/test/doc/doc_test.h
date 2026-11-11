@@ -35,6 +35,9 @@ private slots:
     void init();
     void cleanup();
 
+    void patchedFinePairScalesAsOneValue();
+    void adjacentFixturesAreNotAPair();
+
     void normalizeComponentPath();
     void denormalizeComponentPath();
     void fixtureNamesAreUnique();

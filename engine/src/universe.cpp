@@ -72,13 +72,17 @@ Universe::Universe(quint32 id, GrandMaster *gm, QObject *parent)
     m_held.reset(new std::atomic<quint8>[UNIVERSE_SIZE]);
     m_pastGMFrame.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
     m_groupMaster.reset(new std::atomic<quint8>[UNIVERSE_SIZE]);
+    m_pairRole.reset(new std::atomic<quint8>[UNIVERSE_SIZE]);
     m_letGoBy.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
     m_letGoFrame.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
     for (int i = 0; i < UNIVERSE_SIZE; i++)
     {
         m_letGoBy[i].store(0, std::memory_order_relaxed);
         m_letGoFrame[i].store(0, std::memory_order_relaxed);
+    {
         m_groupMaster[i].store(UCHAR_MAX, std::memory_order_relaxed);
+        m_pairRole[i].store(NotPaired, std::memory_order_relaxed);
+    }
         m_writtenFrame[i].store(0, std::memory_order_relaxed);
         m_held[i].store(0, std::memory_order_relaxed);
         m_pastGMFrame[i].store(0, std::memory_order_relaxed);
@@ -983,6 +987,42 @@ uchar Universe::applyGM(int channel, uchar value)
     return value;
 }
 
+bool Universe::updatePostGMPair(int channel, quint8 role)
+{
+    const int coarse = role == PairFine ? channel - 1 : channel;
+    const int fine = coarse + 1;
+    const uchar coarseMask = uchar(m_channelsMask->at(coarse));
+    const uchar fineMask = uchar(m_channelsMask->at(fine));
+
+    /* No master scaling it (the usual case): byte by byte is exact, and the
+       one test every frame of a 16-bit channel pays. */
+    const uint group = (coarseMask & Intensity)
+                       ? m_groupMaster[coarse].load(std::memory_order_relaxed) : UCHAR_MAX;
+    const bool gmApplies = m_grandMaster->channelMode() == GrandMaster::AllChannels
+                           || (coarseMask & Intensity);
+    if (group == UCHAR_MAX && (gmApplies == false || m_grandMaster->value() == UCHAR_MAX))
+        return false;
+
+    if (((coarseMask | fineMask) & (GMExempt | SwitchOutput | OnAtOpenOutput))
+        || ((coarseMask ^ fineMask) & Intensity) || pastGM(coarse) || pastGM(fine))
+        return false;
+
+    quint32 value = (quint32(preGMValue(coarse)) << 8) | preGMValue(fine);
+    if (group != UCHAR_MAX)
+        value = (value * group + 127) / 255;
+    if (gmApplies)
+    {
+        if (m_grandMaster->valueMode() == GrandMaster::Limit)
+            value = qMin(value, quint32(m_grandMaster->value()) * 257);
+        else
+            value = quint32(floor(double(value) * m_grandMaster->fraction() + 0.5));
+    }
+
+    (*m_postGMValues)[coarse] = char(applyPassthrough(coarse, applyModifiers(coarse, uchar(value >> 8))));
+    (*m_postGMValues)[fine] = char(applyPassthrough(fine, applyModifiers(fine, uchar(value & 0xFF))));
+    return true;
+}
+
 uchar Universe::applyModifiers(int channel, uchar value)
 {
     if (m_modifiers.at(channel) != NULL)
@@ -1018,6 +1058,10 @@ void Universe::updatePostGMValue(int channel)
         (*m_postGMValues)[channel] = char(onAtOpenValue(channel));
         return;
     }
+
+    const quint8 pairRole = m_pairRole[channel].load(std::memory_order_relaxed);
+    if (pairRole != NotPaired && updatePostGMPair(channel, pairRole))
+        return;
 
     uchar value = preGMValue(channel);
 
@@ -1352,6 +1396,8 @@ void Universe::setChannelCapability(ushort channel, QLCChannel::Group group, Cha
     if (channel >= (ushort)m_channelsMask->length())
         return;
 
+    clearChannelPair(channel);
+
     if (Utils::vectorRemove(m_intensityChannels, channel))
         m_intensityChannelsChanged = true;
     Utils::vectorRemove(m_nonIntensityChannels, channel);
@@ -1404,6 +1450,29 @@ void Universe::setChannelCapability(ushort channel, QLCChannel::Group group, Cha
         m_totalChannels = channel + 1;
         m_totalChannelsChanged = true;
     }
+}
+
+void Universe::setChannelPair(ushort coarse)
+{
+    if (int(coarse) + 1 >= UNIVERSE_SIZE)
+        return;
+    m_pairRole[coarse].store(PairCoarse, std::memory_order_relaxed);
+    m_pairRole[coarse + 1].store(PairFine, std::memory_order_relaxed);
+}
+
+void Universe::clearChannelPair(ushort channel)
+{
+    if (channel >= UNIVERSE_SIZE)
+        return;
+    const quint8 role = m_pairRole[channel].exchange(NotPaired, std::memory_order_relaxed);
+    /* Only a partner that still points back: a patch going down its channels
+       has already marked the pair below this one, which is not this one's. */
+    if (role == PairCoarse && channel + 1 < UNIVERSE_SIZE
+        && m_pairRole[channel + 1].load(std::memory_order_relaxed) == PairFine)
+        m_pairRole[channel + 1].store(NotPaired, std::memory_order_relaxed);
+    else if (role == PairFine && channel > 0
+             && m_pairRole[channel - 1].load(std::memory_order_relaxed) == PairCoarse)
+        m_pairRole[channel - 1].store(NotPaired, std::memory_order_relaxed);
 }
 
 uchar Universe::channelCapabilities(ushort channel)
@@ -1573,6 +1642,24 @@ bool Universe::writeMix(int address, uchar value, qreal mix)
         value = uchar(qBound(0, v, 255));
     }
     return write(address, value, true);
+}
+
+bool Universe::writeMix(int address, quint32 value, int channelCount, qreal mix)
+{
+    if (channelCount == 1)
+        return writeMix(address, uchar(value), mix);
+    if (!clipToUniverse(address, value, channelCount))
+        return false;
+    if (mix < 1.0)
+    {
+        qint64 under = 0;
+        for (int i = 0; i < channelCount; i++)
+            under = (under << 8) | uchar(m_preGMValues->at(address + i));
+        value = quint32(under + qRound64((qint64(value) - under) * qMax(qreal(0), mix)));
+    }
+    for (int i = 0; i < channelCount; i++)
+        write(address + i, uchar(value >> (8 * (channelCount - 1 - i))), true);
+    return true;
 }
 
 bool Universe::writePastGM(int address, uchar value)

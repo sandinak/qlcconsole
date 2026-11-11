@@ -86,6 +86,70 @@ void Doc_Test::cleanup()
     QCOMPARE(m_doc->m_addresses.size(), 0);
 }
 
+void Doc_Test::patchedFinePairScalesAsOneValue()
+{
+    Fixture *fxi = new Fixture(m_doc);
+    QLCFixtureDef *def = fxi->genericRGBPanelDef(1, Fixture::RGB, true);
+    QLCFixtureMode *mode = fxi->genericRGBPanelMode(def, Fixture::RGB, true, 100, 100);
+    QVERIFY(def != NULL && mode != NULL);
+    QCOMPARE(mode->channels().size(), 6);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(0);
+    fxi->setUniverse(0);
+    QVERIFY(m_doc->addFixture(fxi));
+
+    m_doc->inputOutputMap()->setGrandMasterValue(127);
+    const double f = 127.0 / 255.0;
+    auto out = [this](quint32 v) {
+        QList<Universe *> us = m_doc->inputOutputMap()->claimUniverses();
+        Universe *u = us.at(0);
+        u->write(0, uchar(v >> 8), true);
+        u->write(1, uchar(v & 0xFF), true);
+        const quint32 got = (quint32(quint8(u->postGMValues()->at(0))) << 8)
+                            | quint8(u->postGMValues()->at(1));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return got;
+    };
+
+    QCOMPARE(out(0x8200), quint32(floor(double(0x8200) * f + 0.5)));
+    QCOMPARE(out(0x81FF), quint32(floor(double(0x81FF) * f + 0.5)));
+
+    // Gone with the fixture: its addresses are 8-bit again.
+    QVERIFY(m_doc->deleteFixture(fxi->id()));
+    const quint32 coarse = quint32(floor(double(0x82) * f + 0.5));
+    QCOMPARE(out(0x8200), coarse << 8);
+    m_doc->inputOutputMap()->setGrandMasterValue(255);
+}
+
+void Doc_Test::adjacentFixturesAreNotAPair()
+{
+    // Two 8-bit fixtures back to back: the last channel of one and the first
+    // of the next are two channels, whatever a "no primary" lookup returns.
+    for (int address : { 10, 13 })
+    {
+        Fixture *fxi = new Fixture(m_doc);
+        QLCFixtureDef *def = fxi->genericRGBPanelDef(1, Fixture::RGB, false);
+        QLCFixtureMode *mode = fxi->genericRGBPanelMode(def, Fixture::RGB, false, 100, 100);
+        QVERIFY(def != NULL && mode != NULL);
+        fxi->setFixtureDefinition(def, mode);
+        fxi->setAddress(quint32(address));
+        fxi->setUniverse(0);
+        QVERIFY(m_doc->addFixture(fxi));
+    }
+
+    m_doc->inputOutputMap()->setGrandMasterValue(127);
+    QList<Universe *> us = m_doc->inputOutputMap()->claimUniverses();
+    Universe *u = us.at(0);
+    u->write(12, 0xFF, true);
+    u->write(13, 0x00, true);
+    const int last = quint8(u->postGMValues()->at(12));
+    const int first = quint8(u->postGMValues()->at(13));
+    m_doc->inputOutputMap()->releaseUniverses(false);
+    m_doc->inputOutputMap()->setGrandMasterValue(255);
+    QCOMPARE(last, 127);
+    QCOMPARE(first, 0);
+}
+
 void Doc_Test::normalizeComponentPath()
 {
      m_doc->setWorkspacePath(QDir("../../../resources/icons/png").absolutePath());

@@ -375,6 +375,128 @@ void Universe_Test::applyGM()
     }
 }
 
+/* The value of a 16-bit pair at channels 0 and 1, going out */
+static quint32 pairOut(Universe *uni)
+{
+    return (quint32(quint8(uni->postGMValues()->at(0))) << 8) | quint8(uni->postGMValues()->at(1));
+}
+
+static void writePair(Universe *uni, quint32 v)
+{
+    uni->write(0, uchar(v >> 8), true);
+    uni->write(1, uchar(v & 0xFF), true);
+}
+
+void Universe_Test::pairMovesEvenlyUnderTheGrandMaster()
+{
+    m_uni->setChannelCapability(0, QLCChannel::Intensity);
+    m_uni->setChannelCapability(1, QLCChannel::Intensity);
+    m_uni->setChannelPair(0);
+
+    // Byte by byte, 0x81FF went out as 0x4180 and the next step as 0x4100.
+    foreach (int gm, QList<int>() << 200 << 127 << 51 << 13 << 1)
+    {
+        m_gm->setValue(uchar(gm));
+        const double fraction = m_gm->fraction();
+        quint32 last = 0;
+        for (quint32 v = 0; v <= 0xFFFF; ++v)
+        {
+            writePair(m_uni, v);
+            const quint32 out = pairOut(m_uni);
+            QVERIFY2(out >= last, qPrintable(QString("GM %1: %2 went down, %3 after %4")
+                                             .arg(gm).arg(v).arg(out).arg(last)));
+            QCOMPARE(out, quint32(floor(double(v) * fraction + 0.5)));
+            last = out;
+        }
+    }
+
+    // A move of the master alone rescales what is held, both bytes.
+    writePair(m_uni, 0x81FF);
+    m_gm->setValue(255);
+    QCOMPARE(pairOut(m_uni), quint32(0x81FF));
+    m_gm->setValue(127);
+    QCOMPARE(pairOut(m_uni), quint32(floor(double(0x81FF) * m_gm->fraction() + 0.5)));
+}
+
+void Universe_Test::pairLimitedAsOneValue()
+{
+    m_uni->setChannelCapability(0, QLCChannel::Intensity);
+    m_uni->setChannelCapability(1, QLCChannel::Intensity);
+    m_uni->setChannelPair(0);
+    m_gm->setValueMode(GrandMaster::Limit);
+    m_gm->setValue(128);
+
+    // Under the limit: untouched, the fine byte too (it used to be clamped).
+    writePair(m_uni, 0x70FF);
+    QCOMPARE(pairOut(m_uni), quint32(0x70FF));
+    writePair(m_uni, 0xC012);
+    QCOMPARE(pairOut(m_uni), quint32(0x8080));
+}
+
+void Universe_Test::pairMovesEvenlyUnderAGroupMaster()
+{
+    m_uni->setChannelCapability(0, QLCChannel::Intensity);
+    m_uni->setChannelCapability(1, QLCChannel::Intensity);
+    m_uni->setChannelPair(0);
+    QByteArray scales(UNIVERSE_SIZE, char(255));
+    scales[0] = char(100);
+    scales[1] = char(100);
+    m_uni->setGroupMasters(scales);
+
+    quint32 last = 0;
+    for (quint32 v = 0; v <= 0xFFFF; ++v)
+    {
+        writePair(m_uni, v);
+        const quint32 out = pairOut(m_uni);
+        QVERIFY2(out >= last, qPrintable(QString("%1 went down").arg(v)));
+        QCOMPARE(out, (v * 100 + 127) / 255);
+        last = out;
+    }
+}
+
+void Universe_Test::pairGoesByteByByteWhenExemptOrUnmarked()
+{
+    m_uni->setChannelCapability(0, QLCChannel::Intensity);
+    m_uni->setChannelCapability(1, QLCChannel::Intensity);
+    m_gm->setValue(127);
+
+    // Not marked as a pair: two 8-bit channels, as ever.
+    writePair(m_uni, 0x8200);
+    QCOMPARE(pairOut(m_uni), (quint32(m_uni->applyGM(0, 0x82)) << 8) | 0);
+
+    // setChannelCapability() on either byte undoes a pair.
+    m_uni->setChannelPair(0);
+    m_uni->setChannelCapability(1, QLCChannel::Intensity);
+    writePair(m_uni, 0x81FF);
+    QCOMPARE(pairOut(m_uni), (quint32(m_uni->applyGM(0, 0x81)) << 8) | m_uni->applyGM(1, 0xFF));
+
+    // A pair that is half written past the master goes byte by byte.
+    m_uni->setChannelPair(0);
+    m_uni->writePastGM(0, 0x81);
+    m_uni->write(1, 0xFF, true);
+    QCOMPARE(quint8(m_uni->postGMValues()->at(0)), quint8(0x81));
+}
+
+void Universe_Test::writeMixPairMovesEvenly()
+{
+    writePair(m_uni, 0x1000);
+    QVERIFY(m_uni->writeMix(0, quint32(0x2000), 2, 0.5));
+    QCOMPARE(pairOut(m_uni), quint32(0x1800));
+
+    // Across a coarse step the fine byte does not saw-tooth.
+    writePair(m_uni, 0x10F0);
+    QVERIFY(m_uni->writeMix(0, quint32(0x1110), 2, 0.5));
+    QCOMPARE(pairOut(m_uni), quint32(0x1100));
+
+    // Full mix writes the value; no mix leaves what is under it.
+    writePair(m_uni, 0x10F0);
+    QVERIFY(m_uni->writeMix(0, quint32(0xABCD), 2, 1.0));
+    QCOMPARE(pairOut(m_uni), quint32(0xABCD));
+    writePair(m_uni, 0x10F0);
+    QVERIFY(m_uni->writeMix(0, quint32(0xABCD), 2, 0.0));
+    QCOMPARE(pairOut(m_uni), quint32(0x10F0));
+}
+
 void Universe_Test::write()
 {
     m_uni->setChannelCapability(0, QLCChannel::Intensity);

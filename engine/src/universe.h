@@ -223,6 +223,19 @@ protected:
      */
     uchar applyGM(int channel, uchar value);
 
+    /**
+     * Work out the output of a 16-bit pair as one number while a master is
+     * scaling it: scaled byte by byte, a fade under a master saw-toothed (at
+     * 50%, 0x81FF went out as 0x4180 and the next step, 0x8200, as 0x4100).
+     *
+     * @param channel Either byte of the pair
+     * @param role Its role (m_pairRole)
+     *
+     * @return false when the pair must go byte by byte: no master is scaling
+     *         it, or its two bytes are not treated alike (exempt, parked...)
+     */
+    bool updatePostGMPair(int channel, quint8 role);
+
     uchar applyModifiers(int channel, uchar value);
     void updatePostGMValue(int channel);
 
@@ -351,6 +364,16 @@ public:
      * @param isHTP Flag to force HTP/LTP behaviour
      */
     void setChannelCapability(ushort channel, QLCChannel::Group group, ChannelType forcedType = Undefined);
+
+    /**
+     * Mark @a coarse and the channel after it as the two bytes of one 16-bit
+     * value, so the masters scale them together. setChannelCapability() on
+     * either byte undoes it: a patch marks its pairs after its capabilities.
+     */
+    void setChannelPair(ushort coarse);
+
+    /** @a channel is no longer part of a 16-bit pair, nor is its partner */
+    void clearChannelPair(ushort channel);
 
     /** Retrieve the capability mask of the given channel index
      *
@@ -725,6 +748,10 @@ private:
     /** Each channel's group master scale (setGroupMasters()), 255 = none:
      *  read once per written channel, so a byte and no lock */
     std::unique_ptr<std::atomic<quint8>[]> m_groupMaster;
+    /** The channel's part in a 16-bit pair (setChannelPair()): one of
+     *  PairRole. The fine byte is always the address after its coarse one. */
+    enum PairRole : quint8 { NotPaired = 0, PairCoarse = 1, PairFine = 2 };
+    std::unique_ptr<std::atomic<quint8>[]> m_pairRole;
     bool pastGM(int address) const
     {
         return m_pastGMFrame[address].load(std::memory_order_relaxed)
@@ -922,6 +949,10 @@ public:
      * what the show plays now rather than to a snapshot.
      */
     bool writeMix(int address, uchar value, qreal mix);
+
+    /** writeMix() of a value of @a channelCount bytes as one number, so a
+     *  16-bit channel moves evenly instead of saw-toothing in its fine byte */
+    bool writeMix(int address, quint32 value, int channelCount, qreal mix);
 
     /**
      * Write a channel from a Park fader: replaces what every fader below

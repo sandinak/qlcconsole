@@ -48,6 +48,11 @@ private slots:
     void grandMasterAllChannelsReduce();
     void grandMasterAllChannelsLimit();
     void applyGM();
+    void pairMovesEvenlyUnderTheGrandMaster();
+    void pairLimitedAsOneValue();
+    void pairMovesEvenlyUnderAGroupMaster();
+    void pairGoesByteByByteWhenExemptOrUnmarked();
+    void writeMixPairMovesEvenly();
     void write();
     void writeRelative();
     void writeMix();
