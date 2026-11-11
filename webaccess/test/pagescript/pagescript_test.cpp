@@ -720,6 +720,9 @@ void PageScript_Test::theDpadRepeatsWhileHeld()
     QVERIFY2(held.count() >= 5 && held.count() <= 8, qPrintable(held.join(QLatin1Char(' '))));
     for (const QString &w : held)
         QCOMPARE(w, QStringLiteral("QLC+FOCUS|press|dpad_up"));
+    // Let go: a repeat already due may land with the release, then none.
+    pad(QJsonObject(), 20);
+    QVERIFY(sent().count() <= 1);
     pad(QJsonObject(), 500);
     QCOMPARE(sent(), QStringList());
 }
