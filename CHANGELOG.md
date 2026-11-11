@@ -10,6 +10,21 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Added
+
+- **Words gate reads every button and action text.** The menu-words test now also catches texts set on any declared button or action (not just `...Btn` names) and on stack buttons; it found three off-canon labels, now Title Case: **Lock Item** / **Unlock Item** (Show Manager), **… — Would Loop** and **… — In Its Own Window** (menu lines).
+- **Screen-walk leftovers.** Add Fixture's model column takes the width the Source column doesn't need, so "Generic RGBW" is no longer cut short; the Build bar's reply wraps under the line instead of widening the window.
+- **The footer keeps what it shows whole at 1024.** Fitting the footer now counts the room a squeezed chip's spacing takes, so the readiness chip ("No outputs: preview only · 1 to check") is no longer cut at the smallest window with the Follow chip on; the Grand Master steps aside first, as its lower place in the footer's order says.
+- **The Workbench editor pane narrows again.** A scene's Looks list asked for more room than its names and fades need, so the editor pane could not be dragged narrower (Windows: past its limit). It now asks for fourteen characters of name beside the fades and no more; the fade columns are headed **In** and **Out**.
+- **A crash in a test build without AI Assist.** The Build command bar is the same size with and without AI Assist built in; a program built without it (a test) wrote past it.
+- **Blind and Solo from the Steam Deck / phone remote.** In Design the Run page (**/run**) has **BLIND** and **SOLO**, and the Deck's controller has LB + LS for Blind, LB + View for Solo and LB + D-pad left / right to step through the layers. They do what the console's own Blind and the Show Tree's Solo do. Blind mutes the rig and keeps the screens live; Solo plays one layer of the cue in the preview. In Operate the remote refuses both, as the console does. A BLIND chip shows on both remote pages.
+- **The remote shows what Teaching holds.** In a Teaching show the Run page and the focus remote show a TEACHING chip and a line saying what the instructor's settings hold: real output, and a GO's show control out (with the cue that was not sent). A remote GO is held exactly as the console's is, Blind from the remote included. The remote cannot change these settings.
+- **The web pages' scripts are tested in the gate.** `webaccess/test/pagescript` runs the Run page, the focus remote and the gamepad reader as the console serves them, in a script engine with a stand-in browser and controller. It covers the buttons, the PIN, the LB arm, triggers, sticks, the dead zone, D-pad repeat, keys and the controller test.
+- **Hardware checklist for the Deck, rewritten.** [gamepad-remote.md](docs/features/gamepad-remote.md#hardware-checklist) is now 14 numbered steps, each with its expected result, for one sitting with a real Deck.
+- **⇧⌘N (New here) works in Build ▸ Palettes and the Lighting Studio.** Palettes: a new palette of the kind you are on, in the folder you are on, open in the Workbench with its name ready to type (*New Gobo Palette in Act 1*). Lighting Studio: a Target Position at the pointer with its Aim palette, selected and ready to name. Same Edit ▸ New item and key, one undo step each.
+
 ## [0.4.3] - 2026-11-10
 
 qlcconsole 0.4.3 is a stable release after 0.4.1. 0.4.2 was built but never

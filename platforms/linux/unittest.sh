@@ -251,6 +251,8 @@ list_tests()
     echo plugins/wled/test
     if [ "$TARGET" != "qmlui" ]; then
         echo webaccess/test
+        # The web pages' scripts (/run, /focus, the gamepad), in a QJSEngine.
+        echo webaccess/test/pagescript
     fi
     # The HID plugin's GameController side: a Mac's framework only.
     [[ "$OSTYPE" == "darwin"* ]] && echo plugins/hid/test

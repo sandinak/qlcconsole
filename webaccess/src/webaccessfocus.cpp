@@ -29,6 +29,7 @@
 #include "showoperate.h"
 #include "gamepadrole.h"
 #include "fixture.h"
+#include "inputoutputmap.h"
 #include "doc.h"
 
 WebAccessFocus::WebAccessFocus(Doc *doc, WebAccessRun *run, QObject *parent)
@@ -58,6 +59,9 @@ WebAccessFocus::WebAccessFocus(Doc *doc, WebAccessRun *run, QObject *parent)
         connect(s, &FocusSession::scopeChanged, this, &WebAccessFocus::schedule);
     }
     connect(m_doc->operateSettings(), &ShowOperate::settingsChanged, this, &WebAccessFocus::schedule);
+    connect(m_doc->inputOutputMap(), &InputOutputMap::outputInhibitedChanged, this, &WebAccessFocus::schedule);
+    if (TeachingSettings *t = m_doc->teachingSettings())
+        connect(t, &TeachingSettings::teachingChanged, this, &WebAccessFocus::schedule);
 }
 
 FocusSession *WebAccessFocus::session() const
@@ -218,7 +222,16 @@ QByteArray WebAccessFocus::stateJson() const
     o[QStringLiteral("remote")] = m_run->remoteAllowed();
     o[QStringLiteral("pin")] = m_run->pinRequired();
     o[QStringLiteral("mode")] = m_doc->mode() == Doc::Operate ? QStringLiteral("LIVE") : QStringLiteral("DESIGN");
-    o[QStringLiteral("teaching")] = m_doc->teachingSettings() != nullptr && m_doc->teachingSettings()->enabled();
+    const TeachingSettings *teach = m_doc->teachingSettings();
+    o[QStringLiteral("teaching")] = teach != nullptr && teach->enabled();
+    // Blind mutes the rig: a focus then moves nothing you can see.
+    o[QStringLiteral("blind")] = m_doc->inputOutputMap()->outputInhibited();
+    if (teach != nullptr && teach->enabled())
+    {
+        QJsonObject held;
+        held[QStringLiteral("output")] = teach->holdsOutput();
+        o[QStringLiteral("held")] = held;
+    }
     o[QStringLiteral("coarse")] = double(FocusSession::coarseRate());
     o[QStringLiteral("fine")] = double(FocusSession::fineRate());
     o[QStringLiteral("repeatDelay")] = int(FocusSession::kRepeatDelay * 1000);

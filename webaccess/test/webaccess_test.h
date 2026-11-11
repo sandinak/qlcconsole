@@ -127,6 +127,12 @@ private slots:
     void theRunStateCarriesEveryNoteOfTheCue();
     void theRunStateCarriesShowStatusAndFocus();
 
+    /* Blind and Solo from the remote (Q229), and Teaching's instructor flags */
+    void blindFromTheRemoteIsDesignsMute();
+    void soloFromTheRemotePlaysOneLayerOfThePreview();
+    void teachingFlagsHoldTheRemotesGoAsTheConsoles();
+    void theRemoteCannotChangeWhatTeachingHolds();
+
     /* Many clients: a phone per crew member (make perf, "web") */
     void fiftyClientsGetEveryChange();
     void cpuPerBroadcast();

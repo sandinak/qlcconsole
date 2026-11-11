@@ -61,6 +61,21 @@ WebAccessRun::WebAccessRun(Doc *doc, QObject *parent)
     connect(m_doc->groupMasters(), &GroupMasters::levelChanged, this, &WebAccessRun::poll);
     connect(m_doc->inputOutputMap(), &InputOutputMap::blackoutChanged, this, &WebAccessRun::poll);
     connect(m_doc->inputOutputMap(), &InputOutputMap::grandMasterValueChanged, this, &WebAccessRun::poll);
+    connect(m_doc->inputOutputMap(), &InputOutputMap::outputInhibitedChanged, this, &WebAccessRun::poll);
+    // A Teaching show's held show control out, as the console's footer says it.
+    connect(m_doc->showControl(), &ShowControl::outHeld, this, [this](const QString &what) {
+        m_lastHeld = what;
+        poll();
+    });
+    connect(m_doc->showControl(), &ShowControl::sentOut, this, [this]() {
+        m_lastHeld.clear();
+        poll();
+    });
+    if (TeachingSettings *t = m_doc->teachingSettings())
+        connect(t, &TeachingSettings::teachingChanged, this, [this]() {
+            m_lastHeld.clear();
+            poll();
+        });
 }
 
 void WebAccessRun::setClients(int count)
@@ -86,6 +101,15 @@ void WebAccessRun::poll()
         return;
     m_last = now;
     emit stateChanged(now);
+}
+
+WebAccessRun::Result WebAccessRun::gate(bool unlocked) const
+{
+    if (!remoteAllowed())
+        return Refused;
+    if (pinRequired() && !unlocked)
+        return NeedPin;
+    return Done;
 }
 
 bool WebAccessRun::remoteAllowed() const
@@ -286,6 +310,109 @@ WebAccessRun::Result WebAccessRun::standby(int direction, bool unlocked)
 }
 
 /*********************************************************************
+ * Blind and Solo (Q229)
+ *********************************************************************/
+
+WebAccessRun::Result WebAccessRun::blind(const QString &what, bool unlocked)
+{
+    InputOutputMap *io = m_doc->inputOutputMap();
+    bool on;
+    if (what == QLatin1String("toggle"))
+        on = !io->outputInhibited();
+    else if (what == QLatin1String("on"))
+        on = true;
+    else if (what == QLatin1String("off"))
+        on = false;
+    else
+        return Unknown;
+    const Result g = gate(unlocked);
+    if (g != Done)
+        return g;
+    // Operate: the console's Blind is its own screens' view, never a mute.
+    if (m_doc->mode() != Doc::Design)
+        return NotInDesign;
+    /* What the console's Blind button does in Design (App::slotControlBlind());
+       the App's button and footer follow the engine (outputInhibitedChanged).
+       Nothing of Teaching locks it on the console, so nothing here: its
+       instructor flag (hold show control in Blind) acts on the next GO,
+       wherever that comes from (ShowControl::sendOut()). */
+    io->setOutputInhibited(on);
+    return Done;
+}
+
+QList<WebAccessRun::SoloLayer> WebAccessRun::soloLayers() const
+{
+    QList<SoloLayer> out;
+    ShowTreeController *st = m_doc->showTree();
+    if (st == nullptr || m_doc->mode() != Doc::Design)
+        return out;
+    const ShowTreeController::PreviewState state = st->previewState();
+    if (state != ShowTreeController::PreviewState::Playing && state != ShowTreeController::PreviewState::Dark)
+        return out;
+    ResolvedCue rc;
+    if (!st->resolvedCue(st->previewedCue(), &rc))
+        return out;
+    // The top layers, as setPreviewSolo() takes them (a child plays with its parent).
+    for (const ResolvedLayer &rl : rc.layers)
+    {
+        if (rl.depth != 0 || rl.layerId == invalidId())
+            continue;
+        bool seen = false;
+        for (const SoloLayer &l : out)
+            seen = seen || l.id == rl.layerId;
+        if (!seen)
+            out << SoloLayer{ rl.layerId, rl.name.isEmpty() ? st->targetLabel(rl.target) : rl.name };
+    }
+    return out;
+}
+
+WebAccessRun::Result WebAccessRun::solo(const QString &what, bool unlocked)
+{
+    bool byId = false;
+    const quint32 id = what.toUInt(&byId);
+    if (!byId && what != QLatin1String("off") && what != QLatin1String("toggle")
+        && what != QLatin1String("next") && what != QLatin1String("prev"))
+        return Unknown;
+    const Result g = gate(unlocked);
+    if (g != Done)
+        return g;
+    // As the Show Tree's Solo: Design only (in Operate the tree is blind).
+    if (m_doc->mode() != Doc::Design)
+        return NotInDesign;
+    ShowTreeController *st = m_doc->showTree();
+    if (what == QLatin1String("off"))
+    {
+        st->setPreviewSolo(invalidId(), invalidId());
+        return Done;
+    }
+    const QList<SoloLayer> layers = soloLayers();
+    if (layers.isEmpty())
+        return NothingToDo;
+    const int n = int(layers.size());
+    int at = -1;
+    for (int i = 0; i < n; ++i)
+        if (layers.at(i).id == st->previewSoloLayer())
+            at = i;
+    quint32 want = invalidId();
+    if (byId)
+    {
+        for (const SoloLayer &l : layers)
+            if (l.id == id)
+                want = id;
+        if (want == invalidId())
+            return NothingToDo;
+    }
+    else if (what == QLatin1String("toggle"))
+        want = at >= 0 ? invalidId() : layers.first().id;
+    else if (what == QLatin1String("next"))
+        want = layers.at(at < 0 ? 0 : (at + 1) % n).id;
+    else
+        want = layers.at(at < 0 ? n - 1 : (at - 1 + n) % n).id;
+    st->setPreviewSolo(want == invalidId() ? invalidId() : st->previewedCue(), want);
+    return Done;
+}
+
+/*********************************************************************
  * State
  *********************************************************************/
 
@@ -353,6 +480,37 @@ QJsonObject WebAccessRun::padMap()
         e[QStringLiteral("label")] = PadNames::expand(PadRun::label(a), PadNames::Xbox);
         map[GamepadRole::key(role)] = e;
     }
+
+    /* The remote's own (Q229), on controls the Run role leaves free, under
+       the same arm (LB held): Blind, and Solo with the D-pad walking the
+       layers -- View solos as it does on the console's walk (PadRun). */
+    struct Extra
+    {
+        GamepadRole::Role role;
+        const char *what;
+        const char *command;
+        QString label;
+    };
+    const Extra extras[] = {
+        { GamepadRole::Back, "solo", "solo|toggle",
+          tr("Solo a layer of the cue in the preview, or the whole cue again ({LB} held; Design)") },
+        { GamepadRole::DpadRight, "solonext", "solo|next", tr("Solo the next layer ({LB} held)") },
+        { GamepadRole::DpadLeft, "soloprev", "solo|prev", tr("Solo the previous layer ({LB} held)") },
+        { GamepadRole::LS, "blind", "blind|toggle",
+          tr("Blind: the rig muted, the screens live ({LB} held; Design)") },
+    };
+    for (const Extra &x : extras)
+    {
+        // Never over a control of the console's Run role.
+        if (PadRun::actionFor(x.role) != PadRun::NoAction)
+            continue;
+        QJsonObject e;
+        e[QStringLiteral("do")] = QLatin1String(x.what);
+        e[QStringLiteral("cmd")] = QLatin1String(x.command);
+        e[QStringLiteral("remote")] = true;
+        e[QStringLiteral("label")] = PadNames::expand(x.label, PadNames::Xbox);
+        map[GamepadRole::key(x.role)] = e;
+    }
     return map;
 }
 
@@ -366,7 +524,43 @@ QByteArray WebAccessRun::stateJson() const
     o[QStringLiteral("remote")] = remoteAllowed();
     o[QStringLiteral("pin")] = pinRequired();
     o[QStringLiteral("mode")] = m_doc->mode() == Doc::Operate ? QStringLiteral("LIVE") : QStringLiteral("DESIGN");
-    o[QStringLiteral("teaching")] = m_doc->teachingSettings() != nullptr && m_doc->teachingSettings()->enabled();
+    const TeachingSettings *teach = m_doc->teachingSettings();
+    o[QStringLiteral("teaching")] = teach != nullptr && teach->enabled();
+    const bool blind = m_doc->inputOutputMap()->outputInhibited();
+    o[QStringLiteral("blind")] = blind;
+    if (teach != nullptr && teach->enabled())
+    {
+        // What the instructor's flags hold now, as the console's footer says it.
+        QJsonObject held;
+        held[QStringLiteral("output")] = teach->holdsOutput();
+        held[QStringLiteral("showControl")] = teach->showControlHeldBecause(blind);
+        held[QStringLiteral("last")] = m_lastHeld;
+        o[QStringLiteral("held")] = held;
+    }
+    const QList<SoloLayer> layers = soloLayers();
+    if (!layers.isEmpty())
+    {
+        const quint32 cueId = st->previewedCue();
+        QJsonObject pv;
+        if (const ShowTree::Cue *c = st->cue(cueId))
+            pv[QStringLiteral("name")] = c->name;
+        if (const CueList *l = st->listOfCue(cueId))
+            pv[QStringLiteral("num")] = st->cueNumber(*l, l->indexOf(cueId));
+        QJsonArray la;
+        int solo = -1;
+        for (const SoloLayer &l : layers)
+        {
+            QJsonObject lo;
+            lo[QStringLiteral("id")] = int(l.id);
+            lo[QStringLiteral("name")] = l.name;
+            la.append(lo);
+            if (l.id == st->previewSoloLayer())
+                solo = int(l.id);
+        }
+        pv[QStringLiteral("layers")] = la;
+        pv[QStringLiteral("solo")] = solo;
+        o[QStringLiteral("preview")] = pv;
+    }
     o[QStringLiteral("hasList")] = ch != nullptr;
     o[QStringLiteral("api")] = 1;
     o[QStringLiteral("blackout")] = m_doc->inputOutputMap()->blackout();

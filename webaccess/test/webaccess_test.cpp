@@ -2036,6 +2036,7 @@ void WebAccess_Test::aSliderTopLabelIsEscapedInThePage()
 #include "qlcfixturehead.h"
 #include "showstatus.h"
 #include "padrun.h"
+#include "teachingsettings.h"
 
 namespace {
 /* A 540/270 spot: pan, tilt, dimmer, placed at (x, y) metres, hung at 5 m
@@ -2241,8 +2242,18 @@ void WebAccess_Test::theRunPageMapIsPadRun()
     // The console's words, its {LB} written out.
     QVERIFY(map.value("a").toObject().value("label").toString().contains(QLatin1String("LB")));
     QVERIFY(!map.value("a").toObject().value("label").toString().contains(QLatin1Char('{')));
+    // The remote's own Blind and Solo (Q229): never over a control of the
+    // console's Run role, each with the word it sends.
+    QCOMPARE(map.value("back").toObject().value("cmd").toString(), QString("solo|toggle"));
+    QCOMPARE(map.value("dpad_right").toObject().value("cmd").toString(), QString("solo|next"));
+    QCOMPARE(map.value("dpad_left").toObject().value("cmd").toString(), QString("solo|prev"));
+    QCOMPARE(map.value("ls").toObject().value("cmd").toString(), QString("blind|toggle"));
+    QVERIFY(map.value("ls").toObject().value("label").toString().contains(QLatin1String("LB")));
     for (const QString &role : map.keys())
-        QCOMPARE(PadRun::actionFor(GamepadRole::fromProfile(role, QString())) == PadRun::NoAction, false);
+    {
+        const bool remote = map.value(role).toObject().value("remote").toBool();
+        QCOMPARE(PadRun::actionFor(GamepadRole::fromProfile(role, QString())) == PadRun::NoAction, remote);
+    }
 }
 
 void WebAccess_Test::theFocusRemoteWorksTheRunningSession()
@@ -2511,4 +2522,241 @@ void WebAccess_Test::theRunStateCarriesShowStatusAndFocus()
     st = QJsonDocument::fromJson(run.stateJson()).object();
     QVERIFY(st.value("focus").toBool());
     m_doc->programmer()->focusSession()->stop();
+}
+
+/*****************************************************************************
+ * Blind and Solo from the remote (Q229), Teaching's instructor flags
+ *****************************************************************************/
+
+void WebAccess_Test::blindFromTheRemoteIsDesignsMute()
+{
+    runShow();
+    InputOutputMap *io = m_doc->inputOutputMap();
+    QCOMPARE(m_doc->mode(), Doc::Design);
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+    QVERIFY(!stateObject(heard).value(QStringLiteral("blind")).toBool());
+
+    // The show's switch first, as GO.
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|blind|toggle"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|blind|refused")));
+    QVERIFY(!io->outputInhibited());
+    m_doc->operateSettings()->setRemoteGo(true);
+
+    // Design: the console's Blind -- the rig muted -- and the page is told.
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|blind|toggle"));
+    QTRY_VERIFY(io->outputInhibited());
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|blind|ok")));
+    QTRY_VERIFY(stateObject(heard).value(QStringLiteral("blind")).toBool());
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|blind|off"));
+    QTRY_VERIFY(!io->outputInhibited());
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|blind|on"));
+    QTRY_VERIFY(io->outputInhibited());
+    // Blind set at the console shows on the page too.
+    io->setOutputInhibited(false);
+    QTRY_VERIFY(!stateObject(heard).value(QStringLiteral("blind")).toBool());
+
+    // Operate: the console's Blind is its screens' view, never a mute.
+    m_doc->setMode(Doc::Operate);
+    heard.clear();
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|blind|on"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|blind|operate")));
+    QVERIFY(!io->outputInhibited());
+    m_doc->setMode(Doc::Design);
+
+    // The PIN, as for GO; a word it doesn't know: nothing.
+    m_doc->operateSettings()->setPin(QStringLiteral("2468"));
+    heard.clear();
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|blind|on"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|blind|needpin")));
+    QVERIFY(!io->outputInhibited());
+    WebAccessRun run(m_doc);
+    QCOMPARE(run.blind(QStringLiteral("sideways"), true), WebAccessRun::Unknown);
+    QCOMPARE(run.blind(QStringLiteral("on"), true), WebAccessRun::Done);
+    QVERIFY(io->outputInhibited());
+    io->setOutputInhibited(false);
+    dropPage(ws);
+}
+
+void WebAccess_Test::soloFromTheRemotePlaysOneLayerOfThePreview()
+{
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    ShowTreeController *st = m_doc->showTree();
+    Fixture *a = dimmer(m_doc, QStringLiteral("SoloA"));
+    Fixture *b = dimmer(m_doc, QStringLiteral("SoloB"));
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer);
+    full->setName(QStringLiteral("Full"));
+    full->setValue(255);
+    m_doc->addPalette(full);
+    const quint32 cueId = st->cueOfStep(st->productions().first().lists.first().id, 0, -1);
+    QVERIFY(cueId != ShowTree::invalidId());
+    auto layer = [&](Fixture *fx, const QString &name) {
+        ShowTree::Target t;
+        t.fixtures = { fx->id() };
+        const quint32 id = st->addLayer(cueId, t, name);
+        st->setLayerLook(cueId, id, st->lookForPalette(full->id()));
+        return id;
+    };
+    const quint32 towers = layer(a, QStringLiteral("Towers"));
+    const quint32 usts = layer(b, QStringLiteral("USTs"));
+
+    WebAccessRun run(m_doc);
+    // Nothing in the preview: nothing to solo, and the state offers none.
+    QCOMPARE(run.solo(QStringLiteral("toggle"), true), WebAccessRun::NothingToDo);
+    QVERIFY(!QJsonDocument::fromJson(run.stateJson()).object().contains(QStringLiteral("preview")));
+
+    // The cue in the preview: its layers, by name, none soloed.
+    st->pickCue(cueId);
+    QJsonObject pv = QJsonDocument::fromJson(run.stateJson()).object().value(QStringLiteral("preview")).toObject();
+    const QJsonArray layers = pv.value(QStringLiteral("layers")).toArray();
+    QCOMPARE(layers.count(), 2);
+    QCOMPARE(layers.at(0).toObject().value(QStringLiteral("name")).toString(), QStringLiteral("Towers"));
+    QCOMPARE(pv.value(QStringLiteral("solo")).toInt(), -1);
+    QCOMPARE(pv.value(QStringLiteral("name")).toString(), QStringLiteral("Open"));
+
+    // Toggle: the first layer, by the Show Tree's own Solo; next / prev walk.
+    QCOMPARE(run.solo(QStringLiteral("toggle"), true), WebAccessRun::Done);
+    QCOMPARE(st->previewSoloLayer(), towers);
+    QCOMPARE(run.solo(QStringLiteral("next"), true), WebAccessRun::Done);
+    QCOMPARE(st->previewSoloLayer(), usts);
+    QCOMPARE(run.solo(QStringLiteral("next"), true), WebAccessRun::Done);     // wraps
+    QCOMPARE(st->previewSoloLayer(), towers);
+    QCOMPARE(run.solo(QStringLiteral("prev"), true), WebAccessRun::Done);
+    QCOMPARE(st->previewSoloLayer(), usts);
+    pv = QJsonDocument::fromJson(run.stateJson()).object().value(QStringLiteral("preview")).toObject();
+    QCOMPARE(quint32(pv.value(QStringLiteral("solo")).toInt()), usts);
+    QCOMPARE(run.solo(QStringLiteral("toggle"), true), WebAccessRun::Done);
+    QCOMPARE(st->previewSoloLayer(), ShowTree::invalidId());
+    // By id; a layer not of this cue is nothing.
+    QCOMPARE(run.solo(QString::number(towers), true), WebAccessRun::Done);
+    QCOMPARE(st->previewSoloLayer(), towers);
+    QCOMPARE(run.solo(QStringLiteral("99999"), true), WebAccessRun::NothingToDo);
+    QCOMPARE(run.solo(QStringLiteral("off"), true), WebAccessRun::Done);
+    QCOMPARE(st->previewSoloLayer(), ShowTree::invalidId());
+    QCOMPARE(run.solo(QStringLiteral("loud"), true), WebAccessRun::Unknown);
+
+    // Over the socket, under the same rules as GO; Operate: refused, as the tree's.
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|solo|next"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|solo|ok")));
+    QCOMPARE(st->previewSoloLayer(), towers);
+    m_doc->operateSettings()->setRemoteGo(false);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|solo|next"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|solo|refused")));
+    QCOMPARE(st->previewSoloLayer(), towers);
+    m_doc->operateSettings()->setRemoteGo(true);
+    st->setPreviewSolo(ShowTree::invalidId(), ShowTree::invalidId());
+    m_doc->setMode(Doc::Operate);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|solo|toggle"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|solo|operate")));
+    QCOMPARE(st->previewSoloLayer(), ShowTree::invalidId());
+    QVERIFY(run.soloLayers().isEmpty());
+    m_doc->setMode(Doc::Design);
+    dropPage(ws);
+    st->stopPreview();
+}
+
+void WebAccess_Test::teachingFlagsHoldTheRemotesGoAsTheConsoles()
+{
+    /* Teaching's instructor flags act where every GO goes through
+       (ShowControl::sendOut()): a GO from the remote is held exactly as the
+       console's own, Blind from the remote included, and the page is told
+       what and why. */
+    Chaser *list = runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    ShowControl *sc = m_doc->showControl();
+    QList<ShowControl::OutMessage> out;
+    sc->setOutSender([&out](const ShowControl::OutMessage &m) { out << m; return true; });
+    ShowControl::OutSettings o;
+    o.oscEnabled = true;
+    o.oscHost = QStringLiteral("127.0.0.1");
+    sc->setOutSettings(o);
+    TeachingSettings *t = m_doc->teachingSettings();
+    WebAccessRun run(m_doc);
+    auto state = [&]() { return QJsonDocument::fromJson(run.stateJson()).object(); };
+    auto go = [&]() {
+        for (int i = 0; i < 3; ++i)
+            m_doc->masterTimer()->timerTick();
+        return run.command(QStringLiteral("go"), true);
+    };
+
+    // Not a Teaching show: a remote GO sends, and nothing is said of holding.
+    QCOMPARE(go(), WebAccessRun::Done);
+    QCOMPARE(out.count(), 1);
+    QVERIFY(!state().contains(QStringLiteral("held")));
+
+    // Teaching, the defaults: output and show control held; the GO plays, its
+    // trigger does not go out, and the page says which cue.
+    t->setEnabled(true);
+    QVERIFY(m_doc->inputOutputMap()->teachingHold());
+    QJsonObject held = state().value(QStringLiteral("held")).toObject();
+    QVERIFY(held.value(QStringLiteral("output")).toBool());
+    QCOMPARE(held.value(QStringLiteral("showControl")).toString(), QStringLiteral("Teaching"));
+    QCOMPARE(go(), WebAccessRun::Done);
+    QCOMPARE(out.count(), 1);
+    QVERIFY(list->isRunning());
+    held = state().value(QStringLiteral("held")).toObject();
+    QVERIFY2(held.value(QStringLiteral("last")).toString().contains(QStringLiteral("not sent")),
+             qPrintable(held.value(QStringLiteral("last")).toString()));
+
+    // The instructor lets show control through: the remote's next GO sends.
+    t->setAllowShowControl(true);
+    QCOMPARE(state().value(QStringLiteral("held")).toObject().value(QStringLiteral("last")).toString(), QString());
+    QCOMPARE(go(), WebAccessRun::Done);
+    QCOMPARE(out.count(), 2);
+
+    // ... and holds it in Blind: Blind from the remote, then a remote GO -- held.
+    t->setHoldShowControlInBlind(true);
+    QCOMPARE(run.blind(QStringLiteral("on"), true), WebAccessRun::Done);
+    QCOMPARE(state().value(QStringLiteral("held")).toObject().value(QStringLiteral("showControl")).toString(),
+             QStringLiteral("Blind (Teaching)"));
+    QCOMPARE(go(), WebAccessRun::Done);
+    QCOMPARE(out.count(), 2);
+    QCOMPARE(run.blind(QStringLiteral("off"), true), WebAccessRun::Done);
+    QCOMPARE(go(), WebAccessRun::Done);
+    QCOMPARE(out.count(), 3);
+
+    // Nothing of Teaching locks Blind or Solo on the console, so nothing does
+    // on the remote: both answer as in any show.
+    QCOMPARE(run.blind(QStringLiteral("toggle"), true), WebAccessRun::Done);
+    QCOMPARE(run.blind(QStringLiteral("toggle"), true), WebAccessRun::Done);
+    QCOMPARE(run.solo(QStringLiteral("off"), true), WebAccessRun::Done);
+
+    t->setEnabled(false);
+    QVERIFY(!state().contains(QStringLiteral("held")));
+    sc->setOutSender(nullptr);
+    list->stop(FunctionParent::master());
+}
+
+void WebAccess_Test::theRemoteCannotChangeWhatTeachingHolds()
+{
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    TeachingSettings *t = m_doc->teachingSettings();
+    t->setEnabled(true);
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+    QVERIFY(stateObject(heard).value(QStringLiteral("teaching")).toBool());
+    // No word of the page's turns a flag: they are the instructor's, behind the PIN.
+    for (const char *w : { "QLC+RUN|teaching|off", "QLC+RUN|allowOutput|1", "QLC+RUN|showControl|allow",
+                           "QLC+FOCUS|teaching|off", "QLC+RUN|held|off" })
+        ws->sendTextMessage(QLatin1String(w));
+    QTest::qWait(200);
+    QVERIFY(t->enabled());
+    QVERIFY(!t->allowOutput());
+    QVERIFY(!t->allowShowControl());
+    QVERIFY(m_doc->inputOutputMap()->teachingHold());
+    t->setEnabled(false);
+    dropPage(ws);
 }
