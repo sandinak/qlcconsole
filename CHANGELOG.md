@@ -10,20 +10,26 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
-## [Unreleased]
+## [0.4.3] - 2026-11-10
 
-### Fixed
+qlcconsole 0.4.3 is a stable release after 0.4.1. 0.4.2 was built but never
+published, so everything in it ships here, together with a fix for a freeze
+when a playing scene is deleted. The changes you will notice first: a follow
+spot is framed from the person's height (Head & Shoulders, Waist Up, Full
+Body) and opened or closed live from the D-pad, with its own top speed and a
+fine stick; the plot's trusses, pipes, walls and platforms stretch and turn by
+hand; a layer's Spread / Grouping / Cross rows can be kept with **Save as
+Formation…**; the Show Tree's Library has an "In this song" section; effect
+rows read as names, not sentences; Ctrl/⌘+G makes a group at once; WLEDs are
+found on the network and patched with a right-click; and the Lighting Studio
+editors and dialogs fit a 1024 x 640 laptop. Deleting a playing scene whose look held the only running
+effect no longer freezes the app, and the course gains Level 3 lessons. Like
+0.4.1, it is built on QLC+ 4.14.4, and a .qxw saved here is still checked
+against QLC+ 4.14.4 itself.
 
-- **Words gate reads every button and action text.** The menu-words test now also catches texts set on any declared button or action (not just `...Btn` names) and on stack buttons; it found three off-canon labels, now Title Case: **Lock Item** / **Unlock Item** (Show Manager), **… — Would Loop** and **… — In Its Own Window** (menu lines).
-- **Screen-walk leftovers.** Add Fixture's model column takes the width the Source column doesn't need, so "Generic RGBW" is no longer cut short; the Build bar's reply wraps under the line instead of widening the window.
-- **The footer keeps what it shows whole at 1024.** Fitting the footer now counts the room a squeezed chip's spacing takes, so the readiness chip ("No outputs: preview only · 1 to check") is no longer cut at the smallest window with the Follow chip on; the Grand Master steps aside first, as its lower place in the footer's order says.
-- **The Workbench editor pane narrows again.** A scene's Looks list asked for more room than its names and fades need, so the editor pane could not be dragged narrower (Windows: past its limit). It now asks for fourteen characters of name beside the fades and no more; the fade columns are headed **In** and **Out**.
-- **A crash in a test build without AI Assist.** The Build command bar is the same size with and without AI Assist built in; a program built without it (a test) wrote past it.
-### Added
-
-- **⇧⌘N (New here) works in Build ▸ Palettes and the Lighting Studio.** Palettes: a new palette of the kind you are on, in the folder you are on, open in the Workbench with its name ready to type (*New Gobo Palette in Act 1*). Lighting Studio: a Target Position at the pointer with its Aim palette, selected and ready to name. Same Edit ▸ New item and key, one undo step each.
 ### New
 
+- **A follow spot's size, live from the pad, and framed from the person's height.** The Followspot effect has a **Framing** -- **Head & Shoulders**, **Waist Up**, **Full Body** or **Custom** (the **Width on Subject**, which was Size on Subject) -- sized from the followed Person's Height, each head from its own throw, steepness and lens, and aimed so the top of the beam stays just over the head (a Custom width aims that way too); **Framing Size** makes it looser or tighter. While it plays, **D-pad Right and Left** open and close the beam a step at a time -- the Framing Size, the Width on Subject, or the beam angle with no size -- never past the lenses (*· Width 9' (widest)*); the footer says it in **Settings → Units**. **Save Positions** keeps it in the look (Workbench or running cue), as one undo step, the Framing kept (*Saved: Waist Up at 110%*). Rows the Framing decides are greyed with the reason, and the Followspot editor now fits its pane at 1024 and 1280 wide (rows wrap under their names). See [How big: framing and the iris](docs/features/stage-targets.md#how-big-framing-and-the-iris).
 - **Plot handles: pipes, and a line's end swings.** A free electric
   (horizontal pipe) gets end handles and the knob, as a truss has. Drag the
   end of a truss, pipe or wall and that end goes where you put it while the
@@ -36,41 +42,6 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   A locked object you select shows its outline in red and what holds it
   instead of handles. See
   [Stretch and turn by hand](docs/features/lighting-studio.md#stretch-and-turn-by-hand).
-
-### Fixed
-
-- **The ruler's corner follows Settings ▸ Units.** It said "(m)" on a metre
-  grid with feet chosen; now it names your unit when a grid square is one of
-  it, and otherwise what a square is in your unit ("SR | SL (1 = 3' 3 3/8")").
-- **The plot's pointer readout is whole in a narrow window.** It sits at the
-  right of the footer, outside the part that scrolls, and is as wide as its
-  longest reading in feet and inches (it was cut to "Y: 8' 3"). Where the
-  footer has no room for it beside View and the turn button (a 1024-wide
-  window), it takes a line of its own under them, so they stay whole.
-- **Fits a 1024 x 640 laptop.** The Lighting Studio editors (Tower, Truss, Platform, Pipe) no longer run off the bottom of the screen: their two side columns scroll and **OK / Cancel** stay in view; so do Preferences, the Connection editor, Head types and the Studio group editor, and the Patch dialog's Place row takes two lines. In the editors nothing is cut any more: **Profile… / Measure… / Copy to Same Fixtures…** sit under the Max draw box, a tower's **On sides** boxes are two by two, its Faces and a truss's Sock put *from / to* on a line of their own, the Collision boxes read **Solid (no overlap)** and **Stackable (sits on top)** (the rest in their tooltips), and the plot's *stage right* / *stage left* labels move clear of the "max" height and the dimensions. Every **+ Effect ▾**-style button (a menu that opens on a click) now has room for its arrow beside the text, app-wide, and so does the main bar's **Stop All** (hold for its fade menu); Build's **Save Positions** now sits before **More**, so at 1024 wide it stays on the bar and More folds into » first. The Effects navigator's filter keeps room to read **Filter…**, the speed masters' beat lights show as soon as the panel opens, and a tower's new-shelf height shows its whole value. In the new scrolling columns the mouse wheel scrolls, also over a number box or a choice: only the one you are typing in takes the wheel. Scene group looks keeps room for a look's name, and the Show Tree gives an empty info column's room to the names until you set its width by hand (a layer no longer reads "Tow…" at 1024 wide). `layoutsanity_test` checks each of these (UX-34, UX-36).
-### Added
-
-- **A follow spot's size, live from the pad, and framed from the person's height.** The Followspot effect has a **Framing** -- **Head & Shoulders**, **Waist Up**, **Full Body** or **Custom** (the **Width on Subject**, which was Size on Subject) -- sized from the followed Person's Height, each head from its own throw, steepness and lens, and aimed so the top of the beam stays just over the head (a Custom width aims that way too); **Framing Size** makes it looser or tighter. While it plays, **D-pad Right and Left** open and close the beam a step at a time -- the Framing Size, the Width on Subject, or the beam angle with no size -- never past the lenses (*· Width 9' (widest)*); the footer says it in **Settings → Units**. **Save Positions** keeps it in the look (Workbench or running cue), as one undo step, the Framing kept (*Saved: Waist Up at 110%*). Rows the Framing decides are greyed with the reason, and the Followspot editor now fits its pane at 1024 and 1280 wide (rows wrap under their names). See [How big: framing and the iris](docs/features/stage-targets.md#how-big-framing-and-the-iris).
-- Deleting a playing scene that held the only running effect froze the app.
-### Tooling
-
-- **The course can't name a button the app doesn't have.** `tools/check-course-ui-names.py` (in the gate and CI, next to the
-  doc-link check) reads the bold UI names and menu paths in every lesson (**File ▸ Open**, **Add Fixture…**), case and
-  trailing "…" included, and fails on any with no matching string in the app, listing file:line and the nearest app string.
-  Keys, show content and real-world names are in its commented allowlist; stale text found but not yet fixed is in two
-  short lists in the script.
-- The Patch dialog's Mode and Universe columns fit their longest name: a mode like "Effect (15ch)" was cut to "Effect (15ch".
-- The Eos import's Special circuits page shows its whole explanation, wrapped, instead of cutting it off mid-sentence.
-
-### Added
-
-- Course: Level 3 lessons 3.1 (DMX, universes and patching), 3.2 (fixtures and definitions) and 3.4 (building the rig), checked by the course test, with a Part 3 for the real rig; pictures for 3.1 to 3.4, 3.7 and 3.10.
-- **The course shows no longer trip Show Review's MOV-08, and the course teaches the mark.** Lesson 1.3 now has a step that aims the AT-Spots in the Pose at level Out, and Lesson 2.5 one that does the same for the Truss-Spots in 1.0.6 Dance Break, so the movers turn in the dark before the Solo and Fan open them. The shipped shows are rebuilt from the lessons' steps (course test) and `showreviewshows_test` no longer expects MOV-08.
-
-## [0.4.2] - 2026-11-09
-
-### Added
-
 - **Effect parameters read as names, not sentences.** In the Show Tree's effect rows (and the Look Editor) a Follow Spot row says **Follow Mode: Hold Last Position** (not "On scene change: hold the last beam position, or snap to the bound followTarget"); the full sentence is the tooltip. Scripts can give a parameter a `label` and its list a `valueLabels`; a long label or value wraps instead of running off the edge. A test guards every bundled effect (UX-77).
 - **The Library has an "In this song" section.** Above "In this cue list": what the song the selected cue is in uses, most used first (*Towers ×6*), to keep a song's context; it follows the selection to the next song.
 - **Ctrl/⌘+G groups at once.** No name prompt: the group is made as "Group 3" and its name is ready to type over in Plot layers. **Snapping is the same everywhere**: a bar's rotation knob snaps to 15° by default and **Alt/⌥** frees it. In Plot layers the plot's folders are now called **groups**.
@@ -78,7 +49,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   or the cue's **Line ⋯ ▸ Formation** asks a name (suggested from the values, e.g. *Pairs crossed*), makes the palette with exactly
   the rows that are set, links the layer to it and clears its own rows, in one undo step. Typed: `Towers formation save "Pairs crossed"`.
   Greyed when no row is set. See [Formation palettes](docs/features/show-tree.md#formation-palettes).
-
+- **⇧⌘N (New here) works in Build ▸ Palettes and the Lighting Studio.** Palettes: a new palette of the kind you are on, in the folder you are on, open in the Workbench with its name ready to type (*New Gobo Palette in Act 1*). Lighting Studio: a Target Position at the pointer with its Aim palette, selected and ready to name. Same Edit ▸ New item and key, one undo step each.
 - **Name the gobo you loaded.** Load your own glass in a light (the moon in AT-2 3's slot 3) and name it in
   **Gobo Wheels…** (**Name…**, a picture optional): that light's slot is called "Moon" in the Look Editor, the channel
   console and the gobo look's lines, and a Gobo look named "Moon" finds it in whichever slot each light carries it.
@@ -86,15 +57,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   reason, when their wheels differ). Show Review **FIX-19** names the lights in a "Moon" look that have no moon loaded.
   See [Gobos and prisms](docs/features/lighting-studio.md).
 - **The footer names fixtures cues use that have no address.** "2 fixtures in cues have no address", **Patch…** opens them; a staged fixture nothing uses no longer nags (the Show Review still notes it).
-
 - **A fixture in no group is in the Show Tree's Library.** Under All, **Ungrouped** lists the patched ones (a WLED just added, a spare; a fixture still in the inventory is not listed), found by
+  name or model in the filter; drag one onto a cue for a layer on just that fixture.
+  It leaves the list once it joins a group.
 - **Each WLED palette shows its colours.** An effect's palette is still picked by name, but every name now has a strip
   of the colours it would use, in the list and on the closed box. The strips are the device's own (read once when it first
   answers, kept by its hardware address, so they work with it off), else WLED's built-in palettes; Color 1, Colors 1&2 and
   the like follow the look's colours 1-3. See [WLED effects](docs/features/build.md#wled-effects).
-- **A fixture in no group is in the Show Tree's Library.** Under All, **Loose fixtures** lists them (a WLED just added, a spare), found by
-  name or model in the filter; drag one onto a cue for a layer on just that fixture.
-  It leaves the list once it joins a group.
 - **WLEDs found on the network, patched with a right-click.** WLEDs
   announce themselves (mDNS); the ones the show doesn't have are greyed in
   the Fixture Manager's Inventory ("Staff L — WLED (172.18.2.100) · 50
@@ -118,7 +87,6 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   WLED to Multi RGB/RGBW, its universe and address, streams on, every segment,
   full brightness and a 2.5 s timeout; the footer finds one whose universes
   don't reach it, and the same device added both ways is said, never flipped.
-
 - **Build's Workbench points to where a look is recorded.** Under Play, one
   quiet grey line, **Record it as a cue in the Show Tree ▸**, shows while a
   look with something in it is loaded (a scene with levels or looks, or any
@@ -127,8 +95,6 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   focused (UX-61, flow F-04).
 - **A Formation dropped on selected cues sets them all.** Drop it on one of several selected cues in the Show Tree: every one takes it, as one undo, as Blocking already did.
 - **Blocking in the Library.** The Show Tree's Library lists **Blocking** (Default and each saved set) under All: drag one onto a cue, or onto the selected cues, and it uses it from there on, exactly as the cue page's Blocking does. See [Blocking](docs/features/show-tree.md#blocking).
-### New
-
 - **Stretch and turn stage features by hand.** Select a platform, a truss or
   a piece of scenery on the plot (Top) and it has a box at each end and side
   to stretch it and a knob to turn it; a group picked together turns as one.
@@ -160,9 +126,72 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   number of LEDs than its fixture has and sets it, asked on its own with a
   warning. Both ask first, show they are working, and are refused in a
   Teaching show that holds real output. No need for the WLED's own web page.
+- **The follow spot's speed on the stage, a fine stick and a speed step.**
+  The Followspot effect has **Top Speed** (how fast the subject moves at
+  full stick, in Settings ▸ Units: 6 ft/s, a brisk walk, by default),
+  **Fine Stick** (the right stick moves it at a share of that, 20% by
+  default, and adds to the left) and **Response Curve** (fine near the
+  centre, Top Speed only at full throw). **D-pad Up / Down** step the speed
+  ×0.25 … ×2 while it plays, and the footer's Follow chip says *Speed ×1.5*.
+  Effect parameter rows in the Look editor are Title Case.
+- **Free Spin: a movement effect for heads that rotate endlessly on pan or
+  tilt.** Set Axis, Speed (the head's slowest to fastest, or RPM where its
+  definition gives them), Direction (clockwise, counter-clockwise,
+  alternate fixtures, or bounce every N seconds), Stagger, Fade In and what
+  it does when it stops (hold, or return to the look's position) -- no more
+  raw DMX values in the rotation band of a pan channel. Each fixture gets
+  its own value from its definition; heads with no free rotation are left
+  to the look, and the effect picker lists it only when one of yours can.
+- **Wands wound with a fairy string.** A wand's properties gain **String
+  length** (how long the lit string is), **Staff diameter** and **First LED
+  at** (Top or Bottom). Auto turns now come from the real string: 50 LEDs on
+  16 ft round a 5 ft staff shows about 58 turns, not half a turn. The Turns
+  field shows the number Auto worked out.
+- **Sprinkle loops, a pixel path for a fairy string over a fountain's
+  gap**: back and forth between the inner and outer wall tops at each
+  point, drooping in between, then along the wall to the next point.
+  Points and Spans per point lay it out evenly; **Edit Spans…** takes a
+  table of which LEDs make each span and where it hangs; **Read Segments**
+  makes the spans from a WLED's own segments. Help: Lighting Studio ▸
+  Sprinkle loops, with how to set up the WLED's segments.
+- **A computer key can fire a hit, a cue, a cue list or a scene.** Learn
+  Trigger… now also learns a key on the keyboard, with its modifiers
+  ("Key · F5"), with the same press modes as a MIDI control, listed in the
+  Control Map and saved with the show. A key fires in Operate, and in
+  Design while what it fires is armed: in the Run tab's cue list, or
+  selected in the Show Tree. Never while a text field, the command line or
+  an editor has the keyboard; keys the app or a Virtual Console widget
+  already uses are refused, saying why.
+- Show Tree: a cue list whose show has no Numbering yet now says so on its own
+  page, beside + Section: "Its cue numbers look like Show.Part.Iteration. Use
+  it", or where to set Numbering when nothing looks like a scheme. + Section is
+  greyed, with the reason, until a scheme is set.
+
+### Changed
+
+- **A par in a fountain's gap washes the inner wall**: dropped between the
+  outer and inner wall, a fixed light is aimed at the nearest point of the
+  inner wall, half way up, instead of up at the flame, and no longer
+  colours the silk. Inside the inner wall it still uplights the flame.
 
 ### Fixed
 
+- **Deleting a playing scene no longer freezes the app.** Deleting a playing scene whose look held the only running JS effect froze the UI and DMX output; it now stops cleanly.
+- **Words gate reads every button and action text.** The menu-words test now also catches texts set on any declared button or action (not just `...Btn` names) and on stack buttons; it found three off-canon labels, now Title Case: **Lock Item** / **Unlock Item** (Show Manager), **… — Would Loop** and **… — In Its Own Window** (menu lines).
+- **Screen-walk leftovers.** Add Fixture's model column takes the width the Source column doesn't need, so "Generic RGBW" is no longer cut short; the Build bar's reply wraps under the line instead of widening the window.
+- **The footer keeps what it shows whole at 1024.** Fitting the footer now counts the room a squeezed chip's spacing takes, so the readiness chip ("No outputs: preview only · 1 to check") is no longer cut at the smallest window with the Follow chip on; the Grand Master steps aside first, as its lower place in the footer's order says.
+- **The Workbench editor pane narrows again.** A scene's Looks list asked for more room than its names and fades need, so the editor pane could not be dragged narrower (Windows: past its limit). It now asks for fourteen characters of name beside the fades and no more; the fade columns are headed **In** and **Out**.
+- **The ruler's corner follows Settings ▸ Units.** It said "(m)" on a metre
+  grid with feet chosen; now it names your unit when a grid square is one of
+  it, and otherwise what a square is in your unit ("SR | SL (1 = 3' 3 3/8")").
+- **The plot's pointer readout is whole in a narrow window.** It sits at the
+  right of the footer, outside the part that scrolls, and is as wide as its
+  longest reading in feet and inches (it was cut to "Y: 8' 3"). Where the
+  footer has no room for it beside View and the turn button (a 1024-wide
+  window), it takes a line of its own under them, so they stay whole.
+- **Fits a 1024 x 640 laptop.** The Lighting Studio editors (Tower, Truss, Platform, Pipe) no longer run off the bottom of the screen: their two side columns scroll and **OK / Cancel** stay in view; so do Preferences, the Connection editor, Head types and the Studio group editor, and the Patch dialog's Place row takes two lines. In the editors nothing is cut any more: **Profile… / Measure… / Copy to Same Fixtures…** sit under the Max draw box, a tower's **On sides** boxes are two by two, its Faces and a truss's Sock put *from / to* on a line of their own, the Collision boxes read **Solid (no overlap)** and **Stackable (sits on top)** (the rest in their tooltips), and the plot's *stage right* / *stage left* labels move clear of the "max" height and the dimensions. Every **+ Effect ▾**-style button (a menu that opens on a click) now has room for its arrow beside the text, app-wide, and so does the main bar's **Stop All** (hold for its fade menu); Build's **Save Positions** now sits before **More**, so at 1024 wide it stays on the bar and More folds into » first. The Effects navigator's filter keeps room to read **Filter…**, the speed masters' beat lights show as soon as the panel opens, and a tower's new-shelf height shows its whole value. In the new scrolling columns the mouse wheel scrolls, also over a number box or a choice: only the one you are typing in takes the wheel. Scene group looks keeps room for a look's name, and the Show Tree gives an empty info column's room to the names until you set its width by hand (a layer no longer reads "Tow…" at 1024 wide). `layoutsanity_test` checks each of these (UX-34, UX-36).
+- The Patch dialog's Mode and Universe columns fit their longest name: a mode like "Effect (15ch)" was cut to "Effect (15ch".
+- The Eos import's Special circuits page shows its whole explanation, wrapped, instead of cutting it off mid-sentence.
 - **A rare AI Assist crash.** Ollama answering the unload after AI Assist had been closed could crash the app.
 - **A turned plot reads right.** Turned 90°, 180° or 270°, the Lighting Studio plot keeps every label level and at the targets' size: a blocking's "(Default)" names no longer lie on their side at three times the size, the fixture-count bubbles' numbers, a shape handle's readout, the stairs' "UP", a free string's LED numbers and the light-footprint names stay upright, and the revealed-fixture tags stay a column. The follow spot's ring, lines and "following ·" label stay on the subject (they were left where the unturned plot had them, off the stage), in a blocking too.
 - **Running the tests no longer switches the app to metres.** Engine test programs wrote Settings ▸ Units (and any other setting) into the real preferences on every Mac that ran the gate; they now keep their own, as the UI tests do. If target heights still read "m", set Settings ▸ Units back to feet and inches once.
@@ -189,7 +218,6 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   rows no longer stop the Show Tree or Workbench preview as they leave the
   tab: you see the cue you are building where the jump took you. Opening a
   scene from Used By still hands the preview to Build's Workbench.
-
 - **Stop all leaves nothing running (UX-70).** It stopped the functions
   but every non-intensity channel kept its last value: a fog machine kept
   pumping, gobos and WLED effects stayed. Stop all (the button, ⌘⇧Esc, a
@@ -229,7 +257,6 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Show Tree and Show readiness's Fix… say why they are greyed. The Library's
   "Functions (played as they are)" row is "Functions", with the rest in its
   tooltip.
-
 - **A WLED snaps with the stage (UX-73).** On a snap cue a WLED on its
   own API lagged the DMX fixtures by about 150 to 340 ms: it waited for a
   100 ms send tick, then glided. A change now goes when the engine writes
@@ -366,19 +393,6 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   remembered per controller. The PlayStation profile's deadzone is 0.08,
   and a joystick with no profile gets 0.08.
 - **Formation palettes have their own Library heading.** They were missing from the Library's Palettes list (no heading took them); they now sit under **Formation**, ready to drag onto a cue or a layer, and a Save as Formation… shows there at once.
-### New
-
-- **The follow spot's speed on the stage, a fine stick and a speed step.**
-  The Followspot effect has **Top Speed** (how fast the subject moves at
-  full stick, in Settings ▸ Units: 6 ft/s, a brisk walk, by default),
-  **Fine Stick** (the right stick moves it at a share of that, 20% by
-  default, and adds to the left) and **Response Curve** (fine near the
-  centre, Top Speed only at full throw). **D-pad Up / Down** step the speed
-  ×0.25 … ×2 while it plays, and the footer's Follow chip says *Speed ×1.5*.
-  Effect parameter rows in the Look editor are Title Case.
-
-### Fixed
-
 - **The follow spot moves smoothly and the same speed both ways.** It used
   to move the subject on its own 20 ms timer while DMX went out on
   another, so about a quarter of the frames held still and a quarter
@@ -391,68 +405,30 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   a second (513°/s at full stick); it now flies at Top Speed over the
   head's throw. A head in an 8-bit mode still moves in its DMX steps (use
   its 16-bit mode for a follow spot).
-### New
-
-- **Free Spin: a movement effect for heads that rotate endlessly on pan or
-  tilt.** Set Axis, Speed (the head's slowest to fastest, or RPM where its
-  definition gives them), Direction (clockwise, counter-clockwise,
-  alternate fixtures, or bounce every N seconds), Stagger, Fade In and what
-  it does when it stops (hold, or return to the look's position) -- no more
-  raw DMX values in the rotation band of a pan channel. Each fixture gets
-  its own value from its definition; heads with no free rotation are left
-  to the look, and the effect picker lists it only when one of yours can.
-
-### Fixed
-
 - **Pointing a head whose definition lists an endless-rotation channel
   after Pan no longer spins it** (Cameo Movo Beam 100, Ayrton Kyalami, Robe
   Robin Spikie, GLP Impression FR1 and others): the rotation channel had
   become the head's pan, so a position went into it.
+
+### Course
+
+- Course: Level 3 lessons 3.1 (DMX, universes and patching), 3.2 (fixtures and definitions) and 3.4 (building the rig), checked by the course test, with a Part 3 for the real rig; pictures for 3.1 to 3.4, 3.7 and 3.10.
+- **The course shows no longer trip Show Review's MOV-08, and the course teaches the mark.** Lesson 1.3 now has a step that aims the AT-Spots in the Pose at level Out, and Lesson 2.5 one that does the same for the Truss-Spots in 1.0.6 Dance Break, so the movers turn in the dark before the Solo and Fan open them. The shipped shows are rebuilt from the lessons' steps (course test) and `showreviewshows_test` no longer expects MOV-08.
+
+### Tooling
+
+- **The course can't name a button the app doesn't have.** `tools/check-course-ui-names.py` (in the gate and CI, next to the
+  doc-link check) reads the bold UI names and menu paths in every lesson (**File ▸ Open**, **Add Fixture…**), case and
+  trailing "…" included, and fails on any with no matching string in the app, listing file:line and the nearest app string.
+  Keys, show content and real-world names are in its commented allowlist; stale text found but not yet fixed is in two
+  short lists in the script.
+- **A crash in a test build without AI Assist.** The Build command bar is the same size with and without AI Assist built in; a program built without it (a test) wrote past it.
 - The test suite no longer crashes, now and then, in the main bar's Blind
   test (SIGBUS, seen once on a GitHub macOS runner): the test listened to
   the timer and universe threads through a local object it destroyed while
   those threads could still be calling it. A test-only fault; the app
   itself never listened that way. A test program that crashes on macOS now
   prints the crashing thread's stack, so a one-off like this one says where.
-### Added
-
-- **Wands wound with a fairy string.** A wand's properties gain **String
-  length** (how long the lit string is), **Staff diameter** and **First LED
-  at** (Top or Bottom). Auto turns now come from the real string: 50 LEDs on
-  16 ft round a 5 ft staff shows about 58 turns, not half a turn. The Turns
-  field shows the number Auto worked out.
-### New
-
-- **Sprinkle loops, a pixel path for a fairy string over a fountain's
-  gap**: back and forth between the inner and outer wall tops at each
-  point, drooping in between, then along the wall to the next point.
-  Points and Spans per point lay it out evenly; **Edit Spans…** takes a
-  table of which LEDs make each span and where it hangs; **Read Segments**
-  makes the spans from a WLED's own segments. Help: Lighting Studio ▸
-  Sprinkle loops, with how to set up the WLED's segments.
-
-### Changed
-
-- **A par in a fountain's gap washes the inner wall**: dropped between the
-  outer and inner wall, a fixed light is aimed at the nearest point of the
-  inner wall, half way up, instead of up at the flame, and no longer
-  colours the silk. Inside the inner wall it still uplights the flame.
-### New
-
-- **A computer key can fire a hit, a cue, a cue list or a scene.** Learn
-  Trigger… now also learns a key on the keyboard, with its modifiers
-  ("Key · F5"), with the same press modes as a MIDI control, listed in the
-  Control Map and saved with the show. A key fires in Operate, and in
-  Design while what it fires is armed: in the Run tab's cue list, or
-  selected in the Show Tree. Never while a text field, the command line or
-  an editor has the keyboard; keys the app or a Virtual Console widget
-  already uses are refused, saying why.
-- Show Tree: a cue list whose show has no Numbering yet now says so on its own
-  page, beside + Section: "Its cue numbers look like Show.Part.Iteration. Use
-  it", or where to set Numbering when nothing looks like a scheme. + Section is
-  greyed, with the reason, until a scheme is set.
-### Added
-
 - For testing: `make ux-walk` walks every tab, menu, dialog and right-click
   of a real show offscreen, in feet and in millimetres, and reports what
   breaks the UI rules (docs/dev/UX_WALKER.md). Not part of the app.
@@ -461,6 +437,26 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   sprinkle loops, autosave recovery) and reports each step whose control
   can't be found from the screen before it (`make ux-walk FLOWS=1`;
   docs/dev/UX_RULES.md, Flows). Not part of the app.
+
+### Known issues
+
+- **The Windows installer is not code-signed**, so Windows SmartScreen
+  warns on first run (More info ▸ Run anyway).
+- **RGB colour effects** (Rainbow, Color Spread and the like) don't run on
+  colour-wheel or CMY movers, so the effect picker doesn't offer them for
+  such groups.
+- **On macOS a long on-screen session can grow memory slowly.** It has not
+  been reproduced offscreen, where memory levels off with no leaks.
+- **Not yet tried on real hardware:** the DualSense adaptive triggers and
+  touchpad swipes, encoder presets on a real encoder controller, the Stream
+  Deck + in a real Companion, and a third-party "Edge" pad's back buttons.
+- **Crackle** pulses up to the look's level from a lower Rest level; it
+  can't rise above the look.
+- **A follow spot on a head in an 8-bit mode moves in its DMX steps.** Use
+  the head's 16-bit mode for a follow spot.
+- **Hold at the end of a WLED effect can't freeze over Art-Net or E1.31.**
+  It freezes a WLED connected as Network (WLED); over Art-Net or E1.31 the
+  effect keeps running, and the At the end row says so.
 
 ## [0.4.1] - 2026-11-06
 
