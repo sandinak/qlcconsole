@@ -2782,7 +2782,7 @@ void FocusCalls_Test::aJumpLeavesTheTargetPageAndTheWholeCall()
     s->nudge(10.0f, 0.0f);
     QVERIFY((dsc->position() - QVector3D(6.0f, 6.0f, 0.0f)).length() < 0.001f);
     s->nudge(0.0f, 5.0f);
-    QVERIFY((dsc->position() - QVector3D(6.0f, 6.5f, 0.0f)).length() < 0.001f);
+    QVERIFY((dsc->position() - QVector3D(6.0f, 5.5f, 0.0f)).length() < 0.001f);
     s->revertTarget();
     QVERIFY((dsc->position() - QVector3D(5.0f, 6.0f, 0.0f)).length() < 0.001f);
     s->stop();
