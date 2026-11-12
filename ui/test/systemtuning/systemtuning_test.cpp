@@ -992,7 +992,7 @@ void SystemTuning_Test::aLightLookKeepsTheDeepAnswers()
     /* The full look runs outside Operate */
     tuning.recheckNow();
     QThreadPool::globalInstance()->waitForDone(2000);
-    QApplication::processEvents();
+    QTest::qWait(50);
 
     /* Operate's looks are light: they don't run tmutil. Not knowing isn't
        "it stopped". */
@@ -1026,11 +1026,11 @@ void SystemTuning_Test::operateRunsNoToolsAndDesignDoes()
     QVERIFY(SystemProbe::toolsAllowed() == false);
     QTRY_COMPARE(lookCount(), 1);
     QThreadPool::globalInstance()->waitForDone(2000);
-    QApplication::processEvents();
+    QTest::qWait(50);
     tuning.recheckNow();
     QTRY_COMPARE(lookCount(), 2);
     QThreadPool::globalInstance()->waitForDone(2000);
-    QApplication::processEvents();
+    QTest::qWait(50);
     {
         QMutexLocker locker(&mutex);
         QCOMPARE(looks, QList<bool>() << false << false);
