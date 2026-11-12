@@ -70,9 +70,15 @@ public:
 
     void setSettings(const FollowSpotDrive::Settings &s);
     FollowSpotDrive::Settings settings() const;
-    /** Deflections, -1..1: x right, y up the stage (away from the
-     *  operator: the stick pushed up). */
+    /** Deflections, -1..1: x the operator's right, y the stick pushed up
+     *  (away from the operator, the way they face: setFacing()). */
     void setSticks(double coarseX, double coarseY, double fineX, double fineY);
+    /** Which way the operator faces (FollowSpotOperator: degrees on the
+     *  plan, 0 upstage, clockwise): the sticks are turned by it before they
+     *  move the subject. Free-fly's velocity (the heads' own pan and tilt)
+     *  is not turned. Main thread; the turn is worked out here, once. */
+    void setFacing(int degrees);
+    int facing() const;
     bool stepMultiplier(int dir);
     double multiplier() const;
     void setMultiplier(double m);
@@ -118,6 +124,9 @@ private:
     int m_frames = 0;       ///< MasterTimer frames that stepped this
     int m_framesSeen = -1;  ///< ...as the last mainTick() saw
     int m_idleTicks = 0;    ///< mainTick()s since one did
+    int m_facing = 0;           ///< the operator's, degrees
+    double m_facingCos = 1.0;   ///< ...its turn, worked out by setFacing()
+    double m_facingSin = 0.0;
 };
 
 /** @} */

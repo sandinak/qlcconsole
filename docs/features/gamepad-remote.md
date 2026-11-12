@@ -74,6 +74,18 @@ is labelled with its job.
 | LB + RB | Fire the armed hit |
 | Menu | Controller test |
 
+**On the console's own controller, while a follow spot plays** (see
+[Moving a follow spot](stage-targets.md#moving-a-follow-spot))
+
+| Control | Does |
+|---|---|
+| Left stick | Moves the subject, turned to where the operator stands |
+| Right stick | The same, finely |
+| D-pad up / down | Speed step |
+| D-pad left / right | Close / open the beam |
+| Hold LS (click), push a stick toward centre stage, let go | Sets which way the operator faces (15° steps) |
+| View + LS | Centre Sticks |
+
 ## Setting up
 
 1. On the console: **Connections ▸ Devices ▸ Show control &amp; sync ▸ Web

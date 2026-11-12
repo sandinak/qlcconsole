@@ -17,7 +17,11 @@
   limitations under the License.
 */
 
+#include <QtMath>
+#include <cmath>
+
 #include "followspotmover.h"
+#include "followspotoperator.h"
 #include "monitorproperties.h"
 #include "mastertimer.h"
 #include "stagetarget.h"
@@ -107,6 +111,22 @@ void FollowSpotMover::setSticks(double coarseX, double coarseY, double fineX, do
     m_drive.setFine(fineX, fineY);
 }
 
+void FollowSpotMover::setFacing(int degrees)
+{
+    const int f = FollowSpotOperator::snapFacing(degrees);
+    const double r = f * M_PI / 180.0;
+    QMutexLocker l(&m_mutex);
+    m_facing = f;
+    m_facingCos = std::cos(r);
+    m_facingSin = std::sin(r);
+}
+
+int FollowSpotMover::facing() const
+{
+    QMutexLocker l(&m_mutex);
+    return m_facing;
+}
+
 bool FollowSpotMover::stepMultiplier(int dir)
 {
     QMutexLocker l(&m_mutex);
@@ -173,8 +193,11 @@ void FollowSpotMover::step(double dt)
        person on a riser stays on it; Default stays where it was). */
     const quint32 blocking = mp->liveBlocking();
     QVector3D p = t->positionIn(blocking);
-    p.setX(qBound(-kReach, p.x() + float(d.x()), kReach));
-    p.setY(qBound(-kReach, p.y() + float(d.y()), kReach));
+    /* The stick as the operator stands: up is the way they face, right
+       their right (a turn worked out once, in setFacing()). */
+    const QPointF w = FollowSpotOperator::onFloor(d.x(), d.y(), m_facingCos, m_facingSin);
+    p.setX(qBound(-kReach, p.x() + float(w.x()), kReach));
+    p.setY(qBound(-kReach, p.y() + float(w.y()), kReach));
     mp->setTargetPositionIn(t, blocking, p);
     /* Re-resolve only the position looks into the scene's faders, at 0
        time, on its next write (the next frame): the heads converge on the

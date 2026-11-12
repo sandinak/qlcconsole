@@ -50,6 +50,15 @@ private slots:
     void freeFlyPansAtTopSpeedBothWays();
     void deletingTheSceneLetsGo();
 
+    /* Where the operator stands (FollowSpotOperator). */
+    void stickUpGoesAwayFromTheOperator();
+    void frontOfHouseKeepsItsRightAndGoesUpstage();
+    void freeFlyIsNotTurned();
+    void theOperatorIsKeptPerStickAndVenue();
+    void anOldShowIsFrontOfHouse();
+    void recalibratingSnapsTo15Degrees();
+    void theOperatorViewsTurnTheRigView();
+
     /* The numbers, printed (QLC_FSPOT_REPORT=1). */
     void report();
     void realTimers();

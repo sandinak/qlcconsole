@@ -73,6 +73,10 @@
 #include "followspotdrive.h"
 #include "gamepadrole.h"
 #include "lookeditor.h"
+#include "followspotoperator.h"
+#include "monitor.h"
+#include "structurestudioview.h"
+#include <QDockWidget>
 #include "measurementunits.h"
 #include "followspotframing.h"
 #include "paletteops.h"
@@ -1685,6 +1689,280 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     QCOMPARE(follow->effectParamValues().value("framing"), 3.0);
     scene->stop(FunctionParent::master());
     settle(200);
+    doc->resetModified();
+}
+
+/* A spot op in the SL tower: set on the Followspot editor's Operator row,
+   or from the pad (hold LS, push toward centre stage, let go). The stick
+   is turned to them -- pushed up, the subject goes the way they face --
+   the footer says "from SL tower" and the Rig Overview has the operator's
+   views. QLC_FSPOT_SHOTS=<dir>: before/ (front of house, as a show from
+   before has it) and after/, the chip, the row and the rig view at the
+   minimum, laptop and wide sizes. */
+void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
+{
+    m_app->doc()->resetModified();
+    m_app->clearDocument();
+    settle(50);
+    Doc *doc = m_app->doc();
+    doc->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    ProgrammerController *pc = doc->programmer();
+    MonitorProperties *props = doc->monitorProperties();
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Operator Mover");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("ch");
+    const char *names[] = { "Pan", "Pan fine", "Tilt", "Tilt fine", "Dimmer" };
+    QLCFixtureHead head;
+    for (int k = 0; k < 5; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setGroup(k == 4 ? QLCChannel::Intensity : k >= 2 ? QLCChannel::Tilt : QLCChannel::Pan);
+        ch->setControlByte(k == 1 || k == 3 ? QLCChannel::LSB : QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(k));
+        if (k < 4)
+            head.addChannel(quint32(k));
+    }
+    mode->insertHead(-1, head);
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    FixtureGroup *spots = new FixtureGroup(doc);
+    spots->setName("AT-Spots");
+    QVERIFY(doc->addFixtureGroup(spots));
+    const QVector3D centre = props->stageCentre();
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("AT%1").arg(i + 1));
+        f->setFixtureDefinition(def, mode);
+        f->setUniverse(0);
+        f->setAddress(quint32(10 + i * 10));
+        QVERIFY(doc->addFixture(f));
+        props->setFixturePosition(f->id(), 0, 0,
+                                  QVector3D((centre.x() + (i == 0 ? -2.0f : 2.0f)) * 1000.0f, 0.0f, 6000.0f));
+        FixtureRigProps rp;
+        rp.mountingType = Truss::TopHung;
+        props->setFixtureRigProps(f->id(), rp);
+        spots->assignFixture(f->id());
+    }
+    StageTarget *witch = props->addStageTarget();
+    witch->setName("ES-Witch");
+    witch->setKind(StageTarget::Kind::Person);
+    const QVector3D home(centre.x(), centre.y(), 0.0f);
+    witch->setPosition(home);
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("On Witch");
+    aim->setStageTargetId(witch->id());
+    QVERIFY(doc->addPalette(aim));
+    QLCPalette *follow = new QLCPalette(QLCPalette::Effect, doc);
+    follow->setName("Followspot");
+    follow->setScriptPath(doc->effectScriptRunner()->cache()->scriptPath("followspot"));
+    QVERIFY(doc->addPalette(follow));
+    Scene *scene = new Scene(doc);
+    scene->setName("Follow Witch");
+    doc->addFunction(scene);
+    scene->addFixtureGroup(spots->id());
+    scene->addPalette(aim->id());
+    scene->addPalette(follow->id());
+
+    pc->clearAxisBindings();
+    patchLikeHis(doc);
+    QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 2000);
+    Workbench *bench = ProgrammingManager::instance()->workbench();
+    m_app->m_tab->setCurrentWidget(ProgrammingManager::instance());
+    bench->load(scene->id());
+    settle(300);
+    QLabel *chip = m_app->followChip();
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chip->text().contains(QString::fromUtf8("AT-Spots ← ES-Witch")),
+                             3000);
+    // Front of house, as every show from before: nothing said.
+    QVERIFY(pc->followSpotOperator().isFrontOfHouse());
+    QVERIFY2(!chip->text().contains("from "), qPrintable(chip->text()));
+
+    // The Followspot editor's Operator row.
+    bench->editPalette(follow->id());
+    settle(300);
+    if (LookEditor *le = bench->lookEditor())
+        le->refreshEffectParams();
+    settle(100);
+    auto shown = [&](auto *dummy, const char *name) {
+        using W = std::remove_pointer_t<decltype(dummy)>;
+        W *found = nullptr;
+        for (W *w : m_app->findChildren<W *>(name))
+            if (w->isVisibleTo(m_app))
+                found = w;
+        return found;
+    };
+    QComboBox *where = nullptr;
+    QTRY_VERIFY_WITH_TIMEOUT((where = shown((QComboBox *)nullptr, "followSpotOperatorPreset")) != nullptr, 10000);
+    QComboBox *facing = shown((QComboBox *)nullptr, "followSpotOperatorFacing");
+    QDoubleSpinBox *eye = shown((QDoubleSpinBox *)nullptr, "followSpotOperatorEye");
+    QLabel *forWho = shown((QLabel *)nullptr, "followSpotOperatorFor");
+    QVERIFY(facing != nullptr && eye != nullptr && forWho != nullptr);
+    QCOMPARE(where->currentText(), QStringLiteral("Front of house"));
+    QCOMPARE(facing->currentData().toInt(), 0);
+    QCOMPARE(facing->count(), 24);
+    // The eye height in Settings > Units (feet and inches by default).
+    QCOMPARE(eye->text(), MeasurementUnits::formatLength(1600.0));
+    QVERIFY2(forWho->text().contains("DUALSHOCK 4"), qPrintable(forWho->text()));
+
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon != nullptr);
+    StructureStudioView *rig = mon->stageOverviewView(true);
+    QVERIFY(rig != nullptr);
+    QComboBox *rigView = rig->parentWidget()->findChild<QComboBox *>(QStringLiteral("rigView"));
+    QVERIFY(rigView != nullptr);
+    QDockWidget *rigDock = nullptr;
+    for (QWidget *w = rig; w != nullptr && rigDock == nullptr; w = w->parentWidget())
+        rigDock = qobject_cast<QDockWidget *>(w);
+    QVERIFY(rigDock != nullptr);
+
+    const QString shots = qEnvironmentVariable("QLC_FSPOT_SHOTS");
+    auto shoot = [&](const QString &phase) {
+        if (shots.isEmpty())
+            return;
+        const QString dir = shots + QLatin1Char('/') + phase;
+        QDir().mkpath(dir);
+        m_app->setTheme(App::ThemeVSCodeDark);
+        const QList<QPair<QString, QSize>> sizes = { { "min", QSize(1024, 640) }, { "laptop", QSize(1280, 800) },
+                                                     { "wide", QSize(1920, 1080) } };
+        rigDock->hide();
+        for (const auto &sz : sizes)
+        {
+            m_app->resize(sz.second);
+            settle(400);
+            for (QWidget *p = where->parentWidget(); p != nullptr; p = p->parentWidget())
+                if (QScrollArea *area = qobject_cast<QScrollArea *>(p))
+                {
+                    area->ensureWidgetVisible(where, 20, 60);
+                    area->horizontalScrollBar()->setValue(0);
+                    break;
+                }
+            settle(200);
+            const QPixmap full = m_app->grab();
+            full.save(QString("%1/operator-setting-%2.png").arg(dir, sz.first));
+            const int h = 44;
+            full.copy(0, full.height() - h * int(full.devicePixelRatio()), full.width(),
+                      h * int(full.devicePixelRatio()))
+                .save(QString("%1/footer-chip-%2.png").arg(dir, sz.first));
+            qInfo().noquote() << "shot" << phase << sz.first << chip->text();
+        }
+        rigDock->show();
+        for (const auto &sz : sizes)
+        {
+            rigDock->resize(sz.second);
+            settle(500);
+            rigDock->grab().save(QString("%1/rig-view-%2.png").arg(dir, sz.first));
+        }
+        m_app->resize(1280, 800);
+        settle(200);
+    };
+    shoot("before");
+
+    // The SL tower, picked on the row: its facing, and the footer says so.
+    where->setCurrentIndex(where->findData(int(FollowSpotOperator::StageLeftTower)));
+    settle(100);
+    QCOMPARE(pc->followSpotOperator().preset, FollowSpotOperator::StageLeftTower);
+    QCOMPARE(pc->followSpotOperator().facing, 270);
+    QCOMPARE(facing->currentData().toInt(), 270);
+    QCOMPARE(pc->followSpotMover()->facing(), 270);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains("from SL tower"), 2000);
+    QVERIFY(doc->isModified());
+
+    // From the pad: hold LS, push up and a little left, let go.
+    InputPatch *ip = doc->inputOutputMap()->inputPatch(0);
+    auto deviceChannel = [&](GamepadRole::Role want) {
+        for (quint32 c = 0; c < 64; ++c)
+            if (pc->controllerRole(0, c) == want)
+                return int(ip->deviceChannel(c));
+        return -1;
+    };
+    const int ls = deviceChannel(GamepadRole::LS);
+    QVERIFY(ls >= 0);
+    QVERIFY(padInput(doc, quint32(ls), 255));
+    settle(30);
+    QVERIFY(pc->isRecalibratingFacing());
+    const QVector3D before = witch->position();
+    QVERIFY(padInput(doc, 0, 64));      // 30 degrees left of straight up
+    QVERIFY(padInput(doc, 1, 17));
+    QTest::qWait(400);
+    QVERIFY2((witch->position() - before).length() < 1e-3f, "the subject moved while the facing was set");
+    QVERIFY(padInput(doc, 0, 128));
+    QVERIFY(padInput(doc, 1, 128));
+    settle(60);
+    QVERIFY(padInput(doc, quint32(ls), 0));
+    settle(60);
+    QVERIFY(!pc->isRecalibratingFacing());
+    QCOMPARE(pc->followSpotOperator().facing, 300);       // 270 + 30
+    QTRY_COMPARE_WITH_TIMEOUT(facing->currentData().toInt(), 300, 1000);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("from SL tower, facing 300°")), 2000);
+
+    // Pushed up, the subject goes the way they face.
+    witch->setPosition(home);
+    QVERIFY(padInput(doc, 1, 0));
+    QTest::qWait(600);
+    QVERIFY(padInput(doc, 1, 128));
+    QTest::qWait(300);
+    const QVector3D moved = witch->position() - home;
+    const double r = qDegreesToRadians(300.0);
+    const QVector3D fwd(float(std::sin(r)), float(-std::cos(r)), 0.0f);
+    QVERIFY2(moved.length() > 0.1f && QVector3D::dotProduct(moved.normalized(), fwd) > 0.98f,
+             qPrintable(QString("%1, %2").arg(double(moved.x())).arg(double(moved.y()))));
+
+    // The View list is in sight without scrolling the bar, at the smallest window.
+    rigDock->show();
+    rigDock->resize(1024, 640);
+    settle(300);
+    {
+        const QRect at(rigView->mapTo(rigDock, QPoint(0, 0)), rigView->size());
+        QVERIFY2(rigView->isVisible() && at.right() < rigDock->width() && at.left() >= 0,
+                 qPrintable(QString("View at %1..%2 of %3").arg(at.left()).arg(at.right()).arg(rigDock->width())));
+    }
+
+    // The Rig Overview: from the operator, and the plan turned to them.
+    const double az = rig->angledAzimuth(), el = rig->angledElevation();
+    rigView->setCurrentIndex(rigView->findText("Operator"));
+    settle(100);
+    QCOMPARE(rig->plane(), StructureStudioView::Angled);
+    QCOMPARE(rig->angledAzimuth(), 60.0);       // -300: from stage left, a little downstage
+    QVERIFY(qAbs(rig->angledElevation() - pc->followSpotOperator().viewElevation(props)) < 1e-6);
+    shoot("after");
+    rigView->setCurrentIndex(rigView->findText("Operator plan"));
+    settle(100);
+    QCOMPARE(rig->plane(), StructureStudioView::Top);
+    QCOMPARE(rig->rotation(), 1);   // stage left at the bottom
+    if (!shots.isEmpty())
+        for (const auto &sz : QList<QPair<QString, QSize>>({ { "min", QSize(1024, 640) },
+                                                            { "laptop", QSize(1280, 800) },
+                                                            { "wide", QSize(1920, 1080) } }))
+        {
+            rigDock->resize(sz.second);
+            settle(500);
+            rigDock->grab().save(QString("%1/after/rig-plan-%2.png").arg(shots, sz.first));
+        }
+    // Any other view: the angle and the turn it had.
+    rigView->setCurrentIndex(rigView->findData(int(StructureStudioView::Angled)));
+    settle(100);
+    QCOMPARE(rig->rotation(), 0);
+    QVERIFY(qAbs(rig->angledAzimuth() - az) < 1e-6 && qAbs(rig->angledElevation() - el) < 1e-6);
+    rigDock->close();
+    settle(100);
+
+    // Back to front of house on the row: nothing said.
+    where->setCurrentIndex(where->findData(int(FollowSpotOperator::FrontOfHouse)));
+    settle(100);
+    QVERIFY(pc->followSpotOperator().isFrontOfHouse());
+    QTRY_VERIFY_WITH_TIMEOUT(!chip->text().contains("from "), 2000);
+    bench->load(Function::invalidId());
+    settle(100);
     doc->resetModified();
 }
 

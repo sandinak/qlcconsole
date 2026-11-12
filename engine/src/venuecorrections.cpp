@@ -862,6 +862,8 @@ bool VenueCorrections::renameVenue(const QString &from, const QString &to)
         if (v.practice.on && v.practice.from == from)
             v.practice.from = n;
     }
+    // What the show keeps by the venue's name goes with it (the follow-spot operator).
+    emit venueRenamed(from, n);
     if (m_active == from)
     {
         m_active = n;

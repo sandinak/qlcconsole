@@ -1044,8 +1044,10 @@ void FocusSession::nudge(float dPan, float dTilt)
         return;
     if (m_targetPage)
     {
-        // Right is across the stage, up is upstage.
-        nudgeTarget(dPan * targetMetresPerDegree(), dTilt * targetMetresPerDegree());
+        // Right is across the stage, up is upstage (-Y: the plan's +Y is
+        // downstage), away from an operator at front of house. This is the
+        // follow spot's own rule (stick up = away from the operator).
+        nudgeTarget(dPan * targetMetresPerDegree(), -dTilt * targetMetresPerDegree());
         return;
     }
     for (quint32 fid : scopeFixtures())

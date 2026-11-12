@@ -163,6 +163,8 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
                 this, &MonitorGraphicsView::updateFollowSpotOverlay);
         connect(m_doc->programmer(), &ProgrammerController::followSpotPinChanged,
                 this, &MonitorGraphicsView::updateFollowSpotOverlay);
+        connect(m_doc->programmer(), &ProgrammerController::followSpotOperatorChanged,
+                this, &MonitorGraphicsView::updateFollowSpotOverlay);
     }
 
     /* The stage marks' spikes and numbers are sized for the screen: redrawn
@@ -7887,6 +7889,49 @@ void MonitorGraphicsView::updateFollowSpotOverlay()
     label->setData(1, r);
     m_scene->addItem(label);
     m_followItems << label;
+
+    /* Where the operator stands, on the plan: a marker pointing the way
+       they face (the stick is turned to it). Front of house is out in the
+       house; it is drawn just off the edge of the stage, where it is seen,
+       pointing the true way. */
+    if (m_pov != PovTop)
+        return;
+    const FollowSpotOperator op = pc->followSpotOperator();
+    const QVector3D centre = props->stageCentre();
+    QPointF at2 = op.position(props);
+    const double margin = 1.5;      // metres off the grid, at most
+    at2.setX(qBound(-margin, at2.x(), 2.0 * double(centre.x()) + margin));
+    at2.setY(qBound(-margin, at2.y(), 2.0 * double(centre.y()) + margin));
+    const QPointF opPx = realPositionToPixels(at2.x() * 1000.0, at2.y() * 1000.0);
+    const double rad = op.facing * M_PI / 180.0;
+    const QPointF fwd(std::sin(rad), -std::cos(rad)), side(std::cos(rad), std::sin(rad));
+    const qreal s = 18.0;
+    QPolygonF chevron;
+    chevron << opPx + fwd * s << opPx - fwd * (s * 0.6) + side * (s * 0.8)
+            << opPx - fwd * (s * 0.2) << opPx - fwd * (s * 0.6) - side * (s * 0.8);
+    QPen opPen(colour, 2.0);
+    opPen.setCosmetic(true);
+    QGraphicsPolygonItem *mark = m_scene->addPolygon(chevron, opPen,
+                                                     QColor(colour.red(), colour.green(), colour.blue(), 90));
+    mark->setZValue(99);
+    mark->setAcceptedMouseButtons(Qt::NoButton);
+    const QString where = op.isFrontOfHouse() ? FollowSpotOperator::presetName(FollowSpotOperator::FrontOfHouse)
+                                              : op.viewpointText();
+    mark->setToolTip(tr("The follow-spot operator: %1. The stick is turned to face the way they do "
+                        "(set in the follow-spot look, or hold the left stick click on the pad).").arg(where));
+    mark->setData(0, QStringLiteral("followOperator"));
+    m_followItems << mark;
+    StageMarkLabel *opLabel = new StageMarkLabel(
+        tr("spot op · %1").arg(FollowSpotOperator::presetName(op.preset)), colour,
+        Qt::AlignHCenter | Qt::AlignTop);
+    opLabel->setPos(opPx);
+    opLabel->setStackOffset(s * viewScale() + 2.0);
+    opLabel->setZValue(99.5);
+    opLabel->setToolTip(mark->toolTip());
+    opLabel->setData(0, QStringLiteral("followOperatorLabel"));
+    opLabel->setData(1, s);
+    m_scene->addItem(opLabel);
+    m_followItems << opLabel;
 }
 
 void MonitorGraphicsView::refreshFollowSpotLabel()
@@ -7895,6 +7940,8 @@ void MonitorGraphicsView::refreshFollowSpotLabel()
     for (QGraphicsItem *it : std::as_const(m_followItems))
         if (it->data(0).toString() == QLatin1String("followLabel"))
             static_cast<StageMarkLabel *>(it)->setStackOffset(-(it->data(1).toReal() * viewScale() + 2.0));
+        else if (it->data(0).toString() == QLatin1String("followOperatorLabel"))
+            static_cast<StageMarkLabel *>(it)->setStackOffset(it->data(1).toReal() * viewScale() + 2.0);
 }
 
 void MonitorGraphicsView::setFollowSpotPin(bool visible, float xMeters, float yMeters)

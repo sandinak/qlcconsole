@@ -1623,7 +1623,9 @@ void FocusCalls_Test::aVenueHasItsOwnTrimsAndTargets()
     QVERIFY(s->referencePoint(a->id(), before));
     s->apply(FocusSession::ToggleReference);           // LS click in the calls
     QVERIFY(s->isTargetPage());
-    s->nudge(10.0f, 5.0f);                              // 1 m across, 0.5 m upstage
+    s->nudge(10.0f, 5.0f);                              // 1 m across, 0.5 m upstage (up = away from FOH = -Y)
+    QVERIFY((dsc->position() - QVector3D(6.0f, 5.5f, 0.0f)).length() < 0.001f);
+    s->nudge(0.0f, -10.0f);                             // stick down: 1 m downstage (+Y)
     QVERIFY((dsc->position() - QVector3D(6.0f, 6.5f, 0.0f)).length() < 0.001f);
     QVector3D after;
     QVERIFY(s->referencePoint(a->id(), after));
@@ -2780,7 +2782,7 @@ void FocusCalls_Test::aJumpLeavesTheTargetPageAndTheWholeCall()
     s->nudge(10.0f, 0.0f);
     QVERIFY((dsc->position() - QVector3D(6.0f, 6.0f, 0.0f)).length() < 0.001f);
     s->nudge(0.0f, 5.0f);
-    QVERIFY((dsc->position() - QVector3D(6.0f, 6.5f, 0.0f)).length() < 0.001f);
+    QVERIFY((dsc->position() - QVector3D(6.0f, 5.5f, 0.0f)).length() < 0.001f);
     s->revertTarget();
     QVERIFY((dsc->position() - QVector3D(5.0f, 6.0f, 0.0f)).length() < 0.001f);
     s->stop();

@@ -367,6 +367,8 @@ void Doc::clearContents()
         // Move in black is the show's: a show without <MoveInBlack> starts
         // from a new show's, not the last one's.
         m_programmer->resetMoveInBlack();
+        // So is where the follow-spot operator stands.
+        m_programmer->resetFollowSpotOperators();
     }
 
     destroyAudioCapture();
@@ -2737,6 +2739,13 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
             else
                 doc.skipCurrentElement();
         }
+        else if (doc.name() == KXMLQLCFollowSpotOperators)
+        {
+            if (m_programmer != NULL)
+                m_programmer->loadFollowSpotOperatorsXML(doc);
+            else
+                doc.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown engine tag:" << doc.name();
@@ -2902,6 +2911,9 @@ bool Doc::saveXML(QXmlStreamWriter *doc, bool forStockQlc)
 
     if (m_programmer != NULL)
         m_programmer->saveMoveInBlackXML(doc);
+
+    if (m_programmer != NULL)
+        m_programmer->saveFollowSpotOperatorsXML(doc);
 
     if (m_monitorProps != NULL)
     {

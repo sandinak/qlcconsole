@@ -19,6 +19,9 @@
 
 #include <QtTest>
 #include <QElapsedTimer>
+#include <QBuffer>
+#include <QXmlStreamWriter>
+#include <QXmlStreamReader>
 #include <QMutex>
 #include <QThread>
 #include <cmath>
@@ -45,6 +48,8 @@
 #include "dmxsource.h"
 #include "followspotmover.h"
 #include "followspotdrive.h"
+#include "followspotoperator.h"
+#include "venuecorrections.h"
 #include "effectinstance.h"
 #include "effectscript.h"
 #include "aimsolver.h"
@@ -786,6 +791,268 @@ void FollowSpotFeel_Test::freeFlyPansAtTopSpeedBothWays()
     const double want = qRadiansToDegrees(top / throwM);
     QVERIFY2(qAbs(right - want) < 0.02 * want, qPrintable(QString("%1 deg/s, want %2").arg(right).arg(want)));
     QVERIFY2(qAbs(left + right) < 0.01 * want, qPrintable(QString("%1 vs %2").arg(left).arg(right)));
+}
+
+
+/****************************************************************************
+ * Where the operator stands
+ ****************************************************************************/
+
+namespace
+{
+/* The subject's floor point after the stick is held at (@p x, @p y) for
+   @p ticks frames, from the rig's home. */
+QVector3D pushed(Harness &h, uchar x, uchar y, int ticks = 40)
+{
+    h.use(h.rig.targetScene);
+    const QVector3D from = h.rig.subject->position();
+    h.stick(x, y);
+    for (int i = 0; i < ticks; ++i)
+        h.tick();
+    h.stick(127, 127);
+    return h.rig.subject->position() - from;
+}
+
+QString str(const QVector3D &v)
+{
+    return QString("(%1, %2)").arg(double(v.x()), 0, 'f', 3).arg(double(v.y()), 0, 'f', 3);
+}
+}
+
+/* From every preset the stick pushed up sends the subject the way the
+   operator faces -- away from where they stand -- and right is their right. */
+void FollowSpotFeel_Test::stickUpGoesAwayFromTheOperator()
+{
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    h.bind();
+    MonitorProperties *mp = m_doc->monitorProperties();
+    for (FollowSpotOperator::Preset p : FollowSpotOperator::presets())
+    {
+        const FollowSpotOperator op = FollowSpotOperator::fromPreset(p);
+        h.pc->setFollowSpotOperator(op);
+        QCOMPARE(h.pc->followSpotOperator(), op);
+        QCOMPARE(h.pc->followSpotMover()->facing(), op.facing);
+        const double r = qDegreesToRadians(double(op.facing));
+        const QVector3D fwd(float(std::sin(r)), float(-std::cos(r)), 0.0f);
+        const QVector3D right(float(std::cos(r)), float(std::sin(r)), 0.0f);
+        const QPointF at = op.position(mp);
+        const QVector3D stands(float(at.x()), float(at.y()), 0.0f);
+
+        const QVector3D home = h.rig.home;
+        const QVector3D up = pushed(h, 127, 0);
+        const QString name = FollowSpotOperator::presetName(p);
+        QVERIFY2(up.length() > 0.2f, qPrintable(name + " " + str(up)));
+        QVERIFY2(QVector3D::dotProduct(up.normalized(), fwd) > 0.99f, qPrintable(name + " up " + str(up)));
+        // Away from them: further from where they stand.
+        QVERIFY2((home + up - stands).length() > (home - stands).length() + 0.2f,
+                 qPrintable(name + " up " + str(up) + " from " + str(stands)));
+        QVERIFY2(qAbs(up.z()) < 1e-5f, qPrintable(name));
+
+        const QVector3D toRight = pushed(h, 255, 127);
+        QVERIFY2(QVector3D::dotProduct(toRight.normalized(), right) > 0.99f,
+                 qPrintable(name + " right " + str(toRight)));
+    }
+    h.pc->setFollowSpotOperator(FollowSpotOperator());
+}
+
+/* Front of house -- every show that never sets one -- is as it was across
+   (right is stage left, +X) and the stick pushed up goes upstage (-Y),
+   away from the house. */
+void FollowSpotFeel_Test::frontOfHouseKeepsItsRightAndGoesUpstage()
+{
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    h.bind();
+    QVERIFY(h.pc->followSpotOperator().isFrontOfHouse());
+    QCOMPARE(h.pc->followSpotMover()->facing(), 0);
+    QVERIFY(h.pc->followSpotOperator().viewpointText().isEmpty());
+    const QVector3D right = pushed(h, 255, 127);
+    QVERIFY2(right.x() > 0.2f && qAbs(right.y()) < 0.01f * right.x(), qPrintable(str(right)));
+    const QVector3D left = pushed(h, 0, 127);
+    QVERIFY2(qAbs(left.x() + right.x()) < 0.01f * right.x(), qPrintable(str(left) + str(right)));
+    const QVector3D up = pushed(h, 127, 0);
+    QVERIFY2(up.y() < -0.2f && qAbs(up.x()) < 0.01f * -up.y(), qPrintable(str(up)));   // the last push's glide aside
+    // The same speed as across: only the direction is the operator's.
+    QVERIFY2(qAbs(up.length() - right.length()) < 0.01f * right.length(), qPrintable(str(up) + str(right)));
+
+    // The turn is the sticks', worked out once: the same as onFloor().
+    const QPointF w = FollowSpotOperator::onFloor(0.3, 0.7, 270);
+    QVERIFY(qAbs(w.x() - (-0.7)) < 1e-9 && qAbs(w.y() - (-0.3)) < 1e-9);
+}
+
+/* Free-fly (no Aim look: each head flown from the stick) is the head's own
+   pan and tilt, from wherever it is seen: not turned. */
+void FollowSpotFeel_Test::freeFlyIsNotTurned()
+{
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    h.bind();
+    h.pc->setFollowSpotOperator(FollowSpotOperator::fromPreset(FollowSpotOperator::StageLeftTower));
+    h.use(h.rig.freeScene);
+    h.stick(255, 127);
+    for (int i = 0; i < 30; ++i)
+        h.tick();
+    const QPointF v = h.pc->followSpotMover()->velocity();
+    h.stick(127, 127);
+    QVERIFY2(v.x() > 0.5 && qAbs(v.y()) < 1e-6, qPrintable(QString("%1, %2").arg(v.x()).arg(v.y())));
+    h.pc->setFollowSpotOperator(FollowSpotOperator());
+}
+
+namespace
+{
+QByteArray saveShow(Doc *doc)
+{
+    QByteArray xml;
+    QBuffer buffer(&xml);
+    buffer.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buffer);
+    w.writeStartDocument();
+    w.writeStartElement("Workspace");
+    doc->saveXML(&w);
+    w.writeEndElement();
+    w.writeEndDocument();
+    return xml;
+}
+
+bool loadShow(Doc *doc, const QByteArray &xml)
+{
+    doc->clearContents();
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();       // Workspace
+    r.readNextStartElement();       // Engine
+    return doc->loadXML(r, false);
+}
+}
+
+/* Kept per controller and per venue, with the show: through a save and a
+   load each comes back where it was set, and a venue renamed takes its own. */
+void FollowSpotFeel_Test::theOperatorIsKeptPerStickAndVenue()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    FollowSpotOperator sl = FollowSpotOperator::fromPreset(FollowSpotOperator::StageLeftTower);
+    sl.facing = 255;
+    sl.eyeMm = 4572;
+    const FollowSpotOperator boh = FollowSpotOperator::fromPreset(FollowSpotOperator::BackOfHouse);
+    const FollowSpotOperator us = FollowSpotOperator::fromPreset(FollowSpotOperator::Upstage);
+    pc->setFollowSpotOperatorFor("Hall", "DUALSHOCK 4", sl);
+    pc->setFollowSpotOperatorFor("Hall", QString(), boh);
+    pc->setFollowSpotOperatorFor(QString(), "DualSense", us);
+    // The venue's for any stick stands in for a stick it has none for.
+    QCOMPARE(pc->followSpotOperatorFor("Hall", "Xbox"), boh);
+    QVERIFY(pc->followSpotOperatorFor("Barn", "DUALSHOCK 4").isFrontOfHouse());
+    // Front of house set where nothing else was is not kept (the show saves as before).
+    pc->setFollowSpotOperatorFor("Barn", "Xbox", FollowSpotOperator());
+    QCOMPARE(pc->followSpotOperators().size(), 3);
+
+    const QByteArray xml = saveShow(m_doc);
+    QVERIFY2(xml.contains("<FollowSpotOperators>"), xml.constData());
+    QVERIFY(xml.contains("Venue=\"Hall\""));
+    QVERIFY(xml.contains("Eye=\"4572\""));      // millimetres
+    QVERIFY(loadShow(m_doc, xml));
+    QCOMPARE(pc->followSpotOperators().size(), 3);
+    QCOMPARE(pc->followSpotOperatorFor("Hall", "DUALSHOCK 4"), sl);
+    QCOMPARE(pc->followSpotOperatorFor("Hall", QString()), boh);
+    QCOMPARE(pc->followSpotOperatorFor(QString(), "DualSense"), us);
+    QCOMPARE(pc->followSpotOperatorFor("Hall", "DUALSHOCK 4").viewpointText(),
+             QString::fromUtf8("from SL tower, facing 255°"));
+
+    // A venue renamed keeps its operators.
+    VenueCorrections *vc = pc->venueCorrections();
+    QCOMPARE(vc->addVenue("Hall"), QStringLiteral("Hall"));
+    QVERIFY(vc->renameVenue("Hall", "Main Hall"));
+    QCOMPARE(pc->followSpotOperatorFor("Main Hall", "DUALSHOCK 4"), sl);
+    QVERIFY(pc->followSpotOperatorFor("Hall", "DUALSHOCK 4").isFrontOfHouse());
+    QVERIFY(vc->removeVenue("Main Hall"));
+
+    // A new show has none.
+    m_doc->clearContents();
+    QVERIFY(pc->followSpotOperators().isEmpty());
+}
+
+/* A show from before any of this: no <FollowSpotOperators>, nothing new
+   written, front of house. */
+void FollowSpotFeel_Test::anOldShowIsFrontOfHouse()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    pc->setFollowSpotOperator(FollowSpotOperator::fromPreset(FollowSpotOperator::Upstage));
+    QCOMPARE(pc->followSpotMover()->facing(), 180);
+    m_doc->clearContents();
+    const QByteArray xml = saveShow(m_doc);
+    QVERIFY(!xml.contains("FollowSpotOperators"));
+    QVERIFY(loadShow(m_doc, xml));
+    QVERIFY(pc->followSpotOperators().isEmpty());
+    QVERIFY(pc->followSpotOperator().isFrontOfHouse());
+    QCOMPARE(pc->followSpotMover()->facing(), 0);
+}
+
+/* Hold LS and push toward centre stage: the facing is set from the push,
+   to the nearest 15 degrees, and the subject holds while it is. */
+void FollowSpotFeel_Test::recalibratingSnapsTo15Degrees()
+{
+    // The arithmetic.
+    QCOMPARE(FollowSpotOperator::snapFacing(7.4), 0);
+    QCOMPARE(FollowSpotOperator::snapFacing(7.6), 15);
+    QCOMPARE(FollowSpotOperator::snapFacing(-20.0), 345);
+    QCOMPARE(FollowSpotOperator::snapFacing(367.0), 0);
+    const QPointF centre(5.0, 4.0);
+    // Facing centre: pushed straight up.
+    QCOMPARE(FollowSpotOperator::facingFromPush(QPointF(5.0, 20.0), centre, 0.0, 1.0), 0);
+    QCOMPARE(FollowSpotOperator::facingFromPush(QPointF(12.0, 4.0), centre, 0.0, 1.0), 270);
+    // Centre on their right: they face a quarter turn left of it.
+    QCOMPARE(FollowSpotOperator::facingFromPush(QPointF(12.0, 4.0), centre, 1.0, 0.0), 180);
+    // 20 degrees off up snaps to the next step.
+    QCOMPARE(FollowSpotOperator::facingFromPush(QPointF(5.0, 20.0), centre,
+                                                std::sin(qDegreesToRadians(20.0)),
+                                                std::cos(qDegreesToRadians(20.0))), 345);
+    // Too little push says nothing.
+    QCOMPARE(FollowSpotOperator::facingFromPush(QPointF(5.0, 20.0), centre, 0.1, 0.2), -1);
+
+    // On the controller: the SL tower, LS held, the stick pushed up and a
+    // little left (centre stage ahead, a touch to their left), released.
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    h.bind();
+    h.pc->setFollowSpotOperator(FollowSpotOperator::fromPreset(FollowSpotOperator::StageLeftTower));
+    h.use(h.rig.targetScene);
+    const QVector3D from = h.rig.subject->position();
+    h.pc->m_recalHeld = true;
+    h.pc->m_recalX = h.pc->m_recalY = 0.0;
+    const double a = qDegreesToRadians(-25.0);       // 25 degrees left of up
+    h.stick(uchar(qRound(127.5 + 127.5 * std::sin(a))), uchar(qRound(127.5 - 127.5 * std::cos(a))));
+    for (int i = 0; i < 20; ++i)
+        h.tick();
+    QVERIFY2((h.rig.subject->position() - from).length() < 1e-4f, "the subject moved while recalibrating");
+    h.stick(127, 127);
+    for (int i = 0; i < 3; ++i)
+        h.tick();
+    h.pc->finishFacingRecalibration();
+    QVERIFY(!h.pc->isRecalibratingFacing());
+    // 270 + 25 = 295, the nearest step 300 (25 / 15 = 1.67: two steps).
+    QCOMPARE(h.pc->followSpotOperator().facing, 300);
+    QCOMPARE(h.pc->followSpotOperator().preset, FollowSpotOperator::StageLeftTower);
+    QCOMPARE(h.pc->followSpotMover()->facing(), 300);
+    h.pc->setFollowSpotOperator(FollowSpotOperator());
+}
+
+/* The rig view from the operator: the angled view swung to look the way
+   they face, looking down from their eye; the plan turned so they are at
+   its bottom. */
+void FollowSpotFeel_Test::theOperatorViewsTurnTheRigView()
+{
+    QCOMPARE(FollowSpotOperator::viewAzimuth(0), 0.0);       // from the audience
+    QCOMPARE(FollowSpotOperator::viewAzimuth(270), 90.0);    // from stage left
+    QCOMPARE(FollowSpotOperator::viewAzimuth(90), -90.0);
+    QCOMPARE(FollowSpotOperator::viewAzimuth(180), 180.0);
+    QCOMPARE(FollowSpotOperator::planTurns(0), 0);
+    QCOMPARE(FollowSpotOperator::planTurns(270), 1);
+    QCOMPARE(FollowSpotOperator::planTurns(180), 2);
+    QCOMPARE(FollowSpotOperator::planTurns(90), 3);
+    MonitorProperties *mp = m_doc->monitorProperties();
+    const FollowSpotOperator foh = FollowSpotOperator::fromPreset(FollowSpotOperator::FrontOfHouse);
+    const FollowSpotOperator boh = FollowSpotOperator::fromPreset(FollowSpotOperator::BackOfHouse);
+    const FollowSpotOperator tower = FollowSpotOperator::fromPreset(FollowSpotOperator::StageLeftTower);
+    QVERIFY(foh.viewElevation(mp) >= 5.0 && foh.viewElevation(mp) < tower.viewElevation(mp));
+    QVERIFY(boh.viewElevation(mp) > 5.0);
+    FollowSpotOperator high = tower;
+    high.eyeMm = 9000;
+    QVERIFY(high.viewElevation(mp) > tower.viewElevation(mp));
 }
 
 /* The scene being followed is deleted mid-move: the motion lets go of it
