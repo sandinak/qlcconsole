@@ -170,6 +170,8 @@ public:
 
     QTreeWidget *tree() const { return m_tree; }
     QTreeWidget *library() const { return m_library; }
+    /** The programmer's tools under the header (Build has the same). */
+    class ProgrammerStrip *programmerStrip() const { return m_programmerStrip; }
 
     /** Select the tree row of node @a id (a layer: in cue @a cueId). */
     bool selectNode(quint32 id, quint32 cueId = ShowTree::invalidId());
@@ -1262,6 +1264,7 @@ private:
     // Library
     QLineEdit *m_filter = nullptr;
     QTreeWidget *m_library;
+    class ProgrammerStrip *m_programmerStrip = nullptr;
     QWidget *m_libraryPane = nullptr;       //!< filter, + Palette and m_library
     QSplitter *m_mainSplit = nullptr; //!< Library | tree | page
     bool m_defaultSplitPending = false; //!< fresh settings: size the panes at the first real width

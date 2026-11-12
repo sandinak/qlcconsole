@@ -77,6 +77,7 @@
 #include "fixturemanager.h"
 #include "virtualconsole.h"
 #include "programmingmanager.h"
+#include "programmerstrip.h"
 #include "powerdistribution.h"
 #include "showtreeview.h"
 #include "moveinblackbutton.h"
@@ -1750,7 +1751,7 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     pc->setAutoMoveInBlack(false);
     pc->setMoveInBlackDarkGapMs(800);
     QVERIFY(!mib->isChecked());
-    QVERIFY(!pm->m_autoMibBtn->isChecked());
+    QVERIFY(!pm->m_strip->m_autoMibBtn->isChecked());
     // Build's drop-down says so too; the menu bar has no switch of its own (Q91)
     QToolButton *markMenu = pm->findChild<QToolButton *>(QStringLiteral("markMenu"));
     QVERIFY(markMenu != nullptr);
@@ -1763,7 +1764,7 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     QVERIFY(pc->isAutoMoveInBlack());
     QVERIFY(mib->isChecked());
     QVERIFY(mib->autoAction()->isChecked());
-    QVERIFY(pm->m_autoMibBtn->isChecked());
+    QVERIFY(pm->m_strip->m_autoMibBtn->isChecked());
     QCOMPARE(markMenu->text(), QString::fromUtf8("Move in Black \u00b7 Auto"));
     QVERIFY(markMenu->property("mibAuto").toBool());
     // Lit: painted in the theme's highlight, not the bar's background
@@ -1777,19 +1778,19 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     }
     mib->leadSpin()->setValue(1.5);
     QCOMPARE(pc->moveInBlackDarkGapMs(), 1500);
-    QCOMPARE(pm->m_mibGapSpin->value(), 1.5);
+    QCOMPARE(pm->m_strip->m_mibGapSpin->value(), 1.5);
 
     // 2. Programming -> the show, the Show Tree
-    pm->m_autoMibBtn->setChecked(false);
+    pm->m_strip->m_autoMibBtn->setChecked(false);
     QVERIFY(!pc->isAutoMoveInBlack());
     QVERIFY(!mib->isChecked());
-    pm->m_mibGapSpin->setValue(2.0);
+    pm->m_strip->m_mibGapSpin->setValue(2.0);
     QCOMPARE(pc->moveInBlackDarkGapMs(), 2000);
     QCOMPARE(mib->leadSpin()->value(), 2.0);
     // The menu's own switch is the same one
     mib->autoAction()->trigger();
     QVERIFY(pc->isAutoMoveInBlack());
-    QVERIFY(pm->m_autoMibBtn->isChecked());
+    QVERIFY(pm->m_strip->m_autoMibBtn->isChecked());
 
     // 3. Settings has no switch of its own (Q91)
     {
@@ -1800,7 +1801,7 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     }
     mib->click();
     QVERIFY(!pc->isAutoMoveInBlack());
-    QVERIFY(!pm->m_autoMibBtn->isChecked());
+    QVERIFY(!pm->m_strip->m_autoMibBtn->isChecked());
     QVERIFY(!markMenu->property("mibAuto").toBool());
 
     // Saved and loaded with the show: every view comes back with it
@@ -1824,8 +1825,8 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     QCOMPARE(pc->moveInBlackDarkGapMs(), 2000);
     QVERIFY(mib->isChecked());
     QCOMPARE(mib->leadSpin()->value(), 2.0);
-    QVERIFY(pm->m_autoMibBtn->isChecked());
-    QCOMPARE(pm->m_mibGapSpin->value(), 2.0);
+    QVERIFY(pm->m_strip->m_autoMibBtn->isChecked());
+    QCOMPARE(pm->m_strip->m_mibGapSpin->value(), 2.0);
 
     const QString dir = QString::fromLocal8Bit(qgetenv("MIB_SHOTS"));
     if (dir.isEmpty() == false)

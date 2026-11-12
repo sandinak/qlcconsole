@@ -102,6 +102,7 @@
 #include "focuscallsdialog.h"
 #include "focusmenu.h"
 #include "showtreeview.h"
+#include "programmerstrip.h"
 #include "previewkeep.h"
 #include "editkeys.h"
 #include "changejournal.h"
@@ -1351,6 +1352,21 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     headerRow->addWidget(m_hint);
     main->addWidget(header);
     MainBar::registerTabTools(this, header);
+
+    /* The programmer's tools (board Q228): Build's strip, the same class --
+       Highlight, Flash, Park, Move in Black, Beat and Tap, Save Positions,
+       Snapshot and the jog speed -- under the header, so a show is
+       programmed from here without going to Build. It acts on the
+       programmer selection, as in Build. */
+    {
+        ProgrammerStrip::Host host;
+        host.workbench = [this]() { return dockedWorkbench(); };
+        host.noScene = tr("Snapshot bakes the live output into a scene open in the Workbench. "
+                          "In the Show Tree, Record makes a cue of what is on stage.");
+        m_programmerStrip = new ProgrammerStrip(m_doc, host, this);
+        m_programmerStrip->setObjectName(QStringLiteral("stProgrammerStrip"));
+        main->addWidget(m_programmerStrip);
+    }
 
     // W5: an old show (chasers, no tree) says so once, never converting on
     // its own: Convert… opens the show converter; ✕ for this show.

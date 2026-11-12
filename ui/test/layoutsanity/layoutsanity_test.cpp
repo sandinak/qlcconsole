@@ -649,7 +649,7 @@ Screen tab(const QString &label, std::function<void(App *, QWidget *)> prepare =
         if (app->workspaceView() != view)
             app->setWorkspaceView(view, false);
         for (int i = 0; i < app->m_tab->count(); ++i)
-            if (app->m_tab->tabText(i) == label)
+            if (app->m_tab->tabBar()->tabData(i).toString() == label)   // the label, not its elided text
             {
                 app->m_tab->setCurrentIndex(i);
                 return app;
@@ -1787,6 +1787,7 @@ void LayoutSanity_Test::primaryActionsStayOnTheBarAt1024()
     struct Primary { const char *tab; const char *text; };
     static const Primary primaries[] = {
         { "Build", "Save Positions" },
+        { "Show Tree", "Save Positions" },     // the same programmer strip (Q228)
     };
     for (const Primary &pa : primaries)
     {
@@ -1799,8 +1800,9 @@ void LayoutSanity_Test::primaryActionsStayOnTheBarAt1024()
         settle();
         QAbstractButton *button = nullptr;
         for (QAbstractButton *b : m_app->findChildren<QAbstractButton *>())
-            if (b->text() == QLatin1String(pa.text) && qobject_cast<QToolBar *>(b->parentWidget()) != nullptr)
-                button = b;
+            if (b->text() == QLatin1String(pa.text) && qobject_cast<QToolBar *>(b->parentWidget()) != nullptr
+                && (button == nullptr || b->isVisibleTo(m_app)))
+                button = b;          // the tab's own (Build and the Show Tree each have the strip)
         QVERIFY2(button != nullptr, qPrintable(QStringLiteral("no \"%1\" on a toolbar").arg(pa.text)));
         QToolBar *bar = qobject_cast<QToolBar *>(button->parentWidget());
         // On the bar: shown, and inside it (the » menu holds what isn't).

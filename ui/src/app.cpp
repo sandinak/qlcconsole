@@ -48,6 +48,7 @@
 #include "itemicons.h"
 #include "functionmanager.h"
 #include "programmingmanager.h"
+#include "programmerstrip.h"
 #include "showtreecontroller.h"
 #include "unsavedchangesdialog.h"
 #include "changejournal.h"
@@ -870,6 +871,8 @@ void App::init()
                 if (!buildTab.isNull())
                     buildTab->returnWorkbench(wb);
             });
+        // Its programmer strip's Save Positions saves, as Build's does.
+        connect(tree->programmerStrip(), &ProgrammerStrip::requestSave, this, &App::slotFileSave);
         w = tree;
     }
     addTab(w, ItemIcons::showTreeIcon(), tr("Show Tree"));
