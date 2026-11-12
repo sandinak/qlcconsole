@@ -314,7 +314,7 @@ and the Workbench's (docked) layer row.
 - Kind: Learn Trigger…, Skip Cue, Don't Move in Black into This Cue, Mode
   ▸, Colour ▸, Record as New Cue, Copy to a Hit, Renumber This Level…,
   Ripple Timecode…; a hit: Colour ▸, Make VC Page
-- Organise: Make Sub-cue of … / Make Inline Cue, Make Cue Reusable… /
+- Organise: Make Sub-cue(s) of … / Make Main Cue(s), Make Cue Reusable… /
   Unlink Here, Move to Folder ▸ (a hit), Move Up, Move Down
 - Edit: Copy, Paste After This Cue / Paste into This Cue, Duplicate
 - Remove: Delete Cue / Delete Sub-cue / Delete Hit
@@ -410,7 +410,7 @@ RGB Matrix (the Workbench said "Effect look…", last).
   goes in Selection.
 - The Plot's "New Map Layer from Selection…" is the plot's own (on top).
   That separates the drawing layer from the Workbench layer (2, point 5).
-- The Show Tree's "Make Inline Cue" / "Make Sub-cue of …" on cue and sub-cue
-  rows are in Organise.
+- The Show Tree's "Make Main Cue(s)" / "Make Sub-cue(s) of …" on cue and
+  sub-cue rows are in Organise: one item, its words following the selection.
 - Show Review's "I meant it" is a review-row action, not an object menu.
   The cyc-backwash layer item is in Kind of a cue layer.

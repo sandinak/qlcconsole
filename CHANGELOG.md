@@ -20,6 +20,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **The web pages' scripts are tested in the gate.** `webaccess/test/pagescript` runs the Run page, the focus remote and the gamepad reader as the console serves them, in a script engine with a stand-in browser and controller. It covers the buttons, the PIN, the LB arm, triggers, sticks, the dead zone, D-pad repeat, keys and the controller test.
 - **Hardware checklist for the Deck, rewritten.** [gamepad-remote.md](docs/features/gamepad-remote.md#hardware-checklist) is now 14 numbered steps, each with its expected result, for one sitting with a real Deck.
 - **Settings ▸ Performance checks much more, per computer.** It now tells Apple silicon, Intel Macs, ARM boards and PCs apart, and looks for what gets in the way of a show: on battery, overheating, Wi-Fi carrying DMX, the macOS Local Network permission, a screen that will lock, backups and file sync, system updates, other busy programs, low memory or disk, and heavy rig view settings. It also shows how many frames really left late with this show. During Operate it looks again every 15 seconds and says so in the footer; the checks that start a program (screen lock, backups, other programs) run only outside Operate, so the show always comes first. See [Tuning your computer](docs/features/system-tuning.md).
+- **Show Tree: select cues and make them sub-cues of the first, or sub-cues
+  main cues.** With two or more cues selected, right-click ▸ **Make Sub-cues
+  of 4** (or **⌘]**) puts the rest under the first selected, in order, after
+  the sub-cues it has (their own sub-cues come along, one level). Selected
+  sub-cues ▸ **Make Main Cues** (**⌘[**; was Make Inline Cue) makes only
+  those cues of the list right after their cue; the others stay sub-cues.
+  Each press still lights the same, it is one undo step, numbers change
+  only where they must, and a mixed selection greys the item saying why. A
+  MIDI/OSC control learned on a cue still plays it once it is a sub-cue.
 
 ### Changed
 

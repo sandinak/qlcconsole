@@ -178,6 +178,7 @@ Build is a tab of the Everything view; the qlcconsole view hides it.
 | ↑ / ↓ (in the command line) | Earlier / later commands |
 | ⌘Z / ⇧⌘Z | Undo / Redo in the tree (in the command line ⌘Z undoes typing: type `undo`) |
 | **⌘/** (in the tree) | Skip the selected cues, or put them back |
+| **⌘]** / **⌘[** (in the tree) | The selected cues become sub-cues of the first of them (one: of the cue before) / the selected sub-cues become main cues after their cue ([Sub-cue ↔ main cue](show-tree.md#sub-cue--main-cue)) |
 | **⌥↩** (Library) | A layer for each group selected |
 | ↓ / Esc (Library filter) | Into the list / back to the tree |
 | **F2** / ⌫ (Library) | Rename / delete the palette or folder |

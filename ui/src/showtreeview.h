@@ -1241,10 +1241,25 @@ public:
     /** + Sub-cue: a sub-cue of the selected cue (after the selected
      *  sub-cue). Its id (invalid: none). */
     quint32 newSubCue();
-    /** Make Inline Cue (the selected sub-cues) or Make Sub-cue of the cue
-     *  before (the selected cues): ShowTreeController::makeInlineCues() /
-     *  makeSubCues(), what happened said in the hint line. */
-    bool convertSelectedCues(bool toInline);
+    /** What Make Sub-cues / Make Main Cues would do with the selection
+     *  around cue @a cueId (the right-clicked or current one). */
+    struct CueConvertPlan
+    {
+        bool offered = false;                       //!< an item at all
+        bool toMain = false;                        //!< sub-cues -> main cues
+        QList<quint32> ids;                         //!< what moves
+        quint32 parent = ShowTree::invalidId();     //!< demote: under this cue
+        QString text;                               //!< the menu item's words
+        QString why;                                //!< empty: it can
+    };
+    CueConvertPlan cueConvertPlan(quint32 cueId) const;
+    /** Make Main Cues (the selected sub-cues) or Make Sub-cues: two or more
+     *  cues selected, the 2nd..Nth under the first; one, under the cue
+     *  before it. ShowTreeController::makeInlineCues() / makeSubCues(),
+     *  what happened (or why not) said in the hint line. @a toMain: the
+     *  direction asked for (⌘[ / ⌘]); -1 either, as the selection says.
+     *  @a cueId: the right-clicked cue (invalid: the current one). */
+    bool convertSelectedCues(int toMain = -1, quint32 cueId = ShowTree::invalidId());
 private:
     QLabel *m_cueLooks;
     QListWidget *m_cueLayers;

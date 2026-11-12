@@ -18,6 +18,8 @@
 */
 
 #include <QScrollArea>
+#include <QPainter>
+#include <QDir>
 #include <QTreeWidgetItemIterator>
 #include <QDoubleSpinBox>
 #include <QMenu>
@@ -6472,7 +6474,7 @@ void ShowTreeView_Test::theTreeColumnsResizeAndAreRemembered()
    action named @a name, in a submenu too. Its text then ("" not offered);
    @a enabled / @a checked as it was offered. */
 static QString contextAction(ShowTreeView &view, QTreeWidgetItem *row, const QString &name,
-                             bool *checked = nullptr, bool *enabled = nullptr)
+                             bool *checked = nullptr, bool *enabled = nullptr, QString *toolTip = nullptr)
 {
     QString seen;
     ModalCloser closer([&](QWidget *w) {
@@ -6487,6 +6489,8 @@ static QString contextAction(ShowTreeView &view, QTreeWidgetItem *row, const QSt
                     *checked = act->isChecked();
                 if (enabled != nullptr)
                     *enabled = act->isEnabled();
+                if (toolTip != nullptr)
+                    *toolTip = act->toolTip();
                 m->close();
                 if (act->isEnabled())
                     act->trigger();
@@ -6607,8 +6611,8 @@ void ShowTreeView_Test::aCarriedInLayerCanBeBroughInOrStartHere()
 
 /* 0.4: "need a function to convert subcues to inline cues ... and vice
    versa". A cue's right-click ▸ Make Sub-cue of <the cue before>, a sub-cue's
-   ▸ Make Inline Cue; one undo step each, said in the hint line, greyed in
-   Operate. */
+   ▸ Make Main Cue (was Make Inline Cue); one undo step each, said in the
+   hint line, greyed in Operate. */
 void ShowTreeView_Test::subCuesAndInlineCuesFromTheMenu()
 {
     FixtureGroup *towers = group("Towers", 0, 2);
@@ -6657,15 +6661,237 @@ void ShowTreeView_Test::subCuesAndInlineCuesFromTheMenu()
     QTreeWidgetItem *row = cueRow(tree, c[1]);
     QVERIFY(row != nullptr);
     QVERIFY(view.selectNode(c[1]));
-    QCOMPARE(contextAction(view, row, "stMakeInlineCueMenu"), QString("Make Inline Cue"));
+    QCOMPARE(contextAction(view, row, "stMakeMainCueMenu"), QString("Make Main Cue"));
     QVERIFY(!st->isSubCue(c[1]));
-    QCOMPARE(st->undoText(), QString("Make inline cue"));
+    QCOMPARE(st->undoText(), QString("Make main cue"));
     QCOMPARE(st->cueList(list)->cues.count(), 3);
     QVERIFY2(hint->text().contains("is a cue now"), qPrintable(hint->text()));
     QVERIFY(st->undo());
     QVERIFY(st->isSubCue(c[1]));
     QVERIFY(st->undo());
     QVERIFY(!st->isSubCue(c[1]));
+}
+
+/* 2026-11-12: "select cues in the tree and convert to subcues under the
+   first one and the corollary .. select subcues and move to main cues".
+   Several cues ▸ Make Sub-cues of <the first>, sub-cues ▸ Make Main Cues;
+   ⌘] / ⌘[ the same; one undo step each; a mixed selection greyed, saying
+   why. */
+void ShowTreeView_Test::selectedCuesBecomeSubCuesOfTheFirstAndBack()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 5; ++i)
+        c << st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    st->setLayerLook(c[2], st->addLayer(c[2], groupTarget(towers->id())), st->lookForPalette(half));
+    st->clearUndo();
+    auto order = [st, list]() {
+        QList<quint32> out;
+        for (const Cue &cue : st->cueList(list)->cues)
+            out << cue.id;
+        return out;
+    };
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 600);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    QLabel *hint = view.findChild<QLabel *>("stDropHint");
+    QVERIFY(hint != nullptr);
+    auto select = [&](const QList<quint32> &ids) {
+        tree->expandAll();
+        QVERIFY(view.selectNode(ids.first()));
+        for (quint32 id : ids)
+            cueRow(tree, id)->setSelected(true);
+    };
+
+    // Cues 2, 3 and 4 selected (right-click on 3): 3 and 4 go under 2.
+    select({ c[2], c[1], c[3] });
+    QCOMPARE(contextAction(view, cueRow(tree, c[2]), "stMakeSubCueMenu"), QString("Make Sub-cues of 2"));
+    quint32 parent = invalidId();
+    QVERIFY(st->isSubCue(c[2], &parent));
+    QCOMPARE(parent, c[1]);
+    QVERIFY(st->isSubCue(c[3], &parent));
+    QCOMPARE(parent, c[1]);
+    QVERIFY(!st->isSubCue(c[1]));
+    QCOMPARE(order(), QList<quint32>({ c[0], c[1], c[4] }));
+    const CueList *subs = st->cueList(st->subCueList(c[1]));
+    QVERIFY(subs != nullptr);
+    QCOMPARE(subs->cues.last().id, c[3]);
+    QCOMPARE(subs->indexOf(c[2]) + 1, subs->indexOf(c[3]));
+    QCOMPARE(st->undoText(), QString("Make sub-cues"));
+    QVERIFY2(hint->text().contains("sub-cues of 2"), qPrintable(hint->text()));
+    // One undo step: back exactly.
+    QVERIFY(st->undo());
+    QCOMPARE(order(), c);
+    QCOMPARE(st->subCueList(c[1]), invalidId());
+
+    // ⌘] does the same.
+    select({ c[1], c[2], c[3] });
+    QShortcut *in = view.findChild<QShortcut *>("stMakeSubCuesKey");
+    QShortcut *out = view.findChild<QShortcut *>("stMakeMainCuesKey");
+    QVERIFY(in != nullptr && out != nullptr);
+    QCOMPARE(in->key(), QKeySequence(Qt::CTRL | Qt::Key_BracketRight));
+    QCOMPARE(out->key(), QKeySequence(Qt::CTRL | Qt::Key_BracketLeft));
+    // ⌘[ on cues: nothing, the hint says what it is for.
+    emit out->activated();
+    QCOMPARE(order(), c);
+    QVERIFY2(hint->text().contains("select sub-cues"), qPrintable(hint->text()));
+    emit in->activated();
+    QCOMPARE(order(), QList<quint32>({ c[0], c[1], c[4] }));
+
+    // A cue and a sub-cue selected: greyed, saying why.
+    tree->expandAll();
+    select({ c[4], c[2] });
+    bool enabled = true;
+    QString tip;
+    QCOMPARE(contextAction(view, cueRow(tree, c[4]), "stMakeSubCueMenu", nullptr, &enabled, &tip),
+             QString("Make Sub-cue of 2"));
+    QVERIFY(!enabled);
+    QVERIFY2(tip.contains("only sub-cues"), qPrintable(tip));
+    QCOMPARE(order(), QList<quint32>({ c[0], c[1], c[4] }));
+
+    // Sub-cues 2.x of 3 (c[2]) and 4 (c[3]): Make Main Cues, after 2, in order.
+    select({ c[3], c[2] });
+    QCOMPARE(contextAction(view, cueRow(tree, c[3]), "stMakeMainCueMenu"), QString("Make Main Cues"));
+    QVERIFY(!st->isSubCue(c[2]));
+    QVERIFY(!st->isSubCue(c[3]));
+    const QList<quint32> now = order();
+    QCOMPARE(now.mid(0, 2), QList<quint32>({ c[0], c[1] }));
+    QVERIFY(now.indexOf(c[2]) == 2 && now.indexOf(c[3]) == 3);
+    QCOMPARE(now.last(), c[4]);
+    QCOMPARE(st->undoText(), QString("Make main cues"));
+    QVERIFY(st->undo());
+    QVERIFY(st->isSubCue(c[2]) && st->isSubCue(c[3]));
+
+    // ⌘[ on one sub-cue: only it moves; the other stays.
+    select({ c[2] });
+    emit out->activated();
+    QVERIFY(!st->isSubCue(c[2]));
+    QVERIFY(st->isSubCue(c[3], &parent));
+    QCOMPARE(parent, c[1]);
+
+    // Sub-cues of two different cues: greyed, saying why.
+    QVERIFY(st->undo());
+    const quint32 other = st->addSubCue(c[4], "Other");
+    tree->expandAll();
+    select({ c[2], other });
+    QCOMPARE(contextAction(view, cueRow(tree, c[2]), "stMakeMainCueMenu", nullptr, &enabled, &tip),
+             QString("Make Main Cues"));
+    QVERIFY(!enabled);
+    QVERIFY2(tip.contains("one cue"), qPrintable(tip));
+
+    // Operate: greyed, saying why; the key does nothing.
+    m_doc->setMode(Doc::Operate);
+    select({ c[2] });
+    QCOMPARE(contextAction(view, cueRow(tree, c[2]), "stMakeMainCueMenu", nullptr, &enabled, &tip),
+             QString("Make Main Cue"));
+    QVERIFY(!enabled);
+    QVERIFY2(tip.contains("Design"), qPrintable(tip));
+    emit out->activated();
+    QVERIFY(st->isSubCue(c[2]));
+    m_doc->setMode(Doc::Design);
+}
+
+/* Before/after pictures of Make Sub-cues / Make Main Cues: the menu and the
+   tree after each, at three sizes, when QLC_SHOT_DIR is set (prefix
+   QLC_SHOT_PREFIX, "after" by default). Uses only what the menu had before
+   too (the older item names), so the same test pictures the old build. */
+void ShowTreeView_Test::subCueConversionShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    const QString prefix = qEnvironmentVariable("QLC_SHOT_PREFIX", QStringLiteral("after"));
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 half = dimmer(127, "Half");
+    const quint32 blue = colour(Qt::blue, "Blue");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Dance"), "Song", ListMode::Tracking);
+    const QStringList names { "Preshow", "Verse", "Hit", "Sweep", "Chorus" };
+    QList<quint32> c;
+    for (int i = 0; i < names.count(); ++i)
+        c << st->addCue(list, i - 1, names.at(i));
+    st->setLayerLook(c[1], st->addLayer(c[1], groupTarget(towers->id())), st->lookForPalette(half));
+    st->setLayerLook(c[2], st->addLayer(c[2], groupTarget(usts->id())), st->lookForPalette(blue));
+    st->setLayerLook(c[3], st->addLayer(c[3], groupTarget(towers->id())), st->lookForPalette(blue));
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1024, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    const QList<QPair<QSize, QString>> sizes = { { QSize(1024, 640), "1024x640" },
+                                                 { QSize(1440, 900), "1440x900" },
+                                                 { QSize(1920, 1080), "1920x1080" } };
+    const QStringList items { "stMakeSubCueMenu", "stMakeMainCueMenu", "stMakeInlineCueMenu" };
+    auto select = [&](const QList<quint32> &ids) {
+        tree->expandAll();
+        QVERIFY(view.selectNode(ids.first()));
+        for (quint32 id : ids)
+            cueRow(tree, id)->setSelected(true);
+    };
+    // The view at each size; with @a menuOn, its right-click menu open on
+    // that cue's row (drawn in), its conversion item triggered at the last.
+    auto shoot = [&](const QString &state, quint32 menuOn, bool trigger) {
+        for (int k = 0; k < sizes.count(); ++k)
+        {
+            view.resize(sizes.at(k).first);
+            for (int i = 0; i < 5; ++i)
+                QCoreApplication::processEvents();
+            tree->expandAll();
+            QPixmap shot = view.grab();
+            if (menuOn != invalidId())
+            {
+                QTreeWidgetItem *row = cueRow(tree, menuOn);
+                QPoint at = tree->viewport()->mapTo(&view, tree->visualItemRect(row).center());
+                QPixmap menuShot;
+                QAction *convert = nullptr;
+                ModalCloser closer([&](QWidget *w) {
+                    QMenu *m = qobject_cast<QMenu *>(w);
+                    if (m == nullptr)
+                        return false;
+                    for (QAction *act : m->findChildren<QAction *>())
+                        if (items.contains(act->objectName()))
+                        {
+                            m->setActiveAction(act);
+                            convert = act;
+                        }
+                    QCoreApplication::processEvents();
+                    menuShot = m->grab();
+                    m->close();
+                    if (trigger && k + 1 == sizes.count() && convert != nullptr && convert->isEnabled())
+                        convert->trigger();
+                    return true;
+                });
+                QMetaObject::invokeMethod(&view, "slotTreeContextMenu",
+                                          Q_ARG(QPoint, tree->visualItemRect(row).center()));
+                QPainter p(&shot);
+                if (at.y() + menuShot.height() > shot.height())
+                    at.setY(qMax(0, shot.height() - menuShot.height()));
+                if (at.x() + menuShot.width() > shot.width())
+                    at.setX(qMax(0, shot.width() - menuShot.width()));
+                p.drawPixmap(at, menuShot);
+            }
+            QVERIFY(shot.save(QStringLiteral("%1/%2-%3-%4.png").arg(dir, prefix, state, sizes.at(k).second)));
+        }
+    };
+
+    select({ c[1], c[2], c[3] });
+    shoot("1-cues-selected-menu", c[2], true);
+    select({ c[1] });
+    shoot("2-tree-after-make-sub-cues", invalidId(), false);
+    select({ c[3], c[2] });
+    shoot("3-sub-cues-selected-menu", c[2], true);
+    select({ c[2] });
+    shoot("4-tree-after-make-main-cues", invalidId(), false);
 }
 
 /* Branson: "in the show-tree we need a way to disable cues inline and skip

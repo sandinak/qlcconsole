@@ -1593,6 +1593,16 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         QShortcut *pasteSc = new QShortcut(QKeySequence::Paste, m_tree);
         pasteSc->setContext(Qt::WidgetShortcut);
         connect(pasteSc, &QShortcut::activated, this, [this]() { pasteClipboard(); });
+        // ⌘] / ⌘[: indent / outdent, as outliners do -- the selected cues
+        // become sub-cues of the first, the selected sub-cues main cues.
+        QShortcut *inSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_BracketRight), m_tree);
+        inSc->setObjectName(QStringLiteral("stMakeSubCuesKey"));
+        inSc->setContext(Qt::WidgetShortcut);
+        connect(inSc, &QShortcut::activated, this, [this]() { convertSelectedCues(0); });
+        QShortcut *outSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_BracketLeft), m_tree);
+        outSc->setObjectName(QStringLiteral("stMakeMainCuesKey"));
+        outSc->setContext(Qt::WidgetShortcut);
+        connect(outSc, &QShortcut::activated, this, [this]() { convertSelectedCues(1); });
     }
     /* ⌘D duplicates, Esc backs out then clears the selection: the edit keys
        every list has (EditKeys). ⌘D is Duplicate only; Control ▸ Dump DMX is
@@ -9189,17 +9199,25 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
         if (!hit)
         {
             // 0.4: a sub-cue becomes a cue of the list, a cue a sub-cue of the
-            // one before; every step plays as before. Design mode only.
-            QAction *convert = nullptr;
-            if (sub)
-                convert = menu.add(ContextMenu::Organise, tr("Make Inline Cue"),
-                                   [this]() { convertSelectedCues(true); }, QStringLiteral("stMakeInlineCueMenu"));
-            else if (list != nullptr && at > 0)
-                convert = menu.add(ContextMenu::Organise,
-                                   tr("Make Sub-cue of %1").arg(m_st->cueNumber(*list, at - 1)),
-                                   [this]() { convertSelectedCues(false); }, QStringLiteral("stMakeSubCueMenu"));
-            if (convert != nullptr)
-                convert->setEnabled(design);
+            // one before (several: the 2nd..Nth of the first); every step
+            // plays as before. Design mode only. One item, its words
+            // following the selection; greyed with why.
+            const CueConvertPlan plan = cueConvertPlan(cueId);
+            if (plan.offered)
+            {
+                QAction *convert = menu.add(ContextMenu::Organise, plan.text, [this, cueId]() { convertSelectedCues(-1, cueId); },
+                                            plan.toMain ? QStringLiteral("stMakeMainCueMenu")
+                                                        : QStringLiteral("stMakeSubCueMenu"));
+                convert->setShortcut(QKeySequence(Qt::CTRL | (plan.toMain ? Qt::Key_BracketLeft
+                                                                          : Qt::Key_BracketRight)));
+                convert->setEnabled(plan.why.isEmpty());
+                convert->setToolTip(!plan.why.isEmpty() ? plan.why
+                                    : plan.toMain ? tr("GO steps through them, right after their cue; every press "
+                                                       "lights the same")
+                                                  : tr("Sub GO steps through them inside the cue; every press "
+                                                       "lights the same"));
+                menu.menu()->setToolTipsVisible(true);
+            }
             if (list != nullptr && single)
             {
                 // P4: a reusable cue, or this use unlinked.
@@ -11449,30 +11467,110 @@ quint32 ShowTreeView::newSubCue()
     return id;
 }
 
-bool ShowTreeView::convertSelectedCues(bool toInline)
+ShowTreeView::CueConvertPlan ShowTreeView::cueConvertPlan(quint32 cueId) const
 {
-    const quint32 current = currentCueId();
+    CueConvertPlan plan;
+    const CueList *list = m_st->listOfCue(cueId);
+    if (list == nullptr || list->looks)
+        return plan;
+    // The selected cues (any kind), the clicked one first if it isn't.
+    QList<quint32> sel;
+    for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+        if ((*it)->isSelected() && (*it)->data(0, KindRole).toInt() == CueNode)
+            sel << (*it)->data(0, IdRole).toUInt();
+    if (!sel.contains(cueId))
+        sel = { cueId };
+
+    quint32 parent = invalidId();
+    plan.toMain = m_st->isSubCue(cueId, &parent);
+    for (quint32 id : sel)
+    {
+        const CueList *l = m_st->listOfCue(id);
+        quint32 up = invalidId();
+        const bool sub = m_st->isSubCue(id, &up);
+        if (l == nullptr || l->looks || sub != plan.toMain)
+            plan.why = tr("Select only sub-cues (to make them main cues) or only cues (to make them sub-cues).");
+        else if (plan.toMain && up != parent)
+            plan.why = tr("Select sub-cues of one cue: they go back after it.");
+        else if (!plan.toMain && l != list)
+            plan.why = tr("Select cues of one cue list.");
+        if (!plan.why.isEmpty())
+            break;
+    }
+
+    if (plan.toMain)
+    {
+        plan.offered = true;
+        plan.ids = sel;
+        plan.parent = parent;
+        plan.text = sel.count() > 1 ? tr("Make Main Cues") : tr("Make Main Cue");
+    }
+    else
+    {
+        // In list order: the first selected is the cue the others go under.
+        QList<quint32> ordered;
+        for (const Cue &c : list->cues)
+            if (sel.contains(c.id))
+                ordered << c.id;
+        if (!plan.why.isEmpty() || ordered.count() < 2)
+        {
+            // One cue: under the cue before it (the first has none).
+            const int at = list->indexOf(cueId);
+            if (at <= 0)
+                return plan;
+            plan.parent = list->cues.at(at - 1).id;
+            plan.ids = { cueId };
+            plan.text = tr("Make Sub-cue of %1").arg(m_st->cueNumber(*list, at - 1));
+        }
+        else
+        {
+            plan.parent = ordered.takeFirst();
+            plan.ids = ordered;
+            plan.text = tr("Make Sub-cues of %1").arg(m_st->cueNumber(*list, list->indexOf(plan.parent)));
+        }
+        plan.offered = true;
+    }
+    if (plan.why.isEmpty() && m_doc->mode() != Doc::Design)
+        plan.why = tr("Design mode only: switch to Design to change what is a sub-cue.");
+    return plan;
+}
+
+bool ShowTreeView::convertSelectedCues(int toMain, quint32 cueId)
+{
+    const quint32 current = cueId != invalidId() ? cueId : currentCueId();
     if (current == invalidId())
     {
         m_hint->setText(tr("Select a cue first."));
         return false;
     }
-    // The selected cues of the current one's kind (sub-cues, or cues of its
-    // list), the current one first if nothing else is selected.
-    const CueList *home = m_st->listOfCue(current);
-    QList<quint32> ids;
-    for (QTreeWidgetItem *sel : m_tree->selectedItems())
+    const CueConvertPlan plan = cueConvertPlan(current);
+    if (!plan.offered && (m_st->listOfCue(current) == nullptr || m_st->listOfCue(current)->looks))
     {
-        if (sel->data(0, KindRole).toInt() != CueNode)
-            continue;
-        const quint32 id = sel->data(0, IdRole).toUInt();
-        if (toInline ? m_st->isSubCue(id) : (home != nullptr && home->indexOf(id) >= 0))
-            ids << id;
+        m_hint->setText(tr("A hit has no sub-cues: it plays what it has, from a VC button."));
+        return false;
     }
-    if (!ids.contains(current))
-        ids = { current };
+    if (!plan.offered)
+    {
+        m_hint->setText(tr("%1 is the first cue: there is no cue before it to go under. Select it with the cues "
+                           "that go under it.").arg(m_st->listOfCue(current) != nullptr
+                                                    ? m_st->cueNumber(*m_st->listOfCue(current), 0) : QString()));
+        return false;
+    }
+    if (toMain >= 0 && bool(toMain) != plan.toMain)
+    {
+        m_hint->setText(toMain ? tr("⌘[ makes sub-cues main cues: select sub-cues.")
+                               : tr("⌘] makes cues sub-cues: select two or more cues (the 2nd on go under the "
+                                    "first), or one to go under the cue before it."));
+        return false;
+    }
+    if (!plan.why.isEmpty())
+    {
+        m_hint->setText(plan.why);
+        return false;
+    }
     QString msg;
-    const bool ok = toInline ? m_st->makeInlineCues(ids, &msg) : m_st->makeSubCues(ids, invalidId(), &msg);
+    const bool ok = plan.toMain ? m_st->makeInlineCues(plan.ids, &msg)
+                                : m_st->makeSubCues(plan.ids, plan.parent, &msg);
     if (ok)
     {
         selectNode(current);

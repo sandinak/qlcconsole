@@ -613,8 +613,12 @@ void ControlMap::actOnFunction(quint32 fid, int how, const QString &what)
 void ControlMap::goList(const Binding &b, bool stop)
 {
     ShowTreeController *st = m_doc->showTree();
+    // A cue bound and then made a sub-cue (Make Sub-cues): GO plays its
+    // cue's step at that sub-cue, as /go 4.2 does.
+    quint32 parent = 0xFFFFFFFF;
+    const bool sub = b.target.type == CueTarget && st->isSubCue(b.target.id, &parent);
     const ShowTree::CueList *list = b.target.type == CueListTarget ? st->cueList(b.target.id)
-                                                                   : st->listOfCue(b.target.id);
+                                                                   : st->listOfCue(sub ? parent : b.target.id);
     if (list == nullptr || list->chaser == ShowTree::invalidId())
         return;
     Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(list->chaser));
@@ -626,11 +630,14 @@ void ControlMap::goList(const Binding &b, bool stop)
     r.command = stop ? ShowControl::Stop : ShowControl::Go;
     if (!stop && b.target.type == CueTarget)
     {
-        const ShowTree::Cue *c = st->cue(b.target.id);
+        const ShowTree::Cue *c = st->cue(sub ? parent : b.target.id);
+        // A cue with sub-cues plays their chaser as its step.
+        const ShowTree::CueList *subs = c == nullptr ? nullptr : st->cueList(st->subCueList(c->id));
+        const quint32 fid = subs != nullptr ? subs->chaser : c != nullptr ? c->collection : ShowTree::invalidId();
         int step = -1;
         for (int i = 0; c != nullptr && i < chaser->stepsCount(); ++i)
         {
-            if (chaser->stepAt(i) != nullptr && chaser->stepAt(i)->fid == c->collection)
+            if (chaser->stepAt(i) != nullptr && chaser->stepAt(i)->fid == fid)
             {
                 step = i;
                 break;
@@ -638,7 +645,15 @@ void ControlMap::goList(const Binding &b, bool stop)
         }
         if (step < 0)
             return;
-        r.cue = ShowControl::cueName(chaser, step, -1);
+        int subCue = -1;
+        if (sub)
+        {
+            const ShowTree::CueList *own = st->listOfCue(b.target.id);
+            subCue = own == nullptr ? -1 : own->indexOf(b.target.id);
+            if (subCue < 0 || subCue >= chaser->subCueCount(step))
+                return;
+        }
+        r.cue = ShowControl::cueName(chaser, step, subCue);
     }
     // The console's one run path (docs/design/RUN_COMMANDS.md).
     if (m_doc->showControl()->run(r, ShowControl::RouteControlMap))
@@ -731,7 +746,9 @@ bool ControlMap::isArmed(const Target &target) const
         return listId != 0xFFFFFFFF && (listId == run || m_selected.contains(cueList(listId)));
     };
     auto listOf = [st](quint32 cueId) {
-        const ShowTree::CueList *l = st->listOfCue(cueId);
+        // A sub-cue (a cue made one after it was bound): its cue's list.
+        quint32 parent = 0xFFFFFFFF;
+        const ShowTree::CueList *l = st->listOfCue(st->isSubCue(cueId, &parent) ? parent : cueId);
         return l == nullptr ? quint32(0xFFFFFFFF) : l->id;
     };
     switch (target.type)

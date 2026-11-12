@@ -65,7 +65,8 @@ private slots:
     void subCuesBecomeInlineCuesAndBack();
     void aCueBecomesASubCueCarryingWhatItPassedOn();
     void aBlockCueBecomesASubCueAndBack();
-    void aLaterSubCueBringsTheOnesAfterIt();
+    void aMiddleSubCueMovesAloneTheOthersStay();
+    void severalCuesGoUnderTheFirstSelected();
     void subCueConversionKeepsIdsAndRefusesWhatItCant();
     void subCueConversionCommands();
 

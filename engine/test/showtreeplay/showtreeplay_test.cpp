@@ -1000,9 +1000,10 @@ QList<QHash<quint32, uchar>> ShowTreePlay_Test::walk(quint32 listId, const QStri
     return out;
 }
 
-/* Make Inline Cue: 2.1 and 2.2 become cues after 2 (Cue-only, 2.2 from
-   2.1's look), GO steps through them and every press lights the rig as
-   before; Make Sub-cue puts them back, the same show. One undo step each. */
+/* Make Main Cues (was Make Inline Cue): 2.1 and 2.2 become cues after 2
+   (Cue-only, 2.2 from 2.1's look), GO steps through them and every press
+   lights the rig as before; Make Sub-cue puts them back, the same show. One
+   undo step each. */
 void ShowTreePlay_Test::subCuesBecomeInlineCuesAndBack()
 {
     const QList<quint32> ids = subCueShow();
@@ -1013,9 +1014,9 @@ void ShowTreePlay_Test::subCuesBecomeInlineCuesAndBack()
     const QList<QHash<quint32, uchar>> before = walk(ids[0], "ggsg");   // 1, 2.1, 2.2, 3
 
     QString msg;
-    QVERIFY2(st->makeInlineCues({ ids[4] }, &msg), qPrintable(msg));
+    QVERIFY2(st->makeInlineCues({ ids[5], ids[4] }, &msg), qPrintable(msg));   // in their order
     QVERIFY2(msg.contains("2.1 and 2.2 are cues now"), qPrintable(msg));
-    QVERIFY2(msg.contains("2.2 came along"), qPrintable(msg));
+    QCOMPARE(st->undoText(), QString("Make main cues"));
     const CueList *list = st->cueList(ids[0]);
     QCOMPARE(list->cues.count(), 5);
     QCOMPARE(list->cues.at(2).id, ids[4]);
@@ -1139,28 +1140,85 @@ void ShowTreePlay_Test::aBlockCueBecomesASubCueAndBack()
     QCOMPARE(walk(listId, "gggg"), before);
 }
 
-/* Make Inline Cue on 2.2 of three: 2.2 and 2.3 go (a sub-cue plays only after
-   the ones before it), 2.1 stays; 2.2 starts from 2.1's look all the same. */
-void ShowTreePlay_Test::aLaterSubCueBringsTheOnesAfterIt()
+/* Make Main Cue on 2.2 of three (2026-11-12: only the selected move): 2.2
+   becomes a cue after 2, 2.1 and 2.3 stay sub-cues of 2. Every cue lights
+   as before -- 2.3 gets what 2.2 set carried in, 2.2 what 2.1 set -- and cue
+   2 waits for GO, so Sub GO still reaches 2.3. One undo step, back exactly. */
+void ShowTreePlay_Test::aMiddleSubCueMovesAloneTheOthersStay()
 {
     const QList<quint32> ids = subCueShow();
     ShowTreeController *st = m_doc->showTree();
     const quint32 s3 = st->addSubCue(ids[2], "Out");
+    Cue two = *st->cue(ids[2]);
+    two.hold = 3000;
+    QVERIFY(st->setCue(two));
+    const QString xml = productionXml(st);
     const QHash<quint32, Stage> stages = stagesOf(st);
     const QList<QHash<quint32, uchar>> before = walk(ids[0], "ggssg");  // 1, 2.1, 2.2, 2.3, 3
 
     QString msg;
     QVERIFY2(st->makeInlineCues({ ids[5] }, &msg), qPrintable(msg));
-    QVERIFY2(msg.contains("2.3 came along"), qPrintable(msg));
+    QVERIFY2(msg.contains("2.2 is a cue now"), qPrintable(msg));
+    QVERIFY2(msg.contains("2.3 stays a sub-cue of 2"), qPrintable(msg));
+    QVERIFY2(msg.contains("2 waits for GO"), qPrintable(msg));
+    QCOMPARE(st->undoText(), QString("Make main cue"));
     const CueList *subs = st->cueList(st->subCueList(ids[2]));
-    QCOMPARE(subs->cues.count(), 1);
+    QVERIFY(subs != nullptr);
+    QCOMPARE(subs->cues.count(), 2);
+    QCOMPARE(subs->cues.at(0).id, ids[4]);
+    QCOMPARE(subs->cues.at(1).id, s3);
+    QCOMPARE(st->cueNumber(*subs, 1), QString("2.3"));          // renumbered only where it must
     const CueList *list = st->cueList(ids[0]);
+    QCOMPARE(list->cues.count(), 4);
     QCOMPARE(list->cues.at(2).id, ids[5]);
-    QCOMPARE(list->cues.at(3).id, s3);
+    QCOMPARE(st->cueNumber(*list, 2), QString("2.2"));
+    QVERIFY(int(list->cues.at(1).hold) < 0);                     // cue 2 waits for GO
+    QCOMPARE(list->cues.at(2).hold, 3000u);                      // 2.2 has cue 2's hold
     QCOMPARE(stagesOf(st), stages);
-    const QList<QHash<quint32, uchar>> want { before[0], before[1], before[2], before[3] };
-    QCOMPARE(walk(ids[0], "gggg"), want);
-    QCOMPARE(walk(ids[0], "ggggg").last(), before[4]);
+    // 1, 2 (2.1), Sub GO 2.3, GO 2.2, GO 3: each lights as it did.
+    const QList<QHash<quint32, uchar>> want { before[0], before[1], before[3], before[2], before[4] };
+    QCOMPARE(walk(ids[0], "ggsgg"), want);
+
+    QVERIFY(st->undo());
+    QCOMPARE(productionXml(st), xml);
+}
+
+/* Make Sub-cues with several cues selected (2026-11-12): the 2nd..Nth go
+   under the first, in order, after the sub-cues it has; a selected cue's own
+   sub-cues come along flattened after it (one level). Every cue lights as
+   before, one undo step, back exactly. */
+void ShowTreePlay_Test::severalCuesGoUnderTheFirstSelected()
+{
+    const QList<quint32> ids = subCueShow();     // 1, 2 (2.1, 2.2), 3
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 c4 = st->addCue(ids[0], 2, "Four");
+    const FixtureGroup *a = m_doc->fixtureGroups().at(0);
+    st->setTargetLook(c4, groupTarget(a->id()), st->lookForPalette(dimmer(200, "Mid")));
+    const QString xml = productionXml(st);
+    const QHash<quint32, Stage> stages = stagesOf(st);
+
+    QString msg;
+    QVERIFY2(st->makeSubCues({ ids[2], c4 }, ids[1], &msg), qPrintable(msg));
+    QVERIFY2(msg.contains("are sub-cues of 1"), qPrintable(msg));
+    QCOMPARE(st->undoText(), QString("Make sub-cues"));
+    const CueList *list = st->cueList(ids[0]);
+    QCOMPARE(list->cues.count(), 2);                 // 1 and 3
+    QCOMPARE(list->cues.at(1).id, ids[3]);
+    const CueList *subs = st->cueList(st->subCueList(ids[1]));
+    QVERIFY(subs != nullptr);
+    QList<quint32> order;
+    for (const Cue &c : subs->cues)
+        order << c.id;
+    // Cue 1's own look first (it had no sub-cues), then 2, its 2.1 and 2.2
+    // flattened after it, then 4.
+    QCOMPARE(order.count(), 5);
+    QCOMPARE(order.mid(1), QList<quint32>({ ids[2], ids[4], ids[5], c4 }));
+    QCOMPARE(st->subCueList(ids[2]), invalidId());   // one level
+    const QHash<quint32, Stage> now = stagesOf(st);
+    for (auto it = stages.constBegin(); it != stages.constEnd(); ++it)
+        QCOMPARE(now.value(it.key()), it.value());
+    QVERIFY(st->undo());
+    QCOMPARE(productionXml(st), xml);
 }
 
 /* Ids stay (a script anchor, a hit under the cue, skip); a taken number is

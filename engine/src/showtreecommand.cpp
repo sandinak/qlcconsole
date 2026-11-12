@@ -111,9 +111,9 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
             { "sub \"Hit\"", "sub + \"Sweep\" follow 0.5", "sub \"Strobe\" subgo" },
             { "follow", "subgo", "cue", "inline" });
         add("inline", "subcues", "inline",
-            "The selected sub-cue (and the sub-cues after it) becomes a cue of the list, right after its "
-            "cue: GO steps through it. Auto-follow becomes the hold of the cue before; every cue plays "
-            "as before (looks carried in where needed). Design mode only.",
+            "The selected sub-cue becomes a main cue of the list, right after its cue: GO plays it (the "
+            "tree's Make Main Cue, ⌘[). The sub-cues after it stay. Auto-follow becomes the hold of the "
+            "cue before; every cue plays as before (looks carried in where needed). Design mode only.",
             { "inline" }, { "sub", "subgo" });
         add("follow", "subcues", "follow [<seconds>]",
             "The selected sub-cue goes on by itself <seconds> after the sub-cue before has faded in "
@@ -2098,8 +2098,8 @@ ShowTreeCommand::Result ShowTreeCommand::runParsed(const QString &line, const Co
     }
     else if (w0 == QLatin1String("inline"))
     {
-        // inline: the selected sub-cue (and the ones after it) become cues
-        // of the list, after their cue.
+        // inline: the selected sub-cue becomes a cue of the list, after its
+        // cue (the sub-cues after it stay).
         r.word();
         QString msg;
         if (!r.atEnd())
