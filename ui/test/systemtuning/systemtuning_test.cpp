@@ -15,6 +15,10 @@
   limitations under the License.
 */
 
+#ifndef _WIN32
+#include <sys/resource.h>
+#endif
+#include <cerrno>
 #include <QtTest>
 #include <QClipboard>
 #include <QCheckBox>
@@ -946,7 +950,12 @@ void SystemTuning_Test::theLookRunsBelowTheShow()
                                                         << QStringLiteral("ps -o nice= -p $$"),
                                           QDeadlineTimer(5000)).trimmed().toInt(&ok);
     QVERIFY(ok);
-    QVERIFY2(nice >= 19, qPrintable(QString::number(nice)));
+    /* Below the show: nicer than the app itself. How far up a host lets it
+       go varies (a GitHub macOS runner stops at 10), so not a fixed 19. */
+    errno = 0;
+    const int own = getpriority(PRIO_PROCESS, 0);
+    QVERIFY(errno == 0);
+    QVERIFY2(nice > own && nice >= 10, qPrintable(QString("tool %1, app %2").arg(nice).arg(own)));
 #endif
 }
 
