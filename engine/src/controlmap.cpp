@@ -631,10 +631,13 @@ void ControlMap::goList(const Binding &b, bool stop)
     if (!stop && b.target.type == CueTarget)
     {
         const ShowTree::Cue *c = st->cue(sub ? parent : b.target.id);
+        // A cue with sub-cues plays their chaser as its step.
+        const ShowTree::CueList *subs = c == nullptr ? nullptr : st->cueList(st->subCueList(c->id));
+        const quint32 fid = subs != nullptr ? subs->chaser : c != nullptr ? c->collection : ShowTree::invalidId();
         int step = -1;
         for (int i = 0; c != nullptr && i < chaser->stepsCount(); ++i)
         {
-            if (chaser->stepAt(i) != nullptr && chaser->stepAt(i)->fid == c->collection)
+            if (chaser->stepAt(i) != nullptr && chaser->stepAt(i)->fid == fid)
             {
                 step = i;
                 break;
@@ -645,8 +648,8 @@ void ControlMap::goList(const Binding &b, bool stop)
         int subCue = -1;
         if (sub)
         {
-            const ShowTree::CueList *subs = st->listOfCue(b.target.id);
-            subCue = subs == nullptr ? -1 : subs->indexOf(b.target.id);
+            const ShowTree::CueList *own = st->listOfCue(b.target.id);
+            subCue = own == nullptr ? -1 : own->indexOf(b.target.id);
             if (subCue < 0 || subCue >= chaser->subCueCount(step))
                 return;
         }
