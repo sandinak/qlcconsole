@@ -42,6 +42,7 @@ private slots:
 
     /* The real probe on this machine */
     void theRealProbeKnowsThisSystem();
+    void theLookRunsBelowTheShow();
 
     /* Settings */
     void settingsDefaultsAndAreRemembered();
@@ -56,6 +57,24 @@ private slots:
     void thePageListsTheItemsAndCopiesTheCommand();
     void thePageSavesItsSettings();
     void theFullSpeedBoxUpdatesTheList();
+
+    void toolOutputIsRead();
+    void frameTimingCountsLateAndDropped();
+    void measuredItemFollowsTheLateFrames();
+    void universeThreadsAdviceFollowsTheNumbers();
+    void theMachineItemKnowsTheArchitecture();
+    void batteryAndHeatAndThePi();
+    void wifiMattersMostWhenItCarriesDmx();
+    void localNetworkOnlyWhenEveryOutputFails();
+    void screenLockFollowsKeepDisplayAwake();
+    void theKeepAwakeBoxUpdatesTheList();
+    void backupsRunningIdleAndBuiltIn();
+    void updatesPendingRunningAndScheduled();
+    void otherProgramsAddUpByName();
+    void memoryDiskAndRigSettings();
+    void hostLookRunsOffTheUiThread();
+    void aLightLookKeepsTheDeepAnswers();
+    void theRealLookIsBounded();
 
 private:
     Doc *m_doc = nullptr;

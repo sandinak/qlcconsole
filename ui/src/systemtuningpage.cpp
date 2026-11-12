@@ -70,7 +70,8 @@ SystemTuningPage::SystemTuningPage(Doc *doc, QWidget *parent)
 
     QGroupBox *check = new QGroupBox(tr("This computer"), this);
     QVBoxLayout *checkLayout = new QVBoxLayout(check);
-    QLabel *intro = new QLabel(tr("What helps the DMX timer send every frame on time (50 a second). "
+    QLabel *intro = new QLabel(tr("What helps every DMX frame leave on time (50 a second), and what could "
+                                  "get in the way during a show. "
                                   "The app changes nothing here that needs an administrator: "
                                   "copy the command, or follow the steps."), check);
     intro->setWordWrap(true);
@@ -114,7 +115,8 @@ SystemTuningPage::SystemTuningPage(Doc *doc, QWidget *parent)
     connect(m_copy, &QPushButton::clicked, this, &SystemTuningPage::copyCommand);
     connect(again, &QPushButton::clicked, this, &SystemTuningPage::refresh);
     /* The full-speed item follows the box, before OK */
-    connect(m_fullSpeed, &QCheckBox::toggled, this, &SystemTuningPage::refresh);
+    connect(m_fullSpeed, &QCheckBox::toggled, this, &SystemTuningPage::showFound);
+    connect(m_display, &QCheckBox::toggled, this, &SystemTuningPage::showFound);
 
     refresh();
 }
@@ -127,14 +129,22 @@ void SystemTuningPage::setProbe(const std::function<SystemTuning::Probe()> &prob
 
 void SystemTuningPage::refresh()
 {
-    SystemTuning::Probe p = m_probe();
+    m_found = m_probe();
+    showFound();
+}
+
+void SystemTuningPage::showFound()
+{
+    SystemTuning::Probe p = m_found;
     p.fullSpeedInOperate = m_fullSpeed->isChecked();
+    p.keepDisplayAwake = m_display->isChecked();
     m_items = SystemTuning::check(p);
 
     const QString key = m_tree->currentItem() ? m_tree->currentItem()->data(0, Qt::UserRole).toString()
                                               : QString();
     m_tree->clear();
     QTreeWidgetItem *select = nullptr;
+    bool selectedImportant = false;
     for (const SystemTuning::Item &it : m_items)
     {
         QTreeWidgetItem *row = new QTreeWidgetItem(m_tree);
@@ -150,8 +160,16 @@ void SystemTuningPage::refresh()
             row->setForeground(0, QColor(0xd0, 0x8a, 0x1c));
         else if (it.status == SystemTuning::Good)
             row->setForeground(0, QColor(0x3a, 0x9a, 0x4a));
-        if (it.key == key || (select == nullptr && key.isEmpty() && it.status == SystemTuning::CanImprove))
+        /* What was selected stays selected; otherwise the first thing to
+           fix, and an important one before any other */
+        const bool important = it.important && it.status == SystemTuning::CanImprove;
+        if (it.key == key
+            || (key.isEmpty() && it.status == SystemTuning::CanImprove
+                && (select == nullptr || (important && selectedImportant == false))))
+        {
             select = row;
+            selectedImportant = important;
+        }
     }
     if (select == nullptr)
         select = m_tree->topLevelItem(0);

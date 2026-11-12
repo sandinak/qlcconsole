@@ -573,6 +573,10 @@ static int runTimed(Doc *doc, const QList<Function*> &funcs, const ShowSpec &spe
         fdEnd = fds;
         if (el >= o.warmupSec * 1000)
         {
+            if (cpuWarm < 0)
+                for (Universe *u : uniArray)
+                    if (u != nullptr)
+                        u->resetSendLatency();
             if (cpuWarm < 0) { cpuWarm = cpuNow; wallWarm = el / 1000.0; }
             slopeT << el / 1000.0; slopeY << rss; cpuPcts << cpuPct;
         }
@@ -676,6 +680,38 @@ static int runTimed(Doc *doc, const QList<Function*> &funcs, const ShowSpec &spe
     r["latePct"] = rec.ticksAll ? 100.0 * double(rec.lateAll) / double(rec.ticksAll) : 0.0;
     r["lateness"] = histMap(rec.lateAllH); r["wake"] = histMap(rec.wakeAll); r["stall"] = histMap(rec.stallAll);
     r["lateSched"] = double(rec.lateSched); r["lateLoad"] = double(rec.lateLoad);
+    {
+        // Tick to sent, every universe's frames together. An upper bound of
+        // the bucket: within a quarter millisecond.
+        QVector<quint64> sum(Universe::kSendLatencyBuckets, 0);
+        quint64 frames = 0;
+        for (Universe *u : uniArray)
+            if (u != nullptr)
+            {
+                const QVector<quint32> h = u->sendLatencyHistogram();
+                for (int i = 0; i < h.size(); i++) { sum[i] += h.at(i); frames += h.at(i); }
+            }
+        const double bucketMs = Universe::kSendLatencyBucketUs / 1000.0;
+        auto pct = [&](double p) {
+            const quint64 want = quint64(std::ceil(double(frames) * p / 100.0));
+            quint64 seen = 0;
+            for (int i = 0; i < sum.size(); i++)
+            {
+                seen += sum.at(i);
+                if (seen >= want && seen > 0)
+                    return (i + 1) * bucketMs;
+            }
+            return 0.0;
+        };
+        double mx = 0.0;
+        for (int i = sum.size() - 1; i >= 0 && mx == 0.0; i--)
+            if (sum.at(i) > 0)
+                mx = (i + 1) * bucketMs;
+        QVariantMap send;
+        send["p50"] = pct(50); send["p99"] = pct(99); send["p999"] = pct(99.9);
+        send["max"] = mx; send["count"] = double(frames);
+        r["send"] = send;
+    }
     r["timerPolicy"] = rec.timerPolicy == SCHED_OTHER ? QString("other")
                        : rec.timerPolicy == SCHED_FIFO ? QString("fifo")
                        : rec.timerPolicy == SCHED_RR ? QString("rr")

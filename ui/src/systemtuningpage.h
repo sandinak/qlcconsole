@@ -67,10 +67,13 @@ public:
 
 private:
     void showSelected();
+    /** The list again from what was last found, without looking again */
+    void showFound();
 
 private:
     Doc *m_doc;
     std::function<SystemTuning::Probe()> m_probe;
+    SystemTuning::Probe m_found;
     QList<SystemTuning::Item> m_items;
 
     QCheckBox *m_fullSpeed;

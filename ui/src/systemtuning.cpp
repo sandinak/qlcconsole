@@ -15,17 +15,28 @@
   limitations under the License.
 */
 
+#include <QGuiApplication>
 #include <QCoreApplication>
+#include <QSysInfo>
 #include <QSettings>
+#include <QThread>
+#include <QThreadPool>
+#include <QPromise>
 #include <QFile>
 #include <QDir>
+#include <memory>
 
 #include "systemtuning.h"
 #include "systemprobe.h"
 #include "showstatus.h"
+#include "inputoutputmap.h"
+#include "outputpatch.h"
+#include "qlcioplugin.h"
 
 #define KEY_FULL_SPEED   QStringLiteral("tuning/fullSpeedInOperate")
-#define KEY_DISPLAY      QStringLiteral("tuning/keepDisplayAwakeInOperate")
+/* A new key since the default became on: pressing OK in Settings used to save
+   the old default, which says nothing about what anyone wanted */
+#define KEY_DISPLAY      QStringLiteral("tuning/displayAwakeInOperate")
 #define KEY_WARN         QStringLiteral("tuning/warnInOperate")
 
 namespace
@@ -50,6 +61,13 @@ QString readLine(const QString &path)
 
 SystemTuning::Probe SystemTuning::probe(const Doc *doc)
 {
+    Probe p = probeDoc(doc);
+    probeHost(&p, true);
+    return p;
+}
+
+SystemTuning::Probe SystemTuning::probeDoc(const Doc *doc)
+{
     Probe p;
 #if defined(Q_OS_LINUX)
     p.os = OsLinux;
@@ -62,10 +80,68 @@ SystemTuning::Probe SystemTuning::probe(const Doc *doc)
     {
         p.scheduling = doc->masterTimer()->timerScheduling();
         p.schedulingText = doc->masterTimer()->timerSchedulingText();
+        p.frames = doc->masterTimer()->frameTiming();
     }
     p.binary = QCoreApplication::applicationFilePath();
     p.fullSpeedSupported = SystemProbe::canHoldFullSpeed();
     p.fullSpeedInOperate = fullSpeedInOperate();
+    p.keepDisplayAwake = keepDisplayAwakeInOperate();
+
+    p.universeScheduling = Universe::threadScheduling();
+    if (doc != nullptr && doc->inputOutputMap() != nullptr)
+    {
+        InputOutputMap *ioMap = doc->inputOutputMap();
+        QVector<quint64> sends(Universe::kSendLatencyBuckets, 0);
+        quint64 total = 0;
+        const QList<Universe *> universes = ioMap->universes();
+        for (Universe *u : universes)
+        {
+            const QVector<quint32> h = u->sendLatencyHistogram();
+            for (int i = 0; i < h.size() && i < sends.size(); i++)
+            {
+                sends[i] += h.at(i);
+                total += h.at(i);
+            }
+            if (u->outputPatchesCount() > 0)
+                p.patchedUniverses++;
+            for (int i = 0; i < u->outputPatchesCount(); i++)
+            {
+                OutputPatch *op = ioMap->outputPatch(u->id(), i);
+                if (op == nullptr || op->plugin() == nullptr)
+                    continue;
+                const QString plugin = op->pluginName();
+                if (plugin != QLatin1String("ArtNet") && plugin != QLatin1String("E1.31"))
+                    continue;
+                p.networkOutputs++;
+                p.dmxAddresses << op->outputName();
+                const QStringList problems = op->plugin()->outputProblems(op->output(), u->id());
+                if (problems.isEmpty() == false)
+                {
+                    p.failingOutputs++;
+                    p.outputProblems << problems;
+                }
+            }
+        }
+        if (total > 0)
+        {
+            quint64 seen = 0;
+            for (int i = 0; i < sends.size(); i++)
+            {
+                seen += sends.at(i);
+                if (seen * 100 >= total * 99)
+                {
+                    p.sendP99Ms = double(i + 1) * Universe::kSendLatencyBucketUs / 1000.0;
+                    break;
+                }
+            }
+        }
+    }
+    {
+        QSettings s;
+        p.rigOperateFps = s.value(QStringLiteral("monitor/rig/operatefps"), 15).toInt();
+        p.rigSupersample = s.value(QStringLiteral("monitor/rig/supersample"), 2).toInt();
+        p.rigGpu = s.value(QStringLiteral("monitor/rig/gpu"), true).toBool();
+    }
 
 #if defined(Q_OS_LINUX)
     p.rtprioLimit = SystemProbe::rtprioLimit();
@@ -234,33 +310,6 @@ QList<SystemTuning::Item> SystemTuning::check(const Probe &p)
             items << it;
         }
 
-        /* Wi-Fi */
-        {
-            Item it;
-            it.key = QStringLiteral("wifi");
-            it.title = tr("Wi-Fi power saving");
-            it.what = tr("Wi-Fi power saving holds packets back for up to a few hundred "
-                         "milliseconds. Art-Net or sACN over Wi-Fi then arrives in bursts.");
-            if (p.wirelessUp.isEmpty())
-            {
-                it.status = Good;
-                it.state = tr("no Wi-Fi in use");
-            }
-            else
-            {
-                it.status = CanImprove;
-                it.state = tr("Wi-Fi up: %1").arg(p.wirelessUp.join(QStringLiteral(", ")));
-                QStringList cmds;
-                for (const QString &dev : p.wirelessUp)
-                    cmds << QStringLiteral("sudo iw dev %1 set power_save off").arg(dev);
-                it.command = cmds.join(QLatin1Char('\n'));
-                it.howTo = tr("Best: send DMX over wired Ethernet. The command lasts until the "
-                              "next restart; NetworkManager keeps it with "
-                              "wifi.powersave = 2 in /etc/NetworkManager/conf.d/.");
-            }
-            items << it;
-        }
-
         /* The kernel */
         {
             Item it;
@@ -282,11 +331,35 @@ QList<SystemTuning::Item> SystemTuning::check(const Probe &p)
             it.title = tr("Raspberry Pi power and heat");
             it.what = tr("A Pi with a weak power supply or no cooling slows itself down without "
                          "warning. Overclocking is not needed.");
-            it.status = Advice;
             it.state = p.model;
-            it.command = QStringLiteral("vcgencmd get_throttled");
-            it.howTo = tr("It should print throttled=0x0. Anything else: use the official power "
-                          "supply and a fan or heatsink case.");
+            const QString fix = tr("Use the official power supply and a fan or heatsink case.");
+            if (p.piThrottled < 0)
+            {
+                it.status = Advice;
+                it.command = QStringLiteral("vcgencmd get_throttled");
+                it.howTo = tr("It should print throttled=0x0. Anything else: use the official power "
+                              "supply and a fan or heatsink case.");
+            }
+            else if (p.piThrottled == 0)
+            {
+                it.status = Good;
+                it.state = tr("never slowed since it started");
+            }
+            else if (p.piThrottled & 0xF)
+            {
+                it.status = CanImprove;
+                it.important = true;
+                it.state = (p.piThrottled & 0x1) ? tr("slowing down now: power supply too weak")
+                                                 : tr("slowing down now: too hot");
+                it.howTo = fix;
+            }
+            else
+            {
+                it.status = CanImprove;
+                it.state = (p.piThrottled & 0x10000) ? tr("power supply dipped since it started")
+                                                     : tr("slowed down since it started");
+                it.howTo = fix;
+            }
             items << it;
         }
     }
@@ -358,6 +431,7 @@ QList<SystemTuning::Item> SystemTuning::check(const Probe &p)
         items << it;
     }
 
+    appendHostItems(p, &items);
     return items;
 }
 
@@ -386,7 +460,7 @@ void SystemTuning::setFullSpeedInOperate(bool on)
 
 bool SystemTuning::keepDisplayAwakeInOperate()
 {
-    return QSettings().value(KEY_DISPLAY, false).toBool();
+    return QSettings().value(KEY_DISPLAY, true).toBool();
 }
 
 void SystemTuning::setKeepDisplayAwakeInOperate(bool on)
@@ -413,11 +487,29 @@ SystemTuning::SystemTuning(Doc *doc, QObject *parent)
     , m_doc(doc)
 {
     Q_ASSERT(doc != nullptr);
-    m_probe = [this]() { return probe(m_doc); };
+    m_probe = [this]() { return probeDoc(m_doc); };
     m_hold = [](bool on, bool keepDisplayAwake) {
         SystemProbe::setFullSpeed(on, keepDisplayAwake,
                                   QStringLiteral("qlcconsole: show in Operate, sending DMX"));
     };
+    /* Offscreen there is no operator, and a test must not depend on what
+       else its host happens to be doing */
+    if (QGuiApplication::platformName() != QLatin1String("offscreen"))
+        m_gather = [](Probe *p, bool deep) { probeHost(p, deep); };
+    connect(&m_watcher, &QFutureWatcher<Probe>::finished, this, [this]() {
+        if (m_watcher.isCanceled() == false && m_watcher.future().resultCount() > 0)
+            publish(m_watcher.result());
+        if (m_gatherAgain)
+        {
+            m_gatherAgain = false;
+            updateStatus();
+        }
+    });
+    m_recheck.setInterval(15000);
+    connect(&m_recheck, &QTimer::timeout, this, [this]() {
+        m_rechecks++;
+        updateStatus(m_rechecks % 4 == 0);
+    });
     connect(m_doc, &Doc::modeChanged, this, &SystemTuning::slotModeChanged);
     if (s_instance == nullptr)
         s_instance = this;
@@ -445,6 +537,17 @@ QString SystemTuning::statusKey()
 void SystemTuning::setProbe(const std::function<Probe()> &probeFn)
 {
     m_probe = probeFn;
+    m_gather = nullptr;
+}
+
+void SystemTuning::setHostGather(const std::function<void(Probe *, bool)> &gatherFn)
+{
+    m_gather = gatherFn;
+}
+
+void SystemTuning::recheckNow(bool deep)
+{
+    updateStatus(deep);
 }
 
 void SystemTuning::setHold(const std::function<void(bool, bool)> &holdFn)
@@ -472,15 +575,88 @@ void SystemTuning::apply()
     updateStatus();
 }
 
-void SystemTuning::updateStatus()
+void SystemTuning::updateStatus(bool deep)
 {
     ShowStatus *status = ShowStatus::instance();
     if (m_doc->mode() != Doc::Operate || warnInOperate() == false || !m_probe)
     {
+        m_recheck.stop();
+        m_gatherAgain = false;
         status->clearStatus(statusKey());
         return;
     }
-    const QList<Item> problems = importantProblems(check(m_probe()));
+    if (m_recheck.isActive() == false)
+    {
+        m_rechecks = 0;
+        m_baseline = m_doc->masterTimer() != nullptr ? m_doc->masterTimer()->frameTiming()
+                                                     : MasterTimer::FrameTiming();
+        m_recheck.start();
+    }
+
+    Probe p = m_probe();
+    /* Late frames since the last look, not since the app started */
+    const MasterTimer::FrameTiming now = p.frames;
+    if (now.frames >= m_baseline.frames)
+    {
+        p.frames.frames -= m_baseline.frames;
+        p.frames.late -= m_baseline.late;
+        p.frames.dropped -= m_baseline.dropped;
+    }
+    m_baseline = now;
+
+    if (!m_gather)
+    {
+        publish(p);
+        return;
+    }
+    if (m_watcher.isRunning())
+    {
+        m_gatherAgain = true;
+        return;
+    }
+    auto promise = std::make_shared<QPromise<Probe>>();
+    m_watcher.setFuture(promise->future());
+    promise->start();
+    const std::function<void(Probe *, bool)> gather = m_gather;
+    QThreadPool::globalInstance()->start([promise, p, deep, gather]() mutable {
+        /* The show comes first. A pool thread goes back to work for others
+           afterwards, and may not be handed back as "inherit". */
+        QThread *thread = QThread::currentThread();
+        const QThread::Priority before = thread->priority();
+        thread->setPriority(QThread::LowestPriority);
+        gather(&p, deep);
+        thread->setPriority(before == QThread::InheritPriority ? QThread::NormalPriority : before);
+        promise->addResult(p);
+        promise->finish();
+    });
+}
+
+void SystemTuning::publish(Probe p)
+{
+    if (p.deepLooked)
+    {
+        m_deep = p;
+    }
+    else if (m_deep.deepLooked)
+    {
+        /* Unknown is not the same as fixed: a light look mustn't clear the
+           warning a deep one raised */
+        p.screenLock = m_deep.screenLock;
+        p.idleMinutes = m_deep.idleMinutes;
+        p.backupRunning = m_deep.backupRunning;
+        p.processes = m_deep.processes;
+        p.processesKnown = m_deep.processesKnown;
+        p.piThrottled = m_deep.piThrottled;
+    }
+
+    ShowStatus *status = ShowStatus::instance();
+    /* The answer can arrive after the show has left Operate */
+    if (m_doc->mode() != Doc::Operate || warnInOperate() == false)
+    {
+        status->clearStatus(statusKey());
+        return;
+    }
+    const QList<Item> problems = importantProblems(check(p));
     if (problems.isEmpty())
     {
         status->clearStatus(statusKey());
@@ -490,7 +666,7 @@ void SystemTuning::updateStatus()
     for (const Item &it : problems)
         lines << QStringLiteral("%1: %2").arg(it.title, it.state);
     status->setStatus(statusKey(), ShowStatus::Warning,
-                      tr("This computer isn't set up for steady DMX timing"),
-                      tr("DMX frames may leave late. See Settings ▸ Performance."),
+                      tr("This computer isn't set up for the show"),
+                      tr("DMX frames may leave late, or the screen may lock. See Settings ▸ Performance."),
                       lines);
 }

@@ -18,6 +18,7 @@
 */
 
 #include <QDebug>
+#include <cmath>
 
 #include "genericfader.h"
 #include "fadechannel.h"
@@ -448,11 +449,7 @@ void GenericFader::write(Universe *universe)
         {
             // An override hit: over what plays, by its mix. Kept while it
             // plays, a 0 too (a blackout hit holds its zeros).
-            for (int i = 0; i < channelCount; i++)
-            {
-                const uchar b = channelCount == 1 ? uchar(value) : ((uchar *)&value)[channelCount - 1 - i];
-                universe->writeMix(int(address) + i, b, m_mix);
-            }
+            universe->writeMix(int(address), value, channelCount, m_mix);
             continue;
         }
         if (flags & FadeChannel::Override)
@@ -465,19 +462,27 @@ void GenericFader::write(Universe *universe)
             // A parked channel goes past the Grand Master as well.
             const bool edit = flags & FadeChannel::EditOverride;
             const bool pastGM = flags & FadeChannel::PastGM;
+            if (flags & FadeChannel::Mix)
+            {
+                // An effect part way in or out: from what is under it
+                // (written by the faders before this one) to its own. The
+                // channel as one number: byte by byte, the fine byte of a
+                // 16-bit one saw-toothed all the way through the mix.
+                double under = 0.0, full = 1.0;
+                for (int i = 0; i < channelCount; i++)
+                {
+                    under = under * 256.0 + universe->preGMValue(int(address) + i);
+                    full *= 256.0;
+                }
+                under *= fc.mixScale();
+                double own = channelCount == 1 ? double(uchar(value)) : double(value);
+                if ((flags & FadeChannel::MixHTP) && under > own)
+                    own = under;
+                value = quint32(qBound(0.0, std::round(under + (own - under) * fc.mixDepth()), full - 1.0));
+            }
             for (int i = 0; i < channelCount; i++)
             {
-                uchar b = channelCount == 1 ? uchar(value) : ((uchar *)&value)[channelCount - 1 - i];
-                if (flags & FadeChannel::Mix)
-                {
-                    // An effect part way in or out: from what is under it
-                    // (written by the faders before this one) to its own.
-                    const float under = float(universe->preGMValue(int(address) + i)) * fc.mixScale();
-                    float own = float(b);
-                    if ((flags & FadeChannel::MixHTP) && under > own)
-                        own = under;
-                    b = uchar(qBound(0, qRound(under + (own - under) * fc.mixDepth()), 255));
-                }
+                const uchar b = channelCount == 1 ? uchar(value) : ((uchar *)&value)[channelCount - 1 - i];
                 if (edit)
                     universe->writeOverride(address + i, b);
                 else if (pastGM)

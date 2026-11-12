@@ -1370,6 +1370,25 @@ bool Doc::fitsUniverseLimit(const Fixture *fixture)
     return (last >> 9) < InputOutputMap::maxUniverses();
 }
 
+/* The 16-bit pairs a fixture marked where it was patched: gone with it, or
+   whatever writes those addresses next is scaled as a pair that is not one. */
+static void clearFixturePairs(const Fixture *fixture, InputOutputMap *ioMap)
+{
+    if (fixture->isPatched() == false)
+        return;
+    QList<Universe *> universes = ioMap->claimUniverses();
+    for (quint32 i = 0; i < fixture->channels(); i++)
+    {
+        if (fixture->crossUniverse() == false && fixture->address() + i >= 512)
+            break;
+        const quint32 at = fixture->universeAddress() + i;
+        const quint32 uni = at >> 9;
+        if (uni < quint32(universes.count()))
+            universes.at(uni)->clearChannelPair(ushort(at & 0x1FF));
+    }
+    ioMap->releaseUniverses(false);
+}
+
 void Doc::applyFixtureToUniverses(Fixture *fixture, bool crossUniverse)
 {
     quint32 i;
@@ -1423,6 +1442,12 @@ void Doc::applyFixtureToUniverses(Fixture *fixture, bool crossUniverse)
             universes.at(uni)->setChannelCapability(addr, channel->group(), Universe::LTP);
         else
             universes.at(uni)->setChannelCapability(addr, channel->group());
+
+        // The fine byte right after its coarse one, on the same universe:
+        // the masters scale the two as one 16-bit value.
+        if (i > 0 && addr > 0 && fixture->fixtureMode() != NULL
+            && fixture->fixtureMode()->primaryChannel(i) == i - 1)
+            universes.at(uni)->setChannelPair(ushort(addr - 1));
 
         // Apply the default value BEFORE modifiers
         universes.at(uni)->setChannelDefaultValue(addr, channel->defaultValue());
@@ -1543,6 +1568,7 @@ bool Doc::patchFixtures(const QList<FixturePatch> &patches, QString *why)
     foreach (const FixturePatch &p, patches)
     {
         Fixture *fxi = fixture(p.fixtureId);
+        clearFixturePairs(fxi, inputOutputMap());
         fxi->blockSignals(true);
         fxi->setUniverse(p.universe);
         fxi->setAddress(p.address);
@@ -1676,6 +1702,7 @@ bool Doc::deleteFixture(quint32 id)
         Fixture* fxi = m_fixtures.take(id);
         Q_ASSERT(fxi != NULL);
         m_fixturesListCacheUpToDate = false;
+        clearFixturePairs(fxi, inputOutputMap());
 
         /* Keep track of fixture addresses */
         QMutableHashIterator <uint,uint> it(m_addresses);
@@ -1843,6 +1870,10 @@ bool Doc::updateFixtureChannelCapabilities(quint32 id, QList<int> forcedHTP, QLi
             universe->setChannelCapability(fxAddress + i, channel->group(), Universe::LTP);
         else
             universe->setChannelCapability(fxAddress + i, channel->group());
+
+        if (i > 0 && fxAddress + i > 0 && fixture->fixtureMode() != NULL
+            && fixture->fixtureMode()->primaryChannel(i) == i - 1)
+            universe->setChannelPair(ushort(fxAddress + i - 1));
 
         // Apply the default value BEFORE modifiers
         universe->setChannelDefaultValue(fxAddress + i, channel->defaultValue());

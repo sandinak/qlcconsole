@@ -19,6 +19,8 @@
 // SystemProbe's macOS side. Built with ARC (engine/src/CMakeLists.txt).
 
 #import <Foundation/Foundation.h>
+#include <IOKit/ps/IOPowerSources.h>
+#include <IOKit/ps/IOPSKeys.h>
 
 #include <QString>
 
@@ -30,6 +32,51 @@ int lowPowerMode()
     if (@available(macOS 12.0, *))
         return [[NSProcessInfo processInfo] isLowPowerModeEnabled] ? 1 : 0;
     return -1;
+}
+
+int thermalState()
+{
+    switch ([[NSProcessInfo processInfo] thermalState])
+    {
+        case NSProcessInfoThermalStateNominal:  return 0;
+        case NSProcessInfoThermalStateFair:     return 1;
+        case NSProcessInfoThermalStateSerious:  return 2;
+        case NSProcessInfoThermalStateCritical: return 3;
+    }
+    return -1;
+}
+
+int onBattery(int *percent)
+{
+    if (percent != nullptr)
+        *percent = -1;
+    CFTypeRef info = IOPSCopyPowerSourcesInfo();
+    if (info == nullptr)
+        return -1;
+    int result = -1;
+    CFStringRef source = IOPSGetProvidingPowerSourceType(info); /* not ours to release */
+    if (source != nullptr)
+        result = CFStringCompare(source, CFSTR(kIOPSBatteryPowerValue), 0) == kCFCompareEqualTo ? 1 : 0;
+    CFArrayRef list = IOPSCopyPowerSourcesList(info);
+    if (list != nullptr)
+    {
+        for (CFIndex i = 0; percent != nullptr && i < CFArrayGetCount(list); i++)
+        {
+            CFDictionaryRef d = IOPSGetPowerSourceDescription(info, CFArrayGetValueAtIndex(list, i));
+            if (d == nullptr)
+                continue;
+            int now = 0, max = 0;
+            CFNumberRef n = (CFNumberRef)CFDictionaryGetValue(d, CFSTR(kIOPSCurrentCapacityKey));
+            CFNumberRef m = (CFNumberRef)CFDictionaryGetValue(d, CFSTR(kIOPSMaxCapacityKey));
+            if (n != nullptr && m != nullptr
+                && CFNumberGetValue(n, kCFNumberIntType, &now)
+                && CFNumberGetValue(m, kCFNumberIntType, &max) && max > 0)
+                *percent = now * 100 / max;
+        }
+        CFRelease(list);
+    }
+    CFRelease(info);
+    return result;
 }
 
 void *beginActivity(const QString &reason, bool keepDisplayAwake)
