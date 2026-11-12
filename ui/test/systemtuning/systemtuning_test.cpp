@@ -21,6 +21,7 @@
 #include <QTreeWidget>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QLabel>
 #include <QSettings>
 #include <QElapsedTimer>
 #include <QMutex>
@@ -937,7 +938,8 @@ void SystemTuning_Test::theLookRunsBelowTheShow()
 #if defined(Q_OS_WIN)
     QSKIP("Windows runs no tools");
 #else
-    /* What a real tool gets: the highest niceness the system allows */
+    /* What a real tool gets: the highest niceness the system allows, without
+       a child process modifier (that makes QProcess fork the whole app) */
     bool ok = false;
     const int nice = SystemProbe::runTool(QStringLiteral("/bin/sh"),
                                           QStringList() << QStringLiteral("-c")
@@ -969,7 +971,7 @@ void SystemTuning_Test::hostLookRunsOffTheUiThread()
     QVERIFY(statusEntry(SystemTuning::statusKey()).items.first().startsWith(QLatin1String("Mains power")));
 
     /* An answer that lands after the show left Operate says nothing */
-    tuning.recheckNow(true);
+    tuning.recheckNow();
     m_doc->setMode(Doc::Design);
     QVERIFY(hasStatus(SystemTuning::statusKey()) == false);
     QTest::qWait(100);
@@ -987,16 +989,109 @@ void SystemTuning_Test::aLightLookKeepsTheDeepAnswers()
             p->backupRunning = 1;
     });
 
+    /* The full look runs outside Operate */
+    tuning.recheckNow();
+    QThreadPool::globalInstance()->waitForDone(2000);
+    QTest::qWait(50);
+
+    /* Operate's looks are light: they don't run tmutil. Not knowing isn't
+       "it stopped". */
     m_doc->setMode(Doc::Operate);
     const QString key = SystemTuning::statusKey();
     QTRY_VERIFY(hasStatus(key));
-
-    /* A light look doesn't run tmutil. Not knowing isn't "it stopped". */
-    tuning.recheckNow(false);
+    QVERIFY(statusEntry(key).items.first().contains(QLatin1String("Time Machine")));
+    tuning.recheckNow();
     QTest::qWait(150);
     QVERIFY(hasStatus(key));
     QVERIFY(statusEntry(key).items.first().contains(QLatin1String("Time Machine")));
     m_doc->setMode(Doc::Design);
+}
+
+void SystemTuning_Test::operateRunsNoToolsAndDesignDoes()
+{
+    SystemTuning tuning(m_doc);
+    tuning.setHold([](bool, bool) {});
+    tuning.setProbe([]() { return macProbe(); });
+    QMutex mutex;
+    QList<bool> looks;
+    tuning.setHostGather([&mutex, &looks](SystemTuning::Probe *p, bool deep) {
+        QMutexLocker locker(&mutex);
+        looks << deep;
+        p->deepLooked = deep;
+    });
+    const auto lookCount = [&mutex, &looks]() { QMutexLocker locker(&mutex); return looks.count(); };
+
+    /* Operate: light looks only, and nothing may start a process */
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(SystemProbe::toolsAllowed() == false);
+    QTRY_COMPARE(lookCount(), 1);
+    QThreadPool::globalInstance()->waitForDone(2000);
+    QTest::qWait(50);
+    tuning.recheckNow();
+    QTRY_COMPARE(lookCount(), 2);
+    QThreadPool::globalInstance()->waitForDone(2000);
+    QTest::qWait(50);
+    {
+        QMutexLocker locker(&mutex);
+        QCOMPARE(looks, QList<bool>() << false << false);
+    }
+
+    /* Whoever asks: the real full look stays light, and no tool runs */
+    const int started = SystemProbe::toolsStarted();
+    SystemTuning::Probe real = SystemTuning::probeDoc(m_doc);
+    SystemTuning::probeHost(&real, true);
+    QVERIFY(real.deepLooked == false);
+    QVERIFY(real.processes.isEmpty());
+#if !defined(Q_OS_WIN)
+    QVERIFY(SystemProbe::runTool(QStringLiteral("/bin/echo"), QStringList() << QStringLiteral("hi"),
+                                 QDeadlineTimer(5000)).isEmpty());
+#endif
+    QCOMPARE(SystemProbe::toolsStarted(), started);
+
+    /* Back in Design the full look runs again, at once */
+    m_doc->setMode(Doc::Design);
+    QVERIFY(SystemProbe::toolsAllowed());
+    QTRY_COMPARE(lookCount(), 3);
+    {
+        QMutexLocker locker(&mutex);
+        QCOMPARE(looks.last(), true);
+    }
+    QThreadPool::globalInstance()->waitForDone(2000);
+#if !defined(Q_OS_WIN)
+    QCOMPARE(SystemProbe::runTool(QStringLiteral("/bin/echo"), QStringList() << QStringLiteral("hi"),
+                                  QDeadlineTimer(5000)).trimmed(), QStringLiteral("hi"));
+    QCOMPARE(SystemProbe::toolsStarted(), started + 1);
+#endif
+}
+
+void SystemTuning_Test::thePageLooksLightlyInOperate()
+{
+    SystemTuning tuning(m_doc);
+    tuning.setHold([](bool, bool) {});
+    QVERIFY(SystemTuning::instance() == &tuning);
+
+    /* What the last full look found, before Operate */
+    SystemTuning::Probe deep = macProbe();
+    deep.deepLooked = true;
+    deep.backupRunning = 1;
+    tuning.rememberLook(&deep);
+
+    m_doc->setMode(Doc::Operate);
+    const int started = SystemProbe::toolsStarted();
+    SystemTuningPage page(m_doc);
+    QCOMPARE(SystemProbe::toolsStarted(), started);
+    QVERIFY(page.fullCheckLabel()->text().contains(QLatin1String("outside Operate")));
+    bool timeMachine = false;
+    for (int i = 0; i < page.itemsTree()->topLevelItemCount(); i++)
+        timeMachine |= page.itemsTree()->topLevelItem(i)->text(2).contains(QLatin1String("Time Machine"));
+    QVERIFY(timeMachine);
+    m_doc->setMode(Doc::Design);
+
+    /* Outside Operate the page's look is the full one, and says when */
+    page.refresh();
+    QVERIFY(SystemTuning::lastFullCheck().isValid());
+    QVERIFY(page.fullCheckLabel()->text().contains(
+        QLocale().toString(SystemTuning::lastFullCheck().time(), QLocale::ShortFormat)));
 }
 
 void SystemTuning_Test::theRealLookIsBounded()

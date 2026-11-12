@@ -25,6 +25,7 @@
 #include <QFile>
 #include <QDir>
 #include <memory>
+#include <atomic>
 
 #include "systemtuning.h"
 #include "systemprobe.h"
@@ -505,11 +506,7 @@ SystemTuning::SystemTuning(Doc *doc, QObject *parent)
             updateStatus();
         }
     });
-    m_recheck.setInterval(15000);
-    connect(&m_recheck, &QTimer::timeout, this, [this]() {
-        m_rechecks++;
-        updateStatus(m_rechecks % 4 == 0);
-    });
+    connect(&m_recheck, &QTimer::timeout, this, &SystemTuning::updateStatus);
     connect(m_doc, &Doc::modeChanged, this, &SystemTuning::slotModeChanged);
     if (s_instance == nullptr)
         s_instance = this;
@@ -521,7 +518,10 @@ SystemTuning::~SystemTuning()
     if (m_held && m_hold)
         m_hold(false, false);
     if (s_instance == this)
+    {
         s_instance = nullptr;
+        SystemProbe::setToolsAllowed(true);
+    }
 }
 
 SystemTuning *SystemTuning::instance()
@@ -545,9 +545,9 @@ void SystemTuning::setHostGather(const std::function<void(Probe *, bool)> &gathe
     m_gather = gatherFn;
 }
 
-void SystemTuning::recheckNow(bool deep)
+void SystemTuning::recheckNow()
 {
-    updateStatus(deep);
+    updateStatus();
 }
 
 void SystemTuning::setHold(const std::function<void(bool, bool)> &holdFn)
@@ -564,6 +564,8 @@ void SystemTuning::slotModeChanged(Doc::Mode mode)
 void SystemTuning::apply()
 {
     const bool operate = m_doc->mode() == Doc::Operate;
+    /* The show wins: nothing starts a process while it runs */
+    SystemProbe::setToolsAllowed(operate == false);
     const bool want = operate && fullSpeedInOperate();
     if (want || m_held)
     {
@@ -575,34 +577,78 @@ void SystemTuning::apply()
     updateStatus();
 }
 
-void SystemTuning::updateStatus(bool deep)
+namespace
+{
+std::atomic<qint64> s_lastFullCheck{0};
+}
+
+void SystemTuning::noteFullCheck()
+{
+    s_lastFullCheck.store(QDateTime::currentMSecsSinceEpoch());
+}
+
+QDateTime SystemTuning::lastFullCheck()
+{
+    const qint64 ms = s_lastFullCheck.load();
+    return ms > 0 ? QDateTime::fromMSecsSinceEpoch(ms) : QDateTime();
+}
+
+void SystemTuning::rememberLook(Probe *p)
+{
+    if (p->deepLooked)
+    {
+        m_deep = *p;
+    }
+    else if (m_deep.deepLooked)
+    {
+        /* Unknown is not the same as fixed: a light look mustn't clear the
+           warning a deep one raised */
+        p->screenLock = m_deep.screenLock;
+        p->idleMinutes = m_deep.idleMinutes;
+        p->backupRunning = m_deep.backupRunning;
+        p->processes = m_deep.processes;
+        p->processesKnown = m_deep.processesKnown;
+        p->piThrottled = m_deep.piThrottled;
+    }
+}
+
+void SystemTuning::updateStatus()
 {
     ShowStatus *status = ShowStatus::instance();
-    if (m_doc->mode() != Doc::Operate || warnInOperate() == false || !m_probe)
+    if (warnInOperate() == false || !m_probe)
     {
         m_recheck.stop();
         m_gatherAgain = false;
         status->clearStatus(statusKey());
         return;
     }
-    if (m_recheck.isActive() == false)
+
+    /* In Operate a light look every 15 s, for the footer. Outside it the
+       full look once a minute, so Operate starts from fresh answers. */
+    const bool operate = m_doc->mode() == Doc::Operate;
+    if (operate == false)
+        status->clearStatus(statusKey());
+    if (m_recheck.isActive() == false || m_operateLooks != operate)
     {
-        m_rechecks = 0;
+        m_operateLooks = operate;
         m_baseline = m_doc->masterTimer() != nullptr ? m_doc->masterTimer()->frameTiming()
                                                      : MasterTimer::FrameTiming();
-        m_recheck.start();
+        m_recheck.start(operate ? 15000 : 60000);
     }
 
     Probe p = m_probe();
-    /* Late frames since the last look, not since the app started */
-    const MasterTimer::FrameTiming now = p.frames;
-    if (now.frames >= m_baseline.frames)
+    if (operate)
     {
-        p.frames.frames -= m_baseline.frames;
-        p.frames.late -= m_baseline.late;
-        p.frames.dropped -= m_baseline.dropped;
+        /* Late frames since the last look, not since the app started */
+        const MasterTimer::FrameTiming now = p.frames;
+        if (now.frames >= m_baseline.frames)
+        {
+            p.frames.frames -= m_baseline.frames;
+            p.frames.late -= m_baseline.late;
+            p.frames.dropped -= m_baseline.dropped;
+        }
+        m_baseline = now;
     }
-    m_baseline = now;
 
     if (!m_gather)
     {
@@ -618,6 +664,7 @@ void SystemTuning::updateStatus(bool deep)
     m_watcher.setFuture(promise->future());
     promise->start();
     const std::function<void(Probe *, bool)> gather = m_gather;
+    const bool deep = operate == false;
     QThreadPool::globalInstance()->start([promise, p, deep, gather]() mutable {
         /* The show comes first. A pool thread goes back to work for others
            afterwards, and may not be handed back as "inherit". */
@@ -633,21 +680,7 @@ void SystemTuning::updateStatus(bool deep)
 
 void SystemTuning::publish(Probe p)
 {
-    if (p.deepLooked)
-    {
-        m_deep = p;
-    }
-    else if (m_deep.deepLooked)
-    {
-        /* Unknown is not the same as fixed: a light look mustn't clear the
-           warning a deep one raised */
-        p.screenLock = m_deep.screenLock;
-        p.idleMinutes = m_deep.idleMinutes;
-        p.backupRunning = m_deep.backupRunning;
-        p.processes = m_deep.processes;
-        p.processesKnown = m_deep.processesKnown;
-        p.piThrottled = m_deep.piThrottled;
-    }
+    rememberLook(&p);
 
     ShowStatus *status = ShowStatus::instance();
     /* The answer can arrive after the show has left Operate */

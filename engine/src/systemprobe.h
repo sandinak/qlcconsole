@@ -105,7 +105,8 @@ namespace SystemProbe
         QString name;
         double cpu = 0;     ///< percent of one core
     };
-    /** Every other process, with what it has used lately */
+    /** Every other process, with what it has used lately; empty while
+     *  toolsAllowed() is off */
     QLC_ENGINE_EXPORT QList<ProcessUse> processes(const QDeadlineTimer &deadline);
 
     /** Whether the screen asks for a password after sitting idle: 1, 0, -1
@@ -121,10 +122,21 @@ namespace SystemProbe
     QLC_ENGINE_EXPORT bool rebootPending();
     /** Raspberry Pi: vcgencmd get_throttled as a number, -1 unknown */
     QLC_ENGINE_EXPORT int piThrottled(const QDeadlineTimer &deadline);
+    /**
+     * Whether a look may start a process, or do other heavy probing (every
+     * process's CPU time). Off while the show is in Operate: the show wins,
+     * and starting a process from a large app can stall it for a moment.
+     * runTool() returns empty while it is off. Any thread.
+     */
+    QLC_ENGINE_EXPORT void setToolsAllowed(bool allowed);
+    QLC_ENGINE_EXPORT bool toolsAllowed();
+    /** How many processes runTool() has started (tests) */
+    QLC_ENGINE_EXPORT int toolsStarted();
+
 #if !defined(Q_OS_WIN)
-    /** A tool's output (stdout and stderr together), empty when it failed or
-     *  the deadline passed. It runs at the lowest priority the system has.
-     *  No shell; the caller gives the absolute path. */
+    /** A tool's output (stdout and stderr together), empty when it failed,
+     *  the deadline passed or tools aren't allowed now. It runs at the lowest
+     *  priority the system has. No shell; the caller gives the absolute path. */
     QLC_ENGINE_EXPORT QString runTool(const QString &program, const QStringList &args,
                                       const QDeadlineTimer &deadline);
 #endif

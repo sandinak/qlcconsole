@@ -26,6 +26,7 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QLabel>
+#include <QLocale>
 
 #include "systemtuningpage.h"
 #include "systemprobe.h"
@@ -36,7 +37,14 @@ SystemTuningPage::SystemTuningPage(Doc *doc, QWidget *parent)
 {
     setObjectName(QStringLiteral("settingsPerformance"));
     setProperty("helpTopic", QStringLiteral("system-tuning.md"));
-    m_probe = [this]() { return SystemTuning::probe(m_doc); };
+    m_probe = [this]() {
+        /* In Operate only the light look: the full one starts processes */
+        SystemTuning::Probe p = SystemTuning::probeDoc(m_doc);
+        SystemTuning::probeHost(&p, m_doc->mode() != Doc::Operate);
+        if (SystemTuning::instance() != nullptr)
+            SystemTuning::instance()->rememberLook(&p);
+        return p;
+    };
 
     QVBoxLayout *layout = new QVBoxLayout(this);
 
@@ -106,9 +114,15 @@ SystemTuningPage::SystemTuningPage(Doc *doc, QWidget *parent)
     cmdRow->addWidget(m_copy, 0, Qt::AlignTop);
     checkLayout->addLayout(cmdRow);
 
+    QHBoxLayout *againRow = new QHBoxLayout();
     QPushButton *again = new QPushButton(tr("Check Again"), check);
     again->setObjectName(QStringLiteral("tuningCheckAgain"));
-    checkLayout->addWidget(again, 0, Qt::AlignLeft);
+    againRow->addWidget(again, 0, Qt::AlignTop);
+    m_fullCheck = new QLabel(check);
+    m_fullCheck->setObjectName(QStringLiteral("tuningFullCheck"));
+    m_fullCheck->setWordWrap(true);
+    againRow->addWidget(m_fullCheck, 1);
+    checkLayout->addLayout(againRow);
     layout->addWidget(check, 1);
 
     connect(m_tree, &QTreeWidget::currentItemChanged, this, [this]() { showSelected(); });
@@ -131,6 +145,12 @@ void SystemTuningPage::refresh()
 {
     m_found = m_probe();
     showFound();
+    /* Say why screen lock, backups and programs may be a minute old */
+    const QDateTime last = SystemTuning::lastFullCheck();
+    m_fullCheck->setText(last.isValid()
+        ? tr("Screen lock, backups and other programs are checked only outside Operate (last at %1).")
+              .arg(QLocale().toString(last.time(), QLocale::ShortFormat))
+        : tr("Screen lock, backups and other programs are checked only outside Operate."));
 }
 
 void SystemTuningPage::showFound()

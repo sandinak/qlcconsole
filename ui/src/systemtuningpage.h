@@ -64,6 +64,7 @@ public:
     QCheckBox *warnCheck() const { return m_warn; }
     QPlainTextEdit *commandEdit() const { return m_command; }
     QPushButton *copyButton() const { return m_copy; }
+    QLabel *fullCheckLabel() const { return m_fullCheck; }
 
 private:
     void showSelected();
@@ -84,6 +85,7 @@ private:
     QLabel *m_howTo;
     QPlainTextEdit *m_command;
     QPushButton *m_copy;
+    QLabel *m_fullCheck;
 };
 
 /** @} */
