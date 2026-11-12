@@ -31,6 +31,7 @@
 #define private public                  // MasterTimer::timerTick(), the joystick tick's clock
 #include "mastertimer.h"
 #include "programmercontroller.h"
+#include "padrun.h"
 #undef private
 #include "focuscalls_test.h"
 #include "showcontrol.h"
