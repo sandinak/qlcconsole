@@ -87,6 +87,16 @@ if [ -n "$REMOTE" ]; then
 fi
 [ -n "${REMOTE_REV:-}" ] && { echo >&2 "check-all.sh: --rev goes with --remote (here, the gate tests the tree as it is)"; exit 2; }
 
+# The Mac stays awake until this gate ends. A pool host runs it detached,
+# with no one at the keyboard: newaudio (sleep after 1 min) went into
+# maintenance sleep 122 times, 2-17 s each, during one 2026-11-12 gate, and
+# every wall-clock test that straddled a nap failed (two 500 ms qWaits
+# took 33 s; a hostile case "hung" past its 15 s). -i idle sleep, -m disk,
+# -s system sleep on AC power; -w: it ends with this script.
+if command -v caffeinate >/dev/null 2>&1; then
+    caffeinate -ims -w $$ </dev/null >/dev/null 2>&1 &
+fi
+
 # Performance cores only, not hw.ncpu -- on Apple Silicon that also counts
 # efficiency cores, which saturating slows down everything else on the
 # machine. Intel Macs have no hw.perflevel0 and use hw.ncpu; Linux, nproc.
