@@ -90,7 +90,8 @@ layers you drop palettes, groups and fixtures onto, with **+ Scene** and
 **+ Effect ▾**, an inline look editor, an effect browser, scene
 transitions (a look arriving fixture by fixture) and WLED effects, all
 previewed live on the rig. The Show Tree borrows the same Workbench to
-edit a cue.
+edit a cue, and has Build's programmer strip. Build is a tab of the
+Everything view; the qlcconsole view hides it.
 → [Build](docs/features/build.md) · [Effects](docs/features/effects.md)
 
 ### The Lighting Studio and the Rig Overview
@@ -194,7 +195,7 @@ clashing or unrouted.
 <img src="docs/images/views-classic.png" alt="The Classic QLC+ view: QLC+'s toolbars and its tabs Fixtures, Functions, Shows, Virtual Console, Simple Desk and Inputs/Outputs" width="900" />
 
 **View ▸ Workspace** picks the tabs: **qlcconsole** (Connections,
-Fixtures, Lighting Studio, Build, Show Tree, Virtual Console, Simple Desk,
+Fixtures, Lighting Studio, Show Tree, Virtual Console, Simple Desk,
 Run), **Classic QLC+** (QLC+'s tabs, names, order and toolbars, for
 someone coming from QLC+), or **Everything**. A view only shows and hides
 tabs; the show is the same. An old QLC+ show opens in Classic QLC+, and

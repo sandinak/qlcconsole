@@ -662,7 +662,7 @@ void FixtureManager::initDataView()
         "The full patch: fixtures, universes, power circuits, and spatial "
         "groups (fixtures arranged on a head-layout grid, used for XY-pad / "
         "per-head effects and as drag-drop dynamic targets in the "
-        "Build tab). Not the same as Channel Groups (next tab)."));
+        "Show Tree and the Workbench). Not the same as Channel Groups (next tab)."));
 
     m_channel_groups_tree = new QTreeWidget(this);
     QStringList chan_labels;

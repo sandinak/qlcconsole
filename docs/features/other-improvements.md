@@ -601,8 +601,8 @@ try it on your own devices before relying on it for a show.
 Every tab is in **Window**. The tabs the [workspace view](getting-started.md#views)
 shows come first, in its order, numbered as they are on screen: ⇧⌘1 is
 the first tab, ⇧⌘0 the tenth. In the qlcconsole view that is ⇧⌘1
-Connections, ⇧⌘2 Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Build, ⇧⌘5 Show
-Tree, ⇧⌘6 Virtual Console, ⇧⌘7 Simple Desk, ⇧⌘8 Run; in
+Connections, ⇧⌘2 Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Show
+Tree, ⇧⌘5 Virtual Console, ⇧⌘6 Simple Desk, ⇧⌘7 Run; in
 Classic QLC+, ⇧⌘1 Fixtures … ⇧⌘6 Inputs/Outputs. They renumber when the
 view changes. The tabs the view hides follow, with no shortcut.
 Choosing one brings it forward — its
@@ -612,10 +612,14 @@ Window**),
 which the menu marks "in its own window". **Put Back in Main Window**
 returns one, **Put All Back in Main Window** all of them; **Minimize** (⌘M)
 as usual. **Rig Overview…** (⇧⌘R) is here too. Effects have no item of
-their own: they live in [Build ▸ Effects](build.md#making-effects). A tab that the workspace view hides (**View ▸
+their own: they live in the Library's Effects (Show Tree) and [Build ▸ Effects](build.md#making-effects) (Everything view). A tab that the workspace view hides (**View ▸
 Workspace**) switches the view to **Everything** when you choose it, with
 a line above the tabs to go back; see
 [Views](getting-started.md#views).
+
+**Build is a tab of the Everything view.** The qlcconsole view hides it
+(it keeps running, so the Show Tree can borrow its Workbench);
+**Window ▸ Build** there switches to Everything, with a line to go back.
 
 **Functions is the stock QLC+ tab.** The qlcconsole view doesn't show it
 (the Classic QLC+ and Everything views do); there, **Window ▸ Functions**
@@ -818,7 +822,7 @@ beam/footprint overlays). Two of them in detail:
 
 A classroom-safety and rigging-focus trio: Blind from the show controls
 (top bar, or status bar) and **View ▸ Blind**, the rest from the
-Build tab's tools:
+programmer strip (Build's top bar, and a row under the Show Tree's toolbar):
 
 - **Blind** means the screens are not the stage, and it is blue wherever
   it shows (the button, the footer, the Show Tree's and the Workbench's

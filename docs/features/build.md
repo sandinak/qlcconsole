@@ -10,6 +10,15 @@ a scene stays a `Scene`, a collection a `Collection` — so a show built the
 old way opens, plays and saves exactly as QLC+ made it: nothing is converted
 when it loads, and nothing asks you to convert it.
 
+**Where Build is.** Build is a tab of the **Everything** view; the
+qlcconsole view hides it (it keeps running underneath). There the
+[programmer strip](show-tree.md#the-programmer-strip) is the Show Tree's too,
+palettes are the Show Tree's Library, and what would open in Build opens in
+the Show Tree: a function docks the Workbench there (↩ Show Tree puts the
+page back), a palette opens in the Look Editor. **Window ▸ Build** from the
+qlcconsole view switches to Everything and says so. This guide describes
+the Build tab itself.
+
 ## Why
 
 Stock QLC+ builds a Scene by setting raw per-channel DMX values, fixture by
@@ -46,6 +55,12 @@ QLC+ plays it.
 7. **The Library** — under every section, to drag onto a layer
    ([The Library and the command bar](#the-library-and-the-command-bar)).
 8. **Command** — the command bar under both panes.
+
+The tools in Build's top bar are the **programmer strip**: Highlight,
+Flash, Park ▾, Move in Black ▾, Beat ▾, Tap, Save Positions and More ▾. The
+Show Tree has the same strip under its toolbar, acting on the same
+selection and state, so the two always agree
+([The programmer strip](show-tree.md#the-programmer-strip)).
 
 Two panes, left to right:
 

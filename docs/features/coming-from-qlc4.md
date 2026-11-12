@@ -125,7 +125,7 @@ shows in the Classic view**.
 ### 3. Try the new parts when you want them
 
 - **View ▸ Workspace ▸ qlcconsole** shows the new tabs (Lighting Studio,
-  Build, Show Tree, Run); **Everything** shows all of them. Switching
+  Show Tree, Run); **Everything** shows all of them, Build among them. Switching
   changes nothing in the show.
 - **File ▸ Upgrade This Show…** turns the chasers you choose into Show
   Tree cue lists. It shows the plan first, checks that each cue puts out
@@ -166,13 +166,13 @@ Every left-hand column still works, in the Classic QLC+ view.
 
 | In QLC+ 4 you… | In Classic you still can | The qlcconsole way, and why |
 |---|---|---|
-| make scenes in the **Function Manager** | **Functions** tab, the stock scene editor | **Build ▸ Scenes** and the Workbench: looks (palettes on groups), so a colour changed in a palette changes every scene that uses it ([Coming from the Functions window](build.md#coming-from-the-functions-window)) |
+| make scenes in the **Function Manager** | **Functions** tab, the stock scene editor | **Build ▸ Scenes** (Everything view) and the Workbench: looks (palettes on groups), so a colour changed in a palette changes every scene that uses it ([Coming from the Functions window](build.md#coming-from-the-functions-window)) |
 | set channels with the scene editor's sliders | Same | In the Workbench, click a group or fixture row for its channels; the [Look Editor](build.md#the-inline-look-editor) for colour, position, beam and gobo by name |
 | build **collections** of scenes, EFX and RGB matrices | Same | Load the collection in the Workbench: its members are layers, **+ Scene** and **+ Effect ▾** add more, and it plays as you build ([The Workbench](build.md#the-workbench)) |
 | run a **chaser as a cue list** from a VC Cue List | Same; tick **Main cue list** in the chaser editor and GO (⌘↩) and the **Run** tab play it too | **Upgrade This Show…** makes it a Show Tree cue list: tracking, cue numbers, sub-cues, notes, and the Run tab ([Show Tree](show-tree.md)) |
-| set the rig, save a scene, chase the scenes | Same | Build keeps it: **Chaser from Selection** ([Two QLC+ habits, kept](build.md#two-qlc-habits-kept)) |
+| set the rig, save a scene, chase the scenes | Same | Build (Everything view) keeps it: **Chaser from Selection** ([Two QLC+ habits, kept](build.md#two-qlc-habits-kept)) |
 | busk with VC buttons on scenes | Same | **Hits**: busking states on VC buttons, built like cues ([Hits](show-tree.md#hits-busking)) |
-| make **EFX** and **RGB matrices** | Stock editors, in Functions or the Workbench | **Build ▸ Effects**: effect palettes that take the look's colours ([Effects](effects.md)) |
+| make **EFX** and **RGB matrices** | Stock editors, in Functions or the Workbench | **Build ▸ Effects** (Everything view), or the Library's **Effects** in the Show Tree: effect palettes that take the look's colours ([Effects](effects.md)) |
 | run a **Show Manager** timeline | **Shows** tab | The same timeline, with track flags and timecode follow ([Shows](shows.md)); for cue-by-cue shows, the Show Tree; QLab can fire cues ([Show control](show-control.md)) |
 | make **fixture groups** | Fixtures tab | Folders, the head-layout grid, groups laid out from where fixtures hang ([Fixture Manager](fixture-manager.md#fixture-group-folders)) |
 | add and address fixtures | **Add fixture** in the Fixtures tab | The inventory and the Patch dialog: place first, address later ([Inventory](fixture-manager.md#inventory-design-the-rig-before-patching)) |

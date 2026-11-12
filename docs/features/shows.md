@@ -4,7 +4,7 @@ A **Show** plays lights against time, the way an audio or video editor
 lays clips on tracks: a song's cues at the moment they happen, run from
 the top, from where you left off, or locked to the band's timecode. Open
 it from the **Shows** tab (in the Classic QLC+ and Everything views;
-**Window ▸ Shows** switches there from the qlcconsole view); the Build tab
+**Window ▸ Shows** switches there from the qlcconsole view); the Build tab (Everything view)
 can show the same timeline for the scene you're building.
 
 ## The words

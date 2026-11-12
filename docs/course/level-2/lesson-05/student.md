@@ -98,8 +98,8 @@ Do one:
 - **Paper:** draw the stage from above with four spots and the line.
   Draw Spread +5, 0 and −5, lights numbered 1–4 from SR. Which ends a
   song best?
-- **Reuse it:** a shape you use on several lines is worth saving once. In
-  Build ▸ Palettes make a **New Formation** (Spread −5, Grouping Pairs),
-  check it in its preview, then drop it on **1.0.8 Button**'s
+- **Reuse it:** a shape you use on several lines is worth saving once. On
+  the layer, in the Show Tree's Formation menu, set Spread −5 and Grouping
+  Pairs, then **Save as Formation…**; check it in its preview, then drop it on **1.0.8 Button**'s
   **Truss-Spots** row in place of its Spread. Change the Formation and every
   cue using it follows.

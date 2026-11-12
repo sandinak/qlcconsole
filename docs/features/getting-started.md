@@ -166,15 +166,15 @@ The measurements, charts and method are on the
 
 ![The main window: the top bar, the open tab, the tabs, the footer](../images/getting-started-main-window.png)
 
-1. **The top bar** — one row. On the left, the open tab's own tools (here
-   Build's Highlight, Flash, Park…); in a narrow window, what
+1. **The top bar** — one row. On the left, the open tab's own tools (in Build, the
+   programmer strip's Highlight, Flash, Park…); in a narrow window, what
    doesn't fit is under **»**. On the right, the show controls:
    **Stop All** (the panic button; hold it for **Fade and stop**),
    **Blackout**, **Blind**, and the **Design | Operate** switch, the mode
    you are in lit. **Blackout** lights red and **Blind** blue while they
    are on (in Operate, Blind shows the cue you are editing on the screens
    only: the Blind view).
-2. **The open tab** — here Build, with a scene open.
+2. **The open tab** — here the Show Tree.
 3. **The tabs**, along the bottom.
 4. **The footer** — is the show ready to run, what GO plays next, Design
    or Operate (below).
@@ -196,7 +196,7 @@ The tabs follow the order a show is built in:
 | **Fixtures** | The fixtures in the show, the inventory, groups and their head layouts, patching | [Fixture Manager](fixture-manager.md) |
 | **Lighting Studio** | The physical rig: structures, where every fixture hangs, the network, the 3D Rig Overview | [Lighting Studio](lighting-studio.md) |
 | **Functions** | Every function by type, as in QLC+ (Classic QLC+ and Everything views only) | [Coming from the Functions window](build.md#coming-from-the-functions-window) |
-| **Build** | Scenes built from looks, looks built from palettes and effects | [Build Tab](build.md) |
+| **Build** | Scenes built from looks, looks built from palettes and effects (Everything view only) | [Build Tab](build.md) |
 | **Show Tree** | A show as one tree: cue lists, cues and the layers in them; the scenes and chaser are made for you | [Show Tree](show-tree.md) |
 | **Shows** | The timeline: tracks, sequences, cues, timecode | [Shows](shows.md) |
 | **Virtual Console** | The operator's surface | stock QLC+ |
@@ -209,10 +209,11 @@ Which of these you see depends on the view (below).
 
 **View ▸ Workspace** picks which tabs the main window shows:
 
-- **qlcconsole** — eight tabs, in show order: Connections, Fixtures,
-  Lighting Studio, Build, Show Tree, Virtual Console, Simple Desk and Run.
-  Shows and Functions are in Everything (**Window** switches there for
-  them, with a line to come back). The **Rig Overview** (⇧⌘R) opens in its
+- **qlcconsole** — seven tabs, in show order: Connections, Fixtures,
+  Lighting Studio, Show Tree, Virtual Console, Simple Desk and Run.
+  Build, Shows and Functions are in Everything (**Window** switches there
+  for them, with a line to come back). Build keeps running hidden: the
+  Show Tree borrows its Workbench and its programmer strip. The **Rig Overview** (⇧⌘R) opens in its
   own window, kept in front of the main window.
 - **Classic QLC+** — the QLC+ tabs in QLC+'s order and names: Fixtures,
   Functions, Shows, Virtual Console, Simple Desk, Inputs/Outputs (the
@@ -390,10 +391,11 @@ needs an address until the end.
 9. **Mark the places that matter** — marks, a drum kit, a performer — as
    **Stage Targets**, so moving heads aim at them.
    ([Stage Targets](stage-targets.md))
-10. **Build looks.** Build tab: make palettes (colour, dimmer, aim,
-    effects…), load a scene in the Workbench and drag groups and palettes
-    onto it; gather scenes, EFX and RGB Matrices into a collection.
-    ([Build Tab](build.md))
+10. **Build looks.** In the Show Tree, make palettes in the Library
+    (colour, dimmer, aim, effects…) and drag groups and palettes onto a
+    cue's layers; scenes and collections are made in the Everything view's
+    Build tab, or by the cues themselves.
+    ([Show Tree](show-tree.md), [Build Tab](build.md))
 11. **Check the footer** says **Ready**, then run it from Virtual Console,
     Simple Desk or Shows.
 
@@ -561,7 +563,7 @@ Steps, towers and booms usually come in sets that should all be the same:
   can GO a chase's cues by number. See
   [Show control (QLab)](show-control.md).
 - The Virtual Console, Simple Desk and Shows timeline work as in stock
-  QLC+; the **Build** tab's tools have Highlight / Flash / Park, and
+  QLC+; the **programmer strip** (Build and the Show Tree) has Highlight / Flash / Park, and
   the show controls Blind, for working on a running show.
 
 ### GO on the beat

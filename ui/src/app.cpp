@@ -3313,8 +3313,8 @@ void App::initMenuBar()
               QT_TR_NOOP("The QLC+ tabs, in QLC+'s order: Fixtures, Functions, Shows, "
                          "Virtual Console, Simple Desk, Inputs/Outputs") },
             { ConsoleView, "viewWorkspaceConsole",
-              QT_TR_NOOP("Connections, Fixtures, Lighting Studio, Build, Show Tree, Virtual Console, "
-                         "Simple Desk and Run; Shows and Functions are in Everything") },
+              QT_TR_NOOP("Connections, Fixtures, Lighting Studio, Show Tree, Virtual Console, "
+                         "Simple Desk and Run; Build, Shows and Functions are in Everything") },
             { EverythingView, "viewWorkspaceEverything",
               QT_TR_NOOP("Every tab") } };
         for (const auto &v : views)
@@ -5488,11 +5488,14 @@ QStringList App::workspaceViewTabs(WorkspaceView view)
         return { tr("Fixtures"), tr("Functions"), tr("Shows"), tr("Virtual Console"),
                  tr("Simple Desk"), tr("Connections") };
     case ConsoleView:
-        // Eight tabs, in show order (Q79): no Functions (Q32) or Shows -- they
-        // are in Everything. The Lighting Studio stays (Branson, after Q79),
-        // Build too (Q74). Simple Desk, a QLC+ user's channel check,
-        // sits after the Virtual Console, before Run (Q71).
-        return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"), tr("Build"),
+        // Seven tabs, in show order (Q79): no Functions (Q32) or Shows -- they
+        // are in Everything. The Lighting Studio stays (Branson, after Q79).
+        // No Build (Q228): its programmer strip is the Show Tree's too, the
+        // Library has the palettes, and scenes and collections are built in
+        // Classic / Everything; it runs on, hidden, lending the Show Tree its
+        // Workbench. Simple Desk, a QLC+ user's channel check, sits after the
+        // Virtual Console, before Run (Q71).
+        return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"),
                  tr("Show Tree"), tr("Virtual Console"), tr("Simple Desk"), tr("Run") };
     case EverythingView:
     default:
@@ -5968,8 +5971,8 @@ bool App::offerConsoleViewAfterUpgrade()
     if (tree == nullptr || tree->productions().isEmpty())
         return false;              // nothing upgraded: nothing new to show
     m_upgradeOfferMade = true;
-    showViewNotice(tr("This show now has a Show Tree. The qlcconsole view shows it, with Build "
-                      "and Run, beside the QLC+ tabs you know."),
+    showViewNotice(tr("This show now has a Show Tree. The qlcconsole view shows it, with the "
+                      "Lighting Studio and Run, beside the QLC+ tabs you know."),
                    tr("Switch to the qlcconsole View"),
                    [this]() { setWorkspaceView(ConsoleView); });
     return true;

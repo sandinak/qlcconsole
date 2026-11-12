@@ -31,6 +31,7 @@ class AppViews_Test : public QObject
 private slots:
     void initTestCase();
     void cleanupTestCase();
+    void buildHideShots();
 
     /** Picking a view from the View menu switches to it even when an earlier
      *  tab has been detached and every index after it has shifted. */
@@ -58,6 +59,7 @@ private slots:
     void theBuildTabWearsAHardHat();
     /** Q68: Window ▸ Effects is Build ▸ Effects; no Effects window. */
     void windowEffectsIsBuildEffects();
+    void withBuildHiddenItsJumpsLandInTheShowTree();
     void helpOpensOnWhatIsInFront();
     void virtualConsoleKeysDontClashWithTheApp();
     void theRigOverviewOpensWithoutTakingYouToTheStudio();

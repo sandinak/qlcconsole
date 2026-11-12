@@ -43,8 +43,8 @@ app: true
 
 ![The Show Tree tab](../../images/lesson-1-1/showtree-tab.png)
 
-- **The tabs** are along the bottom (**6**): Build, Show Tree, Run and the
-  rest. Click one, or use **Window** and its shortcut.
+- **The tabs** are along the bottom (**7**): Connections, Fixtures, Lighting Studio, Show Tree,
+  Virtual Console, Simple Desk and Run. Click one, or use **Window** and its shortcut.
 - **The footer**, under the tabs, says whether your work is saved (bottom
   right) and reads *No outputs: preview only* in class: the course shows
   aren't connected to real lights.
@@ -83,7 +83,7 @@ qlcconsole** (USB stick, school drive or email).
 
 - **⌘Z** (Ctrl+Z) undoes the last change; **⇧⌘Z** (Ctrl+Shift+Z) redoes it.
 - **Edit ▸ Undo** names the step first: *Undo …*.
-- Each tab keeps its own undo: Build, Show Tree, Fixtures, Lighting Studio
+- Each tab keeps its own undo: Show Tree, Fixtures, Lighting Studio
   and Connections. Undo on the tab where you made the change. The Run tab
   has none.
 

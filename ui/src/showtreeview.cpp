@@ -1822,7 +1822,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_listDetach = new QPushButton(tr("Detach to Plain Chaser…"), row);
         m_listDetach->setObjectName("stListDetach");
         m_listDetach->setToolTip(tr("The list's chaser and its cues' collections become ordinary functions you "
-                                    "edit in Build ▸ Scenes; the list leaves the Show Tree. One undo step."));
+                                    "edit in Build ▸ Scenes (the Everything view); the list leaves the Show Tree. "
+                                    "One undo step."));
         h->addWidget(m_listConvert);
         h->addWidget(m_listDetach);
         // W5: an import in place, undone.
@@ -2512,7 +2513,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_newPalette->setObjectName("stNewPalette");
         m_newPalette->setText(tr("+ Palette"));
         m_newPalette->setToolTip(tr("A new palette, by type, in the folder selected in the Library; it opens in "
-                                    "the Look Editor. Effect design, .qxfx and Bundles are in Build."));
+                                    "the Look Editor. Effect design, .qxfx and Bundles are in Build (the Everything "
+                                    "view)."));
         m_newPalette->setPopupMode(QToolButton::InstantPopup);
         {
             QMenu *m = new QMenu(m_newPalette);
@@ -5934,7 +5936,7 @@ void ShowTreeView::lineParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, co
                           });
         }
         if (forms.isEmpty())
-            fm->addAction(tr("No Formation palettes yet (Build ▸ Palettes ▸ New Formation)"))->setEnabled(false);
+            fm->addAction(tr("No Formation palettes yet: set a Spread, Grouping or Cross, then Save as Formation…"))->setEnabled(false);
         fm->addSeparator();
         fm->addAction(tr("Clear (inherit)"), this, [this, cueId, layerId, target]() {
             if (layerId == invalidId() && !target.isEmpty())
@@ -9777,10 +9779,13 @@ bool ShowTreeView::openFunction(quint32 functionId)
         m_hint->setText(tr("“%1” is open in the Workbench: ↩ comes back").arg(f->name()));
         return bench->loadedFunction() == functionId;
     }
-    // Otherwise Build's Workbench (the Functions window is hidden).
+    // Otherwise Build's Workbench (the Functions window is hidden) -- or,
+    // where Build is not a tab (the qlcconsole view), docked here.
     const bool ok = m_functionOpener ? m_functionOpener(functionId) : ProgrammingManager::openFunction(functionId);
+    if (isWorkbenchDocked())
+        return ok;                  // it said so already (openFunctionInWorkbench())
     m_hint->setText(ok ? tr("“%1” is open in Build's Workbench").arg(f->name())
-                       : tr("Couldn't open “%1”: no Build tab").arg(f->name()));
+                       : tr("Couldn't open “%1”: no Workbench").arg(f->name()));
     return ok;
 }
 
@@ -10008,13 +10013,13 @@ bool ShowTreeView::detachListToChaser(quint32 listId)
     const QString name = list->name;
     if (!confirm(tr("Detach to plain chaser"),
                  tr("Detach %1? Its chaser and its cues' collections become ordinary functions you edit in "
-                    "Build (Scenes, Productions folder), and the list leaves the Show Tree. VC widgets and "
+                    "Build (Scenes, Productions folder; the Everything view), and the list leaves the Show Tree. VC widgets and "
                     "show control that play the chaser keep playing it. One undo step.").arg(name)))
         return false;
     const quint32 chaser = m_st->detachList(listId);
     if (chaser == Function::invalidId())
         return false;
-    m_hint->setText(tr("%1 is a plain chaser now (Build ▸ Scenes ▸ Productions)").arg(name));
+    m_hint->setText(tr("%1 is a plain chaser now (Build ▸ Scenes ▸ Productions, in the Everything view)").arg(name));
     return true;
 }
 
@@ -10989,7 +10994,7 @@ void ShowTreeView::buildLibraryPalettes(QTreeWidgetItem *all,
     root->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
     root->setToolTip(0, tr("+ Palette (or right-click) makes one; F2 renames; drag onto a folder to file it "
                            "(folders hold any type); ⌫ deletes, saying where it is used. Effect design, .qxfx "
-                           "and Bundles are in Build."));
+                           "and Bundles are in Build (the Everything view)."));
 
     QList<QLCPalette *> pl;
     for (QLCPalette *p : m_doc->palettes())

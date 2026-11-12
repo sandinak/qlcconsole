@@ -493,7 +493,7 @@ void SceneEditor::initLooksList()
     m_looksTree->setRootIsDecorated(true);
     m_looksTree->setSelectionMode(QAbstractItemView::NoSelection);
     m_looksTree->setToolTip(tr("This scene plays these looks (palettes) on these fixture "
-                               "groups. They are set in Build, not with the sliders below, "
+                               "groups. They are set in the Workbench, not with the sliders below, "
                                "which hold only the scene's own channel values."));
 
     QTreeWidgetItem *groupsItem = new QTreeWidgetItem(m_looksTree, QStringList(tr("Fixture groups")));

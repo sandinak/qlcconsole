@@ -410,4 +410,32 @@ void MenuWords_Test::theTabsHaveTheirNames()
     QVERIFY2(bad.isEmpty(), qPrintable(QStringLiteral("\nthe old tab name:\n  ") + bad.join(QStringLiteral("\n  "))));
 }
 
+void MenuWords_Test::noTextSendsYouToAHiddenBuild()
+{
+    /* Board Q228: Build is not a tab of the qlcconsole view (it is in
+       Everything). A text that sends the person to "the Build tab", to
+       Build ▸ Palettes or to Build's Move in black sends them where the view
+       they work in has nothing: palettes are the Library's, the programmer
+       strip is the Show Tree's too, the selection is the Workbench's. */
+    static const QRegularExpression hidden(QStringLiteral(
+        "Build tab|Build \\x{25B8} Palettes|Build \\x{2192} Move in black|Build's selection|a scene in Build"));
+    QStringList bad;
+    for (const auto &src : sources())
+    {
+        const QStringList &lines = src.second;
+        for (int i = 0; i < lines.size(); ++i)
+        {
+            QRegularExpressionMatchIterator t = trRe().globalMatch(lines.at(i));
+            while (t.hasNext())
+            {
+                const QString text = unescape(t.next().captured(1));
+                if (hidden.match(text).hasMatch())
+                    bad << QStringLiteral("%1:%2  \"%3\"").arg(src.first).arg(i + 1).arg(text);
+            }
+        }
+    }
+    QVERIFY2(bad.isEmpty(), qPrintable(QStringLiteral("\nsends you to Build, hidden in the qlcconsole view:\n  ")
+                                           + bad.join(QStringLiteral("\n  "))));
+}
+
 QTEST_MAIN(MenuWords_Test)

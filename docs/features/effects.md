@@ -37,12 +37,12 @@ Open it from any of three places:
   and dimmer play under the effect, so it looks as it will in the cue.
   **In Context** keeps the rest of the cue playing; **Solo** plays only the
   effect.
-- **Build ▸ Effects.** **+ New**, or click an effect palette: the
+- **Build ▸ Effects** (Everything view; the Library's **Effects** heading in the qlcconsole view). **+ New**, or click an effect palette: the
   designer opens in the Workbench's editor pane, on the **bench**
   described next. Right-click an effect for the palette menu it has everywhere:
   Edit Effect, Runs ▸, Used By ▸, Move to Folder ▸, Duplicate, Rename and
   Delete Palette…. See [Making effects](build.md#making-effects).
-- Build ▸ Effects is effects' one home: no window of their own any more.
+- Build ▸ Effects (in the qlcconsole view, the Library's Effects) is effects' one home: no window of their own any more.
   **Try on ▾** on the bench picks the groups it plays on, and it
   remembers them.
 
@@ -189,7 +189,7 @@ programming: a new layer on the **Try on** groups, playing the effect.
   in “Verse wash”**. Click it to put the layer there.
 - The arrow (or the whole button, when you came from nowhere in
   particular) opens the menu: **Into the Show Tree's cue…** (the cue
-  selected in the Show Tree), **Into a scene in Build…** (pick one) or
+  selected in the Show Tree), **Into a Scene…** (pick one) or
   **Into a new scene…** (name it; the effect and the groups are offered).
 
 In a Show Tree cue it is a new layer on those groups, with the effect as
@@ -483,8 +483,8 @@ driven apart.
 
 Effects that follow the beat (a **Beat sync** setting, or a beat-made
 effect) all read **one beat clock**, so they're on the same beat however far
-apart they were started. Turn the clock on in the Build toolbar's
-**Beat** menu (**Internal beat on**, and the **BPM**; the button then reads
+apart they were started. Turn the clock on in the programmer strip's
+(Build and the Show Tree) **Beat** menu (**Internal beat on**, and the **BPM**; the button then reads
 "Beat 120"), or **Tap** it: the tempo comes from
 your last four taps (pause two seconds to start over), and the beat lands
 on your last tap — every beat effect jumps onto it. A single tap just moves
@@ -529,8 +529,8 @@ the same point, which is a look in itself.
 ### Speed masters
 
 Tempo masters for effects to run on, so one tap or one fader moves
-everything on a master together. Open them from the Build toolbar's
-**Beat** menu → **Speed Masters…**. **Masters:** at the top sets how many
+everything on a master together. Open them from the programmer strip's
+(Build and the Show Tree) **Beat** menu → **Speed Masters…**. **Masters:** at the top sets how many
 the show uses — 4 to 16 (fixed slots, so a control surface can map them).
 Each row has:
 

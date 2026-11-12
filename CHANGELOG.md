@@ -10,6 +10,14 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Changed
+
+- **The programmer strip is in the Show Tree too (Q228).** Build's top-bar tools (Highlight, Flash, Park ▾, Move in Black ▾, Beat ▾, Tap, Save Positions, More ▾) are now one widget that Build and the Show Tree both have, a row under the Show Tree's toolbar. Both act on the programmer selection and the same state (park, highlight, move in black, the beat). In the Show Tree, Snapshot works when a scene is open in the docked Workbench. The joystick's axes auto-bind whenever a strip shows, not only when Build shows.
+- **Build is hidden in the qlcconsole view.** View ▸ Workspace ▸ qlcconsole shows seven tabs: Connections, Fixtures, Lighting Studio, Show Tree, Virtual Console, Simple Desk, Run (⇧⌘1 … ⇧⌘7, so the Show Tree is now ⇧⌘4 and Run ⇧⌘7). Build stays in Everything with its numbers there; **Window ▸ Build** from the qlcconsole view switches to Everything and says so.
+- **What used to open in Build opens in the Show Tree in the qlcconsole view.** Opening a function from anywhere docks the Workbench there (↩ Show Tree puts the page back); opening or editing a palette (effect palettes too) and Show Review's palette fix select it in the Library and open it in the Look Editor; "show effects" goes to the Library's Effects. In Everything they still go to Build. The effect designer's Make a Layer item is now **Into a Scene…**.
+
 ## [0.4.3] - 2026-11-10
 
 qlcconsole 0.4.3 is a stable release after 0.4.1. 0.4.2 was built but never
