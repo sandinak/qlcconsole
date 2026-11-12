@@ -21,12 +21,15 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QMutex>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QThread>
+
+#include <atomic>
 
 #if defined(Q_OS_LINUX)
 #include <sys/resource.h>
@@ -279,17 +282,52 @@ int SystemProbe::performanceCores()
  * What else is going on
  *********************************************************************/
 
+namespace
+{
+std::atomic<bool> s_toolsAllowed{true};
+std::atomic<int> s_toolsStarted{0};
+}
+
+void SystemProbe::setToolsAllowed(bool allowed)
+{
+    s_toolsAllowed.store(allowed);
+}
+
+bool SystemProbe::toolsAllowed()
+{
+    return s_toolsAllowed.load();
+}
+
+int SystemProbe::toolsStarted()
+{
+    return s_toolsStarted.load();
+}
+
 #if !defined(Q_OS_WIN)
 QString SystemProbe::runTool(const QString &program, const QStringList &args, const QDeadlineTimer &deadline)
 {
-    if (deadline.hasExpired())
+    if (deadline.hasExpired() || toolsAllowed() == false
+        || QFileInfo(program).isExecutable() == false)
         return QString();
     QProcess p;
     p.setProcessChannelMode(QProcess::MergedChannels);
     /* The lowest priority there is, so the show always comes first: 20 on
-       macOS, Linux stops at 19. Between fork and exec, so only this call. */
-    p.setChildProcessModifier([]() { (void)setpriority(PRIO_PROCESS, 0, 20); });
-    p.start(program, args, QIODevice::ReadOnly);
+       macOS, Linux stops at 19. Through nice(1) rather than a child process
+       modifier, which would make QProcess fork() the whole app instead of
+       its lighter spawn path. */
+    static const QString nice = QStringLiteral("/usr/bin/nice");
+    static const bool haveNice = QFileInfo(nice).isExecutable();
+    s_toolsStarted++;
+    if (haveNice)
+    {
+        p.start(nice, QStringList() << QStringLiteral("-n") << QStringLiteral("20") << program << args,
+                QIODevice::ReadOnly);
+    }
+    else
+    {
+        p.setChildProcessModifier([]() { (void)setpriority(PRIO_PROCESS, 0, 20); });
+        p.start(program, args, QIODevice::ReadOnly);
+    }
     if (p.waitForFinished(int(qMax<qint64>(1, deadline.remainingTime()))) == false)
     {
         p.kill();
@@ -528,6 +566,9 @@ int SystemProbe::memoryPressure()
 
 QList<SystemProbe::ProcessUse> SystemProbe::processes(const QDeadlineTimer &deadline)
 {
+    /* Reading every process is heavy probing too */
+    if (toolsAllowed() == false)
+        return QList<ProcessUse>();
 #if defined(Q_OS_MACOS)
     return parseProcessTable(runTool(QStringLiteral("/bin/ps"),
                                      QStringList() << QStringLiteral("-Axco") << QStringLiteral("pid,pcpu,comm"),

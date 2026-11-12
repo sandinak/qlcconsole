@@ -24,6 +24,7 @@
 #include <QList>
 #include <QTimer>
 #include <QFutureWatcher>
+#include <QDateTime>
 #include <functional>
 
 #include "mastertimer.h"
@@ -51,8 +52,11 @@
  * the runtime object (one per App) holds it while the show is in Operate,
  * and puts a "system.tuning" entry in Show Status when something marked
  * important is off then. It looks again every 15 seconds during Operate,
- * because a backup can start and a laptop can come unplugged mid-show. What
- * needs a system tool runs on a worker thread (probeHost()), never the UI's.
+ * because a backup can start and a laptop can come unplugged mid-show --
+ * the light look only, in-process and cheap. The full look, which runs
+ * system tools, never runs in Operate (SystemProbe::toolsAllowed()): it
+ * runs outside Operate once a minute, and Operate goes on with its last
+ * answers. Either runs on a worker thread (probeHost()), never the UI's.
  */
 class QLC_UI_EXPORT SystemTuning final : public QObject
 {
@@ -161,8 +165,11 @@ public:
     /** The part that is quick and reads the Doc: UI thread */
     static Probe probeDoc(const Doc *doc);
     /** The part that may run system tools: any thread, under a second. With
-     *  @a deep false, only what costs no new process. */
+     *  @a deep false, or while SystemProbe::toolsAllowed() is off (Operate),
+     *  only what costs no new process. */
     static void probeHost(Probe *p, bool deep);
+    /** When the last full (deep) look finished; invalid when none has */
+    static QDateTime lastFullCheck();
     /** What @a p means, item by item, in a fixed order. */
     static QList<Item> check(const Probe &p);
     /** The items of @a items that are important and CanImprove */
@@ -205,8 +212,12 @@ public:
     void setHold(const std::function<void(bool on, bool keepDisplayAwake)> &holdFn);
     /** Tests: run this on the worker in place of probeHost() */
     void setHostGather(const std::function<void(Probe *, bool)> &gatherFn);
-    /** Tests: one look, as the 15-second timer makes */
-    void recheckNow(bool deep);
+    /** Tests: one look, as the timer makes: light in Operate, full outside */
+    void recheckNow();
+
+    /** A full look's answers are kept; a light one gets the last full
+     *  look's answers for what it didn't read (Settings ▸ Performance too) */
+    void rememberLook(Probe *p);
 
     /** The Show Status key */
     static QString statusKey();
@@ -217,7 +228,8 @@ private slots:
 private:
     /** The items for what the host is doing (systemtuninghost.cpp) */
     static void appendHostItems(const Probe &p, QList<Item> *items);
-    void updateStatus(bool deep = true);
+    static void noteFullCheck();
+    void updateStatus();
     void publish(Probe p);
 
 private:
@@ -230,7 +242,7 @@ private:
     QFutureWatcher<Probe> m_watcher;
     bool m_gatherAgain = false;
     QTimer m_recheck;
-    int m_rechecks = 0;
+    bool m_operateLooks = false;    ///< m_recheck runs at Operate's pace
     MasterTimer::FrameTiming m_baseline;
     Probe m_deep;   ///< the last deep look: what the light ones don't re-read
 };

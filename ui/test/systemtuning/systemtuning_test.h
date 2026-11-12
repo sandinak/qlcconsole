@@ -74,6 +74,8 @@ private slots:
     void memoryDiskAndRigSettings();
     void hostLookRunsOffTheUiThread();
     void aLightLookKeepsTheDeepAnswers();
+    void operateRunsNoToolsAndDesignDoes();
+    void thePageLooksLightlyInOperate();
     void theRealLookIsBounded();
 
 private:

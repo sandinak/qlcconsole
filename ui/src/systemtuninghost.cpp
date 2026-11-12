@@ -206,10 +206,11 @@ void SystemTuning::probeHost(Probe *p, bool deep)
     p->autoUpdates = SystemProbe::autoUpdates();
     p->rebootPending = SystemProbe::rebootPending();
 
-    /* Each of these starts a process, so only the deep look does them.
-       publish() carries the last deep answers over the looks between. */
-    p->deepLooked = deep;
-    if (deep)
+    /* Each of these starts a process (or reads every process), so only the
+       deep look does them, and never in Operate (SystemProbe::toolsAllowed()).
+       rememberLook() carries the last deep answers over the looks between. */
+    p->deepLooked = deep && SystemProbe::toolsAllowed();
+    if (p->deepLooked)
     {
         p->screenLock = SystemProbe::screenLock(&p->idleMinutes, deadline);
         p->backupRunning = SystemProbe::backupRunning(deadline);
@@ -217,6 +218,11 @@ void SystemTuning::probeHost(Probe *p, bool deep)
         p->processesKnown = p->processes.isEmpty() == false;
         if (p->model.contains(QLatin1String("Raspberry Pi")))
             p->piThrottled = SystemProbe::piThrottled(deadline);
+        /* The show went into Operate part way: what's missing isn't an answer */
+        if (SystemProbe::toolsAllowed() == false)
+            p->deepLooked = false;
+        else
+            noteFullCheck();
     }
 }
 

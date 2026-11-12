@@ -34,10 +34,12 @@ never asks for a password. Those are yours to do, with the command shown.
 ## On every computer
 
 These look at what this computer is doing now. During Operate the app looks
-again every 15 seconds (once a minute for the ones that run a system tool),
-so a backup that starts mid-show, or a laptop that comes unplugged, reaches
-the footer while it matters. These looks run at the lowest priority the
-system has, so the show always comes first.
+again every 15 seconds, so a laptop that comes unplugged or a machine that
+runs hot reaches the footer while it matters. The checks that run a system
+tool (screen lock, backups, other programs) never run in Operate, so nothing
+can hold up a frame: they run once a minute outside it, and Operate goes on
+with their last answers. The page says when that was. Every look runs at the
+lowest priority the system has, so the show always comes first.
 
 | Item | What it looks at | What to do |
 |---|---|---|

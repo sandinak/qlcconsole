@@ -14,7 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
-- **Settings ▸ Performance checks much more, per computer.** It now tells Apple silicon, Intel Macs, ARM boards and PCs apart, and looks for what gets in the way of a show: on battery, overheating, Wi-Fi carrying DMX, the macOS Local Network permission, a screen that will lock, backups and file sync, system updates, other busy programs, low memory or disk, and heavy rig view settings. It also shows how many frames really left late with this show. During Operate it looks again every 15 seconds and says so in the footer. See [Tuning your computer](docs/features/system-tuning.md).
+- **Settings ▸ Performance checks much more, per computer.** It now tells Apple silicon, Intel Macs, ARM boards and PCs apart, and looks for what gets in the way of a show: on battery, overheating, Wi-Fi carrying DMX, the macOS Local Network permission, a screen that will lock, backups and file sync, system updates, other busy programs, low memory or disk, and heavy rig view settings. It also shows how many frames really left late with this show. During Operate it looks again every 15 seconds and says so in the footer; the checks that start a program (screen lock, backups, other programs) run only outside Operate, so the show always comes first. See [Tuning your computer](docs/features/system-tuning.md).
 
 ### Changed
 
