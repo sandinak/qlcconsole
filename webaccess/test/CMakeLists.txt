@@ -31,3 +31,6 @@ target_link_libraries(${module_name} PRIVATE
     qlcplusui
     qlcpluswebaccess
 )
+
+# The web pages' scripts, run in a QJSEngine (pagescript_test).
+add_subdirectory(pagescript)

@@ -37,6 +37,10 @@ header a{color:var(--dim);font-size:15px}
 #where{flex:1;min-width:0;font-size:15px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chip{font-size:13px;font-weight:700;letter-spacing:.06em;padding:3px 9px;border-radius:99px;background:var(--line);color:var(--dim)}
 .chip.live{background:#c62828;color:#fff}
+.chip.blue{background:#1565c0;color:#fff}
+#teach,#blindchip{display:none}
+#held{font-size:14px;color:#64b5f6;padding:0 0 6px}
+#held:empty{display:none}
 #dot{width:12px;height:12px;border-radius:50%;background:var(--stop)}
 #dot.on{background:var(--go2)}
 main{flex:1;display:grid;grid-template-columns:1fr;gap:10px;align-content:start}
@@ -86,8 +90,9 @@ main>section:nth-child(2){order:-1}
  .listcard{flex:1;display:flex;flex-direction:column;min-height:0}
 }
 </style></head><body>
-<header><span id="dot"></span><span id="where">Connecting&hellip;</span><span class="chip" id="mode">&nbsp;</span>
+<header><span id="dot"></span><span id="where">Connecting&hellip;</span><span class="chip blue" id="blindchip">BLIND</span><span class="chip blue" id="teach">TEACHING</span><span class="chip" id="mode">&nbsp;</span>
 <a href="run">Run</a></header>
+<div id="held"></div>
 <div id="off" class="card">No focus is running on the console. Start <b>Focus mode</b> or <b>Venue focus</b> there (Lighting Studio &#9656; Focus); this page follows it.</div>
 <main id="main" style="display:none">
 <section>
@@ -141,6 +146,11 @@ function fill(id,items){var u=$(id);while(u.firstChild)u.removeChild(u.firstChil
 function paint(){
   var m=$('mode');m.textContent=st.mode||'';m.className='chip'+(st.mode==='LIVE'?' live':'');
   $('off').style.display=st.active?'none':'block';
+  $('teach').style.display=st.teaching?'inline':'none';
+  $('blindchip').style.display=st.blind?'inline':'none';
+  var hw=[];if(st.blind)hw.push('Blind is on: the rig is muted, moves show only on the console');
+  if(st.held&&st.held.output)hw.push('Teaching holds real output: the lights do not move');
+  $('held').textContent=hw.join(' · ');
   $('main').style.display=st.active?'':'none';
   $('where').textContent=st.active?((st.callName?st.callName:'Focus mode')+(st.venue?' · '+st.venue:'')):'Focus remote';
   QPad.labels(st.labels||{});

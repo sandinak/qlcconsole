@@ -30,6 +30,10 @@ network. The Wi-Fi only carries small control messages.
   **Focus ›** while a focus runs on the console. On a screen 1280 pixels
   wide or more held sideways (the Deck), it is in two columns: the cues on
   the left, GO on the right.
+  In Design it also has **BLIND**, **SOLO** and the arrows either side of
+  SOLO (see [Blind and Solo](#blind-and-solo)). In a Teaching show it
+  shows a blue **TEACHING** chip and a line saying what the instructor's
+  settings hold (see [How it stays safe](#how-it-stays-safe)).
 
 Both pages work on a phone too. Each has a **Controller test** button
 (see below).
@@ -72,7 +76,13 @@ is labelled with its job.
 | LB + Y | Sub GO |
 | LB + X | Stop the list |
 | LB + RB | Fire the armed hit |
+| LB + View | Solo: the first layer of the cue in the preview, or the whole cue again |
+| LB + D-pad right / left | Solo the next / previous layer |
+| LB + LS (click) | Blind on / off |
 | Menu | Controller test |
+
+The last three are the remote's own. The console's controller does not
+use View, the D-pad or LS in its Run role, so nothing clashes.
 
 **On the console's own controller, while a follow spot plays** (see
 [Moving a follow spot](stage-targets.md#moving-a-follow-spot))
@@ -85,6 +95,25 @@ is labelled with its job.
 | D-pad left / right | Close / open the beam |
 | Hold LS (click), push a stick toward centre stage, let go | Sets which way the operator faces (15° steps) |
 | View + LS | Centre Sticks |
+
+## Blind and Solo
+
+Both do what the console's own Blind and Solo do in Design, and both
+appear on the page only in Design.
+
+- **BLIND** mutes the rig and keeps the console's screens live, like the
+  Blind button on the console in Design. The page shows a blue **BLIND**
+  chip while it is on, whoever turned it on. In Operate the console's
+  Blind only changes what its own screens show and never mutes, so the
+  remote refuses it there: "Blind and Solo are for Design: the show is
+  running."
+- **SOLO** works on the cue playing in the Show Tree's preview (pick a
+  cue in the Show Tree, or press **Play** on its page). Only one of its
+  layers plays, as with **Solo** on the Show Tree's cue page. **SOLO**
+  solos the first layer, and pressing it again plays the whole cue.
+  **‹** and **›** step through the layers. The button names the soloed
+  layer (**SOLO: USTs**). With no cue in the preview, SOLO is greyed.
+  Picking another cue on the console ends the solo, as it does there.
 
 ## Setting up
 
@@ -139,6 +168,15 @@ Joystick** in the same layout.
   at the console, so Menu doesn't leave.
 - **The controller test sends nothing.** While it is open, the controls
   only light up their boxes.
+- **Teaching mode holds the remote as it holds the console.** A remote GO
+  goes through the same path as the console's GO, so the instructor's
+  settings ([Teaching mode](teaching.md#instructor-settings)) apply to it
+  in the same way. Real output stays held, a GO's show control out to
+  QLab, OSC or MSC is held, and with **Hold show control out while Blind
+  is on**, a GO after Blind from the remote is held too. The Run page
+  says what is held, and which cue's trigger was not sent. The remote
+  cannot change any of these settings. Teaching locks neither Blind nor
+  Solo on the console, so it does not lock them on the remote either.
 
 ## The controller test
 
@@ -162,24 +200,72 @@ At 40 messages a second, a stick move is on the rig within about
 
 ## Hardware checklist
 
-Try this on the Deck and report back, with a screenshot of the controller
-test:
+One sitting with the Deck, the console running this build, and a show
+with a cue list, two or more layers on a cue, and a Venue focus to start.
+On the console, turn on web access and **Allow GO from the phone Run
+page** (Setting up, steps 1 and 2). Take the screenshots the steps ask
+for and note each result.
 
-1. Join the Deck to the show network's Wi-Fi.
-2. Open **/run** in Desktop Mode. Check the cues show, and that the dot by
-   the name is green.
-3. Open **Controller test**. Press every button, both triggers, both stick
-   clicks, the D-pad and View/Menu, and move both sticks. Each box should
-   light. Take a screenshot.
-4. On the console, start a Venue focus. Open **/focus**. Tap a light; it
-   should blink on the rig.
-5. Move the left stick, then the right. The light should follow with no
-   lag you can feel. Note the round trip the test shows.
-6. Press A to save, and RT to go to the next call.
-7. In Steam, bind L4, R4, L5 and R5 to Page Up, Page Down, [ and ]. Check
-   them in the controller test (Last key) and on the focus page.
-8. Add the browser as a non-Steam game with the focus address. Launch it
-   from Game Mode and repeat step 5.
-9. With the Deck's controller seen by the console directly (USB, or
-   Steam's virtual pad on a Linux console), read the VID:PID the console's
-   controller list shows for it and report it.
+1. **Wi-Fi.** Join the Deck to the show network. In Desktop Mode, open
+   Firefox or Chrome at **http://&lt;address&gt;:9999/run**.
+   *Expected:* the dot by the list name is green and the cue on now and
+   next match the console's Run tab.
+2. **Controller test.** Tap **Controller test**, then press every
+   button, both triggers, both stick clicks, the D-pad, View and Menu,
+   and move both sticks.
+   *Expected:* the name line reads "Steam Deck…" with "mapping:
+   standard". Each box lights while its control is down. A trigger shows
+   how far it is pulled, and the stick bars follow the sticks. Take a
+   screenshot. Menu closes the test.
+3. **Round trip.** Open **/focus**. With the controller test open there,
+   read the round trip line.
+   *Expected:* a number in milliseconds. Note it (a few ms on a quiet
+   5 GHz network).
+4. **Run controls.** Back on **/run**, hold LB.
+   *Expected:* "LB HELD: GO ARMED" shows. LB + A plays the next cue on the
+   console. A on its own does nothing.
+5. **Blind.** Put the console in Design. On the Deck, press LB + LS
+   (click the left stick).
+   *Expected:* the rig goes dark, the console's screens stay live, and
+   the console's Blind button lights. The page shows **BLIND ON** and the
+   blue BLIND chip. Press LB + LS again: the rig comes back.
+6. **Solo.** On the console, pick a cue with two or more layers in the
+   Show Tree, so it plays in the preview. On the Deck, press LB + View.
+   *Expected:* only the first layer lights, and the page reads **SOLO:**
+   and that layer's name. LB + D-pad right moves to the next layer. LB +
+   View again plays the whole cue.
+7. **Blind and Solo in Operate.** Switch the console to Operate.
+   *Expected:* the BLIND and SOLO row disappears from the page. LB + LS
+   says "Blind and Solo are for Design: the show is running."
+8. **Focus remote.** Back in Design, start a Venue focus on the console.
+   On **/focus**, tap a light in the list.
+   *Expected:* that light blinks on the rig.
+9. **Sticks.** Move the left stick, then the right.
+   *Expected:* the light follows, the right stick finer, with no lag you
+   can feel. Let go: it stops at once.
+10. **Save and step.** Press A, then RT.
+    *Expected:* the light shows Saved and the page moves to the next
+    focus call.
+11. **Back grips.** In Steam, bind L4, R4, L5 and R5 to Page Up, Page
+    Down, [ and ] (The back grips, above). Press each one with the
+    controller test open, then with it closed.
+    *Expected:* the test's Last key shows "PageUp = LT", "PageDown = RT",
+    "[ = LB" and "] = RB". With the test closed, the grips change the call
+    and the light.
+12. **Game Mode.** Add the browser as a non-Steam game with
+    `--kiosk http://192.168.1.20:9999/focus`, using your console's
+    address (Game Mode, above). Launch it from Game Mode and repeat
+    step 9.
+    *Expected:* the page fills the screen and the sticks work as in
+    Desktop Mode.
+13. **Teaching.** On the console, open a Teaching show (File ▸ Show
+    Settings ▸ Teaching mode, instructor settings left as they are) and
+    press LB + A on **/run**.
+    *Expected:* the blue TEACHING chip shows, and the line under the
+    section reads "Teaching: real output held · show control out held:
+    Teaching (cue … not sent)". The cue still plays on the console.
+14. **VID:PID.** Connect the Deck's controller to the console directly
+    (USB, or Steam's virtual pad on a Linux console). Open the console's
+    controller list.
+    *Expected:* the Deck's controller is listed, with Xbox button names,
+    and its VID:PID starts with 28DE (Valve). Report the whole VID:PID.

@@ -65,6 +65,10 @@ control held: Teaching (cue 4 not sent)", or "held: Blind (Teaching)"), and
 the Show control page's **Last sent** line says the same. A held trigger is
 not kept: when it is let through, or Blind ends, only the next GO sends.
 
+A GO from the phone or Steam Deck remote ([Run page](gamepad-remote.md))
+is held in the same way. The page shows a TEACHING chip and says what is
+held. The remote cannot change these settings.
+
 Outside Teaching mode a real GO always sends, Blind or not: Blind only keeps
 edits off the stage. A Make Student Handout copy is written with the safe
 defaults (everything held, Blind sends).

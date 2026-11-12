@@ -37,6 +37,16 @@ header{display:flex;align-items:center;gap:10px;padding:12px 0 6px}
 #where{flex:1;min-width:0;font-size:16px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chip{font-size:13px;font-weight:700;letter-spacing:.06em;padding:3px 9px;border-radius:99px;background:var(--line);color:var(--dim)}
 .chip.live{background:#c62828;color:#fff}
+.chip.blue{background:#1565c0;color:#fff}
+#teach,#blindchip{display:none}
+#held{font-size:14px;color:#64b5f6;padding:0 0 6px}
+#held:empty{display:none}
+#rigrow{display:none}
+#rigrow button{min-height:52px;width:auto;min-width:0;flex:1.2}
+#rigrow #soloprev,#rigrow #solonext{flex:0 0 56px}
+#rigrow #solo{flex:2.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#blind.on{background:#1565c0;border-color:#42a5f5;color:#fff}
+#solo.on{background:var(--warn);border-color:var(--warn);color:#101214}
 #dot{width:12px;height:12px;border-radius:50%;background:var(--stop)}
 #dot.on{background:var(--go2)}
 #section{font-size:15px;color:var(--warn);min-height:1.3em;padding:2px 0 8px;text-transform:uppercase;letter-spacing:.08em}
@@ -84,18 +94,20 @@ button:disabled{opacity:.35}
 #statusline.error{color:#ff8a80}
 @media (min-width:700px){body{max-width:640px;margin:0 auto}}
 @media (min-width:1000px) and (orientation:landscape){
- body{max-width:1600px;margin:0 auto;display:grid;grid-template-columns:1.2fr 1fr;grid-template-rows:auto auto 1fr;column-gap:20px}
- header,#section{grid-column:1 / span 2}
- main{grid-column:1;overflow:auto}
- #pad{grid-column:2;grid-row:3;margin-top:0;display:flex;flex-direction:column;justify-content:flex-end}
+ body{max-width:1600px;margin:0 auto;display:grid;grid-template-columns:1.2fr 1fr;grid-template-rows:auto auto auto 1fr;column-gap:20px}
+ header,#section,#held{grid-column:1 / span 2}
+ #held:empty{display:block;padding:0}
+ main{grid-column:1;grid-row:4;overflow:auto}
+ #pad{grid-column:2;grid-row:4;margin-top:0;display:flex;flex-direction:column;justify-content:flex-end}
  #go{min-height:40dvh}
  #testbtn{margin:0 0 0 auto}
  #statusline{display:none !important}
 }
 @media (max-width:999px),(orientation:portrait){#status{display:none !important}}
 </style></head><body>
-<header><span id="dot"></span><span id="where">Connecting&hellip;</span><a id="focuslink" href="focus">Focus &rsaquo;</a><span class="chip" id="mode">&nbsp;</span></header>
+<header><span id="dot"></span><span id="where">Connecting&hellip;</span><a id="focuslink" href="focus">Focus &rsaquo;</a><span class="chip blue" id="blindchip">BLIND</span><span class="chip blue" id="teach">TEACHING</span><span class="chip" id="mode">&nbsp;</span></header>
 <div id="section"></div>
+<div id="held"></div>
 <div id="statusline"></div>
 <main>
 <div class="card" id="now"><small>On now</small><div class="num" id="nnum">&mdash;</div><div class="name" id="nname"></div><div id="nnotes"></div></div>
@@ -110,6 +122,7 @@ button:disabled{opacity:.35}
 <button id="go" disabled>GO</button>
 <div class="row" id="subrow"><button id="subback" disabled>SUB BACK</button><button id="subgo" disabled>SUB GO</button></div>
 <div class="row"><button id="back" disabled>BACK</button><button id="hold" disabled>HOLD</button><button id="stop" disabled>STOP</button></div>
+<div class="row" id="rigrow"><button id="blind" disabled title="Blind: the rig muted, the console's screens live (Design)">BLIND</button><button id="soloprev" disabled title="Solo the previous layer">&lsaquo;</button><button id="solo" disabled title="Solo: only one layer of the cue in the Show Tree preview plays">SOLO</button><button id="solonext" disabled title="Solo the next layer">&rsaquo;</button></div>
 <button id="testbtn" type="button">Controller test</button>
 </div>
 <div id="lock"><p id="lockwhy">This show asks for its PIN before the page can send GO.</p>
@@ -133,6 +146,8 @@ function cue(n,o,sub){
     b.textContent=e.kind+': ';d.appendChild(b);d.appendChild(document.createTextNode(e.text));
     if(e.done)d.className='done';h.appendChild(d)})}
 function canSend(){return st.remote&&st.hasList&&(unlocked||!st.pin)}
+/* Blind and Solo need no cue list: the remote's rules alone. */
+function canRig(){return st.remote&&(unlocked||!st.pin)}
 function paint(){
   $('where').textContent=st.hasList?((st.production?st.production+' · ':'')+st.list):(st.remote===undefined?'Connecting…':'No main cue list');
   var m=$('mode');m.textContent=st.mode||'';m.className='chip'+(st.mode==='LIVE'?' live':'');
@@ -154,7 +169,24 @@ function paint(){
   else if($('msg').textContent===off)msg('');
   if(st.remote&&st.pin&&!unlocked&&$('lock').className!=='show')askPin('');
   $('go').textContent=st.paused?'GO (paused)':'GO';
-  statusList();padLabels()}
+  rig(canRig());statusList();padLabels()}
+/* Teaching's held output, Blind and Solo (Design): what the console's footer and Show Tree say. */
+function rig(ok){
+  var h=st.held,t=[];
+  $('teach').style.display=st.teaching?'inline':'none';
+  if(h){if(h.output)t.push('real output held');
+    if(h.last)t.push('show control out '+h.last);else if(h.showControl)t.push('show control out held ('+h.showControl+')')}
+  $('held').textContent=st.teaching?'Teaching'+(t.length?': '+t.join(' · '):''):'';
+  $('blindchip').style.display=st.blind?'inline':'none';
+  var design=st.mode==='DESIGN',pv=st.preview,layers=(pv&&pv.layers)||[],on=null;
+  $('rigrow').style.display=design&&st.remote?'flex':'none';
+  $('blind').disabled=!ok||!design;$('blind').className=st.blind?'on':'';
+  $('blind').textContent=st.blind?'BLIND ON':'BLIND';
+  layers.forEach(function(l){if(l.id===pv.solo)on=l});
+  ['solo','soloprev','solonext'].forEach(function(i){$(i).disabled=!ok||!design||!layers.length});
+  $('solo').className=on?'on':'';
+  $('solo').textContent=on?'SOLO: '+on.name:'SOLO';
+  $('solo').title=layers.length?'Solo a layer of cue '+(pv.num?pv.num+' ':'')+(pv.name||''):'Solo: play a cue in the Show Tree preview first'}
 var mrows={},touching={};
 function masters(ok){
   var list=st.masters||[],box=$('mlist'),seen={};
@@ -194,8 +226,10 @@ function connect(){
     else if(p[1]==='ack'){
       if(p[3]==='refused')msg('Refused: GO from the phone is off.');
       else if(p[3]==='needpin'){unlocked=false;askPin('')}
+      else if(p[3]==='nothing'&&p[2]==='solo')msg('Solo needs a cue playing in the Show Tree preview.');
       else if(p[3]==='nothing')msg('Nothing to play.');
       else if(p[3]==='design')msg('Hits fire in Operate: switch the console to Operate.');
+      else if(p[3]==='operate')msg('Blind and Solo are for Design: the show is running.');
       else msg('')}}}
 var pendingPin='';
 $('pinok').onclick=function(){pendingPin=$('pin').value;send('QLC+RUN|pin|'+pendingPin)};
@@ -206,6 +240,10 @@ $('back').onclick=function(){cmd('back')};
 $('subgo').onclick=function(){cmd('subgo')};
 $('subback').onclick=function(){cmd('subback')};
 $('hold').onclick=function(){cmd(st.paused?'resume':'pause')};
+$('blind').onclick=function(){cmd('blind|toggle')};
+$('solo').onclick=function(){cmd('solo|toggle')};
+$('soloprev').onclick=function(){cmd('solo|prev')};
+$('solonext').onclick=function(){cmd('solo|next')};
 $('stop').onclick=function(){
   var b=$('stop');
   if(b.className==='armed'){b.className='';b.textContent='STOP';clearTimeout(armedTimer);cmd('stop');return}
@@ -219,7 +257,8 @@ function statusList(){
   sl.textContent=list.length?list[0].text+(list.length>1?' (+'+(list.length-1)+' more)':''):'';
   sl.className=list.length&&list[0].level==='error'?'error':'';
   $('focuslink').style.display=st.focus?'inline':'none'}
-/* The controller: the pad's Run role (PadRun), from the state's map. */
+/* The controller: the pad's Run role (PadRun), from the state's map, and
+   the remote's own Blind and Solo (a.cmd) on controls the Run role leaves free. */
 function padAction(r){return (st.pad||{})[r]}
 function padLabels(){var l={};for(var r in (st.pad||{}))l[r]=st.pad[r].label;QPad.labels(l)}
 QPad.on({
@@ -227,8 +266,8 @@ QPad.on({
     if(r==='start'){QPad.toggle(true);return}
     var a=padAction(r);if(!a)return;
     if(a.do==='arm'){$('armed').style.display='block';return}
-    if(!QPad.down('lb')||!canSend())return;
-    if(a.do==='hit')send('QLC+RUN|hit');else cmd(a.do);
+    if(!QPad.down('lb')||!(a.remote?canRig():canSend()))return;
+    cmd(a.cmd||a.do);
     if(a.do==='go'&&navigator.vibrate)navigator.vibrate(30)},
   up:function(r){var a=padAction(r);if(a&&a.do==='arm')$('armed').style.display='none'}});
 $('testbtn').onclick=function(){QPad.toggle(true)};

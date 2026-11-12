@@ -799,6 +799,16 @@ void WebAccess::handleRunCommand(QHttpConnection *conn, WebAccessUser *user, con
     {
         result = m_run->blackout(cmdList.value(2, QStringLiteral("toggle")), m_runUnlocked.contains(conn));
     }
+    else if (what == QLatin1String("blind"))
+    {
+        // QLC+RUN|blind[|on|off|toggle]: Design's Blind (Q229)
+        result = m_run->blind(cmdList.value(2, QStringLiteral("toggle")), m_runUnlocked.contains(conn));
+    }
+    else if (what == QLatin1String("solo"))
+    {
+        // QLC+RUN|solo|off|toggle|next|prev|<layer id>: a layer of the previewed cue (Q229)
+        result = m_run->solo(cmdList.value(2, QStringLiteral("toggle")), m_runUnlocked.contains(conn));
+    }
     else
     {
         // QLC+RUN|go[|<cue>[|<list>]] -- a cue, on a list, by number
@@ -812,6 +822,7 @@ void WebAccess::handleRunCommand(QHttpConnection *conn, WebAccessUser *user, con
         case WebAccessRun::Refused:     answer = QStringLiteral("refused"); break;
         case WebAccessRun::NeedPin:     answer = QStringLiteral("needpin"); break;
         case WebAccessRun::WrongMode:   answer = QStringLiteral("design"); break;
+        case WebAccessRun::NotInDesign: answer = QStringLiteral("operate"); break;
         case WebAccessRun::Unknown:     return;
     }
     conn->webSocketWrite(QStringLiteral("RUN|ack|%1|%2").arg(what, answer));
@@ -890,6 +901,7 @@ void WebAccess::handleFocusCommand(QHttpConnection *conn, WebAccessUser *user, c
         case WebAccessRun::Refused:     answer = QStringLiteral("refused"); break;
         case WebAccessRun::NeedPin:     answer = QStringLiteral("needpin"); break;
         case WebAccessRun::WrongMode:   answer = QStringLiteral("design"); break;
+        case WebAccessRun::NotInDesign: answer = QStringLiteral("operate"); break;
         case WebAccessRun::Unknown:     return;
     }
     conn->webSocketWrite(QStringLiteral("FOCUS|ack|%1|%2").arg(what, answer));

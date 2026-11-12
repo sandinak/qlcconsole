@@ -531,19 +531,30 @@ controller test panel, Valve IDs in GamepadLayout::deviceKind(). Docs:
 docs/features/gamepad-remote.md.
 
 - [ ] **Hardware check on the user's Deck** (checklist in
-  gamepad-remote.md "Hardware checklist"): controller test screenshot,
-  Wi-Fi round trip, back grips via Steam Input, Game Mode launch, and the
-  VID:PID the console's controller list shows for the Deck.
-- [ ] Blind / Solo from the remote: not built. decided: the remote may do
-  only what the phone Run page may (can change); Blind/Solo would be new
-  remote powers.
-- [ ] Teaching instructor flags (q20x): the remote reports `teaching` and
-  holds nothing extra; add the check once the flags land on main.
+  gamepad-remote.md "Hardware checklist", rewritten 2026-11-10 as 14
+  steps with expected results: controller test screenshot, Wi-Fi round
+  trip, Run arm, Blind, Solo, Operate refusal, focus, sticks, back grips
+  via Steam Input, Game Mode launch, Teaching, and the VID:PID).
+- [x] Blind / Solo from the remote: built (decided Q229, 2026-11-10).
+  Design only, as on the console: Blind = InputOutputMap::setOutputInhibited()
+  (what the console's Blind does in Design), Solo = ShowTreeController::
+  setPreviewSolo() on the previewed cue's layers. Run page BLIND / SOLO / ‹ ›;
+  pad LB + LS, LB + View, LB + D-pad left / right. Operate: refused
+  ("operate" ack). WebAccess_Test::blindFromTheRemoteIsDesignsMute,
+  ::soloFromTheRemotePlaysOneLayerOfThePreview; PageScript_Test.
+- [x] Teaching instructor flags (q20x): the remote's GO goes through
+  ShowControl::sendOut() like the console's, so the flags hold it the same
+  way (Blind from the remote included); the state reports `held`
+  {output, showControl, last} and both pages show TEACHING and what is
+  held; no remote word changes a flag.
+  WebAccess_Test::teachingFlagsHoldTheRemotesGoAsTheConsoles,
+  ::theRemoteCannotChangeWhatTeachingHolds.
 - [ ] Starting a focus from the remote: decided no, the venue choice is
   the console's (can change).
-- [ ] A JS test harness for the page scripts (none in the repo): the
-  mapping tables are C++ and tested; scripts are only syntax-checked by
-  hand (node --check).
+- [x] A JS test harness for the page scripts: `webaccess/test/pagescript`
+  (PageScript_Test) runs /run, /focus and the gamepad reader as served,
+  in a QJSEngine on a stand-in browser (pagestubs.js: DOM from the markup,
+  recording WebSocket, stepped timers and frames, fake gamepads).
 
 ## Layout sanity — done (0.4.1, lay)
 

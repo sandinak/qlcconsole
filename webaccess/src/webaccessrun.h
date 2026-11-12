@@ -21,6 +21,7 @@
 #include <QByteArray>
 #include <QJsonObject>
 #include <QElapsedTimer>
+#include <QList>
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -79,7 +80,7 @@ public:
     PinResult checkPin(const QString &pin);
 
     /** The result of one command from a page. */
-    enum Result { Done, NothingToDo, Refused, NeedPin, Unknown, WrongMode };
+    enum Result { Done, NothingToDo, Refused, NeedPin, Unknown, WrongMode, NotInDesign };
     /** Carry out @a command ("go", "back", "stop", "subgo", "subback",
      *  "pause", "resume")
      *  through ShowControl::run() with RouteWeb. @a unlocked: this page
@@ -114,6 +115,35 @@ public:
      *  master is NothingToDo. */
     Result setMaster(quint32 groupId, int percent, bool unlocked);
 
+    /** Blind from the remote (Q229): "on", "off" or "toggle". The console's
+     *  Blind in Design -- the rig muted, the screens live
+     *  (InputOutputMap::setOutputInhibited(), what App::slotControlBlind()
+     *  does in Design, so its button and footer follow). In Operate the
+     *  console's Blind is a view of its own screens and never a mute: there
+     *  it is NotInDesign. Same rules as a command. A Teaching show's flags
+     *  apply as they do to the console's Blind (a GO in Blind is held when
+     *  the instructor holds show control in Blind); none locks it. */
+    Result blind(const QString &what, bool unlocked);
+
+    /** Solo from the remote (Q229): only one layer of the cue the Show Tree
+     *  previews plays, as the Show Tree page's Solo and the pad walk's do
+     *  (ShowTreeController::setPreviewSolo()). @a what: "off", "toggle"
+     *  (the first layer, or off), "next" / "prev" (wrapping; from none, the
+     *  first / last) or a layer id. Design only, as the preview
+     *  (NotInDesign); no cue previewing is NothingToDo. Same rules as a
+     *  command. */
+    Result solo(const QString &what, bool unlocked);
+
+    /** A layer Solo can pick: the previewed cue's top layers, as it bakes
+     *  them (its own and the ones carried in). */
+    struct SoloLayer
+    {
+        quint32 id;
+        QString name;
+    };
+    /** The previewed cue's layers (empty: not Design, nothing previewing). */
+    QList<SoloLayer> soloLayers() const;
+
     /** How many Run pages are open: the state is watched while there are some. */
     void setClients(int count);
 
@@ -128,6 +158,10 @@ private slots:
     void poll();
 
 private:
+    /** Remote GO on, then the PIN: Done, Refused or NeedPin. */
+    Result gate(bool unlocked) const;
+
+private:
     Doc *m_doc;
     QTimer m_timer;
     QByteArray m_last;
@@ -136,6 +170,9 @@ private:
     int m_hitStep = 0;
     QElapsedTimer m_lockout;
     bool m_locked = false;
+    /** The last GO's show control out that a Teaching show held (cleared
+     *  by the next one sent, or a change of the flags). */
+    QString m_lastHeld;
 };
 
 #endif
