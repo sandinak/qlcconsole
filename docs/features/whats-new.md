@@ -34,6 +34,15 @@ The latest changes, newest first. Each links to the guide with the detail.
   pad move a focus call's target away from front of house when pushed up,
   as the help said. See [Focus calls](focus-calls.md).
 
+### The Show Tree
+
+- **Cues to sub-cues and back.** Select two or more cues and right-click ▸
+  **Make Sub-cues of 4** (or **⌘]**): the rest go under the first one
+  selected, in order. Select sub-cues ▸ **Make Main Cues** (**⌘[**) to
+  bring them back up, right after their cue. Every cue still lights the
+  same, it is one undo step, and a MIDI/OSC control learned on a cue still
+  plays it. See [Sub-cues](show-tree.md#sub-cues).
+
 ### Views
 
 - **Build is hidden in the qlcconsole view.** View ▸ Workspace ▸
