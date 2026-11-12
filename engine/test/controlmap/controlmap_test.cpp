@@ -423,6 +423,56 @@ void ControlMap_Test::aCueListGoesAndACueJumps()
         QCOMPARE(r, ShowControl::RouteControlMap);
 }
 
+/* Make Sub-cues (2026-11-12) keeps the cue's id, so a control learned on
+   cue 3 still plays it once it is sub-cue 2.2: its cue's step at that
+   sub-cue, as /go 2.2 does -- and armed with its cue's list. */
+void ControlMap_Test::aCueMadeASubCueStillJumps()
+{
+    ShowTreeController *st = m_doc->showTree();
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName("All");
+    m_doc->addFixtureGroup(g);
+    g->assignFixture(m_doc->fixtures().at(0)->id());
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    full->setName("Full");
+    full->setValue(255);
+    m_doc->addPalette(full);
+    const quint32 prod = st->addProduction("Show");
+    const quint32 listId = st->addCueList(prod, "Act 1");
+    QList<quint32> cues;
+    for (int i = 0; i < 3; ++i)
+    {
+        ShowTree::Target t;
+        t.groups << g->id();
+        const quint32 c = st->addCue(listId, i - 1, QString("Cue %1").arg(i + 1));
+        st->setLayerLook(c, st->addLayer(c, t), st->lookForPalette(full->id()));
+        cues << c;
+    }
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 11, ControlMap::cue(cues.at(2)), ControlMap::Toggle });
+    QString msg;
+    QVERIFY2(st->makeSubCues({ cues.at(2) }, cues.at(1), &msg), qPrintable(msg));
+    QVERIFY(st->isSubCue(cues.at(2)));
+    QVERIFY(cm->targetExists(ControlMap::cue(cues.at(2))));
+    QVERIFY(cm->targetName(ControlMap::cue(cues.at(2))).contains("2.2"));
+    cm->setRunTabList(listId);
+    QVERIFY(cm->isArmed(ControlMap::cue(cues.at(2))));
+    cm->setRunTabList(ShowTree::invalidId());
+
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(chaser != nullptr);
+    QSignalSpy taken(m_doc->showControl(), &ShowControl::cueTaken);
+    send(11, 127);
+    tick(2);
+    QVERIFY(chaser->isRunning());
+    QCOMPARE(st->runningCue(listId), cues.at(1));
+    QCOMPARE(taken.count(), 1);
+    QCOMPARE(taken.last().at(4).toInt(), 1);         // cue 2's step
+    QCOMPARE(taken.last().at(5).toInt(), 1);         // at sub-cue 2.2
+    QCOMPARE(chaser->currentSubCueIndex(), 1);
+    send(11, 0);
+}
+
 void ControlMap_Test::aHitFires()
 {
     ShowTreeController *st = m_doc->showTree();

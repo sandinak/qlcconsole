@@ -62,8 +62,9 @@ Why is the stomp a Sub GO, and its end automatic?
 
 **Built it as cues already?** A stomp you made as point cue 1.0.2.5:
 right-click it ▸ **Make Sub-cue of 1.0.2**. Each press lights the same
-as before; only the button changes (GO becomes Sub GO). A sub-cue's
-**Make Inline Cue** goes the other way.
+as before; only the button changes (GO becomes Sub GO). Several cues
+selected go under the first of them (**Make Sub-cues of …**, ⌘]).
+Selected sub-cues ▸ **Make Main Cues** (⌘[) goes the other way.
 
 **Stuck?** Wrong place: a sub-cue goes under the selected cue; undo and
 select the chorus. No Advance row: click the sub-cue, not the chorus.

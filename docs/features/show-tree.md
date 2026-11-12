@@ -1977,7 +1977,7 @@ is always there and calls the same operations as the mouse.
 | `sub "Hit"` · `sub + "Sweep" follow 0.5` · `sub "Strobe" subgo` | A **sub-cue** of the selected cue (after the selected sub-cue); Auto-follow after 0.5 s, or Sub GO |
 | `follow 1.5` · `subgo` | The selected sub-cue auto-follows after 1.5 s, or waits for Sub GO |
 | `cue 4.2` | Selects sub-cue 4.2 (when no main cue has that number) |
-| `inline` | The selected sub-cue (and the sub-cues after it) becomes a cue of the list, right after its cue ([Sub-cue ↔ inline cue](#sub-cue--inline-cue)) |
+| `inline` | The selected sub-cue becomes a main cue of the list, right after its cue; the sub-cues after it stay ([Sub-cue ↔ main cue](#sub-cue--main-cue)) |
 | `sub of` · `sub of 4` | The selected cue becomes the last sub-cue of the cue before it, or of cue 4 |
 | `track` · `block` · `cueonly` · `default` | Sets the selected cue's mode (`default` = List default). Also works after `cue …`: `cue + "Out" block` |
 | `base` | Makes the selected cue the base cue |
@@ -2247,8 +2247,8 @@ menus](fixture-manager.md#right-click-menus)):
   Move in Black into This Cue**, **Mode ▸**, **Colour ▸**, **Record as New
   Cue**, **Copy to a Hit** (what it puts on stage, as a new hit),
   **Renumber This Level…** ([Reordering and
-  numbering](#reordering-and-numbering)) | **Make Sub-cue of …** / **Make
-  Inline Cue**, **Make Cue Reusable…** (or, on a use, **Unlink Here**),
+  numbering](#reordering-and-numbering)) | **Make Sub-cue(s) of …** /
+  **Make Main Cue(s)** (⌘] / ⌘[), **Make Cue Reusable…** (or, on a use, **Unlink Here**),
   **Move Up** / **Move Down** | **Copy**, **Paste After This Cue** /
   **Paste into This Cue**, **Duplicate** | **Delete Cue**. Its base cue,
   mode and includes are on its page;
@@ -2659,44 +2659,63 @@ strobe inside a chorus.
   ([sub-cues in the chaser editor](show-control.md#sub-cues)). A scene two
   sub-cues share keeps running through Sub GO, with no re-fade.
 
-### Sub-cue ↔ inline cue
+### Sub-cue ↔ main cue
 
-A stomp built as point cue 4.5 that should be a sub-cue, or a sub-cue that
-should be a cue GO steps through: right-click it. **What is on stage at
-every press stays the same**; only which button takes you there changes.
-One undo step each, Design mode only (greyed in Operate).
+A stomp built as point cue 4.5 that should be a sub-cue, cues 5 and 6
+that belong inside cue 4, or a sub-cue that should be a cue GO steps
+through: select them and right-click (or **⌘]** / **⌘[**). **What is on
+stage at every press stays the same**; only which button takes you there
+changes. One undo step each, Design mode only (greyed in Operate, saying
+so). The menu has one item for it, its words following the selection.
 
-- **Make Inline Cue** (a sub-cue's right-click; `inline`): the sub-cue
-  becomes a cue of the list right after its cue, numbered as it was (4.2)
-  when that is free and in order there, else as **+ Cue** would (the hint
-  line says so). Sub-cues after it come along, in order: a sub-cue plays
-  only after the ones before it. Several selected convert together.
+- **Make Sub-cues of 4** (two or more cues of a list selected; **⌘]**):
+  the 2nd, 3rd… selected become sub-cues of the **first selected**, in
+  their order, after any sub-cues it already has. Cues between them that
+  aren't selected stay main cues. With **one** cue selected the item is
+  **Make Sub-cue of 4**, naming the cue before it (`sub of`, or `sub of
+  4` for another cue before it); the list's first cue has none.
+  - **Numbering:** a cue keeps its number when it already reads as one
+    under its new cue (4.5 under 4 stays 4.5); otherwise it is numbered
+    as **+ Sub-cue** would (4.1, 4.2… after the ones there), and the hint
+    line says which. Nothing else is renumbered.
+  - **Advance:** reached by GO, it is Sub GO; reached by cue 4's hold, it
+    auto-follows after that wait, and its own hold becomes cue 4's.
+  - **A selected cue's own sub-cues come along**, flattened after it
+    (sub-cues are one level), the first following it at once.
+  - If cue 4 had no sub-cues, its own look was a step of its own: a
+    first sub-cue (4.1, cue 4's fades, nothing of its own) stands for it,
+    so GO still plays it — unless cue 4 went on to the cue at once.
+  - **Carried looks:** a cue that tracked passed its changes on to the
+    cue after; as a sub-cue it wouldn't, so they are set in that cue
+    (*Looks carried into 5*). A Block cue started from nothing; as a
+    sub-cue it starts from cue 4's look, so what it didn't light is
+    turned off in it.
+- **Make Main Cues** (one or more sub-cues of one cue selected; **Make
+  Main Cue** for one; **⌘[**; `inline`): they become cues of the list
+  right after their cue, in order, numbered as they were (4.2) when that
+  is free and in order there, else as **+ Cue** would (the hint line says
+  so).
+  - **Only the selected ones move.** Sub-cues you didn't select stay
+    under the cue, and keep their numbers; when some stay after the ones
+    that moved, cue 4 now waits for GO (*4 waits for GO now*) so Sub GO
+    still reaches them, and they get what the moved ones set carried in.
   - **Advance:** Sub GO becomes GO; Auto-follow after 0.5 s becomes the
-    hold of the cue before (*auto after 0.5s*). The first sub-cue played
-    with GO, so cue 4 now goes on to it at once (hold 0); cue 4's own
-    hold moves to the last of them.
+    hold of the cue before (*auto after 0.5s*). When the first sub-cue
+    moves with all after it, cue 4 goes on to it at once (hold 0; it
+    played with GO); cue 4's own hold moves to the last that moved.
   - **Tracking:** a sub-cue started from its cue's look and passed nothing
     on. When the list's own rule plays every cue the same, that is what
     they get; otherwise they are **Cue-only**, each **including** the one
     before (4.2 from 4.1's look, cue 5 still from cue 4's).
   - A sub-cue that only stood for its cue's own look (Make Sub-cue puts
     one first) goes when it is all that is left.
-- **Make Sub-cue of 4** (a cue's right-click, naming the cue before;
-  `sub of`, or `sub of 4` for another cue before it): the cue becomes the
-  last sub-cue of that cue, numbered 4.5 when its number is 4.5 (else as
-  **+ Sub-cue** does). Reached by GO, it is Sub GO; reached by cue 4's
-  hold, it auto-follows after that wait, and its own hold becomes cue 4's.
-  Its own sub-cues come along after it, the first following at once.
-  - If cue 4 had no sub-cues, its own look was a step of its own: a
-    first sub-cue (4.1, cue 4's fades, nothing of its own) stands for it,
-    so GO still plays it — unless cue 4 went on to the cue at once.
-  - **Carried looks:** a cue that tracked passed its changes on to cue 5;
-    as a sub-cue it wouldn't, so they are set in cue 5 (*Looks carried
-    into 5*). A Block cue started from nothing; as a sub-cue it starts
-    from cue 4's look, so what it didn't light is turned off in it.
+- **A mixed selection** (cues with sub-cues, sub-cues of two cues, cues
+  of two lists) greys the item; its tooltip, or the hint line for the
+  keys, says what to select.
 - **Kept:** the cue's id, so its calling-script anchors, hits under it,
-  show-control and MSC references by number, its skip flag, note, colour
-  and fades stay with it.
+  a MIDI / OSC control learned on it (it now plays its cue at that
+  sub-cue, as `/go 4.2` does), its skip flag, note, colour and fades stay
+  with it. Show control and MSC by number follow the number it has now.
 - **Refused, with why, nothing changed:** the list's base cue, a cue on
   timecode, a focus-call cue, a cue that begins a song section (Manual
   numbering), a cue another cue includes, under a skipped cue, and

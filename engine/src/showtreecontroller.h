@@ -206,11 +206,14 @@ public:
     /** How many of @a listId's cues have sub-cues. */
     int subCueListsOf(quint32 listId) const;
 
-    /** Make Inline Cue (0.4): sub-cues @a subCueIds (of one cue) and every
-     *  sub-cue after them become cues of its list, right after the cue, in
-     *  order; GO steps through them. Advance: Auto-follow after N s is the
-     *  hold of the cue before ("auto after N s"), Sub GO is GO; the first
-     *  sub-cue played with GO, so the cue goes on to it at once (hold 0).
+    /** Make Main Cues (0.4; was Make Inline Cue): sub-cues @a subCueIds
+     *  (of one cue) become cues of its list, right after the cue, in order;
+     *  GO steps through them. Only those move (2026-11-12): the others stay
+     *  sub-cues of the cue, and when some stay after them the cue waits for
+     *  GO (hold) so Sub GO still reaches them. Advance: Auto-follow after N
+     *  s is the hold of the cue before ("auto after N s"), Sub GO is GO; the
+     *  first sub-cue played with GO, so the cue goes on to it at once (hold
+     *  0) when none stay.
      *  Ids are kept; numbers too when free, else numbered as + Cue does.
      *  Every cue plays as before: they play as the list's cues if that
      *  matches, else Cue-only, each including the one before (a sub-cue's
@@ -219,7 +222,8 @@ public:
      *  changed; @a message says what happened otherwise. */
     bool makeInlineCues(const QList<quint32> &subCueIds, QString *message = nullptr);
     /** Make Sub-cue (0.4): cues @a cueIds become the last sub-cues of
-     *  @a parentId (invalid: the cue before the first), in order, their own
+     *  @a parentId (invalid: the cue before the first; the tree's Make
+     *  Sub-cues passes the first of several selected), in order, their own
      *  sub-cues coming along after each (the first auto-following at once:
      *  it played with GO). Reached by GO: Sub GO; by the cue's hold:
      *  Auto-follow after that wait. A cue with no sub-cues yet gets a first

@@ -42,6 +42,7 @@ private slots:
     void oneControlOneTarget();
     void theLightFollowsWhatItFires();
     void aCueListGoesAndACueJumps();
+    void aCueMadeASubCueStillJumps();
     void aHitFires();
     void savedWithTheShowAndLoadedBack();
     void aShowWithoutBindingsSavesAsBefore();

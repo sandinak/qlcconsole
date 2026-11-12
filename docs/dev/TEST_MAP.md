@@ -947,7 +947,7 @@ branches bring their tests. Rows are written from those branches.
 
 | ID | Feature | Test(s) | Status | Risk | Note |
 |---|---|---|---|---|---|
-| M690 | Show Tree: Make Inline Cue / Make Sub-cue (subx) | ShowTreePlay_Test::subCuesBecomeInlineCuesAndBack, aCueBecomesASubCueCarryingWhatItPassedOn, aBlockCueBecomesASubCueAndBack, aLaterSubCueBringsTheOnesAfterIt, subCueConversionKeepsIdsAndRefusesWhatItCant, subCueConversionCommands; ShowTreeView_Test::subCuesAndInlineCuesFromTheMenu | covered | high | Playback before/after conversion compared step by step |
+| M690 | Show Tree: Make Main Cue(s) / Make Sub-cue(s) of the first selected (subx, 2026-11-12) | ShowTreePlay_Test::subCuesBecomeInlineCuesAndBack, aCueBecomesASubCueCarryingWhatItPassedOn, aBlockCueBecomesASubCueAndBack, aMiddleSubCueMovesAloneTheOthersStay, severalCuesGoUnderTheFirstSelected, subCueConversionKeepsIdsAndRefusesWhatItCant, subCueConversionCommands; ControlMap_Test::aCueMadeASubCueStillJumps; ShowTreeView_Test::subCuesAndInlineCuesFromTheMenu, selectedCuesBecomeSubCuesOfTheFirstAndBack | covered | high | Playback before/after conversion compared step by step |
 | M691 | Show Review PWR-12 cyc backwash (cyc) | ShowReview_Test (PWR-12 trip / near miss, sceneryOnPurposeSaves); ShowReviewPanel_Test::iMeantItFromTheRow, showTreeMarksBreachingCues | covered | med | |
 | M692 | One command line + AI fallback (cli1) | ShowTree_Test::commandLineSpellCheck; ShowTreeView_Test::oneCommandLineSpellChecksAndHintsAtAi; AiAssist_Test::oneLineFallbackSendsTheParserError, oneLineFallbackProposesACorrectedCommand, oneLineFallbackOffOrOperateAsksNothing (fake server) | covered | med | |
 | M693 | Course pictures 3.5/3.8/3.9 (crsp) | CourseShow_Test::levelThreePictures | n/a (docs) | low | |

@@ -796,6 +796,17 @@ real controller (needs the rig and a pad; it is a demo in 3.8's teacher
 guide); a short lesson on Running order for a show whose songs change
 night to night (an extension in 3.8); the preshow as section 0 of the
 show (3.8 Part 3). No pictures yet for 3.5, 3.8, 3.9.
+## Cues to sub-cues of the first selected, and back (feat/044-cues-to-subcues, 2026-11-12) -- built, leftovers
+
+Several cues ▸ Make Sub-cues of <the first> (⌘]), sub-cues ▸ Make Main
+Cues (⌘[), only the selected moving; one menu item whose words follow the
+selection, greyed with why on a mixed selection; a Control Map binding on
+a cue made a sub-cue plays it through its cue.
+- [ ] Refusals (base cue, timecode, focus call, an included cue) are said
+  in the hint line after the click, not in the menu's tooltip: a dry run
+  per right-click would resolve the whole production.
+- [ ] Not tried on the user's real show (Branson's check).
+
 ## Sub-cue ↔ inline cue — built, leftovers (0.4, subx, 2026-11-02)
 
 Built: `ShowTreeController::makeInlineCues()` / `makeSubCues()`
@@ -806,7 +817,8 @@ on the command line, help in show-tree.md, tests in showtreeplay_test
 checked by resolving the production before and after (stage and
 cue-wide spans per cue) and carries looks where the rules differ, else
 refuses. Decided (can change): Make Inline Cue on 4.2 brings 4.3… along
-(a sub-cue plays only after the ones before it); a cue's own sub-cues
+(a sub-cue plays only after the ones before it) -- changed 2026-11-12:
+only the selected move (Make Main Cues), the cue waits for GO; a cue's own sub-cues
 come along as following sub-cues (the first auto-following at once);
 converted sub-cues are Cue-only and include the one before when the
 list's own rule wouldn't play them the same; a cue with no sub-cues gets

@@ -11635,9 +11635,9 @@ void ShowTree_Test::trackSpanCountsTheCuesSinceItWasSet()
     QCOMPARE(st->trackSpan(s2, ta).cues, 4);
     // Sub-cues don't pass on: 4 is still the third main cue since 1.
     QCOMPARE(st->trackSpan(c[3], ta).cues, 3);
-    // Made inline cues, they count in the list.
+    // Made main cues, they count in the list.
     QString msg;
-    QVERIFY2(st->makeInlineCues({ s1 }, &msg), qPrintable(msg));
+    QVERIFY2(st->makeInlineCues({ s1, s2 }, &msg), qPrintable(msg));
     const CueList *list = st->cueList(listId);
     QCOMPARE(list->indexOf(s1), 3);
     QCOMPARE(list->indexOf(s2), 4);

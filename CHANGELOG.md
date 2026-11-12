@@ -10,6 +10,20 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Added
+
+- **Show Tree: select cues and make them sub-cues of the first, or sub-cues
+  main cues.** With two or more cues selected, right-click ▸ **Make Sub-cues
+  of 4** (or **⌘]**) puts the rest under the first selected, in order, after
+  the sub-cues it has (their own sub-cues come along, one level). Selected
+  sub-cues ▸ **Make Main Cues** (**⌘[**; was Make Inline Cue) makes only
+  those cues of the list right after their cue; the others stay sub-cues.
+  Each press still lights the same, it is one undo step, numbers change
+  only where they must, and a mixed selection greys the item saying why. A
+  MIDI/OSC control learned on a cue still plays it once it is a sub-cue.
+
 ## [0.4.3] - 2026-11-10
 
 qlcconsole 0.4.3 is a stable release after 0.4.1. 0.4.2 was built but never

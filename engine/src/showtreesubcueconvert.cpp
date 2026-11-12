@@ -17,9 +17,11 @@
   limitations under the License.
 */
 
-/* Sub-cue <-> inline cue (0.4): Make Inline Cue turns sub-cues 4.2, 4.3 into
-   cues of the list after cue 4, and Make Sub-cue turns cue 4.5 into the last
-   sub-cue of cue 4. What is on stage at every step stays the same:
+/* Sub-cue <-> main cue (0.4): Make Main Cues (was Make Inline Cue) turns
+   sub-cues 4.2, 4.3 into cues of the list after cue 4 (only the selected
+   ones), and Make Sub-cue turns cue 4.5 into the last sub-cue of cue 4 (the
+   tree: the 2nd..Nth selected cues under the first). What is on stage at
+   every step stays the same:
 
    - the edit is made on a copy of the tree, every cue of the production is
      resolved before and after, and each cue (by id) must put the same
@@ -506,19 +508,30 @@ bool ShowTreeController::makeInlineCues(const QList<quint32> &subCueIds, QString
     if (mainList->cues.at(p).skip)
         return no(tr("Cue %1 is skipped, so its sub-cues don't play from GO: put it back first.").arg(pNumber));
 
-    int first = int(subs->cues.count());
+    // Only the selected sub-cues move (2026-11-12: "select subcues and move
+    // to main cues"), in their order; the others stay under the cue.
+    QList<int> picked;
     for (quint32 id : subCueIds)
-        first = qMin(first, subs->indexOf(id));
+        if (subs->indexOf(id) >= 0 && !picked.contains(subs->indexOf(id)))
+            picked << subs->indexOf(id);
+    std::sort(picked.begin(), picked.end());
+    const int first = picked.first();
+    // Tail: every sub-cue from the first selected on goes, so the cue's
+    // own hold can lead into them as before. Otherwise some stay after,
+    // and the cue waits for GO so Sub GO still reaches them.
+    const bool tail = picked.count() == subs->cues.count() - first;
     const quint32 mainId = mainList->id, subsId = subs->id;
     QList<quint32> moved;
-    QStringList numbers, along;
-    for (int j = first; j < subs->cues.count(); ++j)
+    QList<quint32> stay;
+    QStringList numbers;
+    for (int j : picked)
     {
         moved << subs->cues.at(j).id;
         numbers << cueNumber(*subs, j);
-        if (!subCueIds.contains(subs->cues.at(j).id))
-            along << numbers.last();
     }
+    for (int j = first + 1; j < subs->cues.count(); ++j)
+        if (!picked.contains(j))
+            stay << subs->cues.at(j).id;
 
     // 0: as the list's cues play (List default), 1: tracking from the cue
     // before, 2: Cue-only, each including the one before -- a sub-cue's
@@ -526,6 +539,7 @@ bool ShowTreeController::makeInlineCues(const QList<quint32> &subCueIds, QString
     // stage, nothing passed on. The first that plays every cue as before.
     QStringList renumbered;
     bool standInGone = false;
+    bool parentWaits = false;
     auto build = [&](int variant) {
         renumbered.clear();
         QList<Production> ps = m_productions;
@@ -533,24 +547,34 @@ bool ShowTreeController::makeInlineCues(const QList<quint32> &subCueIds, QString
         CueList *list = pr.list(mainId);
         CueList *sl = pr.list(subsId);
         const uint parentHold = list->cues.at(p).hold;
-        const QList<Cue> taken = sl->cues.mid(first);
-        sl->cues = sl->cues.mid(0, first);
+        QList<Cue> taken, rest;
+        for (int j = 0; j < sl->cues.count(); ++j)
+            (picked.contains(j) ? taken : rest) << sl->cues.at(j);
+        // How each taken one was reached: right after the one before it
+        // (its own advance), or after a sub-cue that stays (GO now).
+        auto advanceOf = [&](int k) {
+            const Cue &c = taken.at(k);
+            return c.follow ? c.wait : Function::infiniteSpeed();
+        };
+        sl->cues = rest;
         // The stand-in Make Sub-cue put first for the cue's own look goes
         // when it is all that is left: the cue's step is its own again.
         standInGone = sl->cues.count() == 1 && isStandIn(sl->cues.first(), list->cues.at(p), pr);
         if (standInGone)
             sl->cues.clear();
         // Into the first: it played with GO (the cue goes on to it at once),
-        // or Sub GO / Auto-follow, which is now the cue's own hold.
-        list->cues[p].hold = first == 0 ? 0u
-                             : taken.first().follow ? taken.first().wait : Function::infiniteSpeed();
+        // or Sub GO / Auto-follow, which is now the cue's own hold. With
+        // sub-cues staying after it, the cue waits for GO instead.
+        parentWaits = !tail && !infiniteHold(parentHold);
+        list->cues[p].hold = !tail ? Function::infiniteSpeed()
+                             : first == 0 ? 0u : advanceOf(0);
         int at = p + 1;
         quint32 before = parent;
         for (int k = 0; k < taken.count(); ++k)
         {
             Cue c = taken.at(k);
             c.hold = k + 1 < taken.count()
-                     ? (taken.at(k + 1).follow ? taken.at(k + 1).wait : Function::infiniteSpeed())
+                     ? (picked.at(k + 1) == picked.at(k) + 1 ? advanceOf(k + 1) : Function::infiniteSpeed())
                      : parentHold;
             c.follow = false;
             c.wait = 0;
@@ -579,12 +603,13 @@ bool ShowTreeController::makeInlineCues(const QList<quint32> &subCueIds, QString
             continue;                   // the same as List default
         work = build(variant);
         carriedInto.clear();
-        if (carryUntilSame(work, pi, QHash<quint32, quint32>(), variant == 2, &carriedInto, &why))
+        // Sub-cues that stay lose what a taken one before them set: always
+        // carried in.
+        if (carryUntilSame(work, pi, QHash<quint32, quint32>(), variant == 2 || !tail, &carriedInto, &why))
             used = variant;
     }
     if (used < 0)
         return no(why);
-
     // Tidy: an include the check doesn't need goes.
     if (used == 2)
         for (quint32 id : moved)
@@ -604,7 +629,7 @@ bool ShowTreeController::makeInlineCues(const QList<quint32> &subCueIds, QString
     if (!reusablesKept(work, pi, moved + carriedInto, &why))
         return no(why);
 
-    const QString label = moved.count() == 1 ? tr("Make inline cue") : tr("Make inline cues");
+    const QString label = moved.count() == 1 ? tr("Make main cue") : tr("Make main cues");
     if (!edit(label, [&work](QList<Production> &ps) {
             ps = work;
             return true;
@@ -621,10 +646,17 @@ bool ShowTreeController::makeInlineCues(const QList<quint32> &subCueIds, QString
         QString text = moved.count() == 1 ? tr("%1 is a cue now, after %2: GO plays it.").arg(listJoin(now), pNumber)
                                           : tr("%1 are cues now, after %2: GO steps through them.")
                                                 .arg(listJoin(now), pNumber);
-        if (!along.isEmpty())
-            text += QLatin1Char(' ') + tr("%1 came along: a sub-cue plays only after the ones before it.")
-                                           .arg(listJoin(along));
-        if (first == 0)
+        QStringList left;
+        if (const CueList *sl = cueList(subCueList(parent)))
+            for (quint32 id : stay)
+                if (sl->indexOf(id) >= 0)
+                    left << cueNumber(*sl, sl->indexOf(id));
+        if (!left.isEmpty())
+            text += QLatin1Char(' ') + (left.count() == 1 ? tr("%1 stays a sub-cue of %2.")
+                                                          : tr("%1 stay sub-cues of %2.")).arg(listJoin(left), pNumber);
+        if (parentWaits)
+            text += QLatin1Char(' ') + tr("%1 waits for GO now, so Sub GO still reaches them.").arg(pNumber);
+        if (first == 0 && tail)
             text += QLatin1Char(' ') + tr("%1 goes on to %2 at once (it played with GO).").arg(pNumber, now.first());
         if (standInGone)
             text += QLatin1Char(' ') + tr("The sub-cue that stood for %1's own look went with them.").arg(pNumber);

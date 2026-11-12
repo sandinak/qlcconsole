@@ -157,6 +157,8 @@ private slots:
     // Skipped cues (2026-10-21)
     void skipCuesInTheTree();
     void subCuesAndInlineCuesFromTheMenu();
+    void selectedCuesBecomeSubCuesOfTheFirstAndBack();
+    void subCueConversionShots();
     void listModeIsAFlag();
     void releaseAFunctionLayer();
     void cueModeFromTheMenus();
