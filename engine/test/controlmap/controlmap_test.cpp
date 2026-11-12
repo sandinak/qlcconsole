@@ -478,6 +478,20 @@ void ControlMap_Test::aCueMadeASubCueStillJumps()
     QCOMPARE(taken.last(), qMakePair(1, 1));         // cue 2's step, at sub-cue 2.2
     QCOMPARE(chaser->currentSubCueIndex(), 1);
     send(11, 0);
+
+    // A control on cue 2 itself (it has sub-cues: its step plays their
+    // chaser) jumps to it too, after cue 1.
+    cm->setBinding({ 0, 12, ControlMap::cue(cues.at(0)), ControlMap::Toggle });
+    cm->setBinding({ 0, 13, ControlMap::cue(cues.at(1)), ControlMap::Toggle });
+    send(12, 127);
+    tick(2);
+    QCOMPARE(st->runningCue(listId), cues.at(0));
+    send(13, 127);
+    tick(2);
+    QCOMPARE(st->runningCue(listId), cues.at(1));
+    QCOMPARE(taken.last().first, 1);
+    send(12, 0);
+    send(13, 0);
 }
 
 void ControlMap_Test::aHitFires()
