@@ -27,6 +27,7 @@
 #include <QPushButton>
 #include <QFile>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QtTest>
 
 #include "../../../engine/test/common/stdprelude.h"
@@ -40,6 +41,7 @@
 #include "programmingmanager.h"
 #include "controllertestdialog.h"
 #include "workbench.h"
+#include "inputdevicenotices.h"
 #undef protected
 #undef private
 #include "showtreecontroller.h"
@@ -593,6 +595,7 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
     };
     QLabel *chip = m_app->followChip();
     QVERIFY(chip != nullptr);
+    const int kGlideMs = 15000;
     /* His DS4 patched as U01-Office's input, as his show has it -- and
        nothing else: no stick bound by hand, the Build tab not shown (before
        0.4.0 only showing it bound a stick, so a show run from the Show Tree
@@ -624,10 +627,20 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
         QTRY_VERIFY2_WITH_TIMEOUT(witch->position().x() > from.x() + 0.2f,
                                   qPrintable(QString("%1: the subject did not move (%2 -> %3)").arg(how)
                                              .arg(from.x()).arg(witch->position().x())), 8000);
-        QTest::qWait(200);
+        /* Every head's pan written, and the chip saying so, while the stick
+           is still held: waited for, not a fixed wait. Both arrive on the
+           follow spot's own ticks, which a loaded runner delays. */
+        auto allFollowed = [&]() {
+            const QList<int> now = pans();
+            for (int i = 0; i < movers.size(); ++i)
+                if (now.at(i) == before.at(i))
+                    return false;
+            return true;
+        };
+        QTRY_VERIFY2_WITH_TIMEOUT(allFollowed(), qPrintable(how + ": not every head followed"), 8000);
         const QList<int> after = pans();
-        QVERIFY2(chip->text().contains(QString::fromUtf8("DUALSHOCK 4 · stick moving")),
-                 qPrintable(how + ": " + chip->text()));
+        QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("DUALSHOCK 4 · stick moving")),
+                                  qPrintable(how + ": " + chip->text()), 8000);
         qInfo().noquote() << how << "pan" << before << "->" << after << "| x" << from.x() << "->"
                           << witch->position().x() << "|" << chip->text();
         QVERIFY(padInput(doc, 0, 128));
@@ -638,8 +651,9 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
         for (int i = 0; i < movers.size(); ++i)
             QVERIFY2(after.at(i) != before.at(i),
                      qPrintable(QString("%1: %2 did not follow (%3)").arg(how, movers.at(i)->name()).arg(after.at(i))));
-        QTest::qWait(600);
-        QVERIFY2(!chip->text().contains("moving"), qPrintable(how + ": " + chip->text()));
+        /* Let go: "moving" goes once the stick has been still 400 ms, said
+           on the next follow-spot tick -- waited for, not a fixed 600 ms. */
+        QTRY_VERIFY2_WITH_TIMEOUT(!chip->text().contains("moving"), qPrintable(how + ": " + chip->text()), 8000);
     };
 
     // Selected in the Show Tree.
@@ -661,10 +675,13 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
     tree->setCurrentItem(row);
     movesWithTheStick("selected");
 
-    // Away from it: she glides back where the show has her, the chip goes.
+    /* Away from it: she glides back where the show has her, the chip goes.
+       The glide steps one timer interval per follow-spot tick (not by the
+       wall clock), so on a loaded runner it takes longer than its fade:
+       waited for generously, still failing if she never gets home. */
     tree->setCurrentItem(row1);
-    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, 3000);
-    QTRY_VERIFY_WITH_TIMEOUT(chip->isHidden(), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, kGlideMs);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isHidden(), 5000);
 
     // GO in Run, in Design.
     const quint32 chaser = st->cueList(list)->chaser;
@@ -676,7 +693,7 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
     movesWithTheStick("GO in Design");
     QVERIFY(doc->function(chaser)->isRunning());
     doc->masterTimer()->stopAllFunctions();
-    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, kGlideMs);
 
     // GO in Operate.
     doc->setMode(Doc::Operate);
@@ -686,7 +703,7 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
     doc->masterTimer()->stopAllFunctions();
     doc->setMode(Doc::Design);
     settle(200);
-    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, kGlideMs);
 
     // The DS4 switched off: no stick, and the chip says so.
     doc->inputOutputMap()->setInputSlot(0, QList<Universe::InputSlotDevice>());
@@ -695,7 +712,7 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
     QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chip->text().contains("no stick"), 3000);
     QTRY_VERIFY_WITH_TIMEOUT(!pc->isPanBound(), 3000);
     tree->setCurrentItem(row1);
-    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, kGlideMs);
     doc->resetModified();
 }
 
@@ -709,6 +726,15 @@ void FollowSpotCue_Test::theStickIsWhicheverPadIsPatched()
     InputOutputMap *iom = doc->inputOutputMap();
     QLCIOPlugin *hid = hidPlugin(doc);
     QVERIFY(hid != nullptr);
+    /* No pad left patched by an earlier test (the one before unpatches its
+       DS4 only when it passes): each pad below must be the only one. */
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        iom->setInputSlot(u, QList<Universe::InputSlotDevice>());
+        if (iom->inputPatch(u) != nullptr)
+            QVERIFY(iom->setInputPatch(u, KInputNone, QString(), QLCIOPlugin::invalidLine()));
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(!pc->isPanBound(), 2000);
     pc->clearAxisBindings();
     struct Pad { const char *uid; const char *name; quint32 universe; };
     for (const Pad &pad : { Pad { kDualSense, "DualSense", 1 }, Pad { kXbox, "Xbox", 2 },
@@ -988,7 +1014,8 @@ void FollowSpotCue_Test::aWornStickMovesNothing()
         // A slow push, held still once the pad has settled in, is kept.
         QTest::qWait(2100);
         QVERIFY(padInput(doc, 0, stickAt(0.4), uid));
-        QTest::qWait(600);
+        QTRY_VERIFY2_WITH_TIMEOUT(pc->m_panNorm > 0.6f, qPrintable(QString::number(pc->m_panNorm)), 2000);
+        QTest::qWait(600);                    // and still there after
         QVERIFY2(pc->m_panNorm > 0.6f, qPrintable(QString::number(pc->m_panNorm)));
         QVERIFY(FocusSession::stickVelocity(pc->m_panNorm, pc->joystickDeadzone()) > 0.0f);
         QVERIFY(padInput(doc, 0, stickAt(0.12), uid));
@@ -999,16 +1026,30 @@ void FollowSpotCue_Test::aWornStickMovesNothing()
        re-centres it by itself, but once it has sat there 3 s (1.5 s in
        this test) with nothing
        else touched, the notice line says so -- once -- with Centre Sticks. */
+    /* Said once a session per controller: on a loaded runner a step above
+       (the slow push, full travel) can sit 1.5 s before the next and be
+       said already -- right, but then this one never is (1 of 6 copies
+       failed so under load). Not said yet, as this part starts. */
+    QVERIFY(m_app->m_inputNotices != nullptr);
+    m_app->m_inputNotices->m_driftSaid.clear();
     const int worn = hid->inputs().indexOf(QString::fromUtf8(kWorn));
     QVERIFY(iom->setInputPatch(0, QStringLiteral("HID"), QString(), quint32(worn)));
     QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound(), 2000);
     QTest::qWait(2200);                       // past the time it learns by itself
     m_app->hideViewNotice();
+    QElapsedTimer pushed;
+    pushed.start();
     QVERIFY(padInput(doc, 0, stickAt(0.42), kWorn));
+    QTRY_VERIFY_WITH_TIMEOUT(pc->m_panNorm > 0.6f, 2000);           // not swallowed
     QTest::qWait(600);
-    QVERIFY(pc->m_panNorm > 0.6f);           // not swallowed
-    QVERIFY(!m_app->m_viewNotice->isVisible());
-    QTRY_VERIFY_WITH_TIMEOUT(m_app->m_viewNotice->isVisible(), 3000);
+    /* Not said early: only while the 1.5 s it must sit there can't have
+       passed -- a loaded runner's 600 ms wait can be longer than that. */
+    if (pushed.elapsed() < 1500)
+        QVERIFY(!m_app->m_viewNotice->isVisible());
+    /* Said once the plugin's stick timer sees it has sat 1.5 s: that tick
+       and its queued signal come late on a loaded runner, so waited for
+       generously (it failed so under load with 3 s). The notice stays 8 s. */
+    QTRY_VERIFY_WITH_TIMEOUT(m_app->m_viewNotice->isVisible(), 15000);
     const QString said = m_app->m_viewNoticeText->text();
     qInfo().noquote() << "drift notice:" << said;
     QVERIFY2(said.contains(QStringLiteral("DUALSHOCK 4 Wireless Controller's stick isn't resting in the middle (Left Stick X +0.")),
@@ -1433,10 +1474,17 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     QVERIFY(save != nullptr);
     QTemporaryDir tmp;
     m_app->setFileName(tmp.filePath("follow.qxw"));
+    /* What the chip and its tooltip said the moment the save was confirmed.
+       "Saved: ..." is shown for three seconds by the wall clock and the save
+       says it at once; read later, a loaded runner can be past those three
+       seconds before the check runs (it failed so under load). */
+    QString savedChip, savedStatus;
     auto savePositions = [&]() {
         QTRY_VERIFY_WITH_TIMEOUT(save->isEnabled(), 2000);    // the pad's change alone enables it
         save->click();                                        // armed
         save->click();                                        // confirmed
+        savedChip = chip->text();
+        savedStatus = pc->followSpotStatusText();
         settle(100);
     };
     const double inch = 2.54;
@@ -1460,7 +1508,7 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     savePositions();
     QVERIFY(qAbs(follow->effectParamValues().value("sizeOnSubject") - 43 * inch) < 0.01);
     QVERIFY(!pad().isSet());
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Saved: Width 3' 7\"").toHtmlEscaped()), 2000);
+    QVERIFY2(savedChip.contains(QString::fromUtf8("Saved: Width 3' 7\"").toHtmlEscaped()), qPrintable(savedChip));
     QVERIFY(doc->paletteOps()->undo());
     QCOMPARE(follow->effectParamValues().value("sizeOnSubject"), 48 * inch);
 
@@ -1501,8 +1549,8 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     savePositions();
     QCOMPARE(follow->effectParamValues().value("framing"), 1.0);          // the Framing stays
     QCOMPARE(follow->effectParamValues().value("framingSize"), 110.0);
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString("Saved: Head & Shoulders at 110%").toHtmlEscaped()), 2000);
-    QVERIFY2(pc->followSpotStatusText().contains("Saved: Head & Shoulders at 110%"), qPrintable(pc->followSpotStatusText()));
+    QVERIFY2(savedChip.contains(QString("Saved: Head & Shoulders at 110%").toHtmlEscaped()), qPrintable(savedChip));
+    QVERIFY2(savedStatus.contains("Saved: Head & Shoulders at 110%"), qPrintable(savedStatus));
     QVERIFY(AimSolver::sceneFramesSubject(doc, scene));
     settle(300);
     QVERIFY2(qAbs(aimedZ() - liveZ) < 0.005f,
