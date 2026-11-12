@@ -234,6 +234,9 @@ View + B (or undo on the laptop) puts the light back.
   is refused.
 - **No GO while walking.** Menu first, then hold LB and press A.
 - A focus-call cue that is armed still takes Menu to begin its calls.
+  When the laptop then asks "Still at <venue>?", **hold A** for a second
+  to say yes, same room. A tap does nothing; another room is answered on
+  the laptop or by voice.
 
 Everything above is on the buttons, the same on both kinds of pad. The
 PlayStation touchpad adds [swipes](#dualsense-extras-triggers-and-swipes).
@@ -286,8 +289,11 @@ button to **Pad: Run**. Connect one pad at a time, and check that
     *Expected:* the focus-call cue arms ("Venue focus ready. Press Start
     to begin."); nothing steps.
 11. Press **Menu** (Options). *Expected:* the focus calls begin and the
-    laptop asks about the venue. Answer it on the laptop, then press Menu
-    again to leave the calls.
+    laptop asks "Still at <venue>?" and the voice says to hold A. Tap A
+    once. *Expected:* nothing is answered (the voice says to hold A).
+    Then hold **A** (Cross) for a second. *Expected:* a short buzz, "Still
+    at <venue>.", and the first call begins. (With no venue applied, answer
+    on the laptop.) Press Menu again to leave the calls.
 12. Hold **View + Menu** (Create + Options) for a second. *Expected:* the
     voice says "Tools role." and the button says **Pad: Tools**. Hold them
     again: "Run role. …" and **Pad: Run**.

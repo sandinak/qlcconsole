@@ -74,6 +74,8 @@ private slots:
     /** Q120: no venue applied, the laptop asks; a name, or after a few
      *  seconds today's date, said. */
     void aFocusCallCueAsksForTheVenue();
+    /** Q230: hold A on the pad answers "Still at <venue>?" yes; a tap does not. */
+    void thePadAnswersStillAt();
     /** Q126: the pad's light bar and buzzes, "Spot 3 kept", "2 lights not
      *  saved", the change since the save and its ghost, hold A / B, both
      *  bumpers to the next unsaved light. */

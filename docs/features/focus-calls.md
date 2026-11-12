@@ -395,12 +395,18 @@ are one checklist:
    **Start Venue Focus** on the Run tab, or **⌘↩** (GO's key: while the calls
    wait, it begins them rather than going on). The first call comes up,
    blinking, as the voice says it. First the laptop confirms the venue
-   (for a show that has been saved: a venue lives beside the show file): "Still at Lincoln HS? Answer on the laptop, or wait for a new
+   (for a show that has been saved: a venue lives beside the show file): "Still at Lincoln HS? Hold A on the pad for yes, or answer on the laptop, or wait for a new
    venue." (with none applied: "Name this venue on the laptop, or wait
-   for today's date."). Press **Still at Lincoln HS**, or type a name and
-   press Return (**New venue**); after 8 seconds a new venue is made, named with today's
+   for today's date."). **Hold A** on the pad for a full second (the same
+   hold as Focus mode's keep all) to say yes, same room: the person on
+   stage need not walk back to the laptop. A tap of A does nothing, and
+   the pad never says no: for another room, press **New venue** or type a
+   name on the laptop (or say it by voice), or wait. Or press **Still at
+   Lincoln HS** on the laptop, or type a name and press Return (**New
+   venue**); after 8 seconds a new venue is made, named with today's
    date, so an old room is never corrected by mistake. Typing holds the
-   clock.
+   clock. With no venue applied there is nothing to confirm, so A is not
+   used for it.
 4. Work the calls as below. **Menu**, or **RT** on the last call, ends
    them (asking about anything unsaved) and the list goes on to the next
    cue — only if it is still on the focus cue. Ended any other way (say,

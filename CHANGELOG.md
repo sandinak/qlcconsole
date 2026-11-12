@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Changed
+
+- **Answer "Still at <venue>?" from the pad.** When Menu begins a focus-call cue's calls and the laptop asks "Still at Lincoln HS?", hold **A** (Cross) for a second to say yes, same room: the person on stage need not walk back to the laptop. A tap does nothing; another room is still answered on the laptop or by voice. The voice and the dialog say so (board Q230, reversing Q129's laptop-only answer).
+
 ### Fixed
 
 - **Words gate reads every button and action text.** The menu-words test now also catches texts set on any declared button or action (not just `...Btn` names) and on stack buttons; it found three off-canon labels, now Title Case: **Lock Item** / **Unlock Item** (Show Manager), **… — Would Loop** and **… — In Its Own Window** (menu lines).

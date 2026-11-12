@@ -165,7 +165,7 @@ bool FocusCallCue::start(QString *why)
         const QString current = venues->activeVenue();
         emit announce(current.isEmpty()
                       ? tr("Name this venue on the laptop, or wait for today's date.")
-                      : tr("Still at %1? Answer on the laptop, or wait for a new venue.").arg(current),
+                      : tr("Still at %1? Hold {A} on the pad for yes, or answer on the laptop, or wait for a new venue.").arg(current),
                       ControllerScheme::ImportantPriority);
         emit venueNeeded(VenueCorrections::defaultVenueName(), m_askTimeout, current);
         m_askTimer->start(m_askTimeout);
@@ -201,6 +201,22 @@ bool FocusCallCue::useVenue(const QString &name)
         return false;
     }
     return true;
+}
+
+bool FocusCallCue::asksStill() const
+{
+    return m_state == NamingVenue && !m_session->venues()->activeVenue().isEmpty();
+}
+
+bool FocusCallCue::answerStillFromPad()
+{
+    if (m_state != NamingVenue)
+        return false;
+    const QString current = m_session->venues()->activeVenue();
+    // Yes only: a different room is named on the laptop (or by voice).
+    if (current.isEmpty())
+        return false;
+    return useVenue(current);
 }
 
 void FocusCallCue::holdVenueAsk()

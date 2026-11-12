@@ -1026,7 +1026,7 @@ void FocusCalls_Test::aFocusCallCueAsksForTheVenue()
     QVERIFY(fcc->start());
     QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
     QCOMPARE(asked.last().at(2).toString(), QString("Lincoln HS"));
-    QCOMPARE(said.last().at(0).toString(), QString("Still at Lincoln HS? Answer on the laptop, or wait for a new venue."));
+    QCOMPARE(said.last().at(0).toString(), QString("Still at Lincoln HS? Hold A on the pad for yes, or answer on the laptop, or wait for a new venue."));
     m_doc->programmer()->setOperatorFeedback(ControllerScheme::BothFeedback);
     QVERIFY(fcc->useVenue("Lincoln HS"));
     QCOMPARE(v->activeVenue(), QString("Lincoln HS"));
@@ -1044,6 +1044,94 @@ void FocusCalls_Test::aFocusCallCueAsksForTheVenue()
     QCOMPARE(v->venueNames().size(), venues + 1);
     s->stop();
     m_doc->setMode(Doc::Design);
+}
+
+void FocusCalls_Test::thePadAnswersStillAt()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    FixtureGroup *dh = makeGroup(m_doc, "DH Tspots", { a });
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusCall c1;
+    c1.groups << dh->id();
+    c1.target = targetRef(dsc->id());
+    ProgrammerController *pc = m_doc->programmer();
+    pc->focusCalls()->setCalls({ c1 });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Spring"), "Pre-show");
+    const quint32 focus = st->addCue(list, -1, "Focus");
+    QVERIFY(st->setCuesFocusCall({ focus }, true));
+    VenueCorrections *v = pc->venueCorrections();
+    v->setShowFile(m_dir->filePath("Spring.qlcc"), false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    const int venues = v->venueNames().size();
+
+    IOPluginStub *stub = plugInStubPad(m_doc, { { 10, "a" }, { 14, "lb" }, { 17, "start" } });
+    QVERIFY(stub != nullptr);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    auto value = [iom](quint32 ch, uchar val) { emit iom->inputValueChanged(0, ch, val, QString()); };
+    FocusCallCue *fcc = pc->focusCallCue();
+    FocusSession *s = pc->focusSession();
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    QSignalSpy buzz(pc, &ProgrammerController::padRumbled);
+    m_doc->setMode(Doc::Operate);
+
+    // Menu begins the calls: the question names the hold.
+    fcc->cueCurrent(list, focus);
+    QVERIFY(fcc->isArmed());
+    value(17, 255);
+    value(17, 0);
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    QVERIFY2(said.last().at(0).toString().startsWith("Still at Lincoln HS? Hold A on the pad for yes"),
+             qPrintable(said.last().at(0).toString()));
+
+    // A tap (and 0.6 s, short of the second) answers nothing; the tap says how.
+    value(10, 255);
+    joyTicks(pc, 30);                       // 0.6 s
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    value(10, 0);
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    QCOMPARE(said.last().at(0).toString(), QString("Hold A to say yes, same room."));
+    value(10, 255);
+    joyTicks(pc, 3);
+    value(10, 0);
+    joyTicks(pc, 60);                       // let go: the hold is not running
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+
+    // Held a full second: yes, same room -- the venue kept, the calls begin.
+    const int buzzed = buzz.count();
+    value(10, 255);
+    joyTicks(pc, 45);
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    joyTicks(pc, 10);
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QCOMPARE(v->activeVenue(), QString("Lincoln HS"));
+    QCOMPARE(v->venueNames().size(), venues);
+    QVERIFY(buzz.count() > buzzed);
+    value(10, 0);
+    s->stop();
+
+    // No prompt: A is its usual self (the Run role refuses it without LB).
+    pc->padRun()->setEnabled(true, false);
+    said.clear();
+    value(10, 255);
+    value(10, 0);
+    QCOMPARE(said.last().at(0).toString(), QString("Hold LB to arm."));
+    pc->padRun()->setEnabled(false, false);
+
+    // No venue applied: nothing to confirm, so A answers nothing.
+    QVERIFY(v->setActiveVenue(QString()));
+    fcc->cueCurrent(list, st->addCue(list, 0, "House"));
+    fcc->cueCurrent(list, focus);
+    value(17, 255);
+    value(17, 0);
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    value(10, 255);
+    joyTicks(pc, 70);
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    value(10, 0);
+    fcc->disarm();
+    m_doc->setMode(Doc::Design);
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
 }
 
 void FocusCalls_Test::thePadAndTheVoiceTellYouMore()
