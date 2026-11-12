@@ -610,6 +610,7 @@ bool ShowTreeController::makeInlineCues(const QList<quint32> &subCueIds, QString
     }
     if (used < 0)
         return no(why);
+
     // Tidy: an include the check doesn't need goes.
     if (used == 2)
         for (quint32 id : moved)

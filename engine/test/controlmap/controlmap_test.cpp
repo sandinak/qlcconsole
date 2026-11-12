@@ -465,9 +465,14 @@ void ControlMap_Test::aCueMadeASubCueStillJumps()
     const QMetaObject::Connection conn = connect(m_doc->showControl(), &ShowControl::cueTaken, this,
         [&taken](ShowControl::Command, quint32, int, int, int step, int sub) { taken << qMakePair(step, sub); });
     auto unhook = qScopeGuard([conn]() { QObject::disconnect(conn); });
+    QStringList said;
+    connect(m_doc->showControl(), &ShowControl::commandHandled, this,
+            [&said](const QString &what, bool done) { said << QStringLiteral("%1 %2").arg(what).arg(done); });
+    QCOMPARE(chaser->subCueCount(1), 2);
+    QCOMPARE(ShowControl::cueName(chaser, 1, 1), QString("2.2"));
     send(11, 127);
     tick(2);
-    QVERIFY(chaser->isRunning());
+    QVERIFY2(chaser->isRunning(), qPrintable(said.join(" / ")));
     QCOMPARE(st->runningCue(listId), cues.at(1));
     QCOMPARE(taken.count(), 1);
     QCOMPARE(taken.last(), qMakePair(1, 1));         // cue 2's step, at sub-cue 2.2
