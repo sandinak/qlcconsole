@@ -8988,7 +8988,6 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
     const int kind = item->data(0, KindRole).toInt();
     const bool inLooks = selectionInLooks();
     const quint32 id = item->data(0, IdRole).toUInt();
-    const bool design = m_doc->mode() == Doc::Design;
 
     /* ---- This place: what can be made here ---- */
     menu.add(ContextMenu::Place, tr("+ Cue List…"), [this]() { slotNewCueList(); });
