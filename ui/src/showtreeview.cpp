@@ -11144,6 +11144,27 @@ void ShowTreeView::selectLibraryPalette(quint32 paletteId)
     }
 }
 
+bool ShowTreeView::showLibraryEffects()
+{
+    // The palettes section's Effects heading (reloadLibrary()): opened,
+    // scrolled to and current.
+    const QString path = QStringLiteral("Palettes/%1").arg(tr("Effects"));
+    for (QTreeWidgetItemIterator it(m_library); *it; ++it)
+    {
+        if ((*it)->data(0, KindRole).toInt() != LibFolder || (*it)->data(0, PathRole).toString() != path)
+            continue;
+        for (QTreeWidgetItem *p = *it; p != nullptr; p = p->parent())
+            p->setExpanded(true);
+        m_library->clearSelection();
+        m_library->setCurrentItem(*it);
+        m_library->scrollToItem(*it, QAbstractItemView::PositionAtTop);
+        m_library->setFocus(Qt::OtherFocusReason);
+        return true;
+    }
+    m_hint->setText(tr("No effect palettes yet: + Palette ▸ Effect in the Library makes one"));
+    return false;
+}
+
 quint32 ShowTreeView::newPaletteFromLibrary(QLCPalette::PaletteType type)
 {
     // In the folder selected in the Library, else where the show keeps

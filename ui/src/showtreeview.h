@@ -922,6 +922,15 @@ public:
                          const QString &trackedSignature = QString());
     /** The tree's selection (a cue, a look, a layer) in the Workbench. */
     bool openSelectionInWorkbench();
+    /** Function @a functionId (a scene, a collection, a chaser...) in the
+     *  Workbench, docked here with no cue (board Q228: Build is not a tab
+     *  of the qlcconsole view); ↩ Show Tree comes back. False: no such
+     *  function. */
+    bool openFunctionInWorkbench(quint32 functionId);
+    /** The Library's Effects (effect palettes) brought into sight and
+     *  selected: where Build ▸ Effects pointed (App::showEffects()). False:
+     *  the show has none. */
+    bool showLibraryEffects();
     /** ↩: the page back, the Workbench handed back, the cue (and the layer
      *  the Workbench had selected) selected in the tree. */
     bool closeWorkbench();
@@ -1337,6 +1346,9 @@ private:
      *  without the tree moving the Workbench in turn. */
     void selectForWorkbench(quint32 cueId, quint32 layerId, const QString &signature);
     /** Leaving / coming back to the tab while docked. */
+    /** Dock the Workbench in place of the page (Build's, lent; or the
+     *  tree's own), wired; nothing loaded yet. True: docked. */
+    bool dockWorkbench();
     void suspendWorkbench();
     void resumeWorkbench();
     void destroyWorkbenchDock();

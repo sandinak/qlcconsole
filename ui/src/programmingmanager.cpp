@@ -1688,11 +1688,28 @@ void ProgrammingManager::showFunction(quint32 fid)
         m_workbench->load(fid);
 }
 
+/* Board Q228: Build is not a tab of the qlcconsole view. There, what would
+   open in Build opens in the Show Tree -- never a switch to Everything. The
+   App that says so (null: none, as in tests -- Build then). */
+static App *buildHiddenApp()
+{
+    foreach (QWidget *w, QApplication::topLevelWidgets())
+        if (App *app = qobject_cast<App *>(w))
+            return !app->buildInView() && ShowTreeView::instance() != nullptr ? app : nullptr;
+    return nullptr;
+}
+
 bool ProgrammingManager::openFunction(quint32 fid)
 {
     ProgrammingManager *pm = instance();
     if (pm == nullptr || pm->m_doc->function(fid) == nullptr)
         return false;
+    if (App *app = buildHiddenApp())
+    {
+        // The Workbench docked in the Show Tree, the function in it.
+        app->showContext(App::tr("Show Tree"));
+        return ShowTreeView::instance()->openFunctionInWorkbench(fid);
+    }
     // Docked in the Show Tree: the Workbench comes home first.
     if (pm->isWorkbenchLent())
         if (ShowTreeView *tree = ShowTreeView::instance())
@@ -1710,6 +1727,16 @@ bool ProgrammingManager::openPalette(quint32 paletteId)
     QLCPalette *p = pm == nullptr ? nullptr : pm->m_doc->palette(paletteId);
     if (p == nullptr)
         return false;
+    if (App *app = buildHiddenApp())
+    {
+        // The Show Tree: found in its Library, open in its Look Editor (or
+        // the docked Workbench's) -- an effect palette too.
+        app->showContext(App::tr("Show Tree"));
+        ShowTreeView *tree = ShowTreeView::instance();
+        tree->showPalette(paletteId);
+        tree->editPalette(paletteId);
+        return true;
+    }
     if (pm->isWorkbenchLent())
         if (ShowTreeView *tree = ShowTreeView::instance())
             tree->closeWorkbench();

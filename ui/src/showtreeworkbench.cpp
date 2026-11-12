@@ -45,6 +45,7 @@
 #include "lookeditor.h"
 #include "workbench.h"
 #include "treecuestack.h"
+#include "function.h"
 #include "doc.h"
 
 using namespace ShowTree;
@@ -112,85 +113,96 @@ bool ShowTreeView::openSelectionInWorkbench()
     return openInWorkbench(cueId);
 }
 
+bool ShowTreeView::dockWorkbench()
+{
+    if (m_wb == nullptr)
+        m_wb = new WorkbenchDock;
+    m_wb->suspended = false;
+    if (isWorkbenchDocked())
+        return true;
+    Workbench *bench = m_wb->borrow ? m_wb->borrow() : nullptr;
+    if (bench == nullptr)
+    {
+        if (m_wb->own.isNull())
+            m_wb->own = new Workbench(m_doc, this);
+        bench = m_wb->own;
+    }
+    QSplitter *split = mainSplitter(this);
+    QSplitter *vsplit = pageSplitter(this);
+    if (split == nullptr || vsplit == nullptr)
+        return false;
+    m_wb->sizes = split->sizes();
+    m_wb->bench = bench;
+    m_wb->docked = true;
+    // Library | Tree | Workbench: the page's place, and more of the room.
+    vsplit->hide();
+    split->addWidget(bench);
+    bench->show();
+    {
+        const QList<int> was = m_wb->sizes;
+        int total = 0;
+        for (int s : was)
+            total += s;
+        if (total > 0 && was.size() >= 3)
+            split->setSizes({ total * 17 / 100, total * 23 / 100, 0, total * 60 / 100 });
+    }
+    bench->setReturnTo(tr("Show Tree"), [this]() {
+        // After the click is done with the button.
+        QTimer::singleShot(0, this, [this]() { closeWorkbench(); });
+    });
+
+    // Wired while docked: a palette edited in the Workbench plays at
+    // once (as the tree's Look Editor does), clicks on the 2D view pick
+    // the layer that lights them.
+    m_wb->wiring << connect(bench, &Workbench::paletteEdited, this, [this](quint32 pid) {
+        paletteEdited(pid, true);
+    });
+    m_wb->wiring << connect(bench->lookEditor(), &LookEditor::paletteValueChanged, this, [this](quint32 pid) {
+        paletteEdited(pid, false);
+    });
+    // The cue gone (deleted, undone, another show): the page back.
+    auto gone = [this]() {
+        QTimer::singleShot(0, this, [this]() {
+            // A function opened here (no cue): gone when the function is.
+            if (!isWorkbenchDocked())
+                return;
+            const bool lost = m_wb->cue == invalidId()
+                ? m_doc->function(m_wb->bench->loadedFunction()) == nullptr
+                : m_st.isNull() || m_st->cue(m_wb->cue) == nullptr;
+            if (lost)
+            {
+                m_wb->suspended = true;     // nothing to reselect
+                closeWorkbench();
+                m_wb->suspended = false;
+            }
+        });
+    };
+    m_wb->wiring << connect(m_st, &ShowTreeController::changed, this, gone);
+    m_wb->wiring << connect(m_doc, &Doc::cleared, this, gone);
+    if (Monitor *mon = Monitor::instance())
+        m_wb->wiring << connect(mon, &Monitor::fixturesSelected, this, [this](const QList<quint32> &ids) {
+            Workbench *b = dockedWorkbench();
+            TreeCueStack *cs = b != nullptr ? qobject_cast<TreeCueStack *>(b->stack()) : nullptr;
+            if (cs == nullptr || ids.isEmpty() || !b->isVisible())
+                return;
+            const int layer = cs->layerOfFixture(ids.first());
+            if (layer < 0)
+                return;
+            ProgrammingOutline::Row r;
+            r.kind = ProgrammingOutline::CueLayerRow;
+            r.id = quint32(layer);
+            r.scene = 0xFFFFFFFF;
+            b->selectRow(r);
+        });
+    return true;
+}
+
 bool ShowTreeView::openInWorkbench(quint32 cueId, quint32 layerId, const QString &trackedSignature)
 {
     if (m_st.isNull() || m_st->cue(cueId) == nullptr)
         return false;
-    if (m_wb == nullptr)
-        m_wb = new WorkbenchDock;
-    m_wb->suspended = false;
-
-    if (!isWorkbenchDocked())
-    {
-        Workbench *bench = m_wb->borrow ? m_wb->borrow() : nullptr;
-        if (bench == nullptr)
-        {
-            if (m_wb->own.isNull())
-                m_wb->own = new Workbench(m_doc, this);
-            bench = m_wb->own;
-        }
-        QSplitter *split = mainSplitter(this);
-        QSplitter *vsplit = pageSplitter(this);
-        if (split == nullptr || vsplit == nullptr)
-            return false;
-        m_wb->sizes = split->sizes();
-        m_wb->bench = bench;
-        m_wb->docked = true;
-        // Library | Tree | Workbench: the page's place, and more of the room.
-        vsplit->hide();
-        split->addWidget(bench);
-        bench->show();
-        {
-            const QList<int> was = m_wb->sizes;
-            int total = 0;
-            for (int s : was)
-                total += s;
-            if (total > 0 && was.size() >= 3)
-                split->setSizes({ total * 17 / 100, total * 23 / 100, 0, total * 60 / 100 });
-        }
-        bench->setReturnTo(tr("Show Tree"), [this]() {
-            // After the click is done with the button.
-            QTimer::singleShot(0, this, [this]() { closeWorkbench(); });
-        });
-
-        // Wired while docked: a palette edited in the Workbench plays at
-        // once (as the tree's Look Editor does), clicks on the 2D view pick
-        // the layer that lights them.
-        m_wb->wiring << connect(bench, &Workbench::paletteEdited, this, [this](quint32 pid) {
-            paletteEdited(pid, true);
-        });
-        m_wb->wiring << connect(bench->lookEditor(), &LookEditor::paletteValueChanged, this, [this](quint32 pid) {
-            paletteEdited(pid, false);
-        });
-        // The cue gone (deleted, undone, another show): the page back.
-        auto gone = [this]() {
-            QTimer::singleShot(0, this, [this]() {
-                if (isWorkbenchDocked() && (m_st.isNull() || m_st->cue(m_wb->cue) == nullptr))
-                {
-                    m_wb->suspended = true;     // nothing to reselect
-                    closeWorkbench();
-                    m_wb->suspended = false;
-                }
-            });
-        };
-        m_wb->wiring << connect(m_st, &ShowTreeController::changed, this, gone);
-        m_wb->wiring << connect(m_doc, &Doc::cleared, this, gone);
-        if (Monitor *mon = Monitor::instance())
-            m_wb->wiring << connect(mon, &Monitor::fixturesSelected, this, [this](const QList<quint32> &ids) {
-                Workbench *b = dockedWorkbench();
-                TreeCueStack *cs = b != nullptr ? qobject_cast<TreeCueStack *>(b->stack()) : nullptr;
-                if (cs == nullptr || ids.isEmpty() || !b->isVisible())
-                    return;
-                const int layer = cs->layerOfFixture(ids.first());
-                if (layer < 0)
-                    return;
-                ProgrammingOutline::Row r;
-                r.kind = ProgrammingOutline::CueLayerRow;
-                r.id = quint32(layer);
-                r.scene = 0xFFFFFFFF;
-                b->selectRow(r);
-            });
-    }
+    if (!dockWorkbench())
+        return false;
 
     Workbench *bench = m_wb->bench;
     m_wb->syncing = true;
@@ -229,6 +241,25 @@ bool ShowTreeView::openInWorkbench(quint32 cueId, quint32 layerId, const QString
     updateButtons();
     slotPreviewChanged();
     return true;
+}
+
+bool ShowTreeView::openFunctionInWorkbench(quint32 functionId)
+{
+    /* Board Q228: Build is not a tab of the qlcconsole view, so a scene,
+       collection or chaser opened from anywhere opens here, in the
+       Workbench docked in place of the page (as a docked Workbench's ▣ Open
+       already did); ↩ Show Tree comes back. */
+    const Function *f = m_doc->function(functionId);
+    if (f == nullptr || !dockWorkbench())
+        return false;
+    Workbench *bench = m_wb->bench;
+    m_wb->syncing = true;
+    m_wb->cue = invalidId();
+    bench->open(functionId);
+    m_wb->syncing = false;
+    m_hint->setText(tr("“%1” is open in the Workbench: ↩ Show Tree puts the page back").arg(f->name()));
+    updateButtons();
+    return bench->loadedFunction() == functionId;
 }
 
 bool ShowTreeView::closeWorkbench()
@@ -277,7 +308,7 @@ bool ShowTreeView::closeWorkbench()
     if (split != nullptr && !m_wb->sizes.isEmpty())
         split->setSizes(m_wb->sizes);
 
-    if (!m_wb->suspended)
+    if (!m_wb->suspended && cueId != invalidId())
     {
         if (layerId != invalidId())
             selectNode(layerId, cueId);

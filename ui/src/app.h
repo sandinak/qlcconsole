@@ -747,9 +747,14 @@ public slots:
     /** Let go of every override activeOverrides() lists (Focus mode may ask
      *  about unsaved offsets first). */
     void clearOverrides();
-    /** Window → Effects: Build ▸ Effects, effects' one home (there is no
-     *  Effects window of its own). */
+    /** Effects: Build ▸ Effects where Build is a tab of the view; in the
+     *  qlcconsole view (no Build, board Q228) the Show Tree's Library, at
+     *  its effect palettes. */
     void showEffects();
+    /** Whether Build is a tab of the current view (board Q228: not in the
+     *  qlcconsole view -- it runs on, for the Show Tree's Workbench). What
+     *  opened in Build opens in the Show Tree when it isn't. */
+    bool buildInView() const { return tabInView(tr("Build")); }
     /** THE switch for the Functions window (Function Manager), board Q32:
      *  shown, it is a tab of its own again and Window → Functions brings it
      *  forward; hidden -- the qlcconsole view -- it has no tab and Window →

@@ -5406,6 +5406,14 @@ void App::slotCaptureUndoStackChanged()
 
 void App::showEffects()
 {
+    // Build hidden (the qlcconsole view): the Library's effect palettes, in
+    // the Show Tree -- never a switch to Everything.
+    if (!buildInView() && tabInView(tr("Show Tree")) && ShowTreeView::instance() != nullptr)
+    {
+        showContext(tr("Show Tree"));
+        ShowTreeView::instance()->showLibraryEffects();
+        return;
+    }
     showContext(tr("Build"));
     if (ProgrammingManager *pm = ProgrammingManager::instance())
         pm->setSection(ProgrammingManager::EffectsSection);
@@ -10056,7 +10064,11 @@ bool App::reviewJump(QWidget *parent, const QString &jump, const QVariantList &d
     }
     if (jump == QLatin1String("palette"))
     {
-        showContext(tr("Build"));
+        // The palette itself, where palettes are edited in this view: the
+        // Show Tree's Library and Look Editor, or Build where it is a tab.
+        if (ProgrammingManager::openPalette(id))
+            return true;
+        showContext(buildInView() || !tabInView(tr("Show Tree")) ? tr("Build") : tr("Show Tree"));
         return true;
     }
     if (jump == QLatin1String("showsettings"))
