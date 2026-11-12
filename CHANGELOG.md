@@ -16,6 +16,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **Follow spot: where the operator stands.** A spot op in a side tower, on a balcony rail or upstage sets it on the Followspot effect's **Operator** row (Front of house, SL tower, SR tower, Upstage, Back of house; facing in 15° steps; eye height in your units), or from the pad: hold the left stick click and push toward centre stage. The stick turns with them: pushed up, the subject goes away from where they stand, and right is their right. Kept per controller and per venue with the show; older shows load as front of house. The footer says *· from SL tower*, the plot marks the operator, and the Rig Overview's View has **Operator** (from their eye) and **Operator plan** (the plan turned so they are at the bottom). Free-fly (no Aim look) is not turned. From front of house the stick pushed up now moves the subject upstage, away from the operator (it went downstage before).
 
+### Changed
+
+- **Focus target page: up is upstage.** On the target page the stick, arrow keys and the web pad moved the target downstage when pushed up (the help already said upstage). Up now moves it away from front of house, upstage, the same as the follow spot's stick; right is still toward stage left. The target page does not use a follow-spot operator's facing; it is always as seen from front of house.
+
 ## [0.4.3] - 2026-11-10
 
 qlcconsole 0.4.3 is a stable release after 0.4.1. 0.4.2 was built but never
