@@ -39,6 +39,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **What used to open in Build opens in the Show Tree in the qlcconsole view.** Opening a function from anywhere docks the Workbench there (↩ Show Tree puts the page back); opening or editing a palette (effect palettes too) and Show Review's palette fix select it in the Library and open it in the Look Editor; "show effects" goes to the Library's Effects. In Everything they still go to Build. The effect designer's Make a Layer item is now **Into a Scene…**.
 - **Operate keeps the screen awake by default,** so the console doesn't sleep or lock mid-show (macOS and Windows). Turn it off in Settings ▸ Performance.
 
+### Fixed
+
+- **Help ▸ What's New is current.** It was still headed "0.4.0 (unreleased)"; 0.4.0 now has its month, and a 0.4.4 section lists this release's changes.
+- **The test gate keeps its Mac awake.** A pool host running a gate unattended went into maintenance sleep every few seconds, and the timing tests that straddled a nap failed (PixelBoxes, SpeedMasters, WebAccess, VCButton on newaudio). The gate now holds `caffeinate` for its length, and those four tests wait on what they check instead of a fixed time. A hostile case that times out now shows the child's last lines.
+
 ## [0.4.3] - 2026-11-10
 
 qlcconsole 0.4.3 is a stable release after 0.4.1. 0.4.2 was built but never

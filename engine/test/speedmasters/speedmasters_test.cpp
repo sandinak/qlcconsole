@@ -755,19 +755,39 @@ void SpeedMasters_Test::aControlSurfaceDrivesAMaster()
     QVERIFY(!sm->isPaused(1));
 
     // Tap: the tempo of the presses as they really came (a busy CI runner
-    // stretches a qWait(500)); releases aren't taps.
+    // stretches a qWait(500)); releases aren't taps. Each press is timed,
+    // and the tempo expected is the one the master hears: the taps since
+    // the last gap over 2 s (a pause that long starts a new count), the
+    // last five. A host that stalls in a wait -- newaudio napped through
+    // one, 2026-11-12: three presses 33 s apart end to end, of which the
+    // master rightly kept the last two -- is then still measured right.
     sm->setBpm(1, 60);
-    QElapsedTimer taps;
-    for (int i = 0; i < 3; ++i)
+    QElapsedTimer clock;
+    clock.start();
+    QList<qint64> pressedAt;
+    const auto heard = [&pressedAt]()
+    {
+        int from = 0;
+        for (int i = 1; i < pressedAt.size(); ++i)
+            if (pressedAt.at(i) - pressedAt.at(i - 1) > 2000)
+                from = i;
+        QList<qint64> kept = pressedAt.mid(from);
+        while (kept.size() > 5)
+            kept.removeFirst();
+        return kept;
+    };
+    // Three presses; more if a stall left the master fewer than two
+    for (int i = 0; i < 3 || (heard().size() < 2 && i < 8); ++i)
     {
         if (i > 0)
             QTest::qWait(500);
-        else
-            taps.start();
+        pressedAt << clock.elapsed();
         emit m_doc->inputOutputMap()->inputValueChanged(0, 10, 127);
         emit m_doc->inputOutputMap()->inputValueChanged(0, 10, 0);
     }
-    const double tapped = 60000.0 * 2 / double(taps.elapsed());
+    const QList<qint64> kept = heard();
+    QVERIFY(kept.size() >= 2);
+    const double tapped = 60000.0 * (kept.size() - 1) / double(qMax<qint64>(1, kept.last() - kept.first()));
     QVERIFY2(qAbs(sm->setBpm(1) - tapped) < tapped * 0.05,
              qPrintable(QString("%1 for taps at %2").arg(sm->setBpm(1)).arg(tapped)));
     QCOMPARE(sm->isPaused(1), false);                // the tap channel only taps

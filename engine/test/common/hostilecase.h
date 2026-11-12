@@ -84,7 +84,10 @@ namespace HostileCase
         {
             p.kill();
             p.waitForFinished(5000);
-            return QStringLiteral("HANG: still running after %1 ms").arg(timeoutMs);
+            /* Where it was: a hang and a slow start (a loaded or napping
+               host) look alike from here, its last lines tell them apart. */
+            return QStringLiteral("HANG: still running after %1 ms; its last lines:\n").arg(timeoutMs)
+                   + QString::fromLocal8Bit(p.readAll().right(3000));
         }
         const QByteArray out = p.readAll();
         const int code = p.exitCode();

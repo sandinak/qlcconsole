@@ -615,12 +615,30 @@ void PixelBoxes_Test::aBreatheSetToOncePlaysItAgain()
     QVERIFY(b != nullptr);
     b->setEffectParamValue(EffectRuns::runsKey(), 1);
     m_doc->effectScriptRunner()->updateEffectParams(b->id());
-    run(450);                                       // not cut off: mid-breath
-    const int mid = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
-    QVERIFY2(mid > kTwentyPercent / 2, qPrintable(QString::number(mid)));
-    run(1000);
-    const int end = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
-    QVERIFY2(qAbs(end - qRound(kTwentyPercent * 0.05)) <= 1, qPrintable(QString::number(end)));
+    /* Each step waited for, not read at a set time: the breath runs on the
+       effect's own clock, but what is read here is the universe, which the
+       master timer's thread writes a frame or more later -- on a busy host
+       (or one napping under the gate: newaudio, 2026-11-12) the read trails
+       the breath, and "the floor at 1.45 s" read 38 of 51, a frame from
+       mid-breath. */
+    const auto now = [this]() { return int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0))); };
+    // Not cut off: a whole breath again, up to the look's 20% (at the edit
+    // it was on its way down, and a cut-off run froze there or dropped)
+    QElapsedTimer t;
+    t.start();
+    int top = 0;
+    while (top < kTwentyPercent - 3 && t.elapsed() < 5000)
+    {
+        QTest::qWait(5);
+        top = qMax(top, now());
+    }
+    QVERIFY2(top >= kTwentyPercent - 3, qPrintable(QString::number(top)));
+    // ...ending on its floor
+    const int floor = qRound(kTwentyPercent * 0.05);
+    QTRY_VERIFY2_WITH_TIMEOUT(qAbs(now() - floor) <= 1, qPrintable(QString::number(now())), 5000);
+    // ...and holding there: a loop would be well up its next breath by now
+    run(600);
+    QVERIFY2(qAbs(now() - floor) <= 1, qPrintable(QString::number(now())));
 }
 
 /* The same Once breathe in three cues in a row, the cue copied in place

@@ -2,7 +2,63 @@
 
 The latest changes, newest first. Each links to the guide with the detail.
 
-## 0.4.0 (unreleased)
+## 0.4.4
+
+### The pad and the remote
+
+- **Follow spot: where the operator stands.** A spot op in a side tower,
+  on a balcony rail or upstage is set on the Followspot effect's
+  **Operator** row (Front of house, SL tower, SR tower, Upstage, Back of
+  house; facing in 15° steps; eye height in your units), or from the pad:
+  hold the left stick click and push toward centre stage. The stick turns
+  with them: pushed up, the subject goes away from where they stand. The
+  footer says *· from SL tower*, and the Rig Overview's View has
+  **Operator** and **Operator plan**. From front of house, up now moves
+  the subject upstage (it went downstage before). See [Where the operator
+  stands](stage-targets.md#where-the-operator-stands).
+- **Blind and Solo from the Steam Deck or a phone.** In Design the Run
+  page has **BLIND** and **SOLO**, and the Deck has LB + LS for Blind,
+  LB + View for Solo and LB + D-pad left / right to step through the layers.
+  They do what the console's own Blind and Solo do; in Operate the remote
+  refuses both, as the console does. See [Blind and
+  Solo](gamepad-remote.md#blind-and-solo).
+- **"Still at *venue*?" answered from the pad.** When Menu begins a focus
+  call cue's calls and the laptop asks, **hold A** for a second to say
+  yes, same room. A tap does nothing; another room is still answered on
+  the laptop or by voice. See [Pad Run](show-control.md#go-from-the-game-controller-pad-run).
+- **The remote shows what Teaching holds.** In a Teaching show the Run
+  page and the focus remote show a TEACHING chip and say what the
+  instructor's settings hold back. See [Running a Teaching
+  show](teaching.md#running-a-teaching-show).
+- **The target page: up is upstage.** The stick, arrow keys and the web
+  pad move a focus call's target away from front of house when pushed up,
+  as the help said. See [Focus calls](focus-calls.md).
+
+### Views
+
+- **Build is hidden in the qlcconsole view.** View ▸ Workspace ▸
+  qlcconsole shows seven tabs, ⇧⌘1 … ⇧⌘7 (the Show Tree is ⇧⌘4, Run ⇧⌘7).
+  What opened in Build opens in the Show Tree there: a function docks the
+  Workbench, a palette opens in the Look Editor. Build stays in
+  Everything; **Window ▸ Build** switches to it and says so. See
+  [Views](getting-started.md#views).
+- **The programmer strip is in the Show Tree too**: Highlight, Flash,
+  Park, Move in Black, Beat, Tap, Save Positions, as in Build, acting on
+  the same selection. See [The programmer
+  strip](show-tree.md#the-programmer-strip).
+
+### Settings ▸ Performance
+
+- **It checks much more, per computer**: Apple silicon, Intel Macs, ARM
+  boards and PCs, and what gets in the way of a show — on battery,
+  overheating, Wi-Fi carrying DMX, the macOS Local Network permission, a
+  screen that will lock, backups and file sync, system updates, other busy
+  programs, low memory or disk, heavy rig view settings — and how many
+  frames really left late. In Operate it looks again every 15 seconds and
+  says so in the footer. Operate now keeps the screen awake by default.
+  See [Settings ▸ Performance](system-tuning.md#settings--performance).
+
+## 0.4.0 (November 2026)
 
 ### AI Assist
 

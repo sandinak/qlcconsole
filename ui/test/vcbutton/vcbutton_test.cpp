@@ -618,8 +618,9 @@ void VCButton_Test::toggle()
     QCOMPARE(btn.state(), VCButton::Inactive);
     VCButton another(&w, m_doc);
     QVERIFY(btn.palette().color(QPalette::Button) != another.palette().color(QPalette::Button));
-    QTest::qWait(500);
-    QVERIFY(btn.palette().color(QPalette::Button) == another.palette().color(QPalette::Button));
+    // The blink's 250 ms timer puts it back: waited for, as a loaded or
+    // napping host may not have run that timer within a fixed 500 ms
+    QTRY_VERIFY_WITH_TIMEOUT(btn.palette().color(QPalette::Button) == another.palette().color(QPalette::Button), 5000);
 
     QMouseEvent ev4(QEvent::MouseButtonRelease, QPoint(0, 0), QPoint(0, 0), QPoint(0, 0),
                     Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
