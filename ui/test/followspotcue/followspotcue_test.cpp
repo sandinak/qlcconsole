@@ -1901,8 +1901,9 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
     const int ls = deviceChannel(GamepadRole::LS);
     QVERIFY(ls >= 0);
     QVERIFY(padInput(doc, quint32(ls), 255));
-    settle(30);
-    QVERIFY(pc->isRecalibratingFacing());
+    // The press reaches the programmer through the input map: wait for it
+    // (a fixed 30 ms was too short on a busy CI runner).
+    QTRY_VERIFY_WITH_TIMEOUT(pc->isRecalibratingFacing(), 3000);
     const QVector3D before = witch->position();
     QVERIFY(padInput(doc, 0, 64));      // 30 degrees left of straight up
     QVERIFY(padInput(doc, 1, 17));
@@ -1912,8 +1913,7 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
     QVERIFY(padInput(doc, 1, 128));
     settle(60);
     QVERIFY(padInput(doc, quint32(ls), 0));
-    settle(60);
-    QVERIFY(!pc->isRecalibratingFacing());
+    QTRY_VERIFY_WITH_TIMEOUT(!pc->isRecalibratingFacing(), 3000);
     QCOMPARE(pc->followSpotOperator().facing, 300);       // 270 + 30
     QTRY_COMPARE_WITH_TIMEOUT(facing->currentData().toInt(), 300, 1000);
     QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("from SL tower, facing 300°")), 2000);
