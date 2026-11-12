@@ -461,14 +461,16 @@ void ControlMap_Test::aCueMadeASubCueStillJumps()
 
     Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
     QVERIFY(chaser != nullptr);
-    QSignalSpy taken(m_doc->showControl(), &ShowControl::cueTaken);
+    QList<QPair<int, int>> taken;
+    const QMetaObject::Connection conn = connect(m_doc->showControl(), &ShowControl::cueTaken, this,
+        [&taken](ShowControl::Command, quint32, int, int, int step, int sub) { taken << qMakePair(step, sub); });
+    auto unhook = qScopeGuard([conn]() { QObject::disconnect(conn); });
     send(11, 127);
     tick(2);
     QVERIFY(chaser->isRunning());
     QCOMPARE(st->runningCue(listId), cues.at(1));
     QCOMPARE(taken.count(), 1);
-    QCOMPARE(taken.last().at(4).toInt(), 1);         // cue 2's step
-    QCOMPARE(taken.last().at(5).toInt(), 1);         // at sub-cue 2.2
+    QCOMPARE(taken.last(), qMakePair(1, 1));         // cue 2's step, at sub-cue 2.2
     QCOMPARE(chaser->currentSubCueIndex(), 1);
     send(11, 0);
 }
