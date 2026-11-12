@@ -67,6 +67,13 @@
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
+#include "qlcfile.h"
+#include <QDir>
+#include <QPixmap>
+#include <QPainter>
+#include "inputoutputmap.h"
+#include "ioplugincache.h"
+#include "iopluginstub.h"
 #include "teachingsettings.h"
 
 #include <QMenu>
@@ -553,6 +560,49 @@ void FocusCallsUi_Test::theLaptopAsksForTheVenue()
     QCOMPARE(fcc->state(), FocusCallCue::Running);
     m_doc->programmer()->focusSession()->stop();
     m_doc->setMode(Doc::Design);
+}
+
+void FocusCallsUi_Test::theVenueAskFitsWithAPadAtEverySize()
+{
+    // Q230: the "Still at <venue>?" prompt with a pad connected and a venue applied.
+    QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
+    stubDir.setFilter(QDir::Files);
+    stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(stubDir);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub");
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_channelRoles = { { 10, "a" }, { 17, "start" } };
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+
+    QDialog *d = FocusCallsDialog::askVenue(m_doc, nullptr, "Venue 2026-11-12", 8000, "Lincoln HS");
+
+    QLabel *hint = d->findChild<QLabel *>("fcAskVenuePad");
+    QVERIFY(hint != nullptr);
+    QVERIFY(hint->text().contains("hold A"));
+    const QSize sizes[] = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+    QString dir = qEnvironmentVariable("QLC_PADRUN_SHOTS");
+    if (!dir.isEmpty())
+        QDir().mkpath(dir);
+    for (const QSize &screen : sizes)
+    {
+        d->adjustSize();
+        // Not clipped: the dialog fits the smallest screen, and the hint shows all its lines.
+        QVERIFY2(d->width() <= screen.width() && d->height() <= screen.height(),
+                 qPrintable(QString("%1x%2").arg(d->width()).arg(d->height())));
+        QVERIFY(hint->height() >= hint->heightForWidth(hint->width()));
+        if (!dir.isEmpty())
+        {
+            QPixmap canvas(screen);
+            canvas.fill(QApplication::palette().color(QPalette::Window).darker(115));
+            QPainter p(&canvas);
+            const QPixmap g = d->grab();
+            p.drawPixmap((screen.width() - g.width()) / 2, (screen.height() - g.height()) / 2, g);
+            p.end();
+            QVERIFY(canvas.save(QString("%1/venue-ask-%2x%3.png").arg(dir).arg(screen.width()).arg(screen.height())));
+        }
+    }
+    d->close();
+    m_doc->inputOutputMap()->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
 }
 
 void FocusCallsUi_Test::anOldVenueIsAskedAbout()
