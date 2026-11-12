@@ -553,6 +553,15 @@ QDialog *FocusCallsDialog::askVenue(Doc *doc, QWidget *parent, const QString &fa
     question->setObjectName(QStringLiteral("fcAskVenueQuestion"));
     question->setWordWrap(true);
     vl->addWidget(question);
+    // Board Q230: the person on stage answers yes from the pad.
+    if (!current.isEmpty() && doc->programmer()->focusController().present)
+    {
+        QLabel *pad = new QLabel(doc->programmer()->padText(
+            tr("Same room: hold {A} on the pad for a second.")), d);
+        pad->setObjectName(QStringLiteral("fcAskVenuePad"));
+        pad->setWordWrap(true);
+        vl->addWidget(pad);
+    }
     QLineEdit *name = new QLineEdit(d);
     name->setObjectName(QStringLiteral("fcAskVenueName"));
     name->setPlaceholderText(fallback);

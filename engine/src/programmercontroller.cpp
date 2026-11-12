@@ -175,8 +175,12 @@ ProgrammerController::ProgrammerController(Doc *doc)
     m_refineSession->setStartGuard(busy);
     /* Spoken unless the operator chose lights only -- except what is
        important, which is always said (Q131). */
-    connect(m_focusCallCue, &FocusCallCue::announce, this, &ProgrammerController::tellOperator);
+    connect(m_focusCallCue, &FocusCallCue::announce, this, [this](const QString &text, int priority) {
+        tellOperator(padText(text), priority);      // {A} in the pad's own names
+    });
     connect(m_focusCallCue, &FocusCallCue::stateChanged, this, [this]() {
+        if (m_focusCallCue->state() != FocusCallCue::NamingVenue)
+            m_holdVenueA.reset();
         // Armed: the controller is read for Start, even with nothing else on.
         if (m_focusCallCue->isArmed())
             connectControllerInput();
@@ -1760,6 +1764,7 @@ void ProgrammerController::freezeController()
     m_fineNormX = m_fineNormY = 0.5f;
     m_holdA.reset();
     m_holdB.reset();
+    m_holdVenueA.reset();
     m_sayHold.reset();
     m_heldRoles.clear();
     m_viewChord = false;
@@ -2897,6 +2902,18 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             m_focusCallCue->start();
             return true;
         }
+        /* "Still at <venue>?" asked (Menu began the calls): A held answers
+           yes, same room (board Q230, reversing Q129's laptop-only); a tap
+           does nothing, and no is the laptop's. Whatever the role. */
+        if (!active && role == GamepadRole::A && m_focusCallCue->asksStill()
+            && (m_ownerUniverse == 0xFFFFFFFF || universe == m_ownerUniverse))
+        {
+            if (value > 0)
+                m_holdVenueA.press();
+            else if (m_holdVenueA.release())
+                tellOperator(padText(tr("Hold {A} to say yes, same room.")), ControllerScheme::ConfirmPriority);
+            return true;
+        }
         /* View + Menu together: held 1 s, the role switches (Tools / Run,
            PadRun); in Tools a shorter press, on its release, asks for Focus
            mode as it always did. Neither does anything on its own before
@@ -3155,6 +3172,14 @@ void ProgrammerController::applyDesignJoystick()
     /* Focus mode is the follow spot's stick put to another use: the same
        bound axes, the same profile deadzone and sensitivity, this same tick --
        nudging the current head's calibration instead of moving a target. */
+    /* "Still at <venue>?" answered from the pad: A held a full second (the
+       same hold as Focus mode's keep all) is yes (board Q230). */
+    if (m_focusCallCue != nullptr && m_focusCallCue->state() == FocusCallCue::NamingVenue
+        && m_holdVenueA.due(m_designJoyTimer != nullptr ? m_designJoyTimer->interval() / 1000.0 : 0.02))
+    {
+        if (m_focusCallCue->answerStillFromPad())
+            padRumble(1);
+    }
     if (m_padRun != nullptr && (m_focusSession == nullptr || !m_focusSession->isActive()))
         m_padRun->swipeTick(m_designJoyTimer != nullptr ? m_designJoyTimer->interval() / 1000.0 : 0.02);
     if (m_focusSession != nullptr && m_focusSession->isActive())

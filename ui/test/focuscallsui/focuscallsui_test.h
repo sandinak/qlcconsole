@@ -78,6 +78,7 @@ private slots:
     /** Q129: an applied venue last changed over a day ago -- "Still at
      *  ...?" on open (New venue the default), and the dialog defaults to
      *  New venue until it is confirmed. */
+    void theVenueAskFitsWithAPadAtEverySize();
     void anOldVenueIsAskedAbout();
     /** Gap 8: opened with no venue file, a sibling's is offered. */
     void aSiblingsVenuesAreOffered();

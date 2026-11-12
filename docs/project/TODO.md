@@ -1088,8 +1088,12 @@ Run tab's **Pad: Tools / Run / ARMED** button; docs/features/show-control.md
   the hit button, several at one place take turns (can change). Open: the
   focus confirm (the rest of "the full role"); not verified on a real pad.
 - Q192's walk is built (MVP, below): Menu in the Run role.
+- Q230: "Still at <venue>?" answered from the pad: hold A (1 s) = yes; no is
+  the laptop's. Built on feat/044-padrun-hits.
 - Not verified on hardware: the DualSense light bar / rumble on GO with a
-  real pad (the code sends the same feedback the focus tools do).
+  real pad (the code sends the same feedback the focus tools do). The
+  per-pad morning checklist (Xbox One, DualShock 4, DualSense) is in
+  docs/features/show-control.md "Check it on a real pad" (044); not run yet.
 - decided (can change): GO needs LB held (a modifier, not a double-press);
   Back, Sub GO and Stop need it too; RT / LT and RS need no arm. Tools is
   the default role, kept per computer (QSettings controller/role). Any

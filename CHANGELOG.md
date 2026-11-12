@@ -22,6 +22,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Answer "Still at <venue>?" from the pad.** When Menu begins a focus-call cue's calls and the laptop asks "Still at Lincoln HS?", hold **A** (Cross) for a second to say yes, same room: the person on stage need not walk back to the laptop. A tap does nothing; another room is still answered on the laptop or by voice. The voice and the dialog say so (board Q230, reversing Q129's laptop-only answer).
 - **Focus target page: up is upstage.** On the target page the stick, arrow keys and the web pad moved the target downstage when pushed up (the help already said upstage). Up now moves it away from front of house, upstage, the same as the follow spot's stick; right is still toward stage left. The target page does not use a follow-spot operator's facing; it is always as seen from front of house.
 
 ## [0.4.3] - 2026-11-10

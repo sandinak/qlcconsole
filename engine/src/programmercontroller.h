@@ -882,6 +882,8 @@ private:
     /** The head the first bumper of a pair stepped from (both bumpers). */
     quint32 m_bumperFrom = 0xFFFFFFFF;
     ControllerScheme::LongPress m_holdB;
+    /** Hold A answering "Still at <venue>?" yes (board Q230). */
+    ControllerScheme::LongPress m_holdVenueA { ControllerScheme::keepAllHoldSeconds() };
     QColor m_padLight;
     PadTriggers::State m_padTriggers;
     bool m_padTriggersSent = false;

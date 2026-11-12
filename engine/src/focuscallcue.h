@@ -89,6 +89,13 @@ public:
     /** How long the laptop waits for a name before it uses the date, ms
      *  (8 s; a test shortens it). */
     void setVenueAskTimeout(int ms) { m_askTimeout = ms; }
+    /** While NamingVenue with a venue applied: "Still at <venue>?" answered
+     *  yes from the pad (held A, board Q230) -- same room, the calls begin.
+     *  False (nothing happens) with no venue applied or not asking: the
+     *  pad never names a new room. */
+    bool answerStillFromPad();
+    /** NamingVenue with a venue applied: "Still at <venue>?" is on the table. */
+    bool asksStill() const;
     /** Someone is typing the name: wait for them, not the clock. */
     void holdVenueAsk();
     int venueAskTimeout() const { return m_askTimeout; }
