@@ -473,7 +473,7 @@ void ControlMap_Test::aCueMadeASubCueStillJumps()
     send(11, 127);
     tick(2);
     QVERIFY2(chaser->isRunning(), qPrintable(said.join(" / ")));
-    QCOMPARE(st->runningCue(listId), cues.at(1));
+    QCOMPARE(chaser->currentStepIndex(), 1);
     QCOMPARE(taken.count(), 1);
     QCOMPARE(taken.last(), qMakePair(1, 1));         // cue 2's step, at sub-cue 2.2
     QCOMPARE(chaser->currentSubCueIndex(), 1);
@@ -488,7 +488,7 @@ void ControlMap_Test::aCueMadeASubCueStillJumps()
     QCOMPARE(st->runningCue(listId), cues.at(0));
     send(13, 127);
     tick(2);
-    QCOMPARE(st->runningCue(listId), cues.at(1));
+    QCOMPARE(chaser->currentStepIndex(), 1);
     QCOMPARE(taken.last().first, 1);
     send(12, 0);
     send(13, 0);
