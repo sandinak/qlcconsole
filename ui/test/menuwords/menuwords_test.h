@@ -43,6 +43,7 @@ private slots:
     void everyButtonLabelIsTitleCase();
     void noLengthIsMetresOnly();
     void theTabsHaveTheirNames();
+    void noTextSendsYouToAHiddenBuild();
 };
 
 #endif

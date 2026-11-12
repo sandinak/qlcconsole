@@ -23,7 +23,7 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 | [What's new](whats-new.md) | The latest changes |
 | [Coming from QLC+ 4](coming-from-qlc4.md) | For QLC+ 4.x users: what stays the same, what's better, moving a show over and back, the old workflows and their new equivalents, what's different |
 | [Lighting Studio](lighting-studio.md) | Building the physical rig: trusses, towers, platforms, pipes, stands, hangers, fixture mounting, plot symbols, locks, the Stage layer (curtain line, number line, apron), the Focus menu and Quick focus; the Angled 3D view and Rig Overview, lit by the show (beams, haze, gobos, lanterns) |
-| [Build Tab](build.md) | Making the show's palettes, effects, scenes and collections: the navigator by section, the Workbench (a scene or a collection as layers, + Scene and + Effect ▾), looks out of reusable palettes instead of raw DMX, the inline look editor and effect browser, scene transitions, WLED effects |
+| [Build Tab](build.md) | A tab of the Everything view (the qlcconsole view hides it; the Show Tree has its programmer strip and Workbench). Making the show's palettes, effects, scenes and collections: the navigator by section, the Workbench (a scene or a collection as layers, + Scene and + Effect ▾), looks out of reusable palettes instead of raw DMX, the inline look editor and effect browser, scene transitions, WLED effects |
 | [Show Tree](show-tree.md) | Writing the show as one tree of cue lists, cues and layers: tracking, cue numbers and reordering, move in black, hits for busking, the Run tab and the cue runner |
 | [Fixture Manager](fixture-manager.md) | Fixture-group folders, the head-layout grid editor, the inventory of unpatched fixtures and the Patch dialog, output rules (relays, house and work lights), plot symbols and icons |
 | [Definition updates](definition-updates.md) | Bringing old fixture definitions up to date, in your fixture folder and inside saved shows, with a way back |
@@ -78,11 +78,11 @@ anyone knows which node a fixture will end up on:
    devices get a universe each, by IP.
 5. **Organize fixtures** into groups, laid out in the head-layout grid —
    or straight from where they stand on stage — for effects and
-   Build-tab drag targets (see [Fixture Manager](fixture-manager.md)).
+   Build-tab (Everything view) and Show Tree drag targets (see [Fixture Manager](fixture-manager.md)).
 6. **Mark places that matter** — a mark on the deck, a drum kit, a person —
    as **Stage Targets**, so moving heads can aim at them instead of you
    dialing in pan/tilt by hand (see [Stage Targets](stage-targets.md)).
-7. **Build looks** in the **Build Tab** by dragging color/dimmer/aim
+7. **Build looks** in the **Show Tree** (or the Everything view's **Build Tab**) by dragging color/dimmer/aim
    palettes onto scenes, instead of setting raw channel values, and give
    scenes transitions (see [Build Tab](build.md)).
 8. **Check the footer.** When it says **Ready**, nothing is unpatched,

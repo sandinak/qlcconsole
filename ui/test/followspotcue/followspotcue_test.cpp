@@ -29,6 +29,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QtTest>
+#include <QScopeGuard>
 
 #include "../../../engine/test/common/stdprelude.h"
 #define private public
@@ -1232,7 +1233,11 @@ void FollowSpotCue_Test::theDpadStepsTheSpeedAndTheRightStickIsFine()
     patchLikeHis(doc);
     QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 2000);
     Workbench *bench = ProgrammingManager::instance()->workbench();
-    m_app->m_tab->setCurrentWidget(ProgrammingManager::instance());
+    // Build is a tab of Everything (the qlcconsole view hides it, Q228).
+    const App::WorkspaceView viewWas = m_app->workspaceView();
+    m_app->setWorkspaceView(App::EverythingView, false);
+    auto viewBack = qScopeGuard([this, viewWas]() { m_app->setWorkspaceView(viewWas, false); });
+    m_app->showContext("Build");
     bench->load(scene->id());
     settle(300);
     QLabel *chip = m_app->followChip();
@@ -1431,7 +1436,11 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     patchLikeHis(doc);
     QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 2000);
     Workbench *bench = ProgrammingManager::instance()->workbench();
-    m_app->m_tab->setCurrentWidget(ProgrammingManager::instance());
+    // Build is a tab of Everything (the qlcconsole view hides it, Q228).
+    const App::WorkspaceView viewWas = m_app->workspaceView();
+    m_app->setWorkspaceView(App::EverythingView, false);
+    auto viewBack = qScopeGuard([this, viewWas]() { m_app->setWorkspaceView(viewWas, false); });
+    m_app->showContext("Build");
     bench->load(scene->id());
     settle(300);
     EffectScriptRunner *runner = doc->effectScriptRunner();

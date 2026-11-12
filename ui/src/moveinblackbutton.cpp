@@ -62,7 +62,7 @@ MoveInBlackButton::MoveInBlackButton(Doc *doc, QWidget *parent)
     wa->setDefaultWidget(row);
     menu->addAction(wa);
     menu->addSeparator();
-    QAction *note = menu->addAction(tr("Saved with the show (also in Build and Settings)"));
+    QAction *note = menu->addAction(tr("Saved with the show (also under Move in Black and in Settings)"));
     note->setEnabled(false);
     setMenu(menu);
 
@@ -120,7 +120,7 @@ void MoveInBlackButton::sync()
     QString tip = tr("Auto move-in-black: while the show runs, look ahead to the next cue and "
                      "pre-position any dark mover it will reveal, if the next cue is at least "
                      "the lead time away (now %1 s). The arrow sets the lead time. Saved with "
-                     "the show; the same switch as Build → Move in black and "
+                     "the show; the same switch as the programmer strip's Move in Black and "
                      "Settings → General → Show Tree.").arg(lead, 0, 'f', 1);
     if (on)
         tip += QLatin1Char('\n') + (presets > 0

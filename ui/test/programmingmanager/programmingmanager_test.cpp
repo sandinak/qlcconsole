@@ -55,6 +55,8 @@
 #define private public
 #include "fadetimespin.h"
 #include "programmingmanager.h"
+#include "programmerstrip.h"
+#include "showtreeview.h"
 #include "rgbmatrix.h"
 #include "efx.h"
 #include "programmingoutline.h"
@@ -1434,12 +1436,12 @@ void ProgrammingManager_Test::theToolbarFitsWithItsMenus()
     QToolButton *beat = mgr.findChild<QToolButton *>("beatMenu");
     QToolButton *more = mgr.findChild<QToolButton *>("programmingMoreMenu");
     QVERIFY(park && mark && beat && more);
-    QVERIFY(mgr.m_highlightBtn->isVisible() && mgr.m_flashBtn->isVisible());
-    QVERIFY(!mgr.m_parkBtn->isVisible() && !mgr.m_snapshotBtn->isVisible());
+    QVERIFY(mgr.m_strip->m_highlightBtn->isVisible() && mgr.m_strip->m_flashBtn->isVisible());
+    QVERIFY(!mgr.m_strip->m_parkBtn->isVisible() && !mgr.m_strip->m_snapshotBtn->isVisible());
     /* One row that fits without scrolling, measured in ordinary buttons of
        the platform's own style (Linux draws it all wider than the Mac, so a
        pixel limit fit one and not the other). */
-    QWidget *row = mgr.m_highlightBtn->parentWidget();
+    QWidget *row = mgr.m_strip->m_highlightBtn->parentWidget();
     QPushButton ref(QStringLiteral("Highlight"), row);
     const double buttons = double(row->sizeHint().width()) / ref.sizeHint().width();
     QVERIFY2(buttons < 12, qPrintable(QString("%1 px: %2 buttons wide")
@@ -1453,15 +1455,15 @@ void ProgrammingManager_Test::theToolbarFitsWithItsMenus()
             on = a;
     QVERIFY(on != nullptr);
     on->trigger();
-    QVERIFY(mgr.m_bpmBtn->isChecked());
+    QVERIFY(mgr.m_strip->m_bpmBtn->isChecked());
     QCOMPARE(beat->text(), QString("Beat 120"));
-    mgr.m_bpmSpin->setValue(128);
+    mgr.m_strip->m_bpmSpin->setValue(128);
     QCOMPARE(beat->text(), QString("Beat 128"));
     on->trigger();
-    QVERIFY(!mgr.m_bpmBtn->isChecked());
+    QVERIFY(!mgr.m_strip->m_bpmBtn->isChecked());
 
     // Jog speed lives in More.
-    QVERIFY(more->menu()->isAncestorOf(mgr.m_speedSpin));
+    QVERIFY(more->menu()->isAncestorOf(mgr.m_strip->m_speedSpin));
     if (!qEnvironmentVariableIsEmpty("TOOLBAR_SHOT"))
         row->grab().save(qEnvironmentVariable("TOOLBAR_SHOT"));
 }
@@ -2933,7 +2935,7 @@ void ProgrammingManager_Test::snapshotBakesTheLiveOutputIntoTheScene()
 
     {
         ModalCloser yes;
-        mgr.slotSnapshotLive();
+        mgr.m_strip->slotSnapshotLive();
         QCOMPARE(yes.seen.count(), 1);
         QVERIFY2(yes.seen.first().contains("2 fixture(s) (6 channel values)"), qPrintable(yes.seen.first()));
     }
@@ -2970,8 +2972,8 @@ void ProgrammingManager_Test::savePositionsSavesOnlyOnTheSecondClick()
     QVERIFY(m_doc->addFunction(look));
 
     ProgrammingManager mgr(nullptr, m_doc);
-    QSignalSpy saves(&mgr, &ProgrammingManager::requestSave);
-    QPushButton *save = mgr.m_saveBtn;
+    QSignalSpy saves(&mgr, &ProgrammingManager::requestSave);   // forwarded from its strip
+    QPushButton *save = mgr.m_strip->m_saveBtn;
     QVERIFY(save != nullptr);
     QVERIFY(!save->isEnabled());                     // nothing nudged yet
     ProgrammerController *pc = m_doc->programmer();
@@ -3468,9 +3470,9 @@ void ProgrammingManager_Test::fourTapsHalfASecondApartShow120Bpm()
     ProgrammingManager mgr(nullptr, m_doc);
     QToolButton *beat = mgr.findChild<QToolButton *>("beatMenu");
     QVERIFY(beat != nullptr);
-    mgr.m_bpmBtn->setChecked(true);                  // Internal beat on
-    QVERIFY(mgr.m_tapBtn->isEnabled());
-    mgr.m_bpmSpin->setValue(90);
+    mgr.m_strip->m_bpmBtn->setChecked(true);                  // Internal beat on
+    QVERIFY(mgr.m_strip->m_tapBtn->isEnabled());
+    mgr.m_strip->m_bpmSpin->setValue(90);
     QCOMPARE(beat->text(), QString("Beat 90"));
     QCOMPARE(m_doc->inputOutputMap()->bpmNumber(), 90);
 
@@ -3480,11 +3482,99 @@ void ProgrammingManager_Test::fourTapsHalfASecondApartShow120Bpm()
     MasterTimer *mt = m_doc->masterTimer();
     const qint64 now = mt->m_clock.nsecsElapsed();
     mt->m_taps = { now - 1500000000LL, now - 1000000000LL, now - 500000000LL };
-    mgr.m_tapBtn->click();
+    mgr.m_strip->m_tapBtn->click();
 
-    QCOMPARE(mgr.m_bpmSpin->value(), 120);
+    QCOMPARE(mgr.m_strip->m_bpmSpin->value(), 120);
     QCOMPARE(m_doc->inputOutputMap()->bpmNumber(), 120);
     QCOMPARE(beat->text(), QString("Beat 120"));
+    // The beat is the show's, not the strip's: off again for the next test.
+    mgr.m_strip->m_bpmBtn->setChecked(false);
+}
+
+/* Board Q228: the programmer's tools are one strip, in Build and in the
+   Show Tree alike. Each tab has its own, and they act on the same state --
+   the programmer selection, park, highlight, the beat -- so they agree. */
+void ProgrammingManager_Test::theShowTreeHasTheSameProgrammerStrip()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    Fixture *a = new Fixture(m_doc);
+    a->setName("Spot A");
+    a->setChannels(4);
+    QVERIFY(m_doc->addFixture(a));
+    Fixture *b = new Fixture(m_doc);
+    b->setName("Spot B");
+    b->setChannels(4);
+    b->setAddress(4);
+    QVERIFY(m_doc->addFixture(b));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    ShowTreeView view(nullptr, m_doc);
+    ProgrammerStrip *build = mgr.programmerStrip();
+    ProgrammerStrip *tree = view.programmerStrip();
+    QVERIFY(build != nullptr && tree != nullptr && build != tree);
+    // The same tools, by name, in both.
+    for (const char *name : { "programmingHighlight", "parkMenu", "markMenu", "beatMenu",
+                              "programmingMoreMenu", "savePositions" })
+    {
+        QVERIFY2(build->findChild<QWidget *>(name) != nullptr, name);
+        QVERIFY2(tree->findChild<QWidget *>(name) != nullptr, name);
+    }
+
+    // Nothing selected: nothing to park or flash, in either.
+    ProgrammerController *pc = m_doc->programmer();
+    pc->setProgrammerSelection({});
+    QVERIFY(!build->m_parkBtn->isEnabled() && !tree->m_parkBtn->isEnabled());
+    QVERIFY(!tree->m_flashBtn->isEnabled());
+
+    // Fixtures picked (the 2D plot, the Library, the Workbench): both follow.
+    pc->setProgrammerSelection({ a->id(), b->id() });
+    QVERIFY(build->m_parkBtn->isEnabled() && tree->m_parkBtn->isEnabled());
+    QVERIFY(tree->m_flashBtn->isEnabled());
+
+    // Park from the Show Tree: Build's Unpark All lights, its Park says Unpark.
+    tree->m_parkBtn->click();
+    QVERIFY(pc->isFixtureParked(a->id()) && pc->isFixtureParked(b->id()));
+    QVERIFY(build->m_unparkBtn->isEnabled());
+    QCOMPARE(build->m_parkBtn->text(), QString("Unpark"));
+    build->m_unparkBtn->click();
+    QVERIFY(!pc->hasParkedFixtures());
+    QVERIFY(!tree->m_unparkBtn->isEnabled());
+
+    // Highlight in one is Highlight in the other.
+    tree->m_highlightBtn->setChecked(true);
+    QVERIFY(pc->isHighlightActive());
+    QVERIFY(build->m_highlightBtn->isChecked());
+    build->m_highlightBtn->setChecked(false);
+    QVERIFY(!tree->m_highlightBtn->isChecked());
+
+    // The beat is the show's: on in Build, Tap works in the Show Tree.
+    QToolButton *treeBeat = tree->findChild<QToolButton *>("beatMenu");
+    build->m_bpmBtn->setChecked(true);
+    build->m_bpmSpin->setValue(96);
+    QVERIFY(tree->m_bpmBtn->isChecked());
+    QVERIFY(tree->m_tapBtn->isEnabled());
+    QCOMPARE(tree->m_bpmSpin->value(), 96);
+    QCOMPARE(treeBeat->text(), QString("Beat 96"));
+    tree->m_bpmBtn->setChecked(false);
+    QVERIFY(!build->m_bpmBtn->isChecked());
+    QVERIFY(!build->m_tapBtn->isEnabled());
+
+    // Save Positions saves from either (App connects both to File ▸ Save).
+    QSignalSpy saves(tree, &ProgrammerStrip::requestSave);
+    pc->designPositionWritten();
+    QVERIFY(tree->m_saveBtn->isEnabled() && build->m_saveBtn->isEnabled());
+    tree->m_saveBtn->click();
+    tree->m_saveBtn->click();
+    QCOMPARE(saves.count(), 1);
+
+    // Snapshot with no Workbench docked in the Show Tree: it says where it works.
+    {
+        ModalCloser ok;
+        tree->slotSnapshotLive();
+        QCOMPARE(ok.seen.count(), 1);
+        QVERIFY2(ok.seen.first().contains("Record"), qPrintable(ok.seen.first()));
+    }
+    pc->setProgrammerSelection({});
 }
 
 void ProgrammingManager_Test::buildsSearchFindsEverySection()

@@ -320,11 +320,11 @@ show then carries the new copy.
 **A tab is missing.** The show's workspace view hides it: **View ▸
 Workspace** picks **Classic QLC+**, **qlcconsole** or **Everything**, and
 the view is saved with the show (an old QLC+ show opens in Classic QLC+,
-without Build, the Show Tree or the Lighting Studio). Choosing a hidden
+without the Show Tree or the Lighting Studio; Build is in Everything only). Choosing a hidden
 tab from **Window** shows it anyway, switching to Everything with a line
 to go back. See [Views](getting-started.md#views).
 
-**⌘Z did nothing.** Undo works in **Build**, the **Show Tree**,
+**⌘Z did nothing.** Undo works in the **Show Tree**, **Build** (Everything view),
 **Fixtures** and the **Lighting Studio** so far (Fixtures and the Studio
 share the rig's history: patching, properties, renames, plot symbols,
 output rules); adding or deleting fixtures and editing groups aren't undone

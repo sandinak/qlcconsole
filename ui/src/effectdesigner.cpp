@@ -1207,7 +1207,7 @@ void EffectDesigner::fillMakeLayerMenu()
         a->setEnabled(false);
         a->setToolTip(tr("Select a cue in the Show Tree to make the layer there"));
     }
-    add(tr("Into a scene in Build…"), "edLayerPickScene",
+    add(tr("Into a Scene…"), "edLayerPickScene",
         tr("Pick a scene: %1 and this effect are added to it.").arg(on), [this]() {
         FunctionSelection fs(this, m_doc);
         fs.setMultiSelection(false);
@@ -1248,7 +1248,7 @@ void EffectDesigner::updateMakeLayerButton()
         m_makeLayerBtn->setText(tr("Make a Layer ▾"));
         m_makeLayerBtn->setToolTip(why.isEmpty()
                                        ? tr("The Try on groups and this effect as a new layer: in a Show Tree "
-                                            "cue, a scene in Build, or a new scene")
+                                            "cue, a scene, or a new scene")
                                        : why);
     }
     else

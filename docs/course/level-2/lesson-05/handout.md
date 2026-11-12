@@ -168,5 +168,5 @@ Cross without the line, so the same fan works on any line.
    screen, **⤢** on the plan opens both in a window you can make bigger, even
    on a second screen. It follows the cue and layer you select. **Esc**
    closes it.
-4. Change the Formation in Build and look at the plan again. Which cues
+4. Change the Formation in the Show Tree's Library and look at the plan again. Which cues
    changed with it, and why is that the point of a palette?

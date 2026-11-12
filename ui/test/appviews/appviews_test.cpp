@@ -54,6 +54,7 @@
 #include "cuerunner.h"
 #include "showtreemodel.h"
 #include "showtreeview.h"
+#include "lookeditor.h"
 #include "showreviewpanel.h"
 #include "showreview.h"
 #include "showtreecontroller.h"
@@ -152,6 +153,47 @@ void AppViews_Test::initTestCase()
     m_app->init();
 }
 
+/* Q228 pictures (BUILDHIDE_SHOTS=dir): the Show Tree at three window
+   sizes, and the tab bar of each workspace view. */
+void AppViews_Test::buildHideShots()
+{
+    const QString dir = qEnvironmentVariable("BUILDHIDE_SHOTS");
+    if (dir.isEmpty())
+        QSKIP("BUILDHIDE_SHOTS not set");
+    QDir().mkpath(dir);
+    const QSize was = m_app->size();
+    const App::WorkspaceView view = m_app->workspaceView();
+    m_app->setWorkspaceView(App::ConsoleView);
+    m_app->showContext("Show Tree");
+    for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+    {
+        m_app->resize(size);
+        for (int i = 0; i < 5; ++i)
+        {
+            QCoreApplication::processEvents();
+            QTest::qWait(30);
+        }
+        QVERIFY(m_app->grab().save(QStringLiteral("%1/showtree-%2x%3.png").arg(dir).arg(size.width()).arg(size.height())));
+    }
+    const struct { App::WorkspaceView v; const char *name; } views[] = {
+        { App::ClassicView, "classic" }, { App::ConsoleView, "qlcconsole" }, { App::EverythingView, "everything" } };
+    m_app->resize(1440, 900);
+    for (const auto &v : views)
+    {
+        m_app->setWorkspaceView(v.v);
+        for (int i = 0; i < 5; ++i)
+        {
+            QCoreApplication::processEvents();
+            QTest::qWait(30);
+        }
+        QVERIFY(m_app->m_tab->tabBar()->grab().save(QStringLiteral("%1/tabs-%2.png").arg(dir, v.name)));
+        QVERIFY(m_app->grab().save(QStringLiteral("%1/window-%2.png").arg(dir, v.name)));
+    }
+    m_app->setWorkspaceView(view);
+    m_app->resize(was);
+    m_app->doc()->resetModified();
+}
+
 void AppViews_Test::cleanupTestCase()
 {
     delete m_app;
@@ -237,8 +279,8 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
     QVERIFY(windowMenu != nullptr);
     QTabWidget *tabs = m_app->m_tab;
     const int views = tabs->count();
-    // And Functions and Shows, which have no tab in the qlcconsole view.
-    QCOMPARE(m_app->m_windowJumps.size(), views + 2);
+    // And Functions, Build and Shows, which have no tab in the qlcconsole view.
+    QCOMPARE(m_app->m_windowJumps.size(), views + 3);
     // The Rig Overview is a window too: offered here as well as under View.
     QVERIFY(windowMenu->actions().contains(m_app->m_rigOverviewAction));
     QCOMPARE(m_app->m_rigOverviewAction->shortcut(),
@@ -371,6 +413,12 @@ void AppViews_Test::shiftClickBreaksATabOutDoubleClickDoesNot()
 
 void AppViews_Test::theBuildTabWearsAHardHat()
 {
+    // Build is a tab of Everything (not of the qlcconsole view, Q228).
+    m_app->setWorkspaceView(App::EverythingView);
+    auto back = qScopeGuard([this]() {
+        m_app->setWorkspaceView(App::ConsoleView);
+        m_app->doc()->resetModified();
+    });
     QTabWidget *tabs = m_app->m_tab;
     int build = -1;
     for (int i = 0; i < tabs->count(); ++i)
@@ -431,7 +479,8 @@ void AppViews_Test::windowFunctionsOpensTheFunctionsTab()
     const int views = tabs->count();
 
     // Still in the Window menu, at its old place; no shortcut, as it has no
-    // tab here (Q69: ⇧⌘4 is the view's fourth tab, Build).
+    // tab here (Q69: ⇧⌘4 is the view's fourth tab, the Show Tree -- Build
+    // has no tab here either, Q228).
     QAction *jump = nullptr;
     foreach (QAction *a, m_app->m_windowJumps)
         if (a->data().toString() == functions)
@@ -441,7 +490,9 @@ void AppViews_Test::windowFunctionsOpensTheFunctionsTab()
     QVERIFY(jump->shortcut().isEmpty());
     QCOMPARE(m_app->m_windowJumps.indexOf(jump), 3);
     QCOMPARE(m_app->m_windowJumps.at(4)->data().toString(), QString("Build"));
-    QCOMPARE(m_app->m_windowJumps.at(4)->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_4));
+    QVERIFY(m_app->m_windowJumps.at(4)->shortcut().isEmpty());
+    QCOMPARE(m_app->m_windowJumps.at(5)->data().toString(), QString("Show Tree"));
+    QCOMPARE(m_app->m_windowJumps.at(5)->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_4));
 
     // A show saved with the Functions tab in front doesn't switch view.
     m_app->showContext("Virtual Console");
@@ -449,16 +500,19 @@ void AppViews_Test::windowFunctionsOpensTheFunctionsTab()
     QCOMPARE(m_app->workspaceView(), App::ConsoleView);
     QCOMPARE(tabs->tabBar()->tabData(tabs->currentIndex()).toString(), QString("Virtual Console"));
 
-    // Opening a function from outside Build: Build's Workbench.
+    // Opening a function from outside Build: Build's Workbench, docked in
+    // the Show Tree (Build has no tab in the qlcconsole view, Q228).
     Doc *doc = m_app->m_doc;
     EFX *efx = new EFX(doc);
     efx->setName("Window Functions EFX");
     QVERIFY(doc->addFunction(efx));
     m_app->showContext("Virtual Console");
     QVERIFY(ProgrammingManager::openFunction(efx->id()));
-    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(build));
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(ShowTreeView::instance()));
+    QCOMPARE(ShowTreeView::instance()->dockedWorkbench(), build->workbench());
     QCOMPARE(build->workbench()->loadedFunction(), efx->id());
     QVERIFY(build->workbench()->findChild<EFXEditor *>() != nullptr);
+    QVERIFY(ShowTreeView::instance()->closeWorkbench());
     doc->deleteFunction(efx->id());
 
     // Window → Functions: the stock tab, in Everything, with the notice.
@@ -469,7 +523,7 @@ void AppViews_Test::windowFunctionsOpensTheFunctionsTab()
     QVERIFY(!m_app->m_viewNotice->isHidden());
     QVERIFY2(m_app->m_viewNoticeText->text().contains("Functions isn't in the qlcconsole view"),
              qPrintable(m_app->m_viewNoticeText->text()));
-    QCOMPARE(tabs->count(), views + 2);   // Everything: + Functions, Shows
+    QCOMPARE(tabs->count(), views + 3);   // Everything: + Functions, Build, Shows
     m_app->setTabLabelMode(App::TabTextOnly);
     for (int i = 0; i < tabs->count(); ++i)
         QCOMPARE(tabs->tabText(i), tabs->tabBar()->tabData(i).toString());
@@ -486,14 +540,118 @@ void AppViews_Test::windowFunctionsOpensTheFunctionsTab()
    view inside one its own, and the Help menu lists the guides. */
 void AppViews_Test::windowEffectsIsBuildEffects()
 {
-    // No Window ▸ Effects: Build ▸ Effects is their one home (Q68, Q97).
+    // No Window ▸ Effects: Build ▸ Effects is their home (Q68, Q97)...
     QVERIFY(m_app->menuBar()->findChild<QAction *>("windowEffects") == nullptr);
     ProgrammingManager *pm = ProgrammingManager::instance();
     QVERIFY(pm != nullptr);
+    m_app->setWorkspaceView(App::EverythingView);
     m_app->showEffects();
     QCOMPARE(m_app->m_tab->currentWidget(), static_cast<QWidget *>(pm));
     QCOMPARE(pm->section(), ProgrammingManager::EffectsSection);
     pm->setSection(ProgrammingManager::ScenesSection);
+
+    // ...where Build is a tab. The qlcconsole view has none (Q228): the Show
+    // Tree's Library, at its effect palettes, and the view stays.
+    m_app->setWorkspaceView(App::ConsoleView);
+    QVERIFY(!m_app->buildInView());
+    QLCPalette *chase = new QLCPalette(QLCPalette::Effect, m_app->doc());
+    chase->setName("Chase");
+    QVERIFY(m_app->doc()->addPalette(chase));
+    const quint32 chaseId = chase->id();
+    auto tidy = qScopeGuard([this, chaseId]() { m_app->doc()->deletePalette(chaseId); });
+    ShowTreeView *tree = ShowTreeView::instance();
+    QVERIFY(tree != nullptr);
+    QVERIFY(QMetaObject::invokeMethod(tree, "reloadLibrary"));
+    m_app->showEffects();
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QCOMPARE(m_app->m_tab->currentWidget(), static_cast<QWidget *>(tree));
+    QTreeWidgetItem *at = tree->library()->currentItem();
+    QVERIFY(at != nullptr);
+    QCOMPARE(at->data(0, ShowTreeView::PathRole).toString(), QString("Palettes/Effects"));
+    QVERIFY(m_app->m_viewNotice->isHidden());
+    m_app->doc()->resetModified();
+}
+
+/* Board Q228: the qlcconsole view has no Build tab. What opened in Build --
+   a function, a palette, Show Review's palette fix -- opens in the Show
+   Tree there, and the view never switches to Everything on its own. */
+void AppViews_Test::withBuildHiddenItsJumpsLandInTheShowTree()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    Doc *doc = m_app->doc();
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QVERIFY(!m_app->buildInView());
+    ProgrammingManager *pm = ProgrammingManager::instance();
+    ShowTreeView *tree = ShowTreeView::instance();
+    QVERIFY(pm != nullptr && tree != nullptr);
+    QCOMPARE(tabs->indexOf(pm), -1);                    // hidden, still there
+
+    Scene *scene = new Scene(doc);
+    scene->setName("01-01.01-Wash");
+    QVERIFY(doc->addFunction(scene));
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, doc);
+    blue->setName("Deep blue");
+    blue->setValue(QColor(0, 0, 255));
+    QVERIFY(doc->addPalette(blue));
+    const quint32 sid = scene->id(), pid = blue->id();
+    auto tidy = qScopeGuard([this, doc, sid, pid]() {
+        if (ShowTreeView::instance() != nullptr)
+            ShowTreeView::instance()->closeWorkbench();
+        doc->deleteFunction(sid);
+        doc->deletePalette(pid);
+        m_app->setWorkspaceView(App::ConsoleView);
+        doc->resetModified();
+    });
+
+    // A function (a context menu's Open, Why On, a chaser's step...): the
+    // Workbench docked in the Show Tree, the function loaded in it.
+    m_app->showContext("Virtual Console");
+    QVERIFY(ProgrammingManager::openFunction(sid));
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(tree));
+    QVERIFY(tree->isWorkbenchDocked());
+    QCOMPARE(tree->dockedWorkbench(), pm->workbench());
+    QCOMPARE(pm->workbench()->loadedFunction(), sid);
+    QVERIFY(m_app->m_viewNotice->isHidden());
+    // ↩ Show Tree: the page back, the Workbench home in Build.
+    QVERIFY(tree->closeWorkbench());
+    QVERIFY(!pm->isWorkbenchLent());
+
+    // A palette: found in the Library, open in the Show Tree's Look Editor.
+    LookEditor *treeLook = tree->findChild<LookEditor *>("stLookEditor");
+    QVERIFY(treeLook != nullptr);
+    m_app->showContext("Fixtures");
+    QVERIFY(ProgrammingManager::openPalette(pid));
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(tree));
+    QCOMPARE(treeLook->paletteId(), pid);
+    QVERIFY(!treeLook->isHidden());
+    QVERIFY(tree->library()->currentItem() != nullptr);
+    QCOMPARE(tree->library()->currentItem()->data(0, ShowTreeView::IdRole).toUInt(), pid);
+
+    // Show Review's palette fix: the same place.
+    m_app->showContext("Fixtures");
+    QVERIFY(m_app->reviewJump(m_app, "palette", QVariantList() << pid));
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(tree));
+    QCOMPARE(treeLook->paletteId(), pid);
+    QVERIFY(!treeLook->isHidden());
+
+    // In Everything, Build has them, as before.
+    m_app->setWorkspaceView(App::EverythingView);
+    QVERIFY(m_app->buildInView());
+    QVERIFY(ProgrammingManager::openFunction(sid));
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(pm));
+    QCOMPARE(pm->workbench()->loadedFunction(), sid);
+
+    // Window ▸ Build from the qlcconsole view is the one way there: asked
+    // for by name, it shows Everything and says so (Back returns).
+    m_app->setWorkspaceView(App::ConsoleView);
+    m_app->showContext("Build");
+    QCOMPARE(m_app->workspaceView(), App::EverythingView);
+    QVERIFY(!m_app->m_viewNotice->isHidden());
+    m_app->m_viewNoticeButton->click();
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
 }
 
 void AppViews_Test::helpOpensOnWhatIsInFront()
@@ -695,8 +853,8 @@ void AppViews_Test::theRunTabIsTheCueRunner()
         if (a->data().toString() == QLatin1String("Run"))
             jump = a;
     QVERIFY(jump != nullptr);
-    // The qlcconsole view's eighth tab (Q69, Q79).
-    QCOMPARE(jump->shortcut(), QKeySequence("CTRL+SHIFT+8"));
+    // The qlcconsole view's seventh tab (Q69, Q79; Build hidden, Q228).
+    QCOMPARE(jump->shortcut(), QKeySequence("CTRL+SHIFT+7"));
     jump->trigger();
     QWidget *page = m_app->m_tab->currentWidget();
     CueRunner *runner = qobject_cast<CueRunner *>(page);
@@ -704,10 +862,10 @@ void AppViews_Test::theRunTabIsTheCueRunner()
     QCOMPARE(runner->runnerSize(), CueRunner::Full);
     QCOMPARE(runner->follow(), ShowTree::invalidId());    // the current production
     QCOMPARE(page->property("helpTopic").toString(), QString("show-tree.md#the-cue-runner"));
-    // The others are numbered by the view too (⇧⌘7 is Simple Desk).
+    // The others are numbered by the view too (⇧⌘6 is Simple Desk).
     foreach (QAction *a, m_app->m_windowJumps)
         if (a->data().toString() == QLatin1String("Simple Desk"))
-            QCOMPARE(a->shortcut(), QKeySequence("CTRL+SHIFT+7"));
+            QCOMPARE(a->shortcut(), QKeySequence("CTRL+SHIFT+6"));
 }
 
 void AppViews_Test::noTwoApplicationShortcutsShareAKey()
@@ -2377,7 +2535,7 @@ void AppViews_Test::eachWorkspaceViewShowsItsTabs()
     QCOMPARE(m_app->workspaceView(), App::ConsoleView);     // a new show
     const QStringList classic = { "Fixtures", "Functions", "Shows", "Virtual Console",
                                   "Simple Desk", "Connections" };
-    const QStringList console = { "Connections", "Fixtures", "Lighting Studio", "Build",
+    const QStringList console = { "Connections", "Fixtures", "Lighting Studio",
                                   "Show Tree", "Virtual Console", "Simple Desk", "Run" };
     const QStringList everything = { "Connections", "Fixtures", "Lighting Studio", "Functions",
                                      "Build", "Show Tree", "Shows", "Virtual Console",
@@ -2540,9 +2698,9 @@ void AppViews_Test::windowShortcutsFollowTheView()
 {
     QCOMPARE(m_app->workspaceView(), App::ConsoleView);
     QCOMPARE(windowJumpsAsShown(m_app),
-             QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Build 4",
-                           "Show Tree 5", "Virtual Console 6", "Simple Desk 7", "Run 8",
-                           "|", "Functions", "Shows" }));
+             QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Show Tree 4",
+                           "Virtual Console 5", "Simple Desk 6", "Run 7",
+                           "|", "Functions", "Build", "Shows" }));
 
     m_app->setWorkspaceView(App::ClassicView);
     QCOMPARE(windowJumpsAsShown(m_app),
@@ -2570,10 +2728,10 @@ void AppViews_Test::windowShortcutsFollowTheView()
     QTabWidget *tabs = m_app->m_tab;
     m_app->slotDetachContext(tabs->indexOf(VirtualConsole::instance()));
     QStringList shown = windowJumpsAsShown(m_app);
-    QCOMPARE(shown.value(5), QString("Virtual Console — In Its Own Window 6"));
-    QCOMPARE(shown.value(6), QString("Simple Desk 7"));
+    QCOMPARE(shown.value(4), QString("Virtual Console — In Its Own Window 5"));
+    QCOMPARE(shown.value(5), QString("Simple Desk 6"));
     reattach(m_app, "Virtual Console");
-    QCOMPARE(windowJumpsAsShown(m_app).value(5), QString("Virtual Console 6"));
+    QCOMPARE(windowJumpsAsShown(m_app).value(4), QString("Virtual Console 5"));
     m_app->doc()->resetModified();
 }
 
@@ -2594,10 +2752,10 @@ void AppViews_Test::aBrokenOutViewSurvivesAViewSwitch()
         return nullptr;
     };
 
-    // The Virtual Console (in both views) and Build (qlcconsole only) out in
-    // windows.
+    // The Virtual Console (in both views) and the Show Tree (qlcconsole
+    // only) out in windows.
     QWidget *vc = VirtualConsole::instance();
-    QWidget *build = ProgrammingManager::instance();
+    QWidget *build = ShowTreeView::instance();
     m_app->slotDetachContext(tabs->indexOf(vc));
     m_app->slotDetachContext(tabs->indexOf(build));
     DetachedContext *vcWin = windowOf(vc);
@@ -2611,7 +2769,7 @@ void AppViews_Test::aBrokenOutViewSurvivesAViewSwitch()
     QCOMPARE(tabs->indexOf(vc), -1);
     QCOMPARE(tabLabels(tabs), QStringList({ "Fixtures", "Functions", "Shows",
                                             "Simple Desk", "Connections" }));
-    // Build has no tab in Classic: put back from the menu it isn't offered...
+    // The Show Tree has no tab in Classic: put back from the menu it isn't offered...
     QCOMPARE(m_app->detachedContexts(), QStringList({ "Virtual Console" }));
     // ...and closing its window puts it away, not on the bar.
     buildWin->close();
@@ -2621,14 +2779,14 @@ void AppViews_Test::aBrokenOutViewSurvivesAViewSwitch()
     vcWin->close();
     QCOMPARE(tabs->indexOf(vc), 3);
 
-    // Out again, and back to qlcconsole: Build is a tab again, the VC stays out.
+    // Out again, and back to qlcconsole: the Show Tree is a tab again, the VC stays out.
     m_app->slotDetachContext(tabs->indexOf(vc));
     vcWin = windowOf(vc);
     m_app->setWorkspaceView(App::ConsoleView);
     QCOMPARE(windowOf(vc), vcWin);
     QCOMPARE(tabs->indexOf(build), 3);
     vcWin->close();
-    QCOMPARE(tabLabels(tabs), QStringList({ "Connections", "Fixtures", "Lighting Studio", "Build",
+    QCOMPARE(tabLabels(tabs), QStringList({ "Connections", "Fixtures", "Lighting Studio",
                                             "Show Tree", "Virtual Console", "Simple Desk", "Run" }));
     m_app->doc()->resetModified();
 }

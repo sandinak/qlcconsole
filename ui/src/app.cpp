@@ -48,6 +48,7 @@
 #include "itemicons.h"
 #include "functionmanager.h"
 #include "programmingmanager.h"
+#include "programmerstrip.h"
 #include "showtreecontroller.h"
 #include "unsavedchangesdialog.h"
 #include "changejournal.h"
@@ -870,6 +871,8 @@ void App::init()
                 if (!buildTab.isNull())
                     buildTab->returnWorkbench(wb);
             });
+        // Its programmer strip's Save Positions saves, as Build's does.
+        connect(tree->programmerStrip(), &ProgrammerStrip::requestSave, this, &App::slotFileSave);
         w = tree;
     }
     addTab(w, ItemIcons::showTreeIcon(), tr("Show Tree"));
@@ -3310,8 +3313,8 @@ void App::initMenuBar()
               QT_TR_NOOP("The QLC+ tabs, in QLC+'s order: Fixtures, Functions, Shows, "
                          "Virtual Console, Simple Desk, Inputs/Outputs") },
             { ConsoleView, "viewWorkspaceConsole",
-              QT_TR_NOOP("Connections, Fixtures, Lighting Studio, Build, Show Tree, Virtual Console, "
-                         "Simple Desk and Run; Shows and Functions are in Everything") },
+              QT_TR_NOOP("Connections, Fixtures, Lighting Studio, Show Tree, Virtual Console, "
+                         "Simple Desk and Run; Build, Shows and Functions are in Everything") },
             { EverythingView, "viewWorkspaceEverything",
               QT_TR_NOOP("Every tab") } };
         for (const auto &v : views)
@@ -5403,6 +5406,14 @@ void App::slotCaptureUndoStackChanged()
 
 void App::showEffects()
 {
+    // Build hidden (the qlcconsole view): the Library's effect palettes, in
+    // the Show Tree -- never a switch to Everything.
+    if (!buildInView() && tabInView(tr("Show Tree")) && ShowTreeView::instance() != nullptr)
+    {
+        showContext(tr("Show Tree"));
+        ShowTreeView::instance()->showLibraryEffects();
+        return;
+    }
     showContext(tr("Build"));
     if (ProgrammingManager *pm = ProgrammingManager::instance())
         pm->setSection(ProgrammingManager::EffectsSection);
@@ -5477,11 +5488,14 @@ QStringList App::workspaceViewTabs(WorkspaceView view)
         return { tr("Fixtures"), tr("Functions"), tr("Shows"), tr("Virtual Console"),
                  tr("Simple Desk"), tr("Connections") };
     case ConsoleView:
-        // Eight tabs, in show order (Q79): no Functions (Q32) or Shows -- they
-        // are in Everything. The Lighting Studio stays (Branson, after Q79),
-        // Build too (Q74). Simple Desk, a QLC+ user's channel check,
-        // sits after the Virtual Console, before Run (Q71).
-        return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"), tr("Build"),
+        // Seven tabs, in show order (Q79): no Functions (Q32) or Shows -- they
+        // are in Everything. The Lighting Studio stays (Branson, after Q79).
+        // No Build (Q228): its programmer strip is the Show Tree's too, the
+        // Library has the palettes, and scenes and collections are built in
+        // Classic / Everything; it runs on, hidden, lending the Show Tree its
+        // Workbench. Simple Desk, a QLC+ user's channel check, sits after the
+        // Virtual Console, before Run (Q71).
+        return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"),
                  tr("Show Tree"), tr("Virtual Console"), tr("Simple Desk"), tr("Run") };
     case EverythingView:
     default:
@@ -5957,8 +5971,8 @@ bool App::offerConsoleViewAfterUpgrade()
     if (tree == nullptr || tree->productions().isEmpty())
         return false;              // nothing upgraded: nothing new to show
     m_upgradeOfferMade = true;
-    showViewNotice(tr("This show now has a Show Tree. The qlcconsole view shows it, with Build "
-                      "and Run, beside the QLC+ tabs you know."),
+    showViewNotice(tr("This show now has a Show Tree. The qlcconsole view shows it, with the "
+                      "Lighting Studio and Run, beside the QLC+ tabs you know."),
                    tr("Switch to the qlcconsole View"),
                    [this]() { setWorkspaceView(ConsoleView); });
     return true;
@@ -10062,7 +10076,11 @@ bool App::reviewJump(QWidget *parent, const QString &jump, const QVariantList &d
     }
     if (jump == QLatin1String("palette"))
     {
-        showContext(tr("Build"));
+        // The palette itself, where palettes are edited in this view: the
+        // Show Tree's Library and Look Editor, or Build where it is a tab.
+        if (ProgrammingManager::openPalette(id))
+            return true;
+        showContext(buildInView() || !tabInView(tr("Show Tree")) ? tr("Build") : tr("Show Tree"));
         return true;
     }
     if (jump == QLatin1String("showsettings"))

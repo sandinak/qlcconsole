@@ -336,7 +336,7 @@ void RefinePanel::refresh()
     if (m_session->isSceneMode())
     {
         const Function *f = m_doc->function(m_session->currentLayer());
-        m_title->setText(tr("Focus this look \342\200\224 scene %1  \302\267  %2 of %3 (Build)")
+        m_title->setText(tr("Focus this look \342\200\224 scene %1  \302\267  %2 of %3 (Workbench)")
                          .arg(f != nullptr ? f->name() : QString())
                          .arg(m_session->layerIndex() + 1).arg(m_session->layers().size()));
     }

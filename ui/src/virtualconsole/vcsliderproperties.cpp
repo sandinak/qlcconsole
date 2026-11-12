@@ -498,7 +498,7 @@ void VCSliderProperties::buildEffectPage()
     QLabel *info = new QLabel(tr("Effect mode moves one setting of an effect while it plays: a live "
                                  "value over its palette's, gone when the effect stops (the Store button "
                                  "on the slider keeps it). \"The current effect\" is the one started or "
-                                 "selected in Build last, so one fader serves every song. An effect "
+                                 "selected in the Workbench last, so one fader serves every song. An effect "
                                  "without the setting reads n/a."), m_effectBox);
     info->setWordWrap(true);
     box->addWidget(info);

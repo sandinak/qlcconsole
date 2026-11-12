@@ -222,6 +222,7 @@ add_library(${module_name}
     powerdistributionwidget.cpp powerdistributionwidget.h
     universeusagewidget.cpp universeusagewidget.h
     programmingmanager.cpp programmingmanager.h
+    programmerstrip.cpp programmerstrip.h
     programmingoutline.cpp programmingoutline.h
     workbenchcommand.cpp workbenchcommand.h
     splitterhandles.cpp splitterhandles.h

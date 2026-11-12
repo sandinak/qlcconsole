@@ -54,8 +54,8 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
 
     QVBoxLayout *lay = new QVBoxLayout(this);
     lay->setContentsMargins(0, 0, 0, 0);
-    m_empty = new QLabel(tr("No triggers yet. Right-click a scene or effect in Build, or a cue list, "
-                            "cue or hit in the Show Tree, and choose Learn trigger…; then press the "
+    m_empty = new QLabel(tr("No triggers yet. Right-click a cue list, cue or hit in the Show Tree (or a "
+                            "scene or effect in Build), and choose Learn trigger…; then press the "
                             "key, pad or button that should fire it."), this);
     m_empty->setObjectName(QStringLiteral("controlMapEmpty"));
     m_empty->setWordWrap(true);
@@ -227,7 +227,7 @@ void ControlMapPanel::buildEncoderBox(QVBoxLayout *lay)
     m_encoderBox = new QGroupBox(tr("Encoder bank"), this);
     m_encoderBox->setObjectName(QStringLiteral("encoderBankBox"));
     m_encoderBox->setToolTip(tr("A MIDI controller with endless encoders turns the attributes of what is "
-                                "selected in Build: banks for Intensity, Colour, Position, Beam and "
+                                "selected in the Workbench: banks for Intensity, Colour, Position, Beam and "
                                 "Gobo / prism"));
     QVBoxLayout *box = new QVBoxLayout(m_encoderBox);
 
@@ -358,7 +358,7 @@ void ControlMapPanel::refreshEncoder()
     }
     else
     {
-        map = tr("Off. Pick the controller to turn Build's selection with its encoders.");
+        map = tr("Off. Pick the controller to turn the Workbench's selection with its encoders.");
     }
     m_encMap->setText(map);
     m_encNote->setText(key.isEmpty() || key == QLatin1String("custom") ? QString() : EncoderBank::presetNote(key));

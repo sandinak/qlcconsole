@@ -233,9 +233,6 @@ private slots:
     /** Fixtures picked (the 2D view): the Workbench shows their channels. */
     void slotFixturesSelected(const QList<quint32> &fixtureIds);
     void slotFixGroupSourceSelectionChanged();
-    /** What is selected changed in the Workbench: Flash, Park, Mark follow. */
-    void slotSelectionTools();
-
     // Bundle CRUD
     void slotStampBundle(const QString &bundleName);
     void slotSaveAsBundle();
@@ -250,32 +247,6 @@ private slots:
     /** Re-estimate the load of what is lit and refresh the footer. */
     void recomputePower();
 
-    // Highlight
-    void slotHighlightToggled(bool on);
-    /** Momentarily flash the selected fixtures to identify them in the rig. */
-    void slotFlashSelection();
-
-    // Snapshot live DMX into the open scene (capture an external-console look)
-    void slotSnapshotLive();
-
-    // Park (hold fixtures out of cue output)
-    void slotParkSelection();
-    void slotUnparkAll();
-    /** Refresh Park/Unpark button state from the ProgrammerController. */
-    void slotParkChanged();
-
-    // Mark (move-in-black: pre-position dark fixtures)
-    void slotMarkSelection();
-    void slotUnmarkAll();
-    /** Refresh Mark/Unmark button state from the ProgrammerController. */
-    void slotMarkChanged();
-
-    // Followspot
-    void slotFollowSpotBindX();
-    void slotFollowSpotBindY();
-    void slotFollowSpotClearBindings();
-    void slotFollowSpotBindingChanged();
-    void slotJoystickUpdated(float pan, float tilt);
     /** The full 'how a look is built' explanation. Shown once on a first
      *  run, and on demand after that. */
     void showProgrammingGuide();
@@ -283,6 +254,8 @@ public:
     /** The full 'how a look is built' explanation, from anywhere that needs
      *  a way back to it. */
     static void showGuide(QWidget *parent);
+    /** The programmer's tools (ProgrammerStrip, the Show Tree's too). */
+    class ProgrammerStrip *programmerStrip() const { return m_strip; }
 private:
     /** True exactly once, ever -- and records that it has answered. */
     static bool takeFirstRunGuideFlag();
@@ -290,14 +263,8 @@ private:
     /** Dispatches controller button actions from ProgrammerController. */
     void slotButtonAction(const QString &action);
 
-    // BPM / internal beat generator
-    void slotBpmToggled(bool on);
-    void slotBpmChanged(int bpm);
-    void slotTapBeat();
-
-    // Design-mode joystick save
+    /** A joystick nudge: the Look Editor shows the palette's new value. */
     void slotDesignPositionWritten();
-    void slotSavePositions();
     void slotFollowSpotPinChanged(bool visible, float xMeters, float yMeters);
 
 private:
@@ -316,10 +283,6 @@ private:
     /** The effect palettes / classic effects a menu on @a clicked acts on:
      *  the selection if the clicked row is in it, else the clicked row. */
     void effectTargets(QTreeWidgetItem *clicked, QList<quint32> &palettes, QList<quint32> &functions) const;
-
-    /** Enable/label the Park button (Park vs Unpark) from selection + park state. */
-    void updateParkButtonLabel();
-    void updateMarkButtonLabel();
 
     /** Select @a sceneId's row in the navigator (and so load it). */
     void revealScene(quint32 sceneId);
@@ -427,37 +390,8 @@ private:
     BundleBrowser       *m_bundleBrowser = nullptr;
     BundleCache         *m_bundleCache   = nullptr;
 
-    // Toolbar buttons
-    QPushButton *m_highlightBtn;
-    QPushButton *m_flashBtn    = nullptr;
-    QPushButton *m_parkBtn     = nullptr;
-    QPushButton *m_unparkBtn   = nullptr;
-    QPushButton *m_markBtn     = nullptr;
-    QPushButton *m_unmarkBtn   = nullptr;
-    QPushButton *m_autoMibBtn  = nullptr;
-    QDoubleSpinBox *m_mibGapSpin = nullptr;
-    QPushButton *m_snapshotBtn = nullptr;
-
-    // BPM / internal beat generator
-    QPushButton  *m_bpmBtn;
-    QSpinBox     *m_bpmSpin;
-    QPushButton  *m_tapBtn;
-
-    // Followspot config panel (kept for signal wiring; always hidden from UI)
-    QWidget     *m_followSpotPanel;
-    QPushButton *m_fsBindXBtn;
-    QPushButton *m_fsBindYBtn;
-    QPushButton *m_fsClearBtn;
-    QLabel      *m_fsXLabel;
-    QLabel      *m_fsYLabel;
-    QLabel      *m_fsJoyLabel;  // live pan/tilt readout
-
-    // Joystick speed spinner
-    QSpinBox    *m_speedSpin = nullptr;
-
-    // Save button (armed two-press confirmation)
-    QPushButton *m_saveBtn = nullptr;
-    bool         m_saveArmed = false;
+    // The programmer's tools (the top bar borrows them)
+    class ProgrammerStrip *m_strip = nullptr;
 
     // Power/amperage estimate (Design mode only). The readout lives in the
     // app status-bar chip now (powerEstimateChanged); the timer here just
@@ -488,7 +422,7 @@ private:
     void updatePowerEstimateActive();
 
 signals:
-    /** Emitted when the user confirms Save Positions. */
+    /** Emitted when the user confirms Save Positions (the strip's). */
     void requestSave();
     /** Re-emits LookEditor::lookFocusChanged — the on-screen look changed
      *  (or was redrawn in place). Lets a control-surface overlay recompute

@@ -93,7 +93,7 @@ QMenu *SelectionMenu::addTo(QMenu *menu, Doc *doc, const QList<quint32> &fixture
         what->setEnabled(false);
         sub->addSeparator();
     }
-    const QString none = tr("Open the Build tab or a Show Tree cue first");
+    const QString none = tr("Open a Show Tree cue or a scene in the Workbench first");
     QAction *newLayer = layerAction(newLayerText(), wb.isNull() ? none : wb->newLayerBlocker(ids),
                                     [ids](Workbench *w) { return w->newLayerFromFixtures(ids); });
     if (newLayer->isEnabled() && doc != nullptr)

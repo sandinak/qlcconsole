@@ -1,6 +1,6 @@
 # Show Tree
 
-The Show Tree tab (beside Build; **⇧⌘5** in the qlcconsole view) is where you write a show
+The Show Tree tab (**⇧⌘4** in the qlcconsole view; Build is a tab of the Everything view) is where you write a show
 as cues. Everything is in one tree:
 
 **Production → Cue list → Cue → Layer**
@@ -24,7 +24,9 @@ as cues. Everything is in one tree:
   tab and the **Cue Runner** VC widget play it all
   ([The cue runner](#the-cue-runner)).
 
-**The Build tab works alongside it.** It makes what the tree schedules:
+**The Build tab works alongside it** (in the Everything view; the
+qlcconsole view hides it and the Show Tree borrows its Workbench and
+programmer strip). It makes what the tree schedules:
 palettes, effect design, `.qxfx` files, Bundles, scenes and collections,
 in its Workbench. The
 everyday palette work — new, rename, folders, delete — is also in the
@@ -56,6 +58,9 @@ is changed only in the tree: elsewhere it is locked. See
   the rig shows is not here: the **stage chip in the footer** says it, such
   as *"Stage: 1.0.1 Verse (Show Tree)"* (see
   [Seeing it on the rig](#seeing-it-on-the-rig)).
+- **The programmer strip.** A row under the toolbar, the same widget as
+  Build's top bar (see [The programmer strip](#the-programmer-strip)).
+
 Left to right: **the Library**, **the tree**, **the page** — so a drag
 from the Library lands in the tree right beside it.
 
@@ -148,6 +153,23 @@ from the Library lands in the tree right beside it.
   is always there.
 
 The dividers between them can be dragged; their places are kept.
+
+### The programmer strip
+
+Under the toolbar is the **programmer strip**: Highlight, Flash, **Park ▾**
+(Park selected fixtures, Unpark All), **Move in Black ▾** (Mark selected,
+Unmark All, Auto move-in-black, Lead time), **Beat ▾** (Internal beat on,
+BPM, Speed Masters…), **Tap**, **Save Positions** and **More ▾**
+(Snapshot live output into the scene, Jog speed). Build's top bar is the
+same widget, so the two tabs agree: both act on the programmer selection
+(fixtures picked in the Lighting Studio's 2D plot, the Library or the
+Workbench) and on the same state: park, highlight, move in black and the
+beat.
+
+**Snapshot** works when a scene is open in the Workbench docked here;
+otherwise it says that **Record** makes a cue of what is on stage. The
+joystick's axes bind (**I/O ▸ Mapping ▸ Joystick**) whenever a strip
+shows.
 
 ## Working on a cue in the Workbench
 
@@ -1033,7 +1055,8 @@ of its own.
 
 A **Formation** palette holds Spread, Grouping and Cross (any of them) and
 works with any line: drop *Pairs crossed* on a layer, or on a cue for the
-cue's formation, beside an Aim palette. Make and edit them in Build
+cue's formation, beside an Aim palette. Set a Spread, Grouping or Cross on a layer and choose **Save as
+Formation…** in the Formation menu; edit them in the Everything view's Build
 ([Formation palettes](build.md#formation-palettes)); typed:
 `Towers formation "Pairs crossed"`, `cue look formation "Pairs crossed"`.
 They are in the Library under **Palettes ▸ Formation**: drag one onto a cue
@@ -2215,8 +2238,9 @@ operation is one undo step on the tab's [Undo](#undo).
   really that old layout changes: a folder you made that happens to be
   called like a type (*Color* holding levels) or *Colour* stays as it is.
   Saved, every path says it is the new kind, and is never changed again.
-- **Still in Build:** designing effects (the browser, presets, WLED),
-  `.qxfx` import and export, Bundles, and capturing.
+- **Still in Build** (a tab of the Everything view): designing effects
+  (the browser, presets, WLED), `.qxfx` import and export, Bundles, and
+  capturing.
 
 ## Editing the tree
 
@@ -2904,17 +2928,18 @@ cue that only brings its level up shows that, never the look of the cue
 you skipped.
 
 It is one setting of the show. Its switch is the Show Tree's **MIB**
-button; Build's **Move in Black ▾** shows and changes the same setting:
+button; the programmer strip's **Move in Black ▾** (Build's and the Show
+Tree's) shows and changes the same setting:
 
 - **The Show Tree's header: MIB**, at its right end, just left of Stop
   all, Blackout and Blind. Click
   it to turn it on (it lights up) or off. Its arrow holds the same switch
   and the **Lead time**. While it is moving lights, it says how many:
   *MIB · 3*.
-- **Build → Move in black ▾** (the Build tab's top bar): **Auto
-  move-in-black** and **Lead time**, with marking lights by hand. While
-  Auto is on it reads **Move in Black · Auto** (see
-  [The Build tab](build.md#layout)).
+- **The programmer strip's Move in black ▾** (a row under the Show Tree's
+  toolbar, and Build's top bar): **Auto move-in-black** and **Lead time**,
+  with marking lights by hand. While Auto is on it reads **Move in Black ·
+  Auto** (see [The Build tab](build.md#layout)).
 
 It is saved with this show, not this computer: another show keeps its own,
 and a new show starts with it off.

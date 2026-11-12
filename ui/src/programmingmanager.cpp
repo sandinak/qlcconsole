@@ -44,7 +44,7 @@
 
 #include <QDebug>
 #include "mainbar.h"
-#include "speedmasterspanel.h"
+#include "programmerstrip.h"
 #include "programmingmanager.h"
 #include "measurementunits.h"
 #include "editkeys.h"
@@ -224,361 +224,20 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     QVBoxLayout *root = new QVBoxLayout(this);
     root->setContentsMargins(4, 4, 4, 4);
     root->setSpacing(3);
-    // Toolbar: Highlight + Followspot toggles
+    /* The programmer's tools (board Q228): the strip the Show Tree has
+       too -- one implementation, the same state. A toolbar, so the main
+       window's top bar borrows it while this is the current tab (MainBar). */
     {
-        QHBoxLayout *toolbar = new QHBoxLayout;
-        toolbar->setContentsMargins(0, 0, 0, 0);
+        ProgrammerStrip::Host host;
+        host.workbench = [this]() { return isWorkbenchLent() ? nullptr : m_workbench; };
+        m_strip = new ProgrammerStrip(m_doc, host, this);
+        connect(m_strip, &ProgrammerStrip::requestSave, this, &ProgrammingManager::requestSave);
+        root->addWidget(m_strip);
+        MainBar::registerTabTools(this, m_strip);
 
-        m_highlightBtn = new QPushButton(tr("Highlight"), this);
-        m_highlightBtn->setObjectName("programmingHighlight");
-        m_highlightBtn->setCheckable(true);
-        m_highlightBtn->setToolTip(tr("Drive selected fixtures to full white so you can identify them in the rig"));
-        toolbar->addWidget(m_highlightBtn);
-
-        m_flashBtn = new QPushButton(tr("Flash"), this);
-        m_flashBtn->setToolTip(tr("Momentarily flash the selected fixtures to identify them in the rig"));
-        m_flashBtn->setEnabled(false);
-        toolbar->addWidget(m_flashBtn);
-
-        m_parkBtn = new QPushButton(tr("Park"), this);
-        m_parkBtn->setToolTip(tr("Hold the selected fixtures at their current values, out of cue "
-                                 "output, until unparked (saved with the workspace)"));
-        m_parkBtn->setEnabled(false);
-
-        m_unparkBtn = new QPushButton(tr("Unpark All"), this);
-        m_unparkBtn->setToolTip(tr("Release every parked fixture"));
-        m_unparkBtn->setEnabled(false);
-
-        m_markBtn = new QPushButton(tr("Mark"), this);
-        m_markBtn->setToolTip(tr("Move-in-black: pre-position the selected DARK fixtures "
-                                 "(pan/tilt, colour, gobo, beam) to where they'll be revealed, "
-                                 "held out of cue output. Auto-releases when a cue lights them; "
-                                 "saved with the workspace."));
-        m_markBtn->setEnabled(false);
-
-        m_unmarkBtn = new QPushButton(tr("Unmark All"), this);
-        m_unmarkBtn->setToolTip(tr("Release every marked fixture"));
-        m_unmarkBtn->setEnabled(false);
-
-        m_autoMibBtn = new QPushButton(tr("Auto MIB"), this);
-        m_autoMibBtn->setCheckable(true);
-        m_autoMibBtn->setToolTip(tr("Automatic move-in-black: while a chaser or the show "
-                                    "timeline runs, look ahead to the next cue and pre-position "
-                                    "any dark mover it will reveal — as long as there's enough "
-                                    "lead time. Releases each fixture as its cue lights it."));
-
-        m_mibGapSpin = new QDoubleSpinBox(this);
-        m_mibGapSpin->setRange(0.1, 10.0);
-        m_mibGapSpin->setSingleStep(0.1);
-        m_mibGapSpin->setDecimals(1);
-        m_mibGapSpin->setSuffix(tr(" s lead"));
-        m_mibGapSpin->setToolTip(tr("Move-in-black lead time: the next cue must be at least this "
-                                    "far away for a dark mover to be pre-set. Below it there's no "
-                                    "time to move in black, so it's skipped."));
-
-        m_snapshotBtn = new QPushButton(tr("Snapshot"), this);
-        m_snapshotBtn->setToolTip(tr("Bake the current live DMX output into the open "
-            "scene as static values — capture a look built on an external console."));
-        connect(m_snapshotBtn, SIGNAL(clicked()), this, SLOT(slotSnapshotLive()));
-
-        // BPM / internal beat generator
-
-        m_bpmSpin = new QSpinBox(this);
-        m_bpmSpin->setRange(20, 400);
-        m_bpmSpin->setValue(120);
-        m_bpmSpin->setToolTip(tr("Beats per minute for internal beat generator"));
-        m_bpmSpin->setEnabled(false);
-
-        m_tapBtn = new QPushButton(tr("Tap"), this);
-        m_tapBtn->setToolTip(tr("Tap to set BPM from live tempo"));
-        m_tapBtn->setEnabled(false);
-        toolbar->addWidget(m_tapBtn);
-
-        m_bpmBtn = new QPushButton(tr("Beat On"), this);
-        m_bpmBtn->setCheckable(true);
-        m_bpmBtn->setToolTip(tr("Enable QLC+ internal beat generator (drives _beat/_bpm in generators)"));
-
-        QPushButton *mastersBtn = new QPushButton(tr("Masters"), this);
-        mastersBtn->setObjectName(QStringLiteral("speedMastersButton"));
-        mastersBtn->setToolTip(tr("The four speed masters: a tempo, tap, rate and pause each, "
-                                  "for effects, looks and chases to run on"));
-        connect(mastersBtn, &QPushButton::clicked, this, [this]() {
-            SpeedMastersPanel::open(m_doc, this);
-        });
-
-
-        m_speedSpin = new QSpinBox(this);
-        m_speedSpin->setRange(10, 500);
-        m_speedSpin->setSingleStep(10);
-        m_speedSpin->setValue(100);
-        m_speedSpin->setSuffix(tr("%"));
-        m_speedSpin->setToolTip(tr("Joystick speed for position editing (100% = %1 a second at full deflection)")
-                                    .arg(MeasurementUnits::formatLength(2000.0)));
-
-        m_saveBtn = new QPushButton(tr("Save Positions"), this);
-        m_saveBtn->setObjectName(QStringLiteral("savePositions"));
-        m_saveBtn->setEnabled(false);
-        m_saveBtn->setToolTip(tr(
-            "Finalize joystick-driven pan/tilt/aim edits and save the workspace.\n"
-            "Only these joystick edits need this button — every other look edit "
-            "here (color, dimmer, gradient, …) is already live; the footer's "
-            "● Unsaved changes indicator tracks those."));
-        toolbar->addWidget(m_saveBtn);
-
-        /* One row, no scrolling ("can we make this row more useful using a
-           dropdown paradigm like we did for the studio options? right now
-           scrolling is a bit obnoxious"): what is pressed all the time stays a
-           button -- Highlight, Flash, Tap, Save Positions -- and the rest sits
-           in drop-downs, as the Lighting Studio's footer does. The buttons
-           behind the menu items are kept (hidden): their state, slots and
-           enabling carry on exactly as before, and each item mirrors its
-           button when the menu opens. */
-        auto dropDown = [this](const QString &text, const QString &name) {
-            QToolButton *b = new QToolButton(this);
-            b->setObjectName(name);
-            b->setText(text);
-            b->setPopupMode(QToolButton::InstantPopup);
-            b->setToolButtonStyle(Qt::ToolButtonTextOnly);
-            QMenu *m = new QMenu(b);
-            m->setToolTipsVisible(true);
-            b->setMenu(m);
-            return b;
-        };
-        auto mirror = [](QMenu *m, QPushButton *btn, const QString &text) {
-            btn->hide();
-            QAction *a = m->addAction(text);
-            a->setToolTip(btn->toolTip());
-            a->setCheckable(btn->isCheckable());
-            QObject::connect(a, &QAction::triggered, btn, [btn]() { btn->click(); });
-            QObject::connect(m, &QMenu::aboutToShow, a, [a, btn]() {
-                a->setEnabled(btn->isEnabled());
-                a->setChecked(btn->isChecked());
-            });
-            return a;
-        };
-        auto fieldAction = [this](QMenu *m, const QString &label, QWidget *field) {
-            QWidget *row = new QWidget(this);
-            QHBoxLayout *rl = new QHBoxLayout(row);
-            rl->setContentsMargins(24, 2, 12, 2);
-            rl->addWidget(new QLabel(label, row));
-            rl->addStretch(1);
-            field->setParent(row);
-            rl->addWidget(field);
-            QWidgetAction *wa = new QWidgetAction(m);
-            wa->setDefaultWidget(row);
-            m->addAction(wa);
-        };
-
-        QToolButton *parkMenu = dropDown(tr("Park"), QStringLiteral("parkMenu"));
-        mirror(parkMenu->menu(), m_parkBtn, tr("Park selected fixtures"));
-        mirror(parkMenu->menu(), m_unparkBtn, tr("Unpark All"));
-
-        QToolButton *markMenu = dropDown(tr("Move in Black"), QStringLiteral("markMenu"));
-        mirror(markMenu->menu(), m_markBtn, tr("Mark selected (pre-position in black)"));
-        mirror(markMenu->menu(), m_unmarkBtn, tr("Unmark All"));
-        markMenu->menu()->addSeparator();
-        mirror(markMenu->menu(), m_autoMibBtn, tr("Auto move-in-black"));
-        fieldAction(markMenu->menu(), tr("Lead time"), m_mibGapSpin);
-        /* The drop-down says when Auto is on ("when we set move in black to
-           auto .. should change the item in the menubar to indicate same"):
-           lit as the Show Tree's MIB button is, "Move in black · Auto", and
-           "MIB · n" while it pre-positions n heads. */
-        markMenu->setStyleSheet(QStringLiteral(
-            "QToolButton#markMenu[mibAuto=\"true\"] { background: palette(highlight);"
-            "  color: palette(highlighted-text); border-radius: 4px;"
-            "  padding: 2px 14px 2px 5px; }"));   // room for the arrow
-        auto markText = [markMenu, this]() {
-            ProgrammerController *pc = m_doc->programmer();
-            const bool on = pc != nullptr && pc->isAutoMoveInBlack();
-            const int presets = pc != nullptr ? pc->moveInBlackPresetCount() : 0;
-            // MIDDLE DOT, as the Show Tree's button.
-            markMenu->setText(!on ? tr("Move in Black")
-                              : presets > 0 ? tr("MIB \302\267 %1").arg(presets)
-                                            : tr("Move in Black \302\267 Auto"));
-            markMenu->setToolTip(!on ? tr("Mark, unmark and auto move-in-black (off)")
-                                 : presets > 0
-                                     ? tr("Auto move-in-black is on: pre-positioning %n head(s) "
-                                          "in black for the next cue.", "", presets)
-                                     : tr("Auto move-in-black is on: nothing to pre-position "
-                                          "right now."));
-            if (markMenu->property("mibAuto").toBool() != on)
-            {
-                markMenu->setProperty("mibAuto", on);
-                markMenu->style()->unpolish(markMenu);
-                markMenu->style()->polish(markMenu);
-            }
-        };
+        // The engine's side of programming, here once (not per strip).
         if (ProgrammerController *pc = m_doc->programmer())
         {
-            connect(pc, &ProgrammerController::autoMoveInBlackChanged, markMenu,
-                    [markText](bool) { markText(); });
-            connect(pc, &ProgrammerController::moveInBlackPresetsChanged, markMenu,
-                    [markText](int) { markText(); });
-        }
-        markText();
-
-        QToolButton *beatMenu = dropDown(tr("Beat"), QStringLiteral("beatMenu"));
-        mirror(beatMenu->menu(), m_bpmBtn, tr("Internal beat on"));
-        fieldAction(beatMenu->menu(), tr("BPM"), m_bpmSpin);
-        beatMenu->menu()->addSeparator();
-        mastersBtn->hide();
-        QAction *mastersAct = beatMenu->menu()->addAction(tr("Speed Masters…"));
-        mastersAct->setToolTip(mastersBtn->toolTip());
-        connect(mastersAct, &QAction::triggered, mastersBtn, &QPushButton::click);
-        // The button says the tempo, so it needn't be opened to read it.
-        auto beatText = [beatMenu, this]() {
-            beatMenu->setText(m_bpmBtn->isChecked() ? tr("Beat %1").arg(m_bpmSpin->value())
-                                                    : tr("Beat off"));
-        };
-        connect(m_bpmBtn, &QPushButton::toggled, beatMenu, [beatText](bool) { beatText(); });
-        connect(m_bpmSpin, QOverload<int>::of(&QSpinBox::valueChanged), beatMenu,
-                [beatText](int) { beatText(); });
-        beatText();
-
-        QToolButton *moreMenu = dropDown(tr("More"), QStringLiteral("programmingMoreMenu"));
-        mirror(moreMenu->menu(), m_snapshotBtn, tr("Snapshot live output into the scene"));
-        fieldAction(moreMenu->menu(), tr("Jog speed"), m_speedSpin);
-
-        // Highlight, Flash | Park, Move in black ... Beat, Tap | Save Positions, More
-        while (toolbar->count() > 0)
-            delete toolbar->takeAt(0);                 // the items, not the widgets
-        delete toolbar;
-
-        // A QToolBar, so the main window's top bar can borrow it while this
-        // is the current tab (MainBar). It was a row of ~15 controls whose
-        // summed minimum widths (~1866 px) held the whole window wider than
-        // most screens, kept in check by a horizontal scroll area; a
-        // toolbar folds what doesn't fit into its » menu instead.
-        QToolBar *bar = new QToolBar(this);
-        bar->setObjectName(QStringLiteral("programmingToolBar"));
-        bar->setMovable(false);
-        bar->setFloatable(false);
-        bar->addWidget(m_highlightBtn);
-        bar->addWidget(m_flashBtn);
-        bar->addWidget(parkMenu);
-        bar->addWidget(markMenu);
-        {
-            QWidget *stretch = new QWidget(bar);
-            stretch->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-            bar->addWidget(stretch);
-        }
-        bar->addWidget(beatMenu);
-        bar->addWidget(m_tapBtn);
-        /* Save Positions before More: a toolbar folds its last items into
-           » first, and More is the least used; at 1024 wide Save Positions
-           went into » (UX-36). */
-        bar->addWidget(m_saveBtn);
-        bar->addWidget(moreMenu);
-
-        root->addWidget(bar);
-        MainBar::registerTabTools(this, bar);
-
-        connect(m_highlightBtn, &QPushButton::toggled,
-                this, &ProgrammingManager::slotHighlightToggled);
-        connect(m_flashBtn, &QPushButton::clicked,
-                this, &ProgrammingManager::slotFlashSelection);
-        connect(m_parkBtn, &QPushButton::clicked,
-                this, &ProgrammingManager::slotParkSelection);
-        connect(m_unparkBtn, &QPushButton::clicked,
-                this, &ProgrammingManager::slotUnparkAll);
-        connect(m_markBtn, &QPushButton::clicked,
-                this, &ProgrammingManager::slotMarkSelection);
-        connect(m_unmarkBtn, &QPushButton::clicked,
-                this, &ProgrammingManager::slotUnmarkAll);
-        connect(m_autoMibBtn, &QPushButton::toggled, this, [this](bool on) {
-            if (ProgrammerController *pc = m_doc->programmer())
-                pc->setAutoMoveInBlack(on);
-        });
-        connect(m_mibGapSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                this, [this](double s) {
-            if (ProgrammerController *pc = m_doc->programmer())
-                pc->setMoveInBlackDarkGapMs(int(s * 1000.0 + 0.5));
-        });
-        connect(m_saveBtn, &QPushButton::clicked,
-                this, &ProgrammingManager::slotSavePositions);
-        connect(m_speedSpin, QOverload<int>::of(&QSpinBox::valueChanged),
-                this, [this](int v) {
-                    ProgrammerController *pc = m_doc->programmer();
-                    if (pc) pc->setJoystickSensitivity(v / 100.0f);
-                });
-        connect(m_bpmBtn, &QPushButton::toggled,
-                this, &ProgrammingManager::slotBpmToggled);
-        connect(m_bpmSpin, QOverload<int>::of(&QSpinBox::valueChanged),
-                this, &ProgrammingManager::slotBpmChanged);
-        connect(m_tapBtn, &QPushButton::clicked,
-                this, &ProgrammingManager::slotTapBeat);
-    }
-
-    // Followspot config panel (hidden until activated)
-    {
-        m_followSpotPanel = new QGroupBox(tr("Followspot settings"), this);
-        QFormLayout *form = new QFormLayout(m_followSpotPanel);
-        form->setContentsMargins(4, 4, 4, 4);
-        form->setSpacing(4);
-
-        QHBoxLayout *xRow = new QHBoxLayout;
-        m_fsBindXBtn = new QPushButton(tr("Bind X (pan)"), this);
-        m_fsXLabel = new QLabel(tr("—"), this);
-        xRow->addWidget(m_fsBindXBtn);
-        xRow->addWidget(m_fsXLabel, 1);
-        form->addRow(tr("Pan axis:"), xRow);
-
-        QHBoxLayout *yRow = new QHBoxLayout;
-        m_fsBindYBtn = new QPushButton(tr("Bind Y (tilt)"), this);
-        m_fsYLabel = new QLabel(tr("—"), this);
-        yRow->addWidget(m_fsBindYBtn);
-        yRow->addWidget(m_fsYLabel, 1);
-        form->addRow(tr("Tilt axis:"), yRow);
-
-        // Note: controller must be assigned as universe input in I/O Manager
-        QLabel *inputNote = new QLabel(
-            tr("<small>⚠ Controller must be assigned as a universe <b>Input</b> in the "
-               "Input/Output Manager before Bind will detect it.</small>"), this);
-        inputNote->setWordWrap(true);
-        form->addRow(inputNote);
-
-        m_fsClearBtn = new QPushButton(tr("Clear Bindings"), this);
-        form->addRow(QString(), m_fsClearBtn);
-
-        m_fsJoyLabel = new QLabel(tr("—"), this);
-        m_fsJoyLabel->setStyleSheet("font-family: monospace;");
-        form->addRow(tr("Joystick:"), m_fsJoyLabel);
-
-        root->addWidget(m_followSpotPanel);
-        m_followSpotPanel->hide(); // axis binding lives in I/O → Mapping → Joystick
-
-        connect(m_fsBindXBtn, &QPushButton::clicked,
-                this, &ProgrammingManager::slotFollowSpotBindX);
-        connect(m_fsBindYBtn, &QPushButton::clicked,
-                this, &ProgrammingManager::slotFollowSpotBindY);
-        connect(m_fsClearBtn, &QPushButton::clicked,
-                this, &ProgrammingManager::slotFollowSpotClearBindings);
-        // Sync with engine state
-        ProgrammerController *pc = m_doc->programmer();
-        if (pc)
-        {
-            connect(pc, &ProgrammerController::axisBindingChanged,
-                    this, &ProgrammingManager::slotFollowSpotBindingChanged);
-            connect(pc, &ProgrammerController::highlightActiveChanged,
-                    m_highlightBtn, &QPushButton::setChecked);
-            connect(pc, &ProgrammerController::parkChanged,
-                    this, &ProgrammingManager::slotParkChanged);
-            connect(pc, &ProgrammerController::markChanged,
-                    this, &ProgrammingManager::slotMarkChanged);
-            connect(pc, &ProgrammerController::autoMoveInBlackChanged, this,
-                    [this, pc](bool on) {
-                QSignalBlocker b1(m_autoMibBtn), b2(m_mibGapSpin);
-                m_autoMibBtn->setChecked(on);
-                m_mibGapSpin->setValue(pc->moveInBlackDarkGapMs() / 1000.0);
-            });
-            // Seed from the (possibly already-loaded) workspace.
-            {
-                QSignalBlocker b1(m_autoMibBtn), b2(m_mibGapSpin);
-                m_autoMibBtn->setChecked(pc->isAutoMoveInBlack());
-                m_mibGapSpin->setValue(pc->moveInBlackDarkGapMs() / 1000.0);
-            }
-            connect(pc, &ProgrammerController::joystickUpdated,
-                    this, &ProgrammingManager::slotJoystickUpdated);
             connect(pc, &ProgrammerController::buttonActionTriggered,
                     this, &ProgrammingManager::slotButtonAction);
             connect(pc, &ProgrammerController::designPositionWritten,
@@ -655,7 +314,6 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     initPowerTimer();
 
     // The Workbench: what it edits, the tools follow.
-    connect(m_workbench, &Workbench::fixturesSelected, this, &ProgrammingManager::slotSelectionTools);
     connect(m_workbench, &Workbench::currentPaletteIdChanged,
             this, &ProgrammingManager::currentPaletteIdChanged);
     connect(m_workbench, &Workbench::guideRequested, this, &ProgrammingManager::showProgrammingGuide);
@@ -2030,11 +1688,28 @@ void ProgrammingManager::showFunction(quint32 fid)
         m_workbench->load(fid);
 }
 
+/* Board Q228: Build is not a tab of the qlcconsole view. There, what would
+   open in Build opens in the Show Tree -- never a switch to Everything. The
+   App that says so (null: none, as in tests -- Build then). */
+static App *buildHiddenApp()
+{
+    foreach (QWidget *w, QApplication::topLevelWidgets())
+        if (App *app = qobject_cast<App *>(w))
+            return !app->buildInView() && ShowTreeView::instance() != nullptr ? app : nullptr;
+    return nullptr;
+}
+
 bool ProgrammingManager::openFunction(quint32 fid)
 {
     ProgrammingManager *pm = instance();
     if (pm == nullptr || pm->m_doc->function(fid) == nullptr)
         return false;
+    if (App *app = buildHiddenApp())
+    {
+        // The Workbench docked in the Show Tree, the function in it.
+        app->showContext(App::tr("Show Tree"));
+        return ShowTreeView::instance()->openFunctionInWorkbench(fid);
+    }
     // Docked in the Show Tree: the Workbench comes home first.
     if (pm->isWorkbenchLent())
         if (ShowTreeView *tree = ShowTreeView::instance())
@@ -2052,6 +1727,16 @@ bool ProgrammingManager::openPalette(quint32 paletteId)
     QLCPalette *p = pm == nullptr ? nullptr : pm->m_doc->palette(paletteId);
     if (p == nullptr)
         return false;
+    if (App *app = buildHiddenApp())
+    {
+        // The Show Tree: found in its Library, open in its Look Editor (or
+        // the docked Workbench's) -- an effect palette too.
+        app->showContext(App::tr("Show Tree"));
+        ShowTreeView *tree = ShowTreeView::instance();
+        tree->showPalette(paletteId);
+        tree->editPalette(paletteId);
+        return true;
+    }
     if (pm->isWorkbenchLent())
         if (ShowTreeView *tree = ShowTreeView::instance())
             tree->closeWorkbench();
@@ -2304,14 +1989,6 @@ void ProgrammingManager::slotFixGroupSourceSelectionChanged()
 void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
 {
     m_workbench->selectFixtures(fixtureIds);
-}
-
-void ProgrammingManager::slotSelectionTools()
-{
-    if (m_flashBtn)
-        m_flashBtn->setEnabled(!m_workbench->selectedFixtures().isEmpty());
-    updateParkButtonLabel();
-    updateMarkButtonLabel();
 }
 
 void ProgrammingManager::slotCopy()
@@ -2696,12 +2373,10 @@ void ProgrammingManager::showEvent(QShowEvent *ev)
     // preserving the current scene selection.
     m_paletteTree->updateTree();
     // Clicks in the 2D view pick fixtures for the Workbench: they are the
-    // programmer selection, which it follows in front or not (Q201).
-    // Auto-bind joystick axes from I/O → Mapping → Joystick profile if not yet bound.
-    if (ProgrammerController *pc = m_doc->programmer())
-        pc->autoBindFromProfile();
+    // programmer selection, which it follows in front or not (Q201). (The
+    // joystick's auto-bind and the parks restored from the show: the
+    // programmer strip, as it shows.)
     updatePowerEstimateActive();
-    slotParkChanged(); // reflect any parks restored from the workspace
     // W6: the Show Tree's Library, lent for as long as this tab shows.
     borrowLibrary();
     QWidget::showEvent(ev);
@@ -3262,279 +2937,9 @@ bool ProgrammingManager::deleteTreeFolder(FunctionsTreeWidget *tree, QTreeWidget
     return true;
 }
 
-/*****************************************************************************
- * Highlight
- *****************************************************************************/
-
-void ProgrammingManager::slotHighlightToggled(bool on)
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (pc)
-        pc->setHighlightActive(on);
-}
-
-void ProgrammingManager::slotFlashSelection()
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (pc == NULL)
-        return;
-    for (quint32 fid : m_workbench->selectedFixtures())
-        pc->flashFixture(fid);
-}
-
-/*****************************************************************************
- * Park (hold fixtures out of cue output)
- *****************************************************************************/
-
-void ProgrammingManager::slotParkSelection()
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (pc == NULL || m_workbench->selectedFixtures().isEmpty())
-        return;
-
-    // Toggle: if the whole selection is already parked, unpark it; else park.
-    bool allParked = true;
-    for (quint32 fid : m_workbench->selectedFixtures())
-        if (!pc->isFixtureParked(fid))
-            allParked = false;
-
-    if (allParked)
-        pc->unparkFixtures(m_workbench->selectedFixtures());
-    else
-        pc->parkFixtures(m_workbench->selectedFixtures());
-}
-
-void ProgrammingManager::slotUnparkAll()
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (pc)
-        pc->unparkAllFixtures();
-}
-
-void ProgrammingManager::slotMarkSelection()
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (pc == NULL || m_workbench->selectedFixtures().isEmpty())
-        return;
-
-    // Toggle: if the whole selection is already marked, unmark it; else mark.
-    bool allMarked = true;
-    for (quint32 fid : m_workbench->selectedFixtures())
-        if (!pc->isFixtureMarked(fid))
-            allMarked = false;
-
-    if (allMarked)
-        pc->unmarkFixtures(m_workbench->selectedFixtures());
-    else
-        pc->markFixtures(m_workbench->selectedFixtures());
-}
-
-void ProgrammingManager::slotUnmarkAll()
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (pc)
-        pc->unmarkAllFixtures();
-}
-
-void ProgrammingManager::slotMarkChanged()
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (pc == NULL)
-        return;
-    if (m_unmarkBtn)
-        m_unmarkBtn->setEnabled(pc->hasMarkedFixtures());
-    updateMarkButtonLabel();
-    // The 2D monitor refreshes its ghost outlines via its own markChanged
-    // connection (see Monitor).
-}
-
-void ProgrammingManager::updateMarkButtonLabel()
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (pc == NULL || m_markBtn == NULL)
-        return;
-
-    bool anySel = !m_workbench->selectedFixtures().isEmpty();
-    bool allMarked = anySel;
-    for (quint32 fid : m_workbench->selectedFixtures())
-        if (!pc->isFixtureMarked(fid))
-            allMarked = false;
-
-    m_markBtn->setEnabled(anySel);
-    m_markBtn->setText(anySel && allMarked ? tr("Unmark") : tr("Mark"));
-}
-
-void ProgrammingManager::slotSnapshotLive()
-{
-    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_workbench->currentSceneId()));
-    if (scene == NULL)
-    {
-        QMessageBox::information(this, tr("Snapshot"),
-            tr("Select a scene in the Workbench first — the snapshot bakes into it."));
-        return;
-    }
-
-    // Read the current pre-Grand-Master output for every patched fixture and
-    // collect the values; apply AFTER releasing the universe lock (never run a
-    // dialog while holding it). A fixture with all-zero output is skipped.
-    QList<SceneValue> captured;
-    int fixCount = 0;
-    {
-        QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
-        foreach (Fixture *fxi, m_doc->fixtures())
-        {
-            if (fxi == NULL || !fxi->isPatched())
-                continue;
-            const quint32 uni = fxi->universe();
-            if (uni >= quint32(universes.size()))
-                continue;
-            Universe *u = universes[uni];
-            const quint32 base = fxi->address();
-            const quint32 chans = fxi->channels();
-
-            bool hasOutput = false;
-            for (quint32 c = 0; c < chans; c++)
-                if (u->preGMValue(int(base + c)) != 0) { hasOutput = true; break; }
-            if (hasOutput == false)
-                continue;
-
-            fixCount++;
-            for (quint32 c = 0; c < chans; c++)
-                captured.append(SceneValue(fxi->id(), c, u->preGMValue(int(base + c))));
-        }
-        m_doc->inputOutputMap()->releaseUniverses(false);
-    }
-
-    if (captured.isEmpty())
-    {
-        QMessageBox::information(this, tr("Snapshot"),
-            tr("Nothing to capture — no fixture is currently outputting."));
-        return;
-    }
-
-    if (QMessageBox::question(this, tr("Snapshot into \"%1\"").arg(scene->name()),
-            tr("Bake the current live output of %1 fixture(s) (%2 channel values) "
-               "into this scene as static values? Existing values on those "
-               "channels are overwritten.").arg(fixCount).arg(captured.count()),
-            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
-        return;
-
-    foreach (const SceneValue &scv, captured)
-        scene->setValue(scv, /*blind*/ false, /*checkHTP*/ false);
-
-    m_doc->setModified();
-    // Shown, played, one step on the history.
-    m_workbench->sceneEditedOutside(tr("snapshot into %1").arg(scene->name()));
-}
-
-void ProgrammingManager::slotParkChanged()
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (pc == NULL)
-        return;
-    if (m_unparkBtn)
-        m_unparkBtn->setEnabled(pc->hasParkedFixtures());
-    updateParkButtonLabel();
-}
-
-void ProgrammingManager::updateParkButtonLabel()
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (pc == NULL || m_parkBtn == NULL)
-        return;
-
-    // If every selected fixture is already parked, offer Unpark instead of Park.
-    bool anySel = !m_workbench->selectedFixtures().isEmpty();
-    bool allParked = anySel;
-    for (quint32 fid : m_workbench->selectedFixtures())
-        if (!pc->isFixtureParked(fid))
-            allParked = false;
-
-    m_parkBtn->setEnabled(anySel);
-    if (anySel && allParked)
-    {
-        m_parkBtn->setText(tr("Unpark"));
-        m_parkBtn->setToolTip(tr("Release the park on the selected fixtures"));
-    }
-    else
-    {
-        m_parkBtn->setText(tr("Park"));
-        m_parkBtn->setToolTip(tr("Hold the selected fixtures at their current values, out of cue "
-                                 "output, until unparked (saved with the workspace)"));
-    }
-}
-
-/*****************************************************************************
- * Followspot
- *****************************************************************************/
-
-void ProgrammingManager::slotFollowSpotBindX()
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (!pc) return;
-    m_fsBindXBtn->setText(tr("Move X Axis…"));
-    m_fsBindYBtn->setEnabled(false);
-    pc->bindPanAxis();
-}
-
-void ProgrammingManager::slotFollowSpotBindY()
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (!pc) return;
-    m_fsBindYBtn->setText(tr("Move Y Axis…"));
-    m_fsBindXBtn->setEnabled(false);
-    pc->bindTiltAxis();
-}
-
-void ProgrammingManager::slotFollowSpotClearBindings()
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (!pc) return;
-    pc->clearAxisBindings();
-}
-
-void ProgrammingManager::slotFollowSpotBindingChanged()
-{
-    ProgrammerController *pc = m_doc->programmer();
-    if (!pc) return;
-
-    m_fsXLabel->setText(pc->panAxisLabel());
-    m_fsYLabel->setText(pc->tiltAxisLabel());
-
-    /* When the binding came from a HID profile, the user doesn't need manual
-       Bind buttons — the profile handles it.  Show them only in manual mode. */
-    const bool profileBound = pc->isBoundFromProfile();
-    m_fsBindXBtn->setVisible(!profileBound);
-    m_fsBindYBtn->setVisible(!profileBound);
-    m_fsClearBtn->setVisible(!profileBound);
-
-    if (!profileBound)
-    {
-        m_fsBindXBtn->setText(tr("Bind X (pan)"));
-        m_fsBindYBtn->setText(tr("Bind Y (tilt)"));
-        m_fsBindXBtn->setEnabled(true);
-        m_fsBindYBtn->setEnabled(true);
-    }
-}
-
-void ProgrammingManager::slotJoystickUpdated(float pan, float tilt)
-{
-    m_fsJoyLabel->setText(
-        QString("Pan %1  Tilt %2")
-            .arg(double(pan),  4, 'f', 2)
-            .arg(double(tilt), 4, 'f', 2));
-}
-
 void ProgrammingManager::slotDesignPositionWritten()
 {
-    // Enable save button and reset armed state (new edits invalidate a pending confirm).
-    if (m_saveBtn)
-    {
-        m_saveArmed = false;
-        m_saveBtn->setText(tr("Save Positions"));
-        m_saveBtn->setEnabled(true);
-    }
-
+    // (Save Positions lights in every ProgrammerStrip on the same signal.)
     // Re-show whatever palette the look editor already has open, in case
     // its value was just changed from outside the widget itself (a control
     // surface nudging pan/tilt directly on the engine side, rather than the
@@ -3557,84 +2962,6 @@ void ProgrammingManager::slotFollowSpotPinChanged(bool visible, float xMeters, f
         visible = false;
     if (Monitor *mon = Monitor::instance())
         mon->setFollowSpotPin(visible, xMeters, yMeters);
-}
-
-void ProgrammingManager::slotSavePositions()
-{
-    if (!m_saveBtn) return;
-
-    if (!m_saveArmed)
-    {
-        // First press: arm — user must click again within 3 s to confirm.
-        m_saveArmed = true;
-        m_saveBtn->setText(tr("Confirm? (click again)"));
-        // Auto-disarm after 3 seconds if the user doesn't confirm.
-        QTimer::singleShot(3000, this, [this]() {
-            if (m_saveArmed)
-            {
-                m_saveArmed = false;
-                if (m_saveBtn) m_saveBtn->setText(tr("Save Positions"));
-            }
-        });
-    }
-    else
-    {
-        // Second press: confirmed — commit joystick position then save workspace.
-        m_saveArmed = false;
-        m_saveBtn->setText(tr("Save Positions"));
-        m_saveBtn->setEnabled(false);
-        ProgrammerController *pc = m_doc->programmer();
-        if (pc) pc->commitDesignJoystick();
-        emit requestSave();
-    }
-}
-
-// ---------------------------------------------------------------------------
-// BPM / internal beat generator
-// ---------------------------------------------------------------------------
-
-void ProgrammingManager::slotBpmToggled(bool on)
-{
-    InputOutputMap *ioMap = m_doc->inputOutputMap();
-    if (!ioMap) return;
-
-    if (on)
-    {
-        ioMap->setBeatGeneratorType(InputOutputMap::Internal);
-        ioMap->setBpmNumber(m_bpmSpin->value());
-        m_bpmSpin->setEnabled(true);
-        m_tapBtn->setEnabled(true);
-    }
-    else
-    {
-        ioMap->setBeatGeneratorType(InputOutputMap::Disabled);
-        m_bpmSpin->setEnabled(false);
-        m_tapBtn->setEnabled(false);
-    }
-}
-
-void ProgrammingManager::slotBpmChanged(int bpm)
-{
-    InputOutputMap *ioMap = m_doc->inputOutputMap();
-    if (!ioMap || !m_bpmBtn->isChecked()) return;
-    ioMap->setBpmNumber(bpm);
-}
-
-void ProgrammingManager::slotTapBeat()
-{
-    // The tempo from the last few taps, and the beat on this one -- every
-    // effect on the clock lands on it (MasterTimer::tap()).
-    InputOutputMap *ioMap = m_doc->inputOutputMap();
-    if (!ioMap || !m_bpmBtn->isChecked())
-        return;
-    const double bpm = ioMap->tapBeat();
-    // Show the tapped tempo (the Beat button follows the spin box) without
-    // setting it again: slotBpmChanged() would restart the beat the tap set.
-    disconnect(m_bpmSpin, QOverload<int>::of(&QSpinBox::valueChanged),
-               this, &ProgrammingManager::slotBpmChanged);
-    m_bpmSpin->setValue(qRound(bpm));
-    connect(m_bpmSpin, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &ProgrammingManager::slotBpmChanged);
 }
 
 /* True exactly once, ever: the first time anybody asks. Consuming the flag as
@@ -3722,8 +3049,8 @@ void ProgrammingManager::slotButtonAction(const QString &action)
 
     if (action == QLatin1String("highlight_toggle"))
     {
-        if (pc && m_highlightBtn)
-            pc->setHighlightActive(!m_highlightBtn->isChecked());
+        if (pc)
+            pc->setHighlightActive(!pc->isHighlightActive());
         return;
     }
 

@@ -175,6 +175,7 @@ private slots:
     void aDuplicatedSequencePlaysItsOwnScene();
     /** Beat ▸ Tap: four taps 500 ms apart -- 120 BPM, on the Beat button. */
     void fourTapsHalfASecondApartShow120Bpm();
+    void theShowTreeHasTheSameProgrammerStrip();
     /** Build's search spans the sections: matches from Palettes, Effects
      *  and Scenes together, under headers with counts; a click goes there,
      *  and clearing it goes back to the section it was on. */
