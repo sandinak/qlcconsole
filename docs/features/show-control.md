@@ -96,7 +96,7 @@ ARMED**. While it's held:
   the previews hold for it, and in Design it offers Operate.
 - **The tools win.** A Focus mode or Focus this cue started on the laptop
   takes the controller until it ends. The Run tab's button and the footer
-  name it meanwhile (**Pad: Venue focus**, **Pad: Focus this cue**). In the Run role, View + Menu doesn't
+  name it meanwhile (**Pad: Venue Focus**, **Pad: Focus This Cue**). In the Run role, View + Menu doesn't
   start Focus mode, and Menu alone walks the show (below). A focus-call
   cue's Start (Menu) still begins its calls.
 - The sticks stay the follow spot's in either role. While a follow spot

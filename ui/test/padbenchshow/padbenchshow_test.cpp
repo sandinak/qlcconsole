@@ -994,8 +994,8 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
        seems dead. Focus this cue, quietly, on the cue running. */
     QString why;
     QVERIFY2(pc->refineSession()->start(mainList->cues.at(1).id, 0xFFFFFFFF, &why), qPrintable(why));
-    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Focus this cue"), 2000);
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().startsWith(QStringLiteral("Pad: Focus this cue")), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Focus This Cue"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().startsWith(QStringLiteral("Pad: Focus This Cue")), 2000);
     QVERIFY(chip->toolTip().contains(QStringLiteral("has the controller until it ends")));
     press(kLB, 255);
     QVERIFY(!run->isArmed());
