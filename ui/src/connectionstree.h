@@ -429,9 +429,13 @@ private:
     class QStackedWidget *m_paneStack = nullptr;
     class QLabel *m_panePlaceholder = nullptr;
     class QSplitter *m_universeSplit = nullptr;
+    class QSplitter *m_outerSplit = nullptr;
+    class QScrollArea *m_outScroll = nullptr;
+    bool m_userSplit = false;
+    int m_laidOutWidth = 0;
     /** Show @p item's universe (and leg) in the pane. */
     void showConnectionOf(QTreeWidgetItem *item);
-    /** Lay the pane and the grid side by side, or one over the other. */
+    /** Share the width: list, settings, then the DMX grid (which gives way). */
     void layoutSide();
     /** A By universe cell edited in place: a universe row, a patch column. */
     bool isGridCell(const QModelIndex &index) const;

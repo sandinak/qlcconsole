@@ -35,6 +35,7 @@
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QToolButton>
+#include <QScrollArea>
 
 #include "../../../engine/test/common/stdprelude.h"
 #define protected public
@@ -2322,7 +2323,7 @@ bool doubleClickRow(ConnectionsTree &tree, QTreeWidgetItem *row)
     QApplication::processEvents();
     tree.m_tree->doItemsLayout();
     QWidget *vp = tree.m_tree->viewport();
-    const QPoint at = tree.m_tree->visualItemRect(row).center();
+    const QPoint at = tree.m_tree->visualRect(tree.m_tree->indexFromItem(row, COL_NAME)).center();
     if (tree.m_tree->itemAt(at) != row)
     {
         qWarning() << "row" << row->text(0) << "is not under" << at
@@ -3300,11 +3301,115 @@ void ConnectionsTree_Test::byUniverseShowsTheSelectedUniversesSettings()
     QCOMPARE(tree.m_connPane->universe(), quint32(4));
     QCOMPARE(tree.m_connPane->m_protocolCombo->currentData().toString(), QString());
 
-    // Narrow, the grid goes under the settings; wide, beside them.
-    tree.resize(1024, 640);
-    QCOMPARE(tree.m_universeSplit->orientation(), Qt::Vertical);
-    tree.resize(1920, 1080);
-    QCOMPARE(tree.m_universeSplit->orientation(), Qt::Horizontal);
+    // At every size: the list, the settings (whole width, in the window,
+    // filled for the selected universe), then the DMX grid, which is what
+    // gives way -- fewer channels to a row.
+    clickUniverse(tree, 1);
+    foreach (const QSize &size, QList<QSize>() << QSize(1024, 640) << QSize(1280, 800)
+                                               << QSize(1920, 1080))
+    {
+        tree.resize(size);
+        QApplication::processEvents();
+        QApplication::processEvents();
+        const QString at = QString("%1x%2").arg(size.width()).arg(size.height());
+        auto rectOf = [&tree](QWidget *w) { return QRect(w->mapTo(&tree, QPoint(0, 0)), w->size()); };
+        const QRect list = rectOf(tree.m_tree);
+        const QRect pane = rectOf(tree.m_connPane);
+        const QRect grid = rectOf(tree.m_outScroll);
+        QVERIFY2(tree.m_connPane->isVisible(), qPrintable(at));
+        QVERIFY2(tree.rect().contains(pane), qPrintable(at));
+        QVERIFY2(pane.width() >= 330 && pane.height() >= 400,
+                 qPrintable(QString("%1: pane %2x%3").arg(at).arg(pane.width()).arg(pane.height())));
+        QVERIFY2(list.width() >= size.width() / 3, qPrintable(at));
+        QVERIFY2(list.right() < pane.left() && pane.right() < grid.left(), qPrintable(at));
+        QVERIFY2(tree.m_outScroll->isVisible() && grid.width() > 100, qPrintable(at));
+        QVERIFY2(tree.rect().contains(grid), qPrintable(at));
+        QVERIFY2(tree.m_output->columns() >= 4, qPrintable(at));
+        // The whole grid row is in view: no column cut off at the side.
+        QVERIFY2(tree.m_output->width() <= tree.m_outScroll->viewport()->width(),
+                 qPrintable(QString("%1: grid %2 in %3").arg(at).arg(tree.m_output->width())
+                            .arg(tree.m_outScroll->viewport()->width())));
+        // Its fields are there, for the universe picked.
+        QCOMPARE(tree.m_connPane->universe(), quint32(1));
+        QVERIFY2(tree.m_connPane->m_protocolCombo->isVisible(), qPrintable(at));
+        QVERIFY2(tree.m_connPane->m_targetCombo->isVisible(), qPrintable(at));
+        QVERIFY2(tree.m_connPane->m_targetPort->isVisible(), qPrintable(at));
+        const QRect sendTo = rectOf(tree.m_connPane->m_targetCombo);
+        QVERIFY2(pane.contains(sendTo), qPrintable(at));
+    }
+    QCOMPARE(tree.m_output->columns(), 16);              // 1920: all of them
+}
+
+namespace
+{
+/* A By universe cell edited the way a hand does it: a double-click on the
+   cell, then the value typed and Enter (a field) or picked (a list). A
+   refusal's message is answered and its text kept in @p said. True when an
+   editor opened. */
+bool editCellByHand(ConnectionsTree &tree, quint32 universe, int column, const QString &value,
+                    QString *said = nullptr)
+{
+    QTreeWidgetItem *row = universeRow(tree.m_tree, universe);
+    if (row == NULL)
+        return false;
+    const QModelIndex idx = tree.m_tree->indexFromItem(row, column);
+    tree.m_tree->scrollTo(idx);
+    QApplication::processEvents();
+    QWidget *vp = tree.m_tree->viewport();
+    const QPoint at = tree.m_tree->visualRect(idx).center();
+    const QPointF global = vp->mapToGlobal(QPointF(at));
+    auto send = [vp, at, global](QEvent::Type type, Qt::MouseButtons held) {
+        QMouseEvent ev(type, QPointF(at), global, Qt::LeftButton, held, Qt::NoModifier);
+        QApplication::sendEvent(vp, &ev);
+    };
+    send(QEvent::MouseButtonPress, Qt::LeftButton);
+    send(QEvent::MouseButtonRelease, Qt::NoButton);
+    send(QEvent::MouseButtonPress, Qt::LeftButton);
+    send(QEvent::MouseButtonDblClick, Qt::LeftButton);
+    send(QEvent::MouseButtonRelease, Qt::NoButton);
+    QApplication::processEvents();
+
+    QWidget *editor = nullptr;
+    foreach (QWidget *w, vp->findChildren<QWidget *>())
+        if (w->isVisible() && (qobject_cast<QLineEdit *>(w) || qobject_cast<QComboBox *>(w))
+                && qobject_cast<QComboBox *>(w->parentWidget()) == nullptr)
+            editor = w;
+    if (editor == nullptr)
+        return false;
+
+    QString message;
+    QTimer answer;
+    answer.setInterval(10);
+    QObject::connect(&answer, &QTimer::timeout, [&message]() {
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        {
+            message = box->text();
+            box->accept();
+        }
+    });
+    answer.start();
+    if (QLineEdit *edit = qobject_cast<QLineEdit *>(editor))
+    {
+        edit->selectAll();
+        QTest::keyClicks(edit, value);
+        QTest::keyClick(edit, Qt::Key_Return);
+    }
+    else if (QComboBox *combo = qobject_cast<QComboBox *>(editor))
+    {
+        int i = combo->findData(value);
+        if (i < 0)
+            i = combo->findText(value);
+        if (i < 0)
+            return false;
+        combo->setCurrentIndex(i);
+        emit combo->activated(i);
+    }
+    for (int k = 0; k < 5; k++)
+        QApplication::processEvents();
+    if (said != nullptr)
+        *said = message;
+    return true;
+}
 }
 
 void ConnectionsTree_Test::byUniverseCellsEditThePatch()
@@ -3340,30 +3445,32 @@ void ConnectionsTree_Test::byUniverseCellsEditThePatch()
     QCOMPARE(outCombo->currentData().toString(), QString("ArtNet"));
     delete holder;
 
-    // A bare number in U is the universe on the node.
-    QVERIFY(tree.commitCell(1, COL_U, "16"));
+    // A bare number in U is the universe on the node: double-click the
+    // cell, type, Enter -- as a hand does.
+    QVERIFY(editCellByHand(tree, 1, COL_U, "16"));
     OutputPatch *op = iom->universe(1)->outputPatch(0);
     QCOMPARE(op->getPluginParameters().value("outputUni").toUInt(), quint32(16));
     QCOMPARE(universeRow(tree.m_tree, 1)->text(COL_U), QString("0:1:0"));
     // The pane beside it shows it too.
     QCOMPARE(tree.m_connPane->m_targetPort->text(), QString("0:1:0"));
     // An IP: sent there, out of the interface on its network.
-    QVERIFY(tree.commitCell(1, COL_IP, "192.168.1.9"));
+    QVERIFY(editCellByHand(tree, 1, COL_IP, "192.168.1.9"));
     op = iom->universe(1)->outputPatch(0);
     QCOMPARE(op->output(), quint32(2));
     QCOMPARE(op->getPluginParameters().value("outputIP").toString(), QString("192.168.1.9"));
     QCOMPARE(tree.m_connPane->m_targetIP->text(), QString("192.168.1.9"));
     QCOMPARE(tree.m_connPane->m_protocolCombo->currentData().toString(), QString("ArtNet"));
-    // Mode and passthrough.
-    QVERIFY(tree.commitCell(1, COL_MODE, "Full"));
+    // Mode and passthrough: lists.
+    QVERIFY(editCellByHand(tree, 1, COL_MODE, "Full"));
     QCOMPARE(iom->universe(1)->outputPatch(0)->getPluginParameters().value("transmitMode").toString(),
              QString("Full"));
-    QVERIFY(tree.commitCell(1, COL_PT, "on"));
+    QVERIFY(editCellByHand(tree, 1, COL_PT, "on"));
     QVERIFY(iom->getUniversePassthrough(1));
     // Refused: says why, changes nothing.
+    QString said;
+    QVERIFY(editCellByHand(tree, 1, COL_U, "40000", &said));
+    QVERIFY2(said.contains("32767"), qPrintable(said));
     QString error;
-    QVERIFY(tree.commitCell(1, COL_U, "40000", &error) == false);
-    QVERIFY2(error.contains("32767"), qPrintable(error));
     QCOMPARE(iom->universe(1)->outputPatch(0)->getPluginParameters().value("outputUni").toUInt(),
              quint32(16));
     QVERIFY(tree.commitCell(1, COL_IP, "nope", &error) == false);
@@ -3371,10 +3478,17 @@ void ConnectionsTree_Test::byUniverseCellsEditThePatch()
 
     // An unpatched universe patched from its Output cell: broadcast, on the
     // first interface that is not loopback.
-    QVERIFY(tree.commitCell(4, COL_OUTPUT, "ArtNet"));
+    QVERIFY(editCellByHand(tree, 4, COL_OUTPUT, "ArtNet"));
     QCOMPARE(iom->universe(4)->outputPatchesCount(), 1);
     QCOMPARE(iom->universe(4)->outputPatch(0)->output(), quint32(1));
     // And taken off it again.
-    QVERIFY(tree.commitCell(4, COL_OUTPUT, ""));
+    QVERIFY(editCellByHand(tree, 4, COL_OUTPUT, ""));
+    // A double-click on the name still opens the whole connection.
+    {
+        EditorSpy spy;
+        QVERIFY(doubleClickRow(tree, universeRow(tree.m_tree, 1)));
+        QCOMPARE(spy.opened, 1);
+        QCOMPARE(spy.universe, quint32(1));
+    }
     QCOMPARE(iom->universe(4)->outputPatchesCount(), 0);
 }

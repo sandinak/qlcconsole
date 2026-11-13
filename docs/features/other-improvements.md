@@ -55,7 +55,7 @@ show or hide each; the choice is remembered. Output, IP, U, Mode, Input and
 PT are on to begin with.
 
 **The columns are a grid you edit in place**, for setting many universes up
-quickly: click a cell of the selected row — **Output** picks
+quickly: double-click a cell (or click one on the selected row) — **Output** picks
 the protocol (or **Not patched**), **IP** takes a node's address (or
 empty to broadcast), **U** takes the universe on the node (a bare number works:
 `15` is 0:0:15), and **Mode**, **Input**, **Profile** and **PT** are lists.
@@ -67,9 +67,11 @@ another universe holds, a universe past 32767) says why and changes nothing.
 
 1. **By universe** — every universe in use, in number order.
 2. **The universes**, each with where it goes, what it carries, and the
-   patch columns you've chosen.
-3. **What the selected universe is sending**, channel by channel.
-4. **Columns** — which of the patch's columns to show (also the header's
+   patch columns you've chosen — double-click a patch cell to edit it.
+3. **The selected universe's settings**: where it goes, its input and
+   feedback.
+4. **What the selected universe is sending**, channel by channel.
+5. **Columns** — which of the patch's columns to show (also the header's
    right-click).
 
 Select a universe and, beside the list, its **settings** open: the same
@@ -81,8 +83,10 @@ patch, so each follows the other. To their right, what the universe is
 **sending**, live: all 512 channels, each with its value and a bar as high, the channels
 of each patched fixture shaded together and named where they start. The
 values are what goes out, after the grand master; hover a channel for whose
-it is ("Front Par, channel 1 — Dimmer"). On a narrower window the channel
-grid goes under the settings.
+it is ("Front Par, channel 1 — Dimmer"). On a narrower window the grid
+puts fewer channels on a row; the settings keep their width. Double-click a
+universe's name for the whole connection in its own window (or right-click
+▸ **Edit Connection…**).
 
 Each row's right-click offers what that level of the wiring owns:
 
@@ -110,7 +114,8 @@ Each row's right-click offers what that level of the wiring owns:
 
 ### Editing a connection
 
-**Edit Connection…** — or a double-click on any universe, in either view —
+**Edit Connection…** — or a double-click on any universe (By universe, on
+its name; a patch cell there is edited in place) —
 opens one window for everything about where that universe goes. Patching an
 unpatched universe and editing a patched one are the same window; a patched
 one opens filled in.

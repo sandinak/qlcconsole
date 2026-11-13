@@ -48,6 +48,7 @@
 #include <QResizeEvent>
 #include <QComboBox>
 #include <QSpinBox>
+#include <QStyle>
 
 #include "connectionstree.h"
 #include "shrinkablebar.h"
@@ -170,6 +171,22 @@ public:
     }
 };
 }
+
+/* Keeps the DMX grid's channels a row to its scroll area's width. */
+class GridWidthFollower : public QObject
+{
+public:
+    GridWidthFollower(UniverseOutputView *view, QObject *parent)
+        : QObject(parent), m_view(view) {}
+    bool eventFilter(QObject *watched, QEvent *ev) override
+    {
+        if (ev->type() == QEvent::Resize)
+            m_view->fitWidth(static_cast<QWidget *>(watched)->width());
+        return QObject::eventFilter(watched, ev);
+    }
+private:
+    UniverseOutputView *m_view;
+};
 
 /* A By universe cell's editor: a list for what is picked (protocol, mode,
    input, profile, passthrough), a field for what is typed (IP, universe).
@@ -485,16 +502,25 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_universeSplit->setCollapsible(0, false);
     m_universeSplit->setStretchFactor(0, 1);
     m_universeSplit->setStretchFactor(1, 0);
+    m_outScroll = outScroll;
+    /* The grid lays its channels out as many to a row as its width holds:
+       on a narrow window it is the grid that gives way, never the
+       settings. */
+    outScroll->viewport()->installEventFilter(new GridWidthFollower(m_output, outScroll));
     m_side = new QStackedWidget(this);
     m_side->addWidget(m_universeSplit);
     m_outputPage = m_universeSplit;
     QSplitter *split = new QSplitter(Qt::Horizontal, this);
+    m_outerSplit = split;
     split->addWidget(m_tree);
     split->addWidget(m_side);
     split->setCollapsible(1, false);
     split->setStretchFactor(0, 3);
     split->setStretchFactor(1, 2);
     lay->addWidget(split, 1);           // every spare pixel goes to the list
+    /* Dragged by hand: kept, not laid out again on the next resize. */
+    connect(split, &QSplitter::splitterMoved, this, [this]() { m_userSplit = true; });
+    connect(m_universeSplit, &QSplitter::splitterMoved, this, [this]() { m_userSplit = true; });
     /* Recorded as it happens: see m_selectionOrder. A rebuild clears and
        restores the same selection, which must not reshuffle it. */
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, [this]() {
@@ -3098,8 +3124,22 @@ bool ConnectionsTree::editConnection(QTreeWidgetItem *item, int column)
 
 void ConnectionsTree::slotItemDoubleClicked(QTreeWidgetItem *item, int column)
 {
-    if (isUniverseRow(item))
-        editConnection(item, column);
+    if (isUniverseRow(item) == false)
+        return;
+    /* By universe, a patch cell is a field: a double-click edits it in
+       place. The universe's name (or any other column) opens its whole
+       connection, as Edit Connection… on its right-click does. */
+    const int row = item->parent() == nullptr ? m_tree->indexOfTopLevelItem(item) : -1;
+    if (row >= 0)
+    {
+        const QModelIndex cell = m_tree->model()->index(row, column);
+        if (isGridCell(cell))
+        {
+            m_tree->edit(cell);
+            return;
+        }
+    }
+    editConnection(item, column);
 }
 
 bool ConnectionsTree::pickPluginLine(QLCIOPlugin *p, bool output, quint32 &lineOut,
@@ -3993,7 +4033,9 @@ void ConnectionsTree::retargetSelection(const QString &pluginName)
        question here; the first port to number up from then starts at that
        device's first free one. */
     QString addr;
-    QString firstText("0:0:0");
+    /* Never 0:0:0 by default: that is a real rig's universe somewhere. The
+       first universe's own number, as the plugin sends it untold. */
+    QString firstText = portAddressText(unis.first());
     const QList<TargetChoice> known = visibleTargets(plug, lines.first());
     if (known.isEmpty() == false)
     {
@@ -4038,27 +4080,19 @@ void ConnectionsTree::retargetSelection(const QString &pluginName)
 
     const QString txt = QInputDialog::getText(
         this, tr("Retarget %1 universes").arg(unis.count()),
-        tr("Port address for the FIRST of them, as net:subnet:universe.\n"
-           "The rest follow on consecutive ports."),
+        tr("Art-Net universe for the FIRST of them: a number (15) or "
+           "net:subnet:universe (0:0:15).\nThe rest follow on consecutive ports."),
         QLineEdit::Normal, firstText, &ok).trimmed();
     if (ok == false)
         return;
 
-    const QStringList parts = txt.split(':');
-    bool okNet = false, okSub = false, okUni = false;
-    const uint net = parts.value(0).toUInt(&okNet);
-    const uint sub = parts.value(1).toUInt(&okSub);
-    const uint uni = parts.value(2).toUInt(&okUni);
-    if (parts.count() != 3 || !okNet || !okSub || !okUni
-            || net > 127 || sub > 15 || uni > 15)
+    quint32 first = 0;
+    if (UniversePatcher::parsePortAddress(txt, first) == false)
     {
         QMessageBox::warning(this, tr("Retarget %1 universes").arg(unis.count()),
-            tr("\"%1\" is not a port address. Expected net:subnet:universe, "
-               "with net 0-127 and subnet and universe 0-15.").arg(txt));
+                             UniversePatcher::portAddressError(txt));
         return;
     }
-
-    const quint32 first = quint32((net << 8) | (sub << 4) | uni);
 
     /* Art-Net port addresses are a packed 15-bit field, so incrementing runs
        off the end at 0x7FFF rather than wrapping into a neighbour's net.
@@ -4400,26 +4434,19 @@ void ConnectionsTree::addManualPort(const QString &address)
     bool ok = false;
     const QString txt = QInputDialog::getText(
         this, tr("Add port"),
-        tr("Port address on %1, as net:subnet:universe (for example 0:0:1):")
-            .arg(address), QLineEdit::Normal, QString("0:0:0"), &ok).trimmed();
+        tr("Art-Net universe of the port on %1: a number (15) or net:subnet:universe "
+           "(0:0:15):").arg(address), QLineEdit::Normal, QString(), &ok).trimmed();
     if (ok == false || txt.isEmpty())
         return;
 
-    const QStringList parts = txt.split(':');
-    bool okNet = false, okSub = false, okUni = false;
-    const uint net = parts.value(0).toUInt(&okNet);
-    const uint sub = parts.value(1).toUInt(&okSub);
-    const uint uni = parts.value(2).toUInt(&okUni);
-    if (parts.count() != 3 || !okNet || !okSub || !okUni
-            || net > 127 || sub > 15 || uni > 15)
+    quint32 pa = 0;
+    if (UniversePatcher::parsePortAddress(txt, pa) == false)
     {
-        QMessageBox::warning(this, tr("Add port"),
-            tr("\"%1\" is not a port address. Expected net:subnet:universe, "
-               "with net 0-127 and subnet and universe 0-15.").arg(txt));
+        QMessageBox::warning(this, tr("Add port"), UniversePatcher::portAddressError(txt));
         return;
     }
 
-    iomap->addManualPort(address, quint32((net << 8) | (sub << 4) | uni));
+    iomap->addManualPort(address, pa);
     m_doc->setModified();
     refresh();
 }
@@ -5182,24 +5209,29 @@ void ConnectionsTree::resizeEvent(QResizeEvent *ev)
 
 void ConnectionsTree::layoutSide()
 {
-    if (m_universeSplit == nullptr)
+    if (m_universeSplit == nullptr || m_outerSplit == nullptr || m_userSplit)
         return;
-    /* Side by side needs room for the list, the settings and the grid; on
-       a narrower window the grid goes under the settings, which stay. */
-    const Qt::Orientation want = width() >= 1500 ? Qt::Horizontal : Qt::Vertical;
-    if (m_universeSplit->orientation() == want)
+    /* Left to right: the list, the selected universe's settings, the DMX
+       grid. The settings keep their width at every size; the list keeps a
+       third or more; the grid has what is left, up to all sixteen columns
+       (fewer to a row when it is narrow, gone only when not even four fit:
+       its handle at the right edge brings it back). */
+    const int w = width() - 12;
+    if (w <= 0 || w == m_laidOutWidth)
         return;
-    m_universeSplit->setOrientation(want);
-    if (want == Qt::Vertical)
-        m_universeSplit->setSizes(QList<int>() << 3000 << 1000);
-    else
-    {
-        /* The grid at its own width (all sixteen columns), the settings the
-           rest. */
-        const int total = qMax(m_universeSplit->width(), 2);
-        const int grid = qMin(m_output->sizeHint().width() + 24, total / 2);
-        m_universeSplit->setSizes(QList<int>() << total - grid << grid);
-    }
+    m_laidOutWidth = w;
+    const int handles = m_outerSplit->handleWidth() + m_universeSplit->handleWidth();
+    const int bar = style()->pixelMetric(QStyle::PM_ScrollBarExtent) + 4;
+    const int pane = qBound(340, w * 27 / 100, 520);
+    const int gridFull = UniverseOutputView::widthFor(16) + bar;
+    const int gridMin = UniverseOutputView::widthFor(4) + bar;
+    const int list = qMax(w * 36 / 100, w - pane - gridFull - handles);
+    const int right = w - list - m_outerSplit->handleWidth();
+    int grid = qMin(gridFull, right - pane - m_universeSplit->handleWidth());
+    if (grid < gridMin)
+        grid = 0;
+    m_outerSplit->setSizes(QList<int>() << list << right);
+    m_universeSplit->setSizes(QList<int>() << right - grid - m_universeSplit->handleWidth() << grid);
 }
 
 bool ConnectionsTree::isGridCell(const QModelIndex &index) const

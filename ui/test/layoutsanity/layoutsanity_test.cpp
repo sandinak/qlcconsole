@@ -719,6 +719,18 @@ QList<Screen> screens()
 
     // The app window, tab by tab.
     list << tab(QStringLiteral("Connections"))
+         << tab(QStringLiteral("Connections"), [](App *app, QWidget *) {
+                // By universe with a universe picked: the list, its settings,
+                // then the DMX grid (M997).
+                if (QCheckBox *by = app->findChild<QCheckBox *>(QStringLiteral("connectionsByUniverse")))
+                    by->setChecked(true);
+                if (QTreeWidget *t = app->findChild<QTreeWidget *>(QStringLiteral("connectionsTree")))
+                    if (t->topLevelItemCount() > 0)
+                    {
+                        t->setCurrentItem(t->topLevelItem(0));
+                        t->topLevelItem(0)->setSelected(true);
+                    }
+            })
          << tab(QStringLiteral("Fixtures"))
          << tab(QStringLiteral("Lighting Studio"))
          << tab(QStringLiteral("Build"))

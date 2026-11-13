@@ -55,6 +55,12 @@ public:
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
 
+    /** Lay the channels out as many to a row (4-16) as @p width holds. */
+    void fitWidth(int width);
+    int columns() const { return m_cols; }
+    /** The width that shows @p columns channels a row. */
+    static int widthFor(int columns);
+
 protected:
     void paintEvent(QPaintEvent *) override;
     bool event(QEvent *e) override;
@@ -73,6 +79,8 @@ private:
     QByteArray m_values;
     QLabel *m_header;
     QTimer *m_repaint;
+    int m_cols = 16;
+    int rows() const;
     bool m_dirty = false;
 };
 

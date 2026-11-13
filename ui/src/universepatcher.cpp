@@ -927,16 +927,15 @@ bool UniversePatcher::askTargetPort(const QString &title, const QString &pluginN
         return true;
     }
     const QString txt = QInputDialog::getText(m_parent, title,
-        tr("Universe on %1, as net:subnet:universe:").arg(addr), QLineEdit::Normal,
-        curAddr.isEmpty() ? QString("0:0:0") : portAddressText(curPort), &ok).trimmed();
+        tr("Art-Net universe on %1: a number (15) or net:subnet:universe (0:0:15):").arg(addr),
+        QLineEdit::Normal,
+        portAddressText(curAddr.isEmpty() ? universe : curPort), &ok).trimmed();
     if (ok == false)
         return false;
     quint32 pa = 0;
     if (parsePortAddress(txt, pa) == false)
     {
-        QMessageBox::warning(m_parent, title,
-            tr("\"%1\" is not a port address. Expected net:subnet:universe, "
-               "with net 0-127 and subnet and universe 0-15.").arg(txt));
+        QMessageBox::warning(m_parent, title, portAddressError(txt));
         return false;
     }
     const quint32 owner = universeOnTarget(pluginName, line, addr, pa, universe);
@@ -1254,7 +1253,7 @@ void UniversePatcher::patchSelectionTo(const QList<quint32> &universes)
                        "(15) or net:subnet:universe (0:0:15).\nThe rest follow on "
                        "consecutive ports.")
                         .arg(targetName),
-                    QLineEdit::Normal, QString("0:0:0"), &ok).trimmed();
+                    QLineEdit::Normal, portAddressText(universes.first()), &ok).trimmed();
                 if (ok == false)
                     return;
                 quint32 first = 0;
