@@ -9930,22 +9930,19 @@ void App::updatePadRoleChip()
        moment what the last press could not do ("Hold LB to arm."), which
        lights-only feedback never says aloud. */
     const QString notice = run->notice();
-    m_statusPadRoleLabel->setText(notice.isEmpty() ? run->roleText()
-                                                   : run->roleText() + QStringLiteral(" · ") + notice);
-    const QString tool = run->holder();
+    /* Walking says how to get back; a notice (a refused press, the list
+       just stepped to) follows the role text, never replaces it. */
+    QString text = run->roleText();
+    if (run->isWalking())
+        text += QStringLiteral(" · ") + pc->padText(tr("{Menu} to go back"));
+    if (!notice.isEmpty())
+        text += QStringLiteral(" · ") + notice;
+    m_statusPadRoleLabel->setText(text);
     m_statusPadRoleLabel->setStyleSheet(run->isArmed()
         ? QStringLiteral("QLabel { color: black; background: %1; font-weight: bold; padding: 0 4px; }")
               .arg(PadRun::armedColour().name())
         : QStringLiteral("QLabel { font-weight: bold; padding: 0 4px; }"));
-    m_statusPadRoleLabel->setToolTip(
-        (tool.isEmpty() ? QString()
-                        : tr("%1 has the controller until it ends; then it runs the show again.\n\n").arg(tool))
-        + tr("The game controller runs the show (the Run tab's Pad: button; hold %1 + %2 on the "
-           "controller for a second to switch). Nothing moves the show unless %3 is held. The "
-           "sticks stay the follow spot's.\n\n%4")
-            .arg(pc->padText(QStringLiteral("{View}")), pc->padText(QStringLiteral("{Menu}")),
-                 pc->padText(QStringLiteral("{LB}")),
-                 PadRun::mapLines(pc->padFamily()).join(QLatin1Char('\n'))));
+    m_statusPadRoleLabel->setToolTip(run->helpHtml());
     m_statusPadRoleLabel->show();
     if (m_statusFitTimer != nullptr)
         m_statusFitTimer->start();

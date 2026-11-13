@@ -1129,6 +1129,14 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
     QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible(), 2000);
     QCOMPARE(chip->text(), QStringLiteral("Pad: Run"));
     QVERIFY(m_app->followChip()->isVisible());  // beside the follow spot's
+    // Hover: the button map in this pad's names, the same text as the Run tab's button.
+    QCOMPARE(chip->toolTip(), padBtn->toolTip());
+    QVERIFY2(chip->toolTip().contains(QStringLiteral("Pad: Run")), qPrintable(chip->toolTip()));
+    QVERIFY2(chip->toolTip().contains(QStringLiteral("<b>L1</b>"))
+                 && chip->toolTip().contains(QStringLiteral("<b>Cross</b>"))
+                 && !chip->toolTip().contains(QStringLiteral("<b>LB</b>")),
+             qPrintable(chip->toolTip()));
+    qInfo().noquote() << "[PAD RUN] tooltip:" << chip->toolTip();
 
     QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
     auto heard = [&said](const QString &part) {
@@ -1167,6 +1175,52 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
     QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Run"), 2000);
     QTRY_VERIFY_WITH_TIMEOUT(chip->text().startsWith(QStringLiteral("Pad: Run")), 2000);
 
+    /* The press sweep: every control of this pad, alone, in the Run role
+       with the follow spot playing -- the role and the chip must still read
+       Pad: Run (a stray press never takes the pad out of Run). Menu is the
+       one documented exception (Walk) and says how to come back. */
+    {
+        QStringList table;
+        for (quint32 ch = 0; ch < 40; ++ch)
+        {
+            const GamepadRole::Role role = GamepadRole::Role(pc->controllerRole(1, ch));
+            if (role == GamepadRole::None || role == GamepadRole::LB
+                || role == GamepadRole::Back || role == GamepadRole::Start)
+                continue;
+            const bool axis = GamepadRole::isAxis(role) || GamepadRole::isTouch(role);
+            press(ch, axis ? 220 : 255);
+            const QString during = chip->isVisible() ? chip->text() : QStringLiteral("(hidden)");
+            const bool ok = run->isEnabled() && run->holder().isEmpty() && !run->isWalking();
+            press(ch, axis ? 128 : 0);
+            table << QStringLiteral("ch %1 role %2: %3 enabled=%4 holder='%5' walking=%6")
+                         .arg(ch).arg(int(role)).arg(during).arg(run->isEnabled()).arg(run->holder()).arg(run->isWalking());
+            QVERIFY2(ok, qPrintable(table.last()));
+            QVERIFY2(during.startsWith(QStringLiteral("Pad: Run")), qPrintable(table.last()));
+            // The triggers step the cue list, and the screen says which.
+            if (role == GamepadRole::RightTrigger || role == GamepadRole::LeftTrigger)
+                QVERIFY2(during.contains(QStringLiteral("List: ")), qPrintable(table.last()));
+            // A press that needs the arm says so, beside the role.
+            if (role == GamepadRole::A || role == GamepadRole::B || role == GamepadRole::X
+                || role == GamepadRole::Y || role == GamepadRole::RB)
+                QVERIFY2(during.contains(QStringLiteral("to arm")), qPrintable(table.last()));
+            press(ch, axis ? 128 : 0);
+            settle(100);
+        }
+        qInfo().noquote() << "[PAD RUN] sweep:\n" + table.join('\n');
+        // Menu alone: Walk, plainly; Menu again: back to Run.
+        const quint32 kMenu = 13;
+        QCOMPARE(GamepadRole::Role(pc->controllerRole(1, kMenu)), GamepadRole::Start);
+        tap(kMenu);
+        qInfo().noquote() << "[PAD RUN] after Menu:" << chip->text() << run->isWalking() << run->holder();
+        if (run->isWalking())
+        {
+            QVERIFY2(chip->text().contains(QStringLiteral("to go back")), qPrintable(chip->text()));
+            tap(kMenu);
+        }
+        QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Run"), 3000);
+        QVERIFY(run->isEnabled());
+    }
+
     /* A tool started on the laptop has the pad until it ends ("The tools
        win"): the button and the footer name it, rather than a pad that
        seems dead. Focus this cue, quietly, on the cue running. */
@@ -1174,7 +1228,7 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
     QVERIFY2(pc->refineSession()->start(mainList->cues.at(1).id, 0xFFFFFFFF, &why), qPrintable(why));
     QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Focus This Cue"), 2000);
     QTRY_VERIFY_WITH_TIMEOUT(chip->text().startsWith(QStringLiteral("Pad: Focus This Cue")), 2000);
-    QVERIFY(chip->toolTip().contains(QStringLiteral("has the controller until it ends")));
+    QVERIFY(chip->toolTip().contains(QStringLiteral("has the controller</b> until it ends")));
     press(kLB, 255);
     QVERIFY(!run->isArmed());
     press(kLB, 0);

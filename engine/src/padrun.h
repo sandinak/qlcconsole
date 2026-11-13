@@ -220,6 +220,11 @@ public:
      *  "Pad: ARMED", "Pad: Walk", or the tool holding it ("Pad: Venue
      *  focus"). */
     QString roleText() const;
+    /** The tooltip for the Run tab's Pad: button and the footer's Pad chip,
+     *  one text for both: the role line, the tool holding the pad (and how
+     *  it ends), then the button map as a table in the connected pad's
+     *  names (Cross / L1 or A / LB), and the walking map. Rich text. */
+    QString helpHtml() const;
     /** Let go of everything held (the pad went away, a tool took it). */
     void reset();
 

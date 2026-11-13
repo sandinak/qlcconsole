@@ -58,7 +58,7 @@ the show from it. The controller has two **roles**:
 Switch with the **Pad:** button in the **Run** tab's header (**Pad: Tools**
 / **Pad: Run**). The choice belongs to this computer and is kept for next
 time. Its tooltip shows the button map in the words of the pad you're
-holding, and **Settings → Advanced → Game controllers → Controller Test…** lists what each
+holding; the footer's **Pad** chip shows the same map as a table when you hover it (it also names a press the pad refused, the list the triggers stepped to, and how to leave Walk), the whole Run tab is framed in orange while the arm is held, and **Settings → Advanced → Game controllers → Controller Test…** lists what each
 button does in the Run role (**Run: GO (LB held)**).
 
 While the role is Run the footer says so too, from every tab: **Pad:
