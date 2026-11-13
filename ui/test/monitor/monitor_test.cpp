@@ -32859,6 +32859,20 @@ void Monitor_Test::aRefusedLayersDropSaysWhy()
         QLabel *hint = panel.findChild<QLabel *>("layersHint");
         QVERIFY(hint != nullptr);
         const QString idle = hint->text();
+    auto shots = [&](QWidget *w, const char *prefix) {
+        const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+        if (dir.isEmpty())
+            return;
+        QDir().mkpath(dir);
+        for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+        {
+            w->resize(sz);
+            QTest::qWait(50);
+            w->grab().save(QString("%1/%2-%3x%4.png").arg(dir, prefix).arg(sz.width()).arg(sz.height()));
+        }
+    };
+        panel.show();
+        shots(&panel, "layers-locked-before");
         const quint32 before = props->fixtureLayer(spare->id());
 
         // Onto a locked layer: nothing moves, and it names the layer.
@@ -32868,6 +32882,7 @@ void Monitor_Test::aRefusedLayersDropSaysWhy()
         QCoreApplication::processEvents();
         QVERIFY2(hint->text().contains("Closed Down") && hint->text().contains("locked"), qPrintable(hint->text()));
         QCOMPARE(props->fixtureLayer(spare->id()), before);
+        shots(&panel, "layers-locked-after");
 
         // Unlocked: it moves and the hint is not a refusal.
         props->setLayerLocked(shut, false);

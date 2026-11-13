@@ -241,14 +241,29 @@ void Workbench_Test::addExistingSaysWhyNothingWasAdded()
     QLabel *hint = wb.findChild<QLabel *>("workbenchHint");
     QVERIFY(hint != nullptr);
     const QString idle = hint->text();
+    auto shots = [&](QWidget *w, const char *prefix) {
+        const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+        if (dir.isEmpty())
+            return;
+        QDir().mkpath(dir);
+        for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+        {
+            w->resize(sz);
+            QTest::qWait(50);
+            w->grab().save(QString("%1/%2-%3x%4.png").arg(dir, prefix).arg(sz.width()).arg(sz.height()));
+        }
+    };
 
     // Nothing loaded.
     wb.addExisting();
     QVERIFY2(hint->text().contains("Load a scene"), qPrintable(hint->text()));
 
     wb.load(c->id());
+    wb.show();
+    shots(&wb, "workbench-addexisting-before");
     // Everything chosen is already a layer.
     QVERIFY(!wb.addExistingChosen({ a->id() }));
+    shots(&wb, "workbench-addexisting-after");
     QVERIFY2(hint->text().contains("Already in") && hint->text().contains("0.0.1-Startup"),
              qPrintable(hint->text()));
     // The picker closed with nothing ticked.
