@@ -282,6 +282,18 @@ void PadBenchShow_Test::cleanupTestCase()
     m_app = nullptr;
     delete m_pluginDir;
     m_pluginDir = nullptr;
+    for (const QString &t : std::as_const(m_times))
+        qInfo().noquote() << "[TIME]" << t;
+}
+
+void PadBenchShow_Test::init()
+{
+    m_clock.start();
+}
+
+void PadBenchShow_Test::cleanup()
+{
+    m_times << QStringLiteral("%1 %2 ms").arg(QLatin1String(QTest::currentTestFunction())).arg(m_clock.elapsed());
 }
 
 bool PadBenchShow_Test::open(const QString &path)

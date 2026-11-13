@@ -21,7 +21,9 @@
 #define PADBENCHSHOW_TEST_H
 
 #include <QObject>
+#include <QElapsedTimer>
 #include <QString>
+#include <QStringList>
 
 class App;
 class QTemporaryDir;
@@ -38,6 +40,8 @@ class PadBenchShow_Test : public QObject
 private slots:
     void initTestCase();
     void cleanupTestCase();
+    void init();
+    void cleanup();
 
     /** Builds the show, saves it, opens it again and checks every item the
      *  checklist names: present, named, and doing what it says. */
@@ -55,6 +59,8 @@ private slots:
     void padRunWithTheFollowSpotPlaying();
 
 private:
+    QElapsedTimer m_clock;      //!< each function's time, said (the gate's budget)
+    QStringList m_times;
     bool open(const QString &path);
     void build(const QString &path);
     void check(const QString &path);
