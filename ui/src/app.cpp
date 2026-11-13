@@ -5144,7 +5144,7 @@ QList<QWidget *> App::statusChipsByPriority() const
     // rig; the counters and the notices last.
     const QList<QWidget *> order = {
         m_statusStage, m_statusDirtyLabel, m_statusModeChipLabel,
-        m_statusFollowLabel, m_statusModeLabel, m_statusOverridesChip, m_statusProgrammerLabel,
+        m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusOverridesChip, m_statusProgrammerLabel,
         m_statusGrandMasterBox, m_statusReviewLabel, m_venueChip,
         m_statusSelectionLabel, m_statusPadModeLabel,
         m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
@@ -8571,6 +8571,16 @@ void App::initStatusBar()
     m_statusPadModeLabel->hide();
     sb->addPermanentWidget(m_statusPadModeLabel);
 
+    /* The game controller's role while it is Run (0.4 Pad Run): what the
+       Run tab's Pad: button says, seen from every tab -- the follow spot's
+       chip beside it only says what the sticks do. */
+    m_statusPadRoleLabel = new QLabel(this);
+    m_statusPadRoleLabel->setObjectName(QStringLiteral("footerPadRole"));
+    m_statusPadRoleLabel->setAlignment(Qt::AlignCenter);
+    m_statusPadRoleLabel->setProperty("helpTopic", QStringLiteral("show-control.md"));
+    m_statusPadRoleLabel->hide();
+    sb->addPermanentWidget(m_statusPadRoleLabel);
+
     // The follow spot at work, wherever you are (Show Tree, Run, Operate):
     // shown only while a follow spot is on.
     m_statusFollowLabel = new QLabel(this);
@@ -8732,8 +8742,18 @@ void App::initStatusBar()
             // Where its operator stands: "from SL tower".
             connect(m_doc->programmer(), &ProgrammerController::followSpotOperatorChanged,
                     this, &App::updateFollowChip);
+            // The pad's role, armed and walking: the footer's Pad chip.
+            PadRun *run = m_doc->programmer()->padRun();
+            connect(run, &PadRun::enabledChanged, this, &App::updatePadRoleChip);
+            connect(run, &PadRun::armedChanged, this, &App::updatePadRoleChip);
+            connect(run, &PadRun::walkingChanged, this, &App::updatePadRoleChip);
+            connect(run, &PadRun::holderChanged, this, &App::updatePadRoleChip);
+            connect(run, &PadRun::noticeChanged, this, &App::updatePadRoleChip);
+            connect(m_doc->programmer(), &ProgrammerController::focusControllerChanged,
+                    this, &App::updatePadRoleChip);
         }
         updateFollowChip();
+        updatePadRoleChip();
     }
 
     // A source registers into ShowStatus, not into this widget directly
@@ -9889,6 +9909,44 @@ void App::updateFollowChip()
                                              .arg(MeasurementUnits::formatSpeed(pc->followSpotTopSpeed())))
                                     + (size.isEmpty() ? QString() : tr("\nBeam: %1.").arg(size)));
     m_statusFollowLabel->show();
+    if (m_statusFitTimer != nullptr)
+        m_statusFitTimer->start();
+}
+
+void App::updatePadRoleChip()
+{
+    if (m_statusPadRoleLabel == nullptr || m_doc == nullptr || m_doc->programmer() == nullptr)
+        return;
+    ProgrammerController *pc = m_doc->programmer();
+    const PadRun *run = pc->padRun();
+    if (!run->isEnabled())
+    {
+        m_statusPadRoleLabel->hide();
+        if (m_statusFitTimer != nullptr)
+            m_statusFitTimer->start();
+        return;
+    }
+    /* The Run tab's button's words, so the two never disagree -- and for a
+       moment what the last press could not do ("Hold LB to arm."), which
+       lights-only feedback never says aloud. */
+    const QString notice = run->notice();
+    m_statusPadRoleLabel->setText(notice.isEmpty() ? run->roleText()
+                                                   : run->roleText() + QStringLiteral(" · ") + notice);
+    const QString tool = run->holder();
+    m_statusPadRoleLabel->setStyleSheet(run->isArmed()
+        ? QStringLiteral("QLabel { color: black; background: %1; font-weight: bold; padding: 0 4px; }")
+              .arg(PadRun::armedColour().name())
+        : QStringLiteral("QLabel { font-weight: bold; padding: 0 4px; }"));
+    m_statusPadRoleLabel->setToolTip(
+        (tool.isEmpty() ? QString()
+                        : tr("%1 has the controller until it ends; then it runs the show again.\n\n").arg(tool))
+        + tr("The game controller runs the show (the Run tab's Pad: button; hold %1 + %2 on the "
+           "controller for a second to switch). Nothing moves the show unless %3 is held. The "
+           "sticks stay the follow spot's.\n\n%4")
+            .arg(pc->padText(QStringLiteral("{View}")), pc->padText(QStringLiteral("{Menu}")),
+                 pc->padText(QStringLiteral("{LB}")),
+                 PadRun::mapLines(pc->padFamily()).join(QLatin1Char('\n'))));
+    m_statusPadRoleLabel->show();
     if (m_statusFitTimer != nullptr)
         m_statusFitTimer->start();
 }

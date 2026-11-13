@@ -21,6 +21,9 @@
 #include <QTemporaryDir>
 #include <QFileInfo>
 #include <QLabel>
+#include <QSignalSpy>
+#include <QRegularExpression>
+#include <QToolButton>
 #include <QFile>
 #include <QDir>
 #include <QtTest>
@@ -32,6 +35,10 @@
 #include "showtreeview.h"
 #include "programmercontroller.h"
 #include "markplanner.h"
+#include "mastertimer.h"
+#include "programmingmanager.h"
+#include "workbenchstack.h"
+#include "workbench.h"
 #undef protected
 #undef private
 #include "showtreecontroller.h"
@@ -56,7 +63,10 @@
 #include "stagetarget.h"
 #include "focuscalls.h"
 #include "focussession.h"
+#include "refinesession.h"
 #include "showcontrol.h"
+#include "controllerscheme.h"
+#include "padrun.h"
 #include "mastertimer.h"
 #include "qlcpalette.h"
 #include "qlcchannel.h"
@@ -870,6 +880,302 @@ void PadBenchShow_Test::theCommittedShowChecksOut()
     QVERIFY(QFile::copy(show, copy));
     QVERIFY(QFile::copy(VenueCorrections::sidecarPath(show), VenueCorrections::sidecarPath(copy)));
     check(copy);
+}
+
+/****************************************************************************
+ * Opening a show over one that plays
+ ****************************************************************************/
+
+namespace
+{
+
+/* What the MasterTimer still holds that is not a function of the Doc: a
+   pointer it would tick after the Doc deleted it. Pointers only, never
+   followed. */
+int strayFunctions(Doc *doc)
+{
+    MasterTimer *timer = doc->masterTimer();
+    QSet<Function *> live;
+    for (Function *f : doc->functions())
+        live.insert(f);
+    QMutexLocker locker(&timer->m_functionListMutex);
+    int stray = 0;
+    for (Function *f : std::as_const(timer->m_startQueue))
+        if (!live.contains(f))
+            ++stray;
+    for (Function *f : std::as_const(timer->m_functionList))
+        if (!live.contains(f))
+            ++stray;
+    return stray;
+}
+
+} // namespace
+
+/* File > Open over a show that plays (Design: the Workbench previewing what
+   it has loaded, the Show Tree previewing a cue, cue lists running): the
+   old show's functions are deleted with the timer stopped, and it starts
+   again on the new show at once. Whatever the old show's teardown started
+   again must not be left in the timer for it to tick freed (crash
+   2026-11-13: DanceHysteria-0.6, then PadBench.qlcc). */
+void PadBenchShow_Test::openingAShowOverOneThatPlays()
+{
+    const QString pad = QStringLiteral(PADBENCH_COMMITTED);
+    const QString dance = QStringLiteral(DANCE_SHOW);
+    if (!QFileInfo::exists(pad) || !QFileInfo::exists(dance))
+        QSKIP("the test shows are not there");
+    QTemporaryDir dir;
+    const QString padCopy = dir.filePath(QStringLiteral("PadBench.qlcc"));
+    const QString danceCopy = dir.filePath(QStringLiteral("Dance.qlcc"));
+    QVERIFY(QFile::copy(pad, padCopy));
+    QVERIFY(QFile::copy(VenueCorrections::sidecarPath(pad), VenueCorrections::sidecarPath(padCopy)));
+    QVERIFY(QFile::copy(dance, danceCopy));
+
+    Doc *doc = m_app->doc();
+    m_app->setWorkspaceView(App::EverythingView, false);
+    ProgrammingManager *pm = ProgrammingManager::instance();
+    QVERIFY(pm != nullptr);
+
+    int strayAtCleared = -1;
+    QMetaObject::Connection cleared = connect(doc, &Doc::cleared, this, [&]() {
+        strayAtCleared = qMax(strayAtCleared, strayFunctions(doc));
+    });
+    auto restore = qScopeGuard([&]() { disconnect(cleared); });
+
+    /* Open the way File > Open does: no Stop all first, the timer running. */
+    auto openOver = [&](const QString &path) {
+        doc->resetModified();
+        m_app->clearDocument();
+        QCOMPARE(m_app->loadShowFile(path, App::NoRecovery), QFile::NoError);
+        doc->resetModified();
+        QCOMPARE(doc->mode(), Doc::Design);
+        // The new show plays a while on the timer's thread.
+        settle(60);
+        QCOMPARE(strayFunctions(doc), 0);
+    };
+
+    QVERIFY(m_app->loadShowFile(danceCopy, App::NoRecovery) == QFile::NoError);
+    doc->setMode(Doc::Design);
+    settle(50);
+
+    const int rounds = 3;
+    for (int round = 0; round < rounds; ++round)
+    {
+        /* The dance show: Build's Workbench previews one function of each
+           kind in turn; on odd rounds its cue lists run too. */
+        m_app->switchToTabContaining(pm);
+        QList<quint32> picks;
+        for (Function::Type type : { Function::CollectionType, Function::ChaserType, Function::SceneType,
+                                     Function::RGBMatrixType, Function::EFXType })
+        {
+            const QList<Function *> of = doc->functionsByType(type);
+            if (!of.isEmpty())
+                picks << of.at(round % of.size())->id();
+        }
+        QVERIFY(!picks.isEmpty());
+        pm->showFunction(picks.at(round % picks.size()));
+        if (round % 2 == 1)
+            for (Function *f : doc->functionsByType(Function::ChaserType))
+                f->start(doc->masterTimer(), FunctionParent::master());
+        settle(80);
+
+        /* Over it, PadBench. */
+        openOver(padCopy);
+        QCOMPARE(strayAtCleared, 0);
+
+        /* PadBench: the Show Tree previews a cue; on odd rounds a list
+           runs (GO) under it, and the Workbench walks a chaser. */
+        QList<quint32> cues;
+        QList<quint32> lists;
+        for (const ShowTree::Production &p : doc->showTree()->productions())
+            for (const ShowTree::CueList &l : p.lists)
+            {
+                lists << l.chaser;
+                for (const ShowTree::Cue &c : l.cues)
+                    cues << c.id;
+            }
+        QVERIFY(!cues.isEmpty());
+        const quint32 cue = cues.at(round % cues.size());
+        if (round % 3 != 2)
+        {
+            /* The cue open in the Show Tree's Workbench, playing in context
+               -- or Solo, one layer of it. */
+            ShowTreeView *tree = ShowTreeView::instance();
+            QVERIFY(tree != nullptr);
+            m_app->switchToTabContaining(tree);
+            settle();
+            QVERIFY(tree->openInWorkbench(cue));
+            settle(30);
+            Workbench *bench = tree->dockedWorkbench();
+            QVERIFY(bench != nullptr && bench->stack() != nullptr);
+            if (round % 3 == 1)
+            {
+                bench->stack()->setFocusLayer(0);
+                bench->stack()->setSolo(true);
+            }
+        }
+        else
+            doc->showTree()->previewCue(cue);
+        if (round % 2 == 1)
+        {
+            if (Chaser *ch = qobject_cast<Chaser *>(doc->function(lists.first())))
+                doc->showControl()->go(ch, 0);
+            const QList<Function *> chasers = doc->functionsByType(Function::ChaserType);
+            if (!chasers.isEmpty())
+                pm->showFunction(chasers.at(round % chasers.size())->id());
+        }
+        settle(80);
+
+        /* And the dance show over that. */
+        openOver(danceCopy);
+        QCOMPARE(strayAtCleared, 0);
+    }
+    doc->masterTimer()->stopAllFunctions();
+    settle(50);
+}
+
+void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
+{
+    const QString show = QStringLiteral(PADBENCH_COMMITTED);
+    if (!QFileInfo::exists(show))
+        QSKIP("test-workspaces/PadBench.qlcc is not there yet");
+    QTemporaryDir dir;
+    const QString copy = dir.filePath(QStringLiteral("PadBench.qlcc"));
+    QVERIFY(QFile::copy(show, copy));
+    QVERIFY(QFile::copy(VenueCorrections::sidecarPath(show), VenueCorrections::sidecarPath(copy)));
+    QVERIFY(open(copy));
+
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    ProgrammerController *pc = doc->programmer();
+    InputOutputMap *iom = doc->inputOutputMap();
+    PadRun *run = pc->padRun();
+
+    // The pad: whichever virtual pad is free takes the "any game controller" slot.
+    QTRY_VERIFY_WITH_TIMEOUT(iom->inputSlotLive(1) == 0, 5000);
+    InputPatch *ip = iom->inputPatch(1);
+    QVERIFY(ip != nullptr && ip->isPatched());
+    const quint32 padLine = ip->input();
+    QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 5000);
+    qInfo().noquote() << "[PAD RUN] pad" << ip->inputName();
+    /* The bench Mac's feedback: lights only -- nothing is said aloud, so
+       what a press could not do must be on the screen. */
+    pc->setOperatorFeedback(ControllerScheme::LightsFeedback);
+
+    // The profile's channels (playstation.qxhid / xbox.qxhid): the six axes, then the buttons.
+    const quint32 kA = 6, kLB = 10, kView = 12, kLS = 14, kDpadUp = 17, kDpadDown = 18;
+    auto press = [&](quint32 ch, uchar v) {
+        QVERIFY(padInput(doc, padLine, ch, v));
+        settle(60);
+    };
+    auto tap = [&](quint32 ch) { press(ch, 255); press(ch, 0); };
+
+    // Top bar > Operate; Main cue 1: the follow spot plays.
+    doc->setMode(Doc::Operate);
+    settle(100);
+    const CueList *mainList = listNamed(st, kProduction, kMain);
+    QVERIFY(mainList != nullptr);
+    ShowControl::Request r;
+    r.command = ShowControl::Go;
+    r.chaser = mainList->chaser;
+    r.cue = mainList->cues.at(0).number;
+    QVERIFY(m_app->runCommand(r, ShowControl::RouteRunTab));
+    QTRY_VERIFY_WITH_TIMEOUT(pc->followSpotStatus().state != ProgrammerController::FollowSpotStatus::Off, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(st->runningCue(mainList->id), mainList->cues.at(0).id, 3000);
+
+    // The follow-spot checks first, in Tools, as on the bench: speed, facing, Centre Sticks.
+    QToolButton *padBtn = m_app->findChild<QToolButton *>(QStringLiteral("crPadRun"));
+    QVERIFY(padBtn != nullptr);
+    if (run->isEnabled())
+        padBtn->click();
+    QCOMPARE(padBtn->text(), QStringLiteral("Pad: Tools"));
+    QLabel *chip = m_app->padRoleChip();
+    QVERIFY(chip != nullptr);
+    QVERIFY(chip->isHidden());              // Tools: nothing to report (UX-23)
+    tap(kDpadUp);
+    tap(kDpadDown);
+    tap(kLS);                               // L3 held and let go: the facing, unchanged
+    press(kView, 255);                      // View + LS: Centre Sticks
+    tap(kLS);
+    press(kView, 0);
+    settle(100);
+
+    // The Run tab's button from Pad: Tools to Pad: Run; the footer says it too.
+    padBtn->click();
+    QVERIFY(run->isEnabled());
+    QCOMPARE(padBtn->text(), QStringLiteral("Pad: Run"));
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible(), 2000);
+    QCOMPARE(chip->text(), QStringLiteral("Pad: Run"));
+    QVERIFY(m_app->followChip()->isVisible());  // beside the follow spot's
+
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    auto heard = [&said](const QString &part) {
+        for (const QList<QVariant> &a : said)
+            if (a.first().toString().contains(part))
+                return true;
+        return false;
+    };
+
+    // 1. A (Cross) alone: nothing plays; the footer says to hold LB (L1) -- lights only, so not aloud.
+    tap(kA);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains(QStringLiteral("to arm")),
+                              qPrintable(QStringLiteral("chip: %1, role %2").arg(chip->text())
+                                         .arg(pc->controllerRole(1, kA))), 2000);
+    qInfo().noquote() << "[PAD RUN] unarmed, footer:" << chip->text();
+    QVERIFY(!heard(QStringLiteral("to arm")));
+    QCOMPARE(st->runningCue(mainList->id), mainList->cues.at(0).id);
+    // With the voice on, it is said as well.
+    pc->setOperatorFeedback(ControllerScheme::BothFeedback);
+    tap(kA);
+    QTRY_VERIFY_WITH_TIMEOUT(heard(QStringLiteral("to arm")), 2000);
+    QCOMPARE(st->runningCue(mainList->id), mainList->cues.at(0).id);
+
+    // 2. Hold LB (L1): armed, on the Run tab's button and in the footer.
+    press(kLB, 255);
+    QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: ARMED"), 2000);
+    QVERIFY(chip->text().startsWith(QStringLiteral("Pad: ARMED")));
+
+    // 3. LB + A: GO, to cue 2.
+    tap(kA);
+    QTRY_COMPARE_WITH_TIMEOUT(st->runningCue(mainList->id), mainList->cues.at(1).id, 3000);
+
+    // Let go of LB: Pad: Run again.
+    press(kLB, 0);
+    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Run"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().startsWith(QStringLiteral("Pad: Run")), 2000);
+
+    /* A tool started on the laptop has the pad until it ends ("The tools
+       win"): the button and the footer name it, rather than a pad that
+       seems dead. Focus this cue, quietly, on the cue running. */
+    QString why;
+    QVERIFY2(pc->refineSession()->start(mainList->cues.at(1).id, 0xFFFFFFFF, &why), qPrintable(why));
+    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Focus This Cue"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().startsWith(QStringLiteral("Pad: Focus This Cue")), 2000);
+    QVERIFY(chip->toolTip().contains(QStringLiteral("has the controller until it ends")));
+    press(kLB, 255);
+    QVERIFY(!run->isArmed());
+    press(kLB, 0);
+    pc->refineSession()->stop();
+    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Run"), 2000);
+
+    // At the smallest window the Pad chip is whole, beside the Follow chip.
+    m_app->resize(1024, 640);
+    settle(400);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->isVisible() && !chip->property("statusSqueezed").toBool()
+                              && chip->width() > 0,
+                              qPrintable(QStringLiteral("chip %1 wide, squeezed %2")
+                                         .arg(chip->width()).arg(chip->property("statusSqueezed").toBool())),
+                              2000);
+    qInfo().noquote() << "[PAD RUN] at 1024: pad chip" << chip->width() << "px, follow chip"
+                      << m_app->followChip()->text().remove(QRegularExpression(QStringLiteral("<[^>]*>")));
+
+    padBtn->click();        // back to Tools: the chip goes
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isHidden(), 2000);
+    m_app->resize(1280, 800);
+    doc->masterTimer()->stopAllFunctions();
+    doc->setMode(Doc::Design);
+    settle(300);
+    doc->resetModified();
 }
 
 int main(int argc, char **argv)

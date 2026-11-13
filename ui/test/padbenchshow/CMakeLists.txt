@@ -29,4 +29,5 @@ target_link_libraries(${module_name} PRIVATE
 add_dependencies(${module_name} hidplugin)
 target_compile_definitions(${module_name} PRIVATE
     QLC_HID_PLUGIN_FILE="$<TARGET_FILE:hidplugin>"
-    PADBENCH_COMMITTED="${CMAKE_SOURCE_DIR}/test-workspaces/PadBench.qlcc")
+    PADBENCH_COMMITTED="${CMAKE_SOURCE_DIR}/test-workspaces/PadBench.qlcc"
+    DANCE_SHOW="${CMAKE_SOURCE_DIR}/test-workspaces/DanceHysteria-0.1.qlcc")

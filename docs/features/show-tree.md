@@ -1573,7 +1573,7 @@ cue, and a cue with fewer places (the song's count-in, *1*) stays as it is.
 Under **Hundreds per song** the song's cues are numbered in its hundred
 from Start (from 0: 200, 201, 202…). With free numbers (QLab) the numbers
 say nothing about the song, so the item is greyed: use Renumber This
-Level… on its cues. The dialog lists every change; a renumber that would
+Level… on its cues. The dialog lists every change as *old → new* and the cue's name, sub-cues indented under their cue, and leaves out the cues that keep their number; a renumber that would
 reach a number outside the song (past 299 for song 200) or put the song out
 of order with the cues around it is refused, saying why. The song's name,
 running-order place and timecode start stay. One undo step, and it asks

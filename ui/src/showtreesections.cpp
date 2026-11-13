@@ -544,13 +544,8 @@ bool ShowTreeView::renumberSong(quint32 listId, const Section &song, int start, 
         return false;
     if (start < 0)
         start = m_st->listNumbering(listId) == Numbering::Hundreds ? 0 : 1;
-    auto lines = [](const QList<ShowTreeController::Renumbered> &plan, int most) {
-        QStringList out;
-        for (const ShowTreeController::Renumbered &r : plan.mid(0, most))
-            out << tr("%1 → %2").arg(r.from, r.to);
-        if (plan.count() > most)
-            out << tr("… and %1 more").arg(plan.count() - most);
-        return out.join(QStringLiteral("\n"));
+    auto lines = [this](const QList<ShowTreeController::Renumbered> &plan, int most) {
+        return renumberLines(plan, most);
     };
     if (ask)
     {
@@ -582,6 +577,7 @@ bool ShowTreeView::renumberSong(quint32 listId, const Section &song, int start, 
         f->addRow(whole);
         QLabel *preview = new QLabel(&dlg);
         preview->setObjectName("stRenumberPreview");
+        preview->setTextFormat(Qt::PlainText);
         preview->setWordWrap(true);
         preview->setTextInteractionFlags(Qt::TextSelectableByMouse);
         f->addRow(preview);

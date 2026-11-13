@@ -10323,7 +10323,9 @@ void ShowTreeView_Test::renumberSongFromTheSongMenu()
             QLabel *preview = w->findChild<QLabel *>("stRenumberPreview");
             if (dlg == nullptr || preview == nullptr || w->findChild<QCheckBox *>("stRenumberWholePoints") == nullptr)
                 return false;
-            if (!preview->text().contains(QString::fromUtf8("1.0.5 → 1.0.2")))
+            if (!preview->text().contains(QString::fromUtf8("1.0.5 → 1.0.2  B")))
+                return false;                                   // old → new, then the cue's name
+            if (!preview->text().contains(QString::fromUtf8("1.0.9 → 1.0.3  C")))
                 return false;
             if (!shotDir.isEmpty())
                 dlg->grab().save(shotDir + "/renumber-song-dialog-after.png");
