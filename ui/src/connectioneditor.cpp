@@ -216,7 +216,9 @@ void ConnectionEditor::buildForm()
         m_targetCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
         m_targetIP = m_targetCombo->lineEdit();
         m_targetIP->setObjectName(QStringLiteral("connTargetIP"));
-        m_targetIP->setPlaceholderText(tr("Type a node's IP, or pick from the list"));
+        /* Broadcast is the empty field, so typing an address starts
+           clean -- there is no "Broadcast" to delete first. */
+        m_targetIP->setPlaceholderText(tr("Broadcast — type a node's IP to send to it"));
         m_targetCombo->setToolTip(tr("Where this universe is sent: type a node's IP address, "
                                      "or open the list for Broadcast and the nodes heard on "
                                      "the network"));
@@ -942,7 +944,7 @@ void ConnectionEditor::loadTargets()
     else
     {
         m_targetCombo->setCurrentIndex(0);
-        m_targetIP->setText(tr("Broadcast"));
+        m_targetIP->clear();
         m_targetPort->clear();
     }
     m_loading = false;
@@ -964,7 +966,7 @@ void ConnectionEditor::slotTargetChanged()
     }
     else if (which == TARGET_BROADCAST)
     {
-        m_targetIP->setText(tr("Broadcast"));
+        m_targetIP->clear();
         m_targetPort->clear();
     }
     m_loading = false;

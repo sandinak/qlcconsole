@@ -55,9 +55,9 @@ show or hide each; the choice is remembered. Output, IP, U, Mode, Input and
 PT are on to begin with.
 
 **The columns are a grid you edit in place**, for setting many universes up
-quickly: click a cell of the selected row (or press F2) — **Output** picks
+quickly: click a cell of the selected row — **Output** picks
 the protocol (or **Not patched**), **IP** takes a node's address (or
-**Broadcast**), **U** takes the universe on the node (a bare number works:
+empty to broadcast), **U** takes the universe on the node (a bare number works:
 `15` is 0:0:15), and **Mode**, **Input**, **Profile** and **PT** are lists.
 Each is made as you leave the cell, as one step of **Undo Patch Change**,
 through the same rules as the window below; one that is refused (a port
@@ -131,7 +131,7 @@ one opens filled in.
 - Below, that protocol's own settings, in place:
   - **Art-Net** (and any protocol that sends to a node): **Send To** is one
     field. Type the node's IP and that's where it goes — no list to scroll
-    first; type a broadcast address (or **Broadcast**) to broadcast; a line
+    first; leave it empty (or type a broadcast address) to broadcast; a line
     under it says what it will do, or why the text isn't an address. Its
     list holds **Broadcast** and every port of every device heard on the
     network, added by hand or only named by an existing patch, **free ones

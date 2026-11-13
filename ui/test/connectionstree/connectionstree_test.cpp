@@ -2490,7 +2490,7 @@ void ConnectionsTree_Test::connectionEditorPatchesANewArtNetUniverse()
     QCOMPARE(ed.m_interfaceCombo->currentIndex(), 0);
     // Broadcast, then the four free ports of "Quad"; any other address is typed.
     QCOMPARE(ed.m_targetCombo->count(), 5);
-    QCOMPARE(ed.m_targetIP->text(), QString("Broadcast"));
+    QVERIFY(ed.m_targetIP->text().isEmpty());              // empty is broadcast
     QVERIFY(ed.m_targetPort->isEnabled() == false);        // broadcast: its own number
     ed.m_targetCombo->setCurrentIndex(3);                  // Quad port 3
     QCOMPARE(ed.m_targetIP->text(), QString("172.18.2.50"));
@@ -3146,7 +3146,7 @@ void ConnectionsTree_Test::typingAnIpPicksSendToAndTheInterface()
     QVERIFY(ed.m_interfaceCombo->isVisibleTo(&ed) == false);
     QCOMPARE(ed.m_interfaceChoose->text(), QString("Choose"));
     QCOMPARE(ed.m_interfaceCombo->currentIndex(), 1);       // not loopback
-    QCOMPARE(ed.m_targetIP->text(), QString("Broadcast"));
+    QVERIFY(ed.m_targetIP->text().isEmpty());              // empty is broadcast
 
     // Typing an IP: Send To is that node -- no list to scroll -- and the
     // interface the one on its network.

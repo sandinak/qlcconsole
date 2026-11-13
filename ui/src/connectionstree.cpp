@@ -5290,7 +5290,7 @@ QWidget *ConnectionsTree::createCellEditor(QWidget *parent, const QModelIndex &i
                 text = k == ConnectionEditor::KindTargets ? form.m_targetIP->text()
                                                           : form.m_sacnIP->text();
                 edit->setPlaceholderText(k == ConnectionEditor::KindTargets
-                    ? tr("A node's IP, or Broadcast") : tr("A receiver's IP, or empty: multicast"));
+                    ? tr("A node's IP, or empty: broadcast") : tr("A receiver's IP, or empty: multicast"));
             }
             else
             {
