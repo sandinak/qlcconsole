@@ -31,6 +31,7 @@ class FixtureGroupEditor;
 class FixtureTreeWidget;
 class QTreeWidgetItem;
 class QLineEdit;
+class QLabel;
 class QTextBrowser;
 class QTreeWidget;
 class QTabWidget;
@@ -369,6 +370,8 @@ private:
     QSplitter* m_splitter;
     FixtureTreeWidget* m_fixtures_tree;
     QLineEdit* m_fixturesSearch;
+    QLabel* m_fixturesNote = NULL;   //!< why a drop was refused, for a few seconds
+    void sayFixturesNote(const QString &text);
     QTreeWidget* m_channel_groups_tree;
     QWidget* m_rdmManager;
 

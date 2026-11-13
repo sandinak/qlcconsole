@@ -274,6 +274,10 @@ private:
     /** Perform a drag-to-reparent drop of @p dragged onto @p target (layer /
      *  group / item container). Reparents items and nests/moves groups. */
     void handleTreeDrop(const QList<QTreeWidgetItem *> &dragged, QTreeWidgetItem *target);
+    /** The hint line under the tree says why a drop was refused. */
+    void sayDropRefused(const QString &text);
+    class QLabel *m_hint = nullptr;
+    QString m_hintIdle;
 
     /** Layer id owning the current row (walks up to the top-level layer node). */
     quint32 currentLayerId() const;

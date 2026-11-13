@@ -1046,6 +1046,10 @@ private slots:
      *  handles, middle, place and undo change it */
     void peopleFollowTheirLine();
 
+    /** A Plot Layers drop onto a locked layer, or a vanished group, says why
+     *  (wfaudit-silent-failures) */
+    void aRefusedLayersDropSaysWhy();
+
 private:
     Doc* m_doc;
 };

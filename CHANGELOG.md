@@ -41,6 +41,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Three silent no-ops now say why.** **Add existing…** in the Workbench, when it adds nothing (everything picked is already a layer, the collection would hold itself, nothing was ticked, or nothing is loaded), puts the reason on the line over the layers. A Plot Layers drop onto a locked layer (it names the layer) or onto a group that has gone since the list was drawn says so on the hint line and moves nothing, instead of acting on a locked layer. A fixture dropped on a Power circuit that has since gone says so under the Fixtures tree and leaves the fixture where it was.
 - **Help ▸ What's New is current.** It was still headed "0.4.0 (unreleased)"; 0.4.0 now has its month, and a 0.4.4 section lists this release's changes.
 - **The test gate keeps its Mac awake.** A pool host running a gate unattended went into maintenance sleep every few seconds, and the timing tests that straddled a nap failed (PixelBoxes, SpeedMasters, WebAccess, VCButton on newaudio). The gate now holds `caffeinate` for its length, and those four tests wait on what they check instead of a fixed time. A hostile case that times out now shows the child's last lines.
 

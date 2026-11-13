@@ -318,6 +318,10 @@ private:
     /** + Scene (an existing one, picked), + new scene / EFX / RGB Matrix on
      *  the selected layer, remove, ▲ ▼, ▣ Open. */
     void addExisting();
+    /** "Add existing…" once the picker has chosen: adds, or says why not on the hint line. */
+    bool addExistingChosen(const QList<quint32> &ids);
+    /** A bold line over the layers for a few seconds (a refusal, never silence). */
+    void sayHint(const QString &text);
     quint32 addNew(Function::Type type);
     void removeSelectedLayers();
     void moveSelectedLayer(int delta);
@@ -375,6 +379,8 @@ private:
     // Rows + add bar
     ProgrammingOutline *m_rows = nullptr;
     QLabel *m_rowsHint = nullptr;
+    QString m_rowsWhat;                  //!< what the hint says when nothing is being said
+    class QTimer *m_hintTimer = nullptr;       //!< puts the hint back after sayHint()
     QToolButton *m_addSceneBtn = nullptr;
     /** + Effect ▾ (Q94): one button for the QLC+ effects, as Build ▸
      *  Effects' + New ▾; its EFX and RGB Matrix are these actions. */

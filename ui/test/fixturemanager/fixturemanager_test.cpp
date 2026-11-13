@@ -48,6 +48,7 @@
 #define protected public
 #define private public
 #include "fixturemanager.h"
+#include "powerdistribution.h"
 #include "../common/shotdark.h"
 #include "qlcchannel.h"
 #include "qlcphysical.h"
@@ -115,6 +116,42 @@ void FixtureManager_Test::init()
 void FixtureManager_Test::cleanup()
 {
     delete m_doc;
+}
+
+void FixtureManager_Test::aRefusedCircuitDropSaysWhy()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Probe");
+    fxi->setChannels(4);
+    QVERIFY(m_doc->addFixture(fxi));
+    PowerSource src;
+    src.name = "Distro A";
+    PowerCircuit cir;
+    cir.name = "Circuit 1";
+    src.circuits << cir;
+    m_doc->powerDistribution()->sources() << src;
+
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.resize(1000, 700);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    QLabel *note = mgr.findChild<QLabel *>("fixturesNote");
+    QVERIFY(note != nullptr);
+    QVERIFY(!note->isVisible());
+
+    // A circuit that is gone: nothing moves, and it says why.
+    mgr.slotFixturesDroppedOnCircuit({ fxi->id() }, 5, 0);
+    QTRY_VERIFY2(note->isVisible() && note->text().contains("circuit is gone"), qPrintable(note->text()));
+    int s = -1, c = -1;
+    m_doc->powerDistribution()->circuitOf(fxi->id(), s, c);
+    QCOMPARE(s, -1);
+
+    // A drop that works says nothing.
+    note->setVisible(false);
+    mgr.slotFixturesDroppedOnCircuit({ fxi->id() }, 0, 0);
+    QTRY_VERIFY(m_doc->powerDistribution()->sources().at(0).circuits.at(0).fixtures.contains(fxi->id()));
+    QVERIFY(!note->isVisible());
 }
 
 void FixtureManager_Test::theDeleteKeyDeletesTheSelectionAskingFirst()

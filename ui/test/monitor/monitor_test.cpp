@@ -32841,3 +32841,55 @@ void Monitor_Test::targetsDuplicateAndCopyPaste()
     QCOMPARE(props->stageTargets().size(), mid);
 }
 
+
+void Monitor_Test::aRefusedLayersDropSaysWhy()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setLayoutLocked(false);
+    Fixture *spare = plainFixture(doc, "Spare Spot", 30);
+    const quint32 shut = props->addLayer("Closed Down");
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.ensureFixtureOnPlot(spare->id());
+        view.ensureGroupRegistry();
+        MonitorLayersPanel panel(doc, &view);
+        panel.reload();
+        QLabel *hint = panel.findChild<QLabel *>("layersHint");
+        QVERIFY(hint != nullptr);
+        const QString idle = hint->text();
+        const quint32 before = props->fixtureLayer(spare->id());
+
+        // Onto a locked layer: nothing moves, and it names the layer.
+        props->setLayerLocked(shut, true);
+        panel.reload();
+        panel.handleTreeDrop({ layersRow(panel, "Spare Spot") }, layersRow(panel, "Closed Down"));
+        QCoreApplication::processEvents();
+        QVERIFY2(hint->text().contains("Closed Down") && hint->text().contains("locked"), qPrintable(hint->text()));
+        QCOMPARE(props->fixtureLayer(spare->id()), before);
+
+        // Unlocked: it moves and the hint is not a refusal.
+        props->setLayerLocked(shut, false);
+        hint->setText(idle);
+        panel.reload();
+        panel.handleTreeDrop({ layersRow(panel, "Spare Spot") }, layersRow(panel, "Closed Down"));
+        QCoreApplication::processEvents();
+        QCOMPARE(props->fixtureLayer(spare->id()), shut);
+        QCOMPARE(hint->text(), idle);
+
+        // A group that has vanished since the list was drawn.
+        const quint32 g = 9001;
+        props->createGroup(g, "Doomed", props->activeLayerId());
+        panel.reload();
+        QTreeWidgetItem *gone = nullptr;
+        for (QTreeWidgetItemIterator it(panel.m_tree); *it != nullptr; ++it)
+            if (rowName(*it) == QStringLiteral("Doomed"))
+                gone = *it;
+        QVERIFY(gone != nullptr);
+        props->removeGroup(g);
+        panel.handleTreeDrop({ layersRow(panel, "Spare Spot") }, gone);
+        QVERIFY2(hint->text().contains("group is gone"), qPrintable(hint->text()));
+    }
+    delete doc;
+}

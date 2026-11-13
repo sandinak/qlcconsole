@@ -152,8 +152,9 @@ public:
     /** Remove a fixture from whatever circuit it is on (no-op if unassigned) */
     void unassignFixture(quint32 fxId);
 
-    /** Assign a fixture to a specific circuit, removing any prior assignment */
-    void assignFixture(quint32 fxId, int sourceIdx, int circuitIdx);
+    /** Assign a fixture to a specific circuit, removing any prior assignment.
+     *  False (and nothing changed) when that source or circuit does not exist. */
+    bool assignFixture(quint32 fxId, int sourceIdx, int circuitIdx);
 
     /** Called when a fixture is deleted from the document */
     void removeFixture(quint32 fxId) { unassignFixture(fxId); }

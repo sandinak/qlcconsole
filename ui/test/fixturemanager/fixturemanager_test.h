@@ -131,6 +131,9 @@ private slots:
      *  changes (one rig undo step on the plot), the show's output does not. */
     void plotSymbolInOperateChangesOnlyThePicture();
 
+    /** A drop on a circuit that is gone says so (wfaudit-silent-failures) */
+    void aRefusedCircuitDropSaysWhy();
+
 private:
     Doc* m_doc;
 };

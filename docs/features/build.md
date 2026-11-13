@@ -238,7 +238,8 @@ selected again. Loading something from the navigator starts afresh.
 **Adding, removing, reordering** — on a collection:
 
 - **+ Scene** adds scenes (or any function) from the show, picked in a list,
-  after the selected layer; its menu's **New Empty Scene** makes one, filed
+  after the selected layer (if it adds nothing, the line over the layers says
+  why: already a layer, can't hold itself, or nothing loaded); its menu's **New Empty Scene** makes one, filed
   with the collection.
 - **+ Effect ▾** → **EFX** or **RGB Matrix** makes a **new** one on the selected layer's
   groups — an EFX on its heads, an RGB Matrix on its first group — add it

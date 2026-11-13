@@ -110,10 +110,10 @@ void PowerDistribution::unassignFixture(quint32 fxId)
     }
 }
 
-void PowerDistribution::assignFixture(quint32 fxId, int sourceIdx, int circuitIdx)
+bool PowerDistribution::assignFixture(quint32 fxId, int sourceIdx, int circuitIdx)
 {
     if (sourceIdx < 0 || sourceIdx >= m_sources.size())
-        return;
+        return false;
     // Assigning directly to a source with no circuits yet (a wall socket, a
     // single-outlet UPS, a fresh distro) creates its first circuit on demand.
     if (circuitIdx == 0 && m_sources[sourceIdx].circuits.isEmpty())
@@ -123,10 +123,11 @@ void PowerDistribution::assignFixture(quint32 fxId, int sourceIdx, int circuitId
         m_sources[sourceIdx].circuits.append(cir);
     }
     if (circuitIdx < 0 || circuitIdx >= m_sources[sourceIdx].circuits.size())
-        return;
+        return false;
 
     unassignFixture(fxId);
     m_sources[sourceIdx].circuits[circuitIdx].fixtures.append(fxId);
+    return true;
 }
 
 void PowerDistribution::circuitOf(quint32 fxId, int &sourceIdx, int &circuitIdx) const

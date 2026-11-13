@@ -645,6 +645,13 @@ void FixtureManager::initDataView()
             this, &FixtureManager::slotFixturesSearchChanged);
     fixturesPaneLayout->addWidget(m_fixturesSearch);
     fixturesPaneLayout->addWidget(m_fixtures_tree, 1);
+    // Says why a drop was refused (hidden until then).
+    m_fixturesNote = new QLabel(fixturesPane);
+    m_fixturesNote->setObjectName(QStringLiteral("fixturesNote"));
+    m_fixturesNote->setWordWrap(true);
+    m_fixturesNote->setStyleSheet(QStringLiteral("QLabel { font-weight: bold; }"));
+    m_fixturesNote->setVisible(false);
+    fixturesPaneLayout->addWidget(m_fixturesNote);
 
     // Labeled "Fixtures" (not "Fixture Groups") -- this tree holds the whole
     // patch (fixtures, spatial groups, Power, Universes), not just groups;
@@ -4569,11 +4576,44 @@ void FixtureManager::slotFixturesDroppedOnCircuit(const QList<quint32>& fixtureI
     // items while Qt's drag machinery still references the dragged item.
     QTimer::singleShot(0, this, [this, fixtureIds, sourceIdx, circuitIdx]() {
         PowerDistribution *pd = m_doc->powerDistribution();
+        int gone = 0, assigned = 0;
         foreach (quint32 fid, fixtureIds)
-            pd->assignFixture(fid, sourceIdx, circuitIdx);
-        m_doc->setModified();
+        {
+            // A refused assignment never changes anything: say so (below).
+            if (m_doc->fixture(fid) != NULL && pd->assignFixture(fid, sourceIdx, circuitIdx))
+                assigned++;
+            else
+                gone++;
+        }
+        if (gone > 0)
+        {
+            const bool circuitMissing = sourceIdx < 0 || sourceIdx >= pd->sources().size()
+                || (circuitIdx > 0 && circuitIdx >= pd->sources().at(sourceIdx).circuits.size());
+            if (circuitMissing)
+                sayFixturesNote(tr("That circuit is gone (the Power list changed), so %n fixture(s) "
+                                   "stayed where they were. Drop them on a circuit that is listed.",
+                                   "", int(fixtureIds.size())));
+            else
+                sayFixturesNote(tr("%n fixture(s) could not be put on that circuit: no longer in the "
+                                   "patch.", "", gone));
+        }
+        if (assigned > 0)
+            m_doc->setModified();
         if (m_power != NULL)
             m_power->refresh();
         updateView();
     });
 }
+
+void FixtureManager::sayFixturesNote(const QString &text)
+{
+    // A line under the tree for a few seconds: the drop was refused, here is why.
+    if (m_fixturesNote == NULL)
+        return;
+    m_fixturesNote->setText(text);
+    m_fixturesNote->setVisible(true);
+    QTimer::singleShot(8000, m_fixturesNote, [this, text]() {
+        if (m_fixturesNote != NULL && m_fixturesNote->text() == text)
+            m_fixturesNote->setVisible(false);
+    });
+}}
