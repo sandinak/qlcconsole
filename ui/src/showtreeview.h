@@ -827,6 +827,8 @@ public:
     bool duplicateReusableCueRow(quint32 id);
     void listClipboardItems(ContextMenu &menu, const QString &what);
     /** Renumber Song… for song @a song of list @a listId (greyed under Manual). */
+    /** One line per changed number, "old → new  Name"; a sub-cue is indented under its cue. */
+    QString renumberLines(const QList<ShowTreeController::Renumbered> &plan, int most) const;
     void renumberSongItem(ContextMenu &menu, quint32 listId, const ShowTree::Section &song);
 
     typedef QPair<quint32, quint32> LayerRef;       //!< cue, layer
