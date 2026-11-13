@@ -4,10 +4,19 @@
 # any (Apple-Silicon) Mac with no Gatekeeper prompt or quarantine step.
 #
 #   platforms/macos/sign-notarize.sh
+#   NOTARIZE=0 platforms/macos/sign-notarize.sh   sign the app only (steps
+#              0-3): what `make rc` installs on our own Macs for testing. No
+#              Apple round trip, no DMG; never published.
 #
 # Requires: a "Developer ID Application" identity in the keychain and a
 # notarytool keychain profile (default: qlc-notary). Override via env:
 #   SIGN_ID, ENT, NOTARY_PROFILE, APP, BUNDLE_ID
+# Notarizing is notarize-lib.sh: submit, then our own polling (notarytool's
+# --wait crashed twice on 2026-11-13). Stopped while the app's submission was
+# in flight: rerun with NZ_SUBMISSION_APP=<id> (printed) to wait on it rather
+# than upload again -- its ticket is keyed by the code hash, which signing
+# the same build again keeps. The DMG is made anew on every run, so its
+# submission always is too.
 set -euo pipefail
 
 # The checkout this script is in (VERSION, the DMG's rev and dist/ come from it).
@@ -19,7 +28,13 @@ NOTARY_PROFILE="${NOTARY_PROFILE:-qlc-notary}"
 BUNDLE_ID="${BUNDLE_ID:-com.bransonmatheson.qlcconsole}"
 SCRATCH="${SCRATCH:-/private/tmp/qlc-notarize}"; mkdir -p "$SCRATCH"
 
+NOTARIZE="${NOTARIZE:-1}"
+. "$REPO/platforms/macos/notarize-lib.sh"
+
 step() { echo; echo "===== $* ====="; }
+
+# Before anything is signed or uploaded: the profile, in words.
+if [ "$NOTARIZE" = 1 ]; then nz_check_profile || exit 1; fi
 csflags=(--force --options runtime --timestamp --sign "$SIGN_ID")
 
 step "0 Ensure CFBundleIdentifier is set in the built app"
@@ -48,16 +63,17 @@ codesign "${csflags[@]}" --entitlements "$ENT" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP" 2>&1 | tail -3
 echo "  --- codesign OK ---"
 
+if [ "$NOTARIZE" = 0 ]; then
+  step "DONE (NOTARIZE=0: signed, not notarized)"
+  echo "App: $APP  (Developer ID signed; not notarized or stapled: for our own Macs,"
+  echo "     copied over ssh so no quarantine applies -- never published)"
+  exit 0
+fi
+
 step "4 Notarize the app"
 ZIP="$SCRATCH/QLCplus-app.zip"; rm -f "$ZIP"
 /usr/bin/ditto -c -k --keepParent "$APP" "$ZIP"
-xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait 2>&1 | tee "$SCRATCH/app-submit.log"
-grep -q "status: Accepted" "$SCRATCH/app-submit.log" || {
-  echo "Notarization NOT accepted; fetching log…"
-  sid=$(awk '/id:/{print $2; exit}' "$SCRATCH/app-submit.log")
-  xcrun notarytool log "$sid" --keychain-profile "$NOTARY_PROFILE" 2>&1 | tail -40
-  exit 1
-}
+nz_notarize "$ZIP" app || exit 1
 
 step "5 Staple the app"
 xcrun stapler staple "$APP"
@@ -87,8 +103,7 @@ DMG_STYLE=(--skip-jenkins); [ "${DMG_FINDER:-0}" = 1 ] && DMG_STYLE=()
 
 step "7 Sign + notarize + staple the DMG"
 codesign --force --timestamp --sign "$SIGN_ID" "$DMG"
-xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait 2>&1 | tee "$SCRATCH/dmg-submit.log"
-grep -q "status: Accepted" "$SCRATCH/dmg-submit.log" || { echo "DMG notarization failed"; exit 1; }
+NZ_SUBMISSION_DMG="" nz_notarize "$DMG" dmg || exit 1
 xcrun stapler staple "$DMG"
 xcrun stapler validate "$DMG"
 

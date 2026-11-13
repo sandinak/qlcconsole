@@ -2,6 +2,7 @@
 # scripts each target calls; see docs/dev/RELEASE.md and CLAUDE.md ("Build & run").
 #
 #   make test      build what's checked out -> ~/Applications/qlcconsole-dev.app
+#   make rc HOSTS= a signed test build installed on our Macs, not notarized
 #   make dmg       signed + notarized universal DMG in dist/ (local only)
 #   make beta      dmg + PUBLIC GitHub pre-release      (platforms/macos/publish.sh)
 #   make release   dmg + PUBLIC GitHub release          (platforms/macos/publish.sh)
@@ -12,7 +13,7 @@ SHELL := /bin/bash
 DEV_APP ?= $(HOME)/Applications/qlcconsole-dev.app
 export DEV_APP
 
-.PHONY: help test run check quick pool pool-status ux-walk perf perf-record perf-history-commit translations dmg release-check beta release attach publish
+.PHONY: help test run check quick strict pool pool-status rc install-test ux-walk perf perf-record perf-history-commit translations dmg release-check beta release attach publish
 
 help:
 	@v=$$(cat VERSION); \
@@ -29,9 +30,12 @@ help:
 	echo "                  'make test', then launch the dev app with -o SHOW (SHOW optional)."; \
 	echo "  make check      The unit-test gate: ./check-all.sh (Qt6, Qt6-Release, Qt6-Werror),"; \
 	echo "                  built together and tested concurrently; ends with gate=N."; \
-	echo "  make quick      Iterate: ./check-all.sh --quick -- the Qt6 leg only (build-qt6/),"; \
+	echo "  make quick      Iterate: ./check-all.sh --quick -- one leg, Debug with the -Werror set"; \
+	echo "                  (build-qt6-werror/),"; \
 	echo "                  testing just the test dirs your change touches since origin/main"; \
 	echo "                  (its own tests, tests that #include a changed header). Not the gate."; \
+	echo "  make strict     ./check-all.sh --strict: quick plus the Release leg (the touched tests"; \
+	echo "                  at -O2 too). Before a branch is ready, and on a merged train."; \
 	echo "  make pool       The full gate of a committed REV (default HEAD) on whichever Mac"; \
 	echo "                  of platforms/macos/gate-hosts.conf is idle (HOST=name to pick);"; \
 	echo "                  ends with gate=N host=... qt=... rev=...  make pool-status: who's free."; \
@@ -50,6 +54,12 @@ help:
 	echo "                  PERF_ARGS=--points=gui,web adds only those points."; \
 	echo "  make translations  Refresh every .ts catalogue from the sources (lupdate,"; \
 	echo "                  ./translate.sh update). Translates nothing; run it every release."; \
+	echo "  make rc HOSTS=\"dink kronk local\" [ARCH=native]"; \
+	echo "                  A TEST build of a committed HEAD that holds origin/main: built"; \
+	echo "                  (no DMG), Developer ID signed, NOT notarized, installed as"; \
+	echo "                  /Applications/qlcconsole.app on each host over ssh (old -> .prev)."; \
+	echo "                  For testing on our own Macs; publish nothing from it."; \
+	echo "  make install-test HOSTS=\"...\"  install ~/qlcconsole.app as it is on those hosts."; \
 	echo "  make dmg        The signed release DMG of a committed HEAD: universal Release build"; \
 	echo "                  (build-universal/), Developer ID sign, notarize (qlc-notary), staple;"; \
 	echo "                  dist/qlcconsole-$$v-universal-<date>-<rev>.dmg + dist/SHA256SUMS."; \
@@ -95,6 +105,9 @@ check:
 quick:
 	./check-all.sh --quick
 
+strict:
+	./check-all.sh --strict
+
 pool:
 	./check-all.sh --remote $(or $(HOST),auto) $(if $(REV),--rev $(REV))
 
@@ -133,6 +146,14 @@ translations:
 
 dmg:
 	@QLC_ARCH="$(ARCH)" platforms/macos/make-release.sh
+
+rc:
+	@[ -n "$(HOSTS)" ] || { echo 'usage: make rc HOSTS="dink kronk local" [ARCH=native]'; exit 1; }
+	@QLC_ARCH="$(ARCH)" platforms/macos/make-rc.sh $(HOSTS)
+
+install-test:
+	@[ -n "$(HOSTS)" ] || { echo 'usage: make install-test HOSTS="dink local"'; exit 1; }
+	@platforms/macos/install-test-app.sh $(HOSTS)
 
 release-check:
 	@dmg="$(DMG)"; [ -n "$$dmg" ] || dmg=$$(ls -t dist/*.dmg 2>/dev/null | head -1); \
