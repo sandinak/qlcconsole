@@ -75,6 +75,19 @@ onto the cue. Outside that cue its button dims and does nothing. Drag
 a second hit onto the same button and it fires whichever belongs to the
 cue that's live: one **HIT 1** button, a different stab in each song.
 
+## A key that fires a hit
+
+On a busked number your hand is on the keyboard anyway. A hit can be
+learned to a computer key the way it can to a MIDI button: right-click the
+hit ▸ **Learn Trigger…**, press the key (it reads *Key · F5*, with any
+modifiers), and pick how it behaves. It fires in **Operate**; in Design,
+only while it is armed: selected in the Show Tree, or in the Run tab's cue
+list. It never fires while a text field, the
+command line or an editor has the keyboard, and a key the app already uses
+is refused with the reason.
+
+Learn **F5** to **Red Stab**. In Operate, with the Verse up, press it.
+
 ## Exit ticket
 
 1. Name two moments when you'd busk instead of pressing GO.

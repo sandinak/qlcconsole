@@ -89,6 +89,28 @@ help covers the tab you're in.
 
 {% include inapp.html do="Help on what you're looking at" path="Help ▸ qlcconsole Help" mac="F1" win="F1" see="It opens on the page for what you're looking at. On a Mac laptop, hold **fn** and press F1." %}
 
+## The same keys everywhere
+
+Changing a show is mostly copying, renaming and deleting, so the keys are
+the same in every list: the Show Tree, the Library's palettes, the Fixtures
+tab and Plot layers. Select a row, then:
+
+| Key | Does |
+|---|---|
+| **F2** | Renames it |
+| **⌘C**, **⌘V** | Copy it, paste it (Ctrl+C, Ctrl+V) |
+| **⌘D** | Duplicates it |
+| **Delete** | Deletes it (**⌘Z** brings it back) |
+
+Select **1.0.3 Scream**, press **⌘D**, then **Delete** on the copy.
+
+## What did I change?
+
+Before you save over a file, check what you are saving. Click **● Unsaved
+changes** in the footer: the changes since the last save, newest first,
+each cue or palette once, with how many edits. Double-click one to go to
+it. **Save** and **Undo last** are in the same window.
+
 ## Exit ticket
 
 1. You changed the verse to **Lavender at 40%**. How does it feel now,

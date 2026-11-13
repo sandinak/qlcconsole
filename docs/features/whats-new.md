@@ -67,6 +67,171 @@ The latest changes, newest first. Each links to the guide with the detail.
   says so in the footer. Operate now keeps the screen awake by default.
   See [Settings ▸ Performance](system-tuning.md#settings--performance).
 
+## 0.4.3 (November 2026)
+
+0.4.2 was built but never published; everything in it is here.
+
+### The follow spot and the plot
+
+- **Framing from the person's height.** The Followspot effect has a
+  **Framing**: **Head & Shoulders**, **Waist Up**, **Full Body** or
+  **Custom**. Each head is sized from the followed Person's Height, its own
+  throw and lens, and aimed so the top of the beam stays just over the
+  head. The D-pad opens and closes the beam while it plays. See [How big:
+  framing and the iris](stage-targets.md#how-big-framing-and-the-iris).
+- **Speed on the stage, and a fine stick.** **Top Speed** is how fast the
+  subject moves at full stick, in Settings ▸ Units (a brisk walk by
+  default). **Fine Stick** adds the right stick at a share of it, and
+  **Response Curve** keeps the centre fine. **D-pad Up / Down** step the
+  speed while it plays; the footer's Follow chip says so. The spot moves
+  smoothly, at the same speed both ways. See [How fast, and how
+  fine](stage-targets.md#how-fast-and-how-fine).
+- **Stretch and turn by hand.** A platform, truss, pipe, wall or piece of
+  scenery selected on the plot has a handle at each end and side and a knob
+  to turn it. Drag an end and that end goes where you put it while the
+  other stays; it snaps to the grid, **Shift** keeps 15°, **Alt/⌥** goes
+  free. One drag is one undo, and what is locked shows no handles. See
+  [Stretch and turn by hand](lighting-studio.md#stretch-and-turn-by-hand).
+- **⌘G makes a group at once** (Ctrl+G on Windows and Linux): no name
+  prompt, the name is ready to type over in Plot layers. Right-click ▸
+  **Group** adds the selection to a group already there, or removes it.
+- **Free string and Free Spin.** A fairy string can be laid anywhere on the
+  plan with anchors (see [Free string
+  (anchors)](lighting-studio.md#free-string-anchors)), and a movement
+  effect, **Free Spin**, drives heads that rotate endlessly on pan or tilt.
+- **Fits a 1024 x 640 laptop.** The Lighting Studio editors scroll, with
+  **OK / Cancel** always in view.
+
+### The Show Tree
+
+- **Save as Formation…** A layer's own Spread / Grouping / Cross rows can
+  be kept as a Formation palette: the row's **⋯** asks a name, makes the
+  palette, links the layer to it and clears its own rows, in one undo step.
+  See [Formation palettes](show-tree.md#formation-palettes).
+- **The Library has "In this song"**, above "In this cue list": what the
+  selected cue's song uses, most used first. **Ungrouped** lists patched
+  fixtures that are in no group; drag one onto a cue for a layer on just
+  that fixture. **Blocking** and **Formation** have their own headings. See
+  [The Library](show-tree.md#the-library).
+- **A key fires a hit.** **Learn Trigger…** now learns a computer key
+  ("Key · F5") as it does a MIDI control, with the same press modes. A key
+  fires in Operate, and in Design while what it fires is armed; never while
+  a text field has the keyboard. See [Hits](show-tree.md#hits-busking).
+- **⇧⌘N (New here)** works in Build ▸ Palettes (a new palette of the kind
+  you are on, in the folder you are on) and the Lighting Studio (a Target
+  Position at the pointer). See [New here](show-tree.md#new-here).
+- **Effect rows read as names**: **Follow Mode: Hold Last Position**, with
+  the full sentence as the tooltip.
+- **Build's Workbench points to where a look is recorded**: under Play, a
+  grey line, **Record it as a cue in the Show Tree ▸**.
+
+### WLED
+
+- **Found on the network, patched with a right-click.** WLEDs announce
+  themselves; the ones the show doesn't have are greyed in the Fixture
+  Manager's Inventory. Right-click ▸ **Patch** makes the fixture, named
+  from the device, with its IP, LED count and a universe of its own. One
+  that comes back at a new IP is found by its hardware address. **Set Up
+  WLED** offers once to name the device, stop WLED sync and set its
+  brightness limit from Max draw and the **LED supply** voltage.
+- **Patched as its LEDs.** **Pixels (Multi RGB)** and **Pixels (Multi
+  RGBW)** make one head per LED, so pixel effects, RGB Matrix and the pixel
+  paths run on every LED. **Fix on Device…** sets the WLED to match. See
+  [Pixel paths on a WLED's own LEDs](lighting-studio.md#pixel-paths-on-a-wleds-own-leds).
+- **Each palette shows its colours**, and effects play on every segment,
+  not just the first. See [WLED effects](build.md#wled-effects).
+- **Name the gobo you loaded.** **Gobo Wheels…** has **Name…** for a
+  light's own glass (the moon in slot 3); a Gobo look named "Moon" finds it
+  in whichever slot each light carries it.
+
+### Fixed
+
+- **Deleting a playing scene no longer freezes the app.**
+- **The footer names fixtures cues use that have no address**; **Patch…**
+  opens them.
+- **Saving no longer makes the footer jump**, and a saved show's autosave
+  is offered when you open the show after a crash.
+
+## 0.4.1 (November 2026)
+
+### The Show Tree
+
+- **Release and Untrack.** **Release After This Cue**: the layer plays in
+  this cue, then lets go. **Untrack From This Cue** (on a grey, carried-in
+  row): the layer never reaches this cue. A grey row's **T** says how long
+  it has tracked, and **Bring Into This Cue** or **Start Here Instead** on
+  it keeps the show the same. See [Tracking](show-tree.md#tracking).
+- **Notes beside the Show Tree.** A pane under the cue page lists the
+  selected item's notes, newest first, dated and signed, open until ticked
+  done. **Snapshot the View** keeps the Rig Overview's camera with the
+  note; **All notes…** lists the whole show's and exports PDF or Markdown.
+  See [Notes](show-tree.md#notes).
+- **Copy, Paste and Duplicate for cue lists and productions** (**⌘C ⌘V
+  ⌘D**), as for a cue: a deep copy named "Name (copy)", one undo step.
+  See [Editing the tree](show-tree.md#editing-the-tree).
+- **The same edit keys in every list.** **⌫**, **F2**, **⌘C / ⌘V**, **⌘D**
+  and **⌘F** do the same in the Show Tree, Build, the Fixtures tab, Plot
+  layers and the plot. **⌘D is Duplicate only**; Dump DMX Values to a
+  Function is **⌥⌘D**. See [Shortcuts](shortcuts.md).
+- **Several selected: the right-click acts on all of them** and counts them
+  (**Delete 3 Cues**).
+- **A drop that does nothing says why**, while you hover and after.
+- **Blocking: one look, wherever the people stand.** A cue's **Blocking**
+  picks a named set of stage target places and tracks to the cues after it;
+  every look aimed at a target follows. See [Blocking](show-tree.md#blocking).
+- **An effect on a layer says what it runs on** and where each setting
+  comes from. The effect picker lists only effects that run on your
+  fixtures; **Show All Effects** lists the rest greyed, with the reason.
+- **Show Review warnings have three states**: open, **I Meant It** and
+  **Not a Problem…**, shown on the cue. See [Show Review](show-review.md).
+
+### The footer
+
+- **Click "Unsaved changes"** to see what changed since the last save,
+  newest first; double-click goes to it, and **Save** and **Undo last** are
+  in the dialog.
+- **A footer chip says what is on the stage**: `LIVE · Act 1 · 1.2 Verse`
+  while a cue list runs, *Stage: …* in Design, `BLIND · stage holds …` in
+  the Blind view. Click it to jump to that cue.
+
+### The rig and the plot
+
+- **Every length follows Settings ▸ Units**, feet and inches by default.
+  Fields take fractions, decimals or another unit (`3/8"`, `12' 6"`),
+  and every label, report and focus call does the same.
+- **Aiming.** An Aim at an Area covers the area; each arm of a multi-arm
+  fixture aims on its own; a stored position shows where it lands. See
+  [Stage Targets](stage-targets.md).
+- **Masking (tape) on any light, a laser power class, fountains and
+  wands, band instruments as targets.** See [Lighting
+  Studio](lighting-studio.md).
+- **A light buried in a deck** is an error in the footer (Show Review
+  **FIX-15**), with **Sit on Top** to fix it.
+
+### The command line
+
+- **It tells a typo from plain words.** `towrs colour blu` gets *Did you
+  mean …?*; a line that reads as language goes to AI Assist, with a spinner
+  and *Esc cancels* while it asks. See [AI Assist](ai-assist.md).
+
+### The remote and Settings ▸ Performance
+
+- **Steam Deck and gamepad remote.** A Steam Deck, phone or tablet works
+  the console in its browser: a **focus remote** page and a **Run page**
+  that reads a game controller. See [Steam Deck and gamepad
+  remote](gamepad-remote.md).
+- **Settings ▸ Performance checks this computer for steady 50 Hz DMX**:
+  real-time scheduling, power plan, Wi-Fi power saving, with the steps to
+  fix each. See [Settings ▸ Performance](system-tuning.md#settings--performance).
+
+### Fixed
+
+- **The follow spot follows the stick** wherever you run the show from, and
+  **selecting a cue shows its effects every time**.
+- **A save that can't be written whole** says so instead of costing you the
+  show.
+- **The rig view runs smoothly on a busy show.**
+
 ## 0.4.0 (November 2026)
 
 ### AI Assist

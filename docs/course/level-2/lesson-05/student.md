@@ -79,6 +79,45 @@ A snap or a quick sweep for the button? Why?
 dashed box. The fan crossed: undo, set −5 in the **Button**. No Spread
 row: the Position must say **Aim Riser Line**.
 
+## Keep a shape: Formation
+
+A Spread and Grouping you like will be wanted again on another line, and
+copying the numbers by hand lets them drift apart. **Save as Formation…**
+keeps them as one palette.
+
+1. Click the **Truss-Spots** row of **1.0.8 Button**: Spread is −5.
+   Set **Grouping** to Pairs.
+2. On the **Spread** row, **⋯ → Save as Formation…**, name it
+   `Pairs Crossed`, **OK**. The layer now uses the palette and clears its
+   own rows; it is one undo step.
+3. Change the Formation and every cue that uses it follows. It is in the
+   Library under **Formation**.
+
+## Blocking: the same look, wherever the people stand
+
+Theatre marks where a performer stands for a number with spike tape. If
+the soloist stands downstage in one song and upstage in the next, you
+don't want a second look for the same light; you want the target to move.
+**Blocking** is that: a named set of stage target places, and a cue picks
+one.
+
+1. Open the Lighting Studio (⇧⌘3) and its **Blocking ▾** button: it says
+   which blocking the plot shows. **Default** is where the targets stand
+   when nothing says otherwise.
+2. Click a cue, then its **Blocking** row on the cue page: **Default**, or
+   a set. **Save Positions as Blocking…** makes a set from where the
+   targets stand now and uses it from this cue on.
+3. Pick the new set in **Blocking ▾**: a blue banner reads *Moving targets
+   in …*, and a drag moves the selected targets in that blocking only. A
+   dashed ring shows where Default puts each one.
+4. Every look aimed at a target follows: the Aim looks, the line spreads,
+   the follow spot. A cue keeps its blocking for the cues after it, until
+   one sets its own.
+
+Why it matters on the real rig: the focus you did in Lesson 3.6 is for
+Default, and a blocking is an offset from it, so a venue's correction
+carries into every set.
+
 ## Exit ticket
 
 1. What does a **line target** do that a point target doesn't?
@@ -98,8 +137,6 @@ Do one:
 - **Paper:** draw the stage from above with four spots and the line.
   Draw Spread +5, 0 and −5, lights numbered 1–4 from SR. Which ends a
   song best?
-- **Reuse it:** a shape you use on several lines is worth saving once. On
-  the layer, in the Show Tree's Formation menu, set Spread −5 and Grouping
-  Pairs, then **Save as Formation…**; check it in its preview, then drop it on **1.0.8 Button**'s
-  **Truss-Spots** row in place of its Spread. Change the Formation and every
-  cue using it follows.
+- **Reuse it:** save Spread −5 and Grouping Pairs as a Formation (see
+  *Keep a shape*), check it in its preview, then change it and watch every
+  cue that uses it follow.
