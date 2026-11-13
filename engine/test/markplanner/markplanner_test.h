@@ -59,6 +59,12 @@ private slots:
     /** A chaser step that holds for GO is always ahead; a show-clocked
      *  chaser is the Show's to answer for; past the horizon is nothing */
     void theLookaheadOfAChaser();
+    /** M992: a Show Tree cue that waits for GO holds for
+     *  Function::infiniteSpeed(); its next cue is ahead without end
+     *  (INT_MAX), not "now", so a dark head is moved in black at the
+     *  show's own lead time. A timed hold longer than INT_MAX ms does not
+     *  wrap round to "now" either. */
+    void aCueThatWaitsForGoIsMovedInBlack();
     /** UX-73: a dark WLED's next look -- its effect, speed, palette and
      *  colours, which come from the WLED look, not the scene -- is moved
      *  in black like a mover's position, so the GO sends its brightness

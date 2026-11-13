@@ -2952,7 +2952,8 @@ mover that cue will light, and that is dark now, is sent ahead of time to
 where it will be revealed: pan and tilt, colour, gobo, beam. Its level is
 left alone, so nobody sees it move. Each light is let go as its cue lights
 it. A next cue closer than the **lead time** (0.8 s for a new show) is too
-soon to move in black, so nothing new is sent for it.
+soon to move in black, so nothing new is sent for it. A cue that waits
+for GO gives the lights as long as it holds: they are moved during it.
 
 **Dark** means the light's dimmer is down, or its shutter is closed. A
 spot whose dimmer sits up behind a closed shutter is dark, and a light
