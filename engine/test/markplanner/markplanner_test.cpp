@@ -629,9 +629,9 @@ void MarkPlanner_Test::aCueThatWaitsForGoIsMovedInBlack()
     longHold->start(&timer, FunctionParent::master());
     timer.timerTick();
     QCOMPARE(longHold->currentStepIndex(), 0);
-    const QList<CueLookahead::UpcomingCue> far = CueLookahead::upcoming(m_doc, INT_MAX - 1);
-    QCOMPARE(far.count(), 1);
-    QCOMPARE(far.first().fireInMs, INT_MAX - 1);
+    const QList<CueLookahead::UpcomingCue> farOff = CueLookahead::upcoming(m_doc, INT_MAX - 1);
+    QCOMPARE(farOff.count(), 1);
+    QCOMPARE(farOff.first().fireInMs, INT_MAX - 1);
     longHold->stop(FunctionParent::master());
     timer.timerTick();
 }
