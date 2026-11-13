@@ -628,7 +628,7 @@ void PadBenchShow_Test::build(const QString &path)
  * The check
  ****************************************************************************/
 
-void PadBenchShow_Test::check(const QString &path)
+void PadBenchShow_Test::check(const QString &path, bool play)
 {
     QVERIFY(open(path));
     Doc *doc = m_app->doc();
@@ -780,6 +780,16 @@ void PadBenchShow_Test::check(const QString &path)
     for (const ShowTreeController::Renumbered &r : plan)
         qInfo().noquote() << "[RENUMBER SONG]" << r.from << "->" << r.to;
 
+    /* The run-through takes ~9 s of real time (cue 3 holds 8 s): played
+       once, on the committed file -- the one the bench opens. The built
+       show is checked to here; written out (PADBENCH_OUT) and committed,
+       it is played by theCommittedShowChecksOut. */
+    if (!play)
+    {
+        doc->resetModified();
+        return;
+    }
+
     // ---- it plays. The pad: whichever virtual pad is free takes the slot.
     QTRY_VERIFY_WITH_TIMEOUT(iom->inputSlotLive(1) == 0, 5000);
     InputPatch *ip = iom->inputPatch(1);
@@ -878,7 +888,7 @@ void PadBenchShow_Test::buildSaveAndCheck()
     if (QTest::currentTestFailed())
         return;
     qInfo().noquote() << "[SAVED]" << path << "+" << VenueCorrections::sidecarPath(path);
-    check(path);
+    check(path, false);
 }
 
 void PadBenchShow_Test::theCommittedShowChecksOut()
@@ -969,7 +979,11 @@ void PadBenchShow_Test::openingAShowOverOneThatPlays()
     doc->setMode(Doc::Design);
     settle(50);
 
-    const int rounds = 3;
+    /* Two rounds, each two opens (the dance show is the slow one to load):
+       round 0 the cue open in context, round 1 Solo with a list GO'd and
+       the dance show's lists running. The cue open in the Workbench
+       previews it (TreeCueStack), so a bare previewCue() adds nothing. */
+    const int rounds = 2;
     for (int round = 0; round < rounds; ++round)
     {
         /* The dance show: Build's Workbench previews one function of each
@@ -1007,7 +1021,6 @@ void PadBenchShow_Test::openingAShowOverOneThatPlays()
             }
         QVERIFY(!cues.isEmpty());
         const quint32 cue = cues.at(round % cues.size());
-        if (round % 3 != 2)
         {
             /* The cue open in the Show Tree's Workbench, playing in context
                -- or Solo, one layer of it. */
@@ -1019,14 +1032,12 @@ void PadBenchShow_Test::openingAShowOverOneThatPlays()
             settle(30);
             Workbench *bench = tree->dockedWorkbench();
             QVERIFY(bench != nullptr && bench->stack() != nullptr);
-            if (round % 3 == 1)
+            if (round == 1)
             {
                 bench->stack()->setFocusLayer(0);
                 bench->stack()->setSolo(true);
             }
         }
-        else
-            doc->showTree()->previewCue(cue);
         if (round % 2 == 1)
         {
             if (Chaser *ch = qobject_cast<Chaser *>(doc->function(lists.first())))

@@ -44,10 +44,11 @@ private slots:
     void cleanup();
 
     /** Builds the show, saves it, opens it again and checks every item the
-     *  checklist names: present, named, and doing what it says. */
+     *  checklist names: present and named (the run-through is the committed
+     *  file's, below). */
     void buildSaveAndCheck();
     /** The committed test-workspaces/PadBench.qlcc (a copy of it) passes
-     *  the same checks. */
+     *  the same checks, and plays: cues 1-4 doing what they say. */
     void theCommittedShowChecksOut();
     /** File > Open over a show that plays leaves nothing of the old show
      *  for the MasterTimer to tick after it is deleted. */
@@ -63,7 +64,9 @@ private:
     QStringList m_times;
     bool open(const QString &path);
     void build(const QString &path);
-    void check(const QString &path);
+    /** The show at @a path as the checklist names it; @a play: and run
+     *  through Main cues 1-4 on the pad (real time, ~9 s). */
+    void check(const QString &path, bool play = true);
 
 private:
     App *m_app = nullptr;
