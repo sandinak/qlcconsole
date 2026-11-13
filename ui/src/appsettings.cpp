@@ -315,6 +315,23 @@ AppSettings::AppSettings(App *app, QWidget *parent)
         mainLayout->addWidget(viewGroup);
     }
 
+    // At start: the last show, again (this computer's).
+    {
+        QGroupBox *startGroup = new QGroupBox(tr("At Start"), this);
+        startGroup->setProperty("helpTopic", QStringLiteral("getting-started.md#starting-the-app"));
+        QVBoxLayout *startLayout = new QVBoxLayout(startGroup);
+        m_reopenLastCheck = new QCheckBox(tr("Open the Last Show at Start"), startGroup);
+        m_reopenLastCheck->setObjectName(QStringLiteral("settingsReopenLastShow"));
+        m_reopenLastCheck->setChecked(App::reopenLastShow());
+        m_reopenLastCheck->setToolTip(tr("Start with the show you had open last (the top of "
+                                         "File ▸ Open Recent) instead of an empty one. A show "
+                                         "named on the command line (-o) is opened instead. "
+                                         "Hold Shift while the app starts to skip it once, "
+                                         "for example if that show will not load."));
+        startLayout->addWidget(m_reopenLastCheck);
+        mainLayout->addWidget(startGroup);
+    }
+
     // QLC+ 4's settings on this computer (LegacySettings): the start-up
     // offer, again, for whoever said no or installed QLC+ later. Shown only
     // where QLC+ 4 has left settings.
@@ -692,6 +709,9 @@ void AppSettings::accept()
     // The view new shows start in (this computer's)
     if (m_newShowsClassicCheck->isChecked() != App::newShowsClassic())
         App::setNewShowsClassic(m_newShowsClassicCheck->isChecked());
+
+    if (m_reopenLastCheck->isChecked() != App::reopenLastShow())
+        App::setReopenLastShow(m_reopenLastCheck->isChecked());
 
     // Apply autosave settings
     m_app->setAutosaveEnabled(m_autosaveEnabledCheck->isChecked());

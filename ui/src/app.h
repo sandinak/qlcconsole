@@ -45,6 +45,7 @@
 
 class QProgressDialog;
 class QDateTime;
+class QSettings;
 class QXmlStreamWriter;
 class VideoProvider;
 class QMessageBox;
@@ -215,6 +216,17 @@ public:
     static QString newShowsClassicSettingKey();
     static bool newShowsClassic();
     static void setNewShowsClassic(bool on);
+    /** Settings ▸ General, "Open the Last Show at Start": this computer's
+     *  (workspace/reopenLastShow), off by default. */
+    static QString reopenLastShowSettingKey();
+    static bool reopenLastShow();
+    static void setReopenLastShow(bool on);
+    /** The show App::startup() opens: @p cliFile (-o) when given, else --
+     *  with the setting on and @p shiftHeld false -- the top of the Open
+     *  Recent list (workspace/recent0) if it still exists. Empty = start
+     *  empty. A recent file that is gone is named in @p notFound. */
+    static QString showToOpenAtStart(const QString &cliFile, const QSettings &settings,
+                                     bool shiftHeld, QString *notFound = nullptr);
     /** The view a new show starts in: Classic QLC+ by the preference, else qlcconsole. */
     static WorkspaceView newShowView();
     /** What tab @p label reads as in the current view ("Inputs/Outputs" for

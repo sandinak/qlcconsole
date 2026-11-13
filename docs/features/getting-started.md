@@ -34,6 +34,13 @@ qlcconsole -f -o show.qlcc          # full screen, as QLC+ 4's -f ("-f resize" f
 qlcconsole -h                       # every option
 ```
 
+To start on the show you had open last, tick **Settings ▸ General ▸ Open
+the Last Show at Start** (this computer's, off at first). It opens the top
+of **File ▸ Open Recent**; a show named with **-o** is opened instead.
+Hold **Shift** while the app starts to skip it once, for a show that will
+not load. If that show has moved or been deleted, the footer says **Last
+show not found** and the app starts empty.
+
 Always pass the show with **-o**. A bare file name on the command line is
 not opened — and saving then can write an empty workspace over it.
 
