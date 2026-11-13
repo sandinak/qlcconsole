@@ -10268,9 +10268,10 @@ void ShowTreeView_Test::renumberSongFromTheSongMenu()
     const quint32 prod = st->addProduction("P");
     const quint32 list = st->addCueList(prod, "Show", ListMode::Tracking);
     QVERIFY(st->setNumbering(prod, ShowTree::Numbering::ShowPartIteration));
+    st->addSection(list, "Preshow");                                // 0.0.1
     const quint32 a = st->addSection(list, "Entrance");             // 1.0.1
-    const quint32 b = st->addCue(list, 0, "B");                     // 1.0.2
-    const quint32 c = st->addCue(list, 1, "C");                     // 1.0.3
+    const quint32 b = st->addCue(list, 1, "B");                     // 1.0.2
+    const quint32 c = st->addCue(list, 2, "C");                     // 1.0.3
     st->addSection(list, "Finale");                                 // 2.0.1
     Cue cb = *st->cue(b);
     cb.number = "1.0.5";
@@ -10285,7 +10286,7 @@ void ShowTreeView_Test::renumberSongFromTheSongMenu()
             out << st->cueNumber(*l, i);
         return out;
     };
-    QCOMPARE(numbers(), QStringList({ "1.0.1", "1.0.5", "1.0.9", "2.0.1" }));
+    QCOMPARE(numbers(), QStringList({ "0.0.1", "1.0.1", "1.0.5", "1.0.9", "2.0.1" }));
 
     ShowTreeView view(nullptr, m_doc);
     QTreeWidgetItem *songRow = nullptr;
@@ -10332,10 +10333,10 @@ void ShowTreeView_Test::renumberSongFromTheSongMenu()
         item->trigger();
         QCOMPARE(ok.seen.count(), 1);
     }
-    QCOMPARE(numbers(), QStringList({ "1.0.1", "1.0.2", "1.0.3", "2.0.1" }));
+    QCOMPARE(numbers(), QStringList({ "0.0.1", "1.0.1", "1.0.2", "1.0.3", "2.0.1" }));
     QCOMPARE(st->undoText(), QString("Renumber song"));
     QVERIFY(st->undo());
-    QCOMPARE(numbers(), QStringList({ "1.0.1", "1.0.5", "1.0.9", "2.0.1" }));
+    QCOMPARE(numbers(), QStringList({ "0.0.1", "1.0.1", "1.0.5", "1.0.9", "2.0.1" }));
 
     // Every cue of the song selected: the cue menu has it too; two of its
     // three cues: not.
@@ -10366,7 +10367,7 @@ void ShowTreeView_Test::renumberSongFromTheSongMenu()
     QVERIFY(view.cuesAreOneSong({ a, b, c }, &songList, &song));
     QCOMPARE(songList, list);
     QVERIFY(view.renumberSong(list, song, 10, 10, true, false));
-    QCOMPARE(numbers(), QStringList({ "1.0.10", "1.0.20", "1.0.30", "2.0.1" }));
+    QCOMPARE(numbers(), QStringList({ "0.0.1", "1.0.10", "1.0.20", "1.0.30", "2.0.1" }));
 
     // Manual numbering: greyed, saying why.
     QVERIFY(st->setNumbering(prod, ShowTree::Numbering::Manual));
