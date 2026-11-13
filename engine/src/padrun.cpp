@@ -238,10 +238,10 @@ QString PadRun::holder() const
         return QString();
     const FocusSession *f = m_pc->focusSession();
     if (f->isActive())
-        return f->isRunningCalls() ? tr("Venue focus") : tr("Quick focus");
+        return f->isRunningCalls() ? tr("Venue Focus") : tr("Quick Focus");
     const RefineSession *r = m_pc->refineSession();
     if (r->isActive())
-        return r->isSceneMode() ? tr("Focus this look") : tr("Focus this cue");
+        return r->isSceneMode() ? tr("Focus This Look") : tr("Focus This Cue");
     return QString();
 }
 
