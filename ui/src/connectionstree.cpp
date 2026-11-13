@@ -3136,7 +3136,17 @@ void ConnectionsTree::slotItemDoubleClicked(QTreeWidgetItem *item, int column)
         const QModelIndex cell = m_tree->model()->index(row, column);
         if (isGridCell(cell))
         {
-            m_tree->edit(cell);
+            /* Once the double-click (and its release) is through: inside
+               it, the view is still handling the click. */
+            const QPersistentModelIndex at(cell);
+            QPointer<QTreeWidget> tree(m_tree);
+            QTimer::singleShot(0, this, [tree, at]() {
+                if (tree != nullptr && at.isValid())
+                {
+                    tree->setCurrentIndex(at);
+                    tree->edit(at);
+                }
+            });
             return;
         }
     }
@@ -5224,13 +5234,13 @@ void ConnectionsTree::layoutSide()
     const int handles = m_outerSplit->handleWidth() + m_universeSplit->handleWidth();
     const int bar = style()->pixelMetric(QStyle::PM_ScrollBarExtent) + 4;
     /* The settings never narrower than their fields need (they'd be cut). */
-    const int paneMin = qMax(340, m_connPane->minimumSizeHint().width());
+    const int paneMin = qMax(340, m_connPane->minimumSizeHint().width() + bar);
     m_paneStack->setMinimumSize(paneMin, 1);
     const int pane = qBound(paneMin, w * 27 / 100, qMax(paneMin, 520));
     const int gridFull = UniverseOutputView::widthFor(16) + bar;
     const int gridMin = UniverseOutputView::widthFor(4) + bar;
     int list = qMax(w * 36 / 100, w - pane - gridFull - handles);
-    list = qMax(w / 3, qMin(list, w - pane - gridMin - handles));
+    list = qMax(w / 4, qMin(list, w - pane - gridMin - handles));
     const int right = w - list - m_outerSplit->handleWidth();
     int grid = qMin(gridFull, right - pane - m_universeSplit->handleWidth());
     if (grid < gridMin)

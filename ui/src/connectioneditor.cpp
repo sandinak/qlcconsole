@@ -1333,6 +1333,7 @@ ConnectionEditor *ConnectionEditor::createPane(Doc *doc, QWidget *parent)
     QFont f = ed->m_paneTitle->font();
     f.setBold(true);
     ed->m_paneTitle->setFont(f);
+    ed->m_paneTitle->setWordWrap(true);     // a long universe name wraps, isn't cut
     if (QWidget *body = ed->m_paneNote->parentWidget())
         if (QVBoxLayout *vl = qobject_cast<QVBoxLayout *>(body->layout()))
             vl->insertWidget(0, ed->m_paneTitle);

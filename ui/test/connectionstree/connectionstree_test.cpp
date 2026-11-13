@@ -3321,7 +3321,9 @@ void ConnectionsTree_Test::byUniverseShowsTheSelectedUniversesSettings()
         QVERIFY2(tree.rect().contains(pane), qPrintable(at));
         QVERIFY2(pane.width() >= 330 && pane.height() >= 400,
                  qPrintable(QString("%1: pane %2x%3").arg(at).arg(pane.width()).arg(pane.height())));
-        QVERIFY2(list.width() >= size.width() / 3, qPrintable(at));
+        QVERIFY2(list.width() >= size.width() / 4,
+                 qPrintable(QString("%1: list %2, pane %3, grid %4").arg(at).arg(list.width())
+                            .arg(pane.width()).arg(grid.width())));
         QVERIFY2(list.right() < pane.left() && pane.right() < grid.left(), qPrintable(at));
         QVERIFY2(tree.m_outScroll->isVisible() && grid.width() > 100, qPrintable(at));
         QVERIFY2(tree.rect().contains(grid), qPrintable(at));
@@ -3384,6 +3386,7 @@ bool editCellByHand(ConnectionsTree &tree, quint32 universe, int column, const Q
     send(QEvent::MouseButtonDblClick, Qt::LeftButton);
     send(QEvent::MouseButtonRelease, Qt::NoButton);
     QApplication::processEvents();
+    QApplication::processEvents();
 
     QWidget *editor = nullptr;
     foreach (QWidget *w, vp->findChildren<QWidget *>())
@@ -3391,7 +3394,13 @@ bool editCellByHand(ConnectionsTree &tree, quint32 universe, int column, const Q
                 && qobject_cast<QComboBox *>(w->parentWidget()) == nullptr)
             editor = w;
     if (editor == nullptr)
+    {
+        qWarning() << "no editor on universe" << universe << "column" << column << "at" << at
+                   << "item there" << (tree.m_tree->itemAt(at) != NULL ? tree.m_tree->itemAt(at)->text(0) : QString())
+                   << "column there" << tree.m_tree->columnAt(at.x())
+                   << "grid cell" << tree.isGridCell(idx);
         return false;
+    }
 
     QString message;
     QTimer answer;
