@@ -52,24 +52,49 @@ blocks whole-tree builds, `-j` above 2, `make quick`/`make check` and
 `check-all.sh` without `--remote` there, for every session and agent, while a
 pool host answers. Undocked (no pool host reachable), ender builds locally.
 
-`--quick` builds only the Qt6 leg and runs only the tests your change touches
-since `origin/main` (`QUICK_BASE` to change): the test's own dir, tests that
+`--quick` builds one leg -- the Werror leg's configuration (Debug plus the
+`-Werror=` set CI fails on), so a new unused variable fails in minutes, not
+in the full gate -- and runs only the tests your change touches since
+`origin/main` (`QUICK_BASE` to change): the test's own dir, tests that
 `#include` a changed header, a plugin's test; everything if CMake files or
-the runner changed. It is not the gate — run the full one before pushing.
-An agent brief says all this in its first lines, not as a later correction.
+the runner changed. **`--strict`** is `--quick` plus the Release leg with the
+same tests at -O2 (a use-after-free that Debug's memory hid crashed only
+there, 2026-11-13): run it before calling a branch ready and on every merged
+train before its full gate. Neither is the gate. **`--shots DIR`** (with
+`--remote`) gives the tests `QLC_SHOT_DIR` on the pool host and copies the
+PNGs back into DIR -- the one sanctioned way to get UX-review shots; never
+hard-code a path in a test or scp from `~/gates`. `GATE_ENV="COURSE_RIG ..."`
+forwards such variables.
+An agent brief starts from [docs/dev/AGENT_BRIEF.md](docs/dev/AGENT_BRIEF.md),
+which says all this in its first lines, not as a later correction.
 
 **Gate cadence** (adopted 2026-11-07: velocity per change, diligence per
 release):
 
 | When | What |
 |---|---|
-| each change / branch | `make quick` only |
-| merging to main | branches go into a train; `make quick` on the merged train (catches merge-only breaks), then **one full gate** on the train's SHA (`gate=0` + `linux=0`), then push that SHA. A failure's test names the branch; if it doesn't, gate the suspects in parallel |
+| each change / branch | `--quick` to iterate; `--strict` once before it is ready (both on the pool) |
+| merging to main | branches go into a train (below); `--strict` on the merged train (catches merge-only breaks and -O2/-Werror ones), then **one full gate** on the train's SHA (`gate=0` + `linux=0`), then `tools/gitsync.sh push-main <SHA>`. A failure's test names the branch; if it doesn't, gate the suspects in parallel |
 | a lone hotfix | its own full gate |
 | every push to main | CI: macOS, Linux, coverage, Windows; a red Windows run blocks the next merge |
 | a release | the full matrix: Windows box, Pi, a spread of Qt versions, clean-machine DMG, `make perf` once, notarize (docs/dev/RELEASE.md) |
 
 Train at least daily, so quick-only branches don't sit unmerged.
+
+**Merging a train** (decided 2026-11-13 after a day of hand-resolved
+conflicts): `tools/gitsync.sh fetch` first (never trust a clone's
+`origin/main`: a push to a URL leaves it stale). `CHANGELOG.md` and
+`docs/dev/TEST_MAP.md` merge with git's union driver (`.gitattributes`), so
+their lists no longer conflict; a branch's new TEST_MAP rows say `| Mnew |`
+and the train runs `tools/test-map-ids.py assign` once and commits it (the
+gate's `check` fails a duplicate id). Any other conflict: `tools/merge-check.py
+resolve FILE...` takes both sides of a "both added here" hunk and leaves real
+ones to you -- never strip markers with sed. `tools/merge-check.py check`
+(the `tools/githooks` pre-commit hook runs it: `git config core.hooksPath
+tools/githooks`) refuses conflict markers and a C/C++ file whose braces
+stopped balancing. Push with `tools/gitsync.sh push-main <SHA>`: it refuses
+without that SHA's `gate=0 … linux=0` pool line, on a stale or non-fast-forward
+main, or an empty SHA, goes over port 443 when 22 fails, and fetches after.
 
 Tests never touch the real screen: every test.sh and every test program
 (`engine/test/common/testguard.cpp`, linked into each by the top-level
@@ -138,6 +163,10 @@ cmake -S . -B build
 
 # Build + test: on the pool (see "Builds run on the pool" above).
 ./check-all.sh --quick --remote auto --rev "$(git rev-parse HEAD)"
+# Before calling it ready (Werror + Release, the touched tests in both):
+./check-all.sh --strict --remote auto --rev "$(git rev-parse HEAD)"
+# UX shots back from the pool:
+QLC_TEST_ONLY="ui/test/foo" ./check-all.sh --quick --shots shots/after --remote auto --rev <SHA>
 
 # A local incremental build is only for a single target on a Mac that is
 # not a shared agent host (on ender the hook allows -j2 at most):
@@ -157,11 +186,23 @@ build/main/qlcconsole -o test-workspaces/surfacetesting.qxw
   **no unit tests** (that's `make check` = `./check-all.sh`). `make run
   SHOW=path` builds and launches with `-o`. Settings are shared with the
   release app (QSettings `org.qlcplus.qlcconsole`).
+- **`make rc HOSTS="dink kronk local"`** — a **test** build for our own
+  Macs: HEAD (committed, holding a freshly fetched origin/main) built,
+  Developer ID signed, **not notarized**, installed as
+  `/Applications/qlcconsole.app` on each host over ssh (old one → `.prev`;
+  refuses while it runs there). Testing never waits on Apple: a copy over
+  ssh has no quarantine flag. `make install-test HOSTS=…` re-installs the
+  current `~/qlcconsole.app`. Publishes nothing.
 - **`make dmg`** — `platforms/macos/make-release.sh`: the signed,
   notarized, stapled universal DMG of a committed HEAD into `dist/` (+
   `dist/SHA256SUMS`); replaces `~/qlcconsole.app` (old one →
   `~/qlcconsole.app.prev`). Publishes nothing. No tests, ccache, kept build dir;
   `make dmg ARCH=native` = arm64-only DMG for our own Macs, never a release.
+  Notarization submits and then polls (`platforms/macos/notarize-lib.sh`;
+  notarytool's own `--wait` crashed twice): a crash or blip is ridden out, a
+  stopped run resumes with `NZ_SUBMISSION_APP=<id>`, and a keychain profile
+  that has gone stops it before anything is uploaded, with the fix. A DMG is
+  for publishing; to test, `make rc`.
 - **`make beta` / `make release` / `make attach` are PUBLIC**
   (`platforms/macos/publish.sh`): gate + `make dmg` + push tag `v<VERSION>` +
   a GitHub pre-release ("Show Tree X (beta)") or full release, DMG +
