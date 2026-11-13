@@ -4616,4 +4616,4 @@ void FixtureManager::sayFixturesNote(const QString &text)
         if (m_fixturesNote != NULL && m_fixturesNote->text() == text)
             m_fixturesNote->setVisible(false);
     });
-}}
+}
