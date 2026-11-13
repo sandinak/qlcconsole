@@ -2830,7 +2830,8 @@ void ConnectionsTree_Test::byUniverseColumnsReadThePatch()
     QCOMPARE(two->text(COL_FEEDBACK), QString());
     QCOMPARE(two->text(COL_PT), QString());
 
-    // Read-only: a double-click on a column opens the connection window.
+    // A double-click on a column the grid doesn't edit opens the connection
+    // window (a patch cell is edited in place: byUniverseCellsEditThePatch).
     tree.m_byUniverse->blockSignals(true);   // keep the columns as they are
     QSettings().setValue(QStringLiteral("connections/universeColumns"),
                          QStringList() << "ip" << "mode");
@@ -2839,7 +2840,7 @@ void ConnectionsTree_Test::byUniverseColumnsReadThePatch()
     QVERIFY(one->flags() & Qt::ItemIsEditable);              // the name only
     QVERIFY(tree.m_tree->itemDelegateForColumn(COL_IP) != tree.m_tree->itemDelegate());
     EditorSpy spy;
-    tree.slotItemDoubleClicked(one, COL_IP);
+    tree.slotItemDoubleClicked(one, COL_DETAIL);
     QCOMPARE(spy.opened, 1);
     QCOMPARE(spy.universe, quint32(0));
     QCOMPARE(spy.protocol, QString("ArtNet"));
@@ -3356,7 +3357,22 @@ bool editCellByHand(ConnectionsTree &tree, quint32 universe, int column, const Q
     tree.m_tree->scrollTo(idx);
     QApplication::processEvents();
     QWidget *vp = tree.m_tree->viewport();
-    const QPoint at = tree.m_tree->visualRect(idx).center();
+    /* The list never scrolls sideways by itself (rows are what is picked):
+       bring the column into view as a hand on the scroll bar would. */
+    QScrollBar *h = tree.m_tree->horizontalScrollBar();
+    QRect cell = tree.m_tree->visualRect(idx);
+    if (cell.left() < 0 || cell.right() > vp->width())
+    {
+        h->setValue(h->value() + cell.left() - 20);
+        QApplication::processEvents();
+        cell = tree.m_tree->visualRect(idx);
+    }
+    if (vp->rect().contains(cell.center()) == false)
+    {
+        qWarning() << "cell" << column << "of universe" << universe << "is not in view" << cell << vp->size();
+        return false;
+    }
+    const QPoint at = cell.center();
     const QPointF global = vp->mapToGlobal(QPointF(at));
     auto send = [vp, at, global](QEvent::Type type, Qt::MouseButtons held) {
         QMouseEvent ev(type, QPointF(at), global, Qt::LeftButton, held, Qt::NoModifier);

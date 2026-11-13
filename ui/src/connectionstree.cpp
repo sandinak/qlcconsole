@@ -492,8 +492,9 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_paneStack->setObjectName(QStringLiteral("connectionsPaneStack"));
     m_paneStack->addWidget(m_panePlaceholder);
     m_paneStack->addWidget(m_connPane);
-    /* Its own minimum height would hold the whole page tall; it scrolls. */
-    m_paneStack->setMinimumSize(300, 1);
+    /* Its own minimum height would hold the whole page tall; it scrolls.
+       Its width: its fields' (layoutSide()). */
+    m_paneStack->setMinimumSize(340, 1);
     outScroll->setMinimumHeight(1);
     m_universeSplit = new QSplitter(Qt::Horizontal, this);
     m_universeSplit->setObjectName(QStringLiteral("connectionsUniverseSplit"));
@@ -5222,10 +5223,14 @@ void ConnectionsTree::layoutSide()
     m_laidOutWidth = w;
     const int handles = m_outerSplit->handleWidth() + m_universeSplit->handleWidth();
     const int bar = style()->pixelMetric(QStyle::PM_ScrollBarExtent) + 4;
-    const int pane = qBound(340, w * 27 / 100, 520);
+    /* The settings never narrower than their fields need (they'd be cut). */
+    const int paneMin = qMax(340, m_connPane->minimumSizeHint().width());
+    m_paneStack->setMinimumSize(paneMin, 1);
+    const int pane = qBound(paneMin, w * 27 / 100, qMax(paneMin, 520));
     const int gridFull = UniverseOutputView::widthFor(16) + bar;
     const int gridMin = UniverseOutputView::widthFor(4) + bar;
-    const int list = qMax(w * 36 / 100, w - pane - gridFull - handles);
+    int list = qMax(w * 36 / 100, w - pane - gridFull - handles);
+    list = qMax(w / 3, qMin(list, w - pane - gridMin - handles));
     const int right = w - list - m_outerSplit->handleWidth();
     int grid = qMin(gridFull, right - pane - m_universeSplit->handleWidth());
     if (grid < gridMin)
