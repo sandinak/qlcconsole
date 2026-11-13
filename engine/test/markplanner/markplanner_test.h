@@ -67,11 +67,43 @@ private slots:
     /** A cue jumped past: what was moved in black for it goes back. */
     void aPresetIsPutBackWhenItsCueIsJumpedPast();
 
+    /* A shutter is a dimmer too (2026-11-12) */
+    /** "Closed" is the definition's close capabilities (a ShutterClose
+     *  preset, or one named so), never a strobe or a "No function". */
+    void closedIsTheDefinitionsCloseCapability();
+    /** The dimmer down keeps it dark whatever the shutter: pre-set as
+     *  before, the next cue's shutter (open) with the rest -- the dimmer
+     *  is what keeps it dark, the GO brings the level. */
+    void aDarkDimmerPresetsTheShutterToo();
+    /** The dimmer up behind a closed shutter is dark: pre-set, the shutter
+     *  left closed (not held open), not handed off while it stays closed,
+     *  handed off when the cue opens it. */
+    void aClosedShutterIsDarkAndStaysClosed();
+    /** A fixture with a shutter and no dimmer: pre-set, the shutter left
+     *  closed, released on reveal (the shutter opens). */
+    void aShutterOnlyFixtureIsMovedInBlack();
+    /** No dimmer, and no shutter that can close (a strobe channel): never
+     *  pre-set, and never lit by a cue as far as the planner can tell. */
+    void aFixtureWithNeitherIsSkipped();
+    /** A shutter auto-open opens (the dimmer up, nothing sets the shutter)
+     *  is open on stage: not dark, so not pre-set. */
+    void anAutoOpenedShutterIsNotDark();
+    /** A manual mark on a fixture dark by its shutter is not the planner's. */
+    void aManualMarkIsLeftAlone();
+    /** A next cue that closes the shutter does not light the fixture: not
+     *  pre-set, and a mark on it dangles. */
+    void aCueThatClosesTheShutterDoesNotLightIt();
+
 private:
     Doc *m_doc = nullptr;
     MarkEffect *m_mark = nullptr;
     quint32 m_fixtureA = 0;   //!< will be lit by the upcoming cue
     quint32 m_fixtureB = 0;   //!< will NOT be lit by the upcoming cue
+
+    /** Adds a fixture: Pan, then a Dimmer (@p dimmer), then a Shutter
+     *  (closed 0-7, open 8-255) when @p shutter, else a strobe-only
+     *  Shutter channel. Returns its id; its channel numbers in order. */
+    quint32 addShutterFixture(quint32 address, bool dimmer, bool shutter);
 };
 
 #endif // MARKPLANNER_TEST_H

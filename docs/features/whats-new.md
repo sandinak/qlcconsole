@@ -40,6 +40,11 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### The Show Tree
 
+- **Move in black reads the shutter too.** A spot with its dimmer up
+  behind a closed shutter is dark, so it is moved in black, its shutter
+  kept closed until the cue opens it. A light with a shutter and no
+  dimmer is moved in black too. "Closed" is the fixture definition's own
+  closed setting. See [Move in black](show-tree.md#move-in-black).
 - **Cues to sub-cues and back.** Select two or more cues and right-click ▸
   **Make Sub-cues of 4** (or **⌘]**): the rest go under the first one
   selected, in order. Select sub-cues ▸ **Make Main Cues** (**⌘[**) to

@@ -2954,6 +2954,22 @@ left alone, so nobody sees it move. Each light is let go as its cue lights
 it. A next cue closer than the **lead time** (0.8 s for a new show) is too
 soon to move in black, so nothing new is sent for it.
 
+**Dark** means the light's dimmer is down, or its shutter is closed. A
+spot whose dimmer sits up behind a closed shutter is dark, and a light
+with a shutter but no dimmer can be moved in black too. "Closed" is what
+the fixture definition calls closed (a Shutter channel's close setting),
+never a guess, so a strobe channel that has no closed setting doesn't
+count. A light with neither a dimmer nor such a shutter isn't moved.
+
+- **Dark by its dimmer:** everything else is sent ahead, the next cue's
+  shutter included; the GO brings the level up.
+- **Dark only by its shutter** (the dimmer is up, or there is none): its
+  shutter is left closed while it moves. The cue opens it, and that is
+  when the light is let go.
+
+A next cue that leaves a light's shutter closed doesn't light it, so the
+light isn't moved for that cue.
+
 A **WLED** that runs effects is moved in black too. While it is dark, its
 next look's effect, speed, palette and colours are sent to the device
 (off). The GO then only turns it on at its brightness, which is the

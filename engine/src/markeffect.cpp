@@ -17,6 +17,7 @@
 #include "universe.h"
 #include "qlcchannel.h"
 #include "wledfixture.h"
+#include "shutterautoopen.h"
 
 MarkEffect::MarkEffect(Doc *doc)
     : QObject(doc)
@@ -103,6 +104,14 @@ void MarkEffect::rebuild()
             (masterCh != QLCChannel::invalid() && masterCh < fxi->channels())
                 ? (int)fxi->address() + (int)masterCh
                 : -1;
+        // Its shutters that can close: closed keeps it dark too.
+        for (quint32 c : ShutterAutoOpen::closingShutters(fxi))
+        {
+            const int absAddr = (int)fxi->address() + (int)c;
+            if (absAddr < 0 || absAddr >= UNIVERSE_SIZE)
+                continue;
+            entry.shutters.append({ absAddr, ShutterAutoOpen::closedRanges(fxi->channel(c)) });
+        }
 
         const QHash<quint32, uchar> &vals = it.value();
         for (QHash<quint32, uchar>::const_iterator vit = vals.constBegin();
@@ -186,7 +195,7 @@ void MarkEffect::writeDMX(MasterTimer *timer, QList<Universe*> universes)
         // Auto-handoff: a real cue is lighting this fixture → stop forcing its
         // pre-position and release the mark (once). The cue was pre-set to these
         // same values, so the take-over is seamless.
-        if (e.intensityAddr >= 0 && uni->preGMValue(e.intensityAddr) > HANDOFF_INTENSITY)
+        if (isLit(e, uni))
         {
             if (!m_revealed.contains(e.fixtureId))
             {
@@ -198,6 +207,31 @@ void MarkEffect::writeDMX(MasterTimer *timer, QList<Universe*> universes)
 
         // The values themselves go out through m_layer (a fader).
     }
+}
+
+bool MarkEffect::isLit(const FixEntry &e, const Universe *uni)
+{
+    if (e.intensityAddr < 0 && e.shutters.isEmpty())
+        return false;                    // nothing says it is lit
+    if (e.intensityAddr >= 0 && uni->preGMValue(e.intensityAddr) <= HANDOFF_INTENSITY)
+        return false;
+    /* Closed when every shutter that can close is: read after the Grand
+       Master and auto-open (ShutterAutoOpen), as it goes out -- a cue that
+       brings the level up and lets auto-open open the shutter lights it. */
+    for (const ShutterGate &g : e.shutters)
+    {
+        const uchar v = uni->postGMValue(g.addr);
+        bool closed = false;
+        for (const QPair<uchar, uchar> &r : g.closed)
+            if (v >= r.first && v <= r.second)
+            {
+                closed = true;
+                break;
+            }
+        if (!closed)
+            return true;                 // a shutter is open
+    }
+    return e.shutters.isEmpty();
 }
 
 bool MarkEffect::saveXML(QXmlStreamWriter *doc) const
