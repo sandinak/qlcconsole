@@ -1031,6 +1031,8 @@ void PadBenchShow_Test::openingAShowOverOneThatPlays()
     }
     doc->masterTimer()->stopAllFunctions();
     settle(50);
+}
+
 void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
 {
     const QString show = QStringLiteral(PADBENCH_COMMITTED);
