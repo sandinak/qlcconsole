@@ -1126,12 +1126,32 @@ const int kHintRoom = 420;
 class DropHintLabel final : public QLabel
 {
 public:
-    explicit DropHintLabel(QWidget *parent) : QLabel(parent) {}
+    /* A hint longer than its room wraps onto a second line (at 1024 wide
+       it was cut off at the edge): it wants the width of one line, keeps
+       kHintRoom at the least, and the header grows by a line when it must. */
+    explicit DropHintLabel(QWidget *parent) : QLabel(parent)
+    {
+        setWordWrap(true);
+        setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    }
+
+    QSize sizeHint() const override
+    {
+        const QFontMetrics fm(font());
+        return QSize(fm.horizontalAdvance(text()) + 2 * margin() + 2, fm.height() + 2 * margin());
+    }
 
     QSize minimumSizeHint() const override
     {
-        const QSize s = QLabel::sizeHint();
+        const QSize s = sizeHint();
         return QSize(qMin(s.width(), kHintRoom), s.height());
+    }
+
+    bool hasHeightForWidth() const override { return true; }
+
+    int heightForWidth(int width) const override
+    {
+        return QLabel::heightForWidth(width);
     }
 };
 

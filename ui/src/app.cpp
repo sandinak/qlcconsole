@@ -7303,9 +7303,22 @@ void App::fitTabLabels()
             fit = step;
             break;
         }
+        /* The short names a few pixels over: the tight padding keeps the
+           words rather than dropping to bare icons. */
+        if (step == TabFitShort)
+        {
+            setTabsCompact(true);
+            bar->updateGeometry();
+            if (bar->sizeHint().width() <= room)
+            {
+                fit = step;
+                break;
+            }
+            setTabsCompact(false);
+        }
     }
     m_tabFit = fit;
-    setTabsCompact(fit == TabFitIcons);
+    setTabsCompact(fit == TabFitIcons || (fit == TabFitShort && m_tabsCompact));
     m_fittingTabs = false;
 }
 

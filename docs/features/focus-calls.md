@@ -113,7 +113,7 @@ its menu starts with **Still at Lincoln HS?…**, which asks again):
 - **None**: the show's own calibration.
 
 The answer shows on the chip: **Venue: Lincoln HS** (its tooltip:
-"Confirmed: you are at Lincoln HS."), the new venue, or **Venue: none**.
+"Confirmed: you are at Lincoln HS."), the new venue, or **Set Venue…** (none).
 The Venue Focus dialog does not pick an old venue for you either: until
 it is confirmed, **New Venue…** is chosen, with a note naming the old
 one.

@@ -91,6 +91,13 @@ private slots:
      *  unchanged. TABFIT_SHOTS=dir (+ TABFIT_TAG) saves pictures. */
     void theTabStripFitsTheWindow();
 
+    /** The 0.4.4 UX nits at 1024x640, 1280x800 and 1920x1080: the Everything
+     *  view's tab strip fits with no scroll arrow, the footer has no "Venue:
+     *  none" chip, and a sub-cue hint in the Show Tree is not cut. With
+     *  UXNIT_SHOTS=<dir> (and UXNIT_TAG=before|after) it also saves the
+     *  pictures; UXNIT_BEFORE=1 only reports. */
+    void theUxNitsAtThreeSizes();
+
     /** Every screen at every size: no overlaps, nothing clipped. */
     void everyScreenIsLaidOutCleanly_data();
     void everyScreenIsLaidOutCleanly();
