@@ -366,7 +366,7 @@ void FixtureUniversePatch_Test::aPatchedUniverseSaysWhereItGoesAndCanBeUnpatched
     {
         QString current;
         EditorAnswer answer([&current](ConnectionEditor *ed) {
-            current = ed->m_targetCombo->currentText();
+            current = ed->m_targetCombo->itemText(ed->m_targetCombo->currentIndex());
             pickTarget(ed, "Quad (172.18.2.50) — port 4");
         });
         bool found = false;
