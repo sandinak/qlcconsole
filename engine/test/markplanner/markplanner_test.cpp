@@ -48,6 +48,7 @@
 #include "inputoutputmap.h"
 #include "qlccapability.h"
 #include "shutterautoopen.h"
+#include "outputlayer.h"
 #include <QBuffer>
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
@@ -802,6 +803,25 @@ void startChaserInto(Doc *doc, Scene *next)
     QCOMPARE(chaser->computeNextStep(0), 1);
 }
 
+/** A running cue's levels (over the mark, as a cue is): a dimmer is reset
+ *  every frame, so it is given one by a fader, not a resting value. */
+struct Stage
+{
+    explicit Stage(Doc *d) : doc(d), layer(d, Universe::Auto, 0, QStringLiteral("Cue")) {}
+    void cue(int address, int value)
+    {
+        levels[address] = value;
+        QList<OutputLayer::Level> l;
+        for (auto it = levels.constBegin(); it != levels.constEnd(); ++it)
+            l.append({ Fixture::invalidId(), quint32(it.key()), uchar(it.value()) });
+        layer.set(l);
+        doc->inputOutputMap()->universes().first()->processFaders();
+    }
+    Doc *doc;
+    OutputLayer layer;
+    QMap<int, int> levels;
+};
+
 /** What is on stage now: @p values as the channels' resting values. */
 void setLive(Doc *doc, const QList<QPair<int, int> > &values)
 {
@@ -885,7 +905,8 @@ void MarkPlanner_Test::aDarkDimmerPresetsTheShutterToo()
     handOff(m_doc, m_mark);
     QVERIFY(m_mark->isMarked(sid));
     // The cue brings the level: handed off.
-    setLive(m_doc, { { 101, 200 } });
+    Stage stage(m_doc);
+    stage.cue(101, 200);
     handOff(m_doc, m_mark);
     QVERIFY(!m_mark->isMarked(sid));
     planner.setEnabled(false);
@@ -900,8 +921,13 @@ void MarkPlanner_Test::aClosedShutterIsDarkAndStaysClosed()
     next->setValue(sid, 2, 200);
     startChaserInto(m_doc, next);
 
-    // The dimmer up behind a closed shutter: dark.
-    setLive(m_doc, { { 100, 10 }, { 101, 255 }, { 102, 0 } });
+    /* The dimmer up behind a closed shutter: dark. The cue on now closes
+       it (a shutter nothing sets would be auto-opened by the level). */
+    setLive(m_doc, { { 100, 10 } });
+    Stage stage(m_doc);
+    stage.cue(102, 0);
+    stage.cue(101, 255);
+    QCOMPARE(live(m_doc, 101), 255);
     MarkPlanner planner(m_doc, m_mark);
     planner.setDarkGapMs(0);
     planner.setEnabled(true);
@@ -923,7 +949,7 @@ void MarkPlanner_Test::aClosedShutterIsDarkAndStaysClosed()
     QCOMPARE(live(m_doc, 102), 0);
 
     // The cue opens the shutter: handed off.
-    setLive(m_doc, { { 102, 200 } });
+    stage.cue(102, 200);
     handOff(m_doc, m_mark);
     QVERIFY(!m_mark->isMarked(sid));
     planner.setEnabled(false);
@@ -988,6 +1014,29 @@ void MarkPlanner_Test::aFixtureWithNeitherIsSkipped()
     planner.setEnabled(false);
 }
 
+void MarkPlanner_Test::anAutoOpenedShutterIsNotDark()
+{
+    const quint32 sid = addShutterFixture(100, true, true);
+    Scene *next = new Scene(m_doc);
+    next->setValue(sid, 0, 128);
+    next->setValue(sid, 1, 200);
+    next->setValue(sid, 2, 200);
+    startChaserInto(m_doc, next);
+    QVERIFY(m_doc->shutterAutoOpen() != nullptr && m_doc->shutterAutoOpen()->isEnabled());
+    m_doc->shutterAutoOpen()->rebuild();
+
+    // The shutter rests closed; the cue on now gives the dimmer a level.
+    setLive(m_doc, { { 100, 10 }, { 102, 0 } });
+    Stage stage(m_doc);
+    stage.cue(101, 255);
+    QVERIFY(live(m_doc, 102) >= 8);         // auto-opened: lit on stage
+    MarkPlanner planner(m_doc, m_mark);
+    planner.setDarkGapMs(0);
+    planner.setEnabled(true);
+    QVERIFY(!m_mark->isMarked(sid));
+    planner.setEnabled(false);
+}
+
 void MarkPlanner_Test::aManualMarkIsLeftAlone()
 {
     const quint32 sid = addShutterFixture(100, true, true);
@@ -996,7 +1045,9 @@ void MarkPlanner_Test::aManualMarkIsLeftAlone()
     next->setValue(sid, 1, 200);
     next->setValue(sid, 2, 200);
     startChaserInto(m_doc, next);
-    setLive(m_doc, { { 100, 10 }, { 101, 255 }, { 102, 0 } });
+    setLive(m_doc, { { 100, 10 }, { 102, 0 } });
+    Stage stage(m_doc);
+    stage.cue(101, 255);
 
     const QHash<quint32, uchar> mine = { { 0, 64 } };
     m_mark->markFixture(sid, mine);

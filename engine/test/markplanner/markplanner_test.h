@@ -85,6 +85,9 @@ private slots:
     /** No dimmer, and no shutter that can close (a strobe channel): never
      *  pre-set, and never lit by a cue as far as the planner can tell. */
     void aFixtureWithNeitherIsSkipped();
+    /** A shutter auto-open opens (the dimmer up, nothing sets the shutter)
+     *  is open on stage: not dark, so not pre-set. */
+    void anAutoOpenedShutterIsNotDark();
     /** A manual mark on a fixture dark by its shutter is not the planner's. */
     void aManualMarkIsLeftAlone();
     /** A next cue that closes the shutter does not light the fixture: not
