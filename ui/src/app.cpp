@@ -522,8 +522,13 @@ void App::startup(const QString &cliWorkspaceFile)
 
     if (lastNotFound.isEmpty() == false)
     {
-        setStatusMessage(tr("Last show not found: %1").arg(QFileInfo(lastNotFound).fileName()));
-        QTimer::singleShot(15000, this, [this]() { clearStatusMessage(); });
+        const QString msg = tr("Last show not found: %1").arg(QFileInfo(lastNotFound).fileName());
+        setStatusMessage(msg);
+        // Cleared only if nothing has replaced it in the meantime.
+        QTimer::singleShot(15000, this, [this, msg]() {
+            if (m_statusMessage == msg)
+                clearStatusMessage();
+        });
     }
 
     // Activate FixtureManager
