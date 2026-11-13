@@ -18,6 +18,7 @@
   limitations under the License.
 */
 
+#include <QPointer>
 #include <QRegularExpression>
 #include <QCoreApplication>
 #include <QLocale>
@@ -3332,7 +3333,13 @@ void Monitor::showStageOverview()
        it had before. */
     struct Before { bool operatorView = false; double az = 0.0, el = 0.0; int turns = 0; };
     QSharedPointer<Before> before(new Before);
-    auto applyOperatorView = [this, view](int which) {
+    QPointer<StructureStudioView> viewPtr(view);
+    auto applyOperatorView = [this, viewPtr](int which) {
+        /* Also reached from the controller's signals, which may come while
+           the window is being taken down (the show cleared at quit). */
+        StructureStudioView *view = viewPtr.data();
+        if (view == nullptr)
+            return;
         ProgrammerController *pc = m_doc->programmer();
         const FollowSpotOperator op = pc != nullptr ? pc->followSpotOperator() : FollowSpotOperator();
         /* Drawn where they stand, and said whose they are: a view that only
@@ -3379,14 +3386,20 @@ void Monitor::showStageOverview()
     };
     if (m_doc->programmer() != nullptr)
     {
-        auto reapply = [planeCombo, applyOperatorView]() {
-            const int d = planeCombo->currentData().toInt();
+        QPointer<QComboBox> comboPtr(planeCombo);
+        auto reapply = [comboPtr, applyOperatorView]() {
+            if (comboPtr.isNull())
+                return;
+            const int d = comboPtr->currentData().toInt();
             if (d == kOperatorView || d == kOperatorPlan)
                 applyOperatorView(d);
         };
-        connect(m_doc->programmer(), &ProgrammerController::followSpotOperatorChanged, &dlg, reapply);
+        /* Gone with this window (the pointers) or with this Monitor (the
+           context): the window is the main window's, and the show is
+           cleared after the Monitor has gone at quit. */
+        connect(m_doc->programmer(), &ProgrammerController::followSpotOperatorChanged, this, reapply);
         // Whose it is (the pad's name) said again when the pad comes or goes.
-        connect(m_doc->programmer(), &ProgrammerController::axisBindingChanged, &dlg, reapply);
+        connect(m_doc->programmer(), &ProgrammerController::axisBindingChanged, this, reapply);
     }
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
             [view, planeCombo, before, applyOperatorView](int i) {

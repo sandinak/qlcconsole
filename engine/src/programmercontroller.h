@@ -538,6 +538,9 @@ public:
         bool settingFacing = false;
         /** "Facing 285°", for a moment after LS's release set it. */
         QString facingSaid;
+        /** The same in fewer words, for a narrow footer: "Facing 270°, as it
+         *  was", "Facing unchanged: push further". */
+        QString facingShort;
 
         bool operator==(const FollowSpotStatus &o) const
         {
@@ -546,7 +549,8 @@ public:
                    && speedShown == o.speedShown && framing == o.framing && scalePct == o.scalePct
                    && sizeCm == o.sizeCm && beamDeg == o.beamDeg && padSet == o.padSet
                    && sizeShown == o.sizeShown && limit == o.limit && saved == o.saved
-                   && settingFacing == o.settingFacing && facingSaid == o.facingSaid;
+                   && settingFacing == o.settingFacing && facingSaid == o.facingSaid
+                   && facingShort == o.facingShort;
         }
         bool operator!=(const FollowSpotStatus &o) const { return !(*this == o); }
     };
@@ -1095,6 +1099,7 @@ private:
     bool m_recalHeld = false;           ///< LS held to set the facing
     QElapsedTimer m_facingSaidClock;    ///< when LS's release last set (or kept) it
     QString m_facingSaid;               ///< what it said, in words
+    QString m_facingShort;              ///< ...and in fewer
     QString m_lastStickName;            ///< the stick there was (followSpotOperatorStick())
     double m_recalX = 0.0;              ///< ...the furthest push seen, x right
     double m_recalY = 0.0;              ///< ...and up
