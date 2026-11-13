@@ -34,6 +34,9 @@
 #include "markplanner.h"
 #include "mastertimer.h"
 #include "programmingmanager.h"
+#include "showtreeview.h"
+#include "workbenchstack.h"
+#include "workbench.h"
 #undef protected
 #undef private
 #include "showtreecontroller.h"
@@ -1008,7 +1011,27 @@ void PadBenchShow_Test::openingAShowOverOneThatPlays()
                     cues << c.id;
             }
         QVERIFY(!cues.isEmpty());
-        doc->showTree()->previewCue(cues.at(round % cues.size()));
+        const quint32 cue = cues.at(round % cues.size());
+        if (round % 3 != 2)
+        {
+            /* The cue open in the Show Tree's Workbench, playing in context
+               -- or Solo, one layer of it. */
+            ShowTreeView *tree = ShowTreeView::instance();
+            QVERIFY(tree != nullptr);
+            m_app->switchToTabContaining(tree);
+            settle();
+            QVERIFY(tree->openInWorkbench(cue));
+            settle(30);
+            Workbench *bench = tree->dockedWorkbench();
+            QVERIFY(bench != nullptr && bench->stack() != nullptr);
+            if (round % 3 == 1)
+            {
+                bench->stack()->setFocusLayer(0);
+                bench->stack()->setSolo(true);
+            }
+        }
+        else
+            doc->showTree()->previewCue(cue);
         if (round % 2 == 1)
         {
             if (Chaser *ch = qobject_cast<Chaser *>(doc->function(lists.first())))
@@ -1028,6 +1051,7 @@ void PadBenchShow_Test::openingAShowOverOneThatPlays()
                    << g_startedInTeardown;
     doc->masterTimer()->stopAllFunctions();
     settle(50);
+    QFAIL("WIP: keep the logs");
 }
 
 int main(int argc, char **argv)
