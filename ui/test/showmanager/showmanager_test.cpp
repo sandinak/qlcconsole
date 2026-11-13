@@ -32,6 +32,7 @@
 #include "chaser.h"
 #include "doc.h"
 #include "audio.h"
+#include "efx.h"
 #include <QBuffer>
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
@@ -370,6 +371,38 @@ void ShowManager_Test::aGeneratedCueListKeepsItsStepsOnATrack()
     sf->setStartTime(2000);
     QCOMPARE(sf->startTime(), quint32(2000));
     QCOMPARE(snap(), before);
+}
+
+void ShowManager_Test::theItemEditorGoesWithItsFunction()
+{
+    EFX *efx = new EFX(m_doc);
+    efx->setName("Sweep");
+    QVERIFY(m_doc->addFunction(efx));
+
+    m_manager->resize(1000, 700);
+    m_manager->show();
+    m_manager->showRightEditor(efx);
+    QPointer<QWidget> ed = m_manager->m_currentEditor;
+    QVERIFY(!ed.isNull());
+    QCOMPARE(m_manager->m_editorFunctionID, efx->id());
+
+    m_doc->deleteFunction(efx->id());
+    QVERIFY(m_manager->m_currentEditor == nullptr);
+    QCOMPARE(m_manager->m_editorFunctionID, Function::invalidId());
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QVERIFY2(ed.isNull(), "the item editor outlived its function");
+    m_doc->setMode(Doc::Operate);
+    m_doc->setMode(Doc::Design);
+
+    // Another show: a function of the same id gets its editor (the id of
+    // the last one was kept through the clear).
+    EFX *again = new EFX(m_doc);
+    QVERIFY(m_doc->addFunction(again));
+    m_manager->showRightEditor(again);
+    QVERIFY(m_manager->m_currentEditor != nullptr);
+    m_doc->clearContents();
+    QCOMPARE(m_manager->m_editorFunctionID, Function::invalidId());
+    QVERIFY(m_manager->m_currentEditor == nullptr);
 }
 
 QTEST_MAIN(ShowManager_Test)

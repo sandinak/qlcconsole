@@ -25,6 +25,7 @@
 #include <QUrl>
 
 #include "audioplugincache.h"
+#include "functioneditorguard.h"
 #include "speeddialwidget.h"
 #include "audiodecoder.h"
 #include "audioeditor.h"
@@ -42,6 +43,9 @@ AudioEditor::AudioEditor(QWidget* parent, Audio *audio, Doc* doc)
     Q_ASSERT(audio != NULL);
 
     setupUi(this);
+
+    // Cut off once its audio leaves the Doc (functioneditorguard.h).
+    FunctionEditorGuard::watch(this, m_doc, audio->id());
 
     m_nameEdit->setText(m_audio->name());
 
@@ -133,7 +137,7 @@ AudioEditor::AudioEditor(QWidget* parent, Audio *audio, Doc* doc)
 
 AudioEditor::~AudioEditor()
 {
-    if (m_previewButton->isChecked())
+    if (m_previewButton->isChecked() && !m_audio.isNull())
         m_audio->stop(functionParent());
 }
 

@@ -20,6 +20,8 @@
 #ifndef CHASEREDITOR_H
 #define CHASEREDITOR_H
 
+#include <QPointer>
+#include "chaser.h"
 #include <QWidget>
 #include "ui_chasereditor.h"
 #include "scene.h"
@@ -91,7 +93,7 @@ private slots:
 
 private:
     Doc* m_doc;
-    Chaser* m_chaser; // The Chaser being edited
+    QPointer<Chaser> m_chaser; // The Chaser being edited
 
     /************************************************************************
      * List manipulation

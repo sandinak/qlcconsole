@@ -34,6 +34,7 @@
 #include <QMessageBox>
 #include <QDebug>
 
+#include "functioneditorguard.h"
 #include "workbench.h"
 #include "previewkeep.h"
 #include "whyonpanel.h"
@@ -1479,11 +1480,7 @@ Workbench::Page Workbench::currentPage() const
    on Linux). Cut it, and everything in it, off from the Doc now. */
 static void retireEditor(QWidget *editor, Doc *doc)
 {
-    QObject::disconnect(doc, nullptr, editor, nullptr);
-    for (QObject *child : editor->findChildren<QObject *>())
-        QObject::disconnect(doc, nullptr, child, nullptr);
-    editor->hide();
-    editor->deleteLater();
+    FunctionEditorGuard::retire(editor, doc);
 }
 
 void Workbench::retireOverviewEditor()

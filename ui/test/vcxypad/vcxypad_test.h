@@ -38,6 +38,9 @@ private slots:
     void loadXML();
     void saveXML();
     void modeChange();
+    /** M998: a preset's scene or EFX deleted (in Design, after a click in
+     *  Operate): the pad lets go; the next tick read the freed scene */
+    void aPresetFunctionDeleted();
 
 private:
     Doc* m_doc;

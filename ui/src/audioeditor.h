@@ -20,6 +20,8 @@
 #ifndef AUDIOEDITOR_H
 #define AUDIOEDITOR_H
 
+#include <QPointer>
+#include "audio.h"
 #include "ui_audioeditor.h"
 #include "function.h"
 
@@ -42,7 +44,7 @@ public:
 
 private:
     Doc* m_doc;
-    Audio* m_audio; // The Audio function being edited
+    QPointer<Audio> m_audio; // The Audio function being edited
 
 private slots:
     void slotNameEdited(const QString& text);

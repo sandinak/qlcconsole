@@ -29,6 +29,7 @@
 #include <QMenu>
 #include <cmath>
 
+#include "functioneditorguard.h"
 #include "functionselection.h"
 #include "channelsselection.h"
 #include "assignhotkey.h"
@@ -45,7 +46,12 @@ ScriptEditor::ScriptEditor(QWidget* parent, Script* script, Doc* doc)
     , m_doc(doc)
     , m_lastUsedPath(QString())
 {
+    Q_ASSERT(script != NULL);
+
     setupUi(this);
+
+    // Cut off once its script leaves the Doc (functioneditorguard.h).
+    FunctionEditorGuard::watch(this, doc, script->id());
     initAddMenu();
 
     /* Name */
@@ -84,7 +90,7 @@ ScriptEditor::~ScriptEditor()
     delete m_document;
     m_document = NULL;
 
-    if (m_testPlayButton->isChecked() == true)
+    if (m_testPlayButton->isChecked() == true && !m_script.isNull())
         m_script->stopAndWait();
 }
 
@@ -207,6 +213,8 @@ void ScriptEditor::slotNameEdited(const QString& name)
 void ScriptEditor::slotContentsChanged()
 {
     //! @todo: this might become quite heavy if there's a lot of content
+    if (m_script.isNull())
+        return;
     m_script->setData(m_document->toPlainText());
     m_doc->setModified();
 }

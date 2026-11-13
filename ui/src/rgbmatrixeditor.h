@@ -20,6 +20,7 @@
 #ifndef RGBMATRIXEDITOR_H
 #define RGBMATRIXEDITOR_H
 
+#include <QPointer>
 #include <QWidget>
 #include <QHash>
 
@@ -133,7 +134,7 @@ private:
 
 private:
     Doc* m_doc;
-    RGBMatrix* m_matrix; // The RGBMatrix being edited
+    QPointer<RGBMatrix> m_matrix; // The RGBMatrix being edited
     RGBMatrixStep *m_previewHandler;
 
     QList <RGBScript> m_scripts;

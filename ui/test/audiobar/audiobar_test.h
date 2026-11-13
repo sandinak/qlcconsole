@@ -38,6 +38,9 @@ private slots:
     void attachDmxChannels();
     void attachDmxChannelsSkipsStagedFixtures();
     void attachFunction();
+    /** M998: the function deleted, the bar holds no freed one (Save wrote
+     *  its id, a trigger started it) */
+    void aDeletedFunctionLeavesTheBar();
     void xml();
 
 private:

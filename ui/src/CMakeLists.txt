@@ -74,6 +74,7 @@ add_library(${module_name}
     fixtureselection.cpp fixtureselection.h fixtureselection.ui
     fixturetreewidget.cpp fixturetreewidget.h
     flowlayout.cpp flowlayout.h
+    functioneditorguard.cpp functioneditorguard.h
     functionliveeditdialog.cpp functionliveeditdialog.h
     functionmanager.cpp functionmanager.h
     functionselection.cpp functionselection.h functionselection.ui

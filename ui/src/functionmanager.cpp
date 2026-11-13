@@ -149,6 +149,14 @@ FunctionManager::FunctionManager(QWidget* parent, Doc* doc)
     });
 
     connect(m_doc, SIGNAL(clearing()), this, SLOT(slotDocClearing()));
+    /* The function in the editor deleted from anywhere (Build, the Show
+       Tree, an undo): the editor goes with it. Doc says so before it
+       deletes the function; the editor, cut off by its guard, is deleted
+       later (it may be what asked for the deletion). */
+    connect(m_doc, &Doc::functionRemoved, this, [this](quint32 id) {
+        if (id != Function::invalidId() && id == m_editedFunctionId)
+            deleteCurrentEditor();
+    });
     connect(m_doc, SIGNAL(loading()), this, SLOT(slotDocLoading()));
     connect(m_doc, SIGNAL(loaded()), this, SLOT(slotDocLoaded()));
     connect(m_doc, SIGNAL(functionNameChanged(quint32)), this, SLOT(slotFunctionNameChanged(quint32)));
@@ -1139,14 +1147,23 @@ void FunctionManager::deleteSelectedFunctions()
             continue;
 
         // Stop running tests before deleting function
-        if (m_editor != NULL)
+        // (Checked casts: the function deleted need not be the one in the
+        // editor, and a static_cast by its type called into the wrong
+        // editor class.)
+        if (func->type() == Function::RGBMatrixType)
         {
-            if (func->type() == Function::RGBMatrixType)
-                static_cast<RGBMatrixEditor*>(m_editor)->stopTest();
-            else if (func->type() == Function::EFXType)
-                static_cast<EFXEditor*>(m_editor)->stopTest();
-            else if (func->type() == Function::ChaserType || func->type() == Function::SequenceType)
-                static_cast<ChaserEditor*>(m_editor)->stopTest();
+            if (RGBMatrixEditor *ed = qobject_cast<RGBMatrixEditor *>(m_editor))
+                ed->stopTest();
+        }
+        else if (func->type() == Function::EFXType)
+        {
+            if (EFXEditor *ed = qobject_cast<EFXEditor *>(m_editor))
+                ed->stopTest();
+        }
+        else if (func->type() == Function::ChaserType || func->type() == Function::SequenceType)
+        {
+            if (ChaserEditor *ed = qobject_cast<ChaserEditor *>(m_editor))
+                ed->stopTest();
         }
 
         /* When deleting a Sequence, check if the bound Scene ID is still used

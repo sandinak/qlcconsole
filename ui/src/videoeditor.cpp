@@ -23,6 +23,7 @@
 #include <QLabel>
 #include <QDebug>
 
+#include "functioneditorguard.h"
 #include "videoeditor.h"
 #include "video.h"
 #include "doc.h"
@@ -37,6 +38,9 @@ VideoEditor::VideoEditor(QWidget* parent, Video *video, Doc* doc)
     Q_ASSERT(video != NULL);
 
     setupUi(this);
+
+    // Cut off once its video leaves the Doc (functioneditorguard.h).
+    FunctionEditorGuard::watch(this, m_doc, video->id());
 
     m_nameEdit->setText(m_video->name());
 
@@ -105,7 +109,8 @@ VideoEditor::VideoEditor(QWidget* parent, Video *video, Doc* doc)
 
 VideoEditor::~VideoEditor()
 {
-    m_video->stopAndWait();
+    if (!m_video.isNull())
+        m_video->stopAndWait();
 }
 
 void VideoEditor::slotNameEdited(const QString& text)

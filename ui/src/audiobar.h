@@ -20,6 +20,8 @@
 #ifndef AUDIOBAR_H
 #define AUDIOBAR_H
 
+#include <QPointer>
+
 #include "scenevalue.h"
 #include "vcwidget.h"
 #include "function.h"
@@ -98,8 +100,10 @@ public:
       * This is precalculated to speed up writeDMX */
     QList<int> m_absDmxChannels;
 
-    /** Reference to an attached Function when m_type == FunctionBar */
-    Function *m_function;
+    /** Reference to an attached Function when m_type == FunctionBar.
+        Null once the function is deleted: the bar outlives it (Save wrote,
+        and a trigger started, the freed function). */
+    QPointer<Function> m_function;
 
     /** ID of the attchaed VCWidget when m_type == VCWidgetBar */
     quint32 m_widgetID;

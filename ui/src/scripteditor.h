@@ -20,6 +20,8 @@
 #ifndef SCRIPTEDITOR_H
 #define SCRIPTEDITOR_H
 
+#include <QPointer>
+#include "script.h"
 #include <QWidget>
 #include "ui_scripteditor.h"
 #include "function.h"
@@ -51,7 +53,7 @@ public:
 
 private:
     QTextDocument* m_document;
-    Script* m_script;
+    QPointer<Script> m_script;
     Doc* m_doc;
     QString m_lastUsedPath;
 

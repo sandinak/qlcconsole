@@ -22,6 +22,9 @@
 
 #include <QDialog>
 #include <QList>
+#include <QPointer>
+
+#include "show.h"
 
 class QDoubleSpinBox;
 class QComboBox;
@@ -31,7 +34,6 @@ class QPushButton;
 class QListWidget;
 class QTimer;
 class Doc;
-class Show;
 
 /** @addtogroup ui UI
  * @{
@@ -92,7 +94,9 @@ private:
 
 private:
     Doc *m_doc;
-    Show *m_show;
+    /** Null once the show is deleted (the dialog is modeless: File ▸ Open,
+        Build or an undo may take it while the dialog is up). */
+    QPointer<Show> m_show;
 
     QComboBox   *m_refCombo;
     QLabel      *m_liveLabel;

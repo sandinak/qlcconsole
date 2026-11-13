@@ -135,6 +135,33 @@ void AudioBar_Test::attachFunction()
     QCOMPARE(bar.m_function, ch);
 }
 
+void AudioBar_Test::aDeletedFunctionLeavesTheBar()
+{
+    Chaser* ch = new Chaser(m_doc);
+    m_doc->addFunction(ch);
+
+    AudioBar bar(AudioBar::FunctionBar, 0, 0);
+    bar.attachFunction(ch);
+    QVERIFY(bar.m_function == ch);
+
+    m_doc->deleteFunction(ch->id());
+    QVERIFY(bar.m_function.isNull());
+
+    // Over the threshold and under it: nothing to start or stop.
+    bar.m_value = 255;
+    bar.checkFunctionThresholds(m_doc);
+    bar.m_value = 0;
+    bar.checkFunctionThresholds(m_doc);
+
+    // Saved without the function it no longer has.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    QVERIFY(bar.saveXML(&xmlWriter, "Spectrum", 0));
+    xmlWriter.writeEndDocument();
+    QVERIFY(!buffer.data().contains("FunctionID"));
+}
+
 void AudioBar_Test::xml()
 {
     Fixture* fxi = new Fixture(m_doc);

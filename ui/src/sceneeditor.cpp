@@ -36,6 +36,7 @@
 #include <QLabel>
 #include <QDebug>
 
+#include "functioneditorguard.h"
 #include "genericdmxsource.h"
 #include "horizontalpan.h"
 #include "fixtureselection.h"
@@ -94,6 +95,15 @@ SceneEditor::SceneEditor(QWidget* parent, Scene* scene, Doc* doc, bool applyValu
     Q_ASSERT(scene != NULL);
 
     setupUi(this);
+
+    // Cut off once its scene leaves the Doc (functioneditorguard.h), and
+    // its values off the rig with it: what the editor writes is the gone
+    // scene's.
+    FunctionEditorGuard::watch(this, m_doc, scene->id());
+    connect(scene, &QObject::destroyed, this, [this]() {
+        delete m_source;
+        m_source = NULL;
+    });
     initPanes();
 
     init(applyValues);

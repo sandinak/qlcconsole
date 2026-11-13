@@ -44,6 +44,7 @@
 
 #include "mainbar.h"
 #include "qlcfile.h"
+#include "functioneditorguard.h"
 #include "functionselection.h"
 #include "audioplugincache.h"
 #include "rgbmatrixeditor.h"
@@ -2705,6 +2706,8 @@ void ShowManager::slotDocClearing()
         delete m_currentEditor;
         m_currentEditor = NULL;
     }
+    // Ids are reused by the next show: its function of this id gets an editor.
+    m_editorFunctionID = Function::invalidId();
     m_vsplitter->widget(1)->hide();
 
     if (m_sceneEditor != NULL)
@@ -2736,6 +2739,18 @@ void ShowManager::slotDocLoaded()
 
 void ShowManager::slotFunctionRemoved(quint32 id)
 {
+    /* The function in the item editor deleted (from Build, the Show Tree,
+       an undo): the editor goes with it. Doc says so before it deletes
+       the function; the editor, cut off by its guard, is deleted later. */
+    if (m_currentEditor != NULL && id == m_editorFunctionID)
+    {
+        m_vsplitter->widget(1)->layout()->removeWidget(m_currentEditor);
+        m_vsplitter->widget(1)->hide();
+        FunctionEditorGuard::retire(m_currentEditor, m_doc);
+        m_currentEditor = NULL;
+        m_editorFunctionID = Function::invalidId();
+    }
+
     /* The combo is empty until the Shows tab is first shown, but the Doc's
        shows are there all the same: a deleted function's items still come
        off their tracks below (Build Delete before the tab was opened left

@@ -20,6 +20,7 @@
 #ifndef EFXEDITOR_H
 #define EFXEDITOR_H
 
+#include <QPointer>
 #include <QPolygon>
 #include <QWidget>
 #include <QFrame>
@@ -58,7 +59,7 @@ public slots:
 
 private:
     Doc* m_doc;
-    EFX* m_efx; // The EFX being edited
+    QPointer<EFX> m_efx; // The EFX being edited
 
 private:
     void initGeneralPage();

@@ -56,6 +56,9 @@ private slots:
      *  it or touch the show (a stale press position made it a move) */
     void aClickOnAChaseBlockDoesntMoveIt();
     void aGeneratedCueListKeepsItsStepsOnATrack();
+    /** M998: the item editor's function deleted elsewhere (Build, an undo):
+     *  the editor goes with it, and Operate calls nothing on the freed one */
+    void theItemEditorGoesWithItsFunction();
 
 private:
     Doc *m_doc = nullptr;

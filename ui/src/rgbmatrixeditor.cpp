@@ -35,6 +35,7 @@
 #include <QDebug>
 #include <QMutex>
 
+#include "functioneditorguard.h"
 #include "fixtureselection.h"
 #include "speeddialwidget.h"
 #include "rgbmatrixeditor.h"
@@ -72,6 +73,9 @@ RGBMatrixEditor::RGBMatrixEditor(QWidget* parent, RGBMatrix* mtx, Doc* doc)
 
     setupUi(this);
 
+    // Cut off once its matrix leaves the Doc (functioneditorguard.h).
+    FunctionEditorGuard::watch(this, m_doc, mtx->id());
+
     // Set a nice gradient backdrop
     m_scene->setBackgroundBrush(Qt::darkGray);
     QLinearGradient gradient(200, 200, 200, 2000);
@@ -94,7 +98,7 @@ RGBMatrixEditor::~RGBMatrixEditor()
 {
     m_previewTimer->stop();
 
-    if (m_testButton->isChecked() == true)
+    if (m_testButton->isChecked() == true && !m_matrix.isNull())
         m_matrix->stopAndWait();
 
     delete m_previewHandler;
@@ -104,7 +108,7 @@ RGBMatrixEditor::~RGBMatrixEditor()
 
 void RGBMatrixEditor::stopTest()
 {
-    if (m_testButton->isChecked() == true)
+    if (m_testButton->isChecked() == true && !m_matrix.isNull())
         m_testButton->click();
 }
 
@@ -779,7 +783,7 @@ bool RGBMatrixEditor::createPreviewItems()
 
 void RGBMatrixEditor::slotPreviewTimeout()
 {
-    if (m_matrix->duration() <= 0)
+    if (m_matrix.isNull() || m_matrix->duration() <= 0)
         return;
 
     m_previewIterator += MasterTimer::tick();
@@ -1216,7 +1220,7 @@ void RGBMatrixEditor::slotModeChanged(Doc::Mode mode)
 {
     if (mode == Doc::Operate)
     {
-        if (m_testButton->isChecked() == true)
+        if (m_testButton->isChecked() == true && !m_matrix.isNull())
             m_matrix->stopAndWait();
         m_testButton->setChecked(false);
         m_testButton->setEnabled(false);
