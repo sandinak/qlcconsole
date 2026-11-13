@@ -1904,6 +1904,12 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
     // The press reaches the programmer through the input map: wait for it
     // (a fixed 30 ms was too short on a busy CI runner).
     QTRY_VERIFY_WITH_TIMEOUT(pc->isRecalibratingFacing(), 3000);
+    /* On the screen, not only in the voice (0.4.4 on his DualSense: "nothing
+       happened"): the footer and the look's line say the hold at once. */
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains("setting the facing"), qPrintable(chip->text()), 2000);
+    QVERIFY2(chip->text().contains("let go of L3"), qPrintable(chip->text()));     // a PlayStation pad's word
+    QVERIFY(pc->followSpotStatus().settingFacing);
+    QVERIFY2(pc->followSpotStatusText().contains("setting the facing"), qPrintable(pc->followSpotStatusText()));
     const QVector3D before = witch->position();
     QVERIFY(padInput(doc, 0, 64));      // 30 degrees left of straight up
     QVERIFY(padInput(doc, 1, 17));
@@ -1917,6 +1923,33 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
     QCOMPARE(pc->followSpotOperator().facing, 300);       // 270 + 30
     QTRY_COMPARE_WITH_TIMEOUT(facing->currentData().toInt(), 300, 1000);
     QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("from SL tower, facing 300°")), 2000);
+    // ...and what it set, for a moment after.
+    QVERIFY2(chip->text().contains(QString::fromUtf8("Facing 300°")), qPrintable(chip->text()));
+    QVERIFY(!pc->followSpotStatus().settingFacing);
+
+    /* Pushed the way they already face: kept, and said so -- not silence
+       (from a tower, pushing straight at centre stage is the preset's own). */
+    auto holdAndPush = [&](uchar x, uchar y) {
+        QVERIFY(padInput(doc, quint32(ls), 255));
+        QTRY_VERIFY_WITH_TIMEOUT(pc->isRecalibratingFacing(), 3000);
+        QVERIFY(padInput(doc, 0, x));
+        QVERIFY(padInput(doc, 1, y));
+        settle(60);
+        QVERIFY(padInput(doc, 0, 128));
+        QVERIFY(padInput(doc, 1, 128));
+        settle(60);
+        QVERIFY(padInput(doc, quint32(ls), 0));
+        QTRY_VERIFY_WITH_TIMEOUT(!pc->isRecalibratingFacing(), 3000);
+    };
+    holdAndPush(64, 17);
+    QCOMPARE(pc->followSpotOperator().facing, 300);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Facing 300°, as it was")),
+                              qPrintable(chip->text()), 2000);
+    // Too small a push: unchanged, and how to do it.
+    holdAndPush(140, 116);
+    QCOMPARE(pc->followSpotOperator().facing, 300);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains("Facing unchanged: push a stick further while you hold L3"),
+                              qPrintable(chip->text()), 2000);
 
     // Pushed up, the subject goes the way they face.
     witch->setPosition(home);
@@ -1942,16 +1975,27 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
 
     // The Rig Overview: from the operator, and the plan turned to them.
     const double az = rig->angledAzimuth(), el = rig->angledElevation();
+    QVERIFY(!rig->operatorMark().on);
+    const QImage pictureBefore = rig->grab().toImage();
     rigView->setCurrentIndex(rigView->findText("Operator"));
     settle(100);
     QCOMPARE(rig->plane(), StructureStudioView::Angled);
     QCOMPARE(rig->angledAzimuth(), 60.0);       // -300: from stage left, a little downstage
     QVERIFY(qAbs(rig->angledElevation() - pc->followSpotOperator().viewElevation(props)) < 1e-6);
+    // The picture itself changed, and says whose view it is.
+    QVERIFY(rig->grab().toImage() != pictureBefore);
+    QVERIFY(rig->operatorMark().on);
+    QCOMPARE(rig->operatorMark().facing, 300);
+    QVERIFY2(rig->operatorMark().caption.contains(QString::fromUtf8("Operator: SL tower, facing 300°"))
+                 && rig->operatorMark().caption.contains("DUALSHOCK 4"),
+             qPrintable(rig->operatorMark().caption));
+    QCOMPARE(rig->operatorMark().label, QString::fromUtf8("spot op · SL tower"));
     shoot("after");
     rigView->setCurrentIndex(rigView->findText("Operator plan"));
     settle(100);
     QCOMPARE(rig->plane(), StructureStudioView::Top);
     QCOMPARE(rig->rotation(), 1);   // stage left at the bottom
+    QVERIFY(rig->operatorMark().on);
     if (!shots.isEmpty())
         for (const auto &sz : QList<QPair<QString, QSize>>({ { "min", QSize(1024, 640) },
                                                             { "laptop", QSize(1280, 800) },
@@ -1961,9 +2005,71 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
             settle(500);
             rigDock->grab().save(QString("%1/after/rig-plan-%2.png").arg(shots, sz.first));
         }
-    // Any other view: the angle and the turn it had.
+    /* The pad asleep or unplugged (0.4.4: the Operator views showed front
+       of house -- a plain plan -- once his DualSense had gone): its operator
+       stays its own, said as not connected. */
+    InputOutputMap *iom = doc->inputOutputMap();
+    iom->setInputSlot(0, QList<Universe::InputSlotDevice>());
+    QVERIFY(iom->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine()));
+    QTRY_VERIFY_WITH_TIMEOUT(!pc->isPanBound() && !pc->isTiltBound(), 3000);
+    QVERIFY(pc->followSpotStickName().isEmpty());
+    QCOMPARE(pc->followSpotOperatorStick(), QStringLiteral("DUALSHOCK 4"));
+    QCOMPARE(pc->followSpotOperator().preset, FollowSpotOperator::StageLeftTower);
+    QCOMPARE(pc->followSpotOperator().facing, 300);
+    settle(100);
+    QCOMPARE(rig->rotation(), 1);
+    QVERIFY2(rig->operatorMark().caption.contains("SL tower"), qPrintable(rig->operatorMark().caption));
+    QTRY_VERIFY_WITH_TIMEOUT(shown((QLabel *)nullptr, "followSpotOperatorFor") != nullptr
+                                 && shown((QLabel *)nullptr, "followSpotOperatorFor")
+                                        ->text().contains("DUALSHOCK 4 (not connected)"),
+                             2000);
+
+    /* His pad, a DualSense, on its own: its stick click comes through the
+       real HID plugin and its PlayStation profile as LS, and the hold sets
+       the DualSense's own operator (front of house until now). */
+    {
+        QLCIOPlugin *hid = hidPlugin(doc);
+        const int dsLine = hid->inputs().indexOf(QString::fromUtf8(kDualSense));
+        QVERIFY(dsLine >= 0);
+        QVERIFY(iom->setInputPatch(0, QStringLiteral("HID"), QString(), quint32(dsLine)));
+        QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->followSpotStickName() == QLatin1String("DualSense"), 3000);
+        QVERIFY(pc->followSpotOperator().isFrontOfHouse());
+        int dsLs = -1;
+        for (quint32 c = 0; c < 64 && dsLs < 0; ++c)
+            if (pc->controllerRole(0, c) == GamepadRole::LS)
+                dsLs = int(iom->inputPatch(0)->deviceChannel(c));
+        QVERIFY(dsLs >= 0);
+        QTRY_VERIFY_WITH_TIMEOUT(pc->followSpotStatus().state != ProgrammerController::FollowSpotStatus::Off
+                                     && pc->followSpotStatus().state
+                                            != ProgrammerController::FollowSpotStatus::NoStick,
+                                 3000);
+        QVERIFY(padInput(doc, quint32(dsLs), 255, kDualSense));
+        QTRY_VERIFY_WITH_TIMEOUT(pc->isRecalibratingFacing(), 3000);
+        QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains("let go of L3"), qPrintable(chip->text()), 2000);
+        QVERIFY(padInput(doc, 0, 64, kDualSense));
+        QVERIFY(padInput(doc, 1, 17, kDualSense));
+        settle(60);
+        QVERIFY(padInput(doc, 0, 128, kDualSense));
+        QVERIFY(padInput(doc, 1, 128, kDualSense));
+        settle(60);
+        QVERIFY(padInput(doc, quint32(dsLs), 0, kDualSense));
+        QTRY_VERIFY_WITH_TIMEOUT(!pc->isRecalibratingFacing(), 3000);
+        QCOMPARE(pc->followSpotOperator().facing, 30);      // front of house, 30 degrees left of up
+        QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Facing 30°")), qPrintable(chip->text()),
+                                  2000);
+        pc->setFollowSpotOperator(FollowSpotOperator());
+        QVERIFY(iom->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine()));
+        QTRY_VERIFY_WITH_TIMEOUT(!pc->isPanBound(), 3000);
+    }
+    patchLikeHis(doc);
+    QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 3000);
+    QCOMPARE(pc->followSpotStickName(), QStringLiteral("DUALSHOCK 4"));
+    QCOMPARE(pc->followSpotOperator().facing, 300);
+
+    // Any other view: the angle and the turn it had, and no mark.
     rigView->setCurrentIndex(rigView->findData(int(StructureStudioView::Angled)));
     settle(100);
+    QVERIFY(!rig->operatorMark().on);
     QCOMPARE(rig->rotation(), 0);
     QVERIFY(qAbs(rig->angledAzimuth() - az) < 1e-6 && qAbs(rig->angledElevation() - el) < 1e-6);
     rigDock->close();

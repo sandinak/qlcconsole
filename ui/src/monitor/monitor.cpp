@@ -3340,6 +3340,35 @@ void Monitor::showStageOverview()
     auto applyOperatorView = [this, view](int which) {
         ProgrammerController *pc = m_doc->programmer();
         const FollowSpotOperator op = pc != nullptr ? pc->followSpotOperator() : FollowSpotOperator();
+        /* Drawn where they stand, and said whose they are: a view that only
+           turned, with nothing to say why, read as nothing having happened
+           (and the default, front of house, as a plain plan). */
+        StructureStudioView::OperatorMark mark;
+        mark.on = true;
+        {
+            const MonitorProperties *props = m_doc->monitorProperties();
+            const QVector3D centre = props != nullptr ? props->stageCentre() : QVector3D();
+            QPointF at = op.position(props);
+            const double margin = 1.5;      // metres off the grid at most, as the plot draws it
+            at.setX(qBound(-margin, at.x(), 2.0 * double(centre.x()) + margin));
+            at.setY(qBound(-margin, at.y(), 2.0 * double(centre.y()) + margin));
+            mark.floor = at;
+        }
+        mark.facing = op.facing;
+        mark.label = tr("spot op · %1").arg(FollowSpotOperator::presetName(op.preset));
+        const QString stick = pc != nullptr ? pc->followSpotOperatorStick() : QString();
+        const QString venue = pc != nullptr && pc->venueCorrections() != nullptr
+                              ? pc->venueCorrections()->activeVenue() : QString();
+        QString whose = stick.isEmpty() ? tr("any controller") : stick;
+        if (!venue.isEmpty())
+            whose = tr("%1 in %2").arg(whose, venue);
+        mark.caption = tr("Operator: %1, facing %2 · %3")
+                           .arg(FollowSpotOperator::presetName(op.preset),
+                                FollowSpotOperator::facingName(op.facing), whose);
+        if (op == FollowSpotOperator())
+            mark.caption += QStringLiteral("\n")
+                            + tr("None set: set where they stand on the Followspot effect's Operator row.");
+        view->setOperatorMark(mark);
         if (which == kOperatorView)
         {
             view->setRotation(0);
@@ -3354,12 +3383,16 @@ void Monitor::showStageOverview()
         }
     };
     if (m_doc->programmer() != nullptr)
-        connect(m_doc->programmer(), &ProgrammerController::followSpotOperatorChanged, &dlg,
-                [planeCombo, applyOperatorView]() {
+    {
+        auto reapply = [planeCombo, applyOperatorView]() {
             const int d = planeCombo->currentData().toInt();
             if (d == kOperatorView || d == kOperatorPlan)
                 applyOperatorView(d);
-        });
+        };
+        connect(m_doc->programmer(), &ProgrammerController::followSpotOperatorChanged, &dlg, reapply);
+        // Whose it is (the pad's name) said again when the pad comes or goes.
+        connect(m_doc->programmer(), &ProgrammerController::axisBindingChanged, &dlg, reapply);
+    }
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
             [view, planeCombo, before, applyOperatorView](int i) {
         const int d = planeCombo->itemData(i).toInt();
@@ -3378,6 +3411,7 @@ void Monitor::showStageOverview()
         if (before->operatorView)
         {
             before->operatorView = false;
+            view->setOperatorMark(StructureStudioView::OperatorMark());
             view->setAngledView(before->az, before->el);
             view->setRotation(before->turns);
         }

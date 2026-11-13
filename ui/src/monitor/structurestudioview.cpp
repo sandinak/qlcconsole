@@ -1887,6 +1887,9 @@ void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
     MonitorProperties *props = m_doc->monitorProperties();
     foreach (quint32 fid, mountedFixtures())
         pts << fixtureCentre(fid);
+    // The follow-spot operator, where they are drawn (setOperatorMark()).
+    if (m_operatorMark.on)
+        pts << QVector3D(float(m_operatorMark.floor.x()), float(m_operatorMark.floor.y()), 0.0f);
     /* And the people standing on it, feet to crown: a figure is drawn, so a
        fit that ignores it cuts off the head of anyone on a deck. */
     foreach (StageTarget *t, props->stageTargets())
@@ -2237,6 +2240,58 @@ void StructureStudioView::drawGrid(QPainter &p) const
         p.setPen(QColor(150, 154, 165));
         p.drawText(QPointF(6, y0 - 4), tr("floor"));
     }
+}
+
+void StructureStudioView::setOperatorMark(const OperatorMark &mark)
+{
+    const bool moved = mark.on != m_operatorMark.on || mark.floor != m_operatorMark.floor;
+    m_operatorMark = mark;
+    if (moved && !m_zoomed)
+        refit();            // framed with the rest
+    update();
+}
+
+void StructureStudioView::drawOperatorMark(QPainter &p) const
+{
+    if (!m_operatorMark.on)
+        return;
+    p.save();
+    const QColor colour(255, 196, 0);
+    if (m_plane == Top || m_plane == Angled)
+    {
+        /* A chevron on the floor pointing the way they face, as the Lighting
+           Studio plot draws it; worked out through w2s() so the plan's turn
+           and the angled view's swing both carry it. */
+        const QVector3D at(float(m_operatorMark.floor.x()), float(m_operatorMark.floor.y()), 0.0f);
+        const double r = qDegreesToRadians(double(m_operatorMark.facing));
+        const QVector3D ahead = at + QVector3D(float(std::sin(r)), float(-std::cos(r)), 0.0f);
+        const QPointF px = w2s(at);
+        QPointF fwd = w2s(ahead) - px;
+        const double len = std::hypot(fwd.x(), fwd.y());
+        fwd = len > 1e-6 ? fwd / len : QPointF(0.0, -1.0);
+        const QPointF side(-fwd.y(), fwd.x());
+        const double s = 16.0;
+        QPolygonF chevron;
+        chevron << px + fwd * s << px - fwd * (s * 0.6) + side * (s * 0.8)
+                << px - fwd * (s * 0.2) << px - fwd * (s * 0.6) - side * (s * 0.8);
+        p.setPen(QPen(colour, 2.0));
+        p.setBrush(QColor(colour.red(), colour.green(), colour.blue(), 90));
+        p.drawPolygon(chevron);
+        if (!m_operatorMark.label.isEmpty())
+        {
+            p.setPen(colour);
+            const QRectF box(px.x() - 120.0, px.y() + s + 2.0, 240.0, 18.0);
+            p.drawText(box, Qt::AlignHCenter | Qt::AlignTop, m_operatorMark.label);
+        }
+    }
+    if (!m_operatorMark.caption.isEmpty())
+    {
+        p.setPen(colour);
+        // Clear of the plane badge on the right.
+        p.drawText(rect().adjusted(10, 6, -190, 0), Qt::AlignTop | Qt::AlignLeft | Qt::TextWordWrap,
+                   m_operatorMark.caption);
+    }
+    p.restore();
 }
 
 void StructureStudioView::drawStageMarks(QPainter &p) const
@@ -10780,6 +10835,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
         drawRotateHandle(p);    // on top of everything it might overlap
     }
     drawStageMarks(p);   // on top: a reference is read through the rig
+    drawOperatorMark(p);
     drawTargetPositions(p);
     drawUnsavedMarks(p);
     /* The rulers are read over the rig, so they go over it: painted before
