@@ -68,6 +68,12 @@ object itself (a fixture's icon, a target's ring), not the room its label
 or warning text takes, and it follows a zoom, a scroll, a turn of the plot
 and a selection made in Plot layers without the mouse having to move.
 
+**Turning the plot.** The ⟳ button in the footer turns the plan (2D — Top)
+in quarter steps; a view setting only, nothing moves. It applies to the plan
+only: Front and Side always draw upright (the button is greyed there), and
+your turn returns when you pick Top again. The button is lit while the turn
+is not 0°; right-click it and choose **Reset to 0°** to clear it.
+
 **The rulers count from the centre line.** Across the stage (Top and Front),
 the ruler reads **0 at the centre line**, marked with a teal **CL** tick,
 and counts out to each side; its corner says which side is which (**SR | SL**,

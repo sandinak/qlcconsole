@@ -1383,15 +1383,23 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     /* No overview button here: it lives in the main View menu (View > Rig
        Overview), because it is a window onto the whole show rather than a
        Lighting Studio tool. */
-    auto applyPlotRotation = [this, plotRotBtn](int turns) {
+    m_plotRotBtn = plotRotBtn;
+    plotRotBtn->setCheckable(true);     // lit while the plan is turned off 0
+    plotRotBtn->setContextMenuPolicy(Qt::ActionsContextMenu);
+    QAction *plotRotReset = new QAction(tr("Reset to 0°"), plotRotBtn);
+    plotRotBtn->addAction(plotRotReset);
+    auto applyPlotRotation = [this](int turns) {
         m_graphicsView->setViewRotation(turns);
-        static const char *names[] = { "0°", "90°", "180°", "270°" };
-        plotRotBtn->setText(QString("⟳ %1").arg(names[m_graphicsView->viewRotation() & 3]));
+        updatePlotRotButton();
     };
     connect(plotRotBtn, &QToolButton::clicked, this, [this, applyPlotRotation]() {
         const int next = (m_graphicsView->viewRotation() + 1) & 3;
         applyPlotRotation(next);
         QSettings().setValue(SETTINGS_PLOTROTATION, next);
+    });
+    connect(plotRotReset, &QAction::triggered, this, [this, applyPlotRotation]() {
+        applyPlotRotation(0);
+        QSettings().setValue(SETTINGS_PLOTROTATION, 0);
     });
     addSep();
 
@@ -3720,12 +3728,32 @@ void Monitor::slotPOVChanged(int index)
 
     m_props->setDisplayMode(MonitorProperties::Graphics);
     m_graphicsView->setViewPOV(MonitorGraphicsView::ViewPOV(data));
+    updatePlotRotButton();
 
     // Elevation views are read-only: the plot-lock and snap controls don't apply.
     const bool elevation = (data != int(MonitorGraphicsView::PovTop));
     if (m_lockAction != NULL) m_lockAction->setEnabled(!elevation);
     if (m_snapCombo != NULL)  m_snapCombo->setEnabled(!elevation);
     updateModeIndicator();
+}
+
+/* The plot turn is for the plan only: off the plan the button is disabled and
+ * says so, and while a turn is set it is lit (checked) so it never hides. */
+void Monitor::updatePlotRotButton()
+{
+    if (m_plotRotBtn == nullptr || m_graphicsView == nullptr)
+        return;
+    static const char *names[] = { "0°", "90°", "180°", "270°" };
+    const int turn = m_graphicsView->viewRotation() & 3;
+    const bool plan = !m_graphicsView->isElevation();
+    m_plotRotBtn->setText(QString("⟳ %1").arg(names[turn]));
+    m_plotRotBtn->setChecked(turn != 0);
+    m_plotRotBtn->setEnabled(plan);
+    m_plotRotBtn->setToolTip(plan
+        ? tr("Turn the plot 90° clockwise. A view setting only — nothing in "
+             "the workspace moves. Right-click to reset to 0°.")
+        : tr("The turn is for the plan (2D — Top) only; front and side "
+             "views always draw upright."));
 }
 
 void Monitor::slotGroupItems()

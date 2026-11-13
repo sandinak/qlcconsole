@@ -4664,6 +4664,111 @@ void Monitor_Test::plotViewRotationFitsGridAndKeepsPositions()
 }
 
 
+/* The plot turn is for the plan only: Front/Side always draw unturned, the
+ * saved turn comes back with the plan. */
+void Monitor_Test::plotTurnIsForThePlanOnly()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    MonitorGraphicsView *gv = rig.gv;
+    gv->resize(1200, 600);
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(40, 24));
+
+    gv->setViewPOV(MonitorGraphicsView::PovTop);
+    gv->setViewRotation(2);
+    QVERIFY(gv->transform().m11() < 0);                 // turned in the plan
+
+    const MonitorGraphicsView::ViewPOV elevations[] = {
+        MonitorGraphicsView::PovFront, MonitorGraphicsView::PovSide };
+    for (MonitorGraphicsView::ViewPOV pov : elevations)
+    {
+        gv->setViewPOV(pov);
+        QCOMPARE(gv->viewRotation(), 2);                // the setting is kept
+        QCOMPARE(gv->effectiveViewRotation(), 0);       // but not drawn
+        QVERIFY(gv->transform().m11() > 0);
+        QVERIFY(gv->transform().m22() > 0);
+        QVERIFY(qFuzzyIsNull(gv->transform().m12()));
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        QCOMPARE(gv->effectiveViewRotation(), 2);       // back with the plan
+        QVERIFY(gv->transform().m11() < 0);
+    }
+
+    // Changing the setting while in an elevation is stored, not drawn.
+    gv->setViewPOV(MonitorGraphicsView::PovFront);
+    gv->setViewRotation(1);
+    QCOMPARE(gv->effectiveViewRotation(), 0);
+    QVERIFY(qFuzzyIsNull(gv->transform().m12()));
+    gv->setViewPOV(MonitorGraphicsView::PovTop);
+    QCOMPARE(gv->effectiveViewRotation(), 1);
+    gv->setViewRotation(0);
+}
+
+/* Screenshots of 2D -- Front with a saved 180 degree turn (QLC_SHOT_DIR, and
+ * QLC_SHOT_STATE "before"/"after"). Does nothing in the gate. */
+void Monitor_Test::plotTurnShots()
+{
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (shots.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    const QString state = qEnvironmentVariable("QLC_SHOT_STATE", QStringLiteral("after"));
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 1500)));
+    QDir().mkpath(shots);
+    for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        rig.parent.resize(sz);
+        rig.mon->resize(sz);
+        rig.parent.show();
+        rig.mon->m_graphicsView->setViewPOV(MonitorGraphicsView::PovTop);
+        rig.mon->m_graphicsView->setViewRotation(2);
+        rig.mon->m_povCombo->setCurrentIndex(
+            rig.mon->m_povCombo->findData(int(MonitorGraphicsView::PovFront)));
+        QApplication::processEvents();
+        rig.parent.grab().save(QStringLiteral("%1/%2-2D_Front_saved_180-%3x%4.png")
+                                 .arg(shots, state).arg(sz.width()).arg(sz.height()));
+    }
+}
+
+void Monitor_Test::plotTurnButtonShowsAndResetsTheTurn()
+{
+    Doc *doc = new Doc(this);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        parent.resize(1200, 800);
+        parent.show();
+        QToolButton *btn = mon.findChild<QToolButton *>(QStringLiteral("plotRotate"));
+        QVERIFY(btn != nullptr);
+        mon.m_graphicsView->setViewPOV(MonitorGraphicsView::PovTop);
+        mon.m_povCombo->setCurrentIndex(mon.m_povCombo->findData(int(MonitorGraphicsView::PovTop)));
+        mon.m_graphicsView->setViewRotation(0);
+        mon.updatePlotRotButton();
+        QVERIFY(btn->isEnabled());
+        QVERIFY(!btn->isChecked());
+
+        btn->click();
+        QVERIFY(btn->isChecked());                      // marked: not 0 degrees
+        QCOMPARE(mon.m_graphicsView->viewRotation(), 1);
+
+        mon.m_povCombo->setCurrentIndex(mon.m_povCombo->findData(int(MonitorGraphicsView::PovFront)));
+        QVERIFY(!btn->isEnabled());
+        QVERIFY(btn->toolTip().contains(QStringLiteral("plan")));
+        QCOMPARE(mon.m_graphicsView->effectiveViewRotation(), 0);
+
+        mon.m_povCombo->setCurrentIndex(mon.m_povCombo->findData(int(MonitorGraphicsView::PovTop)));
+        QVERIFY(btn->isEnabled());
+        QCOMPARE(mon.m_graphicsView->effectiveViewRotation(), 1);
+
+        QVERIFY(!btn->actions().isEmpty());
+        btn->actions().first()->trigger();              // Reset to 0
+        QCOMPARE(mon.m_graphicsView->viewRotation(), 0);
+        QVERIFY(!btn->isChecked());
+    }
+    delete doc;
+    QSettings().remove(QStringLiteral("monitor/plotrotation"));
+}
+
 
 void Monitor_Test::angledViewProjectsAndRefusesEdits()
 {

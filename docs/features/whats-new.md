@@ -4,6 +4,14 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.4.4
 
+### Lighting Studio
+
+- **The plot turn is for the plan only.** A stray click on the ⟳ turn button
+  used to leave 2D — Front upside down and the setting silently saved. Front
+  and Side now always draw upright, the button is disabled there, it is lit
+  while the plan is turned, and right-click ▸ **Reset to 0°** clears it. See
+  [Lighting Studio](lighting-studio.md).
+
 ### The pad and the remote
 
 - **Follow spot: where the operator stands.** A spot op in a side tower,
