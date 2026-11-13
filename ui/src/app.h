@@ -45,6 +45,7 @@
 
 class QProgressDialog;
 class QDateTime;
+class QSettings;
 class QXmlStreamWriter;
 class VideoProvider;
 class QMessageBox;
