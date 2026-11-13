@@ -45,6 +45,9 @@ private slots:
     /** The committed test-workspaces/PadBench.qlcc (a copy of it) passes
      *  the same checks. */
     void theCommittedShowChecksOut();
+    /** File > Open over a show that plays leaves nothing of the old show
+     *  for the MasterTimer to tick after it is deleted. */
+    void openingAShowOverOneThatPlays();
 
 private:
     bool open(const QString &path);
