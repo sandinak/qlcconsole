@@ -376,6 +376,7 @@ private slots:
      *  and stored positions must not move. */
     void plotViewRotationFitsGridAndKeepsPositions();
     void plotTurnIsForThePlanOnly();
+    void plotTurnShots();
     void plotTurnButtonShowsAndResetsTheTurn();
     /** The angled view: its projection must agree with the flat views at the
      *  angles where they coincide, and it must REFUSE drags (there is no honest

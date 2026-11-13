@@ -4704,6 +4704,32 @@ void Monitor_Test::plotTurnIsForThePlanOnly()
     gv->setViewRotation(0);
 }
 
+/* Screenshots of 2D -- Front with a saved 180 degree turn (QLC_SHOT_DIR, and
+ * QLC_SHOT_STATE "before"/"after"). Does nothing in the gate. */
+void Monitor_Test::plotTurnShots()
+{
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (shots.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    const QString state = qEnvironmentVariable("QLC_SHOT_STATE", QStringLiteral("after"));
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 1500)));
+    QDir().mkpath(shots);
+    for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        rig.parent.resize(sz);
+        rig.mon->resize(sz);
+        rig.parent.show();
+        rig.mon->m_graphicsView->setViewPOV(MonitorGraphicsView::PovTop);
+        rig.mon->m_graphicsView->setViewRotation(2);
+        rig.mon->m_povCombo->setCurrentIndex(
+            rig.mon->m_povCombo->findData(int(MonitorGraphicsView::PovFront)));
+        QApplication::processEvents();
+        rig.parent.grab().save(QStringLiteral("%1/%2-2D_Front_saved_180-%3x%4.png")
+                                 .arg(shots, state).arg(sz.width()).arg(sz.height()));
+    }
+}
+
 void Monitor_Test::plotTurnButtonShowsAndResetsTheTurn()
 {
     Doc *doc = new Doc(this);
