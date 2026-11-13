@@ -2,7 +2,7 @@
 
 The latest changes, newest first. Each links to the guide with the detail.
 
-## 0.4.4
+## 0.4.4 (November 2026)
 
 ### Lighting Studio
 

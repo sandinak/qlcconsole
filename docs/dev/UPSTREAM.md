@@ -29,6 +29,12 @@ February sync's upstream commits out and drop `N` by about 550.
 
 ## Intake log
 
+### 2026-11-13: fixture definitions (qlcconsole 0.4.4)
+
+`tools/sync-fixtures.py` against upstream master 167da4814 (2026-11-10, still
+upstream's head): 0 definitions taken or changed; the base stays 167da4814.
+No change to the library.
+
 ### 2026-11-10: fixture definitions (qlcconsole 0.4.3)
 
 `tools/sync-fixtures.py` against upstream master 167da4814 (2026-11-10):

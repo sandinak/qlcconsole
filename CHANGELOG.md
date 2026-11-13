@@ -10,7 +10,23 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
-## [Unreleased]
+## [0.4.4] - 2026-11-13
+
+qlcconsole 0.4.4 follows 0.4.3 with the follow spot operator's point of
+view and more of the show run from a controller. A follow spot's **Operator**
+row says where the spot op stands (a side tower, the balcony rail, upstage),
+and the stick, the focus target page and the Rig Overview's **Operator**
+views turn with them. The Steam Deck and phone remote gain **Blind** and
+**Solo**, and holding **A** on the pad answers "Still at *venue*?". In the
+qlcconsole view Build is hidden: what opened there opens in the Show Tree,
+which now has the programmer strip too. The Show Tree can make selected cues
+sub-cues and back again (⌘] / ⌘[) and **Renumber Song…**; move in black
+treats a closed shutter as dark. **Settings ▸ Performance** checks much more
+about the computer it runs on, and Operate keeps the screen awake by default.
+UI fixes for 1024-wide screens, the plot turn (plan only), What's New and
+the course catch up with the 0.4.x workflow. Like 0.4.3 it is built on
+QLC+ 4.14.4. The fixture library is in step with QLC+ upstream (0 new or
+changed definitions from QLC+ upstream since 0.4.3).
 
 ### Added
 
@@ -51,6 +67,29 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **The plot turn no longer turns the front and side views upside down.** The footer's turn button (⟳) applies to the plan (2D — Top) only; 2D — Front and Side always draw upright, the button is greyed there and says why, and your saved turn comes back with the plan. The button is lit while the plan is turned off 0°, and right-click ▸ **Reset to 0°** puts it back.
 - **Help ▸ What's New is current.** It was still headed "0.4.0 (unreleased)"; 0.4.0 now has its month, and a 0.4.4 section lists this release's changes.
 - **The test gate keeps its Mac awake.** A pool host running a gate unattended went into maintenance sleep every few seconds, and the timing tests that straddled a nap failed (PixelBoxes, SpeedMasters, WebAccess, VCButton on newaudio). The gate now holds `caffeinate` for its length, and those four tests wait on what they check instead of a fixed time. A hostile case that times out now shows the child's last lines.
+
+### Known issues
+
+- **The Windows installer is not code-signed**, so Windows SmartScreen
+  warns on first run (More info ▸ Run anyway).
+- **RGB colour effects** (Rainbow, Color Spread and the like) don't run on
+  colour-wheel or CMY movers, so the effect picker doesn't offer them for
+  such groups.
+- **On macOS a long on-screen session can grow memory slowly.** It has not
+  been reproduced offscreen, where memory levels off with no leaks.
+- **Not yet tried on real hardware:** the Steam Deck's new Blind / Solo
+  buttons and the pad's hold-A answer (a Deck checklist is in
+  [gamepad-remote.md](docs/features/gamepad-remote.md#hardware-checklist)),
+  the DualSense adaptive triggers and touchpad swipes, encoder presets on a
+  real encoder controller, the Stream Deck + in a real Companion, and a
+  third-party "Edge" pad's back buttons.
+- **A follow spot on a head in an 8-bit mode moves in its DMX steps.** Use
+  the head's 16-bit mode for a follow spot.
+- **Free-fly follow spot (no Aim look) is not turned by the operator's
+  facing**; only aimed spots are.
+- **Hold at the end of a WLED effect can't freeze over Art-Net or E1.31.**
+  It freezes a WLED connected as Network (WLED); over Art-Net or E1.31 the
+  effect keeps running, and the At the end row says so.
 
 ## [0.4.3] - 2026-11-10
 
