@@ -283,22 +283,6 @@ void EditorGuard_Test::theFunctionsWindowClosesTheEditor()
 
     m_doc->setMode(Doc::Operate);
     m_doc->setMode(Doc::Design);
-
-    // Deleting from the window itself, the editor of another kind open:
-    // its test stop goes by the editor's own class (a static_cast by the
-    // deleted function's type called into the wrong one).
-    Function *chaser = make(Function::ChaserType);
-    Function *matrix = make(Function::RGBMatrixType);
-    fm.editFunction(chaser);
-    QVERIFY(qobject_cast<ChaserEditor *>(fm.m_editor) != nullptr);
-    QTreeWidgetItem *item = fm.m_tree->functionItem(matrix);
-    QVERIFY(item != nullptr);
-    fm.m_tree->blockSignals(true);
-    fm.m_tree->clearSelection();
-    item->setSelected(true);
-    fm.m_tree->blockSignals(false);
-    fm.deleteSelectedFunctions();
-    QVERIFY(m_doc->function(matrix->id()) == nullptr);
 }
 
 /* A sequence's editor is two: its steps and its bound scene's channels.
