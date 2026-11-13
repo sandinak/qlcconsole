@@ -29,6 +29,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Each press still lights the same, it is one undo step, numbers change
   only where they must, and a mixed selection greys the item saying why. A
   MIDI/OSC control learned on a cue still plays it once it is a sub-cue.
+- **Help ▸ What's New has 0.4.3 and 0.4.1, and the course teaches the 0.4.x workflow.** Student pages gain short sections: ⇧⌘N (Lesson 1.1), the shared edit keys and the Unsaved changes list (1.2), New Layer from Selection (2.3), Save as Formation and Blocking (2.5), a key that fires a hit (2.6), cues to sub-cues and back (2.7), ⌘G and the Ungrouped list (3.4), notes on the cue sheet, In this song and copying a cue list (3.8).
 
 ### Changed
 

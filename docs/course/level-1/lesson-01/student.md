@@ -114,6 +114,17 @@ Roles: **Driver** (mouse), **Navigator** (reads each step), **Designer**
 again. Can't find a palette: type its name in **Filter the Library**.
 Stage dark: select a **cue** in the tree.
 
+## Quicker next time
+
+Once you know where things go, the buttons are the slow part. **⇧⌘N**
+(Ctrl+Shift+N) makes the next thing for where you are: with a cue selected,
+the next cue after it; with a cue list selected, a cue at its end. The new
+row opens with its name ready to type. The **Edit** menu names what it
+will make before you press it.
+
+Click **1.0.2 Chorus**, press **⇧⌘N**, type `Button`, **Return**. Then
+**⌘Z** twice: the name goes, then the cue.
+
 ## Exit ticket
 
 1. Explain what a **cue** is, as you would to someone new to the crew.

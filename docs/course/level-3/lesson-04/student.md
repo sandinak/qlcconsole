@@ -65,6 +65,20 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 **Mount on ▸ Boom** greyed: there is no boom yet. Something moved:
 **Undo** (⌘Z).
 
+## Group it, and find the loose light
+
+A boom and its par move together, and you will move them again. Select
+the boom on the plot (the par goes with it) and press **⌘G** (Ctrl+G):
+they are one group at once, named "Group" and a number, with the name open
+to type over in **Plot Layers**. **⇧⌘G** ungroups it. Right-click ▸ **Group**
+also adds a selection to a group already on that layer.
+
+A fixture you just added is in no group, so nothing in the show can reach
+it by name yet. In the Show Tree, the Library's **All ▸ Ungrouped** lists
+the patched lights that are in no group: **SR Boom Par** is there. Drag
+one onto a cue for a layer on just that light, or give it a group and it
+leaves the list.
+
 ## Exit ticket
 
 1. A spot hangs 2' lower than the plot says. Why do its beams land in the

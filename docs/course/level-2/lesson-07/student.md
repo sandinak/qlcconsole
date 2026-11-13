@@ -60,11 +60,24 @@ Why is the stomp a Sub GO, and its end automatic?
 
 10. Press **GO**: the Flash, lanterns dark. Then **Stop**.
 
-**Built it as cues already?** A stomp you made as point cue 1.0.2.5:
-right-click it ▸ **Make Sub-cue of 1.0.2**. Each press lights the same
-as before; only the button changes (GO becomes Sub GO). Several cues
-selected go under the first of them (**Make Sub-cues of …**, ⌘]).
-Selected sub-cues ▸ **Make Main Cues** (⌘[) goes the other way.
+## Cues to sub-cues, and back
+
+Most of the time you don't know a stomp is a sub-cue until you have
+already built it as a cue. Changing your mind shouldn't mean rebuilding
+it. A stomp you made as point cue 1.0.2.5: right-click it ▸ **Make
+Sub-cue of 1.0.2**. Each press lights the same as before; only the button
+changes (GO becomes Sub GO).
+
+- **Several at once.** ⌘-click two or more cues, then right-click ▸ **Make
+  Sub-cues of …** (**⌘]**, Ctrl+]): the rest go under the first one
+  selected, in order.
+- **Back up.** Select sub-cues, right-click ▸ **Make Main Cues** (**⌘[**,
+  Ctrl+[): they come back as main cues right after their cue.
+- Every cue still lights the same, it is one undo step, and a MIDI or OSC
+  control learned on a cue still plays it.
+
+Try it: select **1.0.2.2 Stomp** and **1.0.2.3 Stomp Out**, press **⌘[**,
+then **⌘Z**.
 
 **Stuck?** Wrong place: a sub-cue goes under the selected cue; undo and
 select the chorus. No Advance row: click the sub-cue, not the chorus.

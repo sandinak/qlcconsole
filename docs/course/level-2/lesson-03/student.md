@@ -69,6 +69,16 @@ Where will the audience look first?
 right-click. US isn't under Steps: undo, hold ⇧ all through the drop.
 The whole truss is amber: undo, drop it on **↳ Trusses SR**.
 
+## Lights, not a group
+
+Sometimes the part you want isn't a group: the two pars the director
+calls "the ones by the piano". A group you make for one cue is a group
+you have to name and keep. Pick the lights instead. On the plot or in the
+Fixtures tab (⇧⌘2), ⌘-click the fixtures, right-click, **Selection ▸ New
+Layer from Selection**. With a cue selected in the Show Tree, that cue gets a layer on exactly those
+lights, selected and ready to edit; whole groups in the selection get a
+layer each. **⌘Z** takes it back.
+
 ## Exit ticket
 
 1. What is a **child layer**, and what does it set?

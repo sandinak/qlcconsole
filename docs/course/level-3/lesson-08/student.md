@@ -96,6 +96,12 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
 
     ![The cue sheet, with Save PDF… and Calling Script…](../../images/lesson-3-8/cue-sheet.png)
 
+    **Notes** is a column of the cue sheet. Click a cue in the Show Tree,
+    type in the box under its page (the notes pane), press **Return**:
+    the note is dated and signed, open until you tick it done, and the next
+    **Cue Sheet…** shows it on that cue's line. The stage manager's paper
+    carries what you were thinking, not only the numbers.
+
 **Stuck?** No **Numbering** box: click the production, not the list. **+
 Section** greyed: pick a **Numbering** first. No Group master on the Run
 tab: tick it on the group in the Fixtures tab. **Hush** does nothing:
@@ -109,6 +115,20 @@ Run tab on the first cue; Stage Power and the house lights as in
 as the plan says; a hand on **Blackout** (top right) and **Stop All**
 (⌘⇧Esc). Blackout takes every light that doesn't ignore it to zero, and
 **Stop All** lets go of every cue and hit. Neither is an edit.
+
+## Two things that save time between songs
+
+**In this song.** With song sections numbered, click **2.0.1** and look at
+the top of the Library: **In this song: 2 — Slow Dance** lists what that
+song already uses, most used first, so a song's own colours and groups are
+at hand and the filter box stays empty. It follows you to the next song.
+
+**Copy a list, not a rebuild.** The same song in another production (a
+second night, a different venue) is a copy, not a rebuild. Right-click the
+cue list ▸ **Copy**, right-click the other production ▸ **Paste**; or
+**⌘D** for "Name (copy)" beside it. Every cue, sub-cue, layer, tracking
+rule, blocking and note comes with it, and one undo takes it back. A
+reusable layer or cue is shared, not copied: edit it and every use changes.
 
 ## Exit ticket
 
