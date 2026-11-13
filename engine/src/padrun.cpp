@@ -46,8 +46,18 @@ PadRun::PadRun(Doc *doc, ProgrammerController *pc, QObject *parent)
     m_chord->setInterval(defaultRoleChordMs());
     connect(m_chord, &QTimer::timeout, this, &PadRun::roleChordFired);
     connect(m_flash, &QTimer::timeout, this, &PadRun::showLight);
+    m_noticeTimer = new QTimer(this);
+    m_noticeTimer->setSingleShot(true);
+    m_noticeTimer->setInterval(noticeMs());
+    connect(m_noticeTimer, &QTimer::timeout, this, [this]() { showNotice(QString()); });
     if (m_pc != nullptr)
     {
+        // A tool taking the pad, or letting it go: the screen says who has it.
+        FocusSession *f = m_pc->focusSession();
+        connect(f, &FocusSession::started, this, &PadRun::holderChanged);
+        connect(f, &FocusSession::stopped, this, &PadRun::holderChanged);
+        connect(m_pc->refineSession(), &RefineSession::started, this, &PadRun::holderChanged);
+        connect(m_pc->refineSession(), &RefineSession::stopped, this, &PadRun::holderChanged);
         RefineSession *r = m_pc->refineSession();
         // Focus this cue ended (Menu, its B held, the laptop, a new show).
         connect(r, &RefineSession::stopped, this, [this]() {
@@ -210,11 +220,53 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
     {
         emit refused(action);
         if (m_pc != nullptr)
-            m_pc->tellOperator(m_pc->padText(tr("Hold {LB} to arm.")), ControllerScheme::ConfirmPriority);
+        {
+            const QString said = m_pc->padText(tr("Hold {LB} to arm."));
+            m_pc->tellOperator(said, ControllerScheme::ConfirmPriority);
+            // On the screen too: with lights-only feedback nothing is said.
+            showNotice(said);
+        }
         return true;
     }
     trigger(action);
     return true;
+}
+
+QString PadRun::holder() const
+{
+    if (m_pc == nullptr || isWalking())
+        return QString();
+    const FocusSession *f = m_pc->focusSession();
+    if (f->isActive())
+        return f->isRunningCalls() ? tr("Venue focus") : tr("Quick focus");
+    const RefineSession *r = m_pc->refineSession();
+    if (r->isActive())
+        return r->isSceneMode() ? tr("Focus this look") : tr("Focus this cue");
+    return QString();
+}
+
+QString PadRun::roleText() const
+{
+    if (!m_enabled)
+        return tr("Pad: Tools");
+    if (isWalking())
+        return tr("Pad: Walk");
+    const QString tool = holder();
+    if (!tool.isEmpty())
+        return tr("Pad: %1").arg(tool);
+    return isArmed() ? tr("Pad: ARMED") : tr("Pad: Run");
+}
+
+void PadRun::showNotice(const QString &text)
+{
+    if (text.isEmpty())
+        m_noticeTimer->stop();
+    else
+        m_noticeTimer->start();
+    if (text == m_notice)
+        return;
+    m_notice = text;
+    emit noticeChanged();
 }
 
 void PadRun::reset()
@@ -358,8 +410,9 @@ bool PadRun::trigger(Action action)
     else
     {
         m_pc->padRumble(1, ControllerScheme::rumbleLongMs());
-        m_pc->tellOperator(tr("%1: nothing to play.").arg(ShowControl::commandName(r.command)),
-                           ControllerScheme::ConfirmPriority);
+        const QString said = tr("%1: nothing to play.").arg(ShowControl::commandName(r.command));
+        m_pc->tellOperator(said, ControllerScheme::ConfirmPriority);
+        showNotice(said);
     }
     return done;
 }

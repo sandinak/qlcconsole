@@ -48,6 +48,11 @@ private slots:
     /** File > Open over a show that plays leaves nothing of the old show
      *  for the MasterTimer to tick after it is deleted. */
     void openingAShowOverOneThatPlays();
+    /** Pad Run on the committed show, as the bench runs it: Operate, the
+     *  Run tab's Pad: Run, Main cue 1 (the follow spot) playing -- A alone
+     *  says to arm, LB arms (Pad: ARMED), LB + A GOes; the footer says the
+     *  pad's role beside the follow spot (M994). */
+    void padRunWithTheFollowSpotPlaying();
 
 private:
     bool open(const QString &path);

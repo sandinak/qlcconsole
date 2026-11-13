@@ -205,6 +205,21 @@ public:
 
     /** The arm is held (on any pad). */
     bool isArmed() const { return !m_armedOn.isEmpty(); }
+
+    /** The tool that has the pad now, so the Run map hears nothing ("The
+     *  tools win"): "Quick focus", "Venue focus", "Focus this cue" or
+     *  "Focus this look"; empty when none does, or when it is the pad's own
+     *  walk. Shown by the Run tab's button and the footer. */
+    QString holder() const;
+    /** What the pad's last press could not do, for the screen whatever the
+     *  feedback (lights only says nothing aloud): "Hold LB to arm", "GO:
+     *  nothing to play"; empty after noticeMs(). */
+    QString notice() const { return m_notice; }
+    static constexpr int noticeMs() { return 3000; }
+    /** The button's and the footer's words: "Pad: Tools", "Pad: Run",
+     *  "Pad: ARMED", "Pad: Walk", or the tool holding it ("Pad: Venue
+     *  focus"). */
+    QString roleText() const;
     /** Let go of everything held (the pad went away, a tool took it). */
     void reset();
 
@@ -334,6 +349,10 @@ signals:
     void hitFired(quint32 hitId, bool on);
     void walkingChanged(bool on);
     void soloChanged(bool on);
+    /** A tool took the pad or let it go (holder()). */
+    void holderChanged();
+    /** notice() changed. */
+    void noticeChanged();
 
 private:
     void showLight();
@@ -349,6 +368,8 @@ private:
     void releaseModifier();
     QString cueLabel(quint32 cueId) const;
     void roleChordFired();
+    /** Say @p text on the screen (notice()) for noticeMs(). */
+    void showNotice(const QString &text);
 
 private:
     Doc *m_doc;
@@ -367,6 +388,8 @@ private:
     TouchSwipe m_swipe;
     /** The light bar's flash after a GO. */
     QTimer *m_flash = nullptr;
+    QTimer *m_noticeTimer = nullptr;
+    QString m_notice;
     /** Walking: Focus this cue was started here and runs. */
     bool m_walking = false;
     /** A cue step restarts Focus this cue: its stop is not the walk's. */

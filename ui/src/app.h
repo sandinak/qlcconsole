@@ -627,6 +627,10 @@ public:
      *  while one is on (a cue playing it or the Workbench's), hidden
      *  otherwise (docs/features/stage-targets.md). */
     QLabel *followChip() const { return m_statusFollowLabel; }
+    /** The game controller's role, beside it: "Pad: Run", "Pad: ARMED",
+     *  "Pad: Walk" while the Run role is on (as the Run tab's Pad: button
+     *  says), hidden in Tools (docs/features/show-control.md). */
+    QLabel *padRoleChip() const { return m_statusPadRoleLabel; }
     /** Show Review's Fix: a finding's jump kind and ids to the view it is
      *  fixed in (a Show Tree cue, Functions, Fixtures, the plot, Build). */
     bool reviewJump(QWidget *parent, const QString &jump, const QVariantList &data);
@@ -1174,6 +1178,8 @@ private slots:
     void slotPadModeChanged(Doc::PadMode mode);
     /** The follow spot's chip, from ProgrammerController::followSpotStatus(). */
     void updateFollowChip();
+    /** The pad's role chip, from PadRun. */
+    void updatePadRoleChip();
     /** QLC_FSPOT_PROBE: the follow spot's stick on stderr, once a second. */
     void startFollowSpotProbe();
 
@@ -1213,6 +1219,7 @@ private:
     QLabel* m_statusProgrammerLabel;
     QLabel* m_statusSelectionLabel;
     QLabel* m_statusPadModeLabel;
+    QLabel *m_statusPadRoleLabel = nullptr;     ///< "Pad: Run" / "Pad: ARMED" (PadRun)
     QLabel *m_statusFollowLabel = nullptr;
     /** The follow chip's line, most said first, then shorter: the footer
      *  shows the longest that fits (fitStatusBar()) rather than dropping the
