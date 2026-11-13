@@ -393,7 +393,16 @@ double MonitorGraphicsView::viewScale() const
  * the one thing that must never turn with the page. */
 void MonitorGraphicsView::setViewRotation(int quarterTurns)
 {
-    const int r = ((quarterTurns % 4) + 4) % 4;
+    m_savedRotation = ((quarterTurns % 4) + 4) % 4;
+    applyViewRotation();
+}
+
+/* The turn is for the plan only: a front or side elevation always draws
+ * unturned (floor at the bottom), and the saved turn comes back when the plan
+ * does. m_viewRotation is what is on screen; m_savedRotation is the setting. */
+void MonitorGraphicsView::applyViewRotation()
+{
+    const int r = (m_pov == PovTop) ? m_savedRotation : 0;
     if (m_viewRotation == r)
         return;
     const double zoom = viewScale();
@@ -4230,6 +4239,7 @@ void MonitorGraphicsView::setViewPOV(ViewPOV pov)
     if (pov == m_pov)
         return;
     m_pov = pov;
+    applyViewRotation();    // the saved turn is the plan's only
 
     /* Rebuild the whole projection. Every item is placed through projectMm(),
        so changing which way the stage is being looked at invalidates all of

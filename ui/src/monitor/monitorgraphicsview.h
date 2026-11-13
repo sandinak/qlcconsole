@@ -92,7 +92,11 @@ public:
      *  hit-testing keep working. Quarter turns preserve handedness, so a
      *  rotated plan still tells the truth about stage left/right. */
     void setViewRotation(int quarterTurns);
-    int  viewRotation() const { return m_viewRotation; }
+    void applyViewRotation();
+    /** The saved plot turn (0..3). Drawn only in the plan (PovTop). */
+    int  viewRotation() const { return m_savedRotation; }
+    /** The turn actually on screen: the saved one in the plan, else 0. */
+    int  effectiveViewRotation() const { return m_viewRotation; }
 
     /** The uniform zoom, independent of the rotation. Use this rather than
      *  transform().m11(), which stops being the scale once the view is turned. */
@@ -1831,7 +1835,8 @@ private:
 
     bool m_showMountedFixtures = true;
     bool m_attachOnDrop = false;        ///< setAttachOnDrop()
-    int  m_viewRotation = 0;   ///< plot turn, 0..3 quarter turns clockwise
+    int  m_viewRotation = 0;   ///< plot turn on screen, 0..3 quarter turns clockwise (0 off the plan)
+    int  m_savedRotation = 0;  ///< the saved plot turn; applies to the plan only
 
     /** Counter-rotate every text item so labels stay upright while turned. */
     void refreshLabelRotations();

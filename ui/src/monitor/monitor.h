@@ -455,6 +455,7 @@ protected slots:
 
     /** Slot called when the point-of-view combo (Top/Front/Side) changes */
     void slotPOVChanged(int index);
+    void updatePlotRotButton();
 
     /** Group / ungroup the current 2D-map selection. */
     void slotGroupItems();
@@ -733,6 +734,7 @@ protected:
     void updateUnitsLabel();
     QSpinBox *m_gridSubdivSpin;
     QComboBox *m_snapCombo;
+    QToolButton *m_plotRotBtn = nullptr;
     QToolButton *m_snapToggle = nullptr;
     int m_mapView = 0;       ///< current 2D-map overlay (0=Normal/1=Power/2=Stage; was m_viewCombo)
     QComboBox *m_povCombo;   ///< Top / Front / Side point of view

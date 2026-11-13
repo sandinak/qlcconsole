@@ -41,6 +41,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **The plot turn no longer turns the front and side views upside down.** The footer's turn button (⟳) applies to the plan (2D — Top) only; 2D — Front and Side always draw upright, the button is greyed there and says why, and your saved turn comes back with the plan. The button is lit while the plan is turned off 0°, and right-click ▸ **Reset to 0°** puts it back.
 - **Help ▸ What's New is current.** It was still headed "0.4.0 (unreleased)"; 0.4.0 now has its month, and a 0.4.4 section lists this release's changes.
 - **The test gate keeps its Mac awake.** A pool host running a gate unattended went into maintenance sleep every few seconds, and the timing tests that straddled a nap failed (PixelBoxes, SpeedMasters, WebAccess, VCButton on newaudio). The gate now holds `caffeinate` for its length, and those four tests wait on what they check instead of a fixed time. A hostile case that times out now shows the child's last lines.
 
