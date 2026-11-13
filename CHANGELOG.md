@@ -45,6 +45,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **The Rig Overview stays on screen when you click into another app (Mac).** It vanished whenever qlcconsole was not the app in front, as when you click into a controller test page beside it. The Speed Masters and "Why is this on?" panels stay up too, as Quick Focus and Focus This Cue already did.
 - **Everything view: the tab strip keeps words at 1024 wide.** When the short names were a few pixels too wide, the strip dropped to bare icons; it now tightens the tab padding first, so the short names (I/O, Studio, Console, Desk, Tree) stay and no tab needs a scroll arrow.
 - **The footer's venue chip says what a click does.** With no venue it read *Venue: none*, like a status; it now reads *Set Venue…* (a click opens the venue menu as before). It is kept in view, not hidden, because Getting Started and Lesson 3.6 send you to it.
 - **Show Tree hints are not cut off at 1024 wide.** A long hint ("1.0.0 is the first cue: there is no cue before it to go under…") wraps onto a second line instead of running past the edge.

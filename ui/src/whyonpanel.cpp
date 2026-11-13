@@ -296,6 +296,8 @@ WhyOnPanel::WhyOnPanel(Doc *doc, QWidget *parent)
     setObjectName(QStringLiteral("whyOnPanel"));
     setWindowTitle(actionText());
     setAttribute(Qt::WA_DeleteOnClose);
+    // A tool window on a Mac hides when another app is in front; keep it up.
+    setAttribute(Qt::WA_MacAlwaysShowToolWindow);
     setProperty("helpTopic", QStringLiteral("troubleshooting.md#why-is-this-light-on"));
     setFrameShape(QFrame::StyledPanel);
     resize(460, 280);

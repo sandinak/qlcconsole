@@ -70,6 +70,8 @@ void SpeedMastersPanel_Test::theRowsShowTheMasters()
     sm->setName(2, "Strobes");
     sm->setBpm(2, 140);
     SpeedMastersPanel panel(m_doc);
+    // Stays on screen when another app is in front (a Mac tool window).
+    QVERIFY(panel.testAttribute(Qt::WA_MacAlwaysShowToolWindow));
     QCOMPARE(panel.row(2).name->text(), QString("Strobes"));
     QCOMPARE(panel.row(2).bpm->value(), 140.0);
     QVERIFY(panel.row(0).name->text().isEmpty());          // the default isn't a name

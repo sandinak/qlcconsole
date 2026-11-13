@@ -115,6 +115,7 @@ void WhyOnPanel_Test::listsTheChainAndAClickGoesThere()
     WhyOnPanel *p = WhyOnPanel::showFor(m_doc, m_fixtures[0]);
     QVERIFY(p != nullptr);
     QCOMPARE(WhyOnPanel::current(), p);
+    QVERIFY(p->testAttribute(Qt::WA_MacAlwaysShowToolWindow));
     QCOMPARE(p->windowTitle(), QString("Why is this on?"));
     QListWidget *list = p->findChild<QListWidget *>("whyOnLines");
     QVERIFY(list != nullptr);
