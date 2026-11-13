@@ -558,11 +558,11 @@ bool ShowTreeView::renumberSong(quint32 listId, const Section &song, int start, 
         dlg.setWindowTitle(tr("Renumber song"));
         QFormLayout *f = new QFormLayout(&dlg);
         QLabel *intro = new QLabel(m_st->listNumbering(listId) == Numbering::Hundreds
-                                   ? tr("Numbers the cues of %1 in its hundred, in list order (from Start, in "
+                                   ? tr("Numbers the cues of “%1” in its hundred, in list order (from Start, in "
                                         "steps of Step). Sub-cues follow their cue.").arg(sectionTitle(song))
-                                   : tr("Numbers each part of %1 1, 2, 3… in list order (or from Start, in steps "
-                                        "of Step), in the last place: no cue changes song or part. Sub-cues "
-                                        "follow their cue.").arg(sectionTitle(song)), &dlg);
+                                   : tr("Numbers the cues of each part of “%1” 1, 2, 3… in list order (or from "
+                                        "Start, in steps of Step), in the last place: no cue changes song or "
+                                        "part. Sub-cues follow their cue.").arg(sectionTitle(song)), &dlg);
         intro->setWordWrap(true);
         f->addRow(intro);
         QSpinBox *from = new QSpinBox(&dlg);
