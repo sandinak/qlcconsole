@@ -21,6 +21,8 @@
 #include <QTemporaryDir>
 #include <QFileInfo>
 #include <QLabel>
+#include <QSignalSpy>
+#include <QToolButton>
 #include <QFile>
 #include <QDir>
 #include <QtTest>
@@ -57,6 +59,8 @@
 #include "focuscalls.h"
 #include "focussession.h"
 #include "showcontrol.h"
+#include "controllerscheme.h"
+#include "padrun.h"
 #include "mastertimer.h"
 #include "qlcpalette.h"
 #include "qlcchannel.h"
@@ -870,6 +874,100 @@ void PadBenchShow_Test::theCommittedShowChecksOut()
     QVERIFY(QFile::copy(show, copy));
     QVERIFY(QFile::copy(VenueCorrections::sidecarPath(show), VenueCorrections::sidecarPath(copy)));
     check(copy);
+}
+
+void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
+{
+    const QString show = QStringLiteral(PADBENCH_COMMITTED);
+    if (!QFileInfo::exists(show))
+        QSKIP("test-workspaces/PadBench.qlcc is not there yet");
+    QTemporaryDir dir;
+    const QString copy = dir.filePath(QStringLiteral("PadBench.qlcc"));
+    QVERIFY(QFile::copy(show, copy));
+    QVERIFY(QFile::copy(VenueCorrections::sidecarPath(show), VenueCorrections::sidecarPath(copy)));
+    QVERIFY(open(copy));
+
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    ProgrammerController *pc = doc->programmer();
+    InputOutputMap *iom = doc->inputOutputMap();
+    PadRun *run = pc->padRun();
+
+    // The pad: whichever virtual pad is free takes the "any game controller" slot.
+    QTRY_VERIFY_WITH_TIMEOUT(iom->inputSlotLive(1) == 0, 5000);
+    InputPatch *ip = iom->inputPatch(1);
+    QVERIFY(ip != nullptr && ip->isPatched());
+    const quint32 padLine = ip->input();
+    QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 5000);
+    qInfo().noquote() << "[PAD RUN] pad" << ip->inputName();
+    // The voice on, as the checklist has it.
+    pc->setOperatorFeedback(ControllerScheme::BothFeedback);
+
+    // Top bar > Operate; the Run tab's button from Pad: Tools to Pad: Run.
+    doc->setMode(Doc::Operate);
+    settle(100);
+    QToolButton *padBtn = m_app->findChild<QToolButton *>(QStringLiteral("crPadRun"));
+    QVERIFY(padBtn != nullptr);
+    if (run->isEnabled())
+        padBtn->click();
+    QCOMPARE(padBtn->text(), QStringLiteral("Pad: Tools"));
+    padBtn->click();
+    QVERIFY(run->isEnabled());
+    QCOMPARE(padBtn->text(), QStringLiteral("Pad: Run"));
+
+    // Main cue 1: the follow spot plays (left over from the follow-spot checks).
+    const CueList *mainList = listNamed(st, kProduction, kMain);
+    QVERIFY(mainList != nullptr);
+    ShowControl::Request r;
+    r.command = ShowControl::Go;
+    r.chaser = mainList->chaser;
+    r.cue = mainList->cues.at(0).number;
+    QVERIFY(m_app->runCommand(r, ShowControl::RouteRunTab));
+    QTRY_VERIFY_WITH_TIMEOUT(pc->followSpotStatus().state != ProgrammerController::FollowSpotStatus::Off, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(st->runningCue(mainList->id), mainList->cues.at(0).id, 3000);
+    settle(100);
+
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    auto heard = [&said](const QString &part) {
+        for (const QList<QVariant> &a : said)
+            if (a.first().toString().contains(part))
+                return true;
+        return false;
+    };
+    // The profile's channels (playstation.qxhid / xbox.qxhid): A/Cross 6, LB/L1 10.
+    const quint32 kA = 6, kLB = 10;
+    auto press = [&](quint32 ch, uchar v) {
+        QVERIFY(padInput(doc, padLine, ch, v));
+        settle(60);
+    };
+
+    // 1. A (Cross) alone: nothing plays, "Hold LB to arm."
+    press(kA, 255);
+    press(kA, 0);
+    QTRY_VERIFY2_WITH_TIMEOUT(heard(QStringLiteral("to arm")),
+                              qPrintable(QStringLiteral("said: %1 role %2")
+                                         .arg(said.count()).arg(pc->controllerRole(1, kA))), 2000);
+    QCOMPARE(st->runningCue(mainList->id), mainList->cues.at(0).id);
+
+    // 2. Hold LB (L1): armed, on the Run tab's button.
+    press(kLB, 255);
+    QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: ARMED"), 2000);
+
+    // 3. LB + A: GO, to cue 2.
+    press(kA, 255);
+    press(kA, 0);
+    QTRY_COMPARE_WITH_TIMEOUT(st->runningCue(mainList->id), mainList->cues.at(1).id, 3000);
+
+    // Let go of LB: Pad: Run again.
+    press(kLB, 0);
+    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Run"), 2000);
+
+    padBtn->click();        // back to Tools, as the next test expects
+    doc->masterTimer()->stopAllFunctions();
+    doc->setMode(Doc::Design);
+    settle(300);
+    doc->resetModified();
 }
 
 int main(int argc, char **argv)
