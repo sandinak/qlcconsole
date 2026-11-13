@@ -84,52 +84,52 @@
         <translation type="vanished">La configurazione di avvio è stata modificata</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="958"/>
+        <location filename="webaccess.cpp" line="970"/>
         <source>Widget not supported (yet) for web access</source>
         <translation>Oggetto non ancora supportato via web</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1422"/>
+        <location filename="webaccess.cpp" line="1434"/>
         <source>Enable</source>
         <translation>Abilita</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1625"/>
+        <location filename="webaccess.cpp" line="1637"/>
         <source>Name</source>
         <translation>Nome</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1626"/>
+        <location filename="webaccess.cpp" line="1638"/>
         <source>Fade In</source>
         <translation>Fade In</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1627"/>
+        <location filename="webaccess.cpp" line="1639"/>
         <source>Fade Out</source>
         <translation>Fade Out</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1628"/>
+        <location filename="webaccess.cpp" line="1640"/>
         <source>Duration</source>
         <translation>Durata</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1629"/>
+        <location filename="webaccess.cpp" line="1641"/>
         <source>Notes</source>
         <translation>Note</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2281"/>
+        <location filename="webaccess.cpp" line="2293"/>
         <source>Load project</source>
         <translation>Carica progetto</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2283"/>
+        <location filename="webaccess.cpp" line="2295"/>
         <source>Simple Desk</source>
         <translation>Banco Semplice</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2285"/>
+        <location filename="webaccess.cpp" line="2297"/>
         <source>Configuration</source>
         <translation>Configurazione</translation>
     </message>
@@ -150,28 +150,28 @@
         <translation type="vanished">Hotspot Wi-Fi disattivato correttamente.</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2013"/>
+        <location filename="webaccess.cpp" line="2025"/>
         <source>Color 2 Reset</source>
         <translation>Reset colore 2</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2022"/>
+        <location filename="webaccess.cpp" line="2034"/>
         <source>Color 3 Reset</source>
         <translation>Reset colore 3</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2031"/>
+        <location filename="webaccess.cpp" line="2043"/>
         <source>Color 4 Reset</source>
         <translation>Reset colore 4</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2040"/>
+        <location filename="webaccess.cpp" line="2052"/>
         <source>Color 5 Reset</source>
         <translation>Reset colore 5</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1031"/>
-        <location filename="webaccess.cpp" line="1140"/>
+        <location filename="webaccess.cpp" line="1043"/>
+        <location filename="webaccess.cpp" line="1152"/>
         <source>Page: %1</source>
         <translation>Pagina %1</translation>
     </message>
@@ -186,55 +186,55 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1038"/>
-        <location filename="webaccess.cpp" line="1147"/>
+        <location filename="webaccess.cpp" line="1050"/>
+        <location filename="webaccess.cpp" line="1159"/>
         <source>Expand/Collapse</source>
         <translation>Espandi/Contrai</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1052"/>
+        <location filename="webaccess.cpp" line="1064"/>
         <source>Enable/Disable frame</source>
         <translation>Abilita/Disabilita il frame</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1067"/>
-        <location filename="webaccess.cpp" line="1176"/>
+        <location filename="webaccess.cpp" line="1079"/>
+        <location filename="webaccess.cpp" line="1188"/>
         <source>Back</source>
         <translation>Indietro</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1074"/>
-        <location filename="webaccess.cpp" line="1183"/>
+        <location filename="webaccess.cpp" line="1086"/>
+        <location filename="webaccess.cpp" line="1195"/>
         <source>Forward</source>
         <translation>Avanti</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1161"/>
+        <location filename="webaccess.cpp" line="1173"/>
         <source>Enable/Disable Solo frame</source>
         <translation>Abilita/Disabilita il frame esclusivo</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1745"/>
+        <location filename="webaccess.cpp" line="1757"/>
         <source>Slider</source>
         <translation>Fader</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1779"/>
+        <location filename="webaccess.cpp" line="1791"/>
         <source>Play Cue list</source>
         <translation>Riproduci la lista di azioni</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1783"/>
+        <location filename="webaccess.cpp" line="1795"/>
         <source>Stop Cue list</source>
         <translation>Interrompi la lista di azioni</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1787"/>
+        <location filename="webaccess.cpp" line="1799"/>
         <source>Go to the previous step in the list</source>
         <translation>Vai al passo precedente nella lista</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1791"/>
+        <location filename="webaccess.cpp" line="1803"/>
         <source>Go to the next step in the list</source>
         <translation>Vai al passo successivo nella lista</translation>
     </message>
@@ -609,6 +609,29 @@
         <location filename="webaccessnetwork.cpp" line="130"/>
         <source>Network interface</source>
         <translation>Interfaccia di rete</translation>
+    </message>
+</context>
+<context>
+    <name>WebAccessRun</name>
+    <message>
+        <location filename="webaccessrun.cpp" line="496"/>
+        <source>Solo a layer of the cue in the preview, or the whole cue again ({LB} held; Design)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccessrun.cpp" line="497"/>
+        <source>Solo the next layer ({LB} held)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccessrun.cpp" line="498"/>
+        <source>Solo the previous layer ({LB} held)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccessrun.cpp" line="500"/>
+        <source>Blind: the rig muted, the screens live ({LB} held; Design)</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
