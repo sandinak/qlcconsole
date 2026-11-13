@@ -1129,6 +1129,14 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
     QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible(), 2000);
     QCOMPARE(chip->text(), QStringLiteral("Pad: Run"));
     QVERIFY(m_app->followChip()->isVisible());  // beside the follow spot's
+    // Hover: the button map in this pad's names, the same text as the Run tab's button.
+    QCOMPARE(chip->toolTip(), padBtn->toolTip());
+    QVERIFY2(chip->toolTip().contains(QStringLiteral("Pad: Run")), qPrintable(chip->toolTip()));
+    QVERIFY2(chip->toolTip().contains(QStringLiteral("<b>L1</b>"))
+                 && chip->toolTip().contains(QStringLiteral("<b>Cross</b>"))
+                 && !chip->toolTip().contains(QStringLiteral("<b>LB</b>")),
+             qPrintable(chip->toolTip()));
+    qInfo().noquote() << "[PAD RUN] tooltip:" << chip->toolTip();
 
     QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
     auto heard = [&said](const QString &part) {

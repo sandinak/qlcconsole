@@ -257,6 +257,48 @@ QString PadRun::roleText() const
     return isArmed() ? tr("Pad: ARMED") : tr("Pad: Run");
 }
 
+QString PadRun::helpHtml() const
+{
+    if (m_pc == nullptr)
+        return QString();
+    const PadNames::Family fam = m_pc->padFamily();
+    auto row = [](const QString &a, const QString &b) {
+        return QStringLiteral("<tr><td><b>%1</b></td><td>%2</td></tr>").arg(a.toHtmlEscaped(), b.toHtmlEscaped());
+    };
+    QString pad = m_pc->followSpotStickName();
+    QString out = QStringLiteral("<p><b>%1</b>%2</p>")
+                      .arg(roleText().toHtmlEscaped(),
+                           pad.isEmpty() ? QString() : QStringLiteral(" · ") + pad.toHtmlEscaped());
+    const QString tool = m_enabled ? holder() : QString();
+    if (!tool.isEmpty())
+        out += tr("<p><b>%1 has the controller</b> until it ends (finish or cancel it on the laptop); "
+                  "then the controller runs the show again.</p>").arg(tool.toHtmlEscaped());
+    if (!m_enabled)
+        out += tr("<p>Tools: Focus Mode, Venue Focus, Focus This Cue and the follow spot. Click the "
+                  "Run tab's Pad: button, or hold %1 + %2 for a second, to run the show from the "
+                  "controller.</p>")
+                   .arg(m_pc->padText(QStringLiteral("{View}")).toHtmlEscaped(),
+                        m_pc->padText(QStringLiteral("{Menu}")).toHtmlEscaped());
+    out += QStringLiteral("<table cellspacing=\"0\" cellpadding=\"2\"><tr><th align=left>%1</th>"
+                          "<th align=left>%2</th></tr>")
+               .arg(tr("Control"), tr("What It Does"));
+    for (Action a : actions())
+        out += row(PadNames::name(roleFor(a), fam), PadNames::expand(label(a), fam));
+    out += row(m_pc->padText(QStringLiteral("{View}")) + QStringLiteral(" + ")
+                   + m_pc->padText(QStringLiteral("{Menu}")),
+               tr("Hold 1 s: switch between Run and Tools"));
+    out += QStringLiteral("</table>");
+    out += tr("<p><b>Walking</b> (%1 in Run):</p><table cellspacing=\"0\" cellpadding=\"2\">")
+               .arg(PadNames::name(roleFor(Walk), fam).toHtmlEscaped());
+    for (WalkAction a : walkActions())
+        out += row(PadNames::name(roleFor(a), fam), PadNames::expand(label(a), fam));
+    const QStringList extra = walkMapLines(fam).mid(walkActions().size());
+    for (const QString &l : extra)
+        out += QStringLiteral("<tr><td colspan=2>%1</td></tr>").arg(l.toHtmlEscaped());
+    out += QStringLiteral("</table>");
+    return out;
+}
+
 void PadRun::showNotice(const QString &text)
 {
     if (text.isEmpty())

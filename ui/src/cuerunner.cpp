@@ -1138,23 +1138,10 @@ void CueRunner::refreshPadRun()
     }
     // "Pad: Run", "Pad: ARMED"... or the tool that has the pad until it ends.
     m_padRunBtn->setText(run->roleText());
-    const QString tool = run->isEnabled() ? run->holder() : QString();
     m_padRunBtn->setStyleSheet(run->isArmed()
         ? QStringLiteral("QToolButton { color: black; background: %1; }").arg(PadRun::armedColour().name())
         : QString());
-    m_padRunBtn->setToolTip(
-        (tool.isEmpty() ? QString()
-                        : tr("<p><b>%1 has the controller</b> until it ends; then the controller runs the "
-                             "show again.</p>").arg(tool))
-        + tr("<p><b>The game controller's role.</b> Tools: Focus mode, Venue focus, Focus This Cue and the "
-           "follow spot, as before. Run: the controller runs the show &mdash; nothing moves it "
-           "unless %1 is held. Click to switch, or hold %3 + %4 on the controller for a second.</p>"
-           "<p>%2</p>")
-            .arg(pc->padText(QStringLiteral("{LB}")),
-                 PadRun::mapLines(pc->padFamily()).join(QStringLiteral("<br>")),
-                 pc->padText(QStringLiteral("{View}")), pc->padText(QStringLiteral("{Menu}")))
-        + tr("<p><b>Walking</b> (Menu in Run):<br>%1</p>")
-            .arg(PadRun::walkMapLines(pc->padFamily()).join(QStringLiteral("<br>"))));
+    m_padRunBtn->setToolTip(run->helpHtml());
 }
 
 void CueRunner::refreshFocusArmed()

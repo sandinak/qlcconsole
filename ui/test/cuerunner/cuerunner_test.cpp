@@ -480,7 +480,7 @@ void CueRunner_Test::thePadRoleShowsOnTheRunTab()
     pad->click();
     QVERIFY(run->isEnabled());
     QCOMPARE(pad->text(), QString("Pad: Run"));
-    QVERIFY2(pad->toolTip().contains("A: GO (LB held)"), qPrintable(pad->toolTip()));
+    QVERIFY2(pad->toolTip().contains("GO (LB held)"), qPrintable(pad->toolTip()));
 
     // Armed from the pad: the button says so.
     run->handle(0, GamepadRole::LB, 255);
