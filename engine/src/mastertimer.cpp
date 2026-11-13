@@ -19,7 +19,6 @@
 */
 
 #include <QDebug>
-#include <execinfo.h> // WIP diagnostic
 #include <QSettings>
 #include <time.h>
 #include <QMutexLocker>
@@ -380,21 +379,20 @@ void MasterTimer::startFunction(Function* function)
     QMutexLocker locker(&m_functionListMutex);
     if (m_startQueue.contains(function) == false)
         m_startQueue.append(function);
-#if 1 // WIP diagnostic
-    if (d_ptr->isRunning() == false)
-    {
-        qWarning() << "[WIPDIAG] queued while the timer is stopped:" << function->name() << function->id();
-        void *frames[40];
-        const int n = backtrace(frames, 40);
-        backtrace_symbols_fd(frames, n, 2);
-    }
-#endif
 }
 
 void MasterTimer::removeFunction(Function* function)
 {
     if (function == NULL)
         return;
+
+    /* Not in the timer at all -- the common case, Doc::clearContents()
+       letting go of every function of a show: nothing to claim. */
+    {
+        QMutexLocker locker(&m_functionListMutex);
+        if (m_startQueue.contains(function) == false && m_functionList.contains(function) == false)
+            return;
+    }
 
     // Remove the function from both the running list and the start queue under
     // the lock. timerTickFunctions() holds the same (recursive) lock while it

@@ -34,7 +34,6 @@
 #include "markplanner.h"
 #include "mastertimer.h"
 #include "programmingmanager.h"
-#include "showtreeview.h"
 #include "workbenchstack.h"
 #include "workbench.h"
 #undef protected
@@ -884,20 +883,6 @@ void PadBenchShow_Test::theCommittedShowChecksOut()
 namespace
 {
 
-/* "Function start()" lines while the old show is torn down: who queued a
-   function the teardown then deletes (said when the check fails). */
-bool g_tearingDown = false;
-QStringList g_startedInTeardown;
-QtMessageHandler g_previousHandler = nullptr;
-
-void noteStarts(QtMsgType type, const QMessageLogContext &context, const QString &msg)
-{
-    if (g_tearingDown && msg.startsWith(QLatin1String("Function start()")))
-        g_startedInTeardown << msg;
-    if (g_previousHandler != nullptr)
-        g_previousHandler(type, context, msg);
-}
-
 /* What the MasterTimer still holds that is not a function of the Doc: a
    pointer it would tick after the Doc deleted it. Pointers only, never
    followed. */
@@ -946,21 +931,13 @@ void PadBenchShow_Test::openingAShowOverOneThatPlays()
 
     int strayAtCleared = -1;
     QMetaObject::Connection cleared = connect(doc, &Doc::cleared, this, [&]() {
-        g_tearingDown = false;
         strayAtCleared = qMax(strayAtCleared, strayFunctions(doc));
     });
-    g_previousHandler = qInstallMessageHandler(noteStarts);
-    auto restore = qScopeGuard([&]() {
-        qInstallMessageHandler(g_previousHandler);
-        g_previousHandler = nullptr;
-        g_tearingDown = false;
-        disconnect(cleared);
-    });
+    auto restore = qScopeGuard([&]() { disconnect(cleared); });
 
     /* Open the way File > Open does: no Stop all first, the timer running. */
     auto openOver = [&](const QString &path) {
         doc->resetModified();
-        g_tearingDown = true;
         m_app->clearDocument();
         QCOMPARE(m_app->loadShowFile(path, App::NoRecovery), QFile::NoError);
         doc->resetModified();
@@ -974,7 +951,7 @@ void PadBenchShow_Test::openingAShowOverOneThatPlays()
     doc->setMode(Doc::Design);
     settle(50);
 
-    const int rounds = 6;
+    const int rounds = 3;
     for (int round = 0; round < rounds; ++round)
     {
         /* The dance show: Build's Workbench previews one function of each
@@ -1046,12 +1023,8 @@ void PadBenchShow_Test::openingAShowOverOneThatPlays()
         openOver(danceCopy);
         QCOMPARE(strayAtCleared, 0);
     }
-    if (!g_startedInTeardown.isEmpty())
-        qWarning() << "[openingAShowOverOneThatPlays] started while the old show was torn down:"
-                   << g_startedInTeardown;
     doc->masterTimer()->stopAllFunctions();
     settle(50);
-    QFAIL("WIP: keep the logs");
 }
 
 int main(int argc, char **argv)

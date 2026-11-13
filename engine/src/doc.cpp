@@ -381,6 +381,14 @@ void Doc::clearContents()
         if (func == NULL)
             continue;
         emit functionRemoved(func->id());
+        /* Out of the MasterTimer before it goes. File > Open stops the
+           timer, clears the show and starts the timer again on the next
+           one: a function started again while the show was torn down (the
+           timer's lists were emptied when it stopped) stayed in its start
+           queue, and the first tick of the next show ran it freed (crash
+           2026-11-13, opening PadBench over DanceHysteria). */
+        if (m_masterTimer != NULL)
+            m_masterTimer->removeFunction(func);
         delete func;
     }
 

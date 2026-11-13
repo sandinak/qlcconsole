@@ -6780,10 +6780,14 @@ void ShowTreeController::setLookVcFrame(quint32 listId, const QString &folder, q
 void ShowTreeController::reset()
 {
     // The show is going: let go of what the preview plays (the functions
-    // are still there; Doc deletes them after this).
+    // are still there; Doc deletes them after this). Its cues go first: the
+    // stop says previewChanged, and a cue open in the Workbench answered it
+    // by previewing its cue again -- starting the old show's functions into
+    // the stopped MasterTimer just before Doc deleted them (crash
+    // 2026-11-13, File > Open over a show previewing a cue).
+    m_productions.clear();
     stopPreview();
     m_sweepTimer->stop();     // nothing of the old show is left to sweep
-    m_productions.clear();
     m_groupSets.clear();
     m_reusableLayers.clear();
     m_reusableCues.clear();
