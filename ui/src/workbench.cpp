@@ -838,6 +838,12 @@ void Workbench::setStackImpl(WorkbenchStack *stack, History history)
     m_editorFunction = Function::invalidId();
     loadCanvas(Function::invalidId());
     clearEditors();
+    /* The overview's step table is the old root's: a chaser's editor holds
+       its Chaser* and hears Doc::modeChanged (into Operate it stops its
+       chaser). Left in place by clear() -- the chaser deleted, another show
+       opened -- the next Operate called stop() on the freed chaser: a hang
+       or a crash in Release (2026-11-13). It goes with the root. */
+    retireOverviewEditor();
     m_lookEditor->setPalette(QLCPalette::invalidId());
 
     WorkbenchStack *old = m_stack;
@@ -1480,13 +1486,18 @@ static void retireEditor(QWidget *editor, Doc *doc)
     editor->deleteLater();
 }
 
-void Workbench::updateOverview()
+void Workbench::retireOverviewEditor()
 {
     if (m_overviewEditor != nullptr)
     {
         retireEditor(m_overviewEditor, m_doc);
         m_overviewEditor = nullptr;
     }
+}
+
+void Workbench::updateOverview()
+{
+    retireOverviewEditor();
     if (m_stack == nullptr)
         return;
     m_overviewHeading->setText(m_stack->title());

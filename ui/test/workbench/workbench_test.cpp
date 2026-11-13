@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QPointer>
 #include <QScopeGuard>
 #include <QTreeWidgetItemIterator>
 #include <QXmlStreamReader>
@@ -602,6 +603,37 @@ void Workbench_Test::sharedMembersSayWhereElse()
     QVERIFY(!wb.m_addSceneBtn->isEnabled());
     QCOMPARE(wb.currentPage(), Workbench::OverviewPage);
     QVERIFY(wb.m_overviewEditor != nullptr);        // its step table
+}
+
+void Workbench_Test::theOverviewStepTableGoesWithItsChaser()
+{
+    Scene *a = scene("A", "Show");
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        Chaser *ch = new Chaser(m_doc);
+        ch->setName("Walk");
+        QVERIFY(m_doc->addFunction(ch));
+        ch->addStep(ChaserStep(a->id()));
+
+        Workbench wb(m_doc);
+        wb.load(ch->id());
+        QCOMPARE(wb.currentPage(), Workbench::OverviewPage);
+        QPointer<QWidget> table = wb.m_overviewEditor;
+        QVERIFY(!table.isNull());               // the chaser's step table
+
+        // Pass 0: the chaser deleted; pass 1: the Workbench cleared (another
+        // show opened), then the chaser goes.
+        if (pass == 1)
+            wb.clear();
+        m_doc->deleteFunction(ch->id());
+        QVERIFY(wb.m_overviewEditor == nullptr);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QVERIFY2(table.isNull(), "the step table outlived its chaser");
+
+        // Into Operate and back: nothing left to stop the freed chaser.
+        m_doc->setMode(Doc::Operate);
+        m_doc->setMode(Doc::Design);
+    }
 }
 
 void Workbench_Test::whatIsLoadedPlays()

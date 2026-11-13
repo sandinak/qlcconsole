@@ -306,6 +306,7 @@ private:
     /** The stock editor of function @a fid in the editor pane. */
     void loadFunctionEditor(quint32 fid);
     void clearEditors();
+    void retireOverviewEditor();
     /** Target rows / fixtures: their channels on the console. */
     void showFixtures(const QList<quint32> &fixtureIds);
     /** The programmer selection changed (anywhere): show it (Q201). */

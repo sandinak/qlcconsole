@@ -61,6 +61,10 @@ private slots:
     void newHereMakesAStepOrALayer();
     /** A member used elsewhere says so: "also in N", where on hover. */
     void sharedMembersSayWhereElse();
+    /** A chaser's step table on the overview goes with the chaser: deleted
+     *  (or another show opened) and then Operate, the table's mode slot
+     *  stopped the freed chaser -- a hang in Release (2026-11-13). */
+    void theOverviewStepTableGoesWithItsChaser();
     /** Design mode: what is loaded plays; a changed collection plays its new
      *  layers; Stop / Play; hidden, nothing plays. */
     void whatIsLoadedPlays();
