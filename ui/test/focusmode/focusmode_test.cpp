@@ -37,6 +37,8 @@
 #include "iopluginstub.h"
 #include "qlcfile.h"
 #include "programmercontroller.h"
+#include "followspotmover.h"
+#include "followspotoperator.h"
 #include "padrun.h"
 #include "monitorproperties.h"
 #include "inputoutputmap.h"
@@ -1568,6 +1570,67 @@ void FocusMode_Test::shots()
     panel->setInputDevice(FocusSession::ControllerInput, false);
     save(panel->controlMap(), QStringLiteral("%1/map-controller-other-profile-blue.png").arg(out));
     qApp->setPalette(native);
+}
+
+/* The target page names the follow-spot operator's viewpoint when a follow
+   spot is following the target (the stick is turned by it), and nothing
+   else. FOCUSUI_TARGET_SHOTS=dir + FOCUSUI_TARGET_PREFIX (before/after)
+   writes the page at the three screen sizes. */
+void FocusMode_Test::theTargetPageSaysTheOperatorsViewpoint()
+{
+    FocusSession::Call c;
+    c.name = "Spots";
+    c.fixtures = m_heads;
+    c.target.kind = FocusSession::Reference::Target;
+    c.target.id = m_target;
+    FocusSession::Options o;
+    o.calls = { c };
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(m_doc, nullptr, o, &why);
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QVERIFY(s->toggleTargetPage());
+    QLabel *ref = panel->findChild<QLabel *>("focusReferenceName");
+    QVERIFY(ref != nullptr);
+    QVERIFY(ref->text().contains("target page"));
+    QVERIFY(!ref->text().contains("from SL"));
+
+    ProgrammerController *pc = m_doc->programmer();
+    const bool after = qEnvironmentVariable("FOCUSUI_TARGET_PREFIX") == QStringLiteral("after");
+    if (after)
+    {
+        pc->followSpotMover()->follow(0, m_target);
+        pc->setFollowSpotOperator(FollowSpotOperator::fromPreset(FollowSpotOperator::StageLeftTower));
+        s->nudge(0.0f, 1.0f);          // a repaint
+        s->nudge(0.0f, -1.0f);
+        QCoreApplication::processEvents();
+        QVERIFY2(ref->text().contains("from SL tower"), qPrintable(ref->text()));
+    }
+    const QString out = qEnvironmentVariable("FOCUSUI_TARGET_SHOTS");
+    if (!out.isEmpty())
+    {
+        QDir().mkpath(out);
+        const QList<QSize> sizes = { { 1024, 640 }, { 1280, 800 }, { 1920, 1080 } };
+        for (const QSize &sz : sizes)
+        {
+            panel->resize(sz);
+            QCoreApplication::processEvents();
+            QVERIFY(panel->grab().save(QStringLiteral("%1/%2-focus-target-page-%3x%4.png")
+                                           .arg(out, qEnvironmentVariable("FOCUSUI_TARGET_PREFIX", "after"))
+                                           .arg(sz.width()).arg(sz.height())));
+        }
+    }
+    if (after)
+    {
+        // Front of house: nothing said.
+        pc->setFollowSpotOperator(FollowSpotOperator());
+        s->nudge(0.0f, 1.0f);
+        s->nudge(0.0f, -1.0f);
+        QVERIFY(!ref->text().contains("from "));
+    }
+    pc->followSpotMover()->follow(UINT_MAX, UINT_MAX);
+    s->discardAll();
+    panel->requestExit();
 }
 
 QTEST_MAIN(FocusMode_Test)

@@ -240,7 +240,11 @@ call's **target** instead of the light: right is across the stage, up is
 upstage. Every head aimed at it follows, like a focus palette on a
 lighting desk. **A** keeps the target (for the venue applied, else in the
 show), **B** puts it back. Leaving the page or stepping calls with a move
-not kept is refused until you choose.
+not kept is refused until you choose. When a follow spot is following that
+target, the page turns the stick the way the follow spot does: up is the way
+its operator faces (their [viewpoint](stage-targets.md#where-the-operator-stands))
+and right is their right. From front of house, and for every other target,
+up is upstage.
 
 **While you nudge,** the panel says what has changed since the light was
 last saved ("Since the save: +2.5° pan, −1.0° tilt") and the plot shows a

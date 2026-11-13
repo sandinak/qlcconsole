@@ -92,6 +92,7 @@ private slots:
     /** With FOCUSUI_SHOTS set: the panel, both maps, in each theme, saved
      *  there (for the docs and a look). */
     void shots();
+    void theTargetPageSaysTheOperatorsViewpoint();
 
 private:
     void plugInPad();

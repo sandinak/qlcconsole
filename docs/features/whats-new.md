@@ -16,6 +16,10 @@ The latest changes, newest first. Each links to the guide with the detail.
   **Operator** and **Operator plan**. From front of house, up now moves
   the subject upstage (it went downstage before). See [Where the operator
   stands](stage-targets.md#where-the-operator-stands).
+- **Focus target page follows the operator.** When a follow spot is
+  following the target, the target page's stick is turned by the operator's
+  viewpoint as the follow spot's is: up is the way they face. Front of
+  house and other targets are unchanged. See [Focus calls](focus-calls.md).
 - **Blind and Solo from the Steam Deck or a phone.** In Design the Run
   page has **BLIND** and **SOLO**, and the Deck has LB + LS for Blind,
   LB + View for Solo and LB + D-pad left / right to step through the layers.

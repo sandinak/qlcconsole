@@ -546,6 +546,10 @@ public:
      *  kept is refused. False (said) when the call has no target. */
     bool toggleTargetPage();
     bool isTargetPage() const { return m_targetPage; }
+    /** The operator's viewpoint ("from SL tower") when a follow spot is
+     *  following the page's target and the operator is not at front of house
+     *  facing upstage -- the stick is turned by it; else empty. */
+    QString targetFacingText() const;
     /** The target moved and not yet kept. */
     bool targetMoved() const;
     /** Move the call's target @p dx, @p dy metres (on the target page). */
