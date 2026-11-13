@@ -1106,7 +1106,8 @@ static void clickUniverse(ConnectionsTree &tree, quint32 id,
 {
     QTreeWidgetItem *row = universeRow(tree.m_tree, id);
     QVERIFY(row != NULL);
-    const QPoint at = tree.m_tree->visualItemRect(row).center();
+    /* On its name: the patch columns make a row wider than the list. */
+    const QPoint at = tree.m_tree->visualRect(tree.m_tree->indexFromItem(row, COL_NAME)).center();
     QTest::mouseClick(tree.m_tree->viewport(), Qt::LeftButton, mod, at);
     QApplication::processEvents();
 }
@@ -2550,8 +2551,8 @@ void ConnectionsTree_Test::connectionEditorOpensFilledInForAPatchedUniverse()
     QCOMPARE(settingsPage(ed), QString("connPageTargets"));
     // The node only that patch names is listed, its port the current one.
     QCOMPARE(ed.m_targetCombo->currentData().toInt(), 0);
-    QVERIFY2(ed.m_targetCombo->currentText().endsWith("(current)"),
-             qPrintable(ed.m_targetCombo->currentText()));
+    QVERIFY2(ed.m_targetCombo->itemText(ed.m_targetCombo->currentIndex()).endsWith("(current)"),
+             qPrintable(ed.m_targetCombo->itemText(ed.m_targetCombo->currentIndex())));
     QCOMPARE(ed.m_targetIP->text(), QString("10.0.0.7"));
     QCOMPARE(ed.m_targetPort->text(), QString("0:2:3"));
     QCOMPARE(ed.m_transmitMode->currentText(), QString("Partial"));
@@ -2575,8 +2576,8 @@ void ConnectionsTree_Test::connectionEditorOpensFilledInForAPatchedUniverse()
     iom->universe(5)->outputPatch(0)->setPluginParameter("outputUni", 1);
     ConnectionEditor again(m_doc, 5);
     QCOMPARE(again.m_targetCombo->currentData().toInt(), 1);
-    QVERIFY2(again.m_targetCombo->currentText().endsWith("(current)"),
-             qPrintable(again.m_targetCombo->currentText()));
+    QVERIFY2(again.m_targetCombo->itemText(again.m_targetCombo->currentIndex()).endsWith("(current)"),
+             qPrintable(again.m_targetCombo->itemText(again.m_targetCombo->currentIndex())));
 
     // Moving it to Not patched unpatches just that leg.
     pickProtocol(again, QString());

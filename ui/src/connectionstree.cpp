@@ -475,7 +475,9 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_paneStack->setObjectName(QStringLiteral("connectionsPaneStack"));
     m_paneStack->addWidget(m_panePlaceholder);
     m_paneStack->addWidget(m_connPane);
-    m_paneStack->setMinimumWidth(300);
+    /* Its own minimum height would hold the whole page tall; it scrolls. */
+    m_paneStack->setMinimumSize(300, 1);
+    outScroll->setMinimumHeight(1);
     m_universeSplit = new QSplitter(Qt::Horizontal, this);
     m_universeSplit->setObjectName(QStringLiteral("connectionsUniverseSplit"));
     m_universeSplit->addWidget(m_paneStack);
@@ -490,8 +492,8 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     split->addWidget(m_tree);
     split->addWidget(m_side);
     split->setCollapsible(1, false);
-    split->setStretchFactor(0, 1);
-    split->setStretchFactor(1, 1);
+    split->setStretchFactor(0, 3);
+    split->setStretchFactor(1, 2);
     lay->addWidget(split, 1);           // every spare pixel goes to the list
     /* Recorded as it happens: see m_selectionOrder. A rebuild clears and
        restores the same selection, which must not reshuffle it. */
