@@ -635,7 +635,7 @@ void PadBenchShow_Test::check(const QString &path)
     // The Spots zoom and have an iris; the 3Z's shutter closes.
     for (const QString &n : { kSpot1, kSpot2 })
     {
-        Fixture *fx = fixtureNamed(doc, n);
+        QVERIFY(fixtureNamed(doc, n) != nullptr);
         QVERIFY(out(doc, n, "Iris") >= 0);
         QVERIFY(out(doc, n, "Zoom") >= 0);
     }
