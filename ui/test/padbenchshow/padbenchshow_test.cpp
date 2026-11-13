@@ -59,6 +59,7 @@
 #include "stagetarget.h"
 #include "focuscalls.h"
 #include "focussession.h"
+#include "refinesession.h"
 #include "showcontrol.h"
 #include "controllerscheme.h"
 #include "padrun.h"
