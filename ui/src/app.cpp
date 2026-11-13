@@ -102,6 +102,8 @@
 #include "layoutdiagnostics.h"
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QFileInfo>
+#include <QTimer>
 #include "measurementunits.h"
 #include "effectscriptrunner.h"
 #include <QPointer>
@@ -455,8 +457,19 @@ App::~App()
     m_doc = NULL;
 }
 
-void App::startup(const QString &workspaceFile)
+void App::startup(const QString &cliWorkspaceFile)
 {
+    // -o always wins; else the last show, if Settings ▸ General asks for it
+    // (never under the offscreen/minimal test platforms; Shift skips it).
+    QString lastNotFound;
+    const QString platform = QGuiApplication::platformName();
+    const bool testPlatform = platform == QLatin1String("offscreen") || platform == QLatin1String("minimal");
+    const QString workspaceFile = showToOpenAtStart(
+        cliWorkspaceFile, QSettings(),
+        testPlatform || QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier),
+        &lastNotFound);
+    const QString openFile = workspaceFile;
+
     // Applied here, before StartupWindow exists, rather than later in
     // init() (where this used to run) -- qApp->setPalette() inside
     // applyTheme() is application-wide, so doing it first means the
@@ -470,7 +483,7 @@ void App::startup(const QString &workspaceFile)
 
     if (m_noGui == false)
     {
-        const int steps = STARTUP_STEP_COUNT + (workspaceFile.isEmpty() ? 0 : 1);
+        const int steps = STARTUP_STEP_COUNT + (openFile.isEmpty() ? 0 : 1);
         m_startupWindow = new StartupWindow(steps);
         m_startupWindow->show();
     }
@@ -506,6 +519,12 @@ void App::startup(const QString &workspaceFile)
 
     slotModeDesign();
     slotDocModified(m_doc->isModified());     // a recovered autosave is unsaved
+
+    if (lastNotFound.isEmpty() == false)
+    {
+        setStatusMessage(tr("Last show not found: %1").arg(QFileInfo(lastNotFound).fileName()));
+        QTimer::singleShot(15000, this, [this]() { clearStatusMessage(); });
+    }
 
     // Activate FixtureManager
     setActiveWindow(FixtureManager::staticMetaObject.className());
@@ -5551,6 +5570,42 @@ QString App::newShowsClassicSettingKey()
 bool App::newShowsClassic()
 {
     return QSettings().value(newShowsClassicSettingKey(), false).toBool();
+}
+
+QString App::reopenLastShowSettingKey()
+{
+    return QStringLiteral("workspace/reopenLastShow");
+}
+
+bool App::reopenLastShow()
+{
+    return QSettings().value(reopenLastShowSettingKey(), false).toBool();
+}
+
+void App::setReopenLastShow(bool on)
+{
+    QSettings().setValue(reopenLastShowSettingKey(), on);
+}
+
+QString App::showToOpenAtStart(const QString &cliFile, const QSettings &settings,
+                               bool shiftHeld, QString *notFound)
+{
+    if (notFound != nullptr)
+        notFound->clear();
+    if (cliFile.isEmpty() == false)
+        return cliFile;
+    if (shiftHeld || settings.value(reopenLastShowSettingKey(), false).toBool() == false)
+        return QString();
+    const QString last = settings.value(QString("%1%2").arg(SETTINGS_RECENTFILE).arg(0)).toString();
+    if (last.isEmpty())
+        return QString();
+    if (QFileInfo::exists(last) == false)
+    {
+        if (notFound != nullptr)
+            *notFound = last;
+        return QString();
+    }
+    return last;
 }
 
 void App::setNewShowsClassic(bool on)

@@ -89,6 +89,8 @@ private slots:
      *  entry, kept for the person, read by the fixture editor too. */
     void settingsChoosesTheUnits();
     void settingsAdvancedHoldsAutoOpen();
+    void reopenLastShowDecision();
+    void reopenLastShowCheckboxRoundTrips();
     /** Q65: theme, toolbar style, the footer's chips and the speed masters'
      *  beat are in Settings ▸ Appearance, not the View menu, and set the
      *  same settings the View menu did. */
