@@ -73,7 +73,7 @@ QString VenueMenu::chipText(Doc *doc, int clashes)
     VenueCorrections *vc = venuesOf(doc);
     if (!vc->isActive())
     {
-        return tr("Venue: none");
+        return tr("Set venue\u2026");
     }
     QString text = vc->needsConfirm() ? tr("Venue: %1?").arg(vc->activeVenue())
                                       : tr("Venue: %1").arg(vc->activeVenue());

@@ -144,6 +144,7 @@
 #include "speedmasterspanel.h"
 #include "structurestudioview.h"
 #include "universeoutputview.h"
+#include "venuemenu.h"
 #include "venuerigdialog.h"
 #include "whyonpanel.h"
 #include "gobowheelsdialog.h"
@@ -2037,33 +2038,56 @@ void LayoutSanity_Test::theUxNitsAtThreeSizes()
     {
         const QString where = QStringLiteral("%1x%2").arg(z.width()).arg(z.height());
 
-        // 1. Everything view: the tabs, all of them reachable.
-        m_app->setWorkspaceView(App::EverythingView, false);
-        m_app->switchToTabContaining(view);
-        fit(z);
-        QTabBar *bar = m_app->m_tab->tabBar();
-        bool arrows = false;
-        for (QToolButton *b : bar->findChildren<QToolButton *>())
-            arrows = arrows || b->isVisibleTo(bar);
-        qInfo().noquote() << "uxnit tabs" << where << "fit" << m_app->tabFit() << "count" << bar->count()
-                          << "bar" << bar->width() << "hint" << bar->sizeHint().width()
-                          << "tab" << m_app->m_tab->width() << "arrows" << arrows;
-        shot(QStringLiteral("everything-tabs"), z);
-        if (!before)
+        // 1. Everything view: the tabs, all of them reachable, in every theme.
+        for (const auto &th : App::themeChoices())
         {
-            QVERIFY2(!arrows, qPrintable(where + ": the Everything tab strip scrolls"));
+            m_app->setTheme(th.first);
+            /* Coming to Everything from a view with fewer tabs, in a window
+               that does not change size: the tabs must be fitted again. */
+            m_app->setWorkspaceView(App::ClassicView, false);
+            fit(z);
+            m_app->setWorkspaceView(App::EverythingView, false);
+            settle();
+            QTest::qWait(50);
+            settle();
+            m_app->switchToTabContaining(view);
+            QTabBar *bar = m_app->m_tab->tabBar();
+            bool arrows = false;
+            for (QToolButton *b : bar->findChildren<QToolButton *>())
+                arrows = arrows || b->isVisibleTo(bar);
+            int last = 0;
             for (int i = 0; i < bar->count(); ++i)
-                QVERIFY2(bar->tabRect(i).right() < bar->width() && bar->tabRect(i).left() >= 0,
-                         qPrintable(where + ": tab " + bar->tabData(i).toString() + " is outside the strip"));
+                last = qMax(last, bar->tabRect(i).right());
+            qInfo().noquote() << "uxnit tabs" << where << th.second << "fit" << m_app->tabFit() << "count" << bar->count()
+                              << "bar" << bar->width() << "hint" << bar->sizeHint().width() << "lastRight" << last
+                              << "tab" << m_app->m_tab->width() << "arrows" << arrows;
+            if (th.first == App::ThemeVSCodeDark)
+                shot(QStringLiteral("everything-tabs"), z);
+            else
+                shot(QStringLiteral("everything-tabs-%1").arg(th.first), z);
+            if (!before)
+            {
+                QVERIFY2(!arrows, qPrintable(where + " " + th.second + ": the Everything tab strip scrolls"));
+                for (int i = 0; i < bar->count(); ++i)
+                    QVERIFY2(bar->tabRect(i).right() < bar->width() && bar->tabRect(i).left() >= 0,
+                             qPrintable(where + " " + th.second + ": tab " + bar->tabData(i).toString()
+                                        + " is outside the strip"));
+            }
         }
+        m_app->setTheme(App::ThemeVSCodeDark);
 
-        // 2. The footer: no "Venue: none" chip while there is no venue.
+        // 2. The footer: no "Venue: none" status word: "Set venue…" says what a click does.
         m_app->setWorkspaceView(App::ConsoleView, false);
         fit(z);
         qInfo().noquote() << "uxnit footer" << where << "venue chip" << m_app->venueFooterText();
         shot(QStringLiteral("footer"), z);
         if (!before)
-            QVERIFY2(m_app->venueFooterText().isEmpty(), qPrintable(where + ": " + m_app->venueFooterText()));
+        {
+            QCOMPARE(m_app->venueFooterText(), QString::fromUtf8("Set venue\u2026"));
+            const QWidget *chip = m_app->m_venueChip;
+            QVERIFY2(chip->width() >= chip->fontMetrics().horizontalAdvance(m_app->venueFooterText()),
+                     qPrintable(where + ": the venue chip is cut"));
+        }
 
         // 3. The Show Tree's hint line after the sub-cue words.
         m_app->setWorkspaceView(App::EverythingView, false);

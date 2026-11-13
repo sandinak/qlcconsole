@@ -242,7 +242,7 @@ their house lights, relays and subs.
 ### The venue chip
 
 - **Which room, always in sight.** The footer says the venue applied —
-  **Venue: Lincoln HS**, or **Venue: none** — and turns amber with a
+  **Venue: Lincoln HS**, or **Set venue…** when there is none — and turns amber with a
   count when it clashes with the show's own rig. Click it for the venue
   menu: switch venue, new, rename, the venue page, venue focus, the focus
   report and the clashes. **View ▸ Venue…** and the Lighting Studio's

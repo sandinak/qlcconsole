@@ -1814,8 +1814,8 @@ void FocusCallsUi_Test::theVenueChipSaysTheVenueAndOpensItsMenu()
     VenueChip chip(m_doc, &window);
     VenueCorrections *vc = m_doc->programmer()->venueCorrections();
 
-    // No venue: "none", and (in the qlcconsole views) shown all the same.
-    QCOMPARE(chip.text(), QString("Venue: none"));
+    // No venue: "Set venue…", and (in the qlcconsole views) shown all the same.
+    QCOMPARE(chip.text(), QString("Set venue\u2026"));
     QVERIFY(chip.wanted());
     QVERIFY(!chip.isAmber());
     // Classic: only once the show has venues.
@@ -1882,14 +1882,14 @@ void FocusCallsUi_Test::theVenueChipSaysTheVenueAndOpensItsMenu()
 
     // Removed (the venue manager): back to none.
     QVERIFY(vc->removeVenue("Roosevelt"));
-    QCOMPARE(chip.text(), QString("Venue: none"));
+    QCOMPARE(chip.text(), QString("Set venue\u2026"));
 
     // None from the chip's menu.
     QVERIFY(vc->setActiveVenue("Lincoln HS"));
     chip.openMenu();
     menuAction(chip.menu(), "venueSwitch")->menu()->actions().first()->trigger();
     QVERIFY(!vc->isActive());
-    QCOMPARE(chip.text(), QString("Venue: none"));
+    QCOMPARE(chip.text(), QString("Set venue\u2026"));
     chip.menu()->close();
 }
 

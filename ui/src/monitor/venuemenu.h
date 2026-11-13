@@ -48,7 +48,7 @@ class VenueMenu final
 
 public:
     /** "Venue: Lincoln HS", "Venue: Lincoln HS?" (not confirmed yet: Still
-     *  at…?), "Venue: none"; with clashes, " · 3 clashes" after it.
+     *  at…?), "Set venue…"; with clashes, " · 3 clashes" after it.
      *  @p clashes: clashCount(), when known already (-1: worked out). */
     static QString chipText(Doc *doc, int clashes = -1);
     /** What the chip says when pointed at: what is applied, whether it was
