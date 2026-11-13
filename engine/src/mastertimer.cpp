@@ -386,6 +386,14 @@ void MasterTimer::removeFunction(Function* function)
     if (function == NULL)
         return;
 
+    /* Not in the timer at all -- the common case, Doc::clearContents()
+       letting go of every function of a show: nothing to claim. */
+    {
+        QMutexLocker locker(&m_functionListMutex);
+        if (m_startQueue.contains(function) == false && m_functionList.contains(function) == false)
+            return;
+    }
+
     // Remove the function from both the running list and the start queue under
     // the lock. timerTickFunctions() holds the same (recursive) lock while it
     // iterates m_functionList, so once this returns the timer thread is

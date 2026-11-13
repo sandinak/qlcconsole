@@ -32,6 +32,10 @@
 #include "showtreeview.h"
 #include "programmercontroller.h"
 #include "markplanner.h"
+#include "mastertimer.h"
+#include "programmingmanager.h"
+#include "workbenchstack.h"
+#include "workbench.h"
 #undef protected
 #undef private
 #include "showtreecontroller.h"
@@ -870,6 +874,157 @@ void PadBenchShow_Test::theCommittedShowChecksOut()
     QVERIFY(QFile::copy(show, copy));
     QVERIFY(QFile::copy(VenueCorrections::sidecarPath(show), VenueCorrections::sidecarPath(copy)));
     check(copy);
+}
+
+/****************************************************************************
+ * Opening a show over one that plays
+ ****************************************************************************/
+
+namespace
+{
+
+/* What the MasterTimer still holds that is not a function of the Doc: a
+   pointer it would tick after the Doc deleted it. Pointers only, never
+   followed. */
+int strayFunctions(Doc *doc)
+{
+    MasterTimer *timer = doc->masterTimer();
+    QSet<Function *> live;
+    for (Function *f : doc->functions())
+        live.insert(f);
+    QMutexLocker locker(&timer->m_functionListMutex);
+    int stray = 0;
+    for (Function *f : std::as_const(timer->m_startQueue))
+        if (!live.contains(f))
+            ++stray;
+    for (Function *f : std::as_const(timer->m_functionList))
+        if (!live.contains(f))
+            ++stray;
+    return stray;
+}
+
+} // namespace
+
+/* File > Open over a show that plays (Design: the Workbench previewing what
+   it has loaded, the Show Tree previewing a cue, cue lists running): the
+   old show's functions are deleted with the timer stopped, and it starts
+   again on the new show at once. Whatever the old show's teardown started
+   again must not be left in the timer for it to tick freed (crash
+   2026-11-13: DanceHysteria-0.6, then PadBench.qlcc). */
+void PadBenchShow_Test::openingAShowOverOneThatPlays()
+{
+    const QString pad = QStringLiteral(PADBENCH_COMMITTED);
+    const QString dance = QStringLiteral(DANCE_SHOW);
+    if (!QFileInfo::exists(pad) || !QFileInfo::exists(dance))
+        QSKIP("the test shows are not there");
+    QTemporaryDir dir;
+    const QString padCopy = dir.filePath(QStringLiteral("PadBench.qlcc"));
+    const QString danceCopy = dir.filePath(QStringLiteral("Dance.qlcc"));
+    QVERIFY(QFile::copy(pad, padCopy));
+    QVERIFY(QFile::copy(VenueCorrections::sidecarPath(pad), VenueCorrections::sidecarPath(padCopy)));
+    QVERIFY(QFile::copy(dance, danceCopy));
+
+    Doc *doc = m_app->doc();
+    m_app->setWorkspaceView(App::EverythingView, false);
+    ProgrammingManager *pm = ProgrammingManager::instance();
+    QVERIFY(pm != nullptr);
+
+    int strayAtCleared = -1;
+    QMetaObject::Connection cleared = connect(doc, &Doc::cleared, this, [&]() {
+        strayAtCleared = qMax(strayAtCleared, strayFunctions(doc));
+    });
+    auto restore = qScopeGuard([&]() { disconnect(cleared); });
+
+    /* Open the way File > Open does: no Stop all first, the timer running. */
+    auto openOver = [&](const QString &path) {
+        doc->resetModified();
+        m_app->clearDocument();
+        QCOMPARE(m_app->loadShowFile(path, App::NoRecovery), QFile::NoError);
+        doc->resetModified();
+        QCOMPARE(doc->mode(), Doc::Design);
+        // The new show plays a while on the timer's thread.
+        settle(60);
+        QCOMPARE(strayFunctions(doc), 0);
+    };
+
+    QVERIFY(m_app->loadShowFile(danceCopy, App::NoRecovery) == QFile::NoError);
+    doc->setMode(Doc::Design);
+    settle(50);
+
+    const int rounds = 3;
+    for (int round = 0; round < rounds; ++round)
+    {
+        /* The dance show: Build's Workbench previews one function of each
+           kind in turn; on odd rounds its cue lists run too. */
+        m_app->switchToTabContaining(pm);
+        QList<quint32> picks;
+        for (Function::Type type : { Function::CollectionType, Function::ChaserType, Function::SceneType,
+                                     Function::RGBMatrixType, Function::EFXType })
+        {
+            const QList<Function *> of = doc->functionsByType(type);
+            if (!of.isEmpty())
+                picks << of.at(round % of.size())->id();
+        }
+        QVERIFY(!picks.isEmpty());
+        pm->showFunction(picks.at(round % picks.size()));
+        if (round % 2 == 1)
+            for (Function *f : doc->functionsByType(Function::ChaserType))
+                f->start(doc->masterTimer(), FunctionParent::master());
+        settle(80);
+
+        /* Over it, PadBench. */
+        openOver(padCopy);
+        QCOMPARE(strayAtCleared, 0);
+
+        /* PadBench: the Show Tree previews a cue; on odd rounds a list
+           runs (GO) under it, and the Workbench walks a chaser. */
+        QList<quint32> cues;
+        QList<quint32> lists;
+        for (const ShowTree::Production &p : doc->showTree()->productions())
+            for (const ShowTree::CueList &l : p.lists)
+            {
+                lists << l.chaser;
+                for (const ShowTree::Cue &c : l.cues)
+                    cues << c.id;
+            }
+        QVERIFY(!cues.isEmpty());
+        const quint32 cue = cues.at(round % cues.size());
+        if (round % 3 != 2)
+        {
+            /* The cue open in the Show Tree's Workbench, playing in context
+               -- or Solo, one layer of it. */
+            ShowTreeView *tree = ShowTreeView::instance();
+            QVERIFY(tree != nullptr);
+            m_app->switchToTabContaining(tree);
+            settle();
+            QVERIFY(tree->openInWorkbench(cue));
+            settle(30);
+            Workbench *bench = tree->dockedWorkbench();
+            QVERIFY(bench != nullptr && bench->stack() != nullptr);
+            if (round % 3 == 1)
+            {
+                bench->stack()->setFocusLayer(0);
+                bench->stack()->setSolo(true);
+            }
+        }
+        else
+            doc->showTree()->previewCue(cue);
+        if (round % 2 == 1)
+        {
+            if (Chaser *ch = qobject_cast<Chaser *>(doc->function(lists.first())))
+                doc->showControl()->go(ch, 0);
+            const QList<Function *> chasers = doc->functionsByType(Function::ChaserType);
+            if (!chasers.isEmpty())
+                pm->showFunction(chasers.at(round % chasers.size())->id());
+        }
+        settle(80);
+
+        /* And the dance show over that. */
+        openOver(danceCopy);
+        QCOMPARE(strayAtCleared, 0);
+    }
+    doc->masterTimer()->stopAllFunctions();
+    settle(50);
 }
 
 int main(int argc, char **argv)
