@@ -313,11 +313,16 @@ and the Workbench's (docked) layer row.
 - Open: Open in Workbench
 - Kind: Learn Trigger…, Skip Cue, Don't Move in Black into This Cue, Mode
   ▸, Colour ▸, Record as New Cue, Copy to a Hit, Renumber This Level…,
-  Ripple Timecode…; a hit: Colour ▸, Make VC Page
+  Ripple Timecode…; every cue of one song selected: Renumber Song… (in
+  the place Renumber This Level… has for one cue); a hit: Colour ▸, Make
+  VC Page
 - Organise: Make Sub-cue(s) of … / Make Main Cue(s), Make Cue Reusable… /
   Unlink Here, Move to Folder ▸ (a hit), Move Up, Move Down
 - Edit: Copy, Paste After This Cue / Paste into This Cue, Duplicate
 - Remove: Delete Cue / Delete Sub-cue / Delete Hit
+
+**Song (a section header row)** — Renumber Song… (greyed under free
+numbers, saying why) | Delete (+ Cue, + Hit for This List on top).
 
 **Cue list** — Learn Trigger…, Convert to Tracking…, Colour ▸, Move in
 Black ▸, Make Main List, Play on GO, Detach to Plain Chaser…, Restore

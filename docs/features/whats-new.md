@@ -42,6 +42,11 @@ The latest changes, newest first. Each links to the guide with the detail.
   bring them back up, right after their cue. Every cue still lights the
   same, it is one undo step, and a MIDI/OSC control learned on a cue still
   plays it. See [Sub-cues](show-tree.md#sub-cues).
+- **Renumber Song…** Right-click a song's header (or select every cue of
+  the song) to number each of its parts 1, 2, 3… again, keeping the song
+  and part: the clean-up after Make Main Cues. Point cues get whole numbers
+  too unless you untick it; one undo step. See [Reordering and
+  numbering](show-tree.md#reordering-and-numbering).
 
 ### Views
 

@@ -1559,6 +1559,26 @@ renumber the points at its level. The dialog lists every number that
 changes before you press OK. A renumber that would make two cues share a
 number or put the level out of order with the cues around it is refused.
 
+**Renumber Song…** (right-click a song's header row, or a cue when every
+cue of one song is selected) tidies a whole song at once: after **Make Main
+Cues** or a few cues added between, its numbers read 1.0.2, 1.0.5,
+1.0.5.5, 1.0.5.6, 1.0.6. Under **Show.Part.Iteration** each part of the
+song is numbered 1, 2, 3… in the last place, in list order (or from
+**Start** in steps of **Step**), and the song and part stay: 1.0.2, 1.0.5,
+1.0.5.5 become 1.0.1, 1.0.2, 1.0.3, and 1.2.3, 1.2.8 become 1.2.1, 1.2.2,
+so no cue changes song or part. **Point cues (1.0.3.5) get whole numbers
+too** is on by default; turn it off and a point cue keeps its point under
+its cue's new number, as with Renumber This Level. Sub-cues follow their
+cue, and a cue with fewer places (the song's count-in, *1*) stays as it is.
+Under **Hundreds per song** the song's cues are numbered in its hundred
+from Start (from 0: 200, 201, 202…). With free numbers (QLab) the numbers
+say nothing about the song, so the item is greyed: use Renumber This
+Level… on its cues. The dialog lists every change; a renumber that would
+reach a number outside the song (past 299 for song 200) or put the song out
+of order with the cues around it is refused, saying why. The song's name,
+running-order place and timecode start stay. One undo step, and it asks
+first while OSC or MSC is listening, as Renumber This Level does.
+
 **What follows a new number.** Inside the tree, cues refer to each other by
 the cue itself, not its number: includes, the base cue, sub-cues and
 reusable cues all follow. The cue list's chaser, its steps' cue numbers and

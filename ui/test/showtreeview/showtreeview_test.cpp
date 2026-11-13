@@ -10304,15 +10304,28 @@ void ShowTreeView_Test::renumberSongFromTheSongMenu()
         QVERIFY(item != nullptr && item->isEnabled());
         QCOMPARE(item->text(), QString::fromUtf8("Renumber Song…"));
         QVERIFY(menu.findChild<QAction *>("stRenumberLevel") == nullptr);
+        const QString shotDir = QString::fromLocal8Bit(qgetenv("QLC_SHOT_DIR"));
+        if (!shotDir.isEmpty())
+        {
+            menu.ensurePolished();
+            menu.adjustSize();
+            menu.grab().save(shotDir + "/song-menu-after.png");
+            item->setVisible(false);                    // the menu before
+            menu.adjustSize();
+            menu.grab().save(shotDir + "/song-menu-before.png");
+            item->setVisible(true);
+        }
 
         // Its dialog lists the changes; OK renumbers.
-        ModalCloser ok([](QWidget *w) {
+        ModalCloser ok([shotDir](QWidget *w) {
             QDialog *dlg = qobject_cast<QDialog *>(w);
             QLabel *preview = w->findChild<QLabel *>("stRenumberPreview");
             if (dlg == nullptr || preview == nullptr || w->findChild<QCheckBox *>("stRenumberWholePoints") == nullptr)
                 return false;
             if (!preview->text().contains(QString::fromUtf8("1.0.5 → 1.0.2")))
                 return false;
+            if (!shotDir.isEmpty())
+                dlg->grab().save(shotDir + "/renumber-song-dialog-after.png");
             dlg->accept();
             return true;
         });
