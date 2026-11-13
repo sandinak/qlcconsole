@@ -534,7 +534,9 @@ and right is their right. Nobody turns the picture round in their head.
   subject holds still while you do it. The footer says *setting the facing*
   while you hold the click, and what it set when you let go. Pushed the
   way they already face, it says *Facing 270°, as it was*; pushed less
-  than half way, *Facing unchanged*. **View + LS** is still Centre Sticks.
+  than half way, *Facing unchanged*. On a narrow window the footer
+  shortens the Follow chip to keep that message (*◎ Follow · Facing
+  300°*); hover over it for the whole line. **View + LS** is still Centre Sticks.
 - **Kept per controller and per venue**, with the show: a DualSense in the
   SL tower and a DUALSHOCK 4 out front each keep their own, and each venue
   its own (one set for the venue with no controller named is used for any

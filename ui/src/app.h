@@ -1214,6 +1214,14 @@ private:
     QLabel* m_statusSelectionLabel;
     QLabel* m_statusPadModeLabel;
     QLabel *m_statusFollowLabel = nullptr;
+    /** The follow chip's line, most said first, then shorter: the footer
+     *  shows the longest that fits (fitStatusBar()) rather than dropping the
+     *  chip -- the last ones keep only what the pad just did. */
+    QStringList m_followChipVariants;
+    QString m_followChipColour;
+    QLabel *m_followChipMeasure = nullptr;      ///< measures a variant, never shown
+    QString followChipHtml(const QString &plain) const;
+    int followChipWidth(const QString &plain);
     /** Rig network transmit gate: red while network output is held because
      *  this machine is not on the show's rig network, amber when the show
      *  has none set or the check is off/lifted. Click opens the setting. */

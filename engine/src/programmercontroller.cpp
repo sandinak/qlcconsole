@@ -2196,6 +2196,7 @@ void ProgrammerController::finishFacingRecalibration()
     if (f < 0)
     {
         m_facingSaid = padText(tr("Facing unchanged: push a stick further while you hold {LS}"));
+        m_facingShort = tr("Facing unchanged: push further");
         tellOperator(padText(tr("Facing unchanged: hold {LS} and push a stick toward centre stage.")),
                      ControllerScheme::ConfirmPriority);
     }
@@ -2203,6 +2204,7 @@ void ProgrammerController::finishFacingRecalibration()
     {
         // Pushed the way they already face: kept, and said so.
         m_facingSaid = tr("Facing %1, as it was").arg(FollowSpotOperator::facingName(f));
+        m_facingShort = tr("Facing %1°, as it was").arg(f);
         tellOperator(m_facingSaid, ControllerScheme::ConfirmPriority);
     }
     else
@@ -2210,6 +2212,7 @@ void ProgrammerController::finishFacingRecalibration()
         op.facing = f;
         setFollowSpotOperator(op);
         m_facingSaid = tr("Facing %1").arg(FollowSpotOperator::facingName(f));
+        m_facingShort = tr("Facing %1°").arg(f);
         tellOperator(m_facingSaid, ControllerScheme::ConfirmPriority);
     }
     updateFollowSpotStatus(joystickScene());
@@ -4533,7 +4536,10 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
                 st.saved = m_followSaved;
             st.settingFacing = m_recalHeld;
             if (!m_recalHeld && m_facingSaidClock.isValid() && m_facingSaidClock.elapsed() < 4000)
+            {
                 st.facingSaid = m_facingSaid;
+                st.facingShort = m_facingShort;
+            }
             if (!stickPatched())
                 st.state = FollowSpotStatus::NoStick;
             else if (m_followMovedClock.isValid() && m_followMovedClock.elapsed() < 400)
