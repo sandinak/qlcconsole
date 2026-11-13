@@ -19,6 +19,7 @@
 
 #include <QScopedPointer>
 #include <QtTest>
+#include <QDir>
 #include <QShortcut>
 #include "../common/fakewled.h"
 #include <QScrollBar>

@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include <QDir>
 #include <QTreeWidgetItemIterator>
 #include <QMenu>
 #include <memory>

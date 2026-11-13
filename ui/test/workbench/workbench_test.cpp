@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QDir>
 #include <QScopeGuard>
 #include <QTreeWidgetItemIterator>
 #include <QXmlStreamReader>
