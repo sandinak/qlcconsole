@@ -9183,6 +9183,12 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
             for (QAction *a : staging->actions())
                 menu.add(ContextMenu::Kind, a);
         }
+        // Every cue of one song selected: Renumber Song… where a single
+        // cue's Renumber This Level… is.
+        quint32 songList = invalidId();
+        Section song;
+        if (!hit && !single && cuesAreOneSong(cues, &songList, &song))
+            renumberSongItem(menu, songList, song);
         if (hit && list != nullptr)
         {
             const QString folder = m_st->cue(cueId) == nullptr ? QString() : m_st->cue(cueId)->folder;
@@ -9373,7 +9379,30 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
                  QStringLiteral("stDeleteProduction"));
         return;
     }
+    if (kind == SectionNode && !inLooks)
+    {
+        // A song: Renumber Song… tidies its numbers part by part.
+        Section song;
+        if (currentSection(&song))
+            renumberSongItem(menu, id, song);
+    }
     menu.add(ContextMenu::Remove, tr("Delete"), [this]() { slotDelete(); });
+}
+
+void ShowTreeView::renumberSongItem(ContextMenu &menu, quint32 listId, const Section &song)
+{
+    QAction *a = menu.add(ContextMenu::Kind, tr("Renumber Song…"),
+                          [this, listId, song]() { renumberSong(listId, song); }, QStringLiteral("stRenumberSong"));
+    if (m_st->listNumbering(listId) == Numbering::Manual)
+    {
+        a->setEnabled(false);
+        a->setToolTip(tr("Manual numbering: the numbers say nothing about the song. Renumber This Level… on "
+                         "its cues instead."));
+    }
+    else
+    {
+        a->setToolTip(tr("Each part's cues 1, 2, 3… in list order; no cue changes song or part"));
+    }
 }
 
 void ShowTreeView::listClipboardItems(ContextMenu &menu, const QString &what)

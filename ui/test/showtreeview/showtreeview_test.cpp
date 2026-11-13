@@ -10255,6 +10255,125 @@ void ShowTreeView_Test::renumberThisLevelAsksFirstWhileShowControlListens()
     QCOMPARE(numbers(), QStringList({ "10", "20", "30" }));
 }
 
+/* Renumber Song… (2026-11-12): a song row's right-click, and a cue's when
+   the selection is every cue of one song; its dialog renumbers each part
+   1, 2, 3… in one undo step. */
+void ShowTreeView_Test::renumberSongFromTheSongMenu()
+{
+    const bool oscWas = ShowControlListener::oscEnabled(), mscWas = ShowControlListener::mscEnabled();
+    const int portWas = ShowControlListener::oscPort(), deviceWas = ShowControlListener::mscDeviceId();
+    auto restore = qScopeGuard([=]() { ShowControlListener::setSettings(oscWas, portWas, mscWas, deviceWas); });
+    ShowControlListener::setSettings(false, portWas, false, deviceWas);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "Show", ListMode::Tracking);
+    QVERIFY(st->setNumbering(prod, ShowTree::Numbering::ShowPartIteration));
+    const quint32 a = st->addSection(list, "Entrance");             // 1.0.1
+    const quint32 b = st->addCue(list, 0, "B");                     // 1.0.2
+    const quint32 c = st->addCue(list, 1, "C");                     // 1.0.3
+    st->addSection(list, "Finale");                                 // 2.0.1
+    Cue cb = *st->cue(b);
+    cb.number = "1.0.5";
+    QVERIFY(st->setCue(cb));
+    Cue cc = *st->cue(c);
+    cc.number = "1.0.9";
+    QVERIFY(st->setCue(cc));
+    auto numbers = [st, list]() {
+        QStringList out;
+        const CueList *l = st->cueList(list);
+        for (int i = 0; i < l->cues.count(); ++i)
+            out << st->cueNumber(*l, i);
+        return out;
+    };
+    QCOMPARE(numbers(), QStringList({ "1.0.1", "1.0.5", "1.0.9", "2.0.1" }));
+
+    ShowTreeView view(nullptr, m_doc);
+    QTreeWidgetItem *songRow = nullptr;
+    for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::SectionNode
+            && (*it)->text(0).contains("Entrance"))
+            songRow = *it;
+    QVERIFY(songRow != nullptr);
+    view.tree()->setCurrentItem(songRow);
+
+    // The song row: Renumber Song…, and no Renumber This Level… beside it.
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, songRow);
+        QAction *item = menu.findChild<QAction *>("stRenumberSong");
+        QVERIFY(item != nullptr && item->isEnabled());
+        QCOMPARE(item->text(), QString::fromUtf8("Renumber Song…"));
+        QVERIFY(menu.findChild<QAction *>("stRenumberLevel") == nullptr);
+
+        // Its dialog lists the changes; OK renumbers.
+        ModalCloser ok([](QWidget *w) {
+            QDialog *dlg = qobject_cast<QDialog *>(w);
+            QLabel *preview = w->findChild<QLabel *>("stRenumberPreview");
+            if (dlg == nullptr || preview == nullptr || w->findChild<QCheckBox *>("stRenumberWholePoints") == nullptr)
+                return false;
+            if (!preview->text().contains(QString::fromUtf8("1.0.5 → 1.0.2")))
+                return false;
+            dlg->accept();
+            return true;
+        });
+        item->trigger();
+        QCOMPARE(ok.seen.count(), 1);
+    }
+    QCOMPARE(numbers(), QStringList({ "1.0.1", "1.0.2", "1.0.3", "2.0.1" }));
+    QCOMPARE(st->undoText(), QString("Renumber song"));
+    QVERIFY(st->undo());
+    QCOMPARE(numbers(), QStringList({ "1.0.1", "1.0.5", "1.0.9", "2.0.1" }));
+
+    // Every cue of the song selected: the cue menu has it too; two of its
+    // three cues: not.
+    view.tree()->clearSelection();
+    QVERIFY(view.selectNode(a));
+    QTreeWidgetItem *rowA = view.tree()->currentItem();
+    QVERIFY(view.selectNode(c));
+    QTreeWidgetItem *rowC = view.tree()->currentItem();
+    rowA->setSelected(true);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, rowC);
+        QVERIFY(menu.findChild<QAction *>("stRenumberSong") == nullptr);
+    }
+    QVERIFY(view.selectNode(b));
+    QTreeWidgetItem *rowB = view.tree()->currentItem();
+    rowA->setSelected(true);
+    rowC->setSelected(true);
+    QCOMPARE(view.selectedCues().count(), 3);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, rowB);
+        QVERIFY(menu.findChild<QAction *>("stRenumberSong") != nullptr);
+    }
+    // Without the dialog (from 10 in tens).
+    ShowTree::Section song;
+    quint32 songList = ShowTree::invalidId();
+    QVERIFY(view.cuesAreOneSong({ a, b, c }, &songList, &song));
+    QCOMPARE(songList, list);
+    QVERIFY(view.renumberSong(list, song, 10, 10, true, false));
+    QCOMPARE(numbers(), QStringList({ "1.0.10", "1.0.20", "1.0.30", "2.0.1" }));
+
+    // Manual numbering: greyed, saying why.
+    QVERIFY(st->setNumbering(prod, ShowTree::Numbering::Manual));
+    QVERIFY(st->addSection(list, "By hand", a) == a);
+    QCoreApplication::processEvents();
+    songRow = nullptr;
+    for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::SectionNode)
+            songRow = *it;
+    QVERIFY(songRow != nullptr);
+    view.tree()->setCurrentItem(songRow);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, songRow);
+        QAction *item = menu.findChild<QAction *>("stRenumberSong");
+        QVERIFY(item != nullptr && !item->isEnabled());
+        QVERIFY(item->toolTip().contains("Manual"));
+    }
+}
+
 /* CHANGELOG [0.2.2] "One word per idea, part 2": the busking Looks are now
    Hits -- "+ Hit, the Hits section, Adopt as a hit, Copy to a hit". A cue's
    right-click says Copy to a hit, a Library scene's says Adopt as a hit,

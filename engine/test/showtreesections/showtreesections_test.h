@@ -50,6 +50,8 @@ private slots:
     void mergeInTheShowPlaysEveryList();
     void sectionsSaveAndLoad();
     void usageInASection();
+    void renumberSongTidiesEachPart();
+    void renumberSongUnderHundreds();
 
     // Tonight's running order (ro)
     void runningOrderPureRules();
