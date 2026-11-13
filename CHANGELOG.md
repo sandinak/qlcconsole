@@ -21,7 +21,9 @@ views turn with them. The Steam Deck and phone remote gain **Blind** and
 qlcconsole view Build is hidden: what opened there opens in the Show Tree,
 which now has the programmer strip too. The Show Tree can make selected cues
 sub-cues and back again (⌘] / ⌘[) and **Renumber Song…**; move in black
-treats a closed shutter as dark. **Settings ▸ Performance** checks much more
+treats a closed shutter as dark and now works into a cue that waits for GO.
+The app can open the last show at start, and the Rig Overview stays on
+screen when you click into another app. **Settings ▸ Performance** checks much more
 about the computer it runs on, and Operate keeps the screen awake by default.
 UI fixes for 1024-wide screens, the plot turn (plan only), What's New and
 the course catch up with the 0.4.x workflow. Like 0.4.3 it is built on
@@ -80,8 +82,10 @@ changed definitions from QLC+ upstream since 0.4.3).
 - **RGB colour effects** (Rainbow, Color Spread and the like) don't run on
   colour-wheel or CMY movers, so the effect picker doesn't offer them for
   such groups.
-- **On macOS a long on-screen session can grow memory slowly.** It has not
-  been reproduced offscreen, where memory levels off with no leaks.
+- **On macOS, Activity Monitor's Real Memory can climb during a long
+  on-screen session** (about 50 MB an hour). It is memory the app has freed
+  and macOS still counts: in a 7-hour soak the app's own memory and its
+  footprint stayed flat.
 - **Not yet tried on real hardware:** the Steam Deck's new Blind / Solo
   buttons and the pad's hold-A answer (a Deck checklist is in
   [gamepad-remote.md](docs/features/gamepad-remote.md#hardware-checklist)),
