@@ -1377,7 +1377,8 @@ bool ConnectionEditor::commitPending()
 
 void ConnectionEditor::reloadIfClean()
 {
-    if (m_commitQueued || formState() != m_cleanState)
+    /* A commit queued with nothing changed (a fill's own) is no edit. */
+    if (formState() != m_cleanState)
         return;
     load();
 }

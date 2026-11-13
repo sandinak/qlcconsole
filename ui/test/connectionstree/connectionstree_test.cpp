@@ -3280,8 +3280,8 @@ void ConnectionsTree_Test::byUniverseShowsTheSelectedUniversesSettings()
     QApplication::processEvents();
     QCOMPARE(iom->universe(1)->outputPatch(0)->getPluginParameters().value("outputUni").toUInt(),
              quint32(17));
-    QCOMPARE(universeRow(tree.m_tree, 1)->text(COL_U), QString("0:0:17"));
-    QCOMPARE(tree.m_connPane->m_targetPort->text(), QString("0:0:17"));
+    QCOMPARE(universeRow(tree.m_tree, 1)->text(COL_U), QString("0:1:1"));
+    QCOMPARE(tree.m_connPane->m_targetPort->text(), QString("0:1:1"));
     // Refused in the pane: it says why there; nothing changes.
     typeInto(tree.m_connPane->m_targetPort, "40000");
     emit tree.m_connPane->m_targetPort->editingFinished();
@@ -3292,7 +3292,7 @@ void ConnectionsTree_Test::byUniverseShowsTheSelectedUniversesSettings()
              quint32(17));
     // Esc puts it back.
     tree.m_connPane->reject();
-    QCOMPARE(tree.m_connPane->m_targetPort->text(), QString("0:0:17"));
+    QCOMPARE(tree.m_connPane->m_targetPort->text(), QString("0:1:1"));
     QVERIFY(tree.m_connPane->isVisibleTo(&tree));
 
     // Another universe: the pane follows the selection.
