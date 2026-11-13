@@ -2009,6 +2009,107 @@ void LayoutSanity_Test::theTabStripFitsTheWindow()
     settle();
 }
 
+void LayoutSanity_Test::theUxNitsAtThreeSizes()
+{
+    const bool before = qEnvironmentVariableIsSet("UXNIT_BEFORE");
+    const QString shots = qEnvironmentVariable("UXNIT_SHOTS");
+    const QString tag = qEnvironmentVariable("UXNIT_TAG", QStringLiteral("after"));
+    const int oldView = m_app->m_workspaceView;
+    const int oldTheme = m_app->theme();
+    m_app->setTheme(App::ThemeVSCodeDark);
+    m_app->setTabLabelMode(App::TabAuto);
+    auto shot = [&](const QString &name, const QSize &z) {
+        if (shots.isEmpty())
+            return;
+        QDir().mkpath(shots);
+        m_app->grab().save(QStringLiteral("%1/%2-%3-%4x%5.png").arg(shots, tag, name).arg(z.width()).arg(z.height()));
+    };
+    auto fit = [&](const QSize &z) {
+        m_app->resize(z);
+        settle();
+        QTest::qWait(50);
+        settle();
+    };
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+
+    for (const QSize &z : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        const QString where = QStringLiteral("%1x%2").arg(z.width()).arg(z.height());
+
+        // 1. Everything view: the tabs, all of them reachable.
+        m_app->setWorkspaceView(App::EverythingView, false);
+        m_app->switchToTabContaining(view);
+        fit(z);
+        QTabBar *bar = m_app->m_tab->tabBar();
+        bool arrows = false;
+        for (QToolButton *b : bar->findChildren<QToolButton *>())
+            arrows = arrows || b->isVisibleTo(bar);
+        qInfo().noquote() << "uxnit tabs" << where << "fit" << m_app->tabFit() << "count" << bar->count()
+                          << "bar" << bar->width() << "hint" << bar->sizeHint().width()
+                          << "tab" << m_app->m_tab->width() << "arrows" << arrows;
+        shot(QStringLiteral("everything-tabs"), z);
+        if (!before)
+        {
+            QVERIFY2(!arrows, qPrintable(where + ": the Everything tab strip scrolls"));
+            for (int i = 0; i < bar->count(); ++i)
+                QVERIFY2(bar->tabRect(i).right() < bar->width() && bar->tabRect(i).left() >= 0,
+                         qPrintable(where + ": tab " + bar->tabData(i).toString() + " is outside the strip"));
+        }
+
+        // 2. The footer: no "Venue: none" chip while there is no venue.
+        m_app->setWorkspaceView(App::ConsoleView, false);
+        fit(z);
+        qInfo().noquote() << "uxnit footer" << where << "venue chip" << m_app->venueFooterText();
+        shot(QStringLiteral("footer"), z);
+        if (!before)
+            QVERIFY2(m_app->venueFooterText().isEmpty(), qPrintable(where + ": " + m_app->venueFooterText()));
+
+        // 3. The Show Tree's hint line after the sub-cue words.
+        m_app->setWorkspaceView(App::EverythingView, false);
+        m_app->switchToTabContaining(view);
+        fit(z);
+        QTreeWidget *tree = view->m_tree;
+        QTreeWidgetItem *cue = nullptr;
+        for (QTreeWidgetItemIterator it(tree); *it != nullptr && cue == nullptr; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode)
+                cue = *it;
+        QVERIFY(cue != nullptr);
+        view->selectNode(cue->data(0, ShowTreeView::IdRole).toUInt());
+        const QStringList said = [&]() {
+            QStringList out;
+            view->convertSelectedCues(1);               // "⌘[ makes sub-cues main cues..."
+            out << view->m_hint->text();
+            view->convertSelectedCues(0);               // first cue: nothing before it, or ⌘] ...
+            out << view->m_hint->text();
+            view->m_hint->setText(QString());
+            return out;
+        }();
+        for (int h = 0; h < said.size(); ++h)
+        {
+            view->m_hint->setText(said.at(h));
+            settle();
+            QTest::qWait(30);
+            settle();
+            const QLabel *l = view->m_hint;
+            const int need = l->fontMetrics().horizontalAdvance(said.at(h));
+            const bool whole = l->wordWrap() ? l->heightForWidth(l->width()) <= l->height() + 1
+                                             : l->width() >= need;
+            qInfo().noquote() << "uxnit hint" << where << h << "width" << l->width() << "needs" << need
+                              << "wrap" << l->wordWrap() << "h" << l->height() << "whole" << whole
+                              << "text" << said.at(h);
+            shot(QStringLiteral("hint%1").arg(h), z);
+            if (!before)
+                QVERIFY2(whole, qPrintable(where + ": hint cut: " + said.at(h)));
+        }
+        view->m_hint->setText(QString());
+    }
+    m_app->setTheme(oldTheme);
+    m_app->setWorkspaceView(App::WorkspaceView(oldView), false);
+    m_app->resize(1280, 800);
+    settle();
+}
+
 void LayoutSanity_Test::everyScreenIsLaidOutCleanly_data()
 {
     QTest::addColumn<int>("index");
