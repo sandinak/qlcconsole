@@ -8187,6 +8187,24 @@ bool ShowTreeView::dropCues(const QList<quint32> &cueIds, quint32 onCueId, bool 
     return ok;
 }
 
+QString ShowTreeView::renumberLines(const QList<ShowTreeController::Renumbered> &plan, int most) const
+{
+    QStringList out;
+    for (const ShowTreeController::Renumbered &r : plan.mid(0, most))
+    {
+        const Cue *c = m_st->cue(r.cue);
+        const CueList *l = m_st->listOfCue(r.cue);
+        const bool sub = l != nullptr && l->isSubCues();
+        QString line = tr("%1 → %2").arg(r.from, r.to);
+        if (c != nullptr && !c->name.isEmpty())
+            line += QStringLiteral("  ") + c->name;
+        out << (sub ? QStringLiteral("    ↳ ") + line : line);
+    }
+    if (plan.count() > most)
+        out << tr("… and %1 more").arg(plan.count() - most);
+    return out.join(QStringLiteral("\n"));
+}
+
 bool ShowTreeView::renumberLevel(quint32 cueId, int start, int step, bool ask)
 {
     const CueList *list = m_st->listOfCue(cueId);
@@ -8214,6 +8232,8 @@ bool ShowTreeView::renumberLevel(quint32 cueId, int start, int step, bool ask)
         f->addRow(tr("Start"), from);
         f->addRow(tr("Step"), by);
         QLabel *preview = new QLabel(&dlg);
+        preview->setObjectName("stRenumberPreview");
+        preview->setTextFormat(Qt::PlainText);
         preview->setWordWrap(true);
         preview->setTextInteractionFlags(Qt::TextSelectableByMouse);
         f->addRow(preview);
@@ -8225,12 +8245,7 @@ bool ShowTreeView::renumberLevel(quint32 cueId, int start, int step, bool ask)
             QString why;
             const QList<ShowTreeController::Renumbered> plan = m_st->renumberLevelPlan(cueId, from->value(),
                                                                                        by->value(), &why);
-            QStringList lines;
-            for (const ShowTreeController::Renumbered &r : plan.mid(0, 12))
-                lines << tr("%1 → %2").arg(r.from, r.to);
-            if (plan.count() > 12)
-                lines << tr("… and %1 more").arg(plan.count() - 12);
-            preview->setText(plan.isEmpty() ? why : lines.join(QStringLiteral("\n")));
+            preview->setText(plan.isEmpty() ? why : renumberLines(plan, 12));
             box->button(QDialogButtonBox::Ok)->setEnabled(!plan.isEmpty());
         };
         connect(from, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, update);
@@ -8246,16 +8261,11 @@ bool ShowTreeView::renumberLevel(quint32 cueId, int start, int step, bool ask)
         if (ShowControlListener::oscEnabled() || ShowControlListener::mscEnabled())
         {
             const QList<ShowTreeController::Renumbered> plan = m_st->renumberLevelPlan(cueId, start, step);
-            QStringList lines;
-            for (const ShowTreeController::Renumbered &r : plan.mid(0, 20))
-                lines << tr("%1 → %2").arg(r.from, r.to);
-            if (plan.count() > 20)
-                lines << tr("… and %1 more").arg(plan.count() - 20);
             if (QMessageBox::question(this, tr("Renumber this level"),
                                       tr("Show control (OSC / MSC) is listening, and fires cues by number. "
                                          "Anything sending these numbers -- QLab, a desk, a MIDI or OSC "
                                          "trigger -- will fire other cues until it is changed too:\n\n%1\n\n"
-                                         "Renumber?").arg(lines.join(QStringLiteral("\n"))))
+                                         "Renumber?").arg(renumberLines(plan, 20)))
                 != QMessageBox::Yes)
                 return false;
         }
