@@ -1196,6 +1196,13 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
                          .arg(ch).arg(int(role)).arg(during).arg(run->isEnabled()).arg(run->holder()).arg(run->isWalking());
             QVERIFY2(ok, qPrintable(table.last()));
             QVERIFY2(during.startsWith(QStringLiteral("Pad: Run")), qPrintable(table.last()));
+            // The triggers step the cue list, and the screen says which.
+            if (role == GamepadRole::RightTrigger || role == GamepadRole::LeftTrigger)
+                QVERIFY2(during.contains(QStringLiteral("List: ")), qPrintable(table.last()));
+            // A press that needs the arm says so, beside the role.
+            if (role == GamepadRole::A || role == GamepadRole::B || role == GamepadRole::X
+                || role == GamepadRole::Y || role == GamepadRole::RB)
+                QVERIFY2(during.contains(QStringLiteral("to arm")), qPrintable(table.last()));
             press(ch, axis ? 128 : 0);
             settle(100);
         }
@@ -1207,8 +1214,7 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
         qInfo().noquote() << "[PAD RUN] after Menu:" << chip->text() << run->isWalking() << run->holder();
         if (run->isWalking())
         {
-            QVERIFY2(chip->text().contains(QStringLiteral("Menu")) || chip->text().contains(QStringLiteral("Options")),
-                     qPrintable(chip->text()));
+            QVERIFY2(chip->text().contains(QStringLiteral("to go back")), qPrintable(chip->text()));
             tap(kMenu);
         }
         QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Run"), 3000);

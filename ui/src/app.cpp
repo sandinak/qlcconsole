@@ -9930,8 +9930,14 @@ void App::updatePadRoleChip()
        moment what the last press could not do ("Hold LB to arm."), which
        lights-only feedback never says aloud. */
     const QString notice = run->notice();
-    m_statusPadRoleLabel->setText(notice.isEmpty() ? run->roleText()
-                                                   : run->roleText() + QStringLiteral(" · ") + notice);
+    /* Walking says how to get back; a notice (a refused press, the list
+       just stepped to) follows the role text, never replaces it. */
+    QString text = run->roleText();
+    if (run->isWalking())
+        text += QStringLiteral(" · ") + pc->padText(tr("{Menu} to go back"));
+    if (!notice.isEmpty())
+        text += QStringLiteral(" · ") + notice;
+    m_statusPadRoleLabel->setText(text);
     m_statusPadRoleLabel->setStyleSheet(run->isArmed()
         ? QStringLiteral("QLabel { color: black; background: %1; font-weight: bold; padding: 0 4px; }")
               .arg(PadRun::armedColour().name())

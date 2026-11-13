@@ -284,6 +284,10 @@ QString PadRun::helpHtml() const
                .arg(tr("Control"), tr("What It Does"));
     for (Action a : actions())
         out += row(PadNames::name(roleFor(a), fam), PadNames::expand(label(a), fam));
+    out += row(tr("Sticks, D-pad"), tr("The follow spot, when one plays (D-pad up / down: speed, left / right: beam size); "
+                                       "otherwise nothing"));
+    out += row(m_pc->padText(QStringLiteral("{View}")) + QStringLiteral(" + ") + PadNames::name(GamepadRole::LS, fam),
+               tr("Centre Sticks"));
     out += row(m_pc->padText(QStringLiteral("{View}")) + QStringLiteral(" + ")
                    + m_pc->padText(QStringLiteral("{Menu}")),
                tr("Hold 1 s: switch between Run and Tools"));
@@ -615,7 +619,10 @@ void PadRun::stepList(int delta)
     if (all.isEmpty())
     {
         if (m_pc != nullptr)
+        {
             m_pc->tellOperator(tr("No cue lists."), ControllerScheme::ConfirmPriority);
+            showNotice(tr("No cue lists."));
+        }
         return;
     }
     quint32 at = listChaser();
@@ -627,7 +634,11 @@ void PadRun::stepList(int delta)
     m_list = all.at(next);
     emit listChanged(m_list);
     if (m_pc != nullptr)
+    {
         m_pc->tellOperator(tr("%1.").arg(listName(m_list)), ControllerScheme::WherePriority);
+        // On the screen too: with lights-only feedback nothing is said.
+        showNotice(tr("List: %1").arg(listName(m_list)));
+    }
 }
 
 QString PadRun::listName(quint32 chaser) const

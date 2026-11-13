@@ -1139,7 +1139,15 @@ void CueRunner::refreshPadRun()
     // "Pad: Run", "Pad: ARMED"... or the tool that has the pad until it ends.
     m_padRunBtn->setText(run->roleText());
     m_padRunBtn->setStyleSheet(run->isArmed()
-        ? QStringLiteral("QToolButton { color: black; background: %1; }").arg(PadRun::armedColour().name())
+        ? QStringLiteral("QToolButton { color: black; background: %1; font-weight: bold; }")
+              .arg(PadRun::armedColour().name())
+        : QString());
+    /* Armed shows across the whole tab, not only on the button: a frame in
+       the armed colour round the Run tab for as long as the arm is held --
+       gone the moment it is let go (no fade, no blink). */
+    setAttribute(Qt::WA_StyledBackground, true);
+    setStyleSheet(run->isArmed()
+        ? QStringLiteral("CueRunner { border: 5px solid %1; }").arg(PadRun::armedColour().name())
         : QString());
     m_padRunBtn->setToolTip(run->helpHtml());
 }
