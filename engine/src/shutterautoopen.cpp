@@ -114,6 +114,52 @@ bool ShutterAutoOpen::isOpenName(const QLCCapability *cap)
         || n == QLatin1String("shutter opened") || n == QLatin1String("beam open");
 }
 
+bool ShutterAutoOpen::isCloseCapability(const QLCCapability *cap)
+{
+    if (cap == nullptr)
+        return false;
+    if (cap->preset() == QLCCapability::ShutterClose)
+        return true;
+    QString n = cap->name().toLower().simplified();
+    n.remove(QLatin1Char('(')).remove(QLatin1Char(')'));
+    return n == QLatin1String("closed") || n == QLatin1String("close")
+        || n == QLatin1String("shutter closed") || n == QLatin1String("shutter close")
+        || n == QLatin1String("closed shutter") || n == QLatin1String("close shutter")
+        || n == QLatin1String("beam closed") || n == QLatin1String("blackout");
+}
+
+QVector<QPair<uchar, uchar> > ShutterAutoOpen::closedRanges(const QLCChannel *ch)
+{
+    QVector<QPair<uchar, uchar> > ranges;
+    if (ch == nullptr || ch->group() != QLCChannel::Shutter
+        || ch->controlByte() != QLCChannel::MSB || isIris(ch))
+        return ranges;
+    foreach (const QLCCapability *cap, ch->capabilities())
+        if (isCloseCapability(cap))
+            ranges.append(qMakePair(cap->min(), cap->max()));
+    return ranges;
+}
+
+QVector<quint32> ShutterAutoOpen::closingShutters(const Fixture *fx)
+{
+    QVector<quint32> out;
+    if (fx == nullptr)
+        return out;
+    for (quint32 c = 0; c < fx->channels(); c++)
+        if (closedRanges(fx->channel(c)).isEmpty() == false)
+            out.append(c);
+    return out;
+}
+
+bool ShutterAutoOpen::closesAt(const QLCChannel *ch, uchar value)
+{
+    const QVector<QPair<uchar, uchar> > ranges = closedRanges(ch);
+    for (const QPair<uchar, uchar> &r : ranges)
+        if (value >= r.first && value <= r.second)
+            return true;
+    return false;
+}
+
 int ShutterAutoOpen::openValue(const QLCChannel *ch)
 {
     if (ch == nullptr || ch->group() != QLCChannel::Shutter

@@ -46,6 +46,8 @@
 #include "wledfixture.h"
 #include "chaseraction.h"
 #include "inputoutputmap.h"
+#include "qlccapability.h"
+#include "shutterautoopen.h"
 #include <QBuffer>
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
@@ -731,4 +733,305 @@ void MarkPlanner_Test::aPresetIsPutBackWhenItsCueIsJumpedPast()
     chaser->stop(FunctionParent::master());
     for (int i = 0; i < 4; ++i)
         timer.timerTick();
+}
+
+/*****************************************************************************
+ * A shutter is a dimmer too
+ *****************************************************************************/
+
+quint32 MarkPlanner_Test::addShutterFixture(quint32 address, bool dimmer, bool shutter)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel(QString("Shutter %1%2").arg(dimmer).arg(shutter));
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    auto add = [&](const QString &name, QLCChannel::Group grp) {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(name);
+        ch->setGroup(grp);
+        def->addChannel(ch);
+        mode->insertChannel(ch, def->channels().size() - 1);
+        return ch;
+    };
+    add("Pan", QLCChannel::Pan);
+    if (dimmer)
+        add("Dimmer", QLCChannel::Intensity);
+    QLCChannel *sh = add(shutter ? "Shutter" : "Strobe", QLCChannel::Shutter);
+    if (shutter)
+    {
+        QLCCapability *closed = new QLCCapability(0, 7, "Closed");
+        closed->setPreset(QLCCapability::ShutterClose);
+        QLCCapability *open = new QLCCapability(8, 255, "Open");
+        open->setPreset(QLCCapability::ShutterOpen);
+        sh->addCapability(closed);
+        sh->addCapability(open);
+    }
+    else
+    {
+        sh->addCapability(new QLCCapability(0, 9, "No function"));
+        sh->addCapability(new QLCCapability(10, 255, "Strobe (slow to fast)"));
+    }
+    mode->cacheHeads();
+    def->addMode(mode);
+
+    Fixture *fx = new Fixture(m_doc);
+    fx->setFixtureDefinition(def, mode);
+    fx->setUniverse(0);
+    fx->setAddress(address);
+    m_doc->addFixture(fx);
+    return fx->id();
+}
+
+namespace
+{
+/** A cue list on its first (empty) step, @p next its next. */
+void startChaserInto(Doc *doc, Scene *next)
+{
+    Scene *current = new Scene(doc);
+    current->setName("Current");
+    doc->addFunction(current);
+    doc->addFunction(next);
+    Chaser *chaser = new Chaser(doc);
+    chaser->setDuration(MasterTimer::tick() * 10);
+    chaser->addStep(current->id());
+    chaser->addStep(next->id());
+    doc->addFunction(chaser);
+    MasterTimer timer(doc);
+    chaser->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    QCOMPARE(chaser->computeNextStep(0), 1);
+}
+
+/** What is on stage now: @p values as the channels' resting values. */
+void setLive(Doc *doc, const QList<QPair<int, int> > &values)
+{
+    Universe *uni = doc->inputOutputMap()->universes().first();
+    for (const QPair<int, int> &v : values)
+        uni->setChannelDefaultValue(ushort(v.first), uchar(v.second));
+    uni->processFaders();
+}
+
+int live(Doc *doc, int address)
+{
+    Universe *uni = doc->inputOutputMap()->universes().first();
+    uni->processFaders();
+    return int(uni->postGMValue(address));
+}
+
+/** One DMX frame of the mark's hand-off, and its queued release. */
+void handOff(Doc *doc, MarkEffect *mark)
+{
+    Universe *uni = doc->inputOutputMap()->universes().first();
+    uni->processFaders();
+    mark->writeDMX(nullptr, doc->inputOutputMap()->universes());
+    QCoreApplication::processEvents();
+}
+}
+
+void MarkPlanner_Test::closedIsTheDefinitionsCloseCapability()
+{
+    const quint32 sid = addShutterFixture(100, true, true);
+    const quint32 strobeId = addShutterFixture(110, false, false);
+    Fixture *spot = m_doc->fixture(sid);
+    Fixture *strobe = m_doc->fixture(strobeId);
+    QCOMPARE(ShutterAutoOpen::closingShutters(spot), QVector<quint32>({ 2 }));
+    QVERIFY(ShutterAutoOpen::closingShutters(strobe).isEmpty());
+    QVERIFY(ShutterAutoOpen::closesAt(spot->channel(2), 0));
+    QVERIFY(ShutterAutoOpen::closesAt(spot->channel(2), 7));
+    QVERIFY(!ShutterAutoOpen::closesAt(spot->channel(2), 8));
+    QVERIFY(!ShutterAutoOpen::closesAt(strobe->channel(1), 0));   // "No function"
+
+    // Untagged definitions: by the capability's name, not an effect's.
+    QLCCapability named(0, 10, "Shutter closed");
+    QVERIFY(ShutterAutoOpen::isCloseCapability(&named));
+    QLCCapability blackout(0, 10, "Blackout");
+    QVERIFY(ShutterAutoOpen::isCloseCapability(&blackout));
+    QLCCapability effect(0, 10, "Slow open - fast close");
+    QVERIFY(!ShutterAutoOpen::isCloseCapability(&effect));
+    QLCCapability strobing(0, 10, "Strobe");
+    QVERIFY(!ShutterAutoOpen::isCloseCapability(&strobing));
+}
+
+void MarkPlanner_Test::aDarkDimmerPresetsTheShutterToo()
+{
+    const quint32 sid = addShutterFixture(100, true, true);   // pan 100, dimmer 101, shutter 102
+    Scene *next = new Scene(m_doc);
+    next->setValue(sid, 0, 128);
+    next->setValue(sid, 1, 200);
+    next->setValue(sid, 2, 200);        // open
+    startChaserInto(m_doc, next);
+    QVERIFY(CueOutput::computeCues(m_doc, next->id()).value(sid).lit);
+
+    // The dimmer down, the shutter open: dark by the dimmer.
+    setLive(m_doc, { { 100, 10 }, { 101, 0 }, { 102, 200 } });
+    MarkPlanner planner(m_doc, m_mark);
+    planner.setDarkGapMs(0);
+    planner.setEnabled(true);
+    QVERIFY(m_mark->isMarked(sid));
+    QHash<quint32, uchar> held = m_mark->markedValues(sid);
+    QCOMPARE(int(held.value(0)), 128);
+    QCOMPARE(int(held.value(2)), 200);   // the dimmer keeps it dark: shutter pre-set
+    QVERIFY(!held.contains(1));
+    planner.setEnabled(false);
+    QVERIFY(!m_mark->isMarked(sid));
+
+    // The dimmer down, the shutter closed too: the same.
+    setLive(m_doc, { { 100, 10 }, { 101, 0 }, { 102, 0 } });
+    planner.setEnabled(true);
+    QVERIFY(m_mark->isMarked(sid));
+    QCOMPARE(int(m_mark->markedValues(sid).value(2)), 200);
+    QCOMPARE(live(m_doc, 102), 200);       // open behind a dark dimmer
+    // Not lit while the dimmer stays down.
+    handOff(m_doc, m_mark);
+    QVERIFY(m_mark->isMarked(sid));
+    // The cue brings the level: handed off.
+    setLive(m_doc, { { 101, 200 } });
+    handOff(m_doc, m_mark);
+    QVERIFY(!m_mark->isMarked(sid));
+    planner.setEnabled(false);
+}
+
+void MarkPlanner_Test::aClosedShutterIsDarkAndStaysClosed()
+{
+    const quint32 sid = addShutterFixture(100, true, true);
+    Scene *next = new Scene(m_doc);
+    next->setValue(sid, 0, 128);
+    next->setValue(sid, 1, 200);
+    next->setValue(sid, 2, 200);
+    startChaserInto(m_doc, next);
+
+    // The dimmer up behind a closed shutter: dark.
+    setLive(m_doc, { { 100, 10 }, { 101, 255 }, { 102, 0 } });
+    MarkPlanner planner(m_doc, m_mark);
+    planner.setDarkGapMs(0);
+    planner.setEnabled(true);
+    QVERIFY(m_mark->isMarked(sid));
+    QCOMPARE(planner.plannedCount(), 1);
+    const QHash<quint32, uchar> held = m_mark->markedValues(sid);
+    QCOMPARE(int(held.value(0)), 128);   // moved...
+    QVERIFY(!held.contains(2));          // ...but the shutter is not opened
+    QVERIFY(!held.contains(1));
+    QCOMPARE(live(m_doc, 100), 128);
+    QCOMPARE(live(m_doc, 102), 0);
+
+    // Held on a re-plan the same way, and not handed off while closed
+    // although the dimmer is up.
+    QMetaObject::invokeMethod(&planner, "evaluate");
+    QVERIFY(!m_mark->markedValues(sid).contains(2));
+    handOff(m_doc, m_mark);
+    QVERIFY(m_mark->isMarked(sid));
+    QCOMPARE(live(m_doc, 102), 0);
+
+    // The cue opens the shutter: handed off.
+    setLive(m_doc, { { 102, 200 } });
+    handOff(m_doc, m_mark);
+    QVERIFY(!m_mark->isMarked(sid));
+    planner.setEnabled(false);
+}
+
+void MarkPlanner_Test::aShutterOnlyFixtureIsMovedInBlack()
+{
+    const quint32 sid = addShutterFixture(100, false, true);   // pan 100, shutter 101
+    QCOMPARE(m_doc->fixture(sid)->masterIntensityChannel(), QLCChannel::invalid());
+    Scene *next = new Scene(m_doc);
+    next->setValue(sid, 0, 128);
+    next->setValue(sid, 1, 200);         // opens
+    startChaserInto(m_doc, next);
+    QVERIFY(CueOutput::computeCues(m_doc, next->id()).value(sid).lit);
+
+    setLive(m_doc, { { 100, 10 }, { 101, 0 } });
+    MarkPlanner planner(m_doc, m_mark);
+    planner.setDarkGapMs(0);
+    planner.setEnabled(true);
+    QVERIFY(m_mark->isMarked(sid));
+    QCOMPARE(int(m_mark->markedValues(sid).value(0)), 128);
+    QVERIFY(!m_mark->markedValues(sid).contains(1));
+    QCOMPARE(live(m_doc, 100), 128);
+    QCOMPARE(live(m_doc, 101), 0);
+    QVERIFY(planner.dangleFixtures().isEmpty());
+
+    handOff(m_doc, m_mark);
+    QVERIFY(m_mark->isMarked(sid));
+    // Revealed: the shutter opens.
+    setLive(m_doc, { { 101, 200 } });
+    handOff(m_doc, m_mark);
+    QVERIFY(!m_mark->isMarked(sid));
+    // Open: not dark, so not pre-set again.
+    QMetaObject::invokeMethod(&planner, "evaluate");
+    QVERIFY(!m_mark->isMarked(sid));
+    planner.setEnabled(false);
+}
+
+void MarkPlanner_Test::aFixtureWithNeitherIsSkipped()
+{
+    const quint32 sid = addShutterFixture(100, false, false);   // pan, strobe
+    Scene *next = new Scene(m_doc);
+    next->setValue(sid, 0, 128);
+    next->setValue(sid, 1, 0);
+    startChaserInto(m_doc, next);
+    QVERIFY(!CueOutput::computeCues(m_doc, next->id()).value(sid).lit);
+
+    setLive(m_doc, { { 100, 10 }, { 101, 0 } });
+    MarkPlanner planner(m_doc, m_mark);
+    planner.setDarkGapMs(0);
+    planner.setEnabled(true);
+    QVERIFY(!m_mark->isMarked(sid));
+    QCOMPARE(planner.plannedCount(), 0);
+
+    // Marked by hand, it is never handed off (nothing says lit) -- and
+    // nothing upcoming lights it, so it dangles.
+    m_mark->markFixture(sid, { { 0, 128 } });
+    handOff(m_doc, m_mark);
+    QVERIFY(m_mark->isMarked(sid));
+    QCOMPARE(planner.dangleFixtures(), QList<quint32>({ sid }));
+    m_mark->unmarkFixture(sid);
+    planner.setEnabled(false);
+}
+
+void MarkPlanner_Test::aManualMarkIsLeftAlone()
+{
+    const quint32 sid = addShutterFixture(100, true, true);
+    Scene *next = new Scene(m_doc);
+    next->setValue(sid, 0, 128);
+    next->setValue(sid, 1, 200);
+    next->setValue(sid, 2, 200);
+    startChaserInto(m_doc, next);
+    setLive(m_doc, { { 100, 10 }, { 101, 255 }, { 102, 0 } });
+
+    const QHash<quint32, uchar> mine = { { 0, 64 } };
+    m_mark->markFixture(sid, mine);
+    MarkPlanner planner(m_doc, m_mark);
+    planner.setDarkGapMs(0);
+    planner.setEnabled(true);
+    QCOMPARE(planner.plannedCount(), 0);
+    QCOMPARE(m_mark->markedValues(sid), mine);
+    planner.setEnabled(false);              // not the planner's to release
+    QVERIFY(m_mark->isMarked(sid));
+    m_mark->unmarkFixture(sid);
+}
+
+void MarkPlanner_Test::aCueThatClosesTheShutterDoesNotLightIt()
+{
+    const quint32 sid = addShutterFixture(100, true, true);
+    const quint32 bare = addShutterFixture(110, false, true);
+    Scene *next = new Scene(m_doc);
+    next->setValue(sid, 0, 128);
+    next->setValue(sid, 1, 200);
+    next->setValue(sid, 2, 0);           // closed
+    next->setValue(bare, 0, 128);        // no shutter: not known open
+    startChaserInto(m_doc, next);
+    const QHash<quint32, CueOutput::FixtureCue> cues = CueOutput::computeCues(m_doc, next->id());
+    QVERIFY(!cues.value(sid).lit);
+    QVERIFY(!cues.value(bare).lit);
+
+    setLive(m_doc, { { 101, 0 }, { 102, 0 }, { 111, 0 } });
+    MarkPlanner planner(m_doc, m_mark);
+    planner.setDarkGapMs(0);
+    planner.setEnabled(true);
+    QVERIFY(!m_mark->isMarked(sid));
+    QVERIFY(!m_mark->isMarked(bare));
+    m_mark->markFixture(sid, { { 0, 128 } });
+    QCOMPARE(planner.dangleFixtures(), QList<quint32>({ sid }));
+    m_mark->unmarkFixture(sid);
+    planner.setEnabled(false);
 }

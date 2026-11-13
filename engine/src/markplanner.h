@@ -8,6 +8,13 @@
   by holding the cue's non-intensity values through the MarkEffect. The mark's own
   auto-handoff releases each fixture as the cue reveals it.
 
+  Dark is the master dimmer at or below DARK_LEVEL, or every shutter that can
+  close (the definition's close capabilities, ShutterAutoOpen::closingShutters())
+  closed; lit is CueOutput::lightsFixture(). Dark by the dimmer, the next cue's
+  shutter is pre-set with the rest. Dark by the shutter alone (dimmer up, or
+  no dimmer), the shutter is not held: it stays closed until the cue opens it.
+  A fixture with neither a dimmer nor such a shutter is never moved.
+
   The planner only ever touches marks it created itself (m_planned), so manual
   Mark/Unmark coexists untouched.
 
@@ -97,6 +104,9 @@ private:
      *  only a level does not reveal a look that never played (UX-70). What
      *  plays on them now writes over that the next frame. */
     void putBack(quint32 fid);
+    /** @p values without @p fxi's Shutter-group channels. */
+    static QHash<quint32, uchar> withoutShutters(const class Fixture *fxi,
+                                                 const QHash<quint32, uchar> &values);
     /** Re-run dangleFixtures() and emit dangleFixturesChanged() on change. */
     void updateDangleDetection();
 
@@ -106,6 +116,10 @@ private:
     bool        m_enabled = false;
     int         m_darkGapMs = defaultDarkGapMs();   //!< lead time; tune on a rig
     QSet<quint32> m_planned;            //!< fixtures WE marked (vs manual marks)
+    /** Of m_planned, those kept dark by a closed shutter (the dimmer is up,
+     *  or there is none): their shutter channels are not held, so the
+     *  shutter stays closed until the cue opens it. */
+    QSet<quint32> m_shutterHeld;
     /** What each pre-set channel was before the planner held it (channel →
      *  value), for putBack(); and the cue each pre-set is for. */
     QHash<quint32, QHash<quint32, uchar>> m_before;
@@ -116,7 +130,7 @@ private:
      *  when no upcoming cue has them. */
     mutable WledLookCache m_wledLooks;
 
-    static const int DARK_LEVEL = 8;    //!< master intensity ≤ this = dark
+    static const int DARK_LEVEL = 8;    //!< master intensity ≤ this = dark (or a closed shutter)
     static const int TICK_MS   = 300;   //!< coarse re-plan cadence
     static const int HORIZON_MS = 60000;
 };

@@ -20,6 +20,7 @@
 #include "qlcengine_export.h"
 
 class Doc;
+class Fixture;
 
 /** What a WLED look (QLCPalette::wledEffect()) sends the WLED fixtures it
  *  plays on -- the effect, its speed, intensity, palette, option and three
@@ -57,7 +58,7 @@ public:
     /** Per-fixture summary of an upcoming cue. */
     struct FixtureCue
     {
-        bool  lit = false;          //!< master intensity > 0 in this cue
+        bool  lit = false;          //!< lit in this cue: see lightsFixture()
         uchar intensity = 0;        //!< master-intensity DMX value (0 if none)
         QHash<quint32, uchar> nonIntensity;  //!< relative channel → value, sans master intensity
     };
@@ -71,8 +72,10 @@ public:
     static QHash<quint32, QHash<quint32, uchar>> compute(Doc *doc, quint32 functionId);
 
     /** As compute(), split per fixture into master intensity vs everything else
-     *  (what a mark holds). Fixtures with no master-intensity channel report
-     *  lit=false — they're not move-in-black candidates. */
+     *  (what a mark holds; a shutter is in it). Fixtures with neither a
+     *  master-intensity channel nor a shutter that can close
+     *  (ShutterAutoOpen::closingShutters()) report lit=false — they're not
+     *  move-in-black candidates. */
     static QHash<quint32, FixtureCue> computeCues(Doc *doc, quint32 functionId);
 
     /** As computeCues(), with what its WLED looks send their WLED fixtures
@@ -82,6 +85,13 @@ public:
      *  WledFixture::settingsAtRest()) under what the scene sets, as
      *  Scene::write lays it out. A dark WLED can then be moved in black. */
     static QHash<quint32, FixtureCue> computeCues(Doc *doc, quint32 functionId, WledLookCache *wled);
+
+    /** Whether @p fc lights @p fxi: its master dimmer above 0 (when it has
+     *  one) and its shutter not closed. A shutter the cue does not set is
+     *  not known closed; a fixture with no dimmer is lit only by a cue that
+     *  opens one of its shutters; one with neither is never lit. "Closed"
+     *  is the definition's close capabilities (ShutterAutoOpen::closesAt()). */
+    static bool lightsFixture(const Fixture *fxi, const FixtureCue &fc);
 };
 
 #endif // CUEOUTPUT_H

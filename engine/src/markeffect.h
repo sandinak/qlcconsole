@@ -19,6 +19,11 @@
   sight). No intensity channel is held -- the fixture stays dark. The
   DMXSource only watches for the hand-off; it writes nothing.
 
+  The hand-off: a fixture is revealed when it is lit -- its master dimmer
+  above HANDOFF_INTENSITY (when it has one) AND its shutter not closed (when
+  it has one that can close: ShutterAutoOpen::closingShutters(), every one
+  of them closed is closed). A fixture with neither is never handed off.
+
   Licensed under the Apache License, Version 2.0 (the "License");
 */
 
@@ -30,6 +35,8 @@
 #include <QHash>
 #include <QSet>
 #include <QList>
+#include <QVector>
+#include <QPair>
 
 #include "dmxsource.h"
 #include "outputlayer.h"
@@ -89,13 +96,23 @@ private:
      *  cue → its mark hands off. Small, to ignore idle/no-drive (0). */
     static const int HANDOFF_INTENSITY = 8;
 
+    /** A shutter that can close, as the DMX thread reads it. */
+    struct ShutterGate {
+        int addr;                                  // universe-local address
+        QVector<QPair<uchar, uchar>> closed;       // its closed ranges
+    };
+
     /** Flattened, absolute-address writes for the DMX thread. */
     struct FixEntry {
         quint32 fixtureId;
         int universeId;
         int intensityAddr;               // absolute addr of master intensity, or -1
+        QVector<ShutterGate> shutters;   // shutters that can close (none: no gate)
         QList<QPair<int, uchar>> writes; // (universe-local address, value)
     };
+
+    /** DMX thread, m_mutex held: @p e lit on @p uni (see the class note). */
+    static bool isLit(const FixEntry &e, const Universe *uni);
 
     /** Rebuild m_entries from m_marked and (un)register the DMX source.
      *  Call with m_mutex NOT held. */

@@ -19,8 +19,38 @@
 #include "wledfixture.h"
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
+#include "shutterautoopen.h"
 
 #include <QSet>
+
+bool CueOutput::lightsFixture(const Fixture *fxi, const FixtureCue &fc)
+{
+    if (fxi == nullptr)
+        return false;
+    const bool hasDimmer = fxi->masterIntensityChannel() != QLCChannel::invalid();
+    const QVector<quint32> shutters = ShutterAutoOpen::closingShutters(fxi);
+    if (!hasDimmer && shutters.isEmpty())
+        return false;                   // nothing that says lit or dark
+    if (hasDimmer && fc.intensity == 0)
+        return false;
+    // The shutters this cue sets: how many, and how many it closes.
+    int set = 0, closed = 0;
+    for (quint32 c : shutters)
+    {
+        const auto it = fc.nonIntensity.constFind(c);
+        if (it == fc.nonIntensity.constEnd())
+            continue;
+        set++;
+        if (ShutterAutoOpen::closesAt(fxi->channel(c), it.value()))
+            closed++;
+    }
+    // No dimmer: lit only when the cue opens a shutter. With one: lit
+    // unless every shutter the cue sets is closed (one it leaves alone is
+    // not known closed -- auto-open may well open it).
+    if (!hasDimmer)
+        return set > closed;
+    return set == 0 || closed < set;
+}
 
 // Accumulate @p functionId's would-be output into @p out (fixtureId → channel →
 // value). Later writes win, matching palette-paramount (Scene) and run order
@@ -224,7 +254,7 @@ QHash<quint32, CueOutput::FixtureCue> CueOutput::computeCues(Doc *doc, quint32 f
     for (quint32 fid : std::as_const(touched))
     {
         FixtureCue &fc = result[fid];
-        fc.lit = fc.intensity > 0;
+        fc.lit = lightsFixture(doc->fixture(fid), fc);
     }
     return result;
 }
@@ -250,7 +280,7 @@ QHash<quint32, CueOutput::FixtureCue> CueOutput::computeCues(Doc *doc, quint32 f
             else
                 fc.nonIntensity.insert(cit.key(), cit.value());
         }
-        fc.lit = (fc.intensity > 0);
+        fc.lit = lightsFixture(fxi, fc);
         result.insert(it.key(), fc);
     }
     return result;

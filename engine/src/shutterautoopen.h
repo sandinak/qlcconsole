@@ -80,6 +80,25 @@ public:
      *  "Open (shutter)") -- not an effect that merely says "open". */
     static bool isOpenName(const QLCCapability *cap);
 
+    /** True when @p cap closes the beam: a ShutterClose capability, or,
+     *  for definitions that never tagged theirs, one named so ("Closed",
+     *  "Shutter closed", "Blackout") -- not an effect that merely says
+     *  "close" ("Slow open - fast close"). */
+    static bool isCloseCapability(const QLCCapability *cap);
+
+    /** The DMX ranges (min, max) at which @p ch closes the beam: its close
+     *  capabilities. Empty when it has none -- a strobe-only channel, an
+     *  iris, a fine byte -- so it can't be read as closed. */
+    static QVector<QPair<uchar, uchar> > closedRanges(const QLCChannel *ch);
+
+    /** @p fx's shutter channels that can close its beam (relative channel
+     *  numbers, ascending): those with closedRanges(). Empty when the
+     *  definition has no recognisable closed shutter. */
+    static QVector<quint32> closingShutters(const Fixture *fx);
+
+    /** True when @p value on @p ch is in one of its closedRanges(). */
+    static bool closesAt(const QLCChannel *ch, uchar value);
+
     /** The rules for one fixture (its universe-relative addresses). */
     static QVector<Universe::AutoOpenRule> rulesFor(const Fixture *fx);
 

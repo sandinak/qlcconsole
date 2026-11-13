@@ -20,6 +20,7 @@
 #include "cueoutput.h"
 #include "cuelookahead.h"
 #include "showtreecontroller.h"
+#include "shutterautoopen.h"
 
 MarkPlanner::MarkPlanner(Doc *doc, MarkEffect *mark, QObject *parent)
     : QObject(parent)
@@ -61,8 +62,24 @@ void MarkPlanner::clearPlanned()
             putBack(fid);
         }
     m_planned.clear();
+    m_shutterHeld.clear();
     m_before.clear();
     m_plannedFor.clear();
+}
+
+QHash<quint32, uchar> MarkPlanner::withoutShutters(const Fixture *fxi,
+                                                   const QHash<quint32, uchar> &values)
+{
+    QHash<quint32, uchar> out = values;
+    for (auto it = out.begin(); it != out.end(); )
+    {
+        const QLCChannel *ch = fxi->channel(it.key());
+        if (ch != nullptr && ch->group() == QLCChannel::Shutter)
+            it = out.erase(it);
+        else
+            ++it;
+    }
+    return out;
 }
 
 void MarkPlanner::putBack(quint32 fid)
@@ -188,6 +205,7 @@ void MarkPlanner::evaluatePlan()
             putBack(fid);
     }
     m_planned.intersect(stillMarked);
+    m_shutterHeld.intersect(m_planned);
 
     const QList<CueLookahead::UpcomingCue> cues =
         CueLookahead::upcoming(m_doc, HORIZON_MS);
@@ -243,27 +261,53 @@ void MarkPlanner::evaluatePlan()
         if (fxi == nullptr || !fxi->isPatched())
             continue;
         const quint32 master = fxi->masterIntensityChannel();
-        if (master == QLCChannel::invalid())
-            continue;                        // need a dimmer to be dark-but-preset
+        const QVector<quint32> shutters = ShutterAutoOpen::closingShutters(fxi);
+        if (master == QLCChannel::invalid() && shutters.isEmpty())
+            continue;                        // nothing that can keep it dark
 
         // Already ours → keep it (and refresh values for the current next-cue).
         // Skip the "would move" test: the mark itself now drives the non-intensity
         // channels, so they'd read as matching and it would oscillate.
         if (m_planned.contains(fid))
         {
+            const QHash<quint32, uchar> hold = m_shutterHeld.contains(fid)
+                    ? withoutShutters(fxi, fc.nonIntensity) : fc.nonIntensity;
             desired.insert(fid);
-            holdValues.insert(fid, fc.nonIntensity);
-            noteBefore(fid, fxi, fc.nonIntensity);
+            holdValues.insert(fid, hold);
+            noteBefore(fid, fxi, hold);
             continue;
         }
 
         const int uni = int(fxi->universe());
-        // Dark right now?
-        if (liveValue(unis, uni, int(fxi->address()) + int(master)) > DARK_LEVEL)
+        /* Dark right now? Its dimmer down, or its shutter closed. A dimmer
+           keeps it dark while the shutter is pre-set with the rest (the GO
+           brings the level); a closed shutter keeps it dark only while it
+           stays closed, so then the shutter is left alone (shutterHeld) and
+           the cue opens it. */
+        const bool dimmerDark = master != QLCChannel::invalid()
+                && liveValue(unis, uni, int(fxi->address()) + int(master)) <= DARK_LEVEL;
+        bool shutterDark = false;
+        if (!dimmerDark && !shutters.isEmpty())
+        {
+            shutterDark = true;
+            for (quint32 c : shutters)
+            {
+                // Post-Grand-Master: an auto-opened shutter is open on stage.
+                const quint32 abs = fxi->universeAddress() + c;
+                const int u = int(abs >> 9);
+                const uchar v = (u < unis.size() && unis.at(u) != nullptr)
+                        ? unis.at(u)->postGMValue(int(abs & 511)) : 0;
+                if (!ShutterAutoOpen::closesAt(fxi->channel(c), v))
+                { shutterDark = false; break; }
+            }
+        }
+        if (!dimmerDark && !shutterDark)
             continue;
+        const QHash<quint32, uchar> hold = shutterDark
+                ? withoutShutters(fxi, fc.nonIntensity) : fc.nonIntensity;
         // Would it actually move? (else pre-setting is pointless)
         bool moves = false;
-        for (auto vit = fc.nonIntensity.constBegin(); vit != fc.nonIntensity.constEnd(); ++vit)
+        for (auto vit = hold.constBegin(); vit != hold.constEnd(); ++vit)
         {
             if (liveValue(unis, uni, int(fxi->address()) + int(vit.key())) != vit.value())
             { moves = true; break; }
@@ -275,8 +319,12 @@ void MarkPlanner::evaluatePlan()
             continue;
 
         desired.insert(fid);
-        holdValues.insert(fid, fc.nonIntensity);
-        noteBefore(fid, fxi, fc.nonIntensity);
+        holdValues.insert(fid, hold);
+        noteBefore(fid, fxi, hold);
+        if (shutterDark)
+            m_shutterHeld.insert(fid);
+        else
+            m_shutterHeld.remove(fid);
     }
 
     m_doc->inputOutputMap()->releaseUniverses(false);
@@ -296,4 +344,5 @@ void MarkPlanner::evaluatePlan()
         m_mark->markFixture(fid, holdValues.value(fid));
 
     m_planned = desired;
+    m_shutterHeld.intersect(m_planned);
 }
