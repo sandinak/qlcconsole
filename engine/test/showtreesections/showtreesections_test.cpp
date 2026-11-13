@@ -575,7 +575,7 @@ void ShowTreeSections_Test::renumberSongUnderHundreds()
     const quint32 prod = st->addProduction("Show");
     const quint32 list = st->addCueList(prod, "Show");
     QVERIFY(st->setNumbering(prod, Numbering::Hundreds));
-    for (const QString &n : { "100", "120", "120.5", "140", "200" })
+    for (const char *n : { "100", "120", "120.5", "140", "200" })
         QVERIFY(cueAtEnd(st, list, n, n) != invalidId());
     const Section song = songOf(st, list, "100");
     QVERIFY(st->renumberSong(list, song, 0, 1));
