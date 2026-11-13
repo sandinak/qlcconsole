@@ -3205,6 +3205,11 @@ void Monitor::showStageOverview()
         m_overviewView = NULL;
     });
     dock->setAttribute(Qt::WA_DeleteOnClose);
+    /* A floating dock is a tool window, and on a Mac a tool window hides
+       whenever the app is not the frontmost one: click into another app
+       (a controller test page beside it) and the rig view vanished. It is
+       a reference window you keep looking at; keep it on screen. */
+    dock->setAttribute(Qt::WA_MacAlwaysShowToolWindow);
     /* Not DockWidgetFloatable: with it, the title bar's float button and a
        double-click on the title "docked" the panel -- into no dock area, so
        it stayed a plain child of the main window, painted over the tabs. A

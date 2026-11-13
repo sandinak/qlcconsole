@@ -89,6 +89,8 @@ SpeedMastersPanel::SpeedMastersPanel(Doc *doc, QWidget *parent)
 {
     setWindowTitle(tr("Speed Masters"));
     setAttribute(Qt::WA_DeleteOnClose);
+    // A tool window on a Mac hides when another app is in front; keep it up.
+    setAttribute(Qt::WA_MacAlwaysShowToolWindow);
     setProperty("helpTopic", QStringLiteral("effects.md#speed-masters"));
     SpeedMasters *sm = m_doc->speedMasters();
 

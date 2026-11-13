@@ -650,7 +650,8 @@ void Monitor_Test::aShowsRigViewDrawTime()
 }
 
 /* ⇧⌘R opens the Rig Overview, and closes it again when it is the window in
-   front; ⌘W closes it too. */
+   front; ⌘W closes it too. It stays on screen when another app is in front
+   (a floating dock is a Mac tool window, hidden on deactivate otherwise). */
 void Monitor_Test::theRigOverviewShortcutTogglesIt()
 {
     QWidget parent;
@@ -667,6 +668,7 @@ void Monitor_Test::theRigOverviewShortcutTogglesIt()
     mon.toggleStageOverview();
     QPointer<QDockWidget> dlg = overview();
     QVERIFY(dlg != nullptr);
+    QVERIFY(dlg->testAttribute(Qt::WA_MacAlwaysShowToolWindow));
     dlg->activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(dlg));
     mon.toggleStageOverview();          // in front: closed
