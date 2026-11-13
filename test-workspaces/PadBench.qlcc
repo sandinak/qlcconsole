@@ -1,0 +1,820 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Workspace>
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="InputOutputManager" View="qlcconsole">
+ <Creator>
+  <Name>qlcconsole</Name>
+  <Version>4.14.4+qlcconsole.0</Version>
+  <Author>branson</Author>
+ </Creator>
+ <Embedded>
+  <EffectScript File="followspot.js" SHA256="df94c7500858195489df6ad4b1a6e942690549d5841255599cc61e4c2e0925ce" From="user" FromModified="2026-11-13T15:01:29Z" Embedded="2026-11-13T15:10:56Z"><![CDATA[/*
+  QLC+ Effect Script: Followspot
+  Move a set of fixtures using two joystick axes (pan/tilt).
+  Compatible with any gamepad or MIDI controller mapped to the x/y inputs.
+
+  Velocity-based: the stick deflects a setpoint at a rate proportional to
+  deflection.  Releasing the stick holds the current position, so the beam
+  stays put without continuous pressure.  Setpoint is initialized from the
+  Aim target when one is bound (followTarget slot), allowing smooth handoff
+  from a pre-set scene Aim palette position.
+*/
+(function() {
+    var effect = new Object;
+    effect.apiVersion  = 1;
+    effect.name        = "Followspot";
+    effect.description = "Pan/tilt fixtures with joystick X/Y axes";
+    effect.author      = "QLC+";
+    effect.fixtureTypes = ["moving"];
+    effect.notes = "Maps joystick X/Y axes to pan and tilt so you can fly moving heads live. This effect controls POSITION — it never touches colour, and it touches the dimmer only when Fade Near Limit or Fade When Blocked is set, so the scene's own Color/Dimmer palettes otherwise retain control. Fade Near Limit dims a head as the target nears the edge of what it can point at, reaching dark where it cannot follow, so it goes out rather than sticking lit at its limit. Fade When Blocked takes a head out, over that many milliseconds, while something solid on stage -- a closed drape, a wall, a riser, a tower -- stands between it and the subject, and brings it back once the way is clear. Framing sizes the beam from the followed Person's Height -- Head & Shoulders, Waist Up or Full Body -- and keeps the top of the beam just over their head; Framing Size makes it looser or tighter; Custom uses the Width On Subject, which zooms each head that has a zoom so its beam is that wide where it lands on the subject, whatever the throw -- a near head zooms out, a far one in -- within the lens's range. D-pad Left and Right close and open the beam while it plays (the Framing Size, the Width on Subject, or the beam angle when no size is set); Save Positions keeps it. Top Speed is how fast the subject moves on the stage with the left stick at full throw (a brisk walk by default); the right stick moves it finer (Fine Stick, a share of Top Speed) and the two add; Response Curve makes the stick fine near the centre; D-pad Up and Down step the speed (x0.25 to x2) while it plays. Deadzone is the controller's (HID device profile). Person Height biases the tilt centre so the beam lands at the subject's head. Bind the followTarget slot to a stage target to seed the initial position from a pre-set Aim palette.";
+
+    // The host injects joystick data automatically when a HID profile is active.
+    // Manual input bindings (x / y) are kept as a fallback for non-HID controllers.
+    effect.dataChannels = ["joystick"];
+
+    effect.inputs = [
+        { name: "x", description: "Pan axis fallback (0=left, 0.5=center, 1=right)", defaultValue: 0.5 },
+        { name: "y", description: "Tilt axis fallback (0=up, 0.5=center, 1=down)",   defaultValue: 0.5 }
+    ];
+
+    // Position-only effect: no colour or dimmer palettes. The scene's own
+    // Color/Dimmer palettes are left untouched so movement composes on top of
+    // whatever look is active.
+    effect.palettes = [];
+
+    // No target binding: the followspot reads its target IMPLICITLY from the
+    // scene's own Aim look.  The host injects that as fixture.sceneTarget and,
+    // when present, moves the shared aim point so the heads converge — this
+    // effect then defers (emits no pan/tilt).  Free-fly (no Aim look) is the
+    // only case this script flies angles itself.
+
+    // Sensitivity and deadzone are deliberately NOT effect parameters — they are
+    // global joystick settings (HID device profile / I/O Manager) and arrive via
+    // the joystick data channel. Only the followspot-specific person-height bias
+    // and the scene-transition seeding mode are configured here.
+    //
+    // followMode controls where the beam starts when this effect takes over from
+    // a previous scene:
+    //   "lastPosition" (default) — resume from the last spot position the beam
+    //       was left at, so the heads DON'T move on transitions between scenes.
+    //       Falls back to the bound followTarget (then physical centre) the very
+    //       first time, when no last position has been recorded yet.
+    //   "snapToTarget" — snap to the bound followTarget's pre-aimed position on
+    //       every transition (ignores the last spot position).
+    effect.parameters = [
+        { name: "followMode",   label: "Follow Mode", description: "On scene change: hold the last beam position, or snap to the bound followTarget", values: ["lastPosition", "snapToTarget"], valueLabels: ["Hold Last Position", "Snap to Target"], defaultValue: 0 },
+        { name: "personHeight", label: "Person Height", description: "Height of the person being followed (free-fly only) -- adjusts the tilt centre", unit: "cm", min: 50, max: 250, defaultValue: 170 },
+        { name: "fadeNearLimit", label: "Fade Near Limit", description: "Fade a head out over this many degrees before its pan/tilt limit, dark where it cannot reach the target (0 = off)", min: 0, max: 45, defaultValue: 0 },
+        { name: "fadeWhenBlocked", label: "Fade When Blocked", description: "Fade a head out over this many milliseconds while a drape, wall, riser or tower stands between it and the subject, back when clear (0 = off)", min: 0, max: 5000, defaultValue: 0 },
+        // Framing: how much of the person the beam takes, sized from the
+        // followed Person's Height, each head from its own throw and lens
+        // (the host's FollowSpotFraming). Custom is the Width on Subject.
+        { name: "framing", label: "Framing", description: "How much of the followed person the beam takes, from their Height: head and shoulders, waist up, the full body, or Custom (the Width on Subject)", values: ["custom", "headShoulders", "waistUp", "fullBody"], valueLabels: ["Custom", "Head & Shoulders", "Waist Up", "Full Body"], defaultValue: 0 },
+        { name: "framingSize", label: "Framing Size", description: "The Framing a little looser or tighter: 100% as it is, 110% a tenth wider. D-pad Left and Right step it while the follow spot plays; Save Positions keeps it", unit: "%", min: 25, max: 300, defaultValue: 100, activeWhen: [{ param: "framing", not: [0] }] },
+        { name: "sizeOnSubject", label: "Width on Subject", description: "Custom: zoom each head so its beam is this wide on the subject, whatever its distance (0 = off). D-pad Left and Right step it while the follow spot plays", unit: "cm", min: 0, max: 800, defaultValue: 0, activeWhen: [{ param: "framing", is: [0] }] },
+        { name: "beamAngle", label: "Beam Angle", description: "With no size on the subject: the beam angle every head zooms to, in degrees (0 = the scene's own zoom). D-pad Left and Right step it while the follow spot plays", unit: "°", min: 0, max: 90, defaultValue: 0, activeWhen: [{ param: "framing", is: [0] }, { param: "sizeOnSubject", is: [0] }] },
+        // The feel (the host moves the subject with these; free-fly below too).
+        // A speed is kept in cm a second and shown in Settings > Units.
+        { name: "topSpeed", description: "Top Speed (how fast the subject moves on the stage with the left stick at full throw: a brisk walk is the default)", unit: "cm/s", min: 15, max: 600, defaultValue: 182.88 },
+        { name: "fineStick", description: "Fine Stick (the right stick's full throw, as a percentage of Top Speed: for small corrections)", unit: "%", min: 5, max: 100, defaultValue: 20 },
+        { name: "responseCurve", description: "Response Curve (0 = speed follows the stick evenly; higher = fine near the centre, Top Speed only at full throw)", unit: "%", min: 0, max: 100, defaultValue: 40 }
+    ];
+
+    effect.tick = function(fixtures, inputs, palettes, params, state, data) {
+        // Prefer automatic joystick data channel (HID profile active) over
+        // manual input bindings — fall back to inputs.x/y for other controllers.
+        var joystick = data && data.joystick;
+        var rawX  = joystick ? joystick.pan  : (inputs.x !== undefined ? inputs.x  : 0.5);
+        var rawY  = joystick ? joystick.tilt : (inputs.y !== undefined ? inputs.y  : 0.5);
+
+        // sensitivity / deadzone are GLOBAL joystick settings, supplied by the
+        // host through the joystick data channel (HID profile / I/O Manager).
+        // Fall back to conservative defaults when no joystick channel is active.
+        var dz  = (joystick && joystick.deadzone    !== undefined) ? joystick.deadzone    : 0.05;
+        var sen = (joystick && joystick.sensitivity !== undefined) ? joystick.sensitivity : 1.0;
+        var pH  = params.personHeight !== undefined ? params.personHeight : 170;
+
+        // Tilt bias: 170 cm is neutral; person height shifts the setpoint at init.
+        // Applied once at initialization rather than every tick.
+        var tiltBias = (170 - pH) / 300 * 0.12;  // fraction of tilt range
+
+        // Velocity from stick position: 0 at centre/deadzone, ±1 at extremes
+        // (the fallback, for a controller the host does not drive).
+        function axisVelocity(v) {
+            var delta = v - 0.5;
+            if (Math.abs(delta) < dz) return 0.0;
+            var sign  = delta > 0 ? 1 : -1;
+            var scale = (Math.abs(delta) - dz) / (0.5 - dz);
+            return sign * scale;
+        }
+
+        var xVel = axisVelocity(rawX);
+        var yVel = axisVelocity(rawY);
+
+        // The time this tick really took (seconds), not an assumed 20 ms: a
+        // late tick moves as far as the stick was held for. Capped, so a
+        // stall is not one big jump.
+        var now = inputs._time;
+        var dt = 0.02;
+        if (now !== undefined && state.lastTime !== undefined)
+            dt = Math.max(0, Math.min(0.1, now - state.lastTime));
+        if (now !== undefined)
+            state.lastTime = now;
+
+        // The host's follow spot motion: how fast to go on the stage, in
+        // metres a second (Top Speed, the speed step, the response curve and
+        // the fine stick in it, eased in and out). Free-fly turns it into
+        // pan and tilt below.
+        var hostVel = joystick && joystick.vx !== undefined;
+        var vx = hostVel ? joystick.vx : 0;
+        var vy = hostVel ? joystick.vy : 0;
+        var centre = hostVel && joystick.cx !== undefined
+                     ? { x: joystick.cx, y: joystick.cy, z: joystick.cz } : { x: 0, y: 0, z: 0 };
+
+        // With no size on the subject: the beam angle (the look's, or the
+        // pad's for this run -- the host hands it over as beamAngle).
+        var angle = params.beamAngle !== undefined ? params.beamAngle : 0;
+
+        // A beam angle on this head's lens, 0..1 of its zoom.
+        function zoomFor(f, deg) {
+            var span = f.lensMax - f.lensMin;
+            return Math.min(1, Math.max(0, (deg - f.lensMin) / span));
+        }
+
+        // Shortest-path / no-wipe between scenes is handled host-side in the
+        // target case (the aim point moves in floor space, a straight line);
+        // free-fly below simply integrates the stick from centre.
+
+        return fixtures.map(function(f) {
+            var intent = {};
+
+            if (f.hasPanTilt) {
+                // TARGET MODE: when the scene has an aim target, the host moves the
+                // shared aim point with the joystick and the scene's Aim look
+                // re-aims EVERY head at it, so multiple heads stay converged on the
+                // spot (per-fixture angle flying can't do that — equal angle steps
+                // from different geometries diverge).  Emit no pan/tilt here so this
+                // effect doesn't fight the Aim look; it just declares the scene a
+                // followspot and carries followMode / personHeight.
+                var hasTarget = f.sceneTarget && f.sceneTarget.pan !== undefined;
+                if (hasTarget) {
+                    // Fade near the limit: the head is about to stick where it
+                    // can go no further, so take its light down with the
+                    // margin it has left, dark once it cannot reach. Only the
+                    // dimmer, and only while fading -- a tick that writes no
+                    // dimmer hands the channel straight back to the scene.
+                    var fade = params.fadeNearLimit !== undefined ? params.fadeNearLimit : 0;
+                    var margin = f.sceneTarget.reachMargin;
+                    var level = 1;
+                    if (fade > 0 && margin !== undefined && margin < fade)
+                        level = Math.max(0, margin / fade);
+
+                    // Fade when blocked: something solid on stage between
+                    // the head and the subject (the host's line of sight,
+                    // f.sceneTarget.blocked). Ramp out over the set time
+                    // while blocked and back up once clear; same hand-back
+                    // as above -- no dimmer once it is all the way up.
+                    var blockFade = params.fadeWhenBlocked !== undefined ? params.fadeWhenBlocked : 0;
+                    var seenKey = "seen_" + f.id;
+                    if (blockFade > 0 && f.sceneTarget.blocked !== undefined) {
+                        var seen = state[seenKey] !== undefined ? state[seenKey] : 1;
+                        // A tick's worth of the fade (a 50 Hz tick, as it always was).
+                        var step = 20 / blockFade;
+                        seen = f.sceneTarget.blocked ? Math.max(0, seen - step)
+                                                     : Math.min(1, seen + step);
+                        state[seenKey] = seen;
+                        level = Math.min(level, seen);
+                    } else if (state[seenKey] !== undefined) {
+                        delete state[seenKey];
+                    }
+                    if (level < 1)
+                        intent.dimmer = level;
+
+                    // Width on subject: the angle that makes the beam this wide
+                    // at this distance, placed within what the lens can do. A
+                    // subject closer than the lens's narrowest can make small
+                    // gets the narrowest; one further than its widest can make
+                    // big gets the widest.
+                    // The width wanted on the subject from this head
+                    // (metres): the host works it out (FollowSpotFraming --
+                    // the Framing from the person's height and this head's
+                    // throw, or the Width on Subject; the pad's change in
+                    // it). None: the beam angle, if one is set.
+                    var width = f.sceneTarget.beamWidth !== undefined ? f.sceneTarget.beamWidth : 0;
+                    var dist = f.sceneTarget.distance;
+                    if (width > 0 && f.hasZoom && dist !== undefined && dist > 0.05) {
+                        var want = 2 * Math.atan(width / 2 / dist) * 180 / Math.PI;
+                        intent.zoom = zoomFor(f, want);
+                    } else if (width <= 0 && f.hasZoom && angle > 0) {
+                        intent.zoom = zoomFor(f, angle);
+                    }
+                    return intent;
+                }
+
+                // FREE-FLY (no target): the operator flies this head's angle from
+                // centre with the stick.  Coherent for a single head; with no shared
+                // point there is nothing to converge on.
+                var panKey  = "pan_"  + f.id;
+                var tiltKey = "tilt_" + f.id;
+
+                // Sentinel until the first stick move leaves the deadzone, so the
+                // scene retains DMX control until the operator actually flies it.
+                if (state[panKey] === undefined) {
+                    state[panKey]  = null;
+                    state[tiltKey] = null;
+                }
+
+                // Degrees a second for each axis: the host's stage speed
+                // over the head's throw to the middle of the stage (a speed
+                // on the stage, the same both ways), else the old fallback
+                // (a whole range a second at full throw).
+                var panRate, tiltRate;
+                if (hostVel) {
+                    var p = f.pos || { x: 0, y: 0, z: 0 };
+                    var dx = p.x - centre.x, dy = p.y - centre.y, dzz = p.z - centre.z;
+                    var throwM = Math.max(1, Math.min(50, Math.sqrt(dx * dx + dy * dy + dzz * dzz)));
+                    var degPerM = 180 / Math.PI / throwM;
+                    panRate  =  vx * degPerM;
+                    tiltRate = -vy * degPerM;     // up the stage: tilt as the stick pushed up did
+                } else {
+                    panRate  = xVel * f.panRange  * sen;
+                    tiltRate = yVel * f.tiltRange * sen;
+                }
+
+                if (panRate !== 0.0 || tiltRate !== 0.0) {
+                    if (state[panKey] === null) {
+                        state[panKey]  = 0.5 * f.panRange;
+                        state[tiltKey] = (0.5 + tiltBias) * f.tiltRange;
+                    }
+                    state[panKey]  = Math.min(f.panRange,  Math.max(0, state[panKey]  + panRate  * dt));
+                    state[tiltKey] = Math.min(f.tiltRange, Math.max(0, state[tiltKey] + tiltRate * dt));
+                }
+
+                if (state[panKey] !== null) {
+                    intent.pan  = state[panKey];
+                    intent.tilt = state[tiltKey];
+                }
+                // No subject to size on: the beam angle alone, if set.
+                if (f.hasZoom && angle > 0)
+                    intent.zoom = zoomFor(f, angle);
+            }
+
+            // Position only here: no colour or dimmer in the intent, so the
+            // scene's own Color/Dimmer palettes retain control (the exceptions
+            // are the reach fade and the zoom for size above).
+            return intent;
+        });
+    };
+
+    return effect;
+})()
+]]></EffectScript>
+  <EffectScript File="dimmer-phaser.js" SHA256="c189375d17ae580f65205c0ddb932653764cab3df60a719dcbb3c8b5c69cec17" From="user" FromModified="2026-11-13T15:01:29Z" Embedded="2026-11-13T15:10:56Z"><![CDATA[/*
+  QLC+ Effect Script: Dimmer Phaser
+  The MA3/Hog intensity-effect workhorse, as one configurable script. A single
+  waveform (sine / saw / triangle / square / random) drives the dimmer, with a
+  per-fixture phase spread that turns it into a chase across the group:
+    - sine, spread 0          -> a unison Breathe
+    - saw down, spread 360    -> a Ramp Chase comet
+    - square, low width       -> a bump / strobe-style chase
+    - random                  -> a sparkle/twinkle (deterministic per step)
+  Intensity-only: drives dimmer (and tints a bound Color), never pan/tilt.
+*/
+(function() {
+    var effect = new Object;
+    effect.apiVersion  = 1;
+    effect.name        = "Dimmer Phaser";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "spread,reverse";
+    // A wave: rate is its cycles. Run Once (or N times) it plays whole
+    // cycles and ends where its wave does -- a sine Breathe on its floor.
+    effect.cycleParam = "rate";
+    effect.description = "Waveform intensity FX with phase-spread chase";
+    effect.author      = "QLC+";
+    effect.fixtureTypes = ["dimmer", "rgb", "moving"];
+    effect.notes = "A configurable intensity engine. Pick a waveform; rate sets cycles "
+                 + "per second; min/max set the dimmer floor and ceiling. spread is the "
+                 + "phase offset across the group in degrees — 0 pulses every fixture "
+                 + "together, 360 walks one full wave across the array (a chase). width is "
+                 + "the on-fraction for the Square waveform (a narrow width gives short "
+                 + "bumps). reverse flips the chase direction. Random holds a fresh level "
+                 + "per fixture each cycle (a deterministic twinkle).";
+
+    effect.inputs = [
+        { name: "level", description: "Master level scaler (0..1)", defaultValue: 1.0 }
+    ];
+
+    effect.parameters = [
+        { name: "waveform", description: "Waveform", defaultValue: 0,
+          values: ["Sine", "Saw Up", "Saw Down", "Triangle", "Square", "Random"] },
+        { name: "rate",   description: "Cycles per second",            min: 0.0, max: 20.0, defaultValue: 1.0 },
+        { name: "minDim", description: "Minimum dimmer level (0-1)",   min: 0.0, max: 1.0,  defaultValue: 0.0 },
+        { name: "maxDim", description: "Maximum dimmer level (0-1)",   min: 0.0, max: 1.0,  defaultValue: 1.0 },
+        { name: "spread", description: "Per-fixture phase spread (deg)", min: 0.0, max: 360.0, defaultValue: 0.0 },
+        { name: "width",  description: "Square on-fraction (0.05-0.95)", min: 0.05, max: 0.95, defaultValue: 0.5 },
+        { name: "reverse", description: "Reverse chase direction",     min: 0.0, max: 1.0, defaultValue: 0.0 }
+    ];
+
+    // Deterministic 0..1 hash (no Math.random — keeps the script pure/testable).
+    function hash(n) {
+        var x = Math.sin(n * 12.9898) * 43758.5453;
+        return x - Math.floor(x);
+    }
+
+    // Waveform shaper: phaseFull is in cycles (its fractional part is one period).
+    function shape(type, phaseFull, fixIndex, width) {
+        var p = phaseFull - Math.floor(phaseFull); // 0..1
+        switch (type) {
+            case 1: return p;                              // Saw Up
+            case 2: return 1.0 - p;                        // Saw Down
+            case 3: return p < 0.5 ? 2 * p : 2 * (1 - p);  // Triangle
+            case 4: return p < width ? 1.0 : 0.0;          // Square
+            case 5: return hash(Math.floor(phaseFull) + fixIndex * 7.13); // Random per step
+            default: return 0.5 - 0.5 * Math.cos(2 * Math.PI * p); // Sine (starts at 0)
+        }
+    }
+
+    effect.tick = function(fixtures, inputs, palettes, params, state) {
+        var t     = inputs._time !== undefined ? inputs._time : 0;
+        var level = inputs.level !== undefined ? inputs.level : 1.0;
+
+        var type   = params.waveform !== undefined ? Math.round(params.waveform) : 0;
+        var rate   = params.rate     !== undefined ? params.rate     : 1.0;
+        var mn      = params.minDim   !== undefined ? params.minDim   : 0.0;
+        var mx      = params.maxDim   !== undefined ? params.maxDim   : 1.0;
+        var spread = (params.spread  !== undefined ? params.spread  : 0.0) / 360.0;
+        var width  = params.width    !== undefined ? params.width    : 0.5;
+        var rev    = params.reverse  !== undefined ? params.reverse  : 0.0;
+
+        var n   = Math.max(fixtures.length - 1, 1);
+        var dir = (rev > 0.5) ? -1.0 : 1.0;
+
+        return fixtures.map(function(f, i) {
+            var phaseFull = t * rate + (inputs._spread ? f.phase : dir * (spread * i / n));
+            var w = shape(type, phaseFull, i, width);
+            var dimmer = (mn + w * (mx - mn)) * level;
+
+            // The dimmer alone: the host scales the look under it by it --
+            // its dimmer, or on a head with none its colour, white and all.
+            // Sending the look's colour too dimmed a head twice and blacked
+            // its white. (It still names palettes.look, here: that keeps the
+            // look's Colour and Dimmer the base it breathes --
+            // QLCPalette::effectUsesLookColours.)
+            return { dimmer: dimmer };
+        });
+    };
+
+    return effect;
+})()
+]]></EffectScript>
+ </Embedded>
+ <Engine>
+  <InputOutputMap>
+   <BeatGenerator BeatType="Disabled" BPM="0"/>
+   <NetworkServer Type="Native" AutoStart="False" Name="" Password=""/>
+   <Universe Name="U01-Bench" ID="0"/>
+   <Universe Name="U02-Pad" ID="1">
+    <InputSlot Roles="lx,ly,lt,rx,ry,rt,a,b,x,y,lb,rb,back,start,ls,rs,guide,dpad_up,dpad_down,dpad_left,dpad_right,,touch_x,touch_y,touch_down,touch2_x,touch2_y,touch2_down">
+     <Device Plugin="HID" Any="True"/>
+    </InputSlot>
+   </Universe>
+   <Universe Name="Universe 3" ID="2"/>
+   <Universe Name="Universe 4" ID="3"/>
+  </InputOutputMap>
+  <Fixture>
+   <Manufacturer>Martin</Manufacturer>
+   <Model>MAC Encore Performance</Model>
+   <Mode>CLD</Mode>
+   <ID>0</ID>
+   <Name>Spot 1</Name>
+   <Universe>0</Universe>
+   <Address>0</Address>
+   <Channels>38</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Martin</Manufacturer>
+   <Model>MAC Encore Performance</Model>
+   <Mode>CLD</Mode>
+   <ID>1</ID>
+   <Name>Spot 2</Name>
+   <Universe>0</Universe>
+   <Address>38</Address>
+   <Channels>38</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>American DJ</Manufacturer>
+   <Model>Focus Spot Three Z</Model>
+   <Mode>21 Channel</Mode>
+   <ID>2</ID>
+   <Name>Shutter Spot</Name>
+   <Universe>0</Universe>
+   <Address>76</Address>
+   <Channels>21</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Chauvet</Manufacturer>
+   <Model>SlimPAR 56</Model>
+   <Mode>7-Ch</Mode>
+   <ID>3</ID>
+   <Name>Wash 1</Name>
+   <Universe>0</Universe>
+   <Address>97</Address>
+   <Channels>7</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Chauvet</Manufacturer>
+   <Model>SlimPAR 56</Model>
+   <Mode>7-Ch</Mode>
+   <ID>4</ID>
+   <Name>Wash 2</Name>
+   <Universe>0</Universe>
+   <Address>104</Address>
+   <Channels>7</Channels>
+  </Fixture>
+  <FixtureGroup ID="0">
+   <Name>Spots</Name>
+   <Size X="1" Y="1"/>
+   <Head X="0" Y="0" Fixture="0">0</Head>
+   <Head X="0" Y="1" Fixture="1">0</Head>
+  </FixtureGroup>
+  <FixtureGroup ID="1">
+   <Name>Wash</Name>
+   <Size X="1" Y="1"/>
+   <Head X="0" Y="0" Fixture="3">0</Head>
+   <Head X="0" Y="1" Fixture="4">0</Head>
+  </FixtureGroup>
+  <Palette ID="0" Type="Dimmer" Name="Full" Value="255"/>
+  <Palette ID="1" Type="Dimmer" Name="Wash 70" Value="178"/>
+  <Palette ID="2" Type="Dimmer" Name="Half" Value="128"/>
+  <Palette ID="3" Type="Shutter" Name="Shutter Closed" Value="3"/>
+  <Palette ID="4" Type="Shutter" Name="Shutter Open"/>
+  <Palette ID="5" Type="PanTilt" Name="Pos B" Value="405,170"/>
+  <Palette ID="6" Type="Effect" Name="Followspot">
+   <EffectScript>followspot</EffectScript>
+   <EffectParam name="framing" value="2"/>
+  </Palette>
+  <Palette ID="7" Type="Effect" Name="Followspot Free Fly">
+   <EffectScript>followspot</EffectScript>
+  </Palette>
+  <Palette ID="8" Type="Effect" Name="Breathe">
+   <EffectScript>dimmer-phaser</EffectScript>
+   <EffectParam name="minDim" value="0.1"/>
+   <EffectParam name="rate" value="0.5"/>
+  </Palette>
+  <Palette ID="9" Type="Color" Name="Blue" Value="#0000ff000000"/>
+  <Palette ID="10" Type="Color" Name="Red" Value="#ff0000000000"/>
+  <Palette ID="11" Type="Color" Name="Amber" Value="#ffb000000000"/>
+  <Palette ID="12" Type="Aim" Name="Aim Bench Person" StageTarget="0"/>
+  <Function ID="0" Type="Chaser" Name="Main" Path="Productions/Pad Bench">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <Direction>Forward</Direction>
+   <RunOrder>SingleShot</RunOrder>
+   <SpeedModes FadeIn="PerStep" FadeOut="PerStep" Duration="PerStep"/>
+   <Step Number="0" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1">3</Step>
+   <Step Number="1" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="2">4</Step>
+   <Step Number="2" FadeIn="0" Hold="8000" FadeOut="0" Cue="3">5</Step>
+   <Step Number="3" FadeIn="2000" Hold="4294967294" FadeOut="0" Cue="4">6</Step>
+   <Step Number="4" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="5">7</Step>
+  </Function>
+  <Function ID="1" Type="Chaser" Name="Second" Path="Productions/Pad Bench">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <Direction>Forward</Direction>
+   <RunOrder>SingleShot</RunOrder>
+   <SpeedModes FadeIn="PerStep" FadeOut="PerStep" Duration="PerStep"/>
+   <Step Number="0" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1">27</Step>
+   <Step Number="1" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="2">28</Step>
+  </Function>
+  <Function ID="2" Type="Chaser" Name="Pre-show" Path="Productions/Pad Bench">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <Direction>Forward</Direction>
+   <RunOrder>SingleShot</RunOrder>
+   <SpeedModes FadeIn="PerStep" FadeOut="PerStep" Duration="PerStep"/>
+   <Step Number="0" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1">33</Step>
+   <Step Number="1" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="2">34</Step>
+  </Function>
+  <Function ID="3" Type="Collection" Name="1-Follow Spot" Hidden="True" Path="Productions/Pad Bench/Main">
+   <Step Number="0">10</Step>
+  </Function>
+  <Function ID="4" Type="Collection" Name="2-Two Layers" Hidden="True" Path="Productions/Pad Bench/Main">
+   <Step Number="0">13</Step>
+   <Step Number="1">15</Step>
+  </Function>
+  <Function ID="5" Type="Collection" Name="3-Shutter Closed" Hidden="True" Path="Productions/Pad Bench/Main">
+   <Step Number="0">17</Step>
+  </Function>
+  <Function ID="6" Type="Collection" Name="4-Shutter Opens" Hidden="True" Path="Productions/Pad Bench/Main">
+   <Step Number="0">20</Step>
+  </Function>
+  <Function ID="7" Type="Collection" Name="5-Free Fly" Hidden="True" Path="Productions/Pad Bench/Main">
+   <Step Number="0">22</Step>
+  </Function>
+  <Function ID="10" Type="Scene" Name="1-Follow Spot · Spots" Hidden="True" Path="Productions/Pad Bench/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="0"/>
+   <Palette ID="0"/>
+   <Palette ID="12"/>
+   <Palette ID="6" FadeIn="-2" FadeOut="-2"/>
+  </Function>
+  <Function ID="13" Type="Scene" Name="2-Two Layers · Spots" Hidden="True" Path="Productions/Pad Bench/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="0"/>
+   <Palette ID="11"/>
+   <Palette ID="0"/>
+   <Palette ID="12"/>
+  </Function>
+  <Function ID="15" Type="Scene" Name="2-Two Layers · Wash" Hidden="True" Path="Productions/Pad Bench/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="1"/>
+   <Palette ID="9"/>
+   <Palette ID="1"/>
+  </Function>
+  <Function ID="17" Type="Scene" Name="3-Shutter Closed · Shutter Spot" Hidden="True" Path="Productions/Pad Bench/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="2"/>
+   <Palette ID="0"/>
+   <Palette ID="3"/>
+  </Function>
+  <Function ID="20" Type="Scene" Name="4-Shutter Opens · Shutter Spot" Hidden="True" Path="Productions/Pad Bench/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="2"/>
+   <Palette ID="0"/>
+   <Palette ID="5"/>
+   <Palette ID="4"/>
+  </Function>
+  <Function ID="22" Type="Scene" Name="5-Free Fly · Spots" Hidden="True" Path="Productions/Pad Bench/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="0"/>
+   <Palette ID="0"/>
+   <Palette ID="7" FadeIn="-2" FadeOut="-2"/>
+  </Function>
+  <Function ID="23" Type="Collection" Name="Breathe" Path="Productions/Pad Bench/Hits">
+   <Step Number="0">26</Step>
+  </Function>
+  <Function ID="26" Type="Scene" Name="Breathe · Wash" Hidden="True" Path="Productions/Pad Bench/Hits">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="1"/>
+   <Palette ID="10"/>
+   <Palette ID="0"/>
+   <Palette ID="8" FadeIn="-2" FadeOut="-2"/>
+  </Function>
+  <Function ID="27" Type="Collection" Name="1-Second A" Hidden="True" Path="Productions/Pad Bench/Second">
+   <Step Number="0">30</Step>
+  </Function>
+  <Function ID="28" Type="Collection" Name="2-Second B" Hidden="True" Path="Productions/Pad Bench/Second">
+   <Step Number="0">32</Step>
+  </Function>
+  <Function ID="30" Type="Scene" Name="1-Second A · Wash" Hidden="True" Path="Productions/Pad Bench/Second">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="1"/>
+   <Palette ID="10"/>
+   <Palette ID="0"/>
+  </Function>
+  <Function ID="32" Type="Scene" Name="2-Second B · Wash" Hidden="True" Path="Productions/Pad Bench/Second">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="1"/>
+   <Palette ID="9"/>
+   <Palette ID="0"/>
+  </Function>
+  <Function ID="33" Type="Collection" Name="1-Venue Focus" Hidden="True" Path="Productions/Pad Bench/Pre-show">
+   <Step Number="0">36</Step>
+  </Function>
+  <Function ID="34" Type="Collection" Name="2-Walk-in" Hidden="True" Path="Productions/Pad Bench/Pre-show">
+   <Step Number="0">38</Step>
+  </Function>
+  <Function ID="36" Type="Scene" Name="1-Venue Focus · Spots" Hidden="True" Path="Productions/Pad Bench/Pre-show">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="0"/>
+   <Palette ID="2"/>
+   <Palette ID="12"/>
+  </Function>
+  <Function ID="38" Type="Scene" Name="2-Walk-in · Wash" Hidden="True" Path="Productions/Pad Bench/Pre-show">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="1"/>
+   <Palette ID="11"/>
+   <Palette ID="2"/>
+  </Function>
+  <Function ID="39" Type="Chaser" Name="Songs" Path="Productions/Song Bench">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <Direction>Forward</Direction>
+   <RunOrder>SingleShot</RunOrder>
+   <SpeedModes FadeIn="PerStep" FadeOut="PerStep" Duration="PerStep"/>
+   <Step Number="0" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.1.2">40</Step>
+   <Step Number="1" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.1.5">41</Step>
+   <Step Number="2" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.1.5.5">42</Step>
+   <Step Number="3" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.2.3" SubCues="SubGo">48</Step>
+   <Step Number="4" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.2.8">44</Step>
+  </Function>
+  <Function ID="40" Type="Collection" Name="1.1.2-Verse In" Hidden="True" Path="Productions/Song Bench/Songs">
+   <Step Number="0">46</Step>
+  </Function>
+  <Function ID="41" Type="Collection" Name="1.1.5-Verse Lift" Hidden="True" Path="Productions/Song Bench/Songs">
+   <Step Number="0">38</Step>
+  </Function>
+  <Function ID="42" Type="Collection" Name="1.1.5.5-Verse Point" Hidden="True" Path="Productions/Song Bench/Songs">
+   <Step Number="0">46</Step>
+  </Function>
+  <Function ID="43" Type="Collection" Name="1.2.3-Chorus In" Hidden="True" Path="Productions/Song Bench/Songs">
+   <Step Number="0">47</Step>
+  </Function>
+  <Function ID="44" Type="Collection" Name="1.2.8-Chorus Out" Hidden="True" Path="Productions/Song Bench/Songs">
+   <Step Number="0">30</Step>
+  </Function>
+  <Function ID="46" Type="Scene" Name="1.1.2-Verse In · Wash" Hidden="True" Path="Productions/Song Bench/Songs">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="1"/>
+   <Palette ID="11"/>
+   <Palette ID="0"/>
+  </Function>
+  <Function ID="47" Type="Scene" Name="1.2.3.1-Chorus Sting · Wash" Hidden="True" Path="Productions/Song Bench/Songs">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="1"/>
+   <Palette ID="10"/>
+   <Palette ID="2"/>
+  </Function>
+  <Function ID="48" Type="Chaser" Name="1.2.3 Chorus In · sub-cues" Hidden="True" Path="Productions/Song Bench/Songs">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <Direction>Forward</Direction>
+   <RunOrder>SingleShot</RunOrder>
+   <SpeedModes FadeIn="PerStep" FadeOut="PerStep" Duration="PerStep"/>
+   <Step Number="0" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.2.3.1">49</Step>
+  </Function>
+  <Function ID="49" Type="Collection" Name="1.2.3.1-Chorus Sting" Hidden="True" Path="Productions/Song Bench/Songs">
+   <Step Number="0">47</Step>
+  </Function>
+  <ShutterAutoOpen Enabled="1"/>
+  <ShowControl MainCueList="0"/>
+  <ShowTree NextId="41" Current="1">
+   <Production ID="1" Name="Pad Bench" MainList="2">
+    <CueList ID="2" Name="Main" Mode="NonTracking" Chaser="0">
+     <Cue ID="5" Number="1" Name="Follow Spot" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="3">
+      <Layer ID="10" Groups="0">
+       <Look Key="Dimmer" Palettes="0"/>
+       <Look Key="Position" Palettes="12"/>
+       <Look Key="Effect.Position" Palettes="6" FadeIn="cue" FadeOut="cue"/>
+      </Layer>
+     </Cue>
+     <Cue ID="6" Number="2" Name="Two Layers" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="4">
+      <Layer ID="11" Groups="0">
+       <Look Key="Dimmer" Palettes="0"/>
+       <Look Key="Colour" Palettes="11"/>
+       <Look Key="Position" Palettes="12"/>
+      </Layer>
+      <Layer ID="12" Groups="1">
+       <Look Key="Dimmer" Palettes="1"/>
+       <Look Key="Colour" Palettes="9"/>
+      </Layer>
+     </Cue>
+     <Cue ID="7" Number="3" Name="Shutter Closed" FadeIn="0" FadeOut="0" Hold="8000" Collection="5">
+      <Layer ID="13" Fixtures="2">
+       <Look Key="Dimmer" Palettes="0"/>
+       <Look Key="Shutter" Palettes="3"/>
+      </Layer>
+     </Cue>
+     <Cue ID="8" Number="4" Name="Shutter Opens" FadeIn="2000" FadeOut="0" Hold="4294967294" Collection="6">
+      <Layer ID="14" Fixtures="2">
+       <Look Key="Dimmer" Palettes="0"/>
+       <Look Key="Shutter" Palettes="4"/>
+       <Look Key="Position" Palettes="5"/>
+      </Layer>
+     </Cue>
+     <Cue ID="9" Number="5" Name="Free Fly" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="7">
+      <Layer ID="15" Groups="0">
+       <Look Key="Dimmer" Palettes="0"/>
+       <Look Key="Effect.Position" Palettes="7" FadeIn="cue" FadeOut="cue"/>
+      </Layer>
+     </Cue>
+    </CueList>
+    <CueList ID="3" Name="Second" Mode="NonTracking" Chaser="1">
+     <Cue ID="19" Number="1" Name="Second A" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="27">
+      <Layer ID="21" Groups="1">
+       <Look Key="Dimmer" Palettes="0"/>
+       <Look Key="Colour" Palettes="10"/>
+      </Layer>
+     </Cue>
+     <Cue ID="20" Number="2" Name="Second B" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="28">
+      <Layer ID="22" Groups="1">
+       <Look Key="Dimmer" Palettes="0"/>
+       <Look Key="Colour" Palettes="9"/>
+      </Layer>
+     </Cue>
+    </CueList>
+    <CueList ID="4" Name="Pre-show" Mode="NonTracking" Chaser="2">
+     <Cue ID="23" Number="1" Name="Venue Focus" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="33" FocusCall="1">
+      <Layer ID="25" Groups="0">
+       <Look Key="Dimmer" Palettes="2"/>
+       <Look Key="Position" Palettes="12"/>
+      </Layer>
+     </Cue>
+     <Cue ID="24" Number="2" Name="Walk-in" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="34">
+      <Layer ID="26" Groups="1">
+       <Look Key="Dimmer" Palettes="2"/>
+       <Look Key="Colour" Palettes="11"/>
+      </Layer>
+     </Cue>
+    </CueList>
+    <Looks ID="16" Name="Hits">
+     <Cue ID="17" Number="1" Name="Breathe" FadeIn="500" FadeOut="500" Hold="4294967294" Collection="23" Scope="Cue" ScopeOf="5">
+      <Layer ID="18" Groups="1">
+       <Look Key="Dimmer" Palettes="0"/>
+       <Look Key="Colour" Palettes="10"/>
+       <Look Key="Effect.Dimmer" Palettes="8" FadeIn="cue" FadeOut="cue"/>
+      </Layer>
+     </Cue>
+    </Looks>
+   </Production>
+   <Production ID="27" Name="Song Bench" MainList="28" Numbering="ShowPartIteration">
+    <CueList ID="28" Name="Songs" Mode="Tracking" Chaser="39">
+     <Section Key="1" Name="Bench Song"/>
+     <Cue ID="29" Number="1.1.2" Name="Verse In" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="40">
+      <Layer ID="34" Groups="1">
+       <Look Key="Dimmer" Palettes="0"/>
+       <Look Key="Colour" Palettes="11"/>
+      </Layer>
+     </Cue>
+     <Cue ID="30" Number="1.1.5" Name="Verse Lift" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="41">
+      <Layer ID="35" Groups="1">
+       <Look Key="Dimmer" Palettes="2"/>
+       <Look Key="Colour" Palettes="11"/>
+      </Layer>
+     </Cue>
+     <Cue ID="31" Number="1.1.5.5" Name="Verse Point" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="42">
+      <Layer ID="36" Groups="1">
+       <Look Key="Dimmer" Palettes="0"/>
+       <Look Key="Colour" Palettes="11"/>
+      </Layer>
+     </Cue>
+     <Cue ID="32" Number="1.2.3" Name="Chorus In" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="43">
+      <Layer ID="37" Groups="1">
+       <Look Key="Dimmer" Palettes="2"/>
+       <Look Key="Colour" Palettes="10"/>
+      </Layer>
+     </Cue>
+     <Cue ID="33" Number="1.2.8" Name="Chorus Out" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="44">
+      <Layer ID="38" Groups="1">
+       <Look Key="Dimmer" Palettes="0"/>
+       <Look Key="Colour" Palettes="10"/>
+      </Layer>
+     </Cue>
+    </CueList>
+    <SubCues ID="40" Name="Sub-cues" Cue="32" Chaser="48">
+     <Cue ID="39" Number="1" Name="Chorus Sting" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="49"/>
+    </SubCues>
+   </Production>
+   <Generated Scenes="10,13,15,17,20,22,26,30,32,36,38,46,47" Collections="3,4,5,6,7,23,27,28,33,34,40,41,42,43,44,49" Chasers="0,1,2,39,48"/>
+   <InlinePalettes IDs=""/>
+  </ShowTree>
+  <FocusCalls>
+   <Call Name="Spot 1 on Bench Person" TargetKind="Target" TargetID="0">
+    <Fixture ID="0"/>
+   </Call>
+   <Call Name="Spot 2 on Bench Person" TargetKind="Target" TargetID="0">
+    <Fixture ID="1"/>
+   </Call>
+  </FocusCalls>
+  <MoveInBlack Auto="1" DarkGapMs="800"/>
+  <Monitor DisplayMode="1" ShowLabels="1" AimSubjectHeight="1.4" ItemLocks="1">
+   <Font>Arial,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0</Font>
+   <ChannelStyle>0</ChannelStyle>
+   <ValueStyle>0</ValueStyle>
+   <Grid Width="24" Height="14" Depth="20" Units="1"/>
+   <FxItem ID="0" XPos="2157.6" YPos="5796"/>
+   <FxItem ID="1" XPos="5157.6" YPos="5796"/>
+   <FxItem ID="2" XPos="3657.6" YPos="5796"/>
+   <FxItem ID="3" XPos="1057.6" YPos="5796"/>
+   <FxItem ID="4" XPos="6257.6" YPos="5796"/>
+   <MonitorLayer ID="0" Name="Default" Visible="1" Order="0"/>
+   <MonitorLayer ID="1" Name="Stage" Visible="1" Order="1"/>
+   <Truss ID="0" Name="FOH Truss" Type="Horizontal" Profile="Square" Length="6.000" Width="0.290" OriginX="0.658" OriginY="5.796" OriginZ="4.500" DirX="1.000000" DirY="0.000000"/>
+   <StagePieces Layer="1">
+    <StagePiece Kind="Centre" Visible="0" Mark="1" Line="0"/>
+    <StagePiece Kind="Curtain" Visible="0"/>
+    <StagePiece Kind="Number" Visible="0"/>
+    <StagePiece Kind="Apron" Visible="0" Auto="1"/>
+   </StagePieces>
+   <StageTarget ID="0" Name="Bench Person" X="3.658" Y="3.048" Z="0.000" Color="#ffb400" Kind="person" PersonHeight="1.626"/>
+   <FixtureRig FID="0" Truss="0" Offset="1.500" Mounting="TopHung" PanZero="0.0"/>
+   <FixtureRig FID="1" Truss="0" Offset="4.500" Mounting="TopHung" PanZero="0.0"/>
+   <FixtureRig FID="2" Truss="0" Offset="3.000" Mounting="TopHung" PanZero="0.0"/>
+   <FixtureRig FID="3" Truss="0" Offset="0.400" Mounting="TopHung" PanZero="0.0"/>
+   <FixtureRig FID="4" Truss="0" Offset="5.600" Mounting="TopHung" PanZero="0.0"/>
+  </Monitor>
+ </Engine>
+ <VirtualConsole>
+  <Frame Caption="">
+   <Appearance>
+    <FrameStyle>None</FrameStyle>
+    <ForegroundColor>Default</ForegroundColor>
+    <BackgroundColor>Default</BackgroundColor>
+    <BackgroundImage>None</BackgroundImage>
+    <Font>Default</Font>
+   </Appearance>
+  </Frame>
+  <Properties>
+   <Size Width="1920" Height="1080"/>
+   <GrandMaster Visible="1" ChannelMode="Intensity" ValueMode="Reduce" SliderMode="Normal"/>
+  </Properties>
+ </VirtualConsole>
+ <SimpleDesk>
+  <Engine/>
+ </SimpleDesk>
+ <AppState/>
+</Workspace>
