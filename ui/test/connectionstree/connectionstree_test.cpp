@@ -2487,9 +2487,10 @@ void ConnectionsTree_Test::connectionEditorPatchesANewArtNetUniverse()
     QCOMPARE(settingsPage(ed), QString("connPageTargets"));
     QCOMPARE(ed.m_interfaceCombo->count(), 4);
     QCOMPARE(ed.m_interfaceCombo->currentIndex(), 0);
-    // Broadcast, the four free ports of "Quad", another address.
-    QCOMPARE(ed.m_targetCombo->count(), 6);
-    QVERIFY(ed.m_targetIP->isEnabled() == false);          // broadcast picked
+    // Broadcast, then the four free ports of "Quad"; any other address is typed.
+    QCOMPARE(ed.m_targetCombo->count(), 5);
+    QCOMPARE(ed.m_targetIP->text(), QString("Broadcast"));
+    QVERIFY(ed.m_targetPort->isEnabled() == false);        // broadcast: its own number
     ed.m_targetCombo->setCurrentIndex(3);                  // Quad port 3
     QCOMPARE(ed.m_targetIP->text(), QString("172.18.2.50"));
     QCOMPARE(ed.m_targetPort->text(), QString("0:0:2"));
@@ -2520,7 +2521,7 @@ void ConnectionsTree_Test::connectionEditorPatchesANewArtNetUniverse()
     typed.m_targetIP->setText("10.1.1.9");
     typed.slotTargetTyped();
     typed.m_targetPort->setText("1:2:3");
-    QCOMPARE(typed.m_targetCombo->currentData().toInt(), -2);   // another address
+    QVERIFY2(typed.m_targetNote->text().contains("10.1.1.9"), qPrintable(typed.m_targetNote->text()));
     QVERIFY2(typed.apply(), qPrintable(typed.error()));
     op = iom->universe(3)->outputPatch(0);
     QCOMPARE(op->output(), quint32(2));
@@ -2594,13 +2595,11 @@ void ConnectionsTree_Test::connectionEditorSetsSacnSettings()
     QCOMPARE(settingsPage(ed), QString("connPageSacn"));
     // The plugin's defaults until it is set: multicast, its own number, 100.
     QVERIFY(ed.m_sacnMulticast->isChecked());
-    QVERIFY(ed.m_sacnIP->isEnabled() == false);
     QCOMPARE(ed.m_sacnUniverse->value(), 2);
     QCOMPARE(ed.m_sacnPriority->value(), 100);
 
     // Unicast with no address is refused, and nothing changes.
     ed.m_sacnMulticast->setChecked(false);
-    QVERIFY(ed.m_sacnIP->isEnabled());
     QVERIFY(ed.apply() == false);
     QVERIFY(ed.error().contains("Unicast"));
     QCOMPARE(iom->universe(1)->outputPatchesCount(), 0);
@@ -2712,16 +2711,16 @@ void ConnectionsTree_Test::byUniverseColumnsShowHideAndAreRemembered()
         QVERIFY2(tree.m_tree->isColumnHidden(c), qPrintable(QString::number(c)));
     QVERIFY(tree.m_columnsButton->isVisibleTo(&tree) == false);
 
-    // By universe, by default: what Detail does not already say.
+    // By universe, by default: the fields a patch is set up with.
     tree.m_byUniverse->setChecked(true);
     QVERIFY(tree.m_columnsButton->isVisibleTo(&tree));
-    QVERIFY(tree.m_tree->isColumnHidden(COL_OUTPUT));
-    QVERIFY(tree.m_tree->isColumnHidden(COL_IP));
-    QVERIFY(tree.m_tree->isColumnHidden(COL_U));
+    QVERIFY(tree.m_tree->isColumnHidden(COL_OUTPUT) == false);
+    QVERIFY(tree.m_tree->isColumnHidden(COL_IP) == false);
+    QVERIFY(tree.m_tree->isColumnHidden(COL_U) == false);
     QVERIFY(tree.m_tree->isColumnHidden(COL_MODE) == false);
     QVERIFY(tree.m_tree->isColumnHidden(COL_INPUT) == false);
     QVERIFY(tree.m_tree->isColumnHidden(COL_PROFILE));
-    QVERIFY(tree.m_tree->isColumnHidden(COL_FEEDBACK) == false);
+    QVERIFY(tree.m_tree->isColumnHidden(COL_FEEDBACK));
     QVERIFY(tree.m_tree->isColumnHidden(COL_PT) == false);
 
     // The header's right-click: a tick per column, named as the header.
@@ -2733,8 +2732,8 @@ void ConnectionsTree_Test::byUniverseColumnsShowHideAndAreRemembered()
         foreach (QAction *a, m->actions())
         {
             seen << a->text();
-            if (a->text() == "IP")
-                a->trigger();               // show IP
+            if (a->text() == "Feedback")
+                a->trigger();               // show Feedback
             else if (a->text() == "PT")
                 a->trigger();               // hide PT
         }
@@ -2744,13 +2743,13 @@ void ConnectionsTree_Test::byUniverseColumnsShowHideAndAreRemembered()
     QApplication::processEvents();
     QCOMPARE(seen, QStringList() << "Output" << "IP" << "U" << "Mode" << "Input"
                                  << "Profile" << "Feedback" << "PT");
-    QVERIFY(tree.m_tree->isColumnHidden(COL_IP) == false);
+    QVERIFY(tree.m_tree->isColumnHidden(COL_FEEDBACK) == false);
     QVERIFY(tree.m_tree->isColumnHidden(COL_PT));
 
     // Remembered: another list opens with the same.
     ConnectionsTree again(m_doc);
     QVERIFY(again.m_byUniverse->isChecked());
-    QVERIFY(again.m_tree->isColumnHidden(COL_IP) == false);
+    QVERIFY(again.m_tree->isColumnHidden(COL_FEEDBACK) == false);
     QVERIFY(again.m_tree->isColumnHidden(COL_PT));
     QVERIFY(again.m_tree->isColumnHidden(COL_MODE) == false);
 
@@ -2758,7 +2757,7 @@ void ConnectionsTree_Test::byUniverseColumnsShowHideAndAreRemembered()
     QMenu menu;
     again.fillColumnsMenu(&menu);
     QCOMPARE(menu.actions().count(), 8);
-    QVERIFY(menu.actions().at(1)->isChecked());         // IP
+    QVERIFY(menu.actions().at(6)->isChecked());         // Feedback
     QVERIFY(menu.actions().at(7)->isChecked() == false); // PT
 
     // The wiring's header has no columns to choose.
@@ -3001,4 +3000,380 @@ void ConnectionsTree_Test::inputProfilesCanBeMadeAndDeleted()
     QVERIFY(ioMap->profile(name) == nullptr);
     QVERIFY(ioMap->inputPatch(0)->profileName() != name);
     QVERIFY(!ed.deleteInputProfile(name, false));   // gone already
+}
+
+/****************************************************************************
+ * Patching simpler: the interface, the universe, Send To; By universe
+ ****************************************************************************/
+
+namespace
+{
+/* A console with a show network (en5 172.18.2.138/24), a house network
+   (en0 192.168.1.20/24, the default route) and loopback; an Art-Net-like
+   plugin with a line on each. 10.50.0.0/16 is routed out of en5 (a
+   router on the show network). Nothing is sent anywhere. */
+IOPluginStub *networkMachine(Doc *doc)
+{
+    IOPluginStub *stub = static_cast<IOPluginStub *>(doc->ioPluginCache()->plugins().at(0));
+    stub->m_nameOverride = "ArtNet";
+    stub->m_supportsTargets = true;
+    stub->m_lineNames = QStringList() << "127.0.0.1" << "172.18.2.138" << "192.168.1.20";
+    stub->m_lineDescriptions[0] = "lo0";
+    stub->m_lineDescriptions[1] = "en5";
+    stub->m_lineDescriptions[2] = "en0";
+    QList<NetworkRoute::LocalAddress> locals;
+    auto la = [](const QString &i, const QString &ip, int pf) {
+        NetworkRoute::LocalAddress a;
+        a.iface = i;
+        a.ip = QHostAddress(ip);
+        a.prefix = pf;
+        return a;
+    };
+    locals << la("lo0", "127.0.0.1", 8) << la("en5", "172.18.2.138", 24)
+           << la("en0", "192.168.1.20", 24);
+    NetworkRoute::setResolverForTest([locals]() { return locals; },
+        [](const QHostAddress &t) {
+            if (t.isInSubnet(QHostAddress("172.18.2.0"), 24) || t.isInSubnet(QHostAddress("10.50.0.0"), 16))
+                return QHostAddress("172.18.2.138");
+            if (t.isLoopback())
+                return QHostAddress("127.0.0.1");
+            return QHostAddress("192.168.1.20");      // the default route
+        });
+    InputOutputMap *iom = doc->inputOutputMap();
+    while (iom->universesCount() < 8)
+        iom->addUniverse();
+    return stub;
+}
+
+struct ResolverReset
+{
+    ~ResolverReset() { NetworkRoute::setResolverForTest(nullptr, nullptr); }
+};
+
+void typeInto(QLineEdit *edit, const QString &text)
+{
+    edit->setFocus();
+    edit->selectAll();
+    QTest::keyClicks(edit, text);
+}
+}
+
+void ConnectionsTree_Test::portAddressTakesABareNumber()
+{
+    quint32 pa = 0;
+    QVERIFY(UniversePatcher::parsePortAddress("15", pa));
+    QCOMPARE(pa, quint32(15));
+    QCOMPARE(UniversePatcher::portAddressText(pa), QString("0:0:15"));
+    QVERIFY(UniversePatcher::parsePortAddress(" 300 ", pa));
+    QCOMPARE(UniversePatcher::portAddressText(pa), QString("1:2:12"));     // 256 + 32 + 12
+    QVERIFY(UniversePatcher::parsePortAddress("32767", pa));
+    QCOMPARE(UniversePatcher::portAddressText(pa), QString("127:15:15"));
+    // net:subnet:universe as before.
+    QVERIFY(UniversePatcher::parsePortAddress("1:2:3", pa));
+    QCOMPARE(pa, quint32((1 << 8) | (2 << 4) | 3));
+    QVERIFY(UniversePatcher::portAddressError("1:2:3").isEmpty());
+    // Out of range or not a number: refused, saying why.
+    QVERIFY(UniversePatcher::parsePortAddress("32768", pa) == false);
+    QVERIFY2(UniversePatcher::portAddressError("32768").contains("32767"),
+             qPrintable(UniversePatcher::portAddressError("32768")));
+    QVERIFY(UniversePatcher::parsePortAddress("0:16:0", pa) == false);
+    QVERIFY(UniversePatcher::parsePortAddress("abc", pa) == false);
+    QVERIFY(UniversePatcher::parsePortAddress("-1", pa) == false);
+    QVERIFY(UniversePatcher::portAddressError("abc").contains("0 to 32767"));
+}
+
+void ConnectionsTree_Test::interfaceFollowsTheDestination()
+{
+    ResolverReset reset;
+    networkMachine(m_doc);
+    const QStringList lines = QStringList() << "127.0.0.1" << "172.18.2.138" << "192.168.1.20";
+    typedef UniversePatcher::Destination D;
+
+    // What Send To's text means.
+    QCOMPARE(int(UniversePatcher::readDestination("").kind), int(D::Broadcast));
+    QCOMPARE(int(UniversePatcher::readDestination("broadcast").kind), int(D::Broadcast));
+    QCOMPARE(int(UniversePatcher::readDestination("255.255.255.255").kind), int(D::Broadcast));
+    QCOMPARE(int(UniversePatcher::readDestination("172.18.").kind), int(D::Partial));
+    const D bad = UniversePatcher::readDestination("172.18.2.x");
+    QCOMPARE(int(bad.kind), int(D::Invalid));
+    QVERIFY2(bad.error.contains("not an IP address"), qPrintable(bad.error));
+    QCOMPARE(int(UniversePatcher::readDestination("300.1.1.1").kind), int(D::Invalid));
+    const D node = UniversePatcher::readDestination(" 172.18.2.60 ");
+    QCOMPARE(int(node.kind), int(D::Unicast));
+    QCOMPARE(node.address, QString("172.18.2.60"));
+    // A local network's broadcast address is broadcast, on that network.
+    const D directed = UniversePatcher::readDestination("172.18.2.255");
+    QCOMPARE(int(directed.kind), int(D::Broadcast));
+    QCOMPARE(directed.network, QString("172.18.2.0/24"));
+
+    // On a network of its own: that interface.
+    UniversePatcher::AutoLine a = UniversePatcher::autoLine(lines, node, -1);
+    QCOMPARE(a.line, 1);
+    QCOMPARE(a.via, QString("en5 · 172.18.2.138"));
+    QVERIFY2(a.why.contains("on its network"), qPrintable(a.why));
+    QVERIFY(a.fallback == false);
+    a = UniversePatcher::autoLine(lines, UniversePatcher::readDestination("192.168.1.9"), 1);
+    QCOMPARE(a.line, 2);
+    // Routed (not the default route): where the system sends it.
+    a = UniversePatcher::autoLine(lines, UniversePatcher::readDestination("10.50.0.9"), 2);
+    QCOMPARE(a.line, 1);
+    QVERIFY2(a.why.contains("routes"), qPrintable(a.why));
+    // Only the default route reaches it: kept where it was, and said.
+    a = UniversePatcher::autoLine(lines, UniversePatcher::readDestination("8.8.8.8"), 2);
+    QCOMPARE(a.line, 2);
+    QVERIFY(a.fallback);
+    a = UniversePatcher::autoLine(lines, UniversePatcher::readDestination("8.8.8.8"), -1);
+    QCOMPARE(a.line, 1);                        // the first that is not loopback
+    // Broadcast: on the network typed, else where it was.
+    QCOMPARE(UniversePatcher::autoLine(lines, directed, 2).line, 1);
+    QCOMPARE(UniversePatcher::autoLine(lines, UniversePatcher::readDestination("192.168.1.255"), 1).line, 2);
+    QCOMPARE(UniversePatcher::autoLine(lines, D(), 2).line, 2);
+    QCOMPARE(UniversePatcher::autoLine(lines, D(), -1).line, 1);
+}
+
+void ConnectionsTree_Test::typingAnIpPicksSendToAndTheInterface()
+{
+    ResolverReset reset;
+    networkMachine(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    ConnectionEditor ed(m_doc, 3);
+    ed.show();
+    pickProtocol(ed, "ArtNet");
+    // The interface is shown, not asked.
+    QVERIFY(ed.m_interfaceAuto->isVisibleTo(&ed));
+    QVERIFY(ed.m_interfaceCombo->isVisibleTo(&ed) == false);
+    QCOMPARE(ed.m_interfaceChoose->text(), QString("Choose"));
+    QCOMPARE(ed.m_interfaceCombo->currentIndex(), 1);       // not loopback
+    QCOMPARE(ed.m_targetIP->text(), QString("Broadcast"));
+
+    // Typing an IP: Send To is that node -- no list to scroll -- and the
+    // interface the one on its network.
+    typeInto(ed.m_targetIP, "192.168.1.9");
+    QCOMPARE(ed.m_interfaceCombo->currentIndex(), 2);
+    QVERIFY2(ed.m_interfaceAuto->text().contains("en0 · 192.168.1.20"), qPrintable(ed.m_interfaceAuto->text()));
+    QVERIFY2(ed.m_targetNote->text().contains("Unicast to 192.168.1.9"), qPrintable(ed.m_targetNote->text()));
+    QVERIFY(ed.m_targetPort->isEnabled());
+    // A bare number is the universe on the node.
+    typeInto(ed.m_targetPort, "300");
+    emit ed.m_targetPort->editingFinished();
+    QCOMPARE(ed.m_targetPort->text(), QString("1:2:12"));
+    QVERIFY2(ed.apply(), qPrintable(ed.error()));
+    OutputPatch *op = iom->universe(3)->outputPatch(0);
+    QCOMPARE(op->output(), quint32(2));
+    QCOMPARE(op->getPluginParameters().value("outputIP").toString(), QString("192.168.1.9"));
+    QCOMPARE(op->getPluginParameters().value("outputUni").toUInt(), quint32(300));
+
+    // Opened again: automatic still, as the route agrees.
+    ConnectionEditor b(m_doc, 3);
+    b.show();
+    QVERIFY(b.m_autoInterface);
+    QCOMPARE(b.m_targetIP->text(), QString("192.168.1.9"));
+    // A network's broadcast address: broadcast, on that network.
+    typeInto(b.m_targetIP, "172.18.2.255");
+    QCOMPARE(b.m_interfaceCombo->currentIndex(), 1);
+    QVERIFY2(b.m_targetNote->text().contains("Broadcast on 172.18.2.0/24"), qPrintable(b.m_targetNote->text()));
+    QVERIFY(b.m_targetPort->isEnabled() == false);
+    QVERIFY2(b.apply(), qPrintable(b.error()));
+    op = iom->universe(3)->outputPatch(0);
+    QCOMPARE(op->output(), quint32(1));
+    QVERIFY(op->getPluginParameters().contains("outputIP") == false);
+
+    // Not an address: says why, changes nothing.
+    ConnectionEditor c(m_doc, 3);
+    c.show();
+    typeInto(c.m_targetIP, "172.18.2.x");
+    QVERIFY2(c.m_targetNote->text().contains("not an IP address"), qPrintable(c.m_targetNote->text()));
+    QVERIFY(c.apply() == false);
+    QVERIFY2(c.error().contains("not an IP address"), qPrintable(c.error()));
+    // A universe past the last: refused, saying the highest.
+    typeInto(c.m_targetIP, "172.18.2.60");
+    c.m_targetPort->setText("40000");
+    QVERIFY(c.apply() == false);
+    QVERIFY2(c.error().contains("32767"), qPrintable(c.error()));
+    QCOMPARE(iom->universe(3)->outputPatch(0)->output(), quint32(1));
+    QVERIFY(iom->universe(3)->outputPatch(0)->getPluginParameters().contains("outputIP") == false);
+
+    // Picking a node heard on the network fills both and picks its interface.
+    QLCIOPlugin::Device node = makeDevice(1, "Stage Left Node", "172.18.2.50");
+    node.portLabels << "0:0:15";
+    node.portUniverses << 15;
+    static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0))->m_devices << node;
+    ConnectionEditor d(m_doc, 4);
+    d.show();
+    pickProtocol(d, "ArtNet");
+    QCOMPARE(d.m_targetCombo->count(), 2);          // Broadcast, the node's port
+    d.m_targetCombo->setCurrentIndex(1);
+    QCOMPARE(d.m_targetIP->text(), QString("172.18.2.50"));
+    QCOMPARE(d.m_targetPort->text(), QString("0:0:15"));
+    QCOMPARE(d.m_interfaceCombo->currentIndex(), 1);
+}
+
+void ConnectionsTree_Test::aHandPickedInterfaceStaysChosen()
+{
+    ResolverReset reset;
+    networkMachine(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    // A saved show sending to the show network out of the house interface:
+    // chosen by hand, and kept so.
+    QVERIFY(iom->setOutputPatch(5, "ArtNet", "", 2, false, 0));
+    iom->universe(5)->outputPatch(0)->setPluginParameter("outputIP", "172.18.2.50");
+    iom->universe(5)->outputPatch(0)->setPluginParameter("outputUni", 15);
+    // And one broadcasting on the house network: its interface stays too.
+    QVERIFY(iom->setOutputPatch(6, "ArtNet", "", 2, false, 0));
+
+    ConnectionEditor ed(m_doc, 5);
+    ed.show();
+    QVERIFY(ed.m_autoInterface == false);
+    QVERIFY(ed.m_interfaceCombo->isVisibleTo(&ed));
+    QCOMPARE(ed.m_interfaceCombo->currentIndex(), 2);
+    QCOMPARE(ed.m_interfaceChoose->text(), QString("Automatic"));
+    QVERIFY(ed.apply());
+    QCOMPARE(iom->universe(5)->outputPatch(0)->output(), quint32(2));
+    QCOMPARE(iom->universe(5)->outputPatch(0)->getPluginParameters().value("outputIP").toString(),
+             QString("172.18.2.50"));
+
+    // Automatic again: the network the node is on.
+    ed.m_interfaceChoose->click();
+    QVERIFY(ed.m_autoInterface);
+    QCOMPARE(ed.m_interfaceCombo->currentIndex(), 1);
+    QVERIFY(ed.apply());
+    QCOMPARE(iom->universe(5)->outputPatch(0)->output(), quint32(1));
+
+    ConnectionEditor bc(m_doc, 6);
+    QVERIFY(bc.m_autoInterface);
+    QCOMPARE(bc.m_interfaceCombo->currentIndex(), 2);
+    QVERIFY(bc.apply());
+    QCOMPARE(iom->universe(6)->outputPatch(0)->output(), quint32(2));
+}
+
+void ConnectionsTree_Test::byUniverseShowsTheSelectedUniversesSettings()
+{
+    ResolverReset reset;
+    networkMachine(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(1, "ArtNet", "", 1, false, 0));
+    iom->universe(1)->outputPatch(0)->setPluginParameter("outputIP", "172.18.2.50");
+    iom->universe(1)->outputPatch(0)->setPluginParameter("outputUni", 15);
+
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+    tree.m_refreshTimer->stop();
+    // The list, then the settings, then the DMX grid.
+    QCOMPARE(tree.m_universeSplit->widget(0), static_cast<QWidget *>(tree.m_paneStack));
+    QVERIFY(tree.m_universeSplit->widget(1)->isAncestorOf(tree.m_output));
+    QCOMPARE(tree.m_paneStack->currentWidget(), static_cast<QWidget *>(tree.m_panePlaceholder));
+
+    clickUniverse(tree, 1);
+    QCOMPARE(tree.m_paneStack->currentWidget(), static_cast<QWidget *>(tree.m_connPane));
+    QCOMPARE(tree.m_connPane->universe(), quint32(1));
+    QVERIFY2(tree.m_connPane->m_paneTitle->text().startsWith("Universe 2"), qPrintable(tree.m_connPane->m_paneTitle->text()));
+    QCOMPARE(tree.m_connPane->m_targetIP->text(), QString("172.18.2.50"));
+    QCOMPARE(tree.m_connPane->m_targetPort->text(), QString("0:0:15"));
+    QVERIFY(tree.m_connPane->m_buttons->isVisibleTo(tree.m_connPane) == false);
+    QCOMPARE(tree.m_output->universe(), quint32(1));
+
+    // Changed in the pane: made as it is committed, and the row follows.
+    typeInto(tree.m_connPane->m_targetPort, "17");
+    emit tree.m_connPane->m_targetPort->editingFinished();
+    QApplication::processEvents();
+    QCOMPARE(iom->universe(1)->outputPatch(0)->getPluginParameters().value("outputUni").toUInt(),
+             quint32(17));
+    QCOMPARE(universeRow(tree.m_tree, 1)->text(COL_U), QString("0:0:17"));
+    QCOMPARE(tree.m_connPane->m_targetPort->text(), QString("0:0:17"));
+    // Refused in the pane: it says why there; nothing changes.
+    typeInto(tree.m_connPane->m_targetPort, "40000");
+    emit tree.m_connPane->m_targetPort->editingFinished();
+    QApplication::processEvents();
+    QVERIFY(tree.m_connPane->m_paneNote->isVisibleTo(tree.m_connPane));
+    QVERIFY(tree.m_connPane->m_paneNote->text().contains("32767"));
+    QCOMPARE(iom->universe(1)->outputPatch(0)->getPluginParameters().value("outputUni").toUInt(),
+             quint32(17));
+    // Esc puts it back.
+    tree.m_connPane->reject();
+    QCOMPARE(tree.m_connPane->m_targetPort->text(), QString("0:0:17"));
+    QVERIFY(tree.m_connPane->isVisibleTo(&tree));
+
+    // Another universe: the pane follows the selection.
+    clickUniverse(tree, 4);
+    QCOMPARE(tree.m_connPane->universe(), quint32(4));
+    QCOMPARE(tree.m_connPane->m_protocolCombo->currentData().toString(), QString());
+
+    // Narrow, the grid goes under the settings; wide, beside them.
+    tree.resize(1024, 640);
+    QCOMPARE(tree.m_universeSplit->orientation(), Qt::Vertical);
+    tree.resize(1920, 1080);
+    QCOMPARE(tree.m_universeSplit->orientation(), Qt::Horizontal);
+}
+
+void ConnectionsTree_Test::byUniverseCellsEditThePatch()
+{
+    ResolverReset reset;
+    networkMachine(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(1, "ArtNet", "", 1, false, 0));
+    iom->universe(1)->outputPatch(0)->setPluginParameter("outputIP", "172.18.2.50");
+    iom->universe(1)->outputPatch(0)->setPluginParameter("outputUni", 15);
+
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+    tree.m_refreshTimer->stop();
+    clickUniverse(tree, 1);
+
+    // Which cells are fields: a patched universe's patch columns.
+    QTreeWidgetItem *row = universeRow(tree.m_tree, 1);
+    QVERIFY(tree.isGridCell(tree.m_tree->indexFromItem(row, COL_IP)));
+    QVERIFY(tree.isGridCell(tree.m_tree->indexFromItem(row, COL_DETAIL)) == false);
+    QTreeWidgetItem *unpatched = universeRow(tree.m_tree, 4);
+    QVERIFY(tree.isGridCell(tree.m_tree->indexFromItem(unpatched, COL_OUTPUT)));
+    QVERIFY(tree.isGridCell(tree.m_tree->indexFromItem(unpatched, COL_IP)) == false);
+    // The editor a cell opens holds what it says.
+    QWidget *holder = new QWidget(&tree);
+    QLineEdit *ipEdit = qobject_cast<QLineEdit *>(
+        tree.createCellEditor(holder, tree.m_tree->indexFromItem(row, COL_IP)));
+    QVERIFY(ipEdit != NULL);
+    QCOMPARE(ipEdit->text(), QString("172.18.2.50"));
+    QComboBox *outCombo = qobject_cast<QComboBox *>(
+        tree.createCellEditor(holder, tree.m_tree->indexFromItem(row, COL_OUTPUT)));
+    QVERIFY(outCombo != NULL);
+    QCOMPARE(outCombo->currentData().toString(), QString("ArtNet"));
+    delete holder;
+
+    // A bare number in U is the universe on the node.
+    QVERIFY(tree.commitCell(1, COL_U, "16"));
+    OutputPatch *op = iom->universe(1)->outputPatch(0);
+    QCOMPARE(op->getPluginParameters().value("outputUni").toUInt(), quint32(16));
+    QCOMPARE(universeRow(tree.m_tree, 1)->text(COL_U), QString("0:1:0"));
+    // The pane beside it shows it too.
+    QCOMPARE(tree.m_connPane->m_targetPort->text(), QString("0:1:0"));
+    // An IP: sent there, out of the interface on its network.
+    QVERIFY(tree.commitCell(1, COL_IP, "192.168.1.9"));
+    op = iom->universe(1)->outputPatch(0);
+    QCOMPARE(op->output(), quint32(2));
+    QCOMPARE(op->getPluginParameters().value("outputIP").toString(), QString("192.168.1.9"));
+    QCOMPARE(tree.m_connPane->m_targetIP->text(), QString("192.168.1.9"));
+    QCOMPARE(tree.m_connPane->m_protocolCombo->currentData().toString(), QString("ArtNet"));
+    // Mode and passthrough.
+    QVERIFY(tree.commitCell(1, COL_MODE, "Full"));
+    QCOMPARE(iom->universe(1)->outputPatch(0)->getPluginParameters().value("transmitMode").toString(),
+             QString("Full"));
+    QVERIFY(tree.commitCell(1, COL_PT, "on"));
+    QVERIFY(iom->getUniversePassthrough(1));
+    // Refused: says why, changes nothing.
+    QString error;
+    QVERIFY(tree.commitCell(1, COL_U, "40000", &error) == false);
+    QVERIFY2(error.contains("32767"), qPrintable(error));
+    QCOMPARE(iom->universe(1)->outputPatch(0)->getPluginParameters().value("outputUni").toUInt(),
+             quint32(16));
+    QVERIFY(tree.commitCell(1, COL_IP, "nope", &error) == false);
+    QVERIFY2(error.contains("not an IP address"), qPrintable(error));
+
+    // An unpatched universe patched from its Output cell: broadcast, on the
+    // first interface that is not loopback.
+    QVERIFY(tree.commitCell(4, COL_OUTPUT, "ArtNet"));
+    QCOMPARE(iom->universe(4)->outputPatchesCount(), 1);
+    QCOMPARE(iom->universe(4)->outputPatch(0)->output(), quint32(1));
+    // And taken off it again.
+    QVERIFY(tree.commitCell(4, COL_OUTPUT, ""));
+    QCOMPARE(iom->universe(4)->outputPatchesCount(), 0);
 }

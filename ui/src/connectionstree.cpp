@@ -45,6 +45,9 @@
 #include <QTreeWidgetItemIterator>
 #include <QToolButton>
 #include <QShowEvent>
+#include <QResizeEvent>
+#include <QComboBox>
+#include <QSpinBox>
 
 #include "connectionstree.h"
 #include "shrinkablebar.h"
@@ -167,6 +170,62 @@ public:
     }
 };
 }
+
+/* A By universe cell's editor: a list for what is picked (protocol, mode,
+   input, profile, passthrough), a field for what is typed (IP, universe).
+   A pick is made at once; the change itself goes through
+   ConnectionsTree::commitCell(), after the editor has closed. */
+class PatchCellDelegate : public QStyledItemDelegate
+{
+public:
+    PatchCellDelegate(ConnectionsTree *tree, QObject *parent)
+        : QStyledItemDelegate(parent), m_ct(tree) {}
+
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &,
+                          const QModelIndex &index) const override
+    {
+        if (m_ct->isGridCell(index) == false)
+            return nullptr;
+        QWidget *w = m_ct->createCellEditor(parent, index);
+        if (QComboBox *combo = qobject_cast<QComboBox *>(w))
+        {
+            PatchCellDelegate *self = const_cast<PatchCellDelegate *>(this);
+            QObject::connect(combo, QOverload<int>::of(&QComboBox::activated), combo, [self, combo]() {
+                emit self->commitData(combo);
+                emit self->closeEditor(combo);
+            });
+        }
+        return w;
+    }
+    void setEditorData(QWidget *, const QModelIndex &) const override {}
+    void setModelData(QWidget *editor, QAbstractItemModel *, const QModelIndex &index) const override
+    {
+        QString value;
+        if (QComboBox *combo = qobject_cast<QComboBox *>(editor))
+            value = combo->currentData().isValid() ? combo->currentData().toString()
+                                                   : combo->currentText();
+        else if (QLineEdit *edit = qobject_cast<QLineEdit *>(editor))
+            value = edit->text();
+        else
+            return;
+        if (editor->property("startValue").toString() == value)
+            return;                         // left as it was
+        const quint32 universe = index.sibling(index.row(), COL_NAME).data(ROLE_UNIVERSE).toUInt();
+        const int column = index.column();
+        QPointer<ConnectionsTree> ct(m_ct);
+        /* After the editor has gone: the change rebuilds the list. */
+        QTimer::singleShot(0, m_ct, [ct, universe, column, value]() {
+            if (ct == nullptr)
+                return;
+            QString error;
+            if (ct->commitCell(universe, column, value, &error) == false && error.isEmpty() == false)
+                QMessageBox::warning(ct, ConnectionsTree::tr("Universe %1").arg(universe + 1), error);
+        });
+    }
+
+private:
+    ConnectionsTree *m_ct;
+};
 
 ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     : QWidget(parent)
@@ -373,6 +432,13 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     };
     for (int c = COL_DETAIL; c < COL_COUNT; c++)
         m_tree->setItemDelegateForColumn(c, new NoEdit(m_tree));
+    /* By universe, the patch columns are a grid to set many universes up
+       quickly ("I really miss the ability to edit fields in a grid"): a
+       click on a selected row's cell edits it, through the same form as the
+       pane and Edit Connection…. */
+    foreach (int c, QList<int>() << COL_OUTPUT << COL_IP << COL_U << COL_MODE
+                                 << COL_INPUT << COL_PROFILE << COL_PT)
+        m_tree->setItemDelegateForColumn(c, new PatchCellDelegate(this, m_tree));
     applyUniverseColumns();
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, SIGNAL(customContextMenuRequested(QPoint)),
@@ -391,14 +457,41 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     outScroll->setWidgetResizable(false);
     outScroll->setMinimumWidth(320);         // narrower, it scrolls
     m_output->resize(m_output->sizeHint());
+    /* Between them, the selected universe's connection -- where it goes,
+       its input and feedback -- to read and change in place ("could just
+       open the settings for a U when selecting it from the left hand
+       side"): the list, its settings, then the DMX grid ("put the DMX
+       address grid to the right and the settings in the middle"). */
+    m_connPane = ConnectionEditor::createPane(m_doc, this);
+    connect(m_connPane, &ConnectionEditor::changed, this, &ConnectionsTree::refresh);
+    m_panePlaceholder = new QLabel(tr("Select a universe on the left to see and change where "
+                                      "it goes."), this);
+    m_panePlaceholder->setObjectName(QStringLiteral("connectionsPanePlaceholder"));
+    m_panePlaceholder->setWordWrap(true);
+    m_panePlaceholder->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    m_panePlaceholder->setMargin(8);
+    m_panePlaceholder->setStyleSheet(QStringLiteral("QLabel { color: #8a8e99; }"));
+    m_paneStack = new QStackedWidget(this);
+    m_paneStack->setObjectName(QStringLiteral("connectionsPaneStack"));
+    m_paneStack->addWidget(m_panePlaceholder);
+    m_paneStack->addWidget(m_connPane);
+    m_paneStack->setMinimumWidth(300);
+    m_universeSplit = new QSplitter(Qt::Horizontal, this);
+    m_universeSplit->setObjectName(QStringLiteral("connectionsUniverseSplit"));
+    m_universeSplit->addWidget(m_paneStack);
+    m_universeSplit->addWidget(outScroll);
+    m_universeSplit->setCollapsible(0, false);
+    m_universeSplit->setStretchFactor(0, 1);
+    m_universeSplit->setStretchFactor(1, 1);
     m_side = new QStackedWidget(this);
-    m_side->addWidget(outScroll);
-    m_outputPage = outScroll;
+    m_side->addWidget(m_universeSplit);
+    m_outputPage = m_universeSplit;
     QSplitter *split = new QSplitter(Qt::Horizontal, this);
     split->addWidget(m_tree);
     split->addWidget(m_side);
-    split->setStretchFactor(0, 3);
-    split->setStretchFactor(1, 2);
+    split->setCollapsible(1, false);
+    split->setStretchFactor(0, 1);
+    split->setStretchFactor(1, 1);
     lay->addWidget(split, 1);           // every spare pixel goes to the list
     /* Recorded as it happens: see m_selectionOrder. A rebuild clears and
        restores the same selection, which must not reshuffle it. */
@@ -425,6 +518,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
         const QVariant uv = it->data(COL_NAME, ROLE_UNIVERSE);
         if (uv.isValid() && uv.toUInt() != Universe::invalid())
             m_output->setUniverse(uv.toUInt());
+        showConnectionOf(it);
     });
 
     /* Art-Net nodes announce themselves roughly once a second, so a node that
@@ -2206,6 +2300,8 @@ void ConnectionsTree::refresh()
        ambiguity it exists to remove, pointing the other way. */
     if (m_status != NULL)
         m_status->setVisible(heardDevices == 0 && m_since->elapsed() < 6000);
+    if (m_connPane != nullptr)
+        m_connPane->reloadIfClean();
 }
 
 void ConnectionsTree::markOutputProblems()
@@ -4656,6 +4752,7 @@ void ConnectionsTree::buildUniverseList()
                                : tr("out:"))
                           .arg(p.plugin, p.uid.isEmpty() ? p.plugin : p.uid);
         item->setText(COL_DETAIL, detail.isEmpty() ? tr("not patched") : detail.join(QStringLiteral(" · ")));
+        item->setToolTip(COL_DETAIL, item->text(COL_DETAIL));
         if (legs.size() > 1)
             setRowTooltip(item, tr("<b>%1</b> goes out %2 ways:<br>%3")
                                     .arg(u->name().toHtmlEscaped()).arg(legs.size())
@@ -4726,6 +4823,8 @@ void ConnectionsTree::buildUniverseList()
     restoreScroll(scroll);
     if (m_status != NULL)
         m_status->hide();
+    if (m_connPane != nullptr)
+        m_connPane->reloadIfClean();
 }
 
 /*****************************************************************************
@@ -4835,12 +4934,14 @@ QStringList ConnectionsTree::universeColumnKeys()
 
 QStringList ConnectionsTree::shownUniverseColumns() const
 {
-    /* Detail already says where each universe goes, in words; the default
-       adds what it doesn't: mode, input, feedback, passthrough. */
+    /* The fields a patch is set up with, to edit in place down the list
+       ("the fields were useful"); feedback and profile are in the
+       universe's settings beside it, and a column away. */
     const QVariant v = QSettings().value(QStringLiteral(SETTINGS_UNIVERSE_COLUMNS));
     if (v.isValid() == false)
-        return QStringList() << QStringLiteral("mode") << QStringLiteral("input")
-                             << QStringLiteral("feedback") << QStringLiteral("pt");
+        return QStringList() << QStringLiteral("output") << QStringLiteral("ip")
+                             << QStringLiteral("u") << QStringLiteral("mode")
+                             << QStringLiteral("input") << QStringLiteral("pt");
     return v.toStringList();
 }
 
@@ -4872,6 +4973,16 @@ void ConnectionsTree::applyUniverseColumns()
     /* Carries takes the spare width only while it is the last column. */
     m_tree->header()->setSectionResizeMode(COL_CARRIES, any ? QHeaderView::ResizeToContents
                                                             : QHeaderView::Stretch);
+    /* With the fields as columns, Detail says the same again in a sentence:
+       a narrow column (its whole text on hover and in the settings beside
+       the list), not the widest thing on the page. */
+    if (byUniverse && any)
+    {
+        m_tree->header()->setSectionResizeMode(COL_DETAIL, QHeaderView::Interactive);
+        m_tree->setColumnWidth(COL_DETAIL, 140);
+    }
+    else
+        m_tree->header()->setSectionResizeMode(COL_DETAIL, QHeaderView::ResizeToContents);
     if (m_columnsButton != NULL)
         m_columnsButton->setVisible(byUniverse);
 }
@@ -5027,4 +5138,266 @@ void ConnectionsTree::setTransmitModeOn(const QList<quint32> &universes, const Q
     if (changed)
         m_doc->setModified();
     refresh();
+}
+
+/*****************************************************************************
+ * The selected universe's connection, and the grid
+ *****************************************************************************/
+
+void ConnectionsTree::showConnectionOf(QTreeWidgetItem *item)
+{
+    if (m_connPane == nullptr || m_paneStack == nullptr || item == nullptr)
+        return;
+    const QVariant uv = item->data(COL_NAME, ROLE_UNIVERSE);
+    if (uv.isValid() == false || uv.toUInt() == Universe::invalid())
+        return;
+    const quint32 universe = uv.toUInt();
+    const int kind = item->data(COL_NAME, ROLE_KIND).toInt();
+    QString plugin;
+    quint32 line = 0;
+    if (kind == KIND_UNIVERSE && item->data(COL_NAME, ROLE_OUTPUT).toBool())
+    {
+        plugin = item->data(COL_NAME, ROLE_PLUGIN).toString();
+        line = item->data(COL_NAME, ROLE_LINE).toUInt();
+    }
+    const bool shown = m_paneStack->currentWidget() == m_connPane;
+    if (shown && m_connPane->universe() == universe && m_connPane->m_origPlugin == plugin
+            && (plugin.isEmpty() || m_connPane->m_origLine == line))
+        return;
+    /* What was typed for the one before is made first, not dropped. A
+       refusal keeps it there, saying why. */
+    if (shown && m_connPane->commitPending() == false)
+        return;
+    m_connPane->setUniverse(universe, plugin, line);
+    m_paneStack->setCurrentWidget(m_connPane);
+}
+
+void ConnectionsTree::resizeEvent(QResizeEvent *ev)
+{
+    QWidget::resizeEvent(ev);
+    layoutSide();
+}
+
+void ConnectionsTree::layoutSide()
+{
+    if (m_universeSplit == nullptr)
+        return;
+    /* Side by side needs room for the list, the settings and the grid; on
+       a narrower window the grid goes under the settings, which stay. */
+    const Qt::Orientation want = width() >= 1500 ? Qt::Horizontal : Qt::Vertical;
+    if (m_universeSplit->orientation() == want)
+        return;
+    m_universeSplit->setOrientation(want);
+    if (want == Qt::Vertical)
+        m_universeSplit->setSizes(QList<int>() << 3 << 1);
+    else
+        m_universeSplit->setSizes(QList<int>() << 1 << 1);
+}
+
+bool ConnectionsTree::isGridCell(const QModelIndex &index) const
+{
+    if (m_byUniverse == nullptr || m_byUniverse->isChecked() == false || index.isValid() == false)
+        return false;
+    const QModelIndex name = index.sibling(index.row(), COL_NAME);
+    const int kind = name.data(ROLE_KIND).toInt();
+    if (kind != KIND_UNIVERSE && kind != KIND_UNPATCHED_UNIVERSE)
+        return false;
+    const quint32 universe = name.data(ROLE_UNIVERSE).toUInt();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    Universe *u = iom != nullptr ? iom->universe(universe) : nullptr;
+    if (u == nullptr)
+        return false;
+    QLCIOPlugin *out = nullptr;
+    for (int i = 0; out == nullptr && i < u->outputPatchesCount(); i++)
+        if (u->outputPatch(i) != nullptr && u->outputPatch(i)->isPending() == false)
+            out = u->outputPatch(i)->plugin();
+    const ConnectionEditor::Kind k = ConnectionEditor::kindOf(out);
+    switch (index.column())
+    {
+        case COL_OUTPUT: case COL_INPUT: case COL_PT:
+            return true;
+        case COL_IP: case COL_U:
+            return k == ConnectionEditor::KindTargets || k == ConnectionEditor::KindSacn;
+        case COL_MODE:
+            return k == ConnectionEditor::KindTargets || k == ConnectionEditor::KindSacn
+                   || k == ConnectionEditor::KindMidi;
+        case COL_PROFILE:
+            return u->inputPatch() != nullptr;
+        default:
+            return false;
+    }
+}
+
+QWidget *ConnectionsTree::createCellEditor(QWidget *parent, const QModelIndex &index)
+{
+    const quint32 universe = index.sibling(index.row(), COL_NAME).data(ROLE_UNIVERSE).toUInt();
+    const QString shown = index.data(Qt::DisplayRole).toString();
+    /* The lists are the form's own, so a cell offers exactly what the pane
+       and Edit Connection… do. */
+    ConnectionEditor form(m_doc, universe, QString(), 0, nullptr);
+    auto copyList = [parent](QComboBox *from, const QString &current) {
+        QComboBox *combo = new QComboBox(parent);
+        for (int i = 0; i < from->count(); i++)
+            combo->addItem(from->itemText(i), from->itemData(i).isValid()
+                           ? from->itemData(i).toString() : from->itemText(i));
+        combo->setCurrentIndex(qMax(0, combo->findData(current)));
+        combo->setProperty("startValue", combo->currentData().toString());
+        return combo;
+    };
+    switch (index.column())
+    {
+        case COL_OUTPUT:
+            return copyList(form.m_protocolCombo, form.pickedPluginName());
+        case COL_MODE:
+        {
+            QComboBox *from = form.m_transmitMode;
+            if (ConnectionEditor::kindOf(form.pickedPlugin()) == ConnectionEditor::KindSacn)
+                from = form.m_sacnMode;
+            else if (ConnectionEditor::kindOf(form.pickedPlugin()) == ConnectionEditor::KindMidi)
+                from = form.m_midiMode;
+            return copyList(from, from->currentText());
+        }
+        case COL_INPUT:
+        {
+            QComboBox *combo = new QComboBox(parent);
+            for (int i = 0; i < form.m_inputCombo->count(); i++)
+                combo->addItem(form.m_inputCombo->itemText(i), form.m_inputCombo->itemText(i));
+            combo->setCurrentIndex(form.m_inputCombo->currentIndex());
+            combo->setProperty("startValue", combo->currentData().toString());
+            return combo;
+        }
+        case COL_PROFILE:
+            return copyList(form.m_profileCombo, form.m_profileCombo->currentData().toString());
+        case COL_PT:
+        {
+            QComboBox *combo = new QComboBox(parent);
+            combo->addItem(tr("Off"), QStringLiteral("off"));
+            combo->addItem(tr("On"), QStringLiteral("on"));
+            combo->setCurrentIndex(form.m_passthrough->isChecked() ? 1 : 0);
+            combo->setProperty("startValue", combo->currentData().toString());
+            return combo;
+        }
+        case COL_IP:
+        case COL_U:
+        {
+            QLineEdit *edit = new QLineEdit(parent);
+            const ConnectionEditor::Kind k = ConnectionEditor::kindOf(form.pickedPlugin());
+            QString text = shown;
+            if (index.column() == COL_IP)
+            {
+                text = k == ConnectionEditor::KindTargets ? form.m_targetIP->text()
+                                                          : form.m_sacnIP->text();
+                edit->setPlaceholderText(k == ConnectionEditor::KindTargets
+                    ? tr("A node's IP, or Broadcast") : tr("A receiver's IP, or empty: multicast"));
+            }
+            else
+            {
+                text = k == ConnectionEditor::KindTargets ? form.m_targetPort->text()
+                                                          : QString::number(form.m_sacnUniverse->value());
+                edit->setPlaceholderText(k == ConnectionEditor::KindTargets
+                    ? tr("A number (15) or 0:0:15") : tr("sACN universe"));
+            }
+            edit->setText(text);
+            edit->setProperty("startValue", text);
+            return edit;
+        }
+        default:
+            return nullptr;
+    }
+}
+
+bool ConnectionsTree::commitCell(quint32 universe, int column, const QString &value, QString *error)
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    Universe *u = iom != nullptr ? iom->universe(universe) : nullptr;
+    if (u == nullptr)
+        return false;
+    /* The universe's first output leg, as its row and the pane show it. */
+    QString plugin;
+    quint32 line = 0;
+    for (int i = 0; plugin.isEmpty() && i < u->outputPatchesCount(); i++)
+    {
+        OutputPatch *op = u->outputPatch(i);
+        if (op != nullptr && op->plugin() != nullptr && op->isPending() == false)
+        {
+            plugin = op->plugin()->name();
+            line = op->output();
+        }
+    }
+    ConnectionEditor form(m_doc, universe, plugin, line, nullptr);
+    const ConnectionEditor::Kind kind = ConnectionEditor::kindOf(form.pickedPlugin());
+    switch (column)
+    {
+        case COL_OUTPUT:
+        {
+            const int i = form.m_protocolCombo->findData(value);
+            if (i < 0)
+                return false;
+            form.m_protocolCombo->setCurrentIndex(i);
+        }
+        break;
+        case COL_IP:
+            if (kind == ConnectionEditor::KindTargets)
+            {
+                form.m_targetIP->setText(value);
+                form.slotTargetTyped();
+            }
+            else if (kind == ConnectionEditor::KindSacn)
+            {
+                form.m_sacnIP->setText(value.trimmed());
+                form.slotSacnTyped();
+            }
+        break;
+        case COL_U:
+            if (kind == ConnectionEditor::KindTargets)
+                form.m_targetPort->setText(value);
+            else if (kind == ConnectionEditor::KindSacn)
+            {
+                bool ok = false;
+                const int n = value.trimmed().toInt(&ok);
+                if (ok == false || n < form.m_sacnUniverse->minimum() || n > form.m_sacnUniverse->maximum())
+                {
+                    if (error != nullptr)
+                        *error = tr("\"%1\" is not an sACN universe: type a number from %2 to %3.")
+                                     .arg(value.trimmed()).arg(form.m_sacnUniverse->minimum())
+                                     .arg(form.m_sacnUniverse->maximum());
+                    return false;
+                }
+                form.m_sacnUniverse->setValue(n);
+            }
+        break;
+        case COL_MODE:
+        {
+            QComboBox *c = kind == ConnectionEditor::KindSacn ? form.m_sacnMode
+                         : kind == ConnectionEditor::KindMidi ? form.m_midiMode : form.m_transmitMode;
+            if (c->findText(value) < 0)
+                return false;
+            c->setCurrentIndex(c->findText(value));
+        }
+        break;
+        case COL_INPUT:
+        {
+            const int i = form.m_inputCombo->findText(value);
+            if (i < 0)
+                return false;
+            form.m_inputCombo->setCurrentIndex(i);
+        }
+        break;
+        case COL_PROFILE:
+            form.m_profileCombo->setCurrentIndex(qMax(0, form.m_profileCombo->findData(value)));
+        break;
+        case COL_PT:
+            form.m_passthrough->setChecked(value == QLatin1String("on"));
+        break;
+        default:
+            return false;
+    }
+    if (form.apply() == false)
+    {
+        if (error != nullptr)
+            *error = form.error();
+        return false;
+    }
+    refresh();
+    return true;
 }

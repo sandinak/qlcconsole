@@ -57,6 +57,7 @@ class Doc;
 class ConnectionEditor final : public QDialog
 {
     Q_OBJECT
+    friend class ConnectionsTree;     // its By universe cells edit through this form
 
 public:
     /** What the lower part shows for a protocol. */
@@ -74,6 +75,21 @@ public:
      *  plugin, its first output leg (none: a new patch). */
     ConnectionEditor(Doc *doc, quint32 universe, const QString &pluginName = QString(),
                      quint32 line = 0, QWidget *parent = nullptr);
+
+    /** The same form as a pane inside another page (Connections ▸ By
+     *  universe, beside the list): no OK/Cancel and no universe picker --
+     *  each change is made as it is committed (a field left, a list
+     *  picked), one undo step each, and a refusal says why in the pane. */
+    static ConnectionEditor *createPane(Doc *doc, QWidget *parent);
+    bool isPane() const { return m_pane; }
+
+    /** Show (pane) or edit another universe's leg. */
+    void setUniverse(quint32 universe, const QString &pluginName = QString(), quint32 line = 0);
+    /** Fill again from the patch, unless something typed is not made yet. */
+    void reloadIfClean();
+    /** Make what is typed but not made yet, now. False if it is refused
+     *  (the pane says why). */
+    bool commitPending();
     ~ConnectionEditor();
 
     /** Open it over @p parent and make the change on OK. @p section: "input",
@@ -97,8 +113,13 @@ public:
     /** The universe being edited. */
     quint32 universe() const { return m_universe; }
 
+signals:
+    /** A pane made a change (after it, once). */
+    void changed();
+
 public slots:
     void accept() override;
+    void reject() override;
 
 private slots:
     void slotUniverseChanged();
@@ -106,6 +127,11 @@ private slots:
     void slotInterfaceChanged();
     void slotTargetChanged();
     void slotTargetTyped();
+    void slotPortCommitted();
+    void slotChooseInterface();
+    void slotSacnTyped();
+    /** A pane: make what was committed, if anything changed. */
+    void slotCommit();
     void slotSacnMulticastToggled();
     void slotInputChanged();
     void slotFeedbackChanged();
@@ -129,6 +155,18 @@ private:
     class OutputPatch *editedPatch() const;
     QVariant origParam(const QString &key) const;
     void showSettingsFor(Kind kind);
+    /** The destination the protocol's settings name now (Art-Net's Send
+     *  To, sACN's unicast address). */
+    UniversePatcher::Destination destination() const;
+    /** Pick the interface from the destination, when that is automatic,
+     *  and say which and why. */
+    void updateInterface();
+    /** The Send To line under the field: what it will do, or why not. */
+    void updateTargetNote();
+    /** Every value of the form, to tell an edit from none. */
+    QString formState() const;
+    void markClean();
+    void schedulePaneCommit();
     /** Refuse what can't be done; empty when it can. */
     QString validate(QString &address, quint32 &portAddress,
                      QString &fbAddress, quint32 &fbPort) const;
@@ -144,11 +182,24 @@ private:
     int m_origIndex = -1;
     bool m_loading = false;
     QString m_error;
+    bool m_pane = false;
+    bool m_commitQueued = false;
+    QString m_cleanState;
+    /** The interface follows the destination (plugins whose lines are local
+     *  addresses), until someone chooses one. */
+    bool m_autoInterface = true;
 
     QComboBox *m_universeCombo = nullptr;
     QLineEdit *m_nameEdit = nullptr;
     QComboBox *m_protocolCombo = nullptr;
     QComboBox *m_interfaceCombo = nullptr;
+    QLabel *m_interfaceAuto = nullptr;
+    QPushButton *m_interfaceChoose = nullptr;
+    QWidget *m_interfaceRow = nullptr;
+    QLabel *m_paneNote = nullptr;
+    QLabel *m_paneTitle = nullptr;
+    class QDialogButtonBox *m_buttons = nullptr;
+    class QFormLayout *m_topForm = nullptr;
     QLabel *m_pendingNote = nullptr;
     QLabel *m_otherLegs = nullptr;
 
@@ -158,7 +209,10 @@ private:
 
     // Art-Net (a node and port)
     QComboBox *m_targetCombo = nullptr;
-    QLineEdit *m_targetIP = nullptr;
+    QLineEdit *m_targetIP = nullptr;        ///< Send To's own text field
+    QLabel *m_targetNote = nullptr;
+    /** The line each of m_ports was heard on. */
+    QList<quint32> m_portLines;
     QLineEdit *m_targetPort = nullptr;
     QComboBox *m_transmitMode = nullptr;
     QList<UniversePatcher::TargetPortChoice> m_ports;

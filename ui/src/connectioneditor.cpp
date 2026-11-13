@@ -30,6 +30,8 @@
 #include <QSpinBox>
 #include <QLabel>
 #include <QMap>
+#include <QSet>
+#include <QTimer>
 
 #include "connectioneditor.h"
 #include "wleddevicesdialog.h"
@@ -51,7 +53,6 @@ static const int kMidiOmni = 16;
 
 /* The target list's two entries that are not a port. */
 #define TARGET_BROADCAST (-1)
-#define TARGET_OTHER     (-2)
 
 ConnectionEditor::ConnectionEditor(Doc *doc, quint32 universe, const QString &pluginName,
                                    quint32 line, QWidget *parent)
@@ -115,7 +116,15 @@ void ConnectionEditor::buildForm()
     vl->setContentsMargins(0, 0, 0, 0);
 
     // ---- Which universe, which protocol, which interface ----
+    m_paneNote = new QLabel(this);
+    m_paneNote->setObjectName(QStringLiteral("connPaneNote"));
+    m_paneNote->setWordWrap(true);
+    m_paneNote->setStyleSheet(QStringLiteral("QLabel { color: #d05a5a; }"));
+    m_paneNote->hide();
+    vl->addWidget(m_paneNote);
+
     QFormLayout *top = new QFormLayout;
+    m_topForm = top;
     m_universeCombo = new QComboBox(this);
     m_universeCombo->setObjectName(QStringLiteral("connUniverse"));
     if (InputOutputMap *iom = m_doc->inputOutputMap())
@@ -142,9 +151,26 @@ void ConnectionEditor::buildForm()
     }
     top->addRow(tr("Protocol:"), m_protocolCombo);
 
-    m_interfaceCombo = new QComboBox(this);
+    /* Which interface: for Art-Net and sACN it follows from where the
+       universe is sent (the network that address is on, or the route the
+       system takes to it), so it is shown, not asked -- "shouldn't need to
+       set interface anymore". Choosing one by hand stays a click away. */
+    m_interfaceRow = new QWidget(this);
+    QHBoxLayout *ifl = new QHBoxLayout(m_interfaceRow);
+    ifl->setContentsMargins(0, 0, 0, 0);
+    m_interfaceAuto = new QLabel(m_interfaceRow);
+    m_interfaceAuto->setObjectName(QStringLiteral("connInterfaceAuto"));
+    m_interfaceAuto->setWordWrap(true);
+    m_interfaceAuto->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    ifl->addWidget(m_interfaceAuto, 1);
+    m_interfaceCombo = new QComboBox(m_interfaceRow);
     m_interfaceCombo->setObjectName(QStringLiteral("connInterface"));
-    top->addRow(tr("Interface:"), m_interfaceCombo);
+    ifl->addWidget(m_interfaceCombo, 1);
+    m_interfaceChoose = new QPushButton(m_interfaceRow);
+    m_interfaceChoose->setObjectName(QStringLiteral("connInterfaceChoose"));
+    m_interfaceChoose->setAutoDefault(false);
+    ifl->addWidget(m_interfaceChoose, 0, Qt::AlignTop);
+    top->addRow(tr("Interface:"), m_interfaceRow);
     vl->addLayout(top);
 
     m_pendingNote = new QLabel(this);
@@ -178,26 +204,41 @@ void ConnectionEditor::buildForm()
         QWidget *page = new QWidget;
         page->setObjectName(QStringLiteral("connPageTargets"));
         QFormLayout *f = new QFormLayout(page);
+        /* One control: type the node's address, or open the list for
+           Broadcast and the nodes heard so far ("so I don't have to scroll
+           all the available IPs to Another Address"). */
         m_targetCombo = new QComboBox(page);
         m_targetCombo->setObjectName(QStringLiteral("connTarget"));
-        f->addRow(tr("Send to:"), m_targetCombo);
-        m_targetIP = new QLineEdit(page);
+        m_targetCombo->setEditable(true);
+        m_targetCombo->setInsertPolicy(QComboBox::NoInsert);
+        m_targetCombo->setCompleter(nullptr);
+        m_targetCombo->setMinimumContentsLength(16);
+        m_targetCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        m_targetIP = m_targetCombo->lineEdit();
         m_targetIP->setObjectName(QStringLiteral("connTargetIP"));
-        m_targetIP->setPlaceholderText(tr("node IP, or a broadcast address"));
-        f->addRow(tr("Node IP:"), m_targetIP);
+        m_targetIP->setPlaceholderText(tr("Type a node's IP, or pick from the list"));
+        m_targetCombo->setToolTip(tr("Where this universe is sent: type a node's IP address, "
+                                     "or open the list for Broadcast and the nodes heard on "
+                                     "the network"));
+        f->addRow(tr("Send To:"), m_targetCombo);
+        m_targetNote = new QLabel(page);
+        m_targetNote->setObjectName(QStringLiteral("connTargetNote"));
+        m_targetNote->setWordWrap(true);
+        f->addRow(QString(), m_targetNote);
         m_targetPort = new QLineEdit(page);
         m_targetPort->setObjectName(QStringLiteral("connTargetPort"));
-        m_targetPort->setPlaceholderText(QStringLiteral("0:0:0"));
-        m_targetPort->setToolTip(tr("The Art-Net universe on the node: net:subnet:universe "
-                                    "(net 0-127, subnet and universe 0-15)"));
-        f->addRow(tr("Universe on the node:"), m_targetPort);
+        m_targetPort->setPlaceholderText(tr("A number (15) or 0:0:15"));
+        m_targetPort->setToolTip(tr("The Art-Net universe on the node: a number from 0 to "
+                                    "32767, or net:subnet:universe (net 0-127, subnet and "
+                                    "universe 0-15). 15 is 0:0:15, 300 is 1:2:12."));
+        f->addRow(tr("Universe on the Node:"), m_targetPort);
         m_transmitMode = new QComboBox(page);
         m_transmitMode->setObjectName(QStringLiteral("connTransmitMode"));
         m_transmitMode->addItems(QStringList() << QStringLiteral("Standard")
                                  << QStringLiteral("Full") << QStringLiteral("Partial"));
         m_transmitMode->setToolTip(tr("Standard sends on change plus a refresh; Full sends "
                                       "every frame; Partial only the channels in use"));
-        f->addRow(tr("Transmit mode:"), m_transmitMode);
+        f->addRow(tr("Transmit Mode:"), m_transmitMode);
         m_settings->addWidget(page);
     }
     // sACN
@@ -208,14 +249,14 @@ void ConnectionEditor::buildForm()
         m_sacnUniverse = new QSpinBox(page);
         m_sacnUniverse->setObjectName(QStringLiteral("connSacnUniverse"));
         m_sacnUniverse->setRange(1, 63999);
-        f->addRow(tr("sACN universe:"), m_sacnUniverse);
+        f->addRow(tr("sACN Universe:"), m_sacnUniverse);
         m_sacnMulticast = new QCheckBox(tr("Multicast"), page);
         m_sacnMulticast->setObjectName(QStringLiteral("connSacnMulticast"));
         f->addRow(QString(), m_sacnMulticast);
         m_sacnIP = new QLineEdit(page);
         m_sacnIP->setObjectName(QStringLiteral("connSacnIP"));
-        m_sacnIP->setPlaceholderText(tr("the receiver's IP"));
-        f->addRow(tr("Unicast to:"), m_sacnIP);
+        m_sacnIP->setPlaceholderText(tr("Type the receiver's IP to unicast"));
+        f->addRow(tr("Unicast To:"), m_sacnIP);
         m_sacnPriority = new QSpinBox(page);
         m_sacnPriority->setObjectName(QStringLiteral("connSacnPriority"));
         m_sacnPriority->setRange(0, 200);
@@ -225,7 +266,7 @@ void ConnectionEditor::buildForm()
         m_sacnMode = new QComboBox(page);
         m_sacnMode->setObjectName(QStringLiteral("connSacnMode"));
         m_sacnMode->addItems(QStringList() << QStringLiteral("Full") << QStringLiteral("Partial"));
-        f->addRow(tr("Transmit mode:"), m_sacnMode);
+        f->addRow(tr("Transmit Mode:"), m_sacnMode);
         m_settings->addWidget(page);
     }
     // WLED
@@ -251,7 +292,7 @@ void ConnectionEditor::buildForm()
         m_midiMode->setObjectName(QStringLiteral("connMidiMode"));
         m_midiMode->addItems(QStringList() << QStringLiteral("Control Change")
                              << QStringLiteral("Note Velocity") << QStringLiteral("Program Change"));
-        f->addRow(tr("MIDI output mode:"), m_midiMode);
+        f->addRow(tr("MIDI Output Mode:"), m_midiMode);
         m_settings->addWidget(page);
     }
     // A device: the interface is the widget
@@ -276,7 +317,7 @@ void ConnectionEditor::buildForm()
     vl->addWidget(m_settingsBox);
 
     // ---- The universe: input, feedback, passthrough ----
-    m_inputBox = new QGroupBox(tr("Input && feedback"), this);
+    m_inputBox = new QGroupBox(tr("Input && Feedback"), this);
     m_inputBox->setObjectName(QStringLiteral("connInputBox"));
     QFormLayout *inf = new QFormLayout(m_inputBox);
     m_inputCombo = new QComboBox(m_inputBox);
@@ -326,7 +367,7 @@ void ConnectionEditor::buildForm()
         foreach (const QString &pn, profiles)
             m_profileCombo->addItem(pn, pn);
     }
-    inf->addRow(tr("Input profile:"), m_profileCombo);
+    inf->addRow(tr("Input Profile:"), m_profileCombo);
     m_midiChannel = new QComboBox(m_inputBox);
     m_midiChannel->setObjectName(QStringLiteral("connMidiChannel"));
     /* The MIDI plugin's own numbering: 0-15 are channels 1-16, and 16
@@ -334,21 +375,21 @@ void ConnectionEditor::buildForm()
     m_midiChannel->addItem(tr("All channels"), kMidiOmni);
     for (int ch = 1; ch <= 16; ch++)
         m_midiChannel->addItem(tr("Channel %1").arg(ch), ch - 1);
-    inf->addRow(tr("MIDI input channel:"), m_midiChannel);
+    inf->addRow(tr("MIDI Input Channel:"), m_midiChannel);
     m_artnetInUni = new QSpinBox(m_inputBox);
     m_artnetInUni->setObjectName(QStringLiteral("connArtNetInputUniverse"));
     m_artnetInUni->setRange(0, 32767);
     m_artnetInUni->setToolTip(tr("Which Art-Net universe this input listens to"));
-    inf->addRow(tr("Art-Net input universe:"), m_artnetInUni);
-    inf->addRow(tr("Feedback to:"), m_feedbackCombo);
+    inf->addRow(tr("Art-Net Input Universe:"), m_artnetInUni);
+    inf->addRow(tr("Feedback To:"), m_feedbackCombo);
     m_feedbackIP = new QLineEdit(m_inputBox);
     m_feedbackIP->setObjectName(QStringLiteral("connFeedbackIP"));
-    m_feedbackIP->setPlaceholderText(tr("empty: broadcast"));
-    inf->addRow(tr("Feedback address:"), m_feedbackIP);
+    m_feedbackIP->setPlaceholderText(tr("Empty: broadcast"));
+    inf->addRow(tr("Feedback Address:"), m_feedbackIP);
     m_feedbackPort = new QLineEdit(m_inputBox);
     m_feedbackPort->setObjectName(QStringLiteral("connFeedbackPort"));
-    m_feedbackPort->setPlaceholderText(QStringLiteral("0:0:0"));
-    inf->addRow(tr("Feedback universe:"), m_feedbackPort);
+    m_feedbackPort->setPlaceholderText(tr("A number (15) or 0:0:15"));
+    inf->addRow(tr("Feedback Universe:"), m_feedbackPort);
     m_passthrough = new QCheckBox(tr("Passthrough"), m_inputBox);
     m_passthrough->setObjectName(QStringLiteral("connPassthrough"));
     m_passthrough->setToolTip(tr("Pass incoming values straight through to the output "
@@ -357,6 +398,7 @@ void ConnectionEditor::buildForm()
     vl->addWidget(m_inputBox);
 
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    m_buttons = buttons;
     connect(buttons, &QDialogButtonBox::accepted, this, &ConnectionEditor::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &ConnectionEditor::reject);
     QVBoxLayout *dialogLayout = new QVBoxLayout(this);
@@ -371,9 +413,18 @@ void ConnectionEditor::buildForm()
             this, &ConnectionEditor::slotInterfaceChanged);
     connect(m_targetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &ConnectionEditor::slotTargetChanged);
+    connect(m_targetCombo, QOverload<int>::of(&QComboBox::activated),
+            this, &ConnectionEditor::slotTargetChanged);
     connect(m_targetIP, &QLineEdit::textEdited, this, &ConnectionEditor::slotTargetTyped);
-    connect(m_targetPort, &QLineEdit::textEdited, this, &ConnectionEditor::slotTargetTyped);
+    connect(m_targetPort, &QLineEdit::editingFinished, this, &ConnectionEditor::slotPortCommitted);
+    connect(m_feedbackPort, &QLineEdit::editingFinished, this, [this]() {
+        quint32 pa = 0;
+        if (UniversePatcher::parsePortAddress(m_feedbackPort->text(), pa))
+            m_feedbackPort->setText(UniversePatcher::portAddressText(pa));
+    });
+    connect(m_interfaceChoose, &QPushButton::clicked, this, &ConnectionEditor::slotChooseInterface);
     connect(m_sacnMulticast, &QCheckBox::toggled, this, &ConnectionEditor::slotSacnMulticastToggled);
+    connect(m_sacnIP, &QLineEdit::textEdited, this, &ConnectionEditor::slotSacnTyped);
     connect(m_inputCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &ConnectionEditor::slotInputChanged);
     connect(m_feedbackCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -433,20 +484,33 @@ void ConnectionEditor::load()
         return;
     m_loading = true;
 
-    // The leg: the one asked for, else the first that is really there.
-    m_origIndex = -1;
+    /* The leg: the one asked for; else (it moved to another interface, say)
+       the first on that protocol; else the first that is really there. */
+    int wanted = -1, samePlugin = -1, first = -1;
+    for (int i = 0; i < u->outputPatchesCount(); i++)
+    {
+        OutputPatch *op = u->outputPatch(i);
+        if (op == nullptr || op->plugin() == nullptr || op->isPending())
+            continue;
+        if (first < 0)
+            first = i;
+        if (op->plugin()->name() == m_origPlugin)
+        {
+            if (samePlugin < 0)
+                samePlugin = i;
+            if (wanted < 0 && op->output() == m_origLine)
+                wanted = i;
+        }
+    }
+    m_origIndex = wanted >= 0 ? wanted : samePlugin >= 0 ? samePlugin : first;
     QStringList others;
     for (int i = 0; i < u->outputPatchesCount(); i++)
     {
         OutputPatch *op = u->outputPatch(i);
         if (op == nullptr || op->plugin() == nullptr || op->isPending())
             continue;
-        const bool wanted = m_origPlugin.isEmpty()
-            ? m_origIndex < 0
-            : (op->plugin()->name() == m_origPlugin && op->output() == m_origLine);
-        if (wanted && m_origIndex < 0)
+        if (i == m_origIndex)
         {
-            m_origIndex = i;
             m_origPlugin = op->plugin()->name();
             m_origLine = op->output();
         }
@@ -468,11 +532,13 @@ void ConnectionEditor::load()
             if (op->isPending())
                 pending << op->pluginName();
     m_pendingNote->setText(pending.isEmpty() ? QString()
-        : tr("Patched to %1, which is not here now: picking an interface here "
-             "replaces that patch.").arg(pending.join(QStringLiteral(", "))));
+        : tr("Patched to %1, which is not here now: a change here patches it again, on "
+             "the interface shown.").arg(pending.join(QStringLiteral(", "))));
     m_pendingNote->setVisible(pending.isEmpty() == false);
 
     m_universeCombo->setCurrentIndex(qMax(0, m_universeCombo->findData(m_universe)));
+    if (m_paneTitle != nullptr)
+        m_paneTitle->setText(tr("Universe %1: %2").arg(m_universe + 1).arg(u->name()));
     m_nameEdit->setText(u->name());
     m_protocolCombo->setCurrentIndex(qMax(0, m_protocolCombo->findData(m_origPlugin)));
     m_loading = false;
@@ -518,6 +584,7 @@ void ConnectionEditor::load()
     m_loading = false;
     slotInputChanged();
     slotFeedbackChanged();
+    markClean();
 }
 
 QLCIOPlugin *ConnectionEditor::pickedPlugin() const
@@ -573,21 +640,42 @@ void ConnectionEditor::slotProtocolChanged()
     if (m_loading)
         return;
     QLCIOPlugin *p = pickedPlugin();
+    const bool sameLeg = p != nullptr && editedPatch() != nullptr && p->name() == m_origPlugin;
     m_loading = true;
     m_interfaceCombo->clear();
     if (p != nullptr)
         m_interfaceCombo->addItems(lineLabels(p, true));
-    const int cur = (p != nullptr && p->name() == m_origPlugin) ? int(m_origLine) : 0;
+    int cur = sameLeg ? int(m_origLine) : 0;
+    /* A new patch on a network protocol starts on the first interface that
+       is not loopback; the destination moves it from there. */
+    if (sameLeg == false && UniversePatcher::linesAreAddresses(p))
+        cur = UniversePatcher::autoLine(p->outputs(), UniversePatcher::Destination(), -1).line;
     m_interfaceCombo->setCurrentIndex(qBound(-1, cur, m_interfaceCombo->count() - 1));
     m_interfaceCombo->setEnabled(m_interfaceCombo->count() > 1);
+    m_autoInterface = true;
     m_loading = false;
 
     m_configureButton->setVisible(p != nullptr && p->canConfigure());
     if (p != nullptr)
         m_configureButton->setText(tr("Configure %1…").arg(p->name()));
     showSettingsFor(kindOf(p));
-    m_settingsBox->setTitle(p != nullptr ? tr("%1 settings").arg(p->name()) : tr("Settings"));
+    m_settingsBox->setTitle(p != nullptr ? tr("%1 Settings").arg(p->name()) : tr("Settings"));
     loadSettings();
+
+    /* A saved show keeps the interface it was patched on. Where the
+       destination would pick that same one anyway it reads "automatic";
+       where it was set to another one by hand, it stays chosen by hand. */
+    if (sameLeg && UniversePatcher::linesAreAddresses(p))
+    {
+        const UniversePatcher::AutoLine a =
+            UniversePatcher::autoLine(p->outputs(), destination(), int(m_origLine));
+        m_autoInterface = (a.line == int(m_origLine));
+        if (m_autoInterface == false && kindOf(p) == KindTargets)
+            loadTargets();              // the nodes on that interface only
+    }
+    updateInterface();
+    updateTargetNote();
+    schedulePaneCommit();
 }
 
 void ConnectionEditor::slotInterfaceChanged()
@@ -595,12 +683,149 @@ void ConnectionEditor::slotInterfaceChanged()
     if (m_loading)
         return;
     /* Only what depends on the interface: the nodes heard on it. What was
-       typed for sACN or MIDI stays. */
+       typed stays. */
     const Kind kind = kindOf(pickedPlugin());
     if (kind == KindTargets)
+    {
+        const QString typed = m_targetIP->text();
+        const QString port = m_targetPort->text();
         loadTargets();
+        m_loading = true;
+        m_targetIP->setText(typed);
+        m_targetPort->setText(port);
+        m_loading = false;
+        updateTargetNote();
+    }
     else if (kind == KindWled)
         loadSettings();
+    updateInterface();
+    schedulePaneCommit();
+}
+
+void ConnectionEditor::slotChooseInterface()
+{
+    m_autoInterface = !m_autoInterface;
+    if (kindOf(pickedPlugin()) == KindTargets)
+    {
+        const QString typed = m_targetIP->text();
+        const QString port = m_targetPort->text();
+        loadTargets();
+        m_loading = true;
+        m_targetIP->setText(typed);
+        m_targetPort->setText(port);
+        m_loading = false;
+    }
+    updateInterface();
+    updateTargetNote();
+    if (m_autoInterface == false)
+        m_interfaceCombo->setFocus();
+    schedulePaneCommit();
+}
+
+UniversePatcher::Destination ConnectionEditor::destination() const
+{
+    switch (kindOf(pickedPlugin()))
+    {
+        case KindTargets:
+            return UniversePatcher::readDestination(m_targetIP->text());
+        case KindSacn:
+            if (m_sacnMulticast->isChecked())
+                return UniversePatcher::Destination();
+            return UniversePatcher::readDestination(m_sacnIP->text());
+        default:
+            return UniversePatcher::Destination();
+    }
+}
+
+void ConnectionEditor::updateInterface()
+{
+    QLCIOPlugin *p = pickedPlugin();
+    const Kind kind = kindOf(p);
+    const bool network = (kind == KindTargets || kind == KindSacn)
+                         && UniversePatcher::linesAreAddresses(p);
+    if (network == false)
+    {
+        m_interfaceAuto->hide();
+        m_interfaceChoose->hide();
+        m_interfaceCombo->show();
+        return;
+    }
+    m_interfaceChoose->show();
+    if (m_autoInterface == false)
+    {
+        m_interfaceAuto->hide();
+        m_interfaceCombo->show();
+        m_interfaceChoose->setText(tr("Automatic"));
+        m_interfaceChoose->setToolTip(tr("Let the address it is sent to pick the interface again"));
+        return;
+    }
+
+    const UniversePatcher::AutoLine a =
+        UniversePatcher::autoLine(p->outputs(), destination(), int(pickedLine()));
+    if (a.line >= 0 && a.line != m_interfaceCombo->currentIndex())
+    {
+        m_loading = true;
+        m_interfaceCombo->setCurrentIndex(a.line);
+        m_loading = false;
+    }
+    m_interfaceAuto->setText(tr("%1 (automatic)\n%2").arg(a.via, a.why).trimmed());
+    m_interfaceAuto->setStyleSheet(a.fallback ? QStringLiteral("QLabel { color: #a06000; }")
+                                              : QString());
+    m_interfaceAuto->setToolTip(tr("Picked from where this universe is sent: the interface on "
+                                   "that address's network, or the one the system routes it "
+                                   "through"));
+    m_interfaceAuto->show();
+    m_interfaceCombo->hide();
+    m_interfaceChoose->setText(tr("Choose"));
+    m_interfaceChoose->setToolTip(tr("Pick the interface by hand instead"));
+}
+
+void ConnectionEditor::updateTargetNote()
+{
+    if (kindOf(pickedPlugin()) != KindTargets)
+        return;
+    const UniversePatcher::Destination d = UniversePatcher::readDestination(m_targetIP->text());
+    QString text;
+    bool bad = false;
+    switch (d.kind)
+    {
+        case UniversePatcher::Destination::Broadcast:
+            text = d.network.isEmpty()
+                ? tr("Broadcast to every node on the interface's network, as Art-Net "
+                     "universe %1 (this universe's own number).")
+                      .arg(UniversePatcher::portAddressText(m_universe))
+                : tr("Broadcast on %1, as Art-Net universe %2 (this universe's own number).")
+                      .arg(d.network, UniversePatcher::portAddressText(m_universe));
+        break;
+        case UniversePatcher::Destination::Unicast:
+        {
+            QString name;
+            foreach (const UniversePatcher::TargetPortChoice &c, m_ports)
+                if (c.address == d.address)
+                    name = c.text.section(QStringLiteral(" — "), 0, 0);
+            text = name.isEmpty() || name == d.address ? tr("Unicast to %1.").arg(d.address)
+                                                       : tr("Unicast to %1.").arg(name);
+        }
+        break;
+        case UniversePatcher::Destination::Partial:
+            text = tr("An IP address is four numbers, like 172.18.2.50.");
+        break;
+        case UniversePatcher::Destination::Invalid:
+            text = d.error;
+            bad = true;
+        break;
+    }
+    m_targetNote->setText(text);
+    m_targetNote->setStyleSheet(bad ? QStringLiteral("QLabel { color: #d05a5a; }")
+                                    : QStringLiteral("QLabel { color: #8a8e99; }"));
+    const bool broadcast = d.kind == UniversePatcher::Destination::Broadcast;
+    m_targetPort->setEnabled(broadcast == false);
+    m_targetPort->setToolTip(broadcast
+        ? tr("Broadcast goes out as this universe's own number; type a node's IP in Send To "
+             "to choose the universe on the node")
+        : tr("The Art-Net universe on the node: a number from 0 to 32767, or "
+             "net:subnet:universe (net 0-127, subnet and universe 0-15). 15 is 0:0:15, "
+             "300 is 1:2:12."));
 }
 
 void ConnectionEditor::loadSettings()
@@ -630,7 +855,6 @@ void ConnectionEditor::loadSettings()
             m_sacnPriority->setValue(pr.isValid() ? pr.toInt() : 100);
             const QString mode = origParam(QStringLiteral("transmitMode")).toString();
             m_sacnMode->setCurrentIndex(qMax(0, m_sacnMode->findText(mode)));
-            m_sacnIP->setEnabled(m_sacnMulticast->isChecked() == false);
         }
         break;
         case KindMidi:
@@ -669,76 +893,128 @@ void ConnectionEditor::loadTargets()
     if (p == nullptr)
         return;
     m_loading = true;
-    m_ports = m_patcher->targetPortChoices(p->name(), pickedLine(), m_universe);
+    /* With the interface automatic, every node heard on any of them: the
+       node picked then decides the interface, not the other way round. */
+    QList<quint32> lines;
+    if (m_autoInterface && UniversePatcher::linesAreAddresses(p))
+    {
+        for (int i = 0; i < p->outputs().count(); i++)
+            lines << quint32(i);
+    }
+    else
+        lines << pickedLine();
+    m_ports.clear();
+    m_portLines.clear();
+    QSet<QString> seen;
+    foreach (quint32 line, lines)
+        foreach (const UniversePatcher::TargetPortChoice &c,
+                 m_patcher->targetPortChoices(p->name(), line, m_universe))
+        {
+            const QString key = QStringLiteral("%1/%2").arg(c.address).arg(c.port);
+            if (seen.contains(key))
+                continue;
+            seen.insert(key);
+            m_ports << c;
+            m_portLines << line;
+        }
     m_targetCombo->clear();
-    m_targetCombo->addItem(tr("Broadcast (no target)"), TARGET_BROADCAST);
+    m_targetCombo->addItem(tr("Broadcast"), TARGET_BROADCAST);
     for (int i = 0; i < m_ports.count(); i++)
         m_targetCombo->addItem(m_ports.at(i).text, i);
-    m_targetCombo->addItem(tr("Another address…"), TARGET_OTHER);
 
-    // Where it goes now, when it is this plugin and line.
+    // Where it goes now, when it is this plugin.
     QString addr;
     quint32 pa = 0;
-    const bool same = editedPatch() != nullptr && p->name() == m_origPlugin
-                      && pickedLine() == m_origLine;
-    int pick = 0;
+    const bool same = editedPatch() != nullptr && p->name() == m_origPlugin;
     if (same && m_patcher->patchTarget(m_universe, p->name(), m_origLine, addr, pa))
     {
-        pick = m_targetCombo->count() - 1;      // another address, unless listed
+        int pick = -1;
         for (int i = 0; i < m_ports.count(); i++)
             if (m_ports.at(i).address == addr && m_ports.at(i).port == pa)
             {
                 pick = i + 1;
                 m_targetCombo->setItemText(i + 1, tr("%1  (current)").arg(m_ports.at(i).text));
             }
+        m_targetCombo->setCurrentIndex(pick);
         m_targetIP->setText(addr);
         m_targetPort->setText(UniversePatcher::portAddressText(pa));
     }
     else
     {
-        m_targetIP->clear();
+        m_targetCombo->setCurrentIndex(0);
+        m_targetIP->setText(tr("Broadcast"));
         m_targetPort->clear();
     }
-    m_targetCombo->setCurrentIndex(pick);
     m_loading = false;
-    slotTargetChanged();
+    updateTargetNote();
 }
 
 void ConnectionEditor::slotTargetChanged()
 {
+    if (m_loading)
+        return;
     const int which = m_targetCombo->currentData().toInt();
-    if (m_loading == false)
+    if (m_targetCombo->currentIndex() < 0)
+        return;
+    m_loading = true;
+    if (which >= 0 && which < m_ports.count())
     {
-        if (which >= 0 && which < m_ports.count())
-        {
-            m_targetIP->setText(m_ports.at(which).address);
-            m_targetPort->setText(UniversePatcher::portAddressText(m_ports.at(which).port));
-        }
-        else if (which == TARGET_BROADCAST)
-        {
-            m_targetIP->clear();
-            m_targetPort->clear();
-        }
+        m_targetIP->setText(m_ports.at(which).address);
+        m_targetPort->setText(UniversePatcher::portAddressText(m_ports.at(which).port));
     }
-    m_targetIP->setEnabled(which != TARGET_BROADCAST);
-    m_targetPort->setEnabled(which != TARGET_BROADCAST);
+    else if (which == TARGET_BROADCAST)
+    {
+        m_targetIP->setText(tr("Broadcast"));
+        m_targetPort->clear();
+    }
+    m_loading = false;
+    updateTargetNote();
+    updateInterface();
+    schedulePaneCommit();
 }
 
 void ConnectionEditor::slotTargetTyped()
 {
-    /* Typed over: it is an address of its own now, whatever was picked. */
-    const int other = m_targetCombo->findData(TARGET_OTHER);
-    if (other >= 0 && m_targetCombo->currentIndex() != other)
+    if (m_loading)
+        return;
+    /* Typed: Send To is that address now, whatever the list had picked --
+       an IP is unicast, a broadcast address broadcast; the interface
+       follows it. */
+    updateTargetNote();
+    updateInterface();
+}
+
+void ConnectionEditor::slotPortCommitted()
+{
+    if (m_loading)
+        return;
+    const QString txt = m_targetPort->text().trimmed();
+    quint32 pa = 0;
+    if (txt.isEmpty() == false && UniversePatcher::parsePortAddress(txt, pa))
+        m_targetPort->setText(UniversePatcher::portAddressText(pa));   // 15 → 0:0:15
+    else if (txt.isEmpty() == false)
     {
-        m_loading = true;
-        m_targetCombo->setCurrentIndex(other);
-        m_loading = false;
+        m_targetNote->setText(UniversePatcher::portAddressError(txt));
+        m_targetNote->setStyleSheet(QStringLiteral("QLabel { color: #d05a5a; }"));
     }
+    schedulePaneCommit();
 }
 
 void ConnectionEditor::slotSacnMulticastToggled()
 {
-    m_sacnIP->setEnabled(m_sacnMulticast->isChecked() == false);
+    if (m_loading == false && m_sacnMulticast->isChecked())
+        m_sacnIP->clear();
+    updateInterface();
+    schedulePaneCommit();
+}
+
+void ConnectionEditor::slotSacnTyped()
+{
+    /* An address typed is unicast to it; emptied, multicast again. */
+    m_loading = true;
+    m_sacnMulticast->setChecked(m_sacnIP->text().trimmed().isEmpty());
+    m_loading = false;
+    updateInterface();
 }
 
 void ConnectionEditor::slotInputChanged()
@@ -774,6 +1050,7 @@ void ConnectionEditor::slotConfigurePlugin()
     m_interfaceCombo->setEnabled(m_interfaceCombo->count() > 1);
     m_loading = false;
     loadSettings();
+    updateInterface();
 }
 
 void ConnectionEditor::slotWledDevices()
@@ -804,16 +1081,25 @@ QString ConnectionEditor::validate(QString &address, quint32 &portAddress,
     if (p != nullptr && m_interfaceCombo->count() == 0)
         return tr("%1 has no interface to send on.").arg(p->name());
 
-    if (kind == KindTargets && m_targetCombo->currentData().toInt() != TARGET_BROADCAST)
+    const UniversePatcher::Destination dest = destination();
+    if (kind == KindTargets || kind == KindSacn)
     {
-        address = m_targetIP->text().trimmed();
-        if (address.isEmpty())
-            return tr("Which node? Type its IP, or pick Broadcast.");
+        if (dest.kind == UniversePatcher::Destination::Invalid)
+            return dest.error;
+        if (dest.kind == UniversePatcher::Destination::Partial)
+            return tr("\"%1\" is not a whole IP address yet: it is four numbers, like "
+                      "172.18.2.50.").arg(kind == KindTargets ? m_targetIP->text().trimmed()
+                                                              : m_sacnIP->text().trimmed());
+    }
+    if (kind == KindTargets && dest.kind == UniversePatcher::Destination::Unicast)
+    {
+        address = dest.address;
+        /* Nothing typed: this universe's own number, as the plugin sends
+           when it is not told one. */
         const QString txt = m_targetPort->text().trimmed();
-        if (UniversePatcher::parsePortAddress(txt.isEmpty() ? QStringLiteral("0:0:0") : txt,
-                                              portAddress) == false)
-            return tr("\"%1\" is not a port address. Expected net:subnet:universe, "
-                      "with net 0-127 and subnet and universe 0-15.").arg(txt);
+        portAddress = m_universe;
+        if (txt.isEmpty() == false && UniversePatcher::parsePortAddress(txt, portAddress) == false)
+            return UniversePatcher::portAddressError(txt);
         /* One node port, one universe (UniversePatcher::applyTarget()). */
         const quint32 owner = m_patcher->universeOnTarget(p->name(), pickedLine(), address,
                                                           portAddress, m_universe);
@@ -830,10 +1116,9 @@ QString ConnectionEditor::validate(QString &address, quint32 &portAddress,
     {
         fbAddress = m_feedbackIP->text().trimmed();
         const QString txt = m_feedbackPort->text().trimmed();
-        if (UniversePatcher::parsePortAddress(txt.isEmpty() ? QStringLiteral("0:0:0") : txt,
-                                              fbPort) == false)
-            return tr("\"%1\" is not a feedback port address. Expected net:subnet:universe.")
-                .arg(txt);
+        fbPort = m_universe;
+        if (txt.isEmpty() == false && UniversePatcher::parsePortAddress(txt, fbPort) == false)
+            return UniversePatcher::portAddressError(txt);
     }
     return QString();
 }
@@ -991,11 +1276,30 @@ bool ConnectionEditor::apply()
         iom->setUniverseName(int(m_universe), name);
 
     m_doc->setModified();
+    /* The leg it is now, so a pane filled again finds it. */
+    m_origPlugin = plugin;
+    m_origLine = line;
     return true;
+}
+
+void ConnectionEditor::reject()
+{
+    if (m_pane)
+    {
+        load();                 // Esc in the pane: back to the patch as it is
+        m_paneNote->hide();
+        return;
+    }
+    QDialog::reject();
 }
 
 void ConnectionEditor::accept()
 {
+    if (m_pane)
+    {
+        slotCommit();
+        return;
+    }
     const bool wasWled = m_origPlugin == QLatin1String("WLED") && m_origIndex >= 0;
     if (apply() == false)
     {
@@ -1006,4 +1310,121 @@ void ConnectionEditor::accept()
     if (kindOf(pickedPlugin()) == KindWled && (wasWled == false || pickedLine() != m_origLine))
         WledDevicesDialog::edit(m_doc, m_universe, pickedLine(), parentWidget());
     QDialog::accept();
+}
+
+/*********************************************************************
+ * As a pane
+ *********************************************************************/
+
+ConnectionEditor *ConnectionEditor::createPane(Doc *doc, QWidget *parent)
+{
+    ConnectionEditor *ed = new ConnectionEditor(doc, 0, QString(), 0, parent);
+    ed->m_pane = true;
+    ed->setWindowFlags(Qt::Widget);
+    ed->setObjectName(QStringLiteral("connectionPane"));
+    ed->m_buttons->hide();
+    ed->m_topForm->setRowVisible(ed->m_universeCombo, false);
+    /* Which universe, as a heading: the list on the left picks it. */
+    ed->m_paneTitle = new QLabel(ed);
+    ed->m_paneTitle->setObjectName(QStringLiteral("connPaneTitle"));
+    QFont f = ed->m_paneTitle->font();
+    f.setBold(true);
+    ed->m_paneTitle->setFont(f);
+    if (QWidget *body = ed->m_paneNote->parentWidget())
+        if (QVBoxLayout *vl = qobject_cast<QVBoxLayout *>(body->layout()))
+            vl->insertWidget(0, ed->m_paneTitle);
+
+    /* Made as each is committed: a list picked, a field left. */
+    auto commit = [ed]() { ed->schedulePaneCommit(); };
+    foreach (QComboBox *c, QList<QComboBox *>() << ed->m_transmitMode << ed->m_sacnMode
+             << ed->m_midiMode << ed->m_inputCombo << ed->m_profileCombo << ed->m_midiChannel
+             << ed->m_feedbackCombo)
+        connect(c, QOverload<int>::of(&QComboBox::currentIndexChanged), ed, commit);
+    foreach (QLineEdit *e, QList<QLineEdit *>() << ed->m_targetIP << ed->m_sacnIP
+             << ed->m_feedbackIP << ed->m_feedbackPort << ed->m_nameEdit)
+        connect(e, &QLineEdit::editingFinished, ed, commit);
+    foreach (QSpinBox *sp, QList<QSpinBox *>() << ed->m_sacnUniverse << ed->m_sacnPriority
+             << ed->m_artnetInUni)
+        connect(sp, &QSpinBox::editingFinished, ed, commit);
+    connect(ed->m_passthrough, &QCheckBox::toggled, ed, commit);
+    ed->markClean();
+    return ed;
+}
+
+void ConnectionEditor::setUniverse(quint32 universe, const QString &pluginName, quint32 line)
+{
+    m_universe = universe;
+    m_origPlugin = pluginName;
+    m_origLine = line;
+    m_paneNote->hide();
+    load();
+}
+
+bool ConnectionEditor::commitPending()
+{
+    if (m_pane == false)
+        return true;
+    if (formState() == m_cleanState)
+    {
+        m_commitQueued = false;
+        return true;
+    }
+    slotCommit();
+    return m_paneNote->isHidden();
+}
+
+void ConnectionEditor::reloadIfClean()
+{
+    if (m_commitQueued || formState() != m_cleanState)
+        return;
+    load();
+}
+
+QString ConnectionEditor::formState() const
+{
+    QStringList v;
+    v << pickedPluginName() << QString::number(m_interfaceCombo->currentIndex())
+      << QString::number(m_autoInterface)
+      << m_targetIP->text().trimmed() << m_targetPort->text().trimmed()
+      << m_transmitMode->currentText()
+      << QString::number(m_sacnMulticast->isChecked()) << m_sacnIP->text().trimmed()
+      << QString::number(m_sacnUniverse->value()) << QString::number(m_sacnPriority->value())
+      << m_sacnMode->currentText() << m_midiMode->currentText()
+      << QString::number(m_inputCombo->currentIndex())
+      << QString::number(m_profileCombo->currentIndex())
+      << QString::number(m_midiChannel->currentIndex())
+      << QString::number(m_artnetInUni->value())
+      << QString::number(m_feedbackCombo->currentIndex())
+      << m_feedbackIP->text().trimmed() << m_feedbackPort->text().trimmed()
+      << QString::number(m_passthrough->isChecked()) << m_nameEdit->text().trimmed();
+    return v.join(QChar(0x1f));
+}
+
+void ConnectionEditor::markClean()
+{
+    m_cleanState = formState();
+}
+
+void ConnectionEditor::schedulePaneCommit()
+{
+    if (m_pane == false || m_loading || m_commitQueued)
+        return;
+    m_commitQueued = true;
+    QTimer::singleShot(0, this, &ConnectionEditor::slotCommit);
+}
+
+void ConnectionEditor::slotCommit()
+{
+    m_commitQueued = false;
+    if (m_pane == false || formState() == m_cleanState)
+        return;
+    if (apply() == false)
+    {
+        m_paneNote->setText(m_error);
+        m_paneNote->show();
+        return;
+    }
+    m_paneNote->hide();
+    load();
+    emit changed();
 }

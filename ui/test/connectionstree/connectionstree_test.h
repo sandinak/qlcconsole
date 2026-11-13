@@ -170,6 +170,16 @@ private slots:
     void byUniverseColumnsReadThePatch();
     void severalSelectedTakeOneTransmitMode();
 
+    /* Patching simpler (M996/M997): the interface follows the destination,
+       a bare number is a universe, typing an IP is Send To; By universe
+       edits in place and shows the selected universe's settings. */
+    void portAddressTakesABareNumber();
+    void interfaceFollowsTheDestination();
+    void typingAnIpPicksSendToAndTheInterface();
+    void aHandPickedInterfaceStaysChosen();
+    void byUniverseShowsTheSelectedUniversesSettings();
+    void byUniverseCellsEditThePatch();
+
 private:
     Doc *m_doc;
 };
