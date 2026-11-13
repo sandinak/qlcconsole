@@ -5243,7 +5243,7 @@ void ConnectionsTree::layoutSide()
     const int paneMin = qMax(340, m_connPane->minimumSizeHint().width() + bar);
     m_paneStack->setMinimumSize(paneMin, 1);
     const int pane = qBound(paneMin, w * 27 / 100, qMax(paneMin, 520));
-    const int gridFull = UniverseOutputView::widthFor(16) + bar;
+    const int gridFull = UniverseOutputView::widthFor(16) + bar + 8;   // + its frame
     const int gridMin = UniverseOutputView::widthFor(4) + bar;
     int list = qMax(w * 36 / 100, w - pane - gridFull - handles);
     list = qMax(w / 4, qMin(list, w - pane - gridMin - handles));
