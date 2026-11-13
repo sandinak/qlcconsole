@@ -1028,6 +1028,23 @@ void FollowSpotFeel_Test::recalibratingSnapsTo15Degrees()
     QCOMPARE(h.pc->followSpotOperator().facing, 300);
     QCOMPARE(h.pc->followSpotOperator().preset, FollowSpotOperator::StageLeftTower);
     QCOMPARE(h.pc->followSpotMover()->facing(), 300);
+    // Said on the screen as well as by the voice (the footer reads it).
+    QCOMPARE(h.pc->m_facingSaid, QString::fromUtf8("Facing 300°"));
+
+    // The same push again: kept, and said so -- not nothing.
+    h.pc->m_recalHeld = true;
+    h.pc->m_recalX = std::sin(a);
+    h.pc->m_recalY = std::cos(a);
+    h.pc->finishFacingRecalibration();
+    QCOMPARE(h.pc->followSpotOperator().facing, 300);
+    QCOMPARE(h.pc->m_facingSaid, QString::fromUtf8("Facing 300°, as it was"));
+    // Too small a push: unchanged, and how.
+    h.pc->m_recalHeld = true;
+    h.pc->m_recalX = 0.1;
+    h.pc->m_recalY = 0.1;
+    h.pc->finishFacingRecalibration();
+    QCOMPARE(h.pc->followSpotOperator().facing, 300);
+    QVERIFY2(h.pc->m_facingSaid.startsWith("Facing unchanged"), qPrintable(h.pc->m_facingSaid));
     h.pc->setFollowSpotOperator(FollowSpotOperator());
 }
 

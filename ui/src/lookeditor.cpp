@@ -3369,10 +3369,13 @@ void LookEditor::rebuildEffectDynWidget()
             where->setCurrentIndex(qMax(0, where->findData(int(op.preset))));
             facing->setCurrentIndex(qMax(0, facing->findData(op.facing)));
             eye->setValue(op.eyeMm);
-            const QString stick = pc->followSpotStickName();
+            // A pad asleep or unplugged keeps its own (followSpotOperatorStick()).
+            const QString stick = pc->followSpotOperatorStick();
             const QString venue = pc->venueCorrections() != nullptr ? pc->venueCorrections()->activeVenue()
                                                                     : QString();
             QString text = stick.isEmpty() ? LookEditor::tr("Any controller") : stick;
+            if (!stick.isEmpty() && pc->followSpotStickName().isEmpty())
+                text = LookEditor::tr("%1 (not connected)").arg(stick);
             if (!venue.isEmpty())
                 text = LookEditor::tr("%1 in %2").arg(text, venue);
             forWho->setText(LookEditor::tr("For %1").arg(text));

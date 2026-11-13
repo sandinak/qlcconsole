@@ -432,7 +432,24 @@ public:
     void setStandOnCentreStage(bool on) { m_standOnCentreStage = on; refit(); update(); }
     /** Back to the whole rig in view, after a zoom or a pan by hand. */
     void fitToRig() { m_zoomed = false; refit(); update(); }
+
+    /** The follow-spot operator, drawn where they stand (the Rig Overview's
+     *  Operator views): a chevron the way they face on the floor, @p label
+     *  under it, and @p caption across the top of the picture -- whose
+     *  operator this is, so a view that looks like any other says why. */
+    struct OperatorMark
+    {
+        bool on = false;
+        QPointF floor;          ///< world metres, on the plan
+        int facing = 0;         ///< degrees on the plan (FollowSpotOperator)
+        QString label;          ///< "spot op · SL tower"
+        QString caption;        ///< "Operator: SL tower, facing 270° · DualSense in Main Hall"
+    };
+    void setOperatorMark(const OperatorMark &mark);
+    OperatorMark operatorMark() const { return m_operatorMark; }
 private:
+    OperatorMark m_operatorMark;
+    void drawOperatorMark(QPainter &p) const;
     bool m_standOnCentreStage = false;
     void collectPoints(QList<QVector3D> &pts) const; ///< every point the fit should frame
     /** Whether the Lighting Studio shows layer @p layerId -- the whole-rig

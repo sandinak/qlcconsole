@@ -9741,6 +9741,13 @@ void App::updateFollowChip()
     /* The D-pad's speed step, said while it is not x1 -- and for a moment
        after any change, back to x1 too -- so the operator sees what the
        press did. */
+    /* Left stick click held: the facing being set from the push, and a
+       moment after, what it set -- on the screen, not only in the voice. */
+    if (st.settingFacing && st.state != Status::NoStick)
+        how += QStringLiteral(" · ") + pc->padText(tr("setting the facing: push toward centre stage, "
+                                                      "let go of {LS}"));
+    else if (!st.facingSaid.isEmpty() && st.state != Status::NoStick)
+        how += QStringLiteral(" · ") + st.facingSaid;
     if (st.speedShown && st.state != Status::NoStick)
         how += QStringLiteral(" · ") + ProgrammerController::followSpotSpeedText(st.speed);
     /* The beam's size (Settings > Units), or its angle with no size: while
