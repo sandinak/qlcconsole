@@ -157,6 +157,7 @@ private slots:
      *  alone; a jump leaves the target page; a stick straight across or
      *  straight up moves the target that way. */
     void aJumpLeavesTheTargetPageAndTheWholeCall();
+    void theTargetPageFacesAFollowSpotOperator();
     /** Stepping flashes the light stepped to; a hold ends the flash, and
      *  the release doesn't bring it back. */
     void aStepFlashesAndAHoldEndsTheFlash();

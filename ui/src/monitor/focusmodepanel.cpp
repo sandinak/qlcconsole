@@ -1042,7 +1042,10 @@ void FocusModePanel::refresh()
     }
     m_referenceLabel->setText(tr("Aimed at: %1%2").arg(m_session->referenceName(),
         m_session->isTargetPage()
-            ? padText(tr("  \u2014 target page: the stick moves it ({A} keeps, {B} puts it back)"))
+            ? (m_session->targetFacingText().isEmpty()
+                   ? padText(tr("  \u2014 target page: the stick moves it ({A} keeps, {B} puts it back)"))
+                   : padText(tr("  \u2014 target page: the stick moves it, %1 ({A} keeps, {B} puts it back)"))
+                         .arg(m_session->targetFacingText()))
             : m_session->usingSecondReference() ? tr("  (second reference)") : QString()));
     m_referenceLabel->setToolTip(m_referenceLabel->text());
     const FocusSession::Offset live = m_session->liveOffset(fid);

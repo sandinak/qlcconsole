@@ -50,6 +50,8 @@
 #include "fixturegroup.h"
 #include "focussession.h"
 #include "stagetarget.h"
+#include "followspotmover.h"
+#include "followspotoperator.h"
 #include "qlcphysical.h"
 #include "focuscalls.h"
 #include "focuscallcue.h"
@@ -2874,6 +2876,57 @@ void FocusCalls_Test::aJumpLeavesTheTargetPageAndTheWholeCall()
     QVERIFY((dsc->position() - QVector3D(6.0f, 5.5f, 0.0f)).length() < 0.001f);
     s->revertTarget();
     QVERIFY((dsc->position() - QVector3D(5.0f, 6.0f, 0.0f)).length() < 0.001f);
+    s->stop();
+}
+
+/* The target page of a target a follow spot is following is turned by that
+   spot's operator, as the stick is there: up is the way they face. Any other
+   target, and front of house, are the plain rule (up = upstage). */
+void FocusCalls_Test::theTargetPageFacesAFollowSpotOperator()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    StageTarget *other = makeTarget(m_doc, "USC", QVector3D(5.0f, 1.0f, 0.0f));
+    ProgrammerController *pc = m_doc->programmer();
+    FocusSession::Call c;
+    c.name = "Spots";
+    c.fixtures = { a->id() };
+    c.target = targetRef(dsc->id());
+    FocusSession *s = pc->focusSession();
+    FocusSession::Options o;
+    o.calls = { c };
+    QVERIFY(s->start(o));
+    QVERIFY(s->toggleTargetPage());
+    auto at = [&](const QVector3D &p) { return (dsc->position() - p).length() < 0.001f; };
+
+    // A follow spot on this target, the operator at the SL tower.
+    pc->followSpotMover()->follow(0, dsc->id());
+    FollowSpotOperator op = FollowSpotOperator::fromPreset(FollowSpotOperator::StageLeftTower);
+    pc->setFollowSpotOperator(op);
+    const QPointF up = FollowSpotOperator::onFloor(0.0, 5.0, op.facing);
+    QVERIFY(qAbs(up.x()) + qAbs(up.y()) > 0.1);
+    QCOMPARE(s->targetFacingText(), QString("from SL tower"));
+    s->nudge(0.0f, 5.0f);
+    QVERIFY(at(QVector3D(5.0f + float(up.x()) * 0.1f, 6.0f + float(up.y()) * 0.1f, 0.0f)));
+    // And it is not the front-of-house rule.
+    QVERIFY(!at(QVector3D(5.0f, 5.5f, 0.0f)));
+    s->revertTarget();
+
+    // Front of house: as it always was.
+    pc->setFollowSpotOperator(FollowSpotOperator());
+    s->nudge(0.0f, 5.0f);
+    QVERIFY(at(QVector3D(5.0f, 5.5f, 0.0f)));
+    s->revertTarget();
+
+    // A follow spot on some other target: this one is not turned.
+    pc->setFollowSpotOperator(op);
+    pc->followSpotMover()->follow(0, other->id());
+    s->nudge(0.0f, 5.0f);
+    QVERIFY(at(QVector3D(5.0f, 5.5f, 0.0f)));
+    s->revertTarget();
+
+    pc->followSpotMover()->follow(UINT_MAX, UINT_MAX);
+    pc->setFollowSpotOperator(FollowSpotOperator());
     s->stop();
 }
 

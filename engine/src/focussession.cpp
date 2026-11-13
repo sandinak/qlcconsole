@@ -38,6 +38,9 @@
 #include "fixture.h"
 #include "scene.h"
 #include "truss.h"
+#include "followspotoperator.h"
+#include "followspotmover.h"
+#include "programmercontroller.h"
 #include "doc.h"
 
 namespace
@@ -1038,6 +1041,16 @@ void FocusSession::applyOffset(quint32 fid, const Offset &offset)
     props->setFixtureRigProps(fid, rp);
 }
 
+QString FocusSession::targetFacingText() const
+{
+    if (!m_targetPage || m_doc == nullptr)
+        return QString();
+    const FollowSpotMover *mover = m_doc->programmer()->followSpotMover();
+    if (mover == nullptr || !mover->isOn() || mover->targetId() != m_targetId)
+        return QString();
+    return m_doc->programmer()->followSpotOperator().viewpointText();
+}
+
 void FocusSession::nudge(float dPan, float dTilt)
 {
     if (m_holding)
@@ -1047,7 +1060,19 @@ void FocusSession::nudge(float dPan, float dTilt)
         // Right is across the stage, up is upstage (-Y: the plan's +Y is
         // downstage), away from an operator at front of house. This is the
         // follow spot's own rule (stick up = away from the operator).
-        nudgeTarget(dPan * targetMetresPerDegree(), -dTilt * targetMetresPerDegree());
+        // When a follow spot is following this very target, the operator's
+        // viewpoint turns the stick as it does there (FollowSpotOperator::
+        // onFloor): up is the way they face, right is their right. Facing
+        // 0 -- front of house, everything else -- is the rule above.
+        double sx = double(dPan), sy = double(dTilt);
+        const FollowSpotMover *mover = m_doc->programmer()->followSpotMover();
+        if (mover != nullptr && mover->isOn() && mover->targetId() == m_targetId)
+        {
+            const QPointF d = FollowSpotOperator::onFloor(sx, sy, m_doc->programmer()->followSpotOperator().facing);
+            nudgeTarget(float(d.x()) * targetMetresPerDegree(), float(d.y()) * targetMetresPerDegree());
+            return;
+        }
+        nudgeTarget(float(sx) * targetMetresPerDegree(), float(-sy) * targetMetresPerDegree());
         return;
     }
     for (quint32 fid : scopeFixtures())
