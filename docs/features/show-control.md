@@ -61,6 +61,10 @@ time. Its tooltip shows the button map in the words of the pad you're
 holding, and **Settings → Advanced → Game controllers → Controller Test…** lists what each
 button does in the Run role (**Run: GO (LB held)**).
 
+While the role is Run the footer says so too, from every tab: **Pad:
+Run**, **Pad: ARMED** (orange) or **Pad: Walk**, beside the follow spot's
+◎ Follow chip when one plays.
+
 **Nothing moves the show unless LB (L1) is held.** Holding it arms the
 pad: the light bar turns orange and the Run tab's button says **Pad:
 ARMED**. While it's held:
@@ -80,7 +84,9 @@ ARMED**. While it's held:
 - **GO is confirmed on the pad.** A GO flashes the light bar blue and gives
   a short buzz. A long buzz means there was nothing to play, and the
   laptop says so if the voice is on.
-- **An unarmed press does nothing.** The voice says "Hold LB to arm."
+- **An unarmed press does nothing.** The voice says "Hold LB to arm.",
+  and the footer's Pad chip shows it for a few seconds, also with
+  feedback set to lights only.
 - **The list.** Commands go to the main cue list until a trigger picks
   another list of the current production. The voice names it ("Act 2.").
 - **The same buttons on every pad.** The map goes by button, not by
@@ -89,7 +95,8 @@ ARMED**. While it's held:
 - **One path.** A pad GO is the same GO as ⌘↩ and the Run tab's button:
   the previews hold for it, and in Design it offers Operate.
 - **The tools win.** A Focus mode or Focus this cue started on the laptop
-  takes the controller until it ends. In the Run role, View + Menu doesn't
+  takes the controller until it ends. The Run tab's button and the footer
+  name it meanwhile (**Pad: Venue focus**, **Pad: Focus this cue**). In the Run role, View + Menu doesn't
   start Focus mode, and Menu alone walks the show (below). A focus-call
   cue's Start (Menu) still begins its calls.
 - The sticks stay the follow spot's in either role. While a follow spot
@@ -265,10 +272,12 @@ button to **Pad: Run**. Connect one pad at a time, and check that
 
 **For each pad**, in this order (Xbox name first, PlayStation second):
 
-1. Press **A** (Cross) without LB. *Expected:* nothing plays; the voice
-   says "Hold LB to arm."
-2. Hold **LB** (L1). *Expected:* the Run tab's button says **Pad:
-   ARMED**; on a PlayStation pad the light bar turns orange.
+1. Press **A** (Cross) without LB. *Expected:* nothing plays; the
+   footer's Pad chip reads **Pad: Run · Hold LB to arm.** (L1 on a
+   PlayStation pad) for a few seconds, and the voice says it.
+2. Hold **LB** (L1). *Expected:* the Run tab's button and the footer's
+   Pad chip say **Pad: ARMED**; on a PlayStation pad the light bar turns
+   orange.
 3. Still holding LB, press **A** (Cross). *Expected:* the main list goes
    to its first cue; a short buzz; on a PlayStation pad the light bar
    flashes blue, then goes back to orange.

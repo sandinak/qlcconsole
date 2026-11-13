@@ -22,6 +22,7 @@
 #include <QFileInfo>
 #include <QLabel>
 #include <QSignalSpy>
+#include <QRegularExpression>
 #include <QToolButton>
 #include <QFile>
 #include <QDir>
@@ -900,22 +901,21 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
     const quint32 padLine = ip->input();
     QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 5000);
     qInfo().noquote() << "[PAD RUN] pad" << ip->inputName();
-    // The voice on, as the checklist has it.
-    pc->setOperatorFeedback(ControllerScheme::BothFeedback);
+    /* The bench Mac's feedback: lights only -- nothing is said aloud, so
+       what a press could not do must be on the screen. */
+    pc->setOperatorFeedback(ControllerScheme::LightsFeedback);
 
-    // Top bar > Operate; the Run tab's button from Pad: Tools to Pad: Run.
+    // The profile's channels (playstation.qxhid / xbox.qxhid): the six axes, then the buttons.
+    const quint32 kA = 6, kLB = 10, kView = 12, kLS = 14, kDpadUp = 17, kDpadDown = 18;
+    auto press = [&](quint32 ch, uchar v) {
+        QVERIFY(padInput(doc, padLine, ch, v));
+        settle(60);
+    };
+    auto tap = [&](quint32 ch) { press(ch, 255); press(ch, 0); };
+
+    // Top bar > Operate; Main cue 1: the follow spot plays.
     doc->setMode(Doc::Operate);
     settle(100);
-    QToolButton *padBtn = m_app->findChild<QToolButton *>(QStringLiteral("crPadRun"));
-    QVERIFY(padBtn != nullptr);
-    if (run->isEnabled())
-        padBtn->click();
-    QCOMPARE(padBtn->text(), QStringLiteral("Pad: Tools"));
-    padBtn->click();
-    QVERIFY(run->isEnabled());
-    QCOMPARE(padBtn->text(), QStringLiteral("Pad: Run"));
-
-    // Main cue 1: the follow spot plays (left over from the follow-spot checks).
     const CueList *mainList = listNamed(st, kProduction, kMain);
     QVERIFY(mainList != nullptr);
     ShowControl::Request r;
@@ -925,7 +925,31 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
     QVERIFY(m_app->runCommand(r, ShowControl::RouteRunTab));
     QTRY_VERIFY_WITH_TIMEOUT(pc->followSpotStatus().state != ProgrammerController::FollowSpotStatus::Off, 5000);
     QTRY_COMPARE_WITH_TIMEOUT(st->runningCue(mainList->id), mainList->cues.at(0).id, 3000);
+
+    // The follow-spot checks first, in Tools, as on the bench: speed, facing, Centre Sticks.
+    QToolButton *padBtn = m_app->findChild<QToolButton *>(QStringLiteral("crPadRun"));
+    QVERIFY(padBtn != nullptr);
+    if (run->isEnabled())
+        padBtn->click();
+    QCOMPARE(padBtn->text(), QStringLiteral("Pad: Tools"));
+    QLabel *chip = m_app->padRoleChip();
+    QVERIFY(chip != nullptr);
+    QVERIFY(chip->isHidden());              // Tools: nothing to report (UX-23)
+    tap(kDpadUp);
+    tap(kDpadDown);
+    tap(kLS);                               // L3 held and let go: the facing, unchanged
+    press(kView, 255);                      // View + LS: Centre Sticks
+    tap(kLS);
+    press(kView, 0);
     settle(100);
+
+    // The Run tab's button from Pad: Tools to Pad: Run; the footer says it too.
+    padBtn->click();
+    QVERIFY(run->isEnabled());
+    QCOMPARE(padBtn->text(), QStringLiteral("Pad: Run"));
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible(), 2000);
+    QCOMPARE(chip->text(), QStringLiteral("Pad: Run"));
+    QVERIFY(m_app->followChip()->isVisible());  // beside the follow spot's
 
     QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
     auto heard = [&said](const QString &part) {
@@ -934,36 +958,64 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
                 return true;
         return false;
     };
-    // The profile's channels (playstation.qxhid / xbox.qxhid): A/Cross 6, LB/L1 10.
-    const quint32 kA = 6, kLB = 10;
-    auto press = [&](quint32 ch, uchar v) {
-        QVERIFY(padInput(doc, padLine, ch, v));
-        settle(60);
-    };
 
-    // 1. A (Cross) alone: nothing plays, "Hold LB to arm."
-    press(kA, 255);
-    press(kA, 0);
-    QTRY_VERIFY2_WITH_TIMEOUT(heard(QStringLiteral("to arm")),
-                              qPrintable(QStringLiteral("said: %1 role %2")
-                                         .arg(said.count()).arg(pc->controllerRole(1, kA))), 2000);
+    // 1. A (Cross) alone: nothing plays; the footer says to hold LB (L1) -- lights only, so not aloud.
+    tap(kA);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains(QStringLiteral("to arm")),
+                              qPrintable(QStringLiteral("chip: %1, role %2").arg(chip->text())
+                                         .arg(pc->controllerRole(1, kA))), 2000);
+    qInfo().noquote() << "[PAD RUN] unarmed, footer:" << chip->text();
+    QVERIFY(!heard(QStringLiteral("to arm")));
+    QCOMPARE(st->runningCue(mainList->id), mainList->cues.at(0).id);
+    // With the voice on, it is said as well.
+    pc->setOperatorFeedback(ControllerScheme::BothFeedback);
+    tap(kA);
+    QTRY_VERIFY_WITH_TIMEOUT(heard(QStringLiteral("to arm")), 2000);
     QCOMPARE(st->runningCue(mainList->id), mainList->cues.at(0).id);
 
-    // 2. Hold LB (L1): armed, on the Run tab's button.
+    // 2. Hold LB (L1): armed, on the Run tab's button and in the footer.
     press(kLB, 255);
     QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
     QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: ARMED"), 2000);
+    QVERIFY(chip->text().startsWith(QStringLiteral("Pad: ARMED")));
 
     // 3. LB + A: GO, to cue 2.
-    press(kA, 255);
-    press(kA, 0);
+    tap(kA);
     QTRY_COMPARE_WITH_TIMEOUT(st->runningCue(mainList->id), mainList->cues.at(1).id, 3000);
 
     // Let go of LB: Pad: Run again.
     press(kLB, 0);
     QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Run"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().startsWith(QStringLiteral("Pad: Run")), 2000);
 
-    padBtn->click();        // back to Tools, as the next test expects
+    /* A tool started on the laptop has the pad until it ends ("The tools
+       win"): the button and the footer name it, rather than a pad that
+       seems dead. Focus this cue, quietly, on the cue running. */
+    QString why;
+    QVERIFY2(pc->refineSession()->start(mainList->cues.at(1).id, 0xFFFFFFFF, &why), qPrintable(why));
+    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Focus this cue"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().startsWith(QStringLiteral("Pad: Focus this cue")), 2000);
+    QVERIFY(chip->toolTip().contains(QStringLiteral("has the controller until it ends")));
+    press(kLB, 255);
+    QVERIFY(!run->isArmed());
+    press(kLB, 0);
+    pc->refineSession()->stop();
+    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Run"), 2000);
+
+    // At the smallest window the Pad chip is whole, beside the Follow chip.
+    m_app->resize(1024, 640);
+    settle(400);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->isVisible() && !chip->property("statusSqueezed").toBool()
+                              && chip->width() > 0,
+                              qPrintable(QStringLiteral("chip %1 wide, squeezed %2")
+                                         .arg(chip->width()).arg(chip->property("statusSqueezed").toBool())),
+                              2000);
+    qInfo().noquote() << "[PAD RUN] at 1024: pad chip" << chip->width() << "px, follow chip"
+                      << m_app->followChip()->text().remove(QRegularExpression(QStringLiteral("<[^>]*>")));
+
+    padBtn->click();        // back to Tools: the chip goes
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isHidden(), 2000);
+    m_app->resize(1280, 800);
     doc->masterTimer()->stopAllFunctions();
     doc->setMode(Doc::Design);
     settle(300);
