@@ -484,7 +484,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_universeSplit->addWidget(outScroll);
     m_universeSplit->setCollapsible(0, false);
     m_universeSplit->setStretchFactor(0, 1);
-    m_universeSplit->setStretchFactor(1, 1);
+    m_universeSplit->setStretchFactor(1, 0);
     m_side = new QStackedWidget(this);
     m_side->addWidget(m_universeSplit);
     m_outputPage = m_universeSplit;
@@ -5191,9 +5191,15 @@ void ConnectionsTree::layoutSide()
         return;
     m_universeSplit->setOrientation(want);
     if (want == Qt::Vertical)
-        m_universeSplit->setSizes(QList<int>() << 3 << 1);
+        m_universeSplit->setSizes(QList<int>() << 3000 << 1000);
     else
-        m_universeSplit->setSizes(QList<int>() << 1 << 1);
+    {
+        /* The grid at its own width (all sixteen columns), the settings the
+           rest. */
+        const int total = qMax(m_universeSplit->width(), 2);
+        const int grid = qMin(m_output->sizeHint().width() + 24, total / 2);
+        m_universeSplit->setSizes(QList<int>() << total - grid << grid);
+    }
 }
 
 bool ConnectionsTree::isGridCell(const QModelIndex &index) const

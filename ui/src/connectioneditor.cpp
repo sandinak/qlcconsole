@@ -398,6 +398,7 @@ void ConnectionEditor::buildForm()
                                  "instead of into the engine"));
     inf->addRow(QString(), m_passthrough);
     vl->addWidget(m_inputBox);
+    vl->addStretch(1);          // tall (a pane beside a list): spare height below, not inside
 
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     m_buttons = buttons;
