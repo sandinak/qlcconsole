@@ -36,17 +36,21 @@ static QList<CueLookahead::UpcomingCue> chaserUpcoming(Chaser *chaser, int horiz
 
     const uint dur = chaser->currentStepDuration();
     int fireInMs;
-    if (dur == 0)
+    /* Holds until a manual GO -- unknown, but there's ample dark time. A
+       Show Tree cue that waits for GO holds for Function::infiniteSpeed()
+       (UINT_MAX - 1): as an int that is -2, which used to read as "fires
+       now" and so never moved anything in black (0.4.5). Any sentinel at
+       or above it (defaultSpeed() too) is no timed wait. */
+    if (dur == 0 || dur >= Function::infiniteSpeed())
     {
-        // Holds until a manual GO — unknown, but there's ample dark time.
         fireInMs = INT_MAX;
     }
     else
     {
+        // In 64 bits: a long finite hold (over INT_MAX ms) must not wrap.
         const quint32 elapsed = chaser->currentRunningStep().m_elapsed;
-        fireInMs = int(dur) - int(elapsed);
-        if (fireInMs < 0)
-            fireInMs = 0;
+        const qint64 left = qint64(dur) - qint64(elapsed);
+        fireInMs = int(qBound(qint64(0), left, qint64(INT_MAX) - 1));
     }
 
     if (fireInMs <= horizonMs || fireInMs == INT_MAX)

@@ -45,6 +45,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Move in black now works when the next cue waits for GO.** While a Show Tree cue holds for GO, a dark mover the next cue will light is now sent to its next position after the lead time; before, a cue waiting for GO read as one about to fire, so nothing was moved in black for it.
 - **Everything view: the tab strip keeps words at 1024 wide.** When the short names were a few pixels too wide, the strip dropped to bare icons; it now tightens the tab padding first, so the short names (I/O, Studio, Console, Desk, Tree) stay and no tab needs a scroll arrow.
 - **The footer's venue chip says what a click does.** With no venue it read *Venue: none*, like a status; it now reads *Set Venue…* (a click opens the venue menu as before). It is kept in view, not hidden, because Getting Started and Lesson 3.6 send you to it.
 - **Show Tree hints are not cut off at 1024 wide.** A long hint ("1.0.0 is the first cue: there is no cue before it to go under…") wraps onto a second line instead of running past the edge.
