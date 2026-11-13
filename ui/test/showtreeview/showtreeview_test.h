@@ -232,6 +232,7 @@ private slots:
     /** Renumber this level asks first while OSC / MSC is listening: No
      *  changes nothing, Yes renumbers; not listening, no question. */
     void renumberThisLevelAsksFirstWhileShowControlListens();
+    void renumberSongFromTheSongMenu();
     /** One word per idea p2: the menus say Copy to a hit and Adopt as a
      *  hit (no "look"), and each makes a hit. */
     void theHitMenusSayHit();

@@ -512,6 +512,17 @@ public:
      *  asks for start and step first, and lists the numbers show control
      *  fires that change when OSC or MSC is listening. */
     bool renumberLevel(quint32 cueId, int start = 1, int step = 1, bool ask = true);
+    /** Renumber Song… (2026-11-12): song @a song of list @a listId tidied
+     *  part by part (ShowTreeController::renumberSong) from @a start (-1:
+     *  the scheme's first, 1 or the hundred's 0) in steps of @a step, point
+     *  cues made whole with @a wholePoints. With @a ask, a dialog asks first
+     *  and lists the changes, and the show-control question as Renumber
+     *  This Level's. */
+    bool renumberSong(quint32 listId, const ShowTree::Section &song, int start = -1, int step = 1,
+                      bool wholePoints = true, bool ask = true);
+    /** Whether @a cues are every cue of one song (sub-cues of them may be
+     *  in too): its list and the song. */
+    bool cuesAreOneSong(const QList<quint32> &cues, quint32 *listId, ShowTree::Section *song) const;
     /** Inline rename of a cue row ("2.5 Fog"): number and name in one
      *  step; a new number moves the cue to its place, one taken is refused
      *  and said. */
@@ -815,6 +826,8 @@ public:
     bool duplicateLibraryReusable();
     bool duplicateReusableCueRow(quint32 id);
     void listClipboardItems(ContextMenu &menu, const QString &what);
+    /** Renumber Song… for song @a song of list @a listId (greyed under Manual). */
+    void renumberSongItem(ContextMenu &menu, quint32 listId, const ShowTree::Section &song);
 
     typedef QPair<quint32, quint32> LayerRef;       //!< cue, layer
     /** MIME type of layers dragged within the tree (cue, layer id pairs). */

@@ -36,9 +36,12 @@
 #include <QCheckBox>
 #include <QLineEdit>
 #include <QDialog>
+#include <QSpinBox>
+#include <QSet>
 #include <QLabel>
 
 #include "showtreeview.h"
+#include "showcontrollistener.h"
 #include "importsheet.h"
 #include "chaser.h"
 #include "doc.h"
@@ -495,3 +498,136 @@ bool ShowTreeView::mergeListsIntoOne(quint32 productionId, const QList<quint32> 
     }
     return true;
 }
+
+/****************************************************************************
+ * Renumber Song… (2026-11-12)
+ ****************************************************************************/
+
+bool ShowTreeView::cuesAreOneSong(const QList<quint32> &cues, quint32 *listId, Section *song) const
+{
+    if (cues.count() < 2)
+        return false;
+    QSet<quint32> picked;
+    const CueList *list = nullptr;
+    for (quint32 c : cues)
+    {
+        const CueList *l = m_st->listOfCue(c);
+        if (l == nullptr || l->looks)
+            return false;
+        if (l->isSubCues())
+            continue;                       // a sub-cue of one of them: fine
+        if (list != nullptr && list != l)
+            return false;
+        list = l;
+        picked << c;
+    }
+    Section s;
+    if (list == nullptr || picked.isEmpty() || !m_st->sectionOfCue(*picked.begin(), &s))
+        return false;
+    if (picked.count() != s.last - s.first + 1)
+        return false;
+    for (int i = s.first; i <= s.last; ++i)
+        if (!picked.contains(list->cues.at(i).id))
+            return false;
+    if (listId != nullptr)
+        *listId = list->id;
+    if (song != nullptr)
+        *song = s;
+    return true;
+}
+
+bool ShowTreeView::renumberSong(quint32 listId, const Section &song, int start, int step, bool wholePoints,
+                                bool ask)
+{
+    const CueList *list = m_st->cueList(listId);
+    if (list == nullptr || list->looks)
+        return false;
+    if (start < 0)
+        start = m_st->listNumbering(listId) == Numbering::Hundreds ? 0 : 1;
+    auto lines = [](const QList<ShowTreeController::Renumbered> &plan, int most) {
+        QStringList out;
+        for (const ShowTreeController::Renumbered &r : plan.mid(0, most))
+            out << tr("%1 → %2").arg(r.from, r.to);
+        if (plan.count() > most)
+            out << tr("… and %1 more").arg(plan.count() - most);
+        return out.join(QStringLiteral("\n"));
+    };
+    if (ask)
+    {
+        QDialog dlg(this);
+        dlg.setWindowTitle(tr("Renumber song"));
+        QFormLayout *f = new QFormLayout(&dlg);
+        QLabel *intro = new QLabel(m_st->listNumbering(listId) == Numbering::Hundreds
+                                   ? tr("Numbers the cues of “%1” in its hundred, in list order (from Start, in "
+                                        "steps of Step). Sub-cues follow their cue.").arg(sectionTitle(song))
+                                   : tr("Numbers the cues of each part of “%1” 1, 2, 3… in list order (or from "
+                                        "Start, in steps of Step), in the last place: no cue changes song or "
+                                        "part. Sub-cues follow their cue.").arg(sectionTitle(song)), &dlg);
+        intro->setWordWrap(true);
+        f->addRow(intro);
+        QSpinBox *from = new QSpinBox(&dlg);
+        from->setObjectName("stRenumberStart");
+        from->setRange(0, 99999);
+        from->setValue(start);
+        QSpinBox *by = new QSpinBox(&dlg);
+        by->setObjectName("stRenumberStep");
+        by->setRange(1, 1000);
+        by->setValue(step);
+        f->addRow(tr("Start"), from);
+        f->addRow(tr("Step"), by);
+        QCheckBox *whole = new QCheckBox(tr("Point cues (1.0.3.5) get whole numbers too"), &dlg);
+        whole->setObjectName("stRenumberWholePoints");
+        whole->setToolTip(tr("Off: a point cue keeps its point under its cue's new number"));
+        whole->setChecked(wholePoints);
+        f->addRow(whole);
+        QLabel *preview = new QLabel(&dlg);
+        preview->setObjectName("stRenumberPreview");
+        preview->setWordWrap(true);
+        preview->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        f->addRow(preview);
+        QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+        f->addRow(box);
+        connect(box, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+        connect(box, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+        auto update = [this, listId, song, from, by, whole, preview, box, lines]() {
+            QString why;
+            const QList<ShowTreeController::Renumbered> plan
+                = m_st->renumberSongPlan(listId, song, from->value(), by->value(), whole->isChecked(), &why);
+            preview->setText(plan.isEmpty() ? why : lines(plan, 12));
+            box->button(QDialogButtonBox::Ok)->setEnabled(!plan.isEmpty());
+        };
+        connect(from, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, update);
+        connect(by, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, update);
+        connect(whole, &QCheckBox::toggled, &dlg, update);
+        update();
+        if (dlg.exec() != QDialog::Accepted)
+            return false;
+        start = from->value();
+        step = by->value();
+        wholePoints = whole->isChecked();
+
+        // As Renumber This Level: what fires cues by number fires others.
+        if (ShowControlListener::oscEnabled() || ShowControlListener::mscEnabled())
+        {
+            const QList<ShowTreeController::Renumbered> plan
+                = m_st->renumberSongPlan(listId, song, start, step, wholePoints);
+            if (QMessageBox::question(this, tr("Renumber song"),
+                                      tr("Show control (OSC / MSC) is listening, and fires cues by number. "
+                                         "Anything sending these numbers -- QLab, a desk, a MIDI or OSC "
+                                         "trigger -- will fire other cues until it is changed too:\n\n%1\n\n"
+                                         "Renumber?").arg(lines(plan, 20)))
+                != QMessageBox::Yes)
+                return false;
+        }
+    }
+    QString why;
+    const bool ok = m_st->renumberSong(listId, song, start, step, wholePoints, &why);
+    if (ok)
+        m_hint->setText(tr("Renumbered %1").arg(sectionTitle(song)));
+    else if (ask && !why.isEmpty())
+        QMessageBox::information(this, tr("Renumber song"), why);
+    else if (!why.isEmpty())
+        m_hint->setText(why);
+    return ok;
+}
+

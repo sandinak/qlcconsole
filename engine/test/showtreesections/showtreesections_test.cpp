@@ -446,6 +446,152 @@ void ShowTreeSections_Test::controllerSectionsAndBlock()
     QVERIFY(st->sections(list).isEmpty());
 }
 
+namespace
+{
+QStringList numbersIn(ShowTreeController *st, quint32 listId)
+{
+    QStringList out;
+    const CueList *l = st->cueList(listId);
+    for (int i = 0; i < l->cues.count(); ++i)
+        out << st->cueNumber(*l, i);
+    return out;
+}
+
+/** A cue at the end of @a listId numbered @a number. */
+quint32 cueAtEnd(ShowTreeController *st, quint32 listId, const QString &number, const QString &name)
+{
+    const quint32 id = st->addCue(listId, int(st->cueList(listId)->cues.count()) - 1, name);
+    Cue c = *st->cue(id);
+    c.number = number;
+    if (!st->setCue(c))
+        return invalidId();
+    return id;
+}
+
+Section songOf(ShowTreeController *st, quint32 listId, const QString &key)
+{
+    for (const Section &s : st->sections(listId))
+        if (s.key == key)
+            return s;
+    return Section();
+}
+}
+
+/* Renumber Song… (2026-11-12): after sub-cues are made main cues (or cues
+   added between) a song's numbers are untidy; it numbers each part's cues
+   1, 2, 3… keeping the song and the part, in one undo step. */
+void ShowTreeSections_Test::renumberSongTidiesEachPart()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Show");
+    const quint32 list = st->addCueList(prod, "Show");
+    QVERIFY(st->setNumbering(prod, Numbering::ShowPartIteration));
+    const quint32 setup = cueAtEnd(st, list, "0.0.1", "Setup");
+    const quint32 countIn = cueAtEnd(st, list, "1", "Count-in");
+    const quint32 intro = cueAtEnd(st, list, "1.0.2", "Intro");
+    const quint32 verse = cueAtEnd(st, list, "1.0.5", "Verse");
+    const quint32 chorus = cueAtEnd(st, list, "1.0.6", "Chorus");
+    const quint32 fog = cueAtEnd(st, list, "1.0.6.5", "Fog");
+    const quint32 bridge = cueAtEnd(st, list, "1.2.3", "Bridge");
+    const quint32 out = cueAtEnd(st, list, "1.2.8", "Out");
+    const quint32 next = cueAtEnd(st, list, "2.0.4", "Next song");
+    for (quint32 id : { setup, countIn, intro, verse, chorus, fog, bridge, out, next })
+        QVERIFY(id != invalidId());
+    const quint32 hit = st->addSubCue(bridge, "Hit");       // stays a sub-cue: follows its cue
+
+    // Two sub-cues of the verse made main cues: point numbers, 1.0.6 taken.
+    const quint32 v1 = st->addSubCue(verse, "Verse a");
+    const quint32 v2 = st->addSubCue(verse, "Verse b");
+    QString msg;
+    QVERIFY2(st->makeInlineCues({ v1, v2 }, &msg), qPrintable(msg));
+    const QStringList untidy = numbersIn(st, list);
+    QCOMPARE(untidy.count(), 11);
+    QCOMPARE(untidy.at(4).count('.'), 3);                   // 1.0.5.x
+    QCOMPARE(untidy.at(5).count('.'), 3);
+    const QString undoBefore = st->undoText();
+
+    // Point cues kept under their cue: the plan only.
+    const Section song = songOf(st, list, "1");
+    QCOMPARE(song.headCue, countIn);
+    QString why;
+    QList<ShowTreeController::Renumbered> plan = st->renumberSongPlan(list, song, 1, 1, false, &why);
+    QVERIFY2(!plan.isEmpty(), qPrintable(why));
+    QStringList to;
+    for (const ShowTreeController::Renumbered &r : plan)
+        to << r.to;
+    QCOMPARE(to, QStringList({ "1.0.1", "1.0.2", QString(untidy.at(4)).replace("1.0.5.", "1.0.2."),
+                               QString(untidy.at(5)).replace("1.0.5.", "1.0.2."), "1.0.3", "1.0.3.5",
+                               "1.2.1", "1.2.1.1", "1.2.2" }));
+    QCOMPARE(numbersIn(st, list), untidy);                  // a plan changes nothing
+
+    // Whole numbers: each part 1, 2, 3…; the count-in, the setup and the
+    // next song stay; the sub-cue follows its cue.
+    plan = st->renumberSongPlan(list, song, 1, 1, true, &why);
+    QCOMPARE(plan.count(), 9);
+    QCOMPARE(plan.at(7).cue, hit);
+    QCOMPARE(plan.at(7).from, QString("1.2.3.1"));
+    QCOMPARE(plan.at(7).to, QString("1.2.1.1"));
+    QVERIFY(st->renumberSong(list, song));
+    QCOMPARE(numbersIn(st, list), QStringList({ "0.0.1", "1", "1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6",
+                                                "1.2.1", "1.2.2", "2.0.4" }));
+    QCOMPARE(st->cueNumber(*st->cueList(st->subCueList(bridge)), 0), QString("1.2.1.1"));
+    QCOMPARE(st->cue(fog)->number, QString("1.0.6"));
+    QCOMPARE(st->undoText(), QString("Renumber song"));
+    // The songs are as they were: none changed song.
+    QCOMPARE(titles(st->sections(list)), QStringList({ "0[0-0]", "1[1-9]", "2[10-10]" }));
+    // The chaser plays the new numbers.
+    const Chaser *chaser = qobject_cast<const Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(chaser != nullptr);
+    QCOMPARE(chaser->stepCue(9), QString("1.2.2"));
+
+    // Again: nothing to do, said.
+    QVERIFY(!st->renumberSong(list, songOf(st, list, "1"), 1, 1, true, &why));
+    QCOMPARE(why, QString("This song is numbered so already."));
+    // In tens, found by its first cue.
+    QVERIFY(st->renumberSong(list, song, 10, 10));
+    QCOMPARE(numbersIn(st, list).mid(2, 8), QStringList({ "1.0.10", "1.0.20", "1.0.30", "1.0.40", "1.0.50",
+                                                          "1.0.60", "1.2.10", "1.2.20" }));
+
+    // One undo step each.
+    QVERIFY(st->undo());
+    QCOMPARE(numbersIn(st, list).at(9), QString("1.2.2"));
+    QVERIFY(st->undo());
+    QCOMPARE(numbersIn(st, list), untidy);
+    QCOMPARE(st->undoText(), undoBefore);
+    QVERIFY(st->redo());
+    QCOMPARE(numbersIn(st, list).at(9), QString("1.2.2"));
+
+    // Manual numbering: the numbers say nothing about a song.
+    QVERIFY(st->setNumbering(prod, Numbering::Manual));
+    QVERIFY(!st->renumberSong(list, song, 1, 1, true, &why));
+    QVERIFY2(why.contains("Manual"), qPrintable(why));
+}
+
+/* Hundreds (Eos / MA): a song's cues whole numbers in its hundred; one that
+   would run into the next song is refused. */
+void ShowTreeSections_Test::renumberSongUnderHundreds()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Show");
+    const quint32 list = st->addCueList(prod, "Show");
+    QVERIFY(st->setNumbering(prod, Numbering::Hundreds));
+    for (const QString &n : { "100", "120", "120.5", "140", "200" })
+        QVERIFY(cueAtEnd(st, list, n, n) != invalidId());
+    const Section song = songOf(st, list, "100");
+    QVERIFY(st->renumberSong(list, song, 0, 1));
+    QCOMPARE(numbersIn(st, list), QStringList({ "100", "101", "102", "103", "200" }));
+    QVERIFY(st->undo());
+
+    // Into 200's hundred: refused, nothing changed, no undo step.
+    const QString undo = st->undoText();
+    QString why;
+    QVERIFY(st->renumberSongPlan(list, song, 0, 40, true, &why).isEmpty());
+    QVERIFY2(why.contains("100 to 199"), qPrintable(why));
+    QVERIFY(!st->renumberSong(list, song, 0, 40, true, &why));
+    QCOMPARE(numbersIn(st, list), QStringList({ "100", "120", "120.5", "140", "200" }));
+    QCOMPARE(st->undoText(), undo);
+}
+
 /* The user's case: a list per song, GO played only the first. Merged, the
    one list's chaser has every cue, the others' chasers are gone, Undo puts
    them back. */

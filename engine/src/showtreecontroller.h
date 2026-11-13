@@ -424,6 +424,21 @@ public:
     QList<Renumbered> renumberLevelPlan(quint32 cueId, int start = 1, int step = 1,
                                         QString *why = nullptr) const;
     bool renumberLevel(quint32 cueId, int start = 1, int step = 1, QString *why = nullptr);
+    /** Renumber Song... (2026-11-12): song @a song of list @a listId (found
+     *  by its first cue, else its key) tidied part by part under the show's
+     *  scheme -- {S}.{P}.{II}: each part's cues @a start, @a start + @a step...
+     *  in list order in the last place, S and P kept (no cue changes song or
+     *  part); Hundreds: key + start, key + start + step... within the
+     *  hundred. A point cue (1.0.3.5, a promoted sub-cue's) becomes a cue
+     *  of its own with @a wholePoints, else keeps its point under its cue's
+     *  new number; sub-cues follow their cue; a cue with fewer places (the
+     *  song's "1") stays. Refused (@a why) under Manual or None, on a number
+     *  a cue outside the song has, or out of order with it. One undo step,
+     *  "Renumber song". */
+    QList<Renumbered> renumberSongPlan(quint32 listId, const ShowTree::Section &song, int start = 1, int step = 1,
+                                       bool wholePoints = true, QString *why = nullptr) const;
+    bool renumberSong(quint32 listId, const ShowTree::Section &song, int start = 1, int step = 1,
+                      bool wholePoints = true, QString *why = nullptr);
 private:
     /** Run @a op (a move or renumber in cue @a cueId's list) keeping what
      *  show control has LOADed on the list's chaser on the same cue. */

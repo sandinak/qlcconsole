@@ -309,6 +309,60 @@ bool startsWith(const QStringList &parts, const QStringList &prefix)
     return true;
 }
 
+/** After a renumber of @a l: one number each, sub-cues included, and still
+ *  in order; @a plan gets every number show control fires that changed.
+ *  @a first .. @a last: the song renumbered (-1: a level). */
+bool checkAndPlan(const QList<Production> &ps, const CueList &l, const QStringList &before,
+                  const QList<QStringList> &subsBefore, bool wasInOrder, int first, int last, QString *why,
+                  QList<ShowTreeController::Renumbered> *plan)
+{
+    const bool song = first >= 0;
+    auto inSong = [&](int i) { return i >= first && i <= last; };
+    for (int i = 0; i < l.cues.count(); ++i)
+    {
+        const int twin = numberedAs(l, l.cues.at(i).number, l.cues.at(i).id);
+        if (twin >= 0 && song && inSong(i) != inSong(twin))
+            return say(why, ShowTreeController::tr("%1 would be the number of a cue outside this song: "
+                                                   "renumber with another start or step.")
+                            .arg(l.cues.at(i).number));
+        if (twin >= 0)
+            return say(why, ShowTreeController::tr("Two cues would be %1: renumber with another start or step.")
+                            .arg(l.cues.at(i).number));
+        if (!l.isSubCues())
+            for (const QString &d : derivedNumbers(ps, l.cues.at(i).id, l.cues.at(i).number))
+                if (numberedAs(l, d) >= 0)
+                    return say(why, ShowTreeController::tr("Sub-cue %1 would be a cue's number: "
+                                                           "renumber with another start or step.").arg(d));
+    }
+    if (wasInOrder && !inOrder(l))
+        return say(why, song ? ShowTreeController::tr("That would put this song out of order with the cues around "
+                                                      "it: renumber with another start or step.")
+                             : ShowTreeController::tr("That would put this level out of order with the cues around "
+                                                      "it: renumber with another start or step."));
+
+    if (plan != nullptr)
+        plan->clear();
+    int changes = 0;
+    for (int i = 0; i < l.cues.count(); ++i)
+    {
+        const QString to = fullNumber(ps, l, i);
+        if (to == before.at(i))
+            continue;
+        ++changes;
+        if (plan == nullptr)
+            continue;
+        plan->append({ l.cues.at(i).id, before.at(i), to });
+        const QStringList subsNow = l.isSubCues() ? QStringList() : derivedNumbers(ps, l.cues.at(i).id, to);
+        const CueList *subs = subsOf(ps, l.cues.at(i).id);
+        for (int k = 0; k < subsNow.count() && k < subsBefore.at(i).count(); ++k)
+            plan->append({ subs->cues.at(k).id, subsBefore.at(i).at(k), subsNow.at(k) });
+    }
+    if (changes == 0)
+        return say(why, song ? ShowTreeController::tr("This song is numbered so already.")
+                             : ShowTreeController::tr("This level is numbered so already."));
+    return true;
+}
+
 bool applyRenumber(QList<Production> &ps, quint32 cueId, int start, int step, QString *why,
                    QList<ShowTreeController::Renumbered> *plan)
 {
@@ -368,43 +422,114 @@ bool applyRenumber(QList<Production> &ps, quint32 cueId, int start, int step, QS
     for (int i = 0; i < l->cues.count(); ++i)
         l->cues[i].number = renumbered.at(i);
 
-    // Still one number each, sub-cues included, and still in order.
-    for (int i = 0; i < l->cues.count(); ++i)
-    {
-        const int twin = numberedAs(*l, l->cues.at(i).number, l->cues.at(i).id);
-        if (twin >= 0)
-            return say(why, ShowTreeController::tr("Two cues would be %1: renumber with another start or step.")
-                            .arg(l->cues.at(i).number));
-        if (!l->isSubCues())
-            for (const QString &d : derivedNumbers(ps, l->cues.at(i).id, l->cues.at(i).number))
-                if (numberedAs(*l, d) >= 0)
-                    return say(why, ShowTreeController::tr("Sub-cue %1 would be a cue's number: "
-                                                           "renumber with another start or step.").arg(d));
-    }
-    if (wasInOrder && !inOrder(*l))
-        return say(why, ShowTreeController::tr("That would put this level out of order with the cues around it: "
-                                               "renumber with another start or step."));
+    return checkAndPlan(ps, *l, before, subsBefore, wasInOrder, -1, -1, why, plan);
+}
 
-    if (plan != nullptr)
-        plan->clear();
-    int changes = 0;
+/** What Renumber Song... numbers a cue at: the scheme's own places --
+ *  {S}.{P}.{II}: three, the last the iteration; Hundreds: one (215). */
+int songDepth(Numbering numbering)
+{
+    return numbering == Numbering::Hundreds ? 1 : 3;
+}
+
+/** "1.00.3" -> "1.0.3": places compared as numbers. */
+QString normalized(const QStringList &parts)
+{
+    QStringList out;
+    for (const QString &p : parts)
+        out << QString::number(p.toDouble());
+    return out.join(QLatin1Char('.'));
+}
+
+bool applyRenumberSong(QList<Production> &ps, quint32 listId, const Section &song, int start, int step,
+                       bool wholePoints, QString *why, QList<ShowTreeController::Renumbered> *plan)
+{
+    Production *pr = nullptr;
+    CueList *l = nullptr;
+    for (Production &p : ps)
+        if ((l = p.list(listId)) != nullptr)
+        {
+            pr = &p;
+            break;
+        }
+    if (l == nullptr || l->looks || l->isSubCues())
+        return say(why, ShowTreeController::tr("Only a cue list's songs can be renumbered."));
+    if (pr->numbering == Numbering::Manual)
+        return say(why, ShowTreeController::tr("Under Manual numbering the numbers say nothing about the song: "
+                                               "use Renumber This Level… on its cues."));
+    if (pr->numbering == Numbering::None)
+        return say(why, ShowTreeController::tr("This show has no songs: choose a numbering scheme first."));
+    if (start < 0 || step < 1)
+        return say(why, ShowTreeController::tr("Start at 0 or more, in steps of 1 or more."));
+
+    // The song: by its first cue, else (renumbered since) by its key.
+    const QList<Section> sections = sectionsOf(*l, pr->numbering);
+    const Section *s = nullptr;
+    for (const Section &sec : sections)
+        if (sec.headCue == song.headCue)
+            s = &sec;
+    for (int k = 0; k < sections.count() && s == nullptr; ++k)
+        if (!song.key.isEmpty() && sections.at(k).key == song.key)
+            s = &sections.at(k);
+    if (s == nullptr)
+        return say(why, ShowTreeController::tr("That song has no cues any more."));
+
+    const bool wasInOrder = inOrder(*l);
+    QStringList before;
+    QList<QStringList> subsBefore;
     for (int i = 0; i < l->cues.count(); ++i)
     {
-        const QString to = fullNumber(ps, *l, i);
-        if (to == before.at(i))
-            continue;
-        ++changes;
-        if (plan == nullptr)
-            continue;
-        plan->append({ l->cues.at(i).id, before.at(i), to });
-        const QStringList subsNow = l->isSubCues() ? QStringList() : derivedNumbers(ps, l->cues.at(i).id, to);
-        const CueList *subs = subsOf(ps, l->cues.at(i).id);
-        for (int k = 0; k < subsNow.count() && k < subsBefore.at(i).count(); ++k)
-            plan->append({ subs->cues.at(k).id, subsBefore.at(i).at(k), subsNow.at(k) });
+        before << fullNumber(ps, *l, i);
+        subsBefore << derivedNumbers(ps, l->cues.at(i).id, before.last());
     }
-    if (changes == 0)
-        return say(why, ShowTreeController::tr("This level is numbered so already."));
-    return true;
+    materialize(*l);
+
+    // Each part of the song ({S}.{P}) numbers its cues start, start +
+    // step... in list order, in the last place; S and P stay, so no cue
+    // changes song or part. A point cue (1.0.3.5) becomes a cue of its own
+    // (wholePoints), or keeps its point under its cue's new number.
+    const int depth = songDepth(pr->numbering);
+    const qlonglong key = s->key.toLongLong();
+    QHash<QString, int> counts;
+    QList<QPair<QStringList, QString>> renamed;    // old places -> new number
+    for (int i = s->first; i <= s->last; ++i)
+    {
+        const QStringList parts = partsOf(l->cues.at(i).number);
+        if (parts.count() < depth)
+            continue;                       // "1", the song's own count-in: as it is
+        QString to;
+        if (!wholePoints && parts.count() > depth)
+            for (const QPair<QStringList, QString> &r : renamed)
+                if (startsWith(parts, r.first))
+                {
+                    QStringList n = partsOf(r.second);
+                    n << parts.mid(depth);
+                    to = n.join(QLatin1Char('.'));
+                    break;
+                }
+        if (to.isEmpty())
+        {
+            const QStringList group = parts.mid(0, depth - 1);
+            const int value = start + step * counts[normalized(group)]++;
+            if (pr->numbering == Numbering::Hundreds)
+            {
+                if (value > 99)
+                    return say(why, ShowTreeController::tr("Song %1 has room for numbers %1 to %2: renumber with "
+                                                           "a smaller start or step.")
+                                    .arg(s->key, QString::number(key + 99)));
+                to = QString::number(key + value);
+            }
+            else
+            {
+                QStringList n = group;
+                n << QString::number(value);
+                to = n.join(QLatin1Char('.'));
+            }
+            renamed << qMakePair(parts.mid(0, depth), to);
+        }
+        l->cues[i].number = to;
+    }
+    return checkAndPlan(ps, *l, before, subsBefore, wasInOrder, s->first, s->last, why, plan);
 }
 
 } // namespace
@@ -528,6 +653,34 @@ bool ShowTreeController::renumberLevel(quint32 cueId, int start, int step, QStri
         });
     });
     if (!ok && why != nullptr)
+        *why = err;
+    return ok;
+}
+
+QList<ShowTreeController::Renumbered> ShowTreeController::renumberSongPlan(quint32 listId, const Section &song,
+                                                                           int start, int step, bool wholePoints,
+                                                                           QString *why) const
+{
+    QList<Production> ps = m_productions;
+    QList<Renumbered> plan;
+    if (!applyRenumberSong(ps, listId, song, start, step, wholePoints, why, &plan))
+        return QList<Renumbered>();
+    return plan;
+}
+
+bool ShowTreeController::renumberSong(quint32 listId, const Section &song, int start, int step, bool wholePoints,
+                                      QString *why)
+{
+    QString err;
+    const CueList *l = cueList(listId);
+    if (l == nullptr || l->cues.isEmpty())
+        return say(why, tr("Only a cue list's songs can be renumbered."));
+    const bool ok = keepingStandby(l->cues.first().id, [&]() {
+        return edit(tr("Renumber song"), [&](QList<Production> &ps) {
+            return applyRenumberSong(ps, listId, song, start, step, wholePoints, &err, nullptr);
+        });
+    });
+    if (!ok && why != nullptr && !err.isEmpty())
         *why = err;
     return ok;
 }
