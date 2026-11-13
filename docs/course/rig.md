@@ -107,7 +107,7 @@ patched to an output, on purpose. Clicking it lists "13 universe(s) with
 fixtures but no output" and "5 definition(s) came with this show": the show carries the descriptions of the lights the app
 doesn't ship, so it opens complete on any computer.
 
-Beside it is **Set venue…**, the venue chip: the room the show is set up
+Beside it is **Set Venue…**, the venue chip: the room the show is set up
 for. The classroom show has no venue until Lesson 3.6 makes one
 (**Venue: Classroom**); a click opens the venue menu. Then comes the
 **GM** (Grand Master) slider. In the middle, the footer

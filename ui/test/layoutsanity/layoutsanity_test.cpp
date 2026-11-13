@@ -2076,14 +2076,14 @@ void LayoutSanity_Test::theUxNitsAtThreeSizes()
         }
         m_app->setTheme(App::ThemeVSCodeDark);
 
-        // 2. The footer: no "Venue: none" status word: "Set venue…" says what a click does.
+        // 2. The footer: no "Venue: none" status word: "Set Venue…" says what a click does.
         m_app->setWorkspaceView(App::ConsoleView, false);
         fit(z);
         qInfo().noquote() << "uxnit footer" << where << "venue chip" << m_app->venueFooterText();
         shot(QStringLiteral("footer"), z);
         if (!before)
         {
-            QCOMPARE(m_app->venueFooterText(), QString::fromUtf8("Set venue\u2026"));
+            QCOMPARE(m_app->venueFooterText(), QString::fromUtf8("Set Venue\u2026"));
             const QWidget *chip = m_app->m_venueChip;
             QVERIFY2(chip->width() >= chip->fontMetrics().horizontalAdvance(m_app->venueFooterText()),
                      qPrintable(where + ": the venue chip is cut"));

@@ -1207,7 +1207,7 @@ private:
      *  has none set or the check is off/lifted. Click opens the setting. */
     QLabel* m_statusRigNetLabel = nullptr;
     void updateRigNetworkFooter();
-    /** The venue chip (board Q150): "Venue: Lincoln HS" or "Set venue…",
+    /** The venue chip (board Q150): "Venue: Lincoln HS" or "Set Venue…",
      *  amber with a count when the venue clashes; a click opens the venue
      *  menu. Always there in the qlcconsole and Everything views; in Classic
      *  only when the show has venues. */

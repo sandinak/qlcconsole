@@ -4623,7 +4623,7 @@ void AppViews_Test::quittingWithTheShowTreeShowing()
     QVERIFY(ShowTreeView::instance() == nullptr);
 }
 
-/* Q150: the venue chip is in the footer, app-wide: "Set venue…" in the
+/* Q150: the venue chip is in the footer, app-wide: "Set Venue…" in the
    qlcconsole and Everything views, in Classic only once the show has
    venues; View ▸ Venue… and the Lighting Studio's Focus ▸ Venues ▸ open
    the same menu as the chip. */
@@ -4641,9 +4641,9 @@ void AppViews_Test::theVenueChipIsInTheFooter()
     });
 
     m_app->setWorkspaceView(App::ConsoleView);
-    QCOMPARE(chip->text(), QString("Set venue\u2026"));
+    QCOMPARE(chip->text(), QString("Set Venue\u2026"));
     QVERIFY(!chip->isHidden());
-    QCOMPARE(m_app->venueFooterText(), QString("Set venue\u2026"));
+    QCOMPARE(m_app->venueFooterText(), QString("Set Venue\u2026"));
     m_app->setWorkspaceView(App::EverythingView);
     QVERIFY(!chip->isHidden());
     // Classic: QLC+'s footer, until the show has a venue.

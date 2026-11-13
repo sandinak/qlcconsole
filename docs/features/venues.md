@@ -15,7 +15,7 @@ focus](focus-calls.md#venues-corrections-that-stay-with-the-room).
 ## The venue chip
 
 The footer says which room the show is set up for, beside **Ready** and
-the Grand Master: **Venue: Lincoln HS**, or **Set venue…** (a click
+the Grand Master: **Venue: Lincoln HS**, or **Set Venue…** (a click
 chooses one) with no venue applied. It is always there in the qlcconsole and Everything
 views; in Classic QLC+ only once the show has a venue.
 
