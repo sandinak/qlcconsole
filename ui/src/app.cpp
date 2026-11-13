@@ -102,6 +102,8 @@
 #include "layoutdiagnostics.h"
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QFileInfo>
+#include <QTimer>
 #include "measurementunits.h"
 #include "effectscriptrunner.h"
 #include <QPointer>
@@ -455,8 +457,19 @@ App::~App()
     m_doc = NULL;
 }
 
-void App::startup(const QString &workspaceFile)
+void App::startup(const QString &cliWorkspaceFile)
 {
+    // -o always wins; else the last show, if Settings ▸ General asks for it
+    // (never under the offscreen/minimal test platforms; Shift skips it).
+    QString lastNotFound;
+    const QString platform = QGuiApplication::platformName();
+    const bool testPlatform = platform == QLatin1String("offscreen") || platform == QLatin1String("minimal");
+    const QString workspaceFile = showToOpenAtStart(
+        cliWorkspaceFile, QSettings(),
+        testPlatform || QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier),
+        &lastNotFound);
+    const QString openFile = workspaceFile;
+
     // Applied here, before StartupWindow exists, rather than later in
     // init() (where this used to run) -- qApp->setPalette() inside
     // applyTheme() is application-wide, so doing it first means the
@@ -470,7 +483,7 @@ void App::startup(const QString &workspaceFile)
 
     if (m_noGui == false)
     {
-        const int steps = STARTUP_STEP_COUNT + (workspaceFile.isEmpty() ? 0 : 1);
+        const int steps = STARTUP_STEP_COUNT + (openFile.isEmpty() ? 0 : 1);
         m_startupWindow = new StartupWindow(steps);
         m_startupWindow->show();
     }
@@ -506,6 +519,17 @@ void App::startup(const QString &workspaceFile)
 
     slotModeDesign();
     slotDocModified(m_doc->isModified());     // a recovered autosave is unsaved
+
+    if (lastNotFound.isEmpty() == false)
+    {
+        const QString msg = tr("Last show not found: %1").arg(QFileInfo(lastNotFound).fileName());
+        setStatusMessage(msg);
+        // Cleared only if nothing has replaced it in the meantime.
+        QTimer::singleShot(15000, this, [this, msg]() {
+            if (m_statusMessage == msg)
+                clearStatusMessage();
+        });
+    }
 
     // Activate FixtureManager
     setActiveWindow(FixtureManager::staticMetaObject.className());
@@ -5169,7 +5193,26 @@ void App::fitStatusBar()
         // footer flickered between the two.
         const bool squeezed = w->property("statusSqueezed").toBool();
         const int minW = squeezed ? w->property("statusMinWidth").toInt() : w->minimumWidth();
-        const int want = qMax(qMax(w->sizeHint().width(), w->minimumSizeHint().width()), minW);
+        int want = qMax(qMax(w->sizeHint().width(), w->minimumSizeHint().width()), minW);
+        if (w == m_statusFollowLabel && !m_followChipVariants.isEmpty())
+        {
+            /* The follow chip shortens before it goes: the longest of its
+               lines that fits (updateFollowChip()); the whole line is in
+               its tooltip. */
+            int at = m_followChipVariants.size() - 1;
+            for (int i = 0; i < m_followChipVariants.size(); ++i)
+                if (qMax(followChipWidth(m_followChipVariants.at(i)), minW) <= room)
+                {
+                    at = i;
+                    break;
+                }
+            want = qMax(followChipWidth(m_followChipVariants.at(at)), minW);
+            if (m_statusFollowLabel->property("followVariant").toInt() != at)
+            {
+                m_statusFollowLabel->setProperty("followVariant", at);
+                m_statusFollowLabel->setText(followChipHtml(m_followChipVariants.at(at)));
+            }
+        }
         const bool fits = want <= room;
         if (fits)
             room -= want;
@@ -5551,6 +5594,42 @@ QString App::newShowsClassicSettingKey()
 bool App::newShowsClassic()
 {
     return QSettings().value(newShowsClassicSettingKey(), false).toBool();
+}
+
+QString App::reopenLastShowSettingKey()
+{
+    return QStringLiteral("workspace/reopenLastShow");
+}
+
+bool App::reopenLastShow()
+{
+    return QSettings().value(reopenLastShowSettingKey(), false).toBool();
+}
+
+void App::setReopenLastShow(bool on)
+{
+    QSettings().setValue(reopenLastShowSettingKey(), on);
+}
+
+QString App::showToOpenAtStart(const QString &cliFile, const QSettings &settings,
+                               bool shiftHeld, QString *notFound)
+{
+    if (notFound != nullptr)
+        notFound->clear();
+    if (cliFile.isEmpty() == false)
+        return cliFile;
+    if (shiftHeld || settings.value(reopenLastShowSettingKey(), false).toBool() == false)
+        return QString();
+    const QString last = settings.value(QString("%1%2").arg(SETTINGS_RECENTFILE).arg(0)).toString();
+    if (last.isEmpty())
+        return QString();
+    if (QFileInfo::exists(last) == false)
+    {
+        if (notFound != nullptr)
+            *notFound = last;
+        return QString();
+    }
+    return last;
 }
 
 void App::setNewShowsClassic(bool on)
@@ -9713,7 +9792,7 @@ void App::updateFollowChip()
         if (const StageTarget *t = m_doc->monitorProperties() != nullptr
                                    ? m_doc->monitorProperties()->stageTarget(st.targetId) : nullptr)
             text += QStringLiteral(" ← ") + t->name();
-    QString how, colour;
+    QString word, colour;
     // The controller that is the stick, by name: "DUALSHOCK 4 · stick moving".
     const QString stick = pc->followSpotStickName();
     QString pad = stick.isEmpty() ? QString() : stick + QStringLiteral(" · ");
@@ -9725,34 +9804,80 @@ void App::updateFollowChip()
     switch (st.state)
     {
     case Status::Moving:
-        how = pad + tr("stick moving");
+        word = tr("stick moving");
         colour = QStringLiteral("#3ec46d");
         break;
     case Status::Holding:
-        how = pad + tr("stick");
+        word = tr("stick");
         colour = QStringLiteral("#e0a820");
         break;
     case Status::NoStick:
     default:
-        how = tr("no stick");
+        word = tr("no stick");
+        pad.clear();
         colour = QStringLiteral("#d9534f");
         break;
     }
+    /* What the pad just did, most urgent first, each in full and in few
+       words: the narrow footer keeps these and drops the names. */
+    QStringList extras, extrasShort;
+    auto extra = [&](const QString &full, const QString &shortText) {
+        extras << full;
+        extrasShort << (shortText.isEmpty() ? full : shortText);
+    };
+    /* Left stick click held: the facing being set from the push, and a
+       moment after, what it set -- on the screen, not only in the voice. */
+    if (st.settingFacing && st.state != Status::NoStick)
+        extra(pc->padText(tr("setting the facing: push toward centre stage, let go of {LS}")), QString());
+    else if (!st.facingSaid.isEmpty() && st.state != Status::NoStick)
+        extra(st.facingSaid, st.facingShort);
     /* The D-pad's speed step, said while it is not x1 -- and for a moment
        after any change, back to x1 too -- so the operator sees what the
        press did. */
     if (st.speedShown && st.state != Status::NoStick)
-        how += QStringLiteral(" · ") + ProgrammerController::followSpotSpeedText(st.speed);
+        extra(ProgrammerController::followSpotSpeedText(st.speed), QString());
     /* The beam's size (Settings > Units), or its angle with no size: while
        the D-pad has it for this run, and a moment after any step. */
     const QString size = ProgrammerController::followSpotSizeText(st);
     if (!st.saved.isEmpty())
-        how += QStringLiteral(" · ") + st.saved;
+        extra(st.saved, QString());
     else if (st.sizeShown && st.state != Status::NoStick && !size.isEmpty())
-        how += QStringLiteral(" · ") + size;
-    m_statusFollowLabel->setText(tr("<span style='color:%1;font-weight:bold;'>◎ Follow: %2 · %3</span>")
-                                 .arg(colour, text.toHtmlEscaped(), how.toHtmlEscaped()));
-    m_statusFollowLabel->setToolTip(pc->followSpotStatusText()
+        extra(size, QString());
+    const QString sep = QStringLiteral(" · ");
+    const QString tail = extras.isEmpty() ? QString() : sep + extras.join(sep);
+    /* Longest first. A chip that does not fit used to vanish whole -- with
+       the facing message in it, at 1024 and 1280 wide. Now the names go
+       first (the pad, where the operator stands, then who and whom), then
+       the stick's state, then the long wording. */
+    QStringList variants;
+    auto add = [&variants](const QString &v) {
+        if (!v.isEmpty() && !variants.contains(v))
+            variants << v;
+    };
+    add(tr("◎ Follow: %1 · %2").arg(text, pad + word) + tail);
+    add(tr("◎ Follow: %1 · %2").arg(text, word) + tail);
+    if (!extras.isEmpty())
+    {
+        add(tr("◎ Follow") + tail);
+        add(tr("◎ Follow") + sep + extrasShort.join(sep));
+        add(QStringLiteral("◎ ") + extrasShort.join(sep));
+        add(QStringLiteral("◎ ") + extrasShort.first());
+    }
+    else
+    {
+        add(tr("◎ Follow · %1").arg(word));
+    }
+    m_followChipVariants = variants;
+    m_followChipColour = colour;
+    m_statusFollowLabel->setProperty("fullText", variants.first());
+    {
+        // The one fitStatusBar() picked last time, if it is still as long.
+        const int was = m_statusFollowLabel->property("followVariant").toInt();
+        const int at = qBound(0, was, variants.size() - 1);
+        m_statusFollowLabel->setText(followChipHtml(variants.at(at)));
+        m_statusFollowLabel->setProperty("followVariant", at);
+    }
+    m_statusFollowLabel->setToolTip(variants.first() + QStringLiteral("\n\n") + pc->followSpotStatusText()
                                     + (st.live ? tr("\nFrom the cue playing now; the stick moves its subject "
                                                     "for this run only.")
                                                : tr("\nFrom the scene open in the Workbench."))
@@ -9764,6 +9889,26 @@ void App::updateFollowChip()
                                              .arg(MeasurementUnits::formatSpeed(pc->followSpotTopSpeed())))
                                     + (size.isEmpty() ? QString() : tr("\nBeam: %1.").arg(size)));
     m_statusFollowLabel->show();
+    if (m_statusFitTimer != nullptr)
+        m_statusFitTimer->start();
+}
+
+QString App::followChipHtml(const QString &plain) const
+{
+    return QStringLiteral("<span style='color:%1;font-weight:bold;'>%2</span>")
+        .arg(m_followChipColour, plain.toHtmlEscaped());
+}
+
+int App::followChipWidth(const QString &plain)
+{
+    // Measured as the chip draws it: the same font, margins and markup.
+    if (m_followChipMeasure == nullptr)
+        m_followChipMeasure = new QLabel(this);
+    m_followChipMeasure->hide();
+    m_followChipMeasure->setFont(m_statusFollowLabel->font());
+    m_followChipMeasure->setContentsMargins(m_statusFollowLabel->contentsMargins());
+    m_followChipMeasure->setText(followChipHtml(plain));
+    return qMax(m_followChipMeasure->sizeHint().width(), m_followChipMeasure->minimumSizeHint().width());
 }
 
 void App::slotProgrammerDirtyChanged(bool dirty)

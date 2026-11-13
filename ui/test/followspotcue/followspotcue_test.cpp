@@ -88,6 +88,8 @@
 #include <QScrollArea>
 #include <QDoubleSpinBox>
 #include <QScrollBar>
+#include <QStatusBar>
+#include "refinesession.h"
 
 #include "followspotcue_test.h"
 
@@ -120,6 +122,13 @@ const char *kXbox = "Xbox Wireless Controller";
    whose rest this computer remembers from before. */
 const char *kWorn = " DUALSHOCK 4 Wireless Controller (AA:00:00:00:00:01)";
 const char *kRemembered = " DUALSHOCK 4 Wireless Controller (AA:00:00:00:00:02)";
+
+/* The follow chip's whole line (its first, longest form). What it shows is
+   the longest form that fits the footer: chip->text(). */
+QString chipLine(const QLabel *chip)
+{
+    return chip->property("fullText").toString();
+}
 
 QLCIOPlugin *hidPlugin(Doc *doc)
 {
@@ -179,7 +188,7 @@ void shootFooter(App *app, const QString &prefix)
         const int h = 44;
         full.copy(0, full.height() - h * int(full.devicePixelRatio()), full.width(), h * int(full.devicePixelRatio()))
             .save(QString("%1/%2-footer-%3.png").arg(dir, prefix, sz.first));
-        qInfo().noquote() << "shot" << prefix << sz.first << app->size() << app->followChip()->text();
+        qInfo().noquote() << "shot" << prefix << sz.first << app->size() << chipLine(app->followChip());
     }
     app->resize(1280, 800);
     settle(200);
@@ -343,7 +352,7 @@ void FollowSpotCue_Test::hisShow()
         const QVector3D from = witch->positionIn(doc->monitorProperties()->liveBlocking());
         QVERIFY(padInput(doc, 0, 30));          // the left stick, to the left
         QTest::qWait(1200);
-        const QString moving = m_app->followChip()->text();
+        const QString moving = chipLine(m_app->followChip());
         QVERIFY(padInput(doc, 0, 128));
         const QString after = panTilt(doc, spots);
         const QVector3D to = witch->positionIn(doc->monitorProperties()->liveBlocking());
@@ -621,9 +630,9 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
                                   qPrintable(how + ": no follow spot on"), 3000);
         QVERIFY2(pc->followSpotStatus().live, qPrintable(how));
         QTRY_VERIFY2_WITH_TIMEOUT(chip->isVisible(), qPrintable(how), 2000);
-        QVERIFY2(chip->text().contains(QString::fromUtf8("AT-Spots ← ES-Witch")), qPrintable(chip->text()));
-        QVERIFY2(!chip->text().contains("no stick"), qPrintable(chip->text()));
-        QVERIFY2(chip->text().contains(QString::fromUtf8("· DUALSHOCK 4 · stick")), qPrintable(chip->text()));
+        QVERIFY2(chipLine(chip).contains(QString::fromUtf8("AT-Spots ← ES-Witch")), qPrintable(chipLine(chip)));
+        QVERIFY2(!chipLine(chip).contains("no stick"), qPrintable(chipLine(chip)));
+        QVERIFY2(chipLine(chip).contains(QString::fromUtf8("· DUALSHOCK 4 · stick")), qPrintable(chipLine(chip)));
         const QVector3D from = witch->position();
         const QList<int> before = pans();
         QVERIFY(padInput(doc, 0, 255));        // the left stick, hard right
@@ -644,10 +653,10 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
         };
         QTRY_VERIFY2_WITH_TIMEOUT(allFollowed(), qPrintable(how + ": not every head followed"), 8000);
         const QList<int> after = pans();
-        QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("DUALSHOCK 4 · stick moving")),
-                                  qPrintable(how + ": " + chip->text()), 8000);
+        QTRY_VERIFY2_WITH_TIMEOUT(chipLine(chip).contains(QString::fromUtf8("DUALSHOCK 4 · stick moving")),
+                                  qPrintable(how + ": " + chipLine(chip)), 8000);
         qInfo().noquote() << how << "pan" << before << "->" << after << "| x" << from.x() << "->"
-                          << witch->position().x() << "|" << chip->text();
+                          << witch->position().x() << "|" << chipLine(chip);
         QVERIFY(padInput(doc, 0, 128));
         QVERIFY2(witch->position().x() > from.x() + 0.2f,
                  qPrintable(QString("%1: the subject did not move (%2 -> %3)").arg(how)
@@ -658,7 +667,7 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
                      qPrintable(QString("%1: %2 did not follow (%3)").arg(how, movers.at(i)->name()).arg(after.at(i))));
         /* Let go: "moving" goes once the stick has been still 400 ms, said
            on the next follow-spot tick -- waited for, not a fixed 600 ms. */
-        QTRY_VERIFY2_WITH_TIMEOUT(!chip->text().contains("moving"), qPrintable(how + ": " + chip->text()), 8000);
+        QTRY_VERIFY2_WITH_TIMEOUT(!chipLine(chip).contains("moving"), qPrintable(how + ": " + chipLine(chip)), 8000);
     };
 
     // Selected in the Show Tree.
@@ -714,7 +723,7 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
     doc->inputOutputMap()->setInputSlot(0, QList<Universe::InputSlotDevice>());
     doc->inputOutputMap()->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine());
     tree->setCurrentItem(row);
-    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chip->text().contains("no stick"), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chipLine(chip).contains("no stick"), 3000);
     QTRY_VERIFY_WITH_TIMEOUT(!pc->isPanBound(), 3000);
     tree->setCurrentItem(row1);
     QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, kGlideMs);
@@ -1241,8 +1250,8 @@ void FollowSpotCue_Test::theDpadStepsTheSpeedAndTheRightStickIsFine()
     bench->load(scene->id());
     settle(300);
     QLabel *chip = m_app->followChip();
-    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chip->text().contains(QString::fromUtf8("FOH Spots ← Lead")), 3000);
-    QVERIFY2(!chip->text().contains("Speed"), qPrintable(chip->text()));     // x1: nothing said
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chipLine(chip).contains(QString::fromUtf8("FOH Spots ← Lead")), 3000);
+    QVERIFY2(!chipLine(chip).contains("Speed"), qPrintable(chipLine(chip)));     // x1: nothing said
 
     // The pad's controls by their roles, as his profile names them.
     InputPatch *ip = doc->inputOutputMap()->inputPatch(0);
@@ -1265,7 +1274,7 @@ void FollowSpotCue_Test::theDpadStepsTheSpeedAndTheRightStickIsFine()
     // D-pad Up: x1.5, said on the chip (and in its tooltip).
     press(up);
     QCOMPARE(pc->followSpotMover()->multiplier(), 1.5);
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Speed ×1.5")), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chipLine(chip).contains(QString::fromUtf8("Speed ×1.5")), 2000);
     QVERIFY2(chip->toolTip().contains("D-pad Up and Down"), qPrintable(chip->toolTip()));
     shootFooter(m_app, "speed-x1.5");
     press(up);
@@ -1277,12 +1286,12 @@ void FollowSpotCue_Test::theDpadStepsTheSpeedAndTheRightStickIsFine()
         press(down);
         QCOMPARE(pc->followSpotMover()->multiplier(), want);
     }
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Speed ×0.5")), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chipLine(chip).contains(QString::fromUtf8("Speed ×0.5")), 2000);
     press(up);
     QCOMPARE(pc->followSpotMover()->multiplier(), 1.0);
     // Back at x1 it is said a moment, then no more.
-    QVERIFY2(chip->text().contains(QString::fromUtf8("Speed ×1")), qPrintable(chip->text()));
-    QTRY_VERIFY_WITH_TIMEOUT(!chip->text().contains("Speed"), 4000);
+    QVERIFY2(chipLine(chip).contains(QString::fromUtf8("Speed ×1")), qPrintable(chipLine(chip)));
+    QTRY_VERIFY_WITH_TIMEOUT(!chipLine(chip).contains("Speed"), 4000);
 
     // The right stick moves the subject, finely: slower than the left.
     auto walk = [&](int ch, uchar v) -> float {
@@ -1446,8 +1455,8 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     EffectScriptRunner *runner = doc->effectScriptRunner();
     QTRY_VERIFY_WITH_TIMEOUT(runner->isPlaying(follow->id()), 3000);
     QLabel *chip = m_app->followChip();
-    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chip->text().contains(QString::fromUtf8("FOH Spots ← Lead")), 3000);
-    QVERIFY2(!chip->text().contains("Size"), qPrintable(chip->text()));    // the look's own: not said
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chipLine(chip).contains(QString::fromUtf8("FOH Spots ← Lead")), 3000);
+    QVERIFY2(!chipLine(chip).contains("Size"), qPrintable(chipLine(chip)));    // the look's own: not said
 
     InputPatch *ip = doc->inputOutputMap()->inputPatch(0);
     auto deviceChannel = [&](GamepadRole::Role want) {
@@ -1496,7 +1505,7 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
         QTRY_VERIFY_WITH_TIMEOUT(save->isEnabled(), 2000);    // the pad's change alone enables it
         save->click();                                        // armed
         save->click();                                        // confirmed
-        savedChip = chip->text();
+        savedChip = chipLine(chip);
         savedStatus = pc->followSpotStatusText();
         settle(100);
     };
@@ -1506,7 +1515,7 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     // in feet and inches -- for the run, not the look.
     press(right);
     QVERIFY2(qAbs(pad().widthCm - 54 * inch) < 0.01, qPrintable(QString::number(pad().widthCm)));
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Width 4' 6\"").toHtmlEscaped()), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chipLine(chip).contains(QString::fromUtf8("Width 4' 6\"")), 2000);
     QVERIFY2(chip->toolTip().contains("Left and Right"), qPrintable(chip->toolTip()));
     QCOMPARE(follow->effectParamValues().value("sizeOnSubject"), 48 * inch);
     QVERIFY(runner->paramOverrides(follow->id()).isEmpty());     // not an override (a VC store never takes it)
@@ -1514,14 +1523,14 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     press(left);
     press(left);
     QVERIFY2(qAbs(pad().widthCm - 43 * inch) < 0.01, qPrintable(QString::number(pad().widthCm)));
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("Width 3' 7\"").toHtmlEscaped()), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chipLine(chip).contains(QString::fromUtf8("Width 3' 7\"")), 2000);
 
     // Save Positions -- the button, enabled by the pad's change alone --
     // keeps it in the look, as one undo step, and says so.
     savePositions();
     QVERIFY(qAbs(follow->effectParamValues().value("sizeOnSubject") - 43 * inch) < 0.01);
     QVERIFY(!pad().isSet());
-    QVERIFY2(savedChip.contains(QString::fromUtf8("Saved: Width 3' 7\"").toHtmlEscaped()), qPrintable(savedChip));
+    QVERIFY2(savedChip.contains(QString::fromUtf8("Saved: Width 3' 7\"")), qPrintable(savedChip));
     QVERIFY(doc->paletteOps()->undo());
     QCOMPARE(follow->effectParamValues().value("sizeOnSubject"), 48 * inch);
 
@@ -1540,7 +1549,7 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     press(left);
     QCOMPARE(pad().scale, 0.9);
     QTRY_VERIFY_WITH_TIMEOUT(zoomOut() < framedZoom, 2000);
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString("Head & Shoulders 90%").toHtmlEscaped()), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chipLine(chip).contains(QString("Head & Shoulders 90%")), 2000);
     press(right);
     press(right);
     QCOMPARE(pad().scale, 1.1);
@@ -1562,7 +1571,7 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     savePositions();
     QCOMPARE(follow->effectParamValues().value("framing"), 1.0);          // the Framing stays
     QCOMPARE(follow->effectParamValues().value("framingSize"), 110.0);
-    QVERIFY2(savedChip.contains(QString("Saved: Head & Shoulders at 110%").toHtmlEscaped()), qPrintable(savedChip));
+    QVERIFY2(savedChip.contains(QString("Saved: Head & Shoulders at 110%")), qPrintable(savedChip));
     QVERIFY2(savedStatus.contains("Saved: Head & Shoulders at 110%"), qPrintable(savedStatus));
     QVERIFY(AimSolver::sceneFramesSubject(doc, scene));
     settle(300);
@@ -1580,27 +1589,27 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
         setLook("sizeOnSubject", 100.0 * 2.0 * dist * std::tan(qDegreesToRadians(11.0)));
     }
     int presses = 0;
-    while (!chip->text().contains("(widest)") && presses++ < 12)
+    while (!chipLine(chip).contains("(widest)") && presses++ < 12)
     {
         press(right);
     }
-    QVERIFY2(chip->text().contains("(widest)"), qPrintable(chip->text()));
+    QVERIFY2(chipLine(chip).contains("(widest)"), qPrintable(chipLine(chip)));
     const double widest = pad().widthCm;
     press(right);
     QCOMPARE(pad().widthCm, widest);
-    QVERIFY2(chip->text().contains("(widest)"), qPrintable(chip->text()));
+    QVERIFY2(chipLine(chip).contains("(widest)"), qPrintable(chipLine(chip)));
     press(left);
     QVERIFY(pad().widthCm < widest);
-    QTRY_VERIFY_WITH_TIMEOUT(!chip->text().contains("(widest)"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(!chipLine(chip).contains("(widest)"), 2000);
 
     // No size: the beam angle, a whole degree a step, down to the lens's
     // narrowest (2 degrees) and no further.
     setLook("sizeOnSubject", 0.0);
     runner->setFollowSpotPad(follow->id(), FollowSpotFraming::Pad());
     presses = 0;
-    while (!chip->text().contains("(narrowest)") && presses++ < 60)
+    while (!chipLine(chip).contains("(narrowest)") && presses++ < 60)
         press(left);
-    QVERIFY2(chip->text().contains(QString::fromUtf8("Beam 2° (narrowest)")), qPrintable(chip->text()));
+    QVERIFY2(chipLine(chip).contains(QString::fromUtf8("Beam 2° (narrowest)")), qPrintable(chipLine(chip)));
     QCOMPARE(pad().beamDeg, 2.0);
     press(left);
     QCOMPARE(pad().beamDeg, 2.0);
@@ -1692,7 +1701,7 @@ void FollowSpotCue_Test::theDpadSizesTheBeamAndSavePositionsKeepsIt()
     QTRY_VERIFY_WITH_TIMEOUT(pc->followSpotStatus().live && runner->isPlaying(follow->id()), 3000);
     press(right);
     QVERIFY(pad().isSet());
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains("Full Body 120%"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chipLine(chip).contains("Full Body 120%"), 2000);
     savePositions();
     QCOMPARE(follow->effectParamValues().value("framingSize"), 120.0);   // 110% on the look, a step more
     QCOMPARE(follow->effectParamValues().value("framing"), 3.0);
@@ -1794,11 +1803,11 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
     bench->load(scene->id());
     settle(300);
     QLabel *chip = m_app->followChip();
-    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chip->text().contains(QString::fromUtf8("AT-Spots ← ES-Witch")),
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chipLine(chip).contains(QString::fromUtf8("AT-Spots ← ES-Witch")),
                              3000);
     // Front of house, as every show from before: nothing said.
     QVERIFY(pc->followSpotOperator().isFrontOfHouse());
-    QVERIFY2(!chip->text().contains("from "), qPrintable(chip->text()));
+    QVERIFY2(!chipLine(chip).contains("from "), qPrintable(chipLine(chip)));
 
     // The Followspot editor's Operator row.
     bench->editPalette(follow->id());
@@ -1866,7 +1875,7 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
             full.copy(0, full.height() - h * int(full.devicePixelRatio()), full.width(),
                       h * int(full.devicePixelRatio()))
                 .save(QString("%1/footer-chip-%2.png").arg(dir, sz.first));
-            qInfo().noquote() << "shot" << phase << sz.first << chip->text();
+            qInfo().noquote() << "shot" << phase << sz.first << chipLine(chip);
         }
         rigDock->show();
         for (const auto &sz : sizes)
@@ -1887,7 +1896,7 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
     QCOMPARE(pc->followSpotOperator().facing, 270);
     QCOMPARE(facing->currentData().toInt(), 270);
     QCOMPARE(pc->followSpotMover()->facing(), 270);
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains("from SL tower"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chipLine(chip).contains("from SL tower"), 2000);
     QVERIFY(doc->isModified());
 
     // From the pad: hold LS, push up and a little left, let go.
@@ -1900,10 +1909,61 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
     };
     const int ls = deviceChannel(GamepadRole::LS);
     QVERIFY(ls >= 0);
+    /* At the smallest window: the chip carrying the facing message vanished
+       whole at 1024 and 1280 (UX-36). It shortens instead, and what the pad
+       just did stays on it, whole and unclipped. */
+    const QSize sizeWas = m_app->size();
+    m_app->resize(1024, 640);
+    settle(200);
+    auto readable = [&](const QString &words) {
+        QTRY_VERIFY2_WITH_TIMEOUT(chip->isVisible() && chip->width() > 0
+                                      && chip->width() >= chip->sizeHint().width() - 1
+                                      && chip->text().contains(words.toHtmlEscaped()),
+                                  qPrintable(QString("'%1': %2 px of %3 (max %4, variant %5, bar %6, "
+                                                     "status %7 %8): %9 | whole: %10")
+                                                 .arg(words).arg(chip->width()).arg(chip->sizeHint().width())
+                                                 .arg(chip->maximumWidth())
+                                                 .arg(chip->property("followVariant").toInt())
+                                                 .arg(m_app->statusBar()->width())
+                                                 .arg(int(pc->followSpotStatus().state))
+                                                 .arg(pc->followSpotStatus().facingSaid)
+                                                 .arg(chip->text(), chipLine(chip))),
+                                  3000);
+        QVERIFY2(chip->mapTo(m_app, QPoint(chip->width(), 0)).x() <= m_app->width(), qPrintable(chip->text()));
+    };
+    // QLC_FSPOT_SHOTS: the footer while the pad's message is on it, at each size.
+    auto footerShots = [&](const QString &tag) {
+        if (shots.isEmpty())
+            return;
+        QDir().mkpath(shots + QStringLiteral("/after"));
+        for (const auto &sz : QList<QPair<QString, QSize>>({ { "min", QSize(1024, 640) },
+                                                            { "laptop", QSize(1280, 800) },
+                                                            { "wide", QSize(1920, 1080) } }))
+        {
+            m_app->resize(sz.second);
+            settle(300);
+            const QPixmap full = m_app->grab();
+            const int h = 44;
+            full.copy(0, full.height() - h * int(full.devicePixelRatio()), full.width(),
+                      h * int(full.devicePixelRatio()))
+                .save(QString("%1/after/facing-%2-%3.png").arg(shots, tag, sz.first));
+            qInfo().noquote() << "shot facing" << tag << sz.first << chip->width() << chip->text();
+        }
+        m_app->resize(1024, 640);
+        settle(200);
+    };
     QVERIFY(padInput(doc, quint32(ls), 255));
     // The press reaches the programmer through the input map: wait for it
     // (a fixed 30 ms was too short on a busy CI runner).
     QTRY_VERIFY_WITH_TIMEOUT(pc->isRecalibratingFacing(), 3000);
+    /* On the screen, not only in the voice (0.4.4 on his DualSense: "nothing
+       happened"): the footer and the look's line say the hold at once. */
+    QTRY_VERIFY2_WITH_TIMEOUT(chipLine(chip).contains("setting the facing"), qPrintable(chipLine(chip)), 2000);
+    QVERIFY2(chipLine(chip).contains("let go of L3"), qPrintable(chipLine(chip)));     // a PlayStation pad's word
+    readable("setting the facing: push toward centre stage, let go of L3");
+    footerShots("held");
+    QVERIFY(pc->followSpotStatus().settingFacing);
+    QVERIFY2(pc->followSpotStatusText().contains("setting the facing"), qPrintable(pc->followSpotStatusText()));
     const QVector3D before = witch->position();
     QVERIFY(padInput(doc, 0, 64));      // 30 degrees left of straight up
     QVERIFY(padInput(doc, 1, 17));
@@ -1916,7 +1976,62 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
     QTRY_VERIFY_WITH_TIMEOUT(!pc->isRecalibratingFacing(), 3000);
     QCOMPARE(pc->followSpotOperator().facing, 300);       // 270 + 30
     QTRY_COMPARE_WITH_TIMEOUT(facing->currentData().toInt(), 300, 1000);
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QString::fromUtf8("from SL tower, facing 300°")), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(chipLine(chip).contains(QString::fromUtf8("from SL tower, facing 300°")), 2000);
+    // ...and what it set, for a moment after.
+    QVERIFY2(chipLine(chip).contains(QString::fromUtf8("Facing 300°")), qPrintable(chipLine(chip)));
+    readable(QString::fromUtf8("Facing 300°"));
+    footerShots("set");
+    QVERIFY(!pc->followSpotStatus().settingFacing);
+
+    /* Pushed the way they already face: kept, and said so -- not silence
+       (from a tower, pushing straight at centre stage is the preset's own). */
+    auto holdAndPush = [&](uchar x, uchar y) {
+        QVERIFY(padInput(doc, quint32(ls), 255));
+        QTRY_VERIFY_WITH_TIMEOUT(pc->isRecalibratingFacing(), 3000);
+        QVERIFY(padInput(doc, 0, x));
+        QVERIFY(padInput(doc, 1, y));
+        settle(60);
+        QVERIFY(padInput(doc, 0, 128));
+        QVERIFY(padInput(doc, 1, 128));
+        settle(60);
+        QVERIFY(padInput(doc, quint32(ls), 0));
+        QTRY_VERIFY_WITH_TIMEOUT(!pc->isRecalibratingFacing(), 3000);
+    };
+    holdAndPush(64, 17);
+    QCOMPARE(pc->followSpotOperator().facing, 300);
+    QTRY_VERIFY2_WITH_TIMEOUT(chipLine(chip).contains(QString::fromUtf8("Facing 300°, as it was")),
+                              qPrintable(chipLine(chip)), 2000);
+    readable(QString::fromUtf8("Facing 300°, as it was"));
+    // Too small a push: unchanged, and how to do it.
+    holdAndPush(140, 116);
+    QCOMPARE(pc->followSpotOperator().facing, 300);
+    QTRY_VERIFY2_WITH_TIMEOUT(chipLine(chip).contains("Facing unchanged: push a stick further while you hold L3"),
+                              qPrintable(chipLine(chip)), 2000);
+    readable("Facing unchanged");      // in full or in few words, whichever fits
+    footerShots("unchanged");
+    // The other long states shorten the same way: the D-pad's speed step.
+    QTRY_VERIFY_WITH_TIMEOUT(!chipLine(chip).contains("Facing unchanged"), 6000);
+    const int dpadUp = deviceChannel(GamepadRole::DpadUp), dpadDown = deviceChannel(GamepadRole::DpadDown);
+    QVERIFY(dpadUp >= 0 && dpadDown >= 0);
+    // A press and its release a moment apart (the input map keeps the last value it is sent).
+    QVERIFY(padInput(doc, quint32(dpadUp), 255));
+    settle(30);
+    QVERIFY(padInput(doc, quint32(dpadUp), 0));
+    settle(30);
+    QTRY_COMPARE_WITH_TIMEOUT(pc->followSpotMover()->multiplier(), 1.5, 2000);
+    readable(QString::fromUtf8("Speed ×1.5"));
+    QVERIFY(padInput(doc, quint32(dpadDown), 255));
+    settle(30);
+    QVERIFY(padInput(doc, quint32(dpadDown), 0));
+    settle(30);
+    QTRY_COMPARE_WITH_TIMEOUT(pc->followSpotMover()->multiplier(), 1.0, 2000);
+    // Wide, the whole line again.
+    m_app->resize(1920, 1080);
+    settle(200);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->isVisible() && chip->text().contains(QString::fromUtf8("AT-Spots ← ES-Witch")),
+                              qPrintable(chip->text()), 3000);
+    m_app->resize(sizeWas);
+    settle(200);
 
     // Pushed up, the subject goes the way they face.
     witch->setPosition(home);
@@ -1942,16 +2057,27 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
 
     // The Rig Overview: from the operator, and the plan turned to them.
     const double az = rig->angledAzimuth(), el = rig->angledElevation();
+    QVERIFY(!rig->operatorMark().on);
+    const QImage pictureBefore = rig->grab().toImage();
     rigView->setCurrentIndex(rigView->findText("Operator"));
     settle(100);
     QCOMPARE(rig->plane(), StructureStudioView::Angled);
     QCOMPARE(rig->angledAzimuth(), 60.0);       // -300: from stage left, a little downstage
     QVERIFY(qAbs(rig->angledElevation() - pc->followSpotOperator().viewElevation(props)) < 1e-6);
+    // The picture itself changed, and says whose view it is.
+    QVERIFY(rig->grab().toImage() != pictureBefore);
+    QVERIFY(rig->operatorMark().on);
+    QCOMPARE(rig->operatorMark().facing, 300);
+    QVERIFY2(rig->operatorMark().caption.contains(QString::fromUtf8("Operator: SL tower, facing 300°"))
+                 && rig->operatorMark().caption.contains("DUALSHOCK 4"),
+             qPrintable(rig->operatorMark().caption));
+    QCOMPARE(rig->operatorMark().label, QString::fromUtf8("spot op · SL tower"));
     shoot("after");
     rigView->setCurrentIndex(rigView->findText("Operator plan"));
     settle(100);
     QCOMPARE(rig->plane(), StructureStudioView::Top);
     QCOMPARE(rig->rotation(), 1);   // stage left at the bottom
+    QVERIFY(rig->operatorMark().on);
     if (!shots.isEmpty())
         for (const auto &sz : QList<QPair<QString, QSize>>({ { "min", QSize(1024, 640) },
                                                             { "laptop", QSize(1280, 800) },
@@ -1961,9 +2087,86 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
             settle(500);
             rigDock->grab().save(QString("%1/after/rig-plan-%2.png").arg(shots, sz.first));
         }
-    // Any other view: the angle and the turn it had.
+    /* The pad asleep or unplugged (0.4.4: the Operator views showed front
+       of house -- a plain plan -- once his DualSense had gone): its operator
+       stays its own, said as not connected. */
+    InputOutputMap *iom = doc->inputOutputMap();
+    iom->setInputSlot(0, QList<Universe::InputSlotDevice>());
+    QVERIFY(iom->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine()));
+    QTRY_VERIFY_WITH_TIMEOUT(!pc->isPanBound() && !pc->isTiltBound(), 3000);
+    QVERIFY(pc->followSpotStickName().isEmpty());
+    QCOMPARE(pc->followSpotOperatorStick(), QStringLiteral("DUALSHOCK 4"));
+    QCOMPARE(pc->followSpotOperator().preset, FollowSpotOperator::StageLeftTower);
+    QCOMPARE(pc->followSpotOperator().facing, 300);
+    settle(100);
+    QCOMPARE(rig->rotation(), 1);
+    QVERIFY2(rig->operatorMark().caption.contains("SL tower"), qPrintable(rig->operatorMark().caption));
+    QTRY_VERIFY_WITH_TIMEOUT(shown((QLabel *)nullptr, "followSpotOperatorFor") != nullptr
+                                 && shown((QLabel *)nullptr, "followSpotOperatorFor")
+                                        ->text().contains("DUALSHOCK 4 (not connected)"),
+                             2000);
+
+    /* His pad, a DualSense, on its own: its stick click comes through the
+       real HID plugin and its PlayStation profile as LS, and the hold sets
+       the DualSense's own operator (front of house until now). */
+    {
+        QLCIOPlugin *hid = hidPlugin(doc);
+        const int dsLine = hid->inputs().indexOf(QString::fromUtf8(kDualSense));
+        QVERIFY(dsLine >= 0);
+        QVERIFY(iom->setInputPatch(0, QStringLiteral("HID"), QString(), quint32(dsLine)));
+        QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->followSpotStickName() == QLatin1String("DualSense"), 3000);
+        QVERIFY(pc->followSpotOperator().isFrontOfHouse());
+        int dsLs = -1;
+        for (quint32 c = 0; c < 64 && dsLs < 0; ++c)
+            if (pc->controllerRole(0, c) == GamepadRole::LS)
+                dsLs = int(iom->inputPatch(0)->deviceChannel(c));
+        QVERIFY(dsLs >= 0);
+        QTRY_VERIFY2_WITH_TIMEOUT(pc->followSpotStatus().state != ProgrammerController::FollowSpotStatus::Off
+                                      && pc->followSpotStatus().state
+                                             != ProgrammerController::FollowSpotStatus::NoStick,
+                                  qPrintable(QString("timer %9 patched %10 fromProfile %11 u %12/%13 "
+                                                     "focused %14; focus %6 refine %7 holding %8; state %1, "
+                                                     "stick '%2', bound %3/%4, %5")
+                                                 .arg(int(pc->followSpotStatus().state))
+                                                 .arg(pc->followSpotStickName())
+                                                 .arg(pc->isPanBound()).arg(pc->isTiltBound())
+                                                 .arg(pc->followSpotStatusText())
+                                                 .arg(pc->focusSession()->isActive())
+                                                 .arg(pc->refineSession() != nullptr && pc->refineSession()->isActive())
+                                                 .arg(pc->isHolding())
+                                                 .arg(pc->m_designJoyTimer->isActive())
+                                                 .arg(pc->stickPatched())
+                                                 .arg(pc->m_boundFromProfile)
+                                                 .arg(pc->m_panUniverse).arg(pc->m_tiltUniverse)
+                                                 .arg(pc->m_focusedSceneId)),
+                                  3000);
+        QVERIFY(padInput(doc, quint32(dsLs), 255, kDualSense));
+        QTRY_VERIFY_WITH_TIMEOUT(pc->isRecalibratingFacing(), 3000);
+        QTRY_VERIFY2_WITH_TIMEOUT(chipLine(chip).contains("let go of L3"), qPrintable(chipLine(chip)), 2000);
+        QVERIFY(padInput(doc, 0, 64, kDualSense));
+        QVERIFY(padInput(doc, 1, 17, kDualSense));
+        settle(60);
+        QVERIFY(padInput(doc, 0, 128, kDualSense));
+        QVERIFY(padInput(doc, 1, 128, kDualSense));
+        settle(60);
+        QVERIFY(padInput(doc, quint32(dsLs), 0, kDualSense));
+        QTRY_VERIFY_WITH_TIMEOUT(!pc->isRecalibratingFacing(), 3000);
+        QCOMPARE(pc->followSpotOperator().facing, 30);      // front of house, 30 degrees left of up
+        QTRY_VERIFY2_WITH_TIMEOUT(chipLine(chip).contains(QString::fromUtf8("Facing 30°")), qPrintable(chipLine(chip)),
+                                  2000);
+        pc->setFollowSpotOperator(FollowSpotOperator());
+        QVERIFY(iom->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine()));
+        QTRY_VERIFY_WITH_TIMEOUT(!pc->isPanBound(), 3000);
+    }
+    patchLikeHis(doc);
+    QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 3000);
+    QCOMPARE(pc->followSpotStickName(), QStringLiteral("DUALSHOCK 4"));
+    QCOMPARE(pc->followSpotOperator().facing, 300);
+
+    // Any other view: the angle and the turn it had, and no mark.
     rigView->setCurrentIndex(rigView->findData(int(StructureStudioView::Angled)));
     settle(100);
+    QVERIFY(!rig->operatorMark().on);
     QCOMPARE(rig->rotation(), 0);
     QVERIFY(qAbs(rig->angledAzimuth() - az) < 1e-6 && qAbs(rig->angledElevation() - el) < 1e-6);
     rigDock->close();
@@ -1973,7 +2176,7 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
     where->setCurrentIndex(where->findData(int(FollowSpotOperator::FrontOfHouse)));
     settle(100);
     QVERIFY(pc->followSpotOperator().isFrontOfHouse());
-    QTRY_VERIFY_WITH_TIMEOUT(!chip->text().contains("from "), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(!chipLine(chip).contains("from "), 2000);
     bench->load(Function::invalidId());
     settle(100);
     doc->resetModified();

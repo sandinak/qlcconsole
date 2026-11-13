@@ -29,6 +29,7 @@
 #include <QToolBar>
 #include <QRegularExpression>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 #include <QTabWidget>
 #include <QTabBar>
 #include <QTreeWidget>
@@ -1129,6 +1130,70 @@ void AppViews_Test::settingsChoosesTheUnits()
     }
     QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Inches);
     MeasurementUnits::setPreferredLength(MeasurementUnits::Millimetres);
+}
+
+void AppViews_Test::reopenLastShowDecision()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString last = dir.filePath("last.qlcc");
+    QFile f(last);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.close();
+    const QString gone = dir.filePath("gone.qlcc");
+
+    QTemporaryFile iniFile(dir.filePath("s-XXXXXX.ini"));
+    QVERIFY(iniFile.open());
+    QSettings s(iniFile.fileName(), QSettings::IniFormat);
+    s.setValue("workspace/recent0", last);
+    QString missing = "stale";
+
+    // Off (the default): nothing.
+    QVERIFY(App::showToOpenAtStart(QString(), s, false, &missing).isEmpty());
+    QVERIFY(missing.isEmpty());
+    s.setValue(App::reopenLastShowSettingKey(), true);
+    // On: the top of Open Recent.
+    QCOMPARE(App::showToOpenAtStart(QString(), s, false, &missing), last);
+    QVERIFY(missing.isEmpty());
+    // -o wins.
+    QCOMPARE(App::showToOpenAtStart("/x/cli.qlcc", s, false), QString("/x/cli.qlcc"));
+    QCOMPARE(App::showToOpenAtStart("/x/cli.qlcc", s, true), QString("/x/cli.qlcc"));
+    // Shift skips it.
+    QVERIFY(App::showToOpenAtStart(QString(), s, true, &missing).isEmpty());
+    QVERIFY(missing.isEmpty());
+    // A show that is gone: nothing, and it is reported.
+    s.setValue("workspace/recent0", gone);
+    QVERIFY(App::showToOpenAtStart(QString(), s, false, &missing).isEmpty());
+    QCOMPARE(missing, gone);
+    // No recent list at all.
+    s.remove("workspace/recent0");
+    QVERIFY(App::showToOpenAtStart(QString(), s, false, &missing).isEmpty());
+    QVERIFY(missing.isEmpty());
+}
+
+void AppViews_Test::reopenLastShowCheckboxRoundTrips()
+{
+    QSettings().remove(App::reopenLastShowSettingKey());
+    QVERIFY(!App::reopenLastShow());
+    {
+        AppSettings dlg(m_app);
+        QCheckBox *c = dlg.findChild<QCheckBox *>(QStringLiteral("settingsReopenLastShow"));
+        QVERIFY(c != nullptr);
+        QVERIFY(!c->isChecked());
+        QVERIFY(c->toolTip().contains("Shift"));
+        c->setChecked(true);
+        dlg.accept();
+    }
+    QVERIFY(App::reopenLastShow());
+    QCOMPARE(QSettings().value("workspace/reopenLastShow").toBool(), true);
+    {
+        AppSettings dlg(m_app);
+        QCheckBox *c = dlg.findChild<QCheckBox *>(QStringLiteral("settingsReopenLastShow"));
+        QVERIFY(c->isChecked());
+        c->setChecked(false);
+        dlg.accept();
+    }
+    QVERIFY(!App::reopenLastShow());
 }
 
 void AppViews_Test::settingsAdvancedHoldsAutoOpen()

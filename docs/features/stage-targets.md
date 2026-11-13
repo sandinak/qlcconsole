@@ -531,12 +531,18 @@ and right is their right. Nobody turns the picture round in their head.
 - **From the pad**: hold the **left stick click (LS, L3)** and push either
   stick toward centre stage as you stand, then let go of the click. The
   facing is set from the push, to the nearest 15° (*Facing 285°*). The
-  subject holds still while you do it. **View + LS** is still Centre Sticks.
+  subject holds still while you do it. The footer says *setting the facing*
+  while you hold the click, and what it set when you let go. Pushed the
+  way they already face, it says *Facing 270°, as it was*; pushed less
+  than half way, *Facing unchanged*. On a narrow window the footer
+  shortens the Follow chip to keep that message (*◎ Follow · Facing
+  300°*); hover over it for the whole line. **View + LS** is still Centre Sticks.
 - **Kept per controller and per venue**, with the show: a DualSense in the
   SL tower and a DUALSHOCK 4 out front each keep their own, and each venue
   its own (one set for the venue with no controller named is used for any
   controller). A venue renamed keeps its. Shows from before load as front of
-  house.
+  house. A pad that is asleep or unplugged keeps its own: the row says
+  *DualSense (not connected)*.
 - **Only the subject is turned.** With no Aim look (free-fly) the stick
   flies the head's own pan and tilt, from wherever you stand, as before.
 - **Front of house** has the stick pushed up going upstage and right going
@@ -553,8 +559,11 @@ Where you see it:
   operator's side, looking the way they face and down from their eye height
   to centre stage, and **Operator plan**, the plan turned so they are at the
   bottom edge: the stick pushed up goes up the screen. The plan turns in
-  quarter turns, so a facing between them shows the nearest one. Back to any
-  other view puts back the angle you had.
+  quarter turns, so a facing between them shows the nearest one. Both views
+  draw the operator where they stand (*spot op · SL tower*) and say whose
+  view it is across the top: *Operator: SL tower, facing 270° · DualSense in
+  Main Hall*. With none set, the caption says so and where to set one. Back
+  to any other view puts back the angle you had.
 
 ### How fast, and how fine
 

@@ -45,6 +45,7 @@
 
 class QProgressDialog;
 class QDateTime;
+class QSettings;
 class QXmlStreamWriter;
 class VideoProvider;
 class QMessageBox;
@@ -215,6 +216,17 @@ public:
     static QString newShowsClassicSettingKey();
     static bool newShowsClassic();
     static void setNewShowsClassic(bool on);
+    /** Settings ▸ General, "Open the Last Show at Start": this computer's
+     *  (workspace/reopenLastShow), off by default. */
+    static QString reopenLastShowSettingKey();
+    static bool reopenLastShow();
+    static void setReopenLastShow(bool on);
+    /** The show App::startup() opens: @p cliFile (-o) when given, else --
+     *  with the setting on and @p shiftHeld false -- the top of the Open
+     *  Recent list (workspace/recent0) if it still exists. Empty = start
+     *  empty. A recent file that is gone is named in @p notFound. */
+    static QString showToOpenAtStart(const QString &cliFile, const QSettings &settings,
+                                     bool shiftHeld, QString *notFound = nullptr);
     /** The view a new show starts in: Classic QLC+ by the preference, else qlcconsole. */
     static WorkspaceView newShowView();
     /** What tab @p label reads as in the current view ("Inputs/Outputs" for
@@ -1202,6 +1214,14 @@ private:
     QLabel* m_statusSelectionLabel;
     QLabel* m_statusPadModeLabel;
     QLabel *m_statusFollowLabel = nullptr;
+    /** The follow chip's line, most said first, then shorter: the footer
+     *  shows the longest that fits (fitStatusBar()) rather than dropping the
+     *  chip -- the last ones keep only what the pad just did. */
+    QStringList m_followChipVariants;
+    QString m_followChipColour;
+    QLabel *m_followChipMeasure = nullptr;      ///< measures a variant, never shown
+    QString followChipHtml(const QString &plain) const;
+    int followChipWidth(const QString &plain);
     /** Rig network transmit gate: red while network output is held because
      *  this machine is not on the show's rig network, amber when the show
      *  has none set or the check is off/lifted. Click opens the setting. */

@@ -18,6 +18,7 @@
   limitations under the License.
 */
 
+#include <QPointer>
 #include <QRegularExpression>
 #include <QCoreApplication>
 #include <QLocale>
@@ -3205,6 +3206,11 @@ void Monitor::showStageOverview()
         m_overviewView = NULL;
     });
     dock->setAttribute(Qt::WA_DeleteOnClose);
+    /* A floating dock is a tool window, and on a Mac a tool window hides
+       whenever the app is not the frontmost one: click into another app
+       (a controller test page beside it) and the rig view vanished. It is
+       a reference window you keep looking at; keep it on screen. */
+    dock->setAttribute(Qt::WA_MacAlwaysShowToolWindow);
     /* Not DockWidgetFloatable: with it, the title bar's float button and a
        double-click on the title "docked" the panel -- into no dock area, so
        it stayed a plain child of the main window, painted over the tabs. A
@@ -3332,9 +3338,44 @@ void Monitor::showStageOverview()
        it had before. */
     struct Before { bool operatorView = false; double az = 0.0, el = 0.0; int turns = 0; };
     QSharedPointer<Before> before(new Before);
-    auto applyOperatorView = [this, view](int which) {
+    QPointer<StructureStudioView> viewPtr(view);
+    auto applyOperatorView = [this, viewPtr](int which) {
+        /* Also reached from the controller's signals, which may come while
+           the window is being taken down (the show cleared at quit). */
+        StructureStudioView *view = viewPtr.data();
+        if (view == nullptr)
+            return;
         ProgrammerController *pc = m_doc->programmer();
         const FollowSpotOperator op = pc != nullptr ? pc->followSpotOperator() : FollowSpotOperator();
+        /* Drawn where they stand, and said whose they are: a view that only
+           turned, with nothing to say why, read as nothing having happened
+           (and the default, front of house, as a plain plan). */
+        StructureStudioView::OperatorMark mark;
+        mark.on = true;
+        {
+            const MonitorProperties *props = m_doc->monitorProperties();
+            const QVector3D centre = props != nullptr ? props->stageCentre() : QVector3D();
+            QPointF at = op.position(props);
+            const double margin = 1.5;      // metres off the grid at most, as the plot draws it
+            at.setX(qBound(-margin, at.x(), 2.0 * double(centre.x()) + margin));
+            at.setY(qBound(-margin, at.y(), 2.0 * double(centre.y()) + margin));
+            mark.floor = at;
+        }
+        mark.facing = op.facing;
+        mark.label = tr("spot op · %1").arg(FollowSpotOperator::presetName(op.preset));
+        const QString stick = pc != nullptr ? pc->followSpotOperatorStick() : QString();
+        const QString venue = pc != nullptr && pc->venueCorrections() != nullptr
+                              ? pc->venueCorrections()->activeVenue() : QString();
+        QString whose = stick.isEmpty() ? tr("any controller") : stick;
+        if (!venue.isEmpty())
+            whose = tr("%1 in %2").arg(whose, venue);
+        mark.caption = tr("Operator: %1, facing %2 · %3")
+                           .arg(FollowSpotOperator::presetName(op.preset),
+                                FollowSpotOperator::facingName(op.facing), whose);
+        if (op == FollowSpotOperator())
+            mark.caption += QStringLiteral("\n")
+                            + tr("None set: set where they stand on the Followspot effect's Operator row.");
+        view->setOperatorMark(mark);
         if (which == kOperatorView)
         {
             view->setRotation(0);
@@ -3349,12 +3390,22 @@ void Monitor::showStageOverview()
         }
     };
     if (m_doc->programmer() != nullptr)
-        connect(m_doc->programmer(), &ProgrammerController::followSpotOperatorChanged, &dlg,
-                [planeCombo, applyOperatorView]() {
-            const int d = planeCombo->currentData().toInt();
+    {
+        QPointer<QComboBox> comboPtr(planeCombo);
+        auto reapply = [comboPtr, applyOperatorView]() {
+            if (comboPtr.isNull())
+                return;
+            const int d = comboPtr->currentData().toInt();
             if (d == kOperatorView || d == kOperatorPlan)
                 applyOperatorView(d);
-        });
+        };
+        /* Gone with this window (the pointers) or with this Monitor (the
+           context): the window is the main window's, and the show is
+           cleared after the Monitor has gone at quit. */
+        connect(m_doc->programmer(), &ProgrammerController::followSpotOperatorChanged, this, reapply);
+        // Whose it is (the pad's name) said again when the pad comes or goes.
+        connect(m_doc->programmer(), &ProgrammerController::axisBindingChanged, this, reapply);
+    }
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
             [view, planeCombo, before, applyOperatorView](int i) {
         const int d = planeCombo->itemData(i).toInt();
@@ -3373,6 +3424,7 @@ void Monitor::showStageOverview()
         if (before->operatorView)
         {
             before->operatorView = false;
+            view->setOperatorMark(StructureStudioView::OperatorMark());
             view->setAngledView(before->az, before->el);
             view->setRotation(before->turns);
         }

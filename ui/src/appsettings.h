@@ -82,6 +82,7 @@ private:
 
     // Autosave widgets
     QCheckBox *m_newShowsClassicCheck = nullptr;
+    QCheckBox *m_reopenLastCheck = nullptr;
     QCheckBox *m_autosaveEnabledCheck;
     QSpinBox  *m_autosaveIntervalSpin;
 

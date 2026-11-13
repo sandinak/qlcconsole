@@ -572,6 +572,70 @@ void MarkPlanner_Test::theLookaheadOfAChaser()
     QVERIFY(CueLookahead::upcoming(m_doc, 60000).isEmpty());
 }
 
+void MarkPlanner_Test::aCueThatWaitsForGoIsMovedInBlack()
+{
+    using namespace ShowTree;
+    // A tree list: cue One (nothing) waits for GO, cue Two lights A.
+    Scene *next = new Scene(m_doc);
+    next->setName("Next");
+    next->setValue(m_fixtureA, 1, 200);     // Dimmer
+    next->setValue(m_fixtureA, 0, 128);     // Pan
+    m_doc->addFunction(next);
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 one = st->addCue(listId, -1, "One");
+    const quint32 two = st->addCue(listId, 0, "Two");
+    Target fn;
+    fn.function = next->id();
+    QVERIFY(st->addLayer(two, fn) != invalidId());
+    QCOMPARE(st->cueList(listId)->cue(one)->hold, Function::infiniteSpeed());
+
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(chaser != nullptr);
+    MasterTimer timer(m_doc);
+    chaser->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    QCOMPARE(chaser->currentStepIndex(), 0);
+    QCOMPARE(chaser->currentStepDuration(), Function::infiniteSpeed());
+
+    // Held for GO: ahead without end, not firing now.
+    const QList<CueLookahead::UpcomingCue> cues = CueLookahead::upcoming(m_doc, 60000);
+    QCOMPARE(cues.count(), 1);
+    QCOMPARE(cues.first().fireInMs, INT_MAX);
+    QCOMPARE(cues.first().step, 1);
+
+    // The show's own lead time (not 0): A, dark, is moved in black.
+    MarkPlanner planner(m_doc, m_mark);
+    QCOMPARE(planner.darkGapMs(), MarkPlanner::defaultDarkGapMs());
+    QVERIFY(MarkPlanner::defaultDarkGapMs() > 0);
+    planner.setEnabled(true);
+    QMetaObject::invokeMethod(&planner, "evaluate");
+    QVERIFY(m_mark->isMarked(m_fixtureA));
+    QCOMPARE(planner.plannedCount(), 1);
+    planner.setEnabled(false);
+    QVERIFY(!m_mark->isMarked(m_fixtureA));
+    chaser->stop(FunctionParent::master());
+    timer.timerTick();
+
+    // A plain chaser with a timed hold past INT_MAX ms: far off, not now.
+    Scene *a = new Scene(m_doc);
+    m_doc->addFunction(a);
+    Chaser *longHold = new Chaser(m_doc);
+    longHold->setDuration(uint(INT_MAX) + 1000u);
+    longHold->addStep(a->id());
+    longHold->addStep(next->id());
+    m_doc->addFunction(longHold);
+    longHold->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    QCOMPARE(longHold->currentStepIndex(), 0);
+    const QList<CueLookahead::UpcomingCue> farOff = CueLookahead::upcoming(m_doc, INT_MAX - 1);
+    QCOMPARE(farOff.count(), 1);
+    QCOMPARE(farOff.first().fireInMs, INT_MAX - 1);
+    longHold->stop(FunctionParent::master());
+    timer.timerTick();
+}
+
 QTEST_GUILESS_MAIN(MarkPlanner_Test)
 
 void MarkPlanner_Test::aDarkWledIsMovedInBlackToItsNextLook()

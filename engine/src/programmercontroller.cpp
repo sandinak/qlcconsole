@@ -129,7 +129,15 @@ ProgrammerController::ProgrammerController(Doc *doc)
         }
     });
     connect(m_venues, &VenueCorrections::activeVenueChanged, this, [this]() { applyFollowSpotOperator(); });
-    connect(this, &ProgrammerController::axisBindingChanged, this, [this]() { applyFollowSpotOperator(); });
+    connect(this, &ProgrammerController::axisBindingChanged, this, [this]() {
+        /* A pad that sleeps or is unplugged keeps its operator: the stick
+           there was stays whose it is until another is bound (a DualSense
+           asleep is not front of house). */
+        const QString stick = followSpotStickName();
+        if (!stick.isEmpty())
+            m_lastStickName = stick;
+        applyFollowSpotOperator();
+    });
     m_focusCalls = new FocusCalls(m_doc, this);
     m_refineSession = new RefineSession(m_doc, this);
     // The light itself, from the walk (Q192): its corrections go where Focus mode's do.
@@ -329,6 +337,7 @@ ProgrammerController::ProgrammerController(Doc *doc)
     connect(m_stickRefreshTimer, &QTimer::timeout, this, &ProgrammerController::refreshStickBinding);
     connect(m_doc, &Doc::loaded, this, &ProgrammerController::scheduleStickRefresh);
     connect(m_doc, &Doc::clearing, this, [this]() {
+        m_lastStickName.clear();        // a new show: its own pads
         if (m_boundFromProfile)
         {
             m_panBound = m_tiltBound = m_boundFromProfile = false;
@@ -2132,16 +2141,22 @@ void ProgrammerController::setFollowSpotOperatorFor(const QString &venue, const 
     applyFollowSpotOperator();
 }
 
+QString ProgrammerController::followSpotOperatorStick() const
+{
+    const QString stick = followSpotStickName();
+    return stick.isEmpty() ? m_lastStickName : stick;
+}
+
 FollowSpotOperator ProgrammerController::followSpotOperator() const
 {
     return followSpotOperatorFor(m_venues != nullptr ? m_venues->activeVenue() : QString(),
-                                 followSpotStickName());
+                                 followSpotOperatorStick());
 }
 
 void ProgrammerController::setFollowSpotOperator(const FollowSpotOperator &op)
 {
     setFollowSpotOperatorFor(m_venues != nullptr ? m_venues->activeVenue() : QString(),
-                             followSpotStickName(), op);
+                             followSpotOperatorStick(), op);
 }
 
 QPointF ProgrammerController::followSpotOperatorPosition() const
@@ -2174,15 +2189,33 @@ void ProgrammerController::finishFacingRecalibration()
     const int f = FollowSpotOperator::facingFromPush(op.position(mp), centre, m_recalX, m_recalY);
     m_recalX = m_recalY = 0.0;
     applyFollowSpotSticks();
+    /* Said on the screen too (the footer, the follow-spot look's line), not
+       only by the voice: with the voice off or the feedback lights only,
+       nothing else showed that anything happened. */
+    m_facingSaidClock.restart();
     if (f < 0)
     {
-        tellOperator(tr("Facing unchanged: hold the left stick click and push a stick toward centre stage."),
+        m_facingSaid = padText(tr("Facing unchanged: push a stick further while you hold {LS}"));
+        m_facingShort = tr("Facing unchanged: push further");
+        tellOperator(padText(tr("Facing unchanged: hold {LS} and push a stick toward centre stage.")),
                      ControllerScheme::ConfirmPriority);
-        return;
     }
-    op.facing = f;
-    setFollowSpotOperator(op);
-    tellOperator(tr("Facing %1").arg(FollowSpotOperator::facingName(f)), ControllerScheme::ConfirmPriority);
+    else if (f == op.facing)
+    {
+        // Pushed the way they already face: kept, and said so.
+        m_facingSaid = tr("Facing %1, as it was").arg(FollowSpotOperator::facingName(f));
+        m_facingShort = tr("Facing %1°, as it was").arg(f);
+        tellOperator(m_facingSaid, ControllerScheme::ConfirmPriority);
+    }
+    else
+    {
+        op.facing = f;
+        setFollowSpotOperator(op);
+        m_facingSaid = tr("Facing %1").arg(FollowSpotOperator::facingName(f));
+        m_facingShort = tr("Facing %1°").arg(f);
+        tellOperator(m_facingSaid, ControllerScheme::ConfirmPriority);
+    }
+    updateFollowSpotStatus(joystickScene());
 }
 
 bool ProgrammerController::saveFollowSpotOperatorsXML(QXmlStreamWriter *doc) const
@@ -4501,6 +4534,12 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
             st.limit = stepped || st.padSet ? m_followLimit : 0;
             if (m_followSavedClock.isValid() && m_followSavedClock.elapsed() < 3000)
                 st.saved = m_followSaved;
+            st.settingFacing = m_recalHeld;
+            if (!m_recalHeld && m_facingSaidClock.isValid() && m_facingSaidClock.elapsed() < 4000)
+            {
+                st.facingSaid = m_facingSaid;
+                st.facingShort = m_facingShort;
+            }
             if (!stickPatched())
                 st.state = FollowSpotStatus::NoStick;
             else if (m_followMovedClock.isValid() && m_followMovedClock.elapsed() < 400)
@@ -4977,9 +5016,11 @@ bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, in
         {
             m_recalHeld = true;
             m_recalX = m_recalY = 0.0;
+            m_facingSaidClock.invalidate();
             applyFollowSpotSticks();
             tellOperator(tr("Push a stick toward centre stage, then let go of the stick click."),
                          ControllerScheme::ConfirmPriority);
+            updateFollowSpotStatus(joystickScene());     // the footer says it at once
         }
         else if (value == 0 && m_recalHeld)
         {
@@ -5052,12 +5093,20 @@ QString ProgrammerController::followSpotStatusText() const
     const QString from = st.targetId != UINT_MAX ? followSpotOperator().viewpointText() : QString();
     if (!from.isEmpty())
         on += QStringLiteral(" · ") + from;
+    if (st.settingFacing)
+        on += QStringLiteral(" · ") + padText(tr("setting the facing: push a stick toward centre stage, "
+                                                "then let go of {LS}"));
+    else if (!st.facingSaid.isEmpty())
+        on += QStringLiteral(" · ") + st.facingSaid;
     if (st.speedShown)
         on += QStringLiteral(" · ") + followSpotSpeedText(st.speed);
     if (!st.saved.isEmpty())
         on += QStringLiteral(" · ") + st.saved;
     else if (st.sizeShown && !followSpotSizeText(st).isEmpty())
         on += QStringLiteral(" · ") + followSpotSizeText(st);
+    // Setting the facing: the subject holds still, and the line says why.
+    if (st.settingFacing)
+        return (who.isEmpty() ? tr("Follow spot") : tr("Following %1").arg(who)) + on;
     if (st.state == FollowSpotStatus::Moving)
         return (who.isEmpty() ? tr("Follow spot · flying") : tr("Following %1 · moving").arg(who)) + on + persists;
     return who.isEmpty() ? tr("Follow spot%1 · holding%2 (move the stick to fly it)").arg(on, persists)

@@ -364,10 +364,14 @@ public:
      * Follow spot: where the operator stands
      *********************************************************************/
 public:
-    /** Where the follow-spot operator stands and faces, for the stick bound
-     *  now (followSpotStickName()) in the venue applied now: the one set for
+    /** Where the follow-spot operator stands and faces, for the stick
+     *  (followSpotOperatorStick()) in the venue applied now: the one set for
      *  both, else for the venue with any stick, else front of house. */
     FollowSpotOperator followSpotOperator() const;
+    /** Whose operator that is: the stick bound now (followSpotStickName()),
+     *  else the last one there was -- a pad asleep or unplugged keeps its
+     *  operator; it is not front of house until it wakes. Empty: any stick. */
+    QString followSpotOperatorStick() const;
     /** Set it for the stick bound now in the venue applied now (no venue:
      *  the show's own; no stick: any stick). The stick is turned at once. */
     void setFollowSpotOperator(const FollowSpotOperator &op);
@@ -530,6 +534,13 @@ public:
         int limit = 0;
         /** "Saved: Waist Up at 110%", for a moment after Save Positions. */
         QString saved;
+        /** LS held to set the operator's facing (isRecalibratingFacing()). */
+        bool settingFacing = false;
+        /** "Facing 285°", for a moment after LS's release set it. */
+        QString facingSaid;
+        /** The same in fewer words, for a narrow footer: "Facing 270°, as it
+         *  was", "Facing unchanged: push further". */
+        QString facingShort;
 
         bool operator==(const FollowSpotStatus &o) const
         {
@@ -537,7 +548,9 @@ public:
                    && targetId == o.targetId && live == o.live && speed == o.speed
                    && speedShown == o.speedShown && framing == o.framing && scalePct == o.scalePct
                    && sizeCm == o.sizeCm && beamDeg == o.beamDeg && padSet == o.padSet
-                   && sizeShown == o.sizeShown && limit == o.limit && saved == o.saved;
+                   && sizeShown == o.sizeShown && limit == o.limit && saved == o.saved
+                   && settingFacing == o.settingFacing && facingSaid == o.facingSaid
+                   && facingShort == o.facingShort;
         }
         bool operator!=(const FollowSpotStatus &o) const { return !(*this == o); }
     };
@@ -1084,6 +1097,10 @@ private:
     void applyFollowSpotOperator();
     FollowSpotOperator m_operatorApplied;
     bool m_recalHeld = false;           ///< LS held to set the facing
+    QElapsedTimer m_facingSaidClock;    ///< when LS's release last set (or kept) it
+    QString m_facingSaid;               ///< what it said, in words
+    QString m_facingShort;              ///< ...and in fewer
+    QString m_lastStickName;            ///< the stick there was (followSpotOperatorStick())
     double m_recalX = 0.0;              ///< ...the furthest push seen, x right
     double m_recalY = 0.0;              ///< ...and up
     /** LS released: the facing from the push. */
