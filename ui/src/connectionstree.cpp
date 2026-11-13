@@ -5216,6 +5216,12 @@ void ConnectionsTree::resizeEvent(QResizeEvent *ev)
 {
     QWidget::resizeEvent(ev);
     layoutSide();
+    /* Again once the splitters have their new width: sizes set before then
+       are scaled to the old one. */
+    QTimer::singleShot(0, this, [this]() {
+        m_laidOutWidth = 0;
+        layoutSide();
+    });
 }
 
 void ConnectionsTree::layoutSide()
