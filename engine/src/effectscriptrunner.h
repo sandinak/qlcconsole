@@ -194,6 +194,9 @@ private:
     /** The RUNNING instance for @p paletteId, or nullptr. (Parked instances are
      *  deliberately not considered — they are held, not running.) */
     EffectInstance *instanceForPalette(quint32 paletteId) const;
+    /** Drives the ticks by hand (instanceForPalette(), slotTick()); a
+     *  friend, not a test-side `#define private public`. */
+    friend class PixelBoxes_Test;
 
     /** Destroy the parked engine for @p paletteId, if any. */
     void discardParked(quint32 paletteId);

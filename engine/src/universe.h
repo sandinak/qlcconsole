@@ -540,6 +540,7 @@ public slots:
 protected:
     void processFaders();
     friend class ShowTree_Test; // drives frames by hand, no `#define protected public`
+    friend class PixelBoxes_Test;
 
     /** DMX writer thread worker method */
     void run() override;
