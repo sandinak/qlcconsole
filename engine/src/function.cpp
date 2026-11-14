@@ -44,6 +44,17 @@
 #include "efx.h"
 #include "doc.h"
 
+/* Show only: bumped whenever any function's sources change (start, stop)
+   or Show-only fixtures come or go -- each running function then works out
+   its previewGate() once, on its next tick. */
+static std::atomic<quint32> s_sourcesGeneration { 0 };
+static std::atomic<bool> s_showOnlyInUse { false };
+
+static void sourcesChanged()
+{
+    s_sourcesGeneration.fetch_add(1, std::memory_order_relaxed);
+}
+
 #define OVERRIDE_ATTRIBUTE_START_ID     128
 
 const QString KSceneString      (      "Scene" );
@@ -1183,6 +1194,7 @@ void Function::start(MasterTimer* timer, FunctionParent source, quint32 startTim
         m_sources.append(source);
         again = m_sources.size() > 1;
     }
+    sourcesChanged();
     if (again)
     {
         // Running already, now started by another: a new start for what
@@ -1214,6 +1226,22 @@ QList<FunctionParent> Function::sources() const
 {
     QMutexLocker locker(&m_sourcesMutex);
     return m_sources;
+}
+
+void Function::setShowOnlyInUse(bool inUse)
+{
+    if (s_showOnlyInUse.exchange(inUse, std::memory_order_relaxed) != inUse)
+        sourcesChanged();
+}
+
+void Function::refreshPreviewGate()
+{
+    const quint32 gen = s_sourcesGeneration.load(std::memory_order_relaxed);
+    if (gen == m_previewGateGen)
+        return;
+    m_previewGateGen = gen;
+    m_previewGate->store(s_showOnlyInUse.load(std::memory_order_relaxed) && startedOnlyByPreview(),
+                         std::memory_order_relaxed);
 }
 
 bool Function::startedOnlyByPreview() const
@@ -1274,6 +1302,7 @@ void Function::stop(FunctionParent source, bool preserveAttributes)
     {
         m_sources.removeAll(source);
     }
+    sourcesChanged();
 
     if (m_sources.size() == 0)
     {

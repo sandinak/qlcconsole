@@ -21,6 +21,8 @@
 #include <QXmlStreamWriter>
 #include <QDebug>
 #include <chrono>
+#include <cstring>
+#include <utility>
 #include <math.h>
 
 #if defined(Q_OS_MACOS)
@@ -556,6 +558,21 @@ void Universe::processFaders()
     else
         m_overrideWritten.fill(char(0));
 
+    /* Show only, going live: start the channels from their safe value
+       (setShowOnlyLive()). Before the faders, which write them again. */
+    if (m_showOnlyReset.load(std::memory_order_relaxed)
+        && m_showOnlyReset.exchange(false, std::memory_order_relaxed))
+    {
+        QMutexLocker locker(&m_outputRulesMutex);
+        for (int c : std::as_const(m_showOnlyChannels))
+        {
+            (*m_preGMValues)[c] = m_showOnlySafe.at(c);
+            updatePostGMValue(c);
+        }
+    }
+    // Live with Show-only channels: the faders that hold them are kept off.
+    const bool keepShowOnly = showOnlyChannelCount() > 0 && showOnlyLive();
+
     {
         QMutexLocker fadersLocker(&m_fadersMutex);
         QMutableListIterator<QSharedPointer<GenericFader> > it(m_faders);
@@ -583,7 +600,7 @@ void Universe::processFaders()
                 continue;
 
             //qDebug() << "Processing fader" << fader->name() << fader->channelsCount();
-            fader->write(this);
+            writeFader(fader.data(), keepShowOnly);
         }
     }
 
@@ -603,7 +620,25 @@ void Universe::processFaders()
         m_lastLimited = postGM;
         dataChanged = true;
     }
-    dumpOutput(postGM, dataChanged);
+    /* Show only, held (Design, Blind): what goes out has the channels at
+       their safe value; what the rig views get (universeWritten) keeps what
+       they would be. In place and back: no copy of the frame. */
+    const bool showOnlyHold = showOnlyHeld();
+    if (showOnlyHold != m_showOnlyWasHeld)
+    {
+        m_showOnlyWasHeld = showOnlyHold;
+        dataChanged = true;
+    }
+    if (showOnlyHold)
+    {
+        holdShowOnly(postGM);
+        dumpOutput(postGM, dataChanged);
+        restoreShowOnly(postGM);
+    }
+    else
+    {
+        dumpOutput(postGM, dataChanged);
+    }
     const qint64 ticked = m_tickedNs.load(std::memory_order_relaxed);
     if (ticked != 0)
     {
@@ -669,20 +704,24 @@ bool Universe::applyPowerLimits(QByteArray &out)
 void Universe::setOutputRules(const QByteArray &bits)
 {
     QMutexLocker locker(&m_outputRulesMutex);
-    QVector<int> onAtOpen;
+    QVector<int> onAtOpen, showOnly;
     for (int c = 0; c < UNIVERSE_SIZE; c++)
     {
-        const char want = c < bits.size() ? char(bits.at(c) & OutputRuleBits) : char(0);
-        const char now = m_channelsMask->at(c);
+        // uchar: ShowOnlyOutput is the top bit, and a char compare would
+        // see it sign-extended on one side only.
+        const uchar want = c < bits.size() ? uchar(uchar(bits.at(c)) & OutputRuleBits) : uchar(0);
+        const uchar now = uchar(m_channelsMask->at(c));
         if (want & OnAtOpenOutput)
             onAtOpen << c;
+        if (want & ShowOnlyOutput)
+            showOnly << c;
         if ((now & OutputRuleBits) == want)
             continue;
         // One byte write: the role bits (HTP/LTP/Intensity) never vanish.
         (*m_channelsMask)[c] = char((now & ~OutputRuleBits) | want);
         if ((now & OnAtOpenOutput) && (want & OnAtOpenOutput) == 0)
             m_onAtOpenRestore << c;
-        if (want & (GMExempt | SwitchOutput | OnAtOpenOutput))
+        if (want & (GMExempt | SwitchOutput | OnAtOpenOutput | ShowOnlyOutput))
         {
             if (c >= m_totalChannels)
             {
@@ -695,6 +734,91 @@ void Universe::setOutputRules(const QByteArray &bits)
         updatePostGMValue(c);
     }
     m_onAtOpenChannels = onAtOpen;
+    m_showOnlyChannels = showOnly;
+    m_showOnlyKept.resize(showOnly.size());
+    if (m_showOnlySafe.size() != UNIVERSE_SIZE)
+        m_showOnlySafe = QByteArray(UNIVERSE_SIZE, char(0));
+    m_showOnlyCount.store(int(showOnly.size()), std::memory_order_relaxed);
+}
+
+void Universe::setShowOnlySafeValues(const QByteArray &safe)
+{
+    QMutexLocker locker(&m_outputRulesMutex);
+    QByteArray full(UNIVERSE_SIZE, char(0));
+    memcpy(full.data(), safe.constData(), size_t(qMin(int(safe.size()), UNIVERSE_SIZE)));
+    m_showOnlySafe = full;
+}
+
+void Universe::setShowOnlyLive(bool live)
+{
+    if (m_showOnlyLive.exchange(live, std::memory_order_relaxed) == live)
+        return;
+    // Going live: whatever a Design preview, Locate or a test left stored on
+    // a Show-only LTP channel (its last value, never sent) must not be what
+    // the first live frame sends. The frame starts them from safe; what the
+    // show plays writes them again in the same frame.
+    if (live)
+        m_showOnlyReset.store(true, std::memory_order_relaxed);
+}
+
+bool Universe::showOnlyHeld() const
+{
+    return showOnlyChannelCount() > 0
+           && (showOnlyLive() == false || m_inhibitOutput.load(std::memory_order_relaxed));
+}
+
+void Universe::writeFader(GenericFader *fader, bool keepShowOnly)
+{
+    if (keepShowOnly == false || fader->holdsShowOnly() == false)
+    {
+        fader->write(this);
+        return;
+    }
+    // Live, and this fader is not the show (a preview, the Workbench,
+    // focus): what it writes on a Show-only channel is undone, so the
+    // channel keeps what the show gave it. Kept in a buffer sized with the
+    // rules -- nothing allocated here.
+    QMutexLocker locker(&m_outputRulesMutex);
+    const int n = int(m_showOnlyChannels.size());
+    for (int i = 0; i < n; i++)
+        m_showOnlyKept[i] = uchar(m_preGMValues->at(m_showOnlyChannels.at(i)));
+    fader->write(this);
+    for (int i = 0; i < n; i++)
+    {
+        const int c = m_showOnlyChannels.at(i);
+        if (uchar(m_preGMValues->at(c)) != m_showOnlyKept.at(i))
+        {
+            (*m_preGMValues)[c] = char(m_showOnlyKept.at(i));
+            updatePostGMValue(c);
+        }
+    }
+}
+
+void Universe::holdShowOnly(QByteArray &out)
+{
+    QMutexLocker locker(&m_outputRulesMutex);
+    const int n = int(m_showOnlyChannels.size());
+    for (int i = 0; i < n; i++)
+    {
+        const int c = m_showOnlyChannels.at(i);
+        if (c >= out.size())
+            break;              // in order: the rest are past the frame too
+        m_showOnlyKept[i] = uchar(out.at(c));
+        out[c] = m_showOnlySafe.at(c);
+    }
+}
+
+void Universe::restoreShowOnly(QByteArray &out)
+{
+    QMutexLocker locker(&m_outputRulesMutex);
+    const int n = int(m_showOnlyChannels.size());
+    for (int i = 0; i < n; i++)
+    {
+        const int c = m_showOnlyChannels.at(i);
+        if (c >= out.size())
+            break;
+        out[c] = char(m_showOnlyKept.at(i));
+    }
 }
 
 void Universe::setOnAtOpenArmed(bool armed)

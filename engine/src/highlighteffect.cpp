@@ -17,6 +17,8 @@ HighlightEffect::HighlightEffect(Doc *doc)
     , m_doc(doc)
     , m_layer(doc, Universe::Highlight, FadeChannel::Override, QStringLiteral("Highlight"))
 {
+    // Finding a light is not the show: a Show-only fixture stays safe.
+    m_layer.setHoldsShowOnly(true);
 }
 
 HighlightEffect::~HighlightEffect()

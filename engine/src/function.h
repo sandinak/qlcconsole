@@ -23,6 +23,7 @@
 
 #include <QWaitCondition>
 #include <atomic>
+#include <memory>
 #include "qlcengine_export.h"
 #include <QObject>
 #include <QString>
@@ -847,6 +848,19 @@ public:
      *  and chasers that started it: it plays to be looked at only. */
     bool startedOnlyByPreview() const;
 
+    /** Show only (Fixture::ShowOnly): startedOnlyByPreview(), kept up to
+     *  date by refreshPreviewGate() and shared with every fader made while
+     *  this function runs (GenericFader::holdsShowOnly()), so a preview's
+     *  scene is kept off a laser while the same scene from a GO drives it */
+    const std::shared_ptr<std::atomic<bool> > &previewGate() const { return m_previewGate; }
+    /** Bring previewGate() up to date if any function's sources changed
+     *  since this one last looked (one atomic load otherwise). The
+     *  MasterTimer thread, before each preRun()/write()/postRun(). */
+    void refreshPreviewGate();
+    /** Whether any fixture is Show only (OutputRuleKeeper): with none,
+     *  refreshPreviewGate() never walks the sources */
+    static void setShowOnlyInUse(bool inUse);
+
     /** What started this function and keeps it running (a copy, under its
      *  lock): for "Why is this on?" (WhyOn), on demand. */
     QList<FunctionParent> sources() const;
@@ -871,6 +885,11 @@ private:
 
     QList<FunctionParent> m_sources;
     mutable QMutex m_sourcesMutex;
+
+    /** previewGate(); m_previewGateGen is the sources generation it was
+     *  worked out at (MasterTimer thread only) */
+    std::shared_ptr<std::atomic<bool> > m_previewGate { std::make_shared<std::atomic<bool> >(false) };
+    quint32 m_previewGateGen = 0xFFFFFFFF;
 
     QMutex m_stopMutex;
     QWaitCondition m_functionStopped;

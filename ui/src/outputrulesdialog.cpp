@@ -44,7 +44,8 @@ OutputRulesDialog::OutputRulesDialog(Doc *doc, const QList<quint32> &fixtureIds,
 
     QVBoxLayout *lay = new QVBoxLayout(this);
     QLabel *intro = new QLabel(tr("For circuits that are not lights in the show: power relays, house, "
-                                  "work, hall and backstage-blue lights."), this);
+                                  "work, hall and backstage-blue lights -- and for what must fire only "
+                                  "in the show: lasers, foggers, flame relays, a DMX curtain."), this);
     intro->setWordWrap(true);
     lay->addWidget(intro);
 
@@ -75,6 +76,10 @@ OutputRulesDialog::OutputRulesDialog(Doc *doc, const QList<quint32> &fixtureIds,
         { Fixture::OnAtOpen, tr("On when not in use"),
           tr("At full whenever nothing in the show sets it -- %1. Anything that sets it, even "
              "to zero, wins.").arg(onWhen), "outputRuleOnAtOpen" },
+        { Fixture::ShowOnly, tr("Show only"),
+          tr("Only a GO in Operate drives it. In Design, Blind, the Workbench, Locate, Solo, focus "
+             "and previews it stays safe -- off, closed -- and the plot draws what it would do."),
+          "outputRuleShowOnly" },
     };
 
     foreach (const Row &r, rows)

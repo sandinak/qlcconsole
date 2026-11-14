@@ -300,6 +300,18 @@ public:
      *  triangle (a warning, not FIX-15's red error). */
     void setOffRow(bool b) { if (b != m_offRow) { m_offRow = b; update(); } }
     bool isOffRow() const { return m_offRow; }
+    /** Show only (Output Rules), held: the light is drawn doing what it
+     *  would, its real output kept safe -- an amber dashed outline and a
+     *  pause badge beside its left edge. */
+    void setShowOnlyHeld(bool b)
+    {
+        if (b == m_showOnlyHeld)
+            return;
+        prepareGeometryChange();        // the badge sits outside the body
+        m_showOnlyHeld = b;
+        update();
+    }
+    bool isShowOnlyHeld() const { return m_showOnlyHeld; }
 
     /** Set the fixture's pan-zero facing (degrees clockwise from downstage),
      *  i.e. FixtureRigProps::panZeroDir. Drives the facing arrow on the icon.
@@ -458,6 +470,7 @@ private:
     bool m_needsFocus    = false;
     bool m_buried        = false;
     bool m_offRow        = false;
+    bool m_showOnlyHeld  = false;
 
     /** True if any head has a Pan channel (i.e. a moving head): only these
      *  show a facing arrow and accept Alt-drag rotation. */

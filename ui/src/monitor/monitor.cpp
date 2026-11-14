@@ -167,6 +167,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "outputrulekeeper.h"
 #include "wledfixture.h"
 #include "contextmenus.h"
 #include "selectionmenu.h"
@@ -325,6 +326,11 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
         highlightFixtures(m_doc->programmerSelection());
     });
     highlightFixtures(m_doc->programmerSelection());
+    // Show only: the plot still draws what a held laser or relay would do,
+    // with a "held" badge on it while its output is kept safe.
+    if (m_doc->outputRuleKeeper() != nullptr)
+        connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::showOnlyChanged,
+                this, &Monitor::refreshShowOnlyHeld);
     // Re-render targets on Design/Operate switch so their drag-ability tracks the
     // mode (editable while designing, frozen in a show).
     connect(m_doc, &Doc::modeChanged, this, [this](Doc::Mode) {
@@ -1990,6 +1996,16 @@ void Monitor::updateView()
     showCurrentView();
     refreshNeedsFocus();
     refreshBuried();
+    refreshShowOnlyHeld();
+}
+
+void Monitor::refreshShowOnlyHeld()
+{
+    if (m_graphicsView == NULL || m_doc->outputRuleKeeper() == nullptr)
+        return;
+    const OutputRuleKeeper *k = m_doc->outputRuleKeeper();
+    m_graphicsView->markShowOnlyHeldFixtures(k->showOnlyHeldBy() != OutputRuleKeeper::NotHeld
+                                                 ? k->showOnlyFixtures() : QList<quint32>());
 }
 
 void Monitor::refreshBuried()
@@ -9985,6 +10001,7 @@ public:
         {
             QSharedPointer<GenericFader> fader = ua[i]->requestFader(Universe::Override);
             fader->setName(QStringLiteral("FixtureTest"));
+            fader->setHoldsShowOnly(true);      // a test never fires a Show-only fixture
             fader->setZeroAll(true);
             m_faders[i] = fader;
             m_universes[i] = ua[i];
@@ -10234,6 +10251,7 @@ public:
             }
             m_fader = m_universe->requestFader(Universe::Flash);
             m_fader->setName(QStringLiteral("FixtureLocate"));
+            m_fader->setHoldsShowOnly(true);    // refused for one anyway (locateRefusal)
         }
         m_doc->inputOutputMap()->releaseUniverses(false);
         setOn(true);
@@ -10390,6 +10408,8 @@ QString Monitor::locateRefusal(const Fixture *fxi)
         return tr("Locate doesn't flash a hazer, fogger or fan: it would fire its output");
     if (FixtureRest::isLaser(fxi))
         return tr("Locate doesn't fire a laser");
+    if (fxi != nullptr && (fxi->outputRules() & Fixture::ShowOnly))
+        return tr("Locate doesn't drive a Show-only fixture: only a GO in Operate does (Output Rules)");
     return QString();
 }
 

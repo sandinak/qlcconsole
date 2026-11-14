@@ -40,6 +40,28 @@ GenericFader::GenericFader(QObject *parent)
     , m_blendMode(Universe::NormalBlend)
     , m_monitoring(false)
 {
+    m_previewGate = creationGate() != nullptr ? *creationGate() : PreviewGate();
+}
+
+/* The faders made on this thread follow this gate (CreationScope). A plain
+   static thread_local, not a class member: an exported class's
+   thread_local member is refused by MSVC and misbehaves under MinGW. */
+static thread_local const GenericFader::PreviewGate *t_creationGate = nullptr;
+
+const GenericFader::PreviewGate *GenericFader::creationGate()
+{
+    return t_creationGate;
+}
+
+GenericFader::CreationScope::CreationScope(const PreviewGate *gate)
+    : m_previous(t_creationGate)
+{
+    t_creationGate = gate;
+}
+
+GenericFader::CreationScope::~CreationScope()
+{
+    t_creationGate = m_previous;
 }
 
 GenericFader::~GenericFader()

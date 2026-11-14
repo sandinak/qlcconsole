@@ -10,6 +10,12 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [0.4.8] - Unreleased
+
+### Changed and fixed
+
+- **Output rule "Show only": a laser, fogger, flame relay or DMX curtain fires only from a GO in Operate.** In Design, Blind, the Workbench, Locate, Solo, focus and previews it stays at its safe value (off, closed), the plot still draws what it would do with a "held" badge, and the footer says so ("Lasers held: Design"). Right-click a fixture or group ▸ Output Rules… ▸ Show only. The Simple Desk drives it in Operate (a hand on the channel is how you test a fogger before doors), never in Design.
+
 ## [0.4.7] - Unreleased
 
 ### Changed and fixed

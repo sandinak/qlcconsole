@@ -55,6 +55,12 @@ class QXmlStreamWriter;
  *    it has none -- a relay pack defined some other way). Snapping a pan or
  *    colour channel to 0/255, or driving it to full, would make no sense.
  *
+ *  - ShowOnly: every channel. Held at its safe value (safeValue()) in
+ *    every frame sent outside Operate, and in Blind; in Operate only the
+ *    faders that are not the show (GenericFader::holdsShowOnly()) are kept
+ *    off it. A Design run, a preview, the Workbench, Locate, Solo, focus,
+ *    a fixture test: none of them fires a laser, a fogger or a flame relay.
+ *
  * When OnAtOpen fixtures come on is the show's setting (saved with it,
  * Settings > Output): when you switch to Operate (the default, the safer
  * one) or as soon as the show is open. Blackout-exempt fixtures also hold
@@ -108,6 +114,26 @@ public:
     /** How many fixtures have any rule (for tests and the UI) */
     int ruleFixtureCount() const { return m_count; }
 
+    /** The Show-only fixtures (patched or not), in the show's order */
+    QList<quint32> showOnlyFixtures() const { return m_showOnly; }
+    /** Why the Show-only fixtures are held right now: Design, Blind --
+     *  empty when nothing holds them (Operate, or there are none). In
+     *  Operate the previews are still kept off them; that is not a hold
+     *  of the show and says nothing here. */
+    enum HeldBy { NotHeld = 0, HeldByDesign, HeldByBlind };
+    HeldBy showOnlyHeldBy() const;
+    /** "Lasers held: Design", "3 Show-only fixtures held: Blind" -- empty
+     *  when not held. For the footer chip and the phone. */
+    QString showOnlyHeldText() const;
+
+    /** A Show-only channel's safe value: 0 for an intensity channel, and
+     *  where nothing drives it (FixtureRest::restValue()) for the rest: a
+     *  laser, fogger or hazer all 0, a gobo or colour wheel open. */
+    static uchar safeValue(const Fixture *fx, quint32 channel);
+    /** The safe values of one universe's Show-only channels (UNIVERSE_SIZE
+     *  bytes, 0 elsewhere) -- what rebuild() hands it */
+    QByteArray safeValuesFor(quint32 universe) const;
+
     /** The channel indices of @p fx a rule of @p rule covers (see above) */
     static QList<quint32> coveredChannels(const Fixture *fx, Fixture::OutputRule rule);
 
@@ -115,9 +141,16 @@ public:
      *  "Ignores Blackout, Grand Master" etc. Empty for none. */
     static QString describe(Fixture::OutputRules rules);
 
+signals:
+    /** The Show-only fixtures, or why they are held, changed */
+    void showOnlyChanged();
+
 private:
     void scheduleRebuild();
     void pushPolicy();
+    /** Every universe told whether the show may drive its Show-only
+     *  channels (Universe::setShowOnlyLive(): Operate) */
+    void pushShowOnlyLive();
 
     Doc *m_doc;
     bool m_pending = false;
@@ -126,6 +159,8 @@ private:
     bool m_blindHoldsExempt = kDefaultBlindHoldsExempt;
     /** OnAtOperate: Operate has been entered since the show was opened */
     bool m_seenOperate = false;
+    QList<quint32> m_showOnly;
+    HeldBy m_lastHeldBy = NotHeld;
 };
 
 /** @} */

@@ -360,6 +360,7 @@ void PowerMeasureDialog::drive(const Step &step)
         if (m_fader.isNull())
         {
             m_fader = ua.at(u)->requestFader(Universe::SimpleDesk);
+            m_fader->setHoldsShowOnly(true);    // measuring is not the show
             m_universe = quint32(u);
         }
         auto set = [&](int offset, uchar value) {

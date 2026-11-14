@@ -18,6 +18,7 @@
 #include "mastertimer.h"
 #include "inputoutputmap.h"
 #include "universe.h"
+#include "outputrulekeeper.h"
 #include "fadechannel.h"
 #include "audiocapture.h"
 
@@ -822,6 +823,14 @@ void EffectScriptRunner::publishWrites()
 {
     QList<EffectInstance::DmxWrite> combined;
     QSet<quint64> drawn;
+    /* Show only, in Operate: an effect playing only for a preview (the
+       Workbench) leaves the Show-only fixtures alone, as its scene's own
+       fader does (GenericFader::holdsShowOnly()). One fader carries every
+       effect, so it is done here, write by write. Outside Operate every
+       frame sent holds them anyway, and the rig views still draw them. */
+    const OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
+    const bool liveShowOnly = m_doc->mode() == Doc::Operate && rules != nullptr
+                              && rules->showOnlyFixtures().isEmpty() == false;
     {
         QMutexLocker locker(&m_instanceMutex);
         for (const EffectInstance *inst : m_instances)
@@ -837,6 +846,15 @@ void EffectScriptRunner::publishWrites()
             }
             const int from = int(combined.size());
             combined += inst->dmxWrites();
+            if (liveShowOnly && previewOnly(inst))
+            {
+                for (int i = int(combined.size()) - 1; i >= from; --i)
+                {
+                    const Fixture *fx = m_doc->fixture(combined.at(i).fixtureId);
+                    if (fx != nullptr && (fx->outputRules() & Fixture::ShowOnly))
+                        combined.removeAt(i);
+                }
+            }
             // Part way in or out: each write that far over what is under it.
             const float depth = inst->depth();
             if (depth < 1.0f)
@@ -853,6 +871,20 @@ void EffectScriptRunner::publishWrites()
     QMutexLocker locker(&m_writesMutex);
     m_publishedWrites = combined;
     m_drawn = drawn;
+}
+
+bool EffectScriptRunner::previewOnly(const EffectInstance *inst) const
+{
+    const QList<quint32> scenes = inst->sceneIds();
+    if (scenes.isEmpty())
+        return false;
+    for (quint32 sid : scenes)
+    {
+        const Function *f = m_doc->function(sid);
+        if (f == nullptr || f->previewGate()->load(std::memory_order_relaxed) == false)
+            return false;
+    }
+    return true;
 }
 
 void EffectScriptRunner::setScenesOffStage(const QSet<quint32> &sceneIds)

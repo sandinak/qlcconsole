@@ -546,6 +546,10 @@ Steps, towers and booms usually come in sets that should all be the same:
   trying a list out; the first time you press it there in a session, a
   line at the top offers **Switch to Operate**. Going back to **Design**
   while functions run asks first: **Yes** stops them all and switches.
+- **Show only** — a laser, fogger, flame relay or DMX curtain given the
+  [Show only output rule](fixture-manager.md#output-rules) fires only from
+  a GO in Operate: Design, Blind, the Workbench, Locate, Solo and focus
+  keep it safe, and the footer says so (**Lasers held: Design**).
 - **Overrides** — an amber footer chip lists anything holding the rig over
   the show (Park, Highlight, Hold at end, Quick focus, Blind); click it to
   clear them all.

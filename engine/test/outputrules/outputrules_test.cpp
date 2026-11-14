@@ -32,6 +32,10 @@
 #undef protected
 
 #include "outputrules_test.h"
+#include "functionparent.h"
+#include "chaserstep.h"
+#include "chaser.h"
+#include "scene.h"
 #include "outputrulekeeper.h"
 #include "inputoutputmap.h"
 #include "ioplugincache.h"
@@ -57,7 +61,7 @@
 /* The circuits an Eos show patches as plain dimmers: a house light
    (Blackout + GM exempt), a stage dimmer (no rules), a power relay
    (Switch) and a work light (OnAtOpen). One channel each. */
-enum { House = 10, Stage = 11, Relay = 12, Work = 13 };
+enum { House = 10, Stage = 11, Relay = 12, Work = 13, Flame = 14 };
 
 void OutputRules_Test::initTestCase()
 {
@@ -97,6 +101,7 @@ void OutputRules_Test::init()
 
 void OutputRules_Test::cleanup()
 {
+    stopFunctions();
     m_doc->programmer()->focusSession()->stop();
     m_doc->lastLook()->clear();
     m_uni->dismissFader(m_fader);
@@ -855,6 +860,291 @@ void OutputRules_Test::cloneAndCapabilityKeepTheRules()
     Fixture *relay = m_doc->fixture(m_doc->fixtureForAddress(Relay));
     QVERIFY(relay != nullptr);
     QCOMPARE(relay->outputRules(), Fixture::OutputRules(Fixture::Switch));
+}
+
+
+/****************************************************************************
+ * Show only
+ ****************************************************************************/
+
+Scene *OutputRules_Test::startScene(const QList<QPair<int, int> > &values, quint32 parentType, quint32 parentId)
+{
+    Scene *s = new Scene(m_doc);
+    for (const QPair<int, int> &v : values)
+    {
+        const quint32 fid = m_doc->fixtureForAddress(quint32(v.first));
+        Fixture *fx = m_doc->fixture(fid);
+        if (fx == nullptr)
+            continue;
+        s->setValue(fid, quint32(v.first) - fx->address(), uchar(v.second));
+    }
+    m_doc->addFunction(s);
+    s->start(m_doc->masterTimer(), FunctionParent(FunctionParent::Type(parentType), parentId));
+    return s;
+}
+
+void OutputRules_Test::stopFunctions()
+{
+    foreach (Function *f, m_doc->functions())
+        f->stop(FunctionParent::master());
+    m_doc->masterTimer()->timerTick();
+    m_doc->masterTimer()->timerTick();
+}
+
+int OutputRules_Test::sent(int address) const
+{
+    return int(uchar(m_stub->m_universe.at(address)));
+}
+
+void OutputRules_Test::showOnlySavedAndLoaded()
+{
+    QCOMPARE(Fixture::outputRulesToString(Fixture::ShowOnly | Fixture::Switch), QString("Switch,ShowOnly"));
+    QCOMPARE(Fixture::stringToOutputRules("Switch,ShowOnly"), Fixture::ShowOnly | Fixture::Switch);
+    Fixture *flame = addDimmer("Flame", Flame, Fixture::ShowOnly | Fixture::Switch);
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter xw(&buf);
+    flame->saveXML(&xw);
+    xw.writeEndDocument();
+    QVERIFY(buf.data().contains("<OutputRules>Switch,ShowOnly</OutputRules>"));
+    QXmlStreamReader xr(buf.data());
+    xr.readNextStartElement();
+    Fixture copy(m_doc);
+    QVERIFY(copy.loadXML(xr, m_doc, m_doc->fixtureDefCache()));
+    QCOMPARE(copy.outputRules(), Fixture::ShowOnly | Fixture::Switch);
+    QCOMPARE(OutputRuleKeeper::describe(Fixture::ShowOnly),
+             QString("Show only (held outside a real run in Operate)"));
+}
+
+void OutputRules_Test::designHoldsAShowOnlyRelay()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly | Fixture::Switch);
+    m_doc->outputRuleKeeper()->rebuild();
+    QCOMPARE(m_uni->showOnlyChannelCount(), 1);
+    QCOMPARE(m_doc->mode(), Doc::Design);
+
+    // A cue tried out in Design -- from the Run tab, a real parent -- and
+    // the Workbench's preview alike: the stage light previews, the flame
+    // relay stays open.
+    startScene({ { Stage, 200 }, { Flame, 255 } }, FunctionParent::ManualVCWidget, 1);
+    QCOMPARE(tickFrame(Stage), 200);
+    QCOMPARE(sent(Stage), 200);
+    QCOMPARE(sent(Flame), 0);
+    // The plot draws what it would do.
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(Flame))), 255);
+    QVERIFY(m_uni->showOnlyHeld());
+
+    startScene({ { Flame, 255 } }, FunctionParent::AutoVCWidget, 0xFFFFFF57);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    stopFunctions();
+}
+
+void OutputRules_Test::operateGoDrivesItAndDesignTakesItBack()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly | Fixture::Switch);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(m_uni->showOnlyLive());
+    startScene({ { Stage, 120 }, { Flame, 255 } }, FunctionParent::ManualVCWidget, 1);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);
+    QCOMPARE(sent(Stage), 120);
+    QVERIFY(m_uni->showOnlyHeld() == false);
+
+    // Back to Design, the cue still running: safe on the next frame.
+    m_doc->setMode(Doc::Design);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    QCOMPARE(sent(Stage), 120);
+    stopFunctions();
+}
+
+void OutputRules_Test::operatePreviewIsKeptOffIt()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly | Fixture::Switch);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    // The Workbench, live in Operate (its preview parent).
+    const FunctionParent workbench = FunctionParent::preview(0x7);
+    Scene *s = startScene({ { Stage, 90 }, { Flame, 255 } }, workbench.type(), workbench.id());
+    tickFrame(Flame);
+    QCOMPARE(sent(Stage), 90);
+    QCOMPARE(sent(Flame), 0);
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(Flame))), 0);  // not even stored
+
+    // The same scene from a GO (a cue list's own parent): it is the show now.
+    const FunctionParent go(FunctionParent::AutoVCWidget, 2);
+    s->start(m_doc->masterTimer(), go);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);
+    // The GO lets go, the preview plays on: held again.
+    s->stop(go);
+    QVERIFY(s->stopped() == false);
+    tickFrame(Flame);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    QCOMPARE(sent(Stage), 90);
+    stopFunctions();
+}
+
+void OutputRules_Test::operatePreviewChildIsKeptOffIt()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly | Fixture::Switch);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    Scene *step = new Scene(m_doc);
+    step->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    step->setValue(m_doc->fixtureForAddress(Stage), 0, 70);
+    m_doc->addFunction(step);
+    Chaser *c = new Chaser(m_doc);
+    ChaserStep cs(step->id());
+    cs.hold = 100000;
+    c->addStep(cs);
+    m_doc->addFunction(c);
+    c->start(m_doc->masterTimer(), FunctionParent::preview(0x5));
+    for (int i = 0; i < 4; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Stage), 70);
+    QCOMPARE(sent(Flame), 0);
+    stopFunctions();
+}
+
+void OutputRules_Test::highlightFocusAndTestsDontDriveIt()
+{
+    Fixture *spot = addSpot("Laser-ish Spot", 20);
+    QVERIFY(spot != nullptr);
+    spot->setOutputRules(Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+
+    HighlightEffect highlight(m_doc);
+    highlight.setFixtures({ spot->id() });
+    frame(20);
+    QCOMPARE(sent(20), 0);
+    highlight.setFixtures({});
+
+    FocusSession *f = m_doc->programmer()->focusSession();
+    f->setFlashEnabled(false);
+    FocusSession::Options o;
+    o.fixtures = { spot->id() };
+    o.level = 1.0f;
+    o.allowOperate = true;
+    QString why;
+    QVERIFY2(f->start(o, &why), qPrintable(why));
+    tickFrame(20);
+    QCOMPARE(sent(20), 0);
+    f->stop();
+
+    // A fader its owner marks (Locate, a fixture test, the programmer)...
+    QSharedPointer<GenericFader> test = m_uni->requestFader(Universe::Override);
+    test->setHoldsShowOnly(true);
+    {
+        GenericFader::ChannelRef fc = test->getChannelFader(m_doc, m_uni, spot->id(), 0);
+        fc->setStart(255); fc->setCurrent(255); fc->setTarget(255);
+    }
+    frame(20);
+    QCOMPARE(sent(20), 0);
+    m_uni->dismissFader(test);
+    // ...and one it doesn't (the Simple Desk: a hand on the fader) drives it.
+    put(20, 180);
+    frame(20);
+    QCOMPARE(sent(20), 180);
+}
+
+void OutputRules_Test::blindHoldsIt()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly | Fixture::Switch | Fixture::ExemptBlackout);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    put(House, 200);
+    put(Flame, 255);
+    frame(Flame);
+    QCOMPARE(sent(Flame), 255);
+    m_doc->inputOutputMap()->setOutputInhibited(true);
+    QVERIFY(m_uni->showOnlyHeld());
+    frame(Flame);
+    QCOMPARE(sent(House), 200);     // Blackout-exempt: still live through Blind
+    QCOMPARE(sent(Flame), 0);       // Show only: Blind holds it
+    QCOMPARE(m_doc->outputRuleKeeper()->showOnlyHeldBy(), OutputRuleKeeper::HeldByBlind);
+    m_doc->inputOutputMap()->setOutputInhibited(false);
+    frame(Flame);
+    QCOMPARE(sent(Flame), 255);
+}
+
+void OutputRules_Test::goingLiveStartsFromSafe()
+{
+    Fixture *spot = addSpot("Curtain-ish", 20);
+    spot->setOutputRules(Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    // Design: something leaves the colour (LTP) channel at 200, stored.
+    put(21, 200);
+    frame(21);
+    QCOMPARE(sent(21), 0);
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(21))), 200);
+    m_uni->dismissFader(m_fader);
+    m_fader = m_uni->requestFader();
+    frame(21);
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(21))), 200);   // LTP: kept
+    // Into Operate with nothing playing it: safe, not the leftover.
+    m_doc->setMode(Doc::Operate);
+    frame(21);
+    QCOMPARE(sent(21), 0);
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(21))), 0);
+}
+
+void OutputRules_Test::safeValuePerKind()
+{
+    Fixture *spot = addSpot("Spot", 20);
+    // A dimmer is dark; a colour channel at its default (0 here).
+    QCOMPARE(int(OutputRuleKeeper::safeValue(spot, 0)), 0);
+    QCOMPARE(int(OutputRuleKeeper::safeValue(spot, 1)), 0);
+    QCOMPARE(int(OutputRuleKeeper::safeValue(nullptr, 0)), 0);
+    // A plain dimmer (no definition) is all output: 0.
+    Fixture *flame = addDimmer("Flame", Flame, Fixture::ShowOnly);
+    QCOMPARE(int(OutputRuleKeeper::safeValue(flame, 0)), 0);
+    m_doc->outputRuleKeeper()->rebuild();
+    QCOMPARE(int(uchar(m_doc->outputRuleKeeper()->safeValuesFor(0).at(Flame))), 0);
+}
+
+void OutputRules_Test::heldTextSaysWhy()
+{
+    OutputRuleKeeper *k = m_doc->outputRuleKeeper();
+    QVERIFY(k->showOnlyHeldText().isEmpty());       // none: nothing to say
+    addDimmer("Flame L", Flame, Fixture::ShowOnly);
+    k->rebuild();
+    QSignalSpy spy(k, &OutputRuleKeeper::showOnlyChanged);
+    QCOMPARE(k->showOnlyHeldText(), QString("Flame L held: Design"));
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(spy.count() >= 1);
+    QVERIFY(k->showOnlyHeldText().isEmpty());
+    m_doc->inputOutputMap()->setOutputInhibited(true);
+    QCOMPARE(k->showOnlyHeldText(), QString("Flame L held: Blind"));
+    m_doc->inputOutputMap()->setOutputInhibited(false);
+    addDimmer("Flame R", Flame + 1, Fixture::ShowOnly);
+    k->rebuild();
+    m_doc->setMode(Doc::Design);
+    QCOMPARE(k->showOnlyHeldText(), QString("2 Show-only fixtures held: Design"));
+}
+
+void OutputRules_Test::showWithoutItIsUnchanged()
+{
+    QCOMPARE(m_uni->showOnlyChannelCount(), 0);
+    QVERIFY(m_uni->showOnlyHeld() == false);
+    QVERIFY(m_doc->outputRuleKeeper()->showOnlyFixtures().isEmpty());
+    put(Stage, 150);
+    frame(Stage);
+    QCOMPARE(sent(Stage), 150);
+    // A preview's scene in Operate writes as it always did.
+    addDimmer("Plain", Flame, 0);
+    m_doc->outputRuleKeeper()->rebuild();
+    QCOMPARE(m_uni->showOnlyChannelCount(), 0);
+    m_doc->setMode(Doc::Operate);
+    const FunctionParent workbench = FunctionParent::preview(0x7);
+    startScene({ { Flame, 77 } }, workbench.type(), workbench.id());
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 77);
+    stopFunctions();
 }
 
 QTEST_GUILESS_MAIN(OutputRules_Test)

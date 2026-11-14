@@ -35,7 +35,8 @@ class Doc;
 
 /**
  * Output rules for one or more fixtures (Fixture::OutputRules): ignore
- * Blackout, ignore the Grand Master, switch (a relay), on when not in use.
+ * Blackout, ignore the Grand Master, switch (a relay), on when not in use,
+ * show only.
  * A rule some of the fixtures have and some do not shows partly checked and
  * is left as each has it unless it is clicked to on or off.
  */
