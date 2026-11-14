@@ -38,6 +38,7 @@
 #include <QIcon>
 #include <algorithm>
 
+#include "treekeepview.h"
 #include "programmingoutline.h"
 #include "contextmenus.h"
 #include "programmingmanager.h"
@@ -1058,6 +1059,7 @@ void ProgrammingOutline::setFilterText(const QString &text)
 {
     m_filter = text.trimmed();
     applyFilter();
+    TreeKeepView::reveal(this);     // stay on what is selected
 }
 
 void ProgrammingOutline::applyFilter()

@@ -30,6 +30,7 @@
 
 #include <QMap>
 #include <QFont>
+#include "treekeepview.h"
 #include "fixturetreewidget.h"
 #include "monitor.h"
 #include "monitor/fixturevisualtraits.h"
@@ -835,6 +836,7 @@ int FixtureTreeWidget::setTextFilter(const QString &text)
     int fixtures = 0;
     for (int i = 0; i < topLevelItemCount(); ++i)
         filterRow(topLevelItem(i), needle, &fixtures);
+    TreeKeepView::reveal(this);     // stay on what is selected
     return fixtures;
 }
 

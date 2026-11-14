@@ -174,7 +174,7 @@ add_library(${module_name}
     rgbmatrixeditor.cpp rgbmatrixeditor.h rgbmatrixeditor.ui
     sceneeditor.cpp sceneeditor.h sceneeditor.ui
     scenegrouplooks.cpp scenegrouplooks.h
-    fixturegroupsource.cpp fixturegroupsource.h
+    fixturegroupsource.cpp fixturegroupsource.h treekeepview.h
     capabilitybar.cpp capabilitybar.h
     gradientdirectionwidget.cpp gradientdirectionwidget.h
     bundleeditor.cpp bundleeditor.h
