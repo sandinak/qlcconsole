@@ -110,6 +110,29 @@ public:
     {
         return type() == AutoVCWidget && (id() & 0xFFFFFFF0) == 0xFFFFFF50;
     }
+
+    /** The parent of an editor's Test play (the EFX, RGB Matrix, Chaser,
+     *  Collection and Script editors): it runs as it would in the show --
+     *  a Script under it runs -- but it is not the show, so a Show-only
+     *  fixture (Fixture::ShowOnly) is held. The AutoVCWidget ids
+     *  0xFFFFFF70..0xFFFFFF7F are kept for these; @a tag tells them apart. */
+    static FunctionParent editorTest(quint32 tag)
+    {
+        return FunctionParent(AutoVCWidget, 0xFFFFFF70 | (tag & 0xF));
+    }
+
+    /** True for a parent made by editorTest() */
+    bool isEditorTest() const
+    {
+        return type() == AutoVCWidget && (id() & 0xFFFFFFF0) == 0xFFFFFF70;
+    }
+
+    /** What it starts is not the show (a preview or an editor's Test):
+     *  it never drives a Show-only fixture */
+    bool isNotTheShow() const
+    {
+        return isPreview() || isEditorTest();
+    }
 };
 
 /** @} */

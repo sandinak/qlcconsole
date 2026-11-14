@@ -21,6 +21,7 @@
 #define GENERICDMXSOURCE_H
 
 #include <QMutex>
+#include <atomic>
 #include <QPair>
 #include <QMap>
 
@@ -61,6 +62,11 @@ public:
     /** Check, whether output is enabled */
     bool isOutputEnabled() const;
 
+    /** Show only (Fixture::ShowOnly): an editor's own output (the Scene
+     *  editor, the LED layout editor) is not the show and never drives a
+     *  Show-only fixture (GenericFader::setHoldsShowOnly()) */
+    void setHoldsShowOnly(bool hold) { m_holdsShowOnly = hold; }
+
     /** Returns how many channels this source is handling */
     quint32 channelsCount() const;
 
@@ -77,6 +83,7 @@ private:
     bool m_outputEnabled;
     bool m_clearRequest;
     bool m_changed;
+    std::atomic<bool> m_holdsShowOnly { false };
     /** Map used to lookup a GenericFader instance for a Universe ID */
     QMap<quint32, QSharedPointer<GenericFader> > m_fadersMap;
 };

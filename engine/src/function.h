@@ -29,6 +29,7 @@
 #include <QString>
 #include <QMutex>
 #include <QList>
+#include <QVector>
 #include <QIcon>
 #include <QMap>
 
@@ -848,13 +849,19 @@ public:
      *  and chasers that started it: it plays to be looked at only. */
     bool startedOnlyByPreview() const;
 
-    /** Show only (Fixture::ShowOnly): startedOnlyByPreview(), kept up to
-     *  date by refreshPreviewGate() and shared with every fader made while
-     *  this function runs (GenericFader::holdsShowOnly()), so a preview's
-     *  scene is kept off a laser while the same scene from a GO drives it */
+    /** Show only (Fixture::ShowOnly): true while what runs this function
+     *  is not the show -- every source a preview or an editor's Test
+     *  (FunctionParent::isNotTheShow()), or a function whose own gate is
+     *  true. Shared with every fader made while it runs
+     *  (GenericFader::holdsShowOnly()), so a preview's scene is kept off a
+     *  laser while the same scene from a GO drives it. Latched: once its
+     *  sources are gone (stopping, fading out) it stays as it was, so a
+     *  preview's fade-out never reaches a Show-only fixture. */
     const std::shared_ptr<std::atomic<bool> > &previewGate() const { return m_previewGate; }
-    /** Bring previewGate() up to date if any function's sources changed
-     *  since this one last looked (one atomic load otherwise). The
+    /** Bring previewGate() up to date if any function's sources (or any
+     *  gate) changed since this one last looked; one atomic load
+     *  otherwise. No Doc lookup: what each source is was settled when it
+     *  was added (start()), a parent function's by its shared gate. The
      *  MasterTimer thread, before each preRun()/write()/postRun(). */
     void refreshPreviewGate();
     /** Whether any fixture is Show only (OutputRuleKeeper): with none,
@@ -885,6 +892,18 @@ private:
 
     QList<FunctionParent> m_sources;
     mutable QMutex m_sourcesMutex;
+
+    /** Show only, one per entry of m_sources (under m_sourcesMutex): the
+     *  source is not the show (a preview, an editor's Test), or it is the
+     *  function that started this one, whose own gate it shares */
+    struct SourceGate
+    {
+        bool notTheShow = false;
+        std::shared_ptr<std::atomic<bool> > parentGate;
+    };
+    QVector<SourceGate> m_sourceGates;
+    /** What a source just added is (start()) */
+    SourceGate sourceGate(const FunctionParent &source) const;
 
     /** previewGate(); m_previewGateGen is the sources generation it was
      *  worked out at (MasterTimer thread only) */

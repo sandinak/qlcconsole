@@ -47,21 +47,32 @@ GenericFader::GenericFader(QObject *parent)
    static thread_local, not a class member: an exported class's
    thread_local member is refused by MSVC and misbehaves under MinGW. */
 static thread_local const GenericFader::PreviewGate *t_creationGate = nullptr;
+static thread_local quint32 t_creationFunction = 0xFFFFFFFF;
 
 const GenericFader::PreviewGate *GenericFader::creationGate()
 {
     return t_creationGate;
 }
 
-GenericFader::CreationScope::CreationScope(const PreviewGate *gate)
-    : m_previous(t_creationGate)
+GenericFader::PreviewGate GenericFader::creationGateOf(quint32 functionId)
+{
+    if (t_creationGate == nullptr || t_creationFunction != functionId)
+        return PreviewGate();
+    return *t_creationGate;
+}
+
+GenericFader::CreationScope::CreationScope(const PreviewGate *gate, quint32 functionId)
+    : m_previousGate(t_creationGate)
+    , m_previousFunction(t_creationFunction)
 {
     t_creationGate = gate;
+    t_creationFunction = functionId;
 }
 
 GenericFader::CreationScope::~CreationScope()
 {
-    t_creationGate = m_previous;
+    t_creationGate = m_previousGate;
+    t_creationFunction = m_previousFunction;
 }
 
 GenericFader::~GenericFader()

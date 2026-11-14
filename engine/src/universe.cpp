@@ -558,8 +558,13 @@ void Universe::processFaders()
     else
         m_overrideWritten.fill(char(0));
 
-    /* Show only, going live: start the channels from their safe value
-       (setShowOnlyLive()). Before the faders, which write them again. */
+    /* Show only: live or not is read ONCE, for the whole frame -- a mode
+       switch landing between the faders and the send must not send one
+       frame of a preview unheld. */
+    const bool showOnlyLiveNow = showOnlyLive();
+    /* Going live (or a channel made Show only while live): start the
+       channels from their safe value. Before the faders, which write them
+       again. */
     if (m_showOnlyReset.load(std::memory_order_relaxed)
         && m_showOnlyReset.exchange(false, std::memory_order_relaxed))
     {
@@ -567,11 +572,12 @@ void Universe::processFaders()
         for (int c : std::as_const(m_showOnlyChannels))
         {
             (*m_preGMValues)[c] = m_showOnlySafe.at(c);
+            (*m_blackoutValues)[c] = m_showOnlySafe.at(c);
             updatePostGMValue(c);
         }
     }
     // Live with Show-only channels: the faders that hold them are kept off.
-    const bool keepShowOnly = showOnlyChannelCount() > 0 && showOnlyLive();
+    const bool keepShowOnly = showOnlyChannelCount() > 0 && showOnlyLiveNow;
 
     {
         QMutexLocker fadersLocker(&m_fadersMutex);
@@ -621,24 +627,9 @@ void Universe::processFaders()
         dataChanged = true;
     }
     /* Show only, held (Design, Blind): what goes out has the channels at
-       their safe value; what the rig views get (universeWritten) keeps what
-       they would be. In place and back: no copy of the frame. */
-    const bool showOnlyHold = showOnlyHeld();
-    if (showOnlyHold != m_showOnlyWasHeld)
-    {
-        m_showOnlyWasHeld = showOnlyHold;
-        dataChanged = true;
-    }
-    if (showOnlyHold)
-    {
-        holdShowOnly(postGM);
-        dumpOutput(postGM, dataChanged);
-        restoreShowOnly(postGM);
-    }
-    else
-    {
-        dumpOutput(postGM, dataChanged);
-    }
+       their safe value (dumpOutputFrame()); what the rig views get
+       (universeWritten) keeps what they would be. */
+    dumpOutputFrame(postGM, dataChanged, showOnlyLiveNow);
     const qint64 ticked = m_tickedNs.load(std::memory_order_relaxed);
     if (ticked != 0)
     {
@@ -719,6 +710,11 @@ void Universe::setOutputRules(const QByteArray &bits)
             continue;
         // One byte write: the role bits (HTP/LTP/Intensity) never vanish.
         (*m_channelsMask)[c] = char((now & ~OutputRuleBits) | want);
+        // Made Show only while live: what is stored there (a preview's
+        // last LTP value) must not be what goes out; the next frame starts
+        // it from safe, as going live does.
+        if ((want & ShowOnlyOutput) && (now & ShowOnlyOutput) == 0 && showOnlyLive())
+            m_showOnlyReset.store(true, std::memory_order_relaxed);
         if ((now & OnAtOpenOutput) && (want & OnAtOpenOutput) == 0)
             m_onAtOpenRestore << c;
         if (want & (GMExempt | SwitchOutput | OnAtOpenOutput | ShowOnlyOutput))
@@ -736,6 +732,7 @@ void Universe::setOutputRules(const QByteArray &bits)
     m_onAtOpenChannels = onAtOpen;
     m_showOnlyChannels = showOnly;
     m_showOnlyKept.resize(showOnly.size());
+    m_showOnlySentDirty = true;     // the next frame is a changed one
     if (m_showOnlySafe.size() != UNIVERSE_SIZE)
         m_showOnlySafe = QByteArray(UNIVERSE_SIZE, char(0));
     m_showOnlyCount.store(int(showOnly.size()), std::memory_order_relaxed);
@@ -746,6 +743,8 @@ void Universe::setShowOnlySafeValues(const QByteArray &safe)
     QMutexLocker locker(&m_outputRulesMutex);
     QByteArray full(UNIVERSE_SIZE, char(0));
     memcpy(full.data(), safe.constData(), size_t(qMin(int(safe.size()), UNIVERSE_SIZE)));
+    if (full != m_showOnlySafe)
+        m_showOnlySentDirty = true;
     m_showOnlySafe = full;
 }
 
@@ -794,31 +793,42 @@ void Universe::writeFader(GenericFader *fader, bool keepShowOnly)
     }
 }
 
-void Universe::holdShowOnly(QByteArray &out)
+void Universe::holdShowOnly(QByteArray &frame, bool held, bool blackout)
 {
     QMutexLocker locker(&m_outputRulesMutex);
-    const int n = int(m_showOnlyChannels.size());
-    for (int i = 0; i < n; i++)
+    for (int c : std::as_const(m_showOnlyChannels))
     {
-        const int c = m_showOnlyChannels.at(i);
-        if (c >= out.size())
+        if (c >= frame.size())
             break;              // in order: the rest are past the frame too
-        m_showOnlyKept[i] = uchar(out.at(c));
-        out[c] = m_showOnlySafe.at(c);
+        if (held || (blackout && (uchar(m_channelsMask->at(c)) & BlackoutExempt) == 0))
+            // Through its modifier, as any value it sends: on an inverted
+            // channel a raw 0 would be full on.
+            frame[c] = char(applyModifiers(c, uchar(m_showOnlySafe.at(c))));
     }
 }
 
-void Universe::restoreShowOnly(QByteArray &out)
+bool Universe::showOnlySentChanged(const QByteArray &frame)
 {
     QMutexLocker locker(&m_outputRulesMutex);
+    bool changed = m_showOnlySentDirty;
+    m_showOnlySentDirty = false;
     const int n = int(m_showOnlyChannels.size());
+    if (m_showOnlyLastSent.size() != n)
+    {
+        m_showOnlyLastSent.resize(n);   // only when the rules change
+        changed = true;
+    }
     for (int i = 0; i < n; i++)
     {
         const int c = m_showOnlyChannels.at(i);
-        if (c >= out.size())
-            break;
-        out[c] = char(m_showOnlyKept.at(i));
+        const uchar v = c < frame.size() ? uchar(frame.at(c)) : uchar(0);
+        if (m_showOnlyLastSent.at(i) != v)
+        {
+            m_showOnlyLastSent[i] = v;
+            changed = true;
+        }
     }
+    return changed;
 }
 
 void Universe::setOnAtOpenArmed(bool armed)
@@ -1073,6 +1083,7 @@ void Universe::reset()
         m_postGMValues->fill(0);
 
     m_modifiers.fill(NULL, UNIVERSE_SIZE);
+    m_modifiedZeroValues->fill(0);      // no modifier: every zero is 0
     m_passthrough = false; // not releasing m_passthroughValues, see comment in setPassthrough
 }
 
@@ -1490,10 +1501,24 @@ OutputPatch *Universe::feedbackPatch() const
 
 void Universe::dumpOutput(const QByteArray &data, bool dataChanged)
 {
+    /* Blackout, leaving Blind and a maintenance send call here between two
+       frames: one frame at a time, and Show only held in theirs too. */
+    QMutexLocker frameLocker(&m_frameMutex);
+    dumpOutputFrame(data, dataChanged, showOnlyLive());
+}
+
+void Universe::dumpOutputFrame(const QByteArray &data, bool dataChanged, bool live)
+{
     /* A universe the venue's house desk keeps (docs/design/VENUES.md section 5): nothing
        of ours goes out on it at all -- not Blind's, not Blackout's. */
     if (m_notOursWhole.load(std::memory_order_relaxed))
         return;
+
+    /* Show only: held outside a real run (Design) and in Blind; in a
+       Blackout frame too, which is built from raw stored values. */
+    const bool showOnly = showOnlyChannelCount() > 0;
+    const bool inhibit = m_inhibitOutput.load(std::memory_order_relaxed);
+    const bool showOnlyHold = showOnly && (live == false || inhibit);
 
     // Fork Blind: hold the physical rig dark while the preview keeps running.
     // processFaders() still emits universeWritten() (the 2D monitor source),
@@ -1504,11 +1529,17 @@ void Universe::dumpOutput(const QByteArray &data, bool dataChanged)
     // blindHoldsExempt(), through Blind -- which then sends what Blackout
     // would rather than nothing, so those circuits are not left to a node's
     // hold-last-look. A universe with none behaves exactly as before.
-    if (m_inhibitOutput.load(std::memory_order_relaxed))
+    if (inhibit)
     {
         if (blindHoldsExempt() == false || hasBlackoutExempt(data.size()) == false)
             return;
         QByteArray frame = blackoutFrame(data);
+        if (showOnly)
+        {
+            holdShowOnly(frame, true, true);
+            if (showOnlySentChanged(frame))
+                dataChanged = true;
+        }
         {
             QMutexLocker locker(&m_notOursMutex);
             for (const QPair<int, int> &r : m_notOursRanges)
@@ -1541,7 +1572,38 @@ void Universe::dumpOutput(const QByteArray &data, bool dataChanged)
                     masked[c] = 0;
         }
     }
-    const QByteArray &frame = masked.isNull() ? data : masked;
+    const QByteArray *base = masked.isNull() ? &data : &masked;
+    if (showOnlyHold)
+    {
+        QByteArray *held = &masked;
+        if (masked.isNull())
+        {
+            /* Copied into a kept buffer: no allocation per frame (unless a
+               plugin still holds the last one). */
+            m_showOnlyFrame.resize(data.size());
+            memcpy(m_showOnlyFrame.data(), data.constData(), size_t(data.size()));
+            held = &m_showOnlyFrame;
+        }
+        holdShowOnly(*held, true, false);
+        base = held;
+    }
+    const QByteArray &frame = *base;
+
+    /* What a Blackout patch sends, made once for every patch in Blackout,
+       and whether what goes out on the Show-only channels changed since
+       the last frame sent (compared once: it keeps what it saw). */
+    QByteArray blackout;
+    bool anyBlackout = false;
+    foreach (OutputPatch *op, m_outputPatchList)
+        anyBlackout = anyBlackout || op->blackout();
+    if (anyBlackout)
+    {
+        blackout = blackoutFrame(frame);
+        if (showOnly)
+            holdShowOnly(blackout, showOnlyHold, true);
+    }
+    if (showOnly && showOnlySentChanged(anyBlackout ? blackout : frame))
+        dataChanged = true;
 
     foreach (OutputPatch *op, m_outputPatchList)
     {
@@ -1549,7 +1611,7 @@ void Universe::dumpOutput(const QByteArray &data, bool dataChanged)
             op->setPluginParameter(PLUGIN_UNIVERSECHANNELS, m_totalChannels);
 
         if (op->blackout())
-            op->dump(m_id, blackoutFrame(frame), dataChanged);
+            op->dump(m_id, blackout, dataChanged);
         else
             op->dump(m_id, frame, dataChanged);
     }
@@ -1738,6 +1800,11 @@ void Universe::setChannelModifier(ushort channel, ChannelModifier *modifier)
         return;
 
     m_modifiers[channel] = modifier;
+    // Taken off: the channel's zero is 0 again. Kept, every frame's
+    // intensity reset sent the old modifier's zero (an inverted channel's
+    // 255) on a channel nothing set.
+    if (modifier == NULL)
+        (*m_modifiedZeroValues)[channel] = 0;
 
     if (modifier != NULL)
     {

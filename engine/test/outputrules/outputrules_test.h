@@ -107,6 +107,38 @@ private slots:
     /** A show with none: no channel held, the frames as before */
     void showWithoutItIsUnchanged();
 
+    /* Show only, safety review (0.4.8) */
+    /** 1: Blackout and Blind (with an exempt house light) never send a
+     *  preview's LTP value on it: a Blackout frame is raw stored values */
+    void blackoutAndBlindNeverSendAPreviewsValue();
+    /** 2: every send holds it -- Blackout off, leaving Blind -- not just
+     *  the frame; and the next frame after a change is a changed one */
+    void everySendHoldsIt();
+    /** 3: a preview stopping in Operate does not fade its level onto it */
+    void aPreviewsFadeOutNeverReachesIt();
+    /** 4: live is read once a frame: a switch to Operate mid-frame does
+     *  not send that frame's preview */
+    void aSwitchMidFrameSendsNoPreview();
+    /** 5: an editor's Test and an editor's own DMX source don't drive it
+     *  in Operate; a GO on the same function does */
+    void editorTestsAndEditorSourcesDontDriveIt();
+    /** 6: made Show only while it is on: a plugin that sends only
+     *  changes gets the held frame at once */
+    void markingItWhileOnIsSentAtOnce();
+    /** 7: its safe value goes out through the channel's modifier */
+    void safeValueGoesThroughTheModifier();
+    /** 8: a function started by another follows that one's gate (no Doc
+     *  lookup on the timer thread); the parent taken by a GO takes them */
+    void childrenFollowTheirParentsGate();
+    /** 9: Show only wins over On when not in use; made Show only while
+     *  live, a stored preview value is not sent */
+    void showOnlyWinsOverOnAtOpen();
+    void markingItLiveDropsAStoredValue();
+    /** What a frame costs with none, with 64 held (Design) and live with a
+     *  preview's fader on them: printed, not asserted (hotpath_test is the
+     *  guard) */
+    void showOnlyFrameCost();
+
 private:
     /** One processFaders() frame; the output value at @p address */
     int frame(int address);

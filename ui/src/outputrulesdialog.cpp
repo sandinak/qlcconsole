@@ -78,7 +78,8 @@ OutputRulesDialog::OutputRulesDialog(Doc *doc, const QList<quint32> &fixtureIds,
              "to zero, wins.").arg(onWhen), "outputRuleOnAtOpen" },
         { Fixture::ShowOnly, tr("Show only"),
           tr("Only a GO in Operate drives it. In Design, Blind, the Workbench, Locate, Solo, focus "
-             "and previews it stays safe -- off, closed -- and the plot draws what it would do."),
+             "and previews it stays safe -- off, closed -- and the plot draws what it would do. "
+             "It wins over On when not in use."),
           "outputRuleShowOnly" },
     };
 

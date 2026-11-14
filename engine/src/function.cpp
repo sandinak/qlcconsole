@@ -25,8 +25,10 @@
 #include <QString>
 #include <QDebug>
 #include <math.h>
+#include <utility>
 
 #include "qlcmacros.h"
+#include "genericfader.h"
 #include "speedmasters.h"
 #include "qlcfile.h"
 
@@ -1192,6 +1194,7 @@ void Function::start(MasterTimer* timer, FunctionParent source, quint32 startTim
         if (m_sources.contains(source))
             return;
         m_sources.append(source);
+        m_sourceGates.append(sourceGate(source));
         again = m_sources.size() > 1;
     }
     sourcesChanged();
@@ -1234,14 +1237,48 @@ void Function::setShowOnlyInUse(bool inUse)
         sourcesChanged();
 }
 
+Function::SourceGate Function::sourceGate(const FunctionParent &source) const
+{
+    SourceGate g;
+    g.notTheShow = source.isNotTheShow();
+    /* Started by another function: that one is writing on this thread now
+       (a chaser's step, a collection's member, a show's track), in the
+       MasterTimer's creation scope -- its gate, shared, with no Doc lookup
+       on the timer thread. Started from anywhere else it is a real source. */
+    if (g.notTheShow == false && source.type() == FunctionParent::Function && source.id() != id())
+        g.parentGate = GenericFader::creationGateOf(source.id());
+    return g;
+}
+
 void Function::refreshPreviewGate()
 {
     const quint32 gen = s_sourcesGeneration.load(std::memory_order_relaxed);
     if (gen == m_previewGateGen)
         return;
     m_previewGateGen = gen;
-    m_previewGate->store(s_showOnlyInUse.load(std::memory_order_relaxed) && startedOnlyByPreview(),
-                         std::memory_order_relaxed);
+    if (s_showOnlyInUse.load(std::memory_order_relaxed) == false)
+    {
+        m_previewGate->store(false, std::memory_order_relaxed);
+        return;
+    }
+    bool any = false, notTheShow = true;
+    {
+        QMutexLocker sourcesLocker(&m_sourcesMutex);
+        for (const SourceGate &g : std::as_const(m_sourceGates))
+        {
+            any = true;
+            if (g.notTheShow == false
+                && (!g.parentGate || g.parentGate->load(std::memory_order_relaxed) == false))
+                notTheShow = false;
+        }
+    }
+    /* Latched: with no source left it is stopping, and what fades out
+       fades as what it was -- a preview's level is never handed to the
+       show on its way out. */
+    if (any == false)
+        return;
+    if (m_previewGate->exchange(notTheShow, std::memory_order_relaxed) != notTheShow)
+        sourcesChanged();   // the functions it started follow its gate: look again
 }
 
 bool Function::startedOnlyByPreview() const
@@ -1297,10 +1334,18 @@ void Function::stop(FunctionParent source, bool preserveAttributes)
         (source.type() == FunctionParent::ManualVCWidget))
     {
         m_sources.clear();
+        m_sourceGates.clear();
     }
     else
     {
-        m_sources.removeAll(source);
+        for (int i = int(m_sources.size()) - 1; i >= 0; --i)
+        {
+            if (m_sources.at(i) == source)
+            {
+                m_sources.removeAt(i);
+                m_sourceGates.removeAt(i);
+            }
+        }
     }
     sourcesChanged();
 

@@ -20,6 +20,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QBuffer>
+#include <QElapsedTimer>
 #include <QtTest>
 
 #include "../common/stdprelude.h"
@@ -36,6 +37,9 @@
 #include "chaserstep.h"
 #include "chaser.h"
 #include "scene.h"
+#include "collection.h"
+#include "genericdmxsource.h"
+#include "channelmodifier.h"
 #include "outputrulekeeper.h"
 #include "inputoutputmap.h"
 #include "ioplugincache.h"
@@ -102,6 +106,9 @@ void OutputRules_Test::init()
 void OutputRules_Test::cleanup()
 {
     stopFunctions();
+    m_stub->m_dropUnchanged = false;
+    for (int a = 0; a < 32; a++)
+        m_uni->setChannelModifier(ushort(a), nullptr);
     m_doc->programmer()->focusSession()->stop();
     m_doc->lastLook()->clear();
     m_uni->dismissFader(m_fader);
@@ -885,10 +892,19 @@ Scene *OutputRules_Test::startScene(const QList<QPair<int, int> > &values, quint
 
 void OutputRules_Test::stopFunctions()
 {
-    foreach (Function *f, m_doc->functions())
-        f->stop(FunctionParent::master());
-    m_doc->masterTimer()->timerTick();
-    m_doc->masterTimer()->timerTick();
+    // Until nothing runs: a collection lets its members go a tick later.
+    for (int i = 0; i < 20; i++)
+    {
+        foreach (Function *f, m_doc->functions())
+            if (f->isRunning())
+                f->stop(FunctionParent::master());
+        m_doc->masterTimer()->timerTick();
+        if (m_doc->masterTimer()->runningFunctions() == 0)
+            break;
+    }
+    // And their faders gone (a fade out, a dismissed fader's last frame).
+    for (int i = 0; i < 4; i++)
+        m_uni->processFaders();
 }
 
 int OutputRules_Test::sent(int address) const
@@ -1145,6 +1161,280 @@ void OutputRules_Test::showWithoutItIsUnchanged()
     tickFrame(Flame);
     QCOMPARE(sent(Flame), 77);
     stopFunctions();
+}
+
+/****************************************************************************
+ * Show only: the safety review's items
+ ****************************************************************************/
+
+void OutputRules_Test::blackoutAndBlindNeverSendAPreviewsValue()
+{
+    Fixture *spot = addSpot("Laser-ish", 20);
+    spot->setOutputRules(Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    // A preview (the Workbench) sets its LTP colour channel.
+    QSharedPointer<GenericFader> preview = m_uni->requestFader(Universe::Override);
+    preview->setHoldsShowOnly(true);
+    {
+        GenericFader::ChannelRef fc = preview->getChannelFader(m_doc, m_uni, spot->id(), 1);
+        fc->setStart(200); fc->setCurrent(200); fc->setTarget(200);
+    }
+    frame(21);
+    QCOMPARE(sent(21), 0);
+    m_doc->inputOutputMap()->setBlackout(true);
+    frame(21);
+    QCOMPARE(sent(21), 0);
+    m_doc->inputOutputMap()->setBlackout(false);
+    // Blind with a house light exempt: Blind sends Blackout's frame.
+    put(House, 200);
+    m_doc->inputOutputMap()->setOutputInhibited(true);
+    frame(21);
+    QCOMPARE(sent(House), 200);
+    QCOMPARE(sent(21), 0);
+    m_doc->inputOutputMap()->setOutputInhibited(false);
+    m_uni->dismissFader(preview);
+}
+
+void OutputRules_Test::everySendHoldsIt()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    put(Flame, 255);                     // Design: stored, held
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    m_stub->m_universe.fill(char(7));
+    m_doc->inputOutputMap()->setBlackout(true);
+    QCOMPARE(sent(Flame), 0);
+    m_doc->inputOutputMap()->setBlackout(false);   // sends the stored frame
+    QCOMPARE(sent(Flame), 0);
+    m_doc->inputOutputMap()->setOutputInhibited(true);
+    m_doc->inputOutputMap()->setOutputInhibited(false);   // leaving Blind sends too
+    QCOMPARE(sent(Flame), 0);
+    // A plugin that sends only changes: the next frame is not a leak
+    // repeated, and going live is a changed frame.
+    m_stub->m_dropUnchanged = true;
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    m_doc->setMode(Doc::Operate);
+    frame(Flame);
+    QVERIFY(m_stub->m_lastDataChanged);
+    QCOMPARE(sent(Flame), 255);
+    m_doc->setMode(Doc::Design);
+    frame(Flame);
+    QVERIFY(m_stub->m_lastDataChanged);
+    QCOMPARE(sent(Flame), 0);
+}
+
+void OutputRules_Test::aPreviewsFadeOutNeverReachesIt()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    const FunctionParent workbench = FunctionParent::preview(0x7);
+    Scene *s = startScene({ { Stage, 200 }, { Flame, 255 } }, workbench.type(), workbench.id());
+    s->setFadeOutSpeed(300);        // over by the end: nothing left for the next test
+    tickFrame(Flame);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    QCOMPARE(sent(Stage), 200);
+    s->stop(workbench);
+    int stageMax = 0;
+    for (int i = 0; i < 30; i++)
+    {
+        tickFrame(Flame);
+        QCOMPARE(sent(Flame), 0);
+        stageMax = qMax(stageMax, sent(Stage));
+    }
+    QVERIFY(stageMax > 0);      // the rest did fade out
+    QCOMPARE(sent(Stage), 0);
+}
+
+void OutputRules_Test::aSwitchMidFrameSendsNoPreview()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    QCOMPARE(m_doc->mode(), Doc::Design);
+    // A preview's fader; Operate arrives while the universe writes it.
+    QSharedPointer<GenericFader> preview = m_uni->requestFader(Universe::Override);
+    preview->setHoldsShowOnly(true);
+    {
+        GenericFader::ChannelRef fc = preview->getChannelFader(m_doc, m_uni, Fixture::invalidId(), Flame);
+        fc->setStart(255); fc->setCurrent(255); fc->setTarget(255);
+    }
+    preview->setMonitoring(true);
+    Universe *uni = m_uni;
+    QMetaObject::Connection c = connect(preview.data(), &GenericFader::preWriteData, this,
+                                        [uni](quint32, const QByteArray &) { uni->setShowOnlyLive(true); },
+                                        Qt::DirectConnection);
+    frame(Flame);
+    disconnect(c);
+    QCOMPARE(sent(Flame), 0);
+    // The next frame is live: the preview is kept off it there.
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    m_uni->setShowOnlyLive(false);
+    m_uni->dismissFader(preview);
+}
+
+void OutputRules_Test::editorTestsAndEditorSourcesDontDriveIt()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    const FunctionParent test = FunctionParent::editorTest(0x1);
+    QVERIFY(test.isNotTheShow() && test.isPreview() == false);
+    Scene *s = startScene({ { Stage, 60 }, { Flame, 255 } }, test.type(), test.id());
+    tickFrame(Flame);
+    QCOMPARE(sent(Stage), 60);
+    QCOMPARE(sent(Flame), 0);
+    s->start(m_doc->masterTimer(), FunctionParent::master());   // a GO
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);
+    stopFunctions();
+    tickFrame(Flame);
+    tickFrame(Flame);
+
+    // The Scene editor's own output (unticking its Blind).
+    GenericDMXSource *src = new GenericDMXSource(m_doc);
+    src->setHoldsShowOnly(true);
+    src->set(m_doc->fixtureForAddress(Flame), 0, 255);
+    src->set(m_doc->fixtureForAddress(Stage), 0, 90);
+    src->setOutputEnabled(true);
+    tickFrame(Flame);
+    QCOMPARE(sent(Stage), 90);
+    QCOMPARE(sent(Flame), 0);
+    delete src;
+}
+
+void OutputRules_Test::markingItWhileOnIsSentAtOnce()
+{
+    addDimmer("Flame L", Flame, Fixture::ShowOnly);   // one already held
+    Fixture *r = addDimmer("Flame R", Flame + 1, 0);
+    m_doc->outputRuleKeeper()->rebuild();
+    put(Flame + 1, 255);
+    frame(Flame);
+    QCOMPARE(sent(Flame + 1), 255);
+    m_stub->m_dropUnchanged = true;
+    frame(Flame);
+    frame(Flame);
+    r->setOutputRules(Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    frame(Flame);
+    QCOMPARE(sent(Flame + 1), 0);
+}
+
+void OutputRules_Test::safeValueGoesThroughTheModifier()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    ChannelModifier inverted;
+    inverted.setModifierMap({ qMakePair(uchar(0), uchar(255)), qMakePair(uchar(255), uchar(0)) });
+    m_uni->setChannelModifier(ushort(Flame), &inverted);
+    put(Flame, 255);
+    frame(Flame);
+    // Off on this channel is 255 out: what the modifier makes of 0.
+    QCOMPARE(sent(Flame), 255);
+    // Taken off, the channel's zero is 0 again (it kept the modifier's 255
+    // and sent it every frame -- a stale modifier zero, found here).
+    m_uni->setChannelModifier(ushort(Flame), nullptr);
+    m_doc->setMode(Doc::Operate);
+    m_uni->dismissFader(m_fader);
+    m_fader = m_uni->requestFader();
+    frame(Flame);
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);
+}
+
+void OutputRules_Test::childrenFollowTheirParentsGate()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    Scene *member = new Scene(m_doc);
+    member->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    member->setValue(m_doc->fixtureForAddress(Stage), 0, 50);
+    m_doc->addFunction(member);
+    Collection *col = new Collection(m_doc);
+    col->addFunction(member->id());
+    m_doc->addFunction(col);
+    col->start(m_doc->masterTimer(), FunctionParent::preview(0x7));
+    for (int i = 0; i < 3; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Stage), 50);
+    QCOMPARE(sent(Flame), 0);
+    // A GO on the same collection: it is the show now, and so is its member.
+    col->start(m_doc->masterTimer(), FunctionParent(FunctionParent::AutoVCWidget, 3));
+    for (int i = 0; i < 4; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);
+}
+
+void OutputRules_Test::showOnlyWinsOverOnAtOpen()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly | Fixture::OnAtOpen);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(m_doc->outputRuleKeeper()->onAtOpenArmed());
+    frame(Flame);
+    frame(Flame);
+    QCOMPARE(sent(Work), 255);      // a plain On-when-not-in-use light is on
+    QCOMPARE(sent(Flame), 0);       // Show only: nothing drives it, it is off
+}
+
+void OutputRules_Test::markingItLiveDropsAStoredValue()
+{
+    Fixture *spot = addSpot("Curtain-ish", 20);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    put(21, 200);                   // something left its LTP channel at 200
+    frame(21);
+    m_uni->dismissFader(m_fader);
+    m_fader = m_uni->requestFader();
+    frame(21);
+    QCOMPARE(sent(21), 200);        // LTP: kept
+    spot->setOutputRules(Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    frame(21);
+    QCOMPARE(sent(21), 0);
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(21))), 0);
+}
+
+void OutputRules_Test::showOnlyFrameCost()
+{
+    // 300 channels of a look, written by a fader every frame.
+    for (int a = 100; a < 400; a++)
+        put(a, uchar(a & 0xff));
+    QList<Fixture *> lasers;
+    for (int i = 0; i < 64; i++)
+        lasers << addDimmer(QString("Laser %1").arg(i), 400 + i, 0);
+    m_doc->outputRuleKeeper()->rebuild();
+    auto perFrame = [this](int frames) {
+        for (int i = 0; i < 50; i++)
+            m_uni->processFaders();
+        QElapsedTimer t;
+        t.start();
+        for (int i = 0; i < frames; i++)
+            m_uni->processFaders();
+        return double(t.nsecsElapsed()) / frames;
+    };
+    const double none = perFrame(2000);
+    for (Fixture *f : lasers)
+        f->setOutputRules(Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    const double held = perFrame(2000);
+    m_doc->setMode(Doc::Operate);
+    QSharedPointer<GenericFader> preview = m_uni->requestFader(Universe::Override);
+    preview->setHoldsShowOnly(true);
+    for (int a = 400; a < 464; a++)
+    {
+        GenericFader::ChannelRef fc = preview->getChannelFader(m_doc, m_uni, Fixture::invalidId(), quint32(a));
+        fc->setStart(255); fc->setCurrent(255); fc->setTarget(255);
+    }
+    const double live = perFrame(2000);
+    m_uni->dismissFader(preview);
+    qInfo("Show only, one universe frame: %.0f ns with none, %.0f ns with 64 held (Design), "
+          "%.0f ns live with a preview's fader on them", none, held, live);
 }
 
 QTEST_GUILESS_MAIN(OutputRules_Test)

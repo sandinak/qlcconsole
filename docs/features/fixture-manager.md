@@ -823,7 +823,17 @@ or a flame relay. So:
   or flame off); a laser's, fogger's, hazer's or plain dimmer's every
   channel at 0; anything else at its default (a gobo or colour wheel open).
 - **Switching** to Operate starts it from safe: nothing a Design preview
-  left on it comes out. Back to Design, it is safe again at once.
+  left on it comes out (nor when you give it the rule while in Operate).
+  Back to Design, it is safe again at once. A preview stopped in Operate
+  fades out without ever reaching it.
+- **Blackout** puts it at its safe value too, unless it also ignores
+  Blackout (then it keeps what the show gives it).
+- **With On when not in use**, Show only wins: nothing turns a laser or a
+  flame on just because nothing else is using it.
+- **Editors' Test buttons** and the Scene editor's own output are not the
+  show either: they are held like a preview. A list you GO in Design and
+  leave running when you switch to Operate *is* the show, and drives it
+  from then on.
 - **You can see it**: while it is held the footer says so in amber —
   **Lasers held: Design**, **Fog held: Blind**, **Flame L held: Design**,
   **3 Show-only fixtures held: Design** (click it for their Output Rules)
