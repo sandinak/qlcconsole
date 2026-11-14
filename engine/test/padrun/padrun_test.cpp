@@ -44,6 +44,8 @@
 #include "padtriggers.h"
 #include "touchswipe.h"
 #include "chaser.h"
+#include "function.h"
+#include "functionparent.h"
 #include "qlcfile.h"
 #include "doc.h"
 #include "refinesession.h"
@@ -1936,6 +1938,99 @@ void PadRun_Test::theNarrowestArmedHitWins()
     QVERIFY(st->setHitScope({ onList, onList2, onProd }, ShowTree::HitScope::Global, ShowTree::invalidId()));
     QCOMPARE(run->armedHits().size(), 4);
     arm(false);
+    m_doc->setMode(Doc::Design);
+}
+
+void PadRun_Test::theNextHitIsNamedBeforeItFires()
+{
+    makeShow();
+    ShowTreeController *st = m_doc->showTree();
+    PadRun *run = runPad(true);
+    QVERIFY2(run != nullptr, "no I/O plugin stub in ../iopluginstub");
+    MasterTimer *timer = m_doc->masterTimer();
+    QSignalSpy changed(run, &PadRun::hitChanged);
+    QSignalSpy fired(run, &PadRun::hitFired);
+    const QString arrow = QString::fromUtf8("Hit \u25b8 ");
+
+    // No hits at all, armed in Operate: nothing to say.
+    QVERIFY(run->hitText().isEmpty());
+    QVERIFY(run->armedHitText().isEmpty());
+    QCOMPARE(run->nextHit(), ShowTree::invalidId());
+
+    // One hit: its name, no "1 of 1".
+    const quint32 breathe = hitWithLayer(ShowTree::HitScope::Production, st->productions().first().id, "Breathe");
+    QTRY_VERIFY(changed.count() > 0);
+    QCOMPARE(run->hitText(), arrow + "Breathe");
+    QCOMPARE(run->armedHitText(), arrow + "Breathe");
+    QCOMPARE(run->nextHit(), breathe);
+
+    // Two at a narrower place take turns: the one the next pull fires, and which.
+    const quint32 red = hitWithLayer(ShowTree::HitScope::List, m_list, "Red");
+    const quint32 blue = hitWithLayer(ShowTree::HitScope::List, m_list, "Blue");
+    QTRY_COMPARE(run->hitText(), arrow + "Red (1 of 2)");
+    struct Turn { quint32 hit; bool on; const char *text; };
+    const Turn turns[] = {
+        { red, true, "Red off (1 of 2)" },      // Red on: the next pull lets it go
+        { red, false, "Blue (2 of 2)" },        // let go: Blue's turn
+        { blue, true, "Blue off (2 of 2)" },
+        { blue, false, "Red (1 of 2)" },        // round again
+    };
+    for (const Turn &t : turns)
+    {
+        // What was named is what the pull does.
+        bool letsGo = false;
+        QCOMPARE(run->nextHit(&letsGo), t.hit);
+        QCOMPARE(letsGo, !t.on);
+        changed.clear();
+        press(kRT);
+        QCOMPARE(fired.last().at(0).toUInt(), t.hit);
+        QCOMPARE(fired.last().at(1).toBool(), t.on);
+        timer->timerTick();
+        QTRY_COMPARE(run->hitText(), arrow + QString::fromUtf8(t.text));
+        QCOMPARE(run->armedHitText(), run->hitText());
+        // The surfaces are told (MasterTimer's start / stop, queued here).
+        QTRY_VERIFY(changed.count() > 0);
+    }
+
+    // Disarmed: the console's surfaces say nothing; what a pull would fire stays known.
+    changed.clear();
+    arm(false);
+    QVERIFY(run->armedHitText().isEmpty());
+    QCOMPARE(run->hitText(), arrow + "Red (1 of 2)");
+    QVERIFY(changed.count() > 0);
+    arm(true);
+    QCOMPARE(run->armedHitText(), arrow + "Red (1 of 2)");
+
+    // Design: no hit fires there, so none is named.
+    changed.clear();
+    m_doc->setMode(Doc::Design);
+    QVERIFY(run->hitText().isEmpty());
+    QVERIFY(run->armedHitText().isEmpty());
+    QVERIFY(changed.count() > 0);
+    m_doc->setMode(Doc::Operate);
+    QCOMPARE(run->hitText(), arrow + "Red (1 of 2)");
+
+    // A hit renamed: the new name, at once.
+    QVERIFY(st->renameNode(red, "Crimson"));
+    QCOMPARE(run->hitText(), arrow + "Crimson (1 of 2)");
+
+    // The emergency stop: the arm drops and the hit goes from the console's surfaces.
+    hold(kLB, true);
+    hold(kRB, true);
+    axis(kLT, 255);
+    axis(kRT, 255);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY(run->armedHitText().isEmpty());
+    axis(kRT, 0);
+    axis(kLT, 0);
+    hold(kRB, false);
+    hold(kLB, false);
+    // (The stop's ALL OFF went to the test's run handler: let the hits go here.)
+    for (quint32 h : { breathe, red, blue })
+        if (Function *f = m_doc->function(st->lookFunction(h)))
+            if (f->isRunning())
+                f->stop(FunctionParent::master());
+    timer->timerTick();
     m_doc->setMode(Doc::Design);
 }
 

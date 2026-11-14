@@ -76,7 +76,7 @@ arm and disarm, the left trigger is the safety, the right trigger the hit)
 | Armed, hold LT + B | Back |
 | Armed, hold LT + X | Sub GO |
 | Armed, hold LT + Y | Sub Back |
-| Armed, pull RT | Fire the armed hit |
+| Armed, pull RT | Fire the armed hit (named under ARMED: **Hit ▸ Breathe**) |
 | LB + RB + LT + RT | Emergency stop: everything off (the page says EMERGENCY STOP) |
 | Armed, hold LT + View | Solo: the first layer of the cue in the preview, or the whole cue again |
 | Armed, hold LT + D-pad right / left | Solo the next / previous layer |
@@ -84,7 +84,17 @@ arm and disarm, the left trigger is the safety, the right trigger the hit)
 | Menu | Controller test |
 
 There is no "stop the list" on the controller: the page's STOP button
-does that (two taps). The pad never picks the list.
+does that (two taps). The pad never picks the list: the page's buttons
+and its controller play the list the console's **Run** tab plays (the
+one picked there, else the main list), the same list as the console's
+controller, and the page's cue on now and next are that list's. A
+Companion button or an OSC message that names a list plays that list.
+
+While the page's controller is armed, the line under **ARMED** names the
+hit RT fires next, in the console's words: **Hit ▸ Breathe**, **Hit ▸
+Breathe off** when the pull lets it go, **Hit ▸ Red (1 of 2)** when two
+take turns (the console's controller and the page's share the turn).
+Nothing shows when there is no hit to fire.
 
 The last three are the remote's own. The console's controller does not
 use View, the D-pad or LS in its Run role, so nothing clashes.

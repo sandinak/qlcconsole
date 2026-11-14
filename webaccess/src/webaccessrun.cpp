@@ -55,6 +55,9 @@ WebAccessRun::WebAccessRun(Doc *doc, QObject *parent)
     connect(&m_timer, &QTimer::timeout, this, &WebAccessRun::poll);
     // A command lands at once; the poll catches a list that steps on its own.
     connect(m_doc->showControl(), &ShowControl::commandHandled, this, &WebAccessRun::poll);
+    // The hit RT fires next, as the console names it (PadRun's one source).
+    if (m_doc->programmer() != nullptr)
+        connect(m_doc->programmer()->padRun(), &PadRun::hitChanged, this, &WebAccessRun::poll);
     connect(m_doc->operateSettings(), &ShowOperate::settingsChanged, this, &WebAccessRun::poll);
     // A master moved from the desk, a VC slider or a controller shows on the phone.
     connect(m_doc->groupMasters(), &GroupMasters::changed, this, &WebAccessRun::poll);
@@ -179,9 +182,11 @@ WebAccessRun::Result WebAccessRun::command(const QString &command, bool unlocked
     if (r.command == ShowControl::AllOff)
         return m_doc->showControl()->run(r, ShowControl::RouteWeb) ? Done : NothingToDo;
 
-    // The main cue list, as the Run tab's default follow does; or the list
-    // by its number, and a cue by its number, as OSC names them.
-    Chaser *ch = m_doc->showControl()->cueList(list);
+    /* No list named: the one the console pad plays (the Run tab's pick,
+       else the main one), so the page's pad and the console's play one
+       list (rule 1: the screen picks it). Or the list by its number, and
+       a cue by its number, as OSC names them. */
+    Chaser *ch = list.trimmed().isEmpty() ? PadRun::playedList(m_doc) : m_doc->showControl()->cueList(list);
     if (ch == nullptr)
         return NothingToDo;
     r.chaser = ch->id();
@@ -243,10 +248,15 @@ WebAccessRun::Result WebAccessRun::hit(quint32 hitId, bool unlocked)
         f->stop(FunctionParent::master());
         return Done;
     }
-    const quint32 pick = hitId != UINT_MAX ? hitId : tier.at(m_hitStep++ % tier.count());
+    /* No id: the console pad's turn among several (one turn for both
+       pads), so the hit both name before a pull is the one it fires. */
+    PadRun *pad = m_doc->programmer() != nullptr ? m_doc->programmer()->padRun() : nullptr;
+    const quint32 pick = hitId != UINT_MAX ? hitId : pad != nullptr ? pad->hitTurn() : tier.first();
     Function *f = m_doc->function(st->lookFunction(pick));
     if (f == nullptr)
         return NothingToDo;
+    if (hitId == UINT_MAX && pad != nullptr)
+        pad->nextHitTurn();
     f->start(m_doc->masterTimer(), FunctionParent::master());
     return Done;
 }
@@ -303,7 +313,7 @@ WebAccessRun::Result WebAccessRun::standby(int direction, bool unlocked)
     if (pinRequired() && !unlocked)
         return NeedPin;
     ShowControl *sc = m_doc->showControl();
-    Chaser *ch = sc->cueList(QString());
+    Chaser *ch = PadRun::playedList(m_doc);
     if (ch == nullptr)
         return NothingToDo;
     const int cur = sc->standbyStep(ch);
@@ -541,7 +551,8 @@ QByteArray WebAccessRun::stateJson() const
 {
     ShowTreeController *st = m_doc->showTree();
     ShowControl *sc = m_doc->showControl();
-    Chaser *ch = sc->cueList(QString());
+    // The list the console pad plays: the Run tab's pick, else the main one.
+    Chaser *ch = PadRun::playedList(m_doc);
 
     QJsonObject o;
     o[QStringLiteral("remote")] = remoteAllowed();
@@ -620,6 +631,10 @@ QByteArray WebAccessRun::stateJson() const
             hits.append(ho);
         }
         o[QStringLiteral("hits")] = hits;
+        // What RT fires next, in the console's words (nothing to say: none).
+        const QString next = m_doc->programmer() != nullptr ? m_doc->programmer()->padRun()->hitText() : QString();
+        if (!next.isEmpty())
+            o[QStringLiteral("hit")] = next;
     }
     QJsonArray masters;
     for (const FixtureGroup *g : m_doc->groupMasters()->groups())

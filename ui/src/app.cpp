@@ -8808,6 +8808,7 @@ void App::initStatusBar()
             PadRun *run = m_doc->programmer()->padRun();
             connect(run, &PadRun::stateChanged, this, &App::updatePadRoleChip);
             connect(run, &PadRun::noticeChanged, this, &App::updatePadRoleChip);
+            connect(run, &PadRun::hitChanged, this, &App::updatePadRoleChip);
             connect(m_doc->programmer(), &ProgrammerController::focusControllerChanged,
                     this, &App::updatePadRoleChip);
         }
@@ -9994,8 +9995,22 @@ void App::updatePadRoleChip()
     QString text = run->roleText();
     if (run->isWalking())
         text += QStringLiteral(" · ") + pc->padText(tr("{Menu} to go back"));
+    /* Armed: what RT fires next, in the Run tab's words (PadRun::armedHitText()),
+       shortened in the middle past a long name so the chip still fits at
+       1024 wide; the whole line is on the Run tab. A notice takes its place
+       for its few seconds: both at once squeezed the chip off a narrow
+       footer, the state with it. */
+    const QString hit = run->armedHitText();
     if (!notice.isEmpty())
+    {
         text += QStringLiteral(" · ") + notice;
+    }
+    else if (!hit.isEmpty())
+    {
+        QFont bold = m_statusPadRoleLabel->font();
+        bold.setBold(true);
+        text += QStringLiteral(" · ") + QFontMetrics(bold).elidedText(hit, Qt::ElideMiddle, 260);
+    }
     m_statusPadRoleLabel->setText(text);
     // Armed and stopped: the state's own colour, as on the Run tab and the pad.
     const QColor state = run->stateColour();

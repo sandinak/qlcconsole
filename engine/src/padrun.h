@@ -37,6 +37,7 @@
 
 class ProgrammerController;
 class QTimer;
+class Chaser;
 class Doc;
 
 /** @addtogroup engine Engine
@@ -92,7 +93,9 @@ class Doc;
  * (ShowTreeController::armedTier()). Armed, RT starts
  * it (a one-shot effect plays again if it has finished; while it runs, the
  * press lets it go) and says its name. Several at the narrowest place:
- * each press takes the next. Operate only, as a VC button.
+ * each press takes the next. Operate only, as a VC button. Before it
+ * fires, every surface names it (hitText(), hitChanged()): the Run tab
+ * and the footer while armed, the phone page while its pad is armed.
  *
  * Walking the show (Q192, TODO.md "Walk the show from the stage"): Menu
  * starts Focus this cue (RefineSession) on the cue in hand, with its own
@@ -375,10 +378,39 @@ public:
      *  armed or the show is in Design. */
     bool fireHit();
 
+    /** The hit the next pull of RT acts on, from either pad -- this one or
+     *  the phone page's (WebAccessRun::hit()): they take one turn between
+     *  them. Invalid when a pull fires nothing (no hit armed now, or the
+     *  show in Design). @p letsGo: it is on, and the pull lets it go (a
+     *  finished one-shot is not: it plays again). @p index (from 1) and
+     *  @p count: its place among the hits taking turns. */
+    quint32 nextHit(bool *letsGo = nullptr, int *index = nullptr, int *count = nullptr) const;
+    /** nextHit() in words: "Hit ▸ Staff Slam", "Hit ▸ Staff Slam (1 of 2)"
+     *  when two take turns, "Hit ▸ Staff Slam off" when the pull lets it
+     *  go; empty when a pull fires nothing (nothing to say, UX-23). The
+     *  phone page shows it while its own pad is armed. */
+    QString hitText() const;
+    /** hitText() while this pad is armed (state() Armed), else empty: what
+     *  the Run tab and the footer's Pad chip show (rule 2: from here,
+     *  never derived on a surface). */
+    QString armedHitText() const;
+    /** Of the hits taking turns now, the one a pull starts when none is
+     *  on (invalid: none armed). */
+    quint32 hitTurn() const;
+    /** A pull started hitTurn(): the turn moves on to the next. */
+    void nextHitTurn();
+
     /** The list the commands go to, by its chaser: the one the Run tab
      *  plays (ControlMap::runTabList(), saved with the show); UINT_MAX: the
      *  main list (as the footer GO), also for a list that has gone. */
-    quint32 listChaser() const;
+    quint32 listChaser() const { return listChaserOf(m_doc); }
+    /** The rule of listChaser() for @p doc: every pad's list, the console
+     *  pad's and the phone page's (rule 1: the screen picks it). */
+    static quint32 listChaserOf(const Doc *doc);
+    /** That list's chaser itself (the main one for UINT_MAX); null: none.
+     *  What the phone page's commands with no list named play and what it
+     *  shows (WebAccessRun). */
+    static Chaser *playedList(Doc *doc);
     /** The list's name as the operator hears it. */
     QString listName(quint32 chaser) const;
     /** "Main. Next: cue 4." -- what RS says. */
@@ -450,6 +482,10 @@ signals:
     /** state(), stateColour() or roleText() changed: the one signal the
      *  screens follow (rule 2). */
     void stateChanged();
+    /** hitText() or armedHitText() changed: the cue moved on, a hit went
+     *  on or off, the turn moved, the arm or the mode changed. Every
+     *  surface naming the hit follows it (rule 2). */
+    void hitChanged();
     void enabledChanged(bool on);
     void armedChanged(bool armed);
     /** A command went to run() (@p done: it did something). */
@@ -498,8 +534,11 @@ private:
     void lightTick();
     /** A tool took the pad or let it go. */
     void toolChanged();
-    /** Follow ShowControl's commands (once it is there): Stopped ends. */
+    /** Follow ShowControl's commands (once it is there): Stopped ends.
+     *  Also follows the Show Tree's hits (made after the programmer). */
     void hookShowControl();
+    /** hitText() may have changed: hitChanged() once if it did. */
+    void syncHit();
 
 private:
     Doc *m_doc;
@@ -527,6 +566,10 @@ private:
     QString m_lastHolder;
     bool m_stopping = false;    ///< the stop's own ALL OFF is going through run()
     bool m_showControlHooked = false;
+    bool m_showTreeHooked = false;
+    /** What the screens were last told of the hit, so hitChanged() goes once. */
+    QString m_shownHit;
+    QString m_shownArmedHit;
     QTimer *m_armChord = nullptr;
     quint32 m_chordUniverse = UINT_MAX;
     /** What the screens were last told, so stateChanged() goes once. */

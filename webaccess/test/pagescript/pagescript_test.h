@@ -57,6 +57,11 @@ private slots:
     void theStopsOwnBumpersDoNotArmThePage();
     void aTriggerInTheChordSpendsItOnThePage();
     void noHitOnTheWayToTheStopOnThePage();
+    /** The hit RT fires next (the state's "hit", the console's words) shows
+     *  under ARMED while the page's pad is armed, follows each new state
+     *  (each pull, the cue moving on), and is gone disarmed, after the
+     *  stop and when the console names none. */
+    void theArmedHitIsNamedUnderTheBanner();
     void theTestOpenedMidChordArmsNothing();
     void aPadGoneMidHoldDisarmsThePage();
     void acksSayWhyInPlainWords();

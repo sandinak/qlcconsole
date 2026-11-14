@@ -143,6 +143,12 @@ private slots:
     /** Hits at several places: the narrowest armed place wins; several at
      *  one place take turns. */
     void theNarrowestArmedHitWins();
+    /** The hit is named before it fires (0.4.6): hitText() says what the
+     *  next pull does -- "Hit ▸ Red (1 of 2)", "Hit ▸ Red off (1 of 2)" --
+     *  and is what the pull then fires, at every turn; armedHitText() only
+     *  while armed; nothing in Design, with no hit armed, or with no hits;
+     *  hitChanged() goes with each change. */
+    void theNextHitIsNamedBeforeItFires();
     /** Hold View + Menu 1 s: Tools to Run and back, said, the Run tab's
      *  button follows. */
     void theRoleChordSwitches();

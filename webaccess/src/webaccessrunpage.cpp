@@ -90,6 +90,7 @@ button:disabled{opacity:.35}
 #focuslink{display:none;color:var(--go2);font-weight:700;text-decoration:none}
 #armed{display:none;text-align:center;font-size:14px;font-weight:700;letter-spacing:.1em;color:#101214;background:var(--warn);border-radius:8px;padding:3px;margin-bottom:8px}
 #armed.stopped{background:var(--stop);color:#fff}
+#padhit{display:none;text-align:center;font-size:16px;font-weight:700;color:var(--warn);margin:-4px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #testbtn{width:auto;min-height:32px;font-size:14px;font-weight:400;padding:0 10px;margin:0 auto 10px;display:block;background:none;border:0;color:var(--dim);text-decoration:underline}
 #statusline{display:none;flex-shrink:0;font-size:14px;color:var(--warn);padding:0 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #statusline.error{color:#ff8a80}
@@ -120,6 +121,7 @@ button:disabled{opacity:.35}
 <div id="pad">
 <div id="msg"></div>
 <div id="armed">ARMED: LT + A IS GO</div>
+<div id="padhit"></div>
 <button id="go" disabled>GO</button>
 <div class="row" id="subrow"><button id="subback" disabled>SUB BACK</button><button id="subgo" disabled>SUB GO</button></div>
 <div class="row"><button id="back" disabled>BACK</button><button id="hold" disabled>HOLD</button><button id="stop" disabled>STOP</button></div>
@@ -170,7 +172,7 @@ function paint(){
   else if($('msg').textContent===off)msg('');
   if(st.remote&&st.pin&&!unlocked&&$('lock').className!=='show')askPin('');
   $('go').textContent=st.paused?'GO (paused)':'GO';
-  rig(canRig());statusList();padLabels()}
+  rig(canRig());statusList();padLabels();showHit()}
 /* Teaching's held output, Blind and Solo (Design): what the console's footer and Show Tree say. */
 function rig(ok){
   var h=st.held,t=[];
@@ -267,7 +269,11 @@ function padAction(r){return (st.pad||{})[r]}
 function padLabels(){var l={};for(var r in (st.pad||{}))l[r]=st.pad[r].label;QPad.labels(l)}
 var padArmed=false,padStopped=false,armT=null,estopDone=false,spent=false;
 function showArm(){var e=$('armed');e.style.display=(padArmed||padStopped)?'block':'none';
-  e.className=padStopped?'stopped':'';e.textContent=padStopped?'EMERGENCY STOP':'ARMED: LT + A IS GO'}
+  e.className=padStopped?'stopped':'';e.textContent=padStopped?'EMERGENCY STOP':'ARMED: LT + A IS GO';showHit()}
+/* What RT fires next, in the console's words (st.hit: PadRun's one source),
+   while this pad is armed; nothing when a pull would fire nothing. */
+function showHit(){var h=$('padhit'),t=padArmed&&!padStopped&&st.hit?st.hit:'';
+  h.textContent=t;h.style.display=t?'block':'none'}
 showArm();
 function isChord(r){return r==='lb'||r==='rb'||r==='lt'||r==='rt'}
 /* A trigger with both bumpers (the stop, or one on its way) spends the

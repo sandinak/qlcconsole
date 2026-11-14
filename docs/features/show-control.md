@@ -108,8 +108,10 @@ them:
 | Switch the role: Tools / Run | hold View + Menu 1 s | hold Create + Options 1 s |
 
 - **Armed stays armed.** The arm drops only on the LB + RB hold, or with
-  no button at all: the role is switched, a tool started on the laptop
-  takes the pad, the controller disconnects, or the emergency stop goes.
+  no button of the Run map at all: the role is switched (the Run tab's
+  **Pad:** button, or on the pad by holding View + Menu for a second: two
+  buttons, never one), a tool started on the laptop takes the pad, the
+  controller disconnects, or the emergency stop goes.
   Each of those says so on the footer's Pad chip ("Disarmed: the
   controller went away.").
 - **One safety for every cue command.** LT with A, B, X or Y. The button
@@ -118,8 +120,10 @@ them:
 - **The emergency stop** stops everything that plays (the same as ALL
   OFF), in the Run role whatever the pad is doing. The arm drops, and the
   button, the frame, the chip and the pad's light turn red (**Pad:
-  STOPPED**), over a walk or a tool too, until you arm again or run the
-  show from the laptop. There is no "stop the list" on the pad:
+  STOPPED**), over a walk or a tool too, until you arm again or any run
+  command goes through from anywhere: a GO, Back or Stop from the laptop,
+  the phone page or OSC, or an ALL OFF from another route (the pad's own
+  four again leave it red). There is no "stop the list" on the pad:
   stop a list on the Run tab.
 - **A pad with no light buzzes instead.** Two short buzzes: armed. One
   long: disarmed. Three long: the emergency stop. An Xbox pad's light
@@ -168,9 +172,20 @@ Where several are armed the **narrowest** wins, exactly as on a Virtual
 Console button holding them all (cue, then list, production, everywhere).
 Use it to call a one-shot, say a breathe, off a hit in a cue.
 
+- **It is named before it fires.** While armed, the Run tab shows
+  **Hit ▸ Breathe** under what GO plays, and the footer's Pad chip says it
+  too (**Pad: ARMED · Hit ▸ Breathe**; for the few seconds the chip says
+  what a press could not do, that takes its place). When the hit is on, the next pull
+  lets it go: **Hit ▸ Breathe off**. Two or more taking turns show which
+  one the next pull fires: **Hit ▸ Red (1 of 2)**. The phone Run page
+  shows the same line under its ARMED banner while its controller is
+  armed. With no hit to fire (none armed here, or Design) nothing is
+  shown.
 - The voice says its name ("Breathe."). Press again and it lets go
   ("Breathe off."); a one-shot that has finished plays again.
-- Two or more hits at the narrowest place take turns, one a press.
+- Two or more hits at the narrowest place take turns, one a press. The
+  console's controller and the phone page's share the turn, so the hit
+  each names is the one it fires.
 - With no hit armed the pad says "No hit armed." and buzzes long. Not
   armed, it says "Not armed: hold LB and RB.", as for GO. One pull is one
   press, however long it is held; a pull with LT or a bumper down does
