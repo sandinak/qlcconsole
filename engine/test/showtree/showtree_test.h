@@ -159,6 +159,7 @@ private slots:
     void aReusableLayerStaysLinkedWhenItsCueIsDuplicated();
     void unlinkingAReusableLayerGivesItItsOwnOneOffs();
     void anOlderShowsSharedOneOffIsSplitWhenItLoads();
+    void oneOffNamesFollowTheirCue();
     void usageInAList();
     void previewShowsTheTrackedState();
     void convertAnImportToTracking();

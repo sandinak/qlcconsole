@@ -4527,7 +4527,7 @@ void ShowTree_Test::duplicatingACueGivesTheCopyItsOwnOneOffs()
     QCOMPARE(int(m_doc->palettes().count()), palettesBefore + 3);
     // ...that play what the original's do.
     QCOMPARE(m_doc->palette(copyRed)->values(), m_doc->palette(red)->values());
-    QCOMPARE(m_doc->palette(copyRed)->name(), m_doc->palette(red)->name());
+    QVERIFY(m_doc->palette(copyRed)->name().startsWith(QStringLiteral("Red-ish \u00b7 ")));
     QCOMPARE(m_doc->palette(copyFx)->effectParamValues(), m_doc->palette(fx)->effectParamValues());
     QCOMPARE(m_doc->palette(copyDim)->value().toInt(), 128);
 
@@ -4718,6 +4718,86 @@ void ShowTree_Test::anOlderShowsSharedOneOffIsSplitWhenItLoads()
     // A show with nothing shared loads as it was.
     QCOMPARE(ost->splitSharedOneOffs(), 0);
     delete other;
+}
+
+/* palette-name-follow: a one-off's name says its cue ("50% · 1.1.1 Music
+   Start A"). A copy takes its new cue's label; Renumber and rename relabel
+   the cue's one-offs in the same undo step; a name in an old show, and the
+   one-offs of a cue nobody touched, stay as they were. */
+void ShowTree_Test::oneOffNamesFollowTheirCue()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "Music Start");
+    const quint32 c2 = st->addCue(listId, 0, "Other");
+    const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
+    const quint32 l2 = st->addLayer(c2, groupTarget(a->id()));
+    Cue first = *st->cue(c1);
+    first.number = "1.1.1";
+    QVERIFY(st->setCue(first));
+    Cue other = *st->cue(c2);
+    other.number = "1.1.2";
+    QVERIFY(st->setCue(other));
+    const QString where = st->targetLabel(groupTarget(a->id()));
+    auto label = [&](quint32 cue) {
+        const CueList *list = st->listOfCue(cue);
+        return st->cueLabel(*list, list->indexOf(cue));
+    };
+    auto oneOff = [&](quint32 cue, quint32 layer) {
+        return st->cue(cue)->layer(layer)->look(KeyColour)->palettes.first();
+    };
+    const quint32 p1 = st->createInlinePalette(QLCPalette::Color, { "#ff0000" },
+                                               QStringLiteral("50%% \u00b7 %1 %2").arg(label(c1), where));
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(p1)));
+    // An old show's: the name says a cue that is not this one.
+    const QString stale = QStringLiteral("30%% \u00b7 9.9.9 Long Gone %1").arg(where);
+    const quint32 p2 = st->createInlinePalette(QLCPalette::Color, { "#00ff00" }, stale);
+    QVERIFY(st->setLayerLook(c2, l2, st->lookForPalette(p2)));
+    QCOMPARE(m_doc->palette(p2)->name(), stale);        // nothing edited its cue's label
+
+    // Duplicate: the copy says its own cue, the original's name is as it was.
+    const QString was1 = m_doc->palette(p1)->name();
+    const quint32 d = st->duplicateCue(c1);
+    QVERIFY(d != invalidId());
+    const quint32 copy = oneOff(d, st->cue(d)->layers.first().id);
+    QVERIFY(copy != p1);
+    QCOMPARE(m_doc->palette(copy)->name(), QStringLiteral("50%% \u00b7 %1 %2").arg(label(d), where));
+    QVERIFY(label(d) != label(c1));
+    QCOMPARE(m_doc->palette(p1)->name(), was1);
+    QCOMPARE(m_doc->palette(p2)->name(), stale);        // a cue nobody touched
+
+    // Rename.
+    Cue c = *st->cue(c1);
+    c.name = "Hands Up";
+    QVERIFY(st->setCue(c));
+    QCOMPARE(m_doc->palette(p1)->name(), QStringLiteral("50%% \u00b7 1.1.1 Hands Up %1").arg(where));
+    QVERIFY(st->undo());
+    QCOMPARE(m_doc->palette(p1)->name(), was1);         // one step with the rename
+    QVERIFY(st->redo());
+
+    // Renumber (one cue, then its level).
+    c = *st->cue(c1);
+    c.number = "4.2.1";
+    QVERIFY(st->setCue(c));
+    QCOMPARE(m_doc->palette(p1)->name(), QStringLiteral("50%% \u00b7 4.2.1 Hands Up %1").arg(where));
+    QVERIFY(st->renumberLevel(c1, 10, 10));
+    QCOMPARE(m_doc->palette(p1)->name(), QStringLiteral("50%% \u00b7 %1 %2").arg(label(c1), where));
+    QVERIFY(label(c1).startsWith(QStringLiteral("10 ")) || label(c1).startsWith(QStringLiteral("1")));
+    // The old show's one-off follows once its own cue's label changes.
+    const QString lab2 = label(c2);
+    QVERIFY(m_doc->palette(p2)->name() != stale || lab2 == QStringLiteral("9.9.9 Long Gone"));
+
+    // A show saved with these names opens with them as saved.
+    QByteArray xml = engineXml(m_doc);
+    Doc *reopened = new Doc(this);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(reopened->loadXML(r, false));
+    QCOMPARE(reopened->palette(p1)->name(), m_doc->palette(p1)->name());
+    QCOMPARE(reopened->palette(p2)->name(), m_doc->palette(p2)->name());
+    QVERIFY(!reopened->showTree()->canUndo());
+    delete reopened;
 }
 
 /* D20: "In this cue list" -- what the list's cues use, with counts. */

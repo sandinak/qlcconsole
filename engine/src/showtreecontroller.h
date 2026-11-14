@@ -1479,6 +1479,16 @@ private:
     int ownOneOffs(QList<ShowTree::Production> &work, const QList<ShowTree::Production> *before,
                    const QList<ShowTree::ReusableLayer> *beforeLayers,
                    const QList<ShowTree::ReusableCue> *beforeCues);
+    /** A one-off's name says where it was made ("44% · 1.1.1 Music Start
+     *  AT-W-ALL"): after an edit, the one-offs of a cue whose label changed
+     *  (renumber, rename, Move) and the copies ownOneOffs made for a new
+     *  cue take that cue's label, in the same undo step. @a old is the
+     *  tree before the edit. A name a person never saw this way, or an old
+     *  show's, is left alone until its cue is edited. */
+    void followCueLabels(const QList<ShowTree::Production> &old);
+    /** Copy -> original of the one-offs ownOneOffs just made (read and
+     *  cleared by followCueLabels). */
+    QHash<quint32, quint32> m_cloneOf;
     /** A new one-off as @a paletteId is (an effect's bound one-offs copied
      *  too), recorded in @a made (original -> copy). */
     quint32 cloneOneOff(quint32 paletteId, QHash<quint32, quint32> &made);
