@@ -50,7 +50,22 @@ this Mac; **`make beta`, `make release` and `make attach` are public**.
   `~/Applications/qlcconsole-dev.app`, ad-hoc signed, for running on this Mac.
   Not a release, not distributable, and it runs no unit tests (`make check`).
 - `make run SHOW=…` — `make test`, then launch it with `-o SHOW`.
-- `make check` — `./check-all.sh`, the unit-test gate.
+- `make check` — `./check-all.sh`, the unit-test gate. `make quick` / `make strict`
+  are its partial runs (one leg with the -Werror set; `strict` adds the
+  Release leg); on ender, run them through the pool (`--remote`).
+- `make rc HOSTS="dink kronk local"` — a **test build**, not a release:
+  `platforms/macos/make-rc.sh` checks the tree is committed and holds
+  origin/main as GitHub has it now (`tools/gitsync.sh fetch`; `ALLOW_BEHIND=1`
+  overrides), builds the app (`package-local.sh` with `NO_DMG=1`; `ARCH=native`
+  for arm64 only), signs it with the Developer ID (`NOTARIZE=0
+  sign-notarize.sh`: steps 0-3, no Apple round trip) and installs it as
+  `/Applications/qlcconsole.app` on each host (`install-test-app.sh`: ditto zip
+  over ssh, codesign verified there, the old one kept as
+  `/Applications/qlcconsole.app.prev`, refused while qlcconsole runs there).
+  A host is a `gate-hosts.conf` name, an ssh destination, or `local`. Not
+  notarized and never published: a copy over ssh carries no quarantine flag,
+  so Gatekeeper never looks at it. `make install-test HOSTS=…` installs the
+  current `~/qlcconsole.app` again (another Mac, after a reboot).
 - `make dmg` — `platforms/macos/make-release.sh`: `package-local.sh` +
   `sign-notarize.sh` on a committed HEAD, then `dist/SHA256SUMS` and a
   Gatekeeper check. It **replaces `~/qlcconsole.app`**, keeping the old one
@@ -61,6 +76,18 @@ this Mac; **`make beta`, `make release` and `make attach` are public**.
   window, at the cost of an AppleScript opening the volume on the screen.
   It ends with the pre-release check of the new DMG (below), and fails if
   that fails; `RELEASE_CHECK=0` skips it.
+  **Notarization** (`platforms/macos/notarize-lib.sh`, sourced by
+  `sign-notarize.sh`) submits without `--wait` and polls `notarytool info`
+  itself: `notarytool submit --wait` died with a Bus error twice on
+  2026-11-13 and the RC was finished by hand. A crashed submit is retried, a
+  failed poll is retried (10 in a row before it gives up), and the
+  submission id is printed and kept in `/private/tmp/qlc-notarize/app.submission`:
+  after a stop, `NZ_SUBMISSION_APP=<id> make dmg` waits on that submission
+  instead of uploading again. The `qlc-notary` profile is checked before
+  anything is signed or uploaded, and its loss is explained (it has come
+  back by itself once the Mac was docked; otherwise `xcrun notarytool
+  store-credentials`, which needs Branson's app-specific password).
+  **Testing never waits on this**: `make rc`.
   **Why it is fast now:** it builds only what ships (`-DQLC_NO_TESTS=ON`:
   none of the ~245 test programs; the gate and `check-all.sh` still build
   them), through ccache for both slices, in a build dir that lasts between
@@ -188,6 +215,9 @@ Steps:
 3. Commit those two changes, and merge the release branch (e.g.
    `release/0.1.0`) to `main`; release from `main`. Push it, so CI builds
    the Windows installer and the AppImage from that commit.
+   Test the release commit on our own Macs while the rest goes on: `make rc
+   HOSTS="dink kronk"` (signed, not notarized; the hardware bench runs on it).
+   Only the DMG that gets published waits on Apple.
 4. `DRYRUN=1 make beta` (or `make release`) to read the plan and notes,
    then `make beta` / `make release` (above). It runs the gate, builds,
    signs and notarizes the universal DMG
@@ -226,6 +256,24 @@ Steps:
 `make beta` / `make release` / `make attach` push a tag and publish on
 GitHub — real, visible actions, and the in-app updater offers the result
 to users. Run them deliberately, not as part of routine iteration.
+
+## Process tools
+
+Made after 2026-11-13, when every one of these cost 20-60 minutes. Each has
+a `--self-test` that the gate runs (check-all's preflight).
+
+| Tool | What it is for |
+|---|---|
+| `check-all.sh --strict` | `--quick` plus the Release leg: the touched tests at -O2 as well as with the -Werror set. Before a branch is ready and on a merged train before its full gate |
+| `check-all.sh --remote H --quick --shots DIR` | the tests' screenshots (`QLC_SHOT_DIR`) written on the pool host, copied back into DIR whatever the result, removed there (`gate-pool.sh`, `fetch_shots`). `GATE_ENV="NAME …"` forwards such switches as `COURSE_RIG` |
+| `make rc HOSTS=…` | a signed, not notarized test build installed on our Macs (above) |
+| `platforms/macos/notarize-lib.sh` | notarization's submit + poll (above) |
+| `.gitattributes` | `CHANGELOG.md` and `docs/dev/TEST_MAP.md` merge with git's union driver: both sides' added lines kept, no conflict |
+| `tools/test-map-ids.py` | branches write TEST_MAP rows as `\| Mnew \|`; `assign` numbers them once on the train (above every id on any branch here); `check` (in the gate) fails a duplicate; `next` for a lone change |
+| `tools/merge-check.py` | `resolve FILE…`: a hunk where both sides only added lines gets ours then theirs, real conflicts are left; `check [REV]`: no conflict marker, no C/C++/JS file whose `{}` `()` `[]` stopped balancing (over the last 150 merges on main it flags exactly the two that dropped a brace). `git config core.hooksPath tools/githooks` runs it on every merge commit |
+| `tools/gitsync.sh` | `fetch` (refreshes origin/*, port 443 when GitHub's 22 fails, says when origin is a local checkout), `status` (is origin/main here GitHub's?), `push-main SHA` (only with that SHA's `gate=0 … linux=0` pool line, a fresh fetch and a fast-forward; pushes to the remote name so origin/main follows, then checks) |
+
+Agent briefs start from [AGENT_BRIEF.md](AGENT_BRIEF.md).
 
 ## Linux gate hosts
 

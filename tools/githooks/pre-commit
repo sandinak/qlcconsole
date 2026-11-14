@@ -1,0 +1,11 @@
+#!/bin/sh
+# Opt in per clone:  git config core.hooksPath tools/githooks
+# Committing a merge (a conflicted one ends here): tools/merge-check.py check
+# refuses conflict markers and a C/C++ file whose braces stopped balancing
+# (2026-11-13: a sed-stripped resolution dropped a `}`; the full gate, 20 min
+# later, was the first to notice). `git commit --no-verify` skips it.
+top=$(git rev-parse --show-toplevel) || exit 0
+if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+    exec python3 -I "$top/tools/merge-check.py" check
+fi
+exit 0

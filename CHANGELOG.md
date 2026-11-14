@@ -104,6 +104,10 @@ changed definitions from QLC+ upstream since 0.4.3).
   It freezes a WLED connected as Network (WLED); over Art-Net or E1.31 the
   effect keeps running, and the At the end row says so.
 
+### Tooling
+
+- **Fewer avoidable gate failures and waits (process review of 2026-11-13).** `--quick` now builds with the -Werror set CI fails on, and `--strict` adds the Release leg with the same tests; the pool brings test screenshots back (`--shots DIR`); `make rc HOSTS=…` installs a signed test build on our Macs without waiting for notarization, and notarization itself polls instead of trusting `notarytool --wait`; CHANGELOG.md and TEST_MAP.md merge without conflicts (`.gitattributes`, `Mnew` row ids numbered on the train); `tools/merge-check.py` resolves "both added" conflicts and refuses a merge that lost a brace; `tools/gitsync.sh` fetches over port 443 and pushes a gated SHA to main only with its gate line. See [RELEASE.md](docs/dev/RELEASE.md#process-tools) and the agent brief, [AGENT_BRIEF.md](docs/dev/AGENT_BRIEF.md).
+
 ## [0.4.3] - 2026-11-10
 
 qlcconsole 0.4.3 is a stable release after 0.4.1. 0.4.2 was built but never

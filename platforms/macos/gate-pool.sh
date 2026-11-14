@@ -4,7 +4,18 @@
 #
 #   platforms/macos/gate-pool.sh [--host NAME|auto] [--rev REV] [-- ARGS...]
 #   platforms/macos/gate-pool.sh --status      what auto would see, and pick
-#   ./check-all.sh --remote NAME|auto [--rev REV] [--leg ... | --quick]
+#   platforms/macos/gate-pool.sh --self-test   the run script and the shot
+#                                              fetch-back, on a scratch ~/gates
+#   ./check-all.sh --remote NAME|auto [--rev REV] [--leg ... | --quick | --strict]
+#
+# Screenshots: --shots DIR (check-all.sh --shots DIR) gives the tests
+# QLC_SHOT_DIR=~/gates/<id>.shots on the host, and when the gate ends --
+# passed or failed -- copies what they wrote into DIR here and removes it
+# there. (The tests' HOME is private and the copy is deleted, so a path in
+# the test, a dot-file in the host's home or an scp afterwards is never
+# needed.) GATE_ENV="NAME ..." sends those variables' values along too (e.g.
+# COURSE_RIG=1), for the tests that run only with them; not PATH, HOME or
+# the gate's own.
 #
 # REV (default HEAD) must be committed: the copy is `git archive REV`, so
 # what is gated is exactly that SHA -- push it with `git push origin
@@ -66,18 +77,132 @@ SSHOPT=(-o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o Server
 WANT=auto
 REV=HEAD
 STATUS=0
+SHOTS=""
+SELFTEST=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --host)   shift; WANT="${1:?--host needs a name or auto}" ;;
         --rev)    shift; REV="${1:?--rev needs a commit}" ;;
         --status) STATUS=1 ;;
+        --shots)  shift; SHOTS="${1:?--shots needs a directory}" ;;
+        --self-test) SELFTEST=1 ;;
         --)       shift; break ;;
-        -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,59p' "$0"; exit 0 ;;
         *) echo >&2 "gate-pool.sh: unknown option '$1' (try --help)"; exit 2 ;;
     esac
     shift
 done
 ARGS=("$@")
+
+# Run a script (stdin) on host i: through ssh, or here for "local".
+on() { # <i> [ssh options...]
+    local i=$1; shift
+    if [ "${DEST[i]}" = local ]; then bash -s; else ssh "${SSHOPT[@]}" "$@" "${DEST[i]}" bash -s; fi
+}
+# A path from the conf as that host's shell sees it: ~ is its $HOME.
+hostpath() { case "$1" in '~'|'~/'*) echo "\$HOME${1#\~}" ;; *) echo "$1" ;; esac; }
+
+# The variables GATE_ENV names, as export lines for the run script.
+gate_env_lines() {
+    local v
+    for v in ${GATE_ENV:-}; do
+        case "$v" in
+            PATH|HOME|TMPDIR|QT6_PREFIX|GATE_*|QLC_SHOT_DIR|QUICK_*) echo >&2 "gate-pool.sh: GATE_ENV may not set $v"; return 1 ;;
+            [A-Za-z_]*) ;;
+            *) echo >&2 "gate-pool.sh: GATE_ENV: '$v' is not a variable name"; return 1 ;;
+        esac
+        case "$v" in *[!A-Za-z0-9_]*) echo >&2 "gate-pool.sh: GATE_ENV: '$v' is not a variable name"; return 1 ;; esac
+        [ -n "${!v+x}" ] || { echo >&2 "gate-pool.sh: GATE_ENV names $v, which is not set here"; return 1; }
+        printf 'export %s=%q\n' "$v" "${!v}"
+    done
+}
+
+# The run script for gate <id> on the host (stdout): check-all.sh in the
+# copy, then the small logs kept and the copy removed, whatever this end
+# does meanwhile. Uses SHA, ARGS, SHOTS.
+write_run() { # <id> <host name> <qt> <path prefix> <extra export, or "">
+    local id=$1 name=$2 qt=$3 xp=$4 qenv=$5 a
+    echo 'G="$HOME/gates"'
+    echo "cd \"\$G/$id\" || exit 1"
+    echo "export PATH=\"$xp\$PATH\" QT6_PREFIX=\"$qt\" GATE_HOST=$name GATE_REV=$SHA"
+    [ -z "$qenv" ] || echo "export $qenv"
+    gate_env_lines || return 1
+    # Screenshots: kept beside the copy (not in it: the copy goes at the
+    # end), fetched and removed by the pool.
+    [ -z "$SHOTS" ] || echo "mkdir -p \"\$G/$id.shots\" && export QLC_SHOT_DIR=\"\$G/$id.shots\""
+    printf './check-all.sh'; for a in ${ARGS[@]+"${ARGS[@]}"}; do printf ' %q' "$a"; done
+    echo " > \"\$G/$id.log\" 2>&1"
+    echo 'rc=$?'
+    echo "cp build-gate-logs/summary.txt \"\$G/$id.summary.txt\" 2>/dev/null"
+    echo "[ \$rc -eq 0 ] || cp -R build-gate-logs \"\$G/$id.logs\" 2>/dev/null"
+    echo "cd \"\$G\" && rm -rf \"./$id\" \"./$id.sh\""
+    echo "echo \$rc > \"$id.rc\"; rm -f \"$id.running\""
+    # The host's lock, dropped by the gate itself: this end may be gone.
+    echo "[ \"\$(sed -n 's/^id=//p' .gatelock/info 2>/dev/null)\" = \"$id\" ] && rm -rf .gatelock"
+}
+
+# The screenshots of gate <id> from host i into <dir> here; removed there.
+# Prints how many files came back.
+fetch_shots() { # <i> <id> <dir>
+    local i=$1 id=$2 dir=$3 rc
+    mkdir -p "$dir" || return 1
+    if [ "${DEST[i]}" = local ]; then
+        ( mkdir -p "$HOME/gates/$id.shots" && cd "$HOME/gates/$id.shots" && tar -cf - . ) | tar -xf - -C "$dir"
+    else
+        ssh "${SSHOPT[@]}" "${DEST[i]}" "mkdir -p \"\$HOME/gates/$id.shots\" && cd \"\$HOME/gates/$id.shots\" && tar -cf - ." | tar -xf - -C "$dir"
+    fi
+    rc=$?
+    [ "$rc" -eq 0 ] && on "$i" <<<"rm -rf \"\$HOME/gates/$id.shots\"" >/dev/null 2>&1
+    find "$dir" -type f | wc -l | tr -d ' '
+    return "$rc"
+}
+
+# --self-test: write_run's lines and fetch_shots, with a "local" host on a
+# scratch HOME. Nothing is built.
+gp_selftest() {
+    local tmp fails=0 out
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/gate-pool-test.XXXXXX") || return 1
+    ok() { echo "ok - $1"; }
+    no() { echo "not ok - $1"; fails=$((fails + 1)); }
+    SHA=0123456789abcdef0123456789abcdef01234567; ARGS=(--quick --strict)
+    SHOTS=""; GATE_ENV=""
+    out=$(write_run id1 dink /q /x: "QLC_TEST_ONLY=ui/test/a")
+    case "$out" in *QLC_SHOT_DIR*) no "no --shots: no QLC_SHOT_DIR" ;; *) ok "no --shots: no QLC_SHOT_DIR" ;; esac
+    printf '%s\n' "$out" | grep -qx "./check-all.sh --quick --strict > \"\$G/id1.log\" 2>&1" \
+        && ok "the arguments reach check-all.sh" || no "the arguments reach check-all.sh"
+    printf '%s\n' "$out" | grep -qx 'export QLC_TEST_ONLY=ui/test/a' && ok "the quick selection rides" || no "the quick selection rides"
+    SHOTS="$tmp/out"
+    out=$(write_run id1 dink /q /x: "")
+    printf '%s\n' "$out" | grep -qx 'mkdir -p "$G/id1.shots" && export QLC_SHOT_DIR="$G/id1.shots"' \
+        && ok "--shots: QLC_SHOT_DIR beside the copy" || no "--shots: QLC_SHOT_DIR beside the copy"
+    COURSE_RIG="a b"; export COURSE_RIG; GATE_ENV="COURSE_RIG"
+    out=$(write_run id1 dink /q /x: "")
+    printf '%s\n' "$out" | grep -qx 'export COURSE_RIG=a\\ b' && ok "GATE_ENV sends a value, quoted" || no "GATE_ENV sends a value, quoted"
+    GATE_ENV="HOME"
+    write_run id1 dink /q /x: "" >/dev/null 2>&1 && no "GATE_ENV refuses HOME" || ok "GATE_ENV refuses HOME"
+    GATE_ENV="NOT_SET_ANYWHERE_X"
+    write_run id1 dink /q /x: "" >/dev/null 2>&1 && no "GATE_ENV refuses an unset name" || ok "GATE_ENV refuses an unset name"
+    GATE_ENV=""
+    # The run script itself, on a fake copy whose check-all.sh writes a shot.
+    local H="$tmp/home"
+    mkdir -p "$H/gates/id2/build-gate-logs"
+    printf '#!/bin/bash\n[ -d "$QLC_SHOT_DIR" ] && echo png > "$QLC_SHOT_DIR/a.png"; echo gate=0 > build-gate-logs/summary.txt; exit 0\n' > "$H/gates/id2/check-all.sh"
+    chmod +x "$H/gates/id2/check-all.sh"
+    write_run id2 local /q "" "" > "$H/gates/id2.sh" && HOME="$H" bash "$H/gates/id2.sh"
+    [ "$(cat "$H/gates/id2.rc" 2>/dev/null)" = 0 ] && [ ! -d "$H/gates/id2" ] && ok "the run script runs, keeps rc, removes the copy" \
+        || no "the run script runs, keeps rc, removes the copy"
+    [ -f "$H/gates/id2.shots/a.png" ] && ok "a test's shot lands beside the copy" || no "a test's shot lands beside the copy"
+    DEST=(local)
+    out=$(HOME="$H" fetch_shots 0 id2 "$tmp/out")
+    [ "$out" = 1 ] && [ -f "$tmp/out/a.png" ] && ok "fetch_shots brings it back" || no "fetch_shots brings it back ($out)"
+    [ ! -d "$H/gates/id2.shots" ] && ok "and removes it on the host" || no "and removes it on the host"
+    out=$(HOME="$H" fetch_shots 0 nosuch "$tmp/out2")
+    [ "$out" = 0 ] && ok "no shots: nothing, no error" || no "no shots: nothing, no error ($out)"
+    rm -rf "$tmp"
+    if [ "$fails" -eq 0 ]; then echo "gate-pool.sh self-test: ok"; return 0; fi
+    echo "gate-pool.sh self-test: $fails failed"; return 1
+}
+if [ "$SELFTEST" = 1 ]; then gp_selftest; exit $?; fi
 
 # The hosts, in file order.
 N=(); DEST=(); QTP=(); XPATH=(); MINS=()
@@ -87,13 +212,6 @@ while read -r name dest qt xpath mins _; do
 done < "$CONF"
 [ ${#N[@]} -gt 0 ] || { echo >&2 "gate-pool.sh: no hosts in $CONF"; exit 2; }
 
-# Run a script (stdin) on host i: through ssh, or here for "local".
-on() { # <i> [ssh options...]
-    local i=$1; shift
-    if [ "${DEST[i]}" = local ]; then bash -s; else ssh "${SSHOPT[@]}" "$@" "${DEST[i]}" bash -s; fi
-}
-# A path from the conf as that host's shell sees it: ~ is its $HOME.
-hostpath() { case "$1" in '~'|'~/'*) echo "\$HOME${1#\~}" ;; *) echo "$1" ;; esac; }
 
 #############################################################################
 # Pick the host
@@ -249,25 +367,9 @@ case " ${ARGS[*]-} " in *" --quick "*)
     fi ;;
 esac
 
-# The run script, with this end's values written in: check-all.sh in the
-# copy, then the small logs kept and the copy removed, whatever this end
-# does meanwhile.
+# The run script, with this end's values written in (write_run).
 RUN="$PROBES/run.sh"
-{
-    echo 'G="$HOME/gates"'
-    echo "cd \"\$G/$ID\" || exit 1"
-    echo "export PATH=\"$XP\$PATH\" QT6_PREFIX=\"$QT\" GATE_HOST=$NAME GATE_REV=$SHA"
-    [ -z "$QENV" ] || echo "export $QENV"
-    printf './check-all.sh'; for a in ${ARGS[@]+"${ARGS[@]}"}; do printf ' %q' "$a"; done
-    echo " > \"\$G/$ID.log\" 2>&1"
-    echo 'rc=$?'
-    echo "cp build-gate-logs/summary.txt \"\$G/$ID.summary.txt\" 2>/dev/null"
-    echo "[ \$rc -eq 0 ] || cp -R build-gate-logs \"\$G/$ID.logs\" 2>/dev/null"
-    echo "cd \"\$G\" && rm -rf \"./$ID\" \"./$ID.sh\""
-    echo "echo \$rc > \"$ID.rc\"; rm -f \"$ID.running\""
-    # The host's lock, dropped by the gate itself: this end may be gone.
-    echo "[ \"\$(sed -n 's/^id=//p' .gatelock/info 2>/dev/null)\" = \"$ID\" ] && rm -rf .gatelock"
-} > "$RUN"
+write_run "$ID" "$NAME" "$QT" "$XP" "$QENV" > "$RUN" || fail 99 "could not write the run script"
 if [ "${DEST[H]}" = local ]; then
     cp "$RUN" "$HOME/gates/$ID.sh"
 else
@@ -288,7 +390,7 @@ stop() {
     on $H <<EOF
 G="\$HOME/gates"
 p=\$(cat "\$G/$ID.pid" 2>/dev/null) && [ -n "\$p" ] && kill -TERM -- "-\$p" 2>/dev/null
-sleep 2; rm -rf "\$G/$ID" "\$G/$ID.sh" "\$G/$ID.running" "\$G/$ID.pid"
+sleep 2; rm -rf "\$G/$ID" "\$G/$ID.sh" "\$G/$ID.running" "\$G/$ID.pid" "\$G/$ID.shots"
 EOF
     fail 130 "stopped"
 }
@@ -329,6 +431,17 @@ EOF
 done
 trap - INT TERM
 
+# The screenshots, passed or failed: they are what a review needs.
+SHOTLINE=""
+if [ -n "$SHOTS" ]; then
+    if NSHOTS=$(fetch_shots "$H" "$ID" "$SHOTS"); then
+        SHOTLINE="shots: $NSHOTS file(s) in $SHOTS"
+    else
+        SHOTLINE="shots: could not copy them back from $NAME:~/gates/$ID.shots (left there)"
+    fi
+    echo "gate pool: $SHOTLINE"
+fi
+
 SUMMARY=$(on $H <<<"cat \"\$HOME/gates/$ID.summary.txt\"; rm -f \"\$HOME/gates/$ID.rc\" \"\$HOME/gates/$ID.pid\"" 2>/dev/null)
 [ -n "$SUMMARY" ] || fail "${RC:-98}" "no summary; see ~/gates/$ID.log on $NAME"
 
@@ -359,6 +472,8 @@ Linux leg did not pass: the gate fails.$([ "$LXRC" = 99 ] && echo " (Host unreac
 $LXREST
 $LXTAIL"
 fi
+[ -n "$SHOTLINE" ] && SUMMARY="$SUMMARY
+$SHOTLINE"
 printf '%s\n' "$SUMMARY" > "$REPO/build-gate-logs/pool-$ID.txt"
 echo
 echo "gate pool: $NAME, $(( $(date +%s) - T0 ))s from copy to result$([ "$RC" -ne 0 ] && echo "; full logs on $NAME: ~/gates/$ID.logs/")"

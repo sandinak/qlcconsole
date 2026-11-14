@@ -1,0 +1,11 @@
+# Files every branch adds to, at the same places: merged with git's union
+# driver, which keeps both sides' lines where both added some (no conflict
+# markers). On 2026-11-13 every merge train stopped on CHANGELOG.md's
+# "### Fixed" list and TEST_MAP.md's newest rows. Safe here because these are
+# lists of independent lines; the cost is that two edits of the SAME line
+# both survive -- read `git diff HEAD^1 -- <file>` after a train merge.
+# TEST_MAP row ids: a branch writes `| Mnew |`; `tools/test-map-ids.py
+# assign` numbers them on the train, and `check` (in the gate) fails a
+# duplicate.
+CHANGELOG.md            merge=union
+docs/dev/TEST_MAP.md    merge=union

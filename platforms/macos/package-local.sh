@@ -29,7 +29,8 @@
 # since changed, and re-links. QLC_ARCH=native (`make dmg ARCH=native`)
 # builds arm64 only, for installing on our own Apple silicon Macs: the DMG is
 # named ...-arm64-native-... and publish.sh refuses it. BUILD_DIR= overrides
-# the build dir; NO_CCACHE=1 turns ccache off.
+# the build dir; NO_CCACHE=1 turns ccache off. NO_DMG=1 stops at the app
+# (make rc).
 #
 # UNIVERSAL=1 (the default) builds one app for Apple silicon AND Intel Macs:
 # against the official, universal Qt (aqt; QTDIR, default ~/Qt-aqt/6.9.3/macos)
@@ -214,6 +215,12 @@ codesign --force --deep --sign - "$APP" 2>/dev/null
 csok=1; codesign --verify --deep --strict "$APP" 2>/dev/null || csok=0
 set -e
 [ "$csok" = 1 ] && echo "  codesign verify OK (ad-hoc)" || { echo "ERROR: codesign verify failed"; exit 1; }
+
+# NO_DMG=1 (make rc): the app is the product; no ad-hoc DMG under a
+# release's name in dist/.
+if [ "${NO_DMG:-0}" = 1 ]; then
+  echo; echo "DONE (NO_DMG=1: no DMG)."; echo "App: $APP"; exit 0
+fi
 
 step "7/7 Create DMG"
 RELEASE=$(cat "$REPO/VERSION")

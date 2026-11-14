@@ -3,9 +3,17 @@
 # errors.
 #
 #   ./check-all.sh            the gate: all three legs
-#   ./check-all.sh --quick    iterate: the Qt6 leg only, testing just the test
-#                             dirs your change touches (since origin/main, or
+#   ./check-all.sh --quick    iterate: one leg (Debug with the Werror leg's
+#                             -Werror set, so a new unused variable fails here,
+#                             not in the full gate), testing just the test dirs
+#                             your change touches (since origin/main, or
 #                             QUICK_BASE) -- not a gate, never push on it
+#   ./check-all.sh --strict   --quick plus the Release leg: the same touched
+#                             tests also at -O2 (use-after-free and undefined
+#                             behaviour that Debug hides). Before a branch is
+#                             ready, and on a merged train before its gate.
+#   ./check-all.sh --remote NAME --quick --shots DIR   the tests' screenshots
+#                             (QLC_SHOT_DIR) brought back from the pool to DIR
 #   ./check-all.sh --leg Qt6-Release [--leg ...]   just those legs
 #   ./check-all.sh --spread   run the Release and Werror legs on other Macs
 #                             over SSH (GATE_SPREAD) while this one runs Qt6
@@ -61,6 +69,8 @@ done
 export PATH
 
 QUICK=0
+STRICT=0
+SHOTS=""
 SPREAD=0
 ONLY_LEGS=""
 REMOTE=""
@@ -72,7 +82,9 @@ while [ $# -gt 0 ]; do
         --leg)    shift; ONLY_LEGS="$ONLY_LEGS ${1:-}"; POOL_ARGS+=(--leg "${1:-}") ;;
         --remote) shift; REMOTE="${1:-auto}" ;;
         --rev)    shift; REMOTE_REV="${1:?--rev needs a commit}" ;;
-        -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
+        --strict) QUICK=1; STRICT=1; POOL_ARGS+=(--quick --strict) ;;
+        --shots)  shift; SHOTS="${1:?--shots needs a directory}" ;;
+        -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
         *) echo >&2 "check-all.sh: unknown option '$1' (try --help)"; exit 2 ;;
     esac
     shift
@@ -83,7 +95,13 @@ done
 # running here would mark this Mac busy to the pool's own probe).
 if [ -n "$REMOTE" ]; then
     [ "$SPREAD" = 1 ] && { echo >&2 "check-all.sh: --remote runs the whole gate elsewhere; not with --spread"; exit 2; }
-    exec "$REPO/platforms/macos/gate-pool.sh" --host "$REMOTE" --rev "${REMOTE_REV:-HEAD}" -- ${POOL_ARGS[@]+"${POOL_ARGS[@]}"}
+    SHOTARG=(); [ -n "$SHOTS" ] && SHOTARG=(--shots "$SHOTS")
+    exec "$REPO/platforms/macos/gate-pool.sh" --host "$REMOTE" --rev "${REMOTE_REV:-HEAD}" ${SHOTARG[@]+"${SHOTARG[@]}"} -- ${POOL_ARGS[@]+"${POOL_ARGS[@]}"}
+fi
+# Here (no pool): the tests write their screenshots straight into DIR.
+if [ -n "$SHOTS" ]; then
+    mkdir -p "$SHOTS" && QLC_SHOT_DIR="$(cd "$SHOTS" && pwd)" && export QLC_SHOT_DIR \
+        || { echo >&2 "check-all.sh: cannot make --shots $SHOTS"; exit 2; }
 fi
 [ -n "${REMOTE_REV:-}" ] && { echo >&2 "check-all.sh: --rev goes with --remote (here, the gate tests the tree as it is)"; exit 2; }
 
@@ -203,7 +221,19 @@ STATE=(); HOST=(); RESULT=(); T_CONF=(); T_BUILD=(); T_TEST=(); T_ALONE=(); NTES
 for ((i = 0; i < NLEGS; i++)); do
     STATE[i]=local; HOST[i]=""; RESULT[i]=""
     T_CONF[i]=0; T_BUILD[i]=0; T_TEST[i]=0; T_ALONE[i]=0; NTESTS[i]=""
-    if [ "$QUICK" = 1 ] && [ "${LEG_NAME[i]}" != Qt6 ]; then STATE[i]=off; fi
+    # --quick: one leg, the Werror leg's (Debug + WERROR_SET: the same
+    # compile as the plain Qt6 leg plus the warnings CI fails on -- an
+    # unused variable in a new test failed a full gate on 2026-11-13 that a
+    # quick run had passed). --strict adds the Release leg (a use-after-free
+    # that Debug's memory hid crashed only at -O2, the same day). --leg
+    # picks the legs itself.
+    if [ "$QUICK" = 1 ] && [ -z "$ONLY_LEGS" ]; then
+        case "${LEG_NAME[i]}" in
+            Qt6-Werror) ;;
+            Qt6-Release) [ "$STRICT" = 1 ] || STATE[i]=off ;;
+            *) STATE[i]=off ;;
+        esac
+    fi
     if [ -n "$ONLY_LEGS" ] && ! echo " $ONLY_LEGS " | grep -q " ${LEG_NAME[i]} "; then STATE[i]=off; fi
     if [ "$SPREAD" = 1 ] && [ "${STATE[i]}" = local ]; then
         for m in $GATE_SPREAD; do
@@ -360,6 +390,31 @@ if ! LOCK_OUT=$("$REPO/platforms/macos/gate-lock.sh" --self-test 2>&1); then
     exit 1
 fi
 
+# The process tools of 2026-11-13 (docs/dev/RELEASE.md, "Process"): the
+# pool's run script and shot fetch-back, notarization's polling, the test
+# install, the guarded push, the merge check and the TEST_MAP ids -- their
+# self-tests, on fakes and scratch repos, a few seconds; then TEST_MAP has no
+# id used twice.
+PROC_OUT=""
+for t in "platforms/macos/gate-pool.sh --self-test" "platforms/macos/notarize-lib.sh --self-test" \
+         "tools/gitsync.sh --self-test" "python3 -I tools/merge-check.py --self-test" \
+         "python3 -I tools/test-map-ids.py --self-test" "python3 -I tools/test-map-ids.py check"; do
+    if ! o=$(cd "$REPO" && $t 2>&1); then PROC_OUT="$PROC_OUT
+== $t
+$o"; fi
+done
+if [ "$(uname)" = Darwin ] && ! o=$("$REPO/platforms/macos/install-test-app.sh" --self-test 2>&1); then
+    PROC_OUT="$PROC_OUT
+== install-test-app.sh --self-test
+$o"
+fi
+if [ -n "$PROC_OUT" ]; then
+    echo >&2 "$PROC_OUT"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "A process tool's self-test (or tools/test-map-ids.py check) failed:$(printf '%s\n' "$PROC_OUT" | sed -n 's/^== / /p' | tr '\n' ';') Nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
+fi
+
 echo "Gate in $REPO on $GATE_HOST: $JOBS cores, Qt $QT_VERSION at $QT6, $CCACHE_STATE; logs in $LOGS"
 
 #############################################################################
@@ -509,7 +564,7 @@ elif [ "$QUICK" = 1 ]; then
         [ "$QUICK_TESTS" = ALL ] || QUICK_TESTS=$(printf '%s\n' $QUICK_TESTS | sort -u | tr '\n' ' ')
     fi
     if [ "$QUICK_TESTS" = ALL ]; then
-        say "quick: the build or the test runner changed -- all of the Qt6 leg's tests"
+        say "quick: the build or the test runner changed -- all of the tests"
     elif [ -z "$QUICK_TESTS" ]; then
         say "quick: no test dir touched since $BASE -- built, nothing to test"
     else
@@ -666,7 +721,7 @@ done
     done
     echo "  whole gate $(( $(date +%s) - GATE_START ))s"
     [ -n "$CC_LINE" ] && echo "  $CC_LINE"
-    [ "$QUICK" = 1 ] && echo "QUICK: the Qt6 leg only$([ -n "$QUICK_TESTS" ] && [ "$QUICK_TESTS" != ALL ] && echo ", tests: $QUICK_TESTS") -- not the gate."
+    [ "$QUICK" = 1 ] && echo "QUICK: $([ "$STRICT" = 1 ] && echo "Qt6-Werror + Qt6-Release (--strict)" || echo "the Qt6-Werror leg only")$([ -n "$QUICK_TESTS" ] && [ "$QUICK_TESTS" != ALL ] && echo ", tests: $QUICK_TESTS") -- not the gate."
     [ -n "$SKIPPED" ] && echo "SKIPPED:$SKIPPED (Qt not at $QT6)$([ -n "${ALLOW_SKIP:-}" ] && echo " -- allowed by ALLOW_SKIP" || echo " -- a skipped leg fails the gate; ALLOW_SKIP=1 to accept")"
     if [ -n "$FAILED" ]; then
         echo "FAILED:$FAILED"
