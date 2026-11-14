@@ -12,6 +12,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [0.4.5] - Unreleased
 
+0.4.5 is the release after 0.4.3. **0.4.4 was never published** (decided
+2026-11-14): running the show from a game controller was rebuilt before it
+went out, so everything listed under 0.4.4 below ships here, with the
+changes in this section on top.
+
 ### Changed and fixed
 
 - **The footer's Stage chip is no longer cut.** At 1280 and 1920 wide a long cue made the chip read "…w Tree)". It now shortens longest-first (the whole line, then without what is running, then without the *(Show Tree)* aside) and only the last form is elided, with the whole line in its tooltip. The Show Tree hint line, the Everything tab strip and the empty venue chip (*Set Venue…*) were already fixed and are held by the layout test.
@@ -36,7 +41,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **Fewer avoidable gate failures and waits (process review of 2026-11-13).** `--quick` now builds with the -Werror set CI fails on, and `--strict` adds the Release leg with the same tests; the pool brings test screenshots back (`--shots DIR`); `make rc HOSTS=…` installs a signed test build on our Macs without waiting for notarization, and notarization itself polls instead of trusting `notarytool --wait`; CHANGELOG.md and TEST_MAP.md merge without conflicts (`.gitattributes`, `Mnew` row ids numbered on the train); `tools/merge-check.py` resolves "both added" conflicts and refuses a merge that lost a brace; `tools/gitsync.sh` fetches over port 443 and pushes a gated SHA to main only with its gate line. See [RELEASE.md](docs/dev/RELEASE.md#process-tools) and the agent brief, [AGENT_BRIEF.md](docs/dev/AGENT_BRIEF.md).
 
-## [0.4.4] - 2026-11-13
+## [0.4.4] - not released (2026-11-13; ships as part of 0.4.5)
 
 qlcconsole 0.4.4 follows 0.4.3 with the follow spot operator's point of
 view and more of the show run from a controller. A follow spot's **Operator**

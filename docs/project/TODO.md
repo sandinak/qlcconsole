@@ -27,14 +27,30 @@ at that one), read by the one position reader
 (MonitorProperties::targetPosition) so the Studio, the plot and every aim
 follow the holder.
 
-To decide before building (board):
+Decided 2026-11-14 (his answers):
+- **The candles are driven by the show**, through the tower IR blaster:
+  Art-Net to a Raspberry Pi that replays the candle remote's buttons
+  (~/git/ir-artnet-controller; DMX-CHART.md and config.candles.yaml there).
+  One fixture of two channels for the whole room, since every candle hears
+  the same remote: ch 1 SELECT (0 nothing, 1 On, 2 Off, 3 Candle = flicker,
+  4 Light = steady, 5 Dim, 6 Brighten), ch 2 WINDOW (how long to keep
+  resending, in tenths of a second; 255 = constantly). So a cue's look
+  sets SELECT and WINDOW, and "the candles are on from this cue" is that
+  look; who holds one is the drawing only.
+- So the build is two parts: (a) a fixture definition for the blaster with
+  SELECT's values named (shipped, or his own: he made a type today), and a
+  way to draw what it last told the candles (on / off, flicker / steady,
+  the dim steps counted from the Dim / Brighten presses); (b) the held
+  prop, below.
+
+Still to decide before building (board):
 - Is "who holds it" part of a Blocking set, or its own tracked value on
   the cue? (Blocking is the smaller change.)
-- Candles: are they fixtures the show drives (an IR sender patched as a
-  universe, so their light is a cue's look) or drawn only? If driven,
-  which sender.
 - Does a held prop change what an Aim at the Person covers (a staff's
   tip), or is it drawn only?
+- The candles' dim level is steps of a remote, not a value: is drawing
+  "on, about this bright" enough, or should the plot not guess at the
+  level at all?
 
 ROI (first guess, to be put on the board with the questions): reach = the
 shows with hand props and the candle number; effort = small if it rides
