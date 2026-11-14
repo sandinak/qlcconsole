@@ -2597,6 +2597,18 @@ void WebAccess_Test::blindFromTheRemoteIsDesignsMute()
     dropPage(ws);
 }
 
+/* The remote pad's emergency stop stops everything even in a show with no
+   main cue list (one run from hits and buttons): it needs no list. */
+void WebAccess_Test::theRemoteEmergencyStopNeedsNoCueList()
+{
+    m_doc->operateSettings()->setRemoteGo(true);
+    QVERIFY(m_doc->showControl()->cueList(QString()) == nullptr);
+    WebAccessRun run(m_doc);
+    QCOMPARE(run.command(QStringLiteral("alloff"), true, QString(), QString()), WebAccessRun::Done);
+    // GO in the same show still has nothing to play.
+    QCOMPARE(run.command(QStringLiteral("go"), true, QString(), QString()), WebAccessRun::NothingToDo);
+}
+
 void WebAccess_Test::soloFromTheRemotePlaysOneLayerOfThePreview()
 {
     runShow();

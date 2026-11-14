@@ -1078,6 +1078,7 @@ QStringList WledConfigCheck::wledIps(Doc *doc, quint32 universe)
 void WledConfigCheck::setUpUniverse(quint32 universe)
 {
     m_suggestions.remove(universe);
+    m_suggestionFrom.remove(universe);
     const QList<quint32> ids = fixturesSentTo(m_doc, universe);
     QSet<QString> covered;
     foreach (quint32 fid, ids)
@@ -1219,6 +1220,7 @@ void WledConfigCheck::resolveDevice(quint32 universe, const QString &ip, const Q
                 if (!fmac.isEmpty() && macKey(there) != macKey(fmac))
                     return;
                 m_suggestions[universe] = fip;
+                m_suggestionFrom[universe] = ip;
                 noteWrite(ip, tr("%1 sends to %2, where nothing answers; %3%4 answers at %5. Send "
                                  "there instead?")
                                   .arg(uniName, ip, fname,
@@ -1294,6 +1296,7 @@ QString WledConfigCheck::suggestedIp(quint32 universe) const
 bool WledConfigCheck::sendThere(quint32 universe)
 {
     const QString to = m_suggestions.value(universe);
+    const QString from = m_suggestionFrom.value(universe);
     InputOutputMap *io = m_doc->inputOutputMap();
     if (to.isEmpty() || io == nullptr || universe >= io->universesCount())
         return false;
@@ -1307,7 +1310,14 @@ bool WledConfigCheck::sendThere(quint32 universe)
     if (io->patchUndo() != nullptr)
         io->patchUndo()->capture(QList<quint32>() << universe,
                                  tr("WLED of universe %1 sent to %2").arg(universe + 1).arg(to));
-    op->setPluginParameter(QStringLiteral("outputIP"), to);
+    /* The address that did not answer may be a backup (outputIP2...), not
+       the primary: replace that one, and only that one. */
+    QString key = QStringLiteral("outputIP");
+    const QMap<QString, QVariant> pp = op->getPluginParameters();
+    for (auto it = pp.constBegin(); it != pp.constEnd(); ++it)
+        if (it.key().startsWith(QLatin1String("outputIP")) && !from.isEmpty() && it.value().toString() == from)
+            key = it.key();
+    op->setPluginParameter(key, to);
     m_doc->setModified();
     setUpUniverse(universe);
     return true;

@@ -174,6 +174,11 @@ WebAccessRun::Result WebAccessRun::command(const QString &command, bool unlocked
     if (pinRequired() && !unlocked)
         return NeedPin;
 
+    /* The emergency stop stops everything: it needs no cue list (a show run
+       from hits or VC buttons has none, and the stop must still stop it). */
+    if (r.command == ShowControl::AllOff)
+        return m_doc->showControl()->run(r, ShowControl::RouteWeb) ? Done : NothingToDo;
+
     // The main cue list, as the Run tab's default follow does; or the list
     // by its number, and a cue by its number, as OSC names them.
     Chaser *ch = m_doc->showControl()->cueList(list);

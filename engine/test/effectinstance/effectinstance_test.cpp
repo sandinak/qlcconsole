@@ -4782,6 +4782,31 @@ void EffectInstance_Test::fireSpreadCatchesOutwardFromThePoint()
         QVERIFY(farLit(2.2));
     }
 
+    /* A pixel with only a level, not yet reached: dark by its own dimmer
+       (an RGB pixel is left to what is under it). */
+    {
+        QJSValue fixtures = eng->newArray(2);
+        for (int i = 0; i < 2; ++i)
+        {
+            QJSValue o = eng->newObject();
+            o.setProperty("heads", 4);
+            o.setProperty("headRGB", i == 1);
+            o.setProperty("headWhite", false);
+            o.setProperty("fromTarget", 4.0);
+            fixtures.setProperty(quint32(i), o);
+        }
+        QJSValue inputs = eng->newObject();
+        inputs.setProperty("_time", 0.5);
+        inputs.setProperty("_fromTargetFar", 4.0);
+        QJSValue params = eng->newObject();
+        params.setProperty("spreadTime", 8);
+        params.setProperty("edge", 0);
+        QJSValue state = fs.newState();
+        const QJSValue out = fs.callTick(fixtures, inputs, eng->newObject(), params, state, eng->newObject());
+        QCOMPARE(out.property(0u).property("dimmer").toNumber(), 0.0);
+        QVERIFY(out.property(1u).property("dimmer").isUndefined());
+    }
+
     // Everything at the point (an unplaced rig): it all catches at once.
     const QList<FireHead> heap = { { 0.0, true, true, false }, { 0.0, false, true, false } };
     for (const QVariantMap &o : fireSpreadFrame(fs, heap, 0.1, hard))

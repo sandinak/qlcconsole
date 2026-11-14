@@ -120,6 +120,7 @@ private slots:
     void theFocusPageIsServed();
     void theGamepadTablesAreTheConsoles();
     void theRunPageMapIsPadRun();
+    void theRemoteEmergencyStopNeedsNoCueList();
     void theFocusRemoteWorksTheRunningSession();
     void focusFollowsTheRemoteGoAndPinRules();
     void aBurstOfNudgesIsOneMove();
