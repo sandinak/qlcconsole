@@ -10,6 +10,16 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [0.4.6] - Unreleased
+
+### Changed and fixed
+
+- **Course lesson 3.5 teaches the real pad rules.** The student page, handout, teacher guide, glossary and course plan say hold LB + RB to arm, LT + A for GO (B Back, X / Y the sub-cues), RT for the armed hit and all four for the emergency stop; they used to teach "hold LB, press A".
+
+### Tooling
+
+- **The UX flows walk the view in use.** F-04 and F-07 now go through the Show Tree's Workbench (Build is hidden in the qlcconsole view), and F-13 (run the show from the pad) and F-14 (fire a staff hit) are added, their pad steps manual.
+
 ## [0.4.5] - Unreleased
 
 0.4.5 is the release after 0.4.3. **0.4.4 was never published** (decided
