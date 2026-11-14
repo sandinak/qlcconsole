@@ -2068,7 +2068,7 @@ is always there and calls the same operations as the mouse.
 | `palette Amber rename "Amber 3"` · `move "01-Song"` · `move none` · `dup` · `edit` | Rename, file in a folder (or none), duplicate, open in the Look Editor |
 | `palette Amber delete` · `delete anyway` | Delete: refused while something uses it (it says what), unless `anyway` — then every use is cleared with it (Undo puts them back) |
 | `palette folder "01-Song"` · `rename "02-Song"` · `delete` | A palette folder: new, renamed, deleted (what is in it moves up) |
-| `hit "Stab"` · `hit "Stab" in "Stings"` | Selects that **hit** of the production, or makes it (and the Hits section); `in` files it. Then set its layers as on a cue (`look` still works) |
+| `hit "Stab"` · `hit "Stab" in "Stings"` · `hit "Slam" for cue 2.3` · `hit "Slam" for list` | Selects that **hit** of the production, or makes it (and the Hits section); `in` files it. `for cue 2.3` makes it a hit for that cue (it may fire only while that cue is live; the cue must exist in the selected list, else the line says so), `for list` one for the selected list; neither takes a folder. Then set its layers as on a cue (`look` still works) |
 | `vcpage` | **Make VC Page** for the selected hit's folder (else every hit) |
 | `adopt "Old Busk"` | **Adopt as a Hit**: a scene becomes a hit |
 | `wb` · `wb 0.0.3` | The selected cue (or layer), or that cue, in the **Workbench** ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)) |

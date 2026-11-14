@@ -9604,6 +9604,63 @@ void ShowTree_Test::hitCommandMakesAndPlaysAHit()
     stopAll();
 }
 
+/* `hit "Slam" for cue 2` makes a cue-scoped hit; a cue that doesn't exist
+   is refused with the reason and nothing is made. */
+void ShowTree_Test::hitForCueCommand()
+{
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ctx.list = st->addCueList(ctx.production, "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(ctx.list, -1, "One");
+    const quint32 c2 = st->addCue(ctx.list, 0, "Two");
+    (void)c1;
+    ctx.cue = c1;
+
+    ShowTreeCommand::Result r = cmd.run("hit \"Slam\" for cue 2", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    const quint32 hit = r.context.cue;
+    QVERIFY(st->isLook(hit));
+    quint32 of = invalidId();
+    QCOMPARE(int(st->hitScope(hit, &of)), int(HitScope::Cue));
+    QCOMPARE(of, c2);
+    QCOMPARE(st->hitsAt(HitScope::Cue, c2), QList<quint32>({ hit }));
+    // Again: the same hit, not a second.
+    r = cmd.run("hit Slam for cue 2", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(r.context.cue, hit);
+    QCOMPARE(st->hitsAt(HitScope::Cue, c2).count(), 1);
+    // A production hit of the same name stays its own.
+    r = cmd.run("hit \"Other\"", ctx);
+    QVERIFY(r.ok);
+    QCOMPARE(int(st->hitScope(r.context.cue)), int(HitScope::Production));
+
+    // For the list.
+    r = cmd.run("hit \"Whole\" for list", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(int(st->hitScope(r.context.cue, &of)), int(HitScope::List));
+    QCOMPARE(of, ctx.list);
+
+    // Refusals say why and make nothing.
+    const int hits = st->cueList(st->looksSection(ctx.production))->cues.count();
+    r = cmd.run("hit \"Nope\" for cue 9", ctx);
+    QVERIFY(!r.ok);
+    QVERIFY2(r.message.contains("No cue 9"), qPrintable(r.message));
+    r = cmd.run("hit \"Nope\" for cue", ctx);
+    QVERIFY(!r.ok);
+    r = cmd.run("hit \"Nope\" in \"X\" for cue 1", ctx);
+    QVERIFY(!r.ok);
+    r = cmd.run("hit \"Nope\" for bar 1", ctx);
+    QVERIFY(!r.ok);
+    QCOMPARE(st->cueList(st->looksSection(ctx.production))->cues.count(), hits);
+    QVERIFY(ShowTreeCommand::helpText("hit").contains("for cue"));
+
+    QStringList next;
+    QVERIFY(cmd.candidates("hit \"Slam\" for ", ctx, &next));
+    QCOMPARE(next, QStringList({ "cue", "list" }));
+}
+
 /* 0.3.1 (k2): the help says a hit fires from a VC button "as you would
    any function (Toggle or Flash)", but only a Scene flashed: a hit is a
    Collection, and Function::flash() played nothing. A Flash button now

@@ -261,6 +261,7 @@ private slots:
     void recordLitTakesARunningLooksLayers();
     void lookCommands();
     void hitCommandMakesAndPlaysAHit();
+    void hitForCueCommand();
     void anOlderLooksSectionKeepsItsName();
     void aFlashButtonPlaysAHitWhileHeld();
 
