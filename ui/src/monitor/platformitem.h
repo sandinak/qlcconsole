@@ -54,6 +54,10 @@ public:
 
     /** Show or hide the platform's name/size label. */
     void showLabel(bool visible);
+    /** The label as drawn (tests): "name\n(size)", the name alone, an
+     *  elided name, or empty when there is no room for one. */
+    QString labelText() const;
+    QGraphicsTextItem *labelItem() const { return m_label; }
 
     /** Which plot view it is drawn in -- 0 plan, 1 front, 2 side -- so a
      *  flight of steps can draw its treads, or its profile, the right way
@@ -101,6 +105,9 @@ private:
     float              m_pxW;
     float              m_pxD;
     QGraphicsTextItem *m_label;   ///< child item
+    bool               m_labelFits = true;     ///< layoutLabel() found room
+    bool               m_labelWanted = true;   ///< showLabel()
+    void layoutLabel();
     bool               m_dragMoved = false;
     int                m_view = 0;    ///< 0 plan, 1 front, 2 side   ///< a click only counts as a move once the pointer moves
 };

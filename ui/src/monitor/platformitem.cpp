@@ -20,6 +20,7 @@
 #include <QtMath>
 #include <QPainterPath>
 #include <QFont>
+#include <QFontMetricsF>
 #include <QMenu>
 
 #include "itemlock.h"
@@ -48,23 +49,62 @@ PlatformItem::PlatformItem(StagePlatform *platform, Doc *doc,
     setCursor(platform->locked() ? Qt::ArrowCursor : AppUtil::nativeCursorShape(Qt::SizeAllCursor));
     setPos(pxX, pxY);
 
-    // Full footprint × height so the size is unambiguous (was height only),
-    // in Settings > Units.
-    m_label = new QGraphicsTextItem(
-        QString("%1\n(%2 × %3 × %4)").arg(platform->name(), MonitorProperties::formatStageDistance(platform->width()),
-                                          MonitorProperties::formatStageDistance(platform->depth()), MonitorProperties::formatStageDistance(platform->height())),
-        this);
-    m_label->setDefaultTextColor(QColor(240, 240, 240, 220));
-    m_label->setFont(QFont("Arial", 10, QFont::Bold));
-    m_label->setZValue(0.1);
+    layoutLabel();
+}
 
-    // Center the label both horizontally and vertically within the platform.
-    m_label->setTextWidth(m_pxW);
-    QTextOption opt = m_label->document()->defaultTextOption();
-    opt.setAlignment(Qt::AlignHCenter);
-    m_label->document()->setDefaultTextOption(opt);
-    const qreal th = m_label->boundingRect().height();
-    m_label->setPos(0, qMax(qreal(0.0), (m_pxD - th) / 2.0));
+/* Its name and size, on one line each, never wrapped a letter to a line
+   (a narrow deck at a small window size used to stack "St / ep / s 2" over
+   its neighbours). What does not fit goes: the size line first, then the
+   name is elided, then the label is not drawn at all. A Box carries its
+   label just above it, so the word FRONT on its face is never under it. */
+void PlatformItem::layoutLabel()
+{
+    const QString name = m_platform->name();
+    const QString size = QString("(%1 × %2 × %3)").arg(MonitorProperties::formatStageDistance(m_platform->width()),
+                                                     MonitorProperties::formatStageDistance(m_platform->depth()),
+                                                     MonitorProperties::formatStageDistance(m_platform->height()));
+    const QFont font("Arial", 10, QFont::Bold);
+    const QFontMetricsF fm(font);
+    const bool box = m_platform->isPropBox();
+    // A box's label stands above it, so it may be a little wider than the box.
+    const qreal room = (box ? qMax(qreal(m_pxW), qreal(140.0)) : qreal(m_pxW)) - 6.0;
+    const qreal line = fm.height();
+    const qreal tall = box ? 2.0 * line : qreal(m_pxD) - 4.0;
+
+    QString text;
+    if (fm.horizontalAdvance(name) <= room && fm.horizontalAdvance(size) <= room && 2.0 * line <= tall)
+        text = name + QLatin1Char('\n') + size;
+    else if (line <= tall)
+    {
+        const QString elided = fm.elidedText(name, Qt::ElideRight, room);
+        // An ellipsis with a letter or two is no name: leave it off.
+        if (!elided.isEmpty() && (elided == name || elided.size() >= 4))
+            text = elided;
+    }
+    m_labelFits = !text.isEmpty();
+
+    if (m_label == nullptr)
+    {
+        m_label = new QGraphicsTextItem(this);
+        m_label->setDefaultTextColor(QColor(240, 240, 240, 220));
+        m_label->setFont(font);
+        m_label->setZValue(0.1);
+        QTextOption opt = m_label->document()->defaultTextOption();
+        opt.setAlignment(Qt::AlignHCenter);
+        opt.setWrapMode(QTextOption::NoWrap);
+        m_label->document()->setDefaultTextOption(opt);
+    }
+    m_label->setPlainText(text);
+    m_label->setVisible(m_labelFits && m_labelWanted);
+    const QRectF br = m_label->boundingRect();
+    const qreal x = (qreal(m_pxW) - br.width()) / 2.0;
+    const qreal y = box ? -br.height() : qMax(qreal(0.0), (qreal(m_pxD) - br.height()) / 2.0);
+    m_label->setPos(x, y);
+}
+
+QString PlatformItem::labelText() const
+{
+    return (m_label != nullptr && m_label->isVisible()) ? m_label->toPlainText() : QString();
 }
 
 quint32 PlatformItem::platformId() const
@@ -80,8 +120,9 @@ void PlatformItem::setMovable(bool movable)
 
 void PlatformItem::showLabel(bool visible)
 {
+    m_labelWanted = visible;
     if (m_label != nullptr)
-        m_label->setVisible(visible);
+        m_label->setVisible(visible && m_labelFits);
 }
 
 QRectF PlatformItem::boundingRect() const
@@ -273,6 +314,10 @@ void PlatformItem::paintBox(QPainter *painter, const QColor &fill, const QColor 
     QFont f = painter->font();
     f.setPixelSize(qBound(7, int(qMin(m_pxW, m_pxD) / 5.0), 11));
     f.setBold(true);
+    // The word only where it fits: the heavy edge alone still says which face.
+    const QFontMetricsF fm(f);
+    const bool frontFits = fm.horizontalAdvance(tr("FRONT")) <= m_pxW - 4.0
+                           && fm.height() <= m_pxD / 2.0;
 
     if (m_view == 0)
     {
@@ -293,10 +338,13 @@ void PlatformItem::paintBox(QPainter *painter, const QColor &fill, const QColor 
         painter->drawLine(QPointF(g * 0.5, g * 2.3), QPointF(g * 2.3, g * 0.5));
         painter->setPen(frontPen);
         painter->drawLine(boxFrontEdge());
-        painter->setPen(border.lighter(170));
-        painter->setFont(f);
-        UprightText::draw(painter, QRectF(0, m_pxD - f.pixelSize() - 6, m_pxW, f.pixelSize() + 2),
-                          Qt::AlignCenter, tr("FRONT"));
+        if (frontFits)
+        {
+            painter->setPen(border.lighter(170));
+            painter->setFont(f);
+            UprightText::draw(painter, QRectF(0, m_pxD - f.pixelSize() - 6, m_pxW, f.pixelSize() + 2),
+                              Qt::AlignCenter, tr("FRONT"));
+        }
         return;
     }
 
@@ -321,8 +369,11 @@ void PlatformItem::paintBox(QPainter *painter, const QColor &fill, const QColor 
         // Face on: this IS the front, where the LEDs go.
         painter->setPen(frontPen);
         painter->drawRect(r.adjusted(2, 2, -2, -2));
-        painter->setPen(border.lighter(170));
-        UprightText::draw(painter, r, Qt::AlignCenter, tr("FRONT"));
+        if (frontFits)
+        {
+            painter->setPen(border.lighter(170));
+            UprightText::draw(painter, r, Qt::AlignCenter, tr("FRONT"));
+        }
         return;
     }
     const QLineF fe = boxFrontEdge();
@@ -332,7 +383,8 @@ void PlatformItem::paintBox(QPainter *painter, const QColor &fill, const QColor 
         painter->drawLine(fe);
         painter->setPen(border.lighter(170));
         const bool right = fe.x1() > m_pxW / 2.0;
-        UprightText::draw(painter, QRectF(right ? m_pxW - 14 : 2, 2, 12, 12), Qt::AlignCenter, tr("F"));
+        if (m_pxW >= 18.0 && m_pxD >= 14.0)
+            UprightText::draw(painter, QRectF(right ? m_pxW - 14 : 2, 2, 12, 12), Qt::AlignCenter, tr("F"));
     }
 }
 
