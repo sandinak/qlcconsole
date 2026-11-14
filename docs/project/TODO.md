@@ -10,6 +10,15 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Plot: fixture labels wrap mid-word (pre-existing, 0.4.6 follow-up)
+
+The ux-reviewer saw fixture names on the plot wrap inside a word ("In the
+b/ox", "Front s/trip") at every size; the platform labels had the same fault
+and were fixed in 0.4.5 (one line each, size then name dropped as room
+shrinks). Do the same for fixture labels.
+
+---
+
 ## Pad hits: the turn is not reset on a new cue (0.4.6 follow-up, decide)
 
 With two hits taking turns, the turn counter carries over from the last
