@@ -53,7 +53,7 @@ class Doc;
  * connected) lights each control while it is held, fills each trigger as
  * far as it is pulled and shows where each stick is, marks every control
  * that has answered, and names the last input read as the role it was read
- * as ("Button 3 â X"), so a control read as the wrong one shows at
+ * as ("Button 3 → X"), so a control read as the wrong one shows at
  * once. It only reads: nothing it shows reaches the show.
  *
  * It reads through QLCIOPlugin's diagnostics (setInputDiagnostics()), from

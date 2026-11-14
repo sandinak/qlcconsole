@@ -294,7 +294,7 @@ QString FocusControlMap::nameLabel(int role) const
 
 QString FocusControlMap::stateText(int role) const
 {
-    const QString tick = QString::fromUtf8("â ");     // a check mark
+    const QString tick = QString::fromUtf8("\342\234\223 ");     // a check mark
     switch (role)
     {
         case R::LeftX: case R::LeftY: case R::RightX: case R::RightY:
@@ -318,8 +318,8 @@ QString FocusControlMap::stateText(int role) const
         case R::DpadUp: case R::DpadDown: case R::DpadLeft: case R::DpadRight:
         {
             const struct { int role; const char *arrow; } arms[] = {
-                { R::DpadUp, "â²" }, { R::DpadDown, "â¼" },
-                { R::DpadLeft, "â" }, { R::DpadRight, "â¶" } };
+                { R::DpadUp, "\342\226\262" }, { R::DpadDown, "\342\226\274" },
+                { R::DpadLeft, "\342\227\200" }, { R::DpadRight, "\342\226\266" } };
             QStringList held;
             int seen = 0, mapped = 0;
             for (const auto &a : arms)
@@ -651,11 +651,11 @@ void FocusControlMap::paintController(QPainter &p)
     {
         /* What a control reads changes as it is pressed: both columns as
            wide as the widest it can say, so the pad holds still. */
-        const QString tick = QString::fromUtf8("â ");
+        const QString tick = QString::fromUtf8("\342\234\223 ");
         const QStringList widest = {
             tr("not on this controller"), tr("not pressed yet"),
             tick + tr("x %1  y %2").arg(QStringLiteral("-0.00"), QStringLiteral("-0.00")),
-            tr("pressed %1").arg(QString::fromUtf8("â² â¼ â â¶")),
+            tr("pressed %1").arg(QString::fromUtf8("\342\226\262 \342\226\274 \342\227\200 \342\226\266")),
             tick + tr("%1 of 4 seen").arg(4), tick + tr("%1 %").arg(100) };
         for (const QString &w : widest)
             leftW = qMax(leftW, nfm.horizontalAdvance(w));
