@@ -224,8 +224,7 @@ QString MappingCheck::line(int i) const
     switch (m_states.at(i))
     {
         case Passed: return QStringLiteral("✓ %1").arg(name);
-        case Wrong: return tr("✗ %1 — expected %2, read %3")
-                           .arg(name, m_steps.at(i).name, m_read.at(i));
+        case Wrong: return QStringLiteral("\u2717 %1 \u2014 %2").arg(name, mismatchText(i));
         case Skipped: return tr("- %1 (skipped)").arg(name);
         case Pending: break;
     }
