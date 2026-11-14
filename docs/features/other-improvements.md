@@ -71,11 +71,20 @@ brightness limit from the fixture's Max draw, and no Art-Net or sACN
 streams taking it over — then read back. Nothing is asked; the settings
 say what was done under the button: "Set up …" for a fresh one, or
 "Reconfigured …: it receives E1.31 (sACN) streams (universe 3). Now: …"
-for one that was set up for something else. One that can't be set up (not
-answering, or no WLED fixture on the universe to name it by) has its Output
+for one that was set up for something else. The same lines are in the
+footer. A device whose fixture on that universe has an old address is
+recognised by its hardware address: the fixture follows it ("OfficeStaff is
+this device (e0:8c:fe:f9:92:e0): its address was 172.18.2.100, now
+172.18.2.187.") and it is set up. When nothing answers at the universe's
+address but the fixture's WLED answers at its own, the settings say so and
+**Send to …** sends the universe there; when neither answers, both
+addresses are named ("one of them is out of date"). A WLED with no WLED
+fixture on its universe is set up without a name (no sync, dark at
+power-on, no streams), and said so. One that can't be set up has its Output
 in red with a ⚠ and the reason; set its devices again, or use **Fix on
 Device…** in the footer once it answers. Undo Patch Change puts the patch
-back, not the device's own settings. **An output that can't be reached now** — its interface not
+back (and a fixture's address it followed), not the device's own
+settings. **An output that can't be reached now** — its interface not
 plugged in, its protocol missing, a node not answering — has its Output
 cell in red with a **⚠**; hover it for why. An input or feedback kept for
 a device that isn't here shows the same way in its own cell.

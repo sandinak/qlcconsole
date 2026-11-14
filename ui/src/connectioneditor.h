@@ -234,6 +234,7 @@ private:
      *  universe to WLED does it): WledConfigCheck::writeStatus(), red when
      *  it could not be done. */
     QLabel *m_wledStatus = nullptr;
+    QPushButton *m_wledSendThere = nullptr;   ///< WledConfigCheck::sendThere()
     void updateWledStatus();
 
     // A device (USB, ...)

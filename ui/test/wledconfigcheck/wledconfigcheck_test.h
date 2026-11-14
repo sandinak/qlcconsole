@@ -33,6 +33,9 @@ private slots:
     void patchingSetsUpAFreshWledAndSaysSo();
     void patchingReconfiguresAWledSetUpOtherwiseAndSaysWhatItWas();
     void aWledThatCannotBeSetUpSaysWhyAndSettingItUpAgainWorks();
+    void aFixtureAtAnOldAddressFollowsItsDeviceByMac();
+    void twoAddressesForOneWledAreNamedAndOneClickSendsThere();
+    void aWledWithNoFixtureIsSetUpWithoutAName();
     void aMismatchIsFoundShownAndFixed();
     /** A device that does not answer: said once, never read; and back. */
     void anUnreachableDeviceIsSaidOnceAndNeverRead();

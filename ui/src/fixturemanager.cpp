@@ -3260,10 +3260,10 @@ void FixtureManager::foundContextMenu(QTreeWidgetItem *clicked)
         if (fid != Fixture::invalidId())
             made << (last = fid);
     }
-    // One Set Up question for all of them.
+    // Set up as they are patched: said in the footer, not asked.
     if (WledConfigCheck *check = WledConfigCheck::instance())
         if (!made.isEmpty())
-            check->offerSetUp(this, made);
+            check->setUpNow(made);
     updateView();
     if (QTreeWidgetItem *row = m_fixtures_tree->fixtureItem(last))
         m_fixtures_tree->setCurrentItem(row);

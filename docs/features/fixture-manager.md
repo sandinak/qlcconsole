@@ -358,11 +358,11 @@ is now at .105 (was 172.18.2.100)", and **Follow It** sends the fixture and
 its universe there (one undo). A WLED in the show that isn't answering is
 the footer's "not answering or on weak Wi-Fi" line.
 
-**Set Up WLED.** After Patch, or adding a WLED with Add Fixture, the show
-offers once to set the device up the way it drives it (on Connections,
-setting a universe's WLED devices does this without asking and says what it
-did: see [Connections](other-improvements.md)), listing exactly what
-changes: its **name** becomes the fixture's, and its network name to match
+**Set Up WLED.** Patching a WLED (Patch, Add Fixture, or the Inventory's
+found WLEDs) sets the device up the way the show drives it, without asking,
+and the footer says what was done ("Set up …", or "Reconfigured …" with what
+it was taking before); setting a universe's WLED devices on Connections does
+the same. What it changes: its **name** becomes the fixture's, and its network name to match
 (Staff L → staff-l.local, from when it next starts); it stops **taking
 brightness, colour, effect and palette from other WLEDs** and sending its
 own (WLED sync: out of the box one WLED's button or app changes the others);
@@ -370,15 +370,14 @@ it stays **dark at power-on** until the show drives it; and, when the
 fixture has a **Max draw** and its **LED supply** is known (Fixture Properties,
 the voltage its LEDs run on: 5 V unless you change it, 12 V, 24 V), its brightness limit follows
 them (the Max draw's watts at the circuit's voltage, over the LED supply's).
-With the LED supply set to Not known nothing is guessed: the confirmation says the
-limit is not set from the show and what the WLED's own is. Patching or
-adding several WLEDs at once asks **once**, listing each device's changes
-under its name. **Set Up Device** writes only those, then reads them back;
-**Not Now** writes nothing. Its Wi-Fi, LED
+With the LED supply set to Not known nothing is guessed: the limit is left
+as the WLED has it. Only what differs is written, then read back; a device
+that does not answer is said in the footer, and set up when it is patched
+again or with **Fix on Device…** once it answers. Its Wi-Fi, LED
 type, pins and colour order are never changed. A WLED that drifts from this
 later (renamed, sync turned back on, lit at power-on) is a **Fix on
 Device…** finding in the footer like any other. A Teaching show that holds
-real output is not asked.
+real output writes nothing, and says why.
 
 Adding a batch of network fixtures gives them **one IP each, counting up**
 from the one you type (…60, …61, …62, carrying past .255), and the dialog
