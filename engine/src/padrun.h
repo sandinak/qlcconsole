@@ -70,7 +70,9 @@ class Doc;
  *      light all show; nothing derives its own.
  *   3. No single control arms or disarms. The arm changes on the LB + RB
  *      chord only -- or with no button at all: the role switched, a tool
- *      took the pad, the pad went away, the emergency stop.
+ *      took the pad, the pad went away, the emergency stop. The chord is
+ *      a fresh one: a trigger down with both bumpers (the stop, or one
+ *      on its way) spends it until both bumpers are let go.
  *   4. No cue moves on one control: armed, and the safety (LT) held, and
  *      the button -- one safety for GO, Back, Sub GO and Sub Back. The
  *      hit is the right trigger's own, armed.
@@ -491,6 +493,9 @@ private:
         bool rb = false;
         ControllerScheme::TriggerButton lt, rt;
         bool stopFired = false;     ///< the four made a stop: not again until one is up
+        /** A trigger was down with both bumpers (the stop, or one on its
+         *  way): no arm until both bumpers are up and squeezed afresh. */
+        bool spent = false;
         bool anyTrigger() const { return lt.isDown() || rt.isDown(); }
         bool all() const { return lb && rb && lt.isDown() && rt.isDown(); }
     };

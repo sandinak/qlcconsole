@@ -79,7 +79,11 @@ them:
 1. **The pad never picks the list.** The screen does (the Run tab).
 2. **The bumpers are the mode, and only that.** Hold **LB + RB** (L1 + R1)
    for half a second to arm. Let go: it stays armed. Hold them again to
-   disarm. No single button, held or pressed, arms or disarms.
+   disarm. No single button, held or pressed, arms or disarms. A trigger
+   squeezed while both bumpers are down (the emergency stop, or one
+   begun) spends the hold: nothing arms until both bumpers are let go
+   and squeezed again, so letting go of the triggers first after a stop
+   never arms.
 3. **The left trigger is the safety.** No cue moves without it: armed, hold
    **LT** (L2) and press the button.
 4. **The right trigger is the hit.** Armed, pull **RT** (R2).

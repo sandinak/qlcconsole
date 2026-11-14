@@ -256,6 +256,13 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
 
     if (chordControl)
     {
+        /* A trigger with both bumpers is the stop (or on its way): no arm
+           chord again until both bumpers are up -- letting go of the
+           triggers first must not arm. */
+        if (h.lb && h.rb && h.anyTrigger())
+            h.spent = true;
+        else if (!h.lb && !h.rb)
+            h.spent = false;
         /* All four: the emergency stop, armed or not, once a chord. */
         if (h.all())
         {
@@ -327,7 +334,7 @@ bool PadRun::isArmChordPending() const
 void PadRun::armChordUpdate(quint32 universe)
 {
     const Held h = m_held.value(universe);
-    const bool chord = h.lb && h.rb && !h.anyTrigger();
+    const bool chord = h.lb && h.rb && !h.anyTrigger() && !h.spent;
     if (chord)
     {
         // Timed from the second bumper down; a held chord is not restarted.
@@ -346,7 +353,7 @@ void PadRun::armChordUpdate(quint32 universe)
        why -- a trigger that does not come back up would otherwise make a
        pad that "will not arm" with nothing to show for it. */
     if (h.lb && h.rb && h.anyTrigger() && !h.all() && m_pc != nullptr)
-        showNotice(m_pc->padText(tr("To arm, let go of the triggers.")));
+        showNotice(m_pc->padText(tr("To arm, let go of everything, then hold {LB} and {RB}.")));
 }
 
 void PadRun::armChordFired()
@@ -354,7 +361,7 @@ void PadRun::armChordFired()
     const quint32 u = m_chordUniverse;
     m_chordUniverse = UINT_MAX;
     const Held h = m_held.value(u);
-    if (!m_enabled || !h.lb || !h.rb || h.anyTrigger())
+    if (!m_enabled || !h.lb || !h.rb || h.anyTrigger() || h.spent)
         return;
     // Another pad's arm is not this one's to drop.
     if (m_armed && u != m_armUniverse)
