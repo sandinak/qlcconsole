@@ -216,7 +216,11 @@ for and note each result.
    *Expected:* the name line reads "Steam Deck…" with "mapping:
    standard". Each box lights while its control is down. A trigger shows
    how far it is pulled, and the stick bars follow the sticks. Take a
-   screenshot. Menu closes the test.
+   screenshot. Menu closes the test. To check the pad's mapping on the
+   console as well, press **Check Mapping** in its Controller Test
+   (see [Controller test](lighting-studio.md#controller-test)) and follow
+   the prompts: *Expected:* every control ticks ✓ and the summary says
+   "20 of 20 match"; copy the log if one reads wrong.
 3. **Round trip.** Open **/focus**. With the controller test open there,
    read the round trip line.
    *Expected:* a number in milliseconds. Note it (a few ms on a quiet

@@ -29,6 +29,7 @@ add_library(${module_name}
     app.cpp app.h
     appsettings.cpp appsettings.h
     controllertestdialog.cpp controllertestdialog.h
+    mappingcheck.cpp mappingcheck.h
     apputil.cpp apputil.h
     contextmenus.cpp contextmenus.h
     editkeys.cpp editkeys.h

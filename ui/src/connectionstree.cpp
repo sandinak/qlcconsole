@@ -51,6 +51,7 @@
 #include <QStyle>
 
 #include "connectionstree.h"
+#include "controllertestdialog.h"
 #include "shrinkablebar.h"
 #include "connectioneditor.h"
 #include "networkroute.h"
@@ -2091,12 +2092,14 @@ void ConnectionsTree::refresh()
                 row->setData(COL_NAME, ROLE_UNIVERSE, u);
                 row->setData(COL_NAME, ROLE_LINE, d);
                 row->setData(COL_NAME, ROLE_PLUGIN, dev.plugin);
+                row->setData(COL_NAME, ROLE_ADDRESS, dev.anyGamepad ? QString() : dev.uid);
                 setRowTooltip(row, tr(
                     "<b>%1</b><br>One of the controllers universe %2's input may come "
                     "from. The first one in this list that is connected drives it; "
                     "each keeps its own input and controller profile, and the show's "
                     "controls work from whichever it is. Right-click to change the "
-                    "order or take it out.")
+                    "order or take it out, or choose Check Mapping\u2026 to walk it through "
+                    "every control.")
                     .arg((dev.anyGamepad ? tr("Any game controller") : dev.uid).toHtmlEscaped())
                     .arg(u + 1));
             }
@@ -2976,12 +2979,23 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         if (hasAny == false)
             any = menu.addAction(tr("Also Take Any Game Controller (last)"));
         menu.addSeparator();
+        QAction *checkMap = menu.addAction(tr("Check Mapping\u2026"));
+        checkMap->setToolTip(tr("Open the Controller Test and walk this controller through every "
+                                "control, to check each is read as the control it is"));
+        menu.addSeparator();
         QAction *remove = menu.addAction(tr("Remove from Universe %1").arg(uni + 1));
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
             return;
         bool changed = false;
+        if (chosen != NULL && chosen == checkMap)
+        {
+            ControllerTestDialog::open(m_doc, this)->startCheck(
+                item->data(COL_NAME, ROLE_PLUGIN).toString(),
+                item->data(COL_NAME, ROLE_ADDRESS).toString());
+            return;
+        }
         if (chosen == up)
             changed = iom->moveInputSlotDevice(uni, index, index - 1);
         else if (chosen == down)

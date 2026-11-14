@@ -2426,6 +2426,27 @@ input and every event in order — on the clipboard, **Save…** writes it to a
 text file. That is everything needed to check, or fix, a controller's
 mapping without the controller in hand.
 
+**Check Mapping** does the pressing for you, one control at a time. Press
+it (with the controller connected; with more than one, pick which from the
+list above the prompt) and the window asks for each control in the pad's
+own printed name, with where it is on the pad: *Press A — the green bottom
+face button*, or *Press Cross (✕) — the bottom face button* on a
+PlayStation pad. The order is the face buttons, the shoulders, the
+triggers (pull each all the way), the small buttons (View and Menu; Create
+or Share and Options, and the touchpad click, on a PlayStation pad), the
+stick clicks, the four D-pad directions, then each stick pushed forward
+and to the right. A control passes when the controller sends it as that
+control. If it sends another one, the prompt turns red — *Expected B, read
+X* — and the control stays marked ✗ until you press **Retry** and press
+it again, or **Skip** it (for a control the pad does not have). A checklist
+of ✓, ✗ and skipped controls runs beside the prompt, and the walk ends with
+a line such as *18 of 20 match; 2 wrong: B read as X, Y read as A*. The
+whole check goes into the log, with the device, its vendor and product ID,
+how it is connected and which layout (Xbox or PlayStation names) it was
+read with, so a tester can **Copy** or **Save…** it and send it. You can
+also start it from Connections: right-click a controller under a
+universe's input and choose **Check Mapping…**.
+
 ### Permissions
 
 A game controller does not normally need any permission on a Mac.
