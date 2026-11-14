@@ -29,6 +29,7 @@
 #include <QPainter>
 #include <QTimer>
 
+#include "treekeepview.h"
 #include "functionstreewidget.h"
 #include "itemicons.h"
 #include "showtreecontroller.h"
@@ -234,6 +235,7 @@ void FunctionsTreeWidget::filterByText(const QString &text)
 
     for (int i = 0; i < topLevelItemCount(); ++i)
         applyFilter(topLevelItem(i));
+    TreeKeepView::reveal(this);     // stay on what is selected
 }
 
 bool FunctionsTreeWidget::isListed(const Function *function) const

@@ -44,6 +44,7 @@
 #include <QPushButton>
 #include <QComboBox>
 #include <QLineEdit>
+#include "treekeepview.h"
 #include "timecodecues.h"
 #include "timecodesource.h"
 #include <QRegularExpression>
@@ -10776,6 +10777,12 @@ void ShowTreeView::slotFilterChanged(const QString &text)
             item->setExpanded(m_openWithoutFilter.contains(
                 path.isEmpty() ? item->text(0) + QLatin1Char('/') + QString::number(LibFolder) : path));
         }
+    // Stay on what is selected -- when the text changed, not on a reload.
+    if (m_library->property("keepFilter").toString() != text)
+    {
+        m_library->setProperty("keepFilter", text);
+        TreeKeepView::reveal(m_library);
+    }
 }
 
 void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)

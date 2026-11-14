@@ -85,7 +85,9 @@ Two panes, left to right:
   show without a Show Tree view has **Groups &amp; fixtures** there instead, with a **Search fixtures &
   groups…** box: a row stays when it or anything under it matches, the
   folders on the way down open, and a matching group keeps all its
-  fixtures. Right-click a row for the menu a fixture or group has
+  fixtures. Clear the search and you stay on the row you picked: it
+  stays selected, its folders stay open and it is scrolled to the middle.
+  Right-click a row for the menu a fixture or group has
   everywhere ([one menu per kind](fixture-manager.md#right-click-menus)):
   on a group **Edit Head Layout…**, **Locate**, [Output
   Rules…](fixture-manager.md#output-rules), **Select All Similar** (the

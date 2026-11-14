@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "treekeepview.h"
 #include "createfixturegroup.h"
 #include "contextmenus.h"
 #include "itemicons.h"
@@ -303,11 +304,14 @@ void FixtureGroupSource::setFilterText(const QString &text)
 {
     const QString t = text.trimmed();
     const bool cleared = !m_filter.isEmpty() && t.isEmpty();
+    const bool changed = t != m_filter;
     m_filter = t;
     for (int i = 0; i < topLevelItemCount(); ++i)
         applyFilter(topLevelItem(i), t, false);
     if (cleared)
         collapseAll();              // back as it opens: collapsed
+    if (changed)
+        TreeKeepView::reveal(this);     // ...but open on what is selected
 }
 
 void FixtureGroupSource::addFixtureLeaf(QTreeWidgetItem *parent, Fixture *f)
