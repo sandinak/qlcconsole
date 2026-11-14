@@ -11153,6 +11153,46 @@ void ShowTree_Test::startHereMovesTheStartForward()
     QCOMPARE(play(), dmxBefore);
 }
 
+/* Bring Into This Cue on a child layer brings the parent in the same step
+   (one undo), the child right after it, every cue playing as before. */
+void ShowTree_Test::bringIntoChildBringsParent()
+{
+    FixtureGroup *steps = group("Steps", { m_fixtures[0], m_fixtures[1], m_fixtures[2] });
+    FixtureGroup *us = group("US", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 parent = st->addLayer(c1, groupTarget(steps->id()));
+    QVERIFY(st->setLayerLook(c1, parent, st->lookForPalette(full)));
+    QString why;
+    const quint32 child = st->addChildLayer(c1, parent, groupTarget(us->id()), &why);
+    QVERIFY2(child != invalidId(), qPrintable(why));
+    QVERIFY(st->setLayerLook(c1, child, st->lookForPalette(half)));
+
+    const CueList before = *st->cueList(listId);
+    const QByteArray xmlBefore = treeXml(st);
+    const Target tp = groupTarget(steps->id()), tc = groupTarget(us->id());
+    QVERIFY(layersOn(st, c2, tp).isEmpty());
+    const ShowTreeController::TrackOp op = st->bringIntoPlan(c2, tc);
+    QVERIFY2(op.ok, qPrintable(op.why));
+    QVERIFY(op.withParent);
+    QVERIFY2(st->bringIntoCue(c2, tc, &why), qPrintable(why));
+    QVERIFY(!stageDiffers(before, *st->cueList(listId)));
+    const QList<const Layer *> p2 = layersOn(st, c2, tp), k2 = layersOn(st, c2, tc);
+    QCOMPARE(p2.count(), 1);
+    QCOMPARE(k2.count(), 1);
+    QCOMPARE(k2.first()->parent, p2.first()->id);
+    QCOMPARE(st->cue(c2)->layers.count(), 2);
+    QCOMPARE(st->cue(c3)->layers.count(), 0);
+    // One undo step.
+    QVERIFY(st->undo());
+    QCOMPARE(treeXml(st), xmlBefore);
+}
+
 /* The cases that are handled or refused with a reason: an include, a Block
    cue between, a Cue-only cue, the base cue. */
 void ShowTree_Test::trackOpsEdgeCases()

@@ -179,6 +179,7 @@ private slots:
     void bringIntoKeepsEveryCueTheSame();
     void startHereMovesTheStartForward();
     void trackOpsEdgeCases();
+    void bringIntoChildBringsParent();
     void untrackEndsTheLayerBeforeThisCue();
     void untrackEdgeCases();
     void trackSpanCountsTheCuesSinceItWasSet();

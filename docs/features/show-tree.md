@@ -1403,8 +1403,10 @@ show the same:
   A **Block** cue between is not a problem: the layer starts at the Block
   cue, so only the Block cue and the cues after it lose it.
 - Either is refused when the layer is one effect or aim shared with other
-  layers by a cue look (on its own it would play as several), or is a child
-  layer whose parent is carried in too (bring the parent in first).
+  layers by a cue look (on its own it would play as several). **Start Here
+  Instead** is also refused on a child layer whose parent is carried in too
+  (bring the parent in first); **Bring Into This Cue** on a child layer
+  brings its parent in as well, in the same step: one undo.
 - **Bring Into This Cue** on a layer that comes in from an include leaves
   the include as it is, and works in a Cue-only cue.
 

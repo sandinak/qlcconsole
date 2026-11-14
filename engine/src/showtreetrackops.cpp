@@ -58,7 +58,11 @@ struct Ctx
     const Cue *cue = nullptr;
     QList<ResolvedCue> res;
     const ResolvedLayer *rl = nullptr;
+    bool parentMissing = false;     //!< a child layer whose parent the cue doesn't hold yet
 };
+
+/** The id a child's parent layer has in a plan, before the edit gives it a real one. */
+const quint32 kPlannedParent = 0xFFFFFFFD;
 
 /** Take the layer on @a target out of cues @a range and put @a op.layer into
  *  cue @a at of @a list. */
@@ -72,6 +76,19 @@ void applyOp(CueList &list, int at, const TrackOp &op, const Target &target)
                 ls.removeAt(i);
     }
     QList<Layer> &ls = list.cues[at].layers;
+    if (op.withParent)
+    {
+        // Bring Into on a child: the parent comes in too, the child right after it.
+        if (op.parentFront)
+            ls.prepend(op.parentLayer);
+        else
+            ls.append(op.parentLayer);
+        int p = 0;
+        while (p < ls.count() && ls.at(p).id != op.parentLayer.id)
+            ++p;
+        ls.insert(p + 1, op.layer);
+        return;
+    }
     if (op.front)
         ls.prepend(op.layer);
     else
@@ -97,7 +114,8 @@ bool samePlay(const QList<ResolvedCue> &a, const QList<ResolvedCue> &b, const QS
 
 /* What both actions need: the cue plays the layer carried in, not its own,
    and nothing that can't be copied faithfully into a layer. */
-static bool commonChecks(const ShowTreeController &st, quint32 cueId, const Target &t, Ctx *c, QString *why)
+static bool commonChecks(const ShowTreeController &st, quint32 cueId, const Target &t, Ctx *c, QString *why,
+                         bool parentComesToo = false)
 {
     c->list = st.listOfCue(cueId);
     if (c->list == nullptr || t.isEmpty())
@@ -163,7 +181,9 @@ static bool commonChecks(const ShowTreeController &st, quint32 cueId, const Targ
         bool found = false;
         for (const Layer &l : c->cue->layers)
             found |= l.target == c->rl->parent;
-        if (!found)
+        if (!found && parentComesToo)
+            c->parentMissing = true;
+        else if (!found)
         {
             *why = ShowTreeController::tr("It is a child layer of %1, which is carried in too: bring that in first.")
                        .arg(st.targetLabel(c->rl->parent));
@@ -183,7 +203,9 @@ static Layer carriedLayer(const Ctx &c, bool nones)
     l.target = c.rl->target;
     for (auto it = c.rl->values.constBegin(); it != c.rl->values.constEnd(); ++it)
         l.setLook(it.value().look);
-    if (c.rl->depth > 0)
+    if (c.parentMissing)
+        l.parent = kPlannedParent;
+    else if (c.rl->depth > 0)
         for (const Layer &o : c.cue->layers)
             if (o.target == c.rl->parent)
             {
@@ -237,13 +259,28 @@ TrackOp ShowTreeController::bringIntoPlan(quint32 cueId, const Target &target) c
 {
     Ctx c;
     QString why;
-    if (!commonChecks(*this, cueId, target, &c, &why))
+    if (!commonChecks(*this, cueId, target, &c, &why, true))
         return refused(why);
     // A cue that mixes plays an included layer beside its own.
     if (c.cue->mixOverlap && c.rl->origin == Origin::Included)
         return refused(tr("This cue mixes what it includes: %1 would play twice. Turn mixing off first.")
                            .arg(targetLabel(target)));
     TrackOp op;
+    if (c.parentMissing)
+    {
+        // The parent comes in first, in the same step; the child goes right after it.
+        const TrackOp up = bringIntoPlan(cueId, c.rl->parent);
+        if (!up.ok)
+            return refused(tr("It is a child layer of %1, which has to come in too: %2")
+                               .arg(targetLabel(c.rl->parent), up.why));
+        if (up.withParent)
+            return refused(tr("It is a child layer of %1, which is a child layer itself: bring %1's parent in first.")
+                               .arg(targetLabel(c.rl->parent)));
+        op.withParent = true;
+        op.parentLayer = up.layer;
+        op.parentLayer.id = kPlannedParent;
+        op.parentFront = up.front;
+    }
     if (!settle(*this, c, target, QSet<quint32>(), &op))
         return refused(tr("%1 can't be brought in without changing what a cue plays (its layer order or the "
                           "cue's own looks).").arg(targetLabel(target)));
@@ -381,6 +418,11 @@ bool ShowTreeController::bringIntoCue(quint32 cueId, const Target &target, QStri
         return false;
     }
     op.layer.id = newId();
+    if (op.withParent)
+    {
+        op.parentLayer.id = newId();
+        op.layer.parent = op.parentLayer.id;
+    }
     return edit(tr("Bring %1 into this cue").arg(targetLabel(target)), [&](QList<Production> &ps) {
         for (Production &p : ps)
             for (CueList &l : p.lists)
