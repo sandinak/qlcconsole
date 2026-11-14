@@ -25,6 +25,7 @@
 #include <QSet>
 
 #include "wleddevicesdialog.h"
+#include "wledconfigcheck.h"
 #include "inputoutputmap.h"
 #include "qlcioplugin.h"
 #include "outputpatch.h"
@@ -289,6 +290,11 @@ bool WledDevicesDialog::edit(Doc *doc, quint32 universe, quint32 line, QWidget *
                                  tr("WLED devices of universe %1").arg(universe + 1));
     apply(op, dlg.devices());
     doc->setModified();
+    /* Patching a universe to a WLED is the one step that brings the device
+       in: it is set up for this show now, and the Connections pane says
+       how that went ("one step to include a device whatever it is"). */
+    if (WledConfigCheck *check = WledConfigCheck::instance())
+        check->setUpUniverse(universe);
     return true;
 }
 

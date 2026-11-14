@@ -104,8 +104,9 @@ happens, never per frame.
 
 **Nothing comes out of a universe, or only part of a rig lights.**
 Connections → tick **By universe**: every universe with where it goes.
-One reading "not patched" has no output — double-click it (or
-right-click ▸ **Edit Connection…**) and pick where it goes. Select a universe to see the channels it is actually
+One reading "not patched" has no output — select it and pick where it goes
+in the settings beside the list (or double-click its Output cell). An
+Output in red with a ⚠ can't be reached now: hover it for why. Select a universe to see the channels it is actually
 sending: if the values are there, the problem is downstream (node, cable,
 the fixture's address); if not, it's the look or the patch.
 

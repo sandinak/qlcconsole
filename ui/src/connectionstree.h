@@ -122,8 +122,9 @@ private slots:
     void slotUndoAvailabilityChanged();
     /** Commit an inline edit of a target's name. */
     void slotItemChanged(class QTreeWidgetItem *item, int column);
-    /** A universe row: its connection (ConnectionEditor), as
-     *  right-click ▸ Edit connection… opens it. */
+    /** A universe row: the cell under the pointer edited in place (a By
+     *  universe patch cell, or the name). No window: the universe's
+     *  connection is already in the pane beside the list. */
     void slotItemDoubleClicked(class QTreeWidgetItem *item, int column);
 
 private:
@@ -132,13 +133,13 @@ private:
     /** Universe ids whose FEEDBACK is routed to this plugin line. */
     QList<quint32> feedbackOn(const QString &pluginName, quint32 line) const;
 
-    /** A row a universe's connection is opened from: a patched, pending or
-     *  unpatched universe. */
+    /** A universe's row: a patched, pending or unpatched universe. */
     static bool isUniverseRow(const QTreeWidgetItem *item);
-    /** Open the connection window for that row's universe (and its leg),
-     *  filled in; @p column, a By universe column, opens it on that part
-     *  (input, feedback, passthrough). True if it changed anything. */
-    bool editConnection(QTreeWidgetItem *item, int column = -1);
+    /** A WLED output leg as the By universe Output cell reads it: "WLED:
+     *  <MAC>", else "WLED: <IP>", else "WLED" (+ its backups). */
+    QString wledOutputText(class OutputPatch *op, quint32 universe) const;
+    /** A By universe row's Output it cannot reach now: ⚠, red, and why. */
+    static void markUnreachable(QTreeWidgetItem *item, const QStringList &reasons);
 
     /** Patch an existing or new universe to this plugin line. */
     void patchUniverseTo(const QString &pluginName, quint32 line, bool output);

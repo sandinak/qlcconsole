@@ -677,14 +677,21 @@ bool WledConfigCheck::setLedCount(quint32 fixtureId)
     return true;
 }
 
-void WledConfigCheck::noteWrite(const QString &ip, const QString &text, bool busy)
+void WledConfigCheck::noteWrite(const QString &ip, const QString &text, bool busy, bool failed)
 {
     Write w;
     w.text = text;
     w.busy = busy;
+    w.failed = failed;
     w.at = QDateTime::currentMSecsSinceEpoch();
     m_writes[ip] = w;
     emit writeChanged(ip);
+}
+
+bool WledConfigCheck::writeFailed(const QString &ip) const
+{
+    const Write w = m_writes.value(ip);
+    return w.failed && !writeStatus(ip).isEmpty();
 }
 
 QString WledConfigCheck::writeStatus(const QString &ip, bool *busy) const
@@ -985,25 +992,164 @@ void WledConfigCheck::offerSetUp(QWidget *parent, const QList<quint32> &fixtureI
     }
 }
 
-void WledConfigCheck::writeSetUp(const QString &ip, const QJsonObject &fix)
+namespace
+{
+/* @p add laid over @p base, objects merged key by key (what WLED does with a
+   partial /json/cfg it is sent). */
+QJsonObject mergedJson(QJsonObject base, const QJsonObject &add)
+{
+    for (auto it = add.constBegin(); it != add.constEnd(); ++it)
+    {
+        if (it.value().isObject() && base.value(it.key()).isObject())
+            base[it.key()] = mergedJson(base.value(it.key()).toObject(), it.value().toObject());
+        else
+            base[it.key()] = it.value();
+    }
+    return base;
+}
+}
+
+QStringList WledConfigCheck::wledIps(Doc *doc, quint32 universe)
+{
+    QStringList ips;
+    InputOutputMap *io = doc != nullptr ? doc->inputOutputMap() : nullptr;
+    if (io == nullptr || universe >= io->universesCount())
+        return ips;
+    for (int i = 0; i < io->outputPatchesCount(universe); i++)
+    {
+        OutputPatch *op = io->outputPatch(universe, i);
+        if (op == nullptr || op->pluginName() != QLatin1String("WLED"))
+            continue;
+        const QMap<QString, QVariant> pp = op->getPluginParameters();
+        for (auto it = pp.constBegin(); it != pp.constEnd(); ++it)
+            if (it.key().startsWith(QLatin1String("outputIP")) && !it.value().toString().isEmpty()
+                && !ips.contains(it.value().toString()))
+                ips << it.value().toString();
+    }
+    ips.sort();
+    return ips;
+}
+
+void WledConfigCheck::setUpUniverse(quint32 universe)
+{
+    const QList<quint32> ids = fixturesSentTo(m_doc, universe);
+    QSet<QString> covered;
+    foreach (quint32 fid, ids)
+        if (const Fixture *fx = m_doc->fixture(fid))
+            covered.insert(fx->ipAddress());
+    foreach (const QString &ip, wledIps(m_doc, universe))
+        if (!covered.contains(ip))
+            noteWrite(ip, tr("%1 was not set up: no WLED fixture in this show is patched to universe "
+                             "%2 at that address, so there is nothing to name or size it by. Add "
+                             "one (Fixtures ▸ Add, Network (WLED)) and it is set up.")
+                              .arg(WledDeviceWrite::deviceName(ip)).arg(universe + 1), false, true);
+    setUpNow(ids);
+}
+
+QList<quint32> WledConfigCheck::fixturesSentTo(Doc *doc, quint32 universe)
+{
+    QList<quint32> ids;
+    const QStringList list = wledIps(doc, universe);
+    const QSet<QString> ips(list.begin(), list.end());
+    if (ips.isEmpty())
+        return ids;
+    foreach (Fixture *fx, doc->fixtures())
+        if (isWled(fx) && fx->transport() == Fixture::WledTransport && fx->isPatched()
+            && fx->universe() == universe && ips.contains(fx->ipAddress()))
+            ids << fx->id();
+    return ids;
+}
+
+void WledConfigCheck::setUpNow(const QList<quint32> &fixtureIds)
+{
+    QSet<QString> ips;
+    foreach (quint32 fid, fixtureIds)
+    {
+        const Fixture *fx = m_doc->fixture(fid);
+        if (!isWled(fx) || ips.contains(fx->ipAddress()))
+            continue;
+        const QString ip = fx->ipAddress();
+        ips.insert(ip);
+        const QString held = WledDeviceWrite::heldReason(m_doc, ip);
+        if (!held.isEmpty())
+        {
+            noteWrite(ip, tr("%1 was not set up: %2").arg(WledDeviceWrite::deviceName(ip), held), false, true);
+            continue;
+        }
+        noteWrite(ip, tr("Setting up %1…").arg(WledDeviceWrite::deviceName(ip)), true);
+        QNetworkRequest req(QUrl(baseUrl(ip) + QStringLiteral("/json/cfg")));
+        req.setTransferTimeout(4000);
+        QNetworkReply *r = m_nam->get(req);
+        connect(r, &QNetworkReply::finished, this, [this, r, ip, fid]() {
+            r->deleteLater();
+            if (r->error() != QNetworkReply::NoError)
+            {
+                noteWrite(ip, tr("%1 was not set up: it did not answer (%2). It is set up when "
+                                 "you patch it again, or with Fix on Device once it answers.")
+                                  .arg(WledDeviceWrite::deviceName(ip), r->errorString()), false, true);
+                return;
+            }
+            const QByteArray body = r->readAll();
+            const QJsonObject cfg = QJsonDocument::fromJson(body).object();
+            const Fixture *fx = m_doc->fixture(fid);
+            if (cfg.isEmpty() || fx == nullptr)
+            {
+                noteWrite(ip, tr("%1 was not set up: its answer is not a WLED's settings.")
+                                  .arg(WledDeviceWrite::deviceName(ip)), false, true);
+                return;
+            }
+            receive(ip, body, true);
+            /* Set Up's settings and the ones Fix on Device would make for
+               how this show drives it: everything in one write. */
+            const Finding own = setUpFor(m_doc, fx, cfg, true);
+            const Finding drive = evaluate(m_doc, fx, cfg);
+            const QJsonObject fix = mergedJson(own.fix, drive.fix);
+            const QString name = WledDeviceWrite::deviceName(ip);
+            if (fix.isEmpty())
+            {
+                noteWrite(ip, tr("%1 is set up the way this show drives it.").arg(name), false);
+                return;
+            }
+            /* evaluate() has Set Up's own findings too (its name, power-on):
+               what is left is how it was set up to be driven -- taking a
+               stream, another protocol, universe or address. */
+            QStringList changes = own.changes, was;
+            foreach (const QString &c, drive.changes)
+                if (!changes.contains(c))
+                    changes << c;
+            foreach (const QString &p, drive.problems)
+                if (!own.problems.contains(p))
+                    was << p;
+            const bool otherwise = changes.size() > own.changes.size();
+            const QString done = otherwise
+                ? tr("Reconfigured %1: it %2. Now: %3.")
+                      .arg(name, was.join(QStringLiteral("; ")), changes.join(QStringLiteral("; ")))
+                : tr("Set up %1 for this show: %2.").arg(name, changes.join(QStringLiteral("; ")));
+            writeSetUp(ip, fix, done);
+        });
+    }
+}
+
+void WledConfigCheck::writeSetUp(const QString &ip, const QJsonObject &fix, const QString &done)
 {
     noteWrite(ip, tr("Setting up %1…").arg(WledDeviceWrite::deviceName(ip)), true);
     QNetworkRequest post(QUrl(baseUrl(ip) + QStringLiteral("/json/cfg")));
     post.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     post.setTransferTimeout(4000);
     QNetworkReply *p = m_nam->post(post, QJsonDocument(fix).toJson(QJsonDocument::Compact));
-    connect(p, &QNetworkReply::finished, this, [this, p, ip, fix]() {
+    connect(p, &QNetworkReply::finished, this, [this, p, ip, fix, done]() {
         p->deleteLater();
         if (p->error() != QNetworkReply::NoError)
         {
-            noteWrite(ip, tr("%1 did not take it: %2").arg(WledDeviceWrite::deviceName(ip), p->errorString()), false);
+            noteWrite(ip, tr("%1 did not take it: %2").arg(WledDeviceWrite::deviceName(ip), p->errorString()),
+                      false, true);
             return;
         }
         // Read it back: what it says now is what counts.
         QNetworkRequest back(QUrl(baseUrl(ip) + QStringLiteral("/json/cfg")));
         back.setTransferTimeout(4000);
         QNetworkReply *b = m_nam->get(back);
-        connect(b, &QNetworkReply::finished, this, [this, b, ip, fix]() {
+        connect(b, &QNetworkReply::finished, this, [this, b, ip, fix, done]() {
             b->deleteLater();
             if (b->error() != QNetworkReply::NoError)
             {
@@ -1013,10 +1159,14 @@ void WledConfigCheck::writeSetUp(const QString &ip, const QJsonObject &fix)
             }
             const QByteArray now = b->readAll();
             const QStringList differ = jsonDiffers(fix, QJsonDocument::fromJson(now).object());
-            noteWrite(ip, differ.isEmpty()
-                ? tr("Set up %1 the way this show drives it.").arg(WledDeviceWrite::deviceName(ip))
-                : tr("Wrote to %1, but it reads back otherwise: %2")
-                      .arg(WledDeviceWrite::deviceName(ip), differ.join(QStringLiteral(", "))), false);
+            if (differ.isEmpty())
+                noteWrite(ip, done.isEmpty()
+                    ? tr("Set up %1 the way this show drives it.").arg(WledDeviceWrite::deviceName(ip))
+                    : done, false);
+            else
+                noteWrite(ip, tr("Wrote to %1, but it reads back otherwise: %2")
+                                  .arg(WledDeviceWrite::deviceName(ip), differ.join(QStringLiteral(", "))),
+                          false, true);
             receive(ip, now, true);
         });
     });

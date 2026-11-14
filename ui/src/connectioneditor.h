@@ -230,6 +230,11 @@ private:
     // WLED
     QPushButton *m_wledButton = nullptr;
     QLabel *m_wledNote = nullptr;
+    /** How setting the WLED devices up for this show went (patching a
+     *  universe to WLED does it): WledConfigCheck::writeStatus(), red when
+     *  it could not be done. */
+    QLabel *m_wledStatus = nullptr;
+    void updateWledStatus();
 
     // A device (USB, ...)
     QLabel *m_deviceNote = nullptr;

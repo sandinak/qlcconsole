@@ -155,8 +155,12 @@ private slots:
        a new universe and editing a patched one are the same window, the
        second filled in; Art-Net, sACN and a USB widget each show their own
        settings in it; OK is one undo step, Cancel changes nothing. */
-    void doubleClickingAUniverseOpensItsConnection();
-    void aUniversesMenuHasOneEditConnection();
+    void doubleClickingAUniverseOpensNoWindow();
+    void aUniversesMenuHasNoEditConnection();
+    void byUniverseOutputSaysWhereEachProtocolGoes();
+    void aTargetsNameDoesNotOutliveIt();
+    void theUniverseGridSaysTheAddressUnderThePointer();
+    void aWledNotSetUpSaysWhyOnItsUniverse();
     void connectionEditorPatchesANewArtNetUniverse();
     void connectionEditorOpensFilledInForAPatchedUniverse();
     void connectionEditorSetsSacnSettings();
@@ -180,6 +184,7 @@ private slots:
     void aHandPickedInterfaceStaysChosen();
     void byUniverseShowsTheSelectedUniversesSettings();
     void byUniverseCellsEditThePatch();
+    void byUniverseShots();
 
 private:
     Doc *m_doc;

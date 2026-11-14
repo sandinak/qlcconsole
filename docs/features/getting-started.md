@@ -387,9 +387,9 @@ needs an address until the end.
    four step units — right-click one → **Patch Others Like This** so they're
    all addressed the same in their own universes.
    ([Patching](fixture-manager.md#patching-the-patch-dialog))
-7. **Wire the universes.** Connections ▸ Devices: double-click a universe
-   (or right-click ▸ **Edit Connection…**) and pick the protocol, the
-   interface and the node's port. For a node not heard yet, right-click
+7. **Wire the universes.** Connections ▸ Devices: select a universe and,
+   in its settings beside the list, pick the protocol, the interface and
+   the node's port. For a node not heard yet, right-click
    the interface ▸ **Add a Target on This Interface…**. Select a universe
    to see what it's sending.
 8. **Group the fixtures** for effects and looks: select on the plot →

@@ -31,28 +31,54 @@ state; click one to set it up on the right. See
 Because Devices follows the wiring, a patched universe appears only under
 the output it goes to, and only unpatched ones gather in their own
 **Unpatched** folder. Tick **By universe** for the other way round: every
-universe in number order, each with where it goes ("Art-Net → CS1
-(172.18.2.211) · port 1 · universe 0:0:0", "WLED → 172.18.2.55", or "not
-patched"; with more than one interface, "· via" the one it leaves by) and
-what it
-carries — same right-click actions, renamed inline the same way. The choice
+universe in number order, each with its **Output** — where it goes, down
+to the far end's own universe ("ArtNet · 172.18.2.157 · universe 0:0:15",
+"E1.31 (sACN) · 172.18.2.157 · universe 7", "WLED: e0:8c:fe:f9:92:e0", "DMX
+USB · " and the widget's name, or "not patched"; the interface by the name
+you gave it, if any) — and what it carries; hover the Output for the whole
+sentence ("ArtNet → CS1 (172.18.2.211) · port 1 · universe 0:0:0", with
+"· via" the interface it leaves by when there is more than one). Same
+right-click actions, renamed inline the same way. The choice
 is remembered. By universe, only the universes **in use** are listed — a
 fixture patched into it, an output or an input — with a line at the foot
 saying how many are hidden; tick **Show unused universes** to see them all.
 (They're only hidden: universes are numbered by position and every patch
 refers to them, so one from the middle can't be removed without renumbering
 the rest.) In the wiring, only the **Device** column is edited in place;
-Detail and Carries describe the row and aren't text to type over.
+Detail and Carries describe the row and aren't text to type over. By
+universe has no Detail column: Output stands in its place.
 
-By universe, the rows can also carry the whole patch as columns:
-**Output** (protocol and interface), **IP** (the node's address, the sACN
+By universe, the rows carry the whole patch as columns: **Output**
+(protocol, interface and the universe at the far end; always shown, second
+from the left), **IP** (the node's address, the sACN
 unicast address, or broadcast/multicast), **U** (the universe on the far
 end: net:subnet:universe for Art-Net, the sACN universe), **Mode** (the
 transmit mode, or a MIDI output's mode), **Input** (with its Art-Net
 universe or MIDI channel), **Profile**, **Feedback** (with its address) and
 **PT** (passthrough). Right-click the list's header, or use **Columns**, to
-show or hide each; the choice is remembered. Output, IP, U, Mode, Input and
-PT are on to begin with.
+show or hide each of the others; the choice is remembered. IP, U, Mode,
+Input and PT are on to begin with.
+
+A WLED output reads **WLED:** and the lantern's hardware (MAC) address once
+it is known — from its fixture, or from the lantern itself on the network —
+else its IP, else just **WLED**: the MAC stays the lantern's when its IP
+changes. **Patching a universe to a WLED sets the WLED up** in the same
+step: once its devices are set (the **WLED devices** button in the
+settings beside the list), each one with a WLED fixture on that universe is
+read and sent what this show needs of it — its name (and network name) the
+fixture's, nothing taken from or sent to other WLEDs, dark at power-on, its
+brightness limit from the fixture's Max draw, and no Art-Net or sACN
+streams taking it over — then read back. Nothing is asked; the settings
+say what was done under the button: "Set up …" for a fresh one, or
+"Reconfigured …: it receives E1.31 (sACN) streams (universe 3). Now: …"
+for one that was set up for something else. One that can't be set up (not
+answering, or no WLED fixture on the universe to name it by) has its Output
+in red with a ⚠ and the reason; set its devices again, or use **Fix on
+Device…** in the footer once it answers. Undo Patch Change puts the patch
+back, not the device's own settings. **An output that can't be reached now** — its interface not
+plugged in, its protocol missing, a node not answering — has its Output
+cell in red with a **⚠**; hover it for why. An input or feedback kept for
+a device that isn't here shows the same way in its own cell.
 
 **The columns are a grid you edit in place**, for setting many universes up
 quickly: double-click a cell (or click one on the selected row) — **Output** picks
@@ -60,14 +86,15 @@ the protocol (or **Not patched**), **IP** takes a node's address (or
 empty to broadcast), **U** takes the universe on the node (a bare number works:
 `15` is 0:0:15), and **Mode**, **Input**, **Profile** and **PT** are lists.
 Each is made as you leave the cell, as one step of **Undo Patch Change**,
-through the same rules as the window below; one that is refused (a port
+through the same rules as the settings beside the list; one that is refused (a port
 another universe holds, a universe past 32767) says why and changes nothing.
 
 ![Connections, by universe, with Universe 1's output showing](../images/connections-by-universe.png)
 
 1. **By universe** — every universe in use, in number order.
-2. **The universes**, each with where it goes, what it carries, and the
-   patch columns you've chosen — double-click a patch cell to edit it.
+2. **The universes**, each with its Output (where it goes, down to the
+   universe on the node), what it carries, and the patch columns you've
+   chosen — double-click a patch cell to edit it.
 3. **The selected universe's settings**: where it goes, its input and
    feedback.
 4. **What the selected universe is sending**, channel by channel.
@@ -75,18 +102,23 @@ another universe holds, a universe past 32767) says why and changes nothing.
    right-click).
 
 Select a universe and, beside the list, its **settings** open: the same
-fields as **Edit Connection…** (below) — name, protocol, interface, Send
+fields as the connection window (below) — name, protocol, interface, Send
 To, the universe on the node, input, feedback — made as each is committed
 (a list picked, a field left), one undo step each; **Esc** puts back what
 you typed but haven't made yet. The grid and the settings edit the same
 patch, so each follows the other. To their right, what the universe is
 **sending**, live: all 512 channels, each with its value and a bar as high, the channels
 of each patched fixture shaded together and named where they start. The
-values are what goes out, after the grand master; hover a channel for whose
-it is ("Front Par, channel 1 — Dimmer"). On a narrower window the grid
-puts fewer channels on a row; the settings keep their width. Double-click a
-universe's name for the whole connection in its own window (or right-click
-▸ **Edit Connection…**).
+values are what goes out, after the grand master. Each row is labelled
+with the address it starts at, and the line above the grid says where the
+pointer is as it moves: the address, and whose channel it is with that
+fixture's range ("124 · Front Wash 3 (121-136) · ch 4 Blue"), or the free
+run it sits in ("121 · free 121-140, 20 channels"); a pointer that rests
+gets the same with the value it sends. On a narrower window the grid
+puts fewer channels on a row; the settings keep their width. They are the
+universe's editor: no window opens on top of them. A double-click edits in
+place what is under it — a patch cell, or the universe's name (to rename
+it).
 
 Each row's right-click offers what that level of the wiring owns:
 
@@ -105,18 +137,19 @@ Each row's right-click offers what that level of the wiring owns:
   Target…**.
 - **A port:** **Patch a Universe to This Port…**, and **Delete Port**
   on one you added.
-- **A universe:** **Edit Connection…** (or just double-click it), **Rename
-  Universe…**, **Unpatch from This Interface** and, last, **Delete
-  Universe…**. Those act on the one row you right-clicked; ⌘-click several
+- **A universe:** **Rename Universe…**, **Unpatch from This Interface**
+  and, last, **Delete Universe…** (where it goes is in the settings beside
+  the list). Those act on the one row you right-clicked; ⌘-click several
   universes first for **Retarget N Selected Universes…** and **Transmit
   Mode of N Selected Universes**. **Collapse All Below**, **Expand All
   Below** and **Add Universe** are on top of every row's menu.
 
 ### Editing a connection
 
-**Edit Connection…** — or a double-click on any universe (By universe, on
-its name; a patch cell there is edited in place) —
-opens one window for everything about where that universe goes. Patching an
+On Connections, the settings beside the list hold everything about where
+the selected universe goes; from the Fixture Manager, a universe's
+right-click ▸ **Edit Connection…** opens the same form as one window, which
+is what the rest of this section describes. Patching an
 unpatched universe and editing a patched one are the same window; a patched
 one opens filled in.
 
@@ -423,9 +456,9 @@ amber "Rig network check off".
 The Art-Net and E1.31 outputs say when where a universe goes stops working,
 in three places: the **readiness footer** (one line per problem, with the
 universes it hits: "Art-Net to 172.18.2.50: not reachable since 20:14
-(universes 3, 4)"), the universe's **row in Connections** (the problem
-appended to Detail in red, all of them in the tooltip; both the wiring tree
-and By universe), and the log. Each clears by itself once it is fixed.
+(universes 3, 4)"), the universe's **row in Connections** (in the wiring
+tree the problem appended to Detail in red; By universe, the Output cell in
+red with a ⚠; all of them in the tooltip), and the log. Each clears by itself once it is fixed.
 
 | Message | What it means |
 |---|---|

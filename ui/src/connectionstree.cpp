@@ -49,6 +49,7 @@
 #include <QComboBox>
 #include <QSpinBox>
 #include <QStyle>
+#include <QRegularExpression>
 
 #include "connectionstree.h"
 #include "controllertestdialog.h"
@@ -66,6 +67,9 @@
 #include "inputpatch.h"
 #include "universe.h"
 #include "fixture.h"
+#include "wleddiscovery.h"
+#include "wledconfigcheck.h"
+#include "wleddevicesdialog.h"
 #include <QLineEdit>
 #include "doc.h"
 #include "qlcconfig.h"
@@ -116,8 +120,8 @@
 #define COL_DETAIL  1
 #define COL_CARRIES 2
 /* By universe only: the patch as columns, each shown or hidden by the
-   operator (the Overview sub-tab's, folded in here, board Q153). Read-only:
-   a double-click opens the connection window on that part. */
+   operator (the Overview sub-tab's, folded in here, board Q153); Output is
+   always shown there, in Detail's place (Detail is hidden By universe). */
 #define COL_OUTPUT   3
 #define COL_IP       4
 #define COL_U        5
@@ -399,7 +403,9 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
                             << tr("Input") << tr("Profile") << tr("Feedback") << tr("PT"));
     {
         const char *tips[COL_COUNT - COL_OUTPUT] = {
-            QT_TR_NOOP("Output: the protocol and interface this universe goes out on"),
+            QT_TR_NOOP("Output: the protocol and interface this universe goes out on, and "
+                       "the universe it is on at the far end. ⚠ in red: it cannot be "
+                       "reached now (hover the cell for why)"),
             QT_TR_NOOP("Where it is sent: the node's IP (Art-Net), the unicast address or "
                        "multicast (sACN)"),
             QT_TR_NOOP("The universe on the far end: net:subnet:universe (Art-Net), the sACN "
@@ -453,7 +459,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     /* By universe, the patch columns are a grid to set many universes up
        quickly ("I really miss the ability to edit fields in a grid"): a
        click on a selected row's cell edits it, through the same form as the
-       pane and Edit Connection…. */
+       pane beside the list. */
     foreach (int c, QList<int>() << COL_OUTPUT << COL_IP << COL_U << COL_MODE
                                  << COL_INPUT << COL_PROFILE << COL_PT)
         m_tree->setItemDelegateForColumn(c, new PatchCellDelegate(this, m_tree));
@@ -461,9 +467,11 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, SIGNAL(customContextMenuRequested(QPoint)),
             this, SLOT(slotContextMenu(QPoint)));
-    /* A double-click on a universe opens its connection ("double clicking on
-       a universe doesn't open its editor. It should."), so it no longer
-       renames: a click on the selected row, or F2, still does. */
+    /* A click on the selected row, or F2, edits in place; so does a
+       double-click on a universe row (slotItemDoubleClicked(): the cell
+       under it, never a window -- the pane beside the list is the
+       universe's editor). Not a view trigger: on a read-only cell it must
+       do nothing. */
     m_tree->setEditTriggers(QAbstractItemView::SelectedClicked | QAbstractItemView::EditKeyPressed);
     connect(m_tree, &QTreeWidget::itemDoubleClicked, this, &ConnectionsTree::slotItemDoubleClicked);
     /* Beside it, what the selected universe is sending ("it would be nice to
@@ -484,6 +492,12 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
        address grid to the right and the settings in the middle"). */
     m_connPane = ConnectionEditor::createPane(m_doc, this);
     connect(m_connPane, &ConnectionEditor::changed, this, &ConnectionsTree::refresh);
+    /* A WLED set up (or not) after its patch: the universe's Output says so. */
+    if (WledConfigCheck *check = WledConfigCheck::instance())
+        connect(check, &WledConfigCheck::writeChanged, this, [this]() {
+            if (m_byUniverse != nullptr && m_byUniverse->isChecked())
+                refresh();
+        });
     m_panePlaceholder = new QLabel(tr("Select a universe on the left to see and change where "
                                       "it goes."), this);
     m_panePlaceholder->setObjectName(QStringLiteral("connectionsPanePlaceholder"));
@@ -2383,10 +2397,16 @@ void ConnectionsTree::markOutputProblems()
         if (problems.isEmpty())
             continue;
 
-        it->setText(COL_DETAIL, it->text(COL_DETAIL).isEmpty()
-                    ? problems.join(QStringLiteral(" · "))
-                    : QString("%1 · %2").arg(it->text(COL_DETAIL), problems.join(QStringLiteral(" · "))));
-        it->setForeground(COL_DETAIL, QBrush(QColor(220, 90, 90)));
+        /* By universe, on its Output cell: Detail is not shown there. */
+        if (byUniverse && kind == KIND_UNIVERSE)
+            markUnreachable(it, problems);
+        else
+        {
+            it->setText(COL_DETAIL, it->text(COL_DETAIL).isEmpty()
+                        ? problems.join(QStringLiteral(" · "))
+                        : QString("%1 · %2").arg(it->text(COL_DETAIL), problems.join(QStringLiteral(" · "))));
+            it->setForeground(COL_DETAIL, QBrush(QColor(220, 90, 90)));
+        }
         QStringList escaped;
         foreach (const QString &p, problems)
             escaped << p.toHtmlEscaped();
@@ -2944,9 +2964,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            port. Same destination as patching from a port row, just reached
            by starting from the universe instead of from the wire. */
         const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
-        QAction *patchTo = menu.addAction(tr("Edit Connection…"));
-        menu.setDefaultAction(patchTo);
-        menu.addSeparator();
+        /* Where it goes is set in the pane beside the list (selecting the
+           row shows it there): no window for it here. */
         QAction *ren = menu.addAction(tr("Rename Universe…"));
         menu.addSeparator();
         QAction *del = menu.addAction(tr("Delete Universe…"));
@@ -2954,9 +2973,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
             return;
-        if (chosen == patchTo)
-            editConnection(item);
-        else if (chosen == ren)
+        if (chosen == ren)
             renameUniverse(uni);
         else if (chosen == del)
             deleteUniverse(uni);
@@ -3033,10 +3050,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            interface exists again, and offering it invited configuring a
            destination that has no effect. Only "give up on it" is real. */
         const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
-        /* Patch it to an interface that IS here: the connection window,
+        /* Patch it to an interface that IS here: the pane beside the list,
            which says what it is waiting for and replaces it. */
-        QAction *editConn = menu.addAction(tr("Edit Connection…"));
-        menu.addSeparator();
         QAction *ren = menu.addAction(tr("Rename Universe…"));
         menu.addSeparator();
         QAction *forget = menu.addAction(tr("Unpatch…"));
@@ -3046,9 +3061,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
             return;
-        if (chosen == editConn)
-            editConnection(item);
-        else if (chosen == ren)
+        if (chosen == ren)
             renameUniverse(uni);
         else if (chosen == forget)
             forgetPendingPatch(uni);
@@ -3065,11 +3078,9 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         /* Everything about this patch -- where it goes, the interface, the
            protocol's own settings (target, transmit mode, MIDI mode, sACN
            priority...), the universe's input, profile, feedback and
-           passthrough -- is one window, filled in: "Edit connection…". It
-           used to be a dozen entries here, each its own small dialog. */
-        QAction *editConn = menu.addAction(tr("Edit Connection…"));
-        menu.setDefaultAction(editConn);
-        menu.addSeparator();
+           passthrough -- is the pane beside the list, filled in when the row
+           is selected. It used to be a dozen entries here, each its own small
+           dialog, then one window ("Edit Connection…") the pane repeated. */
         QAction *ren = menu.addAction(tr("Rename Universe…"));
         /* Wording matters here: a universe can be patched to several lines, so
            removing it from THIS one must not read as deleting the universe.
@@ -3083,9 +3094,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         if (chosen == NULL)
             return;
-        if (chosen == editConn)
-            editConnection(item);
-        else if (chosen == ren)
+        if (chosen == ren)
             renameUniverse(uni);
         else if (chosen == unp)
             unpatchFromLine(uni, plugin, line, output);
@@ -3115,69 +3124,31 @@ bool ConnectionsTree::isUniverseRow(const QTreeWidgetItem *item)
            || kind == KIND_PENDING_UNIVERSE;
 }
 
-bool ConnectionsTree::editConnection(QTreeWidgetItem *item, int column)
-{
-    if (isUniverseRow(item) == false)
-        return false;
-    const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
-    QString plugin;
-    quint32 line = 0;
-    QString section;
-    if (item->data(COL_NAME, ROLE_KIND).toInt() == KIND_UNIVERSE)
-    {
-        /* An output row: that leg. An input or feedback row: the universe's
-           connection, opened on its input / feedback. */
-        if (item->data(COL_NAME, ROLE_OUTPUT).toBool()
-                && item->text(COL_DETAIL) != tr("feedback"))
-        {
-            plugin = item->data(COL_NAME, ROLE_PLUGIN).toString();
-            line = item->data(COL_NAME, ROLE_LINE).toUInt();
-        }
-        else
-            section = item->text(COL_DETAIL) == tr("feedback") ? QStringLiteral("feedback")
-                                                                : QStringLiteral("input");
-    }
-    /* A By universe column: the window opens on the part it shows. */
-    if (column == COL_INPUT || column == COL_PROFILE)
-        section = QStringLiteral("input");
-    else if (column == COL_FEEDBACK)
-        section = QStringLiteral("feedback");
-    else if (column == COL_PT)
-        section = QStringLiteral("passthrough");
-    const bool changed = ConnectionEditor::edit(m_doc, uni, plugin, line, this, section);
-    if (changed)
-        refresh();
-    return changed;
-}
-
 void ConnectionsTree::slotItemDoubleClicked(QTreeWidgetItem *item, int column)
 {
     if (isUniverseRow(item) == false)
         return;
-    /* By universe, a patch cell is a field: a double-click edits it in
-       place. The universe's name (or any other column) opens its whole
-       connection, as Edit Connection… on its right-click does. */
-    const int row = item->parent() == nullptr ? m_tree->indexOfTopLevelItem(item) : -1;
-    if (row >= 0)
-    {
-        const QModelIndex cell = m_tree->model()->index(row, column);
-        if (isGridCell(cell))
+    /* No window: the universe's whole connection is in the pane beside the
+       list once the row is selected ("do not need to pop a window on double
+       click of a universe if we have an editing window right there").
+       What a double-click does is edit the cell under it in place: a By
+       universe patch cell is a field, the name is renamed. Anything else
+       (Carries, a read-only column) does nothing more than select. */
+    const QModelIndex cell = m_tree->indexFromItem(item, column);
+    if (isGridCell(cell) == false
+            && (column != COL_NAME || (item->flags() & Qt::ItemIsEditable) == 0))
+        return;
+    /* Once the double-click (and its release) is through: inside it, the
+       view is still handling the click. */
+    const QPersistentModelIndex at(cell);
+    QPointer<QTreeWidget> tree(m_tree);
+    QTimer::singleShot(0, this, [tree, at]() {
+        if (tree != nullptr && at.isValid())
         {
-            /* Once the double-click (and its release) is through: inside
-               it, the view is still handling the click. */
-            const QPersistentModelIndex at(cell);
-            QPointer<QTreeWidget> tree(m_tree);
-            QTimer::singleShot(0, this, [tree, at]() {
-                if (tree != nullptr && at.isValid())
-                {
-                    tree->setCurrentIndex(at);
-                    tree->edit(at);
-                }
-            });
-            return;
+            tree->setCurrentIndex(at);
+            tree->edit(at);
         }
-    }
-    editConnection(item, column);
+    });
 }
 
 bool ConnectionsTree::pickPluginLine(QLCIOPlugin *p, bool output, quint32 &lineOut,
@@ -4382,13 +4353,18 @@ QString ConnectionsTree::addManualTarget(const QString &pluginName, quint32 line
         return QString();
     }
 
+    /* Names are kept by address. An address declared again -- a new box
+       given an old box's IP -- opens on the name it already has, to keep
+       or change; what is typed is the name, and an empty one clears it.
+       Left alone, an empty answer kept the old box's name unseen, and every
+       universe sent there read as that box ("why does U07 read FART2(SR)"). */
     const QString name = QInputDialog::getText(
         this, tr("Add target"),
         tr("A name for %1 — optional:").arg(addr),
-        QLineEdit::Normal, QString(), &ok).trimmed();
+        QLineEdit::Normal, iomap->targetAlias(addr), &ok).trimmed();
 
     iomap->addManualTarget(pluginName, line, addr);
-    if (ok && name.isEmpty() == false)
+    if (ok)
         iomap->setTargetAlias(addr, name);
 
     /* Declaring a target is exactly the moment someone wants to know whether
@@ -4511,6 +4487,40 @@ void ConnectionsTree::forgetTarget(const QString &address)
         return;
 
     iomap->removeManualTarget(address);
+    /* Its name goes with it unless something still goes by that address --
+       a universe sent there, or a device answering from it. Kept, it came
+       back on whatever was declared at that address next. */
+    bool inUse = false;
+    for (quint32 u = 0; inUse == false && u < iomap->universesCount(); u++)
+    {
+        Universe *uni = iomap->universe(u);
+        if (uni == NULL)
+            continue;
+        QList<OutputPatch *> legs;
+        for (int i = 0; i < uni->outputPatchesCount(); i++)
+            legs << uni->outputPatch(i);
+        legs << uni->feedbackPatch();
+        foreach (OutputPatch *op, legs)
+        {
+            if (op == NULL)
+                continue;
+            const QMap<QString, QVariant> pp = op->getPluginParameters();
+            for (auto it = pp.constBegin(); inUse == false && it != pp.constEnd(); ++it)
+                inUse = it.key().startsWith(QLatin1String("outputIP")) && it.value().toString() == address;
+        }
+    }
+    if (inUse == false && m_doc->ioPluginCache() != NULL)
+    {
+        foreach (QLCIOPlugin *p, m_doc->ioPluginCache()->plugins())
+        {
+            if (p == NULL)
+                continue;
+            foreach (const QLCIOPlugin::Device &dev, p->discoveredDevices())
+                inUse = inUse || dev.address == address;
+        }
+    }
+    if (inUse == false)
+        iomap->setTargetAlias(address, QString());
     m_doc->setModified();
     refresh();
 }
@@ -4809,17 +4819,9 @@ void ConnectionsTree::buildUniverseList()
                 first = op;
             legs << legText(op);
         }
-        QStringList detail = legs;
-        if (InputPatch *ip = u->inputPatch())
-            detail << tr("in: %1").arg(ip->pluginName());
-        foreach (const Universe::OfflinePatch &p, u->offlinePatches())
-            detail << tr("%1 %2 \"%3\" not present — kept, will reconnect")
-                          .arg(p.tag == Universe::InputPatchTag ? tr("in:")
-                               : p.tag == Universe::FeedbackPatchTag ? tr("feedback:")
-                               : tr("out:"))
-                          .arg(p.plugin, p.uid.isEmpty() ? p.plugin : p.uid);
-        item->setText(COL_DETAIL, detail.isEmpty() ? tr("not patched") : detail.join(QStringLiteral(" · ")));
-        item->setToolTip(COL_DETAIL, item->text(COL_DETAIL));
+        /* No Detail here: the Output cell reads where it goes (its whole
+           sentence, the node by name, on hover), the Input cell its input. */
+        item->setToolTip(COL_OUTPUT, legs.join(QStringLiteral("\n")));
         if (legs.size() > 1)
             setRowTooltip(item, tr("<b>%1</b> goes out %2 ways:<br>%3")
                                     .arg(u->name().toHtmlEscaped()).arg(legs.size())
@@ -4837,7 +4839,6 @@ void ConnectionsTree::buildUniverseList()
         else
         {
             item->setData(COL_NAME, ROLE_KIND, KIND_UNPATCHED_UNIVERSE);
-            item->setForeground(COL_DETAIL, QBrush(QColor(138, 142, 153)));
         }
         setCarriesFixtures(item, u->id());
         setUniverseColumns(item, u);
@@ -4848,11 +4849,10 @@ void ConnectionsTree::buildUniverseList()
     {
         QTreeWidgetItem *note = new QTreeWidgetItem(m_tree);
         note->setText(COL_NAME, tr("%n unused universe(s) hidden", "", hidden));
-        note->setText(COL_DETAIL, tr("nothing patched into them, no output -- tick "
-                                     "\"Show unused universes\" to see them"));
+        note->setToolTip(COL_NAME, tr("Nothing patched into them, no output: tick "
+                                      "\"Show unused universes\" to see them."));
         note->setFlags(Qt::ItemIsEnabled);
         note->setForeground(COL_NAME, QBrush(QColor(138, 142, 153)));
-        note->setForeground(COL_DETAIL, QBrush(QColor(138, 142, 153)));
         note->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
     }
 
@@ -5030,26 +5030,25 @@ void ConnectionsTree::applyUniverseColumns()
     const bool byUniverse = m_byUniverse != NULL && m_byUniverse->isChecked();
     const QStringList keys = universeColumnKeys();
     const QStringList shown = shownUniverseColumns();
-    bool any = false;
+    /* Output is where the universe goes, protocol to the far end's own
+       universe, so it is always there, in the place Detail has in the
+       wiring view: Detail only said the columns over again in a sentence
+       ("86 the detail from the universe listing ... put output column where
+       detail was"). Its trouble and its whole text are on the Output cell. */
     for (int c = COL_OUTPUT; c < COL_COUNT; c++)
     {
-        const bool on = byUniverse && shown.contains(keys.value(c - COL_OUTPUT));
+        const bool on = byUniverse
+                        && (c == COL_OUTPUT || shown.contains(keys.value(c - COL_OUTPUT)));
         m_tree->setColumnHidden(c, on == false);
-        any = any || on;
     }
+    m_tree->setColumnHidden(COL_DETAIL, byUniverse);
+    QHeaderView *header = m_tree->header();
+    const int at = byUniverse ? COL_DETAIL : COL_OUTPUT;
+    if (header->visualIndex(COL_OUTPUT) != at)
+        header->moveSection(header->visualIndex(COL_OUTPUT), at);
     /* Carries takes the spare width only while it is the last column. */
-    m_tree->header()->setSectionResizeMode(COL_CARRIES, any ? QHeaderView::ResizeToContents
-                                                            : QHeaderView::Stretch);
-    /* With the fields as columns, Detail says the same again in a sentence:
-       a narrow column (its whole text on hover and in the settings beside
-       the list), not the widest thing on the page. */
-    if (byUniverse && any)
-    {
-        m_tree->header()->setSectionResizeMode(COL_DETAIL, QHeaderView::Interactive);
-        m_tree->setColumnWidth(COL_DETAIL, 140);
-    }
-    else
-        m_tree->header()->setSectionResizeMode(COL_DETAIL, QHeaderView::ResizeToContents);
+    header->setSectionResizeMode(COL_CARRIES, byUniverse ? QHeaderView::ResizeToContents
+                                                         : QHeaderView::Stretch);
     if (m_columnsButton != NULL)
         m_columnsButton->setVisible(byUniverse);
 }
@@ -5058,7 +5057,8 @@ void ConnectionsTree::fillColumnsMenu(QMenu *menu)
 {
     const QStringList keys = universeColumnKeys();
     const QStringList shown = shownUniverseColumns();
-    for (int c = COL_OUTPUT; c < COL_COUNT; c++)
+    /* Output is always shown (applyUniverseColumns()): not offered. */
+    for (int c = COL_OUTPUT + 1; c < COL_COUNT; c++)
     {
         const QString key = keys.value(c - COL_OUTPUT);
         QAction *a = menu->addAction(m_tree->headerItem()->text(c));
@@ -5082,6 +5082,89 @@ void ConnectionsTree::slotHeaderMenu(const QPoint &pos)
     menu.exec(m_tree->header()->viewport()->mapToGlobal(pos));
 }
 
+/** A hardware address as people read it: "e08cfef992e0" (as WLED says
+ *  it) -> "e0:8c:fe:f9:92:e0"; anything else as it is. */
+static QString macText(const QString &mac)
+{
+    QString hex = mac.trimmed().toLower();
+    hex.remove(QLatin1Char(':')).remove(QLatin1Char('-'));
+    static const QRegularExpression twelve(QStringLiteral("^[0-9a-f]{12}$"));
+    if (twelve.match(hex).hasMatch() == false)
+        return mac.trimmed();
+    QStringList pairs;
+    for (int i = 0; i < 12; i += 2)
+        pairs << hex.mid(i, 2);
+    return pairs.join(QLatin1Char(':'));
+}
+
+/** A WLED output by the device it goes to, not the plugin's one interface
+ *  ("WLED (JSON over Wi-Fi)", the same for every lantern): "WLED: <MAC>"
+ *  once its hardware address is known -- it stays the device's through a
+ *  new IP, as the show itself files a WLED (WledDiscovery) -- else
+ *  "WLED: <IP>", else "WLED". The MAC is a WLED fixture's on that universe
+ *  at that IP, else what the lantern said on the network. */
+QString ConnectionsTree::wledOutputText(OutputPatch *op, quint32 universe) const
+{
+    if (op == nullptr)
+        return QString();
+    const QMap<QString, QVariant> pp = op->getPluginParameters();
+    const QString ip = pp.value(QStringLiteral("outputIP")).toString().trimmed();
+    QString mac;
+    if (ip.isEmpty() == false)
+    {
+        foreach (Fixture *fx, m_doc->fixtures())
+        {
+            if (fx != nullptr && fx->universe() == universe && fx->macAddress().isEmpty() == false
+                    && (fx->ipAddress().isEmpty() || fx->ipAddress() == ip))
+            {
+                mac = fx->macAddress();
+                break;
+            }
+        }
+        if (mac.isEmpty() && WledDiscovery::instance() != nullptr)
+        {
+            foreach (const WledDiscovery::Device &d, WledDiscovery::instance()->devices())
+            {
+                if (d.ip == ip && d.mac.isEmpty() == false)
+                {
+                    mac = d.mac;
+                    break;
+                }
+            }
+        }
+    }
+    QString text = mac.isEmpty() == false ? tr("WLED: %1").arg(macText(mac))
+                 : ip.isEmpty() == false ? tr("WLED: %1").arg(ip)
+                 : tr("WLED");
+    /* "+ 1 backup": the lanterns mirroring it. */
+    const int backups = WledDevicesDialog::fromParameters(pp).count() - 1;
+    if (backups > 0)
+        text += backups == 1 ? tr(" + 1 backup") : tr(" + %1 backups").arg(backups);
+    return text;
+}
+
+/** A By universe row whose output cannot be reached now: the Output cell
+ *  in the page's trouble red, marked with a ⚠ (never the colour alone) and
+ *  saying why on hover. Again on the same row adds the reasons. */
+void ConnectionsTree::markUnreachable(QTreeWidgetItem *item, const QStringList &reasons)
+{
+    if (item == nullptr || reasons.isEmpty())
+        return;
+    static const QString mark = QStringLiteral("⚠ ");
+    const QString text = item->text(COL_OUTPUT);
+    if (text.startsWith(mark) == false)
+        item->setText(COL_OUTPUT, mark + text);
+    item->setForeground(COL_OUTPUT, QBrush(QColor(220, 90, 90)));
+    static const QString head = tr("Cannot be reached now:");
+    QString tip = item->toolTip(COL_OUTPUT);
+    if (tip.contains(head) == false)
+        tip += (tip.isEmpty() ? QString() : QStringLiteral("\n\n")) + head;
+    foreach (const QString &r, reasons)
+        if (tip.contains(QStringLiteral("\n• ") + r) == false)
+            tip += QStringLiteral("\n• ") + r;
+    item->setToolTip(COL_OUTPUT, tip);
+}
+
 void ConnectionsTree::setUniverseColumns(QTreeWidgetItem *item, Universe *u) const
 {
     InputOutputMap *iomap = m_doc->inputOutputMap();
@@ -5096,15 +5179,30 @@ void ConnectionsTree::setUniverseColumns(QTreeWidgetItem *item, Universe *u) con
                                  alias.isEmpty() ? lineName : alias);
     };
 
-    /* One value per output leg; a universe sent two ways lists both. */
+    /* One value per output leg; a universe sent two ways lists both. The
+       Output cell reads the whole destination: "ArtNet · eth0 · universe
+       0:0:15" -- the far end's own universe, as that protocol numbers it. */
     QStringList outs, ips, unis, modes;
+    QStringList trouble;                    // why it cannot be reached now
     for (int i = 0; i < u->outputPatchesCount(); i++)
     {
         OutputPatch *op = u->outputPatch(i);
         if (op == NULL)
             continue;
-        outs << lineText(op->pluginName(), op->outputName());
         const QMap<QString, QVariant> pp = op->getPluginParameters();
+        QString out = op->pluginName() == QLatin1String("WLED")
+                      ? wledOutputText(op, u->id())
+                      : lineText(op->pluginName(), op->outputName());
+        /* A WLED the show could not set up when it was patched: said with
+           why, never a bare WLED beside a right IP. */
+        if (op->pluginName() == QLatin1String("WLED") && WledConfigCheck::instance() != nullptr)
+        {
+            foreach (const QString &ip, WledConfigCheck::wledIps(m_doc, u->id()))
+            {
+                if (WledConfigCheck::instance()->writeFailed(ip))
+                    trouble << WledConfigCheck::instance()->writeStatus(ip);
+            }
+        }
         switch (ConnectionEditor::kindOf(op->plugin()))
         {
             case ConnectionEditor::KindTargets:
@@ -5113,12 +5211,22 @@ void ConnectionsTree::setUniverseColumns(QTreeWidgetItem *item, Universe *u) con
                 unis << (pp.contains(QStringLiteral("outputUni"))
                          ? portAddressText(pp.value(QStringLiteral("outputUni")).toUInt()) : QString());
                 modes << pp.value(QStringLiteral("transmitMode"), QStringLiteral("Standard")).toString();
+                /* Art-Net's port address is the QLC+ universe's own number
+                   until one is set (ArtNetController::addUniverse()). */
+                if (pp.contains(QStringLiteral("outputUni"))
+                        || op->pluginName() == QLatin1String("ArtNet"))
+                    out += tr(" · universe %1").arg(portAddressText(
+                        pp.value(QStringLiteral("outputUni"), u->id()).toUInt()));
             break;
             case ConnectionEditor::KindSacn:
+            {
                 ips << (pp.value(QStringLiteral("multicast"), 1).toInt() != 0
                         ? tr("multicast") : pp.value(QStringLiteral("ucastIP")).toString());
-                unis << QString::number(pp.value(QStringLiteral("universe"), u->id() + 1).toInt());
+                const QString n = QString::number(pp.value(QStringLiteral("universe"), u->id() + 1).toInt());
+                unis << n;
                 modes << pp.value(QStringLiteral("transmitMode"), QStringLiteral("Full")).toString();
+                out += tr(" · universe %1").arg(n);
+            }
             break;
             case ConnectionEditor::KindMidi:
                 modes << pp.value(QStringLiteral("mode"), QStringLiteral("Control Change")).toString();
@@ -5126,6 +5234,20 @@ void ConnectionsTree::setUniverseColumns(QTreeWidgetItem *item, Universe *u) con
             default:
             break;
         }
+        /* An interface that is not here: kept, waiting for it. */
+        if (op->isPending() || op->plugin() == NULL)
+            trouble << tr("%1 not present — kept, will reconnect")
+                           .arg(op->outputName().isEmpty() ? op->pluginName() : op->outputName());
+        outs << out;
+    }
+    /* A patch whose protocol is not here at all. */
+    foreach (const Universe::OfflinePatch &p, u->offlinePatches())
+    {
+        if (p.tag == Universe::InputPatchTag || p.tag == Universe::FeedbackPatchTag)
+            continue;
+        outs << tr("%1 \"%2\"").arg(p.plugin, p.uid.isEmpty() ? p.plugin : p.uid);
+        trouble << tr("%1 \"%2\" not present — kept, will reconnect")
+                       .arg(p.plugin, p.uid.isEmpty() ? p.plugin : p.uid);
     }
     auto joined = [](const QStringList &l) {
         QStringList kept;
@@ -5134,7 +5256,24 @@ void ConnectionsTree::setUniverseColumns(QTreeWidgetItem *item, Universe *u) con
                 kept << s;
         return kept.join(QStringLiteral(", "));
     };
-    item->setText(COL_OUTPUT, joined(outs));
+    if (outs.isEmpty())
+    {
+        item->setText(COL_OUTPUT, tr("not patched"));
+        item->setForeground(COL_OUTPUT, QBrush(QColor(138, 142, 153)));
+        item->setToolTip(COL_OUTPUT, tr("Nothing patched: pick where it goes here, or in the "
+                                        "settings beside the list."));
+    }
+    else
+    {
+        item->setText(COL_OUTPUT, joined(outs));
+        /* buildUniverseList() has put where each leg goes in a sentence
+           there (the node by its name, its port, the interface it leaves
+           by); else the cell's own text. */
+        if (item->toolTip(COL_OUTPUT).isEmpty())
+            item->setToolTip(COL_OUTPUT, joined(outs));
+    }
+    if (trouble.isEmpty() == false)
+        markUnreachable(item, trouble);
     item->setText(COL_IP, joined(ips));
     item->setText(COL_U, joined(unis));
     item->setText(COL_MODE, joined(modes));
@@ -5169,6 +5308,19 @@ void ConnectionsTree::setUniverseColumns(QTreeWidgetItem *item, Universe *u) con
             text += tr(" → %1").arg(where.join(QStringLiteral(" · ")));
         }
         item->setText(COL_FEEDBACK, text);
+    }
+
+    /* An input or feedback kept for a protocol that is not here. */
+    foreach (const Universe::OfflinePatch &p, u->offlinePatches())
+    {
+        const int col = p.tag == Universe::InputPatchTag ? COL_INPUT
+                      : p.tag == Universe::FeedbackPatchTag ? COL_FEEDBACK : -1;
+        if (col < 0 || item->text(col).isEmpty() == false)
+            continue;
+        const QString what = tr("%1 \"%2\"").arg(p.plugin, p.uid.isEmpty() ? p.plugin : p.uid);
+        item->setText(col, QStringLiteral("⚠ ") + what);
+        item->setForeground(col, QBrush(QColor(220, 90, 90)));
+        item->setToolTip(col, tr("%1 not present — kept, will reconnect").arg(what));
     }
 
     if (u->passthrough())
@@ -5321,7 +5473,7 @@ QWidget *ConnectionsTree::createCellEditor(QWidget *parent, const QModelIndex &i
     const quint32 universe = index.sibling(index.row(), COL_NAME).data(ROLE_UNIVERSE).toUInt();
     const QString shown = index.data(Qt::DisplayRole).toString();
     /* The lists are the form's own, so a cell offers exactly what the pane
-       and Edit Connection… do. */
+       does. */
     ConnectionEditor form(m_doc, universe, QString(), 0, nullptr);
     auto copyList = [parent](QComboBox *from, const QString &current) {
         QComboBox *combo = new QComboBox(parent);

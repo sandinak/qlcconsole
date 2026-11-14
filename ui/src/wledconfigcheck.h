@@ -152,6 +152,30 @@ public:
      *  under its name. */
     void offerSetUp(QWidget *parent, const QList<quint32> &fixtureIds);
 
+    /** Set @p fixtureIds' WLEDs up as this show drives them, without asking:
+     *  patching a universe to a WLED is the one step that brings it in ("one
+     *  step to include a device whatever it is"). Each device is read, sent
+     *  what Set Up and Fix on Device would send (setUpFor() and evaluate():
+     *  its name, sync off, dark at power-on, its limiter, and streams off
+     *  for a lantern driven through its API), read back, and what happened
+     *  is writeStatus(): "Set up …" for one that only needed this show's
+     *  settings, "Reconfigured …" with what it was taking before when it was
+     *  set up for something else, or why it could not be (writeFailed()). */
+    void setUpNow(const QList<quint32> &fixtureIds);
+    /** The WLED fixtures on @p universe whose IP its WLED output sends to
+     *  (primary or backup), the ones setUpNow() is for when that universe is
+     *  patched. */
+    static QList<quint32> fixturesSentTo(Doc *doc, quint32 universe);
+    /** setUpNow() for every device @p universe's WLED output sends to: a
+     *  device with no WLED fixture on that universe is said not set up
+     *  (the show has nothing to name or size it by). What patching a
+     *  universe to WLED calls. */
+    void setUpUniverse(quint32 universe);
+    /** The IPs @p universe's WLED output sends to (primary and backups). */
+    static QStringList wledIps(Doc *doc, quint32 universe);
+    /** The last write at @p ip (or reading it to set it up) failed. */
+    bool writeFailed(const QString &ip) const;
+
     /** One device in the Set Up confirmation. */
     struct SetUpItem
     {
@@ -183,9 +207,10 @@ private:
     void replied(const QString &ip, QNetworkReply *reply);
     void receive(const QString &ip, const QByteArray &body, bool ok);
     /** Keep @p text as what the write at @p ip says now. */
-    void noteWrite(const QString &ip, const QString &text, bool busy);
-    /** Write @p fix (Set Up's) to the device at @p ip, then read it back. */
-    void writeSetUp(const QString &ip, const QJsonObject &fix);
+    void noteWrite(const QString &ip, const QString &text, bool busy, bool failed = false);
+    /** Write @p fix (Set Up's) to the device at @p ip, then read it back;
+     *  @p done is said when it reads back as sent (else the plain one). */
+    void writeSetUp(const QString &ip, const QJsonObject &fix, const QString &done = QString());
     /** The footer's "wled.config" entry, from the findings. */
     void publish();
 
@@ -196,7 +221,7 @@ private:
     QHash<QString, QJsonObject> m_cfg;          ///< ip -> its last /json/cfg
     QHash<QString, bool> m_answered;            ///< ip -> answered last time
     QHash<quint32, Finding> m_findings;
-    struct Write { QString text; bool busy = false; qint64 at = 0; };
+    struct Write { QString text; bool busy = false; bool failed = false; qint64 at = 0; };
     QHash<QString, Write> m_writes;             ///< ip -> its last device write
     int m_ledWaits[3] = { 8000, 45000, 1000 };
 };

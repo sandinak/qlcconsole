@@ -38,6 +38,9 @@
 #include <QScrollArea>
 #include <QScopeGuard>
 #include <QPointer>
+#include <QToolTip>
+#include <QHelpEvent>
+#include <QMouseEvent>
 
 // Its public face only: included before the define below.
 #include "controllertestdialog.h"
@@ -63,6 +66,7 @@
 #include "networkroute.h"
 #include "inputoutputmanager.h"
 #include "connectioneditor.h"
+#include "wledconfigcheck.h"
 #include "inputoutputpatcheditor.h"
 #include "qlcinputprofile.h"
 #include "inputpatch.h"
@@ -93,6 +97,14 @@
 #define COL_NAME    0
 #define COL_DETAIL  1
 #define COL_CARRIES 2
+#define COL_OUTPUT   3
+#define COL_IP       4
+#define COL_U        5
+#define COL_MODE     6
+#define COL_INPUT    7
+#define COL_PROFILE  8
+#define COL_FEEDBACK 9
+#define COL_PT       10
 
 #define TESTPLUGINDIR "../../../engine/test/iopluginstub"
 
@@ -1703,11 +1715,13 @@ void ConnectionsTree_Test::byUniverseListsEveryUniverseWithWhereItGoes()
     QCOMPARE(tree.m_tree->topLevelItemCount(), int(iom->universesCount()));
     QTreeWidgetItem *first = tree.m_tree->topLevelItem(0);
     QCOMPARE(first->text(COL_NAME), QString("1: U01-CS1"));
-    QVERIFY2(first->text(COL_DETAIL).contains("CS1 (172.18.2.211)"), qPrintable(first->text(COL_DETAIL)));
+    // Where it goes in a sentence, the node by its name: on the Output cell.
+    QVERIFY2(first->toolTip(COL_OUTPUT).contains("CS1 (172.18.2.211)"),
+             qPrintable(first->toolTip(COL_OUTPUT)));
     QCOMPARE(first->data(COL_NAME, ROLE_KIND).toInt(), KIND_UNIVERSE);   // the wiring view's actions
     QCOMPARE(first->data(COL_NAME, ROLE_PLUGIN).toString(), stub->name());
     QTreeWidgetItem *second = tree.m_tree->topLevelItem(1);
-    QCOMPARE(second->text(COL_DETAIL), QString("not patched"));
+    QCOMPARE(second->text(COL_OUTPUT), QString("not patched"));
     QCOMPARE(second->data(COL_NAME, ROLE_KIND).toInt(), 6);              // KIND_UNPATCHED_UNIVERSE
 
     // Renamed inline, as in the wiring view.
@@ -1727,8 +1741,9 @@ void ConnectionsTree_Test::byUniverseListsEveryUniverseWithWhereItGoes()
 static QList<QTreeWidgetItem *> rowsWithText(QTreeWidget *tree, const QString &text)
 {
     QList<QTreeWidgetItem *> out;
+    /* Detail in the wiring; By universe, the Output cell's whole text. */
     foreach (QTreeWidgetItem *it, allItems(tree))
-        if (it->text(COL_DETAIL).contains(text))
+        if (it->text(COL_DETAIL).contains(text) || it->toolTip(COL_OUTPUT).contains(text))
             out << it;
     return out;
 }
@@ -1756,6 +1771,12 @@ void ConnectionsTree_Test::outputProblemsShowOnTheRowAndClear()
     rows = rowsWithText(tree.m_tree, problem);
     QCOMPARE(rows.count(), 1);
     QCOMPARE(rows.first()->text(COL_NAME).left(2), QString("1:"));
+    // ... on its Output cell, Detail not being there: ⚠, red, why on hover.
+    QVERIFY(tree.m_tree->isColumnHidden(COL_DETAIL));
+    QVERIFY2(rows.first()->text(COL_OUTPUT).startsWith(QString::fromUtf8("⚠ ")),
+             qPrintable(rows.first()->text(COL_OUTPUT)));
+    QCOMPARE(rows.first()->foreground(COL_OUTPUT).color(), QColor(220, 90, 90));
+    QVERIFY(rows.first()->toolTip(COL_OUTPUT).contains("Cannot be reached now:"));
 
     // Fixed: the plugin says so, the tree (on screen) catches up by itself
     tree.m_byUniverse->setChecked(false);
@@ -2065,11 +2086,11 @@ void ConnectionsTree_Test::portAndUniverseReadTheSameEverywhere()
     QTreeWidgetItem *u2 = universeRow(tree.m_tree, 1);
     QTreeWidgetItem *u3 = universeRow(tree.m_tree, 2);
     QVERIFY(u2 != NULL && u3 != NULL);
-    QVERIFY2(u2->text(COL_DETAIL).contains("Duo (172.18.2.70) · port 4 · universe 0:0:6"),
-             qPrintable(u2->text(COL_DETAIL)));
-    QVERIFY2(u3->text(COL_DETAIL).contains("172.18.2.80 · universe 0:0:1"),
-             qPrintable(u3->text(COL_DETAIL)));
-    QVERIFY(u3->text(COL_DETAIL).contains("port") == false);
+    QVERIFY2(u2->toolTip(COL_OUTPUT).contains("Duo (172.18.2.70) · port 4 · universe 0:0:6"),
+             qPrintable(u2->toolTip(COL_OUTPUT)));
+    QVERIFY2(u3->toolTip(COL_OUTPUT).contains("172.18.2.80 · universe 0:0:1"),
+             qPrintable(u3->toolTip(COL_OUTPUT)));
+    QVERIFY(u3->toolTip(COL_OUTPUT).contains("port") == false);
 }
 
 /* "Re-patching a universe that's already patched must ask for the network
@@ -2119,10 +2140,10 @@ void ConnectionsTree_Test::repatchAsksTheInterfaceAgain()
         QCOMPARE(sel.preselected.first(), sel.lists.first().at(1));
     }
 
-    // The menu has it as the one connection window, which asks the interface too.
+    // No window on the menu: the settings beside the list are the editor.
     showUniverseList(tree);
     const QStringList offered = contextMenuOn(tree, 6, QString());
-    QVERIFY2(offered.contains("Edit Connection…"), qPrintable(offered.join(" | ")));
+    QVERIFY2(offered.contains("Edit Connection…") == false, qPrintable(offered.join(" | ")));
 }
 
 /* "By-universe and By-device views must agree": a node patched from the
@@ -2181,7 +2202,7 @@ void ConnectionsTree_Test::bothViewsListTheSameTargets()
     {
         QTreeWidgetItem *row = universeRow(tree.m_tree, p.u);
         QVERIFY(row != NULL);
-        byUniverse.insert(p.u, row->text(COL_DETAIL));
+        byUniverse.insert(p.u, row->toolTip(COL_OUTPUT));
     }
 
     QCOMPARE(byDevice.keys(), byUniverse.keys());   // the same set, both ways
@@ -2236,11 +2257,16 @@ void ConnectionsTree_Test::offlinePatchesShowKeptNotUnpatched()
 
     tree.m_byUniverse->setChecked(true);
     QTreeWidgetItem *u1 = tree.m_tree->topLevelItem(0);
-    QVERIFY2(u1->text(COL_DETAIL).contains("no route (172.18.2.219 not present)"),
-             qPrintable(u1->text(COL_DETAIL)));
+    QVERIFY2(u1->toolTip(COL_OUTPUT).contains("no route (172.18.2.219 not present)"),
+             qPrintable(u1->toolTip(COL_OUTPUT)));
+    // Not reachable now: marked, never by colour alone.
+    QVERIFY2(u1->text(COL_OUTPUT).startsWith(QString::fromUtf8("⚠ ")), qPrintable(u1->text(COL_OUTPUT)));
+    QCOMPARE(u1->foreground(COL_OUTPUT).color(), QColor(220, 90, 90));
     QTreeWidgetItem *u2 = tree.m_tree->topLevelItem(1);
-    QVERIFY2(u2->text(COL_DETAIL).contains("\"172.18.2.219\" not present — kept"),
-             qPrintable(u2->text(COL_DETAIL)));
+    // The input kept offline: in its own cell.
+    QVERIFY2(u2->text(COL_INPUT).startsWith(QString::fromUtf8("⚠ ")), qPrintable(u2->text(COL_INPUT)));
+    QVERIFY2(u2->toolTip(COL_INPUT).contains("\"172.18.2.219\" not present — kept"),
+             qPrintable(u2->toolTip(COL_INPUT)));
 
     // The laptop joins the show network: both reconnect, no re-patching.
     NetworkRoute::LocalAddress show;
@@ -2258,7 +2284,8 @@ void ConnectionsTree_Test::offlinePatchesShowKeptNotUnpatched()
     tree.m_byUniverse->setChecked(false);
     tree.m_byUniverse->setChecked(true);
     u1 = tree.m_tree->topLevelItem(0);
-    QVERIFY2(u1->text(COL_DETAIL).contains("via en5 (172.18.2.157)"), qPrintable(u1->text(COL_DETAIL)));
+    QVERIFY2(u1->toolTip(COL_OUTPUT).contains("via en5 (172.18.2.157)"), qPrintable(u1->toolTip(COL_OUTPUT)));
+    QVERIFY(u1->text(COL_OUTPUT).startsWith(QString::fromUtf8("⚠ ")) == false);
     QVERIFY(rowsWithText(tree.m_tree, "kept, will reconnect").isEmpty());
 
     NetworkRoute::setResolverForTest(nullptr, nullptr);
@@ -2426,7 +2453,11 @@ void pickProtocol(ConnectionEditor &ed, const QString &name)
 }
 }
 
-void ConnectionsTree_Test::doubleClickingAUniverseOpensItsConnection()
+/* "do not need to pop a window on double click of a universe if we have an
+   editing window right there anyway": the settings beside the list are the
+   universe's editor. A double-click selects the row (its settings show) and
+   edits the cell under it in place -- the name is renamed -- never a window. */
+void ConnectionsTree_Test::doubleClickingAUniverseOpensNoWindow()
 {
     IOPluginStub *stub = fourPortNode(m_doc);
     stub->m_nameOverride = "ArtNet";
@@ -2439,69 +2470,274 @@ void ConnectionsTree_Test::doubleClickingAUniverseOpensItsConnection()
        that was no longer there (or collapsed). Not what this tests. */
     tree.m_refreshTimer->stop();
 
-    // A patched universe: its window, on its protocol.
+    auto nameEditor = [&tree]() -> QLineEdit * {
+        foreach (QLineEdit *e, tree.m_tree->viewport()->findChildren<QLineEdit *>())
+            if (e->isVisible())
+                return e;
+        return nullptr;
+    };
+
+    // A patched universe and an unpatched one: no window; its settings show
+    // beside the list, and its name is being edited in place.
+    foreach (quint32 id, QList<quint32>() << 2 << 5)
     {
         EditorSpy spy;
-        QTreeWidgetItem *row = universeRow(tree.m_tree, 2);
+        QTreeWidgetItem *row = universeRow(tree.m_tree, id);
         QVERIFY(row != NULL);
         QVERIFY(doubleClickRow(tree, row));
-        QCOMPARE(spy.opened, 1);
-        QCOMPARE(spy.universe, quint32(2));
-        QCOMPARE(spy.protocol, QString("ArtNet"));
+        QCOMPARE(spy.opened, 0);
+        QCOMPARE(tree.m_paneStack->currentWidget(), static_cast<QWidget *>(tree.m_connPane));
+        QCOMPARE(tree.m_connPane->universe(), id);
+        QTRY_VERIFY(nameEditor() != nullptr);
+        QVERIFY2(nameEditor()->text().startsWith(QString("%1:").arg(id + 1)),
+                 qPrintable(nameEditor()->text()));
+        QTest::keyClick(nameEditor(), Qt::Key_Escape);      // left as it was
+        QTRY_VERIFY(nameEditor() == nullptr);
     }
-    // It did not start renaming it instead.
-    foreach (QLineEdit *e, tree.m_tree->viewport()->findChildren<QLineEdit *>())
-        QVERIFY2(e->isVisible() == false, "a double-click started renaming the row");
+    QCOMPARE(iom->universe(2)->name(), QString("Universe 3"));
 
-    // An unpatched one: the same window, nothing patched yet.
+    // On a cell nothing edits in place (Carries): nothing at all.
     {
         EditorSpy spy;
-        QTreeWidgetItem *row = universeRow(tree.m_tree, 5);
-        QVERIFY(row != NULL);
-        QVERIFY(doubleClickRow(tree, row));
-        QCOMPARE(spy.opened, 1);
-        QCOMPARE(spy.universe, quint32(5));
-        QCOMPARE(spy.protocol, QString());
+        tree.slotItemDoubleClicked(universeRow(tree.m_tree, 2), COL_CARRIES);
+        QApplication::processEvents();
+        QCOMPARE(spy.opened, 0);
+        QVERIFY(nameEditor() == nullptr);
     }
 
-    // And in the wiring view, the universe row under its output.
+    // And in the wiring view, the universe row under its output: no window.
     tree.m_byUniverse->setChecked(false);
     tree.refresh();
     QApplication::processEvents();
-    /* Its OUTPUT row (the first, if the tree lists it more than once),
-       its branches opened. */
     QTreeWidgetItem *wired = NULL;
     foreach (QTreeWidgetItem *it, itemsOfKind(tree.m_tree, KIND_UNIVERSE))
         if (wired == NULL && it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == 2
                 && it->data(COL_NAME, ROLE_OUTPUT).toBool())
             wired = it;
     QVERIFY(wired != NULL);
-    for (QTreeWidgetItem *p = wired->parent(); p != NULL; p = p->parent())
-        p->setExpanded(true);
     {
         EditorSpy spy;
-        QSignalSpy dbl(tree.m_tree, &QTreeWidget::itemDoubleClicked);
-        QVERIFY(doubleClickRow(tree, wired));
-        if (dbl.isEmpty())
-        {
-            /* CI's macOS runner (Qt 6.9.3, offscreen) delivers the same
-               synthetic events to this nested row without the view ever
-               calling it a double-click, while every desktop Qt here
-               (6.11, 6.12) and the flat By universe rows above do. The
-               mouse path is what those check; here it is the wiring row
-               reaching the window, so hand it the view's own signal. */
-            qWarning() << "no itemDoubleClicked from the synthetic double-click on the wiring row;"
-                       << "Qt" << qVersion()
-                       << "selected" << wired->isSelected();
-            emit tree.m_tree->itemDoubleClicked(wired, 0);
-            QApplication::processEvents();
-        }
-        QCOMPARE(spy.opened, 1);
-        QCOMPARE(spy.universe, quint32(2));
+        tree.slotItemDoubleClicked(wired, COL_DETAIL);
+        QApplication::processEvents();
+        QCOMPARE(spy.opened, 0);
     }
 }
 
-void ConnectionsTree_Test::aUniversesMenuHasOneEditConnection()
+/* "Extend the output to include the universe" and "change WLED (JSON over
+   WiFi) to WLED: {mac addr} or {IP} once known": one cell, the whole
+   destination, as each protocol names it. */
+void ConnectionsTree_Test::byUniverseOutputSaysWhereEachProtocolGoes()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 4)
+        iom->addUniverse();
+    auto outputOf = [this](quint32 id) {
+        ConnectionsTree tree(m_doc);
+        tree.m_showUnused->setChecked(true);
+        tree.m_byUniverse->setChecked(true);
+        tree.refresh();
+        QTreeWidgetItem *row = universeRow(tree.m_tree, id);
+        return row != NULL ? row->text(COL_OUTPUT) : QString("<no row>");
+    };
+
+    // sACN: its universe number.
+    stub->m_nameOverride = "E1.31";
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0));
+    iom->universe(0)->outputPatch(0)->setPluginParameter("universe", 7);
+    QCOMPARE(outputOf(0), QString("E1.31 (sACN) · %1 · universe 7").arg(stub->outputs().at(0)));
+
+    // A USB widget: the interface is the device; no universe of its own.
+    stub->m_nameOverride = "DMX USB";
+    QVERIFY(iom->setOutputPatch(2, stub->name(), "", 1, false, 0));
+    QCOMPARE(outputOf(2), QString("DMX USB · %1").arg(stub->outputs().at(1)));
+
+    // WLED: by the lantern, never the plugin's one interface.
+    stub->m_nameOverride = "WLED";
+    QVERIFY(iom->setOutputPatch(1, stub->name(), "", 0, false, 0));
+    QCOMPARE(outputOf(1), QString("WLED"));                      // nothing known yet
+    iom->universe(1)->outputPatch(0)->setPluginParameter("outputIP", "172.18.2.50");
+    QCOMPARE(outputOf(1), QString("WLED: 172.18.2.50"));         // its IP
+    Fixture *fx = new Fixture(m_doc);
+    fx->setChannels(15);
+    fx->setUniverse(1);
+    fx->setAddress(0);
+    fx->setIPAddress("172.18.2.50");
+    fx->setMacAddress("e08cfef992e0");
+    QVERIFY(m_doc->addFixture(fx));
+    QCOMPARE(outputOf(1), QString("WLED: e0:8c:fe:f9:92:e0"));   // its MAC, once known
+    QVERIFY(outputOf(1).contains("JSON") == false);
+}
+
+/* "when patching WLED .. it says unpatched even tho it is pointing to the
+   right IP": the IP was right, the device was never set up. Patching sets
+   it up now (WledConfigCheck_Test covers the device side); when it cannot
+   be, the universe says so in words, in the trouble colour, on its Output
+   cell and in the pane beside it -- never a bare WLED beside a right IP. */
+void ConnectionsTree_Test::aWledNotSetUpSaysWhyOnItsUniverse()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_nameOverride = "WLED";
+    stub->m_supportsTargets = true;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 2)
+        iom->addUniverse();
+    QVERIFY(iom->setOutputPatch(1, stub->name(), "", 0, false, 0));
+    iom->universe(1)->outputPatch(0)->setPluginParameter("outputIP", "172.18.2.187");
+    WledConfigCheck check(m_doc);
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+    tree.m_refreshTimer->stop();
+
+    // Set up: nothing in red.
+    check.noteWrite("172.18.2.187", "Set up WLED 172.18.2.187 for this show: Name: Staff.", false);
+    QTreeWidgetItem *row = universeRow(tree.m_tree, 1);
+    QVERIFY(row != NULL);
+    QCOMPARE(row->text(COL_OUTPUT), QString("WLED: 172.18.2.187"));
+    QVERIFY(row->foreground(COL_OUTPUT).color() != QColor(220, 90, 90));
+
+    // Not set up: the row says why (refreshed by itself), and so does the pane.
+    const QString why("WLED 172.18.2.187 was not set up: it did not answer (Connection refused).");
+    check.noteWrite("172.18.2.187", why, false, true);
+    row = universeRow(tree.m_tree, 1);
+    QVERIFY2(row->text(COL_OUTPUT).startsWith(QString::fromUtf8("⚠ WLED: 172.18.2.187")),
+             qPrintable(row->text(COL_OUTPUT)));
+    QCOMPARE(row->foreground(COL_OUTPUT).color(), QColor(220, 90, 90));
+    QVERIFY2(row->toolTip(COL_OUTPUT).contains(why), qPrintable(row->toolTip(COL_OUTPUT)));
+    clickUniverse(tree, 1);
+    QCOMPARE(tree.m_connPane->universe(), quint32(1));
+    tree.m_connPane->updateWledStatus();
+    QVERIFY(tree.m_connPane->m_wledStatus->isVisibleTo(tree.m_connPane));
+    QVERIFY2(tree.m_connPane->m_wledStatus->text().contains(why),
+             qPrintable(tree.m_connPane->m_wledStatus->text()));
+}
+
+/* "in the address usage part of a U view .. it should show addresses or at
+   least show the address of the moused over block": the header line says
+   where the pointer is, at once; a resting pointer gets it as a tooltip;
+   the rows are labelled with the address they start at. */
+void ConnectionsTree_Test::theUniverseGridSaysTheAddressUnderThePointer()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("Front Wash 3");
+    fx->setChannels(16);
+    fx->setUniverse(0);
+    fx->setAddress(120);                    // 121-136
+    QVERIFY(m_doc->addFixture(fx));
+    Q_UNUSED(iom);
+
+    UniverseOutputView view(m_doc);
+    view.setUniverse(0);
+    view.fitWidth(UniverseOutputView::widthFor(16));
+    view.resize(view.sizeHint());
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QLabel *header = view.findChild<QLabel *>();
+    QVERIFY(header != nullptr);
+    const QString own = header->text();
+
+    auto hover = [&view](int ch) {
+        const QPoint at = view.cellRect(ch).center();
+        QMouseEvent move(QEvent::MouseMove, QPointF(at), view.mapToGlobal(QPointF(at)),
+                         Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(&view, &move);
+    };
+
+    // A used cell: its address, whose, the range, which channel.
+    hover(123);
+    QCOMPARE(view.hovered(), 123);
+    QVERIFY2(header->text().startsWith("124 · Front Wash 3 (121-136) · ch 4"), qPrintable(header->text()));
+    // A free one: the free run it sits in.
+    hover(0);
+    QCOMPARE(header->text(), QString("1 · free 1-120, 120 channels"));
+    hover(511);
+    QCOMPARE(header->text(), QString("512 · free 137-512, 376 channels"));
+    // Left: the header's own line again.
+    QEvent leave(QEvent::Leave);
+    QApplication::sendEvent(&view, &leave);
+    QCOMPARE(header->text(), own);
+    QCOMPARE(view.hovered(), -1);
+
+    // A resting pointer: the same, with what it sends.
+    {
+        const QPoint at = view.cellRect(120).center();
+        QHelpEvent help(QEvent::ToolTip, at, view.mapToGlobal(at));
+        QApplication::sendEvent(&view, &help);
+        QTRY_VERIFY(QToolTip::text().isEmpty() == false);
+        QVERIFY2(QToolTip::text().startsWith("121 · Front Wash 3 (121-136) · ch 1"),
+                 qPrintable(QToolTip::text()));
+        QToolTip::hideText();
+    }
+
+    // Row labels: the row's first address, from the live column count.
+    QCOMPARE(view.rowStart(0), 1);
+    QCOMPARE(view.rowStart(1), 17);
+    QCOMPARE(view.rowStart(7), 113);
+    view.fitWidth(UniverseOutputView::widthFor(8));
+    QCOMPARE(view.columns(), 8);
+    QCOMPARE(view.rowStart(1), 9);
+    QCOMPARE(view.rowStart(15), 121);
+    // ... and the cell under the pointer after the change.
+    hover(121);
+    QCOMPARE(view.hovered(), 121);
+    QVERIFY2(view.describe(121).startsWith("122 · Front Wash 3 (121-136) · ch 2"),
+             qPrintable(view.describe(121)));
+    QVERIFY2(header->text().startsWith("122 · Front Wash"), qPrintable(header->text()));
+}
+
+/* "why does U07 read FART2(SR)": a target's name is kept by its address,
+   and outlived the box it was given to. Forgetting a target forgets its
+   name unless something still goes by that address; declaring an address
+   again opens on the name it has, and an empty answer clears it. */
+void ConnectionsTree_Test::aTargetsNameDoesNotOutliveIt()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_supportsTargets = true;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ConnectionsTree tree(m_doc);
+
+    // Forgotten, nothing sending there: its name goes too.
+    iom->addManualTarget(stub->name(), 0, "172.18.2.61");
+    iom->setTargetAlias("172.18.2.61", "FART2(SR) DMX");
+    answerNextMessageBox(QMessageBox::Yes);
+    tree.forgetTarget("172.18.2.61");
+    QVERIFY(iom->isManualTarget("172.18.2.61") == false);
+    QCOMPARE(iom->targetAlias("172.18.2.61"), QString());
+
+    // Forgotten while a universe still sends there: the name stays with it.
+    iom->addManualTarget(stub->name(), 0, "172.18.2.62");
+    iom->setTargetAlias("172.18.2.62", "WDMX/UST");
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0));
+    QVERIFY(tree.applyTarget(0, stub->name(), 0, "172.18.2.62", 0));
+    answerNextMessageBox(QMessageBox::Yes);
+    tree.forgetTarget("172.18.2.62");
+    QCOMPARE(iom->targetAlias("172.18.2.62"), QString("WDMX/UST"));
+
+    // An address declared again opens on the name it has (a box before it),
+    // and what is typed is the name: here, nothing.
+    iom->setTargetAlias("172.18.2.61", "FART2(SR) DMX");    // as an older show has it
+    QStringList openedOn;
+    QStringList answers = QStringList() << "172.18.2.61" << "";
+    QTimer driver;
+    driver.setInterval(5);
+    QObject::connect(&driver, &QTimer::timeout, [&]() {
+        QInputDialog *d = qobject_cast<QInputDialog *>(QApplication::activeModalWidget());
+        if (d == nullptr || answers.isEmpty())
+            return;
+        openedOn << d->textValue();
+        d->setTextValue(answers.takeFirst());
+        d->accept();
+    });
+    driver.start();
+    QCOMPARE(tree.addManualTarget(stub->name(), 0), QString("172.18.2.61"));
+    driver.stop();
+    QCOMPARE(openedOn.count(), 2);
+    QCOMPARE(openedOn.at(1), QString("FART2(SR) DMX"));
+    QCOMPARE(iom->targetAlias("172.18.2.61"), QString());
+}
+
+void ConnectionsTree_Test::aUniversesMenuHasNoEditConnection()
 {
     IOPluginStub *stub = fourPortNode(m_doc);
     stub->m_nameOverride = "ArtNet";
@@ -2511,9 +2747,11 @@ void ConnectionsTree_Test::aUniversesMenuHasOneEditConnection()
     ConnectionsTree tree(m_doc);
     showUniverseList(tree);
 
+    /* Where a universe goes is set in the settings beside the list; the
+       window that repeated them is not on the menu. */
     const QStringList patched = contextMenuOn(tree, 1, QString());
-    QVERIFY2(patched.contains("Edit Connection…"), qPrintable(patched.join(" | ")));
-    // The editing entries it replaces are gone from the menu.
+    QVERIFY2(patched.contains("Edit Connection…") == false, qPrintable(patched.join(" | ")));
+    // The editing entries the window replaced stay gone.
     const QStringList gone = QStringList() << "Change Interface / Target…" << "Configure interface…"
         << "Transmit mode" << "Passthrough" << "Feedback to" << "Input profile"
         << "MIDI output mode" << "Change feedback address / port…";
@@ -2529,16 +2767,11 @@ void ConnectionsTree_Test::aUniversesMenuHasOneEditConnection()
     QCOMPARE(named.first(), QString("Add Universe"));
     QCOMPARE(named.last(), QString("Delete Universe…"));
 
-    // An unpatched universe: the same entry, where "Patch to…" was.
+    // An unpatched universe: neither.
     const QStringList unpatched = contextMenuOn(tree, 4, QString());
-    QVERIFY2(unpatched.contains("Edit Connection…"), qPrintable(unpatched.join(" | ")));
+    QVERIFY2(unpatched.contains("Edit Connection…") == false, qPrintable(unpatched.join(" | ")));
     QVERIFY(unpatched.contains("Patch to…") == false);
-
-    // And it opens the window on that universe.
-    EditorSpy spy;
-    contextMenuOn(tree, 1, "Edit Connection…");
-    QCOMPARE(spy.opened, 1);
-    QCOMPARE(spy.universe, quint32(1));
+    QVERIFY(unpatched.contains("Rename Universe…"));
 }
 
 void ConnectionsTree_Test::connectionEditorPatchesANewArtNetUniverse()
@@ -2761,14 +2994,6 @@ void ConnectionsTree_Test::connectionEditorRefusesATakenPortAndChangesNothing()
  * By universe: the patch as columns (the Overview sub-tab's, board Q153)
  ****************************************************************************/
 
-#define COL_OUTPUT   3
-#define COL_IP       4
-#define COL_U        5
-#define COL_MODE     6
-#define COL_INPUT    7
-#define COL_PROFILE  8
-#define COL_FEEDBACK 9
-#define COL_PT       10
 
 void ConnectionsTree_Test::byUniverseColumnsShowHideAndAreRemembered()
 {
@@ -2811,7 +3036,8 @@ void ConnectionsTree_Test::byUniverseColumnsShowHideAndAreRemembered()
     });
     tree.slotHeaderMenu(QPoint(5, 5));
     QApplication::processEvents();
-    QCOMPARE(seen, QStringList() << "Output" << "IP" << "U" << "Mode" << "Input"
+    // Output is always there (in Detail's place): not one to hide.
+    QCOMPARE(seen, QStringList() << "IP" << "U" << "Mode" << "Input"
                                  << "Profile" << "Feedback" << "PT");
     QVERIFY(tree.m_tree->isColumnHidden(COL_FEEDBACK) == false);
     QVERIFY(tree.m_tree->isColumnHidden(COL_PT));
@@ -2826,12 +3052,23 @@ void ConnectionsTree_Test::byUniverseColumnsShowHideAndAreRemembered()
     // The Columns button is the same menu.
     QMenu menu;
     again.fillColumnsMenu(&menu);
-    QCOMPARE(menu.actions().count(), 8);
-    QVERIFY(menu.actions().at(6)->isChecked());         // Feedback
-    QVERIFY(menu.actions().at(7)->isChecked() == false); // PT
+    QCOMPARE(menu.actions().count(), 7);
+    QVERIFY(menu.actions().at(5)->isChecked());         // Feedback
+    QVERIFY(menu.actions().at(6)->isChecked() == false); // PT
 
-    // The wiring's header has no columns to choose.
+    // Even taken off in a saved list, Output stays; Detail is not shown, and
+    // Output stands where it was, beside the name.
+    QSettings().setValue(QStringLiteral("connections/universeColumns"), QStringList() << "ip");
+    again.applyUniverseColumns();
+    QVERIFY(again.m_tree->isColumnHidden(COL_OUTPUT) == false);
+    QVERIFY(again.m_tree->isColumnHidden(COL_DETAIL));
+    QCOMPARE(again.m_tree->header()->visualIndex(COL_OUTPUT), 1);
+
+    // The wiring's header has no columns to choose; Detail is back, second.
     again.m_byUniverse->setChecked(false);
+    QVERIFY(again.m_tree->isColumnHidden(COL_DETAIL) == false);
+    QCOMPARE(again.m_tree->header()->visualIndex(COL_DETAIL), 1);
+    QCOMPARE(again.m_tree->header()->visualIndex(COL_OUTPUT), COL_OUTPUT);
     bool opened = false;
     QTimer::singleShot(0, [&opened]() {
         if (QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget()))
@@ -2875,7 +3112,8 @@ void ConnectionsTree_Test::byUniverseColumnsReadThePatch()
 
     QTreeWidgetItem *one = universeRow(tree.m_tree, 0);
     QVERIFY(one != NULL);
-    QCOMPARE(one->text(COL_OUTPUT), QString("ArtNet · %1").arg(stub->outputs().at(1)));
+    // The whole destination: protocol, interface, the universe on the node.
+    QCOMPARE(one->text(COL_OUTPUT), QString("ArtNet · %1 · universe 0:1:2").arg(stub->outputs().at(1)));
     QCOMPARE(one->text(COL_IP), QString("172.18.2.50"));
     QCOMPARE(one->text(COL_U), QString("0:1:2"));
     QCOMPARE(one->text(COL_MODE), QString("Full"));
@@ -2887,10 +3125,12 @@ void ConnectionsTree_Test::byUniverseColumnsReadThePatch()
     QVERIFY(three != NULL);
     QCOMPARE(three->text(COL_FEEDBACK), QString("ArtNet · %1 → 10.0.0.9 · 0:0:3")
                                             .arg(stub->outputs().at(3)));
-    QCOMPARE(three->text(COL_OUTPUT), QString());
+    QCOMPARE(three->text(COL_OUTPUT), QString("not patched"));   // feedback only
 
     QTreeWidgetItem *two = universeRow(tree.m_tree, 1);
     QVERIFY(two != NULL);
+    // No port address set: Art-Net's is the universe's own number.
+    QCOMPARE(two->text(COL_OUTPUT), QString("ArtNet · %1 · universe 0:0:1").arg(stub->outputs().at(0)));
     QCOMPARE(two->text(COL_IP), QString("broadcast"));
     QCOMPARE(two->text(COL_U), QString());
     QCOMPARE(two->text(COL_MODE), QString("Standard"));
@@ -2898,8 +3138,8 @@ void ConnectionsTree_Test::byUniverseColumnsReadThePatch()
     QCOMPARE(two->text(COL_FEEDBACK), QString());
     QCOMPARE(two->text(COL_PT), QString());
 
-    // A double-click on a column the grid doesn't edit opens the connection
-    // window (a patch cell is edited in place: byUniverseCellsEditThePatch).
+    // A double-click on a column the grid doesn't edit opens no window (a
+    // patch cell is edited in place: byUniverseCellsEditThePatch).
     tree.m_byUniverse->blockSignals(true);   // keep the columns as they are
     QSettings().setValue(QStringLiteral("connections/universeColumns"),
                          QStringList() << "ip" << "mode");
@@ -2909,9 +3149,8 @@ void ConnectionsTree_Test::byUniverseColumnsReadThePatch()
     QVERIFY(tree.m_tree->itemDelegateForColumn(COL_IP) != tree.m_tree->itemDelegate());
     EditorSpy spy;
     tree.slotItemDoubleClicked(one, COL_DETAIL);
-    QCOMPARE(spy.opened, 1);
-    QCOMPARE(spy.universe, quint32(0));
-    QCOMPARE(spy.protocol, QString("ArtNet"));
+    QApplication::processEvents();
+    QCOMPARE(spy.opened, 0);
 
     // A change of patch shows at the next rebuild.
     op->setPluginParameter("transmitMode", "Partial");
@@ -3576,12 +3815,131 @@ void ConnectionsTree_Test::byUniverseCellsEditThePatch()
     QCOMPARE(iom->universe(4)->outputPatch(0)->output(), quint32(1));
     // And taken off it again.
     QVERIFY(editCellByHand(tree, 4, COL_OUTPUT, ""));
-    // A double-click on the name still opens the whole connection.
+    // A double-click on the name renames it in place: no window.
     {
         EditorSpy spy;
         QVERIFY(doubleClickRow(tree, universeRow(tree.m_tree, 1)));
-        QCOMPARE(spy.opened, 1);
-        QCOMPARE(spy.universe, quint32(1));
+        QCOMPARE(spy.opened, 0);
+        QLineEdit *name = nullptr;
+        QTRY_VERIFY((name = tree.m_tree->viewport()->findChild<QLineEdit *>()) != nullptr
+                    && name->isVisible());
+        QTest::keyClick(name, Qt::Key_Escape);
     }
     QCOMPARE(iom->universe(4)->outputPatchesCount(), 0);
+}
+
+/****************************************************************************
+ * Pictures: By universe (QLC_SHOT_DIR)
+ ****************************************************************************/
+
+namespace {
+/* A WLED beside the stub's Art-Net: a second protocol in the same show, for
+   the pictures (the plugin directory holds the one stub). */
+class ShotWled : public QLCIOPlugin
+{
+public:
+    void init() override {}
+    QString name() const override { return QStringLiteral("WLED"); }
+    int capabilities() const override { return QLCIOPlugin::Output; }
+    QString pluginInfo() const override { return QString(); }
+    QStringList outputs() override { return QStringList() << QStringLiteral("WLED (JSON over Wi-Fi)"); }
+    bool openOutput(quint32 output, quint32 universe) override
+    {
+        addToMap(universe, output, Output);     // where its parameters are kept
+        return true;
+    }
+    void closeOutput(quint32 output, quint32 universe) override { removeFromMap(universe, output, Output); }
+    bool supportsOutputTargets() const override { return true; }
+    void writeUniverse(quint32, quint32, const QByteArray &, bool) override {}
+};
+}
+
+/* With QLC_SHOT_DIR: Connections ▸ By universe, a universe selected, at three
+   sizes, light and dark: Art-Net to a node, one whose node stopped
+   answering, a WLED known by its MAC and one by its IP, an sACN patch whose
+   protocol is not here. QLC_SHOT_PREFIX names them ("after" by default). */
+void ConnectionsTree_Test::byUniverseShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    const QString prefix = qEnvironmentVariable("QLC_SHOT_PREFIX", QStringLiteral("after"));
+
+    IOPluginStub *stub = fourPortNode(m_doc);
+    stub->m_nameOverride = "ArtNet";
+    stub->m_lineNames = QStringList() << "127.0.0.1" << "172.18.2.17";
+    m_doc->ioPluginCache()->m_plugins << new ShotWled;    // the cache deletes it
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    const char *names[] = { "U01-Office", "U02-UST", "U03-T2-Ext", "U04-Staff", "U05-Lantern", "U06-Haze" };
+    for (int i = 0; i < 6; i++)
+        iom->setUniverseName(i, names[i]);
+    ConnectionsTree tree(m_doc);
+    iom->setTargetAlias("172.18.2.50", "T1 DMX");
+    for (quint32 u = 0; u < 3; u++)
+    {
+        QVERIFY(iom->setOutputPatch(u, stub->name(), "", 1, false, 0));
+        QVERIFY(tree.applyTarget(u, stub->name(), 1, u == 2 ? "172.18.2.61" : "172.18.2.50", u));
+    }
+    stub->m_outputProblems[2] = QStringList()
+        << "Art-Net node 172.18.2.61: stopped answering since 20:14";
+    QVERIFY(iom->setOutputPatch(3, "WLED", "", 0, false, 0));
+    iom->universe(3)->outputPatch(0)->setPluginParameter("outputIP", "172.18.2.187");
+    QVERIFY(iom->setOutputPatch(4, "WLED", "", 0, false, 0));
+    iom->universe(4)->outputPatch(0)->setPluginParameter("outputIP", "172.18.2.50");
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("Staff");
+    fx->setChannels(15);
+    fx->setUniverse(3);
+    fx->setAddress(0);
+    fx->setIPAddress("172.18.2.187");
+    fx->setMacAddress("e08cfef992e0");
+    QVERIFY(m_doc->addFixture(fx));
+    Universe::OfflinePatch gone;
+    gone.tag = Universe::OutputPatchTag;
+    gone.plugin = "E1.31";
+    gone.uid = "172.18.2.17";
+    gone.line = 0;
+    iom->loadPatch(5, gone);
+
+    tree.m_showUnused->setChecked(false);
+    tree.m_byUniverse->setChecked(true);
+    tree.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tree));
+    tree.m_refreshTimer->stop();
+    tree.refresh();
+    if (QTreeWidgetItem *first = tree.m_tree->topLevelItem(0))
+    {
+        tree.m_tree->setCurrentItem(first);
+        first->setSelected(true);
+    }
+
+    const QPalette light = QApplication::palette();
+    QPalette dark = light;
+    dark.setColor(QPalette::Window, QColor(37, 37, 38));
+    dark.setColor(QPalette::Base, QColor(30, 30, 30));
+    dark.setColor(QPalette::AlternateBase, QColor(45, 45, 48));
+    dark.setColor(QPalette::Button, QColor(51, 51, 55));
+    dark.setColor(QPalette::WindowText, QColor(212, 212, 212));
+    dark.setColor(QPalette::Text, QColor(212, 212, 212));
+    dark.setColor(QPalette::ButtonText, QColor(212, 212, 212));
+    dark.setColor(QPalette::Highlight, QColor(38, 79, 120));
+    dark.setColor(QPalette::HighlightedText, Qt::white);
+    const QList<QSize> sizes { QSize(900, 560), QSize(1280, 720), QSize(1920, 1080) };
+    for (int theme = 0; theme < 2; theme++)
+    {
+        QApplication::setPalette(theme == 0 ? light : dark);
+        for (const QSize &z : sizes)
+        {
+            tree.resize(z);
+            for (int i = 0; i < 5; i++)
+                QApplication::processEvents();
+            QTest::qWait(30);
+            const QString file = QStringLiteral("%1-byuniverse-%2-%3x%4.png")
+                                     .arg(prefix, theme == 0 ? "light" : "dark")
+                                     .arg(z.width()).arg(z.height());
+            QVERIFY(tree.grab().save(QDir(dir).filePath(file)));
+        }
+    }
+    QApplication::setPalette(light);
 }

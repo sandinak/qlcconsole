@@ -359,7 +359,9 @@ its universe there (one undo). A WLED in the show that isn't answering is
 the footer's "not answering or on weak Wi-Fi" line.
 
 **Set Up WLED.** After Patch, or adding a WLED with Add Fixture, the show
-offers once to set the device up the way it drives it, listing exactly what
+offers once to set the device up the way it drives it (on Connections,
+setting a universe's WLED devices does this without asking and says what it
+did: see [Connections](other-improvements.md)), listing exactly what
 changes: its **name** becomes the fixture's, and its network name to match
 (Staff L → staff-l.local, from when it next starts); it stops **taking
 brightness, colour, effect and palette from other WLEDs** and sending its

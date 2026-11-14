@@ -149,6 +149,96 @@ void WledConfigCheck_Test::anArtNetLanternMustListenWhereItIsPatched()
     QCOMPARE(f.fix.value("if").toObject().value("live").toObject().value("en").toBool(), true);
 }
 
+/* "it seems I didn't 'Setup' the wled controller .. that's an extra step that
+   we should do as a part of 'patching' .. if it's already wled setup .. tell
+   user you're reconfiguring": setUpNow() is what patching a universe to a
+   WLED runs. It asks nothing; it writes, reads back, and says what it did. */
+void WledConfigCheck_Test::patchingSetsUpAFreshWledAndSaysSo()
+{
+    FakeWled wled;
+    QVERIFY(wled.listen(QHostAddress::LocalHost));
+    QJsonObject cfg = liveCfg(false, 5568, 1, 1, 4);
+    cfg["id"] = QJsonObject{ { "name", "WLED" }, { "mdns", "wled-f992e0" } };
+    cfg["def"] = QJsonObject{ { "on", true }, { "bri", 128 } };
+    wled.cfg = cfg;
+    Fixture *fx = lantern(m_doc, wled.address(), Fixture::WledTransport, "Effect (15ch)");
+    QVERIFY(fx != nullptr);
+    fx->setName("Staff");
+    QVERIFY(m_doc->addFixture(fx));
+
+    WledConfigCheck check(m_doc);
+    check.setUpNow({ fx->id() });
+    QTRY_COMPARE(wled.posted.size(), 1);
+    const QJsonObject sent = wled.posted.first().second;
+    QCOMPARE(sent.value("id").toObject().value("name").toString(), QString("Staff"));
+    QCOMPARE(sent.value("def").toObject().value("on").toBool(true), false);
+    QVERIFY(sent.value("if").toObject().contains("live") == false);   // it took no streams
+    QTRY_VERIFY2(check.writeStatus(wled.address()).startsWith("Set up "),
+                 qPrintable(check.writeStatus(wled.address())));
+    QVERIFY(check.writeStatus(wled.address()).contains("Name: Staff"));
+    QVERIFY(check.writeFailed(wled.address()) == false);
+
+    // Set up already: nothing more is written, and that is said.
+    check.setUpNow({ fx->id() });
+    QTRY_VERIFY(check.writeStatus(wled.address()).contains("is set up the way this show drives it"));
+    QCOMPARE(wled.posted.size(), 1);
+}
+
+void WledConfigCheck_Test::patchingReconfiguresAWledSetUpOtherwiseAndSaysWhatItWas()
+{
+    FakeWled wled;
+    QVERIFY(wled.listen(QHostAddress::LocalHost));
+    QJsonObject cfg = liveCfg(true, 5568, 3, 1, 4);      // taking sACN universe 3
+    cfg["id"] = QJsonObject{ { "name", "Stage Left" }, { "mdns", "stage-left" } };
+    wled.cfg = cfg;
+    Fixture *fx = lantern(m_doc, wled.address(), Fixture::WledTransport, "Effect (15ch)");
+    QVERIFY(fx != nullptr);
+    QVERIFY(m_doc->addFixture(fx));
+
+    WledConfigCheck check(m_doc);
+    check.setUpNow({ fx->id() });
+    QTRY_COMPARE(wled.posted.size(), 1);
+    const QJsonObject live = wled.posted.first().second.value("if").toObject().value("live").toObject();
+    QCOMPARE(live.value("en").toBool(true), false);       // streams off: driven by its API
+    QTRY_VERIFY2(check.writeStatus(wled.address()).startsWith("Reconfigured "),
+                 qPrintable(check.writeStatus(wled.address())));
+    const QString said = check.writeStatus(wled.address());
+    QVERIFY2(said.contains("E1.31 (sACN) streams (universe 3)"), qPrintable(said));   // what it was
+    QVERIFY2(said.contains("Receive realtime streams: on → off"), qPrintable(said));  // what it is
+    QVERIFY(check.writeFailed(wled.address()) == false);
+}
+
+void WledConfigCheck_Test::aWledThatCannotBeSetUpSaysWhyAndSettingItUpAgainWorks()
+{
+    quint16 port = 0;
+    {
+        QTcpServer probe;
+        QVERIFY(probe.listen(QHostAddress::LocalHost));
+        port = probe.serverPort();
+    }
+    const QString ip = QString("127.0.0.1:%1").arg(port);
+    Fixture *fx = lantern(m_doc, ip, Fixture::WledTransport, "Effect (15ch)");
+    QVERIFY(fx != nullptr);
+    QVERIFY(m_doc->addFixture(fx));
+
+    WledConfigCheck check(m_doc);
+    check.setUpNow({ fx->id() });
+    QTRY_VERIFY_WITH_TIMEOUT(check.writeFailed(ip), 10000);
+    QVERIFY2(check.writeStatus(ip).contains("was not set up: it did not answer"),
+             qPrintable(check.writeStatus(ip)));
+
+    // It answers now: set up again (what patching it again does).
+    FakeWled wled;
+    if (!wled.listen(QHostAddress::LocalHost, port))
+        QSKIP("the port was taken in the meantime");
+    QJsonObject cfg = liveCfg(false, 5568, 1, 1, 4);
+    cfg["def"] = QJsonObject{ { "on", true }, { "bri", 128 } };
+    wled.cfg = cfg;
+    check.setUpNow({ fx->id() });
+    QTRY_VERIFY_WITH_TIMEOUT(check.writeStatus(ip).startsWith("Set up "), 10000);
+    QVERIFY(check.writeFailed(ip) == false);
+}
+
 void WledConfigCheck_Test::aMismatchIsFoundShownAndFixed()
 {
     FakeWled wled;
