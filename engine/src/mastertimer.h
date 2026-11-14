@@ -154,6 +154,7 @@ private:
     friend class SystemTuning_Test;
     friend class ShowTree_Test;
     friend class SpeedMasters_Test;
+    friend class PixelBoxes_Test;
 
 private:
     /** The timer tick frequency in Hertz */

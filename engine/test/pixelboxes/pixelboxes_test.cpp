@@ -19,6 +19,7 @@
 
 #include <QRegularExpression>
 #include <QElapsedTimer>
+#include <QScopeGuard>
 #include <QtTest>
 #include <QFile>
 #include <QDir>
@@ -36,6 +37,7 @@
 #include "qlcpalette.h"
 #include "effectruns.h"
 #include "effectscriptrunner.h"
+#include "effectinstance.h"
 #include "universe.h"
 #include "qlcfile.h"
 #include "fixture.h"
@@ -176,6 +178,25 @@ void PixelBoxes_Test::go()
 void PixelBoxes_Test::run(int ms)
 {
     QTest::qWait(ms);
+}
+
+void PixelBoxes_Test::frame()
+{
+    m_doc->masterTimer()->timerTick();
+    QList<Universe *> us = m_doc->inputOutputMap()->claimUniverses();
+    for (Universe *u : us)
+        u->processFaders();
+    m_doc->inputOutputMap()->releaseUniverses(false);
+}
+
+/* The instance's clock is pinned with setOffStageClock(), the one hook on
+   it: off the stage it plays as if its scene were up, which it is here
+   (no fade, no transition), so what it writes is what the stage plays. */
+void PixelBoxes_Test::frameAt(EffectInstance *inst, qint64 ms)
+{
+    inst->setOffStageClock(ms);
+    QVERIFY(QMetaObject::invokeMethod(m_doc->effectScriptRunner(), "slotTick", Qt::DirectConnection));
+    frame();
 }
 
 QByteArray PixelBoxes_Test::sends(const QString &name, int from, int n) const
@@ -602,42 +623,59 @@ void PixelBoxes_Test::aBreatheOnceEndsOnItsFloor()
 }
 
 /* Looping, then set to Once while it plays (the Look Editor's Runs): the
-   run starts again, one breath from its floor, and holds there. */
+   run starts again, one breath from its floor, and holds there. Played on
+   a clock of the test's, frame by frame (the master timer stopped, its
+   ticks by hand): a read at a set wall time trailed the breath on a busy
+   host -- the universe is written a frame or more after the effect plays,
+   and a slow runner (GitHub's macOS, 2026-11-14) read the floor the new
+   breath starts on as the one it ends on. */
 void PixelBoxes_Test::aBreatheSetToOncePlaysItAgain()
 {
+    m_doc->masterTimer()->stop();                   // frames by hand from here
+    const auto timerAgain = qScopeGuard([this]() { m_doc->masterTimer()->start(); });
     QVERIFY(breatheOnTheStepTops(1.0, 0));
-    go();
-    run(1700);                                      // well into its second breath
-    QLCPalette *b = nullptr;
-    for (QLCPalette *p : m_doc->palettes())
-        if (p->name() == QLatin1String("Breathe"))
-            b = p;
+    const quint32 fx = palette(QStringLiteral("Breathe"));
+    QLCPalette *b = m_doc->palette(fx);
     QVERIFY(b != nullptr);
-    b->setEffectParamValue(EffectRuns::runsKey(), 1);
-    m_doc->effectScriptRunner()->updateEffectParams(b->id());
-    /* Each step waited for, not read at a set time: the breath runs on the
-       effect's own clock, but what is read here is the universe, which the
-       master timer's thread writes a frame or more later -- on a busy host
-       (or one napping under the gate: newaudio, 2026-11-12) the read trails
-       the breath, and "the floor at 1.45 s" read 38 of 51, a frame from
-       mid-breath. */
+    go();
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    EffectInstance *inst = nullptr;
+    for (int i = 0; i < 50 && inst == nullptr; ++i)
+    {
+        frame();
+        inst = runner->instanceForPalette(fx);
+    }
+    QVERIFY(inst != nullptr);
     const auto now = [this]() { return int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0))); };
+    const int floor = qRound(kTwentyPercent * 0.05);
+
+    // Well into its second breath (1 s each), on its way down
+    for (qint64 ms = 0; ms <= 1700; ms += 20)
+        frameAt(inst, ms);
+    const int atEdit = now();
+    QVERIFY2(atEdit > floor + 3 && atEdit < kTwentyPercent - 3, qPrintable(QString::number(atEdit)));
+
+    b->setEffectParamValue(EffectRuns::runsKey(), 1);
+    runner->updateEffectParams(b->id());
+    QCOMPARE(runner->instanceForPalette(fx), inst);  // the same run, played again
+    // The edit started its run again, its clock with it: 0 is that start
+    frameAt(inst, 0);
+    QVERIFY2(qAbs(now() - floor) <= 1, qPrintable(QString::number(now())));
+
     // Not cut off: a whole breath again, up to the look's 20% (at the edit
     // it was on its way down, and a cut-off run froze there or dropped)
-    QElapsedTimer t;
-    t.start();
     int top = 0;
-    while (top < kTwentyPercent - 3 && t.elapsed() < 5000)
+    for (qint64 ms = 20; ms <= 1000; ms += 20)
     {
-        QTest::qWait(5);
+        frameAt(inst, ms);
         top = qMax(top, now());
     }
     QVERIFY2(top >= kTwentyPercent - 3, qPrintable(QString::number(top)));
     // ...ending on its floor
-    const int floor = qRound(kTwentyPercent * 0.05);
-    QTRY_VERIFY2_WITH_TIMEOUT(qAbs(now() - floor) <= 1, qPrintable(QString::number(now())), 5000);
+    QVERIFY2(qAbs(now() - floor) <= 1, qPrintable(QString::number(now())));
     // ...and holding there: a loop would be well up its next breath by now
-    run(600);
+    for (qint64 ms = 1020; ms <= 1600; ms += 20)
+        frameAt(inst, ms);
     QVERIFY2(qAbs(now() - floor) <= 1, qPrintable(QString::number(now())));
 }
 
