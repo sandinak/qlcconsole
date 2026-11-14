@@ -75,6 +75,7 @@ private slots:
     /** The save-status lamp and its words: green all saved, yellow this
      *  light, red another, a red ring round yellow for both; a save flashes
      *  it green. */
+    void checkMappingWalksTheControllerAndLogsIt();
     void theLampSaysWhatIsUnsaved();
     /** Leaving with unsaved lights names them. */
     void exitNamesTheUnsavedLights();

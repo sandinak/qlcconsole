@@ -21,6 +21,8 @@
 #include <QStandardPaths>
 #include <QApplication>
 #include <QTreeWidget>
+#include <QListWidget>
+#include <QComboBox>
 #include <QHeaderView>
 #include <QFileDialog>
 #include <QMessageBox>
@@ -136,6 +138,69 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
             "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")));
     });
 
+    /* Check Mapping: shown once a walk is started. */
+    m_checkPanel = new QWidget(this);
+    m_checkPanel->setObjectName(QStringLiteral("controllerCheckPanel"));
+    QVBoxLayout *cl = new QVBoxLayout(m_checkPanel);
+    cl->setContentsMargins(0, 0, 0, 0);
+    m_checkDevice = new QComboBox(m_checkPanel);
+    m_checkDevice->setObjectName(QStringLiteral("controllerCheckDevice"));
+    cl->addWidget(m_checkDevice);
+    m_checkPrompt = new QLabel(m_checkPanel);
+    m_checkPrompt->setObjectName(QStringLiteral("controllerCheckPrompt"));
+    m_checkPrompt->setWordWrap(true);
+    QFont big = m_checkPrompt->font();
+    big.setPointSizeF(big.pointSizeF() * 1.3);
+    big.setBold(true);
+    m_checkPrompt->setFont(big);
+    cl->addWidget(m_checkPrompt);
+    m_checkList = new QListWidget(m_checkPanel);
+    m_checkList->setObjectName(QStringLiteral("controllerCheckList"));
+    m_checkList->setFlow(QListView::TopToBottom);
+    m_checkList->setWrapping(true);
+    m_checkList->setResizeMode(QListView::Adjust);
+    m_checkList->setSelectionMode(QAbstractItemView::NoSelection);
+    m_checkList->setFocusPolicy(Qt::NoFocus);
+    m_checkList->setUniformItemSizes(true);
+    m_checkList->setFixedHeight(m_checkList->fontMetrics().height() * 6 + 14);
+    cl->addWidget(m_checkList);
+    QHBoxLayout *cb = new QHBoxLayout;
+    m_checkSummary = new QLabel(m_checkPanel);
+    m_checkSummary->setObjectName(QStringLiteral("controllerCheckSummary"));
+    m_checkSummary->setWordWrap(true);
+    cb->addWidget(m_checkSummary, 1);
+    m_checkRetry = new QPushButton(tr("Retry"), m_checkPanel);
+    m_checkRetry->setObjectName(QStringLiteral("controllerCheckRetry"));
+    m_checkRetry->setToolTip(tr("Ask for this control again"));
+    m_checkSkip = new QPushButton(tr("Skip"), m_checkPanel);
+    m_checkSkip->setObjectName(QStringLiteral("controllerCheckSkip"));
+    m_checkSkip->setToolTip(tr("This controller has no such control, or leave it for now"));
+    m_checkStop = new QPushButton(tr("Stop"), m_checkPanel);
+    m_checkStop->setObjectName(QStringLiteral("controllerCheckStop"));
+    cb->addWidget(m_checkRetry);
+    cb->addWidget(m_checkSkip);
+    cb->addWidget(m_checkStop);
+    cl->addLayout(cb);
+    m_checkPanel->hide();
+    vl->addWidget(m_checkPanel);
+    connect(m_checkDevice, QOverload<int>::of(&QComboBox::activated), this,
+            [this](int i) { beginCheck(i); });
+    connect(m_checkRetry, &QPushButton::clicked, this, [this]() {
+        if (m_check) { m_check->retry(); refreshCheck(); }
+    });
+    connect(m_checkSkip, &QPushButton::clicked, this, [this]() {
+        if (m_check) { m_check->skip(); refreshCheck(); }
+    });
+    connect(m_checkStop, &QPushButton::clicked, this, [this]() {
+        if (m_check && !m_check->finished())
+        {
+            m_check->stop();
+            refreshCheck();
+        }
+        else
+            m_checkPanel->hide();
+    });
+
     m_tree = new QTreeWidget(this);
     m_tree->setObjectName(QStringLiteral("controllerTestInputs"));
     m_tree->setRootIsDecorated(false);
@@ -195,6 +260,9 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
     m_actions->hide();
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Close, this);
+    m_checkButton = bb->addButton(tr("Check Mapping"), QDialogButtonBox::ActionRole);
+    m_checkButton->setObjectName(QStringLiteral("controllerTestCheck"));
+    connect(m_checkButton, &QPushButton::clicked, this, [this]() { startCheck(); });
     QPushButton *clearBtn = bb->addButton(tr("Clear"), QDialogButtonBox::ResetRole);
     clearBtn->setObjectName(QStringLiteral("controllerTestClear"));
     QPushButton *copyBtn = bb->addButton(tr("Copy"), QDialogButtonBox::ActionRole);
@@ -248,6 +316,7 @@ void ControllerTestDialog::slotInputDiagnostic(quint32 input, const QString &dev
         if (!plugin.isNull() && static_cast<QObject *>(plugin.data()) == sender())
         {
             addInput(plugin.data(), input, device, connection, element, raw, channel, value);
+            feedCheck(plugin.data(), input, channel, value);
             return;
         }
     }
@@ -309,6 +378,11 @@ void ControllerTestDialog::refreshStatus()
     if (!hint.isEmpty())
         status << hint;
     m_statusLabel->setText(status.join(QLatin1Char(' ')));
+    const bool anyPad = !controllers().isEmpty();
+    m_checkButton->setEnabled(anyPad);
+    m_checkButton->setToolTip(anyPad ? tr("Walk a controller through every control, one at a time, "
+                                          "and check each is read as the control it is")
+                                     : tr("No game controller is connected"));
     m_askButton->setVisible(perm == ControllerKeepAlive::PermissionUnknown);
     m_settingsButton->setVisible(perm == ControllerKeepAlive::PermissionDenied);
 }
@@ -435,6 +509,11 @@ QString ControllerTestDialog::logText() const
         ts << "  " << it.key() << " -- " << it.value() << "\n";
     ts << "\nStatus: " << m_statusLabel->text() << "\n";
 
+    const QStringList reports = m_checkReports + (m_check && !m_checkArchived
+                                                  ? QStringList(checkReport()) : QStringList());
+    for (const QString &r : reports)
+        ts << "\nMapping check:\n" << r << "\n";
+
     ts << "\nInputs (one row per element):\n";
     QStringList header;
     for (int c = 0; c < ColCount; ++c)
@@ -463,6 +542,7 @@ void ControllerTestDialog::clear()
     m_tree->clear();
     m_rows.clear();
     m_events.clear();
+    m_checkReports.clear();
 }
 
 void ControllerTestDialog::copyLog()
@@ -593,4 +673,161 @@ void ControllerTestDialog::slotSticksCentred(quint32 input, int held)
     else
         m_sticksNote->setText(tr("%1's sticks are centred: where they rest now reads as the middle.").arg(name));
     refreshSticks();
+}
+
+/*****************************************************************************
+ * Check Mapping
+ *****************************************************************************/
+
+QList<ControllerTestDialog::Controller> ControllerTestDialog::controllers() const
+{
+    QList<Controller> out;
+    for (const QPointer<QLCIOPlugin> &plugin : std::as_const(m_plugins))
+    {
+        if (plugin.isNull())
+            continue;
+        const QStringList inputs = plugin->inputs();
+        for (int i = 0; i < inputs.size(); ++i)
+        {
+            const QString info = plugin->inputConnectionInfo(quint32(i));
+            if (info.isEmpty())
+                continue;
+            out.append({ plugin, quint32(i), inputs.at(i).trimmed(), info });
+        }
+    }
+    return out;
+}
+
+bool ControllerTestDialog::startCheck(const QString &pluginName, const QString &device)
+{
+    const QList<Controller> list = controllers();
+    if (list.isEmpty())
+    {
+        m_checkPanel->show();
+        m_checkDevice->hide();
+        m_checkList->hide();
+        m_checkRetry->hide();
+        m_checkSkip->hide();
+        m_checkPrompt->setText(tr("No game controller is connected. Switch one on or plug it in, "
+                                  "then press Check Mapping."));
+        m_checkSummary->clear();
+        m_checkStop->setText(tr("Close"));
+        m_check.reset();
+        return false;
+    }
+    int pick = 0;
+    for (int i = 0; i < list.size(); ++i)
+        if (!device.isEmpty() && list.at(i).name == device.trimmed()
+            && (pluginName.isEmpty() || list.at(i).plugin->name() == pluginName))
+        {
+            pick = i;
+            break;
+        }
+    m_checkControllers = list;
+    m_checkDevice->clear();
+    for (const Controller &c : list)
+        m_checkDevice->addItem(c.name);
+    m_checkDevice->setCurrentIndex(pick);
+    beginCheck(pick);
+    return true;
+}
+
+void ControllerTestDialog::beginCheck(int index)
+{
+    archiveCheck();
+    if (index < 0 || index >= m_checkControllers.size())
+        return;
+    m_checkController = m_checkControllers.at(index);
+    if (m_checkController.plugin.isNull())
+        return;
+    m_check.reset(new MappingCheck(PadNames::familyFrom(
+        m_checkController.plugin->inputDeviceKind(m_checkController.input))));
+    m_checkArchived = false;
+    m_checkDevice->setVisible(m_checkControllers.size() > 1);
+    m_checkList->show();
+    m_checkRetry->show();
+    m_checkSkip->show();
+    m_checkList->clear();
+    for (int i = 0; i < m_check->count(); ++i)
+        m_checkList->addItem(new QListWidgetItem(m_checkList));
+    m_checkPanel->show();
+    refreshCheck();
+}
+
+void ControllerTestDialog::archiveCheck()
+{
+    if (m_check && !m_checkArchived)
+        m_checkReports << checkReport();
+    m_checkArchived = true;
+}
+
+QString ControllerTestDialog::checkReport() const
+{
+    if (!m_check)
+        return QString();
+    const Controller &c = m_checkController;
+    return QStringLiteral("  Device: %1\n  Connection: %2\n  Layout: %3 (%4)\n%5")
+        .arg(c.name, c.info, PadNames::kindKey(m_check->family()),
+             PadNames::isPlayStation(m_check->family()) ? QStringLiteral("PlayStation names")
+                                                        : QStringLiteral("Xbox names"),
+             m_check->report());
+}
+
+void ControllerTestDialog::refreshCheck()
+{
+    if (!m_check)
+        return;
+    for (int i = 0; i < m_check->count() && i < m_checkList->count(); ++i)
+    {
+        QListWidgetItem *item = m_checkList->item(i);
+        item->setText(m_check->line(i));
+        QColor colour;
+        switch (m_check->state(i))
+        {
+            case MappingCheck::Passed: colour = QColor(0x2e, 0x9e, 0x4f); break;
+            case MappingCheck::Wrong: colour = QColor(0xd0, 0x3a, 0x3a); break;
+            default: break;
+        }
+        if (colour.isValid())
+            item->setForeground(colour);
+        else
+            item->setData(Qt::ForegroundRole, QVariant());
+        QFont f = item->font();
+        f.setBold(i == m_check->current());
+        item->setFont(f);
+    }
+    const int cur = m_check->current();
+    m_checkSummary->setStyleSheet(QString());
+    if (m_check->finished())
+    {
+        archiveCheck();
+        m_checkPrompt->setStyleSheet(QString());
+        m_checkPrompt->setText(tr("Done: %1").arg(m_check->summary()));
+        m_checkSummary->setText(tr("It is in the log: Copy or Save it to send."));
+        m_checkRetry->setEnabled(false);
+        m_checkSkip->setEnabled(false);
+        m_checkStop->setText(tr("Close"));
+        return;
+    }
+    const bool wrong = m_check->state(cur) == MappingCheck::Wrong;
+    m_checkPrompt->setStyleSheet(wrong ? QStringLiteral("color: #d03a3a;") : QString());
+    m_checkPrompt->setText(wrong ? tr("%1. Try again, or Skip.").arg(m_check->mismatchText(cur))
+                                 : tr("%1 of %2: %3").arg(cur + 1).arg(m_check->count()).arg(m_check->prompt()));
+    m_checkSummary->setText(tr("%1 matched so far.").arg(m_check->passedCount()));
+    m_checkRetry->setEnabled(wrong);
+    m_checkSkip->setEnabled(true);
+    m_checkStop->setText(tr("Stop"));
+    m_checkList->scrollToItem(m_checkList->item(cur));
+}
+
+void ControllerTestDialog::feedCheck(QLCIOPlugin *plugin, quint32 input, int channel, int value)
+{
+    if (!m_check || m_check->finished() || channel < 0 || value < 0
+        || plugin != m_checkController.plugin.data() || input != m_checkController.input)
+        return;
+    const GamepadRole::Role role = GamepadRole::fromProfile(
+        plugin->inputChannelRole(input, quint32(channel)),
+        plugin->inputChannelName(input, quint32(channel)));
+    if (m_check->feed(role, value) != MappingCheck::Ignored)
+        refreshCheck();
 }

@@ -22,6 +22,9 @@
 #include <QPointer>
 #include <QHash>
 #include <QList>
+#include <memory>
+
+#include "mappingcheck.h"
 
 class FocusControlMap;
 class QTreeWidgetItem;
@@ -30,6 +33,8 @@ class QTreeWidget;
 class QPushButton;
 class QTimer;
 class QLabel;
+class QComboBox;
+class QListWidget;
 class Doc;
 
 /** @addtogroup ui UI
@@ -72,6 +77,13 @@ public:
      *  again once the sticks are let go. How many controllers it asked. */
     int centreSticks();
 
+    /** Check Mapping: walk @p device (an input's name, as the plugin lists
+     *  it; the first controller when empty) of @p pluginName through every
+     *  control, one at a time. False when no such controller is connected. */
+    bool startCheck(const QString &pluginName = QString(), const QString &device = QString());
+    /** The walk, or null when none has been started. */
+    const MappingCheck *mappingCheck() const { return m_check.get(); }
+
 private:
     void addInput(QLCIOPlugin *plugin, quint32 input, const QString &device,
                   const QString &connection, const QString &element, int raw,
@@ -92,6 +104,21 @@ private slots:
     void slotSticksCentred(quint32 input, int held);
 
 private:
+    struct Controller
+    {
+        QPointer<QLCIOPlugin> plugin;
+        quint32 input = 0;
+        QString name;
+        QString info;
+    };
+    /** Every controller listed in the devices line. */
+    QList<Controller> controllers() const;
+    void beginCheck(int controllerIndex);
+    void archiveCheck();
+    void refreshCheck();
+    void feedCheck(QLCIOPlugin *plugin, quint32 input, int channel, int value);
+    QString checkReport() const;
+
     void clear();
     void copyLog();
     void saveLog();
@@ -112,6 +139,22 @@ private:
     QHash<QString, QTreeWidgetItem *> m_rows;
     QHash<QString, QString> m_connections;   ///< device -> how it is connected
     QStringList m_events;             ///< in order, for the log
+
+    // Check Mapping
+    QPushButton *m_checkButton;
+    QWidget *m_checkPanel;
+    QComboBox *m_checkDevice;
+    QLabel *m_checkPrompt;
+    QListWidget *m_checkList;
+    QPushButton *m_checkRetry;
+    QPushButton *m_checkSkip;
+    QPushButton *m_checkStop;
+    QLabel *m_checkSummary;
+    std::unique_ptr<MappingCheck> m_check;
+    QList<Controller> m_checkControllers;
+    Controller m_checkController;
+    bool m_checkArchived = true;
+    QStringList m_checkReports;       ///< finished walks, for the log
 
     static QPointer<ControllerTestDialog> s_instance;
 };

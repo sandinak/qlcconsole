@@ -20,6 +20,7 @@
 #include <QtTest>
 #include <QSignalSpy>
 #include <QPushButton>
+#include <QListWidget>
 #include <QToolButton>
 #include <QComboBox>
 #include <QStandardItemModel>
@@ -1234,6 +1235,82 @@ void FocusMode_Test::theControllerTestListsEachInput()
     dlg->close();
     QTRY_VERIFY(dlg.isNull());
     QCOMPARE(m_stub->m_diagnostics, before);
+    m_stub->m_connectionInfo.clear();
+}
+
+void FocusMode_Test::checkMappingWalksTheControllerAndLogsIt()
+{
+    plugInPad();
+    m_stub->m_connectionInfo = { { 0, "Bluetooth LE \302\267 Xbox Series X|S Controller (045E:0B13)" } };
+    ControllerTestDialog *dlg = ControllerTestDialog::open(m_doc, nullptr);
+    QVERIFY(dlg != nullptr);
+    QPushButton *check = dlg->findChild<QPushButton *>("controllerTestCheck");
+    QVERIFY(check != nullptr && check->isEnabled());
+    QWidget *panel = dlg->findChild<QWidget *>("controllerCheckPanel");
+    QVERIFY(panel != nullptr && !panel->isVisibleTo(dlg));
+    QLabel *prompt = dlg->findChild<QLabel *>("controllerCheckPrompt");
+    QListWidget *list = dlg->findChild<QListWidget *>("controllerCheckList");
+    QLabel *summary = dlg->findChild<QLabel *>("controllerCheckSummary");
+    QVERIFY(prompt != nullptr && list != nullptr && summary != nullptr);
+
+    // With QLC_SHOT_DIR: the window at 1280x800, before / mid-walk / done.
+    const QByteArray shotDir = qgetenv("QLC_SHOT_DIR");
+    auto shot = [&](const char *name) {
+        if (shotDir.isEmpty())
+            return;
+        dlg->resize(1280, 800);
+        QTest::qWait(50);
+        dlg->grab().save(QDir(QString::fromLocal8Bit(shotDir)).filePath(QString::fromLatin1(name)));
+    };
+    shot("controllertest-idle.png");
+
+    check->click();
+    QVERIFY(panel->isVisibleTo(dlg));
+    QVERIFY(dlg->mappingCheck() != nullptr);
+    QVERIFY2(prompt->text().contains("Press A"), qPrintable(prompt->text()));
+    QCOMPARE(list->count(), 20);
+
+    const QString dev = "Xbox Wireless Controller";
+    const QString conn = "Bluetooth LE";
+    // Another controller's input is not the one asked about.
+    m_stub->emitDiagnostic(1, dev, conn, "Button 1", 1, BtnA, 255);
+    QCOMPARE(dlg->mappingCheck()->current(), 0);
+    m_stub->emitDiagnostic(0, dev, conn, "Button 1", 1, BtnA, 255);   // A: matches
+    m_stub->emitDiagnostic(0, dev, conn, "Button 1", 0, BtnA, 0);
+    QCOMPARE(dlg->mappingCheck()->current(), 1);
+    QVERIFY(list->item(0)->text().startsWith(QString::fromUtf8("\342\234\223")));
+    m_stub->emitDiagnostic(0, dev, conn, "Button 3", 1, BtnX, 255);   // B asked, X read
+    m_stub->emitDiagnostic(0, dev, conn, "Button 3", 0, BtnX, 0);
+    QVERIFY2(prompt->text().startsWith("Expected B, read X"), qPrintable(prompt->text()));
+    QVERIFY(list->item(1)->text().contains(QString::fromUtf8("\342\234\227")));
+    QPushButton *retry = dlg->findChild<QPushButton *>("controllerCheckRetry");
+    QPushButton *skip = dlg->findChild<QPushButton *>("controllerCheckSkip");
+    QPushButton *stop = dlg->findChild<QPushButton *>("controllerCheckStop");
+    QVERIFY(retry->isEnabled());
+    shot("controllertest-checking.png");
+    skip->click();                                  // leave B wrong, ask for X
+    QVERIFY2(prompt->text().contains("Press X"), qPrintable(prompt->text()));
+    QVERIFY(!retry->isEnabled());
+    stop->click();                                  // the rest is skipped
+    QVERIFY2(prompt->text().startsWith("Done: 1 of 2 match; 1 wrong: B read as X"),
+             qPrintable(prompt->text()));
+    shot("controllertest-done.png");
+
+    const QString log = dlg->logText();
+    QVERIFY(log.contains("Mapping check:"));
+    QVERIFY(log.contains("045E:0B13"));
+    QVERIFY(log.contains("Layout: xbox"));
+    QVERIFY(log.contains("Expected B, read X"));
+    QVERIFY(log.contains("1 of 2 match; 1 wrong: B read as X"));
+
+    // A PlayStation pad is asked in its own words.
+    m_stub->m_deviceKind = QStringLiteral("dualsense");
+    check->click();
+    QVERIFY2(prompt->text().contains("Cross"), qPrintable(prompt->text()));
+    QCOMPARE(list->count(), 21);
+    m_stub->m_deviceKind.clear();
+
+    dlg->close();
     m_stub->m_connectionInfo.clear();
 }
 
