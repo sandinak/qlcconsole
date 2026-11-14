@@ -109,8 +109,12 @@ you typed but haven't made yet. The grid and the settings edit the same
 patch, so each follows the other. To their right, what the universe is
 **sending**, live: all 512 channels, each with its value and a bar as high, the channels
 of each patched fixture shaded together and named where they start. The
-values are what goes out, after the grand master; hover a channel for whose
-it is ("Front Par, channel 1 — Dimmer"). On a narrower window the grid
+values are what goes out, after the grand master. Each row is labelled
+with the address it starts at, and the line above the grid says where the
+pointer is as it moves: the address, and whose channel it is with that
+fixture's range ("124 · Front Wash 3 (121-136) · ch 4 Blue"), or the free
+run it sits in ("121 · free 121-140, 20 channels"); a pointer that rests
+gets the same with the value it sends. On a narrower window the grid
 puts fewer channels on a row; the settings keep their width. They are the
 universe's editor: no window opens on top of them. A double-click edits in
 place what is under it — a patch cell, or the universe's name (to rename

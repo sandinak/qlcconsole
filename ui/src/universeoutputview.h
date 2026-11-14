@@ -61,9 +61,23 @@ public:
     /** The width that shows @p columns channels a row. */
     static int widthFor(int columns);
 
+    /** Where @p channel (0-based) is, in words: its address and, for a
+     *  used one, the fixture, its address range and which of its channels
+     *  this is ("121 · Front Wash 3 (121-136) · ch 4 Blue"); for a free one,
+     *  the free run it sits in ("121 · free 121-140, 20 channels"). What
+     *  the header line says while the pointer is over that cell. */
+    QString describe(int channel) const;
+    /** The address the label at the left of grid row @p row reads (the
+     *  row's first channel, from the live column count). */
+    int rowStart(int row) const { return row * m_cols + 1; }
+    /** The channel (0-based) the header line is describing, or -1. */
+    int hovered() const { return m_hovered; }
+
 protected:
     void paintEvent(QPaintEvent *) override;
     bool event(QEvent *e) override;
+    void mouseMoveEvent(QMouseEvent *e) override;
+    void leaveEvent(QEvent *e) override;
 
 private slots:
     void slotUniverseWritten(quint32 index, const QByteArray &data);
@@ -74,6 +88,10 @@ private:
     int channelAt(const QPoint &pos) const;
     QRect cellRect(int channel) const;
     void updateHeader();
+    /** The header line on @p channel (describe()), or back to its own
+     *  text (-1). */
+    void hoverChannel(int channel);
+    int m_hovered = -1;
 
     Doc *m_doc;
     quint32 m_universe;

@@ -27,6 +27,7 @@
 #include "universeoutputview.h"
 #include "inputoutputmap.h"
 #include "qlcchannel.h"
+#include <QMouseEvent>
 #include "universe.h"
 #include "fixture.h"
 #include "doc.h"
@@ -154,6 +155,7 @@ void UniverseOutputView::updateHeader()
 void UniverseOutputView::showHeader(const QString &text)
 {
     m_headerText = text;
+    m_hovered = -1;
     const QString shown = m_header->fontMetrics().elidedText(text, Qt::ElideRight,
                                                              m_header->width());
     m_header->setText(shown);
@@ -194,6 +196,69 @@ static Fixture *ownerOf(Doc *doc, quint32 universe, int ch, int *offset)
     return nullptr;
 }
 
+QString UniverseOutputView::describe(int ch) const
+{
+    if (ch < 0 || ch >= 512 || m_universe == Universe::invalid())
+        return QString();
+    int off = 0;
+    if (Fixture *fx = ownerOf(m_doc, m_universe, ch, &off))
+    {
+        const int a = int(fx->address()) + 1;
+        const int last = qMin(512, a + int(fx->channels()) - 1);
+        const QLCChannel *qc = fx->channel(quint32(off));
+        QString what = tr("ch %1").arg(off + 1);
+        if (qc != nullptr && !qc->name().isEmpty())
+            what += QStringLiteral(" ") + qc->name();
+        return tr("%1 · %2 (%3-%4) · %5").arg(ch + 1).arg(fx->name()).arg(a).arg(last).arg(what);
+    }
+    // The free run it sits in: what someone patching is looking for.
+    QVector<bool> used(512, false);
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (!fx->isPatched() || fx->universe() != m_universe)
+            continue;
+        for (quint32 i = 0; i < fx->channels() && fx->address() + i < 512; ++i)
+            used[int(fx->address() + i)] = true;
+    }
+    int from = ch, to = ch;
+    while (from > 0 && !used.at(from - 1))
+        --from;
+    while (to < 511 && !used.at(to + 1))
+        ++to;
+    const int n = to - from + 1;
+    return tr("%1 · free %2-%3, %4").arg(ch + 1).arg(from + 1).arg(to + 1)
+        .arg(n == 1 ? tr("1 channel") : tr("%1 channels").arg(n));
+}
+
+void UniverseOutputView::hoverChannel(int ch)
+{
+    if (ch == m_hovered)
+        return;
+    if (ch < 0)
+    {
+        showHeader(m_headerText);           // its own line back
+        return;
+    }
+    m_hovered = ch;
+    const QString text = describe(ch);
+    m_header->setText(m_header->fontMetrics().elidedText(text, Qt::ElideRight, m_header->width()));
+    m_header->setToolTip(QString());
+}
+
+void UniverseOutputView::mouseMoveEvent(QMouseEvent *e)
+{
+    /* At once, on the header line: no wait for a tooltip ("show the
+       address of the moused over block"). */
+    hoverChannel(m_universe == Universe::invalid() ? -1 : channelAt(e->pos()));
+    QWidget::mouseMoveEvent(e);
+}
+
+void UniverseOutputView::leaveEvent(QEvent *e)
+{
+    hoverChannel(-1);
+    QWidget::leaveEvent(e);
+}
+
 bool UniverseOutputView::event(QEvent *e)
 {
     if (e->type() == QEvent::ToolTip)
@@ -206,16 +271,8 @@ bool UniverseOutputView::event(QEvent *e)
             return true;
         }
         const int v = uchar(ch < m_values.size() ? m_values.at(ch) : char(0));
-        int off = 0;
-        QString text = tr("Channel %1: %2 (%3%)").arg(ch + 1).arg(v).arg(qRound(v * 100.0 / 255.0));
-        if (Fixture *fx = ownerOf(m_doc, m_universe, ch, &off))
-        {
-            const QLCChannel *qc = fx->channel(quint32(off));
-            text += QStringLiteral("\n") + tr("%1, channel %2%3").arg(fx->name()).arg(off + 1)
-                    .arg(qc != nullptr ? QStringLiteral(" — ") + qc->name() : QString());
-        }
-        else
-            text += QStringLiteral("\n") + tr("no fixture patched here");
+        const QString text = describe(ch) + QStringLiteral("\n")
+                             + tr("Sending %1 (%2%)").arg(v).arg(qRound(v * 100.0 / 255.0));
         QToolTip::showText(he->globalPos(), text, this);
         return true;
     }
@@ -259,7 +316,7 @@ void UniverseOutputView::paintEvent(QPaintEvent *)
     p.setPen(QColor(120, 124, 134));
     for (int r = 0; r < rows(); ++r)
         p.drawText(QRect(0, TOP + r * CELL_H, LEFT - 4, CELL_H), Qt::AlignRight | Qt::AlignVCenter,
-                   QString::number(r * m_cols + 1));
+                   QString::number(rowStart(r)));
 
     for (int ch = 0; ch < 512; ++ch)
     {

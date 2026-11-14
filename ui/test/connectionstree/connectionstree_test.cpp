@@ -36,6 +36,9 @@
 #include <QStackedWidget>
 #include <QToolButton>
 #include <QScrollArea>
+#include <QToolTip>
+#include <QHelpEvent>
+#include <QMouseEvent>
 
 #include "../../../engine/test/common/stdprelude.h"
 #define protected public
@@ -2539,6 +2542,80 @@ void ConnectionsTree_Test::aWledNotSetUpSaysWhyOnItsUniverse()
     QVERIFY(tree.m_connPane->m_wledStatus->isVisibleTo(tree.m_connPane));
     QVERIFY2(tree.m_connPane->m_wledStatus->text().contains(why),
              qPrintable(tree.m_connPane->m_wledStatus->text()));
+}
+
+/* "in the address usage part of a U view .. it should show addresses or at
+   least show the address of the moused over block": the header line says
+   where the pointer is, at once; a resting pointer gets it as a tooltip;
+   the rows are labelled with the address they start at. */
+void ConnectionsTree_Test::theUniverseGridSaysTheAddressUnderThePointer()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("Front Wash 3");
+    fx->setChannels(16);
+    fx->setUniverse(0);
+    fx->setAddress(120);                    // 121-136
+    QVERIFY(m_doc->addFixture(fx));
+    Q_UNUSED(iom);
+
+    UniverseOutputView view(m_doc);
+    view.setUniverse(0);
+    view.fitWidth(UniverseOutputView::widthFor(16));
+    view.resize(view.sizeHint());
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QLabel *header = view.findChild<QLabel *>();
+    QVERIFY(header != nullptr);
+    const QString own = header->text();
+
+    auto hover = [&view](int ch) {
+        const QPoint at = view.cellRect(ch).center();
+        QMouseEvent move(QEvent::MouseMove, QPointF(at), view.mapToGlobal(QPointF(at)),
+                         Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(&view, &move);
+    };
+
+    // A used cell: its address, whose, the range, which channel.
+    hover(123);
+    QCOMPARE(view.hovered(), 123);
+    QVERIFY2(header->text().startsWith("124 · Front Wash 3 (121-136) · ch 4"), qPrintable(header->text()));
+    // A free one: the free run it sits in.
+    hover(0);
+    QCOMPARE(header->text(), QString("1 · free 1-120, 120 channels"));
+    hover(511);
+    QCOMPARE(header->text(), QString("512 · free 137-512, 376 channels"));
+    // Left: the header's own line again.
+    QEvent leave(QEvent::Leave);
+    QApplication::sendEvent(&view, &leave);
+    QCOMPARE(header->text(), own);
+    QCOMPARE(view.hovered(), -1);
+
+    // A resting pointer: the same, with what it sends.
+    {
+        const QPoint at = view.cellRect(120).center();
+        QHelpEvent help(QEvent::ToolTip, at, view.mapToGlobal(at));
+        QApplication::sendEvent(&view, &help);
+        QTRY_VERIFY(QToolTip::text().isEmpty() == false);
+        QVERIFY2(QToolTip::text().startsWith("121 · Front Wash 3 (121-136) · ch 1"),
+                 qPrintable(QToolTip::text()));
+        QToolTip::hideText();
+    }
+
+    // Row labels: the row's first address, from the live column count.
+    QCOMPARE(view.rowStart(0), 1);
+    QCOMPARE(view.rowStart(1), 17);
+    QCOMPARE(view.rowStart(7), 113);
+    view.fitWidth(UniverseOutputView::widthFor(8));
+    QCOMPARE(view.columns(), 8);
+    QCOMPARE(view.rowStart(1), 9);
+    QCOMPARE(view.rowStart(15), 121);
+    // ... and the cell under the pointer after the change.
+    hover(121);
+    QCOMPARE(view.hovered(), 121);
+    QVERIFY2(view.describe(121).startsWith("122 · Front Wash 3 (121-136) · ch 2"),
+             qPrintable(view.describe(121)));
+    QVERIFY2(header->text().startsWith("122 · Front Wash"), qPrintable(header->text()));
 }
 
 /* "why does U07 read FART2(SR)": a target's name is kept by its address,

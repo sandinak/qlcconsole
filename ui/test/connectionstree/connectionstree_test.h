@@ -158,6 +158,7 @@ private slots:
     void aUniversesMenuHasNoEditConnection();
     void byUniverseOutputSaysWhereEachProtocolGoes();
     void aTargetsNameDoesNotOutliveIt();
+    void theUniverseGridSaysTheAddressUnderThePointer();
     void aWledNotSetUpSaysWhyOnItsUniverse();
     void connectionEditorPatchesANewArtNetUniverse();
     void connectionEditorOpensFilledInForAPatchedUniverse();
