@@ -89,7 +89,10 @@ them:
 4. **The right trigger is the hit.** Armed, pull **RT** (R2) on its own:
    with LT or a bumper down it is no hit (that is the emergency stop in
    the making).
-5. **The emergency stop is all four:** LB + RB + LT + RT.
+5. **The emergency stop is all four:** LB + RB + LT + RT, in the Run
+   role whatever the pad is doing: armed or not, walking, or with a tool
+   on the laptop holding it. Only the Controller Test window stops it
+   (nothing pressed there runs the show).
 
 | Does | Xbox | PlayStation |
 |---|---|---|
@@ -113,9 +116,10 @@ them:
   alone, the safety only brushed, or the right trigger in its place does
   nothing, and the Pad chip says what it needs ("GO is LT held and A.").
 - **The emergency stop** stops everything that plays (the same as ALL
-  OFF), armed or not. The arm drops, and the button, the frame, the chip
-  and the pad's light turn red (**Pad: STOPPED**) until you arm again or
-  run the show from the laptop. There is no "stop the list" on the pad:
+  OFF), in the Run role whatever the pad is doing. The arm drops, and the
+  button, the frame, the chip and the pad's light turn red (**Pad:
+  STOPPED**), over a walk or a tool too, until you arm again or run the
+  show from the laptop. There is no "stop the list" on the pad:
   stop a list on the Run tab.
 - **A pad with no light buzzes instead.** Two short buzzes: armed. One
   long: disarmed. Three long: the emergency stop. An Xbox pad's light

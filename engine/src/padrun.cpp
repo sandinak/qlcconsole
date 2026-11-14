@@ -443,12 +443,13 @@ PadRun::State PadRun::state() const
 {
     if (!m_enabled)
         return Tools;
+    // Red after the emergency stop (rule 6), whatever has the pad since.
+    if (m_stopped)
+        return Stopped;
     if (isWalking())
         return Walking;
     if (!holder().isEmpty())
         return ToolHasPad;
-    if (m_stopped)
-        return Stopped;
     return m_armed ? Armed : Run;
 }
 
@@ -675,6 +676,39 @@ void PadRun::controllerLost()
         showNotice(tr("Disarmed: the controller went away."));
 }
 
+bool PadRun::watchStop(quint32 universe, GamepadRole::Role role, uchar value)
+{
+    // The Controller Test open: nothing pressed runs the show (rule 7).
+    if (!m_enabled || m_testing)
+        return false;
+    if (role != GamepadRole::LB && role != GamepadRole::RB
+        && role != GamepadRole::LeftTrigger && role != GamepadRole::RightTrigger)
+        return false;
+    Held &h = m_held[universe];
+    switch (role)
+    {
+        case GamepadRole::LB:           h.lb = value > 0; break;
+        case GamepadRole::RB:           h.rb = value > 0; break;
+        case GamepadRole::LeftTrigger:  h.lt.update(value / 255.0f); break;
+        default:                        h.rt.update(value / 255.0f); break;
+    }
+    if (h.lb && h.rb && h.anyTrigger())
+        h.spent = true;
+    else if (!h.lb && !h.rb)
+        h.spent = false;
+    if (!h.all())
+    {
+        h.stopFired = false;
+        return false;
+    }
+    if (!h.stopFired)
+    {
+        h.stopFired = true;
+        emergencyStop();
+    }
+    return true;
+}
+
 void PadRun::forgetPad(quint32 universe)
 {
     m_held.remove(universe);
@@ -691,8 +725,9 @@ void PadRun::showLight()
 {
     if (m_pc == nullptr)
         return;
-    // A tool on the pad has its own lamp (the save colours).
-    if (m_pc->focusSession()->isActive() || m_pc->refineSession()->isActive())
+    // A tool on the pad has its own lamp (the save colours) -- but red
+    // after the emergency stop, as every surface is.
+    if ((m_pc->focusSession()->isActive() || m_pc->refineSession()->isActive()) && state() != Stopped)
         return;
     m_pc->setPadLight(lightColour());
 }

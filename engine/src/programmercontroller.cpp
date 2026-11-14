@@ -1616,7 +1616,10 @@ void ProgrammerController::refreshPadLight()
 {
     // The lamp's colours: blue all saved, yellow this light, orange another.
     QColor c;
-    if (m_focusSession->isActive())
+    // After the Run role's emergency stop: red, over a tool's lamp too.
+    if (m_padRun != nullptr && m_padRun->state() == PadRun::Stopped)
+        c = PadRun::stoppedColour();
+    else if (m_focusSession->isActive())
     {
         switch (m_focusSession->saveStatus())
         {
@@ -2894,6 +2897,11 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     if (!active && m_padRun->isTesting() && !GamepadRole::isTouch(role)
         && role != GamepadRole::LeftX && role != GamepadRole::LeftY
         && role != GamepadRole::RightX && role != GamepadRole::RightY)
+        return true;
+    /* The Run role's emergency stop is the four together whatever the pad
+       is doing (rule 5): a tool or the walk has the pad here, so the four
+       are watched before they reach it, and swallowed while all are down. */
+    if (active && m_padRun->isEnabled() && m_padRun->watchStop(universe, role, value))
         return true;
     /* A follow spot on and no tool: the right stick is its fine stick, the
        D-pad's Up and Down its speed step, Left and Right its beam size

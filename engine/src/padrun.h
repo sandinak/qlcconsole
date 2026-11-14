@@ -58,8 +58,11 @@ class Doc;
  *                        a bumper down: that is the stop in the making;
  *                        one hit for now, several would be RT held + X / Y
  *                        / A / B)
- *   LB + RB + LT + RT    EMERGENCY STOP: everything stops (ALL OFF), armed
- *                        or not; the arm drops and the pad shows red
+ *   LB + RB + LT + RT    EMERGENCY STOP: everything stops (ALL OFF), in
+ *                        the Run role whatever the pad is doing (armed or
+ *                        not, walking, a tool holding it; not while the
+ *                        Controller Test is open); the arm drops and every
+ *                        surface shows red, over a walk or a tool too
  *   (the bumpers are the mode only: the arm, and the stop's four)
  *   RS           say the list and what is on standby
  *   Menu         walk the show (below); not while armed
@@ -270,7 +273,8 @@ public:
         Tools = 0,      ///< the role is off
         Run,            ///< the role is on, not armed
         Armed,
-        Stopped,        ///< the emergency stop went; until armed again
+        Stopped,        ///< the emergency stop went; until armed again or the
+                        ///< show runs (shown over a walk or a tool too)
         Walking,
         ToolHasPad      ///< a tool started on the laptop holds the pad
     };
@@ -312,6 +316,11 @@ public:
      *  it ends), then the button map as a table in the connected pad's
      *  names (Cross / L1 or A / LB), and the walking map. Rich text. */
     QString helpHtml() const;
+    /** A pad control while a tool or the walk has the pad (they hear the
+     *  rest): the emergency stop's four, which are the stop in the Run role
+     *  whatever the pad is doing. True when the four are all down, so the
+     *  tool must not act on it (the stop fires once a chord). */
+    bool watchStop(quint32 universe, GamepadRole::Role role, uchar value);
     /** Let go of everything held and disarm (the pad went away, a tool
      *  took it, the role changed): never a button's doing. */
     void reset();
