@@ -492,6 +492,7 @@ void PadRun::setTesting(bool on)
     m_armChord->stop();
     m_chordUniverse = UINT_MAX;
     m_held.clear();     // what is held across the change was not the Run map's
+    emit testingChanged(on);
     toolChanged();
 }
 

@@ -949,6 +949,9 @@ private:
     void refreshPadFamily();
     /** The gamepad role of an input channel, from its device profile. */
     int controllerRole(quint32 universe, quint32 channel) const;
+    /** @p universe's input is a game controller's (a HID profile, a pad
+     *  kind, or any control with a gamepad role). */
+    bool isPadUniverse(quint32 universe) const;
     /** Focus mode's share of slotControllerInputChanged(). True if it took
      *  the event. */
     bool routeFocusInput(quint32 universe, quint32 channel, uchar value);

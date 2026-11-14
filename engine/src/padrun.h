@@ -464,6 +464,9 @@ signals:
     void holderChanged();
     /** notice() changed. */
     void noticeChanged();
+    /** The Controller Test opened (@p on) or closed: what the pad held
+     *  across it is not known (ProgrammerController's held buttons). */
+    void testingChanged(bool on);
 
 private:
     void showLight();

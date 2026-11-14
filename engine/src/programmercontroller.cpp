@@ -149,6 +149,14 @@ ProgrammerController::ProgrammerController(Doc *doc)
             connectControllerInput();
         refreshControllerKeepAlive();
     });
+    /* The Controller Test opened or closed: a button held across it is not
+       held after (its release may have gone to the test), so a View held
+       as it opened cannot make a later Menu the role chord. */
+    connect(m_padRun, &PadRun::testingChanged, this, [this]() {
+        m_heldRoles.clear();
+        m_viewChord = false;
+        m_centreChord = false;
+    });
     connect(this, &ProgrammerController::controllerLost, m_padRun, [this](bool lost) {
         if (lost)
             m_padRun->controllerLost();
@@ -2870,6 +2878,21 @@ void ProgrammerController::centreSticks(quint32 universe)
     tellOperator(tr("Centring the sticks: let go of them."), ControllerScheme::ConfirmPriority);
 }
 
+bool ProgrammerController::isPadUniverse(quint32 universe) const
+{
+    // A game controller's input: a HID profile, a pad kind, or any gamepad role.
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = iom != nullptr ? iom->inputPatch(universe) : nullptr;
+    if (ip == nullptr || ip->plugin() == nullptr)
+        return false;
+    if (!ip->hidProfileName().isEmpty() || !ip->plugin()->inputDeviceKind(ip->input()).isEmpty())
+        return true;
+    for (quint32 ch = 0; ch < 128; ++ch)
+        if (!ip->plugin()->inputChannelRole(ip->input(), ch).isEmpty())
+            return true;
+    return false;
+}
+
 bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uchar value)
 {
     const float norm = value / 255.0f;
@@ -2888,16 +2911,24 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         m_padRun->touchValue(role, norm);
     else if (role == GamepadRole::TouchClick)
         m_padRun->touchClick(value > 0);
-    if (role == GamepadRole::None && !active)
-        return false;
     /* The Controller Test is open and no tool has the pad: its buttons and
        triggers are being tried, so they do nothing here -- no GO, no hit,
-       no profile action, no role chord, no focus-call start. The sticks
-       stay the follow spot's. */
+       no profile action, no role chord, no focus-call start. That is every
+       control of a game controller, a button with no gamepad role too (a
+       DualSense's mute, an Edge paddle, a Deck grip: its profile action).
+       The sticks stay the follow spot's. A button let go meanwhile is let
+       go here too. */
     if (!active && m_padRun->isTesting() && !GamepadRole::isTouch(role)
         && role != GamepadRole::LeftX && role != GamepadRole::LeftY
-        && role != GamepadRole::RightX && role != GamepadRole::RightY)
+        && role != GamepadRole::RightX && role != GamepadRole::RightY
+        && (role != GamepadRole::None || isPadUniverse(universe)))
+    {
+        if (role != GamepadRole::None && !GamepadRole::isAxis(role) && value == 0)
+            m_heldRoles.remove(role);
         return true;
+    }
+    if (role == GamepadRole::None && !active)
+        return false;
     /* The Run role's emergency stop is the four together whatever the pad
        is doing (rule 5): a tool or the walk has the pad here, so the four
        are watched before they reach it, and swallowed while all are down. */
