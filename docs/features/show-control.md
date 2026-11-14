@@ -59,7 +59,7 @@ Switch with the **Pad:** button in the **Run** tab's header (**Pad: Tools**
 / **Pad: Run**). The choice belongs to this computer and is kept for next
 time. Its tooltip shows the button map in the words of the pad you're
 holding; the footer's **Pad** chip shows the same map as a table when you hover it (it also names a press the pad refused and how to leave Walk), and **Settings → Advanced → Game controllers → Controller Test…** lists what each
-button does in the Run role (**Run: GO (armed, RT held)**).
+button does in the Run role (**Run: GO (armed, LT held)**).
 
 **One state, shown the same everywhere.** The Run tab's **Pad:** button,
 the frame round the Run tab, the footer's **Pad** chip (from every tab) and
@@ -77,21 +77,22 @@ the pad's own light all show the same state, from one place in the app:
 them:
 
 1. **The pad never picks the list.** The screen does (the Run tab).
-2. **Arming takes two buttons, and so does disarming.** Hold **LB + RB**
-   (L1 + R1) for half a second to arm. Let go: it stays armed. Hold them
-   again to disarm. No single button, held or pressed, arms or disarms.
-3. **Nothing moves the show on one button.** Armed, hold the trigger and
-   press the button.
-4. **The emergency stop is all four:** LB + RB + LT + RT.
+2. **The bumpers are the mode, and only that.** Hold **LB + RB** (L1 + R1)
+   for half a second to arm. Let go: it stays armed. Hold them again to
+   disarm. No single button, held or pressed, arms or disarms.
+3. **The left trigger is the safety.** No cue moves without it: armed, hold
+   **LT** (L2) and press the button.
+4. **The right trigger is the hit.** Armed, pull **RT** (R2).
+5. **The emergency stop is all four:** LB + RB + LT + RT.
 
 | Does | Xbox | PlayStation |
 |---|---|---|
 | **Arm**, and disarm | hold LB + RB | hold L1 + R1 |
-| **GO** | armed, hold RT + A | armed, hold R2 + Cross |
-| **Back** | armed, hold RT + B | armed, hold R2 + Circle |
+| **GO** | armed, hold LT + A | armed, hold L2 + Cross |
+| **Back** | armed, hold LT + B | armed, hold L2 + Circle |
 | **Sub GO** | armed, hold LT + X | armed, hold L2 + Square |
 | **Sub Back** | armed, hold LT + Y | armed, hold L2 + Triangle |
-| Fire the **armed hit** (below) | armed, hold LT or RT + RB | armed, hold L2 or R2 + R1 |
+| Fire the **armed hit** (below) | armed, pull RT | armed, pull R2 |
 | **Emergency stop**: everything off | LB + RB + LT + RT | L1 + R1 + L2 + R2 |
 | Say the list and what's on standby | RS click | R3 |
 | Walk the show (below), not while armed | Menu | Options |
@@ -102,10 +103,9 @@ them:
   takes the pad, the controller disconnects, or the emergency stop goes.
   Each of those says so on the footer's Pad chip ("Disarmed: the
   controller went away.").
-- **The right trigger is the main list, the left is sub-cues.** RT with A
-  or B; LT with X or Y. The wrong trigger, a trigger only brushed, or the
-  button alone does nothing, and the Pad chip says what it needs ("GO is
-  RT held and A.").
+- **One safety for every cue command.** LT with A, B, X or Y. The button
+  alone, the safety only brushed, or the right trigger in its place does
+  nothing, and the Pad chip says what it needs ("GO is LT held and A.").
 - **The emergency stop** stops everything that plays (the same as ALL
   OFF), armed or not. The arm drops, and the button, the frame, the chip
   and the pad's light turn red (**Pad: STOPPED**) until you arm again or
@@ -151,7 +151,7 @@ them:
 
 ### Fire a hit from the pad
 
-Armed, with either trigger held, **RB (R1)** fires the hit that is armed right now. A
+Armed, a pull of **RT (R2)** fires the hit that is armed right now. A
 [scoped hit](show-tree.md) is armed while its place is live: under a cue
 that is running, in a cue list, in the current production or everywhere.
 Where several are armed the **narrowest** wins, exactly as on a Virtual
@@ -162,8 +162,10 @@ Use it to call a one-shot, say a breathe, off a hit in a cue.
   ("Breathe off."); a one-shot that has finished plays again.
 - Two or more hits at the narrowest place take turns, one a press.
 - With no hit armed the pad says "No hit armed." and buzzes long. Not
-  armed, it says "Not armed: hold LB and RB.", as for GO. RB with no
-  trigger held does nothing (it is half of the arm's two buttons).
+  armed, it says "Not armed: hold LB and RB.", as for GO. One pull is one
+  press, however long it is held; a pull with a bumper down does nothing
+  (that is the emergency stop in the making).
+- One hit for now. Several on the pad would be RT held with X, Y, A or B.
 - Hits fire in **Operate** only, as a button does. It is not a run command:
   it starts the hit's look the way a VC button's press does.
 
@@ -172,9 +174,9 @@ Use it to call a one-shot, say a breathe, off a hit in a cue.
 Two things a PlayStation DualSense adds to the Run role. Neither is needed:
 everything has a button, and an Xbox pad simply has no triggers to feel.
 
-- **Adaptive triggers.** While armed both triggers are firm: each is held
-  for a GO (R2) or a Sub GO (L2), so holding one takes a squeeze and a
-  brush holds nothing. While walking, both
+- **Adaptive triggers.** While armed both triggers are firm: L2 is the
+  safety and R2 fires the hit, so each takes a squeeze and a brush does
+  neither. While walking, both
   triggers give a light click at the end of each pull, one click a cue
   stepped. The triggers go back to off when you disarm, leave the walk or
   the Run role, lose the pad, or quit.
@@ -204,10 +206,11 @@ show. In Tools, View + Menu released before the second is still Focus mode,
 now on its release. Not while a tool (Focus mode, Focus this cue) has the
 pad: end it first.
 
-decided (2026-11-14, the operator's rules): the arm is a latch on two
-buttons, never a button held; every command is armed + a trigger + a
-button; the pad has an emergency stop and no "stop the list"; the pad
-never picks the list. A hold of 1 s is the role chord.
+decided (2026-11-14, the operator's rules): the bumpers are the mode only
+(the arm a latch on the two of them, never a button held); the left
+trigger is the one safety for GO, Back, Sub GO and Sub Back; the right
+trigger is the armed hit; the pad has an emergency stop and no "stop the
+list"; the pad never picks the list. A hold of 1 s is the role chord.
 
 ### Walk the show from the stage
 
@@ -286,7 +289,7 @@ View + B (or undo on the laptop) puts the light back.
 - **In Operate** the walk follows the quiet Refine rules. Only the
   running cue can be walked, GO moves it, nothing blinks or dims, and solo
   is refused.
-- **No GO while walking**, and no arm. Menu first, then arm (hold LB + RB) and hold RT + A.
+- **No GO while walking**, and no arm. Menu first, then arm (hold LB + RB) and hold LT + A.
 - A focus-call cue that is armed still takes Menu to begin its calls.
   When the laptop then asks "Still at *venue*?", **hold A** for a second
   to say yes, same room. A tap does nothing; another room is answered on
@@ -320,7 +323,7 @@ button to **Pad: Run**. Connect one pad at a time, and check that
 
 **For each pad**, in this order (Xbox name first, PlayStation second):
 
-1. Press **A** (Cross), then hold **RT** (R2) and press A. *Expected:*
+1. Press **A** (Cross), then hold **LT** (L2) and press A. *Expected:*
    nothing plays either time; the footer's Pad chip reads **Pad: Run · Not
    armed: hold LB and RB.** (L1 and R1 on a PlayStation pad) for a few
    seconds, and the voice says it.
@@ -331,31 +334,31 @@ button to **Pad: Run**. Connect one pad at a time, and check that
    on a PlayStation pad the light bar turns orange. Let go of both: all of
    it stays.
 3. Press **A** alone. *Expected:* nothing plays; the Pad chip says **GO is
-   RT held and A.** Hold **LT** and press A: nothing. Hold **RT** (R2) and
-   press **A** (Cross). *Expected:* the main list goes to its first cue; a
-   short buzz; on a PlayStation pad the light bar goes green, blinks green
-   and orange while the cue fades, then is steady orange.
-4. Hold RT + **A**, then RT + **B** (Circle). *Expected:* GO moves to the
+   LT held and A.** Hold **LT** (L2) and press **A** (Cross). *Expected:*
+   the main list goes to its first cue; a short buzz; on a PlayStation pad
+   the light bar goes green, blinks green and orange while the cue fades,
+   then is steady orange.
+4. Hold LT + **A**, then LT + **B** (Circle). *Expected:* GO moves to the
    second cue, Back returns to the first; a short buzz each.
-5. Hold **LT** (L2) + **X** (Square). *Expected:* Sub GO runs the cue's
-   next sub-cue; with none, a long buzz and the voice says there was
-   nothing to play. LT + **Y** (Triangle): Sub Back.
+5. Hold LT + **X** (Square). *Expected:* Sub GO runs the cue's next
+   sub-cue; with none, a long buzz and the voice says there was nothing
+   to play. LT + **Y** (Triangle): Sub Back.
 6. Armed, press every button once and hold each for two seconds, one at a
-   time: A, B, X, Y, LB, RB, LT, RT, the D-pad, LS, RS, Menu, View, the
-   Xbox (PS) button. *Expected:* **Pad: ARMED** the whole time, on the
-   button, the frame and the chip; nothing plays and nothing stops.
-7. GO the main list's first cue again (RT + A), then hold a trigger and
-   press **RB** (R1). *Expected:* the hit under that cue plays and the
-   voice says its name. Again: it lets go ("… off."). Still armed.
+   time: A, B, X, Y, LB, RB, LT, the D-pad, LS, RS, Menu, View, the Xbox
+   (PS) button. *Expected:* **Pad: ARMED** the whole time, on the button,
+   the frame and the chip; nothing plays and nothing stops.
+7. GO the main list's first cue again (LT + A), then pull **RT** (R2).
+   *Expected:* the hit under that cue plays and the voice says its name.
+   Pull again: it lets go ("… off."). Still armed.
 8. Hold **LB + RB** for half a second. *Expected:* one long buzz; **Pad:
    Run**; the frame and the orange are gone everywhere; the light bar goes
    back to its own colour.
-9. Arm again. Press and hold all four: **LB + RB + LT + RT**. *Expected:*
-   everything stops; three long buzzes; the button, the frame, the chip
-   and the light bar are red, **Pad: STOPPED**. RT + A does nothing. Arm
-   again (LB + RB): orange, and RT + A plays.
+9. Arm again. Press and hold all four: **LB + RB + LT + RT** (the bumpers
+   first). *Expected:* everything stops; three long buzzes; the button,
+   the frame, the chip and the light bar are red, **Pad: STOPPED**. LT + A
+   does nothing. Arm again (LB + RB): orange, and LT + A plays.
 10. On the laptop, pick the Pre-show list in the Run tab's list box.
-    Press RS: the voice names Pre-show. Hold RT + A.
+    Press RS: the voice names Pre-show. Hold LT + A.
     *Expected:* the focus-call cue arms ("Venue focus ready. Press Start
     to begin."); nothing steps. Disarm (LB + RB).
 11. Press **Menu** (Options). *Expected:* the focus calls begin and the
@@ -377,7 +380,7 @@ button to **Pad: Run**. Connect one pad at a time, and check that
     and the chip says **Disarmed: the controller went away.** Plug it in:
     still not armed.
 16. Save the show with Pre-show picked in the Run tab's list box, close it and
-    open it again. *Expected:* the Run tab plays Pre-show, and armed, RT +
+    open it again. *Expected:* the Run tab plays Pre-show, and armed, LT +
     A GOes it.
 
 **What differs by pad:**

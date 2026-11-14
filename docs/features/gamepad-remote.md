@@ -66,17 +66,17 @@ is labelled with its job.
 | Arrow keys | Nudge 0.1° (Shift: 1°); the on-screen arrows use the step shown between them |
 | Page Up / Page Down, [ / ], Enter, Backspace | The console's Focus mode keys: call, light, save, revert |
 
-**Run page** (the pad's Run role, by the console pad's rules: two buttons
-to arm and to disarm, and every command is armed + a trigger + a button)
+**Run page** (the pad's Run role, by the console pad's rules: the bumpers
+arm and disarm, the left trigger is the safety, the right trigger the hit)
 
 | Control | Does |
 |---|---|
 | Hold LB + RB | Arm; hold them again to disarm (the page says ARMED until then) |
-| Armed, hold RT + A | GO |
-| Armed, hold RT + B | Back |
+| Armed, hold LT + A | GO |
+| Armed, hold LT + B | Back |
 | Armed, hold LT + X | Sub GO |
 | Armed, hold LT + Y | Sub Back |
-| Armed, hold LT or RT + RB | Fire the armed hit |
+| Armed, pull RT | Fire the armed hit |
 | LB + RB + LT + RT | Emergency stop: everything off (the page says EMERGENCY STOP) |
 | Armed, hold LT + View | Solo: the first layer of the cue in the preview, or the whole cue again |
 | Armed, hold LT + D-pad right / left | Solo the next / previous layer |
@@ -232,9 +232,9 @@ for and note each result.
    5 GHz network).
 4. **Run controls.** Back on **/run**, hold LB + RB for half a second and
    let go.
-   *Expected:* "ARMED: RT + A IS GO" shows and stays. Hold RT and press A:
-   the next cue plays on the console. A on its own does nothing, and
-   neither does LT + A. Hold LB + RB again: the banner goes.
+   *Expected:* "ARMED: LT + A IS GO" shows and stays. Hold LT and press A:
+   the next cue plays on the console. A on its own does nothing. Hold
+   LB + RB again: the banner goes.
 5. **Blind.** Put the console in Design. On the Deck, arm, then hold LT
    and press LS (click the left stick).
    *Expected:* the rig goes dark, the console's screens stay live, and
@@ -271,7 +271,7 @@ for and note each result.
     Desktop Mode.
 13. **Teaching.** On the console, open a Teaching show (File ▸ Show
     Settings ▸ Teaching mode, instructor settings left as they are) and
-    arm and press RT + A on **/run**.
+    arm and press LT + A on **/run**.
     *Expected:* the blue TEACHING chip shows, and the line under the
     section reads "Teaching: real output held · show control out held:
     Teaching (cue … not sent)". The cue still plays on the console.
