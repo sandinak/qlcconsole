@@ -49,6 +49,17 @@ public:
     QJsonObject palx;
     /** Every POST: its path and body. */
     QList<QPair<QByteArray, QJsonObject> > posted;
+    /** The bodies POSTed to @p path alone ("/json/cfg"): a universe patched
+     *  to the WLED output plugin also has it POST its look to /json/state,
+     *  on its own timer, whenever it gets round to it. */
+    QList<QJsonObject> postedTo(const QByteArray &path) const
+    {
+        QList<QJsonObject> out;
+        for (const auto &p : posted)
+            if (p.first == path)
+                out << p.second;
+        return out;
+    }
     /** When each of them came (ms since the epoch), for a check of what
      *  the device showed when (the UX walker's Locate flash). */
     QList<qint64> postedAt;
