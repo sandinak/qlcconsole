@@ -97,6 +97,7 @@ void UniverseOutputView::fitWidth(int width)
         return;
     m_cols = cols;
     m_header->setGeometry(6, 4, LEFT + m_cols * CELL_W - 4, 24);
+    showHeader(m_headerText);
     resize(sizeHint());
     updateGeometry();
     update();
@@ -139,13 +140,24 @@ void UniverseOutputView::updateHeader()
     InputOutputMap *io = m_doc->inputOutputMap();
     if (m_universe == Universe::invalid() || m_universe >= io->universesCount())
     {
-        m_header->setText(tr("Select a universe to see what it sends"));
+        showHeader(tr("Select a universe to see what it sends"));
         return;
     }
     QString name = io->getUniverseNameByIndex(int(m_universe));
     if (name.isEmpty())
         name = tr("Universe %1").arg(m_universe + 1);
-    m_header->setText(tr("%1 — sending").arg(name));
+    showHeader(tr("%1 — sending").arg(name));
+}
+
+/* A universe's name can be longer than four columns are wide: the header
+   then ends in "…" and its tooltip has the whole line. */
+void UniverseOutputView::showHeader(const QString &text)
+{
+    m_headerText = text;
+    const QString shown = m_header->fontMetrics().elidedText(text, Qt::ElideRight,
+                                                             m_header->width());
+    m_header->setText(shown);
+    m_header->setToolTip(shown == text ? QString() : text);
 }
 
 QRect UniverseOutputView::cellRect(int channel) const

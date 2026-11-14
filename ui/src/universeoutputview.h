@@ -69,6 +69,7 @@ private slots:
     void slotUniverseWritten(quint32 index, const QByteArray &data);
 
 private:
+    void showHeader(const QString &text);
     /** The channel (0-based) under @p pos, or -1. */
     int channelAt(const QPoint &pos) const;
     QRect cellRect(int channel) const;
@@ -78,6 +79,7 @@ private:
     quint32 m_universe;
     QByteArray m_values;
     QLabel *m_header;
+    QString m_headerText;
     QTimer *m_repaint;
     int m_cols = 16;
     int rows() const;

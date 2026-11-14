@@ -472,7 +472,9 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     QScrollArea *outScroll = new QScrollArea(this);
     outScroll->setWidget(m_output);
     outScroll->setWidgetResizable(false);
-    outScroll->setMinimumWidth(320);         // narrower, it scrolls
+    /* No floor of its own: layoutSide() gives it four columns or more, or
+       none (its handle brings it back), so the page still narrows. */
+    outScroll->setMinimumWidth(1);
     m_output->resize(m_output->sizeHint());
     /* Between them, the selected universe's connection -- where it goes,
        its input and feedback -- to read and change in place ("could just
