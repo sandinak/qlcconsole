@@ -4492,10 +4492,15 @@ void ConnectionsTree::forgetTarget(const QString &address)
         }
     }
     if (inUse == false && m_doc->ioPluginCache() != NULL)
+    {
         foreach (QLCIOPlugin *p, m_doc->ioPluginCache()->plugins())
-            foreach (const QLCIOPlugin::Device &dev, p != NULL ? p->discoveredDevices()
-                                                               : QList<QLCIOPlugin::Device>())
+        {
+            if (p == NULL)
+                continue;
+            foreach (const QLCIOPlugin::Device &dev, p->discoveredDevices())
                 inUse = inUse || dev.address == address;
+        }
+    }
     if (inUse == false)
         iomap->setTargetAlias(address, QString());
     m_doc->setModified();
