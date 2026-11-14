@@ -5116,12 +5116,48 @@ void App::updateStageIndicator()
         m_statusStage->setStyleSheet(sheet);
     }
 
-    // The cue shortens to the room the footer has (a fifth of the window, at most);
-    // the tooltip keeps all of it.
+    /* The chip shortens before it is cut: the longest of its forms that fits
+       the room the footer gives it (a third of the window, at most), longest
+       first -- the whole line, then without what is running or held, then
+       without the "(Show Tree)" aside, then the cue alone -- and only the
+       last is elided with "...". The tooltip keeps all of it. */
     QFont bold = m_statusStage->font();
     bold.setBold(true);
-    const int room = qBound(150, width() / 5, 420);
-    const QString shown = QFontMetrics(bold).elidedText(full, Qt::ElideRight, room - 16);
+    const QFontMetrics fm(bold);
+    const int room = qBound(150, width() / 3, 520) - 16;
+    QStringList forms;
+    {
+        const QString sep = QStringLiteral(" \u00b7 ");
+        QStringList parts = full.split(sep);
+        // LIVE . list . cue: the cue is what the crew reads, the list goes first.
+        if (parts.size() == 3 && parts.first().contains(QStringLiteral("LIVE")))
+        {
+            forms << full << parts.first() + sep + parts.last();
+            parts = QStringList{ parts.first() + sep + parts.last() };
+        }
+        while (!parts.isEmpty())
+        {
+            QString form = parts.join(sep);
+            if (!forms.contains(form))
+                forms << form;
+            const int paren = form.lastIndexOf(QStringLiteral(" ("));
+            if (paren > 0 && form.endsWith(QLatin1Char(')')) && parts.size() == 1)
+            {
+                const QString bare = form.left(paren);
+                if (!forms.contains(bare))
+                    forms << bare;
+            }
+            parts.removeLast();
+        }
+    }
+    QString shown = forms.isEmpty() ? full : forms.last();
+    for (const QString &form : forms)
+        if (fm.horizontalAdvance(form) <= room)
+        {
+            shown = form;
+            break;
+        }
+    shown = fm.elidedText(shown, Qt::ElideRight, room);
     if (m_statusStage->text() != shown)
         m_statusStage->setText(shown);
     const QString fullTip = shown == full ? tip : full + QStringLiteral("\n") + tip;
