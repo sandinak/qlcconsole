@@ -4866,6 +4866,9 @@ void ConnectionsTree::buildUniverseList()
                                       "\"Show unused universes\" to see them."));
         note->setFlags(Qt::ItemIsEnabled);
         note->setForeground(COL_NAME, QBrush(QColor(138, 142, 153)));
+        /* Across the row: its words do not widen the name column, which
+           would push Output out of a narrow list. */
+        note->setFirstColumnSpanned(true);
         note->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
     }
 
@@ -5463,15 +5466,14 @@ void ConnectionsTree::fitOutputColumn()
     if (m_tree == nullptr || m_byUniverse == nullptr || m_byUniverse->isChecked() == false
             || m_tree->isColumnHidden(COL_OUTPUT))
         return;
-    int others = 0;
-    for (int c = 0; c < COL_COUNT; c++)
-        if (c != COL_OUTPUT && m_tree->isColumnHidden(c) == false)
-            others += m_tree->header()->sectionSize(c);
+    /* Ahead of the optional columns: the room after the name is Output's;
+       IP, U and the rest scroll in beyond it when the list is narrow. */
+    const int others = m_tree->header()->sectionSize(COL_NAME);
     int need = m_tree->header()->sectionSizeHint(COL_OUTPUT);
     const QFontMetrics fm(m_tree->font());
     for (int i = 0; i < m_tree->topLevelItemCount(); i++)
         need = qMax(need, fm.horizontalAdvance(m_tree->topLevelItem(i)->text(COL_OUTPUT)) + 16);
-    const int floor = qMin(need, 180);
+    const int floor = qMin(need, 120);
     const int room = m_tree->viewport()->width() - others;
     m_tree->setColumnWidth(COL_OUTPUT, qBound(floor, room, qMax(floor, need)));
 }
