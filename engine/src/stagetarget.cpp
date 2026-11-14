@@ -44,6 +44,9 @@
 #define KXMLStageTargetDX        QStringLiteral("DX")
 #define KXMLStageTargetDY        QStringLiteral("DY")
 #define KXMLStageTargetDZ        QStringLiteral("DZ")
+#define KXMLStageTargetHold      QStringLiteral("Hold")
+#define KXMLStageTargetHeldBy    QStringLiteral("HeldBy")
+#define KXMLStageTargetLitBy     QStringLiteral("LitBy")
 
 StageTarget::StageTarget(quint32 id, QObject *parent)
     : QObject(parent)
@@ -93,6 +96,8 @@ bool StageTarget::loadXML(QXmlStreamReader &root)
         m_boundId = a.value(KXMLStageTargetBoundId).toUInt();
     if (a.hasAttribute(KXMLStageTargetRotation))
         m_rotation = a.value(KXMLStageTargetRotation).toFloat();
+    if (a.hasAttribute(KXMLStageTargetLitBy))
+        m_litBy = a.value(KXMLStageTargetLitBy).toUInt();
     if (a.hasAttribute(KXMLStageTargetW) || a.hasAttribute(KXMLStageTargetD))
         m_footprint = QSizeF(a.value(KXMLStageTargetW).toDouble(),
                              a.value(KXMLStageTargetD).toDouble());
@@ -118,6 +123,15 @@ bool StageTarget::loadXML(QXmlStreamReader &root)
             const QXmlStreamAttributes ba = root.attributes();
             const quint32 set = ba.value(KXMLStageTargetSet).toUInt();
             Blocked b;
+            /* A hand prop's hold (Set="0" is Default's). An older build reads
+               a Blocked with only a Hold as empty, and Set="0" not at all:
+               the prop stands at its own Default place. */
+            if (ba.hasAttribute(KXMLStageTargetHold))
+            {
+                b.hold = stringToHold(ba.value(KXMLStageTargetHold).toString());
+                if (b.hold == Hold::HeldBy)
+                    b.holder = ba.value(KXMLStageTargetHeldBy).toUInt();
+            }
             if (ba.hasAttribute(KXMLStageTargetDX) || ba.hasAttribute(KXMLStageTargetDY)
                 || ba.hasAttribute(KXMLStageTargetDZ))
             {
@@ -146,7 +160,14 @@ bool StageTarget::loadXML(QXmlStreamReader &root)
             b.hasLine = b.linePoints.size() >= 2;
             if (!b.hasLine)
                 b.linePoints.clear();
-            if (set != 0 && !b.isEmpty())
+            if (set == 0)
+            {
+                Blocked hold;               // Default's place is the target's own
+                hold.hold = b.hold;
+                hold.holder = b.holder;
+                b = hold;
+            }
+            if (!b.isEmpty())
                 m_blocked.insert(set, b);
             continue;       // its end element is read
         }
@@ -171,6 +192,8 @@ QString StageTarget::kindToString(Kind k)
     case Kind::UprightPiano: return QStringLiteral("uprightpiano");
     case Kind::Rack:      return QStringLiteral("rack");
     case Kind::Speaker:   return QStringLiteral("speaker");
+    case Kind::Staff:     return QStringLiteral("staff");
+    case Kind::Candle:    return QStringLiteral("candle");
     case Kind::None:
     default:              return QStringLiteral("none");
     }
@@ -189,6 +212,8 @@ StageTarget::Kind StageTarget::stringToKind(const QString &s, Kind fallback)
     if (k == QLatin1String("uprightpiano")) return Kind::UprightPiano;
     if (k == QLatin1String("rack"))      return Kind::Rack;
     if (k == QLatin1String("speaker"))   return Kind::Speaker;
+    if (k == QLatin1String("staff"))     return Kind::Staff;
+    if (k == QLatin1String("candle"))    return Kind::Candle;
     if (k == QLatin1String("none"))      return Kind::None;
     /* Anything else came from a newer file than this build. Degrade to the
        fallback rather than guessing -- the whole reason these are names and not
@@ -226,6 +251,37 @@ QSizeF StageTarget::defaultFootprint(Kind k)
     case Kind::Speaker:      return QSizeF(0.55, 0.5);
     default:                 return QSizeF();
     }
+}
+
+float StageTarget::defaultPropLength(Kind k)
+{
+    switch (k)
+    {
+    case Kind::Staff:  return 1.8f;
+    case Kind::Candle: return 0.15f;
+    default:           return 0.0f;
+    }
+}
+
+QString StageTarget::holdToString(Hold h)
+{
+    switch (h)
+    {
+    case Hold::OwnPlace: return QStringLiteral("place");
+    case Hold::HeldBy:   return QStringLiteral("held");
+    case Hold::OffStage: return QStringLiteral("off");
+    case Hold::Unset:
+    default:             return QString();
+    }
+}
+
+StageTarget::Hold StageTarget::stringToHold(const QString &s)
+{
+    const QString h = s.trimmed().toLower();
+    if (h == QLatin1String("place")) return Hold::OwnPlace;
+    if (h == QLatin1String("held"))  return Hold::HeldBy;
+    if (h == QLatin1String("off"))   return Hold::OffStage;
+    return Hold::Unset;     // from a newer file: what Default says
 }
 
 float StageTarget::bodyHeight(Kind k)
@@ -287,6 +343,8 @@ bool StageTarget::saveXML(QXmlStreamWriter *doc) const
     }
     if (!qFuzzyIsNull(m_rotation))
         doc->writeAttribute(KXMLStageTargetRotation, QString::number(double(m_rotation), 'f', 2));
+    if (m_litBy != UINT_MAX)
+        doc->writeAttribute(KXMLStageTargetLitBy, QString::number(m_litBy));
     if (m_footprint.isEmpty() == false)
     {
         doc->writeAttribute(KXMLStageTargetW,
@@ -313,6 +371,12 @@ bool StageTarget::saveXML(QXmlStreamWriter *doc) const
         const Blocked b = blocked(set);
         doc->writeStartElement(KXMLStageTargetBlocked);
         doc->writeAttribute(KXMLStageTargetSet, QString::number(set));
+        if (b.hold != Hold::Unset)
+        {
+            doc->writeAttribute(KXMLStageTargetHold, holdToString(b.hold));
+            if (b.hold == Hold::HeldBy)
+                doc->writeAttribute(KXMLStageTargetHeldBy, QString::number(b.holder));
+        }
         if (b.hasOffset)
         {
             doc->writeAttribute(KXMLStageTargetDX, QString::number(double(b.offset.x()), 'f', 3));
@@ -351,13 +415,50 @@ StageTarget::Blocked StageTarget::blocked(quint32 set) const
 
 void StageTarget::setBlocked(quint32 set, const Blocked &b)
 {
+    Blocked kept = b;
     if (set == 0)
-        return;     // Default is the target itself
+    {
+        // Default's place is the target itself: only a hold is kept here.
+        kept = Blocked();
+        kept.hold = b.hold;
+        kept.holder = b.holder;
+    }
     QMutexLocker l(&m_positionMutex);
-    if (b.isEmpty())
+    if (kept.isEmpty())
         m_blocked.remove(set);
     else
-        m_blocked.insert(set, b);
+        m_blocked.insert(set, kept);
+}
+
+StageTarget::Hold StageTarget::holdIn(quint32 set, quint32 *holder) const
+{
+    QMutexLocker l(&m_positionMutex);
+    Hold h = Hold::Unset;
+    quint32 who = UINT_MAX;
+    if (!m_blocked.isEmpty())
+    {
+        auto it = m_blocked.constFind(set);
+        if (it != m_blocked.constEnd() && it->hold != Hold::Unset)
+        {
+            h = it->hold;
+            who = it->holder;
+        }
+        else if (set != 0)
+        {
+            // A set that says nothing: Default's.
+            auto def = m_blocked.constFind(0);
+            if (def != m_blocked.constEnd())
+            {
+                h = def->hold;
+                who = def->holder;
+            }
+        }
+    }
+    if (h == Hold::Unset)
+        h = Hold::OwnPlace;
+    if (holder != nullptr)
+        *holder = h == Hold::HeldBy ? who : UINT_MAX;
+    return h;
 }
 
 bool StageTarget::isBlockedIn(quint32 set) const

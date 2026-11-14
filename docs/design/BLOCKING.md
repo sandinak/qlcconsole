@@ -73,6 +73,61 @@ Resolving is a hash lookup under the target's existing position mutex: no
 allocation per tick. The cue's resolved set is cached on its Collection at
 bake time.
 
+## Props someone holds (2026-11-14)
+
+Asked for: "for props like staff and others .. can we assign to a person
+to 'hold' and would move with them .. should be cued as to when they get
+the prop and when it's taken from them" and hand-held IR candles, "just
+that they have them on cue and they lose them on cue". Decided with the
+user: who holds a prop is part of Blocking; a held prop changes nothing
+an Aim covers ("given it's lit it won't matter"); a candle starts full on
+every On and can be dimmed.
+
+- **Which kinds.** `StageTarget::isHandPropKind()`: **Staff** and
+  **Candle**, two new target kinds (no generic "prop" kind existed; the
+  stage props -- Steps, platforms, scenery, the Box, the fountain -- are
+  structures, not targets, and nobody carries them). A Person is never one,
+  and only a Person holds, so a hold can never loop. The wand stays a pixel
+  fixture with its own `heldBy` (FOUNTAIN_WAND.md); it now reads its holder
+  through the same `MonitorProperties::holderFeet()`.
+- **Model.** `StageTarget::Blocked` gains `hold` (Unset, OwnPlace, HeldBy,
+  OffStage) and `holder`. Default's hold is kept as `m_blocked[0]` (only a
+  hold: Default's place is the target itself). `StageTarget::holdIn(set)`:
+  the set's own hold, else Default's, else OwnPlace -- so a set that says
+  nothing about a prop does what Default does, as with places.
+- **One reader.** `targetPosition()` of a held prop is
+  `handPoint(holder, blocking)`: the holder's place in that blocking, feet
+  on the deck under them, a hand to their right (-X, 0.25 m) and 0.1 m
+  in front, at 55% of their height. `targetHolder()` and `targetOnStage()`
+  say who has it and whether it is drawn. The check is a kind compare, so
+  no other target's read changes; nothing new runs per frame.
+- **Cue tracking** is the blocking's: a cue that sets a blocking whose hold
+  says "held by Ann" is where she gets it; a later cue with a blocking that
+  says otherwise is where it is taken (put down, handed on, or off stage).
+- **Light.** Aims, area cover and the solvers read the person, never the
+  prop: nothing in them looks at a hand prop (tested).
+- **UI.** The plot's right-click: Held By ▸ (Its Own Place, Not on Stage,
+  each person), Give Each a Prop ▸ (Staff, Candle: one new prop in each
+  selected person's hand, one undo step), Lit By ▸ for candles. A prop
+  dropped on a person (within 0.6 m of where they stand) goes into their
+  hand; dropped elsewhere it is put down there. All in the blocking the
+  plot shows. Edit Target's Subject offers Staff and Candle; a staff's
+  Height row is its length.
+- **Candles** (`CandleRemote`, engine/src/candleremote.h): one Generic >
+  IR Candle Remote fixture (Select + Window, the blaster's chart). What a
+  candle shows comes from the Select channel as the plot already reads
+  fixture output (`Fixture::valuesChanged`, UI thread), a change of Select
+  or Window being one button press: On lit full, Off dark, Candle flicker,
+  Light steady, Dim one step down, Brighten full. Unknown until the first
+  button of the session (or Select's value when the Studio first opens).
+  The plot animates the flicker only while it paints the candle; the rig
+  view marks it with two sparks. A candle's `litBy` names its remote;
+  unset = the only one in the show.
+- **File.** `<Blocked Set="2" Hold="held" HeldBy="7"/>`, `Set="0"` for
+  Default's, `Kind="staff"`/`"candle"`, `LitBy="12"`. An older build reads
+  the kind as a plain mark and skips a Blocked with only a hold (and every
+  Set="0"): the prop is a mark at its own Default place.
+
 ## Venues: offsets, not absolute positions
 
 A blocking stores **offsets from Default** for positions. A venue (Q128)

@@ -587,6 +587,20 @@ public:
     void editBlockedLine(StageTarget *t, quint32 set,
                          const std::function<QVector<QVector3D>(QVector<QVector3D>)> &edit);
 
+    /** Props someone holds (BLOCKING.md; monitorgraphicsview_heldprops.cpp):
+     *  a staff or candle item drawn as itself, standing on the deck or in
+     *  its holder's hand, hidden when not on stage in the blocking shown. */
+    void decorateHandProp(class TargetItem *ti, StageTarget *t);
+    /** A hand prop dropped on a person goes into their hand; dropped
+     *  anywhere else it is put down there (its own place) -- in the
+     *  blocking shown, one undo step. False when @p item is not a lone
+     *  hand prop (the usual drop then runs). */
+    bool dropHandProp(class TargetItem *item, const QList<class TargetItem *> &moved);
+    /** Held By, Give Each a Prop, Lit By on a target's right-click. */
+    void addHandPropItems(ContextMenu &cm, quint32 id);
+    /** Whether any hand prop is held by someone (their items follow a move). */
+    bool anyPropHeld() const;
+
     /** Rebuild the aim-line overlays for all selected TargetItems. */
     void updateAimLines();
 

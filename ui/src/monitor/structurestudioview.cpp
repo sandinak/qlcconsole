@@ -36,6 +36,7 @@
 #include <cmath>
 
 #include "structurestudioview.h"
+#include "candleremote.h"
 #include "whyonpanel.h"
 #if defined(Q_OS_UNIX)
 #include <time.h>
@@ -193,6 +194,8 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
     {
         connect(props, &MonitorProperties::rigPropsChanged, this, rigEdited);
         connect(props, &MonitorProperties::stageTargetsChanged, this, rigEdited);
+        // A candle lit or put out by its remote (CandleRemote).
+        connect(CandleRemote::of(m_doc), &CandleRemote::changed, this, [this]() { m_liveDirty = true; update(); });
     }
     if (FocusSession *fs = (m_doc->programmer() != nullptr) ? m_doc->programmer()->focusSession() : nullptr)
     {
@@ -1463,6 +1466,13 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
     {
         if (t == nullptr || (t != &focusFigure && (!layerShown(t->layerId()) || !targetInScope(t->id()))))
             continue;
+
+        /* A staff or a candle: where its blocking puts it (BLOCKING.md). */
+        if (StageTarget::isHandPropKind(t->kind()))
+        {
+            drawHandProp(t, p);
+            continue;
+        }
 
         /* A performer line: its people, each on the deck under them -- not
            the line, which runs through their chests. No mark each: the set
