@@ -39,6 +39,8 @@
 #define KXMLPlatformClimb   QStringLiteral("StepClimb")
 #define KXMLPlatformFrontCurve QStringLiteral("FrontCurve")
 #define KXMLPlatformRotation QStringLiteral("Rotation")
+#define KXMLPlatformProp    QStringLiteral("Prop")
+#define KXMLPlatformPropBox QStringLiteral("Box")
 
 StagePlatform::StagePlatform(quint32 id, QObject *parent)
     : QObject(parent)
@@ -98,9 +100,19 @@ QList<QPointF> StagePlatform::corners(const Block &b) const
                             << toWorld(QPointF(double(b.x0), double(b.y1)));
 }
 
+void StagePlatform::setPropBox(bool box)
+{
+    m_propBox = box;
+    if (!box)
+        return;
+    m_shape = BoxShape;
+    m_topMaterial = ClearTop;
+    m_frontCurve = 0.0f;
+}
+
 float StagePlatform::frontCurve() const
 {
-    if (m_shape == StepsShape)
+    if (m_shape == StepsShape || m_propBox)
         return 0.0f;
     return qMin(m_frontCurve, qMin(m_width / 2.0f, m_depth));
 }
@@ -261,6 +273,9 @@ bool StagePlatform::loadXML(QXmlStreamReader &root)
         if (a.hasAttribute(KXMLPlatformClimb))
             m_climb = Climb(qBound(0, a.value(KXMLPlatformClimb).toInt(), 3));
     }
+    // A Box (TopMaterial says clear for an older build, which ignores this).
+    if (a.value(KXMLPlatformProp) == KXMLPlatformPropBox)
+        setPropBox(true);
 
     root.skipCurrentElement();
     return true;
@@ -297,6 +312,8 @@ bool StagePlatform::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLPlatformFrontCurve, QString::number(double(m_frontCurve), 'f', 3));
     if (m_rotation != 0.0f)
         doc->writeAttribute(KXMLPlatformRotation, QString::number(double(m_rotation), 'f', 2));
+    if (m_propBox)
+        doc->writeAttribute(KXMLPlatformProp, KXMLPlatformPropBox);
     if (m_shape == StepsShape)              // a plain box writes nothing new
     {
         doc->writeAttribute(KXMLPlatformSteps, QString::number(m_stepCount));

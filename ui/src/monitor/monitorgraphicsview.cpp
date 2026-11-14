@@ -589,6 +589,15 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
     // A stage feature's stretch or rotate handle: the drag is the handle's.
     if (shapePress(event))
         return;
+    /* A selected head's facing arrow: its head is a handle, with Shift (for
+       any angle) as without -- Shift-click here is not "toggle selection". */
+    if (event->button() == Qt::LeftButton)
+        if (auto *mfi = dynamic_cast<MonitorFixtureItem *>(itemAt(event->pos())))
+            if (mfi->onFacingHandle(mfi->mapFromScene(mapToScene(event->pos()))))
+            {
+                QGraphicsView::mousePressEvent(event);
+                return;
+            }
 
     /* A no-light zone is dragged by its outline or centre handle, nothing
        else: the plot under its inside stays selectable. Something drawn on
@@ -4542,6 +4551,20 @@ void MonitorGraphicsView::addFixture(quint32 id, QPointF pos)
             this, SLOT(slotFixtureMoved(MonitorFixtureItem*)));
     connect(item, &MonitorFixtureItem::mountingChanged,
             this, [this](quint32 fid) { updateFixture(fid); });
+    /* A turn of its facing -- Alt-drag, or its arrow's head -- is one undo
+       step, however far it went. */
+    connect(item, &MonitorFixtureItem::facingTurnStarted, this, [this](quint32) {
+        m_facingBefore = m_rigSnapshotter ? m_rigSnapshotter() : QByteArray();
+    });
+    connect(item, &MonitorFixtureItem::facingTurnFinished, this, [this](quint32 fid) {
+        const QByteArray before = m_facingBefore;
+        m_facingBefore.clear();
+        if (before.isEmpty() || !m_rigSnapshotter || m_rigSnapshotter() == before)
+            return;                       // let go where it started: nothing to undo
+        pushRigUndo(before);
+        updateFixture(fid);
+        rebuildEmissionOverlay();         // its beam swings with it
+    });
 }
 
 bool MonitorGraphicsView::removeFixture(quint32 id)

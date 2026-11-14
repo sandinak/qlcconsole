@@ -17,6 +17,7 @@
 #include <QTextDocument>
 #include <QTextOption>
 #include <QPainter>
+#include <QtMath>
 #include <QPainterPath>
 #include <QFont>
 #include <QMenu>
@@ -109,6 +110,11 @@ void PlatformItem::paint(QPainter *painter,
     if (m_platform->isSteps())
     {
         paintSteps(painter, fill, border, selected);
+        return;
+    }
+    if (m_platform->isPropBox())
+    {
+        paintBox(painter, fill, border, selected);
         return;
     }
 
@@ -221,6 +227,113 @@ void PlatformItem::paintSteps(QPainter *painter, const QColor &fill, const QColo
     painter->setPen(edge);
     painter->setBrush(QBrush(fill));
     painter->drawPolygon(stairs);
+}
+
+/* Which way a Box's front faces, in the world: downstage (+Y) at turn 0,
+   turned with it (+X toward +Y, as everything on the plot turns). */
+static QPointF boxFrontNormal(const StagePlatform *p)
+{
+    const double r = qDegreesToRadians(double(p->rotation()));
+    return QPointF(-qSin(r), qCos(r));
+}
+
+bool PlatformItem::boxFrontFacesViewer() const
+{
+    if (m_view == 0 || !m_platform->isPropBox())
+        return false;
+    const QPointF n = boxFrontNormal(m_platform);
+    // Front view looks upstage (the house sees +Y faces); Side from stage right (-X).
+    return m_view == 1 ? n.y() > 0.7071 : n.x() < -0.7071;
+}
+
+QLineF PlatformItem::boxFrontEdge() const
+{
+    if (!m_platform->isPropBox())
+        return QLineF();
+    if (m_view == 0)
+        // Plan: the item is turned with the box, so its front is always the
+        // downstage edge of the unturned outline.
+        return QLineF(0, m_pxD, m_pxW, m_pxD);
+    const QPointF n = boxFrontNormal(m_platform);
+    // Across the screen in this elevation: X in Front, Y in Side.
+    const double across = (m_view == 1) ? n.x() : n.y();
+    if (qAbs(across) < 0.7071)
+        return QLineF();          // face on, or facing away
+    return across > 0 ? QLineF(m_pxW, 0, m_pxW, m_pxD) : QLineF(0, 0, 0, m_pxD);
+}
+
+void PlatformItem::paintBox(QPainter *painter, const QColor &fill, const QColor &border, bool selected)
+{
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    const QRectF r(0, 0, m_pxW, m_pxD);
+    const QPen edge(border, selected ? 2.0 : 1.5);
+    // The front: heavy, in the box's own colour made to read on any canvas.
+    QPen frontPen(border.lighter(150), selected ? 5.0 : 4.0);
+    frontPen.setCapStyle(Qt::FlatCap);
+    QFont f = painter->font();
+    f.setPixelSize(qBound(7, int(qMin(m_pxW, m_pxD) / 5.0), 11));
+    f.setBold(true);
+
+    if (m_view == 0)
+    {
+        /* Plan: you look down through the clear top, so it is only a faint
+           tint over what is inside, never the deck fill a platform has --
+           the fixtures in it are drawn over it, their light too. */
+        QColor glass = fill;
+        glass.setAlpha(selected ? 60 : 30);
+        painter->setPen(edge);
+        painter->setBrush(glass);
+        painter->drawRect(r);
+        // A glint across the corner says "glass" without colour alone.
+        QPen glint(border.lighter(170), 1.0, Qt::DashLine);
+        painter->setPen(glint);
+        painter->setBrush(Qt::NoBrush);
+        const qreal g = qMin(m_pxW, m_pxD) * 0.22;
+        painter->drawLine(QPointF(g * 0.5, g * 1.5), QPointF(g * 1.5, g * 0.5));
+        painter->drawLine(QPointF(g * 0.5, g * 2.3), QPointF(g * 2.3, g * 0.5));
+        painter->setPen(frontPen);
+        painter->drawLine(boxFrontEdge());
+        painter->setPen(border.lighter(170));
+        painter->setFont(f);
+        UprightText::draw(painter, QRectF(0, m_pxD - f.pixelSize() - 6, m_pxW, f.pixelSize() + 2),
+                          Qt::AlignCenter, tr("FRONT"));
+        return;
+    }
+
+    /* An elevation: the sides and the front are solid; the top is the thin
+       clear edge at the top of them. */
+    QColor side = fill;
+    side.setAlpha(selected ? 170 : 130);
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(side);
+    painter->drawRect(r);
+    painter->setPen(edge);
+    painter->setBrush(Qt::NoBrush);
+    painter->drawLine(r.bottomLeft(), r.bottomRight());
+    painter->drawLine(r.topLeft(), r.bottomLeft());
+    painter->drawLine(r.topRight(), r.bottomRight());
+    // The clear top: a thin, dashed line.
+    painter->setPen(QPen(border.lighter(170), 1.0, Qt::DashLine));
+    painter->drawLine(r.topLeft(), r.topRight());
+    painter->setFont(f);
+    if (boxFrontFacesViewer())
+    {
+        // Face on: this IS the front, where the LEDs go.
+        painter->setPen(frontPen);
+        painter->drawRect(r.adjusted(2, 2, -2, -2));
+        painter->setPen(border.lighter(170));
+        UprightText::draw(painter, r, Qt::AlignCenter, tr("FRONT"));
+        return;
+    }
+    const QLineF fe = boxFrontEdge();
+    if (!fe.isNull())
+    {
+        painter->setPen(frontPen);
+        painter->drawLine(fe);
+        painter->setPen(border.lighter(170));
+        const bool right = fe.x1() > m_pxW / 2.0;
+        UprightText::draw(painter, QRectF(right ? m_pxW - 14 : 2, 2, 12, 12), Qt::AlignCenter, tr("F"));
+    }
 }
 
 QVariant PlatformItem::itemChange(GraphicsItemChange change, const QVariant &value)

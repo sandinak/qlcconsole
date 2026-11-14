@@ -2427,6 +2427,8 @@ void Monitor::initGraphicsToolbar()
                            this, SLOT(slotAddPlatform()));
         addMenu->addAction(tr("Add Steps"),
                            this, SLOT(slotAddSteps()));
+        addMenu->addAction(tr("Add Box"),
+                           this, SLOT(slotAddBox()));
         QMenu *sceneryMenu = addMenu->addMenu(tr("Add Scenery"));
         foreach (int kind, Scenery::kinds())
             sceneryMenu->addAction(Scenery::kindName(kind), this, [this, kind]() { slotAddScenery(kind); });
@@ -4360,6 +4362,13 @@ void Monitor::slotCopySelected()
             c.rotation = p->rotation(); c.frontCurve = p->frontCurve();
             c.color = p->color();
             c.finish = p->hasFinish() ? p->finish() : QColor();
+            c.shape = int(p->shape());
+            c.stepCount = p->stepCount();
+            c.stepRise = p->stepRise(); c.stepRun = p->stepRun(); c.stepWidth = p->stepWidth();
+            c.climb = int(p->stepsClimb());
+            c.propBox = p->isPropBox();
+            c.topMaterial = int(p->topMaterial());
+            c.solid = p->solid(); c.stackable = p->stackable();
             platforms.append(c);
         }
         else if (TargetItem *tg = dynamic_cast<TargetItem *>(gi))
@@ -4541,6 +4550,13 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
         p->setFrontCurve(c.frontCurve);
         p->setColor(c.color);
         p->setFinish(c.finish);
+        p->setTopMaterial(StagePlatform::TopMaterial(c.topMaterial));
+        p->setSolid(c.solid);
+        p->setStackable(c.stackable);
+        if (c.shape == int(StagePlatform::StepsShape))
+            p->setSteps(c.stepCount, c.stepRise, c.stepRun, c.stepWidth,
+                        StagePlatform::Climb(c.climb));
+        p->setPropBox(c.propBox);
         p->setLayerId(layer);
         newPlatformIds.append(p->id());
     }
@@ -9071,6 +9087,39 @@ void Monitor::slotAddSteps()
     slotEditPlatform(p->id());
 }
 
+void Monitor::slotAddBox()
+{
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
+    /* "A new prop like step .. called box. that we can put leds on the front
+       and it will have a clear top." A platform that is a Box, so it drags,
+       turns, locks, layers, stacks on a deck and carries fixtures like the
+       steps beside it; 2' x 2' x 18" is a box a performer stands on or
+       behind. Stackable, so it can be dragged onto a riser. */
+    StagePlatform *p = m_props->addPlatform();
+    p->setName(tr("Box %1").arg(p->id() + 1));
+    p->setWidth(0.6096f);
+    p->setDepth(0.6096f);
+    p->setHeight(0.4572f);
+    p->setPropBox(true);
+    p->setStackable(true);
+
+    QPointF mm = m_graphicsView->pixelsToRealPosition(
+        m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    p->setOriginX(float(mm.x() / 1000.0));
+    p->setOriginY(float(mm.y() / 1000.0));
+    p->setLayerId(layer);
+
+    m_graphicsView->updatePlatforms();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+
+    slotEditPlatform(p->id());
+}
+
 void Monitor::slotEditPipe(quint32 bid)
 {
     Pipe *b = m_props->pipe(bid);
@@ -9313,8 +9362,9 @@ void Monitor::slotEditPlatform(quint32 pid)
 
 
     QDialog dlg(this);
-    dlg.setWindowTitle(p->isSteps() ? tr("Lighting Studio Editor — Steps %1").arg(p->name())
-                                    : tr("Lighting Studio Editor — Riser %1").arg(p->name()));
+    dlg.setWindowTitle(p->isPropBox() ? tr("Lighting Studio Editor — Box %1").arg(p->name())
+                       : p->isSteps() ? tr("Lighting Studio Editor — Steps %1").arg(p->name())
+                                      : tr("Lighting Studio Editor — Riser %1").arg(p->name()));
     // A fountain's base is the fountain's editor (FOUNTAIN_WAND.md).
     const Fountain::Parts fountain = Fountain::ofBase(m_props, pid);
     if (fountain.isValid())
@@ -9381,10 +9431,16 @@ void Monitor::slotEditPlatform(quint32 pid)
 
     /* A flight of steps: count, rise, run and width say it all, and the box
        above follows from them (read-only while it is steps). */
+    /* A Box is a third shape: square, a clear top, LEDs across its front
+       (a strip's Pixel path), which the Top and Front curve rows then are not. */
     QComboBox *shapeCombo = new QComboBox(&dlg);
+    shapeCombo->setObjectName(QStringLiteral("platformShape"));
     shapeCombo->addItem(tr("Platform"), int(StagePlatform::BoxShape));
     shapeCombo->addItem(tr("Steps"), int(StagePlatform::StepsShape));
-    shapeCombo->setCurrentIndex(p->isSteps() ? 1 : 0);
+    shapeCombo->addItem(tr("Box"), 2);
+    shapeCombo->setToolTip(tr("Platform: a deck. Steps: a flight of steps. Box: a prop with a clear "
+                              "top and a front you can lay LEDs across (a strip's Pixel path)"));
+    shapeCombo->setCurrentIndex(p->isPropBox() ? 2 : p->isSteps() ? 1 : 0);
     form->insertRow(1, tr("Shape:"), shapeCombo);
     QSpinBox *countSpin = new QSpinBox(&dlg);
     countSpin->setRange(1, 60);
@@ -9416,8 +9472,9 @@ void Monitor::slotEditPlatform(quint32 pid)
     auto showShape = [form, shapeCombo, countSpin, riseSpin, runSpin, stepWSpin, climbCombo,
                       wSpin, dSpin, hSpin, curveSpin]() {
         const bool steps = shapeCombo->currentIndex() == 1;
-        curveSpin->setVisible(!steps);
-        if (QWidget *l = form->labelForField(curveSpin)) l->setVisible(!steps);
+        const bool box = shapeCombo->currentIndex() == 2;
+        curveSpin->setVisible(!steps && !box);
+        if (QWidget *l = form->labelForField(curveSpin)) l->setVisible(!steps && !box);
         for (QWidget *w : { (QWidget *)countSpin, (QWidget *)riseSpin, (QWidget *)runSpin,
                             (QWidget *)stepWSpin, (QWidget *)climbCombo })
         {
@@ -9568,6 +9625,13 @@ void Monitor::slotEditPlatform(quint32 pid)
         else
         {
             p->setBoxShape();
+            const bool box = shapeCombo->currentIndex() == 2;
+            if (box != p->isPropBox())
+            {
+                p->setPropBox(box);
+                const QSignalBlocker blockTop(topCombo);
+                topCombo->setCurrentIndex(topCombo->findData(int(p->topMaterial())));
+            }
             p->setWidth(float(wSpin->value() * fromDisp_p));
             p->setDepth(float(dSpin->value() * fromDisp_p));
             p->setHeight(float(hSpin->value() * fromDisp_p));
@@ -9589,8 +9653,14 @@ void Monitor::slotEditPlatform(quint32 pid)
     connect(countSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, [applyLive](int){ applyLive(); });
     connect(climbCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
             [applyLive](int){ applyLive(); });
+    auto showTop = [form, topCombo, shapeCombo]() {
+        const bool box = shapeCombo->currentIndex() == 2;   // a Box's top is clear
+        topCombo->setVisible(!box);
+        if (QWidget *l = form->labelForField(topCombo)) l->setVisible(!box);
+    };
+    showTop();
     connect(shapeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
-            [applyLive, showShape](int){ showShape(); applyLive(); });
+            [applyLive, showShape, showTop](int){ showShape(); showTop(); applyLive(); });
     connect(nameEdit, &QLineEdit::textChanged, &dlg, [applyLive](const QString &){ applyLive(); });
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
@@ -9645,6 +9715,8 @@ void Monitor::fillCanvasMenu(QMenu *out, QPointF scenePos)
                        this, SLOT(slotAddPlatform()));
     addMenu->addAction(tr("Steps"),
                        this, SLOT(slotAddSteps()));
+    addMenu->addAction(tr("Box"),
+                       this, SLOT(slotAddBox()));
     addMenu->addAction(tr("Boom"),
                        this, SLOT(slotAddPipe()));
     addMenu->addAction(tr("Electric"),
@@ -11731,16 +11803,38 @@ public:
     {
         setMinimumSize(116, 116);
         setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-        setToolTip(tr("Orientation preview (DS=downstage, US=upstage, SR/SL=stage "
-                      "right/left).\nGREEN arrow = where it throws: a mover's Front of "
-                      "device (Pan-zero), a fixed light's face (Back = upstage) or its "
-                      "Pan/Tilt aim; a dot when it points straight down (filled) or up "
-                      "(ring).\nBLUE arrow = icon rotation — visual only, never affects "
+        setToolTip(tr("Orientation preview, seen from above as the plot is (DS=downstage, "
+                      "US=upstage, SR/SL=stage right/left).\nGREEN arrow = where it throws: a "
+                      "mover's Front of device (Pan-zero), a fixed light's face (Back = upstage) "
+                      "or its Pan/Tilt aim; a dot when it points straight down (filled) or up "
+                      "(ring). Drag its head round to point it: 15° steps, Shift for any "
+                      "angle.\nBLUE arrow = icon rotation — visual only, never affects "
                       "the aim."));
+        setMouseTracking(true);           // the head's cursor
     }
 
-    void setHasPan(bool h)      { m_hasPan = h; update(); }
-    void setFacing(double deg)  { m_facing = float(deg); update(); }
+    /** Let the green arrow's head be dragged round; @p onTurn gets each new
+     *  angle (degrees from DS, 0..360) as it turns. */
+    void setTurnable(const std::function<void(double)> &onTurn)
+    {
+        m_onTurn = onTurn;
+        setProperty("turnable", bool(onTurn));
+    }
+
+private:
+    /* Where the green arrow's head is from the centre: the "greenTip"
+       property (tests; null when it is a dot). */
+    void tipChanged()
+    {
+        bool dot = false;
+        const QPointF t = greenArrow(&dot);
+        setProperty("greenTip", dot ? QPointF() : t);
+        update();
+    }
+public:
+
+    void setHasPan(bool h)      { m_hasPan = h; tipChanged(); }
+    void setFacing(double deg)  { m_facing = float(deg); tipChanged(); }
     void setIconRotation(double deg) { m_rotation = float(deg); update(); }
     void setPanMax(double deg)  { m_panMax = deg > 0 ? float(deg) : 360.0f; update(); }
     /** A fixed light's throw, a world vector (+X stage left, +Y downstage,
@@ -11758,11 +11852,94 @@ public:
         setProperty("vertical", plan < kVerticalPlan);
         setProperty("pointsDown", m_throw.z() < 0.0f);
         setProperty("bearing", double(b));
-        update();
+        tipChanged();
     }
     QVector3D throwDir() const { return m_throw; }
 
 protected:
+    /* The green arrow from the centre: its tip (widget centre at 0, 0), and
+       whether it is drawn as a dot instead. */
+    QPointF greenArrow(bool *dot) const
+    {
+        *dot = false;
+        if (m_hasPan)
+            return dirOf(m_facing) * (kBodyHalf + 28.0);
+        const float plan = std::hypot(m_throw.x(), m_throw.y());
+        if (plan < kVerticalPlan)
+        {
+            *dot = true;
+            return QPointF();
+        }
+        const float b = float(qRadiansToDegrees(qAtan2(-m_throw.x(), m_throw.y())));
+        return dirOf(b) * (kBodyHalf + 10.0 + 18.0 * plan);
+    }
+    /* Seen from above as the plot draws the stage: DS at the bottom and stage
+       right on the LEFT (+X, stage left, is drawn rightward). A bearing goes
+       the aim solver's way, (-sin a, cos a): 90 is stage right. This drew
+       (sin a, cos a) under SR on the right -- the plot's mirror image. */
+    static QPointF dirOf(float angleDeg)
+    {
+        const qreal a = qDegreesToRadians(qreal(angleDeg));
+        return QPointF(-qSin(a), qCos(a));
+    }
+    bool onGreenHead(const QPointF &pos) const
+    {
+        if (!m_onTurn)
+            return false;
+        bool dot = false;
+        const QPointF t = greenArrow(&dot);
+        if (dot)
+            return false;
+        // A generous grip round the head, but never the body in the middle.
+        const QPointF c = QRectF(rect()).center();
+        return QLineF(pos, c + t).length() <= 16.0 && QLineF(pos, c).length() > kBodyHalf;
+    }
+    void mousePressEvent(QMouseEvent *e) override
+    {
+        if (e->button() == Qt::LeftButton && onGreenHead(e->position()))
+        {
+            m_turning = true;
+            e->accept();
+            update();
+            return;
+        }
+        QWidget::mousePressEvent(e);
+    }
+    void mouseMoveEvent(QMouseEvent *e) override
+    {
+        if (!m_turning)
+        {
+            setCursor(onGreenHead(e->position()) ? Qt::PointingHandCursor : Qt::ArrowCursor);
+            QWidget::mouseMoveEvent(e);
+            return;
+        }
+        const QPointF d = e->position() - QRectF(rect()).center();
+        if (d.manhattanLength() < 2.0)
+            return;
+        double deg = qRadiansToDegrees(qAtan2(-d.x(), d.y()));
+        // 15-degree steps, as the plot's turns; Shift for any angle.
+        if (!(e->modifiers() & Qt::ShiftModifier))
+            deg = qRound(deg / 15.0) * 15.0;
+        deg = std::fmod(deg + 720.0, 360.0);
+        if (deg >= 359.95)
+            deg = 0.0;
+        deg = qRound(deg * 10.0) / 10.0;
+        if (m_onTurn)
+            m_onTurn(deg);        // the field, which sets the arrow back here
+        e->accept();
+    }
+    void mouseReleaseEvent(QMouseEvent *e) override
+    {
+        if (m_turning)
+        {
+            m_turning = false;
+            update();
+            e->accept();
+            return;
+        }
+        QWidget::mouseReleaseEvent(e);
+    }
+
     void paintEvent(QPaintEvent *) override
     {
         QPainter p(this);
@@ -11775,23 +11952,22 @@ protected:
         p.setPen(QPen(QColor(60, 60, 60), 1));
         p.drawRect(r);
 
-        // Stage-reference labels (screen space): DS bottom, US top, SR/SL sides.
+        // Stage-reference labels, as the plot reads: DS bottom, US top, SR left, SL right.
         p.setPen(QColor(150, 150, 150));
         QFont f = p.font(); f.setPixelSize(9); p.setFont(f);
         p.drawText(QRectF(r.left(), r.bottom() - 13, r.width(), 12), Qt::AlignHCenter, tr("DS"));
         p.drawText(QRectF(r.left(), r.top() + 1,     r.width(), 12), Qt::AlignHCenter, tr("US"));
-        p.drawText(QRectF(r.right() - 16, r.top(), 15, r.height()), Qt::AlignVCenter | Qt::AlignRight, tr("SR"));
-        p.drawText(QRectF(r.left() + 1,   r.top(), 15, r.height()), Qt::AlignVCenter | Qt::AlignLeft,  tr("SL"));
+        p.drawText(QRectF(r.right() - 16, r.top(), 15, r.height()), Qt::AlignVCenter | Qt::AlignRight, tr("SL"));
+        p.drawText(QRectF(r.left() + 1,   r.top(), 15, r.height()), Qt::AlignVCenter | Qt::AlignLeft,  tr("SR"));
 
         p.save();
         p.translate(c);
-        const qreal bodyHalf = 12.0;
+        const qreal bodyHalf = kBodyHalf;
 
-        // Helper: draw an arrow from centre toward (sin a, cos a) — the same
-        // mapping the 2D fixture item uses (0°=DS, 90°=SR, 180°=US, 270°=SL).
+        // Helper: draw an arrow from centre toward dirOf(a) — the 2D fixture
+        // item's mapping (0°=DS, 90°=SR on the left, 180°=US, 270°=SL).
         auto drawArrow = [&](float angleDeg, qreal reach, qreal halfHead, const QColor &col) {
-            const qreal a = qDegreesToRadians(qreal(angleDeg));
-            const QPointF dir(qSin(a), qCos(a));
+            const QPointF dir = dirOf(angleDeg);
             const QPointF tip  = dir * (bodyHalf + reach);
             const QPointF perp(-dir.y(), dir.x());
             const QPointF base = tip - dir * (halfHead * 1.8);
@@ -11835,13 +12011,14 @@ protected:
                 drawArrow(b, 10.0 + 18.0 * plan, 5.0, QColor(80, 200, 120));
             }
             p.restore();
+            paintTurning(p, c);
             return;
         }
 
         // Pan-range wedge — centred on the FACING (Front of device).
         const qreal wedgeReach = bodyHalf + 30.0;
         QRectF arcR(-wedgeReach, -wedgeReach, 2 * wedgeReach, 2 * wedgeReach);
-        const int startQt = qRound((270.0 + double(m_facing) - double(m_panMax) / 2.0) * 16.0);
+        const int startQt = qRound((270.0 - double(m_facing) - double(m_panMax) / 2.0) * 16.0);
         const int spanQt  = qRound(double(m_panMax) * 16.0);
         p.setPen(QPen(QColor(120, 90, 160, 130), 2));
         p.drawArc(arcR, startQt, spanQt);
@@ -11849,12 +12026,37 @@ protected:
         drawBody(m_rotation);                                  // body: icon rotation only
         drawArrow(m_rotation, 20.0, 4.5, QColor(90, 150, 230)); // BLUE = icon rotation
         drawArrow(m_facing, 28.0, 5.0, QColor(80, 200, 120));   // GREEN = facing (drives aim)
-
         p.restore();
+        paintTurning(p, c);
+    }
+
+    /* Its head is a handle: a ring round it while it can be dragged; while
+       it turns, the angle in the corner. */
+    void paintTurning(QPainter &p, const QPointF &c)
+    {
+        bool dot = false;
+        const QPointF t = greenArrow(&dot);
+        if (!m_onTurn || dot)
+            return;
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(QColor(80, 200, 120, m_turning ? 255 : 150), 1.2, m_turning ? Qt::SolidLine : Qt::DotLine));
+        p.drawEllipse(c + t, 9.0, 9.0);
+        if (m_turning)
+        {
+            QFont f = p.font(); f.setPixelSize(11); f.setBold(true); p.setFont(f);
+            p.setPen(QColor(235, 235, 235));
+            const double shown = m_hasPan ? double(m_facing)
+                : std::fmod(qRadiansToDegrees(qAtan2(-m_throw.x(), m_throw.y())) + 360.0, 360.0);
+            p.drawText(QRectF(4, 14, 50, 14), Qt::AlignLeft | Qt::AlignVCenter,
+                       QString::fromUtf8("%1°").arg(shown, 0, 'f', 0));
+        }
     }
 
 private:
     static constexpr float kVerticalPlan = 0.26f;   ///< sin(~15 degrees)
+    static constexpr qreal kBodyHalf = 12.0;
+    std::function<void(double)> m_onTurn;
+    bool  m_turning  = false;
     bool  m_hasPan   = true;
     QVector3D m_throw = QVector3D(0.0f, 1.0f, 0.0f);   ///< a fixed light's throw; default downstage
     float m_facing   = 0.0f;
@@ -11997,6 +12199,23 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         panZeroSpin->setSuffix(QString::fromUtf8("°"));
         panZeroSpin->setDecimals(1);
         form->addRow(tr("Aim — front of device (° from DS):"), panZeroSpin);
+        /* The aim as a dial, seen from above as the plot is: drag the green
+           arrow's head round and the Aim row follows (and sets them all). */
+        FacingPreviewWidget *aimDial = new FacingPreviewWidget(box);
+        aimDial->setObjectName(QStringLiteral("fixtureFacingPreview"));
+        {
+            float panMax = 0.0f;
+            foreach (quint32 fid, fids)
+                if (Fixture *f = m_doc->fixture(fid))
+                    if (f->channelNumber(QLCChannel::Pan, QLCChannel::MSB, 0) != QLCChannel::invalid())
+                    {
+                        panMax = float(f->effectiveBeam().panMax);
+                        break;
+                    }
+            aimDial->setPanMax(panMax);
+        }
+        aimDial->setTurnable([panZeroSpin](double deg) { panZeroSpin->setValue(deg); });
+        form->addRow(QString(), aimDial);
         QDoubleSpinBox *rotSpin = new QDoubleSpinBox(box);
         rotSpin->setObjectName(QStringLiteral("fixtureIconRotation"));
         rotSpin->setMaximum(359);
@@ -12070,6 +12289,9 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                 sp->blockSignals(false);
         };
         loadExtras();
+        aimDial->setFacing(qMax(0.0, panZeroSpin->value()));
+        connect(panZeroSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), aimDial,
+                [aimDial](double v) { aimDial->setFacing(qMax(0.0, v)); });
         connect(panZeroSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
                 [this, fids, panZeroSpin, loadExtras, isFixedLight](double v) {
             if (FixtureFields::spinIsMixed(panZeroSpin))
@@ -12865,6 +13087,11 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         // preview in lock-step with it and with the icon Rotation field.
         connect(panZeroSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
                 preview, &FacingPreviewWidget::setFacing);
+        /* Its green arrow's head drags round to point it: the field follows,
+           and the rest as if it were typed (the dialog is one undo step). A
+           strip or a string is aimed by its Face, not this. */
+        if (!isStrip && !pixelString)
+            preview->setTurnable([panZeroSpin](double deg) { panZeroSpin->setValue(deg); });
         connect(rotSpin, QOverload<int>::of(&QSpinBox::valueChanged),
                 [preview](int v) { preview->setIconRotation(v); });
     }

@@ -307,6 +307,23 @@ public:
     void setFacing(float deg) { m_facingDeg = deg; update(); }
     float facing() const { return m_facingDeg; }
 
+    /** The facing arrow's tip, in item coordinates: the arrow points the
+     *  way the head's beam goes at pan zero, (-sin f, cos f) on the plan --
+     *  90 is stage right, on the plot's left, as AimSolver::beamDirection()
+     *  has it. */
+    QPointF facingTip() const;
+    /** Whether the facing arrow's head is a handle now (a mover, selected,
+     *  the rig unlocked and the fixture not locked). */
+    bool facingHandleShown() const;
+    /** Whether @p itemPos (item coordinates) is on that handle: round the
+     *  arrow's head, never on the body itself. */
+    bool onFacingHandle(const QPointF &itemPos) const;
+    /** The facing a pointer at @p itemPos turns it to: free, or to the
+     *  nearest 15 degrees when @p steps. 0 to 360. */
+    float facingFor(const QPointF &itemPos, bool steps) const;
+    /** True while the facing is being turned (Alt-drag, or the handle). */
+    bool isTurningFacing() const { return m_rotating; }
+
     /** Configure the snap-to-grid behaviour for this item.
      *  @param divisions number of cell subdivisions to snap to
      *         (1 = full cell, 2 = 1/2, 4 = 1/4). <= 0 disables snapping.
@@ -337,6 +354,8 @@ protected:
     void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
+    void hoverMoveEvent(QGraphicsSceneHoverEvent *event) override;
+    void hoverLeaveEvent(QGraphicsSceneHoverEvent *event) override;
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *) override;
     QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
 
@@ -368,6 +387,11 @@ signals:
     /** Emitted when the fixture's mounting height (Z) or head orientation
      *  changes, so the view can reposition / relayout it. */
     void mountingChanged(quint32 fid);
+
+    /** A turn of the facing (Alt-drag, or its arrow's head) starts, and is
+     *  done and kept: the view makes the whole drag one undo step. */
+    void facingTurnStarted(quint32 fid);
+    void facingTurnFinished(quint32 fid);
 
 private:
     Doc *m_doc;
@@ -481,6 +505,13 @@ private:
 
     /** True while an Alt-drag facing rotation is in progress. */
     bool m_rotating      = false;
+    /** The turn was started on the arrow's head (not Alt on the body). */
+    bool m_handleTurn    = false;
+    /** The facing when the turn started: a turn that ends where it began
+     *  changes nothing. */
+    float m_facingAtPress = 0.0f;
+    /** Over the arrow's head: its own cursor. */
+    bool m_overHandle    = false;
 
     /** True when the layout is unlocked (rig-setup mode): the facing arrow is
      *  shown and Alt-drag rotation / facing menu are enabled. Mirrors the

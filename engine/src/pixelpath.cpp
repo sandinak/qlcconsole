@@ -44,6 +44,7 @@ QString PixelPath::name(int shape)
         case Wand:         return QCoreApplication::translate("PixelPath", "Wand (wound round a staff)");
         case SprinkleLoops: return QCoreApplication::translate("PixelPath", "Sprinkle loops (over the gap)");
         case FreeString:   return QCoreApplication::translate("PixelPath", "Free string (anchors)");
+        case BoxFront:     return QCoreApplication::translate("PixelPath", "Across a box's front");
         default:           return QCoreApplication::translate("PixelPath", "As its heads (none)");
     }
 }
@@ -827,6 +828,79 @@ static QVector<QVector3D> sprinkles(MonitorProperties *props, const Fountain::Pa
     return out;
 }
 
+StagePlatform *PixelPath::boxOf(MonitorProperties *props, quint32 fid)
+{
+    if (props == nullptr)
+        return nullptr;
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    for (quint32 id : { rp.riserPlatformId, rp.deckPlatformId })
+    {
+        StagePlatform *p = props->platform(id);
+        if (p != nullptr && p->isPropBox())
+            return p;
+    }
+    // Standing in one (a deck mount that was not made): the topmost under it.
+    const QVector3D at = props->fixtureRigPosition(fid);
+    StagePlatform *best = nullptr;
+    float bestTop = -1.0f;
+    foreach (StagePlatform *p, props->platforms())
+    {
+        if (p == nullptr || !p->isPropBox() || !p->containsPoint(at.x(), at.y()))
+            continue;
+        const float top = props->platformBaseZ(p->id()) + p->height();
+        if (top > bestTop)
+        {
+            bestTop = top;
+            best = p;
+        }
+    }
+    return best;
+}
+
+int PixelPath::boxFrontRows(const FixtureRigProps &rp, int n, double width)
+{
+    if (n <= 1)
+        return 1;
+    if (rp.pixelTurns > 0.0f)
+        return qBound(1, qRound(rp.pixelTurns), n);
+    // Across and back as often as the string is long.
+    const double length = rp.wandStripLength > 0.0f ? double(rp.wandStripLength)
+                                                    : kLedSpacing * (n - 1);
+    if (width <= 0.0)
+        return 1;
+    return qBound(1, int(qCeil(length / width - 1e-6)), n);
+}
+
+QVector<QVector3D> PixelPath::boxFrontPositions(const MonitorProperties *props, const StagePlatform *box,
+                                                int n, int rows)
+{
+    QVector<QVector3D> out;
+    if (box == nullptr || n <= 0)
+        return out;
+    rows = qBound(1, rows, n);
+    const double x0 = double(box->originX()), w = double(box->width());
+    // The front face, a hair proud of it so the LEDs are not inside the box.
+    const double front = double(box->originY()) + double(box->depth()) + 0.005;
+    const double base = props != nullptr ? double(props->platformBaseZ(box->id())) : 0.0;
+    const double h = double(box->height());
+    out.reserve(n);
+    for (int r = 0, led = 0; r < rows; ++r)
+    {
+        // The LEDs shared out over the rows, the first rows taking any spare.
+        const int inRow = n / rows + (r < n % rows ? 1 : 0);
+        const double z = base + h * (1.0 - (r + 0.5) / rows);
+        for (int k = 0; k < inRow; ++k, ++led)
+        {
+            // Odd rows run back: a zigzag, as tape is laid across and back.
+            const int along = (r % 2 == 0) ? k : inRow - 1 - k;
+            const double x = x0 + w * (along + 0.5) / inRow;
+            const QPointF wpt = box->toWorld(QPointF(x, front));
+            out << QVector3D(float(wpt.x()), float(wpt.y()), float(z));
+        }
+    }
+    return out;
+}
+
 QVector<QVector3D> PixelPath::positions(const Doc *doc, MonitorProperties *props, quint32 fid, int n)
 {
     QVector<QVector3D> out;
@@ -849,6 +923,13 @@ QVector<QVector3D> PixelPath::positions(const Doc *doc, MonitorProperties *props
     if (rp.pixelPath == FreeString)
         return freeStringPositions(freeStringAnchors(rp, props->fixtureRigPosition(fid), n), n,
                                    freeStringSpacing(rp, n));
+    if (rp.pixelPath == BoxFront)
+    {
+        const StagePlatform *box = boxOf(props, fid);
+        if (box == nullptr)
+            return out;
+        return boxFrontPositions(props, box, n, boxFrontRows(rp, n, double(box->width())));
+    }
     if (!needsFountain(rp.pixelPath))
         return out;
     Fountain::Parts f = Fountain::ofFixture(props, fid);
