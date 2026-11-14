@@ -511,6 +511,35 @@ void RigRoomLight_Test::userShowShots()
         view.m_ops.clear();
     }
     out << "overlapping fixtures: " << view.m_overlappingFixtures.size() << "\n";
+    // Which pairs, and their bodies' boxes (m), for telling a real one from a false one.
+    auto boxOf = [&](quint32 fid, QVector3D &lo, QVector3D &hi) {
+        QVector3D k[8];
+        view.fixtureBoxCorners(fid, classifyFixture(doc->fixture(fid)), k);
+        lo = hi = k[0];
+        for (const QVector3D &q : k)
+        {
+            lo = QVector3D(qMin(lo.x(), q.x()), qMin(lo.y(), q.y()), qMin(lo.z(), q.z()));
+            hi = QVector3D(qMax(hi.x(), q.x()), qMax(hi.y(), q.y()), qMax(hi.z(), q.z()));
+        }
+    };
+    auto boxText = [](const QVector3D &lo, const QVector3D &hi) {
+        return QStringLiteral("[%1..%2, %3..%4, %5..%6]").arg(lo.x(), 0, 'f', 3).arg(hi.x(), 0, 'f', 3)
+            .arg(lo.y(), 0, 'f', 3).arg(hi.y(), 0, 'f', 3).arg(lo.z(), 0, 'f', 3).arg(hi.z(), 0, 'f', 3);
+    };
+    const QList<quint32> flagged = view.m_overlappingFixtures.values();
+    for (int i = 0; i < flagged.size(); ++i)
+        for (int j = i + 1; j < flagged.size(); ++j)
+        {
+            QVector3D alo, ahi, blo, bhi;
+            boxOf(flagged.at(i), alo, ahi);
+            boxOf(flagged.at(j), blo, bhi);
+            bool hit = true;
+            for (int a = 0; a < 3; ++a)
+                hit = hit && alo[a] + 0.01f < bhi[a] && blo[a] + 0.01f < ahi[a];
+            if (hit)
+                out << "pair " << doc->fixture(flagged.at(i))->name() << " " << boxText(alo, ahi)
+                    << " x " << doc->fixture(flagged.at(j))->name() << " " << boxText(blo, bhi) << "\n";
+        }
     diag.close();
 }
 
