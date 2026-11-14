@@ -14,6 +14,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed and fixed
 
+- **After a crash, the Run tab offers the cue the show was on.** If qlcconsole stops mid-show without closing the show (crash, force-quit, battery or power), open the same show again and switch to Operate: the Run tab says *The show was at cue 2.3.1 (Main) when it stopped. Load it?* **Load as Standby** puts that cue on standby: nothing plays and the stage stays as it is, and the next GO plays it. **Dismiss** forgets it. Nothing is offered after a normal quit, New or opening another show. A cue deleted since is named, never loaded. The cue each list is on is kept beside the autosave on each GO, Back and Stop, never in the show file. The pad and the phone's Run page never accept it.
+
 - **Output rule "Show only": a laser, fogger, flame relay or DMX curtain fires only from a GO in Operate.** In Design, Blind, the Workbench, Locate, Solo, focus and previews it stays at its safe value (off, closed), the plot still draws what it would do with a "held" badge, and the footer says so ("Lasers held: Design"). Right-click a fixture or group ▸ Output Rules… ▸ Show only. The Simple Desk drives it in Operate (a hand on the channel is how you test a fogger before doors), never in Design.
 
 ## [0.4.7] - Unreleased

@@ -710,6 +710,9 @@ private:
     QTimer *m_blindViewTimer = nullptr;
     /** The cue in edit's effects, off the stage (engine/src/blindeffects.h). */
     BlindEffects *m_blindEffects = nullptr;
+    /** Which cue each list was on, for the Run tab's offer after a crash
+     *  (engine/src/cueresume.h); the Doc's, made with it. */
+    class CueResume *m_cueResume = nullptr;
     QTimer *m_blindMotionTimer = nullptr;
     QElapsedTimer m_blindMotionClock;
     /** The cue in edit's levels, without its effects, and any override hit live over them (blindLevels()). */

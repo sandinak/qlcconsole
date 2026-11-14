@@ -504,6 +504,45 @@ One level only: a sub-cue's own chase steps run on their own timing.
 | **RESET** | Stops the list and forgets what's on standby. |
 | **ALL OFF** | Stops everything that's running — the panic button. |
 
+## After a crash
+
+If qlcconsole stops in the middle of a show without closing it — a crash,
+a force-quit, the battery or the power — open the same show again (with
+**Open the Last Show at Start** in Settings ▸ General it opens by itself)
+and switch to **Operate**. The **Run** tab says where the show was:
+
+> The show was at cue 2.3.1 (Main) when it stopped. Load it?
+
+- **Load as Standby** LOADs that cue: it waits on **▷ STANDBY**, nothing
+  plays and the stage stays as it is. The next **GO** (the button, Space,
+  ⌘↩, the pad) plays it, and the show goes on from there.
+- **Dismiss** forgets it: GO starts from the cue on standby as usual.
+- A GO before either (starting again from the top, say) takes the offer
+  away: it would undo what you just did.
+- Several lists running (Main and a parallel list) are named together,
+  and **Load as Standby** LOADs each of them.
+- It is the cue, not how far through its [sub-cues](#sub-cues) it had
+  got: GO plays the cue as GO from the cue before would (its first
+  sub-cue), then **Sub GO** on to where you were.
+
+Nothing is ever played by itself: the offer only LOADs, and only from the
+Run tab. The pad and the phone's Run page don't show it or accept it — once
+it is loaded they show the cue on standby like any other.
+
+It is offered only when the app ended without closing the show, and only
+in Operate. After a normal quit, **File ▸ New** or opening another show
+there is nothing to offer. A cue deleted since (an older copy of the show,
+an edit) is never loaded, even when another cue has its number now: the
+Run tab says *…but that cue is no longer in the show: nothing to load.*
+
+What it keeps: on each GO, Back, Stop, Reset and All Off in Operate (never
+per frame), the show's file and the cue each list is on, in
+`resume-cue.json` in your user folder (beside the untitled show's autosave;
+`~/Library/Application Support/qlcconsole` on a Mac). Never in the show
+file. A show that has never been saved isn't kept: it has no file to find
+it by. A recovered autosave of the show counts as the show: open it with
+**Recover** and the offer follows.
+
 ## OSC — QLab's Network cue
 
 1. **Connections → Devices → OSC in**: tick **Listen for OSC

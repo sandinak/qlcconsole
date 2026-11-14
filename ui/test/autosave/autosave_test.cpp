@@ -45,6 +45,10 @@
 #include "fixture.h"
 #include "doc.h"
 #include "startupwindow.h"
+#include "showtreecontroller.h"
+#include "showcontrol.h"
+#include "cueresume.h"
+#include "chaser.h"
 
 void Autosave_Test::initTestCase()
 {
@@ -69,7 +73,7 @@ void Autosave_Test::initTestCase()
 
 void Autosave_Test::cleanupTestCase()
 {
-    delete m_app;
+    delete m_app;           // null after quittingLeavesNothingToResume()
     m_app = nullptr;
     qputenv("HOME", m_realHome);
     if (m_realProfile.isEmpty())
@@ -957,6 +961,109 @@ void Autosave_Test::aWebLoadReplacesTheShowAndIsMarkedFromTheWeb()
     QVERIFY(doc->loadedFromWeb());
     m_app->clearDocument();
     QVERIFY(!doc->loadedFromWeb());
+}
+
+/* A show with a Show Tree list "Main" of three cues, saved as @a show; the
+   App is in Operate with GO run @a gos times through the one run path. */
+static void runShowInOperate(App *app, const QString &show, int gos)
+{
+    Doc *doc = app->doc();
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction("Show");
+    const quint32 list = st->addCueList(prod, "Main");
+    st->addCue(list, -1, "One");
+    st->addCue(list, 0, "Two");
+    st->addCue(list, 1, "Three");
+    st->setCurrentProduction(prod);
+    QCOMPARE(app->saveXML(show), QFile::NoError);
+    doc->setMode(Doc::Operate);
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    Chaser *main = doc->showControl()->cueList(QString());
+    QVERIFY(main != nullptr);
+    for (int i = 0; i < gos; ++i)
+    {
+        QVERIFY(doc->showControl()->run(go, ShowControl::RouteRunTab));
+        // Seconds apart on the night: here, until the cue is playing.
+        QTRY_VERIFY(main->isRunning() && main->currentStepIndex() == i);
+    }
+    QCoreApplication::processEvents();          // written once the GO is done
+}
+
+void Autosave_Test::aCrashLeavesTheLiveCueACleanCloseDoesNot()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString show = dir.filePath("Resume.qlcc");
+    Doc *doc = m_app->doc();
+    m_app->clearDocument();
+    auto tidy = qScopeGuard([this, doc]() {
+        doc->setMode(Doc::Design);
+        m_app->clearDocument();
+    });
+    CueResume *resume = CueResume::of(doc);
+    QVERIFY(resume != nullptr);
+    // Beside the untitled autosave, in this test's own home.
+    const QString record = CueResume::defaultPath();
+    QCOMPARE(resume->path(), record);
+    QCOMPARE(QFileInfo(record).absolutePath(), QFileInfo(m_app->autosaveFilePath()).absolutePath());
+    QVERIFY(record.startsWith(m_home.path()));
+
+    runShowInOperate(m_app, show, 2);
+    if (QTest::currentTestFailed())
+        return;
+    QVERIFY(QFile::exists(record));
+    QFile f(record);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QByteArray left = f.readAll();         // what a crash now leaves
+    f.close();
+    QVERIFY(left.contains("Resume.qlcc"));
+    // Never in the show file itself.
+    QVERIFY(!contents(show).contains("resume"));
+
+    // A clean close (another show opened, File ▸ New): nothing to resume.
+    doc->setMode(Doc::Design);
+    m_app->clearDocument();
+    QVERIFY(!QFile::exists(record));
+    QCOMPARE(m_app->loadXML(show), QFile::NoError);
+    QVERIFY(!resume->hasOffer());
+
+    // The crash: the record left as it was, the show opened again.
+    m_app->clearDocument();
+    {
+        QFile w(record);
+        QVERIFY(w.open(QIODevice::WriteOnly));
+        w.write(left);
+    }
+    QCOMPARE(m_app->loadXML(show), QFile::NoError);
+    QVERIFY(resume->hasOffer());
+    QVERIFY(!resume->offerShown());                 // the app opens in Design
+    QCOMPARE(resume->offerText(), QString("The show was at cue 2 (Main) when it stopped. Load it?"));
+    doc->setMode(Doc::Operate);
+    QVERIFY(resume->offerShown());
+    Chaser *main = doc->showControl()->cueList(QString());
+    QVERIFY(main != nullptr);
+    QCOMPARE(resume->accept(), 1);
+    QCOMPARE(doc->showControl()->loadedStep(main->id()), 1);
+    QVERIFY(!main->isRunning());                    // LOADed, not played
+    doc->setMode(Doc::Design);
+}
+
+void Autosave_Test::quittingLeavesNothingToResume()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    m_app->clearDocument();
+    runShowInOperate(m_app, dir.filePath("Quit.qlcc"), 1);
+    if (QTest::currentTestFailed())
+        return;
+    const QString record = CueResume::defaultPath();
+    QVERIFY(QFile::exists(record));
+    // Quit: closeEvent() only lets it go in Design.
+    m_app->doc()->setMode(Doc::Design);
+    delete m_app;
+    m_app = nullptr;
+    QVERIFY(!QFile::exists(record));
 }
 
 QTEST_MAIN(Autosave_Test)

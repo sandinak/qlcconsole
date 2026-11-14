@@ -274,6 +274,7 @@ bool ShowControl::execute(const Request &request)
         for (Function *f : m_doc->functions())
             if (f->isRunning())
                 f->stop(FunctionParent::master());
+        emit cueListStopped(UINT_MAX);
         return finish(true, tr("everything stopped"));
     }
 
@@ -354,6 +355,7 @@ bool ShowControl::execute(const Request &request)
                               || (sub >= 0 && sub != chaser->currentSubCueIndex())))
                 return finish(false, tr("cue %1 isn't the one playing").arg(cue));
             chaser->stop(FunctionParent::master());
+            emit cueListStopped(chaser->id());
             return finish(true, name);
 
         case Pause:
@@ -396,6 +398,7 @@ bool ShowControl::execute(const Request &request)
             m_loaded.remove(chaser->id());
             if (chaser->isRunning())
                 chaser->stop(FunctionParent::master());
+            emit cueListStopped(chaser->id());
             return finish(true, name);
 
         case SubGo:

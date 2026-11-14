@@ -69,6 +69,7 @@ add_library(${module_name} SHARED
     palettenaming.cpp palettenaming.h
     patchlist.cpp patchlist.h
     cuesheet.cpp cuesheet.h
+    cueresume.cpp cueresume.h
     xlsxwriter.cpp xlsxwriter.h
     csvfield.h
     speedmasters.cpp speedmasters.h

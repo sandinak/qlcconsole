@@ -152,6 +152,7 @@
 #include "showwebaccess.h"
 #include "chaserstep.h"
 #include "showcontrol.h"
+#include "cueresume.h"
 #include "fixturegroup.h"
 #include "stagetarget.h"
 #include "scene.h"
@@ -382,6 +383,10 @@ App::~App()
     // Remove autosave file on clean exit (document was saved or discarded)
     if (m_doc != NULL && m_doc->isModified() == false)
         removeAutosaveFile();
+
+    // A clean close: no cue to resume next time.
+    if (m_cueResume != nullptr)
+        m_cueResume->showClosed();
 
     // Don't save kiosk-mode window geometry because that will screw things up
     if (m_doc->isKiosk() == false && QLCFile::hasWindowManager())
@@ -1352,6 +1357,9 @@ void App::slotLoadProgress(const QString& stage, int count)
 
 void App::clearDocument()
 {
+    // The show closes cleanly: nothing to resume of it.
+    if (m_cueResume != nullptr)
+        m_cueResume->showClosed();
     m_doc->masterTimer()->stop();
     if (m_blindEffects != nullptr)
         m_blindEffects->clear();
@@ -1406,6 +1414,9 @@ void App::initDoc()
     connect(m_doc, SIGNAL(needAutosave()), this, SLOT(slotDocAutosave()));
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged(Doc::Mode)));
     connect(m_doc, SIGNAL(loadProgress(QString,int)), this, SLOT(slotLoadProgress(QString,int)));
+    /* Which cue each list is on while the show runs, beside the autosave:
+       after a crash the Run tab offers it back as standby (crash-resume-cue). */
+    m_cueResume = new CueResume(m_doc, QString(), m_doc);
     // Computer keys bound in the Control Map (watching only while one is).
     new KeyTriggers(m_doc, this);
 #ifdef QLC_AI_ASSIST
@@ -6547,6 +6558,8 @@ void App::slotRecentFileClicked(QAction *recent)
 void App::setFileName(const QString& fileName)
 {
     m_fileName = fileName;
+    if (m_cueResume != nullptr)
+        m_cueResume->setShowFile(fileName);
 }
 
 QString App::fileName() const
@@ -6885,6 +6898,12 @@ QFile::FileError App::loadXML(const QString& fileName, const QString &asShow)
                them (Office.qlcc) asked "Save changes?" on close and wrote
                an autosave at open (F3). */
             m_doc->resetModified();
+
+            /* Opened after a session that ended without closing it (a
+               crash, a force-quit, the power): the Run tab offers the cue
+               each list was on, as standby -- in Operate, never played. */
+            if (m_cueResume != nullptr)
+                m_cueResume->showOpened(show);
 
             /* "Open this show in Operate" (File ▸ Show Settings): once
                it's up, as -p does (after startup's own Design). */

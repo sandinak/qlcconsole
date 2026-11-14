@@ -223,6 +223,11 @@ signals:
     void cueTaken(ShowControl::Command command, quint32 chaserId, int fromStep, int fromSub,
                   int step, int sub);
 
+    /** A Stop or Reset stopped (or let go of) @a chaserId's list; UINT_MAX:
+     *  All Off stopped every list. Once per command, when carried out (the
+     *  crash-resume record, CueResume, follows it with cueTaken()). */
+    void cueListStopped(quint32 chaserId);
+
     /** A GO, Back, Sub GO or Sub Back is about to put a cue on stage, from
      *  anywhere (a key, the Run tab, OSC, MSC, the VC): emitted before it
      *  acts, on the thread the command arrived on. The Show Tree holds its
