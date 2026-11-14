@@ -375,6 +375,41 @@ void PadRunRulesUi_Test::everySurfaceAgreesAtEveryStep()
     value(kLB, 0);
     QVERIFY2(run->isArmed(), qPrintable(diag));
     surfaces("armed again after the pad came back");
+
+    /* Once more in the order an earlier run of this test failed: the stop
+       while walking, the walk ended, armed, the pad lost and back -- with
+       no role switch in between -- then the chord, with what it saw. */
+    chord(false);
+    tap(kMenu);
+    QVERIFY(run->isWalking());
+    value(kLB, 255);
+    value(kRB, 255);
+    value(kLT, 255);
+    value(kRT, 255);
+    value(kRT, 0);
+    value(kLT, 0);
+    value(kRB, 0);
+    value(kLB, 0);
+    if (run->isWalking())
+        pc->refineSession()->stop();
+    chord(true);
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+    emit iom->inputDeviceDisconnected(0, m_stub->name(), QStringLiteral("Stub pad"));
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    emit iom->inputDeviceConnected(0, m_stub->name(), QStringLiteral("Stub pad"));
+    settle(100);
+    value(kLB, 255);
+    value(kRB, 255);
+    QTest::qWait(300);
+    const QString diag2 = QString("again after the pad came back: armed %1, state %2, LB role %3, holder '%4', "
+                                  "testing %5, walking %6, chord pending %7, roleText %8")
+                              .arg(run->isArmed()).arg(int(run->state())).arg(pc->controllerRole(0, kLB))
+                              .arg(run->holder()).arg(run->isTesting()).arg(run->isWalking())
+                              .arg(run->isArmChordPending()).arg(run->roleText());
+    qInfo().noquote() << diag2;
+    value(kRB, 0);
+    value(kLB, 0);
+    QVERIFY2(run->isArmed(), qPrintable(diag2));
     doc->masterTimer()->stopAllFunctions();
 }
 
