@@ -45,6 +45,7 @@
 #include "treecuestack.h"
 #include "workbench.h"
 #include "workbenchstack.h"
+#include "lookeditor.h"
 #undef protected
 #undef private
 
@@ -56,7 +57,8 @@
 #include "functionparent.h"
 #include "fixturegroup.h"
 #include "mastertimer.h"
-#include "lookeditor.h"
+#include "capabilitybar.h"
+#include "paletteops.h"
 #include <QColorDialog>
 #include <QApplication>
 #include "qlcpalette.h"
@@ -346,6 +348,82 @@ void ShowTreeWorkbench_Test::editUndoRedo()
 /* Changelog: the docked Workbench's layer menu has the tree's Release and
    Cue mode. Each is one undo step on the shared history and moves the
    controller's state (and the rig, for the mode) -- not just the menu. */
+void ShowTreeWorkbench_Test::aCuesOneOffValueIsAnUndoStep()
+{
+    const Show s = SHOW();
+    ShowTreeController *st = m_doc->showTree();
+    PaletteOps *ops = m_doc->paletteOps();
+    // Cue One's two layers with values of their own (one-offs), not
+    // palettes; each set as it is made (a bake lets go of an unused one).
+    const quint32 t = st->createInlinePalette(QLCPalette::Dimmer, { 51 }, "20% · 1 One Towers");
+    QVERIFY(st->setLayerLook(s.c1, s.towersLayer1, st->lookForPalette(t)));
+    const quint32 u = st->createInlinePalette(QLCPalette::Dimmer, { 102 }, "40% · 1 One USTs");
+    QVERIFY(st->setLayerLook(s.c1, s.ustsLayer1, st->lookForPalette(u)));
+    QVERIFY(m_doc->palette(t) != nullptr && m_doc->palette(u) != nullptr);
+    QVERIFY(!ops->isManaged(t) && !ops->isManaged(u));
+    st->clearUndo();
+    ops->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.openInWorkbench(s.c1, s.towersLayer1));
+    Workbench *bench = view.dockedWorkbench();
+    WorkbenchStack *stack = bench->stack();
+    const int towers = layerNamed(stack, "Towers");
+    const int usts = layerNamed(stack, "USTs");
+    QVERIFY(towers >= 0 && usts >= 0);
+    const int dimT = attributeKeyed(stack, towers, KeyDimmer);
+    const int dimU = attributeKeyed(stack, usts, KeyDimmer);
+    QVERIFY(dimT >= 0 && dimU >= 0);
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 51, 51, 102, 102 }));
+
+    // The Towers level: one step, the stage follows, Undo puts both back.
+    QVERIFY(bench->selectRow(row(ProgrammingOutline::AttributeRow, quint32(towers), quint32(dimT))));
+    QCOMPARE(bench->currentPage(), Workbench::LookPage);
+    LookEditor *look = bench->lookEditor();
+    QCOMPARE(look->paletteId(), t);
+    QVERIFY2(look->trialNote().contains("one-off"), qPrintable(look->trialNote()));
+    QTest::mouseClick(bench->m_title, Qt::LeftButton);
+    look->m_dimmerBar->setValue(180);
+    look->m_dimmerBar->setValue(200);           // the same drag
+    QCOMPARE(m_doc->palette(t)->intValue1(), 200);
+    QVERIFY(st->canUndoShared());
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 200, 200, 102, 102 }));
+    QVERIFY(st->undoShared());
+    QCOMPARE(m_doc->palette(t)->intValue1(), 51);
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 51, 51, 102, 102 }));
+    QVERIFY2(!st->canUndoShared(), "the drag was more than one step");
+    QVERIFY(st->redoShared());
+    QCOMPARE(m_doc->palette(t)->intValue1(), 200);
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 200, 200, 102, 102 }));
+    QVERIFY(st->undoShared());
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 51, 51, 102, 102 }));
+
+    // Both layers' Dimmer rows: one change sets both, ONE Undo puts both back.
+    QCoreApplication::processEvents();
+    QVERIFY(bench->selectRow(row(ProgrammingOutline::AttributeRow, quint32(towers), quint32(dimT))));
+    QTreeWidgetItem *other = bench->rows()->layerItem(usts)->child(dimU);
+    QVERIFY(other != nullptr);
+    other->setSelected(true);
+    QCOMPARE(look->paletteId(), t);
+    QCOMPARE(look->alsoEditing(), QList<quint32>({ u }));
+    QVERIFY2(look->alsoNote().contains("2 Dimmer looks together"), qPrintable(look->alsoNote()));
+    QTest::mouseClick(bench->m_title, Qt::LeftButton);
+    look->m_dimmerBar->setValue(255);
+    QCOMPARE(m_doc->palette(t)->intValue1(), 255);
+    QCOMPARE(m_doc->palette(u)->intValue1(), 255);
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 255, 255, 255, 255 }));
+    QVERIFY(st->undoShared());
+    QCOMPARE(m_doc->palette(t)->intValue1(), 51);
+    QCOMPARE(m_doc->palette(u)->intValue1(), 102);
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 51, 51, 102, 102 }));
+    QVERIFY(!st->canUndoShared());
+    QVERIFY(st->redoShared());
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 255, 255, 255, 255 }));
+}
+
 void ShowTreeWorkbench_Test::theDockedLayerMenuReleasesAndSetsTheCueMode()
 {
     const Show s = SHOW();

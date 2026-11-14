@@ -61,6 +61,7 @@
 #include "measurementunits.h"
 #include "palettenaming.h"
 #include "paletteops.h"
+#include "undogesture.h"
 #include "effectorigin.h"
 #include "effectruns.h"
 #include "fadetimespin.h"
@@ -306,6 +307,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     , m_loading(false)
 {
     setProperty("helpTopic", QStringLiteral("build.md#the-inline-look-editor"));
+    UndoGesture::watch();       // a drag is one undo step from the first press
     QVBoxLayout *root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
 
@@ -369,6 +371,14 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_trialNote->setWordWrap(true);
     m_trialNote->hide();
     root->addWidget(m_trialNote);
+
+    // Several looks of one type selected: which ones a change sets.
+    m_alsoNote = new QLabel(this);
+    m_alsoNote->setObjectName(QStringLiteral("lookAlsoEditing"));
+    m_alsoNote->setStyleSheet("color: #2a7ab8; font-weight: bold;");
+    m_alsoNote->setWordWrap(true);
+    m_alsoNote->hide();
+    root->addWidget(m_alsoNote);
 
     m_usedBy = new QLabel(this);
     m_usedBy->setObjectName("lookEditorUsedBy");
@@ -1189,6 +1199,89 @@ QString LookEditor::trialNote() const
     return m_trialNote->isHidden() ? QString() : m_trialNote->text();
 }
 
+bool LookEditor::editsTogether(int type)
+{
+    return type != QLCPalette::Undefined && type != QLCPalette::Aim && type != QLCPalette::Effect
+           && type != QLCPalette::Formation;
+}
+
+void LookEditor::setAlsoEditing(const QList<quint32> &paletteIds)
+{
+    m_alsoGiven.clear();
+    for (quint32 id : paletteIds)
+        if (id != m_paletteId && !m_alsoGiven.contains(id))
+            m_alsoGiven << id;
+    updateAlsoNote();
+}
+
+QList<quint32> LookEditor::alsoEditing() const
+{
+    QList<quint32> out;
+    const QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == nullptr || !editsTogether(p->type()))
+        return out;
+    for (quint32 id : m_alsoGiven)
+        if (const QLCPalette *o = m_doc->palette(id))
+            if (o->type() == p->type() && id != m_paletteId)
+                out << id;
+    return out;
+}
+
+QString LookEditor::alsoNote() const
+{
+    return m_alsoNote->isHidden() ? QString() : m_alsoNote->text();
+}
+
+/* The word a person reads for a look's type ("Colour"), in the line. */
+static QString lookTypeWord(int type)
+{
+    switch (type)
+    {
+    case QLCPalette::Dimmer:    return LookEditor::tr("Dimmer");
+    case QLCPalette::Color:     return LookEditor::tr("Colour");
+    case QLCPalette::Pan:       return LookEditor::tr("Pan");
+    case QLCPalette::Tilt:      return LookEditor::tr("Tilt");
+    case QLCPalette::PanTilt:   return LookEditor::tr("Position");
+    case QLCPalette::Aim:       return LookEditor::tr("Aim");
+    case QLCPalette::Shutter:   return LookEditor::tr("Shutter");
+    case QLCPalette::Strobe:    return LookEditor::tr("Strobe");
+    case QLCPalette::Gobo:      return LookEditor::tr("Gobo");
+    case QLCPalette::Zoom:      return LookEditor::tr("Zoom");
+    case QLCPalette::Beam:      return LookEditor::tr("Beam");
+    case QLCPalette::Effect:    return LookEditor::tr("Effect");
+    case QLCPalette::Formation: return LookEditor::tr("Formation");
+    default:                    return LookEditor::tr("look");
+    }
+}
+
+void LookEditor::updateAlsoNote()
+{
+    const QLCPalette *p = m_doc->palette(m_paletteId);
+    QString text;
+    if (p != nullptr)
+    {
+        const int together = int(alsoEditing().size());
+        int others = 0;
+        for (quint32 id : m_alsoGiven)
+            if (m_doc->palette(id) != nullptr)
+                ++others;
+        others -= together;
+        const QString what = lookTypeWord(p->type());
+        if (together > 0 && others == 0)
+            text = tr("Editing %n %1 looks together: a change here sets each of them, one Undo.", "",
+                      together + 1).arg(what);
+        else if (together > 0)
+            text = tr("Editing %n %1 looks together (one Undo); the other looks selected are not %1 "
+                      "and are left as they are.", "", together + 1).arg(what);
+        else if (others > 0 && editsTogether(p->type()))
+            text = tr("Editing this %1 look only: the other looks selected are not %1.").arg(what);
+        else if (others > 0)
+            text = tr("Editing this %1 look only: %1 looks are edited one at a time.").arg(what);
+    }
+    m_alsoNote->setText(text);
+    m_alsoNote->setVisible(!text.isEmpty());
+}
+
 /*********************************************************************
  * The effect picker
  *********************************************************************/
@@ -1470,7 +1563,14 @@ void LookEditor::setPalette(quint32 paletteId)
     // Another look: the picker was for the one before -- it keeps its pick.
     if (effectPickerOpen() && paletteId != m_pickerSnapshot.paletteId)
         closeEffectPicker(true);
+    // Another look edits alone, until its host says what else is selected.
+    const bool another = paletteId != m_paletteId;
     m_paletteId = paletteId;
+    if (another)
+    {
+        m_alsoGiven.clear();
+        updateAlsoNote();
+    }
     QLCPalette *p = m_doc->palette(paletteId);
     if (p == NULL)
     {
@@ -1913,9 +2013,12 @@ void LookEditor::maybeAutoName(QLCPalette *p)
     if (autoName.isEmpty()) return;
     if (p->name() == autoName) return;      // no change → nothing to reveal
     p->setName(autoName);
-    m_nameEdit->blockSignals(true);
-    m_nameEdit->setText(autoName);
-    m_nameEdit->blockSignals(false);
+    if (p->id() == m_paletteId)     // not a look edited with it (setAlsoEditing())
+    {
+        m_nameEdit->blockSignals(true);
+        m_nameEdit->setText(autoName);
+        m_nameEdit->blockSignals(false);
+    }
     emit paletteRenamed(p->id());
 }
 
@@ -1957,7 +2060,7 @@ LookEditor::ValueBefore LookEditor::valueBefore(const QLCPalette *p) const
     return b;
 }
 
-void LookEditor::followName(QLCPalette *p, const ValueBefore &before)
+void LookEditor::followName(QLCPalette *p, const ValueBefore &before, bool shown)
 {
     if (p == NULL)
         return;
@@ -1995,8 +2098,11 @@ void LookEditor::followName(QLCPalette *p, const ValueBefore &before)
         return;
     // Only the name: the folder (the path) is never touched.
     p->setName(name);
-    QSignalBlocker block(m_nameEdit);
-    m_nameEdit->setText(name);
+    if (shown)
+    {
+        QSignalBlocker block(m_nameEdit);
+        m_nameEdit->setText(name);
+    }
     emit paletteRenamed(p->id());
 }
 
@@ -2005,24 +2111,46 @@ void LookEditor::editValue(const std::function<void(QLCPalette *)> &change)
     QLCPalette *p = m_doc->palette(m_paletteId);
     if (p == NULL)
         return;
+    // The shown look first, then the others selected of its type.
+    QList<QLCPalette *> looks = { p };
+    for (quint32 id : alsoEditing())
+        looks << m_doc->palette(id);
     if (m_inValueEdit)
     {
-        change(p);              // the outer edit names it and keeps the step
+        for (QLCPalette *look : looks)
+            change(look);       // the outer edit names them and keeps the step
         return;
     }
-    const ValueBefore before = valueBefore(p);
+    QList<ValueBefore> before;
+    QList<quint32> ids;
+    QStringList key;
+    for (const QLCPalette *look : looks)
+    {
+        before << valueBefore(look);
+        ids << look->id();
+        key << QString::number(look->id());
+    }
     auto run = [&]() {
-        change(p);
-        followName(p, before);
+        for (int i = 0; i < looks.size(); ++i)
+        {
+            change(looks.at(i));
+            followName(looks.at(i), before.at(i), i == 0);
+        }
     };
     m_inValueEdit = true;
     if (PaletteOps *ops = m_doc->paletteOps())
-        ops->valueStep(tr("Edit %1").arg(before.name), p->id(), run,
-                       QStringLiteral("lookvalue:%1").arg(p->id()));
+        ops->valueStep(looks.size() == 1 ? tr("Edit %1").arg(before.first().name)
+                                         : tr("Edit %n looks", "", int(looks.size())),
+                       ids, run, UndoGesture::key(QStringLiteral("lookvalue:%1").arg(key.join(QLatin1Char(',')))),
+                       UndoGesture::held());
     else
         run();
     m_inValueEdit = false;
     m_shownSignature = valueSignature(p);
+    // The others show nowhere here: the host hears each one changed (its
+    // preview, its rows); the caller tells it the shown one.
+    for (int i = 1; i < looks.size(); ++i)
+        emit paletteChanged(looks.at(i)->id());
 }
 
 void LookEditor::slotNameEdited()
@@ -2928,7 +3056,23 @@ void LookEditor::slotBeamChanged(int)
 
     QVariantList vals;
     vals << focus << frost << iris;
-    editValue([vals](QLCPalette *pal) { pal->setValues(vals); });
+    // The slider moved sets that value; the others edited with this look
+    // keep their own two.
+    const QObject *from = sender();
+    const int which = from == m_beamFocusSlider ? 0 : from == m_beamFrostSlider ? 1
+                    : from == m_beamIrisSlider ? 2 : -1;
+    editValue([vals, which](QLCPalette *pal) {
+        if (which < 0)
+        {
+            pal->setValues(vals);
+            return;
+        }
+        QVariantList own = pal->values();
+        while (own.size() < 3)
+            own << 0;
+        own[which] = vals.at(which);
+        pal->setValues(own);
+    });
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
 }

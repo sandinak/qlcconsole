@@ -42,6 +42,11 @@ private slots:
     /** A value dropped on a layer changes the output at once; Undo and
      *  Redo (the tree's) take it back and put it back, the rows follow. */
     void editUndoRedo();
+    /** A cue's one-off value (a level, "A one-off value of this cue")
+     *  changed in the Look Editor is one undo step on the shared history:
+     *  Undo puts the value and the stage back, Redo again. Two layers'
+     *  Dimmer rows selected: one change sets both, one Undo puts both back. */
+    void aCuesOneOffValueIsAnUndoStep();
     void theDockedLayerMenuReleasesAndSetsTheCueMode();
     /** Carried-in rows: not removed, cleared or moved; a value set on one
      *  makes it the cue's own (the tree's rule). */

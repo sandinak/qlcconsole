@@ -96,6 +96,16 @@ private slots:
      *  converted; QLC_WORKBENCH_SHOT: pictures of Build ▸ Scenes with a
      *  scene and a collection loaded. */
     void aRealShowsCollectionsLoadAsLayers();
+    /** Every colour and level change in the Workbench is one undo step on
+     *  the shared history -- the Look Editor's picker, its R G B sliders, a
+     *  Dimmer look's bar, the channel console -- and Undo / Redo put the
+     *  stage back exactly. One press of the mouse is one step however long
+     *  the drag pauses; two clicks a moment apart are two. */
+    void everyColourAndLevelEditIsOneUndoStep();
+    /** Several look rows of one type selected: a colour pick (or a level)
+     *  sets each of them, ONE undo step that puts every one back; the line
+     *  says which it edits, and leaves a look of another type alone. */
+    void severalLookRowsOfOneTypeEditTogether();
 
 private:
     Scene *scene(const QString &name, const QString &path);

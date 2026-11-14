@@ -646,6 +646,10 @@ void PaletteOps::apply(const QList<State> &states, const QStringList &folders)
         }
         if (have == nullptr)
         {
+            // A value step puts a value back, never a palette: one the tree
+            // let go of since is the tree's to bring back (its own step).
+            if (s.value)
+                continue;
             QXmlStreamReader r(s.xml);
             while (!r.atEnd() && !r.isStartElement())
                 r.readNext();
@@ -810,44 +814,79 @@ bool PaletteOps::redo()
  * Value steps
  ****************************************************************************/
 
-bool PaletteOps::valueStep(const QString &label, quint32 paletteId, const std::function<void()> &change,
-                           const QString &mergeKey)
+bool PaletteOps::extendsTop(const QString &mergeKey, qint64 at, bool held) const
 {
-    if (m_doc->palette(paletteId) == nullptr)
+    if (mergeKey.isEmpty() || m_undo.isEmpty() || !m_redo.isEmpty())
         return false;
-    if (!isManaged(paletteId))
+    const Step &top = m_undo.last();
+    if (top.mergeKey != mergeKey || (!held && at - top.mergeAt >= 1500))
+        return false;
+    // A step of the tree's since (one history): that one is on top now.
+    const ShowTreeController *tree = m_doc->showTree();
+    return tree == nullptr || tree->undoStamp() < top.stamp;
+}
+
+bool PaletteOps::valueStep(const QString &label, quint32 paletteId, const std::function<void()> &change,
+                           const QString &mergeKey, bool held)
+{
+    const QList<quint32> ids = { paletteId };
+    return valueStep(label, ids, change, mergeKey, held);
+}
+
+bool PaletteOps::valueStep(const QString &label, const QList<quint32> &paletteIds,
+                           const std::function<void()> &change, const QString &mergeKey, bool held)
+{
+    QList<quint32> ids;
+    for (quint32 id : paletteIds)
+        if (m_doc->palette(id) != nullptr && !ids.contains(id))
+            ids << id;
+    if (ids.isEmpty())
+        return false;
+    QList<State> before;
+    for (quint32 id : ids)
     {
-        change();
-        return false;
+        State b = capture(id);
+        b.value = true;
+        before << b;
     }
-    State before = capture(paletteId);
-    before.value = true;
     change();
-    State after = capture(paletteId);
-    after.value = true;
-    if (!after.exists || (after.values == before.values && after.name == before.name
-                          && after.colourMacro == before.colourMacro && after.goboName == before.goboName
-                          && after.goboValues == before.goboValues))
+    QList<State> after;
+    bool differs = false;
+    for (const State &b : before)
+    {
+        State a = capture(b.id);
+        a.value = true;
+        if (!a.exists)
+            return false;
+        differs = differs || a.values != b.values || a.name != b.name || a.colourMacro != b.colourMacro
+                  || a.goboName != b.goboName || a.goboValues != b.goboValues;
+        after << a;
+    }
+    if (!differs)
         return false;
 
     const qint64 at = QDateTime::currentMSecsSinceEpoch();
-    if (!mergeKey.isEmpty() && !m_undo.isEmpty() && m_undo.last().mergeKey == mergeKey
-        && at - m_undo.last().mergeAt < 1500 && m_redo.isEmpty()
-        && m_undo.last().after.size() == 1 && m_undo.last().after.first().id == paletteId)
+    if (extendsTop(mergeKey, at, held))
     {
-        // The same palette, further on: keep where it started.
         Step &top = m_undo.last();
-        top.after[0] = after;
-        top.mergeAt = at;
-        m_doc->setModified();
-        emit changed();
-        return true;
+        bool same = top.after.size() == after.size();
+        for (int i = 0; same && i < after.size(); ++i)
+            same = top.after.at(i).id == after.at(i).id;
+        if (same)
+        {
+            // The same palettes, further on: keep where they started.
+            top.after = after;
+            top.mergeAt = at;
+            m_doc->setModified();
+            emit changed();
+            return true;
+        }
     }
 
     Step st;
     st.label = label;
-    st.before << before;
-    st.after << after;
+    st.before = before;
+    st.after = after;
     st.foldersBefore = st.foldersAfter = m_emptyFolders;
     st.mergeKey = mergeKey;
     st.mergeAt = at;
@@ -950,7 +989,7 @@ QSharedPointer<Scene> PaletteOps::sceneSnapshot(quint32 sceneId) const
 }
 
 bool PaletteOps::recordSceneStep(const QString &label, const QList<QSharedPointer<Scene>> &before,
-                                 const QString &mergeKey)
+                                 const QString &mergeKey, bool held)
 {
     QList<QPair<quint32, QSharedPointer<Scene>>> was, now;
     for (const QSharedPointer<Scene> &b : before)
@@ -968,8 +1007,7 @@ bool PaletteOps::recordSceneStep(const QString &label, const QList<QSharedPointe
         return false;
 
     const qint64 at = QDateTime::currentMSecsSinceEpoch();
-    if (!mergeKey.isEmpty() && !m_undo.isEmpty() && m_undo.last().mergeKey == mergeKey
-        && at - m_undo.last().mergeAt < 1500 && m_redo.isEmpty())
+    if (extendsTop(mergeKey, at, held))
     {
         Step &top = m_undo.last();
         // The same scenes, further on: keep where they started, take where

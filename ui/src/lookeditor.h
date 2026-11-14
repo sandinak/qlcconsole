@@ -87,6 +87,17 @@ public:
     /** The line as plain text (tests). */
     QString usedByText() const;
 
+    /** The other looks selected with the one shown (the Workbench's rows):
+     *  those of the shown look's type are edited with it -- a colour pick or
+     *  a level sets each of them, ONE undo step for all -- and a line says
+     *  so, naming the selected looks of another type it leaves alone. A
+     *  look shown afresh (another palette) edits alone again. */
+    void setAlsoEditing(const QList<quint32> &paletteIds);
+    /** The looks edited with the one shown (of its type, still there). */
+    QList<quint32> alsoEditing() const;
+    /** What the line says (empty: hidden). */
+    QString alsoNote() const;
+
     /** @name Encoder banks (EncoderBank: a MIDI controller's encoders)
      *  A turn sets the control the shown look's own page has for the
      *  attribute -- the same edit and the same undo step as a hand on it.
@@ -293,6 +304,13 @@ private:
     QLabel    *m_title;      //!< "used by N scene(s)" info line
     QLabel    *m_warning;
     QLabel    *m_trialNote;   //!< see setTrialNote()
+    QLabel    *m_alsoNote = nullptr;   //!< see setAlsoEditing()
+    /** setAlsoEditing()'s looks, as given (any type). */
+    QList<quint32> m_alsoGiven;
+    /** Whether looks of @a type are edited together (their page's every
+     *  edit is editValue()'s): not an Aim, an effect or a Formation. */
+    static bool editsTogether(int type);
+    void updateAlsoNote();
     QLabel    *m_usedBy;      //!< see setUsedBy()
 
     // Per-look fade override row (per scene+palette; hidden when no context
@@ -532,10 +550,12 @@ private:
     ValueBefore valueBefore(const QLCPalette *p) const;
     /** The name follows the value (PaletteNaming): only the part that said
      *  the old value is rewritten; a name of the user's own stays. */
-    void followName(QLCPalette *p, const ValueBefore &before);
+    void followName(QLCPalette *p, const ValueBefore &before, bool shown = true);
     /** Change the shown palette's value with @a change as one undo step on
      *  the palette stack, the name following it in the same step (a drag
-     *  is one step). Nested: the outer call keeps the step. */
+     *  -- one press of the mouse, UndoGesture -- is one step). The looks
+     *  edited with it (setAlsoEditing()) take the same @a change in that
+     *  step. Nested: the outer call keeps the step. */
     void editValue(const std::function<void(QLCPalette *)> &change);
     bool m_inValueEdit = false;
     /** The palette's value and name as this editor last showed or set
