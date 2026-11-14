@@ -19,7 +19,6 @@
 
 #include <QtTest>
 #include <QPointer>
-
 #include <QDir>
 #include <QScopeGuard>
 #include <QTreeWidgetItemIterator>
