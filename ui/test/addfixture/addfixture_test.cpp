@@ -478,7 +478,7 @@ void AddFixture_Test::selectionGeneric()
     QTreeWidgetItem* item = af.m_tree->topLevelItem(af.m_tree->topLevelItemCount() - 1);
     QVERIFY(item != NULL);
     // First, select the parent node so that selectionChanged() fires
-    QCOMPARE(item->childCount(), 6);
+    QCOMPARE(item->childCount(), 7);   // the Generic types, the IR Candle Remote among them
     af.m_tree->setCurrentItem(item);
     // Then, select the child to fire again
     item = item->child(0);
