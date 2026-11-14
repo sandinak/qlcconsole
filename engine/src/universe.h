@@ -312,7 +312,10 @@ public:
 
     /**
      * This is the actual function that writes data to an output patch
-     * A flag indicates if data has changed since previous iteration
+     * A flag indicates if data has changed since previous iteration.
+     * Every frame sent passes here: the Show-only channels are held in it
+     * (setShowOnlyLive()) whoever calls it -- the frame, Blackout, leaving
+     * Blind, a maintenance send. Serialised with processFaders().
      */
     void dumpOutput(const QByteArray& data, bool dataChanged);
 
@@ -621,10 +624,19 @@ private:
     /** Each fader is written by processFaders(); one that holds the
      *  Show-only channels (live) has them put back as they were after it */
     void writeFader(GenericFader *fader, bool keepShowOnly);
-    /** The Show-only channels of @p out at their safe value, the values
-     *  they had kept in m_showOnlyKept (restoreShowOnly() puts them back) */
-    void holdShowOnly(QByteArray &out);
-    void restoreShowOnly(QByteArray &out);
+    /** dumpOutput() with whether the show is live for this frame, read
+     *  once (processFaders() reads it once for the whole frame). Takes
+     *  care of Show only on every path a frame is sent by. */
+    void dumpOutputFrame(const QByteArray &data, bool dataChanged, bool live);
+    /** The Show-only channels of @p frame, as sent: at their safe value
+     *  (through the channel's modifier) when @p held, and in a Blackout
+     *  frame (@p blackout) unless Blackout-exempt -- a Blackout frame's
+     *  other channels are the raw stored values, never masked */
+    void holdShowOnly(QByteArray &frame, bool held, bool blackout);
+    /** True when the Show-only channels of @p frame differ from the last
+     *  frame sent, or the rules changed since: a changed frame, so a
+     *  plugin that sends only changes sends it. Keeps @p frame's. */
+    bool showOnlySentChanged(const QByteArray &frame);
 
 private:
     /** True when any channel up to @p count is Blackout-exempt */
@@ -650,12 +662,16 @@ private:
     QVector<int> m_showOnlyChannels;
     QByteArray m_showOnlySafe;
     QVector<uchar> m_showOnlyKept;
+    /** What the last frame sent had on them (under m_outputRulesMutex) */
+    QVector<uchar> m_showOnlyLastSent;
+    bool m_showOnlySentDirty = true;
+    /** The frame sent while they are held: a copy kept, not made per frame
+     *  (under m_frameMutex, as every dumpOutput() is) */
+    QByteArray m_showOnlyFrame;
     std::atomic<int> m_showOnlyCount { 0 };
     std::atomic<bool> m_showOnlyLive { false };
     /** Set going live: the next frame starts them from safe */
     std::atomic<bool> m_showOnlyReset { false };
-    /** The last frame sent held them (a change is a changed frame) */
-    bool m_showOnlyWasHeld = false;
 
     /*********************************************************************
      * Auto-open shutters

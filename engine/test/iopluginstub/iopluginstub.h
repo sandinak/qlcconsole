@@ -207,6 +207,11 @@ public:
 
     /** Fake universe buffer */
     QByteArray m_universe;
+    /** The last frame's dataChanged; and, when m_dropUnchanged, a frame
+     *  with it false is not taken (what a plugin that sends only changes
+     *  -- Art-Net's Standard mode -- does) */
+    bool m_lastDataChanged = false;
+    bool m_dropUnchanged = false;
 
     /*********************************************************************
      * Inputs

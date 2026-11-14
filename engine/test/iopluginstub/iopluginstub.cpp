@@ -118,8 +118,10 @@ QString IOPluginStub::outputInfo(quint32 output)
 void IOPluginStub::writeUniverse(quint32 universe, quint32 output, const QByteArray &data, bool dataChanged)
 {
     Q_UNUSED(universe)
-    Q_UNUSED(dataChanged)
 
+    m_lastDataChanged = dataChanged;
+    if (m_dropUnchanged && dataChanged == false)
+        return;
     m_universe = m_universe.replace(output * 512, data.size(), data);
 }
 

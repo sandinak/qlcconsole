@@ -334,18 +334,25 @@ public:
     void setHoldsShowOnly(bool hold) { m_holdsShowOnly.store(hold, std::memory_order_relaxed); }
 
     /** While one is in scope on a thread, the faders made there follow
-     *  @p gate (the MasterTimer, around each function's preRun(), write()
-     *  and postRun()). Nests; @p gate must outlive the scope. */
+     *  @p gate, the gate of function @p functionId (the MasterTimer, around
+     *  each function's preRun(), write() and postRun()). Nests; @p gate
+     *  must outlive the scope. */
     class CreationScope
     {
     public:
-        explicit CreationScope(const PreviewGate *gate);
+        explicit CreationScope(const PreviewGate *gate, quint32 functionId = 0xFFFFFFFF);
         ~CreationScope();
         CreationScope(const CreationScope &) = delete;
         CreationScope &operator=(const CreationScope &) = delete;
     private:
-        const PreviewGate *m_previous;
+        const PreviewGate *m_previousGate;
+        quint32 m_previousFunction;
     };
+
+    /** The gate of function @p functionId when it is the one writing on
+     *  this thread now (its CreationScope is in force), else null: what a
+     *  function it starts shares (Function::start()) */
+    static PreviewGate creationGateOf(quint32 functionId);
 
 private:
     /** The gate of the CreationScope in force on this thread, or null */

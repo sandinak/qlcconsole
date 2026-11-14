@@ -177,7 +177,9 @@ QByteArray OutputRuleKeeper::bitsFor(quint32 universe) const
             mark(Fixture::ExemptBlackout, char(Universe::BlackoutExempt));
         if (rules & Fixture::Switch)
             mark(Fixture::Switch, char(Universe::SwitchOutput));
-        if (rules & Fixture::OnAtOpen)
+        // Show only wins over On when not in use: "full when nothing sets
+        // it" would drive a laser or a flame with no GO at all.
+        if ((rules & Fixture::OnAtOpen) && (rules & Fixture::ShowOnly) == 0)
             mark(Fixture::OnAtOpen, char(Universe::OnAtOpenOutput));
         if (rules & Fixture::ShowOnly)
             mark(Fixture::ShowOnly, char(Universe::ShowOnlyOutput));

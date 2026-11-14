@@ -283,7 +283,8 @@ void CollectionEditor::slotTestClicked()
 
 FunctionParent CollectionEditor::functionParent() const
 {
-    return FunctionParent::master();
+    // An editor's Test: not the show, so a Show-only fixture stays safe.
+    return FunctionParent::editorTest(0x2);
 }
 
 void CollectionEditor::updateFunctionList()

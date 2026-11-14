@@ -706,6 +706,7 @@ void LedLayoutEditor::lightOnFixture(int head)
     if (m_source == nullptr)
     {
         m_source = new GenericDMXSource(m_doc);
+        m_source->setHoldsShowOnly(true);       // an editor, not the show
         m_source->setOutputEnabled(true);
         // The fixture's own master dimmer (in no head) open, or nothing shows.
         for (quint32 ci = 0; ci < quint32(mode->channels().size()); ++ci)
