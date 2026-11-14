@@ -88,6 +88,14 @@
 #define COL_NAME    0
 #define COL_DETAIL  1
 #define COL_CARRIES 2
+#define COL_OUTPUT   3
+#define COL_IP       4
+#define COL_U        5
+#define COL_MODE     6
+#define COL_INPUT    7
+#define COL_PROFILE  8
+#define COL_FEEDBACK 9
+#define COL_PT       10
 
 #define TESTPLUGINDIR "../../../engine/test/iopluginstub"
 
@@ -2797,14 +2805,6 @@ void ConnectionsTree_Test::connectionEditorRefusesATakenPortAndChangesNothing()
  * By universe: the patch as columns (the Overview sub-tab's, board Q153)
  ****************************************************************************/
 
-#define COL_OUTPUT   3
-#define COL_IP       4
-#define COL_U        5
-#define COL_MODE     6
-#define COL_INPUT    7
-#define COL_PROFILE  8
-#define COL_FEEDBACK 9
-#define COL_PT       10
 
 void ConnectionsTree_Test::byUniverseColumnsShowHideAndAreRemembered()
 {
