@@ -274,10 +274,11 @@ function isChord(r){return r==='lb'||r==='rb'||r==='lt'||r==='rt'}
    chord: no arm until both bumpers are up and squeezed afresh. */
 function chord(){var a=padAction('lb'),lb=QPad.down('lb'),rb=QPad.down('rb'),tr=QPad.down('lt')||QPad.down('rt');
   if(lb&&rb&&tr)spent=true;else if(!lb&&!rb)spent=false;
-  if(!(lb&&rb)||tr||spent){clearTimeout(armT);armT=null;return}
+  if(!(lb&&rb)||tr||spent||QPad.isOpen()){clearTimeout(armT);armT=null;return}
   if(armT)return;
   armT=setTimeout(function(){armT=null;
-    if(!(QPad.down('lb')&&QPad.down('rb'))||QPad.down('lt')||QPad.down('rt')||spent)return;
+    /* The controller test opened inside the chord's time: nothing pressed there arms. */
+    if(!(QPad.down('lb')&&QPad.down('rb'))||QPad.down('lt')||QPad.down('rt')||spent||QPad.isOpen())return;
     padArmed=!padArmed;padStopped=false;showArm();
     if(navigator.vibrate)navigator.vibrate(padArmed?[30,60,30]:150)},(a&&a.hold)||500)}
 QPad.on({
