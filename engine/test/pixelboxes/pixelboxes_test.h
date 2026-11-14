@@ -23,6 +23,7 @@
 #include <QObject>
 #include <QList>
 
+class EffectInstance;
 class Doc;
 class Fixture;
 class QLCPalette;
@@ -71,6 +72,12 @@ private:
     void go();
     void run(int ms);
     QByteArray sends(const QString &fixture, int from, int n) const;
+    /** One frame by hand (the master timer stopped): its tick, then
+     *  every universe's frame, as the timer and universe threads run it. */
+    void frame();
+    /** The effect played at @p ms of its time -- its clock pinned there,
+     *  the runner's tick -- and that frame: what the universes then hold. */
+    void frameAt(EffectInstance *inst, qint64 ms);
     /** A Breathe (dimmer-phaser at its preset) on the step tops in White at
      *  20%: the cue's one layer. */
     bool breatheOnTheStepTops(double rate, int runs);

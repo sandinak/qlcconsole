@@ -291,7 +291,11 @@ void WledConfigCheck_Test::aFixtureAtAnOldAddressFollowsItsDeviceByMac()
     QVERIFY2(said.startsWith(QString("OfficeStaff is this device (e0:8c:fe:f9:92:e0): its address was %1, "
                                      "now %2.").arg(old, wled.address())), qPrintable(said));
     QVERIFY(check.writeFailed(wled.address()) == false);
-    QCOMPARE(wled.posted.size(), 1);
+    /* One set-up, one write of its settings. The universe's WLED output
+       sends its look to /json/state on its own timer, too: waited for here,
+       as a slow host (GitHub's macOS runner) had it in before the count. */
+    QTRY_VERIFY(!wled.postedTo("/json/state").isEmpty());
+    QCOMPARE(wled.postedTo("/json/cfg").size(), 1);
     QVERIFY(m_doc->isModified());
 }
 
@@ -360,8 +364,8 @@ void WledConfigCheck_Test::aWledWithNoFixtureIsSetUpWithoutAName()
 
     WledConfigCheck check(m_doc);
     check.setUpUniverse(0);
-    QTRY_COMPARE(wled.posted.size(), 1);
-    const QJsonObject sent = wled.posted.first().second;
+    QTRY_COMPARE(wled.postedTo("/json/cfg").size(), 1);                 // not the output's /json/state
+    const QJsonObject sent = wled.postedTo("/json/cfg").first();
     QVERIFY(sent.contains("id") == false);                               // its name stays
     QCOMPARE(sent.value("def").toObject().value("on").toBool(true), false);
     QCOMPARE(sent.value("if").toObject().value("live").toObject().value("en").toBool(true), false);
