@@ -644,7 +644,7 @@ void PreshowCheck::rebuild()
     QGridLayout *grid = new QGridLayout(content);
     // The fix sits by its line, not across a wide screen: the words stop
     // at a reading width and what is left goes after the buttons.
-    grid->setColumnStretch(1, 1);
+    grid->setColumnStretch(1, 4);
     grid->setColumnStretch(3, 1);
     grid->addItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Minimum), 0, 3);
     grid->setHorizontalSpacing(14);
