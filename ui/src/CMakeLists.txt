@@ -163,6 +163,9 @@ add_library(${module_name}
     monitor/fixturefields.cpp monitor/fixturefields.h
     monitor/humanfigure.cpp monitor/humanfigure.h
     monitor/targetitem.cpp monitor/targetitem.h
+    monitor/handprops.cpp monitor/handprops.h
+    monitor/monitorgraphicsview_heldprops.cpp
+    monitor/structurestudioview_heldprops.cpp
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h
     pmjoverlay.cpp pmjoverlay.h

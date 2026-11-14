@@ -113,8 +113,28 @@ public:
         GrandPiano,  ///< a grand, lid up: 1.5 x 1.8 m
         UprightPiano,///< an upright against a wall: 1.5 x 0.6 m
         Rack,        ///< an equipment / amp rack: 0.6 x 0.6 m, 1.2 m tall
-        Speaker      ///< a powered speaker on casters: 0.55 x 0.5 m, the box 1.0 m tall, 0.1 m up
+        Speaker,     ///< a powered speaker on casters: 0.55 x 0.5 m, the box 1.0 m tall, 0.1 m up
+        Staff,       ///< a hand prop: a pole a person can hold (propLength(), 1.8 m)
+        Candle       ///< a hand prop: a flameless candle, lit by an IR remote (litBy())
     };
+
+    /** The kinds a Person can hold, cue by cue, in a blocking
+     *  (docs/design/BLOCKING.md, "Props someone holds"): small things a
+     *  performer carries. Furniture, instruments, marks and shapes are not:
+     *  nobody walks off with a grand piano, and an Area held in a hand is
+     *  not an area. A Person is never one, so a hold can never loop. */
+    static bool isHandPropKind(Kind k) { return k == Kind::Staff || k == Kind::Candle; }
+    /** How long a hand prop is, metres: a staff 1.8, a candle 0.15. */
+    static float defaultPropLength(Kind k);
+    /** This prop's length: personHeight() when one is given (the Edit
+     *  Target dialog's Height row), else the kind's. */
+    float propLength() const
+    { return m_personHeight > 0.0f ? m_personHeight : defaultPropLength(m_kind); }
+
+    /** A candle's IR remote: the fixture whose SELECT channel the show sets
+     *  (CandleRemote). UINT_MAX = the only one in the show. */
+    quint32 litBy() const { return m_litBy; }
+    void setLitBy(quint32 fid) { m_litBy = fid; }
 
     /** The band instruments (Keyboard, pianos, Rack): a kind with a real
      *  footprint, drawn as the thing itself on the plot and in the rig view. */
@@ -281,20 +301,30 @@ public:
      *  Default position (so a venue moving the Default mark moves the
      *  blocked one with it), and, for a line or an area, its own shape.
      *  Anything not set is Default's. */
+    /** Where a hand prop is in a blocking: Unset = what Default says (and
+     *  in Default: its own place), at its own place, in a Person's hand
+     *  (holder), or not on stage at all (not drawn). */
+    enum class Hold { Unset, OwnPlace, HeldBy, OffStage };
+    static QString holdToString(Hold h);
+    static Hold stringToHold(const QString &s);
+
     struct Blocked
     {
+        Hold hold = Hold::Unset;          ///< hand props only
+        quint32 holder = UINT_MAX;        ///< hold == HeldBy: the Person
         bool hasOffset = false;
         QVector3D offset;
         bool hasLine = false;
         QVector<QVector3D> linePoints;   ///< relative to the centre, as linePoints()
         bool hasFootprint = false;
         QSizeF footprint;
-        bool isEmpty() const { return !hasOffset && !hasLine && !hasFootprint; }
+        bool isEmpty() const { return !hasOffset && !hasLine && !hasFootprint && hold == Hold::Unset; }
     };
 
     /** The override for blocking @p set; an empty one when it has none. */
     Blocked blocked(quint32 set) const;
-    /** Replace the override for @p set; an empty one removes it. */
+    /** Replace the override for @p set; an empty one removes it. Set 0
+     *  (Default) keeps only a hold: Default's place is the target itself. */
     void setBlocked(quint32 set, const Blocked &b);
     void clearBlocked(quint32 set) { setBlocked(set, Blocked()); }
     bool isBlockedIn(quint32 set) const;
@@ -308,6 +338,10 @@ public:
     QVector3D positionIn(quint32 set) const;
     QVector<QVector3D> linePointsIn(quint32 set) const;
     QSizeF footprintIn(quint32 set) const;
+    /** A hand prop's hold in @p set: the set's own, else Default's, else
+     *  OwnPlace (never Unset). @p holder gets the Person's id when HeldBy.
+     *  Read through MonitorProperties::targetHolder() / targetOnStage(). */
+    Hold holdIn(quint32 set, quint32 *holder = nullptr) const;
 
     /********************************************************************
      * Load & Save
@@ -346,7 +380,8 @@ private:
     bool      m_locked = false;
     quint32   m_layerId = 0;   ///< 2D-map organizational layer (0 = Default)
     quint32   m_groupId = 0;   ///< 2D-map group (0 = ungrouped)
-    QHash<quint32, Blocked> m_blocked;   ///< by blocking set; guarded by m_positionMutex
+    quint32   m_litBy = UINT_MAX;            ///< Candle: its remote; UINT_MAX = the only one
+    QHash<quint32, Blocked> m_blocked;   ///< by blocking set (0: Default's hold); guarded by m_positionMutex
 };
 
 /** @} */

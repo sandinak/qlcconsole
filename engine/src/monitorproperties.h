@@ -1029,6 +1029,26 @@ public:
      *  live cue's blocking (BLOCKING.md), as a Studio drag in that set. */
     void setTargetPositionIn(class StageTarget *t, quint32 blocking, const QVector3D &p);
 
+    /** Props someone holds (BLOCKING.md): the Person holding hand prop
+     *  @p t in @p blocking, or nullptr (at its own place, not on stage, not
+     *  a hand prop, or its holder gone or not a Person). */
+    const class StageTarget *targetHolder(const class StageTarget *t,
+                                          quint32 blocking = currentBlockingMarker()) const;
+    /** Whether @p t is on stage in @p blocking: false for a hand prop the
+     *  blocking puts off stage. Views do not draw what is not. */
+    bool targetOnStage(const class StageTarget *t, quint32 blocking = currentBlockingMarker()) const;
+    /** Where person @p p's feet are in @p blocking: their place, on the deck
+     *  under it (where the figure stands). Everything a person holds -- a
+     *  wand, a staff, a candle -- is placed from here. */
+    QVector3D holderFeet(const class StageTarget *p, quint32 blocking = currentBlockingMarker()) const;
+    /** Where a prop held by @p p is: a hand's reach to their right
+     *  (stage right as they face the house) and a little in front, at hand
+     *  height (kHandShare of their height). targetPosition() of a held prop. */
+    QVector3D handPoint(const class StageTarget *p, quint32 blocking = currentBlockingMarker()) const;
+    /** Put hand prop @p t in @p blocking: at its own place, held by
+     *  @p holder, or off stage. Undo is the caller's (TargetBlock). */
+    void setTargetHold(class StageTarget *t, quint32 blocking, int hold, quint32 holder = UINT_MAX);
+
     /** A target's footprint (area, kit) in @p blocking. */
     QSizeF targetFootprint(const class StageTarget *t,
                            quint32 blocking = currentBlockingMarker()) const;

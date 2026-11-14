@@ -125,6 +125,8 @@ add_library(${module_name} SHARED
     tower.cpp tower.h
     performerfill.cpp performerfill.h
     stagetarget.cpp stagetarget.h
+    candleremote.cpp candleremote.h
+    heldprops.cpp heldprops.h
     blocking.cpp blocking.h
     truss.cpp truss.h
     networkroute.cpp networkroute.h

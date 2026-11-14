@@ -152,6 +152,22 @@ different place, show the cue page's **Blocking** row and the Lighting
 Studio's **Blocking ▾** button (banner: *Moving targets in: …*). Not part of
 the hands-on; see the help's Stage Targets ▸ Blocking.
 
+## Teacher note: props someone holds
+
+A staff that one actor carries in Act 1 and hands to another in Act 2 is
+the same question as where they stand: who has it is part of the
+blocking. Why it matters: the board op never cues "she picks it up". The
+cue whose blocking puts the staff in her hand is when she has it, and it
+travels with her wherever that blocking puts her. Light is aimed at the
+person, never at the prop, so a look on her lands the same with or
+without it. Hand-held IR candles work the same way for who has one; the
+show lights them with a look on the candle remote (Select On, a Window
+long enough for the cast to catch it). The plot draws what was sent, not
+what each candle did: a candle in a pocket missed the button. To show
+it: right-click a prop on the plot ▸ **Held By**, or select a row of
+singers ▸ **Give Each a Prop** ▸ Candle. Not part of the hands-on; see
+the help's Stage Targets ▸ Props someone holds and Candles.
+
 ## How this lesson was checked
 
 Every step of the handout is run by the course test (`ui/test/courseshow`,

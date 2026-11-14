@@ -136,8 +136,10 @@ QVector3D PixelPath::heldCentre(const MonitorProperties *props, const StageTarge
 {
     if (person == nullptr || props == nullptr)
         return QVector3D();
-    // Where the person stands in the blocking read (BLOCKING.md).
-    const QVector3D at = props->targetPosition(person);
+    /* Where the person stands in the blocking read (BLOCKING.md), feet on
+       the deck under them: the same holder read as a held staff or candle
+       (MonitorProperties::holderFeet()). */
+    const QVector3D at = props->holderFeet(person);
     // Facing the audience (+Y downstage); the hand a forearm in front.
     return QVector3D(at.x(), at.y() + 0.25f, at.z() + rp.holdHeight);
 }

@@ -78,9 +78,10 @@ line with coloured dots. No beam.
 **Held by** (`heldBy`, a Person target): its middle is at the person's
 position, `holdHeight` (1.0 m) up and a hand's reach (0.25 m) downstage of
 them, leaning `holdTilt` (20 degrees) forward; it moves with the person.
-Unheld it stands upright where it was placed. Per-cue blocking positions do
-not exist on main yet; when they land, the held position should read the
-target through the same resolver.
+Unheld it stands upright where it was placed. It reads its holder through
+`MonitorProperties::holderFeet()`, in the blocking read, as a held staff or
+candle does (BLOCKING.md, "Props someone holds"); the wand's hold itself is
+not per cue.
 
 Decided (can change): the wand is a pixel path, not a new stage look, so any
 pixel fixture can be one without a new menu item.

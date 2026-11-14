@@ -1123,6 +1123,10 @@ private:
      *  added up, over the room light. Only Person targets: every other kind is
      *  a point the light is aimed at, and a point has nothing to draw. */
     void drawStageFigures(QPainter &p) const;
+    /** A staff or a candle (BLOCKING.md, "Props someone holds"), where its
+     *  blocking puts it: on the deck, in a hand, or not drawn when off
+     *  stage. structurestudioview_heldprops.cpp. */
+    void drawHandProp(const class StageTarget *t, QPainter &p) const;
 
     /** A beam drawn this frame, kept so the figures it passes through can be
      *  lit by it. Filled by drawMoverSolid() during the depth-sorted pass,
