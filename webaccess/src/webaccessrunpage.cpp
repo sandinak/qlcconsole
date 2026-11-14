@@ -290,8 +290,8 @@ QPad.on({
           if(canRig())cmd('alloff');if(navigator.vibrate)navigator.vibrate([150,80,150,80,150])}
         return}
       chord();
-      /* RT's pull is the hit, below -- not with a bumper down (the stop in the making). */
-      if(r!=='rt'||QPad.down('lb')||QPad.down('rb'))return}
+      /* RT's pull on its own is the hit, below -- not with a bumper or LT down (the stop in the making). */
+      if(r!=='rt'||QPad.down('lb')||QPad.down('rb')||QPad.down('lt'))return}
     var a=padAction(r);if(!a||a.do==='arm'||a.do==='hold')return;
     if(!padArmed){msg('Not armed: hold LB and RB.');return}
     if(a.guard&&!QPad.down(a.guard)){msg('Hold '+a.guard.toUpperCase()+' with it.');return}

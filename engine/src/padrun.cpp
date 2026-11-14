@@ -277,9 +277,10 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
         /* Both bumpers and no trigger, held: the arm changes. Anything
            else of the four ends the timing. */
         armChordUpdate(universe);
-        /* RT's pull is the hit (below) -- not with a bumper down, which is
-           a chord in the making (the stop). The rest of the four is done. */
-        if (!rtPressed || h.lb || h.rb)
+        /* RT's pull on its own is the hit (below) -- not with a bumper or
+           LT down: LT + RT together is the stop in the making, never a
+           hit. The rest of the four is done. */
+        if (!rtPressed || h.lb || h.rb || h.lt.isDown())
             return true;
     }
 

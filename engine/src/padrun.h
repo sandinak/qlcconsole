@@ -54,8 +54,10 @@ class Doc;
  *   LT held              the safety: no cue moves without it
  *   armed, LT held + A   GO            armed, LT held + B   Back
  *   armed, LT held + X   Sub GO        armed, LT held + Y   Sub Back
- *   armed, RT            fire the hit that is armed now (one hit for now;
- *                        several would be RT held + X / Y / A / B)
+ *   armed, RT on its own fire the hit that is armed now (not with LT or
+ *                        a bumper down: that is the stop in the making;
+ *                        one hit for now, several would be RT held + X / Y
+ *                        / A / B)
  *   LB + RB + LT + RT    EMERGENCY STOP: everything stops (ALL OFF), armed
  *                        or not; the arm drops and the pad shows red
  *   (the bumpers are the mode only: the arm, and the stop's four)

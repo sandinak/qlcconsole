@@ -86,7 +86,9 @@ them:
    never arms.
 3. **The left trigger is the safety.** No cue moves without it: armed, hold
    **LT** (L2) and press the button.
-4. **The right trigger is the hit.** Armed, pull **RT** (R2).
+4. **The right trigger is the hit.** Armed, pull **RT** (R2) on its own:
+   with LT or a bumper down it is no hit (that is the emergency stop in
+   the making).
 5. **The emergency stop is all four:** LB + RB + LT + RT.
 
 | Does | Xbox | PlayStation |
@@ -96,7 +98,7 @@ them:
 | **Back** | armed, hold LT + B | armed, hold L2 + Circle |
 | **Sub GO** | armed, hold LT + X | armed, hold L2 + Square |
 | **Sub Back** | armed, hold LT + Y | armed, hold L2 + Triangle |
-| Fire the **armed hit** (below) | armed, pull RT | armed, pull R2 |
+| Fire the **armed hit** (below) | armed, pull RT on its own | armed, pull R2 on its own |
 | **Emergency stop**: everything off | LB + RB + LT + RT | L1 + R1 + L2 + R2 |
 | Say the list and what's on standby | RS click | R3 |
 | Walk the show (below), not while armed | Menu | Options |
@@ -155,7 +157,7 @@ them:
 
 ### Fire a hit from the pad
 
-Armed, a pull of **RT (R2)** fires the hit that is armed right now. A
+Armed, a pull of **RT (R2)** on its own fires the hit that is armed right now. A
 [scoped hit](show-tree.md) is armed while its place is live: under a cue
 that is running, in a cue list, in the current production or everywhere.
 Where several are armed the **narrowest** wins, exactly as on a Virtual
@@ -167,8 +169,8 @@ Use it to call a one-shot, say a breathe, off a hit in a cue.
 - Two or more hits at the narrowest place take turns, one a press.
 - With no hit armed the pad says "No hit armed." and buzzes long. Not
   armed, it says "Not armed: hold LB and RB.", as for GO. One pull is one
-  press, however long it is held; a pull with a bumper down does nothing
-  (that is the emergency stop in the making).
+  press, however long it is held; a pull with LT or a bumper down does
+  nothing (that is the emergency stop in the making).
 - One hit for now. Several on the pad would be RT held with X, Y, A or B.
 - Hits fire in **Operate** only, as a button does. It is not a run command:
   it starts the hit's look the way a VC button's press does.
