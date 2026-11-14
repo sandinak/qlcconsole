@@ -5052,6 +5052,24 @@ void AppViews_Test::theFooterSaysWhatLightsTheStage()
     QVERIFY2(whole.contains(QString::fromUtf8("(Show Tree) \xc2\xb7 Act 1 running")) && !chip->text().contains("Verse"),
              qPrintable(whole));
     shots("ontherig-over-run");
+    // The chip is never drawn cut at the sizes the visual check looks at: what shows is a
+    // whole form of the line (it shortens longest-first before it elides), inside the chip.
+    for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        m_app->resize(sz);
+        for (int i = 0; i < 5; ++i)
+            QCoreApplication::processEvents();
+        m_app->updateStageIndicator();
+        QFont bold = chip->font();
+        bold.setBold(true);
+        const QString at = QStringLiteral("%1 wide: \"%2\" in %3 px").arg(sz.width()).arg(chip->text()).arg(chip->width());
+        QVERIFY2(chip->text().startsWith(QStringLiteral("Stage: ")), qPrintable(at));
+        QVERIFY2(!chip->text().contains(QString::fromUtf8("\xe2\x80\xa6")), qPrintable(at + " is elided"));
+        QVERIFY2(chip->text().endsWith(QLatin1Char(')')) || chip->text().endsWith(QStringLiteral("Chorus"))
+                     || chip->text().endsWith(QStringLiteral("running")), qPrintable(at + " is cut"));
+        QVERIFY2(QFontMetrics(bold).horizontalAdvance(chip->text()) <= chip->width(), qPrintable(at + " is wider than the chip"));
+    }
+    m_app->resize(1280, 800);
     // ...the list stops: still the on-rig cue, now alone...
     doc->masterTimer()->stopAllFunctions();
     QTRY_VERIFY_WITH_TIMEOUT(!list->isRunning(), 5000);
