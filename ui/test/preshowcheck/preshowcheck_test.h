@@ -30,6 +30,33 @@ private slots:
     void init();
     void cleanup();
 
+    /** Every universe reaching its node: no output (red, Open Connections),
+     *  an output (green), a node not answering (red, the entry's own fix) */
+    void outputsReachTheirNodes();
+    /** Show Review: a blocker is red and Open Show Review goes to it; none
+     *  is green */
+    void showReviewBlockers();
+    /** Local Network refused (macOS, every network output failing) is red
+     *  and opens Settings ▸ Performance; sending is green; elsewhere not used */
+    void localNetwork();
+    /** A pad patched and away is red (Show in Connections); here is green;
+     *  none patched is not used */
+    void padsPresent();
+    /** Autosave off is a check with Turn It On (which turns it on); failed
+     *  is red; on is green */
+    void autosave();
+    /** Battery, the screen, Wi-Fi and the rest of Settings ▸ Performance */
+    void thisComputer();
+    /** The footer's other entries: Show Details… opens the readiness dialog */
+    void readinessFooter();
+    /** Each line says its state in a symbol and a word; the summary too;
+     *  the channel check is by hand and offers Quick Focus */
+    void neverColourAlone();
+    /** Show Review's Before the House Opens… opens the page */
+    void reviewPanelOpensIt();
+    /** Fix ▸ on a finding whose cue was deleted says the cue is gone */
+    void fixOnAGoneCueSaysSo();
+
     void screenshots();
 
 private:

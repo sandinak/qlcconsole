@@ -30,6 +30,8 @@
 #include <QMenu>
 
 #include "showreviewpanel.h"
+#include "showtreecontroller.h"
+#include "preshowcheck.h"
 #include "monitorproperties.h"
 #include "showreviewmarker.h"
 #include "showtreeview.h"
@@ -70,6 +72,14 @@ ShowReviewPanel::ShowReviewPanel(Doc *doc, QWidget *parent)
     recheckButton->setToolTip(tr("Run every check again"));
     connect(recheckButton, &QPushButton::clicked, this, &ShowReviewPanel::recheck);
     top->addWidget(recheckButton);
+    // The show's design is one part of being ready: the page before a show
+    // has the rest (outputs, pads, this computer, autosave).
+    QPushButton *preshow = new QPushButton(tr("Before the House Opens…"), this);
+    preshow->setObjectName(QStringLiteral("showReviewPreshow"));
+    preshow->setToolTip(tr("One page before a show: Show Review's blockers, every universe reaching its "
+                           "node, the controllers, this computer, autosave, and the channel check"));
+    connect(preshow, &QPushButton::clicked, this, [this]() { PreshowCheck::openFor(m_doc, this); });
+    top->addWidget(preshow);
     lay->addLayout(top);
 
     QHBoxLayout *filters = new QHBoxLayout;
@@ -577,14 +587,49 @@ bool ShowReviewPanel::fixSelected()
         jump = m_findings.at(idx).jump;
         data = m_findings.at(idx).jumpData;
     }
+    // A cue deleted since the check: say so, rather than go nowhere.
+    m_gone = gonePlace(m_doc, jump, data);
+    if (!m_gone.isEmpty())
+        return false;
     return runJump(this, jump, data);
+}
+
+QString ShowReviewPanel::gonePlace(Doc *doc, const QString &jump, const QVariantList &data)
+{
+    if (doc == nullptr || data.isEmpty())
+        return QString();
+    bool ok = false;
+    const quint32 id = data.first().toUInt(&ok);
+    if (!ok)
+        return QString();
+    if (jump == QLatin1String("cue") && doc->showTree()->listOfCue(id) == nullptr)
+    {
+        // A cue's place, or one of its layers' (PWR-12 goes to the layer).
+        for (const ShowTree::Production &p : doc->showTree()->productions())
+            for (const ShowTree::CueList &list : p.lists)
+                for (const ShowTree::Cue &cue : list.cues)
+                    for (const ShowTree::Layer &layer : cue.layers)
+                        if (layer.id == id)
+                            return QString();
+        return tr("That cue is gone: it was deleted after the check.");
+    }
+    if (jump == QLatin1String("list") && doc->showTree()->cueList(id) == nullptr)
+        return tr("That cue list is gone: it was deleted after the check.");
+    if (jump == QLatin1String("function") && doc->function(id) == nullptr)
+        return tr("That scene or effect is gone: it was deleted after the check.");
+    if (jump == QLatin1String("palette") && doc->palette(id) == nullptr)
+        return tr("That palette is gone: it was deleted after the check.");
+    return QString();
 }
 
 void ShowReviewPanel::fixOrSay()
 {
     // Never a click that does nothing: the finding's place may be gone.
+    m_gone.clear();
     if (m_tree->selectedItems().count() == 1 && !fixSelected())
-        m_summary->setText(tr("⚠ Couldn't go there: it changed or is gone. Re-check."));
+        m_summary->setText(m_gone.isEmpty()
+                           ? tr("⚠ Couldn't go there: it changed or is gone. Re-check.")
+                           : QStringLiteral("⚠ ") + m_gone + QLatin1Char(' ') + tr("Re-check to clear it."));
 }
 
 bool ShowReviewPanel::runJump(QWidget *parent, const QString &jumpTo, const QVariantList &data)

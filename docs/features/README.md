@@ -38,6 +38,7 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 | [Show control (QLab)](show-control.md) | Cue numbers and cue lists; QLab (or anything else) firing cues over MIDI Show Control or OSC |
 | [Effects](effects.md) | Every built-in effect, by what it does, and writing your own |
 | [Keyboard and mouse](shortcuts.md) | Every shortcut, by view |
+| [Before the house opens](dress-rehearsal.md) | One page before a show (Show Review's blockers, every universe reaching its node, Local Network, the controllers, power, the screen, autosave), the channel check from the pad, and the dress-rehearsal checklist for the room |
 | [Troubleshooting](troubleshooting.md) | When lights, the Lighting Studio or Rig Overview, files or fixtures aren't doing what you expect |
 | [Software updates](updates.md) | Update checks from GitHub, the footer chip, installing at quit (never during a show), channels, and turning it off for a school |
 

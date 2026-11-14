@@ -169,6 +169,7 @@
 #include "showoperate.h"
 #include "teachingsettings.h"
 #include "showreviewpanel.h"
+#include "preshowcheck.h"
 #include "showreviewmarker.h"
 #include "contextmenus.h"
 #include "showreview.h"
@@ -2090,6 +2091,8 @@ void App::updateOutputReadiness()
 void App::slotDocModified(bool state)
 {
     updateWindowTitle();
+    if (state == false)
+        m_autosaveFailure.clear();      // saved: the failed autosave is moot
 
     /* Saving changes what the programmer chip should SAY without changing what
        the programmer holds, so it has to be re-rendered here too -- otherwise
@@ -2361,7 +2364,21 @@ void App::slotModeOperate()
         else
             return;
     }
+    const bool teachingWasSaid = m_teachingNoticeShown;
     m_doc->setMode(Doc::Operate);
+
+    /* Before the House Opens, offered once a session by the Operate switch:
+       a quiet line, never a dialog, and not over the Teaching notice that
+       going to Operate may just have shown. Not to a start nobody is there
+       for (-p, kiosk). */
+    if (m_doc->mode() == Doc::Operate && !m_preshowOffered && !m_unattendedOperate && !m_doc->isKiosk()
+        && teachingWasSaid == m_teachingNoticeShown && !m_doc->fixtures().isEmpty())
+    {
+        m_preshowOffered = true;
+        showViewNotice(tr("Before the house opens: one page checks every universe reaching its node, "
+                          "the controllers, this computer and autosave."),
+                       tr("Check Now"), []() { PreshowCheck::openShared(); });
+    }
 }
 
 void App::openShowSettings()
@@ -7848,6 +7865,7 @@ void App::autosaveFailed(const QString &why)
 {
     // Never silent: a designer working for hours believes a recovery copy
     // exists. The chip says it failed until the next autosave or save.
+    m_autosaveFailure = why;
     if (m_statusDirtyLabel == NULL)
         return;
     setChipText(m_statusDirtyLabel, tr("⚠ Autosave failed"));
@@ -7957,6 +7975,7 @@ void App::slotAutosave()
     // just on the dirty transition) and flips this back to "Unsaved
     // changes" on its own — no extra tracking state needed.
     m_lastAutosaveTime = QTime::currentTime().toString("hh:mm:ss");
+    m_autosaveFailure.clear();
     if (m_statusDirtyLabel != NULL)
     {
         /* The chip keeps saying "Unsaved changes" -- they are, an autosave is
@@ -8316,6 +8335,27 @@ void App::initStatusBar()
         ShowReviewPanel::setJumper([this](QWidget *parent, const QString &jump, const QVariantList &data) {
             return reviewJump(parent, jump, data);
         });
+        // Before the House Opens (docs/features/dress-rehearsal.md): what
+        // the app knows about being ready, on one page. These are the parts
+        // only the app holds; the rest it reads itself.
+        PreshowCheck::setShared(m_doc, this);
+        PreshowCheck::Hooks preshow;
+        preshow.pads = [this]() {
+            return m_inputNotices != nullptr ? m_inputNotices->devices() : QList<InputDeviceNotices::Device>();
+        };
+        preshow.autosaveOn = [this]() { return isAutosaveEnabled(); };
+        preshow.autosaveMinutes = [this]() { return autosaveInterval(); };
+        preshow.autosaveFailure = [this]() { return m_autosaveFailure; };
+        preshow.turnAutosaveOn = [this]() { setAutosaveEnabled(true); };
+        preshow.openPerformance = [this](QWidget *parent) {
+            AppSettings settings(this, parent != nullptr ? parent : this);
+            settings.showPerformance();
+            settings.exec();
+            if (PreshowCheck::shared() != nullptr)
+                PreshowCheck::shared()->refresh();
+        };
+        preshow.quickFocus = [this](QWidget *) { slotFocusMode(); };
+        PreshowCheck::setHooks(preshow);
         connect(m_doc->showReview(), &ShowReview::reviewed, this, &App::updateReviewStatus);
         connect(m_doc->showReview(), &ShowReview::acceptancesChanged, this, &App::updateReviewStatus);
         m_reviewTimer = new QTimer(this);
