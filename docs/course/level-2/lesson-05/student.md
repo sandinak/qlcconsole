@@ -118,6 +118,35 @@ Why it matters on the real rig: the focus you did in Lesson 3.6 is for
 Default, and a blocking is an offset from it, so a venue's correction
 carries into every set.
 
+## Props in a hand: a staff in one cue, gone in a later one
+
+A **Staff** or a **Candle** target can be carried. Who holds it is part of
+the blocking, so it is cued the way the places are: the cue whose blocking
+puts the staff in Ann's hand is when she gets it, and a later cue whose
+blocking says otherwise takes it away. Nobody cues "she picks it up". It
+goes wherever she goes, in the plot, the front and side views and the Rig
+Overview. Light is aimed at the person, never the prop, so a look on her
+lands the same either way.
+
+1. In the Lighting Studio, pick the blocking in **Blocking ▾** (or **Save
+   Positions as Blocking…** for a new one) that the staff's cue uses.
+2. Right-click the staff ▸ **Held By** ▸ Ann. In another blocking, right-click it again ▸
+   **Its Own Place** or **Not on Stage**. Each cue gets the staff, or
+   loses it, with its blocking.
+3. For a row of singers, select them all, right-click one ▸ **Give Each a
+   Prop** ▸ **Candle**. Each gets one in the hand, in one Undo step. Do it
+   in a blocking set, and only the cues using that set have them.
+
+The candles are lit by a cue, not by the prop. Patch one **IR Candle
+Remote** fixture (every candle hears the same remote); a look in the cue
+sets its **Select**: **On**, **Off**, **Candle** (flicker), **Light**
+(steady), **Dim** or **Brighten**. **Dim** and **Brighten** are button
+presses, one step each, not a level; the blaster repeats a button for the
+**Window** you set, so give it long enough for the cast to catch the
+beam. Leave Select without a fade: a fade passes through the other
+buttons on the way. The plot shows what was last sent, not what a candle
+did: one in a pocket missed the button.
+
 ## Exit ticket
 
 1. What does a **line target** do that a point target doesn't?
@@ -125,6 +154,9 @@ carries into every set.
 3. Why does the Button have a one-second fade in?
 4. What did the spots' colour wheel and ring do with Red, and why not an
    exact red?
+5. A soloist carries a staff in the verse and hands it off before the
+   chorus. What do you cue, and what do you not?
+6. Why is **Dim** on the candle remote not a level?
 
 ## At home
 

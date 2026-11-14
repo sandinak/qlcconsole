@@ -170,3 +170,15 @@ Cross without the line, so the same fan works on any line.
    closes it.
 4. Change the Formation in the Show Tree's Library and look at the plan again. Which cues
    changed with it, and why is that the point of a palette?
+
+**Blocking and props (optional).** Blocking is a named set of stage target
+places that a cue picks: the cue page's **Blocking** row, and the Lighting
+Studio's **Blocking ▾** to see and move one. Who holds a **Staff** or
+**Candle** is part of it: right-click the prop ▸ **Held By** ▸ a person,
+**Its Own Place** or **Not on Stage**, in the blocking the staff's cue
+uses. The cue whose blocking puts it in a hand is when she has it; a later
+cue's blocking takes it away. A row of singers: select them, right-click
+one ▸ **Give Each a Prop** ▸ **Candle**. The candles are lit by a look that
+sets the **IR Candle Remote**'s **Select** (On, Off, Candle, Light, Dim,
+Brighten); **Dim** and **Brighten** are button presses, not a level, and
+**Window** is how long the blaster keeps sending the button.

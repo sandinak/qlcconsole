@@ -49,6 +49,9 @@ page of the wizard.
    tracking cue lists** ticked, **Next**.
 4. **Special circuits:** check each row. 11 House, 12 Work, 13 Relay
    (power), 14 Backstage, and **5 Cyc Blue** as Backstage too.
+
+   ![The Special circuits page as the wizard reads it](../../images/lesson-3-10/special-circuits.png)
+
 5. Channel 5 is a stage light: set its **Role** to **Normal**, then
    **Finish**.
 6. In the list of what comes in, click **OK**. **Show Details** lists the

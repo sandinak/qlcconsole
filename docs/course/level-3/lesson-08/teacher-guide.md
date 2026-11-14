@@ -92,6 +92,21 @@ A group's SM calls the end of song 1 and the start of song 2; the op uses the La
 
 **Running Order…** (on the production): drag the songs into tonight's order, or untick one to leave it out; GO passes over it. Then ask why the song you moved should be Block. (*It tracks from the song before it by number, not by running order.*) And the **phone Run page** has a slider for each group master, under the cues; ask who should be allowed to touch it.
 
+## Teacher note: before the house opens
+
+The app's **Before the House Opens** page (**Show Review ▸ Before the
+House Opens…**; Operate offers it once a session, as **Check Now**) is the
+paper preshow list's machine half: universes reaching their nodes, the
+controllers, mains power, the screen staying awake, autosave. Each line
+says Ready, Check, Not ready, Not used or By hand, never colour alone,
+and most have a fix button. It reads; it doesn't prove a light came on,
+so the channel check (Quick focus, every light alone) and the room's own
+walk stay with people. Why it matters: the list is what separates "the
+show is open" from "the house can open". Show the page once, then run the
+**dress-rehearsal checklist** from [Before the house opens](https://github.com/sandinak/qlcconsole/blob/main/docs/features/dress-rehearsal.md)
+aloud with the person who does each line (staffs, candles through the IR
+blaster, lanterns, fountains, lasers' zone). Not part of the hands-on.
+
 ## Part 3 — On the real rig (with Branson)
 
 In the theatre: a preshow list as section 0 of the show (the cues of Lesson 3.7), the first GO at the house-out call, and the pad's Run role for the SM backstage. Walk through the checklist aloud, with the person who does each item.
