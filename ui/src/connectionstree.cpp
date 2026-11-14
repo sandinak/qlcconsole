@@ -50,6 +50,7 @@
 #include <QSpinBox>
 #include <QStyle>
 #include <QRegularExpression>
+#include <QFontMetrics>
 
 #include "connectionstree.h"
 #include "controllertestdialog.h"
@@ -5466,7 +5467,10 @@ void ConnectionsTree::fitOutputColumn()
     for (int c = 0; c < COL_COUNT; c++)
         if (c != COL_OUTPUT && m_tree->isColumnHidden(c) == false)
             others += m_tree->header()->sectionSize(c);
-    const int need = m_tree->sizeHintForColumn(COL_OUTPUT) + 8;
+    int need = m_tree->header()->sectionSizeHint(COL_OUTPUT);
+    const QFontMetrics fm(m_tree->font());
+    for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+        need = qMax(need, fm.horizontalAdvance(m_tree->topLevelItem(i)->text(COL_OUTPUT)) + 16);
     const int floor = qMin(need, 180);
     const int room = m_tree->viewport()->width() - others;
     m_tree->setColumnWidth(COL_OUTPUT, qBound(floor, room, qMax(floor, need)));
