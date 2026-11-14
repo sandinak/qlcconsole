@@ -1450,9 +1450,12 @@ void FocusMode_Test::controllerTestPictureShowsWhatIsPressed()
     QVERIFY(!dlg->showController(m_stub->name(), "9: Not Here"));
     QCOMPARE(dlg->shownController(), QString("2: Stub 2"));
 
+    // While the test is open the pad runs nothing; closed, it is the pad's again.
+    QVERIFY(m_doc->programmer()->padRun()->isTesting());
     QPointer<ControllerTestDialog> gone(dlg);
     dlg->close();
     QTRY_VERIFY(gone.isNull());
+    QVERIFY(!m_doc->programmer()->padRun()->isTesting());
 }
 
 void FocusMode_Test::controllerTestShots()

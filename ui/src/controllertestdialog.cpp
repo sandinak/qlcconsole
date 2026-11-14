@@ -98,6 +98,14 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
     , m_doc(doc)
 {
     setAttribute(Qt::WA_DeleteOnClose);
+    /* While this window is open the pad is being tried: nothing pressed on
+       it runs the show (PadRun::setTesting(); the Run tab and the footer
+       read "Pad: Controller Test" in the Run role). */
+    if (m_doc != nullptr && m_doc->programmer() != nullptr)
+    {
+        m_padRun = m_doc->programmer()->padRun();
+        m_padRun->setTesting(true);
+    }
     setObjectName(QStringLiteral("controllerTest"));
     setWindowTitle(tr("Controller Test"));
     setProperty("helpTopic", QStringLiteral("lighting-studio.md#controller-test"));
@@ -358,6 +366,8 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
 
 ControllerTestDialog::~ControllerTestDialog()
 {
+    if (!m_padRun.isNull())
+        m_padRun->setTesting(false);
     for (const QPointer<QLCIOPlugin> &plugin : std::as_const(m_plugins))
         if (!plugin.isNull())
             plugin->setInputDiagnostics(false);

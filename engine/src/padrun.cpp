@@ -474,6 +474,18 @@ QColor PadRun::lightColour() const
     return QColor();
 }
 
+void PadRun::setTesting(bool on)
+{
+    if (on == m_testing)
+        return;
+    m_testing = on;
+    roleChordCancel();
+    m_armChord->stop();
+    m_chordUniverse = UINT_MAX;
+    m_held.clear();     // what is held across the change was not the Run map's
+    toolChanged();
+}
+
 void PadRun::toolChanged()
 {
     /* A tool started on the laptop takes the pad: the arm drops with it
@@ -531,6 +543,8 @@ QString PadRun::holder() const
     const FocusSession *f = m_pc->focusSession();
     if (f->isActive())
         return f->isRunningCalls() ? tr("Venue Focus") : tr("Quick Focus");
+    if (m_testing && !m_pc->refineSession()->isActive())
+        return tr("Controller Test");
     const RefineSession *r = m_pc->refineSession();
     if (r->isActive())
         return r->isSceneMode() ? tr("Focus This Look") : tr("Focus This Cue");
@@ -850,7 +864,8 @@ void PadRun::setRoleChordMs(int ms)
 
 void PadRun::roleChordBegin()
 {
-    if (m_chordPending || m_chordFired)
+    // Not from a press made to test a button.
+    if (m_chordPending || m_chordFired || m_testing)
         return;
     m_chordPending = true;
     m_chord->start();

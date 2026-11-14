@@ -2869,6 +2869,14 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         m_padRun->touchClick(value > 0);
     if (role == GamepadRole::None && !active)
         return false;
+    /* The Controller Test is open and no tool has the pad: its buttons and
+       triggers are being tried, so they do nothing here -- no GO, no hit,
+       no profile action, no role chord, no focus-call start. The sticks
+       stay the follow spot's. */
+    if (!active && m_padRun->isTesting() && !GamepadRole::isTouch(role)
+        && role != GamepadRole::LeftX && role != GamepadRole::LeftY
+        && role != GamepadRole::RightX && role != GamepadRole::RightY)
+        return true;
     /* A follow spot on and no tool: the right stick is its fine stick, the
        D-pad's Up and Down its speed step, Left and Right its beam size
        (before the Run map, which has no use for them and would swallow

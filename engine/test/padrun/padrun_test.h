@@ -79,6 +79,11 @@ private slots:
      *  let go: the role stays Run (Pad: Run / ARMED / Walk); only View +
      *  Menu held leaves it. */
     void nothingOnThePadLeavesTheRunRole();
+    /** The Controller Test open: nothing pressed on the pad runs the show
+     *  or a profile's action -- no arm, GO, hit, emergency stop, walk or
+     *  role change -- the arm drops with a notice, and the state reads
+     *  Pad: Controller Test; closed, the pad is the Run role's again. */
+    void theControllerTestTakesThePad();
     /** The pad is told: the light the arm's colour while armed, green then
      *  blinking on a GO, steady again when nothing fades, its own colour
      *  disarmed, red after the emergency stop; two short buzzes armed, one

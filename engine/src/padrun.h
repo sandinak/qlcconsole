@@ -283,10 +283,17 @@ public:
     QColor lightColour() const;
 
     /** The tool that has the pad now, so the Run map hears nothing ("The
-     *  tools win"): "Quick focus", "Venue focus", "Focus this cue" or
-     *  "Focus this look"; empty when none does, or when it is the pad's own
-     *  walk. Shown by the Run tab's button and the footer. */
+     *  tools win"): "Quick focus", "Venue focus", "Focus this cue",
+     *  "Focus this look" or "Controller Test"; empty when none does, or
+     *  when it is the pad's own walk. Shown by the Run tab's button and
+     *  the footer. */
     QString holder() const;
+    /** The Controller Test is open: its presses are being tried, so they
+     *  must never be a GO, a hit or a role change -- the pad's buttons and
+     *  triggers do nothing here (ProgrammerController swallows them) and
+     *  the arm drops, as for any tool. The sticks stay the follow spot's. */
+    void setTesting(bool on);
+    bool isTesting() const { return m_testing; }
     /** What the pad's last press could not do, for the screen whatever the
      *  feedback (lights only says nothing aloud): "Hold LB to arm", "GO:
      *  nothing to play"; empty after noticeMs(). */
@@ -491,6 +498,7 @@ private:
     bool m_armed = false;
     quint32 m_armUniverse = UINT_MAX;
     bool m_stopped = false;
+    bool m_testing = false;     ///< the Controller Test has the pad
     bool m_stopping = false;    ///< the stop's own ALL OFF is going through run()
     bool m_showControlHooked = false;
     QTimer *m_armChord = nullptr;

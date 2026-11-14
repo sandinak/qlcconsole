@@ -27,6 +27,7 @@
 #include "mappingcheck.h"
 
 class FocusControlMap;
+class PadRun;
 class QTreeWidgetItem;
 class QLCIOPlugin;
 class QTreeWidget;
@@ -152,6 +153,7 @@ private:
 
 private:
     Doc *m_doc;
+    QPointer<PadRun> m_padRun;        ///< told the pad is being tested, while open
     QList<QPointer<QLCIOPlugin>> m_plugins;
     QLabel *m_statusLabel;
     QLabel *m_devicesLabel;

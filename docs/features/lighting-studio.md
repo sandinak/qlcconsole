@@ -2419,8 +2419,11 @@ pick which one the picture shows from **Controller** above it; Check
 Mapping walks the same one. To open the window on one controller, go to
 Connections, right-click it under a universe's input and choose **Test
 Controller…**. The picture only reads the controller and sends nothing
-itself. A controller patched to a universe still works there while you
-test it, so test a patched pad when the show is not live.
+itself. While the window is open the controller's buttons and triggers
+run nothing: no GO, no hit, no button action, and in the Run role the
+arm drops and the Run tab and the footer read **Pad: Controller Test**
+until you close it. The sticks still move a follow spot that is playing,
+so close the test before a show.
 
 The list below the picture gives each input:
 

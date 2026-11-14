@@ -984,6 +984,74 @@ void PadRun_Test::nothingOnThePadLeavesTheRunRole()
     QCOMPARE(run->roleText(), QString("Pad: Tools"));
 }
 
+void PadRun_Test::theControllerTestTakesThePad()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    stub->m_buttonActions = { { kA, "chaser_step_forward" } };
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    ProgrammerController *pc = m_doc->programmer();
+    pc->autoBindFromProfile();
+    PadRun *run = pc->padRun();
+    QSignalSpy actions(pc, &ProgrammerController::buttonActionTriggered);
+
+    // Tools role: a button tried in the test is not the profile's action.
+    run->setTesting(true);
+    QVERIFY(run->isTesting());
+    press(kA);
+    QCOMPARE(actions.count(), 0);
+    run->setTesting(false);
+    press(kA);
+    QCOMPARE(actions.count(), 1);
+
+    // Run role, armed: the test takes the pad and the arm drops, on every surface.
+    run->setEnabled(true);
+    run->setRoleChordMs(30);
+    arm(true);
+    run->setTesting(true);
+    QVERIFY(!run->isArmed());
+    QCOMPARE(run->state(), PadRun::ToolHasPad);
+    QCOMPARE(run->roleText(), QString("Pad: Controller Test"));
+    QVERIFY(!run->stateColour().isValid());
+    QCOMPARE(run->notice(), QString("Disarmed: Controller Test has the controller."));
+    QVERIFY(!pc->padLight().isValid());
+    // Everything a tester presses: no arm, no GO, no hit, no stop, no role change.
+    hold(kLB, true);
+    hold(kRB, true);
+    QTest::qWait(60);
+    QVERIFY(!run->isArmed());
+    axis(kLT, 255);
+    axis(kRT, 255);                 // all four: no emergency stop
+    press(kA);
+    axis(kRT, 0);
+    axis(kLT, 0);
+    hold(kRB, false);
+    hold(kLB, false);
+    hold(kView, true);
+    hold(kMenu, true);
+    QTest::qWait(90);
+    hold(kMenu, false);
+    hold(kView, false);
+    press(kMenu);
+    QVERIFY(m_runs.isEmpty());
+    QVERIFY(run->isEnabled());
+    QVERIFY(!run->isWalking());
+    QCOMPARE(actions.count(), 1);
+    QCOMPARE(run->state(), PadRun::ToolHasPad);
+
+    // The test closed: the Run role again, not armed until the chord.
+    run->setTesting(false);
+    QCOMPARE(run->state(), PadRun::Run);
+    QCOMPARE(run->roleText(), QString("Pad: Run"));
+    with(kLT, kA);
+    QVERIFY(m_runs.isEmpty());
+    arm(true);
+    with(kLT, kA);
+    QCOMPARE(m_runs.size(), 1);
+    arm(false);
+    stub->m_buttonActions.clear();
+}
+
 void PadRun_Test::theLightBarAndRumble()
 {
     IOPluginStub *stub = loadStub();
