@@ -1131,6 +1131,9 @@ private:
     bool m_autosaveEnabled;
     int m_autosaveInterval;  // in minutes
     QString m_lastAutosaveTime;
+    /** Why the last autosave failed, until the next one or a save; empty
+     *  when it didn't (Before the House Opens reads it) */
+    QString m_autosaveFailure;
 
     /*********************************************************************
      * Status Bar
@@ -1253,6 +1256,7 @@ private:
     bool m_teachingNoticeShown = false;     //!< the Operate notice, once per show
     bool m_teachingOperateAnswered = false; //!< "Operate in Teaching Mode", once per show
     bool m_unattendedOperate = false;       //!< slotModeOperate() from startInOperate()
+    bool m_preshowOffered = false;          //!< Before the House Opens, offered once a session
 public:
     void updateVenueFooter();
     /** The chip's text while it is shown, else empty. */

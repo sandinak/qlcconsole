@@ -26,6 +26,15 @@ in Design. Click the chip to open the **Show Review** panel. The **Show
 readiness** dialog (click the readiness chip) also has a **Show Review…**
 button.
 
+**Before the House Opens…**, at the top of the panel, is the page for the
+last half hour before a show: Show Review's blockers beside every universe
+reaching its node, the controllers, this computer and autosave, each with
+its fix ([Before the house opens](dress-rehearsal.md)).
+
+**Fix ▸** on a finding whose cue, cue list, scene or palette was deleted
+after the check says so ("That cue is gone…") instead of going nowhere;
+**Re-check** clears it.
+
 ### Answering a warning where it shows
 
 A warning reads the same wherever it shows — the chip, a **⚠ cyc** mark on

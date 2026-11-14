@@ -105,8 +105,12 @@ public:
     /** Fix the selected row: its jump, or a footer row's action. */
     bool fixSelected();
     /** Fix ▸ / a double-click: fixSelected(), and if it couldn't go there,
-     *  the summary line says so */
+     *  the summary line says so -- by name when the cue, list, scene or
+     *  palette is gone */
     void fixOrSay();
+    /** What is gone of the place @a jump / @a data points at ("That cue is
+     *  gone: ..."); empty when it is still there or can't be told. */
+    static QString gonePlace(Doc *doc, const QString &jump, const QVariantList &data);
 
 public slots:
     /** Run every check again, then redraw. */
@@ -134,6 +138,7 @@ private:
     QPushButton *m_why;
     QPushButton *m_off;
     QList<ReviewFinding> m_findings;
+    QString m_gone;     ///< fixSelected(): what was gone, when that stopped it
 
     static Jumper s_jumper;
     static QPointer<ShowReviewPanel> s_shared;

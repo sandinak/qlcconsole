@@ -10,6 +10,12 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [0.4.9] - Unreleased
+
+### Changed and fixed
+
+- **Before the house opens: one page.** Show Review ▸ **Before the House Opens…** (also offered once a session when you go to Operate) shows, a line each, whether every universe reaches its node, the macOS Local Network permission, the show's controllers, Show Review's blockers, the footer's other not-ready entries, mains power, the screen staying awake, DMX off Wi-Fi, the rest of Settings ▸ Performance, and autosave. Each line has a symbol and a word (never colour alone), says what is wrong, and offers the app's own fix in one click. The channel check walks every light from the pad in Quick Focus, and the dress-rehearsal checklist is its help page. **Show Review's Fix ▸ on a cue deleted since the check** now says "That cue is gone" instead of doing nothing.
+
 ## [0.4.7] - Unreleased
 
 ### Changed and fixed

@@ -138,6 +138,7 @@
 #include "sceneeditor.h"
 #include "showdifferencesdialog.h"
 #include "showreviewpanel.h"
+#include "preshowcheck.h"
 #include "showsettingsdialog.h"
 #include "showstatusdialog.h"
 #include "simpledesk.h"
@@ -881,6 +882,9 @@ QList<Screen> screens()
             })
          << screen(QStringLiteral("Show Review panel"), [](App *app) -> QWidget * {
                 return new ShowReviewPanel(docOf(app));
+            })
+         << screen(QStringLiteral("Before the House Opens"), [](App *app) -> QWidget * {
+                return new PreshowCheck(docOf(app));
             })
          << screen(QStringLiteral("Why is this on panel"), [](App *app) -> QWidget * {
                 // As a right-click on a fixture opens it.
