@@ -76,6 +76,7 @@ void SearchKeepsSelection_Test::fixtureTreeStaysOnTheHitWhenCleared()
     {
         Fixture *f = new Fixture(m_doc);
         f->setName(QString("Fix %1").arg(i, 2, 10, QChar('0')));
+        f->setAddress(i * 4);
         f->setChannels(4);
         m_doc->addFixture(f);
     }
@@ -99,6 +100,7 @@ void SearchKeepsSelection_Test::fixtureTreeStaysWhileTheSearchChanges()
     {
         Fixture *f = new Fixture(m_doc);
         f->setName(QString("Fix %1").arg(i, 2, 10, QChar('0')));
+        f->setAddress(i * 4);
         f->setChannels(4);
         m_doc->addFixture(f);
     }
@@ -125,6 +127,7 @@ void SearchKeepsSelection_Test::fixtureTreeKeepsAMultiSelection()
     {
         Fixture *f = new Fixture(m_doc);
         f->setName(QString("Fix %1").arg(i, 2, 10, QChar('0')));
+        f->setAddress(i * 4);
         f->setChannels(4);
         m_doc->addFixture(f);
     }
