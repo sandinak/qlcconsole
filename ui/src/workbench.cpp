@@ -58,6 +58,7 @@
 #include "treecuestack.h"
 #include "refinepanel.h"
 #include "focusmenu.h"
+#include "undogesture.h"
 #include "chasereditor.h"
 #include "sceneeditor.h"
 #include "sequence.h"
@@ -1691,6 +1692,8 @@ void Workbench::slotRowsSelectionChanged()
         break;
     }
     }
+    // Several look rows of one type: a change sets them all.
+    updateLookCompanions();
 }
 
 void Workbench::updateScenePage()
@@ -1929,6 +1932,8 @@ void Workbench::editPalette(quint32 paletteId)
         m_paletteDetour = true;
         m_lookEditor->setBackText(tr("↩ Back"));
     }
+    // From a list: that one look alone; the look row: with the others selected.
+    updateLookCompanions();
 }
 
 quint32 Workbench::currentPaletteId() const
@@ -1960,8 +1965,45 @@ void Workbench::slotLookEdited(quint32 paletteId)
     {
         Scene *s = qobject_cast<Scene *>(f);
         if (s != nullptr && (s->palettes().contains(paletteId) || s->trialPalette() == paletteId))
+        {
+            // Another layer playing it (a look edited with the one shown,
+            // a shared palette): it re-reads the value as it runs.
+            if (s->isRunning() && s->id() != m_currentScene)
+                s->requestPaletteRefresh();
             m_doc->notifyFunctionChanged(s->id());
+        }
     }
+}
+
+void Workbench::updateLookCompanions()
+{
+    QList<quint32> also;
+    if (currentPage() == LookPage && !m_paletteDetour)
+    {
+        QList<WorkbenchStack::Layer> layers;
+        bool haveLayers = false;
+        for (const ProgrammingOutline::Row &r : m_rows->selectedRows())
+        {
+            quint32 pid = QLCPalette::invalidId();
+            if (r.kind == ProgrammingOutline::PaletteRow)
+                pid = r.id;
+            else if (r.kind == ProgrammingOutline::AttributeRow && m_stack != nullptr)
+            {
+                if (!haveLayers)
+                {
+                    layers = m_stack->layers();
+                    haveLayers = true;
+                }
+                const int layer = int(r.scene);
+                const int attr = int(r.id);
+                if (layer >= 0 && layer < layers.size() && attr >= 0 && attr < layers.at(layer).attributes.size())
+                    pid = layers.at(layer).attributes.at(attr).palette;
+            }
+            if (m_doc->palette(pid) != nullptr && pid != m_lookEditor->paletteId() && !also.contains(pid))
+                also << pid;
+        }
+    }
+    m_lookEditor->setAlsoEditing(also);
 }
 
 void Workbench::updateTrialPalette(quint32 paletteId)
@@ -2291,8 +2333,9 @@ void Workbench::slotFixtureValueChanged(quint32 fxi, quint32 ch, uchar value)
     }
     m_doc->setModified();
     refreshPreview();
-    // A fader drag is one step.
-    recordSceneEdit(tr("set channels in %1").arg(s->name()), QStringLiteral("channel:%1").arg(ch));
+    // A fader drag is one step (one press of the mouse; two pulls, two).
+    recordSceneEdit(tr("set channels in %1").arg(s->name()),
+                    UndoGesture::key(QStringLiteral("channel:%1").arg(ch)), UndoGesture::held());
 }
 
 void Workbench::slotFixtureChecked(quint32 fxi, quint32 ch, bool state)
@@ -2559,14 +2602,14 @@ void Workbench::recaptureBaseline()
                      : QSharedPointer<Scene>();
 }
 
-void Workbench::recordSceneEdit(const QString &label, const QString &mergeKey)
+void Workbench::recordSceneEdit(const QString &label, const QString &mergeKey, bool held)
 {
     PaletteOps *ops = m_doc->paletteOps();
     if (ops == nullptr || m_editBaseline.isNull() || m_editBaseline->id() != m_currentScene)
         return;
     // A step (or nothing changed): either way the scene as it is now is the
     // baseline for the next edit (PaletteOps::changed recaptures it too).
-    if (!ops->recordSceneStep(label, { m_editBaseline }, mergeKey))
+    if (!ops->recordSceneStep(label, { m_editBaseline }, mergeKey, held))
         recaptureBaseline();
 }
 

@@ -348,7 +348,10 @@ private:
     QStringList effectSignature(Scene *scene) const;
 
     void recaptureBaseline();
-    void recordSceneEdit(const QString &label, const QString &mergeKey = QString());
+    void recordSceneEdit(const QString &label, const QString &mergeKey = QString(), bool held = false);
+    /** The other look rows selected with the one the Look Editor shows: the
+     *  looks of its type it edits with it (LookEditor::setAlsoEditing()). */
+    void updateLookCompanions();
 
 private:
     Doc *m_doc;

@@ -231,6 +231,12 @@ is beside it in the Show Tree).
 
 The scene of the row you clicked is the one a control surface addresses.
 
+**Several looks at once.** Select several look rows of one type (⌘-click or
+⇧-click: three layers' Colour rows, say) and the Look Editor edits them
+together. A colour pick or a level sets each of them, and one ⌘Z puts them
+all back. A line over the editor says how many it is editing, and that a
+selected look of another type is left as it is.
+
 **▣ Open** (the button, a double-click, or right-click → **Open in Workbench**) loads
 that layer in the Workbench on its own — a nested collection's layers, a
 scene by itself, a chaser's steps. **↩** in the header (it names where it
@@ -899,7 +905,9 @@ same folder share a naming pattern ("Act2 Red", "Act2 Blue"), the new one
 follows it ("Act2 Amber").
 
 The value change and the rename are **one Undo step**, and a drag counts as
-one step. Undo puts back both the value and the name.
+one step. Undo puts back both the value and the name. Every colour and level
+change in the Workbench is a step, a cue's own one-off values too: one press
+of the mouse is one step however long you drag, and two clicks are two.
 
 If the editor is showing a palette that isn't in the scene selected in the
 outline, the scene **tries it on**: it plays on top of the look's own

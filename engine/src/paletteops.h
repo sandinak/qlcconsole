@@ -216,10 +216,11 @@ public:
     /** One step for scene edits already made: @a before holds each touched
      *  scene as it was (sceneSnapshot()), the after side is taken now. A
      *  scene that didn't change is dropped; nothing changed, no step (false).
-     *  A non-empty @a mergeKey equal to the top step's, within 1.5 s, extends
-     *  that step instead (a fader drag is one step). */
+     *  A non-empty @a mergeKey equal to the top step's, within 1.5 s (or at
+     *  any time while @a held: the same drag, its button still down),
+     *  extends that step instead (a fader drag is one step). */
     bool recordSceneStep(const QString &label, const QList<QSharedPointer<Scene>> &before,
-                         const QString &mergeKey = QString());
+                         const QString &mergeKey = QString(), bool held = false);
     /** Run @a change over scenes @a sceneIds as one step (recordSceneStep). */
     bool sceneStep(const QString &label, const QList<quint32> &sceneIds,
                    const std::function<bool()> &change);
@@ -238,11 +239,18 @@ public:
     /** Run @a change over palette @a paletteId's value (and name) as one
      *  step. Undo puts back the value, wheel slot, gobo name and values and
      *  the name it had. A non-empty @a mergeKey equal to the top step's,
-     *  within 1.5 s, extends that step (a picker drag is one step). A
-     *  palette the tree owns (isManaged() false) is changed with no step.
-     *  Nothing changed: no step (false). */
+     *  within 1.5 s (or at any time while @a held: the same drag, its
+     *  button still down), extends that step (a picker drag is one step).
+     *  The tree's own one-offs (a cue's value) are steps too: the tree's
+     *  history keeps their place, this one their value. Nothing changed: no
+     *  step (false). */
     bool valueStep(const QString &label, quint32 paletteId, const std::function<void()> &change,
-                   const QString &mergeKey = QString());
+                   const QString &mergeKey = QString(), bool held = false);
+    /** The same over the values of several palettes @a paletteIds at once
+     *  (several look rows of one type edited together): ONE step; Undo
+     *  puts every one back. */
+    bool valueStep(const QString &label, const QList<quint32> &paletteIds, const std::function<void()> &change,
+                   const QString &mergeKey = QString(), bool held = false);
     /** Run @a change over the effect parameters of @a paletteIds (Runs,
      *  Length, At the end… from the Show Tree effect row's ⋯ or Build) as
      *  one step, shared palettes and the tree's own one-offs alike. Undo and
@@ -336,6 +344,10 @@ private:
                      const QList<QPair<quint32, QSharedPointer<Scene>>> &other);
     State capture(quint32 id) const;
     void apply(const QList<State> &states, const QStringList &folders);
+    /** Whether an edit keyed @a mergeKey at @a at extends the top step: the
+     *  same key, nothing to redo, no step of the tree's taken since, and
+     *  within 1.5 s of its last edit or @a held (the same drag). */
+    bool extendsTop(const QString &mergeKey, qint64 at, bool held) const;
     /** Run @a change as one undo step named @a label, recording the
      *  palettes @a ids (and any it makes, appended to @a ids). */
     bool step(const QString &label, QList<quint32> ids, const std::function<bool(QList<quint32> &)> &change);

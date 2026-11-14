@@ -43,6 +43,7 @@
 #include "workbench.h"
 #include "workbenchstack.h"
 #include "mastertimer.h"            // timerTick(): the engine ticked by hand
+#include "lookeditor.h"
 #undef private
 #undef protected
 
@@ -72,6 +73,9 @@
 
 #include "workbench_test.h"
 #include "showcontrol.h"
+#include "capabilitybar.h"
+#include <QColorDialog>
+#include <QSlider>
 
 using Row = ProgrammingOutline::Row;
 
@@ -1236,4 +1240,309 @@ void Workbench_Test::theLowerLayerWinsAndFollowsAReorder()
     wb.hide();
     auto stopped = [&]() { tickAndRead(m_doc, 100); return !c->isRunning() && !lower->isRunning(); };
     QTRY_VERIFY(stopped());
+}
+
+/* An RGB head with a dimmer at @a address (Dimmer, Red, Green, Blue), in a
+   group of its own @a g when given. */
+static Fixture *rgbHead(Doc *doc, const QString &name, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("RGB " + name);
+    def->setType(QLCFixtureDef::LEDBarBeams);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("4ch");
+    const struct { const char *name; QLCChannel::PrimaryColour colour; } chans[] = {
+        { "Dimmer", QLCChannel::NoColour }, { "Red", QLCChannel::Red },
+        { "Green", QLCChannel::Green }, { "Blue", QLCChannel::Blue },
+    };
+    for (int i = 0; i < 4; ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(chans[i].name);
+        ch->setGroup(QLCChannel::Intensity);
+        ch->setColour(chans[i].colour);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(i));
+    }
+    QLCFixtureHead head;
+    for (int i = 0; i < 4; ++i)
+        head.addChannel(quint32(i));
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    if (!doc->fixtureDefCache()->addFixtureDef(def))
+        return nullptr;
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(address);
+    return doc->addFixture(fxi) ? fxi : nullptr;
+}
+
+/* The row of look @a paletteId in scene @a sceneId. */
+static QTreeWidgetItem *lookItem(ProgrammingOutline *o, quint32 sceneId, quint32 paletteId)
+{
+    for (QTreeWidgetItemIterator it(o); *it; ++it)
+        if (ProgrammingOutline::rowOf(*it) == row(ProgrammingOutline::PaletteRow, sceneId, paletteId))
+            return *it;
+    return nullptr;
+}
+
+/* Engine ticks, then the four channels of the head at @a address. */
+static QList<int> headOut(Doc *doc, int address)
+{
+    QList<int> out;
+    for (int i = 0; i < 8; ++i)
+        tickAndRead(doc, address);
+    for (int i = 0; i < 4; ++i)
+        out << tickAndRead(doc, address + i);
+    return out;
+}
+
+void Workbench_Test::everyColourAndLevelEditIsOneUndoStep()
+{
+    Fixture *a = rgbHead(m_doc, "A", 0);
+    Fixture *b = rgbHead(m_doc, "B", 4);
+    QVERIFY(a != nullptr && b != nullptr);
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName("Pair");
+    g->setSize(QSize(2, 1));
+    m_doc->addFixtureGroup(g);
+    g->assignFixture(a->id(), QLCPoint(0, 0));
+    g->assignFixture(b->id(), QLCPoint(1, 0));
+    PaletteOps *ops = m_doc->paletteOps();
+    const quint32 red = ops->create(QLCPalette::Color, QString(), "Red",
+                                    { QLCPalette::colorToString(QColor(255, 0, 0), QColor()) });
+    const quint32 half = ops->create(QLCPalette::Dimmer, QString(), "Half", { 128 });
+    Scene *s = scene("Look", QString());
+    s->addFixtureGroup(g->id());
+    s->addPalette(red);
+    s->addPalette(half);
+    ops->clearUndo();
+    QVERIFY(m_doc->mode() == Doc::Design);
+
+    Workbench wb(m_doc);
+    wb.resize(1200, 760);
+    wb.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wb));
+    wb.load(s->id());
+    ProgrammingOutline *rows = wb.rows();
+    QVERIFY(lookItem(rows, s->id(), red) != nullptr && lookItem(rows, s->id(), half) != nullptr);
+    QTRY_COMPARE(headOut(m_doc, 0), QList<int>({ 128, 255, 0, 0 }));
+
+    LookEditor *ed = wb.lookEditor();
+    QLabel *title = wb.m_title;                 // the header: always there, a click changes nothing
+    // A new gesture: a click somewhere that changes nothing.
+    auto click = [&]() { QTest::mouseClick(title, Qt::LeftButton); };
+    auto steps = [&]() { return int(ops->undoSteps().size()); };
+    QLCPalette *colour = m_doc->palette(red);
+    QLCPalette *level = m_doc->palette(half);
+
+    // The picker: one step; Undo / Redo put the look AND the stage back.
+    selectItem(rows, lookItem(rows, s->id(), red));
+    QCOMPARE(wb.currentPage(), Workbench::LookPage);
+    QCOMPARE(ed->paletteId(), red);
+    QVERIFY(ed->alsoNote().isEmpty());
+    click();
+    ed->m_colorDialog->setCurrentColor(QColor(0, 255, 0));
+    QCOMPARE(colour->rgbValue(), QColor(0, 255, 0));
+    QCOMPARE(steps(), 1);
+    QTRY_COMPARE(headOut(m_doc, 0), QList<int>({ 128, 0, 255, 0 }));
+    QCOMPARE(headOut(m_doc, 4), QList<int>({ 128, 0, 255, 0 }));
+    QVERIFY(m_doc->showTree()->undoShared());
+    QCOMPARE(colour->rgbValue(), QColor(255, 0, 0));
+    QTRY_COMPARE(headOut(m_doc, 0), QList<int>({ 128, 255, 0, 0 }));
+    QVERIFY(m_doc->showTree()->redoShared());
+    QCOMPARE(colour->rgbValue(), QColor(0, 255, 0));
+    QTRY_COMPARE(headOut(m_doc, 0), QList<int>({ 128, 0, 255, 0 }));
+
+    // A slider held down: one step, however long the drag pauses.
+    QTest::mousePress(title, Qt::LeftButton);
+    ed->m_blueSlider->setValue(60);
+    QTest::qWait(1600);                         // longer than the 1.5 s merge
+    ed->m_blueSlider->setValue(90);
+    QTest::mouseRelease(title, Qt::LeftButton);
+    QCOMPARE(colour->rgbValue(), QColor(0, 255, 90));
+    QCOMPARE(steps(), 2);
+    // Another click, a moment later: its own step, undone alone.
+    click();
+    ed->m_redSlider->setValue(200);
+    QCOMPARE(steps(), 3);
+    QTRY_COMPARE(headOut(m_doc, 0), QList<int>({ 128, 200, 255, 90 }));
+    QVERIFY(m_doc->showTree()->undoShared());
+    QCOMPARE(colour->rgbValue(), QColor(0, 255, 90));
+    QCOMPARE(ed->m_redSlider->value(), 0);      // the editor shows the undo
+    QVERIFY(m_doc->showTree()->undoShared());
+    QCOMPARE(colour->rgbValue(), QColor(0, 255, 0));
+    QTRY_COMPARE(headOut(m_doc, 0), QList<int>({ 128, 0, 255, 0 }));
+
+    // A Dimmer look's bar: a level, one step.
+    QCoreApplication::processEvents();
+    selectItem(rows, lookItem(rows, s->id(), half));
+    QCOMPARE(ed->paletteId(), half);
+    click();
+    ed->m_dimmerBar->setValue(200);
+    ed->m_dimmerBar->setValue(220);
+    QCOMPARE(level->intValue1(), 220);
+    QCOMPARE(steps(), 2);
+    QTRY_COMPARE(headOut(m_doc, 0).first(), 220);
+    QVERIFY(m_doc->showTree()->undoShared());
+    QCOMPARE(level->intValue1(), 128);
+    QTRY_COMPARE(headOut(m_doc, 0), QList<int>({ 128, 0, 255, 0 }));
+    QVERIFY(m_doc->showTree()->redoShared());
+    QTRY_COMPARE(headOut(m_doc, 0).first(), 220);
+
+    // The channel console on the target row: a pull is one step, the
+    // next pull another.
+    QCoreApplication::processEvents();
+    QTreeWidgetItem *groupRow = nullptr;
+    for (QTreeWidgetItemIterator it(rows); *it; ++it)
+        if (kindOf(*it) == ProgrammingOutline::GroupRow)
+            groupRow = *it;
+    QVERIFY(groupRow != nullptr);
+    selectItem(rows, groupRow);
+    QCOMPARE(wb.currentPage(), Workbench::TargetPage);
+    const int before = steps();
+    const int was = int(s->value(a->id(), 3));
+    QTest::mousePress(title, Qt::LeftButton);
+    wb.slotFixtureValueChanged(a->id(), 3, 40);
+    QTest::qWait(1600);
+    wb.slotFixtureValueChanged(a->id(), 3, 70);
+    QTest::mouseRelease(title, Qt::LeftButton);
+    QCOMPARE(int(s->value(a->id(), 3)), 70);
+    QCOMPARE(int(s->value(b->id(), 3)), 70);
+    QCOMPARE(steps(), before + 1);
+    click();
+    wb.slotFixtureValueChanged(a->id(), 3, 10);
+    QCOMPARE(steps(), before + 2);
+    QVERIFY(m_doc->showTree()->undoShared());
+    QCOMPARE(int(s->value(a->id(), 3)), 70);
+    QVERIFY(m_doc->showTree()->undoShared());
+    QCOMPARE(int(s->value(a->id(), 3)), was);
+}
+
+/* Pictures of the Look Editor with several look rows selected, at three
+   sizes, into QLC_SHOT_DIR (unset: none). */
+static void lookRowShots(QWidget *w, const QString &dir, const QString &prefix)
+{
+    if (dir.isEmpty())
+        return;
+    QDir().mkpath(dir);
+    for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        w->resize(sz);
+        QTest::qWait(80);
+        w->grab().save(QString("%1/%2-%3x%4.png").arg(dir, prefix).arg(sz.width()).arg(sz.height()));
+    }
+    w->resize(1280, 800);
+    QTest::qWait(50);
+}
+
+void Workbench_Test::severalLookRowsOfOneTypeEditTogether()
+{
+    // Three layers, each its own head and Colour look; the last has a Dimmer look too.
+    PaletteOps *ops = m_doc->paletteOps();
+    QList<Scene *> layers;
+    QList<quint32> colours;
+    const QColor own[] = { QColor(255, 0, 0), QColor(0, 0, 255), QColor(0, 255, 0) };
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = rgbHead(m_doc, QString("H%1").arg(i), quint32(i * 4));
+        QVERIFY(f != nullptr);
+        FixtureGroup *g = new FixtureGroup(m_doc);
+        g->setName(QString("G%1").arg(i));
+        g->setSize(QSize(1, 1));
+        m_doc->addFixtureGroup(g);
+        g->assignFixture(f->id(), QLCPoint(0, 0));
+        colours << ops->create(QLCPalette::Color, QString(), QString("Wash %1").arg(i),
+                               { QLCPalette::colorToString(own[i], QColor()) });
+        Scene *s = scene(QString("Layer %1").arg(i), QString());
+        s->addFixtureGroup(g->id());
+        s->addPalette(colours.last());
+        layers << s;
+    }
+    const quint32 full = ops->create(QLCPalette::Dimmer, QString(), "Full", { 255 });
+    layers.last()->addPalette(full);
+    Collection *c = collection("Stack", { layers[0]->id(), layers[1]->id(), layers[2]->id() });
+    ops->clearUndo();
+
+    Workbench wb(m_doc);
+    wb.resize(1280, 800);
+    wb.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wb));
+    wb.load(c->id());
+    ProgrammingOutline *rows = wb.rows();
+    for (int i = 0; i < 3; ++i)
+    {
+        rows->expandItem(rows->layerItem(i));
+        QVERIFY(lookItem(rows, layers[i]->id(), colours[i]) != nullptr);
+    }
+    QVERIFY(lookItem(rows, layers[2]->id(), full) != nullptr);
+    QTRY_COMPARE(headOut(m_doc, 4).mid(1), QList<int>({ 0, 0, 255 }));
+
+    // The three Colour rows: the current one shows, all three are edited.
+    selectItem(rows, lookItem(rows, layers[0]->id(), colours[0]));
+    lookItem(rows, layers[1]->id(), colours[1])->setSelected(true);
+    lookItem(rows, layers[2]->id(), colours[2])->setSelected(true);
+    LookEditor *ed = wb.lookEditor();
+    QCOMPARE(wb.currentPage(), Workbench::LookPage);
+    QCOMPARE(ed->paletteId(), colours[0]);
+    QCOMPARE(ed->alsoEditing(), QList<quint32>({ colours[1], colours[2] }));
+    QVERIFY2(ed->alsoNote().contains("3 Colour looks together"), qPrintable(ed->alsoNote()));
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    lookRowShots(&wb, shots, "wbundo-3-colour-rows");
+    QLabel *title = wb.m_title;
+    QTest::mouseClick(title, Qt::LeftButton);
+    ed->m_colorDialog->setCurrentColor(QColor(255, 255, 0));
+    for (int i = 0; i < 3; ++i)
+        QCOMPARE(m_doc->palette(colours[i])->rgbValue(), QColor(255, 255, 0));
+    QCOMPARE(int(ops->undoSteps().size()), 1);
+    QTRY_COMPARE(headOut(m_doc, 0).mid(1), QList<int>({ 255, 255, 0 }));
+    QTRY_COMPARE(headOut(m_doc, 4).mid(1), QList<int>({ 255, 255, 0 }));
+    QTRY_COMPARE(headOut(m_doc, 8).mid(1), QList<int>({ 255, 255, 0 }));
+
+    // One Undo: every one back to its own, on the stage too; Redo: all again.
+    QVERIFY(m_doc->showTree()->undoShared());
+    for (int i = 0; i < 3; ++i)
+        QCOMPARE(m_doc->palette(colours[i])->rgbValue(), own[i]);
+    QVERIFY(!ops->canUndo());
+    QTRY_COMPARE(headOut(m_doc, 0).mid(1), QList<int>({ 255, 0, 0 }));
+    QTRY_COMPARE(headOut(m_doc, 4).mid(1), QList<int>({ 0, 0, 255 }));
+    QTRY_COMPARE(headOut(m_doc, 8).mid(1), QList<int>({ 0, 255, 0 }));
+    QVERIFY(m_doc->showTree()->redoShared());
+    for (int i = 0; i < 3; ++i)
+        QCOMPARE(m_doc->palette(colours[i])->rgbValue(), QColor(255, 255, 0));
+    QTRY_COMPARE(headOut(m_doc, 4).mid(1), QList<int>({ 255, 255, 0 }));
+    QVERIFY(m_doc->showTree()->undoShared());
+
+    // A Dimmer row selected with them: left alone, and the line says so.
+    QCoreApplication::processEvents();
+    selectItem(rows, lookItem(rows, layers[0]->id(), colours[0]));
+    lookItem(rows, layers[1]->id(), colours[1])->setSelected(true);
+    lookItem(rows, layers[2]->id(), full)->setSelected(true);
+    QCOMPARE(ed->alsoEditing(), QList<quint32>({ colours[1] }));
+    QVERIFY2(ed->alsoNote().contains("2 Colour looks together") && ed->alsoNote().contains("not Colour"),
+             qPrintable(ed->alsoNote()));
+    lookRowShots(&wb, shots, "wbundo-mixed-rows");
+    QTest::mouseClick(title, Qt::LeftButton);
+    ed->m_redSlider->setValue(10);
+    QCOMPARE(m_doc->palette(colours[0])->rgbValue().red(), 10);
+    QCOMPARE(m_doc->palette(colours[1])->rgbValue(), QColor(10, 0, 0));    // the whole colour
+    QCOMPARE(m_doc->palette(colours[2])->rgbValue(), own[2]);
+    QCOMPARE(m_doc->palette(full)->intValue1(), 255);
+    QCOMPARE(int(ops->undoSteps().size()), 1);
+
+    // The Dimmer row current: it edits alone and says why.
+    QCoreApplication::processEvents();
+    selectItem(rows, lookItem(rows, layers[2]->id(), full));
+    lookItem(rows, layers[0]->id(), colours[0])->setSelected(true);
+    QCOMPARE(ed->paletteId(), full);
+    QVERIFY(ed->alsoEditing().isEmpty());
+    QVERIFY2(ed->alsoNote().contains("this Dimmer look only"), qPrintable(ed->alsoNote()));
+
+    // One row again: no line.
+    QCoreApplication::processEvents();
+    selectItem(rows, lookItem(rows, layers[1]->id(), colours[1]));
+    QVERIFY(ed->alsoNote().isEmpty());
+    QVERIFY(ed->alsoEditing().isEmpty());
 }

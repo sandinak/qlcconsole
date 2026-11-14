@@ -14,6 +14,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed and fixed
 
+- **Every colour and level change in the Workbench is one undo step.** A cue's own one-off values used to change with no undo step at all. Now ⌘Z takes back each colour pick, slider pull, level and channel fader, and the stage follows. One press of the mouse is one step however long you drag, and two clicks a moment apart are two. **Several look rows of one type edit together:** select three layers' Colour rows and one pick sets all three, and one ⌘Z puts each back. The Look Editor says how many it is editing and leaves a look of another type alone.
+
 - **Bring Into This Cue on a child layer brings its parent in the same step**: one undo, every cue plays as before (it used to refuse with "bring that in first").
 - **Command line: `hit "Slam" for cue 2.3`** (or `for list`) makes a hit scoped to that cue; a cue that doesn't exist is refused with the reason, and a hit already there is selected, not duplicated.
 - **A new venue asks for its name in the same step.** The field comes filled with the date and selected (Enter takes it, typing replaces it), instead of an empty box that quietly became a timestamp.

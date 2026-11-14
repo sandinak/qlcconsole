@@ -191,6 +191,7 @@ add_library(${module_name}
     effectspage.cpp effectspage.h
     fadetimespin.cpp fadetimespin.h
     lookeditor.cpp lookeditor.h lookeditorencoders.cpp
+    undogesture.cpp undogesture.h
     blindstyle.h
     mainbar.cpp mainbar.h
     moveinblackbutton.cpp moveinblackbutton.h
