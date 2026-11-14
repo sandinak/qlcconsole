@@ -636,7 +636,7 @@ quint32 WledDiscovery::patch(QWidget *parent, const QString &key, bool offerSetU
 
     if (offerSetUp)
         if (WledConfigCheck *check = WledConfigCheck::instance())
-            check->offerSetUp(parent, fid);
+            check->setUpNow({ fid });       // part of patching it: told, not asked
     return fid;
 }
 

@@ -220,6 +220,14 @@ public:
         return w;
     }
     void setEditorData(QWidget *, const QModelIndex &) const override {}
+    /* Output, cut short: "⚠ ArtNet · 172… · universe 0:0:15" -- its mark,
+       protocol and far-end universe kept, the whole of it on hover. */
+    void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override
+    {
+        QStyledItemDelegate::initStyleOption(option, index);
+        if (index.column() == COL_OUTPUT)
+            option->textElideMode = Qt::ElideMiddle;
+    }
     void setModelData(QWidget *editor, QAbstractItemModel *, const QModelIndex &index) const override
     {
         QString value;
@@ -525,6 +533,21 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
        on a narrow window it is the grid that gives way, never the
        settings. */
     outScroll->viewport()->installEventFilter(new GridWidthFollower(m_output, outScroll));
+    /* Output's width follows the list's (fitOutputColumn()). */
+    class OutputWidthFollower : public QObject
+    {
+    public:
+        OutputWidthFollower(ConnectionsTree *ct) : QObject(ct), m_ct(ct) {}
+        bool eventFilter(QObject *watched, QEvent *ev) override
+        {
+            if (ev->type() == QEvent::Resize)
+                m_ct->fitOutputColumn();
+            return QObject::eventFilter(watched, ev);
+        }
+    private:
+        ConnectionsTree *m_ct;
+    };
+    m_tree->viewport()->installEventFilter(new OutputWidthFollower(this));
     m_side = new QStackedWidget(this);
     m_side->addWidget(m_universeSplit);
     m_outputPage = m_universeSplit;
@@ -4876,6 +4899,7 @@ void ConnectionsTree::buildUniverseList()
     markOutputProblems();
     m_rebuilding = false;
     m_populatedOnce = true;
+    fitOutputColumn();
     restoreScroll(scroll);
     if (m_status != NULL)
         m_status->hide();
@@ -5035,9 +5059,15 @@ void ConnectionsTree::applyUniverseColumns()
     const int at = byUniverse ? COL_DETAIL : COL_OUTPUT;
     if (header->visualIndex(COL_OUTPUT) != at)
         header->moveSection(header->visualIndex(COL_OUTPUT), at);
-    /* Carries takes the spare width only while it is the last column. */
+    /* The spare width: Carries' in the wiring (its last column); By
+       universe, Output's -- the one cell that says where a universe goes,
+       elided in the middle when even that is short (PatchCellDelegate), so
+       its ⚠, protocol and far-end universe stay. */
     header->setSectionResizeMode(COL_CARRIES, byUniverse ? QHeaderView::ResizeToContents
                                                          : QHeaderView::Stretch);
+    header->setSectionResizeMode(COL_OUTPUT, byUniverse ? QHeaderView::Interactive
+                                                        : QHeaderView::ResizeToContents);
+    fitOutputColumn();
     if (m_columnsButton != NULL)
         m_columnsButton->setVisible(byUniverse);
 }
@@ -5421,6 +5451,25 @@ void ConnectionsTree::layoutSide()
         grid = 0;
     m_outerSplit->setSizes(QList<int>() << list << right);
     m_universeSplit->setSizes(QList<int>() << right - grid - m_universeSplit->handleWidth() << grid);
+}
+
+void ConnectionsTree::fitOutputColumn()
+{
+    /* By universe, Output has the width the other columns leave -- ahead of
+       them, never under a readable floor -- and no more than its text needs;
+       short of that it elides in the middle (PatchCellDelegate). A Stretch
+       section would fall to a sliver when the others fill the list. */
+    if (m_tree == nullptr || m_byUniverse == nullptr || m_byUniverse->isChecked() == false
+            || m_tree->isColumnHidden(COL_OUTPUT))
+        return;
+    int others = 0;
+    for (int c = 0; c < COL_COUNT; c++)
+        if (c != COL_OUTPUT && m_tree->isColumnHidden(c) == false)
+            others += m_tree->header()->sectionSize(c);
+    const int need = m_tree->sizeHintForColumn(COL_OUTPUT) + 8;
+    const int floor = qMin(need, 180);
+    const int room = m_tree->viewport()->width() - others;
+    m_tree->setColumnWidth(COL_OUTPUT, qBound(floor, room, qMax(floor, need)));
 }
 
 bool ConnectionsTree::isGridCell(const QModelIndex &index) const

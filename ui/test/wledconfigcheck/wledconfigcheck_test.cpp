@@ -239,6 +239,140 @@ void WledConfigCheck_Test::aWledThatCannotBeSetUpSaysWhyAndSettingItUpAgainWorks
     QVERIFY(check.writeFailed(ip) == false);
 }
 
+namespace
+{
+/* Universe 1 sent to @p ip through the real WLED output plugin. */
+bool wledUniverse(Doc *doc, const QString &ip)
+{
+    if (doc->ioPluginCache()->plugin("WLED") == nullptr)
+        doc->ioPluginCache()->load(QDir(TEST_PLUGINS_DIR, "*wled*"));
+    InputOutputMap *io = doc->inputOutputMap();
+    if (doc->ioPluginCache()->plugin("WLED") == nullptr || !io->setOutputPatch(0, "WLED", "", 0))
+        return false;
+    io->outputPatch(0)->setPluginParameter("outputIP", ip);
+    return true;
+}
+
+QString deadAddress()
+{
+    QTcpServer probe;
+    if (!probe.listen(QHostAddress::LocalHost))
+        return QString();
+    return QString("127.0.0.1:%1").arg(probe.serverPort());     // closed when it goes
+}
+}
+
+/* The same WLED written down twice: the universe at its address now, its
+   fixture (known by its MAC) at an old one. Asked which WLED it is, the
+   device's MAC says it is that fixture: the fixture follows it, said, and it
+   is set up as usual. */
+void WledConfigCheck_Test::aFixtureAtAnOldAddressFollowsItsDeviceByMac()
+{
+    FakeWled wled;
+    QVERIFY(wled.listen(QHostAddress::LocalHost));
+    wled.info["mac"] = "e08cfef992e0";
+    QJsonObject cfg = liveCfg(false, 5568, 1, 1, 4);
+    cfg["def"] = QJsonObject{ { "on", true }, { "bri", 128 } };
+    wled.cfg = cfg;
+    const QString old = deadAddress();
+    Fixture *fx = lantern(m_doc, old, Fixture::WledTransport, "Effect (15ch)");
+    QVERIFY(fx != nullptr);
+    fx->setName("OfficeStaff");
+    fx->setMacAddress("e08cfef992e0");
+    QVERIFY(m_doc->addFixture(fx));
+    QVERIFY2(wledUniverse(m_doc, wled.address()), "the WLED plugin did not load");
+
+    WledConfigCheck check(m_doc);
+    check.setUpUniverse(0);
+    QTRY_COMPARE(fx->ipAddress(), wled.address());
+    QTRY_VERIFY2(check.writeStatus(wled.address()).contains("Set up "),
+                 qPrintable(check.writeStatus(wled.address())));
+    const QString said = check.writeStatus(wled.address());
+    QVERIFY2(said.startsWith(QString("OfficeStaff is this device (e0:8c:fe:f9:92:e0): its address was %1, "
+                                     "now %2.").arg(old, wled.address())), qPrintable(said));
+    QVERIFY(check.writeFailed(wled.address()) == false);
+    QCOMPARE(wled.posted.size(), 1);
+    QVERIFY(m_doc->isModified());
+}
+
+/* Nothing answers at the universe's address. With one fixture and one
+   device address that differ, both are named; when the fixture's own
+   address answers as its WLED, the universe is offered to send there, and
+   sending there sets it up. */
+void WledConfigCheck_Test::twoAddressesForOneWledAreNamedAndOneClickSendsThere()
+{
+    const QString gone = deadAddress();
+    const QString alsoGone = deadAddress();
+    Fixture *fx = lantern(m_doc, alsoGone, Fixture::WledTransport, "Effect (15ch)");
+    QVERIFY(fx != nullptr);
+    fx->setName("OfficeStaff");
+    QVERIFY(m_doc->addFixture(fx));
+    QVERIFY2(wledUniverse(m_doc, gone), "the WLED plugin did not load");
+
+    WledConfigCheck check(m_doc);
+    // Neither answers: one of them is out of date, said with both.
+    check.setUpUniverse(0);
+    QTRY_VERIFY_WITH_TIMEOUT(check.writeFailed(gone), 10000);
+    QCOMPARE(check.writeStatus(gone),
+             QString("Universe 1 sends to %1 but its WLED fixture OfficeStaff is at %2: one of them "
+                     "is out of date.").arg(gone, alsoGone));
+    QTest::qWait(300);
+    QVERIFY(check.suggestedIp(0).isEmpty());
+
+    // The fixture's address answers, as its WLED: send there.
+    FakeWled wled;
+    QVERIFY(wled.listen(QHostAddress::LocalHost));
+    wled.info["mac"] = "e08cfef992e0";
+    QJsonObject cfg = liveCfg(false, 5568, 1, 1, 4);
+    cfg["def"] = QJsonObject{ { "on", true }, { "bri", 128 } };
+    wled.cfg = cfg;
+    fx->setIPAddress(wled.address());
+    fx->setMacAddress("e08cfef992e0");
+    check.setUpUniverse(0);
+    QTRY_COMPARE_WITH_TIMEOUT(check.suggestedIp(0), wled.address(), 10000);
+    QVERIFY2(check.writeStatus(gone).endsWith(QString("answers at %1. Send there instead?").arg(wled.address())),
+             qPrintable(check.writeStatus(gone)));
+    QVERIFY(check.writeStatus(gone).contains("OfficeStaff (e0:8c:fe:f9:92:e0)"));
+    QVERIFY(check.sendThere(0));
+    QCOMPARE(m_doc->inputOutputMap()->outputPatch(0)->getPluginParameters().value("outputIP").toString(),
+             wled.address());
+    QTRY_VERIFY(check.writeStatus(wled.address()).startsWith("Set up "));
+    QVERIFY(check.suggestedIp(0).isEmpty());
+}
+
+/* A WLED a universe sends to with no WLED fixture on it at all: what needs
+   no fixture is set up, and said in the ordinary colour. */
+void WledConfigCheck_Test::aWledWithNoFixtureIsSetUpWithoutAName()
+{
+    FakeWled wled;
+    QVERIFY(wled.listen(QHostAddress::LocalHost));
+    QJsonObject cfg = liveCfg(true, 5568, 3, 1, 4);
+    cfg["id"] = QJsonObject{ { "name", "Stage Left" }, { "mdns", "stage-left" } };
+    cfg["def"] = QJsonObject{ { "on", true }, { "bri", 128 } };
+    QJsonObject sync{ { "recv", QJsonObject{ { "bri", true }, { "col", true }, { "fx", false },
+                                             { "pal", false }, { "grp", 1 } } },
+                      { "send", QJsonObject{ { "en", true } } } };
+    QJsonObject ifs = cfg.value("if").toObject();
+    ifs["sync"] = sync;
+    cfg["if"] = ifs;
+    wled.cfg = cfg;
+    QVERIFY2(wledUniverse(m_doc, wled.address()), "the WLED plugin did not load");
+
+    WledConfigCheck check(m_doc);
+    check.setUpUniverse(0);
+    QTRY_COMPARE(wled.posted.size(), 1);
+    const QJsonObject sent = wled.posted.first().second;
+    QVERIFY(sent.contains("id") == false);                               // its name stays
+    QCOMPARE(sent.value("def").toObject().value("on").toBool(true), false);
+    QCOMPARE(sent.value("if").toObject().value("live").toObject().value("en").toBool(true), false);
+    QCOMPARE(sent.value("if").toObject().value("sync").toObject().value("send").toObject()
+                 .value("en").toBool(true), false);
+    QTRY_VERIFY2(check.writeStatus(wled.address()).startsWith("Set up "),
+                 qPrintable(check.writeStatus(wled.address())));
+    QVERIFY(check.writeStatus(wled.address()).contains("without a name"));
+    QVERIFY(check.writeFailed(wled.address()) == false);
+}
+
 void WledConfigCheck_Test::aMismatchIsFoundShownAndFixed()
 {
     FakeWled wled;

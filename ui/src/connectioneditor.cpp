@@ -289,6 +289,20 @@ void ConnectionEditor::buildForm()
         m_wledStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
         m_wledStatus->hide();
         l->addWidget(m_wledStatus);
+        /* "Send there instead?": the universe points where nothing answers,
+           its fixture's WLED answers at its own address. */
+        m_wledSendThere = new QPushButton(page);
+        m_wledSendThere->setObjectName(QStringLiteral("connWledSendThere"));
+        m_wledSendThere->hide();
+        l->addWidget(m_wledSendThere, 0, Qt::AlignLeft);
+        connect(m_wledSendThere, &QPushButton::clicked, this, [this]() {
+            if (WledConfigCheck *check = WledConfigCheck::instance())
+                if (check->sendThere(m_universe))
+                {
+                    loadSettings();
+                    emit changed();
+                }
+        });
         l->addStretch(1);
         m_settings->addWidget(page);
     }
@@ -466,6 +480,10 @@ void ConnectionEditor::updateWledStatus()
     m_wledStatus->setStyleSheet(failed ? QStringLiteral("QLabel { color: #d05a5a; }")
                                        : QStringLiteral("QLabel { color: #8a8e99; }"));
     m_wledStatus->setVisible(lines.isEmpty() == false);
+    const QString there = check != nullptr && kindOf(pickedPlugin()) == KindWled
+                          ? check->suggestedIp(m_universe) : QString();
+    m_wledSendThere->setText(tr("Send to %1").arg(there));
+    m_wledSendThere->setVisible(there.isEmpty() == false);
 }
 
 QStringList ConnectionEditor::lineLabels(QLCIOPlugin *p, bool output) const
@@ -905,7 +923,11 @@ void ConnectionEditor::loadSettings()
             m_wledButton->setEnabled(patched);
             m_wledNote->setText(patched
                 ? tr("A WLED universe goes to its devices -- the primary and any backup "
-                     "lanterns mirroring it. They are set in their own window.")
+                     "lanterns mirroring it. They are set in their own window; setting them "
+                     "sets each device up for this show.")
+                : m_pane
+                ? tr("A WLED universe goes to its devices, set in their own window: the button "
+                     "below opens it as soon as this universe is sent to WLED.")
                 : tr("A WLED universe goes to its devices, set in their own window: it "
                      "opens when you press OK."));
             updateWledStatus();

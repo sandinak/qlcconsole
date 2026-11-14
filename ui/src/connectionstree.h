@@ -438,6 +438,11 @@ private:
     void showConnectionOf(QTreeWidgetItem *item);
     /** Share the width: list, settings, then the DMX grid (which gives way). */
     void layoutSide();
+public:
+    /** By universe: Output has the width the other columns leave (see the
+     *  .cpp). */
+    void fitOutputColumn();
+private:
     /** A By universe cell edited in place: a universe row, a patch column. */
     bool isGridCell(const QModelIndex &index) const;
     QWidget *createCellEditor(QWidget *parent, const QModelIndex &index);
