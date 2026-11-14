@@ -282,7 +282,7 @@ void PreshowCheck_Test::autosave()
     page.fixButton("autosave")->click();
     QVERIFY(s_calls.autosaveOn);                    // the app's own setting
     QTRY_COMPARE(page.line("autosave").state, PreshowCheck::Ready);
-    QVERIFY(page.line("autosave").text.contains("every 5 minute"));
+    QVERIFY(page.line("autosave").text.contains("every 5 minutes"));
 
     s_calls.autosaveFailure = "couldn't write /Volumes/Show/show.qxw.autosave";
     page.refresh();

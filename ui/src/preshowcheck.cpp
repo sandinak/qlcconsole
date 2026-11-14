@@ -176,8 +176,8 @@ QList<PreshowCheck::Line> PreshowCheck::gather(Doc *doc, const Hooks &hooks, con
         else
         {
             l.state = Ready;
-            l.text = tr("%n universe(s) sending, and no node has stopped answering. Look at each "
-                        "node's own light too.", "", sending);
+            l.text = (sending == 1 ? tr("1 universe sending") : tr("%1 universes sending").arg(sending))
+                     + tr(", and no node has stopped answering. Look at each node's own light too.");
         }
         lines << l;
     }
@@ -251,7 +251,8 @@ QList<PreshowCheck::Line> PreshowCheck::gather(Doc *doc, const Hooks &hooks, con
         else if (!away.isEmpty())
         {
             l.state = NotReady;
-            l.text = tr("%n not connected: turn it on, charge it or plug it in.", "", away.count());
+            l.text = (away.count() == 1 ? tr("1 not connected") : tr("%1 not connected").arg(away.count()))
+                     + tr(": turn it on, charge it or plug it in.");
             l.items = away;
             const QString key = QStringLiteral("connections.universe");
             if (!status->actionLabel(key).isEmpty())
@@ -263,7 +264,7 @@ QList<PreshowCheck::Line> PreshowCheck::gather(Doc *doc, const Hooks &hooks, con
         else
         {
             l.state = Ready;
-            l.text = tr("%n connected.", "", here.count());
+            l.text = here.count() == 1 ? tr("1 connected.") : tr("%1 connected.").arg(here.count());
             l.items = here;
         }
         lines << l;
@@ -295,13 +296,15 @@ QList<PreshowCheck::Line> PreshowCheck::gather(Doc *doc, const Hooks &hooks, con
         else if (blockers > 0)
         {
             l.state = NotReady;
-            l.text = tr("%n blocker(s) open.", "", blockers)
-                     + (warnings > 0 ? QLatin1Char(' ') + tr("%n warning(s).", "", warnings) : QString());
+            l.text = (blockers == 1 ? tr("1 blocker open.") : tr("%1 blockers open.").arg(blockers))
+                     + (warnings == 1 ? QLatin1Char(' ') + tr("1 warning.")
+                        : warnings > 1 ? QLatin1Char(' ') + tr("%1 warnings.").arg(warnings) : QString());
         }
         else if (warnings > 0)
         {
             l.state = Check;
-            l.text = tr("No blockers; %n warning(s) open: look them over.", "", warnings);
+            l.text = warnings == 1 ? tr("No blockers; 1 warning open: look it over.")
+                             : tr("No blockers; %1 warnings open: look them over.").arg(warnings);
         }
         else
         {
@@ -348,7 +351,8 @@ QList<PreshowCheck::Line> PreshowCheck::gather(Doc *doc, const Hooks &hooks, con
         else
         {
             l.state = error ? NotReady : Check;
-            l.text = tr("%n more thing(s) listed as not ready.", "", l.items.count());
+            l.text = l.items.count() == 1 ? tr("1 more thing listed as not ready.")
+                                         : tr("%1 more things listed as not ready.").arg(l.items.count());
             l.fixLabel = tr("Show Details…");
             l.fix = [](QWidget *parent) {
                 ShowStatusDialog *dlg = new ShowStatusDialog(parent);
@@ -400,7 +404,9 @@ QList<PreshowCheck::Line> PreshowCheck::gather(Doc *doc, const Hooks &hooks, con
         else if (it->status == SystemTuning::Good)
         {
             l.state = Ready;
-            l.text = it->state.left(1).toUpper() + it->state.mid(1) + QLatin1Char('.');
+            l.text = probe.keepDisplayAwake && probe.fullSpeedInOperate
+                   ? tr("Held awake during Operate (Settings ▸ Performance).")
+                   : it->state.left(1).toUpper() + it->state.mid(1) + QLatin1Char('.');
         }
         else
         {
@@ -456,7 +462,8 @@ QList<PreshowCheck::Line> PreshowCheck::gather(Doc *doc, const Hooks &hooks, con
         else
         {
             l.state = Check;
-            l.text = tr("%n thing(s) in Settings ▸ Performance can make DMX frames late.", "", l.items.count());
+            l.text = (l.items.count() == 1 ? tr("1 thing") : tr("%1 things").arg(l.items.count()))
+                     + tr(" in Settings ▸ Performance can make DMX frames late.");
             performanceFix(&l);
         }
         lines << l;
@@ -492,7 +499,8 @@ QList<PreshowCheck::Line> PreshowCheck::gather(Doc *doc, const Hooks &hooks, con
         {
             l.state = Ready;
             const int minutes = hooks.autosaveMinutes ? hooks.autosaveMinutes() : 0;
-            l.text = minutes > 0 ? tr("A recovery copy every %n minute(s).", "", minutes) : tr("On.");
+            l.text = minutes > 0 ? minutes == 1 ? tr("A recovery copy every minute.")
+                                 : tr("A recovery copy every %1 minutes.").arg(minutes) : tr("On.");
         }
         lines << l;
     }
@@ -682,10 +690,10 @@ void PreshowCheck::rebuild()
 
     if (notReady > 0)
         m_summary->setText(stateSymbol(NotReady) + QLatin1Char(' ')
-                           + tr("Not ready: %n to fix", "", notReady)
-                           + (check > 0 ? tr(", %n to check", "", check) : QString()));
+                           + tr("Not ready: %1 to fix").arg(notReady)
+                           + (check > 0 ? tr(", %1 to check").arg(check) : QString()));
     else if (check > 0)
-        m_summary->setText(stateSymbol(Check) + QLatin1Char(' ') + tr("Nothing stops the show; %n to check", "", check));
+        m_summary->setText(stateSymbol(Check) + QLatin1Char(' ') + tr("Nothing stops the show; %1 to check").arg(check));
     else
         m_summary->setText(stateSymbol(Ready) + QLatin1Char(' ') + tr("Ready for the house"));
     const QColor c = colour(notReady > 0 ? NotReady : check > 0 ? Check : Ready);
