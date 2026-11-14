@@ -205,6 +205,12 @@ void FocusCallsUi_Test::theDialogEditsCallsAndPicksTheVenue()
     QLineEdit *nv = d2.findChild<QLineEdit *>("fcNewVenue");
     QVERIFY(nv->placeholderText().startsWith("Venue "));
     QCOMPARE(d2.venueChoice(), QString("Lincoln HS"));   // the one applied is offered
+    // Choosing "New venue" puts a name in the field (selected), not just a hint.
+    QComboBox *kind = d2.findChild<QComboBox *>("fcVenue");
+    kind->setCurrentIndex(kind->count() - 1);
+    QVERIFY(nv->text().startsWith("Venue "));
+    QVERIFY(nv->hasSelectedText());
+    QCOMPARE(d2.venueChoice(), nv->text());
 }
 
 void FocusCallsUi_Test::theNewVenueNameHasRoom()
@@ -646,7 +652,12 @@ void FocusCallsUi_Test::anOldVenueIsAskedAbout()
     venues->setShowFile(show, true);
     d = FocusCallsDialog::confirmVenue(m_doc, nullptr);
     QVERIFY(d != nullptr);
-    QTest::keyClicks(d->findChild<QLineEdit *>("venueConfirmName"), "Kennedy");
+    // The name is asked for in the same step: prefilled, all selected.
+    QLineEdit *named = d->findChild<QLineEdit *>("venueConfirmName");
+    QVERIFY(named->text().startsWith("Venue "));
+    QVERIFY(named->hasSelectedText());
+    QTest::keyClicks(named, "Kennedy");
+    QCOMPARE(named->text(), QString("Kennedy"));
     d->findChild<QPushButton *>("venueConfirmNew")->click();
     QTRY_VERIFY(d.isNull());
     QCOMPARE(venues->activeVenue(), QString("Kennedy"));

@@ -645,7 +645,10 @@ QDialog *FocusCallsDialog::confirmVenue(Doc *doc, QWidget *parent)
     vl->addWidget(question);
     QLineEdit *name = new QLineEdit(d);
     name->setObjectName(QStringLiteral("venueConfirmName"));
+    // Prefilled and selected: Enter takes it, typing replaces it.
+    name->setText(VenueCorrections::defaultVenueName());
     name->setPlaceholderText(VenueCorrections::defaultVenueName());
+    name->selectAll();
     vl->addWidget(name);
     QDialogButtonBox *bb = new QDialogButtonBox(d);
     QPushButton *fresh = bb->addButton(tr("New venue"), QDialogButtonBox::AcceptRole);
@@ -1014,6 +1017,13 @@ void FocusCallsDialog::refreshVenue()
 {
     const int kind = m_venue->currentData().toInt();
     m_newVenue->setVisible(kind == kNewVenue);
+    if (kind == kNewVenue && m_newVenue->text().trimmed().isEmpty())
+    {
+        // Asked for in the same step: a name to take as it is or type over.
+        m_newVenue->setText(VenueCorrections::defaultVenueName());
+        m_newVenue->selectAll();
+        m_newVenue->setFocus();
+    }
     {
         const QString last = m_doc->programmer()->venueCorrections()->lastVenue();
         m_fromLast->setText(tr("Start from %1").arg(last));
