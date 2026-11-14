@@ -195,7 +195,7 @@ void PixelBoxes_Test::frame()
 void PixelBoxes_Test::frameAt(EffectInstance *inst, qint64 ms)
 {
     inst->setOffStageClock(ms);
-    QVERIFY(QMetaObject::invokeMethod(m_doc->effectScriptRunner(), "slotTick", Qt::DirectConnection));
+    m_doc->effectScriptRunner()->slotTick();
     frame();
 }
 
