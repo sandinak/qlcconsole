@@ -10,7 +10,7 @@ under `~/.claude/.../memory/`.
 
 ---
 
-## Props a person holds, on cue (candidate, asked 2026-11-14) -- not built, waiting on a go
+## Props a person holds, on cue (asked 2026-11-14) -- being built (feat/045-held-props)
 
 Asked for: a prop (a staff and the like) is given to a Person to hold and
 moves with them; a cue says when they get it and when it is taken from
@@ -43,14 +43,14 @@ Decided 2026-11-14 (his answers):
   the dim steps counted from the Dim / Brighten presses); (b) the held
   prop, below.
 
-Still to decide before building (board):
-- Is "who holds it" part of a Blocking set, or its own tracked value on
-  the cue? (Blocking is the smaller change.)
-- Does a held prop change what an Aim at the Person covers (a staff's
-  tip), or is it drawn only?
-- The candles' dim level is steps of a remote, not a value: is drawing
-  "on, about this bright" enough, or should the plot not guess at the
-  level at all?
+Decided 2026-11-14 (his answers to the three questions):
+- Who holds a prop is part of **Blocking** (so the cue whose blocking says
+  "held by X" is when they get it, and a later one that says otherwise is
+  when it is taken).
+- A held prop does **not** change what an Aim at the person covers: it is
+  drawn only ("given it's lit it won't matter").
+- The candles' drawn brightness is a guess and that is fine: full on every
+  On, then dimmed or not.
 
 ROI (first guess, to be put on the board with the questions): reach = the
 shows with hand props and the candle number; effort = small if it rides
