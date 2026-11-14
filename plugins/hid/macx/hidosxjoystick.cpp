@@ -172,6 +172,26 @@ void HIDOSXJoystick::init()
     if (device_set)
         CFRelease(device_set);
 
+    /* macOS's own copy of a pad the GameController framework has (Xbox 360
+       "GamePad-1", GCSyntheticDevice): the real pad is listed beside it, so
+       this one is no controller. Nothing read, nothing opened: with no axis
+       or button the plugin does not list it (makeJoystick()). */
+    if (m_IOKitDevice != nullptr)
+    {
+        CFTypeRef synthetic = IOHIDDeviceGetProperty(m_IOKitDevice, CFSTR("GCSyntheticDevice"));
+        const bool gcSynthetic = synthetic != nullptr && CFGetTypeID(synthetic) == CFBooleanGetTypeID()
+                                 && CFBooleanGetValue((CFBooleanRef)synthetic);
+        const QString product = get_string_property(m_IOKitDevice, CFSTR(kIOHIDProductKey));
+        const QString transport = get_string_property(m_IOKitDevice, CFSTR(kIOHIDTransportKey));
+        if (isGameControllerMirror(gcSynthetic, vid, pid, product, transport))
+        {
+            qDebug() << Q_FUNC_INFO << product << "is macOS's copy of a game controller: not listed";
+            CFRelease(m_IOKitDevice);
+            m_IOKitDevice = nullptr;
+            return;
+        }
+    }
+
     bool hasStandard = false;
     bool hasSimulation = false;
     int maxButtonUsage = 0;

@@ -64,6 +64,7 @@
 #include "scene.h"
 #include "padrun.h"
 #include "programmercontroller.h"
+#include "controlmap.h"
 #include "teachingsettings.h"
 #include "teachingglossary.h"
 #include "teachinglog.h"
@@ -864,6 +865,48 @@ void CueRunner_Test::oneListHasNothingToChoose()
     st->addCueList(corp, "Keynote");
     QVERIFY(!follow->isHidden());
     QCOMPARE(follow->count(), 3);
+}
+
+/* 0.4.5: the pad picks no list. The Run tab's "plays" box is the one
+   choice: it is the pad's GO's list too, and it is kept with the show. */
+void CueRunner_Test::theRunTabsListIsThePadsAndIsSaved()
+{
+    const QList<quint32> ids = show();
+    ShowTreeController *st = m_doc->showTree();
+    CueRunner runner(m_doc, CueRunner::Full);
+    QComboBox *follow = runner.findChild<QComboBox *>("crFollow");
+    QVERIFY(follow != nullptr);
+    QVERIFY(!follow->isHidden());               // several lists: the box shows
+    QVERIFY(follow->toolTip().contains("game controller"));
+    PadRun *pad = m_doc->programmer()->padRun();
+    QCOMPARE(pad->listChaser(), quint32(UINT_MAX));      // the main list
+
+    const int at = follow->findData(ids[6]);
+    follow->setCurrentIndex(at);
+    emit follow->activated(at);
+    QCOMPARE(m_doc->controlMap()->runTabList(), ids[6]);
+    QCOMPARE(pad->listChaser(), st->cueList(ids[6])->chaser);
+
+    // A show loaded with another pick: the Run tab follows it.
+    m_doc->controlMap()->reset();
+    QCOMPARE(runner.follow(), invalidId());
+    QByteArray xml;
+    {
+        QBuffer buf(&xml);
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        w.writeStartElement("ControlMap");
+        w.writeAttribute("RunList", QString::number(ids[6]));
+        w.writeEndElement();
+        w.writeEndDocument();
+    }
+    QXmlStreamReader r(xml);
+    QVERIFY(r.readNextStartElement());
+    QVERIFY(m_doc->controlMap()->loadXML(r));
+    QCOMPARE(runner.follow(), ids[6]);
+    QCOMPARE(follow->currentData().toUInt(), ids[6]);
+    QCOMPARE(runner.headerText(), QString("Corporate · Keynote"));
 }
 
 void CueRunner_Test::liveDesignAndTimecode()

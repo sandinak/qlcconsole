@@ -193,6 +193,19 @@ bool isPlayStation(quint16 vendorId, quint16 productId)
     return m != nullptr && m->family == PlayStation;
 }
 
+bool isGameControllerMirror(bool gcSynthetic, quint16 vendorId, quint16 productId,
+                            const QString &product, const QString &transportProperty)
+{
+    if (gcSynthetic)
+        return true;
+    /* Without the property: the framework's copy is always the Xbox 360
+       wired ID, named "GamePad-<n>", on no transport. A real 360 pad (a
+       third-party driver) is on USB and named for itself. */
+    return vendorId == kMicrosoftVendorId && productId == 0x028E
+           && transportProperty.trimmed().isEmpty()
+           && product.startsWith(QLatin1String("GamePad-"));
+}
+
 Family family(quint16 vendorId, quint16 productId, Transport transport,
               bool hasStandardElements, int maxButtonUsage, bool hasSimulationTriggers)
 {

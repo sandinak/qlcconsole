@@ -105,6 +105,26 @@ namespace GamepadLayout
     /** A Sony pad this layout knows (DualShock 4, DualSense). */
     bool isPlayStation(quint16 vendorId, quint16 productId);
 
+    /**
+     * macOS's own copy of a pad, not a pad: for every controller Apple's
+     * GameController framework has, it publishes a second HID device of its
+     * own for apps that read only HID -- "GamePad-1", Microsoft 045E:028E (an
+     * Xbox 360 pad, _GCSyntheticDeviceType "Xbox360Controller") with
+     * GCSyntheticDevice = Yes and no transport, whatever the real pad is (an
+     * Xbox Series pad on USB, a DualSense). Listed, it was a second "Xbox"
+     * controller fed by the same presses but read in its own element order
+     * (the 360 report's: D-pad, Menu, View, the stick clicks, the bumpers,
+     * Xbox, then A B X Y, and the triggers before the sticks), so its D-pad
+     * Up was the profile's A, Menu its LB, a stick its trigger: a controller
+     * slot that took it ran the show from the wrong buttons.
+     *
+     * @p gcSynthetic: the device's GCSyntheticDevice property is true.
+     * @p transportProperty: its IOKit Transport ("" when it has none). The
+     * IDs and name are the fallback for a macOS that drops the property.
+     */
+    bool isGameControllerMirror(bool gcSynthetic, quint16 vendorId, quint16 productId,
+                                const QString &product, const QString &transportProperty);
+
     /** What kind of pad it is, for the names the tools give its controls
      *  (QLCIOPlugin::inputDeviceKind()): "dualsense", "dualshock4", "xbox";
      *  empty for anything else. */

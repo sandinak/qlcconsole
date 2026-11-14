@@ -286,6 +286,23 @@ void GamepadLayout_Test::gipReport()
                                 .arg(buttonName(b)).arg(s.buttons[b] ? "down" : "up")));
     }
 
+    /* LB + X as a Series X|S pad on USB sends it (a whole report, its
+       header and sticks resting a little off the middle): LB held (byte 5
+       0x10) and X pressed (byte 4 0x40) is LB and X -- never A, which is
+       byte 4 0x10 (xpad.c xpadone_process_packet; SDL's
+       SDL_hidapi_xboxone.c reads the same bits). */
+    {
+        const uchar seq[18] = { 0x20, 0x00, 0x2a, 0x0e, 0x40, 0x10, 0, 0, 0, 0,
+                                0x10, 0x01, 0xf0, 0xfe, 0x20, 0x00, 0xc0, 0xff };
+        QVERIFY(parse(QByteArray(reinterpret_cast<const char *>(seq), 18), &s));
+        for (int b = 0; b < ButtonCount; ++b)
+            QVERIFY2(s.buttons[b] == (b == LB || b == X), qPrintable(buttonName(b)));
+        // A resting stick near the middle reads near the middle, not as a trigger pull.
+        QVERIFY(qAbs(int(s.axes[LeftX]) - 128) <= 2);
+        QCOMPARE(int(s.axes[LeftTrigger]), 0);
+        QCOMPARE(int(s.axes[RightTrigger]), 0);
+    }
+
     // Sticks: right is high, UP is low (as HID) though GIP has up positive.
     QVERIFY(parse(gip(0, 0, 1023, 512, 32767, 32767, -32768, -32768), &s));
     QCOMPARE(int(s.axes[LeftX]), 255);
@@ -437,6 +454,23 @@ void GamepadLayout_Test::deviceKinds()
     if (vid == kValveVendorId)
         QCOMPARE(GamepadLayout::family(quint16(vid), quint16(pid), UnknownTransport, true, 16, false),
                  GamepadLayout::NotXbox);
+}
+
+void GamepadLayout_Test::macOSCopyOfAPadIsNoPad()
+{
+    /* dink, 2026-11-14 (ioreg): an Xbox Series X|S pad on USB, and the
+       GameController framework's copy of it beside it. */
+    // The copy: AppleGCSyntheticDevice "GamePad-1", 045E:028E, GCSyntheticDevice = Yes, no Transport.
+    QVERIFY(isGameControllerMirror(true, kMicrosoftVendorId, 0x028E, "GamePad-1", QString()));
+    // A macOS that leaves the property out: the IDs, the name and no transport still tell.
+    QVERIFY(isGameControllerMirror(false, kMicrosoftVendorId, 0x028E, "GamePad-2", QString()));
+    // The same copy made for a DualSense is still the property's.
+    QVERIFY(isGameControllerMirror(true, kSonyVendorId, 0x0CE6, "DualSense Wireless Controller", "Bluetooth"));
+    // The real pad: XboxSeriesXGamepad "Controller", 045E:0B12 on USB.
+    QVERIFY(!isGameControllerMirror(false, kMicrosoftVendorId, 0x0B12, "Controller", "USB"));
+    // A real Xbox 360 pad through a third-party driver: USB, its own name.
+    QVERIFY(!isGameControllerMirror(false, kMicrosoftVendorId, 0x028E, "Controller", "USB"));
+    QVERIFY(!isGameControllerMirror(false, kMicrosoftVendorId, 0x028E, "Xbox 360 Wired Controller", QString()));
 }
 
 void GamepadLayout_Test::touchpadFingers()

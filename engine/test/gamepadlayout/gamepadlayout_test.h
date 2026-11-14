@@ -54,6 +54,10 @@ private slots:
     /** The kind of pad, from its IDs, for the names its controls get (Q170). */
     void deviceKinds_data();
     void deviceKinds();
+    /** macOS's GameController copy of a pad ("GamePad-1", 045E:028E,
+     *  GCSyntheticDevice) is not listed: it fed the same presses in its
+     *  own order, so its D-pad Up was A (dink, an Xbox Series pad). */
+    void macOSCopyOfAPadIsNoPad();
     /** A touchpad finger as the framework reports it: a lift is exactly
      *  (0, 0) and keeps its place; the middle's neighbours are touches. */
     void touchpadFingers();

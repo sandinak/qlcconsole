@@ -58,7 +58,7 @@ the show from it. The controller has two **roles**:
 Switch with the **Pad:** button in the **Run** tab's header (**Pad: Tools**
 / **Pad: Run**). The choice belongs to this computer and is kept for next
 time. Its tooltip shows the button map in the words of the pad you're
-holding; the footer's **Pad** chip shows the same map as a table when you hover it (it also names a press the pad refused, the list the triggers stepped to, and how to leave Walk), the whole Run tab is framed in orange while the arm is held, and **Settings → Advanced → Game controllers → Controller Test…** lists what each
+holding; the footer's **Pad** chip shows the same map as a table when you hover it (it also names a press the pad refused and how to leave Walk), the whole Run tab is framed in orange while the arm is held, and **Settings → Advanced → Game controllers → Controller Test…** lists what each
 button does in the Run role (**Run: GO (LB held)**).
 
 While the role is Run the footer says so too, from every tab: **Pad:
@@ -75,8 +75,8 @@ ARMED**. While it's held:
 | + | A | Cross | **GO** |
 | + | B | Circle | **Back** |
 | + | Y | Triangle | **Sub GO** |
-| + | X | Square | **Stop** the list |
-| — | RT / LT | R2 / L2 | next / previous cue list (no arm needed) |
+| + hold 1 s | X | Square | **Stop** the list (a tap only says "Hold X to stop the list.") |
+| — | RT / LT | R2 / L2 | nothing |
 | — | RS click | R3 | say the list and what's on standby |
 | + | RB | R1 | fire the **armed hit** (below) |
 | hold 1 s | View + Menu | Create + Options | switch the role: Tools / Run |
@@ -87,8 +87,19 @@ ARMED**. While it's held:
 - **An unarmed press does nothing.** The voice says "Hold LB to arm.",
   and the footer's Pad chip shows it for a few seconds, also with
   feedback set to lights only.
-- **The list.** Commands go to the main cue list until a trigger picks
-  another list of the current production. The voice names it ("Act 2.").
+- **Stop takes a hold.** X sits next to A, so a slip must not stop the
+  list: hold LB, then hold X for a second. A tap of X does nothing but
+  say "Hold X to stop the list." (on the footer's Pad chip too). Let go
+  of LB during the hold and nothing stops.
+- **The list is the Run tab's.** The pad's GO plays the list the Run tab
+  plays: the current production's main list, or the one picked in the
+  list box in the Run tab's header, beside the list's name (**Current
+  production (…)** or *production · list*; it shows when the show has
+  more than one list). The pick is saved with the show. The pad cannot
+  change it: sight unseen, a wrong list is too easy. RS says which list
+  it is.
+- **Nothing on the pad leaves Run** but holding View + Menu for a second
+  (below). Menu walks the show and Menu again comes back, still in Run.
 - **The same buttons on every pad.** The map goes by button, not by
   channel, so a [controller slot](other-improvements.md#one-input-whichever-controller-is-here) that finds a
   DualSense in place of the Xbox pad keeps it.
@@ -135,15 +146,15 @@ everything has a button, and an Xbox pad simply has no triggers to feel.
   one step, and a swipe never fires a GO: it previews and selects.
   While walking: swipe **right / left** for the next / previous cue and
   **down / up** for the next / previous layer. In the Run map, not walking:
-  down / up pick the next / previous list, and right / left start a walk
-  from the next / previous cue (Design only; in Operate the cue moves with
-  GO). A second finger, a click, a slanted drag and a swipe too soon after
+  down / up do nothing (the list is the Run tab's), and right / left start
+  a walk from the next / previous cue (Design only; in Operate the cue
+  moves with GO). A second finger, a click, a slanted drag and a swipe too soon after
   the last do nothing.
 
 While walking, one finger now swipes, so aiming with the touchpad needs LB
 held (two fingers still zoom and focus).
 
-decided (can change): swipes need no arm, as picking a list does not.
+decided (can change): swipes need no arm: they preview and walk, never GO.
 
 ### Switch roles from the pad
 
@@ -160,7 +171,11 @@ decided (can change): RB with LB is the hit gesture, so the Run map still
 has a free D-pad and LS; a hold of 1 s is the role chord.
 
 decided (can change): GO needs a modifier held (LB), not a double-press;
-Back, Sub GO and Stop need it too, so there is one rule.
+Back, Sub GO and Stop need it too, so there is one rule. Stop also needs
+X held for a second, because it sits beside GO.
+
+decided (can change): the pad never picks the cue list; the Run tab's
+list box does, and the show keeps it.
 
 ### Walk the show from the stage
 
@@ -262,7 +277,8 @@ PS4 DualShock 4 and a PS5 DualSense, one after the other in one sitting.
 
 **Before you start.** Open a show with:
 
-- a main cue list of at least three cues, and a second cue list;
+- a main cue list of at least three cues, and a second cue list (so the
+  Run tab shows its list box);
 - a [scoped hit](show-tree.md) under the main list's first cue;
 - a [focus-call cue](focus-calls.md) at the top of a third list (Pre-show).
 
@@ -286,15 +302,19 @@ button to **Pad: Run**. Connect one pad at a time, and check that
    to play.
 5. Hold LB + **A**, then LB + **B** (Circle). *Expected:* GO moves to the
    second cue, Back returns to the first; a short buzz each.
-6. Hold LB + **X** (Square). *Expected:* the list stops; a short buzz;
-   no blue flash.
+6. Hold LB and tap **X** (Square). *Expected:* nothing stops; the
+   footer's Pad chip says **Hold X to stop the list.** (Square on a
+   PlayStation pad). Now hold LB and hold X for a second. *Expected:* the
+   list stops; a short buzz; no blue flash.
 7. Let go of LB. *Expected:* **Pad: Run** again; the light bar goes dark.
 8. GO the main list's first cue again (LB + A), then hold LB + **RB**
    (R1). *Expected:* the hit under that cue plays and the voice says its
    name. LB + RB again: it lets go ("… off.").
-9. Press **RT** (R2), no arm. *Expected:* the voice names the second
-   list. Press **LT** (L2) to come back to the main list.
-10. Press RT until the voice names the Pre-show list, then hold LB + A.
+9. Press **RT** and **LT** (R2, L2), with and without LB. *Expected:*
+   nothing happens; the Pad chip still says **Pad: Run** (or **ARMED**).
+   Press RS: the voice names the main list.
+10. On the laptop, pick the Pre-show list in the Run tab's list box.
+    Press RS: the voice names Pre-show. Hold LB + A.
     *Expected:* the focus-call cue arms ("Venue focus ready. Press Start
     to begin."); nothing steps.
 11. Press **Menu** (Options). *Expected:* the focus calls begin and the
@@ -308,11 +328,24 @@ button to **Pad: Run**. Connect one pad at a time, and check that
     again: "Run role. …" and **Pad: Run**.
 13. Start the same hold and press A before the second is up. *Expected:*
     the role does not change.
+14. In Run, press every other button once, then hold each for two
+    seconds: A, B, X, Y, RB, the D-pad, LS, RS, LT, RT, the Xbox (PS)
+    button, the sticks. *Expected:* the Run tab's button never reads
+    **Pad: Tools**; only View + Menu held leaves Run.
+15. Save the show with Pre-show picked in the Run tab's list box, close it and
+    open it again. *Expected:* the Run tab plays Pre-show, and LB + A
+    GOes it.
 
 **What differs by pad:**
 
-- **Xbox One:** no light bar, so steps 2, 3 and 7 are checked on the Run
-  tab's button and by the buzz.
+- **Xbox One / Series on a Mac:** no light bar, so steps 2, 3 and 7 are
+  checked on the Run tab's button and by the buzz. Before step 1, open
+  **Controller Test…**: the pad is listed once (USB: "read via
+  GameController framework" or "Xbox USB report (GIP)"). macOS also makes
+  a copy of the pad called **GamePad-1** (Microsoft 045E:028E) for other
+  apps; it must not be in the list, and no input slot may point at it.
+  Press A, B, X and Y one at a time in the test: each lights its own
+  box, and D-pad Up lights only D-pad Up.
 - **PS4 DualShock 4:** watch the light bar and the buzz: neither has been
   checked on a real pad yet. No adaptive triggers.
 - **PS5 DualSense:** as the DualShock 4, plus: while LB is held (step 2)

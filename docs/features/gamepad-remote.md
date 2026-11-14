@@ -74,7 +74,7 @@ is labelled with its job.
 | LB + A | GO |
 | LB + B | Back |
 | LB + Y | Sub GO |
-| LB + X | Stop the list |
+| LB + hold X 1 s | Stop the list (a tap does nothing) |
 | LB + RB | Fire the armed hit |
 | LB + View | Solo: the first layer of the cue in the preview, or the whole cue again |
 | LB + D-pad right / left | Solo the next / previous layer |

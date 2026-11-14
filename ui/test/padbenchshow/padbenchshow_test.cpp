@@ -1196,9 +1196,9 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
                          .arg(ch).arg(int(role)).arg(during).arg(run->isEnabled()).arg(run->holder()).arg(run->isWalking());
             QVERIFY2(ok, qPrintable(table.last()));
             QVERIFY2(during.startsWith(QStringLiteral("Pad: Run")), qPrintable(table.last()));
-            // The triggers step the cue list, and the screen says which.
+            // The triggers pick no list from the pad (0.4.5): nothing to say.
             if (role == GamepadRole::RightTrigger || role == GamepadRole::LeftTrigger)
-                QVERIFY2(during.contains(QStringLiteral("List: ")), qPrintable(table.last()));
+                QVERIFY2(!during.contains(QStringLiteral("List: ")), qPrintable(table.last()));
             // A press that needs the arm says so, beside the role.
             if (role == GamepadRole::A || role == GamepadRole::B || role == GamepadRole::X
                 || role == GamepadRole::Y || role == GamepadRole::RB)

@@ -37,6 +37,7 @@
 #include "qlcioplugin.h"
 #include "showcontrol.h"
 #include "padrun_test.h"
+#include "controlmap.h"
 #include "inputpatch.h"
 #include "padnames.h"
 #include "padrun.h"
@@ -264,8 +265,9 @@ void PadRun_Test::theMapByRole()
     QCOMPARE(PadRun::actionFor(GamepadRole::B), PadRun::Back);
     QCOMPARE(PadRun::actionFor(GamepadRole::Y), PadRun::SubGo);
     QCOMPARE(PadRun::actionFor(GamepadRole::X), PadRun::Stop);
-    QCOMPARE(PadRun::actionFor(GamepadRole::RightTrigger), PadRun::NextList);
-    QCOMPARE(PadRun::actionFor(GamepadRole::LeftTrigger), PadRun::PreviousList);
+    // The triggers pick no list (0.4.5): nothing in Run.
+    QCOMPARE(PadRun::actionFor(GamepadRole::RightTrigger), PadRun::NoAction);
+    QCOMPARE(PadRun::actionFor(GamepadRole::LeftTrigger), PadRun::NoAction);
     QCOMPARE(PadRun::actionFor(GamepadRole::RS), PadRun::WhereAmI);
     QCOMPARE(PadRun::actionFor(GamepadRole::LeftX), PadRun::NoAction);
     QCOMPARE(PadRun::actionFor(GamepadRole::Start), PadRun::Walk);
@@ -277,7 +279,7 @@ void PadRun_Test::theMapByRole()
     }
     QVERIFY(PadRun::needsArm(PadRun::Go) && PadRun::needsArm(PadRun::Back)
             && PadRun::needsArm(PadRun::SubGo) && PadRun::needsArm(PadRun::Stop));
-    QVERIFY(!PadRun::needsArm(PadRun::NextList) && !PadRun::needsArm(PadRun::WhereAmI));
+    QVERIFY(!PadRun::needsArm(PadRun::WhereAmI));
     QCOMPARE(PadRun::commandFor(PadRun::Back), ShowControl::Back);
     QCOMPARE(PadRun::commandFor(PadRun::Stop), ShowControl::Stop);
 
@@ -288,6 +290,12 @@ void PadRun_Test::theMapByRole()
     QCOMPARE(xbox.at(1), QString("A: GO (LB held)"));
     QCOMPARE(ps.at(0).left(3), QString("L1:"));
     QCOMPARE(ps.at(1), QString("Cross: GO (L1 held)"));
+    QVERIFY(xbox.contains(QString("X: Hold 1 s: stop the list (LB held)")));
+    QVERIFY(ps.contains(QString("Square: Hold 1 s: stop the list (L1 held)")));
+    // No line names a trigger: the pad picks no list.
+    for (const QString &l : xbox + ps)
+        QVERIFY2(!l.startsWith("RT") && !l.startsWith("LT") && !l.startsWith("R2") && !l.startsWith("L2")
+                 && !l.contains("cue list", Qt::CaseInsensitive), qPrintable(l));
 }
 
 void PadRun_Test::goNeedsTheArmHeld()
@@ -321,11 +329,34 @@ void PadRun_Test::goNeedsTheArmHeld()
 
     press(kB);
     press(kY);
-    press(kX);
-    QCOMPARE(m_runs.size(), 4);
+    QCOMPARE(m_runs.size(), 3);
     QCOMPARE(m_runs.at(1).first.command, ShowControl::Back);
     QCOMPARE(m_runs.at(2).first.command, ShowControl::SubGo);
+
+    /* Stop sits beside GO (0.4.5): a tap of X, armed, stops nothing and
+       says to hold it -- on the screen too. */
+    run->setStopHoldMs(80);
+    press(kX);
+    QCOMPARE(m_runs.size(), 3);
+    QVERIFY(!run->isStopPending());
+    QCOMPARE(run->notice(), QString("Hold X to stop the list."));
+    QCOMPARE(said.last().at(0).toString(), QString("Hold X to stop the list."));
+    // Held: the Stop goes once the hold is up, and once only.
+    hold(kX, true);
+    QVERIFY(run->isStopPending());
+    QTRY_COMPARE(m_runs.size(), 4);
     QCOMPARE(m_runs.at(3).first.command, ShowControl::Stop);
+    QTest::qWait(120);
+    hold(kX, false);
+    QCOMPARE(m_runs.size(), 4);
+    // LB let go during the hold: no Stop.
+    hold(kX, true);
+    hold(kLB, false);
+    QVERIFY(!run->isStopPending());
+    QTest::qWait(120);
+    hold(kX, false);
+    QCOMPARE(m_runs.size(), 4);
+    hold(kLB, true);
     for (const auto &r : m_runs)
         QCOMPARE(r.second, ShowControl::RoutePad);
 
@@ -337,7 +368,7 @@ void PadRun_Test::goNeedsTheArmHeld()
     // Let go of the arm: disarmed.
     hold(kLB, false);
     QVERIFY(!run->isArmed());
-    QCOMPARE(armed.count(), 2);
+    QCOMPARE(armed.count(), 4);      // on, off and on again in the Stop hold, off
     press(kA);
     QCOMPARE(m_runs.size(), 4);
     QCOMPARE(refused.count(), 2);
@@ -456,7 +487,7 @@ void PadRun_Test::xboxAndDualSenseSendTheSameCommands()
     stub->m_lineDeviceKind.clear();
 }
 
-void PadRun_Test::theTriggersPickTheList()
+void PadRun_Test::theListIsTheRunTabs()
 {
     IOPluginStub *stub = loadStub();
     QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
@@ -475,37 +506,127 @@ void PadRun_Test::theTriggersPickTheList()
     ProgrammerController *pc = m_doc->programmer();
     PadRun *run = pc->padRun();
     run->setEnabled(true);
-    QCOMPARE(run->lists(), QList<quint32>({ c1, c2 }));
-    QCOMPARE(run->listChaser(), quint32(UINT_MAX));
+    QCOMPARE(run->listChaser(), quint32(UINT_MAX));        // the main list: Act 1
+    QCOMPARE(m_doc->showControl()->mainCueList(), c1);
     QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
 
-    // RT: the list after the main one (Act 1 plays first).
-    QCOMPARE(m_doc->showControl()->mainCueList(), c1);
-    press(kRT);
-    QCOMPARE(run->listChaser(), c2);
-    QCOMPARE(said.last().at(0).toString(), QString("Act 2."));
-    // A trigger resting a little in does not step again.
-    hold(kRT, true);
-    emit m_doc->inputOutputMap()->inputValueChanged(0, kRT, 120, QString());
-    emit m_doc->inputOutputMap()->inputValueChanged(0, kRT, 255, QString());
-    QCOMPARE(run->listChaser(), c1);                       // one step, wrapped
-    hold(kRT, false);
+    // RT / LT, pulled and let go, armed or not: no list picked, nothing sent or said.
+    for (bool armed : { false, true })
+    {
+        hold(kLB, armed);
+        for (quint32 t : { kRT, kLT })
+        {
+            axis(t, 255);
+            axis(t, 0);
+        }
+        hold(kLB, false);
+    }
+    QCOMPARE(run->listChaser(), quint32(UINT_MAX));
+    QVERIFY(m_runs.isEmpty());
+    QCOMPARE(said.count(), 0);
 
-    // LT back, wrapping the other way.
-    press(kLT);
+    // The Run tab picks the list: the pad's GO plays it, RS names it.
+    m_doc->resetModified();
+    m_doc->controlMap()->setRunTabList(act2);
+    QVERIFY(m_doc->isModified());                          // the show's choice
     QCOMPARE(run->listChaser(), c2);
-
-    // The commands go to the list picked, by its chaser.
     hold(kLB, true);
     press(kA);
     hold(kLB, false);
     QCOMPARE(m_runs.size(), 1);
     QCOMPARE(m_runs.at(0).first.chaser, c2);
-
-    // RS: the list and what is on standby.
     press(kRS);
     QCOMPARE(said.last().at(0).toString(), QString("Act 2. Next: cue 1."));
     QVERIFY(run->wherePhrase().startsWith("Act 2"));
+
+    // Saved with the show and back on load.
+    const QByteArray xml = showXml(m_doc);
+    QVERIFY(xml.contains(QString("RunList=\"%1\"").arg(act2).toUtf8()));
+    Doc *other = new Doc(this);
+    QXmlStreamReader sr(xml);
+    sr.readNextStartElement();
+    QVERIFY(other->loadXML(sr, false));
+    QCOMPARE(other->controlMap()->runTabList(), act2);
+    QCOMPARE(other->programmer()->padRun()->listChaser(), c2);
+    delete other;
+
+    // Back to the main list: nothing written.
+    m_doc->controlMap()->setRunTabList(0xFFFFFFFF);
+    QCOMPARE(run->listChaser(), quint32(UINT_MAX));
+    QVERIFY(!showXml(m_doc).contains("RunList"));
+}
+
+void PadRun_Test::nothingOnThePadLeavesTheRunRole()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    // Every button and trigger the Xbox profile has, by its role.
+    QMap<quint32, QString> roles = xboxRoles();
+    const QMap<quint32, QString> more = {
+        { 40, "ls" }, { 41, "guide" }, { 42, "dpad_down" }, { 43, "dpad_left" }, { 44, "dpad_right" } };
+    for (auto it = more.begin(); it != more.end(); ++it)
+        roles.insert(it.key(), it.value());
+    stub->m_channelRoles = roles;
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Show");
+    const quint32 list = st->addCueList(prod, "Main");
+    st->addCue(list, -1, "Open");
+    m_doc->setMode(Doc::Operate);
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    run->setStopHoldMs(30);
+    QSignalSpy off(run, &PadRun::enabledChanged);
+
+    auto check = [&](const QString &what) {
+        QVERIFY2(run->isEnabled(), qPrintable(what));
+        const QString text = run->roleText();
+        QVERIFY2(text == "Pad: Run" || text == "Pad: ARMED" || text == "Pad: Walk",
+                 qPrintable(what + ": " + text));
+    };
+    for (bool armed : { false, true })
+    {
+        for (auto it = roles.begin(); it != roles.end(); ++it)
+        {
+            const quint32 ch = it.key();
+            if (ch == kLB)
+                continue;
+            const QString what = QString("%1%2").arg(armed ? "LB + " : "", it.value());
+            hold(kLB, armed);
+            // A press, then a hold past every hold time, then the release.
+            press(ch);
+            check(what + " pressed");
+            hold(ch, true);
+            QTest::qWait(60);
+            check(what + " held");
+            hold(ch, false);
+            check(what + " let go");
+            hold(kLB, false);
+            check(what + " LB let go");
+            // A walk (Menu) is still the Run role; Menu again leaves it.
+            if (run->isWalking())
+                run->stopWalk();
+            QVERIFY(!run->isWalking());
+        }
+    }
+    // The sticks and the triggers, pushed all the way and back.
+    for (quint32 a : { kLX, quint32(1), quint32(2), quint32(3), kLT, kRT })
+    {
+        axis(a, 255);
+        axis(a, 0);
+        axis(a, 128);
+        check(QString("axis %1").arg(a));
+    }
+    QCOMPARE(off.count(), 0);
+    // Only the role chord leaves: View + Menu held.
+    run->setRoleChordMs(30);
+    hold(kView, true);
+    hold(kMenu, true);
+    QTRY_VERIFY(!run->isEnabled());
+    hold(kMenu, false);
+    hold(kView, false);
+    QCOMPARE(run->roleText(), QString("Pad: Tools"));
 }
 
 void PadRun_Test::theLightBarAndRumble()
@@ -1787,7 +1908,7 @@ void PadRun_Test::swipesStepAndNeverGo()
     QVERIFY(!run->isWalking());
     run->setEnabled(true);
 
-    // Run, not walking, Operate: left / right refused; up / down pick lists.
+    // Run, not walking, Operate: left / right refused; up / down nothing.
     m_doc->setMode(Doc::Operate);
     swipeAcross(0.2f, 0.5f, 0.8f, 0.5f);
     QVERIFY(!run->isWalking());

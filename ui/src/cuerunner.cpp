@@ -124,6 +124,15 @@ CueRunner::CueRunner(Doc *doc, Size size, QWidget *parent)
     });
     connect(m_doc->showControl(), &ShowControl::mainCueListChanged, this, [this]() { m_treeDirty = true; });
     connect(m_doc->showControl(), &ShowControl::commandHandled, this, [this]() { refresh(); });
+    // The Run tab's list is the show's (saved with it; the pad plays it too).
+    if (m_size == Full)
+    {
+        m_follow = m_doc->controlMap()->runTabList();
+        connect(m_doc->controlMap(), &ControlMap::runTabListChanged, this, [this](quint32 listId) {
+            setFollow(listId);
+        });
+        fillFollowBox();
+    }
     refresh();
 }
 
@@ -406,8 +415,12 @@ void CueRunner::makeFollowBox()
 {
     m_followBox = new QComboBox(this);
     m_followBox->setObjectName(QStringLiteral("crFollow"));
-    m_followBox->setToolTip(tr("Which cue list this runner plays: the current production's main list (what "
-                               "the footer GO and show control play), or one list of any production"));
+    m_followBox->setToolTip(m_size == Full
+        ? tr("Which cue list the Run tab, its GO and the game controller's GO play: the current production's "
+             "main list (what the footer GO and show control play), or one list of any production. Saved with "
+             "the show; the controller cannot change it.")
+        : tr("Which cue list this runner plays: the current production's main list (what "
+             "the footer GO and show control play), or one list of any production"));
     connect(m_followBox, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
         setFollow(m_followBox->itemData(index).toUInt());
     });

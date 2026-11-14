@@ -226,8 +226,10 @@ public:
      *  scene or effect is never armed: its key fires in Operate only. */
     bool isArmed(const Target &target) const;
     /** The cue list the Run tab follows (invalid: the current production's
-     *  main cue list), and the one that is now. */
+     *  main cue list), and the one that is now. The Run tab's pick is the
+     *  pad's list too (PadRun) and is saved with the show. */
     void setRunTabList(quint32 listId);
+    quint32 runTabList() const { return m_runTabList; }
     quint32 runList() const;
     /** What is selected in the Show Tree (cue lists, cues, hits). */
     void setSelectedTargets(const QList<Target> &targets);
@@ -260,6 +262,8 @@ signals:
     /** What isArmed() says may have changed (the mode, the Run tab's
      *  list, the Show Tree's selection, a cue list moving on). */
     void armingChanged();
+    /** The Run tab's list changed (a pick, a show loaded or cleared). */
+    void runTabListChanged(quint32 listId);
 
     /*********************************************************************
      * Load & Save

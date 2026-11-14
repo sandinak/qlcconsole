@@ -68,7 +68,7 @@ App) still holds the previews, through a queued connection.
 | Key | `App::m_cueGoAction` / Back / Sub GO / Sub Back (⌘↩, ⌘⇧↩, ⌥⌘↩, ⌥⌘⇧↩; Control ▸ GO…) | Go, Back, SubGo, SubBack on the main list | yes |
 | Run tab | `CueRunner` Full: buttons, Space, a click (Load) or double-click (Go cue) in the list | all but AllOff and Reset | yes |
 | VC Cue Runner | `CueRunner` Compact/List inside `VCCueRunner` (click, its key, its external input) | the same | no |
-| Pad (Run role) | `PadRun::trigger()` (engine/src/padrun.*): LB held + A / B / Y / X; RT / LT pick the list | Go, Back, SubGo, Stop on the main or picked list | yes |
+| Pad (Run role) | `PadRun::trigger()` (engine/src/padrun.*): LB held + A / B / Y, LB + X held 1 s; no list from the pad | Go, Back, SubGo, Stop on the Run tab's list (ControlMap::runTabList(), else the main one) | yes |
 | Pad (profile action) | `ProgrammingManager::slotButtonAction("chaser_step_forward"/"back")` on a running Show Tree list, Tools role only | Go, Back | yes |
 | VC Cue List | `VCCueList` Next / Previous / Play / Stop, a row's double-click, Sub GO / Sub Back, and the web access page (same slots); a VC button's next / previous step (`ProgrammerController::stepCurrentChaser`), only when the chaser is a Show Tree main list | Go, Back, Stop, Sub GO, Sub Back | no |
 | Control Map | `ControlMap::goList()` (GO / Stop a list or cue) | Go, Stop | no |

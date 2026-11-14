@@ -55,6 +55,8 @@ private slots:
     void aRunnerFollowsOneListOfAnyProduction();
     /** Q75: one list, no Current production drop-down */
     void oneListHasNothingToChoose();
+    /** 0.4.5: the Run tab's list is the pad's GO's list, saved with the show. */
+    void theRunTabsListIsThePadsAndIsSaved();
     void theBoxNamesTheOpenedShowsProduction();
     void liveDesignAndTimecode();
     void theNextCueAtATimecodeAndItsCountdown();

@@ -396,7 +396,20 @@ void PageScript_Test::everyPadWordNeedsLBHeld()
         // With LB held: the word, once.
         pad(QJsonObject{ { "lb", 1 } });
         QVERIFY(shown(QStringLiteral("armed")));
-        pad(QJsonObject{ { "lb", 1 }, { it.key(), 1 } }, 200);
+        const int hold = a.value(QStringLiteral("hold")).toInt();
+        if (hold > 0)
+        {
+            // Stop beside GO: a tap with LB held is nothing; it takes the hold.
+            pad(QJsonObject{ { "lb", 1 }, { it.key(), 1 } }, 200);
+            pad(QJsonObject{ { "lb", 1 } }, hold);
+            QVERIFY2(sent().isEmpty(), qPrintable(it.key()));
+            // LB let go during the hold: nothing either.
+            pad(QJsonObject{ { "lb", 1 }, { it.key(), 1 } }, 200);
+            pad(QJsonObject{ { it.key(), 1 } }, hold);
+            QVERIFY2(sent().isEmpty(), qPrintable(it.key()));
+            pad(QJsonObject{ { "lb", 1 } });
+        }
+        pad(QJsonObject{ { "lb", 1 }, { it.key(), 1 } }, hold + 200);
         pad(QJsonObject());
         QVERIFY(!shown(QStringLiteral("armed")));
         QCOMPARE(sent(), QStringList{ word });

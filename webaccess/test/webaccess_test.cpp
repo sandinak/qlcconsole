@@ -2234,9 +2234,14 @@ void WebAccess_Test::theRunPageMapIsPadRun()
     QCOMPARE(map.value("b").toObject().value("do").toString(), QString("back"));
     QCOMPARE(map.value("y").toObject().value("do").toString(), QString("subgo"));
     QCOMPARE(map.value("x").toObject().value("do").toString(), QString("stop"));
+    // Stop is held, as on the console's pad; nothing else is.
+    QCOMPARE(map.value("x").toObject().value("hold").toInt(), PadRun::stopHoldMs());
+    QVERIFY(!map.value("a").toObject().contains("hold"));
     QCOMPARE(map.value("rb").toObject().value("do").toString(), QString("hit"));
-    // What the page cannot do (another list, the walk, the voice) is not mapped.
+    // What the page cannot do (the walk, the voice) is not mapped, and no
+    // trigger picks a list.
     QVERIFY(!map.contains("rt"));
+    QVERIFY(!map.contains("lt"));
     QVERIFY(!map.contains("start"));
     QVERIFY(!map.contains("rs"));
     // The console's words, its {LB} written out.

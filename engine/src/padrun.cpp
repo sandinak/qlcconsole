@@ -28,6 +28,7 @@
 #include "effectscriptrunner.h"
 #include "functionparent.h"
 #include "mastertimer.h"
+#include "controlmap.h"
 #include "chaser.h"
 #include "function.h"
 #include "padrun.h"
@@ -50,6 +51,10 @@ PadRun::PadRun(Doc *doc, ProgrammerController *pc, QObject *parent)
     m_noticeTimer->setSingleShot(true);
     m_noticeTimer->setInterval(noticeMs());
     connect(m_noticeTimer, &QTimer::timeout, this, [this]() { showNotice(QString()); });
+    m_stopHold = new QTimer(this);
+    m_stopHold->setSingleShot(true);
+    m_stopHold->setInterval(stopHoldMs());
+    connect(m_stopHold, &QTimer::timeout, this, &PadRun::stopHoldFired);
     if (m_pc != nullptr)
     {
         // A tool taking the pad, or letting it go: the screen says who has it.
@@ -88,9 +93,7 @@ PadRun::Action PadRun::actionFor(GamepadRole::Role role)
         case GamepadRole::B:            return Back;
         case GamepadRole::Y:            return SubGo;
         case GamepadRole::X:            return Stop;
-        // The triggers step the big unit, as in every tool (a focus call, a layer).
-        case GamepadRole::RightTrigger: return NextList;
-        case GamepadRole::LeftTrigger:  return PreviousList;
+        // The triggers do nothing in Run: the list is the Run tab's (0.4.5).
         case GamepadRole::RS:           return WhereAmI;
         case GamepadRole::Start:        return Walk;
         case GamepadRole::RB:           return FireHit;
@@ -120,9 +123,7 @@ QString PadRun::label(Action action)
         case Go:           return tr("GO ({LB} held)");
         case Back:         return tr("Back ({LB} held)");
         case SubGo:        return tr("Sub GO ({LB} held)");
-        case Stop:         return tr("Stop the list ({LB} held)");
-        case NextList:     return tr("Next cue list");
-        case PreviousList: return tr("Previous cue list");
+        case Stop:         return tr("Hold 1 s: stop the list ({LB} held)");
         case WhereAmI:     return tr("Say the list and what's next");
         case Walk:         return tr("Walk the show: cues, layers, adjust, tag");
         case FireHit:      return tr("Fire the armed hit ({LB} held)");
@@ -133,7 +134,7 @@ QString PadRun::label(Action action)
 
 QList<PadRun::Action> PadRun::actions()
 {
-    return { Arm, Go, Back, SubGo, Stop, NextList, PreviousList, WhereAmI, Walk, FireHit };
+    return { Arm, Go, Back, SubGo, Stop, WhereAmI, Walk, FireHit };
 }
 
 QStringList PadRun::mapLines(PadNames::Family family)
@@ -187,13 +188,9 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
 
     const Action action = actionFor(role);
 
+    // The triggers: nothing, and nothing else hears them (no list from the pad).
     if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
-    {
-        ControllerScheme::TriggerButton &t = role == GamepadRole::RightTrigger ? m_rt : m_lt;
-        if (t.update(value / 255.0f))
-            trigger(action);
         return true;
-    }
 
     const bool down = value > 0;
     if (action == Arm)
@@ -203,11 +200,32 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
             m_armedOn.insert(universe);
         else
             m_armedOn.remove(universe);
+        // The arm let go during a Stop's hold: no Stop.
+        if (!down && universe == m_stopUniverse)
+        {
+            m_stopHold->stop();
+            m_stopUniverse = UINT_MAX;
+        }
         if (was != isArmed())
         {
             updateTriggers();
             showLight();
             emit armedChanged(isArmed());
+        }
+        return true;
+    }
+
+    // X let go before its hold: no Stop, and the pad says how.
+    if (!down && action == Stop && universe == m_stopUniverse)
+    {
+        const bool tap = m_stopHold->isActive();
+        m_stopHold->stop();
+        m_stopUniverse = UINT_MAX;
+        if (tap && m_pc != nullptr)
+        {
+            const QString said = m_pc->padText(tr("Hold {X} to stop the list."));
+            m_pc->tellOperator(said, ControllerScheme::ConfirmPriority);
+            showNotice(said);
         }
         return true;
     }
@@ -228,8 +246,34 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
         }
         return true;
     }
+    // Stop sits beside GO: it takes X held, not a press (0.4.5).
+    if (action == Stop)
+    {
+        m_stopUniverse = universe;
+        m_stopHold->start();
+        return true;
+    }
     trigger(action);
     return true;
+}
+
+void PadRun::setStopHoldMs(int ms)
+{
+    m_stopHold->setInterval(ms);
+}
+
+bool PadRun::isStopPending() const
+{
+    return m_stopHold->isActive();
+}
+
+void PadRun::stopHoldFired()
+{
+    const quint32 u = m_stopUniverse;
+    m_stopUniverse = UINT_MAX;
+    if (!m_enabled || !m_armedOn.contains(u) || !holder().isEmpty() || isWalking())
+        return;
+    trigger(Stop);
 }
 
 QString PadRun::holder() const
@@ -284,6 +328,9 @@ QString PadRun::helpHtml() const
                .arg(tr("Control"), tr("What It Does"));
     for (Action a : actions())
         out += row(PadNames::name(roleFor(a), fam), PadNames::expand(label(a), fam));
+    out += row(PadNames::name(GamepadRole::RightTrigger, fam) + QStringLiteral(" / ")
+                   + PadNames::name(GamepadRole::LeftTrigger, fam),
+               tr("Nothing: GO plays the list the Run tab plays (pick it there)"));
     out += row(tr("Sticks, D-pad"), tr("The follow spot, when one plays (D-pad up / down: speed, left / right: beam size); "
                                        "otherwise nothing"));
     out += row(m_pc->padText(QStringLiteral("{View}")) + QStringLiteral(" + ") + PadNames::name(GamepadRole::LS, fam),
@@ -318,8 +365,8 @@ void PadRun::showNotice(const QString &text)
 void PadRun::reset()
 {
     roleChordCancel();
-    m_rt.reset();
-    m_lt.reset();
+    m_stopHold->stop();
+    m_stopUniverse = UINT_MAX;
     m_swipe.reset();
     if (m_armedOn.isEmpty())
     {
@@ -391,11 +438,9 @@ bool PadRun::swipe(TouchSwipe::Swipe s)
         stepLayer(delta);
         return true;
     }
+    // Run, not walking: up / down nothing (the list is the Run tab's).
     if (!horizontal)
-    {
-        stepList(delta);
-        return true;
-    }
+        return false;
     // Run, not walking: a walk from the next / previous cue, Design only.
     if (m_doc->mode() == Doc::Operate)
         return refuseWalk(tr("In Operate the cue moves with GO."));
@@ -412,12 +457,6 @@ bool PadRun::trigger(Action action)
 {
     switch (action)
     {
-        case NextList:
-            stepList(1);
-            return true;
-        case PreviousList:
-            stepList(-1);
-            return true;
         case WhereAmI:
             if (m_pc != nullptr)
                 m_pc->tellOperator(wherePhrase(), ControllerScheme::WhereNowPriority);
@@ -584,61 +623,17 @@ void PadRun::roleChordFired()
                        ControllerScheme::ConfirmPriority);
 }
 
-QList<quint32> PadRun::lists() const
-{
-    QList<quint32> out;
-    const ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
-    if (st == nullptr)
-        return out;
-    const quint32 current = st->currentProduction();
-    bool any = false;
-    for (const ShowTree::Production &p : st->productions())
-        any = any || p.id == current;
-    for (const ShowTree::Production &p : st->productions())
-    {
-        if (any && p.id != current)
-            continue;
-        for (const ShowTree::CueList &l : p.lists)
-            if (!l.looks && !l.isSubCues() && l.chaser != 0xFFFFFFFF
-                && qobject_cast<Chaser *>(m_doc->function(l.chaser)) != nullptr)
-                out << l.chaser;
-    }
-    return out;
-}
-
 quint32 PadRun::listChaser() const
 {
-    if (m_list == UINT_MAX || !lists().contains(m_list))
+    // The Run tab's list (its picker, kept with the show), else the main one.
+    const ControlMap *cm = m_doc != nullptr ? m_doc->controlMap() : nullptr;
+    const ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
+    if (cm == nullptr || st == nullptr)
         return UINT_MAX;
-    return m_list;
-}
-
-void PadRun::stepList(int delta)
-{
-    const QList<quint32> all = lists();
-    if (all.isEmpty())
-    {
-        if (m_pc != nullptr)
-        {
-            m_pc->tellOperator(tr("No cue lists."), ControllerScheme::ConfirmPriority);
-            showNotice(tr("No cue lists."));
-        }
-        return;
-    }
-    quint32 at = listChaser();
-    if (at == UINT_MAX && m_doc->showControl() != nullptr)
-        at = m_doc->showControl()->mainCueList();
-    const int n = all.size();
-    const int i = all.indexOf(at);
-    const int next = i < 0 ? (delta > 0 ? 0 : n - 1) : ((i + delta) % n + n) % n;
-    m_list = all.at(next);
-    emit listChanged(m_list);
-    if (m_pc != nullptr)
-    {
-        m_pc->tellOperator(tr("%1.").arg(listName(m_list)), ControllerScheme::WherePriority);
-        // On the screen too: with lights-only feedback nothing is said.
-        showNotice(tr("List: %1").arg(listName(m_list)));
-    }
+    const ShowTree::CueList *l = st->cueList(cm->runTabList());
+    if (l == nullptr || l->looks || l->isSubCues() || qobject_cast<Chaser *>(m_doc->function(l->chaser)) == nullptr)
+        return UINT_MAX;
+    return l->chaser;
 }
 
 QString PadRun::listName(quint32 chaser) const
@@ -751,7 +746,7 @@ quint32 PadRun::cueInHand() const
     ShowControl *sc = m_doc != nullptr ? m_doc->showControl() : nullptr;
     if (st == nullptr)
         return 0xFFFFFFFF;
-    // The picked list (else the main one), as a Show Tree list.
+    // The Run tab's list (else the main one), as a Show Tree list.
     quint32 chaser = listChaser();
     if (chaser == UINT_MAX && sc != nullptr)
         chaser = sc->mainCueList();
@@ -800,8 +795,8 @@ void PadRun::walkStarted()
     // The arm lets go: the walking map has no GO.
     const bool wasArmed = isArmed();
     m_armedOn.clear();
-    m_rt.reset();
-    m_lt.reset();
+    m_stopHold->stop();
+    m_stopUniverse = UINT_MAX;
     m_walkRt.reset();
     m_walkLt.reset();
     m_holdY.reset();
