@@ -9604,6 +9604,63 @@ void ShowTree_Test::hitCommandMakesAndPlaysAHit()
     stopAll();
 }
 
+/* `hit "Slam" for cue 2` makes a cue-scoped hit; a cue that doesn't exist
+   is refused with the reason and nothing is made. */
+void ShowTree_Test::hitForCueCommand()
+{
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ctx.list = st->addCueList(ctx.production, "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(ctx.list, -1, "One");
+    const quint32 c2 = st->addCue(ctx.list, 0, "Two");
+    (void)c1;
+    ctx.cue = c1;
+
+    ShowTreeCommand::Result r = cmd.run("hit \"Slam\" for cue 2", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    const quint32 hit = r.context.cue;
+    QVERIFY(st->isLook(hit));
+    quint32 of = invalidId();
+    QCOMPARE(int(st->hitScope(hit, &of)), int(HitScope::Cue));
+    QCOMPARE(of, c2);
+    QCOMPARE(st->hitsAt(HitScope::Cue, c2), QList<quint32>({ hit }));
+    // Again: the same hit, not a second.
+    r = cmd.run("hit Slam for cue 2", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(r.context.cue, hit);
+    QCOMPARE(st->hitsAt(HitScope::Cue, c2).count(), 1);
+    // A production hit of the same name stays its own.
+    r = cmd.run("hit \"Other\"", ctx);
+    QVERIFY(r.ok);
+    QCOMPARE(int(st->hitScope(r.context.cue)), int(HitScope::Production));
+
+    // For the list.
+    r = cmd.run("hit \"Whole\" for list", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(int(st->hitScope(r.context.cue, &of)), int(HitScope::List));
+    QCOMPARE(of, ctx.list);
+
+    // Refusals say why and make nothing.
+    const int hits = st->cueList(st->looksSection(ctx.production))->cues.count();
+    r = cmd.run("hit \"Nope\" for cue 9", ctx);
+    QVERIFY(!r.ok);
+    QVERIFY2(r.message.contains("No cue 9"), qPrintable(r.message));
+    r = cmd.run("hit \"Nope\" for cue", ctx);
+    QVERIFY(!r.ok);
+    r = cmd.run("hit \"Nope\" in \"X\" for cue 1", ctx);
+    QVERIFY(!r.ok);
+    r = cmd.run("hit \"Nope\" for bar 1", ctx);
+    QVERIFY(!r.ok);
+    QCOMPARE(st->cueList(st->looksSection(ctx.production))->cues.count(), hits);
+    QVERIFY(ShowTreeCommand::helpText("hit").contains("for cue"));
+
+    QStringList next;
+    QVERIFY(cmd.candidates("hit \"Slam\" for ", ctx, &next));
+    QCOMPARE(next, QStringList({ "cue", "list" }));
+}
+
 /* 0.3.1 (k2): the help says a hit fires from a VC button "as you would
    any function (Toggle or Flash)", but only a Scene flashed: a hit is a
    Collection, and Function::flash() played nothing. A Flash button now
@@ -11151,6 +11208,46 @@ void ShowTree_Test::startHereMovesTheStartForward()
     QCOMPARE(treeXml(st), xmlBefore);
     QVERIFY(!stageDiffers(before, *st->cueList(listId)));
     QCOMPARE(play(), dmxBefore);
+}
+
+/* Bring Into This Cue on a child layer brings the parent in the same step
+   (one undo), the child right after it, every cue playing as before. */
+void ShowTree_Test::bringIntoChildBringsParent()
+{
+    FixtureGroup *steps = group("Steps", { m_fixtures[0], m_fixtures[1], m_fixtures[2] });
+    FixtureGroup *us = group("US", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 parent = st->addLayer(c1, groupTarget(steps->id()));
+    QVERIFY(st->setLayerLook(c1, parent, st->lookForPalette(full)));
+    QString why;
+    const quint32 child = st->addChildLayer(c1, parent, groupTarget(us->id()), &why);
+    QVERIFY2(child != invalidId(), qPrintable(why));
+    QVERIFY(st->setLayerLook(c1, child, st->lookForPalette(half)));
+
+    const CueList before = *st->cueList(listId);
+    const QByteArray xmlBefore = treeXml(st);
+    const Target tp = groupTarget(steps->id()), tc = groupTarget(us->id());
+    QVERIFY(layersOn(st, c2, tp).isEmpty());
+    const ShowTreeController::TrackOp op = st->bringIntoPlan(c2, tc);
+    QVERIFY2(op.ok, qPrintable(op.why));
+    QVERIFY(op.withParent);
+    QVERIFY2(st->bringIntoCue(c2, tc, &why), qPrintable(why));
+    QVERIFY(!stageDiffers(before, *st->cueList(listId)));
+    const QList<const Layer *> p2 = layersOn(st, c2, tp), k2 = layersOn(st, c2, tc);
+    QCOMPARE(p2.count(), 1);
+    QCOMPARE(k2.count(), 1);
+    QCOMPARE(k2.first()->parent, p2.first()->id);
+    QCOMPARE(st->cue(c2)->layers.count(), 2);
+    QCOMPARE(st->cue(c3)->layers.count(), 0);
+    // One undo step.
+    QVERIFY(st->undo());
+    QCOMPARE(treeXml(st), xmlBefore);
 }
 
 /* The cases that are handled or refused with a reason: an include, a Block

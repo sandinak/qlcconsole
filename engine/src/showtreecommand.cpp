@@ -315,11 +315,14 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
               "palette Blue edit", "palette folder \"01-Song\"", "palette folder \"01-Song\" rename \"02-Song\"" },
             { "colour", "look" }, { "pal" });
         // hits (R3, named Q77): busking states beside the cue lists
-        add("hit", "busking", "hit \"name\" [in <folder>]",
+        add("hit", "busking", "hit \"name\" [in <folder> | for cue <number> | for list]",
             "Selects that hit of the selected production, or makes it in its Hits section (made too, the "
-            "first time); in files it in a folder. Then set its layers as on a cue: Towers colour Blue. A "
-            "hit never tracks; a VC button fires it. (look \"name\" still works.)",
-            { "hit \"Hit 1\"", "hit \"Blackout Hit\" in \"Stings\"" }, { "vcpage", "adopt" });
+            "first time); in files it in a folder. for cue 2.3 makes it a hit for that cue: it may fire only "
+            "while that cue is live (for list: while the selected list is); the cue has to exist. Then set "
+            "its layers as on a cue: Towers colour Blue. A hit never tracks; a VC button fires it. "
+            "(look \"name\" still works.)",
+            { "hit \"Hit 1\"", "hit \"Blackout Hit\" in \"Stings\"", "hit \"Slam\" for cue 2.3" },
+            { "vcpage", "adopt" });
         add("look", "busking", "look \"name\" [in <folder>]",
             "The old name for hit: the same command.",
             { "look \"Hit 1\"" }, { "hit" });
@@ -2912,8 +2915,70 @@ ShowTreeCommand::Result ShowTreeCommand::runLook(const QString &line, const Cont
                 folder = r.word();
             folderGiven = true;
         }
+        if (r.peek().toLower() == QLatin1String("for"))
+        {
+            // hit "name" for cue 2.3 | for list: a hit that fires only while that cue (list) is live.
+            r.word();
+            const QString what = r.word().toLower();
+            const QString usage = tr("hit \"name\" for cue <number> | for list");
+            if (folderGiven)
+                return fail(tr("A hit for a cue or list stays with it, in no folder: leave out “in”."));
+            HitScope scope = HitScope::List;
+            quint32 place = invalidId();
+            QString where;
+            if (what == QLatin1String("cue"))
+            {
+                const QString num = r.word();
+                if (num.isEmpty() || !r.atEnd())
+                    return fail(usage);
+                scope = HitScope::Cue;
+                const CueList *list = m_st->cueList(ctx.list);
+                if (list == nullptr || list->looks)
+                    return fail(tr("Select a cue list first: the cue number is read in it."));
+                const CueList *main = list->isSubCues() ? m_st->listOfCue(list->subOf) : list;
+                for (const CueList *l : { list, main })
+                    for (int k = 0; l != nullptr && place == invalidId() && k < l->cues.count(); ++k)
+                        if (compareCueNumbers(m_st->cueNumber(*l, k), num) == 0)
+                            place = l->cues.at(k).id;
+                if (place == invalidId())
+                    return fail(tr("No cue %1 in %2: a hit for a cue needs the cue to exist.")
+                                    .arg(num, list->name));
+                where = tr("cue %1").arg(num);
+            }
+            else if (what == QLatin1String("list"))
+            {
+                if (!r.atEnd())
+                    return fail(usage);
+                const CueList *list = m_st->cueList(ctx.list);
+                if (list == nullptr || list->looks || list->isSubCues())
+                    return fail(tr("Select a cue list first: the hit is for that list."));
+                place = list->id;
+                where = tr("list %1").arg(list->name);
+            }
+            else
+                return fail(usage);
+            quint32 have = invalidId();
+            for (quint32 h : m_st->hitsAt(scope, place))
+                if (have == invalidId() && m_st->cue(h) != nullptr
+                    && m_st->cue(h)->name.compare(name.trimmed(), Qt::CaseInsensitive) == 0)
+                    have = h;
+            const bool existed = have != invalidId();
+            if (!existed)
+                have = m_st->addHit(scope, place, name.trimmed());
+            if (have == invalidId())
+                return fail(tr("Couldn't make the hit."));
+            ctx.list = m_st->looksSection(ctx.production);
+            ctx.cue = have;
+            ctx.layer = invalidId();
+            res.message = existed ? tr("hit “%1” for %2").arg(name.trimmed(), where)
+                                  : tr("new hit “%1” for %2").arg(name.trimmed(), where);
+            res.ok = true;
+            res.message = QStringLiteral("✓ %1").arg(res.message);
+            return res;
+        }
         if (!r.atEnd())
-            return fail(tr("hit \"name\" [in \"folder\"] -- don't know “%1”").arg(r.peek()));
+            return fail(tr("hit \"name\" [in \"folder\" | for cue <number> | for list] -- don't know “%1”")
+                            .arg(r.peek()));
         quint32 have = invalidId();
         if (const CueList *l = m_st->cueList(section))
             for (const Cue &c : l->cues)
@@ -3331,10 +3396,31 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
             return false;
         if (r.atEnd())
         {
-            *out = QStringList({ "in" });
+            *out = QStringList({ "in", "for" });
             return true;
         }
-        if (r.word().toLower() != QLatin1String("in"))
+        const QString kw = r.word().toLower();
+        if (kw == QLatin1String("for"))
+        {
+            if (r.atEnd())
+            {
+                *out = QStringList({ "cue", "list" });
+                return true;
+            }
+            const QString what = r.word().toLower();
+            if (what == QLatin1String("list"))
+                return r.atEnd();
+            if (what != QLatin1String("cue"))
+                return false;
+            if (r.atEnd())
+            {
+                *out = cueNumbers(context);
+                return true;
+            }
+            r.word();
+            return r.atEnd();
+        }
+        if (kw != QLatin1String("in"))
             return false;
         if (r.atEnd())
         {

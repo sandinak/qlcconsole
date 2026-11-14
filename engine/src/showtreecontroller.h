@@ -747,6 +747,12 @@ public:
          *  and where it goes among the cue's own layers. */
         ShowTree::Layer layer;
         bool front = true;
+        /** Bring Into on a child layer whose parent the cue doesn't hold:
+         *  @a parentLayer comes in too (at @a parentFront), @a layer right
+         *  after it, in the same step. */
+        bool withParent = false;
+        ShowTree::Layer parentLayer;
+        bool parentFront = true;
         /** The layers each cue in @a lose has on the target, to take out. */
         QList<int> range;                   //!< list indexes (internal)
     };

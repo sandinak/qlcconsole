@@ -179,6 +179,7 @@ private slots:
     void bringIntoKeepsEveryCueTheSame();
     void startHereMovesTheStartForward();
     void trackOpsEdgeCases();
+    void bringIntoChildBringsParent();
     void untrackEndsTheLayerBeforeThisCue();
     void untrackEdgeCases();
     void trackSpanCountsTheCuesSinceItWasSet();
@@ -260,6 +261,7 @@ private slots:
     void recordLitTakesARunningLooksLayers();
     void lookCommands();
     void hitCommandMakesAndPlaysAHit();
+    void hitForCueCommand();
     void anOlderLooksSectionKeepsItsName();
     void aFlashButtonPlaysAHitWhileHeld();
 

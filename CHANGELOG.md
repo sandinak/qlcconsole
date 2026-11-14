@@ -10,6 +10,14 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [0.4.7] - Unreleased
+
+### Changed and fixed
+
+- **Bring Into This Cue on a child layer brings its parent in the same step**: one undo, every cue plays as before (it used to refuse with "bring that in first").
+- **Command line: `hit "Slam" for cue 2.3`** (or `for list`) makes a hit scoped to that cue; a cue that doesn't exist is refused with the reason, and a hit already there is selected, not duplicated.
+- **A new venue asks for its name in the same step.** The field comes filled with the date and selected (Enter takes it, typing replaces it), instead of an empty box that quietly became a timestamp.
+
 ## [0.4.6] - Unreleased
 
 ### Changed and fixed

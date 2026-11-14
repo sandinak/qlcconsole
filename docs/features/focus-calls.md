@@ -107,7 +107,9 @@ changed more than 20 hours ago, the laptop asks "Still at Lincoln
 HS?" (until you answer, the footer's chip says **Venue: Lincoln HS?** and
 its menu starts with **Still at Lincoln HS?…**, which asks again):
 
-- **New venue** (the default): name it, or leave it empty for the date.
+- **New venue** (the default): the name field comes filled with the date and
+  selected: press Enter to take it, or type the room's name over it. Choosing
+  **New venue…** in the venue list of Focus Calls fills it the same way.
   Its corrections start from the show's own; Lincoln HS's are kept.
 - **Still at Lincoln HS**: carry on with it.
 - **None**: the show's own calibration.
