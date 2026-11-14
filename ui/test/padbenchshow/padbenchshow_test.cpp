@@ -1199,7 +1199,7 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
     surfaces(QStringLiteral("Pad: Run"), QColor(), "the Run role, not armed");
     const quint32 cue1 = mainList->cues.at(0).id, cue2 = mainList->cues.at(1).id;
 
-    // 1. A (Cross) alone, and R2 + A, not armed: nothing plays; the footer
+    // 1. A (Cross) alone, and L2 + A, not armed: nothing plays; the footer
     //    says how to arm -- lights only, so not aloud.
     tap(kA);
     QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains(QStringLiteral("Not armed")),
@@ -1207,7 +1207,7 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
                                          .arg(pc->controllerRole(1, kA))), 2000);
     qInfo().noquote() << "[PAD RUN] unarmed, footer:" << chip->text();
     QVERIFY(!heard(QStringLiteral("Not armed")));
-    with(kRT, kA);
+    with(kLT, kA);
     QCOMPARE(st->runningCue(mainList->id), cue1);
     // With the voice on, it is said as well.
     pc->setOperatorFeedback(ControllerScheme::BothFeedback);
@@ -1224,19 +1224,17 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
     chord(true);
     surfaces(QStringLiteral("Pad: ARMED"), PadRun::armedColour(), "armed");
 
-    // 3. Armed, A alone: nothing, and the footer says what GO is. The wrong
-    //    trigger: nothing. R2 held + A: GO, to cue 2.
+    // 3. Armed, A alone: nothing, and the footer says what GO is. L2 (the
+    //    safety) held + A: GO, to cue 2.
     tap(kA);
     QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains(QStringLiteral("GO is")), qPrintable(chip->text()), 2000);
     with(kLT, kA);
-    QCOMPARE(st->runningCue(mainList->id), cue1);
-    with(kRT, kA);
     QTRY_COMPARE_WITH_TIMEOUT(st->runningCue(mainList->id), cue2, 3000);
     QVERIFY(run->isArmed());
-    // R2 + B: back to cue 1; and forward again.
-    with(kRT, kB);
+    // L2 + B: back to cue 1; and forward again.
+    with(kLT, kB);
     QTRY_COMPARE_WITH_TIMEOUT(st->runningCue(mainList->id), cue1, 3000);
-    with(kRT, kA);
+    with(kLT, kA);
     QTRY_COMPARE_WITH_TIMEOUT(st->runningCue(mainList->id), cue2, 3000);
     QTRY_VERIFY_WITH_TIMEOUT(!run->isPlaying(), 8000);
     surfaces(QStringLiteral("Pad: ARMED"), PadRun::armedColour(), "armed, after the GOs");
@@ -1327,11 +1325,11 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
     /* The emergency stop: both bumpers and both triggers. Everything
        stops, the arm drops, and every surface is red until armed again. */
     chord(true);
-    press(kLT, 255);
-    press(kRT, 255);
     press(kLB, 255);
-    QVERIFY(run->isArmed());                // three of the four: nothing yet
     press(kRB, 255);
+    press(kLT, 255);
+    QVERIFY(run->isArmed());                // three of the four: nothing yet
+    press(kRT, 255);
     surfaces(QStringLiteral("Pad: STOPPED"), PadRun::stoppedColour(), "the emergency stop");
     QVERIFY(!run->isArmed());
     QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(mainList->id) != cue2, 3000);
@@ -1343,7 +1341,7 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
     // Armed again and a GO: the show runs, and the red is gone.
     chord(true);
     surfaces(QStringLiteral("Pad: ARMED"), PadRun::armedColour(), "armed after the stop");
-    with(kRT, kA);
+    with(kLT, kA);
     QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(mainList->id) != ShowTree::invalidId(), 3000);
     chord(false);
     surfaces(QStringLiteral("Pad: Run"), QColor(), "disarmed");

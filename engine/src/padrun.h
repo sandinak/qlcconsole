@@ -51,11 +51,14 @@ class Doc;
  *
  *   hold LB + RB (armChordMs())   ARM; the same again disarms. A latch:
  *                                 nothing has to stay held
- *   armed, RT held + A   GO            armed, RT held + B   Back
+ *   LT held              the safety: no cue moves without it
+ *   armed, LT held + A   GO            armed, LT held + B   Back
  *   armed, LT held + X   Sub GO        armed, LT held + Y   Sub Back
- *   armed, a trigger held + RB         fire the hit that is armed now
+ *   armed, RT            fire the hit that is armed now (one hit for now;
+ *                        several would be RT held + X / Y / A / B)
  *   LB + RB + LT + RT    EMERGENCY STOP: everything stops (ALL OFF), armed
  *                        or not; the arm drops and the pad shows red
+ *   (the bumpers are the mode only: the arm, and the stop's four)
  *   RS           say the list and what is on standby
  *   Menu         walk the show (below); not while armed
  *   hold View + Menu 1 s   switch the role (Tools / Run), either way
@@ -68,8 +71,9 @@ class Doc;
  *   3. No single control arms or disarms. The arm changes on the LB + RB
  *      chord only -- or with no button at all: the role switched, a tool
  *      took the pad, the pad went away, the emergency stop.
- *   4. Nothing moves the show on one control: armed, and a trigger held,
- *      and the button.
+ *   4. No cue moves on one control: armed, and the safety (LT) held, and
+ *      the button -- one safety for GO, Back, Sub GO and Sub Back. The
+ *      hit is the right trigger's own, armed.
  *   5. The pad's light says the state where it has one: the arm's colour
  *      armed, blinking green while a cue fades, red after the emergency
  *      stop, its own colour otherwise. A pad with no light buzzes: twice
@@ -78,7 +82,7 @@ class Doc;
  * Hits (Q154, show-tree.md "Hits"): every hit of the show whose place is
  * live now is armed; the narrowest place wins (cue, then list, production,
  * everywhere), as on a Virtual Console button holding them all
- * (ShowTreeController::armedTier()). Armed, with a trigger held, RB starts
+ * (ShowTreeController::armedTier()). Armed, RT starts
  * it (a one-shot effect plays again if it has finished; while it runs, the
  * press lets it go) and says its name. Several at the narrowest place:
  * each press takes the next. Operate only, as a VC button.
@@ -117,8 +121,8 @@ class Doc;
  * the screen stops a list, the pad has the emergency stop.
  * decided: nothing on the pad leaves the Run role but the View + Menu hold.
  *
- * Triggers and swipes (Q199): on a DualSense the arm firms both triggers (a
- * GO takes a squeeze, a brush cannot hold one) and walking clicks them
+ * Triggers and swipes (Q199): on a DualSense the arm firms both triggers (the
+ * safety and the hit take a squeeze, a brush does neither) and walking clicks them
  * (PadTriggers); on any pad with a touchpad a swipe steps -- left / right
  * the previous / next cue, up / down the previous / next layer (in Run, not
  * walking and not armed: right / left walk from the next / previous cue;
@@ -148,14 +152,13 @@ public:
     enum Action
     {
         NoAction = 0,
-        Arm,                ///< LB, with RB, held armChordMs(): arm / disarm
-        Go,                 ///< A, armed, RT held
-        Back,               ///< B, armed, RT held
+        Arm,                ///< LB and RB, held armChordMs(): arm / disarm
+        Safety,             ///< LT: held for the four cue commands
+        Go,                 ///< A, armed, LT held
+        Back,               ///< B, armed, LT held
         SubGo,              ///< X, armed, LT held
         SubBack,            ///< Y, armed, LT held
-        FireHit,            ///< RB, armed, a trigger held
-        HoldMain,           ///< RT: held for GO and Back
-        HoldSub,            ///< LT: held for Sub GO and Sub Back
+        FireHit,            ///< RT, armed
         WhereAmI,           ///< RS
         Walk,               ///< Menu: walk the show (not armed)
         EmergencyStop       ///< LB + RB + LT + RT: no one control's
@@ -182,9 +185,10 @@ public:
     static GamepadRole::Role roleFor(Action action);
     /** True for the actions that only work armed. */
     static bool needsArm(Action action);
-    /** The trigger an action needs held beside its button. */
-    enum Guard { NoGuard = 0, RightGuard, LeftGuard, EitherGuard };
-    static Guard guardFor(Action action);
+    /** True for the cue commands, which also need the safety (LT) held. */
+    static bool needsSafety(Action action);
+    /** The safety: the one control held beside every command's own. */
+    static GamepadRole::Role safetyRole() { return GamepadRole::LeftTrigger; }
     /** What @p action is called on the map and in the help, with control
      *  tokens ("GO ({LB} held)"); expand with PadNames::expand(). */
     static QString label(Action action);
@@ -327,7 +331,7 @@ public:
      * Commands
      *********************************************************************/
 public:
-    /** Carry out @p action as its press would, the arm and the trigger
+    /** Carry out @p action as its press would, the arm and the safety
      *  already checked:
      *  the commands through ShowControl::run(r, RoutePad). True when it
      *  did something. */
@@ -425,7 +429,7 @@ signals:
     void armedChanged(bool armed);
     /** A command went to run() (@p done: it did something). */
     void commandSent(ShowControl::Command command, bool done);
-    /** A press that needs the arm or a trigger came without it. */
+    /** A press that needs the arm or the safety came without it. */
     void refused(PadRun::Action action);
     /** A hit was started (@p on) or let go by the pad. */
     void hitFired(quint32 hitId, bool on);

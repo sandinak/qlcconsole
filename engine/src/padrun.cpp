@@ -110,14 +110,15 @@ PadRun::Action PadRun::actionFor(GamepadRole::Role role)
 {
     switch (role)
     {
-        case GamepadRole::LB:           return Arm;
+        // The bumpers are the mode only: together, the arm.
+        case GamepadRole::LB:
+        case GamepadRole::RB:           return Arm;
+        case GamepadRole::LeftTrigger:  return Safety;
         case GamepadRole::A:            return Go;
         case GamepadRole::B:            return Back;
         case GamepadRole::X:            return SubGo;
         case GamepadRole::Y:            return SubBack;
-        case GamepadRole::RB:           return FireHit;
-        case GamepadRole::RightTrigger: return HoldMain;
-        case GamepadRole::LeftTrigger:  return HoldSub;
+        case GamepadRole::RightTrigger: return FireHit;
         case GamepadRole::RS:           return WhereAmI;
         case GamepadRole::Start:        return Walk;
         default:                        break;
@@ -127,6 +128,9 @@ PadRun::Action PadRun::actionFor(GamepadRole::Role role)
 
 GamepadRole::Role PadRun::roleFor(Action action)
 {
+    // The arm is two controls; LB names it.
+    if (action == Arm)
+        return GamepadRole::LB;
     for (int r = GamepadRole::A; r <= GamepadRole::TouchClick; ++r)
         if (action != NoAction && actionFor(GamepadRole::Role(r)) == action)
             return GamepadRole::Role(r);
@@ -138,30 +142,22 @@ bool PadRun::needsArm(Action action)
     return action == Go || action == Back || action == SubGo || action == SubBack || action == FireHit;
 }
 
-PadRun::Guard PadRun::guardFor(Action action)
+bool PadRun::needsSafety(Action action)
 {
-    switch (action)
-    {
-        case Go: case Back:         return RightGuard;
-        case SubGo: case SubBack:   return LeftGuard;
-        case FireHit:               return EitherGuard;
-        default:                    break;
-    }
-    return NoGuard;
+    return action == Go || action == Back || action == SubGo || action == SubBack;
 }
 
 QString PadRun::label(Action action)
 {
     switch (action)
     {
-        case Arm:           return tr("With {RB}, hold: arm, and the same to disarm");
-        case Go:            return tr("GO (armed, {RT} held)");
-        case Back:          return tr("Back (armed, {RT} held)");
+        case Arm:           return tr("{LB} + {RB} held: arm, and the same to disarm");
+        case Safety:        return tr("The safety: hold for GO, Back, Sub GO and Sub Back");
+        case Go:            return tr("GO (armed, {LT} held)");
+        case Back:          return tr("Back (armed, {LT} held)");
         case SubGo:         return tr("Sub GO (armed, {LT} held)");
         case SubBack:       return tr("Sub Back (armed, {LT} held)");
-        case FireHit:       return tr("Fire the armed hit (armed, {LT} or {RT} held); with {LB}, hold: arm");
-        case HoldMain:      return tr("Hold for GO and Back");
-        case HoldSub:       return tr("Hold for Sub GO and Sub Back");
+        case FireHit:       return tr("Fire the armed hit (armed)");
         case WhereAmI:      return tr("Say the list and what's next");
         case Walk:          return tr("Walk the show: cues, layers, adjust, tag (not armed)");
         case EmergencyStop: return emergencyStopLabel();
@@ -177,7 +173,7 @@ QString PadRun::emergencyStopLabel()
 
 QList<PadRun::Action> PadRun::actions()
 {
-    return { Arm, FireHit, HoldMain, Go, Back, HoldSub, SubGo, SubBack, WhereAmI, Walk };
+    return { Arm, Safety, Go, Back, SubGo, SubBack, FireHit, WhereAmI, Walk };
 }
 
 QStringList PadRun::mapLines(PadNames::Family family)
@@ -248,12 +244,13 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
     const bool chordControl = role == GamepadRole::LB || role == GamepadRole::RB
                               || role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger;
     Held &h = m_held[universe];
+    bool rtPressed = false;
     switch (role)
     {
         case GamepadRole::LB:           h.lb = down; break;
         case GamepadRole::RB:           h.rb = down; break;
         case GamepadRole::LeftTrigger:  h.lt.update(value / 255.0f); break;
-        case GamepadRole::RightTrigger: h.rt.update(value / 255.0f); break;
+        case GamepadRole::RightTrigger: rtPressed = h.rt.update(value / 255.0f); break;
         default:                        break;
     }
 
@@ -273,8 +270,9 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
         /* Both bumpers and no trigger, held: the arm changes. Anything
            else of the four ends the timing. */
         armChordUpdate(universe);
-        // RB with a trigger held is the hit (below); the rest is done.
-        if (!(role == GamepadRole::RB && down && h.anyTrigger()))
+        /* RT's pull is the hit (below) -- not with a bumper down, which is
+           a chord in the making (the stop). The rest of the four is done. */
+        if (!rtPressed || h.lb || h.rb)
             return true;
     }
 
@@ -295,20 +293,18 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
             refuse(action, tr("Another controller is armed."));
             return true;
         }
-        const Guard guard = guardFor(action);
-        if (guard == RightGuard && !h.rt.isDown())
+        // The safety: LT held, for every cue command.
+        if (needsSafety(action) && !h.lt.isDown())
         {
-            refuse(action, action == Go ? tr("GO is {RT} held and {A}.") : tr("Back is {RT} held and {B}."));
+            switch (action)
+            {
+                case Go:        refuse(action, tr("GO is {LT} held and {A}.")); break;
+                case Back:      refuse(action, tr("Back is {LT} held and {B}.")); break;
+                case SubGo:     refuse(action, tr("Sub GO is {LT} held and {X}.")); break;
+                default:        refuse(action, tr("Sub Back is {LT} held and {Y}.")); break;
+            }
             return true;
         }
-        if (guard == LeftGuard && !h.lt.isDown())
-        {
-            refuse(action, action == SubGo ? tr("Sub GO is {LT} held and {X}.")
-                                           : tr("Sub Back is {LT} held and {Y}."));
-            return true;
-        }
-        if (guard == EitherGuard && !h.anyTrigger())
-            return true;        // RB alone: the arm chord's, or nothing
     }
     trigger(action);
     return true;
@@ -391,7 +387,7 @@ bool PadRun::setArmed(bool on, quint32 universe)
             m_pc->padRumble(2, ControllerScheme::rumbleShortMs());
         else
             m_pc->padRumble(1, ControllerScheme::rumbleLongMs());
-        m_pc->tellOperator(on ? m_pc->padText(tr("Armed. {RT} and {A} is GO.")) : tr("Disarmed."),
+        m_pc->tellOperator(on ? m_pc->padText(tr("Armed. {LT} and {A} is GO.")) : tr("Disarmed."),
                            ControllerScheme::ConfirmPriority);
     }
     return true;
@@ -738,7 +734,7 @@ bool PadRun::trigger(Action action)
             return true;
         case Go: case Back: case SubGo: case SubBack:
             break;
-        case Arm: case HoldMain: case HoldSub: case NoAction:
+        case Arm: case Safety: case NoAction:
             return false;
     }
 

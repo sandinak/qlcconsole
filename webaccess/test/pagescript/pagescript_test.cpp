@@ -334,10 +334,11 @@ void PageScript_Test::nothingIsSentWhileRemoteGoIsOff()
     // Not by the pad either.
     armPad();
     QVERIFY(shown(QStringLiteral("armed")));
-    pad(QJsonObject{ { "rt", 1 } });
-    pad(QJsonObject{ { "rt", 1 }, { "a", 1 } });
     pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "a", 1 } });
     pad(QJsonObject{ { "lt", 1 }, { "ls", 1 } });
+    pad(QJsonObject());
+    pad(QJsonObject{ { "rt", 1 } });
     pad(QJsonObject());
     armPad();
     QCOMPARE(sent(), QStringList());
@@ -425,37 +426,41 @@ void PageScript_Test::everyPadWordNeedsTheArmAndItsTrigger()
             continue;
         const QString word = QStringLiteral("QLC+RUN|")
             + (a.contains(QStringLiteral("cmd")) ? a.value(QStringLiteral("cmd")).toString() : what);
+        // The safety (LT) for every word but the hit, which is RT's own.
         const QString guard = a.value(QStringLiteral("guard")).toString();
-        QVERIFY2(!guard.isEmpty(), qPrintable(it.key()));        // rule 4: never one control
-        const QString trig = guard == QLatin1String("lt") ? QStringLiteral("lt") : QStringLiteral("rt");
-        const QString other = trig == QLatin1String("lt") ? QStringLiteral("rt") : QStringLiteral("lt");
-        auto withTrigger = [&](const QString &t) {
-            pad(QJsonObject{ { t, 1 } });
-            pad(QJsonObject{ { t, 1 }, { it.key(), 1 } });
-            pad(QJsonObject{ { t, 1 } });
+        QCOMPARE(guard, it.key() == QLatin1String("rt") ? QString() : QStringLiteral("lt"));
+        auto fire = [&](const QString &held) {
+            QJsonObject base;
+            if (!held.isEmpty())
+                base.insert(held, 1);
+            QJsonObject both = base;
+            both.insert(it.key(), 1);
+            pad(base);
+            pad(both);
+            pad(base);
             pad(QJsonObject());
         };
-        // Not armed, even with its trigger: nothing.
-        withTrigger(trig);
+        // Not armed, even with the safety: nothing.
+        fire(guard);
         QVERIFY2(sent().isEmpty(), qPrintable(it.key()));
         arm(true);
-        // Armed, alone: nothing. With the other trigger: nothing.
-        pad(QJsonObject{ { it.key(), 1 } });
-        pad(QJsonObject());
-        QVERIFY2(sent().isEmpty(), qPrintable(it.key()));
-        if (guard != QLatin1String("any"))
+        if (!guard.isEmpty())
         {
-            withTrigger(other);
+            // Armed, alone: nothing. RT is no safety (it is the hit): not this word.
+            fire(QString());
             QVERIFY2(sent().isEmpty(), qPrintable(it.key()));
+            fire(QStringLiteral("rt"));
+            QVERIFY2(!sent().contains(word), qPrintable(it.key()));
         }
-        // Armed, its trigger held: the word, once -- and still armed after.
-        withTrigger(trig);
+        // Armed, with the safety held (the hit: on its own): the word, once
+        // -- and still armed after.
+        fire(guard);
         QCOMPARE(sent(), QStringList{ word });
         QVERIFY(shown(QStringLiteral("armed")));
         arm(false);
         ++checked;
     }
-    QCOMPARE(checked, map.count() - 4);      // not the arm, the two triggers, the stop
+    QCOMPARE(checked, map.count() - 4);      // not the two bumpers, the safety, the stop
     QVERIFY(js(QStringLiteral("__vibrations.length")).toInt() >= 1);     // the arm and a GO buzz
 
     // The four together: ALL OFF, once, armed or not; the arm drops and the page says so.
@@ -466,12 +471,12 @@ void PageScript_Test::everyPadWordNeedsTheArmAndItsTrigger()
     QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|alloff") });
     QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("EMERGENCY STOP"));
     pad(QJsonObject(), 50);
-    pad(QJsonObject{ { "rt", 1 } });
-    pad(QJsonObject{ { "rt", 1 }, { "a", 1 } });
+    pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "a", 1 } });
     pad(QJsonObject());
     QVERIFY(sent().isEmpty());              // stopped is not armed
     arm(true);
-    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("ARMED: RT + A IS GO"));
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("ARMED: LT + A IS GO"));
     arm(false);
 
     // The labels in the controller test are the console's.
@@ -506,8 +511,8 @@ void PageScript_Test::theControllerTestSendsNothing()
     pad(QJsonObject());
     QCOMPARE(js(QStringLiteral("document.getElementById('qpadtest').className")).toString(), QString());
     armPad();
-    pad(QJsonObject{ { "rt", 1 } });
-    pad(QJsonObject{ { "rt", 1 }, { "a", 1 } });
+    pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "a", 1 } });
     pad(QJsonObject());
     QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|go") });
 }

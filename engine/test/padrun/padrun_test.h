@@ -51,9 +51,9 @@ private slots:
      *  chord again does. */
     void theArmIsATwoButtonLatch();
     /** Armed, a button alone sends nothing and says what it needs; with
-     *  the wrong trigger, or one only brushed, nothing; RT held + A is one
-     *  GO through run() with RoutePad, RT + B Back, LT + X Sub GO, LT + Y
-     *  Sub Back. Another pad's presses are refused. */
+     *  the other trigger, or the safety only brushed, nothing; LT held + A
+     *  is one GO through run() with RoutePad, LT + B Back, LT + X Sub GO,
+     *  LT + Y Sub Back. Another pad's presses are refused. */
     void goNeedsTheArmAndItsTrigger();
     /** LB + RB + LT + RT: ALL OFF through run(), armed or not, once a
      *  chord; the arm drops, the state is Stopped (red) until armed again
@@ -130,11 +130,10 @@ private slots:
     void theLightItselfGoesIntoTheVenue();
 
     /* The Hits page (0.4 item 2 leftovers). */
-    /** Armed, a trigger held + RB fires the armed hit and says its name;
-     *  again lets it go. */
-    void rbFiresTheArmedHit();
-    /** Not armed, with no trigger held, with no hit armed, or in Design:
-     *  nothing starts. */
+    /** Armed, RT fires the armed hit and says its name; again lets it go. */
+    void rtFiresTheArmedHit();
+    /** Not armed, with no hit armed, in Design, RT only brushed or pulled
+     *  with a bumper down: nothing starts; one pull is one hit. */
     void noHitWithoutArmOrAnArmedHit();
     /** Hits at several places: the narrowest armed place wins; several at
      *  one place take turns. */

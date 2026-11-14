@@ -481,7 +481,7 @@ void CueRunner_Test::thePadRoleShowsOnTheRunTab()
     pad->click();
     QVERIFY(run->isEnabled());
     QCOMPARE(pad->text(), QString("Pad: Run"));
-    QVERIFY2(pad->toolTip().contains("GO (armed, RT held)"), qPrintable(pad->toolTip()));
+    QVERIFY2(pad->toolTip().contains("GO (armed, LT held)"), qPrintable(pad->toolTip()));
     QVERIFY2(pad->toolTip().contains("Emergency stop"), qPrintable(pad->toolTip()));
 
     /* PadRun's one state, in its words and colour, on the button and as a

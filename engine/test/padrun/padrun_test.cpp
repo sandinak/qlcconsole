@@ -282,15 +282,18 @@ void PadRun_Test::with(quint32 trigger, quint32 button, quint32 universe)
 
 void PadRun_Test::theMapByRole()
 {
+    // The bumpers are the mode only: together, the arm.
     QCOMPARE(PadRun::actionFor(GamepadRole::LB), PadRun::Arm);
-    QCOMPARE(PadRun::actionFor(GamepadRole::RB), PadRun::FireHit);
+    QCOMPARE(PadRun::actionFor(GamepadRole::RB), PadRun::Arm);
+    QCOMPARE(PadRun::roleFor(PadRun::Arm), GamepadRole::LB);
+    // LT is the safety; the face buttons are the cue commands; RT is the hit.
+    QCOMPARE(PadRun::actionFor(GamepadRole::LeftTrigger), PadRun::Safety);
+    QCOMPARE(PadRun::safetyRole(), GamepadRole::LeftTrigger);
     QCOMPARE(PadRun::actionFor(GamepadRole::A), PadRun::Go);
     QCOMPARE(PadRun::actionFor(GamepadRole::B), PadRun::Back);
     QCOMPARE(PadRun::actionFor(GamepadRole::X), PadRun::SubGo);
     QCOMPARE(PadRun::actionFor(GamepadRole::Y), PadRun::SubBack);
-    // The triggers are held for a command; they pick no list.
-    QCOMPARE(PadRun::actionFor(GamepadRole::RightTrigger), PadRun::HoldMain);
-    QCOMPARE(PadRun::actionFor(GamepadRole::LeftTrigger), PadRun::HoldSub);
+    QCOMPARE(PadRun::actionFor(GamepadRole::RightTrigger), PadRun::FireHit);
     QCOMPARE(PadRun::actionFor(GamepadRole::RS), PadRun::WhereAmI);
     QCOMPARE(PadRun::actionFor(GamepadRole::LeftX), PadRun::NoAction);
     QCOMPARE(PadRun::actionFor(GamepadRole::Start), PadRun::Walk);
@@ -303,18 +306,16 @@ void PadRun_Test::theMapByRole()
     QVERIFY(!PadRun::actions().contains(PadRun::EmergencyStop));
     QCOMPARE(PadRun::roleFor(PadRun::EmergencyStop), GamepadRole::None);
 
-    // Everything that moves the show needs the arm, and a trigger held.
-    for (PadRun::Action a : { PadRun::Go, PadRun::Back, PadRun::SubGo, PadRun::SubBack, PadRun::FireHit })
+    // Every cue command needs the arm and the safety; the hit, the arm.
+    for (PadRun::Action a : { PadRun::Go, PadRun::Back, PadRun::SubGo, PadRun::SubBack })
     {
         QVERIFY(PadRun::needsArm(a));
-        QVERIFY(PadRun::guardFor(a) != PadRun::NoGuard);
+        QVERIFY(PadRun::needsSafety(a));
     }
-    QCOMPARE(PadRun::guardFor(PadRun::Go), PadRun::RightGuard);
-    QCOMPARE(PadRun::guardFor(PadRun::Back), PadRun::RightGuard);
-    QCOMPARE(PadRun::guardFor(PadRun::SubGo), PadRun::LeftGuard);
-    QCOMPARE(PadRun::guardFor(PadRun::SubBack), PadRun::LeftGuard);
-    QCOMPARE(PadRun::guardFor(PadRun::FireHit), PadRun::EitherGuard);
-    QVERIFY(!PadRun::needsArm(PadRun::WhereAmI) && !PadRun::needsArm(PadRun::Walk));
+    QVERIFY(PadRun::needsArm(PadRun::FireHit));
+    QVERIFY(!PadRun::needsSafety(PadRun::FireHit));
+    for (PadRun::Action a : { PadRun::Arm, PadRun::Safety, PadRun::WhereAmI, PadRun::Walk })
+        QVERIFY(!PadRun::needsArm(a) && !PadRun::needsSafety(a));
     QCOMPARE(PadRun::commandFor(PadRun::Back), ShowControl::Back);
     QCOMPARE(PadRun::commandFor(PadRun::SubGo), ShowControl::SubGo);
     QCOMPARE(PadRun::commandFor(PadRun::SubBack), ShowControl::SubBack);
@@ -324,13 +325,15 @@ void PadRun_Test::theMapByRole()
     const QStringList xbox = PadRun::mapLines(PadNames::Xbox);
     const QStringList ps = PadRun::mapLines(PadNames::DualSense);
     QCOMPARE(xbox.size(), PadRun::actions().size() + 1);
-    QCOMPARE(xbox.at(0), QString("LB: With RB, hold: arm, and the same to disarm"));
-    QCOMPARE(ps.at(0).left(3), QString("L1:"));
-    QVERIFY(xbox.contains(QString("A: GO (armed, RT held)")));
-    QVERIFY(xbox.contains(QString("B: Back (armed, RT held)")));
+    QCOMPARE(xbox.at(0), QString("LB: LB + RB held: arm, and the same to disarm"));
+    QCOMPARE(ps.at(0), QString("L1: L1 + R1 held: arm, and the same to disarm"));
+    QVERIFY(xbox.contains(QString("LT: The safety: hold for GO, Back, Sub GO and Sub Back")));
+    QVERIFY(xbox.contains(QString("A: GO (armed, LT held)")));
+    QVERIFY(xbox.contains(QString("B: Back (armed, LT held)")));
     QVERIFY(xbox.contains(QString("X: Sub GO (armed, LT held)")));
     QVERIFY(xbox.contains(QString("Y: Sub Back (armed, LT held)")));
-    QVERIFY(ps.contains(QString("Cross: GO (armed, R2 held)")));
+    QVERIFY(xbox.contains(QString("RT: Fire the armed hit (armed)")));
+    QVERIFY(ps.contains(QString("Cross: GO (armed, L2 held)")));
     QVERIFY(ps.contains(QString("Square: Sub GO (armed, L2 held)")));
     QCOMPARE(xbox.last(), QString("Emergency stop, everything off: LB + RB + LT + RT"));
     QCOMPARE(ps.last(), QString("Emergency stop, everything off: L1 + R1 + L2 + R2"));
@@ -394,7 +397,7 @@ void PadRun_Test::theArmIsATwoButtonLatch()
     hold(kRB, true);
     QTRY_VERIFY(run->isArmed());
     QCOMPARE(armed.count(), 1);
-    QCOMPARE(said.last().at(0).toString(), QString("Armed. RT and A is GO."));
+    QCOMPARE(said.last().at(0).toString(), QString("Armed. LT and A is GO."));
     // Still held: it does not flip back.
     QTest::qWait(120);
     QVERIFY(run->isArmed());
@@ -465,52 +468,51 @@ void PadRun_Test::goNeedsTheArmAndItsTrigger()
     QSignalSpy refused(run, &PadRun::refused);
     QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
 
-    // Not armed: nothing goes, with the trigger or without, and the pad says how.
+    // Not armed: nothing goes, with the safety or without, and the pad says how.
     press(kA);
-    with(kRT, kA);
+    with(kLT, kA);
     QVERIFY(m_runs.isEmpty());
     QCOMPARE(refused.count(), 2);
     QCOMPARE(refused.at(0).at(0).value<PadRun::Action>(), PadRun::Go);
     QCOMPARE(said.last().at(0).toString(), QString("Not armed: hold LB and RB."));
     QCOMPARE(run->notice(), QString("Not armed: hold LB and RB."));
 
-    // Armed, the button alone: nothing, and it says what GO is.
+    // Armed, the button alone: nothing, and it says what each is.
     arm(true);
     refused.clear();
     press(kA);
     QVERIFY(m_runs.isEmpty());
     QCOMPARE(refused.count(), 1);
-    QCOMPARE(run->notice(), QString("GO is RT held and A."));
+    QCOMPARE(run->notice(), QString("GO is LT held and A."));
     press(kB);
-    QCOMPARE(run->notice(), QString("Back is RT held and B."));
+    QCOMPARE(run->notice(), QString("Back is LT held and B."));
     press(kX);
     QCOMPARE(run->notice(), QString("Sub GO is LT held and X."));
     press(kY);
     QCOMPARE(run->notice(), QString("Sub Back is LT held and Y."));
-    // The other trigger, or a trigger only brushed: nothing.
-    with(kLT, kA);
-    with(kLT, kB);
-    with(kRT, kX);
-    with(kRT, kY);
-    axis(kRT, 100);
+    // The other trigger is no safety, nor is LT only brushed.
+    for (quint32 b : { kA, kB, kX, kY })
+        with(kRT, b);
+    axis(kLT, 100);
     press(kA);
-    axis(kRT, 0);
-    QVERIFY(m_runs.isEmpty());
-    // The triggers alone, and together: nothing.
-    axis(kRT, 255);
-    axis(kLT, 255);
     axis(kLT, 0);
-    axis(kRT, 0);
     QVERIFY(m_runs.isEmpty());
+    // The safety alone, and the bumpers one at a time with it: nothing.
+    axis(kLT, 255);
+    press(kLB);
+    press(kRB);
+    axis(kLT, 0);
+    QVERIFY(m_runs.isEmpty());
+    QVERIFY(run->isArmed());
 
-    // Armed + RT held + A: one GO, through run() with the pad's route.
-    with(kRT, kA);
+    // Armed + LT held + A: one GO, through run() with the pad's route.
+    with(kLT, kA);
     QCOMPARE(m_runs.size(), 1);
     QCOMPARE(m_runs.at(0).first.command, ShowControl::Go);
     QCOMPARE(m_runs.at(0).second, ShowControl::RoutePad);
     QCOMPARE(m_runs.at(0).first.chaser, quint32(UINT_MAX));        // the main list
-    // RT + B: Back. LT + X: Sub GO. LT + Y: Sub Back.
-    with(kRT, kB);
+    // The one safety for all four: LT + B Back, + X Sub GO, + Y Sub Back.
+    with(kLT, kB);
     with(kLT, kX);
     with(kLT, kY);
     QCOMPARE(m_runs.size(), 4);
@@ -520,18 +522,18 @@ void PadRun_Test::goNeedsTheArmAndItsTrigger()
     for (const auto &r : m_runs)
         QCOMPARE(r.second, ShowControl::RoutePad);
     // Held, A twice is two GOs; a release sends nothing.
-    axis(kRT, 255);
+    axis(kLT, 255);
     press(kA);
     press(kA);
     hold(kA, false);
-    axis(kRT, 0);
+    axis(kLT, 0);
     QCOMPARE(m_runs.size(), 6);
     // Still armed after all of it.
     QVERIFY(run->isArmed());
 
-    // The arm is one pad's: another's RT + A is refused, and said.
+    // The arm is one pad's: another's LT + A is refused, and said.
     QVERIFY(m_doc->inputOutputMap()->setInputPatch(1, stub->name(), QString(), 1));
-    with(kRT, kA, 1);
+    with(kLT, kA, 1);
     QCOMPARE(m_runs.size(), 6);
     QCOMPARE(run->notice(), QString("Another controller is armed."));
     // Nor may it drop the first pad's arm.
@@ -545,7 +547,7 @@ void PadRun_Test::goNeedsTheArmAndItsTrigger()
 
     // Disarmed: nothing again.
     arm(false);
-    with(kRT, kA);
+    with(kLT, kA);
     QCOMPARE(m_runs.size(), 6);
 }
 
@@ -595,7 +597,7 @@ void PadRun_Test::theEmergencyStop()
     QCOMPARE(run->state(), PadRun::Stopped);
 
     // Stopped is not armed: RT + A goes nowhere.
-    with(kRT, kA);
+    with(kLT, kA);
     QCOMPARE(m_runs.size(), 2);
 
     // Armed again: Stopped is over.
@@ -733,7 +735,7 @@ void PadRun_Test::nothingFiresInTheWrongRole()
     hold(kRB, false);
     hold(kLB, false);
     QVERIFY(!pc->padRun()->isArmed());
-    with(kRT, kA);
+    with(kLT, kA);
     QVERIFY(m_runs.isEmpty());
     QCOMPARE(actions.count(), 1);
     QCOMPARE(actions.at(0).at(0).toString(), QString("chaser_step_forward"));
@@ -741,7 +743,7 @@ void PadRun_Test::nothingFiresInTheWrongRole()
     // Run: the GO, and not the profile's action beside it.
     pc->padRun()->setEnabled(true);
     arm(true);
-    with(kRT, kA);
+    with(kLT, kA);
     arm(false);
     QCOMPARE(m_runs.size(), 1);
     QCOMPARE(actions.count(), 1);
@@ -771,9 +773,9 @@ void PadRun_Test::xboxAndDualSenseSendTheSameCommands()
     stub->m_lineNames = QStringList() << xbox << dualSense;
     // The DualSense lists its face buttons and bumpers in another order.
     QMap<quint32, QString> xroles = { { 6, "a" }, { 7, "b" }, { 8, "lb" }, { 9, "x" },
-                                      { 10, "rb" }, { 11, "rt" } };
+                                      { 10, "rb" }, { 11, "lt" } };
     QMap<quint32, QString> droles = { { 6, "x" }, { 7, "a" }, { 8, "b" }, { 9, "lb" },
-                                      { 10, "rt" }, { 11, "rb" } };
+                                      { 10, "lt" }, { 11, "rb" } };
     stub->m_lineChannelRoles[0] = xroles;
     stub->m_lineChannelRoles[1] = droles;
     stub->m_lineDeviceKind[0] = "xbox";
@@ -797,7 +799,7 @@ void PadRun_Test::xboxAndDualSenseSendTheSameCommands()
         hold(rb, false);
         hold(lb, false);
     };
-    // The Xbox pad: armed, RT + A, then RT + B.
+    // The Xbox pad: armed, LT + A, then LT + B.
     InputPatch *ip = iom->inputPatch(0);
     chord(ip->showChannel(8), ip->showChannel(10), true);
     hold(ip->showChannel(11), true);
@@ -817,7 +819,7 @@ void PadRun_Test::xboxAndDualSenseSendTheSameCommands()
     QCOMPARE(iom->inputSlotLive(0), 1);
     QCOMPARE(pc->padFamily(), PadNames::DualSense);
 
-    // Armed (L1 + R1), R2 + Cross, then R2 + Circle, by the DualSense's own
+    // Armed (L1 + R1), L2 + Cross, then L2 + Circle, by the DualSense's own
     // channels: the same two commands.
     ip = iom->inputPatch(0);
     chord(ip->showChannel(9), ip->showChannel(11), true);
@@ -873,7 +875,9 @@ void PadRun_Test::theListIsTheRunTabs()
             axis(t, 255);
             axis(t, 0);
         }
-        QCOMPARE(said.count(), 0);
+        // The safety says nothing; RT is the hit's (none here); neither names a list.
+        for (const QList<QVariant> &a : said)
+            QVERIFY2(!a.first().toString().contains("Act"), qPrintable(a.first().toString()));
     }
     arm(false);
     QCOMPARE(run->listChaser(), quint32(UINT_MAX));
@@ -885,7 +889,7 @@ void PadRun_Test::theListIsTheRunTabs()
     QVERIFY(m_doc->isModified());                          // the show's choice
     QCOMPARE(run->listChaser(), c2);
     arm(true);
-    with(kRT, kA);
+    with(kLT, kA);
     arm(false);
     QCOMPARE(m_runs.size(), 1);
     QCOMPARE(m_runs.at(0).first.chaser, c2);
@@ -1001,7 +1005,7 @@ void PadRun_Test::theLightBarAndRumble()
     QCOMPARE(rumbles.last().at(1).toInt(), ControllerScheme::rumbleShortMs());
 
     // A GO: green at once, one short buzz, then it blinks with the arm's colour...
-    with(kRT, kA);
+    with(kLT, kA);
     QVERIFY(run->isPlaying());
     QCOMPARE(pc->padLight(), PadRun::playingColour());
     QCOMPARE(rumbles.count(), 2);
@@ -1015,7 +1019,7 @@ void PadRun_Test::theLightBarAndRumble()
 
     // Nothing to play: the long buzz, no green.
     m_answer = false;
-    with(kRT, kA);
+    with(kLT, kA);
     QCOMPARE(rumbles.count(), 3);
     QCOMPARE(rumbles.last().at(1).toInt(), ControllerScheme::rumbleLongMs());
     QCOMPARE(pc->padLight(), PadRun::armedColour());
@@ -1054,13 +1058,13 @@ void PadRun_Test::aLostPadDisarms()
     QVERIFY(!pc->padLight().isValid());
     // Back again it is not armed: RT + A goes nowhere until the chord.
     emit pc->controllerLost(false);
-    with(kRT, kA);
+    with(kLT, kA);
     QVERIFY(m_runs.isEmpty());
     // Turning the role off disarms too, and its buttons are free again.
     arm(true);
     run->setEnabled(false);
     QVERIFY(!run->isArmed());
-    with(kRT, kA);
+    with(kLT, kA);
     QVERIFY(m_runs.isEmpty());
 }
 
@@ -1108,7 +1112,7 @@ void PadRun_Test::menuStartsAndStopsTheWalk()
     QVERIFY(said.count() > 0);
     QVERIFY(said.last().at(0).toString().contains("Walk off"));
     arm(true);
-    with(kRT, kA);
+    with(kLT, kA);
     QCOMPARE(m_runs.size(), 1);
     // Armed, Menu walks nothing: the pad is the cue map until disarmed.
     press(kMenu);
@@ -1720,7 +1724,7 @@ PadRun *PadRun_Test::runPad(bool armed)
     return run;
 }
 
-void PadRun_Test::rbFiresTheArmedHit()
+void PadRun_Test::rtFiresTheArmedHit()
 {
     makeShow();
     ShowTreeController *st = m_doc->showTree();
@@ -1733,7 +1737,7 @@ void PadRun_Test::rbFiresTheArmedHit()
     QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
 
     QCOMPARE(run->armedHits(), QList<quint32>({ breathe }));
-    with(kRT, kRB);
+    press(kRT);
     QCOMPARE(fired.count(), 1);
     QCOMPARE(fired.at(0).at(0).toUInt(), breathe);
     QVERIFY(fired.at(0).at(1).toBool());
@@ -1746,13 +1750,13 @@ void PadRun_Test::rbFiresTheArmedHit()
     QVERIFY(f->isRunning());
 
     // Again: it is let go (and said).
-    with(kLT, kRB);                             // either trigger
+    with(kLT, kRT);                             // the safety held too: the same
     QCOMPARE(fired.count(), 2);
     QVERIFY(!fired.at(1).at(1).toBool());
     QVERIFY(said.last().at(0).toString().contains("Breathe off"));
     m_doc->masterTimer()->timerTick();
     QVERIFY(!f->isRunning());
-    // Still armed: the hit's bumper is no arm chord.
+    // Still armed.
     QVERIFY(run->isArmed());
     arm(false);
     m_doc->setMode(Doc::Design);
@@ -1774,41 +1778,52 @@ void PadRun_Test::noHitWithoutArmOrAnArmedHit()
     QVERIFY(run->armedHits().isEmpty());
 
     // Not armed: refused, said, nothing starts.
-    with(kRT, kRB);
+    press(kRT);
     QCOMPARE(refused.count(), 1);
     QCOMPARE(refused.at(0).at(0).value<PadRun::Action>(), PadRun::FireHit);
     QVERIFY(said.last().at(0).toString().contains("LB"));
     QCOMPARE(fired.count(), 0);
 
-    // Armed, no hit armed: said. RB with no trigger held: nothing, unsaid.
+    // Armed, no hit armed: said. A bumper is the mode's only: nothing, unsaid.
     arm(true);
-    with(kRT, kRB);
+    press(kRT);
     QCOMPARE(fired.count(), 0);
     QVERIFY(said.last().at(0).toString().contains("No hit armed"));
     said.clear();
     press(kRB);
+    press(kLB);
     QCOMPARE(said.count(), 0);
 
     // An armed hit in Design: not fired either (as a VC button).
     const quint32 wash = hitWithLayer(ShowTree::HitScope::Production, prod, "Wash");
     m_doc->setMode(Doc::Design);
-    with(kRT, kRB);
+    press(kRT);
     QCOMPARE(fired.count(), 0);
     QVERIFY(said.last().at(0).toString().contains("Operate"));
     QVERIFY(!m_doc->function(st->lookFunction(wash))->isRunning());
     QVERIFY(!m_doc->function(st->lookFunction(onCue))->isRunning());
 
-    // Disarmed in Operate: nothing again; armed, with no trigger: nothing.
+    // Disarmed in Operate: nothing again.
     m_doc->setMode(Doc::Operate);
     arm(false);
-    with(kRT, kRB);
+    press(kRT);
     QCOMPARE(fired.count(), 0);
     arm(true);
-    press(kRB);
+    // RT only brushed, or pulled with a bumper down (a chord in the making): nothing.
+    axis(kRT, 100);
+    axis(kRT, 0);
+    hold(kRB, true);
+    press(kRT);
+    hold(kRB, false);
     QCOMPARE(fired.count(), 0);
-    with(kRT, kRB);
+    // Pulled: the hit, once a pull however long it is held.
+    axis(kRT, 255);
+    axis(kRT, 250);
+    axis(kRT, 255);
     QCOMPARE(fired.count(), 1);
     QCOMPARE(fired.at(0).at(0).toUInt(), wash);
+    axis(kRT, 0);
+    QCOMPARE(fired.count(), 1);
     arm(false);
     m_doc->setMode(Doc::Design);
 }
@@ -1830,16 +1845,16 @@ void PadRun_Test::theNarrowestArmedHitWins()
     // The cue is not running: the list's two are the narrowest armed.
     QCOMPARE(run->armedHits(), QList<quint32>({ onList, onList2 }));
     // Two at one place take turns: Red, then (Red let go first) Blue.
-    with(kLT, kRB);
+    press(kRT);
     QCOMPARE(fired.last().at(0).toUInt(), onList);
     m_doc->masterTimer()->timerTick();
-    with(kLT, kRB);                                  // lets Red go
+    press(kRT);                                  // lets Red go
     QVERIFY(!fired.last().at(1).toBool());
     m_doc->masterTimer()->timerTick();
-    with(kLT, kRB);
+    press(kRT);
     QCOMPARE(fired.last().at(0).toUInt(), onList2);
     m_doc->masterTimer()->timerTick();
-    with(kLT, kRB);
+    press(kRT);
     QVERIFY(!fired.last().at(1).toBool());
     QVERIFY(onCue != 0 && everywhere != 0 && onProd != 0);
 
@@ -2014,14 +2029,16 @@ void PadRun_Test::inputThroughThePatchDoesNotDeadlock()
        channels: the role lookup goes through the patch's channel map. */
     const QString xbox = QStringLiteral("Xbox Wireless Controller");
     const QString dualSense = QStringLiteral("DualSense Wireless Controller");
-    const quint32 xA = 6, xLB = 8, xRB = 10, xMenu = 11, xRT = 13;
+    const quint32 xA = 6, xLB = 8, xRB = 10, xMenu = 11, xLT = 13, xRT = 14;
     const quint32 dA = 7, dLB = 9, dRB = 11, dMenu = 10;
     stub->m_linesAreHardware = true;
     stub->m_lineNames = QStringList() << xbox << dualSense;
     const QMap<quint32, QString> xroles = { { 6, "a" }, { 7, "b" }, { 8, "lb" }, { 9, "x" },
-                                            { 10, "rb" }, { 11, "start" }, { 12, "back" }, { 13, "rt" } };
+                                            { 10, "rb" }, { 11, "start" }, { 12, "back" }, { 13, "lt" },
+                                            { 14, "rt" } };
     const QMap<quint32, QString> droles = { { 6, "x" }, { 7, "a" }, { 8, "b" }, { 9, "lb" },
-                                            { 10, "start" }, { 11, "rb" }, { 12, "back" }, { 13, "rt" } };
+                                            { 10, "start" }, { 11, "rb" }, { 12, "back" }, { 13, "lt" },
+                                            { 14, "rt" } };
     stub->m_lineChannelRoles[0] = xroles;
     stub->m_lineChannelRoles[1] = droles;
     stub->m_lineDeviceKind[0] = "xbox";
@@ -2044,7 +2061,7 @@ void PadRun_Test::inputThroughThePatchDoesNotDeadlock()
     QCOMPARE(actions.at(0).at(0).toString(), QString("chaser_step_forward"));
     QVERIFY(m_runs.isEmpty());
 
-    /* The Run role: the chord arms (and disarms), then RT held + A is one
+    /* The Run role: the chord arms (and disarms), then LT held + A is one
        GO through the pad's route. */
     run->setEnabled(true);
     run->setArmChordMs(15);
@@ -2057,9 +2074,9 @@ void PadRun_Test::inputThroughThePatchDoesNotDeadlock()
     };
     chord(true);
     QVERIFY(run->isArmed());
-    padHold(stub, 0, xRT, true);
+    padHold(stub, 0, xLT, true);
     padPress(stub, 0, xA);
-    padHold(stub, 0, xRT, false);
+    padHold(stub, 0, xLT, false);
     chord(false);
     QCOMPARE(m_runs.size(), 1);
     QCOMPARE(m_runs.at(0).first.command, ShowControl::Go);
@@ -2072,17 +2089,15 @@ void PadRun_Test::inputThroughThePatchDoesNotDeadlock()
     padPress(stub, 0, xMenu);
     QVERIFY(!run->isWalking());
 
-    // A hit: armed, a trigger held + RB fires the armed one, in Operate.
+    // A hit: armed, RT fires the armed one, in Operate.
     m_doc->setMode(Doc::Operate);
     QSignalSpy fired(run, &PadRun::hitFired);
     chord(true);
-    padHold(stub, 0, xRT, true);
-    padPress(stub, 0, xRB);
+    padPress(stub, 0, xRT);
     QCOMPARE(fired.count(), 1);
     QCOMPARE(fired.at(0).at(0).toUInt(), breathe);
-    padPress(stub, 0, xRB);                 // and lets it go
+    padPress(stub, 0, xRT);                 // and lets it go
     QCOMPARE(fired.count(), 2);
-    padHold(stub, 0, xRT, false);
     chord(false);
     m_doc->setMode(Doc::Design);
 
@@ -2102,9 +2117,9 @@ void PadRun_Test::inputThroughThePatchDoesNotDeadlock()
     QTRY_VERIFY(run->isArmed());
     padHold(stub, 0, dRB, false);
     padHold(stub, 0, dLB, false);
-    padHold(stub, 0, xRT, true);            // R2: the same channel on both here
+    padHold(stub, 0, xLT, true);            // L2: the same channel on both here
     padPress(stub, 0, dA);
-    padHold(stub, 0, xRT, false);
+    padHold(stub, 0, xLT, false);
     padHold(stub, 0, dLB, true);
     padHold(stub, 0, dRB, true);
     QTRY_VERIFY(!run->isArmed());

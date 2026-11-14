@@ -517,7 +517,7 @@ void CueRunner::buildFullLayout()
             this, &CueRunner::refreshFocusCalls);
     refreshFocusCalls();
     /* The pad's Run role (0.4): the game controller runs the show -- armed
-       (LB + RB), RT held and A is GO -- through the same one GO path as the
+       (LB + RB), LT held and A is GO -- through the same one GO path as the
        keys. This computer's choice (the App keeps it); its state shows
        here, from PadRun's one source. */
     m_padRunBtn = new QToolButton(this);

@@ -2234,17 +2234,16 @@ void WebAccess_Test::theRunPageMapIsPadRun()
     QCOMPARE(map.value("b").toObject().value("do").toString(), QString("back"));
     QCOMPARE(map.value("x").toObject().value("do").toString(), QString("subgo"));
     QCOMPARE(map.value("y").toObject().value("do").toString(), QString("subback"));
-    QCOMPARE(map.value("rb").toObject().value("do").toString(), QString("hit"));
-    // Each with the trigger held beside it, as on the console's pad.
-    QCOMPARE(map.value("a").toObject().value("guard").toString(), QString("rt"));
-    QCOMPARE(map.value("b").toObject().value("guard").toString(), QString("rt"));
-    QCOMPARE(map.value("x").toObject().value("guard").toString(), QString("lt"));
-    QCOMPARE(map.value("y").toObject().value("guard").toString(), QString("lt"));
-    QCOMPARE(map.value("rb").toObject().value("guard").toString(), QString("any"));
-    // The arm is the chord, held; the triggers are held, and send nothing.
-    QCOMPARE(map.value("lb").toObject().value("hold").toInt(), PadRun::armChordMs());
-    QCOMPARE(map.value("rt").toObject().value("do").toString(), QString("hold"));
+    // Each with the safety (LT) held beside it, as on the console's pad.
+    for (const char *k : { "a", "b", "x", "y" })
+        QCOMPARE(map.value(QLatin1String(k)).toObject().value("guard").toString(), QString("lt"));
     QCOMPARE(map.value("lt").toObject().value("do").toString(), QString("hold"));
+    // RT is the armed hit, with no safety of its own.
+    QCOMPARE(map.value("rt").toObject().value("do").toString(), QString("hit"));
+    QVERIFY(!map.value("rt").toObject().contains("guard"));
+    // The bumpers are the mode only: the arm, the two held.
+    QCOMPARE(map.value("rb").toObject().value("do").toString(), QString("arm"));
+    QCOMPARE(map.value("lb").toObject().value("hold").toInt(), PadRun::armChordMs());
     // The four together: ALL OFF.
     QCOMPARE(map.value("estop").toObject().value("do").toString(), QString("alloff"));
     // No word stops a list or picks one, and what the page cannot do (the
@@ -2253,8 +2252,8 @@ void WebAccess_Test::theRunPageMapIsPadRun()
         QVERIFY2(map.value(role).toObject().value("do").toString() != QLatin1String("stop"), qPrintable(role));
     QVERIFY(!map.contains("start"));
     QVERIFY(!map.contains("rs"));
-    // The console's words, its {RT} written out.
-    QVERIFY(map.value("a").toObject().value("label").toString().contains(QLatin1String("RT")));
+    // The console's words, its {LT} written out.
+    QVERIFY(map.value("a").toObject().value("label").toString().contains(QLatin1String("LT")));
     QVERIFY(!map.value("a").toObject().value("label").toString().contains(QLatin1Char('{')));
     // The remote's own Blind and Solo (Q229): never over a control of the
     // console's Run role, each with the word it sends.

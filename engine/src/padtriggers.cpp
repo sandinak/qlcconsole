@@ -28,8 +28,9 @@ PadTriggers::State PadTriggers::forState(bool runRole, bool armed, bool walking)
         return s;
     if (walking)
         s.right = s.left = Click;
-    /* Armed, both triggers are firm: each is held for a GO or a Sub GO
-       (PadRun, 0.4.5), so it takes a squeeze and a brush holds nothing. */
+    /* Armed, both triggers are firm: L2 is the safety held for every cue
+       command and R2 fires the hit (PadRun, 0.4.5), so each takes a
+       squeeze and a brush does neither. */
     else if (armed)
         s.right = s.left = Firm;
     return s;

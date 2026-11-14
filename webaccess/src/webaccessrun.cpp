@@ -461,11 +461,11 @@ static QJsonObject cueObject(Doc *doc, Chaser *ch, quint32 listId, int step, int
 QJsonObject WebAccessRun::padMap()
 {
     /* The pad's Run role (PadRun), as far as the page can do it, by the
-       same rules: the arm a latch on LB + RB held, GO and Back with RT
-       held, Sub GO and Sub Back with LT held, the armed hit, and the four
-       together for the emergency stop. The rest (the walk, the voice) are
-       the console's. */
+       same rules: the arm a latch on LB + RB held; GO, Back, Sub GO and
+       Sub Back armed with the safety (LT) held; the armed hit on RT,
+       armed; the four together for the emergency stop. The rest (the walk, the voice) are the console's. */
     QJsonObject map;
+    const QString safety = GamepadRole::key(PadRun::safetyRole());
     for (GamepadRole::Role role : WebAccessGamepad::standardButtons())
     {
         const PadRun::Action a = PadRun::actionFor(role);
@@ -473,26 +473,20 @@ QJsonObject WebAccessRun::padMap()
         switch (a)
         {
             case PadRun::Arm:       what = QStringLiteral("arm"); break;
+            case PadRun::Safety:    what = QStringLiteral("hold"); break;
             case PadRun::Go:        what = QStringLiteral("go"); break;
             case PadRun::Back:      what = QStringLiteral("back"); break;
             case PadRun::SubGo:     what = QStringLiteral("subgo"); break;
             case PadRun::SubBack:   what = QStringLiteral("subback"); break;
             case PadRun::FireHit:   what = QStringLiteral("hit"); break;
-            case PadRun::HoldMain:
-            case PadRun::HoldSub:   what = QStringLiteral("hold"); break;
             default: continue;
         }
         QJsonObject e;
         e[QStringLiteral("do")] = what;
         e[QStringLiteral("label")] = PadNames::expand(PadRun::label(a), PadNames::Xbox);
-        switch (PadRun::guardFor(a))
-        {
-            case PadRun::RightGuard:    e[QStringLiteral("guard")] = QStringLiteral("rt"); break;
-            case PadRun::LeftGuard:     e[QStringLiteral("guard")] = QStringLiteral("lt"); break;
-            case PadRun::EitherGuard:   e[QStringLiteral("guard")] = QStringLiteral("any"); break;
-            case PadRun::NoGuard:       break;
-        }
-        // The arm: LB with RB, held, to arm and again to disarm.
+        if (PadRun::needsSafety(a))
+            e[QStringLiteral("guard")] = safety;
+        // The arm: LB and RB, held, to arm and again to disarm.
         if (a == PadRun::Arm)
             e[QStringLiteral("hold")] = PadRun::armChordMs();
         map[GamepadRole::key(role)] = e;
@@ -531,7 +525,7 @@ QJsonObject WebAccessRun::padMap()
         e[QStringLiteral("do")] = QLatin1String(x.what);
         e[QStringLiteral("cmd")] = QLatin1String(x.command);
         e[QStringLiteral("remote")] = true;
-        e[QStringLiteral("guard")] = QStringLiteral("lt");
+        e[QStringLiteral("guard")] = safety;
         e[QStringLiteral("label")] = PadNames::expand(x.label, PadNames::Xbox);
         map[GamepadRole::key(x.role)] = e;
     }

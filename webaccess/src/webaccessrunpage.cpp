@@ -119,7 +119,7 @@ button:disabled{opacity:.35}
 </main>
 <div id="pad">
 <div id="msg"></div>
-<div id="armed">ARMED: RT + A IS GO</div>
+<div id="armed">ARMED: LT + A IS GO</div>
 <button id="go" disabled>GO</button>
 <div class="row" id="subrow"><button id="subback" disabled>SUB BACK</button><button id="subgo" disabled>SUB GO</button></div>
 <div class="row"><button id="back" disabled>BACK</button><button id="hold" disabled>HOLD</button><button id="stop" disabled>STOP</button></div>
@@ -259,14 +259,15 @@ function statusList(){
   sl.className=list.length&&list[0].level==='error'?'error':'';
   $('focuslink').style.display=st.focus?'inline':'none'}
 /* The controller: the pad's Run role (PadRun), from the state's map and by
-   its rules -- LB + RB held arms and disarms (a latch), a command is armed
-   + its trigger held + the button, the four together are the emergency
-   stop -- and the remote's own Blind and Solo (a.cmd). */
+   its rules -- LB + RB held arms and disarms (a latch); a cue command is
+   armed + the safety (its guard, LT) held + its button; RT, armed, is the
+   hit; the four together are the emergency stop -- and the remote's own Blind and
+   Solo (a.cmd). */
 function padAction(r){return (st.pad||{})[r]}
 function padLabels(){var l={};for(var r in (st.pad||{}))l[r]=st.pad[r].label;QPad.labels(l)}
 var padArmed=false,padStopped=false,armT=null,estopDone=false;
 function showArm(){var e=$('armed');e.style.display=(padArmed||padStopped)?'block':'none';
-  e.className=padStopped?'stopped':'';e.textContent=padStopped?'EMERGENCY STOP':'ARMED: RT + A IS GO'}
+  e.className=padStopped?'stopped':'';e.textContent=padStopped?'EMERGENCY STOP':'ARMED: LT + A IS GO'}
 showArm();
 function isChord(r){return r==='lb'||r==='rb'||r==='lt'||r==='rt'}
 function chord(){var a=padAction('lb');
@@ -286,12 +287,11 @@ QPad.on({
           if(canRig())cmd('alloff');if(navigator.vibrate)navigator.vibrate([150,80,150,80,150])}
         return}
       chord();
-      if(!(r==='rb'&&(QPad.down('lt')||QPad.down('rt'))))return}
+      /* RT's pull is the hit, below -- not with a bumper down (the stop in the making). */
+      if(r!=='rt'||QPad.down('lb')||QPad.down('rb'))return}
     var a=padAction(r);if(!a||a.do==='arm'||a.do==='hold')return;
     if(!padArmed){msg('Not armed: hold LB and RB.');return}
-    if(a.guard==='rt'&&!QPad.down('rt')){msg('Hold RT with it.');return}
-    if(a.guard==='lt'&&!QPad.down('lt')){msg('Hold LT with it.');return}
-    if(a.guard==='any'&&!QPad.down('lt')&&!QPad.down('rt'))return;
+    if(a.guard&&!QPad.down(a.guard)){msg('Hold '+a.guard.toUpperCase()+' with it.');return}
     if(!(a.remote?canRig():canSend()))return;
     cmd(a.cmd||a.do);
     if(a.do==='go'&&navigator.vibrate)navigator.vibrate(30)},
