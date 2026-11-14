@@ -43,6 +43,7 @@ private slots:
     void aDefinitionThatFailsIsRemembered();
     void aLocalDefinitionSaysItReplacesTheIncludedOne();
     void aTypeMadeWhileRunningIsLoaded();
+    void aCustomisedShippedTypeSavedWhileRunningIsUsed();
     void ofTwoLocalCopiesTheNewestIsUsed();
 
 private:

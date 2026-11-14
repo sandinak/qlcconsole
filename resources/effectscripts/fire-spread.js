@@ -154,7 +154,13 @@
             if (age < 0) {
                 // Not reached: dark. Just before, with an Edge, it kindles.
                 if (kindle <= 0 || age < -kindle)
-                    return f.heads > 1 ? {} : { dimmer: 0 };
+                    /* A head of its own: dark. A pixel with only a level:
+                       dark too, by its own dimmer. A colour pixel: left to
+                       what is under it (black would hand it back to the
+                       look anyway, and one pixel's master dimmer is the
+                       whole bar's). */
+                    return f.heads > 1 ? (f.headRGB === false && !f.headWhite ? { dimmer: 0 } : {})
+                                       : { dimmer: 0 };
                 var k = 1 + age / kindle;                       // 0..1 up to the catch
                 var glow = 0.3 * k * FIRE.flame(t * 3, i * 1.618 + fseed + 5, speed);
                 return burn(f, ember, glow * inten, false);

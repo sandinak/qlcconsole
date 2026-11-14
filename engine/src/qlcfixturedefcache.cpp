@@ -333,6 +333,7 @@ int QLCFixtureDefCache::loadNew(const QDir &dir)
     }
 
     const int before = m_defs.size();
+    int replaced = 0;
     const QStringList names = dir.entryList(QDir::Files | QDir::Readable, QDir::Time);
     for (const QString &name : names)
     {
@@ -345,11 +346,39 @@ int QLCFixtureDefCache::loadNew(const QDir &dir)
             continue;
         }
         if (path.toLower().endsWith(KExtFixture) == true)
+        {
+            /* A shipped fixture customised and saved into the user's folder
+               while the app runs: at start the user's folder is read first,
+               so its copy wins; here the shipped one is already loaded, so
+               the local copy takes its place now (the shipped one is kept
+               alive for fixtures of an open show that point at it). */
+            QLCFixtureDef *def = new QLCFixtureDef();
+            if (def->loadXML(path) == QFile::NoError)
+            {
+                QLCFixtureDef *shipped = fixtureDef(def->manufacturer(), def->model());
+                if (shipped != NULL && !shipped->isUser())
+                {
+                    m_failedDefinitions.remove(path);
+                    def->setIsUser(true);
+                    def->setDefinitionSourceFile(path);
+                    def->setLoaded(true);
+                    def->setOverridesIncluded(true);
+                    QLCFixtureDef *old = substitute(def);
+                    if (old != NULL)
+                    {
+                        m_retired << old;
+                        ++replaced;
+                    }
+                    continue;
+                }
+            }
+            delete def;
             loadQXF(path, true);
+        }
         else if (path.toLower().endsWith(KExtAvolitesFixture) == true)
             loadD4(path);
     }
-    return int(m_defs.size()) - before;
+    return int(m_defs.size()) - before + replaced;
 }
 
 int QLCFixtureDefCache::loadMapManufacturer(QXmlStreamReader *doc, QString manufacturer)

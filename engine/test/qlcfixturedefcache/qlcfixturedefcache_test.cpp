@@ -472,6 +472,43 @@ void QLCFixtureDefCache_Test::aTypeMadeWhileRunningIsLoaded()
     QCOMPARE(local.loadNew(QDir(dir.filePath("nowhere"))), 0);
 }
 
+/* A shipped fixture customised in the Fixture Editor and saved into the
+   user's folder while the app runs takes the shipped one's place at once,
+   as it would at the next start; the shipped one stays alive for fixtures
+   of an open show that point at it. */
+void QLCFixtureDefCache_Test::aCustomisedShippedTypeSavedWhileRunningIsUsed()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString included = QString("%1/Futurelight/Futurelight-CY-200.qxf").arg(INTERNAL_FIXTUREDIR);
+    QLCFixtureDefCache local;
+    QVERIFY(local.loadQXF(included, false));
+    QLCFixtureDef *shipped = local.fixtureDef("Futurelight", "CY-200");
+    QVERIFY(shipped != nullptr);
+    QVERIFY(!shipped->isUser());
+
+    QFile in(included);
+    QVERIFY(in.open(QIODevice::ReadOnly));
+    QByteArray xml = in.readAll();
+    xml.replace("Lumens=\"0\"", "Lumens=\"777\"");
+    const QString path = dir.filePath("Futurelight-CY-200.qxf");
+    {
+        QFile out(path);
+        QVERIFY(out.open(QIODevice::WriteOnly));
+        out.write(xml);
+    }
+    QCOMPARE(local.loadNew(QDir(dir.path(), "*.qxf")), 1);
+    QLCFixtureDef *now = local.fixtureDef("Futurelight", "CY-200");
+    QVERIFY(now != nullptr && now != shipped);
+    QVERIFY(now->isUser());
+    QCOMPARE(now->definitionSourceFile(), path);
+    QVERIFY(now->overridesIncluded());
+    QCOMPARE(shipped->model(), QString("CY-200"));      // still alive
+    QCOMPARE(local.definitions().size(), 1);
+    // Asked again: nothing more.
+    QCOMPARE(local.loadNew(QDir(dir.path(), "*.qxf")), 0);
+}
+
 /* Two local files for one fixture: the one changed last is used (it was
    alphabetical, so "X 2.qxf" beat "X.qxf" whichever was current), and the
    one set aside is recorded -- identical or not -- for the footer. */

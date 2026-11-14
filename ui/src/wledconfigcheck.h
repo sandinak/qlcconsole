@@ -222,6 +222,7 @@ private:
     void resolveDevice(quint32 universe, const QString &ip, const QString &mac, bool answered,
                        int deviceIps);
     QHash<quint32, QString> m_suggestions;      ///< universe -> fixture's IP to send to
+    QHash<quint32, QString> m_suggestionFrom;   ///< universe -> the dead IP it replaces
     /** Write @p fix (Set Up's) to the device at @p ip, then read it back;
      *  @p done is said when it reads back as sent (else the plain one). */
     void writeSetUp(const QString &ip, const QJsonObject &fix, const QString &done = QString(),
