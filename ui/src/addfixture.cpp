@@ -907,13 +907,19 @@ void AddFixture::updateMaximumAmount()
         m_amountSpin->setRange(1, 999);
         return;
     }
-    m_amountSpin->setRange(1, (513 - m_addressSpin->value()) /
-                           (m_channelsSpin->value() + m_gapSpin->value()));
+    /* As many as the universe can hold: when they do not fit after the
+       address shown, the address moves to a gap that takes them
+       (checkOverlapping()) -- it used to stop the count at what was left
+       after the address. Editing one fixture, the address is its own. */
+    const int step = m_channelsSpin->value() + m_gapSpin->value();
+    if (m_fixtureID != Fixture::invalidId())
+        m_amountSpin->setRange(1, qMax(1, (513 - m_addressSpin->value()) / step));
+    else
+        m_amountSpin->setRange(1, qMax(1, (512 + m_gapSpin->value()) / step));
 }
 
 bool AddFixture::checkAddressAvailability(int value, int channels)
 {
-    qDebug() << "Check availability for address: " << value;
     // Not on channels the venue applied keeps for itself (not ours).
     if (m_doc->isOnNotOurs(quint32(value) >> 9, quint32(value) & 0x01FF, quint32(qMax(0, channels))))
         return false;
@@ -1028,6 +1034,8 @@ void AddFixture::slotUniverseActivated(int universe)
         m_addressSpin->setValue((addr & 0x01FF) + 1);
     else
         m_addressSpin->setValue(1);
+    // The first free address holds one: all of them may need the next gap.
+    checkOverlapping(true);
     updateAddressFields();      // does this universe reach a network fixture's IP?
 }
 
@@ -1052,7 +1060,7 @@ void AddFixture::slotChannelsChanged(int value)
     /* Set the maximum number of fixtures */
     updateMaximumAmount();
 
-    checkOverlapping();
+    checkOverlapping(true);
 }
 
 void AddFixture::slotNameEdited(const QString &text)
@@ -1092,7 +1100,7 @@ void AddFixture::slotAmountSpinChanged(int value)
     updateIpRange();
     updateAddressFields();
 
-    checkOverlapping();
+    checkOverlapping(true);
     checkNameConflict();
 }
 
@@ -1140,7 +1148,7 @@ void AddFixture::slotGapSpinChanged(int value)
     /* Set the maximum number of fixtures */
     updateMaximumAmount();
 
-    checkOverlapping();
+    checkOverlapping(true);
 }
 
 void AddFixture::slotSearchFilterChanged(QString)
@@ -1306,7 +1314,34 @@ void AddFixture::slotDiptoolButtonClicked()
     m_addressSpin->setValue(at.getAddress());
 }
 
-void AddFixture::checkOverlapping()
+bool AddFixture::blockFits(int address)
+{
+    const int step = m_channelsValue + m_gapValue;
+    // The last one ends inside the universe.
+    if (address < 0 || address + (m_amountValue - 1) * step + m_channelsValue > 512)
+        return false;
+    for (int i = 0; i < m_amountValue; ++i)
+    {
+        const int absAddress = (address + i * step) | (m_universeValue << 9);
+        if (checkAddressAvailability(absAddress, m_channelsValue) == false)
+            return false;
+    }
+    return true;
+}
+
+int AddFixture::nextFittingAddress(int from)
+{
+    // The next gap up from where it is; none there, the first from the start.
+    for (int a = qMax(0, from); a < 512; ++a)
+        if (blockFits(a))
+            return a;
+    for (int a = 0; a < qMin(from, 512); ++a)
+        if (blockFits(a))
+            return a;
+    return -1;
+}
+
+void AddFixture::checkOverlapping(bool mayMove)
 {
     if (m_inventoryMode || ownUniverse() || routesElsewhere())
     {
@@ -1318,19 +1353,45 @@ void AddFixture::checkOverlapping()
         return;
     }
 
-    for (int i = 0; i < m_amountValue; ++i)
+    if (blockFits(m_addressValue))
     {
-        int address = m_addressValue + i * (m_gapValue + m_channelsValue);
-        int absAddress = (address & 0x01FF) | (m_universeValue << 9);
-        if (checkAddressAvailability(absAddress, m_channelsValue) == false)
-        {
-            // Show overlapping error
-            m_addrErrorLabel->show();
-            m_invalidAddressFlag = true;
-            return;
-        }
+        m_addrErrorLabel->hide();
+        m_invalidAddressFlag = false;
+        return;
     }
 
-    m_addrErrorLabel->hide();
-    m_invalidAddressFlag = false;
+    const int step = m_channelsValue + m_gapValue;
+    const int needed = (m_amountValue - 1) * step + m_channelsValue;
+    /* Adding, and the count, the mode or the gap grew past the gap it is
+       in: on to the next gap on this universe that takes all of them,
+       said beside the address. Not for an address typed by hand (it would
+       jump about under the typing), nor for a fixture being edited (its
+       address is its own). */
+    if (mayMove && m_fixtureID == Fixture::invalidId())
+    {
+        const int to = nextFittingAddress(m_addressValue);
+        if (to >= 0)
+        {
+            const int was = m_addressValue + 1;
+            {
+                const QSignalBlocker block(m_addressSpin);
+                m_addressSpin->setValue(to + 1);
+            }
+            m_addressValue = to;
+            m_addrErrorLabel->setText(tr("Moved to address %1: no room at %2 for %3 channels.")
+                                          .arg(to + 1).arg(was).arg(needed));
+            m_addrErrorLabel->show();
+            m_invalidAddressFlag = false;
+            return;
+        }
+        m_addrErrorLabel->setText(QStringLiteral("<span style=\"color:#ff0000;\">%1</span>")
+                                      .arg(tr("No free gap of %1 channels on this universe.").arg(needed)));
+    }
+    else
+        m_addrErrorLabel->setText(QStringLiteral("<span style=\"color:#ff0000;\">%1</span>")
+                                      .arg(tr("ERROR: Address already used!")));
+
+    // Show overlapping error
+    m_addrErrorLabel->show();
+    m_invalidAddressFlag = true;
 }

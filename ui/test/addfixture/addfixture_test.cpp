@@ -632,6 +632,94 @@ void AddFixture_Test::findAddressIgnoresUnpatchedFixtures()
     delete staged;
 }
 
+/* "When adding a fixture and the existing gap isn't big enough for the
+   fixtures, it should check for the next available gap in addresses on a
+   universe and auto change to that gap." */
+void AddFixture_Test::theAddressMovesToTheNextGapThatFits()
+{
+    // Universe 4: 1-16 and 41-56 taken, so the gaps are 17-40 (24) and 57-512.
+    const quint32 uni = 3;
+    QList<quint32> made;
+    for (quint32 at : { quint32(0), quint32(40) })
+    {
+        Fixture *fxi = new Fixture(m_doc);
+        fxi->setChannels(16);
+        fxi->setUniverse(uni);
+        fxi->setAddress(at);
+        QVERIFY(m_doc->addFixture(fxi));
+        made << fxi->id();
+    }
+
+    AddFixture af(NULL, m_doc);
+    af.m_universeCombo->setCurrentIndex(int(uni));
+    af.slotUniverseActivated(int(uni));
+    af.m_channelsSpin->setValue(8);
+    af.m_addressSpin->setValue(17);
+    QVERIFY(!af.invalidAddress());
+    QVERIFY(af.m_addrErrorLabel->isHidden());
+    // As many as a universe holds, not only what is left after the address.
+    QCOMPARE(af.m_amountSpin->maximum(), 64);
+
+    // Three of 8 fill the 24: still there. A fourth does not fit: the next gap.
+    af.m_amountSpin->setValue(3);
+    QCOMPARE(af.m_addressSpin->value(), 17);
+    QVERIFY(af.m_addrErrorLabel->isHidden());
+    af.m_amountSpin->setValue(4);
+    QCOMPARE(af.m_addressSpin->value(), 57);
+    QCOMPARE(af.address(), quint32(56));
+    QVERIFY(!af.invalidAddress());
+    QVERIFY(!af.m_addrErrorLabel->isHidden());
+    QCOMPARE(af.m_addrErrorLabel->text(), QString("Moved to address 57: no room at 17 for 32 channels."));
+    // Fewer again: it stays where it is, and the note goes.
+    af.m_amountSpin->setValue(3);
+    QCOMPARE(af.m_addressSpin->value(), 57);
+    QVERIFY(af.m_addrErrorLabel->isHidden());
+
+    // A gap between them that no longer fits: on to the next.
+    af.m_addressSpin->setValue(17);
+    QVERIFY(!af.invalidAddress());
+    af.m_gapSpin->setValue(1);                  // 3 x 8 + 2 = 26 in a gap of 24
+    QCOMPARE(af.m_addressSpin->value(), 57);
+    QVERIFY(af.m_addrErrorLabel->text().contains("for 26 channels"));
+    af.m_gapSpin->setValue(0);
+
+    // A bigger footprint (another mode): the same.
+    af.m_amountSpin->setValue(1);
+    af.m_addressSpin->setValue(17);
+    af.m_channelsSpin->setValue(30);
+    QCOMPARE(af.m_addressSpin->value(), 57);
+    QVERIFY(!af.invalidAddress());
+    af.m_channelsSpin->setValue(8);
+
+    // Past the end of the universe: back to the first gap from the start that takes it.
+    af.m_addressSpin->setValue(400);
+    af.m_amountSpin->setValue(20);              // 160 from 400 runs past 512
+    QCOMPARE(af.m_addressSpin->value(), 57);
+    QVERIFY(!af.invalidAddress());
+
+    // An address typed onto a fixture is not moved from under the typing: it is marked.
+    af.m_amountSpin->setValue(1);
+    af.m_addressSpin->setValue(5);
+    QCOMPARE(af.m_addressSpin->value(), 5);
+    QVERIFY(af.invalidAddress());
+    QVERIFY(af.m_addrErrorLabel->text().contains("Address already used"));
+    af.m_addressSpin->setValue(17);
+    QVERIFY(!af.invalidAddress());
+
+    // No gap on the universe takes them: said, marked, the address left alone.
+    af.m_channelsSpin->setValue(100);
+    af.m_addressSpin->setValue(57);
+    af.m_amountSpin->setValue(5);               // 500 in the 456 after 56
+    QCOMPARE(af.m_addressSpin->value(), 57);
+    QVERIFY(af.invalidAddress());
+    QVERIFY(af.m_addrErrorLabel->text().contains("No free gap of 500 channels"));
+    af.m_amountSpin->setValue(4);               // 400: fits again
+    QVERIFY(!af.invalidAddress());
+
+    for (quint32 id : made)
+        m_doc->deleteFixture(id);
+}
+
 void AddFixture_Test::inventoryQuantityIsNotLimitedByAUniverse()
 {
     // "why can't I add more than 1 fixture here?": a 165-channel fixture with
@@ -639,7 +727,7 @@ void AddFixture_Test::inventoryQuantityIsNotLimitedByAUniverse()
     AddFixture af(NULL, m_doc);
     af.m_channelsSpin->setValue(165);
     af.m_addressSpin->setValue(300);
-    QCOMPARE(af.m_amountSpin->maximum(), 1);          // patching: one fits there
+    QCOMPARE(af.m_amountSpin->maximum(), 3);          // patching: what a universe holds
 
     af.setInventoryMode(true);
     QVERIFY(af.m_amountSpin->maximum() >= 100);

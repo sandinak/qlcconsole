@@ -276,7 +276,17 @@ protected slots:
     void slotDiptoolButtonClicked();
 
 protected:
-    void checkOverlapping();
+    /** Does the whole block (amount x channels, the gap between) fit from
+     *  the address shown? No: with @p mayMove, adding, the address goes to
+     *  the next gap on this universe that takes it, and says so; else (or
+     *  with no such gap) the address is marked wrong. */
+    void checkOverlapping(bool mayMove = false);
+    /** The block fits from @p address (0-based) on the universe shown:
+     *  inside its 512 and on no channel a fixture or the venue holds. */
+    bool blockFits(int address);
+    /** The first address at or above @p from where the block fits, else
+     *  the first from the start of the universe; -1: nowhere on it. */
+    int nextFittingAddress(int from);
 
     /** Names of all fixtures already in the doc, excluding the one being
      *  edited (m_fixtureID). Used for prepopulation and conflict checks. */
