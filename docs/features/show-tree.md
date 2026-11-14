@@ -829,7 +829,8 @@ When no palette plays it:
   row turns it into a palette in one click, named as above. To choose the
   name yourself, right-click it in Recent → **Make Reusable…**. Either is one
   undo step: undo makes it a one-off again. A one-off that no cue uses any
-  more is deleted.
+  more is deleted. Its name says the cue it is in (*30% · 1.0.1 Towers*) and
+  follows the cue when it is renumbered, renamed or duplicated.
 
 ### Colour rings
 
@@ -1443,6 +1444,10 @@ so an edit to the copy never changes the original. Named palettes from the
 Library stay shared, and a reusable layer or cue stays linked: editing those
 changes every cue that uses them, as it is meant to. A show saved before
 this was so gets each cue its own one-offs again when it is opened.
+A one-off's name says its cue (*50% · 1.1.1 Music Start*): a copy is named
+for its new cue, and renumbering or renaming a cue renames its one-offs in
+the same undo step. Names in a show saved before this stay as they are until
+that cue is edited.
 
 **Duplicate and paste a cue list, a production or a reusable cue.** The
 same **Copy**, **Paste** and **Duplicate** (**⌘C**, **⌘V**, **⌘D**) work on

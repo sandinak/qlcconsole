@@ -693,7 +693,9 @@ bool ShowTreeController::edit(const QString &label,
         syncReusables(m_productions, work);
         ownOneOffs(work, &m_productions, &layersBefore, &cuesBefore);
         syncCueNotes(work);             // Q212: a cue's note is its first entry
+        const QList<Production> oldTree = m_productions;
         m_productions = work;
+        followCueLabels(oldTree);
         m_batchChanged = true;
         return true;
     }
@@ -714,7 +716,9 @@ bool ShowTreeController::edit(const QString &label,
     ownOneOffs(work, &m_productions, &layersBefore, &cuesBefore);
     const int notesBefore = m_notes.count();
     syncCueNotes(work);                 // Q212: a cue's note is its first entry
+    const QList<Production> oldTree = m_productions;
     m_productions = work;
+    followCueLabels(oldTree);
     pushUndo(label, before);
 
     bake();
@@ -5536,6 +5540,9 @@ int ShowTreeController::ownOneOffs(QList<Production> &work, const QList<Producti
     }
     if (remap.isEmpty())
         return copies;
+    for (auto r = remap.constBegin(); r != remap.constEnd(); ++r)
+        for (auto m = r.value().constBegin(); m != r.value().constEnd(); ++m)
+            m_cloneOf.insert(m.value(), m.key());
 
     // 4. Each place's looks on its copies.
     forEachLookPlace(work, m_reusableLayers, m_reusableCues, [&remap](quint64 place, QList<Look> &looks) {
@@ -5554,9 +5561,119 @@ int ShowTreeController::ownOneOffs(QList<Production> &work, const QList<Producti
     return copies;
 }
 
+/* A one-off's name is "<value> · <cue label> <where>". @a name with its cue
+   label made @a newLabel: the label it had (one of @a oldLabels, exact), else
+   whatever sits between " · " and the layer's " <where>". */
+static bool followLabel(QString &name, const QStringList &oldLabels, const QString &newLabel,
+                        const QString &where)
+{
+    const QString sep = QStringLiteral(" \u00b7 ");
+    const int at = name.indexOf(sep);
+    if (at < 0 || newLabel.isEmpty())
+        return false;
+    const QString head = name.left(at + sep.size());
+    const QString rest = name.mid(at + sep.size());
+    for (const QString &old : oldLabels)
+        if (!old.isEmpty() && old != newLabel && (rest == old || rest.startsWith(old + QLatin1Char(' '))))
+        {
+            name = head + newLabel + rest.mid(old.size());
+            return true;
+        }
+    const QString tail = QLatin1Char(' ') + where;
+    if (!where.isEmpty() && rest.size() > tail.size() && rest.endsWith(tail))
+    {
+        const QString now = head + newLabel + tail;
+        if (now != name)
+        {
+            name = now;
+            return true;
+        }
+    }
+    return false;
+}
+
+void ShowTreeController::followCueLabels(const QList<Production> &old)
+{
+    QHash<quint32, quint32> cloneOf;
+    cloneOf.swap(m_cloneOf);
+    if (m_inlinePalettes.isEmpty())
+        return;
+
+    // The one-offs each plain cue holds, and where (a layer's name or
+    // target; a cue's own looks: no way to say, so by its old label only).
+    struct Held { quint32 pid; QString where; };
+    QHash<quint32, QList<Held>> held;
+    QHash<quint32, QList<quint32>> cuesOf;      // one-off -> cues
+    auto take = [&](const Cue &c, const QList<Look> &looks, const QString &where) {
+        for (const Look &l : looks)
+            for (const QList<quint32> *ids : { &l.palettes, &l.own })
+                for (quint32 pid : *ids)
+                    if (m_inlinePalettes.contains(pid))
+                    {
+                        held[c.id] << Held { pid, where };
+                        cuesOf[pid] << c.id;
+                    }
+    };
+    for (const Production &p : m_productions)
+        for (const CueList &list : p.lists)
+            for (const Cue &c : list.cues)
+            {
+                if (c.reusable != ShowTree::invalidId())
+                    continue;
+                take(c, c.looks, QString());
+                for (const Layer &layer : c.layers)
+                    if (layer.reusable == ShowTree::invalidId())
+                        take(c, layer.looks, layer.name.isEmpty() ? targetLabel(layer.target) : layer.name);
+            }
+    if (held.isEmpty())
+        return;
+
+    // Labels, now and before (the numbers of a sub-cue come from its
+    // parent, so each is read with its own tree in place).
+    auto labelsOf = [this, &held](const QList<Production> &tree) {
+        QHash<quint32, QString> out;
+        for (const Production &p : tree)
+            for (const CueList &list : p.lists)
+                for (int i = 0; i < list.cues.count(); ++i)
+                    if (held.contains(list.cues.at(i).id))
+                        out.insert(list.cues.at(i).id, cueLabel(list, i));
+        return out;
+    };
+    const QHash<quint32, QString> now = labelsOf(m_productions);
+    QList<Production> keep = m_productions;
+    m_productions = old;
+    const QHash<quint32, QString> was = labelsOf(old);
+    m_productions.swap(keep);
+
+    for (auto it = held.constBegin(); it != held.constEnd(); ++it)
+    {
+        const QString &label = now.value(it.key());
+        const bool changed = was.contains(it.key()) && was.value(it.key()) != label;
+        for (const Held &h : it.value())
+        {
+            QLCPalette *p = m_doc->palette(h.pid);
+            if (p == nullptr)
+                continue;
+            QStringList olds;
+            if (changed)
+                olds << was.value(it.key());
+            const bool copy = cloneOf.contains(h.pid);
+            if (copy)
+                for (quint32 other : cuesOf.value(cloneOf.value(h.pid)))
+                    olds << now.value(other);
+            if (!changed && !copy)
+                continue;
+            QString name = p->name();
+            if (followLabel(name, olds, label, h.where))
+                p->setName(name);
+        }
+    }
+}
+
 int ShowTreeController::splitSharedOneOffs()
 {
     const int copies = ownOneOffs(m_productions, nullptr, nullptr, nullptr);
+    m_cloneOf.clear();                  // a repair on load: names stay as saved
     if (copies > 0)
         qInfo() << "Show Tree: one-offs shared by more than one place split:" << copies << "copies";
     return copies;

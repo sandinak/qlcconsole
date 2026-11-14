@@ -16,6 +16,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **Course lesson 3.5 teaches the real pad rules.** The student page, handout, teacher guide, glossary and course plan say hold LB + RB to arm, LT + A for GO (B Back, X / Y the sub-cues), RT for the armed hit and all four for the emergency stop; they used to teach "hold LB, press A".
 
+- **A one-off palette's name follows its cue.** Duplicate and Paste name the copy for its new cue, and renumbering or renaming a cue renames its one-offs in the same undo step, so a copied cue no longer shows "60% · 0.0.5 Who Are We 2" in the Look Editor and Workbench. Old shows stay as saved until the cue is edited.
+
 ### Tooling
 
 - **The UX flows walk the view in use.** F-04 and F-07 now go through the Show Tree's Workbench (Build is hidden in the qlcconsole view), and F-13 (run the show from the pad) and F-14 (fire a staff hit) are added, their pad steps manual.
