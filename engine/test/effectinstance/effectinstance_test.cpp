@@ -4504,6 +4504,433 @@ void EffectInstance_Test::crackleRestsPulsesUpAndFadesBack()
     QVERIFY(sawPulse);
 }
 
+/* Firelight before its flame moved to lib/fire.js, written out: what it
+   gave fixture @p i at time @p t. */
+static void firelightAsItWas(double t, int i, double speed, double inten, double cool,
+                             int &r, int &g, int &b, double &flame)
+{
+    const double seed = i * 1.618;
+    flame = 0.5 + 0.25 * std::sin(t * speed * 1.0 + seed * 7.3)
+                + 0.15 * std::sin(t * speed * 2.3 + seed * 3.1)
+                + 0.10 * std::sin(t * speed * 5.7 + seed * 11.9);
+    flame = std::max(0.0, std::min(1.0, flame));
+    // JS Math.round: halves go up.
+    auto jsRound = [](double v) { return int(std::floor(v + 0.5)); };
+    double rr, gg, bb;
+    if (flame < 0.5)
+    {
+        const double f01 = flame * 2;
+        rr = jsRound(64 + f01 * (255 - 64));
+        gg = jsRound(0 + f01 * 60);
+        bb = 0;
+    }
+    else
+    {
+        const double f01 = (flame - 0.5) * 2;
+        rr = 255;
+        gg = jsRound(60 + f01 * (200 - 60));
+        bb = jsRound(0 + f01 * 20);
+    }
+    rr = jsRound(rr * (1 - cool) + 200 * cool);
+    gg = jsRound(gg * (1 - cool) + 220 * cool);
+    bb = jsRound(bb * (1 - cool) + 255 * cool);
+    r = jsRound(rr * inten);
+    g = jsRound(gg * inten);
+    b = jsRound(bb * inten);
+}
+
+void EffectInstance_Test::firelightIsUnchangedOnTheSharedFlame()
+{
+    EffectScript fire;
+    QVERIFY(fire.load(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/fire.js"));
+    QCOMPARE(fire.name(), QString("Firelight"));
+    QJSEngine *eng = fire.engine();
+    const int n = 6;
+    QJSValue fixtures = eng->newArray(n);
+    for (int i = 0; i < n; ++i)
+    {
+        QJSValue o = eng->newObject();
+        o.setProperty("hasDimmer", i % 2 == 0);
+        fixtures.setProperty(quint32(i), o);
+    }
+    struct P { double speed, inten, cool; };
+    const P sets[] = { { 1.0, 1.0, 0.0 }, { 2.5, 0.7, 0.3 }, { 0.1, 0.0, 1.0 } };
+    int compared = 0;
+    for (const P &p : sets)
+        for (double t = 0; t < 30; t += 0.37)
+        {
+            QJSValue inputs = eng->newObject();
+            inputs.setProperty("_time", t);
+            QJSValue params = eng->newObject();
+            params.setProperty("speed", p.speed);
+            params.setProperty("intensity", p.inten);
+            params.setProperty("coolness", p.cool);
+            QJSValue state = fire.newState();
+            const QJSValue out = fire.callTick(fixtures, inputs, eng->newObject(), params,
+                                               state, eng->newObject());
+            QVERIFY(out.isArray());
+            for (int i = 0; i < n; ++i)
+            {
+                int r, g, b;
+                double flame;
+                firelightAsItWas(t, i, p.speed, p.inten, p.cool, r, g, b, flame);
+                const QJSValue o = out.property(quint32(i));
+                QCOMPARE(o.property("r").toInt(), r);
+                QCOMPARE(o.property("g").toInt(), g);
+                QCOMPARE(o.property("b").toInt(), b);
+                if (i % 2 == 0)
+                    QCOMPARE(o.property("dimmer").toNumber(), flame * p.inten);
+                else
+                    QVERIFY(o.property("dimmer").isUndefined());
+                ++compared;
+            }
+        }
+    QVERIFY(compared > 400);
+}
+
+namespace
+{
+/* What Fire Spread gives each head of @p heads (each a head of its own,
+   at its distance from the point) at time @p t. */
+struct FireHead
+{
+    double dist;
+    bool rgb, dimmer, wheel;
+};
+
+QList<QVariantMap> fireSpreadFrame(EffectScript &script, const QList<FireHead> &heads, double t,
+                                   const QVariantMap &set)
+{
+    QJSEngine *eng = script.engine();
+    QJSValue fixtures = eng->newArray(uint(heads.size()));
+    double farthest = 0;
+    for (int i = 0; i < heads.size(); ++i)
+    {
+        QJSValue o = eng->newObject();
+        o.setProperty("heads", 1);
+        o.setProperty("hasRGB", heads.at(i).rgb);
+        o.setProperty("hasDimmer", heads.at(i).dimmer);
+        o.setProperty("hasColorWheel", heads.at(i).wheel);
+        o.setProperty("fromTarget", heads.at(i).dist);
+        farthest = qMax(farthest, heads.at(i).dist);
+        fixtures.setProperty(quint32(i), o);
+    }
+    QJSValue inputs = eng->newObject();
+    inputs.setProperty("_time", t);
+    inputs.setProperty("_fromTargetFar", farthest);
+    QJSValue params = eng->newObject();
+    for (const EffectScript::ParamDef &d : script.paramDefs())
+        params.setProperty(d.name, double(d.defaultValue));
+    for (auto it = set.constBegin(); it != set.constEnd(); ++it)
+        params.setProperty(it.key(), it.value().toDouble());
+    QJSValue state = script.newState();
+    const QJSValue out = script.callTick(fixtures, inputs, eng->newObject(), params,
+                                         state, eng->newObject());
+    QList<QVariantMap> frame;
+    for (int i = 0; i < heads.size(); ++i)
+        frame << out.property(quint32(i)).toVariant().toMap();
+    return frame;
+}
+
+/* Lit: a dimmer above nothing; with no dimmer, any colour. */
+bool fireLit(const QVariantMap &o)
+{
+    if (o.contains("dimmer"))
+        return o.value("dimmer").toDouble() > 0;
+    return o.value("r").toInt() > 0 || o.value("g").toInt() > 0 || o.value("b").toInt() > 0;
+}
+}
+
+void EffectInstance_Test::fireSpreadCatchesOutwardFromThePoint()
+{
+    EffectScript fs;
+    QVERIFY(fs.load(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/fire-spread.js"));
+    QCOMPARE(fs.name(), QString("Fire Spread"));
+    QVERIFY(fs.wantsTargetDistance());
+    QVERIFY(fs.wantsCueTime());
+    QCOMPARE(EffectScriptCache::categoryForTypes(fs.fixtureTypes()), QString("Dimmer"));
+
+    // An RGB par with a dimmer at the point, a dimmer 1 m out, a colour-only
+    // par 2 m out, a colour-wheel mover 4 m out.
+    const QList<FireHead> rig = { { 0.0, true, true, false }, { 1.0, false, true, false },
+                                  { 2.0, true, false, false }, { 4.0, false, true, true } };
+    const QVariantMap hard = { { "edge", 0.0 }, { "spreadTime", 8.0 } };
+
+    // When each catches, to a frame (20 ms): in proportion to its distance.
+    const double expect[] = { 0.0, 2.0, 4.0, 8.0 };
+    QVector<double> caught(rig.size(), -1);
+    for (int tick = 0; tick <= 500; ++tick)
+    {
+        const double t = tick * 0.02;
+        const QList<QVariantMap> f = fireSpreadFrame(fs, rig, t, hard);
+        for (int i = 0; i < rig.size(); ++i)
+        {
+            if (caught[i] < 0 && fireLit(f.at(i)))
+                caught[i] = t;
+            if (t < expect[i] - 1e-6)
+            {
+                // Nothing before the front: a dimmer of none, and no colour.
+                QCOMPARE(f.at(i).size(), 1);
+                QCOMPARE(f.at(i).value("dimmer").toDouble(), 0.0);
+            }
+        }
+    }
+    for (int i = 0; i < rig.size(); ++i)
+        QVERIFY2(caught[i] >= expect[i] && caught[i] <= expect[i] + 0.041,
+                 qPrintable(QString("head %1 caught at %2, not %3").arg(i).arg(caught[i]).arg(expect[i])));
+    // Twice as far, twice as late.
+    QVERIFY(qAbs(caught[3] - 2 * caught[2]) < 0.1);
+
+    // The flare: hotter and brighter than the settled flame just after the
+    // catch, and gone within a second -- then it is the flame alone.
+    const QVariantMap noFlare = { { "edge", 0.0 }, { "spreadTime", 8.0 }, { "flare", 0.0 } };
+    QVariantMap full = hard;
+    full["flare"] = 1.0;
+    const QVariantMap flaring = fireSpreadFrame(fs, rig, 2.1, full).at(1);
+    const QVariantMap plain = fireSpreadFrame(fs, rig, 2.1, noFlare).at(1);
+    QVERIFY2(flaring.value("dimmer").toDouble() > plain.value("dimmer").toDouble() + 0.1,
+             qPrintable(QString("%1 vs %2").arg(flaring.value("dimmer").toDouble()).arg(plain.value("dimmer").toDouble())));
+    QVERIFY(flaring.value("g").toInt() > plain.value("g").toInt());       // whiter
+    QVERIFY(flaring.value("b").toInt() > plain.value("b").toInt());
+    QCOMPARE(fireSpreadFrame(fs, rig, 3.1, full).at(1), fireSpreadFrame(fs, rig, 3.1, noFlare).at(1));
+    // The colour-only par flares in its colour.
+    QVERIFY(fireSpreadFrame(fs, rig, 4.15, full).at(2).value("b").toInt()
+            > fireSpreadFrame(fs, rig, 4.15, noFlare).at(2).value("b").toInt());
+
+    // All burning after the spread, and long after still flickering.
+    for (double t : { 8.5, 60.0, 600.0 })
+        for (const QVariantMap &o : fireSpreadFrame(fs, rig, t, hard))
+            QVERIFY2(fireLit(o), qPrintable(QString("dark at %1").arg(t)));
+    QVERIFY(fireSpreadFrame(fs, rig, 60.0, hard) != fireSpreadFrame(fs, rig, 60.5, hard));
+
+    // Each kind of head: the dimmer one flickers in level...
+    QSet<int> levels;
+    for (double t = 10; t < 20; t += 0.5)
+        levels.insert(qRound(fireSpreadFrame(fs, rig, t, hard).at(1).value("dimmer").toDouble() * 100));
+    QVERIFY(levels.size() > 5);
+    // ...the colour-only par burns in fire colours, red over green over blue,
+    // with no dimmer (it has none: its colour is its level)...
+    for (double t = 10; t < 20; t += 0.5)
+    {
+        const QVariantMap o = fireSpreadFrame(fs, rig, t, hard).at(2);
+        QVERIFY(!o.contains("dimmer"));
+        QVERIFY(o.value("r").toInt() >= o.value("g").toInt());
+        QVERIFY(o.value("g").toInt() >= o.value("b").toInt());
+        QVERIFY(o.value("r").toInt() > 0);
+    }
+    // ...and the colour wheel keeps one colour (its wheel never chases) and
+    // flickers on its dimmer. No pan or tilt from anything.
+    QSet<int> wheelLevels;
+    for (double t = 10; t < 20; t += 0.5)
+    {
+        const QList<QVariantMap> f = fireSpreadFrame(fs, rig, t, hard);
+        const QVariantMap o = f.at(3);
+        QCOMPARE(o.value("r").toInt(), 255);
+        QCOMPARE(o.value("g").toInt(), 60);
+        QCOMPARE(o.value("b").toInt(), 0);
+        wheelLevels.insert(qRound(o.value("dimmer").toDouble() * 100));
+        for (const QVariantMap &h : f)
+            QVERIFY(!h.contains("pan") && !h.contains("tilt"));
+    }
+    QVERIFY(wheelLevels.size() > 5);
+
+    // A ragged edge: the same seed, the same fire; another seed, another.
+    // Heads still never light before the front's ragged reach.
+    const QVariantMap ragged = { { "edge", 1.0 }, { "spreadTime", 8.0 }, { "seed", 3.0 } };
+    QVariantMap other = ragged;
+    other["seed"] = 4.0;
+    bool differs = false;
+    for (double t = 0; t < 10; t += 0.25)
+    {
+        QCOMPARE(fireSpreadFrame(fs, rig, t, ragged), fireSpreadFrame(fs, rig, t, ragged));
+        differs = differs || fireSpreadFrame(fs, rig, t, ragged) != fireSpreadFrame(fs, rig, t, other);
+    }
+    QVERIFY(differs);
+    // Edge 1: up to a quarter of the spread early, kindling 0.6 s before.
+    for (double t = 0; t < 8.0 * 0.75 - 0.6; t += 0.1)
+        QVERIFY(!fireLit(fireSpreadFrame(fs, rig, t, ragged).at(3)));
+    for (const QVariantMap &o : fireSpreadFrame(fs, rig, 8.01, ragged))
+        QVERIFY(fireLit(o));
+
+    // Spread over the cue's time: the host's _cueTime times it.
+    {
+        QJSEngine *eng = fs.engine();
+        QJSValue fixtures = eng->newArray(2);
+        for (int i = 0; i < 2; ++i)
+        {
+            QJSValue o = eng->newObject();
+            o.setProperty("heads", 1);
+            o.setProperty("hasDimmer", true);
+            o.setProperty("fromTarget", i * 4.0);
+            fixtures.setProperty(quint32(i), o);
+        }
+        auto farLit = [&](double t) {
+            QJSValue inputs = eng->newObject();
+            inputs.setProperty("_time", t);
+            inputs.setProperty("_fromTargetFar", 4.0);
+            inputs.setProperty("_cueTime", 2.0);
+            QJSValue params = eng->newObject();
+            params.setProperty("spreadOver", 1);
+            params.setProperty("spreadTime", 30);
+            params.setProperty("edge", 0);
+            QJSValue state = fs.newState();
+            const QJSValue out = fs.callTick(fixtures, inputs, eng->newObject(), params,
+                                             state, eng->newObject());
+            return out.property(1u).property("dimmer").toNumber() > 0;
+        };
+        QVERIFY(!farLit(1.9));
+        QVERIFY(farLit(2.2));
+    }
+
+    // Everything at the point (an unplaced rig): it all catches at once.
+    const QList<FireHead> heap = { { 0.0, true, true, false }, { 0.0, false, true, false } };
+    for (const QVariantMap &o : fireSpreadFrame(fs, heap, 0.1, hard))
+        QVERIFY(fireLit(o));
+}
+
+void EffectInstance_Test::fireSpreadBurnsTheRigFromTheAimTarget()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    // A dimmer standing on the point, and a 2 m strip of 8 RGB pixels
+    // running away from it, 4 to 6 m out.
+    Fixture *dim = oneDimmerFixture(m_doc, 100);
+    props->setFixturePosition(dim->id(), 0, 0, QVector3D(1000.0f, 1000.0f, 0));
+    QLCFixtureDef *stripDef = makePixelDef("Fire strip", 8, 0);
+    {
+        QLCFixtureMode *mode = stripDef->modes().first();
+        QLCPhysical ph = mode->physical();
+        ph.setWidth(2000);
+        ph.setHeight(50);
+        mode->setPhysical(ph);
+    }
+    m_doc->fixtureDefCache()->addFixtureDef(stripDef);
+    Fixture *strip = new Fixture(m_doc);
+    strip->setFixtureDefinition(stripDef, stripDef->modes().first());
+    strip->setName("Strip");
+    strip->setUniverse(0);
+    strip->setAddress(200);
+    QVERIFY(m_doc->addFixture(strip));
+    props->setFixturePosition(strip->id(), 0, 0, QVector3D(5000.0f, 975.0f, 0));
+
+    StageTarget *point = props->addStageTarget();
+    point->setName("Ignition");
+    point->setPosition(QVector3D(1.0f, 1.0f, 0));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setStageTargetId(point->id());
+    QVERIFY(m_doc->addPalette(aim));
+
+    QLCPalette *fire = new QLCPalette(QLCPalette::Effect, m_doc);
+    fire->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/fire-spread.js");
+    fire->setEffectParamValue("spreadTime", 10.0);
+    fire->setEffectParamValue("edge", 0.0);
+    fire->setEffectParamValue(EffectRuns::runsKey(), 0);      // Loop
+    QVERIFY(m_doc->addPalette(fire));
+
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(dim->id());
+    scene->addFixture(strip->id());
+    scene->addPalette(aim->id());
+    scene->addPalette(fire->id());
+
+    EffectInstance inst(m_doc, scene->id(), fire->id());
+    QVERIFY2(inst.isValid(), "fire-spread.js did not load");
+
+    // Each pixel lit (any of its three channels above 0) at clock @p ms.
+    auto at = [&](qint64 ms, int &dimmer) {
+        inst.setOffStageClock(ms);
+        inst.runTick();
+        QVector<bool> px(8, false);
+        dimmer = -1;
+        for (const EffectInstance::DmxWrite &w : inst.dmxWrites())
+        {
+            if (w.fixtureId == dim->id())
+                dimmer = w.value;
+            else if (w.fixtureId == strip->id() && w.value > 0 && w.channel < 24)
+                px[int(w.channel / 3)] = true;
+        }
+        return px;
+    };
+
+    // The strip's pixels are 4..6 m from the point, each by its own place.
+    {
+        int cols = 0, rows = 0;
+        const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+        const QJSValue arr = inst.buildFixturesArray(cells, cols, rows);
+        QCOMPARE(cells.size(), 9);
+        QVector<double> d;
+        for (int i = 0; i < cells.size(); ++i)
+            if (cells.at(i).fixtureId == strip->id())
+                d << arr.property(quint32(i)).property("fromTarget").toNumber();
+            else
+                QCOMPARE(arr.property(quint32(i)).property("fromTarget").toNumber(), 0.0);
+        QCOMPARE(d.size(), 8);
+        QVERIFY2(qAbs(d.first() - 4.0) < 0.01 && qAbs(d.last() - 6.0) < 0.01,
+                 qPrintable(QString("%1 .. %2").arg(d.first()).arg(d.last())));
+        for (int i = 1; i < d.size(); ++i)
+            QVERIFY(d.at(i) > d.at(i - 1));
+        QCOMPARE(inst.buildInputsObject().property("_fromTargetFar").toNumber(), d.last());
+        QVERIFY(inst.buildInputsObject().property("_targetAimed").toBool());
+    }
+
+    int dimmer = -1;
+    // Half a second in: the dimmer on the point burns, the strip is dark.
+    QVector<bool> px = at(500, dimmer);
+    QVERIFY2(dimmer > 0, qPrintable(QString("dimmer %1").arg(dimmer)));
+    QCOMPARE(px, QVector<bool>(8, false));
+    // 8.5 s: the front is 5.1 m out -- the strip's near pixels burn, its far ones not yet.
+    px = at(8500, dimmer);
+    QVERIFY(px.first());
+    QVERIFY(!px.last());
+    // 10.5 s on: all of it.
+    px = at(10500, dimmer);
+    QCOMPARE(px, QVector<bool>(8, true));
+
+    // On Loop it keeps burning and never starts again from the point: well
+    // past several Spread times every pixel burns, and it still flickers.
+    QList<int> levels;
+    for (qint64 ms : { 25000, 40000, 40400, 95000 })
+    {
+        px = at(ms, dimmer);
+        QCOMPARE(px, QVector<bool>(8, true));
+        QVERIFY(dimmer > 0);
+        levels << dimmer;
+    }
+    QVERIFY(QSet<int>(levels.begin(), levels.end()).size() > 1);
+    QVERIFY(!inst.runDone());
+
+    // No Aim look: it starts at centre stage.
+    scene->removePalette(aim->id());
+    {
+        int cols = 0, rows = 0;
+        const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+        const QJSValue arr = inst.buildFixturesArray(cells, cols, rows);
+        const QVector3D c = props->stageCentre();
+        const double want = std::hypot(1.0 - c.x(), 1.0 - c.y());
+        for (int i = 0; i < cells.size(); ++i)
+            if (cells.at(i).fixtureId == dim->id())
+                QVERIFY2(qAbs(arr.property(quint32(i)).property("fromTarget").toNumber() - want) < 1e-4,
+                         qPrintable(QString("%1, not %2").arg(arr.property(quint32(i)).property("fromTarget").toNumber()).arg(want)));
+        QVERIFY(!inst.buildInputsObject().property("_targetAimed").toBool());
+    }
+
+    // An effect that does not ask is not given it.
+    QLCPalette *flicker = new QLCPalette(QLCPalette::Effect, m_doc);
+    flicker->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/fire.js");
+    QVERIFY(m_doc->addPalette(flicker));
+    scene->addPalette(flicker->id());
+    EffectInstance plain(m_doc, scene->id(), flicker->id());
+    QVERIFY(plain.isValid());
+    {
+        int cols = 0, rows = 0;
+        const QList<EffectInstance::EffectCell> cells = plain.effectiveCells(cols, rows);
+        const QJSValue arr = plain.buildFixturesArray(cells, cols, rows);
+        QVERIFY(cells.size() > 0);
+        QVERIFY(arr.property(0u).property("fromTarget").isUndefined());
+        QVERIFY(plain.buildInputsObject().property("_fromTargetFar").isUndefined());
+    }
+}
+
 /*****************************************************************************
  * Matrix effects
  *****************************************************************************/

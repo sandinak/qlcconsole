@@ -237,6 +237,7 @@ previews.
 | **Crackle** | Fixtures pulse up at random in their own colour and fade back to a rest level |
 | **Dimmer Phaser** | A waveform intensity chase with phase spread |
 | **Firelight** | Warm flickering fire colours, each fixture on its own |
+| **Fire Spread** | The stage catches fire from the look's Aim target and the fire spreads out until everything burns |
 | **Lightning** | Random storm flashes across the rig |
 | **Sparkle** | Random fixtures flash and fade like stars |
 | **Spotlight Chase** | A hot spot chases across the rig, with a dimmer trail |
@@ -261,6 +262,55 @@ nothing pulses.
 | **Attack** | How fast it snaps up, in seconds (0.03) |
 | **Decay** | How long it takes to fade back, in seconds (0.7); a long decay lets several overlap |
 | **Seed** | The same seed gives the same crackle every run (1) |
+
+### Fire Spread
+
+**Fire Spread** sets the stage alight from one point. The head nearest the
+point catches first and the fire runs outward across the floor at an even
+speed, so a head twice as far away catches twice as late. As each head
+catches it flares, brighter and whiter, and within a second settles into
+Firelight's flicker. Once the whole rig has caught it keeps burning for as
+long as the look plays. Until the fire reaches a head, that head is dark.
+
+The point is the look's **Aim target**, the same one the Spread row's
+*out from the target* uses, so there is no setting for it: pick it the way
+you pick any Aim. With no Aim look the fire starts at centre stage. The
+distances come from where the rig stands in the 2D plan, each pixel of a
+pixel bar or strip by its own place. Heads that aren't placed stand in one
+spot and catch together.
+
+To make the stage catch fire from one point:
+
+1. Put the group that holds the whole rig on a layer.
+2. Pick **Fire Spread** as its effect.
+3. Add an **Aim** look at the point the fire starts from.
+
+Each kind of head burns its own way. A dimmer flickers in level. An RGB
+par takes the fire colours, from deep red to yellow. A moving head takes
+colour and dimmer only and never moves. On a colour wheel it holds one
+orange slot so the wheel doesn't chase, and flickers on its dimmer. A pixel
+bar burns pixel by pixel as the fire crosses it. Before the fire reaches a
+pixel it shows whatever is under the effect, which is dark when the look
+has no Colour look.
+
+The spread is how the effect opens. It isn't a cycle. On **Runs: Loop**
+(the default) the fire spreads once from the start and then burns. It
+never starts again from the point, and the next cue that keeps the same
+effect keeps it burning. Once the look has stopped, starting it again lights
+it again from the point.
+**Once** burns for one **Length** (auto takes the cue's time), then
+**Hold** freezes the last frame or **Release** lets go.
+
+| Setting | Does |
+|---|---|
+| **Spread Over** | What times the spread: **Spread Time**, or **The Cue's Time** (the look's Length when set, else the chase step or Show Tree cue it plays in, its fade in when the cue waits for Go) |
+| **Spread Time** | Seconds for the fire to reach the farthest head (8) |
+| **Edge** | How ragged the front is: 0 is a hard line; up to 1, heads catch a little early or late at random and kindle with a faint ember just before (0.3) |
+| **Flare** | How bright and white a head flares as it catches (0.6) |
+| **Flicker Speed** | How fast the fire flickers, as Firelight's (1) |
+| **Intensity** | Overall brightness (1) |
+| **Coolness** | Shifts the fire toward blue-white: 0 fire, 1 ice (0) |
+| **Seed** | The same seed gives the same fire every run (1) |
 
 ## Position (moving heads)
 

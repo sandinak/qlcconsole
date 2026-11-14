@@ -157,6 +157,18 @@ public:
      *  naming its own params the host spread stands in for (comma-separated;
      *  "" when it has none). */
     bool        takesHostSpread() const { return m_takesHostSpread; }
+
+    /** It spreads out from a point: each head gets "fromTarget", how far it
+     *  stands (metres, on the floor) from the look's Aim target, centre
+     *  stage without one -- each pixel of a pixel fixture by its own place
+     *  -- and the inputs "_fromTargetFar" (the farthest head's) and
+     *  "_targetAimed". Declared as `effect.targetDistance = true`. */
+    bool        wantsTargetDistance() const { return m_wantsTargetDistance; }
+    /** It reads the cue's time as "_cueTime" (seconds): the look's Length,
+     *  else the chase step or Show Tree cue it plays in, else its
+     *  naturalDurationMs -- what a one-shot's run length is. Declared as
+     *  `effect.cueTime = true`. */
+    bool        wantsCueTime() const { return m_wantsCueTime; }
     QStringList hostSpreadParams() const
     {
         QStringList out;
@@ -298,6 +310,8 @@ private:
     int         m_naturalDurationMs = 2000;
     QString     m_cycleParam;
     bool        m_takesHostSpread = false;
+    bool        m_wantsTargetDistance = false;
+    bool        m_wantsCueTime = false;
     QString     m_hostSpreadParam;
     QStringList m_fixtureTypes;
 

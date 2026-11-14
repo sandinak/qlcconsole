@@ -976,12 +976,15 @@ names the effect, with **Change Effect…** to open the browser again:
 
   Presets sit under the effect they're built from.
 
-Two effects are called fire-something:
+Three effects are called fire-something:
 
 - **Fire** is the RGB Matrix flame, rising from the lowest heads on stage
   (its Orientation setting flips it).
 - **Firelight** is the per-fixture flicker. (Older looks that used it keep
   it.)
+- **Fire Spread** sets the stage alight from one point, the look's Aim
+  target, and burns with Firelight's flicker once the fire reaches each
+  head (see [Fire Spread](effects.md#fire-spread)).
 
 RGB Matrix scripts that share a name with an effect script are listed as
 "&lt;name&gt; (RGB Matrix)" — Confetti, Lightning, Meteor, Plasma.
