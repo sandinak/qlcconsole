@@ -297,44 +297,52 @@
     {
       "id": "F-04",
       "title": "Build a look in the Workbench and record it as a cue",
-      "from": "docs/features/build.md, show-tree.md Record and duplicate; course level 2",
+      "from": "docs/features/build.md, show-tree.md Record and duplicate, The programmer strip; course level 2",
       "rules": [
         "UX-61",
         "UX-66"
       ],
-      "budget": 11,
+      "budget": 10,
       "levels": {
-        "student": "Open a scene in Build, play it, Record it into the cue list.",
-        "pro": "Type record lit on the Show Tree's command line."
+        "student": "Open a cue in the Show Tree's Workbench, play it, ↩ back, Record it into the cue list.",
+        "pro": "Type record lit on the Show Tree's command line; the programmer strip sits under the toolbar."
       },
       "steps": [
         {
           "screen": "any",
-          "control": "Build tab",
-          "expect": "Build",
+          "control": "Show Tree tab",
+          "expect": "the Show Tree",
           "do": {
-            "tab": "Build"
+            "tab": "Show Tree"
           }
         },
         {
-          "screen": "Build",
-          "control": "+ Scene, drag a group onto it, drop a colour",
-          "expect": "a look",
-          "clicks": 3,
-          "manual": "Drag and drop isn't driven; the next step opens a scene of the canned show instead."
+          "screen": "Show Tree",
+          "control": "a cue",
+          "expect": "its page",
+          "do": {
+            "node": "cue"
+          }
         },
         {
-          "screen": "Build ▸ Scenes",
-          "control": "a scene in the navigator",
-          "expect": "it in the Workbench",
+          "screen": "Show Tree",
+          "control": "✎ Workbench",
+          "expect": "the cue in the Workbench, Play beside it",
           "do": {
-            "code": "workbenchLoadScene"
+            "click": "stOpenWorkbench"
           },
           "check": {
             "visible": [
               "workbenchPlay"
             ]
           }
+        },
+        {
+          "screen": "the Workbench",
+          "control": "drop a colour on a layer",
+          "expect": "the look changes",
+          "clicks": 2,
+          "manual": "Drag and drop isn't driven; Play below plays the cue as it stands."
         },
         {
           "screen": "the Workbench",
@@ -351,29 +359,10 @@
         },
         {
           "screen": "the Workbench",
-          "control": "record this as a cue",
-          "expect": "a Record control, or a line pointing to the Show Tree's Record",
-          "find": {
-            "text": "^Record|record .*cue"
-          },
-          "pointer": [
-            "Record it as a cue"
-          ]
-        },
-        {
-          "screen": "any",
-          "control": "Show Tree tab",
-          "expect": "the Show Tree",
+          "control": "↩ Show Tree",
+          "expect": "the cue's page back",
           "do": {
-            "tab": "Show Tree"
-          }
-        },
-        {
-          "screen": "Show Tree",
-          "control": "a cue",
-          "expect": "its page",
-          "do": {
-            "node": "cue"
+            "click": "workbenchBack"
           }
         },
         {
@@ -550,12 +539,12 @@
     {
       "id": "F-07",
       "title": "Follow spot with a pad",
-      "from": "docs/features/stage-targets.md Follow-spot behavior; 2026-11-04 (UX-56)",
+      "from": "docs/features/stage-targets.md Follow-spot behavior; 2026-11-04 (UX-56); 0.4.4 (Q228: Build is hidden in the qlcconsole view)",
       "rules": [
         "UX-56",
         "UX-66"
       ],
-      "budget": 9,
+      "budget": 11,
       "manual": "Needs a game pad: followspotcue_test drives a virtual pad through the HID plugin, which the walker doesn't load, and the feel is checked only on his real pad (UX-56).",
       "levels": {
         "student": "Patch the pad, put Followspot and an Aim on the spot, GO, walk the stick.",
@@ -577,10 +566,10 @@
           "manual": "hardware flow"
         },
         {
-          "screen": "Build Workbench",
-          "control": "+ Effect ▸ Effect Palette… ▸ Followspot ▸ Make layer",
+          "screen": "Show Tree",
+          "control": "a cue ▸ ✎ Workbench ▸ + Effect ▸ Effect Palette… ▸ Followspot ▸ Make layer",
           "expect": "the spot follows",
-          "clicks": 4,
+          "clicks": 6,
           "manual": "hardware flow"
         },
         {
@@ -1287,6 +1276,124 @@
         },
         {
           "click": "stPickerApply"
+        }
+      ]
+    },
+    {
+      "id": "F-13",
+      "title": "Run the show from the pad",
+      "from": "docs/features/show-control.md GO from the game controller; ROADMAP_045_050 item 4",
+      "rules": [
+        "UX-45",
+        "UX-66"
+      ],
+      "budget": 5,
+      "manual": "Needs a game pad: the walker doesn't load the HID plugin. padrun_test drives a virtual pad; the feel and the lights are checked on his real pad (UX-56).",
+      "levels": {
+        "student": "Pad: Run, hold LB + RB to arm, hold LT and press A for GO, hold LB + RB again to disarm.",
+        "pro": "The footer's Pad chip shows the state from every tab; the table is on its hover."
+      },
+      "steps": [
+        {
+          "screen": "any",
+          "control": "Run tab",
+          "expect": "the cue list, NEXT on the first cue",
+          "do": {
+            "tab": "Run"
+          },
+          "check": {
+            "visible": [
+              "crGo"
+            ],
+            "text": "^(NEXT|▷ STANDBY)"
+          }
+        },
+        {
+          "screen": "Run",
+          "control": "Pad: Tools ▸ Pad: Run",
+          "expect": "the button reads Pad: Run, not armed",
+          "clicks": 1,
+          "manual": "hardware"
+        },
+        {
+          "screen": "the pad",
+          "control": "hold LB + RB for half a second",
+          "expect": "Pad: ARMED in orange on the Run tab and the footer's Pad chip; the pad's light orange",
+          "clicks": 1,
+          "manual": "hardware"
+        },
+        {
+          "screen": "the pad",
+          "control": "armed, hold LT and press A",
+          "expect": "the next cue plays; a short buzz, the light green while it fades; the Pad chip agrees",
+          "clicks": 1,
+          "manual": "hardware"
+        },
+        {
+          "screen": "the pad",
+          "control": "hold LB + RB again",
+          "expect": "Pad: Run, disarmed; the same on every surface",
+          "clicks": 1,
+          "manual": "hardware"
+        }
+      ]
+    },
+    {
+      "id": "F-14",
+      "title": "Fire a staff hit",
+      "from": "docs/features/show-control.md Pad Run, show-tree.md Hits; ROADMAP_045_050 item 3",
+      "rules": [
+        "UX-45",
+        "UX-61"
+      ],
+      "budget": 5,
+      "manual": "Needs a game pad, and the hit is shown by roadmap item 3 (hit-visible); the walker can't arm a pad.",
+      "levels": {
+        "student": "A cue has a hit under it; arm the pad, pull RT.",
+        "pro": "One HIT button on the Virtual Console fires the same armed hit (narrowest place wins)."
+      },
+      "steps": [
+        {
+          "screen": "any",
+          "control": "Run tab",
+          "expect": "the cue list, NEXT on the first cue",
+          "do": {
+            "tab": "Run"
+          },
+          "check": {
+            "visible": [
+              "crGo"
+            ],
+            "text": "^(NEXT|▷ STANDBY)"
+          }
+        },
+        {
+          "screen": "Run",
+          "control": "Switch to Operate",
+          "expect": "LIVE; hits fire in Operate only",
+          "clicks": 1,
+          "manual": "the cue under test needs a hit of its own (Staff Slam); the notice bar's button is F-05's"
+        },
+        {
+          "screen": "Run",
+          "control": "Pad: Tools ▸ Pad: Run",
+          "expect": "Pad: Run, and the hit named (Hit: Staff Slam)",
+          "clicks": 1,
+          "manual": "hardware"
+        },
+        {
+          "screen": "the pad",
+          "control": "hold LB + RB for half a second",
+          "expect": "Pad: ARMED; the Run tab, the Pad chip and the phone Run page all name the same hit",
+          "clicks": 1,
+          "manual": "hardware"
+        },
+        {
+          "screen": "the pad",
+          "control": "armed, pull RT",
+          "expect": "the hit fires; the three surfaces still agree; no GO happened",
+          "clicks": 1,
+          "manual": "hardware"
         }
       ]
     }

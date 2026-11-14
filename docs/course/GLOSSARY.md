@@ -201,7 +201,7 @@ brackets.
 | **Sub (submaster)** | On an Eos desk, a fader that brings up a set of levels by hand. An imported sub becomes a Virtual Console fader. [3.10] |
 | **Show control** | Another computer (QLab) fires the lights' cues by number over OSC or MIDI Show Control. [3.5] |
 | **Timecode** | A clock counting hh:mm:ss:ff with the music. A list that follows it goes to each cue at the cue's time. [3.5] |
-| **Pad Run** | A game controller as a GO button: hold LB + RB to arm it, then hold LT and press A for GO. [3.5] |
+| **Pad Run** | A game controller as a GO button: hold LB + RB to arm it, then hold LT and press A for GO; RT fires the armed hit, all four buttons are the emergency stop. [3.5] |
 | **Phone Run page** | A web page with GO, Back and Stop, off in every show until the show allows it. [3.5] |
 | **Override hit** | A hit that wins over everything the show plays, brightness included. Let go and the show is back. [3.8] |
 | **Cue sheet / tracking sheet** | The stage manager's paper, made from the show: cues in running order; each layer across the cues, what each cue sets and what only carries in. [3.8] |
