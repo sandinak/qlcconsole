@@ -48,6 +48,9 @@ Switch after each correction.
 7. In **Fixtures**, right-click the **Lanterns** group → **Plot Symbol ▸**
    → under **Practicals**, **Lantern**. The six lanterns are drawn as
    lanterns.
+
+   ![The Fixtures tab: the washes and the lanterns with their new icons](../../images/lesson-3-3/symbols-fixtures.png)
+
 8. Click the **Show Tree** tab (⇧⌘5) and open the Library's groups: the
    same icons. A symbol is only the picture; the lights send what they
    did before.

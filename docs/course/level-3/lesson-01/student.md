@@ -44,6 +44,9 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 2. Click the **Fixtures** tab (⇧⌘2). Open **Universes** and click the
    first one, **Spots, washes, beams, lanterns** (Universe 1): the grid and
    **357 / 512 addresses used (69%)**.
+
+   ![Universe 1's address usage](../../images/lesson-3-1/universe-usage.png)
+
 3. Click **SR Truss Spot 1**: **Address Range** 214 - 225, **Channels** 12,
    **Binary Address (DIP)**. Click **SR Truss Spot 2**: why does it start at 226?
 4. Click **Truss pixel boxes 1** (Universe 2): 495 of 512. Why isn't a fourth XL-450 in it?
@@ -54,11 +57,17 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 7. Click **Lantern 1**, ⇧-click **Lantern 6**, right-click → **Patch 6
    Fixtures…**. Set **Place selected at universe** to **Step fronts 1**
    (Universe 5), **address** 385, click **Place**: each **Status** reads *moves from 1.n*. Click **Apply**.
+
+   ![The Patch dialog placing the lanterns](../../images/lesson-3-1/patch-dialog.png)
+
 8. Press ⌘Z on the Fixtures tab: the lanterns are back on Universe 1.
 9. **Fixtures → Patch List…**: grouped by **Location**; change **Group by**
    to **Universe** and **Type**.
 10. **Save XLSX…** into **Documents → qlcconsole** and open it.
 11. **Print Labels…**: read the preview (names and "D1.214"), **Save PDF…**.
+
+   ![The patch list](../../images/lesson-3-1/patch-list.png)
+
 12. **File → Save As** → `Lesson3-1-yourname.qlcc`.
 
 **Stuck?** **Add ▾** greyed out: click **Design**. Red error stays: pick the

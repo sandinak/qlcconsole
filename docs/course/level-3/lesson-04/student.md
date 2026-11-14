@@ -53,9 +53,15 @@ Roles: Driver, Navigator, Designer. Switch after each part.
    **COREpar 40 USB**, **Mode** **8-Channel**, **Name** `SR Boom Par`, **OK**.
 6. Right-click **SR Boom Par** → **Mount on ▸ Boom ▸ SR Boom**. In Plot
    layers it hangs under **SR Boom**.
+
+   ![The plot: the boom, the par, and what hangs on what](../../images/lesson-3-4/plot-boom.png)
+
 7. Double-click **SR Boom Par**. **Face** → **Stage left**: in **Aim &
    Mount**, **Points (° from DS)** reads 270. In **Tilt in yoke** type
    `20 down`. **OK**.
+
+   ![Aim and mount for the par](../../images/lesson-3-4/aim-mount.png)
+
 8. Right-click the boom → **Lock Layer “Towers”** and drag it: **Layer
    locked — unlock it in Layers to move**. Click the **Towers** padlock in
    Plot layers to unlock, then right-click the boom → **Lock Position**.

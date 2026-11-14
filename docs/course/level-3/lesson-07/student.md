@@ -46,10 +46,16 @@ Roles: Driver, Navigator, Designer. Switch after each fixture.
 5. Right-click **House Lights** → **Output Rules…**: tick **Ignore
    Blackout** and **Ignore the Grand Master**, **OK**. An amber badge
    appears on its icon.
+
+   ![The Output Rules dialog for House Lights](../../images/lesson-3-7/output-rules-house.png)
+
 6. The same for **Work Lights**.
 7. **Stage Power** → **Output Rules…**: tick **Switch (relay)**, **Ignore
    Blackout**, **Ignore the Grand Master** and **On when not in use**,
    **OK**.
+
+   ![The Output Rules dialog for Stage Power](../../images/lesson-3-7/output-rules.png)
+
 8. **Settings** (⌘,) → **Advanced**: leave **"On when not in use"
    fixtures come on** at **When you switch to Operate**. Close Settings.
 9. Click the **Show Tree** tab (⇧⌘5), click the **Command** line, and type

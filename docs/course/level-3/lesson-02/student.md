@@ -44,14 +44,23 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 2. Open **Fixture Groups ▸ Trusses** and click **SR Truss Cyc 1**:
    **Manufacturer** Warmdance, **Model** XL-450, **Mode** 165ch, **Type** LED
    Bar (Pixels), **Definition** Local, **Channels** 165.
+
+   ![The XL-450's info](../../images/lesson-3-2/definition-info.png)
+
 3. Click **SR Truss Spot 1**: a Moving Head, 12 Channel. Which channel dims
    it? What dims the cyc box instead?
 4. Right-click **SR Truss Cyc 1** → **Definition & Mode…**. Pick each **Mode**
    and read **Channels**: 165, 135, 30. **Cancel**.
+
+   ![The modes of the XL-450](../../images/lesson-3-2/definition-modes.png)
+
 5. How many boxes fit in a universe in each mode (165ch, 135ch RGB, 30ch White)?
 6. Click **TrussC-RGB**: each cell is a head: point at one and its tooltip reads
    the box's name, **H:**, **A:**, **U:** and the tag **[RGB]**. Click
    **TrussC-W**: the tag is **[W]**.
+
+   ![The cyc boxes' colour heads](../../images/lesson-3-2/group-heads.png)
+
 7. Right-click **SR Truss Cyc 1** → **Edit Fixture Definition…**. In the Fixture
    Editor click **Modes**: **Name**, **Channels**, **Heads** (75, 45 and 30
    heads). Close it **without saving**.
