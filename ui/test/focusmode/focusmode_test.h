@@ -76,6 +76,9 @@ private slots:
      *  light, red another, a red ring round yellow for both; a save flashes
      *  it green. */
     void checkMappingWalksTheControllerAndLogsIt();
+    /** With QLC_SHOT_DIR: the Controller Test, Xbox and DualSense, three
+     *  sizes, light and dark, some controls held. */
+    void controllerTestShots();
     void theLampSaysWhatIsUnsaved();
     /** Leaving with unsaved lights names them. */
     void exitNamesTheUnsavedLights();

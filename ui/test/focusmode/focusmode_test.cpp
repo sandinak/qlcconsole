@@ -158,12 +158,12 @@ Fixture *makeZoomWash(Doc *doc)
 /* The gamepad's channels: the four stick axes, then the buttons. */
 enum Ch : quint32
 {
-    LX = 0, LY = 1, RX = 2, RY = 3,
+    LX = 0, LY = 1, RX = 2, RY = 3, LT = 4, RT = 5,
     BtnA = 10, BtnB = 11, BtnX = 12, BtnY = 13, BtnLB = 14, BtnRB = 15,
     BtnView = 16, BtnMenu = 17, Up = 18, Down = 19, Left = 20, Right = 21,
     // A PlayStation pad's touchpad (Q170).
     TouchX = 22, TouchY = 23, TouchDown = 24, Touch2X = 25, Touch2Y = 26, Touch2Down = 27,
-    TouchClick = 28
+    TouchClick = 28, BtnLS = 29, BtnRS = 30
 };
 }
 
@@ -1312,6 +1312,81 @@ void FocusMode_Test::checkMappingWalksTheControllerAndLogsIt()
 
     dlg->close();
     m_stub->m_connectionInfo.clear();
+}
+
+void FocusMode_Test::controllerTestShots()
+{
+    /* With QLC_SHOT_DIR (the gate's --shots): the Controller Test at three
+       sizes, light and dark, with an Xbox pad and a DualSense, some
+       controls held and some pressed before. QLC_SHOT_STATE names them
+       ("after", or "before" on the base). */
+    const QString out = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (out.isEmpty())
+        QSKIP("QLC_SHOT_DIR is not set");
+    QDir().mkpath(out);
+    const QString state = qEnvironmentVariable("QLC_SHOT_STATE", QStringLiteral("after"));
+    const QPalette native = qApp->palette();
+    const QString conn = QStringLiteral("USB");
+
+    for (const char *pad : { "xbox", "dualsense" })
+    {
+        const bool ps = QLatin1String(pad) == QLatin1String("dualsense");
+        if (ps)
+            plugInPlayStationPad(QStringLiteral("dualsense"));
+        else
+            plugInPad();
+        m_stub->m_channelRoles.insert(LT, "lt");
+        m_stub->m_channelRoles.insert(RT, "rt");
+        m_stub->m_channelRoles.insert(BtnLS, "ls");
+        m_stub->m_channelRoles.insert(BtnRS, "rs");
+        m_stub->m_connectionInfo = { { 0, ps ? "USB \302\267 DualSense Wireless Controller (054C:0CE6)"
+                                             : "USB \302\267 Xbox Series X|S Controller (045E:0B12)" } };
+        ControllerTestDialog *dlg = ControllerTestDialog::open(m_doc, nullptr);
+        QVERIFY(dlg != nullptr);
+        const QString dev = ps ? QStringLiteral("DualSense Wireless Controller")
+                               : QStringLiteral("Xbox Wireless Controller");
+        auto send = [&](const char *element, quint32 ch, int value) {
+            m_stub->emitDiagnostic(0, dev, conn, QString::fromLatin1(element), value, int(ch), value);
+        };
+        // Pressed before: B, X, Menu, D-pad up; held: A, LB, a trigger part
+        // way, the left stick up and right; the right stick clicked (on the
+        // PlayStation pad, the touchpad clicked too).
+        for (quint32 ch : { BtnB, BtnX, BtnMenu, Up })
+        {
+            send("Button", ch, 255);
+            send("Button", ch, 0);
+        }
+        send("Button 1", BtnA, 255);
+        send("Button 5", BtnLB, 255);
+        send("Z", RT, 166);
+        send("X", LX, 220);
+        send("Y", LY, 50);
+        send("Button 10", BtnRS, 255);
+        if (ps)
+            send("Button 14", TouchClick, 255);
+        QCoreApplication::processEvents();
+
+        const QSize small = dlg->minimumSizeHint().expandedTo(QSize(820, 620));
+        for (const char *theme : { "light", "dark" })
+        {
+            qApp->setPalette(QLatin1String(theme) == QLatin1String("dark")
+                             ? App::themePalette(App::ThemeVSCodeDark, native) : native);
+            for (const QSize &size : { small, QSize(980, 760), QSize(1440, 900) })
+            {
+                dlg->resize(size);
+                QTest::qWait(30);
+                const QString file = QStringLiteral("%1/controllertest-%2-%3-%4-%5x%6.png")
+                    .arg(out, QLatin1String(pad), QLatin1String(theme), state)
+                    .arg(dlg->width()).arg(dlg->height());
+                QVERIFY2(dlg->grab().save(file), qPrintable(file));
+            }
+        }
+        qApp->setPalette(native);
+        dlg->close();
+        QCoreApplication::processEvents();
+        m_stub->m_connectionInfo.clear();
+        unplugPad();
+    }
 }
 
 void FocusMode_Test::theLampSaysWhatIsUnsaved()
