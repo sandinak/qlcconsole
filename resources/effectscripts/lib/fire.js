@@ -30,6 +30,38 @@ var FIRE = (function() {
         return Math.max(0, Math.min(1, F.flicker(t, seed, speed)));
     };
 
+    /** Many flames at once, for an effect over thousands of heads: the
+     *  same flicker as F.flame(t, seeds[i], speed), to the last bit or two,
+     *  with each seed's three phases worked out once (F.phases, when the
+     *  seeds change) and each tick's three sines once for every head
+     *  (F.clock): sin(a + b) = sin a cos b + cos a sin b.
+     *      var ph = F.phases(seeds);           // once
+     *      var k = F.clock(t, speed);          // each tick
+     *      var flame = F.flameAt(ph, i, k);    // each head */
+    F.phases = function(seeds) {
+        var n = seeds.length, ph = new Float64Array(n * 6);
+        for (var i = 0; i < n; i++) {
+            var sd = seeds[i], j = i * 6;
+            ph[j]     = Math.sin(sd * 7.3);  ph[j + 1] = Math.cos(sd * 7.3);
+            ph[j + 2] = Math.sin(sd * 3.1);  ph[j + 3] = Math.cos(sd * 3.1);
+            ph[j + 4] = Math.sin(sd * 11.9); ph[j + 5] = Math.cos(sd * 11.9);
+        }
+        return ph;
+    };
+
+    F.clock = function(t, speed) {
+        var a = t * speed * 1.0, b = t * speed * 2.3, c = t * speed * 5.7;
+        return [Math.sin(a), Math.cos(a), Math.sin(b), Math.cos(b), Math.sin(c), Math.cos(c)];
+    };
+
+    F.flameAt = function(ph, i, k) {
+        var j = i * 6;
+        var v = 0.5 + 0.25 * (k[0] * ph[j + 1] + k[1] * ph[j])
+                    + 0.15 * (k[2] * ph[j + 3] + k[3] * ph[j + 2])
+                    + 0.10 * (k[4] * ph[j + 5] + k[5] * ph[j + 4]);
+        return v < 0 ? 0 : (v > 1 ? 1 : v);
+    };
+
     /** The fire colour of a flame 0..1: (64,0,0) at 0, (255,60,0) at 0.5,
      *  (255,200,20) at 1; @p cool shifts it toward blue-white (0 fire,
      *  1 ice), then @p inten scales it. Whole numbers, as DMX takes them. */

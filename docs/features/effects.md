@@ -226,8 +226,69 @@ previews.
 | **Color Spread** | Two colours distributed across the group |
 | **Rainbow** | Continuous hue rotation across the fixtures. With a colour in the look it sweeps **that colour** instead (a wave of it across the heads); with two or more, it sweeps through them |
 | **Spatial Gradient** | A gradient laid across the rig by where each fixture really is (its 3D position), at a direction you set on a compass |
+| **Spell Spread** | The look's colour reaches each light in turn, out from the look's Aim target or in from a side of the stage; lights not yet reached keep what the cue under them gives |
 | **Warm Cool** | Alternates warm (white) and cool (blue) across the fixtures |
 | **Amber Pulse** / **UV Pulse** | A phase-shifted pulse or chase on the amber / UV emitters |
+
+### Spell Spread
+
+**Spell Spread** brings a colour to the lights one by one: the spell
+sweeping the stage from the witch, the steps lighting as the cast is
+bespelled, blood running down the steps. It starts from the look's **Aim
+target**, or sweeps in from a side of the stage, and the colour reaches
+each light in turn at an even speed: a light twice as far away is reached
+twice as late. As it arrives a light flashes brighter and whiter, then
+settles into the colour and holds it for as long as the look plays.
+
+Until the spell reaches a light, the effect leaves that light alone: it
+keeps what the cue under it gives, whether that is the cue's earlier
+colour, another layer's, or dark.
+
+To spread a colour out from the witch:
+
+1. Put the group that holds the lights on a layer (the steps, the
+   lanterns and fountains, the whole rig).
+2. Pick **Spell Spread** as its effect, and give it **its own colour**
+   (⋯ ▸ Its Own Colour / Dimmer on the effect's row), red, say. Without
+   one it uses the layer's Colour; with no colour at all it spreads white.
+3. Add an **Aim** look at the point it starts from: the witch's target.
+   With no Aim look it starts at centre stage.
+
+To run it down the steps instead, set **From** to **Upstage**: it starts
+at the most upstage light and runs downstage. **Downstage** runs it the
+other way, and **Stage Left** and **Stage Right** sweep it across from that
+side. The distances come from where the rig stands in the 2D plan, each
+pixel of a pixel bar by its own place, so a step bar running across the
+stage lights all at once from Upstage and pixel by pixel from Stage Left.
+Lights that aren't placed stand in one spot and are reached together.
+
+Each kind of light shows the colour its own way. A par takes the colour on
+its colour channels and the layer's level on its dimmer. An RGB batten or
+a pixel bar with no dimmer (the step bars) takes the colour at the layer's
+level, pixel by pixel. A pixel bar whose one dimmer serves all its pixels
+has that dimmer at full while any of it is lit. A moving head takes colour
+and dimmer only and never moves. A colour wheel goes to its nearest slot
+and doesn't flash, so the wheel never chases. A WLED lantern in its Effect
+mode takes the colour and level, and its effect, speed and palette
+channels are left as they are. Lights with no colour at all, a dimmer or a
+relay such as a silk flame, are not the spell's: they keep what is under
+them.
+
+The spread is how the effect opens. It isn't a cycle. On **Runs: Loop**
+(the default) the colour spreads once from the start and then holds. It
+never starts again, and the next cue that keeps the same effect keeps the
+colour. Once the look has stopped, starting it again spreads it again.
+**Once** plays for one **Length** (auto takes the cue's time), then
+**Hold** freezes the last frame or **Release** lets go.
+
+| Setting | Does |
+|---|---|
+| **From** | Where the spell starts: **The Aim Target** (the look's, else centre stage), or the side it sweeps in from: **Upstage** (it runs downstage), **Downstage**, **Stage Left**, **Stage Right** |
+| **Spread Over** | What times the spread: **Spread Time**, or **The Cue's Time** (the look's Length when set, else the chase step or Show Tree cue it plays in, its fade in when the cue waits for Go) |
+| **Spread Time** | Seconds for the spell to reach the last light (6) |
+| **Edge** | How ragged the front is: 0 is a hard line; up to 1, lights are reached a little early or late at random and glow faintly in the colour just before (0.2) |
+| **Flash** | How bright and white a light flashes as the spell reaches it (0.5) |
+| **Seed** | The same seed gives the same ragged front every run (1) |
 
 ## Dimmer
 
@@ -288,10 +349,18 @@ To make the stage catch fire from one point:
 Each kind of head burns its own way. A dimmer flickers in level. An RGB
 par takes the fire colours, from deep red to yellow. A moving head takes
 colour and dimmer only and never moves. On a colour wheel it holds one
-orange slot so the wheel doesn't chase, and flickers on its dimmer. A pixel
-bar burns pixel by pixel as the fire crosses it. Before the fire reaches a
-pixel it shows whatever is under the effect, which is dark when the look
-has no Colour look.
+orange slot so the wheel doesn't chase, and flickers on its dimmer. A WLED
+lantern in its Effect mode takes the fire's colour and level; its effect,
+speed and palette channels are left as they are. A relay, such as a silk
+flame's, switches on as the fire catches it and stays on: a flicker would
+chatter it. A pixel bar burns pixel by pixel as the fire crosses it, and
+each pixel is dark until the fire reaches it. On a pixel bar whose one
+dimmer serves all its pixels, a pixel the fire hasn't reached shows
+whatever is under the effect instead (that dimmer dark would darken the
+whole bar), which is dark when the look has no Colour look.
+
+To bring a colour in the same way without the fire, use
+[Spell Spread](#spell-spread).
 
 The spread is how the effect opens. It isn't a cycle. On **Runs: Loop**
 (the default) the fire spreads once from the start and then burns. It
