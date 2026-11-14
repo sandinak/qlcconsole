@@ -202,6 +202,14 @@ void PageScript_Test::pad(const QJsonObject &down, int ms, const QJsonArray &axe
            .arg(ms));
 }
 
+void PageScript_Test::armPad()
+{
+    // LB + RB held past the chord's time, then let go: armed, or disarmed.
+    const int ms = WebAccessRun::padMap().value(QStringLiteral("lb")).toObject().value(QStringLiteral("hold")).toInt();
+    pad(QJsonObject{ { "lb", 1 }, { "rb", 1 } }, ms + 200);
+    pad(QJsonObject(), 50);
+}
+
 /*****************************************************************************
  * Both pages
  *****************************************************************************/
@@ -324,10 +332,14 @@ void PageScript_Test::nothingIsSentWhileRemoteGoIsOff()
     QVERIFY(!shown(QStringLiteral("rigrow")));
     QVERIFY(text(QStringLiteral("msg")).contains(QStringLiteral("off in Show Settings")));
     // Not by the pad either.
-    pad(QJsonObject{ { "lb", 1 } });
-    pad(QJsonObject{ { "lb", 1 }, { "a", 1 } });
-    pad(QJsonObject{ { "lb", 1 }, { "ls", 1 } });
+    armPad();
+    QVERIFY(shown(QStringLiteral("armed")));
+    pad(QJsonObject{ { "rt", 1 } });
+    pad(QJsonObject{ { "rt", 1 }, { "a", 1 } });
+    pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "ls", 1 } });
     pad(QJsonObject());
+    armPad();
     QCOMPARE(sent(), QStringList());
 
     // Turned on: the message goes, the buttons work.
@@ -493,8 +505,9 @@ void PageScript_Test::theControllerTestSendsNothing()
     pad(QJsonObject{ { "start", 1 } });
     pad(QJsonObject());
     QCOMPARE(js(QStringLiteral("document.getElementById('qpadtest').className")).toString(), QString());
-    pad(QJsonObject{ { "lb", 1 } });
-    pad(QJsonObject{ { "lb", 1 }, { "a", 1 } });
+    armPad();
+    pad(QJsonObject{ { "rt", 1 } });
+    pad(QJsonObject{ { "rt", 1 }, { "a", 1 } });
     pad(QJsonObject());
     QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|go") });
 }
@@ -604,11 +617,12 @@ void PageScript_Test::blindAndSoloButtonsSendTheirWords()
     QVERIFY(click(QStringLiteral("soloprev")));
     QCOMPARE(sent(), (QStringList{ QStringLiteral("QLC+RUN|blind|toggle"), QStringLiteral("QLC+RUN|solo|toggle"),
                                    QStringLiteral("QLC+RUN|solo|next"), QStringLiteral("QLC+RUN|solo|prev") }));
-    // The D-pad walks the layers (with LB), as the buttons do.
-    pad(QJsonObject{ { "lb", 1 } });
-    pad(QJsonObject{ { "lb", 1 }, { "dpad_right", 1 } });
-    pad(QJsonObject{ { "lb", 1 } });
-    pad(QJsonObject{ { "lb", 1 }, { "dpad_right", 1 } });
+    // The D-pad walks the layers (armed, LT held), as the buttons do.
+    armPad();
+    pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "dpad_right", 1 } });
+    pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "dpad_right", 1 } });
     pad(QJsonObject());
     QCOMPARE(sent(), (QStringList{ QStringLiteral("QLC+RUN|solo|next"), QStringLiteral("QLC+RUN|solo|next") }));
 }
@@ -653,8 +667,9 @@ void PageScript_Test::theConsolesOwnStateDrawsOnThePage()
         doc->inputOutputMap()->setOutputInhibited(false);
 
         // The pad map in the state is the one the page acts on.
-        pad(QJsonObject{ { "lb", 1 } });
-        pad(QJsonObject{ { "lb", 1 }, { "ls", 1 } });
+        armPad();
+        pad(QJsonObject{ { "lt", 1 } });
+        pad(QJsonObject{ { "lt", 1 }, { "ls", 1 } });
         pad(QJsonObject());
         QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|blind|toggle") });
     }

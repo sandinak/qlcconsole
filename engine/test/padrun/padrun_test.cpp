@@ -2096,8 +2096,19 @@ void PadRun_Test::inputThroughThePatchDoesNotDeadlock()
     QCOMPARE(iom->inputSlotLive(0), 1);
     QVERIFY(!iom->inputPatch(0)->channelMap().isEmpty());
 
+    // The DualSense's own chord and trigger: the same GO.
     padHold(stub, 0, dLB, true);
+    padHold(stub, 0, dRB, true);
+    QTRY_VERIFY(run->isArmed());
+    padHold(stub, 0, dRB, false);
+    padHold(stub, 0, dLB, false);
+    padHold(stub, 0, xRT, true);            // R2: the same channel on both here
     padPress(stub, 0, dA);
+    padHold(stub, 0, xRT, false);
+    padHold(stub, 0, dLB, true);
+    padHold(stub, 0, dRB, true);
+    QTRY_VERIFY(!run->isArmed());
+    padHold(stub, 0, dRB, false);
     padHold(stub, 0, dLB, false);
     QCOMPARE(m_runs.size(), 2);
     QCOMPARE(m_runs.at(1).first.command, ShowControl::Go);

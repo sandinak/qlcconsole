@@ -57,16 +57,7 @@ PadRun::PadRun(Doc *doc, ProgrammerController *pc, QObject *parent)
     m_blink = new QTimer(this);
     m_blink->setInterval(blinkMs());
     connect(m_blink, &QTimer::timeout, this, &PadRun::lightTick);
-    /* Stopped ends when the show is run again from anywhere (the keys, the
-       Run tab): the pad's red would otherwise outlast what it reports. */
-    if (m_doc != nullptr && m_doc->showControl() != nullptr)
-        connect(m_doc->showControl(), &ShowControl::commandHandled, this, [this](const QString &, bool done) {
-            if (m_stopped && !m_stopping && done)
-            {
-                m_stopped = false;
-                sync();
-            }
-        });
+    hookShowControl();
     if (m_pc != nullptr)
     {
         // A tool taking the pad, or letting it go: the screen says who has it.
@@ -90,6 +81,25 @@ PadRun::PadRun(Doc *doc, ProgrammerController *pc, QObject *parent)
 
 PadRun::~PadRun()
 {
+}
+
+void PadRun::hookShowControl()
+{
+    /* Stopped ends when the show is run again from anywhere (the keys, the
+       Run tab): the pad's red would otherwise outlast what it reports.
+       Doc makes its ShowControl after the programmer, so this is also
+       tried when the role comes on. */
+    ShowControl *sc = m_doc != nullptr ? m_doc->showControl() : nullptr;
+    if (sc == nullptr || m_showControlHooked)
+        return;
+    m_showControlHooked = true;
+    connect(sc, &ShowControl::commandHandled, this, [this](const QString &, bool done) {
+        if (m_stopped && !m_stopping && done)
+        {
+            m_stopped = false;
+            sync();
+        }
+    });
 }
 
 /*****************************************************************************
@@ -201,6 +211,7 @@ void PadRun::setEnabled(bool on, bool say)
 {
     if (on == m_enabled)
         return;
+    hookShowControl();
     clear();
     m_stopped = false;
     m_enabled = on;
@@ -390,6 +401,7 @@ void PadRun::emergencyStop()
 {
     m_armChord->stop();
     m_chordUniverse = UINT_MAX;
+    hookShowControl();
     ShowControl *sc = m_doc != nullptr ? m_doc->showControl() : nullptr;
     bool done = false;
     if (sc != nullptr)
@@ -1096,6 +1108,8 @@ bool PadRun::refuseWalk(const QString &reason, QString *why)
         *why = reason;
     m_pc->padRumble(1, ControllerScheme::rumbleLongMs());
     m_pc->tellOperator(reason, ControllerScheme::ConfirmPriority);
+    // On the screen too: with lights-only feedback nothing is said.
+    showNotice(reason);
     return false;
 }
 

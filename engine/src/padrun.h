@@ -466,6 +466,8 @@ private:
     void lightTick();
     /** A tool took the pad or let it go. */
     void toolChanged();
+    /** Follow ShowControl's commands (once it is there): Stopped ends. */
+    void hookShowControl();
 
 private:
     Doc *m_doc;
@@ -486,6 +488,7 @@ private:
     quint32 m_armUniverse = UINT_MAX;
     bool m_stopped = false;
     bool m_stopping = false;    ///< the stop's own ALL OFF is going through run()
+    bool m_showControlHooked = false;
     QTimer *m_armChord = nullptr;
     quint32 m_chordUniverse = UINT_MAX;
     /** What the screens were last told, so stateChanged() goes once. */

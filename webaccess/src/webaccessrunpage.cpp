@@ -267,6 +267,7 @@ function padLabels(){var l={};for(var r in (st.pad||{}))l[r]=st.pad[r].label;QPa
 var padArmed=false,padStopped=false,armT=null,estopDone=false;
 function showArm(){var e=$('armed');e.style.display=(padArmed||padStopped)?'block':'none';
   e.className=padStopped?'stopped':'';e.textContent=padStopped?'EMERGENCY STOP':'ARMED: RT + A IS GO'}
+showArm();
 function isChord(r){return r==='lb'||r==='rb'||r==='lt'||r==='rt'}
 function chord(){var a=padAction('lb');
   if(!(QPad.down('lb')&&QPad.down('rb'))||QPad.down('lt')||QPad.down('rt')){clearTimeout(armT);armT=null;return}
