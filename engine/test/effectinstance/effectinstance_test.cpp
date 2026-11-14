@@ -4785,6 +4785,7 @@ void EffectInstance_Test::fireSpreadCatchesOutwardFromThePoint()
     /* A pixel with only a level, not yet reached: dark by its own dimmer
        (an RGB pixel is left to what is under it). */
     {
+        QJSEngine *eng = fs.engine();
         QJSValue fixtures = eng->newArray(2);
         for (int i = 0; i < 2; ++i)
         {
