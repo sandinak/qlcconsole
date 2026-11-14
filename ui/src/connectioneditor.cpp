@@ -35,6 +35,7 @@
 
 #include "connectioneditor.h"
 #include "wleddevicesdialog.h"
+#include "wledconfigcheck.h"
 #include "ioplugincache.h"
 #include "inputoutputmap.h"
 #include "qlcioplugin.h"
@@ -282,6 +283,12 @@ void ConnectionEditor::buildForm()
         m_wledButton = new QPushButton(UniversePatcher::retargetText(QStringLiteral("WLED")), page);
         m_wledButton->setObjectName(QStringLiteral("connWledDevices"));
         l->addWidget(m_wledButton, 0, Qt::AlignLeft);
+        m_wledStatus = new QLabel(page);
+        m_wledStatus->setObjectName(QStringLiteral("connWledStatus"));
+        m_wledStatus->setWordWrap(true);
+        m_wledStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        m_wledStatus->hide();
+        l->addWidget(m_wledStatus);
         l->addStretch(1);
         m_settings->addWidget(page);
     }
@@ -434,6 +441,31 @@ void ConnectionEditor::buildForm()
             this, &ConnectionEditor::slotFeedbackChanged);
     connect(m_configureButton, &QPushButton::clicked, this, &ConnectionEditor::slotConfigurePlugin);
     connect(m_wledButton, &QPushButton::clicked, this, &ConnectionEditor::slotWledDevices);
+    if (WledConfigCheck *check = WledConfigCheck::instance())
+        connect(check, &WledConfigCheck::writeChanged, this, &ConnectionEditor::updateWledStatus);
+}
+
+void ConnectionEditor::updateWledStatus()
+{
+    WledConfigCheck *check = WledConfigCheck::instance();
+    QStringList lines;
+    bool failed = false;
+    if (check != nullptr && kindOf(pickedPlugin()) == KindWled && editedPatch() != nullptr)
+    {
+        foreach (const QString &ip, WledConfigCheck::wledIps(m_doc, m_universe))
+        {
+            const QString said = check->writeStatus(ip);
+            if (said.isEmpty())
+                continue;
+            const bool bad = check->writeFailed(ip);
+            failed = failed || bad;
+            lines << (bad ? QStringLiteral("⚠ ") : QString()) + said;
+        }
+    }
+    m_wledStatus->setText(lines.join(QStringLiteral("\n")));
+    m_wledStatus->setStyleSheet(failed ? QStringLiteral("QLabel { color: #d05a5a; }")
+                                       : QStringLiteral("QLabel { color: #8a8e99; }"));
+    m_wledStatus->setVisible(lines.isEmpty() == false);
 }
 
 QStringList ConnectionEditor::lineLabels(QLCIOPlugin *p, bool output) const
@@ -876,6 +908,7 @@ void ConnectionEditor::loadSettings()
                      "lanterns mirroring it. They are set in their own window.")
                 : tr("A WLED universe goes to its devices, set in their own window: it "
                      "opens when you press OK."));
+            updateWledStatus();
         }
         break;
         case KindDevice:

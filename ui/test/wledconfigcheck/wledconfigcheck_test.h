@@ -30,6 +30,9 @@ private slots:
      *  mode are the patch's and the definition's. */
     void anArtNetLanternMustListenWhereItIsPatched();
     /** Read from the device, in the footer, fixed on the device, read back. */
+    void patchingSetsUpAFreshWledAndSaysSo();
+    void patchingReconfiguresAWledSetUpOtherwiseAndSaysWhatItWas();
+    void aWledThatCannotBeSetUpSaysWhyAndSettingItUpAgainWorks();
     void aMismatchIsFoundShownAndFixed();
     /** A device that does not answer: said once, never read; and back. */
     void anUnreachableDeviceIsSaidOnceAndNeverRead();

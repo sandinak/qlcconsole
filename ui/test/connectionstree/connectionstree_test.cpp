@@ -58,6 +58,7 @@
 #include "networkroute.h"
 #include "inputoutputmanager.h"
 #include "connectioneditor.h"
+#include "wledconfigcheck.h"
 #include "inputoutputpatcheditor.h"
 #include "qlcinputprofile.h"
 #include "inputpatch.h"
@@ -2495,6 +2496,49 @@ void ConnectionsTree_Test::byUniverseOutputSaysWhereEachProtocolGoes()
     QVERIFY(m_doc->addFixture(fx));
     QCOMPARE(outputOf(1), QString("WLED: e0:8c:fe:f9:92:e0"));   // its MAC, once known
     QVERIFY(outputOf(1).contains("JSON") == false);
+}
+
+/* "when patching WLED .. it says unpatched even tho it is pointing to the
+   right IP": the IP was right, the device was never set up. Patching sets
+   it up now (WledConfigCheck_Test covers the device side); when it cannot
+   be, the universe says so in words, in the trouble colour, on its Output
+   cell and in the pane beside it -- never a bare WLED beside a right IP. */
+void ConnectionsTree_Test::aWledNotSetUpSaysWhyOnItsUniverse()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_nameOverride = "WLED";
+    stub->m_supportsTargets = true;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 2)
+        iom->addUniverse();
+    QVERIFY(iom->setOutputPatch(1, stub->name(), "", 0, false, 0));
+    iom->universe(1)->outputPatch(0)->setPluginParameter("outputIP", "172.18.2.187");
+    WledConfigCheck check(m_doc);
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+    tree.m_refreshTimer->stop();
+
+    // Set up: nothing in red.
+    check.noteWrite("172.18.2.187", "Set up WLED 172.18.2.187 for this show: Name: Staff.", false);
+    QTreeWidgetItem *row = universeRow(tree.m_tree, 1);
+    QVERIFY(row != NULL);
+    QCOMPARE(row->text(COL_OUTPUT), QString("WLED: 172.18.2.187"));
+    QVERIFY(row->foreground(COL_OUTPUT).color() != QColor(220, 90, 90));
+
+    // Not set up: the row says why (refreshed by itself), and so does the pane.
+    const QString why("WLED 172.18.2.187 was not set up: it did not answer (Connection refused).");
+    check.noteWrite("172.18.2.187", why, false, true);
+    row = universeRow(tree.m_tree, 1);
+    QVERIFY2(row->text(COL_OUTPUT).startsWith(QString::fromUtf8("⚠ WLED: 172.18.2.187")),
+             qPrintable(row->text(COL_OUTPUT)));
+    QCOMPARE(row->foreground(COL_OUTPUT).color(), QColor(220, 90, 90));
+    QVERIFY2(row->toolTip(COL_OUTPUT).contains(why), qPrintable(row->toolTip(COL_OUTPUT)));
+    clickUniverse(tree, 1);
+    QCOMPARE(tree.m_connPane->universe(), quint32(1));
+    tree.m_connPane->updateWledStatus();
+    QVERIFY(tree.m_connPane->m_wledStatus->isVisibleTo(tree.m_connPane));
+    QVERIFY2(tree.m_connPane->m_wledStatus->text().contains(why),
+             qPrintable(tree.m_connPane->m_wledStatus->text()));
 }
 
 /* "why does U07 read FART2(SR)": a target's name is kept by its address,

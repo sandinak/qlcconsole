@@ -68,6 +68,7 @@
 #include "universe.h"
 #include "fixture.h"
 #include "wleddiscovery.h"
+#include "wledconfigcheck.h"
 #include "wleddevicesdialog.h"
 #include <QLineEdit>
 #include "doc.h"
@@ -491,6 +492,12 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
        address grid to the right and the settings in the middle"). */
     m_connPane = ConnectionEditor::createPane(m_doc, this);
     connect(m_connPane, &ConnectionEditor::changed, this, &ConnectionsTree::refresh);
+    /* A WLED set up (or not) after its patch: the universe's Output says so. */
+    if (WledConfigCheck *check = WledConfigCheck::instance())
+        connect(check, &WledConfigCheck::writeChanged, this, [this]() {
+            if (m_byUniverse != nullptr && m_byUniverse->isChecked())
+                refresh();
+        });
     m_panePlaceholder = new QLabel(tr("Select a universe on the left to see and change where "
                                       "it goes."), this);
     m_panePlaceholder->setObjectName(QStringLiteral("connectionsPanePlaceholder"));
@@ -5175,6 +5182,16 @@ void ConnectionsTree::setUniverseColumns(QTreeWidgetItem *item, Universe *u) con
         QString out = op->pluginName() == QLatin1String("WLED")
                       ? wledOutputText(op, u->id())
                       : lineText(op->pluginName(), op->outputName());
+        /* A WLED the show could not set up when it was patched: said with
+           why, never a bare WLED beside a right IP. */
+        if (op->pluginName() == QLatin1String("WLED") && WledConfigCheck::instance() != nullptr)
+        {
+            foreach (const QString &ip, WledConfigCheck::wledIps(m_doc, u->id()))
+            {
+                if (WledConfigCheck::instance()->writeFailed(ip))
+                    trouble << WledConfigCheck::instance()->writeStatus(ip);
+            }
+        }
         switch (ConnectionEditor::kindOf(op->plugin()))
         {
             case ConnectionEditor::KindTargets:

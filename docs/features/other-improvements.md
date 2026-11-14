@@ -62,7 +62,20 @@ Input and PT are on to begin with.
 A WLED output reads **WLED:** and the lantern's hardware (MAC) address once
 it is known — from its fixture, or from the lantern itself on the network —
 else its IP, else just **WLED**: the MAC stays the lantern's when its IP
-changes. **An output that can't be reached now** — its interface not
+changes. **Patching a universe to a WLED sets the WLED up** in the same
+step: once its devices are set (the **WLED devices** button in the
+settings beside the list), each one with a WLED fixture on that universe is
+read and sent what this show needs of it — its name (and network name) the
+fixture's, nothing taken from or sent to other WLEDs, dark at power-on, its
+brightness limit from the fixture's Max draw, and no Art-Net or sACN
+streams taking it over — then read back. Nothing is asked; the settings
+say what was done under the button: "Set up …" for a fresh one, or
+"Reconfigured …: it receives E1.31 (sACN) streams (universe 3). Now: …"
+for one that was set up for something else. One that can't be set up (not
+answering, or no WLED fixture on the universe to name it by) has its Output
+in red with a ⚠ and the reason; set its devices again, or use **Fix on
+Device…** in the footer once it answers. Undo Patch Change puts the patch
+back, not the device's own settings. **An output that can't be reached now** — its interface not
 plugged in, its protocol missing, a node not answering — has its Output
 cell in red with a **⚠**; hover it for why. An input or feedback kept for
 a device that isn't here shows the same way in its own cell.
