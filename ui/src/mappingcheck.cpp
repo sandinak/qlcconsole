@@ -224,7 +224,7 @@ QString MappingCheck::line(int i) const
     switch (m_states.at(i))
     {
         case Passed: return QStringLiteral("✓ %1").arg(name);
-        case Wrong: return QStringLiteral("\u2717 %1 \u2014 %2").arg(name, mismatchText(i));
+        case Wrong: return tr("\u2717 %1 (read %2)").arg(name, m_read.at(i));
         case Skipped: return tr("- %1 (skipped)").arg(name);
         case Pending: break;
     }
@@ -235,7 +235,9 @@ QString MappingCheck::report() const
 {
     QStringList out;
     for (int i = 0; i < m_steps.size(); ++i)
-        out << QStringLiteral("  ") + line(i);
+        out << QStringLiteral("  ") + (m_states.at(i) == Wrong
+                                          ? QStringLiteral("\u2717 %1 \u2014 %2").arg(m_steps.at(i).name, mismatchText(i))
+                                          : line(i));
     out << QStringLiteral("  ") + summary();
     return out.join(QLatin1Char('\n'));
 }

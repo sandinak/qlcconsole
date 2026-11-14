@@ -69,7 +69,7 @@ void MappingCheck_Test::aDifferentRoleIsAMismatch()
     QCOMPARE(c.state(1), MappingCheck::Wrong);
     QCOMPARE(c.current(), 1);                              // stays on it
     QCOMPARE(c.mismatchText(1), QString("Expected B, read X"));
-    QVERIFY(c.line(1).contains("Expected B, read X"));
+    QCOMPARE(c.line(1), QString::fromUtf8("\342\234\227 B (read X)"));
     // Another stray press while it is marked wrong does not pile up.
     c.feed(R::X, 0);
     QCOMPARE(c.feed(R::Y, 255), MappingCheck::Ignored);
