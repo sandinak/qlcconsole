@@ -506,6 +506,8 @@ private:
     quint32 m_armUniverse = UINT_MAX;
     bool m_stopped = false;
     bool m_testing = false;     ///< the Controller Test has the pad
+    /** holder() when last seen: a change forgets what was held. */
+    QString m_lastHolder;
     bool m_stopping = false;    ///< the stop's own ALL OFF is going through run()
     bool m_showControlHooked = false;
     QTimer *m_armChord = nullptr;

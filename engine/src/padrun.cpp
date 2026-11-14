@@ -503,6 +503,17 @@ void PadRun::toolChanged()
         reset();
         showNotice(tr("Disarmed: %1 has the controller.").arg(holder()));
     }
+    /* What was held when the pad changed hands (either way) is not known
+       any more: the tool hears the releases, the Run map does not. A
+       chord begun before is no chord after. */
+    const QString now = holder();
+    if (now != m_lastHolder)
+    {
+        m_lastHolder = now;
+        m_armChord->stop();
+        m_chordUniverse = UINT_MAX;
+        m_held.clear();
+    }
     emit holderChanged();
     m_shownState = -1;      // the tool's name is part of what is shown
     sync();
