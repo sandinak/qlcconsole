@@ -10,6 +10,12 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Watch: WledConfigCheck_Test::aFixtureAtAnOldAddressFollowsItsDeviceByMac
+
+Counted 2 HTTP posts instead of 1 once on dink under load (feat/046-candle-safety's
+run, 2026-11-14), passed on rerun. Network-timing test against FakeWled: if it
+fails again, make it wait on the first post's reply instead of counting.
+
 ## Effect host cost over many pixels (perf, before 0.5.0)
 
 Over the show's 96 step bars (6,144 pixel heads) an effect that returns

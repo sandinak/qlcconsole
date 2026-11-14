@@ -49,6 +49,7 @@ QLCCapability *QLCCapability::createCopy()
     QLCCapability *copy = new QLCCapability(m_min, m_max, m_name);
     copy->setWarning(m_warning);
     copy->setPreset(preset());
+    copy->setPress(m_press);
     for (int i = 0; i < m_resources.count(); i++)
         copy->setResource(i, m_resources.at(i));
     foreach (AliasInfo alias, m_aliases)
@@ -356,6 +357,9 @@ bool QLCCapability::saveXML(QXmlStreamWriter *doc)
         }
     }
 
+    if (m_press)
+        doc->writeAttribute(KXMLQLCCapabilityPress, QStringLiteral("true"));
+
     /* Name */
     if (m_aliases.isEmpty())
         doc->writeCharacters(m_name);
@@ -418,6 +422,12 @@ bool QLCCapability::loadXML(QXmlStreamReader &doc)
     {
         str = attrs.value(KXMLQLCCapabilityPreset).toString();
         setPreset(stringToPreset(str));
+    }
+
+    if (attrs.hasAttribute(KXMLQLCCapabilityPress))
+    {
+        const QString press = attrs.value(KXMLQLCCapabilityPress).toString();
+        setPress(press == QLatin1String("true") || press == QLatin1String("1"));
     }
 
     switch(presetType())
