@@ -240,6 +240,13 @@ private:
     mutable bool       m_figureCached = false;
     mutable bool       m_figureCachePerson = false;
 
+    bool               m_flickerPending = false;   ///< a candle's next flicker frame is asked for
+public:
+    /** A prop in a hand: its name is the holder's tooltip, not a label. */
+    void setLabelShown(bool on);
+private:
+    /** A staff or a candle (HandProps): drawn as itself, not as a mark. */
+    void paintHandProp(QPainter *painter, bool selected, bool locked, const QColor &col);
     QPolygonF          m_curve;            ///< line: the curve, item coords
     QVector<double>    m_curveFractions;   ///< parallel to m_curve
     QVector<QPointF>   m_handles;          ///< line: ends first and last

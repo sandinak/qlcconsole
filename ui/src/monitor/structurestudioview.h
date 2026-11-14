@@ -727,8 +727,21 @@ private:
      *  contrast-safe tint, or a flat warning colour when it overlaps another
      *  fixture's -- unmistakable and independent of either fixture's own
      *  colour, which an overlap warning has to be to read as a warning at
-     *  all rather than as an odd shade of whatever the fixture already is. */
-    QColor overlapAwareEdgeColor(quint32 fid, const QColor &base) const;
+     *  all rather than as an odd shade of whatever the fixture already is.
+     *
+     *  The usual tint is in the room's light (roomEdge()), as the body's faces
+     *  are, unless the fixture is selected or dragged; @p emitting (its body is
+     *  showing its own output) keeps the edge at least as bright as @p base,
+     *  so a lit fixture still reads lit. @p roomLit false: the plain tint,
+     *  for a mark that is not a surface (a mover's aim stub). */
+    QColor overlapAwareEdgeColor(quint32 fid, const QColor &base,
+                                 bool emitting = false, bool roomLit = true) const;
+    /** An object's edge in the room's light (the 45° view): its own edge
+     *  colour at work light, sinking toward a faint neutral grey as the room
+     *  goes dark -- in a blackout an unlit object is a dim silhouette, not a
+     *  line drawing in whatever colour its edge happens to be, yet never
+     *  lost against the canvas. */
+    QColor roomEdge(const QColor &edge) const;
 
     /** Whether fid's PERSISTED locks -- layout, its layer, its group chain, or
      *  the truss/pipe/tower/platform it is mounted on -- forbid moving it.
@@ -1123,6 +1136,10 @@ private:
      *  added up, over the room light. Only Person targets: every other kind is
      *  a point the light is aimed at, and a point has nothing to draw. */
     void drawStageFigures(QPainter &p) const;
+    /** A staff or a candle (BLOCKING.md, "Props someone holds"), where its
+     *  blocking puts it: on the deck, in a hand, or not drawn when off
+     *  stage. structurestudioview_heldprops.cpp. */
+    void drawHandProp(const class StageTarget *t, QPainter &p) const;
 
     /** A beam drawn this frame, kept so the figures it passes through can be
      *  lit by it. Filled by drawMoverSolid() during the depth-sorted pass,

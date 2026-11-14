@@ -24,6 +24,8 @@ look that aims at it re-solves automatically.
 | **Upright piano** | An upright, 4 ft 11 in × 2 ft (1.5 × 0.6 m), 4 ft 3 in (1.3 m) tall, aimed at 3 ft 11 in (1.2 m) | A box with the keyboard edge; in the Rig View, a box with the key ledge |
 | **Equipment rack** | An amp or equipment rack, 2 ft × 2 ft (0.6 × 0.6 m), 3 ft 11 in (1.2 m) tall, aimed at 3 ft 3 in (1.0 m) | A box with rack-unit lines; in the Rig View, a box with units on its face |
 | **Speaker** | A powered speaker on casters: the box 1 ft 10 in × 1 ft 8 in (0.55 × 0.5 m) and 3 ft 3 in (1.0 m) tall, sitting 4 in (0.1 m) up; aimed at 2 ft 7 in (0.8 m) | A box with the cone circle and a tick on the face it points from; in the Rig View, a cabinet on four little wheels |
+| **Staff** | A hand prop: a pole 5 ft 11 in (1.8 m) long unless its **Height** says otherwise. A person can [hold it](#props-someone-holds) | A wooden pole, upright; from above, its top as a ring round a dot |
+| **Candle** | A hand prop: a flameless candle, 6 in (0.15 m), [lit by the show](#candles) through an IR remote | A small candle; a flame when it was last told to be lit |
 | **Area** | A region of deck, not a point: the lights aimed at it [cover it](#area-targets), each its own part | A dashed-outline footprint rectangle |
 | **Structure** | Bound to a truss/platform/steps/tower — its position *follows* whatever it's bound to | Crosshair, position always live |
 | **Line** | A curve in space — every light aimed at it gets its **own** point on it, evenly spaced | The curve, square handles at its ends, round ones at its mid points, and a crosshair at its centre |
@@ -331,6 +333,71 @@ wherever they are. Theatre calls the places *spike marks*.
 
 Not yet: an area's size in a blocking is set by file or test only (no
 editor yet); the target's own dialog edits Default.
+
+### Props someone holds
+
+A **Staff** or a **Candle** target can be in a performer's hand. Who has
+it is part of the blocking, so it is cued the way the places are: the cue
+whose blocking first puts the staff in Ann's hand is when she gets it; a
+later cue whose blocking says otherwise is when it is taken away. Nobody
+has to be shown picking it up.
+
+In each blocking a hand prop is one of:
+
+- **its own place**: where it was put down (in Default, where it stands
+  today);
+- **held by** a person: in their right hand, at hand height, a little in
+  front of them. It goes where they go, in that blocking and every view
+  (plot, front, side, Rig View);
+- **not on stage**: not drawn at all.
+
+A blocking that says nothing about a prop does what Default says.
+
+- **Hand it over.** Right-click the prop on the plot ▸ **Held By** ▸ a
+  person, **Its Own Place** or **Not on Stage**. It changes the blocking
+  the plot shows (the toolbar's **Blocking ▾**), as a drag does. Select
+  several props first to change them all. Or drag the prop onto a person
+  to put it in their hand, or anywhere else to put it down there.
+- **One each.** Select the people, right-click one of them ▸ **Give Each
+  a Prop** ▸ **Staff** or **Candle**: each gets a new one in their hand,
+  in one step (one Undo). Done in a blocking set, the new props are not
+  on stage in Default, so only the cues using that set have them.
+- **Make a target a prop.** Edit Target ▸ **Subject**: Staff or Candle.
+  A staff's **Height** is its length.
+- **Light ignores them.** An Aim at a person covers the same heads
+  whether or not they hold anything; a held prop is drawn only.
+
+A wand (a pixel fixture laid along a staff) is held the same way, from its
+own **Held by** field.
+
+### Candles
+
+Hand-held flameless candles that answer an infrared remote are lit by the
+show: an IR blaster on the network sends the remote's buttons. Patch one
+**Generic ▸ IR Candle Remote** fixture for the whole room (every candle
+hears the same remote): channel 1 **Select** (1 On, 2 Off, 3 Candle
+flicker, 4 Light steady, 5 Dim, 6 Brighten; 0 nothing) and channel 2
+**Window** (how long the blaster keeps resending the button, in tenths of
+a second; 255 constantly). A change of either sends the button again.
+
+Five people with lit candles from cue 12 to cue 15:
+
+1. **They have them on cue:** cue 12's blocking gives each a candle (Give
+   Each a Prop ▸ Candle in that blocking), and cue 16's blocking does not.
+2. **The candles come on:** a look in cue 12 sets the remote's Select to
+   On (1) and Window long enough for the cast to catch the beam (30 = 3 s,
+   or 255).
+
+Give Select no fade (a fade passes through the other buttons on the way).
+With more than one remote in the show, right-click a candle ▸ **Lit By**.
+
+The plot shows **what was last sent**, not what a candle did: one in a
+pocket, out of the beam, missed it. After On a candle is drawn lit at
+full (they start full every time); Off dark; Candle a flickering flame;
+Light a steady one; Dim one size smaller (the real candles step, and the
+blaster repeats the button for the whole window, so the true level can't
+be known); Brighten full again. Before anything is sent, a candle is
+drawn unlit with a dashed outline. Hover a candle to read its state.
 
 ## The Aim Solver
 

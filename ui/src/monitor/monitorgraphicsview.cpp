@@ -6709,6 +6709,8 @@ void MonitorGraphicsView::repositionTargetItems()
         ti->setScenePos(float(px.x()), float(px.y()));
         if (t->isLine())
             refreshLineItem(ti);
+        if (StageTarget::isHandPropKind(t->kind()))
+            decorateHandProp(ti, t);        // in a hand that moved, or put down
     }
     updateAimLines();   // keep aim lines tracking the moved target
     updateBlockingGhosts();
@@ -6789,7 +6791,7 @@ void MonitorGraphicsView::updateTargets()
            itself in an elevation (where the plot shows no Y). Unless Show >
            Stage marks > Target positions is off. */
         if (m_doc->monitorProperties() != nullptr && m_doc->monitorProperties()->targetPositionsVisible()
-            && !PerformerFill::isPerformer(props, t))
+            && !PerformerFill::isPerformer(props, t) && props->targetHolder(t) == nullptr)
         {
             ti->setPositionReadout([this, at](const QPointF &scenePos) {
                 MonitorProperties *mp = m_doc->monitorProperties();
@@ -6873,6 +6875,8 @@ void MonitorGraphicsView::updateTargets()
             ti->setFigure(feet, crown, 1000.0 * m_cellPixels / m_unitValue,
                           m_pov == PovSide);
         }
+        if (StageTarget::isHandPropKind(t->kind()))
+            decorateHandProp(ti, t);
         // Targets are a DESIGN-time aim point: draggable while editing (even when
         // the rig layout is locked), but frozen in Run/Operate — in a show the
         // operator drives the follow-spot pin, not the target.
@@ -6938,6 +6942,9 @@ void MonitorGraphicsView::updateBlockingGhosts()
         StageTarget *t = ti != nullptr ? ti->target() : nullptr;
         if (t == nullptr || !ti->isVisible() || !t->isBlockedIn(set))
             continue;
+        if (StageTarget::isHandPropKind(t->kind()))
+            continue;       // a hand prop is with its holder: no "(Default)" mark
+
         const QVector3D def = props->targetPosition(t, MonitorProperties::defaultBlocking());
         const QVector3D now = props->targetPosition(t, set);
         if ((def - now).length() < 0.005f)
@@ -7098,6 +7105,15 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
             moved.append(tg);
     if (item != nullptr && !moved.contains(item))
         moved.append(item);
+    /* A prop someone holds goes where they go: dragged with them it is not
+       dropped anywhere. Dragged on its own it is handed over or put down. */
+    if (dropHandProp(item, moved))
+        return;
+    if (moved.size() > 1)
+        for (int i = moved.size() - 1; i >= 0; --i)
+            if (moved.at(i)->target() != nullptr
+                && m_doc->monitorProperties()->targetHolder(moved.at(i)->target()) != nullptr)
+                moved.removeAt(i);
 
     /* Snap the dropped target, shift the rest by the same -- only when it
        was dragged: a line's handle drag ends here too (the release sweep),
@@ -7200,6 +7216,9 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
     for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
         if (m_doc->monitorProperties()->fixtureRigProps(it.key()).isHeld())
             updateFixture(it.key());
+    // And a staff or a candle.
+    if (!drops.isEmpty() && anyPropHeld())
+        repositionTargetItems();
 
     if (!e.targetPositions.isEmpty())
     {
@@ -7808,6 +7827,10 @@ void MonitorGraphicsView::setTargetScope(bool all, const QSet<quint32> &ids)
 
 bool MonitorGraphicsView::targetInScope(quint32 targetId) const
 {
+    // A hand prop the blocking shown puts off stage is not drawn at all.
+    if (const MonitorProperties *mp = m_doc->monitorProperties())
+        if (const StageTarget *t = mp->stageTarget(targetId); t != nullptr && !mp->targetOnStage(t))
+            return false;
     if (m_targetScopeAll || m_targetScope.contains(targetId) || m_placedTargets.contains(targetId))
         return true;
     // The people on the stage are the scene, not a marker the cue scope narrows.
@@ -9961,6 +9984,9 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
     }
     if (design)
     {
+        // Props someone holds: who has it in this blocking, hand them out.
+        if (kind == QLatin1String("target"))
+            addHandPropItems(cm, id);
         /* A network node set up by hand can become a model to place the next
            one from (Add Network Node > Model). */
         if (kind == QLatin1String("network"))

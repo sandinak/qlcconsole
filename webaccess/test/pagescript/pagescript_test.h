@@ -53,6 +53,12 @@ private slots:
     void thePinIsAskedAndKeptForTheSession();
     void everyPadWordNeedsTheArmAndItsTrigger();
     void theControllerTestSendsNothing();
+    /* The pad rules, tried as a pad on stage breaks them (padrunrules) */
+    void theStopsOwnBumpersDoNotArmThePage();
+    void aTriggerInTheChordSpendsItOnThePage();
+    void noHitOnTheWayToTheStopOnThePage();
+    void theTestOpenedMidChordArmsNothing();
+    void aPadGoneMidHoldDisarmsThePage();
     void acksSayWhyInPlainWords();
     void teachingShowsWhatItHolds();
     void blindAndSoloFollowTheState();

@@ -30,7 +30,11 @@
 #include "stagemarklabel.h"
 #include "stagetarget.h"
 #include "humanfigure.h"
+#include "candleremote.h"
+#include "handprops.h"
 #include "doc.h"
+#include <QDateTime>
+#include <QTimer>
 
 TargetItem::TargetItem(StageTarget *target, Doc *doc, float pxX, float pxY,
                        QGraphicsItem *parent)
@@ -48,7 +52,7 @@ TargetItem::TargetItem(StageTarget *target, Doc *doc, float pxX, float pxY,
     setPos(pxX, pxY);
 
     QString labelText = target->name();
-    if (target->z() > 0.0f)
+    if (target->z() > 0.0f && !StageTarget::isHandPropKind(target->kind()))
         labelText += QString("\n(Z: %1)").arg(MonitorProperties::formatStageDistance(target->z()));
 
     m_label = new QGraphicsTextItem(labelText, this);
@@ -58,6 +62,10 @@ TargetItem::TargetItem(StageTarget *target, Doc *doc, float pxX, float pxY,
     m_label->setFont(labelFont());
     m_label->setZValue(0.1);
     m_label->setPos(kRadius + 3, -kRadius);
+
+    /* A candle shows what its remote last sent: redrawn when that changes. */
+    if (doc != nullptr && target->kind() == StageTarget::Kind::Candle)
+        connect(CandleRemote::of(doc), &CandleRemote::changed, this, [this]() { update(); });
 }
 
 QFont TargetItem::labelFont()
@@ -616,6 +624,8 @@ QRectF TargetItem::geometryRect() const
         rect |= bandBounds();
     if (isLine())
         rect |= m_curve.boundingRect();
+    if (m_target != nullptr && StageTarget::isHandPropKind(m_target->kind()))
+        rect |= HandProps::bounds(m_target->kind(), m_feet, m_crown, m_pxPerMetre);
     return rect;
 }
 
@@ -647,6 +657,8 @@ QRectF TargetItem::boundingRect() const
         for (const QPointF &h : m_handles)
             rect |= QRectF(h.x() - r, h.y() - r, 2 * r, 2 * r);
     }
+    if (m_target != nullptr && StageTarget::isHandPropKind(m_target->kind()))
+        rect |= HandProps::bounds(m_target->kind(), m_feet, m_crown, m_pxPerMetre);
     return rect;
 }
 
@@ -684,6 +696,12 @@ void TargetItem::paint(QPainter *painter,
        red lost the colour, and a line drawn red read as the wrong colour. */
     const QColor col = m_target->color().isValid() ? m_target->color() : QColor(255, 180, 0);
     const bool locked = ItemLock::drawnLocked(this, m_target->locked());
+
+    if (StageTarget::isHandPropKind(m_target->kind()))
+    {
+        paintHandProp(painter, selected, locked, col);
+        return;
+    }
 
     /* The ground it covers, under everything else: tinted so the stage under
        it still reads, outlined so its edge is exact. */
@@ -888,6 +906,48 @@ void TargetItem::paint(QPainter *painter,
         painter->setPen(glowPen);
         painter->setBrush(Qt::NoBrush);
         painter->drawEllipse(QPointF(0, 0), double(kRadius) + 3.0, double(kRadius) + 3.0);
+    }
+}
+
+void TargetItem::setLabelShown(bool on)
+{
+    if (m_label != nullptr)
+        m_label->setVisible(on);
+}
+
+void TargetItem::paintHandProp(QPainter *painter, bool selected, bool locked, const QColor &col)
+{
+    HandProps::Flame flame = HandProps::Flame::Unknown;
+    if (m_target->kind() == StageTarget::Kind::Candle && m_doc != nullptr)
+        flame = HandProps::flameFor(CandleRemote::of(m_doc)->stateFor(m_target));
+    HandProps::paint(painter, m_target->kind(), flame, m_feet, m_crown, m_pxPerMetre, col, selected,
+                     QDateTime::currentMSecsSinceEpoch());
+    if (m_target->kind() == StageTarget::Kind::Candle)
+    {
+        // What was sent, not what a candle in a pocket did (the help says so).
+        const QString tip = tr("%1: %2 (as last sent to its remote)")
+                                .arg(m_target->name(), HandProps::flameText(flame));
+        if (toolTip() != tip)
+            setToolTip(tip);
+    }
+    if (locked)
+    {
+        QPen lockPen(QColor(200, 60, 60), 2.0);
+        lockPen.setStyle(Qt::DashLine);
+        painter->setPen(lockPen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawEllipse(QPointF(0, 0), 12.0, 12.0);
+    }
+    /* A flickering flame asks for its next frame only from here, so it
+       moves only while a view is painting it: hidden, scrolled away or not
+       on stage, nothing ticks. */
+    if ((flame == HandProps::Flame::Flicker || flame == HandProps::Flame::FlickerDimmed) && !m_flickerPending)
+    {
+        m_flickerPending = true;
+        QTimer::singleShot(120, this, [this]() {
+            m_flickerPending = false;
+            update();
+        });
     }
 }
 

@@ -79,11 +79,20 @@ them:
 1. **The pad never picks the list.** The screen does (the Run tab).
 2. **The bumpers are the mode, and only that.** Hold **LB + RB** (L1 + R1)
    for half a second to arm. Let go: it stays armed. Hold them again to
-   disarm. No single button, held or pressed, arms or disarms.
+   disarm. No single button, held or pressed, arms or disarms. A trigger
+   squeezed while both bumpers are down (the emergency stop, or one
+   begun) spends the hold: nothing arms until both bumpers are let go
+   and squeezed again, so letting go of the triggers first after a stop
+   never arms.
 3. **The left trigger is the safety.** No cue moves without it: armed, hold
    **LT** (L2) and press the button.
-4. **The right trigger is the hit.** Armed, pull **RT** (R2).
-5. **The emergency stop is all four:** LB + RB + LT + RT.
+4. **The right trigger is the hit.** Armed, pull **RT** (R2) on its own:
+   with LT or a bumper down it is no hit (that is the emergency stop in
+   the making).
+5. **The emergency stop is all four:** LB + RB + LT + RT, in the Run
+   role whatever the pad is doing: armed or not, walking, or with a tool
+   on the laptop holding it. Only the Controller Test window stops it
+   (nothing pressed there runs the show).
 
 | Does | Xbox | PlayStation |
 |---|---|---|
@@ -92,7 +101,7 @@ them:
 | **Back** | armed, hold LT + B | armed, hold L2 + Circle |
 | **Sub GO** | armed, hold LT + X | armed, hold L2 + Square |
 | **Sub Back** | armed, hold LT + Y | armed, hold L2 + Triangle |
-| Fire the **armed hit** (below) | armed, pull RT | armed, pull R2 |
+| Fire the **armed hit** (below) | armed, pull RT on its own | armed, pull R2 on its own |
 | **Emergency stop**: everything off | LB + RB + LT + RT | L1 + R1 + L2 + R2 |
 | Say the list and what's on standby | RS click | R3 |
 | Walk the show (below), not while armed | Menu | Options |
@@ -107,9 +116,10 @@ them:
   alone, the safety only brushed, or the right trigger in its place does
   nothing, and the Pad chip says what it needs ("GO is LT held and A.").
 - **The emergency stop** stops everything that plays (the same as ALL
-  OFF), armed or not. The arm drops, and the button, the frame, the chip
-  and the pad's light turn red (**Pad: STOPPED**) until you arm again or
-  run the show from the laptop. There is no "stop the list" on the pad:
+  OFF), in the Run role whatever the pad is doing. The arm drops, and the
+  button, the frame, the chip and the pad's light turn red (**Pad:
+  STOPPED**), over a walk or a tool too, until you arm again or run the
+  show from the laptop. There is no "stop the list" on the pad:
   stop a list on the Run tab.
 - **A pad with no light buzzes instead.** Two short buzzes: armed. One
   long: disarmed. Three long: the emergency stop. An Xbox pad's light
@@ -151,7 +161,7 @@ them:
 
 ### Fire a hit from the pad
 
-Armed, a pull of **RT (R2)** fires the hit that is armed right now. A
+Armed, a pull of **RT (R2)** on its own fires the hit that is armed right now. A
 [scoped hit](show-tree.md) is armed while its place is live: under a cue
 that is running, in a cue list, in the current production or everywhere.
 Where several are armed the **narrowest** wins, exactly as on a Virtual
@@ -163,8 +173,8 @@ Use it to call a one-shot, say a breathe, off a hit in a cue.
 - Two or more hits at the narrowest place take turns, one a press.
 - With no hit armed the pad says "No hit armed." and buzzes long. Not
   armed, it says "Not armed: hold LB and RB.", as for GO. One pull is one
-  press, however long it is held; a pull with a bumper down does nothing
-  (that is the emergency stop in the making).
+  press, however long it is held; a pull with LT or a bumper down does
+  nothing (that is the emergency stop in the making).
 - One hit for now. Several on the pad would be RT held with X, Y, A or B.
 - Hits fire in **Operate** only, as a button does. It is not a run command:
   it starts the hit's look the way a VC button's press does.

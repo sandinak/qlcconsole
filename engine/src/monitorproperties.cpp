@@ -2837,6 +2837,13 @@ QVector3D MonitorProperties::targetPosition(const StageTarget *t, quint32 blocki
         return QVector3D();
     blocking = resolveBlocking(blocking);
 
+    /* A prop someone holds is in their hand, wherever the blocking puts
+       them. Only a hand prop is asked (a kind compare), so every other
+       target reads exactly as before. */
+    if (StageTarget::isHandPropKind(t->kind()))
+        if (const StageTarget *holder = targetHolder(t, blocking))
+            return handPoint(holder, blocking);
+
     QVector3D p = t->positionIn(blocking);
 
     /* A BOUND target is a relationship, not a coordinate. Read the structure
@@ -2893,6 +2900,59 @@ void MonitorProperties::setTargetPositionIn(StageTarget *t, quint32 blocking, co
     StageTarget::Blocked b = t->blocked(blocking);
     b.offset = p - t->position();
     b.hasOffset = true;
+    t->setBlocked(blocking, b);
+}
+
+const StageTarget *MonitorProperties::targetHolder(const StageTarget *t, quint32 blocking) const
+{
+    if (t == nullptr || !StageTarget::isHandPropKind(t->kind()))
+        return nullptr;
+    quint32 who = UINT_MAX;
+    if (t->holdIn(resolveBlocking(blocking), &who) != StageTarget::Hold::HeldBy)
+        return nullptr;
+    const StageTarget *holder = m_stageTargets.value(who, nullptr);
+    // Only a Person holds; a Person is never a hand prop, so no loop.
+    return holder != nullptr && holder->kind() == StageTarget::Kind::Person ? holder : nullptr;
+}
+
+bool MonitorProperties::targetOnStage(const StageTarget *t, quint32 blocking) const
+{
+    if (t == nullptr)
+        return false;
+    if (!StageTarget::isHandPropKind(t->kind()))
+        return true;
+    return t->holdIn(resolveBlocking(blocking)) != StageTarget::Hold::OffStage;
+}
+
+QVector3D MonitorProperties::holderFeet(const StageTarget *p, quint32 blocking) const
+{
+    const QVector3D at = targetPosition(p, blocking);
+    // On the deck under them, as targetAimPoint() stands a Person.
+    return QVector3D(at.x(), at.y(), platformHeightAt(at.x(), at.y()));
+}
+
+QVector3D MonitorProperties::handPoint(const StageTarget *p, quint32 blocking) const
+{
+    if (p == nullptr)
+        return QVector3D();
+    static constexpr float kHandShare = 0.55f;    // the hand, arm at the side, of a 1.75 m person ~0.96 m
+    const QVector3D feet = holderFeet(p, blocking);
+    return QVector3D(feet.x() - 0.25f, feet.y() + 0.10f,
+                     feet.z() + p->effectivePersonHeight() * kHandShare);
+}
+
+void MonitorProperties::setTargetHold(StageTarget *t, quint32 blocking, int hold, quint32 holder)
+{
+    if (t == nullptr || !StageTarget::isHandPropKind(t->kind()))
+        return;
+    if (blocking != defaultBlocking() && !m_blockingSets.contains(blocking))
+        blocking = defaultBlocking();
+    StageTarget::Blocked b = t->blocked(blocking);
+    b.hold = StageTarget::Hold(hold);
+    b.holder = b.hold == StageTarget::Hold::HeldBy ? holder : UINT_MAX;
+    /* In Default, its own place is the plain state: nothing to store. */
+    if (blocking == defaultBlocking() && b.hold == StageTarget::Hold::OwnPlace)
+        b.hold = StageTarget::Hold::Unset;
     t->setBlocked(blocking, b);
 }
 
@@ -3192,6 +3252,20 @@ StageTarget *MonitorProperties::addStageTarget()
 
 void MonitorProperties::removeStageTarget(quint32 id)
 {
+    /* What they held is put back at its own place, in every blocking: a
+       later target given the same id must not inherit their props. */
+    for (StageTarget *o : std::as_const(m_stageTargets))
+        if (o != nullptr && o->id() != id && StageTarget::isHandPropKind(o->kind()))
+            for (quint32 set : o->blockedSets())
+            {
+                StageTarget::Blocked b = o->blocked(set);
+                if (b.hold == StageTarget::Hold::HeldBy && b.holder == id)
+                {
+                    b.hold = set == defaultBlocking() ? StageTarget::Hold::Unset : StageTarget::Hold::OwnPlace;
+                    b.holder = UINT_MAX;
+                    o->setBlocked(set, b);
+                }
+            }
     deleteStructure(m_stageTargets.take(id));
     emit stageTargetsChanged();
 }

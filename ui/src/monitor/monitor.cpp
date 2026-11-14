@@ -7695,6 +7695,8 @@ void Monitor::slotEditTarget(quint32 tid)
     kindCombo->addItem(tr("Upright piano"), int(StageTarget::Kind::UprightPiano));
     kindCombo->addItem(tr("Equipment rack"), int(StageTarget::Kind::Rack));
     kindCombo->addItem(tr("Speaker (on wheels)"), int(StageTarget::Kind::Speaker));
+    kindCombo->addItem(tr("Staff (a person can hold it)"), int(StageTarget::Kind::Staff));
+    kindCombo->addItem(tr("Candle (a person can hold it)"), int(StageTarget::Kind::Candle));
     kindCombo->addItem(tr("Bound to a structure"),
                        int(StageTarget::Kind::Structure));
     kindCombo->addItem(tr("Area"),          int(StageTarget::Kind::Area));
@@ -7710,7 +7712,9 @@ void Monitor::slotEditTarget(quint32 tid)
     QDoubleSpinBox *personSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     personSpin->setObjectName(QStringLiteral("personHeight"));
     personSpin->setRange(0.5 * toDisp_t, 3.0 * toDisp_t);
-    personSpin->setValue(double(t->effectivePersonHeight()) * toDisp_t);
+    // A staff's Height is its length (a candle's is fixed).
+    personSpin->setValue(double(t->kind() == StageTarget::Kind::Staff ? t->propLength()
+                                                                      : t->effectivePersonHeight()) * toDisp_t);
     personSpin->setToolTip(tr("How tall this person is. They are drawn this tall, and "
                               "light is aimed at their chest -- 80% of it."));
     form->addRow(tr("Height:"), personSpin);
@@ -7799,7 +7803,7 @@ void Monitor::slotEditTarget(quint32 tid)
         }
         wSpin->setEnabled(sized);
         dSpin->setEnabled(sized);
-        personSpin->setEnabled(k == StageTarget::Kind::Person);
+        personSpin->setEnabled(k == StageTarget::Kind::Person || k == StageTarget::Kind::Staff);
         // A line's points carry their own heights.
         ovrChk->setEnabled(k != StageTarget::Kind::Line);
         ovrSpin->setEnabled(k != StageTarget::Kind::Line && ovrChk->isChecked());
@@ -7915,7 +7919,8 @@ void Monitor::slotEditTarget(quint32 tid)
                 chosenSeed = QRandomGenerator::global()->generate();
             t->setSeed(chosenSeed);
         }
-        if (t->kind() == StageTarget::Kind::Person || t->isPerformerLine())
+        if (t->kind() == StageTarget::Kind::Person || t->isPerformerLine()
+            || t->kind() == StageTarget::Kind::Staff)
             t->setPersonHeight(float(personSpin->value() * fromDisp_t));
         const QString bound = boundCombo->currentData().toString();
         if (t->kind() == StageTarget::Kind::Structure && bound.isEmpty() == false)

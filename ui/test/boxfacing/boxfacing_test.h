@@ -40,6 +40,7 @@ private slots:
     void turningAndMovingABoxKeepsItsFront();
     void aStripOnTheFrontLaysItsLedsAcrossIt();
     void theTopIsClear();
+    void labelsNeverWrapAndNeverCoverTheFront();
 
     // The facing arrow
     void theArrowPointsWhereTheBeamGoes();

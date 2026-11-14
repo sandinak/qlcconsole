@@ -54,10 +54,15 @@ class Doc;
  *   LT held              the safety: no cue moves without it
  *   armed, LT held + A   GO            armed, LT held + B   Back
  *   armed, LT held + X   Sub GO        armed, LT held + Y   Sub Back
- *   armed, RT            fire the hit that is armed now (one hit for now;
- *                        several would be RT held + X / Y / A / B)
- *   LB + RB + LT + RT    EMERGENCY STOP: everything stops (ALL OFF), armed
- *                        or not; the arm drops and the pad shows red
+ *   armed, RT on its own fire the hit that is armed now (not with LT or
+ *                        a bumper down: that is the stop in the making;
+ *                        one hit for now, several would be RT held + X / Y
+ *                        / A / B)
+ *   LB + RB + LT + RT    EMERGENCY STOP: everything stops (ALL OFF), in
+ *                        the Run role whatever the pad is doing (armed or
+ *                        not, walking, a tool holding it; not while the
+ *                        Controller Test is open); the arm drops and every
+ *                        surface shows red, over a walk or a tool too
  *   (the bumpers are the mode only: the arm, and the stop's four)
  *   RS           say the list and what is on standby
  *   Menu         walk the show (below); not while armed
@@ -70,7 +75,9 @@ class Doc;
  *      light all show; nothing derives its own.
  *   3. No single control arms or disarms. The arm changes on the LB + RB
  *      chord only -- or with no button at all: the role switched, a tool
- *      took the pad, the pad went away, the emergency stop.
+ *      took the pad, the pad went away, the emergency stop. The chord is
+ *      a fresh one: a trigger down with both bumpers (the stop, or one
+ *      on its way) spends it until both bumpers are let go.
  *   4. No cue moves on one control: armed, and the safety (LT) held, and
  *      the button -- one safety for GO, Back, Sub GO and Sub Back. The
  *      hit is the right trigger's own, armed.
@@ -266,7 +273,8 @@ public:
         Tools = 0,      ///< the role is off
         Run,            ///< the role is on, not armed
         Armed,
-        Stopped,        ///< the emergency stop went; until armed again
+        Stopped,        ///< the emergency stop went; until armed again or the
+                        ///< show runs (shown over a walk or a tool too)
         Walking,
         ToolHasPad      ///< a tool started on the laptop holds the pad
     };
@@ -308,12 +316,22 @@ public:
      *  it ends), then the button map as a table in the connected pad's
      *  names (Cross / L1 or A / LB), and the walking map. Rich text. */
     QString helpHtml() const;
+    /** A pad control while a tool or the walk has the pad (they hear the
+     *  rest): the emergency stop's four, which are the stop in the Run role
+     *  whatever the pad is doing. True when the four are all down, so the
+     *  tool must not act on it (the stop fires once a chord). */
+    bool watchStop(quint32 universe, GamepadRole::Role role, uchar value);
     /** Let go of everything held and disarm (the pad went away, a tool
      *  took it, the role changed): never a button's doing. */
     void reset();
     /** The controller went away: reset(), and the screen says why the arm
      *  dropped. */
     void controllerLost();
+    /** The input on @p universe was repatched (its pad unplugged, another
+     *  pad in its slot, back again): what it held is forgotten, and an arm
+     *  made on it drops as controllerLost() -- its releases may never have
+     *  come, so a held safety is no safety on the pad there now. */
+    void forgetPad(quint32 universe);
 
     /*********************************************************************
      * Triggers and swipes (Q199)
@@ -446,6 +464,9 @@ signals:
     void holderChanged();
     /** notice() changed. */
     void noticeChanged();
+    /** The Controller Test opened (@p on) or closed: what the pad held
+     *  across it is not known (ProgrammerController's held buttons). */
+    void testingChanged(bool on);
 
 private:
     void showLight();
@@ -491,6 +512,9 @@ private:
         bool rb = false;
         ControllerScheme::TriggerButton lt, rt;
         bool stopFired = false;     ///< the four made a stop: not again until one is up
+        /** A trigger was down with both bumpers (the stop, or one on its
+         *  way): no arm until both bumpers are up and squeezed afresh. */
+        bool spent = false;
         bool anyTrigger() const { return lt.isDown() || rt.isDown(); }
         bool all() const { return lb && rb && lt.isDown() && rt.isDown(); }
     };
@@ -499,6 +523,8 @@ private:
     quint32 m_armUniverse = UINT_MAX;
     bool m_stopped = false;
     bool m_testing = false;     ///< the Controller Test has the pad
+    /** holder() when last seen: a change forgets what was held. */
+    QString m_lastHolder;
     bool m_stopping = false;    ///< the stop's own ALL OFF is going through run()
     bool m_showControlHooked = false;
     QTimer *m_armChord = nullptr;

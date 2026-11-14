@@ -575,6 +575,65 @@ void BoxFacing_Test::theTopIsClear()
     QVERIFY(!it->isBuried());
 }
 
+/* A label is one line each for the name and the size, never a letter a
+   line: what does not fit goes (the size, then the name is elided, then the
+   label). A Box's label stands above it, clear of the FRONT on its face. */
+void BoxFacing_Test::labelsNeverWrapAndNeverCoverTheFront()
+{
+    Rig rig;
+    QVERIFY(rig.build());
+    StagePlatform *riser = rig.props->addPlatform();
+    riser->setName("Riser 1");
+    riser->setOriginX(2.0f); riser->setOriginY(2.0f);
+    riser->setWidth(2.44f); riser->setDepth(1.22f); riser->setHeight(0.4f);
+    StagePlatform *steps = rig.props->addPlatform();
+    steps->setName("Steps 2");
+    steps->setSteps(2, 0.2032f, 0.2032f, 0.9144f, StagePlatform::ClimbUpstage);
+    steps->setOriginX(6.0f); steps->setOriginY(2.0f);
+    StagePlatform *box = rig.addBox(9.0f, 2.0f);
+    const QFontMetricsF fm(QFont("Arial", 10, QFont::Bold));
+
+    auto check = [&](const char *when) {
+        for (StagePlatform *p : { riser, steps, box })
+        {
+            PlatformItem *pi = rig.item(p);
+            QVERIFY(pi != nullptr);
+            const QString text = pi->labelText();
+            const QStringList lines = text.split('\n', Qt::SkipEmptyParts);
+            QVERIFY2(lines.size() <= 2, qPrintable(QString("%1 %2: %3").arg(when, p->name(), text)));
+            if (text.isEmpty())
+                continue;
+            // As many lines drawn as written: nothing wrapped.
+            const qreal h = pi->labelItem()->boundingRect().height();
+            QVERIFY2(h < fm.height() * (lines.size() + 1),
+                     qPrintable(QString("%1 %2: %3 high for %4 line(s)").arg(when, p->name()).arg(h).arg(lines.size())));
+            const QRectF lr = pi->labelItem()->mapRectToParent(pi->labelItem()->boundingRect());
+            if (p->isPropBox())
+                QVERIFY2(lr.bottom() <= 0.5, qPrintable(QString("%1 box label at %2").arg(when).arg(lr.bottom())));
+            else
+                QVERIFY2(lr.width() <= pi->geometryRect().width() + 1.0,
+                         qPrintable(QString("%1 %2: %3 wide in %4").arg(when, p->name()).arg(lr.width())
+                                        .arg(pi->geometryRect().width())));
+        }
+    };
+    // Far out: a narrow flight of steps has room for little or nothing.
+    rig.gv->setGridSize(QSize(80, 48));
+    rig.gv->updatePlatforms();
+    check("far");
+    // Close: the riser says its name and size.
+    rig.gv->setGridSize(QSize(14, 8));
+    rig.gv->updatePlatforms();
+    check("close");
+    QVERIFY(rig.item(riser)->labelText().contains("Riser 1\n("));
+    // Every view.
+    for (auto pov : { MonitorGraphicsView::PovFront, MonitorGraphicsView::PovSide })
+    {
+        rig.gv->setViewPOV(pov);
+        rig.gv->updatePlatforms();
+        check(pov == MonitorGraphicsView::PovFront ? "front" : "side");
+    }
+}
+
 /* At pan zero a head throws where its arrow points -- 90 is stage right,
    the plot's left, as AimSolver::beamDirection() has it. The arrow used to
    be drawn the mirror way round. */
@@ -584,7 +643,7 @@ void BoxFacing_Test::theArrowPointsWhereTheBeamGoes()
     QVERIFY(rig.build());
     Fixture *head = makeMover(rig.doc, "A", 0);
     QVERIFY(head != nullptr);
-    rig.props->setFixturePosition(head->id(), 0, 0, QVector3D(5000, 3000, 6000));
+    rig.props->setFixturePosition(head->id(), 0, 0, QVector3D(5000, 3000, 6.0f));
     rig.gv->addFixture(head->id(), QPointF(5000, 3000));
     MonitorFixtureItem *it = rig.gv->fixtureItemForId(head->id());
     QVERIFY(it != nullptr && it->m_hasPan);
@@ -619,7 +678,7 @@ void BoxFacing_Test::draggingTheArrowHeadTurnsTheFacingInOneUndoStep()
     QVERIFY(rig.show());
     Fixture *head = makeMover(rig.doc, "A", 0);
     QVERIFY(head != nullptr);
-    rig.props->setFixturePosition(head->id(), 0, 0, QVector3D(8000, 6000, 6000));
+    rig.props->setFixturePosition(head->id(), 0, 0, QVector3D(8000, 6000, 6.0f));
     rig.gv->addFixture(head->id(), QPointF(8000, 6000));
     MonitorFixtureItem *it = rig.gv->fixtureItemForId(head->id());
     QVERIFY(it != nullptr);
@@ -702,8 +761,8 @@ void BoxFacing_Test::theHandleIsOnlyTheHeadAndOnlyWhenItCanTurn()
     Fixture *a = makeMover(rig.doc, "A", 0);
     Fixture *b = makeMover(rig.doc, "B", 10);
     QVERIFY(a != nullptr && b != nullptr);
-    rig.props->setFixturePosition(a->id(), 0, 0, QVector3D(8000, 6000, 6000));
-    rig.props->setFixturePosition(b->id(), 0, 0, QVector3D(12000, 6000, 6000));
+    rig.props->setFixturePosition(a->id(), 0, 0, QVector3D(8000, 6000, 6.0f));
+    rig.props->setFixturePosition(b->id(), 0, 0, QVector3D(12000, 6000, 6.0f));
     rig.gv->addFixture(a->id(), QPointF(8000, 6000));
     rig.gv->addFixture(b->id(), QPointF(12000, 6000));
     MonitorFixtureItem *ia = rig.gv->fixtureItemForId(a->id());
@@ -757,8 +816,8 @@ void BoxFacing_Test::theDialInFixturePropertiesDragsAndFollowsTheField()
     Fixture *a = makeMover(rig.doc, "A", 0);
     Fixture *b = makeMover(rig.doc, "B", 10);
     QVERIFY(a != nullptr && b != nullptr);
-    rig.props->setFixturePosition(a->id(), 0, 0, QVector3D(8000, 6000, 6000));
-    rig.props->setFixturePosition(b->id(), 0, 0, QVector3D(12000, 6000, 6000));
+    rig.props->setFixturePosition(a->id(), 0, 0, QVector3D(8000, 6000, 6.0f));
+    rig.props->setFixturePosition(b->id(), 0, 0, QVector3D(12000, 6000, 6.0f));
     rig.gv->addFixture(a->id(), QPointF(8000, 6000));
     rig.gv->addFixture(b->id(), QPointF(12000, 6000));
 
@@ -878,7 +937,7 @@ void BoxFacing_Test::picturesForReview()
     }
     strip->setChannelValues(v);
     Fixture *head = makeMover(rig.doc, "Spot 1", 300);
-    rig.props->setFixturePosition(head->id(), 0, 0, QVector3D(2500, 3200, 6000));
+    rig.props->setFixturePosition(head->id(), 0, 0, QVector3D(2500, 3200, 6.0f));
     rig.gv->addFixture(head->id(), QPointF(2500, 3200));
     FixtureRigProps hp = rig.props->fixtureRigProps(head->id());
     hp.panZeroDir = 60.0f;

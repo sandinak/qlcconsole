@@ -36,6 +36,7 @@
 #include <cmath>
 
 #include "structurestudioview.h"
+#include "candleremote.h"
 #include "whyonpanel.h"
 #if defined(Q_OS_UNIX)
 #include <time.h>
@@ -193,6 +194,8 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
     {
         connect(props, &MonitorProperties::rigPropsChanged, this, rigEdited);
         connect(props, &MonitorProperties::stageTargetsChanged, this, rigEdited);
+        // A candle lit or put out by its remote (CandleRemote).
+        connect(CandleRemote::of(m_doc), &CandleRemote::changed, this, [this]() { m_liveDirty = true; update(); });
     }
     if (FocusSession *fs = (m_doc->programmer() != nullptr) ? m_doc->programmer()->focusSession() : nullptr)
     {
@@ -1463,6 +1466,13 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
     {
         if (t == nullptr || (t != &focusFigure && (!layerShown(t->layerId()) || !targetInScope(t->id()))))
             continue;
+
+        /* A staff or a candle: where its blocking puts it (BLOCKING.md). */
+        if (StageTarget::isHandPropKind(t->kind()))
+        {
+            drawHandProp(t, p);
+            continue;
+        }
 
         /* A performer line: its people, each on the deck under them -- not
            the line, which runs through their chests. No mark each: the set
@@ -3265,10 +3275,40 @@ static QColor fixtureEdgeColor(const QColor &base)
                   base.alpha());
 }
 
-QColor StructureStudioView::overlapAwareEdgeColor(quint32 fid, const QColor &base) const
+QColor StructureStudioView::overlapAwareEdgeColor(quint32 fid, const QColor &base,
+                                                  bool emitting, bool roomLit) const
 {
     static const QColor kOverlapWarning(255, 70, 40);
-    return m_overlappingFixtures.contains(fid) ? kOverlapWarning : fixtureEdgeColor(base);
+    if (m_overlappingFixtures.contains(fid))
+        return kOverlapWarning;
+    const QColor tint = fixtureEdgeColor(base);
+    // Selected or being dragged: the edge is the selection, not the room's.
+    if (!roomLit || fid == m_dragFid || m_highlight.contains(fid))
+        return tint;
+    QColor e = roomEdge(tint);
+    if (emitting)
+        e = QColor(qMax(e.red(), base.red()), qMax(e.green(), base.green()),
+                   qMax(e.blue(), base.blue()), e.alpha());
+    return e;
+}
+
+/* The room's light on an edge, as drawSolidBox() puts it on a face.
+ *
+ * Faces were dimmed by the room and edges were not, so a blackout left every
+ * deck, bar and box as a bright line drawing on the dark canvas -- the shape
+ * of the rig with none of its darkness. An edge now goes the way its faces go:
+ * as it is at work light, down to a faint neutral grey in a blackout. Not to
+ * black: a stage-black deck's faces are darker than the canvas there, and the
+ * faint edge is what keeps its shape (its own edge is grey for the same
+ * reason, platformPaint()). Neutral, so no edge colour survives into a
+ * blackout as a coloured outline. */
+QColor StructureStudioView::roomEdge(const QColor &edge) const
+{
+    static const QColor kFaint(56, 58, 64);
+    const double k = qBound(0.0, m_ambient, 1.0);
+    auto mix = [k](int faint, int own) { return qRound(faint + (own - faint) * k); };
+    return QColor(mix(kFaint.red(), edge.red()), mix(kFaint.green(), edge.green()),
+                  mix(kFaint.blue(), edge.blue()), edge.alpha());
 }
 
 bool StructureStudioView::boomResizeLocked(const Pipe *pipe) const
@@ -3946,6 +3986,8 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             const float b0 = props->platformBaseZ(id);
             const int topAlpha = (pl->topMaterial() == StagePlatform::SolidTop) ? 255
                                : (pl->topMaterial() == StagePlatform::ClearTop) ? 70 : 0;
+            // Its edges in the room's light, as its faces are (roomEdge()).
+            const QColor litEdge = roomEdge(edge);
             if (pl->hasRoundedFront())
             {
                 /* A rounded front: the deck's outline stood up into its sides,
@@ -3980,7 +4022,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                         vz << viewDepth(w);
                         d += vz.last();
                     }
-                    emitPoly(poly, d / 4.0, side, edge, 1.1, p, vz);
+                    emitPoly(poly, d / 4.0, side, litEdge, 1.1, p, vz);
                 }
                 if (topAlpha > 0)
                 {
@@ -3996,7 +4038,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                         vz << viewDepth(w);
                         d += vz.last();
                     }
-                    emitPoly(poly, d / fp.size(), lit(deck), edge, 1.1, p, vz);
+                    emitPoly(poly, d / fp.size(), lit(deck), litEdge, 1.1, p, vz);
                 }
             }
             else
@@ -4006,7 +4048,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                 QVector3D c[8];
                 boxCorners(c, bk.x0, bk.y0, b0, bk.x1, bk.y1, b0 + bk.height);
                 turnCorners(c, pl);
-                drawSolidBox(p, c, pc, edge, topAlpha);
+                drawSolidBox(p, c, pc, litEdge, topAlpha);
             }
         }
         else if (pl->isPropBox())
@@ -6660,7 +6702,7 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
         k[2] = mid + l - u + n; k[3] = mid - l - u + n;
         k[4] = mid - l + u - n; k[5] = mid + l + u - n;
         k[6] = mid + l + u + n; k[7] = mid - l + u + n;
-        drawSolidBox(p, k, col, overlapAwareEdgeColor(fid, col), 255, ambientLit);
+        drawSolidBox(p, k, col, overlapAwareEdgeColor(fid, col, !ambientLit), 255, ambientLit);
     };
 
     /* Stand it ON what holds it, not THROUGH it.
@@ -6797,7 +6839,7 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
             const QVector3D tip = headMid + beam * float(qMax(0.25, h * 1.4));
             emitLine(w2s(headMid), w2s(tip),
                      viewDepth(headMid), viewDepth(tip),
-                     overlapAwareEdgeColor(fid, col), 1.4, p);
+                     overlapAwareEdgeColor(fid, col, false, false), 1.4, p);
 
             if (m_beams && look.beamLevel > 0.01)
             {
@@ -8511,7 +8553,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                              ledPts, leds.leds, leds.tag, RigHeads::clearGlass(m_doc, fid));
         }
         else
-            drawSolidBox(p, corner, col, overlapAwareEdgeColor(fid, col), 255, !showingOutput,
+            drawSolidBox(p, corner, col, overlapAwareEdgeColor(fid, col, showingOutput), 255, !showingOutput,
                          depthBias);
 
         /* Washes, pars and bars throw light too. Only movers did -- the whole
@@ -10648,14 +10690,18 @@ void StructureStudioView::takeLiveSnapshot() const
             m_liveSnapshot.insert(fx->id(), fx->channelValues());
 }
 
-/* Which fixtures physically overlap another fixture's body -- a rough,
- * axis-aligned check, not a true oriented-box intersection: the horizontal
- * half-extent is the LARGER of the fixture's declared width and depth, used
- * for both X and Y, so a truss-mounted bar running across the rig at some
- * arbitrary angle is never under-counted just because its width and depth
- * were declared for a different orientation than it happens to be rigged
- * in. Conservative (can over-warn on a long fixture end-on to another) is
- * the right side to err on for a warning, unlike a hard constraint.
+/* Which fixtures physically overlap another fixture's body: the world box
+ * round each body as it is rigged (fixtureBoxCorners(), the box the 45° view
+ * draws), compared box against box. Still conservative for a body turned at
+ * an angle (its box is bigger than it is), which is the right side to err on
+ * for a warning.
+ *
+ * It used to be a box made from the LARGER of width and depth, used for X
+ * and Y alike, and the height for Z, whichever way the fixture was turned. A
+ * bar stood on end, or a strip lying along a step, was then a square of its
+ * own length on the plan: sixteen upright bars a hand apart on a truss, and
+ * eight strips stacked up a step's face, all "in the same space", and the
+ * whole of a real rig's steps and bar rows drawn in the warning red.
  *
  * O(fixtures^2), and placing every fixture to compare them was a quarter of
  * what a frame of a 200-fixture show cost -- for warnings that change only
@@ -10680,13 +10726,29 @@ void StructureStudioView::rebuildOverlapWarnings() const
         const FixtureVisualTraits traits = classifyFixture(fx);
         if (traits.physW <= 0.0f && traits.physH <= 0.0f && traits.physD <= 0.0f)
             continue;   // nothing declared to compare against
-        const double horiz = qMax(0.03, qMax(double(traits.physW), double(traits.physD)) * 0.5);
-        const double vert  = qMax(0.03, double(traits.physH) * 0.5);
-        const QVector3D c = fixtureCentre(fx->id());
+        QVector3D k[8];
+        fixtureBoxCorners(fx->id(), traits, k);
         Box b;
         b.fid = fx->id();
-        b.lo = QVector3D(c.x() - float(horiz), c.y() - float(horiz), c.z() - float(vert));
-        b.hi = QVector3D(c.x() + float(horiz), c.y() + float(horiz), c.z() + float(vert));
+        b.lo = b.hi = k[0];
+        for (int i = 1; i < 8; ++i)
+        {
+            b.lo = QVector3D(qMin(b.lo.x(), k[i].x()), qMin(b.lo.y(), k[i].y()), qMin(b.lo.z(), k[i].z()));
+            b.hi = QVector3D(qMax(b.hi.x(), k[i].x()), qMax(b.hi.y(), k[i].y()), qMax(b.hi.z(), k[i].z()));
+        }
+        /* At least 3 cm through on every axis: a strip of tape a couple of
+           millimetres deep is still something two fixtures can share, and
+           thinner than the tolerance below it could never be found in the
+           same place as anything. */
+        const QVector3D mid = (b.lo + b.hi) * 0.5f;
+        for (int a = 0; a < 3; ++a)
+        {
+            if (b.hi[a] - b.lo[a] < 0.03f)
+            {
+                b.lo[a] = mid[a] - 0.015f;
+                b.hi[a] = mid[a] + 0.015f;
+            }
+        }
         boxes << b;
     }
 

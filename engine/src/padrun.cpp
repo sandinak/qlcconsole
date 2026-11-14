@@ -256,6 +256,13 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
 
     if (chordControl)
     {
+        /* A trigger with both bumpers is the stop (or on its way): no arm
+           chord again until both bumpers are up -- letting go of the
+           triggers first must not arm. */
+        if (h.lb && h.rb && h.anyTrigger())
+            h.spent = true;
+        else if (!h.lb && !h.rb)
+            h.spent = false;
         /* All four: the emergency stop, armed or not, once a chord. */
         if (h.all())
         {
@@ -270,9 +277,10 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
         /* Both bumpers and no trigger, held: the arm changes. Anything
            else of the four ends the timing. */
         armChordUpdate(universe);
-        /* RT's pull is the hit (below) -- not with a bumper down, which is
-           a chord in the making (the stop). The rest of the four is done. */
-        if (!rtPressed || h.lb || h.rb)
+        /* RT's pull on its own is the hit (below) -- not with a bumper or
+           LT down: LT + RT together is the stop in the making, never a
+           hit. The rest of the four is done. */
+        if (!rtPressed || h.lb || h.rb || h.lt.isDown())
             return true;
     }
 
@@ -327,7 +335,7 @@ bool PadRun::isArmChordPending() const
 void PadRun::armChordUpdate(quint32 universe)
 {
     const Held h = m_held.value(universe);
-    const bool chord = h.lb && h.rb && !h.anyTrigger();
+    const bool chord = h.lb && h.rb && !h.anyTrigger() && !h.spent;
     if (chord)
     {
         // Timed from the second bumper down; a held chord is not restarted.
@@ -346,7 +354,7 @@ void PadRun::armChordUpdate(quint32 universe)
        why -- a trigger that does not come back up would otherwise make a
        pad that "will not arm" with nothing to show for it. */
     if (h.lb && h.rb && h.anyTrigger() && !h.all() && m_pc != nullptr)
-        showNotice(m_pc->padText(tr("To arm, let go of the triggers.")));
+        showNotice(m_pc->padText(tr("To arm, let go of everything, then hold {LB} and {RB}.")));
 }
 
 void PadRun::armChordFired()
@@ -354,7 +362,7 @@ void PadRun::armChordFired()
     const quint32 u = m_chordUniverse;
     m_chordUniverse = UINT_MAX;
     const Held h = m_held.value(u);
-    if (!m_enabled || !h.lb || !h.rb || h.anyTrigger())
+    if (!m_enabled || !h.lb || !h.rb || h.anyTrigger() || h.spent)
         return;
     // Another pad's arm is not this one's to drop.
     if (m_armed && u != m_armUniverse)
@@ -435,12 +443,13 @@ PadRun::State PadRun::state() const
 {
     if (!m_enabled)
         return Tools;
+    // Red after the emergency stop (rule 6), whatever has the pad since.
+    if (m_stopped)
+        return Stopped;
     if (isWalking())
         return Walking;
     if (!holder().isEmpty())
         return ToolHasPad;
-    if (m_stopped)
-        return Stopped;
     return m_armed ? Armed : Run;
 }
 
@@ -483,6 +492,7 @@ void PadRun::setTesting(bool on)
     m_armChord->stop();
     m_chordUniverse = UINT_MAX;
     m_held.clear();     // what is held across the change was not the Run map's
+    emit testingChanged(on);
     toolChanged();
 }
 
@@ -494,6 +504,17 @@ void PadRun::toolChanged()
     {
         reset();
         showNotice(tr("Disarmed: %1 has the controller.").arg(holder()));
+    }
+    /* What was held when the pad changed hands (either way) is not known
+       any more: the tool hears the releases, the Run map does not. A
+       chord begun before is no chord after. */
+    const QString now = holder();
+    if (now != m_lastHolder)
+    {
+        m_lastHolder = now;
+        m_armChord->stop();
+        m_chordUniverse = UINT_MAX;
+        m_held.clear();
     }
     emit holderChanged();
     m_shownState = -1;      // the tool's name is part of what is shown
@@ -656,12 +677,58 @@ void PadRun::controllerLost()
         showNotice(tr("Disarmed: the controller went away."));
 }
 
+bool PadRun::watchStop(quint32 universe, GamepadRole::Role role, uchar value)
+{
+    // The Controller Test open: nothing pressed runs the show (rule 7).
+    if (!m_enabled || m_testing)
+        return false;
+    if (role != GamepadRole::LB && role != GamepadRole::RB
+        && role != GamepadRole::LeftTrigger && role != GamepadRole::RightTrigger)
+        return false;
+    Held &h = m_held[universe];
+    switch (role)
+    {
+        case GamepadRole::LB:           h.lb = value > 0; break;
+        case GamepadRole::RB:           h.rb = value > 0; break;
+        case GamepadRole::LeftTrigger:  h.lt.update(value / 255.0f); break;
+        default:                        h.rt.update(value / 255.0f); break;
+    }
+    if (h.lb && h.rb && h.anyTrigger())
+        h.spent = true;
+    else if (!h.lb && !h.rb)
+        h.spent = false;
+    if (!h.all())
+    {
+        h.stopFired = false;
+        return false;
+    }
+    if (!h.stopFired)
+    {
+        h.stopFired = true;
+        emergencyStop();
+    }
+    return true;
+}
+
+void PadRun::forgetPad(quint32 universe)
+{
+    m_held.remove(universe);
+    if (m_chordUniverse == universe)
+    {
+        m_armChord->stop();
+        m_chordUniverse = UINT_MAX;
+    }
+    if (m_armed && m_armUniverse == universe)
+        controllerLost();
+}
+
 void PadRun::showLight()
 {
     if (m_pc == nullptr)
         return;
-    // A tool on the pad has its own lamp (the save colours).
-    if (m_pc->focusSession()->isActive() || m_pc->refineSession()->isActive())
+    // A tool on the pad has its own lamp (the save colours) -- but red
+    // after the emergency stop, as every surface is.
+    if ((m_pc->focusSession()->isActive() || m_pc->refineSession()->isActive()) && state() != Stopped)
         return;
     m_pc->setPadLight(lightColour());
 }
