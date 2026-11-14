@@ -675,6 +675,18 @@ void PadRun::controllerLost()
         showNotice(tr("Disarmed: the controller went away."));
 }
 
+void PadRun::forgetPad(quint32 universe)
+{
+    m_held.remove(universe);
+    if (m_chordUniverse == universe)
+    {
+        m_armChord->stop();
+        m_chordUniverse = UINT_MAX;
+    }
+    if (m_armed && m_armUniverse == universe)
+        controllerLost();
+}
+
 void PadRun::showLight()
 {
     if (m_pc == nullptr)

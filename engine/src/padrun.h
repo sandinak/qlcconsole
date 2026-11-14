@@ -318,6 +318,11 @@ public:
     /** The controller went away: reset(), and the screen says why the arm
      *  dropped. */
     void controllerLost();
+    /** The input on @p universe was repatched (its pad unplugged, another
+     *  pad in its slot, back again): what it held is forgotten, and an arm
+     *  made on it drops as controllerLost() -- its releases may never have
+     *  come, so a held safety is no safety on the pad there now. */
+    void forgetPad(quint32 universe);
 
     /*********************************************************************
      * Triggers and swipes (Q199)

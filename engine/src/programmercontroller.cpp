@@ -2544,6 +2544,20 @@ void ProgrammerController::connectControllerInput()
             this, &ProgrammerController::focusControllerChanged);
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputDeviceConnected,
             this, &ProgrammerController::focusControllerChanged);
+    /* A pad unplugged, swapped in its slot or back: the Run role forgets
+       what it held (its releases never came) and drops an arm made on it;
+       the pad now there starts in its own colour, so it is told the
+       state's light again. */
+    connect(m_doc->inputOutputMap(), &InputOutputMap::inputPatchChanged, this, [this](quint32 universe) {
+        if (m_padRun != nullptr)
+            m_padRun->forgetPad(universe);
+        if (m_padLight.isValid())
+        {
+            const QColor light = m_padLight;
+            m_padLight = QColor();
+            setPadLight(light);
+        }
+    });
     // Blackout or the Grand Master to zero mid-session: said.
     auto recheck = [this]() {
         checkRigOutput(m_focusSession->isActive() ? m_focusSession->currentFixture()
