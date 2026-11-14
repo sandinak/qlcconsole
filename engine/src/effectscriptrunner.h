@@ -187,6 +187,9 @@ private:
     /** Collect every live instance's DMX writes into m_publishedWrites, which is
      *  the ONLY thing writeDMX() (MasterTimer thread) reads. Main thread only. */
     void publishWrites();
+    /** Every scene @p inst plays for runs only for a preview (Function::
+     *  previewGate()): in Operate it keeps off the Show-only fixtures */
+    bool previewOnly(const EffectInstance *inst) const;
 
     /** The RUNNING instance for @p paletteId, or nullptr. (Parked instances are
      *  deliberately not considered — they are held, not running.) */

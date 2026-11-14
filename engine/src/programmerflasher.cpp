@@ -20,6 +20,8 @@ ProgrammerFlasher::ProgrammerFlasher(Doc *doc)
     , m_doc(doc)
     , m_layer(doc, Universe::Flash, FadeChannel::Override, QStringLiteral("Flash"))
 {
+    // A blip to find a light is not the show: a Show-only fixture stays safe.
+    m_layer.setHoldsShowOnly(true);
 }
 
 ProgrammerFlasher::~ProgrammerFlasher()

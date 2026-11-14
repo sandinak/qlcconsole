@@ -120,7 +120,9 @@ public:
         BlackoutExempt  = 1 << 4,   //!< Blackout (and Blind) sends its live value
         SwitchOutput    = 1 << 5,   //!< a relay: 0 or 255, never GM-scaled
         OnAtOpenOutput  = 1 << 6,   //!< full when nothing sets it (when armed)
+        ShowOnlyOutput  = 1 << 7,   //!< only a real run drives it (setShowOnlyLive)
         OutputRuleBits  = GMExempt | BlackoutExempt | SwitchOutput | OnAtOpenOutput
+                          | ShowOnlyOutput
     };
 
     static quint32 invalid() { return UINT_MAX; }
@@ -594,6 +596,35 @@ public:
     void setBlindHoldsExempt(bool hold);
     bool blindHoldsExempt() const { return m_blindHoldsExempt.load(std::memory_order_relaxed); }
 
+    /** Show only (Fixture::ShowOnly): @p safe holds each ShowOnlyOutput
+     *  channel's safe value (UNIVERSE_SIZE bytes; off, closed -- what
+     *  OutputRuleKeeper::safeValue() says). Set with the rule bits. */
+    void setShowOnlySafeValues(const QByteArray &safe);
+    /** Whether a real run of the show may drive the Show-only channels:
+     *  true in Operate. False (Design, the default): every frame sent has
+     *  them at their safe value, whatever wrote them -- universeWritten()
+     *  still carries what they would be, for the rig views. True: only the
+     *  faders that hold them (GenericFader::holdsShowOnly(): a preview, the
+     *  Workbench, focus, Locate) are kept off them. Back to true, the
+     *  stored values start from safe, so nothing a Design preview left on
+     *  an LTP channel comes out. Safe from any thread. */
+    void setShowOnlyLive(bool live);
+    bool showOnlyLive() const { return m_showOnlyLive.load(std::memory_order_relaxed); }
+    /** How many channels are Show only */
+    int showOnlyChannelCount() const { return m_showOnlyCount.load(std::memory_order_relaxed); }
+    /** True when the frames sent now hold the Show-only channels at their
+     *  safe value: not live, or Blind (inhibitOutput()) */
+    bool showOnlyHeld() const;
+
+private:
+    /** Each fader is written by processFaders(); one that holds the
+     *  Show-only channels (live) has them put back as they were after it */
+    void writeFader(GenericFader *fader, bool keepShowOnly);
+    /** The Show-only channels of @p out at their safe value, the values
+     *  they had kept in m_showOnlyKept (restoreShowOnly() puts them back) */
+    void holdShowOnly(QByteArray &out);
+    void restoreShowOnly(QByteArray &out);
+
 private:
     /** True when any channel up to @p count is Blackout-exempt */
     bool hasBlackoutExempt(int count) const;
@@ -612,6 +643,18 @@ private:
     QVector<int> m_onAtOpenRestore;
     std::atomic<bool> m_onAtOpenArmed { false };
     std::atomic<bool> m_blindHoldsExempt { true };
+    /** Show only: the channels (under m_outputRulesMutex), their safe
+     *  values, and room to keep what a frame had there -- sized when the
+     *  rules change, never per frame */
+    QVector<int> m_showOnlyChannels;
+    QByteArray m_showOnlySafe;
+    QVector<uchar> m_showOnlyKept;
+    std::atomic<int> m_showOnlyCount { 0 };
+    std::atomic<bool> m_showOnlyLive { false };
+    /** Set going live: the next frame starts them from safe */
+    std::atomic<bool> m_showOnlyReset { false };
+    /** The last frame sent held them (a change is a changed frame) */
+    bool m_showOnlyWasHeld = false;
 
     /*********************************************************************
      * Auto-open shutters

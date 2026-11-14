@@ -25,6 +25,8 @@
 #include <QList>
 #include <QHash>
 #include <mutex>
+#include <memory>
+#include <atomic>
 #if defined(Q_OS_WIN)
 #include <QRecursiveMutex>
 #endif
@@ -311,6 +313,44 @@ public:
      *  @a fadeOutMs; then the fader goes. */
     void releaseOverrideMix(uint fadeOutMs);
 
+    /*********************************************************************
+     * Show only (Fixture::ShowOnly)
+     *********************************************************************/
+    /** A function's "started only by a preview" flag, shared with the
+     *  faders it makes (Function::previewGate()) */
+    typedef std::shared_ptr<std::atomic<bool> > PreviewGate;
+
+    /** True when this fader is not the show -- a preview's function, the
+     *  Workbench, focus, Locate, a fixture test -- and so, live (Operate),
+     *  is kept off the Show-only channels (Universe::setShowOnlyLive()).
+     *  Set by its owner (setHoldsShowOnly()) or, for a function's fader,
+     *  by what started that function, at once when that changes. Read
+     *  once a frame on the universe thread. */
+    bool holdsShowOnly() const
+    {
+        return m_holdsShowOnly.load(std::memory_order_relaxed)
+               || (m_previewGate && m_previewGate->load(std::memory_order_relaxed));
+    }
+    void setHoldsShowOnly(bool hold) { m_holdsShowOnly.store(hold, std::memory_order_relaxed); }
+
+    /** While one is in scope on a thread, the faders made there follow
+     *  @p gate (the MasterTimer, around each function's preRun(), write()
+     *  and postRun()). Nests; @p gate must outlive the scope. */
+    class CreationScope
+    {
+    public:
+        explicit CreationScope(const PreviewGate *gate);
+        ~CreationScope();
+        CreationScope(const CreationScope &) = delete;
+        CreationScope &operator=(const CreationScope &) = delete;
+    private:
+        const PreviewGate *m_previous;
+    };
+
+private:
+    /** The gate of the CreationScope in force on this thread, or null */
+    static const PreviewGate *creationGate();
+
 signals:
     /** Signal emitted when monitoring is enabled.
      *  Data is preGM and includes the whole universe */
@@ -340,6 +380,9 @@ private:
     Universe::BlendMode m_blendMode;
     bool m_monitoring;
     bool m_zeroAll = false;
+    std::atomic<bool> m_holdsShowOnly { false };
+    /** Set once, when made (CreationScope): never changes after */
+    PreviewGate m_previewGate;
 
     /** An override hit's mix (startOverrideMix): off, coming in (and held
      *  at 1 when in), or going. Worked out once a frame in write(). */

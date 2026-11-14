@@ -243,13 +243,18 @@ public:
      *                    The Grand Master cannot switch it off.
      * OnAtOpen:          full whenever nothing in the show sets it (when that
      *                    applies is the OutputRuleKeeper's setting).
+     * ShowOnly:          only a real run of the show drives it (Operate): a
+     *                    Design preview, the Workbench, Locate, Solo, Blind
+     *                    and focus hold it at its safe value (off, closed).
+     *                    Lasers, foggers, flame relays, a DMX curtain.
      */
     enum OutputRule
     {
         ExemptBlackout    = 1 << 0,
         ExemptGrandMaster = 1 << 1,
         Switch            = 1 << 2,
-        OnAtOpen          = 1 << 3
+        OnAtOpen          = 1 << 3,
+        ShowOnly          = 1 << 4
     };
     Q_DECLARE_FLAGS(OutputRules, OutputRule)
 
@@ -257,7 +262,7 @@ public:
     void setOutputRules(OutputRules rules);
     OutputRules outputRules() const { return OutputRules(m_outputRules.loadRelaxed()); }
 
-    /** "Blackout,GrandMaster,Switch,OnAtOpen" (as saved) and back */
+    /** "Blackout,GrandMaster,Switch,OnAtOpen,ShowOnly" (as saved) and back */
     static QString outputRulesToString(OutputRules rules);
     static OutputRules stringToOutputRules(const QString &str);
 

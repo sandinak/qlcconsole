@@ -257,6 +257,9 @@ public:
     void refreshNeedsFocus();
     /** Ring the lights the footer says are buried in the stage (FIX-15). */
     void refreshBuried();
+    /** Show only: badge the Show-only fixtures "held" on the plot while
+     *  their output is kept safe (OutputRuleKeeper::showOnlyHeldBy()) */
+    void refreshShowOnlyHeld();
     /** Open Focus mode (FocusModePanel) on the selected scene and the heads
      *  selected on the plot or in the programmer. */
     void openFocusMode();

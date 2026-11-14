@@ -82,6 +82,31 @@ private slots:
     void movedFixtureTakesItsBits();
     void cloneAndCapabilityKeepTheRules();
 
+    /* Show only (Fixture::ShowOnly) */
+    void showOnlySavedAndLoaded();
+    /** Design: a cue that turns a Show-only relay on leaves its DMX safe
+     *  while the other lights preview; the rig views still get the value */
+    void designHoldsAShowOnlyRelay();
+    /** Operate: a real GO drives it; back to Design it is safe at once */
+    void operateGoDrivesItAndDesignTakesItBack();
+    /** Operate: a preview's scene (the Workbench) is kept off it, and the
+     *  same scene from a GO drives it */
+    void operatePreviewIsKeptOffIt();
+    /** A preview's chaser step (a scene started by the chaser) too */
+    void operatePreviewChildIsKeptOffIt();
+    /** Operate: Highlight, Focus and a fixture-test fader don't drive it */
+    void highlightFocusAndTestsDontDriveIt();
+    /** Blind holds it, Operate too */
+    void blindHoldsIt();
+    /** What a Design preview left on an LTP channel never comes out live */
+    void goingLiveStartsFromSafe();
+    /** A laser's every channel 0; a moving light's wheel at its default */
+    void safeValuePerKind();
+    /** The footer's words */
+    void heldTextSaysWhy();
+    /** A show with none: no channel held, the frames as before */
+    void showWithoutItIsUnchanged();
+
 private:
     /** One processFaders() frame; the output value at @p address */
     int frame(int address);
@@ -96,6 +121,12 @@ private:
     /** What goes out at @p address: GM 255 at @p full, half at half GM,
      *  0 under Blackout (with the house light still on), back after */
     void checkGrandMasterAndBlackout(int address, int full);
+    /** A one-step scene of @p values (address, value), started by @p parent */
+    class Scene *startScene(const QList<QPair<int, int> > &values, quint32 parentType, quint32 parentId);
+    /** Every function stopped and gone from the master timer */
+    void stopFunctions();
+    /** What went out at @p address, the last frame */
+    int sent(int address) const;
 
     Doc *m_doc = nullptr;
     Universe *m_uni = nullptr;

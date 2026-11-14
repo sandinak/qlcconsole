@@ -58,6 +58,8 @@
 #include "blindstyle.h"
 #include "workbench.h"
 #include "inputoutputmap.h"
+#include "outputrulekeeper.h"
+#include "outputrulesdialog.h"
 #include "universe.h"
 #include <climits>
 #include "inputdevicenotices.h"
@@ -5205,7 +5207,8 @@ QList<QWidget *> App::statusChipsByPriority() const
     // rig; the counters and the notices last.
     const QList<QWidget *> order = {
         m_statusStage, m_statusDirtyLabel, m_statusModeChipLabel,
-        m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusOverridesChip, m_statusProgrammerLabel,
+        m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusShowOnlyLabel,
+        m_statusOverridesChip, m_statusProgrammerLabel,
         m_statusGrandMasterBox, m_statusReviewLabel, m_venueChip,
         m_statusSelectionLabel, m_statusPadModeLabel,
         m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
@@ -8359,6 +8362,23 @@ void App::initStatusBar()
     m_statusRigNetLabel->hide();
     sb->addWidget(m_statusRigNetLabel, 0);
 
+    // Show only, beside it: "Lasers held: Design". A laser, fogger or flame
+    // relay kept safe is said, never silent. Hidden while nothing holds one.
+    m_statusShowOnlyLabel = new QLabel(this);
+    m_statusShowOnlyLabel->setObjectName(QStringLiteral("footerShowOnly"));
+    m_statusShowOnlyLabel->setCursor(Qt::PointingHandCursor);
+    m_statusShowOnlyLabel->setProperty("helpTopic", QStringLiteral("fixture-manager.md#output-rules"));
+    m_statusShowOnlyLabel->installEventFilter(this);   // click → their Output Rules
+    m_statusShowOnlyLabel->hide();
+    sb->addWidget(m_statusShowOnlyLabel, 0);
+    if (m_doc != NULL && m_doc->outputRuleKeeper() != nullptr)
+    {
+        connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::showOnlyChanged,
+                this, &App::updateShowOnlyFooter);
+        connect(m_doc, &Doc::fixtureChanged, this, [this](quint32) { updateShowOnlyFooter(); });
+        updateShowOnlyFooter();
+    }
+
     // Software Update's chip: "Update available: 0.1.1". Never a pop-up --
     // a show may be running -- just this, until it is clicked.
     m_statusUpdateLabel = new QLabel(this);
@@ -9134,6 +9154,14 @@ bool App::eventFilter(QObject *watched, QEvent *event)
     {
         if (static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton)
             ShowReviewPanel::openShared();
+        return true;
+    }
+
+    if (watched == m_statusShowOnlyLabel && event->type() == QEvent::MouseButtonPress)
+    {
+        if (m_doc != NULL && m_doc->outputRuleKeeper() != nullptr)
+            OutputRulesDialog::edit(this, m_doc, QList<quint32>(),
+                                    m_doc->outputRuleKeeper()->showOnlyFixtures());
         return true;
     }
 
@@ -10260,6 +10288,49 @@ void App::updateRigNetworkFooter()
     tip << tr("Click to set the show's rig networks.");
     m_statusRigNetLabel->setToolTip(tip.join("\n"));
     m_statusRigNetLabel->show();
+}
+
+void App::updateShowOnlyFooter()
+{
+    if (m_statusShowOnlyLabel == nullptr || m_doc == NULL || m_doc->outputRuleKeeper() == nullptr)
+        return;
+    const OutputRuleKeeper *k = m_doc->outputRuleKeeper();
+    const QString text = k->showOnlyHeldText();
+    if (text.isEmpty())
+    {
+        if (!m_statusShowOnlyLabel->isHidden())
+        {
+            m_statusShowOnlyLabel->hide();
+            if (m_statusFitTimer != nullptr)
+                m_statusFitTimer->start();
+        }
+        return;
+    }
+    setChipText(m_statusShowOnlyLabel, text);
+    setChipStyle(m_statusShowOnlyLabel, QStringLiteral("QLabel { color: #d08000; font-weight: bold; }"));
+    QStringList names;
+    foreach (quint32 id, k->showOnlyFixtures())
+        if (const Fixture *fx = m_doc->fixture(id))
+            names << fx->name();
+    const int shown = 12;
+    QString list = QStringList(names.mid(0, shown)).join(QStringLiteral(", "));
+    if (names.size() > shown)
+        list += tr(" and %n more", "", int(names.size() - shown));
+    QStringList tip;
+    tip << (k->showOnlyHeldBy() == OutputRuleKeeper::HeldByBlind
+                ? tr("Blind holds the Show-only fixtures at their safe value (off, closed).")
+                : tr("Design never fires a Show-only fixture: previews, the Workbench, Locate, "
+                     "Solo and focus leave it at its safe value (off, closed). The plot still "
+                     "draws what it would do."))
+        << tr("A GO in Operate drives it.")
+        << QString() << list << QString() << tr("Click to see their Output Rules.");
+    m_statusShowOnlyLabel->setToolTip(tip.join(QLatin1Char('\n')));
+    if (m_statusShowOnlyLabel->isHidden())
+    {
+        m_statusShowOnlyLabel->show();
+        if (m_statusFitTimer != nullptr)
+            m_statusFitTimer->start();
+    }
 }
 
 void App::updateReviewStatus()

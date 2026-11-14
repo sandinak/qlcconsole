@@ -82,12 +82,25 @@ void OutputLayer::set(const QList<Level> &levels)
         if (slot.fader.isNull() || slot.universe != uni || uni->faders().contains(slot.fader) == false)
         {
             slot.universe = uni;
+            // Its own, not the function's whose tick this may run in (a
+            // show stopping captures its last look in postRun()).
+            GenericFader::CreationScope noFunction(nullptr);
             slot.fader = uni->requestFader(m_priority);
+            slot.fader->setHoldsShowOnly(m_holdsShowOnly);
             slot.fader->setName(m_name);
             slot.fader->setDoc(doc);
         }
         slot.fader->replaceAll(it.value());
     }
+}
+
+void OutputLayer::setHoldsShowOnly(bool hold)
+{
+    QMutexLocker locker(&m_mutex);
+    m_holdsShowOnly = hold;
+    for (auto it = m_slots.begin(); it != m_slots.end(); ++it)
+        if (!it.value().fader.isNull())
+            it.value().fader->setHoldsShowOnly(hold);
 }
 
 void OutputLayer::clear()

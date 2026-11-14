@@ -32,6 +32,13 @@ private slots:
     void initTestCase();
     void cleanupTestCase();
     void buildHideShots();
+    /** Show only (Output Rules): QLC_SHOT_DIR=dir -- the window at three
+     *  sizes with two Show-only lasers (the footer chip, the plot badge), in
+     *  Operate, and the Output Rules dialog */
+    void showOnlyShots();
+    /** The footer says why they are held, the plot badges them, Locate is
+     *  refused, and the dialog sets the rule */
+    void showOnlyIsSaidAndBadged();
 
     /** Picking a view from the View menu switches to it even when an earlier
      *  tab has been detached and every index after it has shifted. */
@@ -305,6 +312,10 @@ private slots:
     void quittingWithTheShowTreeShowing();
 
 private:
+    /** Two lasers on the plot, Show only; their ids */
+    QList<quint32> addShowOnlyLasers();
+    void removeFixtures(const QList<quint32> &ids);
+
     App *m_app;
 };
 

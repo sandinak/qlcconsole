@@ -63,6 +63,9 @@ FocusSession::FocusSession(Doc *doc, QObject *parent)
     , m_doc(doc)
     , m_layer(doc, Universe::Focus, FadeChannel::Override, QStringLiteral("Focus"))
 {
+    // A focus call, Quick or Venue Focus is not the show: a Show-only
+    // fixture (a laser, a flame relay) stays safe, Operate too.
+    m_layer.setHoldsShowOnly(true);
     // The selection's flash: a few frames a blink, then it stops itself.
     m_flashTimer = new QTimer(this);
     m_flashTimer->setInterval(30);

@@ -129,6 +129,7 @@
 #include "speedmastersfooter.h"
 #include "fixturetreewidget.h"
 #include "outputrulekeeper.h"
+#include "outputrulesdialog.h"
 #include "functionparent.h"
 #include "mastertimer.h"
 #include "showcontrol.h"
@@ -2341,6 +2342,188 @@ void AppViews_Test::pagesSquashWithTheWindow()
         const int w = m_app->m_tab->widget(i)->minimumSizeHint().width();
         QVERIFY2(w <= 700, qPrintable(QString("%1 is at least %2 px wide").arg(tab).arg(w)));
     }
+}
+
+/****************************************************************************
+ * Show only (Output Rules)
+ ****************************************************************************/
+
+QList<quint32> AppViews_Test::addShowOnlyLasers()
+{
+    Doc *doc = m_app->doc();
+    QLCFixtureDef *def = doc->fixtureDefCache()->fixtureDef(QStringLiteral("Test"), QStringLiteral("Show Laser"));
+    if (def == nullptr)
+    {
+        def = new QLCFixtureDef();
+        def->setManufacturer(QStringLiteral("Test"));
+        def->setModel(QStringLiteral("Show Laser"));
+        def->setType(QLCFixtureDef::Laser);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName(QStringLiteral("3ch"));
+        const struct { const char *name; QLCChannel::Group group; } chans[] = {
+            { "Laser On", QLCChannel::Intensity }, { "Pattern", QLCChannel::Effect },
+            { "Colour", QLCChannel::Colour } };
+        int i = 0;
+        for (const auto &c : chans)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString::fromLatin1(c.name));
+            ch->setGroup(c.group);
+            def->addChannel(ch);
+            mode->insertChannel(ch, i++);
+        }
+        def->addMode(mode);
+        if (!doc->fixtureDefCache()->addFixtureDef(def))
+        {
+            delete def;
+            return {};
+        }
+    }
+    QList<quint32> ids;
+    const char *names[] = { "Laser SL", "Laser SR" };
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString::fromLatin1(names[i]));
+        f->setFixtureDefinition(def, def->modes().first());
+        f->setUniverse(0);
+        f->setAddress(quint32(400 + 3 * i));
+        if (!doc->addFixture(f))
+        {
+            delete f;
+            continue;
+        }
+        // Written as the show saves it: an older build reads nothing.
+        f->setOutputRules(Fixture::stringToOutputRules(QStringLiteral("ShowOnly")));
+        // On the stage, either side of centre (the grid is in metres).
+        const QVector3D g = doc->monitorProperties()->gridSize();
+        doc->monitorProperties()->setFixturePosition(f->id(), 0, 0,
+            QVector3D(g.x() * 1000.0f * (i == 0 ? 0.35f : 0.65f), g.z() * 1000.0f * 0.4f, 5));
+        ids << f->id();
+    }
+    doc->outputRuleKeeper()->rebuild();
+    if (Monitor::instance() != nullptr)
+        Monitor::instance()->updateView();
+    for (int i = 0; i < 8; ++i)
+    {
+        QCoreApplication::processEvents();
+        QTest::qWait(20);
+    }
+    return ids;
+}
+
+void AppViews_Test::removeFixtures(const QList<quint32> &ids)
+{
+    for (quint32 id : ids)
+        m_app->doc()->deleteFixture(id);
+    m_app->doc()->outputRuleKeeper()->rebuild();
+    QCoreApplication::processEvents();
+}
+
+void AppViews_Test::showOnlyShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    const QList<quint32> ids = addShowOnlyLasers();
+    QCOMPARE(ids.size(), 2);
+    const QSize was = m_app->size();
+    const App::WorkspaceView view = m_app->workspaceView();
+    m_app->setWorkspaceView(App::ConsoleView);
+    m_app->showContext(QStringLiteral("Lighting Studio"));
+    auto settle = []() {
+        for (int i = 0; i < 6; ++i)
+        {
+            QCoreApplication::processEvents();
+            QTest::qWait(30);
+        }
+    };
+    for (const QSize &size : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        m_app->resize(size);
+        settle();
+        QVERIFY(m_app->grab().save(QStringLiteral("%1/showonly-design-%2x%3.png")
+                                   .arg(dir).arg(size.width()).arg(size.height())));
+        QVERIFY(m_app->statusBar()->grab().save(QStringLiteral("%1/showonly-footer-%2.png")
+                                               .arg(dir).arg(size.width())));
+    }
+    if (MonitorGraphicsView *gv = m_app->findChild<MonitorGraphicsView *>())
+    {
+        gv->resize(900, 600);
+        settle();
+        QVERIFY(gv->grab().save(QStringLiteral("%1/showonly-plot.png").arg(dir)));
+    }
+    m_app->resize(1280, 800);
+    m_app->doc()->setMode(Doc::Operate);
+    settle();
+    QVERIFY(m_app->grab().save(QStringLiteral("%1/showonly-operate-1280x800.png").arg(dir)));
+    m_app->doc()->setMode(Doc::Design);
+    settle();
+    {
+        OutputRulesDialog dlg(m_app->doc(), ids, m_app);
+        dlg.show();
+        settle();
+        QVERIFY(dlg.grab().save(QStringLiteral("%1/showonly-dialog.png").arg(dir)));
+    }
+    removeFixtures(ids);
+    m_app->setWorkspaceView(view);
+    m_app->resize(was);
+    m_app->doc()->resetModified();
+}
+
+void AppViews_Test::showOnlyIsSaidAndBadged()
+{
+    const QList<quint32> ids = addShowOnlyLasers();
+    QCOMPARE(ids.size(), 2);
+    Doc *doc = m_app->doc();
+    QCOMPARE(doc->mode(), Doc::Design);
+    QLabel *chip = m_app->findChild<QLabel *>(QStringLiteral("footerShowOnly"));
+    QVERIFY(chip != nullptr);
+    QVERIFY(chip->isVisibleTo(m_app));
+    QVERIFY2(chip->text().contains(QStringLiteral("Lasers held: Design")), qPrintable(chip->text()));
+    QVERIFY(chip->toolTip().contains(QStringLiteral("Laser SL")));
+    MonitorGraphicsView *plot = m_app->findChild<MonitorGraphicsView *>();
+    QVERIFY(plot != nullptr);
+    {
+        QList<quint32> marked = plot->showOnlyHeldFixtures();
+        std::sort(marked.begin(), marked.end());
+        QList<quint32> want = ids;
+        std::sort(want.begin(), want.end());
+        QCOMPARE(marked, want);
+    }
+    // Locate is refused for it, saying why.
+    QVERIFY(Monitor::locateRefusal(doc->fixture(ids.first())).isEmpty() == false);
+
+    // Operate: the show drives them, nothing to say, no badge.
+    doc->setMode(Doc::Operate);
+    QCoreApplication::processEvents();
+    QVERIFY(chip->isVisibleTo(m_app) == false);
+    QVERIFY(plot->showOnlyHeldFixtures().isEmpty());
+    // Blind holds them again, and says so.
+    doc->inputOutputMap()->setOutputInhibited(true);
+    QCoreApplication::processEvents();
+    QVERIFY(chip->isVisibleTo(m_app));
+    QVERIFY2(chip->text().contains(QStringLiteral("Lasers held: Blind")), qPrintable(chip->text()));
+    doc->inputOutputMap()->setOutputInhibited(false);
+    doc->setMode(Doc::Design);
+    QCoreApplication::processEvents();
+
+    // The dialog: the fifth rule, and unticking it lets them go.
+    {
+        OutputRulesDialog dlg(doc, ids, m_app);
+        QCheckBox *cb = dlg.findChild<QCheckBox *>(QStringLiteral("outputRuleShowOnly"));
+        QVERIFY(cb != nullptr);
+        QCOMPARE(cb->checkState(), Qt::Checked);
+        cb->setChecked(false);
+        QVERIFY(dlg.apply());
+    }
+    QCOMPARE(doc->fixture(ids.first())->outputRules(), Fixture::OutputRules());
+    doc->outputRuleKeeper()->rebuild();
+    QCoreApplication::processEvents();
+    QVERIFY(chip->isVisibleTo(m_app) == false);
+    removeFixtures(ids);
+    doc->resetModified();
 }
 
 QTEST_MAIN(AppViews_Test)

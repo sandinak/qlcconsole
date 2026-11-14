@@ -89,6 +89,8 @@ RefineSession::RefineSession(Doc *doc, QObject *parent)
     , m_doc(doc)
     , m_layer(doc, Universe::Focus, FadeChannel::Override, QStringLiteral("Refine"))
 {
+    // Refining a look is not the show: a Show-only fixture stays safe.
+    m_layer.setHoldsShowOnly(true);
     m_flashTimer = new QTimer(this);
     m_flashTimer->setInterval(30);
     connect(m_flashTimer, &QTimer::timeout, this, &RefineSession::onFlashTick);

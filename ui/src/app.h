@@ -1239,6 +1239,11 @@ private:
      *  has none set or the check is off/lifted. Click opens the setting. */
     QLabel* m_statusRigNetLabel = nullptr;
     void updateRigNetworkFooter();
+    /** Show only (Output Rules): "Lasers held: Design" while the Show-only
+     *  fixtures are held at their safe value -- amber, never silent; hidden
+     *  in Operate or with none. A click opens their Output Rules. */
+    QLabel *m_statusShowOnlyLabel = nullptr;
+    void updateShowOnlyFooter();
     /** The venue chip (board Q150): "Venue: Lincoln HS" or "Set Venue…",
      *  amber with a count when the venue clashes; a click opens the venue
      *  menu. Always there in the qlcconsole and Everything views; in Classic

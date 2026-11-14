@@ -3669,6 +3669,8 @@ void ProgrammerController::writeChannelLive(quint32 fixtureId, quint32 channel, 
         {
             fader = universe->requestFader();
             fader->setName(QStringLiteral("Programmer"));  // WhyOn names it
+            // Building a look is not the show: a Show-only fixture stays safe.
+            fader->setHoldsShowOnly(true);
             m_liveFadersMap[fxi->universe()] = fader;
         }
     }

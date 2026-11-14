@@ -788,11 +788,13 @@ drop-in for the new one).
 Some of a rig's "dimmers" are not lights in the show: the power relays
 that feed the movers, the house, work and hall lights, backstage blues.
 An Eos show patches them as plain dimmers; here they must not go out with
-Blackout or the Grand Master, and a relay must switch, not fade.
+Blackout or the Grand Master, and a relay must switch, not fade. Others
+must fire only in the show: lasers, foggers, flame relays, a curtain on
+DMX.
 
 Select fixtures (or a group — every member) and right-click →
 **Output Rules…**. The same item is on a group or fixture in Build's
-*Groups & fixtures* and in the Show Tree's Library. Four rules, any
+*Groups & fixtures* and in the Show Tree's Library. Five rules, any
 together:
 
 | Rule | What it does |
@@ -801,6 +803,35 @@ together:
 | **Ignore the Grand Master** | The Grand Master does not dim it. |
 | **Switch (relay)** | On at 50% and over, off below — never in between, never faded (a fade-in switches at once). The Grand Master cannot switch it off, and the power limiter never scales it. |
 | **On when not in use** | At full whenever nothing in the show sets it. Anything that sets it — a cue, a slider, even to zero — wins; when that lets go, it is back at full. |
+| **Show only** | Only a real run of the show drives it: a GO in **Operate**. Everywhere else it stays at its safe value — off, closed — while the plot still draws what it would do. |
+
+**Show only**, in full. Building looks must never fire a laser, a fogger
+or a flame relay. So:
+
+- **Held** (its output stays safe): everything in **Design** — the Show
+  Tree's preview, **Solo**, the Workbench, a GO from the Run tab while you
+  try a list out, effect previews, the Simple Desk — and **Blind** in
+  either mode. In Operate the things that are not the show stay off it
+  too: the Workbench, **Locate** (greyed for it, as for a laser),
+  Highlight, the programmer's flash, focus calls, **Quick Focus** and
+  **Venue Focus**, Refine, a fixture test, a power measurement.
+- **Driven**: in **Operate**, a GO from anywhere (the Run tab, the pad, the
+  phone, QLab, a Stream Deck), the cue's hits and effects, the Virtual
+  Console, and the **Simple Desk** — a fader pushed on its channel there is
+  your own hand on it, which is how you test a fogger before doors.
+- **Its safe value**: every intensity channel at 0 (a relay open, a laser
+  or flame off); a laser's, fogger's, hazer's or plain dimmer's every
+  channel at 0; anything else at its default (a gobo or colour wheel open).
+- **Switching** to Operate starts it from safe: nothing a Design preview
+  left on it comes out. Back to Design, it is safe again at once.
+- **You can see it**: while it is held the footer says so in amber —
+  **Lasers held: Design**, **Fog held: Blind**, **Flame L held: Design**,
+  **3 Show-only fixtures held: Design** (click it for their Output Rules)
+  — and the plot gives each an amber dashed outline and a pause badge
+  beside its left edge, still drawing what it would do.
+
+Teaching mode, which holds the network output, still holds it: a teaching
+show fires nothing, Show only or not.
 
 When **On when not in use** fixtures come on is the show's setting, in
 **Settings ▸ Advanced ▸ Output (saved with this show)**: **When you switch
@@ -817,10 +848,11 @@ all. **⌘Z** undoes the change (one rig undo step).
 A fixture with rules has a small amber lightning badge on its icon in the
 Fixture Manager, Build and the Library; hover it for the rules in words.
 
-Which channels: *Ignore Blackout* and *Ignore the Grand Master* cover all
-of the fixture's channels (Blackout already keeps the non-intensity ones;
-this keeps the intensity ones too). *Switch* and *On when not in use*
-cover its intensity channels — all of them if it has none.
+Which channels: *Ignore Blackout*, *Ignore the Grand Master* and *Show
+only* cover all of the fixture's channels (Blackout already keeps the
+non-intensity ones; this keeps the intensity ones too). *Switch* and *On
+when not in use* cover its intensity channels — all of them if it has
+none.
 
 The rules are saved with the fixture, only when it has any, so a show
 without them is unchanged; QLC+ and older qlcconsole builds skip them.

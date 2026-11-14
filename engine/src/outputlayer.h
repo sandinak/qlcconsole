@@ -61,6 +61,13 @@ public:
     /** Let go of everything */
     void clear();
 
+    /** Show only (Fixture::ShowOnly): this layer is not the show -- focus,
+     *  Refine, Highlight -- and never drives a Show-only fixture
+     *  (GenericFader::setHoldsShowOnly()). Park, a held last look and Mark
+     *  are the show's or the operator's own hand, and drive it. */
+    void setHoldsShowOnly(bool hold);
+    bool holdsShowOnly() const { return m_holdsShowOnly; }
+
     /** The channels the layer writes, per universe index (for tests) */
     QHash<int, int> channelCounts() const;
 
@@ -81,6 +88,7 @@ private:
     const Universe::FaderPriority m_priority;
     const int m_flags;
     const QString m_name;
+    bool m_holdsShowOnly = false;
 
     /** Serialises set()/clear(); guards m_slots */
     mutable QMutex m_mutex;

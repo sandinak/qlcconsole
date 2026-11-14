@@ -519,6 +519,9 @@ void MasterTimer::timerTickFunctions(QList<Universe *> universes)
             if (function != NULL)
             {
                 /* Run the function unless it's supposed to be stopped */
+                // Show only: the faders it makes follow what started it.
+                function->refreshPreviewGate();
+                GenericFader::CreationScope faderScope(&function->previewGate());
                 if (function->stopped() == false && m_stopAllFunctions == false)
                 {
                     if (firstIteration)
@@ -565,6 +568,8 @@ void MasterTimer::timerTickFunctions(QList<Universe *> universes)
 
         foreach (Function* f, startQueue)
         {
+            f->refreshPreviewGate();
+            GenericFader::CreationScope faderScope(&f->previewGate());
             if (m_functionList.contains(f))
             {
                 f->postRun(this, universes);
