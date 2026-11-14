@@ -24,14 +24,25 @@ class App;
 
 /* The Rig Overview's 45° view in the room's light: an object's edges follow
  * the room as its faces do, so a blackout leaves dim silhouettes, not a line
- * drawing in plot or warning colours. */
+ * drawing in plot or warning colours; and only fixtures really in the same
+ * space are outlined in the overlap warning's red. */
 class RigRoomLight_Test : public QObject
 {
     Q_OBJECT
 
 private slots:
-    void initTestCase();
     void cleanupTestCase();
+
+    /** A deck's and a strip's edges in a blackout: faint, neutral, still
+     *  above the canvas; brighter in House light. */
+    void blackoutEdgesAreFaintAndNeutral();
+    /** Strips stacked up a step's face, each touching the next, are not
+     *  "in the same space"; two strips rigged in one place are. */
+    void stackedStripsAreNotAnOverlap();
+    /** Bars stood on end side by side along a truss are not an overlap. */
+    void uprightBarsSideBySideAreNotAnOverlap();
+    /** A selected fixture's edge is the selection's, whatever the room. */
+    void aSelectedFixtureKeepsItsEdge();
 
     /** Review shots of a real show (repro/show.qlcc beside the test, never
      *  committed) in Blackout and House, with a per-object list of the
