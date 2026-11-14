@@ -10,6 +10,40 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Props a person holds, on cue (candidate, asked 2026-11-14) -- not built, waiting on a go
+
+Asked for: a prop (a staff and the like) is given to a Person to hold and
+moves with them; a cue says when they get it and when it is taken from
+them. Hand-held, infrared-controlled candles the same way, as an effect to
+show: no "getting" to draw, they simply have them from a cue and lose them
+on a cue.
+
+Where it attaches (no new model): the wand is already "held by a Person"
+(docs/design/FOUNTAIN_WAND.md), a prop is a stage target, and where a
+target is per cue is Blocking (docs/design/BLOCKING.md, tracked on the
+cue). So: "held by" becomes a property any prop target can have, and it
+is tracked per cue like a place in a Blocking (held from this cue, let go
+at that one), read by the one position reader
+(MonitorProperties::targetPosition) so the Studio, the plot and every aim
+follow the holder.
+
+To decide before building (board):
+- Is "who holds it" part of a Blocking set, or its own tracked value on
+  the cue? (Blocking is the smaller change.)
+- Candles: are they fixtures the show drives (an IR sender patched as a
+  universe, so their light is a cue's look) or drawn only? If driven,
+  which sender.
+- Does a held prop change what an Aim at the Person covers (a staff's
+  tip), or is it drawn only?
+
+ROI (first guess, to be put on the board with the questions): reach = the
+shows with hand props and the candle number; effort = small if it rides
+Blocking and the wand's "held by", medium if the candles are driven
+fixtures. Ships with help (stage-targets.md), a BLK- test, a course note
+where blocking is taught, and a CHANGELOG line.
+
+---
+
 ## Laptop fit (fix/043-laptop-fit, 2026-11-10) -- built, leftovers
 
 The first UX review's findings at 1024x640 (UX-34/36): scrolling Studio
