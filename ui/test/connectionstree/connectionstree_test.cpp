@@ -3654,8 +3654,12 @@ public:
     int capabilities() const override { return QLCIOPlugin::Output; }
     QString pluginInfo() const override { return QString(); }
     QStringList outputs() override { return QStringList() << QStringLiteral("WLED (JSON over Wi-Fi)"); }
-    bool openOutput(quint32, quint32) override { return true; }
-    void closeOutput(quint32, quint32) override {}
+    bool openOutput(quint32 output, quint32 universe) override
+    {
+        addToMap(universe, output, Output);     // where its parameters are kept
+        return true;
+    }
+    void closeOutput(quint32 output, quint32 universe) override { removeFromMap(output, universe, Output); }
     bool supportsOutputTargets() const override { return true; }
     void writeUniverse(quint32, quint32, const QByteArray &, bool) override {}
 };
