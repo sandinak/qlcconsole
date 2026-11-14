@@ -16,7 +16,7 @@ words:
   - term: Follow timecode
     means: "A cue list's setting: its cues with a time go on by themselves when the incoming timecode reaches it."
   - term: Pad Run
-    means: "The game controller as a GO button: hold **LB**, press **A**."
+    means: "The game controller as a GO button: hold **LB + RB** to arm it, then hold **LT** and press **A**."
   - term: Phone Run page
     means: "A web page on a phone with GO, Back and Stop. Off in every show until someone turns it on."
 ---
@@ -97,8 +97,12 @@ has its own switch, and its own PIN.
 - **QLab fires by number.** QLab's cue says "GO cue 1.0.2" and the lights
   go to 1.0.2. Renumber the cues the night before and QLab fires the wrong
   ones, so a number is a promise to the sound op.
-- **The pad.** Hold **LB** (L1), press **A** (Cross): GO. Nothing moves
-  unless LB is held, so a pad knocked off a stool does nothing.
+- **The pad.** Hold **LB + RB** (L1 + R1) for half a second to arm it; it
+  stays armed until you hold them again. Armed, hold **LT** (L2, the
+  safety) and press **A** (Cross): GO. B is Back, X and Y the sub-cue
+  GO and Back, and **RT** fires the armed hit. All four held at once is
+  the emergency stop. A press without LT does nothing, so a pad knocked
+  off a stool moves no cue. The pad never picks the list: the Run tab does.
 - **The phone page.** It shows the cues and GO, Back and Stop. Stop takes
   two taps.
 

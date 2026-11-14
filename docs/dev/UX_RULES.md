@@ -871,21 +871,23 @@ Budget 15 clicks. From: 2026-11-07 (UX-64, UX-65); docs/features/lighting-studio
 
 ### F-04 Build a look in the Workbench and record it as a cue
 
-Budget 11 clicks. From: docs/features/build.md, show-tree.md Record and duplicate; course level 2. Rules: UX-61, UX-66.
+Budget 10 clicks. From: docs/features/build.md, show-tree.md Record and duplicate, The programmer strip; course level 2. Rules: UX-61, UX-66.
 
-- **Student:** Open a scene in Build, play it, Record it into the cue list.
-- **Pro:** Type record lit on the Show Tree's command line.
+- **Student:** Open a cue in the Show Tree's Workbench, play it, ↩ back, Record it into the cue list.
+- **Pro:** Type record lit on the Show Tree's command line; the programmer strip sits under the toolbar.
 
 | # | Screen | Control | You see | Clicks |
 |---|---|---|---|---|
-| 1 | any | Build tab | Build | 1 |
-| 2 | Build | + Scene, drag a group onto it, drop a colour *(manual)* | a look | 3 |
-| 3 | Build ▸ Scenes | a scene in the navigator | it in the Workbench | 1 |
-| 4 | the Workbench | Play | it on the rig | 1 |
-| 5 | the Workbench | "Record it as a cue in the Show Tree ▸" *(find)* | the grey line under Play; its link opens the Show Tree with Record ready | - |
-| 6 | any | Show Tree tab | the Show Tree | 1 |
-| 7 | Show Tree | a cue | its page | 1 |
-| 8 | Show Tree | Record ▸ Everything lit ▸ Record | a new cue after it | 3 |
+| 1 | any | Show Tree tab | the Show Tree | 1 |
+| 2 | Show Tree | a cue | its page | 1 |
+| 3 | Show Tree | ✎ Workbench | the cue in the Workbench, Play beside it | 1 |
+| 4 | the Workbench | drop a colour on a layer *(manual)* | the look changes | 2 |
+| 5 | the Workbench | Play | it on the rig | 1 |
+| 6 | the Workbench | ↩ Show Tree | the cue's page back | 1 |
+| 7 | Show Tree | Record ▸ Everything lit ▸ Record | a new cue after it | 3 |
+
+The Build tab is hidden in the qlcconsole view (0.4.4, Q228); the Show Tree
+borrows its Workbench and programmer strip, so the flows go through those.
 
 ### F-05 GO through a show in the Run tab
 
@@ -918,7 +920,7 @@ Budget 12 clicks. From: course level 3 lesson 6; docs/features/focus-calls.md. R
 
 ### F-07 Follow spot with a pad
 
-Budget 9 clicks. From: docs/features/stage-targets.md Follow-spot behavior; 2026-11-04 (UX-56). Rules: UX-56, UX-66.
+Budget 11 clicks. From: docs/features/stage-targets.md Follow-spot behavior; 2026-11-04 (UX-56); 0.4.4 (Q228: Build is hidden in the qlcconsole view). Rules: UX-56, UX-66.
 
 - **Student:** Patch the pad, put Followspot and an Aim on the spot, GO, walk the stick.
 - **Pro:** Fine stick and speed step on the pad (fix/042-followspot-feel).
@@ -928,7 +930,7 @@ Budget 9 clicks. From: docs/features/stage-targets.md Follow-spot behavior; 2026
 |---|---|---|---|---|
 | 1 | Connections | patch the pad as an input *(manual)* | the pad found | 2 |
 | 2 | Lighting Studio | Add ▸ Target (a person) *(manual)* | a target on the plot | 2 |
-| 3 | Build Workbench | + Effect ▸ Effect Palette… ▸ Followspot ▸ Make layer *(manual)* | the spot follows | 4 |
+| 3 | Show Tree | a cue ▸ ✎ Workbench ▸ + Effect ▸ Effect Palette… ▸ Followspot ▸ Make layer *(manual)* | the spot follows | 6 |
 | 4 | Run | GO, walk the left stick *(manual)* | footer: ◎ Follow … stick moving | 1 |
 
 ### F-08 Set Units and see every length follow
@@ -1007,6 +1009,38 @@ Budget 4 clicks. From: 2026-11-07 catch (UX-69); docs/features/show-tree.md Reco
 | 2 | Show Tree | Duplicate (⌘D) | a copy of the cue after it (UX-42) | 1 |
 | 3 | Look Editor | change the copy's effect or colour | the copy changes; the Look Editor says what, if anything, is still shared (UX-69) | 1 |
 | 4 | Show Tree | the original cue | unchanged (UX-69) | 1 |
+
+### F-13 Run the show from the pad
+
+Budget 5 clicks. From: docs/features/show-control.md GO from the game controller; ROADMAP_045_050 item 4. Rules: UX-45, UX-66.
+
+- **Student:** Pad: Run, hold LB + RB to arm, hold LT and press A for GO, hold LB + RB again to disarm.
+- **Pro:** The footer's Pad chip shows the state from every tab; the table is on its hover.
+- **Manual:** Needs a game pad: the walker doesn't load the HID plugin. padrun_test drives a virtual pad; the feel and the lights are checked on his real pad (UX-56).
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | any | Run tab | the cue list, NEXT on the first cue | 1 |
+| 2 | Run | Pad: Tools ▸ Pad: Run *(manual)* | the button reads Pad: Run, not armed | 1 |
+| 3 | the pad | hold LB + RB for half a second *(manual)* | Pad: ARMED in orange on the Run tab and the footer's Pad chip; the pad's light orange | 1 |
+| 4 | the pad | armed, hold LT and press A *(manual)* | the next cue plays; a short buzz, the light green while it fades; the Pad chip agrees | 1 |
+| 5 | the pad | hold LB + RB again *(manual)* | Pad: Run, disarmed; the same on every surface | 1 |
+
+### F-14 Fire a staff hit
+
+Budget 5 clicks. From: docs/features/show-control.md Pad Run, show-tree.md Hits; ROADMAP_045_050 item 3. Rules: UX-45, UX-61.
+
+- **Student:** A cue has a hit under it; arm the pad, pull RT.
+- **Pro:** One HIT button on the Virtual Console fires the same armed hit (narrowest place wins).
+- **Manual:** Needs a game pad, and the hit is shown by roadmap item 3 (hit-visible); the walker can't arm a pad.
+
+| # | Screen | Control | You see | Clicks |
+|---|---|---|---|---|
+| 1 | any | Run tab | the cue list, NEXT on the first cue | 1 |
+| 2 | Run | Switch to Operate *(manual)* | LIVE; hits fire in Operate only | 1 |
+| 3 | Run | Pad: Tools ▸ Pad: Run *(manual)* | Pad: Run, and the hit named (Hit: Staff Slam) | 1 |
+| 4 | the pad | hold LB + RB for half a second *(manual)* | Pad: ARMED; the Run tab, the Pad chip and the phone Run page all name the same hit | 1 |
+| 5 | the pad | armed, pull RT *(manual)* | the hit fires; the three surfaces still agree; no GO happened | 1 |
 
 ## How to add a rule
 
