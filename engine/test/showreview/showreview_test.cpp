@@ -44,6 +44,7 @@
 #include "qlcfixturemode.h"
 #include "qlcfixturehead.h"
 #include "qlcfixturedef.h"
+#include "qlcfixturedefcache.h"
 #include "qlccapability.h"
 #include "fixturegroup.h"
 #include "qlcphysical.h"
@@ -2047,6 +2048,46 @@ void ShowReview_Test::cue15()
     console(QString());
     QVERIFY(st->setSubCueFollow(second, true, 500));
     QVERIFY(quiet("CUE-15"));
+}
+
+/* CUE-17 (more in engine/test/candlepresses): a Dim on the IR candle remote
+   that tracks into the next cue; quiet for a state, and released. */
+void ShowReview_Test::cue17()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QStringLiteral(QLC_TEST_RESOURCE_ROOT "fixtures/Generic/Generic-IR-Candle-Remote.qxf")),
+             QFile::NoError);
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(def));
+    Fixture *remote = new Fixture(m_doc);
+    remote->setName("Candles");
+    remote->setFixtureDefinition(def, def->modes().first());
+    QVERIFY(m_doc->addFixture(remote));
+    auto scene = [&](int select) {
+        Scene *s = new Scene(m_doc);
+        s->setValue(remote->id(), 0, uchar(select));
+        s->setValue(remote->id(), 1, 20);
+        m_doc->addFunction(s);
+        ShowTree::Target t;
+        t.function = s->id();
+        return t;
+    };
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Main");
+    const quint32 on = st->addCue(lid, -1, "Candles on");
+    QVERIFY(st->addLayer(on, scene(1)) != ShowTree::invalidId());
+    st->addCue(lid, 0, "Scene 2");
+    QVERIFY(quiet("CUE-17"));                       // On is a state: it tracks
+    const quint32 dim = st->addCue(lid, 1, "Candles dim");
+    const quint32 layer = st->addLayer(dim, scene(5));
+    QVERIFY(layer != ShowTree::invalidId());
+    st->addCue(lid, 2, "Scene 4");
+    QVERIFY(fires("CUE-17"));
+    const ReviewFinding f = findings("CUE-17").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY2(f.message.contains("presses Dim on the candles; it fires once per GO") && f.message.contains("dims them again"),
+             qPrintable(f.message));
+    QVERIFY(st->setLayerRelease(dim, layer, true));
+    QVERIFY(quiet("CUE-17"));
 }
 
 /****************************************************************************

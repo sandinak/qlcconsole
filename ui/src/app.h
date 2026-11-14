@@ -1293,6 +1293,9 @@ private:
     /** The GM label+slider+value's shared container — toggled as one unit
      *  by m_showFooterGM, same pattern as Load/Power below. */
     QWidget* m_statusGrandMasterBox = nullptr;
+    /** The Pad chip leaves out what RT fires (the Run tab still says it):
+     *  with it, a narrow footer squeezed the Grand Master out. */
+    bool m_padChipShort = false;
     QLabel* m_statusTimecodeLabel;
     class QToolButton* m_statusStandby = nullptr;   ///< "Next: 12.5 — ..."
     QLabel* m_statusLoadLabel;

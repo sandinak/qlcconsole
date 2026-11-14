@@ -129,6 +129,8 @@ private slots:
     void vc07();
     void vc09();
     void cue15();
+    /** CUE-17: a press (the candles' Dim) that tracks; quiet released */
+    void cue17();
     void ven01();
     void ven02();
     void ven05();

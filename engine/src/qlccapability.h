@@ -54,6 +54,10 @@ class QFile;
 #define KXMLQLCCapabilityColor1     QStringLiteral("Color")
 #define KXMLQLCCapabilityColor2     QStringLiteral("Color2")
 
+/** A button press, not a state (qlcconsole): Press="true". An older build
+ *  ignores the attribute. */
+#define KXMLQLCCapabilityPress      QStringLiteral("Press")
+
 typedef struct
 {
     QString targetMode;     /** Name of the mode where this alias has effect */
@@ -281,6 +285,23 @@ public:
 
 protected:
     QList<AliasInfo> m_aliases;
+
+    /********************************************************************
+     * Press (qlcconsole)
+     ********************************************************************/
+public:
+    /** A value that PRESSES a button on whatever the channel drives (an IR
+     *  blaster's Dim or Brighten): each time it is sent the thing it drives
+     *  takes one more step, so sending it again is not harmless the way a
+     *  state (On, Off) is. The Show Tree never tracks a press into the cues
+     *  after the one that sets it, and a channel with a press never fades
+     *  (QLCChannel::hasPress()). Set it before the capability is added to
+     *  its channel. Saved as Press="true", which an older build ignores. */
+    bool isPress() const { return m_press; }
+    void setPress(bool press) { m_press = press; }
+
+protected:
+    bool m_press = false;
 
     /********************************************************************
      * Load & Save

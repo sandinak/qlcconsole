@@ -28,6 +28,8 @@
 #include "showreviewcontext.h"
 #include "showtreecontroller.h"
 #include "monitorproperties.h"
+#include "candleremote.h"
+#include "presses.h"
 #include "lookstackcheck.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
@@ -486,6 +488,103 @@ static QString vcWidgetText(const VcWidget &w)
     return QStringLiteral("%1 '%2'").arg(kind, w.label());
 }
 
+/* CUE-17: a press (QLCCapability::isPress(), the candles' Dim or Brighten)
+   in a cue that tracks it on, or in a chase that goes round. The tree sends
+   a press only in the cue that sets it (ShowTreeController::pressGuards());
+   a Back to that cue, a jump to it or a re-run sends it again, and a chase
+   sends it on every pass. Released after its cue (it doesn't track), a
+   press in a cue of its own is quiet: that's how to use one. */
+static QString capitalised(QString text)
+{
+    if (!text.isEmpty())
+        text[0] = text.at(0).toUpper();
+    return text;
+}
+
+static QString pressText(Doc *doc, Presses::Key k, uchar value, QString *again)
+{
+    const Fixture *fx = doc->fixture(Presses::fixtureOf(k));
+    const QString button = Presses::buttonName(doc, k, value);
+    if (CandleRemote::isRemote(fx))
+    {
+        if (again != nullptr)
+            *again = CandleRemote::command(value) == CandleRemote::Brighten
+                     ? tr("brightens them again") : tr("dims them again");
+        return tr("%1 on the candles").arg(button);
+    }
+    if (again != nullptr)
+        *again = tr("presses it again");
+    return tr("%1 on %2").arg(button, fx == nullptr ? QString() : fx->name());
+}
+
+static void cue17(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    Doc *doc = ctx.doc();
+    const QSet<quint64> channels = Presses::channels(doc);
+    if (channels.isEmpty())
+        return;
+    for (const auto &pl : plainLists(doc))
+    {
+        const CueList &list = *pl.second;
+        const QList<ResolvedCue> &res = ctx.resolved(list);
+        for (int i = 0; i < list.cues.count() && i < res.count(); ++i)
+        {
+            const Cue &cue = list.cues.at(i);
+            if (cue.skip)
+                continue;                               // CUE-07's
+            for (const ResolvedLayer &rl : res.at(i).layers)
+            {
+                if (!rl.own || !rl.target.isOpaque())
+                    continue;
+                const quint32 fid = rl.target.function;
+                Function *f = doc->function(fid);
+                if (f == nullptr)
+                    continue;
+
+                Presses::Key pk = 0;
+                uchar pv = 0;
+                if (Presses::repeats(doc, fid, channels, &pk, &pv))
+                {
+                    QString again;
+                    const QString what = pressText(doc, pk, pv, &again);
+                    out << ReviewContext::make(QStringLiteral("CUE-17"), ReviewFinding::Warning,
+                        capitalised(tr("%1 plays the chase '%2', which presses %3 every time it comes "
+                                       "round: each pass %4.")
+                                        .arg(ctx.cueText(list, i), f->name(), what, again)),
+                        { cueKey(list, cue.id), QStringLiteral("fn:%1").arg(fid),
+                          QStringLiteral("fx:%1").arg(Presses::fixtureOf(pk)) },
+                        QStringLiteral("chase/%1/%2/%3").arg(fid).arg(pk).arg(int(pv)).toUtf8(),
+                        QStringLiteral("cue"), QVariantList() << cue.id);
+                    continue;
+                }
+
+                // Tracks on: the next cue carries this layer in.
+                const ResolvedLayer *next = i + 1 < res.count() ? res.at(i + 1).layer(rl.target) : nullptr;
+                if (next == nullptr || next->own)
+                    continue;
+                const QHash<quint64, uchar> w = Presses::written(doc, fid, channels);
+                QList<quint64> keys = w.keys();
+                std::sort(keys.begin(), keys.end());
+                for (quint64 k : keys)
+                {
+                    const uchar v = w.value(k);
+                    if (!Presses::isPress(doc, k, v))
+                        continue;
+                    QString again;
+                    const QString what = pressText(doc, k, v, &again);
+                    out << ReviewContext::make(QStringLiteral("CUE-17"), ReviewFinding::Warning,
+                        capitalised(tr("%1 presses %2; it fires once per GO — a Back or a re-run %3.")
+                                        .arg(ctx.cueText(list, i), what, again)),
+                        { cueKey(list, cue.id), QStringLiteral("fn:%1").arg(fid),
+                          QStringLiteral("fx:%1").arg(Presses::fixtureOf(k)) },
+                        QStringLiteral("tracks/%1/%2/%3").arg(fid).arg(k).arg(int(v)).toUtf8(),
+                        QStringLiteral("cue"), QVariantList() << cue.id);
+                }
+            }
+        }
+    }
+}
+
 static void cue12(ReviewContext &ctx, QList<ReviewFinding> &out)
 {
     // decided (can change): only (a) of the design: an original kept for
@@ -897,6 +996,13 @@ QList<ShowReview::Check> ShowReviewChecks::treeChecks()
           tr("After Import in place the Show Tree list plays the show and the chaser it came "
              "from is kept to Restore. Something that still plays the old chaser plays a show "
              "that no longer matches the list."), cue12 },
+        { QStringLiteral("CUE-17"), tr("A press that tracks or repeats"), S::Cues,
+          tr("Dim and Brighten on the candles' IR remote are button presses, not states: each "
+             "time one is sent, every candle in the room takes one more step. The Show Tree sends "
+             "a press only in the cue that sets it — the cues it tracks into send nothing there "
+             "— but a Back to that cue, a jump to it or running it again presses it again, and "
+             "a chase presses it every time it comes round. Give the press a cue of its own, with "
+             "a short Window, and set Release After This Cue on it."), cue17 },
         { QStringLiteral("VC-01"), tr("Hits that fight in one place"), S::Hits,
           tr("Two hits in the same place that set the same attribute on the same lights: the "
              "stage depends on which was pressed last. Give them different places, or different "

@@ -553,6 +553,18 @@ the show has no focus calls, or none whose fixtures are in this production.
 Says: *"Cue 0.1 is a venue focus cue, but the show has no focus calls."*
 [cue 0.1]
 
+**CUE-17 A press that tracks or repeats.** · W · cheap · v1 ✓
+Detects: a cue whose own function layer sets a press
+(`QLCCapability::isPress()`, the IR candle remote's Dim and Brighten) and
+tracks into the next cue, or plays a Chaser (or a collection with one) that
+steps through a press. Why: a press is a button, not a state -- every send
+steps every candle once more. The tree sends nothing there in the cues a
+press tracks into (`ShowTreeController::pressGuards()`), but Back to the
+cue, a jump or a re-run presses it again, and a chase every pass. Quiet
+for a press released after its cue. Data: `Presses`, resolve. Says: *"Cue
+2.3.1 presses Dim on the candles; it fires once per GO — a Back or a re-run
+dims them again."* [cue, function, fixture]
+
 ### 3.4 Hits and Virtual Console (VC)
 
 The Virtual Console is UI-only (`ui/src/virtualconsole/`); see §5.3 for how

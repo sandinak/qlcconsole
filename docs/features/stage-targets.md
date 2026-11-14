@@ -388,8 +388,32 @@ Five people with lit candles from cue 12 to cue 15:
    On (1) and Window long enough for the cast to catch the beam (30 = 3 s,
    or 255).
 
-Give Select no fade (a fade passes through the other buttons on the way).
-With more than one remote in the show, right-click a candle ▸ **Lit By**.
+Select never fades, whatever the cue's fade: a fade would pass through the
+other buttons on the way. With more than one remote in the show,
+right-click a candle ▸ **Lit By**.
+
+**On, Off, Candle and Light are states; Dim and Brighten are presses.**
+Sending On again changes nothing, so a state tracks like any value. Each
+Dim or Brighten the blaster sends takes every candle in the room one more
+step, so a press does **not** track: the cue that sets it sends it, and the
+cues after it send nothing there (Select 0) until a cue sets Select again.
+That also means a later cue that only changes Window can't restart it.
+What still sends it again is playing that cue again: **Back** to it, a jump
+to it, or GO through it a second time. To dim the candles safely:
+
+1. **Give the press a cue of its own:** a scene that sets Select to Dim (5)
+   or Brighten (6), added to the cue as a layer (+ Scene).
+2. **Keep Window short:** long enough to reach the cast, not much more
+   (10 to 20 is 1 to 2 s). The blaster repeats the button for the whole
+   window, and the candles may step more than once while it does.
+3. **Let it go after its cue:** right-click the layer ▸ **Release After
+   This Cue**, and don't GO on until the window has run (the next cue
+   sends Select 0, which stops the blaster at once).
+4. **Don't put it in a chase:** a chase presses it every time round.
+
+Show Review's **CUE-17** warns about a press that tracks into the next cue
+or sits in a chase. A busking hit can press Dim or Brighten too: it fires
+once each time the button is pressed.
 
 The plot shows **what was last sent**, not what a candle did: one in a
 pocket, out of the beam, missed it. After On a candle is drawn lit at

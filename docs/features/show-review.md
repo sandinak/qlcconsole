@@ -266,6 +266,12 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   Runner shows a Sub GO button and no Cue Runner key or input sends it. The
   keyboard shortcut (Ctrl+Alt+Return) still works, but nothing on the
   console says so.
+- **CUE-17** A cue that presses Dim or Brighten on the candles (any button
+  a fixture definition marks as a press) and tracks it into the next cue,
+  or plays a chase that presses it every time it comes round. The cues it
+  tracks into send nothing there, but a Back to the cue or running it again
+  presses it again. Give the press a cue of its own and set **Release After
+  This Cue** on it ([Candles](stage-targets.md#candles)).
 
 **Hits**
 

@@ -16,8 +16,8 @@
   <Capability Min="2" Max="2">Off</Capability>
   <Capability Min="3" Max="3">Candle (flicker)</Capability>
   <Capability Min="4" Max="4">Light (steady)</Capability>
-  <Capability Min="5" Max="5">Dim</Capability>
-  <Capability Min="6" Max="6">Brighten</Capability>
+  <Capability Min="5" Max="5" Press="true">Dim</Capability>
+  <Capability Min="6" Max="6" Press="true">Brighten</Capability>
   <Capability Min="7" Max="255">Nothing</Capability>
  </Channel>
  <Channel Name="Window">
