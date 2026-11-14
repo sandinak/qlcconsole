@@ -163,6 +163,9 @@ WebAccessRun::Result WebAccessRun::command(const QString &command, bool unlocked
         r.command = ShowControl::Pause;
     else if (command == QLatin1String("resume"))
         r.command = ShowControl::Resume;
+    // The remote pad's emergency stop (LB + RB + LT + RT), as the console pad's.
+    else if (command == QLatin1String("alloff"))
+        r.command = ShowControl::AllOff;
     else
         return Unknown;
 
@@ -457,36 +460,47 @@ static QJsonObject cueObject(Doc *doc, Chaser *ch, quint32 listId, int step, int
 
 QJsonObject WebAccessRun::padMap()
 {
-    /* The pad's Run role (PadRun), as far as the page can do it: the arm,
-       GO, Back, Sub GO, Stop and the armed hit. The rest (the
-       walk, the voice) are the console's. */
+    /* The pad's Run role (PadRun), as far as the page can do it, by the
+       same rules: the arm a latch on LB + RB held; GO, Back, Sub GO and
+       Sub Back armed with the safety (LT) held; the armed hit on RT,
+       armed; the four together for the emergency stop. The rest (the walk, the voice) are the console's. */
     QJsonObject map;
+    const QString safety = GamepadRole::key(PadRun::safetyRole());
     for (GamepadRole::Role role : WebAccessGamepad::standardButtons())
     {
         const PadRun::Action a = PadRun::actionFor(role);
         QString what;
         switch (a)
         {
-            case PadRun::Arm:     what = QStringLiteral("arm"); break;
-            case PadRun::Go:      what = QStringLiteral("go"); break;
-            case PadRun::Back:    what = QStringLiteral("back"); break;
-            case PadRun::SubGo:   what = QStringLiteral("subgo"); break;
-            case PadRun::Stop:    what = QStringLiteral("stop"); break;
-            case PadRun::FireHit: what = QStringLiteral("hit"); break;
+            case PadRun::Arm:       what = QStringLiteral("arm"); break;
+            case PadRun::Safety:    what = QStringLiteral("hold"); break;
+            case PadRun::Go:        what = QStringLiteral("go"); break;
+            case PadRun::Back:      what = QStringLiteral("back"); break;
+            case PadRun::SubGo:     what = QStringLiteral("subgo"); break;
+            case PadRun::SubBack:   what = QStringLiteral("subback"); break;
+            case PadRun::FireHit:   what = QStringLiteral("hit"); break;
             default: continue;
         }
         QJsonObject e;
         e[QStringLiteral("do")] = what;
         e[QStringLiteral("label")] = PadNames::expand(PadRun::label(a), PadNames::Xbox);
-        // Stop sits beside GO: held, as on the console's pad.
-        if (a == PadRun::Stop)
-            e[QStringLiteral("hold")] = PadRun::stopHoldMs();
+        if (PadRun::needsSafety(a))
+            e[QStringLiteral("guard")] = safety;
+        // The arm: LB and RB, held, to arm and again to disarm.
+        if (a == PadRun::Arm)
+            e[QStringLiteral("hold")] = PadRun::armChordMs();
         map[GamepadRole::key(role)] = e;
+    }
+    {
+        QJsonObject e;
+        e[QStringLiteral("do")] = QStringLiteral("alloff");
+        e[QStringLiteral("label")] = PadNames::expand(PadRun::emergencyStopLabel(), PadNames::Xbox);
+        map[QStringLiteral("estop")] = e;
     }
 
     /* The remote's own (Q229), on controls the Run role leaves free, under
-       the same arm (LB held): Blind, and Solo with the D-pad walking the
-       layers -- View solos as it does on the console's walk (PadRun). */
+       the same rule (armed, LT held): Blind, and Solo with the D-pad
+       walking the layers -- View solos as it does on the console's walk. */
     struct Extra
     {
         GamepadRole::Role role;
@@ -496,11 +510,11 @@ QJsonObject WebAccessRun::padMap()
     };
     const Extra extras[] = {
         { GamepadRole::Back, "solo", "solo|toggle",
-          tr("Solo a layer of the cue in the preview, or the whole cue again ({LB} held; Design)") },
-        { GamepadRole::DpadRight, "solonext", "solo|next", tr("Solo the next layer ({LB} held)") },
-        { GamepadRole::DpadLeft, "soloprev", "solo|prev", tr("Solo the previous layer ({LB} held)") },
+          tr("Solo a layer of the cue in the preview, or the whole cue again (armed, {LT} held; Design)") },
+        { GamepadRole::DpadRight, "solonext", "solo|next", tr("Solo the next layer (armed, {LT} held)") },
+        { GamepadRole::DpadLeft, "soloprev", "solo|prev", tr("Solo the previous layer (armed, {LT} held)") },
         { GamepadRole::LS, "blind", "blind|toggle",
-          tr("Blind: the rig muted, the screens live ({LB} held; Design)") },
+          tr("Blind: the rig muted, the screens live (armed, {LT} held; Design)") },
     };
     for (const Extra &x : extras)
     {
@@ -511,6 +525,7 @@ QJsonObject WebAccessRun::padMap()
         e[QStringLiteral("do")] = QLatin1String(x.what);
         e[QStringLiteral("cmd")] = QLatin1String(x.command);
         e[QStringLiteral("remote")] = true;
+        e[QStringLiteral("guard")] = safety;
         e[QStringLiteral("label")] = PadNames::expand(x.label, PadNames::Xbox);
         map[GamepadRole::key(x.role)] = e;
     }

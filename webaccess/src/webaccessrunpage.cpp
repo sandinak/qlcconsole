@@ -89,6 +89,7 @@ button:disabled{opacity:.35}
 #status div.warning{color:var(--warn)}
 #focuslink{display:none;color:var(--go2);font-weight:700;text-decoration:none}
 #armed{display:none;text-align:center;font-size:14px;font-weight:700;letter-spacing:.1em;color:#101214;background:var(--warn);border-radius:8px;padding:3px;margin-bottom:8px}
+#armed.stopped{background:var(--stop);color:#fff}
 #testbtn{width:auto;min-height:32px;font-size:14px;font-weight:400;padding:0 10px;margin:0 auto 10px;display:block;background:none;border:0;color:var(--dim);text-decoration:underline}
 #statusline{display:none;flex-shrink:0;font-size:14px;color:var(--warn);padding:0 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #statusline.error{color:#ff8a80}
@@ -118,7 +119,7 @@ button:disabled{opacity:.35}
 </main>
 <div id="pad">
 <div id="msg"></div>
-<div id="armed">LB HELD: GO ARMED</div>
+<div id="armed">ARMED: LT + A IS GO</div>
 <button id="go" disabled>GO</button>
 <div class="row" id="subrow"><button id="subback" disabled>SUB BACK</button><button id="subgo" disabled>SUB GO</button></div>
 <div class="row"><button id="back" disabled>BACK</button><button id="hold" disabled>HOLD</button><button id="stop" disabled>STOP</button></div>
@@ -257,27 +258,45 @@ function statusList(){
   sl.textContent=list.length?list[0].text+(list.length>1?' (+'+(list.length-1)+' more)':''):'';
   sl.className=list.length&&list[0].level==='error'?'error':'';
   $('focuslink').style.display=st.focus?'inline':'none'}
-/* The controller: the pad's Run role (PadRun), from the state's map, and
-   the remote's own Blind and Solo (a.cmd) on controls the Run role leaves free. */
+/* The controller: the pad's Run role (PadRun), from the state's map and by
+   its rules -- LB + RB held arms and disarms (a latch); a cue command is
+   armed + the safety (its guard, LT) held + its button; RT, armed, is the
+   hit; the four together are the emergency stop -- and the remote's own Blind and
+   Solo (a.cmd). */
 function padAction(r){return (st.pad||{})[r]}
 function padLabels(){var l={};for(var r in (st.pad||{}))l[r]=st.pad[r].label;QPad.labels(l)}
-var padHold=null;
-function padHoldEnd(){if(padHold){clearTimeout(padHold.t);padHold=null}}
+var padArmed=false,padStopped=false,armT=null,estopDone=false;
+function showArm(){var e=$('armed');e.style.display=(padArmed||padStopped)?'block':'none';
+  e.className=padStopped?'stopped':'';e.textContent=padStopped?'EMERGENCY STOP':'ARMED: LT + A IS GO'}
+showArm();
+function isChord(r){return r==='lb'||r==='rb'||r==='lt'||r==='rt'}
+function chord(){var a=padAction('lb');
+  if(!(QPad.down('lb')&&QPad.down('rb'))||QPad.down('lt')||QPad.down('rt')){clearTimeout(armT);armT=null;return}
+  if(armT)return;
+  armT=setTimeout(function(){armT=null;
+    if(!(QPad.down('lb')&&QPad.down('rb'))||QPad.down('lt')||QPad.down('rt'))return;
+    padArmed=!padArmed;padStopped=false;showArm();
+    if(navigator.vibrate)navigator.vibrate(padArmed?[30,60,30]:150)},(a&&a.hold)||500)}
 QPad.on({
   down:function(r){
     if(r==='start'){QPad.toggle(true);return}
-    var a=padAction(r);if(!a)return;
-    if(a.do==='arm'){$('armed').style.display='block';return}
-    if(!QPad.down('lb')||!(a.remote?canRig():canSend()))return;
-    /* Held, not pressed (Stop, beside GO): the word once the hold is up,
-       with LB still held. */
-    if(a.hold){padHoldEnd();padHold={r:r,t:setTimeout(function(){padHold=null;
-      if(QPad.down('lb')&&QPad.down(r))cmd(a.cmd||a.do)},a.hold)};return}
+    if(isChord(r)){
+      if(QPad.down('lb')&&QPad.down('rb')&&QPad.down('lt')&&QPad.down('rt')){
+        clearTimeout(armT);armT=null;
+        if(!estopDone){estopDone=true;padArmed=false;padStopped=true;showArm();
+          if(canRig())cmd('alloff');if(navigator.vibrate)navigator.vibrate([150,80,150,80,150])}
+        return}
+      chord();
+      /* RT's pull is the hit, below -- not with a bumper down (the stop in the making). */
+      if(r!=='rt'||QPad.down('lb')||QPad.down('rb'))return}
+    var a=padAction(r);if(!a||a.do==='arm'||a.do==='hold')return;
+    if(!padArmed){msg('Not armed: hold LB and RB.');return}
+    if(a.guard&&!QPad.down(a.guard)){msg('Hold '+a.guard.toUpperCase()+' with it.');return}
+    if(!(a.remote?canRig():canSend()))return;
     cmd(a.cmd||a.do);
     if(a.do==='go'&&navigator.vibrate)navigator.vibrate(30)},
-  up:function(r){var a=padAction(r);
-    if(a&&a.do==='arm'){$('armed').style.display='none';padHoldEnd()}
-    if(padHold&&padHold.r===r)padHoldEnd()}});
+  up:function(r){if(isChord(r)){estopDone=false;chord()}},
+  pad:function(p){if(!p&&padArmed){padArmed=false;showArm();msg('Disarmed: the controller went away.')}}});
 $('testbtn').onclick=function(){QPad.toggle(true)};
 $('qpadclose').onclick=function(){QPad.toggle(false)};
 if(navigator.wakeLock){var hold=function(){navigator.wakeLock.request('screen').then(function(l){wake=l}).catch(function(){})};

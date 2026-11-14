@@ -1146,94 +1146,205 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
         return false;
     };
 
-    // 1. A (Cross) alone: nothing plays; the footer says to hold LB (L1) -- lights only, so not aloud.
+    /* The pad's controls by their role, whatever channels this pad's
+       profile gives them. */
+    auto chOf = [&](GamepadRole::Role role) {
+        for (quint32 ch = 0; ch < 40; ++ch)
+            if (GamepadRole::Role(pc->controllerRole(1, ch)) == role)
+                return ch;
+        return quint32(UINT_MAX);
+    };
+    const quint32 kB = chOf(GamepadRole::B), kX = chOf(GamepadRole::X), kRB = chOf(GamepadRole::RB),
+                  kLT = chOf(GamepadRole::LeftTrigger), kRT = chOf(GamepadRole::RightTrigger),
+                  kMenu = chOf(GamepadRole::Start);
+    for (quint32 ch : { kB, kX, kRB, kLT, kRT, kMenu })
+        QVERIFY(ch != UINT_MAX);
+    QCOMPARE(chOf(GamepadRole::A), kA);
+    QCOMPARE(chOf(GamepadRole::LB), kLB);
+
+    /* Rule 2, one state on every surface: the Run tab's button, the frame
+       round the Run tab, the footer's chip and the pad's light, in the
+       state's colour or in none -- checked together, every time. */
+    QWidget *runTab = padBtn;
+    while (runTab != nullptr && QLatin1String(runTab->metaObject()->className()) != QLatin1String("CueRunner"))
+        runTab = runTab->parentWidget();
+    QVERIFY(runTab != nullptr);
+    auto surfaces = [&](const QString &words, const QColor &colour, const char *when) {
+        QTRY_VERIFY2_WITH_TIMEOUT(padBtn->text() == words, qPrintable(QStringLiteral("%1: button %2")
+                                  .arg(QLatin1String(when), padBtn->text())), 2000);
+        QVERIFY2(chip->text().startsWith(words), qPrintable(QStringLiteral("%1: chip %2").arg(QLatin1String(when), chip->text())));
+        QVERIFY2(run->roleText() == words, when);
+        const QString name = colour.isValid() ? colour.name() : QString();
+        QVERIFY2(colour.isValid() ? padBtn->styleSheet().contains(name) : padBtn->styleSheet().isEmpty(), when);
+        QVERIFY2(colour.isValid() ? runTab->styleSheet().contains(name) : runTab->styleSheet().isEmpty(), when);
+        QVERIFY2(colour.isValid() ? chip->styleSheet().contains(name)
+                                  : !chip->styleSheet().contains(QStringLiteral("background")), when);
+        QVERIFY2(run->stateColour() == colour, when);
+        if (run->state() != PadRun::ToolHasPad && !run->isPlaying())
+            QVERIFY2(pc->padLight() == colour, when);
+    };
+    auto chord = [&](bool on) {
+        press(kLB, 255);
+        press(kRB, 255);
+        QTRY_VERIFY_WITH_TIMEOUT(run->isArmed() == on, 3000);
+        press(kRB, 0);
+        press(kLB, 0);
+        QVERIFY(run->isArmed() == on);
+    };
+    auto with = [&](quint32 trigger, quint32 button) {
+        press(trigger, 255);
+        tap(button);
+        press(trigger, 0);
+    };
+    surfaces(QStringLiteral("Pad: Run"), QColor(), "the Run role, not armed");
+    const quint32 cue1 = mainList->cues.at(0).id, cue2 = mainList->cues.at(1).id;
+
+    // 1. A (Cross) alone, and L2 + A, not armed: nothing plays; the footer
+    //    says how to arm -- lights only, so not aloud.
     tap(kA);
-    QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains(QStringLiteral("to arm")),
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains(QStringLiteral("Not armed")),
                               qPrintable(QStringLiteral("chip: %1, role %2").arg(chip->text())
                                          .arg(pc->controllerRole(1, kA))), 2000);
     qInfo().noquote() << "[PAD RUN] unarmed, footer:" << chip->text();
-    QVERIFY(!heard(QStringLiteral("to arm")));
-    QCOMPARE(st->runningCue(mainList->id), mainList->cues.at(0).id);
+    QVERIFY(!heard(QStringLiteral("Not armed")));
+    with(kLT, kA);
+    QCOMPARE(st->runningCue(mainList->id), cue1);
     // With the voice on, it is said as well.
     pc->setOperatorFeedback(ControllerScheme::BothFeedback);
     tap(kA);
-    QTRY_VERIFY_WITH_TIMEOUT(heard(QStringLiteral("to arm")), 2000);
-    QCOMPARE(st->runningCue(mainList->id), mainList->cues.at(0).id);
+    QTRY_VERIFY_WITH_TIMEOUT(heard(QStringLiteral("Not armed")), 2000);
+    QCOMPARE(st->runningCue(mainList->id), cue1);
 
-    // 2. Hold LB (L1): armed, on the Run tab's button and in the footer.
+    // 2. One bumper held: nothing. Both held: ARMED, everywhere, and it
+    //    stays armed with both let go.
     press(kLB, 255);
-    QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
-    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: ARMED"), 2000);
-    QVERIFY(chip->text().startsWith(QStringLiteral("Pad: ARMED")));
-
-    // 3. LB + A: GO, to cue 2.
-    tap(kA);
-    QTRY_COMPARE_WITH_TIMEOUT(st->runningCue(mainList->id), mainList->cues.at(1).id, 3000);
-
-    // Let go of LB: Pad: Run again.
+    settle(PadRun::armChordMs() + 200);
     press(kLB, 0);
-    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Run"), 2000);
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().startsWith(QStringLiteral("Pad: Run")), 2000);
+    QVERIFY(!run->isArmed());
+    chord(true);
+    surfaces(QStringLiteral("Pad: ARMED"), PadRun::armedColour(), "armed");
 
-    /* The press sweep: every control of this pad, alone, in the Run role
-       with the follow spot playing -- the role and the chip must still read
-       Pad: Run (a stray press never takes the pad out of Run). Menu is the
-       one documented exception (Walk) and says how to come back. */
+    // 3. Armed, A alone: nothing, and the footer says what GO is. L2 (the
+    //    safety) held + A: GO, to cue 2.
+    tap(kA);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains(QStringLiteral("GO is")), qPrintable(chip->text()), 2000);
+    with(kLT, kA);
+    QTRY_COMPARE_WITH_TIMEOUT(st->runningCue(mainList->id), cue2, 3000);
+    QVERIFY(run->isArmed());
+    // L2 + B: back to cue 1; and forward again.
+    with(kLT, kB);
+    QTRY_COMPARE_WITH_TIMEOUT(st->runningCue(mainList->id), cue1, 3000);
+    with(kLT, kA);
+    QTRY_COMPARE_WITH_TIMEOUT(st->runningCue(mainList->id), cue2, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isPlaying(), 8000);
+    surfaces(QStringLiteral("Pad: ARMED"), PadRun::armedColour(), "armed, after the GOs");
+
+    /* The press sweep, armed and not: every control of this pad, alone,
+       with the follow spot playing. Rule 3: none arms or disarms. Rule 4:
+       none moves the show. And the role never leaves Run. */
+    /* (The chord's time shortened for the sweep, so each control is held
+       past it without the sweep taking a minute; put back after.) */
+    const int sweepChordMs = 100;
+    run->setArmChordMs(sweepChordMs);
+    for (bool armed : { true, false })
     {
+        if (run->isArmed() != armed)
+            chord(armed);
+        const QString words = armed ? QStringLiteral("Pad: ARMED") : QStringLiteral("Pad: Run");
         QStringList table;
         for (quint32 ch = 0; ch < 40; ++ch)
         {
             const GamepadRole::Role role = GamepadRole::Role(pc->controllerRole(1, ch));
-            if (role == GamepadRole::None || role == GamepadRole::LB
-                || role == GamepadRole::Back || role == GamepadRole::Start)
+            // View and Menu make the role chord; Menu alone is checked below.
+            if (role == GamepadRole::None || role == GamepadRole::Back || role == GamepadRole::Start)
                 continue;
-            const bool axis = GamepadRole::isAxis(role) || GamepadRole::isTouch(role);
-            press(ch, axis ? 220 : 255);
+            const bool trigger = role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger;
+            const bool axis = !trigger && (GamepadRole::isAxis(role) || GamepadRole::isTouch(role));
+            const uchar rest = axis ? 128 : 0;
+            QVERIFY(padInput(doc, padLine, ch, axis ? 220 : 255));
+            settle(sweepChordMs + 60);              // held past the chord's time
             const QString during = chip->isVisible() ? chip->text() : QStringLiteral("(hidden)");
-            const bool ok = run->isEnabled() && run->holder().isEmpty() && !run->isWalking();
-            press(ch, axis ? 128 : 0);
-            table << QStringLiteral("ch %1 role %2: %3 enabled=%4 holder='%5' walking=%6")
-                         .arg(ch).arg(int(role)).arg(during).arg(run->isEnabled()).arg(run->holder()).arg(run->isWalking());
+            const bool ok = run->isEnabled() && run->holder().isEmpty() && !run->isWalking()
+                            && run->isArmed() == armed;
+            QVERIFY(padInput(doc, padLine, ch, rest));
+            settle(30);
+            table << QStringLiteral("ch %1 role %2: %3 enabled=%4 armed=%5 holder='%6' walking=%7")
+                         .arg(ch).arg(int(role)).arg(during).arg(run->isEnabled()).arg(run->isArmed())
+                         .arg(run->holder()).arg(run->isWalking());
             QVERIFY2(ok, qPrintable(table.last()));
-            QVERIFY2(during.startsWith(QStringLiteral("Pad: Run")), qPrintable(table.last()));
-            // The triggers pick no list from the pad (0.4.5): nothing to say.
-            if (role == GamepadRole::RightTrigger || role == GamepadRole::LeftTrigger)
-                QVERIFY2(!during.contains(QStringLiteral("List: ")), qPrintable(table.last()));
-            // A press that needs the arm says so, beside the role.
-            if (role == GamepadRole::A || role == GamepadRole::B || role == GamepadRole::X
-                || role == GamepadRole::Y || role == GamepadRole::RB)
-                QVERIFY2(during.contains(QStringLiteral("to arm")), qPrintable(table.last()));
-            press(ch, axis ? 128 : 0);
-            settle(100);
+            QVERIFY2(run->isArmed() == armed, qPrintable(table.last()));
+            QVERIFY2(during.startsWith(words), qPrintable(table.last()));
+            QVERIFY2(st->runningCue(mainList->id) == cue2, qPrintable(table.last()));
+            // The pad picks no list: nothing to say about one.
+            QVERIFY2(!during.contains(QStringLiteral("List: ")), qPrintable(table.last()));
+            // A press that lacks the arm, or its trigger, says so beside the role.
+            if (role == GamepadRole::A || role == GamepadRole::B || role == GamepadRole::X || role == GamepadRole::Y)
+                QVERIFY2(during.contains(armed ? QStringLiteral(" held and ") : QStringLiteral("Not armed")),
+                         qPrintable(table.last()));
         }
-        qInfo().noquote() << "[PAD RUN] sweep:\n" + table.join('\n');
-        // Menu alone: Walk, plainly; Menu again: back to Run.
-        const quint32 kMenu = 13;
-        QCOMPARE(GamepadRole::Role(pc->controllerRole(1, kMenu)), GamepadRole::Start);
-        tap(kMenu);
-        qInfo().noquote() << "[PAD RUN] after Menu:" << chip->text() << run->isWalking() << run->holder();
-        if (run->isWalking())
-        {
-            QVERIFY2(chip->text().contains(QStringLiteral("to go back")), qPrintable(chip->text()));
-            tap(kMenu);
-        }
-        QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Run"), 3000);
-        QVERIFY(run->isEnabled());
+        qInfo().noquote() << QStringLiteral("[PAD RUN] sweep, %1:\n").arg(words) + table.join('\n');
+        surfaces(words, armed ? PadRun::armedColour() : QColor(), "after the sweep");
     }
+
+    run->setArmChordMs(PadRun::armChordMs());
+
+    // Menu alone, not armed: Walk, plainly; Menu again: back to Run.
+    tap(kMenu);
+    qInfo().noquote() << "[PAD RUN] after Menu:" << chip->text() << run->isWalking() << run->holder();
+    if (run->isWalking())
+    {
+        QVERIFY2(chip->text().contains(QStringLiteral("to go back")), qPrintable(chip->text()));
+        tap(kMenu);
+    }
+    surfaces(QStringLiteral("Pad: Run"), QColor(), "after the walk");
+    QVERIFY(run->isEnabled());
+    // Armed, Menu walks nothing and the arm stays.
+    chord(true);
+    tap(kMenu);
+    QVERIFY(!run->isWalking());
+    surfaces(QStringLiteral("Pad: ARMED"), PadRun::armedColour(), "Menu while armed");
 
     /* A tool started on the laptop has the pad until it ends ("The tools
        win"): the button and the footer name it, rather than a pad that
-       seems dead. Focus this cue, quietly, on the cue running. */
+       seems dead -- and the arm drops with it, on every surface at once.
+       Focus this cue, quietly, on the cue running. */
     QString why;
-    QVERIFY2(pc->refineSession()->start(mainList->cues.at(1).id, 0xFFFFFFFF, &why), qPrintable(why));
-    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Focus This Cue"), 2000);
-    QTRY_VERIFY_WITH_TIMEOUT(chip->text().startsWith(QStringLiteral("Pad: Focus This Cue")), 2000);
+    QVERIFY2(pc->refineSession()->start(cue2, 0xFFFFFFFF, &why), qPrintable(why));
+    surfaces(QStringLiteral("Pad: Focus This Cue"), QColor(), "a tool has the pad");
+    QVERIFY(!run->isArmed());
     QVERIFY(chip->toolTip().contains(QStringLiteral("has the controller</b> until it ends")));
     press(kLB, 255);
+    press(kRB, 255);
+    settle(PadRun::armChordMs() + 200);
     QVERIFY(!run->isArmed());
+    press(kRB, 0);
     press(kLB, 0);
     pc->refineSession()->stop();
-    QTRY_COMPARE_WITH_TIMEOUT(padBtn->text(), QStringLiteral("Pad: Run"), 2000);
+    surfaces(QStringLiteral("Pad: Run"), QColor(), "the tool ended");
+
+    /* The emergency stop: both bumpers and both triggers. Everything
+       stops, the arm drops, and every surface is red until armed again. */
+    chord(true);
+    press(kLB, 255);
+    press(kRB, 255);
+    press(kLT, 255);
+    QVERIFY(run->isArmed());                // three of the four: nothing yet
+    press(kRT, 255);
+    surfaces(QStringLiteral("Pad: STOPPED"), PadRun::stoppedColour(), "the emergency stop");
+    QVERIFY(!run->isArmed());
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(mainList->id) != cue2, 3000);
+    press(kRB, 0);
+    press(kLB, 0);
+    press(kRT, 0);
+    press(kLT, 0);
+    surfaces(QStringLiteral("Pad: STOPPED"), PadRun::stoppedColour(), "the four let go");
+    // Armed again and a GO: the show runs, and the red is gone.
+    chord(true);
+    surfaces(QStringLiteral("Pad: ARMED"), PadRun::armedColour(), "armed after the stop");
+    with(kLT, kA);
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(mainList->id) != ShowTree::invalidId(), 3000);
+    chord(false);
+    surfaces(QStringLiteral("Pad: Run"), QColor(), "disarmed");
 
     // At the smallest window the Pad chip is whole, beside the Follow chip.
     m_app->resize(1024, 640);

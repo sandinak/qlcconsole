@@ -45,10 +45,24 @@ private slots:
     /** The table: roles to actions and back, which need the arm, and the
      *  map in each pad's own words. */
     void theMapByRole();
-    /** A press of A without LB held sends nothing and says why; with LB
-     *  held it is one GO through run() with RoutePad. B, Y and X likewise
-     *  (Back, Sub GO, Stop); letting go of LB disarms. */
-    void goNeedsTheArmHeld();
+    /** The arm is a latch on LB + RB held: one bumper, a brush of both, or
+     *  both with a trigger arm nothing; held, it arms and stays armed with
+     *  everything let go; no single control, however held, disarms; the
+     *  chord again does. */
+    void theArmIsATwoButtonLatch();
+    /** Armed, a button alone sends nothing and says what it needs; with
+     *  the other trigger, or the safety only brushed, nothing; LT held + A
+     *  is one GO through run() with RoutePad, LT + B Back, LT + X Sub GO,
+     *  LT + Y Sub Back. Another pad's presses are refused. */
+    void goNeedsTheArmAndItsTrigger();
+    /** LB + RB + LT + RT: ALL OFF through run(), armed or not, once a
+     *  chord; the arm drops, the state is Stopped (red) until armed again
+     *  or the show is run from elsewhere. */
+    void theEmergencyStop();
+    /** State, words, colour and the pad's light agree through every
+     *  change -- role, arm, a tool taking the pad, the walk, the stop --
+     *  and stateChanged() goes once for each. */
+    void theStateHasOneSource();
     /** In the Tools role the Run map is nothing: no run() call, and the
      *  profile's button action fires as before; in the Run role the
      *  profile's action does not fire beside it, nor View + Menu ask for
@@ -65,10 +79,12 @@ private slots:
      *  let go: the role stays Run (Pad: Run / ARMED / Walk); only View +
      *  Menu held leaves it. */
     void nothingOnThePadLeavesTheRunRole();
-    /** The pad is told: the light bar orange while armed, blue on a GO,
-     *  a short buzz on a GO and a long one when there was nothing to play. */
+    /** The pad is told: the light the arm's colour while armed, green then
+     *  blinking on a GO, steady again when nothing fades, its own colour
+     *  disarmed, red after the emergency stop; two short buzzes armed, one
+     *  long disarmed, a short one on a GO, a long one for nothing to play. */
     void theLightBarAndRumble();
-    /** The controller lost while armed: disarmed. */
+    /** The controller lost while armed: disarmed, and the screen says why. */
     void aLostPadDisarms();
 
     /* Walking the show (Q192). */
@@ -114,9 +130,10 @@ private slots:
     void theLightItselfGoesIntoTheVenue();
 
     /* The Hits page (0.4 item 2 leftovers). */
-    /** LB + RB fires the armed hit and says its name; again lets it go. */
-    void rbFiresTheArmedHit();
-    /** Without LB, with no hit armed, or in Design: nothing starts. */
+    /** Armed, RT fires the armed hit and says its name; again lets it go. */
+    void rtFiresTheArmedHit();
+    /** Not armed, with no hit armed, in Design, RT only brushed or pulled
+     *  with a bumper down: nothing starts; one pull is one hit. */
     void noHitWithoutArmOrAnArmedHit();
     /** Hits at several places: the narrowest armed place wins; several at
      *  one place take turns. */
@@ -137,7 +154,7 @@ private slots:
     void inputThroughThePatchDoesNotDeadlock();
 
     /* Adaptive triggers and swipes (Q199). */
-    /** The feel by state: off outside the Run role, R2 firm while armed,
+    /** The feel by state: off outside the Run role, both firm while armed,
      *  both clicking while walking. */
     void theTriggerFeelByState();
     /** Arm, disarm, walk, leave the walk, leave the role, lose the pad,
@@ -165,6 +182,10 @@ private:
      *  palette); the target's id. */
     quint32 aimFronts();
     void hold(quint32 channel, bool down, quint32 universe = 0);
+    /** Arm or disarm as the operator does: LB + RB held, then let go. */
+    void arm(bool on, quint32 universe = 0);
+    /** @p trigger pulled, @p button pressed, the trigger let go. */
+    void with(quint32 trigger, quint32 button, quint32 universe = 0);
     /** As a pad's plugin sends them, on device line @p line: the press and
      *  release (the release passes the press straight through the patch),
      *  then the frame's flush; a hold, then the flush. */

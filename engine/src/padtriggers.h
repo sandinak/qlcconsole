@@ -32,8 +32,8 @@
  * (GCDualSenseAdaptiveTrigger on macOS, nothing elsewhere or on other pads),
  * so what the feel should be is decided here, where a test can read it.
  *
- *  - Pad Run armed (LB held):  off -- the triggers do nothing in Run (0.4.5),
- *    so neither may feel as if it did.
+ *  - Pad Run armed:            both firm -- L2 is the safety held for every
+ *    command, R2 fires the hit, so each takes a squeeze (0.4.5).
  *  - walking the show:         both triggers click -- one click at the end
  *    of each pull, a cue (or a level) stepped.
  *  - otherwise:                off.

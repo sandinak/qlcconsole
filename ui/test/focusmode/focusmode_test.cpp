@@ -1214,7 +1214,7 @@ void FocusMode_Test::theControllerTestListsEachInput()
     // The pad's Run role on (0.4): a new row also says what it does there.
     m_doc->programmer()->padRun()->setEnabled(true, false);
     m_stub->emitDiagnostic(0, dev, conn, "Button 2", 1, BtnB, 255);
-    QVERIFY2(tree->topLevelItem(5)->text(7).contains("Run: Back (LB held)"),
+    QVERIFY2(tree->topLevelItem(5)->text(7).contains("Run: Back (armed, LT held)"),
              qPrintable(tree->topLevelItem(5)->text(7)));
     m_doc->programmer()->padRun()->setEnabled(false, false);
     QCOMPARE(dlg->rowCount(), 6);

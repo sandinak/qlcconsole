@@ -68,14 +68,14 @@ App) still holds the previews, through a queued connection.
 | Key | `App::m_cueGoAction` / Back / Sub GO / Sub Back (⌘↩, ⌘⇧↩, ⌥⌘↩, ⌥⌘⇧↩; Control ▸ GO…) | Go, Back, SubGo, SubBack on the main list | yes |
 | Run tab | `CueRunner` Full: buttons, Space, a click (Load) or double-click (Go cue) in the list | all but AllOff and Reset | yes |
 | VC Cue Runner | `CueRunner` Compact/List inside `VCCueRunner` (click, its key, its external input) | the same | no |
-| Pad (Run role) | `PadRun::trigger()` (engine/src/padrun.*): LB held + A / B / Y, LB + X held 1 s; no list from the pad | Go, Back, SubGo, Stop on the Run tab's list (ControlMap::runTabList(), else the main one) | yes |
+| Pad (Run role) | `PadRun::trigger()` and `PadRun::emergencyStop()` (engine/src/padrun.*): armed (LB + RB held, a latch), the safety LT held + A / B / X / Y; RT, armed, fires the hit (not a run command); LB + RB + LT + RT is the emergency stop; no list and no list stop from the pad | Go, Back, SubGo, SubBack on the Run tab's list (ControlMap::runTabList(), else the main one); AllOff | yes |
 | Pad (profile action) | `ProgrammingManager::slotButtonAction("chaser_step_forward"/"back")` on a running Show Tree list, Tools role only | Go, Back | yes |
 | VC Cue List | `VCCueList` Next / Previous / Play / Stop, a row's double-click, Sub GO / Sub Back, and the web access page (same slots); a VC button's next / previous step (`ProgrammerController::stepCurrentChaser`), only when the chaser is a Show Tree main list | Go, Back, Stop, Sub GO, Sub Back | no |
 | Control Map | `ControlMap::goList()` (GO / Stop a list or cue) | Go, Stop | no |
 | Focus call | `FocusCallCue` continuing its list when the calls are done | Go | no |
 | OSC | `ShowControl::handleOsc()` (from `ShowControlListener`) | all | no |
 | MSC | `ShowControl::handleSysEx()` (a patched MIDI input) | Go, Pause, Resume, Load, AllOff, Reset, Stop | no |
-| Web | the phone Run page (`/run`, `WebAccessRun::command()`) and the Companion module (same socket) | Go (a cue, a list), Back, Stop, SubGo, SubBack, Pause, Resume, Load (standby dial) | no |
+| Web | the phone Run page (`/run`, `WebAccessRun::command()`) and the Companion module (same socket) | Go (a cue, a list), Back, Stop, SubGo, SubBack, Pause, Resume, Load (standby dial), AllOff (the remote pad's emergency stop) | no |
 | Timecode | `TimecodeCues` (a list set to follow timecode reaches a cue's time) | Go (by cue number and chaser) | no |
 
 **Not routes:**

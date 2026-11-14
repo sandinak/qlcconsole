@@ -55,7 +55,7 @@ private slots:
     void openingAShowOverOneThatPlays();
     /** Pad Run on the committed show, as the bench runs it: Operate, the
      *  Run tab's Pad: Run, Main cue 1 (the follow spot) playing -- A alone
-     *  says to arm, LB arms (Pad: ARMED), LB + A GOes; the footer says the
+     *  says to arm, LB + RB held arms (Pad: ARMED), LT + A GOes; the footer says the
      *  pad's role beside the follow spot (M994). */
     void padRunWithTheFollowSpotPlaying();
 

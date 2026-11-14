@@ -2232,20 +2232,28 @@ void WebAccess_Test::theRunPageMapIsPadRun()
     QCOMPARE(map.value("lb").toObject().value("do").toString(), QString("arm"));
     QCOMPARE(map.value("a").toObject().value("do").toString(), QString("go"));
     QCOMPARE(map.value("b").toObject().value("do").toString(), QString("back"));
-    QCOMPARE(map.value("y").toObject().value("do").toString(), QString("subgo"));
-    QCOMPARE(map.value("x").toObject().value("do").toString(), QString("stop"));
-    // Stop is held, as on the console's pad; nothing else is.
-    QCOMPARE(map.value("x").toObject().value("hold").toInt(), PadRun::stopHoldMs());
-    QVERIFY(!map.value("a").toObject().contains("hold"));
-    QCOMPARE(map.value("rb").toObject().value("do").toString(), QString("hit"));
-    // What the page cannot do (the walk, the voice) is not mapped, and no
-    // trigger picks a list.
-    QVERIFY(!map.contains("rt"));
-    QVERIFY(!map.contains("lt"));
+    QCOMPARE(map.value("x").toObject().value("do").toString(), QString("subgo"));
+    QCOMPARE(map.value("y").toObject().value("do").toString(), QString("subback"));
+    // Each with the safety (LT) held beside it, as on the console's pad.
+    for (const char *k : { "a", "b", "x", "y" })
+        QCOMPARE(map.value(QLatin1String(k)).toObject().value("guard").toString(), QString("lt"));
+    QCOMPARE(map.value("lt").toObject().value("do").toString(), QString("hold"));
+    // RT is the armed hit, with no safety of its own.
+    QCOMPARE(map.value("rt").toObject().value("do").toString(), QString("hit"));
+    QVERIFY(!map.value("rt").toObject().contains("guard"));
+    // The bumpers are the mode only: the arm, the two held.
+    QCOMPARE(map.value("rb").toObject().value("do").toString(), QString("arm"));
+    QCOMPARE(map.value("lb").toObject().value("hold").toInt(), PadRun::armChordMs());
+    // The four together: ALL OFF.
+    QCOMPARE(map.value("estop").toObject().value("do").toString(), QString("alloff"));
+    // No word stops a list or picks one, and what the page cannot do (the
+    // walk, the voice) is not mapped.
+    for (const QString &role : map.keys())
+        QVERIFY2(map.value(role).toObject().value("do").toString() != QLatin1String("stop"), qPrintable(role));
     QVERIFY(!map.contains("start"));
     QVERIFY(!map.contains("rs"));
-    // The console's words, its {LB} written out.
-    QVERIFY(map.value("a").toObject().value("label").toString().contains(QLatin1String("LB")));
+    // The console's words, its {LT} written out.
+    QVERIFY(map.value("a").toObject().value("label").toString().contains(QLatin1String("LT")));
     QVERIFY(!map.value("a").toObject().value("label").toString().contains(QLatin1Char('{')));
     // The remote's own Blind and Solo (Q229): never over a control of the
     // console's Run role, each with the word it sends.
@@ -2253,9 +2261,12 @@ void WebAccess_Test::theRunPageMapIsPadRun()
     QCOMPARE(map.value("dpad_right").toObject().value("cmd").toString(), QString("solo|next"));
     QCOMPARE(map.value("dpad_left").toObject().value("cmd").toString(), QString("solo|prev"));
     QCOMPARE(map.value("ls").toObject().value("cmd").toString(), QString("blind|toggle"));
-    QVERIFY(map.value("ls").toObject().value("label").toString().contains(QLatin1String("LB")));
+    QVERIFY(map.value("ls").toObject().value("label").toString().contains(QLatin1String("LT")));
+    QCOMPARE(map.value("ls").toObject().value("guard").toString(), QString("lt"));
     for (const QString &role : map.keys())
     {
+        if (role == QLatin1String("estop"))
+            continue;       // four controls: no one role's
         const bool remote = map.value(role).toObject().value("remote").toBool();
         QCOMPARE(PadRun::actionFor(GamepadRole::fromProfile(role, QString())) == PadRun::NoAction, remote);
     }

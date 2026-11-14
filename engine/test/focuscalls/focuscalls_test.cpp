@@ -1113,12 +1113,12 @@ void FocusCalls_Test::thePadAnswersStillAt()
     value(10, 0);
     s->stop();
 
-    // No prompt: A is its usual self (the Run role refuses it without LB).
+    // No prompt: A is its usual self (the Run role refuses it, not armed).
     pc->padRun()->setEnabled(true, false);
     said.clear();
     value(10, 255);
     value(10, 0);
-    QCOMPARE(said.last().at(0).toString(), QString("Hold LB to arm."));
+    QCOMPARE(said.last().at(0).toString(), QString("Not armed: hold LB and RB."));
     pc->padRun()->setEnabled(false, false);
 
     // No venue applied: nothing to confirm, so A answers nothing.

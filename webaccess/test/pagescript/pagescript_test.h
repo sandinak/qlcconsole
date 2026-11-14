@@ -51,7 +51,7 @@ private slots:
     void stopNeedsASecondTapInTwoSeconds();
     void nothingIsSentWhileRemoteGoIsOff();
     void thePinIsAskedAndKeptForTheSession();
-    void everyPadWordNeedsLBHeld();
+    void everyPadWordNeedsTheArmAndItsTrigger();
     void theControllerTestSendsNothing();
     void acksSayWhyInPlainWords();
     void teachingShowsWhatItHolds();
@@ -84,6 +84,8 @@ private:
     bool click(const QString &id);
     /** Hold these controls down (role: value) for @a ms. */
     void pad(const QJsonObject &down, int ms = 50, const QJsonArray &axes = QJsonArray());
+    /** The chord on the pad: LB + RB held, then let go (arms, or disarms). */
+    void armPad();
 
 private:
     QJSEngine *m_js = nullptr;

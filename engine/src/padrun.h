@@ -24,6 +24,7 @@
 #include <QObject>
 #include <QColor>
 #include <QList>
+#include <QHash>
 #include <QSet>
 
 #include "qlcengine_export.h"
@@ -45,25 +46,46 @@ class Doc;
 /**
  * The pad's Run role (STRATEGY.md section 4, 0.4): run the show from a game
  * controller. While the role is on and no on-stage tool (Focus mode, Venue
- * focus, Refine) has the pad, its buttons are the Run map:
+ * focus, Refine) has the pad, its buttons are the Run map (reworked 0.4.5,
+ * the rules below):
  *
- *   hold LB      arm: nothing moves the show unless it is held
- *   LB + A       GO              LB + B   Back
- *   LB + Y       Sub GO
- *   LB + hold X 1 s   Stop the list (a tap of X only says to hold it)
- *   RT / LT      nothing (swallowed): the pad never picks the list
+ *   hold LB + RB (armChordMs())   ARM; the same again disarms. A latch:
+ *                                 nothing has to stay held
+ *   LT held              the safety: no cue moves without it
+ *   armed, LT held + A   GO            armed, LT held + B   Back
+ *   armed, LT held + X   Sub GO        armed, LT held + Y   Sub Back
+ *   armed, RT            fire the hit that is armed now (one hit for now;
+ *                        several would be RT held + X / Y / A / B)
+ *   LB + RB + LT + RT    EMERGENCY STOP: everything stops (ALL OFF), armed
+ *                        or not; the arm drops and the pad shows red
+ *   (the bumpers are the mode only: the arm, and the stop's four)
  *   RS           say the list and what is on standby
- *   LB + RB      fire the hit that is armed now (the Hits page, below)
- *   Menu         walk the show (below)
+ *   Menu         walk the show (below); not while armed
  *   hold View + Menu 1 s   switch the role (Tools / Run), either way
+ *
+ * The rules (the operator's, 2026-11-14; every later change keeps them):
+ *   1. The pad never picks the list: the screen does (the Run tab).
+ *   2. One state, one source: state(), stateColour() and roleText() are
+ *      what the Run tab's border and button, the footer and the pad's own
+ *      light all show; nothing derives its own.
+ *   3. No single control arms or disarms. The arm changes on the LB + RB
+ *      chord only -- or with no button at all: the role switched, a tool
+ *      took the pad, the pad went away, the emergency stop.
+ *   4. No cue moves on one control: armed, and the safety (LT) held, and
+ *      the button -- one safety for GO, Back, Sub GO and Sub Back. The
+ *      hit is the right trigger's own, armed.
+ *   5. The pad's light says the state where it has one: the arm's colour
+ *      armed, blinking green while a cue fades, red after the emergency
+ *      stop, its own colour otherwise. A pad with no light buzzes: twice
+ *      armed, once long disarmed, three long for the stop.
  *
  * Hits (Q154, show-tree.md "Hits"): every hit of the show whose place is
  * live now is armed; the narrowest place wins (cue, then list, production,
  * everywhere), as on a Virtual Console button holding them all
- * (ShowTreeController::armedTier()). LB + RB starts it (a one-shot effect
- * plays again if it has finished; while it runs, the press lets it go) and
- * says its name. Several at the narrowest place: each press takes the
- * next. Needs the arm, as GO does; Operate only, as a VC button.
+ * (ShowTreeController::armedTier()). Armed, RT starts
+ * it (a one-shot effect plays again if it has finished; while it runs, the
+ * press lets it go) and says its name. Several at the narrowest place:
+ * each press takes the next. Operate only, as a VC button.
  *
  * Walking the show (Q192, TODO.md "Walk the show from the stage"): Menu
  * starts Focus this cue (RefineSession) on the cue in hand, with its own
@@ -93,19 +115,18 @@ class Doc;
  * ControlMap::runTabList()), else the main cue list -- never picked from
  * the pad: sight unseen, a wrong list is too easy (0.4.5).
  *
- * decided: GO needs a modifier held (LB), not a double-press (can change).
- * decided: Back, Sub GO and Stop need it too: one rule, "nothing moves the
- * show unless LB is held" (can change).
- * decided: Stop also needs X held for stopHoldMs(): it sits beside GO, and
- * a slip onto it stopped the list (0.4.5).
+ * decided: the arm is a latch on a two-button chord, not a button held
+ * (0.4.5; it was LB held): a held arm let go by one finger disarmed.
+ * decided: there is no "stop the list" on the pad (it was LB + X held):
+ * the screen stops a list, the pad has the emergency stop.
  * decided: nothing on the pad leaves the Run role but the View + Menu hold.
  *
- * Triggers and swipes (Q199): on a DualSense the arm firms R2 (a GO takes a
- * squeeze, a brush cannot fire) and walking clicks both triggers
+ * Triggers and swipes (Q199): on a DualSense the arm firms both triggers (the
+ * safety and the hit take a squeeze, a brush does neither) and walking clicks them
  * (PadTriggers); on any pad with a touchpad a swipe steps -- left / right
  * the previous / next cue, up / down the previous / next layer (in Run, not
- * walking: right / left walk from the next / previous cue; up / down do
- * nothing). Never a GO: swipes preview and select only.
+ * walking and not armed: right / left walk from the next / previous cue;
+ * up / down do nothing). Never a GO: swipes preview and select only.
  *
  * decided: while walking, one finger on the touchpad swipes; the aim nudge
  * it used to make needs LB held (can change).
@@ -131,14 +152,16 @@ public:
     enum Action
     {
         NoAction = 0,
-        Arm,                ///< LB held
-        Go,                 ///< A
-        Back,               ///< B
-        SubGo,              ///< Y
-        Stop,               ///< X, held stopHoldMs()
+        Arm,                ///< LB and RB, held armChordMs(): arm / disarm
+        Safety,             ///< LT: held for the four cue commands
+        Go,                 ///< A, armed, LT held
+        Back,               ///< B, armed, LT held
+        SubGo,              ///< X, armed, LT held
+        SubBack,            ///< Y, armed, LT held
+        FireHit,            ///< RT, armed
         WhereAmI,           ///< RS
-        Walk,               ///< Menu: walk the show
-        FireHit             ///< RB: fire the armed hit
+        Walk,               ///< Menu: walk the show (not armed)
+        EmergencyStop       ///< LB + RB + LT + RT: no one control's
     };
     Q_ENUM(Action)
 
@@ -160,13 +183,20 @@ public:
     static Action actionFor(GamepadRole::Role role);
     /** The role that does @p action (None for NoAction). */
     static GamepadRole::Role roleFor(Action action);
-    /** True for the actions that only work with the arm held. */
+    /** True for the actions that only work armed. */
     static bool needsArm(Action action);
+    /** True for the cue commands, which also need the safety (LT) held. */
+    static bool needsSafety(Action action);
+    /** The safety: the one control held beside every command's own. */
+    static GamepadRole::Role safetyRole() { return GamepadRole::LeftTrigger; }
     /** What @p action is called on the map and in the help, with control
      *  tokens ("GO ({LB} held)"); expand with PadNames::expand(). */
     static QString label(Action action);
-    /** Every action, in map order. */
+    /** Every action that has a control of its own, in map order (not the
+     *  emergency stop: four controls, emergencyStopLabel()). */
     static QList<Action> actions();
+    /** "Emergency stop: {LB} + {RB} + {LT} + {RT}", with control tokens. */
+    static QString emergencyStopLabel();
     /** The whole map, one line a control, in @p family's names: "LB: Hold
      *  to arm...", "A: GO (LB held)" -- or "L1", "Cross" on a PlayStation
      *  pad. For tooltips, the controller test and the help. */
@@ -188,18 +218,23 @@ public:
      *  (half the range a second). */
     static constexpr float levelRate() { return 127.5f; }
 
-    /** How long X is held, with the arm, to stop the list, ms. */
-    static constexpr int stopHoldMs() { return 1000; }
-    /** The time the hold takes (tests shorten it). */
-    void setStopHoldMs(int ms);
-    /** X is held for a Stop that has not gone yet. */
-    bool isStopPending() const;
+    /** How long LB + RB are held to arm, or to disarm, ms. */
+    static constexpr int armChordMs() { return 500; }
+    /** The time the chord takes (tests shorten it). */
+    void setArmChordMs(int ms);
+    /** LB + RB are held for an arm change that has not gone yet. */
+    bool isArmChordPending() const;
 
-    /** The light bar while armed, and its flash when a GO went. Colour-blind
-     *  safe with each other: orange and blue. */
+    /** The colours of the state, on the screen and on the pad's light:
+     *  the arm, the emergency stop, and the blink while a cue fades. The
+     *  blink carries "playing" by its motion, not by green alone. */
     static QColor armedColour() { return ControllerScheme::othersUnsavedColour(); }
-    static QColor wentColour() { return ControllerScheme::savedColour(); }
+    static QColor stoppedColour() { return QColor(0xD3, 0x2F, 0x2F); }
+    static QColor playingColour() { return QColor(0x2E, 0xB8, 0x4E); }
+    /** A GO shows as playing at least this long, however short its fade. */
     static constexpr int wentFlashMs() { return 400; }
+    /** Half the blink's period while a cue fades, ms. */
+    static constexpr int blinkMs() { return 250; }
 
     /*********************************************************************
      * The role
@@ -216,8 +251,36 @@ public:
      *  trigger is the Run map's, used or not, so nothing else fires. */
     bool handle(quint32 universe, GamepadRole::Role role, uchar value);
 
-    /** The arm is held (on any pad). */
-    bool isArmed() const { return !m_armedOn.isEmpty(); }
+    /** Armed: latched by the LB + RB chord until the chord again (or the
+     *  role, a tool, the pad going away, the emergency stop). */
+    bool isArmed() const { return m_armed; }
+    /** The pad that armed, whose presses count (UINT_MAX: not armed). */
+    quint32 armedUniverse() const { return m_armed ? m_armUniverse : UINT_MAX; }
+    /** Arm or disarm as the chord on @p universe would (the chord's own
+     *  end, and for tests); refused while a tool has the pad or walking. */
+    bool setArmed(bool on, quint32 universe = 0);
+
+    /** The one state every surface shows (rule 2). */
+    enum State
+    {
+        Tools = 0,      ///< the role is off
+        Run,            ///< the role is on, not armed
+        Armed,
+        Stopped,        ///< the emergency stop went; until armed again
+        Walking,
+        ToolHasPad      ///< a tool started on the laptop holds the pad
+    };
+    Q_ENUM(State)
+    State state() const;
+    /** The colour of state() for a border, a chip and the pad's light:
+     *  armedColour(), stoppedColour(), or invalid (nothing to show). */
+    QColor stateColour() const;
+    /** Black or white, whichever reads on stateColour(). */
+    QColor stateInk() const;
+    /** A cue of the list is fading now (or a GO just went). */
+    bool isPlaying() const { return m_playing; }
+    /** What the pad's light shows now (invalid: its own colour). */
+    QColor lightColour() const;
 
     /** The tool that has the pad now, so the Run map hears nothing ("The
      *  tools win"): "Quick focus", "Venue focus", "Focus this cue" or
@@ -229,17 +292,21 @@ public:
      *  nothing to play"; empty after noticeMs(). */
     QString notice() const { return m_notice; }
     static constexpr int noticeMs() { return 3000; }
-    /** The button's and the footer's words: "Pad: Tools", "Pad: Run",
-     *  "Pad: ARMED", "Pad: Walk", or the tool holding it ("Pad: Venue
-     *  focus"). */
+    /** state() in words, for the button and the footer: "Pad: Tools",
+     *  "Pad: Run", "Pad: ARMED", "Pad: STOPPED", "Pad: Walk", or the tool
+     *  holding it ("Pad: Venue focus"). */
     QString roleText() const;
     /** The tooltip for the Run tab's Pad: button and the footer's Pad chip,
      *  one text for both: the role line, the tool holding the pad (and how
      *  it ends), then the button map as a table in the connected pad's
      *  names (Cross / L1 or A / LB), and the walking map. Rich text. */
     QString helpHtml() const;
-    /** Let go of everything held (the pad went away, a tool took it). */
+    /** Let go of everything held and disarm (the pad went away, a tool
+     *  took it, the role changed): never a button's doing. */
     void reset();
+    /** The controller went away: reset(), and the screen says why the arm
+     *  dropped. */
+    void controllerLost();
 
     /*********************************************************************
      * Triggers and swipes (Q199)
@@ -264,7 +331,8 @@ public:
      * Commands
      *********************************************************************/
 public:
-    /** Carry out @p action as its press would, the arm already checked:
+    /** Carry out @p action as its press would, the arm and the safety
+     *  already checked:
      *  the commands through ShowControl::run(r, RoutePad). True when it
      *  did something. */
     bool trigger(Action action);
@@ -274,6 +342,9 @@ public:
     /** The hits that may fire now at the narrowest armed place (more than
      *  one: they share a place and the presses step through them). */
     QList<quint32> armedHits() const;
+    /** Everything stops (ALL OFF through run()), the arm drops, the state
+     *  is Stopped. */
+    void emergencyStop();
     /** Fire the armed hit: start it, or let it go when it runs (a finished
      *  one-shot plays again). Says its name; false, said, when none is
      *  armed or the show is in Design. */
@@ -351,11 +422,14 @@ public:
     void setRoleChordMs(int ms);
 
 signals:
+    /** state(), stateColour() or roleText() changed: the one signal the
+     *  screens follow (rule 2). */
+    void stateChanged();
     void enabledChanged(bool on);
     void armedChanged(bool armed);
     /** A command went to run() (@p done: it did something). */
     void commandSent(ShowControl::Command command, bool done);
-    /** A press that needs the arm came without it. */
+    /** A press that needs the arm or the safety came without it. */
     void refused(PadRun::Action action);
     /** A hit was started (@p on) or let go by the pad. */
     void hitFired(quint32 hitId, bool on);
@@ -382,25 +456,58 @@ private:
     void roleChordFired();
     /** Say @p text on the screen (notice()) for noticeMs(). */
     void showNotice(const QString &text);
-    /** X held long enough with the arm: the Stop goes. */
-    void stopHoldFired();
+    /** LB + RB held long enough: the arm changes. */
+    void armChordFired();
+    /** Start or stop timing the chord from what @p universe holds now. */
+    void armChordUpdate(quint32 universe);
+    /** reset() without telling the screens (the caller does). */
+    void clear();
+    /** Tell a press what it lacks, aloud and on the screen. */
+    void refuse(Action action, const QString &text);
+    /** The state may have changed: the light, the triggers, stateChanged(). */
+    void sync();
+    /** The blink's tick while armed: is a cue fading? */
+    void lightTick();
+    /** A tool took the pad or let it go. */
+    void toolChanged();
+    /** Follow ShowControl's commands (once it is there): Stopped ends. */
+    void hookShowControl();
 
 private:
     Doc *m_doc;
     ProgrammerController *m_pc;
     bool m_enabled = false;
-    /** The universes whose arm (LB) is held: arming is per pad. */
-    QSet<quint32> m_armedOn;
-    /** X held for a Stop, and the pad it is held on. */
-    QTimer *m_stopHold = nullptr;
-    quint32 m_stopUniverse = UINT_MAX;
+    /** What a pad holds now, of the four controls the chords are made of. */
+    struct Held
+    {
+        bool lb = false;
+        bool rb = false;
+        ControllerScheme::TriggerButton lt, rt;
+        bool stopFired = false;     ///< the four made a stop: not again until one is up
+        bool anyTrigger() const { return lt.isDown() || rt.isDown(); }
+        bool all() const { return lb && rb && lt.isDown() && rt.isDown(); }
+    };
+    QHash<quint32, Held> m_held;
+    bool m_armed = false;
+    quint32 m_armUniverse = UINT_MAX;
+    bool m_stopped = false;
+    bool m_stopping = false;    ///< the stop's own ALL OFF is going through run()
+    bool m_showControlHooked = false;
+    QTimer *m_armChord = nullptr;
+    quint32 m_chordUniverse = UINT_MAX;
+    /** What the screens were last told, so stateChanged() goes once. */
+    int m_shownState = int(Tools);
+    /** The blink: a cue fading (or the GO's flash), and its phase. */
+    QTimer *m_blink = nullptr;
+    bool m_playing = false;
+    bool m_blinkOn = false;
     /** The next hit a press takes among several at the narrowest place. */
     int m_hitStep = 0;
     QTimer *m_chord = nullptr;
     bool m_chordPending = false;    ///< both down, still timing
     bool m_chordFired = false;      ///< switched: the releases do nothing
     TouchSwipe m_swipe;
-    /** The light bar's flash after a GO. */
+    /** A GO just went: playing, whatever its fade. */
     QTimer *m_flash = nullptr;
     QTimer *m_noticeTimer = nullptr;
     QString m_notice;

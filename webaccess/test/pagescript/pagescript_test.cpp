@@ -202,6 +202,14 @@ void PageScript_Test::pad(const QJsonObject &down, int ms, const QJsonArray &axe
            .arg(ms));
 }
 
+void PageScript_Test::armPad()
+{
+    // LB + RB held past the chord's time, then let go: armed, or disarmed.
+    const int ms = WebAccessRun::padMap().value(QStringLiteral("lb")).toObject().value(QStringLiteral("hold")).toInt();
+    pad(QJsonObject{ { "lb", 1 }, { "rb", 1 } }, ms + 200);
+    pad(QJsonObject(), 50);
+}
+
 /*****************************************************************************
  * Both pages
  *****************************************************************************/
@@ -324,10 +332,15 @@ void PageScript_Test::nothingIsSentWhileRemoteGoIsOff()
     QVERIFY(!shown(QStringLiteral("rigrow")));
     QVERIFY(text(QStringLiteral("msg")).contains(QStringLiteral("off in Show Settings")));
     // Not by the pad either.
-    pad(QJsonObject{ { "lb", 1 } });
-    pad(QJsonObject{ { "lb", 1 }, { "a", 1 } });
-    pad(QJsonObject{ { "lb", 1 }, { "ls", 1 } });
+    armPad();
+    QVERIFY(shown(QStringLiteral("armed")));
+    pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "a", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "ls", 1 } });
     pad(QJsonObject());
+    pad(QJsonObject{ { "rt", 1 } });
+    pad(QJsonObject());
+    armPad();
     QCOMPARE(sent(), QStringList());
 
     // Turned on: the message goes, the buttons work.
@@ -369,7 +382,7 @@ void PageScript_Test::thePinIsAskedAndKeptForTheSession()
     QVERIFY(text(QStringLiteral("pinerr")).contains(QStringLiteral("Too many tries")));
 }
 
-void PageScript_Test::everyPadWordNeedsLBHeld()
+void PageScript_Test::everyPadWordNeedsTheArmAndItsTrigger()
 {
     loadPage(WebAccessRun::html());
     js(QStringLiteral("__open()"));
@@ -378,45 +391,93 @@ void PageScript_Test::everyPadWordNeedsLBHeld()
 
     // The map is the console's (WebAccessRun::padMap()): every word in it.
     const QJsonObject map = WebAccessRun::padMap();
-    for (const char *k : { "a", "b", "x", "y", "rb", "back", "dpad_left", "dpad_right", "ls" })
+    for (const char *k : { "a", "b", "x", "y", "lb", "rb", "lt", "rt", "estop", "back", "dpad_left",
+                           "dpad_right", "ls" })
         QVERIFY2(map.contains(QLatin1String(k)), k);
+    const int armMs = map.value(QStringLiteral("lb")).toObject().value(QStringLiteral("hold")).toInt();
+    QVERIFY(armMs > 0);
+    const QJsonObject both{ { "lb", 1 }, { "rb", 1 } };
+
+    // The arm is a latch on LB + RB held: one bumper, or a brush of both, is nothing.
+    pad(QJsonObject{ { "lb", 1 } }, armMs + 200);
+    pad(QJsonObject(), armMs + 200);
+    QVERIFY(!shown(QStringLiteral("armed")));
+    pad(both, armMs / 4);
+    pad(QJsonObject(), armMs + 200);
+    QVERIFY(!shown(QStringLiteral("armed")));
+    // Both with a trigger held: nothing.
+    pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "lb", 1 }, { "rb", 1 } }, armMs + 200);
+    pad(QJsonObject(), 50);
+    QVERIFY(!shown(QStringLiteral("armed")));
+    QVERIFY(sent().isEmpty());
+    auto arm = [&](bool on) {
+        pad(both, armMs + 200);
+        pad(QJsonObject(), 50);
+        QCOMPARE(shown(QStringLiteral("armed")), on);
+    };
+
     int checked = 0;
     for (auto it = map.begin(); it != map.end(); ++it)
     {
         const QJsonObject a = it.value().toObject();
-        if (a.value(QStringLiteral("do")).toString() == QLatin1String("arm"))
+        const QString what = a.value(QStringLiteral("do")).toString();
+        if (what == QLatin1String("arm") || what == QLatin1String("hold") || what == QLatin1String("alloff"))
             continue;
         const QString word = QStringLiteral("QLC+RUN|")
-            + (a.contains(QStringLiteral("cmd")) ? a.value(QStringLiteral("cmd")).toString()
-                                                : a.value(QStringLiteral("do")).toString());
-        // Alone: nothing.
-        pad(QJsonObject{ { it.key(), 1 } });
-        pad(QJsonObject());
+            + (a.contains(QStringLiteral("cmd")) ? a.value(QStringLiteral("cmd")).toString() : what);
+        // The safety (LT) for every word but the hit, which is RT's own.
+        const QString guard = a.value(QStringLiteral("guard")).toString();
+        QCOMPARE(guard, it.key() == QLatin1String("rt") ? QString() : QStringLiteral("lt"));
+        auto fire = [&](const QString &held) {
+            QJsonObject base;
+            if (!held.isEmpty())
+                base.insert(held, 1);
+            QJsonObject both = base;
+            both.insert(it.key(), 1);
+            pad(base);
+            pad(both);
+            pad(base);
+            pad(QJsonObject());
+        };
+        // Not armed, even with the safety: nothing.
+        fire(guard);
         QVERIFY2(sent().isEmpty(), qPrintable(it.key()));
-        // With LB held: the word, once.
-        pad(QJsonObject{ { "lb", 1 } });
-        QVERIFY(shown(QStringLiteral("armed")));
-        const int hold = a.value(QStringLiteral("hold")).toInt();
-        if (hold > 0)
+        arm(true);
+        if (!guard.isEmpty())
         {
-            // Stop beside GO: a tap with LB held is nothing; it takes the hold.
-            pad(QJsonObject{ { "lb", 1 }, { it.key(), 1 } }, 200);
-            pad(QJsonObject{ { "lb", 1 } }, hold);
+            // Armed, alone: nothing. RT is no safety (it is the hit): not this word.
+            fire(QString());
             QVERIFY2(sent().isEmpty(), qPrintable(it.key()));
-            // LB let go during the hold: nothing either.
-            pad(QJsonObject{ { "lb", 1 }, { it.key(), 1 } }, 200);
-            pad(QJsonObject{ { it.key(), 1 } }, hold);
-            QVERIFY2(sent().isEmpty(), qPrintable(it.key()));
-            pad(QJsonObject{ { "lb", 1 } });
+            fire(QStringLiteral("rt"));
+            QVERIFY2(!sent().contains(word), qPrintable(it.key()));
         }
-        pad(QJsonObject{ { "lb", 1 }, { it.key(), 1 } }, hold + 200);
-        pad(QJsonObject());
-        QVERIFY(!shown(QStringLiteral("armed")));
+        // Armed, with the safety held (the hit: on its own): the word, once
+        // -- and still armed after.
+        fire(guard);
         QCOMPARE(sent(), QStringList{ word });
+        QVERIFY(shown(QStringLiteral("armed")));
+        arm(false);
         ++checked;
     }
-    QCOMPARE(checked, map.count() - 1);
-    QVERIFY(js(QStringLiteral("__vibrations.length")).toInt() >= 1);     // LB + A buzzes
+    QCOMPARE(checked, map.count() - 4);      // not the two bumpers, the safety, the stop
+    QVERIFY(js(QStringLiteral("__vibrations.length")).toInt() >= 1);     // the arm and a GO buzz
+
+    // The four together: ALL OFF, once, armed or not; the arm drops and the page says so.
+    arm(true);
+    pad(QJsonObject{ { "lb", 1 }, { "rb", 1 }, { "lt", 1 } });
+    QVERIFY(sent().isEmpty());
+    pad(QJsonObject{ { "lb", 1 }, { "rb", 1 }, { "lt", 1 }, { "rt", 1 } }, armMs + 200);
+    QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|alloff") });
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("EMERGENCY STOP"));
+    pad(QJsonObject(), 50);
+    pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "a", 1 } });
+    pad(QJsonObject());
+    QVERIFY(sent().isEmpty());              // stopped is not armed
+    arm(true);
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("ARMED: LT + A IS GO"));
+    arm(false);
 
     // The labels in the controller test are the console's.
     pad(QJsonObject{ { "start", 1 } });
@@ -449,8 +510,9 @@ void PageScript_Test::theControllerTestSendsNothing()
     pad(QJsonObject{ { "start", 1 } });
     pad(QJsonObject());
     QCOMPARE(js(QStringLiteral("document.getElementById('qpadtest').className")).toString(), QString());
-    pad(QJsonObject{ { "lb", 1 } });
-    pad(QJsonObject{ { "lb", 1 }, { "a", 1 } });
+    armPad();
+    pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "a", 1 } });
     pad(QJsonObject());
     QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|go") });
 }
@@ -560,11 +622,12 @@ void PageScript_Test::blindAndSoloButtonsSendTheirWords()
     QVERIFY(click(QStringLiteral("soloprev")));
     QCOMPARE(sent(), (QStringList{ QStringLiteral("QLC+RUN|blind|toggle"), QStringLiteral("QLC+RUN|solo|toggle"),
                                    QStringLiteral("QLC+RUN|solo|next"), QStringLiteral("QLC+RUN|solo|prev") }));
-    // The D-pad walks the layers (with LB), as the buttons do.
-    pad(QJsonObject{ { "lb", 1 } });
-    pad(QJsonObject{ { "lb", 1 }, { "dpad_right", 1 } });
-    pad(QJsonObject{ { "lb", 1 } });
-    pad(QJsonObject{ { "lb", 1 }, { "dpad_right", 1 } });
+    // The D-pad walks the layers (armed, LT held), as the buttons do.
+    armPad();
+    pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "dpad_right", 1 } });
+    pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "dpad_right", 1 } });
     pad(QJsonObject());
     QCOMPARE(sent(), (QStringList{ QStringLiteral("QLC+RUN|solo|next"), QStringLiteral("QLC+RUN|solo|next") }));
 }
@@ -609,8 +672,9 @@ void PageScript_Test::theConsolesOwnStateDrawsOnThePage()
         doc->inputOutputMap()->setOutputInhibited(false);
 
         // The pad map in the state is the one the page acts on.
-        pad(QJsonObject{ { "lb", 1 } });
-        pad(QJsonObject{ { "lb", 1 }, { "ls", 1 } });
+        armPad();
+        pad(QJsonObject{ { "lt", 1 } });
+        pad(QJsonObject{ { "lt", 1 }, { "ls", 1 } });
         pad(QJsonObject());
         QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|blind|toggle") });
     }

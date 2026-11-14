@@ -8778,12 +8778,10 @@ void App::initStatusBar()
             // Where its operator stands: "from SL tower".
             connect(m_doc->programmer(), &ProgrammerController::followSpotOperatorChanged,
                     this, &App::updateFollowChip);
-            // The pad's role, armed and walking: the footer's Pad chip.
+            /* The footer's Pad chip: PadRun's one state (stateChanged()),
+               as the Run tab's button and border, and the pad's light. */
             PadRun *run = m_doc->programmer()->padRun();
-            connect(run, &PadRun::enabledChanged, this, &App::updatePadRoleChip);
-            connect(run, &PadRun::armedChanged, this, &App::updatePadRoleChip);
-            connect(run, &PadRun::walkingChanged, this, &App::updatePadRoleChip);
-            connect(run, &PadRun::holderChanged, this, &App::updatePadRoleChip);
+            connect(run, &PadRun::stateChanged, this, &App::updatePadRoleChip);
             connect(run, &PadRun::noticeChanged, this, &App::updatePadRoleChip);
             connect(m_doc->programmer(), &ProgrammerController::focusControllerChanged,
                     this, &App::updatePadRoleChip);
@@ -9955,7 +9953,7 @@ void App::updatePadRoleChip()
         return;
     ProgrammerController *pc = m_doc->programmer();
     const PadRun *run = pc->padRun();
-    if (!run->isEnabled())
+    if (run->state() == PadRun::Tools)
     {
         m_statusPadRoleLabel->hide();
         if (m_statusFitTimer != nullptr)
@@ -9974,9 +9972,11 @@ void App::updatePadRoleChip()
     if (!notice.isEmpty())
         text += QStringLiteral(" · ") + notice;
     m_statusPadRoleLabel->setText(text);
-    m_statusPadRoleLabel->setStyleSheet(run->isArmed()
-        ? QStringLiteral("QLabel { color: black; background: %1; font-weight: bold; padding: 0 4px; }")
-              .arg(PadRun::armedColour().name())
+    // Armed and stopped: the state's own colour, as on the Run tab and the pad.
+    const QColor state = run->stateColour();
+    m_statusPadRoleLabel->setStyleSheet(state.isValid()
+        ? QStringLiteral("QLabel { color: %1; background: %2; font-weight: bold; padding: 0 4px; }")
+              .arg(run->stateInk().name(), state.name())
         : QStringLiteral("QLabel { font-weight: bold; padding: 0 4px; }"));
     m_statusPadRoleLabel->setToolTip(run->helpHtml());
     m_statusPadRoleLabel->show();

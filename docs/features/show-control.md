@@ -58,39 +58,69 @@ the show from it. The controller has two **roles**:
 Switch with the **Pad:** button in the **Run** tab's header (**Pad: Tools**
 / **Pad: Run**). The choice belongs to this computer and is kept for next
 time. Its tooltip shows the button map in the words of the pad you're
-holding; the footer's **Pad** chip shows the same map as a table when you hover it (it also names a press the pad refused and how to leave Walk), the whole Run tab is framed in orange while the arm is held, and **Settings → Advanced → Game controllers → Controller Test…** lists what each
-button does in the Run role (**Run: GO (LB held)**).
+holding; the footer's **Pad** chip shows the same map as a table when you hover it (it also names a press the pad refused and how to leave Walk), and **Settings → Advanced → Game controllers → Controller Test…** lists what each
+button does in the Run role (**Run: GO (armed, LT held)**).
 
-While the role is Run the footer says so too, from every tab: **Pad:
-Run**, **Pad: ARMED** (orange) or **Pad: Walk**, beside the follow spot's
-◎ Follow chip when one plays.
+**One state, shown the same everywhere.** The Run tab's **Pad:** button,
+the frame round the Run tab, the footer's **Pad** chip (from every tab) and
+the pad's own light all show the same state, from one place in the app:
 
-**Nothing moves the show unless LB (L1) is held.** Holding it arms the
-pad: the light bar turns orange and the Run tab's button says **Pad:
-ARMED**. While it's held:
-
-| Control | Xbox | PlayStation | Does |
+| State | Button and footer | Colour | Pad light |
 |---|---|---|---|
-| hold | LB | L1 | arm |
-| + | A | Cross | **GO** |
-| + | B | Circle | **Back** |
-| + | Y | Triangle | **Sub GO** |
-| + hold 1 s | X | Square | **Stop** the list (a tap only says "Hold X to stop the list.") |
-| — | RT / LT | R2 / L2 | nothing |
-| — | RS click | R3 | say the list and what's on standby |
-| + | RB | R1 | fire the **armed hit** (below) |
-| hold 1 s | View + Menu | Create + Options | switch the role: Tools / Run |
+| Run, not armed | **Pad: Run** | none | the pad's own |
+| Armed | **Pad: ARMED** | orange | orange; blinks green while a cue fades |
+| After the emergency stop | **Pad: STOPPED** | red | red |
+| Walking | **Pad: Walk** | none | the walk's |
+| A tool has the pad | **Pad: Venue Focus**, … | none | the tool's |
 
-- **GO is confirmed on the pad.** A GO flashes the light bar blue and gives
-  a short buzz. A long buzz means there was nothing to play, and the
-  laptop says so if the voice is on.
-- **An unarmed press does nothing.** The voice says "Hold LB to arm.",
-  and the footer's Pad chip shows it for a few seconds, also with
-  feedback set to lights only.
-- **Stop takes a hold.** X sits next to A, so a slip must not stop the
-  list: hold LB, then hold X for a second. A tap of X does nothing but
-  say "Hold X to stop the list." (on the footer's Pad chip too). Let go
-  of LB during the hold and nothing stops.
+**The rules.** They hold for every control, and anything added later keeps
+them:
+
+1. **The pad never picks the list.** The screen does (the Run tab).
+2. **The bumpers are the mode, and only that.** Hold **LB + RB** (L1 + R1)
+   for half a second to arm. Let go: it stays armed. Hold them again to
+   disarm. No single button, held or pressed, arms or disarms.
+3. **The left trigger is the safety.** No cue moves without it: armed, hold
+   **LT** (L2) and press the button.
+4. **The right trigger is the hit.** Armed, pull **RT** (R2).
+5. **The emergency stop is all four:** LB + RB + LT + RT.
+
+| Does | Xbox | PlayStation |
+|---|---|---|
+| **Arm**, and disarm | hold LB + RB | hold L1 + R1 |
+| **GO** | armed, hold LT + A | armed, hold L2 + Cross |
+| **Back** | armed, hold LT + B | armed, hold L2 + Circle |
+| **Sub GO** | armed, hold LT + X | armed, hold L2 + Square |
+| **Sub Back** | armed, hold LT + Y | armed, hold L2 + Triangle |
+| Fire the **armed hit** (below) | armed, pull RT | armed, pull R2 |
+| **Emergency stop**: everything off | LB + RB + LT + RT | L1 + R1 + L2 + R2 |
+| Say the list and what's on standby | RS click | R3 |
+| Walk the show (below), not while armed | Menu | Options |
+| Switch the role: Tools / Run | hold View + Menu 1 s | hold Create + Options 1 s |
+
+- **Armed stays armed.** The arm drops only on the LB + RB hold, or with
+  no button at all: the role is switched, a tool started on the laptop
+  takes the pad, the controller disconnects, or the emergency stop goes.
+  Each of those says so on the footer's Pad chip ("Disarmed: the
+  controller went away.").
+- **One safety for every cue command.** LT with A, B, X or Y. The button
+  alone, the safety only brushed, or the right trigger in its place does
+  nothing, and the Pad chip says what it needs ("GO is LT held and A.").
+- **The emergency stop** stops everything that plays (the same as ALL
+  OFF), armed or not. The arm drops, and the button, the frame, the chip
+  and the pad's light turn red (**Pad: STOPPED**) until you arm again or
+  run the show from the laptop. There is no "stop the list" on the pad:
+  stop a list on the Run tab.
+- **A pad with no light buzzes instead.** Two short buzzes: armed. One
+  long: disarmed. Three long: the emergency stop. An Xbox pad's light
+  cannot be set, so on it read the buzz and the screen.
+- **GO is confirmed on the pad.** A GO gives a short buzz and turns the
+  light green; it blinks green and orange for as long as the cue fades,
+  then goes back to steady orange. A long buzz means there was nothing to
+  play, and the laptop says so if the voice is on.
+- **An unarmed press does nothing.** The voice says "Not armed: hold LB
+  and RB.", and the footer's Pad chip shows it for a few seconds, also
+  with feedback set to lights only.
 - **The list is the Run tab's.** The pad's GO plays the list the Run tab
   plays: the current production's main list, or the one picked in the
   list box in the Run tab's header, beside the list's name (**Current
@@ -100,13 +130,18 @@ ARMED**. While it's held:
   it is.
 - **Nothing on the pad leaves Run** but holding View + Menu for a second
   (below). Menu walks the show and Menu again comes back, still in Run.
+  While armed, Menu does nothing ("Armed. To walk, disarm first: hold LB
+  and RB."): armed, the pad is the cue map and nothing else.
+- **Two pads.** The pad that armed is the one whose presses count; another
+  pad's GO is refused ("Another controller is armed.") and it cannot
+  disarm the first.
 - **The same buttons on every pad.** The map goes by button, not by
   channel, so a [controller slot](other-improvements.md#one-input-whichever-controller-is-here) that finds a
   DualSense in place of the Xbox pad keeps it.
 - **One path.** A pad GO is the same GO as ⌘↩ and the Run tab's button:
   the previews hold for it, and in Design it offers Operate.
 - **The tools win.** A Focus mode or Focus this cue started on the laptop
-  takes the controller until it ends. The Run tab's button and the footer
+  takes the controller until it ends, and the arm drops with it. The Run tab's button and the footer
   name it meanwhile (**Pad: Venue Focus**, **Pad: Focus This Cue**). In the Run role, View + Menu doesn't
   start Focus mode, and Menu alone walks the show (below). A focus-call
   cue's Start (Menu) still begins its calls.
@@ -116,7 +151,7 @@ ARMED**. While it's held:
 
 ### Fire a hit from the pad
 
-With the arm held, **RB (R1)** fires the hit that is armed right now. A
+Armed, a pull of **RT (R2)** fires the hit that is armed right now. A
 [scoped hit](show-tree.md) is armed while its place is live: under a cue
 that is running, in a cue list, in the current production or everywhere.
 Where several are armed the **narrowest** wins, exactly as on a Virtual
@@ -126,8 +161,11 @@ Use it to call a one-shot, say a breathe, off a hit in a cue.
 - The voice says its name ("Breathe."). Press again and it lets go
   ("Breathe off."); a one-shot that has finished plays again.
 - Two or more hits at the narrowest place take turns, one a press.
-- With no hit armed the pad says "No hit armed." and buzzes long. Without
-  LB held it says "Hold LB to arm", as for GO.
+- With no hit armed the pad says "No hit armed." and buzzes long. Not
+  armed, it says "Not armed: hold LB and RB.", as for GO. One pull is one
+  press, however long it is held; a pull with a bumper down does nothing
+  (that is the emergency stop in the making).
+- One hit for now. Several on the pad would be RT held with X, Y, A or B.
 - Hits fire in **Operate** only, as a button does. It is not a run command:
   it starts the hit's look the way a VC button's press does.
 
@@ -136,18 +174,20 @@ Use it to call a one-shot, say a breathe, off a hit in a cue.
 Two things a PlayStation DualSense adds to the Run role. Neither is needed:
 everything has a button, and an Xbox pad simply has no triggers to feel.
 
-- **Adaptive triggers.** In the Run role the triggers do nothing, so they
-  stay loose, armed or not. While walking, both
+- **Adaptive triggers.** While armed both triggers are firm: L2 is the
+  safety and R2 fires the hit, so each takes a squeeze and a brush does
+  neither. While walking, both
   triggers give a light click at the end of each pull, one click a cue
   stepped. The triggers go back to off when you disarm, leave the walk or
   the Run role, lose the pad, or quit.
 - **Touchpad swipes.** One finger across the touchpad steps. One swipe is
   one step, and a swipe never fires a GO: it previews and selects.
   While walking: swipe **right / left** for the next / previous cue and
-  **down / up** for the next / previous layer. In the Run map, not walking:
+  **down / up** for the next / previous layer. In the Run map, not walking
+  and not armed:
   down / up do nothing (the list is the Run tab's), and right / left start
   a walk from the next / previous cue (Design only; in Operate the cue
-  moves with GO). A second finger, a click, a slanted drag and a swipe too soon after
+  moves with GO). Armed, a swipe does nothing. A second finger, a click, a slanted drag and a swipe too soon after
   the last do nothing.
 
 While walking, one finger now swipes, so aiming with the touchpad needs LB
@@ -159,22 +199,18 @@ decided (can change): swipes need no arm: they preview and walk, never GO.
 
 Hold **View + Menu** (Create + Options) for a second and the controller
 changes role: Tools to Run, or Run to Tools. The voice says which
-("Run role. Hold LB and press A to GO." / "Tools role.") and the Run tab's
+("Run role. Hold LB and RB to arm." / "Tools role.") and the Run tab's
 **Pad:** button follows. Neither button does anything alone, and any third
 button pressed during the hold cancels it, so a knocked pad cannot take the
 show. In Tools, View + Menu released before the second is still Focus mode,
 now on its release. Not while a tool (Focus mode, Focus this cue) has the
 pad: end it first.
 
-decided (can change): RB with LB is the hit gesture, so the Run map still
-has a free D-pad and LS; a hold of 1 s is the role chord.
-
-decided (can change): GO needs a modifier held (LB), not a double-press;
-Back, Sub GO and Stop need it too, so there is one rule. Stop also needs
-X held for a second, because it sits beside GO.
-
-decided (can change): the pad never picks the cue list; the Run tab's
-list box does, and the show keeps it.
+decided (2026-11-14, the operator's rules): the bumpers are the mode only
+(the arm a latch on the two of them, never a button held); the left
+trigger is the one safety for GO, Back, Sub GO and Sub Back; the right
+trigger is the armed hit; the pad has an emergency stop and no "stop the
+list"; the pad never picks the list. A hold of 1 s is the role chord.
 
 ### Walk the show from the stage
 
@@ -253,7 +289,7 @@ View + B (or undo on the laptop) puts the light back.
 - **In Operate** the walk follows the quiet Refine rules. Only the
   running cue can be walked, GO moves it, nothing blinks or dims, and solo
   is refused.
-- **No GO while walking.** Menu first, then hold LB and press A.
+- **No GO while walking**, and no arm. Menu first, then arm (hold LB + RB) and hold LT + A.
 - A focus-call cue that is armed still takes Menu to begin its calls.
   When the laptop then asks "Still at *venue*?", **hold A** for a second
   to say yes, same room. A tap does nothing; another room is answered on
@@ -287,35 +323,44 @@ button to **Pad: Run**. Connect one pad at a time, and check that
 
 **For each pad**, in this order (Xbox name first, PlayStation second):
 
-1. Press **A** (Cross) without LB. *Expected:* nothing plays; the
-   footer's Pad chip reads **Pad: Run · Hold LB to arm.** (L1 on a
-   PlayStation pad) for a few seconds, and the voice says it.
-2. Hold **LB** (L1). *Expected:* the Run tab's button and the footer's
-   Pad chip say **Pad: ARMED**; on a PlayStation pad the light bar turns
-   orange.
-3. Still holding LB, press **A** (Cross). *Expected:* the main list goes
-   to its first cue; a short buzz; on a PlayStation pad the light bar
-   flashes blue, then goes back to orange.
-4. Hold LB + **Y** (Triangle). *Expected:* Sub GO runs the cue's next
-   sub-cue; with none, a long buzz and the voice says there was nothing
-   to play.
-5. Hold LB + **A**, then LB + **B** (Circle). *Expected:* GO moves to the
+1. Press **A** (Cross), then hold **LT** (L2) and press A. *Expected:*
+   nothing plays either time; the footer's Pad chip reads **Pad: Run · Not
+   armed: hold LB and RB.** (L1 and R1 on a PlayStation pad) for a few
+   seconds, and the voice says it.
+2. Hold **LB** (L1) alone for two seconds, then **RB** (R1) alone.
+   *Expected:* nothing. Now hold **LB + RB** together for half a second.
+   *Expected:* two short buzzes; the Run tab's button and the footer's Pad
+   chip say **Pad: ARMED** in orange, the Run tab has an orange frame, and
+   on a PlayStation pad the light bar turns orange. Let go of both: all of
+   it stays.
+3. Press **A** alone. *Expected:* nothing plays; the Pad chip says **GO is
+   LT held and A.** Hold **LT** (L2) and press **A** (Cross). *Expected:*
+   the main list goes to its first cue; a short buzz; on a PlayStation pad
+   the light bar goes green, blinks green and orange while the cue fades,
+   then is steady orange.
+4. Hold LT + **A**, then LT + **B** (Circle). *Expected:* GO moves to the
    second cue, Back returns to the first; a short buzz each.
-6. Hold LB and tap **X** (Square). *Expected:* nothing stops; the
-   footer's Pad chip says **Hold X to stop the list.** (Square on a
-   PlayStation pad). Now hold LB and hold X for a second. *Expected:* the
-   list stops; a short buzz; no blue flash.
-7. Let go of LB. *Expected:* **Pad: Run** again; the light bar goes dark.
-8. GO the main list's first cue again (LB + A), then hold LB + **RB**
-   (R1). *Expected:* the hit under that cue plays and the voice says its
-   name. LB + RB again: it lets go ("… off.").
-9. Press **RT** and **LT** (R2, L2), with and without LB. *Expected:*
-   nothing happens; the Pad chip still says **Pad: Run** (or **ARMED**).
-   Press RS: the voice names the main list.
+5. Hold LT + **X** (Square). *Expected:* Sub GO runs the cue's next
+   sub-cue; with none, a long buzz and the voice says there was nothing
+   to play. LT + **Y** (Triangle): Sub Back.
+6. Armed, press every button once and hold each for two seconds, one at a
+   time: A, B, X, Y, LB, RB, LT, the D-pad, LS, RS, Menu, View, the Xbox
+   (PS) button. *Expected:* **Pad: ARMED** the whole time, on the button,
+   the frame and the chip; nothing plays and nothing stops.
+7. GO the main list's first cue again (LT + A), then pull **RT** (R2).
+   *Expected:* the hit under that cue plays and the voice says its name.
+   Pull again: it lets go ("… off."). Still armed.
+8. Hold **LB + RB** for half a second. *Expected:* one long buzz; **Pad:
+   Run**; the frame and the orange are gone everywhere; the light bar goes
+   back to its own colour.
+9. Arm again. Press and hold all four: **LB + RB + LT + RT** (the bumpers
+   first). *Expected:* everything stops; three long buzzes; the button,
+   the frame, the chip and the light bar are red, **Pad: STOPPED**. LT + A
+   does nothing. Arm again (LB + RB): orange, and LT + A plays.
 10. On the laptop, pick the Pre-show list in the Run tab's list box.
-    Press RS: the voice names Pre-show. Hold LB + A.
+    Press RS: the voice names Pre-show. Hold LT + A.
     *Expected:* the focus-call cue arms ("Venue focus ready. Press Start
-    to begin."); nothing steps.
+    to begin."); nothing steps. Disarm (LB + RB).
 11. Press **Menu** (Options). *Expected:* the focus calls begin and the
     laptop asks "Still at *venue*?" and the voice says to hold A. Tap A
     once. *Expected:* nothing is answered (the voice says to hold A).
@@ -327,18 +372,21 @@ button to **Pad: Run**. Connect one pad at a time, and check that
     again: "Run role. …" and **Pad: Run**.
 13. Start the same hold and press A before the second is up. *Expected:*
     the role does not change.
-14. In Run, press every other button once, then hold each for two
-    seconds: A, B, X, Y, RB, the D-pad, LS, RS, LT, RT, the Xbox (PS)
-    button, the sticks. *Expected:* the Run tab's button never reads
-    **Pad: Tools**; only View + Menu held leaves Run.
-15. Save the show with Pre-show picked in the Run tab's list box, close it and
-    open it again. *Expected:* the Run tab plays Pre-show, and LB + A
-    GOes it.
+14. In Run, not armed, press every button once, then hold each for two
+    seconds, as in step 6. *Expected:* never armed, and the Run tab's
+    button never reads **Pad: Tools**; only View + Menu held leaves Run.
+    (Menu walks: Menu again comes back.)
+15. Arm, then unplug the pad (or switch it off). *Expected:* **Pad: Run**
+    and the chip says **Disarmed: the controller went away.** Plug it in:
+    still not armed.
+16. Save the show with Pre-show picked in the Run tab's list box, close it and
+    open it again. *Expected:* the Run tab plays Pre-show, and armed, LT +
+    A GOes it.
 
 **What differs by pad:**
 
-- **Xbox One / Series on a Mac:** no light bar, so steps 2, 3 and 7 are
-  checked on the Run tab's button and by the buzz. Before step 1, open
+- **Xbox One / Series on a Mac:** no light bar, so steps 2, 3, 8 and 9 are
+  checked on the Run tab's button and frame and by the buzz. Before step 1, open
   **Controller Test…**: the pad is listed once (USB: "read via
   GameController framework" or "Xbox USB report (GIP)"). macOS also makes
   a copy of the pad called **GamePad-1** (Microsoft 045E:028E) for other
@@ -347,8 +395,8 @@ button to **Pad: Run**. Connect one pad at a time, and check that
   box, and D-pad Up lights only D-pad Up.
 - **PS4 DualShock 4:** watch the light bar and the buzz: neither has been
   checked on a real pad yet. No adaptive triggers.
-- **PS5 DualSense:** as the DualShock 4, plus: R2 stays loose while LB is
-  held, and both triggers click once a pull while walking (see
+- **PS5 DualSense:** as the DualShock 4, plus: both triggers are firm while
+  armed, and both click once a pull while walking (see
   [DualSense extras](#dualsense-extras-triggers-and-swipes)).
 
 Write down any step that did not give its expected result, with the pad

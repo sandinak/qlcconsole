@@ -46,23 +46,26 @@ PadRun::PadRun(Doc *doc, ProgrammerController *pc, QObject *parent)
     m_chord->setSingleShot(true);
     m_chord->setInterval(defaultRoleChordMs());
     connect(m_chord, &QTimer::timeout, this, &PadRun::roleChordFired);
-    connect(m_flash, &QTimer::timeout, this, &PadRun::showLight);
     m_noticeTimer = new QTimer(this);
     m_noticeTimer->setSingleShot(true);
     m_noticeTimer->setInterval(noticeMs());
     connect(m_noticeTimer, &QTimer::timeout, this, [this]() { showNotice(QString()); });
-    m_stopHold = new QTimer(this);
-    m_stopHold->setSingleShot(true);
-    m_stopHold->setInterval(stopHoldMs());
-    connect(m_stopHold, &QTimer::timeout, this, &PadRun::stopHoldFired);
+    m_armChord = new QTimer(this);
+    m_armChord->setSingleShot(true);
+    m_armChord->setInterval(armChordMs());
+    connect(m_armChord, &QTimer::timeout, this, &PadRun::armChordFired);
+    m_blink = new QTimer(this);
+    m_blink->setInterval(blinkMs());
+    connect(m_blink, &QTimer::timeout, this, &PadRun::lightTick);
+    hookShowControl();
     if (m_pc != nullptr)
     {
         // A tool taking the pad, or letting it go: the screen says who has it.
         FocusSession *f = m_pc->focusSession();
-        connect(f, &FocusSession::started, this, &PadRun::holderChanged);
-        connect(f, &FocusSession::stopped, this, &PadRun::holderChanged);
-        connect(m_pc->refineSession(), &RefineSession::started, this, &PadRun::holderChanged);
-        connect(m_pc->refineSession(), &RefineSession::stopped, this, &PadRun::holderChanged);
+        connect(f, &FocusSession::started, this, &PadRun::toolChanged);
+        connect(f, &FocusSession::stopped, this, &PadRun::toolChanged);
+        connect(m_pc->refineSession(), &RefineSession::started, this, &PadRun::toolChanged);
+        connect(m_pc->refineSession(), &RefineSession::stopped, this, &PadRun::toolChanged);
         RefineSession *r = m_pc->refineSession();
         // Focus this cue ended (Menu, its B held, the laptop, a new show).
         connect(r, &RefineSession::stopped, this, [this]() {
@@ -80,6 +83,25 @@ PadRun::~PadRun()
 {
 }
 
+void PadRun::hookShowControl()
+{
+    /* Stopped ends when the show is run again from anywhere (the keys, the
+       Run tab): the pad's red would otherwise outlast what it reports.
+       Doc makes its ShowControl after the programmer, so this is also
+       tried when the role comes on. */
+    ShowControl *sc = m_doc != nullptr ? m_doc->showControl() : nullptr;
+    if (sc == nullptr || m_showControlHooked)
+        return;
+    m_showControlHooked = true;
+    connect(sc, &ShowControl::commandHandled, this, [this](const QString &, bool done) {
+        if (m_stopped && !m_stopping && done)
+        {
+            m_stopped = false;
+            sync();
+        }
+    });
+}
+
 /*****************************************************************************
  * The map
  *****************************************************************************/
@@ -88,15 +110,17 @@ PadRun::Action PadRun::actionFor(GamepadRole::Role role)
 {
     switch (role)
     {
-        case GamepadRole::LB:           return Arm;
+        // The bumpers are the mode only: together, the arm.
+        case GamepadRole::LB:
+        case GamepadRole::RB:           return Arm;
+        case GamepadRole::LeftTrigger:  return Safety;
         case GamepadRole::A:            return Go;
         case GamepadRole::B:            return Back;
-        case GamepadRole::Y:            return SubGo;
-        case GamepadRole::X:            return Stop;
-        // The triggers do nothing in Run: the list is the Run tab's (0.4.5).
+        case GamepadRole::X:            return SubGo;
+        case GamepadRole::Y:            return SubBack;
+        case GamepadRole::RightTrigger: return FireHit;
         case GamepadRole::RS:           return WhereAmI;
         case GamepadRole::Start:        return Walk;
-        case GamepadRole::RB:           return FireHit;
         default:                        break;
     }
     return NoAction;
@@ -104,6 +128,9 @@ PadRun::Action PadRun::actionFor(GamepadRole::Role role)
 
 GamepadRole::Role PadRun::roleFor(Action action)
 {
+    // The arm is two controls; LB names it.
+    if (action == Arm)
+        return GamepadRole::LB;
     for (int r = GamepadRole::A; r <= GamepadRole::TouchClick; ++r)
         if (action != NoAction && actionFor(GamepadRole::Role(r)) == action)
             return GamepadRole::Role(r);
@@ -112,29 +139,41 @@ GamepadRole::Role PadRun::roleFor(Action action)
 
 bool PadRun::needsArm(Action action)
 {
-    return action == Go || action == Back || action == SubGo || action == Stop || action == FireHit;
+    return action == Go || action == Back || action == SubGo || action == SubBack || action == FireHit;
+}
+
+bool PadRun::needsSafety(Action action)
+{
+    return action == Go || action == Back || action == SubGo || action == SubBack;
 }
 
 QString PadRun::label(Action action)
 {
     switch (action)
     {
-        case Arm:          return tr("Hold to arm GO, Back, Sub GO, Stop");
-        case Go:           return tr("GO ({LB} held)");
-        case Back:         return tr("Back ({LB} held)");
-        case SubGo:        return tr("Sub GO ({LB} held)");
-        case Stop:         return tr("Hold 1 s: stop the list ({LB} held)");
-        case WhereAmI:     return tr("Say the list and what's next");
-        case Walk:         return tr("Walk the show: cues, layers, adjust, tag");
-        case FireHit:      return tr("Fire the armed hit ({LB} held)");
-        case NoAction:     break;
+        case Arm:           return tr("{LB} + {RB} held: arm, and the same to disarm");
+        case Safety:        return tr("The safety: hold for GO, Back, Sub GO and Sub Back");
+        case Go:            return tr("GO (armed, {LT} held)");
+        case Back:          return tr("Back (armed, {LT} held)");
+        case SubGo:         return tr("Sub GO (armed, {LT} held)");
+        case SubBack:       return tr("Sub Back (armed, {LT} held)");
+        case FireHit:       return tr("Fire the armed hit (armed)");
+        case WhereAmI:      return tr("Say the list and what's next");
+        case Walk:          return tr("Walk the show: cues, layers, adjust, tag (not armed)");
+        case EmergencyStop: return emergencyStopLabel();
+        case NoAction:      break;
     }
     return QString();
 }
 
+QString PadRun::emergencyStopLabel()
+{
+    return tr("Emergency stop, everything off: {LB} + {RB} + {LT} + {RT}");
+}
+
 QList<PadRun::Action> PadRun::actions()
 {
-    return { Arm, Go, Back, SubGo, Stop, WhereAmI, Walk, FireHit };
+    return { Arm, Safety, Go, Back, SubGo, SubBack, FireHit, WhereAmI, Walk };
 }
 
 QStringList PadRun::mapLines(PadNames::Family family)
@@ -143,6 +182,7 @@ QStringList PadRun::mapLines(PadNames::Family family)
     for (Action a : actions())
         out << QStringLiteral("%1: %2").arg(PadNames::name(roleFor(a), family),
                                             PadNames::expand(label(a), family));
+    out << PadNames::expand(emergencyStopLabel(), family);
     return out;
 }
 
@@ -150,10 +190,11 @@ ShowControl::Command PadRun::commandFor(Action action)
 {
     switch (action)
     {
-        case Back:  return ShowControl::Back;
-        case SubGo: return ShowControl::SubGo;
-        case Stop:  return ShowControl::Stop;
-        default:    break;
+        case Back:          return ShowControl::Back;
+        case SubGo:         return ShowControl::SubGo;
+        case SubBack:       return ShowControl::SubBack;
+        case EmergencyStop: return ShowControl::AllOff;
+        default:            break;
     }
     return ShowControl::Go;
 }
@@ -166,14 +207,27 @@ void PadRun::setEnabled(bool on, bool say)
 {
     if (on == m_enabled)
         return;
-    reset();
+    hookShowControl();
+    clear();
+    m_stopped = false;
     m_enabled = on;
-    updateTriggers();
     emit enabledChanged(on);
+    sync();
     if (say && m_pc != nullptr)
-        m_pc->tellOperator(on ? m_pc->padText(tr("Run role. Hold {LB} and press {A} to GO."))
+        m_pc->tellOperator(on ? m_pc->padText(tr("Run role. Hold {LB} and {RB} to arm."))
                               : tr("Run role off."),
                            ControllerScheme::ConfirmPriority);
+}
+
+void PadRun::refuse(Action action, const QString &text)
+{
+    emit refused(action);
+    if (m_pc == nullptr)
+        return;
+    const QString said = m_pc->padText(text);
+    m_pc->tellOperator(said, ControllerScheme::ConfirmPriority);
+    // On the screen too: with lights-only feedback nothing is said.
+    showNotice(said);
 }
 
 bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
@@ -186,94 +240,288 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
         || role == GamepadRole::RightX || role == GamepadRole::RightY)
         return false;
 
-    const Action action = actionFor(role);
-
-    // The triggers: nothing, and nothing else hears them (no list from the pad).
-    if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
-        return true;
-
     const bool down = value > 0;
-    if (action == Arm)
+    const bool chordControl = role == GamepadRole::LB || role == GamepadRole::RB
+                              || role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger;
+    Held &h = m_held[universe];
+    bool rtPressed = false;
+    switch (role)
     {
-        const bool was = isArmed();
-        if (down)
-            m_armedOn.insert(universe);
-        else
-            m_armedOn.remove(universe);
-        // The arm let go during a Stop's hold: no Stop.
-        if (!down && universe == m_stopUniverse)
-        {
-            m_stopHold->stop();
-            m_stopUniverse = UINT_MAX;
-        }
-        if (was != isArmed())
-        {
-            updateTriggers();
-            showLight();
-            emit armedChanged(isArmed());
-        }
-        return true;
+        case GamepadRole::LB:           h.lb = down; break;
+        case GamepadRole::RB:           h.rb = down; break;
+        case GamepadRole::LeftTrigger:  h.lt.update(value / 255.0f); break;
+        case GamepadRole::RightTrigger: rtPressed = h.rt.update(value / 255.0f); break;
+        default:                        break;
     }
 
-    // X let go before its hold: no Stop, and the pad says how.
-    if (!down && action == Stop && universe == m_stopUniverse)
+    if (chordControl)
     {
-        const bool tap = m_stopHold->isActive();
-        m_stopHold->stop();
-        m_stopUniverse = UINT_MAX;
-        if (tap && m_pc != nullptr)
+        /* All four: the emergency stop, armed or not, once a chord. */
+        if (h.all())
         {
-            const QString said = m_pc->padText(tr("Hold {X} to stop the list."));
-            m_pc->tellOperator(said, ControllerScheme::ConfirmPriority);
-            showNotice(said);
+            if (!h.stopFired)
+            {
+                h.stopFired = true;
+                emergencyStop();
+            }
+            return true;
         }
-        return true;
+        h.stopFired = false;
+        /* Both bumpers and no trigger, held: the arm changes. Anything
+           else of the four ends the timing. */
+        armChordUpdate(universe);
+        /* RT's pull is the hit (below) -- not with a bumper down, which is
+           a chord in the making (the stop). The rest of the four is done. */
+        if (!rtPressed || h.lb || h.rb)
+            return true;
     }
 
+    const Action action = actionFor(role);
     // Everything else acts on the press; the rest of the map is swallowed.
     if (!down || action == NoAction)
         return true;
 
-    if (needsArm(action) && !m_armedOn.contains(universe))
+    if (needsArm(action))
     {
-        emit refused(action);
-        if (m_pc != nullptr)
+        if (!m_armed)
         {
-            const QString said = m_pc->padText(tr("Hold {LB} to arm."));
-            m_pc->tellOperator(said, ControllerScheme::ConfirmPriority);
-            // On the screen too: with lights-only feedback nothing is said.
-            showNotice(said);
+            refuse(action, tr("Not armed: hold {LB} and {RB}."));
+            return true;
         }
-        return true;
-    }
-    // Stop sits beside GO: it takes X held, not a press (0.4.5).
-    if (action == Stop)
-    {
-        m_stopUniverse = universe;
-        m_stopHold->start();
-        return true;
+        if (universe != m_armUniverse)
+        {
+            refuse(action, tr("Another controller is armed."));
+            return true;
+        }
+        // The safety: LT held, for every cue command.
+        if (needsSafety(action) && !h.lt.isDown())
+        {
+            switch (action)
+            {
+                case Go:        refuse(action, tr("GO is {LT} held and {A}.")); break;
+                case Back:      refuse(action, tr("Back is {LT} held and {B}.")); break;
+                case SubGo:     refuse(action, tr("Sub GO is {LT} held and {X}.")); break;
+                default:        refuse(action, tr("Sub Back is {LT} held and {Y}.")); break;
+            }
+            return true;
+        }
     }
     trigger(action);
     return true;
 }
 
-void PadRun::setStopHoldMs(int ms)
+/*****************************************************************************
+ * The arm
+ *****************************************************************************/
+
+void PadRun::setArmChordMs(int ms)
 {
-    m_stopHold->setInterval(ms);
+    m_armChord->setInterval(ms);
 }
 
-bool PadRun::isStopPending() const
+bool PadRun::isArmChordPending() const
 {
-    return m_stopHold->isActive();
+    return m_armChord->isActive();
 }
 
-void PadRun::stopHoldFired()
+void PadRun::armChordUpdate(quint32 universe)
 {
-    const quint32 u = m_stopUniverse;
-    m_stopUniverse = UINT_MAX;
-    if (!m_enabled || !m_armedOn.contains(u) || !holder().isEmpty() || isWalking())
+    const Held h = m_held.value(universe);
+    const bool chord = h.lb && h.rb && !h.anyTrigger();
+    if (chord)
+    {
+        // Timed from the second bumper down; a held chord is not restarted.
+        if (!m_armChord->isActive() || m_chordUniverse != universe)
+        {
+            m_chordUniverse = universe;
+            m_armChord->start();
+        }
+    }
+    else if (m_chordUniverse == universe)
+    {
+        m_armChord->stop();
+        m_chordUniverse = UINT_MAX;
+    }
+    /* Both bumpers with one trigger down: no chord, and the screen says
+       why -- a trigger that does not come back up would otherwise make a
+       pad that "will not arm" with nothing to show for it. */
+    if (h.lb && h.rb && h.anyTrigger() && !h.all() && m_pc != nullptr)
+        showNotice(m_pc->padText(tr("To arm, let go of the triggers.")));
+}
+
+void PadRun::armChordFired()
+{
+    const quint32 u = m_chordUniverse;
+    m_chordUniverse = UINT_MAX;
+    const Held h = m_held.value(u);
+    if (!m_enabled || !h.lb || !h.rb || h.anyTrigger())
         return;
-    trigger(Stop);
+    // Another pad's arm is not this one's to drop.
+    if (m_armed && u != m_armUniverse)
+    {
+        refuse(Arm, tr("Another controller is armed."));
+        return;
+    }
+    setArmed(!m_armed, u);
+}
+
+bool PadRun::setArmed(bool on, quint32 universe)
+{
+    if (on == m_armed)
+        return true;
+    if (on && (!m_enabled || isWalking() || !holder().isEmpty()))
+        return false;
+    m_armed = on;
+    m_armUniverse = on ? universe : UINT_MAX;
+    if (on)
+        m_stopped = false;
+    m_playing = false;
+    m_blinkOn = false;
+    m_flash->stop();
+    emit armedChanged(on);
+    sync();
+    if (m_pc != nullptr)
+    {
+        // A pad with no light is told by its motors: twice armed, once long not.
+        if (on)
+            m_pc->padRumble(2, ControllerScheme::rumbleShortMs());
+        else
+            m_pc->padRumble(1, ControllerScheme::rumbleLongMs());
+        m_pc->tellOperator(on ? m_pc->padText(tr("Armed. {LT} and {A} is GO.")) : tr("Disarmed."),
+                           ControllerScheme::ConfirmPriority);
+    }
+    return true;
+}
+
+void PadRun::emergencyStop()
+{
+    m_armChord->stop();
+    m_chordUniverse = UINT_MAX;
+    hookShowControl();
+    ShowControl *sc = m_doc != nullptr ? m_doc->showControl() : nullptr;
+    bool done = false;
+    if (sc != nullptr)
+    {
+        ShowControl::Request r;
+        r.command = ShowControl::AllOff;
+        m_stopping = true;      // its own commandHandled() does not end Stopped
+        done = sc->run(r, ShowControl::RoutePad);
+        m_stopping = false;
+    }
+    const bool was = m_armed;
+    m_armed = false;
+    m_armUniverse = UINT_MAX;
+    m_stopped = true;
+    m_playing = false;
+    m_flash->stop();
+    emit commandSent(ShowControl::AllOff, done);
+    if (was)
+        emit armedChanged(false);
+    sync();
+    if (m_pc != nullptr)
+    {
+        m_pc->padRumble(3, ControllerScheme::rumbleLongMs());
+        const QString said = tr("Emergency stop. Everything is off.");
+        m_pc->tellOperator(said, ControllerScheme::ConfirmPriority);
+        showNotice(said);
+    }
+}
+
+/*****************************************************************************
+ * The state
+ *****************************************************************************/
+
+PadRun::State PadRun::state() const
+{
+    if (!m_enabled)
+        return Tools;
+    if (isWalking())
+        return Walking;
+    if (!holder().isEmpty())
+        return ToolHasPad;
+    if (m_stopped)
+        return Stopped;
+    return m_armed ? Armed : Run;
+}
+
+QColor PadRun::stateColour() const
+{
+    switch (state())
+    {
+        case Armed:     return armedColour();
+        case Stopped:   return stoppedColour();
+        default:        break;
+    }
+    return QColor();
+}
+
+QColor PadRun::stateInk() const
+{
+    const QColor c = stateColour();
+    if (!c.isValid())
+        return QColor();
+    return c == stoppedColour() ? QColor(Qt::white) : QColor(Qt::black);
+}
+
+QColor PadRun::lightColour() const
+{
+    switch (state())
+    {
+        case Armed:     return m_playing && m_blinkOn ? playingColour() : armedColour();
+        case Stopped:   return stoppedColour();
+        default:        break;
+    }
+    return QColor();
+}
+
+void PadRun::toolChanged()
+{
+    /* A tool started on the laptop takes the pad: the arm drops with it
+       (no button did that), so it is not found armed when the tool ends. */
+    if (m_armed && !holder().isEmpty())
+    {
+        reset();
+        showNotice(tr("Disarmed: %1 has the controller.").arg(holder()));
+    }
+    emit holderChanged();
+    m_shownState = -1;      // the tool's name is part of what is shown
+    sync();
+}
+
+void PadRun::sync()
+{
+    const State now = state();
+    // The blink runs only while there is an arm to show it on.
+    if (now == Armed)
+    {
+        if (!m_blink->isActive())
+            m_blink->start();
+    }
+    else
+    {
+        m_blink->stop();
+        m_playing = false;
+        m_blinkOn = false;
+    }
+    updateTriggers();
+    showLight();
+    if (int(now) != m_shownState)
+    {
+        m_shownState = int(now);
+        emit stateChanged();
+    }
+}
+
+void PadRun::lightTick()
+{
+    ShowControl *sc = m_doc != nullptr ? m_doc->showControl() : nullptr;
+    const quint32 at = listChaser();
+    const Chaser *chaser = sc == nullptr ? nullptr
+                           : at != UINT_MAX ? qobject_cast<Chaser *>(m_doc->function(at)) : sc->cueList(QString());
+    const bool playing = m_flash->isActive() || ShowControl::fadeProgress(chaser) >= 0;
+    m_blinkOn = playing ? !m_blinkOn : false;
+    m_playing = playing;
+    showLight();
 }
 
 QString PadRun::holder() const
@@ -291,14 +539,16 @@ QString PadRun::holder() const
 
 QString PadRun::roleText() const
 {
-    if (!m_enabled)
-        return tr("Pad: Tools");
-    if (isWalking())
-        return tr("Pad: Walk");
-    const QString tool = holder();
-    if (!tool.isEmpty())
-        return tr("Pad: %1").arg(tool);
-    return isArmed() ? tr("Pad: ARMED") : tr("Pad: Run");
+    switch (state())
+    {
+        case Tools:         return tr("Pad: Tools");
+        case Run:           return tr("Pad: Run");
+        case Armed:         return tr("Pad: ARMED");
+        case Stopped:       return tr("Pad: STOPPED");
+        case Walking:       return tr("Pad: Walk");
+        case ToolHasPad:    return tr("Pad: %1").arg(holder());
+    }
+    return QString();
 }
 
 QString PadRun::helpHtml() const
@@ -328,9 +578,10 @@ QString PadRun::helpHtml() const
                .arg(tr("Control"), tr("What It Does"));
     for (Action a : actions())
         out += row(PadNames::name(roleFor(a), fam), PadNames::expand(label(a), fam));
-    out += row(PadNames::name(GamepadRole::RightTrigger, fam) + QStringLiteral(" / ")
-                   + PadNames::name(GamepadRole::LeftTrigger, fam),
-               tr("Nothing: GO plays the list the Run tab plays (pick it there)"));
+    out += QStringLiteral("<tr><td colspan=2><b>%1</b></td></tr>")
+               .arg(PadNames::expand(emergencyStopLabel(), fam).toHtmlEscaped());
+    out += QStringLiteral("<tr><td colspan=2>%1</td></tr>")
+               .arg(tr("GO plays the list the Run tab plays: pick it there, never on the controller.").toHtmlEscaped());
     out += row(tr("Sticks, D-pad"), tr("The follow spot, when one plays (D-pad up / down: speed, left / right: beam size); "
                                        "otherwise nothing"));
     out += row(m_pc->padText(QStringLiteral("{View}")) + QStringLiteral(" + ") + PadNames::name(GamepadRole::LS, fam),
@@ -364,29 +615,41 @@ void PadRun::showNotice(const QString &text)
 
 void PadRun::reset()
 {
+    clear();
+    sync();
+}
+
+void PadRun::clear()
+{
     roleChordCancel();
-    m_stopHold->stop();
-    m_stopUniverse = UINT_MAX;
+    m_armChord->stop();
+    m_chordUniverse = UINT_MAX;
+    m_held.clear();
     m_swipe.reset();
-    if (m_armedOn.isEmpty())
-    {
-        updateTriggers();
-        return;
-    }
-    m_armedOn.clear();
-    updateTriggers();
-    showLight();
-    emit armedChanged(false);
+    m_flash->stop();
+    const bool was = m_armed;
+    m_armed = false;
+    m_armUniverse = UINT_MAX;
+    if (was)
+        emit armedChanged(false);
+}
+
+void PadRun::controllerLost()
+{
+    const bool was = m_armed;
+    reset();
+    if (was)
+        showNotice(tr("Disarmed: the controller went away."));
 }
 
 void PadRun::showLight()
 {
-    if (m_pc == nullptr || m_flash->isActive())
+    if (m_pc == nullptr)
         return;
     // A tool on the pad has its own lamp (the save colours).
     if (m_pc->focusSession()->isActive() || m_pc->refineSession()->isActive())
         return;
-    m_pc->setPadLight(isArmed() ? armedColour() : QColor());
+    m_pc->setPadLight(lightColour());
 }
 
 /*****************************************************************************
@@ -438,8 +701,9 @@ bool PadRun::swipe(TouchSwipe::Swipe s)
         stepLayer(delta);
         return true;
     }
-    // Run, not walking: up / down nothing (the list is the Run tab's).
-    if (!horizontal)
+    // Run, not walking: up / down nothing (the list is the Run tab's);
+    // armed, nothing at all (the pad is the cue map).
+    if (!horizontal || m_armed)
         return false;
     // Run, not walking: a walk from the next / previous cue, Design only.
     if (m_doc->mode() == Doc::Operate)
@@ -465,9 +729,12 @@ bool PadRun::trigger(Action action)
             return startWalk();
         case FireHit:
             return fireHit();
-        case Go: case Back: case SubGo: case Stop:
+        case EmergencyStop:
+            emergencyStop();
+            return true;
+        case Go: case Back: case SubGo: case SubBack:
             break;
-        case Arm: case NoAction:
+        case Arm: case Safety: case NoAction:
             return false;
     }
 
@@ -485,12 +752,11 @@ bool PadRun::trigger(Action action)
     if (done)
     {
         m_pc->padRumble(1, ControllerScheme::rumbleShortMs());
-        if (action != Stop)
-        {
-            m_flash->stop();
-            m_pc->setPadLight(wentColour());
-            m_flash->start();
-        }
+        // Playing: green at once, then the blink for as long as it fades.
+        m_flash->start();
+        m_playing = true;
+        m_blinkOn = true;
+        showLight();
     }
     else
     {
@@ -618,7 +884,7 @@ void PadRun::roleChordFired()
     if (m_pc == nullptr)
         return;
     m_pc->padRumble(2, ControllerScheme::rumbleShortMs());
-    m_pc->tellOperator(on ? m_pc->padText(tr("Run role. Hold {LB} and press {A} to GO."))
+    m_pc->tellOperator(on ? m_pc->padText(tr("Run role. Hold {LB} and {RB} to arm."))
                           : tr("Tools role."),
                        ControllerScheme::ConfirmPriority);
 }
@@ -792,11 +1058,13 @@ bool PadRun::tryStart(quint32 cueId, QString *why)
 
 void PadRun::walkStarted()
 {
-    // The arm lets go: the walking map has no GO.
-    const bool wasArmed = isArmed();
-    m_armedOn.clear();
-    m_stopHold->stop();
-    m_stopUniverse = UINT_MAX;
+    // The walking map has no GO, and no arm (a walk never starts armed).
+    const bool wasArmed = m_armed;
+    m_armed = false;
+    m_armUniverse = UINT_MAX;
+    m_armChord->stop();
+    m_chordUniverse = UINT_MAX;
+    m_held.clear();
     m_walkRt.reset();
     m_walkLt.reset();
     m_holdY.reset();
@@ -810,7 +1078,7 @@ void PadRun::walkStarted()
         emit walkingChanged(true);
     }
     syncSolo();
-    updateTriggers();
+    sync();
 }
 
 void PadRun::walkEnded()
@@ -824,8 +1092,9 @@ void PadRun::walkEnded()
     m_walkRt.reset();
     m_walkLt.reset();
     setSolo(false);
+    m_held.clear();     // what was held while walking was the walk's
     emit walkingChanged(false);
-    updateTriggers();
+    sync();
     m_pc->tellOperator(tr("Walk off. Run role."), ControllerScheme::ConfirmPriority);
 }
 
@@ -835,6 +1104,8 @@ bool PadRun::refuseWalk(const QString &reason, QString *why)
         *why = reason;
     m_pc->padRumble(1, ControllerScheme::rumbleLongMs());
     m_pc->tellOperator(reason, ControllerScheme::ConfirmPriority);
+    // On the screen too: with lights-only feedback nothing is said.
+    showNotice(reason);
     return false;
 }
 
@@ -842,6 +1113,9 @@ bool PadRun::startWalk(quint32 cueId, QString *why)
 {
     if (m_pc == nullptr)
         return false;
+    // Armed, the pad is the cue map: the walk has its own (rule 3).
+    if (m_armed)
+        return refuseWalk(m_pc->padText(tr("Armed. To walk, disarm first: hold {LB} and {RB}.")), why);
     if (cueId == 0xFFFFFFFF)
         cueId = cueInHand();
     if (cueId == 0xFFFFFFFF)

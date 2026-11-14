@@ -195,6 +195,11 @@ public:
      *  @a chaser as a command names it: "4", "4.2". */
     static QString cueName(const Chaser *chaser, int step, int subCue);
 
+    /** How far the cue @a chaser plays has faded in, 0..99 -- its sub-cue's
+     *  own fade when it has sub-cues; -1 when nothing of it is fading (not
+     *  running, no fade, or the fade is done). */
+    static int fadeProgress(const Chaser *chaser);
+
 signals:
     /** The main cue list was set (by the chaser editor, the Show Tree's
      *  current production), or let go of with its chaser. Not on load. */
