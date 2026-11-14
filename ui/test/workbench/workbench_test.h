@@ -44,6 +44,7 @@ private slots:
     /** A collection's members are its layers: a scene opens up into its
      *  targets and looks, anything else is a ▣ row; the overview says what
      *  it is; a ▣ row's stock editor fills the editor pane. */
+    void addExistingSaysWhyNothingWasAdded();
     void aCollectionsMembersAreLayers();
     /** Open on a ▣ row loads it; ↩ comes back, the row selected again. */
     void openAndBackKeepTheSelection();

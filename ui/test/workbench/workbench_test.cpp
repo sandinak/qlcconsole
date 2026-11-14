@@ -19,6 +19,8 @@
 
 #include <QtTest>
 #include <QPointer>
+
+#include <QDir>
 #include <QScopeGuard>
 #include <QTreeWidgetItemIterator>
 #include <QXmlStreamReader>
@@ -228,6 +230,55 @@ void Workbench_Test::aSceneIsOneLayer()
     QCOMPARE(wb.loadedFunction(), Function::invalidId());
     QCOMPARE(wb.currentSceneId(), Function::invalidId());
     QCOMPARE(wb.m_title->text(), QString("Nothing loaded"));
+}
+
+void Workbench_Test::addExistingSaysWhyNothingWasAdded()
+{
+    // wfaudit-silent-failures: "Add existing…" that adds nothing says why.
+    Scene *a = scene("Main Drape", "Show");
+    Scene *b = scene("Wash", "Show");
+    Collection *c = collection("0.0.1-Startup", { a->id() });
+    c->setPath("Show");
+    Workbench wb(m_doc);
+    wb.resize(1200, 700);
+    QLabel *hint = wb.findChild<QLabel *>("workbenchHint");
+    QVERIFY(hint != nullptr);
+    const QString idle = hint->text();
+    auto shots = [&](QWidget *w, const char *prefix) {
+        const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+        if (dir.isEmpty())
+            return;
+        QDir().mkpath(dir);
+        for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+        {
+            w->resize(sz);
+            QTest::qWait(50);
+            w->grab().save(QString("%1/%2-%3x%4.png").arg(dir, prefix).arg(sz.width()).arg(sz.height()));
+        }
+    };
+
+    // Nothing loaded.
+    wb.addExisting();
+    QVERIFY2(hint->text().contains("Load a scene"), qPrintable(hint->text()));
+
+    wb.load(c->id());
+    wb.show();
+    shots(&wb, "workbench-addexisting-before");
+    // Everything chosen is already a layer.
+    QVERIFY(!wb.addExistingChosen({ a->id() }));
+    shots(&wb, "workbench-addexisting-after");
+    QVERIFY2(hint->text().contains("Already in") && hint->text().contains("0.0.1-Startup"),
+             qPrintable(hint->text()));
+    // The picker closed with nothing ticked.
+    QVERIFY(!wb.addExistingChosen({}));
+    QVERIFY2(hint->text().contains("Nothing was chosen"), qPrintable(hint->text()));
+    // The collection itself can't go in itself.
+    QVERIFY(!wb.addExistingChosen({ c->id() }));
+    QVERIFY2(hint->text().contains("can't go in it"), qPrintable(hint->text()));
+    // A real add says nothing and leaves the hint alone.
+    hint->setText(idle);
+    QVERIFY(wb.addExistingChosen({ b->id() }));
+    QCOMPARE(hint->text(), idle);
 }
 
 void Workbench_Test::aCollectionsMembersAreLayers()

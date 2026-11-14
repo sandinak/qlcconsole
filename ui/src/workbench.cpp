@@ -155,6 +155,7 @@ Workbench::Workbench(Doc *doc, QWidget *parent)
     m_rows->setStack(nullptr);
     const QString rowsWhat = tr("Its layers. Click a row to edit it; drag palettes, groups and "
                                 "fixtures onto a layer, scenes onto the list.");
+    m_rowsWhat = rowsWhat;
     m_rowsHint = new QLabel(rowsWhat, column);
     m_rowsHint->setObjectName(QStringLiteral("workbenchHint"));
     m_rowsHint->setWordWrap(true);
@@ -1304,7 +1305,13 @@ QList<GroupHead> Workbench::layerHeads(int layer) const
 void Workbench::addExisting()
 {
     if (m_stack == nullptr || !m_stack->canAddLayers())
+    {
+        // Never a menu item that does nothing: say why.
+        QString why = m_stack == nullptr ? QString() : m_stack->addPlan(QList<quint32>());
+        why = why.startsWith(QLatin1Char('!')) ? why.mid(1) : QString();
+        sayHint(why.isEmpty() ? tr("Load a scene, collection or chaser first: its layers come up here.") : why);
         return;
+    }
     FunctionSelection fs(this, m_doc);
     fs.setMultiSelection(true);
     QList<quint32> disabled;
@@ -1320,10 +1327,49 @@ void Workbench::addExisting()
     fs.setDisabledFunctions(disabled);
     if (fs.exec() != QDialog::Accepted)
         return;
-    const QList<quint32> ids = fs.selection();
+    addExistingChosen(fs.selection());
+}
+
+bool Workbench::addExistingChosen(const QList<quint32> &ids)
+{
+    if (m_stack == nullptr)
+        return false;
+    if (ids.isEmpty())
+    {
+        sayHint(tr("Nothing was chosen, so nothing was added."));
+        return false;
+    }
     const int layer = selectedLayer();
     if (m_stack->addLayers(ids, layer >= 0 ? layer + 1 : -1))
+    {
         layersChanged();
+        return true;
+    }
+    // Nothing added: say which reason (already there, can't hold it, read-only...).
+    const QString plan = m_stack->addPlan(ids);
+    sayHint(plan.startsWith(QLatin1Char('!')) ? plan.mid(1)
+                                              : tr("Nothing was added: the layers did not change."));
+    return false;
+}
+
+void Workbench::sayHint(const QString &text)
+{
+    // The line over the layers, bold for a few seconds, then back to what it was for.
+    if (m_rowsHint == nullptr)
+        return;
+    if (m_hintTimer == nullptr)
+    {
+        m_hintTimer = new QTimer(this);
+        m_hintTimer->setSingleShot(true);
+        m_hintTimer->setInterval(8000);
+        connect(m_hintTimer, &QTimer::timeout, this, [this]() {
+            m_rowsHint->setText(m_rowsWhat);
+            m_rowsHint->setStyleSheet(QStringLiteral("QLabel { font-style: italic; }"));
+        });
+    }
+    m_rowsHint->setText(text);
+    m_rowsHint->setStyleSheet(QStringLiteral("QLabel { font-weight: bold; }"));
+    m_hintTimer->start();
 }
 
 quint32 Workbench::addNew(Function::Type type)

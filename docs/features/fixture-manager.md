@@ -30,7 +30,9 @@ The **Fixtures** tab is a tree on the left. Four sections are always there:
    [Inventory](#inventory-design-the-rig-before-patching)), filed
    manufacturer → model → fixture, alphabetically, with a count on each
    folder. It stays even when empty, since it's where Add to inventory lives.
-3. **Power** — power-distribution sources and circuits.
+3. **Power** — power-distribution sources and circuits. Drag fixtures onto a
+   circuit to put them on it; if that circuit is gone, a line under the tree
+   says so and the fixtures stay where they were.
 4. **Universes** — one folder per universe, pre-built so an empty universe
    shows up before anything is patched to it. Patched fixtures nest under
    whichever universe they're on.

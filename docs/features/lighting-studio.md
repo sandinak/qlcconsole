@@ -74,6 +74,10 @@ only: Front and Side always draw upright (the button is greyed there), and
 your turn returns when you pick Top again. The button is lit while the turn
 is not 0°; right-click it and choose **Reset to 0°** to clear it.
 
+Dragging onto a locked layer in Plot layers doesn't move anything: the hint
+under the list names the locked layer. The same line says so when the group
+dropped on has gone.
+
 **The rulers count from the centre line.** Across the stage (Top and Front),
 the ruler reads **0 at the centre line**, marked with a teal **CL** tick,
 and counts out to each side; its corner says which side is which (**SR | SL**,

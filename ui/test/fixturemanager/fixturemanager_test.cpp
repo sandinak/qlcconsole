@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include <QDir>
 #include <QTreeWidgetItemIterator>
 #include <QMenu>
 #include <memory>
@@ -48,6 +49,7 @@
 #define protected public
 #define private public
 #include "fixturemanager.h"
+#include "powerdistribution.h"
 #include "../common/shotdark.h"
 #include "qlcchannel.h"
 #include "qlcphysical.h"
@@ -115,6 +117,56 @@ void FixtureManager_Test::init()
 void FixtureManager_Test::cleanup()
 {
     delete m_doc;
+}
+
+void FixtureManager_Test::aRefusedCircuitDropSaysWhy()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Probe");
+    fxi->setChannels(4);
+    QVERIFY(m_doc->addFixture(fxi));
+    PowerSource src;
+    src.name = "Distro A";
+    PowerCircuit cir;
+    cir.name = "Circuit 1";
+    src.circuits << cir;
+    m_doc->powerDistribution()->sources() << src;
+
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.resize(1000, 700);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    QLabel *note = mgr.findChild<QLabel *>("fixturesNote");
+    QVERIFY(note != nullptr);
+    QVERIFY(!note->isVisible());
+    auto shots = [&](QWidget *w, const char *prefix) {
+        const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+        if (dir.isEmpty())
+            return;
+        QDir().mkpath(dir);
+        for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+        {
+            w->resize(sz);
+            QTest::qWait(50);
+            w->grab().save(QString("%1/%2-%3x%4.png").arg(dir, prefix).arg(sz.width()).arg(sz.height()));
+        }
+    };
+    shots(&mgr, "fixtures-circuit-before");
+
+    // A circuit that is gone: nothing moves, and it says why.
+    mgr.slotFixturesDroppedOnCircuit({ fxi->id() }, 5, 0);
+    QTRY_VERIFY2(note->isVisible() && note->text().contains("circuit is gone"), qPrintable(note->text()));
+    shots(&mgr, "fixtures-circuit-after");
+    int s = -1, c = -1;
+    m_doc->powerDistribution()->circuitOf(fxi->id(), s, c);
+    QCOMPARE(s, -1);
+
+    // A drop that works says nothing.
+    note->setVisible(false);
+    mgr.slotFixturesDroppedOnCircuit({ fxi->id() }, 0, 0);
+    QTRY_VERIFY(m_doc->powerDistribution()->sources().at(0).circuits.at(0).fixtures.contains(fxi->id()));
+    QVERIFY(!note->isVisible());
 }
 
 void FixtureManager_Test::theDeleteKeyDeletesTheSelectionAskingFirst()

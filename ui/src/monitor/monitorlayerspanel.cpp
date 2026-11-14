@@ -464,8 +464,11 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     });
     vbox->addWidget(m_tree, 1);
 
-    QLabel *hint = new QLabel(tr("Enter/F2 renames a layer or group. Multi-select "
-                                 "items, then right-click to make a group or move."), this);
+    m_hintIdle = tr("Enter/F2 renames a layer or group. Multi-select "
+                    "items, then right-click to make a group or move.");
+    QLabel *hint = new QLabel(m_hintIdle, this);
+    m_hint = hint;
+    hint->setObjectName(QStringLiteral("layersHint"));
     hint->setWordWrap(true);
     QFont hf = hint->font();
     hf.setPointSizeF(hf.pointSizeF() - 1.0);
@@ -1932,6 +1935,20 @@ void MonitorLayersPanel::handleTreeDrop(const QList<QTreeWidgetItem *> &dragged,
         }
     }
 
+    // A drop that can't land says so (never a silent no-op).
+    if (intoGroup && !m_props->hasGroup(containerId))
+    {
+        sayDropRefused(tr("That group is gone, so nothing moved. The list is being redrawn: "
+                          "drop on the layer or group again."));
+        return;
+    }
+    if (m_props->hasLayer(containerLayer) && m_props->layer(containerLayer).locked)
+    {
+        sayDropRefused(tr("Layer \u201c%1\u201d is locked, so nothing moved. Unlock it in Layers first.")
+                           .arg(m_props->layer(containerLayer).name));
+        return;
+    }
+
     // Split the drag into item leaves and group nodes.
     QList<QPair<QString, quint32> > leaves;
     QList<quint32> groups;
@@ -2016,6 +2033,27 @@ void MonitorLayersPanel::handleTreeDrop(const QList<QTreeWidgetItem *> &dragged,
     // drag machinery is still using (use-after-free / crash). The reparent calls
     // emit mapStructureChanged, which is wired as a QUEUED reload that runs once
     // this drop event has fully unwound.
+}
+
+void MonitorLayersPanel::sayDropRefused(const QString &text)
+{
+    // The line under the tree, bold for a few seconds, then what it was.
+    if (m_hint == nullptr)
+        return;
+    m_hint->setEnabled(true);
+    QFont f = m_hint->font();
+    f.setBold(true);
+    m_hint->setFont(f);
+    m_hint->setText(text);
+    QTimer::singleShot(8000, m_hint, [this, text]() {
+        if (m_hint == nullptr || m_hint->text() != text)
+            return;
+        QFont g = m_hint->font();
+        g.setBold(false);
+        m_hint->setFont(g);
+        m_hint->setEnabled(false);
+        m_hint->setText(m_hintIdle);
+    });
 }
 
 void MonitorLayersPanel::beginRenameCurrent()
