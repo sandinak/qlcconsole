@@ -73,6 +73,7 @@
 #include "monitorproperties.h"
 #include "stagetarget.h"
 #include "areacover.h"
+#include "effectinstance.h"
 #include "aimsolver.h"
 #include "qlcphysical.h"
 #include "qlcfixturehead.h"
@@ -1225,6 +1226,108 @@ void HotPath_Test::anAreaAimThatDimsWorksOutItsZonesOnce()
     delete doc;
 }
 
+namespace
+{
+/* A step bar as the show's (PHS Chorus Step Row 64 Heads): 64 RGB pixels,
+   no dimmer, 2.134 m long, at @p mm on the plan. */
+Fixture *stepBar(Doc *doc, const QVector3D &mm)
+{
+    QLCFixtureDef *def = doc->fixtureDefCache()->fixtureDef("Test", "Step bar");
+    if (def == nullptr)
+    {
+        def = new QLCFixtureDef();
+        def->setManufacturer("Test");
+        def->setModel("Step bar");
+        def->setType(QLCFixtureDef::LEDBarPixels);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("64 px");
+        const QLCChannel::Preset presets[] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                               QLCChannel::IntensityBlue };
+        for (int h = 0; h < 64; ++h)
+        {
+            QLCFixtureHead head;
+            for (int c = 0; c < 3; ++c)
+            {
+                QLCChannel *ch = new QLCChannel();
+                ch->setName(QString("%1-%2").arg(h + 1).arg(c));
+                ch->setPreset(presets[c]);
+                def->addChannel(ch);
+                mode->insertChannel(ch, quint32(h * 3 + c));
+                head.addChannel(quint32(h * 3 + c));
+            }
+            mode->insertHead(-1, head);
+        }
+        QLCPhysical ph;
+        ph.setWidth(2134);
+        ph.setHeight(25);
+        mode->setPhysical(ph);
+        mode->cacheHeads();
+        def->addMode(mode);
+        doc->fixtureDefCache()->addFixtureDef(def);
+    }
+    Fixture *fxi = new Fixture(doc);
+    fxi->setFixtureDefinition(def, def->modes().first());
+    fxi->setAddress(0);
+    fxi->setUniverse(quint32(doc->fixtures().size()));
+    if (!doc->addFixture(fxi))
+        return nullptr;
+    doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, mm);
+    return fxi;
+}
+}
+
+void HotPath_Test::aSpreadWorksOutWhereItsHeadsStandOnce()
+{
+    Doc *doc = new Doc(this);
+    Fixture *bar = stepBar(doc, QVector3D(6000, 2000, 0));
+    QVERIFY(bar != nullptr);
+    QCOMPARE(bar->heads(), 64);
+    StageTarget *witch = doc->monitorProperties()->addStageTarget();
+    witch->setPosition(QVector3D(1.0f, 2.0f, 0));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setStageTargetId(witch->id());
+    QVERIFY(doc->addPalette(aim));
+
+    for (const char *script : { "fire-spread.js", "spell-spread.js" })
+    {
+        witch->setPosition(QVector3D(1.0f, 2.0f, 0));
+        QLCPalette *fx = new QLCPalette(QLCPalette::Effect, doc);
+        fx->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/" + script);
+        QVERIFY(doc->addPalette(fx));
+        Scene *look = new Scene(doc);
+        doc->addFunction(look);
+        look->addFixture(bar->id());
+        look->addPalette(aim->id());
+        look->addPalette(fx->id());
+        EffectInstance inst(doc, look->id(), fx->id());
+        QVERIFY2(inst.isValid(), script);
+        inst.setOffStageClock(0);
+        inst.runTick();
+        const quint64 first = inst.placesWorkedOut();
+        QVERIFY(first >= 1);
+        for (int i = 1; i <= 100; ++i)
+        {
+            inst.setOffStageClock(i * 20);
+            inst.runTick();
+        }
+        qInfo("%s on a 64-head bar: places worked out %llu time(s) in 101 ticks", script,
+              (unsigned long long)first);
+        QCOMPARE(inst.placesWorkedOut(), first);
+        // The target moves: once more, then not again.
+        witch->setPosition(QVector3D(2.0f, 2.0f, 0));
+        inst.setOffStageClock(2100);
+        inst.runTick();
+        QCOMPARE(inst.placesWorkedOut(), first + 1);
+        for (int i = 1; i <= 50; ++i)
+        {
+            inst.setOffStageClock(2100 + i * 20);
+            inst.runTick();
+        }
+        QCOMPARE(inst.placesWorkedOut(), first + 1);
+    }
+    delete doc;
+}
+
 void HotPath_Test::timecodeFramesWithAnchorsAllocateNothing()
 {
     Doc *doc = new Doc(this);
@@ -1351,6 +1454,31 @@ void HotPath_Test::cpuPerOperation()
         }, 100 * scale));
         QVERIFY(got > 0);
         QCOMPARE(got % 512, 0);
+    }
+
+    // 6. A tick of Spell Spread, spreading, over a 64-head step bar.
+    {
+        Doc *doc = new Doc(this);
+        Fixture *bar = stepBar(doc, QVector3D(6000, 2000, 0));
+        QVERIFY(bar != nullptr);
+        QLCPalette *fx = new QLCPalette(QLCPalette::Effect, doc);
+        fx->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/spell-spread.js");
+        fx->setEffectParamValue("spreadTime", 1000.0);     // spreading all the while
+        QVERIFY(doc->addPalette(fx));
+        Scene *look = new Scene(doc);
+        doc->addFunction(look);
+        look->addFixture(bar->id());
+        look->addPalette(fx->id());
+        EffectInstance inst(doc, look->id(), fx->id());
+        QVERIFY(inst.isValid());
+        qint64 ms = 0;
+        inst.setOffStageClock(ms);
+        inst.runTick();
+        results << qMakePair(QStringLiteral("effect_spread_tick_64px"), nsPerOp([&inst, &ms]() {
+            inst.setOffStageClock(ms += 20);
+            inst.runTick();
+        }, 50 * scale));
+        delete doc;
     }
 
     QStringList table;

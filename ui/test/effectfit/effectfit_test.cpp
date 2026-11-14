@@ -132,6 +132,10 @@ void EffectFit_Test::whatFitsWhat_data()
         QTest::newRow(qPrintable(f + " / Zoom Pulse")) << f << "Zoom Pulse" << r.zoom;
         QTest::newRow(qPrintable(f + " / Matrix Bars")) << f << "Matrix Bars" << r.matrix;
         QTest::newRow(qPrintable(f + " / Dimmer Phaser (intensity)")) << f << "Dimmer Phaser" << (r.dimmerFx || r.position);
+        // The spreads: Spell Spread is a colour (a dimmer has none); Fire
+        // Spread burns on anything that gives light.
+        QTest::newRow(qPrintable(f + " / Spell Spread (colour)")) << f << "Spell Spread" << (r.rgb || r.position);
+        QTest::newRow(qPrintable(f + " / Fire Spread")) << f << "Fire Spread" << true;
     }
     // Free Spin: heads whose definition gives them free pan/tilt rotation
     // (the Rivale has continuous rotation channels; a Sharpy's gobos and

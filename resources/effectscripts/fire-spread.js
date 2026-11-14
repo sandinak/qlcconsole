@@ -21,14 +21,22 @@
   after it has stopped, it lights again from the point.
 
   Before the front a head is dark: dimmer 0, which the host takes as "none
-  of the look's level". Moving heads get colour and dimmer only.
+  of the look's level" -- on a pixel bar with no dimmer, pixel by pixel; on
+  one whose single dimmer serves every pixel, a pixel not yet reached is
+  left to what is under it. Moving heads get colour and dimmer only. A
+  relay (a silk flame's fan) switches on as it catches and stays on: its
+  flicker would chatter it.
 
-  Pure & testable: no Math.random and no state; the flame and its colours
-  are Firelight's (lib/fire.js).
+  Pure & testable: no Math.random, and what it keeps in state (when each
+  head catches, each head's flame phases) is worked out again whenever the
+  heads, the spread or the seed change -- the same time gives the same
+  fire. The flame and its colours are Firelight's (lib/fire.js; worked out
+  for every head at once, its colours in 256 steps), the front and how
+  each kind of head shows it are shared with Spell Spread (lib/spread.js).
 
-  A Direction (the fire dying back to the point) would only change
-  catchAt() and burn(): the front is the same distance over time, read
-  the other way.
+  A Direction (the fire dying back to the point) would only change when
+  a head is reached (SPREAD.front): the front is the same distance over
+  time, read the other way.
 */
 (function() {
     var effect = new Object;
@@ -37,11 +45,11 @@
     effect.name        = "Fire Spread";
     effect.description = "The stage catches fire from the look's Aim target and the fire spreads out until everything burns";
     effect.author      = "qlcconsole";
-    effect.requires    = ["fire"];
+    effect.requires    = ["fire", "spread"];
     effect.targetDistance = true;   // fixture.fromTarget, inputs._fromTargetFar
     effect.cueTime        = true;   // inputs._cueTime, for Spread over: The cue's time
     effect.naturalDurationMs = 8000;
-    effect.notes = "The head nearest the look's Aim target catches fire first and the fire spreads outward across the floor at an even speed until every head burns, then keeps flickering like Firelight for as long as the look plays. Add an Aim look for the point it starts from; without one it starts at centre stage. Spread Time is how long the fire takes to reach the farthest head (or take the cue's time). Edge makes the front ragged; Flare is the flash as a head catches. Heads are dark until the fire reaches them. Needs the rig placed in the 2D plan: heads all in one place catch together.";
+    effect.notes = "The head nearest the look's Aim target catches fire first and the fire spreads outward across the floor at an even speed until every head burns, then keeps flickering like Firelight for as long as the look plays. Add an Aim look for the point it starts from; without one it starts at centre stage. Spread Time is how long the fire takes to reach the farthest head (or take the cue's time). Edge makes the front ragged; Flare is the flash as a head catches. Heads are dark until the fire reaches them; a relay (a silk flame) switches on as it catches. Needs the rig placed in the 2D plan: heads all in one place catch together.";
     effect.fixtureTypes = [
         "rgb", "rgbw", "rgba", "rgbwa", "rgbwauv",
         "wash", "spot", "beam", "dimmer", "color", "colorwheel",
@@ -70,65 +78,17 @@
     var FLARE_S = 1.0;      // a catch's flare settles in this long
     var ATTACK_S = 0.06;    // ...after snapping up in this long
     var KINDLE_S = 0.6;     // at Edge 1, a head kindles this long before it catches
-    var JITTER = 0.25;      // at Edge 1, a head catches up to this much of the spread early or late
     var HOT = { r: 255, g: 235, b: 170 };   // the flare's colour
     var ORANGE = { r: 255, g: 60, b: 0 };   // a colour wheel's one fire slot
 
-    // Deterministic hash -> 0..1.
-    function hash(a, b) {
-        var s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
-        return s - Math.floor(s);
-    }
-
-    function num(v, d) { return v !== undefined ? v : d; }
-
-    /* When head i catches, in seconds from the start: its share of the
-       distance to the farthest head, nudged by the Edge, never after the
-       spread is over. */
-    function catchAt(d, far, i, seed, spread, edge) {
-        var frac = far > 1e-6 ? d / far : 0;
-        if (edge > 0)
-            frac += edge * JITTER * (2 * hash(i + 1, seed) - 1);
-        return Math.max(0, Math.min(1, frac)) * spread;
-    }
+    var num = SPREAD.num;
+    var OTHER = 0, PIXEL = 1, RELAY = 2;    // the kinds of head the tick tells apart
 
     /* What a head shows, burning at @p level (0..1 of the look) in colour
-       @p c (Firelight's, or hotter while it flares). The way it is said
-       depends on the head:
-         a head of its own (a par, a mover, a dimmer): colour plus a dimmer
-           level, as Firelight; one with no dimmer channel carries the level
-           in its colour; a colour-wheel head keeps one slot (orange) and
-           flickers on its dimmer, so the wheel never chases;
-         a pixel of a pixel bar (one of several heads): the level in its
-           colour, and the bar's own dimmer at full while it is lit -- one
-           pixel's dimmer would be the whole bar's. */
+       @p c (Firelight's, or hotter while it flares): SPREAD.light, a colour
+       wheel on its one orange slot. */
     function burn(f, c, level, firelight) {
-        var o;
-        if (f.heads > 1) {
-            if (f.headRGB === false && !f.headWhite)
-                return { dimmer: level };                       // a dimmer pixel
-            var m = firelight ? 1 : level;                      // Firelight's colour already flickers
-            if (f.headRGB === false)
-                o = { w: Math.round(Math.max(c.r, c.g, c.b) * m) };   // a white pixel
-            else
-                o = { r: Math.round(c.r * m), g: Math.round(c.g * m), b: Math.round(c.b * m) };
-            if (f.hasDimmer && level > 0)
-                o.dimmer = 1;
-            return o;
-        }
-        if (f.hasColorWheel && !f.hasRGB)
-            return { r: ORANGE.r, g: ORANGE.g, b: ORANGE.b, dimmer: level };
-        if (f.hasDimmer) {
-            o = { r: c.r, g: c.g, b: c.b, dimmer: level };
-            return o;
-        }
-        // Colour only: the level is in the colour (Firelight's colour as it
-        // is once it burns); all black would leave the head to the look.
-        var k = firelight ? 1 : level;
-        o = { r: Math.round(c.r * k), g: Math.round(c.g * k), b: Math.round(c.b * k) };
-        if (o.r === 0 && o.g === 0 && o.b === 0)
-            return { dimmer: 0 };
-        return o;
+        return SPREAD.light(f, c, level, firelight, ORANGE);
     }
 
     effect.tick = function(fixtures, inputs, palettes, params, state) {
@@ -139,51 +99,93 @@
         var edge   = Math.max(0, Math.min(1, num(params.edge, 0.3)));
         var flareK = Math.max(0, Math.min(1, num(params.flare, 0.6)));
         var seed   = Math.floor(num(params.seed, 1));
-        var spread = num(params.spreadOver, 0) >= 0.5 ? num(inputs._cueTime, 8)
-                                                      : num(params.spreadTime, 8);
-        spread = Math.max(0.05, spread);
-        var far    = num(inputs._fromTargetFar, 0);
+        var spread = SPREAD.seconds(params, inputs);
         var kindle = edge * KINDLE_S;
         var fseed  = seed * 13.7;   // the flames' own, so the seed moves them too
         var ember  = FIRE.colour(0.1, cool, inten);
+        var n      = fixtures.length;
 
-        return fixtures.map(function(f, i) {
-            var at = catchAt(num(f.fromTarget, 0), far, i, seed, spread, edge);
-            var age = t - at;
+        /* Kept from tick to tick (a rig of thousands of pixels): when each
+           head catches, until the heads or the spread change; what kind of
+           head each is, until the heads do; each head's flame phases, until
+           the heads or the seed do. The loop below reads them, not the
+           heads: it runs for every pixel of the rig, every tick. */
+        var A = SPREAD.arrivals(fixtures, inputs, 0, seed, spread, edge, state);
+        var at = A.at;
+        var bank = state ? state._flames : undefined;
+        if (bank === undefined || bank.n !== n || bank.fseed !== fseed || bank.places !== A) {
+            var seeds = new Float64Array(n), kind = new Int8Array(n);
+            for (var s = 0; s < n; s++) {
+                var fs = fixtures[s];
+                seeds[s] = s * 1.618 + fseed;
+                kind[s] = fs.switches ? RELAY
+                        : (fs.heads > 1 && fs.headRGB !== false && !fs.hasDimmer) ? PIXEL : OTHER;
+            }
+            bank = { n: n, fseed: fseed, places: A, ph: FIRE.phases(seeds), kind: kind };
+            if (state)
+                state._flames = bank;
+        }
+        var ph = bank.ph, kinds = bank.kind;
+        var k = FIRE.clock(t, speed);
+        var k0 = k[0], k1 = k[1], k2 = k[2], k3 = k[3], k4 = k[4], k5 = k[5];
+        var table = new Array(256);     // this tick's colours, one object a flame step
+        var shared = { none: {}, off: { dimmer: 0 } };
+        var on = { dimmer: inten > 0 ? 1 : 0 };
+
+        var out = new Array(n);
+        for (var i = 0; i < n; i++) {
+            var age = t - at[i];
+            var kd = kinds[i];
+
+            // A relay: off until the fire catches, then on, and it stays on.
+            if (kd === RELAY) {
+                out[i] = age >= 0 ? on : shared.off;
+                continue;
+            }
 
             if (age < 0) {
                 // Not reached: dark. Just before, with an Edge, it kindles.
-                if (kindle <= 0 || age < -kindle)
-                    /* A head of its own: dark. A pixel with only a level:
-                       dark too, by its own dimmer. A colour pixel: left to
-                       what is under it (black would hand it back to the
-                       look anyway, and one pixel's master dimmer is the
-                       whole bar's). */
-                    return f.heads > 1 ? (f.headRGB === false && !f.headWhite ? { dimmer: 0 } : {})
-                                       : { dimmer: 0 };
-                var k = 1 + age / kindle;                       // 0..1 up to the catch
-                var glow = 0.3 * k * FIRE.flame(t * 3, i * 1.618 + fseed + 5, speed);
-                return burn(f, ember, glow * inten, false);
+                if (kindle <= 0 || age < -kindle) {
+                    out[i] = SPREAD.dark(fixtures[i], shared);
+                    continue;
+                }
+                var kk = 1 + age / kindle;                      // 0..1 up to the catch
+                var glow = 0.3 * kk * FIRE.flame(t * 3, i * 1.618 + fseed + 5, speed);
+                out[i] = burn(fixtures[i], ember, glow * inten, false);
+                continue;
             }
 
-            var flame = FIRE.flame(t, i * 1.618 + fseed, speed);
-            var c = FIRE.colour(flame, cool, inten);
-            var level = flame * inten;
-            if (age >= FLARE_S || flareK <= 0)
-                return burn(f, c, level, true);                 // burning: Firelight
+            // Firelight's flame (FIRE.flameAt, written out) and its colour
+            // in 256 steps (FIRE.colour, each step worked out once a tick).
+            var j = i * 6;
+            var flame = 0.5 + 0.25 * (k0 * ph[j + 1] + k1 * ph[j])
+                            + 0.15 * (k2 * ph[j + 3] + k3 * ph[j + 2])
+                            + 0.10 * (k4 * ph[j + 5] + k5 * ph[j + 4]);
+            flame = flame < 0 ? 0 : (flame > 1 ? 1 : flame);
+            var q = (flame * 255 + 0.5) | 0;
+            var c = table[q];
+            if (c === undefined)
+                c = table[q] = FIRE.colour(q / 255, cool, inten);
+            if (age >= FLARE_S || flareK <= 0) {
+                // Burning: Firelight. A pixel with no dimmer is its colour,
+                // as it is: the one object for every pixel at that flame.
+                out[i] = kd === PIXEL ? c : burn(fixtures[i], c, flame * inten, true);
+                continue;
+            }
 
             // The catch: snap up, flare hot, settle into the flame.
+            var level = flame * inten;
             var w = flareK * Math.pow(1 - age / FLARE_S, 2);
             var hot = { r: Math.round(c.r + (HOT.r * inten - c.r) * w),
                         g: Math.round(c.g + (HOT.g * inten - c.g) * w),
                         b: Math.round(c.b + (HOT.b * inten - c.b) * w) };
             level = level + (inten - level) * w;
-            if (age < ATTACK_S) {
-                var a = age / ATTACK_S;
-                return burn(f, hot, level * a, false);
-            }
-            return burn(f, hot, level, true);
-        });
+            if (age < ATTACK_S)
+                out[i] = burn(fixtures[i], hot, level * (age / ATTACK_S), false);
+            else
+                out[i] = burn(fixtures[i], hot, level, true);
+        }
+        return out;
     };
 
     return effect;

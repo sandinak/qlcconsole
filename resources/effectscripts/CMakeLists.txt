@@ -12,6 +12,7 @@ list(SORT SCRIPT_FILES)
 set(SCRIPT_LIBS
     lib/fire.js
     lib/matrix.js
+    lib/spread.js
     lib/wled.js
 )
 

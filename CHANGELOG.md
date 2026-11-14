@@ -22,6 +22,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed and fixed
 
+- **Spell Spread: a colour reaches the lights one by one.** A new Colour effect for the spell sweeping the stage from the witch, the steps lighting as the cast is bespelled, and blood running down the steps. It starts from the look's Aim target (centre stage without one), or set **From** to **Upstage** (runs downstage, down the steps), **Downstage**, **Stage Left** or **Stage Right**. The colour (its own, else the layer's) reaches each light at an even speed, each pixel of a pixel bar by its own place. A light not yet reached keeps what the cue under it gives. Reached, it flashes whiter (**Flash**) and holds the colour. **Edge** makes the front ragged; **Spread Time** or the cue's time sets how long it takes; a loop never starts again. Relays and plain dimmers are not its.
+- **Fire Spread on the real rig.** A silk flame's relay now switches on as the fire catches and stays on (its flicker chattered the relay). Step bars and PL-4003 bars, which have no dimmer, stay dark pixel by pixel until the fire reaches them, as every other light does. A WLED lantern in Effect mode takes the fire's colour and level, and its effect channels are left alone. Over 96 step bars (6,144 pixels) a tick costs about half what it did (11.8 → 6.3 ms, Release).
+
 - **Course lesson 3.5 teaches the real pad rules.** The student page, handout, teacher guide, glossary and course plan say hold LB + RB to arm, LT + A for GO (B Back, X / Y the sub-cues), RT for the armed hit and all four for the emergency stop; they used to teach "hold LB, press A".
 
 - **A one-off palette's name follows its cue.** Duplicate and Paste name the copy for its new cue, and renumbering or renaming a cue renames its one-offs in the same undo step, so a copied cue no longer shows "60% · 0.0.5 Who Are We 2" in the Look Editor and Workbench. Old shows stay as saved until the cue is edited.

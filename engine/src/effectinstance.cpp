@@ -29,6 +29,7 @@
 #include "qlcphysical.h"
 #include "monitorproperties.h"
 #include "righeads.h"
+#include "fountain.h"
 #include "stagetarget.h"
 #include "scenevalue.h"
 #include "universe.h"
@@ -1372,13 +1373,15 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             continue;
         }
         if (fxi != f.fixture || fxi->fixtureMode() != f.mode
-            || fxi->heads() != f.heads || fxi->name() != f.name)
+            || fxi->heads() != f.heads || fxi->name() != f.name
+            || uint(fxi->outputRules().toInt()) != f.rules)
         {
             rebuild = true;
             f.fixture = fxi;
             f.mode = fxi->fixtureMode();
             f.name = fxi->name();
             f.heads = fxi->heads();
+            f.rules = uint(fxi->outputRules().toInt());
             readFixtureFacts(fxi, f);
         }
 
@@ -1435,6 +1438,7 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             obj.setProperty("hasDimmer",     f.hasDimmer);
             obj.setProperty("hasGobo",       f.hasGobo);
             obj.setProperty("hasShutter",    f.hasShutter);
+            obj.setProperty("switches",      f.switches);
             // What THIS head emits. hasRGB is the whole fixture's: a box of
             // RGB pixel rows and white pixel rows (the XL-450's 165ch mode)
             // has it on every head, the white ones too, and a pixel effect
@@ -1558,22 +1562,30 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
 
     /* How far each head stands from the look's Aim target (centre stage
        without one) on the floor, for a script that spreads out from a point
-       (effect.targetDistance: Fire Spread). The same target and the same
-       floor distance the Spread row's "out from the target" orders heads
-       by, but the distance itself, so a head twice as far is twice as far.
-       A pixel fixture's heads each by their own place (RigHeads, where the
-       rig view draws them). Worked out again only when the cells, where
-       things stand or the target change. */
-    if (m_script.wantsTargetDistance())
+       (effect.targetDistance: Fire Spread, Spell Spread). The same target
+       and the same floor distance the Spread row's "out from the target"
+       orders heads by, but the distance itself, so a head twice as far is
+       twice as far. And where each head stands on the floor, with the
+       heads' extent, for one that sweeps in from a side of the stage
+       (effect.floorPlace: Spell Spread's From). A pixel fixture's heads
+       each by their own place (RigHeads, where the rig view draws them).
+       Worked out again only when the cells, where things stand or the
+       target change. */
+    const bool wantsDist = m_script.wantsTargetDistance();
+    const bool wantsFloor = m_script.wantsFloorPlace();
+    if (wantsDist || wantsFloor)
     {
         QVector3D centre = mp != nullptr ? mp->stageCentre() : QVector3D();
-        const bool aimed = aimCentre(&centre);
+        const bool aimed = wantsDist && aimCentre(&centre);
         if (!aimed && mp != nullptr)
             centre = mp->stageCentre();
         if (rebuild || moved || !m_distBuilt || aimed != m_distAimed || centre != m_distCentre)
         {
+            ++m_placesWorkedOut;
             QHash<quint32, QVector<QVector3D>> headsAt;
             double farthest = 0.0;
+            double x0 = 0.0, y0 = 0.0, x1 = 0.0, y1 = 0.0;
+            bool any = false;
             for (int i = 0; i < cells.size() && i < m_cellObjects.size(); ++i)
             {
                 if (m_cellObjects.at(i).isUndefined())
@@ -1591,9 +1603,30 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
                     if (cell.head >= 0 && cell.head < it->size())
                         p = it->at(cell.head);
                 }
-                const double d = std::hypot(double(p.x() - centre.x()), double(p.y() - centre.y()));
-                m_cellObjects[i].setProperty("fromTarget", d);
-                farthest = qMax(farthest, d);
+                if (wantsDist)
+                {
+                    const double d = std::hypot(double(p.x() - centre.x()), double(p.y() - centre.y()));
+                    m_cellObjects[i].setProperty("fromTarget", d);
+                    farthest = qMax(farthest, d);
+                }
+                if (wantsFloor)
+                {
+                    m_cellObjects[i].setProperty("floorX", double(p.x()));
+                    m_cellObjects[i].setProperty("floorY", double(p.y()));
+                    x0 = any ? qMin(x0, double(p.x())) : double(p.x());
+                    x1 = any ? qMax(x1, double(p.x())) : double(p.x());
+                    y0 = any ? qMin(y0, double(p.y())) : double(p.y());
+                    y1 = any ? qMax(y1, double(p.y())) : double(p.y());
+                    any = true;
+                }
+            }
+            if (wantsFloor)
+            {
+                m_floorBox = m_script.engine()->newObject();
+                m_floorBox.setProperty("x0", x0);
+                m_floorBox.setProperty("y0", y0);
+                m_floorBox.setProperty("x1", x1);
+                m_floorBox.setProperty("y1", y1);
             }
             m_distFar = farthest;
             m_distCentre = centre;
@@ -1757,6 +1790,9 @@ void EffectInstance::readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const
     f.lensMin = f.lensMax = 0.0f;
     f.hasPanTilt = f.hasRGB = f.hasColorWheel = f.hasDimmer = false;
     f.hasGobo = f.hasShutter = f.hasZoom = false;
+    // A relay, or a silk flame (its fan is on a relay): a level between
+    // none and full only chatters it.
+    f.switches = fxi->outputRules().testFlag(Fixture::Switch) || Fountain::isFlame(fxi);
     f.arms = AimSolver::arms(fxi);
     f.spin.clear();
     const QLCFixtureMode *mode = fxi->fixtureMode();
@@ -2079,6 +2115,12 @@ QJSValue EffectInstance::buildInputsObject() const
         obj.setProperty("_fromTargetFar", m_distFar);
         obj.setProperty("_targetAimed", m_distAimed);
     }
+    if (m_script.wantsFloorPlace() && !m_floorBox.isUndefined())
+        obj.setProperty("_floorBox", m_floorBox);
+    // Changes exactly when the places above do: a script keeps what it
+    // works out from them (when each head is reached) until it does.
+    if (m_script.wantsTargetDistance() || m_script.wantsFloorPlace())
+        obj.setProperty("_placesBuilt", double(m_placesWorkedOut));
     if (m_script.wantsCueTime())
         obj.setProperty("_cueTime", resolvedDurationMs() / 1000.0);
 
