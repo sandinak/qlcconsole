@@ -313,6 +313,10 @@ private:
      *  wider one now -- "HIT 1: Strobe ↳ overrides Blackout" (Run tab). */
     void refreshHitsNow();
     QLabel *m_hitsNow = nullptr;
+    /** What the pad's RT fires next while armed, "Hit ▸ Staff Slam (1 of
+     *  2)": PadRun::armedHitText(), its hitChanged() (rule 2). */
+    void refreshPadHit();
+    QLabel *m_padHit = nullptr;
     QToolButton *m_focusStart = nullptr;
 };
 

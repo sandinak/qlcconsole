@@ -113,6 +113,15 @@ private slots:
     void dialTurnsAddUpAndClampAtTheEnds();
     void aDialWalksTheStandbyCue();
     void aHitFiresAtTheNarrowestArmedPlace();
+    /** The state names the hit RT fires next in the console pad's words
+     *  (PadRun::hitText()), at every turn; the page's "hit" with no id
+     *  takes the console pad's turn, so what both name is what fires. */
+    void thePageNamesTheHitTheConsolePadFires();
+    /** Rule 1 on the phone: the page's commands with no list named, its
+     *  standby dial and the cues it shows are the list the console pad
+     *  plays (the Run tab's pick, else the main one); a named list stays
+     *  that list. */
+    void thePagePlaysTheListTheConsolePadPlays();
     void companionWordsFollowRemoteGoPinAndMode();
     void aSpinIsOneNudge();
 

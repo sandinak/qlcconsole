@@ -61,7 +61,11 @@ public:
      *   masters:[{id,name,level}] (percent; only when there are some),
      *   grand (percent), blackout, api (1), pad (padMap()), focus (a focus
      *   session runs on the console), status:[{level,text}] (Show Status),
-     *   hits:[{id,name,on,armed}] (only when the show has some)}. */
+     *   hits:[{id,name,on,armed}] (only when the show has some),
+     *   hit: what RT fires next, "Hit ▸ Staff Slam (1 of 2)" (PadRun::hitText(),
+     *   the console pad's own words; only when a pull would fire one)}.
+     *  The list, the cues and standby are the list the console pad plays
+     *  (PadRun::playedList(): the Run tab's pick, else the main one). */
     QByteArray stateJson() const;
 
     /** The pad's Run role as the page does it, by role key: {"lb":
@@ -84,14 +88,19 @@ public:
     /** Carry out @a command ("go", "back", "stop", "subgo", "subback",
      *  "pause", "resume")
      *  through ShowControl::run() with RouteWeb. @a unlocked: this page
-     *  gave the PIN (or the show has none). */
+     *  gave the PIN (or the show has none). @a list empty: the list the
+     *  console pad plays (PadRun::playedList(): the Run tab's pick, else
+     *  the main one), so the page's pad and the console's play one list;
+     *  a list named (OSC, Companion) is that list. */
     Result command(const QString &command, bool unlocked, const QString &cue = QString(),
                    const QString &list = QString());
 
     /** Fire hit @a hitId, or let it go when it runs, as a VC button does:
      *  only a hit that is armed at the narrowest armed place, in Operate
      *  (else WrongMode / NothingToDo). 0xFFFFFFFF: the armed one, taking
-     *  turns among several. Same rules as a command. */
+     *  turns among several -- the console pad's turn (PadRun::hitTurn()),
+     *  so the hit the page names is the one it fires. Same rules as a
+     *  command. */
     Result hit(quint32 hitId, bool unlocked);
 
     /** Blackout "on", "off" or "toggle". Same rules as a command. */
@@ -107,7 +116,8 @@ public:
 
     /** Put the cue @a direction (+1 next, -1 previous) of the standby cue
      *  on standby (a LOAD through ShowControl::run(), no GO): a dial that
-     *  walks the cue list. Same rules as a command. */
+     *  walks the cue list (the one the console pad plays). Same rules as a
+     *  command. */
     Result standby(int direction, bool unlocked);
 
     /** Move group master @a groupId to @a percent (0..100), under the same
@@ -167,7 +177,6 @@ private:
     QByteArray m_last;
     int m_clients = 0;
     int m_failures = 0;
-    int m_hitStep = 0;
     QElapsedTimer m_lockout;
     bool m_locked = false;
     /** The last GO's show control out that a Teaching show held (cleared

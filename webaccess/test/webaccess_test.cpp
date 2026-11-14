@@ -29,6 +29,7 @@
 #include <QFile>
 #include <QDir>
 #include <functional>
+#include <climits>
 #if defined(Q_OS_UNIX)
 #include <time.h>
 #endif
@@ -66,6 +67,9 @@
 #include "showcontrol.h"
 #include "showoperate.h"
 #include "showtreecontroller.h"
+#include "programmercontroller.h"
+#include "controlmap.h"
+#include "padrun.h"
 #include "showwebaccess.h"
 #include "qlcfixturedefcache.h"
 #include "qlcfixturedef.h"
@@ -1697,6 +1701,130 @@ void WebAccess_Test::aHitFiresAtTheNarrowestArmedPlace()
     QTRY_VERIFY((m_doc->masterTimer()->timerTick(), !fn->isRunning()));
     QTRY_VERIFY(!onOf(narrow));
     dropPage(ws);
+}
+
+void WebAccess_Test::thePageNamesTheHitTheConsolePadFires()
+{
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    ShowTreeController *st = m_doc->showTree();
+    Fixture *fx = dimmer(m_doc, QStringLiteral("D1"));
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer);
+    full->setName(QStringLiteral("Full"));
+    full->setValue(255);
+    m_doc->addPalette(full);
+    ShowTree::Target target;
+    target.fixtures = { fx->id() };
+    const quint32 prod = st->productions().first().id;
+    auto makeHit = [&](const QString &name) {
+        const quint32 h = st->addHit(ShowTree::HitScope::Production, prod, name);
+        const quint32 layer = st->addLayer(h, target, name);
+        ShowTree::Look look;
+        look.key = ShowTree::KeyDimmer;
+        look.palettes = { full->id() };
+        st->setLayerLook(h, layer, look);
+        return h;
+    };
+    WebAccessRun run(m_doc);
+    PadRun *pad = m_doc->programmer()->padRun();
+    MasterTimer *timer = m_doc->masterTimer();
+    auto said = [&]() { return QJsonDocument::fromJson(run.stateJson()).object().value(QStringLiteral("hit")).toString(); };
+    const QString arrow = QString::fromUtf8("Hit \u25b8 ");
+
+    // No hits: nothing to say.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(!QJsonDocument::fromJson(run.stateJson()).object().contains(QStringLiteral("hit")));
+    const quint32 red = makeHit(QStringLiteral("Red"));
+    const quint32 blue = makeHit(QStringLiteral("Blue"));
+    QCOMPARE(said(), arrow + QStringLiteral("Red (1 of 2)"));
+    QCOMPARE(said(), pad->hitText());
+
+    // The page's pull fires what it named, and the console pad's next pull the one named after.
+    QCOMPARE(run.hit(UINT_MAX, true), WebAccessRun::Done);
+    timer->timerTick();
+    QVERIFY(m_doc->function(st->lookFunction(red))->isRunning());
+    QCOMPARE(said(), arrow + QStringLiteral("Red off (1 of 2)"));
+    QCOMPARE(run.hit(UINT_MAX, true), WebAccessRun::Done);
+    timer->timerTick();
+    QVERIFY(!m_doc->function(st->lookFunction(red))->isRunning());
+    QCOMPARE(said(), arrow + QStringLiteral("Blue (2 of 2)"));
+    QCOMPARE(said(), pad->hitText());
+    QVERIFY(pad->fireHit());                    // the console pad's RT: Blue, as named
+    timer->timerTick();
+    QVERIFY(m_doc->function(st->lookFunction(blue))->isRunning());
+    QCOMPARE(said(), arrow + QStringLiteral("Blue off (2 of 2)"));
+    QVERIFY(pad->fireHit());
+    timer->timerTick();
+    QCOMPARE(said(), arrow + QStringLiteral("Red (1 of 2)"));
+    QCOMPARE(run.hit(UINT_MAX, true), WebAccessRun::Done);   // and back to the page: Red
+    timer->timerTick();
+    QVERIFY(m_doc->function(st->lookFunction(red))->isRunning());
+
+    // Design: no hit fires there, so the page names none.
+    QCOMPARE(run.hit(red, true), WebAccessRun::Done);       // let go (no timer thread here)
+    timer->timerTick();
+    QVERIFY(!m_doc->function(st->lookFunction(red))->isRunning());
+    m_doc->setMode(Doc::Design);
+    QVERIFY(!QJsonDocument::fromJson(run.stateJson()).object().contains(QStringLiteral("hit")));
+}
+
+void WebAccess_Test::thePagePlaysTheListTheConsolePadPlays()
+{
+    Chaser *mainList = runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->productions().first().id;
+    const quint32 act2 = st->addCueList(prod, QStringLiteral("Act Two"), ShowTree::ListMode::NonTracking);
+    st->addCue(act2, -1, QStringLiteral("Storm"));
+    st->addCue(act2, 0, QStringLiteral("Calm"));
+    Chaser *other = qobject_cast<Chaser *>(m_doc->function(st->cueList(act2)->chaser));
+    QVERIFY(other != nullptr && other != mainList);
+    ShowControl *sc = m_doc->showControl();
+    QList<ShowControl::Request> seen;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route) {
+        seen << r;
+        return true;
+    });
+    auto cleanup = qScopeGuard([&]() { sc->setRunHandler(nullptr); });
+    WebAccessRun run(m_doc);
+    PadRun *pad = m_doc->programmer()->padRun();
+    auto state = [&]() { return QJsonDocument::fromJson(run.stateJson()).object(); };
+
+    // Nothing picked on the Run tab: the main list, for the console pad and the page.
+    QCOMPARE(pad->listChaser(), UINT_MAX);
+    QCOMPARE(state().value(QStringLiteral("list")).toString(), QStringLiteral("Act One"));
+    QCOMPARE(run.command(QStringLiteral("go"), true), WebAccessRun::Done);
+    QCOMPARE(seen.last().chaser, mainList->id());
+
+    // Another list picked on the Run tab: the page's GO, Back and Stop, its
+    // standby dial and its cues are that list's -- the console pad's.
+    m_doc->controlMap()->setRunTabList(act2);
+    QCOMPARE(pad->listChaser(), other->id());
+    QCOMPARE(state().value(QStringLiteral("list")).toString(), QStringLiteral("Act Two"));
+    QCOMPARE(state().value(QStringLiteral("next")).toObject().value(QStringLiteral("name")).toString(),
+             QStringLiteral("Storm"));
+    for (const char *word : { "go", "back", "stop", "subgo" })
+    {
+        QCOMPARE(run.command(QLatin1String(word), true), WebAccessRun::Done);
+        QCOMPARE(seen.last().chaser, pad->listChaser());
+    }
+    QCOMPARE(run.standby(+1, true), WebAccessRun::Done);
+    QCOMPARE(seen.last().command, ShowControl::Load);
+    QCOMPARE(seen.last().chaser, other->id());
+
+    // A caller that names a list (OSC, Companion) gets that list.
+    if (!mainList->cueListNumber().isEmpty())
+    {
+        QCOMPARE(run.command(QStringLiteral("go"), true, QString(), mainList->cueListNumber()), WebAccessRun::Done);
+        QCOMPARE(seen.last().chaser, mainList->id());
+    }
+
+    // The pick gone: the main list again, on both.
+    QVERIFY(st->removeCueList(act2));
+    QCOMPARE(pad->listChaser(), UINT_MAX);
+    QCOMPARE(state().value(QStringLiteral("list")).toString(), QStringLiteral("Act One"));
+    QCOMPARE(run.command(QStringLiteral("go"), true), WebAccessRun::Done);
+    QCOMPARE(seen.last().chaser, mainList->id());
 }
 
 void WebAccess_Test::companionWordsFollowRemoteGoPinAndMode()

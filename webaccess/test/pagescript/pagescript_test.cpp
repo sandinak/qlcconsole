@@ -579,6 +579,58 @@ void PageScript_Test::noHitOnTheWayToTheStopOnThePage()
     QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|hit") });
 }
 
+void PageScript_Test::theArmedHitIsNamedUnderTheBanner()
+{
+    loadPage(WebAccessRun::html());
+    js(QStringLiteral("__open()"));
+    sent();
+    const QString red = QString::fromUtf8("Hit \u25b8 Red (1 of 2)");
+    const QString redOff = QString::fromUtf8("Hit \u25b8 Red off (1 of 2)");
+    const QString blue = QString::fromUtf8("Hit \u25b8 Blue (2 of 2)");
+    // Not armed: the console names a hit, the page says nothing of it.
+    runState(liveRun(QJsonObject{ { "hit", red } }));
+    QVERIFY(!shown(QStringLiteral("padhit")));
+    // Armed: the banner as before, and the hit under it.
+    armPad();
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("ARMED: LT + A IS GO"));
+    QVERIFY(shown(QStringLiteral("padhit")));
+    QCOMPARE(text(QStringLiteral("padhit")), red);
+    // Each pull's state: what the next pull does.
+    pad(QJsonObject{ { "rt", 1 } });
+    pad(QJsonObject());
+    QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|hit") });
+    runState(liveRun(QJsonObject{ { "hit", redOff } }));
+    QCOMPARE(text(QStringLiteral("padhit")), redOff);
+    runState(liveRun(QJsonObject{ { "hit", blue } }));
+    QCOMPARE(text(QStringLiteral("padhit")), blue);
+    // The cue moved on to one with no hit: nothing, not "none".
+    runState(liveRun());
+    QVERIFY(!shown(QStringLiteral("padhit")));
+    QCOMPARE(text(QStringLiteral("padhit")), QString());
+    runState(liveRun(QJsonObject{ { "hit", red } }));
+    QVERIFY(shown(QStringLiteral("padhit")));
+    // Disarmed: gone; armed again: back.
+    armPad();
+    QVERIFY(!shown(QStringLiteral("padhit")));
+    armPad();
+    QCOMPARE(text(QStringLiteral("padhit")), red);
+    // The emergency stop: EMERGENCY STOP, no hit under it.
+    pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "rt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "rt", 1 }, { "lb", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "rt", 1 }, { "lb", 1 }, { "rb", 1 } });
+    QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|alloff") });
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("EMERGENCY STOP"));
+    QVERIFY(!shown(QStringLiteral("padhit")));
+    pad(QJsonObject(), 50);
+    // The controller gone: disarmed, and the hit with it.
+    armPad();
+    QVERIFY(shown(QStringLiteral("padhit")));
+    js(QStringLiteral("__noPad();__advance(50)"));
+    QVERIFY(!shown(QStringLiteral("armed")));
+    QVERIFY(!shown(QStringLiteral("padhit")));
+}
+
 void PageScript_Test::theTestOpenedMidChordArmsNothing()
 {
     loadPage(WebAccessRun::html());

@@ -10,6 +10,16 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Pad hits: the turn is not reset on a new cue (0.4.6 follow-up, decide)
+
+With two hits taking turns, the turn counter carries over from the last
+cue, so arriving at a new cue can read "Thunder (2 of 2)" first. The display
+is honest (it names what the pull fires). Resetting the turn when the set of
+armed hits changes would start each cue at "1 of n" but changes which hit
+fires. Proposed: reset on a new set; needs his yes (rules first).
+
+---
+
 ## Props a person holds, on cue (asked 2026-11-14) -- being built (feat/045-held-props)
 
 Asked for: a prop (a staff and the like) is given to a Person to hold and

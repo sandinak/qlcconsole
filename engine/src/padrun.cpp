@@ -58,6 +58,18 @@ PadRun::PadRun(Doc *doc, ProgrammerController *pc, QObject *parent)
     m_blink->setInterval(blinkMs());
     connect(m_blink, &QTimer::timeout, this, &PadRun::lightTick);
     hookShowControl();
+    if (m_doc != nullptr)
+    {
+        /* The hit named before it fires: Operate only, and a hit going on
+           or off (a VC button, the phone page) changes what a pull does.
+           Queued: a function starts and stops on the DMX thread. */
+        connect(m_doc, &Doc::modeChanged, this, &PadRun::syncHit);
+        if (MasterTimer *mt = m_doc->masterTimer())
+        {
+            connect(mt, &MasterTimer::functionStarted, this, &PadRun::syncHit, Qt::QueuedConnection);
+            connect(mt, &MasterTimer::functionStopped, this, &PadRun::syncHit, Qt::QueuedConnection);
+        }
+    }
     if (m_pc != nullptr)
     {
         // A tool taking the pad, or letting it go: the screen says who has it.
@@ -89,6 +101,14 @@ void PadRun::hookShowControl()
        Run tab): the pad's red would otherwise outlast what it reports.
        Doc makes its ShowControl after the programmer, so this is also
        tried when the role comes on. */
+    ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
+    if (st != nullptr && !m_showTreeHooked)
+    {
+        // The hit named on every surface follows the cue, the hits and their edits.
+        m_showTreeHooked = true;
+        connect(st, &ShowTreeController::hitArmingChanged, this, &PadRun::syncHit);
+        connect(st, &ShowTreeController::changed, this, &PadRun::syncHit);
+    }
     ShowControl *sc = m_doc != nullptr ? m_doc->showControl() : nullptr;
     if (sc == nullptr || m_showControlHooked)
         return;
@@ -543,6 +563,19 @@ void PadRun::sync()
         m_shownState = int(now);
         emit stateChanged();
     }
+    syncHit();
+}
+
+void PadRun::syncHit()
+{
+    hookShowControl();
+    const QString hit = hitText();
+    const QString armed = state() == Armed ? hit : QString();
+    if (hit == m_shownHit && armed == m_shownArmedHit)
+        return;
+    m_shownHit = hit;
+    m_shownArmedHit = armed;
+    emit hitChanged();
 }
 
 void PadRun::lightTick()
@@ -555,6 +588,8 @@ void PadRun::lightTick()
     m_blinkOn = playing ? !m_blinkOn : false;
     m_playing = playing;
     showLight();
+    // A one-shot hit that finishes plays again on the next pull: say so.
+    syncHit();
 }
 
 QString PadRun::holder() const
@@ -907,17 +942,98 @@ bool PadRun::fireHit()
     }
 
     // Several at the narrowest place: each press takes the next.
-    const quint32 pick = tier.at(m_hitStep % tier.count());
+    const quint32 pick = hitTurn();
     Function *f = m_doc->function(st->lookFunction(pick));
     if (f == nullptr)
         return refuse(tr("No hit armed."));
-    ++m_hitStep;
+    nextHitTurn();
     f->start(m_doc->masterTimer(), FunctionParent::master());
     const ShowTree::Cue *c = st->cue(pick);
     m_pc->padRumble(1, ControllerScheme::rumbleShortMs());
     m_pc->tellOperator(tr("%1.").arg(c != nullptr ? c->name : f->name()), ControllerScheme::ConfirmPriority);
     emit hitFired(pick, true);
     return true;
+}
+
+quint32 PadRun::hitTurn() const
+{
+    const QList<quint32> tier = armedHits();
+    return tier.isEmpty() ? ShowTree::invalidId() : tier.at(m_hitStep % tier.count());
+}
+
+void PadRun::nextHitTurn()
+{
+    /* No syncHit() here: the hit starting is what changes the words (its
+       functionStarted(), a tick later), and telling the screens now would
+       flash the next one's name for that tick before "… off". */
+    ++m_hitStep;
+}
+
+quint32 PadRun::nextHit(bool *letsGo, int *index, int *count) const
+{
+    if (letsGo != nullptr)
+        *letsGo = false;
+    if (index != nullptr)
+        *index = 0;
+    if (count != nullptr)
+        *count = 0;
+    const ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
+    // As fireHit(): Operate only, the narrowest armed place.
+    if (st == nullptr || m_doc->mode() != Doc::Operate)
+        return ShowTree::invalidId();
+    const QList<quint32> tier = armedHits();
+    if (tier.isEmpty())
+        return ShowTree::invalidId();
+    quint32 pick = ShowTree::invalidId();
+    bool off = false;
+    // One on: the pull lets it go -- or, a one-shot that has finished, plays it again.
+    for (quint32 h : tier)
+    {
+        const Function *f = m_doc->function(st->lookFunction(h));
+        if (f == nullptr || !f->isRunning())
+            continue;
+        const EffectScriptRunner *esr = m_doc->effectScriptRunner();
+        pick = h;
+        off = esr == nullptr || esr->oneShotState(f->id()) != 1;
+        break;
+    }
+    if (pick == ShowTree::invalidId())
+    {
+        pick = tier.at(m_hitStep % tier.count());
+        if (m_doc->function(st->lookFunction(pick)) == nullptr)
+            return ShowTree::invalidId();     // fireHit(): "No hit armed."
+    }
+    if (letsGo != nullptr)
+        *letsGo = off;
+    if (index != nullptr)
+        *index = int(tier.indexOf(pick)) + 1;
+    if (count != nullptr)
+        *count = int(tier.count());
+    return pick;
+}
+
+QString PadRun::hitText() const
+{
+    bool off = false;
+    int index = 0, count = 0;
+    const quint32 hit = nextHit(&off, &index, &count);
+    if (hit == ShowTree::invalidId())
+        return QString();
+    const ShowTreeController *st = m_doc->showTree();
+    const ShowTree::Cue *c = st->cue(hit);
+    QString name = c != nullptr ? c->name : QString();
+    if (name.isEmpty())
+        if (const Function *f = m_doc->function(st->lookFunction(hit)))
+            name = f->name();
+    if (count > 1)
+        return off ? tr("Hit \u25b8 %1 off (%2 of %3)").arg(name).arg(index).arg(count)
+                   : tr("Hit \u25b8 %1 (%2 of %3)").arg(name).arg(index).arg(count);
+    return off ? tr("Hit \u25b8 %1 off").arg(name) : tr("Hit \u25b8 %1").arg(name);
+}
+
+QString PadRun::armedHitText() const
+{
+    return state() == Armed ? hitText() : QString();
 }
 
 /*****************************************************************************
@@ -971,17 +1087,26 @@ void PadRun::roleChordFired()
                        ControllerScheme::ConfirmPriority);
 }
 
-quint32 PadRun::listChaser() const
+quint32 PadRun::listChaserOf(const Doc *doc)
 {
     // The Run tab's list (its picker, kept with the show), else the main one.
-    const ControlMap *cm = m_doc != nullptr ? m_doc->controlMap() : nullptr;
-    const ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
+    const ControlMap *cm = doc != nullptr ? doc->controlMap() : nullptr;
+    const ShowTreeController *st = doc != nullptr ? doc->showTree() : nullptr;
     if (cm == nullptr || st == nullptr)
         return UINT_MAX;
     const ShowTree::CueList *l = st->cueList(cm->runTabList());
-    if (l == nullptr || l->looks || l->isSubCues() || qobject_cast<Chaser *>(m_doc->function(l->chaser)) == nullptr)
+    if (l == nullptr || l->looks || l->isSubCues() || qobject_cast<Chaser *>(doc->function(l->chaser)) == nullptr)
         return UINT_MAX;
     return l->chaser;
+}
+
+Chaser *PadRun::playedList(Doc *doc)
+{
+    ShowControl *sc = doc != nullptr ? doc->showControl() : nullptr;
+    if (sc == nullptr)
+        return nullptr;
+    const quint32 at = listChaserOf(doc);
+    return at != UINT_MAX ? qobject_cast<Chaser *>(doc->function(at)) : sc->cueList(QString());
 }
 
 QString PadRun::listName(quint32 chaser) const

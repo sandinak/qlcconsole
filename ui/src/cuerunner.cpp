@@ -626,6 +626,18 @@ void CueRunner::buildFullLayout()
     m_subNext->setFont(big);
     m_subNext->setWordWrap(true);
     v->addWidget(m_subNext);
+    /* Under what GO plays, what the pad's RT fires (armed): its name before
+       it fires, "1 of 2" when two take turns -- PadRun's words, as the
+       footer's Pad chip and the phone page say it. Nothing while there is
+       nothing to fire (UX-23). */
+    m_padHit = new QLabel(this);
+    m_padHit->setObjectName(QStringLiteral("crPadHit"));
+    m_padHit->setFont(hf);
+    m_padHit->hide();
+    v->addWidget(m_padHit, 0, Qt::AlignLeft);
+    connect(m_doc->programmer()->padRun(), &PadRun::hitChanged, this, &CueRunner::refreshPadHit);
+    connect(m_doc->programmer(), &ProgrammerController::focusControllerChanged, this, &CueRunner::refreshPadHit);
+    refreshPadHit();
     m_tcNext = new QLabel(this);
     m_tcNext->setObjectName(QStringLiteral("crTimecodeNext"));
     m_tcNext->setFont(big);
@@ -1162,6 +1174,22 @@ void CueRunner::refreshPadRun()
         ? QStringLiteral("CueRunner { border: 5px solid %1; }").arg(state.name())
         : QString());
     m_padRunBtn->setToolTip(run->helpHtml());
+}
+
+void CueRunner::refreshPadHit()
+{
+    if (m_padHit == nullptr)
+        return;
+    const PadRun *run = m_doc->programmer()->padRun();
+    const QString text = run->armedHitText();
+    m_padHit->setText(text);
+    // The arm's own colour, as the Pad: button and the frame round the tab.
+    m_padHit->setStyleSheet(QStringLiteral("QLabel { color: %1; background: %2; padding: 2px 8px; border-radius: 4px; }")
+                                .arg(run->stateInk().name(), PadRun::armedColour().name()));
+    m_padHit->setToolTip(m_doc->programmer()->padText(
+        tr("What {RT} fires now, armed and pulled on its own: the hit armed at the narrowest place. "
+           "Two or more there take turns, one a pull; on, the pull lets it go.")));
+    m_padHit->setVisible(!text.isEmpty());
 }
 
 void CueRunner::refreshFocusArmed()

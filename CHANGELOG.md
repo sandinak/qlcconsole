@@ -18,6 +18,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **A one-off palette's name follows its cue.** Duplicate and Paste name the copy for its new cue, and renumbering or renaming a cue renames its one-offs in the same undo step, so a copied cue no longer shows "60% · 0.0.5 Who Are We 2" in the Look Editor and Workbench. Old shows stay as saved until the cue is edited.
 
+- **The pad says which hit RT fires before you pull it.** While armed, the Run tab shows **Hit ▸ Staff Slam** under what GO plays, and the footer's Pad chip says it too (**Pad: ARMED · Hit ▸ Staff Slam**). Two hits taking turns show which one is next (**Hit ▸ Red (1 of 2)**), and a hit that is on shows that the pull lets it go (**Hit ▸ Breathe off**). The phone Run page shows the same line under ARMED while its controller is armed, and both controllers share the turn. With no hit to fire, nothing is shown.
+- **The phone Run page plays the Run tab's list.** Its GO, Back, Stop and standby, its controller, and the cues it shows now go to the list the Run tab plays (its pick, else the main list), the same list as the console's controller. A Companion button or OSC message that names a list still plays that list.
+
 ### Tooling
 
 - **The UX flows walk the view in use.** F-04 and F-07 now go through the Show Tree's Workbench (Build is hidden in the qlcconsole view), and F-13 (run the show from the pad) and F-14 (fire a staff hit) are added, their pad steps manual.

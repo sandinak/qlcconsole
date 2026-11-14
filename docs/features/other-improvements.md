@@ -1226,8 +1226,10 @@ How it keeps the show safe:
   other GO takes (the console's keys, the Run tab, the pad, OSC), so cues
   hold the Design previews and play exactly as from the console.
 
-The page drives the show's main cue list, as the Run tab does when it
-follows the current production.
+The page drives the cue list the console's Run tab plays (the one picked
+there, else the show's main list), the same list as the console's game
+controller, and shows that list's cues. A Companion button or an OSC
+message that names a list plays that list.
 
 A game controller works the page too (hold LB + RB to arm, then LT + A for GO), and a Steam
 Deck can use it as a second screen; there is a focus remote beside it. See
