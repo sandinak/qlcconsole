@@ -163,7 +163,10 @@ person, never at the prop, so a look on her lands the same with or
 without it. Hand-held IR candles work the same way for who has one; the
 show lights them with a look on the candle remote (Select On, a Window
 long enough for the cast to catch it). The plot draws what was sent, not
-what each candle did: a candle in a pocket missed the button. To show
+what each candle did: a candle in a pocket missed the button. On, Off,
+Candle and Light are states and track like any value; Dim and Brighten
+are presses (each one sent steps every candle again), so they never track
+and belong in a cue of their own, released after it. To show
 it: right-click a prop on the plot ▸ **Held By**, or select a row of
 singers ▸ **Give Each a Prop** ▸ Candle. Not part of the hands-on; see
 the help's Stage Targets ▸ Props someone holds and Candles.

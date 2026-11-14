@@ -123,6 +123,16 @@ every On and can be dimmed.
   The plot animates the flicker only while it paints the candle; the rig
   view marks it with two sparks. A candle's `litBy` names its remote;
   unset = the only one in the show.
+- **Presses don't track** (0.4.6). Dim and Brighten carry `Press="true"`
+  in the definition (`QLCCapability::isPress()`; an older build ignores
+  it): a channel with one never fades, and the Show Tree sends a press only
+  in the cue whose own layer sets it. Every other cue of a list that
+  presses there gets a generated guard scene, its last member, holding
+  Select at what tracks with presses as 0, or 0 where nothing sets it
+  (`ShowTreeController::pressGuards()`, engine/src/showtreepresses.cpp) --
+  so a Back to a cue it tracked into, a jump, a later Window change or a
+  Release to a base cue that has it sends nothing. Back to the press cue
+  itself, or a chase through one, still presses: Show Review CUE-17.
 - **File.** `<Blocked Set="2" Hold="held" HeldBy="7"/>`, `Set="0"` for
   Default's, `Kind="staff"`/`"candle"`, `LitBy="12"`. An older build reads
   the kind as a plain mark and skips a Blocked with only a hold (and every

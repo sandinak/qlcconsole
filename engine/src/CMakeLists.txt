@@ -79,6 +79,7 @@ add_library(${module_name} SHARED
     showtreebridge.cpp
     showtreeconvert.cpp
     showtreelooks.cpp
+    showtreepresses.cpp
     showtreehits.cpp
     showtreeblocking.cpp
     showtreeproductions.cpp
@@ -127,6 +128,7 @@ add_library(${module_name} SHARED
     performerfill.cpp performerfill.h
     stagetarget.cpp stagetarget.h
     candleremote.cpp candleremote.h
+    presses.cpp presses.h
     heldprops.cpp heldprops.h
     blocking.cpp blocking.h
     truss.cpp truss.h

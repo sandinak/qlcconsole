@@ -5307,6 +5307,17 @@ void App::fitStatusBar()
             w->setMaximumWidth(0);
         }
     }
+    /* The Grand Master is a safety control: it never gives way to the Pad
+       chip's hit line, which the Run tab shows in full anyway. */
+    if (!m_padChipShort && m_statusGrandMasterBox != nullptr && m_statusGrandMasterBox->isVisibleTo(sb)
+        && m_statusGrandMasterBox->property("statusSqueezed").toBool()
+        && m_statusPadRoleLabel != nullptr && m_statusPadRoleLabel->isVisibleTo(sb)
+        && m_doc != nullptr && m_doc->programmer() != nullptr
+        && !m_doc->programmer()->padRun()->armedHitText().isEmpty())
+    {
+        m_padChipShort = true;
+        updatePadRoleChip();
+    }
 }
 
 void App::slotFooterGrandMasterMoved(int value)
@@ -8910,7 +8921,15 @@ bool App::eventFilter(QObject *watched, QEvent *event)
     if (m_statusFitTimer != nullptr && watched == statusBar()
         && (event->type() == QEvent::LayoutRequest || event->type() == QEvent::Resize
             || event->type() == QEvent::Show))
+    {
+        // Wider again: the Pad chip may say what RT fires (fitStatusBar() takes it back out).
+        if (event->type() == QEvent::Resize && m_padChipShort)
+        {
+            m_padChipShort = false;
+            updatePadRoleChip();
+        }
         m_statusFitTimer->start();
+    }
     /* The footer's "Unsaved changes": hover says how many, a click lists them. */
     if (watched == m_statusDirtyLabel && m_statusDirtyLabel != NULL && m_doc != NULL && m_doc->isModified())
     {
@@ -10052,7 +10071,7 @@ void App::updatePadRoleChip()
     {
         text += QStringLiteral(" · ") + notice;
     }
-    else if (!hit.isEmpty())
+    else if (!hit.isEmpty() && !m_padChipShort)
     {
         QFont bold = m_statusPadRoleLabel->font();
         bold.setBold(true);
