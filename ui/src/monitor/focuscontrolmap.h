@@ -44,6 +44,12 @@
  * not have is greyed. Controls light while they are pressed and the sticks
  * show their deflection, so the mapping can be checked on the hardware.
  * A click on a control does what pressing it would.
+ *
+ * The Controller Test draws the same pad with NameLabels: each control is
+ * labelled with its own name on the pad in hand (A or Cross, LB or L1) and
+ * what it reads now -- a trigger's pull, a stick's deflection -- with a
+ * mark on every control that has answered since clearSeen(). Nothing there
+ * is clickable: it only shows what the controller sends.
  */
 class FocusControlMap final : public QWidget
 {
@@ -51,11 +57,18 @@ class FocusControlMap final : public QWidget
 
 public:
     enum Mode { ControllerMap, KeyboardMap };
+    enum Labels { ActionLabels, NameLabels };
 
     explicit FocusControlMap(QWidget *parent = nullptr);
 
     Mode mode() const { return m_mode; }
     void setMode(Mode mode);
+
+    /** What each control is labelled with: what it does in the tool
+     *  (ActionLabels), or its own name and what it reads now (NameLabels,
+     *  the Controller Test's picture: nothing on it can be clicked). */
+    Labels labels() const { return m_labels; }
+    void setLabels(Labels labels);
 
     /** Which tool's words the controller is labelled with (Focus mode,
      *  Focus calls, Refine: one layout, ControllerScheme). */
@@ -85,6 +98,22 @@ public:
     void setKeyDown(int key, bool down);
     /** Nothing held, sticks centred. */
     void clearInput();
+
+    /** A trigger's pull as last read, 0..1. */
+    float triggerLevel(bool right) const { return m_trigger[right ? 1 : 0]; }
+    /** @p role was pressed (a trigger pulled half way, a stick pushed half
+     *  way) since the last clearSeen(): its "seen" mark. A stick is seen by
+     *  its X role (LeftX, RightX). */
+    bool wasSeen(int role) const { return m_seen.contains(role); }
+    QSet<int> seenControls() const { return m_seen; }
+    void clearSeen();
+    /** The control Check Mapping asks for, outlined (NameLabels only;
+     *  GamepadRole::None: none). A stick by either of its axes. */
+    void setPrompted(int role);
+    int prompted() const { return m_prompted; }
+    /** The second line under @p role's label with NameLabels ("pressed",
+     *  "62 %", "x +0.31  y -0.80"...). */
+    QString stateText(int role) const;
 
     /* What it shows -- for the panel's tests. */
     /** What the map says @p role does ("Save", "Next head"...); empty for a
@@ -128,12 +157,14 @@ private:
     };
 
     void paintController(QPainter &p);
+    QString nameLabel(int role) const;
     void paintKeyboard(QPainter &p);
     int hitAt(const QPointF &pos, QString *tip = nullptr) const;
     static int canonicalKey(int key);
 
 private:
     Mode m_mode = ControllerMap;
+    Labels m_labels = ActionLabels;
     ControllerScheme::Tool m_tool = ControllerScheme::FocusTool;
     PadNames::Family m_family = PadNames::Xbox;
     QColor m_light;
@@ -141,6 +172,9 @@ private:
     float m_step = 0.1f;
     QSet<int> m_lit;              ///< roles held
     float m_axis[4] = { 0.5f, 0.5f, 0.5f, 0.5f };   ///< LX LY RX RY
+    float m_trigger[2] = { 0.0f, 0.0f };            ///< LT RT, 0..1
+    QSet<int> m_seen;             ///< roles that answered (sticks by X)
+    int m_prompted = 0;           ///< GamepadRole::None
     QSet<int> m_keys;             ///< keys held
     QList<Hit> m_hits;
     int m_hover = -1;

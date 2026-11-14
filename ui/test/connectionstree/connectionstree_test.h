@@ -64,6 +64,7 @@ private slots:
     void lineAliasIsShownOnTheRow();
     void anAbsentInputDeviceIsShownNotConnected();
     void aControllerSlotListsItsDevices();
+    void testControllerOpensThePictureOnIt();
     void targetAliasIsShownOnTheRow();
 
     /* Default expansion and its memory */

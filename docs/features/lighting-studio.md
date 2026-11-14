@@ -2398,7 +2398,31 @@ in front: another app, the screen saver, a locked screen.
 
 **Controller Test…**, next to **Use** in Quick focus's setup (and in
 **Settings → Advanced → Game controllers**), opens a window listing every
-input your controllers send, as it arrives, whether or not they are patched:
+input your controllers send, as it arrives, whether or not they are patched.
+
+At the top is a **picture of the controller**, labelled with its own
+names: A, B, LB, RT, View and Menu on an Xbox pad; Cross, Circle, L1, R2,
+Create (or Share) and Options on a PlayStation pad. Press a control and it
+fills in with a heavy outline while you hold it. A trigger fills from the
+bottom as far as you pull it, and its label gives the pull as a
+percentage. A stick shows where it is as a dot in its circle, with its
+position under its name, and fills in when you click it. The D-pad's four
+directions light on their own. On a PlayStation pad the touchpad lights
+too. Every control that has answered gets a small ✓ and says *seen*, so
+press everything once and look for the ones that never answered.
+**Reset Marks** clears the ticks to start again.
+
+Under the picture, **Last read** names the raw input and the control it
+was read as, for example *Button 3 → X*. If you pressed Y and it says X,
+the controller is mapped wrong. With more than one controller connected,
+pick which one the picture shows from **Controller** above it; Check
+Mapping walks the same one. To open the window on one controller, go to
+Connections, right-click it under a universe's input and choose **Test
+Controller…**. The picture only reads the controller and sends nothing
+itself. A controller patched to a universe still works there while you
+test it, so test a patched pad when the show is not live.
+
+The list below the picture gives each input:
 
 - the **device**, and its **connection** — USB, Bluetooth or Bluetooth LE,
   the model and its product ID, and how it is read (the GameController
@@ -2427,8 +2451,8 @@ text file. That is everything needed to check, or fix, a controller's
 mapping without the controller in hand.
 
 **Check Mapping** does the pressing for you, one control at a time. Press
-it (with the controller connected; with more than one, pick which from the
-list above the prompt) and the window asks for each control in the pad's
+it (with the controller connected; with more than one, it walks the one
+the picture shows) and the window asks for each control in the pad's
 own printed name, with where it is on the pad: *Press A — the green bottom
 face button*, or *Press Cross (✕) — the bottom face button* on a
 PlayStation pad. The order is the face buttons, the shoulders, the
@@ -2445,7 +2469,8 @@ whole check goes into the log, with the device, its vendor and product ID,
 how it is connected and which layout (Xbox or PlayStation names) it was
 read with, so a tester can **Copy** or **Save…** it and send it. You can
 also start it from Connections: right-click a controller under a
-universe's input and choose **Check Mapping…**.
+universe's input and choose **Check Mapping…**. While it runs, the
+control it is asking for is ringed with a dashed line on the picture.
 
 ### Permissions
 

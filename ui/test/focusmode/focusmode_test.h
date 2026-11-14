@@ -76,6 +76,11 @@ private slots:
      *  light, red another, a red ring round yellow for both; a save flashes
      *  it green. */
     void checkMappingWalksTheControllerAndLogsIt();
+    /** The Controller Test's picture: a button lit while held and ticked
+     *  once seen, a trigger's level, a stick's deflection and click, the
+     *  D-pad's directions, the last input named with its role, Reset
+     *  Marks, the walk's control ringed, one picker for two pads. */
+    void controllerTestPictureShowsWhatIsPressed();
     /** With QLC_SHOT_DIR: the Controller Test, Xbox and DualSense, three
      *  sizes, light and dark, some controls held. */
     void controllerTestShots();

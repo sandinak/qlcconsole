@@ -36,6 +36,11 @@
 #include <QStackedWidget>
 #include <QToolButton>
 #include <QScrollArea>
+#include <QScopeGuard>
+#include <QPointer>
+
+// Its public face only: included before the define below.
+#include "controllertestdialog.h"
 
 #include "../../../engine/test/common/stdprelude.h"
 #define protected public
@@ -591,6 +596,69 @@ void ConnectionsTree_Test::aControllerSlotListsItsDevices()
     QCOMPARE(rows.count(), 2);
     QVERIFY(rows.at(0)->text(COL_DETAIL).startsWith("not connected"));
     QVERIFY(rows.at(1)->text(COL_DETAIL).startsWith("not connected"));
+}
+
+void ConnectionsTree_Test::testControllerOpensThePictureOnIt()
+{
+    /* Right-click a controller under a universe's input: Test Controller…
+       opens the Controller Test with the picture on that controller. */
+    const QString xbox = QStringLiteral("Xbox Wireless Controller (0b13)");
+    const QString pad = QStringLiteral("DualSense Wireless Controller (aa-bb)");
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << xbox << pad;
+    stub->m_connectionInfo = { { 0, QStringLiteral("USB") }, { 1, QStringLiteral("Bluetooth") } };
+    auto restore = qScopeGuard([stub]() { stub->m_connectionInfo.clear(); });
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->addInputSlotDevice(0, stub->name(), pad));
+
+    ConnectionsTree tree(m_doc);
+    tree.refresh();
+    tree.m_tree->expandAll();
+    QTreeWidgetItem *row = NULL;
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+        if (it->data(COL_NAME, ROLE_KIND).toInt() == 11 && it->text(COL_NAME).endsWith(pad))  // KIND_SLOTDEVICE
+            row = it;
+    QVERIFY(row != NULL);
+    tree.m_tree->scrollToItem(row);
+
+    QStringList items;
+    QTimer::singleShot(0, [&items]() {
+        QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (m == NULL)
+            return;
+        QAction *chosen = NULL;
+        foreach (QAction *a, m->actions())
+        {
+            items << a->text();
+            if (a->text() == QString::fromUtf8("Test Controller\u2026"))
+                chosen = a;
+        }
+        if (chosen == NULL)
+        {
+            m->close();
+            return;
+        }
+        m->setActiveAction(chosen);
+        QTest::keyClick(m, Qt::Key_Return);
+    });
+    tree.slotContextMenu(tree.m_tree->visualItemRect(row).center());
+    QApplication::processEvents();
+
+    // One new item, just above Check Mapping….
+    const int at = items.indexOf(QString::fromUtf8("Test Controller\u2026"));
+    QVERIFY2(at >= 0, qPrintable(items.join(" | ")));
+    QCOMPARE(items.value(at + 1), QString::fromUtf8("Check Mapping\u2026"));
+    ControllerTestDialog *dlg = ControllerTestDialog::instance();
+    QVERIFY(dlg != NULL);
+    QCOMPARE(dlg->shownController(), pad);
+    QWidget *picture = dlg->findChild<QWidget *>(QStringLiteral("controllerTestPicture"));
+    QVERIFY(picture != NULL && picture->isVisibleTo(dlg));
+    QVERIFY(dlg->mappingCheck() == NULL);          // no walk: just the picture
+    QPointer<ControllerTestDialog> gone(dlg);
+    dlg->close();
+    QTRY_VERIFY(gone.isNull());
 }
 
 void ConnectionsTree_Test::targetAliasIsShownOnTheRow()
