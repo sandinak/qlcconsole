@@ -32,6 +32,7 @@
 #include <QPainter>
 #include <QPointer>
 #include <QPushButton>
+#include <QFrame>
 #include <QPlainTextEdit>
 #include <QAction>
 #include <QLabel>
@@ -60,6 +61,7 @@
 #include "teachinglog.h"
 #include "vcbutton.h"
 #include "usedby.h"
+#include "cueresume.h"
 #include "chaser.h"
 #include "doc.h"
 
@@ -97,6 +99,42 @@ QAction *CueRunner::upgradeAction()
 bool CueRunner::isEmptyStateShown() const
 {
     return m_empty != nullptr && !m_empty->isHidden();
+}
+
+bool CueRunner::isResumeOfferShown() const
+{
+    return m_resumeBar != nullptr && !m_resumeBar->isHidden();
+}
+
+QString CueRunner::resumeOfferText() const
+{
+    return isResumeOfferShown() ? m_resumeText->text() : QString();
+}
+
+void CueRunner::refreshResume()
+{
+    if (m_resumeBar == nullptr)
+        return;
+    CueResume *resume = CueResume::of(m_doc);
+    if (resume != nullptr && m_resumeFollowed.data() != resume)
+    {
+        m_resumeFollowed = resume;
+        connect(resume, &CueResume::offerChanged, this, &CueRunner::refreshResume);
+    }
+    /* Operate only: Design isn't for running the show, and a click there
+       plays what it picks. The words are worked out again each time, so a
+       cue deleted since is said, never loaded. */
+    const bool shown = resume != nullptr && resume->offerShown();
+    if (shown)
+    {
+        const QString text = resume->offerText();
+        if (m_resumeText->text() != text)
+            m_resumeText->setText(text);
+        m_resumeText->setToolTip(resume->offerDetail());
+        m_resumeLoad->setVisible(resume->loadableCount() > 0);
+    }
+    if (shown != isResumeOfferShown())
+        m_resumeBar->setVisible(shown);
 }
 
 CueRunner::CueRunner(Doc *doc, Size size, QWidget *parent)
@@ -538,6 +576,51 @@ void CueRunner::buildFullLayout()
                           "is selected. ⌘F12 switches."));
     head->addWidget(m_mode);
     v->addLayout(head);
+
+    /* After a crash (crash-resume-cue): the cue each list was on, offered
+       back as standby -- one click LOADs it, nothing plays, the next GO
+       goes on. Operate only; the phone and the pad never see it (the
+       screen decides). The buttons take no focus: Space stays GO. */
+    {
+        m_resumeBar = new QFrame(this);
+        m_resumeBar->setObjectName(QStringLiteral("crResume"));
+        m_resumeBar->setProperty("helpTopic", QStringLiteral("show-control.md#after-a-crash"));
+        m_resumeBar->setStyleSheet(QStringLiteral("QFrame#crResume { border: 2px solid #d08a1c; "
+                                                  "border-radius: 6px; }"));
+        QHBoxLayout *rh = new QHBoxLayout(m_resumeBar);
+        rh->setContentsMargins(10, 6, 10, 6);
+        m_resumeText = new QLabel(m_resumeBar);
+        m_resumeText->setObjectName(QStringLiteral("crResumeText"));
+        m_resumeText->setFont(hf);
+        m_resumeText->setWordWrap(true);
+        rh->addWidget(m_resumeText, 1);
+        m_resumeLoad = new QPushButton(tr("Load as Standby"), m_resumeBar);
+        m_resumeLoad->setObjectName(QStringLiteral("crResumeLoad"));
+        m_resumeLoad->setFont(big);
+        m_resumeLoad->setFocusPolicy(Qt::NoFocus);
+        m_resumeLoad->setToolTip(tr("LOAD the cue it was on: it waits on standby, nothing plays and the "
+                                    "stage stays as it is. The next GO plays it."));
+        connect(m_resumeLoad, &QPushButton::clicked, this, [this]() {
+            if (CueResume *r = CueResume::of(m_doc))
+                r->accept();
+            refresh();
+        });
+        rh->addWidget(m_resumeLoad);
+        m_resumeDismiss = new QPushButton(tr("Dismiss"), m_resumeBar);
+        m_resumeDismiss->setObjectName(QStringLiteral("crResumeDismiss"));
+        m_resumeDismiss->setFont(big);
+        m_resumeDismiss->setFocusPolicy(Qt::NoFocus);
+        m_resumeDismiss->setToolTip(tr("Forget it: GO starts from the cue on standby as usual"));
+        connect(m_resumeDismiss, &QPushButton::clicked, this, [this]() {
+            if (CueResume *r = CueResume::of(m_doc))
+                r->dismiss();
+            refreshResume();
+        });
+        rh->addWidget(m_resumeDismiss);
+        m_resumeBar->hide();
+        v->addWidget(m_resumeBar);
+        connect(m_doc, &Doc::modeChanged, this, &CueRunner::refreshResume);
+    }
 
     makeTree();
     m_tree->setFont(big);
@@ -1814,6 +1897,7 @@ void CueRunner::refresh()
 {
     rebuildTree();
     updateStates();
+    refreshResume();
 }
 
 QString CueRunner::headerText() const

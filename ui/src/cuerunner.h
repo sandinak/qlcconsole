@@ -20,6 +20,7 @@
 #ifndef CUERUNNER_H
 #define CUERUNNER_H
 
+#include <QPointer>
 #include <QWidget>
 
 #include "showcontrol.h"
@@ -122,6 +123,13 @@ public:
     /** The Run tab's empty state (no main cue list) shown now. */
     bool isEmptyStateShown() const;
     QPushButton *upgradeButton() const { return m_upgrade; }
+    /** After a crash (CueResume, Run tab only, Operate only): "The show was
+     *  at cue 2.3.1 (Main) when it stopped. Load it?", Load as Standby and
+     *  Dismiss. Shown now? Its words, and its buttons for the tests. */
+    bool isResumeOfferShown() const;
+    QString resumeOfferText() const;
+    QPushButton *resumeLoadButton() const { return m_resumeLoad; }
+    QPushButton *resumeDismissButton() const { return m_resumeDismiss; }
 
     static QString sizeToString(Size size);
     static Size stringToSize(const QString &str);
@@ -318,6 +326,14 @@ private:
     void refreshPadHit();
     QLabel *m_padHit = nullptr;
     QToolButton *m_focusStart = nullptr;
+    /** The crash-resume offer (Run tab): its words and buttons. */
+    void refreshResume();
+    QWidget *m_resumeBar = nullptr;
+    QLabel *m_resumeText = nullptr;
+    QPushButton *m_resumeLoad = nullptr;
+    QPushButton *m_resumeDismiss = nullptr;
+    /** The CueResume whose offerChanged() this runner follows. */
+    QPointer<QObject> m_resumeFollowed;
 };
 
 /** @} */

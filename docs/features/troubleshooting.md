@@ -266,6 +266,16 @@ keeps the copy as *Show*.qlcc.autosave-*date-time*: to look at it later,
 **File ▸ Open**, choose **All Files**, open it, then **File ▸ Save As…**
 over the show's own name.
 
+**The laptop crashed mid-show.** Start qlcconsole again and open the
+same show (**Open the Last Show at Start** opens it for you; if it asks
+**Recover the autosave from** *time*?, **Recover**). Nothing plays while it
+starts. Switch to **Operate** and look at the **Run** tab: *The show was at
+cue 2.3.1 (Main) when it stopped. Load it?* **Load as Standby** puts that
+cue on standby without changing the stage; the next **GO** plays it. See
+[After a crash](show-control.md#after-a-crash). No offer? The show was
+closed normally, never saved, or ran in Design: LOAD the cue yourself
+(click it in the Run tab), then GO.
+
 **An RGB matrix runs nothing, and the footer says its effect isn't
 installed.** The show uses a matrix script this computer doesn't have. It
 won't run here, but saving keeps it as it was, so it plays again on a

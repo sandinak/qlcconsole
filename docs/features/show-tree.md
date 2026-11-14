@@ -2811,6 +2811,10 @@ Console widget is the same runner on a VC page.
   ([Tracking](#tracking)).
 - **Click a cue: LOAD** — it becomes STANDBY, what the next GO plays.
   **Double-click: jump** to it now (a sub-cue: its cue first).
+- **After a crash** the Run tab (Operate) offers the cue each list was on:
+  *The show was at cue 2.3.1 (Main) when it stopped. Load it?* **Load as
+  Standby** LOADs it, nothing plays, and GO goes on
+  ([After a crash](show-control.md#after-a-crash)).
 - **One state everywhere.** The Run tab, every Cue Runner widget, the
   footer, the keys and QLab / OSC / MSC all drive the same list: what one
   does, all show.
