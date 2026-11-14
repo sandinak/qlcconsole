@@ -3659,7 +3659,7 @@ public:
         addToMap(universe, output, Output);     // where its parameters are kept
         return true;
     }
-    void closeOutput(quint32 output, quint32 universe) override { removeFromMap(output, universe, Output); }
+    void closeOutput(quint32 output, quint32 universe) override { removeFromMap(universe, output, Output); }
     bool supportsOutputTargets() const override { return true; }
     void writeUniverse(quint32, quint32, const QByteArray &, bool) override {}
 };
