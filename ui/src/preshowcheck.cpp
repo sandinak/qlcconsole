@@ -18,6 +18,7 @@
 #include <QDialogButtonBox>
 #include <QApplication>
 #include <QScrollArea>
+#include <QSpacerItem>
 #include <QGridLayout>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -641,7 +642,11 @@ void PreshowCheck::rebuild()
     QWidget *content = new QWidget;
     content->setObjectName(QStringLiteral("preshowContent"));
     QGridLayout *grid = new QGridLayout(content);
+    // The fix sits by its line, not across a wide screen: the words stop
+    // at a reading width and what is left goes after the buttons.
     grid->setColumnStretch(1, 1);
+    grid->setColumnStretch(3, 1);
+    grid->addItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Minimum), 0, 3);
     grid->setHorizontalSpacing(14);
     grid->setVerticalSpacing(12);
     int notReady = 0, check = 0, row = 0;
@@ -671,6 +676,7 @@ void PreshowCheck::rebuild()
         text->setTextFormat(Qt::RichText);
         text->setWordWrap(true);
         text->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        text->setMaximumWidth(text->fontMetrics().averageCharWidth() * 100);
         grid->addWidget(text, row, 1, Qt::AlignTop);
 
         if (l.fix && !l.fixLabel.isEmpty())
