@@ -2131,11 +2131,21 @@ void PadRun_Test::inputThroughThePatchDoesNotDeadlock()
     QVERIFY(run->isWalking());
     padPress(stub, 0, dMenu);
     QVERIFY(!run->isWalking());
+    // The hit on the DualSense: armed (its own bumpers), R2.
     m_doc->setMode(Doc::Operate);
     padHold(stub, 0, dLB, true);
-    padPress(stub, 0, dRB);
+    padHold(stub, 0, dRB, true);
+    QTRY_VERIFY(run->isArmed());
+    padHold(stub, 0, dRB, false);
+    padHold(stub, 0, dLB, false);
+    padPress(stub, 0, xRT);
     QCOMPARE(fired.count(), 3);
-    padPress(stub, 0, dRB);
+    padPress(stub, 0, xRT);
+    QCOMPARE(fired.count(), 4);
+    padHold(stub, 0, dLB, true);
+    padHold(stub, 0, dRB, true);
+    QTRY_VERIFY(!run->isArmed());
+    padHold(stub, 0, dRB, false);
     padHold(stub, 0, dLB, false);
     m_doc->setMode(Doc::Design);
 
