@@ -573,6 +573,9 @@ protected slots:
     void slotAddPlatform();
     /** A flight of steps: 2 x 8" rise and run, 3' wide, climbing upstage. */
     void slotAddSteps();
+    /** A Box: 2' wide, 2' deep, 18" high, a clear top, LEDs on its front
+     *  (StagePlatform::isPropBox()). */
+    void slotAddBox();
     void slotAddPipe();
     void slotAddElectric();
     void slotAddStand();
@@ -848,6 +851,15 @@ private:
         float   rotation, frontCurve;
         QColor  color;
         QColor  finish;             ///< invalid: stage black
+        /* What it is: a flight of steps, a Box, its top, and how it sits
+           with the others -- a copy of steps was a plain riser before. */
+        int     shape = 0;          ///< StagePlatform::Shape
+        int     stepCount = 2;
+        float   stepRise = 0.2f, stepRun = 0.2f, stepWidth = 1.0f;
+        int     climb = 0;
+        bool    propBox = false;
+        int     topMaterial = 0;
+        bool    solid = true, stackable = false;
     };
     struct TargetClip
     {

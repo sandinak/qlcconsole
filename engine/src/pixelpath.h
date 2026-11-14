@@ -26,6 +26,7 @@
 class QJsonObject;
 class MonitorProperties;
 class StageTarget;
+class StagePlatform;
 struct FixtureRigProps;
 struct SprinkleSpan;
 struct StringAnchor;
@@ -51,9 +52,10 @@ namespace PixelPath
         FlameSpiral,    ///< wound up its flame
         Wand,           ///< a staff, wound round it
         SprinkleLoops,  ///< a fairy string looped across a fountain's gap
-        FreeString      ///< a fairy string laid anywhere, through its anchors
+        FreeString,     ///< a fairy string laid anywhere, through its anchors
+        BoxFront        ///< in rows across the front of the Box it is on
     };
-    const int kShapes = int(FreeString) + 1;
+    const int kShapes = int(BoxFront) + 1;
 
     /** Its name for a menu ("Inner wall top ring"). */
     QString name(int shape);
@@ -193,6 +195,23 @@ namespace PixelPath
      *  x, y, height (metres), pinned LED (0 none), reversed (0 or 1). */
     QString stringAnchorsToString(const QVector<StringAnchor> &anchors);
     QVector<StringAnchor> stringAnchorsFromString(const QString &text);
+
+    /** Box front: the Box (StagePlatform::isPropBox()) @p fid is on -- its
+     *  riser or deck mount's, else the topmost Box under where it stands;
+     *  nullptr when there is none. */
+    StagePlatform *boxOf(MonitorProperties *props, quint32 fid);
+    /** How many rows a string of @p n LEDs is laid in across a front @p width
+     *  wide: @p rows when set (above 0), else as many as the string's length
+     *  (rp.wandStripLength, or LED tape at kLedSpacing) needs to go across
+     *  and back. 1 to @p n. */
+    int boxFrontRows(const FixtureRigProps &rp, int n, double width);
+    /** @p n LEDs across the front face of @p box, in @p rows rows, zigzag:
+     *  LED 1 at the top on the house's left (the box's own stage-right end),
+     *  the first row across to the other end, the next back, top to bottom,
+     *  each LED in the middle of its share of the row, just proud of the
+     *  face. World metres, turned with the box, on the deck it stands on. */
+    QVector<QVector3D> boxFrontPositions(const MonitorProperties *props, const StagePlatform *box,
+                                         int n, int rows);
 
     /** The world positions of @p n LEDs of @p fid along its pixel path, in
      *  head order; empty when it has none (or its fountain is gone). */

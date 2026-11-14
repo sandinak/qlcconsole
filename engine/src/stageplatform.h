@@ -165,6 +165,19 @@ public:
     /** Back to a plain box, keeping the outside dimensions. */
     void setBoxShape() { m_shape = BoxShape; }
 
+    /** A Box: a prop a performer stands on or behind ("a new prop like step
+     *  .. called box. that we can put leds on the front and it will have a
+     *  clear top"). A plain box shape with a clear top, square and flat
+     *  fronted, that a WLED string can be laid across the front of
+     *  (PixelPath::BoxFront). Its FRONT is the face downstage at turn 0 --
+     *  the local originY() + depth() edge -- and turns with it. Saved as
+     *  Prop="Box" on the platform: an older build, not knowing it, reads a
+     *  plain platform with a clear top. */
+    bool isPropBox() const { return m_propBox; }
+    /** Make it a Box (the shape a box, the top clear, the front square), or
+     *  a plain platform again (keeping the rest). */
+    void setPropBox(bool box);
+
     /** Height of the walking surface above the platform's own base at world (x, y)
      *  -- height() for a box, the tread there for steps (the nearest tread
      *  for a point off the platform; callers decide whether it is on it). */
@@ -237,6 +250,7 @@ private:
     float   m_rotation = 0.0f;
     TopMaterial m_topMaterial = SolidTop;
     Shape   m_shape = BoxShape;
+    bool    m_propBox = false;   ///< a Box prop (isPropBox())
     Climb   m_climb = ClimbUpstage;
     int     m_stepCount = 2;
     float   m_stepRise = 0.2032f;   ///< 8"

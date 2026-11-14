@@ -4009,6 +4009,87 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                 drawSolidBox(p, c, pc, edge, topAlpha);
             }
         }
+        else if (pl->isPropBox())
+        {
+            /* A Box, flat: its top is clear -- from above, only a faint tint
+               over what is inside it; side on, a thin dashed line over solid
+               sides -- and its front, where its LEDs go, is marked: a heavy
+               edge, or the word FRONT when it faces this view. */
+            const float b0 = (m_plane == Top) ? 0.0f : props->platformBaseZ(id);
+            const float top = b0 + h;
+            const QList<QPointF> fp = pl->footprint(4);
+            const double rr = qDegreesToRadians(double(pl->rotation()));
+            const QPointF n(-qSin(rr), qCos(rr));                      // the front's way, world
+            const QPointF fa = pl->toWorld(QPointF(x0, y1)), fb = pl->toWorld(QPointF(x1, y1));
+            QPen frontPen(edge.lighter(130), 4.0);
+            frontPen.setCapStyle(Qt::FlatCap);
+            QFont lf = p.font();
+            lf.setPixelSize(10);
+            lf.setBold(true);
+            p.setFont(lf);
+            if (m_plane == Top)
+            {
+                QPolygonF poly;
+                foreach (const QPointF &q, fp)
+                    poly << w2s(QVector3D(float(q.x()), float(q.y()), 0));
+                QColor glass = pc.lighter(160);
+                glass.setAlpha(45);
+                p.setBrush(glass);
+                p.setPen(QPen(halo, 3.2));
+                p.drawPolygon(poly);
+                p.setBrush(Qt::NoBrush);
+                p.setPen(QPen(edge, 1.6));
+                p.drawPolygon(poly);
+                p.setPen(frontPen);
+                p.drawLine(w2s(QVector3D(float(fa.x()), float(fa.y()), 0)),
+                           w2s(QVector3D(float(fb.x()), float(fb.y()), 0)));
+                const QPointF mid = (fa + fb) / 2.0 - n * (double(pl->depth()) * 0.18);
+                p.setPen(edge.lighter(150));
+                const QPointF at = w2s(QVector3D(float(mid.x()), float(mid.y()), 0));
+                p.drawText(QRectF(at.x() - 30, at.y() - 7, 60, 14), Qt::AlignCenter, tr("FRONT"));
+            }
+            else
+            {
+                float ax = 1e9f, ay = 1e9f, bx = -1e9f, by = -1e9f;
+                foreach (const QPointF &q, fp)
+                {
+                    ax = qMin(ax, float(q.x())); bx = qMax(bx, float(q.x()));
+                    ay = qMin(ay, float(q.y())); by = qMax(by, float(q.y()));
+                }
+                const QRectF r = QRectF(w2s(QVector3D(ax, ay, b0)), w2s(QVector3D(bx, by, top))).normalized();
+                // Solid sides; a thin dashed line for the clear top.
+                p.setBrush(fill);
+                p.setPen(QPen(halo, 3.2));
+                p.drawRect(r);
+                p.setBrush(Qt::NoBrush);
+                p.setPen(QPen(edge, 1.6));
+                p.drawLine(r.topLeft(), r.bottomLeft());
+                p.drawLine(r.bottomLeft(), r.bottomRight());
+                p.drawLine(r.bottomRight(), r.topRight());
+                p.setPen(QPen(edge.lighter(150), 1.0, Qt::DashLine));
+                p.drawLine(r.topLeft(), r.topRight());
+                // Toward the viewer: +Y in Front, -Y in Back, -X in Side.
+                const double toViewer = (m_plane == Side) ? -n.x() : m_fromBehind ? -n.y() : n.y();
+                const QPointF c = pl->centre();
+                const double sx = w2s(QVector3D(float(c.x() + n.x()), float(c.y() + n.y()), b0)).x()
+                                - w2s(QVector3D(float(c.x()), float(c.y()), b0)).x();
+                p.setPen(frontPen);
+                if (toViewer > 0.7071)
+                {
+                    p.drawRect(r.adjusted(3, 3, -3, -3));
+                    p.setPen(edge.lighter(150));
+                    p.drawText(r, Qt::AlignCenter, tr("FRONT"));
+                }
+                else if (toViewer > -0.7071)
+                {
+                    const double ex = sx > 0 ? r.right() : r.left();
+                    p.drawLine(QPointF(ex, r.top()), QPointF(ex, r.bottom()));
+                    p.setPen(edge.lighter(150));
+                    p.drawText(QRectF(sx > 0 ? r.right() - 16 : r.left() + 2, r.top() + 2, 14, 14),
+                               Qt::AlignCenter, tr("F"));
+                }
+            }
+        }
         else if (pl->isSteps())
         {
             /* Steps, flat: every step from the base to its tread, tallest

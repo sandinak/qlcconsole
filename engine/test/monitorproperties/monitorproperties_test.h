@@ -118,6 +118,8 @@ private slots:
     void stepsAreAFlightOfTreads();
     void stepsClimbEveryWay();
     void stepsRoundTripInXml();
+    void aBoxIsSavedAsABoxAndAnOlderBuildReadsAClearPlatform();
+    void aStringAcrossABoxFrontLiesInRowsAndTurnsWithIt();
     void aRoundedFrontCutsTheCorners();
     void aPlatformTurnsAboutItsMiddle();
     void whatIsOnAPlatformOrTowerTurnsWithIt();

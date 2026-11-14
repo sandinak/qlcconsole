@@ -393,6 +393,27 @@ drapes):
     with an UP arrow from above, risers face-on, and the staircase side-on.
     Beams land on each tread, a deck-mounted fixture stands on the tread
     under it, and a target bound to the steps aims at the middle tread.
+  - **A Box** is a prop a performer stands on or behind, with a clear top
+    and LEDs on its front. **Add → Add Box** gives one 2' wide, 2' deep and
+    18" high; in its editor, **Shape: Box** switches a platform to one and
+    back. Its **front** is the face that looks downstage before it is
+    turned: the plot draws it as a heavy edge with the word FRONT (FRONT
+    across the whole face in an elevation that looks straight at it, an F
+    on the edge seen side on), and it turns and moves with the box. The
+    **top is clear**: from above the box is only an outline over a faint
+    tint, so a light rigged inside it (its **Placement** set to Inside) shows, and its light goes up through
+    the top; seen from the side, the top is a thin dashed line over solid
+    sides. A box is stackable, so you can drag it onto a riser and it
+    stands on the riser's deck. It locks, turns, duplicates and undoes like
+    any platform.
+  - **LEDs on a box's front.** Drag a WLED string or pixel strip onto the
+    box, then in its properties set **Pixel path: Across a box's front**
+    (offered only for a fixture on a box). Its LEDs are laid across the
+    front in rows, zigzag: LED 1 at the top on the left as the house sees
+    it, across, then back along the next row down. **Rows** sets how many;
+    Auto works it out from the **String length** (LED tape when that is
+    empty) going across and back. The LEDs move and turn with the box, and
+    effects light the LED the plot shows where it is.
   - **A rounded front** (an apron arc): **Front curve** in a platform's
     editor is how far the middle of the downstage edge reaches past its
     corners — 0 is square, half the width a half circle. The depth is the
@@ -402,7 +423,7 @@ drapes):
   placed where it's rigged (see [Network nodes and cable runs](#network-nodes-and-cable-runs)).
 
 Add one from the plot. The toolbar's **Add** has trusses, platforms and
-risers, steps, scenery, fountains, images, network nodes, targets and
+risers, steps, boxes, scenery, fountains, images, network nodes, targets and
 people. Right-click an empty part of the plot for **Add Here**, which has
 all of those plus **Boom**, **Electric** (a horizontal pipe), **Stand**
 and **Tower**, placed where you clicked. Right-click a truss for **Add ▸
@@ -1148,7 +1169,18 @@ throws: a mover's front of device (pan zero), or a fixed light's face
 — the steeper it points, the shorter the arrow; straight down is a
 filled dot, straight up a ring. The **blue** arrow is the icon rotation,
 which only turns the symbol and never the aim. The diagram follows each
-field as you change it.
+field as you change it. It is drawn the way the plot is: stage right on
+the left. **Drag the green arrow's head** round to point the light, and
+the Aim field follows: it turns in 15° steps, hold **Shift** for any
+angle. Several fixtures' Fixture Properties have the same dial beside
+Aim, and dragging it sets them all.
+
+**On the plot**, a selected moving head's green facing arrow has a ring
+round its head: drag the head round (no key needed) to turn its pan-zero
+facing, in 15° steps (**Shift** or **Alt/⌥** for any angle); the angle shows
+by the arrow as you turn, and one Ctrl/⌘+Z undoes the whole drag.
+**Alt/⌥-drag** on the fixture itself turns it too. Dragging the fixture's
+body still moves it, and a locked fixture, layer or plot does not turn.
 
 **Right-click a fixture** on the plot for **Facing (pan zero) ▸**
 (Downstage, Stage Right, Upstage, Stage Left), **Set Mounting Height…**

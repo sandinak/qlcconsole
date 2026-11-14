@@ -138,6 +138,7 @@ private:
     QDoubleSpinBox *m_tilt;
     QComboBox *m_pixelPath;     ///< PixelPath::Shape
     QDoubleSpinBox *m_pixelTurns;
+    QString m_turnsTip;         ///< m_pixelTurns' tooltip as Turns
     QDoubleSpinBox *m_wandLength;
     QDoubleSpinBox *m_wandStrip;     ///< the lit string's length; 0 = LED tape
     QDoubleSpinBox *m_wandDiameter;

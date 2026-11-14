@@ -2598,6 +2598,167 @@ void MonitorProperties_Test::stepsRoundTripInXml()
     QVERIFY(!b2.data().contains("Step"));
 }
 
+/* A Box ("a new prop like step .. called box. that we can put leds on the
+   front and it will have a clear top"): a platform that says Prop="Box",
+   its top clear. An older build, which does not know the attribute, reads
+   it as a plain platform with a clear top -- fails soft, nothing lost. */
+void MonitorProperties_Test::aBoxIsSavedAsABoxAndAnOlderBuildReadsAClearPlatform()
+{
+    StagePlatform box(7);
+    box.setName("Box 8");
+    box.setWidth(0.6096f);
+    box.setDepth(0.6096f);
+    box.setHeight(0.4572f);
+    box.setFrontCurve(0.2f);
+    box.setPropBox(true);
+    QVERIFY(box.isPropBox());
+    QCOMPARE(box.shape(), StagePlatform::BoxShape);
+    QCOMPARE(box.topMaterial(), StagePlatform::ClearTop);
+    QCOMPARE(box.frontCurve(), 0.0f);             // a box's front is flat
+    box.setRotation(30.0f);
+
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    box.saveXML(&w);
+    buf.close();
+    QVERIFY(buf.data().contains("Prop=\"Box\""));
+    QVERIFY(buf.data().contains("TopMaterial=\"1\""));
+
+    QXmlStreamReader r(buf.data());
+    r.readNextStartElement();
+    StagePlatform back(0);
+    QVERIFY(back.loadXML(r));
+    QVERIFY(back.isPropBox());
+    QCOMPARE(back.id(), 7u);
+    // The file keeps millimetres (three decimals of a metre).
+    QVERIFY(qAbs(back.width() - 0.6096f) < 1e-3f);
+    QVERIFY(qAbs(back.height() - 0.4572f) < 1e-3f);
+    QCOMPARE(back.rotation(), 30.0f);
+    QCOMPARE(back.topMaterial(), StagePlatform::ClearTop);
+
+    // An older build reads every attribute but Prop: a clear-topped platform.
+    QByteArray old = buf.data();
+    old.replace("Prop=\"Box\"", "");
+    QXmlStreamReader r2(old);
+    r2.readNextStartElement();
+    StagePlatform before(0);
+    QVERIFY(before.loadXML(r2));
+    QVERIFY(!before.isPropBox());
+    QVERIFY(!before.isSteps());
+    QCOMPARE(before.topMaterial(), StagePlatform::ClearTop);
+    QVERIFY(qAbs(before.width() - 0.6096f) < 1e-3f);
+
+    // Undone, a plain platform writes nothing new.
+    back.setPropBox(false);
+    QBuffer b2;
+    b2.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w2(&b2);
+    back.saveXML(&w2);
+    QVERIFY(!b2.data().contains("Prop"));
+
+    // Through the show's MonitorProperties too.
+    MonitorProperties mp;
+    StagePlatform *p = mp.addPlatform();
+    p->setPropBox(true);
+    const quint32 id = p->id();
+    QByteArray b3;
+    QXmlStreamWriter w3(&b3);
+    w3.writeStartDocument();
+    mp.saveXML(&w3, nullptr);
+    w3.writeEndDocument();
+    MonitorProperties mp2;
+    QXmlStreamReader r3(b3);
+    while (r3.readNextStartElement())
+        if (r3.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp2.loadXML(r3, nullptr));
+    QVERIFY(mp2.platform(id) != nullptr && mp2.platform(id)->isPropBox());
+}
+
+/* A WLED string on a Box's front: its LEDs in rows across the face, zigzag,
+   LED 1 at the top on the house's left (the box's stage-right end), a hair
+   proud of the face; turned and moved with the box, raised with a deck it
+   stands on. */
+void MonitorProperties_Test::aStringAcrossABoxFrontLiesInRowsAndTurnsWithIt()
+{
+    MonitorProperties mp;
+    StagePlatform *box = mp.addPlatform();
+    box->setOriginX(1.0f);
+    box->setOriginY(2.0f);
+    box->setWidth(0.6f);
+    box->setDepth(0.6f);
+    box->setHeight(0.4f);
+    box->setPropBox(true);
+    const quint32 fid = 4;
+    mp.setFixturePosition(fid, 0, 0, QVector3D(1300, 2300, 0));
+    FixtureRigProps rp;
+    rp.deckPlatformId = box->id();
+    rp.pixelPath = PixelPath::BoxFront;
+    rp.pixelTurns = 2;                        // two rows
+    mp.setFixtureRigProps(fid, rp);
+    QVERIFY(PixelPath::boxOf(&mp, fid) == box);
+    QCOMPARE(PixelPath::name(PixelPath::BoxFront), QString("Across a box's front"));
+    QVERIFY(!PixelPath::needsFountain(PixelPath::BoxFront));
+
+    auto closeTo = [](const QVector3D &a, const QVector3D &b) { return (a - b).length() < 1e-4f; };
+    QVector<QVector3D> leds = PixelPath::positions(nullptr, &mp, fid, 10);
+    QCOMPARE(leds.size(), 10);
+    // Row 1 at three quarters up, left to right as the house sees it ...
+    QVERIFY(closeTo(leds.at(0), QVector3D(1.06f, 2.605f, 0.3f)));
+    QVERIFY(closeTo(leds.at(4), QVector3D(1.54f, 2.605f, 0.3f)));
+    // ... row 2 a quarter up, back the other way.
+    QVERIFY(closeTo(leds.at(5), QVector3D(1.54f, 2.605f, 0.1f)));
+    QVERIFY(closeTo(leds.at(9), QVector3D(1.06f, 2.605f, 0.1f)));
+    foreach (const QVector3D &l, leds)
+        QVERIFY(qAbs(l.y() - 2.605f) < 1e-4f);    // all on the front face
+
+    // Auto rows: LED tape (2 cm apart) across 0.6 m and back -- 60 LEDs, 2 rows.
+    rp.pixelTurns = 0;
+    mp.setFixtureRigProps(fid, rp);
+    QCOMPARE(PixelPath::boxFrontRows(rp, 60, 0.6), 2);
+    QCOMPARE(PixelPath::boxFrontRows(rp, 20, 0.6), 1);   // fits in one run
+    QCOMPARE(PixelPath::positions(nullptr, &mp, fid, 60).size(), 60);
+
+    // Turned 90 degrees, its front faces stage right (-X), LED 1 upstage.
+    rp.pixelTurns = 2;
+    mp.setFixtureRigProps(fid, rp);
+    box->setRotation(90.0f);
+    leds = PixelPath::positions(nullptr, &mp, fid, 10);
+    QVERIFY2(closeTo(leds.at(0), QVector3D(0.995f, 2.06f, 0.3f)),
+             qPrintable(QString("%1 %2 %3").arg(leds.at(0).x()).arg(leds.at(0).y()).arg(leds.at(0).z())));
+    QVERIFY(closeTo(leds.at(4), QVector3D(0.995f, 2.54f, 0.3f)));
+    foreach (const QVector3D &l, leds)
+        QVERIFY(qAbs(l.x() - 0.995f) < 1e-4f);
+
+    // Moved, the LEDs go with it.
+    box->setRotation(0.0f);
+    box->setOriginX(3.0f);
+    leds = PixelPath::positions(nullptr, &mp, fid, 10);
+    QVERIFY(closeTo(leds.at(0), QVector3D(3.06f, 2.605f, 0.3f)));
+
+    // On a 0.5 m deck, it rises from the deck.
+    StagePlatform *deck = mp.addPlatform();
+    deck->setOriginX(2.0f);
+    deck->setOriginY(1.0f);
+    deck->setWidth(4.0f);
+    deck->setDepth(4.0f);
+    deck->setHeight(0.5f);
+    QCOMPARE(mp.platformBaseZ(box->id()), 0.5f);
+    leds = PixelPath::positions(nullptr, &mp, fid, 10);
+    QVERIFY(closeTo(leds.at(0), QVector3D(3.06f, 2.605f, 0.8f)));
+
+    // Not mounted, but standing in it: still its box. On no box: no LEDs here.
+    rp.deckPlatformId = FixtureRigProps::invalidPlatformId();
+    mp.setFixtureRigProps(fid, rp);
+    mp.setFixturePosition(fid, 0, 0, QVector3D(3300, 2300, 0));
+    QVERIFY(PixelPath::boxOf(&mp, fid) == box);
+    mp.setFixturePosition(fid, 0, 0, QVector3D(9000, 9000, 0));
+    QVERIFY(PixelPath::boxOf(&mp, fid) == nullptr);
+    QVERIFY(PixelPath::positions(nullptr, &mp, fid, 10).isEmpty());
+    // A plain platform is not a box.
+    QVERIFY(!deck->isPropBox());
+}
+
 void MonitorProperties_Test::aRoundedFrontCutsTheCorners()
 {
     // A 10 m stage, 6 m deep at the middle, its front 1 m further out there.

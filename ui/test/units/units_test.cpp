@@ -395,7 +395,7 @@ struct Opener
 struct Rig
 {
     Doc *doc = nullptr;
-    quint32 fid = 0, trussId = 0, towerId = 0, platformId = 0, pipeId = 0, standId = 0, targetId = 0;
+    quint32 fid = 0, trussId = 0, towerId = 0, platformId = 0, boxId = 0, pipeId = 0, standId = 0, targetId = 0;
 };
 
 void buildRig(Rig &rig)
@@ -420,6 +420,12 @@ void buildRig(Rig &rig)
     deck->setOriginX(1.0f); deck->setOriginY(1.0f);
     deck->setWidth(2.4f); deck->setDepth(1.2f); deck->setHeight(0.4f);
     rig.platformId = deck->id();
+    StagePlatform *box = props->addPlatform();         // a Box: its size fields too
+    box->setName(QStringLiteral("Box"));
+    box->setOriginX(5.0f); box->setOriginY(1.0f);
+    box->setWidth(0.6096f); box->setDepth(0.6096f); box->setHeight(0.4572f);
+    box->setPropBox(true);
+    rig.boxId = box->id();
     Pipe *p = props->addPipe();
     p->setName(QStringLiteral("Boom"));
     p->setHeight(3.0f);
@@ -654,6 +660,7 @@ void Units_Test::dialogsFollowThePreference()
         { QStringLiteral("Truss"), true, [mon, &rig](QWidget *) { mon->slotEditTruss(rig.trussId); }, {} },
         { QStringLiteral("Tower"), true, [mon, &rig](QWidget *) { mon->slotEditTower(rig.towerId); }, {} },
         { QStringLiteral("Platform"), true, [mon, &rig](QWidget *) { mon->slotEditPlatform(rig.platformId); }, {} },
+        { QStringLiteral("Box"), true, [mon, &rig](QWidget *) { mon->slotEditPlatform(rig.boxId); }, {} },
         { QStringLiteral("Pipe"), true, [mon, &rig](QWidget *) { mon->slotEditPipe(rig.pipeId); }, {} },
         { QStringLiteral("Stand"), true, [mon, &rig](QWidget *) { mon->slotEditStand(rig.standId); }, {} },
         { QStringLiteral("Target"), true, [mon, &rig](QWidget *) { mon->slotEditTarget(rig.targetId); }, {} },

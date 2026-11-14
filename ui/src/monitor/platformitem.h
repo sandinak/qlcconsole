@@ -77,6 +77,19 @@ protected:
 
 private:
     void paintSteps(QPainter *painter, const QColor &fill, const QColor &border, bool selected);
+    /** A Box: its top clear (an outline over a light, see-through tint, no
+     *  deck hatching) in plan, its sides solid in an elevation, and its
+     *  front marked in every view -- a heavy edge and the word FRONT. */
+    void paintBox(QPainter *painter, const QColor &fill, const QColor &border, bool selected);
+
+public:
+    /** Where a Box's front is drawn in this item (tests): the edge it is on,
+     *  in item coordinates; a null line when the front faces the viewer or
+     *  away (an elevation sees it face on, or not at all). */
+    QLineF boxFrontEdge() const;
+    /** Whether an elevation is looking straight at a Box's front. */
+    bool boxFrontFacesViewer() const;
+private:
 
 signals:
     /** Emitted when the user finishes a drag so the view can persist the move. */

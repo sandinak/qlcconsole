@@ -1474,6 +1474,8 @@ private:
     /** A stage piece being dragged: the rig before it, and how far the
      *  piece's line was from the pointer when it was taken hold of. */
     QByteArray m_stageDragBefore;
+    /** The rig when a fixture's facing began to turn (one undo per turn). */
+    QByteArray m_facingBefore;
     double m_stageDragOffset = 0.0;
     void stagePieceDragStarted(int piece, const QPointF &scenePos);
     void stagePieceDragMoved(int piece, const QPointF &scenePos);

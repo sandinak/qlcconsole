@@ -56,6 +56,7 @@
 #include "pixelpathdecor.h"
 #include "stagetarget.h"
 #include "pixelpath.h"
+#include "stageplatform.h"
 #include "fountain.h"
 #include "sprinklespansdialog.h"
 #include "stringanchorsdialog.h"
@@ -1015,8 +1016,9 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     for (int k = 0; k < PixelPath::kShapes; ++k)
         m_pixelPath->addItem(PixelPath::name(k), k);
     m_pixelPath->setToolTip(tr("Where its LEDs are: round a fountain's wall or base, wound up "
-                               "its flame, round a wand, or laid anywhere through anchors you "
-                               "place on the plan -- in the order of its heads"));
+                               "its flame, round a wand, laid anywhere through anchors you "
+                               "place on the plan, or in rows across the front of the box it "
+                               "stands on -- in the order of its heads"));
     form->addRow(tr("Pixel path:"), m_pixelPath);
 
     m_pixelTurns = new QDoubleSpinBox(parent);
@@ -1024,10 +1026,11 @@ void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
     m_pixelTurns->setRange(0.0, 500.0);
     m_pixelTurns->setDecimals(1);
     m_pixelTurns->setSpecialValueText(tr("Auto"));
-    m_pixelTurns->setToolTip(tr("Turns of the strip round the flame or the staff. Auto: a wand's "
-                                "from its string length and staff diameter (no string length: "
-                                "LED tape, %1 apart), a flame's about one every %2")
-                                .arg(MeasurementUnits::formatLength(20.0), MeasurementUnits::formatLength(300.0)));
+    m_turnsTip = tr("Turns of the strip round the flame or the staff. Auto: a wand's "
+                    "from its string length and staff diameter (no string length: "
+                    "LED tape, %1 apart), a flame's about one every %2")
+                    .arg(MeasurementUnits::formatLength(20.0), MeasurementUnits::formatLength(300.0));
+    m_pixelTurns->setToolTip(m_turnsTip);
     form->addRow(tr("Turns:"), m_pixelTurns);
 
     m_wandLength = new FeetInchesSpinBox(isFeet, parent);
@@ -1241,31 +1244,53 @@ void FixtureFields::showPixelRows(quint32 fid)
     // The fountain paths only in a fountain.
     const bool inFountain = Fountain::ofFixture(props, fid).isValid()
                             || Fountain::ofBase(props, rp.deckPlatformId).isValid();
+    // Across a box's front only on a Box.
+    const bool onBox = PixelPath::boxOf(props, fid) != nullptr;
     if (auto *model = qobject_cast<QStandardItemModel *>(m_pixelPath->model()))
         for (int k = 0; k < model->rowCount(); ++k)
             if (QStandardItem *it = model->item(k))
-                it->setEnabled(!PixelPath::needsFountain(k) || inFountain || rp.pixelPath == k);
+                it->setEnabled(rp.pixelPath == k
+                               || (k == PixelPath::BoxFront ? onBox
+                                                            : !PixelPath::needsFountain(k) || inFountain));
     const QSignalBlocker b1(m_pixelPath), b2(m_pixelTurns), b3(m_wandLength), b4(m_heldBy),
                          b5(m_holdHeight), b6(m_holdTilt), b7(m_wandStrip), b8(m_wandDiameter),
                          b9(m_wandStart), b10(m_ledSupply);
     m_pixelPath->setCurrentIndex(qMax(0, m_pixelPath->findData(rp.pixelPath)));
     row(m_pixelPath, true);
     const bool wound = rp.pixelPath == PixelPath::Wand || rp.pixelPath == PixelPath::FlameSpiral;
+    /* Across a box's front the same number is how many rows the string is
+       laid in, across and back. */
+    const bool boxFront = rp.pixelPath == PixelPath::BoxFront;
+    m_pixelTurns->setDecimals(boxFront ? 0 : 1);
     m_pixelTurns->setValue(double(rp.pixelTurns));
-    row(m_pixelTurns, wound);
+    row(m_pixelTurns, wound || boxFront);
+    if (QLabel *l = qobject_cast<QLabel *>(m_form->labelForField(m_pixelTurns)))
+        l->setText(boxFront ? tr("Rows:") : tr("Turns:"));
+    m_pixelTurns->setToolTip(boxFront
+        ? tr("How many rows the string runs in across the box's front, zigzag from the top: "
+             "LED 1 at the top on the left as the house sees it. Auto: as many as its length "
+             "needs to go across and back")
+        : m_turnsTip);
     const bool wand = rp.pixelPath == PixelPath::Wand;
     m_wandLength->setValue(double(rp.wandLength) * toDisp);
     row(m_wandLength, wand);
     const bool freeString = rp.pixelPath == PixelPath::FreeString;
     m_wandStrip->setValue(double(rp.wandStripLength) * toDisp);
-    row(m_wandStrip, wand || freeString);
+    row(m_wandStrip, wand || freeString || boxFront);
     m_ledSupply->setValue(double(rp.ledSupplyVolts));
     row(m_ledSupply, WledConfigCheck::isWled(doc->fixture(fid)));
     m_wandDiameter->setValue(double(rp.wandDiameter) * toDisp);
     row(m_wandDiameter, wand);
     m_wandStart->setCurrentIndex(rp.wandFromTop ? 1 : 0);
     row(m_wandStart, wand);
-    if (wand && rp.pixelTurns <= 0.0f)
+    if (boxFront && rp.pixelTurns <= 0.0f)
+    {
+        const StagePlatform *box = PixelPath::boxOf(props, fid);
+        const int rows = box != nullptr
+            ? PixelPath::boxFrontRows(rp, PixelPathDecor::ledCount(doc, fid), double(box->width())) : 1;
+        m_pixelTurns->setSpecialValueText(tr("Auto (%n row(s))", "", rows));
+    }
+    else if (wand && rp.pixelTurns <= 0.0f)
     {
         // Auto: say what it worked out, so the number can be checked on the real staff.
         const double turns = PixelPath::wandTurns(rp, PixelPathDecor::ledCount(doc, fid));
