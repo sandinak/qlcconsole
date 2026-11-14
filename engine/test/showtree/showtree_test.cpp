@@ -4748,10 +4748,10 @@ void ShowTree_Test::oneOffNamesFollowTheirCue()
         return st->cue(cue)->layer(layer)->look(KeyColour)->palettes.first();
     };
     const quint32 p1 = st->createInlinePalette(QLCPalette::Color, { "#ff0000" },
-                                               QStringLiteral("50%% \u00b7 %1 %2").arg(label(c1), where));
+                                               QStringLiteral("50% \u00b7 %1 %2").arg(label(c1), where));
     QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(p1)));
     // An old show's: the name says a cue that is not this one.
-    const QString stale = QStringLiteral("30%% \u00b7 9.9.9 Long Gone %1").arg(where);
+    const QString stale = QStringLiteral("30% \u00b7 9.9.9 Long Gone %1").arg(where);
     const quint32 p2 = st->createInlinePalette(QLCPalette::Color, { "#00ff00" }, stale);
     QVERIFY(st->setLayerLook(c2, l2, st->lookForPalette(p2)));
     QCOMPARE(m_doc->palette(p2)->name(), stale);        // nothing edited its cue's label
@@ -4762,7 +4762,7 @@ void ShowTree_Test::oneOffNamesFollowTheirCue()
     QVERIFY(d != invalidId());
     const quint32 copy = oneOff(d, st->cue(d)->layers.first().id);
     QVERIFY(copy != p1);
-    QCOMPARE(m_doc->palette(copy)->name(), QStringLiteral("50%% \u00b7 %1 %2").arg(label(d), where));
+    QCOMPARE(m_doc->palette(copy)->name(), QStringLiteral("50% \u00b7 %1 %2").arg(label(d), where));
     QVERIFY(label(d) != label(c1));
     QCOMPARE(m_doc->palette(p1)->name(), was1);
     QCOMPARE(m_doc->palette(p2)->name(), stale);        // a cue nobody touched
@@ -4771,7 +4771,7 @@ void ShowTree_Test::oneOffNamesFollowTheirCue()
     Cue c = *st->cue(c1);
     c.name = "Hands Up";
     QVERIFY(st->setCue(c));
-    QCOMPARE(m_doc->palette(p1)->name(), QStringLiteral("50%% \u00b7 1.1.1 Hands Up %1").arg(where));
+    QCOMPARE(m_doc->palette(p1)->name(), QStringLiteral("50% \u00b7 1.1.1 Hands Up %1").arg(where));
     QVERIFY(st->undo());
     QCOMPARE(m_doc->palette(p1)->name(), was1);         // one step with the rename
     QVERIFY(st->redo());
@@ -4780,13 +4780,12 @@ void ShowTree_Test::oneOffNamesFollowTheirCue()
     c = *st->cue(c1);
     c.number = "4.2.1";
     QVERIFY(st->setCue(c));
-    QCOMPARE(m_doc->palette(p1)->name(), QStringLiteral("50%% \u00b7 4.2.1 Hands Up %1").arg(where));
+    QCOMPARE(m_doc->palette(p1)->name(), QStringLiteral("50% \u00b7 4.2.1 Hands Up %1").arg(where));
     QVERIFY(st->renumberLevel(c1, 10, 10));
-    QCOMPARE(m_doc->palette(p1)->name(), QStringLiteral("50%% \u00b7 %1 %2").arg(label(c1), where));
-    QVERIFY(label(c1).startsWith(QStringLiteral("10 ")) || label(c1).startsWith(QStringLiteral("1")));
+    QCOMPARE(m_doc->palette(p1)->name(), QStringLiteral("50% \u00b7 %1 %2").arg(label(c1), where));
     // The old show's one-off follows once its own cue's label changes.
-    const QString lab2 = label(c2);
-    QVERIFY(m_doc->palette(p2)->name() != stale || lab2 == QStringLiteral("9.9.9 Long Gone"));
+    QVERIFY(label(c2) != QStringLiteral("1.1.2"));
+    QCOMPARE(m_doc->palette(p2)->name(), QStringLiteral("30% \u00b7 %1 %2").arg(label(c2), where));
 
     // A show saved with these names opens with them as saved.
     QByteArray xml = engineXml(m_doc);
