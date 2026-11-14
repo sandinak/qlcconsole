@@ -4784,7 +4784,10 @@ void ShowTree_Test::oneOffNamesFollowTheirCue()
     QVERIFY(st->renumberLevel(c1, 10, 10));
     QCOMPARE(m_doc->palette(p1)->name(), QStringLiteral("50% \u00b7 %1 %2").arg(label(c1), where));
     // The old show's one-off follows once its own cue's label changes.
-    QVERIFY(label(c2) != QStringLiteral("1.1.2"));
+    other = *st->cue(c2);
+    other.name = "Other Again";
+    QVERIFY(st->setCue(other));
+    QCOMPARE(label(c2), QStringLiteral("1.1.2 Other Again"));
     QCOMPARE(m_doc->palette(p2)->name(), QStringLiteral("30% \u00b7 %1 %2").arg(label(c2), where));
 
     // A show saved with these names opens with them as saved.
