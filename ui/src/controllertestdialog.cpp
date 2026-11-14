@@ -762,7 +762,6 @@ bool ControllerTestDialog::startCheck(const QString &pluginName, const QString &
     if (list.isEmpty())
     {
         m_checkPanel->show();
-        m_checkDevice->hide();
         m_checkList->hide();
         m_checkRetry->hide();
         m_checkSkip->hide();
