@@ -66,6 +66,12 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
     , m_doc(doc)
 {
     setProperty("helpTopic", QStringLiteral("fixture-manager.md#patching-the-patch-dialog"));
+    /* A fixture type made since the app started (the Fixture Editor, a file
+       put in the folder) is listed without a restart. The App's watch on
+       the folder does this as it happens; this is for a folder that tells
+       nobody (a synced or network one). */
+    if (m_doc != NULL && m_doc->fixtureDefCache() != NULL)
+        m_doc->fixtureDefCache()->loadNew(QLCFixtureDefCache::userDefinitionDirectory());
     m_addressValue = 0;
     m_universeValue = 0;
     m_amountValue = 1;

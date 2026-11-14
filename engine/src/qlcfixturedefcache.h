@@ -178,6 +178,14 @@ public:
      */
     bool load(const QDir& dir);
 
+    /** Load what has come into @a dir since it was read -- a fixture type
+     *  just made in the Fixture Editor, a file dropped into the folder --
+     *  and try again a file that would not load. A definition already
+     *  loaded, and a file set aside as a duplicate, is left alone. So a new
+     *  type can be added to the show without a restart.
+     *  @return how many definitions the cache gained */
+    int loadNew(const QDir &dir);
+
     /**
      * Load all the fixture information found for the given manufacturer.
      *

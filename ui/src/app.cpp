@@ -1839,6 +1839,7 @@ void App::initDoc()
         m_startupWindow->beginStep(tr("Loading fixture definitions"));
     m_doc->fixtureDefCache()->load(QLCFixtureDefCache::userDefinitionDirectory());
     m_doc->fixtureDefCache()->loadMap(QLCFixtureDefCache::systemDefinitionDirectory());
+    watchDefinitionFolder();
     if (m_startupWindow != NULL)
         m_startupWindow->logDetail(tr("%1 manufacturer(s)")
                                     .arg(m_doc->fixtureDefCache()->manufacturers().count()));
@@ -1929,6 +1930,30 @@ void App::initDoc()
         m_startupWindow->beginStep(tr("Initializing control surfaces"));
     m_controlSurfaceEngine = new ControlSurfaceEngine(this);
     m_pmjOverlay = new PMJOverlay(m_doc, m_controlSurfaceEngine, this, this);
+}
+
+void App::watchDefinitionFolder()
+{
+    if (m_definitionFolderWatcher != nullptr)
+        return;
+    const QString dir = QLCFixtureDefCache::userDefinitionDirectory().absolutePath();
+    if (!QFileInfo(dir).isDir())
+        return;
+    m_definitionFolderWatcher = new QFileSystemWatcher(this);
+    m_definitionFolderWatcher->addPath(dir);
+    connect(m_definitionFolderWatcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString &) {
+        // After the editor has finished writing; several changes, one read.
+        if (m_definitionFolderRead)
+            return;
+        m_definitionFolderRead = true;
+        QTimer::singleShot(500, this, [this]() {
+            m_definitionFolderRead = false;
+            if (m_doc == NULL)
+                return;
+            if (m_doc->fixtureDefCache()->loadNew(QLCFixtureDefCache::userDefinitionDirectory()) > 0)
+                AppUtil::updateFixtureReadiness(m_doc);
+        });
+    });
 }
 
 void App::watchDefinition(const QString &file)
