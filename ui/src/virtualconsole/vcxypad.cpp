@@ -177,6 +177,10 @@ VCXYPad::VCXYPad(QWidget* parent, Doc* doc) : VCWidget(parent, doc)
     m_doc->masterTimer()->registerDMXSource(this);
     connect(m_doc->inputOutputMap(), SIGNAL(universeWritten(quint32,QByteArray)),
             this, SLOT(slotUniverseWritten(quint32,QByteArray)));
+    /* A preset's function is held from its click on, past Operate: deleted
+       in Design (Build, an undo), the next tick read the freed scene. */
+    connect(m_doc, SIGNAL(functionRemoved(quint32)),
+            this, SLOT(slotFunctionRemoved(quint32)));
 }
 
 VCXYPad::~VCXYPad()
@@ -369,6 +373,7 @@ void VCXYPad::updateDegreesRange()
 
 void VCXYPad::writeDMX(MasterTimer* timer, QList<Universe *> universes)
 {
+    QMutexLocker locker(&m_sceneMutex);
     if (m_scene != NULL)
         writeScenePositions(timer, universes);
     else
@@ -704,6 +709,31 @@ QMap<quint32,QString> VCXYPad::presetsMap() const
     return map;
 }
 
+void VCXYPad::slotFunctionRemoved(quint32 id)
+{
+    if (m_efx != NULL && m_efx->id() == id)
+    {
+        disconnect(m_efx, SIGNAL(durationChanged(uint)), this, SLOT(slotEFXDurationChanged(uint)));
+        m_efx = NULL;
+        m_efxStartXOverrideId = Function::invalidAttributeId();
+        m_efxStartYOverrideId = Function::invalidAttributeId();
+        m_efxWidthOverrideId = Function::invalidAttributeId();
+        m_efxHeightOverrideId = Function::invalidAttributeId();
+    }
+
+    if (m_scene != NULL && m_scene->id() == id)
+    {
+        QMutexLocker locker(&m_sceneMutex);
+        m_scene = NULL;
+        foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+        {
+            if (!fader.isNull())
+                fader->requestDelete();
+        }
+        m_fadersMap.clear();
+    }
+}
+
 void VCXYPad::slotPresetClicked(bool checked)
 {
     if (mode() == Doc::Design)
@@ -731,6 +761,7 @@ void VCXYPad::slotPresetClicked(bool checked)
     if (m_scene != NULL)
     {
         m_scene->stop(functionParent());
+        QMutexLocker locker(&m_sceneMutex);
         m_scene = NULL;
         foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
         {
@@ -833,6 +864,8 @@ void VCXYPad::slotPresetClicked(bool checked)
         if (f == NULL || f->type() != Function::SceneType)
             return;
 
+        // Built whole before a tick reads it (writeDMX, under the mutex).
+        QMutexLocker sceneLocker(&m_sceneMutex);
         m_scene = qobject_cast<Scene*>(f);
         m_sceneChannels.clear();
 
@@ -855,6 +888,7 @@ void VCXYPad::slotPresetClicked(bool checked)
             sChan.m_subType = ch->controlByte();
             m_sceneChannels.append(sChan);
         }
+        sceneLocker.unlock();
 
         m_area->enableEFXPreview(false);
         // reset the area window as we're switching to relative

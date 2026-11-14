@@ -27,6 +27,7 @@
 #include "showeditor.h"
 #include "chaser.h"
 #include "track.h"
+#include "functioneditorguard.h"
 #include "scene.h"
 #include "show.h"
 #include "doc.h"
@@ -47,6 +48,9 @@ ShowEditor::ShowEditor(QWidget* parent, Show* show, Doc* doc)
     Q_ASSERT(show != NULL);
 
     setupUi(this);
+
+    // Cut off once its show leaves the Doc (functioneditorguard.h).
+    FunctionEditorGuard::watch(this, m_doc, show->id());
     m_tree->setRootIsDecorated(true);
     m_tree->setSortingEnabled(false);
     m_tree->setSelectionMode(QAbstractItemView::SingleSelection);

@@ -20,6 +20,8 @@
 #ifndef COLLECTIONEDITOR_H
 #define COLLECTIONEDITOR_H
 
+#include <QPointer>
+#include "collection.h"
 #include <QWidget>
 
 #include "ui_collectioneditor.h"
@@ -48,7 +50,7 @@ public:
 
 private:
     Doc* m_doc;
-    Collection* m_collection; // The Collection being edited
+    QPointer<Collection> m_collection; // The Collection being edited
     FunctionSelection* m_functionSelection;
 
 private slots:

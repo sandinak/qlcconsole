@@ -20,6 +20,7 @@
 #ifndef SCENEEDITOR_H
 #define SCENEEDITOR_H
 
+#include <QPointer>
 #include <QWidget>
 #include <QList>
 #include <QMap>
@@ -73,7 +74,7 @@ protected slots:
 
 private:
     Doc* m_doc;
-    Scene* m_scene; // The Scene that is being edited
+    QPointer<Scene> m_scene; // The Scene that is being edited
     GenericDMXSource* m_source;
 
 protected:

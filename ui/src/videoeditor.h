@@ -20,6 +20,8 @@
 #ifndef VIDEOEDITOR_H
 #define VIDEOEDITOR_H
 
+#include <QPointer>
+#include "video.h"
 #include "ui_videoeditor.h"
 #include "function.h"
 
@@ -41,7 +43,7 @@ public:
 
 private:
     Doc* m_doc;
-    Video* m_video; // The Video function being edited
+    QPointer<Video> m_video; // The Video function being edited
 
 private slots:
     void slotNameEdited(const QString& text);

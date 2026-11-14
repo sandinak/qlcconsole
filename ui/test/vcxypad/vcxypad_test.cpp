@@ -38,6 +38,8 @@
 #include "vcxypad.h"
 #include "vcframe.h"
 #include "qlcfile.h"
+#include "scene.h"
+#include "efx.h"
 #include "doc.h"
 #undef private
 #undef protected
@@ -496,6 +498,32 @@ void VCXYPad_Test::modeChange()
     QCOMPARE(pad->fixtures()[0].m_yMSB, QLCChannel::invalid());
     delete pad;
     QCOMPARE(m_doc->masterTimer()->m_dmxSourceList.size(), 0);
+}
+
+void VCXYPad_Test::aPresetFunctionDeleted()
+{
+    QWidget w;
+    VCXYPad pad(&w, m_doc);
+
+    Scene *s = new Scene(m_doc);
+    QVERIFY(m_doc->addFunction(s));
+    EFX *e = new EFX(m_doc);
+    QVERIFY(m_doc->addFunction(e));
+
+    // As a scene preset and an EFX preset clicked in Operate leave them:
+    // held past the switch back to Design.
+    pad.m_scene = s;
+    pad.m_efx = e;
+
+    m_doc->deleteFunction(s->id());
+    QVERIFY(pad.m_scene == NULL);
+    QVERIFY(pad.m_fadersMap.isEmpty());
+    QVERIFY(pad.m_efx == e);            // not the one deleted
+    m_doc->deleteFunction(e->id());
+    QVERIFY(pad.m_efx == NULL);
+
+    // A tick reads no freed scene.
+    pad.writeDMX(m_doc->masterTimer(), QList<Universe *>());
 }
 
 QTEST_MAIN(VCXYPad_Test)

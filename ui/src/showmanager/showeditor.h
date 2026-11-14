@@ -20,6 +20,8 @@
 #ifndef SHOWEDITOR_H
 #define SHOWEDITOR_H
 
+#include <QPointer>
+#include "show.h"
 #include "ui_showeditor.h"
 
 class Show;
@@ -40,7 +42,7 @@ public:
 
 private:
     Doc* m_doc;
-    Show* m_show; // The Show being edited
+    QPointer<Show> m_show; // The Show being edited
 
 private slots:
     void slotNameEdited(const QString& text);

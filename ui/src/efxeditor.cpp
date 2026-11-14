@@ -32,6 +32,7 @@
 #include <QDebug>
 #include <QPen>
 
+#include "functioneditorguard.h"
 #include "fixtureselection.h"
 #include "speeddialwidget.h"
 #include "efxpreviewarea.h"
@@ -72,6 +73,9 @@ EFXEditor::EFXEditor(QWidget* parent, EFX* efx, Doc* doc)
 
     setupUi(this);
 
+    // Cut off once its EFX leaves the Doc (functioneditorguard.h).
+    FunctionEditorGuard::watch(this, m_doc, efx->id());
+
     connect(m_speedDial, SIGNAL(toggled(bool)),
             this, SLOT(slotSpeedDialToggle(bool)));
 
@@ -103,13 +107,13 @@ EFXEditor::EFXEditor(QWidget* parent, EFX* efx, Doc* doc)
 
 EFXEditor::~EFXEditor()
 {
-    if (m_testButton->isChecked() == true)
+    if (m_testButton->isChecked() == true && !m_efx.isNull())
         m_efx->stopAndWait();
 }
 
 void EFXEditor::stopTest()
 {
-    if (m_testButton->isChecked() == true)
+    if (m_testButton->isChecked() == true && !m_efx.isNull())
         m_testButton->click();
 }
 
@@ -323,7 +327,7 @@ void EFXEditor::slotTestClicked()
 
 void EFXEditor::slotRestartTest()
 {
-    if (m_testButton->isChecked() == true)
+    if (m_testButton->isChecked() == true && !m_efx.isNull())
     {
         // Toggle off, toggle on. Duh.
         m_testButton->click();
@@ -335,7 +339,8 @@ void EFXEditor::slotModeChanged(Doc::Mode mode)
 {
     if (mode == Doc::Operate)
     {
-        m_efx->stopAndWait();
+        if (!m_efx.isNull())
+            m_efx->stopAndWait();
         m_testButton->setChecked(false);
         m_testButton->setEnabled(false);
     }

@@ -40,6 +40,7 @@
 #include <QUrl>
 #include <QAction>
 
+#include "functioneditorguard.h"
 #include "functionstreewidget.h"
 #include "programmingmanager.h"
 #include "workbench.h"
@@ -130,6 +131,9 @@ ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveM
     Q_ASSERT(doc != NULL);
 
     setupUi(this);
+
+    // Cut off once its chaser leaves the Doc (functioneditorguard.h).
+    FunctionEditorGuard::watch(this, m_doc, chaser->id());
 
     /* Disable editing of steps number */
     m_tree->setItemDelegateForColumn(COL_NUM, new NoEditDelegate(this));
@@ -449,7 +453,7 @@ ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveM
     // RC8: GO takes the stage from a Test play -- not when what is tested
     // is a Show Tree list itself (its start is the run).
     connect(m_doc->showTree(), &ShowTreeController::stageTakenForRun, this, [this](QStringList *held) {
-        if (!m_testNextButton->isEnabled() || !m_chaser->isRunning()
+        if (m_chaser.isNull() || !m_testNextButton->isEnabled() || !m_chaser->isRunning()
             || m_doc->showTree()->productionOfChaser(m_chaser->id()) != ShowTree::invalidId())
             return;
         slotTestStop();
@@ -477,9 +481,8 @@ ChaserEditor::~ChaserEditor()
         m_speedDials->deleteLater();
     m_speedDials = NULL;
 
-    // double check that the Chaser still exists !
-    if (m_liveMode == false &&
-        m_doc->functions().contains(m_chaser) == true)
+    // The Chaser may be gone already (the guard nulled it)
+    if (m_liveMode == false && !m_chaser.isNull())
         m_chaser->stopAndWait();
 }
 
@@ -491,7 +494,8 @@ void ChaserEditor::showOrderAndDirection(bool show)
 
 void ChaserEditor::stopTest()
 {
-    m_chaser->stopAndWait();
+    if (!m_chaser.isNull())
+        m_chaser->stopAndWait();
 }
 
 void ChaserEditor::selectStepAtTime(quint32 time)
@@ -1703,7 +1707,7 @@ void ChaserEditor::slotModeChanged(Doc::Mode mode)
     {
         m_testPlayButton->setEnabled(false);
         m_testStopButton->setEnabled(false);
-        if (m_liveMode == false)
+        if (m_liveMode == false && !m_chaser.isNull())
             m_chaser->stop(functionParent());
     }
     else

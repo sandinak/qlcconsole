@@ -223,6 +223,9 @@ protected:
 protected slots:
     void slotPresetClicked(bool checked);
     void slotEFXDurationChanged(uint duration);
+    /** A preset's EFX or scene deleted (Build, an undo, the Show Tree):
+        let go of it before the Doc frees it. */
+    void slotFunctionRemoved(quint32 id);
 
 private:
     FunctionParent functionParent() const;
@@ -239,6 +242,10 @@ protected:
 
     Scene *m_scene;
     QList<SceneChannel> m_sceneChannels;
+    /** writeDMX() (the MasterTimer thread) reads m_scene and m_fadersMap
+        under it; slotFunctionRemoved() takes it to let the scene go, so no
+        tick is still inside the scene when the Doc deletes it. */
+    QMutex m_sceneMutex;
 
     /*********************************************************************
      * External input

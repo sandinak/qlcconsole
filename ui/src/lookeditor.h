@@ -26,6 +26,7 @@
 #include "qlcui_export.h"
 #include "effectfit.h"
 #include "effectscript.h"
+#include "scene.h"
 
 class QStackedWidget;
 class QColorDialog;
@@ -267,7 +268,9 @@ private:
 
 private:
     Doc *m_doc;
-    Scene *m_contextScene;
+    /** Null once the scene is deleted (Build, an undo, the Show Tree): a
+        host that did not hand over nullptr first leaves no dangling one. */
+    QPointer<Scene> m_contextScene;
     quint32 m_paletteId;
     bool m_loading;
     //!< "<paletteId>|<scriptPath>" the effect param panel was last built for, so

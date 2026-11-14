@@ -30,6 +30,7 @@
 #include <QMenu>
 #include <QAction>
 
+#include "functioneditorguard.h"
 #include "functionselection.h"
 #include "speedmasterspanel.h"
 #include <QComboBox>
@@ -57,6 +58,9 @@ CollectionEditor::CollectionEditor(QWidget* parent, Collection* fc, Doc* doc)
     Q_ASSERT(fc != NULL);
 
     setupUi(this);
+
+    // Cut off once its collection leaves the Doc (functioneditorguard.h).
+    FunctionEditorGuard::watch(this, m_doc, fc->id());
 
     connect(m_nameEdit, SIGNAL(textEdited(const QString&)),
             this, SLOT(slotNameEdited(const QString&)));
@@ -121,7 +125,7 @@ CollectionEditor::~CollectionEditor()
         delete m_functionSelection;
     }
 
-    if (m_testButton->isChecked())
+    if (m_testButton->isChecked() && !m_collection.isNull())
         m_collection->stopAndWait();
 }
 
@@ -152,7 +156,7 @@ void CollectionEditor::slotAdd()
     m_functionSelection->setDisabledFunctions(disabledList);
 
     // Use exec() to show modal dialog and get selection
-    if (m_functionSelection->exec() == QDialog::Accepted)
+    if (m_functionSelection->exec() == QDialog::Accepted && !m_collection.isNull())
     {
         QList<quint32> ids = m_functionSelection->selection();
         foreach (quint32 id, ids)
