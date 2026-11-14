@@ -456,6 +456,8 @@ private:
     void armChordFired();
     /** Start or stop timing the chord from what @p universe holds now. */
     void armChordUpdate(quint32 universe);
+    /** reset() without telling the screens (the caller does). */
+    void clear();
     /** Tell a press what it lacks, aloud and on the screen. */
     void refuse(Action action, const QString &text);
     /** The state may have changed: the light, the triggers, stateChanged(). */
@@ -487,7 +489,7 @@ private:
     QTimer *m_armChord = nullptr;
     quint32 m_chordUniverse = UINT_MAX;
     /** What the screens were last told, so stateChanged() goes once. */
-    int m_shownState = -1;
+    int m_shownState = int(Tools);
     /** The blink: a cue fading (or the GO's flash), and its phase. */
     QTimer *m_blink = nullptr;
     bool m_playing = false;

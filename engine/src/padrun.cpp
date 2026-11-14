@@ -201,7 +201,7 @@ void PadRun::setEnabled(bool on, bool say)
 {
     if (on == m_enabled)
         return;
-    reset();
+    clear();
     m_stopped = false;
     m_enabled = on;
     emit enabledChanged(on);
@@ -452,7 +452,7 @@ QColor PadRun::stateInk() const
     const QColor c = stateColour();
     if (!c.isValid())
         return QColor();
-    return c.lightnessF() > 0.5f || c == armedColour() ? QColor(Qt::black) : QColor(Qt::white);
+    return c == stoppedColour() ? QColor(Qt::white) : QColor(Qt::black);
 }
 
 QColor PadRun::lightColour() const
@@ -607,6 +607,12 @@ void PadRun::showNotice(const QString &text)
 
 void PadRun::reset()
 {
+    clear();
+    sync();
+}
+
+void PadRun::clear()
+{
     roleChordCancel();
     m_armChord->stop();
     m_chordUniverse = UINT_MAX;
@@ -618,7 +624,6 @@ void PadRun::reset()
     m_armUniverse = UINT_MAX;
     if (was)
         emit armedChanged(false);
-    sync();
 }
 
 void PadRun::controllerLost()
