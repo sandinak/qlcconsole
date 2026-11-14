@@ -1725,9 +1725,8 @@ void PadRun_Test::theTriggerFeelByState()
     // The role off: always off.
     QCOMPARE(T::forState(false, true, true), T::State());
     QCOMPARE(T::forState(true, false, false), T::State());
-    // Armed: R2 firm, L2 free.
-    QCOMPARE(T::forState(true, true, false).right, T::Firm);
-    QCOMPARE(T::forState(true, true, false).left, T::Off);
+    // Armed: both loose (the triggers do nothing in Run).
+    QCOMPARE(T::forState(true, true, false), T::State());
     // Walking: both click, the arm or not.
     QCOMPARE(T::forState(true, false, true).right, T::Click);
     QCOMPARE(T::forState(true, true, true).left, T::Click);
@@ -1754,18 +1753,12 @@ void PadRun_Test::theTriggersFollowTheArm()
 
     run->setEnabled(true);
     told.clear();
+    // Armed: the triggers do nothing in Run, so they stay loose (0.4.5).
     hold(kLB, true);
     QVERIFY(run->isArmed());
-    QCOMPARE(pc->padTriggers().right, PadTriggers::Firm);
-    QCOMPARE(pc->padTriggers().left, PadTriggers::Off);
-    QCOMPARE(told.count(), 1);
-    // Held, nothing is said again.
-    hold(kLB, true);
-    QCOMPARE(told.count(), 1);
-    // Disarm: off.
+    QCOMPARE(pc->padTriggers(), PadTriggers::State());
     hold(kLB, false);
     QCOMPARE(pc->padTriggers(), PadTriggers::State());
-    QCOMPARE(told.count(), 2);
 
     // Walking: both click; leaving the walk: off.
     press(kMenu);
@@ -1781,23 +1774,11 @@ void PadRun_Test::theTriggersFollowTheArm()
     pc->refineSession()->stop();
     QCOMPARE(pc->padTriggers(), PadTriggers::State());
 
-    // Armed, then the role leaves: off.
-    hold(kLB, true);
-    QCOMPARE(pc->padTriggers().right, PadTriggers::Firm);
+    // Walking, then the role leaves: off.
+    QVERIFY(run->startWalk());
+    QCOMPARE(pc->padTriggers().left, PadTriggers::Click);
     run->setEnabled(false);
     QCOMPARE(pc->padTriggers(), PadTriggers::State());
-    hold(kLB, false);
-
-    // Armed, the controller is lost: reset puts them off.
-    run->setEnabled(true);
-    hold(kLB, true);
-    QCOMPARE(pc->padTriggers().right, PadTriggers::Firm);
-    run->reset();
-    QCOMPARE(pc->padTriggers(), PadTriggers::State());
-
-    // Quit while armed: off before the controller goes.
-    hold(kLB, true);
-    QCOMPARE(pc->padTriggers().right, PadTriggers::Firm);
 }
 
 void PadRun_Test::swipeAcross(float x0, float y0, float x1, float y1)

@@ -136,9 +136,8 @@ Use it to call a one-shot, say a breathe, off a hit in a cue.
 Two things a PlayStation DualSense adds to the Run role. Neither is needed:
 everything has a button, and an Xbox pad simply has no triggers to feel.
 
-- **Adaptive triggers.** While you hold LB (L1) to arm, R2 pushes back
-  firmly, so a GO takes a deliberate squeeze and a brush cannot fire one.
-  Let go of LB and the trigger is loose again. While walking, both
+- **Adaptive triggers.** In the Run role the triggers do nothing, so they
+  stay loose, armed or not. While walking, both
   triggers give a light click at the end of each pull, one click a cue
   stepped. The triggers go back to off when you disarm, leave the walk or
   the Run role, lose the pad, or quit.
@@ -348,8 +347,8 @@ button to **Pad: Run**. Connect one pad at a time, and check that
   box, and D-pad Up lights only D-pad Up.
 - **PS4 DualShock 4:** watch the light bar and the buzz: neither has been
   checked on a real pad yet. No adaptive triggers.
-- **PS5 DualSense:** as the DualShock 4, plus: while LB is held (step 2)
-  R2 pushes back firmly, and it is loose again in step 7 (see
+- **PS5 DualSense:** as the DualShock 4, plus: R2 stays loose while LB is
+  held, and both triggers click once a pull while walking (see
   [DualSense extras](#dualsense-extras-triggers-and-swipes)).
 
 Write down any step that did not give its expected result, with the pad
