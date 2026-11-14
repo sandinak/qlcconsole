@@ -406,6 +406,12 @@ private:
     SpreadLayer::Settings m_spreadBuilt;    //!< what the cells' "phase" was worked out for
     QVector3D        m_spreadCentre;        //!< ...and round which target
     bool             m_spreadHadCentre = false;
+    /** EffectScript::wantsTargetDistance(): the cells' "fromTarget" was
+     *  worked out round this centre (aimed or centre stage); the farthest. */
+    bool             m_distBuilt = false;
+    bool             m_distAimed = false;
+    QVector3D        m_distCentre;
+    double           m_distFar = 0.0;
     mutable double   m_startBeat = 0;
     /** Own speed: the effect's time, run at its "__ownRate" (×1 = as
      *  made). Summed tick by tick so a rate change never jumps the

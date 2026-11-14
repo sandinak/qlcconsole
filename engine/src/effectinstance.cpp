@@ -1556,6 +1556,52 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         }
     }
 
+    /* How far each head stands from the look's Aim target (centre stage
+       without one) on the floor, for a script that spreads out from a point
+       (effect.targetDistance: Fire Spread). The same target and the same
+       floor distance the Spread row's "out from the target" orders heads
+       by, but the distance itself, so a head twice as far is twice as far.
+       A pixel fixture's heads each by their own place (RigHeads, where the
+       rig view draws them). Worked out again only when the cells, where
+       things stand or the target change. */
+    if (m_script.wantsTargetDistance())
+    {
+        QVector3D centre = mp != nullptr ? mp->stageCentre() : QVector3D();
+        const bool aimed = aimCentre(&centre);
+        if (!aimed && mp != nullptr)
+            centre = mp->stageCentre();
+        if (rebuild || moved || !m_distBuilt || aimed != m_distAimed || centre != m_distCentre)
+        {
+            QHash<quint32, QVector<QVector3D>> headsAt;
+            double farthest = 0.0;
+            for (int i = 0; i < cells.size() && i < m_cellObjects.size(); ++i)
+            {
+                if (m_cellObjects.at(i).isUndefined())
+                    continue;
+                const EffectCell &cell = cells.at(i);
+                const auto fit = m_facts.constFind(cell.fixtureId);
+                if (fit == m_facts.constEnd())
+                    continue;
+                QVector3D p = fit->pos;
+                if (fit->heads > 1 && mp != nullptr && !p.isNull())
+                {
+                    auto it = headsAt.find(cell.fixtureId);
+                    if (it == headsAt.end())
+                        it = headsAt.insert(cell.fixtureId, RigHeads::headPositions(m_doc, cell.fixtureId));
+                    if (cell.head >= 0 && cell.head < it->size())
+                        p = it->at(cell.head);
+                }
+                const double d = std::hypot(double(p.x() - centre.x()), double(p.y() - centre.y()));
+                m_cellObjects[i].setProperty("fromTarget", d);
+                farthest = qMax(farthest, d);
+            }
+            m_distFar = farthest;
+            m_distCentre = centre;
+            m_distAimed = aimed;
+            m_distBuilt = true;
+        }
+    }
+
     /* What changes as it runs, worked out once a fixture. */
     const bool aiming = mp && effectPal && !m_script.targetDefs().isEmpty();
     StageTarget *sceneTarget = nullptr;
@@ -2027,6 +2073,14 @@ QJSValue EffectInstance::buildInputsObject() const
     obj.setProperty("_fade", double(m_depthFade ? depth() : m_envelope));
     obj.setProperty("_spread", spreadNow.isActive());
     obj.setProperty("_spreadAmount", spreadNow.amount);     // cycles, for effects that lay heads out by it
+    if (m_script.wantsTargetDistance())
+    {
+        // Each head's own distance is its "fromTarget" (buildFixturesArray()).
+        obj.setProperty("_fromTargetFar", m_distFar);
+        obj.setProperty("_targetAimed", m_distAimed);
+    }
+    if (m_script.wantsCueTime())
+        obj.setProperty("_cueTime", resolvedDurationMs() / 1000.0);
 
     // One-shot lifecycle: hand the effect its window so it fits any duration.
     //   phase    — 0→1 progress through the resolved run length

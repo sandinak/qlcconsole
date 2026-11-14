@@ -25,6 +25,17 @@ private slots:
     void aWholeRigOfPixelsTicksQuickly();
     void theTextEffectSpellsOnAGrid();
     void crackleRestsPulsesUpAndFadesBack();
+    /** Firelight's flame moved to lib/fire.js: its output is what the
+     *  maths it had gave, number for number. */
+    void firelightIsUnchangedOnTheSharedFlame();
+    /** Fire Spread, the script: heads catch in proportion to their
+     *  distance, dark before, flare then settle, all burning after the
+     *  spread and still flickering, the same seed the same fire, a
+     *  dimmer-only, a colour-only and a colour-wheel head. */
+    void fireSpreadCatchesOutwardFromThePoint();
+    /** Fire Spread on a rig: a dimmer at the Aim target and a pixel strip
+     *  away from it, pixel by pixel, run on Loop: it never starts again. */
+    void fireSpreadBurnsTheRigFromTheAimTarget();
     /** The matrix effects on a box of RGB and white pixel rows, eight boxes
      *  as one canvas, its RGB-only and white-only modes and a plain RGB
      *  matrix: each head told what it emits, every effect running through
