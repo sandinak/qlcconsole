@@ -156,7 +156,11 @@ WledConfigCheck::WledConfigCheck(Doc *doc, QObject *parent)
 WledConfigCheck::~WledConfigCheck()
 {
     if (s_instance == this)
+    {
         s_instance = nullptr;
+        if (ShowStatus *status = ShowStatus::instance())
+            status->clearStatus("wled.setup");
+    }
 }
 
 void WledConfigCheck::setInterval(int ms)

@@ -698,7 +698,7 @@ void WledDiscovery_Test::setUpAsksOnceWritesTheKeysAndReadsBack()
              QString("WLED (%1) is set up the way this show drives it.").arg(wled.address()));
 }
 
-void WledDiscovery_Test::aBatchIsSetUpWithOneQuestion()
+void WledDiscovery_Test::aBatchIsSetUpWithoutAQuestion()
 {
     FakeWled left, right;
     QVERIFY(left.listen(QHostAddress::LocalHost));
@@ -721,36 +721,19 @@ void WledDiscovery_Test::aBatchIsSetUpWithOneQuestion()
     found.receive(answer("wled-000002", "127.0.0.1", right.serverPort(), "aa0000000002"), QHostAddress::LocalHost);
     QVERIFY(waitFor([&found]() { return found.notInShow().size() == 2; }));
 
-    // The folder stands for both: one Patch, one question naming each.
+    /* The folder stands for both: one Patch, and each device set up as part
+       of it -- no question ("one step to include a device"); the footer says
+       what was done. */
     QTreeWidgetItem *folder = foundRow(mgr, true);
     QVERIFY(folder != nullptr);
     int boxes = 0;
-    QString text;
     auto poll = std::make_shared<std::function<void()> >();
     auto left_ = std::make_shared<int>(400);
-    *poll = [&boxes, &text, poll, left_]() {
+    *poll = [&boxes, poll, left_]() {
         if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
         {
             ++boxes;
-            text = box->text();
-            const QByteArray dir = qgetenv("QLC_SHOT_DIR");
-            if (!dir.isEmpty())
-                for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
-                {
-                    if (QWidget *over = box->parentWidget())
-                        over->window()->resize(sz);
-                    QApplication::processEvents();
-                    box->grab().save(QString::fromLocal8Bit(dir) + QStringLiteral("/setup-confirm-batch-%1x%2.png")
-                                         .arg(sz.width()).arg(sz.height()));
-                }
-            QAbstractButton *hit = nullptr;
-            for (QAbstractButton *b : box->buttons())
-                if (b->text() == "Set Up 2 Devices")
-                    hit = b;
-            if (hit != nullptr)
-                hit->click();
-            else
-                box->reject();
+            box->reject();
         }
         if (--*left_ > 0)
             QTimer::singleShot(10, *poll);
@@ -759,11 +742,18 @@ void WledDiscovery_Test::aBatchIsSetUpWithOneQuestion()
     QVERIFY2(texts.contains("Patch 2 WLEDs"), qPrintable(texts.join(" | ")));
     QTimer::singleShot(0, *poll);
     QVERIFY(waitFor([&left, &right]() { return left.posted.size() == 1 && right.posted.size() == 1; }));
+    QVERIFY(waitFor([&check, &left, &right]() {
+        return check.writeStatus(left.address()).startsWith("Set up ")
+               && check.writeStatus(right.address()).startsWith("Set up ");
+    }));
     QTest::qWait(300);
-    QCOMPARE(boxes, 1);
-    QVERIFY2(text.startsWith("Set up these 2 WLEDs the way this show drives them?"), qPrintable(text));
-    QVERIFY2(text.contains(QString("<b>Staff L</b> (WLED (%1))").arg(left.address())), qPrintable(text));
-    QVERIFY2(text.contains(QString("<b>Staff R</b> (WLED (%1))").arg(right.address())), qPrintable(text));
+    QCOMPARE(boxes, 0);
+    ShowStatus::Entry said;
+    foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+        if (e.key == "wled.setup")
+            said = e;
+    QCOMPARE(said.items.size(), 2);
+    QCOMPARE(said.severity, ShowStatus::Ok);
     QCOMPARE(left.posted.first().second["id"].toObject()["name"].toString(), QString("Staff L"));
     QCOMPARE(right.posted.first().second["id"].toObject()["mdns"].toString(), QString("staff-r"));
     QCOMPARE(m_doc->fixtures().size(), 2);
