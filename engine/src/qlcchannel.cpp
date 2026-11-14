@@ -117,6 +117,7 @@ QLCChannel& QLCChannel::operator=(const QLCChannel& channel)
         /* Copy new capabilities from the other channel */
         while (it.hasNext() == true)
             m_capabilities.append(it.next()->createCopy());
+        m_hasPress = channel.m_hasPress;
     }
 
     return *this;
@@ -1072,7 +1073,16 @@ bool QLCChannel::addCapability(QLCCapability* cap)
     }
 
     m_capabilities.append(cap);
+    m_hasPress = m_hasPress || cap->isPress();
     return true;
+}
+
+bool QLCChannel::isPressValue(uchar value) const
+{
+    if (!m_hasPress)
+        return false;
+    const QLCCapability *cap = searchCapability(value);
+    return cap != NULL && cap->isPress();
 }
 
 bool QLCChannel::setCapabilityRange(QLCCapability* cap, uchar min, uchar max)
@@ -1112,6 +1122,9 @@ bool QLCChannel::removeCapability(QLCCapability* cap)
         {
             it.remove();
             delete cap;
+            m_hasPress = false;
+            for (const QLCCapability *c : std::as_const(m_capabilities))
+                m_hasPress = m_hasPress || c->isPress();
             return true;
         }
     }

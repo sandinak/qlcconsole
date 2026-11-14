@@ -1401,7 +1401,36 @@ public:
      *  it, or a cue sets it (its own, a cue look): that starts it afresh. */
     bool effectOnlyTracked(quint32 sceneId, quint32 paletteId, quint32 viaFunction) const;
 
+    /** Presses don't track (docs/features/stage-targets.md "Candles"): per
+     *  cue of @a list, what the cue's press guard sets -- (fixture << 32 |
+     *  channel) -> value, Presses::Key -- on the channels with a press
+     *  (QLCCapability::isPress(), the IR candle remote's Dim and Brighten).
+     *  The bake plays it as a generated scene after the cue's layers, so it
+     *  wins those channels however the cue is reached (GO, Back, a jump):
+     *
+     *  - a cue whose own layer sets the channel plays that, newly
+     *    programmed here: no guard, unless a carried-in layer would press
+     *    there too (then the guard holds the own value);
+     *  - else a carried-in (tracked, included, base) value plays as it
+     *    tracks, except a press, which goes to 0, nothing -- and so does a
+     *    state older than a press set since (the press was released, but it
+     *    is the last thing the cue sent there);
+     *  - a cue where nothing sets the channel sends 0, so a Window change
+     *    can't restart a press left on the wire.
+     *
+     *  Only in a list that presses that channel somewhere, so a show with no
+     *  press -- every show before this -- bakes as it did. A Looks section
+     *  (a hit is pressed by hand) and sub-cues have none. Empty hashes: no
+     *  guard in that cue. */
+    QList<QHash<quint64, uchar>> pressGuards(const ShowTree::CueList &list) const;
+
 private:
+    QList<QHash<quint64, uchar>> pressGuards(const ShowTree::CueList &list,
+                                             const QList<ShowTree::ResolvedCue> &resolved,
+                                             const QSet<quint64> &pressChannels) const;
+    /** A press guard's values as the bake finds it again ("12:0=0,..."). */
+    static QString pressGuardSignature(const QHash<quint64, uchar> &values);
+
     /** One generated scene a cue plays: what a resolved layer bakes to,
      *  with what it leaves out for a lower layer (§3.5) and what it lays out
      *  over with others (D10, D17). */

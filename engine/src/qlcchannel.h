@@ -387,9 +387,19 @@ public:
     /** Sort capabilities to ascending order by their values */
     void sortCapabilities();
 
+    /** Whether a capability of this channel is a press (a button, not a
+     *  state: QLCCapability::isPress()). Such a channel is a button
+     *  selector: it never fades (a fade would pass through the other
+     *  buttons), and the Show Tree never tracks a press. Kept as the
+     *  capabilities are added and removed, so the DMX path reads a bool. */
+    bool hasPress() const { return m_hasPress; }
+    /** Whether @p value on this channel is a press. */
+    bool isPressValue(uchar value) const;
+
 protected:
     /** List of channel's capabilities */
     QList <QLCCapability*> m_capabilities;
+    bool m_hasPress = false;
 
     /*********************************************************************
      * File operations

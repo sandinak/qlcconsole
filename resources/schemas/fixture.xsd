@@ -146,6 +146,8 @@ elementFormDefault="qualified"
    <xs:attribute name="Res" type="xs:string"/>
    <xs:attribute name="Color" type="xs:string"/>
    <xs:attribute name="Color2" type="xs:string"/>
+   <!-- qlcconsole: a button press, not a state (QLCCapability::isPress) -->
+   <xs:attribute name="Press" type="xs:boolean"/>
 </xs:complexType>
 
 <!-- please see
