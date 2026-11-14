@@ -164,6 +164,13 @@ public:
      *  -- and the inputs "_fromTargetFar" (the farthest head's) and
      *  "_targetAimed". Declared as `effect.targetDistance = true`. */
     bool        wantsTargetDistance() const { return m_wantsTargetDistance; }
+    /** It sweeps in from a side of the stage: each head gets "floorX" and
+     *  "floorY", where it stands on the floor (metres; +X stage left, +Y
+     *  downstage) -- each pixel of a pixel fixture by its own place -- and
+     *  the input "_floorBox" {x0, y0, x1, y1}, the heads' extent. Worked
+     *  out with the target distances, only when the heads or where they
+     *  stand change. Declared as `effect.floorPlace = true`. */
+    bool        wantsFloorPlace() const { return m_wantsFloorPlace; }
     /** It reads the cue's time as "_cueTime" (seconds): the look's Length,
      *  else the chase step or Show Tree cue it plays in, else its
      *  naturalDurationMs -- what a one-shot's run length is. Declared as
@@ -311,6 +318,7 @@ private:
     QString     m_cycleParam;
     bool        m_takesHostSpread = false;
     bool        m_wantsTargetDistance = false;
+    bool        m_wantsFloorPlace = false;
     bool        m_wantsCueTime = false;
     QString     m_hostSpreadParam;
     QStringList m_fixtureTypes;

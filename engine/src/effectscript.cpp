@@ -122,6 +122,7 @@ bool EffectScript::load(const QString &path)
     m_cycleParam.clear();
     m_takesHostSpread = false;
     m_wantsTargetDistance = false;
+    m_wantsFloorPlace = false;
     m_wantsCueTime = false;
     m_hostSpreadParam.clear();
     m_inputs.clear();
@@ -262,6 +263,7 @@ bool EffectScript::parseMeta()
         m_naturalDurationMs = 2000;
     m_cycleParam = jsText(m_script.property("cycleParam"));
     m_wantsTargetDistance = m_script.property("targetDistance").toBool();
+    m_wantsFloorPlace = m_script.property("floorPlace").toBool();
     m_wantsCueTime = m_script.property("cueTime").toBool();
 
     if (m_name.isEmpty())

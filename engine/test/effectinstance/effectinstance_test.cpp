@@ -4782,17 +4782,21 @@ void EffectInstance_Test::fireSpreadCatchesOutwardFromThePoint()
         QVERIFY(farLit(2.2));
     }
 
-    /* A pixel with only a level, not yet reached: dark by its own dimmer
-       (an RGB pixel is left to what is under it). */
+    /* Pixels not yet reached. One with only a level: dark by its own
+       dimmer. An RGB pixel of a bar with no dimmer (the show's step bars):
+       dark too, pixel by pixel, its colour scaled to none. An RGB pixel of
+       a bar whose one dimmer serves every pixel: left to what is under it
+       (that dimmer at none would darken the whole bar). */
     {
         QJSEngine *eng = fs.engine();
-        QJSValue fixtures = eng->newArray(2);
-        for (int i = 0; i < 2; ++i)
+        QJSValue fixtures = eng->newArray(3);
+        for (int i = 0; i < 3; ++i)
         {
             QJSValue o = eng->newObject();
             o.setProperty("heads", 4);
-            o.setProperty("headRGB", i == 1);
+            o.setProperty("headRGB", i >= 1);
             o.setProperty("headWhite", false);
+            o.setProperty("hasDimmer", i == 2);
             o.setProperty("fromTarget", 4.0);
             fixtures.setProperty(quint32(i), o);
         }
@@ -4805,7 +4809,10 @@ void EffectInstance_Test::fireSpreadCatchesOutwardFromThePoint()
         QJSValue state = fs.newState();
         const QJSValue out = fs.callTick(fixtures, inputs, eng->newObject(), params, state, eng->newObject());
         QCOMPARE(out.property(0u).property("dimmer").toNumber(), 0.0);
-        QVERIFY(out.property(1u).property("dimmer").isUndefined());
+        QCOMPARE(out.property(1u).property("dimmer").toNumber(), 0.0);
+        QVERIFY(out.property(1u).property("r").isUndefined());
+        QVERIFY(out.property(2u).property("dimmer").isUndefined());
+        QVERIFY(out.property(2u).property("r").isUndefined());
     }
 
     // Everything at the point (an unplaced rig): it all catches at once.

@@ -61,6 +61,9 @@ private slots:
     void whoLetGoAddsNoAllocationPerFrame();
     void aBeamSizeReaimAddsNoFadersAndReadsFadesFree();
     void anAreaAimThatDimsWorksOutItsZonesOnce();
+    /* Fire Spread and Spell Spread over a 64-head step bar: where each
+       pixel stands is worked out once a layout, not once a tick. */
+    void aSpreadWorksOutWhereItsHeadsStandOnce();
 
     void resolvingABlockedTargetAllocatesNothing();
 

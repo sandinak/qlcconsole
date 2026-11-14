@@ -215,6 +215,11 @@ public:
      *  its scene were up, running or not. -1 (the default): the stage. */
     void setOffStageClock(qint64 ms) { m_offStageMs = ms; }
 
+    /** How many times its heads' places on the floor (targetDistance,
+     *  floorPlace) were worked out: once a layout, not once a tick
+     *  (hotpath_test). */
+    quint64 placesWorkedOut() const { return m_placesWorkedOut; }
+
     // --- Read last results (any thread, mutex-protected) ---
     QList<DmxWrite> dmxWrites() const;
 
@@ -373,6 +378,10 @@ private:
         float lensMin = 0.0f, lensMax = 0.0f;
         bool hasPanTilt = false, hasRGB = false, hasColorWheel = false;
         bool hasDimmer = false, hasGobo = false, hasShutter = false, hasZoom = false;
+        /** It only switches on and off: a relay (the Switch output rule)
+         *  or a silk flame (its fan's relay). Its level is all or none. */
+        bool switches = false;
+        uint rules = 0;                 //!< its Fixture::OutputRules, to see them change
         QVector3D pos;
         QJSValue posObj;                //!< shared by its cells
         quint64 seen = 0;               //!< the tick it was last looked at
@@ -412,6 +421,10 @@ private:
     bool             m_distAimed = false;
     QVector3D        m_distCentre;
     double           m_distFar = 0.0;
+    /** EffectScript::wantsFloorPlace(): the heads' extent on the floor,
+     *  {x0, y0, x1, y1} (metres), handed in as "_floorBox". */
+    QJSValue         m_floorBox;
+    quint64          m_placesWorkedOut = 0;
     mutable double   m_startBeat = 0;
     /** Own speed: the effect's time, run at its "__ownRate" (×1 = as
      *  made). Summed tick by tick so a rate change never jumps the

@@ -10,6 +10,23 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Effect host cost over many pixels (perf, before 0.5.0)
+
+Over the show's 96 step bars (6,144 pixel heads) an effect that returns
+nothing still costs ~3.4 ms a tick in the host (EffectInstance::parseIntents
+and per-head argument building), Release on an M-series Mac; Fire Spread
+~6.3 ms total. kronk (Intel MBP, the show laptop) will be slower. Measure on
+kronk with the real show (make perf / renderperf) and cut the host cost
+before 0.5.0. From feat/046-spell-spread's report.
+
+## His PL-4003 definition: Layout Width 64 for 40 heads
+
+His user definition of "PL-4003 1 Bar" says Layout Width="64" but has 40
+heads, so effects and the rig view spread its pixels over the first 62 % of
+the bar. Fix in his file (Width="40"); ask before touching it.
+
+---
+
 ## Plot: fixture labels wrap mid-word (pre-existing, 0.4.6 follow-up)
 
 The ux-reviewer saw fixture names on the plot wrap inside a word ("In the
