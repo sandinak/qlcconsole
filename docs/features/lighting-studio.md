@@ -278,6 +278,8 @@ window's title bar moves and closes it as before. Click a box (View,
 Room, Haze, Quality) to step to its next choice; its arrow lists them
 all. **Room** is how much light there is in the house apart from the
 rig: **Work light**, **House** (the default), **Dim** or **Blackout**.
+Edges follow it as surfaces do: in a Blackout an unlit deck, bar or box
+is a dim shape with a faint grey edge, not a line drawing.
 **Owner** shows **All** fixtures (the default), **House only** (the room's
 own rig) or **Ours only** (the tour package and rentals), by each
 fixture's owner (set in the Fixture Manager; a fixture follows its group
@@ -2628,13 +2630,18 @@ Two small but load-bearing visual cues:
   amount rather than scaled multiplicatively, so a fixture with a declared
   black housing (common — plenty of real fixtures *are* black) is still
   clearly outlined against the dark canvas instead of nearly disappearing
-  into it.
+  into it. In the Rig Overview that edge is in the **Room**'s light, like
+  the body: at work light as bright as above, in a **Blackout** a faint
+  grey, so an unlit fixture, deck or box is a dim shape and only what the
+  rig is lighting stands out. A selected fixture keeps its bright edge.
 - **Overlap warnings** — if two fixtures' physical bodies actually occupy
   the same real-world space (two heads stacked at the same truss offset, or
   a deck fixture dragged into another's footprint), both draw with a flat
   warning-red outline instead of their normal contrast tint — deliberately
-  independent of either fixture's own color, so it reads as a warning
-  rather than an odd shade.
+  independent of either fixture's own color and of the room, so it reads as
+  a warning rather than an odd shade. Each body is measured as it is
+  rigged: bars stood on end side by side, or strips stacked up a step's
+  face each touching the next, are not in the same space.
 
 ## Terminology
 

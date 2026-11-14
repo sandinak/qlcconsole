@@ -1,0 +1,57 @@
+/*
+  Q Light Controller Plus
+  rigroomlight_test.h
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0.txt
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#ifndef RIGROOMLIGHT_TEST_H
+#define RIGROOMLIGHT_TEST_H
+
+#include <QObject>
+
+class App;
+
+/* The Rig Overview's 45° view in the room's light: an object's edges follow
+ * the room as its faces do, so a blackout leaves dim silhouettes, not a line
+ * drawing in plot or warning colours; and only fixtures really in the same
+ * space are outlined in the overlap warning's red. */
+class RigRoomLight_Test : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void cleanupTestCase();
+
+    /** A deck's and a strip's edges in a blackout: faint, neutral, still
+     *  above the canvas; brighter in House light. */
+    void blackoutEdgesAreFaintAndNeutral();
+    /** Strips stacked up a step's face, each touching the next, are not
+     *  "in the same space"; two strips rigged in one place are. */
+    void stackedStripsAreNotAnOverlap();
+    /** Bars stood on end side by side along a truss are not an overlap. */
+    void uprightBarsSideBySideAreNotAnOverlap();
+    /** A selected fixture's edge is the selection's, whatever the room. */
+    void aSelectedFixtureKeepsItsEdge();
+
+    /** Review shots of a real show (repro/show.qlcc beside the test, never
+     *  committed) in Blackout and House, with a per-object list of the
+     *  red-dominant colours each draws. Skipped when there is no show or no
+     *  QLC_SHOT_DIR. */
+    void userShowShots();
+
+private:
+    App *m_app = nullptr;
+};
+
+#endif
