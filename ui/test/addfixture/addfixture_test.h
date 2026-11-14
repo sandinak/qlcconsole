@@ -35,6 +35,7 @@ private slots:
 
     void findAddress();
     void findAddressIgnoresUnpatchedFixtures();
+    void theAddressMovesToTheNextGapThatFits();
     void inventoryQuantityIsNotLimitedByAUniverse();
     void addingMoreStartsOnTheSameModelAndMode();
     void modelColumnShowsWholeNames();

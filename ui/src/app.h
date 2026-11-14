@@ -391,6 +391,11 @@ public:
     void watchDefinition(const QString &file);
 private:
     class QFileSystemWatcher *m_definitionWatcher = nullptr;
+    /** The user's fixture folder: a type made while the app runs is loaded
+     *  (QLCFixtureDefCache::loadNew()), so it can be added at once. */
+    class QFileSystemWatcher *m_definitionFolderWatcher = nullptr;
+    void watchDefinitionFolder();
+    bool m_definitionFolderRead = false;    ///< a read of it is already on its way
 public:
 
     /** Busy dialog shown while a workspace is being read outside of boot

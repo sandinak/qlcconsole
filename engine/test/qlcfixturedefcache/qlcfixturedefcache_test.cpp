@@ -410,6 +410,68 @@ void QLCFixtureDefCache_Test::aLocalDefinitionSaysItReplacesTheIncludedOne()
     QCOMPARE(other.sourceDescription(), QString("Downloadable"));
 }
 
+/* A fixture type made while the app runs (the Fixture Editor saving into
+   the user's folder) is loaded by loadNew(), so it can be added without a
+   restart; what was loaded already, and a duplicate set aside, is left
+   alone; a file that would not load is tried again. */
+void QLCFixtureDefCache_Test::aTypeMadeWhileRunningIsLoaded()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    auto shipped = [](const char *rel) { return QString("%1/%2").arg(INTERNAL_FIXTUREDIR, QLatin1String(rel)); };
+    const QString first = dir.filePath("Futurelight-CY-200.qxf");
+    QVERIFY(QFile::copy(shipped("Futurelight/Futurelight-CY-200.qxf"), first));
+
+    QLCFixtureDefCache local;
+    QVERIFY(local.load(QDir(dir.path(), "*.qxf")));
+    QCOMPARE(local.definitions().size(), 1);
+    QLCFixtureDef *kept = local.definitions().first();
+    // Nothing new: nothing gained, and the one there is the same object.
+    QCOMPARE(local.loadNew(QDir(dir.path(), "*.qxf")), 0);
+    QCOMPARE(local.definitions().size(), 1);
+    QCOMPARE(local.definitions().first(), kept);
+
+    // A second type saved into the folder: there at once.
+    QVERIFY(local.fixtureDef("Futurelight", "AHS-150") == nullptr);
+    const QString second = dir.filePath("Futurelight-AHS-150.qxf");
+    QVERIFY(QFile::copy(shipped("Futurelight/Futurelight-AHS-150.qxf"), second));
+    QCOMPARE(local.loadNew(QDir(dir.path(), "*.qxf")), 1);
+    QLCFixtureDef *made = local.fixtureDef("Futurelight", "AHS-150");
+    QVERIFY(made != nullptr);
+    QVERIFY(made->isUser());
+    QCOMPARE(made->definitionSourceFile(), second);
+    QCOMPARE(local.definitions().first(), kept);
+    // Asked again: not read twice, no duplicate noted.
+    QCOMPARE(local.loadNew(QDir(dir.path(), "*.qxf")), 0);
+    QCOMPARE(local.definitions().size(), 2);
+    QVERIFY(local.duplicates().isEmpty());
+
+    // A copy of one already there is set aside once, not on every read.
+    QVERIFY(QFile::copy(first, dir.filePath("Futurelight-CY-200 copy.qxf")));
+    QCOMPARE(local.loadNew(QDir(dir.path(), "*.qxf")), 0);
+    QCOMPARE(local.duplicates().size(), 1);
+    QCOMPARE(local.loadNew(QDir(dir.path(), "*.qxf")), 0);
+    QCOMPARE(local.duplicates().size(), 1);
+
+    // A file caught half-written fails, and is read when it is whole.
+    const QString third = dir.filePath("Half.qxf");
+    {
+        QFile f(third);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("<?xml version=\"1.0\"?>\n<FixtureDefinition><Manufacturer>X</Manu");
+    }
+    QCOMPARE(local.loadNew(QDir(dir.path(), "*.qxf")), 0);
+    QVERIFY(local.failedDefinitions().contains(third));
+    QVERIFY(QFile::remove(third));
+    QVERIFY(QFile::copy(shipped("Futurelight/Futurelight-PHS-260.qxf"), third));
+    QCOMPARE(local.loadNew(QDir(dir.path(), "*.qxf")), 1);
+    QVERIFY(!local.failedDefinitions().contains(third));
+    QCOMPARE(local.definitions().size(), 3);
+
+    // No such folder: nothing, quietly.
+    QCOMPARE(local.loadNew(QDir(dir.filePath("nowhere"))), 0);
+}
+
 /* Two local files for one fixture: the one changed last is used (it was
    alphabetical, so "X 2.qxf" beat "X.qxf" whichever was current), and the
    one set aside is recorded -- identical or not -- for the footer. */

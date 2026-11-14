@@ -315,6 +315,43 @@ bool QLCFixtureDefCache::load(const QDir& dir)
     return true;
 }
 
+int QLCFixtureDefCache::loadNew(const QDir &dir)
+{
+    if (dir.exists() == false || dir.isReadable() == false)
+        return 0;
+
+    // What has been read already: the files the definitions came from, and
+    // the ones set aside as duplicates.
+    QSet<QString> known;
+    for (const QLCFixtureDef *def : std::as_const(m_defs))
+        if (def != NULL && def->definitionSourceFile().isEmpty() == false)
+            known.insert(QFileInfo(def->definitionSourceFile()).absoluteFilePath());
+    for (const Duplicate &d : std::as_const(m_duplicates))
+    {
+        known.insert(QFileInfo(d.kept).absoluteFilePath());
+        known.insert(QFileInfo(d.ignored).absoluteFilePath());
+    }
+
+    const int before = m_defs.size();
+    const QStringList names = dir.entryList(QDir::Files | QDir::Readable, QDir::Time);
+    for (const QString &name : names)
+    {
+        const QString path(dir.absoluteFilePath(name));
+        if (known.contains(QFileInfo(path).absoluteFilePath()))
+            continue;
+        if (QLCFile::isOnlineOnly(path))
+        {
+            QLCFile::noteSkippedOnlineOnly(path);
+            continue;
+        }
+        if (path.toLower().endsWith(KExtFixture) == true)
+            loadQXF(path, true);
+        else if (path.toLower().endsWith(KExtAvolitesFixture) == true)
+            loadD4(path);
+    }
+    return int(m_defs.size()) - before;
+}
+
 int QLCFixtureDefCache::loadMapManufacturer(QXmlStreamReader *doc, QString manufacturer)
 {
     int count = 0;

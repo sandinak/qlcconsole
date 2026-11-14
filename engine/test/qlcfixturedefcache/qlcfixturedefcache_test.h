@@ -42,6 +42,7 @@ private slots:
     void reloadPhysicalKeepsTheModes();
     void aDefinitionThatFailsIsRemembered();
     void aLocalDefinitionSaysItReplacesTheIncludedOne();
+    void aTypeMadeWhileRunningIsLoaded();
     void ofTwoLocalCopiesTheNewestIsUsed();
 
 private:

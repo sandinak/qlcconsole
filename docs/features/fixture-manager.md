@@ -214,6 +214,16 @@ never changed.
 
 ### Network fixtures: one IP each
 
+**Add Fixture finds room.** If the fixtures you are adding outgrow the gap
+the address is in (a higher **Amount**, a bigger mode, a wider **Gap**), the
+address moves to the next free gap on that universe that takes all of them,
+and a line beside it says so ("Moved to address 57: no room at 17 for 32
+channels."). If no gap on the universe is big enough it says that and
+leaves the address alone: pick another universe. An address you type is
+never moved, and a fixture being edited keeps its own. A fixture type you
+have just made in the Fixture Editor is in the list at once, without a
+restart.
+
 A show has at most 1024 universes. Add Fixture refuses a fixture that would end
 past the last one, with a message saying so: pick a lower universe or address.
 
