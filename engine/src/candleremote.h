@@ -29,6 +29,8 @@
 #include <QList>
 #include <climits>
 
+#include "qlcengine_export.h"
+
 class StageTarget;
 class Fixture;
 class Doc;
@@ -37,7 +39,7 @@ class Doc;
  * @{
  */
 
-class CandleRemote final : public QObject
+class QLC_ENGINE_EXPORT CandleRemote final : public QObject
 {
     Q_OBJECT
 

@@ -163,7 +163,7 @@ void AddFixture_Test::initialNoFixture()
         else
         {
             QCOMPARE(i, af.m_tree->topLevelItemCount() - 1); // Generic should be last
-            QCOMPARE(top->childCount(), 6);   // Generic, RGB, RGBW, Smoke, Silk Flame, Stage Curtain
+            QCOMPARE(top->childCount(), 7);   // Generic, IR Candle Remote, RGB, RGBW, Smoke, Silk Flame, Stage Curtain
             QCOMPARE(top->child(0)->text(0), QString(KXMLFixtureGeneric));
 
             QStringList models(m_doc->fixtureDefCache()->models(top->text(0)));
@@ -282,7 +282,7 @@ void AddFixture_Test::initialDimmer()
         else
         {
             QCOMPARE(i, af.m_tree->topLevelItemCount() - 1); // Generic should be last
-            QCOMPARE(top->childCount(), 6);   // Generic, RGB, RGBW, Smoke, Silk Flame, Stage Curtain
+            QCOMPARE(top->childCount(), 7);   // Generic, IR Candle Remote, RGB, RGBW, Smoke, Silk Flame, Stage Curtain
             QCOMPARE(top->child(0)->text(0), QString(KXMLFixtureGeneric));
 
             QStringList models(m_doc->fixtureDefCache()->models(top->text(0)));
@@ -382,7 +382,7 @@ void AddFixture_Test::initialScanner()
         else
         {
             QCOMPARE(i, af.m_tree->topLevelItemCount() - 1); // Generic should be last
-            QCOMPARE(top->childCount(), 6);   // Generic, RGB, RGBW, Smoke, Silk Flame, Stage Curtain
+            QCOMPARE(top->childCount(), 7);   // Generic, IR Candle Remote, RGB, RGBW, Smoke, Silk Flame, Stage Curtain
             QCOMPARE(top->child(0)->text(0), QString(KXMLFixtureGeneric));
 
             QStringList models(m_doc->fixtureDefCache()->models(top->text(0)));
