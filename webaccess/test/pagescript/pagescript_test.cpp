@@ -517,6 +517,105 @@ void PageScript_Test::theControllerTestSendsNothing()
     QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|go") });
 }
 
+/* The pad rules on the page's own pad, the ways a pad on stage breaks
+   them (as engine/test/padrunrules does the console's). */
+void PageScript_Test::theStopsOwnBumpersDoNotArmThePage()
+{
+    loadPage(WebAccessRun::html());
+    js(QStringLiteral("__open()"));
+    sent();
+    runState(liveRun());
+    const int armMs = WebAccessRun::padMap().value(QStringLiteral("lb")).toObject().value(QStringLiteral("hold")).toInt();
+    for (bool armedFirst : { false, true })
+    {
+        if (armedFirst)
+            armPad();
+        pad(QJsonObject{ { "lb", 1 }, { "rb", 1 }, { "lt", 1 }, { "rt", 1 } });
+        QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|alloff") });
+        // The triggers let go first, the bumpers still squeezed past the chord's time.
+        pad(QJsonObject{ { "lb", 1 }, { "rb", 1 } }, armMs + 200);
+        QVERIFY2(text(QStringLiteral("armed")) == QStringLiteral("EMERGENCY STOP"),
+                 qPrintable(QString("the stop's own bumpers armed the page: %1").arg(text(QStringLiteral("armed")))));
+        pad(QJsonObject(), 50);
+    }
+    armPad();
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("ARMED: LT + A IS GO"));
+}
+
+void PageScript_Test::aTriggerInTheChordSpendsItOnThePage()
+{
+    loadPage(WebAccessRun::html());
+    js(QStringLiteral("__open()"));
+    sent();
+    runState(liveRun());
+    const int armMs = WebAccessRun::padMap().value(QStringLiteral("lb")).toObject().value(QStringLiteral("hold")).toInt();
+    pad(QJsonObject{ { "lb", 1 }, { "rb", 1 } }, armMs / 4);
+    pad(QJsonObject{ { "lb", 1 }, { "rb", 1 }, { "lt", 1 } });
+    pad(QJsonObject{ { "lb", 1 }, { "rb", 1 } }, armMs + 200);
+    QVERIFY2(!shown(QStringLiteral("armed")), "armed after a trigger was pulled inside the chord");
+    pad(QJsonObject(), 50);
+    armPad();
+    QVERIFY(shown(QStringLiteral("armed")));
+}
+
+void PageScript_Test::noHitOnTheWayToTheStopOnThePage()
+{
+    loadPage(WebAccessRun::html());
+    js(QStringLiteral("__open()"));
+    sent();
+    runState(liveRun());
+    armPad();
+    // The triggers first on the way to the stop: LT, then RT, then the bumpers.
+    pad(QJsonObject{ { "lt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "rt", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "rt", 1 }, { "lb", 1 } });
+    pad(QJsonObject{ { "lt", 1 }, { "rt", 1 }, { "lb", 1 }, { "rb", 1 } });
+    QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|alloff") });
+    pad(QJsonObject(), 50);
+    // RT on its own, armed, is still the hit.
+    armPad();
+    pad(QJsonObject{ { "rt", 1 } });
+    pad(QJsonObject());
+    QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|hit") });
+}
+
+void PageScript_Test::theTestOpenedMidChordArmsNothing()
+{
+    loadPage(WebAccessRun::html());
+    js(QStringLiteral("__open()"));
+    sent();
+    runState(liveRun());
+    const int armMs = WebAccessRun::padMap().value(QStringLiteral("lb")).toObject().value(QStringLiteral("hold")).toInt();
+    // LB + RB squeezed, and inside the chord's time Menu opens the test.
+    pad(QJsonObject{ { "lb", 1 }, { "rb", 1 } }, armMs / 3);
+    pad(QJsonObject{ { "lb", 1 }, { "rb", 1 }, { "start", 1 } });
+    QCOMPARE(js(QStringLiteral("document.getElementById('qpadtest').className")).toString(), QStringLiteral("show"));
+    pad(QJsonObject{ { "lb", 1 }, { "rb", 1 } }, armMs + 200);
+    QVERIFY2(!shown(QStringLiteral("armed")), "the arm flipped while the Controller test was open");
+    pad(QJsonObject(), 50);
+    pad(QJsonObject{ { "start", 1 } });
+    pad(QJsonObject(), 50);
+    QCOMPARE(js(QStringLiteral("document.getElementById('qpadtest').className")).toString(), QString());
+    QVERIFY2(!shown(QStringLiteral("armed")), "armed after the test closed, with no chord");
+    QCOMPARE(sent(), QStringList());
+}
+
+void PageScript_Test::aPadGoneMidHoldDisarmsThePage()
+{
+    loadPage(WebAccessRun::html());
+    js(QStringLiteral("__open()"));
+    sent();
+    runState(liveRun());
+    armPad();
+    pad(QJsonObject{ { "lt", 1 } });
+    js(QStringLiteral("__noPad();__advance(50)"));
+    QVERIFY(!shown(QStringLiteral("armed")));
+    // Back, A alone (the safety's release never came): nothing.
+    pad(QJsonObject{ { "a", 1 } });
+    pad(QJsonObject());
+    QCOMPARE(sent(), QStringList());
+}
+
 void PageScript_Test::acksSayWhyInPlainWords()
 {
     loadPage(WebAccessRun::html());

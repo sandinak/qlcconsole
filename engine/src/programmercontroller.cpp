@@ -149,6 +149,14 @@ ProgrammerController::ProgrammerController(Doc *doc)
             connectControllerInput();
         refreshControllerKeepAlive();
     });
+    /* The Controller Test opened or closed: a button held across it is not
+       held after (its release may have gone to the test), so a View held
+       as it opened cannot make a later Menu the role chord. */
+    connect(m_padRun, &PadRun::testingChanged, this, [this]() {
+        m_heldRoles.clear();
+        m_viewChord = false;
+        m_centreChord = false;
+    });
     connect(this, &ProgrammerController::controllerLost, m_padRun, [this](bool lost) {
         if (lost)
             m_padRun->controllerLost();
@@ -1616,7 +1624,10 @@ void ProgrammerController::refreshPadLight()
 {
     // The lamp's colours: blue all saved, yellow this light, orange another.
     QColor c;
-    if (m_focusSession->isActive())
+    // After the Run role's emergency stop: red, over a tool's lamp too.
+    if (m_padRun != nullptr && m_padRun->state() == PadRun::Stopped)
+        c = PadRun::stoppedColour();
+    else if (m_focusSession->isActive())
     {
         switch (m_focusSession->saveStatus())
         {
@@ -1630,6 +1641,10 @@ void ProgrammerController::refreshPadLight()
         c = !m_refineSession->hasPending() ? ControllerScheme::savedColour()
             : m_refineSession->hasPendingHere() ? ControllerScheme::thisUnsavedColour()
                                                 : ControllerScheme::othersUnsavedColour();
+    /* No tool: the light is the Run role's state (rule 2) -- a tool or a
+       walk that ends with the pad STOPPED leaves it red, not its own. */
+    else if (m_padRun != nullptr)
+        c = m_padRun->lightColour();
     setPadLight(c);
 }
 
@@ -2544,6 +2559,20 @@ void ProgrammerController::connectControllerInput()
             this, &ProgrammerController::focusControllerChanged);
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputDeviceConnected,
             this, &ProgrammerController::focusControllerChanged);
+    /* A pad unplugged, swapped in its slot or back: the Run role forgets
+       what it held (its releases never came) and drops an arm made on it;
+       the pad now there starts in its own colour, so it is told the
+       state's light again. */
+    connect(m_doc->inputOutputMap(), &InputOutputMap::inputPatchChanged, this, [this](quint32 universe) {
+        if (m_padRun != nullptr)
+            m_padRun->forgetPad(universe);
+        if (m_padLight.isValid())
+        {
+            const QColor light = m_padLight;
+            m_padLight = QColor();
+            setPadLight(light);
+        }
+    });
     // Blackout or the Grand Master to zero mid-session: said.
     auto recheck = [this]() {
         checkRigOutput(m_focusSession->isActive() ? m_focusSession->currentFixture()
@@ -2849,6 +2878,21 @@ void ProgrammerController::centreSticks(quint32 universe)
     tellOperator(tr("Centring the sticks: let go of them."), ControllerScheme::ConfirmPriority);
 }
 
+bool ProgrammerController::isPadUniverse(quint32 universe) const
+{
+    // A game controller's input: a HID profile, a pad kind, or any gamepad role.
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = iom != nullptr ? iom->inputPatch(universe) : nullptr;
+    if (ip == nullptr || ip->plugin() == nullptr)
+        return false;
+    if (!ip->hidProfileName().isEmpty() || !ip->plugin()->inputDeviceKind(ip->input()).isEmpty())
+        return true;
+    for (quint32 ch = 0; ch < 128; ++ch)
+        if (!ip->plugin()->inputChannelRole(ip->input(), ch).isEmpty())
+            return true;
+    return false;
+}
+
 bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uchar value)
 {
     const float norm = value / 255.0f;
@@ -2867,15 +2911,28 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         m_padRun->touchValue(role, norm);
     else if (role == GamepadRole::TouchClick)
         m_padRun->touchClick(value > 0);
-    if (role == GamepadRole::None && !active)
-        return false;
     /* The Controller Test is open and no tool has the pad: its buttons and
        triggers are being tried, so they do nothing here -- no GO, no hit,
-       no profile action, no role chord, no focus-call start. The sticks
-       stay the follow spot's. */
+       no profile action, no role chord, no focus-call start. That is every
+       control of a game controller, a button with no gamepad role too (a
+       DualSense's mute, an Edge paddle, a Deck grip: its profile action).
+       The sticks stay the follow spot's. A button let go meanwhile is let
+       go here too. */
     if (!active && m_padRun->isTesting() && !GamepadRole::isTouch(role)
         && role != GamepadRole::LeftX && role != GamepadRole::LeftY
-        && role != GamepadRole::RightX && role != GamepadRole::RightY)
+        && role != GamepadRole::RightX && role != GamepadRole::RightY
+        && (role != GamepadRole::None || isPadUniverse(universe)))
+    {
+        if (role != GamepadRole::None && !GamepadRole::isAxis(role) && value == 0)
+            m_heldRoles.remove(role);
+        return true;
+    }
+    if (role == GamepadRole::None && !active)
+        return false;
+    /* The Run role's emergency stop is the four together whatever the pad
+       is doing (rule 5): a tool or the walk has the pad here, so the four
+       are watched before they reach it, and swallowed while all are down. */
+    if (active && m_padRun->isEnabled() && m_padRun->watchStop(universe, role, value))
         return true;
     /* A follow spot on and no tool: the right stick is its fine stick, the
        D-pad's Up and Down its speed step, Left and Right its beam size

@@ -1817,8 +1817,11 @@ void PadRun_Test::rtFiresTheArmedHit()
     m_doc->masterTimer()->timerTick();
     QVERIFY(f->isRunning());
 
-    // Again: it is let go (and said).
-    with(kLT, kRT);                             // the safety held too: the same
+    // LT held with it: no hit -- LT + RT is the emergency stop in the making.
+    with(kLT, kRT);
+    QCOMPARE(fired.count(), 1);
+    // Again on its own: it is let go (and said).
+    press(kRT);
     QCOMPARE(fired.count(), 2);
     QVERIFY(!fired.at(1).at(1).toBool());
     QVERIFY(said.last().at(0).toString().contains("Breathe off"));

@@ -265,16 +265,20 @@ function statusList(){
    Solo (a.cmd). */
 function padAction(r){return (st.pad||{})[r]}
 function padLabels(){var l={};for(var r in (st.pad||{}))l[r]=st.pad[r].label;QPad.labels(l)}
-var padArmed=false,padStopped=false,armT=null,estopDone=false;
+var padArmed=false,padStopped=false,armT=null,estopDone=false,spent=false;
 function showArm(){var e=$('armed');e.style.display=(padArmed||padStopped)?'block':'none';
   e.className=padStopped?'stopped':'';e.textContent=padStopped?'EMERGENCY STOP':'ARMED: LT + A IS GO'}
 showArm();
 function isChord(r){return r==='lb'||r==='rb'||r==='lt'||r==='rt'}
-function chord(){var a=padAction('lb');
-  if(!(QPad.down('lb')&&QPad.down('rb'))||QPad.down('lt')||QPad.down('rt')){clearTimeout(armT);armT=null;return}
+/* A trigger with both bumpers (the stop, or one on its way) spends the
+   chord: no arm until both bumpers are up and squeezed afresh. */
+function chord(){var a=padAction('lb'),lb=QPad.down('lb'),rb=QPad.down('rb'),tr=QPad.down('lt')||QPad.down('rt');
+  if(lb&&rb&&tr)spent=true;else if(!lb&&!rb)spent=false;
+  if(!(lb&&rb)||tr||spent||QPad.isOpen()){clearTimeout(armT);armT=null;return}
   if(armT)return;
   armT=setTimeout(function(){armT=null;
-    if(!(QPad.down('lb')&&QPad.down('rb'))||QPad.down('lt')||QPad.down('rt'))return;
+    /* The controller test opened inside the chord's time: nothing pressed there arms. */
+    if(!(QPad.down('lb')&&QPad.down('rb'))||QPad.down('lt')||QPad.down('rt')||spent||QPad.isOpen())return;
     padArmed=!padArmed;padStopped=false;showArm();
     if(navigator.vibrate)navigator.vibrate(padArmed?[30,60,30]:150)},(a&&a.hold)||500)}
 QPad.on({
@@ -282,13 +286,13 @@ QPad.on({
     if(r==='start'){QPad.toggle(true);return}
     if(isChord(r)){
       if(QPad.down('lb')&&QPad.down('rb')&&QPad.down('lt')&&QPad.down('rt')){
-        clearTimeout(armT);armT=null;
+        clearTimeout(armT);armT=null;spent=true;
         if(!estopDone){estopDone=true;padArmed=false;padStopped=true;showArm();
           if(canRig())cmd('alloff');if(navigator.vibrate)navigator.vibrate([150,80,150,80,150])}
         return}
       chord();
-      /* RT's pull is the hit, below -- not with a bumper down (the stop in the making). */
-      if(r!=='rt'||QPad.down('lb')||QPad.down('rb'))return}
+      /* RT's pull on its own is the hit, below -- not with a bumper or LT down (the stop in the making). */
+      if(r!=='rt'||QPad.down('lb')||QPad.down('rb')||QPad.down('lt'))return}
     var a=padAction(r);if(!a||a.do==='arm'||a.do==='hold')return;
     if(!padArmed){msg('Not armed: hold LB and RB.');return}
     if(a.guard&&!QPad.down(a.guard)){msg('Hold '+a.guard.toUpperCase()+' with it.');return}
