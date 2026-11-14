@@ -1630,6 +1630,10 @@ void ProgrammerController::refreshPadLight()
         c = !m_refineSession->hasPending() ? ControllerScheme::savedColour()
             : m_refineSession->hasPendingHere() ? ControllerScheme::thisUnsavedColour()
                                                 : ControllerScheme::othersUnsavedColour();
+    /* No tool: the light is the Run role's state (rule 2) -- a tool or a
+       walk that ends with the pad STOPPED leaves it red, not its own. */
+    else if (m_padRun != nullptr)
+        c = m_padRun->lightColour();
     setPadLight(c);
 }
 
