@@ -31,6 +31,7 @@
 #include <algorithm>
 
 #include "showtreecontroller.h"
+#include "presses.h"
 #include "blocking.h"
 #include "showcontrol.h"
 #include "paletteops.h"
@@ -4969,6 +4970,19 @@ void ShowTreeController::bake()
                             for (quint32 fid : coll->functions())
                                 overrideScenes.insert(fid);
     QHash<QString, quint32> bySignature;
+    // Press guards (showtreepresses.cpp): the only generated scenes with
+    // values of their own and no looks; found again by their values, else
+    // (a hidden scene is saved with its values as 0, Scene::saveXML) by the
+    // channels they set, in the order they were made.
+    const QSet<quint64> pressChannels = Presses::channels(m_doc);
+    QList<quint32> guardIds;
+    QHash<quint32, QString> guardSig, guardChannels;
+    auto channelsSignature = [](const QHash<quint64, uchar> &values) {
+        QHash<quint64, uchar> zero;
+        for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+            zero.insert(it.key(), 0);
+        return pressGuardSignature(zero);
+    };
     QList<quint32> existing = m_generatedScenes.values();
     std::sort(existing.begin(), existing.end());
     for (quint32 id : existing)
@@ -4976,6 +4990,18 @@ void ShowTreeController::bake()
         const Scene *s = qobject_cast<const Scene *>(m_doc->function(id));
         if (s == nullptr)
             continue;
+        if (s->palettes().isEmpty() && !s->values().isEmpty())
+        {
+            // Never a layer's (a layer's plays looks): one the show no
+            // longer needs is let go below.
+            QHash<quint64, uchar> values;
+            for (const SceneValue &sv : s->values())
+                values.insert(Presses::key(sv.fxi, sv.channel), sv.value);
+            guardIds << id;
+            guardSig.insert(id, pressGuardSignature(values));
+            guardChannels.insert(id, channelsSignature(values));
+            continue;
+        }
         const QString sig = sceneSignature(s) + (overrideScenes.contains(id) ? overrideMark : QString());
         if (!bySignature.contains(sig))
             bySignature.insert(sig, id);
@@ -5010,6 +5036,7 @@ void ShowTreeController::bake()
                                                                   parentList != nullptr ? parentList->name : list.name);
             const QList<ResolvedCue> resolved = this->resolved(list);
             const QVector<quint32> blockings = listBlockings(list);    // BLOCKING.md
+            const QList<QHash<quint64, uchar>> guards = pressGuards(list, resolved, pressChannels);
             QHash<quint32, int> order;
             order.reserve(list.cues.count());
             for (int i = 0; i < list.cues.count(); ++i)
@@ -5160,6 +5187,72 @@ void ShowTreeController::bake()
                                                              : sceneAt.value(k, Function::invalidId());
                     if (fid != Function::invalidId() && !members.contains(fid))
                         members << fid;
+                }
+                // Presses don't track: the cue's guard last, so it wins the
+                // press channels however the cue is reached.
+                if (i < guards.count() && !guards.at(i).isEmpty())
+                {
+                    const QHash<quint64, uchar> &values = guards.at(i);
+                    const QString gsig = pressGuardSignature(values);
+                    const QString gchannels = channelsSignature(values);
+                    quint32 gid = Function::invalidId();
+                    for (quint32 id : std::as_const(guardIds))
+                        if (guardSig.value(id) == gsig)
+                        {
+                            gid = id;
+                            break;
+                        }
+                    // One on the same channels no cue has taken yet: set to these.
+                    for (int g = 0; gid == Function::invalidId() && g < guardIds.count(); ++g)
+                    {
+                        const quint32 id = guardIds.at(g);
+                        Scene *spare = qobject_cast<Scene *>(m_doc->function(id));
+                        if (spare == nullptr || keepScenes.contains(id) || guardChannels.value(id) != gchannels)
+                            continue;
+                        for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+                            spare->setValue(Presses::fixtureOf(it.key()), Presses::channelOf(it.key()), it.value());
+                        guardSig.insert(id, gsig);
+                        gid = id;
+                    }
+                    Scene *guard = qobject_cast<Scene *>(m_doc->function(gid));
+                    if (guard == nullptr)
+                    {
+                        guard = new Scene(m_doc);
+                        QList<quint64> keys = values.keys();
+                        std::sort(keys.begin(), keys.end());
+                        for (quint64 k : keys)
+                            guard->setValue(Presses::fixtureOf(k), Presses::channelOf(k), values.value(k));
+                        guard->setVisible(false);
+                        if (!m_doc->addFunction(guard))
+                        {
+                            delete guard;
+                            guard = nullptr;
+                        }
+                        else
+                        {
+                            gid = guard->id();
+                            guardIds << gid;
+                            guardSig.insert(gid, gsig);
+                            guardChannels.insert(gid, gchannels);
+                            m_generatedScenes.insert(gid);
+                        }
+                    }
+                    if (guard != nullptr)
+                    {
+                        if (!keepScenes.contains(gid))
+                        {
+                            const QString name = tr("%1 · presses don't track").arg(collName);
+                            if (guard->name() != name)
+                                guard->setName(name);
+                            if (guard->path(true) != folder)
+                                guard->setPath(folder);
+                            keepScenes.insert(gid);
+                            m_generatedLabels.insert(gid, tr("Keeps a press from being sent again in cue %1 of %2")
+                                                          .arg(label, list.name));
+                        }
+                        members.removeAll(gid);
+                        members << gid;
+                    }
                 }
 
                 Collection *coll = qobject_cast<Collection *>(m_doc->function(cue.collection));

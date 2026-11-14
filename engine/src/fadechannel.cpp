@@ -182,9 +182,12 @@ void FadeChannel::autoDetect(const Doc *doc)
         }
 
         // autodetect the channel type. A Switch fixture (a relay) never
-        // fades: it goes, on or off, the moment it is told to.
+        // fades: it goes, on or off, the moment it is told to. Nor does a
+        // button selector (a channel with a press, QLCChannel::hasPress()):
+        // a fade from On to Dim would press Off, Candle and Light on the way.
         if (fixture->channelCanFade(chIndex)
-            && (fixture->outputRules() & Fixture::Switch) == 0)
+            && (fixture->outputRules() & Fixture::Switch) == 0
+            && !m_channelRef->hasPress())
             addFlag(FadeChannel::CanFade);
 
         if (m_channelRef != NULL && m_channelRef->group() == QLCChannel::Intensity)
