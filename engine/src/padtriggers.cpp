@@ -28,9 +28,10 @@ PadTriggers::State PadTriggers::forState(bool runRole, bool armed, bool walking)
         return s;
     if (walking)
         s.right = s.left = Click;
-    /* Armed, the triggers stay loose: in Run they do nothing (0.4.5, no
-       list switching from the pad), so a firm R2 would promise a GO. */
-    (void)armed;
+    /* Armed, both triggers are firm: each is held for a GO or a Sub GO
+       (PadRun, 0.4.5), so it takes a squeeze and a brush holds nothing. */
+    else if (armed)
+        s.right = s.left = Firm;
     return s;
 }
 

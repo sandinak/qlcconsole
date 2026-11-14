@@ -149,6 +149,20 @@ void ShowControl::goSubCue(Chaser *chaser, int step, int subCue)
         chaser->setPause(false);
 }
 
+int ShowControl::fadeProgress(const Chaser *chaser)
+{
+    if (chaser == nullptr || !chaser->isRunning())
+        return -1;
+    ChaserRunnerStep step(chaser->currentRunningStep());
+    if (const Chaser *inner = qobject_cast<const Chaser *>(step.m_function))
+        if (inner->isRunning())
+            step = inner->currentRunningStep();
+    if (step.m_function == nullptr || step.m_fadeIn == Function::defaultSpeed() || step.m_fadeIn == 0
+        || step.m_elapsed >= step.m_fadeIn)
+        return -1;
+    return int(100.0 * step.m_elapsed / step.m_fadeIn);
+}
+
 QString ShowControl::cueName(const Chaser *chaser, int step, int subCue)
 {
     if (chaser == nullptr)

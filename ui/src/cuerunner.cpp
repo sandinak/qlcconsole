@@ -516,19 +516,17 @@ void CueRunner::buildFullLayout()
     connect(m_doc->programmer()->venueCorrections(), &VenueCorrections::activeVenueChanged,
             this, &CueRunner::refreshFocusCalls);
     refreshFocusCalls();
-    /* The pad's Run role (0.4): the game controller runs the show -- hold
-       LB and press A to GO -- through the same one GO path as the keys.
-       This computer's choice (the App keeps it); armed shows here too. */
+    /* The pad's Run role (0.4): the game controller runs the show -- armed
+       (LB + RB), RT held and A is GO -- through the same one GO path as the
+       keys. This computer's choice (the App keeps it); its state shows
+       here, from PadRun's one source. */
     m_padRunBtn = new QToolButton(this);
     m_padRunBtn->setObjectName(QStringLiteral("crPadRun"));
     m_padRunBtn->setCheckable(true);
     connect(m_padRunBtn, &QToolButton::toggled, this, [this](bool on) {
         m_doc->programmer()->padRun()->setEnabled(on);
     });
-    connect(m_doc->programmer()->padRun(), &PadRun::enabledChanged, this, &CueRunner::refreshPadRun);
-    connect(m_doc->programmer()->padRun(), &PadRun::armedChanged, this, &CueRunner::refreshPadRun);
-    connect(m_doc->programmer()->padRun(), &PadRun::walkingChanged, this, &CueRunner::refreshPadRun);
-    connect(m_doc->programmer()->padRun(), &PadRun::holderChanged, this, &CueRunner::refreshPadRun);
+    connect(m_doc->programmer()->padRun(), &PadRun::stateChanged, this, &CueRunner::refreshPadRun);
     connect(m_doc->programmer(), &ProgrammerController::focusControllerChanged,
             this, &CueRunner::refreshPadRun);
     head->addWidget(m_padRunBtn);
@@ -1149,18 +1147,19 @@ void CueRunner::refreshPadRun()
         const QSignalBlocker block(m_padRunBtn);
         m_padRunBtn->setChecked(run->isEnabled());
     }
-    // "Pad: Run", "Pad: ARMED"... or the tool that has the pad until it ends.
+    /* PadRun's one state, in its words and its colour: the button, and a
+       frame round the whole tab while it has one (armed; red after the
+       emergency stop) -- the same as the footer's chip and the pad's
+       light, and gone the moment the state is. */
     m_padRunBtn->setText(run->roleText());
-    m_padRunBtn->setStyleSheet(run->isArmed()
-        ? QStringLiteral("QToolButton { color: black; background: %1; font-weight: bold; }")
-              .arg(PadRun::armedColour().name())
+    const QColor state = run->stateColour();
+    m_padRunBtn->setStyleSheet(state.isValid()
+        ? QStringLiteral("QToolButton { color: %1; background: %2; font-weight: bold; }")
+              .arg(run->stateInk().name(), state.name())
         : QString());
-    /* Armed shows across the whole tab, not only on the button: a frame in
-       the armed colour round the Run tab for as long as the arm is held --
-       gone the moment it is let go (no fade, no blink). */
     setAttribute(Qt::WA_StyledBackground, true);
-    setStyleSheet(run->isArmed()
-        ? QStringLiteral("CueRunner { border: 5px solid %1; }").arg(PadRun::armedColour().name())
+    setStyleSheet(state.isValid()
+        ? QStringLiteral("CueRunner { border: 5px solid %1; }").arg(state.name())
         : QString());
     m_padRunBtn->setToolTip(run->helpHtml());
 }
@@ -1544,17 +1543,7 @@ void CueRunner::updateStates()
     const int subNext = running && ch->isSubGoStep(cur) ? ch->nextSubCueIndex() : -1;
 
     // The fade of what plays: the sub-cue's own when it has sub-cues.
-    int progress = -1;
-    if (running)
-    {
-        ChaserRunnerStep step(ch->currentRunningStep());
-        if (Chaser *inner = qobject_cast<Chaser *>(step.m_function))
-            if (inner->isRunning())
-                step = inner->currentRunningStep();
-        if (step.m_function != nullptr && step.m_fadeIn != Function::defaultSpeed() && step.m_fadeIn > 0
-            && step.m_elapsed < step.m_fadeIn)
-            progress = int(100.0 * step.m_elapsed / step.m_fadeIn);
-    }
+    const int progress = running ? ShowControl::fadeProgress(ch) : -1;
 
     // Rows: done, ▶ running, ▷ STANDBY, NEXT, SUB NEXT.
     if (m_tree != nullptr)

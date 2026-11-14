@@ -151,7 +151,7 @@ ProgrammerController::ProgrammerController(Doc *doc)
     });
     connect(this, &ProgrammerController::controllerLost, m_padRun, [this](bool lost) {
         if (lost)
-            m_padRun->reset();
+            m_padRun->controllerLost();
     });
     m_focusCallCue = new FocusCallCue(m_doc, m_focusSession, m_focusCalls, this);
     /* Gap 5: one controller tool at a time, and a start never throws away
