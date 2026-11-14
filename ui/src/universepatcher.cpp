@@ -22,6 +22,8 @@
 #include <QDebug>
 #include <QSet>
 #include <QMap>
+#include <QHostAddress>
+#include <QRegularExpression>
 #include <QVariant>
 
 #include "universepatcher.h"
@@ -503,7 +505,19 @@ void UniversePatcher::retargetPatch(quint32 universe, const QString &pluginName,
 
 bool UniversePatcher::parsePortAddress(const QString &txt, quint32 &pa)
 {
-    const QStringList parts = txt.trimmed().split(':');
+    const QString t = txt.trimmed();
+    /* A bare number is the port address itself: what a node's own panel
+       and most consoles call "universe 15" is 0:0:15. */
+    if (t.isEmpty() == false && t.contains(':') == false)
+    {
+        bool ok = false;
+        const uint n = t.toUInt(&ok);
+        if (ok == false || n > 0x7FFF)
+            return false;
+        pa = quint32(n);
+        return true;
+    }
+    const QStringList parts = t.split(':');
     bool okNet = false, okSub = false, okUni = false;
     const uint net = parts.value(0).toUInt(&okNet);
     const uint sub = parts.value(1).toUInt(&okSub);
@@ -513,6 +527,190 @@ bool UniversePatcher::parsePortAddress(const QString &txt, quint32 &pa)
         return false;
     pa = quint32((net << 8) | (sub << 4) | uni);
     return true;
+}
+
+QString UniversePatcher::portAddressError(const QString &txt)
+{
+    quint32 pa = 0;
+    if (parsePortAddress(txt, pa))
+        return QString();
+    const QString t = txt.trimmed();
+    bool ok = false;
+    const uint n = t.toUInt(&ok);
+    if (ok && n > 0x7FFF)
+        return tr("%1 is past the last Art-Net universe: 32767 (127:15:15) is the highest.").arg(t);
+    return tr("\"%1\" is not an Art-Net universe. Type a number from 0 to 32767, or "
+              "net:subnet:universe with net 0-127 and subnet and universe 0-15.").arg(t);
+}
+
+/*********************************************************************
+ * Which interface: from where it is sent
+ *********************************************************************/
+
+namespace
+{
+    QHostAddress v4(const QString &text)
+    {
+        const QHostAddress a(text.trimmed());
+        if (a.isNull() || a.protocol() != QAbstractSocket::IPv4Protocol)
+            return QHostAddress();
+        return a;
+    }
+
+    /* The local address a line is named after, if this machine has it. */
+    bool localOf(const QString &lineName, NetworkRoute::LocalAddress &out)
+    {
+        const QHostAddress ip = v4(lineName);
+        if (ip.isNull())
+            return false;
+        foreach (const NetworkRoute::LocalAddress &la, NetworkRoute::localAddresses())
+            if (la.ip == ip)
+            {
+                out = la;
+                return true;
+            }
+        return false;
+    }
+
+    int prefixOf(const NetworkRoute::LocalAddress &la)
+    {
+        return la.prefix > 0 ? la.prefix : 24;  // as NetworkRoute assumes
+    }
+
+    quint32 broadcastOf(const NetworkRoute::LocalAddress &la)
+    {
+        const int p = prefixOf(la);
+        const quint32 mask = p == 0 ? 0 : (0xFFFFFFFFu << (32 - p));
+        return (la.ip.toIPv4Address() & mask) | ~mask;
+    }
+}
+
+bool UniversePatcher::linesAreAddresses(const QLCIOPlugin *p)
+{
+    if (p == nullptr)
+        return false;
+    const QStringList lines = const_cast<QLCIOPlugin *>(p)->outputs();
+    if (lines.isEmpty())
+        return false;
+    foreach (const QString &l, lines)
+        if (NetworkRoute::isAddressIdentity(l) == false)
+            return false;
+    return true;
+}
+
+UniversePatcher::Destination UniversePatcher::readDestination(const QString &text)
+{
+    Destination d;
+    const QString t = text.trimmed();
+    if (t.isEmpty() || t.compare(tr("Broadcast"), Qt::CaseInsensitive) == 0
+            || t.compare(QLatin1String("Broadcast"), Qt::CaseInsensitive) == 0)
+        return d;
+
+    const QHostAddress ip = v4(t);
+    if (ip.isNull() == false && t.count('.') == 3)
+    {
+        if (ip == QHostAddress(QHostAddress::Broadcast))
+            return d;
+        /* A local network's broadcast address: broadcast, on that one. */
+        foreach (const NetworkRoute::LocalAddress &la, NetworkRoute::localAddresses())
+            if (ip.isLoopback() == false && ip.toIPv4Address() == broadcastOf(la))
+            {
+                d.network = NetworkRoute::networkOf(la.ip, prefixOf(la));
+                return d;
+            }
+        d.kind = Destination::Unicast;
+        d.address = ip.toString();
+        return d;
+    }
+
+    /* Digits and dots still being typed: not wrong yet. */
+    static const QRegularExpression partial(QStringLiteral("^\\d{1,3}(\\.\\d{0,3}){0,3}$"));
+    if (partial.match(t).hasMatch())
+    {
+        bool fits = true;
+        foreach (const QString &part, t.split('.'))
+            if (part.isEmpty() == false && part.toUInt() > 255)
+                fits = false;
+        if (fits)
+        {
+            d.kind = Destination::Partial;
+            return d;
+        }
+    }
+    d.kind = Destination::Invalid;
+    d.error = tr("\"%1\" is not an IP address. Type the node's address, like 172.18.2.50, "
+                 "or pick it from the list.").arg(t);
+    return d;
+}
+
+QString UniversePatcher::lineVia(const QString &lineName)
+{
+    NetworkRoute::LocalAddress la;
+    if (localOf(lineName, la) == false || la.iface.isEmpty())
+        return lineName;
+    return tr("%1 · %2").arg(la.iface, la.ip.toString());
+}
+
+UniversePatcher::AutoLine UniversePatcher::autoLine(const QStringList &lines,
+                                                    const Destination &destination,
+                                                    int fallback)
+{
+    AutoLine out;
+    if (lines.isEmpty())
+        return out;
+    if (fallback < 0 || fallback >= lines.count())
+    {
+        fallback = 0;
+        for (int i = 0; i < lines.count(); i++)
+            if (v4(lines.at(i)).isLoopback() == false)
+            {
+                fallback = i;
+                break;
+            }
+    }
+    auto finish = [&](int line) {
+        out.line = line;
+        out.via = lineVia(lines.at(line));
+        return out;
+    };
+
+    if (destination.kind == Destination::Unicast)
+    {
+        const NetworkRoute::Resolution r =
+            NetworkRoute::resolve(lines, QString(), QString(), destination.address);
+        if (r.line >= 0)
+        {
+            NetworkRoute::LocalAddress la;
+            const bool attached = localOf(lines.at(r.line), la)
+                && QHostAddress(destination.address).isInSubnet(la.ip, prefixOf(la));
+            out.why = attached
+                ? tr("%1 is on its network (%2).").arg(destination.address, r.network)
+                : tr("The system routes %1 through it.").arg(destination.address);
+            return finish(r.line);
+        }
+        out.fallback = true;
+        out.why = tr("Nothing on this computer reaches %1 (no network of its own, only the "
+                     "default route), so it keeps this one. Connect the show network, or "
+                     "choose the interface.").arg(destination.address);
+        return finish(fallback);
+    }
+    if (destination.kind == Destination::Broadcast && destination.network.isEmpty() == false)
+    {
+        const QPair<QHostAddress, int> net = QHostAddress::parseSubnet(destination.network);
+        for (int i = 0; i < lines.count(); i++)
+        {
+            const QHostAddress ip = v4(lines.at(i));
+            if (ip.isNull() == false && ip.isInSubnet(net))
+            {
+                out.why = tr("It broadcasts on %1.").arg(destination.network);
+                return finish(i);
+            }
+        }
+    }
+    if (destination.kind == Destination::Broadcast)
+        out.why = tr("Broadcast leaves by one interface. To pick it by network, type that "
+                     "network's broadcast address (like 172.18.2.255).");
+    return finish(fallback);
 }
 
 QList<UniversePatcher::TargetChoice>
@@ -729,16 +927,15 @@ bool UniversePatcher::askTargetPort(const QString &title, const QString &pluginN
         return true;
     }
     const QString txt = QInputDialog::getText(m_parent, title,
-        tr("Universe on %1, as net:subnet:universe:").arg(addr), QLineEdit::Normal,
-        curAddr.isEmpty() ? QString("0:0:0") : portAddressText(curPort), &ok).trimmed();
+        tr("Art-Net universe on %1: a number (15) or net:subnet:universe (0:0:15):").arg(addr),
+        QLineEdit::Normal,
+        portAddressText(curAddr.isEmpty() ? universe : curPort), &ok).trimmed();
     if (ok == false)
         return false;
     quint32 pa = 0;
     if (parsePortAddress(txt, pa) == false)
     {
-        QMessageBox::warning(m_parent, title,
-            tr("\"%1\" is not a port address. Expected net:subnet:universe, "
-               "with net 0-127 and subnet and universe 0-15.").arg(txt));
+        QMessageBox::warning(m_parent, title, portAddressError(txt));
         return false;
     }
     const quint32 owner = universeOnTarget(pluginName, line, addr, pa, universe);
@@ -1052,26 +1249,19 @@ void UniversePatcher::patchSelectionTo(const QList<quint32> &universes)
             if (askFirstPort)
             {
                 const QString txt = QInputDialog::getText(m_parent, title,
-                    tr("Port address for the FIRST of them on %1, as "
-                       "net:subnet:universe.\nThe rest follow on consecutive ports.")
+                    tr("Art-Net universe for the FIRST of them on %1: a number "
+                       "(15) or net:subnet:universe (0:0:15).\nThe rest follow on "
+                       "consecutive ports.")
                         .arg(targetName),
-                    QLineEdit::Normal, QString("0:0:0"), &ok).trimmed();
+                    QLineEdit::Normal, portAddressText(universes.first()), &ok).trimmed();
                 if (ok == false)
                     return;
-                const QStringList parts = txt.split(':');
-                bool okNet = false, okSub = false, okUni = false;
-                const uint net = parts.value(0).toUInt(&okNet);
-                const uint sub = parts.value(1).toUInt(&okSub);
-                const uint uni = parts.value(2).toUInt(&okUni);
-                if (parts.count() != 3 || !okNet || !okSub || !okUni
-                        || net > 127 || sub > 15 || uni > 15)
+                quint32 first = 0;
+                if (parsePortAddress(txt, first) == false)
                 {
-                    QMessageBox::warning(m_parent, title,
-                        tr("\"%1\" is not a port address. Expected net:subnet:universe, "
-                           "with net 0-127 and subnet and universe 0-15.").arg(txt));
+                    QMessageBox::warning(m_parent, title, portAddressError(txt));
                     return;
                 }
-                const quint32 first = quint32((net << 8) | (sub << 4) | uni);
                 for (int k = 0; k < universes.count() && first + quint32(k) <= 0x7FFF; k++)
                     ports << first + quint32(k);
             }

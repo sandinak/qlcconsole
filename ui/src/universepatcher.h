@@ -57,8 +57,55 @@ public:
     static QString portAddressText(quint32 pa);
     /** "port N · universe n:s:u", or "universe n:s:u" when the socket is unknown. */
     static QString portWhereText(int number, quint32 pa);
-    /** net:subnet:universe back to a port address; false if it is not one. */
+    /** net:subnet:universe back to a port address; false if it is not one.
+     *  A bare number N is the port address itself (N = net * 256 + subnet *
+     *  16 + universe), so "15" is 0:0:15 and "300" is 1:2:12. */
     static bool parsePortAddress(const QString &txt, quint32 &pa);
+    /** Why @p txt is not a port address, in words; empty when it is one. */
+    static QString portAddressError(const QString &txt);
+
+    /*********************************************************************
+     * Which interface: from where it is sent
+     *********************************************************************/
+
+    /** True when every line of @p p is a local address (Art-Net, sACN):
+     *  then the interface follows from the destination and is not a
+     *  question to ask. */
+    static bool linesAreAddresses(const QLCIOPlugin *p);
+
+    /** What a destination typed for a network output means. */
+    struct Destination
+    {
+        enum Kind { Broadcast, Unicast, Partial, Invalid };
+        Kind kind = Broadcast;
+        QString address;        ///< Unicast: the node's address
+        QString network;        ///< a directed broadcast: "172.18.2.0/24"
+        QString error;          ///< Invalid: why, in words
+    };
+    /** Read what was typed in Send To: empty or "Broadcast" (any case) or
+     *  255.255.255.255 is broadcast; a local network's broadcast address
+     *  is broadcast on that network; any other IPv4 address is unicast; a
+     *  number still being typed ("172.18.") is Partial. */
+    static Destination readDestination(const QString &text);
+
+    /** The interface (line of a plugin whose lines are local addresses)
+     *  that reaches a destination, and why. */
+    struct AutoLine
+    {
+        int line = -1;
+        QString via;            ///< "en5 · 172.18.2.138"
+        QString why;            ///< a sentence: why that one
+        bool fallback = false;  ///< nothing reached it; @p line is the fallback
+    };
+    /** @p lines: the plugin's line names (addresses). @p destination as
+     *  readDestination() reads it. @p fallback: the line to keep when the
+     *  destination says nothing about one (broadcast) or nothing reaches it;
+     *  -1 takes the first that is not loopback. Pure: the machine's
+     *  addresses and routes come from NetworkRoute, which tests replace. */
+    static AutoLine autoLine(const QStringList &lines, const Destination &destination,
+                             int fallback);
+    /** "en5 · 172.18.2.138" for a line named after a local address. */
+    static QString lineVia(const QString &lineName);
 
     /** The plural menu entries, worded once for every list that offers them. */
     static QString patchSelectionText(int count);

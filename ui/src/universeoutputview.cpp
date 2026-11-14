@@ -31,7 +31,8 @@
 #include "fixture.h"
 #include "doc.h"
 
-static const int COLS = 16;
+static const int MAX_COLS = 16;
+static const int MIN_COLS = 4;
 static const int CELL_W = 34;
 static const int CELL_H = 34;          // number, a fixture's name, the value
 static const int TOP = 34;          // under the header
@@ -46,7 +47,7 @@ UniverseOutputView::UniverseOutputView(Doc *doc, QWidget *parent)
     setMouseTracking(true);
     m_header = new QLabel(this);
     // Within the grid's width: never past the view's own edge.
-    m_header->setGeometry(6, 4, LEFT + COLS * CELL_W - 4, 24);
+    m_header->setGeometry(6, 4, LEFT + m_cols * CELL_W - 4, 24);
     m_header->setStyleSheet("QLabel { color: #c8ccd6; font-weight: bold; }");
 
     /* Universes write up to the tick rate; the grid is repainted at most
@@ -69,12 +70,36 @@ UniverseOutputView::UniverseOutputView(Doc *doc, QWidget *parent)
 
 QSize UniverseOutputView::sizeHint() const
 {
-    return QSize(LEFT + COLS * CELL_W + 8, TOP + (512 / COLS) * CELL_H + 8);
+    return QSize(widthFor(m_cols), TOP + rows() * CELL_H + 8);
 }
 
 QSize UniverseOutputView::minimumSizeHint() const
 {
-    return QSize(LEFT + COLS * CELL_W + 8, TOP + 8 * CELL_H);
+    return QSize(widthFor(m_cols), TOP + 8 * CELL_H);
+}
+
+int UniverseOutputView::widthFor(int columns)
+{
+    return LEFT + columns * CELL_W + 8;
+}
+
+int UniverseOutputView::rows() const
+{
+    return (512 + m_cols - 1) / m_cols;
+}
+
+void UniverseOutputView::fitWidth(int width)
+{
+    /* As many channels a row as the width holds, up to sixteen: a narrow
+       window gives the grid fewer columns, never the settings beside it. */
+    const int cols = qBound(MIN_COLS, (width - LEFT - 8) / CELL_W, MAX_COLS);
+    if (cols == m_cols)
+        return;
+    m_cols = cols;
+    m_header->setGeometry(6, 4, LEFT + m_cols * CELL_W - 4, 24);
+    resize(sizeHint());
+    updateGeometry();
+    update();
 }
 
 void UniverseOutputView::setUniverse(quint32 universe)
@@ -125,7 +150,7 @@ void UniverseOutputView::updateHeader()
 
 QRect UniverseOutputView::cellRect(int channel) const
 {
-    return QRect(LEFT + (channel % COLS) * CELL_W, TOP + (channel / COLS) * CELL_H, CELL_W - 2, CELL_H - 2);
+    return QRect(LEFT + (channel % m_cols) * CELL_W, TOP + (channel / m_cols) * CELL_H, CELL_W - 2, CELL_H - 2);
 }
 
 int UniverseOutputView::channelAt(const QPoint &pos) const
@@ -133,9 +158,9 @@ int UniverseOutputView::channelAt(const QPoint &pos) const
     if (pos.x() < LEFT || pos.y() < TOP)
         return -1;
     const int c = (pos.x() - LEFT) / CELL_W, r = (pos.y() - TOP) / CELL_H;
-    if (c >= COLS)
+    if (c >= m_cols)
         return -1;
-    const int ch = r * COLS + c;
+    const int ch = r * m_cols + c;
     return (ch >= 0 && ch < 512) ? ch : -1;
 }
 
@@ -220,9 +245,9 @@ void UniverseOutputView::paintEvent(QPaintEvent *)
     // Row numbers down the side.
     p.setFont(tiny);
     p.setPen(QColor(120, 124, 134));
-    for (int r = 0; r < 512 / COLS; ++r)
+    for (int r = 0; r < rows(); ++r)
         p.drawText(QRect(0, TOP + r * CELL_H, LEFT - 4, CELL_H), Qt::AlignRight | Qt::AlignVCenter,
-                   QString::number(r * COLS + 1));
+                   QString::number(r * m_cols + 1));
 
     for (int ch = 0; ch < 512; ++ch)
     {
@@ -257,7 +282,7 @@ void UniverseOutputView::paintEvent(QPaintEvent *)
             continue;
         const QRect cell = cellRect(ch);
         const QString name = p.fontMetrics().elidedText(startName.at(ch), Qt::ElideRight,
-                                                        (COLS - ch % COLS) * CELL_W - 6);
+                                                        (m_cols - ch % m_cols) * CELL_W - 6);
         // Its own line, between the channel numbers and the values.
         const QRect tag(cell.left() + 3, cell.top() + 11, p.fontMetrics().horizontalAdvance(name) + 4,
                         p.fontMetrics().height());

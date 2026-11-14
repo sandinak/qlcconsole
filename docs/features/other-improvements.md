@@ -41,8 +41,8 @@ fixture patched into it, an output or an input — with a line at the foot
 saying how many are hidden; tick **Show unused universes** to see them all.
 (They're only hidden: universes are numbered by position and every patch
 refers to them, so one from the middle can't be removed without renumbering
-the rest.) Only the **Device** column is edited in place; Detail and
-Carries describe the row and aren't text to type over.
+the rest.) In the wiring, only the **Device** column is edited in place;
+Detail and Carries describe the row and aren't text to type over.
 
 By universe, the rows can also carry the whole patch as columns:
 **Output** (protocol and interface), **IP** (the node's address, the sACN
@@ -51,25 +51,42 @@ end: net:subnet:universe for Art-Net, the sACN universe), **Mode** (the
 transmit mode, or a MIDI output's mode), **Input** (with its Art-Net
 universe or MIDI channel), **Profile**, **Feedback** (with its address) and
 **PT** (passthrough). Right-click the list's header, or use **Columns**, to
-show or hide each; the choice is remembered. Mode, Input, Feedback and PT
-are on to begin with (Detail already says where each goes). The columns are
-read-only: double-click one to open the universe's connection, on that part
-— everything they show is edited there.
+show or hide each; the choice is remembered. Output, IP, U, Mode, Input and
+PT are on to begin with.
+
+**The columns are a grid you edit in place**, for setting many universes up
+quickly: double-click a cell (or click one on the selected row) — **Output** picks
+the protocol (or **Not patched**), **IP** takes a node's address (or
+empty to broadcast), **U** takes the universe on the node (a bare number works:
+`15` is 0:0:15), and **Mode**, **Input**, **Profile** and **PT** are lists.
+Each is made as you leave the cell, as one step of **Undo Patch Change**,
+through the same rules as the window below; one that is refused (a port
+another universe holds, a universe past 32767) says why and changes nothing.
 
 ![Connections, by universe, with Universe 1's output showing](../images/connections-by-universe.png)
 
 1. **By universe** — every universe in use, in number order.
 2. **The universes**, each with where it goes, what it carries, and the
-   patch columns you've chosen.
-3. **What the selected universe is sending**, channel by channel.
-4. **Columns** — which of the patch's columns to show (also the header's
+   patch columns you've chosen — double-click a patch cell to edit it.
+3. **The selected universe's settings**: where it goes, its input and
+   feedback.
+4. **What the selected universe is sending**, channel by channel.
+5. **Columns** — which of the patch's columns to show (also the header's
    right-click).
 
-Select a universe and the panel on the right shows what it is **sending**,
-live: all 512 channels, each with its value and a bar as high, the channels
+Select a universe and, beside the list, its **settings** open: the same
+fields as **Edit Connection…** (below) — name, protocol, interface, Send
+To, the universe on the node, input, feedback — made as each is committed
+(a list picked, a field left), one undo step each; **Esc** puts back what
+you typed but haven't made yet. The grid and the settings edit the same
+patch, so each follows the other. To their right, what the universe is
+**sending**, live: all 512 channels, each with its value and a bar as high, the channels
 of each patched fixture shaded together and named where they start. The
 values are what goes out, after the grand master; hover a channel for whose
-it is ("Front Par, channel 1 — Dimmer").
+it is ("Front Par, channel 1 — Dimmer"). On a narrower window the grid
+puts fewer channels on a row; the settings keep their width. Double-click a
+universe's name for the whole connection in its own window (or right-click
+▸ **Edit Connection…**).
 
 Each row's right-click offers what that level of the wiring owns:
 
@@ -97,22 +114,40 @@ Each row's right-click offers what that level of the wiring owns:
 
 ### Editing a connection
 
-**Edit Connection…** — or a double-click on any universe, in either view —
+**Edit Connection…** — or a double-click on any universe (By universe, on
+its name; a patch cell there is edited in place) —
 opens one window for everything about where that universe goes. Patching an
 unpatched universe and editing a patched one are the same window; a patched
 one opens filled in.
 
 - At the top: the **universe** (switch to another without closing), its
   **name**, the **protocol** (or **Not patched**) and the **interface**.
+- **The interface is picked for you** on Art-Net and sACN: it is the one on
+  the network the address you send to is on, or the one the computer routes
+  it through, and the window says which and why ("en5 · 172.18.2.138
+  (automatic) — 172.18.2.60 is on its network"). A network's broadcast
+  address (172.18.2.255) picks that network's interface. When nothing on
+  the computer reaches the address (the show network isn't plugged in) it
+  keeps the one it had and says so in amber. **Choose** picks one by hand;
+  **Automatic** goes back. A saved show keeps the interface it was patched
+  on: if that is where the address leads anyway it reads automatic, and if
+  it was set to another by hand, it stays chosen by hand. A USB widget or
+  MIDI port still has its list: there, the interface is the device.
 - Below, that protocol's own settings, in place:
-  - **Art-Net** (and any protocol that sends to a node): **Send to** lists
-    every port of every device under that interface, whether heard on the
+  - **Art-Net** (and any protocol that sends to a node): **Send To** is one
+    field. Type the node's IP and that's where it goes — no list to scroll
+    first; leave it empty (or type a broadcast address) to broadcast; a line
+    under it says what it will do, or why the text isn't an address. Its
+    list holds **Broadcast** and every port of every device heard on the
     network, added by hand or only named by an existing patch, **free ones
-    first**, then the ones another universe holds, saying which; or
-    **Broadcast (no target)**, or **Another address…** — type the node IP
-    and its universe as net:subnet:universe. Then the **transmit mode**.
+    first**, then the ones another universe holds, saying which — picking
+    one fills in the node and its universe. **Universe on the Node** takes
+    net:subnet:universe or a bare number: `15` becomes 0:0:15, `300`
+    1:2:12 (net × 256 + subnet × 16 + universe); past 32767 is refused.
+    Left empty, it is the universe's own number. Then the **transmit mode**.
   - **sACN (E1.31)**: the sACN **universe**, **Multicast** or a unicast
-    address, the **priority** (0–200, 100 by default) and the transmit mode.
+    address (typing one unticks Multicast; emptying it ticks it again), the
+    **priority** (0–200, 100 by default) and the transmit mode.
   - **MIDI**: the output mode.
   - **WLED**: its devices — the primary and any backup lanterns — are set in
     their own window: the button opens it, and a universe newly sent to WLED

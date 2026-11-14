@@ -106,6 +106,8 @@ protected:
        the whole tree every five seconds for the entire session, including
        right through a show, with nobody looking at it. */
     void showEvent(QShowEvent *ev) override;
+    /** Narrow: the DMX grid goes under the universe's settings. */
+    void resizeEvent(QResizeEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;
 
 private slots:
@@ -418,6 +420,31 @@ private:
     /** The right side: the output view, or the show-control panel. */
     class QStackedWidget *m_side = nullptr;
     QWidget *m_outputPage = nullptr;
+
+    /* The selected universe's connection, beside the list (the same form
+       as Edit Connection…, made as each field is committed), then the DMX
+       grid of what it sends. */
+    friend class PatchCellDelegate;
+    class ConnectionEditor *m_connPane = nullptr;
+    class QStackedWidget *m_paneStack = nullptr;
+    class QLabel *m_panePlaceholder = nullptr;
+    class QSplitter *m_universeSplit = nullptr;
+    class QSplitter *m_outerSplit = nullptr;
+    class QScrollArea *m_outScroll = nullptr;
+    bool m_userSplit = false;
+    int m_laidOutWidth = 0;
+    /** Show @p item's universe (and leg) in the pane. */
+    void showConnectionOf(QTreeWidgetItem *item);
+    /** Share the width: list, settings, then the DMX grid (which gives way). */
+    void layoutSide();
+    /** A By universe cell edited in place: a universe row, a patch column. */
+    bool isGridCell(const QModelIndex &index) const;
+    QWidget *createCellEditor(QWidget *parent, const QModelIndex &index);
+    /** Make one cell's edit, through the same form the pane and Edit
+     *  Connection… use: @p value is the protocol's name (Output), the text
+     *  typed (IP, U), the mode, the input's label, the profile's name, or
+     *  "on"/"off" (PT). False and @p error when it is refused. */
+    bool commitCell(quint32 universe, int column, const QString &value, QString *error = nullptr);
     QWidget *m_showControlPanel = nullptr;
     QList<QStringList> m_showControlRows;
     /* Nodes announce themselves about once a second, so a periodic rebuild
