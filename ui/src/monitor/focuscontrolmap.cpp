@@ -182,6 +182,13 @@ void FocusControlMap::setStepDegrees(float step)
 
 void FocusControlMap::setControlValue(int role, float value)
 {
+    // Seen: pressed, or pulled or pushed half way (a stick at rest jitters).
+    const bool stick = role == R::LeftX || role == R::LeftY || role == R::RightX || role == R::RightY;
+    if (stick ? qAbs(value - 0.5f) >= 0.25f
+              : (role == R::LeftTrigger || role == R::RightTrigger) ? value >= 0.5f : value > 0.0f)
+        m_seen.insert(role == R::LeftY ? int(R::LeftX) : role == R::RightY ? int(R::RightX) : role);
+    if (role == R::LeftTrigger || role == R::RightTrigger)
+        m_trigger[role == R::RightTrigger ? 1 : 0] = qBound(0.0f, value, 1.0f);
     switch (role)
     {
         case R::LeftX:  m_axis[0] = value; break;
@@ -235,7 +242,111 @@ void FocusControlMap::clearInput()
     m_keys.clear();
     for (float &a : m_axis)
         a = 0.5f;
+    m_trigger[0] = m_trigger[1] = 0.0f;
     update();
+}
+
+void FocusControlMap::setLabels(Labels labels)
+{
+    if (labels == m_labels)
+        return;
+    m_labels = labels;
+    m_hover = -1;
+    updateGeometry();
+    update();
+}
+
+void FocusControlMap::clearSeen()
+{
+    m_seen.clear();
+    update();
+}
+
+void FocusControlMap::setPrompted(int role)
+{
+    if (role == m_prompted)
+        return;
+    m_prompted = role;
+    update();
+}
+
+/* A control's own name on the pad in hand, for the Controller Test: the
+   family's ("Cross", "L1", "Create"), with a PlayStation face button's
+   symbol, else the profile's. */
+QString FocusControlMap::nameLabel(int role) const
+{
+    switch (role)
+    {
+        case R::DpadUp: case R::DpadDown: case R::DpadLeft: case R::DpadRight:
+            return tr("D-pad");
+        case R::TouchClick: case R::TouchX:
+            return tr("Touchpad");
+        default:
+            break;
+    }
+    QString n = PadNames::name(GamepadRole::Role(role), m_family);
+    if (n.isEmpty())
+        n = controlName(role);
+    if (PadNames::isPlayStation(m_family) && (role == R::A || role == R::B || role == R::X || role == R::Y))
+        n += QStringLiteral(" ") + PadNames::name(GamepadRole::Role(role), m_family, PadNames::Glyph);
+    return n;
+}
+
+QString FocusControlMap::stateText(int role) const
+{
+    const QString tick = QString::fromUtf8("\342\234\223 ");     // a check mark
+    switch (role)
+    {
+        case R::LeftX: case R::LeftY: case R::RightX: case R::RightY:
+        {
+            const bool right = role == R::RightX || role == R::RightY;
+            if (!isMapped(right ? R::RightX : R::LeftX) && !isMapped(right ? R::RightY : R::LeftY))
+                return tr("not on this controller");
+            // Y as a person reads it: up is +.
+            const QPointF d = stickDeflection(right);
+            return (wasSeen(right ? R::RightX : R::LeftX) ? tick : QString())
+                   + tr("x %1  y %2").arg(QString::asprintf("%+.2f", d.x()),
+                                          QString::asprintf("%+.2f", -d.y()));
+        }
+        case R::LeftTrigger: case R::RightTrigger:
+        {
+            if (!isMapped(role))
+                return tr("not on this controller");
+            const int pc = qRound(triggerLevel(role == R::RightTrigger) * 100.0f);
+            return (wasSeen(role) ? tick : QString()) + tr("%1 %").arg(pc);
+        }
+        case R::DpadUp: case R::DpadDown: case R::DpadLeft: case R::DpadRight:
+        {
+            const struct { int role; const char *arrow; } arms[] = {
+                { R::DpadUp, "\342\226\262" }, { R::DpadDown, "\342\226\274" },
+                { R::DpadLeft, "\342\227\200" }, { R::DpadRight, "\342\226\266" } };
+            QStringList held;
+            int seen = 0, mapped = 0;
+            for (const auto &a : arms)
+            {
+                if (isLit(a.role))
+                    held << QString::fromUtf8(a.arrow);
+                seen += wasSeen(a.role) ? 1 : 0;
+                mapped += isMapped(a.role) ? 1 : 0;
+            }
+            if (mapped == 0)
+                return tr("not on this controller");
+            if (!held.isEmpty())
+                return tr("pressed %1").arg(held.join(QLatin1Char(' ')));
+            return seen == 0 ? tr("not pressed yet") : tick + tr("%1 of 4 seen").arg(seen);
+        }
+        default:
+            break;
+    }
+    if (role == R::TouchX)
+        role = R::TouchClick;
+    if (!isMapped(role))
+        return tr("not on this controller");
+    if (m_lit.contains(role))
+        return tr("pressed");
+    if (role == R::TouchClick && isLit(role))
+        return tr("touched");
+    return wasSeen(role) ? tick + tr("seen") : tr("not pressed yet");
 }
 
 void FocusControlMap::setTool(ControllerScheme::Tool tool)
@@ -390,6 +501,9 @@ QSize FocusControlMap::sizeHint() const
 
 QSize FocusControlMap::minimumSizeHint() const
 {
+    // The Controller Test's labels are short: the pad can be drawn smaller.
+    if (m_mode == ControllerMap && m_labels == NameLabels)
+        return QSize(460, 220);
     return m_mode == ControllerMap ? QSize(520, 280) : QSize(470, 190);
 }
 
@@ -461,6 +575,13 @@ void FocusControlMap::paintController(QPainter &p)
         c.mapped = false;
         for (int r : roles)
             c.mapped = c.mapped || isMapped(r);
+        // The Controller Test: the control's own name, and what it reads.
+        if (m_labels == NameLabels)
+        {
+            c.action = nameLabel(roles.first());
+            c.name = stateText(roles.first());
+            return c;
+        }
         c.name = name.isEmpty() ? controlName(roles.first()) : name;
         if (!c.mapped)
             c.name = tr("%1 (not on this controller)").arg(c.name);
@@ -525,6 +646,21 @@ void FocusControlMap::paintController(QPainter &p)
         const qreal w = qMax(afm.horizontalAdvance(c.action), nfm.horizontalAdvance(c.name));
         (c.left ? leftW : rightW) = qMax(c.left ? leftW : rightW, w);
     }
+    const bool names = m_labels == NameLabels;
+    if (names)
+    {
+        /* What a control reads changes as it is pressed: both columns as
+           wide as the widest it can say, so the pad holds still. */
+        const QString tick = QString::fromUtf8("\342\234\223 ");
+        const QStringList widest = {
+            tr("not on this controller"), tr("not pressed yet"),
+            tick + tr("x %1  y %2").arg(QStringLiteral("-0.00"), QStringLiteral("-0.00")),
+            tr("pressed %1").arg(QString::fromUtf8("\342\226\262 \342\226\274 \342\227\200 \342\226\266")),
+            tick + tr("%1 of 4 seen").arg(4), tick + tr("%1 %").arg(100) };
+        for (const QString &w : widest)
+            leftW = qMax(leftW, nfm.horizontalAdvance(w));
+        leftW = rightW = qMax(leftW, rightW);
+    }
     const qreal gap = 8, margin = 6;
     const qreal availW = width() - leftW - rightW - 2 * (gap + margin);
     const qreal availH = height() - 2 * margin;
@@ -538,8 +674,9 @@ void FocusControlMap::paintController(QPainter &p)
     t.scale(s, s);
     t.translate(-kPad.left(), -kPad.top());
 
-    auto addHit = [this, &t](const QPainterPath &shape, int role, const QString &tip) {
-        m_hits << Hit{ t.map(shape), role, tip };
+    auto addHit = [this, &t, names](const QPainterPath &shape, int role, const QString &tip) {
+        if (!names)     // the Controller Test's picture only shows
+            m_hits << Hit{ t.map(shape), role, tip };
     };
     const QString hoverTip = tr("Click to do it");
 
@@ -611,14 +748,97 @@ void FocusControlMap::paintController(QPainter &p)
             label = dim;
         }
     };
+    /* The Controller Test's marks: a tick on a control that has answered,
+       and a dashed ring round the one Check Mapping asks for. */
+    auto drawSeen = [&](const QPointF &at) {
+        const qreal r = qMax(4.5, 5.0 * s);
+        p.setPen(QPen(bg, 1.0));
+        p.setBrush(text);
+        p.drawEllipse(at, r, r);
+        QPainterPath tick;
+        tick.moveTo(at + QPointF(-0.5 * r, 0.0));
+        tick.lineTo(at + QPointF(-0.1 * r, 0.42 * r));
+        tick.lineTo(at + QPointF(0.55 * r, -0.4 * r));
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(bg, qMax(1.4, 0.32 * r), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.drawPath(tick);
+    };
+    auto drawPrompt = [&](const QPainterPath &shape) {
+        const QRectF b = shape.boundingRect();
+        QTransform grow;
+        grow.translate(b.center().x(), b.center().y());
+        grow.scale((b.width() + 10) / b.width(), (b.height() + 10) / b.height());
+        grow.translate(-b.center().x(), -b.center().y());
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(text, 2.0, Qt::DashLine));
+        p.drawPath(t.map(grow.map(shape)));
+    };
     auto drawControl = [&](const QPainterPath &shape, int role, const QString &glyph,
                            const QColor &accent = QColor()) {
         const bool mapped = isMapped(role);
         QColor fill, pen, label;
         stateColours(role, mapped, fill, pen, label);
+        const QPainterPath mappedShape = t.map(shape);
+        if (names)
+        {
+            /* Held: filled, with a heavy outline (not by colour alone). A
+               trigger fills from the bottom as far as it is pulled. */
+            const bool trigger = role == R::LeftTrigger || role == R::RightTrigger;
+            const float level = trigger ? triggerLevel(role == R::RightTrigger) : 0.0f;
+            const bool held = trigger ? level > 0.02f : isLit(role);
+            const QRectF box = mappedShape.boundingRect();
+            QRectF bar = box;
+            if (trigger)
+                bar.setTop(box.bottom() - box.height() * level);
+            p.setPen(Qt::NoPen);
+            p.setBrush(trigger ? (mapped ? face : bodyFill) : fill);
+            p.drawPath(mappedShape);
+            if (trigger && level > 0.0f)
+            {
+                p.save();
+                p.setClipPath(mappedShape);
+                p.fillRect(bar, hi);
+                p.restore();
+            }
+            p.setBrush(Qt::NoBrush);
+            p.setPen(held ? QPen(text, 2.6) : QPen(pen, 1.2));
+            p.drawPath(mappedShape);
+            if (accent.isValid() && mapped && !held)
+            {
+                p.setPen(QPen(accent, 2.0));
+                p.drawPath(mappedShape);
+            }
+            if (!glyph.isEmpty())
+            {
+                QFont f = font();
+                f.setBold(true);
+                f.setPixelSize(qMax(7, int(qMin(shape.boundingRect().height() * 0.62, 14.0) * s)));
+                p.setFont(f);
+                // Over a trigger's level the letters turn, so they read on both.
+                p.save();
+                if (trigger)
+                {
+                    QRectF above = box;
+                    above.setBottom(bar.top());
+                    p.setClipRect(above);
+                    p.setPen(mapped ? text : dim);
+                    p.drawText(box, Qt::AlignCenter, glyph);
+                    p.setClipRect(bar);
+                    p.setPen(hiText);
+                }
+                else
+                    p.setPen(label);
+                p.drawText(box, Qt::AlignCenter, glyph);
+                p.restore();
+            }
+            if (wasSeen(role) && !held)
+                drawSeen(box.topRight());
+            if (m_prompted == role && m_prompted != R::None)
+                drawPrompt(shape);
+            return;
+        }
         p.setBrush(fill);
         p.setPen(QPen(pen, 1.2));
-        const QPainterPath mappedShape = t.map(shape);
         p.drawPath(mappedShape);
         if (accent.isValid() && mapped && !isLit(role))
         {
@@ -739,13 +959,14 @@ void FocusControlMap::paintController(QPainter &p)
         cap.addEllipse(capAt, 17, 17);
         QColor fill, pen, label;
         stateColours(clickRole, mapped, fill, pen, label);
-        if (moved && mapped)
+        if (moved && mapped && !names)
         {
             fill = hi;
             pen = hi.darker(130);
         }
         p.setBrush(fill);
-        p.setPen(QPen(pen, 1.2));
+        // The Controller Test: a click is the fill and a heavy outline.
+        p.setPen(names && isLit(clickRole) ? QPen(text, 2.6) : QPen(pen, 1.2));
         p.drawPath(t.map(cap));
         // The grip ring on the cap.
         p.setBrush(Qt::NoBrush);
@@ -753,7 +974,32 @@ void FocusControlMap::paintController(QPainter &p)
         QPainterPath ring;
         ring.addEllipse(capAt, 11, 11);
         p.drawPath(t.map(ring));
-        if (mapped)
+        if (names)
+        {
+            /* Where the stick is: a dot, on a line from the middle once it
+               is off it. Ticks: the well's for a push, the cap's for a
+               click. */
+            const QPointF mid = t.map(c), dot = t.map(capAt);
+            if (moved)
+            {
+                p.setPen(QPen(hi, qMax(1.5, 2.0 * s), Qt::SolidLine, Qt::RoundCap));
+                p.drawLine(mid, dot);
+            }
+            const qreal r = qMax(3.5, 4.5 * s);
+            p.setPen(QPen(text, 1.2));
+            p.setBrush(moved ? hi : withAlpha(text, 160));
+            p.drawEllipse(dot, r, r);
+            const QRectF wb = t.map(well).boundingRect();
+            if (wasSeen(xRole))
+                drawSeen(QPointF(wb.right() - wb.width() * 0.12, wb.top() + wb.height() * 0.12));
+            if (wasSeen(clickRole) && !isLit(clickRole))
+                drawSeen(t.map(capAt + QPointF(0, -17)));
+            if (m_prompted != R::None && (m_prompted == xRole || m_prompted == yRole))
+                drawPrompt(well);
+            else if (m_prompted != R::None && m_prompted == clickRole)
+                drawPrompt(cap);
+        }
+        else if (mapped)
             m_hits << Hit{ t.map(well), -1, tr("%1: %2").arg(controlName(xRole), actionText(xRole)) };
     };
     drawStick(ls, R::LeftX, R::LeftY, R::LS, false);
@@ -793,13 +1039,26 @@ void FocusControlMap::paintController(QPainter &p)
             p.setBrush(withAlpha(hi, 70));
             p.drawRoundedRect(ar.united(nr).adjusted(-4, -1, 4, 1), 4, 4);
         }
+        // The control Check Mapping asks for: its label ringed too.
+        bool asked = false;
+        for (int r : c.roles)
+            asked = asked || (names && m_prompted != R::None && r == m_prompted);
+        if (c.roles.contains(R::LeftX) || c.roles.contains(R::RightX))
+            asked = asked || (names && m_prompted != R::None
+                              && m_prompted == (c.roles.contains(R::LeftX) ? R::LeftY : R::RightY));
+        if (asked)
+        {
+            p.setPen(QPen(text, 1.5, Qt::DashLine));
+            p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(ar.united(nr).adjusted(-4, -1, 4, 1), 4, 4);
+        }
         p.setFont(actionFont);
         p.setPen(c.mapped ? text : dim);
         p.drawText(ar, al, c.action);
         p.setFont(nameFont);
         p.setPen(c.mapped ? nameCol : dim);
         p.drawText(nr, al, c.name);
-        if (c.mapped && c.roles.size() == 1)
+        if (c.mapped && c.roles.size() == 1 && !names)
         {
             QPainterPath hp;
             hp.addRect(ar.united(nr));

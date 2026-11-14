@@ -49,6 +49,13 @@ class Doc;
  * what is needed to check (or fix) a controller's mapping without the
  * controller in hand.
  *
+ * Above the list, a picture of the controller shown (one picked from those
+ * connected) lights each control while it is held, fills each trigger as
+ * far as it is pulled and shows where each stick is, marks every control
+ * that has answered, and names the last input read as the role it was read
+ * as ("Button 3 → X"), so a control read as the wrong one shows at
+ * once. It only reads: nothing it shows reaches the show.
+ *
  * It reads through QLCIOPlugin's diagnostics (setInputDiagnostics()), from
  * every controller a plugin can see, patched or not. One window at a time.
  */
@@ -84,6 +91,15 @@ public:
     /** The walk, or null when none has been started. */
     const MappingCheck *mappingCheck() const { return m_check.get(); }
 
+    /** Show @p device (an input's name, as the plugin lists it; the first
+     *  controller when empty) of @p pluginName on the picture. False when
+     *  no such controller is connected. */
+    bool showController(const QString &pluginName = QString(), const QString &device = QString());
+    /** The controller the picture shows (its name); empty when none. */
+    QString shownController() const { return m_shown.name; }
+    /** The picture, for tests. */
+    FocusControlMap *picture() const { return m_picture; }
+
 private:
     void addInput(QLCIOPlugin *plugin, quint32 input, const QString &device,
                   const QString &connection, const QString &element, int raw,
@@ -113,6 +129,17 @@ private:
     };
     /** Every controller listed in the devices line. */
     QList<Controller> controllers() const;
+    /** The picker: the controllers connected, the shown one kept. */
+    void refreshPicker();
+    int pickerIndex(const QString &pluginName, const QString &device) const;
+    /** Show m_picker's @p index on the picture (its controls, its family). */
+    void pick(int index);
+    /** The shown controller's controls (by role) and family, on the picture. */
+    void loadControls();
+    void feedPicture(QLCIOPlugin *plugin, quint32 input, const QString &element,
+                     int channel, int value);
+    /** Reset Marks: no control has answered yet. */
+    void resetPicture();
     void beginCheck(int controllerIndex);
     void archiveCheck();
     void refreshCheck();
@@ -136,6 +163,16 @@ private:
     QPushButton *m_centreButton;
     QTimer *m_sticksTimer;
     FocusControlMap *m_actions;       ///< never shown: what a control does in Focus mode
+
+    // The picture
+    QWidget *m_pickerRow;
+    QComboBox *m_device;              ///< which controller: the picture's and the walk's
+    FocusControlMap *m_picture;
+    QLabel *m_lastRead;
+    QPushButton *m_resetButton;
+    QList<Controller> m_picker;       ///< what m_device lists
+    Controller m_shown;
+    qint64 m_lastReadAt = 0;          ///< when the last control was named (ms)
     QHash<QString, QTreeWidgetItem *> m_rows;
     QHash<QString, QString> m_connections;   ///< device -> how it is connected
     QStringList m_events;             ///< in order, for the log
@@ -143,7 +180,6 @@ private:
     // Check Mapping
     QPushButton *m_checkButton;
     QWidget *m_checkPanel;
-    QComboBox *m_checkDevice;
     QLabel *m_checkPrompt;
     QListWidget *m_checkList;
     QPushButton *m_checkRetry;
@@ -151,7 +187,6 @@ private:
     QPushButton *m_checkStop;
     QLabel *m_checkSummary;
     std::unique_ptr<MappingCheck> m_check;
-    QList<Controller> m_checkControllers;
     Controller m_checkController;
     bool m_checkArchived = true;
     QStringList m_checkReports;       ///< finished walks, for the log

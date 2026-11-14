@@ -24,6 +24,7 @@
 #include <QListWidget>
 #include <QComboBox>
 #include <QHeaderView>
+#include <QSplitter>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QPushButton>
@@ -100,13 +101,15 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
     setObjectName(QStringLiteral("controllerTest"));
     setWindowTitle(tr("Controller Test"));
     setProperty("helpTopic", QStringLiteral("lighting-studio.md#controller-test"));
-    resize(980, 560);
+    resize(980, 760);
 
     QVBoxLayout *vl = new QVBoxLayout(this);
     QLabel *intro = new QLabel(tr("Press every button once and move each stick and trigger all "
-                                  "the way round. Every input the controller sends is listed as "
-                                  "it arrives \342\200\224 what it is, its raw value, and what it "
-                                  "does here. Then Copy or Save the log."), this);
+                                  "the way round. The picture lights each control while it is "
+                                  "held and ticks each one that has answered; every input the "
+                                  "controller sends is listed as it arrives \342\200\224 what it "
+                                  "is, its raw value, and what it does here. Then Copy or Save "
+                                  "the log."), this);
     intro->setWordWrap(true);
     vl->addWidget(intro);
 
@@ -138,14 +141,27 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
             "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")));
     });
 
+    /* Which controller the picture shows, and Check Mapping walks: one
+       picker for both, there when more than one is connected. */
+    m_pickerRow = new QWidget(this);
+    QHBoxLayout *pr = new QHBoxLayout(m_pickerRow);
+    pr->setContentsMargins(0, 0, 0, 0);
+    QLabel *pickLabel = new QLabel(tr("Controller:"), m_pickerRow);
+    pr->addWidget(pickLabel);
+    m_device = new QComboBox(m_pickerRow);
+    m_device->setObjectName(QStringLiteral("controllerTestDevice"));
+    m_device->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    pickLabel->setBuddy(m_device);
+    pr->addWidget(m_device);
+    pr->addStretch(1);
+    m_pickerRow->hide();
+    vl->addWidget(m_pickerRow);
+
     /* Check Mapping: shown once a walk is started. */
     m_checkPanel = new QWidget(this);
     m_checkPanel->setObjectName(QStringLiteral("controllerCheckPanel"));
     QVBoxLayout *cl = new QVBoxLayout(m_checkPanel);
     cl->setContentsMargins(0, 0, 0, 0);
-    m_checkDevice = new QComboBox(m_checkPanel);
-    m_checkDevice->setObjectName(QStringLiteral("controllerCheckDevice"));
-    cl->addWidget(m_checkDevice);
     m_checkPrompt = new QLabel(m_checkPanel);
     m_checkPrompt->setObjectName(QStringLiteral("controllerCheckPrompt"));
     m_checkPrompt->setWordWrap(true);
@@ -183,8 +199,11 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
     cl->addLayout(cb);
     m_checkPanel->hide();
     vl->addWidget(m_checkPanel);
-    connect(m_checkDevice, QOverload<int>::of(&QComboBox::activated), this,
-            [this](int i) { beginCheck(i); });
+    connect(m_device, QOverload<int>::of(&QComboBox::activated), this, [this](int i) {
+        pick(i);
+        if (m_checkPanel->isVisible() && m_check)
+            beginCheck(i);
+    });
     connect(m_checkRetry, &QPushButton::clicked, this, [this]() {
         if (m_check) { m_check->retry(); refreshCheck(); }
     });
@@ -198,8 +217,37 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
             refreshCheck();
         }
         else
+        {
             m_checkPanel->hide();
+            m_picture->setPrompted(GamepadRole::None);
+        }
     });
+
+    /* The picture: the controller shown, live, labelled with its own
+       names; under it the last input read, and Reset Marks. */
+    QWidget *pictureBox = new QWidget(this);
+    QVBoxLayout *pl = new QVBoxLayout(pictureBox);
+    pl->setContentsMargins(0, 0, 0, 0);
+    m_picture = new FocusControlMap(pictureBox);
+    m_picture->setObjectName(QStringLiteral("controllerTestPicture"));
+    m_picture->setLabels(FocusControlMap::NameLabels);
+    pl->addWidget(m_picture, 1);
+    QHBoxLayout *lr = new QHBoxLayout;
+    m_lastRead = new QLabel(pictureBox);
+    m_lastRead->setObjectName(QStringLiteral("controllerTestLastRead"));
+    m_lastRead->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    QFont lastFont = m_lastRead->font();
+    lastFont.setBold(true);
+    m_lastRead->setFont(lastFont);
+    lr->addWidget(m_lastRead, 1);
+    m_resetButton = new QPushButton(tr("Reset Marks"), pictureBox);
+    m_resetButton->setObjectName(QStringLiteral("controllerTestReset"));
+    m_resetButton->setToolTip(tr("Clear the tick on every control that has answered, to check "
+                                 "them again"));
+    lr->addWidget(m_resetButton);
+    pl->addLayout(lr);
+    connect(m_resetButton, &QPushButton::clicked, this, &ControllerTestDialog::resetPicture);
+    resetPicture();
 
     m_tree = new QTreeWidget(this);
     m_tree->setObjectName(QStringLiteral("controllerTestInputs"));
@@ -219,7 +267,15 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
     m_tree->setColumnWidth(ColChannel, 60);
     m_tree->setColumnWidth(ColValue, 50);
     m_tree->setColumnWidth(ColMapsTo, 260);
-    vl->addWidget(m_tree, 1);
+
+    QSplitter *split = new QSplitter(Qt::Vertical, this);
+    split->setObjectName(QStringLiteral("controllerTestSplit"));
+    split->setChildrenCollapsible(false);
+    split->addWidget(pictureBox);
+    split->addWidget(m_tree);
+    split->setStretchFactor(0, 3);
+    split->setStretchFactor(1, 2);
+    vl->addWidget(split, 1);
 
     /* The sticks: where each rests (a worn stick does not come back to the
        middle) and what every tool gets once that is taken out. */
@@ -316,6 +372,7 @@ void ControllerTestDialog::slotInputDiagnostic(quint32 input, const QString &dev
         if (!plugin.isNull() && static_cast<QObject *>(plugin.data()) == sender())
         {
             addInput(plugin.data(), input, device, connection, element, raw, channel, value);
+            feedPicture(plugin.data(), input, element, channel, value);
             feedCheck(plugin.data(), input, channel, value);
             return;
         }
@@ -385,6 +442,7 @@ void ControllerTestDialog::refreshStatus()
                                      : tr("No game controller is connected"));
     m_askButton->setVisible(perm == ControllerKeepAlive::PermissionUnknown);
     m_settingsButton->setVisible(perm == ControllerKeepAlive::PermissionDenied);
+    refreshPicker();
 }
 
 QString ControllerTestDialog::mapsTo(QLCIOPlugin *plugin, quint32 input, int channel) const
@@ -704,7 +762,6 @@ bool ControllerTestDialog::startCheck(const QString &pluginName, const QString &
     if (list.isEmpty())
     {
         m_checkPanel->show();
-        m_checkDevice->hide();
         m_checkList->hide();
         m_checkRetry->hide();
         m_checkSkip->hide();
@@ -715,35 +772,35 @@ bool ControllerTestDialog::startCheck(const QString &pluginName, const QString &
         m_check.reset();
         return false;
     }
-    int pick = 0;
-    for (int i = 0; i < list.size(); ++i)
-        if (!device.isEmpty() && list.at(i).name == device.trimmed()
-            && (pluginName.isEmpty() || list.at(i).plugin->name() == pluginName))
-        {
-            pick = i;
-            break;
-        }
-    m_checkControllers = list;
-    m_checkDevice->clear();
-    for (const Controller &c : list)
-        m_checkDevice->addItem(c.name);
-    m_checkDevice->setCurrentIndex(pick);
-    beginCheck(pick);
+    refreshPicker();
+    // No controller named: the one the picture shows (of that plugin).
+    int index = -1;
+    if (device.isEmpty() && !m_shown.plugin.isNull()
+        && (pluginName.isEmpty() || m_shown.plugin->name() == pluginName))
+        index = pickerIndex(m_shown.plugin->name(), m_shown.name);
+    if (index < 0)
+        index = pickerIndex(pluginName, device);
+    beginCheck(qMax(0, index));
     return true;
 }
 
 void ControllerTestDialog::beginCheck(int index)
 {
     archiveCheck();
-    if (index < 0 || index >= m_checkControllers.size())
+    if (index < 0 || index >= m_picker.size())
         return;
-    m_checkController = m_checkControllers.at(index);
+    m_checkController = m_picker.at(index);
     if (m_checkController.plugin.isNull())
         return;
+    // The picture shows the controller walked.
+    if (m_device->currentIndex() != index || m_shown.name != m_checkController.name)
+    {
+        m_device->setCurrentIndex(index);
+        pick(index);
+    }
     m_check.reset(new MappingCheck(PadNames::familyFrom(
         m_checkController.plugin->inputDeviceKind(m_checkController.input))));
     m_checkArchived = false;
-    m_checkDevice->setVisible(m_checkControllers.size() > 1);
     m_checkList->show();
     m_checkRetry->show();
     m_checkSkip->show();
@@ -798,6 +855,9 @@ void ControllerTestDialog::refreshCheck()
     }
     const int cur = m_check->current();
     m_checkSummary->setStyleSheet(QString());
+    // The control asked for, ringed on the picture.
+    m_picture->setPrompted(m_check->finished() ? int(GamepadRole::None)
+                                               : int(m_check->step(cur).role));
     if (m_check->finished())
     {
         archiveCheck();
@@ -830,4 +890,189 @@ void ControllerTestDialog::feedCheck(QLCIOPlugin *plugin, quint32 input, int cha
         plugin->inputChannelName(input, quint32(channel)));
     if (m_check->feed(role, value) != MappingCheck::Ignored)
         refreshCheck();
+}
+
+/*****************************************************************************
+ * The picture
+ *****************************************************************************/
+
+int ControllerTestDialog::pickerIndex(const QString &pluginName, const QString &device) const
+{
+    for (int i = 0; i < m_picker.size(); ++i)
+    {
+        const Controller &c = m_picker.at(i);
+        if (c.plugin.isNull())
+            continue;
+        if ((device.isEmpty() || c.name == device.trimmed())
+            && (pluginName.isEmpty() || c.plugin->name() == pluginName))
+            return i;
+    }
+    return -1;
+}
+
+void ControllerTestDialog::refreshPicker()
+{
+    const QList<Controller> list = controllers();
+    bool same = list.size() == m_picker.size();
+    for (int i = 0; same && i < list.size(); ++i)
+        same = list.at(i).plugin == m_picker.at(i).plugin && list.at(i).name == m_picker.at(i).name
+               && list.at(i).input == m_picker.at(i).input;
+    const bool showing = !m_shown.plugin.isNull();
+    if (same && showing == !list.isEmpty())
+    {
+        loadControls();     // a profile may have come since
+        return;
+    }
+    m_picker = list;
+    {
+        const QSignalBlocker block(m_device);
+        m_device->clear();
+        for (const Controller &c : list)
+            m_device->addItem(c.name);
+    }
+    m_pickerRow->setVisible(list.size() > 1);
+    // The one shown stays shown (marks and all) while it is connected.
+    const int kept = m_shown.plugin.isNull() ? -1
+                                             : pickerIndex(m_shown.plugin->name(), m_shown.name);
+    m_device->setCurrentIndex(qMax(0, kept));
+    if (kept >= 0)
+    {
+        m_shown = m_picker.at(kept);
+        loadControls();
+    }
+    else
+        pick(list.isEmpty() ? -1 : 0);
+}
+
+bool ControllerTestDialog::showController(const QString &pluginName, const QString &device)
+{
+    refreshPicker();
+    const int index = pickerIndex(pluginName, device);
+    if (index < 0)
+    {
+        if (!device.isEmpty())
+            m_lastRead->setText(tr("%1 is not connected. Switch it on or plug it in.").arg(device.trimmed()));
+        return false;
+    }
+    m_device->setCurrentIndex(index);
+    if (m_shown.name != m_picker.at(index).name || m_shown.plugin != m_picker.at(index).plugin)
+        pick(index);
+    // A walk under way follows: one picker for both.
+    if (m_checkPanel->isVisible() && m_check && !m_check->finished()
+        && m_checkController.name != m_shown.name)
+        beginCheck(index);
+    return true;
+}
+
+void ControllerTestDialog::pick(int index)
+{
+    m_shown = index >= 0 && index < m_picker.size() ? m_picker.at(index) : Controller();
+    loadControls();
+    m_picture->clearInput();
+    m_picture->setPrompted(GamepadRole::None);
+    resetPicture();
+}
+
+void ControllerTestDialog::loadControls()
+{
+    /* Its controls, by role, as Focus mode finds them: a control its
+       profile does not have is greyed. HID channels are the axes, then the
+       buttons; no profile goes past 128. */
+    QMap<int, QString> controls;
+    PadNames::Family family = PadNames::Xbox;
+    if (!m_shown.plugin.isNull())
+    {
+        for (quint32 ch = 0; ch < 128; ++ch)
+        {
+            const QString name = m_shown.plugin->inputChannelName(m_shown.input, ch);
+            const GamepadRole::Role role =
+                GamepadRole::fromProfile(m_shown.plugin->inputChannelRole(m_shown.input, ch), name);
+            if (role != GamepadRole::None && !controls.contains(role))
+                controls.insert(role, name);
+        }
+        const QString kind = m_shown.plugin->inputDeviceKind(m_shown.input);
+        family = kind.isEmpty() ? PadNames::guess(QString(), m_shown.name, controls)
+                                : PadNames::familyFrom(kind);
+    }
+    m_picture->setControls(controls);
+    m_picture->setFamily(family);
+}
+
+void ControllerTestDialog::resetPicture()
+{
+    m_picture->clearSeen();
+    m_lastReadAt = 0;
+    m_lastRead->setText(m_shown.plugin.isNull()
+                        ? tr("No game controller is connected.")
+                        : tr("Press any control on %1.").arg(m_shown.name));
+}
+
+void ControllerTestDialog::feedPicture(QLCIOPlugin *plugin, quint32 input, const QString &element,
+                                       int channel, int value)
+{
+    if (m_shown.plugin.isNull() || plugin != m_shown.plugin.data() || input != m_shown.input)
+        return;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (channel < 0 || value < 0)
+    {
+        /* Not in the layout: said, unless a control was read just now (a
+           pad's motion sensors stream, and would hide it). */
+        if (now - m_lastReadAt > 1500)
+            m_lastRead->setText(tr("Last read: %1 \342\206\222 nothing (not in this controller's layout)")
+                                .arg(element));
+        return;
+    }
+    using R = GamepadRole::Role;
+    const R role = GamepadRole::fromProfile(plugin->inputChannelRole(input, quint32(channel)),
+                                            plugin->inputChannelName(input, quint32(channel)));
+    if (role == R::None)
+    {
+        if (value > 0 && now - m_lastReadAt > 1500)
+            m_lastRead->setText(tr("Last read: %1 \342\206\222 channel %2, no gamepad role")
+                                .arg(element).arg(channel));
+        return;
+    }
+    // A touchpad finger's place is not drawn; its touch lights the pad.
+    if (GamepadRole::isTouch(role) && role != R::TouchDown && role != R::Touch2Down)
+        return;
+    const bool axis = GamepadRole::isAxis(role);
+    m_picture->setControlValue(int(role), axis ? value / 255.0f : (value > 0 ? 1.0f : 0.0f));
+
+    /* The line names a press, a pull or a push in earnest: not a release,
+       nor a stick's jitter round the middle. */
+    const PadNames::Family family = m_picture->family();
+    QString what;
+    switch (role)
+    {
+        case R::LeftTrigger: case R::RightTrigger:
+            if (value >= 26)
+                what = tr("%1 (%2 %)").arg(PadNames::name(role, family)).arg(qRound(value * 100 / 255.0));
+            break;
+        case R::LeftX: case R::RightX:
+            if (qAbs(value - 128) >= 40)
+                what = value > 128 ? tr("%1 right").arg(PadNames::name(role, family))
+                                   : tr("%1 left").arg(PadNames::name(role, family));
+            break;
+        case R::LeftY: case R::RightY:
+            if (qAbs(value - 128) >= 40)
+                what = value < 128 ? tr("%1 up").arg(PadNames::name(role, family))
+                                   : tr("%1 down").arg(PadNames::name(role, family));
+            break;
+        default:
+            if (value >= 128)
+            {
+                what = role == R::TouchDown || role == R::Touch2Down ? tr("Touchpad (a finger on it)")
+                                                                     : PadNames::name(role, family);
+                if (what.isEmpty())
+                    what = GamepadRole::key(role);
+                const bool face = role == R::A || role == R::B || role == R::X || role == R::Y;
+                if (face && PadNames::isPlayStation(family))
+                    what += QStringLiteral(" ") + PadNames::name(role, family, PadNames::Glyph);
+            }
+            break;
+    }
+    if (what.isEmpty())
+        return;
+    m_lastReadAt = now;
+    m_lastRead->setText(tr("Last read: %1 \342\206\222 %2").arg(element, what));
 }

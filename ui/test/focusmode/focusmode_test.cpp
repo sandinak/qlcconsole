@@ -158,12 +158,12 @@ Fixture *makeZoomWash(Doc *doc)
 /* The gamepad's channels: the four stick axes, then the buttons. */
 enum Ch : quint32
 {
-    LX = 0, LY = 1, RX = 2, RY = 3,
+    LX = 0, LY = 1, RX = 2, RY = 3, LT = 4, RT = 5,
     BtnA = 10, BtnB = 11, BtnX = 12, BtnY = 13, BtnLB = 14, BtnRB = 15,
     BtnView = 16, BtnMenu = 17, Up = 18, Down = 19, Left = 20, Right = 21,
     // A PlayStation pad's touchpad (Q170).
     TouchX = 22, TouchY = 23, TouchDown = 24, Touch2X = 25, Touch2Y = 26, Touch2Down = 27,
-    TouchClick = 28
+    TouchClick = 28, BtnLS = 29, BtnRS = 30
 };
 }
 
@@ -1312,6 +1312,228 @@ void FocusMode_Test::checkMappingWalksTheControllerAndLogsIt()
 
     dlg->close();
     m_stub->m_connectionInfo.clear();
+}
+
+void FocusMode_Test::controllerTestPictureShowsWhatIsPressed()
+{
+    plugInPad();
+    m_stub->m_channelRoles.insert(LT, "lt");
+    m_stub->m_channelRoles.insert(RT, "rt");
+    m_stub->m_channelRoles.insert(BtnLS, "ls");
+    m_stub->m_channelRoles.insert(BtnRS, "rs");
+    m_stub->m_connectionInfo = { { 0, "USB \302\267 Xbox Series X|S Controller (045E:0B12)" } };
+    auto restore = qScopeGuard([this]() { m_stub->m_connectionInfo.clear(); unplugPad(); });
+    if (QPointer<ControllerTestDialog> before = ControllerTestDialog::instance())
+    {
+        before->close();
+        QTRY_VERIFY(before.isNull());
+    }
+    ControllerTestDialog *dlg = ControllerTestDialog::open(m_doc, nullptr);
+    QVERIFY(dlg != nullptr);
+    FocusControlMap *pic = dlg->findChild<FocusControlMap *>("controllerTestPicture");
+    QLabel *last = dlg->findChild<QLabel *>("controllerTestLastRead");
+    QPushButton *reset = dlg->findChild<QPushButton *>("controllerTestReset");
+    QWidget *picker = dlg->findChild<QComboBox *>("controllerTestDevice");
+    QVERIFY(pic != nullptr && last != nullptr && reset != nullptr && picker != nullptr);
+    QVERIFY(pic->isVisibleTo(dlg));
+    QCOMPARE(pic->labels(), FocusControlMap::NameLabels);
+    QCOMPARE(dlg->shownController(), QString("1: Stub 1"));
+    QVERIFY(!picker->isVisibleTo(dlg));            // one controller: nothing to pick
+    QVERIFY2(last->text().startsWith("Press any control"), qPrintable(last->text()));
+    QVERIFY(pic->isMapped(R::A) && pic->isMapped(R::LeftTrigger) && pic->isMapped(R::DpadLeft));
+    QVERIFY(!pic->isMapped(R::Guide));
+    QCOMPARE(pic->stateText(R::Guide), QString("not on this controller"));
+    QCOMPARE(pic->stateText(R::A), QString("not pressed yet"));
+    const QString tick = QString::fromUtf8("\342\234\223 ");
+    const QString arrow = QString::fromUtf8(" \342\206\222 ");
+
+    const QString dev = "Xbox Wireless Controller";
+    const QString conn = "USB";
+    // A button lights while held, and is ticked once let go.
+    m_stub->emitDiagnostic(0, dev, conn, "Button 1", 1, BtnA, 255);
+    QVERIFY(pic->isLit(R::A));
+    QCOMPARE(pic->stateText(R::A), QString("pressed"));
+    QCOMPARE(last->text(), "Last read: Button 1" + arrow + "A");
+    m_stub->emitDiagnostic(0, dev, conn, "Button 1", 0, BtnA, 0);
+    QVERIFY(!pic->isLit(R::A));
+    QVERIFY(pic->wasSeen(R::A));
+    QCOMPARE(pic->stateText(R::A), tick + "seen");
+    QCOMPARE(last->text(), "Last read: Button 1" + arrow + "A");    // a release names nothing
+    // The raw element and the role it is read as: a wrong mapping shows.
+    m_stub->emitDiagnostic(0, dev, conn, "Button 3", 1, BtnX, 255);
+    QCOMPARE(last->text(), "Last read: Button 3" + arrow + "X");
+    m_stub->emitDiagnostic(0, dev, conn, "Button 3", 0, BtnX, 0);
+
+    // A trigger: its pull as a level, seen from half way.
+    m_stub->emitDiagnostic(0, dev, conn, "Z", 153, LT, 153);
+    QVERIFY(qAbs(pic->triggerLevel(false) - 0.6f) < 0.01f);
+    QVERIFY(pic->wasSeen(R::LeftTrigger));
+    QCOMPARE(pic->stateText(R::LeftTrigger), tick + "60 %");
+    QCOMPARE(last->text(), "Last read: Z" + arrow + "LT (60 %)");
+    m_stub->emitDiagnostic(0, dev, conn, "Rz", 40, RT, 40);
+    QVERIFY(qAbs(pic->triggerLevel(true) - 40 / 255.0f) < 0.01f);
+    QVERIFY(!pic->wasSeen(R::RightTrigger));       // barely touched
+    QCOMPARE(pic->stateText(R::RightTrigger), QString("16 %"));
+    m_stub->emitDiagnostic(0, dev, conn, "Rz", 0, RT, 0);
+    QCOMPARE(pic->triggerLevel(true), 0.0f);
+
+    // A stick: its deflection, as a dot; its click lights it.
+    m_stub->emitDiagnostic(0, dev, conn, "X", 255, LX, 255);
+    m_stub->emitDiagnostic(0, dev, conn, "Y", 0, LY, 0);
+    QVERIFY(qAbs(pic->stickDeflection(false).x() - 1.0) < 0.01);
+    QVERIFY(qAbs(pic->stickDeflection(false).y() + 1.0) < 0.01);
+    QVERIFY(pic->wasSeen(R::LeftX));
+    QCOMPARE(pic->stateText(R::LeftX), tick + "x +1.00  y +1.00");
+    QCOMPARE(last->text(), "Last read: Y" + arrow + "Left stick up");
+    m_stub->emitDiagnostic(0, dev, conn, "Ry", 140, RY, 140);       // jitter: not named
+    QCOMPARE(last->text(), "Last read: Y" + arrow + "Left stick up");
+    QVERIFY(!pic->wasSeen(R::RightX));
+    m_stub->emitDiagnostic(0, dev, conn, "Button 9", 1, BtnLS, 255);
+    QVERIFY(pic->isLit(R::LS));
+    QCOMPARE(last->text(), "Last read: Button 9" + arrow + "LS");
+    m_stub->emitDiagnostic(0, dev, conn, "Button 9", 0, BtnLS, 0);
+    m_stub->emitDiagnostic(0, dev, conn, "X", 128, LX, 128);
+    m_stub->emitDiagnostic(0, dev, conn, "Y", 128, LY, 128);
+    QVERIFY(qAbs(pic->stickDeflection(false).x()) < 0.01);
+
+    // The D-pad's directions, each on its own.
+    m_stub->emitDiagnostic(0, dev, conn, "Hat switch", 1, Left, 255);
+    QVERIFY(pic->isLit(R::DpadLeft) && !pic->isLit(R::DpadUp));
+    QCOMPARE(pic->stateText(R::DpadUp), QString::fromUtf8("pressed \342\227\200"));
+    QCOMPARE(last->text(), "Last read: Hat switch" + arrow + "D-pad left");
+    m_stub->emitDiagnostic(0, dev, conn, "Hat switch", 0, Left, 0);
+    QCOMPARE(pic->stateText(R::DpadUp), tick + "1 of 4 seen");
+
+    // Another controller's input is not this picture's.
+    m_stub->emitDiagnostic(1, dev, conn, "Button 2", 1, BtnB, 255);
+    QVERIFY(!pic->isLit(R::B) && !pic->wasSeen(R::B));
+    m_stub->emitDiagnostic(1, dev, conn, "Button 2", 0, BtnB, 0);
+
+    // It only shows: nothing on it can be clicked into the show.
+    QVERIFY(pic->clickable().isEmpty());
+
+    // Reset Marks: nothing has answered.
+    QVERIFY(pic->seenControls().size() >= 5);
+    reset->click();
+    QVERIFY(pic->seenControls().isEmpty());
+    QCOMPARE(pic->stateText(R::A), QString("not pressed yet"));
+    QVERIFY2(last->text().startsWith("Press any control"), qPrintable(last->text()));
+
+    // Check Mapping: the control asked for is ringed on the picture.
+    QPushButton *check = dlg->findChild<QPushButton *>("controllerTestCheck");
+    check->click();
+    QCOMPARE(pic->prompted(), int(R::A));
+    m_stub->emitDiagnostic(0, dev, conn, "Button 1", 1, BtnA, 255);
+    m_stub->emitDiagnostic(0, dev, conn, "Button 1", 0, BtnA, 0);
+    QCOMPARE(pic->prompted(), int(R::B));
+    QVERIFY(pic->wasSeen(R::A));                   // the walk's presses count too
+    dlg->findChild<QPushButton *>("controllerCheckStop")->click();
+    QCOMPARE(pic->prompted(), int(R::None));
+
+    // Two controllers: one picker, for the picture and the walk.
+    m_stub->m_connectionInfo.insert(1, "Bluetooth \302\267 DualSense Wireless Controller (054C:0CE6)");
+    m_stub->m_lineDeviceKind.insert(1, "dualsense");
+    auto noKind = qScopeGuard([this]() { m_stub->m_lineDeviceKind.clear(); });
+    m_stub->configure();
+    QVERIFY(picker->isVisibleTo(dlg));
+    QCOMPARE(dlg->shownController(), QString("1: Stub 1"));    // the one shown stays
+    QVERIFY(dlg->showController(m_stub->name(), "2: Stub 2"));
+    QCOMPARE(dlg->shownController(), QString("2: Stub 2"));
+    QCOMPARE(pic->family(), PadNames::DualSense);
+    m_stub->emitDiagnostic(1, dev, conn, "Button 2", 1, BtnA, 255);
+    QVERIFY(pic->isLit(R::A));
+    QCOMPARE(last->text(), QString::fromUtf8("Last read: Button 2 \342\206\222 Cross \342\234\225"));
+    m_stub->emitDiagnostic(1, dev, conn, "Button 2", 0, BtnA, 0);
+    check->click();                                // walks the one shown
+    QVERIFY2(dlg->findChild<QLabel *>("controllerCheckPrompt")->text().contains("Cross"),
+             qPrintable(dlg->findChild<QLabel *>("controllerCheckPrompt")->text()));
+    QVERIFY(!dlg->showController(m_stub->name(), "9: Not Here"));
+    QCOMPARE(dlg->shownController(), QString("2: Stub 2"));
+
+    QPointer<ControllerTestDialog> gone(dlg);
+    dlg->close();
+    QTRY_VERIFY(gone.isNull());
+}
+
+void FocusMode_Test::controllerTestShots()
+{
+    /* With QLC_SHOT_DIR (the gate's --shots): the Controller Test at three
+       sizes, light and dark, with an Xbox pad and a DualSense, some
+       controls held and some pressed before. QLC_SHOT_STATE names them
+       ("after", or "before" on the base). */
+    const QString out = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (out.isEmpty())
+        QSKIP("QLC_SHOT_DIR is not set");
+    QDir().mkpath(out);
+    const QString state = qEnvironmentVariable("QLC_SHOT_STATE", QStringLiteral("after"));
+    const QPalette native = qApp->palette();
+    const QString conn = QStringLiteral("USB");
+
+    for (const char *pad : { "xbox", "dualsense" })
+    {
+        const bool ps = QLatin1String(pad) == QLatin1String("dualsense");
+        if (ps)
+            plugInPlayStationPad(QStringLiteral("dualsense"));
+        else
+            plugInPad();
+        m_stub->m_channelRoles.insert(LT, "lt");
+        m_stub->m_channelRoles.insert(RT, "rt");
+        m_stub->m_channelRoles.insert(BtnLS, "ls");
+        m_stub->m_channelRoles.insert(BtnRS, "rs");
+        m_stub->m_connectionInfo = { { 0, ps ? "USB \302\267 DualSense Wireless Controller (054C:0CE6)"
+                                             : "USB \302\267 Xbox Series X|S Controller (045E:0B12)" } };
+        if (QPointer<ControllerTestDialog> before = ControllerTestDialog::instance())
+        {
+            before->close();
+            QTRY_VERIFY(before.isNull());
+        }
+        ControllerTestDialog *dlg = ControllerTestDialog::open(m_doc, nullptr);
+        QVERIFY(dlg != nullptr);
+        const QString dev = ps ? QStringLiteral("DualSense Wireless Controller")
+                               : QStringLiteral("Xbox Wireless Controller");
+        auto send = [&](const char *element, quint32 ch, int value) {
+            m_stub->emitDiagnostic(0, dev, conn, QString::fromLatin1(element), value, int(ch), value);
+        };
+        // Pressed before: B, X, Menu, D-pad up; held: A, LB, a trigger part
+        // way, the left stick up and right; the right stick clicked (on the
+        // PlayStation pad, the touchpad clicked too).
+        for (quint32 ch : { BtnB, BtnX, BtnMenu, Up })
+        {
+            send("Button", ch, 255);
+            send("Button", ch, 0);
+        }
+        send("Button 1", BtnA, 255);
+        send("Button 5", BtnLB, 255);
+        send("Z", RT, 166);
+        send("X", LX, 220);
+        send("Y", LY, 50);
+        send("Button 10", BtnRS, 255);
+        if (ps)
+            send("Button 14", TouchClick, 255);
+        QCoreApplication::processEvents();
+
+        const QSize small = dlg->minimumSizeHint().expandedTo(QSize(820, 620));
+        for (const char *theme : { "light", "dark" })
+        {
+            qApp->setPalette(QLatin1String(theme) == QLatin1String("dark")
+                             ? App::themePalette(App::ThemeVSCodeDark, native) : native);
+            for (const QSize &size : { small, QSize(980, 760), QSize(1440, 900) })
+            {
+                dlg->resize(size);
+                QTest::qWait(30);
+                const QString file = QStringLiteral("%1/controllertest-%2-%3-%4-%5x%6.png")
+                    .arg(out, QLatin1String(pad), QLatin1String(theme), state)
+                    .arg(dlg->width()).arg(dlg->height());
+                QVERIFY2(dlg->grab().save(file), qPrintable(file));
+            }
+        }
+        qApp->setPalette(native);
+        QPointer<ControllerTestDialog> gone(dlg);
+        dlg->close();
+        QTRY_VERIFY(gone.isNull());       // the next pad gets a window of its own
+        m_stub->m_connectionInfo.clear();
+        unplugPad();
+    }
 }
 
 void FocusMode_Test::theLampSaysWhatIsUnsaved()
