@@ -481,16 +481,35 @@ void CueRunner_Test::thePadRoleShowsOnTheRunTab()
     pad->click();
     QVERIFY(run->isEnabled());
     QCOMPARE(pad->text(), QString("Pad: Run"));
-    QVERIFY2(pad->toolTip().contains("GO (LB held)"), qPrintable(pad->toolTip()));
+    QVERIFY2(pad->toolTip().contains("GO (armed, RT held)"), qPrintable(pad->toolTip()));
+    QVERIFY2(pad->toolTip().contains("Emergency stop"), qPrintable(pad->toolTip()));
 
-    // Armed from the pad: the button says so.
-    run->handle(0, GamepadRole::LB, 255);
-    QCOMPARE(pad->text(), QString("Pad: ARMED"));
-    // Armed shows across the whole tab; gone the moment LB is let go.
-    QVERIFY2(runner.styleSheet().contains(PadRun::armedColour().name()), qPrintable(runner.styleSheet()));
-    run->handle(0, GamepadRole::LB, 0);
-    QVERIFY(runner.styleSheet().isEmpty());
-    QCOMPARE(pad->text(), QString("Pad: Run"));
+    /* PadRun's one state, in its words and colour, on the button and as a
+       frame round the whole tab -- both or neither. */
+    auto shows = [&](const QString &words, const QColor &colour) {
+        QCOMPARE(pad->text(), words);
+        if (colour.isValid())
+        {
+            QVERIFY2(runner.styleSheet().contains(colour.name()), qPrintable(runner.styleSheet()));
+            QVERIFY2(pad->styleSheet().contains(colour.name()), qPrintable(pad->styleSheet()));
+        }
+        else
+        {
+            QVERIFY(runner.styleSheet().isEmpty());
+            QVERIFY(pad->styleSheet().isEmpty());
+        }
+    };
+    // Armed from the pad (its chord): it stays, with nothing held.
+    QVERIFY(run->setArmed(true));
+    shows("Pad: ARMED", PadRun::armedColour());
+    // The emergency stop: red, until armed again.
+    run->emergencyStop();
+    shows("Pad: STOPPED", PadRun::stoppedColour());
+    QVERIFY(run->setArmed(true));
+    shows("Pad: ARMED", PadRun::armedColour());
+    // Disarmed: gone the moment it is.
+    QVERIFY(run->setArmed(false));
+    shows("Pad: Run", QColor());
 
     // Switched elsewhere (the App restoring it): the button follows.
     run->setEnabled(false, false);

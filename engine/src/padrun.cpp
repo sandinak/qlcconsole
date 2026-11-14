@@ -335,6 +335,11 @@ void PadRun::armChordUpdate(quint32 universe)
         m_armChord->stop();
         m_chordUniverse = UINT_MAX;
     }
+    /* Both bumpers with one trigger down: no chord, and the screen says
+       why -- a trigger that does not come back up would otherwise make a
+       pad that "will not arm" with nothing to show for it. */
+    if (h.lb && h.rb && h.anyTrigger() && !h.all() && m_pc != nullptr)
+        showNotice(m_pc->padText(tr("To arm, let go of the triggers.")));
 }
 
 void PadRun::armChordFired()

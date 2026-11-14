@@ -51,7 +51,7 @@ private slots:
     void stopNeedsASecondTapInTwoSeconds();
     void nothingIsSentWhileRemoteGoIsOff();
     void thePinIsAskedAndKeptForTheSession();
-    void everyPadWordNeedsLBHeld();
+    void everyPadWordNeedsTheArmAndItsTrigger();
     void theControllerTestSendsNothing();
     void acksSayWhyInPlainWords();
     void teachingShowsWhatItHolds();
