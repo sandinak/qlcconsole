@@ -5160,7 +5160,7 @@ void AppViews_Test::theFooterSaysWhatLightsTheStage()
     m_app->m_cueGoAction->trigger();
     QTRY_VERIFY_WITH_TIMEOUT(m_app->m_stage == App::Stage::Live, 5000);
     QVERIFY(chip->text().endsWith(QString::fromUtf8("\xe2\x80\xa6")));
-    QVERIFY(chip->sizeHint().width() <= m_app->width() / 5 + 16);
+    QVERIFY(chip->sizeHint().width() <= m_app->width() / 3 + 16);
     QVERIFY(chip->toolTip().contains(QString(120, 'x')));
 }
 

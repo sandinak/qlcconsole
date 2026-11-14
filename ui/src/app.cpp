@@ -5129,6 +5129,12 @@ void App::updateStageIndicator()
     {
         const QString sep = QStringLiteral(" \u00b7 ");
         QStringList parts = full.split(sep);
+        // LIVE . list . cue: the cue is what the crew reads, the list goes first.
+        if (parts.size() == 3 && parts.first().contains(QStringLiteral("LIVE")))
+        {
+            forms << full << parts.first() + sep + parts.last();
+            parts = QStringList{ parts.first() + sep + parts.last() };
+        }
         while (!parts.isEmpty())
         {
             QString form = parts.join(sep);
