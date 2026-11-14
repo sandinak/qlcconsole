@@ -29,8 +29,8 @@ The latest changes, newest first. Each links to the guide with the detail.
   viewpoint as the follow spot's is: up is the way they face. Front of
   house and other targets are unchanged. See [Focus calls](focus-calls.md).
 - **Blind and Solo from the Steam Deck or a phone.** In Design the Run
-  page has **BLIND** and **SOLO**, and the Deck has LB + LS for Blind,
-  LB + View for Solo and LB + D-pad left / right to step through the layers.
+  page has **BLIND** and **SOLO**, and the Deck, armed with LT held, has LS for Blind,
+  View for Solo and D-pad left / right to step through the layers.
   They do what the console's own Blind and Solo do; in Operate the remote
   refuses both, as the console does. See [Blind and
   Solo](gamepad-remote.md#blind-and-solo).

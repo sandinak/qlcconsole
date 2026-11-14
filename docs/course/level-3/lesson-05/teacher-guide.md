@@ -57,7 +57,7 @@ Play the first minute of the song. Ask the class to clap at each change of secti
 2. On the start file, click the list, tick **Follow timecode**, and type one time. Show the Run tab's **at** on the row.
 3. If you have a timecode source (Branson's QLab laptop sending MTC, or an LTC clip into the audio input), start it: the Run tab's header shows the clock, the list goes to each cue as it passes, and under the list it says what is next and in how many seconds. Stop the clock and nothing moves; start it again and it carries on. Jump it back: nothing plays for the jump, and the cues after it play as the clock reaches them.
 4. Phone: **Show Settings**, tick **Allow GO from the phone Run page** (leave off afterwards), open **/run** on a phone from the QR beside **Web access**. Tap GO; the show moves. Tap Stop once: it asks again.
-5. Pad: the Run tab's **Pad:** button to **Run**. Press A: nothing. Hold LB: the light bar turns orange, **Pad: ARMED**. A: GO.
+5. Pad: the Run tab's **Pad:** button to **Run**. Press A: nothing. Hold LB + RB for half a second: the light bar turns orange, **Pad: ARMED**, and it stays armed. Hold RT and press A: GO. Hold LB + RB again to disarm.
 
 ## 3. Hands-on (20 min)
 

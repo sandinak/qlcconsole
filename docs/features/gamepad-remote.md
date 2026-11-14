@@ -66,20 +66,25 @@ is labelled with its job.
 | Arrow keys | Nudge 0.1° (Shift: 1°); the on-screen arrows use the step shown between them |
 | Page Up / Page Down, [ / ], Enter, Backspace | The console's Focus mode keys: call, light, save, revert |
 
-**Run page** (the pad's Run role: nothing moves the show unless LB is held)
+**Run page** (the pad's Run role, by the console pad's rules: two buttons
+to arm and to disarm, and every command is armed + a trigger + a button)
 
 | Control | Does |
 |---|---|
-| Hold LB | Arm (the page says LB HELD) |
-| LB + A | GO |
-| LB + B | Back |
-| LB + Y | Sub GO |
-| LB + hold X 1 s | Stop the list (a tap does nothing) |
-| LB + RB | Fire the armed hit |
-| LB + View | Solo: the first layer of the cue in the preview, or the whole cue again |
-| LB + D-pad right / left | Solo the next / previous layer |
-| LB + LS (click) | Blind on / off |
+| Hold LB + RB | Arm; hold them again to disarm (the page says ARMED until then) |
+| Armed, hold RT + A | GO |
+| Armed, hold RT + B | Back |
+| Armed, hold LT + X | Sub GO |
+| Armed, hold LT + Y | Sub Back |
+| Armed, hold LT or RT + RB | Fire the armed hit |
+| LB + RB + LT + RT | Emergency stop: everything off (the page says EMERGENCY STOP) |
+| Armed, hold LT + View | Solo: the first layer of the cue in the preview, or the whole cue again |
+| Armed, hold LT + D-pad right / left | Solo the next / previous layer |
+| Armed, hold LT + LS (click) | Blind on / off |
 | Menu | Controller test |
+
+There is no "stop the list" on the controller: the page's STOP button
+does that (two taps). The pad never picks the list.
 
 The last three are the remote's own. The console's controller does not
 use View, the D-pad or LS in its Run role, so nothing clashes.
@@ -225,21 +230,23 @@ for and note each result.
    read the round trip line.
    *Expected:* a number in milliseconds. Note it (a few ms on a quiet
    5 GHz network).
-4. **Run controls.** Back on **/run**, hold LB.
-   *Expected:* "LB HELD: GO ARMED" shows. LB + A plays the next cue on the
-   console. A on its own does nothing.
-5. **Blind.** Put the console in Design. On the Deck, press LB + LS
-   (click the left stick).
+4. **Run controls.** Back on **/run**, hold LB + RB for half a second and
+   let go.
+   *Expected:* "ARMED: RT + A IS GO" shows and stays. Hold RT and press A:
+   the next cue plays on the console. A on its own does nothing, and
+   neither does LT + A. Hold LB + RB again: the banner goes.
+5. **Blind.** Put the console in Design. On the Deck, arm, then hold LT
+   and press LS (click the left stick).
    *Expected:* the rig goes dark, the console's screens stay live, and
    the console's Blind button lights. The page shows **BLIND ON** and the
-   blue BLIND chip. Press LB + LS again: the rig comes back.
+   blue BLIND chip. LT + LS again: the rig comes back.
 6. **Solo.** On the console, pick a cue with two or more layers in the
-   Show Tree, so it plays in the preview. On the Deck, press LB + View.
+   Show Tree, so it plays in the preview. On the Deck, armed, hold LT and press View.
    *Expected:* only the first layer lights, and the page reads **SOLO:**
-   and that layer's name. LB + D-pad right moves to the next layer. LB +
+   and that layer's name. LT + D-pad right moves to the next layer. LT +
    View again plays the whole cue.
 7. **Blind and Solo in Operate.** Switch the console to Operate.
-   *Expected:* the BLIND and SOLO row disappears from the page. LB + LS
+   *Expected:* the BLIND and SOLO row disappears from the page. LT + LS
    says "Blind and Solo are for Design: the show is running."
 8. **Focus remote.** Back in Design, start a Venue focus on the console.
    On **/focus**, tap a light in the list.
@@ -264,7 +271,7 @@ for and note each result.
     Desktop Mode.
 13. **Teaching.** On the console, open a Teaching show (File ▸ Show
     Settings ▸ Teaching mode, instructor settings left as they are) and
-    press LB + A on **/run**.
+    arm and press RT + A on **/run**.
     *Expected:* the blue TEACHING chip shows, and the line under the
     section reads "Teaching: real output held · show control out held:
     Teaching (cue … not sent)". The cue still plays on the console.
