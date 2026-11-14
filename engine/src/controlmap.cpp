@@ -45,6 +45,7 @@
 #define KXMLID QStringLiteral("ID")
 #define KXMLMode QStringLiteral("Mode")
 #define KXMLKey QStringLiteral("Key")
+#define KXMLRunList QStringLiteral("RunList")
 
 namespace
 {
@@ -176,10 +177,13 @@ void ControlMap::reset()
     m_heldStarted.clear();
     m_listening = false;
     m_learnBind = false;
+    const bool hadList = m_runTabList != 0xFFFFFFFF;
     m_runTabList = 0xFFFFFFFF;
     m_selected.clear();
     if (had)
         changed(false);
+    if (hadList)
+        emit runTabListChanged(m_runTabList);
 }
 
 void ControlMap::changed(bool modified)
@@ -723,6 +727,9 @@ void ControlMap::setRunTabList(quint32 listId)
     if (listId == m_runTabList)
         return;
     m_runTabList = listId;
+    // The show's: the pad and the Run tab play it next time too.
+    m_doc->setModified();
+    emit runTabListChanged(listId);
     emit armingChanged();
 }
 
@@ -879,9 +886,12 @@ bool ControlMap::saveXML(QXmlStreamWriter *doc) const
 {
     if (doc == nullptr)
         return false;
-    if (m_bindings.isEmpty() && m_encoderBank->device().encoders < 0)
+    if (m_bindings.isEmpty() && m_encoderBank->device().encoders < 0 && m_runTabList == 0xFFFFFFFF)
         return true;    // a show with none saves as before
     doc->writeStartElement(KXMLQLCControlMap);
+    // The list the Run tab (and so the pad) plays, when it is not the main one.
+    if (m_runTabList != 0xFFFFFFFF)
+        doc->writeAttribute(KXMLRunList, QString::number(m_runTabList));
     for (const Binding &b : m_bindings)
     {
         doc->writeStartElement(KXMLTrigger);
@@ -918,6 +928,10 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
     m_down.clear();
     m_heldStarted.clear();
     m_encoderBank->reset();
+    bool okList = false;
+    const quint32 runList = root.attributes().value(KXMLRunList).toUInt(&okList);
+    const quint32 wasList = m_runTabList;
+    m_runTabList = okList ? runList : 0xFFFFFFFF;
     while (root.readNextStartElement())
     {
         if (root.name() == KXMLQLCEncoderBank)
@@ -963,5 +977,10 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
     }
     changed(false);
     resendFeedback();
+    if (m_runTabList != wasList)
+    {
+        emit runTabListChanged(m_runTabList);
+        emit armingChanged();
+    }
     return true;
 }

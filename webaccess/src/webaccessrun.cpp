@@ -458,7 +458,7 @@ static QJsonObject cueObject(Doc *doc, Chaser *ch, quint32 listId, int step, int
 QJsonObject WebAccessRun::padMap()
 {
     /* The pad's Run role (PadRun), as far as the page can do it: the arm,
-       GO, Back, Sub GO, Stop and the armed hit. The rest (another list, the
+       GO, Back, Sub GO, Stop and the armed hit. The rest (the
        walk, the voice) are the console's. */
     QJsonObject map;
     for (GamepadRole::Role role : WebAccessGamepad::standardButtons())
@@ -478,6 +478,9 @@ QJsonObject WebAccessRun::padMap()
         QJsonObject e;
         e[QStringLiteral("do")] = what;
         e[QStringLiteral("label")] = PadNames::expand(PadRun::label(a), PadNames::Xbox);
+        // Stop sits beside GO: held, as on the console's pad.
+        if (a == PadRun::Stop)
+            e[QStringLiteral("hold")] = PadRun::stopHoldMs();
         map[GamepadRole::key(role)] = e;
     }
 

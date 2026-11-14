@@ -49,8 +49,9 @@ class Doc;
  *
  *   hold LB      arm: nothing moves the show unless it is held
  *   LB + A       GO              LB + B   Back
- *   LB + Y       Sub GO          LB + X   Stop the list
- *   RT / LT      next / previous list (no arm: it only picks)
+ *   LB + Y       Sub GO
+ *   LB + hold X 1 s   Stop the list (a tap of X only says to hold it)
+ *   RT / LT      nothing (swallowed): the pad never picks the list
  *   RS           say the list and what is on standby
  *   LB + RB      fire the hit that is armed now (the Hits page, below)
  *   Menu         walk the show (below)
@@ -88,16 +89,23 @@ class Doc;
  * goes through ShowControl::run() with RoutePad (docs/design/RUN_COMMANDS.md):
  * nothing here calls a runner.
  *
+ * The list is the Run tab's (its "plays" picker, saved with the show:
+ * ControlMap::runTabList()), else the main cue list -- never picked from
+ * the pad: sight unseen, a wrong list is too easy (0.4.5).
+ *
  * decided: GO needs a modifier held (LB), not a double-press (can change).
  * decided: Back, Sub GO and Stop need it too: one rule, "nothing moves the
  * show unless LB is held" (can change).
+ * decided: Stop also needs X held for stopHoldMs(): it sits beside GO, and
+ * a slip onto it stopped the list (0.4.5).
+ * decided: nothing on the pad leaves the Run role but the View + Menu hold.
  *
  * Triggers and swipes (Q199): on a DualSense the arm firms R2 (a GO takes a
  * squeeze, a brush cannot fire) and walking clicks both triggers
  * (PadTriggers); on any pad with a touchpad a swipe steps -- left / right
  * the previous / next cue, up / down the previous / next layer (in Run, not
- * walking: right / left walk from the next / previous cue, up / down pick
- * the list). Never a GO: swipes preview and select only.
+ * walking: right / left walk from the next / previous cue; up / down do
+ * nothing). Never a GO: swipes preview and select only.
  *
  * decided: while walking, one finger on the touchpad swipes; the aim nudge
  * it used to make needs LB held (can change).
@@ -127,9 +135,7 @@ public:
         Go,                 ///< A
         Back,               ///< B
         SubGo,              ///< Y
-        Stop,               ///< X
-        NextList,           ///< RT
-        PreviousList,       ///< LT
+        Stop,               ///< X, held stopHoldMs()
         WhereAmI,           ///< RS
         Walk,               ///< Menu: walk the show
         FireHit             ///< RB: fire the armed hit
@@ -181,6 +187,13 @@ public:
     /** Level from the triggers with LB held: 0..255 a second at full pull
      *  (half the range a second). */
     static constexpr float levelRate() { return 127.5f; }
+
+    /** How long X is held, with the arm, to stop the list, ms. */
+    static constexpr int stopHoldMs() { return 1000; }
+    /** The time the hold takes (tests shorten it). */
+    void setStopHoldMs(int ms);
+    /** X is held for a Stop that has not gone yet. */
+    bool isStopPending() const;
 
     /** The light bar while armed, and its flash when a GO went. Colour-blind
      *  safe with each other: orange and blue. */
@@ -266,15 +279,10 @@ public:
      *  armed or the show is in Design. */
     bool fireHit();
 
-    /** The cue lists the pad picks between: the current production's lists
-     *  (else every production's) that play -- not a Looks section or a
-     *  cue's sub-cues -- by their chaser, in order. */
-    QList<quint32> lists() const;
-    /** The list the commands go to, by its chaser; UINT_MAX: the main list
-     *  (as the footer GO). A list that has gone counts as the main one. */
+    /** The list the commands go to, by its chaser: the one the Run tab
+     *  plays (ControlMap::runTabList(), saved with the show); UINT_MAX: the
+     *  main list (as the footer GO), also for a list that has gone. */
     quint32 listChaser() const;
-    /** Pick the next (@p delta 1) or previous (-1) list, wrapping. */
-    void stepList(int delta);
     /** The list's name as the operator hears it. */
     QString listName(quint32 chaser) const;
     /** "Main. Next: cue 4." -- what RS says. */
@@ -345,7 +353,6 @@ public:
 signals:
     void enabledChanged(bool on);
     void armedChanged(bool armed);
-    void listChanged(quint32 chaser);
     /** A command went to run() (@p done: it did something). */
     void commandSent(ShowControl::Command command, bool done);
     /** A press that needs the arm came without it. */
@@ -375,6 +382,8 @@ private:
     void roleChordFired();
     /** Say @p text on the screen (notice()) for noticeMs(). */
     void showNotice(const QString &text);
+    /** X held long enough with the arm: the Stop goes. */
+    void stopHoldFired();
 
 private:
     Doc *m_doc;
@@ -382,14 +391,14 @@ private:
     bool m_enabled = false;
     /** The universes whose arm (LB) is held: arming is per pad. */
     QSet<quint32> m_armedOn;
-    /** The list picked (UINT_MAX: the main one). */
-    quint32 m_list = UINT_MAX;
+    /** X held for a Stop, and the pad it is held on. */
+    QTimer *m_stopHold = nullptr;
+    quint32 m_stopUniverse = UINT_MAX;
     /** The next hit a press takes among several at the narrowest place. */
     int m_hitStep = 0;
     QTimer *m_chord = nullptr;
     bool m_chordPending = false;    ///< both down, still timing
     bool m_chordFired = false;      ///< switched: the releases do nothing
-    ControllerScheme::TriggerButton m_rt, m_lt;
     TouchSwipe m_swipe;
     /** The light bar's flash after a GO. */
     QTimer *m_flash = nullptr;

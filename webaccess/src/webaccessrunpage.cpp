@@ -261,15 +261,23 @@ function statusList(){
    the remote's own Blind and Solo (a.cmd) on controls the Run role leaves free. */
 function padAction(r){return (st.pad||{})[r]}
 function padLabels(){var l={};for(var r in (st.pad||{}))l[r]=st.pad[r].label;QPad.labels(l)}
+var padHold=null;
+function padHoldEnd(){if(padHold){clearTimeout(padHold.t);padHold=null}}
 QPad.on({
   down:function(r){
     if(r==='start'){QPad.toggle(true);return}
     var a=padAction(r);if(!a)return;
     if(a.do==='arm'){$('armed').style.display='block';return}
     if(!QPad.down('lb')||!(a.remote?canRig():canSend()))return;
+    /* Held, not pressed (Stop, beside GO): the word once the hold is up,
+       with LB still held. */
+    if(a.hold){padHoldEnd();padHold={r:r,t:setTimeout(function(){padHold=null;
+      if(QPad.down('lb')&&QPad.down(r))cmd(a.cmd||a.do)},a.hold)};return}
     cmd(a.cmd||a.do);
     if(a.do==='go'&&navigator.vibrate)navigator.vibrate(30)},
-  up:function(r){var a=padAction(r);if(a&&a.do==='arm')$('armed').style.display='none'}});
+  up:function(r){var a=padAction(r);
+    if(a&&a.do==='arm'){$('armed').style.display='none';padHoldEnd()}
+    if(padHold&&padHold.r===r)padHoldEnd()}});
 $('testbtn').onclick=function(){QPad.toggle(true)};
 $('qpadclose').onclick=function(){QPad.toggle(false)};
 if(navigator.wakeLock){var hold=function(){navigator.wakeLock.request('screen').then(function(l){wake=l}).catch(function(){})};

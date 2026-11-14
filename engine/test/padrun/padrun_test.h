@@ -57,9 +57,14 @@ private slots:
     /** An Xbox pad and a DualSense in one controller slot, their buttons on
      *  other channels: the same presses send the same commands. */
     void xboxAndDualSenseSendTheSameCommands();
-    /** RT / LT pick the next / previous list (wrapping), and the commands
-     *  then go to its chaser; RS says the list and what is on standby. */
-    void theTriggersPickTheList();
+    /** The pad picks no list (0.4.5): RT / LT do nothing, armed or not;
+     *  the commands go to the Run tab's list (ControlMap::runTabList(),
+     *  saved with the show), else the main one; RS names it. */
+    void theListIsTheRunTabs();
+    /** Every button, trigger and stick, armed and not, pressed, held and
+     *  let go: the role stays Run (Pad: Run / ARMED / Walk); only View +
+     *  Menu held leaves it. */
+    void nothingOnThePadLeavesTheRunRole();
     /** The pad is told: the light bar orange while armed, blue on a GO,
      *  a short buzz on a GO and a long one when there was nothing to play. */
     void theLightBarAndRumble();
