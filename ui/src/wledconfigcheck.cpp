@@ -1110,13 +1110,21 @@ void WledConfigCheck::setUpNow(const QList<quint32> &fixtureIds)
                 noteWrite(ip, tr("%1 is set up the way this show drives it.").arg(name), false);
                 return;
             }
-            const QString changes = (drive.changes + own.changes).join(QStringLiteral("; "));
-            /* Set up for something else (taking a stream, another protocol,
-               universe or address): said, with what it was. */
-            const QString done = drive.changes.isEmpty()
-                ? tr("Set up %1 for this show: %2.").arg(name, changes)
-                : tr("Reconfigured %1: it %2. Now: %3.")
-                      .arg(name, drive.problems.join(QStringLiteral("; ")), changes);
+            /* evaluate() has Set Up's own findings too (its name, power-on):
+               what is left is how it was set up to be driven -- taking a
+               stream, another protocol, universe or address. */
+            QStringList changes = own.changes, was;
+            foreach (const QString &c, drive.changes)
+                if (!changes.contains(c))
+                    changes << c;
+            foreach (const QString &p, drive.problems)
+                if (!own.problems.contains(p))
+                    was << p;
+            const bool otherwise = changes.size() > own.changes.size();
+            const QString done = otherwise
+                ? tr("Reconfigured %1: it %2. Now: %3.")
+                      .arg(name, was.join(QStringLiteral("; ")), changes.join(QStringLiteral("; ")))
+                : tr("Set up %1 for this show: %2.").arg(name, changes.join(QStringLiteral("; ")));
             writeSetUp(ip, fix, done);
         });
     }
