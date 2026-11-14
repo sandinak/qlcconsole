@@ -14,6 +14,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed and fixed
 
+- **Show Review's power check counts palette colours.** PWR-01 now counts colour set through palettes (and a colour set to 0) when it estimates a circuit's draw, instead of treating it as full white, which overestimated the draw.
+
 - **Before the house opens: one page.** Show Review ▸ **Before the House Opens…** (also offered once a session when you go to Operate) shows, a line each, whether every universe reaches its node, the macOS Local Network permission, the show's controllers, Show Review's blockers, the footer's other not-ready entries, mains power, the screen staying awake, DMX off Wi-Fi, the rest of Settings ▸ Performance, and autosave. Each line has a symbol and a word (never colour alone), says what is wrong, and offers the app's own fix in one click. The channel check walks every light from the pad in Quick Focus, and the dress-rehearsal checklist is its help page. **Show Review's Fix ▸ on a cue deleted since the check** now says "That cue is gone" instead of doing nothing.
 - **Course for the show's new tools.** Lesson 2.5 gains a section on props in a hand (a staff in one cue and gone in a later one, Give Each a Prop, candles lit by the IR Candle Remote's Select with Dim and Brighten as presses); Lesson 3.5 names the **Hit ▸** line on Pad Run; Lesson 3.8's teacher guide gets a Before the House Opens and dress-rehearsal note; Level 3 student pages 3.1-3.4, 3.7 and 3.10 now show their pictures.
 

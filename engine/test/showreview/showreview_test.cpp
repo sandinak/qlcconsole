@@ -1008,6 +1008,60 @@ void ShowReview_Test::pwr01()
     QVERIFY(findings("PWR-01").first().targets.contains(QStringLiteral("circ:0.0")));
 }
 
+void ShowReview_Test::pwr01Palette()
+{
+    // A colour set through a palette draws what the same colour typed in does,
+    // not the white an unresolved colour would.
+    Fixture *a = par("Par 1", 0);
+    PowerProfile prof;                      // measured: each colour alone at full is 1 A
+    prof.colourAmps.insert(int(QLCChannel::Red), 1.0);
+    prof.colourAmps.insert(int(QLCChannel::Green), 1.0);
+    prof.colourAmps.insert(int(QLCChannel::Blue), 1.0);
+    a->setPowerProfile(prof);
+    PowerDistribution *pd = m_doc->powerDistribution();
+    PowerSource src;
+    src.name = "Distro";
+    src.voltage = 120;
+    PowerCircuit cir;
+    cir.name = "1";
+    cir.ratedAmps = 0.2;                    // tiny: any look on the par is over it
+    cir.deratePercent = 80;
+    src.circuits << cir;
+    pd->sources() << src;
+    pd->assignFixture(a->id(), 0, 0);
+
+    Scene *s = new Scene(m_doc);
+    s->setName("Look");
+    s->addFixture(a->id());
+    s->setValue(a->id(), 3, 255);           // dimmer up
+    m_doc->addFunction(s);
+    s->addPalette(colour(QColor(255, 0, 0))->id());
+    const QList<ReviewFinding> viaPalette = findings("PWR-01");
+    QCOMPARE(viaPalette.size(), 1);
+
+    Scene *typed = new Scene(m_doc);
+    typed->setName("Typed");
+    typed->setValue(a->id(), 0, 255);
+    typed->setValue(a->id(), 1, 0);
+    typed->setValue(a->id(), 2, 0);
+    typed->setValue(a->id(), 3, 255);
+    m_doc->addFunction(typed);
+    m_doc->deleteFunction(s->id());         // one look at a time
+    const QList<ReviewFinding> viaValues = findings("PWR-01");
+    QCOMPARE(viaValues.size(), 1);
+    QCOMPARE(viaPalette.first().fingerprint, viaValues.first().fingerprint);
+
+    Scene *white = new Scene(m_doc);
+    white->setName("White");
+    white->setValue(a->id(), 3, 255);       // colour unset: counts as white
+    m_doc->addFunction(white);
+    m_doc->deleteFunction(typed->id());
+    const QList<ReviewFinding> viaWhite = findings("PWR-01");
+    QCOMPARE(viaWhite.size(), 1);
+    QVERIFY2(viaWhite.first().fingerprint != viaPalette.first().fingerprint,
+             qPrintable(viaWhite.first().message + " | " + viaPalette.first().message + " | " + viaValues.first().message));
+}
+
 void ShowReview_Test::pwr03()
 {
     Fixture *a = dimmer("Lamp 1", 0);

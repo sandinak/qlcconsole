@@ -717,24 +717,35 @@ static void functionChannels(Doc *doc, Function *f, QHash<quint32, QHash<quint32
         if (it == cache.end())
         {
             QHash<quint32, uchar> ch;
-            // decided (can change): colour palettes aren't resolved (most of a
-            // run's time on a big show); an unresolved colour counts as white,
-            // the most it can draw (see pwr01()).
-            static const QSet<int> lit { int(QLCPalette::Dimmer) };
+            // Dimmer and colour palettes are resolved, so a colour set through
+            // a palette draws what the same colour typed in would; a colour
+            // nothing sets still counts as white, the most it can draw
+            // (see pwr01()). Aims, gobos and the like move no intensity.
+            static const QSet<int> lit { int(QLCPalette::Dimmer), int(QLCPalette::Color) };
             for (const SceneValue &sv : sceneValues(doc, scene, lit, &paletteCache))
             {
                 Fixture *fx = doc->fixture(sv.fxi);
                 if (fx == nullptr)
                     continue;
                 const quint32 key = fx->universe() * 512u + fx->address() + sv.channel;
-                if (uchar(sv.value) > ch.value(key, 0))
+                // An explicit 0 is kept: a colour set to nothing is not "unset"
+                // (which counts as white).
+                auto at = ch.find(key);
+                if (at == ch.end())
                     ch.insert(key, uchar(sv.value));
+                else if (uchar(sv.value) > at.value())
+                    at.value() = uchar(sv.value);
             }
             it = cache.insert(scene->id(), ch);
         }
         for (auto c = it.value().constBegin(); c != it.value().constEnd(); ++c)
-            if (c.value() > out.value(c.key(), 0))
+        {
+            auto at = out.find(c.key());
+            if (at == out.end())
                 out.insert(c.key(), c.value());
+            else if (c.value() > at.value())
+                at.value() = c.value();
+        }
     }
     else if (Collection *col = qobject_cast<Collection *>(f))
     {
@@ -800,7 +811,10 @@ static void pwr01(ReviewContext &ctx, QList<ReviewFinding> &out)
         QHash<quint32, uchar> channels;
         QSet<quint32> visited;
         functionChannels(doc, fn, sceneCache, paletteCache, channels, visited);
-        if (channels.isEmpty())
+        bool lit = false;
+        for (auto it = channels.constBegin(); it != channels.constEnd() && !lit; ++it)
+            lit = it.value() > 0;
+        if (!lit)
             continue;                           // lights nothing
         QSet<quint32> touched;
         for (auto it = channels.constBegin(); it != channels.constEnd(); ++it)
@@ -815,8 +829,8 @@ static void pwr01(ReviewContext &ctx, QList<ReviewFinding> &out)
         quint32 listId = 0, cueId = ShowTree::invalidId(), layerId = ShowTree::invalidId();
         if (scene && st->generatedNode(fn->id(), &listId, &cueId, &layerId) && layerId != ShowTree::invalidId())
             continue;
-        // A colour the scene doesn't set itself (a colour palette, not
-        // resolved here) counts as white: the most the look can draw.
+        // A colour the scene sets neither by value nor by a colour palette
+        // counts as white: the most the look can draw.
         const PowerEstimator::PreGMReader read = [&channels, &colourAt](quint32 uni, quint32 addr) -> uchar {
             const quint32 abs = uni * 512u + addr;
             auto it = channels.constFind(abs);

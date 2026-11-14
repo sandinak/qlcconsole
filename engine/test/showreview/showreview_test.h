@@ -63,6 +63,7 @@ private slots:
     void fix16Save();
     void fx07();
     void pwr01();
+    void pwr01Palette();
     void pwr03();
     void pwr05();
     void pwr06();
