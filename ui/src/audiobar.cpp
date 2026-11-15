@@ -27,6 +27,8 @@
 #include "vcspeeddial.h"
 #include "vccuelist.h"
 #include "virtualconsole.h"
+#include "genericfader.h"
+#include "function.h"
 
 AudioBar::AudioBar(int type, uchar value, quint32 parentId)
     : m_type(type)
@@ -173,6 +175,11 @@ void AudioBar::checkWidgetFunctionality()
 
     if (widget() == NULL) // fills m_widget if needed
         return;
+
+    /* Show only (R6-2): the music pressing a button, moving a slider or
+       stepping a cue list is automatic, not a hand or a GO -- whatever it
+       stamps takes the session the audio widget was armed in. */
+    GenericFader::StampScope automatic(Function::autoSourceEpoch(functionParent()));
 
     if (m_widget->type() == VCWidget::ButtonWidget)
     {
@@ -352,8 +359,8 @@ bool AudioBar::saveXML(QXmlStreamWriter *doc, QString tagName, int index)
 
 FunctionParent AudioBar::functionParent() const
 {
-    if (m_parentId != quint32(-1))
-        return FunctionParent(FunctionParent::AutoVCWidget, m_parentId);
-    else
-        return FunctionParent::master();
+    /* Always its widget's, never master(): an automatic widget's source,
+       the show only once the operator arms it (Show only, R6-1). A bar of
+       no widget yet is a widget never armed. */
+    return FunctionParent(FunctionParent::AutoVCWidget, m_parentId);
 }

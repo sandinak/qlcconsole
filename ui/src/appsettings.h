@@ -25,6 +25,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QDoubleSpinBox;
 class QSpinBox;
 class QLineEdit;
 class QLabel;
@@ -96,6 +97,8 @@ private:
     QCheckBox *m_scrollBarsCheck = nullptr;
     // Show controls: top bar or status bar (App::ShowControlsPlacement)
     QComboBox *m_showControlsCombo;
+    /** The double-GO guard's window, seconds (0: off); App::setGoGuardMs() */
+    QDoubleSpinBox *m_goGuardSpin = nullptr;
     QComboBox *m_scriptEditorCombo;
 
     // Show Tree: Record as new cue, when the choices differ

@@ -31,6 +31,9 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
                                              quint32 preselectUniverse, FixtureGroup *addToGroup,
                                              const Fixture *like, const QString &manufacturer)
 {
+    /* N2 (outputpatch.h, review 16 F2): one marking scope for Add N --
+       all Show only before a non-network output is held. */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(doc != nullptr ? doc->inputOutputMap() : nullptr);
     QList<quint32> created;
     AddFixture af(parent, doc);
     if (like != NULL)

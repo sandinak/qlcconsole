@@ -23,6 +23,7 @@
 #define VCXYPAD_H
 
 #include <QWidget>
+#include <atomic>
 #include <QPixmap>
 #include <QString>
 #include <QMutex>
@@ -200,6 +201,13 @@ signals:
     void fixturePositions(const QVariantList positions);
 
 private:
+    /** Show only: the live session it was last really moved in, and where */
+    std::atomic<quint32> m_liveEpoch { 0 };
+    QPointF m_stampedPosition;
+    /** Show only: a hand on a slider (actionTriggered) or a preset button
+     *  is what the next position change comes from */
+    bool m_sliderByHand = false;
+    bool m_presetByHand = false;
     bool m_padInteraction;
     bool m_sliderInteraction;
     bool m_inputValueChanged;

@@ -444,6 +444,49 @@ void pwr11(ReviewContext &ctx, QList<ReviewFinding> &out)
         }
     }
 }
+/* PWR-13: a laser that stands inside a no-light zone. PWR-11 follows what a
+   lit beam does; this one is the plot itself: the unit's own place (its
+   centre, RigHeads::fixtureCentre, the apex PWR-11 throws from) is in the
+   zone's box, edges included, so the laser sits where the zone says nothing
+   lit goes. Any zone kind that keeps lasers out (all light, beams, lasers).
+   Not cue-dependent. Move the zone or the unit. */
+void pwr13(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    Doc *doc = ctx.doc();
+    MonitorProperties *mp = doc->monitorProperties();
+    if (mp == nullptr || mp->noLightZones().isEmpty())
+        return;
+    const QList<NoLightZone> zones = mp->noLightZones();
+    QList<Fixture *> fixtures = doc->fixtures();
+    std::sort(fixtures.begin(), fixtures.end(),
+              [](const Fixture *a, const Fixture *b) { return a->id() < b->id(); });
+    for (Fixture *fx : fixtures)
+    {
+        if (fx == nullptr || fx->fixtureMode() == nullptr || !mp->containsFixture(fx->id()) || !isLaser(fx))
+            continue;
+        const QVector3D at = RigHeads::fixtureCentre(doc, fx->id());
+        for (const NoLightZone &z : zones)
+        {
+            if (!z.applies(true, 0.0) || !z.contains(at))
+                continue;
+            QByteArray print = QByteArray::number(z.id) + ':' + QByteArray::number(fx->id()) + ',';
+            print += QByteArray::number(qRound(z.x * 100)) + ',' + QByteArray::number(qRound(z.y * 100))
+                     + ',' + QByteArray::number(qRound(z.width * 100)) + ','
+                     + QByteArray::number(qRound(z.depth * 100)) + ','
+                     + QByteArray::number(qRound(z.floorZ * 100)) + ','
+                     + QByteArray::number(qRound(z.height * 100)) + ',' + QByteArray::number(z.kind)
+                     + ',' + QByteArray::number(qRound(at.x() * 100)) + ','
+                     + QByteArray::number(qRound(at.y() * 100)) + ',' + QByteArray::number(qRound(at.z() * 100));
+            out << ReviewContext::make(QStringLiteral("PWR-13"), ReviewFinding::Warning,
+                tr("%1 stands inside the no-light zone '%2' (%3, up to %4). Move the zone or the laser.")
+                    .arg(ctx.fixtureName(fx->id()), z.name, NoLightZone::kindLabel(z.kind).toLower(),
+                         MonitorProperties::formatStageDistance(float(z.floorZ + z.height))),
+                { QStringLiteral("fx:%1").arg(fx->id()), QStringLiteral("zone:%1").arg(z.id) },
+                print, QStringLiteral("plot"), QVariantList() << fx->id());
+        }
+    }
+}
+
 /* PWR-12, backwash: light on scenery kept for light on purpose (a cyc, a
    scrim: Scenery::lightOnPurposeOnly()) that nobody meant. Exact and
    reproducible from the show: a lit beam's sampled rays (LightRays::cone,
@@ -927,6 +970,10 @@ QList<ShowReview::Check> ShowReviewChecks::zoneChecks()
              "audience's eyes) that a lit beam's cone crosses in a cue. It is named once, in the "
              "first cue the beam starts to cross it. Aim the light off, darken it, or move the "
              "zone."), pwr11 },
+        { QStringLiteral("PWR-13"), tr("Laser inside a no-light zone"), S::Power,
+          tr("A laser whose place on the plot is inside a zone marked as dark (the band, the "
+             "orchestra pit, a camera). Whatever it throws starts in the zone. Show Me finds it "
+             "on the plot; move the zone or the laser."), pwr13 },
         { QStringLiteral("PWR-12"), tr("Light on the cyc nobody meant (backwash)"), S::Power,
           tr("Light that lands on a cyc or a scrim (or any scenery set to take light only on "
              "purpose) by accident: a front light or a special at a performer that carries on and "

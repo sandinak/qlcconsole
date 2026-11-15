@@ -74,6 +74,12 @@ private slots:
     void theAutosaveIsNotWrittenOverBeforeTheChoice();
     void aWebLoadThatIsNotAShowKeepsTheShow();
     void aWebLoadReplacesTheShowAndIsMarkedFromTheWeb();
+    /** crash-resume-cue: GOs in Operate leave the cue each list is on
+     *  beside the autosave; opening the show after a crash offers it, a
+     *  clean close (another show, New) leaves nothing to offer. */
+    void aCrashLeavesTheLiveCueACleanCloseDoesNot();
+    /** Last: quitting (~App) is a clean close too. Deletes the App. */
+    void quittingLeavesNothingToResume();
 
 private:
     App *m_app;

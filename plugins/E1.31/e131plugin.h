@@ -71,6 +71,9 @@ public:
     /** @reimp */
     int capabilities() const override;
 
+    /** @reimp Show-only fixtures may use it (N1) */
+    bool isNetworkDmxOutput() const override { return true; }
+
     /** @reimp */
     QString pluginInfo() const override;
 
@@ -86,6 +89,13 @@ public:
 
     /** @reimp */
     void closeOutput(quint32 output, quint32 universe) override;
+
+    /** @reimp Review 18: the universe leaves the controller too -- never
+     *  resent by the Standard-mode refresh -- the line stays for the others */
+    void forgetOutput(quint32 output, quint32 universe) override;
+
+    /** @reimp Review 19: a closing frame whose send failed is tried once more */
+    void flushOutput(quint32 output, quint32 universe) override;
 
     /** @reimp */
     QStringList outputs() override;

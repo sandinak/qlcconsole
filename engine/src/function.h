@@ -23,11 +23,13 @@
 
 #include <QWaitCondition>
 #include <atomic>
+#include <memory>
 #include "qlcengine_export.h"
 #include <QObject>
 #include <QString>
 #include <QMutex>
 #include <QList>
+#include <QVector>
 #include <QIcon>
 #include <QMap>
 
@@ -847,6 +849,48 @@ public:
      *  and chasers that started it: it plays to be looked at only. */
     bool startedOnlyByPreview() const;
 
+    /** Show only (Fixture::ShowOnly): true while what runs this function
+     *  is not the show -- every source a preview or an editor's Test
+     *  (FunctionParent::isNotTheShow()), or a function whose own gate is
+     *  true. Shared with every fader made while it runs
+     *  (GenericFader::holdsShowOnly()), so a preview's scene is kept off a
+     *  laser while the same scene from a GO drives it. Latched: once its
+     *  sources are gone (stopping, fading out) it stays as it was, so a
+     *  preview's fade-out never reaches a Show-only fixture. */
+    const std::shared_ptr<std::atomic<bool> > &previewGate() const { return m_previewGate; }
+    /** Show only: its stamp as the show (the latest stamp of a source that
+     *  counts in this session, GenericFader::stampEpoch()), 0 while held.
+     *  Shared with its faders: a fader counts on a Show-only channel only
+     *  while this is of the current session (S0) -- no refresh needed for
+     *  a new session to hold it. */
+    const std::shared_ptr<std::atomic<quint32> > &showStamp() const { return m_showStamp; }
+    /** Bring previewGate() up to date if any function's sources (or any
+     *  gate) changed since this one last looked; one atomic load
+     *  otherwise. No Doc lookup: what each source is was settled when it
+     *  was added (start()), a parent function's by its shared gate. The
+     *  MasterTimer thread, before each preRun()/write()/postRun(). */
+    void refreshPreviewGate();
+    /** Whether any fixture is Show only (OutputRuleKeeper): with none,
+     *  refreshPreviewGate() never walks the sources */
+    static void setShowOnlyInUse(bool inUse);
+    /** Operate starts: every source added before now (in Design) is not
+     *  the show for Show-only fixtures until a GO in Operate adds or
+     *  renews one (start() with a source it has renews it). Call
+     *  MasterTimer::refreshPreviewGates() after, before the universes go
+     *  live. */
+    static void startLiveSession();
+    /** E3: an automatic widget's source (FunctionParent::AutoVCWidget: an
+     *  audio trigger, a VC Clock) armed by the operator now, in Operate --
+     *  what it starts is the show in this session. Only this arms it:
+     *  never its own first start (R6-3). */
+    static void armAutoSource(const FunctionParent &source);
+    /** The session @p source was armed in; 0 (no session) when never */
+    static quint32 autoSourceEpoch(const FunctionParent &source);
+    /** Another show: no widget armed */
+    static void clearAutoSources();
+    /** Bumped whenever a source or a gate changes */
+    static quint32 sourcesGeneration();
+
     /** What started this function and keeps it running (a copy, under its
      *  lock): for "Why is this on?" (WhyOn), on demand. */
     QList<FunctionParent> sources() const;
@@ -871,6 +915,37 @@ private:
 
     QList<FunctionParent> m_sources;
     mutable QMutex m_sourcesMutex;
+
+    /** Show only, one per entry of m_sources (under m_sourcesMutex): the
+     *  source is not the show (a preview, an editor's Test), or it is the
+     *  function that started this one, whose gate it follows -- latching
+     *  that one's stamp into epoch whenever it is the show (S3) */
+    struct SourceGate
+    {
+        bool notTheShow = false;
+        std::shared_ptr<std::atomic<bool> > parentGate;
+        std::shared_ptr<std::atomic<quint32> > parentStamp;
+        /** The Operate session it was stamped in (GenericFader::stampEpoch()
+         *  when added; for a parent function's, latched from its gate): one
+         *  from before this session is not the show */
+        quint32 epoch = 0;
+    };
+    QVector<SourceGate> m_sourceGates;
+    /** What a source just added is (start()) */
+    SourceGate sourceGate(const FunctionParent &source) const;
+    /** previewGate() worked out from m_sourceGates and stored (under
+     *  m_sourcesMutex); with none left it keeps what it was (stopping).
+     *  True when it changed. */
+    bool storeGateLocked();
+
+    /** previewGate(); m_previewGateGen is the sources generation it was
+     *  worked out at (MasterTimer thread only) */
+    /* Held until worked out: start() works it out from the source it adds,
+       so nothing it plays -- not even a preview started and stopped inside
+       one tick -- is ever the show by default. */
+    std::shared_ptr<std::atomic<bool> > m_previewGate { std::make_shared<std::atomic<bool> >(true) };
+    std::shared_ptr<std::atomic<quint32> > m_showStamp { std::make_shared<std::atomic<quint32> >(0) };
+    quint32 m_previewGateGen = 0xFFFFFFFF;
 
     QMutex m_stopMutex;
     QWaitCondition m_functionStopped;

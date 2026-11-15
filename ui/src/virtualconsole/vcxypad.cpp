@@ -32,6 +32,7 @@
 #include <QPixmap>
 #include <QCursor>
 #include <QSlider>
+#include <QScopeGuard>
 #include <qmath.h>
 #include <QDebug>
 #include <QPoint>
@@ -52,6 +53,7 @@
 #include "scene.h"
 #include "efx.h"
 #include "doc.h"
+#include "genericfader.h"
 
 const quint8 VCXYPad::panInputSourceId = 0;
 const quint8 VCXYPad::tiltInputSourceId = 1;
@@ -151,6 +153,9 @@ VCXYPad::VCXYPad(QWidget* parent, Doc* doc) : VCWidget(parent, doc)
             this, SLOT(slotSliderValueChanged()));
     connect(m_hSlider, SIGNAL(valueChanged(int)),
             this, SLOT(slotSliderValueChanged()));
+    // Show only: a slider's action is a hand on it (a value set by code is not)
+    connect(m_hSlider, &QAbstractSlider::actionTriggered, this, [this](int) { m_sliderByHand = true; });
+    connect(m_vSlider, &QAbstractSlider::actionTriggered, this, [this](int) { m_sliderByHand = true; });
     connect(m_hRangeSlider, SIGNAL(positionsChanged(int,int)),
             this, SLOT(slotRangeValueChanged()));
     connect(m_vRangeSlider, SIGNAL(positionsChanged(int,int)),
@@ -413,6 +418,8 @@ void VCXYPad::writeXYFixtures(MasterTimer *timer, QList<Universe *> universes)
                 fader->adjustIntensity(intensity());
                 m_fadersMap[universe] = fader;
             }
+            // Show only: the pad's own stamp (S3), on whatever fader it writes.
+            fader->setLiveEpoch(m_liveEpoch.load(std::memory_order_relaxed));
             fixture.writeDMX(x, y, fader, universes[universe]);
         }
     }
@@ -453,6 +460,7 @@ void VCXYPad::writeScenePositions(MasterTimer *timer, QList<Universe *> universe
             fader->adjustIntensity(intensity());
             m_fadersMap[sc.m_universe] = fader;
         }
+        fader->setLiveEpoch(m_liveEpoch.load(std::memory_order_relaxed));
 
         if (sc.m_group == QLCChannel::Pan)
         {
@@ -487,6 +495,18 @@ void VCXYPad::slotPositionChanged(const QPointF& pt)
 {
     if (m_sliderInteraction == true)
         return;
+
+    /* Show only (S3): moved to a new place in Operate -- by a hand on the
+       pad, its input or a preset pressed -- it is the show from now on. A
+       position set by code (a load, a page change, a re-sync) is no move
+       (R7-8). */
+    if (mode() == Doc::Operate
+        && (m_area->movedByHand()       // a press re-stamps, even at the same point
+            || ((m_inputValueChanged || m_presetByHand) && pt != m_stampedPosition)))
+    {
+        m_stampedPosition = pt;
+        m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
+    }
 
     m_padInteraction = true;
     m_hSlider->setValue(pt.x());
@@ -533,6 +553,13 @@ void VCXYPad::slotSliderValueChanged()
         sendFeedback(Yfb, tiltInputSourceId);
     }
 
+    // Show only (S3): its sliders moved by a hand to a new place in Operate.
+    if (mode() == Doc::Operate && pt != m_stampedPosition && m_sliderByHand)
+    {
+        m_stampedPosition = pt;
+        m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
+    }
+    m_sliderByHand = false;
     m_area->setPosition(pt);
     m_area->update();
     m_sliderInteraction = false;
@@ -743,6 +770,10 @@ void VCXYPad::slotPresetClicked(bool checked)
     VCXYPadPreset *preset = m_presets[btn];
 
     Q_ASSERT(preset != NULL);
+
+    // Show only: a preset pressed is a hand on the pad.
+    m_presetByHand = true;
+    const auto byHandDone = qScopeGuard([this]() { m_presetByHand = false; });
 
     // stop any previously started EFX
     if (m_efx != NULL && m_efx->isRunning())

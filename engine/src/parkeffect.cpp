@@ -34,7 +34,7 @@ void ParkEffect::parkFixture(quint32 fixtureId, const QHash<quint32, uchar> &val
         return;
     }
     m_parked.insert(fixtureId, values);
-    rebuild();
+    rebuild(fixtureId);
 }
 
 void ParkEffect::unparkFixture(quint32 fixtureId)
@@ -66,7 +66,7 @@ bool ParkEffect::isEmpty() const
     return m_parked.isEmpty();
 }
 
-void ParkEffect::rebuild()
+void ParkEffect::rebuild(quint32 renewFixture)
 {
     QList<FixEntry> entries;
     QList<OutputLayer::Level> levels;
@@ -101,7 +101,9 @@ void ParkEffect::rebuild()
     }
 
     m_entries = entries;
-    m_layer.set(levels);
+    // Show only: the fixture just parked is set now (the show, in
+    // Operate); the others keep the session they were parked in.
+    m_layer.set(levels, [renewFixture](const OutputLayer::Level &l) { return l.fixtureId == renewFixture; });
 }
 
 bool ParkEffect::saveXML(QXmlStreamWriter *doc) const

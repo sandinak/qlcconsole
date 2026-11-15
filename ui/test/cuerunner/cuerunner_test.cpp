@@ -77,6 +77,11 @@
 #include "chaser.h"
 #include "doc.h"
 
+#include "cueresume.h"
+#include <QTemporaryDir>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include "cuerunner_test.h"
 
 using namespace ShowTree;
@@ -1594,6 +1599,451 @@ void CueRunner_Test::screenshots()
                            .arg(sizes.last().width()).arg(sizes.last().height())));
     m_doc->setMode(Doc::Design);
     console->hide();
+}
+
+/****************************************************************************
+ * Resume after a crash (crash-resume-cue)
+ ****************************************************************************/
+
+namespace
+{
+ShowControl::Request command(ShowControl::Command c, const QString &cue = QString())
+{
+    ShowControl::Request r;
+    r.command = c;
+    r.cue = cue;
+    return r;
+}
+
+QJsonObject readRecord(const QString &path)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return QJsonObject();
+    return QJsonDocument::fromJson(f.readAll()).object();
+}
+} // namespace
+
+void CueRunner_Test::crashedSession(const QString &path, const QString &showFile, int gos)
+{
+    show();
+    CueResume *resume = new CueResume(m_doc, path, m_doc);
+    resume->showOpened(showFile);
+    QVERIFY(!resume->hasOffer());
+    m_doc->setMode(Doc::Operate);
+    for (int i = 0; i < gos; ++i)
+    {
+        QVERIFY(m_doc->showControl()->run(command(ShowControl::Go), ShowControl::RouteRunTab));
+        settle(3);
+    }
+    QCoreApplication::processEvents();          // written once the GO is done
+    QVERIFY(QFile::exists(path));
+
+    // The show's file, as it is on disk.
+    QByteArray xml;
+    {
+        QBuffer buf(&xml);
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        m_doc->saveXML(&w);
+        w.writeEndDocument();
+    }
+
+    /* The crash: the Doc and its CueResume go, nothing is closed. (A crash
+       runs no destructor at all: the record is only ever removed by
+       showClosed() or dismiss(), which this does not call.) */
+    for (Function *f : m_doc->functions())
+        f->stop(FunctionParent::master());
+    settle(3);
+    delete m_doc;
+    QVERIFY(QFile::exists(path));
+
+    // A fresh start: the same show opened.
+    m_doc = new Doc(this);
+    QBuffer in(&xml);
+    in.open(QIODevice::ReadOnly);
+    QXmlStreamReader r(&in);
+    QVERIFY(r.readNextStartElement());
+    QVERIFY(m_doc->loadXML(r, false));
+    QCOMPARE(m_doc->mode(), Doc::Design);
+}
+
+void CueRunner_Test::theLiveCueIsKeptOncePerCommand()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath("resume-cue.json");
+    const QList<quint32> ids = show();
+    const quint32 song = ids.at(0);
+    CueResume *resume = new CueResume(m_doc, path, m_doc);
+    ShowControl *sc = m_doc->showControl();
+    Chaser *ch = sc->cueList(QString());
+    QVERIFY(ch != nullptr);
+
+    // A show with no file of its own: nothing to find it by, nothing kept.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(sc->run(command(ShowControl::Go), ShowControl::RouteRunTab));
+    settle(3);
+    QCoreApplication::processEvents();
+    QCOMPARE(resume->writes(), 0);
+    QVERIFY(!QFile::exists(path));
+    QVERIFY(sc->run(command(ShowControl::Stop), ShowControl::RouteRunTab));
+    settle(3);
+
+    // Design: GO plays (Q92), but the show isn't running: nothing kept.
+    resume->showOpened(tmp.filePath("Show.qlcc"));
+    m_doc->setMode(Doc::Design);
+    QVERIFY(sc->run(command(ShowControl::Go), ShowControl::RouteRunTab));
+    settle(3);
+    QCoreApplication::processEvents();
+    QCOMPARE(resume->writes(), 0);
+    QVERIFY(sc->run(command(ShowControl::Stop), ShowControl::RouteRunTab));
+    settle(3);
+    QCoreApplication::processEvents();
+    QCOMPARE(resume->writes(), 0);
+
+    // Operate: one write per GO, after it acted.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(sc->run(command(ShowControl::Go), ShowControl::RouteRunTab));
+    QCoreApplication::processEvents();
+    QCOMPARE(resume->writes(), 1);
+    settle(3);
+    QVERIFY(sc->run(command(ShowControl::Go), ShowControl::RouteRunTab));
+    QCoreApplication::processEvents();
+    QCOMPARE(resume->writes(), 2);
+    QJsonObject rec = readRecord(path);
+    QCOMPARE(rec.value("show").toString(), QDir::cleanPath(QFileInfo(tmp.filePath("Show.qlcc")).absoluteFilePath()));
+    QJsonArray lists = rec.value("lists").toArray();
+    QCOMPARE(lists.count(), 1);
+    QCOMPARE(lists.at(0).toObject().value("number").toString(), QString("2"));
+    QCOMPARE(lists.at(0).toObject().value("listName").toString(), QString("Song"));
+    QCOMPARE(quint32(lists.at(0).toObject().value("list").toInteger()), song);
+    QCOMPARE(quint32(lists.at(0).toObject().value("cue").toInteger()), ids.at(2));
+
+    // The cost is per command, never per frame: a few seconds of frames,
+    // the fade and the cue playing, write nothing.
+    settle(200);
+    QCoreApplication::processEvents();
+    QCOMPARE(resume->writes(), 2);
+    // Neither do a Sub GO, a Pause or a LOAD: the cue each list is on is the same.
+    QVERIFY(sc->run(command(ShowControl::SubGo), ShowControl::RouteRunTab));
+    QVERIFY(sc->run(command(ShowControl::Load, "3"), ShowControl::RouteRunTab));
+    settle(3);
+    QCoreApplication::processEvents();
+    QCOMPARE(resume->writes(), 2);
+
+    // Back: the cue before.
+    QVERIFY(sc->run(command(ShowControl::Back), ShowControl::RouteRunTab));
+    QCoreApplication::processEvents();
+    QCOMPARE(resume->writes(), 3);
+    QCOMPARE(readRecord(path).value("lists").toArray().at(0).toObject().value("number").toString(),
+             QString("1"));
+    settle(3);
+
+    // Stop: the list is on no cue; with none on any, nothing to resume.
+    QVERIFY(sc->run(command(ShowControl::Stop), ShowControl::RouteRunTab));
+    QCoreApplication::processEvents();
+    QCOMPARE(resume->writes(), 4);
+    QVERIFY(!QFile::exists(path));
+    QVERIFY(resume->current().isEmpty());
+
+    // All Off the same.
+    QVERIFY(sc->run(command(ShowControl::Go), ShowControl::RouteRunTab));
+    QCoreApplication::processEvents();
+    QVERIFY(QFile::exists(path));
+    QVERIFY(sc->run(command(ShowControl::AllOff), ShowControl::RouteRunTab));
+    QCoreApplication::processEvents();
+    QVERIFY(!QFile::exists(path));
+    m_doc->setMode(Doc::Design);
+}
+
+void CueRunner_Test::afterACrashTheRunTabOffersTheCueAsStandby()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath("resume-cue.json");
+    const QString showFile = tmp.filePath("Show.qlcc");
+    crashedSession(path, showFile, 2);         // at cue 2 when it crashed
+    if (QTest::currentTestFailed())
+        return;
+
+    ShowControl *sc = m_doc->showControl();
+    Chaser *ch = sc->cueList(QString());
+    QVERIFY(ch != nullptr);
+    CueResume *resume = new CueResume(m_doc, path, m_doc);
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.resize(1024, 700);
+
+    // Another show opened: nothing offered for it.
+    resume->showOpened(tmp.filePath("Other.qlcc"));
+    QVERIFY(!resume->hasOffer());
+    // This one: offered -- but not in Design, where the app opens.
+    resume->showOpened(showFile);
+    QVERIFY(resume->hasOffer());
+    runner.refresh();
+    QVERIFY(!resume->offerShown());
+    QVERIFY(!runner.isResumeOfferShown());
+
+    m_doc->setMode(Doc::Operate);
+    runner.refresh();
+    QVERIFY(runner.isResumeOfferShown());
+    QCOMPARE(runner.resumeOfferText(), QString("The show was at cue 2 (Song) when it stopped. Load it?"));
+    QVERIFY(!runner.resumeLoadButton()->isHidden());
+    QCOMPARE(runner.resumeLoadButton()->text(), QString("Load as Standby"));
+    QCOMPARE(runner.resumeLoadButton()->focusPolicy(), Qt::NoFocus);    // Space stays GO
+
+    // Nothing played by itself: the stage is as the start left it.
+    QVERIFY(!ch->isRunning());
+    const QHash<quint32, uchar> before = settle(5);
+
+    // Load as Standby: a LOAD through the one run path, and nothing else.
+    QList<ShowControl::Command> ran;
+    sc->setRunHandler([sc, &ran](const ShowControl::Request &r, ShowControl::Route) {
+        ran << r.command;
+        return sc->execute(r);
+    });
+    auto unhook = qScopeGuard([sc]() { sc->setRunHandler(ShowControl::RunHandler()); });
+    QSignalSpy taken(sc, &ShowControl::cueTaken);
+    QSignalSpy stage(sc, &ShowControl::aboutToTakeStage);
+    runner.resumeLoadButton()->click();
+    QCOMPARE(ran, QList<ShowControl::Command>({ ShowControl::Load }));
+    QCOMPARE(taken.count(), 0);
+    QCOMPARE(stage.count(), 0);
+    QVERIFY(!runner.isResumeOfferShown());
+    QVERIFY(!resume->hasOffer());
+    QCOMPARE(sc->loadedStep(ch->id()), 1);
+    QCOMPARE(sc->loadedSubCue(ch->id()), -1);
+    // Cue 2 on standby: GO into it plays its first sub-cue, as from the top.
+    QVERIFY2(runner.nextText().startsWith("▷ STANDBY 2.1 Hit"), qPrintable(runner.nextText()));
+    // Still nothing on stage.
+    QCOMPARE(settle(10), before);
+    QVERIFY(!ch->isRunning());
+    // The record stays until the next GO: a second crash now offers it again.
+    QVERIFY(QFile::exists(path));
+
+    // The next GO plays it.
+    runner.go();
+    settle();
+    QVERIFY(ch->isRunning());
+    QCOMPARE(ch->currentStepIndex(), 1);
+    QVERIFY(settle(3) != before);
+    QCOMPARE(ran.last(), ShowControl::Go);
+    QCoreApplication::processEvents();
+    QCOMPARE(readRecord(path).value("lists").toArray().at(0).toObject().value("number").toString(),
+             QString("2"));
+    m_doc->setMode(Doc::Design);
+}
+
+void CueRunner_Test::dismissForgetsTheOffer()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath("resume-cue.json");
+    const QString showFile = tmp.filePath("Show.qlcc");
+    crashedSession(path, showFile, 3);
+    if (QTest::currentTestFailed())
+        return;
+
+    CueResume *resume = new CueResume(m_doc, path, m_doc);
+    resume->showOpened(showFile);
+    m_doc->setMode(Doc::Operate);
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.refresh();
+    QCOMPARE(runner.resumeOfferText(), QString("The show was at cue 3 (Song) when it stopped. Load it?"));
+    runner.resumeDismissButton()->click();
+    QVERIFY(!runner.isResumeOfferShown());
+    QVERIFY(!resume->hasOffer());
+    QVERIFY(!QFile::exists(path));
+    QCOMPARE(m_doc->showControl()->loadedStep(m_doc->showControl()->cueList(QString())->id()), -1);
+
+    // The next start: nothing.
+    CueResume again(m_doc, path);
+    again.showOpened(showFile);
+    QVERIFY(!again.hasOffer());
+    m_doc->setMode(Doc::Design);
+}
+
+void CueRunner_Test::aCleanCloseOffersNothing()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath("resume-cue.json");
+    const QString showFile = tmp.filePath("Show.qlcc");
+    show();
+    CueResume *resume = new CueResume(m_doc, path, m_doc);
+    resume->showOpened(showFile);
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(m_doc->showControl()->run(command(ShowControl::Go), ShowControl::RouteRunTab));
+    QCoreApplication::processEvents();
+    QVERIFY(QFile::exists(path));
+
+    // The show closed cleanly (App::clearDocument(), ~App): the record goes.
+    m_doc->setMode(Doc::Design);
+    resume->showClosed();
+    QVERIFY(!QFile::exists(path));
+
+    CueResume next(m_doc, path);
+    next.showOpened(showFile);
+    QVERIFY(!next.hasOffer());
+    QVERIFY(next.offerText().isEmpty());
+
+    // A record left for another show is not this session's to remove.
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(QJsonDocument(QJsonObject{ { "version", 1 }, { "show", tmp.filePath("Other.qlcc") },
+                                           { "lists", QJsonArray{ QJsonObject{ { "chaser", 1 },
+                                                                               { "number", "1" },
+                                                                               { "listName", "Song" } } } } })
+                    .toJson());
+    }
+    CueResume third(m_doc, path);
+    third.showOpened(showFile);
+    QVERIFY(!third.hasOffer());
+    third.showClosed();
+    QVERIFY(QFile::exists(path));
+}
+
+void CueRunner_Test::aDeletedCueIsSaidNotLoaded()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath("resume-cue.json");
+    const QString showFile = tmp.filePath("Show.qlcc");
+    crashedSession(path, showFile, 2);         // at cue 2 "Two"
+    if (QTest::currentTestFailed())
+        return;
+
+    // Cue 2 deleted since (an older copy of the show, an edit): cue 3 is
+    // cue 2 by position now, and is not the cue the show was at.
+    ShowTreeController *st = m_doc->showTree();
+    ShowControl *sc = m_doc->showControl();
+    Chaser *ch = sc->cueList(QString());
+    QVERIFY(ch != nullptr);
+    QJsonObject rec = readRecord(path);
+    const quint32 two = quint32(rec.value("lists").toArray().at(0).toObject().value("cue").toInteger());
+    const quint32 listId = quint32(rec.value("lists").toArray().at(0).toObject().value("list").toInteger());
+    QVERIFY(st->removeCue(two));
+    QVERIFY(st->renumberLevel(st->cueOfStep(listId, 0)));     // "Three" is 2 now
+    ch = sc->cueList(QString());
+    QVERIFY(ch != nullptr);
+    QCOMPARE(ch->stepCue(1), QString("2"));
+
+    CueResume *resume = new CueResume(m_doc, path, m_doc);
+    resume->showOpened(showFile);
+    m_doc->setMode(Doc::Operate);
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.refresh();
+    QVERIFY(runner.isResumeOfferShown());
+    QCOMPARE(runner.resumeOfferText(),
+             QString("The show was at cue 2 (Song) when it stopped, but that cue is no longer in the show: "
+                     "nothing to load."));
+    QVERIFY(runner.resumeLoadButton()->isHidden());
+    QCOMPARE(resume->loadableCount(), 0);
+    QCOMPARE(resume->accept(), 0);
+    QCOMPARE(sc->loadedStep(ch->id()), -1);
+    QVERIFY(!ch->isRunning());
+    m_doc->setMode(Doc::Design);
+}
+
+void CueRunner_Test::aGoOvertakesTheOffer()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath("resume-cue.json");
+    const QString showFile = tmp.filePath("Show.qlcc");
+    crashedSession(path, showFile, 3);
+    if (QTest::currentTestFailed())
+        return;
+
+    CueResume *resume = new CueResume(m_doc, path, m_doc);
+    resume->showOpened(showFile);
+    m_doc->setMode(Doc::Operate);
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.refresh();
+    QVERIFY(runner.isResumeOfferShown());
+    // The operator starts from the top instead: the offer would undo that.
+    runner.go();
+    settle(3);
+    runner.refresh();
+    QVERIFY(!runner.isResumeOfferShown());
+    QVERIFY(!resume->hasOffer());
+    QCoreApplication::processEvents();
+    QCOMPARE(readRecord(path).value("lists").toArray().at(0).toObject().value("number").toString(),
+             QString("1"));
+    m_doc->setMode(Doc::Design);
+}
+
+void CueRunner_Test::resumeOfferShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath("resume-cue.json");
+    const QString showFile = tmp.filePath("Show.qlcc");
+    crashedSession(path, showFile, 2);
+    if (QTest::currentTestFailed())
+        return;
+    QByteArray record;
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        record = f.readAll();
+    }
+
+    const QFont appFont = QApplication::font();
+    auto restoreFont = qScopeGuard([appFont]() { QApplication::setFont(appFont); });
+    QFont mac = appFont;
+    mac.setPointSize(13);
+    QApplication::setFont(mac);
+
+    const QList<QSize> sizes { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) };
+    CueResume *resume = new CueResume(m_doc, path, m_doc);
+    m_doc->setMode(Doc::Operate);
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&runner));
+    auto shoot = [&](const QString &tag, const QList<QSize> &at) {
+        for (const QSize &sz : at)
+        {
+            runner.resize(sz);
+            runner.refresh();
+            QTest::qWait(50);
+            QVERIFY(runner.grab().save(QStringLiteral("%1/%2-%3x%4.png").arg(dir, tag)
+                                       .arg(sz.width()).arg(sz.height())));
+        }
+    };
+    // Before: the show opened again after the crash, nothing offered (0.4.7).
+    shoot(QStringLiteral("before-runtab"), sizes);
+    resume->showOpened(showFile);
+    QVERIFY(resume->offerShown());
+    shoot(QStringLiteral("after-runtab-offer"), sizes);
+    // Load as Standby: the cue waits on standby, nothing plays.
+    runner.resumeLoadButton()->click();
+    shoot(QStringLiteral("after-runtab-loaded"), { sizes.at(1) });
+    m_doc->showControl()->moveLoaded(m_doc->showControl()->cueList(QString())->id(), -1);
+
+    // A cue deleted since: said, nothing to load.
+    delete resume;
+    m_doc->setMode(Doc::Design);
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(record);
+    }
+    const QJsonObject rec = QJsonDocument::fromJson(record).object();
+    QVERIFY(m_doc->showTree()->removeCue(
+        quint32(rec.value("lists").toArray().at(0).toObject().value("cue").toInteger())));
+    resume = new CueResume(m_doc, path, m_doc);
+    resume->showOpened(showFile);
+    m_doc->setMode(Doc::Operate);
+    shoot(QStringLiteral("after-runtab-cue-gone"), { sizes.at(1) });
+    runner.hide();
+    m_doc->setMode(Doc::Design);
 }
 
 QTEST_MAIN(CueRunner_Test)

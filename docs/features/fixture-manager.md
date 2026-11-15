@@ -788,11 +788,13 @@ drop-in for the new one).
 Some of a rig's "dimmers" are not lights in the show: the power relays
 that feed the movers, the house, work and hall lights, backstage blues.
 An Eos show patches them as plain dimmers; here they must not go out with
-Blackout or the Grand Master, and a relay must switch, not fade.
+Blackout or the Grand Master, and a relay must switch, not fade. Others
+must fire only in the show: lasers, foggers, flame relays, a curtain on
+DMX.
 
 Select fixtures (or a group — every member) and right-click →
 **Output Rules…**. The same item is on a group or fixture in Build's
-*Groups & fixtures* and in the Show Tree's Library. Four rules, any
+*Groups & fixtures* and in the Show Tree's Library. Five rules, any
 together:
 
 | Rule | What it does |
@@ -801,6 +803,159 @@ together:
 | **Ignore the Grand Master** | The Grand Master does not dim it. |
 | **Switch (relay)** | On at 50% and over, off below — never in between, never faded (a fade-in switches at once). The Grand Master cannot switch it off, and the power limiter never scales it. |
 | **On when not in use** | At full whenever nothing in the show sets it. Anything that sets it — a cue, a slider, even to zero — wins; when that lets go, it is back at full. |
+| **Show only** | Only a real run of the show drives it: a GO in **Operate**. Everywhere else it stays at its safe value — off, closed — while the plot still draws what it would do. |
+
+**Show only**, in full. Building looks must never fire a laser, a fogger
+or a flame relay. One rule decides it: **in Operate, a Show-only fixture
+answers only to what was started, set or moved since Operate began** (and,
+after an emergency stop, since the stop; after opening a show, since it
+opened — over the web while in Operate too). So:
+
+- **Held** (its output stays safe): everything in **Design** — the Show
+  Tree's preview, **Solo**, the Workbench, a GO from the Run tab while you
+  try a list out, effect previews, the Simple Desk — and **Blind** in
+  either mode. In Operate the things that are not the show stay off it
+  too: the Workbench (its **Play Live** too: a preview), **Locate** (greyed for it, as for a laser),
+  Highlight, the programmer's flash, focus calls, **Quick Focus** and
+  **Venue Focus**, Refine, a fixture test, a power measurement, editors'
+  Test buttons (and the Show editor's Play, and what a Script under one
+  starts) and the Scene editor's own output.
+- **What counts as the show** in Operate: a GO from anywhere (the Run tab,
+  the pad, the phone, QLab, a Stream Deck, the Show Tree, a VC cue list or
+  a VC step button, the Show tab's Play), the cue's hits and effects; and,
+  set or moved in Operate, a **Simple Desk** channel (your own hand on it,
+  which is how you test a fogger before doors), a **Park**, a **Mark** or
+  a Simple Desk **cue stack**. Not GOs, but the show too: VC buttons,
+  sliders, the XY pad, a VC button's flash, a Control Map MIDI or OSC
+  binding and the web page's function command — moved or pressed by you:
+  a position or level the console sets itself (loading the show, a page
+  change) is no move.
+- **Control surfaces**: a motor fader's echo and an OSC surface re-sending
+  its page send the value a fader already has — that is not a move, and
+  drives nothing new.
+- **One rule, every frame.** In Operate each Show-only channel is worked
+  out from scratch every frame: it starts at its safe value, and only what
+  counts now — started, set or moved in this session, after the fixture
+  was patched where it is — is put on it. Nothing else adds anything, and
+  nothing that stopped counting stays behind.
+- **Automatic widgets wait to be armed.** Audio triggers and a VC Clock's
+  schedule drive a Show-only fixture only once **you** have worked them in
+  Operate: switched audio triggers on (a click, a key, an input, the web),
+  touched the clock or played or reset it (a click, a key, MIDI/OSC, the
+  web). Never their own first peak or schedule: a show opened straight
+  into Operate has them all unarmed. What an audio bar does to a VC
+  button, slider or cue list is the audio widget's, not a hand's or a GO's
+  — armed or held with it.
+- **Timecode** starts a Show (and, at a freeze, its section's linked cue
+  list) that drives Show-only fixtures only if you armed **Follow timecode**
+  in Operate. Saved on with the show, or switched on in Design, it plays
+  them held: switch Follow off and on again in Operate to arm it. The same
+  for a Show Tree cue list set to **Follow timecode**: its timecode GOs
+  drive Show-only fixtures only once you switch Follow on (or touch it) in
+  Operate. All Off disarms both.
+- **Input passthrough** (a house desk merged into a universe) never
+  reaches a Show-only channel.
+- **Cues left running from Design hold Show-only fixtures until a GO in
+  Operate.** A list you tried out in Design and left running keeps them
+  safe after the switch until you GO on it (a GO on a running list makes it
+  the show without restarting it). A Park, Mark or cue stack set in Design,
+  or a VC slider or Simple Desk channel left up from Design, holds them
+  until you set or move it again in Operate; parking another fixture does
+  not wake it. A Park or Mark saved with the show is held when it opens,
+  until you set it again.
+- **A cue a Script started** keeps driving after the Script ends, for as
+  long as the session lasts. A VC playback slider that restarts its cue by
+  itself after a stop is held until you move it again.
+- **When a cue lets go**, its Show-only fixtures go to safe at once: they
+  never fade out of a cue (a stopped cue is no longer the show), and no
+  channel keeps the cue's level — a fogger's fog channel included.
+- **Blind**: a GO in Blind is checked on screen; GO again after Blind to
+  fire it. Leaving Blind in Operate starts afresh, as switching to Operate
+  does. Going into Blind, the rig keeps the look from before it (as in
+  QLC+) except the Show-only fixtures, which are sent to safe first; **All
+  Off** and **Blackout** still reach the rig while in Blind.
+- **Every send, not just the frame**: Blackout on and off, Blind on and
+  off, All Off, Identify and any other output a plugin sends between two
+  frames put a Show-only fixture at the same value the frame does — safe,
+  or what the show's GO gives it. A preview never shows through, not even
+  for an instant.
+- **Moving, holding or unpatching an output** sends its Show-only fixtures
+  safe first: an output re-patched to another line, aimed at another node
+  or universe, held (Teaching mode, an interface off the rig network),
+  unpatched, or its universe removed gets one last frame with them at safe
+  before it stops — and it reaches the device, a USB interface or a WLED
+  too — so a node that keeps its last frame never keeps a laser on. In
+  Blind that frame has the rest of the rig as it was before Blind, never the
+  preview. A held output comes back with what the show gives them now.
+- **Show-only fixtures need a network output** in this version: Art-Net,
+  sACN (E1.31) or WLED, aimed anywhere. A universe with one can't be patched to anything else (USB, MIDI, Loopback,
+  OSC…), refused saying why, and one already there is held, its last frame
+  sending the Show-only channels safe — because such an interface can be
+  unplugged, swapped or rescanned and come back as another device. While it
+  is held, its interface is kept for its lasers: every other universe on
+  it is held too, and nothing else opens on it (remove that output to free
+  it). Take the rule off and they all come back as before.
+- **Sharing an address**: a fixture patched over a Show-only one cannot
+  turn it on — **On when not in use** and **Ignore Blackout** do nothing on
+  the shared channels. The Grand Master never scales a safe value (a gobo
+  wheel's "open"), held or live.
+- **Patched or moved mid-show** (by any number of channels, or its mode
+  changed): whatever was driving the addresses it lands on — a cue stack, a
+  fader, a Simple Desk channel, an effect, even its own GO from before the
+  move — does not drive it there until you move or GO it again.
+- **A last look** never holds a Show-only fixture.
+- **Its safe value**: every intensity channel at 0 (a relay open, a laser
+  or flame off); a laser's, fogger's, hazer's or plain dimmer's every
+  channel at 0; anything else at its default (a gobo or colour wheel open).
+  It is also what the channel goes back to when nothing drives it — never
+  its definition's default (a laser's control mode).
+- **Switching** to Operate starts it from safe: nothing a Design preview
+  left on it comes out (nor when you give it the rule while in Operate).
+  Back to Design, it is safe again at once.
+- **Blackout always wins**: it puts a Show-only fixture at its safe value,
+  even one marked Ignore Blackout. Ticking **Show only** unticks and greys
+  **Ignore Blackout** in the dialog, and says why.
+- **The emergency stop** (the pad's, the phone's or the laptop's **All
+  Off**) cuts every Show-only fixture to its safe value at once, with no
+  fade, and starts afresh, as switching to Operate does: **nothing from
+  before the stop comes back**. A GO drives what it starts; a control
+  drives once you move it again; an audio trigger or VC Clock once you
+  switch it on or touch it again; timecode once you arm Follow again. A GO
+  on another list does not bring back a fade-out, a stored level, a last
+  look, a Park or a fader left up from before the stop. The Simple Desk lets go of the Show-only channels you
+  had not moved since. The footer says **… held: emergency stop -- a GO or
+  a control you move drives them again** until the next GO (what that GO
+  does not drive stays held) or the next switch of mode.
+  Other lights stop as All Off always stopped them. Opening another show
+  clears it.
+- **With On when not in use**, Show only wins: nothing turns a laser or a
+  flame on just because nothing else is using it.
+- **The VC step button** in Operate steps only the show: the most recent
+  list playing as the show — never a preview, an editor's Test or the
+  Workbench — and a list inside another as that list (a chaser on a Show's
+  timeline steps itself, as part of its Show). With none, it says so and
+  does nothing. A VC cue list's crossfader is a GO on a list already
+  running (it never starts one), and its step and cue changes are held by
+  the double-GO guard as any GO is.
+- **Move-in-black** never pre-sets a Show-only fixture: a laser's mode
+  channel may be what turns it on.
+- **Identify and Reset** (the plot's and Fixture Properties' DMX Controls,
+  the Fixtures tab's Reset) are refused for a Show-only fixture — and for
+  any fixture patched over its addresses — in Design and Operate, as
+  Locate is: greyed, saying why.
+- **A Show-only fixture moved or patched mid-show** is held at its new
+  address at once; a Simple Desk channel moved there for what was patched
+  before holds it until you move that fader again.
+- **A reset** (a universe cleared, a Simple Desk channel let go) leaves a
+  Show-only channel at its safe value.
+- **You can see it**: while it is held the footer says so in amber —
+  **Lasers held: Design**, **Fog held: Blind**, **Flame L held: Design**,
+  **3 Show-only fixtures held: Design** (click it for their Output Rules)
+  — and the plot gives each an amber dashed outline and a pause badge
+  beside its left edge, still drawing what it would do.
+
+Teaching mode, which holds the network output, still holds it: a teaching
+show fires nothing, Show only or not.
 
 When **On when not in use** fixtures come on is the show's setting, in
 **Settings ▸ Advanced ▸ Output (saved with this show)**: **When you switch
@@ -817,13 +972,23 @@ all. **⌘Z** undoes the change (one rig undo step).
 A fixture with rules has a small amber lightning badge on its icon in the
 Fixture Manager, Build and the Library; hover it for the rules in words.
 
-Which channels: *Ignore Blackout* and *Ignore the Grand Master* cover all
-of the fixture's channels (Blackout already keeps the non-intensity ones;
-this keeps the intensity ones too). *Switch* and *On when not in use*
-cover its intensity channels — all of them if it has none.
+Which channels: *Ignore Blackout*, *Ignore the Grand Master* and *Show
+only* cover all of the fixture's channels (Blackout already keeps the
+non-intensity ones; this keeps the intensity ones too). *Switch* and *On
+when not in use* cover its intensity channels — all of them if it has
+none.
 
 The rules are saved with the fixture, only when it has any, so a show
 without them is unchanged; QLC+ and older qlcconsole builds skip them.
+
+**Known limit:** the Show-only rule checks the kind of output, not where
+it is aimed or what happens to it after. An Art-Net, sACN or WLED output
+can be aimed at this computer — fine for a visualiser. But a universe
+passed through to another (input passthrough), or received on this
+computer by a Loopback or another program that sends it on to a USB
+output, can still reach a laser that way, and nothing checks that chain.
+Don't route a Show-only universe's channels through a passthrough or
+Loopback chain to a USB interface.
 
 ## Context menu
 

@@ -148,6 +148,8 @@ VCAudioTriggers::VCAudioTriggers(QWidget* parent, Doc* doc)
 
 VCAudioTriggers::~VCAudioTriggers()
 {
+    // Registered in Operate (slotModeChanged()): never ticked once gone.
+    m_doc->masterTimer()->unregisterDMXSource(this);
     QSharedPointer<AudioCapture> capture(m_doc->audioInputCapture());
 
     if (m_inputCapture == capture.data())
@@ -240,6 +242,10 @@ void VCAudioTriggers::toggleEnableButton(bool toggle)
     if (mode() == Doc::Design)
         return;
 
+    // Switched on from the web or an input, already on: an operator action
+    // all the same (the button's toggled() does not fire).
+    if (toggle && m_button && m_button->isChecked())
+        armForShow();
     if (m_button)
         m_button->setChecked(toggle);
 }
@@ -249,8 +255,42 @@ void VCAudioTriggers::slotEnableButtonToggled(bool toggle)
     if (mode() == Doc::Design)
         return;
 
+    if (toggle)
+        armForShow();
     enableCapture(toggle);
     updateFeedback();
+}
+
+void VCAudioTriggers::armForShow()
+{
+    /* Show only (S3, E3): switched on by the operator in Operate -- by a
+       click, a key, an input or the web -- its function bars, its DMX bars
+       and the widgets its bars drive are the show in this session. Only
+       this arms it: never its own first start. */
+    if (mode() != Doc::Operate)
+        return;
+    syncBarParents();
+    m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
+    Function::armAutoSource(FunctionParent(FunctionParent::AutoVCWidget, id()));
+}
+
+void VCAudioTriggers::setID(quint32 id)
+{
+    VCWidget::setID(id);
+    syncBarParents();
+}
+
+void VCAudioTriggers::syncBarParents()
+{
+    /* R6-1: the bars are made before the widget has an id (the constructor,
+       loadXML()'s bar count before loadXMLCommon()): every bar starts its
+       functions as this widget, never as master() -- the source Show only
+       arms (armForShow()). */
+    if (m_volumeBar != nullptr)
+        m_volumeBar->setParentId(id());
+    for (AudioBar *sb : std::as_const(m_spectrumBars))
+        if (sb != nullptr)
+            sb->setParentId(id());
 }
 
 void VCAudioTriggers::slotDisplaySpectrum(double *spectrumBands, int size,
@@ -323,6 +363,7 @@ void VCAudioTriggers::writeDMX(MasterTimer *timer, QList<Universe *> universes)
                 }
                 lastUniverse = universe;
                 fader->setEnabled(m_button->isChecked() ? true : false);
+                fader->setLiveEpoch(m_liveEpoch.load(std::memory_order_relaxed));
             }
 
             GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[universe], Fixture::invalidId(), absAddress);           
@@ -351,6 +392,7 @@ void VCAudioTriggers::writeDMX(MasterTimer *timer, QList<Universe *> universes)
                         m_fadersMap[universe] = fader;
                     }
                     fader->setEnabled(m_button->isChecked() ? true : false);
+                    fader->setLiveEpoch(m_liveEpoch.load(std::memory_order_relaxed));
                     lastUniverse = universe;
                 }
 
@@ -556,6 +598,7 @@ void VCAudioTriggers::setSpectrumBarsNumber(int num)
 
     if (m_spectrum != NULL)
         m_spectrum->setBarsNumber(num);
+    syncBarParents();
 }
 
 void VCAudioTriggers::setSpectrumBarType(int index, int type)
@@ -594,6 +637,7 @@ void VCAudioTriggers::editProperties()
     }
 
     m_spectrum->setBarsNumber(m_spectrumBars.count());
+    syncBarParents();
 
     if (barsNumber != m_spectrumBars.count())
     {
@@ -689,6 +733,8 @@ bool VCAudioTriggers::loadXML(QXmlStreamReader &root)
             root.skipCurrentElement();
         }
     }
+
+    syncBarParents();     // R6-1: every bar is this widget's
 
     return true;
 }

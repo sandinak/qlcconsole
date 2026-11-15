@@ -18,6 +18,7 @@
 #include "mastertimer.h"
 #include "inputoutputmap.h"
 #include "universe.h"
+#include "outputrulekeeper.h"
 #include "fadechannel.h"
 #include "audiocapture.h"
 
@@ -487,7 +488,7 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
         QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
         for (auto it2 = m_faders.begin(); it2 != m_faders.end(); ++it2)
         {
-            int idx = it2.key();
+            int idx = it2.key() & ~kHeldFader;
             if (!it2.value().isNull() && idx >= 0 && idx < ua.size())
                 ua.at(idx)->dismissFader(it2.value());
         }
@@ -673,7 +674,7 @@ void EffectScriptRunner::slotTick()
         QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
         for (auto it2 = m_faders.begin(); it2 != m_faders.end(); ++it2)
         {
-            int idx = it2.key();
+            int idx = it2.key() & ~kHeldFader;
             if (!it2.value().isNull() && idx >= 0 && idx < ua.size())
                 ua.at(idx)->dismissFader(it2.value());
         }
@@ -821,7 +822,24 @@ static const quint64 kAnyScene = quint64(0xFFFFFFFFu) << 32;
 void EffectScriptRunner::publishWrites()
 {
     QList<EffectInstance::DmxWrite> combined;
+    QVector<QVector<SceneGate> > gateSets;
     QSet<quint64> drawn;
+    /* Show only: an effect on a Show-only fixture carries the gates of the
+       scenes it plays for, and writeDMX() puts it on the held fader while
+       they say "not the show" (a preview, a Test, a cue left running from
+       Design) -- in both modes, read each tick: no window at a mode switch.
+       The rig views still get it (a held fader is kept off only live). */
+    /* Against the rules as they are now: the keeper's list, or a universe
+       a Show-only fixture was just marked on (before its rebuild). */
+    const OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
+    bool anyShowOnly = rules != nullptr && rules->showOnlyFixtures().isEmpty() == false;
+    if (!anyShowOnly)
+        for (Universe *u : m_doc->inputOutputMap()->universes())
+            if (u != nullptr && u->showOnlyChannelCount() > 0)
+            {
+                anyShowOnly = true;
+                break;
+            }
     {
         QMutexLocker locker(&m_instanceMutex);
         for (const EffectInstance *inst : m_instances)
@@ -837,6 +855,27 @@ void EffectScriptRunner::publishWrites()
             }
             const int from = int(combined.size());
             combined += inst->dmxWrites();
+            if (anyShowOnly)
+            {
+                int set = -1;
+                for (int i = from; i < int(combined.size()); ++i)
+                {
+                    const Fixture *fx = m_doc->fixture(combined.at(i).fixtureId);
+                    if (fx == nullptr || (fx->outputRules() & Fixture::ShowOnly) == 0)
+                        continue;
+                    if (set < 0)
+                    {
+                        QVector<SceneGate> gates;
+                        for (quint32 sid : inst->sceneIds())
+                            if (const Function *f = m_doc->function(sid))
+                                gates << qMakePair(f->previewGate(), f->showStamp());
+                        set = int(gateSets.size());
+                        gateSets << gates;
+                    }
+                    combined[i].showOnly = true;
+                    combined[i].gateSet = set;
+                }
+            }
             // Part way in or out: each write that far over what is under it.
             const float depth = inst->depth();
             if (depth < 1.0f)
@@ -852,6 +891,7 @@ void EffectScriptRunner::publishWrites()
 
     QMutexLocker locker(&m_writesMutex);
     m_publishedWrites = combined;
+    m_publishedGateSets = gateSets;
     m_drawn = drawn;
 }
 
@@ -1032,20 +1072,79 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
     // is NEVER held across script evaluation (that is the whole reason it exists
     // separately from m_instanceMutex), so this can't stall the DMX thread.
     QList<EffectInstance::DmxWrite> writes;
+    QVector<QVector<SceneGate> > gateSets;
     {
         QMutexLocker locker(&m_writesMutex);
         writes = m_publishedWrites;
+        gateSets = m_publishedGateSets;     // shared, not copied
+    }
+
+    /* Show only: a write on a Show-only fixture goes out only for a scene
+       that is the show (its gate, read now); one whose scenes are all not
+       the show -- or that has no scene at all -- goes on a fader of its own
+       that holds the Show-only channels, composed apart. So does a write
+       the last publish did not mark on a channel that is Show only now
+       (the rule given, a fixture patched there since): the universe's own
+       bits, this tick. */
+    QList<EffectInstance::DmxWrite> held;
+    const quint32 session = GenericFader::liveEpoch();
+    bool anyShowOnly = gateSets.isEmpty() == false;
+    for (int u = 0; !anyShowOnly && u < universes.size(); ++u)
+        anyShowOnly = universes.at(u) != nullptr && universes.at(u)->showOnlyChannelCount() > 0;
+    if (anyShowOnly)
+    {
+        for (int i = int(writes.size()) - 1; i >= 0; --i)
+        {
+            EffectInstance::DmxWrite &w = writes[i];
+            bool hold;
+            if (w.showOnly)
+            {
+                /* Held unless one of its scenes is the show; none: held. It
+                   carries the latest stamp of those that are (R8-5): the
+                   universe counts it on a channel only when later than that
+                   channel's mark, as every writer (no trusted bypass). */
+                hold = true;
+                if (w.gateSet >= 0 && w.gateSet < gateSets.size())
+                    for (const SceneGate &g : gateSets.at(w.gateSet))
+                        if (g.first && g.second && g.first->load(std::memory_order_acquire) == false)
+                        {
+                            const quint32 st = g.second->load(std::memory_order_acquire);
+                            if (st >= session)
+                            {
+                                hold = false;
+                                w.stamp = qMax(w.stamp, st);
+                            }
+                        }
+            }
+            else
+            {
+                Universe *uni = w.universeId >= 0 && w.universeId < universes.size()
+                                ? universes.at(w.universeId) : nullptr;
+                hold = uni != nullptr && uni->showOnlyChannelCount() > 0
+                       && w.addr >= 0 && w.addr < UNIVERSE_SIZE
+                       && (uni->channelCapabilities(ushort(w.addr)) & Universe::ShowOnlyOutput);
+            }
+            if (hold)
+            {
+                held.prepend(w);
+                writes.removeAt(i);
+            }
+        }
     }
 
     writes = composeWrites(writes);
-
-    for (const auto &w : writes)
+    const int heldFrom = int(writes.size());
+    if (held.isEmpty() == false)
+        writes += composeWrites(held);
+    for (int i = 0; i < int(writes.size()); ++i)
     {
+        const EffectInstance::DmxWrite &w = writes.at(i);
         if (w.universeId < 0 || w.universeId >= universes.size())
             continue;
         Universe *uni = universes.at(w.universeId);
         if (!uni)
             continue;
+        const int key = w.universeId | (i >= heldFrom ? kHeldFader : 0);
 
         // Get or create a GenericFader for this universe. Using a fader
         // instead of uni->write() ensures that processFaders() writes our
@@ -1061,7 +1160,7 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         // effect fader is written last, so it reliably wins LTP channels
         // (pan/tilt).  HTP channels (intensity) still max regardless of
         // order, so this doesn't change colour/dimmer behaviour.
-        QSharedPointer<GenericFader> &fader = m_faders[w.universeId];
+        QSharedPointer<GenericFader> &fader = m_faders[key];
         if (fader.isNull())
         {
             // On top of the Override faders too: a Show Tree preview's
@@ -1070,9 +1169,19 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
             fader = uni->requestTopFader(Universe::Override);
             fader->setName(QStringLiteral("EffectScript"));
             fader->setDoc(m_doc);        // unpatched fixtures: shown, not sent
+            // Show only: the writes are sorted by their scenes' gates above
+            // -- the held fader holds; the other is stamped channel by
+            // channel with its writes' scenes' stamps (below).
+            fader->setHoldsShowOnly(key & kHeldFader);
+            next[key];
         }
 
         FadeChannel fc(m_doc, w.fixtureId, w.channel);
+        // R8-5: a Show-only write counts where its scene's stamp is later
+        // than the channel's mark -- the universe's test, per channel.
+        if (w.showOnly && !(key & kHeldFader) && fc.addressInUniverse() != QLCChannel::invalid())
+            for (int c = 0; c < int(fc.channelCount()); ++c)
+                fader->setChannelLiveEpoch(int(fc.addressInUniverse()) + c, w.stamp);
         fc.setTarget(w.value);
         fc.setCurrent(w.value);
         fc.setFadeTime(0);
@@ -1094,7 +1203,7 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         // qDebug() line per channel. At 50 Hz over a rig's worth of channels
         // that is thousands of formatted stderr writes per second on the
         // MasterTimer thread, which on its own can blow the tick budget.
-        next[w.universeId].append(fc);
+        next[key].append(fc);
     }
 
     for (auto it = next.constBegin(); it != next.constEnd(); ++it)

@@ -97,6 +97,8 @@ private:
     void fillMappingTree();
     QTreeWidgetItem* pluginItem(const QString& pluginName);
     void showPluginMappingError();
+    /** The output radio and m_currentOutput* back to the real patch */
+    void restoreOutputChecks();
 
 private slots:
     void slotMapCurrentItemChanged(QTreeWidgetItem* item);

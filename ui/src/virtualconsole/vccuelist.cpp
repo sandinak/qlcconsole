@@ -41,6 +41,7 @@
 #include "mastertimer.h"
 #include "chaserstep.h"
 #include "vccuelist.h"
+#include "outputrulekeeper.h"
 #include "qlcmacros.h"
 #include "function.h"
 #include "vcwidget.h"
@@ -904,7 +905,10 @@ void VCCueList::slotPlayback()
             if (currentTreeIndex != ch->currentStepIndex())
                 playCueAtIndex(currentTreeIndex);
 
+            const bool resuming = ch->isPaused();
             ch->setPause(!ch->isPaused());
+            if (resuming)
+                claimRunning(ch);
         }
         else if (playbackLayout() == PlayStopPause)
         {
@@ -984,7 +988,7 @@ void VCCueList::slotNextCue()
         {
             m_tree->setCurrentItem(m_tree->topLevelItem(getNextIndex()));
         }
-        else if (!runShowTree(ShowControl::Go))
+        else if (!runShowTree(ShowControl::Go) && admitDirect(ShowControl::Go))
         {
             ChaserAction action;
             action.m_action = ChaserNextStep;
@@ -992,6 +996,7 @@ void VCCueList::slotNextCue()
             action.m_stepIntensity = getPrimaryIntensity();
             action.m_fadeMode = getFadeMode();
             ch->setAction(action);
+            claimRunning(ch);
         }
     }
     else
@@ -1030,7 +1035,7 @@ void VCCueList::slotPreviousCue()
         {
             m_tree->setCurrentItem(m_tree->topLevelItem(getPrevIndex()));
         }
-        else if (!runShowTree(ShowControl::Back))
+        else if (!runShowTree(ShowControl::Back) && admitDirect(ShowControl::Back))
         {
             ChaserAction action;
             action.m_action = ChaserPreviousStep;
@@ -1038,6 +1043,7 @@ void VCCueList::slotPreviousCue()
             action.m_stepIntensity = getPrimaryIntensity();
             action.m_fadeMode = getFadeMode();
             ch->setAction(action);
+            claimRunning(ch);
         }
     }
     else
@@ -1162,7 +1168,11 @@ void VCCueList::playSubCue(int index, int subIndex)
 
     if (ch->isRunning())
     {
+        // A GO: through the double-GO guard first.
+        if (!admitDirect(ShowControl::Go))
+            return;
         ch->setAction(action);
+        claimRunning(ch);
         return;
     }
     // Stopped: start there, as startChaser() does at a step.
@@ -1417,6 +1427,8 @@ void VCCueList::startChaser(int startIndex)
         return;
     if (runShowTree(ShowControl::Go, startIndex))
         return;
+    if (!admitDirect(ShowControl::Go))
+        return;
 
     adjustFunctionIntensity(ch, intensity());
 
@@ -1429,6 +1441,8 @@ void VCCueList::startChaser(int startIndex)
     ch->setAction(action);
 
     ch->start(m_doc->masterTimer(), functionParent());
+    if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+        rules->noteGo();
     emit functionStarting(m_chaserID);
 }
 
@@ -1667,6 +1681,9 @@ void VCCueList::slotSideFaderValueChanged(int value)
 
         if (newStep == ch->currentStepIndex())
             return;
+        // A step is a GO: through the double-GO guard first.
+        if (!admitDirect(ShowControl::Go))
+            return;
 
         ChaserAction action;
         action.m_action = ChaserSetStepIndex;
@@ -1675,6 +1692,7 @@ void VCCueList::slotSideFaderValueChanged(int value)
         action.m_stepIntensity = getPrimaryIntensity();
         action.m_fadeMode = getFadeMode();
         ch->setAction(action);
+        claimRunning(ch);
     }
     else
     {
@@ -1686,6 +1704,16 @@ void VCCueList::slotSideFaderValueChanged(int value)
         Chaser *ch = chaser();
         if (!(ch == NULL || ch->stopped()))
         {
+            /* The crossfader is the show (a VC action): it claims the list
+               once, through the double-GO guard; the fade itself is never
+               held (it starts nothing). */
+            if (ch->previewGate()->load())
+            {
+                // Held by the double-GO guard: it starts nothing at all.
+                if (!admitDirect(ShowControl::Go))
+                    return;
+                claimRunning(ch);
+            }
             ch->adjustStepIntensity(qreal(value) / 100.0, m_primaryTop ? m_primaryIndex : m_secondaryIndex,
                                     Chaser::FadeControlMode(getFadeMode()));
             ch->adjustStepIntensity(qreal(100 - value) / 100.0, m_primaryTop ? m_secondaryIndex : m_primaryIndex,
@@ -1998,6 +2026,9 @@ void VCCueList::playCueAtIndex(int idx)
     }
     else if (ch->isRunning())
     {
+        // A GO: through the double-GO guard first.
+        if (!admitDirect(ShowControl::Go))
+            return;
         ChaserAction action;
         action.m_action = ChaserSetStepIndex;
         action.m_stepIndex = m_primaryIndex;
@@ -2005,6 +2036,7 @@ void VCCueList::playCueAtIndex(int idx)
         action.m_stepIntensity = getPrimaryIntensity();
         action.m_fadeMode = getFadeMode();
         ch->setAction(action);
+        claimRunning(ch);
     }
     else
     {
@@ -2013,6 +2045,28 @@ void VCCueList::playCueAtIndex(int idx)
 
     if (sideFaderMode() == Crossfade)
         setFaderInfo(m_primaryIndex);
+}
+
+bool VCCueList::admitDirect(int command)
+{
+    /* A plain chaser, stepped here as in QLC+ 4: the double-GO guard holds
+       it as it would a GO through ShowControl::run() (its rules there). */
+    Chaser *ch = chaser();
+    ShowControl *sc = m_doc->showControl();
+    return ch == NULL || sc == NULL
+           || sc->admitDirect(ch->id(), ShowControl::Command(command), ShowControl::RouteVcCueList);
+}
+
+void VCCueList::claimRunning(Chaser *ch)
+{
+    /* A cue list action on a list already running -- from a preview, an
+       editor's Test, or left running from Design: the VC is the show now.
+       Started again by this cue list, which restarts nothing but makes it
+       drive Show-only fixtures (Fixture::ShowOnly). */
+    if (ch != NULL && ch->isRunning())
+        ch->start(m_doc->masterTimer(), functionParent());
+    if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+        rules->noteGo();
 }
 
 FunctionParent VCCueList::functionParent() const

@@ -167,6 +167,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "outputrulekeeper.h"
 #include "wledfixture.h"
 #include "contextmenus.h"
 #include "selectionmenu.h"
@@ -325,6 +326,11 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
         highlightFixtures(m_doc->programmerSelection());
     });
     highlightFixtures(m_doc->programmerSelection());
+    // Show only: the plot still draws what a held laser or relay would do,
+    // with a "held" badge on it while its output is kept safe.
+    if (m_doc->outputRuleKeeper() != nullptr)
+        connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::showOnlyChanged,
+                this, &Monitor::refreshShowOnlyHeld);
     // Re-render targets on Design/Operate switch so their drag-ability tracks the
     // mode (editable while designing, frozen in a show).
     connect(m_doc, &Doc::modeChanged, this, [this](Doc::Mode) {
@@ -1893,6 +1899,8 @@ void Monitor::restoreRig(const QByteArray &snap)
     }
     if (haveRules)
     {
+        // N2: every fixture marked before a hardware output is held.
+        InputOutputMap::ShowOnlyMarks marks(m_doc->inputOutputMap());
         foreach (Fixture *fx, m_doc->fixtures())
             fx->setOutputRules(Fixture::OutputRules(rules.value(fx->id(), 0)));
     }
@@ -1990,6 +1998,16 @@ void Monitor::updateView()
     showCurrentView();
     refreshNeedsFocus();
     refreshBuried();
+    refreshShowOnlyHeld();
+}
+
+void Monitor::refreshShowOnlyHeld()
+{
+    if (m_graphicsView == NULL || m_doc->outputRuleKeeper() == nullptr)
+        return;
+    const OutputRuleKeeper *k = m_doc->outputRuleKeeper();
+    m_graphicsView->markShowOnlyHeldFixtures(k->showOnlyHeldBy() != OutputRuleKeeper::NotHeld
+                                                 ? k->showOnlyFixtures() : QList<quint32>());
 }
 
 void Monitor::refreshBuried()
@@ -9985,6 +10003,7 @@ public:
         {
             QSharedPointer<GenericFader> fader = ua[i]->requestFader(Universe::Override);
             fader->setName(QStringLiteral("FixtureTest"));
+            fader->setHoldsShowOnly(true);      // a test never fires a Show-only fixture
             fader->setZeroAll(true);
             m_faders[i] = fader;
             m_universes[i] = ua[i];
@@ -10234,6 +10253,7 @@ public:
             }
             m_fader = m_universe->requestFader(Universe::Flash);
             m_fader->setName(QStringLiteral("FixtureLocate"));
+            m_fader->setHoldsShowOnly(true);    // refused for one anyway (locateRefusal)
         }
         m_doc->inputOutputMap()->releaseUniverses(false);
         setOn(true);
@@ -10390,6 +10410,8 @@ QString Monitor::locateRefusal(const Fixture *fxi)
         return tr("Locate doesn't flash a hazer, fogger or fan: it would fire its output");
     if (FixtureRest::isLaser(fxi))
         return tr("Locate doesn't fire a laser");
+    if (fxi != nullptr && (fxi->outputRules() & Fixture::ShowOnly))
+        return tr("Locate doesn't drive a Show-only fixture: only a GO in Operate does (Output Rules)");
     return QString();
 }
 
@@ -10454,10 +10476,39 @@ void Monitor::setMaintenanceHoldMs(int ms)
     s_maintenanceHoldMs = qMax(1, ms);
 }
 
+QString Monitor::maintenanceRefusal(const Fixture *fxi)
+{
+    if (fxi == nullptr)
+        return QString();
+    const QString why = tr("Identify and Reset don't drive a Show-only fixture: only a GO in Operate does "
+                           "(Output Rules)");
+    if (fxi->outputRules() & Fixture::ShowOnly)
+        return why;
+    /* Nor one that shares its addresses: what Identify sends there would
+       reach the laser or the flame patched on top. */
+    const Doc *doc = qobject_cast<const Doc *>(fxi->parent());
+    if (doc == nullptr || !fxi->isPatched())
+        return QString();
+    const quint32 from = fxi->universeAddress(), to = from + fxi->channels();
+    for (const Fixture *other : doc->fixtures())
+    {
+        if (other == fxi || (other->outputRules() & Fixture::ShowOnly) == 0 || !other->isPatched())
+            continue;
+        const quint32 oFrom = other->universeAddress(), oTo = oFrom + other->channels();
+        if (from < oTo && oFrom < to)
+            return why;
+    }
+    return QString();
+}
+
 void Monitor::sendMaintenance(quint32 fxId, int channel, uchar value)
 {
     Fixture *fxi = m_doc->fixture(fxId);
     if (fxi == nullptr || !fxi->isPatched() || channel < 0 || quint32(channel) >= fxi->channels())
+        return;
+    // A laser, a fogger, a flame -- or what shares their addresses: no
+    // maintenance tool fires it.
+    if (!maintenanceRefusal(fxi).isEmpty())
         return;
     const quint32 abs = fxi->universeAddress() + quint32(channel);
     const int u = int(abs >> 9);
@@ -10466,13 +10517,14 @@ void Monitor::sendMaintenance(quint32 fxId, int channel, uchar value)
     bool sent = false;
     uchar before = 0;
     QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
-    if (u < ua.size() && ua[u] != nullptr)
+    // The universe's own rule bits too: a Show-only channel is never sent.
+    if (u < ua.size() && ua[u] != nullptr
+        && (ua[u]->channelCapabilities(ushort(addr)) & Universe::ShowOnlyOutput) == 0)
     {
         Universe *uni = ua[u];
         before = uni->preGMValue(addr);
         uni->write(addr, value, true);
-        const QByteArray pg = uni->postGMValues()->mid(0, uni->usedChannels());
-        uni->dumpOutput(pg, true);
+        uni->sendCurrent();         // under the frame lock; Show only through S0
         sent = true;
     }
     m_doc->inputOutputMap()->releaseUniverses(false);
@@ -10487,8 +10539,7 @@ void Monitor::sendMaintenance(quint32 fxId, int channel, uchar value)
         {
             Universe *uni = ua[u];
             uni->write(addr, before, true);
-            const QByteArray pg = uni->postGMValues()->mid(0, uni->usedChannels());
-            uni->dumpOutput(pg, true);
+            uni->sendCurrent();
         }
         doc->inputOutputMap()->releaseUniverses(false);
     });
@@ -11767,6 +11818,11 @@ void Monitor::showFixturePropertiesById(quint32 fxId)
                 {
                     btn->setEnabled(false);
                     btn->setToolTip(tr("Patch this fixture first: it is in the inventory and has no DMX address"));
+                }
+                else if (!maintenanceRefusal(fxi).isEmpty())
+                {
+                    btn->setEnabled(false);
+                    btn->setToolTip(maintenanceRefusal(fxi));
                 }
                 connect(btn, &QPushButton::clicked, [=]() {
                     if (!fxi->isPatched())
@@ -13210,6 +13266,11 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                 identBtn->setToolTip(tr("Makes the fixture flash/beep to confirm its DMX address.\n"
                                         "Sends the Identify capability value (Maintenance channel)."));
                 dmxHl->addWidget(identBtn);
+                if (!maintenanceRefusal(fxi).isEmpty())
+                {
+                    identBtn->setEnabled(false);
+                    identBtn->setToolTip(maintenanceRefusal(fxi));
+                }
                 const int iCh = identifyCh; const uchar iVal = identifyVal;
                 connect(identBtn, &QPushButton::clicked, [&, iCh, iVal]() {
                     sendMaintenance(fxi->id(), iCh, iVal);
@@ -13228,6 +13289,11 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                 resetBtn->setToolTip(tr("Sends the fixture's reset DMX value (Maintenance channel).\n"
                                         "Hold for ~3 seconds while the fixture resets."));
                 dmxHl->addWidget(resetBtn);
+                if (!maintenanceRefusal(fxi).isEmpty())
+                {
+                    resetBtn->setEnabled(false);
+                    resetBtn->setToolTip(maintenanceRefusal(fxi));
+                }
                 const int rCh = resetCh; const uchar rVal = resetVal;
                 connect(resetBtn, &QPushButton::clicked, [&, rCh, rVal]() {
                     sendMaintenance(fxi->id(), rCh, rVal);

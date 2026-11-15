@@ -245,8 +245,18 @@ void VCClock::slotUpdateTime()
     update();
 }
 
+void VCClock::armForShow()
+{
+    /* Show only (E3, R6-3): the operator working the clock in Operate --
+       a touch, a key, an input or the web -- arms its schedules for this
+       session. Nothing else does: never its own first start. */
+    if (mode() == Doc::Operate)
+        Function::armAutoSource(functionParent());
+}
+
 void VCClock::resetTimer()
 {
+    armForShow();
     if (clockType() == Stopwatch)
         m_currentTime = 0;
     else if (clockType() == Countdown)
@@ -260,6 +270,7 @@ void VCClock::resetTimer()
 
 void VCClock::playPauseTimer()
 {
+    armForShow();
     if (clockType() == Stopwatch || clockType() == Countdown)
         m_isPaused = !m_isPaused;
 
@@ -588,6 +599,10 @@ void VCClock::mousePressEvent(QMouseEvent *e)
         VCWidget::mousePressEvent(e);
         return;
     }
+
+    /* Show only (E3): touched by the operator in Operate -- what its
+       schedule starts is the show in this session. */
+    armForShow();
 
     if (e->button() == Qt::RightButton)
     {

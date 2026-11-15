@@ -68,6 +68,11 @@ public:
     /** Check if the position has changed since the last currentXYPosition() call */
     bool hasPositionChanged();
 
+    /** Show only (R7-8): true while a hand moves it -- a mouse or a key on
+     *  the pad, read in positionChanged()'s slot. A position set by code (a
+     *  load, a page change, a feedback re-sync) is no hand. */
+    bool movedByHand() const { return m_byHand; }
+
 signals:
     void positionChanged(const QPointF& point);
 
@@ -98,6 +103,7 @@ private:
 
     mutable bool m_changed;
     mutable QMutex m_mutex;
+    bool m_byHand = false;
 
     /** Used to display active point - blue */
     QPixmap m_activePixmap;

@@ -17,6 +17,8 @@
 #include <QElapsedTimer>
 #include <QDateTime>
 #include <QtTest>
+#include <QEventLoop>
+#include <QTimer>
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QNetworkAccessManager>
@@ -741,6 +743,79 @@ void Wled_Test::aDeadDeviceDoesNotHoldUpTheOthers()
     QTRY_VERIFY_WITH_TIMEOUT(backup.posts.size() > before, 600);
 }
 
+/* Reviews 11-12 (M-2, F8): flushOutput() sends a closing frame's look to
+   each device. With the event loop running (the show) it never holds its
+   caller -- the engine's frame lock -- and the closing state is not cut off
+   under load: it arrives, however late, and no newer look overtakes it. As
+   the app quits (no event loop) it is waited on, about a second at most.
+   A device that never answers holds up neither. */
+void Wled_Test::aFlushSendsTheLastLookWithinItsBudget()
+{
+    FakeWled lantern;
+    QVERIFY(lantern.powerOn());
+    WledPlugin plugin;
+    plugin.init();
+    plugin.setSendInterval(40);
+    plugin.setInfoInterval(60);
+    QVERIFY(plugin.openOutput(0, 4));
+    plugin.setParameter(4, 0, QLCIOPlugin::Output, WLED_OUTPUTIP, lantern.ip());
+    plugin.setParameter(4, 0, QLCIOPlugin::Output, "outputIP2", QStringLiteral("10.255.255.1"));
+    QTRY_VERIFY_WITH_TIMEOUT(plugin.m_targets.value(4).devices.value(0).layoutKnown, 10000);
+    {
+        // The unreachable backup as if known: the flush tries it too.
+        QMutexLocker locker(&plugin.m_mutex);
+        WledPlugin::Device &d = plugin.m_targets[4].devices[1];
+        d.layoutKnown = true;
+        d.gateOpen = true;
+    }
+    plugin.writeUniverse(4, 0, universe({ 255, 0, 128, 128, 0, 0, 200, 0, 0 }), true);
+    QTRY_VERIFY_WITH_TIMEOUT(!lantern.posts.isEmpty(), 10000);
+    QTest::qWait(100);
+    const int before = lantern.posts.size();
+    auto firstDarkSince = [&lantern](int from) {
+        for (int i = from; i < lantern.posts.size(); i++)
+            if (lantern.posts.at(i).contains("on") && lantern.posts.at(i).value("on").toBool() == false)
+                return i;
+        return -1;
+    };
+
+    // 1. The show running (an event loop): the caller is never held...
+    plugin.writeUniverse(4, 0, universe({ 0, 0, 0, 0, 0, 0, 0, 0, 0 }), true);   // the closing frame
+    qint64 took = -1;
+    QEventLoop loop;
+    QTimer::singleShot(0, &loop, [&]() {
+        QElapsedTimer t;
+        t.start();
+        plugin.flushOutput(0, 4);
+        took = t.elapsed();
+        // ...and a new look at once may not overtake the closing state.
+        plugin.writeUniverse(4, 0, universe({ 255, 0, 128, 128, 0, 0, 90, 0, 0 }), true);
+        loop.quit();
+    });
+    loop.exec();
+    QVERIFY2(took >= 0 && took < 250, qPrintable(QString("flushOutput() held its caller for %1 ms").arg(took)));
+    // ...and the closing state arrives, however loaded the machine is.
+    QTRY_VERIFY_WITH_TIMEOUT(firstDarkSince(before) >= 0, 15000);
+    const int dark = firstDarkSince(before);
+    QTRY_VERIFY_WITH_TIMEOUT(lantern.posts.size() > dark + 1
+                             && lantern.posts.last().value("on").toBool(), 15000);
+    // Nothing but the closing state since the look before it was taken.
+    for (int i = before; i < dark; i++)
+        QVERIFY2(lantern.posts.at(i).value("on").toBool() == false,
+                 "the new look reached the lantern before its closing state");
+
+    // 2. The app quitting (no event loop left): waited on, about a second
+    //    at most however many devices do not answer; it reaches the device.
+    const int before2 = lantern.posts.size();
+    plugin.writeUniverse(4, 0, universe({ 0, 0, 0, 0, 0, 0, 0, 0, 0 }), true);
+    QElapsedTimer t;
+    t.start();
+    plugin.flushOutput(0, 4);
+    const qint64 tookQuit = t.elapsed();
+    QVERIFY2(tookQuit < 2500, qPrintable(QString("flushOutput() at quit took %1 ms").arg(tookQuit)));
+    QTRY_VERIFY_WITH_TIMEOUT(firstDarkSince(before2) >= 0, 15000);
+}
+
 /* Switched off and on again, a lantern has forgotten the look: it is sent
    again, in full, as soon as it answers -- though nothing changed meanwhile. */
 void Wled_Test::aDeviceThatComesBackIsSentTheLookAgain()
@@ -1262,6 +1337,12 @@ void Wled_Test::aCrashWithReverseOnIsPutRightFromTheKeptWays()
     plugin.setParameter(0, 0, QLCIOPlugin::Output, "outputIP2", other.ip());
     QTRY_VERIFY(!other.posts.isEmpty());
     QCOMPARE(revs(other), (QList<bool>{ true, true }));
+}
+
+void Wled_Test::showOnlyMayUseIt()
+{
+    WledPlugin plugin;
+    QCOMPARE(plugin.isNetworkDmxOutput(), true);
 }
 
 QTEST_MAIN(Wled_Test)

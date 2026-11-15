@@ -21,6 +21,7 @@
 #include <climits>
 #include <algorithm>
 #include <QXmlStreamReader>
+#include <QScopeGuard>
 #include <QXmlStreamWriter>
 #include <QRegularExpression>
 #include <QStringList>
@@ -1421,6 +1422,16 @@ void Doc::applyFixtureToUniverses(Fixture *fixture, bool crossUniverse)
         inputOutputMap()->startUniverses();
     }
 
+    /* R9-2: a Show-only fixture is Show only on its channels BEFORE its
+       defaults are written: setChannelDefaultValue() then writes its safe
+       value (E6), and no frame in between -- the universe thread runs on
+       its own -- sends a definition default (a laser's auto program). The
+       fixtureChanged()/fixtureAdded() mark after finds it done. Not under
+       the claim: markNow() reads the universes unclaimed. */
+    if (m_outputRuleKeeper != nullptr && fixture->isPatched()
+        && (fixture->outputRules() & Fixture::ShowOnly) && m_fixtures.contains(fixture->id()))
+        m_outputRuleKeeper->markNow(fixture->id());
+
     // Add the fixture channels capabilities to the universe they belong
     QList<Universe *> universes = inputOutputMap()->claimUniverses();
 
@@ -1560,6 +1571,11 @@ bool Doc::patchFixtures(const QList<FixturePatch> &patches, QString *why)
 {
     if (!canPatchFixtures(patches, why))
         return false;
+
+    /* N2 (outputpatch.h): one marking scope -- every fixture is Show only
+       where it lands before a non-network output there is held, so its
+       closing frame has every one at safe (review 16 F2). */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(inputOutputMap());
 
     // Release every claim first, so the order of the list cannot matter.
     QSet<quint32> moving;
@@ -1846,6 +1862,16 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
         }
         m_latestFixtureId = id;
     }
+
+    /* Review 16 F1: nothing here emits a fixture signal, so the output
+       rules are rebuilt now, in one marking scope: the old addresses'
+       marks go, the new ones are set, and N2 / N4 (outputpatch.h) hold or
+       let go every universe touched. */
+    if (m_outputRuleKeeper != nullptr)
+    {
+        InputOutputMap::ShowOnlyMarks showOnlyMarks(inputOutputMap());
+        m_outputRuleKeeper->rebuild();
+    }
     return true;
 }
 
@@ -1855,6 +1881,10 @@ bool Doc::updateFixtureChannelCapabilities(quint32 id, QList<int> forcedHTP, QLi
         return false;
 
     Fixture* fixture = m_fixtures[id];
+    // R9-2: Show only first (a mode change), then the defaults
+    if (m_outputRuleKeeper != nullptr && fixture->isPatched()
+        && (fixture->outputRules() & Fixture::ShowOnly))
+        m_outputRuleKeeper->markNow(id);
     // get exclusive access to the universes list
     QList<Universe *> universes = inputOutputMap()->claimUniverses();
     Universe *universe = universes.at(fixture->universe());
@@ -2617,6 +2647,16 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
     m_loadStatus = Loading;
     emit loading();
 
+    /* Review 13: while the show is read, nothing goes out -- its patches
+       are checked against the Show-only rules once its fixtures are known,
+       below, before the first frame. Let go however the load ends. */
+    if (loadIO)
+        m_ioMap->setLoadHold(true);
+    auto loadHold = qScopeGuard([this, loadIO]() {
+        if (loadIO)
+            m_ioMap->setLoadHold(false);
+    });
+
     /* Auto-open shutters as for a show saved without the setting (QLC+:
        off); its <ShutterAutoOpen>, when there is one, overrides. */
     m_shutterAutoOpen->beginLoad();
@@ -2817,6 +2857,16 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
             found = (qint32(m_ioMap->getUniverseID(i)) == m_timecodeSource->sourceUniverse());
         if (!found)
             m_timecodeSource->setSourceUniverse(-1);
+    }
+
+    /* The Show-only fixtures are known now (the I/O map is read before
+       them): N3 holds their universes' hardware outputs (outputpatch.h),
+       then output is let go. */
+    if (loadIO)
+    {
+        m_outputRuleKeeper->rebuild();
+        m_ioMap->recheckPatchesAfterLoad();
+        m_ioMap->setLoadHold(false);
     }
 
     m_loadStatus = Loaded;

@@ -24,6 +24,7 @@
 #include <QVBoxLayout>
 #include <QToolButton>
 #include <QLabel>
+#include <atomic>
 
 #include "audiotriggerwidget.h"
 #include "clickandgoslider.h"
@@ -72,6 +73,18 @@ public:
      *  In this way we let Qt to handle the toggle signal and
      *  start the audio capture in the correct thread */
     void toggleEnableButton(bool toggle);
+
+    /** @reimp: the bars take the id too (Show only arms them by it) */
+    void setID(quint32 id) override;
+
+private:
+    /** Show only: switched on by the operator in Operate -- what it drives
+     *  is the show in this session (Function::armAutoSource()) */
+    void armForShow();
+    /** Every bar starts its functions as this widget (AudioBar::setParentId()) */
+    void syncBarParents();
+
+public:
 
 public slots:
     void slotEnableButtonToggled(bool toggle);
@@ -201,6 +214,10 @@ public:
      * @param frame_root The button's VCFrame XML parent node to save to
      */
     bool saveXML(QXmlStreamWriter *doc) override;
+
+private:
+    /** Show only: the live session the operator last switched it on in */
+    std::atomic<quint32> m_liveEpoch { 0 };
 };
 
 /** @} */

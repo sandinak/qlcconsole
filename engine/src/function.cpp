@@ -23,10 +23,14 @@
 #include <QRegularExpression>
 #include <QElapsedTimer>
 #include <QString>
+#include <QThread>
 #include <QDebug>
 #include <math.h>
+#include <utility>
+#include <QHash>
 
 #include "qlcmacros.h"
+#include "genericfader.h"
 #include "speedmasters.h"
 #include "qlcfile.h"
 
@@ -43,6 +47,17 @@
 #include "show.h"
 #include "efx.h"
 #include "doc.h"
+
+/* Show only: bumped whenever any function's sources change (start, stop)
+   or Show-only fixtures come or go -- each running function then works out
+   its previewGate() once, on its next tick. */
+static std::atomic<quint32> s_sourcesGeneration { 0 };
+static std::atomic<bool> s_showOnlyInUse { false };
+
+static void sourcesChanged()
+{
+    s_sourcesGeneration.fetch_add(1, std::memory_order_relaxed);
+}
 
 #define OVERRIDE_ATTRIBUTE_START_ID     128
 
@@ -1178,11 +1193,26 @@ void Function::start(MasterTimer* timer, FunctionParent source, quint32 startTim
     bool again = false;
     {
         QMutexLocker sourcesLocker(&m_sourcesMutex);
-        if (m_sources.contains(source))
+        const int already = int(m_sources.indexOf(source));
+        if (already >= 0)
+        {
+            // Started again by what started it (a GO on a list it already
+            // plays): nothing restarts, but the source is renewed -- a GO
+            // in Operate makes a list left running from Design the show.
+            m_sourceGates[already] = sourceGate(source);
+            storeGateLocked();
+            sourcesLocker.unlock();
+            sourcesChanged();
             return;
+        }
         m_sources.append(source);
+        m_sourceGates.append(sourceGate(source));
+        // Worked out now, on the thread that starts it: never a tick of a
+        // preview played as the show before the timer looks.
+        storeGateLocked();
         again = m_sources.size() > 1;
     }
+    sourcesChanged();
     if (again)
     {
         // Running already, now started by another: a new start for what
@@ -1214,6 +1244,156 @@ QList<FunctionParent> Function::sources() const
 {
     QMutexLocker locker(&m_sourcesMutex);
     return m_sources;
+}
+
+static QMutex s_autoSourcesMutex;
+static QHash<quint32, quint32> s_autoSources;    // AutoVCWidget id -> session armed in
+
+quint32 Function::autoSourceEpoch(const FunctionParent &source)
+{
+    /* Armed only by an operator action (armAutoSource()); never armed: 0,
+       which no session ever is -- a widget's own first start arms nothing. */
+    QMutexLocker locker(&s_autoSourcesMutex);
+    return s_autoSources.value(source.id(), 0);
+}
+
+void Function::armAutoSource(const FunctionParent &source)
+{
+    {
+        QMutexLocker locker(&s_autoSourcesMutex);
+        s_autoSources.insert(source.id(), GenericFader::stampEpoch());
+    }
+    sourcesChanged();
+}
+
+void Function::clearAutoSources()
+{
+    QMutexLocker locker(&s_autoSourcesMutex);
+    s_autoSources.clear();
+}
+
+void Function::startLiveSession()
+{
+    GenericFader::bumpLiveEpoch();
+    sourcesChanged();
+}
+
+quint32 Function::sourcesGeneration()
+{
+    return s_sourcesGeneration.load(std::memory_order_relaxed);
+}
+
+void Function::setShowOnlyInUse(bool inUse)
+{
+    if (s_showOnlyInUse.exchange(inUse, std::memory_order_relaxed) != inUse)
+        sourcesChanged();
+}
+
+Function::SourceGate Function::sourceGate(const FunctionParent &source) const
+{
+    SourceGate g;
+    g.notTheShow = source.isNotTheShow();
+    /* Started by another function: that one is writing on this thread now
+       (a chaser's step, a collection's member, a show's track), in the
+       MasterTimer's creation scope -- its gate, shared, with no Doc lookup
+       on the timer thread. Started from anywhere else it is a real source. */
+    if (g.notTheShow == false && source.type() == FunctionParent::Function && source.id() != id())
+    {
+        g.parentGate = GenericFader::creationGateOf(source.id());
+        g.parentStamp = GenericFader::creationStampOf(source.id());
+        /* Started by a function from outside the MasterTimer's scope (a
+           VC cue list's crossfader stepping on the main thread): its
+           parent's gate all the same, looked up where that is safe --
+           never a fresh stamp (storeGateLocked() latches the parent's). */
+        if (!g.parentGate && doc() != nullptr && QThread::currentThread() == doc()->thread())
+            if (const Function *parent = doc()->function(source.id()))
+            {
+                g.parentGate = parent->previewGate();
+                g.parentStamp = parent->showStamp();
+            }
+    }
+    /* S3: started by a function, it takes that one's stamp (storeGateLocked()
+       latches it, now and whenever the parent is the show). E3: an
+       automatic widget (an audio trigger's function bar, a VC Clock's
+       schedule) starts on its own, not by a hand: it is the show only from
+       the session it was armed in (armAutoSource()) -- never armed, never.
+       Anything else is stamped as an operator action now (stampEpoch():
+       inside an automatic writer's StampScope, that writer's session). */
+    if (g.parentGate || (g.notTheShow == false && source.type() == FunctionParent::Function
+                         && source.id() != id()))
+        g.epoch = 0;        // a function's: its parent's stamp, or none -- never a fresh one
+    else if (g.notTheShow == false && source.type() == FunctionParent::AutoVCWidget)
+        g.epoch = autoSourceEpoch(source);
+    else
+        g.epoch = GenericFader::stampEpoch();
+    return g;
+}
+
+bool Function::storeGateLocked()
+{
+    if (s_showOnlyInUse.load(std::memory_order_relaxed) == false)
+    {
+        // No Show-only fixture: nothing reads it (OutputRuleKeeper marks a
+        // channel only after the gates are worked out for real).
+        m_showStamp->store(0, std::memory_order_release);
+        return m_previewGate->exchange(false, std::memory_order_acq_rel) != false;
+    }
+    bool any = false;
+    quint32 best = 0;
+    const quint32 session = GenericFader::liveEpoch();
+    for (SourceGate &g : m_sourceGates)
+    {
+        any = true;
+        if (g.notTheShow)
+            continue;
+        /* Started by a function: R6-6, it takes its root's stamp and keeps
+           it for the session -- a cue a Script launched still drives after
+           the Script ends. R7-1: only a parent that is the show NOW, worked
+           out in this session (its stamp is of it), passes its stamp on;
+           one left from before (not yet worked out for this session, in
+           whatever order the functions are refreshed) passes nothing. A
+           new session (Operate, All Off, a show loaded, Blind ending)
+           leaves every stamp old. */
+        if (g.parentGate && g.parentStamp && g.parentGate->load(std::memory_order_acquire) == false)
+        {
+            const quint32 ps = g.parentStamp->load(std::memory_order_acquire);
+            if (ps >= session && ps > g.epoch)
+                g.epoch = ps;
+        }
+        if (g.epoch >= session && g.epoch > best)
+            best = g.epoch;
+    }
+    /* E5: with no source left it is stopping -- nothing that is the show
+       holds it any more, so what fades out is held: a cue stopped by All
+       Off, or let go by the next GO, never fades a laser out. */
+    const bool held = any == false || best == 0;
+    bool changed;
+    if (held)
+    {
+        changed = m_previewGate->exchange(true, std::memory_order_acq_rel) != true;
+        changed = (m_showStamp->exchange(0, std::memory_order_acq_rel) != 0) || changed;
+    }
+    else
+    {
+        changed = m_showStamp->exchange(best, std::memory_order_acq_rel) != best;
+        changed = (m_previewGate->exchange(false, std::memory_order_acq_rel) != false) || changed;
+    }
+    return changed;
+}
+
+void Function::refreshPreviewGate()
+{
+    const quint32 gen = s_sourcesGeneration.load(std::memory_order_relaxed);
+    if (gen == m_previewGateGen)
+        return;
+    m_previewGateGen = gen;
+    bool changed;
+    {
+        QMutexLocker sourcesLocker(&m_sourcesMutex);
+        changed = storeGateLocked();
+    }
+    if (changed)
+        sourcesChanged();   // the functions it started follow its gate: look again
 }
 
 bool Function::startedOnlyByPreview() const
@@ -1269,11 +1449,22 @@ void Function::stop(FunctionParent source, bool preserveAttributes)
         (source.type() == FunctionParent::ManualVCWidget))
     {
         m_sources.clear();
+        m_sourceGates.clear();
     }
     else
     {
-        m_sources.removeAll(source);
+        for (int i = int(m_sources.size()) - 1; i >= 0; --i)
+        {
+            if (m_sources.at(i) == source)
+            {
+                m_sources.removeAt(i);
+                m_sourceGates.removeAt(i);
+            }
+        }
     }
+    // Worked out now, not at the next tick: stopped is held at once (E1, E5).
+    storeGateLocked();
+    sourcesChanged();
 
     if (m_sources.size() == 0)
     {

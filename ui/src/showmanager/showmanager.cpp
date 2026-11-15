@@ -56,6 +56,8 @@
 #include "efxeditor.h"
 #include "videoeditor.h"
 #include "showmanager.h"
+#include "outputrulekeeper.h"
+#include "genericfader.h"
 #include "sceneeditor.h"
 #include "timingstool.h"
 #include "qlcmacros.h"
@@ -1775,6 +1777,16 @@ void ShowManager::slotStartPlayback()
         cursorMovedDuringPause = false;
         m_show->start(m_doc->masterTimer(), functionParent(), m_showview->getTimeFromCursor());
         m_playAction->setIcon(QIcon(":/player_pause.png"));
+        claimForShow();
+    }
+    else if (m_doc->mode() == Doc::Operate && m_show->isPaused() == false
+             && m_show->previewGate()->load())
+    {
+        /* Play in Operate on a show left running from Design (or played by
+           an editor's Test): an explicit run -- it is the show now, not a
+           pause. */
+        claimForShow();
+        m_playAction->setIcon(QIcon(":/player_pause.png"));
     }
     else
     {
@@ -1792,6 +1804,7 @@ void ShowManager::slotStartPlayback()
             if (m_show->isPaused())
                 m_show->setPause(false);
             m_playAction->setIcon(QIcon(":/player_pause.png"));
+            claimForShow();
             return;
         }
 
@@ -1809,6 +1822,7 @@ void ShowManager::slotStartPlayback()
             {
                 m_show->setPause(false);
             }
+            claimForShow();
         }
         else
         {
@@ -2326,6 +2340,9 @@ void ShowManager::slotTimecodeRunningChanged(bool running)
         quint32 tc = m_doc->timecodeSource()->positionMs();
         quint32 pos = (tc > offset) ? tc - offset : 0;
         cursorMovedDuringPause = false;
+        // Show only (R6-8): started by timecode, not a hand -- the show
+        // only if the operator armed the link in Operate this session.
+        GenericFader::StampScope byTimecode(m_show->timecodeArmEpoch());
         m_show->start(m_doc->masterTimer(), functionParent(), pos);
         m_playAction->setIcon(QIcon(":/player_pause.png"));
     }
@@ -2349,7 +2366,11 @@ void ShowManager::slotTimecodeRunningChanged(bool running)
             {
                 Chaser *mc = qobject_cast<Chaser*>(m_doc->function(it.value().cueListId));
                 if (mc != NULL && mc->isRunning() == false && showMayOutput())
+                {
+                    // Show only (R6-8): as the timecode link was armed.
+                    GenericFader::StampScope byTimecode(m_show->timecodeArmEpoch());
                     mc->start(m_doc->masterTimer(), functionParent());
+                }
                 break;
             }
         }
@@ -3023,6 +3044,20 @@ void ShowManager::hideEvent(QHideEvent* ev)
     ShowItem *item = m_showview->getSelectedItem();
     if (item != NULL)
         item->setSelected(false);
+}
+
+void ShowManager::claimForShow()
+{
+    /* The Show tab's Play in Operate is an explicit run, as a GO: the show
+       is the show from now on for Show-only fixtures (started again by
+       this tab, which restarts nothing). In Design it stays held, as
+       everything there is. */
+    if (m_show == NULL || m_doc->mode() != Doc::Operate)
+        return;
+    if (m_show->isRunning())
+        m_show->start(m_doc->masterTimer(), functionParent());
+    if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+        rules->noteGo();
 }
 
 FunctionParent ShowManager::functionParent() const

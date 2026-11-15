@@ -83,6 +83,13 @@ public:
     /** @reimp */
     void closeOutput(quint32 output, quint32 universe) override;
 
+    /** @reimp Review 18: the universe leaves the controller too -- never
+     *  resent by the Standard-mode refresh -- the line stays for the others */
+    void forgetOutput(quint32 output, quint32 universe) override;
+
+    /** @reimp Review 19: a closing frame whose send failed is tried once more */
+    void flushOutput(quint32 output, quint32 universe) override;
+
     /** @reimp */
     QStringList outputs() override;
 
@@ -97,6 +104,8 @@ public:
 
     /** @reimp Patches carry outputIP + outputUni to aim at a node's port. */
     bool supportsOutputTargets() const override { return true; }
+    /** @reimp Show-only fixtures may use it (N1) */
+    bool isNetworkDmxOutput() const override { return true; }
 
     /** @reimp Outputs that can't send, nodes that stopped answering, and
         ports that report a fault -- see SendHealth and ArtNetNodeWatch. */

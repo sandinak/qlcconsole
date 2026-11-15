@@ -105,6 +105,46 @@ private slots:
 
     void universeNames();
     void addUniverse();
+    void addUniverseInBlind();
+    void review10_rigGateBackOnSendsTheClosingFrame();
+    void everyRigCheckHoldsWithTheClosingFrameFirst();
+    void review11_unplugReplugOneOfTwoComesBackOnItsOwnDevice();
+    void review11_twoIdenticalDevicesUnplugReplugKeepTwoLines();
+    void review11_keptPendingDoesNotCloseTheLineAnotherUniverseMovedTo();
+    void h5_identicalNamesLoadOnTheirSavedLines();
+    void n1_aShowOnlyUniverseHasNoHardwareOutput();
+    void n1_undoCannotPutAShowOnlyUniverseBackOnUsb();
+    void n2_markingALaserOnUsbLeavesEveryChannelSafeOnTheWire();
+    void n2_markingAGroupHoldsOnceEveryFixtureIsSafe();
+    void n2_aHoldOnASharedLineHoldsEveryPatchOnIt();
+    void n3_aShowLoadedWithLasersOnUsbKeepsThemPending();
+    void n4_aHoldComesBackByNameAsStock();
+    void review15_aLaserUniverseIsNeverOnUsbThroughASwapUnmarkAndMark();
+    void review15_n4AfterALoadHoldOpensByNameAsStock();
+    void review15_teachingNeverOpensALaserUniverseOnUsb();
+    void review15_aLaserUniversesFeedbackLineIsAllowedItsOutputHeld();
+    void f3_aHoldWithNoNameWaitsOnItsLineNumber();
+    void f4_aHandPatchOntoAHeldLaserInterfaceIsRefused();
+    void f4_aLoadOntoAHeldLaserInterfaceIsKeptPending();
+    void f5_onlyArtNetSacnAndWledMaySendToShowOnly();
+    void r17n_aSharedLineIsHeldAlikeAtRuntimeAndOnLoad();
+    void scope_aShowOnlyUniverseMaySendToAVisualiserHere();
+    void r17n_heldPatchesSayWhy();
+    void r18n_aNetworkHoldClosesOnlyThatUniverse();
+    /** Review 19 (independent): red tests, see each */
+    void r19_aFormerLaserLoadedByNameComesBackOnTheLineItShared();
+    void r19_removingAHeldPatchStopsTheUniversesOpenOne();
+    /** Review 20 (independent), finding 3 */
+    void r20_removingOneOfTwoOpenLegsStopsTheOther();
+    void r16_fixtureRemapLeavesALaserUnheldOnUsb();
+    void r16_holdingADanglingPatchKeepsIt();
+    void r16_patchingTwoLasersOntoUsbClosesWithBothSafe();
+    void r16_noOrdinaryUniverseRenumbersOntoAHeldLaserInterface();
+    void r17_aSharedLineHoldLeavesTheFoggerOnTheWire();
+    void r17_anOrdinaryUniverseKeptOffASharedLineNeverComesBack();
+    void r17_aFailedN4KeepsReservingWithNoLaserLeft();
+    void r18_aSharedLineHoldSendsTheClosingFrame();
+    void r18_aFormerLaserOnASharedIdenticalUsbLineComesBack();
     void removeUniverse();
     void universe();
     void profiles();

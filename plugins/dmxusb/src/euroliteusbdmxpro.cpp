@@ -213,52 +213,70 @@ bool EuroliteUSBDMXPro::writeUniverse(quint32 universe, quint32 output, const QB
 
 void EuroliteUSBDMXPro::stop()
 {
+    /* Review 10 H1: the frame given last (a closing line's: its Show-only
+       channels at safe) is on the wire before the line closes -- one more,
+       sent here once the thread is joined (never from the thread itself:
+       a failed open closes from inside run()). */
     if (isRunning() == true)
     {
         m_running = false;
+        if (QThread::currentThread() == this)
+            return;
         wait();
+        sendFrame();
     }
+}
+
+void EuroliteUSBDMXPro::sendFrame()
+{
+#ifdef QTSERIAL
+    if (isOpen() == false)
+        return;
+#else
+    if (m_file.isOpen() == false)
+        return;
+#endif
+    int dataLen = m_portsInfo[0].m_universeData.length();
+    if (dataLen == 0)
+        return;
+
+    QByteArray request;
+    request.append(EUROLITE_USB_DMX_PRO_START_OF_MSG); // Start byte
+    request.append(EUROLITE_USB_DMX_PRO_SEND_DMX_RQ); // Send request
+    request.append((dataLen + 1) & 0xff); // Data length LSB
+    request.append(((dataLen + 1) >> 8) & 0xff); // Data length MSB
+    request.append(char(EUROLITE_USB_DMX_PRO_DMX_ZERO)); // DMX start code (Which constitutes the + 1 below)
+    request.append(m_portsInfo[0].m_universeData);
+    request.append(EUROLITE_USB_DMX_PRO_END_OF_MSG); // Stop byte
+
+#ifdef QTSERIAL
+    if (iface()->write(request) == false)
+#else
+    if (m_file.write(request) == false)
+#endif
+    {
+        recordWrite(false);
+        qWarning() << Q_FUNC_INFO << name() << "will not accept DMX data";
+#ifdef QTSERIAL
+        iface()->purgeBuffers();
+#endif
+    }
+    else
+        recordWrite(true);
 }
 
 void EuroliteUSBDMXPro::run()
 {
     qDebug() << "OUTPUT thread started";
     QElapsedTimer timer;
-    QByteArray request;
 
     m_running = true;
     while (m_running == true)
     {
         timer.restart();
 
-        int dataLen = m_portsInfo[0].m_universeData.length();
-        if (dataLen == 0)
-            goto framesleep;
+        sendFrame();
 
-        request.clear();
-        request.append(EUROLITE_USB_DMX_PRO_START_OF_MSG); // Start byte
-        request.append(EUROLITE_USB_DMX_PRO_SEND_DMX_RQ); // Send request
-        request.append((dataLen + 1) & 0xff); // Data length LSB
-        request.append(((dataLen + 1) >> 8) & 0xff); // Data length MSB
-        request.append(char(EUROLITE_USB_DMX_PRO_DMX_ZERO)); // DMX start code (Which constitutes the + 1 below)
-        request.append(m_portsInfo[0].m_universeData);
-        request.append(EUROLITE_USB_DMX_PRO_END_OF_MSG); // Stop byte
-
-#ifdef QTSERIAL
-        if (iface()->write(request) == false)
-#else
-        if (m_file.write(request) == false)
-#endif
-        {
-            recordWrite(false);
-            qWarning() << Q_FUNC_INFO << name() << "will not accept DMX data";
-#ifdef QTSERIAL
-            iface()->purgeBuffers();
-#endif
-        }
-        else
-            recordWrite(true);
-framesleep:
         int timetoSleep = m_frameTimeUs - (timer.nsecsElapsed() / 1000);
         if (timetoSleep < 0)
             qWarning() << "DMX output is running late !";

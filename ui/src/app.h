@@ -274,6 +274,13 @@ public:
     bool runCommand(const ShowControl::Request &request, ShowControl::Route route);
     /** The notice runCommand() shows when it held something. */
     static QString heldForRunText();
+    /** The double-GO guard's window, ms, this computer's (Settings ▸
+     *  General ▸ Show Controls): ShowControl::defaultGoGuardMs() unless
+     *  set; 0 is off. setGoGuardMs() keeps it and hands it to the show's
+     *  ShowControl (its rules at ShowControl::run()). */
+    static QString goGuardSettingKey();
+    static int goGuardMs();
+    void setGoGuardMs(int ms);
     /** Blind's tooltip in Design (the mute). */
     static QString blindDesignTip();
     /** RC8: as a show opens, when any fixture is drawn from the show's own
@@ -679,6 +686,9 @@ public slots:
     void slotControlBlackout();
     /** Toggle global Blind (output inhibit) from the main toolbar. */
     void slotControlBlind(bool checked);
+    /** The Blind button pressed (a control surface's too): one rule -- a
+     *  mute in Design, the Blind view in Operate (slotControlBlind()) */
+    void toggleBlind();
     void slotBlackoutChanged(bool state);
     /** Show/hide the global Blind (output-inhibited) status-bar chip. */
     void slotOutputInhibitedChanged(bool state);
@@ -710,6 +720,9 @@ private:
     QTimer *m_blindViewTimer = nullptr;
     /** The cue in edit's effects, off the stage (engine/src/blindeffects.h). */
     BlindEffects *m_blindEffects = nullptr;
+    /** Which cue each list was on, for the Run tab's offer after a crash
+     *  (engine/src/cueresume.h); the Doc's, made with it. */
+    class CueResume *m_cueResume = nullptr;
     QTimer *m_blindMotionTimer = nullptr;
     QElapsedTimer m_blindMotionClock;
     /** The cue in edit's levels, without its effects, and any override hit live over them (blindLevels()). */
@@ -1242,6 +1255,11 @@ private:
      *  has none set or the check is off/lifted. Click opens the setting. */
     QLabel* m_statusRigNetLabel = nullptr;
     void updateRigNetworkFooter();
+    /** Show only (Output Rules): "Lasers held: Design" while the Show-only
+     *  fixtures are held at their safe value -- amber, never silent; hidden
+     *  in Operate or with none. A click opens their Output Rules. */
+    QLabel *m_statusShowOnlyLabel = nullptr;
+    void updateShowOnlyFooter();
     /** The venue chip (board Q150): "Venue: Lincoln HS" or "Set Venue…",
      *  amber with a count when the venue clashes; a click opens the venue
      *  menu. Always there in the qlcconsole and Everything views; in Classic

@@ -30,6 +30,7 @@
 #include <QMutex>
 #include <climits>
 #include <QMap>
+#include <functional>
 
 #define PLUGIN_UNIVERSECHANNELS "UniverseChannels"
 
@@ -262,6 +263,51 @@ public:
      */
     virtual void writeUniverse(quint32 universe, quint32 output, const QByteArray& data, bool dataChanged);
 
+    /**
+     * Show only (R9-1): everything given to writeUniverse() for @p output
+     * and @p universe so far is on the wire before this returns. The engine
+     * calls it after a line's closing frame, before the line is closed or
+     * retargeted. A plugin that sends inside writeUniverse() (Art-Net,
+     * E1.31) needs nothing; one that sends from its own thread or timer
+     * (a USB widget's send thread, WLED) sends the latest frame now.
+     */
+    virtual void flushOutput(quint32 output, quint32 universe);
+
+    /**
+     * Review 12 F6: forget @p universe on @p output without closing the
+     * line -- another universe still sends there (a patch held off a
+     * device that another universe now has). Nothing of @p universe is
+     * written there again; the device stays open for the other one.
+     */
+    virtual void forgetOutput(quint32 output, quint32 universe);
+
+    /**
+     * Show only (R9-1, review 10 M2): the engine's builder of the frame a
+     * line that stops receiving @p universe is sent last (the Show-only
+     * channels at safe). Set by the engine for every loaded plugin; a
+     * plugin whose lines go away under it (a USB device unplugged, a
+     * rescan) asks it for each open output before it lets go of it.
+     */
+    typedef std::function<bool(quint32 universe, QByteArray &frame)> ClosingFrameSource;
+    /** @p owner: who set it (the engine's InputOutputMap), so it alone
+     *  clears it (clearClosingFrameSource()) when it goes */
+    void setClosingFrameSource(const ClosingFrameSource &source, const void *owner);
+    void clearClosingFrameSource(const void *owner);
+
+protected:
+    /** The closing frame for @p universe (see setClosingFrameSource()):
+     *  false when there is none to send. Takes the universe's frame lock:
+     *  never call it holding a lock writeUniverse() takes. */
+    bool closingFrameFor(quint32 universe, QByteArray &frame) const;
+    /** The open output lines and the universe each sends (m_universesMap) */
+    QList<QPair<quint32, quint32> > openOutputLines() const;
+
+private:
+    ClosingFrameSource m_closingFrameSource;
+    const void *m_closingFrameOwner = nullptr;
+
+public:
+
     /*************************************************************************
      * Inputs
      *************************************************************************/
@@ -419,6 +465,15 @@ public:
      * the widget the operator just connected.
      */
     virtual bool linesAreHardware() const { return false; }
+
+    /**
+     * True for the outputs a universe with Show-only fixtures (lasers,
+     * foggers, flame) may use -- N1 in engine/src/outputpatch.h. Only
+     * Art-Net, E1.31/sACN and WLED say so; every other plugin (USB DMX,
+     * DMX4Linux, SPI, OLA, UART, GPIO, MIDI, HID, Loopback, OSC, anything
+     * unknown) is refused for them.
+     */
+    virtual bool isNetworkDmxOutput() const { return false; }
 
     /**
      * True when a patch on this plugin can be aimed at a specific target on
@@ -867,7 +922,12 @@ private:
     QVector<QPair<quint32, int> > m_transmitNetworks;
 };
 
-#define QLCIOPlugin_iid "org.qlcplus.QLCIOPlugin"
+/* The interface's identity, bumped whenever its virtual table changes
+   (review 13 L6: 0.4.8 added flushOutput(), forgetOutput() and the
+   closing-frame source): a plugin built against an older one is refused
+   by QPluginLoader -- it would call through the wrong slots -- rather than
+   loaded. Every in-tree plugin names it with this macro. */
+#define QLCIOPlugin_iid "org.qlcconsole.QLCIOPlugin/0.4.8.1"
 
 Q_DECLARE_INTERFACE(QLCIOPlugin, QLCIOPlugin_iid)
 

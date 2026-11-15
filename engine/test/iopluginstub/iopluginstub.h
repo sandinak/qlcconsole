@@ -70,6 +70,10 @@ public:
 
     /** @reimp */
     bool linesAreHardware() const override { return m_linesAreHardware; }
+    /** @reimp a network DMX output unless dressed as hardware or told not
+     *  to be one (m_networkDmx false: Loopback, OSC, an unknown plugin) */
+    bool isNetworkDmxOutput() const override { return m_networkDmx && !m_linesAreHardware; }
+    bool m_networkDmx = true;
 
     /** @reimp */
     bool supportsOutputTargets() const override { return m_supportsTargets; }
@@ -201,12 +205,70 @@ public:
     /** @reimp */
     void writeUniverse(quint32 universe, quint32 output, const QByteArray& data, bool dataChanged) override;
 
+    /** @reimp m_async: the frames kept for @p output go out now */
+    void flushOutput(quint32 output, quint32 universe) override;
+
+    /** m_async: the send thread's pass -- every kept frame goes out.
+     *  Inline: the stub is a plugin DLL, and a test calls this straight
+     *  (an out-of-line non-virtual member is not exported: MinGW link). */
+    void pumpAsync()
+    {
+        const QMap<quint32, QPair<quint32, QByteArray> > pending = m_asyncPending;
+        m_asyncPending.clear();
+        for (auto it = pending.constBegin(); it != pending.constEnd(); ++it)
+            sendNow(it.value().first, it.key(), it.value().second);
+    }
+
+    /** @reimp recorded in m_forgotten (line, universe), then forgotten */
+    void forgetOutput(quint32 output, quint32 universe) override
+    { m_forgotten << qMakePair(output, universe); QLCIOPlugin::forgetOutput(output, universe); }
+    QList<QPair<quint32, quint32> > m_forgotten;
+    /** Whether @p universe is still mapped on @p output (a plugin entry) */
+    bool mapped(quint32 universe, quint32 output) const
+    { return m_universesMap.contains(universe) && m_universesMap.value(universe).outputLine == output; }
+
 public:
+    /** Review 10: a plugin that sends from its own thread (a USB widget,
+     *  WLED). writeUniverse() only keeps the frame (m_asyncPending); it is
+     *  "sent" -- reaches m_universe -- by the send thread's pass
+     *  (pumpAsync()) or flushOutput(); closeOutput() drops what is kept,
+     *  as a send thread stopped before its next pass does. */
+    bool m_async = false;
+    /** output -> (universe, frame) kept for the send thread */
+    QMap<quint32, QPair<quint32, QByteArray> > m_asyncPending;
+    int m_flushes = 0;
+    /** The last frame each target got, keyed "outputIP/line" (the line's
+     *  "outputIP" when it went out, "default" when none) -- a retarget's
+     *  old node keeps its last */
+    QMap<QString, QByteArray> m_lastByTarget;
+
+private:
+    /** A frame on the wire: m_universe and m_lastByTarget (inline: see
+     *  pumpAsync()) */
+    void sendNow(quint32 universe, quint32 output, const QByteArray &data)
+    {
+        m_universe = m_universe.replace(output * 512, data.size(), data);
+        const QString ip = m_universesMap.contains(universe)
+                           ? m_universesMap.value(universe).outputParameters.value("outputIP").toString()
+                           : QString();
+        m_lastByTarget.insert(QString("%1/%2").arg(ip.isEmpty() ? QString("default") : ip).arg(output), data);
+    }
+
+public:
+
     /** List of outputs that have been opened */
     QList <quint32> m_openOutputs;
 
     /** Fake universe buffer */
     QByteArray m_universe;
+    /** The last frame's dataChanged; and, when m_dropUnchanged, a frame
+     *  with it false is not taken (what a plugin that sends only changes
+     *  -- Art-Net's Standard mode -- does) */
+    bool m_lastDataChanged = false;
+    bool m_dropUnchanged = false;
+    /** Review 10: drop a frame on a line its cached gate decision holds
+     *  (m_gateAllowed), as Art-Net's controller does (transmitHeld()) */
+    bool m_holdLikeNetwork = false;
 
     /*********************************************************************
      * Inputs

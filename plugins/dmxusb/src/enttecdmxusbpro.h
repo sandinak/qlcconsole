@@ -23,6 +23,7 @@
 #include <QByteArray>
 #include <QVariant>
 #include <QThread>
+#include <atomic>
 
 #include "dmxusbwidget.h"
 
@@ -142,6 +143,10 @@ public:
     /** @reimp */
     bool writeUniverse(quint32 universe, quint32 output, const QByteArray& data, bool dataChanged) override;
 
+    /** @reimp waits for the thread to have sent @p line's last frame
+     *  (flushPort()) -- only ever asked after a closing frame */
+    void flush(quint32 line) override;
+
     /************************************************************************
      * Input/Output Thread
      ************************************************************************/
@@ -151,6 +156,21 @@ private:
 
     /** Stop input/output thread */
     void stopThread();
+
+    /** Port @p i's DMX (or MIDI) from its latest buffer: the thread's
+     *  output pass for one port */
+    void sendPort(int i);
+
+    /** Review 10 H1: what an output port was given last is on the wire.
+     *  Thread running: two of its output passes after now (one in flight
+     *  may have read the buffer before); stopped: sent here. */
+    void flushPort(int i);
+
+    /** Output passes the thread has made (flushPort()) */
+    std::atomic<quint32> m_outputPasses { 0 };
+    /** Output ports closed while another stays open, still to be sent once
+     *  more (bit per port; review 12 F2) */
+    std::atomic<quint32> m_drainPorts { 0 };
 
     int readData(QByteArray &payload, bool &isMIDI, int RDM = None);
 

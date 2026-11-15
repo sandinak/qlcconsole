@@ -1108,7 +1108,8 @@ void ConnectionsTree::refresh()
                 OutputPatch *op = u->outputPatch(i);
                 if (op != NULL && op->isPending())
                 {
-                    pendingByPluginThenInterface[op->pluginName()][op->outputName()] << u;
+                    // F3: a held patch with no name is "line N of <plugin>", never "None".
+                    pendingByPluginThenInterface[op->pluginName()][op->deviceText()] << u;
                     pendingUniverseIds.insert(u->id());
                     break;   // one ghost row per universe is enough
                 }
@@ -1805,7 +1806,7 @@ void ConnectionsTree::refresh()
             {
                 QTreeWidgetItem *ghostLine = new QTreeWidgetItem(pitem);
                 ghostLine->setText(COL_NAME, it.key());
-                QString ghostNet, heldWhy;
+                QString ghostNet, heldWhy, deviceWhy;
                 foreach (Universe *u, it.value())
                     for (int i = 0; i < u->outputPatchesCount(); i++)
                         if (u->outputPatch(i) != NULL && u->outputPatch(i)->isPending())
@@ -1814,11 +1815,17 @@ void ConnectionsTree::refresh()
                                 ghostNet = u->outputPatch(i)->pendingNetwork();
                             if (heldWhy.isEmpty())
                                 heldWhy = u->outputPatch(i)->heldReason();
+                            if (deviceWhy.isEmpty())
+                                deviceWhy = u->outputPatch(i)->reconnectHeld();
                         }
                 /* Held by the rig network gate (InputOutputMap::
                    transmitGateActive()): the line may well be right here,
                    it is just not on one of the show's rig networks. */
-                ghostLine->setText(COL_DETAIL, heldWhy.isEmpty() == false
+                /* Held off a USB interface (reviews 11-12): the row is named
+                   after the device it was patched to, and says why. */
+                ghostLine->setText(COL_DETAIL, deviceWhy.isEmpty() == false
+                    ? tr("kept off — %1").arg(deviceWhy)
+                    : heldWhy.isEmpty() == false
                     ? tr("held: %1 — kept, resumes on the rig network").arg(heldWhy)
                     : ghostNet.isEmpty()
                     ? tr("not present — kept, will reconnect")
@@ -1826,6 +1833,15 @@ void ConnectionsTree::refresh()
                 const QBrush errBrush(QColor(220, 90, 90));
                 ghostLine->setForeground(COL_NAME, errBrush);
                 ghostLine->setForeground(COL_DETAIL, errBrush);
+                if (deviceWhy.isEmpty() == false)
+                    setRowTooltip(ghostLine, tr(
+                        "<b>%1</b><br>%2<br><br>Lasers, foggers and flame need a network output "
+                        "(Art-Net, sACN or WLED) in this version. A universe with Show-only fixtures "
+                        "is held off %1, and while it is, no other universe opens on %1 either. "
+                        "Patch that universe to a network output, or take the Show-only rule off: "
+                        "the patches here come back as before.")
+                        .arg(it.key().toHtmlEscaped(), deviceWhy.toHtmlEscaped()));
+                else
                 setRowTooltip(ghostLine, tr(
                     "<b>%1</b><br>No interface on this machine reaches the network "
                     "these universes were patched to -- typically a laptop away from "
@@ -3344,7 +3360,9 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
 
     if (done == false)
         QMessageBox::warning(this, tr("Patch universe"),
-                             tr("Could not patch that universe to %1.").arg(pluginName));
+                             output && iomap->lastPatchRefusal().isEmpty() == false
+                             ? iomap->lastPatchRefusal()
+                             : tr("Could not patch that universe to %1.").arg(pluginName));
     else
         m_doc->setModified();
     refresh();
@@ -3570,6 +3588,7 @@ void ConnectionsTree::rerouteLine(const QString &pluginName, quint32 oldLine,
         iomap->patchUndo()->capture(universes,
             tr("reroute %1 from \"%2\" to \"%3\"").arg(pluginName).arg(oldName).arg(newName));
 
+    QStringList refused;
     foreach (quint32 uniId, universes)
     {
         Universe *u = iomap->universe(uniId);
@@ -3581,7 +3600,9 @@ void ConnectionsTree::rerouteLine(const QString &pluginName, quint32 oldLine,
             if (op != NULL && op->plugin() != NULL
                     && op->plugin()->name() == pluginName && op->output() == oldLine)
             {
-                iomap->setOutputPatch(uniId, pluginName, QString(), newLine, false, i);
+                if (iomap->setOutputPatch(uniId, pluginName, QString(), newLine, false, i) == false
+                    && iomap->lastPatchRefusal().isEmpty() == false)
+                    refused << tr("%1: %2").arg(u->name(), iomap->lastPatchRefusal());
                 break;
             }
         }
@@ -3589,6 +3610,9 @@ void ConnectionsTree::rerouteLine(const QString &pluginName, quint32 oldLine,
 
     m_doc->setModified();
     refresh();
+    // N1: a universe with Show-only fixtures stays where it was.
+    if (refused.isEmpty() == false)
+        QMessageBox::warning(this, tr("Reroute interface"), refused.join("\n\n"));
 }
 
 void ConnectionsTree::addUniverse()
@@ -3772,7 +3796,9 @@ void ConnectionsTree::patchUniverseToPort(const QString &pluginName, quint32 lin
     if (iomap->setOutputPatch(uniId, pluginName, QString(), line, false, index) == false)
     {
         QMessageBox::warning(this, tr("Patch to port"),
-                             tr("Could not patch that universe to %1.").arg(pluginName));
+                             iomap->lastPatchRefusal().isEmpty() == false
+                             ? iomap->lastPatchRefusal()
+                             : tr("Could not patch that universe to %1.").arg(pluginName));
         return;
     }
 

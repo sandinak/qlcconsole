@@ -413,7 +413,13 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
             {
                 m_propertiesAction->setEnabled(true);
                 m_testAction->setEnabled(true);
-                m_resetAction->setEnabled(true);
+                // Reset never drives a Show-only fixture; says why.
+                const QString why = Monitor::maintenanceRefusal(
+                    m_doc->fixture(item->data(KColumnName, PROP_ID).toUInt()));
+                m_resetAction->setEnabled(why.isEmpty());
+                m_resetAction->setToolTip(why.isEmpty()
+                    ? tr("Send this fixture's reset command (only shown when its definition has one).")
+                    : why);
             }
             else
             {
@@ -485,7 +491,12 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
         bool singleFixture = (item && item->data(KColumnName, PROP_ID).isValid() &&
                               m_fixtures_tree->selectedItems().size() == 1);
         m_testAction->setEnabled(singleFixture);
-        m_resetAction->setEnabled(singleFixture);
+        const QString resetWhy = singleFixture
+            ? Monitor::maintenanceRefusal(m_doc->fixture(item->data(KColumnName, PROP_ID).toUInt()))
+            : QString();
+        m_resetAction->setEnabled(singleFixture && resetWhy.isEmpty());
+        if (!resetWhy.isEmpty())
+            m_resetAction->setToolTip(resetWhy);
         // Locate works on any selection, including in Operate mode.
         m_locateAction->setEnabled(m_fixtures_tree->selectedItems().isEmpty() == false);
     }
@@ -1311,6 +1322,9 @@ void FixtureManager::selectedRows(QList<quint32> &fixtures, QList<quint32> &grou
 
 QList<quint32> FixtureManager::duplicate(const QList<quint32> &fixtures, const QList<quint32> &groups)
 {
+    /* N2 (outputpatch.h, review 16 F2): one marking scope for duplicate and paste of several --
+       all Show only before a non-network output is held. */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(m_doc->inputOutputMap());
     if (m_doc->mode() != Doc::Design)
         return QList<quint32>();
     QList<quint32> made;
@@ -2167,6 +2181,9 @@ void FixtureManager::addChannelsGroup()
 
 void FixtureManager::slotAddRGBPanel()
 {
+    /* N2 (outputpatch.h, review 16 F2): one marking scope for an RGB panel's fixtures --
+       all Show only before a non-network output is held. */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(m_doc->inputOutputMap());
     if (!ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Add an RGB panel to the patch")))
         return;
     AddRGBPanel rgb(this, m_doc);
@@ -3073,6 +3090,9 @@ void FixtureManager::slotImport()
 
 int FixtureManager::importFixtureList(Doc *doc, const QString &fileName)
 {
+    /* N2 (outputpatch.h, review 16 F2): one marking scope for an imported fixture list --
+       all Show only before a non-network output is held. */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(doc != nullptr ? doc->inputOutputMap() : nullptr);
     QXmlStreamReader *reader = QLCFile::getXMLReader(fileName);
     if (reader == NULL || reader->device() == NULL || reader->hasError())
     {

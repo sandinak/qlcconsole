@@ -25,6 +25,13 @@ class E131_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** A held line (rig network gate) never retries a closing frame */
+    void aHeldLineNeverRetriesTheClosingFrame();
+    /** Review 18: forgetOutput() takes the universe out of the controller */
+    void r18_aForgottenUniverseLeavesTheController();
+    /** Review 16 F5: one of the outputs a universe with Show-only
+     *  fixtures may use (QLCIOPlugin::isNetworkDmxOutput()). */
+    void showOnlyMayUseIt();
     /* Send failure reporting through SendHealth (whose rules artnet_test
        covers in full): results are injected, nothing is sent. */
     void transientFailuresAreNotReported();

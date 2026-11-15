@@ -120,7 +120,9 @@ public:
         BlackoutExempt  = 1 << 4,   //!< Blackout (and Blind) sends its live value
         SwitchOutput    = 1 << 5,   //!< a relay: 0 or 255, never GM-scaled
         OnAtOpenOutput  = 1 << 6,   //!< full when nothing sets it (when armed)
+        ShowOnlyOutput  = 1 << 7,   //!< only a real run drives it (setShowOnlyLive)
         OutputRuleBits  = GMExempt | BlackoutExempt | SwitchOutput | OnAtOpenOutput
+                          | ShowOnlyOutput
     };
 
     static quint32 invalid() { return UINT_MAX; }
@@ -271,7 +273,8 @@ public:
                        QLCInputProfile *profile = NULL);
 
     /** Add/Remove/Replace an output patch on this Universe */
-    bool setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index = 0);
+    bool setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index = 0,
+                        const QMap<QString, QVariant> &params = QMap<QString, QVariant>());
 
     /** Add/Replace an output patch at @p index whose saved interface
      *  identity @p pendingUID did not match any line @p plugin currently
@@ -279,7 +282,12 @@ public:
      *  setOutputPatch(), there is no "clear this patch" meaning here, only
      *  "remember it, unresolved". */
     bool setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index = 0,
-                               quint32 savedLine = UINT_MAX, const QString &network = QString());
+                               quint32 savedLine = UINT_MAX, const QString &network = QString(),
+                               bool byNumber = false);
+
+    /** A pending (or held) output patch at @p index found its line again:
+     *  opened on @p line under the frame lock (OutputPatch::resolvePending()) */
+    bool resolveOutputPatch(int index, quint32 line);
 
     /** Sets a feedback patch for this Universe */
     bool setFeedbackPatch(QLCIOPlugin *plugin, quint32 output);
@@ -310,7 +318,10 @@ public:
 
     /**
      * This is the actual function that writes data to an output patch
-     * A flag indicates if data has changed since previous iteration
+     * A flag indicates if data has changed since previous iteration.
+     * Every frame sent passes here: the Show-only channels are held in it
+     * (setShowOnlyLive()) whoever calls it -- the frame, Blackout, leaving
+     * Blind, a maintenance send. Serialised with processFaders().
      */
     void dumpOutput(const QByteArray& data, bool dataChanged);
 
@@ -336,6 +347,13 @@ signals:
     /** Notify the listeners that a feedback line has been patched/unpatched */
     void hasFeedbackChanged();
 
+    /** The first Show-only channel was marked (none before): the I/O map
+     *  holds its hardware outputs (N2, outputpatch.h) */
+    void showOnlyStarted();
+    /** The last Show-only channel was unmarked: the I/O map lets those
+     *  holds go (N4) */
+    void showOnlyEnded();
+
 private:
     /** Reference to the input patch associated to this universe. */
     InputPatch *m_inputPatch;
@@ -346,6 +364,8 @@ private:
     /** Reference to the feedback patch associated to this universe. */
     OutputPatch *m_fbPatch;
 
+    /** A new output patch, its closing frame this universe's */
+    OutputPatch *newOutputPatch();
 private:
     // Connect to inputPatch's valueChanged signal
     void connectInputPatch();
@@ -595,6 +615,108 @@ public:
     void setBlindHoldsExempt(bool hold);
     bool blindHoldsExempt() const { return m_blindHoldsExempt.load(std::memory_order_relaxed); }
 
+    /** Show only (Fixture::ShowOnly): @p safe holds each ShowOnlyOutput
+     *  channel's safe value (UNIVERSE_SIZE bytes; off, closed -- what
+     *  OutputRuleKeeper::safeValue() says). Set with the rule bits. */
+    void setShowOnlySafeValues(const QByteArray &safe);
+    /** A show being loaded (InputOutputMap::setLoadHold()): nothing of
+     *  this universe reaches any plugin -- frames, sendCurrent(),
+     *  sendHeld() -- until its patches have been checked against the
+     *  Show-only rules (review 13: before the first frame after a load).
+     *  A closing frame still goes out. Safe from any thread. */
+    void setLoadHold(bool hold) { m_loadHold.store(hold, std::memory_order_relaxed); }
+    bool loadHold() const { return m_loadHold.load(std::memory_order_relaxed); }
+
+    /** Whether a real run of the show may drive the Show-only channels:
+     *  true in Operate. False (Design, the default): every frame sent has
+     *  them at their safe value, whatever wrote them -- universeWritten()
+     *  still carries what they would be, for the rig views. True (S0):
+     *  every frame each of them starts at its safe value and only the
+     *  faders that count now (GenericFader::showStamp(): of this session,
+     *  later than the channel's own stamp) are applied on it; the rest add
+     *  nothing. Back to true, the stored values start from safe, so nothing
+     *  a Design preview left on an LTP channel comes out. Safe from any
+     *  thread. */
+    void setShowOnlyLive(bool live);
+    bool showOnlyLive() const { return m_showOnlyLive.load(std::memory_order_relaxed); }
+    /** The emergency stop (E1): every Show-only channel's stored values
+     *  back to safe at once, under the frame lock */
+    void cutShowOnly();
+    /** One channel made Show only (@p on, at @p safe) or not, at once --
+     *  a Show-only fixture moved or patched mid-show, before the full
+     *  rebuild (OutputRuleKeeper) catches up. @p remark: a fresh mark even
+     *  if it was Show only already (the fixture moved or re-moded: R8-3) */
+    void markShowOnly(int channel, bool on, uchar safe, bool remark = false);
+    /** S0, every send: a send between two frames (Blackout, leaving Blind,
+     *  a maintenance send) -- under the frame lock, the Show-only channels
+     *  from the S0 builder */
+    void sendCurrent();
+    /** The emergency stop's send, entering Blind, Blackout in Blind --
+     *  always sent, Blind or not: the Show-only channels at safe, the
+     *  others as they are (in Blind: frozen at the frame from before) */
+    void sendHeld();
+    /** R9-1: the last frame for an output line that stops receiving this
+     *  universe (re-patched, held, unpatched, the universe removed, the
+     *  patch destroyed): built as sendHeld() builds it, under the frame
+     *  lock -- the Show-only channels at safe, the others as they are (in
+     *  Blind: frozen), as Blackout makes it when @p blackout. False (and
+     *  nothing sent): there are no Show-only channels, or none of ours go
+     *  out here at all. OutputPatch::setClosingFrame(). */
+    bool closingFrame(QByteArray &frame, bool blackout);
+    /** What a held send starts from (frame lock held): the live values,
+     *  or in Blind the frame from before it with anything past its end at
+     *  0 -- never the preview */
+    QByteArray heldBaseFrame() const;
+    /** Blackout on @p frame for a held send: in Blind, intensity (HTP) at
+     *  0 on the frozen values, never m_blackoutValues (the preview) */
+    QByteArray heldBlackoutFrame(const QByteArray &frame) const;
+    /** Where a fade starting on @p address starts from: for a Show-only
+     *  channel, what the last S0 frame built there (never a value stored
+     *  mid-frame) */
+    uchar fadeStartValue(int address);
+    /** How many channels are Show only */
+    int showOnlyChannelCount() const { return m_showOnlyCount.load(std::memory_order_relaxed); }
+    /** True when the frames sent now hold the Show-only channels at their
+     *  safe value: not live, or Blind (inhibitOutput()) */
+    bool showOnlyHeld() const;
+
+private:
+    /** Each fader is written by processFaders(); one that holds the
+     *  Show-only channels (live) has them put back as they were after it */
+    void writeFader(GenericFader *fader, bool keepShowOnly);
+    /** dumpOutput() with whether the show is live for this frame, read
+     *  once (processFaders() reads it once for the whole frame). Takes
+     *  care of Show only on every path a frame is sent by. */
+    void dumpOutputFrame(const QByteArray &data, bool dataChanged, bool live);
+    /** S0, the one builder of every send: the Show-only channels of
+     *  @p frame at their safe value (through the modifier, never GM-scaled)
+     *  when @p held or under @p blackout, else at what the last frame built
+     *  (m_showOnlyOut) -- never what @p frame carried */
+    void buildShowOnly(QByteArray &frame, bool held, bool blackout);
+    uchar showOnlySafeOut(int c);
+    /** m_showOnlyOut/m_showOnlyPre of @p c back to safe (rules lock held) */
+    void setShowOnlyOutSafeLocked(int c);
+    /** The live frame's end: a Show-only channel at its safe value goes out
+     *  at it unscaled; what each was built at is kept (m_showOnlyPre) */
+    void finishShowOnlyFrame();
+    /** What the frame sends on the Show-only channels, kept for every send
+     *  until the next frame (m_showOnlyOut) */
+    void recordShowOnlyOut(const QByteArray &postGM);
+    /** S0: a write on @p address dropped -- its writer does not count there
+     *  (set by writeFader() for the fader writing) */
+    bool writeBlocked(int address) const;
+    /** True when the Show-only channels of @p frame differ from the last
+     *  frame sent, or the rules changed since: a changed frame, so a
+     *  plugin that sends only changes sends it. Keeps @p frame's. */
+    bool showOnlySentChanged(const QByteArray &frame);
+    /** m_showOnlyMaxMark worked out again (m_outputRulesMutex held) */
+    void updateMaxMarkLocked();
+    /** The Show-only channels from @p address on, @p range of them, back
+     *  to their safe value (a reset: E6) */
+    void restoreShowOnlySafe(int address, int range);
+    /** The "not ours" ranges of @p frame at zero (m_notOursMutex held) */
+    void zeroNotOurs(QByteArray &frame) const;
+
 private:
     /** True when any channel up to @p count is Blackout-exempt */
     bool hasBlackoutExempt(int count) const;
@@ -613,6 +735,24 @@ private:
     QVector<int> m_onAtOpenRestore;
     std::atomic<bool> m_onAtOpenArmed { false };
     std::atomic<bool> m_blindHoldsExempt { true };
+    /** Show only: the channels (under m_outputRulesMutex), their safe
+     *  values, and room to keep what a frame had there -- sized when the
+     *  rules change, never per frame */
+    QVector<int> m_showOnlyChannels;
+    QByteArray m_showOnlySafe;
+    /** What the last frame sent had on them (under m_outputRulesMutex) */
+    QVector<uchar> m_showOnlyLastSent;
+    bool m_showOnlySentDirty = true;
+    /** The frame sent while they are held: a copy kept, not made per frame
+     *  (under m_frameMutex, as every dumpOutput() is) */
+    QByteArray m_showOnlyFrame;
+    std::atomic<int> m_showOnlyCount { 0 };
+    std::atomic<bool> m_showOnlyLive { false };
+    std::atomic<bool> m_loadHold { false };
+    /** Channels made Show only while live: the next frame starts them
+     *  from safe (m_showOnlyResetChannels, under m_outputRulesMutex) */
+    std::atomic<bool> m_showOnlyReset { false };
+    QVector<int> m_showOnlyResetChannels;
 
     /*********************************************************************
      * Auto-open shutters
@@ -678,7 +818,8 @@ public:
         for (int i = 0; i < count; ++i)
         {
             const int a = address + i;
-            if (a < 0 || a >= UNIVERSE_SIZE)
+            // R9-3: a held writer (S0) never wrote it: it lets go of nothing
+            if (a < 0 || a >= UNIVERSE_SIZE || writeBlocked(a))
                 continue;
             m_letGoBy[a].store(token, std::memory_order_relaxed);
             m_letGoFrame[a].store(frame, std::memory_order_relaxed);
@@ -1185,6 +1326,30 @@ public:
      */
     bool savePluginParametersXML(QXmlStreamWriter *doc,
                                  QMap<QString, QVariant>parameters) const;
+
+private:
+    /** S0: the stamp each channel was made Show only at
+     *  (GenericFader::newStamp()); a writer counts there only if stamped
+     *  later. Under m_outputRulesMutex; the highest of them, read lock-free
+     *  per fader (writeFader()'s fast path). Last in the class: nothing on
+     *  the per-channel write path moves for it. */
+    QVector<quint32> m_showOnlyMark = QVector<quint32>(UNIVERSE_SIZE, 0);
+    std::atomic<quint32> m_showOnlyMaxMark { 0 };
+    /** S0, every send: each Show-only channel's value as the last live
+     *  frame sent it (post-GM) and as it stood before the Grand Master
+     *  (fade starts); safe until a frame builds them */
+    QByteArray m_showOnlyOut = QByteArray(UNIVERSE_SIZE, char(0));
+    QByteArray m_showOnlyPre = QByteArray(UNIVERSE_SIZE, char(0));
+    /** writeFader(): the channels the fader writing now does not count on,
+     *  and whether any (the universe thread, in the frame) */
+    QByteArray m_showOnlyBlocked = QByteArray(UNIVERSE_SIZE, char(0));
+    bool m_writeGuard = false;
+    /** Blind: the frame from before it, what the rig keeps (Show-only
+     *  channels at safe when sent: sendHeld()) */
+    QByteArray m_blindFrozen;
+    /** m_postGMValues' bytes, written in place: never detached, so an
+     *  unlocked reader never sees the array swapped under it */
+    char *m_post = nullptr;
 };
 
 /** @} */

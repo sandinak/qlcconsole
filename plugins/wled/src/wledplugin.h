@@ -118,8 +118,17 @@ public:
     QStringList outputs() override;
     QString outputInfo(quint32 output) override;
     bool supportsOutputTargets() const override { return true; }
+    /** @reimp Show-only fixtures may use it (N1) */
+    bool isNetworkDmxOutput() const override { return true; }
     void writeUniverse(quint32 universe, quint32 output, const QByteArray &data,
                        bool dataChanged) override;
+    /** Review 10-12 (Show only): the look written last for @p universe --
+     *  a closing frame -- is sent to each of its devices now, before the
+     *  output closes or is aimed at another device. With an event loop it
+     *  is never waited on (the caller holds the engine's frame lock) and
+     *  nothing newer reaches that device before it is done; as the app
+     *  quits it is waited on, about a second at most. */
+    void flushOutput(quint32 output, quint32 universe) override;
     void setParameter(quint32 universe, quint32 line, Capability type,
                       QString name, QVariant value) override;
     void unSetParameter(quint32 universe, quint32 line, Capability type,
@@ -292,6 +301,30 @@ private:
      *  device is left as its layout, not turned round. Best effort, at most
      *  about a second however many do not answer; no event loop. */
     static void restoreDirections(const QVector<Device> &devices);
+    /** A closing state for one device: where, what, and what it is */
+    struct ClosingPost
+    {
+        QString ip;
+        QByteArray body;
+        quint32 universe = 0;
+        QJsonObject state;
+    };
+    /** A closing state POSTed through the network manager, never waited
+     *  on; until it is done no newer look goes to that device (review 12
+     *  F8); marked sent only once taken, tried once more if not
+     *  (@p attempt: 0, 1) -- review 13 L5 */
+    void postClosing(const ClosingPost &c, int attempt);
+    /** The closing state that waited for a look POST to @p ip, sent */
+    void postQueuedClosing(const QString &ip);
+    /** The devices of @p universe at @p ip have @p state (m_mutex held) */
+    void markClosingSent(quint32 universe, const QString &ip, const QJsonObject &state);
+    /** Closing states waiting for a look POST still on its way (m_mutex) */
+    QHash<QString, ClosingPost> m_closingQueued;
+    /** The same with no event loop (the app quitting): waited on, at most
+     *  @p waitMs */
+    static bool postNowSync(const QString &ip, const QByteArray &body, int waitMs);
+    /** Closing states on their way, per device IP (under m_mutex) */
+    QHash<QString, int> m_closingInFlight;
     static const int restoreBudgetMs = 1000;
 
     /** The rig network gate (QLCIOPlugin::setTransmitNetworks()) for one

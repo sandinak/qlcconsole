@@ -916,6 +916,11 @@ private slots:
     /** Output Rules… on two fixtures (one of them mixed) is one rig undo:
      *  ⌘Z puts every fixture's rules and the universe's rule bits back */
     void outputRulesAreOneRigUndoStep();
+    /** Show only: Identify / Reset refused for a Show-only fixture, both
+     *  modes, saying why (as Locate) */
+    void maintenanceIsRefusedForAShowOnlyFixture();
+    /** Show only ticked unticks and greys Ignore Blackout, saying why */
+    void showOnlyGreysIgnoreBlackout();
     /** ⌘C / ⌘V on the plot: a truss comes back as a copy, offset, with the
      *  fixtures it carries; ⌘Z takes the copy away */
     void copyAndPasteDuplicatesATrussWithItsFixtures();

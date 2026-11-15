@@ -23,6 +23,7 @@
 #include <QSharedPointer>
 #include "qlcengine_export.h"
 #include <QObject>
+#include <QSet>
 #include <QMutex>
 #include <QDir>
 
@@ -160,6 +161,9 @@ signals:
      */
     void blackoutChanged(bool state);
 
+    /** Blind is about to end (before anything is sent again): Show only
+     *  starts a new session (OutputRuleKeeper) */
+    void outputResuming();
     /** Sent when the Blind (output-inhibited) state changes. */
     void outputInhibitedChanged(bool state);
 
@@ -168,6 +172,7 @@ private:
     bool m_blackout;
     /** Current Blind (output-inhibited) state */
     bool m_outputInhibited = false;
+    bool m_loadHold = false;
 
     /*********************************************************************
      * Universes
@@ -287,6 +292,12 @@ public:
      * Retrieve the list of references of the Universe in the input/output map
      */
     QList<Universe*> universes() const;
+
+    /** The universes, read under the claim lock from any thread (an
+     *  emergency stop from a plugin's thread). On the thread that holds
+     *  the claim (the MasterTimer's tick) the list can't change, and it is
+     *  read as it is: never a deadlock. */
+    QList<Universe*> universesSnapshot();
 
     /**
      * Get a reference to a Universe from the given Universe ID
@@ -415,7 +426,8 @@ public:
      */
     bool setOutputPatch(quint32 universe, const QString& pluginName,
                         const QString& outputUID, quint32 output = 0,
-                        bool isFeedback = false, int index = 0);
+                        bool isFeedback = false, int index = 0,
+                        const QMap<QString, QVariant> &params = QMap<QString, QVariant>());
 
     int outputPatchesCount(quint32 universe) const;
 
@@ -488,6 +500,16 @@ public:
     /** Try every kept (offline/pending) patch again; returns how many
      *  reconnected. Runs by itself every few seconds while any exist. */
     int retryOfflinePatches();
+
+    /** A show being loaded (Doc::loadXML()): no universe sends anything to
+     *  a plugin -- universes added meanwhile neither -- until it is let go,
+     *  after recheckPatchesAfterLoad() */
+    void setLoadHold(bool hold);
+    /** N3, F4 (outputpatch.h): once a show's Show-only fixtures are known,
+     *  every output of their universes that is not a network DMX one is
+     *  held, then any other the load opened onto an interface those
+     *  reserve -- before any output is let go. Returns how many. */
+    int recheckPatchesAfterLoad();
 
     /** Are any patches being kept offline right now? */
     bool hasOfflinePatches() const;
@@ -567,7 +589,45 @@ public:
     /** How a patch with saved identity @p uid would resolve here: a line
      *  index, or -1 when nothing on this machine reaches it. */
     int resolveSavedLine(QLCIOPlugin *plugin, bool output, const QString &uid,
-                         const QString &network, const QString &target) const;
+                         const QString &network, const QString &target,
+                         quint32 savedLine = UINT_MAX) const;
+
+    /** Why the last setOutputPatch() was refused by N1 (outputpatch.h): a
+     *  universe with Show-only fixtures onto a hardware line. Empty when it
+     *  was not; cleared by each call. */
+    QString lastPatchRefusal() const { return m_lastPatchRefusal; }
+
+    /** N1's words: @p device can't send to Show-only fixtures */
+    static QString networkOnlyText(const QString &device);
+    /** F4's words: @p device is cabled to @p universe's lasers; remove its
+     *  @p output output there to free it */
+    static QString reservedText(const QString &device, const QString &universe,
+                                const QString &output = QStringLiteral("USB"));
+    /** N1: why a universe with Show-only fixtures may not send through
+     *  @p plugin's @p line (named @p lineName) -- not a network DMX output
+     *  (QLCIOPlugin::isNetworkDmxOutput()); empty when it may. The target
+     *  is not checked: one on this computer (a visualiser) is fine. */
+    static QString showOnlyRefusal(QLCIOPlugin *plugin, const QString &lineName, quint32 line);
+    /** Why @p universe's output patch @p index may not be patched by hand
+     *  onto @p pluginName's @p line (N1, F4); empty when it may. The I/O
+     *  tab asks before it changes anything. */
+    QString outputPatchRefusal(quint32 universe, const QString &pluginName, quint32 line, int index = 0) const;
+
+    /** N2: marks made between begin and end (a fixture's channels, a
+     *  group's fixtures) hold a hardware patch once, after the last of
+     *  them -- its closing frame then has every one at safe. Nests. */
+    void beginShowOnlyMarks();
+    void endShowOnlyMarks();
+    /** beginShowOnlyMarks() / endShowOnlyMarks() for a scope */
+    class ShowOnlyMarks
+    {
+    public:
+        explicit ShowOnlyMarks(InputOutputMap *io) : m_io(io) { if (m_io) m_io->beginShowOnlyMarks(); }
+        ~ShowOnlyMarks() { if (m_io) m_io->endShowOnlyMarks(); }
+    private:
+        Q_DISABLE_COPY(ShowOnlyMarks)
+        InputOutputMap *m_io;
+    };
 
     /*********************************************************************
      * Rig network transmit gate
@@ -847,6 +907,18 @@ private:
     /** A game controller line (its plugin says what kind, or its profile
      *  gives it gamepad roles). */
     static bool isGamepadLine(QLCIOPlugin *plugin, quint32 line);
+    /** True when an open output patch other than @p except sends on
+     *  @p plugin's @p line (review 11: a kept-off patch must not close it) */
+    bool lineUsedByAnother(const QLCIOPlugin *plugin, quint32 line, const OutputPatch *except) const;
+    /** N2/N3: @p universe has Show-only fixtures -- each of its outputs that
+     *  is not a network DMX one is held (N1's words), closing frame first;
+     *  @p fromLoad: waiting on its saved line */
+    void holdShowOnlyOutputs(Universe *universe, bool fromLoad);
+    /** F4: why @p plugin's @p line is reserved by a held laser universe
+     *  (but @p except); empty when it is not */
+    QString reservedWhy(const QLCIOPlugin *plugin, quint32 line, const OutputPatch *except) const;
+    /** N2, N4: follow @p uni's Show-only fixtures coming and going */
+    void watchShowOnly(Universe *uni);
 
 private slots:
    /** Slot that catches plugin configuration change notifications from UIPluginCache */
@@ -855,6 +927,10 @@ private slots:
 
 private:
     QTimer *m_offlineRetry;
+    QString m_lastPatchRefusal;
+    /** beginShowOnlyMarks() depth, and the universes marked meanwhile */
+    int m_showOnlyMarks = 0;
+    QSet<quint32> m_showOnlyMarked;
     /** applyInputSlot() is patching: not the user choosing one device */
     bool m_applyingSlot = false;
 

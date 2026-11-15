@@ -125,6 +125,19 @@ void PadRun::hookShowControl()
             sync();
         }
     });
+    /* The double-GO guard held a command, from anywhere (ShowControl::run(),
+       its rule 2): the pad says it as every surface does, in the same words
+       -- one long buzz, and the voice. Not its notice: the footer's Next
+       chip already shows the words, and the two together crowded the
+       footer. In the Run role only: in Tools the pad isn't running the
+       show. */
+    connect(sc, &ShowControl::commandHeld, this, [this](const QString &text, quint32, ShowControl::Route) {
+        m_heldNow = true;
+        if (!m_enabled || m_pc == nullptr)
+            return;
+        m_pc->padRumble(1, ControllerScheme::rumbleLongMs());
+        m_pc->tellOperator(text, ControllerScheme::ConfirmPriority);
+    });
 }
 
 /*****************************************************************************
@@ -892,9 +905,14 @@ bool PadRun::trigger(Action action)
     r.command = commandFor(action);
     r.chaser = listChaser();
     // The one GO path: the App's guard decides, and says what it held.
+    hookShowControl();
+    m_heldNow = false;
     const bool done = sc->run(r, ShowControl::RoutePad);
     emit commandSent(r.command, done);
     if (m_pc == nullptr)
+        return done;
+    // Held by the double-GO guard: already buzzed and said, as everywhere.
+    if (!done && m_heldNow)
         return done;
     if (done)
     {

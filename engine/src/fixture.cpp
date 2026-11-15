@@ -2199,6 +2199,8 @@ QString Fixture::outputRulesToString(OutputRules rules)
         out << QStringLiteral("Switch");
     if (rules & OnAtOpen)
         out << QStringLiteral("OnAtOpen");
+    if (rules & ShowOnly)
+        out << QStringLiteral("ShowOnly");
     return out.join(QLatin1Char(','));
 }
 
@@ -2216,6 +2218,8 @@ Fixture::OutputRules Fixture::stringToOutputRules(const QString &str)
             rules |= Switch;
         else if (w == QLatin1String("OnAtOpen"))
             rules |= OnAtOpen;
+        else if (w == QLatin1String("ShowOnly"))
+            rules |= ShowOnly;
         else
             qWarning() << Q_FUNC_INFO << "Unknown output rule:" << w;
     }

@@ -26,6 +26,7 @@
 #include "outputrulekeeper.h"
 #include "fixturegroup.h"
 #include "monitor/monitor.h"
+#include "inputoutputmap.h"
 #include "doc.h"
 
 OutputRulesDialog::OutputRulesDialog(Doc *doc, const QList<quint32> &fixtureIds, QWidget *parent)
@@ -44,13 +45,14 @@ OutputRulesDialog::OutputRulesDialog(Doc *doc, const QList<quint32> &fixtureIds,
 
     QVBoxLayout *lay = new QVBoxLayout(this);
     QLabel *intro = new QLabel(tr("For circuits that are not lights in the show: power relays, house, "
-                                  "work, hall and backstage-blue lights."), this);
+                                  "work, hall and backstage-blue lights -- and for what must fire only "
+                                  "in the show: lasers, foggers, flame relays, a DMX curtain."), this);
     intro->setWordWrap(true);
     lay->addWidget(intro);
 
     OutputRuleKeeper *k = m_doc->outputRuleKeeper();
     QString onWhen;
-    switch (k != nullptr ? k->onAtOpenWhen() : OutputRuleKeeper::kDefaultOnAtOpenWhen)
+    switch (k != nullptr ? k->onAtOpenWhen() : OutputRuleKeeper::defaultOnAtOpenWhen())
     {
         case OutputRuleKeeper::OnAtOperate:
             onWhen = tr("from when you switch to Operate (the show's setting, in Settings ▸ Advanced ▸ Output)");
@@ -75,6 +77,11 @@ OutputRulesDialog::OutputRulesDialog(Doc *doc, const QList<quint32> &fixtureIds,
         { Fixture::OnAtOpen, tr("On when not in use"),
           tr("At full whenever nothing in the show sets it -- %1. Anything that sets it, even "
              "to zero, wins.").arg(onWhen), "outputRuleOnAtOpen" },
+        { Fixture::ShowOnly, tr("Show only"),
+          tr("Only a GO in Operate drives it. In Design, Blind, the Workbench, Locate, Solo, focus "
+             "and previews it stays safe -- off, closed -- and the plot draws what it would do. "
+             "It wins over On when not in use; Blackout wins over it."),
+          "outputRuleShowOnly" },
     };
 
     foreach (const Row &r, rows)
@@ -113,6 +120,32 @@ OutputRulesDialog::OutputRulesDialog(Doc *doc, const QList<quint32> &fixtureIds,
         lay->addWidget(note);
     }
 
+    /* Blackout always wins over Show only: with Show only ticked, Ignore
+       Blackout is unticked and greyed, saying why. */
+    QCheckBox *showOnly = m_boxes.value(Fixture::ShowOnly);
+    QCheckBox *blackout = m_boxes.value(Fixture::ExemptBlackout);
+    if (showOnly != nullptr && blackout != nullptr)
+    {
+        const QString blackoutTip = blackout->toolTip();
+        auto follow = [showOnly, blackout, blackoutTip]() {
+            const bool on = showOnly->checkState() == Qt::Checked;
+            if (on)
+            {
+                blackout->setTristate(false);
+                blackout->setChecked(false);
+                blackout->setToolTip(tr("Blackout always wins over Show only: a Show-only fixture "
+                                        "goes out with Blackout."));
+            }
+            else
+            {
+                blackout->setToolTip(blackoutTip);
+            }
+            blackout->setEnabled(!on);
+        };
+        connect(showOnly, &QCheckBox::checkStateChanged, this, follow);
+        follow();
+    }
+
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(bb, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -138,6 +171,10 @@ Fixture::OutputRules OutputRulesDialog::rulesFor(quint32 fixtureId) const
 bool OutputRulesDialog::apply()
 {
     bool changed = false;
+    /* N2 (outputpatch.h): a group made Show only holds a hardware output
+       once, after every fixture is marked -- the closing frame has them all
+       at safe. */
+    InputOutputMap::ShowOnlyMarks marks(m_doc->inputOutputMap());
     foreach (quint32 id, m_fixtures)
     {
         Fixture *f = m_doc->fixture(id);

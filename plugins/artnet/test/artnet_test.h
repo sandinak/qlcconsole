@@ -29,6 +29,14 @@ class ArtNet_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** Review 19: a closing frame whose send failed goes again on the flush */
+    void r19_aFailedClosingFrameIsTriedOnceMore();
+    /** Review 16 F5: one of the outputs a universe with Show-only
+     *  fixtures may use (QLCIOPlugin::isNetworkDmxOutput()). */
+    void showOnlyMayUseIt();
+    /** Review 18 (independent): forgetOutput() on a shared line (a Show-only
+     *  hold) must stop the 2 s resend of that universe's last frame */
+    void r18_aForgottenUniverseIsNotResent();
     void setupArtNetDmx();
     void fillArtPollReplyInfo();
 
@@ -91,6 +99,7 @@ private slots:
     void rigNetworkGateHoldsEverySend();
     void rigNetworkGateAllowsRigAndLoopback();
     void rigNetworkGateDecisionIsCachedOffTheSendPath();
+    void rigNetworkGateReleaseSendsNoStaleFrame();
 
     /* The RDM flag held steady (ArtNetRdmFlag): a junk Status1 (the
        CR041R's) reads "no RDM" throughout; a real one is followed. */

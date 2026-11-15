@@ -65,6 +65,12 @@ typedef struct _uinfo
      *  starts clean. */
     SendHealth sendHealth;
     QHostAddress healthTarget;
+
+    /** Review 19: the last DMX packet whose send failed, for one more try
+     *  when the line is flushed (a closing frame); empty otherwise */
+    QByteArray unsentPacket;
+    QHostAddress unsentAddress;
+    quint16 unsentPort = 0;
 } UniverseInfo;
 
 class E131Controller final : public QObject
@@ -87,6 +93,14 @@ public:
 
     /** Send DMX data to a specific port/universe */
     void sendDmx(const quint32 universe, const QByteArray& data);
+
+    /** Review 19: a closing frame whose send failed is tried once more, now
+     *  (QLCIOPlugin::flushOutput()); false, and said, when it fails again */
+    bool retryUnsent(quint32 universe);
+
+    /** Where @p universe unicasts when it is given no address: as
+     *  addUniverse() sets it ((line & 255.255.255.0) + universe + 1) */
+    QHostAddress defaultOutputUCastAddress(quint32 universe) const;
 
     /** Work out again whether this line is held by the rig network gate
      *  (QLCIOPlugin::setTransmitNetworks()). Called when the line is made,

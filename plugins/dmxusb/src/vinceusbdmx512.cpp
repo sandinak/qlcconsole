@@ -168,10 +168,49 @@ bool VinceUSBDMX512::writeUniverse(quint32 universe, quint32 output, const QByte
 
 void VinceUSBDMX512::stopOutputThread()
 {
+    /* Review 10 H1: the frame given last (a closing line's: its Show-only
+       channels at safe) is on the wire before the line closes -- one more,
+       sent here once the thread is joined (never from the thread itself:
+       a failed open closes from inside run()). */
     if (isRunning() == true)
     {
         m_running = false;
+        if (QThread::currentThread() == this)
+            return;
         wait();
+        sendFrame();
+    }
+}
+
+void VinceUSBDMX512::sendFrame()
+{
+    if (isOpen() == false)
+        return;
+
+    int dataLen = m_portsInfo[0].m_universeData.length();
+
+    if (dataLen > 0)
+    {
+        QByteArray request;
+        request.append(QByteArray(2, VINCE_START_OF_MSG));  // Start byte
+        request.append(VINCE_CMD_UPDATE_DMX);               // Command
+        request.append(int((dataLen + 2) / 256));           // Data length
+        request.append(int((dataLen + 2) % 256));
+        request.append(QByteArray(2, 0x00));                // Gap with data
+        request.append(m_portsInfo[0].m_universeData);
+        request.append(VINCE_END_OF_MSG);                   // Stop byte
+
+        const bool sent = iface()->write(request);
+        recordWrite(sent);
+        if (sent == false)
+            qWarning() << Q_FUNC_INFO << name() << "Will not accept DMX data";
+        else
+        {
+            QByteArray reply;
+
+            if (readData(iface(), reply) > 0)
+                qWarning() << Q_FUNC_INFO << name() << "Invalid response";
+        }
     }
 }
 
@@ -187,31 +226,7 @@ void VinceUSBDMX512::run()
     {
         timer.restart();
 
-        int dataLen = m_portsInfo[0].m_universeData.length();
-
-        if (dataLen > 0)
-        {
-            QByteArray request;
-            request.append(QByteArray(2, VINCE_START_OF_MSG));  // Start byte
-            request.append(VINCE_CMD_UPDATE_DMX);               // Command
-            request.append(int((dataLen + 2) / 256));           // Data length
-            request.append(int((dataLen + 2) % 256));
-            request.append(QByteArray(2, 0x00));                // Gap with data
-            request.append(m_portsInfo[0].m_universeData);
-            request.append(VINCE_END_OF_MSG);                   // Stop byte
-
-            const bool sent = iface()->write(request);
-            recordWrite(sent);
-            if (sent == false)
-                qWarning() << Q_FUNC_INFO << name() << "Will not accept DMX data";
-            else
-            {
-                QByteArray reply;
-
-                if (readData(iface(), reply) > 0)
-                    qWarning() << Q_FUNC_INFO << name() << "Invalid response";
-            }
-        }
+        sendFrame();
 
         int timetoSleep = m_frameTimeUs - (timer.nsecsElapsed() / 1000);
         if (timetoSleep < 0)

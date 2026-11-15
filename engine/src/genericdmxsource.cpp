@@ -137,6 +137,7 @@ void GenericDMXSource::writeDMX(MasterTimer* timer, QList<Universe *> ua)
             if (fader.isNull())
             {
                 fader = universe->requestFader();
+                fader->setHoldsShowOnly(m_holdsShowOnly.load());
                 m_fadersMap[universe->id()] = fader;
             }
 

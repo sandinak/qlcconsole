@@ -32,6 +32,16 @@ private slots:
     void initTestCase();
     void cleanupTestCase();
     void buildHideShots();
+    /** Show only (Output Rules): QLC_SHOT_DIR=dir -- the window at three
+     *  sizes with two Show-only lasers (the footer chip, the plot badge), in
+     *  Operate, and the Output Rules dialog */
+    void showOnlyShots();
+    /** The footer says why they are held, the plot badges them, Locate is
+     *  refused, and the dialog sets the rule */
+    void showOnlyIsSaidAndBadged();
+    /** A control surface's Blind is the console's Blind button: in
+     *  Operate never a mute of the live show */
+    void aControlSurfaceBlindFollowsTheConsolesRule();
 
     /** Picking a view from the View menu switches to it even when an earlier
      *  tab has been detached and every index after it has shifted. */
@@ -299,12 +309,19 @@ private slots:
      *  then clears the selection; in Build the same. */
     void escBacksOutThenClearsTheSelection();
 
+    /** Q236: Operate's Workbench is Blind; Play Live said in the footer. */
+    void workbenchPlayLiveIsSaidInTheFooter();
+
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)
      *  doesn't land on a freed Doc. Last: it deletes the app. */
     void quittingWithTheShowTreeShowing();
 
 private:
+    /** Two lasers on the plot, Show only; their ids */
+    QList<quint32> addShowOnlyLasers();
+    void removeFixtures(const QList<quint32> &ids);
+
     App *m_app;
 };
 

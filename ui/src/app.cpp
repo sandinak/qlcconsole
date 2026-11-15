@@ -58,6 +58,8 @@
 #include "blindstyle.h"
 #include "workbench.h"
 #include "inputoutputmap.h"
+#include "outputrulekeeper.h"
+#include "outputrulesdialog.h"
 #include "universe.h"
 #include <climits>
 #include "inputdevicenotices.h"
@@ -150,6 +152,7 @@
 #include "showwebaccess.h"
 #include "chaserstep.h"
 #include "showcontrol.h"
+#include "cueresume.h"
 #include "fixturegroup.h"
 #include "stagetarget.h"
 #include "scene.h"
@@ -381,6 +384,10 @@ App::~App()
     // Remove autosave file on clean exit (document was saved or discarded)
     if (m_doc != NULL && m_doc->isModified() == false)
         removeAutosaveFile();
+
+    // A clean close: no cue to resume next time.
+    if (m_cueResume != nullptr)
+        m_cueResume->showClosed();
 
     // Don't save kiosk-mode window geometry because that will screw things up
     if (m_doc->isKiosk() == false && QLCFile::hasWindowManager())
@@ -776,6 +783,9 @@ void App::init()
         ProgrammingManager *pm = new ProgrammingManager(m_tab, m_doc);
         buildTab = pm;
         connect(pm, &ProgrammingManager::requestSave, this, &App::slotFileSave);
+        // Operate: the Workbench's Play Live is said in the footer (one status source).
+        if (Workbench *bench = pm->workbench())
+            connect(bench, &Workbench::playLiveChanged, this, [this]() { updateStageIndicator(); });
         connect(pm, &ProgrammingManager::powerEstimateChanged, this,
                 [this](double amps, double kw, bool overload, const QString &detail) {
             if (m_statusPowerLabel == NULL)
@@ -1351,6 +1361,9 @@ void App::slotLoadProgress(const QString& stage, int count)
 
 void App::clearDocument()
 {
+    // The show closes cleanly: nothing to resume of it.
+    if (m_cueResume != nullptr)
+        m_cueResume->showClosed();
     m_doc->masterTimer()->stop();
     if (m_blindEffects != nullptr)
         m_blindEffects->clear();
@@ -1405,6 +1418,9 @@ void App::initDoc()
     connect(m_doc, SIGNAL(needAutosave()), this, SLOT(slotDocAutosave()));
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged(Doc::Mode)));
     connect(m_doc, SIGNAL(loadProgress(QString,int)), this, SLOT(slotLoadProgress(QString,int)));
+    /* Which cue each list is on while the show runs, beside the autosave:
+       after a crash the Run tab offers it back as standby (crash-resume-cue). */
+    m_cueResume = new CueResume(m_doc, QString(), m_doc);
     // Computer keys bound in the Control Map (watching only while one is).
     new KeyTriggers(m_doc, this);
 #ifdef QLC_AI_ASSIST
@@ -2924,6 +2940,11 @@ void App::initActions()
     m_doc->showControl()->setRunHandler([this](const ShowControl::Request &r, ShowControl::Route route) {
         return runCommand(r, route);
     });
+    /* The double-GO guard (board Q233; its rules at ShowControl::run()):
+       this computer's window, from Settings ▸ General ▸ Show Controls. A
+       hold shows on the footer's Next chip at once, not at the next poll. */
+    m_doc->showControl()->setGoGuardMs(goGuardMs());
+    connect(m_doc->showControl(), &ShowControl::commandHeld, this, [this]() { slotUpdateStandby(); });
     m_cueBackAction = new QAction(tr("Back (Main Cue List)"), this);
     m_cueBackAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return));
     m_cueBackAction->setShortcutContext(Qt::ApplicationShortcut);
@@ -4784,6 +4805,12 @@ void App::slotControlBlind(bool checked)
         m_doc->inputOutputMap()->setOutputInhibited(checked);
 }
 
+void App::toggleBlind()
+{
+    if (m_controlBlindAction != NULL && m_controlBlindAction->isEnabled())
+        m_controlBlindAction->trigger();     // toggles, then slotControlBlind()
+}
+
 void App::setBlindView(bool on)
 {
     if (m_doc == NULL)
@@ -5082,6 +5109,18 @@ QString App::stageIndicatorText(Stage *stageOut, QString *tipOut) const
                  : tr(" A cue list keeps running underneath: %1.").arg(running.join(QStringLiteral(", "))))
               + tr(" Click for the Show Tree.");
     }
+    else if (!design && ProgrammingManager::instance() != nullptr
+             && ProgrammingManager::instance()->workbench() != nullptr
+             && ProgrammingManager::instance()->workbench()->playsLive())
+    {
+        // Operate: the Workbench's Play Live puts what is loaded on the stage.
+        stage = Stage::Live;
+        text = tr("\u25cf LIVE \u00b7 Workbench: %1")
+                   .arg(ProgrammingManager::instance()->workbench()->liveName());
+        tip = tr("The Workbench is playing what is loaded on the stage (Play Live). Click Back to "
+                 "Blind in the Workbench, or leave it, to take it off. Show-only fixtures still "
+                 "wait for a GO.") + runningTip;
+    }
     else if (!playing.isEmpty())
     {
         stage = Stage::Live;
@@ -5220,12 +5259,18 @@ QList<QWidget *> App::statusChipsByPriority() const
     // What the stage shows, what is unsaved and the mode first (they are
     // what a crew checks at a glance); then readiness and what holds the
     // rig; the counters and the notices last.
+    /* A second GO just held (the double-GO guard): the Next chip says so,
+       and for its seconds it is as important as the mode -- it must not be
+       the chip squeezed out to make room. */
+    const bool goHeld = m_statusStandby != nullptr && m_statusStandby->property("goHeld").toBool();
     const QList<QWidget *> order = {
         m_statusStage, m_statusDirtyLabel, m_statusModeChipLabel,
-        m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusOverridesChip, m_statusProgrammerLabel,
+        goHeld ? m_statusStandby : nullptr,
+        m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusShowOnlyLabel,
+        m_statusOverridesChip, m_statusProgrammerLabel,
         m_statusGrandMasterBox, m_statusReviewLabel, m_venueChip,
         m_statusSelectionLabel, m_statusPadModeLabel,
-        m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
+        goHeld ? nullptr : m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
         m_statusShowTreeNotice, m_statusTimecodeLabel, m_statusLoadLabel,
         m_statusPowerLabel, m_statusDangleLabel, m_statusTimelineLabel
     };
@@ -6075,6 +6120,24 @@ bool App::noticeDifferingDefinitions()
     return true;
 }
 
+QString App::goGuardSettingKey()
+{
+    return QStringLiteral("showcontrol/goGuardMs");
+}
+
+int App::goGuardMs()
+{
+    return qBound(0, QSettings().value(goGuardSettingKey(), ShowControl::defaultGoGuardMs()).toInt(),
+                  ShowControl::maxGoGuardMs());
+}
+
+void App::setGoGuardMs(int ms)
+{
+    QSettings().setValue(goGuardSettingKey(), qBound(0, ms, ShowControl::maxGoGuardMs()));
+    if (m_doc != nullptr)
+        m_doc->showControl()->setGoGuardMs(goGuardMs());
+}
+
 QString App::heldForRunText()
 {
     return tr("Stopped the Show Tree preview so GO plays alone \u2014 Play brings it back.");
@@ -6572,6 +6635,8 @@ void App::slotRecentFileClicked(QAction *recent)
 void App::setFileName(const QString& fileName)
 {
     m_fileName = fileName;
+    if (m_cueResume != nullptr)
+        m_cueResume->setShowFile(fileName);
 }
 
 QString App::fileName() const
@@ -6911,6 +6976,12 @@ QFile::FileError App::loadXML(const QString& fileName, const QString &asShow)
                an autosave at open (F3). */
             m_doc->resetModified();
 
+            /* Opened after a session that ended without closing it (a
+               crash, a force-quit, the power): the Run tab offers the cue
+               each list was on, as standby -- in Operate, never played. */
+            if (m_cueResume != nullptr)
+                m_cueResume->showOpened(show);
+
             /* "Open this show in Operate" (File ▸ Show Settings): once
                it's up, as -p does (after startup's own Design). */
             if (m_doc->operateSettings()->openInOperate())
@@ -6952,6 +7023,10 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
     m_upgradeOfferMade = false;
     m_showTreeNoticeDismissed = false;      // P45: back each time the show opens
 
+    /* N2 (outputpatch.h): a legacy <Fixture> outside <Engine> marks one at
+       a time -- one scope, so a non-network output is held once, after all
+       of them, with every channel at safe (review 17). */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(m_doc->inputOutputMap());
     while (doc.readNextStartElement())
     {
         if (doc.name() == KXMLQLCEngine)
@@ -8410,6 +8485,23 @@ void App::initStatusBar()
     m_statusRigNetLabel->hide();
     sb->addWidget(m_statusRigNetLabel, 0);
 
+    // Show only, beside it: "Lasers held: Design". A laser, fogger or flame
+    // relay kept safe is said, never silent. Hidden while nothing holds one.
+    m_statusShowOnlyLabel = new QLabel(this);
+    m_statusShowOnlyLabel->setObjectName(QStringLiteral("footerShowOnly"));
+    m_statusShowOnlyLabel->setCursor(Qt::PointingHandCursor);
+    m_statusShowOnlyLabel->setProperty("helpTopic", QStringLiteral("fixture-manager.md#output-rules"));
+    m_statusShowOnlyLabel->installEventFilter(this);   // click → their Output Rules
+    m_statusShowOnlyLabel->hide();
+    sb->addWidget(m_statusShowOnlyLabel, 0);
+    if (m_doc != NULL && m_doc->outputRuleKeeper() != nullptr)
+    {
+        connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::showOnlyChanged,
+                this, &App::updateShowOnlyFooter);
+        connect(m_doc, &Doc::fixtureChanged, this, [this](quint32) { updateShowOnlyFooter(); });
+        updateShowOnlyFooter();
+    }
+
     // Software Update's chip: "Update available: 0.1.1". Never a pop-up --
     // a show may be running -- just this, until it is clicked.
     m_statusUpdateLabel = new QLabel(this);
@@ -9196,6 +9288,14 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         return true;
     }
 
+    if (watched == m_statusShowOnlyLabel && event->type() == QEvent::MouseButtonPress)
+    {
+        if (m_doc != NULL && m_doc->outputRuleKeeper() != nullptr)
+            OutputRulesDialog::edit(this, m_doc, QList<quint32>(),
+                                    m_doc->outputRuleKeeper()->showOnlyFixtures());
+        return true;
+    }
+
     if (watched == m_statusRigNetLabel && event->type() == QEvent::MouseButtonPress)
     {
         if (m_doc != NULL && m_doc->inputOutputMap()->teachingHold())
@@ -9463,6 +9563,35 @@ void App::slotUpdateStandby()
 {
     if (m_statusStandby == NULL || m_doc == NULL)
         return;
+    /* The double-GO guard held a GO (ShowControl::run(), rule 2): for its
+       few seconds the chip says so, in the Run tab's, the phone's and the
+       pad's words -- in every view, Classic too: it is about the stage. */
+    const QString held = m_doc->showControl()->heldNotice();
+    const bool wasHeld = m_statusStandby->property("goHeld").toBool();
+    if (!held.isEmpty())
+    {
+        if (!wasHeld)
+        {
+            m_statusStandby->setProperty("goHeld", true);
+            m_statusStandby->setStyleSheet(QStringLiteral("QToolButton { color: white; background: #d08a1c; "
+                                                          "font-weight: bold; padding: 0 6px; }"));
+        }
+        const QString shown = QFontMetrics(m_statusStandby->font()).elidedText(held, Qt::ElideRight,
+                                                                               qBound(150, width() / 3, 520));
+        if (m_statusStandby->text() != shown)
+            m_statusStandby->setText(shown);
+        m_statusStandby->show();
+        if (!wasHeld && m_statusFitTimer != nullptr)
+            m_statusFitTimer->start();          // its place moves up (statusChipsByPriority())
+        return;
+    }
+    if (wasHeld)
+    {
+        m_statusStandby->setProperty("goHeld", false);
+        m_statusStandby->setStyleSheet(QString());
+        if (m_statusFitTimer != nullptr)
+            m_statusFitTimer->start();
+    }
     if (m_classicChrome)   // Classic QLC+'s footer has no Next (Q78)
     {
         m_statusStandby->hide();
@@ -10319,6 +10448,49 @@ void App::updateRigNetworkFooter()
     tip << tr("Click to set the show's rig networks.");
     m_statusRigNetLabel->setToolTip(tip.join("\n"));
     m_statusRigNetLabel->show();
+}
+
+void App::updateShowOnlyFooter()
+{
+    if (m_statusShowOnlyLabel == nullptr || m_doc == NULL || m_doc->outputRuleKeeper() == nullptr)
+        return;
+    const OutputRuleKeeper *k = m_doc->outputRuleKeeper();
+    const QString text = k->showOnlyHeldText();
+    if (text.isEmpty())
+    {
+        if (!m_statusShowOnlyLabel->isHidden())
+        {
+            m_statusShowOnlyLabel->hide();
+            if (m_statusFitTimer != nullptr)
+                m_statusFitTimer->start();
+        }
+        return;
+    }
+    setChipText(m_statusShowOnlyLabel, text);
+    setChipStyle(m_statusShowOnlyLabel, QStringLiteral("QLabel { color: #d08000; font-weight: bold; }"));
+    QStringList names;
+    foreach (quint32 id, k->showOnlyFixtures())
+        if (const Fixture *fx = m_doc->fixture(id))
+            names << fx->name();
+    const int shown = 12;
+    QString list = QStringList(names.mid(0, shown)).join(QStringLiteral(", "));
+    if (names.size() > shown)
+        list += tr(" and %n more", "", int(names.size() - shown));
+    QStringList tip;
+    tip << (k->showOnlyHeldBy() == OutputRuleKeeper::HeldByBlind
+                ? tr("Blind holds the Show-only fixtures at their safe value (off, closed).")
+                : tr("Design never fires a Show-only fixture: previews, the Workbench, Locate, "
+                     "Solo and focus leave it at its safe value (off, closed). The plot still "
+                     "draws what it would do."))
+        << tr("A GO in Operate drives it.")
+        << QString() << list << QString() << tr("Click to see their Output Rules.");
+    m_statusShowOnlyLabel->setToolTip(tip.join(QLatin1Char('\n')));
+    if (m_statusShowOnlyLabel->isHidden())
+    {
+        m_statusShowOnlyLabel->show();
+        if (m_statusFitTimer != nullptr)
+            m_statusFitTimer->start();
+    }
 }
 
 void App::updateReviewStatus()

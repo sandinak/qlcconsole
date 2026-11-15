@@ -24,7 +24,10 @@
 #include <functional>
 #include <QList>
 #include <QHash>
+#include <QMutex>
 #include <mutex>
+#include <memory>
+#include <atomic>
 #if defined(Q_OS_WIN)
 #include <QRecursiveMutex>
 #endif
@@ -311,6 +314,144 @@ public:
      *  @a fadeOutMs; then the fader goes. */
     void releaseOverrideMix(uint fadeOutMs);
 
+    /*********************************************************************
+     * Show only (Fixture::ShowOnly)
+     *********************************************************************/
+    /** A function's "not the show" flag, shared with the faders it makes
+     *  (Function::previewGate()); true: held */
+    typedef std::shared_ptr<std::atomic<bool> > PreviewGate;
+    /** A function's stamp as the show (Function::showStamp()), shared with
+     *  the faders it makes; 0 while held */
+    typedef std::shared_ptr<std::atomic<quint32> > StampGate;
+
+    /** Show only (OutputRuleKeeper, rules S0-S3, E1-E7). Every operator
+     *  action takes a stamp (stampEpoch()): a number that only grows. A
+     *  live session starts at a stamp of its own (liveEpoch()); each
+     *  Show-only channel keeps the stamp it was made Show only at
+     *  (Universe). A writer counts on a Show-only channel only while its
+     *  stamp is of this session (>= liveEpoch()) and later than the
+     *  channel's. What a fader's stamp is (showStamp()):
+     *   - a function's (made in its CreationScope): its function's
+     *     (0 while the function is held);
+     *   - held (setHoldsShowOnly(): a preview, focus, Locate, a test): 0;
+     *   - stamped (setLiveEpoch(): Park, Mark, a cue stack, a VC slider,
+     *     XY pad, flash or audio DMX bar -- the stamp is its owner's, given
+     *     again on every write, so a fader rebuilt from a control left up
+     *     stays as old as the control);
+     *   - stamped per channel (setChannelLiveEpoch(): the Simple Desk, the
+     *     effect runner's own fader -- each Show-only write with its
+     *     scene's stamp; channelStamp());
+     *   - none of these: not the show -- 0.
+     *  No writer bypasses a channel's mark (R8-5).
+     *  Read once a frame on the universe thread. */
+    quint32 showStamp() const
+    {
+        if (m_holdsShowOnly.load(std::memory_order_relaxed))
+            return 0;
+        if (m_previewGate)
+        {
+            if (m_previewGate->load(std::memory_order_acquire))
+                return 0;
+            return m_gateStamp ? m_gateStamp->load(std::memory_order_acquire) : 0;
+        }
+        if (m_liveBound.load(std::memory_order_relaxed))
+            return m_liveEpoch.load(std::memory_order_relaxed);
+        return 0;
+    }
+    /** True when the whole fader is held now (its stamp is not of this
+     *  session). A per-channel one (the Simple Desk) never is as a whole. */
+    bool holdsShowOnly() const
+    {
+        if (channelStamped() && !m_holdsShowOnly.load(std::memory_order_relaxed) && !m_previewGate
+            && !m_liveBound.load(std::memory_order_relaxed))
+            return false;
+        return showStamp() < liveEpoch();
+    }
+    void setHoldsShowOnly(bool hold) { m_holdsShowOnly.store(hold, std::memory_order_relaxed); }
+
+    /** Stamped by its owner now (an operator action; or, inside a
+     *  StampScope, the automatic writer's own stamp) */
+    void stampLiveEpoch() { setLiveEpoch(stampEpoch()); }
+    /** Stamped with @p stamp: its owner's, whenever that was */
+    void setLiveEpoch(quint32 stamp)
+    {
+        m_liveEpoch.store(stamp, std::memory_order_relaxed);
+        m_liveBound.store(true, std::memory_order_relaxed);
+    }
+
+    /** Stamped channel by channel (the Simple Desk: each channel its own
+     *  control): channel @p address of its universe stamped @p stamp. A
+     *  channel never stamped is held. */
+    void setChannelLiveEpoch(int address, quint32 stamp);
+    bool channelStamped() const { return m_channelStamped.load(std::memory_order_relaxed); }
+    /** Channel @p address's stamp (0: none) */
+    quint32 channelStamp(int address) const;
+
+    /** The stamp the current live session started at: bumped at each
+     *  switch to Operate, All Off, a show loaded or cleared, the end of
+     *  Blind (Function::startLiveSession()). A stamp below it is of an
+     *  older session. */
+    static quint32 liveEpoch();
+    static void bumpLiveEpoch();
+    /** A new stamp, later than every one before (a channel made Show only
+     *  takes one: Universe) */
+    static quint32 newStamp();
+
+    /** The stamp an operator action happening now takes: a new one, or --
+     *  inside a StampScope on this thread -- its automatic writer's. Every
+     *  stamp (a source added, a control moved, a Park set) takes this. */
+    static quint32 stampEpoch();
+    /** True inside a StampScope on this thread: what happens now is an
+     *  automatic writer's, not a person's (no GO is noted) */
+    static bool stampOverridden();
+
+    /** While one is in scope on this thread, every stamp made there is
+     *  @p stamp (0: never the show): an audio bar pressing a VC button or
+     *  moving a slider is the audio widget's (armed when it was), not a
+     *  hand; a playback slider starting its function again is as old as
+     *  its last move; a Show or a cue list started by timecode is as old
+     *  as the timecode link's arming. Nests. */
+    class StampScope
+    {
+    public:
+        explicit StampScope(quint32 stamp);
+        ~StampScope();
+        StampScope(const StampScope &) = delete;
+        StampScope &operator=(const StampScope &) = delete;
+    private:
+        quint32 m_previous;
+        bool m_previousActive;
+    };
+
+    /** While one is in scope on a thread, the faders made there follow
+     *  @p gate and @p stamp, those of function @p functionId (the
+     *  MasterTimer, around each function's preRun(), write() and
+     *  postRun()). Nests; both must outlive the scope. */
+    class CreationScope
+    {
+    public:
+        explicit CreationScope(const PreviewGate *gate, const StampGate *stamp = nullptr,
+                               quint32 functionId = 0xFFFFFFFF);
+        ~CreationScope();
+        CreationScope(const CreationScope &) = delete;
+        CreationScope &operator=(const CreationScope &) = delete;
+    private:
+        const PreviewGate *m_previousGate;
+        const StampGate *m_previousStamp;
+        quint32 m_previousFunction;
+    };
+
+    /** The gate and stamp of function @p functionId when it is the one
+     *  writing on this thread now (its CreationScope is in force), else
+     *  null: what a function it starts follows (Function::start()) */
+    static PreviewGate creationGateOf(quint32 functionId);
+    static StampGate creationStampOf(quint32 functionId);
+
+private:
+    /** The gate of the CreationScope in force on this thread, or null */
+    static const PreviewGate *creationGate();
+    static const StampGate *creationStamp();
+
 signals:
     /** Signal emitted when monitoring is enabled.
      *  Data is preGM and includes the whole universe */
@@ -340,6 +481,14 @@ private:
     Universe::BlendMode m_blendMode;
     bool m_monitoring;
     bool m_zeroAll = false;
+    std::atomic<bool> m_holdsShowOnly { false };
+    std::atomic<bool> m_liveBound { false };
+    std::atomic<quint32> m_liveEpoch { 0 };
+    std::atomic<bool> m_channelStamped { false };
+    mutable QMutex m_channelEpochMutex;
+    QHash<int, quint32> m_channelEpochs;
+    /** Set once, when made (CreationScope): never changes after */
+    PreviewGate m_previewGate;
 
     /** An override hit's mix (startOverrideMix): off, coming in (and held
      *  at 1 when in), or going. Worked out once a frame in write(). */
@@ -349,6 +498,11 @@ private:
     qreal m_mixFrom = 1.0;
     uint m_mixTime = 0;
     uint m_mixElapsed = 0;
+
+    /** Show only: its function's stamp (Function::showStamp()), set once,
+     *  when made (CreationScope). Last: read once a frame, never in the
+     *  per-channel loop. */
+    StampGate m_gateStamp;
 };
 
 /** @} */

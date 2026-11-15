@@ -21,6 +21,7 @@
 #define SHOW_H
 
 #include <QMutex>
+#include <atomic>
 #include <QList>
 #include <QSet>
 #include <QMap>
@@ -281,6 +282,12 @@ public:
      *  a show remembers whether it is timecode-driven. */
     void setTimecodeFollow(bool enable);
     bool timecodeFollow() const;
+    /** Show only (R6-8): the live session the timecode link was armed in
+     *  -- Follow switched on by the operator in Operate -- or 0 (loaded
+     *  with the show, switched on in Design, or never). What timecode
+     *  starts (the show, a section's linked cue list) is stamped with it
+     *  (GenericFader::StampScope): the show only in that session. */
+    quint32 timecodeArmEpoch() const { return m_timecodeArmEpoch.load(std::memory_order_relaxed); }
 
     /** Push the current external absolute position (ms) to the runner. */
     void setExternalTime(quint32 ms);
@@ -320,6 +327,8 @@ protected:
     QSet <quint32> m_runningChildren;
     /** Whether this show follows an external timecode (persisted) */
     bool m_timecodeFollow;
+    /** timecodeArmEpoch() */
+    std::atomic<quint32> m_timecodeArmEpoch { 0 };
     /** Timecode-to-timeline offset in ms (persisted) */
     quint32 m_timecodeOffset;
     /** Explicit show length in ms; 0 = auto-fit content (persisted) */

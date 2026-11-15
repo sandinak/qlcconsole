@@ -22,6 +22,7 @@
 #define CUESTACK_H
 
 #include <QObject>
+#include <atomic>
 #include <QMutex>
 #include <QList>
 #include <QMap>
@@ -222,6 +223,8 @@ signals:
 
 private:
     bool m_running;
+    /** Show only: the Operate session it was last started or stepped in */
+    std::atomic<quint32> m_liveEpoch { 0 };
     qreal m_intensity;
     int m_currentIndex;
 

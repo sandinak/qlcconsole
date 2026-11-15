@@ -45,6 +45,48 @@ A **cue list** is a chase (a chaser). Its steps are the **cues**.
 - A **Virtual Console cue list** shows a **Cue** column beside the step
   number and a **Next:** line under its list — the cue, its name and its
   note.
+- Two GOs a moment apart play one cue: [Two GOs at once](#two-gos-at-once).
+
+## Two GOs at once
+
+When more than one person can GO — a student on the laptop calling the
+script, you on the pad, someone on the phone's Run page — two GOs can land
+a moment apart, and the second would skip a cue. The **double-GO guard**
+stops that: on one cue list, a GO that comes within **1.0 s** of a GO that
+played is **held**. The first plays; the second does nothing.
+
+- It doesn't matter where either came from: ⌘↩, the Run tab's GO or
+  Space, the calling script's GO, the pad, the phone, a Virtual Console
+  cue list or Cue Runner, the Control Map, OSC or MSC — or the same one
+  twice (a double press).
+- **Back**, **Sub GO**, **Sub Back** and **Stop** are held the same way: a
+  Back right after a GO is held, and so is a GO right after a Back.
+- **Emergency stop** (All Off: the pad's four, the phone's) and
+  **Blackout** are **never** held. After an emergency stop the next GO
+  plays at once.
+- Pause / Resume and LOAD aren't held, and nor is the **Show** tab's Play:
+  it plays and pauses a timeline, and a second press there is Pause.
+- A Virtual Console button's step or cue list on a plain chaser (one that
+  isn't a Show Tree cue list) is held the same way.
+- A held GO doesn't count as a GO for anything: it never lets go of the
+  emergency stop's hold on **Show only** fixtures. The first GO after an
+  emergency stop plays (and lets go of it).
+- Each cue list has its own guard: a GO on the main list doesn't hold a
+  GO on a parallel list.
+- A list following timecode GOs at its cues' times; those are never held.
+
+Every surface says the same thing at the same moment, naming whose GO
+was taken:
+
+> Second GO held: Laptop's GO took it 0.4 s ago
+
+It shows under the header of the **Run** tab, in the footer's **Next:**
+chip, on the phone's Run page (which buzzes too), and on the pad: one long
+rumble, and the words aloud when the voice is on. It stays a few seconds.
+
+Set the time in **Settings ▸ General ▸ Show Controls ▸ Double-GO guard**
+(up to 5 s, in tenths). **Off** (0) turns it off. It belongs to this
+computer, not the show.
 
 ## GO from the game controller (Pad Run)
 
@@ -131,7 +173,9 @@ them:
 - **GO is confirmed on the pad.** A GO gives a short buzz and turns the
   light green; it blinks green and orange for as long as the cue fades,
   then goes back to steady orange. A long buzz means there was nothing to
-  play, and the laptop says so if the voice is on.
+  play, and the laptop says so if the voice is on — or that a GO was
+  [held](#two-gos-at-once): the pad's own, or anyone's, a moment after
+  another GO; the footer's Next chip names whose GO played.
 - **An unarmed press does nothing.** The voice says "Not armed: hold LB
   and RB.", and the footer's Pad chip shows it for a few seconds, also
   with feedback set to lights only.
@@ -506,6 +550,45 @@ One level only: a sub-cue's own chase steps run on their own timing.
 | **PAUSE** / **RESUME** | Holds the list where it is, and carries on. |
 | **RESET** | Stops the list and forgets what's on standby. |
 | **ALL OFF** | Stops everything that's running — the panic button. |
+
+## After a crash
+
+If qlcconsole stops in the middle of a show without closing it — a crash,
+a force-quit, the battery or the power — open the same show again (with
+**Open the Last Show at Start** in Settings ▸ General it opens by itself)
+and switch to **Operate**. The **Run** tab says where the show was:
+
+> The show was at cue 2.3.1 (Main) when it stopped. Load it?
+
+- **Load as Standby** LOADs that cue: it waits on **▷ STANDBY**, nothing
+  plays and the stage stays as it is. The next **GO** (the button, Space,
+  ⌘↩, the pad) plays it, and the show goes on from there.
+- **Dismiss** forgets it: GO starts from the cue on standby as usual.
+- A GO before either (starting again from the top, say) takes the offer
+  away: it would undo what you just did.
+- Several lists running (Main and a parallel list) are named together,
+  and **Load as Standby** LOADs each of them.
+- It is the cue, not how far through its [sub-cues](#sub-cues) it had
+  got: GO plays the cue as GO from the cue before would (its first
+  sub-cue), then **Sub GO** on to where you were.
+
+Nothing is ever played by itself: the offer only LOADs, and only from the
+Run tab. The pad and the phone's Run page don't show it or accept it — once
+it is loaded they show the cue on standby like any other.
+
+It is offered only when the app ended without closing the show, and only
+in Operate. After a normal quit, **File ▸ New** or opening another show
+there is nothing to offer. A cue deleted since (an older copy of the show,
+an edit) is never loaded, even when another cue has its number now: the
+Run tab says *…but that cue is no longer in the show: nothing to load.*
+
+What it keeps: on each GO, Back, Stop, Reset and All Off in Operate (never
+per frame), the show's file and the cue each list is on, in
+`resume-cue.json` in your user folder (beside the untitled show's autosave;
+`~/Library/Application Support/qlcconsole` on a Mac). Never in the show
+file. A show that has never been saved isn't kept: it has no file to find
+it by. A recovered autosave of the show counts as the show: open it with
+**Recover** and the offer follows.
 
 ## OSC — QLab's Network cue
 

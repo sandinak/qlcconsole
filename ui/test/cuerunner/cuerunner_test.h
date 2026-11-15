@@ -70,6 +70,26 @@ private slots:
     void vcPropertiesRoundTrip();
     void textColoursOnEveryLine();
     void screenshots();
+
+    /* Resume after a crash (crash-resume-cue, CueResume). */
+    /** Each GO, Back and Stop in Operate writes the record once; frames,
+     *  Design and a show with no file write nothing. */
+    void theLiveCueIsKeptOncePerCommand();
+    /** Kill simulation: a fresh Doc after a crash offers the cue, in
+     *  Operate only; Load as Standby LOADs it, plays nothing, GO goes on. */
+    void afterACrashTheRunTabOffersTheCueAsStandby();
+    /** Dismiss forgets it: the record goes, the next start offers nothing. */
+    void dismissForgetsTheOffer();
+    /** A clean close (another show, quit) leaves nothing to offer. */
+    void aCleanCloseOffersNothing();
+    /** A cue deleted since is said, never loaded -- not even the cue that
+     *  has its number now. */
+    void aDeletedCueIsSaidNotLoaded();
+    /** A GO before Load as Standby takes the offer away. */
+    void aGoOvertakesTheOffer();
+    /** With QLC_SHOT_DIR: the Run tab before (no offer) and with it, at
+     *  1024, 1280 and 1920 wide. */
+    void resumeOfferShots();
     /** Q62: no main cue list -- GO and the rest grey, why, and Upgrade. */
     void noMainListGreysGoAndOffersUpgrade();
 
@@ -80,6 +100,11 @@ private:
      *  song, c1, c2, c3, s1, s2, keynote. */
     QList<quint32> show();
     QHash<quint32, uchar> settle(int ticks = 10);
+    /** A session of show() in Operate at cue @a gos (GOs from the top),
+     *  its record in @a path for show file @a show, then a crash: the Doc
+     *  goes without a clean close and a fresh one loads the same show. The
+     *  show's XML. */
+    void crashedSession(const QString &path, const QString &show, int gos);
 
     Doc *m_doc = nullptr;
     QList<quint32> m_fixtures;

@@ -1015,6 +1015,7 @@ void SceneEditor::slotBlindToggled(bool state)
         if (m_scene != NULL && !m_scene->isRunning())
         {
             m_source = new GenericDMXSource(m_doc);
+            m_source->setHoldsShowOnly(true);   // an editor, not the show
             foreach (SceneValue scv, m_scene->values())
                 m_source->set(scv.fxi, scv.channel, scv.value);
         }
@@ -1022,7 +1023,10 @@ void SceneEditor::slotBlindToggled(bool state)
     else
     {
         if (m_source == NULL)
+        {
             m_source = new GenericDMXSource(m_doc);
+            m_source->setHoldsShowOnly(true);   // an editor, not the show
+        }
     }
 
     if (m_source != NULL)

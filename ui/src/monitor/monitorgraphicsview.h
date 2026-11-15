@@ -940,6 +940,10 @@ public:
      *  ring and a triangle). */
     void markOffRowFixtures(const QList<quint32> &ids);
     QList<quint32> offRowFixtures() const;
+    /** Show only: the lights whose output is held safe while the plot
+     *  draws what they would do (a dashed outline and a pause badge) */
+    void markShowOnlyHeldFixtures(const QList<quint32> &ids);
+    QList<quint32> showOnlyHeldFixtures() const;
     /** The lights badged so (tests). */
     QList<quint32> needsFocusFixtures() const;
     /** Focus mode's ghost (Q126): a dashed ring where the head would land

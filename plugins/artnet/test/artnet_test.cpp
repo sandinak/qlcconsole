@@ -81,6 +81,69 @@ void ArtNet_Test::setupArtNetDmx()
     QCOMPARE(data.data(), "Art-Net");
 }
 
+void ArtNet_Test::showOnlyMayUseIt()
+{
+    ArtNetPlugin plugin;
+    QCOMPARE(plugin.isNetworkDmxOutput(), true);
+}
+
+/* Review 18, finding A (plugin side): InputOutputMap::holdShowOnlyOutputs()
+   only forgets a held universe on an Art-Net line another universe sends on
+   (QLCIOPlugin::forgetOutput(), not overridden here). The controller keeps
+   the universe and its last frame, and slotSendAllUniverses() (every 2 s,
+   Standard mode) sends it again -- to the loopback / own-address target the
+   hold was meant to stop. */
+static ArtNetController *testController(QObject *parent, const QHostAddress &target,
+                                        QList<quint32> universes);
+void ArtNet_Test::r18_aForgottenUniverseIsNotResent()
+{
+    ArtNetPlugin plugin;
+    ArtNetController *ctrl = testController(&plugin, QHostAddress::LocalHost, { 0, 1 });
+    QList<QNetworkDatagram> sink;
+    ctrl->m_testSink = &sink;
+    ArtNetIO io;
+    io.controller = ctrl;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+
+    plugin.writeUniverse(0, 0, QByteArray(512, char(255)), true);   // the fogger at full
+    plugin.writeUniverse(1, 0, QByteArray(512, char(10)), true);
+    plugin.forgetOutput(0, 0);                                      // the Show-only hold, shared line
+    sink.clear();
+    QMetaObject::invokeMethod(ctrl, "slotSendAllUniverses", Qt::DirectConnection);   // the 2 s refresh
+    int full = 0;
+    for (const QNetworkDatagram &dg : std::as_const(sink))
+        if (dg.data().size() > 18 && uchar(dg.data().at(18)) == 255)
+            full++;
+    plugin.m_IOmapping.clear();
+    delete ctrl;
+    QVERIFY2(full == 0, qPrintable(QString("a forgotten universe's last frame (at full) is resent %1 time(s)")
+                                   .arg(full)));
+}
+
+void ArtNet_Test::r19_aFailedClosingFrameIsTriedOnceMore()
+{
+    ArtNetPlugin plugin;
+    ArtNetController *ctrl = testController(&plugin, QHostAddress::LocalHost, { 0 });
+    QList<QNetworkDatagram> sink;
+    ctrl->m_testSink = &sink;
+    ArtNetIO io;
+    io.controller = ctrl;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+    ctrl->m_testSinkFails = true;                                   // the closing frame: lost
+    plugin.writeUniverse(0, 0, QByteArray(512, char(0)), true);
+    ctrl->m_testSinkFails = false;
+    plugin.flushOutput(0, 0);                                       // OutputPatch's flush: once more
+    const int sent = sink.count();
+    plugin.flushOutput(0, 0);                                       // nothing left to retry
+    const int again = sink.count();
+    plugin.m_IOmapping.clear();
+    delete ctrl;
+    QCOMPARE(sent, 1);
+    QCOMPARE(again, 1);
+}
+
 QTEST_MAIN(ArtNet_Test)
 
 /** A real ArtPollReply, captured off the wire from the rig's CR041R
@@ -1652,6 +1715,58 @@ void ArtNet_Test::rigNetworkGateDecisionIsCachedOffTheSendPath()
     plugin.setTransmitNetworks(QStringList() << "10.4.0.0/16");
     sink.clear();
     QVERIFY2(sendFromAnotherThread(), "a held send waited for the gate lock");
+    QVERIFY(sink.isEmpty());
+
+    plugin.setTransmitNetworks(QStringList());
+    plugin.m_IOmapping.clear();
+}
+
+/* A transmit hold ending (the rig network back): the Standard refresh
+   must not re-send the frame kept from before the hold -- a laser on then,
+   let go of since -- and the next real frame goes out, changed or not. */
+void ArtNet_Test::rigNetworkGateReleaseSendsNoStaleFrame()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    if (showNetLine(plugin, sock, &sink) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+    ArtNetController *ctrl = plugin.m_IOmapping.at(0).controller;
+    ctrl->addUniverse(0, ArtNetController::Output);
+    QCOMPARE(ctrl->m_universeMap[0].outputTransmissionMode, int(ArtNetController::Standard));
+
+    // Before the hold: the laser on
+    sink.clear();
+    ctrl->sendDmx(0, QByteArray(512, char(255)), true);
+    QCOMPARE(sink.count(), 1);
+
+    // Held (off the rig network); the show lets go of the laser meanwhile
+    plugin.setTransmitNetworks(QStringList() << "10.4.0.0/16");
+    QVERIFY(ctrl->transmitHeld());
+    ctrl->sendDmx(0, QByteArray(512, char(0)), true);
+
+    // Back: the refresh tick before any frame sends nothing kept from before
+    plugin.setTransmitNetworks(QStringList() << "172.18.0.0/20");
+    QVERIFY(ctrl->transmitHeld() == false);
+    sink.clear();
+    QVERIFY(QMetaObject::invokeMethod(ctrl, "slotSendAllUniverses"));
+    for (const QNetworkDatagram &dg : std::as_const(sink))
+        QVERIFY2(dg.data().mid(18) != QByteArray(512, char(255)),
+                 "the refresh re-sent the frame from before the hold");
+    QVERIFY(sink.isEmpty());
+
+    // The next real frame goes out, though unchanged since the hold
+    ctrl->sendDmx(0, QByteArray(512, char(0)), false);
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().data().mid(18), QByteArray(512, char(0)));
+    // ...and the refresh carries it from then on
+    sink.clear();
+    QVERIFY(QMetaObject::invokeMethod(ctrl, "slotSendAllUniverses"));
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().data().mid(18), QByteArray(512, char(0)));
+    // An unchanged frame after that: the refresh's job, as before
+    sink.clear();
+    ctrl->sendDmx(0, QByteArray(512, char(0)), false);
     QVERIFY(sink.isEmpty());
 
     plugin.setTransmitNetworks(QStringList());

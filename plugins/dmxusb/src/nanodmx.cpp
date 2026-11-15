@@ -280,10 +280,74 @@ bool NanoDMX::writeUniverse(quint32 universe, quint32 output, const QByteArray& 
 
 void NanoDMX::stop()
 {
+    /* Review 10 H1: the frame given last (a closing line's: its Show-only
+       channels at safe) is on the wire before the line closes -- one more,
+       sent here once the thread is joined (never from the thread itself:
+       a failed open closes from inside run()). */
     if (isRunning() == true)
     {
         m_running = false;
+        if (QThread::currentThread() == this)
+            return;
         wait();
+        sendFrame();
+    }
+}
+
+void NanoDMX::sendFrame()
+{
+#ifdef QTSERIAL
+    if (isOpen() == false)
+        return;
+#else
+    if (m_file.isOpen() == false)
+        return;
+#endif
+    if (m_portsInfo[0].m_compareData.size() == 0)
+        m_portsInfo[0].m_compareData.fill(0, 512);
+
+    for (int i = 0; i < m_portsInfo[0].m_universeData.length(); i++)
+    {
+        char val = m_portsInfo[0].m_universeData[i];
+
+        if (val == m_portsInfo[0].m_compareData[i])
+            continue;
+
+        //qDebug() << "Writing value at index" << i;
+        QByteArray fastTrans;
+        if (i < 256)
+        {
+            fastTrans.append((char)0xE2);
+            fastTrans.append((char)i);
+        }
+        else
+        {
+            fastTrans.append((char)0xE3);
+            fastTrans.append((char)(i - 256));
+        }
+        fastTrans.append(val);
+#ifdef QTSERIAL
+        if (iface()->write(fastTrans) == false)
+#else
+        if (m_file.write(fastTrans) <= 0)
+#endif
+        {
+            recordWrite(false);
+            qWarning() << Q_FUNC_INFO << name() << "will not accept DMX data";
+#ifdef QTSERIAL
+            iface()->purgeBuffers();
+#endif
+            continue;
+        }
+        else
+        {
+            recordWrite(true);
+            m_portsInfo[0].m_compareData[i] = val;
+#ifdef QTSERIAL
+            if (checkReply() == false)
+                iface()->purgeBuffers();
+#endif
+        }
     }
 }
 
@@ -305,49 +369,7 @@ void NanoDMX::run()
     {
         timer.restart();
 
-        for (int i = 0; i < m_portsInfo[0].m_universeData.length(); i++)
-        {
-            char val = m_portsInfo[0].m_universeData[i];
-
-            if (val == m_portsInfo[0].m_compareData[i])
-                continue;
-
-            //qDebug() << "Writing value at index" << i;
-            QByteArray fastTrans;
-            if (i < 256)
-            {
-                fastTrans.append((char)0xE2);
-                fastTrans.append((char)i);
-            }
-            else
-            {
-                fastTrans.append((char)0xE3);
-                fastTrans.append((char)(i - 256));
-            }
-            fastTrans.append(val);
-#ifdef QTSERIAL
-            if (iface()->write(fastTrans) == false)
-#else
-            if (m_file.write(fastTrans) <= 0)
-#endif
-            {
-                recordWrite(false);
-                qWarning() << Q_FUNC_INFO << name() << "will not accept DMX data";
-#ifdef QTSERIAL
-                iface()->purgeBuffers();
-#endif
-                continue;
-            }
-            else
-            {
-                recordWrite(true);
-                m_portsInfo[0].m_compareData[i] = val;
-#ifdef QTSERIAL
-                if (checkReply() == false)
-                    iface()->purgeBuffers();
-#endif
-            }
-        }
+        sendFrame();
 
         int timetoSleep = m_frameTimeUs - (timer.nsecsElapsed() / 1000);
         if (timetoSleep < 0)

@@ -567,6 +567,7 @@ private:
     /** holder() when last seen: a change forgets what was held. */
     QString m_lastHolder;
     bool m_stopping = false;    ///< the stop's own ALL OFF is going through run()
+    bool m_heldNow = false;     ///< the double-GO guard held the command trigger() sent
     bool m_showControlHooked = false;
     bool m_showTreeHooked = false;
     /** What the screens were last told of the hit, so hitChanged() goes once. */

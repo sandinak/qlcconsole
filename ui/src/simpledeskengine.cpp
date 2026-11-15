@@ -27,10 +27,13 @@
 #include "simpledeskengine.h"
 #include "genericfader.h"
 #include "mastertimer.h"
+#include <utility>
 #include "fadechannel.h"
 #include "cuestack.h"
 #include "universe.h"
 #include "doc.h"
+#include "inputoutputmap.h"
+#include "outputrulekeeper.h"
 
 #define PROP_ID "id"
 
@@ -45,6 +48,51 @@ SimpleDeskEngine::SimpleDeskEngine(Doc* doc)
     qDebug() << Q_FUNC_INFO;
     Q_ASSERT(doc != NULL);
     doc->masterTimer()->registerDMXSource(this);
+    /* Show only, the emergency stop: what the Simple Desk had up on a
+       Show-only channel, and not moved since, is let go of (E7: told later
+       if the stop came from another thread, so a channel pushed again in
+       the meantime keeps its new value). */
+    if (OutputRuleKeeper *rules = doc->outputRuleKeeper())
+        connect(rules, &OutputRuleKeeper::emergencyStopStruck, this, [this](quint32 session) {
+            releaseShowOnlyChannels(session);
+        });
+    /* A fixture patched, moved or unpatched under a channel the desk holds:
+       the desk's channel there was made for what was patched before (its
+       fader channel is keyed by fixture and channel), and a second one for
+       the new fixture would write the same address -- the output then
+       followed hash order. Rebuilt from the desk's values at the next
+       write, one channel an address. */
+    auto repatched = [this](quint32) {
+        QMutexLocker locker(&m_mutex);
+        if (m_values.isEmpty())
+            return;
+        m_repatched = true;
+        setChanged(true);
+    };
+    connect(doc, &Doc::fixtureAdded, this, repatched);
+    connect(doc, &Doc::fixtureChanged, this, repatched);
+    connect(doc, &Doc::fixtureRemoved, this, repatched);
+}
+
+void SimpleDeskEngine::releaseShowOnlyChannels(quint32 session)
+{
+    QList<uint> drop;
+    {
+        QMutexLocker locker(&m_mutex);
+        const QList<Universe *> ua = m_doc->inputOutputMap()->universes();
+        for (auto it = m_values.constBegin(); it != m_values.constEnd(); ++it)
+        {
+            const int u = int(it.key() >> 9);
+            Universe *uni = u < ua.size() ? ua.at(u) : nullptr;
+            if (uni == nullptr || (uni->channelCapabilities(ushort(it.key() & 0x1FF)) & Universe::ShowOnlyOutput) == 0)
+                continue;
+            if (m_channelEpochs.value(it.key()) >= session)
+                continue;           // pushed after the stop: the hand's
+            drop << it.key();
+        }
+    }
+    for (uint ch : std::as_const(drop))
+        resetChannel(ch);
 }
 
 SimpleDeskEngine::~SimpleDeskEngine()
@@ -85,6 +133,13 @@ void SimpleDeskEngine::setValue(uint channel, uchar value)
 
     QMutexLocker locker(&m_mutex);
     const bool taken = !m_values.contains(channel);
+    /* Show only (S3): a channel really moved -- a new value, from the
+       desk's fader or its input -- is the show from now on; the same value
+       again (an echo, a page reload) stamps nothing. A stamp given before a
+       Show-only fixture came onto the address does not count there (S0:
+       the channel's own stamp is later). */
+    if (taken || m_values.value(channel) != value)
+        m_channelEpochs.insert(channel, GenericFader::stampEpoch());
     m_values[channel] = value;
     setChanged(true);
     locker.unlock();
@@ -393,6 +448,13 @@ void SimpleDeskEngine::writeDMX(MasterTimer *timer, QList<Universe *> ua)
 
     if (hasChanged())
     {
+        if (m_repatched)
+        {
+            for (const QSharedPointer<GenericFader> &f : std::as_const(m_fadersMap))
+                if (!f.isNull())
+                    f->removeAll();
+            m_repatched = false;
+        }
         QMapIterator <uint,uchar> it(m_values);
         while (it.hasNext() == true)
         {
@@ -404,6 +466,11 @@ void SimpleDeskEngine::writeDMX(MasterTimer *timer, QList<Universe *> ua)
             fc->setCurrent(value);
             fc->setTarget(value);
             fc->addFlag(FadeChannel::Override);
+            fc.release();
+            // Its control's stamp (S3), channel by channel.
+            QSharedPointer<GenericFader> fader = m_fadersMap.value(quint32(uni));
+            if (!fader.isNull())
+                fader->setChannelLiveEpoch(address & 0x1FF, m_channelEpochs.value(it.key()));
         }
         setChanged(false);
     }

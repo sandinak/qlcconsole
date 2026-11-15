@@ -39,6 +39,7 @@ private slots:
     /** "selecting different WLED isn't changing the fixtures" -- what the
      *  desk holds is said in the footer, and Release lets it go. */
     void heldChannelsAreInTheFooterUntilReleased();
+    void aFixturePatchedUnderAHeldChannelLeavesOneChannel();
 
 private:
     Doc* m_doc;

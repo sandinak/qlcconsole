@@ -355,8 +355,13 @@ holds it; **Play** (or loading something) plays again. Leaving the tab stops
 it. A **GO** (the Run tab, ⌘↩, OSC, MSC, the Virtual Console) holds it too,
 so the show plays alone: the header says **■ Held — GO took the stage**,
 loading something else keeps it off while the show runs, and **Play**
-previews over the show. In Operate mode what is loaded runs as the show
-output, as before.
+previews over the show. In Operate mode what is loaded is **Blind**: the
+header says so in blue and nothing you change reaches the stage, which keeps
+the show. **Play Live** (one click, in the header) plays it on the stage and
+the footer says *LIVE · Workbench: name*; **Back to Blind** (the same
+button), loading something else, leaving the Workbench or switching to Design
+takes it off again. Play Live is still a preview for Show-only fixtures
+(lasers, foggers): they stay held; only the show's GO drives them.
 
 **Undo.** Every Workbench edit — a layer added, removed or reordered, a new
 EFX or RGB Matrix (Undo takes the new function away too; Redo brings it
@@ -1195,7 +1200,9 @@ It follows the app's global Design/Operate mode:
 - **Design mode**: what the Workbench has loaded plays live so you can see
   what you're building (**Stop** in its header holds it), and edits don't
   disturb a running show elsewhere.
-- **Operate mode**: what is loaded runs as the actual show output.
+- **Operate mode**: what is loaded is Blind -- the stage keeps the show --
+  until you click **Play Live**; the footer says *LIVE · Workbench* while it
+  plays. Show-only fixtures (lasers, foggers) still wait for a GO.
 
 The 2D Monitor plot, if open, stays in sync with the scene being edited.
 

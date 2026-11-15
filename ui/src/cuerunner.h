@@ -20,6 +20,7 @@
 #ifndef CUERUNNER_H
 #define CUERUNNER_H
 
+#include <QPointer>
 #include <QWidget>
 
 #include "showcontrol.h"
@@ -82,6 +83,10 @@ public:
     /** "Focus calls: waiting for the controller" while a focus-call cue is
      *  armed (running: that it runs); empty otherwise. */
     QString focusArmedText() const;
+    /** The double-GO guard's hold as the Run tab shows it under its header
+     *  (ShowControl::heldNotice(): the footer's and the phone's words);
+     *  empty while none is shown. */
+    QString goHeldText() const;
 
     Size runnerSize() const { return m_size; }
     void setRunnerSize(Size size);
@@ -122,6 +127,13 @@ public:
     /** The Run tab's empty state (no main cue list) shown now. */
     bool isEmptyStateShown() const;
     QPushButton *upgradeButton() const { return m_upgrade; }
+    /** After a crash (CueResume, Run tab only, Operate only): "The show was
+     *  at cue 2.3.1 (Main) when it stopped. Load it?", Load as Standby and
+     *  Dismiss. Shown now? Its words, and its buttons for the tests. */
+    bool isResumeOfferShown() const;
+    QString resumeOfferText() const;
+    QPushButton *resumeLoadButton() const { return m_resumeLoad; }
+    QPushButton *resumeDismissButton() const { return m_resumeDismiss; }
 
     static QString sizeToString(Size size);
     static Size stringToSize(const QString &str);
@@ -317,7 +329,17 @@ private:
      *  2)": PadRun::armedHitText(), its hitChanged() (rule 2). */
     void refreshPadHit();
     QLabel *m_padHit = nullptr;
+    void refreshGoHeld();
+    QLabel *m_goHeld = nullptr;
     QToolButton *m_focusStart = nullptr;
+    /** The crash-resume offer (Run tab): its words and buttons. */
+    void refreshResume();
+    QWidget *m_resumeBar = nullptr;
+    QLabel *m_resumeText = nullptr;
+    QPushButton *m_resumeLoad = nullptr;
+    QPushButton *m_resumeDismiss = nullptr;
+    /** The CueResume whose offerChanged() this runner follows. */
+    QPointer<QObject> m_resumeFollowed;
 };
 
 /** @} */

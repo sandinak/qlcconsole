@@ -87,10 +87,7 @@ void E131Controller::addUniverse(quint32 universe, E131Controller::Type type)
         info.inputSocket.clear();
         info.outputMulticast = true;
         info.outputMcastAddress = multicastFor(universe + 1);
-        if (m_ipAddr != QHostAddress::LocalHost)
-            info.outputUcastAddress = QHostAddress(quint32((m_ipAddr.toIPv4Address() & 0xFFFFFF00) + (universe + 1)));
-        else
-            info.outputUcastAddress = m_ipAddr;
+        info.outputUcastAddress = defaultOutputUCastAddress(universe);
         info.outputUcastPort = E131_DEFAULT_PORT;
         info.outputUniverse = universe + 1;
         info.outputTransmissionMode = Full;
@@ -244,6 +241,31 @@ void E131Controller::setOutputMCastAddress(quint32 universe, QString address, bo
     QMutexLocker locker(&m_dataMutex);
     m_universeMap[universe].outputMcastAddress = legacy ?
         QHostAddress(QString("239.255.0.%1").arg(address)) : QHostAddress(address);
+}
+
+QHostAddress E131Controller::defaultOutputUCastAddress(quint32 universe) const
+{
+    if (m_ipAddr != QHostAddress::LocalHost)
+        return QHostAddress(quint32((m_ipAddr.toIPv4Address() & 0xFFFFFF00) + (universe + 1)));
+    return m_ipAddr;
+}
+
+bool E131Controller::retryUnsent(quint32 universe)
+{
+    QMutexLocker locker(&m_dataMutex);
+    if (m_universeMap.contains(universe) == false || m_universeMap[universe].unsentPacket.isEmpty())
+        return true;
+    UniverseInfo &info = m_universeMap[universe];
+    const QByteArray packet = info.unsentPacket;
+    info.unsentPacket.clear();
+    // Not on the show's rig network: held, as sendDmx() -- nothing sent, not a failure.
+    if (m_held.load(std::memory_order_relaxed))
+        return true;
+    if (m_UdpSocket->writeDatagram(packet.data(), packet.size(), info.unsentAddress, info.unsentPort) >= 0)
+        return true;
+    qWarning() << "[E1.31] the closing frame of universe" << universe + 1 << "to"
+               << info.unsentAddress.toString() << "could not be sent:" << m_UdpSocket->errorString();
+    return false;
 }
 
 void E131Controller::setOutputUCastAddress(quint32 universe, QString address)
@@ -404,7 +426,19 @@ void E131Controller::sendDmx(const quint32 universe, const QByteArray &data)
                                              outAddress, outPort);
     bool changed = false;
     if (m_universeMap.contains(universe))
-        changed = reportSendResult(m_universeMap[universe], universe, outAddress, sent >= 0);
+    {
+        // Kept for one more try if this was the closing frame (retryUnsent()).
+        UniverseInfo &kept = m_universeMap[universe];
+        if (sent < 0)
+        {
+            kept.unsentPacket = dmxPacket;
+            kept.unsentAddress = outAddress;
+            kept.unsentPort = outPort;
+        }
+        else
+            kept.unsentPacket.clear();
+        changed = reportSendResult(kept, universe, outAddress, sent >= 0);
+    }
     else if (sent >= 0)
         m_packetSent++;
 

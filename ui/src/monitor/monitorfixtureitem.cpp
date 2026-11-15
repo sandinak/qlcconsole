@@ -1113,6 +1113,8 @@ QRectF MonitorFixtureItem::boundingRect() const
     // stale halo fragments on the canvas when the selection changes.
     const qreal m = qMax(qreal(MOVEMENT_THICKNESS), 3.0 + 3.0 / m_viewScale) + 1;
     QRectF rect(-m, -m, m_width + 2 * m, m_height + 2 * m);
+    if (m_showOnlyHeld)
+        rect |= QRectF(-16.0, m_height / 2.0 - 7.0, 16.0, 14.0);   // the "held" badge
     if (m_labelVisibility)
     {
         rect |= QRectF(-10, m_height, m_width + 20, m_labelRect.height() + 2);
@@ -1452,6 +1454,36 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         painter->setPen(QColor(30, 15, 0));
         UprightText::draw(painter, QRectF(at.x() - 6.0, at.y() - 6.0, 12.0, 12.0), Qt::AlignCenter, QStringLiteral("!"));
         painter->setFont(keepFont);
+        painter->setPen(keep);
+    }
+
+    /* Show only, held (Design, Blind): drawn doing what it would, but its
+       output is kept safe -- an amber dashed outline and a pause badge
+       ("held") beside its left edge: a shape, so it reads without colour
+       vision too. */
+    if (m_showOnlyHeld)
+    {
+        const QPen keep = painter->pen();
+        const QColor amber(240, 170, 30);
+        if (!m_offRow && !m_buried && !m_unsaved)
+        {
+            QPen ring(amber, 2.0, Qt::DashLine);
+            ring.setCosmetic(true);
+            painter->setPen(ring);
+            painter->setBrush(Qt::NoBrush);
+            drawBody(painter, QRectF(-3.0, -3.0, m_width + 6.0, m_height + 6.0));
+        }
+        QPen edge(QColor(70, 40, 0), 1.0);
+        edge.setCosmetic(true);
+        painter->setPen(edge);
+        painter->setBrush(amber);
+        // Off the body's left edge, so its heads and label never cover it.
+        const QPointF at(-9.0, m_height / 2.0);
+        painter->drawRoundedRect(QRectF(at.x() - 6.0, at.y() - 6.0, 12.0, 12.0), 2.5, 2.5);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(QColor(50, 28, 0));
+        painter->drawRect(QRectF(at.x() - 3.5, at.y() - 3.5, 2.5, 7.0));
+        painter->drawRect(QRectF(at.x() + 1.0, at.y() - 3.5, 2.5, 7.0));
         painter->setPen(keep);
     }
 

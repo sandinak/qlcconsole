@@ -420,8 +420,11 @@ void VenueRig::putFixture(HouseFixture &hf, QMap<quint32, quint32> &remap, const
 
 void VenueRig::apply(Data &d)
 {
+    /* N2 (outputpatch.h, review 16 F2): one marking scope for a venue's house fixtures --
+       all Show only before a non-network output is held. */
     if (m_doc == nullptr)
         return;
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(m_doc->inputOutputMap());
     const bool was = m_doc->isModified();
     m_writing = true;
     m_applied = true;

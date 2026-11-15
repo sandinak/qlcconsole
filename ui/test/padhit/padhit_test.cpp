@@ -95,6 +95,9 @@ void PadHit_Test::initTestCase()
     qputenv("QLC_IOPLUGIN_DIR", m_pluginDir->path().toLocal8Bit());
     m_app = new App();
     m_app->init();
+    // GOs here come back to back on purpose: the double-GO guard (its own
+    // tests, engine/test/goguard and ui/test/goguardui) is off for them.
+    m_app->doc()->showControl()->setGoGuardMs(0);
     m_app->showNormal();
     m_app->resize(1280, 800);
     QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
@@ -291,8 +294,10 @@ void PadHit_Test::everySurfaceNamesTheNextHit()
     QTRY_COMPARE(run->armedHitText(), hit("Breathe"));
     surfaces("Ballad", hit("Breathe"), hit("Breathe"));
 
-    /* At 1024 wide the Grand Master stays in the footer: the chip leaves the
-       hit out (the Run tab still says it), and says it again when wider. */
+    /* At 1024 wide the Grand Master stays in the footer. Where the footer
+       has no room for both (it depends on the platform's font: macOS has
+       none, Windows has), the chip leaves the hit out -- the Run tab still
+       says it -- and says it again when wider. */
     {
         QWidget *gm = m_app->findChild<QWidget *>(QStringLiteral("footerGrandMaster"));
         QVERIFY(gm != nullptr);
@@ -300,7 +305,9 @@ void PadHit_Test::everySurfaceNamesTheNextHit()
         settle(300);
         QTRY_VERIFY2(!gm->property("statusSqueezed").toBool() && gm->width() > 0,
                      qPrintable(QString("GM squeezed at 1024 (chip '%1')").arg(chip->text())));
-        QVERIFY2(!chip->text().contains(QString::fromUtf8("Hit ▸")), qPrintable(chip->text()));
+        QCOMPARE(chip->text().contains(QString::fromUtf8("Hit ▸")), !m_app->m_padChipShort);
+        if (!m_app->m_padChipShort)
+            QVERIFY2(chip->text().contains(QString::fromUtf8("Hit ▸ Breathe")), qPrintable(chip->text()));
         QVERIFY(chip->text().startsWith(QStringLiteral("Pad: ARMED")));
         QCOMPARE(line->text(), hit("Breathe"));
         m_app->resize(1280, 800);

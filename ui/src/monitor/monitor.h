@@ -257,6 +257,9 @@ public:
     void refreshNeedsFocus();
     /** Ring the lights the footer says are buried in the stage (FIX-15). */
     void refreshBuried();
+    /** Show only: badge the Show-only fixtures "held" on the plot while
+     *  their output is kept safe (OutputRuleKeeper::showOnlyHeldBy()) */
+    void refreshShowOnlyHeld();
     /** Open Focus mode (FocusModePanel) on the selected scene and the heads
      *  selected on the plot or in the programmer. */
     void openFocusMode();
@@ -358,6 +361,10 @@ public:
      *  located at a quarter of the Locate level; a dimmer pack or a bar
      *  flashes every dimmer. */
     static QString locateRefusal(const Fixture *fxi);
+    /** Why Identify / Reset (sendMaintenance()) won't drive @p fxi, or
+     *  empty: a Show-only fixture (Output Rules) is never driven by a
+     *  maintenance tool, Design or Operate, as Locate never fires it */
+    static QString maintenanceRefusal(const Fixture *fxi);
 
     /** Send a fixture's "reset" Maintenance-channel capability once -- same
      *  detection the old Fixture Test quick-dialog uses, but callable directly

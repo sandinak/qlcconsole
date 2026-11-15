@@ -59,6 +59,7 @@
 #include "monitorproperties.h"
 #include <cmath>
 #include "monitorgraphicsview.h"
+#include "outputrulekeeper.h"
 #include "blockingview.h"
 #include "selectionmenu.h"
 #include "programmingmanager.h"
@@ -4540,6 +4541,10 @@ void MonitorGraphicsView::addFixture(quint32 id, QPointF pos)
         m_doc->monitorProperties()->layer(m_doc->monitorProperties()->fixtureLayer(id));
     item->setMovable(!m_layoutLocked && !lyr.locked);
     item->setVisible(fixtureItemShouldBeVisible(id));
+    // Show only: badged "held" from the start when its output is held now.
+    if (const OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+        item->setShowOnlyHeld(rules->showOnlyHeldBy() != OutputRuleKeeper::NotHeld
+                              && rules->showOnlyFixtures().contains(id));
     // Reflect any existing truss binding (e.g. on workspace load)
     FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(id);
     item->setBoundToTruss(rp.trussId != Truss::invalidId());
@@ -8181,6 +8186,22 @@ void MonitorGraphicsView::markOffRowFixtures(const QList<quint32> &ids)
     const QSet<quint32> idSet(ids.begin(), ids.end());
     for (auto it = m_fixtures.begin(); it != m_fixtures.end(); ++it)
         it.value()->setOffRow(idSet.contains(it.key()));
+}
+
+void MonitorGraphicsView::markShowOnlyHeldFixtures(const QList<quint32> &ids)
+{
+    const QSet<quint32> idSet(ids.begin(), ids.end());
+    for (auto it = m_fixtures.begin(); it != m_fixtures.end(); ++it)
+        it.value()->setShowOnlyHeld(idSet.contains(it.key()));
+}
+
+QList<quint32> MonitorGraphicsView::showOnlyHeldFixtures() const
+{
+    QList<quint32> out;
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+        if (it.value()->isShowOnlyHeld())
+            out << it.key();
+    return out;
 }
 
 QList<quint32> MonitorGraphicsView::offRowFixtures() const

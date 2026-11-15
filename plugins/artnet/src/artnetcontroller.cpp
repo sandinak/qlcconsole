@@ -347,7 +347,8 @@ void ArtNetController::slotSendAllUniverses()
     {
         UniverseInfo &info = it.value();
 
-        if ((info.type & Output) && info.outputTransmissionMode == Standard)
+        // Nothing kept from before a transmit hold: the next frame first
+        if ((info.type & Output) && info.outputTransmissionMode == Standard && !info.outputStale)
         {
             QByteArray dmxPacket;
             if (info.outputData.size() == 0)
@@ -389,6 +390,13 @@ void ArtNetController::sendDmx(const quint32 universe, const QByteArray &data, b
 
     // if data has not changed since previous tick don't do anything.
     // A timer will refresh all universes every N seconds
+    // -- unless what it would refresh with is from before a transmit hold:
+    // this frame goes out and replaces it, changed or not.
+    if (info->outputStale)
+    {
+        dataChanged = true;
+        info->outputStale = false;
+    }
     if (transmitMode == Standard && !dataChanged)
         return;
 
@@ -406,6 +414,14 @@ void ArtNetController::sendDmx(const quint32 universe, const QByteArray &data, b
     }
 
     qint64 sent = writeDatagram(QNetworkDatagram(dmxPacket, outAddress, ARTNET_PORT));
+    // Kept for one more try if this was the closing frame (retryUnsent()).
+    if (sent < 0)
+    {
+        info->unsentPacket = dmxPacket;
+        info->unsentAddress = outAddress;
+    }
+    else
+        info->unsentPacket.clear();
     const bool changed = reportSendResult(*info, universe, outAddress, sent >= 0);
     locker.unlock();
     if (changed)
@@ -786,8 +802,34 @@ bool ArtNetController::isOnSubnet(const QHostAddress &address) const
 
 void ArtNetController::refreshTransmitGate()
 {
-    m_held.store(m_gate != NULL && m_gate->transmitAllowedFrom(m_ipAddr.toIPv4Address()) == false,
-                 std::memory_order_relaxed);
+    const bool held = m_gate != NULL && m_gate->transmitAllowedFrom(m_ipAddr.toIPv4Address()) == false;
+    const bool was = m_held.exchange(held, std::memory_order_relaxed);
+    /* A hold starting: what each universe kept to refresh with is from
+       before it. When the hold ends, the refresh must not send it -- the
+       next real frame does (sendDmx()). */
+    if (held && !was)
+    {
+        QMutexLocker locker(&m_dataMutex);
+        for (QMap<quint32, UniverseInfo>::iterator it = m_universeMap.begin(); it != m_universeMap.end(); ++it)
+            if (it.value().type & Output)
+                it.value().outputStale = true;
+    }
+}
+
+bool ArtNetController::retryUnsent(quint32 universe)
+{
+    QMutexLocker locker(&m_dataMutex);
+    UniverseInfo *info = getUniverseInfo(universe);
+    if (info == NULL || info->unsentPacket.isEmpty())
+        return true;
+    const QByteArray packet = info->unsentPacket;
+    const QHostAddress to = info->unsentAddress;
+    info->unsentPacket.clear();
+    if (writeDatagram(QNetworkDatagram(packet, to, ARTNET_PORT)) >= 0)
+        return true;
+    qWarning() << "[ArtNet] the closing frame of universe" << universe + 1 << "to" << to.toString()
+               << "could not be sent:" << (m_udpSocket.isNull() ? QString() : m_udpSocket->errorString());
+    return false;
 }
 
 qint64 ArtNetController::writeDatagram(const QNetworkDatagram &dg)

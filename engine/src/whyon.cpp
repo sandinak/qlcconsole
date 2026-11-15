@@ -241,6 +241,8 @@ QString startedBy(const Function *f)
         {
             if (p.isPreview())
                 return WhyOn::tr("a preview");
+            if (p.isEditorTest())
+                return WhyOn::tr("an editor's Test");
             if (p == FunctionParent::controlMap())
                 return WhyOn::tr("the Control Map");
             const QString n = widgetNamer() ? widgetNamer()(p.id()) : QString();

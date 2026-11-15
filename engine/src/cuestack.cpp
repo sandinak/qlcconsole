@@ -22,6 +22,7 @@
 #include <QXmlStreamWriter>
 #include <qmath.h>
 #include <QDebug>
+#include <utility>
 
 #include "genericfader.h"
 #include "fadechannel.h"
@@ -282,6 +283,8 @@ int CueStack::currentIndex() const
 void CueStack::previousCue()
 {
     qDebug() << Q_FUNC_INFO;
+    // Show only: started or stepped now -- in Operate, the show.
+    m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
     m_previous = true;
     if (isRunning() == false)
         start();
@@ -290,6 +293,8 @@ void CueStack::previousCue()
 void CueStack::nextCue()
 {
     qDebug() << Q_FUNC_INFO;
+    // Show only: started or stepped now -- in Operate, the show.
+    m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
     m_next = true;
     if (isRunning() == false)
         start();
@@ -384,6 +389,8 @@ bool CueStack::saveXML(QXmlStreamWriter *doc, uint id) const
 void CueStack::start()
 {
     qDebug() << Q_FUNC_INFO;
+    // Show only: started or stepped now -- in Operate, the show.
+    m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
     m_running = true;
 }
 
@@ -420,6 +427,9 @@ qreal CueStack::intensity() const
 
 void CueStack::setFlashing(bool enable)
 {
+    // Show only: a flash pressed now is the show (S3).
+    if (enable)
+        m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
     qDebug() << Q_FUNC_INFO;
     if (m_flashing == enable || m_cues.isEmpty())
         return;
@@ -459,6 +469,7 @@ void CueStack::writeDMX(MasterTimer *timer, QList<Universe*> ua)
                     fader = ua[universe]->requestFader();
                     m_fadersMap[universe] = fader;
                 }
+                fader->setLiveEpoch(m_liveEpoch.load(std::memory_order_relaxed));
 
                 fc.setTarget(it.value());
                 fc.addFlag(FadeChannel::Flashing);
@@ -537,6 +548,15 @@ void CueStack::write(QList<Universe*> ua)
     }
 */
     //m_fader->write(ua);
+
+    /* Show only: a cue stack is playback, not a hand on a fader -- what it
+       plays is the show only from the session it was started or stepped
+       in; left playing from Design, it holds Show-only fixtures until it
+       is stepped in Operate. */
+    const quint32 epoch = m_liveEpoch.load(std::memory_order_relaxed);
+    for (const QSharedPointer<GenericFader> &f : std::as_const(m_fadersMap))
+        if (!f.isNull())
+            f->setLiveEpoch(epoch);
 
     m_elapsed += MasterTimer::tick();
 }

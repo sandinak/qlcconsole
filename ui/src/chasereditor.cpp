@@ -1553,7 +1553,8 @@ void ChaserEditor::slotTestPlay()
 
 FunctionParent ChaserEditor::functionParent() const
 {
-    return FunctionParent::master();
+    // An editor's Test: not the show, so a Show-only fixture stays safe.
+    return FunctionParent::editorTest(0x1);
 }
 
 bool ChaserEditor::eventFilter(QObject *obj, QEvent *event)

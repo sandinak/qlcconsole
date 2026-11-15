@@ -23,6 +23,7 @@
 #include <time.h>
 #include <QMutexLocker>
 #include <cmath>
+#include <utility>
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #   include "mastertimer-win32.h"
@@ -482,6 +483,26 @@ void MasterTimer::fadeAndStopAll(int timeout)
     stopAllFunctions();
 }
 
+void MasterTimer::refreshPreviewGates()
+{
+    // Under the list's lock: no tick runs meanwhile (it holds it for the
+    // whole tick), so the gates are worked out here as the tick would.
+    QMutexLocker locker(&m_functionListMutex);
+    for (int pass = 0; pass < 8; ++pass)
+    {
+        const quint32 gen = Function::sourcesGeneration();
+        for (Function *f : std::as_const(m_functionList))
+            if (f != nullptr)
+                f->refreshPreviewGate();
+        for (Function *f : std::as_const(m_startQueue))
+            if (f != nullptr)
+                f->refreshPreviewGate();
+        // A gate that changed bumps the generation: its children look again.
+        if (Function::sourcesGeneration() == gen)
+            break;
+    }
+}
+
 int MasterTimer::runningFunctions() const
 {
     // Locked: never a count from the middle of a tick (TSan M1). The lock is
@@ -519,6 +540,9 @@ void MasterTimer::timerTickFunctions(QList<Universe *> universes)
             if (function != NULL)
             {
                 /* Run the function unless it's supposed to be stopped */
+                // Show only: the faders it makes follow what started it.
+                function->refreshPreviewGate();
+                GenericFader::CreationScope faderScope(&function->previewGate(), &function->showStamp(), function->id());
                 if (function->stopped() == false && m_stopAllFunctions == false)
                 {
                     if (firstIteration)
@@ -565,6 +589,8 @@ void MasterTimer::timerTickFunctions(QList<Universe *> universes)
 
         foreach (Function* f, startQueue)
         {
+            f->refreshPreviewGate();
+            GenericFader::CreationScope faderScope(&f->previewGate(), &f->showStamp(), f->id());
             if (m_functionList.contains(f))
             {
                 f->postRun(this, universes);

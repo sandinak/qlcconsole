@@ -47,6 +47,7 @@
 #include "outputrulekeeper.h"
 #include "script.h"
 #include "programmercontroller.h"
+#include "showcontrol.h"
 #include "doc.h"
 #include "app.h"
 #include "speedmastersfooter.h"
@@ -363,7 +364,9 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     // status bar, leaving the top to the tab. Applied on OK, no restart.
     QGroupBox *scGroupBox = new QGroupBox(tr("Show Controls"), this);
     scGroupBox->setProperty("helpTopic", QStringLiteral("getting-started.md#finding-your-way-around"));
-    QHBoxLayout *showCtlLayout = new QHBoxLayout(scGroupBox);
+    QVBoxLayout *scLayout = new QVBoxLayout(scGroupBox);
+    QHBoxLayout *showCtlLayout = new QHBoxLayout();
+    scLayout->addLayout(showCtlLayout);
     QLabel *showCtlLabel = new QLabel(tr("Stop all, Blackout, Blind and Design | Operate:"), scGroupBox);
     showCtlLabel->setWordWrap(true);
     showCtlLayout->addWidget(showCtlLabel);
@@ -379,6 +382,34 @@ AppSettings::AppSettings(App *app, QWidget *parent)
                                        "The shortcuts are the same either way."));
     showCtlLayout->addWidget(m_showControlsCombo);
     showCtlLayout->addStretch();
+    /* The double-GO guard (board Q233; its rules at ShowControl::run()):
+       two GOs on one cue list a moment apart -- the laptop and the pad, the
+       phone, the same key twice -- and only the first plays. This
+       computer's, applied on OK. */
+    {
+        QHBoxLayout *guardRow = new QHBoxLayout();
+        QLabel *guardLabel = new QLabel(tr("Double-GO guard:"), scGroupBox);
+        guardRow->addWidget(guardLabel);
+        m_goGuardSpin = new QDoubleSpinBox(scGroupBox);
+        m_goGuardSpin->setObjectName(QStringLiteral("settingsGoGuard"));
+        m_goGuardSpin->setProperty("helpTopic", QStringLiteral("show-control.md#two-gos-at-once"));
+        m_goGuardSpin->setRange(0.0, ShowControl::maxGoGuardMs() / 1000.0);
+        m_goGuardSpin->setDecimals(1);
+        m_goGuardSpin->setSingleStep(0.1);
+        m_goGuardSpin->setSuffix(tr(" s"));
+        m_goGuardSpin->setSpecialValueText(tr("Off"));
+        m_goGuardSpin->setValue(App::goGuardMs() / 1000.0);
+        m_goGuardSpin->setToolTip(tr("A second GO, Back, Sub GO, Sub Back or Stop on the same cue list within "
+                                     "this long of one that played is held, from any source: the laptop, "
+                                     "the pad, the phone, the VC, OSC. The Run tab, the footer, the phone and "
+                                     "the pad say whose was taken. Emergency stop and Blackout are never "
+                                     "held. Off turns it off."));
+        guardLabel->setToolTip(m_goGuardSpin->toolTip());
+        guardLabel->setBuddy(m_goGuardSpin);
+        guardRow->addWidget(m_goGuardSpin);
+        guardRow->addStretch();
+        scLayout->addLayout(guardRow);
+    }
     mainLayout->addWidget(scGroupBox);
 
     // --- Units ---
@@ -740,6 +771,9 @@ void AppSettings::accept()
 
     // Where the show controls sit (live)
     m_app->setShowControlsPlacement(m_showControlsCombo->currentData().toInt());
+    // Only when changed: OK on another page leaves the show's guard as it is.
+    if (qRound(m_goGuardSpin->value() * 1000.0) != App::goGuardMs())
+        m_app->setGoGuardMs(qRound(m_goGuardSpin->value() * 1000.0));
 
     // Show Tree: what Record records when the choices differ.
     QSettings().setValue(ShowTreeView::recordSettingKey(false), m_recordDesignCombo->currentData().toString());

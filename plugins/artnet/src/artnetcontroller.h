@@ -75,6 +75,12 @@ typedef struct _uinfo
     /** Universe data to be sent depending on the transmission mode */
     QByteArray outputData;
 
+    /** outputData is from before a transmit hold (transmitHeld()): the
+     *  Standard refresh does not send it, and the next real frame goes out
+     *  (changed or not) and replaces it. A node is never handed a frame
+     *  from before the hold -- a laser on, since let go. */
+    bool outputStale = false;
+
     /** Whether sends for this universe are failing, with hysteresis. A send
      *  can fail forever -- most commonly when the workspace names a bind
      *  interface this machine doesn't have -- and at DMX rates a warning per
@@ -83,6 +89,11 @@ typedef struct _uinfo
      *  per state change turned into a fail/recover pair every ~25 s.
      *  See SendHealth for the rules. */
     SendHealth sendHealth;
+
+    /** Review 19: the last DMX packet whose send failed, kept for one more
+     *  try when the line is flushed (a closing frame); empty otherwise */
+    QByteArray unsentPacket;
+    QHostAddress unsentAddress;
 } UniverseInfo;
 
 class ArtNetController final : public QObject
@@ -106,6 +117,10 @@ public:
 
     /** Send DMX data to a specific port/universe */
     void sendDmx(const quint32 universe, const QByteArray& data, bool dataChanged);
+
+    /** Review 19: a closing frame whose send failed is tried once more, now
+     *  (QLCIOPlugin::flushOutput()); false, and said, when it fails again */
+    bool retryUnsent(quint32 universe);
 
     /** Return the controller IP address */
     QString getNetworkIP();

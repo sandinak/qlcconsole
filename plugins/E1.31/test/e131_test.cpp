@@ -395,6 +395,60 @@ void E131_Test::pluginAppliesAndKeepsTheParameters()
     QVERIFY(plugin.m_IOmapping.at(0).controller == NULL);
 }
 
+void E131_Test::showOnlyMayUseIt()
+{
+    E131Plugin plugin;
+    QCOMPARE(plugin.isNetworkDmxOutput(), true);
+}
+
+/* Review 18: a universe forgotten on a shared line (a Show-only hold) is
+   out of the controller too -- nothing resends it -- and the others stay. */
+void E131_Test::r18_aForgottenUniverseLeavesTheController()
+{
+    E131Plugin plugin;
+    E131Controller *ctrl = testController(&plugin, { 0, 1 });
+    E131IO io;
+    io.controller = ctrl;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+    plugin.forgetOutput(0, 0);
+    const QList<quint32> left = ctrl->universesList();
+    plugin.m_IOmapping.clear();
+    delete ctrl;
+    QVERIFY(left.contains(0) == false);
+    QVERIFY(left.contains(1));
+}
+
+/* A closing frame whose send failed is tried once more on the flush
+   (retryUnsent()) -- but not from a line the rig network gate holds: it
+   sends nothing at all, as sendDmx() and Art-Net's writeDatagram() do. */
+void E131_Test::aHeldLineNeverRetriesTheClosingFrame()
+{
+    QUdpSocket rx;
+    QVERIFY(rx.bind(QHostAddress::LocalHost, 0));
+    QObject parent;
+    E131Controller *ctrl = testController(&parent, { 0 });
+    auto lose = [&]() {
+        UniverseInfo &info = ctrl->m_universeMap[0];
+        info.unsentPacket = QByteArray(126, char(0x10));
+        info.unsentAddress = QHostAddress::LocalHost;
+        info.unsentPort = rx.localPort();
+    };
+
+    lose();
+    QVERIFY(ctrl->retryUnsent(0));                                  // not held: sent
+    QVERIFY(rx.waitForReadyRead(2000));
+    QByteArray got(int(rx.pendingDatagramSize()), char(0));
+    rx.readDatagram(got.data(), got.size());
+    QCOMPARE(got.size(), 126);
+
+    lose();
+    ctrl->m_held.store(true);                                       // off the rig network
+    QVERIFY(ctrl->retryUnsent(0));                                  // not a failure
+    QVERIFY(ctrl->m_universeMap[0].unsentPacket.isEmpty());         // and not kept for later
+    QVERIFY2(rx.waitForReadyRead(200) == false, "a held E1.31 line sent its unsent closing frame");
+}
+
 QTEST_MAIN(E131_Test)
 
 void E131_Test::dmxPacketsAreBoundedByTheDatagramAndAUniverse()

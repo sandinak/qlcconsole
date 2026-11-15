@@ -2938,6 +2938,54 @@ void ShowReview_Test::pwr11()
     QVERIFY(p != nullptr);
 }
 
+void ShowReview_Test::pwr13LaserInZone()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(10, 3, 8));
+    Fixture *l = laser("Laser 1", 0, QLCPhysical::LaserEmission, 10, QVector3D(5000, 2000, 5000), 20);
+    Fixture *p = par("Par 1", 20);
+    QVERIFY(l != nullptr && p != nullptr);
+    FixturePreviewItem item;
+    item.m_baseItem.m_position = QVector3D(5000, 2000, 5000);
+    mp->setFixtureProperties(p->id(), item);
+    const QVector3D at = RigHeads::fixtureCentre(m_doc, l->id());
+    // No zones: quiet.
+    QVERIFY(quiet("PWR-13"));
+    const quint32 zid = mp->addNoLightZone(at.x() - 1.0f, at.y() - 1.0f);
+    NoLightZone z = mp->noLightZone(zid);
+    z.name = QStringLiteral("Band");
+    z.width = 2.0f;
+    z.depth = 2.0f;
+    z.floorZ = at.z() - 1.0f;
+    z.height = 2.0f;
+    z.kind = NoLightZone::NoLasers;
+    mp->setNoLightZone(z);
+    // Inside: the laser, once; the par on the same spot is not a laser.
+    QVERIFY2(fires("PWR-13"), "a laser inside the zone");
+    QCOMPARE(findings("PWR-13").count(), 1);
+    const ReviewFinding f = findings("PWR-13").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY(f.message.contains("Laser 1") && f.message.contains("Band"));
+    QVERIFY(f.targets.contains(QStringLiteral("fx:%1").arg(l->id())));
+    QVERIFY(f.targets.contains(QStringLiteral("zone:%1").arg(zid)));
+    QCOMPARE(f.jump, QStringLiteral("plot"));
+    QCOMPARE(f.jumpData.first().toUInt(), l->id());
+    // On the edge counts as inside.
+    z.x = at.x();
+    z.width = 1.0f;
+    mp->setNoLightZone(z);
+    QVERIFY2(fires("PWR-13"), "on the edge");
+    // Upstage of it: outside.
+    z.x = at.x() + 0.5f;
+    mp->setNoLightZone(z);
+    QVERIFY2(quiet("PWR-13"), "the zone moved off the laser");
+    // Above it: outside.
+    z.x = at.x() - 1.0f;
+    z.floorZ = at.z() + 0.5f;
+    mp->setNoLightZone(z);
+    QVERIFY2(quiet("PWR-13"), "the zone starts above the laser");
+}
+
 void ShowReview_Test::pwr11Mover()
 {
     MonitorProperties *mp = m_doc->monitorProperties();
