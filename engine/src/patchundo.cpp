@@ -136,58 +136,45 @@ void PatchUndo::restoreOne(const State &st)
 {
     /* --- Output patches ---------------------------------------------------
 
-       Order matters three times over.
+       Order matters twice over, and each leg is restored in one step.
 
-       First, wipe the parameters of every patch as it stands NOW, before
-       anything is re-pointed. Parameters live in the plugin keyed by universe,
-       and QLCIOPlugin::unSetParameter only acts while the plugin still agrees
-       that universe is on that line (qlcioplugin.cpp: the outputLine == line
-       guard). Clearing after a re-patch therefore silently does nothing
-       whenever the line changed -- and a parameter the undone operation ADDED
-       would survive, leaving a patch unicast to a node when it used to
-       broadcast. Writing the captured map back cannot fix that either: it only
-       overwrites keys the capture happened to contain.
-
-       Second, trim surplus patches from the END. Removing index 0 first
+       First, trim surplus patches from the END. Removing index 0 first
        shuffles every later patch down, so each subsequent removal takes the
        wrong one.
 
-       Third, re-point and re-parameterise, in index order, so a universe
+       Then re-point and re-parameterise, in index order, so a universe
        fanned out to several nodes gets each leg back on its own node rather
-       than in some other arrangement of the same set. */
-    for (int i = 0; i < m_ioMap->outputPatchesCount(st.id); i++)
-    {
-        OutputPatch *op = m_ioMap->outputPatch(st.id, i);
-        if (op == NULL)
-            continue;
-        foreach (const QString &key, op->getPluginParameters().keys())
-            op->unSetPluginParameter(key);
-    }
-
+       than in some other arrangement of the same set. Each leg goes back
+       with ALL its parameters at once (review 21): on its line still, by
+       OutputPatch::replacePluginParameters() -- one closing frame, to the
+       target it has now, then the captured one -- or onto another line by
+       setOutputPatch(..., parameters), opened aimed. Clearing everything
+       first and setting each parameter after (as this did) put the line on
+       the plugin's default target -- broadcast, Port-Address 0 -- between
+       the two, and the first parameter set was a retarget whose closing
+       frame went there. A parameter the undone operation ADDED is cleared
+       by the same call (the captured map is the whole of what it had). */
     for (int i = m_ioMap->outputPatchesCount(st.id) - 1; i >= st.outputs.count(); i--)
         m_ioMap->setOutputPatch(st.id, QString(), QString(), 0, false, i);
 
     for (int i = 0; i < st.outputs.count(); i++)
     {
         const Patch &p = st.outputs.at(i);
-        m_ioMap->setOutputPatch(st.id, p.plugin, QString(), p.line, false, i);
-
         OutputPatch *op = m_ioMap->outputPatch(st.id, i);
-        if (op == NULL)
-            continue;
-        /* Belt and braces: anything the re-patch itself brought along that the
-           capture did not hold. */
-        foreach (const QString &key, op->getPluginParameters().keys())
+        const bool sameLine = op != NULL && op->isPatched() && op->pluginName() == p.plugin
+                              && op->output() == p.line;
+        if (sameLine == false
+            && m_ioMap->setOutputPatch(st.id, p.plugin, QString(), p.line, false, i, p.parameters) == false)
         {
-            if (p.parameters.contains(key) == false)
-                op->unSetPluginParameter(key);
+            // Refused (N1, F4) or not opened: whatever it is on is left as it is.
+            op = m_ioMap->outputPatch(st.id, i);
+            if (op == NULL || op->pluginName() != p.plugin || op->output() != p.line)
+                continue;
         }
-        QMapIterator<QString, QVariant> it(p.parameters);
-        while (it.hasNext())
-        {
-            it.next();
-            op->setPluginParameter(it.key(), it.value());
-        }
+
+        op = m_ioMap->outputPatch(st.id, i);
+        if (op != NULL && op->plugin() != NULL && op->pluginName() == p.plugin)
+            op->replacePluginParameters(p.parameters);
     }
 
     /* --- Input patch ------------------------------------------------------ */
@@ -215,18 +202,15 @@ void PatchUndo::restoreOne(const State &st)
     /* --- Feedback patch --------------------------------------------------- */
     if (st.feedback.present)
     {
-        m_ioMap->setOutputPatch(st.id, st.feedback.plugin, QString(),
-                                st.feedback.line, true, 0);
         OutputPatch *fb = m_ioMap->feedbackPatch(st.id);
+        // As an output leg: on its line still, only its parameters, in one step.
+        if (fb == NULL || fb->isPatched() == false || fb->pluginName() != st.feedback.plugin
+            || fb->output() != st.feedback.line)
+            m_ioMap->setOutputPatch(st.id, st.feedback.plugin, QString(),
+                                    st.feedback.line, true, 0);
+        fb = m_ioMap->feedbackPatch(st.id);
         if (fb != NULL)
-        {
-            QMapIterator<QString, QVariant> it(st.feedback.parameters);
-            while (it.hasNext())
-            {
-                it.next();
-                fb->setPluginParameter(it.key(), it.value());
-            }
-        }
+            fb->replacePluginParameters(st.feedback.parameters);
     }
     else
     {

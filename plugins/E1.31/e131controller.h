@@ -102,6 +102,10 @@ public:
      *  addUniverse() sets it ((line & 255.255.255.0) + universe + 1) */
     QHostAddress defaultOutputUCastAddress(quint32 universe) const;
 
+    /** The multicast group @p universe sends to when it is given none:
+     *  239.255.x.y of its own E1.31 universe (universe + 1), as addUniverse() */
+    static QHostAddress defaultOutputMCastAddress(quint32 universe);
+
     /** Work out again whether this line is held by the rig network gate
      *  (QLCIOPlugin::setTransmitNetworks()). Called when the line is made,
      *  and by the plugin's refreshTransmitGate(); sendDmx() only reads the

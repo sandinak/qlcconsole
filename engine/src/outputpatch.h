@@ -134,8 +134,10 @@ public:
      *      channel of every fixture being marked is marked first
      *      (InputOutputMap::ShowOnlyMarks), then the line gets its closing
      *      frame (the whole Show-only mask at safe) and a flush, and only
-     *      then it is closed -- on a line another universe also uses, it is
-     *      only forgotten, no frame. It waits on the line it was open on.
+     *      then it is closed -- on a line other universes also use, they are
+     *      held first (F4, only forgotten there), then this universe gets
+     *      its closing frame and the line is closed. It waits on the line
+     *      it was open on.
      *  N3. On load, a universe with Show-only fixtures whose saved output is
      *      such a line stays pending, with N1's words -- checked before any
      *      output is let go (InputOutputMap::recheckPatchesAfterLoad()); it
@@ -177,7 +179,11 @@ public:
      *  (@p sendClosing), then closed; false: the plugin only forgets this
      *  universe there (another patch on it closes it). @p sharedLine: it
      *  shared that line with another patch when held (review 17: F4 lets it
-     *  back there by number, as stock, even if that one is open). */
+     *  back there by number, as stock, even if that one is open). Since
+     *  0.4.8 no rule holds a network output (N1 is the plugin allow-list),
+     *  so this is reached for hardware lines only; on a network line it
+     *  still does the same, harmless defence (Art-Net/E1.31 forgetOutput()
+     *  take the universe out of the controller). */
     void hold(HoldKind kind, const QString &why, bool closeTheLine, bool sendClosing,
               quint32 waitLine = UINT_MAX, bool sharedLine = false);
     /** The line number a show load saved for this patch, when it opened
@@ -209,13 +215,15 @@ public:
     QString deviceText() const;
     static QString deviceText(const QLCIOPlugin *plugin, quint32 line, const QString &name);
 
-    /** Review 19 (A1), review 20: whether another open patch of this
-     *  universe uses @p line of this plugin -- then a hold, the destructor,
-     *  a set() onto another line and setPending() neither close nor forget
+    /** Review 19 (A1), review 20: another open patch of this universe on
+     *  @p line of this plugin, or none -- then a hold, the destructor, a
+     *  set() onto another line and setPending() neither close nor forget
      *  (line, universe), which is that patch's too (no closing frame
-     *  either: the line goes on sending this universe). The Universe sets
-     *  it. */
-    typedef std::function<bool(const OutputPatch *patch, quint32 line)> SiblingOnLine;
+     *  either: the line goes on sending this universe). Review 21: the
+     *  plugin keeps one target per universe, so that patch's own target
+     *  goes back to the plugin (reapplyPluginParameters()). The Universe
+     *  sets it. */
+    typedef std::function<OutputPatch *(const OutputPatch *patch, quint32 line)> SiblingOnLine;
     void setSiblingOnLine(const SiblingOnLine &check) { m_siblingOnLine = check; }
 
     /** The line it was open on when it was held (UINT_MAX: never held) */
@@ -266,6 +274,19 @@ public:
     void setPluginParameters(const QMap<QString, QVariant> &values,
                              const QStringList &unset = QStringList());
 
+    /** PatchUndo (review 21): this patch's parameters become exactly
+     *  @p values -- each set, every other one cleared (the plugin's own
+     *  default) -- in one step under the frame lock, with one closing frame
+     *  to the old target when the target moves; never a frame to a target
+     *  half-way or to the plugin's default on the way. */
+    void replacePluginParameters(const QMap<QString, QVariant> &values);
+
+    /** Review 21: give the plugin this patch's own parameters again -- the
+     *  other open patch of this universe on its line (SiblingOnLine) was
+     *  removed or moved, and the plugin, one target per universe, still
+     *  had that one's. Its closing frame first when the target moves. */
+    void reapplyPluginParameters();
+
     /** True for a parameter that changes where an open line's frames land
      *  (Art-Net outputIP/outputUni, E1.31 universe/unicast/multicast, a
      *  WLED device's address or window) */
@@ -314,7 +335,9 @@ private:
     std::function<bool(QByteArray &, bool)> m_closingFrame;
     SiblingOnLine m_siblingOnLine;
     quint32 m_heldOnLine = UINT_MAX;
-    bool siblingOnLine(quint32 line) const { return m_siblingOnLine && m_siblingOnLine(this, line); }
+    OutputPatch *siblingOnLine(quint32 line) const { return m_siblingOnLine ? m_siblingOnLine(this, line) : nullptr; }
+    /** Left on a line with its sibling: that one's target back (review 21) */
+    void leaveLineToSibling(quint32 line);
 
     /** Close the open line for good: its closing frame first (see
      *  setClosingFrame()), then the plugin's closeOutput() */

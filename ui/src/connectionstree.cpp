@@ -3945,8 +3945,8 @@ void ConnectionsTree::retargetFeedback(quint32 universe)
 
     if (addr.isEmpty())
     {
-        fb->unSetPluginParameter("outputIP");
-        fb->unSetPluginParameter("outputUni");
+        // Address and port back to broadcast in one step (review 21).
+        fb->setPluginParameters({}, { QStringLiteral("outputIP"), QStringLiteral("outputUni") });
         m_doc->setModified();
         refresh();
         return;

@@ -403,6 +403,47 @@ void E131_Test::showOnlyMayUseIt()
 
 /* Review 18: a universe forgotten on a shared line (a Show-only hold) is
    out of the controller too -- nothing resends it -- and the others stay. */
+/* Review 21: "multicast" or the default receiver chosen after a unicast
+   node (the Connection editor, UniversePatcher, undo) is an unSetParameter();
+   the controller sends to the default from the next frame, as when stock
+   QLC+ sets a default back -- not to the old node until a reconnect. */
+void E131_Test::r21_aClearedTargetIsTheDefaultAtOnce()
+{
+    E131Plugin plugin;
+    E131Controller *ctrl = testController(&plugin, { 0 });
+    E131IO io;
+    io.controller = ctrl;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+    const QHostAddress byDefault = ctrl->m_universeMap[0].outputUcastAddress;
+    const QHostAddress group = ctrl->m_universeMap[0].outputMcastAddress;
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "multicast", 0);
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "ucastIP", "10.0.0.5");
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "ucastPort", 6000);
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "universe", 9);
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "priority", 150);
+    const QHostAddress aimed = ctrl->m_universeMap[0].outputUcastAddress;
+    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "ucastIP");
+    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "ucastPort");
+    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "multicast");
+    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "universe");
+    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "priority");
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "mcastFullIP", "239.255.1.2");
+    const QHostAddress regrouped = ctrl->m_universeMap[0].outputMcastAddress;
+    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "mcastFullIP");
+    const UniverseInfo after = ctrl->m_universeMap[0];
+    plugin.m_IOmapping.clear();
+    delete ctrl;
+    QCOMPARE(aimed, QHostAddress("10.0.0.5"));
+    QCOMPARE(regrouped, QHostAddress("239.255.1.2"));
+    QCOMPARE(after.outputUcastAddress, byDefault);
+    QCOMPARE(after.outputUcastPort, quint16(5568));
+    QVERIFY(after.outputMulticast);
+    QCOMPARE(after.outputUniverse, quint16(1));
+    QCOMPARE(after.outputPriority, 100);
+    QCOMPARE(after.outputMcastAddress, group);
+}
+
 void E131_Test::r18_aForgottenUniverseLeavesTheController()
 {
     E131Plugin plugin;

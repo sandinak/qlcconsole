@@ -143,9 +143,13 @@ void WledDevicesDialog::apply(OutputPatch *op, const QList<Device> &devices)
     const QMap<QString, QVariant> before = op->getPluginParameters();
     const QMap<QString, QVariant> after = toParameters(devices);
 
+    /* Every change in one step (review 21): one closing state for the
+       devices as they were, never one half-way. */
+    QStringList unset;
+    QMap<QString, QVariant> set;
     foreach (const QString &k, before.keys())
         if (isDeviceKey(k) && !after.contains(k))
-            op->unSetPluginParameter(k);
+            unset << k;
     for (auto it = after.constBegin(); it != after.constEnd(); ++it)
     {
         /* A show patched by hand may never have said the primary's address
@@ -157,8 +161,10 @@ void WledDevicesDialog::apply(OutputPatch *op, const QList<Device> &devices)
             continue;
         if (before.contains(it.key()) && before.value(it.key()).toString() == it.value().toString())
             continue;
-        op->setPluginParameter(it.key(), it.value());
+        set.insert(it.key(), it.value());
     }
+    if (set.isEmpty() == false || unset.isEmpty() == false)
+        op->setPluginParameters(set, unset);
 }
 
 bool WledDevicesDialog::validAddress(const QString &ip)
