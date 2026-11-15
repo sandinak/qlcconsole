@@ -535,6 +535,19 @@ quint32 PadRunRulesUi_Test::makeFocusShow(quint32 *focus, quint32 *house)
 {
     Doc *doc = m_app->doc();
     ProgrammerController *pc = doc->programmer();
+    // Made once (the App and its show live across the test functions).
+    if (m_focusList != 0)
+    {
+        *focus = m_focusCue;
+        *house = m_houseCue;
+        m_running = *focus;
+        pc->focusCallCue()->setRunningCueProbe([this](quint32) { return m_running; });
+        doc->setMode(Doc::Operate);
+        settle(50);
+        pc->focusCallCue()->cueCurrent(m_focusList, *house);
+        pc->focusCallCue()->cueCurrent(m_focusList, *focus);
+        return m_focusList;
+    }
     MonitorProperties *props = doc->monitorProperties();
     FixtureGroup *g = new FixtureGroup(doc);
     g->setName(QStringLiteral("Focus Spots"));
@@ -593,6 +606,9 @@ quint32 PadRunRulesUi_Test::makeFocusShow(quint32 *focus, quint32 *house)
     doc->setMode(Doc::Operate);
     settle(50);
     pc->focusCallCue()->cueCurrent(list, *focus);
+    m_focusList = list;
+    m_focusCue = *focus;
+    m_houseCue = *house;
     return list;
 }
 

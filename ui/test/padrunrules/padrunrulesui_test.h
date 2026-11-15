@@ -59,6 +59,7 @@ private:
     QTemporaryDir *m_pluginDir = nullptr;
     IOPluginStub *m_stub = nullptr;
     quint32 m_running = 0;      // the cue the probe says the focus list is on
+    quint32 m_focusList = 0, m_focusCue = 0, m_houseCue = 0;
 };
 
 #endif
