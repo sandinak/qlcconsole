@@ -31,6 +31,8 @@
 #include <QElapsedTimer>
 #include <QTcpSocket>
 #include <QUrl>
+#include <QThread>
+#include <QCoreApplication>
 
 #include "wledplugin.h"
 #include "../../../engine/src/wledpalettes.h"
@@ -274,35 +276,52 @@ QPair<int, int> WledPlugin::answering(quint32 universe) const
     return qMakePair(ok, it.value().deviceCount());
 }
 
-bool WledPlugin::postNow(const QString &ip, const QByteArray &body, int waitMs)
+bool WledPlugin::postNowSync(const QString &ip, const QByteArray &body, int waitMs)
 {
+    /* No event loop (the app quitting): a plain socket waited on, as
+       restoreDirections() does -- the bytes on their way before it returns. */
     const QUrl url(QStringLiteral("http://%1/").arg(ip));
-    const QByteArray request = "POST /json/state HTTP/1.1\r\nHost: " + url.host().toUtf8()
-            + "\r\nContent-Type: application/json\r\nContent-Length: "
-            + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
-    /* The plugin's until it is done: connected, it writes; closed, failed
-       or after a few seconds, it goes. Waited on only for waitMs. */
-    QTcpSocket *sock = new QTcpSocket(this);
-    connect(sock, &QTcpSocket::connected, sock, [sock, request]() { sock->write(request); });
-    connect(sock, &QTcpSocket::disconnected, sock, &QObject::deleteLater);
-    connect(sock, &QAbstractSocket::errorOccurred, sock, [sock, ip](QAbstractSocket::SocketError) {
-        qWarning() << "[WLED] closing state to" << ip << "not sent:" << sock->errorString();
-        sock->deleteLater();
-    });
-    QTimer::singleShot(5000, sock, &QObject::deleteLater);
+    QTcpSocket sock;
     QElapsedTimer waited;
     waited.start();
-    sock->connectToHost(url.host(), quint16(url.port(80)));
-    bool written = false;
-    if (sock->waitForConnected(qMax(1, waitMs)))
-    {
-        const int left = waitMs - int(waited.elapsed());
-        written = sock->bytesToWrite() == 0 || (left > 0 && sock->waitForBytesWritten(left));
-    }
-    if (!written)
-        qInfo() << "[WLED] closing state to" << ip << "still on its way after"
-                << waited.elapsed() << "ms: left to finish on its own";
+    sock.connectToHost(url.host(), quint16(url.port(80)));
+    if (!sock.waitForConnected(qMax(1, waitMs)))
+        return false;
+    sock.write("POST /json/state HTTP/1.1\r\nHost: " + url.host().toUtf8()
+               + "\r\nContent-Type: application/json\r\nContent-Length: "
+               + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+    const bool written = sock.waitForBytesWritten(qMax(1, waitMs - int(waited.elapsed())));
+    sock.disconnectFromHost();
+    if (sock.state() != QAbstractSocket::UnconnectedState)
+        sock.waitForDisconnected(50);
     return written;
+}
+
+void WledPlugin::postClosing(const QString &ip, const QByteArray &body)
+{
+    /* The event loop running: sent through the network manager, never
+       waited on -- the caller holds the engine's frame lock (review 11 M-2).
+       It is not cut off: it finishes on its own however long the device
+       takes (a socket waited on and timed out was aborted -- the closing
+       state lost under load). Until it is done, nothing newer goes to this
+       device (closingInFlight()). */
+    QNetworkRequest req(QUrl(QStringLiteral("http://%1/json/state").arg(ip)));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    req.setTransferTimeout(4000);
+    QNetworkReply *reply = m_nam->post(req, body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, ip]() {
+        reply->deleteLater();
+        const QNetworkReply::NetworkError err = reply->error();
+        // The device closing the connection after taking it: sent.
+        if (err != QNetworkReply::NoError && err != QNetworkReply::RemoteHostClosedError)
+            qWarning() << "[WLED] closing state to" << ip << "not taken:" << reply->errorString();
+        {
+            QMutexLocker locker(&m_mutex);
+            if (--m_closingInFlight[ip] <= 0)
+                m_closingInFlight.remove(ip);
+        }
+        kick();         // what changed meanwhile goes now
+    });
 }
 
 void WledPlugin::flushOutput(quint32 output, quint32 universe)
@@ -311,6 +330,10 @@ void WledPlugin::flushOutput(quint32 output, quint32 universe)
         return;
     struct Post { QString ip; QByteArray body; };
     QList<Post> posts;
+    /* As the app quits there is no event loop left to send it later: then
+       it is waited on, about a second at most, as R10 did. */
+    const bool noEventLoop = QThread::currentThread()->loopLevel() == 0
+                             || QCoreApplication::closingDown() || m_nam == nullptr;
     {
         QMutexLocker locker(&m_mutex);
         auto it = m_targets.find(universe);
@@ -331,13 +354,24 @@ void WledPlugin::flushOutput(quint32 output, quint32 universe)
             posts << Post { d.ip, QJsonDocument(body).toJson(QJsonDocument::Compact) };
             d.sent = state;
             d.postedAt = QDateTime::currentMSecsSinceEpoch();
+            if (!noEventLoop)
+                m_closingInFlight[d.ip]++;
         }
     }
-    // At most flushBudgetMs in all; what is not through by then goes on its own.
-    QElapsedTimer budget;
-    budget.start();
+    if (noEventLoop)
+    {
+        QElapsedTimer budget;
+        budget.start();
+        for (const Post &p : std::as_const(posts))
+        {
+            const int left = restoreBudgetMs - int(budget.elapsed());
+            if (left <= 0 || !postNowSync(p.ip, p.body, left))
+                qInfo() << "[WLED] closing state to" << p.ip << "not sent as the app quits";
+        }
+        return;
+    }
     for (const Post &p : std::as_const(posts))
-        postNow(p.ip, p.body, qMax(0, flushBudgetMs - int(budget.elapsed())));
+        postClosing(p.ip, p.body);
 }
 
 void WledPlugin::setParameter(quint32 universe, quint32 line, Capability type,
@@ -504,6 +538,10 @@ void WledPlugin::tick(bool kicked)
                 // that did not answer is tried again in a moment, not every
                 // tick. Neither holds up the other devices.
                 if (d.ip.isEmpty() || d.inFlight || d.infoInFlight || !d.gateOpen)
+                    continue;
+                // Its closing state still on its way (review 12 F8): nothing
+                // newer may overtake it.
+                if (m_closingInFlight.contains(d.ip))
                     continue;
                 /* Its segments first: nothing is sent before they are known,
                    so the first look reaches every one of them -- and a

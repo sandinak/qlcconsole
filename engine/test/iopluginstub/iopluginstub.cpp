@@ -48,6 +48,7 @@ void IOPluginStub::init()
     m_async = false;
     m_asyncPending.clear();
     m_lastByTarget.clear();
+    m_forgotten.clear();
 }
 
 QString IOPluginStub::name() const

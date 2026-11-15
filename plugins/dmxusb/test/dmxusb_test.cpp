@@ -154,6 +154,54 @@ void DMXUSB_Test::proSendsTheClosingFrameBeforeClosing()
                                            "in %1 of %2 closes -- the Pro keeps sending the laser on").arg(lost).arg(trials)));
 }
 
+/* Review 12: DMXUSB::rescanWidgets() (any DMX USB hot-plug, the config
+   dialog's Refresh) writes each Show-only universe's closing frame to its
+   widget, then closes every open line in turn, then deletes the widgets.
+   Review 11 took the wait out of the Pro's close() (moved to flush(), which
+   only the engine's flushOutput() calls) -- the rescan never calls it. On
+   a Pro with two output ports, the port closed first is marked closed at
+   once and its thread skips it: the closing frame is never sent, and the
+   Pro repeats the last frame it got for as long as it has power. */
+void DMXUSB_Test::review12_aRescanSendsTheClosingFrameOnEveryPortOfAPro()
+{
+    int lost = 0;
+    const int trials = 5;
+    for (int trial = 0; trial < trials; ++trial)
+    {
+        FakeDMXInterface *iface = new FakeDMXInterface();
+        EnttecDMXUSBPro widget(iface, 0, 0);
+        widget.setPortsMapping(QList<int>() << (DMXUSBWidget::DMX | DMXUSBWidget::Output)
+                                            << (DMXUSBWidget::DMX | DMXUSBWidget::Output));
+        QVERIFY(widget.open(0, false));
+        QVERIFY(waitFor([&]() { return widget.isOpen() && widget.openPortsCount() == 1; }));
+        QVERIFY(widget.open(1, false));
+        QVERIFY(waitFor([&]() { return widget.openPortsCount() == 2; }));
+
+        // Port 1: the laser rig's universe, laser on. Port 2: another universe.
+        QByteArray on(512, char(0));
+        on[Laser] = char(255);
+        QByteArray other(512, char(0));
+        other[3] = char(100);
+        widget.writeUniverse(0, 0, on, true);
+        widget.writeUniverse(1, 1, other, true);
+        QVERIFY(waitFor([&]() { return lastSent(iface->writes(), 5, char(6), Laser) == 255; }));
+
+        // rescanWidgets(): the closing frames (Show-only universes only),
+        // then every open line closed, in the plugin's universe order.
+        QByteArray closing(512, char(0));
+        widget.writeUniverse(0, 0, closing, true);
+        widget.close(0, false);
+        widget.close(1, false);
+
+        const int last = lastSent(iface->writes(), 5, char(6), Laser);
+        if (last != 0)
+            ++lost;
+        qInfo("Pro two ports, trial %d: the last frame on port 1 has the laser at %d", trial, last);
+    }
+    QVERIFY2(lost == 0, qPrintable(QString("Enttec Pro, two ports: a rescan's closing frame never reached "
+                                           "port 1 in %1 of %2 rescans -- the laser stays on").arg(lost).arg(trials)));
+}
+
 /* 44 frames a second: one write every 23 ms. */
 static const qint64 Frame = 23;
 

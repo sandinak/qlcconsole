@@ -65,7 +65,14 @@ OutputPatch::~OutputPatch()
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
         closeLine();
     else if (m_plugin != NULL)
+    {
         m_plugin->closeOutput(m_pluginLine, m_universe);
+        /* Held for a device change and now unpatched (review 12 F6): the
+           plugin forgets this universe on the line it had, whoever else
+           is open there. */
+        if (m_deviceHold != NoDeviceHold && m_pendingLine != UINT_MAX)
+            m_plugin->forgetOutput(m_pendingLine, m_universe);
+    }
 }
 
 void OutputPatch::setClosingFrame(const std::function<bool(QByteArray &, bool)> &source)
@@ -137,13 +144,41 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
     {
         const bool opened = m_plugin->openOutput(m_pluginLine, m_universe);
         m_freshLine.store(opened, std::memory_order_relaxed);
-        m_lineName = m_plugin->linesAreHardware() ? m_plugin->outputs().value(int(m_pluginLine))
-                                                  : QString();
+        /* The device this patch was made to, recorded here once (a reopen
+           by number never changes it): its name, and how many lines carry
+           that name -- two of one model without a serial (review 12 F3). */
+        if (m_plugin->linesAreHardware())
+        {
+            const QStringList names = m_plugin->outputs();
+            m_lineName = names.value(int(m_pluginLine));
+            m_lineNameCount = int(names.count(m_lineName));
+        }
+        else
+        {
+            m_lineName.clear();
+            m_lineNameCount = 0;
+        }
         m_reconnectHeld.clear();
+        m_deviceHold = NoDeviceHold;
         return opened;
     }
 
     return false;
+}
+
+bool OutputPatch::set(QLCIOPlugin *plugin, quint32 output, const QMap<QString, QVariant> &params)
+{
+    /* Review 12 F7: opened with its target in one step -- the parameters
+       given to the plugin before any frame (the caller holds the frame
+       lock), never to its default target first, and no closing frame: it
+       was sending nowhere. */
+    for (auto it = params.constBegin(); it != params.constEnd(); ++it)
+        m_parametersCache[it.key()] = it.value();
+    const bool opened = set(plugin, output);
+    if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
+        for (auto it = params.constBegin(); it != params.constEnd(); ++it)
+            m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
+    return opened;
 }
 
 bool OutputPatch::reconnect()
@@ -186,7 +221,21 @@ bool OutputPatch::lineNameChanged() const
     return m_plugin->outputs().value(int(m_pluginLine)) != m_lineName;
 }
 
-void OutputPatch::holdForDeviceChange(const QString &why, bool closeTheLine)
+int OutputPatch::lineNameCountNow() const
+{
+    if (m_plugin == NULL || m_lineName.isEmpty())
+        return 0;
+    return int(m_plugin->outputs().count(m_lineName));
+}
+
+QString OutputPatch::recordedLineName() const
+{
+    if (m_pluginLine != QLCIOPlugin::invalidLine())
+        return m_lineName;
+    return m_deviceHold != NoDeviceHold ? m_pendingUID : QString();
+}
+
+void OutputPatch::holdForDeviceChange(const QString &why, bool closeTheLine, bool needsConfirm)
 {
     if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine())
         return;
@@ -194,12 +243,17 @@ void OutputPatch::holdForDeviceChange(const QString &why, bool closeTheLine)
     if (m_frameLock != nullptr)
         locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
     m_reconnectHeld = why;
+    m_deviceHold = needsConfirm ? HeldNeedsConfirm : HeldDeviceChanged;
     qWarning() << "[OutputPatch]" << why;
     /* Not closed when another patch is open on it now: closing is per line
-       in a USB plugin, and would stop that universe too. No closing frame:
-       the line is another device now. */
+       in a USB plugin, and would stop that universe too -- the plugin only
+       forgets this universe there (review 12 F6), so nothing of it is ever
+       written to that device again. No closing frame: the line is another
+       device now. */
     if (closeTheLine)
         m_plugin->closeOutput(m_pluginLine, m_universe);
+    else
+        m_plugin->forgetOutput(m_pluginLine, m_universe);
     m_pendingUID = m_lineName;
     m_pendingLine = m_pluginLine;
     m_pendingNetwork.clear();
@@ -217,6 +271,7 @@ void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid,
     m_plugin = plugin;
     m_pluginLine = QLCIOPlugin::invalidLine();
     m_reconnectHeld.clear();
+    m_deviceHold = NoDeviceHold;
     m_pendingUID = uid;
     m_pendingLine = savedLine;
     m_pendingNetwork = network;
@@ -293,6 +348,14 @@ bool OutputPatch::isPatched() const
     return output() != QLCIOPlugin::invalidLine() && m_plugin != NULL;
 }
 
+bool OutputPatch::sameParameterValue(const QVariant &a, const QVariant &b)
+{
+    // "1" and 1 are the same address (review 12 F7: wledAddress).
+    if (a == b)
+        return true;
+    return a.isValid() && b.isValid() && a.toString() == b.toString();
+}
+
 bool OutputPatch::isTargetParameter(const QString &prop)
 {
     static const QStringList exact = {
@@ -314,7 +377,8 @@ void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values, con
         locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
     bool retarget = false;
     for (auto it = values.constBegin(); it != values.constEnd(); ++it)
-        if (isTargetParameter(it.key()) && m_parametersCache.value(it.key()) != it.value())
+        if (isTargetParameter(it.key())
+            && sameParameterValue(m_parametersCache.value(it.key()), it.value()) == false)
             retarget = true;
     foreach (const QString &prop, unset)
         if (isTargetParameter(prop) && m_parametersCache.contains(prop))
@@ -343,7 +407,8 @@ void OutputPatch::setPluginParameter(QString prop, QVariant value)
        receiving this universe -- its closing frame first, then the move,
        with no frame between (the frame lock). */
     if (isTargetParameter(prop) && m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine()
-        && (m_parametersCache.contains(prop) == false || m_parametersCache.value(prop) != value))
+        && (m_parametersCache.contains(prop) == false
+            || sameParameterValue(m_parametersCache.value(prop), value) == false))
     {
         setPluginParameters({ { prop, value } });
         return;

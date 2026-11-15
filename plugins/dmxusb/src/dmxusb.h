@@ -80,10 +80,14 @@ private:
     /** A rescan in progress: frames of the show no longer reach the old
      *  widgets, so their last one stays the closing frame */
     std::atomic<bool> m_rescanning { false };
-    /** The output lines the engine has opened (since the last rescan):
-     *  a frame for any other is dropped, never kept in a widget that may be
-     *  another device now (under m_widgetsMutex) */
-    QList<quint32> m_openLines;
+    /** What the engine has opened since the last rescan, per (line,
+     *  universe) -- a universe mirrored on two lines, two universes on one
+     *  (review 12 F6): a frame for any other pair is dropped, never kept in
+     *  a widget that may be another device now (under m_widgetsMutex) */
+    QList<QPair<quint32, quint32> > m_openPairs;
+    /** True when some pair other than (@p line, @p universe) is open on
+     *  @p line (m_widgetsMutex held) */
+    bool lineOpenForAnother(quint32 line, quint32 universe) const;
 
     /************************************************************************
      * Outputs
@@ -106,6 +110,10 @@ public:
 
     /** @reimp the frame given last is on the wire (DMXUSBWidget::flush()) */
     void flushOutput(quint32 output, quint32 universe) override;
+
+    /** @reimp this universe forgotten on @p output, the line left open for
+     *  the others (review 12 F6) */
+    void forgetOutput(quint32 output, quint32 universe) override;
 
     /** @reimp: a widget that stopped taking data (unplugged mid-session,
      *  driver gave up) -- WriteHealth, fed by each widget's write loop. */

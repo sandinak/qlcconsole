@@ -39,6 +39,8 @@ private slots:
      *  line at once. The frame must reach the wire before the line closes. */
     void openDmxSendsTheClosingFrameBeforeClosing();
     void proSendsTheClosingFrameBeforeClosing();
+    /** Review 12: a rescan (DMXUSB::rescanWidgets()) on a two-port Pro */
+    void review12_aRescanSendsTheClosingFrameOnEveryPortOfAPro();
 };
 
 #endif

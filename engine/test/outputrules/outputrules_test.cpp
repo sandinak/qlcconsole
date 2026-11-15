@@ -3450,6 +3450,45 @@ void OutputRules_Test::aRetargetInOneStepClosesOnlyTheOldNode()
     m_stub->m_universe.fill(char(0));
 }
 
+void OutputRules_Test::aPatchOpenedAimedSendsNothingToTheDefaultTarget()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    const FunctionParent go = FunctionParent::master();
+    startScene({ { Flame, 255 } }, go.type(), go.id());
+    tickFrame(Flame);
+    m_stub->m_lastByTarget.clear();
+
+    InputOutputMap *io = m_doc->inputOutputMap();
+    QMap<QString, QVariant> aim;
+    aim.insert(QStringLiteral("outputIP"), QStringLiteral("10.0.0.9"));
+    aim.insert(QStringLiteral("wledAddress"), 1);
+    QVERIFY(io->setOutputPatch(0, m_stub->name(), QString(), 2, false, 1, aim));
+    QCOMPARE(m_uni->outputPatch(1)->getPluginParameters().value("outputIP").toString(),
+             QString("10.0.0.9"));
+    // Nothing at all on the new line yet: no frame, no closing frame, to
+    // whatever it would have sent to before it was aimed.
+    foreach (const QString &k, m_stub->m_lastByTarget.keys())
+        QVERIFY2(k.endsWith("/2") == false,
+                 qPrintable(QString("a frame went to %1 before the patch was aimed").arg(k)));
+    tickFrame(Flame);
+    foreach (const QString &k, m_stub->m_lastByTarget.keys())
+        QVERIFY2(k.endsWith("/2") == false || k == "10.0.0.9/2", qPrintable(k));
+    QCOMPARE(int(uchar(m_stub->m_lastByTarget.value("10.0.0.9/2").at(Flame))), 255);
+
+    // The same target again, an int as a string: nothing sent, no closing frame.
+    m_stub->m_lastByTarget.clear();
+    m_uni->outputPatch(1)->setPluginParameter(QStringLiteral("wledAddress"), QStringLiteral("1"));
+    m_uni->outputPatch(1)->setPluginParameters({ { QStringLiteral("outputIP"), QStringLiteral("10.0.0.9") } });
+    QVERIFY(m_stub->m_lastByTarget.isEmpty());
+
+    stopFunctions();
+    QVERIFY(io->setOutputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine(), false, 1));
+    m_stub->m_lastByTarget.clear();
+    m_stub->m_universe.fill(char(0));
+}
+
 void OutputRules_Test::aClosingLineWithNoShowOnlyGetsNothingExtra()
 {
     QCOMPARE(m_uni->showOnlyChannelCount(), 0);

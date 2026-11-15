@@ -23,6 +23,7 @@
 #include <QSharedPointer>
 #include "qlcengine_export.h"
 #include <QObject>
+#include <QSet>
 #include <QMutex>
 #include <QDir>
 
@@ -424,7 +425,8 @@ public:
      */
     bool setOutputPatch(quint32 universe, const QString& pluginName,
                         const QString& outputUID, quint32 output = 0,
-                        bool isFeedback = false, int index = 0);
+                        bool isFeedback = false, int index = 0,
+                        const QMap<QString, QVariant> &params = QMap<QString, QVariant>());
 
     int outputPatchesCount(quint32 universe) const;
 
@@ -497,6 +499,15 @@ public:
     /** Try every kept (offline/pending) patch again; returns how many
      *  reconnected. Runs by itself every few seconds while any exist. */
     int retryOfflinePatches();
+    /** The same, leaving @p skip alone (held in the pass that calls it) */
+    int retryOfflinePatches(const QSet<const OutputPatch *> &skip);
+
+    /** Review 12 F3: "Reconnect as before" -- every output patch of
+     *  @p universe held for a device change is reopened on the line number
+     *  it had, as stock QLC+ would have done, once the operator confirmed
+     *  it (identical interfaces nobody can tell apart). Not on a line
+     *  another open patch uses. Returns how many reopened. */
+    int reconnectAsBefore(quint32 universe);
 
     /** Are any patches being kept offline right now? */
     bool hasOfflinePatches() const;
@@ -859,6 +870,15 @@ private:
     /** True when an open output patch other than @p except sends on
      *  @p plugin's @p line (review 11: a kept-off patch must not close it) */
     bool lineUsedByAnother(const QLCIOPlugin *plugin, quint32 line, const OutputPatch *except) const;
+    /** Why @p op (of @p universe) must not be reopened on its line now
+     *  (review 11/12); empty: reconnect by number. A leading '?': only the
+     *  operator may reconnect it (identical interfaces, F3). */
+    QString deviceHoldReason(QLCIOPlugin *plugin, quint32 universe, const OutputPatch *op,
+                             const QStringList &names,
+                             const QMultiMap<QString, const OutputPatch *> &showOnlyRecorded) const;
+    /** The line a patch held for a device change may reopen on now, -1
+     *  for none (F1, F4; may turn it into a confirm-only hold, F3) */
+    int deviceHeldLine(const Universe *uni, OutputPatch *op);
 
 private slots:
    /** Slot that catches plugin configuration change notifications from UIPluginCache */

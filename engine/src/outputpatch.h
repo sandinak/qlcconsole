@@ -68,6 +68,11 @@ public:
      */
     bool set(QLCIOPlugin* plugin, quint32 output);
 
+    /** Review 12 F7: set() with its target @p params, in one step -- they
+     *  reach the plugin before any frame (the caller holds the frame lock),
+     *  never the plugin's default target first */
+    bool set(QLCIOPlugin *plugin, quint32 output, const QMap<QString, QVariant> &params);
+
     /**
      * Record a patch to @p plugin whose saved interface identity (@p uid --
      * an ArtNet interface's IP, for instance) does not currently match any
@@ -114,14 +119,38 @@ public:
     /** A hardware line (USB, MIDI) whose name now is not the one it had
      *  when this patch was made: another device took its number */
     bool lineNameChanged() const;
-    /** Review 11: a universe with Show-only channels whose line now names
-     *  another device is kept pending on the name it was patched with,
-     *  @p why said -- reopened only when a line of that name is back at
-     *  the same number. @p closeTheLine false: another open patch uses the
-     *  line, which stays open for it. */
-    void holdForDeviceChange(const QString &why, bool closeTheLine);
+    /** The name of the device this patch was made to (a hardware line),
+     *  open or held for a device change; empty otherwise */
+    QString recordedLineName() const;
+    /** How many lines carried that name when the patch was made, and now
+     *  (two of one model with no serial: review 12 F3) */
+    int recordedLineNameCount() const { return m_lineNameCount; }
+    int lineNameCountNow() const;
+
+    /** How a patch is held for a device change */
+    enum DeviceHold
+    {
+        NoDeviceHold = 0,
+        /** Reopened by itself once its device is back (InputOutputMap::
+         *  retryOfflinePatches()) */
+        HeldDeviceChanged,
+        /** Nobody can tell which line is its device (identical names):
+         *  only "Reconnect as before", confirmed (review 12 F3) */
+        HeldNeedsConfirm
+    };
+    /** Review 11/12: kept pending on the name it was patched with, @p why
+     *  said. @p closeTheLine false: another open patch uses the line, which
+     *  stays open for it (the plugin only forgets this universe there). */
+    void holdForDeviceChange(const QString &why, bool closeTheLine, bool needsConfirm = false);
+    DeviceHold deviceHold() const { return m_deviceHold; }
+    /** Held, and now nobody can tell which line is its device: only a
+     *  confirmed "Reconnect as before" reopens it */
+    void markNeedsConfirm(const QString &why) { m_deviceHold = HeldNeedsConfirm; m_reconnectHeld = why; }
     /** Why holdForDeviceChange() left this patch pending; empty if not */
     QString reconnectHeld() const { return m_reconnectHeld; }
+
+    /** Two parameter values that mean the same ("1" and 1) */
+    static bool sameParameterValue(const QVariant &a, const QVariant &b);
 
     /** The plugin instance that has been assigned to a patch */
     QLCIOPlugin* plugin() const;
@@ -202,6 +231,8 @@ private:
     /** Why the rig network gate holds this patch; empty when it does not */
     QString m_heldReason;
     QString m_reconnectHeld;
+    DeviceHold m_deviceHold = NoDeviceHold;
+    int m_lineNameCount = 0;
     /** The patch parameters cache */
     QMap<QString, QVariant>m_parametersCache;
     /** See setClosingFrame() */

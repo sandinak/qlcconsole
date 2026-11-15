@@ -63,6 +63,11 @@ void QLCIOPlugin::flushOutput(quint32 output, quint32 universe)
     Q_UNUSED(universe)
 }
 
+void QLCIOPlugin::forgetOutput(quint32 output, quint32 universe)
+{
+    removeFromMap(universe, output, Output);
+}
+
 void QLCIOPlugin::setClosingFrameSource(const ClosingFrameSource &source, const void *owner)
 {
     m_closingFrameSource = source;
