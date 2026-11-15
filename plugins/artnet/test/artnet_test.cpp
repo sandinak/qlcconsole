@@ -144,6 +144,54 @@ void ArtNet_Test::r19_aFailedClosingFrameIsTriedOnceMore()
     QCOMPARE(again, 1);
 }
 
+/* Review 21 (independent), finding 1 (high, ordinary DMX): the Connection
+   editor's "Send to: broadcast" (ConnectionEditor::apply(), KindTargets with
+   no address), UniversePatcher's unaim and a plan's placement clear a node
+   with OutputPatch::unSetPluginParameter("outputIP") and ("outputUni") --
+   the plugin's unSetParameter(). With the review 19 overrides reverted that
+   only drops the stored parameter: the controller goes on sending to the
+   node, on its Port-Address, until the line is reopened, while the patch,
+   the editor and the saved show say broadcast. Stock QLC+ puts a default
+   back through setParameter() (ConfigureArtNet), never unSetParameter(). */
+void ArtNet_Test::r21_broadcastChosenAfterANodeStillSendsToTheNode()
+{
+    ArtNetPlugin plugin;
+    ArtNetController *ctrl = testController(&plugin, QHostAddress::LocalHost, { 0 });
+    QList<QNetworkDatagram> sink;
+    ctrl->m_testSink = &sink;
+    ArtNetIO io;
+    io.controller = ctrl;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+    const QHostAddress broadcast = ctrl->m_broadcastAddr;
+
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "outputIP", "10.0.0.5");     // a node
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "outputUni", 7);
+    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "outputIP");               // Send to: broadcast
+    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "outputUni");
+    sink.clear();
+    plugin.writeUniverse(0, 0, QByteArray(512, char(30)), true);                // the next frame
+    bool found = false;
+    QHostAddress to;
+    int port = -1;
+    for (const QNetworkDatagram &dg : std::as_const(sink))
+    {
+        const QByteArray d = dg.data();
+        if (d.size() > 18 && d.startsWith("Art-Net") && uchar(d.at(9)) == 0x50)
+        {
+            found = true;
+            to = dg.destinationAddress();
+            port = uchar(d.at(14)) | (uchar(d.at(15)) << 8);
+        }
+    }
+    plugin.m_IOmapping.clear();
+    delete ctrl;
+    QVERIFY(found);
+    QVERIFY2(to == broadcast && port == 0,
+             qPrintable(QString("broadcast chosen, but the frame went to %1 on Port-Address %2 "
+                                "(expected %3, 0)").arg(to.toString()).arg(port).arg(broadcast.toString())));
+}
+
 QTEST_MAIN(ArtNet_Test)
 
 /** A real ArtPollReply, captured off the wire from the rig's CR041R

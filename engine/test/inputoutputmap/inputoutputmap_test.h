@@ -136,6 +136,10 @@ private slots:
     void r19_removingAHeldPatchStopsTheUniversesOpenOne();
     /** Review 20 (independent), finding 3 */
     void r20_removingOneOfTwoOpenLegsStopsTheOther();
+    /** Review 21 (independent): red tests, see each */
+    void r21_undoOfAReAimSendsTheClosingFrameToBroadcast();
+    void r21_theLegLeftAfterItsSiblingIsRemovedSendsToItsOwnNode();
+    void r21_siblingLegsNeverLeaveALineOpen();
     void r16_fixtureRemapLeavesALaserUnheldOnUsb();
     void r16_holdingADanglingPatchKeepsIt();
     void r16_patchingTwoLasersOntoUsbClosesWithBothSafe();
