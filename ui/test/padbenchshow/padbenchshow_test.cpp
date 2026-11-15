@@ -813,8 +813,8 @@ void PadBenchShow_Test::check(const QString &path, bool play)
             QVERIFY(!sl->cues.at(i).follow);
             QCOMPARE(sl->cues.at(i).layers.count(), 1);
         }
-        QCOMPARE(sl->cues.at(0).number, QStringLiteral("1.2.3.1"));
-        QCOMPARE(sl->cues.at(2).number, QStringLiteral("1.2.3.3"));
+        QCOMPARE(st->cueNumber(*sl, 0), QStringLiteral("1.2.3.1"));
+        QCOMPARE(st->cueNumber(*sl, 2), QStringLiteral("1.2.3.3"));
     }
 
     /* The run-through takes ~9 s of real time (cue 3 holds 8 s): played
