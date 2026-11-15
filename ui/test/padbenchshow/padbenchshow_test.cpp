@@ -591,7 +591,7 @@ void PadBenchShow_Test::build(const QString &path)
     {
         const quint32 l = st->addLayer(songCues[i], wash);
         look(songCues[i], l, i % 2 == 0 ? full : half);
-        look(songCues[i], l, i < 3 ? amber : red);
+        look(songCues[i], l, i < 4 ? amber : red);   // Chorus In: Half Amber, not the Sting's Full Red
     }
     QString why;
     for (const SubSpec &sp : kSubCues)
@@ -791,6 +791,28 @@ void PadBenchShow_Test::check(const QString &path, bool play)
     QVERIFY2(!plan.isEmpty(), qPrintable(why));
     for (const ShowTreeController::Renumbered &r : plan)
         qInfo().noquote() << "[RENUMBER SONG]" << r.from << "->" << r.to;
+
+    // Chorus In's three sub-cues: Sub GO has two more to play after the first.
+    {
+        const Cue *chorus = nullptr;
+        for (const Cue &c : songList->cues)
+            if (c.name == QStringLiteral("Chorus In"))
+                chorus = &c;
+        QVERIFY(chorus != nullptr);
+        const quint32 subs = st->subCueList(chorus->id);
+        QVERIFY(subs != invalidId());
+        const CueList *sl = st->cueList(subs);
+        QVERIFY(sl != nullptr);
+        QCOMPARE(sl->cues.count(), kSubCues.count());
+        for (int i = 0; i < kSubCues.count(); ++i)
+        {
+            QCOMPARE(sl->cues.at(i).name, kSubCues.at(i).name);
+            QVERIFY(!sl->cues.at(i).follow);
+            QCOMPARE(sl->cues.at(i).layers.count(), 1);
+        }
+        QCOMPARE(sl->cues.at(0).number, QStringLiteral("1.2.3.1"));
+        QCOMPARE(sl->cues.at(2).number, QStringLiteral("1.2.3.3"));
+    }
 
     /* The run-through takes ~9 s of real time (cue 3 holds 8 s): played
        once, on the committed file -- the one the bench opens. The built
