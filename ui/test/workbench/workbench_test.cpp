@@ -1060,19 +1060,30 @@ void Workbench_Test::operateRunsWhatIsLoadedAndStopsOnlyItsOwn()
     wb.show();
     QVERIFY(QTest::qWaitForWindowExposed(&wb));
 
-    // Operate: what is loaded runs, as the show's output.
+    // Operate loads Blind (Q236): nothing of it reaches the stage...
     wb.load(a->id());
+    for (int i = 0; i < 5; ++i)
+        QCOMPARE(tickAndRead(m_doc, 0), 0);
+    QVERIFY(!a->isRunning());
+    QVERIFY(!wb.playsLive());
+    // ...Play Live (one click on the header's button) sends it.
+    QVERIFY(wb.m_playBtn->isVisible() && wb.m_playBtn->isEnabled());
+    QCOMPARE(wb.m_playBtn->text(), QString("Play Live"));
+    wb.m_playBtn->click();
     QTRY_COMPARE(tickAndRead(m_doc, 0), 180);
     QVERIFY(a->isRunning());
+    QVERIFY(wb.playsLive());
     QCOMPARE(wb.m_operateFunction, a->id());
+    QCOMPARE(wb.liveName(), QString("A"));
     QVERIFY(wb.m_onRig->text().contains("Live: A"));
+    QCOMPARE(wb.m_playBtn->text(), QString("Back to Blind"));
 
     // Something started elsewhere (a VC button) plays alongside.
     elsewhere->start(m_doc->masterTimer(), vcButton);
     QTRY_COMPARE(tickAndRead(m_doc, 3), 90);
 
     // To Design: the Workbench leaves what it didn't start running; what
-    // is loaded carries on as its preview.
+    // is loaded plays as its preview, and Play Live is over.
     m_doc->setMode(Doc::Design);
     for (int i = 0; i < 5; ++i)
         tickAndRead(m_doc, 0);
@@ -1080,20 +1091,28 @@ void Workbench_Test::operateRunsWhatIsLoadedAndStopsOnlyItsOwn()
     QCOMPARE(tickAndRead(m_doc, 3), 90);
     QVERIFY(a->isRunning());
     QCOMPARE(wb.m_previewFunction, a->id());
+    QVERIFY(!wb.playsLive());
 
-    // Back to Operate: the preview is the live run; hidden, only that stops.
+    // Back to Operate: Blind again, the preview stops; only that goes.
     m_doc->setMode(Doc::Operate);
-    QCOMPARE(wb.m_operateFunction, a->id());
+    QTRY_VERIFY(tickAndRead(m_doc, 0) == 0 && !a->isRunning());
+    QVERIFY(!wb.playsLive());
+    QVERIFY(elsewhere->isRunning());
+    QCOMPARE(tickAndRead(m_doc, 3), 90);
+    wb.setPlayLive(true);
+    QTRY_COMPARE(tickAndRead(m_doc, 0), 180);
     wb.hide();
     QTRY_VERIFY(tickAndRead(m_doc, 0) == 0 && !a->isRunning());
+    QVERIFY(!wb.playsLive());
     QVERIFY(elsewhere->isRunning());
     QCOMPARE(tickAndRead(m_doc, 3), 90);
 
-    // Loaded while already running from elsewhere: hiding the Workbench
-    // must leave it to the VC button that started it.
+    // Loaded while already running from elsewhere: Play Live, then hiding the
+    // Workbench must leave it to the VC button that started it.
     wb.show();
     QVERIFY(QTest::qWaitForWindowExposed(&wb));
     wb.load(elsewhere->id());
+    wb.setPlayLive(true);
     QCOMPARE(wb.m_operateFunction, elsewhere->id());
     wb.hide();
     for (int i = 0; i < 5; ++i)
@@ -1101,6 +1120,55 @@ void Workbench_Test::operateRunsWhatIsLoadedAndStopsOnlyItsOwn()
     QVERIFY(elsewhere->isRunning());
     elsewhere->stop(vcButton);
     tickAndRead(m_doc, 0);
+}
+
+/* Q236: the edit in Operate is Blind; Play Live sends it, the signal that
+   the footer follows says so, a second click or another load is Blind. */
+void Workbench_Test::operateIsBlindUntilPlayLive()
+{
+    FixtureGroup *g = group("Washes", 2);
+    const quint32 f1 = g->fixtureList().at(0);
+    Scene *a = scene("A", QString());
+    a->setValue(f1, 0, 100);
+    Scene *b = scene("B", QString());
+    b->setValue(f1, 0, 40);
+    m_doc->setMode(Doc::Operate);
+    Workbench wb(m_doc);
+    wb.resize(1000, 700);
+    wb.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wb));
+    QSignalSpy spy(&wb, &Workbench::playLiveChanged);
+    wb.load(a->id());
+    QVERIFY(wb.m_onRig->text().startsWith("Blind"));
+
+    // An edit while Blind: the universe keeps what the show has (0).
+    a->setValue(f1, 0, 150);
+    for (int i = 0; i < 5; ++i)
+        QCOMPARE(tickAndRead(m_doc, 0), 0);
+
+    wb.m_playBtn->click();                       // Play Live
+    QTRY_COMPARE(tickAndRead(m_doc, 0), 150);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.last().first().toBool(), true);
+
+    wb.m_playBtn->click();                       // a second click: Blind
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.last().first().toBool(), false);
+    QTRY_VERIFY(tickAndRead(m_doc, 0) == 0 && !a->isRunning());
+
+    // Live, then another thing loaded: Blind, never straight onto the stage.
+    wb.setPlayLive(true);
+    QTRY_COMPARE(tickAndRead(m_doc, 0), 150);
+    wb.load(b->id());
+    QVERIFY(!wb.playsLive());
+    QTRY_VERIFY(tickAndRead(m_doc, 0) == 0 && !a->isRunning() && !b->isRunning());
+
+    // Design is as it was: the preview plays, Play Live does nothing.
+    m_doc->setMode(Doc::Design);
+    QTRY_COMPARE(tickAndRead(m_doc, 0), 40);
+    wb.setPlayLive(true);
+    QVERIFY(!wb.playsLive());
+    QCOMPARE(wb.m_playBtn->text(), QString("Stop"));
 }
 
 void Workbench_Test::aPreviewNeverRunsAScript()

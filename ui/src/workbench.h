@@ -261,6 +261,8 @@ signals:
     void sendToShowTreeRequested(quint32 chaserId);
     /** The quiet line under Play: "Record it as a cue in the Show Tree ▸". */
     void recordPointerClicked();
+    /** Operate: Play Live went on or off (the footer says it). */
+    void playLiveChanged(bool live);
 
 protected:
     void showEvent(QShowEvent *ev) override;
@@ -274,6 +276,14 @@ public:
      *  latest action wins, so a hold by a run lets go and it plays, in
      *  Design (docs/design/LIVE_BLIND.md). */
     void playPicked();
+    /** Operate: what is loaded (a scene, collection or chaser) is Blind --
+     *  nothing of it reaches the stage -- until Play Live. True while it
+     *  plays live. Leaving the Workbench or Design lets go (Blind again). */
+    bool playsLive() const { return m_playLive; }
+    /** The Workbench header's Play Live / Blind button; a no-op outside Operate. */
+    void setPlayLive(bool live);
+    /** The name the footer says while live ("" when Blind). */
+    QString liveName() const;
 protected:
     /** Esc: backOut(). */
     void keyPressEvent(QKeyEvent *ev) override;
@@ -440,6 +450,7 @@ private:
     quint32 m_operateFunction = Function::invalidId();
     quint32 m_trialScene = Function::invalidId();
     bool m_previewHeld = false;              //!< Stop pressed: don't replay until Play / a load
+    bool m_playLive = false;                 //!< Operate: Play Live is on (Blind otherwise)
     bool m_heldByRun = false;                //!< RC8: a GO held the preview (Play brings it back)
     QList<quint32> m_selectedFixtures;
     quint32 m_selectedFixturesScene = UINT_MAX;

@@ -14,6 +14,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed and fixed
 
+- **The Workbench opens Blind in Operate; Play Live is one click.** During a run, what you load and change in the Workbench no longer reaches the stage (it used to play what was loaded as soon as it opened). The header says *Blind: edits stay off the stage*; **Play Live** plays it on the stage and the footer says *LIVE · Workbench: name*; **Back to Blind** (the same button), loading something else, leaving the Workbench or switching to Design takes it off. Show-only fixtures still wait for a GO. Design is unchanged.
+
 - **After a crash, the Run tab offers the cue the show was on.** If qlcconsole stops mid-show without closing the show (crash, force-quit, battery or power), open the same show again and switch to Operate: the Run tab says *The show was at cue 2.3.1 (Main) when it stopped. Load it?* **Load as Standby** puts that cue on standby: nothing plays and the stage stays as it is, and the next GO plays it. **Dismiss** forgets it. Nothing is offered after a normal quit, New or opening another show. A cue deleted since is named, never loaded. The cue each list is on is kept beside the autosave on each GO, Back and Stop, never in the show file. The pad and the phone's Run page never accept it.
 
 - **A channel modifier taken off no longer leaves its "zero" going out.** Removing a modifier (or a reset) left the old modifier's zero value (255 on an inverted channel) on the wire every frame.
