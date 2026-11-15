@@ -2761,7 +2761,10 @@ void OutputRules_Test::r8_anOnAtOpenFixtureOnItsAddressDrivesIt()
     work->setAddress(Flame);            // re-patched over it (a mistake)
     QCoreApplication::processEvents();  // the rebuild
     m_doc->outputRuleKeeper()->rebuild();
-    m_doc->setMode(Doc::Operate);       // OnAtOperate: armed now; no GO
+    // On as soon as the show is open (either setting: Operate arms it too).
+    m_doc->outputRuleKeeper()->setOnAtOpenWhen(OutputRuleKeeper::OnAtShowOpen);
+    m_doc->setMode(Doc::Operate);       // no GO
+    m_uni->m_held[Flame].store(0);      // nothing left set by an earlier test
     tickFrame(Flame);
     tickFrame(Flame);
     qWarning() << "R8-2: caps" << Qt::hex << int(m_uni->channelCapabilities(Flame)) << Qt::dec
