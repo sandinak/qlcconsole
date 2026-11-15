@@ -46,8 +46,12 @@ private slots:
     /** A GO while a hit plays: the hit completes (output still the hit's,
      *  a previous cue's hit too, a pull on the new cue leaves it). */
     void aHitPlayingWhenAGoComesCompletes();
-    /** A one-shot hit ends on its own time, not at the GO. */
+    /** A one-shot hit ends on its own time, not at the GO, then lets go by
+     *  itself and the cue's levels return (Q239). */
     void aOneShotHitEndsOnItsOwnTimeNotAtTheGo();
+    /** A new set of armed hits starts at 1 of n, and so does the same set
+     *  armed again (Q240). */
+    void eachNewSetOfHitsStartsAtOneOfN();
     /** Pictures for the visual check (QLC_SHOT_DIR set; else skipped): the
      *  Run tab and the footer, armed on a cue with two hits, after a pull,
      *  and on a cue with one, at 1024, 1280 and 1920 wide. */
