@@ -32,6 +32,9 @@ private slots:
     /** Review 16 F5: one of the outputs a universe with Show-only
      *  fixtures may use (QLCIOPlugin::isNetworkDmxOutput()). */
     void showOnlyMayUseIt();
+    /** Review 18 (independent): forgetOutput() on a shared line (a Show-only
+     *  hold) must stop the 2 s resend of that universe's last frame */
+    void r18_aForgottenUniverseIsNotResent();
     void setupArtNetDmx();
     void fillArtPollReplyInfo();
 

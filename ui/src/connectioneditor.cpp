@@ -1234,6 +1234,7 @@ bool ConnectionEditor::apply()
             m_error = tr("Could not patch that universe to %1.").arg(plugin);
             return false;
         }
+        const bool openBefore = op->isPatched();
         /* Another protocol's settings mean nothing to this one. */
         if (samePlugin == false)
         {
@@ -1273,6 +1274,13 @@ bool ConnectionEditor::apply()
             case KindDevice:
             case KindNone:
             break;
+        }
+        /* Review 18 (N1): aimed back at this computer, a universe with
+           Show-only fixtures is held -- said. */
+        if (openBefore && op->isPending() && op->showOnlyHold())
+        {
+            m_error = op->reconnectHeld();
+            return false;
         }
     }
 

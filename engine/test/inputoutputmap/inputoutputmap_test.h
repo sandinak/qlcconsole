@@ -130,6 +130,8 @@ private slots:
     void r17n_aSharedLineIsHeldAlikeAtRuntimeAndOnLoad();
     void r17n_anArtNetOrSacnOutputBackToThisComputerIsRefused();
     void r17n_heldPatchesSayWhy();
+    void r18n_aNetworkHoldClosesOnlyThatUniverse();
+    void r18n_reAimingAShowOnlyUniverseIsChecked();
     void r16_fixtureRemapLeavesALaserUnheldOnUsb();
     void r16_holdingADanglingPatchKeepsIt();
     void r16_patchingTwoLasersOntoUsbClosesWithBothSafe();
@@ -137,6 +139,10 @@ private slots:
     void r17_aSharedLineHoldLeavesTheFoggerOnTheWire();
     void r17_anOrdinaryUniverseKeptOffASharedLineNeverComesBack();
     void r17_aFailedN4KeepsReservingWithNoLaserLeft();
+    void r18_aSharedLoopbackArtNetHoldSendsTheClosingFrame();
+    void r18_aFormerLaserOnASharedIdenticalUsbLineComesBack();
+    void r18_aShowOnlyUniverseRetargetedBackHereIsHeld();
+    void r18_loopbackTargetsTheCheckMisses();
     void removeUniverse();
     void universe();
     void profiles();

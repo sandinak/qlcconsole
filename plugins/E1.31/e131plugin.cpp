@@ -220,6 +220,17 @@ void E131Plugin::closeOutput(quint32 output, quint32 universe)
     emit targetProblemsChanged();
 }
 
+void E131Plugin::forgetOutput(quint32 output, quint32 universe)
+{
+    // Review 18: out of the controller too, so nothing resends it.
+    removeFromMap(universe, output, Output);
+    if (output >= (quint32)m_IOmapping.length())
+        return;
+    E131Controller *controller = m_IOmapping.at(output).controller;
+    if (controller != NULL)
+        controller->removeUniverse(universe, E131Controller::Output);
+}
+
 /** Every output whose sends are failing, a target's universes on one line:
  *  "E1.31 to 239.255.0.3: not reachable since 20:14 (universe 3)". Send
  *  health only: base E1.31 has no reply a receiver sends back (unlike

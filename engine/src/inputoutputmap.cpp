@@ -1254,7 +1254,11 @@ int InputOutputMap::retryOfflinePatches()
                 }
                 QString note;
                 int line = -1;
-                if (op->pendingByNumber() || op->holdKind() == OutputPatch::HeldReserved)
+                /* F3, F4 by number; and (review 18) a former laser universe
+                   that shared its line before the hold, back there like the
+                   others on it. */
+                if (op->pendingByNumber() || op->holdKind() == OutputPatch::HeldReserved
+                    || (op->fromShowOnlyHold() && op->sharedLine()))
                 {
                     // F3, F4: back by its number.
                     if (plugin != NULL && op->pendingLine() < quint32(plugin->outputs().count()))
@@ -1281,7 +1285,7 @@ int InputOutputMap::retryOfflinePatches()
                 /* Its lasers gone (N4): as stock, by name -- but a name other
                    lines carry too is not taken while another patch is on it
                    (nobody can tell those interfaces apart). */
-                if (line >= 0 && op->fromShowOnlyHold() && plugin != NULL
+                if (line >= 0 && op->fromShowOnlyHold() && op->sharedLine() == false && plugin != NULL
                     && plugin->outputs().count(plugin->outputs().value(line)) > 1
                     && lineUsedByAnother(plugin, quint32(line), op))
                     line = -1;
@@ -2053,16 +2057,37 @@ QString InputOutputMap::reservedText(const QString &device, const QString &unive
 
 static bool isOwnAddress(const QString &text)
 {
-    // 127.0.0.0/8, ::1, or an address of one of this machine's interfaces.
+    /* 127.0.0.0/8, ::1, 0.0.0.0 / :: (sent to: this host), or an address of
+       one of this machine's interfaces -- an IPv4-mapped one as its IPv4. */
     QHostAddress a;
     if (a.setAddress(text.trimmed()) == false)
         return false;
-    if (a.isLoopback())
+    bool v4 = false;
+    const quint32 mapped = a.toIPv4Address(&v4);
+    if (v4 && a.protocol() == QAbstractSocket::IPv6Protocol)
+        a = QHostAddress(mapped);
+    if (a.isLoopback() || a == QHostAddress(QHostAddress::AnyIPv4) || a == QHostAddress(QHostAddress::AnyIPv6))
         return true;
     for (const NetworkRoute::LocalAddress &la : NetworkRoute::localAddresses())
         if (la.ip.isEqual(a, QHostAddress::ConvertV4MappedToIPv4))
             return true;
     return false;
+}
+
+static QString expandLegacyArtNetTarget(const QString &target, const QString &lineAddress)
+{
+    /* As ArtNetController::setOutputIPAddress(): before 2016 only the
+       octets that differed from the line's own address were saved ("7",
+       "12.7") -- they replace its last ones. */
+    const QStringList octets = target.split(QLatin1Char('.'));
+    if (target.isEmpty() || target.contains(QLatin1Char(':')) || octets.count() >= 4)
+        return target;
+    QStringList ip = lineAddress.split(QLatin1Char('.'));
+    if (ip.count() != 4)
+        return target;
+    for (int i = 0; i < octets.count(); i++)
+        ip.replace(4 - octets.count() + i, octets.at(i));
+    return ip.join(QLatin1Char('.'));
 }
 
 QString InputOutputMap::showOnlyRefusal(QLCIOPlugin *plugin, const QString &lineName, quint32 line,
@@ -2085,7 +2110,8 @@ QString InputOutputMap::showOnlyRefusal(QLCIOPlugin *plugin, const QString &line
         return loopbackText(lineName);
     QString target;
     if (artNet)
-        target = params.value(QStringLiteral("outputIP")).toString();
+        target = expandLegacyArtNetTarget(params.value(QStringLiteral("outputIP")).toString().trimmed(),
+                                          lineName);
     else if (params.contains(QStringLiteral("multicast")) && params.value(QStringLiteral("multicast")).toInt() == 0)
         target = params.value(QStringLiteral("ucastIP")).toString();
     if (target.isEmpty() == false && isOwnAddress(target))
@@ -2145,6 +2171,15 @@ QString InputOutputMap::outputPatchRefusal(quint32 universe, const QString &plug
 
 void InputOutputMap::watchShowOnly(Universe *uni)
 {
+    /* N1 when an output is re-aimed (review 18): Art-Net or sACN turned
+       back to this computer holds it. */
+    uni->setOutputTargetCheck([uni](const OutputPatch *op, const QMap<QString, QVariant> &params) {
+        if (uni->showOnlyChannelCount() == 0 || op->plugin() == NULL || op->isPatched() == false)
+            return QString();
+        return showOnlyRefusal(op->plugin(), op->plugin()->outputs().value(int(op->output())),
+                               op->output(), params);
+    });
+
     /* N2: the first Show-only fixture on a universe holds its hardware
        patches -- after every mark of that change (beginShowOnlyMarks()),
        and not during a show load (recheckPatchesAfterLoad(), N3). Direct,
@@ -2213,6 +2248,7 @@ void InputOutputMap::holdShowOnlyOutputs(Universe *universe, bool fromLoad)
                                                 op->getPluginParameters());
             if (why.isEmpty())
                 continue;
+            bool shared = false;
             if (plugin->isNetworkDmxOutput() == false)
             {
                 const QString kept = reservedText(op->deviceText(), universe->name(),
@@ -2227,12 +2263,15 @@ void InputOutputMap::holdShowOnlyOutputs(Universe *universe, bool fromLoad)
                             || q->output() != line)
                             continue;
                         q->hold(OutputPatch::HeldReserved, kept, false, false, UINT_MAX, true);
+                        shared = true;
                     }
                 }
             }
-            // A network line another universe still sends on: only forgotten.
-            const bool alone = lineUsedByAnother(plugin, line, op) == false;
-            op->hold(OutputPatch::HeldShowOnly, why, alone, true, fromLoad ? op->loadedLine() : UINT_MAX);
+            /* Then this universe: its closing frame, flushed, then closed --
+               on a network line (Art-Net, sACN, WLED: they close per
+               universe) the others on it are left alone (review 18). Shared
+               before: it comes back there by number once its lasers are gone. */
+            op->hold(OutputPatch::HeldShowOnly, why, true, true, fromLoad ? op->loadedLine() : UINT_MAX, shared);
             held = true;
         }
         else if (op->isPending() && op->showOnlyHold() == false)

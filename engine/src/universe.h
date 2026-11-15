@@ -28,6 +28,7 @@
 #include <QThread>
 #include <QSet>
 #include <QMap>
+#include <functional>
 #include <QVariant>
 #include <climits>
 #include <atomic>
@@ -366,6 +367,13 @@ private:
 
     /** A new output patch, its closing frame this universe's */
     OutputPatch *newOutputPatch();
+public:
+    /** Review 18: what every output patch of this universe asks when it is
+     *  re-aimed (OutputPatch::setTargetCheck()) -- set by the I/O map */
+    void setOutputTargetCheck(const std::function<QString(const OutputPatch *,
+                                                          const QMap<QString, QVariant> &)> &check);
+private:
+    std::function<QString(const OutputPatch *, const QMap<QString, QVariant> &)> m_outputTargetCheck;
 
 private:
     // Connect to inputPatch's valueChanged signal
