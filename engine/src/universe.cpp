@@ -1816,11 +1816,13 @@ bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pending
         {
             OutputPatch *patch = m_outputPatchList.at(index);
             patch->setPending(plugin, pendingUID, savedLine, network);
+            patch->setPendingByNumber(byNumber && pendingUID.isEmpty());
         }
         else
         {
             OutputPatch *patch = newOutputPatch();
             patch->setPending(plugin, pendingUID, savedLine, network);
+            patch->setPendingByNumber(byNumber && pendingUID.isEmpty());
             m_outputPatchList.append(patch);
             added = true;
         }

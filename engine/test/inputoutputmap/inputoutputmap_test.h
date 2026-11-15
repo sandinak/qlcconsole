@@ -116,9 +116,9 @@ private slots:
     void n1_undoCannotPutAShowOnlyUniverseBackOnUsb();
     void n2_markingALaserOnUsbLeavesEveryChannelSafeOnTheWire();
     void n2_markingAGroupHoldsOnceEveryFixtureIsSafe();
-    void n2_aHoldOnASharedLineForgetsOnlyThatUniverse();
+    void n2_aHoldOnASharedLineHoldsEveryPatchOnIt();
     void n3_aShowLoadedWithLasersOnUsbKeepsThemPending();
-    void n4_aHoldComesBackByNameNeverOntoAnotherPatchsLine();
+    void n4_aHoldComesBackByNameAsStock();
     void review15_aLaserUniverseIsNeverOnUsbThroughASwapUnmarkAndMark();
     void review15_n4AfterALoadHoldOpensByNameAsStock();
     void review15_teachingNeverOpensALaserUniverseOnUsb();
@@ -127,10 +127,16 @@ private slots:
     void f4_aHandPatchOntoAHeldLaserInterfaceIsRefused();
     void f4_aLoadOntoAHeldLaserInterfaceIsKeptPending();
     void f5_onlyArtNetSacnAndWledMaySendToShowOnly();
+    void r17n_aSharedLineIsHeldAlikeAtRuntimeAndOnLoad();
+    void r17n_anArtNetOrSacnOutputBackToThisComputerIsRefused();
+    void r17n_heldPatchesSayWhy();
     void r16_fixtureRemapLeavesALaserUnheldOnUsb();
     void r16_holdingADanglingPatchKeepsIt();
     void r16_patchingTwoLasersOntoUsbClosesWithBothSafe();
     void r16_noOrdinaryUniverseRenumbersOntoAHeldLaserInterface();
+    void r17_aSharedLineHoldLeavesTheFoggerOnTheWire();
+    void r17_anOrdinaryUniverseKeptOffASharedLineNeverComesBack();
+    void r17_aFailedN4KeepsReservingWithNoLaserLeft();
     void removeUniverse();
     void universe();
     void profiles();

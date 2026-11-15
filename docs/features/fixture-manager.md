@@ -887,13 +887,15 @@ opened — over the web while in Operate too). So:
   too — so a node that keeps its last frame never keeps a laser on. In
   Blind that frame has the rest of the rig as it was before Blind, never the
   preview. A held output comes back with what the show gives them now.
-- **Show-only fixtures need a network output** in this version: Art-Net,
-  sACN (E1.31) or WLED. A universe with one can't be patched to anything
-  else (USB, MIDI, Loopback, OSC…) — refused, and one already there is held,
-  saying why — because such an interface can be unplugged, swapped or
-  rescanned and come back as another device. While it is held, the
-  interface it was on is kept for its lasers: no other universe opens on it.
-  Take the rule off and both come back as before.
+- **Show-only fixtures need a network output to another device** in this
+  version: Art-Net, sACN (E1.31) or WLED — never back to this computer. A
+  universe with one can't be patched to anything else (USB, MIDI, Loopback,
+  OSC…), refused saying why, and one already there is held, its last frame
+  sending the Show-only channels safe — because such an interface can be
+  unplugged, swapped or rescanned and come back as another device. While it
+  is held, its interface is kept for its lasers: every other universe on
+  it is held too, and nothing else opens on it (remove that output to free
+  it). Take the rule off and they all come back as before.
 - **Sharing an address**: a fixture patched over a Show-only one cannot
   turn it on — **On when not in use** and **Ignore Blackout** do nothing on
   the shared channels. The Grand Master never scales a safe value (a gobo
@@ -979,6 +981,12 @@ none.
 
 The rules are saved with the fixture, only when it has any, so a show
 without them is unchanged; QLC+ and older qlcconsole builds skip them.
+
+**Known limit:** the Show-only rule follows the show's own output, not
+what happens to it after: a universe passed through to another (input
+passthrough), or sent to a local Loopback or another program that sends
+it on, can still reach a laser that way. Don't route a Show-only
+universe's channels through a passthrough or Loopback chain.
 
 ## Context menu
 

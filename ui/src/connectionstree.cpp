@@ -1108,7 +1108,8 @@ void ConnectionsTree::refresh()
                 OutputPatch *op = u->outputPatch(i);
                 if (op != NULL && op->isPending())
                 {
-                    pendingByPluginThenInterface[op->pluginName()][op->outputName()] << u;
+                    // F3: a held patch with no name is "line N of <plugin>", never "None".
+                    pendingByPluginThenInterface[op->pluginName()][op->deviceText()] << u;
                     pendingUniverseIds.insert(u->id());
                     break;   // one ghost row per universe is enough
                 }
@@ -1823,7 +1824,7 @@ void ConnectionsTree::refresh()
                 /* Held off a USB interface (reviews 11-12): the row is named
                    after the device it was patched to, and says why. */
                 ghostLine->setText(COL_DETAIL, deviceWhy.isEmpty() == false
-                    ? tr("kept off — Show-only fixtures: re-patch to use it, or wait for %1").arg(it.key())
+                    ? tr("kept off — %1").arg(deviceWhy)
                     : heldWhy.isEmpty() == false
                     ? tr("held: %1 — kept, resumes on the rig network").arg(heldWhy)
                     : ghostNet.isEmpty()
@@ -1834,12 +1835,11 @@ void ConnectionsTree::refresh()
                 ghostLine->setForeground(COL_DETAIL, errBrush);
                 if (deviceWhy.isEmpty() == false)
                     setRowTooltip(ghostLine, tr(
-                        "<b>%1</b><br>%2<br><br>The USB interfaces changed (one unplugged, or "
-                        "plugged into another port), and a universe with Show-only fixtures -- a "
-                        "laser, a flame -- is patched to %1. Nothing is reopened by itself on a line "
-                        "that may be that interface now, so no other universe's levels can reach it. "
-                        "A Show-only universe comes back by itself only when %1 is back on its own "
-                        "port; otherwise re-patch it (select the universe, then its interface).")
+                        "<b>%1</b><br>%2<br><br>Lasers, foggers and flame need a network output "
+                        "(Art-Net, sACN or WLED) in this version. A universe with Show-only fixtures "
+                        "is held off %1, and while it is, no other universe opens on %1 either. "
+                        "Patch that universe to a network output, or take the Show-only rule off: "
+                        "the patches here come back as before.")
                         .arg(it.key().toHtmlEscaped(), deviceWhy.toHtmlEscaped()));
                 else
                 setRowTooltip(ghostLine, tr(
