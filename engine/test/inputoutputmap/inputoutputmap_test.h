@@ -105,6 +105,7 @@ private slots:
 
     void universeNames();
     void addUniverse();
+    void addUniverseInBlind();
     void removeUniverse();
     void universe();
     void profiles();

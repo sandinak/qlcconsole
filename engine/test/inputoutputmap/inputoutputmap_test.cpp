@@ -1081,6 +1081,31 @@ void InputOutputMap_Test::addUniverse()
     QVERIFY(im.universesCount() == 9);
 }
 
+/* A universe created while Blind is on -- added, or recreated by a show
+   loaded in Blind -- starts with its output inhibited, as the others are. */
+void InputOutputMap_Test::addUniverseInBlind()
+{
+    InputOutputMap im(m_doc, 2);
+    QVERIFY(im.setOutputInhibited(true));
+    QVERIFY(im.addUniverse());
+    QVERIFY(im.addUniverse(5));             // fills the gap: 3, 4 and 5
+    QCOMPARE(im.universesCount(), quint32(6));
+    for (Universe *u : im.universes())
+        QVERIFY(u->inhibitOutput());
+
+    // A show loaded in Blind: every universe made again
+    im.removeAllUniverses();
+    QVERIFY(im.addUniverse(0));
+    QVERIFY(im.addUniverse(1));
+    for (Universe *u : im.universes())
+        QVERIFY(u->inhibitOutput());
+
+    QVERIFY(im.setOutputInhibited(false));
+    QVERIFY(im.addUniverse());
+    for (Universe *u : im.universes())
+        QVERIFY(u->inhibitOutput() == false);
+}
+
 void InputOutputMap_Test::removeUniverse()
 {
     InputOutputMap im(m_doc, 4);

@@ -91,6 +91,7 @@ private slots:
     void rigNetworkGateHoldsEverySend();
     void rigNetworkGateAllowsRigAndLoopback();
     void rigNetworkGateDecisionIsCachedOffTheSendPath();
+    void rigNetworkGateReleaseSendsNoStaleFrame();
 
     /* The RDM flag held steady (ArtNetRdmFlag): a junk Status1 (the
        CR041R's) reads "no RDM" throughout; a real one is followed. */

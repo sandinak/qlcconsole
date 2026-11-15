@@ -137,11 +137,17 @@ Universe::~Universe()
     }
 
     delete m_inputPatch;
-    int opCount = m_outputPatchList.count();
-    for (int i = 0; i < opCount; i++)
+    /* R9-1: each line closed with its closing frame (~OutputPatch), while
+       this universe is still whole -- the thread is stopped, nothing else
+       sends -- and under the frame lock, as every send is. */
     {
-        OutputPatch *patch = m_outputPatchList.takeLast();
-        delete patch;
+        QMutexLocker frameLocker(&m_frameMutex);
+        int opCount = m_outputPatchList.count();
+        for (int i = 0; i < opCount; i++)
+        {
+            OutputPatch *patch = m_outputPatchList.takeLast();
+            delete patch;
+        }
     }
     delete m_fbPatch;
 }
@@ -1068,6 +1074,38 @@ void Universe::sendHeld()
     m_totalChannelsChanged = false;
 }
 
+bool Universe::closingFrame(QByteArray &frame, bool blackout)
+{
+    QMutexLocker frameLocker(&m_frameMutex);
+    if (showOnlyChannelCount() == 0 || m_notOursWhole.load(std::memory_order_relaxed))
+        return false;
+    const bool inhibit = m_inhibitOutput.load(std::memory_order_relaxed);
+    frame = inhibit && !m_blindFrozen.isEmpty()
+            ? m_blindFrozen : QByteArray(m_postGMValues->constData(), m_usedChannels);
+    // A frame frozen before a Show-only channel was patched past its end
+    // still reaches it.
+    if (frame.size() < m_usedChannels)
+        frame.append(m_postGMValues->constData() + frame.size(), m_usedChannels - frame.size());
+    buildShowOnly(frame, true, false);
+    if (blackout)
+    {
+        frame = blackoutFrame(frame);
+        buildShowOnly(frame, true, true);
+    }
+    QMutexLocker locker(&m_notOursMutex);
+    zeroNotOurs(frame);
+    return true;
+}
+
+OutputPatch *Universe::newOutputPatch()
+{
+    OutputPatch *patch = new OutputPatch(m_id, this);
+    patch->setClosingFrame([this](QByteArray &frame, bool blackout) {
+        return closingFrame(frame, blackout);
+    });
+    return patch;
+}
+
 bool Universe::writeBlocked(int address) const
 {
     return m_writeGuard && address >= 0 && address < UNIVERSE_SIZE && m_showOnlyBlocked.at(address);
@@ -1675,37 +1713,50 @@ bool Universe::setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index)
     qDebug() << "[Universe] setOutputPatch - ID:" << m_id
              << ", plugin:" << ((plugin == NULL) ? "None" : plugin->name()) << ", output:" << output;
 
-    // replace or delete an existing patch
-    if (index < m_outputPatchList.count())
+    /* Under the frame lock: the universe thread's frame (dumpOutputFrame())
+       and sendCurrent()/sendHeld() never walk the list, nor dump to a patch,
+       while it changes; a line closed sends its closing frame first (R9-1:
+       OutputPatch::closeLine()). The signals after, with the lock let go. */
+    bool result = false;
+    enum { NoChange, Changed, CountChanged } change = NoChange;
     {
-        if (plugin == NULL || output == QLCIOPlugin::invalidLine())
+        QMutexLocker frameLocker(&m_frameMutex);
+        // replace or delete an existing patch
+        if (index < m_outputPatchList.count())
         {
-            // need to delete an existing patch
-            OutputPatch *patch = m_outputPatchList.takeAt(index);
-            delete patch;
-            emit outputPatchesCountChanged();
-            return true;
+            if (plugin == NULL || output == QLCIOPlugin::invalidLine())
+            {
+                // need to delete an existing patch
+                OutputPatch *patch = m_outputPatchList.takeAt(index);
+                delete patch;
+                result = true;
+                change = CountChanged;
+            }
+            else
+            {
+                OutputPatch *patch = m_outputPatchList.at(index);
+                result = patch->set(plugin, output);
+                change = Changed;
+            }
         }
+        else
+        {
+            if (plugin == NULL || output == QLCIOPlugin::invalidLine())
+                return false;
 
-        OutputPatch *patch = m_outputPatchList.at(index);
-        bool result = patch->set(plugin, output);
-        emit outputPatchChanged();
-        return result;
+            // add a new patch
+            OutputPatch *patch = newOutputPatch();
+            result = patch->set(plugin, output);
+            m_outputPatchList.append(patch);
+            change = CountChanged;
+        }
     }
-    else
-    {
-        if (plugin == NULL || output == QLCIOPlugin::invalidLine())
-            return false;
 
-        // add a new patch
-        OutputPatch *patch = new OutputPatch(m_id, this);
-        bool result = patch->set(plugin, output);
-        m_outputPatchList.append(patch);
+    if (change == CountChanged)
         emit outputPatchesCountChanged();
-        return result;
-    }
-
-    return false;
+    else if (change == Changed)
+        emit outputPatchChanged();
+    return result;
 }
 
 bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index,
@@ -1717,21 +1768,38 @@ bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pending
     qDebug() << "[Universe] setOutputPatchPending - ID:" << m_id
              << ", plugin:" << plugin->name() << ", pending UID:" << pendingUID;
 
-    if (index < m_outputPatchList.count())
+    // Under the frame lock, as setOutputPatch(): a held line sends its
+    // closing frame first (R9-1).
+    bool added = false;
     {
-        OutputPatch *patch = m_outputPatchList.at(index);
-        patch->setPending(plugin, pendingUID, savedLine, network);
-        emit outputPatchChanged();
-        return true;
+        QMutexLocker frameLocker(&m_frameMutex);
+        if (index < m_outputPatchList.count())
+        {
+            OutputPatch *patch = m_outputPatchList.at(index);
+            patch->setPending(plugin, pendingUID, savedLine, network);
+        }
+        else
+        {
+            OutputPatch *patch = newOutputPatch();
+            patch->setPending(plugin, pendingUID, savedLine, network);
+            m_outputPatchList.append(patch);
+            added = true;
+        }
     }
-    else
-    {
-        OutputPatch *patch = new OutputPatch(m_id, this);
-        patch->setPending(plugin, pendingUID, savedLine, network);
-        m_outputPatchList.append(patch);
+    if (added)
         emit outputPatchesCountChanged();
-        return true;
-    }
+    else
+        emit outputPatchChanged();
+    return true;
+}
+
+bool Universe::resolveOutputPatch(int index, quint32 line)
+{
+    // Under the frame lock, as every patch change: the line opens between
+    // two frames, and its first is the current S0 build (sent as changed).
+    QMutexLocker frameLocker(&m_frameMutex);
+    OutputPatch *patch = outputPatch(index);
+    return patch != NULL && patch->resolvePending(line);
 }
 
 bool Universe::setFeedbackPatch(QLCIOPlugin *plugin, quint32 output)
@@ -2316,16 +2384,18 @@ bool Universe::writeRelative(int address, quint32 value, int channelCount)
 
     //qDebug() << "Write relative channel" << address << "value" << value;
 
+    // S0 (R9-3): a relative write on a channel it does not count on: none --
+    // no value, no "written" flag, no growth. Checked before anything.
+    if (Q_UNLIKELY(m_writeGuard))
+        for (int i = 0; i < channelCount; i++)
+            if (writeBlocked(address + i))
+                return false;
+
     if (address + channelCount >= m_usedChannels)
         m_usedChannels = address + channelCount;
 
     for (int i = 0; i < channelCount; i++)
         markWritten(address + i);
-
-    if (Q_UNLIKELY(m_writeGuard))
-        for (int i = 0; i < channelCount; i++)
-            if (writeBlocked(address + i))
-                return false;       // S0: a relative write on a channel it does not count on: none
 
     if (channelCount == 1)
     {
@@ -2358,6 +2428,18 @@ bool Universe::writeBlended(int address, quint32 value, int channelCount, Univer
 {
     if (!clipToUniverse(address, value, channelCount))
         return false;
+
+    // S0 (R9-3): where its writer does not count, nothing -- checked first
+    // (writeMultiple() drops each blocked byte of a write it lets through).
+    if (Q_UNLIKELY(m_writeGuard))
+    {
+        int blocked = 0;
+        for (int i = 0; i < channelCount; i++)
+            if (writeBlocked(address + i))
+                ++blocked;
+        if (blocked == channelCount)
+            return false;
+    }
 
     if (address + channelCount >= m_usedChannels)
         m_usedChannels = address + channelCount;

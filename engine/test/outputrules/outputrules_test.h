@@ -266,6 +266,23 @@ private slots:
      *  before it checks writeBlocked() */
     void r9_aHeldRelativeWriterSetsTheWrittenFlag();
 
+    /* Ninth review: the fixes' own tests */
+    /** Every way a line stops receiving a universe (re-patched, held,
+     *  unpatched, the universe removed, the patch destroyed), mid-show with
+     *  a Show-only cue live: that line's last frame has the Show-only
+     *  channels at safe, the others as they are; nothing after */
+    void everyClosingLineGetsShowOnlySafeLast();
+    /** A line closed with no Show-only channel gets no extra frame */
+    void aClosingLineWithNoShowOnlyGetsNothingExtra();
+    /** A held line released: its first frame is the S0 build */
+    void aReleasedLineStartsFromTheCurrentBuild();
+    /** The patch list changes under the frame lock: frames and sends from
+     *  another thread while lines are added, moved, held and removed */
+    void patchListChangesUnderTheFrameLock();
+    /** A held AutoRemove channel reaching its target lets go of nothing
+     *  (no hold, no "Why is this on?" let-go) */
+    void aHeldAutoRemoveChannelLetsGoOfNothing();
+
 private slots:
     /* The e-stop rules (OutputRuleKeeper E1-E7), swept: each writer set
        up in Operate, All Off, an unrelated GO -- held -- then its own

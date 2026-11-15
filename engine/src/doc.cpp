@@ -1421,6 +1421,16 @@ void Doc::applyFixtureToUniverses(Fixture *fixture, bool crossUniverse)
         inputOutputMap()->startUniverses();
     }
 
+    /* R9-2: a Show-only fixture is Show only on its channels BEFORE its
+       defaults are written: setChannelDefaultValue() then writes its safe
+       value (E6), and no frame in between -- the universe thread runs on
+       its own -- sends a definition default (a laser's auto program). The
+       fixtureChanged()/fixtureAdded() mark after finds it done. Not under
+       the claim: markNow() reads the universes unclaimed. */
+    if (m_outputRuleKeeper != nullptr && fixture->isPatched()
+        && (fixture->outputRules() & Fixture::ShowOnly) && m_fixtures.contains(fixture->id()))
+        m_outputRuleKeeper->markNow(fixture->id());
+
     // Add the fixture channels capabilities to the universe they belong
     QList<Universe *> universes = inputOutputMap()->claimUniverses();
 
@@ -1855,6 +1865,10 @@ bool Doc::updateFixtureChannelCapabilities(quint32 id, QList<int> forcedHTP, QLi
         return false;
 
     Fixture* fixture = m_fixtures[id];
+    // R9-2: Show only first (a mode change), then the defaults
+    if (m_outputRuleKeeper != nullptr && fixture->isPatched()
+        && (fixture->outputRules() & Fixture::ShowOnly))
+        m_outputRuleKeeper->markNow(id);
     // get exclusive access to the universes list
     QList<Universe *> universes = inputOutputMap()->claimUniverses();
     Universe *universe = universes.at(fixture->universe());

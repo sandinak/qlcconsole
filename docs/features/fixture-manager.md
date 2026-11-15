@@ -879,6 +879,12 @@ opened — over the web while in Operate too). So:
   frames put a Show-only fixture at the same value the frame does — safe,
   or what the show's GO gives it. A preview never shows through, not even
   for an instant.
+- **Moving, holding or unpatching an output** sends its Show-only fixtures
+  safe first: an output re-patched to another line, held (Teaching mode, an
+  interface off the rig network), unpatched, or its universe removed gets
+  one last frame with them at safe before it stops — a node that keeps its
+  last frame never keeps a laser on. A held output comes back with what the
+  show gives them now.
 - **Sharing an address**: a fixture patched over a Show-only one cannot
   turn it on — **On when not in use** and **Ignore Blackout** do nothing on
   the shared channels. The Grand Master never scales a safe value (a gobo

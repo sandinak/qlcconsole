@@ -23,6 +23,7 @@
 #include <QObject>
 #include <QMap>
 #include <climits>
+#include <functional>
 
 class QLCIOPlugin;
 
@@ -109,6 +110,16 @@ public:
     /** The plugin instance that has been assigned to a patch */
     QLCIOPlugin* plugin() const;
 
+    /** What a line is sent last, before it stops receiving this universe
+     *  (Show only, S0): @p source fills the frame (and returns true) or
+     *  says there is none to send (false). Asked for whenever an open line
+     *  is closed for good -- re-patched to another line, put on hold
+     *  (setPending()), unpatched, the universe removed, this patch
+     *  destroyed -- never for a reconnect() of the same line. The Universe
+     *  sets it to its held frame (Universe::closingFrame()); unset, a line
+     *  is closed as it always was. */
+    void setClosingFrame(const std::function<bool(QByteArray &frame, bool blackout)> &source);
+
     /** Friendly name of the plugin assigned to a patch ("None" if none) */
     QString pluginName() const;
 
@@ -157,6 +168,12 @@ private:
     QString m_heldReason;
     /** The patch parameters cache */
     QMap<QString, QVariant>m_parametersCache;
+    /** See setClosingFrame() */
+    std::function<bool(QByteArray &, bool)> m_closingFrame;
+
+    /** Close the open line for good: its closing frame first (see
+     *  setClosingFrame()), then the plugin's closeOutput() */
+    void closeLine();
 
     /********************************************************************
      * Value dump
@@ -179,6 +196,9 @@ signals:
     void blackoutChanged(bool blackout);
 
 private:
+    /** A line just opened: its first frame goes out as a changed one (a
+     *  plugin that sends only changes must not skip it) */
+    bool m_freshLine = false;
     /** A buffer used when this output patch is paused */
     QByteArray m_pauseBuffer;
     bool m_paused;

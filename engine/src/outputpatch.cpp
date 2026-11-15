@@ -57,8 +57,32 @@ OutputPatch::OutputPatch(quint32 universe, QObject* parent)
 
 OutputPatch::~OutputPatch()
 {
-    if (m_plugin != NULL)
+    if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
+        closeLine();
+    else if (m_plugin != NULL)
         m_plugin->closeOutput(m_pluginLine, m_universe);
+}
+
+void OutputPatch::setClosingFrame(const std::function<bool(QByteArray &, bool)> &source)
+{
+    m_closingFrame = source;
+}
+
+void OutputPatch::closeLine()
+{
+    if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine())
+        return;
+    /* Show only (S0): a node or an interface keeps the last frame it was
+       given. The line's last one has every Show-only channel at its safe
+       value -- paused or not -- or a laser stays on where it was, and All
+       Off, Blackout, a cue letting go never reach it again. */
+    if (m_closingFrame)
+    {
+        QByteArray frame;
+        if (m_closingFrame(frame, m_blackout))
+            m_plugin->writeUniverse(m_universe, m_pluginLine, frame, true);
+    }
+    m_plugin->closeOutput(m_pluginLine, m_universe);
 }
 
 /****************************************************************************
@@ -68,7 +92,13 @@ OutputPatch::~OutputPatch()
 bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
 {
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
-        m_plugin->closeOutput(m_pluginLine, m_universe);
+    {
+        // The same line again (a re-set of what is open): no closing frame.
+        if (m_plugin == plugin && m_pluginLine == output)
+            m_plugin->closeOutput(m_pluginLine, m_universe);
+        else
+            closeLine();
+    }
 
     // A concrete set() always supersedes whatever this patch was pending on.
     m_pendingUID.clear();
@@ -87,7 +117,11 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
     }
 
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
-        return m_plugin->openOutput(m_pluginLine, m_universe);
+    {
+        const bool opened = m_plugin->openOutput(m_pluginLine, m_universe);
+        m_freshLine = opened;
+        return opened;
+    }
 
     return false;
 }
@@ -105,6 +139,7 @@ bool OutputPatch::reconnect()
         bool ret = m_plugin->openOutput(m_pluginLine, m_universe);
         if (ret == true)
         {
+            m_freshLine = true;
             QMap<QString, QVariant>::iterator it = m_parametersCache.begin();
             for (; it != m_parametersCache.end(); it++)
                 m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
@@ -117,8 +152,9 @@ bool OutputPatch::reconnect()
 void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid,
                              quint32 savedLine, const QString &network)
 {
+    // Held: the line stops receiving this universe -- its closing frame first.
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
-        m_plugin->closeOutput(m_pluginLine, m_universe);
+        closeLine();
 
     m_plugin = plugin;
     m_pluginLine = QLCIOPlugin::invalidLine();
@@ -270,6 +306,13 @@ void OutputPatch::dump(quint32 universe, const QByteArray& data, bool dataChange
     /* Don't do anything if there is no plugin and/or output line. */
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
     {
+        // A line just opened (released from a hold, re-patched): its first
+        // frame is sent as changed, so it carries the current build.
+        if (m_freshLine)
+        {
+            dataChanged = true;
+            m_freshLine = false;
+        }
         if (m_paused)
         {
             if (m_pauseBuffer.isNull())

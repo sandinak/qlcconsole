@@ -283,6 +283,10 @@ public:
     bool setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index = 0,
                                quint32 savedLine = UINT_MAX, const QString &network = QString());
 
+    /** A pending (or held) output patch at @p index found its line again:
+     *  opened on @p line under the frame lock (OutputPatch::resolvePending()) */
+    bool resolveOutputPatch(int index, quint32 line);
+
     /** Sets a feedback patch for this Universe */
     bool setFeedbackPatch(QLCIOPlugin *plugin, quint32 output);
 
@@ -350,6 +354,9 @@ private:
 
     /** Reference to the feedback patch associated to this universe. */
     OutputPatch *m_fbPatch;
+
+    /** A new output patch, its closing frame this universe's */
+    OutputPatch *newOutputPatch();
 
 private:
     // Connect to inputPatch's valueChanged signal
@@ -632,6 +639,14 @@ public:
      *  always sent, Blind or not: the Show-only channels at safe, the
      *  others as they are (in Blind: frozen at the frame from before) */
     void sendHeld();
+    /** R9-1: the last frame for an output line that stops receiving this
+     *  universe (re-patched, held, unpatched, the universe removed, the
+     *  patch destroyed): built as sendHeld() builds it, under the frame
+     *  lock -- the Show-only channels at safe, the others as they are (in
+     *  Blind: frozen), as Blackout makes it when @p blackout. False (and
+     *  nothing sent): there are no Show-only channels, or none of ours go
+     *  out here at all. OutputPatch::setClosingFrame(). */
+    bool closingFrame(QByteArray &frame, bool blackout);
     /** Where a fade starting on @p address starts from: for a Show-only
      *  channel, what the last S0 frame built there (never a value stored
      *  mid-frame) */
@@ -779,7 +794,8 @@ public:
         for (int i = 0; i < count; ++i)
         {
             const int a = address + i;
-            if (a < 0 || a >= UNIVERSE_SIZE)
+            // R9-3: a held writer (S0) never wrote it: it lets go of nothing
+            if (a < 0 || a >= UNIVERSE_SIZE || writeBlocked(a))
                 continue;
             m_letGoBy[a].store(token, std::memory_order_relaxed);
             m_letGoFrame[a].store(frame, std::memory_order_relaxed);
