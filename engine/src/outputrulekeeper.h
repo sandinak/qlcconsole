@@ -29,6 +29,7 @@
 
 #include "fixture.h"
 #include "doc.h"
+#include "qlcengine_export.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -69,7 +70,7 @@ class QXmlStreamWriter;
  * one) or as soon as the show is open. Blackout-exempt fixtures also hold
  * through Blind (kDefaultBlindHoldsExempt; board Q44).
  */
-class OutputRuleKeeper final : public QObject
+class QLC_ENGINE_EXPORT OutputRuleKeeper final : public QObject
 {
     Q_OBJECT
 

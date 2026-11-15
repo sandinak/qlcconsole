@@ -27,6 +27,7 @@
 
 #include "programmingoutline.h"
 #include "function.h"
+#include "qlcui_export.h"
 
 class WorkbenchStack;
 class SceneGroupLooks;
@@ -68,7 +69,7 @@ class Doc;
  * and W3 docks the same widget in the Show Tree with a TreeCueStack loaded
  * (setStack(), setReturnTo()).
  */
-class Workbench final : public QWidget
+class QLC_UI_EXPORT Workbench final : public QWidget
 {
     Q_OBJECT
     friend class HelpShots;
