@@ -94,6 +94,7 @@ private slots:
     void maskCutsTheWindow();
     void laserClassPwr09();
     void pwr11Band();
+    void pwr13LaserInZone();
     void pwr11BehindCyc();
     void pwr11BandedPan();
     void pwr12Backwash();
