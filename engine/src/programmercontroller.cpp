@@ -194,7 +194,14 @@ ProgrammerController::ProgrammerController(Doc *doc)
     connect(m_focusCallCue, &FocusCallCue::announce, this, [this](const QString &text, int priority) {
         tellOperator(padText(text), priority);      // {A} in the pad's own names
     });
+    /* The Run role (PadRun rule 6): the calls start with LT + Menu, armed,
+       the pad is in FOCUS while they run, and RT past the last call says
+       how to finish rather than finishing. */
+    m_focusCallCue->setRunRole(m_padRun->isEnabled());
+    connect(m_padRun, &PadRun::enabledChanged, m_focusCallCue, &FocusCallCue::setRunRole);
+    m_focusSession->setLastCallHold([this]() { return m_padRun->lastCallHold(); });
     connect(m_focusCallCue, &FocusCallCue::stateChanged, this, [this]() {
+        m_padRun->focusCueChanged();
         if (m_focusCallCue->state() != FocusCallCue::NamingVenue)
             m_holdVenueA.reset();
         // Armed: the controller is read for Start, even with nothing else on.
@@ -1717,6 +1724,9 @@ void ProgrammerController::refreshPadLight()
     // After the Run role's emergency stop: red, over a tool's lamp too.
     if (m_padRun != nullptr && m_padRun->state() == PadRun::Stopped)
         c = PadRun::stoppedColour();
+    // FOCUS (PadRun rule 6): the one state's colour, over the focus lamp.
+    else if (m_padRun != nullptr && m_padRun->state() == PadRun::Focus)
+        c = PadRun::focusColour();
     else if (m_focusSession->isActive())
     {
         switch (m_focusSession->saveStatus())
@@ -1934,6 +1944,14 @@ QString ProgrammerController::controllerOwnerName() const
     return ip != nullptr && ip->plugin() != nullptr ? ip->inputName() : QString();
 }
 
+void ProgrammerController::claimController(quint32 universe)
+{
+    if (m_ownerUniverse != 0xFFFFFFFF)
+        return;
+    m_ownerUniverse = universe;
+    emit focusControllerChanged();     // the panels name it
+}
+
 void ProgrammerController::releaseOwnerIfIdle()
 {
     if (!m_focusSession->isActive() && !m_refineSession->isActive()
@@ -1975,7 +1993,11 @@ void ProgrammerController::checkControllerPresence()
             emit controllerLost(false);
     }
     const bool cameBack = !m_padPresent && present;
+    const bool wentAway = m_padPresent && !present;
     m_padPresent = present;
+    // FOCUS needs the pad there (PadRun rule 6).
+    if ((cameBack || wentAway) && m_padRun != nullptr)
+        m_padRun->setPadPresent(present);
     if (cameBack && m_padRun != nullptr)
         m_padRun->updateTriggers(true);
 }
@@ -3039,7 +3061,9 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
                            && !isPan && !isTilt;
         if (m_ownerUniverse == 0xFFFFFFFF)
         {
-            if (press && (active || role == FocusCallCue::startRole()))
+            /* In the Run role the pad that starts the calls (armed, LT +
+               Menu) claims it there: an unarmed Menu claims nothing. */
+            if (press && (active || (role == FocusCallCue::startRole() && !m_padRun->isEnabled())))
             {
                 m_ownerUniverse = universe;
                 emit focusControllerChanged();     // the panels name it
@@ -3083,9 +3107,19 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             m_centreChord = false;
             return true;
         }
-        // A focus-call cue armed: Start (Menu) begins the calls.
+        /* The Run role, a venue focus begun (PadRun rule 6): Menu is the
+           focus's way out with LT held, and nothing else -- never the
+           tool's own Leave on one button, nor the role chord with View. */
+        if (role == FocusCallCue::startRole() && m_padRun->isFocusing())
+        {
+            if (value > 0)
+                m_padRun->focusMenu(universe);
+            return true;
+        }
+        /* A focus-call cue armed: Start (Menu) begins the calls -- in the
+           Tools role; in the Run role it is PadRun's (armed, LT + Menu). */
         if (!active && value > 0 && role == FocusCallCue::startRole() && m_focusCallCue->isArmed()
-            && !m_heldRoles.contains(GamepadRole::Back))
+            && !m_padRun->isEnabled() && !m_heldRoles.contains(GamepadRole::Back))
         {
             m_focusCallCue->start();
             return true;

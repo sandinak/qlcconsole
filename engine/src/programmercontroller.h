@@ -276,6 +276,9 @@ public:
     /** @p text with its control tokens ("{A} keeps it") in the words of
      *  the pad the tools use. */
     QString padText(const QString &text) const;
+    /** The pad on @p universe uses the controller tools now (the Run role
+     *  starting a venue focus from it): it is their owner, if none is. */
+    void claimController(quint32 universe);
 
     /** Board Q170, a PlayStation pad's touchpad as a trackpad: a finger
      *  dragged right across the whole pad nudges pan this many degrees

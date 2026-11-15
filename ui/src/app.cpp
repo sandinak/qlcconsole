@@ -9599,14 +9599,26 @@ void App::slotUpdateStandby()
     }
     // A focus-call cue armed: the footer says what it waits for.
     if (const FocusCallCue *fcc = m_doc->programmer() != NULL ? m_doc->programmer()->focusCallCue() : NULL)
-        if (fcc->state() != FocusCallCue::Idle)
+        if (fcc->state() != FocusCallCue::Idle || fcc->isDone())
         {
-            m_statusStandby->setText(fcc->isArmed() ? (PadNames::isPlayStation(m_doc->programmer()->padFamily())
-                                     ? m_doc->programmer()->padText(tr("Venue focus: waiting for the controller ({Menu})"))
-                                     : tr("Venue focus: waiting for the controller (Start)"))
-                                     : fcc->state() == FocusCallCue::NamingVenue
-                                       ? tr("Venue focus: name the venue on the laptop")
-                                       : m_doc->programmer()->padText(tr("Venue focus running ({Menu} ends it)")));
+            // The pad's Run role (PadRun rule 6): armed, LT + Menu starts and ends it.
+            const ProgrammerController *pc = m_doc->programmer();
+            const bool runRole = pc->padRun()->isEnabled();
+            QString text;
+            if (fcc->isArmed())
+                text = runRole ? pc->padText(tr("Venue focus: waiting for the controller ({LT} + {Menu}, armed)"))
+                       : PadNames::isPlayStation(pc->padFamily())
+                         ? pc->padText(tr("Venue focus: waiting for the controller ({Menu})"))
+                         : tr("Venue focus: waiting for the controller (Start)");
+            else if (fcc->state() == FocusCallCue::NamingVenue)
+                text = tr("Venue focus: name the venue on the laptop");
+            else if (fcc->state() == FocusCallCue::Running)
+                text = runRole ? pc->padText(tr("Venue focus running ({LT} + {Menu} ends it)"))
+                               : pc->padText(tr("Venue focus running ({Menu} ends it)"));
+            else
+                text = runRole ? pc->padText(tr("Venue focus done: {LT} + {A} for the next cue"))
+                               : tr("Venue focus done: GO for the next cue");
+            m_statusStandby->setText(text);
             m_statusStandby->show();
             return;
         }

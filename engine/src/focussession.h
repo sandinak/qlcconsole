@@ -122,8 +122,8 @@ public:
          *  going into Operate does not end it. */
         bool allowOperate = false;
         /** RT on the last call asks to leave (exitRequested()) instead of
-         *  going round to the first: a focus-call cue goes on to the next
-         *  cue when the calls are done. */
+         *  going round to the first (a focus-call cue: the calls are done;
+         *  setLastCallHold() may say how to finish instead). */
         bool endAfterLastCall = false;
     };
 
@@ -176,6 +176,10 @@ public:
      *  controller tool -- or this one -- has unsaved work a start would
      *  throw away (gap 5: never silently discarded). */
     void setStartGuard(const std::function<bool(QString *)> &guard) { m_startGuard = guard; }
+    /** With endAfterLastCall, a step past the last call asks @p hold first:
+     *  words back (the pad's Run role, PadRun rule 6: "LT + Menu to
+     *  finish") are said and the calls go on; empty, the calls end. */
+    void setLastCallHold(const std::function<QString()> &hold) { m_lastCallHold = hold; }
 
     /** Stop, discarding any unsaved offsets (saveAll() first to keep them).
      *  Lets go of the heads. */
@@ -713,6 +717,7 @@ private:
     QTimer *m_breathTimer = nullptr;
     QElapsedTimer m_breathClock;
     std::function<bool(QString *)> m_startGuard;
+    std::function<QString()> m_lastCallHold;
     bool m_endedByOperator = false;
     bool m_targetPage = false;
     quint32 m_targetId = 0xFFFFFFFF;

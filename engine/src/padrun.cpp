@@ -24,6 +24,7 @@
 #include "showtreecontroller.h"
 #include "refinesession.h"
 #include "focussession.h"
+#include "focuscallcue.h"
 #include "showcontrol.h"
 #include "effectscriptrunner.h"
 #include "functionparent.h"
@@ -197,7 +198,8 @@ QString PadRun::label(Action action)
         case SubBack:       return tr("Sub Back (armed, {LT} held)");
         case FireHit:       return tr("Fire the armed hit (armed)");
         case WhereAmI:      return tr("Say the list and what's next");
-        case Walk:          return tr("Walk the show: cues, layers, adjust, tag (not armed)");
+        case Walk:          return tr("Walk the show: cues, layers, adjust, tag (not armed); "
+                                      "armed, {LT} held: start the venue focus cue");
         case EmergencyStop: return emergencyStopLabel();
         case NoAction:      break;
     }
@@ -327,6 +329,27 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
     if (!down || action == NoAction)
         return true;
 
+    /* Rule 6: a venue focus begun (the venue being named; once the calls
+       run the focus tool has the pad) -- no cue moves and no hit fires
+       from here, and only LT + Menu ends it. RS still says where. */
+    if (isFocusing())
+    {
+        if (action == Walk)
+            focusMenu(universe);
+        else if (action == WhereAmI)
+            trigger(action);
+        else if (m_pc != nullptr)
+            showNotice(m_pc->padText(tr("Venue focus: nothing plays from the controller. "
+                                        "{LT} + {Menu} finishes it.")));
+        return true;
+    }
+    // A venue focus cue waits: Menu is its start, armed and with LT held.
+    if (action == Walk && isFocusCueWaiting())
+    {
+        focusStartPress(universe, h.lt.isDown());
+        return true;
+    }
+
     if (needsArm(action))
     {
         if (!m_armed)
@@ -373,7 +396,8 @@ bool PadRun::isArmChordPending() const
 void PadRun::armChordUpdate(quint32 universe)
 {
     const Held h = m_held.value(universe);
-    const bool chord = h.lb && h.rb && !h.anyTrigger() && !h.spent;
+    // In FOCUS the bumpers are the focus tool's: no arm change (rule 6).
+    const bool chord = h.lb && h.rb && !h.anyTrigger() && !h.spent && !isFocusing();
     if (chord)
     {
         // Timed from the second bumper down; a held chord is not restarted.
@@ -400,7 +424,7 @@ void PadRun::armChordFired()
     const quint32 u = m_chordUniverse;
     m_chordUniverse = UINT_MAX;
     const Held h = m_held.value(u);
-    if (!m_enabled || !h.lb || !h.rb || h.anyTrigger() || h.spent)
+    if (!m_enabled || !h.lb || !h.rb || h.anyTrigger() || h.spent || isFocusing())
         return;
     // Another pad's arm is not this one's to drop.
     if (m_armed && u != m_armUniverse)
@@ -415,7 +439,7 @@ bool PadRun::setArmed(bool on, quint32 universe)
 {
     if (on == m_armed)
         return true;
-    if (on && (!m_enabled || isWalking() || !holder().isEmpty()))
+    if (on && (!m_enabled || isWalking() || !holder().isEmpty() || isFocusing()))
         return false;
     m_armed = on;
     m_armUniverse = on ? universe : UINT_MAX;
@@ -457,6 +481,7 @@ void PadRun::emergencyStop()
     const bool was = m_armed;
     m_armed = false;
     m_armUniverse = UINT_MAX;
+    m_focusArm = UINT_MAX;      // a focus ending after the stop does not re-arm
     m_stopped = true;
     m_playing = false;
     m_flash->stop();
@@ -484,6 +509,9 @@ PadRun::State PadRun::state() const
     // Red after the emergency stop (rule 6), whatever has the pad since.
     if (m_stopped)
         return Stopped;
+    // A venue focus begun, the pad here (rule 6); with no pad, never FOCUS.
+    if (isFocusing() && !m_padGone)
+        return Focus;
     if (isWalking())
         return Walking;
     if (!holder().isEmpty())
@@ -497,6 +525,7 @@ QColor PadRun::stateColour() const
     {
         case Armed:     return armedColour();
         case Stopped:   return stoppedColour();
+        case Focus:     return focusColour();
         default:        break;
     }
     return QColor();
@@ -516,6 +545,7 @@ QColor PadRun::lightColour() const
     {
         case Armed:     return m_playing && m_blinkOn ? playingColour() : armedColour();
         case Stopped:   return stoppedColour();
+        case Focus:     return focusColour();
         default:        break;
     }
     return QColor();
@@ -536,6 +566,10 @@ void PadRun::setTesting(bool on)
 
 void PadRun::toolChanged()
 {
+    /* A venue focus cue's calls, started on the laptop while armed: FOCUS,
+       which is not disarmed (rule 6) -- the arm is put by for the end. */
+    if (m_armed && isFocusing())
+        putArmBy();
     /* A tool started on the laptop takes the pad: the arm drops with it
        (no button did that), so it is not found armed when the tool ends. */
     if (m_armed && !holder().isEmpty())
@@ -661,6 +695,7 @@ QString PadRun::roleText() const
         case Stopped:       return tr("Pad: STOPPED");
         case Walking:       return tr("Pad: Walk");
         case ToolHasPad:    return tr("Pad: %1").arg(holder());
+        case Focus:         return tr("Pad: FOCUS");
     }
     return QString();
 }
@@ -678,7 +713,14 @@ QString PadRun::helpHtml() const
                       .arg(roleText().toHtmlEscaped(),
                            pad.isEmpty() ? QString() : QStringLiteral(" · ") + pad.toHtmlEscaped());
     const QString tool = m_enabled ? holder() : QString();
-    if (!tool.isEmpty())
+    if (state() == Focus)
+        out += tr("<p><b>Venue focus has the controller.</b> Hold %1 and press %2 to finish it "
+                  "(or finish it on the laptop); the list stays on the focus cue until you move "
+                  "it on. Nothing plays from the controller meanwhile; the emergency stop still "
+                  "works.</p>")
+                   .arg(m_pc->padText(QStringLiteral("{LT}")).toHtmlEscaped(),
+                        m_pc->padText(QStringLiteral("{Menu}")).toHtmlEscaped());
+    else if (!tool.isEmpty())
         out += tr("<p><b>%1 has the controller</b> until it ends (finish or cancel it on the laptop); "
                   "then the controller runs the show again.</p>").arg(tool.toHtmlEscaped());
     if (!m_enabled)
@@ -744,13 +786,15 @@ void PadRun::clear()
     const bool was = m_armed;
     m_armed = false;
     m_armUniverse = UINT_MAX;
+    m_focusArm = UINT_MAX;
     if (was)
         emit armedChanged(false);
 }
 
 void PadRun::controllerLost()
 {
-    const bool was = m_armed;
+    // Armed, or in FOCUS with an arm to go back to: either way, not armed now.
+    const bool was = m_armed || m_focusArm != UINT_MAX;
     reset();
     if (was)
         showNotice(tr("Disarmed: the controller went away."));
@@ -797,8 +841,19 @@ void PadRun::forgetPad(quint32 universe)
         m_armChord->stop();
         m_chordUniverse = UINT_MAX;
     }
-    if (m_armed && m_armUniverse == universe)
+    if ((m_armed && m_armUniverse == universe) || m_focusArm == universe)
         controllerLost();
+}
+
+void PadRun::setPadPresent(bool present)
+{
+    if (m_padGone == !present)
+        return;
+    m_padGone = !present;
+    // Gone in FOCUS: the arm the focus would go back to goes too (rule 6).
+    if (!present && m_focusArm != UINT_MAX)
+        controllerLost();
+    sync();
 }
 
 void PadRun::showLight()
@@ -807,9 +862,154 @@ void PadRun::showLight()
         return;
     // A tool on the pad has its own lamp (the save colours) -- but red
     // after the emergency stop, as every surface is.
-    if ((m_pc->focusSession()->isActive() || m_pc->refineSession()->isActive()) && state() != Stopped)
+    if ((m_pc->focusSession()->isActive() || m_pc->refineSession()->isActive())
+        && state() != Stopped && state() != Focus)
         return;
     m_pc->setPadLight(lightColour());
+}
+
+/*****************************************************************************
+ * Venue focus from the pad (rule 6)
+ *****************************************************************************/
+
+bool PadRun::isFocusing() const
+{
+    if (!m_enabled || m_pc == nullptr)
+        return false;
+    const FocusCallCue *fcc = m_pc->focusCallCue();
+    if (fcc == nullptr)
+        return false;
+    if (fcc->state() == FocusCallCue::NamingVenue || fcc->state() == FocusCallCue::Running)
+        return true;
+    // Starting: the calls are up a moment before the cue says it runs.
+    const FocusSession *f = m_pc->focusSession();
+    return fcc->isArmed() && f->isActive() && f->isRunningCalls();
+}
+
+bool PadRun::isFocusCueWaiting() const
+{
+    const FocusCallCue *fcc = m_pc != nullptr ? m_pc->focusCallCue() : nullptr;
+    return m_enabled && fcc != nullptr && fcc->isArmed() && !isFocusing();
+}
+
+void PadRun::focusStartPress(quint32 universe, bool safetyHeld)
+{
+    // Two controls, armed: the start is never one button (rules 3 and 6).
+    if (!m_armed)
+    {
+        refuse(Walk, tr("Not armed. To start the venue focus, hold {LB} and {RB} to arm, then {LT} + {Menu}."));
+        return;
+    }
+    if (universe != m_armUniverse)
+    {
+        refuse(Walk, tr("Another controller is armed."));
+        return;
+    }
+    if (!safetyHeld)
+    {
+        refuse(Walk, tr("Armed. To walk, disarm first: hold {LB} and {RB}. "
+                        "{LT} + {Menu} starts the venue focus."));
+        return;
+    }
+    startFocus(universe);
+}
+
+bool PadRun::startFocus(quint32 universe)
+{
+    if (m_pc == nullptr)
+        return false;
+    /* FOCUS is not armed: the arm is put by, to come back when the focus
+       ends -- before the start, so the calls taking the pad are no tool
+       taking an armed pad. Told once the start has gone. */
+    m_focusArm = universe;
+    m_armed = false;
+    m_armUniverse = UINT_MAX;
+    m_armChord->stop();
+    m_chordUniverse = UINT_MAX;
+    m_playing = false;
+    m_flash->stop();
+    m_pc->claimController(universe);
+    QString why;
+    if (!m_pc->focusCallCue()->start(&why))
+    {
+        // Refused (no calls, no lights; already said): armed as it was.
+        m_focusArm = UINT_MAX;
+        m_armed = true;
+        m_armUniverse = universe;
+        if (!why.isEmpty())
+            showNotice(m_pc->padText(why));
+        sync();
+        return false;
+    }
+    emit armedChanged(false);
+    m_pc->padRumble(1, ControllerScheme::rumbleShortMs());
+    sync();
+    return true;
+}
+
+bool PadRun::focusMenu(quint32 universe)
+{
+    if (!isFocusing() || m_pc == nullptr)
+        return false;
+    if (!m_held.value(universe).lt.isDown())
+    {
+        refuse(Walk, tr("Venue focus: hold {LT} and press {Menu} to finish it."));
+        return true;
+    }
+    FocusCallCue *fcc = m_pc->focusCallCue();
+    if (fcc->state() == FocusCallCue::NamingVenue)
+        fcc->cancelStart();
+    else
+        // As the tool's own Leave: the laptop asks about unsaved work, then ends it.
+        m_pc->focusSession()->apply(FocusSession::Exit);
+    return true;
+}
+
+QString PadRun::lastCallHold()
+{
+    if (!isFocusing() || m_pc == nullptr)
+        return QString();
+    const QString text = m_pc->padText(tr("Last call. Hold {LT} and press {Menu} to finish."));
+    showNotice(text);
+    return text;
+}
+
+void PadRun::putArmBy()
+{
+    m_focusArm = m_armUniverse;
+    m_armed = false;
+    m_armUniverse = UINT_MAX;
+    m_armChord->stop();
+    m_chordUniverse = UINT_MAX;
+    m_playing = false;
+    m_flash->stop();
+    emit armedChanged(false);
+}
+
+void PadRun::focusCueChanged()
+{
+    // Begun from the laptop while armed (the venue to name first): FOCUS.
+    if (m_armed && isFocusing())
+        putArmBy();
+    /* Over (or the start given up): ARMED again, as it was before LT +
+       Menu -- unless something else has happened to the pad since (the
+       stop, the pad gone, another tool, the role). */
+    if (!isFocusing() && m_focusArm != UINT_MAX)
+    {
+        const quint32 u = m_focusArm;
+        m_focusArm = UINT_MAX;
+        if (m_enabled && !m_stopped && !m_padGone && holder().isEmpty() && !isWalking())
+        {
+            m_armed = true;
+            m_armUniverse = u;
+            m_armChord->stop();
+            m_chordUniverse = UINT_MAX;
+            emit armedChanged(true);
+            if (m_pc != nullptr)
+                m_pc->padRumble(2, ControllerScheme::rumbleShortMs());
+        }
+    }
+    sync();
 }
 
 /*****************************************************************************

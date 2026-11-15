@@ -696,13 +696,19 @@ void CueRunner::buildFullLayout()
         m_focusStart = new QToolButton(m_focusArmed);
         m_focusStart->setObjectName(QStringLiteral("crFocusStart"));
         m_focusStart->setText(tr("Start Venue Focus"));
-        m_focusStart->setToolTip(tr("Begin venue focus (Start on the controller, or \u2318\u21a9)"));
+        m_focusStart->setToolTip(tr("Begin venue focus (Start on the controller, or \u2318\u21a9; "
+                                    "the controller in the Run role: armed, LT + Menu)"));
         connect(m_focusStart, &QToolButton::clicked, this, [this]() {
             m_doc->programmer()->focusCallCue()->start();
         });
         fh->addWidget(m_focusStart);
         v->addWidget(m_focusArmed);
         connect(m_doc->programmer()->focusCallCue(), &FocusCallCue::stateChanged,
+                this, &CueRunner::refreshFocusArmed);
+        // Done, the list waits on the cue; the words follow the pad's role.
+        connect(m_doc->programmer()->focusCallCue(), &FocusCallCue::doneChanged,
+                this, &CueRunner::refreshFocusArmed);
+        connect(m_doc->programmer()->padRun(), &PadRun::enabledChanged,
                 this, &CueRunner::refreshFocusArmed);
         refreshFocusArmed();
     }
@@ -1296,17 +1302,24 @@ void CueRunner::refreshFocusArmed()
 {
     if (m_focusArmed == nullptr)
         return;
-    const FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
+    const ProgrammerController *pc = m_doc->programmer();
+    const FocusCallCue *fcc = pc->focusCallCue();
+    // The pad's Run role (PadRun rule 6): armed, LT + Menu starts and ends it.
+    const bool runRole = pc->padRun()->isEnabled();
     switch (fcc->state())
     {
         case FocusCallCue::Armed:
-            m_focusArmedLabel->setText((PadNames::isPlayStation(m_doc->programmer()->padFamily())
-                                       ? m_doc->programmer()->padText(tr("Venue focus: waiting for the controller \u2014 press {Menu}"))
-                                       : tr("Venue focus: waiting for the controller \u2014 press Start")));
+            m_focusArmedLabel->setText(runRole
+                ? pc->padText(tr("Venue focus: waiting for the controller \u2014 armed, hold {LT} and press {Menu}"))
+                : PadNames::isPlayStation(pc->padFamily())
+                  ? pc->padText(tr("Venue focus: waiting for the controller \u2014 press {Menu}"))
+                  : tr("Venue focus: waiting for the controller \u2014 press Start"));
             m_focusStart->show();
             break;
         case FocusCallCue::Running:
-            m_focusArmedLabel->setText(m_doc->programmer()->padText(tr("Venue focus running \u2014 {Menu} ends it and goes on")));
+            m_focusArmedLabel->setText(runRole
+                ? pc->padText(tr("Venue focus running \u2014 {LT} + {Menu} ends it; the list stays on this cue"))
+                : pc->padText(tr("Venue focus running \u2014 {Menu} ends it; the list stays on this cue")));
             m_focusStart->hide();
             break;
         case FocusCallCue::NamingVenue:
@@ -1314,9 +1327,17 @@ void CueRunner::refreshFocusArmed()
             m_focusStart->hide();
             break;
         case FocusCallCue::Idle:
+            // Done: the list waits on the focus cue for the next GO (never goes on by itself).
+            if (fcc->isDone())
+            {
+                m_focusArmedLabel->setText(runRole
+                    ? pc->padText(tr("Venue focus done: {LT} + {A} for the next cue"))
+                    : tr("Venue focus done: GO for the next cue"));
+                m_focusStart->hide();
+            }
             break;
     }
-    m_focusArmed->setVisible(fcc->state() != FocusCallCue::Idle);
+    m_focusArmed->setVisible(fcc->state() != FocusCallCue::Idle || fcc->isDone());
 }
 
 QString CueRunner::focusArmedText() const
