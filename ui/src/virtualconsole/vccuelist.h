@@ -464,8 +464,6 @@ private:
     /** A cue list action on a running list makes it the show (Show only):
      *  started again by this cue list, which restarts nothing */
     void claimRunning(Chaser *ch);
-    /** A GO lets the emergency stop's hold go (Show only) */
-    void releaseEmergencyStop();
 
     /*************************************************************************
      * Load & Save

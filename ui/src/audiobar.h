@@ -113,7 +113,9 @@ public:
 
     int m_skippedBeats;
 
-private:
+public:
+    /** What the function bar starts its function under (an automatic
+     *  widget's: Show only arms it, Function::armAutoSource()) */
     FunctionParent functionParent() const;
 
 private:

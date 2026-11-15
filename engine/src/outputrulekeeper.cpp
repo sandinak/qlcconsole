@@ -55,8 +55,10 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     // Another show: a new show's setting, and OnAtOperate waits for its
     // own first Operate.
     connect(doc, &Doc::cleared, this, [this]() {
-        // Another show: its own start, no emergency stop carried over.
-        setEmergencyStop(false);
+        // Another show: its own start, no emergency stop carried over, no
+        // automatic widget armed.
+        m_stopEpoch.store(0, std::memory_order_relaxed);
+        Function::clearAutoSources();
         m_onAtOpenWhen = kDefaultOnAtOpenWhen;
         m_seenOperate = m_doc->mode() == Doc::Operate;
         scheduleRebuild();
@@ -297,67 +299,62 @@ QByteArray OutputRuleKeeper::safeValuesFor(quint32 universe) const
 
 void OutputRuleKeeper::emergencyStop()
 {
-    /* Every Show-only channel out at once -- no fade -- and held there,
-       whatever drives it (Park, the Simple Desk, a VC slider), until the
-       next GO in Operate. The stop cleans up what it stops: a new session
-       (what ran before is not the show after), every hand's fader left up
-       frozen until moved again, the stored values back to safe, every
-       last look without them. Nothing from before the stop comes back when
-       it lets go. Safe from any thread (a plugin's: OSC, MSC). */
-    const quint32 stopBefore = GenericFader::stopEpoch();
-    GenericFader::bumpStopEpoch();
+    // E2: a new live session -- every stamp from before is old now.
     Function::startLiveSession();
-    if (m_doc->masterTimer() != nullptr)
-        m_doc->masterTimer()->refreshPreviewGates();
-    m_emergencyStop.store(true, std::memory_order_relaxed);
+    const quint32 session = GenericFader::liveEpoch();
+    m_stopEpoch.store(session, std::memory_order_relaxed);
+    // E1, E5: every function stopped, queued ones too; each is held at once
+    // (no source left), so its faders and its fade-out are kept off.
+    for (Function *f : m_doc->functions())
+        if (f != nullptr && (f->isRunning() || f->sources().isEmpty() == false))
+            f->stop(FunctionParent::master());
+    // E1: the cut -- stored values to safe and a frame sent, now.
     const QList<Universe *> ua = m_doc->inputOutputMap()->universesSnapshot();
     for (Universe *u : ua)
     {
-        if (u == nullptr)
+        if (u == nullptr || u->showOnlyChannelCount() == 0)
             continue;
-        u->freezeFadersForStop(stopBefore);
-        u->setShowOnlyEmergencyStop(true);      // and the stored values to safe
+        u->cutShowOnly();
+        u->dumpOutput(u->postGMValues()->mid(0, u->usedChannels()), true);
     }
-    // At once, not at the next frame.
-    for (Universe *u : ua)
-        if (u != nullptr && u->showOnlyChannelCount() > 0)
-            u->dumpOutput(u->postGMValues()->mid(0, u->usedChannels()), true);
-    // The last look and the footer: on the keeper's own thread.
+    // Then the gates of whatever is still running, worked out as a tick would.
+    if (m_doc->masterTimer() != nullptr)
+        m_doc->masterTimer()->refreshPreviewGates();
+    // E7: only the footer and the Simple Desk hear of it later; they check
+    // the session they were told of.
+    emit emergencyStopStruck(session);
     QMetaObject::invokeMethod(this, [this]() {
-        if (m_doc->lastLook() != nullptr)
-            m_doc->lastLook()->dropShowOnly();
         m_lastHeldBy = showOnlyHeldBy();
         emit showOnlyChanged();
-        emit emergencyStopChanged(true);
     }, thread() == QThread::currentThread() ? Qt::DirectConnection : Qt::QueuedConnection);
 }
 
-void OutputRuleKeeper::releaseEmergencyStop()
+bool OutputRuleKeeper::emergencyStopped() const
 {
-    if (emergencyStopped() && m_doc->mode() == Doc::Operate)
-        setEmergencyStop(false);
+    const quint32 stop = m_stopEpoch.load(std::memory_order_relaxed);
+    return stop != 0 && stop == GenericFader::liveEpoch();
 }
 
-void OutputRuleKeeper::setEmergencyStop(bool stop)
+void OutputRuleKeeper::noteGo()
 {
-    if (m_emergencyStop.exchange(stop, std::memory_order_relaxed) == stop)
-        return;
-    for (Universe *u : m_doc->inputOutputMap()->universesSnapshot())
-        if (u != nullptr)
-            u->setShowOnlyEmergencyStop(stop);
-    m_lastHeldBy = showOnlyHeldBy();
-    emit showOnlyChanged();
-    emit emergencyStopChanged(stop);
+    /* What the footer says only: the first GO after the stop ends "held:
+       emergency stop". It lets nothing go (E4) -- the rule holds what that
+       GO does not drive. */
+    if (m_stopEpoch.exchange(0, std::memory_order_relaxed) != 0)
+        QMetaObject::invokeMethod(this, [this]() {
+            m_lastHeldBy = showOnlyHeldBy();
+            emit showOnlyChanged();
+        }, thread() == QThread::currentThread() ? Qt::DirectConnection : Qt::QueuedConnection);
 }
 
 OutputRuleKeeper::HeldBy OutputRuleKeeper::showOnlyHeldBy() const
 {
     if (m_showOnly.isEmpty())
         return NotHeld;
-    if (emergencyStopped())
-        return HeldByEmergencyStop;
     if (m_doc->mode() != Doc::Operate)
         return HeldByDesign;
+    if (emergencyStopped())
+        return HeldByEmergencyStop;
     if (m_doc->inputOutputMap()->outputInhibited())
         return HeldByBlind;
     return NotHeld;
@@ -368,7 +365,7 @@ QString OutputRuleKeeper::showOnlyHeldText() const
     const HeldBy by = showOnlyHeldBy();
     if (by == NotHeld)
         return QString();
-    const QString why = by == HeldByEmergencyStop ? tr("emergency stop, until the next GO")
+    const QString why = by == HeldByEmergencyStop ? tr("emergency stop -- a GO or a control you move drives them again")
                       : by == HeldByBlind ? tr("Blind") : tr("Design");
 
     /* Named by what they are when they are all one kind: "Lasers held". */
@@ -462,7 +459,6 @@ void OutputRuleKeeper::rebuild()
         u->setShowOnlySafeValues(i < safe.size() ? safe.at(i) : QByteArray());
         u->setOutputRules(i < bits.size() ? bits.at(i) : QByteArray());
         u->setShowOnlyLive(m_doc->mode() == Doc::Operate);
-        u->setShowOnlyEmergencyStop(emergencyStopped());
     }
     const HeldBy by = showOnlyHeldBy();
     if (showOnlyListChanged || by != m_lastHeldBy)

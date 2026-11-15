@@ -47,16 +47,13 @@ void LastLookEffect::apply(const QSet<quint32> &renewAddresses, bool renewAll)
     });
 }
 
-QList<LastLookEffect::ChannelHold> LastLookEffect::withoutShowOnly(const QList<ChannelHold> &channels,
-                                                                  bool always) const
+QList<LastLookEffect::ChannelHold> LastLookEffect::withoutShowOnly(const QList<ChannelHold> &channels) const
 {
-    /* Show only, the emergency stop: a look captured while it holds (a
-       show stopped by it, its postRun on the next tick, reads the values
-       from before the stop) never holds a Show-only channel. By the
-       universe's own bits: no fixture lookup, safe on the timer thread. */
-    const OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
-    if (!always && (rules == nullptr || !rules->emergencyStopped()))
-        return channels;
+    /* Show only (OutputRuleKeeper, S3): a last look never holds a
+       Show-only channel. A capture is no operator action -- a show stopped
+       by All Off captures on the next tick what it had before the stop.
+       By the universe's own bits: no fixture lookup, safe on the timer
+       thread. */
     const QList<Universe *> ua = m_doc->inputOutputMap()->universes();
     QList<ChannelHold> out;
     out.reserve(channels.size());
@@ -71,20 +68,10 @@ QList<LastLookEffect::ChannelHold> LastLookEffect::withoutShowOnly(const QList<C
     return out;
 }
 
-void LastLookEffect::dropShowOnly()
-{
-    QMutexLocker locker(&m_mutex);
-    const QList<ChannelHold> kept = withoutShowOnly(m_entries, true);
-    if (kept.size() == m_entries.size())
-        return;
-    m_entries = kept;
-    apply();
-}
-
 void LastLookEffect::hold(const QList<ChannelHold> &channels)
 {
     QMutexLocker locker(&m_mutex);
-    m_entries = withoutShowOnly(channels, false);
+    m_entries = withoutShowOnly(channels);
     apply(QSet<quint32>(), true);
 }
 
@@ -97,7 +84,7 @@ void LastLookEffect::addHold(const QList<ChannelHold> &channels)
     QSet<quint32> incoming;
     for (const ChannelHold &c : channels)
         incoming.insert(c.fixtureId);
-    const QList<ChannelHold> fresh0 = withoutShowOnly(channels, false);
+    const QList<ChannelHold> fresh0 = withoutShowOnly(channels);
 
     QMutexLocker locker(&m_mutex);
     QList<ChannelHold> merged;

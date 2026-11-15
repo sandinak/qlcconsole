@@ -3042,14 +3042,14 @@ void ShowManager::claimForShow()
 {
     /* The Show tab's Play in Operate is an explicit run, as a GO: the show
        is the show from now on for Show-only fixtures (started again by
-       this tab, which restarts nothing) and the emergency stop's hold lets
-       go. In Design it stays held, as everything there is. */
+       this tab, which restarts nothing). In Design it stays held, as
+       everything there is. */
     if (m_show == NULL || m_doc->mode() != Doc::Operate)
         return;
     if (m_show->isRunning())
         m_show->start(m_doc->masterTimer(), functionParent());
     if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
-        rules->releaseEmergencyStop();
+        rules->noteGo();
 }
 
 FunctionParent ShowManager::functionParent() const

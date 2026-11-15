@@ -1168,6 +1168,9 @@ void VCCueList::playSubCue(int index, int subIndex)
 
     if (ch->isRunning())
     {
+        // A GO: through the double-GO guard first.
+        if (!admitDirect(ShowControl::Go))
+            return;
         ch->setAction(action);
         claimRunning(ch);
         return;
@@ -1438,7 +1441,8 @@ void VCCueList::startChaser(int startIndex)
     ch->setAction(action);
 
     ch->start(m_doc->masterTimer(), functionParent());
-    releaseEmergencyStop();
+    if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+        rules->noteGo();
     emit functionStarting(m_chaserID);
 }
 
@@ -1677,6 +1681,9 @@ void VCCueList::slotSideFaderValueChanged(int value)
 
         if (newStep == ch->currentStepIndex())
             return;
+        // A step is a GO: through the double-GO guard first.
+        if (!admitDirect(ShowControl::Go))
+            return;
 
         ChaserAction action;
         action.m_action = ChaserSetStepIndex;
@@ -1697,8 +1704,11 @@ void VCCueList::slotSideFaderValueChanged(int value)
         Chaser *ch = chaser();
         if (!(ch == NULL || ch->stopped()))
         {
-            // The crossfader is the show (a VC action): the list with it.
-            claimRunning(ch);
+            /* The crossfader is the show (a VC action): it claims the list
+               once, through the double-GO guard; the fade itself is never
+               held (it starts nothing). */
+            if (ch->previewGate()->load() && admitDirect(ShowControl::Go))
+                claimRunning(ch);
             ch->adjustStepIntensity(qreal(value) / 100.0, m_primaryTop ? m_primaryIndex : m_secondaryIndex,
                                     Chaser::FadeControlMode(getFadeMode()));
             ch->adjustStepIntensity(qreal(100 - value) / 100.0, m_primaryTop ? m_secondaryIndex : m_primaryIndex,
@@ -2011,6 +2021,9 @@ void VCCueList::playCueAtIndex(int idx)
     }
     else if (ch->isRunning())
     {
+        // A GO: through the double-GO guard first.
+        if (!admitDirect(ShowControl::Go))
+            return;
         ChaserAction action;
         action.m_action = ChaserSetStepIndex;
         action.m_stepIndex = m_primaryIndex;
@@ -2047,15 +2060,8 @@ void VCCueList::claimRunning(Chaser *ch)
        drive Show-only fixtures (Fixture::ShowOnly). */
     if (ch != NULL && ch->isRunning())
         ch->start(m_doc->masterTimer(), functionParent());
-    releaseEmergencyStop();
-}
-
-void VCCueList::releaseEmergencyStop()
-{
-    // A GO from the cue list: the emergency stop's hold on Show-only
-    // fixtures lets go (Operate).
     if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
-        rules->releaseEmergencyStop();
+        rules->noteGo();
 }
 
 FunctionParent VCCueList::functionParent() const

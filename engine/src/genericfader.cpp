@@ -60,16 +60,18 @@ void GenericFader::bumpLiveEpoch()
     s_liveEpoch.fetch_add(1, std::memory_order_relaxed);
 }
 
-static std::atomic<quint32> s_stopEpoch { 1 };
-
-quint32 GenericFader::stopEpoch()
+void GenericFader::setChannelLiveEpoch(int address, quint32 epoch)
 {
-    return s_stopEpoch.load(std::memory_order_relaxed);
+    QMutexLocker locker(&m_channelEpochMutex);
+    m_channelEpochs.insert(address, epoch);
+    m_channelStamped.store(true, std::memory_order_relaxed);
 }
 
-void GenericFader::bumpStopEpoch()
+bool GenericFader::channelLive(int address) const
 {
-    s_stopEpoch.fetch_add(1, std::memory_order_relaxed);
+    QMutexLocker locker(&m_channelEpochMutex);
+    const auto it = m_channelEpochs.constFind(address);
+    return it != m_channelEpochs.constEnd() && it.value() == liveEpoch();
 }
 
 const GenericFader::PreviewGate *GenericFader::creationGate()

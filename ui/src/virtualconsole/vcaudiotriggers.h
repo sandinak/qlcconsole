@@ -24,6 +24,7 @@
 #include <QVBoxLayout>
 #include <QToolButton>
 #include <QLabel>
+#include <atomic>
 
 #include "audiotriggerwidget.h"
 #include "clickandgoslider.h"
@@ -201,6 +202,10 @@ public:
      * @param frame_root The button's VCFrame XML parent node to save to
      */
     bool saveXML(QXmlStreamWriter *doc) override;
+
+private:
+    /** Show only: the live session the operator last switched it on in */
+    std::atomic<quint32> m_liveEpoch { 0 };
 };
 
 /** @} */

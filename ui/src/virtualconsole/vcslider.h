@@ -25,6 +25,7 @@
 #include <QMutex>
 #include <QList>
 #include <climits>
+#include <atomic>
 
 #include "clickandgoslider.h"
 #include "clickandgowidget.h"
@@ -520,6 +521,8 @@ protected:
     uchar m_levelLowLimit;
     uchar m_levelHighLimit;
 
+    /** Show only: the live session it was last really moved in */
+    std::atomic<quint32> m_liveEpoch { 0 };
     QMutex m_levelValueMutex;
     bool m_levelValueChanged;
     uchar m_levelValue;

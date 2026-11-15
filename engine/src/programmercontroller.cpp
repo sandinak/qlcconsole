@@ -1386,6 +1386,7 @@ void ProgrammerController::stepCurrentChaser(int direction)
     ShowControl *sc = m_doc->showControl();
     const bool operate = m_doc->mode() == Doc::Operate;
     Chaser *chaser = nullptr;
+    Function *claimRoot = nullptr;
     if (!operate)
     {
         chaser = qobject_cast<Chaser*>(m_doc->function(running.last()));
@@ -1397,10 +1398,22 @@ void ProgrammerController::stepCurrentChaser(int direction)
            Workbench; a list nested in another is stepped as that one. */
         for (int i = int(running.size()) - 1; i >= 0 && chaser == nullptr; --i)
         {
-            Function *root = rootFunctionOf(m_doc, m_doc->function(running.at(i)));
-            Chaser *c = qobject_cast<Chaser*>(root);
-            if (c != nullptr && c->isRunning() && playedByTheShow(c))
-                chaser = c;
+            Chaser *own = qobject_cast<Chaser*>(m_doc->function(running.at(i)));
+            Function *root = rootFunctionOf(m_doc, own);
+            if (root == nullptr || !root->isRunning() || !playedByTheShow(root))
+                continue;
+            if (Chaser *c = qobject_cast<Chaser*>(root))
+            {
+                chaser = c;             // a list, or a list inside a list: the root
+            }
+            else if (own != nullptr && own->isRunning())
+            {
+                /* A chaser inside a Show's timeline (or a collection): it is
+                   stepped itself and follows its root's gate; the root is
+                   claimed (the GO is the show's). */
+                chaser = own;
+                claimRoot = root;
+            }
         }
         if (chaser == nullptr)
         {
@@ -1437,7 +1450,9 @@ void ProgrammerController::stepCurrentChaser(int direction)
     action.m_fadeMode = Chaser::FromFunction;
     chaser->setAction(action);
     // In Operate the VC's step button is a GO: the list is the show.
-    if (operate && sc != NULL)
+    if (operate && claimRoot != nullptr)
+        claimRoot->start(m_doc->masterTimer(), FunctionParent::master());   // renewed, nothing restarts
+    else if (operate && sc != NULL)
         sc->claim(chaser);
 }
 

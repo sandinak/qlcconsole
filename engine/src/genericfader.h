@@ -24,6 +24,7 @@
 #include <functional>
 #include <QList>
 #include <QHash>
+#include <QMutex>
 #include <mutex>
 #include <memory>
 #include <atomic>
@@ -320,59 +321,53 @@ public:
      *  faders it makes (Function::previewGate()) */
     typedef std::shared_ptr<std::atomic<bool> > PreviewGate;
 
-    /** True when this fader is not the show -- a preview's function, the
-     *  Workbench, focus, Locate, a fixture test -- and so, live (Operate),
-     *  is kept off the Show-only channels (Universe::setShowOnlyLive()).
-     *  Set by its owner (setHoldsShowOnly()) or, for a function's fader,
-     *  by what started that function, at once when that changes. Read
-     *  once a frame on the universe thread. */
+    /** Show only, the one rule (OutputRuleKeeper, rules S1-S3 and E1-E7):
+     *  a Show-only channel goes out in Operate only from a writer stamped
+     *  in the current live session. What a fader is:
+     *   - a function's (made in its CreationScope): its function's gate;
+     *   - held (setHoldsShowOnly(): a preview, focus, Locate, a test);
+     *   - stamped (setLiveEpoch(): Park, Mark, a cue stack, a VC slider,
+     *     XY pad or audio DMX bar -- the stamp is its owner's, given again
+     *     on every write, so a fader rebuilt from a control left up stays
+     *     as old as the control);
+     *   - stamped per channel (setChannelLiveEpoch(): the Simple Desk);
+     *   - trusted (setTrustedForShowOnly(): the effect runner, which sorts
+     *     its writes by their scenes' gates itself);
+     *   - none of these: not the show -- held.
+     *  True when the whole fader is held. Read once a frame on the
+     *  universe thread. */
     bool holdsShowOnly() const
     {
-        return m_holdsShowOnly.load(std::memory_order_relaxed)
-               || (m_previewGate && m_previewGate->load(std::memory_order_relaxed))
-               || (m_liveBound.load(std::memory_order_relaxed)
-                   && m_liveEpoch.load(std::memory_order_relaxed) != liveEpoch())
-               || (m_stopBound.load(std::memory_order_relaxed)
-                   && m_stopEpoch.load(std::memory_order_relaxed) != stopEpoch());
+        if (m_holdsShowOnly.load(std::memory_order_relaxed))
+            return true;
+        if (m_previewGate)
+            return m_previewGate->load(std::memory_order_relaxed);
+        if (m_liveBound.load(std::memory_order_relaxed))
+            return m_liveEpoch.load(std::memory_order_relaxed) != liveEpoch();
+        if (m_trusted.load(std::memory_order_relaxed) || m_channelStamped.load(std::memory_order_relaxed))
+            return false;
+        return true;
     }
-
-    /** The emergency stop (OutputRuleKeeper::emergencyStop()): a hand's
-     *  fader -- not a function's, not already stamped by session, not
-     *  already held -- left up when it struck is frozen: it holds the
-     *  Show-only channels from then on, so nothing from before the stop
-     *  comes back when the stop lets go, until its owner is moved again
-     *  (unfreezeStop(): the Simple Desk, a VC slider). */
-    void freezeForStop(quint32 stopEpochBefore)
-    {
-        if (m_previewGate || m_holdsShowOnly.load(std::memory_order_relaxed)
-            || m_liveBound.load(std::memory_order_relaxed) || m_stopBound.load(std::memory_order_relaxed))
-            return;
-        m_stopEpoch.store(stopEpochBefore, std::memory_order_relaxed);
-        m_stopBound.store(true, std::memory_order_relaxed);
-    }
-    /** Moved after the stop: its owner's hand again */
-    void unfreezeStop()
-    {
-        if (m_stopBound.load(std::memory_order_relaxed))
-            m_stopEpoch.store(stopEpoch(), std::memory_order_relaxed);
-    }
-    /** Bumped by each emergency stop */
-    static quint32 stopEpoch();
-    static void bumpStopEpoch();
     void setHoldsShowOnly(bool hold) { m_holdsShowOnly.store(hold, std::memory_order_relaxed); }
+    /** It sorts its own writes (the effect runner): never held whole */
+    void setTrustedForShowOnly(bool trusted) { m_trusted.store(trusted, std::memory_order_relaxed); }
 
-    /** What a fader not a function's holds was set by hand (Park, Mark, a
-     *  held last look): it is the show only when set in this Operate
-     *  session. Stamps it now; from the next switch to Operate on, until
-     *  stamped again, it holds the Show-only channels. */
+    /** Stamped by its owner now (an operator action in this session) */
     void stampLiveEpoch() { setLiveEpoch(liveEpoch()); }
-    /** Stamp it with session @p epoch (a playback stamped when it was
-     *  last started or stepped: a Simple Desk cue stack) */
+    /** Stamped with session @p epoch: its owner's, whenever that was */
     void setLiveEpoch(quint32 epoch)
     {
         m_liveEpoch.store(epoch, std::memory_order_relaxed);
         m_liveBound.store(true, std::memory_order_relaxed);
     }
+
+    /** Stamped channel by channel (the Simple Desk: each channel its own
+     *  control): channel @p address of its universe set in session
+     *  @p epoch. A channel never stamped is held. */
+    void setChannelLiveEpoch(int address, quint32 epoch);
+    bool channelStamped() const { return m_channelStamped.load(std::memory_order_relaxed); }
+    /** Whether channel @p address may go out (stamped in this session) */
+    bool channelLive(int address) const;
 
     /** Show only's Operate session: bumped each time Operate starts
      *  (Function::startLiveSession()). Whatever was started or set before
@@ -437,8 +432,10 @@ private:
     std::atomic<bool> m_holdsShowOnly { false };
     std::atomic<bool> m_liveBound { false };
     std::atomic<quint32> m_liveEpoch { 0 };
-    std::atomic<bool> m_stopBound { false };
-    std::atomic<quint32> m_stopEpoch { 0 };
+    std::atomic<bool> m_trusted { false };
+    std::atomic<bool> m_channelStamped { false };
+    mutable QMutex m_channelEpochMutex;
+    QHash<int, quint32> m_channelEpochs;
     /** Set once, when made (CreationScope): never changes after */
     PreviewGate m_previewGate;
 

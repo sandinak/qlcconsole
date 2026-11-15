@@ -806,7 +806,9 @@ together:
 | **Show only** | Only a real run of the show drives it: a GO in **Operate**. Everywhere else it stays at its safe value — off, closed — while the plot still draws what it would do. |
 
 **Show only**, in full. Building looks must never fire a laser, a fogger
-or a flame relay. So:
+or a flame relay. One rule decides it: **in Operate, a Show-only fixture
+answers only to what was started, set or moved since Operate began** (and,
+after an emergency stop, since the stop). So:
 
 - **Held** (its output stays safe): everything in **Design** — the Show
   Tree's preview, **Solo**, the Workbench, a GO from the Run tab while you
@@ -814,61 +816,63 @@ or a flame relay. So:
   either mode. In Operate the things that are not the show stay off it
   too: the Workbench, **Locate** (greyed for it, as for a laser),
   Highlight, the programmer's flash, focus calls, **Quick Focus** and
-  **Venue Focus**, Refine, a fixture test, a power measurement.
-- **Driven**: in **Operate**, a GO from anywhere (the Run tab, the pad, the
-  phone, QLab, a Stream Deck, the Show Tree, a VC cue list or a VC step
-  button, the Show tab's Play), the cue's hits and effects, and the
-  **Simple Desk**'s channel faders — a fader pushed on its channel there
-  is your own hand on it, which is how you test a fogger before doors.
-- **Not GOs, but the show**: in Operate, VC buttons, sliders, the XY pad,
-  audio triggers, a Control Map MIDI or OSC binding and the web page's
-  function command drive it as the show does.
+  **Venue Focus**, Refine, a fixture test, a power measurement, editors'
+  Test buttons (and the Show editor's Play, and what a Script under one
+  starts) and the Scene editor's own output.
+- **What counts as the show** in Operate: a GO from anywhere (the Run tab,
+  the pad, the phone, QLab, a Stream Deck, the Show Tree, a VC cue list or
+  a VC step button, the Show tab's Play), the cue's hits and effects; and,
+  set or moved in Operate, a **Simple Desk** channel (your own hand on it,
+  which is how you test a fogger before doors), a **Park**, a **Mark** or
+  a Simple Desk **cue stack**. Not GOs, but the show too: VC buttons,
+  sliders, the XY pad, a Control Map MIDI or OSC binding and the web
+  page's function command; audio triggers and a VC Clock's schedule once
+  you have switched them on (or touched them) in Operate.
+- **Cues left running from Design hold Show-only fixtures until a GO in
+  Operate.** A list you tried out in Design and left running keeps them
+  safe after the switch until you GO on it (a GO on a running list makes it
+  the show without restarting it). A Park, Mark or cue stack set in Design,
+  or a VC slider or Simple Desk channel left up from Design, holds them
+  until you set or move it again in Operate; parking another fixture does
+  not wake it.
+- **When a cue lets go**, its Show-only fixtures go to safe at once: they
+  never fade out of a cue (a stopped cue is no longer the show).
+- **A last look** never holds a Show-only fixture.
 - **Its safe value**: every intensity channel at 0 (a relay open, a laser
   or flame off); a laser's, fogger's, hazer's or plain dimmer's every
   channel at 0; anything else at its default (a gobo or colour wheel open).
+  It is also what the channel goes back to when nothing drives it — never
+  its definition's default (a laser's control mode).
 - **Switching** to Operate starts it from safe: nothing a Design preview
   left on it comes out (nor when you give it the rule while in Operate).
-  Back to Design, it is safe again at once. A preview stopped in Operate
-  fades out without ever reaching it.
+  Back to Design, it is safe again at once.
 - **Blackout always wins**: it puts a Show-only fixture at its safe value,
   even one marked Ignore Blackout. Ticking **Show only** unticks and greys
   **Ignore Blackout** in the dialog, and says why.
 - **The emergency stop** (the pad's, the phone's or the laptop's **All
   Off**) cuts every Show-only fixture to its safe value at once, with no
-  fade, and holds it there whatever drives it — Park, the Simple Desk, a
-  VC slider — until the next GO in Operate. The footer says **… held:
-  emergency stop, until the next GO**. **Nothing from before the stop
-  comes back** when that GO lets it go: what was stored on those channels
-  is reset, every last look loses them (and a look captured while the stop
-  holds never has them), the Simple Desk lets go of them, and a VC slider
-  or fader left up holds them until you move it again. Other lights stop
-  as All Off always stopped them. Opening another show clears the stop.
+  fade, and starts afresh, as switching to Operate does: **nothing from
+  before the stop comes back**. A GO drives what it starts; a control
+  drives once you move it again; an audio trigger or VC Clock once you
+  switch it on or touch it again. A GO on another list does not bring back
+  a fade-out, a stored level, a last look, a Park or a fader left up from
+  before the stop. The Simple Desk lets go of the Show-only channels you
+  had not moved since. The footer says **… held: emergency stop -- a GO or
+  a control you move drives them again** until the next GO (what that GO
+  does not drive stays held) or the next switch of mode.
+  Other lights stop as All Off always stopped them. Opening another show
+  clears it.
 - **With On when not in use**, Show only wins: nothing turns a laser or a
   flame on just because nothing else is using it.
-- **Editors' Test buttons** (and the Show editor's Play, and what a Script
-  under one starts) and the Scene editor's own output are not the show
-  either: they are held like a preview.
-- **Cues left running from Design hold Show-only fixtures until a GO in
-  Operate.** Nothing moves a laser, fogger or flame without a GO in
-  Operate: a list you tried out in Design and left running keeps them safe
-  after the switch until you GO on it (Run tab, pad, phone, QLab, the Show
-  Tree, the VC cue list -- a GO on a running list makes it the show without
-  restarting it). Park and Mark set in Design hold them too, each fixture
-  until it is set again in Operate (parking another fixture does not wake
-  it), and so does a last look held from Design. A Simple Desk **cue
-  stack** is playback: one left playing from Design holds them until it is
-  stepped in Operate. The Show tab's **Play** in Operate is a GO (on a show
-  left running from Design it takes it, it does not pause it); in Design it
-  is held. A VC cue list's crossfader is a GO on a list already running;
-  it never starts one.
 - **The VC step button** in Operate steps only the show: the most recent
   list playing as the show — never a preview, an editor's Test or the
-  Workbench — and a list inside another as that list. With none, it says
-  so and does nothing.
+  Workbench — and a list inside another as that list (a chaser on a Show's
+  timeline steps itself, as part of its Show). With none, it says so and
+  does nothing. A VC cue list's crossfader is a GO on a list already
+  running (it never starts one), and its step and cue changes are held by
+  the double-GO guard as any GO is.
 - **Move-in-black** never pre-sets a Show-only fixture: a laser's mode
   channel may be what turns it on.
-- **The Simple Desk**'s channel faders are your own hand on the channel: a
-  level you push there drives it in Operate, also one left up from Design.
 - **Identify and Reset** (the plot's and Fixture Properties' DMX Controls,
   the Fixtures tab's Reset) are refused for a Show-only fixture, in Design
   and Operate, as Locate is — greyed, saying why.

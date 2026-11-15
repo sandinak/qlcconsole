@@ -781,27 +781,18 @@ void Universe::setShowOnlyLive(bool live)
     m_showOnlyLive.store(true, std::memory_order_relaxed);
 }
 
-void Universe::setShowOnlyEmergencyStop(bool stop)
+void Universe::cutShowOnly()
 {
-    if (stop == false)
-    {
-        m_showOnlyEStop.store(false, std::memory_order_relaxed);
-        return;
-    }
-    /* The stop cleans up what it stops: what is stored on a Show-only
-       channel (a GO's LTP level) goes back to safe NOW, between two
-       frames, so nothing from before the stop is there when it lets go. */
+    /* The emergency stop (E1): what is stored on a Show-only channel goes
+       back to safe NOW, between two frames, as going live does. */
     QMutexLocker frameLocker(&m_frameMutex);
+    QMutexLocker locker(&m_outputRulesMutex);
+    for (int c : std::as_const(m_showOnlyChannels))
     {
-        QMutexLocker locker(&m_outputRulesMutex);
-        for (int c : std::as_const(m_showOnlyChannels))
-        {
-            (*m_preGMValues)[c] = m_showOnlySafe.at(c);
-            (*m_blackoutValues)[c] = m_showOnlySafe.at(c);
-            updatePostGMValue(c);
-        }
+        (*m_preGMValues)[c] = m_showOnlySafe.at(c);
+        (*m_blackoutValues)[c] = m_showOnlySafe.at(c);
+        updatePostGMValue(c);
     }
-    m_showOnlyEStop.store(true, std::memory_order_relaxed);
 }
 
 void Universe::markShowOnly(int channel, bool on, uchar safe)
@@ -845,24 +836,17 @@ void Universe::markShowOnly(int channel, bool on, uchar safe)
     updatePostGMValue(channel);
 }
 
-void Universe::freezeFadersForStop(quint32 stopEpochBefore)
-{
-    QMutexLocker fadersLocker(&m_fadersMutex);
-    for (const QSharedPointer<GenericFader> &f : std::as_const(m_faders))
-        if (!f.isNull())
-            f->freezeForStop(stopEpochBefore);
-}
-
 bool Universe::showOnlyHeld() const
 {
     return showOnlyChannelCount() > 0
-           && (showOnlyLive() == false || m_inhibitOutput.load(std::memory_order_relaxed)
-               || showOnlyEmergencyStop());
+           && (showOnlyLive() == false || m_inhibitOutput.load(std::memory_order_relaxed));
 }
 
 void Universe::writeFader(GenericFader *fader, bool keepShowOnly)
 {
-    if (keepShowOnly == false || fader->holdsShowOnly() == false)
+    const bool whole = keepShowOnly && fader->holdsShowOnly();
+    const bool perChannel = keepShowOnly && !whole && fader->channelStamped();
+    if (!whole && !perChannel)
     {
         fader->write(this);
         return;
@@ -879,6 +863,10 @@ void Universe::writeFader(GenericFader *fader, bool keepShowOnly)
     for (int i = 0; i < n; i++)
     {
         const int c = m_showOnlyChannels.at(i);
+        // Stamped channel by channel (the Simple Desk): only the channels
+        // moved in this session go through.
+        if (perChannel && fader->channelLive(c))
+            continue;
         if (uchar(m_preGMValues->at(c)) != m_showOnlyKept.at(i))
         {
             (*m_preGMValues)[c] = char(m_showOnlyKept.at(i));
@@ -1616,8 +1604,7 @@ void Universe::dumpOutputFrame(const QByteArray &data, bool dataChanged, bool li
     // A reset still to come (a channel just made Show only while live) is
     // held until the frame that does it.
     const bool showOnlyHold = showOnly && (live == false || inhibit
-                                           || m_showOnlyReset.load(std::memory_order_relaxed)
-                                           || m_showOnlyEStop.load(std::memory_order_relaxed));
+                                           || m_showOnlyReset.load(std::memory_order_relaxed));
 
     // Fork Blind: hold the physical rig dark while the preview keeps running.
     // processFaders() still emits universeWritten() (the 2D monitor source),
@@ -1889,6 +1876,14 @@ void Universe::setChannelDefaultValue(ushort channel, uchar value)
 
     if (channel >= m_usedChannels)
         m_usedChannels = channel + 1;
+
+    /* E6: a Show-only channel's "nothing drives it" value is its safe
+       value, never its definition's default (a laser's control mode). */
+    if (uchar(m_channelsMask->at(channel)) & ShowOnlyOutput)
+    {
+        QMutexLocker locker(&m_outputRulesMutex);
+        value = uchar(m_showOnlySafe.at(channel));
+    }
 
     (*m_preGMValues)[channel] = value;
     updatePostGMValue(channel);

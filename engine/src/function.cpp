@@ -26,6 +26,7 @@
 #include <QDebug>
 #include <math.h>
 #include <utility>
+#include <QHash>
 
 #include "qlcmacros.h"
 #include "genericfader.h"
@@ -1244,6 +1245,35 @@ QList<FunctionParent> Function::sources() const
     return m_sources;
 }
 
+static QMutex s_autoSourcesMutex;
+static QHash<quint32, quint32> s_autoSources;    // AutoVCWidget id -> session armed in
+
+quint32 Function::autoSourceEpoch(const FunctionParent &source)
+{
+    QMutexLocker locker(&s_autoSourcesMutex);
+    const auto it = s_autoSources.constFind(source.id());
+    if (it != s_autoSources.constEnd())
+        return it.value();
+    const quint32 now = GenericFader::liveEpoch();
+    s_autoSources.insert(source.id(), now);
+    return now;
+}
+
+void Function::armAutoSource(const FunctionParent &source)
+{
+    {
+        QMutexLocker locker(&s_autoSourcesMutex);
+        s_autoSources.insert(source.id(), GenericFader::liveEpoch());
+    }
+    sourcesChanged();
+}
+
+void Function::clearAutoSources()
+{
+    QMutexLocker locker(&s_autoSourcesMutex);
+    s_autoSources.clear();
+}
+
 void Function::startLiveSession()
 {
     GenericFader::bumpLiveEpoch();
@@ -1271,7 +1301,12 @@ Function::SourceGate Function::sourceGate(const FunctionParent &source) const
        on the timer thread. Started from anywhere else it is a real source. */
     if (g.notTheShow == false && source.type() == FunctionParent::Function && source.id() != id())
         g.parentGate = GenericFader::creationGateOf(source.id());
-    g.epoch = GenericFader::liveEpoch();
+    /* E3: an automatic widget (an audio trigger's function bar, a VC
+       Clock's schedule) starts on its own, not by a hand: it is the show
+       only from the session it was armed in (armAutoSource()); its very
+       first start since the show opened counts as arming it. */
+    g.epoch = (g.notTheShow == false && source.type() == FunctionParent::AutoVCWidget)
+              ? autoSourceEpoch(source) : GenericFader::liveEpoch();
     return g;
 }
 
@@ -1293,11 +1328,11 @@ bool Function::storeGateLocked()
         if (real)
             notTheShow = false;
     }
-    /* Latched: with no source left it is stopping, and what fades out
-       fades as what it was -- a preview's level is never handed to the
-       show on its way out. */
+    /* E5: with no source left it is stopping -- nothing that is the show
+       holds it any more, so what fades out is held: a cue stopped by All
+       Off, or let go by the next GO, never fades a laser out. */
     if (any == false)
-        return false;
+        notTheShow = true;
     return m_previewGate->exchange(notTheShow, std::memory_order_relaxed) != notTheShow;
 }
 
@@ -1382,6 +1417,8 @@ void Function::stop(FunctionParent source, bool preserveAttributes)
             }
         }
     }
+    // Worked out now, not at the next tick: stopped is held at once (E1, E5).
+    storeGateLocked();
     sourcesChanged();
 
     if (m_sources.size() == 0)

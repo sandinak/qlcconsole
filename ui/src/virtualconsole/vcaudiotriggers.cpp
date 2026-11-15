@@ -148,6 +148,8 @@ VCAudioTriggers::VCAudioTriggers(QWidget* parent, Doc* doc)
 
 VCAudioTriggers::~VCAudioTriggers()
 {
+    // Registered in Operate (slotModeChanged()): never ticked once gone.
+    m_doc->masterTimer()->unregisterDMXSource(this);
     QSharedPointer<AudioCapture> capture(m_doc->audioInputCapture());
 
     if (m_inputCapture == capture.data())
@@ -249,6 +251,17 @@ void VCAudioTriggers::slotEnableButtonToggled(bool toggle)
     if (mode() == Doc::Design)
         return;
 
+    /* Show only (S3, E3): switched on by the operator in Operate -- its
+       function bars and its DMX bars are the show in this session. */
+    if (toggle)
+    {
+        m_liveEpoch.store(GenericFader::liveEpoch(), std::memory_order_relaxed);
+        Function::armAutoSource(FunctionParent(FunctionParent::AutoVCWidget, id()));
+        if (m_volumeBar != nullptr)
+            Function::armAutoSource(m_volumeBar->functionParent());
+        for (const AudioBar *sb : std::as_const(m_spectrumBars))
+            Function::armAutoSource(sb->functionParent());
+    }
     enableCapture(toggle);
     updateFeedback();
 }
@@ -323,6 +336,7 @@ void VCAudioTriggers::writeDMX(MasterTimer *timer, QList<Universe *> universes)
                 }
                 lastUniverse = universe;
                 fader->setEnabled(m_button->isChecked() ? true : false);
+                fader->setLiveEpoch(m_liveEpoch.load(std::memory_order_relaxed));
             }
 
             GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[universe], Fixture::invalidId(), absAddress);           
@@ -351,6 +365,7 @@ void VCAudioTriggers::writeDMX(MasterTimer *timer, QList<Universe *> universes)
                         m_fadersMap[universe] = fader;
                     }
                     fader->setEnabled(m_button->isChecked() ? true : false);
+                    fader->setLiveEpoch(m_liveEpoch.load(std::memory_order_relaxed));
                     lastUniverse = universe;
                 }
 

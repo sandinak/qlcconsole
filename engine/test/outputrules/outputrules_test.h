@@ -22,6 +22,8 @@
 
 #include <QObject>
 #include <QSharedPointer>
+#include <functional>
+#include "qlcchannel.h"
 
 class GenericFader;
 class IOPluginStub;
@@ -209,6 +211,25 @@ private slots:
     /** L3: an emergency stop from a plugin's thread acts at once */
     void anEmergencyStopFromAnotherThreadActsAtOnce();
 
+    /* Fifth review (red until fixed) */
+    /** A show's scene fading out after All Off is still the show: a GO on
+     *  another list lets the latch go and the fade-out reaches the flame */
+    void aShowsFadeOutAfterTheStopStaysOut();
+
+private slots:
+    /* The e-stop rules (OutputRuleKeeper E1-E7), swept: each writer set
+       up in Operate, All Off, an unrelated GO -- held -- then its own
+       operator action -- driven */
+    void sweepFunctionFadeOut();
+    void sweepChaserStepFade();
+    void sweepEfx();
+    void sweepRgbMatrix();
+    void sweepPark();
+    void sweepMark();
+    void sweepLastLook();
+    void sweepCueStack();
+    void sweepEffectRunner();
+
 private:
     /** One processFaders() frame; the output value at @p address */
     int frame(int address);
@@ -225,6 +246,14 @@ private:
     void checkGrandMasterAndBlackout(int address, int full);
     /** A one-step scene of @p values (address, value), started by @p parent */
     class Scene *startScene(const QList<QPair<int, int> > &values, quint32 parentType, quint32 parentId);
+    /** A Show-only fixture of its own definition, channels @p chans */
+    class Fixture *addShowOnlyDef(const QString &name, int address,
+                                  const QList<QPair<QLCChannel::Group, QLCChannel::PrimaryColour> > &chans);
+    class Chaser *listOf(class Function *step);
+    void goList(class Chaser *c);
+    void sweep(int address, const std::function<void()> &tickOnce,
+               const std::function<void()> &setUp, const std::function<void()> &again,
+               const std::function<void()> &afterStop = std::function<void()>());
     /** Every function stopped and gone from the master timer */
     void stopFunctions();
     /** What went out at @p address, the last frame */

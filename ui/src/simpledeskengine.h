@@ -56,8 +56,9 @@ public:
     SimpleDeskEngine(Doc* doc);
     virtual ~SimpleDeskEngine();
 
-    /** The emergency stop: let go of every Show-only channel it holds */
-    void releaseShowOnlyChannels();
+    /** The emergency stop that started session @p session: let go of every
+     *  Show-only channel it holds that was not moved since */
+    void releaseShowOnlyChannels(quint32 session);
 
     /** Start from scratch; clear everything */
     void clearContents();
@@ -102,6 +103,8 @@ private:
     /** A map of channel absolute addresses and their values.
       * Note that only channels overridden by Simple Desk are here */
     QMap <uint,uchar> m_values;
+    /** Show only: the session each channel was last really moved in */
+    QHash <uint,quint32> m_channelEpochs;
 
     /** A list of commands to be executed on writeDMX.
      *  This is used to sync reset requests with mastertimer ticks */

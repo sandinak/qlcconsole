@@ -52,6 +52,7 @@
 #include "scene.h"
 #include "efx.h"
 #include "doc.h"
+#include "genericfader.h"
 
 const quint8 VCXYPad::panInputSourceId = 0;
 const quint8 VCXYPad::tiltInputSourceId = 1;
@@ -413,6 +414,8 @@ void VCXYPad::writeXYFixtures(MasterTimer *timer, QList<Universe *> universes)
                 fader->adjustIntensity(intensity());
                 m_fadersMap[universe] = fader;
             }
+            // Show only: the pad's own stamp (S3), on whatever fader it writes.
+            fader->setLiveEpoch(m_liveEpoch.load(std::memory_order_relaxed));
             fixture.writeDMX(x, y, fader, universes[universe]);
         }
     }
@@ -453,6 +456,7 @@ void VCXYPad::writeScenePositions(MasterTimer *timer, QList<Universe *> universe
             fader->adjustIntensity(intensity());
             m_fadersMap[sc.m_universe] = fader;
         }
+        fader->setLiveEpoch(m_liveEpoch.load(std::memory_order_relaxed));
 
         if (sc.m_group == QLCChannel::Pan)
         {
@@ -487,6 +491,14 @@ void VCXYPad::slotPositionChanged(const QPointF& pt)
 {
     if (m_sliderInteraction == true)
         return;
+
+    /* Show only (S3): moved to a new place in Operate -- by a hand on the
+       pad or its input -- it is the show from now on. */
+    if (mode() == Doc::Operate && pt != m_stampedPosition)
+    {
+        m_stampedPosition = pt;
+        m_liveEpoch.store(GenericFader::liveEpoch(), std::memory_order_relaxed);
+    }
 
     m_padInteraction = true;
     m_hSlider->setValue(pt.x());
@@ -533,6 +545,12 @@ void VCXYPad::slotSliderValueChanged()
         sendFeedback(Yfb, tiltInputSourceId);
     }
 
+    // Show only (S3): its sliders moved to a new place in Operate.
+    if (mode() == Doc::Operate && pt != m_stampedPosition)
+    {
+        m_stampedPosition = pt;
+        m_liveEpoch.store(GenericFader::liveEpoch(), std::memory_order_relaxed);
+    }
     m_area->setPosition(pt);
     m_area->update();
     m_sliderInteraction = false;

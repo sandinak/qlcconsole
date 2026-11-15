@@ -427,6 +427,9 @@ qreal CueStack::intensity() const
 
 void CueStack::setFlashing(bool enable)
 {
+    // Show only: a flash pressed now is the show (S3).
+    if (enable)
+        m_liveEpoch.store(GenericFader::liveEpoch(), std::memory_order_relaxed);
     qDebug() << Q_FUNC_INFO;
     if (m_flashing == enable || m_cues.isEmpty())
         return;
@@ -466,6 +469,7 @@ void CueStack::writeDMX(MasterTimer *timer, QList<Universe*> ua)
                     fader = ua[universe]->requestFader();
                     m_fadersMap[universe] = fader;
                 }
+                fader->setLiveEpoch(m_liveEpoch.load(std::memory_order_relaxed));
 
                 fc.setTarget(it.value());
                 fc.addFlag(FadeChannel::Flashing);
