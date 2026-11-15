@@ -20,7 +20,9 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QTimer>
+#include <QThread>
 #include <QHash>
+#include <QSet>
 
 #include "outputrulekeeper.h"
 #include "inputoutputmap.h"
@@ -30,6 +32,8 @@
 #include "universe.h"
 #include "function.h"
 #include "mastertimer.h"
+#include "lastlookeffect.h"
+#include "genericfader.h"
 
 #define KXMLQLCOutputRuleOnAtOpen QStringLiteral("OnAtOpen")
 
@@ -41,11 +45,8 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
        new address is held at once, not after the event loop comes round
        (one frame there could fire it). Anything else waits, coalesced. */
     auto changed = [this](quint32 id) {
-        const Fixture *fx = m_doc->fixture(id);
-        if ((fx != nullptr && (fx->outputRules() & Fixture::ShowOnly)) || m_showOnly.contains(id))
-            rebuild();
-        else
-            scheduleRebuild();
+        markNow(id);
+        scheduleRebuild();      // the rest, once, coalesced
     };
     connect(doc, &Doc::fixtureAdded, this, changed);
     connect(doc, &Doc::fixtureRemoved, this, [this](quint32) { scheduleRebuild(); });
@@ -86,12 +87,64 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     m_seenOperate = doc->mode() == Doc::Operate;
 }
 
+void OutputRuleKeeper::markNow(quint32 id)
+{
+    /* A Show-only fixture added, moved, patched or given the rule -- mid-
+       show too: its channels are held where it is now, at once, channel
+       by channel (a move that changes universe and address is two changes:
+       each is cheap, and the full rebuild runs once after). */
+    const Fixture *fx = m_doc->fixture(id);
+    const bool showOnly = fx != nullptr && fx->isPatched() && (fx->outputRules() & Fixture::ShowOnly);
+    const auto was = m_showOnlyAt.constFind(id);
+    if (!showOnly && was == m_showOnlyAt.constEnd())
+        return;
+    const QList<Universe *> ua = m_doc->inputOutputMap()->universes();
+    QSet<quint32> now;
+    if (showOnly)
+        for (quint32 i = 0; i < fx->channels(); i++)
+            now.insert(fx->universeAddress() + i);
+    if (was != m_showOnlyAt.constEnd())
+    {
+        for (quint32 i = 0; i < was.value().second; i++)
+        {
+            const quint32 abs = was.value().first + i;
+            const int u = int(abs >> 9);
+            if (!now.contains(abs) && u < ua.size() && ua.at(u) != nullptr)
+                ua.at(u)->markShowOnly(int(abs & 0x1ff), false, 0);
+        }
+    }
+    if (showOnly)
+    {
+        for (quint32 i = 0; i < fx->channels(); i++)
+        {
+            const quint32 abs = fx->universeAddress() + i;
+            const int u = int(abs >> 9);
+            if (u < ua.size() && ua.at(u) != nullptr)
+                ua.at(u)->markShowOnly(int(abs & 0x1ff), true, safeValue(fx, i));
+        }
+        m_showOnlyAt.insert(id, qMakePair(fx->universeAddress(), fx->channels()));
+    }
+    else
+    {
+        m_showOnlyAt.remove(id);
+    }
+}
+
 void OutputRuleKeeper::scheduleRebuild()
 {
-    if (m_pending)
-        return;
+    /* One timer, not a singleShot a call: a rebuild() run straight (a
+       test, rebuildNow) used to leave its queued one behind, and the next
+       change queued another -- several rebuilds for one change. */
+    if (m_rebuildTimer == nullptr)
+    {
+        m_rebuildTimer = new QTimer(this);
+        m_rebuildTimer->setSingleShot(true);
+        m_rebuildTimer->setInterval(0);
+        connect(m_rebuildTimer, &QTimer::timeout, this, [this]() { rebuild(); });
+    }
     m_pending = true;
-    QTimer::singleShot(0, this, [this]() { rebuild(); });
+    if (!m_rebuildTimer->isActive())
+        m_rebuildTimer->start();
 }
 
 void OutputRuleKeeper::setOnAtOpenWhen(OnAtOpenWhen when)
@@ -246,43 +299,62 @@ void OutputRuleKeeper::emergencyStop()
 {
     /* Every Show-only channel out at once -- no fade -- and held there,
        whatever drives it (Park, the Simple Desk, a VC slider), until the
-       next GO in Operate. And a new session: what ran before the stop is
-       not the show after it either. */
+       next GO in Operate. The stop cleans up what it stops: a new session
+       (what ran before is not the show after), every hand's fader left up
+       frozen until moved again, the stored values back to safe, every
+       last look without them. Nothing from before the stop comes back when
+       it lets go. Safe from any thread (a plugin's: OSC, MSC). */
+    const quint32 stopBefore = GenericFader::stopEpoch();
+    GenericFader::bumpStopEpoch();
     Function::startLiveSession();
     if (m_doc->masterTimer() != nullptr)
         m_doc->masterTimer()->refreshPreviewGates();
-    setEmergencyStop(true);
+    m_emergencyStop.store(true, std::memory_order_relaxed);
+    const QList<Universe *> ua = m_doc->inputOutputMap()->universesSnapshot();
+    for (Universe *u : ua)
+    {
+        if (u == nullptr)
+            continue;
+        u->freezeFadersForStop(stopBefore);
+        u->setShowOnlyEmergencyStop(true);      // and the stored values to safe
+    }
     // At once, not at the next frame.
-    for (Universe *u : m_doc->inputOutputMap()->universes())
+    for (Universe *u : ua)
         if (u != nullptr && u->showOnlyChannelCount() > 0)
             u->dumpOutput(u->postGMValues()->mid(0, u->usedChannels()), true);
+    // The last look and the footer: on the keeper's own thread.
+    QMetaObject::invokeMethod(this, [this]() {
+        if (m_doc->lastLook() != nullptr)
+            m_doc->lastLook()->dropShowOnly();
+        m_lastHeldBy = showOnlyHeldBy();
+        emit showOnlyChanged();
+        emit emergencyStopChanged(true);
+    }, thread() == QThread::currentThread() ? Qt::DirectConnection : Qt::QueuedConnection);
 }
 
 void OutputRuleKeeper::releaseEmergencyStop()
 {
-    if (m_emergencyStop && m_doc->mode() == Doc::Operate)
+    if (emergencyStopped() && m_doc->mode() == Doc::Operate)
         setEmergencyStop(false);
 }
 
 void OutputRuleKeeper::setEmergencyStop(bool stop)
 {
-    if (m_emergencyStop == stop)
+    if (m_emergencyStop.exchange(stop, std::memory_order_relaxed) == stop)
         return;
-    m_emergencyStop = stop;
-    for (Universe *u : m_doc->inputOutputMap()->universes())
+    for (Universe *u : m_doc->inputOutputMap()->universesSnapshot())
         if (u != nullptr)
             u->setShowOnlyEmergencyStop(stop);
-    const HeldBy by = showOnlyHeldBy();
-    if (by != m_lastHeldBy)
-        m_lastHeldBy = by;
+    m_lastHeldBy = showOnlyHeldBy();
     emit showOnlyChanged();
+    emit emergencyStopChanged(stop);
 }
 
 OutputRuleKeeper::HeldBy OutputRuleKeeper::showOnlyHeldBy() const
 {
     if (m_showOnly.isEmpty())
         return NotHeld;
-    if (m_emergencyStop)
+    if (emergencyStopped())
         return HeldByEmergencyStop;
     if (m_doc->mode() != Doc::Operate)
         return HeldByDesign;
@@ -342,6 +414,9 @@ void OutputRuleKeeper::pushShowOnlyLive()
 void OutputRuleKeeper::rebuild()
 {
     m_pending = false;
+    if (m_rebuildTimer != nullptr)
+        m_rebuildTimer->stop();     // this is the one it would have run
+    ++m_rebuilds;
     int count = 0;
     QList<quint32> showOnly;
     foreach (Fixture *fx, m_doc->fixtures())
@@ -351,6 +426,10 @@ void OutputRuleKeeper::rebuild()
         if (fx->outputRules() & Fixture::ShowOnly)
             showOnly << fx->id();
     }
+    m_showOnlyAt.clear();
+    foreach (Fixture *fx, m_doc->fixtures())
+        if ((fx->outputRules() & Fixture::ShowOnly) && fx->isPatched())
+            m_showOnlyAt.insert(fx->id(), qMakePair(fx->universeAddress(), fx->channels()));
     m_count = count;
     const bool showOnlyListChanged = showOnly != m_showOnly;
     m_showOnly = showOnly;
@@ -383,7 +462,7 @@ void OutputRuleKeeper::rebuild()
         u->setShowOnlySafeValues(i < safe.size() ? safe.at(i) : QByteArray());
         u->setOutputRules(i < bits.size() ? bits.at(i) : QByteArray());
         u->setShowOnlyLive(m_doc->mode() == Doc::Operate);
-        u->setShowOnlyEmergencyStop(m_emergencyStop);
+        u->setShowOnlyEmergencyStop(emergencyStopped());
     }
     const HeldBy by = showOnlyHeldBy();
     if (showOnlyListChanged || by != m_lastHeldBy)

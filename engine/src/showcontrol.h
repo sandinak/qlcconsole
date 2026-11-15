@@ -192,6 +192,10 @@ public:
      *  hold let go (Operate) */
     void claim(Chaser *chaser);
 
+    /** A line about a command that came from elsewhere (the VC's step
+     *  button), told as a command's is (commandHandled()) */
+    void say(const QString &line, bool done) { emit commandHandled(line, done); }
+
     /*********************************************************************
      * The double-GO guard (rules at run())
      *********************************************************************/

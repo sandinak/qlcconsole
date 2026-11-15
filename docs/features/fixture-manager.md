@@ -837,8 +837,12 @@ or a flame relay. So:
   Off**) cuts every Show-only fixture to its safe value at once, with no
   fade, and holds it there whatever drives it — Park, the Simple Desk, a
   VC slider — until the next GO in Operate. The footer says **… held:
-  emergency stop, until the next GO**. Other lights stop as All Off always
-  stopped them.
+  emergency stop, until the next GO**. **Nothing from before the stop
+  comes back** when that GO lets it go: what was stored on those channels
+  is reset, every last look loses them (and a look captured while the stop
+  holds never has them), the Simple Desk lets go of them, and a VC slider
+  or fader left up holds them until you move it again. Other lights stop
+  as All Off always stopped them. Opening another show clears the stop.
 - **With On when not in use**, Show only wins: nothing turns a laser or a
   flame on just because nothing else is using it.
 - **Editors' Test buttons** (and the Show editor's Play, and what a Script
@@ -855,7 +859,14 @@ or a flame relay. So:
   stack** is playback: one left playing from Design holds them until it is
   stepped in Operate. The Show tab's **Play** in Operate is a GO (on a show
   left running from Design it takes it, it does not pause it); in Design it
-  is held. A VC cue list's crossfader is a GO.
+  is held. A VC cue list's crossfader is a GO on a list already running;
+  it never starts one.
+- **The VC step button** in Operate steps only the show: the most recent
+  list playing as the show — never a preview, an editor's Test or the
+  Workbench — and a list inside another as that list. With none, it says
+  so and does nothing.
+- **Move-in-black** never pre-sets a Show-only fixture: a laser's mode
+  channel may be what turns it on.
 - **The Simple Desk**'s channel faders are your own hand on the channel: a
   level you push there drives it in Operate, also one left up from Design.
 - **Identify and Reset** (the plot's and Fixture Properties' DMX Controls,

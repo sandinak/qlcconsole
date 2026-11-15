@@ -56,6 +56,9 @@ public:
     SimpleDeskEngine(Doc* doc);
     virtual ~SimpleDeskEngine();
 
+    /** The emergency stop: let go of every Show-only channel it holds */
+    void releaseShowOnlyChannels();
+
     /** Start from scratch; clear everything */
     void clearContents();
 

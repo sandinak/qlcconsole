@@ -234,6 +234,18 @@ void MarkPlanner_Test::aDarkFixtureIsPresetButAStagedOneIsNot()
     QVERIFY(!m_mark->isMarked(m_fixtureA));
 }
 
+void MarkPlanner_Test::aShowOnlyFixtureIsNeverPreset()
+{
+    startChaserLightingFixtureA(m_doc, m_fixtureA);
+    m_doc->fixture(m_fixtureA)->setOutputRules(Fixture::ShowOnly);
+    MarkPlanner planner(m_doc, m_mark);
+    planner.setDarkGapMs(0);
+    planner.setEnabled(true);
+    QMetaObject::invokeMethod(&planner, "evaluate");
+    QVERIFY(!m_mark->isMarked(m_fixtureA));            // dark now, lit next: still not pre-set
+    planner.setEnabled(false);
+}
+
 void MarkPlanner_Test::theShowsMoveInBlackSavesLoadsAndResets()
 {
     ProgrammerController *pc = m_doc->programmer();

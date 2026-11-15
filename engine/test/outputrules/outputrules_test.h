@@ -185,6 +185,30 @@ private slots:
     void aShowOnlyFixtureMovedMidShowIsHeldAtOnce();
     void theHeldTextSaysEmergencyStop();
 
+    /* Fourth safety review (review/048-show-only-4) */
+    /** R4-1: All Off on a Show tab show in Operate, then a GO on another
+     *  list: the show's last look (captured as it stops, after the stop's
+     *  new session) does not fire the laser */
+    void emergencyStopThenAGoDoesNotRefireTheShowsLastLook();
+    /** R4-2: All Off, then a GO on another list: a stopped cue's LTP level
+     *  left stored on a Show-only channel does not come back */
+    void emergencyStopThenAGoDoesNotRefireAStoredLtpLevel();
+    /** R4-3: the VC step button in Operate steps the last chaser started:
+     *  an editor's Test chaser is not made the show by it */
+    void aVcStepButtonDoesNotClaimAnEditorTest();
+
+private slots:
+    /* Fourth review: the fixes' own tests */
+    /** C1, the other order: a look captured before the stop loses its
+     *  Show-only channels at the stop */
+    void emergencyStopDropsALastLookCapturedBeforeIt();
+    /** L2: the step button steps the root of a nested list */
+    void aVcStepButtonStepsTheRootOfANestedList();
+    /** L3: universe and address changed: marked at once, rebuilt once */
+    void aMoveAcrossUniversesMarksAtOnceAndRebuildsOnce();
+    /** L3: an emergency stop from a plugin's thread acts at once */
+    void anEmergencyStopFromAnotherThreadActsAtOnce();
+
 private:
     /** One processFaders() frame; the output value at @p address */
     int frame(int address);

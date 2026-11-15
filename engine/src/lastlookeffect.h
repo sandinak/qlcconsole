@@ -67,6 +67,8 @@ public:
     /** Release the whole hold (the rig returns to whatever else is driving
      *  those channels — typically nothing). */
     void clear();
+    /** The emergency stop: every Show-only channel out of the held look */
+    void dropShowOnly();
 
     bool isActive() const;
 
@@ -76,6 +78,9 @@ private:
     /** Lay m_entries on the output; @p renewAddresses (absolute) or all
      *  (@p renewAll) were captured just now (Show only's session stamp) */
     void apply(const QSet<quint32> &renewAddresses = QSet<quint32>(), bool renewAll = false);
+    /** @p channels without the Show-only ones -- always, or only while
+     *  the emergency stop holds */
+    QList<ChannelHold> withoutShowOnly(const QList<ChannelHold> &channels, bool always) const;
 
     Doc *m_doc;
 

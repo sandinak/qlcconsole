@@ -34,6 +34,8 @@ private slots:
     /** dangleFixturesChanged() fires on change, not on every tick. */
     void signalFiresOnlyOnChange();
     void aDarkFixtureIsPresetButAStagedOneIsNot();
+    /** Show only: move-in-black never pre-sets a Show-only fixture */
+    void aShowOnlyFixtureIsNeverPreset();
     /** Through the show's ProgrammerController: one switch + lead time,
      *  every change signalled (the lead time too, so every view follows),
      *  saved and loaded with the show, and a new show starts it off. */

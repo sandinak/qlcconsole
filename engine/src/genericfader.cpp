@@ -60,6 +60,18 @@ void GenericFader::bumpLiveEpoch()
     s_liveEpoch.fetch_add(1, std::memory_order_relaxed);
 }
 
+static std::atomic<quint32> s_stopEpoch { 1 };
+
+quint32 GenericFader::stopEpoch()
+{
+    return s_stopEpoch.load(std::memory_order_relaxed);
+}
+
+void GenericFader::bumpStopEpoch()
+{
+    s_stopEpoch.fetch_add(1, std::memory_order_relaxed);
+}
+
 const GenericFader::PreviewGate *GenericFader::creationGate()
 {
     return t_creationGate;

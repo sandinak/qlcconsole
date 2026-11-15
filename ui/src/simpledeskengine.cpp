@@ -27,10 +27,13 @@
 #include "simpledeskengine.h"
 #include "genericfader.h"
 #include "mastertimer.h"
+#include <utility>
 #include "fadechannel.h"
 #include "cuestack.h"
 #include "universe.h"
 #include "doc.h"
+#include "inputoutputmap.h"
+#include "outputrulekeeper.h"
 
 #define PROP_ID "id"
 
@@ -45,6 +48,32 @@ SimpleDeskEngine::SimpleDeskEngine(Doc* doc)
     qDebug() << Q_FUNC_INFO;
     Q_ASSERT(doc != NULL);
     doc->masterTimer()->registerDMXSource(this);
+    /* Show only, the emergency stop: what the Simple Desk had up on a
+       Show-only channel is let go of -- nothing from before the stop comes
+       back when it lets go; push the fader again to drive it. */
+    if (OutputRuleKeeper *rules = doc->outputRuleKeeper())
+        connect(rules, &OutputRuleKeeper::emergencyStopChanged, this, [this](bool stopped) {
+            if (stopped)
+                releaseShowOnlyChannels();
+        });
+}
+
+void SimpleDeskEngine::releaseShowOnlyChannels()
+{
+    QList<uint> drop;
+    {
+        QMutexLocker locker(&m_mutex);
+        const QList<Universe *> ua = m_doc->inputOutputMap()->universes();
+        for (auto it = m_values.constBegin(); it != m_values.constEnd(); ++it)
+        {
+            const int u = int(it.key() >> 9);
+            Universe *uni = u < ua.size() ? ua.at(u) : nullptr;
+            if (uni != nullptr && (uni->channelCapabilities(ushort(it.key() & 0x1FF)) & Universe::ShowOnlyOutput))
+                drop << it.key();
+        }
+    }
+    for (uint ch : std::as_const(drop))
+        resetChannel(ch);
 }
 
 SimpleDeskEngine::~SimpleDeskEngine()
@@ -405,6 +434,10 @@ void SimpleDeskEngine::writeDMX(MasterTimer *timer, QList<Universe *> ua)
             fc->setTarget(value);
             fc->addFlag(FadeChannel::Override);
         }
+        // Moved: the hand's again after an emergency stop froze it.
+        for (const QSharedPointer<GenericFader> &f : std::as_const(m_fadersMap))
+            if (!f.isNull())
+                f->unfreezeStop();
         setChanged(false);
     }
 
