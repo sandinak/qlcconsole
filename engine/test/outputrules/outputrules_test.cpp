@@ -3403,6 +3403,53 @@ void OutputRules_Test::everyClosingLineGetsShowOnlySafeLast()
     }
 }
 
+void OutputRules_Test::aRetargetInOneStepClosesOnlyTheOldNode()
+{
+    QVERIFY(OutputPatch::isTargetParameter(QStringLiteral("outputPort")));     // OSC
+    QVERIFY(OutputPatch::isTargetParameter(QStringLiteral("transmitMode")) == false);
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    InputOutputMap *io = m_doc->inputOutputMap();
+    auto flameAt = [this](const char *target) {
+        const QByteArray f = m_stub->m_lastByTarget.value(QString::fromLatin1(target));
+        return Flame < f.size() ? int(uchar(f.at(Flame))) : -1;
+    };
+    QVERIFY(io->setOutputPatch(0, m_stub->name(), QString(), 2, false, 1));
+    OutputPatch *op = m_uni->outputPatch(1);
+    op->setPluginParameters({ { QStringLiteral("outputIP"), QStringLiteral("10.0.0.1") },
+                              { QStringLiteral("outputUni"), 1 } });
+    m_doc->setMode(Doc::Operate);
+    const FunctionParent go = FunctionParent::master();
+    startScene({ { Flame, 255 } }, go.type(), go.id());
+    tickFrame(Flame);
+    tickFrame(Flame);
+    m_stub->m_lastByTarget.clear();
+    tickFrame(Flame);
+    QCOMPARE(flameAt("10.0.0.1/2"), 255);
+
+    // Both at once: one closing frame, to the old node only.
+    op->setPluginParameters({ { QStringLiteral("outputIP"), QStringLiteral("10.0.0.2") },
+                              { QStringLiteral("outputUni"), 2 } });
+    QCOMPARE(flameAt("10.0.0.1/2"), 0);
+    QVERIFY2(m_stub->m_lastByTarget.contains("10.0.0.2/2") == false,
+             "the new node was sent a frame meant for the old one");
+    tickFrame(Flame);
+    QCOMPARE(flameAt("10.0.0.2/2"), 255);
+
+    // Unset in the same step (sACN taking its unicast address in place of
+    // outputIP): still one closing frame, to where it was going.
+    m_stub->m_lastByTarget.clear();
+    op->setPluginParameters({ { QStringLiteral("ucastIP"), QStringLiteral("10.0.0.3") } },
+                            { QStringLiteral("outputIP") });
+    QCOMPARE(flameAt("10.0.0.2/2"), 0);
+    QCOMPARE(m_stub->m_lastByTarget.size(), 1);
+    QVERIFY(op->getPluginParameters().contains(QStringLiteral("outputIP")) == false);
+    stopFunctions();
+    QVERIFY(io->setOutputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine(), false, 1));
+    m_stub->m_lastByTarget.clear();
+    m_stub->m_universe.fill(char(0));
+}
+
 void OutputRules_Test::aClosingLineWithNoShowOnlyGetsNothingExtra()
 {
     QCOMPARE(m_uni->showOnlyChannelCount(), 0);

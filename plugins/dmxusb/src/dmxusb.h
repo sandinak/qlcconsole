@@ -104,6 +104,9 @@ public:
     /** @reimp */
     void writeUniverse(quint32 universe, quint32 output, const QByteArray& data, bool dataChanged) override;
 
+    /** @reimp the frame given last is on the wire (DMXUSBWidget::flush()) */
+    void flushOutput(quint32 output, quint32 universe) override;
+
     /** @reimp: a widget that stopped taking data (unplugged mid-session,
      *  driver gave up) -- WriteHealth, fed by each widget's write loop. */
     QStringList outputProblems(quint32 output, quint32 universe) const override;

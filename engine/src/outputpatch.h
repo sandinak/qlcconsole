@@ -106,14 +106,21 @@ public:
 
     /**
      * If a valid plugin and line have been set, close
-     * the output line and re-open it again -- under the frame lock. A line
-     * whose name changed (a USB device unplugged, another in its place) is
-     * followed to wherever that name is now; gone, a universe with
-     * Show-only channels is never reopened on whatever took its number:
-     * it is kept pending on the old name (reconnectHeld() says why).
+     * the output line and re-open it again (by its number) -- under the
+     * frame lock.
      */
     bool reconnect();
-    /** Why the last reconnect() left this patch pending; empty if it did not */
+
+    /** A hardware line (USB, MIDI) whose name now is not the one it had
+     *  when this patch was made: another device took its number */
+    bool lineNameChanged() const;
+    /** Review 11: a universe with Show-only channels whose line now names
+     *  another device is kept pending on the name it was patched with,
+     *  @p why said -- reopened only when a line of that name is back at
+     *  the same number. @p closeTheLine false: another open patch uses the
+     *  line, which stays open for it. */
+    void holdForDeviceChange(const QString &why, bool closeTheLine);
+    /** Why holdForDeviceChange() left this patch pending; empty if not */
     QString reconnectHeld() const { return m_reconnectHeld; }
 
     /** The plugin instance that has been assigned to a patch */
@@ -155,7 +162,8 @@ public:
     /** Several at once, under the frame lock: one closing frame for the
      *  old target, and no frame sent half-way (a new address on the old
      *  port). UniversePatcher::applyTarget(). */
-    void setPluginParameters(const QMap<QString, QVariant> &values);
+    void setPluginParameters(const QMap<QString, QVariant> &values,
+                             const QStringList &unset = QStringList());
 
     /** True for a parameter that changes where an open line's frames land
      *  (Art-Net outputIP/outputUni, E1.31 universe/unicast/multicast, a

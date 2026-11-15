@@ -115,6 +115,21 @@ bool DMXUSB::rescanWidgets()
                 m_inputs.append(widget);
         }
         m_openLines.clear();
+
+        /* Review 11 M-1: the same devices on the same lines (their names,
+           serials included, unchanged): nothing tells the engine, so the
+           lines it had open are opened again here -- or output would stop
+           without a word. Changed, the engine reconnects them. */
+        if (outputs() == outputsBefore)
+        {
+            foreach (const LineUniverse &lu, openOutputLines())
+            {
+                if (lu.first >= quint32(m_outputs.size()))
+                    continue;
+                if (m_outputs.at(int(lu.first))->open(lu.first, false) && m_openLines.contains(lu.first) == false)
+                    m_openLines.append(lu.first);
+            }
+        }
         m_rescanning.store(false, std::memory_order_release);
     }
 
@@ -260,14 +275,29 @@ void DMXUSB::writeUniverse(quint32 universe, quint32 output, const QByteArray &d
     {
         DMXUSBWidget *widget = m_outputs.at(output);
         // Not opened by the engine (a new device that took this number in
-        // a rescan): nothing is kept for it, nothing reaches the rig.
+        // a rescan): nothing is kept for it, nothing reaches the rig -- and
+        // the footer says so (WriteHealth), never silently.
         if (m_openLines.contains(output) == false)
+        {
+            widget->recordWrite(false);
             return;
+        }
         // Not open (it went away, or never opened): nothing reaches the rig.
         if (widget->writeUniverse(universe, output, data, dataChanged) == false
             && widget->isOpen() == false)
             widget->recordWrite(false);
     }
+}
+
+void DMXUSB::flushOutput(quint32 output, quint32 universe)
+{
+    Q_UNUSED(universe)
+    /* Asked only after a closing frame (a universe with Show-only
+       channels): a widget whose thread serves other ports (the Pro) waits
+       for it to have sent it. The others send it as they close. GUI thread,
+       as a rescan: no lock needed, and none held while it waits. */
+    if (output < quint32(m_outputs.size()))
+        m_outputs.at(int(output))->flush(output);
 }
 
 QStringList DMXUSB::outputProblems(quint32 output, quint32 universe) const

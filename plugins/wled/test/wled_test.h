@@ -39,6 +39,7 @@ private slots:
     void backupDevicesAreParametersOfTheirOwn();
     void everyDeviceIsSentTheSameLook();
     void aDeadDeviceDoesNotHoldUpTheOthers();
+    void aFlushSendsTheLastLookWithinItsBudget();
     void aDeviceThatComesBackIsSentTheLookAgain();
     void theRigViewWatchesTheFirstDeviceThatAnswers();
     void rigNetworkGateIsDecidedOffTheSendTick();

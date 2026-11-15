@@ -888,11 +888,11 @@ opened — over the web while in Operate too). So:
   Blind that frame has the rest of the rig as it was before Blind, never the
   preview. A held output comes back with what the show gives them now.
 - **A USB interface unplugged**: its outputs are sent the Show-only
-  fixtures at safe first, as far as the device still answers. A patch
-  follows its interface by name (serial number) when the interfaces move
-  round; if its interface is gone, a universe with Show-only fixtures is
-  never reopened on whatever took its place — it waits, listed as missing,
-  until that interface is back.
+  fixtures at safe first, as far as the device still answers. Patches
+  reconnect by their line number, as they always have. A universe with
+  Show-only fixtures whose line now names another interface is kept off
+  it — listed as missing, and the log says why — until that interface is
+  back on that line.
 - **Sharing an address**: a fixture patched over a Show-only one cannot
   turn it on — **On when not in use** and **Ignore Blackout** do nothing on
   the shared channels. The Grand Master never scales a safe value (a gobo

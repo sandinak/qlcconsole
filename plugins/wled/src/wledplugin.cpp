@@ -277,18 +277,31 @@ QPair<int, int> WledPlugin::answering(quint32 universe) const
 bool WledPlugin::postNow(const QString &ip, const QByteArray &body, int waitMs)
 {
     const QUrl url(QStringLiteral("http://%1/").arg(ip));
-    QTcpSocket sock;
-    sock.connectToHost(url.host(), quint16(url.port(80)));
-    if (!sock.waitForConnected(waitMs))
-        return false;
-    sock.write("POST /json/state HTTP/1.1\r\nHost: " + url.host().toUtf8()
-               + "\r\nContent-Type: application/json\r\nContent-Length: "
-               + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
-    const bool written = sock.waitForBytesWritten(waitMs);
-    sock.waitForReadyRead(waitMs);          // taken once it answers; sent either way
-    sock.disconnectFromHost();
-    if (sock.state() != QAbstractSocket::UnconnectedState)
-        sock.waitForDisconnected(50);
+    const QByteArray request = "POST /json/state HTTP/1.1\r\nHost: " + url.host().toUtf8()
+            + "\r\nContent-Type: application/json\r\nContent-Length: "
+            + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
+    /* The plugin's until it is done: connected, it writes; closed, failed
+       or after a few seconds, it goes. Waited on only for waitMs. */
+    QTcpSocket *sock = new QTcpSocket(this);
+    connect(sock, &QTcpSocket::connected, sock, [sock, request]() { sock->write(request); });
+    connect(sock, &QTcpSocket::disconnected, sock, &QObject::deleteLater);
+    connect(sock, &QAbstractSocket::errorOccurred, sock, [sock, ip](QAbstractSocket::SocketError) {
+        qWarning() << "[WLED] closing state to" << ip << "not sent:" << sock->errorString();
+        sock->deleteLater();
+    });
+    QTimer::singleShot(5000, sock, &QObject::deleteLater);
+    QElapsedTimer waited;
+    waited.start();
+    sock->connectToHost(url.host(), quint16(url.port(80)));
+    bool written = false;
+    if (sock->waitForConnected(qMax(1, waitMs)))
+    {
+        const int left = waitMs - int(waited.elapsed());
+        written = sock->bytesToWrite() == 0 || (left > 0 && sock->waitForBytesWritten(left));
+    }
+    if (!written)
+        qInfo() << "[WLED] closing state to" << ip << "still on its way after"
+                << waited.elapsed() << "ms: left to finish on its own";
     return written;
 }
 
@@ -320,15 +333,11 @@ void WledPlugin::flushOutput(quint32 output, quint32 universe)
             d.postedAt = QDateTime::currentMSecsSinceEpoch();
         }
     }
+    // At most flushBudgetMs in all; what is not through by then goes on its own.
     QElapsedTimer budget;
     budget.start();
     for (const Post &p : std::as_const(posts))
-    {
-        const int left = restoreBudgetMs - int(budget.elapsed());
-        if (left <= 50)
-            break;
-        postNow(p.ip, p.body, qMax(50, left / 3));
-    }
+        postNow(p.ip, p.body, qMax(0, flushBudgetMs - int(budget.elapsed())));
 }
 
 void WledPlugin::setParameter(quint32 universe, quint32 line, Capability type,

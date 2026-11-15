@@ -143,6 +143,10 @@ public:
     /** @reimp */
     bool writeUniverse(quint32 universe, quint32 output, const QByteArray& data, bool dataChanged) override;
 
+    /** @reimp waits for the thread to have sent @p line's last frame
+     *  (flushPort()) -- only ever asked after a closing frame */
+    void flush(quint32 line) override;
+
     /************************************************************************
      * Input/Output Thread
      ************************************************************************/

@@ -121,9 +121,9 @@ public:
     void writeUniverse(quint32 universe, quint32 output, const QByteArray &data,
                        bool dataChanged) override;
     /** Review 10 (Show only): the look written last for @p universe -- a
-     *  closing frame -- reaches each of its devices now, before the output
-     *  closes or is aimed at another device: a POST waited on (no event
-     *  loop), at most about a second however many do not answer. */
+     *  closing frame -- is sent to each of its devices now, before the
+     *  output closes or is aimed at another device: a POST, waited on for
+     *  at most flushBudgetMs in all, then left to finish on its own. */
     void flushOutput(quint32 output, quint32 universe) override;
     void setParameter(quint32 universe, quint32 line, Capability type,
                       QString name, QVariant value) override;
@@ -297,9 +297,14 @@ private:
      *  device is left as its layout, not turned round. Best effort, at most
      *  about a second however many do not answer; no event loop. */
     static void restoreDirections(const QVector<Device> &devices);
-    /** POST @p body to @p ip's /json/state and wait (at most @p waitMs a
-     *  step): the output closing, where an event loop must not spin */
-    static bool postNow(const QString &ip, const QByteArray &body, int waitMs);
+    /** POST @p body to @p ip's /json/state, waiting at most @p waitMs in
+     *  all (no event loop): past that it finishes on its own (the socket
+     *  is this plugin's until it closes) and that is logged. True when it
+     *  was written within the wait. */
+    bool postNow(const QString &ip, const QByteArray &body, int waitMs);
+    /** flushOutput()'s whole wait, however many devices (review 11 M-2:
+     *  it runs under the frame lock, and the UI waits on it) */
+    static const int flushBudgetMs = 100;
     static const int restoreBudgetMs = 1000;
 
     /** The rig network gate (QLCIOPlugin::setTransmitNetworks()) for one

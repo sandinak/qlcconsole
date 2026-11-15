@@ -904,6 +904,10 @@ int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *probl
                                                 "is not available here").arg(a.universe + 1).arg(name);
                 continue;
             }
+            /* One step (review 11 M-3): the device it was aimed at gets the
+               closing frame, once; the new one never does. */
+            QMap<QString, QVariant> set;
+            QStringList unset;
             if (!fx->ipAddress().isEmpty())
             {
                 /* The fixture's IP is the primary. Backup lanterns on the
@@ -912,7 +916,7 @@ int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *probl
                    sent to twice. */
                 const QMap<QString, QVariant> pp = wop->getPluginParameters();
                 const QString was = pp.value(QStringLiteral("outputIP")).toString();
-                wop->setPluginParameter(QStringLiteral("outputIP"), fx->ipAddress());
+                set.insert(QStringLiteral("outputIP"), fx->ipAddress());
                 for (auto it = pp.constBegin(); it != pp.constEnd(); ++it)
                 {
                     if (!it.key().startsWith(QLatin1String("outputIP"))
@@ -920,15 +924,16 @@ int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *probl
                         || it.value().toString() != fx->ipAddress())
                         continue;
                     if (!was.isEmpty() && was != fx->ipAddress())
-                        wop->setPluginParameter(it.key(), was);
+                        set.insert(it.key(), was);
                     else
-                        wop->unSetPluginParameter(it.key());
+                        unset << it.key();
                 }
             }
             else if (problems != NULL)
                 *problems << QStringLiteral("WLED fixture %1 has no IP address").arg(name);
-            wop->setPluginParameter(QStringLiteral("wledAddress"), fx->address() + 1);
-            wop->setPluginParameter(QStringLiteral("wledChannels"), fx->channels());
+            set.insert(QStringLiteral("wledAddress"), fx->address() + 1);
+            set.insert(QStringLiteral("wledChannels"), fx->channels());
+            wop->setPluginParameters(set, unset);
             continue;
         }
 
@@ -1483,17 +1488,14 @@ int PatchPlanner::routeWledPixels(const QList<quint32> &fixtureIds, QStringList 
             }
             if (op == NULL || !isNetworkPlugin(op->pluginName()))
                 break;
+            // One step each (review 11 M-3): the closing frame to the old target only.
             if (op->pluginName() == QLatin1String("E1.31"))
-            {
-                op->setPluginParameter(QStringLiteral("multicast"), 0);
-                op->setPluginParameter(QStringLiteral("ucastIP"), fx->ipAddress());
-                op->setPluginParameter(QStringLiteral("universe"), number + k);
-            }
+                op->setPluginParameters({ { QStringLiteral("multicast"), 0 },
+                                          { QStringLiteral("ucastIP"), fx->ipAddress() },
+                                          { QStringLiteral("universe"), number + k } });
             else
-            {
-                op->setPluginParameter(QStringLiteral("outputIP"), fx->ipAddress());
-                op->setPluginParameter(QStringLiteral("outputUni"), number + k);
-            }
+                op->setPluginParameters({ { QStringLiteral("outputIP"), fx->ipAddress() },
+                                          { QStringLiteral("outputUni"), number + k } });
             const QString now = io->getUniverseNameByID(u);
             if (now.isEmpty() || now == QStringLiteral("Universe %1").arg(u + 1))
             {
@@ -1831,18 +1833,24 @@ bool PatchPlanner::aimUniverseAt(quint32 universe, const QString &ipIn, QString 
     {
         /* sACN's unicast: E1.31 reads "multicast" and "ucastIP", never
            "outputIP" (which only a warning in the log ever saw). */
-        op->setPluginParameter(QStringLiteral("multicast"), 0);
-        op->setPluginParameter(QStringLiteral("ucastIP"), ip);
+        // One step (review 11 M-3): the closing frame to the old target only.
+        QStringList unset;
         if (op->getPluginParameters().contains(QStringLiteral("outputIP")))
-            op->unSetPluginParameter(QStringLiteral("outputIP"));
+            unset << QStringLiteral("outputIP");
+        op->setPluginParameters({ { QStringLiteral("multicast"), 0 },
+                                  { QStringLiteral("ucastIP"), ip } }, unset);
         return true;
     }
 
-    op->setPluginParameter(QStringLiteral("outputIP"), ip);
+    QMap<QString, QVariant> target;
+    target.insert(QStringLiteral("outputIP"), ip);
     /* A node heard at that IP listens on its own Port-Addresses: send on one
-       of those, not on the universe's number. */
+       of those, not on the universe's number -- worked out on the parameters
+       it will have, and set with the address in one step. */
+    QMap<QString, QVariant> will = op->getPluginParameters();
+    will.insert(QStringLiteral("outputIP"), ip);
     const QList<quint32> ports = nodePorts(m_doc, ip);
-    const quint32 sends = artNetPortAddress(op->getPluginParameters(), universe);
+    const quint32 sends = artNetPortAddress(will, universe);
     if (!ports.isEmpty() && !ports.contains(sends))
     {
         const QSet<quint32> taken = portsSentTo(m_doc, ip, universe);
@@ -1850,10 +1858,11 @@ bool PatchPlanner::aimUniverseAt(quint32 universe, const QString &ipIn, QString 
         {
             if (taken.contains(pa))
                 continue;
-            op->setPluginParameter(QStringLiteral("outputUni"), pa);
+            target.insert(QStringLiteral("outputUni"), pa);
             break;
         }
     }
+    op->setPluginParameters(target);
     return true;
 }
 
