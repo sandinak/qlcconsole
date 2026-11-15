@@ -144,6 +144,12 @@ void OutputRules_Test::cleanup()
     m_doc->outputRuleKeeper()->rebuild();
     QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
     m_uni = ua.first();
+    /* Every fader let go: a stopped cue's fade-out (4 s in some tests) used
+       to run on into the next tests -- one wrote the flame's channel every
+       frame, and R8-2 passed in the suite only because of it. */
+    for (Universe *u : ua)
+        for (const QSharedPointer<GenericFader> &f : u->faders())
+            u->dismissFader(f);
     m_doc->inputOutputMap()->releaseUniverses(false);
     m_uni->reset();
     for (int i = 0; i < 4; i++)
@@ -2979,6 +2985,96 @@ void OutputRules_Test::r8_allOffAndBlackoutInBlindNeverReachTheRig()
              << "after Blackout" << afterBlackout;
     QCOMPARE(afterAllOff, 0);
     QCOMPARE(afterBlackout, 0);
+}
+
+/****************************************************************************
+ * S0, every send
+ ****************************************************************************/
+
+void OutputRules_Test::everySendGoesThroughTheS0Builder()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    const FunctionParent go = FunctionParent::master();
+    startScene({ { Flame, 200 } }, go.type(), go.id());     // a GO: the S0 value is 200
+    // A held writer on the flame (a preview), full.
+    QSharedPointer<GenericFader> preview = m_uni->requestFader(Universe::Override);
+    preview->setHoldsShowOnly(true);
+    {
+        GenericFader::ChannelRef fc = preview->getChannelFader(m_doc, m_uni, Fixture::invalidId(), quint32(Flame));
+        fc->setStart(255);
+        fc->setCurrent(255);
+        fc->setTarget(255);
+    }
+    auto cleanupPreview = qScopeGuard([this, preview]() { m_uni->dismissFader(preview); });
+    tickFrame(Flame);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 200);                         // the frame
+
+    // A plugin's own send of whatever it holds: the flame from S0.
+    m_uni->dumpOutput(QByteArray(m_uni->usedChannels(), char(255)), true);
+    QCOMPARE(sent(Flame), 200);
+    // A maintenance send (another channel written, sent between frames).
+    m_uni->write(Stage, 90, true);
+    m_uni->sendCurrent();
+    QCOMPARE(sent(Flame), 200);
+    QCOMPARE(sent(Stage), 90);
+    // Blackout on: safe; off: the S0 value again.
+    m_doc->inputOutputMap()->setBlackout(true);
+    QCOMPARE(sent(Flame), 0);
+    m_doc->inputOutputMap()->setBlackout(false);
+    QCOMPARE(sent(Flame), 200);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 200);
+
+    // Blind on: one frame with it at safe; in Blind nothing else is sent;
+    // Blind off: a new session -- safe until a GO.
+    m_doc->inputOutputMap()->setOutputInhibited(true);
+    QCOMPARE(sent(Flame), 0);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    m_doc->inputOutputMap()->setBlackout(true);         // Blackout in Blind: sent
+    QCOMPARE(sent(Flame), 0);
+    m_doc->inputOutputMap()->setBlackout(false);
+    QCOMPARE(sent(Flame), 0);
+    m_doc->inputOutputMap()->setOutputInhibited(false);
+    QCOMPARE(sent(Flame), 0);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);
+
+    // A GO again, then the emergency stop between two frames.
+    stopFunctions();
+    startScene({ { Flame, 200 } }, go.type(), go.id());
+    tickFrame(Flame);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 200);
+    m_doc->outputRuleKeeper()->emergencyStop();
+    QCOMPARE(sent(Flame), 0);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    m_uni->dumpOutput(QByteArray(m_uni->usedChannels(), char(255)), true);
+    QCOMPARE(sent(Flame), 0);                           // a plugin's send after it: still safe
+    stopFunctions();
+}
+
+void OutputRules_Test::aSafeValueIsNeverScaledHeldOrLive()
+{
+    Fixture *g = addShowOnlyDef(QStringLiteral("Gobo wheel"), 40,
+                                { qMakePair(QLCChannel::Gobo, QLCChannel::NoColour) });
+    QVERIFY(g != nullptr);
+    const_cast<QLCFixtureDef *>(g->fixtureDef())->setType(QLCFixtureDef::MovingHead);
+    const_cast<QLCChannel *>(g->channel(0))->setDefaultValue(40);   // "open" is 40
+    m_doc->outputRuleKeeper()->rebuild();
+    QCOMPARE(int(OutputRuleKeeper::safeValue(g, 0)), 40);
+    m_doc->inputOutputMap()->setGrandMasterChannelMode(GrandMaster::AllChannels);
+    m_doc->inputOutputMap()->setGrandMasterValue(128);
+    frame(40);
+    QCOMPARE(sent(40), 40);                             // held (Design): unscaled
+    m_doc->setMode(Doc::Operate);
+    frame(40);
+    frame(40);
+    QCOMPARE(sent(40), 40);                             // live, nothing drives it: the same
 }
 
 QTEST_GUILESS_MAIN(OutputRules_Test)

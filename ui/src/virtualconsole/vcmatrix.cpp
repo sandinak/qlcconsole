@@ -39,6 +39,7 @@
 #include "flowlayout.h"
 #include "rgbmatrix.h"
 #include "vcmatrix.h"
+#include "genericfader.h"
 #include "function.h"
 #include "rgbtext.h"
 #include "doc.h"
@@ -309,6 +310,10 @@ void VCMatrix::slotSliderMoved(int value)
 
     if (m_sliderExternalMovement)
         return;
+
+    // Show only: a hand on the slider (not adjustIntensity()) -- its stamp.
+    if (!m_adjusting)
+        m_sliderStamp = GenericFader::stampEpoch();
 
     if (value == 0)
     {
@@ -591,7 +596,13 @@ void VCMatrix::editProperties()
 void VCMatrix::adjustIntensity(qreal val)
 {
     VCWidget::adjustIntensity(val);
+    /* Show only: a frame's or submaster's intensity is no hand on this
+       slider -- a matrix it starts again is as old as the slider's last
+       move (GenericFader::StampScope). */
+    GenericFader::StampScope lastMove(m_sliderStamp);
+    m_adjusting = true;
     this->slotSliderMoved(this->m_slider->value());
+    m_adjusting = false;
 }
 
 /*********************************************************************

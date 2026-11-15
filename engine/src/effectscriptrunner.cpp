@@ -1095,19 +1095,25 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
     {
         for (int i = int(writes.size()) - 1; i >= 0; --i)
         {
-            const EffectInstance::DmxWrite &w = writes.at(i);
+            EffectInstance::DmxWrite &w = writes[i];
             bool hold;
             if (w.showOnly)
             {
-                // Held unless one of its scenes is the show; none: held.
+                /* Held unless one of its scenes is the show; none: held. It
+                   carries the latest stamp of those that are (R8-5): the
+                   universe counts it on a channel only when later than that
+                   channel's mark, as every writer (no trusted bypass). */
                 hold = true;
                 if (w.gateSet >= 0 && w.gateSet < gateSets.size())
                     for (const SceneGate &g : gateSets.at(w.gateSet))
-                        if (g.first && g.second && g.first->load(std::memory_order_acquire) == false
-                            && g.second->load(std::memory_order_acquire) >= session)
+                        if (g.first && g.second && g.first->load(std::memory_order_acquire) == false)
                         {
-                            hold = false;
-                            break;
+                            const quint32 st = g.second->load(std::memory_order_acquire);
+                            if (st >= session)
+                            {
+                                hold = false;
+                                w.stamp = qMax(w.stamp, st);
+                            }
                         }
             }
             else
@@ -1164,14 +1170,18 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
             fader->setName(QStringLiteral("EffectScript"));
             fader->setDoc(m_doc);        // unpatched fixtures: shown, not sent
             // Show only: the writes are sorted by their scenes' gates above
-            // -- the held fader holds, the other carries only what is the
-            // show (or no Show-only channel at all).
+            // -- the held fader holds; the other is stamped channel by
+            // channel with its writes' scenes' stamps (below).
             fader->setHoldsShowOnly(key & kHeldFader);
-            fader->setTrustedForShowOnly((key & kHeldFader) == 0);
             next[key];
         }
 
         FadeChannel fc(m_doc, w.fixtureId, w.channel);
+        // R8-5: a Show-only write counts where its scene's stamp is later
+        // than the channel's mark -- the universe's test, per channel.
+        if (w.showOnly && !(key & kHeldFader) && fc.addressInUniverse() != QLCChannel::invalid())
+            for (int c = 0; c < int(fc.channelCount()); ++c)
+                fader->setChannelLiveEpoch(int(fc.addressInUniverse()) + c, w.stamp);
         fc.setTarget(w.value);
         fc.setCurrent(w.value);
         fc.setFadeTime(0);

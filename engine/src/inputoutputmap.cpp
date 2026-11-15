@@ -166,8 +166,13 @@ bool InputOutputMap::applyBlackout(bool blackout)
                 op->setBlackout(blackout);
         }
 
-        const QByteArray postGM = universe->postGMValues()->mid(0, universe->usedChannels());
-        universe->dumpOutput(postGM, true);
+        /* S0, every send: under the frame lock, the Show-only channels
+           through the builder. In Blind, Blackout still sends (on and off):
+           the frame from before Blind, the Show-only channels at safe. */
+        if (universe->inhibitOutput())
+            universe->sendHeld();
+        else
+            universe->sendCurrent();
     }
 
     return true;
@@ -234,10 +239,15 @@ bool InputOutputMap::setOutputInhibited(bool inhibit)
                 universe->cutShowOnly();
 
             // Push the current values through immediately: while inhibited
-            // dumpOutput() is a no-op (rig goes dark); when resuming, this forces
-            // the plugins to catch up to the latest look right away.
-            const QByteArray postGM = universe->postGMValues()->mid(0, universe->usedChannels());
-            universe->dumpOutput(postGM, true);
+            // dumpOutput() is a no-op (the rig keeps the frame from before);
+            // when resuming, this forces the plugins to catch up to the
+            // latest look right away. R8-6: entering Blind, a universe with
+            // Show-only channels sends one frame with them at safe -- what
+            // the rig keeps through Blind.
+            if (inhibit && universe->showOnlyChannelCount() > 0)
+                universe->sendHeld();
+            else
+                universe->sendCurrent();
         }
     }
 

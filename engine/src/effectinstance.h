@@ -70,6 +70,7 @@ public:
                                  // its stop): never mixed by depth, written whole
         bool    showOnly = false; // on a Show-only fixture (set by the runner)
         int     gateSet = -1;    // the runner's gates of the scenes it plays for
+        quint32 stamp = 0;       // Show only: the latest stamp of those that are the show
     };
 
     EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteId);

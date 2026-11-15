@@ -242,6 +242,12 @@ private slots:
      *  GO'd before a Show-only fixture is re-patched drives it at its new
      *  address, past the new marks */
     void r8_anEffectFollowsARepatchPastTheMarks();
+    /** S0, every send: each send path between two frames, a held writer
+     *  present -- the Show-only channel goes out at its S0 value */
+    void everySendGoesThroughTheS0Builder();
+    /** AllChannels Grand Master: a non-zero safe value goes out the same,
+     *  unscaled, held and live */
+    void aSafeValueIsNeverScaledHeldOrLive();
 
 private slots:
     /* The e-stop rules (OutputRuleKeeper E1-E7), swept: each writer set

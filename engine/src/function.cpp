@@ -23,6 +23,7 @@
 #include <QRegularExpression>
 #include <QElapsedTimer>
 #include <QString>
+#include <QThread>
 #include <QDebug>
 #include <math.h>
 #include <utility>
@@ -1300,6 +1301,16 @@ Function::SourceGate Function::sourceGate(const FunctionParent &source) const
     {
         g.parentGate = GenericFader::creationGateOf(source.id());
         g.parentStamp = GenericFader::creationStampOf(source.id());
+        /* Started by a function from outside the MasterTimer's scope (a
+           VC cue list's crossfader stepping on the main thread): its
+           parent's gate all the same, looked up where that is safe --
+           never a fresh stamp (storeGateLocked() latches the parent's). */
+        if (!g.parentGate && doc() != nullptr && QThread::currentThread() == doc()->thread())
+            if (const Function *parent = doc()->function(source.id()))
+            {
+                g.parentGate = parent->previewGate();
+                g.parentStamp = parent->showStamp();
+            }
     }
     /* S3: started by a function, it takes that one's stamp (storeGateLocked()
        latches it, now and whenever the parent is the show). E3: an
@@ -1308,8 +1319,9 @@ Function::SourceGate Function::sourceGate(const FunctionParent &source) const
        the session it was armed in (armAutoSource()) -- never armed, never.
        Anything else is stamped as an operator action now (stampEpoch():
        inside an automatic writer's StampScope, that writer's session). */
-    if (g.parentGate)
-        g.epoch = 0;
+    if (g.parentGate || (g.notTheShow == false && source.type() == FunctionParent::Function
+                         && source.id() != id()))
+        g.epoch = 0;        // a function's: its parent's stamp, or none -- never a fresh one
     else if (g.notTheShow == false && source.type() == FunctionParent::AutoVCWidget)
         g.epoch = autoSourceEpoch(source);
     else
