@@ -368,7 +368,10 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
         if (role.index == ControlSurface::Blackout && value > 0)
             iom->toggleBlackout();
         else if (role.index == ControlSurface::Blind && value > 0)
-            iom->setOutputInhibited(!iom->outputInhibited());
+            // One rule with the console's Blind button (App::slotControlBlind()):
+            // a mute in Design, the Blind view in Operate -- never a mute of a
+            // live show.
+            m_app->toggleBlind();
         break;
 
     case ControlSurface::RoleType::Level:

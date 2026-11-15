@@ -214,6 +214,11 @@ public:
     void fadeAndStopAll(int timeout);
 
     /** Get the number of currently running functions */
+    /** Show only: bring every running (and queued) function's preview
+     *  gate up to date now, between two ticks (Operate starting:
+     *  Function::startLiveSession()), until no gate changes */
+    void refreshPreviewGates();
+
     int runningFunctions() const;
 
 signals:

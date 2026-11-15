@@ -51,6 +51,8 @@
 #include "efx.h"
 #include "showtreecontroller.h"
 #include "doc.h"
+#include "outputrulekeeper.h"
+#include "functionparent.h"
 #undef private
 #undef protected
 
@@ -1329,6 +1331,33 @@ void VCCueList_Test::plainChaserStillStepsDirectly()
     timer->timerTick();
     QVERIFY(!c->isRunning());
     QCOMPARE(routed, 0);               // none of it went through run()
+}
+
+void VCCueList_Test::aNextOnAListRunningFromAPreviewIsTheShow()
+{
+    QWidget w;
+    VCCueList cl(&w, m_doc);
+    Chaser *c = createChaser(m_doc);
+    c->setDuration(Function::infiniteSpeed());
+    cl.setChaser(c->id());
+    Fixture *fx = m_doc->fixtures().first();
+    fx->setOutputRules(Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    MasterTimer *timer = m_doc->masterTimer();
+    c->start(timer, FunctionParent::preview(0x7));     // the Workbench plays it
+    for (int i = 0; i < 3; i++)
+        timer->timerTick();
+    QVERIFY(c->isRunning());
+    QVERIFY(c->previewGate()->load());                // not the show
+    cl.slotNextCue();
+    for (int i = 0; i < 3; i++)
+        timer->timerTick();
+    QVERIFY(c->isRunning());
+    QVERIFY(c->previewGate()->load() == false);       // the show now
+    Function *step = m_doc->function(c->steps().at(1).fid);
+    QVERIFY(step->isRunning());
+    QVERIFY(step->previewGate()->load() == false);    // and what it plays
 }
 
 QTEST_MAIN(VCCueList_Test)

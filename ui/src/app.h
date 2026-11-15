@@ -679,6 +679,9 @@ public slots:
     void slotControlBlackout();
     /** Toggle global Blind (output inhibit) from the main toolbar. */
     void slotControlBlind(bool checked);
+    /** The Blind button pressed (a control surface's too): one rule -- a
+     *  mute in Design, the Blind view in Operate (slotControlBlind()) */
+    void toggleBlind();
     void slotBlackoutChanged(bool state);
     /** Show/hide the global Blind (output-inhibited) status-bar chip. */
     void slotOutputInhibitedChanged(bool state);

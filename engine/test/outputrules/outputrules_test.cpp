@@ -29,6 +29,7 @@
 #include "mastertimer.h"
 #include "universe.h"
 #include "iopluginstub.h"
+#include "effectscriptrunner.h"
 #undef private
 #undef protected
 
@@ -38,6 +39,12 @@
 #include "chaser.h"
 #include "scene.h"
 #include "collection.h"
+#include "showcontrol.h"
+#include "script.h"
+#include "qlcpalette.h"
+#include "fixturegroup.h"
+#include <QTemporaryDir>
+#include <QScopeGuard>
 #include "genericdmxsource.h"
 #include "channelmodifier.h"
 #include "outputrulekeeper.h"
@@ -48,6 +55,7 @@
 #include "grandmaster.h"
 #include "qlcfile.h"
 #include "parkeffect.h"
+#include "outputlayer.h"
 #include "highlighteffect.h"
 #include "programmerflasher.h"
 #include "lastlookeffect.h"
@@ -1435,6 +1443,218 @@ void OutputRules_Test::showOnlyFrameCost()
     m_uni->dismissFader(preview);
     qInfo("Show only, one universe frame: %.0f ns with none, %.0f ns with 64 held (Design), "
           "%.0f ns live with a preview's fader on them", none, held, live);
+}
+
+/****************************************************************************
+ * Show only: the second review
+ ****************************************************************************/
+
+void OutputRules_Test::goingLiveSendsNoStoredPreview()
+{
+    Fixture *spot = addSpot("Laser-ish", 20);
+    spot->setOutputRules(Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    // Design: a preview leaves the LTP colour channel at 200, stored.
+    QSharedPointer<GenericFader> preview = m_uni->requestFader(Universe::Override);
+    preview->setHoldsShowOnly(true);
+    {
+        GenericFader::ChannelRef fc = preview->getChannelFader(m_doc, m_uni, spot->id(), 1);
+        fc->setStart(200); fc->setCurrent(200); fc->setTarget(200);
+    }
+    frame(21);
+    m_uni->dismissFader(preview);
+    frame(21);
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(21))), 200);
+    // Operate, and a send before any frame (leaving Blind, Blackout).
+    m_doc->setMode(Doc::Operate);
+    m_uni->dumpOutput(m_uni->postGMValues()->mid(0, m_uni->usedChannels()), true);
+    QCOMPARE(sent(21), 0);
+}
+
+void OutputRules_Test::aGoOnAListRunningFromAPreviewDrivesIt()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    Scene *step = new Scene(m_doc);
+    step->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    step->setValue(m_doc->fixtureForAddress(Stage), 0, 70);
+    m_doc->addFunction(step);
+    Chaser *c = new Chaser(m_doc);
+    c->setName("Lasers");
+    ChaserStep cs(step->id());
+    cs.hold = 100000;
+    c->addStep(cs);
+    m_doc->addFunction(c);
+    c->start(m_doc->masterTimer(), FunctionParent::preview(0x7));   // the Workbench
+    for (int i = 0; i < 4; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Stage), 70);
+    QCOMPARE(sent(Flame), 0);
+    // A GO from the Run tab on the list already playing.
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = c->id();
+    m_doc->showControl()->run(go, ShowControl::RouteRunTab);
+    for (int i = 0; i < 4; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);
+}
+
+void OutputRules_Test::aListLeftRunningFromDesignWaitsForAGo()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *step = new Scene(m_doc);
+    step->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    step->setValue(m_doc->fixtureForAddress(Stage), 0, 80);
+    m_doc->addFunction(step);
+    Chaser *c = new Chaser(m_doc);
+    c->setName("Run");
+    ChaserStep cs(step->id());
+    cs.hold = 100000;
+    c->addStep(cs);
+    m_doc->addFunction(c);
+    // Tried out in Design (the Run tab), left running.
+    c->start(m_doc->masterTimer(), FunctionParent::master());
+    for (int i = 0; i < 4; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);           // Design
+    m_doc->setMode(Doc::Operate);
+    for (int i = 0; i < 4; i++)
+    {
+        tickFrame(Flame);
+        QCOMPARE(sent(Flame), 0);       // not the show yet
+        QCOMPARE(sent(Stage), 80);      // the rest plays on
+    }
+    // A GO in Operate on it: the show.
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = c->id();
+    m_doc->showControl()->run(go, ShowControl::RouteRunTab);
+    for (int i = 0; i < 4; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);
+}
+
+void OutputRules_Test::aParkSetInDesignHoldsItInOperate()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    OutputLayer park(m_doc, Universe::Park, FadeChannel::Override, QStringLiteral("Park"));
+    park.set({ { m_doc->fixtureForAddress(Flame), 0, 255 } });
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);           // Design
+    m_doc->setMode(Doc::Operate);
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);           // set in Design: not the show
+    park.set({ { m_doc->fixtureForAddress(Flame), 0, 255 } });   // set again, live
+    frame(Flame);
+    QCOMPARE(sent(Flame), 255);
+    park.clear();
+}
+
+void OutputRules_Test::whatAScriptUnderATestStartsIsHeld()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    Scene *scene = new Scene(m_doc);
+    scene->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    scene->setValue(m_doc->fixtureForAddress(Stage), 0, 40);
+    m_doc->addFunction(scene);
+    Script *script = new Script(m_doc);
+    m_doc->addFunction(script);
+    script->setData(QString("stoponexit:false\nstartfunction:%1\n").arg(scene->id()));
+    script->start(m_doc->masterTimer(), FunctionParent::editorTest(0x5));   // the Script editor's Test
+    for (int i = 0; i < 6; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Stage), 40);
+    QCOMPARE(sent(Flame), 0);
+}
+
+void OutputRules_Test::aPreviewsEffectIsHeldFromTheFirstLiveFrame()
+{
+    Fixture *flame = addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->assignFixture(flame->id());
+    m_doc->addFixtureGroup(grp);
+    QTemporaryDir dir;
+    QFile js(dir.filePath("full.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Full';"
+             " e.tick = function(fixtures) { return fixtures.map(function() { return { dimmer: 1.0 }; }); };"
+             " return e; })()");
+    js.close();
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, m_doc);
+    look->setScriptPath(js.fileName());
+    m_doc->addPalette(look);
+    Scene *scene = new Scene(m_doc);
+    scene->addFixtureGroup(grp->id());
+    scene->addPalette(look->id());
+    m_doc->addFunction(scene);
+    /* The effect goes first, pass or fail: stopped from a tick on this
+       thread, the runner would claim the universes the tick holds (in the
+       app it hears the stop on another thread). */
+    auto teardown = qScopeGuard([this, scene]() {
+        m_doc->effectScriptRunner()->destroyInstancesForScene(scene->id(), false);
+    });
+    scene->start(m_doc->masterTimer(), FunctionParent::preview(0x7));
+    for (int i = 0; i < 6; i++)
+    {
+        m_doc->masterTimer()->timerTick();
+        m_doc->effectScriptRunner()->slotTick();
+        frame(Flame);
+    }
+    QVERIFY2(uchar(m_uni->postGMValues()->at(Flame)) > 0, "the effect draws on the plot");
+    QCOMPARE(sent(Flame), 0);           // Design
+    // Operate: no publish in between -- held from the first live frame.
+    m_doc->setMode(Doc::Operate);
+    m_doc->masterTimer()->timerTick();
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    m_doc->masterTimer()->timerTick();
+    m_doc->effectScriptRunner()->slotTick();
+    m_doc->masterTimer()->timerTick();
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);
+}
+
+void OutputRules_Test::notOursStaysZeroUnderTheHold()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    ChannelModifier inverted;           // a safe value that is not 0 out
+    inverted.setModifierMap({ qMakePair(uchar(0), uchar(255)), qMakePair(uchar(255), uchar(0)) });
+    m_uni->setChannelModifier(ushort(Flame), &inverted);
+    frame(Flame);
+    QCOMPARE(sent(Flame), 255);
+    m_uni->setNotOurs(false, { qMakePair(int(Flame), int(Flame)) });
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);           // the venue's desk keeps it: nothing of ours
+    m_uni->setNotOurs(false, {});
+    m_uni->setChannelModifier(ushort(Flame), nullptr);
+}
+
+void OutputRules_Test::markingOneMidShowResetsOnlyIt()
+{
+    Fixture *spot = addSpot("Curtain-ish", 20);
+    spot->setOutputRules(Fixture::ShowOnly);
+    addDimmer("Flame", Flame, 0);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    put(21, 150);                       // the show left its LTP channel at 150
+    frame(21);
+    m_uni->dismissFader(m_fader);
+    m_fader = m_uni->requestFader();
+    frame(21);
+    QCOMPARE(sent(21), 150);
+    Fixture *flame = m_doc->fixture(m_doc->fixtureForAddress(Flame));
+    flame->setOutputRules(Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    frame(21);
+    QCOMPARE(sent(21), 150);            // another fixture made Show only: this one untouched
 }
 
 QTEST_GUILESS_MAIN(OutputRules_Test)

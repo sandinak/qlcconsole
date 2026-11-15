@@ -139,6 +139,24 @@ private slots:
      *  guard) */
     void showOnlyFrameCost();
 
+    /* Show only, second review */
+    /** 1: going live, a send before the next frame has no preview value */
+    void goingLiveSendsNoStoredPreview();
+    /** 2: a GO on a list running from a preview drives it */
+    void aGoOnAListRunningFromAPreviewDrivesIt();
+    /** Epoch: a list left running from Design holds it until a GO in
+     *  Operate; a Park set in Design too, until set again */
+    void aListLeftRunningFromDesignWaitsForAGo();
+    void aParkSetInDesignHoldsItInOperate();
+    /** 3a: what a Script under an editor's Test starts is held */
+    void whatAScriptUnderATestStartsIsHeld();
+    /** 4: a preview's effect on it is held from the first live frame */
+    void aPreviewsEffectIsHeldFromTheFirstLiveFrame();
+    /** 5: "not ours" stays zero over a held safe value */
+    void notOursStaysZeroUnderTheHold();
+    /** 8: made Show only mid-show, only that fixture is reset */
+    void markingOneMidShowResetsOnlyIt();
+
 private:
     /** One processFaders() frame; the output value at @p address */
     int frame(int address);

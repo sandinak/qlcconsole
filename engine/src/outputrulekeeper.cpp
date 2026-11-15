@@ -29,6 +29,7 @@
 #include "qlcfixturedef.h"
 #include "universe.h"
 #include "function.h"
+#include "mastertimer.h"
 
 #define KXMLQLCOutputRuleOnAtOpen QStringLiteral("OnAtOpen")
 
@@ -48,8 +49,16 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
         scheduleRebuild();
     });
     connect(doc, &Doc::modeChanged, this, [this](Doc::Mode mode) {
-        // Show only: before anything else hears of Operate, so a GO that
-        // follows the switch at once drives what it should.
+        /* Show only, Operate starting: a new session -- what was started
+           or set in Design is not the show until a GO in Operate -- with
+           every running function's gate worked out now, and only then the
+           universes live. Before anything else hears of Operate. */
+        if (mode == Doc::Operate)
+        {
+            Function::startLiveSession();
+            if (m_doc->masterTimer() != nullptr)
+                m_doc->masterTimer()->refreshPreviewGates();
+        }
         pushShowOnlyLive();
         if (mode == Doc::Operate && m_seenOperate == false)
         {

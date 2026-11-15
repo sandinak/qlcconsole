@@ -56,6 +56,10 @@ public:
     /** Start the thread execution and therefore the JavaScript code */
     void execute();
 
+    /** The Script this runs for: what it starts runs under it, following
+     *  its Show only gate (Function::previewGate()) */
+    void setParentFunction(quint32 id) { m_parentFunction = id; }
+
     void stop();
 
     QStringList collectScriptData();
@@ -272,6 +276,8 @@ private:
     quint32 m_waitFunctionId;
     // Map used to lookup a GenericFader instance for a Universe ID
     QMap<quint32, QSharedPointer<GenericFader> > m_fadersMap;
+private:
+    quint32 m_parentFunction = 0xFFFFFFFF;
 };
 
 #endif

@@ -1191,8 +1191,17 @@ void Function::start(MasterTimer* timer, FunctionParent source, quint32 startTim
     bool again = false;
     {
         QMutexLocker sourcesLocker(&m_sourcesMutex);
-        if (m_sources.contains(source))
+        const int already = int(m_sources.indexOf(source));
+        if (already >= 0)
+        {
+            // Started again by what started it (a GO on a list it already
+            // plays): nothing restarts, but the source is renewed -- a GO
+            // in Operate makes a list left running from Design the show.
+            m_sourceGates[already] = sourceGate(source);
+            sourcesLocker.unlock();
+            sourcesChanged();
             return;
+        }
         m_sources.append(source);
         m_sourceGates.append(sourceGate(source));
         again = m_sources.size() > 1;
@@ -1231,6 +1240,17 @@ QList<FunctionParent> Function::sources() const
     return m_sources;
 }
 
+void Function::startLiveSession()
+{
+    GenericFader::bumpLiveEpoch();
+    sourcesChanged();
+}
+
+quint32 Function::sourcesGeneration()
+{
+    return s_sourcesGeneration.load(std::memory_order_relaxed);
+}
+
 void Function::setShowOnlyInUse(bool inUse)
 {
     if (s_showOnlyInUse.exchange(inUse, std::memory_order_relaxed) != inUse)
@@ -1247,6 +1267,7 @@ Function::SourceGate Function::sourceGate(const FunctionParent &source) const
        on the timer thread. Started from anywhere else it is a real source. */
     if (g.notTheShow == false && source.type() == FunctionParent::Function && source.id() != id())
         g.parentGate = GenericFader::creationGateOf(source.id());
+    g.epoch = GenericFader::liveEpoch();
     return g;
 }
 
@@ -1264,11 +1285,17 @@ void Function::refreshPreviewGate()
     bool any = false, notTheShow = true;
     {
         QMutexLocker sourcesLocker(&m_sourcesMutex);
+        const quint32 epoch = GenericFader::liveEpoch();
         for (const SourceGate &g : std::as_const(m_sourceGates))
         {
             any = true;
-            if (g.notTheShow == false
-                && (!g.parentGate || g.parentGate->load(std::memory_order_relaxed) == false))
+            if (g.notTheShow)
+                continue;
+            // Started by a function: as that one is. Else the show only
+            // when added (or renewed) in this Operate session.
+            const bool real = g.parentGate ? g.parentGate->load(std::memory_order_relaxed) == false
+                                           : g.epoch == epoch;
+            if (real)
                 notTheShow = false;
         }
     }

@@ -329,9 +329,27 @@ public:
     bool holdsShowOnly() const
     {
         return m_holdsShowOnly.load(std::memory_order_relaxed)
-               || (m_previewGate && m_previewGate->load(std::memory_order_relaxed));
+               || (m_previewGate && m_previewGate->load(std::memory_order_relaxed))
+               || (m_liveBound.load(std::memory_order_relaxed)
+                   && m_liveEpoch.load(std::memory_order_relaxed) != liveEpoch());
     }
     void setHoldsShowOnly(bool hold) { m_holdsShowOnly.store(hold, std::memory_order_relaxed); }
+
+    /** What a fader not a function's holds was set by hand (Park, Mark, a
+     *  held last look): it is the show only when set in this Operate
+     *  session. Stamps it now; from the next switch to Operate on, until
+     *  stamped again, it holds the Show-only channels. */
+    void stampLiveEpoch()
+    {
+        m_liveEpoch.store(liveEpoch(), std::memory_order_relaxed);
+        m_liveBound.store(true, std::memory_order_relaxed);
+    }
+
+    /** Show only's Operate session: bumped each time Operate starts
+     *  (Function::startLiveSession()). Whatever was started or set before
+     *  it -- in Design -- is not the show until a GO in Operate. */
+    static quint32 liveEpoch();
+    static void bumpLiveEpoch();
 
     /** While one is in scope on a thread, the faders made there follow
      *  @p gate, the gate of function @p functionId (the MasterTimer, around
@@ -388,6 +406,8 @@ private:
     bool m_monitoring;
     bool m_zeroAll = false;
     std::atomic<bool> m_holdsShowOnly { false };
+    std::atomic<bool> m_liveBound { false };
+    std::atomic<quint32> m_liveEpoch { 0 };
     /** Set once, when made (CreationScope): never changes after */
     PreviewGate m_previewGate;
 

@@ -637,6 +637,8 @@ private:
      *  frame sent, or the rules changed since: a changed frame, so a
      *  plugin that sends only changes sends it. Keeps @p frame's. */
     bool showOnlySentChanged(const QByteArray &frame);
+    /** The "not ours" ranges of @p frame at zero (m_notOursMutex held) */
+    void zeroNotOurs(QByteArray &frame) const;
 
 private:
     /** True when any channel up to @p count is Blackout-exempt */
@@ -670,8 +672,10 @@ private:
     QByteArray m_showOnlyFrame;
     std::atomic<int> m_showOnlyCount { 0 };
     std::atomic<bool> m_showOnlyLive { false };
-    /** Set going live: the next frame starts them from safe */
+    /** Channels made Show only while live: the next frame starts them
+     *  from safe (m_showOnlyResetChannels, under m_outputRulesMutex) */
     std::atomic<bool> m_showOnlyReset { false };
+    QVector<int> m_showOnlyResetChannels;
 
     /*********************************************************************
      * Auto-open shutters

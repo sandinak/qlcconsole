@@ -830,10 +830,19 @@ or a flame relay. So:
   Blackout (then it keeps what the show gives it).
 - **With On when not in use**, Show only wins: nothing turns a laser or a
   flame on just because nothing else is using it.
-- **Editors' Test buttons** and the Scene editor's own output are not the
-  show either: they are held like a preview. A list you GO in Design and
-  leave running when you switch to Operate *is* the show, and drives it
-  from then on.
+- **Editors' Test buttons** (and the Show editor's Play, and what a Script
+  under one starts) and the Scene editor's own output are not the show
+  either: they are held like a preview.
+- **Cues left running from Design hold Show-only fixtures until a GO in
+  Operate.** Nothing moves a laser, fogger or flame without a GO in
+  Operate: a list you tried out in Design and left running keeps them safe
+  after the switch until you GO on it (Run tab, pad, phone, QLab, the Show
+  Tree, the VC cue list -- a GO on a running list makes it the show without
+  restarting it). Park and Mark set in Design hold them too, until set
+  again in Operate. A VC cue list's crossfader is a GO.
+- **The Simple Desk** is your own hand on the channel: a level you push
+  there drives it in Operate, also one left up from Design. A maintenance
+  command sent to the fixture itself (lamp on, reset) is sent as asked.
 - **You can see it**: while it is held the footer says so in amber —
   **Lasers held: Design**, **Fog held: Blind**, **Flame L held: Design**,
   **3 Show-only fixtures held: Design** (click it for their Output Rules)

@@ -4780,6 +4780,12 @@ void App::slotControlBlind(bool checked)
         m_doc->inputOutputMap()->setOutputInhibited(checked);
 }
 
+void App::toggleBlind()
+{
+    if (m_controlBlindAction != NULL && m_controlBlindAction->isEnabled())
+        m_controlBlindAction->trigger();     // toggles, then slotControlBlind()
+}
+
 void App::setBlindView(bool on)
 {
     if (m_doc == NULL)

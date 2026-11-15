@@ -488,7 +488,7 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
         QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
         for (auto it2 = m_faders.begin(); it2 != m_faders.end(); ++it2)
         {
-            int idx = it2.key();
+            int idx = it2.key() & ~kHeldFader;
             if (!it2.value().isNull() && idx >= 0 && idx < ua.size())
                 ua.at(idx)->dismissFader(it2.value());
         }
@@ -674,7 +674,7 @@ void EffectScriptRunner::slotTick()
         QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
         for (auto it2 = m_faders.begin(); it2 != m_faders.end(); ++it2)
         {
-            int idx = it2.key();
+            int idx = it2.key() & ~kHeldFader;
             if (!it2.value().isNull() && idx >= 0 && idx < ua.size())
                 ua.at(idx)->dismissFader(it2.value());
         }
@@ -822,15 +822,15 @@ static const quint64 kAnyScene = quint64(0xFFFFFFFFu) << 32;
 void EffectScriptRunner::publishWrites()
 {
     QList<EffectInstance::DmxWrite> combined;
+    QVector<QVector<std::shared_ptr<std::atomic<bool> > > > gateSets;
     QSet<quint64> drawn;
-    /* Show only, in Operate: an effect playing only for a preview (the
-       Workbench) leaves the Show-only fixtures alone, as its scene's own
-       fader does (GenericFader::holdsShowOnly()). One fader carries every
-       effect, so it is done here, write by write. Outside Operate every
-       frame sent holds them anyway, and the rig views still draw them. */
+    /* Show only: an effect on a Show-only fixture carries the gates of the
+       scenes it plays for, and writeDMX() puts it on the held fader while
+       they say "not the show" (a preview, a Test, a cue left running from
+       Design) -- in both modes, read each tick: no window at a mode switch.
+       The rig views still get it (a held fader is kept off only live). */
     const OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
-    const bool liveShowOnly = m_doc->mode() == Doc::Operate && rules != nullptr
-                              && rules->showOnlyFixtures().isEmpty() == false;
+    const bool anyShowOnly = rules != nullptr && rules->showOnlyFixtures().isEmpty() == false;
     {
         QMutexLocker locker(&m_instanceMutex);
         for (const EffectInstance *inst : m_instances)
@@ -846,13 +846,25 @@ void EffectScriptRunner::publishWrites()
             }
             const int from = int(combined.size());
             combined += inst->dmxWrites();
-            if (liveShowOnly && previewOnly(inst))
+            if (anyShowOnly)
             {
-                for (int i = int(combined.size()) - 1; i >= from; --i)
+                int set = -1;
+                for (int i = from; i < int(combined.size()); ++i)
                 {
                     const Fixture *fx = m_doc->fixture(combined.at(i).fixtureId);
-                    if (fx != nullptr && (fx->outputRules() & Fixture::ShowOnly))
-                        combined.removeAt(i);
+                    if (fx == nullptr || (fx->outputRules() & Fixture::ShowOnly) == 0)
+                        continue;
+                    if (set < 0)
+                    {
+                        QVector<std::shared_ptr<std::atomic<bool> > > gates;
+                        for (quint32 sid : inst->sceneIds())
+                            if (const Function *f = m_doc->function(sid))
+                                gates << f->previewGate();
+                        set = int(gateSets.size());
+                        gateSets << gates;
+                    }
+                    combined[i].showOnly = true;
+                    combined[i].gateSet = set;
                 }
             }
             // Part way in or out: each write that far over what is under it.
@@ -870,21 +882,8 @@ void EffectScriptRunner::publishWrites()
 
     QMutexLocker locker(&m_writesMutex);
     m_publishedWrites = combined;
+    m_publishedGateSets = gateSets;
     m_drawn = drawn;
-}
-
-bool EffectScriptRunner::previewOnly(const EffectInstance *inst) const
-{
-    const QList<quint32> scenes = inst->sceneIds();
-    if (scenes.isEmpty())
-        return false;
-    for (quint32 sid : scenes)
-    {
-        const Function *f = m_doc->function(sid);
-        if (f == nullptr || f->previewGate()->load(std::memory_order_relaxed) == false)
-            return false;
-    }
-    return true;
 }
 
 void EffectScriptRunner::setScenesOffStage(const QSet<quint32> &sceneIds)
@@ -1064,20 +1063,49 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
     // is NEVER held across script evaluation (that is the whole reason it exists
     // separately from m_instanceMutex), so this can't stall the DMX thread.
     QList<EffectInstance::DmxWrite> writes;
+    QVector<QVector<std::shared_ptr<std::atomic<bool> > > > gateSets;
     {
         QMutexLocker locker(&m_writesMutex);
         writes = m_publishedWrites;
+        gateSets = m_publishedGateSets;     // shared, not copied
+    }
+
+    /* Show only: the writes on a Show-only fixture whose scenes are all
+       not the show (their gates, read now) go on a fader of their own that
+       holds the Show-only channels; composed apart. */
+    QList<EffectInstance::DmxWrite> held;
+    if (gateSets.isEmpty() == false)
+    {
+        for (int i = int(writes.size()) - 1; i >= 0; --i)
+        {
+            const EffectInstance::DmxWrite &w = writes.at(i);
+            if (w.showOnly == false || w.gateSet < 0 || w.gateSet >= gateSets.size())
+                continue;
+            const QVector<std::shared_ptr<std::atomic<bool> > > &gates = gateSets.at(w.gateSet);
+            bool notTheShow = gates.isEmpty() == false;
+            for (const auto &g : gates)
+                notTheShow = notTheShow && g && g->load(std::memory_order_relaxed);
+            if (notTheShow)
+            {
+                held.prepend(w);
+                writes.removeAt(i);
+            }
+        }
     }
 
     writes = composeWrites(writes);
-
-    for (const auto &w : writes)
+    const int heldFrom = int(writes.size());
+    if (held.isEmpty() == false)
+        writes += composeWrites(held);
+    for (int i = 0; i < int(writes.size()); ++i)
     {
+        const EffectInstance::DmxWrite &w = writes.at(i);
         if (w.universeId < 0 || w.universeId >= universes.size())
             continue;
         Universe *uni = universes.at(w.universeId);
         if (!uni)
             continue;
+        const int key = w.universeId | (i >= heldFrom ? kHeldFader : 0);
 
         // Get or create a GenericFader for this universe. Using a fader
         // instead of uni->write() ensures that processFaders() writes our
@@ -1093,7 +1121,7 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         // effect fader is written last, so it reliably wins LTP channels
         // (pan/tilt).  HTP channels (intensity) still max regardless of
         // order, so this doesn't change colour/dimmer behaviour.
-        QSharedPointer<GenericFader> &fader = m_faders[w.universeId];
+        QSharedPointer<GenericFader> &fader = m_faders[key];
         if (fader.isNull())
         {
             // On top of the Override faders too: a Show Tree preview's
@@ -1102,6 +1130,8 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
             fader = uni->requestTopFader(Universe::Override);
             fader->setName(QStringLiteral("EffectScript"));
             fader->setDoc(m_doc);        // unpatched fixtures: shown, not sent
+            fader->setHoldsShowOnly(key & kHeldFader);
+            next[key];
         }
 
         FadeChannel fc(m_doc, w.fixtureId, w.channel);
@@ -1126,7 +1156,7 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         // qDebug() line per channel. At 50 Hz over a rig's worth of channels
         // that is thousands of formatted stderr writes per second on the
         // MasterTimer thread, which on its own can blow the tick budget.
-        next[w.universeId].append(fc);
+        next[key].append(fc);
     }
 
     for (auto it = next.constBegin(); it != next.constEnd(); ++it)

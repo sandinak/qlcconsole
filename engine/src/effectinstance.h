@@ -68,6 +68,8 @@ public:
                                  //      (FadeChannel::Mix); set by the runner
         bool    snap = false;    // a value that means nothing part way (a spin speed,
                                  // its stop): never mixed by depth, written whole
+        bool    showOnly = false; // on a Show-only fixture (set by the runner)
+        int     gateSet = -1;    // the runner's gates of the scenes it plays for
     };
 
     EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteId);

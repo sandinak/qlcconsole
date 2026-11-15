@@ -190,7 +190,10 @@ bool ScriptRunner::write(MasterTimer *timer, QList<Universe *> universes)
 
             if (operation == FunctionOperation::START || operation == FunctionOperation::START_DONT_STOP)
             {
-                function->start(timer, FunctionParent::master());
+                // Under the Script (Show only: it follows the Script's gate).
+                function->start(timer, m_parentFunction != 0xFFFFFFFF
+                                       ? FunctionParent(FunctionParent::Function, m_parentFunction)
+                                       : FunctionParent::master());
                 if (operation == FunctionOperation::START)
                     m_startedFunctions << fID;
             }

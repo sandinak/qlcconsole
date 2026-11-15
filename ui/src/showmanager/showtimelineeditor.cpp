@@ -187,7 +187,9 @@ ShowTimelineEditor::~ShowTimelineEditor()
 
 FunctionParent ShowTimelineEditor::functionParent() const
 {
-    return FunctionParent::master();
+    // The editor's Play (the Workbench's editor for a Show too) is a Test,
+    // not the show: a Show-only fixture stays safe; a GO of the show drives.
+    return FunctionParent::editorTest(0x6);
 }
 
 void ShowTimelineEditor::stopForStructuralEdit()
