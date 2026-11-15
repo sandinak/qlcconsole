@@ -604,7 +604,10 @@ QString Script::handleStartFunction(const QList<QStringList>& tokens, MasterTime
     Function* function = doc->function(id);
     if (function != NULL)
     {
-        function->start(timer, FunctionParent::master());
+        // Under this script, so it follows the script's own Show only gate:
+        // what a Script started by a preview or an editor's Test starts is
+        // not the show either.
+        function->start(timer, FunctionParent(FunctionParent::Function, this->id()));
 
         if (m_stopOnExit)
         {

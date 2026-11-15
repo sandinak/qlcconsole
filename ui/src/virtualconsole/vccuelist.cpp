@@ -904,7 +904,10 @@ void VCCueList::slotPlayback()
             if (currentTreeIndex != ch->currentStepIndex())
                 playCueAtIndex(currentTreeIndex);
 
+            const bool resuming = ch->isPaused();
             ch->setPause(!ch->isPaused());
+            if (resuming)
+                claimRunning(ch);
         }
         else if (playbackLayout() == PlayStopPause)
         {
@@ -992,6 +995,7 @@ void VCCueList::slotNextCue()
             action.m_stepIntensity = getPrimaryIntensity();
             action.m_fadeMode = getFadeMode();
             ch->setAction(action);
+            claimRunning(ch);
         }
     }
     else
@@ -1038,6 +1042,7 @@ void VCCueList::slotPreviousCue()
             action.m_stepIntensity = getPrimaryIntensity();
             action.m_fadeMode = getFadeMode();
             ch->setAction(action);
+            claimRunning(ch);
         }
     }
     else
@@ -1163,6 +1168,7 @@ void VCCueList::playSubCue(int index, int subIndex)
     if (ch->isRunning())
     {
         ch->setAction(action);
+        claimRunning(ch);
         return;
     }
     // Stopped: start there, as startChaser() does at a step.
@@ -1675,6 +1681,7 @@ void VCCueList::slotSideFaderValueChanged(int value)
         action.m_stepIntensity = getPrimaryIntensity();
         action.m_fadeMode = getFadeMode();
         ch->setAction(action);
+        claimRunning(ch);
     }
     else
     {
@@ -1686,6 +1693,8 @@ void VCCueList::slotSideFaderValueChanged(int value)
         Chaser *ch = chaser();
         if (!(ch == NULL || ch->stopped()))
         {
+            // The crossfader is the show (a VC action): the list with it.
+            claimRunning(ch);
             ch->adjustStepIntensity(qreal(value) / 100.0, m_primaryTop ? m_primaryIndex : m_secondaryIndex,
                                     Chaser::FadeControlMode(getFadeMode()));
             ch->adjustStepIntensity(qreal(100 - value) / 100.0, m_primaryTop ? m_secondaryIndex : m_primaryIndex,
@@ -2005,6 +2014,7 @@ void VCCueList::playCueAtIndex(int idx)
         action.m_stepIntensity = getPrimaryIntensity();
         action.m_fadeMode = getFadeMode();
         ch->setAction(action);
+        claimRunning(ch);
     }
     else
     {
@@ -2013,6 +2023,16 @@ void VCCueList::playCueAtIndex(int idx)
 
     if (sideFaderMode() == Crossfade)
         setFaderInfo(m_primaryIndex);
+}
+
+void VCCueList::claimRunning(Chaser *ch)
+{
+    /* A cue list action on a list already running -- from a preview, an
+       editor's Test, or left running from Design: the VC is the show now.
+       Started again by this cue list, which restarts nothing but makes it
+       drive Show-only fixtures (Fixture::ShowOnly). */
+    if (ch != NULL && ch->isRunning())
+        ch->start(m_doc->masterTimer(), functionParent());
 }
 
 FunctionParent VCCueList::functionParent() const

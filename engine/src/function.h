@@ -867,6 +867,14 @@ public:
     /** Whether any fixture is Show only (OutputRuleKeeper): with none,
      *  refreshPreviewGate() never walks the sources */
     static void setShowOnlyInUse(bool inUse);
+    /** Operate starts: every source added before now (in Design) is not
+     *  the show for Show-only fixtures until a GO in Operate adds or
+     *  renews one (start() with a source it has renews it). Call
+     *  MasterTimer::refreshPreviewGates() after, before the universes go
+     *  live. */
+    static void startLiveSession();
+    /** Bumped whenever a source or a gate changes */
+    static quint32 sourcesGeneration();
 
     /** What started this function and keeps it running (a copy, under its
      *  lock): for "Why is this on?" (WhyOn), on demand. */
@@ -900,6 +908,9 @@ private:
     {
         bool notTheShow = false;
         std::shared_ptr<std::atomic<bool> > parentGate;
+        /** The Operate session it was added in (GenericFader::liveEpoch()):
+         *  one from before this session is not the show */
+        quint32 epoch = 0;
     };
     QVector<SourceGate> m_sourceGates;
     /** What a source just added is (start()) */

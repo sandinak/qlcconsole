@@ -48,6 +48,17 @@ GenericFader::GenericFader(QObject *parent)
    thread_local member is refused by MSVC and misbehaves under MinGW. */
 static thread_local const GenericFader::PreviewGate *t_creationGate = nullptr;
 static thread_local quint32 t_creationFunction = 0xFFFFFFFF;
+static std::atomic<quint32> s_liveEpoch { 1 };
+
+quint32 GenericFader::liveEpoch()
+{
+    return s_liveEpoch.load(std::memory_order_relaxed);
+}
+
+void GenericFader::bumpLiveEpoch()
+{
+    s_liveEpoch.fetch_add(1, std::memory_order_relaxed);
+}
 
 const GenericFader::PreviewGate *GenericFader::creationGate()
 {

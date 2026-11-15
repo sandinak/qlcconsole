@@ -90,6 +90,10 @@ void OutputLayer::set(const QList<Level> &levels)
             slot.fader->setName(m_name);
             slot.fader->setDoc(doc);
         }
+        // Park, Mark, a held last look: set now, so the show from now on
+        // (set in Design, it holds Show-only fixtures once Operate starts).
+        if (!m_holdsShowOnly)
+            slot.fader->stampLiveEpoch();
         slot.fader->replaceAll(it.value());
     }
 }

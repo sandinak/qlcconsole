@@ -376,6 +376,9 @@ private:
     QString listName(const Chaser *chaser) const;
     void go(Chaser *chaser, int step);
     void goSubCue(Chaser *chaser, int step, int subCue);
+    /** A command on a running list: its source renewed, so it is the
+     *  show (Show only), and resumed if paused */
+    void claim(Chaser *chaser);
 
 private:
     Doc *m_doc;

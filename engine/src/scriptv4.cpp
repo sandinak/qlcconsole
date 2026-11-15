@@ -338,6 +338,7 @@ bool Script::saveXML(QXmlStreamWriter *doc) const
 void Script::preRun(MasterTimer* timer)
 {
     m_runner = new ScriptRunner(doc(), m_data);
+    m_runner->setParentFunction(id());
     connect(m_runner, SIGNAL(finished()), this, SLOT(slotRunnerFinished()));
     m_runner->execute();
 

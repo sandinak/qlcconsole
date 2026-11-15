@@ -134,7 +134,18 @@ void ShowControl::go(Chaser *chaser, int step)
 
     if (!chaser->isRunning())
         chaser->start(m_doc->masterTimer(), FunctionParent::master());
-    else if (chaser->isPaused())
+    else
+        claim(chaser);
+}
+
+void ShowControl::claim(Chaser *chaser)
+{
+    /* A GO on a list already running -- from a preview, a Test, or left
+       running from Design: the GO is the show now. Started again by the
+       GO's own source, which restarts nothing (Function::start()) but
+       makes it drive Show-only fixtures (Fixture::ShowOnly). */
+    chaser->start(m_doc->masterTimer(), FunctionParent::master());
+    if (chaser->isPaused())
         chaser->setPause(false);
 }
 
@@ -145,8 +156,8 @@ void ShowControl::goSubCue(Chaser *chaser, int step, int subCue)
     chaser->jumpToSubCue(step, subCue);
     if (!chaser->isRunning())
         chaser->start(m_doc->masterTimer(), FunctionParent::master());
-    else if (chaser->isPaused())
-        chaser->setPause(false);
+    else
+        claim(chaser);
 }
 
 int ShowControl::fadeProgress(const Chaser *chaser)
@@ -367,7 +378,7 @@ bool ShowControl::execute(const Request &request)
         case Resume:
             if (!chaser->isRunning() || !chaser->isPaused())
                 return finish(false, tr("%1 isn't paused").arg(name));
-            chaser->setPause(false);
+            claim(chaser);
             return finish(true, name);
 
         case Back:
@@ -390,6 +401,7 @@ bool ShowControl::execute(const Request &request)
                               to < 0 ? from : to, -1);
             }
             chaser->setAction(action);
+            claim(chaser);
             m_loaded.remove(chaser->id());
             return finish(true, name);
         }
@@ -426,6 +438,7 @@ bool ShowControl::execute(const Request &request)
                 chaser->subGo();
             else
                 chaser->subBack();
+            claim(chaser);
             return finish(true, name);
         }
 

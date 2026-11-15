@@ -110,6 +110,7 @@
 #include "fixturemanager.h"
 #include "inputoutputmanager.h"
 #include "timecodesource.h"
+#include "pmjoverlay.h"
 #undef protected
 #undef private
 #include "helpbrowser.h"
@@ -130,6 +131,7 @@
 #include "fixturetreewidget.h"
 #include "outputrulekeeper.h"
 #include "outputrulesdialog.h"
+#include "controlsurface.h"
 #include "functionparent.h"
 #include "mastertimer.h"
 #include "showcontrol.h"
@@ -2524,6 +2526,24 @@ void AppViews_Test::showOnlyIsSaidAndBadged()
     QVERIFY(chip->isVisibleTo(m_app) == false);
     removeFixtures(ids);
     doc->resetModified();
+}
+
+void AppViews_Test::aControlSurfaceBlindFollowsTheConsolesRule()
+{
+    Doc *doc = m_app->doc();
+    QVERIFY(m_app->m_pmjOverlay != nullptr);
+    const ControlSurface::Role blind(ControlSurface::RoleType::Static, ControlSurface::Blind);
+    doc->setMode(Doc::Operate);
+    QCoreApplication::processEvents();
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, blind, 255);
+    QVERIFY(doc->inputOutputMap()->outputInhibited() == false);   // the Blind view, not a mute
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, blind, 255);   // and back
+    doc->setMode(Doc::Design);
+    QCoreApplication::processEvents();
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, blind, 255);
+    QVERIFY(doc->inputOutputMap()->outputInhibited());           // Design: a mute
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, blind, 255);
+    QVERIFY(doc->inputOutputMap()->outputInhibited() == false);
 }
 
 QTEST_MAIN(AppViews_Test)

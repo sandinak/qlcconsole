@@ -23,6 +23,7 @@
 #include <time.h>
 #include <QMutexLocker>
 #include <cmath>
+#include <utility>
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #   include "mastertimer-win32.h"
@@ -480,6 +481,26 @@ void MasterTimer::fadeAndStopAll(int timeout)
 
     // At last, stop all functions
     stopAllFunctions();
+}
+
+void MasterTimer::refreshPreviewGates()
+{
+    // Under the list's lock: no tick runs meanwhile (it holds it for the
+    // whole tick), so the gates are worked out here as the tick would.
+    QMutexLocker locker(&m_functionListMutex);
+    for (int pass = 0; pass < 8; ++pass)
+    {
+        const quint32 gen = Function::sourcesGeneration();
+        for (Function *f : std::as_const(m_functionList))
+            if (f != nullptr)
+                f->refreshPreviewGate();
+        for (Function *f : std::as_const(m_startQueue))
+            if (f != nullptr)
+                f->refreshPreviewGate();
+        // A gate that changed bumps the generation: its children look again.
+        if (Function::sourcesGeneration() == gen)
+            break;
+    }
 }
 
 int MasterTimer::runningFunctions() const

@@ -458,6 +458,9 @@ signals:
 
 private:
     FunctionParent functionParent() const;
+    /** A cue list action on a running list makes it the show (Show only):
+     *  started again by this cue list, which restarts nothing */
+    void claimRunning(Chaser *ch);
 
     /*************************************************************************
      * Load & Save

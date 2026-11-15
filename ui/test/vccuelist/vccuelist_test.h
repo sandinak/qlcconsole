@@ -28,6 +28,9 @@ class VCCueList_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** Show only: a cue list's Next on a list running from a preview
+     *  makes it the show (its gate opens), restarting nothing */
+    void aNextOnAListRunningFromAPreviewIsTheShow();
     void initTestCase();
     void init();
     void cleanup();

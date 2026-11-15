@@ -39,6 +39,9 @@ private slots:
     /** The footer says why they are held, the plot badges them, Locate is
      *  refused, and the dialog sets the rule */
     void showOnlyIsSaidAndBadged();
+    /** A control surface's Blind is the console's Blind button: in
+     *  Operate never a mute of the live show */
+    void aControlSurfaceBlindFollowsTheConsolesRule();
 
     /** Picking a view from the View menu switches to it even when an earlier
      *  tab has been detached and every index after it has shifted. */

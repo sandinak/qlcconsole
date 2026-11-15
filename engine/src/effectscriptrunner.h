@@ -17,6 +17,9 @@
 #define EFFECTSCRIPTRUNNER_H
 
 #include <QObject>
+#include <QVector>
+#include <atomic>
+#include <memory>
 #include "qlcengine_export.h"
 #include <QHash>
 #include <QList>
@@ -187,9 +190,7 @@ private:
     /** Collect every live instance's DMX writes into m_publishedWrites, which is
      *  the ONLY thing writeDMX() (MasterTimer thread) reads. Main thread only. */
     void publishWrites();
-    /** Every scene @p inst plays for runs only for a preview (Function::
-     *  previewGate()): in Operate it keeps off the Show-only fixtures */
-    bool previewOnly(const EffectInstance *inst) const;
+
 
     /** The RUNNING instance for @p paletteId, or nullptr. (Parked instances are
      *  deliberately not considered — they are held, not running.) */
@@ -238,6 +239,11 @@ private:
      *  only ever held for a flat list copy — never across script evaluation. */
     mutable QMutex m_writesMutex;
     QList<EffectInstance::DmxWrite> m_publishedWrites;
+    /** Show only: per published instance on a Show-only fixture, the
+     *  preview gates (Function::previewGate()) of the scenes it plays for;
+     *  a write's gateSet indexes it. All true: the write is not the show
+     *  and goes out on the held fader (m_faders key | kHeldFader). */
+    QVector<QVector<std::shared_ptr<std::atomic<bool> > > > m_publishedGateSets;
     /** What has drawn (hasDrawn()), published with the writes, under the
      *  same mutex: (scene id << 32) | effect palette id; a failed effect's
      *  palette id alone, with every bit of the scene half set. */
@@ -296,7 +302,9 @@ private:
     /** Per-universe GenericFaders used to write effect DMX through the fader
      *  pipeline instead of directly to preGMValues (which zeroIntensityChannels
      *  would wipe before processFaders re-writes colour faders). */
-    QHash<int, QSharedPointer<GenericFader>> m_faders; // key = universe index
+    QHash<int, QSharedPointer<GenericFader>> m_faders; // key = universe index (| kHeldFader)
+    /** m_faders' key bit for a universe's held fader (Show only) */
+    static constexpr int kHeldFader = 0x10000;
 
     /** Last followspot beam position (pan/tilt degrees) per fixture, captured
      *  from the most recent Operate-mode tick.  Persists across scene
