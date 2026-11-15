@@ -117,6 +117,11 @@ private slots:
     void review12_aHeldUniverseReopensWhenItsDeviceIsBackAtAnotherNumber();
     void identicalInterfacesReconnectOnlyAsBeforeConfirmed();
     void aHoldOnASharedLineForgetsOnlyThatUniverse();
+    void review13_pendingShowOnlyDeviceIsNotTakenByNumberOnSwap();
+    void review13_pendingShowOnlyDeviceIsNotTakenByNumberOnPlug();
+    void review13_reconnectAsBeforeNotOntoAnotherShowOnlyDevice();
+    void review13_anOrdinaryUniverseHeldOffTheLaserComesBackWithItsDevice();
+    void review13_loadingIdenticalInterfacesKeepsTheLaserLineItsOwn();
     void removeUniverse();
     void universe();
     void profiles();

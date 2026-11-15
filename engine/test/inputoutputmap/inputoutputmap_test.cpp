@@ -2606,6 +2606,160 @@ void InputOutputMap_Test::aHoldOnASharedLineForgetsOnlyThatUniverse()
     QVERIFY(stub->mapped(0, 1) == false);
 }
 
+/* Review 13 (critical): a Show-only universe whose interface was not
+   plugged in when the show was loaded is pending on its name, not "held
+   for a device change" -- so it is not in the set of Show-only devices
+   (recordedLineName() is empty for it). The laser interface is plugged
+   into the port the dimmer interface used: the ordinary universe on line 0
+   reconnects by number onto the laser rig's interface, and the Show-only
+   universe then resolves by name onto the same line. */
+void InputOutputMap_Test::review13_pendingShowOnlyDeviceIsNotTakenByNumberOnSwap()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)";
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 0));                  // dimmers -> A1
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString("Pro (S/N: B2)"), 1));   // laser rig: B2 not here yet
+    iom.universe(1)->markShowOnly(14, true, 0);
+    QVERIFY(iom.outputPatch(1, 0)->isPending());
+
+    stub->m_lineNames = QStringList() << "Pro (S/N: B2)";      // A1 out, B2 in its place
+    stub->configure();
+    iom.retryOfflinePatches();
+
+    OutputPatch *dim = iom.outputPatch(0, 0);
+    const QString now = dim->isPatched() ? stub->outputs().value(int(dim->output())) : QString();
+    QVERIFY2(now != QLatin1String("Pro (S/N: B2)"),
+             qPrintable(QString("universe 1 (no Show-only) is open on line %1 = %2, the laser rig's "
+                                "interface (universe 2 %3)")
+                        .arg(dim->output() + 1).arg(now)
+                        .arg(iom.outputPatch(1, 0)->isPatched()
+                             ? QString("open on line %1 too").arg(iom.outputPatch(1, 0)->output() + 1)
+                             : QString("pending"))));
+}
+
+/* Review 13 (critical): the same, the laser interface plugged in while the
+   dimmer one stays, and enumerated before it (lines follow the USB bus). */
+void InputOutputMap_Test::review13_pendingShowOnlyDeviceIsNotTakenByNumberOnPlug()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)";
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 0));                  // dimmers -> A1
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString("Pro (S/N: B2)"), 1));   // laser rig: B2 not here yet
+    iom.universe(1)->markShowOnly(14, true, 0);
+    QVERIFY(iom.outputPatch(1, 0)->isPending());
+
+    stub->m_lineNames = QStringList() << "Pro (S/N: B2)" << "Pro (S/N: A1)";   // B2 plugged in, first
+    stub->configure();
+    iom.retryOfflinePatches();
+
+    OutputPatch *dim = iom.outputPatch(0, 0);
+    const QString now = dim->isPatched() ? stub->outputs().value(int(dim->output())) : QString();
+    QVERIFY2(now != QLatin1String("Pro (S/N: B2)"),
+             qPrintable(QString("universe 1 (no Show-only) is open on line %1 = %2, the laser rig's "
+                                "interface (universe 2 %3)")
+                        .arg(dim->output() + 1).arg(now)
+                        .arg(iom.outputPatch(1, 0)->isPatched()
+                             ? QString("open on line %1 too").arg(iom.outputPatch(1, 0)->output() + 1)
+                             : QString("pending"))));
+}
+
+/* Review 13 (high/critical): "Reconnect as Before" reopens on the old
+   number whatever is on that line now. Two identical Eurolites (dimmers on
+   #1, a Show-only universe on #2) and a laser Pro B2 (another Show-only
+   universe). Both Eurolites are unplugged: line 1 is now B2. Before the
+   retry tick brings the laser universe back, the operator confirms
+   Reconnect as Before on the dimmer universe: it opens on B2. */
+void InputOutputMap_Test::review13_reconnectAsBeforeNotOntoAnotherShowOnlyDevice()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    const QString e("Eurolite USB-DMX512 PRO");
+    stub->m_lineNames = QStringList() << e << e << "Pro (S/N: B2)";
+    InputOutputMap iom(m_doc, 3);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 0));     // dimmers -> Eurolite #1
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 1));     // flame -> Eurolite #2
+    QVERIFY(iom.setOutputPatch(2, stub->name(), QString(), 2));     // laser rig -> B2
+    iom.universe(1)->markShowOnly(14, true, 0);
+    iom.universe(2)->markShowOnly(14, true, 0);
+
+    stub->m_lineNames = QStringList() << "Pro (S/N: B2)";          // both Eurolites out
+    stub->configure();
+    QCOMPARE(iom.outputPatch(0, 0)->deviceHold(), OutputPatch::HeldNeedsConfirm);
+    QVERIFY(iom.outputPatch(2, 0)->isPending());                    // the laser universe: back next tick
+
+    iom.reconnectAsBefore(0);                                       // confirmed in the dialog
+    OutputPatch *dim = iom.outputPatch(0, 0);
+    const QString now = dim->isPatched() ? stub->outputs().value(int(dim->output())) : QString();
+    QVERIFY2(now != QLatin1String("Pro (S/N: B2)"),
+             qPrintable(QString("Reconnect as Before put universe 1 (dimmers, recorded on %1) on line %2 "
+                                "= %3, the laser rig's interface, which universe 3 is held for")
+                        .arg(e).arg(dim->output() + 1).arg(now)));
+}
+
+/* Review 13 (medium): an ordinary universe held off the laser rig's
+   interface (F1) never comes back while its own interface is plugged in at
+   another number -- the laser universe took the line it waits on. */
+void InputOutputMap_Test::review13_anOrdinaryUniverseHeldOffTheLaserComesBackWithItsDevice()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)" << "Pro (S/N: B2)";
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 0));     // dimmers -> A1
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 1));     // laser rig -> B2
+    iom.universe(1)->markShowOnly(14, true, 0);
+
+    stub->m_lineNames = QStringList() << "Pro (S/N: B2)";          // A1 unplugged
+    stub->configure();
+    iom.retryOfflinePatches();                                      // the laser universe back on line 1 (B2)
+    QVERIFY(iom.outputPatch(1, 0)->isPatched());
+    QVERIFY(iom.outputPatch(0, 0)->isPending());
+
+    stub->m_lineNames = QStringList() << "Pro (S/N: B2)" << "Pro (S/N: A1)";   // A1 back, after it
+    stub->configure();
+    iom.retryOfflinePatches();
+    iom.retryOfflinePatches();
+    QVERIFY2(iom.outputPatch(0, 0)->isPatched(),
+             qPrintable(QString("A1 is plugged in (line 2), nothing uses it, but the dimmer universe "
+                                "is still dark: %1").arg(iom.outputPatch(0, 0)->reconnectHeld())));
+}
+
+/* Review 13 (pre-existing, critical for Show only): a show saved with two
+   interfaces of one model (no serial). The laser rig is on #1, the dimmers
+   on #2. Loading it resolves both by name -- the first line of that name --
+   so the dimmer universe's levels go out on the laser rig's interface. */
+void InputOutputMap_Test::review13_loadingIdenticalInterfacesKeepsTheLaserLineItsOwn()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    const QString e("Eurolite USB-DMX512 PRO");
+    stub->m_lineNames = QStringList() << e << e;
+    InputOutputMap iom(m_doc, 2);
+    iom.universe(0)->markShowOnly(14, true, 0);                     // laser rig, saved on line 1
+    Universe::OfflinePatch laser;
+    laser.plugin = stub->name();
+    laser.uid = e;
+    laser.line = 0;
+    iom.loadPatch(0, laser);
+    Universe::OfflinePatch dim;                                     // dimmers, saved on line 2
+    dim.plugin = stub->name();
+    dim.uid = e;
+    dim.line = 1;
+    iom.loadPatch(1, dim);
+
+    QVERIFY(iom.outputPatch(0, 0) != NULL && iom.outputPatch(1, 0) != NULL);
+    const OutputPatch *l = iom.outputPatch(0, 0);
+    const OutputPatch *d = iom.outputPatch(1, 0);
+    QVERIFY2(!(l->isPatched() && d->isPatched() && l->output() == d->output()),
+             qPrintable(QString("the laser universe and the dimmer universe both loaded on line %1: "
+                                "the dimmer levels go out on the laser rig's interface")
+                        .arg(l->output() + 1)));
+}
+
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()
 {
     schoolLaptop();
