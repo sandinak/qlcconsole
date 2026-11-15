@@ -56,6 +56,22 @@ SimpleDeskEngine::SimpleDeskEngine(Doc* doc)
         connect(rules, &OutputRuleKeeper::emergencyStopStruck, this, [this](quint32 session) {
             releaseShowOnlyChannels(session);
         });
+    /* A fixture patched, moved or unpatched under a channel the desk holds:
+       the desk's channel there was made for what was patched before (its
+       fader channel is keyed by fixture and channel), and a second one for
+       the new fixture would write the same address -- the output then
+       followed hash order. Rebuilt from the desk's values at the next
+       write, one channel an address. */
+    auto repatched = [this](quint32) {
+        QMutexLocker locker(&m_mutex);
+        if (m_values.isEmpty())
+            return;
+        m_repatched = true;
+        setChanged(true);
+    };
+    connect(doc, &Doc::fixtureAdded, this, repatched);
+    connect(doc, &Doc::fixtureChanged, this, repatched);
+    connect(doc, &Doc::fixtureRemoved, this, repatched);
 }
 
 void SimpleDeskEngine::releaseShowOnlyChannels(quint32 session)
@@ -441,6 +457,13 @@ void SimpleDeskEngine::writeDMX(MasterTimer *timer, QList<Universe *> ua)
 
     if (hasChanged())
     {
+        if (m_repatched)
+        {
+            for (const QSharedPointer<GenericFader> &f : std::as_const(m_fadersMap))
+                if (!f.isNull())
+                    f->removeAll();
+            m_repatched = false;
+        }
         QMapIterator <uint,uchar> it(m_values);
         while (it.hasNext() == true)
         {
