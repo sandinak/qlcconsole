@@ -249,6 +249,40 @@ private slots:
      *  unscaled, held and live */
     void aSafeValueIsNeverScaledHeldOrLive();
 
+    /* Ninth review (of 690eeeab48): red until fixed */
+    /** R9-1: an output put on hold (Teaching mode's "hold real output",
+     *  the rig-network gate: OutputPatch::setPending()) is closed with no
+     *  frame at safe: the line keeps the laser on through All Off */
+    void r9_aHeldOutputKeepsTheLaserOnThroughAllOff();
+    /** R9-1: a universe re-patched to another output line mid-show: the
+     *  old line is closed with no frame at safe, All Off never reaches it */
+    void r9_aMovedOutputKeepsTheLaserOnThroughAllOff();
+    /** R9-2: Doc::patchFixtures() writes a laser's definition defaults
+     *  (applyFixtureToUniverses()) and only marks it Show only after every
+     *  fixture is applied: a frame in between sends the default */
+    void r9_aLaserBeingPatchedSendsItsDefault();
+    /** R9-3: a held relative writer (an EFX in relative mode, the XY pad)
+     *  marks a Show-only channel written: Universe::writeRelative() marks
+     *  before it checks writeBlocked() */
+    void r9_aHeldRelativeWriterSetsTheWrittenFlag();
+
+    /* Ninth review: the fixes' own tests */
+    /** Every way a line stops receiving a universe (re-patched, held,
+     *  unpatched, the universe removed, the patch destroyed), mid-show with
+     *  a Show-only cue live: that line's last frame has the Show-only
+     *  channels at safe, the others as they are; nothing after */
+    void everyClosingLineGetsShowOnlySafeLast();
+    /** A line closed with no Show-only channel gets no extra frame */
+    void aClosingLineWithNoShowOnlyGetsNothingExtra();
+    /** A held line released: its first frame is the S0 build */
+    void aReleasedLineStartsFromTheCurrentBuild();
+    /** The patch list changes under the frame lock: frames and sends from
+     *  another thread while lines are added, moved, held and removed */
+    void patchListChangesUnderTheFrameLock();
+    /** A held AutoRemove channel reaching its target lets go of nothing
+     *  (no hold, no "Why is this on?" let-go) */
+    void aHeldAutoRemoveChannelLetsGoOfNothing();
+
 private slots:
     /* The e-stop rules (OutputRuleKeeper E1-E7), swept: each writer set
        up in Operate, All Off, an unrelated GO -- held -- then its own

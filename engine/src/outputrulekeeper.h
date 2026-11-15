@@ -270,6 +270,11 @@ public:
      *  "Ignores Blackout, Grand Master" etc. Empty for none. */
     static QString describe(Fixture::OutputRules rules);
 
+    /** A fixture's Show-only channels marked where it is now, at once.
+     *  Doc::applyFixtureToUniverses() calls it before a Show-only fixture's
+     *  defaults are written (R9-2), so none of them is ever sent. */
+    void markNow(quint32 fixtureId);
+
 signals:
     /** The Show-only fixtures, or why they are held, changed */
     void showOnlyChanged();
@@ -281,8 +286,6 @@ private:
     void scheduleRebuild();
     /** A new live session (E2): Operate, All Off, a show loaded or cleared */
     void startSession();
-    /** A fixture's Show-only channels marked where it is now, at once */
-    void markNow(quint32 fixtureId);
     void pushPolicy();
     /** Every universe told whether the show may drive its Show-only
      *  channels (Universe::setShowOnlyLive(): Operate) */

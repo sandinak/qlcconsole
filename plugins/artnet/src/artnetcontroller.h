@@ -75,6 +75,12 @@ typedef struct _uinfo
     /** Universe data to be sent depending on the transmission mode */
     QByteArray outputData;
 
+    /** outputData is from before a transmit hold (transmitHeld()): the
+     *  Standard refresh does not send it, and the next real frame goes out
+     *  (changed or not) and replaces it. A node is never handed a frame
+     *  from before the hold -- a laser on, since let go. */
+    bool outputStale = false;
+
     /** Whether sends for this universe are failing, with hysteresis. A send
      *  can fail forever -- most commonly when the workspace names a bind
      *  interface this machine doesn't have -- and at DMX rates a warning per

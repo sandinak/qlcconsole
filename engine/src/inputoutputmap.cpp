@@ -307,14 +307,19 @@ bool InputOutputMap::addUniverse(quint32 id)
             while (id > universesCount())
             {
                 uni = new Universe(universesCount(), m_grandMaster);
+                // In Blind: inhibited from its first frame, as the others are.
+                uni->setInhibitOutput(m_outputInhibited);
                 connect(uni, SIGNAL(universeWritten(quint32,QByteArray)), this, SIGNAL(universeWritten(quint32,QByteArray)));
                 m_universeArray.append(uni);
             }
         }
 
         /* Woken each frame by MasterTimer::timerTick() itself, not through
-           the GUI thread's event loop (see there). */
+           the GUI thread's event loop (see there). Created while Blind is on
+           (added, or recreated by a show loaded in Blind): inhibited from
+           its first frame, matching the others. */
         uni = new Universe(id, m_grandMaster);
+        uni->setInhibitOutput(m_outputInhibited);
         connect(uni, SIGNAL(universeWritten(quint32,QByteArray)), this, SIGNAL(universeWritten(quint32,QByteArray)));
         m_universeArray.append(uni);
     }
@@ -1127,7 +1132,7 @@ int InputOutputMap::retryOfflinePatches()
             qDebug() << "[IOMAP] universe" << i + 1 << "output" << op->outputName()
                      << "reconnected on line" << line;
             QMutexLocker locker(&m_universeMutex);
-            op->resolvePending(quint32(line));
+            uni->resolveOutputPatch(o, quint32(line));
             reconnected++;
         }
 

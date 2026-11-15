@@ -1658,6 +1658,58 @@ void ArtNet_Test::rigNetworkGateDecisionIsCachedOffTheSendPath()
     plugin.m_IOmapping.clear();
 }
 
+/* A transmit hold ending (the rig network back): the Standard refresh
+   must not re-send the frame kept from before the hold -- a laser on then,
+   let go of since -- and the next real frame goes out, changed or not. */
+void ArtNet_Test::rigNetworkGateReleaseSendsNoStaleFrame()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    if (showNetLine(plugin, sock, &sink) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+    ArtNetController *ctrl = plugin.m_IOmapping.at(0).controller;
+    ctrl->addUniverse(0, ArtNetController::Output);
+    QCOMPARE(ctrl->m_universeMap[0].outputTransmissionMode, int(ArtNetController::Standard));
+
+    // Before the hold: the laser on
+    sink.clear();
+    ctrl->sendDmx(0, QByteArray(512, char(255)), true);
+    QCOMPARE(sink.count(), 1);
+
+    // Held (off the rig network); the show lets go of the laser meanwhile
+    plugin.setTransmitNetworks(QStringList() << "10.4.0.0/16");
+    QVERIFY(ctrl->transmitHeld());
+    ctrl->sendDmx(0, QByteArray(512, char(0)), true);
+
+    // Back: the refresh tick before any frame sends nothing kept from before
+    plugin.setTransmitNetworks(QStringList() << "172.18.0.0/20");
+    QVERIFY(ctrl->transmitHeld() == false);
+    sink.clear();
+    QVERIFY(QMetaObject::invokeMethod(ctrl, "slotSendAllUniverses"));
+    for (const QNetworkDatagram &dg : std::as_const(sink))
+        QVERIFY2(dg.data().mid(18) != QByteArray(512, char(255)),
+                 "the refresh re-sent the frame from before the hold");
+    QVERIFY(sink.isEmpty());
+
+    // The next real frame goes out, though unchanged since the hold
+    ctrl->sendDmx(0, QByteArray(512, char(0)), false);
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().data().mid(18), QByteArray(512, char(0)));
+    // ...and the refresh carries it from then on
+    sink.clear();
+    QVERIFY(QMetaObject::invokeMethod(ctrl, "slotSendAllUniverses"));
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().data().mid(18), QByteArray(512, char(0)));
+    // An unchanged frame after that: the refresh's job, as before
+    sink.clear();
+    ctrl->sendDmx(0, QByteArray(512, char(0)), false);
+    QVERIFY(sink.isEmpty());
+
+    plugin.setTransmitNetworks(QStringList());
+    plugin.m_IOmapping.clear();
+}
+
 /****************************************************************************
  * The RDM flag, held steady
  ****************************************************************************/
