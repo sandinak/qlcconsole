@@ -86,6 +86,13 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     connect(doc->inputOutputMap(), &InputOutputMap::outputInhibitedChanged, this, [this](bool) {
         pushShowOnlyLive();     // Blind holds them: the chip says so
     });
+    /* R7-4: Blind ending in Operate starts a new session, before anything
+       is sent again: a GO taken in Blind was checked on screen, and fires
+       only when GO'd again. */
+    connect(doc->inputOutputMap(), &InputOutputMap::outputResuming, this, [this]() {
+        if (m_doc->mode() == Doc::Operate)
+            startSession();
+    });
     connect(doc->inputOutputMap(), &InputOutputMap::universeAdded, this, [this](quint32) { scheduleRebuild(); });
     connect(doc->inputOutputMap(), &InputOutputMap::universeRemoved, this, [this](quint32) { scheduleRebuild(); });
     m_seenOperate = doc->mode() == Doc::Operate;
@@ -112,6 +119,15 @@ void OutputRuleKeeper::markNow(quint32 id)
     if (!showOnly && was == m_showOnlyAt.constEnd())
         return;
     const QList<Universe *> ua = m_doc->inputOutputMap()->universes();
+    /* The first Show-only fixture: every gate worked out for real before
+       its channels are marked, so not even the first frame lets a preview
+       drive it. */
+    if (showOnly && m_showOnly.isEmpty() && m_showOnlyAt.isEmpty())
+    {
+        Function::setShowOnlyInUse(true);
+        if (m_doc->masterTimer() != nullptr)
+            m_doc->masterTimer()->refreshPreviewGates();
+    }
     QSet<quint32> now;
     if (showOnly)
         for (quint32 i = 0; i < fx->channels(); i++)

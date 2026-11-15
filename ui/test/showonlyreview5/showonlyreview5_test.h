@@ -25,6 +25,8 @@ class Fixture;
 class Universe;
 class IOPluginStub;
 class QLCFixtureDef;
+class Chaser;
+class Function;
 
 /* Fifth Show-only review (of df050e0ce6): after an emergency stop and a GO
    on an unrelated list, nothing that GO does not drive reaches a Show-only
@@ -74,6 +76,24 @@ private slots:
     void sweepR6ShowLoadedInOperateStartsASession();
     void sweepR6DeskStampIsForWhatIsPatched();
 
+    /* Seventh review (of 66445810d0) */
+    void r7SharedSceneLatchesAcrossADesignTrip();
+    void r7DesignLeftoverLatchesAtOperate();
+    void r7CollectionChildLatchesAcrossADesignTrip();
+    void r7QueuedAllOffChildLatchesInTheGap();
+    void r7LtpChannelKeptWhenItsCueLetsGo();
+    void r7GoInBlindFiresWhenBlindEnds();
+    void r7VcButtonFlashIsHeld();
+    void r7TimecodeCueListFiresUnarmed();
+    void r7XYPadLoadedInOperateIsStamped();
+    void r7AllOffRaceLeavesAnLtpChannelUp();
+    void r7CueStackStampSurvivesARepatch();
+
+    /* S0 swept: an LTP and an HTP channel of a Show-only fixture, built
+       from scratch every frame */
+    void sweepS0LtpChannel();
+    void sweepS0HtpChannel();
+
 private:
     Fixture *addDimmer(const QString &name, int address, int rules);
     Fixture *addLaser(const QString &name, int address);
@@ -82,6 +102,13 @@ private:
     void allOff();
     /** A GO on a new list that only lights the stage dimmer */
     void goUnrelated(int level);
+    /** r7: a one-step list playing @p f, and a GO on it */
+    Chaser *listOf(Function *f, const QString &name);
+    void goList(Chaser *list);
+    Fixture *addFogger(const QString &name, int address);
+    /** S0: the five ways a Show-only channel at @p fx's address could keep
+       a level, each ending at safe until a fresh operator action */
+    void sweepS0(Fixture *fx);
 
     Doc *m_doc = nullptr;
     IOPluginStub *m_stub = nullptr;

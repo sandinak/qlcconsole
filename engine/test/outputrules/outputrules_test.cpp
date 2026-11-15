@@ -1109,6 +1109,9 @@ void OutputRules_Test::blindHoldsIt()
     QCOMPARE(m_doc->outputRuleKeeper()->showOnlyHeldBy(), OutputRuleKeeper::HeldByBlind);
     m_doc->inputOutputMap()->setOutputInhibited(false);
     frame(Flame);
+    QCOMPARE(sent(Flame), 0);       // R7-4: Blind ended, a new session -- set again to drive
+    put(Flame, 255);
+    frame(Flame);
     QCOMPARE(sent(Flame), 255);
 }
 
@@ -1663,10 +1666,7 @@ void OutputRules_Test::markingOneMidShowResetsOnlyIt()
     addDimmer("Flame", Flame, 0);
     m_doc->outputRuleKeeper()->rebuild();
     m_doc->setMode(Doc::Operate);
-    put(21, 150);                       // the show left its LTP channel at 150
-    frame(21);
-    m_uni->dismissFader(m_fader);
-    m_fader = m_uni->requestFader();
+    put(21, 150);                       // the show drives its LTP channel at 150
     frame(21);
     QCOMPARE(sent(21), 150);
     Fixture *flame = m_doc->fixture(m_doc->fixtureForAddress(Flame));
@@ -1674,6 +1674,11 @@ void OutputRules_Test::markingOneMidShowResetsOnlyIt()
     m_doc->outputRuleKeeper()->rebuild();
     frame(21);
     QCOMPARE(sent(21), 150);            // another fixture made Show only: this one untouched
+    // S0: its writer gone, the LTP channel is not kept -- cut to safe.
+    m_uni->dismissFader(m_fader);
+    m_fader = m_uni->requestFader();
+    frame(21);
+    QCOMPARE(sent(21), int(OutputRuleKeeper::safeValue(spot, 1)));
 }
 
 /****************************************************************************
@@ -2651,7 +2656,7 @@ void OutputRules_Test::aShowOnlyFixtureMovedOntoAStampedChannelWaits()
     frame(Free);
     frame(Free);
     QCOMPARE(sent(Free), 0);
-    desk->setChannelLiveEpoch(Free, GenericFader::liveEpoch());     // stamped again
+    desk->setChannelLiveEpoch(Free, GenericFader::stampEpoch());    // stamped again, by a hand
     frame(Free);
     QCOMPARE(sent(Free), 150);
     m_uni->dismissFader(desk);

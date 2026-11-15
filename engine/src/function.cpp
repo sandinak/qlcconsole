@@ -1260,7 +1260,7 @@ void Function::armAutoSource(const FunctionParent &source)
 {
     {
         QMutexLocker locker(&s_autoSourcesMutex);
-        s_autoSources.insert(source.id(), GenericFader::liveEpoch());
+        s_autoSources.insert(source.id(), GenericFader::stampEpoch());
     }
     sourcesChanged();
 }
@@ -1297,7 +1297,10 @@ Function::SourceGate Function::sourceGate(const FunctionParent &source) const
        MasterTimer's creation scope -- its gate, shared, with no Doc lookup
        on the timer thread. Started from anywhere else it is a real source. */
     if (g.notTheShow == false && source.type() == FunctionParent::Function && source.id() != id())
+    {
         g.parentGate = GenericFader::creationGateOf(source.id());
+        g.parentStamp = GenericFader::creationStampOf(source.id());
+    }
     /* S3: started by a function, it takes that one's stamp (storeGateLocked()
        latches it, now and whenever the parent is the show). E3: an
        automatic widget (an audio trigger's function bar, a VC Clock's
@@ -1317,31 +1320,53 @@ Function::SourceGate Function::sourceGate(const FunctionParent &source) const
 bool Function::storeGateLocked()
 {
     if (s_showOnlyInUse.load(std::memory_order_relaxed) == false)
-        return m_previewGate->exchange(false, std::memory_order_relaxed) != false;
-    bool any = false, notTheShow = true;
-    const quint32 epoch = GenericFader::liveEpoch();
+    {
+        // No Show-only fixture: nothing reads it (OutputRuleKeeper marks a
+        // channel only after the gates are worked out for real).
+        m_showStamp->store(0, std::memory_order_release);
+        return m_previewGate->exchange(false, std::memory_order_acq_rel) != false;
+    }
+    bool any = false;
+    quint32 best = 0;
+    const quint32 session = GenericFader::liveEpoch();
     for (SourceGate &g : m_sourceGates)
     {
         any = true;
         if (g.notTheShow)
             continue;
         /* Started by a function: R6-6, it takes its root's stamp and keeps
-           it for the session -- whenever the parent is the show, the stamp
-           is latched, so a cue a Script launched still drives after the
-           Script ends. A new session (Operate, All Off, another show)
-           leaves it old. Else the show only when added (or renewed) in
-           this Operate session. */
-        if (g.parentGate && g.parentGate->load(std::memory_order_relaxed) == false)
-            g.epoch = epoch;
-        if (g.epoch == epoch)
-            notTheShow = false;
+           it for the session -- a cue a Script launched still drives after
+           the Script ends. R7-1: only a parent that is the show NOW, worked
+           out in this session (its stamp is of it), passes its stamp on;
+           one left from before (not yet worked out for this session, in
+           whatever order the functions are refreshed) passes nothing. A
+           new session (Operate, All Off, a show loaded, Blind ending)
+           leaves every stamp old. */
+        if (g.parentGate && g.parentStamp && g.parentGate->load(std::memory_order_acquire) == false)
+        {
+            const quint32 ps = g.parentStamp->load(std::memory_order_acquire);
+            if (ps >= session && ps > g.epoch)
+                g.epoch = ps;
+        }
+        if (g.epoch >= session && g.epoch > best)
+            best = g.epoch;
     }
     /* E5: with no source left it is stopping -- nothing that is the show
        holds it any more, so what fades out is held: a cue stopped by All
        Off, or let go by the next GO, never fades a laser out. */
-    if (any == false)
-        notTheShow = true;
-    return m_previewGate->exchange(notTheShow, std::memory_order_relaxed) != notTheShow;
+    const bool held = any == false || best == 0;
+    bool changed;
+    if (held)
+    {
+        changed = m_previewGate->exchange(true, std::memory_order_acq_rel) != true;
+        changed = (m_showStamp->exchange(0, std::memory_order_acq_rel) != 0) || changed;
+    }
+    else
+    {
+        changed = m_showStamp->exchange(best, std::memory_order_acq_rel) != best;
+        changed = (m_previewGate->exchange(false, std::memory_order_acq_rel) != false) || changed;
+    }
+    return changed;
 }
 
 void Function::refreshPreviewGate()

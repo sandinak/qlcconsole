@@ -1244,6 +1244,10 @@ void Scene::flash(MasterTimer *timer, bool shouldOverride, bool forceLTP)
 
     m_flashOverrides = shouldOverride;
     m_flashForceLTP = forceLTP;
+    /* Show only (R7-5): a flash is a hand on a button (a VC button in
+       Flash, pressed by a person, its key or its input -- or what an armed
+       audio bar presses: its StampScope). Its faders take that stamp. */
+    m_flashStamp.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
 
     Q_ASSERT(timer != NULL);
     Function::flash(timer, shouldOverride, forceLTP);
@@ -1293,6 +1297,7 @@ void Scene::writeDMX(MasterTimer *timer, QList<Universe *> ua)
                     fader->setParentFunctionID(id());
                     m_fadersMap[universe] = fader;
                 }
+                fader->setLiveEpoch(m_flashStamp.load(std::memory_order_relaxed));
 
                 if (m_flashForceLTP)
                     fc.addFlag(FadeChannel::ForceLTP);

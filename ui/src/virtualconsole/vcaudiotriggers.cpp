@@ -270,7 +270,7 @@ void VCAudioTriggers::armForShow()
     if (mode() != Doc::Operate)
         return;
     syncBarParents();
-    m_liveEpoch.store(GenericFader::liveEpoch(), std::memory_order_relaxed);
+    m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
     Function::armAutoSource(FunctionParent(FunctionParent::AutoVCWidget, id()));
 }
 

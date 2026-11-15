@@ -1821,8 +1821,10 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
             if (m_isOverriding)
                 fc->addFlag(FadeChannel::Override);
 
-            // request to autoremove LTP channels when set
-            if (qlcch->group() != QLCChannel::Intensity)
+            // request to autoremove LTP channels when set -- not on a
+            // Show-only fixture: S0 builds its channels from scratch every
+            // frame, so the slider keeps asserting what it holds there.
+            if (qlcch->group() != QLCChannel::Intensity && (fxi->outputRules() & Fixture::ShowOnly) == 0)
                 fc->addFlag(FadeChannel::AutoRemove);
 
             if (chType & FadeChannel::Intensity)
@@ -1995,7 +1997,8 @@ void VCSlider::writeDMXParameter(MasterTimer *timer, QList<Universe *> universes
         // stops asserting them so the rest of the show can take over
         // cleanly.
         const QLCChannel *qch = fxi->channel(ch);
-        if (qch != NULL && qch->group() != QLCChannel::Intensity)
+        if (qch != NULL && qch->group() != QLCChannel::Intensity
+            && (fxi->outputRules() & Fixture::ShowOnly) == 0)      // S0: kept asserting
             fc->addFlag(FadeChannel::AutoRemove);
 
         fc->setStart(fc->current());

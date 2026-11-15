@@ -41,20 +41,31 @@ GenericFader::GenericFader(QObject *parent)
     , m_monitoring(false)
 {
     m_previewGate = creationGate() != nullptr ? *creationGate() : PreviewGate();
+    m_gateStamp = creationStamp() != nullptr ? *creationStamp() : StampGate();
 }
 
 /* The faders made on this thread follow this gate (CreationScope). A plain
    static thread_local, not a class member: an exported class's
    thread_local member is refused by MSVC and misbehaves under MinGW. */
 static thread_local const GenericFader::PreviewGate *t_creationGate = nullptr;
+static thread_local const GenericFader::StampGate *t_creationStamp = nullptr;
 static thread_local quint32 t_creationFunction = 0xFFFFFFFF;
+/* Show only's stamps: one counter that only grows (S0). A session starts
+   at a stamp of its own. 32 bits: a stamp per operator action or control
+   move, years of shows before it wraps. */
+static std::atomic<quint32> s_stampCounter { 1 };
 static std::atomic<quint32> s_liveEpoch { 1 };
 static thread_local quint32 t_stampEpoch = 0;
 static thread_local bool t_stampActive = false;
 
+quint32 GenericFader::newStamp()
+{
+    return s_stampCounter.fetch_add(1, std::memory_order_acq_rel) + 1;
+}
+
 quint32 GenericFader::stampEpoch()
 {
-    return t_stampActive ? t_stampEpoch : liveEpoch();
+    return t_stampActive ? t_stampEpoch : newStamp();
 }
 
 bool GenericFader::stampOverridden()
@@ -62,11 +73,11 @@ bool GenericFader::stampOverridden()
     return t_stampActive;
 }
 
-GenericFader::StampScope::StampScope(quint32 epoch)
+GenericFader::StampScope::StampScope(quint32 stamp)
     : m_previous(t_stampEpoch)
     , m_previousActive(t_stampActive)
 {
-    t_stampEpoch = epoch;
+    t_stampEpoch = stamp;
     t_stampActive = true;
 }
 
@@ -78,37 +89,35 @@ GenericFader::StampScope::~StampScope()
 
 quint32 GenericFader::liveEpoch()
 {
-    return s_liveEpoch.load(std::memory_order_relaxed);
+    return s_liveEpoch.load(std::memory_order_acquire);
 }
 
 void GenericFader::bumpLiveEpoch()
 {
-    s_liveEpoch.fetch_add(1, std::memory_order_relaxed);
+    s_liveEpoch.store(newStamp(), std::memory_order_release);
 }
 
-void GenericFader::setChannelLiveEpoch(int address, quint32 epoch)
+void GenericFader::setChannelLiveEpoch(int address, quint32 stamp)
 {
     QMutexLocker locker(&m_channelEpochMutex);
-    m_channelEpochs.insert(address, epoch);
+    m_channelEpochs.insert(address, stamp);
     m_channelStamped.store(true, std::memory_order_relaxed);
 }
 
-void GenericFader::clearChannelLiveEpoch(int address)
+quint32 GenericFader::channelStamp(int address) const
 {
     QMutexLocker locker(&m_channelEpochMutex);
-    m_channelEpochs.remove(address);
-}
-
-bool GenericFader::channelLive(int address) const
-{
-    QMutexLocker locker(&m_channelEpochMutex);
-    const auto it = m_channelEpochs.constFind(address);
-    return it != m_channelEpochs.constEnd() && it.value() == liveEpoch();
+    return m_channelEpochs.value(address, 0);
 }
 
 const GenericFader::PreviewGate *GenericFader::creationGate()
 {
     return t_creationGate;
+}
+
+const GenericFader::StampGate *GenericFader::creationStamp()
+{
+    return t_creationStamp;
 }
 
 GenericFader::PreviewGate GenericFader::creationGateOf(quint32 functionId)
@@ -118,17 +127,27 @@ GenericFader::PreviewGate GenericFader::creationGateOf(quint32 functionId)
     return *t_creationGate;
 }
 
-GenericFader::CreationScope::CreationScope(const PreviewGate *gate, quint32 functionId)
+GenericFader::StampGate GenericFader::creationStampOf(quint32 functionId)
+{
+    if (t_creationStamp == nullptr || t_creationFunction != functionId)
+        return StampGate();
+    return *t_creationStamp;
+}
+
+GenericFader::CreationScope::CreationScope(const PreviewGate *gate, const StampGate *stamp, quint32 functionId)
     : m_previousGate(t_creationGate)
+    , m_previousStamp(t_creationStamp)
     , m_previousFunction(t_creationFunction)
 {
     t_creationGate = gate;
+    t_creationStamp = stamp;
     t_creationFunction = functionId;
 }
 
 GenericFader::CreationScope::~CreationScope()
 {
     t_creationGate = m_previousGate;
+    t_creationStamp = m_previousStamp;
     t_creationFunction = m_previousFunction;
 }
 

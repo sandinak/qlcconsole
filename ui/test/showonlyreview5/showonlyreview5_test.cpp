@@ -34,6 +34,7 @@
 #include "grouphead.h"
 #include "vcbutton.h"
 #include "vccuelist.h"
+#include "mastertimer.h"
 #undef private
 #undef protected
 
@@ -60,6 +61,14 @@
 #include "programmercontroller.h"
 #include <QXmlStreamReader>
 #include <QMouseEvent>
+#include <QThread>
+#include <QScopeGuard>
+#include "cuestack.h"
+#include "cue.h"
+#include "collection.h"
+#include "timecodesource.h"
+#include "timecodecues.h"
+#include "showtreecontroller.h"
 
 enum { LaserAt = 0, Stage = 10, Flame = 14 };
 
@@ -476,7 +485,18 @@ void ShowOnlyReview5_Test::sweepXYPad()
             tick(1);
         }
     };
-    pad.m_area->setPosition(QPointF(200, 100));     // a hand on the pad
+    /* A hand on the pad: a mouse press and release on it (R7-8: a
+       position set by code is no hand). */
+    pad.m_area->resize(256, 256);
+    auto handAt = [&pad](int x, int y) {
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(x, y), QPointF(x, y),
+                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        pad.m_area->mousePressEvent(&press);
+        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(x, y), QPointF(x, y),
+                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        pad.m_area->mouseReleaseEvent(&release);
+    };
+    handAt(200, 100);                               // a hand on the pad
     tickPad(3);
     const int moved = sent(30);
     QVERIFY(moved > 0);
@@ -486,7 +506,7 @@ void ShowOnlyReview5_Test::sweepXYPad()
     goUnrelated(60);
     tickPad(4);
     QCOMPARE(sent(30), 0);
-    pad.m_area->setPosition(QPointF(120, 80));      // moved after the stop
+    handAt(120, 80);                                // moved after the stop
     tickPad(3);
     QVERIFY(sent(30) > 0);
 }
@@ -1177,6 +1197,634 @@ void ShowOnlyReview5_Test::sweepR6DeskStampIsForWhatIsPatched()
     eng.setValue(Free, 160);                        // moved for the flame
     tick(3);
     QCOMPARE(sent(Free), 160);
+}
+
+/****************************************************************************
+ * Seventh review (of 66445810d0)
+ ****************************************************************************/
+
+Chaser *ShowOnlyReview5_Test::listOf(Function *f, const QString &name)
+{
+    Chaser *list = new Chaser(m_doc);
+    list->setName(name);
+    ChaserStep s(f->id());
+    s.hold = 100000;
+    list->addStep(s);
+    m_doc->addFunction(list);
+    return list;
+}
+
+void ShowOnlyReview5_Test::goList(Chaser *list)
+{
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = list->id();
+    QVERIFY(m_doc->showControl()->run(go, ShowControl::RouteRunTab));
+}
+
+Fixture *ShowOnlyReview5_Test::addFogger(const QString &name, int address)
+{
+    /* As the bundled Involight FM-series foggers: one channel, "Smoke",
+       group Effect -- an LTP channel. */
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Review7"));
+    def->setModel(QStringLiteral("Fogger %1").arg(name));
+    def->setType(QLCFixtureDef::Smoke);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("1ch"));
+    QLCChannel *smoke = new QLCChannel();
+    smoke->setName(QStringLiteral("Smoke"));
+    smoke->setGroup(QLCChannel::Effect);
+    def->addChannel(smoke);
+    mode->insertChannel(smoke, 0);
+    def->addMode(mode);
+    if (!m_doc->fixtureDefCache()->addFixtureDef(def))
+    {
+        delete def;
+        return nullptr;
+    }
+    Fixture *f = new Fixture(m_doc);
+    f->setName(name);
+    f->setFixtureDefinition(def, def->modes().first());
+    f->setUniverse(0);
+    f->setAddress(quint32(address));
+    f->setOutputRules(Fixture::ShowOnly);
+    if (!m_doc->addFixture(f))
+    {
+        delete f;
+        return nullptr;
+    }
+    return f;
+}
+
+/* R7-1. Function::storeGateLocked() latches a parent's stamp whenever the
+   parent's gate reads "the show". MasterTimer::refreshPreviewGates() walks
+   the functions in list order, so a scene that sits BEFORE one of its
+   parents in m_functionList (it was already running when the second list
+   took it as a step) reads that parent's gate before the parent has been
+   worked out for the new session: still false, so the scene latches the
+   NEW session. A laser scene shared by two cue lists, both GO'd in
+   Operate; a trip to Design and back; no GO since: the laser fires. */
+void ShowOnlyReview5_Test::r7SharedSceneLatchesAcrossADesignTrip()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fire);
+    Chaser *a = listOf(fire, QStringLiteral("A"));
+    Chaser *b = listOf(fire, QStringLiteral("B"));
+    m_doc->setMode(Doc::Operate);
+    goList(a);
+    tick(3);
+    goList(b);
+    tick(3);
+    QCOMPARE(fire->sources().size(), 2);
+    QCOMPARE(sent(Flame), 255);             // two GOs in Operate: the show
+
+    QString pre;
+    m_doc->setMode(Doc::Design);            // to fix a cue
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    QString info;
+    auto dump = [&](const char *when) {
+        QString src;
+        for (const FunctionParent &p : fire->sources())
+            src += QStringLiteral("%1:%2 ").arg(int(p.type())).arg(p.id());
+        info += QStringLiteral("[%1 epoch %2 gates fire/a/b %3%4%5 a=%6 b=%7 src %8 list %9/%10/%11] ")
+                    .arg(when).arg(GenericFader::liveEpoch()).arg(fire->previewGate()->load())
+                    .arg(a->previewGate()->load()).arg(b->previewGate()->load()).arg(a->id()).arg(b->id()).arg(src)
+                    .arg(m_doc->masterTimer()->m_functionList.indexOf(a))
+                    .arg(m_doc->masterTimer()->m_functionList.indexOf(fire))
+                    .arg(m_doc->masterTimer()->m_functionList.indexOf(b));
+    };
+    dump("design");
+    m_doc->setMode(Doc::Operate);           // back; nobody presses GO
+    dump("operate");
+    int flameMax = 0;
+    for (int i = 0; i < 5; i++)
+    {
+        tick(1);
+        flameMax = qMax(flameMax, sent(Flame));
+    }
+    dump("end");
+    qDebug() << info;
+    QVERIFY(a->previewGate()->load());      // both lists are held (left from Design)...
+    QVERIFY(b->previewGate()->load());
+    QCOMPARE(flameMax, 0);                  // ...so the flame must be too
+}
+
+/* R7-1, the same from Design only: a scene left on in Design, then a list
+   that has it as a step started in Design. Switch to Operate: no GO. */
+void ShowOnlyReview5_Test::r7DesignLeftoverLatchesAtOperate()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fire);
+    Chaser *list = listOf(fire, QStringLiteral("Design list"));
+    fire->start(m_doc->masterTimer(), FunctionParent::master());   // left on in Design
+    tick(2);
+    list->start(m_doc->masterTimer(), FunctionParent::master());   // a list run in Design
+    tick(3);
+    QCOMPARE(fire->sources().size(), 2);
+    QCOMPARE(sent(Flame), 0);               // Design: held
+    m_doc->setMode(Doc::Operate);
+    int flameMax = 0;
+    for (int i = 0; i < 5; i++)
+    {
+        tick(1);
+        flameMax = qMax(flameMax, sent(Flame));
+    }
+    QCOMPARE(flameMax, 0);                  // anything left from Design is held
+}
+
+/* R7-2. All Off from another thread (an OSC or MSC plugin): the cut is
+   out at once and the function stop is queued to the main thread. In the
+   gap, the latch of R7-1 makes a scene shared by two lists the show of the
+   NEW session: the frame after the cut has the flame up again. */
+void ShowOnlyReview5_Test::r7QueuedAllOffChildLatchesInTheGap()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fire);
+    Chaser *a = listOf(fire, QStringLiteral("A"));
+    Chaser *b = listOf(fire, QStringLiteral("B"));
+    m_doc->setMode(Doc::Operate);
+    goList(a);
+    tick(3);
+    goList(b);
+    tick(3);
+    QCOMPARE(sent(Flame), 255);
+
+    QThread *osc = QThread::create([this]() {
+        ShowControl::Request off;
+        off.command = ShowControl::AllOff;
+        m_doc->showControl()->run(off, ShowControl::RouteOsc);
+    });
+    osc->start();
+    QVERIFY(osc->wait(5000));
+    delete osc;
+    QCOMPARE(sent(Flame), 0);               // E1: the cut, at once
+    // One frame before the main thread runs the queued stop (tick() only
+    // processes events after the frame is sent).
+    tick(1);
+    const int gapFrame = sent(Flame);
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    QCOMPARE(gapFrame, 0);                  // nothing from before the stop comes back
+}
+
+/* R7-3. "A cue letting go of a Show-only fixture cuts it." A fogger whose
+   fog channel is LTP (group Effect, as the bundled Involight FM foggers):
+   the next GO lets go of its cue, the cue's function is stopped and held
+   (E5) -- and the held fader's write is undone back to what the channel
+   had, which on an LTP channel is the cue's own level. Nothing ever puts
+   it to safe: the fogger keeps fogging for the rest of the show. */
+void ShowOnlyReview5_Test::r7LtpChannelKeptWhenItsCueLetsGo()
+{
+    QVERIFY(addFogger(QStringLiteral("Fogger"), Flame) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fog = new Scene(m_doc);
+    fog->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fog);
+    Scene *stage = new Scene(m_doc);
+    stage->setValue(m_doc->fixtureForAddress(Stage), 0, 60);
+    m_doc->addFunction(stage);
+    Chaser *list = new Chaser(m_doc);
+    ChaserStep s1(fog->id());
+    s1.hold = 100000;
+    list->addStep(s1);
+    ChaserStep s2(stage->id());
+    s2.hold = 100000;
+    list->addStep(s2);
+    // Each step held until the next GO (a duration of 0 stepped every tick).
+    list->setDuration(100000);
+    m_doc->addFunction(list);
+    m_doc->setMode(Doc::Operate);
+    goList(list);
+    tick(5);
+    QCOMPARE(sent(Flame), 255);             // cue 1: fog, the show
+    goList(list);                           // cue 2: the stage only
+    tick(10);
+    QCOMPARE(sent(Stage), 60);
+    QVERIFY(!fog->isRunning());             // cue 1 let go of the fogger
+    QCOMPARE(sent(Flame), 0);               // ...so it is cut
+}
+
+/* R7-4 (decision). Blind is listed as held. A GO taken in Blind, in
+   Operate, is stamped as the show; Blind only masks the frame. Leaving
+   Blind -- no GO -- fires the flame the GO in Blind played. */
+void ShowOnlyReview5_Test::r7GoInBlindFiresWhenBlindEnds()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fire);
+    Chaser *list = listOf(fire, QStringLiteral("Rehearse"));
+    m_doc->setMode(Doc::Operate);
+    m_doc->inputOutputMap()->setOutputInhibited(true);     // Blind
+    goList(list);                                           // checked on screen
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    m_doc->inputOutputMap()->setOutputInhibited(false);    // out of Blind, no GO
+    const int atOnce = sent(Flame);
+    tick(3);
+    const int after = sent(Flame);
+    QCOMPARE(atOnce, 0);
+    QCOMPARE(after, 0);
+}
+
+/* R7-5 (should drive). A VC button in Flash mode, pressed by hand in
+   Operate: Scene::flash() makes its fader in Scene::writeDMX(), a DMX
+   source written outside any CreationScope -- no gate, no stamp, held. */
+void ShowOnlyReview5_Test::r7VcButtonFlashIsHeld()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *burst = new Scene(m_doc);
+    burst->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(burst);
+    QWidget w;
+    VCButton button(&w, m_doc);
+    button.setID(61);
+    button.setFunction(burst->id());
+    button.setAction(VCButton::Flash);
+    m_doc->setMode(Doc::Operate);
+    button.pressFunction();                 // a hand on the flash button
+    tick(3);
+    QVERIFY(burst->flashing());
+    const int flashed = sent(Flame);
+    button.releaseFunction();
+    tick(3);
+    QCOMPARE(flashed, 255);
+}
+
+/* R7-6 (the noted limit). A Simple Desk cue stack stepped by hand in
+   Operate plays on a free address; a Show-only fixture is patched onto
+   that address mid-show. The cue stack's stamp is whole-fader (CueStack::
+   write()), never dropped by Universe::clearShowOnlyStamps(): the flame
+   fires at once. */
+void ShowOnlyReview5_Test::r7CueStackStampSurvivesARepatch()
+{
+    Fixture *flame = addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly);
+    QVERIFY(flame != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    enum { Free = 40 };
+    SimpleDeskEngine eng(m_doc);
+    CueStack *cs = eng.cueStack(0);
+    QVERIFY(cs != nullptr);
+    Cue cue(QStringLiteral("haze"));
+    cue.setValue(Free, 150);
+    cs->appendCue(cue);
+    cs->nextCue();                          // stepped by hand: the show
+    tick(10);
+    QCOMPARE(sent(Free), 150);
+    flame->setAddress(Free);                // the flame re-patched onto it, mid-show
+    tick(5);
+    const int repatched = sent(Free);
+    cs->stop();
+    tick(3);
+    eng.clearContents();
+    tick(2);
+    QCOMPARE(repatched, 0);
+}
+
+/* R7-7. A Show Tree cue list set to follow timecode (saved with the show:
+   FollowTimecode="1") GOes its cues as timecode reaches their times
+   (TimecodeCues::slotTime() -> ShowControl::run(RouteTimecode)), with no
+   StampScope: each GO is stamped as a hand's GO in the live session. The
+   rule: "timecode, only if armed in Operate". Nothing armed it; Operate;
+   the band's playback rolls timecode: the flame cue fires. */
+void ShowOnlyReview5_Test::r7TimecodeCueListFiresUnarmed()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fire);
+    m_doc->timecodeSource();                    // makes TimecodeCues
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction(QStringLiteral("P"));
+    const quint32 list = st->addCueList(prod, QStringLiteral("Song"));
+    const quint32 cue = st->addCue(list, -1, QStringLiteral("Flame hit"));
+    QVERIFY(st->setCueTimecode(cue, 1000));
+    QVERIFY(st->setListFollowTimecode(list, true));   // as loaded with the show
+    QCoreApplication::processEvents();
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(ch != nullptr);
+    QVERIFY(ch->stepsCount() >= 1);
+    Collection *coll = qobject_cast<Collection *>(m_doc->function(ch->steps().at(0).fid));
+    QVERIFY(coll != nullptr);
+    coll->addFunction(fire->id());              // the cue's look lights the flame
+
+    m_doc->setMode(Doc::Operate);
+    tick(2);
+    m_doc->timecodeSource()->updateTimeCode(0, 0, 30);
+    m_doc->timecodeSource()->updateTimeCode(0, 500, 30);
+    m_doc->timecodeSource()->updateTimeCode(0, 1000, 30);   // the cue's time
+    tick(5);
+    QVERIFY(ch->isRunning());                   // timecode GOed it
+    QVERIFY(coll->functions().contains(fire->id()));
+    QVERIFY(fire->isRunning());
+    QCOMPARE(sent(Flame), 0);                   // never armed in Operate: held
+    st->setListFollowTimecode(list, false);
+}
+
+/* R7-8. A show loaded while in Operate (web /loadProject: no mode change):
+   Doc::loaded starts the session at the end of Doc::loadXML(), and the
+   Virtual Console is loaded AFTER it (App::loadXML()). VCXYPad::loadXML()
+   ends with m_area->setPosition(saved), whose positionChanged() reaches
+   slotPositionChanged() in Operate with a new point: stamped as a hand's
+   move in the new session -- the pad drives a Show-only mover's pan and
+   tilt with nobody touching it. */
+void ShowOnlyReview5_Test::r7XYPadLoadedInOperateIsStamped()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Review7"));
+    def->setModel(QStringLiteral("Laser mover"));
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("2ch"));
+    QLCChannel *pan = new QLCChannel();
+    pan->setName(QStringLiteral("Pan"));
+    pan->setGroup(QLCChannel::Pan);
+    pan->setControlByte(QLCChannel::MSB);
+    def->addChannel(pan);
+    mode->insertChannel(pan, 0);
+    QLCChannel *tilt = new QLCChannel();
+    tilt->setName(QStringLiteral("Tilt"));
+    tilt->setGroup(QLCChannel::Tilt);
+    tilt->setControlByte(QLCChannel::MSB);
+    def->addChannel(tilt);
+    mode->insertChannel(tilt, 1);
+    def->addMode(mode);
+    mode->cacheHeads();
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(def));
+    Fixture *mover = new Fixture(m_doc);
+    mover->setName(QStringLiteral("Mover"));
+    mover->setFixtureDefinition(def, mode);
+    mover->setUniverse(0);
+    mover->setAddress(30);
+    mover->setOutputRules(Fixture::ShowOnly);
+    QVERIFY(m_doc->addFixture(mover));
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    tick(2);
+
+    emit m_doc->loaded();                       // the show loaded in Operate: a new session
+    QWidget w;
+    VCXYPad pad(&w, m_doc);                     // the VC loads after it
+    VCXYPadFixture fx(m_doc);
+    fx.setHead(GroupHead(mover->id(), 0));
+    pad.appendFixture(fx);
+    for (VCXYPadFixture &f : pad.m_fixtures)
+        f.arm();
+    pad.m_area->setPosition(QPointF(220, 40));  // as VCXYPad::loadXML() ends
+    for (int i = 0; i < 3; i++)
+    {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        pad.writeDMX(m_doc->masterTimer(), ua);
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        tick(1);
+    }
+    QCOMPARE(sent(30), 0);                      // nobody moved it: held at safe
+}
+
+/* R7-9. The cut (E1) resets the stored values; the functions' gates flip
+   only when the MasterTimer refreshes them (or the stop reaches each
+   function). The universe threads run processFaders() AFTER the
+   MasterTimer's tick (Universe::run(), woken by tick()): a frame whose
+   tick refreshed the gates before the stop is processed after the cut,
+   with the gates still "the show" -- it writes the cue back. From the
+   next tick the function is held, and holding means "undo to what the
+   channel had": on an LTP channel, the value that frame just wrote. The
+   stop then lets go, and LTP keeps it. All Off left the fogger on. (MSC
+   All Off: the stop is queued; on the main thread the same window is the
+   cut -> the per-function stop loop.) */
+void ShowOnlyReview5_Test::r7AllOffRaceLeavesAnLtpChannelUp()
+{
+    QVERIFY(addFogger(QStringLiteral("Race fogger"), Flame) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fog = new Scene(m_doc);
+    fog->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fog);
+    Chaser *list = listOf(fog, QStringLiteral("Fog"));
+    m_doc->setMode(Doc::Operate);
+    goList(list);
+    tick(5);
+    QCOMPARE(sent(Flame), 255);
+
+    // The MasterTimer has ticked (gates refreshed) and woken the universe
+    // threads; MSC's All Off lands before they process that frame.
+    QThread *msc = QThread::create([this]() {
+        ShowControl::Request off;
+        off.command = ShowControl::AllOff;
+        m_doc->showControl()->run(off, ShowControl::RouteMsc);
+    });
+    msc->start();
+    QVERIFY(msc->wait(5000));
+    delete msc;
+    QCOMPARE(sent(Flame), 0);               // the cut
+    {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        for (Universe *u : ua)
+            u->processFaders();             // the woken universe thread's frame
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    }
+    const int raced = sent(Flame);
+    tick(10);                               // the queued stop runs; ticks go on
+    QVERIFY(!fog->isRunning());
+    const int after = sent(Flame);
+    qDebug() << "frame after the cut:" << raced << "ten frames later:" << after;
+    QCOMPARE(after, 0);                     // All Off: out, and stays out
+    QCOMPARE(raced, 0);
+}
+
+/* R7-1b. The latch of R7-1 with a parent that does not renew its children
+   each tick (a Collection; a chaser does, which undoes the latch on the
+   next tick). A fire scene is a step of list A; a Collection holding it is
+   started in Operate (a VC button, the web FUNCTION command) -- the scene
+   sits before the Collection in the MasterTimer's list. A trip to Design
+   and back: refreshPreviewGates() reads the Collection's gate before it is
+   worked out for the new session, and the scene latches the new session.
+   Nothing renews it: it is the show from then on. */
+void ShowOnlyReview5_Test::r7CollectionChildLatchesAcrossADesignTrip()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fire);
+    Chaser *a = listOf(fire, QStringLiteral("A"));
+    Collection *both = new Collection(m_doc);
+    both->addFunction(fire->id());
+    m_doc->addFunction(both);
+    m_doc->setMode(Doc::Operate);
+    goList(a);
+    tick(3);
+    both->start(m_doc->masterTimer(), FunctionParent(FunctionParent::ManualVCWidget, 71));  // a VC button
+    tick(3);
+    QCOMPARE(fire->sources().size(), 2);
+    QCOMPARE(sent(Flame), 255);             // the show: right
+
+    m_doc->setMode(Doc::Design);
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    m_doc->setMode(Doc::Operate);           // back; nobody touches anything
+    int flameMax = 0;
+    for (int i = 0; i < 10; i++)
+    {
+        tick(1);
+        flameMax = qMax(flameMax, sent(Flame));
+    }
+    QVERIFY(a->previewGate()->load());      // list A: left from Design, held
+    QVERIFY(both->previewGate()->load());   // the Collection: held
+    QCOMPARE(flameMax, 0);                  // ...so the flame must be too
+}
+
+/****************************************************************************
+ * S0 swept: every frame a Show-only channel is built from scratch
+ ****************************************************************************/
+
+void ShowOnlyReview5_Test::sweepS0(Fixture *fx)
+{
+    QVERIFY(fx != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    const int at = int(fx->address());
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(fx->id(), 0, 255);
+    m_doc->addFunction(fire);
+    Scene *stage = new Scene(m_doc);
+    stage->setValue(m_doc->fixtureForAddress(Stage), 0, 60);
+    m_doc->addFunction(stage);
+    auto stopAll = [this]() {
+        for (Function *f : m_doc->functions())
+            if (f->isRunning())
+                f->stop(FunctionParent::master());
+        tick(4);
+    };
+    auto freshGo = [this, fire, at](const char *why) {
+        goList(listOf(fire, QString::fromLatin1(why)));
+        tick(4);
+        QCOMPARE(sent(at), 255);            // a fresh GO drives it again
+    };
+    m_doc->setMode(Doc::Operate);
+
+    // 1. A cue letting go of it: the next cue lights the stage only.
+    {
+        Chaser *list = new Chaser(m_doc);
+        ChaserStep s1(fire->id());
+        s1.hold = 100000;
+        list->addStep(s1);
+        ChaserStep s2(stage->id());
+        s2.hold = 100000;
+        list->addStep(s2);
+        list->setDuration(100000);                  // each step held till the next GO
+        m_doc->addFunction(list);
+        goList(list);
+        tick(4);
+        QCOMPARE(sent(at), 255);
+        goList(list);
+        tick(6);
+        QCOMPARE(sent(Stage), 60);
+        QCOMPARE(sent(at), 0);
+        freshGo("after the cue let go");
+        stopAll();
+    }
+
+    // 2. All Off from another thread, a frame processed in the gap.
+    {
+        goList(listOf(fire, QStringLiteral("before the stop")));
+        tick(4);
+        QCOMPARE(sent(at), 255);
+        QThread *osc = QThread::create([this]() {
+            ShowControl::Request off;
+            off.command = ShowControl::AllOff;
+            m_doc->showControl()->run(off, ShowControl::RouteOsc);
+        });
+        osc->start();
+        QVERIFY(osc->wait(5000));
+        delete osc;
+        QCOMPARE(sent(at), 0);
+        {
+            QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+            for (Universe *u : ua)
+                u->processFaders();     // a frame before the queued stop
+            m_doc->inputOutputMap()->releaseUniverses(false);
+        }
+        QCOMPARE(sent(at), 0);
+        tick(4);
+        QCOMPARE(sent(at), 0);
+        freshGo("after All Off");
+        stopAll();
+    }
+
+    // 3. A trip to Design and back.
+    {
+        goList(listOf(fire, QStringLiteral("before Design")));
+        tick(4);
+        QCOMPARE(sent(at), 255);
+        m_doc->setMode(Doc::Design);
+        tick(3);
+        QCOMPARE(sent(at), 0);
+        m_doc->setMode(Doc::Operate);
+        tick(4);
+        QCOMPARE(sent(at), 0);
+        freshGo("after Design");
+        stopAll();
+    }
+
+    // 4. Blind and back.
+    {
+        goList(listOf(fire, QStringLiteral("before Blind")));
+        tick(4);
+        QCOMPARE(sent(at), 255);
+        m_doc->inputOutputMap()->setOutputInhibited(true);
+        auto blindOff = qScopeGuard([this]() { m_doc->inputOutputMap()->setOutputInhibited(false); });
+        tick(3);                        // Blind: nothing is sent at all
+        m_doc->inputOutputMap()->setOutputInhibited(false);
+        QCOMPARE(sent(at), 0);          // the first frame after it: safe
+        tick(4);
+        QCOMPARE(sent(at), 0);
+        freshGo("after Blind");
+        stopAll();
+    }
+
+    // 5. Re-patched onto an address a writer drives.
+    {
+        enum { Free = 40 };
+        SimpleDeskEngine eng(m_doc);
+        eng.setValue(Free, 150);
+        tick(3);
+        QCOMPARE(sent(Free), 150);
+        fx->setAddress(Free);
+        tick(4);
+        QCOMPARE(sent(Free), 0);
+        eng.setValue(Free, 170);        // moved for it
+        tick(3);
+        QCOMPARE(sent(Free), 170);
+        eng.resetChannel(Free);         // let go of it
+        tick(3);
+        QCOMPARE(sent(Free), 0);
+    }
+}
+
+void ShowOnlyReview5_Test::sweepS0LtpChannel()
+{
+    sweepS0(addFogger(QStringLiteral("S0 fogger"), Flame));     // group Effect: LTP
+}
+
+void ShowOnlyReview5_Test::sweepS0HtpChannel()
+{
+    sweepS0(addDimmer(QStringLiteral("S0 flame"), Flame, Fixture::ShowOnly));  // intensity: HTP
 }
 
 QTEST_MAIN(ShowOnlyReview5_Test)

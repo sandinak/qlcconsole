@@ -356,7 +356,9 @@ void VCXYPadArea::mousePressEvent(QMouseEvent* e)
         pt.setX(SCALE(pt.x(), qreal(0), qreal(width()), qreal(0), qreal(256)));
         pt.setY(SCALE(pt.y(), qreal(0), qreal(height()), qreal(0), qreal(256)));
 
+        m_byHand = true;
         setPosition(pt);
+        m_byHand = false;
         setMouseTracking(true);
         setCursor(Qt::CrossCursor);
         update();
@@ -373,7 +375,9 @@ void VCXYPadArea::mouseReleaseEvent(QMouseEvent* e)
         pt.setX(SCALE(pt.x(), qreal(0), qreal(width()), qreal(0), qreal(256)));
         pt.setY(SCALE(pt.y(), qreal(0), qreal(height()), qreal(0), qreal(256)));
 
+        m_byHand = true;
         setPosition(pt);
+        m_byHand = false;
         setMouseTracking(false);
         unsetCursor();
     }
@@ -389,7 +393,9 @@ void VCXYPadArea::mouseMoveEvent(QMouseEvent* e)
         pt.setX(SCALE(pt.x(), qreal(0), qreal(width()), qreal(0), qreal(256)));
         pt.setY(SCALE(pt.y(), qreal(0), qreal(height()), qreal(0), qreal(256)));
 
+        m_byHand = true;
         setPosition(pt);
+        m_byHand = false;
         update();
     }
 
@@ -408,22 +414,30 @@ void VCXYPadArea::keyPressEvent(QKeyEvent *e)
 
         if (e->key() == Qt::Key_Left)
         {
+            m_byHand = true;
             nudgePosition(-step , 0);
+            m_byHand = false;
             update();
         }
         else if (e->key() == Qt::Key_Right)
         {
+            m_byHand = true;
             nudgePosition(step, 0);
+            m_byHand = false;
             update();
         }
         else if (e->key() == Qt::Key_Up)
         {
+            m_byHand = true;
             nudgePosition(0, -step);
+            m_byHand = false;
             update();
         }
         else if (e->key() == Qt::Key_Down)
         {
+            m_byHand = true;
             nudgePosition(0, step);
+            m_byHand = false;
             update();
         }
         else

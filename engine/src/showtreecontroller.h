@@ -601,8 +601,15 @@ public:
      *  (Cue::timecode, TimecodeCues). One undo step; false when nothing
      *  changes (no such cue, a Looks section or sub-cue, the same time). */
     bool setCueTimecode(quint32 cueId, qint32 ms);
-    /** Whether list @a listId follows timecode (CueList::followTimecode). */
+    /** Whether list @a listId follows timecode (CueList::followTimecode).
+     *  Switched on in Operate -- or touched, already on -- it arms the
+     *  list's timecode link for Show only (listTimecodeArm()). */
     bool setListFollowTimecode(quint32 listId, bool follow);
+    /** Show only (R7-7): the stamp list @a listId's timecode link was armed
+     *  with (Follow timecode switched on in Operate), or 0: loaded with
+     *  the show, switched on in Design, or never. The GOs timecode takes on
+     *  it (TimecodeCues) are stamped with it; All Off leaves it old. */
+    quint32 listTimecodeArm(quint32 listId) const { return m_tcArm.value(listId, 0); }
 
     /************************************************************************
      * Timecode anchors (Q198, engine/src/showtreetimecode.cpp)
@@ -2079,6 +2086,8 @@ private:
 
 private:
     Doc *m_doc;
+    /** listTimecodeArm() */
+    QHash<quint32, quint32> m_tcArm;
     QList<ShowTree::Production> m_productions;
     quint32 m_nextId = 1;
     bool m_baking = false;

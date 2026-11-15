@@ -106,8 +106,6 @@ private:
     QMap <uint,uchar> m_values;
     /** Show only: the session each channel was last really moved in */
     QHash <uint,quint32> m_channelEpochs;
-    /** ... and those of them stamped while Show only (for that fixture) */
-    QSet <uint> m_stampedShowOnly;
     /** A fixture was patched, moved or unpatched: the desk's fader channels
      *  are rebuilt from m_values at the next write (under m_mutex) */
     bool m_repatched = false;

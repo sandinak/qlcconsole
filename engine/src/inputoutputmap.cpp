@@ -214,6 +214,11 @@ bool InputOutputMap::setOutputInhibited(bool inhibit)
         return false;
 
     m_outputInhibited = inhibit;
+    /* Show only (R7-4): Blind ending starts a new session (OutputRuleKeeper)
+       before anything is sent -- a GO taken in Blind was checked on
+       screen; it needs a GO again to fire. */
+    if (inhibit == false)
+        emit outputResuming();
 
     // GUI entry only: take m_universeMutex to serialise the universe iteration
     // and the dumpOutput() calls with the MasterTimer tick (which holds the same
@@ -224,6 +229,9 @@ bool InputOutputMap::setOutputInhibited(bool inhibit)
         foreach (Universe *universe, m_universeArray)
         {
             universe->setInhibitOutput(inhibit);
+            // ...and its Show-only channels at safe in what goes out now.
+            if (inhibit == false && universe->showOnlyLive() && universe->showOnlyChannelCount() > 0)
+                universe->cutShowOnly();
 
             // Push the current values through immediately: while inhibited
             // dumpOutput() is a no-op (rig goes dark); when resuming, this forces

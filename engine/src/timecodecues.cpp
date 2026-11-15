@@ -21,6 +21,7 @@
 #include <QStringList>
 
 #include "timecodecues.h"
+#include "genericfader.h"
 #include "timecodesource.h"
 #include "showtreecontroller.h"
 #include "showcontrol.h"
@@ -102,7 +103,7 @@ void TimecodeCues::rebuild() const
                 const Cue &c = l.cues.at(i);
                 if (c.timecode < 0 || c.skip || l.chaser == 0xFFFFFFFF)
                     continue;
-                m_entries << Entry{ c.timecode, l.chaser, st->cueNumber(l, i), order };
+                m_entries << Entry{ c.timecode, l.chaser, st->cueNumber(l, i), order, l.id };
             }
         }
     }
@@ -172,8 +173,13 @@ void TimecodeCues::slotTime(quint32 now)
     ShowControl *sc = m_doc->showControl();
     if (sc == nullptr)
         return;
+    const ShowTreeController *st = m_doc->showTree();
     for (const Entry &e : go)
     {
+        /* Show only (R7-7): a GO timecode takes is no hand's -- it is the
+           show only as the list's timecode link was armed (Follow switched
+           on in Operate this session). */
+        GenericFader::StampScope byTimecode(st != nullptr ? st->listTimecodeArm(e.list) : 0);
         ShowControl::Request r;
         r.command = ShowControl::Go;
         r.cue = e.cue;

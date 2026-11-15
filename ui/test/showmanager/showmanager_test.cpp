@@ -482,7 +482,7 @@ void ShowManager_Test::timecodeDrivesAShowOnlyFixtureOnlyWhenArmedInOperate()
 
     m_manager->setFollowTimecode(false);            // the operator arms it, in Operate
     m_manager->setFollowTimecode(true);
-    QCOMPARE(m_show->timecodeArmEpoch(), GenericFader::liveEpoch());
+    QVERIFY(m_show->timecodeArmEpoch() >= GenericFader::liveEpoch());     // a stamp of this session
     m_manager->slotTimecodeRunningChanged(true);
     timer->timerTick();
     QVERIFY(m_show->isRunning());

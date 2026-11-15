@@ -607,11 +607,13 @@ public:
     /** Whether a real run of the show may drive the Show-only channels:
      *  true in Operate. False (Design, the default): every frame sent has
      *  them at their safe value, whatever wrote them -- universeWritten()
-     *  still carries what they would be, for the rig views. True: only the
-     *  faders that hold them (GenericFader::holdsShowOnly(): a preview, the
-     *  Workbench, focus, Locate) are kept off them. Back to true, the
-     *  stored values start from safe, so nothing a Design preview left on
-     *  an LTP channel comes out. Safe from any thread. */
+     *  still carries what they would be, for the rig views. True (S0):
+     *  every frame each of them starts at its safe value and only the
+     *  faders that count now (GenericFader::showStamp(): of this session,
+     *  later than the channel's own stamp) are applied on it; the rest add
+     *  nothing. Back to true, the stored values start from safe, so nothing
+     *  a Design preview left on an LTP channel comes out. Safe from any
+     *  thread. */
     void setShowOnlyLive(bool live);
     bool showOnlyLive() const { return m_showOnlyLive.load(std::memory_order_relaxed); }
     /** The emergency stop (E1): every Show-only channel's stored values
@@ -644,9 +646,8 @@ private:
      *  frame sent, or the rules changed since: a changed frame, so a
      *  plugin that sends only changes sends it. Keeps @p frame's. */
     bool showOnlySentChanged(const QByteArray &frame);
-    /** Channels just made Show only: every fader's per-channel stamp on
-     *  them dropped (GenericFader::clearChannelLiveEpoch()) */
-    void clearShowOnlyStamps(const QVector<int> &channels);
+    /** m_showOnlyMaxMark worked out again (m_outputRulesMutex held) */
+    void updateMaxMarkLocked();
     /** The Show-only channels from @p address on, @p range of them, back
      *  to their safe value (a reset: E6) */
     void restoreShowOnlySafe(int address, int range);
@@ -1261,6 +1262,15 @@ public:
      */
     bool savePluginParametersXML(QXmlStreamWriter *doc,
                                  QMap<QString, QVariant>parameters) const;
+
+private:
+    /** S0: the stamp each channel was made Show only at
+     *  (GenericFader::newStamp()); a writer counts there only if stamped
+     *  later. Under m_outputRulesMutex; the highest of them, read lock-free
+     *  per fader (writeFader()'s fast path). Last in the class: nothing on
+     *  the per-channel write path moves for it. */
+    QVector<quint32> m_showOnlyMark = QVector<quint32>(UNIVERSE_SIZE, 0);
+    std::atomic<quint32> m_showOnlyMaxMark { 0 };
 };
 
 /** @} */
