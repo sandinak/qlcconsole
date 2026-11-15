@@ -1336,23 +1336,84 @@ void ProgrammerController::finalizeSaveBuckets(QList<Doc::SaveBucket> &buckets) 
     }
 }
 
+/* The list a chaser is played under: itself, or -- started by another
+   function (a list's step, a collection's member) -- the one that started
+   that, up to a function something else started. */
+static Function *rootFunctionOf(Doc *doc, Function *f, int depth = 0)
+{
+    if (f == nullptr || depth > 16)
+        return f;
+    const QList<FunctionParent> sources = f->sources();
+    bool child = sources.isEmpty() == false;
+    quint32 parent = Function::invalidId();
+    for (const FunctionParent &p : sources)
+    {
+        if (p.type() != FunctionParent::Function || p.id() == f->id())
+        {
+            child = false;
+            break;
+        }
+        parent = p.id();
+    }
+    if (!child)
+        return f;
+    return rootFunctionOf(doc, doc->function(parent), depth + 1);
+}
+
+/* Played as the show (Show only): something that is the show started it
+   -- not only previews, editors' Tests or the Workbench. */
+static bool playedByTheShow(const Function *f)
+{
+    if (f == nullptr)
+        return false;
+    for (const FunctionParent &p : f->sources())
+        if (!p.isNotTheShow() && p.type() != FunctionParent::Function)
+            return true;
+    return false;
+}
+
 void ProgrammerController::stepCurrentChaser(int direction)
 {
     if (direction == 0)
         return;
-    quint32 cid = Function::invalidId();
+    QList<quint32> running;
     {
         QMutexLocker locker(&m_stateMutex);
-        if (m_runningChasers.isEmpty())
-            return;
-        cid = m_runningChasers.last();
+        running = m_runningChasers;
     }
-    Chaser *chaser = qobject_cast<Chaser*>(m_doc->function(cid));
+    if (running.isEmpty())
+        return;
+    ShowControl *sc = m_doc->showControl();
+    const bool operate = m_doc->mode() == Doc::Operate;
+    Chaser *chaser = nullptr;
+    if (!operate)
+    {
+        chaser = qobject_cast<Chaser*>(m_doc->function(running.last()));
+    }
+    else
+    {
+        /* Operate: the step button steps the show -- the most recent list
+           played as the show, never a preview, an editor's Test or the
+           Workbench; a list nested in another is stepped as that one. */
+        for (int i = int(running.size()) - 1; i >= 0 && chaser == nullptr; --i)
+        {
+            Function *root = rootFunctionOf(m_doc, m_doc->function(running.at(i)));
+            Chaser *c = qobject_cast<Chaser*>(root);
+            if (c != nullptr && c->isRunning() && playedByTheShow(c))
+                chaser = c;
+        }
+        if (chaser == nullptr)
+        {
+            if (sc != NULL)
+                sc->say(tr("Step: no cue list is playing as the show"), false);
+            return;
+        }
+    }
     if (chaser == NULL)
         return;
+    const quint32 cid = chaser->id();
     // A Show Tree cue list is run like any other GO / Back (the preview
     // hold, the guards); any other chaser steps directly, as in QLC+ 4.
-    ShowControl *sc = m_doc->showControl();
     if (sc != NULL && sc->isTreeGoList(cid))
     {
         ShowControl::Request r;
@@ -1375,8 +1436,8 @@ void ProgrammerController::stepCurrentChaser(int direction)
     action.m_stepIntensity = 1.0;
     action.m_fadeMode = Chaser::FromFunction;
     chaser->setAction(action);
-    // The VC's step button is a GO: the list is the show from now on.
-    if (sc != NULL)
+    // In Operate the VC's step button is a GO: the list is the show.
+    if (operate && sc != NULL)
         sc->claim(chaser);
 }
 

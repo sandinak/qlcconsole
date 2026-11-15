@@ -429,6 +429,19 @@ QList<Universe *> InputOutputMap::universes() const
     return m_universeArray;
 }
 
+QList<Universe *> InputOutputMap::universesSnapshot()
+{
+    // tryLock, not lock: the claim is not recursive, and the tick that
+    // holds it may be the caller. Briefly waited for otherwise.
+    if (m_universeMutex.tryLock(200))
+    {
+        const QList<Universe *> copy = m_universeArray;
+        m_universeMutex.unlock();
+        return copy;
+    }
+    return m_universeArray;
+}
+
 Universe *InputOutputMap::universe(quint32 id)
 {
     for (int i = 0; i < m_universeArray.size(); i++)

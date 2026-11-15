@@ -21,6 +21,7 @@
 #include <QXmlStreamWriter>
 #include <QDebug>
 #include <chrono>
+#include <algorithm>
 #include <cstring>
 #include <utility>
 #include <math.h>
@@ -782,7 +783,74 @@ void Universe::setShowOnlyLive(bool live)
 
 void Universe::setShowOnlyEmergencyStop(bool stop)
 {
-    m_showOnlyEStop.store(stop, std::memory_order_relaxed);
+    if (stop == false)
+    {
+        m_showOnlyEStop.store(false, std::memory_order_relaxed);
+        return;
+    }
+    /* The stop cleans up what it stops: what is stored on a Show-only
+       channel (a GO's LTP level) goes back to safe NOW, between two
+       frames, so nothing from before the stop is there when it lets go. */
+    QMutexLocker frameLocker(&m_frameMutex);
+    {
+        QMutexLocker locker(&m_outputRulesMutex);
+        for (int c : std::as_const(m_showOnlyChannels))
+        {
+            (*m_preGMValues)[c] = m_showOnlySafe.at(c);
+            (*m_blackoutValues)[c] = m_showOnlySafe.at(c);
+            updatePostGMValue(c);
+        }
+    }
+    m_showOnlyEStop.store(true, std::memory_order_relaxed);
+}
+
+void Universe::markShowOnly(int channel, bool on, uchar safe)
+{
+    if (channel < 0 || channel >= UNIVERSE_SIZE)
+        return;
+    QMutexLocker locker(&m_outputRulesMutex);
+    const uchar now = uchar(m_channelsMask->at(channel));
+    if (bool(now & ShowOnlyOutput) == on && (!on || uchar(m_showOnlySafe.at(channel)) == safe))
+        return;
+    if (m_showOnlySafe.size() != UNIVERSE_SIZE)
+        m_showOnlySafe = QByteArray(UNIVERSE_SIZE, char(0));
+    m_showOnlySafe[channel] = char(on ? safe : 0);
+    (*m_channelsMask)[channel] = char(on ? (now | ShowOnlyOutput) : (now & ~ShowOnlyOutput));
+    // The channel list in order (holdShowOnly() stops at the frame's end).
+    const auto at = std::lower_bound(m_showOnlyChannels.begin(), m_showOnlyChannels.end(), channel);
+    const bool listed = at != m_showOnlyChannels.end() && *at == channel;
+    if (on && !listed)
+        m_showOnlyChannels.insert(at, channel);
+    else if (!on && listed)
+        m_showOnlyChannels.erase(at);
+    m_showOnlyKept.resize(m_showOnlyChannels.size());
+    m_showOnlyCount.store(int(m_showOnlyChannels.size()), std::memory_order_relaxed);
+    m_showOnlySentDirty = true;
+    if (on)
+    {
+        if (channel >= m_totalChannels)
+        {
+            m_totalChannels = channel + 1;
+            m_totalChannelsChanged = true;
+        }
+        if (channel >= m_usedChannels)
+            m_usedChannels = channel + 1;
+        // Live: what is stored there is not what the next send has.
+        if (showOnlyLive() && (now & ShowOnlyOutput) == 0)
+        {
+            m_showOnlyResetChannels << channel;
+            m_showOnlyReset.store(true, std::memory_order_relaxed);
+        }
+    }
+    updatePostGMValue(channel);
+}
+
+void Universe::freezeFadersForStop(quint32 stopEpochBefore)
+{
+    QMutexLocker fadersLocker(&m_fadersMutex);
+    for (const QSharedPointer<GenericFader> &f : std::as_const(m_faders))
+        if (!f.isNull())
+            f->freezeForStop(stopEpochBefore);
 }
 
 bool Universe::showOnlyHeld() const

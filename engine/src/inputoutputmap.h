@@ -288,6 +288,12 @@ public:
      */
     QList<Universe*> universes() const;
 
+    /** The universes, read under the claim lock from any thread (an
+     *  emergency stop from a plugin's thread). On the thread that holds
+     *  the claim (the MasterTimer's tick) the list can't change, and it is
+     *  read as it is: never a deadlock. */
+    QList<Universe*> universesSnapshot();
+
     /**
      * Get a reference to a Universe from the given Universe ID
      * Return NULL if no Universe is found

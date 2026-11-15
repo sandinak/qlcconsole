@@ -1790,6 +1790,8 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
                 }
             }
 
+            // Moved: the hand's again after an emergency stop froze it.
+            fader->unfreezeStop();
             GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[universe], lch.fixture, lch.channel);
             if (fc->universe() == Universe::invalid())
             {

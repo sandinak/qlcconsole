@@ -21,8 +21,11 @@
 #define OUTPUTRULEKEEPER_H
 
 #include <QObject>
+#include <atomic>
 #include <QByteArray>
 #include <QList>
+#include <QHash>
+#include <QPair>
 
 #include "fixture.h"
 #include "doc.h"
@@ -111,6 +114,8 @@ public:
      *  bytes -- what rebuild() hands it */
     QByteArray bitsFor(quint32 universe) const;
 
+    /** How many full rebuilds have run (tests) */
+    int rebuildCount() const { return m_rebuilds; }
     /** How many fixtures have any rule (for tests and the UI) */
     int ruleFixtureCount() const { return m_count; }
 
@@ -133,7 +138,7 @@ public:
     void emergencyStop();
     /** A GO in Operate: the emergency stop's hold lets go (Design: kept) */
     void releaseEmergencyStop();
-    bool emergencyStopped() const { return m_emergencyStop; }
+    bool emergencyStopped() const { return m_emergencyStop.load(std::memory_order_relaxed); }
 
     /** A Show-only channel's safe value: 0 for an intensity channel, and
      *  where nothing drives it (FixtureRest::restValue()) for the rest: a
@@ -153,9 +158,14 @@ public:
 signals:
     /** The Show-only fixtures, or why they are held, changed */
     void showOnlyChanged();
+    /** The emergency stop struck (true: the Simple Desk lets go of its
+     *  Show-only channels) or let go (false) */
+    void emergencyStopChanged(bool stopped);
 
 private:
     void scheduleRebuild();
+    /** A fixture's Show-only channels marked where it is now, at once */
+    void markNow(quint32 fixtureId);
     void pushPolicy();
     /** Every universe told whether the show may drive its Show-only
      *  channels (Universe::setShowOnlyLive(): Operate) */
@@ -170,7 +180,12 @@ private:
     bool m_seenOperate = false;
     QList<quint32> m_showOnly;
     HeldBy m_lastHeldBy = NotHeld;
-    bool m_emergencyStop = false;
+    std::atomic<bool> m_emergencyStop { false };
+    /** Where each Show-only fixture's channels are marked (absolute base,
+     *  channel count) */
+    QHash<quint32, QPair<quint32, quint32> > m_showOnlyAt;
+    int m_rebuilds = 0;
+    class QTimer *m_rebuildTimer = nullptr;
     void setEmergencyStop(bool stop);
 };
 

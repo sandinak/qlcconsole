@@ -9,6 +9,9 @@
 #include <QSet>
 
 #include "lastlookeffect.h"
+#include "universe.h"
+#include "inputoutputmap.h"
+#include "outputrulekeeper.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -44,10 +47,44 @@ void LastLookEffect::apply(const QSet<quint32> &renewAddresses, bool renewAll)
     });
 }
 
+QList<LastLookEffect::ChannelHold> LastLookEffect::withoutShowOnly(const QList<ChannelHold> &channels,
+                                                                  bool always) const
+{
+    /* Show only, the emergency stop: a look captured while it holds (a
+       show stopped by it, its postRun on the next tick, reads the values
+       from before the stop) never holds a Show-only channel. By the
+       universe's own bits: no fixture lookup, safe on the timer thread. */
+    const OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
+    if (!always && (rules == nullptr || !rules->emergencyStopped()))
+        return channels;
+    const QList<Universe *> ua = m_doc->inputOutputMap()->universes();
+    QList<ChannelHold> out;
+    out.reserve(channels.size());
+    for (const ChannelHold &c : channels)
+    {
+        Universe *u = c.universeId >= 0 && c.universeId < ua.size() ? ua.at(c.universeId) : nullptr;
+        if (u != nullptr && c.address >= 0 && c.address < UNIVERSE_SIZE
+            && (u->channelCapabilities(ushort(c.address)) & Universe::ShowOnlyOutput))
+            continue;
+        out.append(c);
+    }
+    return out;
+}
+
+void LastLookEffect::dropShowOnly()
+{
+    QMutexLocker locker(&m_mutex);
+    const QList<ChannelHold> kept = withoutShowOnly(m_entries, true);
+    if (kept.size() == m_entries.size())
+        return;
+    m_entries = kept;
+    apply();
+}
+
 void LastLookEffect::hold(const QList<ChannelHold> &channels)
 {
     QMutexLocker locker(&m_mutex);
-    m_entries = channels;
+    m_entries = withoutShowOnly(channels, false);
     apply(QSet<quint32>(), true);
 }
 
@@ -60,6 +97,7 @@ void LastLookEffect::addHold(const QList<ChannelHold> &channels)
     QSet<quint32> incoming;
     for (const ChannelHold &c : channels)
         incoming.insert(c.fixtureId);
+    const QList<ChannelHold> fresh0 = withoutShowOnly(channels, false);
 
     QMutexLocker locker(&m_mutex);
     QList<ChannelHold> merged;
@@ -67,10 +105,10 @@ void LastLookEffect::addHold(const QList<ChannelHold> &channels)
     for (const ChannelHold &e : m_entries)
         if (incoming.contains(e.fixtureId) == false)
             merged.append(e);
-    merged.append(channels);
+    merged.append(fresh0);
     m_entries = merged;
     QSet<quint32> fresh;
-    for (const ChannelHold &c : channels)
+    for (const ChannelHold &c : fresh0)
         if (c.universeId >= 0 && c.address >= 0 && c.address < UNIVERSE_SIZE)
             fresh.insert(quint32(c.universeId) * UNIVERSE_SIZE + quint32(c.address));
     apply(fresh, false);

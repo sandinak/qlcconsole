@@ -260,6 +260,10 @@ void MarkPlanner::evaluatePlan()
         Fixture *fxi = m_doc->fixture(fid);
         if (fxi == nullptr || !fxi->isPatched())
             continue;
+        // Show only: never pre-set -- a laser's mode channel may be what
+        // turns it on. Only the GO drives it.
+        if (fxi->outputRules() & Fixture::ShowOnly)
+            continue;
         const quint32 master = fxi->masterIntensityChannel();
         const QVector<quint32> shutters = ShutterAutoOpen::closingShutters(fxi);
         if (master == QLCChannel::invalid() && shutters.isEmpty())

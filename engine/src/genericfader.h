@@ -331,8 +331,34 @@ public:
         return m_holdsShowOnly.load(std::memory_order_relaxed)
                || (m_previewGate && m_previewGate->load(std::memory_order_relaxed))
                || (m_liveBound.load(std::memory_order_relaxed)
-                   && m_liveEpoch.load(std::memory_order_relaxed) != liveEpoch());
+                   && m_liveEpoch.load(std::memory_order_relaxed) != liveEpoch())
+               || (m_stopBound.load(std::memory_order_relaxed)
+                   && m_stopEpoch.load(std::memory_order_relaxed) != stopEpoch());
     }
+
+    /** The emergency stop (OutputRuleKeeper::emergencyStop()): a hand's
+     *  fader -- not a function's, not already stamped by session, not
+     *  already held -- left up when it struck is frozen: it holds the
+     *  Show-only channels from then on, so nothing from before the stop
+     *  comes back when the stop lets go, until its owner is moved again
+     *  (unfreezeStop(): the Simple Desk, a VC slider). */
+    void freezeForStop(quint32 stopEpochBefore)
+    {
+        if (m_previewGate || m_holdsShowOnly.load(std::memory_order_relaxed)
+            || m_liveBound.load(std::memory_order_relaxed) || m_stopBound.load(std::memory_order_relaxed))
+            return;
+        m_stopEpoch.store(stopEpochBefore, std::memory_order_relaxed);
+        m_stopBound.store(true, std::memory_order_relaxed);
+    }
+    /** Moved after the stop: its owner's hand again */
+    void unfreezeStop()
+    {
+        if (m_stopBound.load(std::memory_order_relaxed))
+            m_stopEpoch.store(stopEpoch(), std::memory_order_relaxed);
+    }
+    /** Bumped by each emergency stop */
+    static quint32 stopEpoch();
+    static void bumpStopEpoch();
     void setHoldsShowOnly(bool hold) { m_holdsShowOnly.store(hold, std::memory_order_relaxed); }
 
     /** What a fader not a function's holds was set by hand (Park, Mark, a
@@ -411,6 +437,8 @@ private:
     std::atomic<bool> m_holdsShowOnly { false };
     std::atomic<bool> m_liveBound { false };
     std::atomic<quint32> m_liveEpoch { 0 };
+    std::atomic<bool> m_stopBound { false };
+    std::atomic<quint32> m_stopEpoch { 0 };
     /** Set once, when made (CreationScope): never changes after */
     PreviewGate m_previewGate;
 
