@@ -14,6 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed and fixed
 
+- **Hits: a finished one-shot lets go, and each cue starts at hit 1.** A hit that runs once (a Breathe) now stops by itself when its run ends, the cue's own levels come back, and the Run tab, footer and phone say **Hit ▸ Breathe** (not "off") until the next pull plays it afresh; a toggle hit works as before. A new set of armed hits, or the same cue again after another, starts at **1 of n**.
 - **Cues from the script.** The calling script's **Make Cues…** turns its SCENE:, LIGHTING: and LIGHTS: lines into cues: you see them first, song by song, numbered for the show (`{S}.{P}.{II}`: a song named in the script is that song, a capitals title over a LIGHTING: line is the next one, named from the script), and untick what you don't want. Each cue is called on its line with the line's words as its note, lines that already have a cue are skipped and say so, and the lot is one undo step. Cancel makes nothing.
 - **Show Review's power check counts palette colours.** PWR-01 now counts colour set through palettes (and a colour set to 0) when it estimates a circuit's draw, instead of treating it as full white, which overestimated the draw.
 

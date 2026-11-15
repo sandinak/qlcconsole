@@ -57,6 +57,11 @@ PadRun::PadRun(Doc *doc, ProgrammerController *pc, QObject *parent)
     m_blink = new QTimer(this);
     m_blink->setInterval(blinkMs());
     connect(m_blink, &QTimer::timeout, this, &PadRun::lightTick);
+    // A finished one-shot hit lets go by itself, armed or not.
+    m_oneShotTick = new QTimer(this);
+    m_oneShotTick->setInterval(blinkMs());
+    connect(m_oneShotTick, &QTimer::timeout, this, &PadRun::letGoFinishedOneShots);
+    m_oneShotTick->start();
     hookShowControl();
     if (m_doc != nullptr)
     {
@@ -566,9 +571,36 @@ void PadRun::sync()
     syncHit();
 }
 
+void PadRun::letGoFinishedOneShots()
+{
+    ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
+    EffectScriptRunner *esr = m_doc != nullptr ? m_doc->effectScriptRunner() : nullptr;
+    if (st == nullptr || esr == nullptr || m_doc->mode() != Doc::Operate)
+        return;
+    bool any = false;
+    for (quint32 h : allHits())
+    {
+        Function *f = m_doc->function(st->lookFunction(h));
+        if (f == nullptr || !f->isRunning() || esr->oneShotState(f->id()) != 1)
+            continue;
+        // Its run is over: stop it, and the cue's own levels come back.
+        f->stop(FunctionParent::master());
+        any = true;
+    }
+    if (any)
+        syncHit();
+}
+
 void PadRun::syncHit()
 {
     hookShowControl();
+    // A new set of armed hits (a new cue, a list change) starts at 1 of n.
+    const QList<quint32> armedNow = armedHits();
+    if (armedNow != m_armedSet)
+    {
+        m_armedSet = armedNow;
+        m_hitStep = 0;
+    }
     const QString hit = hitText();
     const QString armed = state() == Armed ? hit : QString();
     if (hit == m_shownHit && armed == m_shownArmedHit)
@@ -588,7 +620,6 @@ void PadRun::lightTick()
     m_blinkOn = playing ? !m_blinkOn : false;
     m_playing = playing;
     showLight();
-    // A one-shot hit that finishes plays again on the next pull: say so.
     syncHit();
 }
 

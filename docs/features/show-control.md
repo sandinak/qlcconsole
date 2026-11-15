@@ -177,12 +177,15 @@ Use it to call a one-shot, say a breathe, off a hit in a cue.
   too (**Pad: ARMED · Hit ▸ Breathe**; for the few seconds the chip says
   what a press could not do, that takes its place). When the hit is on, the next pull
   lets it go: **Hit ▸ Breathe off**. Two or more taking turns show which
-  one the next pull fires: **Hit ▸ Red (1 of 2)**. The phone Run page
+  one the next pull fires: **Hit ▸ Red (1 of 2)**. Each new set of hits (a
+  cue with different hits, or going back to a cue) starts at 1 of n. The phone Run page
   shows the same line under its ARMED banner while its controller is
   armed. With no hit to fire (none armed here, or Design) nothing is
   shown.
 - The voice says its name ("Breathe."). Press again and it lets go
-  ("Breathe off."); a one-shot that has finished plays again.
+  ("Breathe off."). A one-shot (an effect that runs once) lets go by itself when
+  its run ends: the cue's own levels come back, the line reads **Hit ▸ Breathe**
+  again, and the next pull plays it afresh. Only a toggle hit reads **off**.
 - Two or more hits at the narrowest place take turns, one a press. The
   console's controller and the phone page's share the turn, so the hit
   each names is the one it fires.

@@ -572,12 +572,72 @@ void PadHit_Test::aOneShotHitEndsOnItsOwnTimeNotAtTheGo()
     QVERIFY(hitFn->isRunning());
     // Over the new cue's 60, the breath rises to its top.
     QTRY_VERIFY2_WITH_TIMEOUT(level(1) > 120, qPrintable(QString::number(level(1))), 1500);
-    // It ends on its own time: the breath done, the hit still on (a toggle),
-    // holding the breath's last level -- the hit's, not the new cue's 60.
-    QTRY_COMPARE_WITH_TIMEOUT(esr->oneShotState(hitFn->id()), 1, 3000);
-    QVERIFY(hitFn->isRunning());
-    QTRY_VERIFY2_WITH_TIMEOUT(level(1) < 30, qPrintable(QString::number(level(1))), 1000);
+    // It ends on its own time, and lets go by itself (Q239): the breath done,
+    // the hit stops and the cue's own 60 comes back on the hit's channel.
+    QTRY_VERIFY_WITH_TIMEOUT(!hitFn->isRunning(), 4000);
+    QTRY_COMPARE_WITH_TIMEOUT(level(1), 60, 1000);
     QCOMPARE(level(0), 60);             // the cue plays on its own channel
+    // Every surface says the next action is a fresh pull, never "off".
+    QLabel *line = m_app->findChild<QLabel *>(QStringLiteral("crPadHit"));
+    QVERIFY(line != nullptr);
+    WebAccessRun phone(doc);
+    QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Flash (one-shot)"), 1000);
+    settle();
+    QCOMPARE(line->text(), hit("Flash (one-shot)"));
+    QCOMPARE(QJsonDocument::fromJson(phone.stateJson()).object().value(QStringLiteral("hit")).toString(),
+             hit("Flash (one-shot)"));
+    QVERIFY(m_app->padRoleChip()->text().contains(hit("Flash (one-shot)")) || !run->notice().isEmpty());
+    // The next pull fires it again, as a pull, not as a let-go.
+    tap(kRT);
+    QTRY_COMPARE_WITH_TIMEOUT(fired.count(), 2, 2000);
+    QVERIFY(fired.last().at(1).toBool());
+    QTRY_VERIFY_WITH_TIMEOUT(hitFn->isRunning(), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Flash (one-shot) off"), 1000);
+}
+
+void PadHit_Test::eachNewSetOfHitsStartsAtOneOfN()
+{
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    PadRun *run = doc->programmer()->padRun();
+    doc->masterTimer()->stopAllFunctions();
+    settle(100);
+    doc->setMode(Doc::Operate);
+    settle(50);
+    run->setEnabled(true);
+    if (!run->isArmed())
+        chord(true);
+    QVERIFY(run->isArmed());
+    Undo undo;
+    undo.f = [&]() {
+        doc->masterTimer()->stopAllFunctions();
+        doc->setMode(Doc::Design);
+        run->setEnabled(false, false);
+        settle(50);
+    };
+    // Opening: two hits. Pull one (Staff Slam on), let it go (turn 2: Thunder).
+    go();
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(m_list) == m_cues.at(0), 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Staff Slam (1 of 2)"), 2000);
+    tap(kRT);
+    QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Staff Slam off (1 of 2)"), 2000);
+    tap(kRT);
+    QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Thunder (2 of 2)"), 2000);
+    // On to a cue with a different set: its one hit, then back to Opening: 1 of 2.
+    go();
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(m_list) == m_cues.at(1), 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Breathe"), 2000);
+    ShowControl::Request back;
+    back.command = ShowControl::Back;
+    back.chaser = st->cueList(m_list)->chaser;
+    QVERIFY(doc->showControl()->run(back, ShowControl::RouteKey));
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(m_list) == m_cues.at(0), 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Staff Slam (1 of 2)"), 2000);
+    // And what it fires is hit 1, not the old turn's.
+    QSignalSpy fired(run, &PadRun::hitFired);
+    tap(kRT);
+    QTRY_COMPARE_WITH_TIMEOUT(fired.count(), 1, 2000);
+    QCOMPARE(st->cue(fired.last().at(0).toUInt())->name, QString("Staff Slam"));
 }
 
 void PadHit_Test::pictures()
