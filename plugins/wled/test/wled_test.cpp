@@ -1339,6 +1339,12 @@ void Wled_Test::aCrashWithReverseOnIsPutRightFromTheKeptWays()
     QCOMPARE(revs(other), (QList<bool>{ true, true }));
 }
 
+void Wled_Test::showOnlyMayUseIt()
+{
+    WledPlugin plugin;
+    QCOMPARE(plugin.isNetworkDmxOutput(), true);
+}
+
 QTEST_MAIN(Wled_Test)
 
 namespace

@@ -677,6 +677,25 @@ void InputOutputPatchEditor::slotMapItemChanged(QTreeWidgetItem* item, int col)
     if (item == NULL)
         return;
 
+    /* N1, F4 (outputpatch.h): an output this universe may not have is
+       refused before anything changes -- no undo step for it. */
+    if (col == KMapColumnHasOutput && item->checkState(col) == Qt::Checked && m_ioMap != NULL
+        && item->checkState(KMapColumnHasFeedback) != Qt::Checked)
+    {
+        const QString refusal = m_ioMap->outputPatchRefusal(m_universe, item->text(KMapColumnPluginName),
+                                                            item->text(KMapColumnOutputLine).toUInt());
+        if (refusal.isEmpty() == false)
+        {
+            disconnect(m_mapTree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
+                       this, SLOT(slotMapItemChanged(QTreeWidgetItem*, int)));
+            restoreOutputChecks();
+            connect(m_mapTree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
+                    this, SLOT(slotMapItemChanged(QTreeWidgetItem*, int)));
+            QMessageBox::warning(this, tr("Show only"), refusal);
+            return;
+        }
+    }
+
     /* Held before the checkbox is acted on, so the Devices tab's undo can put
        this universe's patch back. The button lives on another tab, but the
        state it restores belongs to InputOutputMap -- wiring only some of the
@@ -739,29 +758,11 @@ void InputOutputPatchEditor::slotMapItemChanged(QTreeWidgetItem* item, int col)
                 if (m_ioMap->setOutputPatch(m_universe, m_currentOutputPluginName, "",
                                             m_currentOutput, false) == false)
                 {
-                    /* N1: a universe with Show-only fixtures onto a hardware
-                       line -- refused. The tree and this editor go back to
-                       the patch the universe really has. */
+                    // N1, F4: refused (checked above; a race here is said too).
                     const QString refusal = m_ioMap->lastPatchRefusal();
                     if (refusal.isEmpty() == false)
                     {
-                        OutputPatch *real = m_ioMap->outputPatch(m_universe);
-                        const bool open = real != NULL && real->isPatched();
-                        m_currentOutputPluginName = open ? real->pluginName() : KOutputNone;
-                        m_currentOutput = open ? real->output() : QLCIOPlugin::invalidLine();
-                        QTreeWidgetItemIterator rit(m_mapTree);
-                        for (; *rit != NULL; ++rit)
-                        {
-                            // Only the rows that have an output box.
-                            if ((*rit)->data(KMapColumnHasOutput, Qt::CheckStateRole).isValid())
-                            {
-                                const bool mine = open
-                                        && (*rit)->text(KMapColumnPluginName) == m_currentOutputPluginName
-                                        && (*rit)->text(KMapColumnOutputLine).toUInt() == m_currentOutput;
-                                if ((*rit)->checkState(KMapColumnHasOutput) != (mine ? Qt::Checked : Qt::Unchecked))
-                                    (*rit)->setCheckState(KMapColumnHasOutput, mine ? Qt::Checked : Qt::Unchecked);
-                            }
-                        }
+                        restoreOutputChecks();
                         QMessageBox::warning(this, tr("Show only"), refusal);
                     }
                     else
@@ -878,6 +879,28 @@ QTreeWidgetItem* InputOutputPatchEditor::pluginItem(const QString& pluginName)
     }
 
     return NULL;
+}
+
+void InputOutputPatchEditor::restoreOutputChecks()
+{
+    /* A refused output: this editor and the tree go back to the patch the
+       universe really has. */
+    OutputPatch *real = m_ioMap->outputPatch(m_universe);
+    const bool open = real != NULL && real->isPatched();
+    m_currentOutputPluginName = open ? real->pluginName() : KOutputNone;
+    m_currentOutput = open ? real->output() : QLCIOPlugin::invalidLine();
+    QTreeWidgetItemIterator rit(m_mapTree);
+    for (; *rit != NULL; ++rit)
+    {
+        // Only the rows that have an output box.
+        if ((*rit)->data(KMapColumnHasOutput, Qt::CheckStateRole).isValid() == false)
+            continue;
+        const bool mine = open && (*rit)->text(KMapColumnPluginName) == m_currentOutputPluginName
+                          && (*rit)->text(KMapColumnOutputLine).toUInt() == m_currentOutput;
+        const Qt::CheckState want = mine ? Qt::Checked : Qt::Unchecked;
+        if ((*rit)->checkState(KMapColumnHasOutput) != want)
+            (*rit)->setCheckState(KMapColumnHasOutput, want);
+    }
 }
 
 void InputOutputPatchEditor::showPluginMappingError()

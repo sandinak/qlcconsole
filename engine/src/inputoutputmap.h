@@ -505,9 +505,10 @@ public:
      *  a plugin -- universes added meanwhile neither -- until it is let go,
      *  after recheckPatchesAfterLoad() */
     void setLoadHold(bool hold);
-    /** N3 (outputpatch.h): once a show's Show-only fixtures are known,
-     *  every output patch of their universes on a hardware line is held,
-     *  before any output is let go. Returns how many. */
+    /** N3, F4 (outputpatch.h): once a show's Show-only fixtures are known,
+     *  every output of their universes that is not a network DMX one is
+     *  held, then any other the load opened onto an interface those
+     *  reserve -- before any output is let go. Returns how many. */
     int recheckPatchesAfterLoad();
 
     /** Are any patches being kept offline right now? */
@@ -598,6 +599,12 @@ public:
 
     /** N1's words: @p device can't send to Show-only fixtures */
     static QString networkOnlyText(const QString &device);
+    /** F4's words: @p device is cabled to @p universe's lasers */
+    static QString reservedText(const QString &device, const QString &universe);
+    /** Why @p universe's output patch @p index may not be patched by hand
+     *  onto @p pluginName's @p line (N1, F4); empty when it may. The I/O
+     *  tab asks before it changes anything. */
+    QString outputPatchRefusal(quint32 universe, const QString &pluginName, quint32 line, int index = 0) const;
 
     /** N2: marks made between begin and end (a fixture's channels, a
      *  group's fixtures) hold a hardware patch once, after the last of
@@ -896,9 +903,13 @@ private:
     /** True when an open output patch other than @p except sends on
      *  @p plugin's @p line (review 11: a kept-off patch must not close it) */
     bool lineUsedByAnother(const QLCIOPlugin *plugin, quint32 line, const OutputPatch *except) const;
-    /** N2: @p universe has Show-only fixtures now -- each of its output
-     *  patches on a hardware line is held (N1's words), closing frame first */
-    void holdShowOnlyHardware(Universe *universe);
+    /** N2/N3: @p universe has Show-only fixtures -- each of its outputs that
+     *  is not a network DMX one is held (N1's words), closing frame first;
+     *  @p fromLoad: waiting on its saved line */
+    void holdShowOnlyOutputs(Universe *universe, bool fromLoad);
+    /** F4: why @p plugin's @p line is reserved by a held laser universe
+     *  (but @p except); empty when it is not */
+    QString reservedWhy(const QLCIOPlugin *plugin, quint32 line, const OutputPatch *except) const;
     /** N2, N4: follow @p uni's Show-only fixtures coming and going */
     void watchShowOnly(Universe *uni);
 

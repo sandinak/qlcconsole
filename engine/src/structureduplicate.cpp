@@ -663,6 +663,9 @@ StructureDuplicate::Result StructureDuplicate::apply(Doc *doc, const QString &so
                                                      const QStringList &targets,
                                                      const Options &options)
 {
+    /* N2 (outputpatch.h, review 16 F2): one marking scope for a duplicated structure's fixtures --
+       all Show only before a non-network output is held. */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(doc != nullptr ? doc->inputOutputMap() : nullptr);
     Result res;
     Plan plan;
     buildPlan(doc, source, targets, options, plan);
@@ -993,6 +996,9 @@ StructureDuplicate::Result StructureDuplicate::apply(Doc *doc, const QString &so
 
 void StructureDuplicate::undo(Doc *doc, const Undo &u)
 {
+    /* N2 (outputpatch.h, review 16 F2): one marking scope for an undone duplicate --
+       all Show only before a non-network output is held. */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(doc != nullptr ? doc->inputOutputMap() : nullptr);
     if (doc == nullptr)
         return;
     MonitorProperties *props = doc->monitorProperties();

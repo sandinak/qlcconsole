@@ -70,6 +70,10 @@ public:
 
     /** @reimp */
     bool linesAreHardware() const override { return m_linesAreHardware; }
+    /** @reimp a network DMX output unless dressed as hardware or told not
+     *  to be one (m_networkDmx false: Loopback, OSC, an unknown plugin) */
+    bool isNetworkDmxOutput() const override { return m_networkDmx && !m_linesAreHardware; }
+    bool m_networkDmx = true;
 
     /** @reimp */
     bool supportsOutputTargets() const override { return m_supportsTargets; }

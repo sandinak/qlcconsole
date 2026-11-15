@@ -1322,6 +1322,9 @@ void FixtureManager::selectedRows(QList<quint32> &fixtures, QList<quint32> &grou
 
 QList<quint32> FixtureManager::duplicate(const QList<quint32> &fixtures, const QList<quint32> &groups)
 {
+    /* N2 (outputpatch.h, review 16 F2): one marking scope for duplicate and paste of several --
+       all Show only before a non-network output is held. */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(m_doc->inputOutputMap());
     if (m_doc->mode() != Doc::Design)
         return QList<quint32>();
     QList<quint32> made;
@@ -2178,6 +2181,9 @@ void FixtureManager::addChannelsGroup()
 
 void FixtureManager::slotAddRGBPanel()
 {
+    /* N2 (outputpatch.h, review 16 F2): one marking scope for an RGB panel's fixtures --
+       all Show only before a non-network output is held. */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(m_doc->inputOutputMap());
     if (!ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Add an RGB panel to the patch")))
         return;
     AddRGBPanel rgb(this, m_doc);
@@ -3084,6 +3090,9 @@ void FixtureManager::slotImport()
 
 int FixtureManager::importFixtureList(Doc *doc, const QString &fileName)
 {
+    /* N2 (outputpatch.h, review 16 F2): one marking scope for an imported fixture list --
+       all Show only before a non-network output is held. */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(doc != nullptr ? doc->inputOutputMap() : nullptr);
     QXmlStreamReader *reader = QLCFile::getXMLReader(fileName);
     if (reader == NULL || reader->device() == NULL || reader->hasError())
     {

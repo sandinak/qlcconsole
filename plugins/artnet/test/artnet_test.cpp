@@ -81,6 +81,12 @@ void ArtNet_Test::setupArtNetDmx()
     QCOMPARE(data.data(), "Art-Net");
 }
 
+void ArtNet_Test::showOnlyMayUseIt()
+{
+    ArtNetPlugin plugin;
+    QCOMPARE(plugin.isNetworkDmxOutput(), true);
+}
+
 QTEST_MAIN(ArtNet_Test)
 
 /** A real ArtPollReply, captured off the wire from the rig's CR041R

@@ -887,11 +887,13 @@ opened — over the web while in Operate too). So:
   too — so a node that keeps its last frame never keeps a laser on. In
   Blind that frame has the rest of the rig as it was before Blind, never the
   preview. A held output comes back with what the show gives them now.
-- **Show-only fixtures need a network output** (Art-Net, sACN, WLED) in
-  this version: a universe with one can't be patched to a USB or MIDI
-  interface — that's refused, and one already there is held, saying why —
-  because a USB interface can be unplugged, swapped or rescanned and come
-  back as another device. Take the rule off and it comes back as before.
+- **Show-only fixtures need a network output** in this version: Art-Net,
+  sACN (E1.31) or WLED. A universe with one can't be patched to anything
+  else (USB, MIDI, Loopback, OSC…) — refused, and one already there is held,
+  saying why — because such an interface can be unplugged, swapped or
+  rescanned and come back as another device. While it is held, the
+  interface it was on is kept for its lasers: no other universe opens on it.
+  Take the rule off and both come back as before.
 - **Sharing an address**: a fixture patched over a Show-only one cannot
   turn it on — **On when not in use** and **Ignore Blackout** do nothing on
   the shared channels. The Grand Master never scales a safe value (a gobo

@@ -287,6 +287,9 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
                                      const QList<quint32> &functionIds,
                                      const QList<quint32> &paletteIds)
 {
+    /* N2 (outputpatch.h, review 16 F2): one marking scope for an imported show's fixtures --
+       all Show only before a non-network output is held. */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(targetDoc != nullptr ? targetDoc->inputOutputMap() : nullptr);
     QxwImportResult result;
     if (sourceDoc == NULL || targetDoc == NULL)
         return result;
