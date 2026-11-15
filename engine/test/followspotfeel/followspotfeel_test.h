@@ -49,6 +49,11 @@ private slots:
     void aSixteenBitHeadGlides();
     void freeFlyPansAtTopSpeedBothWays();
     void deletingTheSceneLetsGo();
+    /** Heads whose pan zero faces away from the stage (the stage across
+     *  the seam of the turn the solver used to answer in): the stick walks
+     *  the subject across and back and every head's pan moves smoothly,
+     *  clear of both channel ends, never round. */
+    void aWalkAcrossTheSeamNeverSwingsRound();
 
     /* Where the operator stands (FollowSpotOperator). */
     void stickUpGoesAwayFromTheOperator();

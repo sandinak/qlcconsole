@@ -71,6 +71,20 @@ private slots:
     void areaCoversHisChorus();
     void areaCoverNeedsHeadAndDeck();
     void areaTiesGoToTheBestCover();
+
+    /** The middle of the pan range: a target swept across the stage and
+     *  back moves the pan smoothly, never to a channel end and round, for a
+     *  540 and a 630 degree head whose zero faces away from the stage (the
+     *  stage straddles the turn's seam) and a 360 facing it; hung and
+     *  standing, inverted or not. Every answer still points at its target. */
+    void aSweepAcrossTheStageStaysOnOneTurn_data();
+    void aSweepAcrossTheStageStaysOnOneTurn();
+    /** A 360 degree head has one pan for each bearing: nothing to choose,
+     *  and its answers are what they always were. */
+    void aHeadWithOneTurnHasNothingToChoose();
+    /** Two Aim looks either side of the old seam: their pans are the short
+     *  way apart, and a fade between them lands between the two marks. */
+    void looksEitherSideOfTheSeamFadeTheShortWay();
 };
 
 #endif
