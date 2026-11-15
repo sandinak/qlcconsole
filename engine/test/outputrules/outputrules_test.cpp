@@ -3077,4 +3077,156 @@ void OutputRules_Test::aSafeValueIsNeverScaledHeldOrLive()
     QCOMPARE(sent(40), 40);                             // live, nothing drives it: the same
 }
 
+/****************************************************************************
+ * Ninth review (of 690eeeab48): red until fixed
+ ****************************************************************************/
+
+/* R9-1: OutputPatch::setPending() (InputOutputMap::holdOutputPatch():
+   Teaching mode's "hold real output", the rig-network gate) closes the
+   plugin line at once -- no frame with the Show-only channels at safe goes
+   out first. A node or a USB interface keeps the last frame it was given
+   (the stub keeps it, as an Art-Net node holding its last look does): the
+   GO'd laser stays on, and All Off, Blackout, a cue letting go never reach
+   it again. */
+void OutputRules_Test::r9_aHeldOutputKeepsTheLaserOnThroughAllOff()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    const FunctionParent go = FunctionParent::master();
+    startScene({ { Flame, 255 } }, go.type(), go.id());     // a GO
+    tickFrame(Flame);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);
+    auto restore = qScopeGuard([this]() {
+        m_doc->inputOutputMap()->setOutputPatch(0, m_stub->name(), QString(), 0);
+    });
+    // The output goes on hold, as holdOutputPatch() does it.
+    QVERIFY(m_uni->setOutputPatchPending(m_stub, m_stub->outputs().at(0), 0, 0, QString()));
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+    for (int i = 0; i < 3; i++)
+        tickFrame(Flame);
+    const int onTheLine = sent(Flame);
+    stopFunctions();
+    QVERIFY2(onTheLine == 0, qPrintable(QString("the held line's last frame has the flame at %1 "
+                                                "after All Off").arg(onTheLine)));
+}
+
+/* R9-1, re-patched: Universe::setOutputPatch() -> OutputPatch::set()
+   closes the old line and opens the new one; the old line's last frame is
+   the GO'd laser, on. */
+void OutputRules_Test::r9_aMovedOutputKeepsTheLaserOnThroughAllOff()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    const FunctionParent go = FunctionParent::master();
+    startScene({ { Flame, 255 } }, go.type(), go.id());     // a GO
+    tickFrame(Flame);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);
+    auto restore = qScopeGuard([this]() {
+        m_doc->inputOutputMap()->setOutputPatch(0, m_stub->name(), QString(), 0);
+    });
+    // Mid-show, the universe is sent to another line (the I/O tab is open in Operate).
+    QVERIFY(m_doc->inputOutputMap()->setOutputPatch(0, m_stub->name(), QString(), 1));
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+    for (int i = 0; i < 3; i++)
+        tickFrame(Flame);
+    const int oldLine = sent(Flame);
+    const int newLine = int(uchar(m_stub->m_universe.at(512 + Flame)));
+    stopFunctions();
+    QCOMPARE(newLine, 0);
+    QVERIFY2(oldLine == 0, qPrintable(QString("the old line's last frame has the flame at %1 "
+                                              "after All Off").arg(oldLine)));
+}
+
+/* R9-2: Doc::patchFixtures() applies every fixture to the universes
+   (setChannelDefaultValue(): the definition's default, the channel not yet
+   Show only), calls setModified() and only then emits fixtureChanged() --
+   when OutputRuleKeeper::markNow() makes the channels Show only. The
+   universe thread runs on its own: a frame in that window (here: one run
+   from Doc::modified, emitted inside it) sends the laser's default. In
+   Design too -- the channel is not Show only yet, so nothing holds it. */
+void OutputRules_Test::r9_aLaserBeingPatchedSendsItsDefault()
+{
+    enum { At = 100 };
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Review9"));
+    def->setModel(QStringLiteral("Laser R9"));
+    def->setType(QLCFixtureDef::Laser);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("1ch"));
+    QLCChannel *ch = new QLCChannel();
+    ch->setName(QStringLiteral("Mode"));
+    ch->setGroup(QLCChannel::Effect);
+    ch->setDefaultValue(200);               // e.g. "auto program"
+    def->addChannel(ch);
+    mode->insertChannel(ch, 0);
+    def->addMode(mode);
+    mode->cacheHeads();
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(def));
+    Fixture *laser = new Fixture(m_doc);
+    laser->setName(QStringLiteral("Laser R9"));
+    laser->setFixtureDefinition(def, mode);
+    laser->setOutputRules(Fixture::ShowOnly);
+    laser->setPatched(false);               // in the inventory
+    QVERIFY(m_doc->addFixture(laser));
+    m_doc->outputRuleKeeper()->rebuild();
+    QCOMPARE(int(OutputRuleKeeper::safeValue(laser, 0)), 0);
+    frame(At);
+    QCOMPARE(sent(At), 0);
+
+    int inWindow = 0;
+    QMetaObject::Connection c = connect(m_doc, &Doc::modified, this, [this, &inWindow](bool) {
+        frame(At);                          // the universe thread's frame
+        inWindow = qMax(inWindow, sent(At));
+    });
+    QString why;
+    const bool ok = m_doc->patchFixtures({ Doc::FixturePatch{ laser->id(), 0, At } }, &why);
+    disconnect(c);
+    QVERIFY2(ok, qPrintable(why));
+    QVERIFY(m_uni->channelCapabilities(At) & Universe::ShowOnlyOutput);    // marked after
+    frame(At);
+    QCOMPARE(sent(At), 0);
+    QVERIFY2(inWindow == 0, qPrintable(QString("a frame inside patchFixtures() sent the laser's "
+                                               "default %1 (not Show only yet)").arg(inWindow)));
+}
+
+/* R9-3: S0 says a writer that does not count "sets no flag". writeRelative()
+   calls markWritten() on every channel before it checks writeBlocked(): a
+   held relative writer leaves the Show-only channel "written this frame"
+   (isChannelSet(), channelSnapshot().set, the auto-open shutter test). */
+void OutputRules_Test::r9_aHeldRelativeWriterSetsTheWrittenFlag()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    m_uni->m_held[Flame].store(0);
+    frame(Flame);
+    frame(Flame);
+    QVERIFY(m_uni->channelSnapshot(Flame).set == false);
+    // A preview's EFX in relative mode on it: held.
+    QSharedPointer<GenericFader> efx = m_uni->requestFader();
+    efx->setHoldsShowOnly(true);
+    {
+        GenericFader::ChannelRef fc = efx->getChannelFader(m_doc, m_uni, Fixture::invalidId(), quint32(Flame));
+        fc->addFlag(FadeChannel::Relative);
+        fc->setStart(200);
+        fc->setCurrent(200);
+        fc->setTarget(200);
+    }
+    frame(Flame);
+    const Universe::ChannelSnapshot snap = m_uni->channelSnapshot(Flame);
+    m_uni->dismissFader(efx);
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    QVERIFY2(snap.set == false, qPrintable(QString("a held writer marked the Show-only channel written "
+                                                   "(%1 frames since)").arg(snap.framesSinceWrite)));
+}
+
 QTEST_GUILESS_MAIN(OutputRules_Test)
