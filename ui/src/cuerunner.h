@@ -83,6 +83,10 @@ public:
     /** "Focus calls: waiting for the controller" while a focus-call cue is
      *  armed (running: that it runs); empty otherwise. */
     QString focusArmedText() const;
+    /** The double-GO guard's hold as the Run tab shows it under its header
+     *  (ShowControl::heldNotice(): the footer's and the phone's words);
+     *  empty while none is shown. */
+    QString goHeldText() const;
 
     Size runnerSize() const { return m_size; }
     void setRunnerSize(Size size);
@@ -325,6 +329,8 @@ private:
      *  2)": PadRun::armedHitText(), its hitChanged() (rule 2). */
     void refreshPadHit();
     QLabel *m_padHit = nullptr;
+    void refreshGoHeld();
+    QLabel *m_goHeld = nullptr;
     QToolButton *m_focusStart = nullptr;
     /** The crash-resume offer (Run tab): its words and buttons. */
     void refreshResume();

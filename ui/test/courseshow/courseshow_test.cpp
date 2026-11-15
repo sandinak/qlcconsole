@@ -740,6 +740,9 @@ void CourseShow_Test::initTestCase()
                                                     QString(QLC_TEST_RESOURCE_ROOT) + "rgbscripts");
     m_app = new App();
     m_app->init();
+    // GOs here come back to back on purpose: the double-GO guard (its own
+    // tests, engine/test/goguard and ui/test/goguardui) is off for them.
+    m_app->doc()->showControl()->setGoGuardMs(0);
     // The definitions that ship with the app, as a student's install has
     // them (a test program isn't inside an app bundle to find them).
     QVERIFY(m_app->doc()->fixtureDefCache()->loadMap(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures")));

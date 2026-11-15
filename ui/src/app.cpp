@@ -2923,6 +2923,11 @@ void App::initActions()
     m_doc->showControl()->setRunHandler([this](const ShowControl::Request &r, ShowControl::Route route) {
         return runCommand(r, route);
     });
+    /* The double-GO guard (board Q233; its rules at ShowControl::run()):
+       this computer's window, from Settings ▸ General ▸ Show Controls. A
+       hold shows on the footer's Next chip at once, not at the next poll. */
+    m_doc->showControl()->setGoGuardMs(goGuardMs());
+    connect(m_doc->showControl(), &ShowControl::commandHeld, this, [this]() { slotUpdateStandby(); });
     m_cueBackAction = new QAction(tr("Back (Main Cue List)"), this);
     m_cueBackAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return));
     m_cueBackAction->setShortcutContext(Qt::ApplicationShortcut);
@@ -5237,13 +5242,18 @@ QList<QWidget *> App::statusChipsByPriority() const
     // What the stage shows, what is unsaved and the mode first (they are
     // what a crew checks at a glance); then readiness and what holds the
     // rig; the counters and the notices last.
+    /* A second GO just held (the double-GO guard): the Next chip says so,
+       and for its seconds it is as important as the mode -- it must not be
+       the chip squeezed out to make room. */
+    const bool goHeld = m_statusStandby != nullptr && m_statusStandby->property("goHeld").toBool();
     const QList<QWidget *> order = {
         m_statusStage, m_statusDirtyLabel, m_statusModeChipLabel,
+        goHeld ? m_statusStandby : nullptr,
         m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusShowOnlyLabel,
         m_statusOverridesChip, m_statusProgrammerLabel,
         m_statusGrandMasterBox, m_statusReviewLabel, m_venueChip,
         m_statusSelectionLabel, m_statusPadModeLabel,
-        m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
+        goHeld ? nullptr : m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
         m_statusShowTreeNotice, m_statusTimecodeLabel, m_statusLoadLabel,
         m_statusPowerLabel, m_statusDangleLabel, m_statusTimelineLabel
     };
@@ -6091,6 +6101,24 @@ bool App::noticeDifferingDefinitions()
         dlg.exec();
     });
     return true;
+}
+
+QString App::goGuardSettingKey()
+{
+    return QStringLiteral("showcontrol/goGuardMs");
+}
+
+int App::goGuardMs()
+{
+    return qBound(0, QSettings().value(goGuardSettingKey(), ShowControl::defaultGoGuardMs()).toInt(),
+                  ShowControl::maxGoGuardMs());
+}
+
+void App::setGoGuardMs(int ms)
+{
+    QSettings().setValue(goGuardSettingKey(), qBound(0, ms, ShowControl::maxGoGuardMs()));
+    if (m_doc != nullptr)
+        m_doc->showControl()->setGoGuardMs(goGuardMs());
 }
 
 QString App::heldForRunText()
@@ -9491,6 +9519,35 @@ void App::slotUpdateStandby()
 {
     if (m_statusStandby == NULL || m_doc == NULL)
         return;
+    /* The double-GO guard held a GO (ShowControl::run(), rule 2): for its
+       few seconds the chip says so, in the Run tab's, the phone's and the
+       pad's words -- in every view, Classic too: it is about the stage. */
+    const QString held = m_doc->showControl()->heldNotice();
+    const bool wasHeld = m_statusStandby->property("goHeld").toBool();
+    if (!held.isEmpty())
+    {
+        if (!wasHeld)
+        {
+            m_statusStandby->setProperty("goHeld", true);
+            m_statusStandby->setStyleSheet(QStringLiteral("QToolButton { color: white; background: #d08a1c; "
+                                                          "font-weight: bold; padding: 0 6px; }"));
+        }
+        const QString shown = QFontMetrics(m_statusStandby->font()).elidedText(held, Qt::ElideRight,
+                                                                               qBound(150, width() / 3, 520));
+        if (m_statusStandby->text() != shown)
+            m_statusStandby->setText(shown);
+        m_statusStandby->show();
+        if (!wasHeld && m_statusFitTimer != nullptr)
+            m_statusFitTimer->start();          // its place moves up (statusChipsByPriority())
+        return;
+    }
+    if (wasHeld)
+    {
+        m_statusStandby->setProperty("goHeld", false);
+        m_statusStandby->setStyleSheet(QString());
+        if (m_statusFitTimer != nullptr)
+            m_statusFitTimer->start();
+    }
     if (m_classicChrome)   // Classic QLC+'s footer has no Next (Q78)
     {
         m_statusStandby->hide();

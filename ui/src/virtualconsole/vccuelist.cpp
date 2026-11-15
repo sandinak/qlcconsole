@@ -988,7 +988,7 @@ void VCCueList::slotNextCue()
         {
             m_tree->setCurrentItem(m_tree->topLevelItem(getNextIndex()));
         }
-        else if (!runShowTree(ShowControl::Go))
+        else if (!runShowTree(ShowControl::Go) && admitDirect(ShowControl::Go))
         {
             ChaserAction action;
             action.m_action = ChaserNextStep;
@@ -1035,7 +1035,7 @@ void VCCueList::slotPreviousCue()
         {
             m_tree->setCurrentItem(m_tree->topLevelItem(getPrevIndex()));
         }
-        else if (!runShowTree(ShowControl::Back))
+        else if (!runShowTree(ShowControl::Back) && admitDirect(ShowControl::Back))
         {
             ChaserAction action;
             action.m_action = ChaserPreviousStep;
@@ -1423,6 +1423,8 @@ void VCCueList::startChaser(int startIndex)
     if (ch == NULL)
         return;
     if (runShowTree(ShowControl::Go, startIndex))
+        return;
+    if (!admitDirect(ShowControl::Go))
         return;
 
     adjustFunctionIntensity(ch, intensity());
@@ -2025,6 +2027,16 @@ void VCCueList::playCueAtIndex(int idx)
 
     if (sideFaderMode() == Crossfade)
         setFaderInfo(m_primaryIndex);
+}
+
+bool VCCueList::admitDirect(int command)
+{
+    /* A plain chaser, stepped here as in QLC+ 4: the double-GO guard holds
+       it as it would a GO through ShowControl::run() (its rules there). */
+    Chaser *ch = chaser();
+    ShowControl *sc = m_doc->showControl();
+    return ch == NULL || sc == NULL
+           || sc->admitDirect(ch->id(), ShowControl::Command(command), ShowControl::RouteVcCueList);
 }
 
 void VCCueList::claimRunning(Chaser *ch)

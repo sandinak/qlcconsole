@@ -92,6 +92,9 @@ void PadHit_Test::initTestCase()
     qputenv("QLC_IOPLUGIN_DIR", m_pluginDir->path().toLocal8Bit());
     m_app = new App();
     m_app->init();
+    // GOs here come back to back on purpose: the double-GO guard (its own
+    // tests, engine/test/goguard and ui/test/goguardui) is off for them.
+    m_app->doc()->showControl()->setGoGuardMs(0);
     m_app->showNormal();
     m_app->resize(1280, 800);
     QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));

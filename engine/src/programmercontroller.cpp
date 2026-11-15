@@ -1361,6 +1361,10 @@ void ProgrammerController::stepCurrentChaser(int direction)
         sc->run(r, ShowControl::RouteVcCueList);
         return;
     }
+    // The double-GO guard holds this step as it would a GO through run().
+    if (sc != NULL && !sc->admitDirect(cid, direction > 0 ? ShowControl::Go : ShowControl::Back,
+                                       ShowControl::RouteVcCueList))
+        return;
     ChaserAction action;
     action.m_action = (direction > 0) ? ChaserNextStep : ChaserPreviousStep;
     // Every field: ChaserAction has no defaults, and a step played at
