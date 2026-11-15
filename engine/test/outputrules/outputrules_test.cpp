@@ -2764,6 +2764,10 @@ void OutputRules_Test::r8_anOnAtOpenFixtureOnItsAddressDrivesIt()
     m_doc->setMode(Doc::Operate);       // OnAtOperate: armed now; no GO
     tickFrame(Flame);
     tickFrame(Flame);
+    qDebug() << "R8-2: caps" << Qt::hex << int(m_uni->channelCapabilities(Flame)) << Qt::dec
+             << "armed" << m_uni->onAtOpenArmed() << "post" << int(uchar(m_uni->postGMValues()->at(Flame)))
+             << "work at" << work->address() << "patched" << work->isPatched()
+             << "sent" << sent(Flame);
     QCOMPARE(sent(Flame), 0);
 }
 
