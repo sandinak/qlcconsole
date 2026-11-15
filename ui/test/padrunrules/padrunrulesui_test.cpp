@@ -22,6 +22,7 @@
 #include <QToolButton>
 #include <QLabel>
 #include <QtTest>
+#include <QScopeGuard>
 
 #include "../../../engine/test/common/stdprelude.h"
 #define private public
@@ -419,6 +420,115 @@ void PadRunRulesUi_Test::everySurfaceAgreesAtEveryStep()
     value(kLB, 0);
     QVERIFY2(run->isArmed(), qPrintable(diag2));
     doc->masterTimer()->stopAllFunctions();
+}
+
+void PadRunRulesUi_Test::focusOnEverySurface()
+{
+    Doc *doc = m_app->doc();
+    InputOutputMap *iom = doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    ProgrammerController *pc = doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setArmChordMs(15);
+    run->setEnabled(true, false);
+    quint32 focus = 0, house = 0;
+    const quint32 list = makeFocusShow(&focus, &house);
+    FocusCallCue *fcc = pc->focusCallCue();
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QList<ShowControl::Request> runs;
+    ShowControl *sc = doc->showControl();
+    sc->setRunHandler([&runs](const ShowControl::Request &r, ShowControl::Route) {
+        runs << r;
+        return true;
+    });
+    auto unhook = qScopeGuard([sc]() { sc->setRunHandler(ShowControl::RunHandler()); });
+
+    QToolButton *btn = m_app->findChild<QToolButton *>(QStringLiteral("crPadRun"));
+    QVERIFY(btn != nullptr);
+    QWidget *w = btn;
+    while (w != nullptr && qobject_cast<CueRunner *>(w) == nullptr)
+        w = w->parentWidget();
+    CueRunner *runTab = qobject_cast<CueRunner *>(w);
+    QVERIFY(runTab != nullptr);
+    QLabel *chip = m_app->padRoleChip();
+    QVERIFY(chip != nullptr);
+    auto value = [&](quint32 ch, uchar v) { emit iom->inputValueChanged(0, ch, v, QString()); };
+    auto ltMenu = [&]() {
+        value(kLT, 255);
+        value(kMenu, 255);
+        value(kMenu, 0);
+        value(kLT, 0);
+    };
+    // One state on every surface: words, colour, frame, chip, light.
+    auto surfaces = [&](PadRun::State want, const char *when) {
+        settle();
+        QVERIFY2(run->state() == want, qPrintable(QString("%1: %2").arg(when, run->roleText())));
+        const QString words = run->roleText();
+        const QColor colour = run->stateColour();
+        QVERIFY2(colour.isValid(), when);
+        const QString name = colour.name();
+        QVERIFY2(btn->text() == words, qPrintable(QString("%1: button '%2'").arg(when, btn->text())));
+        QVERIFY2(chip->isVisible() && chip->text().startsWith(words),
+                 qPrintable(QString("%1: chip '%2'").arg(when, chip->text())));
+        QVERIFY2(btn->styleSheet().contains(name), qPrintable(QString("%1: button '%2'").arg(when, btn->styleSheet())));
+        QVERIFY2(runTab->styleSheet().contains(name), qPrintable(QString("%1: frame '%2'").arg(when, runTab->styleSheet())));
+        QVERIFY2(chip->styleSheet().contains(name), qPrintable(QString("%1: chip '%2'").arg(when, chip->styleSheet())));
+        QVERIFY2(pc->padLight() == colour, qPrintable(QString("%1: light %2, state %3")
+                 .arg(when, pc->padLight().name(), name)));
+        const QString sent = lastLight(m_stub);
+        QVERIFY2(sent == name, qPrintable(QString("%1: the pad was last sent '%2', the state is '%3'").arg(when, sent, name)));
+    };
+
+    value(kLB, 255);
+    value(kRB, 255);
+    QTRY_VERIFY(run->isArmed());
+    value(kRB, 0);
+    value(kLB, 0);
+    surfaces(PadRun::Armed, "armed, the focus cue waiting");
+    QVERIFY2(runTab->focusArmedText().contains("armed, hold LT and press Menu"), qPrintable(runTab->focusArmedText()));
+    ltMenu();
+    QTRY_COMPARE(fcc->state(), FocusCallCue::Running);
+    surfaces(PadRun::Focus, "FOCUS");
+    QCOMPARE(btn->text(), QString("Pad: FOCUS"));
+    QCOMPARE(run->stateColour(), PadRun::focusColour());
+    QVERIFY(runTab->focusArmedText().contains("LT + Menu ends it"));
+    // The focus's own work changes nothing shown (a save colour on the lamp is not the state).
+    value(kRT, 255);
+    value(kRT, 0);
+    surfaces(PadRun::Focus, "FOCUS, a call stepped");
+    // LT + Menu: ARMED, the list waits on the cue.
+    ltMenu();
+    QTRY_VERIFY(!pc->focusSession()->isActive());
+    surfaces(PadRun::Armed, "armed after the focus");
+    QVERIFY(runs.isEmpty());
+    QCOMPARE(runTab->focusArmedText(), QString("Venue focus done: LT + A for the next cue"));
+    // Again, and the emergency stop in FOCUS: red everywhere.
+    m_running = house;
+    fcc->cueCurrent(list, house);
+    m_running = focus;
+    fcc->cueCurrent(list, focus);
+    ltMenu();
+    QTRY_COMPARE(fcc->state(), FocusCallCue::Running);
+    surfaces(PadRun::Focus, "FOCUS again");
+    value(kLB, 255);
+    value(kRB, 255);
+    value(kLT, 255);
+    value(kRT, 255);
+    surfaces(PadRun::Stopped, "the emergency stop in FOCUS");
+    QCOMPARE(runs.size(), 1);
+    QCOMPARE(runs.at(0).command, ShowControl::AllOff);
+    value(kRT, 0);
+    value(kLT, 0);
+    value(kRB, 0);
+    value(kLB, 0);
+    ltMenu();
+    QTRY_VERIFY(!pc->focusSession()->isActive());
+    QVERIFY(!run->isArmed());
+    fcc->setRunningCueProbe({});
+    run->setEnabled(false, false);
+    doc->masterTimer()->stopAllFunctions();
+    doc->setMode(Doc::Design);
+    settle(50);
 }
 
 quint32 PadRunRulesUi_Test::makeFocusShow(quint32 *focus, quint32 *house)

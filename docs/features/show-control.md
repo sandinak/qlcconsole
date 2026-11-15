@@ -113,6 +113,7 @@ the pad's own light all show the same state, from one place in the app:
 | Armed | **Pad: ARMED** | orange | orange; blinks green while a cue fades |
 | After the emergency stop | **Pad: STOPPED** | red | red |
 | Walking | **Pad: Walk** | none | the walk's |
+| A venue focus cue's calls (below) | **Pad: FOCUS** | blue | blue |
 | A tool has the pad | **Pad: Venue Focus**, … | none | the tool's |
 
 **The rules.** They hold for every control, and anything added later keeps
@@ -147,6 +148,7 @@ them:
 | **Emergency stop**: everything off | LB + RB + LT + RT | L1 + R1 + L2 + R2 |
 | Say the list and what's on standby | RS click | R3 |
 | Walk the show (below), not while armed | Menu | Options |
+| Start a waiting **venue focus cue** (below), and finish it | armed, hold LT + Menu | armed, hold L2 + Options |
 | Switch the role: Tools / Run | hold View + Menu 1 s | hold Create + Options 1 s |
 
 - **Armed stays armed.** The arm drops only on the LB + RB hold, or with
@@ -188,6 +190,22 @@ them:
   it is.
 - **Nothing on the pad leaves Run** but holding View + Menu for a second
   (below). Menu walks the show and Menu again comes back, still in Run.
+- **Venue focus from the pad: Pad: FOCUS.** With a [venue focus
+  cue](focus-calls.md#a-venue-focus-cue-pre-show) waiting, armed, hold
+  **LT** and press **Menu**: the calls begin and the pad is in **FOCUS**
+  (blue on the button, the frame, the chip and the light bar) — not armed
+  and not disarmed. Menu alone, armed, does nothing to the focus; not
+  armed, the start is refused ("Not armed. To start the venue focus, hold
+  LB and RB to arm, then LT + Menu."). In FOCUS the focus has the pad
+  (sticks, bumpers, triggers, A, B, …, as in Focus mode), no cue plays
+  from the pad, and the emergency stop (all four) still stops. Hold LT +
+  Menu again to finish (a Menu tap, or RT past the last call, only says
+  so): the laptop asks about anything unsaved and the pad is **ARMED**
+  again. The list stays on the focus cue (**Venue focus done: LT + A for
+  the next cue**) until LT + A or GO on the laptop moves it on; ending
+  the focus never moves the list, from the pad or the laptop. A focus
+  started on the laptop while armed is FOCUS too and comes back ARMED.
+  The controller going away mid-focus: back not armed.
   While armed, Menu does nothing ("Armed. To walk, disarm first: hold LB
   and RB."): armed, the pad is the cue map and nothing else.
 - **Two pads.** The pad that armed is the one whose presses count; another

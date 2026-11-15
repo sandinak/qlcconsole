@@ -37,6 +37,12 @@ private slots:
     void initTestCase();
     void cleanupTestCase();
     void everySurfaceAgreesAtEveryStep();
+    /** Rule 6 on the real surfaces: a venue focus cue waiting, ARMED, LT +
+     *  Menu -- Pad: FOCUS in its blue on the button, the frame, the chip
+     *  and the pad's light; the emergency stop there turns them red; LT +
+     *  Menu again: ARMED, and the Run tab says the list waits (Venue focus
+     *  done: LT + A for the next cue) with no command sent. */
+    void focusOnEverySurface();
     /** QLC_SHOT_DIR set: the Run tab and the footer at 1024x640, 1280x800
      *  and 1920x1080 with a venue focus started from the armed pad (LT +
      *  Menu), then finished the same way (the UX review's shots). */
