@@ -90,6 +90,10 @@ public:
     /** @reimp */
     void closeOutput(quint32 output, quint32 universe) override;
 
+    /** @reimp Review 18: the universe leaves the controller too -- never
+     *  resent by the Standard-mode refresh -- the line stays for the others */
+    void forgetOutput(quint32 output, quint32 universe) override;
+
     /** @reimp */
     QStringList outputs() override;
 

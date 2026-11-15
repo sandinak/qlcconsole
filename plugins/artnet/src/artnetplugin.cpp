@@ -589,6 +589,16 @@ void ArtNetPlugin::closeOutput(quint32 output, quint32 universe)
     emit targetProblemsChanged();
 }
 
+void ArtNetPlugin::forgetOutput(quint32 output, quint32 universe)
+{
+    removeFromMap(universe, output, Output);
+    if (output >= (quint32)m_IOmapping.length())
+        return;
+    ArtNetController *controller = m_IOmapping.at(output).controller;
+    if (controller != NULL)
+        controller->removeUniverse(universe, ArtNetController::Output);
+}
+
 void ArtNetPlugin::writeUniverse(quint32 universe, quint32 output, const QByteArray &data, bool dataChanged)
 {
     if (output >= (quint32)m_IOmapping.count())

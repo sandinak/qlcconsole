@@ -383,8 +383,26 @@ void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values, con
     foreach (const QString &prop, unset)
         if (isTargetParameter(prop) && m_parametersCache.contains(prop))
             retarget = true;
+    /* Review 18 (N1): re-aimed where its universe may not send (Art-Net or
+       sACN back to this computer): held -- its closing frame to the old
+       target, the line closed -- and the new target kept for when it may. */
+    bool held = false;
+    if (retarget && m_targetCheck && m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
+    {
+        QMap<QString, QVariant> next = m_parametersCache;
+        for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+            next[it.key()] = it.value();
+        foreach (const QString &prop, unset)
+            next.remove(prop);
+        const QString why = m_targetCheck(this, next);
+        if (why.isEmpty() == false)
+        {
+            hold(HeldShowOnly, why, true, true);
+            held = true;
+        }
+    }
     // One closing frame, to the old target only: then every change at once.
-    if (retarget)
+    if (retarget && held == false)
         sendClosingFrame();
     for (auto it = values.constBegin(); it != values.constEnd(); ++it)
     {

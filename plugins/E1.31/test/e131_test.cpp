@@ -401,6 +401,24 @@ void E131_Test::showOnlyMayUseIt()
     QCOMPARE(plugin.isNetworkDmxOutput(), true);
 }
 
+/* Review 18: a universe forgotten on a shared line (a Show-only hold) is
+   out of the controller too -- nothing resends it -- and the others stay. */
+void E131_Test::r18_aForgottenUniverseLeavesTheController()
+{
+    E131Plugin plugin;
+    E131Controller *ctrl = testController(&plugin, { 0, 1 });
+    E131IO io;
+    io.controller = ctrl;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+    plugin.forgetOutput(0, 0);
+    const QList<quint32> left = ctrl->universesList();
+    plugin.m_IOmapping.clear();
+    delete ctrl;
+    QVERIFY(left.contains(0) == false);
+    QVERIFY(left.contains(1));
+}
+
 QTEST_MAIN(E131_Test)
 
 void E131_Test::dmxPacketsAreBoundedByTheDatagramAndAUniverse()

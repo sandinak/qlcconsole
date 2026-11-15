@@ -1140,7 +1140,16 @@ OutputPatch *Universe::newOutputPatch()
     patch->setClosingFrame([this](QByteArray &frame, bool blackout) {
         return closingFrame(frame, blackout);
     });
+    patch->setTargetCheck(m_outputTargetCheck);
     return patch;
+}
+
+void Universe::setOutputTargetCheck(const std::function<QString(const OutputPatch *,
+                                                                const QMap<QString, QVariant> &)> &check)
+{
+    m_outputTargetCheck = check;
+    foreach (OutputPatch *op, m_outputPatchList)
+        op->setTargetCheck(check);
 }
 
 bool Universe::writeBlocked(int address) const

@@ -986,7 +986,9 @@ without them is unchanged; QLC+ and older qlcconsole builds skip them.
 what happens to it after: a universe passed through to another (input
 passthrough), or sent to a local Loopback or another program that sends
 it on, can still reach a laser that way. Don't route a Show-only
-universe's channels through a passthrough or Loopback chain.
+universe's channels through a passthrough or Loopback chain. Art-Net
+**broadcast** reaches receivers on this computer too: for lasers, aim the
+universe at its node (unicast).
 
 ## Context menu
 

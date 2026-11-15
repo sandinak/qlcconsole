@@ -209,6 +209,14 @@ public:
     QString deviceText() const;
     static QString deviceText(const QLCIOPlugin *plugin, quint32 line, const QString &name);
 
+    /** Review 18: asked, when an open patch is re-aimed (a target parameter,
+     *  isTargetParameter()), whether its universe may send to the new
+     *  target (N1); a non-empty answer holds it (HeldShowOnly), the closing
+     *  frame going to the old target first. The Universe sets it from the
+     *  I/O map; unset, nothing is asked. */
+    typedef std::function<QString(const OutputPatch *patch, const QMap<QString, QVariant> &params)> TargetCheck;
+    void setTargetCheck(const TargetCheck &check) { m_targetCheck = check; }
+
     /** Two parameter values that mean the same ("1" and 1) */
     static bool sameParameterValue(const QVariant &a, const QVariant &b);
 
@@ -300,6 +308,7 @@ private:
     QMap<QString, QVariant>m_parametersCache;
     /** See setClosingFrame() */
     std::function<bool(QByteArray &, bool)> m_closingFrame;
+    TargetCheck m_targetCheck;
 
     /** Close the open line for good: its closing frame first (see
      *  setClosingFrame()), then the plugin's closeOutput() */

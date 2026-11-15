@@ -25,6 +25,8 @@ class E131_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** Review 18: forgetOutput() takes the universe out of the controller */
+    void r18_aForgottenUniverseLeavesTheController();
     /** Review 16 F5: one of the outputs a universe with Show-only
      *  fixtures may use (QLCIOPlugin::isNetworkDmxOutput()). */
     void showOnlyMayUseIt();

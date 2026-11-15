@@ -1517,6 +1517,9 @@ int PatchPlanner::routeWledPixels(const QList<quint32> &fixtureIds, QStringList 
             else
                 op->setPluginParameters({ { QStringLiteral("outputIP"), fx->ipAddress() },
                                           { QStringLiteral("outputUni"), number + k } });
+            // Review 18 (N1): aimed back at this computer, Show-only is held -- said.
+            if (op->isPending() && op->showOnlyHold() && problems != NULL)
+                *problems << op->reconnectHeld();
             const QString now = io->getUniverseNameByID(u);
             if (now.isEmpty() || now == QStringLiteral("Universe %1").arg(u + 1))
             {
@@ -1904,7 +1907,15 @@ bool PatchPlanner::aimUniverseAt(quint32 universe, const QString &ipIn, QString 
     QStringList unset;
     const QMap<QString, QVariant> target =
             networkAim(m_doc, op->pluginName(), ip, universe, op->getPluginParameters(), &unset);
+    const bool openBefore = op->isPatched();
     op->setPluginParameters(target, unset);
+    // Review 18 (N1): aimed back at this computer, Show-only is held -- said.
+    if (openBefore && op->isPending() && op->showOnlyHold())
+    {
+        if (problem != NULL)
+            *problem = op->reconnectHeld();
+        return false;
+    }
     return true;
 }
 

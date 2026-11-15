@@ -87,6 +87,40 @@ void ArtNet_Test::showOnlyMayUseIt()
     QCOMPARE(plugin.isNetworkDmxOutput(), true);
 }
 
+/* Review 18, finding A (plugin side): InputOutputMap::holdShowOnlyOutputs()
+   only forgets a held universe on an Art-Net line another universe sends on
+   (QLCIOPlugin::forgetOutput(), not overridden here). The controller keeps
+   the universe and its last frame, and slotSendAllUniverses() (every 2 s,
+   Standard mode) sends it again -- to the loopback / own-address target the
+   hold was meant to stop. */
+static ArtNetController *testController(QObject *parent, const QHostAddress &target,
+                                        QList<quint32> universes);
+void ArtNet_Test::r18_aForgottenUniverseIsNotResent()
+{
+    ArtNetPlugin plugin;
+    ArtNetController *ctrl = testController(&plugin, QHostAddress::LocalHost, { 0, 1 });
+    QList<QNetworkDatagram> sink;
+    ctrl->m_testSink = &sink;
+    ArtNetIO io;
+    io.controller = ctrl;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+
+    plugin.writeUniverse(0, 0, QByteArray(512, char(255)), true);   // the fogger at full
+    plugin.writeUniverse(1, 0, QByteArray(512, char(10)), true);
+    plugin.forgetOutput(0, 0);                                      // the Show-only hold, shared line
+    sink.clear();
+    QMetaObject::invokeMethod(ctrl, "slotSendAllUniverses", Qt::DirectConnection);   // the 2 s refresh
+    int full = 0;
+    for (const QNetworkDatagram &dg : std::as_const(sink))
+        if (dg.data().size() > 18 && uchar(dg.data().at(18)) == 255)
+            full++;
+    plugin.m_IOmapping.clear();
+    delete ctrl;
+    QVERIFY2(full == 0, qPrintable(QString("a forgotten universe's last frame (at full) is resent %1 time(s)")
+                                   .arg(full)));
+}
+
 QTEST_MAIN(ArtNet_Test)
 
 /** A real ArtPollReply, captured off the wire from the rig's CR041R
