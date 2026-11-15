@@ -3489,7 +3489,10 @@ void OutputRules_Test::review10_aClosingLineInBlindGetsNoPreview()
     QCOMPARE(sent(Stage), 100);
 
     io->setOutputInhibited(true);                      // Blind
-    const int Late = 40;
+    // A channel past the frame frozen when Blind started
+    const int Late = m_uni->m_blindFrozen.size() + 2;
+    qInfo("frozen frame: %d channels; the late fixture at %d", int(m_uni->m_blindFrozen.size()), Late + 1);
+    QVERIFY(Late < 512);
     QVERIFY(addDimmer("Late", Late, 0) != nullptr);    // patched in Blind
     m_doc->outputRuleKeeper()->rebuild();
     put(Late, 200);                                    // programmed in Blind: preview only
