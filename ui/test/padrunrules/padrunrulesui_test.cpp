@@ -49,6 +49,14 @@
 #include "qlcpalette.h"
 #include "fixture.h"
 #include "doc.h"
+#include "focuscallcue.h"
+#include "focuscalls.h"
+#include "focussession.h"
+#include "fixturegroup.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
+#include "qlcpoint.h"
+#include "cuerunner.h"
 
 #include "padrunrulesui_test.h"
 
@@ -411,6 +419,139 @@ void PadRunRulesUi_Test::everySurfaceAgreesAtEveryStep()
     value(kLB, 0);
     QVERIFY2(run->isArmed(), qPrintable(diag2));
     doc->masterTimer()->stopAllFunctions();
+}
+
+quint32 PadRunRulesUi_Test::makeFocusShow(quint32 *focus, quint32 *house)
+{
+    Doc *doc = m_app->doc();
+    ProgrammerController *pc = doc->programmer();
+    MonitorProperties *props = doc->monitorProperties();
+    FixtureGroup *g = new FixtureGroup(doc);
+    g->setName(QStringLiteral("Focus Spots"));
+    g->setSize(QSize(2, 1));
+    for (int i = 0; i < 2; ++i)
+    {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test");
+        def->setModel(QString("Focus Spot %1").arg(i));
+        def->setType(QLCFixtureDef::MovingHead);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("3ch");
+        QLCFixtureHead head;
+        const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+        for (int k = 0; k < 3; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("Ch %1").arg(k));
+            ch->setGroup(groups[k]);
+            ch->setControlByte(QLCChannel::MSB);
+            def->addChannel(ch);
+            mode->insertChannel(ch, k);
+            head.addChannel(k);
+        }
+        QLCPhysical ph;
+        ph.setFocusPanMax(540);
+        ph.setFocusTiltMax(270);
+        mode->setPhysical(ph);
+        mode->insertHead(-1, head);
+        def->addMode(mode);
+        Fixture *fxi = new Fixture(doc);
+        fxi->setName(QString("Focus Spot %1").arg(i + 1));
+        fxi->setFixtureDefinition(def, mode);
+        fxi->setUniverse(0);
+        fxi->setAddress(quint32(100 + i * 3));
+        doc->addFixture(fxi);
+        props->setFixturePosition(fxi->id(), 0, 0, QVector3D(2000.0f * (i + 1), 2000.0f, 5.0f));
+        g->assignFixture(fxi->id(), QLCPoint(i, 0));
+    }
+    doc->addFixtureGroup(g);
+    StageTarget *dsc = props->addStageTarget();
+    dsc->setName(QStringLiteral("DSC"));
+    dsc->setPosition(QVector3D(5.0f, 6.0f, 0.0f));
+    FocusCall c;
+    c.groups << g->id();
+    c.target.kind = FocusSession::Reference::Target;
+    c.target.id = dsc->id();
+    pc->focusCalls()->setCalls({ c });
+    ShowTreeController *st = doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Pre-show"), "Pre-show");
+    *focus = st->addCue(list, -1, "Focus");
+    *house = st->addCue(list, 0, "House");
+    st->setCuesFocusCall({ *focus }, true);
+    m_running = *focus;
+    pc->focusCallCue()->setRunningCueProbe([this](quint32) { return m_running; });
+    doc->setMode(Doc::Operate);
+    settle(50);
+    pc->focusCallCue()->cueCurrent(list, *focus);
+    return list;
+}
+
+void PadRunRulesUi_Test::venueFocusShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    // "after" on this branch; the base's shots for the review are "before".
+    const QString phase = QStringLiteral("after");
+    Doc *doc = m_app->doc();
+    InputOutputMap *iom = doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    ProgrammerController *pc = doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setArmChordMs(15);
+    run->setEnabled(true, false);
+    quint32 focus = 0, house = 0;
+    const quint32 list = makeFocusShow(&focus, &house);
+    FocusCallCue *fcc = pc->focusCallCue();
+    auto value = [&](quint32 ch, uchar v) { emit iom->inputValueChanged(0, ch, v, QString()); };
+    auto ltMenu = [&]() {
+        value(kLT, 255);
+        value(kMenu, 255);
+        value(kMenu, 0);
+        value(kLT, 0);
+    };
+    for (const QSize &size : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        const QString wh = QString("%1x%2").arg(size.width()).arg(size.height());
+        m_app->resize(size);
+        m_app->showContext(QStringLiteral("Run"));
+        // Armed, the focus cue waiting.
+        if (!run->isArmed())
+        {
+            value(kLB, 255);
+            value(kRB, 255);
+            QTRY_VERIFY(run->isArmed());
+            value(kRB, 0);
+            value(kLB, 0);
+        }
+        m_running = house;
+        fcc->cueCurrent(list, house);
+        m_running = focus;
+        fcc->cueCurrent(list, focus);
+        QCOMPARE(fcc->state(), FocusCallCue::Armed);
+        settle(100);
+        m_app->grab().save(QString("%1/%2-runtab-focuswaiting-%3.png").arg(dir, phase, wh));
+        // LT + Menu: the calls.
+        ltMenu();
+        QTRY_COMPARE(fcc->state(), FocusCallCue::Running);
+        m_app->showContext(QStringLiteral("Run"));
+        m_app->raise();
+        m_app->activateWindow();
+        settle(200);
+        m_app->grab().save(QString("%1/%2-runtab-focus-%3.png").arg(dir, phase, wh));
+        // LT + Menu again: finished.
+        ltMenu();
+        QTRY_VERIFY(!pc->focusSession()->isActive());
+        settle(200);
+        m_app->grab().save(QString("%1/%2-runtab-focusdone-%3.png").arg(dir, phase, wh));
+        doc->masterTimer()->stopAllFunctions();
+        settle(50);
+    }
+    fcc->setRunningCueProbe({});
+    run->setEnabled(false, false);
+    doc->setMode(Doc::Design);
+    settle(50);
 }
 
 int main(int argc, char **argv)

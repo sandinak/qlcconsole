@@ -37,11 +37,22 @@ private slots:
     void initTestCase();
     void cleanupTestCase();
     void everySurfaceAgreesAtEveryStep();
+    /** QLC_SHOT_DIR set: the Run tab and the footer at 1024x640, 1280x800
+     *  and 1920x1080 with a venue focus started from the armed pad (LT +
+     *  Menu), then finished the same way (the UX review's shots). */
+    void venueFocusShots();
 
 private:
+    /** Two spots on the plot, a group, a target, one focus call; a
+     *  Pre-show list (Focus, a venue focus cue, then House) the list is on
+     *  (a probe stands in for it playing), the cue armed. Its list id;
+     *  @p focus and @p house its cues. */
+    quint32 makeFocusShow(quint32 *focus, quint32 *house);
+
     App *m_app = nullptr;
     QTemporaryDir *m_pluginDir = nullptr;
     IOPluginStub *m_stub = nullptr;
+    quint32 m_running = 0;      // the cue the probe says the focus list is on
 };
 
 #endif
