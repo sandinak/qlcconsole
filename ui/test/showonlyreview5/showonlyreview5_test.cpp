@@ -34,6 +34,7 @@
 #include "grouphead.h"
 #include "vcbutton.h"
 #include "vccuelist.h"
+#include "mastertimer.h"
 #undef private
 #undef protected
 
@@ -1273,7 +1274,20 @@ void ShowOnlyReview5_Test::r7SharedSceneLatchesAcrossADesignTrip()
     m_doc->setMode(Doc::Design);            // to fix a cue
     tick(3);
     QCOMPARE(sent(Flame), 0);
+    auto dump = [&](const char *when) {
+        QString src;
+        for (const FunctionParent &p : fire->sources())
+            src += QStringLiteral("%1:%2 ").arg(int(p.type())).arg(p.id());
+        qDebug() << when << "epoch" << GenericFader::liveEpoch() << "fire gate" << fire->previewGate()->load()
+                 << "a gate" << a->previewGate()->load() << "b gate" << b->previewGate()->load()
+                 << "a" << a->id() << "b" << b->id() << "fire sources" << src
+                 << "list" << m_doc->masterTimer()->m_functionList.indexOf(a)
+                 << m_doc->masterTimer()->m_functionList.indexOf(fire)
+                 << m_doc->masterTimer()->m_functionList.indexOf(b);
+    };
+    dump("design");
     m_doc->setMode(Doc::Operate);           // back; nobody presses GO
+    dump("operate");
     int flameMax = 0;
     for (int i = 0; i < 5; i++)
     {
