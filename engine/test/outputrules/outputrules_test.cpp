@@ -2863,4 +2863,65 @@ void OutputRules_Test::r8_aSendBetweenTwoFramesCarriesAHeldWriter()
                                           .arg(caught.isEmpty() ? 0 : int(uchar(caught.at(Flame)))).arg(out)));
 }
 
+/* R8-5: EffectScriptRunner's fader for the show is setTrustedForShowOnly()
+   (showStamp() 0xFFFFFFFF) and the writes on it are sorted by their
+   scenes' stamps against the session only -- never against the channel's
+   mark. The effect's writes follow the fixture to its new address (its
+   address is read every tick), where the marks are new: S0 says a writer
+   counts there only when stamped after the move. */
+void OutputRules_Test::r8_anEffectFollowsARepatchPastTheMarks()
+{
+    Fixture *flame = addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->assignFixture(flame->id());
+    m_doc->addFixtureGroup(grp);
+    QTemporaryDir dir;
+    QFile js(dir.filePath("full.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Full';"
+             " e.tick = function(fixtures) { return fixtures.map(function() { return { dimmer: 1.0 }; }); };"
+             " return e; })()");
+    js.close();
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, m_doc);
+    look->setScriptPath(js.fileName());
+    m_doc->addPalette(look);
+    Scene *scene = new Scene(m_doc);
+    scene->addFixtureGroup(grp->id());
+    scene->addPalette(look->id());
+    m_doc->addFunction(scene);
+    auto teardown = qScopeGuard([this, scene]() {
+        m_doc->effectScriptRunner()->destroyInstancesForScene(scene->id(), false);
+    });
+    Chaser *a = listOf(scene);
+    enum { Moved = 60 };
+    auto tickFx = [this]() {
+        m_doc->masterTimer()->timerTick();
+        m_doc->effectScriptRunner()->slotTick();
+        m_doc->masterTimer()->timerTick();
+        frame(Flame);
+    };
+    m_doc->setMode(Doc::Operate);
+    goList(a);                                  // a GO
+    int most = 0;
+    for (int i = 0; i < 8; i++)
+    {
+        tickFx();
+        most = qMax(most, sent(Flame));
+    }
+    QVERIFY2(most > 0, "the GO'd effect drives the flame");
+    // Re-patched mid-show to a free address: no GO since.
+    flame->setAddress(Moved);
+    QCoreApplication::processEvents();
+    QVERIFY(m_uni->channelCapabilities(Moved) & Universe::ShowOnlyOutput);
+    most = 0;
+    for (int i = 0; i < 8; i++)
+    {
+        tickFx();
+        most = qMax(most, sent(Moved));
+    }
+    stopFunctions();
+    QCOMPARE(most, 0);
+}
+
 QTEST_GUILESS_MAIN(OutputRules_Test)
