@@ -63,20 +63,22 @@ bool DMXUSB::rescanWidgets()
     /* Review 10 M2. A rescan replaces every widget, and the devices may
        have moved or gone: each open output is sent its closing frame (the
        Show-only channels at safe -- best effort, the device may be gone
-       already) and closed (H1: on the wire before the port goes) before
-       its widget is deleted -- and no universe thread is inside
-       writeUniverse() while the widgets are swapped. The closing frames
-       are fetched first, with no lock of ours held: the engine's builder
-       takes the universe's frame lock, which a universe thread holds
-       while it waits for ours. */
+       already), flushed onto the wire (review 12 F2: the Pro's other port
+       is still open) and closed before its widget is deleted -- and no
+       universe thread is inside writeUniverse() while the widgets are
+       swapped. The closing frames are fetched first, with no lock of ours
+       held: the engine's builder takes the universe's frame lock, which a
+       universe thread holds while it waits for ours. */
     m_rescanning.store(true, std::memory_order_release);
+    QList<QPair<quint32, quint32> > open;
     {
         QMutexLocker barrier(&m_widgetsMutex);     // a write in progress is done
+        open = m_openPairs;
     }
     struct Closing { quint32 line; quint32 universe; QByteArray frame; };
     QList<Closing> closing;
     typedef QPair<quint32, quint32> LineUniverse;
-    foreach (const LineUniverse &lu, openOutputLines())
+    foreach (const LineUniverse &lu, open)
     {
         Closing c { lu.first, lu.second, QByteArray() };
         if (closingFrameFor(c.universe, c.frame))
@@ -86,11 +88,20 @@ bool DMXUSB::rescanWidgets()
     {
         QMutexLocker locker(&m_widgetsMutex);
         foreach (const Closing &c, closing)
-            if (c.line < quint32(m_outputs.size()) && m_outputs.at(int(c.line))->isOpen())
-                m_outputs.at(int(c.line))->writeUniverse(c.universe, c.line, c.frame, true);
-        foreach (const LineUniverse &lu, openOutputLines())
-            if (lu.first < quint32(m_outputs.size()))
-                m_outputs.at(int(lu.first))->close(lu.first, false);
+        {
+            if (c.line >= quint32(m_outputs.size()) || m_outputs.at(int(c.line))->isOpen() == false)
+                continue;
+            m_outputs.at(int(c.line))->writeUniverse(c.universe, c.line, c.frame, true);
+            m_outputs.at(int(c.line))->flush(c.line);
+        }
+        QList<quint32> closed;
+        foreach (const LineUniverse &lu, open)
+        {
+            if (lu.first >= quint32(m_outputs.size()) || closed.contains(lu.first))
+                continue;
+            closed << lu.first;
+            m_outputs.at(int(lu.first))->close(lu.first, false);
+        }
 
         m_inputs.clear();
         m_outputs.clear();
@@ -114,30 +125,29 @@ bool DMXUSB::rescanWidgets()
             for (int i = 0; i < widget->inputsNumber(); i++)
                 m_inputs.append(widget);
         }
-        m_openLines.clear();
-
-        /* Review 11 M-1: the same devices on the same lines (their names,
-           serials included, unchanged): nothing tells the engine, so the
-           lines it had open are opened again here -- or output would stop
-           without a word. Changed, the engine reconnects them. */
-        if (outputs() == outputsBefore)
-        {
-            foreach (const LineUniverse &lu, openOutputLines())
-            {
-                if (lu.first >= quint32(m_outputs.size()))
-                    continue;
-                if (m_outputs.at(int(lu.first))->open(lu.first, false) && m_openLines.contains(lu.first) == false)
-                    m_openLines.append(lu.first);
-            }
-        }
-        m_rescanning.store(false, std::memory_order_release);
+        m_openPairs.clear();
     }
+
+    /* Review 11 M-1: the same devices on the same lines (their names,
+       serials included, unchanged): nothing tells the engine, so what it
+       had open is opened again here, as openOutput() opens it (the Pro's
+       RDM replies too: review 12 F6) -- or output would stop without a
+       word. Changed, the engine reconnects them. */
+    if (outputs() == outputsBefore)
+    {
+        foreach (const LineUniverse &lu, open)
+        {
+            if (lu.first < quint32(m_outputs.size()))
+                openOutput(lu.first, lu.second);
+        }
+    }
+    m_rescanning.store(false, std::memory_order_release);
 
     /* Told when the lines are not the same ones as before, not only when
        their number changed (a device swapped for another): the engine then
-       follows each patch by its device's name (serial), and never reopens
-       a Show-only universe on whatever took its number. With no lock held:
-       the engine reopens lines, under its frame locks. */
+       reconnects by number, keeping every universe off a Show-only
+       universe's device. With no lock held: the engine reopens lines, under
+       its frame locks. */
     if (m_inputs.count() + m_outputs.count() != linesCount || outputs() != outputsBefore)
         emit configurationChanged();
 
@@ -153,6 +163,14 @@ QList <DMXUSBWidget*> DMXUSB::widgets() const
  * Outputs
  ****************************************************************************/
 
+bool DMXUSB::lineOpenForAnother(quint32 line, quint32 universe) const
+{
+    for (const QPair<quint32, quint32> &p : m_openPairs)
+        if (p.first == line && p.second != universe)
+            return true;
+    return false;
+}
+
 bool DMXUSB::openOutput(quint32 output, quint32 universe)
 {
     if (output < quint32(m_outputs.size()))
@@ -162,14 +180,21 @@ bool DMXUSB::openOutput(quint32 output, quint32 universe)
         {
             EnttecDMXUSBPro *pro = static_cast<EnttecDMXUSBPro*>(widget);
             connect(pro, SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)),
-                    this, SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)), Qt::QueuedConnection);
+                    this, SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)),
+                    Qt::ConnectionType(Qt::QueuedConnection | Qt::UniqueConnection));
         }
         addToMap(universe, output, Output);
+        bool already = false;
         {
             QMutexLocker locker(&m_widgetsMutex);
-            if (m_openLines.contains(output) == false)
-                m_openLines.append(output);
+            already = lineOpenForAnother(output, universe);
+            const QPair<quint32, quint32> pair(output, universe);
+            if (m_openPairs.contains(pair) == false)
+                m_openPairs.append(pair);
         }
+        // Another universe on this line already opened it.
+        if (already)
+            return true;
         return m_outputs.at(output)->open(output, false);
     }
     return false;
@@ -180,19 +205,31 @@ void DMXUSB::closeOutput(quint32 output, quint32 universe)
     if (output < quint32(m_outputs.size()))
     {
         DMXUSBWidget *widget = m_outputs.at(output);
+        removeFromMap(universe, output, Output);
+        bool stillUsed = false;
+        {
+            QMutexLocker locker(&m_widgetsMutex);
+            m_openPairs.removeAll(qMakePair(output, universe));
+            stillUsed = lineOpenForAnother(output, universe);
+        }
+        // Another universe still sends on this line: it stays open for it.
+        if (stillUsed)
+            return;
         if (widget->supportRDM())
         {
             EnttecDMXUSBPro *pro = static_cast<EnttecDMXUSBPro*>(widget);
             disconnect(pro, SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)),
                        this , SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)));
         }
-        removeFromMap(universe, output, Output);
-        {
-            QMutexLocker locker(&m_widgetsMutex);
-            m_openLines.removeAll(output);
-        }
-        m_outputs.at(output)->close(output, false);
+        widget->close(output, false);
     }
+}
+
+void DMXUSB::forgetOutput(quint32 output, quint32 universe)
+{
+    removeFromMap(universe, output, Output);
+    QMutexLocker locker(&m_widgetsMutex);
+    m_openPairs.removeAll(qMakePair(output, universe));
 }
 
 QStringList DMXUSB::outputs()
@@ -277,7 +314,7 @@ void DMXUSB::writeUniverse(quint32 universe, quint32 output, const QByteArray &d
         // Not opened by the engine (a new device that took this number in
         // a rescan): nothing is kept for it, nothing reaches the rig -- and
         // the footer says so (WriteHealth), never silently.
-        if (m_openLines.contains(output) == false)
+        if (m_openPairs.contains(qMakePair(output, universe)) == false)
         {
             widget->recordWrite(false);
             return;

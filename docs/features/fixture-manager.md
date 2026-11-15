@@ -889,10 +889,19 @@ opened — over the web while in Operate too). So:
   preview. A held output comes back with what the show gives them now.
 - **A USB interface unplugged**: its outputs are sent the Show-only
   fixtures at safe first, as far as the device still answers. Patches
-  reconnect by their line number, as they always have. A universe with
-  Show-only fixtures whose line now names another interface is kept off
-  it — listed as missing, and the log says why — until that interface is
-  back on that line.
+  reconnect by their line number, as they always have — except onto the
+  interface a universe with Show-only fixtures is patched to. That
+  universe, if its line is now another interface, is kept off it until its
+  own interface is back (at any port: it is found by name); and no other
+  universe is reopened on the laser rig's interface — it is kept off too,
+  and says which interface took its line. Both are listed as missing in
+  Connections, named after the interface they wait for.
+- **An interface swap with lasers on it asks you before reconnecting**:
+  with two interfaces of one model that give no serial number (they look
+  the same to the console) and a Show-only universe on one of them, a
+  change in how many there are holds every universe on them. Check which
+  is which, then right-click the universe in Connections and choose
+  **Reconnect as Before…**.
 - **Sharing an address**: a fixture patched over a Show-only one cannot
   turn it on — **On when not in use** and **Ignore Blackout** do nothing on
   the shared channels. The Grand Master never scales a safe value (a gobo

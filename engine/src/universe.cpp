@@ -1729,7 +1729,8 @@ bool Universe::setInputPatch(QLCIOPlugin *plugin,
     return true;
 }
 
-bool Universe::setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index)
+bool Universe::setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index,
+                              const QMap<QString, QVariant> &params)
 {
     if (index < 0)
         return false;
@@ -1759,7 +1760,7 @@ bool Universe::setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index)
             else
             {
                 OutputPatch *patch = m_outputPatchList.at(index);
-                result = patch->set(plugin, output);
+                result = params.isEmpty() ? patch->set(plugin, output) : patch->set(plugin, output, params);
                 change = Changed;
             }
         }
@@ -1770,7 +1771,7 @@ bool Universe::setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index)
 
             // add a new patch
             OutputPatch *patch = newOutputPatch();
-            result = patch->set(plugin, output);
+            result = params.isEmpty() ? patch->set(plugin, output) : patch->set(plugin, output, params);
             m_outputPatchList.append(patch);
             change = CountChanged;
         }

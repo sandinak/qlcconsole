@@ -274,6 +274,14 @@ public:
     virtual void flushOutput(quint32 output, quint32 universe);
 
     /**
+     * Review 12 F6: forget @p universe on @p output without closing the
+     * line -- another universe still sends there (a patch held off a
+     * device that another universe now has). Nothing of @p universe is
+     * written there again; the device stays open for the other one.
+     */
+    virtual void forgetOutput(quint32 output, quint32 universe);
+
+    /**
      * Show only (R9-1, review 10 M2): the engine's builder of the frame a
      * line that stops receiving @p universe is sent last (the Show-only
      * channels at safe). Set by the engine for every loaded plugin; a

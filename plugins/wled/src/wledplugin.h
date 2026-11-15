@@ -120,10 +120,12 @@ public:
     bool supportsOutputTargets() const override { return true; }
     void writeUniverse(quint32 universe, quint32 output, const QByteArray &data,
                        bool dataChanged) override;
-    /** Review 10 (Show only): the look written last for @p universe -- a
-     *  closing frame -- is sent to each of its devices now, before the
-     *  output closes or is aimed at another device: a POST, waited on for
-     *  at most flushBudgetMs in all, then left to finish on its own. */
+    /** Review 10-12 (Show only): the look written last for @p universe --
+     *  a closing frame -- is sent to each of its devices now, before the
+     *  output closes or is aimed at another device. With an event loop it
+     *  is never waited on (the caller holds the engine's frame lock) and
+     *  nothing newer reaches that device before it is done; as the app
+     *  quits it is waited on, about a second at most. */
     void flushOutput(quint32 output, quint32 universe) override;
     void setParameter(quint32 universe, quint32 line, Capability type,
                       QString name, QVariant value) override;
@@ -297,14 +299,14 @@ private:
      *  device is left as its layout, not turned round. Best effort, at most
      *  about a second however many do not answer; no event loop. */
     static void restoreDirections(const QVector<Device> &devices);
-    /** POST @p body to @p ip's /json/state, waiting at most @p waitMs in
-     *  all (no event loop): past that it finishes on its own (the socket
-     *  is this plugin's until it closes) and that is logged. True when it
-     *  was written within the wait. */
-    bool postNow(const QString &ip, const QByteArray &body, int waitMs);
-    /** flushOutput()'s whole wait, however many devices (review 11 M-2:
-     *  it runs under the frame lock, and the UI waits on it) */
-    static const int flushBudgetMs = 100;
+    /** A closing state POSTed through the network manager, never waited
+     *  on; until it is done no newer look goes to @p ip (review 12 F8) */
+    void postClosing(const QString &ip, const QByteArray &body);
+    /** The same with no event loop (the app quitting): waited on, at most
+     *  @p waitMs */
+    static bool postNowSync(const QString &ip, const QByteArray &body, int waitMs);
+    /** Closing states on their way, per device IP (under m_mutex) */
+    QHash<QString, int> m_closingInFlight;
     static const int restoreBudgetMs = 1000;
 
     /** The rig network gate (QLCIOPlugin::setTransmitNetworks()) for one

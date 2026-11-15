@@ -207,6 +207,14 @@ public:
     /** m_async: the send thread's pass -- every kept frame goes out */
     void pumpAsync();
 
+    /** @reimp recorded in m_forgotten (line, universe), then forgotten */
+    void forgetOutput(quint32 output, quint32 universe) override
+    { m_forgotten << qMakePair(output, universe); QLCIOPlugin::forgetOutput(output, universe); }
+    QList<QPair<quint32, quint32> > m_forgotten;
+    /** Whether @p universe is still mapped on @p output (a plugin entry) */
+    bool mapped(quint32 universe, quint32 output) const
+    { return m_universesMap.contains(universe) && m_universesMap.value(universe).outputLine == output; }
+
 public:
     /** Review 10: a plugin that sends from its own thread (a USB widget,
      *  WLED). writeUniverse() only keeps the frame (m_asyncPending); it is

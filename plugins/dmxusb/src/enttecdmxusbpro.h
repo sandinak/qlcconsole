@@ -168,6 +168,9 @@ private:
 
     /** Output passes the thread has made (flushPort()) */
     std::atomic<quint32> m_outputPasses { 0 };
+    /** Output ports closed while another stays open, still to be sent once
+     *  more (bit per port; review 12 F2) */
+    std::atomic<quint32> m_drainPorts { 0 };
 
     int readData(QByteArray &payload, bool &isMIDI, int RDM = None);
 

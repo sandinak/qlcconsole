@@ -1805,7 +1805,8 @@ void ConnectionsTree::refresh()
             {
                 QTreeWidgetItem *ghostLine = new QTreeWidgetItem(pitem);
                 ghostLine->setText(COL_NAME, it.key());
-                QString ghostNet, heldWhy;
+                QString ghostNet, heldWhy, deviceWhy;
+                bool needsConfirm = false;
                 foreach (Universe *u, it.value())
                     for (int i = 0; i < u->outputPatchesCount(); i++)
                         if (u->outputPatch(i) != NULL && u->outputPatch(i)->isPending())
@@ -1814,11 +1815,21 @@ void ConnectionsTree::refresh()
                                 ghostNet = u->outputPatch(i)->pendingNetwork();
                             if (heldWhy.isEmpty())
                                 heldWhy = u->outputPatch(i)->heldReason();
+                            if (deviceWhy.isEmpty())
+                                deviceWhy = u->outputPatch(i)->reconnectHeld();
+                            if (u->outputPatch(i)->deviceHold() == OutputPatch::HeldNeedsConfirm)
+                                needsConfirm = true;
                         }
                 /* Held by the rig network gate (InputOutputMap::
                    transmitGateActive()): the line may well be right here,
                    it is just not on one of the show's rig networks. */
-                ghostLine->setText(COL_DETAIL, heldWhy.isEmpty() == false
+                /* Held off a USB interface (reviews 11-12): the row is named
+                   after the device it was patched to, and says why. */
+                ghostLine->setText(COL_DETAIL, needsConfirm
+                    ? tr("kept off — can't tell which interface it is: right-click a universe, Reconnect as Before")
+                    : deviceWhy.isEmpty() == false
+                    ? tr("kept off — Show-only fixtures: waits for %1").arg(it.key())
+                    : heldWhy.isEmpty() == false
                     ? tr("held: %1 — kept, resumes on the rig network").arg(heldWhy)
                     : ghostNet.isEmpty()
                     ? tr("not present — kept, will reconnect")
@@ -1826,6 +1837,20 @@ void ConnectionsTree::refresh()
                 const QBrush errBrush(QColor(220, 90, 90));
                 ghostLine->setForeground(COL_NAME, errBrush);
                 ghostLine->setForeground(COL_DETAIL, errBrush);
+                if (deviceWhy.isEmpty() == false)
+                    setRowTooltip(ghostLine, tr(
+                        "<b>%1</b><br>%2<br><br>The USB interfaces changed (one unplugged, or "
+                        "plugged into another port), and a universe with Show-only fixtures -- a "
+                        "laser, a flame -- is patched to %1. Nothing is reopened on a line that "
+                        "may be that interface now, so no other universe's levels can reach it. "
+                        "%3").arg(it.key().toHtmlEscaped(), deviceWhy.toHtmlEscaped(),
+                                  needsConfirm
+                                  ? tr("Interfaces of one model with no serial number can't be told "
+                                       "apart: check which is which, then right-click the universe "
+                                       "and choose Reconnect as Before.")
+                                  : tr("It reconnects by itself when %1 is back.")
+                                        .arg(it.key().toHtmlEscaped())));
+                else
                 setRowTooltip(ghostLine, tr(
                     "<b>%1</b><br>No interface on this machine reaches the network "
                     "these universes were patched to -- typically a laptop away from "
@@ -3076,6 +3101,14 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
         /* Patch it to an interface that IS here: the pane beside the list,
            which says what it is waiting for and replaces it. */
+        /* Held off identical interfaces nobody can tell apart (review 12
+           F3): the one way back is the operator's -- as it was, confirmed. */
+        QAction *asBefore = NULL;
+        if (Universe *pu = m_doc->inputOutputMap() != NULL ? m_doc->inputOutputMap()->universe(uni) : NULL)
+            for (int i = 0; i < pu->outputPatchesCount(); i++)
+                if (pu->outputPatch(i) != NULL
+                    && pu->outputPatch(i)->deviceHold() == OutputPatch::HeldNeedsConfirm)
+                    asBefore = menu.addAction(tr("Reconnect as Before…"));
         QAction *ren = menu.addAction(tr("Rename Universe…"));
         menu.addSeparator();
         QAction *forget = menu.addAction(tr("Unpatch…"));
@@ -3085,7 +3118,9 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
             return;
-        if (chosen == ren)
+        if (asBefore != NULL && chosen == asBefore)
+            reconnectAsBefore(uni);
+        else if (chosen == ren)
             renameUniverse(uni);
         else if (chosen == forget)
             forgetPendingPatch(uni);
@@ -3346,6 +3381,26 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
         QMessageBox::warning(this, tr("Patch universe"),
                              tr("Could not patch that universe to %1.").arg(pluginName));
     else
+        m_doc->setModified();
+    refresh();
+}
+
+void ConnectionsTree::reconnectAsBefore(quint32 universe)
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == NULL)
+        return;
+    /* An interface swap with Show-only fixtures on it: asked, never done by
+       itself (review 12 F3). */
+    if (QMessageBox::question(this, tr("Reconnect as Before"),
+            tr("Universe %1 is reopened on the line number it had before the USB interfaces "
+               "changed. Interfaces of one model with no serial number can't be told apart: "
+               "make sure the one on that line is the interface this universe drives -- with "
+               "Show-only fixtures on one of them, the wrong one could fire a laser or a flame.\n\n"
+               "Reconnect it as before?").arg(universe + 1),
+            QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+        return;
+    if (iom->reconnectAsBefore(universe) > 0)
         m_doc->setModified();
     refresh();
 }

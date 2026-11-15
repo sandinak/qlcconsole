@@ -168,6 +168,9 @@ private:
      *  -- the one action that makes sense on a KIND_PENDING_UNIVERSE row
      *  besides renaming/deleting the universe itself (see
      *  OutputPatch::isPending()). */
+    /** Review 12 F3: a universe held off identical interfaces, reopened on
+     *  its old line number once the operator confirms */
+    void reconnectAsBefore(quint32 universe);
     void forgetPendingPatch(quint32 universe);
     void renameUniverse(quint32 universe);
     void deleteUniverse(quint32 universe);

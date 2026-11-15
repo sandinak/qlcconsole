@@ -2530,6 +2530,82 @@ void InputOutputMap_Test::review12_aHeldUniverseReopensWhenItsDeviceIsBackAtAnot
                                 "held: %1").arg(iom.outputPatch(0, 0)->reconnectHeld())));
 }
 
+/* Review 12 F3: two of one model with no serial, a Show-only universe on
+   one of them. One unplugged: both universes are held -- nothing reconnects
+   onto either interface by itself, not even when it is plugged back in.
+   Only "Reconnect as before", confirmed, reopens each on its old number. */
+void InputOutputMap_Test::identicalInterfacesReconnectOnlyAsBeforeConfirmed()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    const QString e("Eurolite USB-DMX512 PRO");
+    stub->m_lineNames = QStringList() << e << e;
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 0));     // dimmers
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 1));     // laser rig
+    iom.universe(1)->markShowOnly(14, true, 0);
+
+    stub->m_lineNames = QStringList() << e;                         // one unplugged
+    stub->configure();
+    for (int u = 0; u < 2; u++)
+    {
+        OutputPatch *op = iom.outputPatch(quint32(u), 0);
+        QVERIFY(op->isPending());
+        QCOMPARE(op->deviceHold(), OutputPatch::HeldNeedsConfirm);
+        QCOMPARE(op->outputName(), e);                              // names the recorded device
+    }
+
+    // Plugged back in: still nothing by itself, the retry tick neither.
+    stub->m_lineNames = QStringList() << e << e;
+    stub->configure();
+    iom.retryOfflinePatches();
+    QVERIFY(iom.outputPatch(0, 0)->isPending());
+    QVERIFY(iom.outputPatch(1, 0)->isPending());
+
+    // The operator checked which is which and confirms: as before.
+    QSignalSpy changed(&iom, SIGNAL(offlinePatchesChanged()));
+    QCOMPARE(iom.reconnectAsBefore(0), 1);
+    QCOMPARE(iom.reconnectAsBefore(1), 1);
+    QVERIFY(changed.count() >= 2);
+    QVERIFY(iom.outputPatch(0, 0)->isPatched());
+    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(0));
+    QVERIFY(iom.outputPatch(1, 0)->isPatched());
+    QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(1));
+    QCOMPARE(iom.outputPatch(1, 0)->deviceHold(), OutputPatch::NoDeviceHold);
+    QCOMPARE(iom.reconnectAsBefore(1), 0);                          // nothing left to do
+}
+
+/* Review 12 F6: a Show-only universe held off a line another universe
+   still sends on -- the line stays open for it; the plugin forgets only the
+   held universe there (no frame of it reaches that device later), and the
+   held patch unpatched clears its plugin entry. */
+void InputOutputMap_Test::aHoldOnASharedLineForgetsOnlyThatUniverse()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    stub->m_forgotten.clear();
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)" << "Pro (S/N: B2)";
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 1));     // laser rig -> B2
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 1));     // another universe on B2 too
+    iom.universe(0)->markShowOnly(14, true, 0);
+
+    stub->m_lineNames = QStringList() << "Pro (S/N: B2)" << "Pro (S/N: C3)";   // A1 out, C3 in
+    stub->configure();
+    QVERIFY(iom.outputPatch(0, 0)->isPending());
+    QVERIFY(stub->m_forgotten.contains(qMakePair(quint32(1), quint32(0))));
+    QVERIFY(stub->mapped(0, 1) == false);
+    // The other universe's line stayed open (by number, as before)
+    QVERIFY(iom.outputPatch(1, 0)->isPatched());
+    QVERIFY(stub->m_openOutputs.contains(1));
+
+    // The held patch unpatched: its plugin entry is gone too.
+    stub->m_forgotten.clear();
+    QVERIFY(iom.setOutputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine()));
+    QVERIFY(stub->m_forgotten.contains(qMakePair(quint32(1), quint32(0))));
+    QVERIFY(stub->mapped(0, 1) == false);
+}
+
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()
 {
     schoolLaptop();

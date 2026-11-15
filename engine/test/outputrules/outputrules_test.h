@@ -279,6 +279,10 @@ private slots:
      *  PatchPlanner's): the old node gets the closing frame, the new one
      *  never does; OSC's outputPort is a target too */
     void aRetargetInOneStepClosesOnlyTheOldNode();
+    /** Review 12 F7: a patch opened with its target (Patch Planner's) sends
+     *  nothing to the plugin's default target, not even a closing frame;
+     *  the same value again ("1" for 1) sends nothing */
+    void aPatchOpenedAimedSendsNothingToTheDefaultTarget();
     /** A held line released: its first frame is the S0 build */
     void aReleasedLineStartsFromTheCurrentBuild();
     /** The patch list changes under the frame lock: frames and sends from

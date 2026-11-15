@@ -273,7 +273,8 @@ public:
                        QLCInputProfile *profile = NULL);
 
     /** Add/Remove/Replace an output patch on this Universe */
-    bool setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index = 0);
+    bool setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index = 0,
+                        const QMap<QString, QVariant> &params = QMap<QString, QVariant>());
 
     /** Add/Replace an output patch at @p index whose saved interface
      *  identity @p pendingUID did not match any line @p plugin currently

@@ -397,13 +397,17 @@ bool EnttecDMXUSBPro::close(quint32 line, bool input)
        its Show-only channels at safe) reaches the Pro before the port is
        let go -- the Pro's firmware repeats the last frame it received, for
        as long as it has power. */
-    /* With another port still open the thread keeps running: the engine's
-       flushOutput() (flush()) has waited for it already -- only when there
-       was a closing frame (Show-only channels), so an ordinary re-patch
-       never stalls here (review 11). */
+    /* With another port still open the thread keeps running, and skips a
+       port once it is closed: the port is left to drain -- the thread
+       sends it once more on its next pass, or, if the thread is stopped
+       first (the other port closing too: a rescan), it is sent here after
+       the join (review 12 F2). Nothing waits: an ordinary re-patch never
+       stalls (review 11). */
     const quint32 portIndex = input ? UINT_MAX : lineToPortIndex(line, DMXUSBWidget::Output);
     const bool output = portIndex < quint32(m_portsInfo.count())
                         && m_portsInfo.at(int(portIndex)).m_openDirection == DMXUSBWidget::Output;
+    if (output && openPortsCount() > 1 && portIndex < 32)
+        m_drainPorts.fetch_or(1u << portIndex, std::memory_order_acq_rel);
 
     InterfaceAction cmd;
     cmd.action = CloseLine;
@@ -416,7 +420,12 @@ bool EnttecDMXUSBPro::close(quint32 line, bool input)
     if (openPortsCount() == 1)
     {
         stopThread();
-        // The thread is gone: the last frame from here, the port still open.
+        // The thread is gone: the last frames from here -- the ports left to
+        // drain, then this one -- the device still open.
+        const quint32 drain = m_drainPorts.exchange(0, std::memory_order_acq_rel);
+        for (int i = 0; i < m_portsInfo.count() && i < 32; i++)
+            if ((drain & (1u << i)) && isOpen())
+                sendPort(i);
         if (output)
             flushPort(int(portIndex));
     }
@@ -884,6 +893,13 @@ void EnttecDMXUSBPro::run()
             if (m_portsInfo[i].m_openDirection != DMXUSBWidget::Output)
                 continue;
             sendPort(i);
+        }
+        // Ports closed since the last pass, while others stay open: once more.
+        {
+            const quint32 drain = m_drainPorts.exchange(0, std::memory_order_acq_rel);
+            for (int i = 0; i < m_portsInfo.count() && i < 32; i++)
+                if (drain & (1u << i))
+                    sendPort(i);
         }
         m_outputPasses.fetch_add(1, std::memory_order_release);
 

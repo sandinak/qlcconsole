@@ -894,7 +894,15 @@ int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *probl
             if ((wop == NULL || wop->pluginName() != QLatin1String("WLED"))
                 && wled != NULL && !wled->outputs().isEmpty())
             {
-                io->setOutputPatch(a.universe, QStringLiteral("WLED"), wled->outputs().first(), 0);
+                /* Opened already aimed (review 12 F7): no frame, and no
+                   closing frame, to the plugin's default target first. */
+                QMap<QString, QVariant> aim;
+                if (!fx->ipAddress().isEmpty())
+                    aim.insert(QStringLiteral("outputIP"), fx->ipAddress());
+                aim.insert(QStringLiteral("wledAddress"), fx->address() + 1);
+                aim.insert(QStringLiteral("wledChannels"), fx->channels());
+                io->setOutputPatch(a.universe, QStringLiteral("WLED"), wled->outputs().first(), 0,
+                                   false, 0, aim);
                 wop = io->outputPatch(a.universe);
             }
             if (wop == NULL || wop->pluginName() != QLatin1String("WLED"))
@@ -1480,8 +1488,21 @@ int PatchPlanner::routeWledPixels(const QList<quint32> &fixtureIds, QStringList 
                 if (refPlugin.isEmpty())
                     break;
                 // Its own universe: the network output in the place of what was
-                // there (a WLED output, from when it was driven by its API).
-                io->setOutputPatch(u, refPlugin, refLine, refOutput);
+                // there (a WLED output, from when it was driven by its API) --
+                // opened already aimed (review 12 F7).
+                QMap<QString, QVariant> aim;
+                if (refPlugin == QLatin1String("E1.31"))
+                {
+                    aim.insert(QStringLiteral("multicast"), 0);
+                    aim.insert(QStringLiteral("ucastIP"), fx->ipAddress());
+                    aim.insert(QStringLiteral("universe"), number + k);
+                }
+                else
+                {
+                    aim.insert(QStringLiteral("outputIP"), fx->ipAddress());
+                    aim.insert(QStringLiteral("outputUni"), number + k);
+                }
+                io->setOutputPatch(u, refPlugin, refLine, refOutput, false, 0, aim);
                 op = io->outputPatch(u);
                 if (plugin.isEmpty())
                     plugin = refPlugin;
@@ -1791,6 +1812,45 @@ PatchPlanner::NetRoute PatchPlanner::universeReaches(Doc *doc, quint32 universe,
     return first;
 }
 
+/* Where universe @p universe aims at @p ip, on @p plugin, from the patch
+   parameters @p params it has: sACN's unicast (and the outputIP it drops,
+   @p unset), Art-Net's address and -- when the node there was heard -- one
+   of its own Port-Addresses. */
+static QMap<QString, QVariant> networkAim(Doc *doc, const QString &plugin, const QString &ip,
+                                          quint32 universe, const QMap<QString, QVariant> &params,
+                                          QStringList *unset)
+{
+    QMap<QString, QVariant> target;
+    if (plugin == QLatin1String("E1.31"))
+    {
+        target.insert(QStringLiteral("multicast"), 0);
+        target.insert(QStringLiteral("ucastIP"), ip);
+        if (unset != NULL && params.contains(QStringLiteral("outputIP")))
+            *unset << QStringLiteral("outputIP");
+        return target;
+    }
+    target.insert(QStringLiteral("outputIP"), ip);
+    /* A node heard at that IP listens on its own Port-Addresses: send on one
+       of those, not on the universe's number -- worked out on the parameters
+       it will have. */
+    QMap<QString, QVariant> will = params;
+    will.insert(QStringLiteral("outputIP"), ip);
+    const QList<quint32> ports = nodePorts(doc, ip);
+    const quint32 sends = artNetPortAddress(will, universe);
+    if (!ports.isEmpty() && !ports.contains(sends))
+    {
+        const QSet<quint32> taken = portsSentTo(doc, ip, universe);
+        foreach (quint32 pa, ports)
+        {
+            if (taken.contains(pa))
+                continue;
+            target.insert(QStringLiteral("outputUni"), pa);
+            break;
+        }
+    }
+    return target;
+}
+
 bool PatchPlanner::aimUniverseAt(quint32 universe, const QString &ipIn, QString *problem)
 {
     InputOutputMap *io = m_doc->inputOutputMap();
@@ -1798,13 +1858,20 @@ bool PatchPlanner::aimUniverseAt(quint32 universe, const QString &ipIn, QString 
     OutputPatch *op = io->outputPatch(universe);
     if (op == NULL || !isNetworkPlugin(op->pluginName()))
     {
+        /* Opened already aimed at @p ip (review 12 F7): no frame, and no
+           closing frame, to the plugin's default target first. */
+        auto aimFor = [this, &ip, universe](const QString &plugin) {
+            return ip.isEmpty() ? QMap<QString, QVariant>()
+                                : networkAim(m_doc, plugin, ip, universe, QMap<QString, QVariant>(), NULL);
+        };
         // Borrow the plugin and interface of an existing network universe.
         bool done = false;
         for (quint32 u = 0; u < io->universesCount() && !done; u++)
         {
             OutputPatch *ref = io->outputPatch(u);
             if (u != universe && ref != NULL && isNetworkPlugin(ref->pluginName()))
-                done = io->setOutputPatch(universe, ref->pluginName(), ref->outputName(), ref->output());
+                done = io->setOutputPatch(universe, ref->pluginName(), ref->outputName(), ref->output(),
+                                          false, 0, aimFor(ref->pluginName()));
         }
         /* None in the show: the Art-Net (else sACN) interface on the
            fixture's network. */
@@ -1815,7 +1882,8 @@ bool PatchPlanner::aimUniverseAt(quint32 universe, const QString &ipIn, QString 
             QLCIOPlugin *p = cache->plugin(QLatin1String(names[n]));
             const int line = p != NULL ? p->lineOnSameSubnet(ip) : -1;
             if (line >= 0 && line < p->outputs().size())
-                done = io->setOutputPatch(universe, p->name(), p->outputs().at(line), quint32(line));
+                done = io->setOutputPatch(universe, p->name(), p->outputs().at(line), quint32(line),
+                                          false, 0, aimFor(p->name()));
         }
         op = io->outputPatch(universe);
     }
@@ -1829,40 +1897,14 @@ bool PatchPlanner::aimUniverseAt(quint32 universe, const QString &ipIn, QString 
     if (ip.isEmpty())
         return true;
 
-    if (op->pluginName() == QLatin1String("E1.31"))
-    {
-        /* sACN's unicast: E1.31 reads "multicast" and "ucastIP", never
-           "outputIP" (which only a warning in the log ever saw). */
-        // One step (review 11 M-3): the closing frame to the old target only.
-        QStringList unset;
-        if (op->getPluginParameters().contains(QStringLiteral("outputIP")))
-            unset << QStringLiteral("outputIP");
-        op->setPluginParameters({ { QStringLiteral("multicast"), 0 },
-                                  { QStringLiteral("ucastIP"), ip } }, unset);
-        return true;
-    }
-
-    QMap<QString, QVariant> target;
-    target.insert(QStringLiteral("outputIP"), ip);
-    /* A node heard at that IP listens on its own Port-Addresses: send on one
-       of those, not on the universe's number -- worked out on the parameters
-       it will have, and set with the address in one step. */
-    QMap<QString, QVariant> will = op->getPluginParameters();
-    will.insert(QStringLiteral("outputIP"), ip);
-    const QList<quint32> ports = nodePorts(m_doc, ip);
-    const quint32 sends = artNetPortAddress(will, universe);
-    if (!ports.isEmpty() && !ports.contains(sends))
-    {
-        const QSet<quint32> taken = portsSentTo(m_doc, ip, universe);
-        foreach (quint32 pa, ports)
-        {
-            if (taken.contains(pa))
-                continue;
-            target.insert(QStringLiteral("outputUni"), pa);
-            break;
-        }
-    }
-    op->setPluginParameters(target);
+    /* sACN's unicast: E1.31 reads "multicast" and "ucastIP", never
+       "outputIP" (which only a warning in the log ever saw). One step
+       (review 11 M-3): the closing frame to the old target only -- none
+       at all when it is already aimed there (opened so above). */
+    QStringList unset;
+    const QMap<QString, QVariant> target =
+            networkAim(m_doc, op->pluginName(), ip, universe, op->getPluginParameters(), &unset);
+    op->setPluginParameters(target, unset);
     return true;
 }
 
