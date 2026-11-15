@@ -30,6 +30,7 @@
 #include <QDebug>
 
 #include "vcshowcontrol.h"
+#include "genericfader.h"
 #include "qlcfile.h"
 #include "vcshowcontrolproperties.h"
 #include "mastertimer.h"
@@ -359,6 +360,9 @@ void VCShowControl::slotPoll()
         && show != NULL && m_doc->mode() == Doc::Operate
         && show->timecodeFollow() && show->isRunning() == false)
     {
+        // Show only (R6-8): started by timecode, not a hand -- the show
+        // only if the operator armed the link in Operate this session.
+        GenericFader::StampScope byTimecode(show->timecodeArmEpoch());
         playShow();
     }
     m_tcWasRolling = tcRolling;

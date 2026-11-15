@@ -29,6 +29,7 @@ private slots:
     /** Show only: Play in Operate on a show left running from Design is
      *  a GO -- it is the show (its gate opens), not a pause */
     void playInOperateClaimsAShowRunningFromDesign();
+    void timecodeDrivesAShowOnlyFixtureOnlyWhenArmedInOperate();
     void init();
     void cleanup();
 

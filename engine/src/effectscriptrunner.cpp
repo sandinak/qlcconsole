@@ -829,8 +829,17 @@ void EffectScriptRunner::publishWrites()
        they say "not the show" (a preview, a Test, a cue left running from
        Design) -- in both modes, read each tick: no window at a mode switch.
        The rig views still get it (a held fader is kept off only live). */
+    /* Against the rules as they are now: the keeper's list, or a universe
+       a Show-only fixture was just marked on (before its rebuild). */
     const OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
-    const bool anyShowOnly = rules != nullptr && rules->showOnlyFixtures().isEmpty() == false;
+    bool anyShowOnly = rules != nullptr && rules->showOnlyFixtures().isEmpty() == false;
+    if (!anyShowOnly)
+        for (Universe *u : m_doc->inputOutputMap()->universes())
+            if (u != nullptr && u->showOnlyChannelCount() > 0)
+            {
+                anyShowOnly = true;
+                break;
+            }
     {
         QMutexLocker locker(&m_instanceMutex);
         for (const EffectInstance *inst : m_instances)
@@ -1070,22 +1079,44 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         gateSets = m_publishedGateSets;     // shared, not copied
     }
 
-    /* Show only: the writes on a Show-only fixture whose scenes are all
-       not the show (their gates, read now) go on a fader of their own that
-       holds the Show-only channels; composed apart. */
+    /* Show only: a write on a Show-only fixture goes out only for a scene
+       that is the show (its gate, read now); one whose scenes are all not
+       the show -- or that has no scene at all -- goes on a fader of its own
+       that holds the Show-only channels, composed apart. So does a write
+       the last publish did not mark on a channel that is Show only now
+       (the rule given, a fixture patched there since): the universe's own
+       bits, this tick. */
     QList<EffectInstance::DmxWrite> held;
-    if (gateSets.isEmpty() == false)
+    bool anyShowOnly = gateSets.isEmpty() == false;
+    for (int u = 0; !anyShowOnly && u < universes.size(); ++u)
+        anyShowOnly = universes.at(u) != nullptr && universes.at(u)->showOnlyChannelCount() > 0;
+    if (anyShowOnly)
     {
         for (int i = int(writes.size()) - 1; i >= 0; --i)
         {
             const EffectInstance::DmxWrite &w = writes.at(i);
-            if (w.showOnly == false || w.gateSet < 0 || w.gateSet >= gateSets.size())
-                continue;
-            const QVector<std::shared_ptr<std::atomic<bool> > > &gates = gateSets.at(w.gateSet);
-            bool notTheShow = gates.isEmpty() == false;
-            for (const auto &g : gates)
-                notTheShow = notTheShow && g && g->load(std::memory_order_relaxed);
-            if (notTheShow)
+            bool hold;
+            if (w.showOnly)
+            {
+                // Held unless one of its scenes is the show; none: held.
+                hold = true;
+                if (w.gateSet >= 0 && w.gateSet < gateSets.size())
+                    for (const auto &g : gateSets.at(w.gateSet))
+                        if (g && g->load(std::memory_order_relaxed) == false)
+                        {
+                            hold = false;
+                            break;
+                        }
+            }
+            else
+            {
+                Universe *uni = w.universeId >= 0 && w.universeId < universes.size()
+                                ? universes.at(w.universeId) : nullptr;
+                hold = uni != nullptr && uni->showOnlyChannelCount() > 0
+                       && w.addr >= 0 && w.addr < UNIVERSE_SIZE
+                       && (uni->channelCapabilities(ushort(w.addr)) & Universe::ShowOnlyOutput);
+            }
+            if (hold)
             {
                 held.prepend(w);
                 writes.removeAt(i);
@@ -1131,7 +1162,8 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
             fader->setName(QStringLiteral("EffectScript"));
             fader->setDoc(m_doc);        // unpatched fixtures: shown, not sent
             // Show only: the writes are sorted by their scenes' gates above
-            // -- the held fader holds, the other is trusted with the rest.
+            // -- the held fader holds, the other carries only what is the
+            // show (or no Show-only channel at all).
             fader->setHoldsShowOnly(key & kHeldFader);
             fader->setTrustedForShowOnly((key & kHeldFader) == 0);
             next[key];

@@ -111,6 +111,9 @@ private:
 
 private:
     FunctionParent functionParent() const;
+    /** Show only: worked by the operator in Operate -- its schedules are
+     *  the show in this session (Function::armAutoSource()) */
+    void armForShow();
 
     /*********************************************************************
      * Time

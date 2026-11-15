@@ -10476,9 +10476,26 @@ void Monitor::setMaintenanceHoldMs(int ms)
 
 QString Monitor::maintenanceRefusal(const Fixture *fxi)
 {
-    if (fxi != nullptr && (fxi->outputRules() & Fixture::ShowOnly))
-        return tr("Identify and Reset don't drive a Show-only fixture: only a GO in Operate does "
-                  "(Output Rules)");
+    if (fxi == nullptr)
+        return QString();
+    const QString why = tr("Identify and Reset don't drive a Show-only fixture: only a GO in Operate does "
+                           "(Output Rules)");
+    if (fxi->outputRules() & Fixture::ShowOnly)
+        return why;
+    /* Nor one that shares its addresses: what Identify sends there would
+       reach the laser or the flame patched on top. */
+    const Doc *doc = qobject_cast<const Doc *>(fxi->parent());
+    if (doc == nullptr || !fxi->isPatched())
+        return QString();
+    const quint32 from = fxi->universeAddress(), to = from + fxi->channels();
+    for (const Fixture *other : doc->fixtures())
+    {
+        if (other == fxi || (other->outputRules() & Fixture::ShowOnly) == 0 || !other->isPatched())
+            continue;
+        const quint32 oFrom = other->universeAddress(), oTo = oFrom + other->channels();
+        if (from < oTo && oFrom < to)
+            return why;
+    }
     return QString();
 }
 
@@ -10487,7 +10504,8 @@ void Monitor::sendMaintenance(quint32 fxId, int channel, uchar value)
     Fixture *fxi = m_doc->fixture(fxId);
     if (fxi == nullptr || !fxi->isPatched() || channel < 0 || quint32(channel) >= fxi->channels())
         return;
-    // A laser, a fogger, a flame: no maintenance tool fires it.
+    // A laser, a fogger, a flame -- or what shares their addresses: no
+    // maintenance tool fires it.
     if (!maintenanceRefusal(fxi).isEmpty())
         return;
     const quint32 abs = fxi->universeAddress() + quint32(channel);
@@ -10497,7 +10515,9 @@ void Monitor::sendMaintenance(quint32 fxId, int channel, uchar value)
     bool sent = false;
     uchar before = 0;
     QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
-    if (u < ua.size() && ua[u] != nullptr)
+    // The universe's own rule bits too: a Show-only channel is never sent.
+    if (u < ua.size() && ua[u] != nullptr
+        && (ua[u]->channelCapabilities(ushort(addr)) & Universe::ShowOnlyOutput) == 0)
     {
         Universe *uni = ua[u];
         before = uni->preGMValue(addr);

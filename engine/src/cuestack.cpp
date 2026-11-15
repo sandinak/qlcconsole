@@ -284,7 +284,7 @@ void CueStack::previousCue()
 {
     qDebug() << Q_FUNC_INFO;
     // Show only: started or stepped now -- in Operate, the show.
-    m_liveEpoch.store(GenericFader::liveEpoch(), std::memory_order_relaxed);
+    m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
     m_previous = true;
     if (isRunning() == false)
         start();
@@ -294,7 +294,7 @@ void CueStack::nextCue()
 {
     qDebug() << Q_FUNC_INFO;
     // Show only: started or stepped now -- in Operate, the show.
-    m_liveEpoch.store(GenericFader::liveEpoch(), std::memory_order_relaxed);
+    m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
     m_next = true;
     if (isRunning() == false)
         start();
@@ -390,7 +390,7 @@ void CueStack::start()
 {
     qDebug() << Q_FUNC_INFO;
     // Show only: started or stepped now -- in Operate, the show.
-    m_liveEpoch.store(GenericFader::liveEpoch(), std::memory_order_relaxed);
+    m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
     m_running = true;
 }
 
@@ -429,7 +429,7 @@ void CueStack::setFlashing(bool enable)
 {
     // Show only: a flash pressed now is the show (S3).
     if (enable)
-        m_liveEpoch.store(GenericFader::liveEpoch(), std::memory_order_relaxed);
+        m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
     qDebug() << Q_FUNC_INFO;
     if (m_flashing == enable || m_cues.isEmpty())
         return;

@@ -29017,6 +29017,17 @@ void Monitor_Test::maintenanceIsRefusedForAShowOnlyFixture()
         QVERIFY(Monitor::maintenanceRefusal(g).isEmpty());
         mon.sendMaintenance(g->id(), 0, 200);
         QCOMPARE(int(uni->preGMValue(41)), 200);
+        // One patched over the flame's address: refused too -- what it
+        // sends there would reach the flame.
+        Fixture *h = new Fixture(doc);
+        h->setChannels(2);
+        h->setUniverse(0);
+        h->setAddress(60);
+        QVERIFY(doc->addFixture(h));
+        h->setAddress(39);              // re-patched over the flame (an address clash)
+        QVERIFY(Monitor::maintenanceRefusal(h).isEmpty() == false);
+        mon.sendMaintenance(h->id(), 1, 200);
+        QCOMPARE(int(uni->preGMValue(40)), 0);
     }
     delete doc;
 }

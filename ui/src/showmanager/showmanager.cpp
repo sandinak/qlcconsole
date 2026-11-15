@@ -57,6 +57,7 @@
 #include "videoeditor.h"
 #include "showmanager.h"
 #include "outputrulekeeper.h"
+#include "genericfader.h"
 #include "sceneeditor.h"
 #include "timingstool.h"
 #include "qlcmacros.h"
@@ -2339,6 +2340,9 @@ void ShowManager::slotTimecodeRunningChanged(bool running)
         quint32 tc = m_doc->timecodeSource()->positionMs();
         quint32 pos = (tc > offset) ? tc - offset : 0;
         cursorMovedDuringPause = false;
+        // Show only (R6-8): started by timecode, not a hand -- the show
+        // only if the operator armed the link in Operate this session.
+        GenericFader::StampScope byTimecode(m_show->timecodeArmEpoch());
         m_show->start(m_doc->masterTimer(), functionParent(), pos);
         m_playAction->setIcon(QIcon(":/player_pause.png"));
     }
@@ -2362,7 +2366,11 @@ void ShowManager::slotTimecodeRunningChanged(bool running)
             {
                 Chaser *mc = qobject_cast<Chaser*>(m_doc->function(it.value().cueListId));
                 if (mc != NULL && mc->isRunning() == false && showMayOutput())
+                {
+                    // Show only (R6-8): as the timecode link was armed.
+                    GenericFader::StampScope byTimecode(m_show->timecodeArmEpoch());
                     mc->start(m_doc->masterTimer(), functionParent());
+                }
                 break;
             }
         }

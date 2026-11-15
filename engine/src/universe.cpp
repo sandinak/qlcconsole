@@ -697,51 +697,57 @@ bool Universe::applyPowerLimits(QByteArray &out)
 
 void Universe::setOutputRules(const QByteArray &bits)
 {
-    QMutexLocker locker(&m_outputRulesMutex);
-    QVector<int> onAtOpen, showOnly;
-    for (int c = 0; c < UNIVERSE_SIZE; c++)
+    QVector<int> newlyShowOnly;
     {
-        // uchar: ShowOnlyOutput is the top bit, and a char compare would
-        // see it sign-extended on one side only.
-        const uchar want = c < bits.size() ? uchar(uchar(bits.at(c)) & OutputRuleBits) : uchar(0);
-        const uchar now = uchar(m_channelsMask->at(c));
-        if (want & OnAtOpenOutput)
-            onAtOpen << c;
-        if (want & ShowOnlyOutput)
-            showOnly << c;
-        if ((now & OutputRuleBits) == want)
-            continue;
-        // One byte write: the role bits (HTP/LTP/Intensity) never vanish.
-        (*m_channelsMask)[c] = char((now & ~OutputRuleBits) | want);
-        // Made Show only while live: what is stored there (a preview's
-        // last LTP value) must not be what goes out; the next frame starts
-        // it from safe, as going live does.
-        if ((want & ShowOnlyOutput) && (now & ShowOnlyOutput) == 0 && showOnlyLive())
+        QMutexLocker locker(&m_outputRulesMutex);
+        QVector<int> onAtOpen, showOnly;
+        for (int c = 0; c < UNIVERSE_SIZE; c++)
         {
-            m_showOnlyResetChannels << c;
-            m_showOnlyReset.store(true, std::memory_order_relaxed);
-        }
-        if ((now & OnAtOpenOutput) && (want & OnAtOpenOutput) == 0)
-            m_onAtOpenRestore << c;
-        if (want & (GMExempt | SwitchOutput | OnAtOpenOutput | ShowOnlyOutput))
-        {
-            if (c >= m_totalChannels)
+            // uchar: ShowOnlyOutput is the top bit, and a char compare would
+            // see it sign-extended on one side only.
+            const uchar want = c < bits.size() ? uchar(uchar(bits.at(c)) & OutputRuleBits) : uchar(0);
+            const uchar now = uchar(m_channelsMask->at(c));
+            if (want & OnAtOpenOutput)
+                onAtOpen << c;
+            if (want & ShowOnlyOutput)
+                showOnly << c;
+            if ((now & OutputRuleBits) == want)
+                continue;
+            // One byte write: the role bits (HTP/LTP/Intensity) never vanish.
+            (*m_channelsMask)[c] = char((now & ~OutputRuleBits) | want);
+            if ((want & ShowOnlyOutput) && (now & ShowOnlyOutput) == 0)
+                newlyShowOnly << c;
+            // Made Show only while live: what is stored there (a preview's
+            // last LTP value) must not be what goes out; the next frame starts
+            // it from safe, as going live does.
+            if ((want & ShowOnlyOutput) && (now & ShowOnlyOutput) == 0 && showOnlyLive())
             {
-                m_totalChannels = c + 1;
-                m_totalChannelsChanged = true;
+                m_showOnlyResetChannels << c;
+                m_showOnlyReset.store(true, std::memory_order_relaxed);
             }
-            if (c >= m_usedChannels)
-                m_usedChannels = c + 1;
+            if ((now & OnAtOpenOutput) && (want & OnAtOpenOutput) == 0)
+                m_onAtOpenRestore << c;
+            if (want & (GMExempt | SwitchOutput | OnAtOpenOutput | ShowOnlyOutput))
+            {
+                if (c >= m_totalChannels)
+                {
+                    m_totalChannels = c + 1;
+                    m_totalChannelsChanged = true;
+                }
+                if (c >= m_usedChannels)
+                    m_usedChannels = c + 1;
+            }
+            updatePostGMValue(c);
         }
-        updatePostGMValue(c);
+        m_onAtOpenChannels = onAtOpen;
+        m_showOnlyChannels = showOnly;
+        m_showOnlyKept.resize(showOnly.size());
+        m_showOnlySentDirty = true;     // the next frame is a changed one
+        if (m_showOnlySafe.size() != UNIVERSE_SIZE)
+            m_showOnlySafe = QByteArray(UNIVERSE_SIZE, char(0));
+        m_showOnlyCount.store(int(showOnly.size()), std::memory_order_relaxed);
     }
-    m_onAtOpenChannels = onAtOpen;
-    m_showOnlyChannels = showOnly;
-    m_showOnlyKept.resize(showOnly.size());
-    m_showOnlySentDirty = true;     // the next frame is a changed one
-    if (m_showOnlySafe.size() != UNIVERSE_SIZE)
-        m_showOnlySafe = QByteArray(UNIVERSE_SIZE, char(0));
-    m_showOnlyCount.store(int(showOnly.size()), std::memory_order_relaxed);
+    clearShowOnlyStamps(newlyShowOnly);
 }
 
 void Universe::setShowOnlySafeValues(const QByteArray &safe)
@@ -799,41 +805,62 @@ void Universe::markShowOnly(int channel, bool on, uchar safe)
 {
     if (channel < 0 || channel >= UNIVERSE_SIZE)
         return;
-    QMutexLocker locker(&m_outputRulesMutex);
-    const uchar now = uchar(m_channelsMask->at(channel));
-    if (bool(now & ShowOnlyOutput) == on && (!on || uchar(m_showOnlySafe.at(channel)) == safe))
-        return;
-    if (m_showOnlySafe.size() != UNIVERSE_SIZE)
-        m_showOnlySafe = QByteArray(UNIVERSE_SIZE, char(0));
-    m_showOnlySafe[channel] = char(on ? safe : 0);
-    (*m_channelsMask)[channel] = char(on ? (now | ShowOnlyOutput) : (now & ~ShowOnlyOutput));
-    // The channel list in order (holdShowOnly() stops at the frame's end).
-    const auto at = std::lower_bound(m_showOnlyChannels.begin(), m_showOnlyChannels.end(), channel);
-    const bool listed = at != m_showOnlyChannels.end() && *at == channel;
-    if (on && !listed)
-        m_showOnlyChannels.insert(at, channel);
-    else if (!on && listed)
-        m_showOnlyChannels.erase(at);
-    m_showOnlyKept.resize(m_showOnlyChannels.size());
-    m_showOnlyCount.store(int(m_showOnlyChannels.size()), std::memory_order_relaxed);
-    m_showOnlySentDirty = true;
-    if (on)
+    bool newlyOn = false;
     {
-        if (channel >= m_totalChannels)
+        QMutexLocker locker(&m_outputRulesMutex);
+        const uchar now = uchar(m_channelsMask->at(channel));
+        if (bool(now & ShowOnlyOutput) == on && (!on || uchar(m_showOnlySafe.at(channel)) == safe))
+            return;
+        newlyOn = on && (now & ShowOnlyOutput) == 0;
+        if (m_showOnlySafe.size() != UNIVERSE_SIZE)
+            m_showOnlySafe = QByteArray(UNIVERSE_SIZE, char(0));
+        m_showOnlySafe[channel] = char(on ? safe : 0);
+        (*m_channelsMask)[channel] = char(on ? (now | ShowOnlyOutput) : (now & ~ShowOnlyOutput));
+        // The channel list in order (holdShowOnly() stops at the frame's end).
+        const auto at = std::lower_bound(m_showOnlyChannels.begin(), m_showOnlyChannels.end(), channel);
+        const bool listed = at != m_showOnlyChannels.end() && *at == channel;
+        if (on && !listed)
+            m_showOnlyChannels.insert(at, channel);
+        else if (!on && listed)
+            m_showOnlyChannels.erase(at);
+        m_showOnlyKept.resize(m_showOnlyChannels.size());
+        m_showOnlyCount.store(int(m_showOnlyChannels.size()), std::memory_order_relaxed);
+        m_showOnlySentDirty = true;
+        if (on)
         {
-            m_totalChannels = channel + 1;
-            m_totalChannelsChanged = true;
+            if (channel >= m_totalChannels)
+            {
+                m_totalChannels = channel + 1;
+                m_totalChannelsChanged = true;
+            }
+            if (channel >= m_usedChannels)
+                m_usedChannels = channel + 1;
+            // Live: what is stored there is not what the next send has.
+            if (showOnlyLive() && (now & ShowOnlyOutput) == 0)
+            {
+                m_showOnlyResetChannels << channel;
+                m_showOnlyReset.store(true, std::memory_order_relaxed);
+            }
         }
-        if (channel >= m_usedChannels)
-            m_usedChannels = channel + 1;
-        // Live: what is stored there is not what the next send has.
-        if (showOnlyLive() && (now & ShowOnlyOutput) == 0)
-        {
-            m_showOnlyResetChannels << channel;
-            m_showOnlyReset.store(true, std::memory_order_relaxed);
-        }
+        updatePostGMValue(channel);
     }
-    updatePostGMValue(channel);
+    if (newlyOn)
+        clearShowOnlyStamps(QVector<int>() << channel);
+}
+
+void Universe::clearShowOnlyStamps(const QVector<int> &channels)
+{
+    /* A channel just made Show only (a Show-only fixture patched or moved
+       onto it, the rule just given): a stamp a writer had there was for
+       what was patched before -- gone, so it waits for a new operator
+       action. Outside m_outputRulesMutex: the faders' lock comes first. */
+    if (channels.isEmpty())
+        return;
+    QMutexLocker fadersLocker(&m_fadersMutex);
+    for (const QSharedPointer<GenericFader> &f : std::as_const(m_faders))
+        if (!f.isNull() && f->channelStamped())
+            for (int c : channels)
+                f->clearChannelLiveEpoch(c);
 }
 
 bool Universe::showOnlyHeld() const
@@ -1168,6 +1195,25 @@ void Universe::reset()
     m_modifiers.fill(NULL, UNIVERSE_SIZE);
     m_modifiedZeroValues->fill(0);      // no modifier: every zero is 0
     m_passthrough = false; // not releasing m_passthroughValues, see comment in setPassthrough
+    restoreShowOnlySafe(0, UNIVERSE_SIZE);
+}
+
+void Universe::restoreShowOnlySafe(int address, int range)
+{
+    /* Show only (E6): a reset leaves a Show-only channel at its safe value
+       (a gobo open, a laser's control channel at 0), never 0 or the
+       input's -- what "nothing drives it" means there. */
+    if (showOnlyChannelCount() == 0)
+        return;
+    QMutexLocker locker(&m_outputRulesMutex);
+    for (int c : std::as_const(m_showOnlyChannels))
+    {
+        if (c < address || c >= address + range)
+            continue;
+        (*m_preGMValues)[c] = m_showOnlySafe.at(c);
+        (*m_blackoutValues)[c] = m_showOnlySafe.at(c);
+        updatePostGMValue(c);
+    }
 }
 
 void Universe::reset(int address, int range)
@@ -1183,6 +1229,7 @@ void Universe::reset(int address, int range)
     memcpy(m_postGMValues->data() + address, m_modifiedZeroValues->data() + address, range * sizeof(*m_postGMValues->data()));
 
     applyPassthroughValues(address, range);
+    restoreShowOnlySafe(address, range);
 }
 
 void Universe::applyPassthroughValues(int address, int range)
@@ -1192,6 +1239,8 @@ void Universe::applyPassthroughValues(int address, int range)
 
     for (int i = address; i < address + range && i < UNIVERSE_SIZE; i++)
     {
+        if (uchar(m_channelsMask->at(i)) & ShowOnlyOutput)
+            continue;       // Show only: never the input's (R6-4)
         if (static_cast<uchar>(m_postGMValues->at(i)) < static_cast<uchar>(m_passthroughValues->at(i))) // HTP merge
         {
             (*m_postGMValues)[i] = (*m_passthroughValues)[i];
@@ -1356,6 +1405,10 @@ uchar Universe::applyPassthrough(int channel, uchar value)
 {
     if (m_passthrough)
     {
+        // Show only (R6-4): an input merged in never reaches a Show-only
+        // channel -- no GO, no stamp, past every fader.
+        if (uchar(m_channelsMask->at(channel)) & ShowOnlyOutput)
+            return value;
         const uchar passthroughValue = static_cast<uchar>(m_passthroughValues->at(channel));
         if (value < passthroughValue) // HTP merge
         {
@@ -1728,6 +1781,9 @@ void Universe::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
             if (channel >= m_usedChannels)
                 m_usedChannels = channel + 1;
 
+            // Show only (R6-4): never kept for a Show-only channel.
+            if (uchar(m_channelsMask->at(int(channel))) & ShowOnlyOutput)
+                value = 0;
             (*m_passthroughValues)[channel] = value;
 
             updatePostGMValue(channel);

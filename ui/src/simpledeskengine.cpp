@@ -119,9 +119,20 @@ void SimpleDeskEngine::setValue(uint channel, uchar value)
     const bool taken = !m_values.contains(channel);
     /* Show only (S3): a channel really moved -- a new value, from the
        desk's fader or its input -- is the show from now on; the same value
-       again (an echo, a page reload) stamps nothing. */
+       again (an echo, a page reload) stamps nothing. A stamp is for what
+       is patched there now: one given before a Show-only fixture came onto
+       the address is no stamp for it (writeDMX()). */
     if (taken || m_values.value(channel) != value)
-        m_channelEpochs.insert(channel, GenericFader::liveEpoch());
+    {
+        m_channelEpochs.insert(channel, GenericFader::stampEpoch());
+        const QList<Universe *> ua = m_doc->inputOutputMap()->universes();
+        const int u = int(channel >> 9);
+        if (u < ua.size() && ua.at(u) != nullptr
+            && (ua.at(u)->channelCapabilities(ushort(channel & 0x1FF)) & Universe::ShowOnlyOutput))
+            m_stampedShowOnly.insert(channel);
+        else
+            m_stampedShowOnly.remove(channel);
+    }
     m_values[channel] = value;
     setChanged(true);
     locker.unlock();
@@ -442,10 +453,17 @@ void SimpleDeskEngine::writeDMX(MasterTimer *timer, QList<Universe *> ua)
             fc->setTarget(value);
             fc->addFlag(FadeChannel::Override);
             fc.release();
-            // Its control's stamp (S3), channel by channel.
+            // Its control's stamp (S3), channel by channel -- none for a
+            // Show-only channel moved before it was Show only.
             QSharedPointer<GenericFader> fader = m_fadersMap.value(quint32(uni));
             if (!fader.isNull())
-                fader->setChannelLiveEpoch(address & 0x1FF, m_channelEpochs.value(it.key()));
+            {
+                quint32 epoch = m_channelEpochs.value(it.key());
+                if (ua[uni]->showOnlyChannelCount() > 0 && !m_stampedShowOnly.contains(it.key())
+                    && (ua[uni]->channelCapabilities(ushort(address & 0x1FF)) & Universe::ShowOnlyOutput))
+                    epoch = 0;
+                fader->setChannelLiveEpoch(address & 0x1FF, epoch);
+            }
         }
         setChanged(false);
     }

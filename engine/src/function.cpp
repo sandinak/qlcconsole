@@ -1250,13 +1250,10 @@ static QHash<quint32, quint32> s_autoSources;    // AutoVCWidget id -> session a
 
 quint32 Function::autoSourceEpoch(const FunctionParent &source)
 {
+    /* Armed only by an operator action (armAutoSource()); never armed: 0,
+       which no session ever is -- a widget's own first start arms nothing. */
     QMutexLocker locker(&s_autoSourcesMutex);
-    const auto it = s_autoSources.constFind(source.id());
-    if (it != s_autoSources.constEnd())
-        return it.value();
-    const quint32 now = GenericFader::liveEpoch();
-    s_autoSources.insert(source.id(), now);
-    return now;
+    return s_autoSources.value(source.id(), 0);
 }
 
 void Function::armAutoSource(const FunctionParent &source)
@@ -1301,12 +1298,19 @@ Function::SourceGate Function::sourceGate(const FunctionParent &source) const
        on the timer thread. Started from anywhere else it is a real source. */
     if (g.notTheShow == false && source.type() == FunctionParent::Function && source.id() != id())
         g.parentGate = GenericFader::creationGateOf(source.id());
-    /* E3: an automatic widget (an audio trigger's function bar, a VC
-       Clock's schedule) starts on its own, not by a hand: it is the show
-       only from the session it was armed in (armAutoSource()); its very
-       first start since the show opened counts as arming it. */
-    g.epoch = (g.notTheShow == false && source.type() == FunctionParent::AutoVCWidget)
-              ? autoSourceEpoch(source) : GenericFader::liveEpoch();
+    /* S3: started by a function, it takes that one's stamp (storeGateLocked()
+       latches it, now and whenever the parent is the show). E3: an
+       automatic widget (an audio trigger's function bar, a VC Clock's
+       schedule) starts on its own, not by a hand: it is the show only from
+       the session it was armed in (armAutoSource()) -- never armed, never.
+       Anything else is stamped as an operator action now (stampEpoch():
+       inside an automatic writer's StampScope, that writer's session). */
+    if (g.parentGate)
+        g.epoch = 0;
+    else if (g.notTheShow == false && source.type() == FunctionParent::AutoVCWidget)
+        g.epoch = autoSourceEpoch(source);
+    else
+        g.epoch = GenericFader::stampEpoch();
     return g;
 }
 
@@ -1316,16 +1320,20 @@ bool Function::storeGateLocked()
         return m_previewGate->exchange(false, std::memory_order_relaxed) != false;
     bool any = false, notTheShow = true;
     const quint32 epoch = GenericFader::liveEpoch();
-    for (const SourceGate &g : std::as_const(m_sourceGates))
+    for (SourceGate &g : m_sourceGates)
     {
         any = true;
         if (g.notTheShow)
             continue;
-        // Started by a function: as that one is. Else the show only when
-        // added (or renewed) in this Operate session.
-        const bool real = g.parentGate ? g.parentGate->load(std::memory_order_relaxed) == false
-                                       : g.epoch == epoch;
-        if (real)
+        /* Started by a function: R6-6, it takes its root's stamp and keeps
+           it for the session -- whenever the parent is the show, the stamp
+           is latched, so a cue a Script launched still drives after the
+           Script ends. A new session (Operate, All Off, another show)
+           leaves it old. Else the show only when added (or renewed) in
+           this Operate session. */
+        if (g.parentGate && g.parentGate->load(std::memory_order_relaxed) == false)
+            g.epoch = epoch;
+        if (g.epoch == epoch)
             notTheShow = false;
     }
     /* E5: with no source left it is stopping -- nothing that is the show

@@ -497,7 +497,7 @@ void VCXYPad::slotPositionChanged(const QPointF& pt)
     if (mode() == Doc::Operate && pt != m_stampedPosition)
     {
         m_stampedPosition = pt;
-        m_liveEpoch.store(GenericFader::liveEpoch(), std::memory_order_relaxed);
+        m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
     }
 
     m_padInteraction = true;
@@ -549,7 +549,7 @@ void VCXYPad::slotSliderValueChanged()
     if (mode() == Doc::Operate && pt != m_stampedPosition)
     {
         m_stampedPosition = pt;
-        m_liveEpoch.store(GenericFader::liveEpoch(), std::memory_order_relaxed);
+        m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
     }
     m_area->setPosition(pt);
     m_area->update();
