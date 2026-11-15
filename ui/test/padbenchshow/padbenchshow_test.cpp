@@ -918,6 +918,8 @@ void PadBenchShow_Test::buildSaveAndCheck()
     QString path = qEnvironmentVariable("PADBENCH_OUT");
     if (path.isEmpty())
         path = dir.filePath(QStringLiteral("PadBench.qlcc"));
+    QDir().mkpath(QStringLiteral("/tmp/padbench-regen"));
+    path = QStringLiteral("/tmp/padbench-regen/PadBench.qlcc"); // WIP-REGEN
     build(path);
     if (QTest::currentTestFailed())
         return;
