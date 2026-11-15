@@ -56,6 +56,8 @@
 #include "doc.h"
 #include "function.h"
 #include "script.h"
+#include "programmercontroller.h"
+#include <QXmlStreamReader>
 #include <QMouseEvent>
 
 enum { LaserAt = 0, Stage = 10, Flame = 14 };
@@ -815,6 +817,27 @@ void ShowOnlyReview5_Test::r6ScriptLaunchedCueDrives()
     QVERIFY(fog->isRunning());
     QVERIFY(!script->isRunning());
     QCOMPARE(sent(Flame), 255);
+}
+
+/* R6-8. A show loaded while the console is in Operate (web access
+   /loadProject -> App::slotLoadDocFromMemory(): clearDocument() and
+   loadXML(), no mode change, so no new live session): its saved Park is
+   set by OutputLayer::set() with this session's stamp -- the show --
+   and the flame goes out at its parked level with no operator action. */
+void ShowOnlyReview5_Test::r6ParkLoadedInOperateDrives()
+{
+    Fixture *flame = addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly);
+    QVERIFY(flame != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    tick(2);
+    const QString xml = QStringLiteral("<Park><PFixture ID=\"%1\"><PChannel Number=\"0\">255</PChannel>"
+                                       "</PFixture></Park>").arg(flame->id());
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(m_doc->programmer()->loadParkXML(r));  // as Doc::loadXML() does
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
 }
 
 QTEST_MAIN(ShowOnlyReview5_Test)

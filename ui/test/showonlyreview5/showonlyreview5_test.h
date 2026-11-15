@@ -60,6 +60,7 @@ private slots:
     void r6InputPassthroughThroughStop();
     void r6PlaybackSliderRestartsAfterStop();
     void r6ScriptLaunchedCueDrives();
+    void r6ParkLoadedInOperateDrives();
 
 private:
     Fixture *addDimmer(const QString &name, int address, int rules);
