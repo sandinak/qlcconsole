@@ -62,6 +62,16 @@ namespace AimSolver
         bool  tiltInvert = false;
         float panMax = 360.0f;
         float tiltMax = 270.0f;
+        /** Which way centre stage is from the head: a bearing in the same
+         *  terms as panZeroDir (frameFor() sets it; unset it is the pan zero).
+         *  A head with more than a turn of pan reaches most bearings at two
+         *  pans a turn apart; solve() takes the one nearest the pan for this
+         *  bearing, and that pan the turn nearest the middle of the range. So
+         *  the stage sits in the middle of the channel, a move across it
+         *  never runs to a channel end and swings round, and a fade between
+         *  two aims goes the short way. */
+        bool  hasPanReference = false;
+        float panReferenceDir = 0.0f;
     };
 
     /** Which way up a head is rigged: standing (home points UP) or hanging.
@@ -71,6 +81,10 @@ namespace AimSolver
      *  no structure under it is standing on the deck, whatever the rig-props
      *  default says (TopHung leaks in whenever an entry is auto-created). */
     bool floorMounted(const ::FixtureRigProps &rp);
+
+    /** How near either end of its pan channel solve() lets a head's answer
+     *  sit while an equivalent pan (a whole turn round) has more room. */
+    constexpr float kPanEdgeMarginDeg = 10.0f;
 
     /** Where a head has to point for a world point, and whether it can. */
     struct Solution
@@ -141,7 +155,16 @@ namespace AimSolver
      *  is what this has always answered, and it is kept whenever it is within
      *  range, so a head does not swing round mid-move. The second is taken only
      *  when the first is out of range and the second is not as far out --
-     *  which is the case a clamp used to get silently wrong. */
+     *  which is the case a clamp used to get silently wrong.
+     *
+     *  The first way can itself be a whole turn either side on a head with
+     *  more than 360 degrees of pan. Of those in range, the answer is the one
+     *  nearest the frame's reference pan (Frame::panReferenceDir, centre
+     *  stage), keeping kPanEdgeMarginDeg from either end where one does. It
+     *  used to be the one within half a turn of the pan zero, whatever the
+     *  stage: a head whose zero faced away from the stage had the seam of
+     *  that turn on the stage, and a move across it ran the pan to one end
+     *  and round to the other. Stateless: the same target, the same DMX. */
     Solution solve(const Frame &frame, const QVector3D &targetWorld);
 
     /** The way back: a head's pan and tilt as DMX sends them (fixture

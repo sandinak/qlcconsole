@@ -1651,3 +1651,258 @@ void AimSolver_Test::areaTiesGoToTheBestCover()
         QCOMPARE(again.at(i).cell, zones.at(i).cell);
     delete doc;
 }
+
+/****************************************************************************
+ * The middle of the pan range
+ ****************************************************************************/
+
+namespace
+{
+/* A 16-bit mover with @p panMax degrees of pan and 270 of tilt. */
+Fixture *addMover(Doc *doc, const QString &name, int panMax, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel(QString("Mover %1 %2").arg(panMax).arg(name));
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("16bit");
+    QLCFixtureHead head;
+    int n = 0;
+    for (QLCChannel::Group g : { QLCChannel::Pan, QLCChannel::Tilt })
+        for (QLCChannel::ControlByte b : { QLCChannel::MSB, QLCChannel::LSB })
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("%1%2").arg(g == QLCChannel::Pan ? "Pan" : "Tilt")
+                                        .arg(b == QLCChannel::MSB ? "" : " fine"));
+            ch->setGroup(g);
+            ch->setControlByte(b);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(n));
+            head.addChannel(quint32(n));
+            ++n;
+        }
+    QLCPhysical ph;
+    ph.setFocusPanMax(panMax);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(address);
+    return doc->addFixture(fxi) ? fxi : nullptr;
+}
+
+/* A 10 m x 8 m stage (centre (5, 4)) and one head out front at (6, 12):
+   hung 6 m up, or standing on the floor. Pan zero 0 faces downstage, away
+   from the stage, so the stage sits right across the seam of the turn
+   solve() used to answer in; 180 faces it. */
+Fixture *frontOfHouse(Doc *doc, int panMax, bool standing, bool invert, float panZero)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10.0f, 6.0f, 8.0f));
+    Fixture *fx = addMover(doc, "FOH", panMax, 0);
+    if (fx == nullptr)
+        return nullptr;
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(6000.0f, 12000.0f, standing ? 0.0f : 6.0f));
+    FixtureRigProps rp;
+    rp.mountingType = standing ? Truss::FloorMounted : Truss::TopHung;
+    rp.panZeroDir = panZero;
+    rp.panInvert = invert;
+    props->setFixtureRigProps(fx->id(), rp);
+    return fx;
+}
+
+/* Across the stage at chest height and back, 5 cm a step. */
+QList<QVector3D> sweep()
+{
+    QList<QVector3D> out;
+    for (int i = 0; i <= 200; ++i)
+        out << QVector3D(0.05f * float(i), 4.0f, 1.4f);
+    for (int i = 199; i >= 0; --i)
+        out << QVector3D(0.05f * float(i), 4.0f, 1.4f);
+    return out;
+}
+
+/* The pan, in degrees, a look's values give @p fx (16-bit). */
+double lookPan(const QList<SceneValue> &values, const Fixture *fx, double &frac)
+{
+    int coarse = -1, fine = 0;
+    for (const SceneValue &v : values)
+    {
+        if (v.fxi != fx->id())
+            continue;
+        if (v.channel == 0)
+            coarse = v.value;
+        else if (v.channel == 1)
+            fine = v.value;
+    }
+    frac = (coarse + fine / 256.0) / 255.0;
+    return coarse < 0 ? -1.0 : fx->effectiveBeam().panMax * (coarse * 256 + fine) / 65535.0;
+}
+
+double lookTiltFrac(const QList<SceneValue> &values, const Fixture *fx)
+{
+    int coarse = 0, fine = 0;
+    for (const SceneValue &v : values)
+    {
+        if (v.fxi != fx->id())
+            continue;
+        if (v.channel == 2)
+            coarse = v.value;
+        else if (v.channel == 3)
+            fine = v.value;
+    }
+    return (coarse + fine / 256.0) / 255.0;
+}
+}
+
+void AimSolver_Test::aSweepAcrossTheStageStaysOnOneTurn_data()
+{
+    QTest::addColumn<int>("panMax");
+    QTest::addColumn<bool>("standing");
+    QTest::addColumn<bool>("invert");
+    QTest::addColumn<float>("panZero");
+    QTest::newRow("540 hung, zero away from the stage")       << 540 << false << false << 0.0f;
+    QTest::newRow("540 hung, inverted")                       << 540 << false << true  << 0.0f;
+    QTest::newRow("540 standing, zero away from the stage")   << 540 << true  << false << 0.0f;
+    QTest::newRow("540 standing, inverted")                   << 540 << true  << true  << 0.0f;
+    QTest::newRow("630 hung, zero away from the stage")       << 630 << false << false << 0.0f;
+    QTest::newRow("630 standing, inverted")                   << 630 << true  << true  << 0.0f;
+    QTest::newRow("360 hung, facing the stage")               << 360 << false << false << 180.0f;
+    QTest::newRow("360 standing, inverted, facing the stage") << 360 << true  << true  << 180.0f;
+}
+
+void AimSolver_Test::aSweepAcrossTheStageStaysOnOneTurn()
+{
+    QFETCH(int, panMax);
+    QFETCH(bool, standing);
+    QFETCH(bool, invert);
+    QFETCH(float, panZero);
+
+    Doc *doc = new Doc(this);
+    Fixture *fx = frontOfHouse(doc, panMax, standing, invert, panZero);
+    QVERIFY(fx != nullptr);
+    AimSolver::Frame frame;
+    QVERIFY(AimSolver::frameFor(doc, fx->id(), frame));
+    QCOMPARE(frame.floorMounted, standing);
+    QCOMPARE(frame.panMax, float(panMax));
+    const FixtureRigProps rp = doc->monitorProperties()->fixtureRigProps(fx->id());
+    const float edge = AimSolver::kPanEdgeMarginDeg;
+
+    // What it was: the seam is on the stage, and the pan went round.
+    float oldJump = 0.0f, oldPrev = -1.0f;
+    float newJump = 0.0f, prev = -1.0f;
+    float lo = frame.panMax, hi = 0.0f;
+    for (const QVector3D &t : sweep())
+    {
+        float lp = 0.0f, lt = 0.0f;
+        legacyAim(frame, t, lp, lt);
+        if (oldPrev >= 0.0f)
+            oldJump = qMax(oldJump, qAbs(lp - oldPrev));
+        oldPrev = lp;
+
+        const AimSolver::Solution s = AimSolver::solve(frame, t);
+        QVERIFY2(s.reachable(), qPrintable(QString("(%1, %2) out of reach, margin %3")
+                                           .arg(t.x()).arg(t.y()).arg(s.marginDeg)));
+        if (prev >= 0.0f)
+            newJump = qMax(newJump, qAbs(s.panDeg - prev));
+        prev = s.panDeg;
+        lo = qMin(lo, s.panDeg);
+        hi = qMax(hi, s.panDeg);
+
+        // The same beam, whichever turn it is on.
+        QVector3D dir;
+        QVERIFY(AimSolver::beamDirection(rp, s.panDeg - frame.panMax / 2.0f,
+                                         s.tiltDeg - frame.tiltMax / 2.0f, dir));
+        const double off = degreesBetween(dir, t - frame.position);
+        QVERIFY2(off < 0.5, qPrintable(QString("pan %1 tilt %2 at (%3, %4) points %5 degrees off")
+                                       .arg(s.panDeg).arg(s.tiltDeg).arg(t.x()).arg(t.y()).arg(off)));
+    }
+    if (panZero == 0.0f)
+        QVERIFY2(oldJump > 300.0f, qPrintable(QString("the old answer should go round here, "
+                                                      "largest step %1").arg(oldJump)));
+    QVERIFY2(newJump < 3.0f, qPrintable(QString("the pan stepped %1 degrees between two "
+                                                "samples 5 cm apart (range %2..%3)")
+                                        .arg(newJump).arg(lo).arg(hi)));
+    QVERIFY2(lo >= edge && hi <= frame.panMax - edge,
+             qPrintable(QString("pan ran %1..%2 of 0..%3: within %4 of an end")
+                        .arg(lo).arg(hi).arg(frame.panMax).arg(edge)));
+    delete doc;
+}
+
+void AimSolver_Test::aHeadWithOneTurnHasNothingToChoose()
+{
+    for (bool standing : { false, true })
+    {
+        Doc *doc = new Doc(this);
+        Fixture *fx = frontOfHouse(doc, 360, standing, false, 0.0f);
+        QVERIFY(fx != nullptr);
+        AimSolver::Frame frame;
+        QVERIFY(AimSolver::frameFor(doc, fx->id(), frame));
+        for (const QVector3D &t : sweep())
+        {
+            float lp = 0.0f, lt = 0.0f;
+            legacyAim(frame, t, lp, lt);
+            const AimSolver::Solution s = AimSolver::solve(frame, t);
+            QVERIFY2(qAbs(s.panDeg - lp) < 1e-3f && qAbs(s.tiltDeg - lt) < 1e-3f,
+                     qPrintable(QString("%1 at (%2, %3): %4/%5, was %6/%7")
+                                .arg(standing ? "standing" : "hung").arg(t.x()).arg(t.y())
+                                .arg(s.panDeg).arg(s.tiltDeg).arg(lp).arg(lt)));
+        }
+        delete doc;
+    }
+}
+
+void AimSolver_Test::looksEitherSideOfTheSeamFadeTheShortWay()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = frontOfHouse(doc, 540, false, false, 0.0f);
+    QVERIFY(fx != nullptr);
+    MonitorProperties *props = doc->monitorProperties();
+    AimSolver::Frame frame;
+    QVERIFY(AimSolver::frameFor(doc, fx->id(), frame));
+
+    // Either side of the line straight upstage from the head: the old seam.
+    const QVector3D marks[2] = { QVector3D(frame.position.x() - 1.5f, 4.0f, 0.0f),
+                                 QVector3D(frame.position.x() + 1.5f, 4.0f, 0.0f) };
+    QList<SceneValue> values[2];
+    double pan[2], panFrac[2], tiltFrac[2];
+    float aimZ = 0.0f;
+    for (int i = 0; i < 2; ++i)
+    {
+        StageTarget *t = props->addStageTarget();
+        t->setName(i == 0 ? "Left of it" : "Right of it");
+        t->setPosition(marks[i]);
+        aimZ = props->targetAimPoint(t).z();
+        QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+        aim->setName(t->name());
+        aim->setStageTargetId(t->id());
+        QVERIFY(doc->addPalette(aim));
+        values[i] = aim->valuesFromFixtures(doc, { fx->id() });
+        pan[i] = lookPan(values[i], fx, panFrac[i]);
+        tiltFrac[i] = lookTiltFrac(values[i], fx);
+        QVERIFY2(pan[i] >= 0.0, "the look sets no pan");
+    }
+    // 1.5 m either side, 8 m away: about 21 degrees apart, not a turn less that.
+    QVERIFY2(qAbs(pan[0] - pan[1]) < 30.0,
+             qPrintable(QString("the two looks pan %1 and %2: %3 degrees apart")
+                        .arg(pan[0]).arg(pan[1]).arg(qAbs(pan[0] - pan[1]))));
+
+    // A fade is a straight line in DMX: half way, the beam is between the two marks.
+    const double midPan = (panFrac[0] + panFrac[1]) / 2.0, midTilt = (tiltFrac[0] + tiltFrac[1]) / 2.0;
+    QVector3D dir;
+    QVERIFY(AimSolver::headDirection(fx, QByteArray(fx->channels(), '\0'), -1,
+                                     props->fixtureRigProps(fx->id()), dir, &midPan, &midTilt));
+    QVERIFY(dir.z() < -1e-3f);
+    const QVector3D at = frame.position + dir * ((aimZ - frame.position.z()) / dir.z());
+    QVERIFY2(at.x() > marks[0].x() && at.x() < marks[1].x() && qAbs(at.y() - 4.0f) < 0.5f,
+             qPrintable(QString("half way through the fade the beam is at (%1, %2), not between "
+                                "(%3, 4) and (%4, 4)").arg(at.x()).arg(at.y())
+                        .arg(marks[0].x()).arg(marks[1].x())));
+    delete doc;
+}
