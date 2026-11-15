@@ -1271,19 +1271,21 @@ void ShowOnlyReview5_Test::r7SharedSceneLatchesAcrossADesignTrip()
     QCOMPARE(fire->sources().size(), 2);
     QCOMPARE(sent(Flame), 255);             // two GOs in Operate: the show
 
+    QString pre;
     m_doc->setMode(Doc::Design);            // to fix a cue
     tick(3);
     QCOMPARE(sent(Flame), 0);
+    QString info;
     auto dump = [&](const char *when) {
         QString src;
         for (const FunctionParent &p : fire->sources())
             src += QStringLiteral("%1:%2 ").arg(int(p.type())).arg(p.id());
-        qDebug() << when << "epoch" << GenericFader::liveEpoch() << "fire gate" << fire->previewGate()->load()
-                 << "a gate" << a->previewGate()->load() << "b gate" << b->previewGate()->load()
-                 << "a" << a->id() << "b" << b->id() << "fire sources" << src
-                 << "list" << m_doc->masterTimer()->m_functionList.indexOf(a)
-                 << m_doc->masterTimer()->m_functionList.indexOf(fire)
-                 << m_doc->masterTimer()->m_functionList.indexOf(b);
+        info += QStringLiteral("[%1 epoch %2 gates fire/a/b %3%4%5 a=%6 b=%7 src %8 list %9/%10/%11] ")
+                    .arg(when).arg(GenericFader::liveEpoch()).arg(fire->previewGate()->load())
+                    .arg(a->previewGate()->load()).arg(b->previewGate()->load()).arg(a->id()).arg(b->id()).arg(src)
+                    .arg(m_doc->masterTimer()->m_functionList.indexOf(a))
+                    .arg(m_doc->masterTimer()->m_functionList.indexOf(fire))
+                    .arg(m_doc->masterTimer()->m_functionList.indexOf(b));
     };
     dump("design");
     m_doc->setMode(Doc::Operate);           // back; nobody presses GO
@@ -1294,6 +1296,8 @@ void ShowOnlyReview5_Test::r7SharedSceneLatchesAcrossADesignTrip()
         tick(1);
         flameMax = qMax(flameMax, sent(Flame));
     }
+    dump("end");
+    QVERIFY2(false, qPrintable(info));      // DEBUG
     QVERIFY(a->previewGate()->load());      // both lists are held (left from Design)...
     QVERIFY(b->previewGate()->load());
     QCOMPARE(flameMax, 0);                  // ...so the flame must be too
