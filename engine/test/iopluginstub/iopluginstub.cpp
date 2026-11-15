@@ -122,6 +122,9 @@ void IOPluginStub::writeUniverse(quint32 universe, quint32 output, const QByteAr
     m_lastDataChanged = dataChanged;
     if (m_dropUnchanged && dataChanged == false)
         return;
+    if (m_holdLikeNetwork && int(output) < m_lineNames.size()
+        && m_gateAllowed.value(m_lineNames.at(int(output)), true) == false)
+        return;
     m_universe = m_universe.replace(output * 512, data.size(), data);
 }
 

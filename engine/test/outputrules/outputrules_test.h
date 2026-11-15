@@ -274,6 +274,7 @@ private slots:
     void everyClosingLineGetsShowOnlySafeLast();
     /** A line closed with no Show-only channel gets no extra frame */
     void aClosingLineWithNoShowOnlyGetsNothingExtra();
+    void review10_aClosingLineInBlindGetsNoPreview();
     /** A held line released: its first frame is the S0 build */
     void aReleasedLineStartsFromTheCurrentBuild();
     /** The patch list changes under the frame lock: frames and sends from

@@ -3471,3 +3471,41 @@ void OutputRules_Test::aHeldAutoRemoveChannelLetsGoOfNothing()
 }
 
 QTEST_GUILESS_MAIN(OutputRules_Test)
+
+/* Review 10: Blind sends nothing of the preview. A fixture patched (or a
+   channel first written) after Blind started lies past the frozen frame's
+   end; Universe::closingFrame() fills that tail from the LIVE values -- the
+   preview -- and a line re-patched, held or unpatched in Blind gets them as
+   its last frame, which the node then keeps. */
+void OutputRules_Test::review10_aClosingLineInBlindGetsNoPreview()
+{
+    InputOutputMap *io = m_doc->inputOutputMap();
+    m_doc->outputRuleKeeper()->setBlindHoldsExempt(false);   // Blind: nothing goes out
+    QVERIFY(addDimmer("Flame", Flame, Fixture::ShowOnly) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    put(Stage, 100);
+    frame(Stage);
+    frame(Stage);
+    QCOMPARE(sent(Stage), 100);
+
+    io->setOutputInhibited(true);                      // Blind
+    const int Late = 40;
+    QVERIFY(addDimmer("Late", Late, 0) != nullptr);    // patched in Blind
+    m_doc->outputRuleKeeper()->rebuild();
+    put(Late, 200);                                    // programmed in Blind: preview only
+    put(Stage, 30);
+    frame(Late);
+    frame(Late);
+    QCOMPARE(sent(Late), 0);                           // nothing reached the rig
+    QCOMPARE(sent(Stage), 100);
+
+    // The universe moved to another interface while still in Blind.
+    QVERIFY(io->setOutputPatch(0, m_stub->name(), QString(), 3, false, 0));
+    const int late = sent(Late), stage = sent(Stage), flame = sent(Flame);
+    QVERIFY(io->setOutputPatch(0, m_stub->name(), QString(), 0, false, 0));   // put back
+    m_stub->m_universe.fill(char(0));
+    QCOMPARE(flame, 0);
+    QCOMPARE(stage, 100);
+    QVERIFY2(late == 0, qPrintable(QString("the closing frame in Blind sent the preview: channel %1 at %2")
+                                   .arg(Late + 1).arg(late)));
+}

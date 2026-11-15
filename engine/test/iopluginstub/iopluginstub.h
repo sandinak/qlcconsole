@@ -212,6 +212,9 @@ public:
      *  -- Art-Net's Standard mode -- does) */
     bool m_lastDataChanged = false;
     bool m_dropUnchanged = false;
+    /** Review 10: drop a frame on a line its cached gate decision holds
+     *  (m_gateAllowed), as Art-Net's controller does (transmitHeld()) */
+    bool m_holdLikeNetwork = false;
 
     /*********************************************************************
      * Inputs

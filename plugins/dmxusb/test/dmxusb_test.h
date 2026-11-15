@@ -33,6 +33,12 @@ private slots:
     void aFewLostFramesAreNot();
     /** Writes going through again for a while clear it, once. */
     void itClearsOnceWritesHaveGoneThroughAWhile();
+
+    /** Review 10 (R9-1 on real widgets): OutputPatch::closeLine() hands the
+     *  widget the closing frame (Show-only channels at safe) and closes the
+     *  line at once. The frame must reach the wire before the line closes. */
+    void openDmxSendsTheClosingFrameBeforeClosing();
+    void proSendsTheClosingFrameBeforeClosing();
 };
 
 #endif

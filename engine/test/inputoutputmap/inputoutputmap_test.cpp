@@ -2212,6 +2212,49 @@ void InputOutputMap_Test::rigNetworkLivePatchAndSettingsHoldAndRelease()
     QVERIFY(iom.outputPatch(0, 0)->isHeld());
 }
 
+/* Review 10: "Transmit anyway" lifted the rig-network check and the show
+   ran on this line (a Show-only laser on). The check back on holds the
+   line (setPending): R9-1 says it is sent its closing frame first. A network
+   plugin (Art-Net, E1.31) is told the networks BEFORE the patches are held
+   (applyTransmitGate(): pushTransmitNetworks() first), so its own transmit
+   hold is already on and drops that frame. Pass 0: a plugin with no hold of
+   its own (the stub as it was) -- the frame arrives. Pass 1: one that holds
+   like Art-Net -- it does not, and the node keeps the laser on. */
+void InputOutputMap_Test::review10_rigGateBackOnSendsTheClosingFrame()
+{
+    schoolLaptop();
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+    const int Laser = 14;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        stub->m_holdLikeNetwork = pass == 1;
+        stub->m_gateAllowed.clear();
+        stub->m_universe.fill(char(0));
+        int last = -1;
+        bool held = false;
+        {
+            InputOutputMap iom(m_doc, 1);
+            iom.setRigNetworks(QStringList() << "172.18.0.0/20");
+            iom.setTransmitOverride(true);                  // "Transmit anyway, this session"
+            if (iom.setOutputPatch(0, "ArtNet", QString(), 1) == false)
+                QFAIL("could not patch");
+            iom.universe(0)->markShowOnly(Laser, true, 0);
+            stub->m_universe[512 + Laser] = char(255);      // the node has the laser on
+            iom.setTransmitOverride(false);                 // the check back on
+            held = iom.outputPatch(0, 0) != nullptr && iom.outputPatch(0, 0)->isHeld();
+            last = uchar(stub->m_universe.at(512 + Laser));
+            iom.setTransmitOverride(true);
+        }
+        stub->m_holdLikeNetwork = false;
+        stub->m_universe.fill(char(0));
+        QVERIFY(held);
+        QVERIFY2(last == 0, qPrintable(QString("pass %1 (%2): the held line's last frame has the laser at %3 "
+                                               "-- the closing frame was dropped by the plugin's own hold")
+                                       .arg(pass).arg(pass == 1 ? "a plugin that holds like Art-Net" : "no plugin hold")
+                                       .arg(last)));
+    }
+}
+
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()
 {
     schoolLaptop();
