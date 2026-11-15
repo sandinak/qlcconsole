@@ -37,6 +37,11 @@
 #include <QBuffer>
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
+#include "fixture.h"
+#include "universe.h"
+#include "genericfader.h"
+#include "fadechannel.h"
+#include "mastertimer.h"
 #include "simpledeskengine_test.h"
 
 void SimpleDeskEngine_Test::init()
@@ -139,6 +144,49 @@ void SimpleDeskEngine_Test::heldChannelsAreInTheFooterUntilReleased()
     desk.releaseUniverse(1);
     QVERIFY(eng->heldChannels().isEmpty());
     QTRY_VERIFY(entry().key.isEmpty());
+}
+
+/* A fixture patched onto an address the desk already holds: the desk's
+   fader channel there was keyed for "no fixture", and the next write made
+   a second one for the fixture, both on the same address -- which one went
+   out followed the hash's order (random per run). The desk rebuilds its
+   channels on a patch change: one an address, at the desk's value. */
+void SimpleDeskEngine_Test::aFixturePatchedUnderAHeldChannelLeavesOneChannel()
+{
+    SimpleDeskEngine eng(m_doc);
+    auto write = [this, &eng]() {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        eng.writeDMX(m_doc->masterTimer(), ua);
+        ua.at(0)->processFaders();
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    };
+    auto channelsAt = [&eng](quint32 address) {
+        int n = 0;
+        QSharedPointer<GenericFader> f = eng.m_fadersMap.value(0);
+        if (!f.isNull())
+            for (const FadeChannel &fc : f->channels())
+                if (fc.address() == address)
+                    ++n;
+        return n;
+    };
+    Universe *uni = m_doc->inputOutputMap()->universes().at(0);
+    eng.setValue(40, 150);
+    write();
+    QCOMPARE(int(uni->preGMValue(40)), 150);
+    Fixture *f = new Fixture(m_doc);
+    f->setChannels(1);
+    f->setUniverse(0);
+    f->setAddress(40);
+    QVERIFY(m_doc->addFixture(f));
+    eng.setValue(40, 160);
+    write();
+    QCOMPARE(channelsAt(40), 1);
+    QCOMPARE(int(uni->preGMValue(40)), 160);
+    f->setAddress(60);                  // moved off it again
+    eng.setValue(40, 170);
+    write();
+    QCOMPARE(channelsAt(40), 1);
+    QCOMPARE(int(uni->preGMValue(40)), 170);
 }
 
 QTEST_MAIN(SimpleDeskEngine_Test)
