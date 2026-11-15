@@ -413,7 +413,13 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
             {
                 m_propertiesAction->setEnabled(true);
                 m_testAction->setEnabled(true);
-                m_resetAction->setEnabled(true);
+                // Reset never drives a Show-only fixture; says why.
+                const QString why = Monitor::maintenanceRefusal(
+                    m_doc->fixture(item->data(KColumnName, PROP_ID).toUInt()));
+                m_resetAction->setEnabled(why.isEmpty());
+                m_resetAction->setToolTip(why.isEmpty()
+                    ? tr("Send this fixture's reset command (only shown when its definition has one).")
+                    : why);
             }
             else
             {
@@ -485,7 +491,12 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
         bool singleFixture = (item && item->data(KColumnName, PROP_ID).isValid() &&
                               m_fixtures_tree->selectedItems().size() == 1);
         m_testAction->setEnabled(singleFixture);
-        m_resetAction->setEnabled(singleFixture);
+        const QString resetWhy = singleFixture
+            ? Monitor::maintenanceRefusal(m_doc->fixture(item->data(KColumnName, PROP_ID).toUInt()))
+            : QString();
+        m_resetAction->setEnabled(singleFixture && resetWhy.isEmpty());
+        if (!resetWhy.isEmpty())
+            m_resetAction->setToolTip(resetWhy);
         // Locate works on any selection, including in Operate mode.
         m_locateAction->setEnabled(m_fixtures_tree->selectedItems().isEmpty() == false);
     }

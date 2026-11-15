@@ -28983,6 +28983,71 @@ void Monitor_Test::outputRulesAreOneRigUndoStep()
     delete doc;
 }
 
+/* Show only: Identify and Reset (Monitor::sendMaintenance) never drive a
+   Show-only fixture, in Design or Operate; the reason is said. */
+void Monitor_Test::maintenanceIsRefusedForAShowOnlyFixture()
+{
+    Doc *doc = new Doc(this);
+    Fixture *f = new Fixture(doc);
+    f->setName("Flame");
+    f->setChannels(1);
+    f->setUniverse(0);
+    f->setAddress(40);
+    QVERIFY(doc->addFixture(f));
+    f->setOutputRules(Fixture::ShowOnly);
+    doc->outputRuleKeeper()->rebuild();
+    QVERIFY(Monitor::maintenanceRefusal(f).isEmpty() == false);
+    Universe *uni = doc->inputOutputMap()->universes().at(0);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        for (Doc::Mode mode : { Doc::Design, Doc::Operate })
+        {
+            doc->setMode(mode);
+            mon.sendMaintenance(f->id(), 0, 200);
+            QCOMPARE(int(uni->preGMValue(40)), 0);
+        }
+        doc->setMode(Doc::Design);
+        // Any other fixture: sent as asked.
+        Fixture *g = new Fixture(doc);
+        g->setChannels(1);
+        g->setUniverse(0);
+        g->setAddress(41);
+        QVERIFY(doc->addFixture(g));
+        QVERIFY(Monitor::maintenanceRefusal(g).isEmpty());
+        mon.sendMaintenance(g->id(), 0, 200);
+        QCOMPARE(int(uni->preGMValue(41)), 200);
+    }
+    delete doc;
+}
+
+void Monitor_Test::showOnlyGreysIgnoreBlackout()
+{
+    Doc *doc = new Doc(this);
+    Fixture *f = new Fixture(doc);
+    f->setChannels(1);
+    f->setUniverse(0);
+    f->setAddress(0);
+    QVERIFY(doc->addFixture(f));
+    f->setOutputRules(Fixture::ExemptBlackout);
+    {
+        OutputRulesDialog dlg(doc, { f->id() });
+        QCheckBox *bo = dlg.findChild<QCheckBox *>("outputRuleBlackout");
+        QCheckBox *so = dlg.findChild<QCheckBox *>("outputRuleShowOnly");
+        QVERIFY(bo != nullptr && so != nullptr);
+        QVERIFY(bo->isEnabled() && bo->isChecked());
+        so->setChecked(true);
+        QVERIFY(bo->isEnabled() == false);
+        QVERIFY(bo->isChecked() == false);
+        QVERIFY(bo->toolTip().contains("Blackout always wins"));
+        QVERIFY(dlg.apply());
+        QCOMPARE(f->outputRules(), Fixture::OutputRules(Fixture::ShowOnly));
+        so->setChecked(false);
+        QVERIFY(bo->isEnabled());
+    }
+    delete doc;
+}
+
 /* ⌘C / ⌘V on the plot (Monitor::slotCopySelected / slotPasteFeatures), by
    their actions: what docs/features/shortcuts.md calls "Copy / paste
    structures with their fixtures". */

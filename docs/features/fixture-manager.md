@@ -816,9 +816,13 @@ or a flame relay. So:
   Highlight, the programmer's flash, focus calls, **Quick Focus** and
   **Venue Focus**, Refine, a fixture test, a power measurement.
 - **Driven**: in **Operate**, a GO from anywhere (the Run tab, the pad, the
-  phone, QLab, a Stream Deck), the cue's hits and effects, the Virtual
-  Console, and the **Simple Desk** — a fader pushed on its channel there is
-  your own hand on it, which is how you test a fogger before doors.
+  phone, QLab, a Stream Deck, the Show Tree, a VC cue list or a VC step
+  button, the Show tab's Play), the cue's hits and effects, and the
+  **Simple Desk**'s channel faders — a fader pushed on its channel there
+  is your own hand on it, which is how you test a fogger before doors.
+- **Not GOs, but the show**: in Operate, VC buttons, sliders, the XY pad,
+  audio triggers, a Control Map MIDI or OSC binding and the web page's
+  function command drive it as the show does.
 - **Its safe value**: every intensity channel at 0 (a relay open, a laser
   or flame off); a laser's, fogger's, hazer's or plain dimmer's every
   channel at 0; anything else at its default (a gobo or colour wheel open).
@@ -826,8 +830,15 @@ or a flame relay. So:
   left on it comes out (nor when you give it the rule while in Operate).
   Back to Design, it is safe again at once. A preview stopped in Operate
   fades out without ever reaching it.
-- **Blackout** puts it at its safe value too, unless it also ignores
-  Blackout (then it keeps what the show gives it).
+- **Blackout always wins**: it puts a Show-only fixture at its safe value,
+  even one marked Ignore Blackout. Ticking **Show only** unticks and greys
+  **Ignore Blackout** in the dialog, and says why.
+- **The emergency stop** (the pad's, the phone's or the laptop's **All
+  Off**) cuts every Show-only fixture to its safe value at once, with no
+  fade, and holds it there whatever drives it — Park, the Simple Desk, a
+  VC slider — until the next GO in Operate. The footer says **… held:
+  emergency stop, until the next GO**. Other lights stop as All Off always
+  stopped them.
 - **With On when not in use**, Show only wins: nothing turns a laser or a
   flame on just because nothing else is using it.
 - **Editors' Test buttons** (and the Show editor's Play, and what a Script
@@ -838,11 +849,20 @@ or a flame relay. So:
   Operate: a list you tried out in Design and left running keeps them safe
   after the switch until you GO on it (Run tab, pad, phone, QLab, the Show
   Tree, the VC cue list -- a GO on a running list makes it the show without
-  restarting it). Park and Mark set in Design hold them too, until set
-  again in Operate. A VC cue list's crossfader is a GO.
-- **The Simple Desk** is your own hand on the channel: a level you push
-  there drives it in Operate, also one left up from Design. A maintenance
-  command sent to the fixture itself (lamp on, reset) is sent as asked.
+  restarting it). Park and Mark set in Design hold them too, each fixture
+  until it is set again in Operate (parking another fixture does not wake
+  it), and so does a last look held from Design. A Simple Desk **cue
+  stack** is playback: one left playing from Design holds them until it is
+  stepped in Operate. The Show tab's **Play** in Operate is a GO (on a show
+  left running from Design it takes it, it does not pause it); in Design it
+  is held. A VC cue list's crossfader is a GO.
+- **The Simple Desk**'s channel faders are your own hand on the channel: a
+  level you push there drives it in Operate, also one left up from Design.
+- **Identify and Reset** (the plot's and Fixture Properties' DMX Controls,
+  the Fixtures tab's Reset) are refused for a Show-only fixture, in Design
+  and Operate, as Locate is — greyed, saying why.
+- **A Show-only fixture moved or patched mid-show** is held at its new
+  address at once.
 - **You can see it**: while it is held the footer says so in amber —
   **Lasers held: Design**, **Fog held: Blind**, **Flame L held: Design**,
   **3 Show-only fixtures held: Design** (click it for their Output Rules)

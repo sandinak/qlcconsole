@@ -27,6 +27,7 @@
 #include "chaseraction.h"
 #include "inputoutputmap.h"
 #include "showcontrol.h"
+#include "outputrulekeeper.h"
 #include "inputpatch.h"
 #include "mastertimer.h"
 #include "function.h"
@@ -133,9 +134,18 @@ void ShowControl::go(Chaser *chaser, int step)
     chaser->setAction(action);
 
     if (!chaser->isRunning())
+    {
         chaser->start(m_doc->masterTimer(), FunctionParent::master());
+        releaseEmergencyStop();
+    }
     else
         claim(chaser);
+}
+
+void ShowControl::releaseEmergencyStop()
+{
+    if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+        rules->releaseEmergencyStop();
 }
 
 void ShowControl::claim(Chaser *chaser)
@@ -147,6 +157,8 @@ void ShowControl::claim(Chaser *chaser)
     chaser->start(m_doc->masterTimer(), FunctionParent::master());
     if (chaser->isPaused())
         chaser->setPause(false);
+    // A GO: the emergency stop's hold lets go (Operate).
+    releaseEmergencyStop();
 }
 
 void ShowControl::goSubCue(Chaser *chaser, int step, int subCue)
@@ -155,7 +167,10 @@ void ShowControl::goSubCue(Chaser *chaser, int step, int subCue)
     // (the runner sees to it); a stopped list starts there.
     chaser->jumpToSubCue(step, subCue);
     if (!chaser->isRunning())
+    {
         chaser->start(m_doc->masterTimer(), FunctionParent::master());
+        releaseEmergencyStop();
+    }
     else
         claim(chaser);
 }
@@ -285,6 +300,10 @@ bool ShowControl::execute(const Request &request)
         for (Function *f : m_doc->functions())
             if (f->isRunning())
                 f->stop(FunctionParent::master());
+        // Show only: lasers, fog and flame out at once (no fade), and held
+        // until the next GO in Operate, whatever drives them.
+        if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+            rules->emergencyStop();
         emit cueListStopped(UINT_MAX);
         return finish(true, tr("everything stopped"));
     }

@@ -1198,12 +1198,16 @@ void Function::start(MasterTimer* timer, FunctionParent source, quint32 startTim
             // plays): nothing restarts, but the source is renewed -- a GO
             // in Operate makes a list left running from Design the show.
             m_sourceGates[already] = sourceGate(source);
+            storeGateLocked();
             sourcesLocker.unlock();
             sourcesChanged();
             return;
         }
         m_sources.append(source);
         m_sourceGates.append(sourceGate(source));
+        // Worked out now, on the thread that starts it: never a tick of a
+        // preview played as the show before the timer looks.
+        storeGateLocked();
         again = m_sources.size() > 1;
     }
     sourcesChanged();
@@ -1271,40 +1275,44 @@ Function::SourceGate Function::sourceGate(const FunctionParent &source) const
     return g;
 }
 
+bool Function::storeGateLocked()
+{
+    if (s_showOnlyInUse.load(std::memory_order_relaxed) == false)
+        return m_previewGate->exchange(false, std::memory_order_relaxed) != false;
+    bool any = false, notTheShow = true;
+    const quint32 epoch = GenericFader::liveEpoch();
+    for (const SourceGate &g : std::as_const(m_sourceGates))
+    {
+        any = true;
+        if (g.notTheShow)
+            continue;
+        // Started by a function: as that one is. Else the show only when
+        // added (or renewed) in this Operate session.
+        const bool real = g.parentGate ? g.parentGate->load(std::memory_order_relaxed) == false
+                                       : g.epoch == epoch;
+        if (real)
+            notTheShow = false;
+    }
+    /* Latched: with no source left it is stopping, and what fades out
+       fades as what it was -- a preview's level is never handed to the
+       show on its way out. */
+    if (any == false)
+        return false;
+    return m_previewGate->exchange(notTheShow, std::memory_order_relaxed) != notTheShow;
+}
+
 void Function::refreshPreviewGate()
 {
     const quint32 gen = s_sourcesGeneration.load(std::memory_order_relaxed);
     if (gen == m_previewGateGen)
         return;
     m_previewGateGen = gen;
-    if (s_showOnlyInUse.load(std::memory_order_relaxed) == false)
-    {
-        m_previewGate->store(false, std::memory_order_relaxed);
-        return;
-    }
-    bool any = false, notTheShow = true;
+    bool changed;
     {
         QMutexLocker sourcesLocker(&m_sourcesMutex);
-        const quint32 epoch = GenericFader::liveEpoch();
-        for (const SourceGate &g : std::as_const(m_sourceGates))
-        {
-            any = true;
-            if (g.notTheShow)
-                continue;
-            // Started by a function: as that one is. Else the show only
-            // when added (or renewed) in this Operate session.
-            const bool real = g.parentGate ? g.parentGate->load(std::memory_order_relaxed) == false
-                                           : g.epoch == epoch;
-            if (real)
-                notTheShow = false;
-        }
+        changed = storeGateLocked();
     }
-    /* Latched: with no source left it is stopping, and what fades out
-       fades as what it was -- a preview's level is never handed to the
-       show on its way out. */
-    if (any == false)
-        return;
-    if (m_previewGate->exchange(notTheShow, std::memory_order_relaxed) != notTheShow)
+    if (changed)
         sourcesChanged();   // the functions it started follow its gate: look again
 }
 

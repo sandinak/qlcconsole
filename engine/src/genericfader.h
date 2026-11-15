@@ -339,9 +339,12 @@ public:
      *  held last look): it is the show only when set in this Operate
      *  session. Stamps it now; from the next switch to Operate on, until
      *  stamped again, it holds the Show-only channels. */
-    void stampLiveEpoch()
+    void stampLiveEpoch() { setLiveEpoch(liveEpoch()); }
+    /** Stamp it with session @p epoch (a playback stamped when it was
+     *  last started or stepped: a Simple Desk cue stack) */
+    void setLiveEpoch(quint32 epoch)
     {
-        m_liveEpoch.store(liveEpoch(), std::memory_order_relaxed);
+        m_liveEpoch.store(epoch, std::memory_order_relaxed);
         m_liveBound.store(true, std::memory_order_relaxed);
     }
 

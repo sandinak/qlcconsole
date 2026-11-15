@@ -157,6 +157,34 @@ private slots:
     /** 8: made Show only mid-show, only that fixture is reset */
     void markingOneMidShowResetsOnlyIt();
 
+    /* Third safety review (review/048-show-only-3): each is a path the
+       rule as set says must hold (or drive) a Show-only fixture. */
+    /** R3-1: a Park set in Design stays held when another fixture is parked in Operate */
+    void aDesignParkStaysHeldWhenAnotherFixtureIsParkedLive();
+    /** R3-2: a preview started and stopped before the timer ticks sends nothing */
+    void aPreviewStoppedBeforeItsFirstTickSendsNothing();
+    /** R3-3: a Simple Desk cue stack left playing from Design waits for a GO */
+    void aSimpleDeskCueStackLeftRunningFromDesignIsHeld();
+    /* R3-4 (Identify / Reset refused for a Show-only fixture) is
+       Monitor_Test::maintenanceIsRefusedForAShowOnlyFixture */
+    /** R3-5: Blackout wins over a Show-only fixture marked Ignore Blackout */
+    void blackoutWinsOverShowOnlyIgnoringBlackout();
+    /** R3-6: the emergency stop (All Off) takes it out at once, not over a fade */
+    void emergencyStopTakesItOutAtOnce();
+    /** R3-7: a VC "next step" button on a list left running from Design takes */
+    void aVcStepButtonOnADesignListDrivesIt();
+
+    /* Third review: the fixes' own tests */
+    /** R3-1: Mark and a held last look are stamped per channel too */
+    void aDesignMarkStaysHeldWhenAnotherIsMarkedLive();
+    void aDesignLastLookStaysHeldAtTheNextGo();
+    /** R3-6: the e-stop holds them, a Simple Desk fader too, until a GO */
+    void emergencyStopLatchesUntilTheNextGo();
+    /** 9: a Show-only fixture moved mid-show is held at its new address
+     *  at once */
+    void aShowOnlyFixtureMovedMidShowIsHeldAtOnce();
+    void theHeldTextSaysEmergencyStop();
+
 private:
     /** One processFaders() frame; the output value at @p address */
     int frame(int address);

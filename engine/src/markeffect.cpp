@@ -45,7 +45,7 @@ void MarkEffect::markFixture(quint32 fixtureId, const QHash<quint32, uchar> &val
         return;
     }
     m_marked.insert(fixtureId, values);
-    rebuild();
+    rebuild(fixtureId);
 }
 
 void MarkEffect::unmarkFixture(quint32 fixtureId)
@@ -83,7 +83,7 @@ void MarkEffect::slotFixtureRevealed(quint32 fixtureId)
     unmarkFixture(fixtureId);
 }
 
-void MarkEffect::rebuild()
+void MarkEffect::rebuild(quint32 renewFixture)
 {
     QList<FixEntry> entries;
 
@@ -154,8 +154,11 @@ void MarkEffect::rebuild()
             (wled ? wledLevels : levels).append({ e.fixtureId, ch, w.second });
         }
     }
-    m_layer.set(levels);
-    m_wledLayer.set(wledLevels);
+    // Show only: the fixture just marked is set now; the others keep the
+    // session they were marked in (an auto-unmark rebuild renews nothing).
+    auto renewed = [renewFixture](const OutputLayer::Level &l) { return l.fixtureId == renewFixture; };
+    m_layer.set(levels, renewed);
+    m_wledLayer.set(wledLevels, renewed);
 
     {
         QMutexLocker locker(&m_mutex);

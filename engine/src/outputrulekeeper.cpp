@@ -37,13 +37,25 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     : QObject(doc)
     , m_doc(doc)
 {
-    connect(doc, &Doc::fixtureAdded, this, [this](quint32) { scheduleRebuild(); });
+    /* A Show-only fixture added, moved or (re)patched -- mid-show too: its
+       new address is held at once, not after the event loop comes round
+       (one frame there could fire it). Anything else waits, coalesced. */
+    auto changed = [this](quint32 id) {
+        const Fixture *fx = m_doc->fixture(id);
+        if ((fx != nullptr && (fx->outputRules() & Fixture::ShowOnly)) || m_showOnly.contains(id))
+            rebuild();
+        else
+            scheduleRebuild();
+    };
+    connect(doc, &Doc::fixtureAdded, this, changed);
     connect(doc, &Doc::fixtureRemoved, this, [this](quint32) { scheduleRebuild(); });
-    connect(doc, &Doc::fixtureChanged, this, [this](quint32) { scheduleRebuild(); });
+    connect(doc, &Doc::fixtureChanged, this, changed);
     connect(doc, &Doc::loaded, this, [this]() { scheduleRebuild(); });
     // Another show: a new show's setting, and OnAtOperate waits for its
     // own first Operate.
     connect(doc, &Doc::cleared, this, [this]() {
+        // Another show: its own start, no emergency stop carried over.
+        setEmergencyStop(false);
         m_onAtOpenWhen = kDefaultOnAtOpenWhen;
         m_seenOperate = m_doc->mode() == Doc::Operate;
         scheduleRebuild();
@@ -182,7 +194,9 @@ QByteArray OutputRuleKeeper::bitsFor(quint32 universe) const
         };
         if (rules & Fixture::ExemptGrandMaster)
             mark(Fixture::ExemptGrandMaster, char(Universe::GMExempt));
-        if (rules & Fixture::ExemptBlackout)
+        // Blackout always wins over Show only: Ignore Blackout does not
+        // apply to a Show-only fixture.
+        if ((rules & Fixture::ExemptBlackout) && (rules & Fixture::ShowOnly) == 0)
             mark(Fixture::ExemptBlackout, char(Universe::BlackoutExempt));
         if (rules & Fixture::Switch)
             mark(Fixture::Switch, char(Universe::SwitchOutput));
@@ -228,10 +242,48 @@ QByteArray OutputRuleKeeper::safeValuesFor(quint32 universe) const
     return safe;
 }
 
+void OutputRuleKeeper::emergencyStop()
+{
+    /* Every Show-only channel out at once -- no fade -- and held there,
+       whatever drives it (Park, the Simple Desk, a VC slider), until the
+       next GO in Operate. And a new session: what ran before the stop is
+       not the show after it either. */
+    Function::startLiveSession();
+    if (m_doc->masterTimer() != nullptr)
+        m_doc->masterTimer()->refreshPreviewGates();
+    setEmergencyStop(true);
+    // At once, not at the next frame.
+    for (Universe *u : m_doc->inputOutputMap()->universes())
+        if (u != nullptr && u->showOnlyChannelCount() > 0)
+            u->dumpOutput(u->postGMValues()->mid(0, u->usedChannels()), true);
+}
+
+void OutputRuleKeeper::releaseEmergencyStop()
+{
+    if (m_emergencyStop && m_doc->mode() == Doc::Operate)
+        setEmergencyStop(false);
+}
+
+void OutputRuleKeeper::setEmergencyStop(bool stop)
+{
+    if (m_emergencyStop == stop)
+        return;
+    m_emergencyStop = stop;
+    for (Universe *u : m_doc->inputOutputMap()->universes())
+        if (u != nullptr)
+            u->setShowOnlyEmergencyStop(stop);
+    const HeldBy by = showOnlyHeldBy();
+    if (by != m_lastHeldBy)
+        m_lastHeldBy = by;
+    emit showOnlyChanged();
+}
+
 OutputRuleKeeper::HeldBy OutputRuleKeeper::showOnlyHeldBy() const
 {
     if (m_showOnly.isEmpty())
         return NotHeld;
+    if (m_emergencyStop)
+        return HeldByEmergencyStop;
     if (m_doc->mode() != Doc::Operate)
         return HeldByDesign;
     if (m_doc->inputOutputMap()->outputInhibited())
@@ -244,7 +296,8 @@ QString OutputRuleKeeper::showOnlyHeldText() const
     const HeldBy by = showOnlyHeldBy();
     if (by == NotHeld)
         return QString();
-    const QString why = by == HeldByBlind ? tr("Blind") : tr("Design");
+    const QString why = by == HeldByEmergencyStop ? tr("emergency stop, until the next GO")
+                      : by == HeldByBlind ? tr("Blind") : tr("Design");
 
     /* Named by what they are when they are all one kind: "Lasers held". */
     int lasers = 0, smoke = 0;
@@ -314,7 +367,10 @@ void OutputRuleKeeper::rebuild()
     }
 
     const bool armed = onAtOpenArmed();
-    QList<Universe *> ua = io->claimUniverses();
+    /* The universes as they are, not claimed: rebuild() runs straight from
+       a fixture change, which can come from code that holds the claim. A
+       universe takes its rules under its own lock. */
+    const QList<Universe *> ua = io->universes();
     for (int i = 0; i < ua.size(); ++i)
     {
         Universe *u = ua.at(i);
@@ -327,8 +383,8 @@ void OutputRuleKeeper::rebuild()
         u->setShowOnlySafeValues(i < safe.size() ? safe.at(i) : QByteArray());
         u->setOutputRules(i < bits.size() ? bits.at(i) : QByteArray());
         u->setShowOnlyLive(m_doc->mode() == Doc::Operate);
+        u->setShowOnlyEmergencyStop(m_emergencyStop);
     }
-    io->releaseUniverses(false);
     const HeldBy by = showOnlyHeldBy();
     if (showOnlyListChanged || by != m_lastHeldBy)
     {

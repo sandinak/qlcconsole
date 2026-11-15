@@ -780,10 +780,16 @@ void Universe::setShowOnlyLive(bool live)
     m_showOnlyLive.store(true, std::memory_order_relaxed);
 }
 
+void Universe::setShowOnlyEmergencyStop(bool stop)
+{
+    m_showOnlyEStop.store(stop, std::memory_order_relaxed);
+}
+
 bool Universe::showOnlyHeld() const
 {
     return showOnlyChannelCount() > 0
-           && (showOnlyLive() == false || m_inhibitOutput.load(std::memory_order_relaxed));
+           && (showOnlyLive() == false || m_inhibitOutput.load(std::memory_order_relaxed)
+               || showOnlyEmergencyStop());
 }
 
 void Universe::writeFader(GenericFader *fader, bool keepShowOnly)
@@ -820,7 +826,8 @@ void Universe::holdShowOnly(QByteArray &frame, bool held, bool blackout)
     {
         if (c >= frame.size())
             break;              // in order: the rest are past the frame too
-        if (held || (blackout && (uchar(m_channelsMask->at(c)) & BlackoutExempt) == 0))
+        // Blackout always wins: Show only overrides Ignore Blackout.
+        if (held || blackout)
             // Through its modifier, as any value it sends: on an inverted
             // channel a raw 0 would be full on.
             frame[c] = char(applyModifiers(c, uchar(m_showOnlySafe.at(c))));
@@ -1541,7 +1548,8 @@ void Universe::dumpOutputFrame(const QByteArray &data, bool dataChanged, bool li
     // A reset still to come (a channel just made Show only while live) is
     // held until the frame that does it.
     const bool showOnlyHold = showOnly && (live == false || inhibit
-                                           || m_showOnlyReset.load(std::memory_order_relaxed));
+                                           || m_showOnlyReset.load(std::memory_order_relaxed)
+                                           || m_showOnlyEStop.load(std::memory_order_relaxed));
 
     // Fork Blind: hold the physical rig dark while the preview keeps running.
     // processFaders() still emits universeWritten() (the 2D monitor source),

@@ -31,6 +31,9 @@
 #include "showtreecontroller.h"
 #include "chaser.h"
 #include "doc.h"
+#include "outputrulekeeper.h"
+#include "mastertimer.h"
+#include "fixture.h"
 #include "audio.h"
 #include "efx.h"
 #include <QBuffer>
@@ -403,6 +406,34 @@ void ShowManager_Test::theItemEditorGoesWithItsFunction()
     m_doc->clearContents();
     QCOMPARE(m_manager->m_editorFunctionID, Function::invalidId());
     QVERIFY(m_manager->m_currentEditor == nullptr);
+}
+
+
+void ShowManager_Test::playInOperateClaimsAShowRunningFromDesign()
+{
+    Fixture *f = new Fixture(m_doc);
+    f->setChannels(1);
+    f->setUniverse(0);
+    f->setAddress(0);
+    QVERIFY(m_doc->addFixture(f));
+    f->setOutputRules(Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    MasterTimer *timer = m_doc->masterTimer();
+    m_manager->slotStartPlayback();         // Play in Design
+    timer->timerTick();
+    QVERIFY(m_show->isRunning());
+    m_doc->setMode(Doc::Operate);
+    timer->timerTick();
+    QVERIFY(m_show->previewGate()->load()); // left running from Design: held
+    m_manager->slotStartPlayback();         // Play in Operate
+    timer->timerTick();
+    QVERIFY(m_show->isRunning());
+    QVERIFY(m_show->isPaused() == false);   // not a pause
+    QVERIFY(m_show->previewGate()->load() == false);
+    m_show->stop(FunctionParent::master());
+    timer->timerTick();
+    timer->timerTick();
+    m_doc->setMode(Doc::Design);
 }
 
 QTEST_MAIN(ShowManager_Test)

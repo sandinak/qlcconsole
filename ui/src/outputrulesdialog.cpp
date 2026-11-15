@@ -79,7 +79,7 @@ OutputRulesDialog::OutputRulesDialog(Doc *doc, const QList<quint32> &fixtureIds,
         { Fixture::ShowOnly, tr("Show only"),
           tr("Only a GO in Operate drives it. In Design, Blind, the Workbench, Locate, Solo, focus "
              "and previews it stays safe -- off, closed -- and the plot draws what it would do. "
-             "It wins over On when not in use."),
+             "It wins over On when not in use; Blackout wins over it."),
           "outputRuleShowOnly" },
     };
 
@@ -117,6 +117,32 @@ OutputRulesDialog::OutputRulesDialog(Doc *doc, const QList<quint32> &fixtureIds,
         note->setFont(f);
         note->setEnabled(false);    // dimmed, as a hint
         lay->addWidget(note);
+    }
+
+    /* Blackout always wins over Show only: with Show only ticked, Ignore
+       Blackout is unticked and greyed, saying why. */
+    QCheckBox *showOnly = m_boxes.value(Fixture::ShowOnly);
+    QCheckBox *blackout = m_boxes.value(Fixture::ExemptBlackout);
+    if (showOnly != nullptr && blackout != nullptr)
+    {
+        const QString blackoutTip = blackout->toolTip();
+        auto follow = [showOnly, blackout, blackoutTip]() {
+            const bool on = showOnly->checkState() == Qt::Checked;
+            if (on)
+            {
+                blackout->setTristate(false);
+                blackout->setChecked(false);
+                blackout->setToolTip(tr("Blackout always wins over Show only: a Show-only fixture "
+                                        "goes out with Blackout."));
+            }
+            else
+            {
+                blackout->setToolTip(blackoutTip);
+            }
+            blackout->setEnabled(!on);
+        };
+        connect(showOnly, &QCheckBox::checkStateChanged, this, follow);
+        follow();
     }
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);

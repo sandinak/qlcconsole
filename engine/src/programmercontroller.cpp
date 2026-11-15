@@ -1363,7 +1363,17 @@ void ProgrammerController::stepCurrentChaser(int direction)
     }
     ChaserAction action;
     action.m_action = (direction > 0) ? ChaserNextStep : ChaserPreviousStep;
+    // Every field: ChaserAction has no defaults, and a step played at
+    // whatever intensity was on the stack came out dark (found by the
+    // Show only review's test, in Release).
+    action.m_stepIndex = 0;
+    action.m_masterIntensity = 1.0;
+    action.m_stepIntensity = 1.0;
+    action.m_fadeMode = Chaser::FromFunction;
     chaser->setAction(action);
+    // The VC's step button is a GO: the list is the show from now on.
+    if (sc != NULL)
+        sc->claim(chaser);
 }
 
 quint32 ProgrammerController::findMatchingScene(

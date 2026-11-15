@@ -25,6 +25,7 @@
 #include <QMutex>
 #include <QObject>
 #include <QList>
+#include <QSet>
 #include <QPair>
 
 #include "outputlayer.h"
@@ -72,7 +73,9 @@ public:
 private:
     /** Lay m_entries on the output. Call with m_mutex held, so two threads
      *  changing the hold can't leave the output on the older one. */
-    void apply();
+    /** Lay m_entries on the output; @p renewAddresses (absolute) or all
+     *  (@p renewAll) were captured just now (Show only's session stamp) */
+    void apply(const QSet<quint32> &renewAddresses = QSet<quint32>(), bool renewAll = false);
 
     Doc *m_doc;
 

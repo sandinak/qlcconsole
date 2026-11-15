@@ -23,7 +23,7 @@ LastLookEffect::~LastLookEffect()
 {
 }
 
-void LastLookEffect::apply()
+void LastLookEffect::apply(const QSet<quint32> &renewAddresses, bool renewAll)
 {
     // By address: the fixture a held channel is on is looked up again, so
     // the fader treats it as that fixture's channel.
@@ -36,14 +36,19 @@ void LastLookEffect::apply()
         levels.append({ Fixture::invalidId(),
                         quint32(e.universeId) * UNIVERSE_SIZE + quint32(e.address), e.value });
     }
-    m_layer.set(levels);
+    /* Show only: a look captured now is set now (the show, in Operate);
+       what was held from before -- a capture in Design -- keeps its
+       session, so a GO that lets some fixtures go does not wake the rest. */
+    m_layer.set(levels, [&renewAddresses, renewAll](const OutputLayer::Level &l) {
+        return renewAll || renewAddresses.contains(l.channel);
+    });
 }
 
 void LastLookEffect::hold(const QList<ChannelHold> &channels)
 {
     QMutexLocker locker(&m_mutex);
     m_entries = channels;
-    apply();
+    apply(QSet<quint32>(), true);
 }
 
 void LastLookEffect::addHold(const QList<ChannelHold> &channels)
@@ -64,7 +69,11 @@ void LastLookEffect::addHold(const QList<ChannelHold> &channels)
             merged.append(e);
     merged.append(channels);
     m_entries = merged;
-    apply();
+    QSet<quint32> fresh;
+    for (const ChannelHold &c : channels)
+        if (c.universeId >= 0 && c.address >= 0 && c.address < UNIVERSE_SIZE)
+            fresh.insert(quint32(c.universeId) * UNIVERSE_SIZE + quint32(c.address));
+    apply(fresh, false);
 }
 
 void LastLookEffect::releaseFixtures(const QList<quint32> &fixtureIds)

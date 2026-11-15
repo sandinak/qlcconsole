@@ -2467,6 +2467,20 @@ void AppViews_Test::showOnlyShots()
         dlg.show();
         settle();
         QVERIFY(dlg.grab().save(QStringLiteral("%1/showonly-dialog.png").arg(dir)));
+        // The dialog over the window, as it is seen, at three window sizes.
+        const QPixmap d = dlg.grab();
+        for (const QSize &size : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+        {
+            m_app->resize(size);
+            settle();
+            QPixmap w = m_app->grab();
+            {
+                QPainter p(&w);
+                p.drawPixmap((w.width() - d.width()) / 2, (w.height() - d.height()) / 2, d);
+            }
+            QVERIFY(w.save(QStringLiteral("%1/showonly-dialog-%2x%3.png")
+                           .arg(dir).arg(size.width()).arg(size.height())));
+        }
     }
     removeFixtures(ids);
     m_app->setWorkspaceView(view);
