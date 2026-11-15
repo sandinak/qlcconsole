@@ -116,14 +116,51 @@ public:
      */
     bool reconnect();
 
+    /*
+     * Hot-plug on hardware lines (QLCIOPlugin::linesAreHardware(): USB,
+     * MIDI and the like) with Show-only fixtures -- review 13's rules,
+     * kept by InputOutputMap (slotPluginConfigurationChanged(),
+     * retryOfflinePatches(), loadPatch()). With no Show-only universe
+     * anywhere, everything is exactly as stock QLC+ does it.
+     *
+     *  H1. A Show-only universe on a hardware line reopens by itself in one
+     *      case only: its recorded device (a unique name) is back at the
+     *      same line number. Pending from load, the name changed, the device
+     *      back at another number, an identical-name count change: it stays
+     *      held -- "<device> missing or moved: re-patch to use it" -- until
+     *      the operator re-patches it (I/O tab, Connections).
+     *  H2. No other universe, ordinary or Show-only, is ever opened by
+     *      itself -- by number, by name, by retry or on load -- onto a line
+     *      named as the recorded device of a Show-only universe that is
+     *      open, held or pending from load. It is held instead, and says
+     *      which interface took its line.
+     *  H3. A held ordinary universe reopens when its recorded device is
+     *      back at its own number, or anywhere if the name is unique and the
+     *      line is free and not protected by H2.
+     *  H4. There is no "reconnect as before": identical names with a
+     *      Show-only universe recorded on that name are held (H1, H2) until
+     *      re-patched.
+     *  H5. On load, a name that more than one line carries resolves to the
+     *      saved line number when that line carries it; otherwise a
+     *      Show-only universe stays pending (H1), an ordinary one takes the
+     *      first, as stock does. For such names H2 holds by line on load:
+     *      nothing loads onto the line a Show-only universe has or was
+     *      saved on. (The I/O map is saved before the fixtures: a file
+     *      load holds every output until the show is read, then checks each
+     *      patch it opened against H1, H2, H5 -- InputOutputMap::
+     *      recheckPatchesAfterLoad() -- before the first frame.)
+     *  Once no Show-only universe is left, every hold made for these
+     *  reasons is let go as stock would have reconnected it (by number).
+     */
+
     /** A hardware line (USB, MIDI) whose name now is not the one it had
      *  when this patch was made: another device took its number */
     bool lineNameChanged() const;
-    /** The name of the device this patch was made to (a hardware line),
-     *  open or held for a device change; empty otherwise */
+    /** The name of the device this patch was made to (a hardware line):
+     *  open, held for a device change, or pending on it from load (its
+     *  saved name); empty otherwise */
     QString recordedLineName() const;
-    /** How many lines carried that name when the patch was made, and now
-     *  (two of one model with no serial: review 12 F3) */
+    /** How many lines carried that name when the patch was (re)opened */
     int recordedLineNameCount() const { return m_lineNameCount; }
     int lineNameCountNow() const;
 
@@ -131,22 +168,28 @@ public:
     enum DeviceHold
     {
         NoDeviceHold = 0,
-        /** Reopened by itself once its device is back (InputOutputMap::
-         *  retryOfflinePatches()) */
-        HeldDeviceChanged,
-        /** Nobody can tell which line is its device (identical names):
-         *  only "Reconnect as before", confirmed (review 12 F3) */
-        HeldNeedsConfirm
+        /** Held by the rules above; reconnectHeld() says why */
+        HeldDeviceChanged
     };
-    /** Review 11/12: kept pending on the name it was patched with, @p why
-     *  said. @p closeTheLine false: another open patch uses the line, which
-     *  stays open for it (the plugin only forgets this universe there). */
-    void holdForDeviceChange(const QString &why, bool closeTheLine, bool needsConfirm = false);
+    /** Held by the rules above, @p why said: kept pending on the name it
+     *  was patched with and its number. @p closeTheLine false: another open
+     *  patch uses the line, which stays open for it (the plugin only
+     *  forgets this universe there). */
+    void holdForDeviceChange(const QString &why, bool closeTheLine, bool sendClosing = false);
+    /** The line number a show load saved for this patch, when it opened
+     *  it (InputOutputMap::loadPatch()); UINT_MAX otherwise. The check after
+     *  the load (H1, H5) reads it; any other set() forgets it. */
+    void setLoadedLine(quint32 line) { m_loadedLine = line; }
+    quint32 loadedLine() const { return m_loadedLine; }
+    /** A pending patch (from load, or held) the rules keep pending: said */
+    void markDeviceHold(const QString &why) { m_deviceHold = HeldDeviceChanged; m_reconnectHeld = why; }
     DeviceHold deviceHold() const { return m_deviceHold; }
-    /** Held, and now nobody can tell which line is its device: only a
-     *  confirmed "Reconnect as before" reopens it */
-    void markNeedsConfirm(const QString &why) { m_deviceHold = HeldNeedsConfirm; m_reconnectHeld = why; }
-    /** Why holdForDeviceChange() left this patch pending; empty if not */
+    /** It was open when it was held (a hot-plug): let go, it reopens by
+     *  number, as stock would have; else it resolves as a load does */
+    bool heldFromOpen() const { return m_heldFromOpen; }
+    /** Let go of the hold (no Show-only universe left): plain pending */
+    void clearDeviceHold() { m_deviceHold = NoDeviceHold; m_reconnectHeld.clear(); m_heldFromOpen = false; }
+    /** Why this patch is held; empty if not */
     QString reconnectHeld() const { return m_reconnectHeld; }
 
     /** Two parameter values that mean the same ("1" and 1) */
@@ -232,6 +275,8 @@ private:
     QString m_heldReason;
     QString m_reconnectHeld;
     DeviceHold m_deviceHold = NoDeviceHold;
+    bool m_heldFromOpen = false;
+    quint32 m_loadedLine = UINT_MAX;
     int m_lineNameCount = 0;
     /** The patch parameters cache */
     QMap<QString, QVariant>m_parametersCache;

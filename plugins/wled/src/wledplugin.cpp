@@ -297,39 +297,77 @@ bool WledPlugin::postNowSync(const QString &ip, const QByteArray &body, int wait
     return written;
 }
 
-void WledPlugin::postClosing(const QString &ip, const QByteArray &body)
+void WledPlugin::markClosingSent(quint32 universe, const QString &ip, const QJsonObject &state)
+{
+    // m_mutex held. What the device has now is the closing state.
+    auto it = m_targets.find(universe);
+    if (it == m_targets.end())
+        return;
+    for (Device &d : it.value().devices)
+        if (d.ip == ip)
+        {
+            d.sent = state;
+            d.postedAt = QDateTime::currentMSecsSinceEpoch();
+        }
+}
+
+void WledPlugin::postClosing(const ClosingPost &c, int attempt)
 {
     /* The event loop running: sent through the network manager, never
        waited on -- the caller holds the engine's frame lock (review 11 M-2).
        It is not cut off: it finishes on its own however long the device
        takes (a socket waited on and timed out was aborted -- the closing
        state lost under load). Until it is done, nothing newer goes to this
-       device (closingInFlight()). */
-    QNetworkRequest req(QUrl(QStringLiteral("http://%1/json/state").arg(ip)));
+       device (m_closingInFlight). The device has it once it said so
+       (review 13 L5): only then is it what was sent; failed, it is tried
+       once more. */
+    QNetworkRequest req(QUrl(QStringLiteral("http://%1/json/state").arg(c.ip)));
     req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     req.setTransferTimeout(4000);
-    QNetworkReply *reply = m_nam->post(req, body);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, ip]() {
+    QNetworkReply *reply = m_nam->post(req, c.body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, c, attempt]() {
         reply->deleteLater();
         const QNetworkReply::NetworkError err = reply->error();
         // The device closing the connection after taking it: sent.
-        if (err != QNetworkReply::NoError && err != QNetworkReply::RemoteHostClosedError)
-            qWarning() << "[WLED] closing state to" << ip << "not taken:" << reply->errorString();
+        const bool ok = err == QNetworkReply::NoError || err == QNetworkReply::RemoteHostClosedError;
+        if (!ok && attempt == 0)
+        {
+            qInfo() << "[WLED] closing state to" << c.ip << "not taken (" << reply->errorString()
+                    << "): once more";
+            postClosing(c, 1);
+            return;
+        }
+        if (!ok)
+            qWarning() << "[WLED] closing state to" << c.ip << "not taken:" << reply->errorString();
         {
             QMutexLocker locker(&m_mutex);
-            if (--m_closingInFlight[ip] <= 0)
-                m_closingInFlight.remove(ip);
+            if (ok)
+                markClosingSent(c.universe, c.ip, c.state);
+            if (--m_closingInFlight[c.ip] <= 0)
+                m_closingInFlight.remove(c.ip);
         }
         kick();         // what changed meanwhile goes now
     });
+}
+
+void WledPlugin::postQueuedClosing(const QString &ip)
+{
+    // A look POST to @p ip is done: the closing state waiting for it goes now.
+    ClosingPost c;
+    {
+        QMutexLocker locker(&m_mutex);
+        if (m_closingQueued.contains(ip) == false)
+            return;
+        c = m_closingQueued.take(ip);
+    }
+    postClosing(c, 0);
 }
 
 void WledPlugin::flushOutput(quint32 output, quint32 universe)
 {
     if (output != 0)
         return;
-    struct Post { QString ip; QByteArray body; };
-    QList<Post> posts;
+    QList<ClosingPost> posts;
     /* As the app quits there is no event loop left to send it later: then
        it is waited on, about a second at most, as R10 did. */
     const bool noEventLoop = QThread::currentThread()->loopLevel() == 0
@@ -351,27 +389,45 @@ void WledPlugin::flushOutput(quint32 output, quint32 universe)
             QJsonObject body = trimmed(message(state, d, nullptr), state, d.sent,
                                        d.layoutGen == d.sentLayoutGen);
             body[QStringLiteral("transition")] = 0;     // at once: it is the last one
-            posts << Post { d.ip, QJsonDocument(body).toJson(QJsonDocument::Compact) };
-            d.sent = state;
-            d.postedAt = QDateTime::currentMSecsSinceEpoch();
-            if (!noEventLoop)
-                m_closingInFlight[d.ip]++;
+            const ClosingPost c { d.ip, QJsonDocument(body).toJson(QJsonDocument::Compact), universe, state };
+            if (noEventLoop)
+            {
+                posts << c;
+                continue;
+            }
+            /* L5: a look already on its way to this device would land after
+               the closing state: the closing state waits for it (the newest
+               one only: it supersedes any queued before). */
+            if (d.inFlight)
+            {
+                if (m_closingQueued.contains(d.ip) == false)
+                    m_closingInFlight[d.ip]++;
+                m_closingQueued.insert(d.ip, c);
+                continue;
+            }
+            m_closingInFlight[d.ip]++;
+            posts << c;
         }
     }
     if (noEventLoop)
     {
         QElapsedTimer budget;
         budget.start();
-        for (const Post &p : std::as_const(posts))
+        for (const ClosingPost &c : std::as_const(posts))
         {
             const int left = restoreBudgetMs - int(budget.elapsed());
-            if (left <= 0 || !postNowSync(p.ip, p.body, left))
-                qInfo() << "[WLED] closing state to" << p.ip << "not sent as the app quits";
+            if (left > 0 && postNowSync(c.ip, c.body, left))
+            {
+                QMutexLocker locker(&m_mutex);
+                markClosingSent(c.universe, c.ip, c.state);
+            }
+            else
+                qInfo() << "[WLED] closing state to" << c.ip << "not sent as the app quits";
         }
         return;
     }
-    for (const Post &p : std::as_const(posts))
-        postClosing(p.ip, p.body);
+    for (const ClosingPost &c : std::as_const(posts))
+        postClosing(c, 0);
 }
 
 void WledPlugin::setParameter(quint32 universe, quint32 line, Capability type,
@@ -829,6 +885,8 @@ void WledPlugin::send(quint32 universe, int index)
     QNetworkReply *reply = m_nam->post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
     connect(reply, &QNetworkReply::finished, this, [this, reply, universe, index, state, ip, revs, gen]() {
         reply->deleteLater();
+        // L5: a closing state that waited for this look goes now, after it.
+        postQueuedClosing(ip);
         const bool ok = reply->error() == QNetworkReply::NoError;
         {
             QMutexLocker locker(&m_mutex);

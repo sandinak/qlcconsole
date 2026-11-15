@@ -115,11 +115,16 @@ private slots:
     void review12_anOrdinaryUniverseIsNotReopenedOnTheShowOnlyDevice();
     void review12_identicalInterfacesAnOrdinaryUniverseIsNotReopenedOnTheLaserOne();
     void review12_aHeldUniverseReopensWhenItsDeviceIsBackAtAnotherNumber();
-    void identicalInterfacesReconnectOnlyAsBeforeConfirmed();
+    void h4_identicalInterfacesWaitForARepatch();
+    void h1_aShowOnlyUniverseComesBackOnlyOnItsOwnNumber();
+    void h2_nothingOpensByItselfOntoAShowOnlyDevice();
+    void h3_anOrdinaryHoldEndsOnItsOwnNumber();
+    void h5_identicalNamesLoadOnTheirSavedLines();
+    void l3_holdsLetGoWithTheLastShowOnlyUniverse();
+    void aShowLoadedOntoMovedInterfacesKeepsItsLasersHeld();
     void aHoldOnASharedLineForgetsOnlyThatUniverse();
     void review13_pendingShowOnlyDeviceIsNotTakenByNumberOnSwap();
     void review13_pendingShowOnlyDeviceIsNotTakenByNumberOnPlug();
-    void review13_reconnectAsBeforeNotOntoAnotherShowOnlyDevice();
     void review13_anOrdinaryUniverseHeldOffTheLaserComesBackWithItsDevice();
     void review13_loadingIdenticalInterfacesKeepsTheLaserLineItsOwn();
     void removeUniverse();

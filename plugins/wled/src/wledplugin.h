@@ -299,9 +299,25 @@ private:
      *  device is left as its layout, not turned round. Best effort, at most
      *  about a second however many do not answer; no event loop. */
     static void restoreDirections(const QVector<Device> &devices);
+    /** A closing state for one device: where, what, and what it is */
+    struct ClosingPost
+    {
+        QString ip;
+        QByteArray body;
+        quint32 universe = 0;
+        QJsonObject state;
+    };
     /** A closing state POSTed through the network manager, never waited
-     *  on; until it is done no newer look goes to @p ip (review 12 F8) */
-    void postClosing(const QString &ip, const QByteArray &body);
+     *  on; until it is done no newer look goes to that device (review 12
+     *  F8); marked sent only once taken, tried once more if not
+     *  (@p attempt: 0, 1) -- review 13 L5 */
+    void postClosing(const ClosingPost &c, int attempt);
+    /** The closing state that waited for a look POST to @p ip, sent */
+    void postQueuedClosing(const QString &ip);
+    /** The devices of @p universe at @p ip have @p state (m_mutex held) */
+    void markClosingSent(quint32 universe, const QString &ip, const QJsonObject &state);
+    /** Closing states waiting for a look POST still on its way (m_mutex) */
+    QHash<QString, ClosingPost> m_closingQueued;
     /** The same with no event loop (the app quitting): waited on, at most
      *  @p waitMs */
     static bool postNowSync(const QString &ip, const QByteArray &body, int waitMs);

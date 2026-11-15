@@ -172,6 +172,7 @@ private:
     bool m_blackout;
     /** Current Blind (output-inhibited) state */
     bool m_outputInhibited = false;
+    bool m_loadHold = false;
 
     /*********************************************************************
      * Universes
@@ -502,12 +503,19 @@ public:
     /** The same, leaving @p skip alone (held in the pass that calls it) */
     int retryOfflinePatches(const QSet<const OutputPatch *> &skip);
 
-    /** Review 12 F3: "Reconnect as before" -- every output patch of
-     *  @p universe held for a device change is reopened on the line number
-     *  it had, as stock QLC+ would have done, once the operator confirmed
-     *  it (identical interfaces nobody can tell apart). Not on a line
-     *  another open patch uses. Returns how many reopened. */
-    int reconnectAsBefore(quint32 universe);
+    /** Review 13 L3: no Show-only universe left -- every hold made for the
+     *  hardware-line rules (outputpatch.h, H1-H5) let go, reconnected as
+     *  stock would have. Returns how many. OutputRuleKeeper calls it. */
+    int releaseShowOnlyHolds();
+
+    /** A show being loaded (Doc::loadXML()): no universe sends anything to
+     *  a plugin -- universes added meanwhile neither -- until it is let go,
+     *  after recheckPatchesAfterLoad() */
+    void setLoadHold(bool hold);
+    /** Review 13: every patch a show load opened, checked against H1, H2
+     *  and H5 (outputpatch.h) now its Show-only fixtures are known, held
+     *  where they say so. Returns how many. */
+    int recheckPatchesAfterLoad();
 
     /** Are any patches being kept offline right now? */
     bool hasOfflinePatches() const;
@@ -587,7 +595,8 @@ public:
     /** How a patch with saved identity @p uid would resolve here: a line
      *  index, or -1 when nothing on this machine reaches it. */
     int resolveSavedLine(QLCIOPlugin *plugin, bool output, const QString &uid,
-                         const QString &network, const QString &target) const;
+                         const QString &network, const QString &target,
+                         quint32 savedLine = UINT_MAX, bool showOnly = false) const;
 
     /*********************************************************************
      * Rig network transmit gate
@@ -874,11 +883,19 @@ private:
      *  (review 11/12); empty: reconnect by number. A leading '?': only the
      *  operator may reconnect it (identical interfaces, F3). */
     QString deviceHoldReason(QLCIOPlugin *plugin, quint32 universe, const OutputPatch *op,
-                             const QStringList &names,
-                             const QMultiMap<QString, const OutputPatch *> &showOnlyRecorded) const;
-    /** The line a patch held for a device change may reopen on now, -1
-     *  for none (F1, F4; may turn it into a confirm-only hold, F3) */
+                             const QStringList &names) const;
+    /** The line a pending patch on a hardware line may reopen on now under
+     *  H1/H3 (outputpatch.h), -1 for none */
     int deviceHeldLine(const Universe *uni, OutputPatch *op);
+    /** H2: the recorded devices of every Show-only universe's patch on
+     *  @p plugin (open, held, pending from load), but @p except's */
+    QStringList protectedLineNames(const QLCIOPlugin *plugin, const OutputPatch *except) const;
+    /** H2 for a load (or a patch pending from one): @p line must not be
+     *  opened because it is a Show-only universe's device -- by name, or,
+     *  for identical names (H5), by the line it has or was saved on */
+    bool loadBlockedByShowOnly(const QLCIOPlugin *plugin, int line, const OutputPatch *except) const;
+    QString showOnlyMovedText(quint32 universe, const QString &device) const;
+    QString protectedLineText(quint32 universe, quint32 line, const QString &now, const QString &own) const;
 
 private slots:
    /** Slot that catches plugin configuration change notifications from UIPluginCache */

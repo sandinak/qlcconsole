@@ -913,7 +913,12 @@ private:
     QVector<QPair<quint32, int> > m_transmitNetworks;
 };
 
-#define QLCIOPlugin_iid "org.qlcplus.QLCIOPlugin"
+/* The interface's identity, bumped whenever its virtual table changes
+   (review 13 L6: 0.4.8 added flushOutput(), forgetOutput() and the
+   closing-frame source): a plugin built against an older one is refused
+   by QPluginLoader -- it would call through the wrong slots -- rather than
+   loaded. Every in-tree plugin names it with this macro. */
+#define QLCIOPlugin_iid "org.qlcconsole.QLCIOPlugin/0.4.8"
 
 Q_DECLARE_INTERFACE(QLCIOPlugin, QLCIOPlugin_iid)
 

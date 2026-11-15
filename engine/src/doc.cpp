@@ -21,6 +21,7 @@
 #include <climits>
 #include <algorithm>
 #include <QXmlStreamReader>
+#include <QScopeGuard>
 #include <QXmlStreamWriter>
 #include <QRegularExpression>
 #include <QStringList>
@@ -2631,6 +2632,16 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
     m_loadStatus = Loading;
     emit loading();
 
+    /* Review 13: while the show is read, nothing goes out -- its patches
+       are checked against the Show-only rules once its fixtures are known,
+       below, before the first frame. Let go however the load ends. */
+    if (loadIO)
+        m_ioMap->setLoadHold(true);
+    auto loadHold = qScopeGuard([this, loadIO]() {
+        if (loadIO)
+            m_ioMap->setLoadHold(false);
+    });
+
     /* Auto-open shutters as for a show saved without the setting (QLC+:
        off); its <ShutterAutoOpen>, when there is one, overrides. */
     m_shutterAutoOpen->beginLoad();
@@ -2831,6 +2842,16 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
             found = (qint32(m_ioMap->getUniverseID(i)) == m_timecodeSource->sourceUniverse());
         if (!found)
             m_timecodeSource->setSourceUniverse(-1);
+    }
+
+    /* The Show-only fixtures are known now (the I/O map is read before
+       them): every patch the load opened, checked against H1, H2, H5
+       (outputpatch.h), then output let go. */
+    if (loadIO)
+    {
+        m_outputRuleKeeper->rebuild();
+        m_ioMap->recheckPatchesAfterLoad();
+        m_ioMap->setLoadHold(false);
     }
 
     m_loadStatus = Loaded;

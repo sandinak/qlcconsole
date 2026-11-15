@@ -204,8 +204,16 @@ public:
     /** @reimp m_async: the frames kept for @p output go out now */
     void flushOutput(quint32 output, quint32 universe) override;
 
-    /** m_async: the send thread's pass -- every kept frame goes out */
-    void pumpAsync();
+    /** m_async: the send thread's pass -- every kept frame goes out.
+     *  Inline: the stub is a plugin DLL, and a test calls this straight
+     *  (an out-of-line non-virtual member is not exported: MinGW link). */
+    void pumpAsync()
+    {
+        const QMap<quint32, QPair<quint32, QByteArray> > pending = m_asyncPending;
+        m_asyncPending.clear();
+        for (auto it = pending.constBegin(); it != pending.constEnd(); ++it)
+            sendNow(it.value().first, it.key(), it.value().second);
+    }
 
     /** @reimp recorded in m_forgotten (line, universe), then forgotten */
     void forgetOutput(quint32 output, quint32 universe) override
@@ -231,8 +239,16 @@ public:
     QMap<QString, QByteArray> m_lastByTarget;
 
 private:
-    /** A frame on the wire: m_universe and m_lastByTarget */
-    void sendNow(quint32 universe, quint32 output, const QByteArray &data);
+    /** A frame on the wire: m_universe and m_lastByTarget (inline: see
+     *  pumpAsync()) */
+    void sendNow(quint32 universe, quint32 output, const QByteArray &data)
+    {
+        m_universe = m_universe.replace(output * 512, data.size(), data);
+        const QString ip = m_universesMap.contains(universe)
+                           ? m_universesMap.value(universe).outputParameters.value("outputIP").toString()
+                           : QString();
+        m_lastByTarget.insert(QString("%1/%2").arg(ip.isEmpty() ? QString("default") : ip).arg(output), data);
+    }
 
 public:
 
