@@ -59,11 +59,54 @@ class QXmlStreamWriter;
  *    it has none -- a relay pack defined some other way). Snapping a pan or
  *    colour channel to 0/255, or driving it to full, would make no sense.
  *
- *  - ShowOnly: every channel. Held at its safe value (safeValue()) in
- *    every frame sent outside Operate, and in Blind; in Operate only the
- *    faders that are not the show (GenericFader::holdsShowOnly()) are kept
- *    off it. A Design run, a preview, the Workbench, Locate, Solo, focus,
- *    a fixture test: none of them fires a laser, a fogger or a flame relay.
+ *  - ShowOnly: every channel. The rules below.
+ *
+ * Show only: the rules. One mechanism, the live session
+ * (GenericFader::liveEpoch()), and every writer stamped by it.
+ *
+ *  S1. Outside Operate, and in Blind, every frame sent has a Show-only
+ *      channel at its safe value (safeValue(): dark, closed, through the
+ *      channel's modifier). Blackout always wins, Ignore Blackout or not.
+ *  S2. A live session starts at each switch to Operate. In Operate a
+ *      Show-only channel goes out only from a writer stamped in the
+ *      current session (GenericFader::holdsShowOnly()); anything else that
+ *      writes it is undone before the frame is sent.
+ *  S3. Stamps. A function is stamped by its sources: one added (or renewed:
+ *      a GO on a list already playing) in this session is the show, unless
+ *      it is a preview, an editor's Test or the Workbench; a function
+ *      started by another follows that one; one with no source left (it is
+ *      stopping) is held, fade-out and all. A Park, Mark or cue stack is
+ *      stamped when set, started or stepped; a Simple Desk channel, a VC
+ *      slider, XY pad or audio DMX bar when a person really moves it (a
+ *      changed value from the UI or an input -- never an echo, a feedback
+ *      re-sync, a rebuild, a mode trip or a page load); the stamp is the
+ *      control's, so a fader rebuilt from a control left up is as old as
+ *      the control. An audio trigger's or VC Clock's functions are stamped
+ *      by the session the widget was armed in. A last look never holds a
+ *      Show-only channel. Previews, editors' Tests, Locate, focus and
+ *      fixture tests are never stamped.
+ *
+ * The emergency stop (All Off, emergencyStop()):
+ *  E1. Every Show-only channel goes to its safe value at once: no fade and
+ *      no waiting on the function list before the cut (cut first, gates
+ *      worked out after). Every function is stopped, queued ones too.
+ *  E2. It starts a new live session, exactly as the switch to Operate does.
+ *  E3. A writer is stamped again only by an operator action after it: a GO
+ *      or claim (for what it starts, and their children through the
+ *      root's gate), a hand control really moved, an automatic widget
+ *      re-armed in Operate.
+ *  E4. There is no release: a GO on list B makes B's writers current and
+ *      nothing else -- list A's fade-out, a stored level, a definition
+ *      default, a last look, an armed trigger or schedule, a rebuilt fader
+ *      from before the stop all stay held.
+ *  E5. A function stopped by it is held for the rest of its fade-out (S3:
+ *      no source, held).
+ *  E6. A Show-only channel's "nothing drives it" value is its safe value
+ *      (Universe::setChannelDefaultValue()), so no definition default can
+ *      come back.
+ *  E7. All of it happens on the calling thread, at once; only the footer
+ *      is told later. What the Simple Desk lets go of is only what was not
+ *      moved since the stop.
  *
  * When OnAtOpen fixtures come on is the show's setting (saved with it,
  * Settings > Output): when you switch to Operate (the default, the safer
@@ -132,14 +175,15 @@ public:
      *  when not held. For the footer chip and the phone. */
     QString showOnlyHeldText() const;
 
-    /** The emergency stop (ShowControl::AllOff): every Show-only channel
-     *  to its safe value at once, no fade, held there whatever drives it
-     *  until the next GO in Operate (releaseEmergencyStop()); a new live
-     *  session too (Function::startLiveSession()) */
+    /** The emergency stop (ShowControl::AllOff): rules E1-E7. Safe from
+     *  any thread (an OSC or MSC plugin's). */
     void emergencyStop();
-    /** A GO in Operate: the emergency stop's hold lets go (Design: kept) */
-    void releaseEmergencyStop();
-    bool emergencyStopped() const { return m_emergencyStop.load(std::memory_order_relaxed); }
+    /** What the footer says: true from the emergency stop until the first
+     *  GO after it (noteGo()), a switch of mode or another show. It holds
+     *  nothing itself -- the rules do (E4: no release). */
+    bool emergencyStopped() const;
+    /** A GO was carried out (ShowControl, a VC cue list, the Show tab) */
+    void noteGo();
 
     /** A Show-only channel's safe value: 0 for an intensity channel, and
      *  where nothing drives it (FixtureRest::restValue()) for the rest: a
@@ -159,9 +203,9 @@ public:
 signals:
     /** The Show-only fixtures, or why they are held, changed */
     void showOnlyChanged();
-    /** The emergency stop struck (true: the Simple Desk lets go of its
-     *  Show-only channels) or let go (false) */
-    void emergencyStopChanged(bool stopped);
+    /** The emergency stop struck, starting session @p epoch (the Simple
+     *  Desk lets go of what was not moved since) */
+    void emergencyStopStruck(quint32 epoch);
 
 private:
     void scheduleRebuild();
@@ -181,13 +225,13 @@ private:
     bool m_seenOperate = false;
     QList<quint32> m_showOnly;
     HeldBy m_lastHeldBy = NotHeld;
-    std::atomic<bool> m_emergencyStop { false };
+    /** The session the last emergency stop started (0: none) */
+    std::atomic<quint32> m_stopEpoch { 0 };
     /** Where each Show-only fixture's channels are marked (absolute base,
      *  channel count) */
     QHash<quint32, QPair<quint32, quint32> > m_showOnlyAt;
     int m_rebuilds = 0;
     class QTimer *m_rebuildTimer = nullptr;
-    void setEmergencyStop(bool stop);
 };
 
 /** @} */

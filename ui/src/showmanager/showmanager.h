@@ -316,7 +316,7 @@ protected slots:
 
 private:
     /** Play in Operate: an explicit run -- the show for Show-only
-     *  fixtures from now on, and the emergency stop's hold let go */
+     *  fixtures from now on */
     void claimForShow();
     FunctionParent functionParent() const;
 

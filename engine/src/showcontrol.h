@@ -181,15 +181,14 @@ public:
      *  decided: the Show tab's Play is not held: it is a timeline's play /
      *  pause toggle, not a cue list's GO, and its second press (Pause)
      *  must act at once (can change).
-     *  decided: a held command never reaches execute(), so it never lets
-     *  go of the emergency stop's latch (OutputRuleKeeper); ALL OFF clears
-     *  every window, so the first GO after it plays at once and does. */
+     *  decided: a held command never reaches execute(), so it never stamps
+     *  anything as the show (OutputRuleKeeper); ALL OFF clears every
+     *  window, so the first GO after it plays at once. */
     bool run(const Request &request, Route route);
 
     /** A GO on a list already running (a command here, a VC step button):
      *  its source renewed, so it is the show for Show-only fixtures
-     *  (Fixture::ShowOnly), resumed if paused, and the emergency stop's
-     *  hold let go (Operate) */
+     *  (Fixture::ShowOnly), resumed if paused */
     void claim(Chaser *chaser);
 
     /** A line about a command that came from elsewhere (the VC's step
@@ -497,7 +496,8 @@ private slots:
 private:
     QString listName(const Chaser *chaser) const;
     void go(Chaser *chaser, int step);
-    void releaseEmergencyStop();
+    /** A GO carried out: the footer's "emergency stop" goes */
+    void noteGo();
     void goSubCue(Chaser *chaser, int step, int subCue);
 
 private:

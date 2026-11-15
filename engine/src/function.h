@@ -873,6 +873,15 @@ public:
      *  MasterTimer::refreshPreviewGates() after, before the universes go
      *  live. */
     static void startLiveSession();
+    /** E3: an automatic widget's source (FunctionParent::AutoVCWidget: an
+     *  audio trigger, a VC Clock) armed by the operator now -- what it
+     *  starts is the show in this session. Its very first start since the
+     *  show opened arms it; once another session starts (Operate, All Off)
+     *  only this does. */
+    static void armAutoSource(const FunctionParent &source);
+    static quint32 autoSourceEpoch(const FunctionParent &source);
+    /** Another show: no widget armed */
+    static void clearAutoSources();
     /** Bumped whenever a source or a gate changes */
     static quint32 sourcesGeneration();
 

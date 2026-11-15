@@ -71,6 +71,10 @@
 #include "fixture.h"
 #include "doc.h"
 #include "show.h"
+#include <functional>
+#include "rgbplain.h"
+#include "rgbmatrix.h"
+#include "efx.h"
 #include "track.h"
 #include "showfunction.h"
 #include <QThread>
@@ -259,6 +263,9 @@ void OutputRules_Test::put(int address, uchar value)
     fc->setStart(value);
     fc->setCurrent(value);
     fc->setTarget(value);
+    fc.release();
+    // A hand on a fader, moved now (Show only, S3): stamped in this session.
+    m_fader->stampLiveEpoch();
 }
 
 void OutputRules_Test::rulesRoundTripAsText()
@@ -1232,6 +1239,7 @@ void OutputRules_Test::everySendHoldsIt()
     frame(Flame);
     QCOMPARE(sent(Flame), 0);
     m_doc->setMode(Doc::Operate);
+    put(Flame, 255);                    // set in Operate (S3): set in Design is not the show
     frame(Flame);
     QVERIFY(m_stub->m_lastDataChanged);
     QCOMPARE(sent(Flame), 255);
@@ -1874,10 +1882,11 @@ void OutputRules_Test::aDesignLastLookStaysHeldAtTheNextGo()
     look->releaseFixtures({ hs.fixtureId });
     frame(Flame);
     QCOMPARE(sent(Flame), 0);
-    // Captured live (a show stopping in Operate): the show.
+    // Captured live (a show stopping in Operate): still never a Show-only
+    // channel (S3: a capture is no operator action).
     look->hold({ hf });
     frame(Flame);
-    QCOMPARE(sent(Flame), 200);
+    QCOMPARE(sent(Flame), 0);
     look->clear();
 }
 
@@ -1913,12 +1922,15 @@ void OutputRules_Test::emergencyStopLatchesUntilTheNextGo()
     go.command = ShowControl::Go;
     go.chaser = c->id();
     m_doc->showControl()->run(go, ShowControl::RouteRunTab);
+    // The footer's "emergency stop" goes at the GO; the output is still
+    // held by the rule (E4: no release).
     QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped() == false);
     frame(Flame);
-    // Nothing from before the stop comes back: the fader left up is frozen.
+    // Nothing from before the stop comes back (E4): the fader left up is
+    // as old as the stop's session.
     QCOMPARE(sent(Flame), 0);
-    // Moved again (the Simple Desk, a VC slider do this): the hand again.
-    m_fader->unfreezeStop();
+    // Moved again by a hand after the stop (E3): the show again.
+    put(Flame, 255);
     frame(Flame);
     QCOMPARE(sent(Flame), 255);
 }
@@ -1950,13 +1962,12 @@ void OutputRules_Test::theHeldTextSaysEmergencyStop()
     m_doc->setMode(Doc::Operate);
     m_doc->outputRuleKeeper()->emergencyStop();
     QCOMPARE(m_doc->outputRuleKeeper()->showOnlyHeldText(),
-             QString("Flame L held: emergency stop, until the next GO"));
-    // Design does not let it go; a GO in Operate does.
-    m_doc->setMode(Doc::Design);
-    m_doc->outputRuleKeeper()->releaseEmergencyStop();
+             QString("Flame L held: emergency stop -- a GO or a control you move drives them again"));
+    // The footer says it until a GO or a new session.
     QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
+    m_doc->setMode(Doc::Design);
+    QCOMPARE(m_doc->outputRuleKeeper()->showOnlyHeldText(), QString("Flame L held: Design"));
     m_doc->setMode(Doc::Operate);
-    m_doc->outputRuleKeeper()->releaseEmergencyStop();
     QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped() == false);
 }
 
@@ -2135,8 +2146,8 @@ void OutputRules_Test::aVcStepButtonDoesNotClaimAnEditorTest()
 
 void OutputRules_Test::emergencyStopDropsALastLookCapturedBeforeIt()
 {
-    // The other order to the review's: the look was captured live, before
-    // the stop (a show stopped in Operate), then All Off, then a GO.
+    // A last look never holds a Show-only channel (S3): captured live
+    // before a stop, it has the stage light and not the flame.
     Fixture *flame = addDimmer("Flame", Flame, Fixture::ShowOnly);
     m_doc->outputRuleKeeper()->rebuild();
     m_doc->setMode(Doc::Operate);
@@ -2152,18 +2163,15 @@ void OutputRules_Test::emergencyStopDropsALastLookCapturedBeforeIt()
     hs.value = 90;
     m_doc->lastLook()->hold({ hf, hs });
     frame(Flame);
-    QCOMPARE(sent(Flame), 255);         // captured live: the show
+    QCOMPARE(sent(Stage), 90);
+    QCOMPARE(sent(Flame), 0);
     ShowControl::Request off;
     off.command = ShowControl::AllOff;
     QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
     QCoreApplication::processEvents();
     frame(Flame);
     QCOMPARE(sent(Flame), 0);
-    // The stage light stays in the look; the flame is gone from it.
-    QCOMPARE(sent(Stage), 90);
-    m_doc->outputRuleKeeper()->releaseEmergencyStop();
-    frame(Flame);
-    QCOMPARE(sent(Flame), 0);
+    QCOMPARE(sent(Stage), 90);          // the rest of the look stays
     m_doc->lastLook()->clear();
 }
 
@@ -2252,6 +2260,344 @@ void OutputRules_Test::anEmergencyStopFromAnotherThreadActsAtOnce()
     QCOMPARE(sent(Flame), 0);           // sent from that thread, at once
     QCoreApplication::processEvents();  // the footer and the last look, here
     QCOMPARE(rules->showOnlyHeldBy(), OutputRuleKeeper::HeldByEmergencyStop);
+}
+
+/****************************************************************************
+ * Fifth review (of df050e0ce6): red until fixed
+ ****************************************************************************/
+
+void OutputRules_Test::aShowsFadeOutAfterTheStopStaysOut()
+{
+    // A flame cue with a 4 s fade-out, GO'd in Operate.
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    fire->setFadeOutSpeed(4000);
+    m_doc->addFunction(fire);
+    Chaser *a = new Chaser(m_doc);
+    ChaserStep sa(fire->id());
+    sa.hold = 100000;
+    a->addStep(sa);
+    m_doc->addFunction(a);
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = a->id();
+    QVERIFY(m_doc->showControl()->run(go, ShowControl::RouteRunTab));
+    for (int i = 0; i < 5; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);         // the show drives it: right
+
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+    for (int i = 0; i < 3; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);           // the e-stop: out at once
+
+    // The next GO is another list, a moment later (the fade still runs).
+    Scene *stage = new Scene(m_doc);
+    stage->setValue(m_doc->fixtureForAddress(Stage), 0, 60);
+    m_doc->addFunction(stage);
+    Chaser *b = new Chaser(m_doc);
+    ChaserStep sb(stage->id());
+    sb.hold = 100000;
+    b->addStep(sb);
+    m_doc->addFunction(b);
+    go.chaser = b->id();
+    QVERIFY(m_doc->showControl()->run(go, ShowControl::RouteRunTab));
+    int flameMax = 0;
+    for (int i = 0; i < 6; i++)
+    {
+        tickFrame(Flame);
+        flameMax = qMax(flameMax, sent(Flame));
+    }
+    QCOMPARE(sent(Stage), 60);          // the GO took
+    // What the stop cut must not come back: not even its fade-out.
+    QCOMPARE(flameMax, 0);
+}
+
+/****************************************************************************
+ * The e-stop rules, swept over every writer (fifth review)
+ ****************************************************************************/
+
+Fixture *OutputRules_Test::addShowOnlyDef(const QString &name, int address,
+                                          const QList<QPair<QLCChannel::Group, QLCChannel::PrimaryColour> > &chans)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Sweep"));
+    def->setModel(name);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("Mode"));
+    int i = 0;
+    for (const auto &c : chans)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QStringLiteral("%1 %2").arg(name).arg(i));
+        ch->setGroup(c.first);
+        if (c.first == QLCChannel::Intensity)
+            ch->setColour(c.second);
+        if (c.first == QLCChannel::Pan || c.first == QLCChannel::Tilt)
+            ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(i++));
+    }
+    def->addMode(mode);
+    mode->cacheHeads();
+    if (!m_doc->fixtureDefCache()->addFixtureDef(def))
+    {
+        delete def;
+        return nullptr;
+    }
+    Fixture *f = new Fixture(m_doc);
+    f->setName(name);
+    f->setFixtureDefinition(def, mode);
+    f->setUniverse(0);
+    f->setAddress(quint32(address));
+    f->setOutputRules(Fixture::ShowOnly);
+    if (!m_doc->addFixture(f))
+    {
+        delete f;
+        return nullptr;
+    }
+    m_doc->outputRuleKeeper()->rebuild();
+    return f;
+}
+
+Chaser *OutputRules_Test::listOf(Function *step)
+{
+    Chaser *c = new Chaser(m_doc);
+    ChaserStep cs(step->id());
+    cs.hold = 100000;
+    c->addStep(cs);
+    m_doc->addFunction(c);
+    return c;
+}
+
+void OutputRules_Test::goList(Chaser *c)
+{
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = c->id();
+    QVERIFY(m_doc->showControl()->run(go, ShowControl::RouteRunTab));
+}
+
+void OutputRules_Test::sweep(int address, const std::function<void()> &tickOnce,
+                             const std::function<void()> &setUp, const std::function<void()> &again,
+                             const std::function<void()> &afterStop)
+{
+    // Set up in Operate: it drives the Show-only channel.
+    const int safe = int(uchar(m_uni->m_showOnlySafe.at(address)));
+    m_doc->setMode(Doc::Operate);
+    setUp();
+    int most = 0;
+    for (int i = 0; i < 8; i++)
+    {
+        tickOnce();
+        most = qMax(most, qAbs(sent(address) - safe));
+    }
+    QVERIFY2(most > 0, "the writer drove it before the stop");
+    // E1: All Off, cut at once.
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+    QCOMPARE(sent(address), safe);
+    if (afterStop)
+        afterStop();
+    // E4: a GO on an unrelated list makes nothing else current.
+    Scene *stage = new Scene(m_doc);
+    stage->setValue(m_doc->fixtureForAddress(Stage), 0, 60);
+    m_doc->addFunction(stage);
+    goList(listOf(stage));
+    most = 0;
+    for (int i = 0; i < 10; i++)
+    {
+        tickOnce();
+        most = qMax(most, qAbs(sent(address) - safe));
+    }
+    QCOMPARE(sent(Stage), 60);
+    QCOMPARE(most, 0);
+    // E3: its own operator action makes it the show again.
+    if (again)
+    {
+        again();
+        most = 0;
+        for (int i = 0; i < 8; i++)
+        {
+            tickOnce();
+            most = qMax(most, qAbs(sent(address) - safe));
+        }
+        QVERIFY2(most > 0, "its own operator action drives it again");
+    }
+}
+
+void OutputRules_Test::sweepFunctionFadeOut()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    fire->setFadeOutSpeed(4000);
+    m_doc->addFunction(fire);
+    Chaser *a = listOf(fire);
+    sweep(Flame, [this]() { tickFrame(Flame); }, [this, a]() { goList(a); }, [this, a]() { goList(a); });
+}
+
+void OutputRules_Test::sweepChaserStepFade()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fire);
+    Chaser *a = new Chaser(m_doc);
+    ChaserStep st(fire->id());
+    st.fadeIn = 3000;                   // stopped mid-fade
+    st.fadeOut = 3000;
+    st.hold = 100000;
+    a->addStep(st);
+    m_doc->addFunction(a);
+    sweep(Flame, [this]() { tickFrame(Flame); }, [this, a]() { goList(a); }, [this, a]() { goList(a); });
+}
+
+void OutputRules_Test::sweepEfx()
+{
+    Fixture *mover = addShowOnlyDef("Mover", 30, { { QLCChannel::Pan, QLCChannel::NoColour },
+                                                   { QLCChannel::Tilt, QLCChannel::NoColour } });
+    QVERIFY(mover != nullptr);
+    EFX *efx = new EFX(m_doc);
+    QVERIFY(efx->addFixture(mover->id(), 0));
+    m_doc->addFunction(efx);
+    Chaser *a = listOf(efx);
+    sweep(30, [this]() { tickFrame(30); }, [this, a]() { goList(a); }, [this, a]() { goList(a); });
+}
+
+void OutputRules_Test::sweepRgbMatrix()
+{
+    Fixture *bar = addShowOnlyDef("Bar", 40, { { QLCChannel::Intensity, QLCChannel::Red },
+                                               { QLCChannel::Intensity, QLCChannel::Green },
+                                               { QLCChannel::Intensity, QLCChannel::Blue } });
+    QVERIFY(bar != nullptr);
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setSize(QSize(1, 1));
+    grp->assignFixture(bar->id(), QLCPoint(0, 0));
+    m_doc->addFixtureGroup(grp);
+    RGBMatrix *mtx = new RGBMatrix(m_doc);
+    mtx->setFixtureGroup(grp->id());
+    mtx->setAlgorithm(new RGBPlain(m_doc));
+    mtx->setColor(0, QColor(255, 0, 0));
+    m_doc->addFunction(mtx);
+    Chaser *a = listOf(mtx);
+    sweep(40, [this]() { tickFrame(40); }, [this, a]() { goList(a); }, [this, a]() { goList(a); });
+}
+
+void OutputRules_Test::sweepPark()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    ParkEffect park(m_doc);
+    const quint32 fid = m_doc->fixtureForAddress(Flame);
+    sweep(Flame, [this]() { tickFrame(Flame); },
+          [&park, fid]() { park.parkFixture(fid, { { 0u, uchar(255) } }); },
+          [&park, fid]() { park.parkFixture(fid, { { 0u, uchar(255) } }); });
+    park.unparkAll();
+}
+
+void OutputRules_Test::sweepMark()
+{
+    Fixture *spot = addSpot("Laser-ish", 20);
+    spot->setOutputRules(Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    MarkEffect mark(m_doc);
+    const quint32 fid = spot->id();
+    sweep(21, [this]() { tickFrame(21); },
+          [&mark, fid]() { mark.markFixture(fid, { { 1u, uchar(200) } }); },
+          [&mark, fid]() { mark.markFixture(fid, { { 1u, uchar(200) } }); });
+    mark.unmarkAll();
+}
+
+void OutputRules_Test::sweepLastLook()
+{
+    // A last look never holds a Show-only channel (S3): it never drives it,
+    // before a stop or after, so there is nothing to sweep but that.
+    Fixture *flame = addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    LastLookEffect::ChannelHold h;
+    h.fixtureId = flame->id();
+    h.universeId = 0;
+    h.address = Flame;
+    h.value = 255;
+    m_doc->lastLook()->hold({ h });
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+    m_doc->lastLook()->hold({ h });     // a show stopped by it captures after it
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    m_doc->lastLook()->clear();
+}
+
+void OutputRules_Test::sweepCueStack()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    CueStack cs(m_doc);
+    QMap<uint, uchar> values;
+    values[uint(Flame)] = 255;
+    cs.appendCue(Cue(values));
+    cs.appendCue(Cue(values));
+    QList<Universe *> ua = m_doc->inputOutputMap()->universes();
+    auto tickStack = [this, &cs, ua]() {
+        if (!cs.isStarted())
+            cs.preRun();
+        cs.write(ua);
+        tickFrame(Flame);
+    };
+    sweep(Flame, tickStack, [&cs]() { cs.start(); cs.nextCue(); }, [&cs]() { cs.nextCue(); });
+    cs.stop();
+    cs.postRun(m_doc->masterTimer(), ua);
+}
+
+void OutputRules_Test::sweepEffectRunner()
+{
+    Fixture *flame = addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->assignFixture(flame->id());
+    m_doc->addFixtureGroup(grp);
+    QTemporaryDir dir;
+    QFile js(dir.filePath("full.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Full';"
+             " e.tick = function(fixtures) { return fixtures.map(function() { return { dimmer: 1.0 }; }); };"
+             " return e; })()");
+    js.close();
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, m_doc);
+    look->setScriptPath(js.fileName());
+    m_doc->addPalette(look);
+    Scene *scene = new Scene(m_doc);
+    scene->addFixtureGroup(grp->id());
+    scene->addPalette(look->id());
+    m_doc->addFunction(scene);
+    auto teardown = qScopeGuard([this, scene]() {
+        m_doc->effectScriptRunner()->destroyInstancesForScene(scene->id(), false);
+    });
+    Chaser *a = listOf(scene);
+    auto tickFx = [this]() {
+        m_doc->masterTimer()->timerTick();
+        m_doc->effectScriptRunner()->slotTick();
+        m_doc->masterTimer()->timerTick();
+        frame(Flame);
+    };
+    /* What the app does when the stopped scene is told stopped (queued
+       there; from a tick on this thread the runner would claim the
+       universes the tick holds): its effect let go. */
+    sweep(Flame, tickFx, [this, a]() { goList(a); }, [this, a]() { goList(a); },
+          [this, scene]() { m_doc->effectScriptRunner()->destroyInstancesForScene(scene->id(), true); });
 }
 
 QTEST_GUILESS_MAIN(OutputRules_Test)

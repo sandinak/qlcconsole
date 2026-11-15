@@ -1130,7 +1130,10 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
             fader = uni->requestTopFader(Universe::Override);
             fader->setName(QStringLiteral("EffectScript"));
             fader->setDoc(m_doc);        // unpatched fixtures: shown, not sent
+            // Show only: the writes are sorted by their scenes' gates above
+            // -- the held fader holds, the other is trusted with the rest.
             fader->setHoldsShowOnly(key & kHeldFader);
+            fader->setTrustedForShowOnly((key & kHeldFader) == 0);
             next[key];
         }
 

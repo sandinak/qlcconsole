@@ -135,18 +135,16 @@ void ShowControl::go(Chaser *chaser, int step)
     chaser->setAction(action);
 
     if (!chaser->isRunning())
-    {
         chaser->start(m_doc->masterTimer(), FunctionParent::master());
-        releaseEmergencyStop();
-    }
     else
         claim(chaser);
+    noteGo();
 }
 
-void ShowControl::releaseEmergencyStop()
+void ShowControl::noteGo()
 {
     if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
-        rules->releaseEmergencyStop();
+        rules->noteGo();
 }
 
 void ShowControl::claim(Chaser *chaser)
@@ -158,8 +156,7 @@ void ShowControl::claim(Chaser *chaser)
     chaser->start(m_doc->masterTimer(), FunctionParent::master());
     if (chaser->isPaused())
         chaser->setPause(false);
-    // A GO: the emergency stop's hold lets go (Operate).
-    releaseEmergencyStop();
+    noteGo();
 }
 
 void ShowControl::goSubCue(Chaser *chaser, int step, int subCue)
@@ -170,7 +167,7 @@ void ShowControl::goSubCue(Chaser *chaser, int step, int subCue)
     if (!chaser->isRunning())
     {
         chaser->start(m_doc->masterTimer(), FunctionParent::master());
-        releaseEmergencyStop();
+        noteGo();
     }
     else
         claim(chaser);
@@ -469,13 +466,14 @@ bool ShowControl::execute(const Request &request)
         // MasterTimer::stopAllFunctions(), which waits for the timer
         // thread, here on the thread a command arrives on.
         m_loaded.clear();
-        for (Function *f : m_doc->functions())
-            if (f->isRunning())
-                f->stop(FunctionParent::master());
-        // Show only: lasers, fog and flame out at once (no fade), and held
-        // until the next GO in Operate, whatever drives them.
+        /* Show only (OutputRuleKeeper, E1-E7): a new session, every function
+           stopped (queued ones too), lasers, fog and flame cut at once. */
         if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
             rules->emergencyStop();
+        else
+            for (Function *f : m_doc->functions())
+                if (f->isRunning())
+                    f->stop(FunctionParent::master());
         emit cueListStopped(UINT_MAX);
         return finish(true, tr("everything stopped"));
     }

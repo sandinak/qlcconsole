@@ -589,6 +589,10 @@ void VCClock::mousePressEvent(QMouseEvent *e)
         return;
     }
 
+    /* Show only (E3): touched by the operator in Operate -- what its
+       schedule starts is the show in this session. */
+    Function::armAutoSource(functionParent());
+
     if (e->button() == Qt::RightButton)
     {
         resetTimer();

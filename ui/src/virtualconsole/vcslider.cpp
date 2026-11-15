@@ -1202,11 +1202,20 @@ bool VCSlider::channelsMonitorEnabled() const
 void VCSlider::setLevelValue(uchar value, bool external)
 {
     QMutexLocker locker(&m_levelValueMutex);
+    const uchar was = m_levelValue;
     m_levelValue = CLAMP(value, levelLowLimit(), levelHighLimit());
     if (m_monitorEnabled == true)
         m_monitorValue = m_levelValue;
     if (m_slider->isSliderDown() || external)
+    {
         m_levelValueChanged = true;
+        /* Show only (S3): really moved -- a new value, by a hand on it or
+           its input -- it is the show from now on. The same value again (a
+           motor fader's echo, a surface re-syncing its page) stamps
+           nothing; nor a rebuild or a trip to Design (no move at all). */
+        if (m_levelValue != was)
+            m_liveEpoch.store(GenericFader::liveEpoch(), std::memory_order_relaxed);
+    }
 }
 
 uchar VCSlider::levelValue() const
@@ -1790,8 +1799,8 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
                 }
             }
 
-            // Moved: the hand's again after an emergency stop froze it.
-            fader->unfreezeStop();
+            // Show only: the slider's own stamp, on whatever fader it writes.
+            fader->setLiveEpoch(m_liveEpoch.load(std::memory_order_relaxed));
             GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[universe], lch.fixture, lch.channel);
             if (fc->universe() == Universe::invalid())
             {
@@ -1968,6 +1977,7 @@ void VCSlider::writeDMXParameter(MasterTimer *timer, QList<Universe *> universes
                 m_fadersMap[universe] = fader;
             }
         }
+        fader->setLiveEpoch(m_liveEpoch.load(std::memory_order_relaxed));
 
         GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[universe],
                                                  fid, ch);

@@ -49,16 +49,16 @@ SimpleDeskEngine::SimpleDeskEngine(Doc* doc)
     Q_ASSERT(doc != NULL);
     doc->masterTimer()->registerDMXSource(this);
     /* Show only, the emergency stop: what the Simple Desk had up on a
-       Show-only channel is let go of -- nothing from before the stop comes
-       back when it lets go; push the fader again to drive it. */
+       Show-only channel, and not moved since, is let go of (E7: told later
+       if the stop came from another thread, so a channel pushed again in
+       the meantime keeps its new value). */
     if (OutputRuleKeeper *rules = doc->outputRuleKeeper())
-        connect(rules, &OutputRuleKeeper::emergencyStopChanged, this, [this](bool stopped) {
-            if (stopped)
-                releaseShowOnlyChannels();
+        connect(rules, &OutputRuleKeeper::emergencyStopStruck, this, [this](quint32 session) {
+            releaseShowOnlyChannels(session);
         });
 }
 
-void SimpleDeskEngine::releaseShowOnlyChannels()
+void SimpleDeskEngine::releaseShowOnlyChannels(quint32 session)
 {
     QList<uint> drop;
     {
@@ -68,8 +68,11 @@ void SimpleDeskEngine::releaseShowOnlyChannels()
         {
             const int u = int(it.key() >> 9);
             Universe *uni = u < ua.size() ? ua.at(u) : nullptr;
-            if (uni != nullptr && (uni->channelCapabilities(ushort(it.key() & 0x1FF)) & Universe::ShowOnlyOutput))
-                drop << it.key();
+            if (uni == nullptr || (uni->channelCapabilities(ushort(it.key() & 0x1FF)) & Universe::ShowOnlyOutput) == 0)
+                continue;
+            if (m_channelEpochs.value(it.key()) == session)
+                continue;           // pushed after the stop: the hand's
+            drop << it.key();
         }
     }
     for (uint ch : std::as_const(drop))
@@ -114,6 +117,11 @@ void SimpleDeskEngine::setValue(uint channel, uchar value)
 
     QMutexLocker locker(&m_mutex);
     const bool taken = !m_values.contains(channel);
+    /* Show only (S3): a channel really moved -- a new value, from the
+       desk's fader or its input -- is the show from now on; the same value
+       again (an echo, a page reload) stamps nothing. */
+    if (taken || m_values.value(channel) != value)
+        m_channelEpochs.insert(channel, GenericFader::liveEpoch());
     m_values[channel] = value;
     setChanged(true);
     locker.unlock();
@@ -433,11 +441,12 @@ void SimpleDeskEngine::writeDMX(MasterTimer *timer, QList<Universe *> ua)
             fc->setCurrent(value);
             fc->setTarget(value);
             fc->addFlag(FadeChannel::Override);
+            fc.release();
+            // Its control's stamp (S3), channel by channel.
+            QSharedPointer<GenericFader> fader = m_fadersMap.value(quint32(uni));
+            if (!fader.isNull())
+                fader->setChannelLiveEpoch(address & 0x1FF, m_channelEpochs.value(it.key()));
         }
-        // Moved: the hand's again after an emergency stop froze it.
-        for (const QSharedPointer<GenericFader> &f : std::as_const(m_fadersMap))
-            if (!f.isNull())
-                f->unfreezeStop();
         setChanged(false);
     }
 
