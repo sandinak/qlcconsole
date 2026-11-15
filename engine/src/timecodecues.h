@@ -91,6 +91,7 @@ private:
         quint32 chaser;
         QString cue;
         int order;          //!< list, then cue: later wins a tie
+        quint32 list;       //!< its cue list (Show only's arm)
     };
     void rebuild() const;
 

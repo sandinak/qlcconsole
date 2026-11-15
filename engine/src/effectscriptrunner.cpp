@@ -822,7 +822,7 @@ static const quint64 kAnyScene = quint64(0xFFFFFFFFu) << 32;
 void EffectScriptRunner::publishWrites()
 {
     QList<EffectInstance::DmxWrite> combined;
-    QVector<QVector<std::shared_ptr<std::atomic<bool> > > > gateSets;
+    QVector<QVector<SceneGate> > gateSets;
     QSet<quint64> drawn;
     /* Show only: an effect on a Show-only fixture carries the gates of the
        scenes it plays for, and writeDMX() puts it on the held fader while
@@ -865,10 +865,10 @@ void EffectScriptRunner::publishWrites()
                         continue;
                     if (set < 0)
                     {
-                        QVector<std::shared_ptr<std::atomic<bool> > > gates;
+                        QVector<SceneGate> gates;
                         for (quint32 sid : inst->sceneIds())
                             if (const Function *f = m_doc->function(sid))
-                                gates << f->previewGate();
+                                gates << qMakePair(f->previewGate(), f->showStamp());
                         set = int(gateSets.size());
                         gateSets << gates;
                     }
@@ -1072,7 +1072,7 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
     // is NEVER held across script evaluation (that is the whole reason it exists
     // separately from m_instanceMutex), so this can't stall the DMX thread.
     QList<EffectInstance::DmxWrite> writes;
-    QVector<QVector<std::shared_ptr<std::atomic<bool> > > > gateSets;
+    QVector<QVector<SceneGate> > gateSets;
     {
         QMutexLocker locker(&m_writesMutex);
         writes = m_publishedWrites;
@@ -1087,6 +1087,7 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
        (the rule given, a fixture patched there since): the universe's own
        bits, this tick. */
     QList<EffectInstance::DmxWrite> held;
+    const quint32 session = GenericFader::liveEpoch();
     bool anyShowOnly = gateSets.isEmpty() == false;
     for (int u = 0; !anyShowOnly && u < universes.size(); ++u)
         anyShowOnly = universes.at(u) != nullptr && universes.at(u)->showOnlyChannelCount() > 0;
@@ -1101,8 +1102,9 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
                 // Held unless one of its scenes is the show; none: held.
                 hold = true;
                 if (w.gateSet >= 0 && w.gateSet < gateSets.size())
-                    for (const auto &g : gateSets.at(w.gateSet))
-                        if (g && g->load(std::memory_order_relaxed) == false)
+                    for (const SceneGate &g : gateSets.at(w.gateSet))
+                        if (g.first && g.second && g.first->load(std::memory_order_acquire) == false
+                            && g.second->load(std::memory_order_acquire) >= session)
                         {
                             hold = false;
                             break;

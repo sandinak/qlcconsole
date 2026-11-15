@@ -31,6 +31,7 @@
 #include <algorithm>
 
 #include "showtreecontroller.h"
+#include "genericfader.h"
 #include "presses.h"
 #include "blocking.h"
 #include "showcontrol.h"
@@ -1324,6 +1325,11 @@ bool ShowTreeController::setCueTimecode(quint32 cueId, qint32 ms)
 
 bool ShowTreeController::setListFollowTimecode(quint32 listId, bool follow)
 {
+    // Show only: switched on (or touched) by the operator in Operate.
+    if (follow && m_doc != nullptr && m_doc->mode() == Doc::Operate)
+        m_tcArm.insert(listId, GenericFader::stampEpoch());
+    else if (!follow)
+        m_tcArm.remove(listId);
     return edit(follow ? tr("Follow timecode") : tr("Stop following timecode"), [&](QList<Production> &ps) {
         CueList *l = listIn(ps, listId);
         if (l == nullptr || l->looks || l->isSubCues() || l->followTimecode == follow)

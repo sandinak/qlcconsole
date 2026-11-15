@@ -532,6 +532,8 @@ public:
 private:
     bool m_flashOverrides;
     bool m_flashForceLTP;
+    /** Show only: the stamp of the hand that pressed the flash */
+    std::atomic<quint32> m_flashStamp { 0 };
 
     /*********************************************************************
      * Running

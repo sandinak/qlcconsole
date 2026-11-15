@@ -62,6 +62,7 @@
 #include <QXmlStreamReader>
 #include <QMouseEvent>
 #include <QThread>
+#include <QScopeGuard>
 #include "cuestack.h"
 #include "cue.h"
 #include "collection.h"
@@ -484,7 +485,18 @@ void ShowOnlyReview5_Test::sweepXYPad()
             tick(1);
         }
     };
-    pad.m_area->setPosition(QPointF(200, 100));     // a hand on the pad
+    /* A hand on the pad: a mouse press and release on it (R7-8: a
+       position set by code is no hand). */
+    pad.m_area->resize(256, 256);
+    auto handAt = [&pad](int x, int y) {
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(x, y), QPointF(x, y),
+                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        pad.m_area->mousePressEvent(&press);
+        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(x, y), QPointF(x, y),
+                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        pad.m_area->mouseReleaseEvent(&release);
+    };
+    handAt(200, 100);                               // a hand on the pad
     tickPad(3);
     const int moved = sent(30);
     QVERIFY(moved > 0);
@@ -494,7 +506,7 @@ void ShowOnlyReview5_Test::sweepXYPad()
     goUnrelated(60);
     tickPad(4);
     QCOMPARE(sent(30), 0);
-    pad.m_area->setPosition(QPointF(120, 80));      // moved after the stop
+    handAt(120, 80);                                // moved after the stop
     tickPad(3);
     QVERIFY(sent(30) > 0);
 }
@@ -1391,6 +1403,8 @@ void ShowOnlyReview5_Test::r7LtpChannelKeptWhenItsCueLetsGo()
     ChaserStep s2(stage->id());
     s2.hold = 100000;
     list->addStep(s2);
+    // Each step held until the next GO (a duration of 0 stepped every tick).
+    list->setDuration(100000);
     m_doc->addFunction(list);
     m_doc->setMode(Doc::Operate);
     goList(list);
@@ -1673,6 +1687,144 @@ void ShowOnlyReview5_Test::r7CollectionChildLatchesAcrossADesignTrip()
     QVERIFY(a->previewGate()->load());      // list A: left from Design, held
     QVERIFY(both->previewGate()->load());   // the Collection: held
     QCOMPARE(flameMax, 0);                  // ...so the flame must be too
+}
+
+/****************************************************************************
+ * S0 swept: every frame a Show-only channel is built from scratch
+ ****************************************************************************/
+
+void ShowOnlyReview5_Test::sweepS0(Fixture *fx)
+{
+    QVERIFY(fx != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    const int at = int(fx->address());
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(fx->id(), 0, 255);
+    m_doc->addFunction(fire);
+    Scene *stage = new Scene(m_doc);
+    stage->setValue(m_doc->fixtureForAddress(Stage), 0, 60);
+    m_doc->addFunction(stage);
+    auto stopAll = [this]() {
+        for (Function *f : m_doc->functions())
+            if (f->isRunning())
+                f->stop(FunctionParent::master());
+        tick(4);
+    };
+    auto freshGo = [this, fire, at](const char *why) {
+        goList(listOf(fire, QString::fromLatin1(why)));
+        tick(4);
+        QCOMPARE(sent(at), 255);            // a fresh GO drives it again
+    };
+    m_doc->setMode(Doc::Operate);
+
+    // 1. A cue letting go of it: the next cue lights the stage only.
+    {
+        Chaser *list = new Chaser(m_doc);
+        ChaserStep s1(fire->id());
+        s1.hold = 100000;
+        list->addStep(s1);
+        ChaserStep s2(stage->id());
+        s2.hold = 100000;
+        list->addStep(s2);
+        list->setDuration(100000);                  // each step held till the next GO
+        m_doc->addFunction(list);
+        goList(list);
+        tick(4);
+        QCOMPARE(sent(at), 255);
+        goList(list);
+        tick(6);
+        QCOMPARE(sent(Stage), 60);
+        QCOMPARE(sent(at), 0);
+        freshGo("after the cue let go");
+        stopAll();
+    }
+
+    // 2. All Off from another thread, a frame processed in the gap.
+    {
+        goList(listOf(fire, QStringLiteral("before the stop")));
+        tick(4);
+        QCOMPARE(sent(at), 255);
+        QThread *osc = QThread::create([this]() {
+            ShowControl::Request off;
+            off.command = ShowControl::AllOff;
+            m_doc->showControl()->run(off, ShowControl::RouteOsc);
+        });
+        osc->start();
+        QVERIFY(osc->wait(5000));
+        delete osc;
+        QCOMPARE(sent(at), 0);
+        {
+            QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+            for (Universe *u : ua)
+                u->processFaders();     // a frame before the queued stop
+            m_doc->inputOutputMap()->releaseUniverses(false);
+        }
+        QCOMPARE(sent(at), 0);
+        tick(4);
+        QCOMPARE(sent(at), 0);
+        freshGo("after All Off");
+        stopAll();
+    }
+
+    // 3. A trip to Design and back.
+    {
+        goList(listOf(fire, QStringLiteral("before Design")));
+        tick(4);
+        QCOMPARE(sent(at), 255);
+        m_doc->setMode(Doc::Design);
+        tick(3);
+        QCOMPARE(sent(at), 0);
+        m_doc->setMode(Doc::Operate);
+        tick(4);
+        QCOMPARE(sent(at), 0);
+        freshGo("after Design");
+        stopAll();
+    }
+
+    // 4. Blind and back.
+    {
+        goList(listOf(fire, QStringLiteral("before Blind")));
+        tick(4);
+        QCOMPARE(sent(at), 255);
+        m_doc->inputOutputMap()->setOutputInhibited(true);
+        auto blindOff = qScopeGuard([this]() { m_doc->inputOutputMap()->setOutputInhibited(false); });
+        tick(3);                        // Blind: nothing is sent at all
+        m_doc->inputOutputMap()->setOutputInhibited(false);
+        QCOMPARE(sent(at), 0);          // the first frame after it: safe
+        tick(4);
+        QCOMPARE(sent(at), 0);
+        freshGo("after Blind");
+        stopAll();
+    }
+
+    // 5. Re-patched onto an address a writer drives.
+    {
+        enum { Free = 40 };
+        SimpleDeskEngine eng(m_doc);
+        eng.setValue(Free, 150);
+        tick(3);
+        QCOMPARE(sent(Free), 150);
+        fx->setAddress(Free);
+        tick(4);
+        QCOMPARE(sent(Free), 0);
+        eng.setValue(Free, 170);        // moved for it
+        tick(3);
+        QCOMPARE(sent(Free), 170);
+        eng.resetChannel(Free);         // let go of it
+        tick(3);
+        QCOMPARE(sent(Free), 0);
+    }
+}
+
+void ShowOnlyReview5_Test::sweepS0LtpChannel()
+{
+    sweepS0(addFogger(QStringLiteral("S0 fogger"), Flame));     // group Effect: LTP
+}
+
+void ShowOnlyReview5_Test::sweepS0HtpChannel()
+{
+    sweepS0(addDimmer(QStringLiteral("S0 flame"), Flame, Fixture::ShowOnly));  // intensity: HTP
 }
 
 QTEST_MAIN(ShowOnlyReview5_Test)

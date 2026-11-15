@@ -61,50 +61,69 @@ class QXmlStreamWriter;
  *
  *  - ShowOnly: every channel. The rules below.
  *
- * Show only: the rules. One mechanism, the live session
- * (GenericFader::liveEpoch()), and every writer stamped by it.
+ * Show only: the rules. One mechanism, the stamp, and the live session.
+ * Every operator action takes a stamp (GenericFader::stampEpoch(): a
+ * number that only grows); a live session starts at a stamp of its own
+ * (GenericFader::liveEpoch()); each Show-only channel keeps the stamp it
+ * was made Show only at.
  *
+ *  S0. The frame. In Operate, every frame, each Show-only channel is built
+ *      from scratch (Universe::processFaders()): it starts at its safe
+ *      value, and only the writers that count NOW are applied, HTP and LTP
+ *      among themselves. A writer counts on a channel while its stamp is
+ *      of the current session and later than the channel's own (a fixture
+ *      patched or moved onto it, the rule given). A writer that does not
+ *      count contributes nothing -- nothing is undone to what was there.
+ *      With none, the channel is at its safe value: a cue letting go cuts
+ *      it, whatever its channel group (board Q246). The same in Blind (the
+ *      frame is built for the plot, safe is sent), under Blackout (safe is
+ *      sent) and after the emergency stop's cut.
  *  S1. Outside Operate, and in Blind, every frame sent has a Show-only
  *      channel at its safe value (safeValue(): dark, closed, through the
  *      channel's modifier). Blackout always wins, Ignore Blackout or not.
- *  S2. A live session starts at each switch to Operate, at All Off, and
- *      when a show is loaded or cleared (E2). In Operate a Show-only
- *      channel goes out only from a writer stamped in the current session
- *      (GenericFader::holdsShowOnly()); anything else that writes it is
- *      undone before the frame is sent. Input passthrough never reaches
- *      it (Universe::applyPassthrough()).
- *  S3. Stamps. Every stamp is taken from GenericFader::stampEpoch(): the
- *      live session for a person's action, an automatic writer's own
- *      session inside its StampScope.
- *      - A function is stamped by its sources: one added (or renewed: a GO
- *        on a list already playing) in this session is the show, unless it
- *        is a preview, an editor's Test or the Workbench. One started by
- *        another function takes that one's stamp -- at its start, and
- *        whenever that one is the show -- and keeps it for the session: a
- *        cue a Script launched still drives after the Script ends. One
- *        with no source left (it is stopping) is held, fade-out and all.
+ *  S2. A live session starts at each switch to Operate, at All Off, when a
+ *      show is loaded or cleared, and when Blind ends in Operate (a GO in
+ *      Blind is checked on screen: GO again after Blind to fire it).
+ *      Input passthrough never reaches a Show-only channel.
+ *  S3. Stamps. Every stamp is taken from GenericFader::stampEpoch(): a new
+ *      one for a person's action, an automatic writer's own inside its
+ *      GenericFader::StampScope.
+ *      - A function is stamped by its sources (Function::showStamp()): one
+ *        added (or renewed: a GO on a list already playing) is the show,
+ *        unless it is a preview, an editor's Test or the Workbench (Play
+ *        Live too: a preview). One started by another function takes that
+ *        one's stamp -- only while that one is the show and worked out in
+ *        this session, so the order the functions are refreshed in never
+ *        matters -- and keeps it for the session: a cue a Script launched
+ *        still drives after the Script ends. One with no source left (it
+ *        is stopping) is held, fade-out and all. A fader reads its
+ *        function's stamp every frame: a new session holds it at once,
+ *        before any gate is worked out again.
  *      - A Park, Mark or cue stack is stamped when set, started or stepped
  *        by hand; a Park or Mark loaded with the show (or a parked fixture
- *        patched later) is stamped by no session.
+ *        patched later) is stamped by nothing.
  *      - A Simple Desk channel, a VC slider, XY pad or audio DMX bar when
- *        it is really moved (a changed value from the UI or an input --
- *        never an echo, a feedback re-sync, a rebuild, a mode trip or a
- *        page load); the stamp is the control's, so a fader rebuilt from a
- *        control left up is as old as the control. A playback slider that
- *        starts its function again (after a stop) is as old as its last
- *        move. A stamp is for what is patched there: a Simple Desk channel
- *        moved before a Show-only fixture came onto its address holds it.
+ *        it is really moved (a changed value from a hand or an input --
+ *        never an echo, a feedback re-sync, a rebuild, a mode trip, a load
+ *        or a page change: a position set by code is no move); the stamp
+ *        is the control's, so a fader rebuilt from a control left up is as
+ *        old as the control. A playback slider that starts its function
+ *        again (after a stop) is as old as its last move. A VC button's
+ *        flash is a hand: its flash fader takes the press's stamp.
  *      - An automatic widget (VC audio triggers, a VC Clock) is the show
- *        only from the session the operator armed it in, in Operate: by
+ *        only from the stamp the operator armed it with, in Operate: by
  *        switching it on, touching it, or working it by a key, an input or
  *        the web (Function::armAutoSource()); never by its own first
  *        start. Everything it drives -- its functions, its DMX bars, and a
  *        VC button, slider or cue list one of its bars works -- takes that
- *        session, never a hand's stamp or a GO's (no GO is noted).
+ *        stamp, never a hand's or a GO's (no GO is noted).
  *      - Timecode: a Show, or a section's linked cue list, that external
- *        timecode starts takes the session the timecode link was armed in
- *        (Follow switched on in Operate: Show::timecodeArmEpoch()); loaded
- *        on with the show, or switched on in Design, it is not armed.
+ *        timecode starts takes the stamp the Show's timecode link was
+ *        armed with (Follow switched on in Operate: Show::timecodeArmEpoch());
+ *        a Show Tree cue list's timecode GOs, the stamp its Follow
+ *        timecode was switched on (or touched) with in Operate
+ *        (ShowTreeController::listTimecodeArm()). Loaded on with the show,
+ *        or switched on in Design, it is not armed.
  *      - A last look never holds a Show-only channel. Previews, editors'
  *        Tests, Locate, focus and fixture tests are never stamped;
  *        Identify and Reset are refused for a Show-only fixture and for
@@ -115,6 +134,8 @@ class QXmlStreamWriter;
  *      no waiting on the function list before the cut (cut first, then
  *      the functions). Every function is stopped, queued ones too -- on
  *      the main thread, queued there when the stop came from another.
+ *      From the cut on, nothing stamped before it counts (S0), stopped
+ *      yet or not: a frame processed in the gap adds nothing.
  *  E2. It starts a new live session, exactly as the switch to Operate, a
  *      show loaded and a show cleared do.
  *  E3. A writer is stamped again only by an operator action after it: a GO

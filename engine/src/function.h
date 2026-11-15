@@ -858,6 +858,12 @@ public:
      *  sources are gone (stopping, fading out) it stays as it was, so a
      *  preview's fade-out never reaches a Show-only fixture. */
     const std::shared_ptr<std::atomic<bool> > &previewGate() const { return m_previewGate; }
+    /** Show only: its stamp as the show (the latest stamp of a source that
+     *  counts in this session, GenericFader::stampEpoch()), 0 while held.
+     *  Shared with its faders: a fader counts on a Show-only channel only
+     *  while this is of the current session (S0) -- no refresh needed for
+     *  a new session to hold it. */
+    const std::shared_ptr<std::atomic<quint32> > &showStamp() const { return m_showStamp; }
     /** Bring previewGate() up to date if any function's sources (or any
      *  gate) changed since this one last looked; one atomic load
      *  otherwise. No Doc lookup: what each source is was settled when it
@@ -918,6 +924,7 @@ private:
     {
         bool notTheShow = false;
         std::shared_ptr<std::atomic<bool> > parentGate;
+        std::shared_ptr<std::atomic<quint32> > parentStamp;
         /** The Operate session it was stamped in (GenericFader::stampEpoch()
          *  when added; for a parent function's, latched from its gate): one
          *  from before this session is not the show */
@@ -937,6 +944,7 @@ private:
        so nothing it plays -- not even a preview started and stopped inside
        one tick -- is ever the show by default. */
     std::shared_ptr<std::atomic<bool> > m_previewGate { std::make_shared<std::atomic<bool> >(true) };
+    std::shared_ptr<std::atomic<quint32> > m_showStamp { std::make_shared<std::atomic<quint32> >(0) };
     quint32 m_previewGateGen = 0xFFFFFFFF;
 
     QMutex m_stopMutex;

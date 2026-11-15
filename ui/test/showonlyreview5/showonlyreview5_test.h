@@ -89,6 +89,11 @@ private slots:
     void r7AllOffRaceLeavesAnLtpChannelUp();
     void r7CueStackStampSurvivesARepatch();
 
+    /* S0 swept: an LTP and an HTP channel of a Show-only fixture, built
+       from scratch every frame */
+    void sweepS0LtpChannel();
+    void sweepS0HtpChannel();
+
 private:
     Fixture *addDimmer(const QString &name, int address, int rules);
     Fixture *addLaser(const QString &name, int address);
@@ -101,6 +106,9 @@ private:
     Chaser *listOf(Function *f, const QString &name);
     void goList(Chaser *list);
     Fixture *addFogger(const QString &name, int address);
+    /** S0: the five ways a Show-only channel at @p fx's address could keep
+       a level, each ending at safe until a fresh operator action */
+    void sweepS0(Fixture *fx);
 
     Doc *m_doc = nullptr;
     IOPluginStub *m_stub = nullptr;

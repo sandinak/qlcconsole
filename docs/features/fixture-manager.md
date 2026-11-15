@@ -815,7 +815,7 @@ opened — over the web while in Operate too). So:
   Tree's preview, **Solo**, the Workbench, a GO from the Run tab while you
   try a list out, effect previews, the Simple Desk — and **Blind** in
   either mode. In Operate the things that are not the show stay off it
-  too: the Workbench, **Locate** (greyed for it, as for a laser),
+  too: the Workbench (its **Play Live** too: a preview), **Locate** (greyed for it, as for a laser),
   Highlight, the programmer's flash, focus calls, **Quick Focus** and
   **Venue Focus**, Refine, a fixture test, a power measurement, editors'
   Test buttons (and the Show editor's Play, and what a Script under one
@@ -826,8 +826,18 @@ opened — over the web while in Operate too). So:
   set or moved in Operate, a **Simple Desk** channel (your own hand on it,
   which is how you test a fogger before doors), a **Park**, a **Mark** or
   a Simple Desk **cue stack**. Not GOs, but the show too: VC buttons,
-  sliders, the XY pad, a Control Map MIDI or OSC binding and the web
-  page's function command.
+  sliders, the XY pad, a VC button's flash, a Control Map MIDI or OSC
+  binding and the web page's function command — moved or pressed by you:
+  a position or level the console sets itself (loading the show, a page
+  change) is no move.
+- **Control surfaces**: a motor fader's echo and an OSC surface re-sending
+  its page send the value a fader already has — that is not a move, and
+  drives nothing new.
+- **One rule, every frame.** In Operate each Show-only channel is worked
+  out from scratch every frame: it starts at its safe value, and only what
+  counts now — started, set or moved in this session, after the fixture
+  was patched where it is — is put on it. Nothing else adds anything, and
+  nothing that stopped counting stays behind.
 - **Automatic widgets wait to be armed.** Audio triggers and a VC Clock's
   schedule drive a Show-only fixture only once **you** have worked them in
   Operate: switched audio triggers on (a click, a key, an input, the web),
@@ -839,7 +849,10 @@ opened — over the web while in Operate too). So:
 - **Timecode** starts a Show (and, at a freeze, its section's linked cue
   list) that drives Show-only fixtures only if you armed **Follow timecode**
   in Operate. Saved on with the show, or switched on in Design, it plays
-  them held: switch Follow off and on again in Operate to arm it.
+  them held: switch Follow off and on again in Operate to arm it. The same
+  for a Show Tree cue list set to **Follow timecode**: its timecode GOs
+  drive Show-only fixtures only once you switch Follow on (or touch it) in
+  Operate. All Off disarms both.
 - **Input passthrough** (a house desk merged into a universe) never
   reaches a Show-only channel.
 - **Cues left running from Design hold Show-only fixtures until a GO in
@@ -854,7 +867,14 @@ opened — over the web while in Operate too). So:
   long as the session lasts. A VC playback slider that restarts its cue by
   itself after a stop is held until you move it again.
 - **When a cue lets go**, its Show-only fixtures go to safe at once: they
-  never fade out of a cue (a stopped cue is no longer the show).
+  never fade out of a cue (a stopped cue is no longer the show), and no
+  channel keeps the cue's level — a fogger's fog channel included.
+- **Blind**: a GO in Blind is checked on screen; GO again after Blind to
+  fire it. Leaving Blind in Operate starts afresh, as switching to Operate
+  does.
+- **Patched or moved mid-show**: whatever was driving the addresses a
+  Show-only fixture lands on (a cue stack, a fader, a Simple Desk channel)
+  does not drive it there until you move or GO it again.
 - **A last look** never holds a Show-only fixture.
 - **Its safe value**: every intensity channel at 0 (a relay open, a laser
   or flame off); a laser's, fogger's, hazer's or plain dimmer's every

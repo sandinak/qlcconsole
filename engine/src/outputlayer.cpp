@@ -32,6 +32,7 @@ void OutputLayer::set(const QList<Level> &levels, const std::function<bool(const
        on its universe's fader -- or, for a layer that is the show, on the
        stale one when it was set before this Operate session. */
     QHash<int, QList<FadeChannel>> next;
+    QHash<int, quint32> slotStamps;
     Doc *doc = m_doc.data();
     const quint32 epoch = GenericFader::liveEpoch();
     /* What a level set now is stamped with: an operator action's session.
@@ -70,8 +71,17 @@ void OutputLayer::set(const QList<Level> &levels, const std::function<bool(const
             fc.setTarget(l.value);
             fc.setReady(true);
             const quint64 key = (quint64(l.fixtureId) << 32) | l.channel;
-            const bool stale = !m_holdsShowOnly && stamps.value(key).epoch != epoch;
-            next[int(fc.universe()) | (stale ? kStaleSlot : 0)].append(fc);
+            const quint32 st = stamps.value(key).epoch;
+            const bool stale = !m_holdsShowOnly && st < epoch;
+            const int slotKey = int(fc.universe()) | (stale ? kStaleSlot : 0);
+            next[slotKey].append(fc);
+            // A slot's fader is as old as its oldest level (S0: a level set
+            // before a channel was made Show only does not count on it).
+            auto ms = slotStamps.find(slotKey);
+            if (ms == slotStamps.end())
+                slotStamps.insert(slotKey, st);
+            else if (st < ms.value())
+                ms.value() = st;
         }
     }
 
@@ -125,7 +135,7 @@ void OutputLayer::set(const QList<Level> &levels, const std::function<bool(const
         // show until the next one starts (set in Design, it holds Show-only
         // fixtures once Operate starts).
         if (!m_holdsShowOnly && !stale)
-            slot.fader->stampLiveEpoch();
+            slot.fader->setLiveEpoch(slotStamps.value(it.key()));
         slot.fader->replaceAll(it.value());
     }
 }

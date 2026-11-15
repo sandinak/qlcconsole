@@ -41,6 +41,10 @@ class Doc;
 
 class QLC_ENGINE_EXPORT EffectScriptRunner final : public QObject, public DMXSource
 {
+    /** Show only: a scene's gate and stamp (Function::previewGate(),
+     *  Function::showStamp()) */
+    typedef QPair<std::shared_ptr<std::atomic<bool> >, std::shared_ptr<std::atomic<quint32> > > SceneGate;
+
     Q_OBJECT
 
 public:
@@ -240,10 +244,11 @@ private:
     mutable QMutex m_writesMutex;
     QList<EffectInstance::DmxWrite> m_publishedWrites;
     /** Show only: per published instance on a Show-only fixture, the
-     *  preview gates (Function::previewGate()) of the scenes it plays for;
+     *  gates and stamps (Function::previewGate(), showStamp()) of the
+     *  scenes it plays for;
      *  a write's gateSet indexes it. All true: the write is not the show
      *  and goes out on the held fader (m_faders key | kHeldFader). */
-    QVector<QVector<std::shared_ptr<std::atomic<bool> > > > m_publishedGateSets;
+    QVector<QVector<SceneGate> > m_publishedGateSets;
     /** What has drawn (hasDrawn()), published with the writes, under the
      *  same mutex: (scene id << 32) | effect palette id; a failed effect's
      *  palette id alone, with every bit of the scene half set. */

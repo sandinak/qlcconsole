@@ -563,14 +563,18 @@ void Universe::processFaders()
        switch landing between the faders and the send must not send one
        frame of a preview unheld. */
     const bool showOnlyLiveNow = showOnlyLive();
-    /* Going live (or a channel made Show only while live): start the
-       channels from their safe value. Before the faders, which write them
-       again. */
-    if (m_showOnlyReset.load(std::memory_order_relaxed))
+    // Live with Show-only channels: S0, each built from scratch this frame.
+    const bool keepShowOnly = showOnlyChannelCount() > 0 && showOnlyLiveNow;
+    /* S0: every frame, live, each Show-only channel starts at its safe
+       value; only the writers that count now (Universe::writeFader())
+       put anything on it. Nothing a writer left -- a cue that let go, an
+       LTP level, a writer held since -- carries over. Not live, only the
+       channels just made Show only (the frame is held as it is sent). */
+    if (keepShowOnly || m_showOnlyReset.load(std::memory_order_relaxed))
     {
         QMutexLocker locker(&m_outputRulesMutex);
-        // Only the channels just made Show only (setOutputRules()).
-        for (int c : std::as_const(m_showOnlyResetChannels))
+        const QVector<int> &reset = keepShowOnly ? m_showOnlyChannels : m_showOnlyResetChannels;
+        for (int c : reset)
         {
             (*m_preGMValues)[c] = m_showOnlySafe.at(c);
             (*m_blackoutValues)[c] = m_showOnlySafe.at(c);
@@ -579,8 +583,6 @@ void Universe::processFaders()
         m_showOnlyResetChannels.clear();
         m_showOnlyReset.store(false, std::memory_order_relaxed);
     }
-    // Live with Show-only channels: the faders that hold them are kept off.
-    const bool keepShowOnly = showOnlyChannelCount() > 0 && showOnlyLiveNow;
 
     {
         QMutexLocker fadersLocker(&m_fadersMutex);
@@ -746,8 +748,25 @@ void Universe::setOutputRules(const QByteArray &bits)
         if (m_showOnlySafe.size() != UNIVERSE_SIZE)
             m_showOnlySafe = QByteArray(UNIVERSE_SIZE, char(0));
         m_showOnlyCount.store(int(showOnly.size()), std::memory_order_relaxed);
+        // S0: a channel made Show only now takes a stamp of its own; only a
+        // writer stamped after it counts there (a cue stack, a fader, a
+        // desk channel moved for what was patched before does not).
+        if (!newlyShowOnly.isEmpty())
+        {
+            const quint32 mark = GenericFader::newStamp();
+            for (int c : std::as_const(newlyShowOnly))
+                m_showOnlyMark[c] = mark;
+        }
+        updateMaxMarkLocked();
     }
-    clearShowOnlyStamps(newlyShowOnly);
+}
+
+void Universe::updateMaxMarkLocked()
+{
+    quint32 maxMark = 0;
+    for (int c : std::as_const(m_showOnlyChannels))
+        maxMark = qMax(maxMark, m_showOnlyMark.at(c));
+    m_showOnlyMaxMark.store(maxMark, std::memory_order_relaxed);
 }
 
 void Universe::setShowOnlySafeValues(const QByteArray &safe)
@@ -842,25 +861,11 @@ void Universe::markShowOnly(int channel, bool on, uchar safe)
                 m_showOnlyReset.store(true, std::memory_order_relaxed);
             }
         }
+        if (newlyOn)
+            m_showOnlyMark[channel] = GenericFader::newStamp();     // S0
+        updateMaxMarkLocked();
         updatePostGMValue(channel);
     }
-    if (newlyOn)
-        clearShowOnlyStamps(QVector<int>() << channel);
-}
-
-void Universe::clearShowOnlyStamps(const QVector<int> &channels)
-{
-    /* A channel just made Show only (a Show-only fixture patched or moved
-       onto it, the rule just given): a stamp a writer had there was for
-       what was patched before -- gone, so it waits for a new operator
-       action. Outside m_outputRulesMutex: the faders' lock comes first. */
-    if (channels.isEmpty())
-        return;
-    QMutexLocker fadersLocker(&m_fadersMutex);
-    for (const QSharedPointer<GenericFader> &f : std::as_const(m_faders))
-        if (!f.isNull() && f->channelStamped())
-            for (int c : channels)
-                f->clearChannelLiveEpoch(c);
 }
 
 bool Universe::showOnlyHeld() const
@@ -871,16 +876,26 @@ bool Universe::showOnlyHeld() const
 
 void Universe::writeFader(GenericFader *fader, bool keepShowOnly)
 {
-    const bool whole = keepShowOnly && fader->holdsShowOnly();
-    const bool perChannel = keepShowOnly && !whole && fader->channelStamped();
-    if (!whole && !perChannel)
+    if (!keepShowOnly)
     {
         fader->write(this);
         return;
     }
-    // Live, and this fader is not the show (a preview, the Workbench,
-    // focus): what it writes on a Show-only channel is undone, so the
-    // channel keeps what the show gave it. Kept in a buffer sized with the
+    /* S0: a writer counts on a Show-only channel only while its stamp is
+       of this session and later than the channel's (made Show only at:
+       m_showOnlyMark). One that counts on all of them writes as any fader
+       does -- the usual case, one compare. */
+    const quint32 session = GenericFader::liveEpoch();
+    const bool perChannel = fader->channelStamped() && !fader->holdsShowOnly();
+    const quint32 stamp = perChannel ? 0 : fader->showStamp();
+    if (!perChannel && stamp >= session && stamp > m_showOnlyMaxMark.load(std::memory_order_relaxed))
+    {
+        fader->write(this);
+        return;
+    }
+    // Some or all of the Show-only channels: what it writes there is not
+    // applied -- the channel keeps what the writers that count gave it
+    // this frame (from its safe value). Kept in a buffer sized with the
     // rules -- nothing allocated here.
     QMutexLocker locker(&m_outputRulesMutex);
     const int n = int(m_showOnlyChannels.size());
@@ -890,10 +905,9 @@ void Universe::writeFader(GenericFader *fader, bool keepShowOnly)
     for (int i = 0; i < n; i++)
     {
         const int c = m_showOnlyChannels.at(i);
-        // Stamped channel by channel (the Simple Desk): only the channels
-        // moved in this session go through.
-        if (perChannel && fader->channelLive(c))
-            continue;
+        const quint32 s = perChannel ? fader->channelStamp(c) : stamp;
+        if (s >= session && s > m_showOnlyMark.at(c))
+            continue;           // it counts here
         if (uchar(m_preGMValues->at(c)) != m_showOnlyKept.at(i))
         {
             (*m_preGMValues)[c] = char(m_showOnlyKept.at(i));

@@ -160,6 +160,9 @@ signals:
      */
     void blackoutChanged(bool state);
 
+    /** Blind is about to end (before anything is sent again): Show only
+     *  starts a new session (OutputRuleKeeper) */
+    void outputResuming();
     /** Sent when the Blind (output-inhibited) state changes. */
     void outputInhibitedChanged(bool state);
 
