@@ -856,6 +856,9 @@ private:
     /** A game controller line (its plugin says what kind, or its profile
      *  gives it gamepad roles). */
     static bool isGamepadLine(QLCIOPlugin *plugin, quint32 line);
+    /** True when an open output patch other than @p except sends on
+     *  @p plugin's @p line (review 11: a kept-off patch must not close it) */
+    bool lineUsedByAnother(const QLCIOPlugin *plugin, quint32 line, const OutputPatch *except) const;
 
 private slots:
    /** Slot that catches plugin configuration change notifications from UIPluginCache */

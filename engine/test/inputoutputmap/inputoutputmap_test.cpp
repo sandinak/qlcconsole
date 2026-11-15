@@ -2326,50 +2326,127 @@ void InputOutputMap_Test::everyRigCheckHoldsWithTheClosingFrameFirst()
     }
 }
 
-/* Review 10 M2: a USB device unplugged and another plugged in -- its line
-   number now names a different device. The patch follows its device's
-   name where it went; with the name gone, a universe with Show-only
-   channels is never reopened on whatever took the number (kept pending on
-   the old name, said); one without is reopened as before. */
+/* Review 10 M2, as review 11 decided it: every universe reconnects by its
+   line number, as it always did. A universe with Show-only channels whose
+   line now names another device than the one it was patched to is kept
+   off it -- pending on that name, said -- even when that device is at
+   another number now (never followed), and comes back only when a line of
+   that name is at its own number again. */
 void InputOutputMap_Test::aLineThatNamesAnotherDeviceIsNotReopened()
 {
     IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
     stub->m_linesAreHardware = true;
     stub->m_lineNames = QStringList() << "Pro (S/N: A1)" << "Open (S/N: B2)" << "Open (S/N: C3)";
     InputOutputMap iom(m_doc, 2);
-    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 1));     // B2
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 1));     // B2, Show-only
     QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 2));     // C3
     iom.universe(0)->markShowOnly(14, true, 0);
     QVERIFY(iom.universe(1)->showOnlyChannelCount() == 0);
 
-    // B2 moved down a line (A1 unplugged): followed by name.
+    // A1 unplugged: B2 is line 0 now, C3 line 1. The Show-only universe is
+    // not reopened on line 1 (C3 now) nor followed to B2; the other one
+    // reopens on its number, as before.
     stub->m_lineNames = QStringList() << "Open (S/N: B2)" << "Open (S/N: C3)";
-    stub->configure();
-    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(0));
-    QCOMPARE(iom.outputPatch(0, 0)->outputName(), QString("Open (S/N: B2)"));
-    QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(1));
-
-    // B2 gone, another device in its place: the Show-only universe is not
-    // reopened on it; the other universe, gone too, reopens as before.
-    stub->m_lineNames = QStringList() << "Eurolite (S/N: Z9)" << "Nano (S/N: Y8)";
     QSignalSpy kept(&iom, SIGNAL(offlinePatchesChanged()));
-    stub->m_openOutputs.clear();
     stub->configure();
     OutputPatch *op = iom.outputPatch(0, 0);
     QVERIFY(op->isPending());
     QVERIFY(op->isPatched() == false);
     QCOMPARE(op->outputName(), QString("Open (S/N: B2)"));
     QVERIFY(op->reconnectHeld().contains("Show-only"));
-    QVERIFY(stub->m_openOutputs.contains(0) == false);
     QVERIFY(kept.count() >= 1);
     QVERIFY(iom.outputPatch(1, 0)->isPatched());
-    QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(1));
+    QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(2));
 
-    // It comes back: reopened on it, by name.
-    stub->m_lineNames = QStringList() << "Eurolite (S/N: Z9)" << "Nano (S/N: Y8)" << "Open (S/N: B2)";
+    // B2 back at its own number: reopened there.
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)" << "Open (S/N: B2)" << "Open (S/N: C3)";
     stub->configure();
     QVERIFY(iom.outputPatch(0, 0)->isPatched());
-    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(2));
+    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(1));
+    QVERIFY(stub->m_openOutputs.contains(1));
+    QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(2));
+}
+
+/* Review 11: an ordinary unplug and replug of one of two USB interfaces,
+   NO Show-only fixtures anywhere. Before d82506c298 each universe came back
+   on its own line (reconnect() by number). */
+void InputOutputMap_Test::review11_unplugReplugOneOfTwoComesBackOnItsOwnDevice()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)" << "Pro (S/N: B2)";
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 0));     // A1
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 1));     // B2
+    QVERIFY(iom.universe(0)->showOnlyChannelCount() == 0);
+    QVERIFY(iom.universe(1)->showOnlyChannelCount() == 0);
+
+    // A1 unplugged (cable bump): B2 is line 0 now.
+    stub->m_lineNames = QStringList() << "Pro (S/N: B2)";
+    stub->configure();
+    // Two universes must never be opened on one device.
+    QVERIFY2(!(iom.outputPatch(0, 0)->isPatched() && iom.outputPatch(1, 0)->isPatched()
+               && iom.outputPatch(0, 0)->output() == iom.outputPatch(1, 0)->output()),
+             "universe 1 and universe 2 are both sending to B2");
+
+    // A1 plugged back in, where it was.
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)" << "Pro (S/N: B2)";
+    stub->configure();
+    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(0));
+    QCOMPARE(iom.outputPatch(0, 0)->outputName(), QString("Pro (S/N: A1)"));
+    QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(1));
+    QCOMPARE(iom.outputPatch(1, 0)->outputName(), QString("Pro (S/N: B2)"));
+}
+
+/* Review 11: two of one model whose line name carries no serial (Eurolite
+   USB-DMX512 PRO, NanoDMX, Stageprofi name their line name() only). One is
+   unplugged and plugged back in; no Show-only fixtures. */
+void InputOutputMap_Test::review11_twoIdenticalDevicesUnplugReplugKeepTwoLines()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    const QString e("Eurolite USB-DMX512 PRO");
+    stub->m_lineNames = QStringList() << e << e;
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 1));
+
+    // Nothing unplugged: a configuration change keeps both where they are.
+    stub->configure();
+    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(0));
+    QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(1));
+
+    stub->m_lineNames = QStringList() << e;          // one unplugged
+    stub->configure();
+    stub->m_lineNames = QStringList() << e << e;     // and back
+    stub->configure();
+    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(0));
+    QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(1));
+}
+
+/* Review 11: the universe whose device went has Show-only fixtures; the
+   other universe's device is still there and only moved down a line. The
+   kept-pending path closes the line it had -- which the other universe was
+   just reopened on. */
+void InputOutputMap_Test::review11_keptPendingDoesNotCloseTheLineAnotherUniverseMovedTo()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)" << "Pro (S/N: B2)";
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 1));     // universe 1 -> B2
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 0));     // universe 2 -> A1
+    iom.universe(1)->markShowOnly(14, true, 0);                     // a laser on A1's rig
+
+    stub->m_lineNames = QStringList() << "Pro (S/N: B2)";          // A1 unplugged
+    stub->configure();
+
+    OutputPatch *b = iom.outputPatch(0, 0);
+    QVERIFY(b->isPatched());
+    // Wherever universe 1 is patched now, that line is open in the plugin.
+    QVERIFY2(stub->m_openOutputs.contains(b->output()),
+             qPrintable(QString("universe 1 is patched on line %1 (%2), which is closed")
+                        .arg(b->output()).arg(b->outputName())));
 }
 
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()

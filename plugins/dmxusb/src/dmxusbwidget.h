@@ -150,6 +150,12 @@ public:
      */
     virtual bool isOpen();
 
+    /** What output @p line was given last is on the wire before this
+     *  returns (QLCIOPlugin::flushOutput(): after a closing frame). A widget
+     *  that sends as it closes needs nothing; the Pro, whose thread serves
+     *  its other port too, waits for it. */
+    virtual void flush(quint32 line) { Q_UNUSED(line) }
+
     /********************************************************************
      * Widget Ports
      ********************************************************************/

@@ -1127,8 +1127,14 @@ int InputOutputMap::retryOfflinePatches()
             if (op == NULL || op->isPending() == false)
                 continue;
             const QMap<QString, QVariant> params = op->getPluginParameters();
-            const int line = resolveSavedLine(op->plugin(), true, op->outputName(),
-                    op->pendingNetwork(), NetworkRoute::targetFromParameters(params));
+            /* Kept off for a device change (review 11): back only on its own
+               number, named as when it was patched -- never followed. */
+            const int line = op->reconnectHeld().isEmpty() == false
+                    ? (op->plugin() != NULL && op->pendingLine() != UINT_MAX
+                       && op->plugin()->outputs().value(int(op->pendingLine())) == op->outputName()
+                       ? int(op->pendingLine()) : -1)
+                    : resolveSavedLine(op->plugin(), true, op->outputName(),
+                                       op->pendingNetwork(), NetworkRoute::targetFromParameters(params));
             if (line < 0)
             {
                 /* Nothing reaches its network. With the gate on and this
@@ -1861,6 +1867,23 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
         emit offlinePatchesChanged();
 }
 
+bool InputOutputMap::lineUsedByAnother(const QLCIOPlugin *plugin, quint32 line,
+                                       const OutputPatch *except) const
+{
+    for (quint32 u = 0; u < universesCount(); u++)
+    {
+        const Universe *uni = m_universeArray.at(u);
+        for (int o = 0; o < uni->outputPatchesCount(); o++)
+        {
+            const OutputPatch *op = uni->outputPatch(o);
+            if (op != NULL && op != except && op->plugin() == plugin
+                && op->isPatched() && op->output() == line)
+                return true;
+        }
+    }
+    return false;
+}
+
 void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
 {
     /* A device input (game controller, MIDI surface) is a line that comes
@@ -1883,11 +1906,27 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
 
             if (op != NULL && op->plugin() == plugin)
             {
-                /*success = */ op->reconnect();
-                // Its device gone, a Show-only universe kept off whatever
-                // took its line (review 10 M2): said, and kept to reopen.
-                if (op->isPending() && op->reconnectHeld().isEmpty() == false)
+                /* Review 11: every universe reconnects by line number, as
+                   it always did. Only a universe with Show-only channels
+                   whose line now names another device than the one it was
+                   patched to (a USB interface unplugged, another in its
+                   place) is kept off it: pending on that name, said, and
+                   reopened when a line of that name is back at the same
+                   number. */
+                if (universe->showOnlyChannelCount() > 0 && op->lineNameChanged())
+                {
+                    const quint32 line = op->output();
+                    const QString now = plugin->outputs().value(int(line));
+                    op->holdForDeviceChange(
+                        tr("Universe %1: %2 is not on line %3 any more (%4 is): it has Show-only "
+                           "fixtures, so it is kept off until %2 is back")
+                            .arg(i + 1).arg(op->outputName())
+                            .arg(line + 1).arg(now.isEmpty() ? tr("nothing") : now),
+                        lineUsedByAnother(plugin, line, op) == false);
                     keptOffLine = true;
+                    continue;
+                }
+                /*success = */ op->reconnect();
             }
         }
 

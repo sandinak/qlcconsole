@@ -397,11 +397,13 @@ bool EnttecDMXUSBPro::close(quint32 line, bool input)
        its Show-only channels at safe) reaches the Pro before the port is
        let go -- the Pro's firmware repeats the last frame it received, for
        as long as it has power. */
+    /* With another port still open the thread keeps running: the engine's
+       flushOutput() (flush()) has waited for it already -- only when there
+       was a closing frame (Show-only channels), so an ordinary re-patch
+       never stalls here (review 11). */
     const quint32 portIndex = input ? UINT_MAX : lineToPortIndex(line, DMXUSBWidget::Output);
     const bool output = portIndex < quint32(m_portsInfo.count())
                         && m_portsInfo.at(int(portIndex)).m_openDirection == DMXUSBWidget::Output;
-    if (output && openPortsCount() > 1)
-        flushPort(int(portIndex));
 
     InterfaceAction cmd;
     cmd.action = CloseLine;
@@ -1048,6 +1050,17 @@ void EnttecDMXUSBPro::sendPort(int i)
         if (sent == false)
             qWarning() << Q_FUNC_INFO << name() << "will not accept DMX data";
     }
+}
+
+void EnttecDMXUSBPro::flush(quint32 line)
+{
+    // The last open port: close() stops the thread and sends it, no wait.
+    if (openPortsCount() <= 1)
+        return;
+    const quint32 portIndex = lineToPortIndex(line, DMXUSBWidget::Output);
+    if (portIndex < quint32(m_portsInfo.count())
+        && m_portsInfo.at(int(portIndex)).m_openDirection == DMXUSBWidget::Output)
+        flushPort(int(portIndex));
 }
 
 void EnttecDMXUSBPro::flushPort(int i)

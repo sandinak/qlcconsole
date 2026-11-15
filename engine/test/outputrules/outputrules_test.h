@@ -275,6 +275,10 @@ private slots:
     /** A line closed with no Show-only channel gets no extra frame */
     void aClosingLineWithNoShowOnlyGetsNothingExtra();
     void review10_aClosingLineInBlindGetsNoPreview();
+    /** Review 11 M-3: a retarget in one step (address and port at once,
+     *  PatchPlanner's): the old node gets the closing frame, the new one
+     *  never does; OSC's outputPort is a target too */
+    void aRetargetInOneStepClosesOnlyTheOldNode();
     /** A held line released: its first frame is the S0 build */
     void aReleasedLineStartsFromTheCurrentBuild();
     /** The patch list changes under the frame lock: frames and sends from

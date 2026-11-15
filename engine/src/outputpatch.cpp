@@ -155,53 +155,11 @@ bool OutputPatch::reconnect()
         if (m_frameLock != nullptr)
             locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
 
-        /* The plugin's lines may have moved under the patch (a USB device
-           unplugged or plugged in: another device at this number). Follow
-           the line's name; gone, a universe with Show-only channels must
-           not be reopened on whatever took its number -- a laser on another
-           interface (review 10 M2). The old line is not sent a closing
-           frame: it is another device now (the plugin closed the old one). */
-        /* Hardware lines only (a line is a device: USB, MIDI): a network
-           line is named after this machine's address, followed by its
-           network (InputOutputMap::resolveSavedLine()), as before. */
-        const bool hardware = m_plugin->linesAreHardware();
-        const QStringList names = hardware ? m_plugin->outputs() : QStringList();
-        const QString now = names.value(int(m_pluginLine));
-        if (hardware && m_lineName.isEmpty() == false && now != m_lineName)
-        {
-            const int moved = names.indexOf(m_lineName);
-            if (moved >= 0)
-            {
-                qWarning() << "[OutputPatch] universe" << m_universe + 1 << m_lineName
-                           << "moved from line" << m_pluginLine << "to" << moved << ": followed";
-                m_plugin->closeOutput(m_pluginLine, m_universe);
-                m_pluginLine = quint32(moved);
-            }
-            else
-            {
-                QByteArray probe;
-                const bool showOnly = m_closingFrame && m_closingFrame(probe, false);
-                if (showOnly)
-                {
-                    m_reconnectHeld = tr("%1 is gone: universe %2 has Show-only fixtures, so it is not "
-                                         "reopened on %3").arg(m_lineName).arg(m_universe + 1)
-                                          .arg(now.isEmpty() ? tr("another line") : now);
-                    qWarning() << "[OutputPatch]" << m_reconnectHeld;
-                    m_plugin->closeOutput(m_pluginLine, m_universe);
-                    m_pendingUID = m_lineName;
-                    m_pendingLine = m_pluginLine;
-                    m_pendingNetwork.clear();
-                    m_pluginLine = QLCIOPlugin::invalidLine();
-                    emit outputNameChanged();
-                    return false;
-                }
-                qWarning() << "[OutputPatch] universe" << m_universe + 1 << m_lineName
-                           << "is gone: reopening line" << m_pluginLine << "(" << now << ")";
-                m_plugin->closeOutput(m_pluginLine, m_universe);
-            }
-        }
-        else
-            m_plugin->closeOutput(m_pluginLine, m_universe);
+        /* By number, as it always was (review 11: following a name broke an
+           ordinary unplug and replug). A universe with Show-only channels
+           is checked before this is called (lineNameChanged()). The name
+           recorded when the patch was made is kept: never this line's. */
+        m_plugin->closeOutput(m_pluginLine, m_universe);
 #if defined(WIN32) || defined(Q_OS_WIN)
         Sleep(GRACE_MS);
 #else
@@ -211,16 +169,42 @@ bool OutputPatch::reconnect()
         if (ret == true)
         {
             m_freshLine.store(true, std::memory_order_relaxed);
-            if (hardware)
-                m_lineName = m_plugin->outputs().value(int(m_pluginLine));
             QMap<QString, QVariant>::iterator it = m_parametersCache.begin();
             for (; it != m_parametersCache.end(); it++)
                 m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
         }
-        emit outputNameChanged();
         return ret;
     }
     return false;
+}
+
+bool OutputPatch::lineNameChanged() const
+{
+    if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine() || m_lineName.isEmpty()
+        || m_plugin->linesAreHardware() == false)
+        return false;
+    return m_plugin->outputs().value(int(m_pluginLine)) != m_lineName;
+}
+
+void OutputPatch::holdForDeviceChange(const QString &why, bool closeTheLine)
+{
+    if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine())
+        return;
+    std::unique_ptr<QMutexLocker<QRecursiveMutex> > locker;
+    if (m_frameLock != nullptr)
+        locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
+    m_reconnectHeld = why;
+    qWarning() << "[OutputPatch]" << why;
+    /* Not closed when another patch is open on it now: closing is per line
+       in a USB plugin, and would stop that universe too. No closing frame:
+       the line is another device now. */
+    if (closeTheLine)
+        m_plugin->closeOutput(m_pluginLine, m_universe);
+    m_pendingUID = m_lineName;
+    m_pendingLine = m_pluginLine;
+    m_pendingNetwork.clear();
+    m_pluginLine = QLCIOPlugin::invalidLine();
+    emit outputNameChanged();
 }
 
 void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid,
@@ -232,6 +216,7 @@ void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid,
 
     m_plugin = plugin;
     m_pluginLine = QLCIOPlugin::invalidLine();
+    m_reconnectHeld.clear();
     m_pendingUID = uid;
     m_pendingLine = savedLine;
     m_pendingNetwork = network;
@@ -315,13 +300,14 @@ bool OutputPatch::isTargetParameter(const QString &prop)
         QStringLiteral("universe"), QStringLiteral("multicast"),       // E1.31
         QStringLiteral("mcastIP"), QStringLiteral("mcastFullIP"),
         QStringLiteral("ucastIP"), QStringLiteral("ucastPort"),
+        QStringLiteral("outputPort"),                                   // OSC
     };
     // Art-Net / E1.31 / WLED "outputIP", and a WLED backup's "outputIP2".. and window
     return exact.contains(prop) || prop.startsWith(QLatin1String("outputIP"))
            || prop.startsWith(QLatin1String("wledAddress")) || prop.startsWith(QLatin1String("wledChannels"));
 }
 
-void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values)
+void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values, const QStringList &unset)
 {
     std::unique_ptr<QMutexLocker<QRecursiveMutex> > locker;
     if (m_frameLock != nullptr)
@@ -330,6 +316,10 @@ void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values)
     for (auto it = values.constBegin(); it != values.constEnd(); ++it)
         if (isTargetParameter(it.key()) && m_parametersCache.value(it.key()) != it.value())
             retarget = true;
+    foreach (const QString &prop, unset)
+        if (isTargetParameter(prop) && m_parametersCache.contains(prop))
+            retarget = true;
+    // One closing frame, to the old target only: then every change at once.
     if (retarget)
         sendClosingFrame();
     for (auto it = values.constBegin(); it != values.constEnd(); ++it)
@@ -337,6 +327,13 @@ void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values)
         m_parametersCache[it.key()] = it.value();
         if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
             m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
+    }
+    foreach (const QString &prop, unset)
+    {
+        if (m_parametersCache.remove(prop) == 0)
+            continue;
+        if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
+            m_plugin->unSetParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, prop);
     }
 }
 

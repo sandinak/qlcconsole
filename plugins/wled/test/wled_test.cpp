@@ -741,6 +741,44 @@ void Wled_Test::aDeadDeviceDoesNotHoldUpTheOthers()
     QTRY_VERIFY_WITH_TIMEOUT(backup.posts.size() > before, 600);
 }
 
+/* Review 11 M-2: flushOutput() (a closing frame, under the engine's frame
+   lock) sends the last look to each device, waits at most about 100 ms in
+   all, and leaves the rest to finish on its own: a device that never
+   answers a connection cannot hold it up. */
+void Wled_Test::aFlushSendsTheLastLookWithinItsBudget()
+{
+    FakeWled lantern;
+    QVERIFY(lantern.powerOn());
+    WledPlugin plugin;
+    plugin.init();
+    plugin.setSendInterval(40);
+    plugin.setInfoInterval(60);
+    QVERIFY(plugin.openOutput(0, 4));
+    plugin.setParameter(4, 0, QLCIOPlugin::Output, WLED_OUTPUTIP, lantern.ip());
+    plugin.setParameter(4, 0, QLCIOPlugin::Output, "outputIP2", QStringLiteral("10.255.255.1"));
+    QTRY_VERIFY_WITH_TIMEOUT(plugin.m_targets.value(4).devices.value(0).layoutKnown, 3000);
+    {
+        // The unreachable backup as if known: the flush tries it too.
+        QMutexLocker locker(&plugin.m_mutex);
+        WledPlugin::Device &d = plugin.m_targets[4].devices[1];
+        d.layoutKnown = true;
+        d.gateOpen = true;
+    }
+    plugin.writeUniverse(4, 0, universe({ 255, 0, 128, 128, 0, 0, 200, 0, 0 }), true);
+    QTRY_VERIFY_WITH_TIMEOUT(!lantern.posts.isEmpty(), 2000);
+    const int before = lantern.posts.size();
+
+    // The closing frame (dark), then the flush: no event loop in between.
+    plugin.writeUniverse(4, 0, universe({ 0, 0, 0, 0, 0, 0, 0, 0, 0 }), true);
+    QElapsedTimer t;
+    t.start();
+    plugin.flushOutput(0, 4);
+    const qint64 took = t.elapsed();
+    QVERIFY2(took < 400, qPrintable(QString("flushOutput() held its caller for %1 ms").arg(took)));
+    QTRY_VERIFY_WITH_TIMEOUT(lantern.posts.size() > before
+                             && lantern.posts.last().value("on").toBool() == false, 2000);
+}
+
 /* Switched off and on again, a lantern has forgotten the look: it is sent
    again, in full, as soon as it answers -- though nothing changed meanwhile. */
 void Wled_Test::aDeviceThatComesBackIsSentTheLookAgain()
