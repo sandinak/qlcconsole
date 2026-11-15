@@ -3360,7 +3360,9 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
 
     if (done == false)
         QMessageBox::warning(this, tr("Patch universe"),
-                             tr("Could not patch that universe to %1.").arg(pluginName));
+                             output && iomap->lastPatchRefusal().isEmpty() == false
+                             ? iomap->lastPatchRefusal()
+                             : tr("Could not patch that universe to %1.").arg(pluginName));
     else
         m_doc->setModified();
     refresh();
@@ -3586,6 +3588,7 @@ void ConnectionsTree::rerouteLine(const QString &pluginName, quint32 oldLine,
         iomap->patchUndo()->capture(universes,
             tr("reroute %1 from \"%2\" to \"%3\"").arg(pluginName).arg(oldName).arg(newName));
 
+    QStringList refused;
     foreach (quint32 uniId, universes)
     {
         Universe *u = iomap->universe(uniId);
@@ -3597,7 +3600,9 @@ void ConnectionsTree::rerouteLine(const QString &pluginName, quint32 oldLine,
             if (op != NULL && op->plugin() != NULL
                     && op->plugin()->name() == pluginName && op->output() == oldLine)
             {
-                iomap->setOutputPatch(uniId, pluginName, QString(), newLine, false, i);
+                if (iomap->setOutputPatch(uniId, pluginName, QString(), newLine, false, i) == false
+                    && iomap->lastPatchRefusal().isEmpty() == false)
+                    refused << tr("%1: %2").arg(u->name(), iomap->lastPatchRefusal());
                 break;
             }
         }
@@ -3605,6 +3610,9 @@ void ConnectionsTree::rerouteLine(const QString &pluginName, quint32 oldLine,
 
     m_doc->setModified();
     refresh();
+    // S-H1: a laser universe stays where it was.
+    if (refused.isEmpty() == false)
+        QMessageBox::warning(this, tr("Reroute interface"), refused.join("\n\n"));
 }
 
 void ConnectionsTree::addUniverse()
@@ -3788,7 +3796,9 @@ void ConnectionsTree::patchUniverseToPort(const QString &pluginName, quint32 lin
     if (iomap->setOutputPatch(uniId, pluginName, QString(), line, false, index) == false)
     {
         QMessageBox::warning(this, tr("Patch to port"),
-                             tr("Could not patch that universe to %1.").arg(pluginName));
+                             iomap->lastPatchRefusal().isEmpty() == false
+                             ? iomap->lastPatchRefusal()
+                             : tr("Could not patch that universe to %1.").arg(pluginName));
         return;
     }
 

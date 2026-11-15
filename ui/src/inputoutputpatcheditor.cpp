@@ -738,7 +738,16 @@ void InputOutputPatchEditor::slotMapItemChanged(QTreeWidgetItem* item, int col)
                 /* Apply the patch immediately */
                 if (m_ioMap->setOutputPatch(m_universe, m_currentOutputPluginName, "",
                                             m_currentOutput, false) == false)
-                    showPluginMappingError();
+                {
+                    // S-H1: a laser universe onto an interface with no serial.
+                    if (m_ioMap->lastPatchRefusal().isEmpty() == false)
+                    {
+                        item->setCheckState(KMapColumnHasOutput, Qt::Unchecked);
+                        QMessageBox::warning(this, tr("Show only"), m_ioMap->lastPatchRefusal());
+                    }
+                    else
+                        showPluginMappingError();
+                }
             }
         }
         else if (col == KMapColumnHasFeedback)

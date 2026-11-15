@@ -531,9 +531,9 @@ void OutputRuleKeeper::rebuild()
         m_lastHeldBy = by;
         emit showOnlyChanged();
     }
-    /* Review 13 L3: the last Show-only fixture gone -- every patch held for
-       the hardware-line rules (outputpatch.h) is let go as stock would
-       have reconnected it. Queued: rebuild() can run under the universe
+    /* S-H4: the last Show-only fixture gone -- every patch held for the
+       hardware-line rules (outputpatch.h) is let go as stock would have
+       reconnected it. Queued: rebuild() can run under the universe
        claim, which reconnecting takes. */
     if (showOnlyListChanged && showOnly.isEmpty())
         QMetaObject::invokeMethod(this, [this]() {

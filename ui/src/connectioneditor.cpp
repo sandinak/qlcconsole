@@ -1222,7 +1222,9 @@ bool ConnectionEditor::apply()
         {
             if (iom->setOutputPatch(m_universe, plugin, QString(), line, false, index) == false)
             {
-                m_error = tr("Could not patch that universe to %1.").arg(plugin);
+                m_error = iom->lastPatchRefusal().isEmpty() == false
+                          ? iom->lastPatchRefusal()
+                          : tr("Could not patch that universe to %1.").arg(plugin);
                 return false;
             }
         }

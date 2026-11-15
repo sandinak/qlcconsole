@@ -117,52 +117,56 @@ public:
     bool reconnect();
 
     /*
-     * Hot-plug on hardware lines (QLCIOPlugin::linesAreHardware(): USB,
-     * MIDI and the like) with Show-only fixtures -- review 13's rules,
-     * kept by InputOutputMap (slotPluginConfigurationChanged(),
-     * retryOfflinePatches(), loadPatch()). With no Show-only universe
-     * anywhere, everything is exactly as stock QLC+ does it.
+     * Show-only fixtures (lasers, foggers, flame) on hardware lines
+     * (QLCIOPlugin::linesAreHardware(): USB DMX, MIDI, HID) -- review 14's
+     * strict rules, kept by InputOutputMap. Network outputs (Art-Net, sACN,
+     * WLED) are not affected. With no Show-only universe anywhere,
+     * everything is exactly as stock QLC+ does it (reconnect by number).
      *
-     *  H1. A Show-only universe on a hardware line reopens by itself in one
-     *      case only: its recorded device (a unique name) is back at the
-     *      same line number. Pending from load, the name changed, the device
-     *      back at another number, an identical-name count change: it stays
-     *      held -- "<device> missing or moved: re-patch to use it" -- until
-     *      the operator re-patches it (I/O tab, Connections).
-     *  H2. No other universe, ordinary or Show-only, is ever opened by
-     *      itself -- by number, by name, by retry or on load -- onto a line
-     *      named as the recorded device of a Show-only universe that is
-     *      open, held or pending from load. It is held instead, and says
-     *      which interface took its line.
-     *  H3. A held ordinary universe reopens when its recorded device is
-     *      back at its own number, or anywhere if the name is unique and the
-     *      line is free and not protected by H2.
-     *  H4. There is no "reconnect as before": identical names with a
-     *      Show-only universe recorded on that name are held (H1, H2) until
-     *      re-patched.
-     *  H5. On load, a name that more than one line carries resolves to the
-     *      saved line number when that line carries it; otherwise a
-     *      Show-only universe stays pending (H1), an ordinary one takes the
-     *      first, as stock does. For such names H2 holds by line on load:
-     *      nothing loads onto the line a Show-only universe has or was
-     *      saved on. (The I/O map is saved before the fixtures: a file
-     *      load holds every output until the show is read, then checks each
-     *      patch it opened against H1, H2, H5 -- InputOutputMap::
-     *      recheckPatchesAfterLoad() -- before the first frame.)
-     *  Once no Show-only universe is left, every hold made for these
-     *  reasons is let go as stock would have reconnected it (by number).
+     *  S-H1. A unique interface name is required. A universe with Show-only
+     *      fixtures may be patched to a hardware line only if that line's
+     *      name is unique among the plugin's lines (a device with a serial
+     *      in its name). Patching one onto a shared name is refused (I/O
+     *      tab, Connections, the web); a fixture marked Show only on, or
+     *      added to, a universe on such a line holds that universe; a show
+     *      loaded with one on such a name keeps it pending -- each saying
+     *      "<name> has no serial number: lasers and foggers need an
+     *      interface that can be told apart. Use one with a serial, or a
+     *      network output." (InputOutputMap::sharedNameText())
+     *  S-H2. Lasers never reconnect by themselves. A configuration change
+     *      of the plugin (hot-plug, rescan) that changes the name at a
+     *      Show-only universe's line -- its device gone, moved, or another
+     *      in its place -- holds it, closing frame first, until the
+     *      operator re-patches it; so does a load where its saved line does
+     *      not carry its unique name. No exception, not even the same
+     *      device back at the same number; the retry tick never reopens
+     *      it. "<device>: interfaces changed -- re-patch to send to the
+     *      lasers again." A change that leaves its line as it was (same
+     *      name at the same number) leaves it open.
+     *  S-H3. Nothing else takes a laser's interface. No ordinary universe
+     *      and no feedback patch is opened by itself -- by number, by name,
+     *      on retry, on load or by the check after a load -- onto a line
+     *      whose name is the recorded device of a Show-only universe that
+     *      is open, held or pending from load (InputOutputMap::
+     *      protectedLineNames()). Such a patch is held, and reopens by
+     *      number once its line no longer names a protected device. S-H1
+     *      makes those names unique, so the check by name is sound.
+     *  S-H4. When the last Show-only fixture is gone, every hold made for
+     *      these rules is let go as stock would have reconnected it
+     *      (InputOutputMap::releaseShowOnlyHolds()).
+     *
+     *  On load, a name more than one line carries resolves to the saved
+     *  line number when that line carries it, else to the first (H5, for
+     *  ordinary universes). The I/O map is read before the fixtures: a
+     *  file load holds every output until the show is read, then checks
+     *  each patch it opened against S-H1..S-H3 (InputOutputMap::
+     *  recheckPatchesAfterLoad()) before the first frame.
      */
 
-    /** A hardware line (USB, MIDI) whose name now is not the one it had
-     *  when this patch was made: another device took its number */
-    bool lineNameChanged() const;
     /** The name of the device this patch was made to (a hardware line):
      *  open, held for a device change, or pending on it from load (its
      *  saved name); empty otherwise */
     QString recordedLineName() const;
-    /** How many lines carried that name when the patch was (re)opened */
-    int recordedLineNameCount() const { return m_lineNameCount; }
-    int lineNameCountNow() const;
 
     /** How a patch is held for a device change */
     enum DeviceHold
@@ -172,13 +176,14 @@ public:
         HeldDeviceChanged
     };
     /** Held by the rules above, @p why said: kept pending on the name it
-     *  was patched with and its number. @p closeTheLine false: another open
-     *  patch uses the line, which stays open for it (the plugin only
-     *  forgets this universe there). */
-    void holdForDeviceChange(const QString &why, bool closeTheLine, bool sendClosing = false);
+     *  was patched with and @p waitLine (UINT_MAX: the line it is on).
+     *  @p closeTheLine false: another open patch uses the line, which
+     *  stays open for it (the plugin only forgets this universe there). */
+    void holdForDeviceChange(const QString &why, bool closeTheLine, bool sendClosing = false,
+                             quint32 waitLine = UINT_MAX);
     /** The line number a show load saved for this patch, when it opened
      *  it (InputOutputMap::loadPatch()); UINT_MAX otherwise. The check after
-     *  the load (H1, H5) reads it; any other set() forgets it. */
+     *  the load reads it; any other set() forgets it. */
     void setLoadedLine(quint32 line) { m_loadedLine = line; }
     quint32 loadedLine() const { return m_loadedLine; }
     /** A pending patch (from load, or held) the rules keep pending: said */
@@ -277,7 +282,6 @@ private:
     DeviceHold m_deviceHold = NoDeviceHold;
     bool m_heldFromOpen = false;
     quint32 m_loadedLine = UINT_MAX;
-    int m_lineNameCount = 0;
     /** The patch parameters cache */
     QMap<QString, QVariant>m_parametersCache;
     /** See setClosingFrame() */
