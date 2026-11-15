@@ -49,6 +49,32 @@ GenericFader::GenericFader(QObject *parent)
 static thread_local const GenericFader::PreviewGate *t_creationGate = nullptr;
 static thread_local quint32 t_creationFunction = 0xFFFFFFFF;
 static std::atomic<quint32> s_liveEpoch { 1 };
+static thread_local quint32 t_stampEpoch = 0;
+static thread_local bool t_stampActive = false;
+
+quint32 GenericFader::stampEpoch()
+{
+    return t_stampActive ? t_stampEpoch : liveEpoch();
+}
+
+bool GenericFader::stampOverridden()
+{
+    return t_stampActive;
+}
+
+GenericFader::StampScope::StampScope(quint32 epoch)
+    : m_previous(t_stampEpoch)
+    , m_previousActive(t_stampActive)
+{
+    t_stampEpoch = epoch;
+    t_stampActive = true;
+}
+
+GenericFader::StampScope::~StampScope()
+{
+    t_stampEpoch = m_previous;
+    t_stampActive = m_previousActive;
+}
 
 quint32 GenericFader::liveEpoch()
 {
@@ -65,6 +91,12 @@ void GenericFader::setChannelLiveEpoch(int address, quint32 epoch)
     QMutexLocker locker(&m_channelEpochMutex);
     m_channelEpochs.insert(address, epoch);
     m_channelStamped.store(true, std::memory_order_relaxed);
+}
+
+void GenericFader::clearChannelLiveEpoch(int address)
+{
+    QMutexLocker locker(&m_channelEpochMutex);
+    m_channelEpochs.remove(address);
 }
 
 bool GenericFader::channelLive(int address) const

@@ -331,8 +331,10 @@ public:
      *     on every write, so a fader rebuilt from a control left up stays
      *     as old as the control);
      *   - stamped per channel (setChannelLiveEpoch(): the Simple Desk);
-     *   - trusted (setTrustedForShowOnly(): the effect runner, which sorts
-     *     its writes by their scenes' gates itself);
+     *   - trusted (setTrustedForShowOnly(): the effect runner's own
+     *     fader, which gets only the writes it sorted as the show by their
+     *     scenes' gates -- a Show-only write with no scene, or on a channel
+     *     made Show only since its publish, goes on its held fader);
      *   - none of these: not the show -- held.
      *  True when the whole fader is held. Read once a frame on the
      *  universe thread. */
@@ -352,8 +354,9 @@ public:
     /** It sorts its own writes (the effect runner): never held whole */
     void setTrustedForShowOnly(bool trusted) { m_trusted.store(trusted, std::memory_order_relaxed); }
 
-    /** Stamped by its owner now (an operator action in this session) */
-    void stampLiveEpoch() { setLiveEpoch(liveEpoch()); }
+    /** Stamped by its owner now (an operator action in this session; or,
+     *  inside a StampScope, the automatic writer's own session) */
+    void stampLiveEpoch() { setLiveEpoch(stampEpoch()); }
     /** Stamped with session @p epoch: its owner's, whenever that was */
     void setLiveEpoch(quint32 epoch)
     {
@@ -365,6 +368,9 @@ public:
      *  control): channel @p address of its universe set in session
      *  @p epoch. A channel never stamped is held. */
     void setChannelLiveEpoch(int address, quint32 epoch);
+    /** Channel @p address's stamp dropped (a Show-only fixture patched
+     *  onto it): held until its owner stamps it again */
+    void clearChannelLiveEpoch(int address);
     bool channelStamped() const { return m_channelStamped.load(std::memory_order_relaxed); }
     /** Whether channel @p address may go out (stamped in this session) */
     bool channelLive(int address) const;
@@ -374,6 +380,34 @@ public:
      *  it -- in Design -- is not the show until a GO in Operate. */
     static quint32 liveEpoch();
     static void bumpLiveEpoch();
+
+    /** The session an operator action happening now is stamped with: the
+     *  live session, or -- inside a StampScope on this thread -- the
+     *  session its automatic writer was armed in. Every stamp (a source
+     *  added, a control moved, a Park set) takes this, never liveEpoch()
+     *  straight. */
+    static quint32 stampEpoch();
+    /** True inside a StampScope on this thread: what happens now is an
+     *  automatic writer's, not a person's (no GO is noted) */
+    static bool stampOverridden();
+
+    /** While one is in scope on this thread, every stamp made there is
+     *  @p epoch (0: never the show) instead of the live session: an audio
+     *  bar pressing a VC button or moving a slider is the audio widget's
+     *  (armed in its session), not a hand; a playback slider starting its
+     *  function again is as old as its last move; a Show started by
+     *  timecode is as old as the timecode link's arming. Nests. */
+    class StampScope
+    {
+    public:
+        explicit StampScope(quint32 epoch);
+        ~StampScope();
+        StampScope(const StampScope &) = delete;
+        StampScope &operator=(const StampScope &) = delete;
+    private:
+        quint32 m_previous;
+        bool m_previousActive;
+    };
 
     /** While one is in scope on a thread, the faders made there follow
      *  @p gate, the gate of function @p functionId (the MasterTimer, around

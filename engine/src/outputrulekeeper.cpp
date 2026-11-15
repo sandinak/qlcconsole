@@ -51,7 +51,12 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     connect(doc, &Doc::fixtureAdded, this, changed);
     connect(doc, &Doc::fixtureRemoved, this, [this](quint32) { scheduleRebuild(); });
     connect(doc, &Doc::fixtureChanged, this, changed);
-    connect(doc, &Doc::loaded, this, [this]() { scheduleRebuild(); });
+    connect(doc, &Doc::loaded, this, [this]() {
+        // E2 (R6-7): a show loaded -- over the web while in Operate too --
+        // starts a new session: nothing it brought in is the show.
+        startSession();
+        scheduleRebuild();
+    });
     // Another show: a new show's setting, and OnAtOperate waits for its
     // own first Operate.
     connect(doc, &Doc::cleared, this, [this]() {
@@ -59,6 +64,7 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
         // automatic widget armed.
         m_stopEpoch.store(0, std::memory_order_relaxed);
         Function::clearAutoSources();
+        startSession();
         m_onAtOpenWhen = kDefaultOnAtOpenWhen;
         m_seenOperate = m_doc->mode() == Doc::Operate;
         scheduleRebuild();
@@ -69,11 +75,7 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
            every running function's gate worked out now, and only then the
            universes live. Before anything else hears of Operate. */
         if (mode == Doc::Operate)
-        {
-            Function::startLiveSession();
-            if (m_doc->masterTimer() != nullptr)
-                m_doc->masterTimer()->refreshPreviewGates();
-        }
+            startSession();
         pushShowOnlyLive();
         if (mode == Doc::Operate && m_seenOperate == false)
         {
@@ -87,6 +89,15 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     connect(doc->inputOutputMap(), &InputOutputMap::universeAdded, this, [this](quint32) { scheduleRebuild(); });
     connect(doc->inputOutputMap(), &InputOutputMap::universeRemoved, this, [this](quint32) { scheduleRebuild(); });
     m_seenOperate = doc->mode() == Doc::Operate;
+}
+
+void OutputRuleKeeper::startSession()
+{
+    // E2: a new live session, with every running function's gate worked
+    // out now, between two ticks.
+    Function::startLiveSession();
+    if (m_doc->masterTimer() != nullptr)
+        m_doc->masterTimer()->refreshPreviewGates();
 }
 
 void OutputRuleKeeper::markNow(quint32 id)
@@ -299,16 +310,14 @@ QByteArray OutputRuleKeeper::safeValuesFor(quint32 universe) const
 
 void OutputRuleKeeper::emergencyStop()
 {
-    // E2: a new live session -- every stamp from before is old now.
+    // E2: a new live session -- every stamp from before is old now, so
+    // every writer is held from its next write on (a function's gate at
+    // its next tick: the generation moved).
     Function::startLiveSession();
     const quint32 session = GenericFader::liveEpoch();
     m_stopEpoch.store(session, std::memory_order_relaxed);
-    // E1, E5: every function stopped, queued ones too; each is held at once
-    // (no source left), so its faders and its fade-out are kept off.
-    for (Function *f : m_doc->functions())
-        if (f != nullptr && (f->isRunning() || f->sources().isEmpty() == false))
-            f->stop(FunctionParent::master());
-    // E1: the cut -- stored values to safe and a frame sent, now.
+    // E1: the cut first -- stored values to safe and a frame sent, now,
+    // waiting on no function and no list.
     const QList<Universe *> ua = m_doc->inputOutputMap()->universesSnapshot();
     for (Universe *u : ua)
     {
@@ -317,9 +326,22 @@ void OutputRuleKeeper::emergencyStop()
         u->cutShowOnly();
         u->dumpOutput(u->postGMValues()->mid(0, u->usedChannels()), true);
     }
-    // Then the gates of whatever is still running, worked out as a tick would.
-    if (m_doc->masterTimer() != nullptr)
-        m_doc->masterTimer()->refreshPreviewGates();
+    // E1, E5: then every function stopped, queued ones too; each is held
+    // at once (no source left), so its fade-out is kept off. The Doc's
+    // function list is the main thread's: from another thread (an OSC or
+    // MSC plugin's) this part is queued there -- the cut is already out.
+    auto stopAll = [this]() {
+        for (Function *f : m_doc->functions())
+            if (f != nullptr && (f->isRunning() || f->sources().isEmpty() == false))
+                f->stop(FunctionParent::master());
+        // The gates of whatever is still running, worked out as a tick would.
+        if (m_doc->masterTimer() != nullptr)
+            m_doc->masterTimer()->refreshPreviewGates();
+    };
+    if (thread() == QThread::currentThread())
+        stopAll();
+    else
+        QMetaObject::invokeMethod(this, stopAll, Qt::QueuedConnection);
     // E7: only the footer and the Simple Desk hear of it later; they check
     // the session they were told of.
     emit emergencyStopStruck(session);
@@ -339,7 +361,10 @@ void OutputRuleKeeper::noteGo()
 {
     /* What the footer says only: the first GO after the stop ends "held:
        emergency stop". It lets nothing go (E4) -- the rule holds what that
-       GO does not drive. */
+       GO does not drive. An automatic writer's (an audio bar stepping a cue
+       list: a StampScope) is no GO at all. */
+    if (GenericFader::stampOverridden())
+        return;
     if (m_stopEpoch.exchange(0, std::memory_order_relaxed) != 0)
         QMetaObject::invokeMethod(this, [this]() {
             m_lastHeldBy = showOnlyHeldBy();

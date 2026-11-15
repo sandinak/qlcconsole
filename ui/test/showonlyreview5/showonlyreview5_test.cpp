@@ -33,6 +33,7 @@
 #include "vcclock.h"
 #include "grouphead.h"
 #include "vcbutton.h"
+#include "vccuelist.h"
 #undef private
 #undef protected
 
@@ -345,6 +346,9 @@ void ShowOnlyReview5_Test::audioTriggerArmedBeforeTheStopStaysHeld()
     bar.attachFunction(burst);
     bar.setMinThreshold(20);
     bar.setMaxThreshold(200);
+    // Switched on by the operator in Operate (R6-3: its own first start
+    // arms nothing).
+    Function::armAutoSource(bar.functionParent());
     bar.m_value = 230;                              // a peak
     bar.checkFunctionThresholds(m_doc);
     tick(3);
@@ -500,6 +504,7 @@ void ShowOnlyReview5_Test::sweepAudioFunctionBar()
     bar.attachFunction(burst);
     bar.setMinThreshold(20);
     bar.setMaxThreshold(200);
+    Function::armAutoSource(bar.functionParent());  // switched on in Operate (R6-3)
     bar.m_value = 230;
     bar.checkFunctionThresholds(m_doc);
     tick(3);
@@ -570,6 +575,8 @@ void ShowOnlyReview5_Test::sweepVcClockSchedule()
     m_doc->addFunction(fog);
     QWidget w;
     VCClock clock(&w, m_doc);
+    // Started by the operator in Operate (R6-3: never its own first start).
+    clock.playPauseTimer();
     // Its schedule starts the function (VCClock::slotUpdateTime()).
     fog->start(m_doc->masterTimer(), clock.functionParent());
     tick(3);
@@ -655,6 +662,7 @@ void ShowOnlyReview5_Test::r6AudioBarMovesVcSliderAfterStop()
     AudioBar bar(AudioBar::VCWidgetBar, 0, 77);
     bar.m_widgetID = slider.id();
     bar.m_widget = &slider;
+    Function::armAutoSource(bar.functionParent());  // its widget switched on in Operate (R6-3)
     bar.m_value = 230;
     bar.checkWidgetFunctionality();
     tick(3);
@@ -690,6 +698,7 @@ void ShowOnlyReview5_Test::r6AudioBarPressesVcButtonAfterStop()
     bar.setMaxThreshold(200);
     bar.m_widgetID = button.id();
     bar.m_widget = &button;
+    Function::armAutoSource(bar.functionParent());  // its widget switched on in Operate (R6-3)
     bar.m_value = 230;
     bar.checkWidgetFunctionality();
     tick(3);
@@ -838,6 +847,336 @@ void ShowOnlyReview5_Test::r6ParkLoadedInOperateDrives()
     QVERIFY(m_doc->programmer()->loadParkXML(r));  // as Doc::loadXML() does
     tick(3);
     QCOMPARE(sent(Flame), 0);
+}
+
+/****************************************************************************
+ * The sixth review's writers, swept
+ ****************************************************************************/
+
+/* R6-1 and R6-3: a real audio triggers widget. Every bar is the widget's
+   (never master()), the bars made later too; in Operate with nobody
+   touching it a peak drives nothing; switched on from the web or an input
+   (toggleEnableButton(), the button already on) it is the show; All Off
+   holds it again. */
+void ShowOnlyReview5_Test::sweepR6RealAudioWidgetArmsOnlyByTheOperator()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *burst = new Scene(m_doc);
+    burst->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(burst);
+    QWidget w;
+    VCAudioTriggers *at = new VCAudioTriggers(&w, m_doc);
+    at->setID(43);
+    at->setSpectrumBarsNumber(at->m_spectrumBars.size() + 2);   // made after the id
+    for (const AudioBar *b : at->getAudioBars())
+    {
+        QCOMPARE(b->functionParent().type(), quint32(FunctionParent::AutoVCWidget));
+        QCOMPARE(b->functionParent().id(), quint32(43));
+    }
+    AudioBar *bar = at->m_spectrumBars.last();
+    bar->setType(AudioBar::FunctionBar);
+    bar->attachFunction(burst);
+    bar->setMinThreshold(20);
+    bar->setMaxThreshold(200);
+    m_doc->setMode(Doc::Operate);                   // a show opened into Operate
+    bar->m_value = 230;
+    bar->checkFunctionThresholds(m_doc);
+    tick(3);
+    QCOMPARE(sent(Flame), 0);                       // never armed: held
+    bar->m_value = 0;
+    bar->checkFunctionThresholds(m_doc);
+    tick(2);
+
+    at->m_button->blockSignals(true);               // on already (no capture in a test)
+    at->m_button->setChecked(true);
+    at->m_button->blockSignals(false);
+    at->toggleEnableButton(true);                   // the web's / an input's "on"
+    bar->m_value = 230;
+    bar->checkFunctionThresholds(m_doc);
+    tick(3);
+    QCOMPARE(sent(Flame), 255);
+
+    allOff();
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    goUnrelated(60);
+    bar->m_value = 230;
+    bar->checkFunctionThresholds(m_doc);
+    tick(4);
+    QCOMPARE(sent(Stage), 60);
+    QCOMPARE(sent(Flame), 0);
+    at->m_button->blockSignals(true);
+    at->m_button->setChecked(false);
+    at->m_button->blockSignals(false);
+    delete at;
+}
+
+/* R6-2: an audio bar stepping a VC cue list is automatic: what the list
+   plays takes the audio widget's armed session, never a GO's -- held
+   unarmed, the show armed, held after All Off, and no GO noted (the
+   footer keeps "emergency stop"). */
+void ShowOnlyReview5_Test::sweepR6AudioBarStepsAVcCueList()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *one = new Scene(m_doc);
+    one->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(one);
+    Scene *two = new Scene(m_doc);
+    two->setValue(m_doc->fixtureForAddress(Flame), 0, 200);
+    m_doc->addFunction(two);
+    Chaser *list = new Chaser(m_doc);
+    ChaserStep s1(one->id());
+    s1.hold = 100000;
+    list->addStep(s1);
+    ChaserStep s2(two->id());
+    s2.hold = 100000;
+    list->addStep(s2);
+    m_doc->addFunction(list);
+    QWidget w;
+    VCCueList cue(&w, m_doc);
+    cue.setID(53);
+    cue.setChaser(list->id());
+    m_doc->setMode(Doc::Operate);
+    AudioBar bar(AudioBar::VCWidgetBar, 0, 79);
+    bar.setMinThreshold(20);
+    bar.setMaxThreshold(200);
+    bar.m_widgetID = cue.id();
+    bar.m_widget = &cue;
+    auto beat = [&bar]() {
+        bar.m_value = 10;
+        bar.checkWidgetFunctionality();
+        bar.m_value = 230;
+        bar.checkWidgetFunctionality();
+    };
+    beat();                                         // unarmed: starts the list...
+    tick(4);
+    QVERIFY(list->isRunning());
+    QCOMPARE(sent(Flame), 0);                       // ...which drives nothing
+
+    Function::armAutoSource(bar.functionParent());  // the audio widget switched on
+    beat();                                         // the next step, armed
+    tick(4);
+    QVERIFY(sent(Flame) > 0);
+
+    allOff();
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    beat();                                         // the music goes on
+    tick(4);
+    QCOMPARE(sent(Flame), 0);
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());    // no GO came
+    goUnrelated(60);
+    beat();
+    tick(4);
+    QCOMPARE(sent(Stage), 60);
+    QCOMPARE(sent(Flame), 0);
+}
+
+/* R6-3: a VC Clock is armed by the operator working it -- from MIDI/OSC
+   or the web (playPauseTimer(), resetTimer()) as much as a touch; never
+   by its own first schedule. */
+void ShowOnlyReview5_Test::sweepR6VcClockArmedByInputOrWeb()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fog = new Scene(m_doc);
+    fog->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fog);
+    QWidget w;
+    VCClock clock(&w, m_doc);
+    clock.setID(62);
+    m_doc->setMode(Doc::Operate);
+    fog->start(m_doc->masterTimer(), clock.functionParent());     // its first schedule
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    fog->stop(clock.functionParent());
+    tick(3);
+
+    clock.playPauseTimer();                         // the web's "S", a MIDI play
+    fog->start(m_doc->masterTimer(), clock.functionParent());
+    tick(3);
+    QCOMPARE(sent(Flame), 255);
+
+    allOff();
+    tick(3);
+    goUnrelated(60);
+    fog->start(m_doc->masterTimer(), clock.functionParent());
+    tick(4);
+    QCOMPARE(sent(Stage), 60);
+    QCOMPARE(sent(Flame), 0);
+    fog->stop(clock.functionParent());
+    tick(3);
+    clock.resetTimer();                             // the web's "R", a MIDI reset
+    fog->start(m_doc->masterTimer(), clock.functionParent());
+    tick(3);
+    QCOMPARE(sent(Flame), 255);
+}
+
+/* R6-4: input passthrough reaches an ordinary channel as before and never
+   a Show-only one -- in Operate, after a GO on it, through All Off. */
+void ShowOnlyReview5_Test::sweepR6PassthroughNeverDrives()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        ua[0]->setPassthrough(true);
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    }
+    m_doc->setMode(Doc::Operate);
+    {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        ua[0]->slotInputValueChanged(0, Flame, 255, QString());
+        ua[0]->slotInputValueChanged(0, Stage, 120, QString());
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    }
+    tick(3);
+    QCOMPARE(sent(Stage), 120);                     // an ordinary channel: as before
+    QCOMPARE(sent(Flame), 0);
+
+    // A GO on the flame drives it -- at its own level, not the input's.
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(m_doc->fixtureForAddress(Flame), 0, 90);
+    m_doc->addFunction(fire);
+    Chaser *list = new Chaser(m_doc);
+    ChaserStep st(fire->id());
+    st.hold = 100000;
+    list->addStep(st);
+    m_doc->addFunction(list);
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = list->id();
+    QVERIFY(m_doc->showControl()->run(go, ShowControl::RouteRunTab));
+    tick(4);
+    QCOMPARE(sent(Flame), 90);
+
+    allOff();
+    QCOMPARE(sent(Flame), 0);                       // the cut, at once
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    QCOMPARE(sent(Stage), 120);
+}
+
+/* R6-5: after the stop the playback slider stays held until it is really
+   moved; moved, it drives. */
+void ShowOnlyReview5_Test::sweepR6PlaybackSliderMovedAfterTheStop()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *burst = new Scene(m_doc);
+    burst->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(burst);
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setID(54);
+    slider.setSliderMode(VCSlider::Playback);
+    slider.setPlaybackFunction(burst->id());
+    m_doc->setMode(Doc::Operate);
+    slider.setSliderValue(255, false, true);
+    tick(6);
+    QCOMPARE(sent(Flame), 255);
+    allOff();
+    tick(6);
+    QCOMPARE(sent(Flame), 0);
+    goUnrelated(60);
+    tick(4);
+    QCOMPARE(sent(Stage), 60);
+    QCOMPARE(sent(Flame), 0);
+    slider.setSliderValue(200, false, true);        // moved after the stop
+    tick(6);
+    QVERIFY(sent(Flame) > 0);
+}
+
+/* R6-6: the cue a Script launched drives for the session, not past it:
+   All Off holds it, and an unrelated GO does not wake it. */
+void ShowOnlyReview5_Test::sweepR6ScriptLaunchedCueAfterTheStop()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fog = new Scene(m_doc);
+    fog->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fog);
+    Script *script = new Script(m_doc);
+    QVERIFY(script->setData(QStringLiteral("stoponexit:false\nstartfunction:%1\n").arg(fog->id())));
+    m_doc->addFunction(script);
+    m_doc->setMode(Doc::Operate);
+    script->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(10);
+    QCOMPARE(sent(Flame), 255);
+    allOff();
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    goUnrelated(60);
+    tick(4);
+    QCOMPARE(sent(Stage), 60);
+    QCOMPARE(sent(Flame), 0);
+    // A Script started in Design launches nothing that drives in Operate.
+    m_doc->setMode(Doc::Design);
+    tick(2);
+    script->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(10);
+    m_doc->setMode(Doc::Operate);
+    tick(3);
+    QVERIFY(fog->isRunning());
+    QCOMPARE(sent(Flame), 0);
+}
+
+/* R6-7: a show loaded in Operate (the web's /loadProject: no mode change)
+   starts a new session -- a hand control set before it is held. */
+void ShowOnlyReview5_Test::sweepR6ShowLoadedInOperateStartsASession()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    SimpleDeskEngine eng(m_doc);
+    eng.setValue(Flame, 200);
+    tick(3);
+    QCOMPARE(sent(Flame), 200);
+    const quint32 before = GenericFader::liveEpoch();
+    emit m_doc->loaded();                           // as Doc::loadXML() ends
+    QVERIFY(GenericFader::liveEpoch() != before);
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    eng.setValue(Flame, 180);                       // a hand on it, after the load
+    tick(3);
+    QCOMPARE(sent(Flame), 180);
+}
+
+/* Re-patching: a Simple Desk channel moved in Operate for what was there
+   is no stamp for a Show-only fixture patched onto it -- held until the
+   fader is moved again. */
+void ShowOnlyReview5_Test::sweepR6DeskStampIsForWhatIsPatched()
+{
+    Fixture *flame = addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly);
+    QVERIFY(flame != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    SimpleDeskEngine eng(m_doc);
+    enum { Free = 40 };
+    eng.setValue(Free, 150);                        // nothing patched there
+    eng.setValue(Stage, 70);
+    tick(3);
+    QCOMPARE(sent(Free), 150);
+    flame->setAddress(Free);                        // the flame moved onto it, mid-show
+    tick(3);
+    QCOMPARE(sent(Free), 0);
+    eng.setValue(Stage, 80);                        // another desk channel: no stamp for it
+    tick(3);
+    QCOMPARE(sent(Stage), 80);
+    QCOMPARE(sent(Free), 0);
+    eng.setValue(Free, 160);                        // moved for the flame
+    tick(3);
+    QCOMPARE(sent(Free), 160);
 }
 
 QTEST_MAIN(ShowOnlyReview5_Test)

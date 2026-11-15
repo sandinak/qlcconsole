@@ -1214,7 +1214,7 @@ void VCSlider::setLevelValue(uchar value, bool external)
            motor fader's echo, a surface re-syncing its page) stamps
            nothing; nor a rebuild or a trip to Design (no move at all). */
         if (m_levelValue != was)
-            m_liveEpoch.store(GenericFader::liveEpoch(), std::memory_order_relaxed);
+            m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
     }
 }
 
@@ -1575,6 +1575,10 @@ void VCSlider::setPlaybackValue(uchar value)
     QMutexLocker locker(&m_playbackValueMutex);
     m_playbackValue = value;
     m_playbackChangeCounter = 5;
+    /* Show only (S3): a new value is a move -- by a hand, its input, or an
+       audio bar (then the audio widget's session) -- and what it starts is
+       stamped with it, not with when the tick gets to it (R6-5). */
+    m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
 }
 
 uchar VCSlider::playbackValue() const
@@ -2085,6 +2089,10 @@ void VCSlider::writeDMXPlayback(MasterTimer* timer, QList<Universe *> ua)
 
     uchar value = m_playbackValue;
     qreal pIntensity = qreal(value) / qreal(UCHAR_MAX);
+    /* Show only (R6-5): starting the function again after a stop (All Off
+       inside the five ticks) is not a move: it is as old as the last real
+       move, so a stop's new session holds it until the slider moves. */
+    GenericFader::StampScope lastMove(m_liveEpoch.load(std::memory_order_relaxed));
 
     if (value == 0)
     {

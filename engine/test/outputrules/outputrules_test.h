@@ -215,6 +215,11 @@ private slots:
     /** A show's scene fading out after All Off is still the show: a GO on
      *  another list lets the latch go and the fade-out reaches the flame */
     void aShowsFadeOutAfterTheStopStaysOut();
+    /* Sixth review (of 1391a70ca1), the engine's part */
+    void passthroughAndAResetLeaveAShowOnlyChannelAtSafe();
+    void aShowOnlyFixtureMovedOntoAStampedChannelWaits();
+    void aChildKeepsItsParentsStampForTheSession();
+    void anAutomaticSourceIsHeldUntilArmed();
 
 private slots:
     /* The e-stop rules (OutputRuleKeeper E1-E7), swept: each writer set

@@ -62,6 +62,18 @@ private slots:
     void r6ScriptLaunchedCueDrives();
     void r6ParkLoadedInOperateDrives();
 
+    /* The sixth review's writers, swept: set up in Operate, held unless its
+       own operator action in this session, held after All Off, and an
+       unrelated GO wakes only its own list */
+    void sweepR6RealAudioWidgetArmsOnlyByTheOperator();
+    void sweepR6AudioBarStepsAVcCueList();
+    void sweepR6VcClockArmedByInputOrWeb();
+    void sweepR6PassthroughNeverDrives();
+    void sweepR6PlaybackSliderMovedAfterTheStop();
+    void sweepR6ScriptLaunchedCueAfterTheStop();
+    void sweepR6ShowLoadedInOperateStartsASession();
+    void sweepR6DeskStampIsForWhatIsPatched();
+
 private:
     Fixture *addDimmer(const QString &name, int address, int rules);
     Fixture *addLaser(const QString &name, int address);

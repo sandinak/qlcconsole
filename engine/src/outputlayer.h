@@ -64,7 +64,9 @@ public:
      *  its stamp, so parking another fixture in Operate does not make a
      *  Park left from Design the show. @p renewed picks the levels set
      *  anew now even at the same value (the fixture just parked again, a
-     *  look just captured); none: only the changed ones. A level stamped
+     *  look just captured); none: only the changed ones. With @p renewed,
+     *  a new level it does not pick (a Park loaded with the show, a parked
+     *  fixture patched later) is stamped by no session. A level stamped
      *  before this session goes out on a fader that holds Show-only
      *  channels. */
     void set(const QList<Level> &levels,

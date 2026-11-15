@@ -1011,8 +1011,10 @@ void OutputRules_Test::operatePreviewIsKeptOffIt()
     QCOMPARE(sent(Flame), 0);
     QCOMPARE(int(uchar(m_uni->postGMValues()->at(Flame))), 0);  // not even stored
 
-    // The same scene from a GO (a cue list's own parent): it is the show now.
+    // The same scene from a source that is the show (an automatic widget's,
+    // armed by the operator in Operate: R6-3): it is the show now.
     const FunctionParent go(FunctionParent::AutoVCWidget, 2);
+    Function::armAutoSource(go);
     s->start(m_doc->masterTimer(), go);
     tickFrame(Flame);
     QCOMPARE(sent(Flame), 255);
@@ -1387,7 +1389,7 @@ void OutputRules_Test::childrenFollowTheirParentsGate()
     QCOMPARE(sent(Stage), 50);
     QCOMPARE(sent(Flame), 0);
     // A GO on the same collection: it is the show now, and so is its member.
-    col->start(m_doc->masterTimer(), FunctionParent(FunctionParent::AutoVCWidget, 3));
+    col->start(m_doc->masterTimer(), FunctionParent(FunctionParent::ManualVCWidget, 3));
     for (int i = 0; i < 4; i++)
         tickFrame(Flame);
     QCOMPARE(sent(Flame), 255);
@@ -2598,6 +2600,115 @@ void OutputRules_Test::sweepEffectRunner()
        universes the tick holds): its effect let go. */
     sweep(Flame, tickFx, [this, a]() { goList(a); }, [this, a]() { goList(a); },
           [this, scene]() { m_doc->effectScriptRunner()->destroyInstancesForScene(scene->id(), true); });
+}
+
+/****************************************************************************
+ * Sixth review (of 1391a70ca1), the engine's part
+ ****************************************************************************/
+
+/* R6-4 and E6: what passthrough brought in before a channel was made Show
+   only never goes out on it, and a reset leaves it at its safe value --
+   not the input's, not 0's "nothing set" computed past the rules. */
+void OutputRules_Test::passthroughAndAResetLeaveAShowOnlyChannelAtSafe()
+{
+    m_uni->setPassthrough(true);
+    m_uni->slotInputValueChanged(m_uni->id(), Flame, 255, QString());  // before the rule
+    m_uni->slotInputValueChanged(m_uni->id(), Stage, 140, QString());
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(Flame))), 0);
+    QCOMPARE(sent(Stage), 140);                     // an ordinary channel: as before
+    m_uni->reset(Flame - 2, 4);
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(Flame))), 0);
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(Stage))), 140);
+    m_uni->reset();
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(Flame))), 0);
+    QCOMPARE(int(uchar(m_uni->preGMValue(Flame))), 0);
+}
+
+/* A channel stamped by its writer, channel by channel, for what was
+   patched there: a Show-only fixture moved onto it mid-show is held until
+   the writer stamps it again. */
+void OutputRules_Test::aShowOnlyFixtureMovedOntoAStampedChannelWaits()
+{
+    Fixture *flame = addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    enum { Free = 40 };
+    QSharedPointer<GenericFader> desk = m_uni->requestFader();
+    GenericFader::ChannelRef fc = desk->getChannelFader(m_doc, m_uni, Fixture::invalidId(), quint32(Free));
+    fc->setStart(150);
+    fc->setCurrent(150);
+    fc->setTarget(150);
+    fc.release();
+    desk->setChannelLiveEpoch(Free, GenericFader::liveEpoch());
+    frame(Free);
+    QCOMPARE(sent(Free), 150);
+    flame->setAddress(Free);
+    frame(Free);
+    frame(Free);
+    QCOMPARE(sent(Free), 0);
+    desk->setChannelLiveEpoch(Free, GenericFader::liveEpoch());     // stamped again
+    frame(Free);
+    QCOMPARE(sent(Free), 150);
+    m_uni->dismissFader(desk);
+}
+
+/* R6-6, in the engine: a child takes its parent's stamp and keeps it for
+   the session once the parent is gone; a new session leaves it old. */
+void OutputRules_Test::aChildKeepsItsParentsStampForTheSession()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    Scene *fog = new Scene(m_doc);
+    fog->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fog);
+    Script *script = new Script(m_doc);
+    QVERIFY(script->setData(QStringLiteral("stoponexit:false\nstartfunction:%1\n").arg(fog->id())));
+    m_doc->addFunction(script);
+    script->start(m_doc->masterTimer(), FunctionParent::master());
+    for (int i = 0; i < 8; i++)
+        tickFrame(Flame);
+    QVERIFY(!script->isRunning());
+    QVERIFY(fog->isRunning());
+    QCOMPARE(sent(Flame), 255);
+    QVERIFY(fog->previewGate()->load() == false);
+    // Another session (the switch to Operate again): old, held.
+    m_doc->setMode(Doc::Design);
+    m_doc->setMode(Doc::Operate);
+    for (int i = 0; i < 3; i++)
+        tickFrame(Flame);
+    QVERIFY(fog->isRunning());
+    QCOMPARE(sent(Flame), 0);
+    stopFunctions();
+}
+
+/* R6-3: an automatic widget's source is the show only once armed in this
+   session; its own first start arms nothing. */
+void OutputRules_Test::anAutomaticSourceIsHeldUntilArmed()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    const FunctionParent clock(FunctionParent::AutoVCWidget, 9);
+    QCOMPARE(Function::autoSourceEpoch(clock), quint32(0));
+    Scene *s = startScene({ { Flame, 255 } }, clock.type(), clock.id());
+    for (int i = 0; i < 3; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    QCOMPARE(Function::autoSourceEpoch(clock), quint32(0));        // still not armed
+    s->stop(clock);
+    tickFrame(Flame);
+    Function::armAutoSource(clock);
+    s->start(m_doc->masterTimer(), clock);
+    for (int i = 0; i < 3; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);
+    stopFunctions();
 }
 
 QTEST_GUILESS_MAIN(OutputRules_Test)

@@ -644,6 +644,12 @@ private:
      *  frame sent, or the rules changed since: a changed frame, so a
      *  plugin that sends only changes sends it. Keeps @p frame's. */
     bool showOnlySentChanged(const QByteArray &frame);
+    /** Channels just made Show only: every fader's per-channel stamp on
+     *  them dropped (GenericFader::clearChannelLiveEpoch()) */
+    void clearShowOnlyStamps(const QVector<int> &channels);
+    /** The Show-only channels from @p address on, @p range of them, back
+     *  to their safe value (a reset: E6) */
+    void restoreShowOnlySafe(int address, int range);
     /** The "not ours" ranges of @p frame at zero (m_notOursMutex held) */
     void zeroNotOurs(QByteArray &frame) const;
 

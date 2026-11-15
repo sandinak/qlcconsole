@@ -34,6 +34,12 @@ void OutputLayer::set(const QList<Level> &levels, const std::function<bool(const
     QHash<int, QList<FadeChannel>> next;
     Doc *doc = m_doc.data();
     const quint32 epoch = GenericFader::liveEpoch();
+    /* What a level set now is stamped with: an operator action's session.
+       With @p renewed, only the levels it picks are set by hand now; any
+       other new one (a Park loaded with the show, a parked fixture patched
+       later: R6-7) is stamped by no session at all -- held until set again
+       by hand. */
+    const quint32 stampNow = GenericFader::stampEpoch();
     QHash<quint64, Stamp> stamps;
     {
         QMutexLocker locker(&m_mutex);
@@ -42,7 +48,8 @@ void OutputLayer::set(const QList<Level> &levels, const std::function<bool(const
             const quint64 key = (quint64(l.fixtureId) << 32) | l.channel;
             Stamp st;
             st.value = l.value;
-            st.epoch = epoch;
+            const bool byHand = !renewed || renewed(l);
+            st.epoch = byHand ? stampNow : 0;
             const auto was = m_stamps.constFind(key);
             if (was != m_stamps.constEnd() && was.value().value == l.value && !(renewed && renewed(l)))
                 st.epoch = was.value().epoch;      // untouched: as old as it was

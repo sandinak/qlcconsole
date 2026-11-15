@@ -30,6 +30,8 @@
 #include "show.h"
 #include "showtreecontroller.h"
 #include "chaser.h"
+#include "genericfader.h"
+#include "chaserstep.h"
 #include "doc.h"
 #include "outputrulekeeper.h"
 #include "mastertimer.h"
@@ -433,6 +435,76 @@ void ShowManager_Test::playInOperateClaimsAShowRunningFromDesign()
     m_show->stop(FunctionParent::master());
     timer->timerTick();
     timer->timerTick();
+    m_doc->setMode(Doc::Design);
+}
+
+/* Show only (R6-8): a Show that external timecode starts -- and the
+   section's linked manual cue list its freeze starts -- is the show only
+   when the operator armed the timecode link in Operate in this session.
+   Saved on with the show (or switched on in Design): held. All Off
+   disarms it. */
+void ShowManager_Test::timecodeDrivesAShowOnlyFixtureOnlyWhenArmedInOperate()
+{
+    Fixture *f = new Fixture(m_doc);
+    f->setChannels(1);
+    f->setUniverse(0);
+    f->setAddress(0);
+    QVERIFY(m_doc->addFixture(f));
+    f->setOutputRules(Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    Chaser *talk = new Chaser(m_doc);
+    ChaserStep st(m_sceneB);
+    st.hold = 100000;
+    talk->addStep(st);
+    m_doc->addFunction(talk);
+    m_show->setMarker(0, 100000, QStringLiteral("Talk"));
+    m_show->setMarkerCueList(0, talk->id());
+    MasterTimer *timer = m_doc->masterTimer();
+    auto stopAll = [this, timer, talk]() {
+        m_show->stop(FunctionParent::master());
+        talk->stop(FunctionParent::master());
+        timer->timerTick();
+        timer->timerTick();
+    };
+
+    m_show->setTimecodeFollow(true);                // saved on / set in Design
+    m_doc->setMode(Doc::Operate);
+    QCOMPARE(m_show->timecodeArmEpoch(), quint32(0));
+    m_manager->slotTimecodeRunningChanged(true);    // timecode rolls
+    timer->timerTick();
+    QVERIFY(m_show->isRunning());
+    QVERIFY(m_show->previewGate()->load());         // not armed: held
+    m_manager->slotTimecodeRunningChanged(false);   // the freeze: its talk list
+    timer->timerTick();
+    QVERIFY(talk->isRunning());
+    QVERIFY(talk->previewGate()->load());
+    stopAll();
+
+    m_manager->setFollowTimecode(false);            // the operator arms it, in Operate
+    m_manager->setFollowTimecode(true);
+    QCOMPARE(m_show->timecodeArmEpoch(), GenericFader::liveEpoch());
+    m_manager->slotTimecodeRunningChanged(true);
+    timer->timerTick();
+    QVERIFY(m_show->isRunning());
+    QVERIFY(m_show->previewGate()->load() == false);
+    m_manager->slotTimecodeRunningChanged(false);
+    timer->timerTick();
+    QVERIFY(talk->isRunning());
+    QVERIFY(talk->previewGate()->load() == false);
+
+    m_doc->outputRuleKeeper()->emergencyStop();     // All Off disarms it
+    timer->timerTick();
+    timer->timerTick();
+    QVERIFY(!m_show->isRunning());
+    m_manager->slotTimecodeRunningChanged(true);
+    timer->timerTick();
+    QVERIFY(m_show->isRunning());
+    QVERIFY(m_show->previewGate()->load());
+    m_manager->slotTimecodeRunningChanged(false);
+    timer->timerTick();
+    QVERIFY(talk->isRunning());
+    QVERIFY(talk->previewGate()->load());
+    stopAll();
     m_doc->setMode(Doc::Design);
 }
 

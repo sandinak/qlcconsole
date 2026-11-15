@@ -32,6 +32,7 @@
 #include "qlcfile.h"
 #include "show.h"
 #include "doc.h"
+#include "genericfader.h"
 
 #define KXMLQLCShowTimeDivision QStringLiteral("TimeDivision")
 #define KXMLQLCShowTimeType     QStringLiteral("Type")
@@ -703,6 +704,10 @@ void Show::preRun(MasterTimer* timer)
 void Show::setTimecodeFollow(bool enable)
 {
     m_timecodeFollow = enable;
+    /* Show only (R6-8): armed by the operator in Operate, for this session
+       (All Off, another Operate or another show leave it old). */
+    m_timecodeArmEpoch.store(enable && doc() != nullptr && doc()->mode() == Doc::Operate
+                             ? GenericFader::stampEpoch() : 0, std::memory_order_relaxed);
     QMutexLocker rlock(&m_runnerMutex);
     if (m_runner != NULL)
         m_runner->setTimecodeFollow(enable);

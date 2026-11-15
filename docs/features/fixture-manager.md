@@ -808,7 +808,8 @@ together:
 **Show only**, in full. Building looks must never fire a laser, a fogger
 or a flame relay. One rule decides it: **in Operate, a Show-only fixture
 answers only to what was started, set or moved since Operate began** (and,
-after an emergency stop, since the stop). So:
+after an emergency stop, since the stop; after opening a show, since it
+opened — over the web while in Operate too). So:
 
 - **Held** (its output stays safe): everything in **Design** — the Show
   Tree's preview, **Solo**, the Workbench, a GO from the Run tab while you
@@ -826,15 +827,32 @@ after an emergency stop, since the stop). So:
   which is how you test a fogger before doors), a **Park**, a **Mark** or
   a Simple Desk **cue stack**. Not GOs, but the show too: VC buttons,
   sliders, the XY pad, a Control Map MIDI or OSC binding and the web
-  page's function command; audio triggers and a VC Clock's schedule once
-  you have switched them on (or touched them) in Operate.
+  page's function command.
+- **Automatic widgets wait to be armed.** Audio triggers and a VC Clock's
+  schedule drive a Show-only fixture only once **you** have worked them in
+  Operate: switched audio triggers on (a click, a key, an input, the web),
+  touched the clock or played or reset it (a click, a key, MIDI/OSC, the
+  web). Never their own first peak or schedule: a show opened straight
+  into Operate has them all unarmed. What an audio bar does to a VC
+  button, slider or cue list is the audio widget's, not a hand's or a GO's
+  — armed or held with it.
+- **Timecode** starts a Show (and, at a freeze, its section's linked cue
+  list) that drives Show-only fixtures only if you armed **Follow timecode**
+  in Operate. Saved on with the show, or switched on in Design, it plays
+  them held: switch Follow off and on again in Operate to arm it.
+- **Input passthrough** (a house desk merged into a universe) never
+  reaches a Show-only channel.
 - **Cues left running from Design hold Show-only fixtures until a GO in
   Operate.** A list you tried out in Design and left running keeps them
   safe after the switch until you GO on it (a GO on a running list makes it
   the show without restarting it). A Park, Mark or cue stack set in Design,
   or a VC slider or Simple Desk channel left up from Design, holds them
   until you set or move it again in Operate; parking another fixture does
-  not wake it.
+  not wake it. A Park or Mark saved with the show is held when it opens,
+  until you set it again.
+- **A cue a Script started** keeps driving after the Script ends, for as
+  long as the session lasts. A VC playback slider that restarts its cue by
+  itself after a stop is held until you move it again.
 - **When a cue lets go**, its Show-only fixtures go to safe at once: they
   never fade out of a cue (a stopped cue is no longer the show).
 - **A last look** never holds a Show-only fixture.
@@ -854,9 +872,9 @@ after an emergency stop, since the stop). So:
   fade, and starts afresh, as switching to Operate does: **nothing from
   before the stop comes back**. A GO drives what it starts; a control
   drives once you move it again; an audio trigger or VC Clock once you
-  switch it on or touch it again. A GO on another list does not bring back
-  a fade-out, a stored level, a last look, a Park or a fader left up from
-  before the stop. The Simple Desk lets go of the Show-only channels you
+  switch it on or touch it again; timecode once you arm Follow again. A GO
+  on another list does not bring back a fade-out, a stored level, a last
+  look, a Park or a fader left up from before the stop. The Simple Desk lets go of the Show-only channels you
   had not moved since. The footer says **… held: emergency stop -- a GO or
   a control you move drives them again** until the next GO (what that GO
   does not drive stays held) or the next switch of mode.
@@ -874,10 +892,14 @@ after an emergency stop, since the stop). So:
 - **Move-in-black** never pre-sets a Show-only fixture: a laser's mode
   channel may be what turns it on.
 - **Identify and Reset** (the plot's and Fixture Properties' DMX Controls,
-  the Fixtures tab's Reset) are refused for a Show-only fixture, in Design
-  and Operate, as Locate is — greyed, saying why.
+  the Fixtures tab's Reset) are refused for a Show-only fixture — and for
+  any fixture patched over its addresses — in Design and Operate, as
+  Locate is: greyed, saying why.
 - **A Show-only fixture moved or patched mid-show** is held at its new
-  address at once.
+  address at once; a Simple Desk channel moved there for what was patched
+  before holds it until you move that fader again.
+- **A reset** (a universe cleared, a Simple Desk channel let go) leaves a
+  Show-only channel at its safe value.
 - **You can see it**: while it is held the footer says so in amber —
   **Lasers held: Design**, **Fog held: Blind**, **Flame L held: Design**,
   **3 Show-only fixtures held: Design** (click it for their Output Rules)

@@ -874,11 +874,11 @@ public:
      *  live. */
     static void startLiveSession();
     /** E3: an automatic widget's source (FunctionParent::AutoVCWidget: an
-     *  audio trigger, a VC Clock) armed by the operator now -- what it
-     *  starts is the show in this session. Its very first start since the
-     *  show opened arms it; once another session starts (Operate, All Off)
-     *  only this does. */
+     *  audio trigger, a VC Clock) armed by the operator now, in Operate --
+     *  what it starts is the show in this session. Only this arms it:
+     *  never its own first start (R6-3). */
     static void armAutoSource(const FunctionParent &source);
+    /** The session @p source was armed in; 0 (no session) when never */
     static quint32 autoSourceEpoch(const FunctionParent &source);
     /** Another show: no widget armed */
     static void clearAutoSources();
@@ -912,13 +912,15 @@ private:
 
     /** Show only, one per entry of m_sources (under m_sourcesMutex): the
      *  source is not the show (a preview, an editor's Test), or it is the
-     *  function that started this one, whose own gate it shares */
+     *  function that started this one, whose gate it follows -- latching
+     *  that one's stamp into epoch whenever it is the show (S3) */
     struct SourceGate
     {
         bool notTheShow = false;
         std::shared_ptr<std::atomic<bool> > parentGate;
-        /** The Operate session it was added in (GenericFader::liveEpoch()):
-         *  one from before this session is not the show */
+        /** The Operate session it was stamped in (GenericFader::stampEpoch()
+         *  when added; for a parent function's, latched from its gate): one
+         *  from before this session is not the show */
         quint32 epoch = 0;
     };
     QVector<SourceGate> m_sourceGates;

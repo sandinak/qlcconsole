@@ -74,6 +74,18 @@ public:
      *  start the audio capture in the correct thread */
     void toggleEnableButton(bool toggle);
 
+    /** @reimp: the bars take the id too (Show only arms them by it) */
+    void setID(quint32 id) override;
+
+private:
+    /** Show only: switched on by the operator in Operate -- what it drives
+     *  is the show in this session (Function::armAutoSource()) */
+    void armForShow();
+    /** Every bar starts its functions as this widget (AudioBar::setParentId()) */
+    void syncBarParents();
+
+public:
+
 public slots:
     void slotEnableButtonToggled(bool toggle);
 

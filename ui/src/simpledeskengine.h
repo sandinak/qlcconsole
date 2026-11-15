@@ -25,6 +25,7 @@
 #include "qlcui_export.h"
 #include <QMutex>
 #include <QHash>
+#include <QSet>
 #include <QList>
 #include <QMap>
 
@@ -105,6 +106,8 @@ private:
     QMap <uint,uchar> m_values;
     /** Show only: the session each channel was last really moved in */
     QHash <uint,quint32> m_channelEpochs;
+    /** ... and those of them stamped while Show only (for that fixture) */
+    QSet <uint> m_stampedShowOnly;
 
     /** A list of commands to be executed on writeDMX.
      *  This is used to sync reset requests with mastertimer ticks */
