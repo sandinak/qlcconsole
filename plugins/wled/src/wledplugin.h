@@ -120,6 +120,11 @@ public:
     bool supportsOutputTargets() const override { return true; }
     void writeUniverse(quint32 universe, quint32 output, const QByteArray &data,
                        bool dataChanged) override;
+    /** Review 10 (Show only): the look written last for @p universe -- a
+     *  closing frame -- reaches each of its devices now, before the output
+     *  closes or is aimed at another device: a POST waited on (no event
+     *  loop), at most about a second however many do not answer. */
+    void flushOutput(quint32 output, quint32 universe) override;
     void setParameter(quint32 universe, quint32 line, Capability type,
                       QString name, QVariant value) override;
     void unSetParameter(quint32 universe, quint32 line, Capability type,
@@ -292,6 +297,9 @@ private:
      *  device is left as its layout, not turned round. Best effort, at most
      *  about a second however many do not answer; no event loop. */
     static void restoreDirections(const QVector<Device> &devices);
+    /** POST @p body to @p ip's /json/state and wait (at most @p waitMs a
+     *  step): the output closing, where an event loop must not spin */
+    static bool postNow(const QString &ip, const QByteArray &body, int waitMs);
     static const int restoreBudgetMs = 1000;
 
     /** The rig network gate (QLCIOPlugin::setTransmitNetworks()) for one

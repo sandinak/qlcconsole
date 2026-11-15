@@ -201,7 +201,33 @@ public:
     /** @reimp */
     void writeUniverse(quint32 universe, quint32 output, const QByteArray& data, bool dataChanged) override;
 
+    /** @reimp m_async: the frames kept for @p output go out now */
+    void flushOutput(quint32 output, quint32 universe) override;
+
+    /** m_async: the send thread's pass -- every kept frame goes out */
+    void pumpAsync();
+
 public:
+    /** Review 10: a plugin that sends from its own thread (a USB widget,
+     *  WLED). writeUniverse() only keeps the frame (m_asyncPending); it is
+     *  "sent" -- reaches m_universe -- by the send thread's pass
+     *  (pumpAsync()) or flushOutput(); closeOutput() drops what is kept,
+     *  as a send thread stopped before its next pass does. */
+    bool m_async = false;
+    /** output -> (universe, frame) kept for the send thread */
+    QMap<quint32, QPair<quint32, QByteArray> > m_asyncPending;
+    int m_flushes = 0;
+    /** The last frame each target got, keyed "outputIP/line" (the line's
+     *  "outputIP" when it went out, "default" when none) -- a retarget's
+     *  old node keeps its last */
+    QMap<QString, QByteArray> m_lastByTarget;
+
+private:
+    /** A frame on the wire: m_universe and m_lastByTarget */
+    void sendNow(quint32 universe, quint32 output, const QByteArray &data);
+
+public:
+
     /** List of outputs that have been opened */
     QList <quint32> m_openOutputs;
 
@@ -212,6 +238,9 @@ public:
      *  -- Art-Net's Standard mode -- does) */
     bool m_lastDataChanged = false;
     bool m_dropUnchanged = false;
+    /** Review 10: drop a frame on a line its cached gate decision holds
+     *  (m_gateAllowed), as Art-Net's controller does (transmitHeld()) */
+    bool m_holdLikeNetwork = false;
 
     /*********************************************************************
      * Inputs

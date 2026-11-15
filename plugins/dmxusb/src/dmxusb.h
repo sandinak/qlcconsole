@@ -21,6 +21,9 @@
 #ifndef DMXUSB_H
 #define DMXUSB_H
 
+#include <QMutex>
+#include <atomic>
+
 #include "qlcioplugin.h"
 
 class DMXUSBWidget;
@@ -68,6 +71,19 @@ public:
 private:
     /** List of references to the discovered USB widgets */
     QList <DMXUSBWidget*> m_widgets;
+
+    /** Review 10 M2: the widgets (and m_outputs) are never replaced while a
+     *  universe thread is inside writeUniverse(): it takes this, rescan
+     *  takes it to swap them. Nothing else is done under it that waits on
+     *  the engine (a closing frame is fetched before it is taken). */
+    QMutex m_widgetsMutex;
+    /** A rescan in progress: frames of the show no longer reach the old
+     *  widgets, so their last one stays the closing frame */
+    std::atomic<bool> m_rescanning { false };
+    /** The output lines the engine has opened (since the last rescan):
+     *  a frame for any other is dropped, never kept in a widget that may be
+     *  another device now (under m_widgetsMutex) */
+    QList<quint32> m_openLines;
 
     /************************************************************************
      * Outputs

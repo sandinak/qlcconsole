@@ -106,6 +106,9 @@ private slots:
     void universeNames();
     void addUniverse();
     void addUniverseInBlind();
+    void review10_rigGateBackOnSendsTheClosingFrame();
+    void everyRigCheckHoldsWithTheClosingFrameFirst();
+    void aLineThatNamesAnotherDeviceIsNotReopened();
     void removeUniverse();
     void universe();
     void profiles();

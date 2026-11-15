@@ -24,6 +24,9 @@
 #include <QMap>
 #include <climits>
 #include <functional>
+#include <atomic>
+
+class QRecursiveMutex;
 
 class QLCIOPlugin;
 
@@ -103,9 +106,15 @@ public:
 
     /**
      * If a valid plugin and line have been set, close
-     * the output line and re-open it again
+     * the output line and re-open it again -- under the frame lock. A line
+     * whose name changed (a USB device unplugged, another in its place) is
+     * followed to wherever that name is now; gone, a universe with
+     * Show-only channels is never reopened on whatever took its number:
+     * it is kept pending on the old name (reconnectHeld() says why).
      */
     bool reconnect();
+    /** Why the last reconnect() left this patch pending; empty if it did not */
+    QString reconnectHeld() const { return m_reconnectHeld; }
 
     /** The plugin instance that has been assigned to a patch */
     QLCIOPlugin* plugin() const;
@@ -120,6 +129,12 @@ public:
      *  is closed as it always was. */
     void setClosingFrame(const std::function<bool(QByteArray &frame, bool blackout)> &source);
 
+    /** The universe's frame lock (Universe::m_frameMutex): taken around
+     *  every change of the line or its target that does not come through
+     *  the universe (reconnect(), a retarget), so no frame is sent while
+     *  the line moves. Unset: nothing is locked (a patch of no universe). */
+    void setFrameLock(QRecursiveMutex *lock) { m_frameLock = lock; }
+
     /** Friendly name of the plugin assigned to a patch ("None" if none) */
     QString pluginName() const;
 
@@ -132,8 +147,20 @@ public:
     /** Returns true if a valid plugin line has been set */
     bool isPatched() const;
 
-    /** Set a parameter specific to the patched plugin */
+    /** Set a parameter specific to the patched plugin. One that aims the
+     *  line elsewhere (another node, port or universe: isTargetParameter())
+     *  on an open line sends the old target its closing frame first. */
     void setPluginParameter(QString prop, QVariant value);
+
+    /** Several at once, under the frame lock: one closing frame for the
+     *  old target, and no frame sent half-way (a new address on the old
+     *  port). UniversePatcher::applyTarget(). */
+    void setPluginParameters(const QMap<QString, QVariant> &values);
+
+    /** True for a parameter that changes where an open line's frames land
+     *  (Art-Net outputIP/outputUni, E1.31 universe/unicast/multicast, a
+     *  WLED device's address or window) */
+    static bool isTargetParameter(const QString &prop);
 
     /**
      * Drop a plugin parameter entirely, as opposed to setting it empty.
@@ -166,6 +193,7 @@ private:
     QString m_pendingNetwork;
     /** Why the rig network gate holds this patch; empty when it does not */
     QString m_heldReason;
+    QString m_reconnectHeld;
     /** The patch parameters cache */
     QMap<QString, QVariant>m_parametersCache;
     /** See setClosingFrame() */
@@ -174,6 +202,12 @@ private:
     /** Close the open line for good: its closing frame first (see
      *  setClosingFrame()), then the plugin's closeOutput() */
     void closeLine();
+    /** The closing frame to the line's current target, on the wire
+     *  (QLCIOPlugin::flushOutput()) -- the line still open */
+    void sendClosingFrame();
+    /** The open line's name when it was opened: reconnect() follows it */
+    QString m_lineName;
+    QRecursiveMutex *m_frameLock = nullptr;
 
     /********************************************************************
      * Value dump
@@ -198,7 +232,7 @@ signals:
 private:
     /** A line just opened: its first frame goes out as a changed one (a
      *  plugin that sends only changes must not skip it) */
-    bool m_freshLine = false;
+    std::atomic<bool> m_freshLine { false };
     /** A buffer used when this output patch is paused */
     QByteArray m_pauseBuffer;
     bool m_paused;
