@@ -111,6 +111,7 @@ private slots:
     void aLineThatNamesAnotherDeviceIsNotReopened();
     void review11_unplugReplugOneOfTwoComesBackOnItsOwnDevice();
     void review11_twoIdenticalDevicesUnplugReplugKeepTwoLines();
+    void review11_keptPendingDoesNotCloseTheLineAnotherUniverseMovedTo();
     void removeUniverse();
     void universe();
     void profiles();

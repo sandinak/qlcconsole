@@ -2429,6 +2429,31 @@ void InputOutputMap_Test::review11_twoIdenticalDevicesUnplugReplugKeepTwoLines()
     QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(1));
 }
 
+/* Review 11: the universe whose device went has Show-only fixtures; the
+   other universe's device is still there and only moved down a line. The
+   kept-pending path closes the line it had -- which the other universe was
+   just reopened on. */
+void InputOutputMap_Test::review11_keptPendingDoesNotCloseTheLineAnotherUniverseMovedTo()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)" << "Pro (S/N: B2)";
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 1));     // universe 1 -> B2
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 0));     // universe 2 -> A1
+    iom.universe(1)->markShowOnly(14, true, 0);                     // a laser on A1's rig
+
+    stub->m_lineNames = QStringList() << "Pro (S/N: B2)";          // A1 unplugged
+    stub->configure();
+
+    OutputPatch *b = iom.outputPatch(0, 0);
+    QVERIFY(b->isPatched());
+    // Wherever universe 1 is patched now, that line is open in the plugin.
+    QVERIFY2(stub->m_openOutputs.contains(b->output()),
+             qPrintable(QString("universe 1 is patched on line %1 (%2), which is closed")
+                        .arg(b->output()).arg(b->outputName())));
+}
+
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()
 {
     schoolLaptop();
