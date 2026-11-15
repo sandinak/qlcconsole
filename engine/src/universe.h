@@ -282,7 +282,8 @@ public:
      *  setOutputPatch(), there is no "clear this patch" meaning here, only
      *  "remember it, unresolved". */
     bool setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index = 0,
-                               quint32 savedLine = UINT_MAX, const QString &network = QString());
+                               quint32 savedLine = UINT_MAX, const QString &network = QString(),
+                               bool byNumber = false);
 
     /** A pending (or held) output patch at @p index found its line again:
      *  opened on @p line under the frame lock (OutputPatch::resolvePending()) */

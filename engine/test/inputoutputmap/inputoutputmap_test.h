@@ -123,6 +123,14 @@ private slots:
     void review15_n4AfterALoadHoldOpensByNameAsStock();
     void review15_teachingNeverOpensALaserUniverseOnUsb();
     void review15_aLaserUniversesFeedbackLineIsAllowedItsOutputHeld();
+    void f3_aHoldWithNoNameWaitsOnItsLineNumber();
+    void f4_aHandPatchOntoAHeldLaserInterfaceIsRefused();
+    void f4_aLoadOntoAHeldLaserInterfaceIsKeptPending();
+    void f5_onlyArtNetSacnAndWledMaySendToShowOnly();
+    void r16_fixtureRemapLeavesALaserUnheldOnUsb();
+    void r16_holdingADanglingPatchKeepsIt();
+    void r16_patchingTwoLasersOntoUsbClosesWithBothSafe();
+    void r16_noOrdinaryUniverseRenumbersOntoAHeldLaserInterface();
     void removeUniverse();
     void universe();
     void profiles();

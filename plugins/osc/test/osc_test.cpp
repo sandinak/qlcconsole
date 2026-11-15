@@ -547,6 +547,12 @@ void OSC_Test::pluginKeepsOnlyWhatDiffersFromTheDefault()
     QVERIFY(plugin.m_IOmapping.at(0).controller == nullptr);
 }
 
+void OSC_Test::showOnlyMayNotUseIt()
+{
+    OSCPlugin plugin;
+    QCOMPARE(plugin.isNetworkDmxOutput(), false);
+}
+
 QTEST_GUILESS_MAIN(OSC_Test)
 
 void OSC_Test::aShowControlPacketLeavesTheLineToTheTarget()

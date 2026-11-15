@@ -19,6 +19,9 @@ class Wled_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** Review 16 F5: one of the outputs a universe with Show-only
+     *  fixtures may use (QLCIOPlugin::isNetworkDmxOutput()). */
+    void showOnlyMayUseIt();
     /** Each test starts with no kept layouts (the settings are the test's own). */
     void init();
 

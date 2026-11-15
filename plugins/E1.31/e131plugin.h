@@ -71,6 +71,9 @@ public:
     /** @reimp */
     int capabilities() const override;
 
+    /** @reimp Show-only fixtures may use it (N1) */
+    bool isNetworkDmxOutput() const override { return true; }
+
     /** @reimp */
     QString pluginInfo() const override;
 

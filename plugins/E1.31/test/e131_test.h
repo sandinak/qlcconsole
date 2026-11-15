@@ -25,6 +25,9 @@ class E131_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** Review 16 F5: one of the outputs a universe with Show-only
+     *  fixtures may use (QLCIOPlugin::isNetworkDmxOutput()). */
+    void showOnlyMayUseIt();
     /* Send failure reporting through SendHealth (whose rules artnet_test
        covers in full): results are injected, nothing is sent. */
     void transientFailuresAreNotReported();

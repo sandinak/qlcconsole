@@ -1572,6 +1572,11 @@ bool Doc::patchFixtures(const QList<FixturePatch> &patches, QString *why)
     if (!canPatchFixtures(patches, why))
         return false;
 
+    /* N2 (outputpatch.h): one marking scope -- every fixture is Show only
+       where it lands before a non-network output there is held, so its
+       closing frame has every one at safe (review 16 F2). */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(inputOutputMap());
+
     // Release every claim first, so the order of the list cannot matter.
     QSet<quint32> moving;
     foreach (const FixturePatch &p, patches)
@@ -1856,6 +1861,16 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
             m_addresses[i] = id;
         }
         m_latestFixtureId = id;
+    }
+
+    /* Review 16 F1: nothing here emits a fixture signal, so the output
+       rules are rebuilt now, in one marking scope: the old addresses'
+       marks go, the new ones are set, and N2 / N4 (outputpatch.h) hold or
+       let go every universe touched. */
+    if (m_outputRuleKeeper != nullptr)
+    {
+        InputOutputMap::ShowOnlyMarks showOnlyMarks(inputOutputMap());
+        m_outputRuleKeeper->rebuild();
     }
     return true;
 }

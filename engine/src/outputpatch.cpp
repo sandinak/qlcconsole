@@ -70,7 +70,7 @@ OutputPatch::~OutputPatch()
         /* Held by N2/N3 and now unpatched (review 12 F6): the plugin
            forgets this universe on the line it had, whoever else is open
            there. */
-        if (m_showOnlyHold && m_pendingLine != UINT_MAX)
+        if (m_holdKind != NotHeld && m_pendingLine != UINT_MAX)
             m_plugin->forgetOutput(m_pendingLine, m_universe);
     }
 }
@@ -144,13 +144,10 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
     {
         const bool opened = m_plugin->openOutput(m_pluginLine, m_universe);
         m_freshLine.store(opened, std::memory_order_relaxed);
-        // The device it was patched to: N2 keeps it pending on that name.
-        if (m_plugin->linesAreHardware())
-            m_lineName = m_plugin->outputs().value(int(m_pluginLine));
-        else
-            m_lineName.clear();
+        // The device it was patched to: a hold keeps it pending on that name.
+        m_lineName = m_plugin->outputs().value(int(m_pluginLine));
         m_reconnectHeld.clear();
-        m_showOnlyHold = false;
+        m_holdKind = NotHeld;
         m_loadedLine = UINT_MAX;
         return opened;
     }
@@ -204,7 +201,8 @@ bool OutputPatch::reconnect()
     return false;
 }
 
-void OutputPatch::holdForShowOnly(const QString &why, bool closeTheLine, quint32 waitLine)
+void OutputPatch::hold(HoldKind kind, const QString &why, bool closeTheLine, bool sendClosing,
+                       quint32 waitLine)
 {
     if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine())
         return;
@@ -212,23 +210,43 @@ void OutputPatch::holdForShowOnly(const QString &why, bool closeTheLine, quint32
     if (m_frameLock != nullptr)
         locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
     m_reconnectHeld = why;
-    m_showOnlyHold = true;
+    m_holdKind = kind;
     qWarning() << "[OutputPatch]" << why;
     /* N2: the whole Show-only mask at safe, on the wire, before the line
        stops receiving this universe. Not closed when another patch is open
        on it: closing is per line in a USB plugin, and would stop that
        universe too -- the plugin only forgets this one there (review 12
-       F6), so nothing of it is written to that device again. */
-    sendClosingFrame();
+       F6), and nothing of it, not even a closing frame, is written to that
+       device again (review 16). */
     if (closeTheLine)
+    {
+        if (sendClosing)
+            sendClosingFrame();
         m_plugin->closeOutput(m_pluginLine, m_universe);
+    }
     else
         m_plugin->forgetOutput(m_pluginLine, m_universe);
+    // F3: no name (a dangling line): pending on its number only.
     m_pendingUID = m_lineName;
     m_pendingLine = waitLine != UINT_MAX ? waitLine : m_pluginLine;
     m_pendingNetwork.clear();
     m_pluginLine = QLCIOPlugin::invalidLine();
     emit outputNameChanged();
+}
+
+QString OutputPatch::deviceText(const QLCIOPlugin *plugin, quint32 line, const QString &name)
+{
+    if (name.isEmpty() == false && name != KOutputNone)
+        return name;
+    return tr("line %1 of %2").arg(line == UINT_MAX ? 0 : line + 1)
+            .arg(plugin != NULL ? plugin->name() : QString());
+}
+
+QString OutputPatch::deviceText() const
+{
+    if (isPatched())
+        return deviceText(m_plugin, m_pluginLine, m_plugin->outputs().value(int(m_pluginLine)));
+    return deviceText(m_plugin, m_pendingLine, m_pendingUID);
 }
 
 void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid,
@@ -241,7 +259,7 @@ void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid,
     m_plugin = plugin;
     m_pluginLine = QLCIOPlugin::invalidLine();
     m_reconnectHeld.clear();
-    m_showOnlyHold = false;
+    m_holdKind = NotHeld;
     m_pendingUID = uid;
     m_pendingLine = savedLine;
     m_pendingNetwork = network;
@@ -271,7 +289,10 @@ bool OutputPatch::resolvePending(quint32 line)
 
 bool OutputPatch::isPending() const
 {
-    return m_pluginLine == QLCIOPlugin::invalidLine() && m_pendingUID.isEmpty() == false;
+    if (m_pluginLine != QLCIOPlugin::invalidLine())
+        return false;
+    // F3: a held patch with no name waits on its line number.
+    return m_pendingUID.isEmpty() == false || (m_holdKind != NotHeld && m_pendingLine != UINT_MAX);
 }
 
 QString OutputPatch::pluginName() const

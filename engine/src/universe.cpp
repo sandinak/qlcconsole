@@ -1798,9 +1798,10 @@ bool Universe::setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index,
 }
 
 bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index,
-                                     quint32 savedLine, const QString &network)
+                                     quint32 savedLine, const QString &network, bool byNumber)
 {
-    if (index < 0 || plugin == NULL || pendingUID.isEmpty())
+    // An empty name only for a patch held by its number (F3, outputpatch.h).
+    if (index < 0 || plugin == NULL || (pendingUID.isEmpty() && (byNumber == false || savedLine == UINT_MAX)))
         return false;
 
     qDebug() << "[Universe] setOutputPatchPending - ID:" << m_id

@@ -29,6 +29,9 @@ class ArtNet_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** Review 16 F5: one of the outputs a universe with Show-only
+     *  fixtures may use (QLCIOPlugin::isNetworkDmxOutput()). */
+    void showOnlyMayUseIt();
     void setupArtNetDmx();
     void fillArtPollReplyInfo();
 

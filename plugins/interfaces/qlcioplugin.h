@@ -467,6 +467,15 @@ public:
     virtual bool linesAreHardware() const { return false; }
 
     /**
+     * True for the outputs a universe with Show-only fixtures (lasers,
+     * foggers, flame) may use -- N1 in engine/src/outputpatch.h. Only
+     * Art-Net, E1.31/sACN and WLED say so; every other plugin (USB DMX,
+     * DMX4Linux, SPI, OLA, UART, GPIO, MIDI, HID, Loopback, OSC, anything
+     * unknown) is refused for them.
+     */
+    virtual bool isNetworkDmxOutput() const { return false; }
+
+    /**
      * True when a patch on this plugin can be aimed at a specific target on
      * the far end -- a node address plus a port on it -- rather than simply
      * leaving by the line.
@@ -918,7 +927,7 @@ private:
    closing-frame source): a plugin built against an older one is refused
    by QPluginLoader -- it would call through the wrong slots -- rather than
    loaded. Every in-tree plugin names it with this macro. */
-#define QLCIOPlugin_iid "org.qlcconsole.QLCIOPlugin/0.4.8"
+#define QLCIOPlugin_iid "org.qlcconsole.QLCIOPlugin/0.4.8.1"
 
 Q_DECLARE_INTERFACE(QLCIOPlugin, QLCIOPlugin_iid)
 

@@ -118,6 +118,8 @@ public:
     QStringList outputs() override;
     QString outputInfo(quint32 output) override;
     bool supportsOutputTargets() const override { return true; }
+    /** @reimp Show-only fixtures may use it (N1) */
+    bool isNetworkDmxOutput() const override { return true; }
     void writeUniverse(quint32 universe, quint32 output, const QByteArray &data,
                        bool dataChanged) override;
     /** Review 10-12 (Show only): the look written last for @p universe --

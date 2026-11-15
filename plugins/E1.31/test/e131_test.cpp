@@ -395,6 +395,12 @@ void E131_Test::pluginAppliesAndKeepsTheParameters()
     QVERIFY(plugin.m_IOmapping.at(0).controller == NULL);
 }
 
+void E131_Test::showOnlyMayUseIt()
+{
+    E131Plugin plugin;
+    QCOMPARE(plugin.isNetworkDmxOutput(), true);
+}
+
 QTEST_MAIN(E131_Test)
 
 void E131_Test::dmxPacketsAreBoundedByTheDatagramAndAUniverse()

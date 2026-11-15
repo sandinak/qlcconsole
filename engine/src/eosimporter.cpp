@@ -341,6 +341,9 @@ bool EosImporter::applyCircuitRoles(Doc *doc, const QMap<int, EosCircuit> &circu
 bool EosImporter::build(const EosShowData &data, Doc *doc, const EosFixtureMapper &mapper,
                         EosImportResult &result, const QString &showName, const QHash<int, int> &circuitRoles)
 {
+    /* N2 (outputpatch.h, review 16 F2): one marking scope for an EOS show's fixtures --
+       all Show only before a non-network output is held. */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(doc != nullptr ? doc->inputOutputMap() : nullptr);
     if (doc == nullptr)
         return false;
 

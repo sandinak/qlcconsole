@@ -97,6 +97,8 @@ public:
 
     /** @reimp Patches carry outputIP + outputUni to aim at a node's port. */
     bool supportsOutputTargets() const override { return true; }
+    /** @reimp Show-only fixtures may use it (N1) */
+    bool isNetworkDmxOutput() const override { return true; }
 
     /** @reimp Outputs that can't send, nodes that stopped answering, and
         ports that report a fault -- see SendHealth and ArtNetNodeWatch. */
