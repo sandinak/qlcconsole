@@ -117,7 +117,12 @@ const QList<CueSpec> kSongCues = {
     { "1.1.2", "Verse In" }, { "1.1.5", "Verse Lift" }, { "1.1.5.5", "Verse Point" },
     { "1.2.3", "Chorus In" }, { "1.2.8", "Chorus Out" },
 };
-const QString kSubCue = QStringLiteral("Chorus Sting");
+/* Chorus In's sub-cues: Sub GO plays them in turn (the first one plays with
+   GO onto the cue), each a look of its own on the Wash. */
+struct SubSpec { QString name; bool full; QString colour; };
+const QList<SubSpec> kSubCues = {
+    { "Chorus Sting", true, "Red" }, { "Chorus Lift", true, "Amber" }, { "Chorus Drop", false, "Blue" },
+};
 
 /* Where cue 4 puts Shutter Spot (raw degrees on its 630 x 270 yoke). */
 const int kPosBPan = 405, kPosBTilt = 170;
@@ -592,7 +597,14 @@ void PadBenchShow_Test::build(const QString &path)
         look(songCues[i], l, i < 3 ? amber : red);
     }
     QString why;
-    QVERIFY2(st->addSubCue(songCues[3], kSubCue, invalidId(), &why) != invalidId(), qPrintable(why));
+    for (const SubSpec &sp : kSubCues)
+    {
+        const quint32 sub = st->addSubCue(songCues[3], sp.name, invalidId(), &why);
+        QVERIFY2(sub != invalidId(), qPrintable(why));
+        const quint32 l = st->addLayer(sub, wash);
+        look(sub, l, sp.full ? full : half);
+        look(sub, l, sp.colour == "Red" ? red : sp.colour == "Amber" ? amber : blue);
+    }
     QList<Section> secs = st->sections(songList);
     QCOMPARE(secs.count(), 1);
     QVERIFY(st->setSectionName(songList, secs.first(), kSong));
