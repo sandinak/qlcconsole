@@ -2924,4 +2924,46 @@ void OutputRules_Test::r8_anEffectFollowsARepatchPastTheMarks()
     QCOMPARE(most, 0);
 }
 
+/* R8-6: Universe::dumpOutputFrame() in Blind sends only when Blind holds
+   exempt circuits and the universe has one; otherwise it returns -- for
+   the frame, for Blackout (applyBlackout()) and for the emergency stop's
+   own send (OutputRuleKeeper::emergencyStop()) alike. The output keeps
+   the last frame sent before Blind (a USB interface refreshes it, a node
+   holds it): the GO'd laser stays on through All Off and Blackout, while
+   the footer says "held: Blind". */
+void OutputRules_Test::r8_allOffAndBlackoutInBlindNeverReachTheRig()
+{
+    // A universe with no house light on it (the usual laser universe).
+    QVERIFY(m_doc->deleteFixture(m_doc->fixtureForAddress(House)));
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    QVERIFY(m_uni->hasBlackoutExempt(UNIVERSE_SIZE) == false);
+    m_doc->setMode(Doc::Operate);
+    const FunctionParent go = FunctionParent::master();
+    startScene({ { Flame, 255 } }, go.type(), go.id());     // a GO
+    tickFrame(Flame);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);
+    m_doc->inputOutputMap()->setOutputInhibited(true);      // Blind
+    tickFrame(Flame);
+    const int inBlind = sent(Flame);
+    // The pad's emergency stop, in Blind.
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+    for (int i = 0; i < 3; i++)
+        tickFrame(Flame);
+    const int afterAllOff = sent(Flame);
+    m_doc->inputOutputMap()->setBlackout(true);
+    tickFrame(Flame);
+    const int afterBlackout = sent(Flame);
+    m_doc->inputOutputMap()->setBlackout(false);
+    m_doc->inputOutputMap()->setOutputInhibited(false);
+    stopFunctions();
+    qDebug() << "R8-6: sent in Blind" << inBlind << "after All Off" << afterAllOff
+             << "after Blackout" << afterBlackout;
+    QCOMPARE(afterAllOff, 0);
+    QCOMPARE(afterBlackout, 0);
+}
+
 QTEST_GUILESS_MAIN(OutputRules_Test)
