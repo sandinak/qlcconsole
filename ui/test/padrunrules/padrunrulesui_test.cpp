@@ -58,6 +58,7 @@
 #include "stagetarget.h"
 #include "qlcpoint.h"
 #include "cuerunner.h"
+#include "controlmap.h"
 
 #include "padrunrulesui_test.h"
 
@@ -630,6 +631,10 @@ void PadRunRulesUi_Test::venueFocusShots()
     quint32 focus = 0, house = 0;
     const quint32 list = makeFocusShow(&focus, &house);
     FocusCallCue *fcc = pc->focusCallCue();
+    // The Run tab plays the focus cue's list, as on a pre-show night.
+    doc->controlMap()->setRunTabList(list);
+    // What an earlier test's pad left on the chip (a notice) has gone.
+    QTest::qWait(PadRun::noticeMs() + 200);
     auto value = [&](quint32 ch, uchar v) { emit iom->inputValueChanged(0, ch, v, QString()); };
     auto ltMenu = [&]() {
         value(kLT, 255);
@@ -675,6 +680,7 @@ void PadRunRulesUi_Test::venueFocusShots()
         settle(50);
     }
     fcc->setRunningCueProbe({});
+    doc->controlMap()->setRunTabList(0xFFFFFFFF);
     run->setEnabled(false, false);
     doc->setMode(Doc::Design);
     settle(50);
