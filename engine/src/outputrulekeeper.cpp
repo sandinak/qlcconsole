@@ -65,7 +65,7 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
         m_stopEpoch.store(0, std::memory_order_relaxed);
         Function::clearAutoSources();
         startSession();
-        m_onAtOpenWhen = kDefaultOnAtOpenWhen;
+        m_onAtOpenWhen = defaultOnAtOpenWhen();
         m_seenOperate = m_doc->mode() == Doc::Operate;
         scheduleRebuild();
     });
@@ -173,7 +173,7 @@ void OutputRuleKeeper::saveXML(QXmlStreamWriter *doc) const
 {
     // Only when it differs from a new show's: shows that never touched it
     // save as they always did.
-    if (m_onAtOpenWhen == kDefaultOnAtOpenWhen)
+    if (m_onAtOpenWhen == defaultOnAtOpenWhen())
         return;
     doc->writeStartElement(KXMLQLCOutputRuleSettings);
     doc->writeAttribute(KXMLQLCOutputRuleOnAtOpen, m_onAtOpenWhen == OnAtShowOpen

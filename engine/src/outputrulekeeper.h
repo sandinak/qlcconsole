@@ -137,7 +137,7 @@ class QXmlStreamWriter;
  * When OnAtOpen fixtures come on is the show's setting (saved with it,
  * Settings > Output): when you switch to Operate (the default, the safer
  * one) or as soon as the show is open. Blackout-exempt fixtures also hold
- * through Blind (kDefaultBlindHoldsExempt; board Q44).
+ * through Blind (defaultBlindHoldsExempt(); board Q44).
  */
 class QLC_ENGINE_EXPORT OutputRuleKeeper final : public QObject
 {
@@ -156,9 +156,11 @@ public:
     Q_ENUM(OnAtOpenWhen)
 
     /** A new show's (board Q45: Operate, the safer choice) */
-    static constexpr OnAtOpenWhen kDefaultOnAtOpenWhen = OnAtOperate;
+    /* Functions, not static data: a dllimport-ed constexpr data member odr-used
+       outside the engine DLL fails to link with MinGW (Windows CI). */
+    static constexpr OnAtOpenWhen defaultOnAtOpenWhen() { return OnAtOperate; }
     /** Board Q44: Blackout-exempt fixtures hold through Blind */
-    static constexpr bool kDefaultBlindHoldsExempt = true;
+    static constexpr bool defaultBlindHoldsExempt() { return true; }
 
     explicit OutputRuleKeeper(Doc *doc);
 
@@ -177,7 +179,7 @@ public:
     bool onAtOpenArmed() const;
 
     bool blindHoldsExempt() const { return m_blindHoldsExempt; }
-    /** For this session (tests; the default is kDefaultBlindHoldsExempt) */
+    /** For this session (tests; the default is defaultBlindHoldsExempt()) */
     void setBlindHoldsExempt(bool hold);
 
     /** The rule bits of one universe (Universe::ChannelType), UNIVERSE_SIZE
@@ -247,8 +249,8 @@ private:
     Doc *m_doc;
     bool m_pending = false;
     int m_count = 0;
-    OnAtOpenWhen m_onAtOpenWhen = kDefaultOnAtOpenWhen;
-    bool m_blindHoldsExempt = kDefaultBlindHoldsExempt;
+    OnAtOpenWhen m_onAtOpenWhen = defaultOnAtOpenWhen();
+    bool m_blindHoldsExempt = defaultBlindHoldsExempt();
     /** OnAtOperate: Operate has been entered since the show was opened */
     bool m_seenOperate = false;
     QList<quint32> m_showOnly;

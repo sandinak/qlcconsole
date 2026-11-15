@@ -136,8 +136,8 @@ void OutputRules_Test::cleanup()
     m_doc->inputOutputMap()->setOutputInhibited(false);
     m_doc->inputOutputMap()->setGrandMasterValue(255);
     m_doc->inputOutputMap()->setGrandMasterChannelMode(GrandMaster::Intensity);
-    m_doc->outputRuleKeeper()->setOnAtOpenWhen(OutputRuleKeeper::kDefaultOnAtOpenWhen);
-    m_doc->outputRuleKeeper()->setBlindHoldsExempt(OutputRuleKeeper::kDefaultBlindHoldsExempt);
+    m_doc->outputRuleKeeper()->setOnAtOpenWhen(OutputRuleKeeper::defaultOnAtOpenWhen());
+    m_doc->outputRuleKeeper()->setBlindHoldsExempt(OutputRuleKeeper::defaultBlindHoldsExempt());
     m_doc->setMode(Doc::Design);
     m_doc->clearContents();
     m_doc->outputRuleKeeper()->rebuild();
@@ -714,7 +714,7 @@ void OutputRules_Test::onAtOpenFollowsItsSetting()
 
     // A new show: the default setting, and waits for its own Operate.
     m_doc->clearContents();
-    QCOMPARE(k->onAtOpenWhen(), OutputRuleKeeper::kDefaultOnAtOpenWhen);
+    QCOMPARE(k->onAtOpenWhen(), OutputRuleKeeper::defaultOnAtOpenWhen());
     QVERIFY(k->onAtOpenArmed() == false);
 }
 

@@ -51,7 +51,7 @@ OutputRulesDialog::OutputRulesDialog(Doc *doc, const QList<quint32> &fixtureIds,
 
     OutputRuleKeeper *k = m_doc->outputRuleKeeper();
     QString onWhen;
-    switch (k != nullptr ? k->onAtOpenWhen() : OutputRuleKeeper::kDefaultOnAtOpenWhen)
+    switch (k != nullptr ? k->onAtOpenWhen() : OutputRuleKeeper::defaultOnAtOpenWhen())
     {
         case OutputRuleKeeper::OnAtOperate:
             onWhen = tr("from when you switch to Operate (the show's setting, in Settings ▸ Advanced ▸ Output)");
