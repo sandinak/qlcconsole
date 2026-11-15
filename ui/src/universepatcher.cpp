@@ -458,7 +458,9 @@ void UniversePatcher::retargetPatch(quint32 universe, const QString &pluginName,
         if (moved == false)
         {
             QMessageBox::warning(m_parent, tr("Retarget patch"),
-                                 tr("That universe is no longer patched to %1.")
+                                 iomap != NULL && iomap->lastPatchRefusal().isEmpty() == false
+                                 ? iomap->lastPatchRefusal()
+                                 : tr("That universe is no longer patched to %1.")
                                      .arg(pluginName));
             return;
         }
@@ -1077,11 +1079,17 @@ int UniversePatcher::applyOrderedPatch(const OrderedPatch &plan)
        0 rather than appending: a universe sends to one line (see
        ConnectionsTree::patchUniverseTo()). */
     QList<OrderedPatchEntry> placed;
+    QStringList refused;
     foreach (const OrderedPatchEntry &e, plan.entries)
     {
         if (iomap->setOutputPatch(e.universe, plan.pluginName, QString(), e.line,
                                   false, 0) == false)
+        {
+            // S-H1: a laser universe onto an interface with no serial.
+            if (iomap->lastPatchRefusal().isEmpty() == false)
+                refused << tr("Universe %1: %2").arg(e.universe + 1).arg(iomap->lastPatchRefusal());
             continue;
+        }
         Universe *u = iomap->universe(e.universe);
         OutputPatch *op = (u != NULL && u->outputPatchesCount() > 0) ? u->outputPatch(0) : NULL;
         if (op != NULL)
@@ -1102,6 +1110,8 @@ int UniversePatcher::applyOrderedPatch(const OrderedPatch &plan)
 
     m_doc->setModified();
     emit patchChanged();
+    if (refused.isEmpty() == false)
+        QMessageBox::warning(m_parent, tr("Patch universes"), refused.join("\n\n"));
     return applied;
 }
 

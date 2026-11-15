@@ -2845,7 +2845,7 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
     }
 
     /* The Show-only fixtures are known now (the I/O map is read before
-       them): every patch the load opened, checked against H1, H2, H5
+       them): every patch the load opened, checked against S-H1..S-H3
        (outputpatch.h), then output let go. */
     if (loadIO)
     {

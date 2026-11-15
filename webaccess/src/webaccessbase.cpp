@@ -668,8 +668,12 @@ bool WebAccessBase::handleCommonWebSocketCommand(QHttpConnection *conn, WebAcces
         }
         else if (cmdList[1] == "OUTPUT")
         {
-            m_doc->inputOutputMap()->setOutputPatch(universe, cmdList[3], "", cmdList[4].toUInt(), false);
-            m_doc->inputOutputMap()->saveDefaults();
+            InputOutputMap *iom = m_doc->inputOutputMap();
+            // S-H1: a laser universe onto an interface with no serial is refused, said.
+            if (iom->setOutputPatch(universe, cmdList[3], "", cmdList[4].toUInt(), false) == false
+                && iom->lastPatchRefusal().isEmpty() == false && conn)
+                conn->webSocketWrite(QString("ALERT|" + iom->lastPatchRefusal()));
+            iom->saveDefaults();
         }
         else if (cmdList[1] == "FB")
         {

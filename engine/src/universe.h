@@ -346,6 +346,10 @@ signals:
     /** Notify the listeners that a feedback line has been patched/unpatched */
     void hasFeedbackChanged();
 
+    /** The first Show-only channel was marked (none before): the I/O map
+     *  checks its line (S-H1, outputpatch.h) */
+    void showOnlyStarted();
+
 private:
     /** Reference to the input patch associated to this universe. */
     InputPatch *m_inputPatch;

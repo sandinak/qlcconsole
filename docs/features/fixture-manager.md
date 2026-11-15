@@ -887,17 +887,16 @@ opened — over the web while in Operate too). So:
   too — so a node that keeps its last frame never keeps a laser on. In
   Blind that frame has the rest of the rig as it was before Blind, never the
   preview. A held output comes back with what the show gives them now.
-- **A USB interface unplugged**: its outputs are sent the Show-only
-  fixtures at safe first, and patches reconnect by number as always —
-  except around the lasers: a universe with Show-only fixtures comes back
-  by itself only when its own interface is back on its own port (else it
-  says "missing or moved: re-patch to use it"); nothing else ever opens by
-  itself on that interface; a universe kept off it comes back with its own
-  interface. Two interfaces of one model with no serial number, with lasers
-  on one: they wait for you to re-patch them — an interface swap with
-  lasers on it holds the lasers' universes until you re-patch them. A show
-  opened on moved interfaces is checked the same way before anything is
-  sent.
+- **Lasers need an interface with a serial number** (USB, MIDI): a
+  universe with Show-only fixtures goes only on an interface whose name no
+  other has; else it's refused or held, and says so (use one with a
+  serial, or a network output).
+- **Lasers never reconnect by themselves**: if their interface or port
+  changes (unplugged, rescanned, a show opened on moved interfaces), their
+  universe is held until you re-patch it — even back on its own port.
+- **Nothing else takes the lasers' interface**: no other universe or
+  feedback line opens on it by itself; one kept off it comes back on its
+  own port once that port is another interface.
 - **Sharing an address**: a fixture patched over a Show-only one cannot
   turn it on — **On when not in use** and **Ignore Blackout** do nothing on
   the shared channels. The Grand Master never scales a safe value (a gobo

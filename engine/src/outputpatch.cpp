@@ -145,19 +145,11 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
         const bool opened = m_plugin->openOutput(m_pluginLine, m_universe);
         m_freshLine.store(opened, std::memory_order_relaxed);
         /* The device this patch was made to, recorded here once (a reopen
-           by number never changes it): its name, and how many lines carry
-           that name -- two of one model without a serial (review 12 F3). */
+           by number never changes it). */
         if (m_plugin->linesAreHardware())
-        {
-            const QStringList names = m_plugin->outputs();
-            m_lineName = names.value(int(m_pluginLine));
-            m_lineNameCount = int(names.count(m_lineName));
-        }
+            m_lineName = m_plugin->outputs().value(int(m_pluginLine));
         else
-        {
             m_lineName.clear();
-            m_lineNameCount = 0;
-        }
         m_reconnectHeld.clear();
         m_deviceHold = NoDeviceHold;
         m_heldFromOpen = false;
@@ -194,7 +186,7 @@ bool OutputPatch::reconnect()
 
         /* By number, as it always was (review 11: following a name broke an
            ordinary unplug and replug). A universe with Show-only channels
-           is checked before this is called (lineNameChanged()). The name
+           is checked before this is called (S-H2, outputpatch.h). The name
            recorded when the patch was made is kept: never this line's. */
         m_plugin->closeOutput(m_pluginLine, m_universe);
 #if defined(WIN32) || defined(Q_OS_WIN)
@@ -206,10 +198,6 @@ bool OutputPatch::reconnect()
         if (ret == true)
         {
             m_freshLine.store(true, std::memory_order_relaxed);
-            // The name stays the one it was patched to; how many lines carry
-            // it now is the count from here on (review 13 L3).
-            if (m_plugin->linesAreHardware() && m_lineName.isEmpty() == false)
-                m_lineNameCount = int(m_plugin->outputs().count(m_lineName));
             QMap<QString, QVariant>::iterator it = m_parametersCache.begin();
             for (; it != m_parametersCache.end(); it++)
                 m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
@@ -217,21 +205,6 @@ bool OutputPatch::reconnect()
         return ret;
     }
     return false;
-}
-
-bool OutputPatch::lineNameChanged() const
-{
-    if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine() || m_lineName.isEmpty()
-        || m_plugin->linesAreHardware() == false)
-        return false;
-    return m_plugin->outputs().value(int(m_pluginLine)) != m_lineName;
-}
-
-int OutputPatch::lineNameCountNow() const
-{
-    if (m_plugin == NULL || m_lineName.isEmpty())
-        return 0;
-    return int(m_plugin->outputs().count(m_lineName));
 }
 
 QString OutputPatch::recordedLineName() const
@@ -244,7 +217,8 @@ QString OutputPatch::recordedLineName() const
     return QString();
 }
 
-void OutputPatch::holdForDeviceChange(const QString &why, bool closeTheLine, bool sendClosing)
+void OutputPatch::holdForDeviceChange(const QString &why, bool closeTheLine, bool sendClosing,
+                                      quint32 waitLine)
 {
     if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine())
         return;
@@ -270,7 +244,7 @@ void OutputPatch::holdForDeviceChange(const QString &why, bool closeTheLine, boo
     else
         m_plugin->forgetOutput(m_pluginLine, m_universe);
     m_pendingUID = m_lineName;
-    m_pendingLine = m_pluginLine;
+    m_pendingLine = waitLine != UINT_MAX ? waitLine : m_pluginLine;
     m_pendingNetwork.clear();
     m_pluginLine = QLCIOPlugin::invalidLine();
     emit outputNameChanged();

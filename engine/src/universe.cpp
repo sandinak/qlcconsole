@@ -729,6 +729,7 @@ bool Universe::applyPowerLimits(QByteArray &out)
 void Universe::setOutputRules(const QByteArray &bits)
 {
     QVector<int> newlyShowOnly;
+    const bool hadShowOnly = showOnlyChannelCount() > 0;
     {
         QMutexLocker locker(&m_outputRulesMutex);
         QVector<int> onAtOpen, showOnly;
@@ -790,6 +791,9 @@ void Universe::setOutputRules(const QByteArray &bits)
         }
         updateMaxMarkLocked();
     }
+    // S-H1 (outputpatch.h): the I/O map checks the line it is on.
+    if (hadShowOnly == false && showOnlyChannelCount() > 0)
+        emit showOnlyStarted();
 }
 
 void Universe::updateMaxMarkLocked()
@@ -858,6 +862,7 @@ void Universe::markShowOnly(int channel, bool on, uchar safe, bool remark)
     if (channel < 0 || channel >= UNIVERSE_SIZE)
         return;
     bool newlyOn = false;
+    const bool hadShowOnly = showOnlyChannelCount() > 0;
     {
         QMutexLocker locker(&m_outputRulesMutex);
         const uchar now = uchar(m_channelsMask->at(channel));
@@ -912,6 +917,9 @@ void Universe::markShowOnly(int channel, bool on, uchar safe, bool remark)
         updateMaxMarkLocked();
         updatePostGMValue(channel);
     }
+    // S-H1 (outputpatch.h): the I/O map checks the line it is on.
+    if (hadShowOnly == false && showOnlyChannelCount() > 0)
+        emit showOnlyStarted();
 }
 
 bool Universe::showOnlyHeld() const
@@ -2880,8 +2888,10 @@ bool Universe::saveXML(QXmlStreamWriter *doc) const
                      p.params, p.hidProfile, p.network);
     if (feedbackPatch() != NULL)
     {
-        savePatchXML(doc, KXMLQLCUniverseFeedbackPatch, feedbackPatch()->pluginName(), feedbackPatch()->outputName(),
-            feedbackPatch()->output(), "", feedbackPatch()->getPluginParameters(), QString(),
+        // Held off a Show-only device (S-H3): its own number, as it was.
+        const OutputPatch *fb = feedbackPatch();
+        savePatchXML(doc, KXMLQLCUniverseFeedbackPatch, fb->pluginName(), fb->outputName(),
+            fb->isPending() ? fb->pendingLine() : fb->output(), "", feedbackPatch()->getPluginParameters(), QString(),
             NetworkRoute::networkForLine(feedbackPatch()->outputName()));
     }
     else
