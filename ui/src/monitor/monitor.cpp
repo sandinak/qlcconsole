@@ -10474,10 +10474,21 @@ void Monitor::setMaintenanceHoldMs(int ms)
     s_maintenanceHoldMs = qMax(1, ms);
 }
 
+QString Monitor::maintenanceRefusal(const Fixture *fxi)
+{
+    if (fxi != nullptr && (fxi->outputRules() & Fixture::ShowOnly))
+        return tr("Identify and Reset don't drive a Show-only fixture: only a GO in Operate does "
+                  "(Output Rules)");
+    return QString();
+}
+
 void Monitor::sendMaintenance(quint32 fxId, int channel, uchar value)
 {
     Fixture *fxi = m_doc->fixture(fxId);
     if (fxi == nullptr || !fxi->isPatched() || channel < 0 || quint32(channel) >= fxi->channels())
+        return;
+    // A laser, a fogger, a flame: no maintenance tool fires it.
+    if (!maintenanceRefusal(fxi).isEmpty())
         return;
     const quint32 abs = fxi->universeAddress() + quint32(channel);
     const int u = int(abs >> 9);
@@ -11787,6 +11798,11 @@ void Monitor::showFixturePropertiesById(quint32 fxId)
                 {
                     btn->setEnabled(false);
                     btn->setToolTip(tr("Patch this fixture first: it is in the inventory and has no DMX address"));
+                }
+                else if (!maintenanceRefusal(fxi).isEmpty())
+                {
+                    btn->setEnabled(false);
+                    btn->setToolTip(maintenanceRefusal(fxi));
                 }
                 connect(btn, &QPushButton::clicked, [=]() {
                     if (!fxi->isPatched())
@@ -13230,6 +13246,11 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                 identBtn->setToolTip(tr("Makes the fixture flash/beep to confirm its DMX address.\n"
                                         "Sends the Identify capability value (Maintenance channel)."));
                 dmxHl->addWidget(identBtn);
+                if (!maintenanceRefusal(fxi).isEmpty())
+                {
+                    identBtn->setEnabled(false);
+                    identBtn->setToolTip(maintenanceRefusal(fxi));
+                }
                 const int iCh = identifyCh; const uchar iVal = identifyVal;
                 connect(identBtn, &QPushButton::clicked, [&, iCh, iVal]() {
                     sendMaintenance(fxi->id(), iCh, iVal);
@@ -13248,6 +13269,11 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                 resetBtn->setToolTip(tr("Sends the fixture's reset DMX value (Maintenance channel).\n"
                                         "Hold for ~3 seconds while the fixture resets."));
                 dmxHl->addWidget(resetBtn);
+                if (!maintenanceRefusal(fxi).isEmpty())
+                {
+                    resetBtn->setEnabled(false);
+                    resetBtn->setToolTip(maintenanceRefusal(fxi));
+                }
                 const int rCh = resetCh; const uchar rVal = resetVal;
                 connect(resetBtn, &QPushButton::clicked, [&, rCh, rVal]() {
                     sendMaintenance(fxi->id(), rCh, rVal);

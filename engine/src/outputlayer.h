@@ -25,6 +25,7 @@
 #define OUTPUTLAYER_H
 
 #include <QSharedPointer>
+#include <functional>
 #include <QMutex>
 #include <QString>
 #include <QHash>
@@ -55,8 +56,19 @@ public:
     ~OutputLayer();
 
     /** Lay exactly @p levels on the output, from the next frame on;
-     *  anything the layer held before and is not in @p levels is let go. */
-    void set(const QList<Level> &levels);
+     *  anything the layer held before and is not in @p levels is let go.
+     *
+     *  Show only: a layer that is the show (Park, Mark, a held last look)
+     *  stamps each level with the Operate session it was set in
+     *  (GenericFader::liveEpoch()): one whose value has not changed keeps
+     *  its stamp, so parking another fixture in Operate does not make a
+     *  Park left from Design the show. @p renewed picks the levels set
+     *  anew now even at the same value (the fixture just parked again, a
+     *  look just captured); none: only the changed ones. A level stamped
+     *  before this session goes out on a fader that holds Show-only
+     *  channels. */
+    void set(const QList<Level> &levels,
+             const std::function<bool(const Level &)> &renewed = std::function<bool(const Level &)>());
 
     /** Let go of everything */
     void clear();
@@ -80,6 +92,16 @@ private:
         Universe *universe = nullptr;
         QSharedPointer<GenericFader> fader;
     };
+    /** m_slots' key bit: the universe's fader for levels set before this
+     *  Operate session (it holds Show-only channels) */
+    static constexpr int kStaleSlot = 0x10000;
+    /** Each level's value and the session it was set in */
+    struct Stamp
+    {
+        uchar value = 0;
+        quint32 epoch = 0;
+    };
+    QHash<quint64, Stamp> m_stamps;
 
     /** Guarded: a layer held by one of the Doc's children (a FocusSession)
      *  is destroyed, and lets go, after ~Doc has run. A plain pointer made

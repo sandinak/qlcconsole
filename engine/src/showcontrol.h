@@ -141,6 +141,12 @@ public:
      *  off this object's thread, straight to execute(). */
     bool run(const Request &request, Route route);
 
+    /** A GO on a list already running (a command here, a VC step button):
+     *  its source renewed, so it is the show for Show-only fixtures
+     *  (Fixture::ShowOnly), resumed if paused, and the emergency stop's
+     *  hold let go (Operate) */
+    void claim(Chaser *chaser);
+
     /** The one place run commands are guarded, set by the App; empty: none.
      *  It must end in execute() for anything it lets through. */
     using RunHandler = std::function<bool(const Request &request, Route route)>;
@@ -375,10 +381,8 @@ private slots:
 private:
     QString listName(const Chaser *chaser) const;
     void go(Chaser *chaser, int step);
+    void releaseEmergencyStop();
     void goSubCue(Chaser *chaser, int step, int subCue);
-    /** A command on a running list: its source renewed, so it is the
-     *  show (Show only), and resumed if paused */
-    void claim(Chaser *chaser);
 
 private:
     Doc *m_doc;

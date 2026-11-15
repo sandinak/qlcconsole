@@ -315,6 +315,9 @@ protected slots:
     void slotFunctionRemoved(quint32 id);
 
 private:
+    /** Play in Operate: an explicit run -- the show for Show-only
+     *  fixtures from now on, and the emergency stop's hold let go */
+    void claimForShow();
     FunctionParent functionParent() const;
 
     /** May the show currently drive DMX output? In Operate mode: always (VC

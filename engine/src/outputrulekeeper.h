@@ -120,11 +120,20 @@ public:
      *  empty when nothing holds them (Operate, or there are none). In
      *  Operate the previews are still kept off them; that is not a hold
      *  of the show and says nothing here. */
-    enum HeldBy { NotHeld = 0, HeldByDesign, HeldByBlind };
+    enum HeldBy { NotHeld = 0, HeldByDesign, HeldByBlind, HeldByEmergencyStop };
     HeldBy showOnlyHeldBy() const;
     /** "Lasers held: Design", "3 Show-only fixtures held: Blind" -- empty
      *  when not held. For the footer chip and the phone. */
     QString showOnlyHeldText() const;
+
+    /** The emergency stop (ShowControl::AllOff): every Show-only channel
+     *  to its safe value at once, no fade, held there whatever drives it
+     *  until the next GO in Operate (releaseEmergencyStop()); a new live
+     *  session too (Function::startLiveSession()) */
+    void emergencyStop();
+    /** A GO in Operate: the emergency stop's hold lets go (Design: kept) */
+    void releaseEmergencyStop();
+    bool emergencyStopped() const { return m_emergencyStop; }
 
     /** A Show-only channel's safe value: 0 for an intensity channel, and
      *  where nothing drives it (FixtureRest::restValue()) for the rest: a
@@ -161,6 +170,8 @@ private:
     bool m_seenOperate = false;
     QList<quint32> m_showOnly;
     HeldBy m_lastHeldBy = NotHeld;
+    bool m_emergencyStop = false;
+    void setEmergencyStop(bool stop);
 };
 
 /** @} */

@@ -915,10 +915,17 @@ private:
     QVector<SourceGate> m_sourceGates;
     /** What a source just added is (start()) */
     SourceGate sourceGate(const FunctionParent &source) const;
+    /** previewGate() worked out from m_sourceGates and stored (under
+     *  m_sourcesMutex); with none left it keeps what it was (stopping).
+     *  True when it changed. */
+    bool storeGateLocked();
 
     /** previewGate(); m_previewGateGen is the sources generation it was
      *  worked out at (MasterTimer thread only) */
-    std::shared_ptr<std::atomic<bool> > m_previewGate { std::make_shared<std::atomic<bool> >(false) };
+    /* Held until worked out: start() works it out from the source it adds,
+       so nothing it plays -- not even a preview started and stopped inside
+       one tick -- is ever the show by default. */
+    std::shared_ptr<std::atomic<bool> > m_previewGate { std::make_shared<std::atomic<bool> >(true) };
     quint32 m_previewGateGen = 0xFFFFFFFF;
 
     QMutex m_stopMutex;

@@ -55,7 +55,10 @@
 #include "grandmaster.h"
 #include "qlcfile.h"
 #include "parkeffect.h"
+#include "markeffect.h"
 #include "outputlayer.h"
+#include "cuestack.h"
+#include "cue.h"
 #include "highlighteffect.h"
 #include "programmerflasher.h"
 #include "lastlookeffect.h"
@@ -1548,7 +1551,9 @@ void OutputRules_Test::aParkSetInDesignHoldsItInOperate()
     m_doc->setMode(Doc::Operate);
     frame(Flame);
     QCOMPARE(sent(Flame), 0);           // set in Design: not the show
-    park.set({ { m_doc->fixtureForAddress(Flame), 0, 255 } });   // set again, live
+    // Parked again, live (ParkEffect renews the fixture it parks).
+    park.set({ { m_doc->fixtureForAddress(Flame), 0, 255 } },
+             [](const OutputLayer::Level &) { return true; });
     frame(Flame);
     QCOMPARE(sent(Flame), 255);
     park.clear();
@@ -1655,6 +1660,295 @@ void OutputRules_Test::markingOneMidShowResetsOnlyIt()
     m_doc->outputRuleKeeper()->rebuild();
     frame(21);
     QCOMPARE(sent(21), 150);            // another fixture made Show only: this one untouched
+}
+
+/****************************************************************************
+ * Third safety review (review/048-show-only-3)
+ ****************************************************************************/
+
+void OutputRules_Test::aDesignParkStaysHeldWhenAnotherFixtureIsParkedLive()
+{
+    // A fogger parked at full in Design (haze for focus), the show then
+    // opened in Operate: held, as the rule says. The operator parks a
+    // broken mover -- another fixture -- during the show.
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    ParkEffect park(m_doc);
+    park.parkFixture(m_doc->fixtureForAddress(Flame), { { 0u, uchar(255) } });
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);           // Design
+    m_doc->setMode(Doc::Operate);
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);           // parked in Design: not the show
+    park.parkFixture(m_doc->fixtureForAddress(Stage), { { 0u, uchar(100) } });
+    frame(Flame);
+    QCOMPARE(sent(Stage), 100);
+    // Nobody touched the fogger's park in Operate: still held.
+    QCOMPARE(sent(Flame), 0);
+    park.unparkAll();
+}
+
+void OutputRules_Test::aPreviewStoppedBeforeItsFirstTickSendsNothing()
+{
+    // Operate: the Workbench previews a layer and a GO takes the stage
+    // (stageTakenForRun() stops it) inside the same 20 ms tick.
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    const FunctionParent workbench = FunctionParent::preview(0x7);
+    Scene *s = new Scene(m_doc);
+    s->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    s->setValue(m_doc->fixtureForAddress(Stage), 0, 90);
+    s->setFadeOutSpeed(400);
+    m_doc->addFunction(s);
+    s->start(m_doc->masterTimer(), workbench);
+    s->stop(workbench);
+    int flameMax = 0;
+    for (int i = 0; i < 30; i++)
+    {
+        tickFrame(Flame);
+        flameMax = qMax(flameMax, sent(Flame));
+    }
+    QCOMPARE(flameMax, 0);
+}
+
+void OutputRules_Test::aSimpleDeskCueStackLeftRunningFromDesignIsHeld()
+{
+    // Simple Desk's cue stack (SimpleDeskEngine::writeDMX() drives it on
+    // the timer thread, as here): a fog cue played in Design, left on.
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    CueStack cs(m_doc);
+    QMap<uint, uchar> values;
+    values[uint(Flame)] = 255;
+    cs.appendCue(Cue(values));
+    cs.start();
+    cs.nextCue();
+    QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+    m_doc->inputOutputMap()->releaseUniverses(false);
+    cs.preRun();
+    cs.write(ua);
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);           // Design
+    m_doc->setMode(Doc::Operate);
+    int flameMax = 0;
+    for (int i = 0; i < 4; i++)
+    {
+        cs.write(ua);
+        frame(Flame);
+        flameMax = qMax(flameMax, sent(Flame));
+    }
+    cs.stop();
+    cs.postRun(m_doc->masterTimer(), ua);
+    // A cue left running from Design: no GO in Operate, so held.
+    QCOMPARE(flameMax, 0);
+}
+
+void OutputRules_Test::blackoutWinsOverShowOnlyIgnoringBlackout()
+{
+    // Both boxes ticked in Output Rules (the dialog allows it).
+    addDimmer("Flame", Flame, Fixture::ShowOnly | Fixture::ExemptBlackout);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    startScene({ { Flame, 255 } }, FunctionParent::Master, 0);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);         // a GO drives it
+    m_doc->inputOutputMap()->setBlackout(true);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);           // Blackout must always win
+    m_doc->inputOutputMap()->setBlackout(false);
+}
+
+void OutputRules_Test::emergencyStopTakesItOutAtOnce()
+{
+    // A GO drives the laser; its scene has a fade out. The pad's
+    // emergency stop is ShowControl AllOff.
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    Scene *s = new Scene(m_doc);
+    s->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    s->setFadeOutSpeed(3000);
+    m_doc->addFunction(s);
+    s->start(m_doc->masterTimer(), FunctionParent::master());
+    // Whatever happens below, its fade is over before the next test.
+    auto drain = qScopeGuard([this]() {
+        for (int i = 0; i < 200; i++)
+            tickFrame(Flame);
+    });
+    tickFrame(Flame);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+    for (int i = 0; i < 3; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);           // 60 ms after "Everything is off"
+}
+
+void OutputRules_Test::aVcStepButtonOnADesignListDrivesIt()
+{
+    // A plain chaser (not a Show Tree list) tried out in Design and left
+    // running; in Operate the VC "Chaser step next" button
+    // (VCButton::ChaserStepNext -> Doc::stepCurrentChaser) is the GO.
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *one = new Scene(m_doc);
+    one->setValue(m_doc->fixtureForAddress(Stage), 0, 50);
+    m_doc->addFunction(one);
+    Scene *two = new Scene(m_doc);
+    two->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(two);
+    Chaser *c = new Chaser(m_doc);
+    ChaserStep a(one->id()), b(two->id());
+    a.hold = 100000;
+    b.hold = 100000;
+    c->addStep(a);
+    c->addStep(b);
+    m_doc->addFunction(c);
+    c->start(m_doc->masterTimer(), FunctionParent::master());
+    for (int i = 0; i < 4; i++)
+        tickFrame(Flame);
+    m_doc->setMode(Doc::Operate);
+    for (int i = 0; i < 2; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);           // left running from Design: held
+    m_doc->stepCurrentChaser(+1);
+    for (int i = 0; i < 6; i++)
+        tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);         // the VC's step is a GO in Operate
+}
+
+/****************************************************************************
+ * Third review: the fixes' own tests
+ ****************************************************************************/
+
+void OutputRules_Test::aDesignMarkStaysHeldWhenAnotherIsMarkedLive()
+{
+    Fixture *a = addSpot("Laser-ish", 20);
+    a->setOutputRules(Fixture::ShowOnly);
+    Fixture *b = addSpot("Mover", 30);
+    m_doc->outputRuleKeeper()->rebuild();
+    MarkEffect mark(m_doc);
+    mark.markFixture(a->id(), { { 1u, uchar(200) } });     // its colour, in the dark
+    frame(21);
+    QCOMPARE(sent(21), 0);              // Design
+    m_doc->setMode(Doc::Operate);
+    frame(21);
+    QCOMPARE(sent(21), 0);              // marked in Design: not the show
+    mark.markFixture(b->id(), { { 1u, uchar(100) } });
+    frame(21);
+    QCOMPARE(sent(31), 100);
+    QCOMPARE(sent(21), 0);              // untouched in Operate: still held
+    mark.unmarkAll();
+}
+
+void OutputRules_Test::aDesignLastLookStaysHeldAtTheNextGo()
+{
+    Fixture *flame = addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    LastLookEffect *look = m_doc->lastLook();
+    LastLookEffect::ChannelHold hf;
+    hf.fixtureId = flame->id();
+    hf.universeId = 0;
+    hf.address = Flame;
+    hf.value = 200;
+    LastLookEffect::ChannelHold hs;
+    hs.fixtureId = m_doc->fixtureForAddress(Stage);
+    hs.universeId = 0;
+    hs.address = Stage;
+    hs.value = 120;
+    look->hold({ hf, hs });             // captured in Design
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    m_doc->setMode(Doc::Operate);
+    frame(Flame);
+    QCOMPARE(sent(Stage), 120);
+    QCOMPARE(sent(Flame), 0);
+    // The next GO takes the stage light: the rest of the look stays as it was.
+    look->releaseFixtures({ hs.fixtureId });
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    // Captured live (a show stopping in Operate): the show.
+    look->hold({ hf });
+    frame(Flame);
+    QCOMPARE(sent(Flame), 200);
+    look->clear();
+}
+
+void OutputRules_Test::emergencyStopLatchesUntilTheNextGo()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    put(Flame, 255);                    // the Simple Desk: a hand on its fader
+    frame(Flame);
+    QCOMPARE(sent(Flame), 255);
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    m_stub->m_universe.fill(char(7));
+    QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+    QCOMPARE(sent(Flame), 0);           // at once, before any frame
+    QCOMPARE(m_doc->outputRuleKeeper()->showOnlyHeldBy(), OutputRuleKeeper::HeldByEmergencyStop);
+    for (int i = 0; i < 3; i++)
+    {
+        frame(Flame);
+        QCOMPARE(sent(Flame), 0);       // the fader still up: held
+    }
+    // The next GO in Operate lets go.
+    Scene *step = new Scene(m_doc);
+    step->setValue(m_doc->fixtureForAddress(Stage), 0, 60);
+    m_doc->addFunction(step);
+    Chaser *c = new Chaser(m_doc);
+    ChaserStep cs(step->id());
+    cs.hold = 100000;
+    c->addStep(cs);
+    m_doc->addFunction(c);
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = c->id();
+    m_doc->showControl()->run(go, ShowControl::RouteRunTab);
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped() == false);
+    frame(Flame);
+    QCOMPARE(sent(Flame), 255);         // the hand is the hand again
+}
+
+void OutputRules_Test::aShowOnlyFixtureMovedMidShowIsHeldAtOnce()
+{
+    Fixture *flame = addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    // A preview lights the address the flame is about to move to.
+    QSharedPointer<GenericFader> preview = m_uni->requestFader(Universe::Override);
+    preview->setHoldsShowOnly(true);
+    {
+        GenericFader::ChannelRef fc = preview->getChannelFader(m_doc, m_uni, Fixture::invalidId(), quint32(Flame + 2));
+        fc->setStart(255); fc->setCurrent(255); fc->setTarget(255);
+    }
+    frame(Flame);
+    QCOMPARE(sent(Flame + 2), 255);     // nothing Show only there yet
+    flame->setAddress(quint32(Flame + 2));      // re-patched, no event loop
+    frame(Flame);
+    QCOMPARE(sent(Flame + 2), 0);
+    m_uni->dismissFader(preview);
+}
+
+void OutputRules_Test::theHeldTextSaysEmergencyStop()
+{
+    addDimmer("Flame L", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    m_doc->outputRuleKeeper()->emergencyStop();
+    QCOMPARE(m_doc->outputRuleKeeper()->showOnlyHeldText(),
+             QString("Flame L held: emergency stop, until the next GO"));
+    // Design does not let it go; a GO in Operate does.
+    m_doc->setMode(Doc::Design);
+    m_doc->outputRuleKeeper()->releaseEmergencyStop();
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
+    m_doc->setMode(Doc::Operate);
+    m_doc->outputRuleKeeper()->releaseEmergencyStop();
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped() == false);
 }
 
 QTEST_GUILESS_MAIN(OutputRules_Test)

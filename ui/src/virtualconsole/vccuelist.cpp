@@ -41,6 +41,7 @@
 #include "mastertimer.h"
 #include "chaserstep.h"
 #include "vccuelist.h"
+#include "outputrulekeeper.h"
 #include "qlcmacros.h"
 #include "function.h"
 #include "vcwidget.h"
@@ -1435,6 +1436,7 @@ void VCCueList::startChaser(int startIndex)
     ch->setAction(action);
 
     ch->start(m_doc->masterTimer(), functionParent());
+    releaseEmergencyStop();
     emit functionStarting(m_chaserID);
 }
 
@@ -2033,6 +2035,15 @@ void VCCueList::claimRunning(Chaser *ch)
        drive Show-only fixtures (Fixture::ShowOnly). */
     if (ch != NULL && ch->isRunning())
         ch->start(m_doc->masterTimer(), functionParent());
+    releaseEmergencyStop();
+}
+
+void VCCueList::releaseEmergencyStop()
+{
+    // A GO from the cue list: the emergency stop's hold on Show-only
+    // fixtures lets go (Operate).
+    if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+        rules->releaseEmergencyStop();
 }
 
 FunctionParent VCCueList::functionParent() const

@@ -614,6 +614,11 @@ public:
      *  an LTP channel comes out. Safe from any thread. */
     void setShowOnlyLive(bool live);
     bool showOnlyLive() const { return m_showOnlyLive.load(std::memory_order_relaxed); }
+    /** The emergency stop (ShowControl::AllOff): every frame sent holds
+     *  the Show-only channels at their safe value, whatever drives them,
+     *  until it is let go (the next GO in Operate) */
+    void setShowOnlyEmergencyStop(bool stop);
+    bool showOnlyEmergencyStop() const { return m_showOnlyEStop.load(std::memory_order_relaxed); }
     /** How many channels are Show only */
     int showOnlyChannelCount() const { return m_showOnlyCount.load(std::memory_order_relaxed); }
     /** True when the frames sent now hold the Show-only channels at their
@@ -672,6 +677,7 @@ private:
     QByteArray m_showOnlyFrame;
     std::atomic<int> m_showOnlyCount { 0 };
     std::atomic<bool> m_showOnlyLive { false };
+    std::atomic<bool> m_showOnlyEStop { false };
     /** Channels made Show only while live: the next frame starts them
      *  from safe (m_showOnlyResetChannels, under m_outputRulesMutex) */
     std::atomic<bool> m_showOnlyReset { false };

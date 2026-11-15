@@ -361,6 +361,10 @@ public:
      *  located at a quarter of the Locate level; a dimmer pack or a bar
      *  flashes every dimmer. */
     static QString locateRefusal(const Fixture *fxi);
+    /** Why Identify / Reset (sendMaintenance()) won't drive @p fxi, or
+     *  empty: a Show-only fixture (Output Rules) is never driven by a
+     *  maintenance tool, Design or Operate, as Locate never fires it */
+    static QString maintenanceRefusal(const Fixture *fxi);
 
     /** Send a fixture's "reset" Maintenance-channel capability once -- same
      *  detection the old Fixture Test quick-dialog uses, but callable directly

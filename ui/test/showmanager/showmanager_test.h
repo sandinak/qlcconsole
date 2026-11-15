@@ -26,6 +26,9 @@ class ShowManager_Test : public QObject
     Q_OBJECT
 
 private slots:
+    /** Show only: Play in Operate on a show left running from Design is
+     *  a GO -- it is the show (its gate opens), not a pause */
+    void playInOperateClaimsAShowRunningFromDesign();
     void init();
     void cleanup();
 

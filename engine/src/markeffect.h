@@ -116,7 +116,9 @@ private:
 
     /** Rebuild m_entries from m_marked and (un)register the DMX source.
      *  Call with m_mutex NOT held. */
-    void rebuild();
+    /** @p renewFixture: the fixture set anew just now (Show only's
+     *  session stamp, OutputLayer::set()) */
+    void rebuild(quint32 renewFixture = 0xFFFFFFFF);
 
     Doc *m_doc;
 

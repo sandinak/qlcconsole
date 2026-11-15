@@ -25,12 +25,30 @@ OutputLayer::~OutputLayer()
     clear();
 }
 
-void OutputLayer::set(const QList<Level> &levels)
+void OutputLayer::set(const QList<Level> &levels, const std::function<bool(const Level &)> &renewed)
 {
     /* Built outside the lock: a FadeChannel looks its fixture up. A level
-       that never fades: it is at its value from the first frame. */
+       that never fades: it is at its value from the first frame. Each goes
+       on its universe's fader -- or, for a layer that is the show, on the
+       stale one when it was set before this Operate session. */
     QHash<int, QList<FadeChannel>> next;
     Doc *doc = m_doc.data();
+    const quint32 epoch = GenericFader::liveEpoch();
+    QHash<quint64, Stamp> stamps;
+    {
+        QMutexLocker locker(&m_mutex);
+        for (const Level &l : levels)
+        {
+            const quint64 key = (quint64(l.fixtureId) << 32) | l.channel;
+            Stamp st;
+            st.value = l.value;
+            st.epoch = epoch;
+            const auto was = m_stamps.constFind(key);
+            if (was != m_stamps.constEnd() && was.value().value == l.value && !(renewed && renewed(l)))
+                st.epoch = was.value().epoch;      // untouched: as old as it was
+            stamps.insert(key, st);
+        }
+    }
     if (doc != nullptr)
     {
         for (const Level &l : levels)
@@ -44,7 +62,9 @@ void OutputLayer::set(const QList<Level> &levels)
             fc.setCurrent(l.value);
             fc.setTarget(l.value);
             fc.setReady(true);
-            next[int(fc.universe())].append(fc);
+            const quint64 key = (quint64(l.fixtureId) << 32) | l.channel;
+            const bool stale = !m_holdsShowOnly && stamps.value(key).epoch != epoch;
+            next[int(fc.universe()) | (stale ? kStaleSlot : 0)].append(fc);
         }
     }
 
@@ -55,11 +75,13 @@ void OutputLayer::set(const QList<Level> &levels)
     const QList<Universe *> universes = ioMap != nullptr ? ioMap->universes() : QList<Universe *>();
 
     QMutexLocker locker(&m_mutex);
+    m_stamps = stamps;
 
     // Let go where the layer no longer writes, or the universe went away.
     for (auto it = m_slots.begin(); it != m_slots.end(); )
     {
-        Universe *live = it.key() < universes.size() ? universes.at(it.key()) : nullptr;
+        const int u = it.key() & ~kStaleSlot;
+        Universe *live = u < universes.size() ? universes.at(u) : nullptr;
         if (live == it.value().universe && next.contains(it.key()))
         {
             ++it;
@@ -73,7 +95,9 @@ void OutputLayer::set(const QList<Level> &levels)
 
     for (auto it = next.constBegin(); it != next.constEnd(); ++it)
     {
-        Universe *uni = it.key() >= 0 && it.key() < universes.size() ? universes.at(it.key()) : nullptr;
+        const int u = it.key() & ~kStaleSlot;
+        const bool stale = it.key() & kStaleSlot;
+        Universe *uni = u >= 0 && u < universes.size() ? universes.at(u) : nullptr;
         if (uni == nullptr)
             continue;
 
@@ -86,13 +110,14 @@ void OutputLayer::set(const QList<Level> &levels)
             // show stopping captures its last look in postRun()).
             GenericFader::CreationScope noFunction(nullptr);
             slot.fader = uni->requestFader(m_priority);
-            slot.fader->setHoldsShowOnly(m_holdsShowOnly);
+            slot.fader->setHoldsShowOnly(m_holdsShowOnly || stale);
             slot.fader->setName(m_name);
             slot.fader->setDoc(doc);
         }
-        // Park, Mark, a held last look: set now, so the show from now on
-        // (set in Design, it holds Show-only fixtures once Operate starts).
-        if (!m_holdsShowOnly)
+        // Park, Mark, a held last look: what was set in this session is the
+        // show until the next one starts (set in Design, it holds Show-only
+        // fixtures once Operate starts).
+        if (!m_holdsShowOnly && !stale)
             slot.fader->stampLiveEpoch();
         slot.fader->replaceAll(it.value());
     }
@@ -104,7 +129,7 @@ void OutputLayer::setHoldsShowOnly(bool hold)
     m_holdsShowOnly = hold;
     for (auto it = m_slots.begin(); it != m_slots.end(); ++it)
         if (!it.value().fader.isNull())
-            it.value().fader->setHoldsShowOnly(hold);
+            it.value().fader->setHoldsShowOnly(hold || (it.key() & kStaleSlot));
 }
 
 void OutputLayer::clear()
@@ -117,7 +142,7 @@ QHash<int, int> OutputLayer::channelCounts() const
     QMutexLocker locker(&m_mutex);
     QHash<int, int> counts;
     for (auto it = m_slots.constBegin(); it != m_slots.constEnd(); ++it)
-        counts.insert(it.key(), it.value().fader.isNull() ? 0 : it.value().fader->channelsCount());
+        counts[it.key() & ~kStaleSlot] += it.value().fader.isNull() ? 0 : it.value().fader->channelsCount();
     return counts;
 }
 

@@ -70,7 +70,9 @@ private:
 
     /** Rebuild m_entries from m_parked and lay them on the output. Call
      *  again when a parked fixture is patched elsewhere or unpatched. */
-    void rebuild();
+    /** @p renewFixture: the fixture set anew just now (Show only's
+     *  session stamp, OutputLayer::set()) */
+    void rebuild(quint32 renewFixture = 0xFFFFFFFF);
 
     Doc *m_doc;
 
