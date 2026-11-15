@@ -14,6 +14,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed and fixed
 
+- **Show Review flags a laser that stands inside a no-light zone (PWR-13).** A laser whose place on the plot is inside a zone that keeps lasers out (the band, the pit) is a warning naming the laser and the zone; Show Me finds it on the plot. Other lights inside a zone are left alone.
+
 - **After a crash, the Run tab offers the cue the show was on.** If qlcconsole stops mid-show without closing the show (crash, force-quit, battery or power), open the same show again and switch to Operate: the Run tab says *The show was at cue 2.3.1 (Main) when it stopped. Load it?* **Load as Standby** puts that cue on standby: nothing plays and the stage stays as it is, and the next GO plays it. **Dismiss** forgets it. Nothing is offered after a normal quit, New or opening another show. A cue deleted since is named, never loaded. The cue each list is on is kept beside the autosave on each GO, Back and Stop, never in the show file. The pad and the phone's Run page never accept it.
 
 - **A channel modifier taken off no longer leaves its "zero" going out.** Removing a modifier (or a reset) left the old modifier's zero value (255 on an inverted channel) on the wire every frame.

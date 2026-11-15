@@ -364,6 +364,13 @@ both give the same answer.
   on the bottom clear it (**Apply This Cut** puts it in the unit's Masking).
   Aim it off, darken it in that cue, tape it, or move the zone. Zones are drawn and
   edited in the [Lighting Studio](lighting-studio.md#no-light-zones).
+- **PWR-13** A **laser that stands inside a no-light zone** on the plot (move
+  the band zone upstage of the lasers, or the laser out of it). It looks at
+  the unit's own place on the plot, not at a cue: a laser whose centre is in
+  the zone's box, edges included, is a warning that names the laser and the
+  zone and gives the zone's top in your units. Any zone that keeps lasers out
+  counts (all light, no beams, no lasers). **Show Me** finds the laser on the
+  plot. Other lights inside a zone are not flagged.
 - **PWR-12** Light on the cyc nobody meant (*backwash*): a lit beam whose
   cone reaches a cyc or a scrim (or any scenery with **Light here only on
   purpose**) and isn't meant. Any part of the cone counts, followed from the
