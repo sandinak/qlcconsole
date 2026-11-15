@@ -3481,34 +3481,50 @@ void OutputRules_Test::review10_aClosingLineInBlindGetsNoPreview()
 {
     InputOutputMap *io = m_doc->inputOutputMap();
     m_doc->outputRuleKeeper()->setBlindHoldsExempt(false);   // Blind: nothing goes out
-    QVERIFY(addDimmer("Flame", Flame, Fixture::ShowOnly) != nullptr);
-    m_doc->outputRuleKeeper()->rebuild();
-    put(Stage, 100);
-    frame(Stage);
-    frame(Stage);
-    QCOMPARE(sent(Stage), 100);
+    io->setOutputInhibited(true);                             // Blind
+    // A universe made in Blind (added, or a show loaded in Blind): its
+    // frozen frame is empty -- R9's setInhibitOutput() at creation.
+    QVERIFY(io->addUniverse());
+    const quint32 uni = io->universesCount() - 1;
+    Universe *u = io->universes().at(int(uni));
+    QVERIFY(u->inhibitOutput());
+    qInfo("frozen frame of the new universe: %d channels", int(u->m_blindFrozen.size()));
+    QVERIFY(io->setOutputPatch(uni, m_stub->name(), QString(), 2, false, 0));
 
-    io->setOutputInhibited(true);                      // Blind
-    // A channel past the frame frozen when Blind started
-    const int Late = m_uni->m_blindFrozen.size() + 2;
-    qInfo("frozen frame: %d channels; the late fixture at %d", int(m_uni->m_blindFrozen.size()), Late + 1);
-    QVERIFY(Late < 512);
-    QVERIFY(addDimmer("Late", Late, 0) != nullptr);    // patched in Blind
+    auto addOn = [this, uni](const QString &name, int address, int rules) {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(name);
+        f->setChannels(1);
+        f->setUniverse(uni);
+        f->setAddress(quint32(address));
+        f->setOutputRules(Fixture::OutputRules(rules));
+        if (!m_doc->addFixture(f)) { delete f; return (Fixture *)nullptr; }
+        return f;
+    };
+    Fixture *flame = addOn("Flame2", 5, Fixture::ShowOnly);
+    Fixture *wash = addOn("Wash", 3, 0);
+    QVERIFY(flame && wash);
     m_doc->outputRuleKeeper()->rebuild();
-    put(Late, 200);                                    // programmed in Blind: preview only
-    put(Stage, 30);
-    frame(Late);
-    frame(Late);
-    QCOMPARE(sent(Late), 0);                           // nothing reached the rig
-    QCOMPARE(sent(Stage), 100);
+    // Programmed in Blind: a preview only
+    u->write(3, 200);
+    u->processFaders();
+    u->processFaders();
+    const int before = uchar(m_stub->m_universe.at(1024 + 3));
 
-    // The universe moved to another interface while still in Blind.
-    QVERIFY(io->setOutputPatch(0, m_stub->name(), QString(), 3, false, 0));
-    const int late = sent(Late), stage = sent(Stage), flame = sent(Flame);
-    QVERIFY(io->setOutputPatch(0, m_stub->name(), QString(), 0, false, 0));   // put back
+    // Re-patched to another interface while still in Blind
+    QVERIFY(io->setOutputPatch(uni, m_stub->name(), QString(), 3, false, 0));
+    const int wash2 = uchar(m_stub->m_universe.at(1024 + 3));
+    const int flame2 = uchar(m_stub->m_universe.at(1024 + 5));
+
+    QVERIFY(io->setOutputPatch(uni, QString(), QString(), QLCIOPlugin::invalidLine(), false, 0));
+    QVERIFY(m_doc->deleteFixture(flame->id()));
+    QVERIFY(m_doc->deleteFixture(wash->id()));
+    QVERIFY(io->removeUniverse(int(uni)));
+    m_doc->outputRuleKeeper()->rebuild();
     m_stub->m_universe.fill(char(0));
-    QCOMPARE(flame, 0);
-    QCOMPARE(stage, 100);
-    QVERIFY2(late == 0, qPrintable(QString("the closing frame in Blind sent the preview: channel %1 at %2")
-                                   .arg(Late + 1).arg(late)));
+
+    QCOMPARE(before, 0);                    // Blind: nothing went out
+    QCOMPARE(flame2, 0);
+    QVERIFY2(wash2 == 0, qPrintable(QString("the closing frame in Blind sent the preview: the wash at %1")
+                                    .arg(wash2)));
 }
