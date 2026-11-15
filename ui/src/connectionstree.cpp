@@ -3730,11 +3730,6 @@ void ConnectionsTree::configurePlugin(const QString &pluginName)
         if (p != NULL && p->name() == pluginName)
         {
             p->configure();
-            // Review 19 (C1): its settings window may have aimed a Show-only universe back here.
-            if (m_doc->inputOutputMap() != NULL && m_doc->inputOutputMap()->recheckShowOnlyTargets() > 0)
-                QMessageBox::warning(this, tr("Show only"),
-                                     tr("A universe with Show-only fixtures was aimed back at this computer "
-                                        "in %1's settings: it is held until it is aimed at a node.").arg(pluginName));
             refresh();
             return;
         }

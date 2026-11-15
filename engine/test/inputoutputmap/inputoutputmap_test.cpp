@@ -3346,63 +3346,55 @@ void InputOutputMap_Test::r17n_aSharedLineIsHeldAlikeAtRuntimeAndOnLoad()
     QVERIFY(a.open == false && b.open == false);
 }
 
-/* Review 17, finding 4: an Art-Net or sACN output that comes back to this
-   computer -- a loopback line, a loopback target, this machine's own
-   address as the unicast target -- is not a network output to another
-   device: refused for a universe with Show-only fixtures, said, and one
-   already aimed there is held when a fixture is made Show only. */
-void InputOutputMap_Test::r17n_anArtNetOrSacnOutputBackToThisComputerIsRefused()
+/* Show only, scope (after review 20): there is no loopback clause. A
+   universe with Show-only fixtures may send Art-Net or sACN to this
+   computer -- a visualiser -- on the loopback line, to 127.0.0.1 or to one
+   of its own addresses: only the plugin counts (N1, isNetworkDmxOutput()).
+   One aimed here and then made Show only is not held, nor is one re-aimed
+   here; its frames go there. */
+void InputOutputMap_Test::scope_aShowOnlyUniverseMaySendToAVisualiserHere()
 {
     IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
     {
         InputOutputMap iom(m_doc, 2);
-        iom.universe(0)->markShowOnly(14, true, 0);
-        QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 0) == false);            // the loopback line
-        QCOMPARE(iom.lastPatchRefusal(), InputOutputMap::loopbackText("127.0.0.1"));
-        QVERIFY(iom.lastPatchRefusal().contains("a network output to another device"));
-        for (const QString &ip : { QString("127.0.0.1"), QString("127.3.4.5"), QString("::1") })
-        {
-            QMap<QString, QVariant> aim;
-            aim.insert("outputIP", ip);
-            QVERIFY2(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, aim) == false, qPrintable(ip));
-            QCOMPARE(iom.lastPatchRefusal(), InputOutputMap::loopbackText(ip));
-        }
-        const QList<NetworkRoute::LocalAddress> own = NetworkRoute::localAddresses();
-        for (const NetworkRoute::LocalAddress &la : own)
-        {
-            if (la.ip.isLoopback() || la.ip.protocol() != QAbstractSocket::IPv4Protocol)
-                continue;
-            QMap<QString, QVariant> aim;
-            aim.insert("outputIP", la.ip.toString());
-            QVERIFY2(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, aim) == false,
-                     qPrintable(la.ip.toString()));
-            break;
-        }
-        QMap<QString, QVariant> node;
-        node.insert("outputIP", "10.4.12.99");                      // a node on the network
-        QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, node));
+        Universe *fog = iom.universe(0);
+        fog->markShowOnly(14, true, 0);
+        QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 0));         // the loopback line
+        QVERIFY(iom.lastPatchRefusal().isEmpty());
+        QVERIFY(iom.outputPatchRefusal(0, "ArtNet", 0).isEmpty());
+        QMap<QString, QVariant> here;
+        here.insert("outputIP", "127.0.0.1");                           // a visualiser on this computer
+        QVERIFY2(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, here),
+                 qPrintable(iom.lastPatchRefusal()));
         QVERIFY(iom.outputPatch(0, 0)->isPatched());
+        stub->m_lastByTarget.clear();
+        fog->write(14, 255, true);
+        fog->dumpOutput(fog->postGMValues()->mid(0, fog->usedChannels()), true);
+        QVERIFY(stub->m_lastByTarget.contains("127.0.0.1/1"));         // sent there
 
-        // An ordinary universe aimed back here, then made Show only: held (N2).
-        QMap<QString, QVariant> back;
-        back.insert("outputIP", "127.0.0.1");
-        QVERIFY(iom.setOutputPatch(1, "ArtNet", QString(), 1, false, 0, back));
+        iom.outputPatch(0, 0)->setPluginParameter("outputIP", "10.4.12.7");   // re-aimed: its own address
+        QVERIFY(iom.outputPatch(0, 0)->isPatched());
+        QCOMPARE(iom.outputPatch(0, 0)->holdKind(), OutputPatch::NotHeld);
+
+        // An ordinary universe aimed here, then made Show only: not held (N2 is by plugin).
+        QVERIFY(iom.setOutputPatch(1, "ArtNet", QString(), 1, false, 0, here));
         iom.universe(1)->markShowOnly(14, true, 0);
-        QVERIFY(iom.outputPatch(1, 0)->isPending());
-        QCOMPARE(iom.outputPatch(1, 0)->reconnectHeld(), InputOutputMap::loopbackText("127.0.0.1"));
-        QVERIFY(iom.outputPatch(0, 0)->isPatched());                // the node: not affected
+        QVERIFY(iom.outputPatch(1, 0)->isPatched());
+        QCOMPARE(iom.outputPatch(1, 0)->holdKind(), OutputPatch::NotHeld);
+        iom.retryOfflinePatches();
+        QVERIFY(iom.outputPatch(0, 0)->isPatched() && iom.outputPatch(1, 0)->isPatched());
     }
     {
-        namedStub(m_doc, "E1.31", QStringList() << "10.4.12.7");    // sACN unicast back here
+        namedStub(m_doc, "E1.31", QStringList() << "10.4.12.7");    // sACN unicast to this computer
         InputOutputMap iom(m_doc, 1);
         iom.universe(0)->markShowOnly(14, true, 0);
         QMap<QString, QVariant> aim;
         aim.insert("multicast", 0);
         aim.insert("ucastIP", "127.0.0.1");
-        QVERIFY(iom.setOutputPatch(0, "E1.31", QString(), 0, false, 0, aim) == false);
-        aim.insert("multicast", 1);                                 // multicast: another device
         QVERIFY(iom.setOutputPatch(0, "E1.31", QString(), 0, false, 0, aim));
+        QVERIFY(iom.outputPatch(0, 0)->isPatched());
     }
+    stub->m_lastByTarget.clear();
     stub->m_nameOverride.clear();
 }
 
@@ -3463,37 +3455,37 @@ void InputOutputMap_Test::r17n_heldPatchesSayWhy()
     QVERIFY2(other.outputPatch(1, 0)->reconnectHeld().isEmpty(), qPrintable(other.outputPatch(1, 0)->reconnectHeld()));
 }
 
-/* Review 18 (independent), finding A: a Show-only universe on an Art-Net
-   line another universe also sends on -- the loopback line, or a NIC with
-   this machine's own address as the target -- is held by N1's loopback
-   clause, but the line being shared it is only forgotten
-   (holdShowOnlyOutputs(): "A network line another universe still sends on:
-   only forgotten"): no closing frame. The Art-Net plugin keeps that
-   universe in its controller and resends its last frame every 2 s
-   (ArtNetController::slotSendAllUniverses), so the fogger stays at full
-   back to this computer. Art-Net closes per universe, never the line for
-   another universe: the hold should close it, closing frame first. */
-void InputOutputMap_Test::r18_aSharedLoopbackArtNetHoldSendsTheClosingFrame()
+/* Review 18, finding A (rewritten when the loopback clause went): a
+   Show-only universe held off a line another universe also sends on --
+   here a plugin that is not a network DMX output (N2) -- gets its closing
+   frame, flushed, and is closed there; never only forgotten, which would
+   leave the fogger at full on that line. The other universe on it is held
+   (F4, forgotten). */
+void InputOutputMap_Test::r18_aSharedLineHoldSendsTheClosingFrame()
 {
-    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+    IOPluginStub *stub = namedStub(m_doc, "OSC", QStringList() << "OSC 1" << "OSC 2");
+    stub->m_networkDmx = false;                                     // not Art-Net, sACN or WLED
     stub->m_universe.fill(char(0));
     stub->m_forgotten.clear();
     InputOutputMap iom(m_doc, 2);
-    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 0));         // the fogger's universe -> 127.0.0.1
-    QVERIFY(iom.setOutputPatch(1, "ArtNet", QString(), 0));         // a visualiser universe there too
+    QVERIFY(iom.setOutputPatch(0, "OSC", QString(), 0));            // the fogger's universe
+    QVERIFY(iom.setOutputPatch(1, "OSC", QString(), 0));            // another universe there too
     Universe *fog = iom.universe(0);
     fog->write(14, 255, true);
     fog->dumpOutput(fog->postGMValues()->mid(0, fog->usedChannels()), true);
     QCOMPARE(uchar(stub->m_universe.at(14)), uchar(255));
 
     fog->markShowOnly(14, true, 0);                                 // the rule on: safe is 0
-    QVERIFY(iom.outputPatch(0, 0)->isPending());                    // held (loopback)
+    QVERIFY(iom.outputPatch(0, 0)->isPending());                    // held (N2: not a network output)
+    QCOMPARE(iom.outputPatch(1, 0)->holdKind(), OutputPatch::HeldReserved);
     const int wire = uchar(stub->m_universe.at(14));
     const bool onlyForgotten = stub->m_forgotten.contains(qMakePair(quint32(0), quint32(0)));
+    const bool stillMapped = stub->mapped(0, 0);
     stub->m_universe.fill(char(0));
-    QVERIFY2(wire == 0 && onlyForgotten == false,
-             qPrintable(QString("the held Show-only universe is left at %1 on 127.0.0.1 and %2")
-                        .arg(wire).arg(onlyForgotten ? "only forgotten (Art-Net resends it)" : "closed")));
+    stub->m_forgotten.clear();
+    QVERIFY2(wire == 0 && onlyForgotten == false && stillMapped == false,
+             qPrintable(QString("the held Show-only universe is left at %1 on its shared line and %2")
+                        .arg(wire).arg(onlyForgotten ? "only forgotten" : stillMapped ? "still open" : "closed")));
 }
 
 /* Review 18, finding B: two identical uDMX (no serial); the lasers'
@@ -3526,154 +3518,30 @@ void InputOutputMap_Test::r18_aFormerLaserOnASharedIdenticalUsbLineComesBack()
                                 "for good: '%1'").arg(op->reconnectHeld())));
 }
 
-/* Review 18, finding C: N1's loopback clause is checked when a patch is
-   made, not when its target changes. A Show-only universe patched to a
-   node, then aimed back at this computer from Connections (OutputPatch::
-   setPluginParameter, as ConnectionsTree does), keeps sending -- the same
-   show loaded is held (N3). */
-void InputOutputMap_Test::r18_aShowOnlyUniverseRetargetedBackHereIsHeld()
-{
-    namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
-    InputOutputMap iom(m_doc, 1);
-    iom.universe(0)->markShowOnly(14, true, 0);
-    QMap<QString, QVariant> node;
-    node.insert("outputIP", "10.4.12.99");
-    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, node));
-    QVERIFY(iom.outputPatch(0, 0)->isPatched());
-    iom.outputPatch(0, 0)->setPluginParameter("outputIP", "127.0.0.1");   // re-aimed in Connections
-    QVERIFY2(iom.outputPatch(0, 0)->isPatched() == false,
-             "a Show-only universe sends Art-Net back to this computer once re-aimed after patching");
-}
-
-/* Review 18, finding D: targets that come back to this computer which
-   showOnlyRefusal() lets through. */
-void InputOutputMap_Test::r18_loopbackTargetsTheCheckMisses()
-{
-    namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
-    mockMachine(QList<NetworkRoute::LocalAddress>()
-                    << localAddr("lo0", "127.0.0.1", 8)
-                    << localAddr("en0", "10.4.12.7", 24),
-                QMap<QString, QString>());
-    InputOutputMap iom(m_doc, 1);
-    iom.universe(0)->markShowOnly(14, true, 0);
-    QStringList missed;
-    // 0.0.0.0 (sent to: this host), v4-mapped loopback, a legacy partial
-    // target ("7" = the line's own 10.4.12.7, ArtNetController expands it)
-    for (const QString &ip : { QString("0.0.0.0"), QString("::ffff:127.0.0.1"), QString("7"),
-                               QString("12.7"), QString("::ffff:10.4.12.7") })
-    {
-        QMap<QString, QVariant> aim;
-        aim.insert("outputIP", ip);
-        if (iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, aim))
-            missed << ip;
-        iom.setOutputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
-    }
-    QVERIFY2(missed.isEmpty(), qPrintable("allowed back to this computer: " + missed.join(", ")));
-}
-
-/* Review 18, decision A: a hold on a network line closes that universe's
-   output (Art-Net, sACN and WLED close per universe), its closing frame
-   first, whether or not the line is shared -- never only forgotten -- and
-   the others on the line keep sending. */
+/* Review 18, decision A (rewritten when the loopback clause went): no rule
+   holds a network output any more -- a Show-only universe on an Art-Net
+   line it shares with another stays open, both sending -- but a hold of a
+   network patch (OutputPatch::hold()) closes only that universe's output
+   (Art-Net, sACN and WLED close per universe), its closing frame first,
+   never only forgotten, and the others on the line keep sending. */
 void InputOutputMap_Test::r18n_aNetworkHoldClosesOnlyThatUniverse()
 {
     IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
     stub->m_forgotten.clear();
     InputOutputMap iom(m_doc, 2);
-    QMap<QString, QVariant> back;
-    back.insert("outputIP", "127.0.0.1");
-    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, back));   // fogger, aimed back here
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1));                   // the fogger's universe
     QVERIFY(iom.setOutputPatch(1, "ArtNet", QString(), 1));                   // others on that NIC
     iom.universe(0)->markShowOnly(14, true, 0);
+    QVERIFY(iom.outputPatch(0, 0)->isPatched());                    // a network output: not held
+    QCOMPARE(iom.outputPatch(0, 0)->holdKind(), OutputPatch::NotHeld);
+
+    iom.outputPatch(0, 0)->hold(OutputPatch::HeldShowOnly, QStringLiteral("held"), true, true);
     QVERIFY(iom.outputPatch(0, 0)->isPending());
     QVERIFY(stub->m_forgotten.isEmpty());                           // closed, not forgotten
     QVERIFY(stub->mapped(0, 1) == false);
     QVERIFY(iom.outputPatch(1, 0)->isPatched());                    // the other universe: untouched
     QVERIFY(stub->mapped(1, 1));
     QCOMPARE(iom.outputPatch(1, 0)->holdKind(), OutputPatch::NotHeld);
-}
-
-/* Review 18, decision C: re-aiming is re-checked -- one step (Patch Planner,
-   UniversePatcher) and one parameter at a time (Connections) alike. Held
-   with the closing frame to the old target first; aimed at a node again
-   while held, it comes back; an ordinary universe re-aimed is untouched. */
-void InputOutputMap_Test::r18n_reAimingAShowOnlyUniverseIsChecked()
-{
-    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
-    // A machine on 10.4.12.0/24: its nodes are reached through line 2.
-    QMap<QString, QString> routes;
-    routes.insert("10.4.12.", "10.4.12.7");
-    mockMachine(QList<NetworkRoute::LocalAddress>()
-                    << localAddr("lo0", "127.0.0.1", 8)
-                    << localAddr("en0", "10.4.12.7", 24),
-                routes);
-    InputOutputMap iom(m_doc, 2);
-    iom.universe(0)->markShowOnly(14, true, 0);
-    QMap<QString, QVariant> node;
-    node.insert("outputIP", "10.4.12.99");
-    node.insert("outputUni", 3);
-    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, node));
-    stub->m_lastByTarget.clear();
-    QMap<QString, QVariant> here;
-    here.insert("outputIP", "127.0.0.1");
-    here.insert("outputUni", 4);
-    iom.outputPatch(0, 0)->setPluginParameters(here);
-    const OutputPatch *op = iom.outputPatch(0, 0);
-    QVERIFY(op->isPending() && op->showOnlyHold());
-    QCOMPARE(op->reconnectHeld(), InputOutputMap::loopbackText("127.0.0.1"));
-    QVERIFY(stub->m_lastByTarget.contains("10.4.12.99/1"));          // the closing frame: the old node
-    QVERIFY(stub->m_lastByTarget.contains("127.0.0.1/1") == false);
-    QCOMPARE(iom.outputPatch(0, 0)->getPluginParameters().value("outputIP").toString(),
-             QString("127.0.0.1"));                                 // the new target, kept
-
-    iom.outputPatch(0, 0)->setPluginParameter("outputIP", "10.4.12.98");   // a node again
-    iom.retryOfflinePatches();
-    QVERIFY(iom.outputPatch(0, 0)->isPatched());
-
-    QVERIFY(iom.setOutputPatch(1, "ArtNet", QString(), 1));          // ordinary: as stock
-    iom.outputPatch(1, 0)->setPluginParameter("outputIP", "127.0.0.1");
-    QVERIFY(iom.outputPatch(1, 0)->isPatched());
-}
-
-/* Review 19, finding C1 (critical): the protocol's own settings window --
-   "Configure ArtNet..." in the Connection editor (ConnectionEditor::
-   slotConfigurePlugin) and the I/O tab -- re-aims a universe straight in the
-   plugin: ConfigureArtNet::accept() calls QLCIOPlugin::setParameter(universe,
-   line, Output, "outputIP", ...) (ConfigureE131::accept() likewise sets
-   "multicast" 0 and "ucastIP"). No OutputPatch, no TargetCheck: a Show-only
-   universe aimed at its node is turned back at this computer and keeps
-   sending there. */
-void InputOutputMap_Test::r19_aProtocolSettingsWindowAimsAShowOnlyUniverseBackHere()
-{
-    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
-    mockMachine(QList<NetworkRoute::LocalAddress>()
-                    << localAddr("lo0", "127.0.0.1", 8)
-                    << localAddr("en0", "10.4.12.7", 24),
-                QMap<QString, QString>());
-    InputOutputMap iom(m_doc, 1);
-    Universe *fog = iom.universe(0);
-    fog->markShowOnly(14, true, 0);
-    QMap<QString, QVariant> node;
-    node.insert("outputIP", "10.4.12.99");
-    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, node));
-    QVERIFY(iom.outputPatch(0, 0)->isPatched());
-
-    // ConfigureArtNet::accept(), the IP column of universe 1 typed as 127.0.0.1
-    stub->setParameter(0, 1, QLCIOPlugin::Output, "outputIP", "127.0.0.1");
-    QCoreApplication::processEvents();
-    iom.retryOfflinePatches();
-
-    stub->m_lastByTarget.clear();
-    fog->write(0, 10, true);
-    fog->write(14, 255, true);
-    fog->dumpOutput(fog->postGMValues()->mid(0, fog->usedChannels()), true);
-    const bool backHere = stub->m_lastByTarget.contains("127.0.0.1/1");
-    stub->m_lastByTarget.clear();
-    QVERIFY2(backHere == false,
-             qPrintable(QString("a Show-only universe's frames go to 127.0.0.1 after the Art-Net settings "
-                                "window re-aimed it (patch open: %1, saved target: %2)")
-                        .arg(iom.outputPatch(0, 0)->isPatched())
-                        .arg(iom.outputPatch(0, 0)->getPluginParameters().value("outputIP").toString())));
 }
 
 /* Review 19, finding B1 (high, regression of decision B): a show saved with
@@ -3721,63 +3589,62 @@ void InputOutputMap_Test::r19_aFormerLaserLoadedByNameComesBackOnTheLineItShared
                         .arg(int(iom.outputPatch(2, 0)->output()) + 1)));
 }
 
-/* Review 19, finding D1: sACN unicast with no "ucastIP" sends to
-   E131Controller's default, (line & 255.255.255.0) + universe + 1
-   (e131controller.cpp addUniverse()). On a console at 10.4.12.1 that is the
-   console itself for universe 1. showOnlyRefusal() checks only an explicit
-   ucastIP. Reached by a show saved with multicast="0" and no ucastIP, a
-   one-parameter change (Connections, undo replaying multicast before
-   ucastIP), or a universe made Show only while unicasting so. */
-void InputOutputMap_Test::r19_sacnUnicastToItsDefaultReceiverIsThisComputer()
+/* Review 19, finding A1 (rewritten when the loopback clause went): a held
+   patch removed while another open output of the same universe uses the
+   line it was held off. ~OutputPatch() forgets the universe on that line
+   -- the very entry the open patch uses (the plugin keys by universe), so
+   it would send nothing while it reads as patched. Here an ordinary
+   universe kept off a line a laser universe shares (F4, HeldReserved),
+   given a second output on that line (straight on the universe: by hand,
+   F4 refuses it), then the held one removed. */
+void InputOutputMap_Test::r19_removingAHeldPatchStopsTheUniversesOpenOne()
 {
-    namedStub(m_doc, "E1.31", QStringList() << "127.0.0.1" << "10.4.12.1");
-    mockMachine(QList<NetworkRoute::LocalAddress>()
-                    << localAddr("lo0", "127.0.0.1", 8)
-                    << localAddr("en0", "10.4.12.1", 24),
-                QMap<QString, QString>());
-    InputOutputMap iom(m_doc, 1);
-    iom.universe(0)->markShowOnly(14, true, 0);
-    QMap<QString, QVariant> unicast;
-    unicast.insert("multicast", 0);                                 // to the default receiver: 10.4.12.1
-    const bool allowed = iom.setOutputPatch(0, "E1.31", QString(), 1, false, 0, unicast);
-    QVERIFY2(allowed == false,
-             "a Show-only universe may unicast sACN to its default receiver, 10.4.12.1 -- this computer");
+    IOPluginStub *stub = namedStub(m_doc, "OSC", QStringList() << "OSC 1" << "OSC 2");
+    stub->m_networkDmx = false;                                     // not a network DMX output
+    stub->m_forgotten.clear();
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, "OSC", QString(), 1));            // the lasers' universe
+    QVERIFY(iom.setOutputPatch(1, "OSC", QString(), 1, false, 0));  // another universe there too
+    iom.universe(0)->markShowOnly(14, true, 0);                     // N2: universe 2 kept off (F4)
+    QVERIFY(iom.outputPatch(1, 0)->isPending());
+    QCOMPARE(iom.outputPatch(1, 0)->holdKind(), OutputPatch::HeldReserved);
+    QVERIFY(iom.universe(1)->setOutputPatch(stub, 1, 1));           // a second output on that line
+    QVERIFY(iom.outputPatch(1, 1)->isPatched());
+    QVERIFY(stub->mapped(1, 1));
+    stub->m_forgotten.clear();
+    QVERIFY(iom.setOutputPatch(1, QString(), QString(), QLCIOPlugin::invalidLine(), false, 0));   // the held one removed
+    const OutputPatch *op = iom.outputPatch(1, 0);
+    QVERIFY(op != NULL && op->isPatched());
+    const bool forgotten = stub->m_forgotten.contains(qMakePair(quint32(1), quint32(1)));
+    stub->m_forgotten.clear();
+    QVERIFY2(forgotten == false && stub->mapped(1, 1),
+             "the open output of universe 2 on line 2 was forgotten by the plugin when its held sibling was removed");
 }
 
-/* Review 19, finding A1 (high, made worse by the Art-Net/E1.31 forgetOutput()
-   overrides): a Show-only universe's patch held (aimed back here), a second
-   output of that universe added on the same interface to its node, then the
-   held one removed. ~OutputPatch() forgets the universe on the line it was
-   held off -- the very line the open patch uses (the plugin keys by
-   universe): its parameters go, and with review 18's overrides Art-Net and
-   E1.31 take the universe out of the controller, so the open patch sends
-   nothing while it reads as patched. */
-void InputOutputMap_Test::r19_removingAHeldPatchStopsTheUniversesOpenOne()
+/* Review 20, finding 3 (high, ordinary DMX): A1 guards a HELD patch's
+   destructor, but an open patch's ~OutputPatch() still closeLine()s
+   (line, universe) -- the very entry another open leg of the universe on
+   that line uses. The remaining leg reads as patched and sends nothing
+   (Art-Net/E1.31 drop a universe they no longer have). */
+void InputOutputMap_Test::r20_removingOneOfTwoOpenLegsStopsTheOther()
 {
     IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
     mockMachine(QList<NetworkRoute::LocalAddress>()
                     << localAddr("lo0", "127.0.0.1", 8)
                     << localAddr("en0", "10.4.12.7", 24),
                 QMap<QString, QString>());
-    stub->m_forgotten.clear();
     InputOutputMap iom(m_doc, 1);
-    iom.universe(0)->markShowOnly(14, true, 0);
-    QMap<QString, QVariant> node;
-    node.insert("outputIP", "10.4.12.99");
-    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, node));
-    iom.outputPatch(0, 0)->setPluginParameter("outputIP", "10.4.12.7");   // aimed here: held
-    QVERIFY(iom.outputPatch(0, 0)->isPending() && iom.outputPatch(0, 0)->showOnlyHold());
-    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 1, node));   // a new output, to the node
-    QVERIFY(iom.outputPatch(0, 1)->isPatched());
-    QVERIFY(stub->mapped(0, 1));
-    QVERIFY(iom.setOutputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine(), false, 0));   // the held one removed
+    QMap<QString, QVariant> a, b;
+    a.insert("outputIP", "10.4.12.99");
+    b.insert("outputIP", "10.4.12.98");
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, a));
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 1, b));
+    QVERIFY(iom.outputPatch(0, 0)->isPatched() && iom.outputPatch(0, 1)->isPatched());
+    QVERIFY(iom.setOutputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine(), false, 1));   // one leg removed
     const OutputPatch *op = iom.outputPatch(0, 0);
     QVERIFY(op != NULL && op->isPatched());
-    const bool forgotten = stub->m_forgotten.contains(qMakePair(quint32(1), quint32(0)));
-    QVERIFY2(forgotten == false && stub->mapped(0, 1),
-             qPrintable(QString("the open output of universe 1 on 10.4.12.7 was forgotten by the plugin "
-                                "(its target now '%1'): Art-Net/E1.31 stop sending it")
-                        .arg(const_cast<OutputPatch *>(op)->getPluginParameters().value("outputIP").toString())));
+    QVERIFY2(stub->mapped(0, 1),
+             "removing one open leg closed (line 2, universe 1) under the other open leg: it reads patched, sends nothing");
 }
 
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()

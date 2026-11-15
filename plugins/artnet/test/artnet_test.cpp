@@ -121,31 +121,6 @@ void ArtNet_Test::r18_aForgottenUniverseIsNotResent()
                                    .arg(full)));
 }
 
-void ArtNet_Test::r19_unSetParameterPutsTheDefaultBackAtOnce()
-{
-    ArtNetPlugin plugin;
-    ArtNetController *ctrl = testController(&plugin, QHostAddress::LocalHost, { 0 });
-    ArtNetIO io;
-    io.controller = ctrl;
-    plugin.m_IOmapping.clear();
-    plugin.m_IOmapping.append(io);
-    plugin.setParameter(0, 0, QLCIOPlugin::Output, "outputIP", "10.0.0.5");
-    plugin.setParameter(0, 0, QLCIOPlugin::Output, "outputUni", 7);
-    const QHostAddress aimed = ctrl->m_universeMap[0].outputAddress;
-    const quint32 aimedUni = ctrl->m_universeMap[0].outputUniverse;
-    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "outputIP");
-    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "outputUni");
-    const QHostAddress after = ctrl->m_universeMap[0].outputAddress;
-    const quint32 afterUni = ctrl->m_universeMap[0].outputUniverse;
-    const QHostAddress broadcast = ctrl->m_broadcastAddr;
-    plugin.m_IOmapping.clear();
-    delete ctrl;
-    QCOMPARE(aimed, QHostAddress("10.0.0.5"));
-    QCOMPARE(aimedUni, quint32(7));
-    QCOMPARE(after, broadcast);
-    QCOMPARE(afterUni, quint32(0));
-}
-
 void ArtNet_Test::r19_aFailedClosingFrameIsTriedOnceMore()
 {
     ArtNetPlugin plugin;

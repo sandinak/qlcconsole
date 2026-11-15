@@ -62,8 +62,13 @@ OutputPatch::OutputPatch(quint32 universe, QObject* parent)
 
 OutputPatch::~OutputPatch()
 {
+    /* Review 20: another open patch of this universe on this line goes on
+       sending it there -- (line, universe) is not closed under it. */
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
-        closeLine();
+    {
+        if (siblingOnLine(m_pluginLine) == false)
+            closeLine();
+    }
     else if (m_plugin != NULL)
     {
         m_plugin->closeOutput(m_pluginLine, m_universe);
@@ -120,7 +125,9 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
         // The same line again (a re-set of what is open): no closing frame.
         if (m_plugin == plugin && m_pluginLine == output)
             m_plugin->closeOutput(m_pluginLine, m_universe);
-        else
+        /* Review 20: moved away from a line another open patch of this
+           universe still uses -- left open for it. */
+        else if (siblingOnLine(m_pluginLine) == false)
             closeLine();
     }
 
@@ -244,12 +251,6 @@ void OutputPatch::hold(HoldKind kind, const QString &why, bool closeTheLine, boo
     emit outputNameChanged();
 }
 
-void OutputPatch::adoptPluginParameters(const QMap<QString, QVariant> &values)
-{
-    for (auto it = values.constBegin(); it != values.constEnd(); ++it)
-        m_parametersCache[it.key()] = it.value();
-}
-
 QString OutputPatch::deviceText(const QLCIOPlugin *plugin, quint32 line, const QString &name)
 {
     if (name.isEmpty() == false && name != KOutputNone)
@@ -270,8 +271,10 @@ QString OutputPatch::deviceText() const
 void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid,
                              quint32 savedLine, const QString &network)
 {
-    // Held: the line stops receiving this universe -- its closing frame first.
-    if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
+    /* Held: the line stops receiving this universe -- its closing frame
+       first; unless another open patch of this universe uses it (review 20). */
+    if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine()
+        && siblingOnLine(m_pluginLine) == false)
         closeLine();
 
     m_plugin = plugin;
@@ -395,26 +398,8 @@ void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values, con
     foreach (const QString &prop, unset)
         if (isTargetParameter(prop) && m_parametersCache.contains(prop))
             retarget = true;
-    /* Review 18 (N1): re-aimed where its universe may not send (Art-Net or
-       sACN back to this computer): held -- its closing frame to the old
-       target, the line closed -- and the new target kept for when it may. */
-    bool held = false;
-    if (retarget && m_targetCheck && m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
-    {
-        QMap<QString, QVariant> next = m_parametersCache;
-        for (auto it = values.constBegin(); it != values.constEnd(); ++it)
-            next[it.key()] = it.value();
-        foreach (const QString &prop, unset)
-            next.remove(prop);
-        const QString why = m_targetCheck(this, next);
-        if (why.isEmpty() == false)
-        {
-            hold(HeldShowOnly, why, true, true);
-            held = true;
-        }
-    }
     // One closing frame, to the old target only: then every change at once.
-    if (retarget && held == false)
+    if (retarget)
         sendClosingFrame();
     for (auto it = values.constBegin(); it != values.constEnd(); ++it)
     {

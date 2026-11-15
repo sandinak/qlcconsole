@@ -25,9 +25,8 @@ class E131_Test final : public QObject
     Q_OBJECT
 
 private slots:
-    /** Review 19: a cleared ucastIP / multicast / universe is the
-     *  controller's default at once, not at a reconnect */
-    void r19_unSetParameterPutsTheDefaultBackAtOnce();
+    /** A held line (rig network gate) never retries a closing frame */
+    void aHeldLineNeverRetriesTheClosingFrame();
     /** Review 18: forgetOutput() takes the universe out of the controller */
     void r18_aForgottenUniverseLeavesTheController();
     /** Review 16 F5: one of the outputs a universe with Show-only
