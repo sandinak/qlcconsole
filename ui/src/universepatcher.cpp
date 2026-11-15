@@ -438,9 +438,19 @@ void UniversePatcher::retargetPatch(quint32 universe, const QString &pluginName,
                       addr, wanted) == false)
         return;
 
-    /* Both answered: now move it, keeping the patch's own settings. */
+    /* Both answered: now move it, keeping the patch's own settings --
+       opened already aimed at the answer (review 21, V5b), never on the
+       plugin's default target first: the target set after the move was a
+       retarget whose closing frame went to broadcast on the universe's own
+       port. Broadcast answered: nothing to aim, the default is it. */
     if (newLine != line)
     {
+        QMap<QString, QVariant> aimed;
+        if (addr.isEmpty() == false)
+        {
+            aimed.insert(QStringLiteral("outputIP"), addr);
+            aimed.insert(QStringLiteral("outputUni"), wanted);
+        }
         InputOutputMap *iomap = m_doc->inputOutputMap();
         Universe *uni = iomap ? iomap->universe(universe) : NULL;
         bool moved = false;
@@ -451,7 +461,7 @@ void UniversePatcher::retargetPatch(quint32 universe, const QString &pluginName,
                     && op->plugin()->name() == pluginName && op->output() == line)
             {
                 moved = iomap->setOutputPatch(universe, pluginName, QString(),
-                                              newLine, false, i);
+                                              newLine, false, i, aimed);
                 break;
             }
         }

@@ -2774,6 +2774,86 @@ void ConnectionsTree_Test::aUniversesMenuHasNoEditConnection()
     QVERIFY(unpatched.contains("Rename Universe…"));
 }
 
+/* Review of c54477406 (independent), V5: the Connection editor moving an
+   aimed Art-Net leg to another interface, same node and port. apply() calls
+   setOutputPatch(..., line) with no parameters -- the leg opens on the
+   plugin's default target, broadcast on the universe's own Port-Address --
+   lets the frame lock go, emits outputPatchChanged, and only then sets the
+   target (setPluginParameters()). A frame the universe thread sends in that
+   gap (simulated here from the signal, which is emitted inside it) goes to
+   broadcast. Review 21 says "never a frame to the default target". */
+void ConnectionsTree_Test::r21r_editorLineChangeSendsNothingToTheDefault()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    stub->m_nameOverride = "ArtNet";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QMap<QString, QVariant> node;
+    node.insert("outputIP", "10.1.1.9");
+    node.insert("outputUni", 0x123);
+    QVERIFY(iom->setOutputPatch(3, "ArtNet", "", 0, false, 0, node));
+    Universe *u = iom->universe(3);
+    u->write(0, 90, true);
+    QStringList between;
+    QMetaObject::Connection tick = connect(u, &Universe::outputPatchChanged, this, [&]() {
+        stub->m_lastByTarget.clear();
+        u->dumpOutput(u->postGMValues()->mid(0, u->usedChannels()), true);
+        between << stub->m_lastByTarget.keys();
+    });
+    ConnectionEditor ed(m_doc, 3);
+    QCOMPARE(ed.m_interfaceCombo->currentIndex(), 0);
+    ed.m_interfaceCombo->setCurrentIndex(2);
+    ed.m_targetCombo->setCurrentIndex(0);
+    ed.m_targetIP->setText("10.1.1.9");
+    ed.slotTargetTyped();
+    ed.m_targetPort->setText("1:2:3");
+    const bool applied = ed.apply();
+    disconnect(tick);
+    QVERIFY2(applied, qPrintable(ed.error()));
+    QCOMPARE(u->outputPatch(0)->output(), quint32(2));
+    QCOMPARE(u->outputPatch(0)->getPluginParameters().value("outputIP").toString(), QString("10.1.1.9"));
+    QVERIFY2(between.isEmpty() == false, "no frame was simulated in the gap");
+    QVERIFY2(between.contains("default/2") == false,
+             qPrintable("the Connection editor's line change sent a frame to broadcast: " + between.join(", ")));
+}
+
+/* Review of c54477406 (independent), V5b: as V5, a universe with a
+   Show-only fixture, to another node on the new interface. No thread
+   needed: the move opens the new line on its default target, then
+   setPluginParameters() sees a retarget (the patch's cached node differs)
+   and sends the closing frame to where the line is now -- broadcast on the
+   universe's own Port-Address. UniversePatcher::retargetPatch() with a new
+   interface does the same (setOutputPatch(), then applyTarget()). */
+void ConnectionsTree_Test::r21r_editorLineChangeSendsNoClosingFrameToTheDefault()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    stub->m_nameOverride = "ArtNet";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QMap<QString, QVariant> node;
+    node.insert("outputIP", "10.1.1.9");
+    node.insert("outputUni", 0x123);
+    QVERIFY(iom->setOutputPatch(3, "ArtNet", "", 0, false, 0, node));
+    Universe *u = iom->universe(3);
+    u->markShowOnly(14, true, 0);
+    u->write(0, 90, true);
+    u->dumpOutput(u->postGMValues()->mid(0, u->usedChannels()), true);
+    ConnectionEditor ed(m_doc, 3);
+    ed.m_interfaceCombo->setCurrentIndex(2);
+    ed.m_targetCombo->setCurrentIndex(0);
+    ed.m_targetIP->setText("10.1.1.10");
+    ed.slotTargetTyped();
+    ed.m_targetPort->setText("1:2:3");
+    stub->m_lastByTarget.clear();
+    const bool applied = ed.apply();
+    const QStringList got = stub->m_lastByTarget.keys();
+    stub->m_lastByTarget.clear();
+    QVERIFY2(applied, qPrintable(ed.error()));
+    QCOMPARE(u->outputPatch(0)->output(), quint32(2));
+    QCOMPARE(u->outputPatch(0)->getPluginParameters().value("outputIP").toString(), QString("10.1.1.10"));
+    QVERIFY2(got.contains("default/2") == false,
+             qPrintable("moving an aimed leg to another interface sent its closing frame to broadcast: "
+                        + got.join(", ")));
+}
+
 void ConnectionsTree_Test::connectionEditorPatchesANewArtNetUniverse()
 {
     IOPluginStub *stub = fourPortNode(m_doc);

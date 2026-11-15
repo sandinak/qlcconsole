@@ -140,6 +140,10 @@ private slots:
     void r21_undoOfAReAimSendsTheClosingFrameToBroadcast();
     void r21_theLegLeftAfterItsSiblingIsRemovedSendsToItsOwnNode();
     void r21_siblingLegsNeverLeaveALineOpen();
+    /** Review of c54477406 (independent): red tests, see each */
+    void r21r_venueSwitchSendsNoClosingFrameToTheDefault();
+    void r21r_clearingTheFeedbackTargetKeepsTheOutputOnItsNode();
+    void r21r_removingFeedbackOnTheOutputsLineKeepsTheOutputOpen();
     void r16_fixtureRemapLeavesALaserUnheldOnUsb();
     void r16_holdingADanglingPatchKeepsIt();
     void r16_patchingTwoLasersOntoUsbClosesWithBothSafe();

@@ -401,8 +401,6 @@ void E131_Test::showOnlyMayUseIt()
     QCOMPARE(plugin.isNetworkDmxOutput(), true);
 }
 
-/* Review 18: a universe forgotten on a shared line (a Show-only hold) is
-   out of the controller too -- nothing resends it -- and the others stay. */
 /* Review 21: "multicast" or the default receiver chosen after a unicast
    node (the Connection editor, UniversePatcher, undo) is an unSetParameter();
    the controller sends to the default from the next frame, as when stock
@@ -444,6 +442,8 @@ void E131_Test::r21_aClearedTargetIsTheDefaultAtOnce()
     QCOMPARE(after.outputMcastAddress, group);
 }
 
+/* Review 18: a universe forgotten on a shared line (a Show-only hold) is
+   out of the controller too -- nothing resends it -- and the others stay. */
 void E131_Test::r18_aForgottenUniverseLeavesTheController()
 {
     E131Plugin plugin;

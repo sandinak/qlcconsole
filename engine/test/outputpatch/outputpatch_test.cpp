@@ -30,6 +30,33 @@
 
 #define TESTPLUGINDIR "../iopluginstub"
 
+namespace
+{
+/** A network plugin that keeps each universe's parameters: what a patch
+ *  hands it is what it has (not registered with any Doc) */
+class KeepingPlugin : public QLCIOPlugin
+{
+public:
+    explicit KeepingPlugin(const QString &name) : m_name(name) {}
+    void init() override {}
+    QString name() const override { return m_name; }
+    int capabilities() const override { return Output; }
+    QString pluginInfo() const override { return QString(); }
+    QStringList outputs() override { return QStringList() << QStringLiteral("eth0"); }
+    bool openOutput(quint32, quint32) override { return true; }
+    void closeOutput(quint32, quint32) override {}
+    void setParameter(quint32 universe, quint32, Capability, QString name, QVariant value) override
+    { m_params[universe][name] = value; }
+    void unSetParameter(quint32 universe, quint32, Capability, QString name) override
+    { m_params[universe].remove(name); }
+    QMap<QString, QVariant> getParameters(quint32 universe, quint32, Capability) const override
+    { return m_params.value(universe); }
+    QMap<quint32, QMap<QString, QVariant> > m_params;
+private:
+    QString m_name;
+};
+}
+
 static QDir testPluginDir()
 {
     QDir dir(TESTPLUGINDIR);
@@ -192,6 +219,43 @@ void OutputPatch_Test::dump()
     QVERIFY(stub->m_universe[511] == (char) 3);
 
     delete op;
+}
+
+/* Review 21 (stale cache): a patch moved to another plugin keeps none of
+   the old one's parameters -- an Art-Net outputIP would be replayed onto
+   the new plugin by reconnect() and saved with it (getPluginParameters()
+   while pending). Same for setPending() onto another plugin. */
+void OutputPatch_Test::anotherPluginForgetsTheOldOnesParameters()
+{
+    KeepingPlugin artnet(QStringLiteral("ArtNet")), sacn(QStringLiteral("E1.31"));
+    {
+        OutputPatch op(quint32(0));
+        QVERIFY(op.set(&artnet, 0));
+        op.setPluginParameter(QStringLiteral("outputIP"), QStringLiteral("10.0.0.5"));
+        op.setPluginParameter(QStringLiteral("outputUni"), 7);
+        QVERIFY(op.set(&sacn, 0));
+        QVERIFY(op.reconnect());
+        QVERIFY2(sacn.m_params.value(0).isEmpty(),
+                 qPrintable("reconnect() replayed Art-Net's onto E1.31: "
+                            + QStringList(sacn.m_params.value(0).keys()).join(", ")));
+        op.setPending(&sacn, QStringLiteral("eth0"));
+        QVERIFY(op.getPluginParameters().isEmpty());
+    }
+    {
+        OutputPatch op(quint32(1));
+        QVERIFY(op.set(&artnet, 0));
+        op.setPluginParameter(QStringLiteral("outputIP"), QStringLiteral("10.0.0.6"));
+        op.setPending(&sacn, QStringLiteral("eth0"));
+        QVERIFY2(op.getPluginParameters().isEmpty(), "pending on E1.31, it still says Art-Net's outputIP");
+    }
+    {
+        // The same plugin on another line keeps them: still its own target.
+        OutputPatch op(quint32(2));
+        QVERIFY(op.set(&artnet, 0));
+        op.setPluginParameter(QStringLiteral("outputIP"), QStringLiteral("10.0.0.7"));
+        op.setPending(&artnet, QStringLiteral("eth1"));
+        QCOMPARE(op.getPluginParameters().value(QStringLiteral("outputIP")).toString(), QString("10.0.0.7"));
+    }
 }
 
 QTEST_APPLESS_MAIN(OutputPatch_Test)

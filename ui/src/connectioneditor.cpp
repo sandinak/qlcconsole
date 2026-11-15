@@ -1218,26 +1218,13 @@ bool ConnectionEditor::apply()
            for its interface included), as patching it always has. */
         const int index = m_origIndex >= 0 ? m_origIndex : 0;
         const bool samePlugin = m_origIndex >= 0 && plugin == m_origPlugin;
-        if (samePlugin == false || line != m_origLine)
-        {
-            if (iom->setOutputPatch(m_universe, plugin, QString(), line, false, index) == false)
-            {
-                m_error = iom->lastPatchRefusal().isEmpty() == false
-                          ? iom->lastPatchRefusal()
-                          : tr("Could not patch that universe to %1.").arg(plugin);
-                return false;
-            }
-        }
-        OutputPatch *op = iom->outputPatch(m_universe, index);
-        if (op == nullptr || op->plugin() == nullptr || op->plugin()->name() != plugin)
-        {
-            m_error = tr("Could not patch that universe to %1.").arg(plugin);
-            return false;
-        }
-        /* The whole target in one step (review 21): one closing frame for
-           the old node, then address, port and mode together -- never a
-           frame to the default target or to a new address on the old port
-           half-way. */
+        /* The whole target in one step (review 21): on its line still, one
+           closing frame for the old node, then address, port and mode
+           together (setPluginParameters() below); onto another line, the
+           leg opens already aimed (setOutputPatch(..., values)), the old
+           line closed to its own node -- never a frame to the plugin's
+           default target, nor to a new address on the old port, on the
+           way. */
         QMap<QString, QVariant> values;
         QStringList unset;
         switch (kindOf(p))
@@ -1269,6 +1256,22 @@ bool ConnectionEditor::apply()
             case KindDevice:
             case KindNone:
             break;
+        }
+        if (samePlugin == false || line != m_origLine)
+        {
+            if (iom->setOutputPatch(m_universe, plugin, QString(), line, false, index, values) == false)
+            {
+                m_error = iom->lastPatchRefusal().isEmpty() == false
+                          ? iom->lastPatchRefusal()
+                          : tr("Could not patch that universe to %1.").arg(plugin);
+                return false;
+            }
+        }
+        OutputPatch *op = iom->outputPatch(m_universe, index);
+        if (op == nullptr || op->plugin() == nullptr || op->plugin()->name() != plugin)
+        {
+            m_error = tr("Could not patch that universe to %1.").arg(plugin);
+            return false;
         }
         /* Another protocol's settings mean nothing to this one. */
         if (samePlugin == false)

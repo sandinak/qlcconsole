@@ -1859,6 +1859,16 @@ bool Universe::setFeedbackPatch(QLCIOPlugin *plugin, quint32 output)
             return false;
 
         m_fbPatch = new OutputPatch(m_id, this);
+        m_fbPatch->setFeedback(true);
+        /* Review 21 (V3): the plugin keeps one entry per (line, universe),
+           the feedback's and the output's alike -- an open output leg on
+           the feedback's line is its sibling there. */
+        m_fbPatch->setSiblingOnLine([this](const OutputPatch *self, quint32 line) -> OutputPatch * {
+            foreach (OutputPatch *op, m_outputPatchList)
+                if (op != self && op->plugin() == self->plugin() && op->isPatched() && op->output() == line)
+                    return op;
+            return nullptr;
+        });
     }
     else
     {

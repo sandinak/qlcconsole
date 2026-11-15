@@ -10,6 +10,29 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## PatchUndo doesn't round-trip a pending leg
+
+`PatchUndo::captureOne()` records a pending output leg (its interface away)
+as (plugin, invalid line, its cached target); `restoreOne()` then calls
+`setOutputPatch(..., invalid line)`, which DELETES the leg, applies nothing
+to it, and the leg that shifts into its index can take the wrong target.
+Capture the pending identity (uid, saved line, network, hold) and restore it
+with `setOutputPatchPending()`. Red test from the review of c54477406:
+`InputOutputMap_Test::r21r_undoKeepsAPendingLegAndTheOthersTarget` (on
+review/049-c54477406-checks, not on main). Pre-existing, not from 0.4.9.
+
+## Two legs of one universe on two lines of one plugin share one parameter store
+
+QLCIOPlugin keeps ONE output line and one parameter map per universe
+(`PluginUniverseDescriptor`). A universe with two Art-Net legs on two
+interfaces reads the first leg's parameters as {} (the map is the second
+line's): the show saves it without its target, PatchUndo captures {} and
+on undo clears its cached target (Art-Net's unSetParameter() now puts that
+line on broadcast at once). Needs a per-(universe, line) store in the
+plugin interface, or OutputPatch reading its own cache for its line. Red
+test: `InputOutputMap_Test::r21r_twoLegsOnTwoLinesEachKeepTheirTarget` (on
+review/049-c54477406-checks, not on main). Pre-existing (stock).
+
 ## Watch: WledConfigCheck_Test::aFixtureAtAnOldAddressFollowsItsDeviceByMac
 
 Counted 2 HTTP posts instead of 1 once on dink under load (feat/046-candle-safety's

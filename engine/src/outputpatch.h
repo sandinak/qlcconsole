@@ -221,10 +221,18 @@ public:
      *  (line, universe), which is that patch's too (no closing frame
      *  either: the line goes on sending this universe). Review 21: the
      *  plugin keeps one target per universe, so that patch's own target
-     *  goes back to the plugin (reapplyPluginParameters()). The Universe
-     *  sets it. */
+     *  goes back to the plugin (reapplyPluginParameters()). For the
+     *  feedback patch, an open output leg of its universe on that line
+     *  (review 21, V3): removing or moving the feedback never closes the
+     *  line under the output. The Universe sets it. */
     typedef std::function<OutputPatch *(const OutputPatch *patch, quint32 line)> SiblingOnLine;
     void setSiblingOnLine(const SiblingOnLine &check) { m_siblingOnLine = check; }
+
+    /** A universe's feedback patch (Universe::setFeedbackPatch()): the
+     *  plugin's parameter entry for the universe is its output's, so it
+     *  clears only the parameters it set itself (review 21, V2) */
+    void setFeedback(bool on) { m_isFeedback = on; }
+    bool isFeedback() const { return m_isFeedback; }
 
     /** The line it was open on when it was held (UINT_MAX: never held) */
     quint32 heldOnLine() const { return m_heldOnLine; }
@@ -334,6 +342,7 @@ private:
     /** See setClosingFrame() */
     std::function<bool(QByteArray &, bool)> m_closingFrame;
     SiblingOnLine m_siblingOnLine;
+    bool m_isFeedback = false;
     quint32 m_heldOnLine = UINT_MAX;
     OutputPatch *siblingOnLine(quint32 line) const { return m_siblingOnLine ? m_siblingOnLine(this, line) : nullptr; }
     /** Left on a line with its sibling: that one's target back (review 21) */

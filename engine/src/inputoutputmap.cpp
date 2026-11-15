@@ -1158,7 +1158,11 @@ void InputOutputMap::loadPatch(quint32 universe, const Universe::OfflinePatch &p
             }
             else
             {
-                setOutputPatch(universe, patch.plugin, QString(), quint32(line), false, index);
+                /* Opened aimed, in one step (review 21, V1: a venue switch,
+                   a config import): never on the plugin's default target
+                   first, whose closing frame the first parameter's
+                   retarget sent there. */
+                setOutputPatch(universe, patch.plugin, QString(), quint32(line), false, index, patch.params);
                 // Its saved number, for the check once the show is read.
                 if (OutputPatch *lop = uni->outputPatch(index))
                     if (lop->isPatched())
