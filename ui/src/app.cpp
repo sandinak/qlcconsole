@@ -7006,6 +7006,10 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
     m_upgradeOfferMade = false;
     m_showTreeNoticeDismissed = false;      // P45: back each time the show opens
 
+    /* N2 (outputpatch.h): a legacy <Fixture> outside <Engine> marks one at
+       a time -- one scope, so a non-network output is held once, after all
+       of them, with every channel at safe (review 17). */
+    InputOutputMap::ShowOnlyMarks showOnlyMarks(m_doc->inputOutputMap());
     while (doc.readNextStartElement())
     {
         if (doc.name() == KXMLQLCEngine)

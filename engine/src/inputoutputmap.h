@@ -599,8 +599,18 @@ public:
 
     /** N1's words: @p device can't send to Show-only fixtures */
     static QString networkOnlyText(const QString &device);
-    /** F4's words: @p device is cabled to @p universe's lasers */
-    static QString reservedText(const QString &device, const QString &universe);
+    /** N1's words for an Art-Net or sACN output back to this computer */
+    static QString loopbackText(const QString &device);
+    /** F4's words: @p device is cabled to @p universe's lasers; remove its
+     *  @p output output there to free it */
+    static QString reservedText(const QString &device, const QString &universe,
+                                const QString &output = QStringLiteral("USB"));
+    /** N1: why a universe with Show-only fixtures may not send through
+     *  @p plugin's @p line (named @p lineName) aimed with @p params -- not a
+     *  network DMX output, or Art-Net / sACN back to this computer; empty
+     *  when it may */
+    static QString showOnlyRefusal(QLCIOPlugin *plugin, const QString &lineName, quint32 line,
+                                   const QMap<QString, QVariant> &params);
     /** Why @p universe's output patch @p index may not be patched by hand
      *  onto @p pluginName's @p line (N1, F4); empty when it may. The I/O
      *  tab asks before it changes anything. */

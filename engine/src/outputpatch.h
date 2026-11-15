@@ -174,10 +174,12 @@ public:
     /** Held, @p why said: kept pending on the name of the line it was on
      *  (or by number, F3, when it has none) and @p waitLine (UINT_MAX: the
      *  line it is on). @p closeTheLine: the line's closing frame first
-     *  (@p sendClosing), then closed; false: another open patch uses it,
-     *  which stays open -- the plugin only forgets this universe there. */
+     *  (@p sendClosing), then closed; false: the plugin only forgets this
+     *  universe there (another patch on it closes it). @p sharedLine: it
+     *  shared that line with another patch when held (review 17: F4 lets it
+     *  back there by number, as stock, even if that one is open). */
     void hold(HoldKind kind, const QString &why, bool closeTheLine, bool sendClosing,
-              quint32 waitLine = UINT_MAX);
+              quint32 waitLine = UINT_MAX, bool sharedLine = false);
     /** The line number a show load saved for this patch, when it opened
      *  it (InputOutputMap::loadPatch()); UINT_MAX otherwise. N3's hold
      *  waits there; any other set() forgets it. */
@@ -188,12 +190,20 @@ public:
     HoldKind holdKind() const { return m_holdKind; }
     /** Held by N2/N3 */
     bool showOnlyHold() const { return m_holdKind == HeldShowOnly; }
+    /** Review 17: its universe has no Show-only fixture left -- plain
+     *  pending (by name, H5) from here, its reservation gone */
+    void releaseShowOnlyHold() { m_holdKind = NotHeld; m_fromShowOnlyHold = true; m_reconnectHeld.clear(); }
+    /** It was held by N2/N3 until its universe lost its Show-only fixtures */
+    bool fromShowOnlyHold() const { return m_fromShowOnlyHold; }
+    /** See hold() */
+    bool sharedLine() const { return m_sharedLine; }
     /** Why this patch is held; empty if not */
     QString reconnectHeld() const { return m_reconnectHeld; }
     /** Say why it waits, its hold unchanged */
     void setReconnectHeld(const QString &why) { m_reconnectHeld = why; }
     /** Pending on its line number only (F3): no name to wait for */
-    bool pendingByNumber() const { return isPending() && m_pendingUID.isEmpty(); }
+    bool pendingByNumber() const { return isPending() && m_pendingByNumber; }
+    void setPendingByNumber(bool on) { m_pendingByNumber = on; }
     /** The interface this patch is on or waits for: its name, or "line N
      *  of <plugin>" (F3) */
     QString deviceText() const;
@@ -282,6 +292,9 @@ private:
     QString m_heldReason;
     QString m_reconnectHeld;
     HoldKind m_holdKind = NotHeld;
+    bool m_pendingByNumber = false;
+    bool m_fromShowOnlyHold = false;
+    bool m_sharedLine = false;
     quint32 m_loadedLine = UINT_MAX;
     /** The patch parameters cache */
     QMap<QString, QVariant>m_parametersCache;
