@@ -7,7 +7,7 @@
   <Author>branson</Author>
  </Creator>
  <Embedded>
-  <EffectScript File="followspot.js" SHA256="df94c7500858195489df6ad4b1a6e942690549d5841255599cc61e4c2e0925ce" From="user" FromModified="2026-11-13T15:01:29Z" Embedded="2026-11-13T15:10:56Z"><![CDATA[/*
+  <EffectScript File="followspot.js" SHA256="df94c7500858195489df6ad4b1a6e942690549d5841255599cc61e4c2e0925ce" From="user" FromModified="2026-11-15T23:12:03Z" Embedded="2026-11-15T23:14:34Z"><![CDATA[/*
   QLC+ Effect Script: Followspot
   Move a set of fixtures using two joystick axes (pan/tilt).
   Compatible with any gamepad or MIDI controller mapped to the x/y inputs.
@@ -268,7 +268,7 @@
     return effect;
 })()
 ]]></EffectScript>
-  <EffectScript File="dimmer-phaser.js" SHA256="c189375d17ae580f65205c0ddb932653764cab3df60a719dcbb3c8b5c69cec17" From="user" FromModified="2026-11-13T15:01:29Z" Embedded="2026-11-13T15:10:56Z"><![CDATA[/*
+  <EffectScript File="dimmer-phaser.js" SHA256="c189375d17ae580f65205c0ddb932653764cab3df60a719dcbb3c8b5c69cec17" From="user" FromModified="2026-11-15T23:12:03Z" Embedded="2026-11-15T23:14:34Z"><![CDATA[/*
   QLC+ Effect Script: Dimmer Phaser
   The MA3/Hog intensity-effect workhorse, as one configurable script. A single
   waveform (sine / saw / triangle / square / random) drives the dimmer, with a
@@ -600,7 +600,7 @@
    <Step Number="0" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.1.2">40</Step>
    <Step Number="1" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.1.5">41</Step>
    <Step Number="2" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.1.5.5">42</Step>
-   <Step Number="3" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.2.3" SubCues="SubGo">48</Step>
+   <Step Number="3" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.2.3" SubCues="SubGo">47</Step>
    <Step Number="4" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.2.8">44</Step>
   </Function>
   <Function ID="40" Type="Collection" Name="1.1.2-Verse In" Hidden="True" Path="Productions/Song Bench/Songs">
@@ -613,36 +613,44 @@
    <Step Number="0">46</Step>
   </Function>
   <Function ID="43" Type="Collection" Name="1.2.3-Chorus In" Hidden="True" Path="Productions/Song Bench/Songs">
-   <Step Number="0">47</Step>
+   <Step Number="0">38</Step>
   </Function>
   <Function ID="44" Type="Collection" Name="1.2.8-Chorus Out" Hidden="True" Path="Productions/Song Bench/Songs">
    <Step Number="0">30</Step>
   </Function>
-  <Function ID="46" Type="Scene" Name="1.1.2-Verse In · Wash" Hidden="True" Path="Productions/Song Bench/Songs">
+  <Function ID="46" Type="Scene" Name="1.2.3.2-Chorus Lift · Wash" Hidden="True" Path="Productions/Song Bench/Songs">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureGroup ID="1"/>
    <Palette ID="11"/>
    <Palette ID="0"/>
   </Function>
-  <Function ID="47" Type="Scene" Name="1.2.3.1-Chorus Sting · Wash" Hidden="True" Path="Productions/Song Bench/Songs">
-   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
-   <FixtureGroup ID="1"/>
-   <Palette ID="10"/>
-   <Palette ID="2"/>
-  </Function>
-  <Function ID="48" Type="Chaser" Name="1.2.3 Chorus In · sub-cues" Hidden="True" Path="Productions/Song Bench/Songs">
+  <Function ID="47" Type="Chaser" Name="1.2.3 Chorus In · sub-cues" Hidden="True" Path="Productions/Song Bench/Songs">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <Direction>Forward</Direction>
    <RunOrder>SingleShot</RunOrder>
    <SpeedModes FadeIn="PerStep" FadeOut="PerStep" Duration="PerStep"/>
-   <Step Number="0" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.2.3.1">49</Step>
+   <Step Number="0" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.2.3.1">48</Step>
+   <Step Number="1" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.2.3.2">49</Step>
+   <Step Number="2" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1.2.3.3">50</Step>
   </Function>
-  <Function ID="49" Type="Collection" Name="1.2.3.1-Chorus Sting" Hidden="True" Path="Productions/Song Bench/Songs">
-   <Step Number="0">47</Step>
+  <Function ID="48" Type="Collection" Name="1.2.3.1-Chorus Sting" Hidden="True" Path="Productions/Song Bench/Songs">
+   <Step Number="0">30</Step>
+  </Function>
+  <Function ID="49" Type="Collection" Name="1.2.3.2-Chorus Lift" Hidden="True" Path="Productions/Song Bench/Songs">
+   <Step Number="0">46</Step>
+  </Function>
+  <Function ID="50" Type="Collection" Name="1.2.3.3-Chorus Drop" Hidden="True" Path="Productions/Song Bench/Songs">
+   <Step Number="0">51</Step>
+  </Function>
+  <Function ID="51" Type="Scene" Name="1.2.3.3-Chorus Drop · Wash" Hidden="True" Path="Productions/Song Bench/Songs">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="1"/>
+   <Palette ID="9"/>
+   <Palette ID="2"/>
   </Function>
   <ShutterAutoOpen Enabled="1"/>
   <ShowControl MainCueList="0"/>
-  <ShowTree NextId="41" Current="1">
+  <ShowTree NextId="46" Current="1">
    <Production ID="1" Name="Pad Bench" MainList="2">
     <CueList ID="2" Name="Main" Mode="NonTracking" Chaser="0">
      <Cue ID="5" Number="1" Name="Follow Spot" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="3">
@@ -745,7 +753,7 @@
      <Cue ID="32" Number="1.2.3" Name="Chorus In" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="43">
       <Layer ID="37" Groups="1">
        <Look Key="Dimmer" Palettes="2"/>
-       <Look Key="Colour" Palettes="10"/>
+       <Look Key="Colour" Palettes="11"/>
       </Layer>
      </Cue>
      <Cue ID="33" Number="1.2.8" Name="Chorus Out" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="44">
@@ -755,11 +763,28 @@
       </Layer>
      </Cue>
     </CueList>
-    <SubCues ID="40" Name="Sub-cues" Cue="32" Chaser="48">
-     <Cue ID="39" Number="1" Name="Chorus Sting" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="49"/>
+    <SubCues ID="40" Name="Sub-cues" Cue="32" Chaser="47">
+     <Cue ID="39" Number="1" Name="Chorus Sting" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="48">
+      <Layer ID="41" Groups="1">
+       <Look Key="Dimmer" Palettes="0"/>
+       <Look Key="Colour" Palettes="10"/>
+      </Layer>
+     </Cue>
+     <Cue ID="42" Number="2" Name="Chorus Lift" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="49">
+      <Layer ID="43" Groups="1">
+       <Look Key="Dimmer" Palettes="0"/>
+       <Look Key="Colour" Palettes="11"/>
+      </Layer>
+     </Cue>
+     <Cue ID="44" Number="3" Name="Chorus Drop" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="50">
+      <Layer ID="45" Groups="1">
+       <Look Key="Dimmer" Palettes="2"/>
+       <Look Key="Colour" Palettes="9"/>
+      </Layer>
+     </Cue>
     </SubCues>
    </Production>
-   <Generated Scenes="10,13,15,17,20,22,26,30,32,36,38,46,47" Collections="3,4,5,6,7,23,27,28,33,34,40,41,42,43,44,49" Chasers="0,1,2,39,48"/>
+   <Generated Scenes="10,13,15,17,20,22,26,30,32,36,38,46,51" Collections="3,4,5,6,7,23,27,28,33,34,40,41,42,43,44,48,49,50" Chasers="0,1,2,39,47"/>
    <InlinePalettes IDs=""/>
   </ShowTree>
   <FocusCalls>

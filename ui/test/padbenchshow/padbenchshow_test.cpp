@@ -117,7 +117,12 @@ const QList<CueSpec> kSongCues = {
     { "1.1.2", "Verse In" }, { "1.1.5", "Verse Lift" }, { "1.1.5.5", "Verse Point" },
     { "1.2.3", "Chorus In" }, { "1.2.8", "Chorus Out" },
 };
-const QString kSubCue = QStringLiteral("Chorus Sting");
+/* Chorus In's sub-cues: Sub GO plays them in turn (the first one plays with
+   GO onto the cue), each a look of its own on the Wash. */
+struct SubSpec { QString name; bool full; QString colour; };
+const QList<SubSpec> kSubCues = {
+    { "Chorus Sting", true, "Red" }, { "Chorus Lift", true, "Amber" }, { "Chorus Drop", false, "Blue" },
+};
 
 /* Where cue 4 puts Shutter Spot (raw degrees on its 630 x 270 yoke). */
 const int kPosBPan = 405, kPosBTilt = 170;
@@ -589,10 +594,17 @@ void PadBenchShow_Test::build(const QString &path)
     {
         const quint32 l = st->addLayer(songCues[i], wash);
         look(songCues[i], l, i % 2 == 0 ? full : half);
-        look(songCues[i], l, i < 3 ? amber : red);
+        look(songCues[i], l, i < 4 ? amber : red);   // Chorus In: Half Amber, not the Sting's Full Red
     }
     QString why;
-    QVERIFY2(st->addSubCue(songCues[3], kSubCue, invalidId(), &why) != invalidId(), qPrintable(why));
+    for (const SubSpec &sp : kSubCues)
+    {
+        const quint32 sub = st->addSubCue(songCues[3], sp.name, invalidId(), &why);
+        QVERIFY2(sub != invalidId(), qPrintable(why));
+        const quint32 l = st->addLayer(sub, wash);
+        look(sub, l, sp.full ? full : half);
+        look(sub, l, sp.colour == "Red" ? red : sp.colour == "Amber" ? amber : blue);
+    }
     QList<Section> secs = st->sections(songList);
     QCOMPARE(secs.count(), 1);
     QVERIFY(st->setSectionName(songList, secs.first(), kSong));
@@ -782,6 +794,28 @@ void PadBenchShow_Test::check(const QString &path, bool play)
     QVERIFY2(!plan.isEmpty(), qPrintable(why));
     for (const ShowTreeController::Renumbered &r : plan)
         qInfo().noquote() << "[RENUMBER SONG]" << r.from << "->" << r.to;
+
+    // Chorus In's three sub-cues: Sub GO has two more to play after the first.
+    {
+        const Cue *chorus = nullptr;
+        for (const Cue &c : songList->cues)
+            if (c.name == QStringLiteral("Chorus In"))
+                chorus = &c;
+        QVERIFY(chorus != nullptr);
+        const quint32 subs = st->subCueList(chorus->id);
+        QVERIFY(subs != invalidId());
+        const CueList *sl = st->cueList(subs);
+        QVERIFY(sl != nullptr);
+        QCOMPARE(sl->cues.count(), kSubCues.count());
+        for (int i = 0; i < kSubCues.count(); ++i)
+        {
+            QCOMPARE(sl->cues.at(i).name, kSubCues.at(i).name);
+            QVERIFY(!sl->cues.at(i).follow);
+            QCOMPARE(sl->cues.at(i).layers.count(), 1);
+        }
+        QCOMPARE(st->cueNumber(*sl, 0), QStringLiteral("1.2.3.1"));
+        QCOMPARE(st->cueNumber(*sl, 2), QStringLiteral("1.2.3.3"));
+    }
 
     /* The run-through takes ~9 s of real time (cue 3 holds 8 s): played
        once, on the committed file -- the one the bench opens. The built
