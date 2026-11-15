@@ -200,7 +200,8 @@ them:
   (sticks, bumpers, triggers, A, B, …, as in Focus mode), no cue plays
   from the pad, and the emergency stop (all four) still stops. Hold LT +
   Menu again to finish (a Menu tap, or RT past the last call, only says
-  so): the laptop asks about anything unsaved and the pad is **ARMED**
+  so; in FOCUS, LT steps back a call when you let it go, and not at all
+  when Menu was pressed with it, so the chord never moves the focus): the laptop asks about anything unsaved and the pad is **ARMED**
   again. The list stays on the focus cue (**Venue focus done: LT + A for
   the next cue**) until LT + A or GO on the laptop moves it on; ending
   the focus never moves the list, from the pad or the laptop. A focus

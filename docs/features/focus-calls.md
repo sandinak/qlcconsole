@@ -177,7 +177,7 @@ the running calls with the Deck's sticks and buttons, in the same scheme
 
 | Do | Controller | Keyboard |
 |---|---|---|
-| Next / previous focus call | RT / LT | PgDn / PgUp |
+| Next / previous focus call | RT / LT (the pad's Run role: LT on its release, never with Menu) | PgDn / PgUp |
 | Next / previous fixture | RB / LB | ] / [ (or Tab / ⇧Tab) |
 | One fixture / the whole call (scope) | Y | G |
 | Nudge (coarse, fine) | Left stick, right stick | Arrows (0.1°; ⇧: 1°) |
