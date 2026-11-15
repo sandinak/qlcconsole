@@ -2372,6 +2372,63 @@ void InputOutputMap_Test::aLineThatNamesAnotherDeviceIsNotReopened()
     QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(2));
 }
 
+/* Review 11: an ordinary unplug and replug of one of two USB interfaces,
+   NO Show-only fixtures anywhere. Before d82506c298 each universe came back
+   on its own line (reconnect() by number). */
+void InputOutputMap_Test::review11_unplugReplugOneOfTwoComesBackOnItsOwnDevice()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)" << "Pro (S/N: B2)";
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 0));     // A1
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 1));     // B2
+    QVERIFY(iom.universe(0)->showOnlyChannelCount() == 0);
+    QVERIFY(iom.universe(1)->showOnlyChannelCount() == 0);
+
+    // A1 unplugged (cable bump): B2 is line 0 now.
+    stub->m_lineNames = QStringList() << "Pro (S/N: B2)";
+    stub->configure();
+    // Two universes must never be opened on one device.
+    QVERIFY2(!(iom.outputPatch(0, 0)->isPatched() && iom.outputPatch(1, 0)->isPatched()
+               && iom.outputPatch(0, 0)->output() == iom.outputPatch(1, 0)->output()),
+             "universe 1 and universe 2 are both sending to B2");
+
+    // A1 plugged back in, where it was.
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)" << "Pro (S/N: B2)";
+    stub->configure();
+    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(0));
+    QCOMPARE(iom.outputPatch(0, 0)->outputName(), QString("Pro (S/N: A1)"));
+    QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(1));
+    QCOMPARE(iom.outputPatch(1, 0)->outputName(), QString("Pro (S/N: B2)"));
+}
+
+/* Review 11: two of one model whose line name carries no serial (Eurolite
+   USB-DMX512 PRO, NanoDMX, Stageprofi name their line name() only). One is
+   unplugged and plugged back in; no Show-only fixtures. */
+void InputOutputMap_Test::review11_twoIdenticalDevicesUnplugReplugKeepTwoLines()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    const QString e("Eurolite USB-DMX512 PRO");
+    stub->m_lineNames = QStringList() << e << e;
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 1));
+
+    // Nothing unplugged: a configuration change keeps both where they are.
+    stub->configure();
+    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(0));
+    QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(1));
+
+    stub->m_lineNames = QStringList() << e;          // one unplugged
+    stub->configure();
+    stub->m_lineNames = QStringList() << e << e;     // and back
+    stub->configure();
+    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(0));
+    QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(1));
+}
+
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()
 {
     schoolLaptop();

@@ -109,6 +109,8 @@ private slots:
     void review10_rigGateBackOnSendsTheClosingFrame();
     void everyRigCheckHoldsWithTheClosingFrameFirst();
     void aLineThatNamesAnotherDeviceIsNotReopened();
+    void review11_unplugReplugOneOfTwoComesBackOnItsOwnDevice();
+    void review11_twoIdenticalDevicesUnplugReplugKeepTwoLines();
     void removeUniverse();
     void universe();
     void profiles();
