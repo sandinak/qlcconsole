@@ -481,6 +481,12 @@ void Workbench::buildHeader(QWidget *column)
     m_playBtn->setObjectName(QStringLiteral("workbenchPlay"));
     m_playBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
     connect(m_playBtn, &QToolButton::clicked, this, [this]() {
+        if (m_doc->mode() == Doc::Operate)
+        {
+            // Operate: Blind <-> Play Live, one click each way.
+            setPlayLive(!m_playLive);
+            return;
+        }
         if (m_ownPreview && m_stack != nullptr && m_stack->ownPreviewHeld())
         {
             // Play over a running list (RC8): the hold lets go.
@@ -837,6 +843,12 @@ void Workbench::setStackImpl(WorkbenchStack *stack, History history)
 
     stopPreview();
     stopOperate();
+    // Another thing loaded: Blind again (never straight onto the stage).
+    if (m_playLive)
+    {
+        m_playLive = false;
+        emit playLiveChanged(false);
+    }
     m_restartTimer->stop();
     m_editorFunction = Function::invalidId();
     loadCanvas(Function::invalidId());
@@ -1181,7 +1193,10 @@ void Workbench::updateOnRig()
     {
         onRigText(m_onRig, tr("▶ Live: %1").arg(live->name()));
         onRigStyle(m_onRig, QStringLiteral("QLabel { color: #6cc08f; }"));
-        m_playBtn->setVisible(false);
+        m_playBtn->setText(tr("Back to Blind"));
+        m_playBtn->setToolTip(tr("Stop playing this on the stage: edits are Blind again"));
+        m_playBtn->setVisible(true);
+        m_playBtn->setEnabled(true);
     }
     else
     {
@@ -1196,7 +1211,10 @@ void Workbench::updateOnRig()
             onRigStyle(m_onRig, BlindStyle::labelSheet());
         }
         else if (m_doc->mode() != Doc::Design)
-            onRigText(m_onRig, tr("Operate: nothing previews here"));
+        {
+            onRigText(m_onRig, tr("Blind: edits stay off the stage"));
+            onRigStyle(m_onRig, BlindStyle::labelSheet());
+        }
         else if (m_heldByRun)
             onRigText(m_onRig, tr("■ Held — GO took the stage. Play to preview over the show."));
         else
@@ -1206,10 +1224,16 @@ void Workbench::updateOnRig()
                                           : tr("Play what is loaded on the rig (Design mode)"));
         // A Show Tree cue: greyed in Operate (the tree's rule), not hidden.
         const bool treeCue = canPlay && m_stack->playsItself();
-        m_playBtn->setVisible(canPlay && (design || treeCue));
-        m_playBtn->setEnabled(design);
+        m_playBtn->setVisible(canPlay);
+        m_playBtn->setEnabled(design || !treeCue);
         if (!design && treeCue)
             m_playBtn->setToolTip(blindWhy);
+        else if (!design)
+        {
+            m_playBtn->setText(tr("Play Live"));
+            m_playBtn->setToolTip(tr("Play this on the stage now. Edits are Blind until you do; "
+                                     "Show-only fixtures still wait for a GO."));
+        }
     }
 }
 
@@ -2489,6 +2513,9 @@ void Workbench::startOperate()
     // A cue edited in Live is blind (the tree's rule): nothing started here.
     if (m_stack->playsItself())
         return;
+    // Operate loads Blind: nothing reaches the stage until Play Live.
+    if (!m_playLive)
+        return;
     const quint32 fid = m_stack->previewFunction();
     if (m_operateFunction == fid)
         return;
@@ -2498,6 +2525,31 @@ void Workbench::startOperate()
     f->start(m_doc->masterTimer(), workbenchParent());
     m_operateFunction = fid;
     updateOnRig();
+}
+
+void Workbench::setPlayLive(bool live)
+{
+    if (m_doc->mode() != Doc::Operate)
+        live = false;
+    if (live && (m_stack == nullptr || m_stack->playsItself()))
+        live = false;
+    if (live == m_playLive)
+        return;
+    m_playLive = live;
+    if (live)
+        startOperate();
+    else
+        stopOperate();
+    updateOnRig();
+    emit playLiveChanged(m_playLive);
+}
+
+QString Workbench::liveName() const
+{
+    if (!m_playLive)
+        return QString();
+    Function *f = m_doc->function(m_operateFunction);
+    return f != nullptr ? f->name() : (m_stack != nullptr ? m_stack->title() : QString());
 }
 
 void Workbench::stopOperate()
@@ -2519,21 +2571,22 @@ void Workbench::slotModeChanged()
            fresh preview (a start only: no start/stop race). */
         m_operateFunction = Function::invalidId();
         m_previewFunction = Function::invalidId();
+        const bool wasLive = m_playLive;
+        m_playLive = false;
         startPreview();
+        if (wasLive)
+            emit playLiveChanged(false);
     }
     else
     {
-        // Design -> Operate: the same run carries on as the live one (a
-        // cue's own preview stops: Live is blind in the tree).
-        if (m_ownPreview)
-            stopPreview();
-        else if (m_previewFunction != Function::invalidId())
-        {
-            m_operateFunction = m_previewFunction;
-            m_previewFunction = Function::invalidId();
-        }
-        else
-            startOperate();
+        // Design -> Operate: Blind. The Design preview stops; what is
+        // loaded reaches the stage only by Play Live.
+        const bool wasLive = m_playLive;
+        m_playLive = false;
+        stopPreview();
+        stopOperate();
+        if (wasLive)
+            emit playLiveChanged(false);
     }
     updateOnRig();
 }
@@ -2586,6 +2639,11 @@ void Workbench::hideEvent(QHideEvent *ev)
     {
         stopPreview();
         stopOperate();
+        if (m_playLive)
+        {
+            m_playLive = false;
+            emit playLiveChanged(false);
+        }
     }
     scheduleEncoderRings();     // the controller's rings go dark
     QWidget::hideEvent(ev);

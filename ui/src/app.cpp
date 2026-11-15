@@ -782,6 +782,9 @@ void App::init()
         ProgrammingManager *pm = new ProgrammingManager(m_tab, m_doc);
         buildTab = pm;
         connect(pm, &ProgrammingManager::requestSave, this, &App::slotFileSave);
+        // Operate: the Workbench's Play Live is said in the footer (one status source).
+        if (Workbench *bench = pm->workbench())
+            connect(bench, &Workbench::playLiveChanged, this, [this]() { updateStageIndicator(); });
         connect(pm, &ProgrammingManager::powerEstimateChanged, this,
                 [this](double amps, double kw, bool overload, const QString &detail) {
             if (m_statusPowerLabel == NULL)
@@ -5083,6 +5086,18 @@ QString App::stageIndicatorText(Stage *stageOut, QString *tipOut) const
                  "lights show now.") + (playing.isEmpty() ? QString()
                  : tr(" A cue list keeps running underneath: %1.").arg(running.join(QStringLiteral(", "))))
               + tr(" Click for the Show Tree.");
+    }
+    else if (!design && ProgrammingManager::instance() != nullptr
+             && ProgrammingManager::instance()->workbench() != nullptr
+             && ProgrammingManager::instance()->workbench()->playsLive())
+    {
+        // Operate: the Workbench's Play Live puts what is loaded on the stage.
+        stage = Stage::Live;
+        text = tr("\u25cf LIVE \u00b7 Workbench: %1")
+                   .arg(ProgrammingManager::instance()->workbench()->liveName());
+        tip = tr("The Workbench is playing what is loaded on the stage (Play Live). Click Back to "
+                 "Blind in the Workbench, or leave it, to take it off. Show-only fixtures still "
+                 "wait for a GO.") + runningTip;
     }
     else if (!playing.isEmpty())
     {

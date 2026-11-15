@@ -309,6 +309,9 @@ private slots:
      *  then clears the selection; in Build the same. */
     void escBacksOutThenClearsTheSelection();
 
+    /** Q236: Operate's Workbench is Blind; Play Live said in the footer. */
+    void workbenchPlayLiveIsSaidInTheFooter();
+
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)
      *  doesn't land on a freed Doc. Last: it deletes the app. */

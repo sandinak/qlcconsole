@@ -4891,6 +4891,79 @@ void AppViews_Test::quittingWithTheShowTreeShowing()
     QVERIFY(ShowTreeView::instance() == nullptr);
 }
 
+/* Q236: the Workbench opened in Operate is Blind; Play Live is one click and
+   the footer says so (one status source); a second click, Design or leaving
+   it is Blind again. QLC_SHOT_DIR + QLC_SHOT_PREFIX: pictures at three sizes. */
+void AppViews_Test::workbenchPlayLiveIsSaidInTheFooter()
+{
+    Doc *doc = m_app->doc();
+    m_app->setWorkspaceView(App::ConsoleView);
+    Scene *scene = new Scene(doc);
+    scene->setName("01-01.01-Wash");
+    QVERIFY(doc->addFunction(scene));
+    const quint32 sid = scene->id();
+    auto tidy = qScopeGuard([this, doc, sid]() {
+        if (ShowTreeView::instance() != nullptr)
+            ShowTreeView::instance()->closeWorkbench();
+        doc->masterTimer()->stopAllFunctions();
+        doc->setMode(Doc::Design);
+        doc->deleteFunction(sid);
+        doc->resetModified();
+    });
+    const QByteArray shotDir = qgetenv("QLC_SHOT_DIR");
+    const QString prefix = qEnvironmentVariable("QLC_SHOT_PREFIX", QStringLiteral("after"));
+    m_app->show();
+    doc->setMode(Doc::Operate);
+    m_app->hideViewNotice();
+    m_app->m_operateOffered = true;
+    m_app->showContext("Show Tree");
+    QVERIFY(ProgrammingManager::openFunction(sid));
+    Workbench *wb = ProgrammingManager::instance()->workbench();
+    QVERIFY(wb != nullptr && wb->isVisible());
+    auto shots = [&](const QString &state) {
+        if (shotDir.isEmpty())
+            return;
+        QDir().mkpath(QString::fromLocal8Bit(shotDir));
+        for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+        {
+            m_app->resize(sz);
+            for (int i = 0; i < 5; ++i)
+                QCoreApplication::processEvents();
+            const QString base = QString::fromLocal8Bit(shotDir)
+                + QStringLiteral("/%1-workbench-operate-%2-%3").arg(prefix, state).arg(sz.width());
+            QVERIFY(m_app->grab().save(base + QStringLiteral(".png")));
+        }
+    };
+    auto chipText = [this]() { return m_app->stageIndicatorText(nullptr, nullptr); };
+
+    // Blind on opening: the stage keeps the show; the footer does not say Workbench.
+    QVERIFY(!wb->playsLive());
+    QVERIFY(!scene->isRunning());
+    QVERIFY(!chipText().contains("Workbench"));
+    shots("blind");
+
+    // One click: live, and the footer says so.
+    QToolButton *play = wb->findChild<QToolButton *>("workbenchPlay");
+    QVERIFY(play != nullptr && play->isVisible() && play->isEnabled());
+    play->click();
+    QVERIFY(wb->playsLive());
+    QVERIFY2(chipText().contains("Workbench: 01-01.01-Wash"), qPrintable(chipText()));
+    QVERIFY(m_app->m_statusStage->text().contains("LIVE"));
+    shots("live");
+
+    // A second click: Blind again, the footer back.
+    play->click();
+    QVERIFY(!wb->playsLive());
+    QVERIFY(!chipText().contains("Workbench"));
+
+    // Leaving (Design) is Blind too.
+    play->click();
+    QVERIFY(wb->playsLive());
+    doc->setMode(Doc::Design);
+    QVERIFY(!wb->playsLive());
+    QVERIFY(!chipText().contains("Workbench"));
+}
+
 /* Q150: the venue chip is in the footer, app-wide: "Set Venue…" in the
    qlcconsole and Everything views, in Classic only once the show has
    venues; View ▸ Venue… and the Lighting Studio's Focus ▸ Venues ▸ open

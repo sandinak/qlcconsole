@@ -83,6 +83,7 @@ private slots:
      *  member or a chaser's step -- which would act on the world (set
      *  channels, start things, run programs). Started from anywhere else
      *  the same Script runs. */
+    void operateIsBlindUntilPlayLive();
     void aPreviewNeverRunsAScript();
     /** Two layers set one channel: the lower layer wins on the DMX; ▲
      *  swaps them and the output follows; ⌘Z puts it back. */
