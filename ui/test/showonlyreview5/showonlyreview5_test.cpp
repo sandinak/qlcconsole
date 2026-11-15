@@ -63,6 +63,10 @@
 #include <QThread>
 #include "cuestack.h"
 #include "cue.h"
+#include "collection.h"
+#include "timecodesource.h"
+#include "timecodecues.h"
+#include "showtreecontroller.h"
 
 enum { LaserAt = 0, Stage = 10, Flame = 14 };
 
@@ -1456,6 +1460,156 @@ void ShowOnlyReview5_Test::r7CueStackStampSurvivesARepatch()
     QCOMPARE(sent(Free), 0);
     cs->stop();
     tick(3);
+}
+
+/* R7-7. A Show Tree cue list set to follow timecode (saved with the show:
+   FollowTimecode="1") GOes its cues as timecode reaches their times
+   (TimecodeCues::slotTime() -> ShowControl::run(RouteTimecode)), with no
+   StampScope: each GO is stamped as a hand's GO in the live session. The
+   rule: "timecode, only if armed in Operate". Nothing armed it; Operate;
+   the band's playback rolls timecode: the flame cue fires. */
+void ShowOnlyReview5_Test::r7TimecodeCueListFiresUnarmed()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fire);
+    m_doc->timecodeSource();                    // makes TimecodeCues
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction(QStringLiteral("P"));
+    const quint32 list = st->addCueList(prod, QStringLiteral("Song"));
+    const quint32 cue = st->addCue(list, -1, QStringLiteral("Flame hit"));
+    QVERIFY(st->setCueTimecode(cue, 1000));
+    QVERIFY(st->setListFollowTimecode(list, true));   // as loaded with the show
+    QCoreApplication::processEvents();
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(ch != nullptr);
+    QVERIFY(ch->stepsCount() >= 1);
+    Collection *coll = qobject_cast<Collection *>(m_doc->function(ch->steps().at(0).fid));
+    QVERIFY(coll != nullptr);
+    coll->addFunction(fire->id());              // the cue's look lights the flame
+
+    m_doc->setMode(Doc::Operate);
+    tick(2);
+    m_doc->timecodeSource()->updateTimeCode(0, 0, 30);
+    m_doc->timecodeSource()->updateTimeCode(0, 500, 30);
+    m_doc->timecodeSource()->updateTimeCode(0, 1000, 30);   // the cue's time
+    tick(5);
+    QVERIFY(ch->isRunning());                   // timecode GOed it
+    QVERIFY(coll->functions().contains(fire->id()));
+    QVERIFY(fire->isRunning());
+    QCOMPARE(sent(Flame), 0);                   // never armed in Operate: held
+    st->setListFollowTimecode(list, false);
+}
+
+/* R7-8. A show loaded while in Operate (web /loadProject: no mode change):
+   Doc::loaded starts the session at the end of Doc::loadXML(), and the
+   Virtual Console is loaded AFTER it (App::loadXML()). VCXYPad::loadXML()
+   ends with m_area->setPosition(saved), whose positionChanged() reaches
+   slotPositionChanged() in Operate with a new point: stamped as a hand's
+   move in the new session -- the pad drives a Show-only mover's pan and
+   tilt with nobody touching it. */
+void ShowOnlyReview5_Test::r7XYPadLoadedInOperateIsStamped()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Review7"));
+    def->setModel(QStringLiteral("Laser mover"));
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("2ch"));
+    QLCChannel *pan = new QLCChannel();
+    pan->setName(QStringLiteral("Pan"));
+    pan->setGroup(QLCChannel::Pan);
+    pan->setControlByte(QLCChannel::MSB);
+    def->addChannel(pan);
+    mode->insertChannel(pan, 0);
+    QLCChannel *tilt = new QLCChannel();
+    tilt->setName(QStringLiteral("Tilt"));
+    tilt->setGroup(QLCChannel::Tilt);
+    tilt->setControlByte(QLCChannel::MSB);
+    def->addChannel(tilt);
+    mode->insertChannel(tilt, 1);
+    def->addMode(mode);
+    mode->cacheHeads();
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(def));
+    Fixture *mover = new Fixture(m_doc);
+    mover->setName(QStringLiteral("Mover"));
+    mover->setFixtureDefinition(def, mode);
+    mover->setUniverse(0);
+    mover->setAddress(30);
+    mover->setOutputRules(Fixture::ShowOnly);
+    QVERIFY(m_doc->addFixture(mover));
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    tick(2);
+
+    emit m_doc->loaded();                       // the show loaded in Operate: a new session
+    QWidget w;
+    VCXYPad pad(&w, m_doc);                     // the VC loads after it
+    VCXYPadFixture fx(m_doc);
+    fx.setHead(GroupHead(mover->id(), 0));
+    pad.appendFixture(fx);
+    for (VCXYPadFixture &f : pad.m_fixtures)
+        f.arm();
+    pad.m_area->setPosition(QPointF(220, 40));  // as VCXYPad::loadXML() ends
+    for (int i = 0; i < 3; i++)
+    {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        pad.writeDMX(m_doc->masterTimer(), ua);
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        tick(1);
+    }
+    QCOMPARE(sent(30), 0);                      // nobody moved it: held at safe
+}
+
+/* R7-9. The cut (E1) resets the stored values; the functions' gates flip
+   only when the MasterTimer refreshes them (or the stop reaches each
+   function). The universe threads run processFaders() AFTER the
+   MasterTimer's tick (Universe::run(), woken by tick()): a frame whose
+   tick refreshed the gates before the stop is processed after the cut,
+   with the gates still "the show" -- it writes the cue back. From the
+   next tick the function is held, and holding means "undo to what the
+   channel had": on an LTP channel, the value that frame just wrote. The
+   stop then lets go, and LTP keeps it. All Off left the fogger on. (MSC
+   All Off: the stop is queued; on the main thread the same window is the
+   cut -> the per-function stop loop.) */
+void ShowOnlyReview5_Test::r7AllOffRaceLeavesAnLtpChannelUp()
+{
+    QVERIFY(addFogger(QStringLiteral("Fogger"), Flame) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fog = new Scene(m_doc);
+    fog->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fog);
+    Chaser *list = listOf(fog, QStringLiteral("Fog"));
+    m_doc->setMode(Doc::Operate);
+    goList(list);
+    tick(5);
+    QCOMPARE(sent(Flame), 255);
+
+    // The MasterTimer has ticked (gates refreshed) and woken the universe
+    // threads; MSC's All Off lands before they process that frame.
+    QThread *msc = QThread::create([this]() {
+        ShowControl::Request off;
+        off.command = ShowControl::AllOff;
+        m_doc->showControl()->run(off, ShowControl::RouteMsc);
+    });
+    msc->start();
+    QVERIFY(msc->wait(5000));
+    delete msc;
+    QCOMPARE(sent(Flame), 0);               // the cut
+    {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        for (Universe *u : ua)
+            u->processFaders();             // the woken universe thread's frame
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    }
+    const int raced = sent(Flame);
+    tick(10);                               // the queued stop runs; ticks go on
+    QVERIFY(!fog->isRunning());
+    const int after = sent(Flame);
+    qDebug() << "frame after the cut:" << raced << "ten frames later:" << after;
+    QCOMPARE(after, 0);                     // All Off: out, and stays out
+    QCOMPARE(raced, 0);
 }
 
 QTEST_MAIN(ShowOnlyReview5_Test)
