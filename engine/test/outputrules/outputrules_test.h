@@ -234,14 +234,14 @@ private slots:
      *  a maintenance send) copies postGMValues() unlocked, mid-frame: a held
      *  writer's value, not yet put back, goes out */
     void r8_aSendBetweenTwoFramesCarriesAHeldWriter();
-    /** R8-5: the effect runner's own fader is trusted always: an effect
-     *  GO'd before a Show-only fixture is re-patched drives it at its new
-     *  address, past the new marks */
-    void r8_anEffectFollowsARepatchPastTheMarks();
     /** R8-6: in Blind on a universe with no Blackout-exempt circuit nothing
      *  is sent at all -- not the emergency stop's cut, not Blackout: the
      *  rig keeps the last frame, the laser on */
     void r8_allOffAndBlackoutInBlindNeverReachTheRig();
+    /** R8-5: the effect runner's own fader is trusted always: an effect
+     *  GO'd before a Show-only fixture is re-patched drives it at its new
+     *  address, past the new marks */
+    void r8_anEffectFollowsARepatchPastTheMarks();
 
 private slots:
     /* The e-stop rules (OutputRuleKeeper E1-E7), swept: each writer set

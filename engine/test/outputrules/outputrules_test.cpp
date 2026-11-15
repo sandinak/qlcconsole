@@ -2764,7 +2764,7 @@ void OutputRules_Test::r8_anOnAtOpenFixtureOnItsAddressDrivesIt()
     m_doc->setMode(Doc::Operate);       // OnAtOperate: armed now; no GO
     tickFrame(Flame);
     tickFrame(Flame);
-    qDebug() << "R8-2: caps" << Qt::hex << int(m_uni->channelCapabilities(Flame)) << Qt::dec
+    qWarning() << "R8-2: caps" << Qt::hex << int(m_uni->channelCapabilities(Flame)) << Qt::dec
              << "armed" << m_uni->onAtOpenArmed() << "post" << int(uchar(m_uni->postGMValues()->at(Flame)))
              << "work at" << work->address() << "patched" << work->isPatched()
              << "sent" << sent(Flame);
@@ -2906,6 +2906,7 @@ void OutputRules_Test::r8_anEffectFollowsARepatchPastTheMarks()
         frame(Flame);
     };
     m_doc->setMode(Doc::Operate);
+    qWarning("R8-5: GO");
     goList(a);                                  // a GO
     int most = 0;
     for (int i = 0; i < 8; i++)
@@ -2915,8 +2916,11 @@ void OutputRules_Test::r8_anEffectFollowsARepatchPastTheMarks()
     }
     QVERIFY2(most > 0, "the GO'd effect drives the flame");
     // Re-patched mid-show to a free address: no GO since.
+    qWarning() << "R8-5: drove" << most << "; moving";
     flame->setAddress(Moved);
+    qWarning("R8-5: moved");
     QCoreApplication::processEvents();
+    qWarning("R8-5: events done");
     QVERIFY(m_uni->channelCapabilities(Moved) & Universe::ShowOnlyOutput);
     most = 0;
     for (int i = 0; i < 8; i++)
@@ -2924,6 +2928,7 @@ void OutputRules_Test::r8_anEffectFollowsARepatchPastTheMarks()
         tickFx();
         most = qMax(most, sent(Moved));
     }
+    qWarning() << "R8-5: after move" << most;
     stopFunctions();
     QCOMPARE(most, 0);
 }
@@ -2964,7 +2969,7 @@ void OutputRules_Test::r8_allOffAndBlackoutInBlindNeverReachTheRig()
     m_doc->inputOutputMap()->setBlackout(false);
     m_doc->inputOutputMap()->setOutputInhibited(false);
     stopFunctions();
-    qDebug() << "R8-6: sent in Blind" << inBlind << "after All Off" << afterAllOff
+    qWarning() << "R8-6: sent in Blind" << inBlind << "after All Off" << afterAllOff
              << "after Blackout" << afterBlackout;
     QCOMPARE(afterAllOff, 0);
     QCOMPARE(afterBlackout, 0);
