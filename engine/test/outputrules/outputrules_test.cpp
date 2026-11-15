@@ -2929,6 +2929,9 @@ void OutputRules_Test::r8_anEffectFollowsARepatchPastTheMarks()
         most = qMax(most, sent(Moved));
     }
     qWarning() << "R8-5: after move" << most;
+    /* Let the effect go first: a tick on this thread would have the
+       runner claim the universes the tick holds (as sweepEffectRunner). */
+    m_doc->effectScriptRunner()->destroyInstancesForScene(scene->id(), true);
     stopFunctions();
     QCOMPARE(most, 0);
 }
