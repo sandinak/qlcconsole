@@ -539,22 +539,11 @@ void ConnectionEditor::load()
 
     /* The leg: the one asked for; else (it moved to another interface, say)
        the first on that protocol; else the first that is really there. */
-    /* Review 19: a patch held by the Show-only rules is a leg too, on the
-       line it waits on -- so re-aiming it here reaches it (and the check). */
-    auto legLine = [](const OutputPatch *op) {
-        if (op == nullptr || op->plugin() == nullptr)
-            return QLCIOPlugin::invalidLine();
-        if (op->isPatched())
-            return op->output();
-        if (op->isPending() && op->holdKind() != OutputPatch::NotHeld)
-            return op->pendingLine();
-        return QLCIOPlugin::invalidLine();
-    };
     int wanted = -1, samePlugin = -1, first = -1;
     for (int i = 0; i < u->outputPatchesCount(); i++)
     {
         OutputPatch *op = u->outputPatch(i);
-        if (legLine(op) == QLCIOPlugin::invalidLine())
+        if (op == nullptr || op->plugin() == nullptr || op->isPending())
             continue;
         if (first < 0)
             first = i;
@@ -562,7 +551,7 @@ void ConnectionEditor::load()
         {
             if (samePlugin < 0)
                 samePlugin = i;
-            if (wanted < 0 && legLine(op) == m_origLine)
+            if (wanted < 0 && op->output() == m_origLine)
                 wanted = i;
         }
     }
@@ -571,14 +560,14 @@ void ConnectionEditor::load()
     for (int i = 0; i < u->outputPatchesCount(); i++)
     {
         OutputPatch *op = u->outputPatch(i);
-        if (legLine(op) == QLCIOPlugin::invalidLine())
+        if (op == nullptr || op->plugin() == nullptr || op->isPending())
             continue;
         if (i == m_origIndex)
         {
             m_origPlugin = op->plugin()->name();
-            m_origLine = legLine(op);
+            m_origLine = op->output();
         }
-        else if (op->isPatched())
+        else
             others << m_patcher->outputLegText(op);
     }
     if (m_origIndex < 0)
@@ -1111,12 +1100,6 @@ void ConnectionEditor::slotConfigurePlugin()
         return;
     const quint32 line = pickedLine();
     p->configure();
-    // Review 19 (C1): its settings window may have aimed a Show-only universe back here.
-    if (m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->recheckShowOnlyTargets() > 0)
-        QMessageBox::warning(this, tr("Show only"), m_doc->inputOutputMap()->outputPatch(m_universe) != nullptr
-                             && m_doc->inputOutputMap()->outputPatch(m_universe)->showOnlyHold()
-                             ? m_doc->inputOutputMap()->outputPatch(m_universe)->reconnectHeld()
-                             : tr("A universe with Show-only fixtures was aimed back at this computer: it is held."));
     /* Its interfaces and devices may be different now. */
     m_loading = true;
     m_interfaceCombo->clear();
@@ -1251,7 +1234,6 @@ bool ConnectionEditor::apply()
             m_error = tr("Could not patch that universe to %1.").arg(plugin);
             return false;
         }
-        const bool openBefore = op->isPatched();
         /* Another protocol's settings mean nothing to this one. */
         if (samePlugin == false)
         {
@@ -1292,16 +1274,6 @@ bool ConnectionEditor::apply()
             case KindNone:
             break;
         }
-        /* Review 18 (N1): aimed back at this computer, a universe with
-           Show-only fixtures is held -- said. */
-        if (openBefore && op->isPending() && op->showOnlyHold())
-        {
-            m_error = op->reconnectHeld();
-            return false;
-        }
-        // A held leg re-aimed here: back now if it may be (N1 decides).
-        if (openBefore == false && op->isPending())
-            iom->retryOfflinePatches();
     }
 
     // ---- Input, profile ----

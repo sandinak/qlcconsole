@@ -382,13 +382,6 @@ bool UniversePatcher::applyTarget(quint32 universe, const QString &pluginName,
         target.insert(QStringLiteral("outputIP"), address);
         target.insert(QStringLiteral("outputUni"), portAddress);
         op->setPluginParameters(target);
-        /* Review 18 (N1): aimed back at this computer, a universe with
-           Show-only fixtures is held -- said. */
-        if (op->isPending() && op->showOnlyHold())
-        {
-            QMessageBox::warning(m_parent, tr("Show only"), op->reconnectHeld());
-            return false;
-        }
         return true;
     }
     return false;

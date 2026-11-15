@@ -29,9 +29,6 @@ class ArtNet_Test final : public QObject
     Q_OBJECT
 
 private slots:
-    /** Review 19: a cleared outputIP / outputUni is the controller's
-     *  default at once (broadcast, its own universe), not at a reconnect */
-    void r19_unSetParameterPutsTheDefaultBackAtOnce();
     /** Review 19: a closing frame whose send failed goes again on the flush */
     void r19_aFailedClosingFrameIsTriedOnceMore();
     /** Review 16 F5: one of the outputs a universe with Show-only

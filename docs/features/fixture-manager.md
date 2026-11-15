@@ -887,9 +887,8 @@ opened — over the web while in Operate too). So:
   too — so a node that keeps its last frame never keeps a laser on. In
   Blind that frame has the rest of the rig as it was before Blind, never the
   preview. A held output comes back with what the show gives them now.
-- **Show-only fixtures need a network output to another device** in this
-  version: Art-Net, sACN (E1.31) or WLED — never back to this computer. A
-  universe with one can't be patched to anything else (USB, MIDI, Loopback,
+- **Show-only fixtures need a network output** in this version: Art-Net,
+  sACN (E1.31) or WLED, aimed anywhere. A universe with one can't be patched to anything else (USB, MIDI, Loopback,
   OSC…), refused saying why, and one already there is held, its last frame
   sending the Show-only channels safe — because such an interface can be
   unplugged, swapped or rescanned and come back as another device. While it
@@ -982,13 +981,14 @@ none.
 The rules are saved with the fixture, only when it has any, so a show
 without them is unchanged; QLC+ and older qlcconsole builds skip them.
 
-**Known limit:** the Show-only rule follows the show's own output, not
-what happens to it after: a universe passed through to another (input
-passthrough), or sent to a local Loopback or another program that sends
-it on, can still reach a laser that way. Don't route a Show-only
-universe's channels through a passthrough or Loopback chain. Art-Net
-**broadcast** reaches receivers on this computer too: for lasers, aim the
-universe at its node (unicast).
+**Known limit:** the Show-only rule checks the kind of output, not where
+it is aimed or what happens to it after. An Art-Net, sACN or WLED output
+can be aimed at this computer — fine for a visualiser. But a universe
+passed through to another (input passthrough), or received on this
+computer by a Loopback or another program that sends it on to a USB
+output, can still reach a laser that way, and nothing checks that chain.
+Don't route a Show-only universe's channels through a passthrough or
+Loopback chain to a USB interface.
 
 ## Context menu
 

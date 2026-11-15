@@ -10,6 +10,17 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Art-Net/E1.31 unSetParameter doesn't reset the controller target until reconnect (stock)
+
+Clearing an Art-Net or sACN target (outputIP, outputUni, ucastIP, multicast,
+universe) drops it from the plugin's parameter store, but the controller
+keeps sending to the old target until the line reconnects -- as stock QLC+
+does. Review 19 made unSetParameter() put the default back at once, and that
+made PatchUndo (clear all, then set each) send closing frames to broadcast /
+Port-Address 0:0:0, a real rig; reverted in 0.4.8 (fix/048-show-only-scope).
+Fix together with PatchUndo applying the final parameters in one
+setPluginParameters() call.
+
 ## Watch: WledConfigCheck_Test::aFixtureAtAnOldAddressFollowsItsDeviceByMac
 
 Counted 2 HTTP posts instead of 1 once on dink under load (feat/046-candle-safety's

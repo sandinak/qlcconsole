@@ -258,6 +258,9 @@ bool E131Controller::retryUnsent(quint32 universe)
     UniverseInfo &info = m_universeMap[universe];
     const QByteArray packet = info.unsentPacket;
     info.unsentPacket.clear();
+    // Not on the show's rig network: held, as sendDmx() -- nothing sent, not a failure.
+    if (m_held.load(std::memory_order_relaxed))
+        return true;
     if (m_UdpSocket->writeDatagram(packet.data(), packet.size(), info.unsentAddress, info.unsentPort) >= 0)
         return true;
     qWarning() << "[E1.31] the closing frame of universe" << universe + 1 << "to"

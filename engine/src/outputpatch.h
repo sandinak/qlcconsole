@@ -209,25 +209,14 @@ public:
     QString deviceText() const;
     static QString deviceText(const QLCIOPlugin *plugin, quint32 line, const QString &name);
 
-    /** Review 18: asked, when an open patch is re-aimed (a target parameter,
-     *  isTargetParameter()), whether its universe may send to the new
-     *  target (N1); a non-empty answer holds it (HeldShowOnly), the closing
-     *  frame going to the old target first. The Universe sets it from the
-     *  I/O map; unset, nothing is asked. */
-    typedef std::function<QString(const OutputPatch *patch, const QMap<QString, QVariant> &params)> TargetCheck;
-    void setTargetCheck(const TargetCheck &check) { m_targetCheck = check; }
-
-    /** Review 19 (A1): whether another open patch of this universe uses
-     *  @p line of this plugin -- then a hold or the destructor neither
-     *  closes nor forgets (line, universe), which is that patch's too. The
-     *  Universe sets it. */
+    /** Review 19 (A1), review 20: whether another open patch of this
+     *  universe uses @p line of this plugin -- then a hold, the destructor,
+     *  a set() onto another line and setPending() neither close nor forget
+     *  (line, universe), which is that patch's too (no closing frame
+     *  either: the line goes on sending this universe). The Universe sets
+     *  it. */
     typedef std::function<bool(const OutputPatch *patch, quint32 line)> SiblingOnLine;
     void setSiblingOnLine(const SiblingOnLine &check) { m_siblingOnLine = check; }
-
-    /** Review 19 (C1): what the plugin itself was set to (a protocol's
-     *  settings window, past this patch) taken into this patch's
-     *  parameters, so it is saved and re-checked as it is */
-    void adoptPluginParameters(const QMap<QString, QVariant> &values);
 
     /** The line it was open on when it was held (UINT_MAX: never held) */
     quint32 heldOnLine() const { return m_heldOnLine; }
@@ -323,7 +312,6 @@ private:
     QMap<QString, QVariant>m_parametersCache;
     /** See setClosingFrame() */
     std::function<bool(QByteArray &, bool)> m_closingFrame;
-    TargetCheck m_targetCheck;
     SiblingOnLine m_siblingOnLine;
     quint32 m_heldOnLine = UINT_MAX;
     bool siblingOnLine(quint32 line) const { return m_siblingOnLine && m_siblingOnLine(this, line); }

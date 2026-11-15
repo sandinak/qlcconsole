@@ -716,21 +716,13 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
     QMutexLocker locker(&m_universeMutex);
     QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(pluginName);
     /* N1 (outputpatch.h): a universe with Show-only fixtures has no output
-       but a network DMX one to another device -- open or waiting for its
-       interface. The patch's target is the one it will have: what it has
-       now (set() keeps it) with @p params over it. */
+       but a network DMX one -- open or waiting for its interface. */
     const bool hasUID = outputUID.isEmpty() == false && outputUID != KOutputNone;
     if (isFeedback == false && plugin != NULL && (output != QLCIOPlugin::invalidLine() || hasUID)
         && m_universeArray.at(universe)->showOnlyChannelCount() > 0)
     {
-        Universe *nu = m_universeArray.at(universe);
-        QMap<QString, QVariant> target;
-        if (index >= 0 && index < nu->outputPatchesCount() && nu->outputPatch(index) != NULL)
-            target = nu->outputPatch(index)->getPluginParameters();
-        for (auto it = params.constBegin(); it != params.constEnd(); ++it)
-            target[it.key()] = it.value();
         const QString refusal = showOnlyRefusal(plugin, hasUID ? outputUID : plugin->outputs().value(int(output)),
-                                                output, target, universe);
+                                                output);
         if (refusal.isEmpty() == false)
         {
             m_lastPatchRefusal = refusal;
@@ -1073,8 +1065,7 @@ void InputOutputMap::loadPatch(quint32 universe, const Universe::OfflinePatch &p
        onto an interface a held laser universe is cabled to. */
     OutputPatch::HoldKind keptKind = OutputPatch::NotHeld;
     const QString showOnlyWhy = patch.tag == Universe::OutputPatchTag && showOnly
-            ? showOnlyRefusal(plugin, hasIdentity ? patch.uid : plugin->outputs().value(line), patch.line,
-                              patch.params, universe)
+            ? showOnlyRefusal(plugin, hasIdentity ? patch.uid : plugin->outputs().value(line), patch.line)
             : QString();
     if (showOnlyWhy.isEmpty() == false)
     {
@@ -1223,8 +1214,6 @@ bool InputOutputMap::hasOfflinePatches() const
 int InputOutputMap::retryOfflinePatches()
 {
     int reconnected = 0;
-    // Review 19 (C1): what a protocol's settings window aimed, first.
-    recheckShowOnlyTargets();
 
     /* Review 17: the patches held off a reserved interface first (F4) --
        one that shared its line before comes back there, as stock -- then
@@ -1243,10 +1232,10 @@ int InputOutputMap::retryOfflinePatches()
                     continue;
                 QLCIOPlugin *plugin = op->plugin();
                 const QMap<QString, QVariant> params = op->getPluginParameters();
-                // N1: only a network DMX output to another device while the universe has Show-only fixtures.
+                // N1: only a network DMX output while the universe has Show-only fixtures.
                 if (uni->showOnlyChannelCount() > 0)
                 {
-                    const QString refusal = showOnlyRefusal(plugin, op->outputName(), op->pendingLine(), params, i);
+                    const QString refusal = showOnlyRefusal(plugin, op->outputName(), op->pendingLine());
                     if (refusal.isEmpty() == false)
                     {
                         if (op->showOnlyHold() == false)
@@ -1380,8 +1369,6 @@ void InputOutputMap::slotRetryOfflinePatches()
     applyTransmitGate();
     if (hasOfflinePatches())
         retryOfflinePatches();
-    else
-        recheckShowOnlyTargets();
     noteTransmitGateStatus();
 }
 
@@ -1921,8 +1908,6 @@ void InputOutputMap::configurePlugin(const QString& pluginName)
     QLCIOPlugin* outputPlugin = m_doc->ioPluginCache()->plugin(pluginName);
     if (outputPlugin != NULL)
         outputPlugin->configure();
-    // Review 19 (C1): its settings window may have aimed a Show-only universe back here.
-    recheckShowOnlyTargets();
 }
 
 bool InputOutputMap::canConfigurePlugin(const QString& pluginName)
@@ -2052,14 +2037,6 @@ QString InputOutputMap::networkOnlyText(const QString &device)
               "the Show-only rule off.").arg(device);
 }
 
-QString InputOutputMap::loopbackText(const QString &device)
-{
-    // N1's words for a network output that comes back to this computer.
-    return tr("Lasers, foggers and flame need a network output to another device in this version — "
-              "Art-Net, sACN (E1.31) or WLED: %1 sends back to this computer. Patch this universe to "
-              "a node on the network, or take the Show-only rule off.").arg(device);
-}
-
 QString InputOutputMap::reservedText(const QString &device, const QString &universe, const QString &output)
 {
     // F4's words, everywhere it refuses or holds.
@@ -2067,77 +2044,14 @@ QString InputOutputMap::reservedText(const QString &device, const QString &unive
               "output from %2 to free it.").arg(device, universe, output);
 }
 
-static bool isOwnAddress(const QString &text)
-{
-    /* 127.0.0.0/8, ::1, 0.0.0.0 / :: (sent to: this host), or an address of
-       one of this machine's interfaces -- an IPv4-mapped one as its IPv4. */
-    QHostAddress a;
-    if (a.setAddress(text.trimmed()) == false)
-        return false;
-    bool v4 = false;
-    const quint32 mapped = a.toIPv4Address(&v4);
-    if (v4 && a.protocol() == QAbstractSocket::IPv6Protocol)
-        a = QHostAddress(mapped);
-    if (a.isLoopback() || a == QHostAddress(QHostAddress::AnyIPv4) || a == QHostAddress(QHostAddress::AnyIPv6))
-        return true;
-    for (const NetworkRoute::LocalAddress &la : NetworkRoute::localAddresses())
-        if (la.ip.isEqual(a, QHostAddress::ConvertV4MappedToIPv4))
-            return true;
-    return false;
-}
-
-static QString expandLegacyArtNetTarget(const QString &target, const QString &lineAddress)
-{
-    /* As ArtNetController::setOutputIPAddress(): before 2016 only the
-       octets that differed from the line's own address were saved ("7",
-       "12.7") -- they replace its last ones. */
-    const QStringList octets = target.split(QLatin1Char('.'));
-    if (target.isEmpty() || target.contains(QLatin1Char(':')) || octets.count() >= 4)
-        return target;
-    QStringList ip = lineAddress.split(QLatin1Char('.'));
-    if (ip.count() != 4)
-        return target;
-    for (int i = 0; i < octets.count(); i++)
-        ip.replace(4 - octets.count() + i, octets.at(i));
-    return ip.join(QLatin1Char('.'));
-}
-
-QString InputOutputMap::showOnlyRefusal(QLCIOPlugin *plugin, const QString &lineName, quint32 line,
-                                        const QMap<QString, QVariant> &params, quint32 universe)
+QString InputOutputMap::showOnlyRefusal(QLCIOPlugin *plugin, const QString &lineName, quint32 line)
 {
     /* N1: a universe with Show-only fixtures sends only over Art-Net, sACN
-       or WLED (review 16) -- and Art-Net or sACN not back to this computer
-       (review 17): a loopback line, or a target that is loopback or this
-       machine's own address. */
-    if (plugin == NULL)
+       or WLED (review 16) -- to any target, this computer's own (a
+       visualiser) too. */
+    if (plugin == NULL || plugin->isNetworkDmxOutput())
         return QString();
-    if (plugin->isNetworkDmxOutput() == false)
-        return networkOnlyText(OutputPatch::deviceText(plugin, line, lineName));
-    const bool artNet = plugin->name() == QLatin1String("ArtNet");
-    const bool sacn = plugin->name() == QLatin1String("E1.31");
-    if (artNet == false && sacn == false)
-        return QString();
-    QHostAddress lineAddress;
-    if (lineAddress.setAddress(lineName) && lineAddress.isLoopback())
-        return loopbackText(lineName);
-    QString target;
-    if (artNet)
-        target = expandLegacyArtNetTarget(params.value(QStringLiteral("outputIP")).toString().trimmed(),
-                                          lineName);
-    else if (params.contains(QStringLiteral("multicast")) && params.value(QStringLiteral("multicast")).toInt() == 0)
-    {
-        target = params.value(QStringLiteral("ucastIP")).toString().trimmed();
-        /* Review 19: no ucastIP is E131Controller::addUniverse()'s default
-           receiver -- (line & 255.255.255.0) + universe + 1, the line itself
-           on loopback. */
-        if (target.isEmpty() && lineAddress.protocol() == QAbstractSocket::IPv4Protocol)
-            target = lineAddress.isLoopback() || universe == UINT_MAX
-                   ? lineAddress.toString()
-                   : QHostAddress(quint32((lineAddress.toIPv4Address() & 0xFFFFFF00) + (universe + 1))).toString();
-    }
-    if (target.isEmpty() == false && isOwnAddress(target))
-        return loopbackText(target);
-    return QString();
+    return networkOnlyText(OutputPatch::deviceText(plugin, line, lineName));
 }
 
 QString InputOutputMap::reservedWhy(const QLCIOPlugin *plugin, quint32 line, const OutputPatch *except) const
@@ -2179,10 +2093,7 @@ QString InputOutputMap::outputPatchRefusal(quint32 universe, const QString &plug
     const Universe *uni = m_universeArray.at(universe);
     if (uni->showOnlyChannelCount() > 0)
     {
-        const OutputPatch *op = index >= 0 && index < uni->outputPatchesCount() ? uni->outputPatch(index) : NULL;
-        const QString refusal = showOnlyRefusal(plugin, plugin->outputs().value(int(line)), line,
-                                                op != NULL ? const_cast<OutputPatch *>(op)->getPluginParameters()
-                                                           : QMap<QString, QVariant>(), universe);
+        const QString refusal = showOnlyRefusal(plugin, plugin->outputs().value(int(line)), line);
         if (refusal.isEmpty() == false)
             return refusal;
     }
@@ -2192,15 +2103,6 @@ QString InputOutputMap::outputPatchRefusal(quint32 universe, const QString &plug
 
 void InputOutputMap::watchShowOnly(Universe *uni)
 {
-    /* N1 when an output is re-aimed (review 18): Art-Net or sACN turned
-       back to this computer holds it. */
-    uni->setOutputTargetCheck([uni](const OutputPatch *op, const QMap<QString, QVariant> &params) {
-        if (uni->showOnlyChannelCount() == 0 || op->plugin() == NULL || op->isPatched() == false)
-            return QString();
-        return showOnlyRefusal(op->plugin(), op->plugin()->outputs().value(int(op->output())),
-                               op->output(), params, uni->id());
-    });
-
     /* N2: the first Show-only fixture on a universe holds its hardware
        patches -- after every mark of that change (beginShowOnlyMarks()),
        and not during a show load (recheckPatchesAfterLoad(), N3). Direct,
@@ -2249,12 +2151,12 @@ void InputOutputMap::endShowOnlyMarks()
 void InputOutputMap::holdShowOnlyOutputs(Universe *universe, bool fromLoad)
 {
     /* N2/N3: each output of a universe with Show-only fixtures that is not
-       a network DMX output to another device is held. N2 waits on the line
-       it was open on; N3 on its saved one. On a line other patches share
-       too (review 17, at runtime as on load): they are held first (F4, the
-       plugin only forgets them), then this universe's closing frame -- its
-       whole frame, the Show-only channels at safe -- goes out and is
-       flushed, and only then is the line closed. */
+       a network DMX output is held. N2 waits on the line it was open on;
+       N3 on its saved one. On a line other patches share too (review 17,
+       at runtime as on load): they are held first (F4, the plugin only
+       forgets them), then this universe's closing frame -- its whole
+       frame, the Show-only channels at safe -- goes out and is flushed,
+       and only then is the line closed. */
     bool held = false;
     for (int o = 0; o < universe->outputPatchesCount(); o++)
     {
@@ -2265,8 +2167,7 @@ void InputOutputMap::holdShowOnlyOutputs(Universe *universe, bool fromLoad)
         if (op->isPatched())
         {
             const quint32 line = op->output();
-            const QString why = showOnlyRefusal(plugin, plugin->outputs().value(int(line)), line,
-                                                op->getPluginParameters(), universe->id());
+            const QString why = showOnlyRefusal(plugin, plugin->outputs().value(int(line)), line);
             if (why.isEmpty())
                 continue;
             bool shared = false;
@@ -2297,8 +2198,7 @@ void InputOutputMap::holdShowOnlyOutputs(Universe *universe, bool fromLoad)
         }
         else if (op->isPending() && op->showOnlyHold() == false)
         {
-            const QString why = showOnlyRefusal(plugin, op->outputName(), op->pendingLine(),
-                                                op->getPluginParameters(), universe->id());
+            const QString why = showOnlyRefusal(plugin, op->outputName(), op->pendingLine());
             if (why.isEmpty())
                 continue;
             op->markHold(OutputPatch::HeldShowOnly, why);
@@ -2315,45 +2215,6 @@ void InputOutputMap::setLoadHold(bool hold)
     QMutexLocker locker(&m_universeMutex);
     foreach (Universe *uni, m_universeArray)
         uni->setLoadHold(hold);
-}
-
-int InputOutputMap::recheckShowOnlyTargets()
-{
-    /* Review 19 (C1): a protocol's own settings window ("Configure
-       ArtNet...", "Configure E1.31...") aims a universe straight in the
-       plugin. Each open output of a universe with Show-only fixtures is
-       checked again (N1) against what the plugin has now; one that fails is
-       held, its closing frame first. */
-    int held = 0;
-    for (quint32 u = 0; u < universesCount(); u++)
-    {
-        Universe *uni = m_universeArray.at(u);
-        if (uni->showOnlyChannelCount() == 0)
-            continue;
-        for (int o = 0; o < uni->outputPatchesCount(); o++)
-        {
-            OutputPatch *op = uni->outputPatch(o);
-            QLCIOPlugin *plugin = op != NULL ? op->plugin() : NULL;
-            if (plugin == NULL || op->isPatched() == false)
-                continue;
-            const quint32 line = op->output();
-            QMap<QString, QVariant> now = op->getPluginParameters();
-            const QMap<QString, QVariant> inPlugin = plugin->getParameters(u, line, QLCIOPlugin::Output);
-            for (auto it = inPlugin.constBegin(); it != inPlugin.constEnd(); ++it)
-                now[it.key()] = it.value();
-            const QString why = showOnlyRefusal(plugin, plugin->outputs().value(int(line)), line, now, u);
-            if (why.isEmpty())
-                continue;
-            // Kept as the plugin has it: saved so, and checked so again.
-            op->adoptPluginParameters(inPlugin);
-            QMutexLocker locker(&m_universeMutex);
-            op->hold(OutputPatch::HeldShowOnly, why, true, true);
-            held++;
-        }
-    }
-    if (held > 0)
-        emit offlinePatchesChanged();
-    return held;
 }
 
 int InputOutputMap::recheckPatchesAfterLoad()
@@ -2471,8 +2332,6 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
        it now rather than at the next retry tick. */
     if (plugin->linesAreHardware() && hasOfflinePatches())
         retryOfflinePatches();
-    // Review 19 (C1): a settings window that changed the plugin may have aimed one back here.
-    recheckShowOnlyTargets();
     if (keptOff)
         emit offlinePatchesChanged();
 

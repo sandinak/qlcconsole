@@ -419,31 +419,34 @@ void E131_Test::r18_aForgottenUniverseLeavesTheController()
     QVERIFY(left.contains(1));
 }
 
-void E131_Test::r19_unSetParameterPutsTheDefaultBackAtOnce()
+/* A closing frame whose send failed is tried once more on the flush
+   (retryUnsent()) -- but not from a line the rig network gate holds: it
+   sends nothing at all, as sendDmx() and Art-Net's writeDatagram() do. */
+void E131_Test::aHeldLineNeverRetriesTheClosingFrame()
 {
-    E131Plugin plugin;
-    E131Controller *ctrl = testController(&plugin, { 0 });
-    E131IO io;
-    io.controller = ctrl;
-    plugin.m_IOmapping.clear();
-    plugin.m_IOmapping.append(io);
-    const QHostAddress byDefault = ctrl->m_universeMap[0].outputUcastAddress;
-    plugin.setParameter(0, 0, QLCIOPlugin::Output, "multicast", 0);
-    plugin.setParameter(0, 0, QLCIOPlugin::Output, "ucastIP", "10.0.0.5");
-    plugin.setParameter(0, 0, QLCIOPlugin::Output, "universe", 9);
-    const QHostAddress aimed = ctrl->m_universeMap[0].outputUcastAddress;
-    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "ucastIP");
-    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "multicast");
-    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "universe");
-    const QHostAddress after = ctrl->m_universeMap[0].outputUcastAddress;
-    const bool multicast = ctrl->m_universeMap[0].outputMulticast;
-    const quint32 universe = ctrl->m_universeMap[0].outputUniverse;
-    plugin.m_IOmapping.clear();
-    delete ctrl;
-    QCOMPARE(aimed, QHostAddress("10.0.0.5"));
-    QCOMPARE(after, byDefault);
-    QVERIFY(multicast);
-    QCOMPARE(universe, quint32(1));
+    QUdpSocket rx;
+    QVERIFY(rx.bind(QHostAddress::LocalHost, 0));
+    QObject parent;
+    E131Controller *ctrl = testController(&parent, { 0 });
+    auto lose = [&]() {
+        UniverseInfo &info = ctrl->m_universeMap[0];
+        info.unsentPacket = QByteArray(126, char(0x10));
+        info.unsentAddress = QHostAddress::LocalHost;
+        info.unsentPort = rx.localPort();
+    };
+
+    lose();
+    QVERIFY(ctrl->retryUnsent(0));                                  // not held: sent
+    QVERIFY(rx.waitForReadyRead(2000));
+    QByteArray got(int(rx.pendingDatagramSize()), char(0));
+    rx.readDatagram(got.data(), got.size());
+    QCOMPARE(got.size(), 126);
+
+    lose();
+    ctrl->m_held.store(true);                                       // off the rig network
+    QVERIFY(ctrl->retryUnsent(0));                                  // not a failure
+    QVERIFY(ctrl->m_universeMap[0].unsentPacket.isEmpty());         // and not kept for later
+    QVERIFY2(rx.waitForReadyRead(200) == false, "a held E1.31 line sent its unsent closing frame");
 }
 
 QTEST_MAIN(E131_Test)

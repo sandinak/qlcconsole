@@ -229,21 +229,6 @@ void E131Plugin::flushOutput(quint32 output, quint32 universe)
         controller->retryUnsent(universe);
 }
 
-void E131Plugin::unSetParameter(quint32 universe, quint32 line, Capability type, QString name)
-{
-    E131Controller *controller = line < (quint32)m_IOmapping.length() ? m_IOmapping.at(line).controller : NULL;
-    if (controller != NULL && type == Output)
-    {
-        if (name == E131_UCASTIP)
-            controller->setOutputUCastAddress(universe, controller->defaultOutputUCastAddress(universe).toString());
-        else if (name == E131_MULTICAST)
-            controller->setOutputMulticast(universe, true);
-        else if (name == E131_UNIVERSE)
-            controller->setOutputUniverse(universe, universe + 1);
-    }
-    QLCIOPlugin::unSetParameter(universe, line, type, name);
-}
-
 void E131Plugin::forgetOutput(quint32 output, quint32 universe)
 {
     // Review 18: out of the controller too, so nothing resends it.
