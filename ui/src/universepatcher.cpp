@@ -375,8 +375,13 @@ bool UniversePatcher::applyTarget(quint32 universe, const QString &pluginName,
             return false;
         }
 
-        op->setPluginParameter("outputIP", address);
-        op->setPluginParameter("outputUni", portAddress);
+        /* Both at once, under the universe's frame lock: the old node and
+           port are sent the closing frame (Show-only fixtures at safe), and
+           no frame goes out half-way -- to the new node on the old port. */
+        QMap<QString, QVariant> target;
+        target.insert(QStringLiteral("outputIP"), address);
+        target.insert(QStringLiteral("outputUni"), portAddress);
+        op->setPluginParameters(target);
         return true;
     }
     return false;

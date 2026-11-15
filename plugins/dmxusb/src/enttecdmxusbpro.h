@@ -23,6 +23,7 @@
 #include <QByteArray>
 #include <QVariant>
 #include <QThread>
+#include <atomic>
 
 #include "dmxusbwidget.h"
 
@@ -151,6 +152,18 @@ private:
 
     /** Stop input/output thread */
     void stopThread();
+
+    /** Port @p i's DMX (or MIDI) from its latest buffer: the thread's
+     *  output pass for one port */
+    void sendPort(int i);
+
+    /** Review 10 H1: what an output port was given last is on the wire.
+     *  Thread running: two of its output passes after now (one in flight
+     *  may have read the buffer before); stopped: sent here. */
+    void flushPort(int i);
+
+    /** Output passes the thread has made (flushPort()) */
+    std::atomic<quint32> m_outputPasses { 0 };
 
     int readData(QByteArray &payload, bool &isMIDI, int RDM = None);
 

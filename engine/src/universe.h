@@ -647,6 +647,13 @@ public:
      *  nothing sent): there are no Show-only channels, or none of ours go
      *  out here at all. OutputPatch::setClosingFrame(). */
     bool closingFrame(QByteArray &frame, bool blackout);
+    /** What a held send starts from (frame lock held): the live values,
+     *  or in Blind the frame from before it with anything past its end at
+     *  0 -- never the preview */
+    QByteArray heldBaseFrame() const;
+    /** Blackout on @p frame for a held send: in Blind, intensity (HTP) at
+     *  0 on the frozen values, never m_blackoutValues (the preview) */
+    QByteArray heldBlackoutFrame(const QByteArray &frame) const;
     /** Where a fade starting on @p address starts from: for a Show-only
      *  channel, what the last S0 frame built there (never a value stored
      *  mid-frame) */

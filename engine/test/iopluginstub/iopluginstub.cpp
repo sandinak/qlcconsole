@@ -45,6 +45,9 @@ void IOPluginStub::init()
     m_outputProblems.clear();
     m_lineChannelRoles.clear();
     m_lineDeviceKind.clear();
+    m_async = false;
+    m_asyncPending.clear();
+    m_lastByTarget.clear();
 }
 
 QString IOPluginStub::name() const
@@ -87,6 +90,7 @@ bool IOPluginStub::openOutput(quint32 output, quint32 universe)
 
 void IOPluginStub::closeOutput(quint32 output, quint32 universe)
 {
+    m_asyncPending.remove(output);          // m_async: a send thread stopped
     m_openOutputs.removeAll(output);
     /* like the real plugins: forget (universe, line) -- universe FIRST */
     if (output < 4)
@@ -125,7 +129,40 @@ void IOPluginStub::writeUniverse(quint32 universe, quint32 output, const QByteAr
     if (m_holdLikeNetwork && int(output) < m_lineNames.size()
         && m_gateAllowed.value(m_lineNames.at(int(output)), true) == false)
         return;
+    if (m_async)
+    {
+        m_asyncPending.insert(output, qMakePair(universe, data));
+        return;
+    }
+    sendNow(universe, output, data);
+}
+
+void IOPluginStub::sendNow(quint32 universe, quint32 output, const QByteArray &data)
+{
     m_universe = m_universe.replace(output * 512, data.size(), data);
+    const QString ip = m_universesMap.contains(universe)
+                       ? m_universesMap.value(universe).outputParameters.value("outputIP").toString()
+                       : QString();
+    m_lastByTarget.insert(QString("%1/%2").arg(ip.isEmpty() ? QString("default") : ip).arg(output), data);
+}
+
+void IOPluginStub::flushOutput(quint32 output, quint32 universe)
+{
+    Q_UNUSED(universe)
+    m_flushes++;
+    if (m_asyncPending.contains(output))
+    {
+        const QPair<quint32, QByteArray> f = m_asyncPending.take(output);
+        sendNow(f.first, output, f.second);
+    }
+}
+
+void IOPluginStub::pumpAsync()
+{
+    const QMap<quint32, QPair<quint32, QByteArray> > pending = m_asyncPending;
+    m_asyncPending.clear();
+    for (auto it = pending.constBegin(); it != pending.constEnd(); ++it)
+        sendNow(it.value().first, it.key(), it.value().second);
 }
 
 /*****************************************************************************

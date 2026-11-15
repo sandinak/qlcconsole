@@ -24,6 +24,11 @@
 #   include <unistd.h>
 #endif
 
+#include <QRecursiveMutex>
+#include <memory>
+#include <QMutexLocker>
+#include <QDebug>
+
 #include "qlcioplugin.h"
 #include "outputpatch.h"
 
@@ -68,20 +73,32 @@ void OutputPatch::setClosingFrame(const std::function<bool(QByteArray &, bool)> 
     m_closingFrame = source;
 }
 
-void OutputPatch::closeLine()
+void OutputPatch::sendClosingFrame()
 {
-    if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine())
+    if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine() || !m_closingFrame)
         return;
     /* Show only (S0): a node or an interface keeps the last frame it was
        given. The line's last one has every Show-only channel at its safe
        value -- paused or not -- or a laser stays on where it was, and All
-       Off, Blackout, a cue letting go never reach it again. */
-    if (m_closingFrame)
+       Off, Blackout, a cue letting go never reach it again. On the wire,
+       not only handed over: a plugin that sends from its own thread or
+       timer sends it now (review 10). */
+    QByteArray frame;
+    if (m_closingFrame(frame, m_blackout))
     {
-        QByteArray frame;
-        if (m_closingFrame(frame, m_blackout))
-            m_plugin->writeUniverse(m_universe, m_pluginLine, frame, true);
+        m_plugin->writeUniverse(m_universe, m_pluginLine, frame, true);
+        m_plugin->flushOutput(m_pluginLine, m_universe);
     }
+}
+
+void OutputPatch::closeLine()
+{
+    if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine())
+        return;
+    std::unique_ptr<QMutexLocker<QRecursiveMutex> > locker;
+    if (m_frameLock != nullptr)
+        locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
+    sendClosingFrame();
     m_plugin->closeOutput(m_pluginLine, m_universe);
 }
 
@@ -119,7 +136,10 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
     {
         const bool opened = m_plugin->openOutput(m_pluginLine, m_universe);
-        m_freshLine = opened;
+        m_freshLine.store(opened, std::memory_order_relaxed);
+        m_lineName = m_plugin->linesAreHardware() ? m_plugin->outputs().value(int(m_pluginLine))
+                                                  : QString();
+        m_reconnectHeld.clear();
         return opened;
     }
 
@@ -130,7 +150,58 @@ bool OutputPatch::reconnect()
 {
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
     {
-        m_plugin->closeOutput(m_pluginLine, m_universe);
+        // Closed and opened between two frames (L1): no frame to a line half-way.
+        std::unique_ptr<QMutexLocker<QRecursiveMutex> > locker;
+        if (m_frameLock != nullptr)
+            locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
+
+        /* The plugin's lines may have moved under the patch (a USB device
+           unplugged or plugged in: another device at this number). Follow
+           the line's name; gone, a universe with Show-only channels must
+           not be reopened on whatever took its number -- a laser on another
+           interface (review 10 M2). The old line is not sent a closing
+           frame: it is another device now (the plugin closed the old one). */
+        /* Hardware lines only (a line is a device: USB, MIDI): a network
+           line is named after this machine's address, followed by its
+           network (InputOutputMap::resolveSavedLine()), as before. */
+        const bool hardware = m_plugin->linesAreHardware();
+        const QStringList names = hardware ? m_plugin->outputs() : QStringList();
+        const QString now = names.value(int(m_pluginLine));
+        if (hardware && m_lineName.isEmpty() == false && now != m_lineName)
+        {
+            const int moved = names.indexOf(m_lineName);
+            if (moved >= 0)
+            {
+                qWarning() << "[OutputPatch] universe" << m_universe + 1 << m_lineName
+                           << "moved from line" << m_pluginLine << "to" << moved << ": followed";
+                m_plugin->closeOutput(m_pluginLine, m_universe);
+                m_pluginLine = quint32(moved);
+            }
+            else
+            {
+                QByteArray probe;
+                const bool showOnly = m_closingFrame && m_closingFrame(probe, false);
+                if (showOnly)
+                {
+                    m_reconnectHeld = tr("%1 is gone: universe %2 has Show-only fixtures, so it is not "
+                                         "reopened on %3").arg(m_lineName).arg(m_universe + 1)
+                                          .arg(now.isEmpty() ? tr("another line") : now);
+                    qWarning() << "[OutputPatch]" << m_reconnectHeld;
+                    m_plugin->closeOutput(m_pluginLine, m_universe);
+                    m_pendingUID = m_lineName;
+                    m_pendingLine = m_pluginLine;
+                    m_pendingNetwork.clear();
+                    m_pluginLine = QLCIOPlugin::invalidLine();
+                    emit outputNameChanged();
+                    return false;
+                }
+                qWarning() << "[OutputPatch] universe" << m_universe + 1 << m_lineName
+                           << "is gone: reopening line" << m_pluginLine << "(" << now << ")";
+                m_plugin->closeOutput(m_pluginLine, m_universe);
+            }
+        }
+        else
+            m_plugin->closeOutput(m_pluginLine, m_universe);
 #if defined(WIN32) || defined(Q_OS_WIN)
         Sleep(GRACE_MS);
 #else
@@ -139,11 +210,14 @@ bool OutputPatch::reconnect()
         bool ret = m_plugin->openOutput(m_pluginLine, m_universe);
         if (ret == true)
         {
-            m_freshLine = true;
+            m_freshLine.store(true, std::memory_order_relaxed);
+            if (hardware)
+                m_lineName = m_plugin->outputs().value(int(m_pluginLine));
             QMap<QString, QVariant>::iterator it = m_parametersCache.begin();
             for (; it != m_parametersCache.end(); it++)
                 m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
         }
+        emit outputNameChanged();
         return ret;
     }
     return false;
@@ -234,8 +308,49 @@ bool OutputPatch::isPatched() const
     return output() != QLCIOPlugin::invalidLine() && m_plugin != NULL;
 }
 
+bool OutputPatch::isTargetParameter(const QString &prop)
+{
+    static const QStringList exact = {
+        QStringLiteral("outputUni"),                                    // Art-Net
+        QStringLiteral("universe"), QStringLiteral("multicast"),       // E1.31
+        QStringLiteral("mcastIP"), QStringLiteral("mcastFullIP"),
+        QStringLiteral("ucastIP"), QStringLiteral("ucastPort"),
+    };
+    // Art-Net / E1.31 / WLED "outputIP", and a WLED backup's "outputIP2".. and window
+    return exact.contains(prop) || prop.startsWith(QLatin1String("outputIP"))
+           || prop.startsWith(QLatin1String("wledAddress")) || prop.startsWith(QLatin1String("wledChannels"));
+}
+
+void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values)
+{
+    std::unique_ptr<QMutexLocker<QRecursiveMutex> > locker;
+    if (m_frameLock != nullptr)
+        locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
+    bool retarget = false;
+    for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+        if (isTargetParameter(it.key()) && m_parametersCache.value(it.key()) != it.value())
+            retarget = true;
+    if (retarget)
+        sendClosingFrame();
+    for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+    {
+        m_parametersCache[it.key()] = it.value();
+        if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
+            m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
+    }
+}
+
 void OutputPatch::setPluginParameter(QString prop, QVariant value)
 {
+    /* Aimed elsewhere (review 10 M1): the old node, port or universe stops
+       receiving this universe -- its closing frame first, then the move,
+       with no frame between (the frame lock). */
+    if (isTargetParameter(prop) && m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine()
+        && (m_parametersCache.contains(prop) == false || m_parametersCache.value(prop) != value))
+    {
+        setPluginParameters({ { prop, value } });
+        return;
+    }
     m_parametersCache[prop] = value;
     // Nothing to tell the plugin while pending: there is no line yet.
     // resolvePending() replays the cache once there is.
@@ -245,6 +360,15 @@ void OutputPatch::setPluginParameter(QString prop, QVariant value)
 
 void OutputPatch::unSetPluginParameter(QString prop)
 {
+    // Back to the plugin's default target (broadcast): a retarget too.
+    std::unique_ptr<QMutexLocker<QRecursiveMutex> > locker;
+    if (isTargetParameter(prop) && m_parametersCache.contains(prop)
+        && m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
+    {
+        if (m_frameLock != nullptr)
+            locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
+        sendClosingFrame();
+    }
     m_parametersCache.remove(prop);
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
         m_plugin->unSetParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, prop);
@@ -308,10 +432,10 @@ void OutputPatch::dump(quint32 universe, const QByteArray& data, bool dataChange
     {
         // A line just opened (released from a hold, re-patched): its first
         // frame is sent as changed, so it carries the current build.
-        if (m_freshLine)
+        if (Q_UNLIKELY(m_freshLine.load(std::memory_order_relaxed)))
         {
             dataChanged = true;
-            m_freshLine = false;
+            m_freshLine.store(false, std::memory_order_relaxed);
         }
         if (m_paused)
         {

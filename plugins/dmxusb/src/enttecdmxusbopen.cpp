@@ -153,11 +153,32 @@ bool EnttecDMXUSBOpen::writeUniverse(quint32 universe, quint32 output, const QBy
 
 void EnttecDMXUSBOpen::stop()
 {
+    /* Review 10 H1: the frame given last (a closing line's: its Show-only
+       channels at safe) is on the wire before the line closes -- one more,
+       sent here once the thread is joined (never from the thread itself:
+       a failed open closes from inside run()). */
     if (isRunning() == true)
     {
         m_running = false;
+        if (QThread::currentThread() == this)
+            return;
         wait();
+        if (isOpen())
+            sendFrame();
     }
+}
+
+void EnttecDMXUSBOpen::sendFrame()
+{
+    if (iface()->setBreak(true) == false)
+        return;
+    if (m_granularity == Good)
+        usleep(DMX_BREAK);
+    if (iface()->setBreak(false) == false)
+        return;
+    if (m_granularity == Good)
+        usleep(DMX_MAB);
+    recordWrite(iface()->write(m_portsInfo[0].m_universeData));
 }
 
 void EnttecDMXUSBOpen::run()
@@ -193,26 +214,8 @@ void EnttecDMXUSBOpen::run()
         // Measure how much time passes during these calls
         time.restart();
 
-        if (iface()->setBreak(true) == false)
-            goto framesleep;
+        sendFrame();
 
-        if (m_granularity == Good)
-            usleep(DMX_BREAK);
-
-        if (iface()->setBreak(false) == false)
-            goto framesleep;
-
-        if (m_granularity == Good)
-            usleep(DMX_MAB);
-
-        if (iface()->write(m_portsInfo[0].m_universeData) == false)
-        {
-            recordWrite(false);
-            goto framesleep;
-        }
-        recordWrite(true);
-
-framesleep:
         // Sleep for the remainder of the DMX frame time
         if (m_granularity == Good)
             while (time.elapsed() < (m_frameTimeUs / 1000)) { usleep(1000); }

@@ -1041,9 +1041,7 @@ void Universe::sendHeld()
     QMutexLocker frameLocker(&m_frameMutex);
     if (m_notOursWhole.load(std::memory_order_relaxed) || m_outputPatchList.isEmpty())
         return;
-    const bool inhibit = m_inhibitOutput.load(std::memory_order_relaxed);
-    QByteArray frame = inhibit && !m_blindFrozen.isEmpty()
-                       ? m_blindFrozen : QByteArray(m_postGMValues->constData(), m_usedChannels);
+    QByteArray frame = heldBaseFrame();
     if (showOnlyChannelCount() > 0)
     {
         buildShowOnly(frame, true, false);
@@ -1055,7 +1053,7 @@ void Universe::sendHeld()
         anyBlackout = anyBlackout || op->blackout();
     if (anyBlackout)
     {
-        blackout = blackoutFrame(frame);
+        blackout = heldBlackoutFrame(frame);
         if (showOnlyChannelCount() > 0)
             buildShowOnly(blackout, true, true);
     }
@@ -1079,17 +1077,11 @@ bool Universe::closingFrame(QByteArray &frame, bool blackout)
     QMutexLocker frameLocker(&m_frameMutex);
     if (showOnlyChannelCount() == 0 || m_notOursWhole.load(std::memory_order_relaxed))
         return false;
-    const bool inhibit = m_inhibitOutput.load(std::memory_order_relaxed);
-    frame = inhibit && !m_blindFrozen.isEmpty()
-            ? m_blindFrozen : QByteArray(m_postGMValues->constData(), m_usedChannels);
-    // A frame frozen before a Show-only channel was patched past its end
-    // still reaches it.
-    if (frame.size() < m_usedChannels)
-        frame.append(m_postGMValues->constData() + frame.size(), m_usedChannels - frame.size());
+    frame = heldBaseFrame();
     buildShowOnly(frame, true, false);
     if (blackout)
     {
-        frame = blackoutFrame(frame);
+        frame = heldBlackoutFrame(frame);
         buildShowOnly(frame, true, true);
     }
     QMutexLocker locker(&m_notOursMutex);
@@ -1097,9 +1089,41 @@ bool Universe::closingFrame(QByteArray &frame, bool blackout)
     return true;
 }
 
+QByteArray Universe::heldBaseFrame() const
+{
+    /* Blind (review 10 M3/L3): the frame from before it, never the preview.
+       A channel past its end (patched or first written in Blind; all of
+       them on a universe made in Blind) goes out at 0. */
+    if (m_inhibitOutput.load(std::memory_order_relaxed))
+    {
+        QByteArray frame = m_blindFrozen;
+        if (frame.size() < m_usedChannels)
+            frame.append(QByteArray(m_usedChannels - frame.size(), char(0)));
+        return frame;
+    }
+    return QByteArray(m_postGMValues->constData(), m_usedChannels);
+}
+
+QByteArray Universe::heldBlackoutFrame(const QByteArray &frame) const
+{
+    if (m_inhibitOutput.load(std::memory_order_relaxed) == false)
+        return blackoutFrame(frame);
+    /* Blackout in Blind: the frozen frame with its intensity (HTP) at 0 --
+       not m_blackoutValues, which carries the preview's LTP values. The
+       Blackout-exempt channels keep their frozen value. */
+    QByteArray out = frame;
+    const char *mask = m_channelsMask->constData();
+    const int count = qMin(out.size(), int(m_channelsMask->size()));
+    for (int c = 0; c < count; c++)
+        if ((mask[c] & HTP) && (mask[c] & BlackoutExempt) == 0)
+            out[c] = char(0);
+    return out;
+}
+
 OutputPatch *Universe::newOutputPatch()
 {
     OutputPatch *patch = new OutputPatch(m_id, this);
+    patch->setFrameLock(&m_frameMutex);
     patch->setClosingFrame([this](QByteArray &frame, bool blackout) {
         return closingFrame(frame, blackout);
     });

@@ -30,6 +30,7 @@
 #include <QMutex>
 #include <climits>
 #include <QMap>
+#include <functional>
 
 #define PLUGIN_UNIVERSECHANNELS "UniverseChannels"
 
@@ -261,6 +262,43 @@ public:
      * @param universe The universe data to write
      */
     virtual void writeUniverse(quint32 universe, quint32 output, const QByteArray& data, bool dataChanged);
+
+    /**
+     * Show only (R9-1): everything given to writeUniverse() for @p output
+     * and @p universe so far is on the wire before this returns. The engine
+     * calls it after a line's closing frame, before the line is closed or
+     * retargeted. A plugin that sends inside writeUniverse() (Art-Net,
+     * E1.31) needs nothing; one that sends from its own thread or timer
+     * (a USB widget's send thread, WLED) sends the latest frame now.
+     */
+    virtual void flushOutput(quint32 output, quint32 universe);
+
+    /**
+     * Show only (R9-1, review 10 M2): the engine's builder of the frame a
+     * line that stops receiving @p universe is sent last (the Show-only
+     * channels at safe). Set by the engine for every loaded plugin; a
+     * plugin whose lines go away under it (a USB device unplugged, a
+     * rescan) asks it for each open output before it lets go of it.
+     */
+    typedef std::function<bool(quint32 universe, QByteArray &frame)> ClosingFrameSource;
+    /** @p owner: who set it (the engine's InputOutputMap), so it alone
+     *  clears it (clearClosingFrameSource()) when it goes */
+    void setClosingFrameSource(const ClosingFrameSource &source, const void *owner);
+    void clearClosingFrameSource(const void *owner);
+
+protected:
+    /** The closing frame for @p universe (see setClosingFrameSource()):
+     *  false when there is none to send. Takes the universe's frame lock:
+     *  never call it holding a lock writeUniverse() takes. */
+    bool closingFrameFor(quint32 universe, QByteArray &frame) const;
+    /** The open output lines and the universe each sends (m_universesMap) */
+    QList<QPair<quint32, quint32> > openOutputLines() const;
+
+private:
+    ClosingFrameSource m_closingFrameSource;
+    const void *m_closingFrameOwner = nullptr;
+
+public:
 
     /*************************************************************************
      * Inputs

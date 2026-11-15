@@ -274,6 +274,63 @@ QPair<int, int> WledPlugin::answering(quint32 universe) const
     return qMakePair(ok, it.value().deviceCount());
 }
 
+bool WledPlugin::postNow(const QString &ip, const QByteArray &body, int waitMs)
+{
+    const QUrl url(QStringLiteral("http://%1/").arg(ip));
+    QTcpSocket sock;
+    sock.connectToHost(url.host(), quint16(url.port(80)));
+    if (!sock.waitForConnected(waitMs))
+        return false;
+    sock.write("POST /json/state HTTP/1.1\r\nHost: " + url.host().toUtf8()
+               + "\r\nContent-Type: application/json\r\nContent-Length: "
+               + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+    const bool written = sock.waitForBytesWritten(waitMs);
+    sock.waitForReadyRead(waitMs);          // taken once it answers; sent either way
+    sock.disconnectFromHost();
+    if (sock.state() != QAbstractSocket::UnconnectedState)
+        sock.waitForDisconnected(50);
+    return written;
+}
+
+void WledPlugin::flushOutput(quint32 output, quint32 universe)
+{
+    if (output != 0)
+        return;
+    struct Post { QString ip; QByteArray body; };
+    QList<Post> posts;
+    {
+        QMutexLocker locker(&m_mutex);
+        auto it = m_targets.find(universe);
+        if (it == m_targets.end())
+            return;
+        Target &t = it.value();
+        for (Device &d : t.devices)
+        {
+            if (d.ip.isEmpty() || !d.gateOpen || !d.layoutKnown)
+                continue;
+            const QJsonObject state = WledState::decode(t.data, t.addressOf(d), t.channelsOf(d),
+                                                        m_sendInterval);
+            if (sameLook(state, d.sent) && d.layoutGen == d.sentLayoutGen)
+                continue;
+            QJsonObject body = trimmed(message(state, d, nullptr), state, d.sent,
+                                       d.layoutGen == d.sentLayoutGen);
+            body[QStringLiteral("transition")] = 0;     // at once: it is the last one
+            posts << Post { d.ip, QJsonDocument(body).toJson(QJsonDocument::Compact) };
+            d.sent = state;
+            d.postedAt = QDateTime::currentMSecsSinceEpoch();
+        }
+    }
+    QElapsedTimer budget;
+    budget.start();
+    for (const Post &p : std::as_const(posts))
+    {
+        const int left = restoreBudgetMs - int(budget.elapsed());
+        if (left <= 50)
+            break;
+        postNow(p.ip, p.body, qMax(50, left / 3));
+    }
+}
+
 void WledPlugin::setParameter(quint32 universe, quint32 line, Capability type,
                               QString name, QVariant value)
 {

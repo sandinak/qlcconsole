@@ -18,6 +18,7 @@
 */
 
 #include <QDebug>
+#include <QElapsedTimer>
 
 #include "enttecdmxusbpro.h"
 #include "midiprotocol.h"
@@ -392,6 +393,16 @@ bool EnttecDMXUSBPro::open(quint32 line, bool input)
 
 bool EnttecDMXUSBPro::close(quint32 line, bool input)
 {
+    /* Review 10 H1: the frame this output was given last (a closing line's:
+       its Show-only channels at safe) reaches the Pro before the port is
+       let go -- the Pro's firmware repeats the last frame it received, for
+       as long as it has power. */
+    const quint32 portIndex = input ? UINT_MAX : lineToPortIndex(line, DMXUSBWidget::Output);
+    const bool output = portIndex < quint32(m_portsInfo.count())
+                        && m_portsInfo.at(int(portIndex)).m_openDirection == DMXUSBWidget::Output;
+    if (output && openPortsCount() > 1)
+        flushPort(int(portIndex));
+
     InterfaceAction cmd;
     cmd.action = CloseLine;
     cmd.param1 = line;
@@ -401,7 +412,12 @@ bool EnttecDMXUSBPro::close(quint32 line, bool input)
     // if this is the last line to close,
     // stop the input/output thread
     if (openPortsCount() == 1)
+    {
         stopThread();
+        // The thread is gone: the last frame from here, the port still open.
+        if (output)
+            flushPort(int(portIndex));
+    }
 
     return DMXUSBWidget::close(line, input);
 }
@@ -865,86 +881,9 @@ void EnttecDMXUSBPro::run()
             // consider only open output ports
             if (m_portsInfo[i].m_openDirection != DMXUSBWidget::Output)
                 continue;
-
-            int dataLen = m_portsInfo[i].m_universeData.length();
-            if (dataLen == 0)
-                continue;
-
-            if (m_portsInfo[i].m_portFlags & DMXUSBWidget::MIDI)
-            {
-                QByteArray request;
-
-                if (m_portsInfo[i].m_compareData.size() == 0)
-                    m_portsInfo[i].m_compareData.fill(0, 512);
-
-                // send only values that changed
-                for (int j = 0; j < m_portsInfo[i].m_universeData.length(); j++)
-                {
-                    char val = m_portsInfo[i].m_universeData[j];
-
-                    if (val == m_portsInfo[i].m_compareData[j])
-                        continue;
-
-                    m_portsInfo[i].m_compareData[j] = val;
-
-                    request.clear();
-                    request.prepend(ENTTEC_PRO_START_OF_MSG); // Start byte
-                    request.append(ENTTEC_PRO_MIDI_OUT_MSG);
-                    request.append(char(0x03)); // size LSB: 3 bytes
-                    request.append(char(0x00)); // size MSB
-
-                    uchar cmd = 0;
-                    uchar data1 = 0, data2 = 0;
-
-                    if (QLCMIDIProtocol::feedbackToMidi(i + 1, val,
-                                                        MAX_MIDI_CHANNELS, // MIDI output channel is always OMNI
-                                                        true, // send Note OFF
-                                                        &cmd, &data1, &data2) == true)
-                    {
-                        qDebug() << Q_FUNC_INFO << "cmd:" << cmd << "data1:" << data1 << "data2:" << data2;
-                        request.append(cmd);
-                        request.append(data1);
-                        request.append(data2);
-                        request.append(ENTTEC_PRO_END_OF_MSG); // Stop byte
-
-                        if (iface()->write(request) == false)
-                        {
-                            qWarning() << Q_FUNC_INFO << name() << "will not accept MIDI data";
-                            continue;
-                        }
-                    }
-                }
-            }
-            else
-            {
-                QByteArray request;
-                request.append(ENTTEC_PRO_START_OF_MSG); // Start byte
-
-                // Command - port selection
-                if (m_dmxKingMode)
-                    request.append(DMXKING_SEND_DMX_PORT1 + i);
-                else
-                    request.append(i == 0 ? ENTTEC_PRO_SEND_DMX_RQ : ENTTEC_PRO_SEND_DMX_RQ2);
-
-                request.append((dataLen + 1) & 0xff); // Data length LSB
-                request.append(((dataLen + 1) >> 8) & 0xff); // Data length MSB
-                request.append(char(ENTTEC_PRO_DMX_ZERO)); // DMX start code (Which constitutes the + 1 below)
-                request.append(m_portsInfo[i].m_universeData);
-                request.append(ENTTEC_PRO_END_OF_MSG); // Stop byte
-
-                //qDebug() << "OUTPUT" << request.length() << "bytes on line" << i;
-                //qDebug() << "DATA" << QString::number(request.at(5)) << QString::number(request.at(6)) << QString::number(request.at(7));
-
-                /* Write "Output Only Send DMX Packet Request" message */
-                const bool sent = iface()->write(request);
-                recordWrite(sent);
-                if (sent == false)
-                {
-                    qWarning() << Q_FUNC_INFO << name() << "will not accept DMX data";
-                    continue;
-                }
-            }
+            sendPort(i);
         }
+        m_outputPasses.fetch_add(1, std::memory_order_release);
 
         /* **************************************************************
          *                  READ DMX OR MIDI INPUT DATA
@@ -1030,6 +969,103 @@ framesleep:
     }
 
     qDebug() << "INPUT/OUTPUT thread terminated";
+}
+
+void EnttecDMXUSBPro::sendPort(int i)
+{
+    int dataLen = m_portsInfo[i].m_universeData.length();
+    if (dataLen == 0)
+        return;
+
+    if (m_portsInfo[i].m_portFlags & DMXUSBWidget::MIDI)
+    {
+        QByteArray request;
+
+        if (m_portsInfo[i].m_compareData.size() == 0)
+            m_portsInfo[i].m_compareData.fill(0, 512);
+
+        // send only values that changed
+        for (int j = 0; j < m_portsInfo[i].m_universeData.length(); j++)
+        {
+            char val = m_portsInfo[i].m_universeData[j];
+
+            if (val == m_portsInfo[i].m_compareData[j])
+                continue;
+
+            m_portsInfo[i].m_compareData[j] = val;
+
+            request.clear();
+            request.prepend(ENTTEC_PRO_START_OF_MSG); // Start byte
+            request.append(ENTTEC_PRO_MIDI_OUT_MSG);
+            request.append(char(0x03)); // size LSB: 3 bytes
+            request.append(char(0x00)); // size MSB
+
+            uchar cmd = 0;
+            uchar data1 = 0, data2 = 0;
+
+            if (QLCMIDIProtocol::feedbackToMidi(i + 1, val,
+                                                MAX_MIDI_CHANNELS, // MIDI output channel is always OMNI
+                                                true, // send Note OFF
+                                                &cmd, &data1, &data2) == true)
+            {
+                qDebug() << Q_FUNC_INFO << "cmd:" << cmd << "data1:" << data1 << "data2:" << data2;
+                request.append(cmd);
+                request.append(data1);
+                request.append(data2);
+                request.append(ENTTEC_PRO_END_OF_MSG); // Stop byte
+
+                if (iface()->write(request) == false)
+                {
+                    qWarning() << Q_FUNC_INFO << name() << "will not accept MIDI data";
+                    continue;
+                }
+            }
+        }
+    }
+    else
+    {
+        QByteArray request;
+        request.append(ENTTEC_PRO_START_OF_MSG); // Start byte
+
+        // Command - port selection
+        if (m_dmxKingMode)
+            request.append(DMXKING_SEND_DMX_PORT1 + i);
+        else
+            request.append(i == 0 ? ENTTEC_PRO_SEND_DMX_RQ : ENTTEC_PRO_SEND_DMX_RQ2);
+
+        request.append((dataLen + 1) & 0xff); // Data length LSB
+        request.append(((dataLen + 1) >> 8) & 0xff); // Data length MSB
+        request.append(char(ENTTEC_PRO_DMX_ZERO)); // DMX start code (Which constitutes the + 1 below)
+        request.append(m_portsInfo[i].m_universeData);
+        request.append(ENTTEC_PRO_END_OF_MSG); // Stop byte
+
+        //qDebug() << "OUTPUT" << request.length() << "bytes on line" << i;
+        //qDebug() << "DATA" << QString::number(request.at(5)) << QString::number(request.at(6)) << QString::number(request.at(7));
+
+        /* Write "Output Only Send DMX Packet Request" message */
+        const bool sent = iface()->write(request);
+        recordWrite(sent);
+        if (sent == false)
+            qWarning() << Q_FUNC_INFO << name() << "will not accept DMX data";
+    }
+}
+
+void EnttecDMXUSBPro::flushPort(int i)
+{
+    if (i < 0 || i >= m_portsInfo.count() || QThread::currentThread() == this)
+        return;
+    if (m_isThreadRunning && isRunning())
+    {
+        const quint32 from = m_outputPasses.load(std::memory_order_acquire);
+        QElapsedTimer waited;
+        waited.start();
+        while (m_isThreadRunning && quint32(m_outputPasses.load(std::memory_order_acquire) - from) < 2
+               && waited.elapsed() < 250)
+            QThread::usleep(500);
+        return;
+    }
+    if (isOpen())
+        sendPort(i);
 }
 
 void EnttecDMXUSBPro::stopThread()

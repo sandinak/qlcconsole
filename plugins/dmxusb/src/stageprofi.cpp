@@ -178,10 +178,61 @@ bool Stageprofi::writeUniverse(quint32 universe, quint32 output, const QByteArra
 
 void Stageprofi::stop()
 {
+    /* Review 10 H1: the frame given last (a closing line's: its Show-only
+       channels at safe) is on the wire before the line closes -- one more,
+       sent here once the thread is joined (never from the thread itself:
+       a failed open closes from inside run()). */
     if (isRunning() == true)
     {
         m_running = false;
+        if (QThread::currentThread() == this)
+            return;
         wait();
+        sendFrame();
+    }
+}
+
+void Stageprofi::sendFrame()
+{
+    if (isOpen() == false)
+        return;
+    if (m_portsInfo[0].m_compareData.size() == 0)
+        m_portsInfo[0].m_compareData.fill(0, 512);
+
+    for (int i = 0; i < m_portsInfo[0].m_universeData.length(); i++)
+    {
+        char val = m_portsInfo[0].m_universeData[i];
+
+        if (val == m_portsInfo[0].m_compareData[i])
+            continue;
+
+        QByteArray fastTrans;
+        if (i < 256)
+        {
+            fastTrans.append((char)0xE2);
+            fastTrans.append((char)i);
+        }
+        else
+        {
+            fastTrans.append((char)0xE3);
+            fastTrans.append((char)(i - 256));
+        }
+        fastTrans.append(val);
+
+        const bool sent = iface()->write(fastTrans);
+        recordWrite(sent);
+        if (sent == false)
+        {
+            qWarning() << Q_FUNC_INFO << name() << "will not accept DMX data";
+            iface()->purgeBuffers();
+            continue;
+        }
+        else
+        {
+            m_portsInfo[0].m_compareData[i] = val;
+            if (checkReply() == false)
+                iface()->purgeBuffers();
+        }
     }
 }
 
@@ -203,41 +254,7 @@ void Stageprofi::run()
     {
         timer.restart();
 
-        for (int i = 0; i < m_portsInfo[0].m_universeData.length(); i++)
-        {
-            char val = m_portsInfo[0].m_universeData[i];
-
-            if (val == m_portsInfo[0].m_compareData[i])
-                continue;
-
-            QByteArray fastTrans;
-            if (i < 256)
-            {
-                fastTrans.append((char)0xE2);
-                fastTrans.append((char)i);
-            }
-            else
-            {
-                fastTrans.append((char)0xE3);
-                fastTrans.append((char)(i - 256));
-            }
-            fastTrans.append(val);
-
-            const bool sent = iface()->write(fastTrans);
-            recordWrite(sent);
-            if (sent == false)
-            {
-                qWarning() << Q_FUNC_INFO << name() << "will not accept DMX data";
-                iface()->purgeBuffers();
-                continue;
-            }
-            else
-            {
-                m_portsInfo[0].m_compareData[i] = val;
-                if (checkReply() == false)
-                    iface()->purgeBuffers();
-            }
-        }
+        sendFrame();
 
         int timetoSleep = m_frameTimeUs - (timer.nsecsElapsed() / 1000);
         if (timetoSleep < 0)

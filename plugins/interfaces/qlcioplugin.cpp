@@ -57,6 +57,40 @@ void QLCIOPlugin::writeUniverse(quint32 universe, quint32 output, const QByteArr
     Q_UNUSED(dataChanged)
 }
 
+void QLCIOPlugin::flushOutput(quint32 output, quint32 universe)
+{
+    Q_UNUSED(output)
+    Q_UNUSED(universe)
+}
+
+void QLCIOPlugin::setClosingFrameSource(const ClosingFrameSource &source, const void *owner)
+{
+    m_closingFrameSource = source;
+    m_closingFrameOwner = owner;
+}
+
+void QLCIOPlugin::clearClosingFrameSource(const void *owner)
+{
+    if (m_closingFrameOwner != owner)
+        return;
+    m_closingFrameSource = ClosingFrameSource();
+    m_closingFrameOwner = nullptr;
+}
+
+bool QLCIOPlugin::closingFrameFor(quint32 universe, QByteArray &frame) const
+{
+    return m_closingFrameSource && m_closingFrameSource(universe, frame);
+}
+
+QList<QPair<quint32, quint32> > QLCIOPlugin::openOutputLines() const
+{
+    QList<QPair<quint32, quint32> > out;
+    for (auto it = m_universesMap.constBegin(); it != m_universesMap.constEnd(); ++it)
+        if (it.value().outputLine != UINT_MAX)
+            out << qMakePair(it.value().outputLine, it.key());
+    return out;
+}
+
 /*************************************************************************
  * Inputs
  *************************************************************************/

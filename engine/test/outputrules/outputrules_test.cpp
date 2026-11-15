@@ -3236,18 +3236,28 @@ void OutputRules_Test::r9_aHeldRelativeWriterSetsTheWrittenFlag()
 
 void OutputRules_Test::everyClosingLineGetsShowOnlySafeLast()
 {
-    enum How { RePatch, Hold, Unpatch, PatchDestroyed, UniverseRemoved };
+    enum How { RePatch, Hold, Unpatch, PatchDestroyed, UniverseRemoved, Retarget };
     const QList<QPair<How, const char *> > hows = {
         { RePatch, "re-patched to another line" },
         { Hold, "held (Teaching's hold of real output, the rig-network gate)" },
         { Unpatch, "unpatched" },
         { PatchDestroyed, "its patch destroyed" },
         { UniverseRemoved, "its universe removed" },
+        { Retarget, "aimed at another node (outputIP)" },
     };
+    /* Review 10: as real plugins send. Sync: inside writeUniverse() (Art-Net,
+       E1.31). Async: from their own thread (a USB widget, WLED) -- a frame
+       counts only once the send thread has sent it (pumpAsync(), each
+       frame), or flushOutput(); closing the line drops what is kept. */
+    enum Mode { Sync, Async };
     InputOutputMap *io = m_doc->inputOutputMap();
     const quint32 Line = 2, Other = 3;
     auto onLine = [this](quint32 line, int address) {
         return int(uchar(m_stub->m_universe.at(int(line) * 512 + address)));
+    };
+    auto atTarget = [this](const QString &target, int address) {
+        const QByteArray f = m_stub->m_lastByTarget.value(target);
+        return address < f.size() ? int(uchar(f.at(address))) : -1;
     };
     auto addOn = [this](const QString &name, quint32 uni, int address, int rules) -> Fixture * {
         Fixture *f = new Fixture(m_doc);
@@ -3263,10 +3273,18 @@ void OutputRules_Test::everyClosingLineGetsShowOnlySafeLast()
         }
         return f;
     };
+    auto modeOff = qScopeGuard([this]() {
+        m_stub->m_async = false;
+        m_stub->m_asyncPending.clear();
+        m_stub->m_lastByTarget.clear();
+    });
 
+    for (Mode mode : { Sync, Async })
     for (const auto &how : hows)
     {
-        const QString what = QString::fromLatin1(how.second);
+        const QString what = QString("%1 (%2)").arg(QString::fromLatin1(how.second),
+                                                    mode == Async ? "a plugin that sends from its own thread"
+                                                                  : "a plugin that sends at once");
         // The universe removed is the last one (only the last can go).
         const bool last = how.first == UniverseRemoved;
         const quint32 uniIdx = last ? io->universesCount() - 1 : 0;
@@ -3278,6 +3296,10 @@ void OutputRules_Test::everyClosingLineGetsShowOnlySafeLast()
         m_doc->outputRuleKeeper()->rebuild();
         Universe *u = io->universes().at(int(uniIdx));
         QVERIFY2(io->setOutputPatch(uniIdx, m_stub->name(), QString(), Line, false, idx), qPrintable(what));
+        if (how.first == Retarget)
+            u->outputPatch(idx)->setPluginParameter(QStringLiteral("outputIP"), QStringLiteral("10.0.0.1"));
+        m_stub->m_async = mode == Async;
+        m_stub->m_lastByTarget.clear();
 
         // Mid-show: a GO'd cue has the laser on, a dimmer at 100.
         m_doc->setMode(Doc::Operate);
@@ -3286,11 +3308,18 @@ void OutputRules_Test::everyClosingLineGetsShowOnlySafeLast()
         s->setValue(stage->id(), 0, 100);
         m_doc->addFunction(s);
         s->start(m_doc->masterTimer(), FunctionParent::master());
-        auto tick = [this, &u]() { m_doc->masterTimer()->timerTick(); u->processFaders(); };
+        auto tick = [this, &u]() {
+            m_doc->masterTimer()->timerTick();
+            if (u != nullptr)
+                u->processFaders();
+            m_stub->pumpAsync();                        // the send thread's pass
+        };
         tick();
         tick();
         QVERIFY2(onLine(Line, Flame) == 255, qPrintable(what));
         QCOMPARE(onLine(Line, Stage), 100);
+        // The show's frame since, handed over but not sent yet (Async)
+        u->processFaders();
 
         switch (how.first)
         {
@@ -3310,12 +3339,26 @@ void OutputRules_Test::everyClosingLineGetsShowOnlySafeLast()
                 QVERIFY(io->removeUniverse(int(uniIdx)));
                 u = nullptr;
             break;
+            case Retarget:
+                u->outputPatch(idx)->setPluginParameter(QStringLiteral("outputIP"), QStringLiteral("10.0.0.2"));
+            break;
         }
-        // The closing line's last frame: the laser at safe, the rest as it was.
-        QVERIFY2(onLine(Line, Flame) == 0,
-                 qPrintable(QString("%1: its last frame has the laser at %2").arg(what).arg(onLine(Line, Flame))));
-        QVERIFY2(onLine(Line, Stage) == 100, qPrintable(what));
-        QVERIFY2(m_stub->m_openOutputs.contains(Line) == false, qPrintable(what));
+        if (how.first == Retarget)
+        {
+            // The old node's last frame: the laser at safe, the rest as it was.
+            QVERIFY2(atTarget("10.0.0.1/2", Flame) == 0,
+                     qPrintable(QString("%1: the old node's last frame has the laser at %2")
+                                .arg(what).arg(atTarget("10.0.0.1/2", Flame))));
+            QCOMPARE(atTarget("10.0.0.1/2", Stage), 100);
+        }
+        else
+        {
+            // The closing line's last frame: the laser at safe, the rest as it was.
+            QVERIFY2(onLine(Line, Flame) == 0,
+                     qPrintable(QString("%1: its last frame has the laser at %2").arg(what).arg(onLine(Line, Flame))));
+            QVERIFY2(onLine(Line, Stage) == 100, qPrintable(what));
+            QVERIFY2(m_stub->m_openOutputs.contains(Line) == false, qPrintable(what));
+        }
 
         if (last)
         {
@@ -3331,13 +3374,22 @@ void OutputRules_Test::everyClosingLineGetsShowOnlySafeLast()
             QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
             for (int i = 0; i < 3; i++)
                 tick();
-            QVERIFY2(onLine(Line, Stage) == 77, qPrintable(what));
+            if (how.first == Retarget)
+            {
+                QCOMPARE(atTarget("10.0.0.1/2", Stage), 100);     // no frame to the old node since
+                QCOMPARE(atTarget("10.0.0.2/2", Flame), 0);
+                QCOMPARE(atTarget("10.0.0.2/2", Stage), 0);       // All Off reached the new one
+            }
+            else
+                QVERIFY2(onLine(Line, Stage) == 77, qPrintable(what));
             QCOMPARE(sent(Flame), 0);
             if (how.first == RePatch)
                 QCOMPARE(onLine(Other, Flame), 0);
         }
 
         stopFunctions();
+        m_stub->m_async = false;
+        m_stub->m_asyncPending.clear();
         if (!last && u->outputPatchesCount() > idx)
             QVERIFY(io->setOutputPatch(uniIdx, QString(), QString(), QLCIOPlugin::invalidLine(), false, idx));
         QCOMPARE(u->outputPatchesCount(), last ? 0 : 1);

@@ -71,6 +71,11 @@ public:
 private:
     /** Stop the output thread */
     void stopOutputThread();
+    /** One DMX frame from the latest buffer -- the thread's loop body.
+     *  stop() sends one more after the thread is joined, so the frame a
+     *  closing line was given last (Show only: its closing frame) is on
+     *  the wire before the line closes (review 10 H1). */
+    void sendFrame();
 
     /** Output thread worker method */
     void run() override;

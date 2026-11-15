@@ -2255,6 +2255,123 @@ void InputOutputMap_Test::review10_rigGateBackOnSendsTheClosingFrame()
     }
 }
 
+/* Review 10 H2, every way the check comes on mid-show -- "Transmit anyway"
+   ended, the check switched on, the rig networks set, Teaching's hold --
+   with a plugin that has no hold of its own and with one that holds as
+   Art-Net does: the held line's last frame has the laser at safe. */
+void InputOutputMap_Test::everyRigCheckHoldsWithTheClosingFrameFirst()
+{
+    schoolLaptop();
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+    const int Laser = 14;
+    enum Trigger { OverrideEnds, GateSwitchedOn, NetworksSet, TeachingOn };
+    const QList<QPair<Trigger, const char *> > triggers = {
+        { OverrideEnds, "Transmit anyway ended" },
+        { GateSwitchedOn, "the rig check switched on" },
+        { NetworksSet, "the rig networks set" },
+        { TeachingOn, "Teaching holds real output" },
+    };
+    for (int pass = 0; pass < 2; ++pass)
+    for (const auto &t : triggers)
+    {
+        const QString what = QString("%1, %2").arg(QString::fromLatin1(t.second),
+                                                   pass == 1 ? "a plugin that holds like Art-Net" : "no plugin hold");
+        stub->m_holdLikeNetwork = pass == 1;
+        stub->m_gateAllowed.clear();
+        stub->setTransmitNetworks(QStringList());
+        stub->m_universe.fill(char(0));
+        int last = -1;
+        bool held = false;
+        {
+            InputOutputMap iom(m_doc, 1);
+            // Before: the show runs on the line, nothing holds it.
+            switch (t.first)
+            {
+                case OverrideEnds:
+                    iom.setRigNetworks(QStringList() << "172.18.0.0/20");
+                    iom.setTransmitOverride(true);
+                break;
+                case GateSwitchedOn:
+                    iom.setTransmitGateEnabled(false);
+                    iom.setRigNetworks(QStringList() << "172.18.0.0/20");
+                break;
+                case NetworksSet:
+                case TeachingOn:
+                break;
+            }
+            if (iom.setOutputPatch(0, "ArtNet", QString(), 1) == false)
+                QFAIL("could not patch");
+            QVERIFY2(iom.outputPatch(0, 0) != nullptr && iom.outputPatch(0, 0)->isPatched(), qPrintable(what));
+            iom.universe(0)->markShowOnly(Laser, true, 0);
+            stub->m_universe[512 + Laser] = char(255);      // the node has the laser on
+            switch (t.first)
+            {
+                case OverrideEnds: iom.setTransmitOverride(false); break;
+                case GateSwitchedOn: iom.setTransmitGateEnabled(true); break;
+                case NetworksSet: iom.setRigNetworks(QStringList() << "172.18.0.0/20"); break;
+                case TeachingOn: iom.setTeachingHold(true); break;
+            }
+            held = iom.outputPatch(0, 0) != nullptr && iom.outputPatch(0, 0)->isHeld();
+            last = uchar(stub->m_universe.at(512 + Laser));
+            iom.setTeachingHold(false);
+            iom.setTransmitGateEnabled(true);
+            iom.setRigNetworks(QStringList());
+        }
+        stub->m_holdLikeNetwork = false;
+        stub->setTransmitNetworks(QStringList());
+        stub->m_universe.fill(char(0));
+        QVERIFY2(held, qPrintable(what));
+        QVERIFY2(last == 0, qPrintable(QString("%1: the held line's last frame has the laser at %2")
+                                       .arg(what).arg(last)));
+    }
+}
+
+/* Review 10 M2: a USB device unplugged and another plugged in -- its line
+   number now names a different device. The patch follows its device's
+   name where it went; with the name gone, a universe with Show-only
+   channels is never reopened on whatever took the number (kept pending on
+   the old name, said); one without is reopened as before. */
+void InputOutputMap_Test::aLineThatNamesAnotherDeviceIsNotReopened()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)" << "Open (S/N: B2)" << "Open (S/N: C3)";
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 1));     // B2
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 2));     // C3
+    iom.universe(0)->markShowOnly(14, true, 0);
+    QVERIFY(iom.universe(1)->showOnlyChannelCount() == 0);
+
+    // B2 moved down a line (A1 unplugged): followed by name.
+    stub->m_lineNames = QStringList() << "Open (S/N: B2)" << "Open (S/N: C3)";
+    stub->configure();
+    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(0));
+    QCOMPARE(iom.outputPatch(0, 0)->outputName(), QString("Open (S/N: B2)"));
+    QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(1));
+
+    // B2 gone, another device in its place: the Show-only universe is not
+    // reopened on it; the other universe, gone too, reopens as before.
+    stub->m_lineNames = QStringList() << "Eurolite (S/N: Z9)" << "Nano (S/N: Y8)";
+    QSignalSpy kept(&iom, SIGNAL(offlinePatchesChanged()));
+    stub->m_openOutputs.clear();
+    stub->configure();
+    OutputPatch *op = iom.outputPatch(0, 0);
+    QVERIFY(op->isPending());
+    QVERIFY(op->isPatched() == false);
+    QCOMPARE(op->outputName(), QString("Open (S/N: B2)"));
+    QVERIFY(op->reconnectHeld().contains("Show-only"));
+    QVERIFY(stub->m_openOutputs.contains(0) == false);
+    QVERIFY(kept.count() >= 1);
+    QVERIFY(iom.outputPatch(1, 0)->isPatched());
+    QCOMPARE(iom.outputPatch(1, 0)->output(), quint32(1));
+
+    // It comes back: reopened on it, by name.
+    stub->m_lineNames = QStringList() << "Eurolite (S/N: Z9)" << "Nano (S/N: Y8)" << "Open (S/N: B2)";
+    stub->configure();
+    QVERIFY(iom.outputPatch(0, 0)->isPatched());
+    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(2));
+}
+
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()
 {
     schoolLaptop();

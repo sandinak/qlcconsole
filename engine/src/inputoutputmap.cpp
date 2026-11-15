@@ -126,6 +126,15 @@ InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
 
 InputOutputMap::~InputOutputMap()
 {
+    // The closing-frame source handed to the plugins points here.
+    if (m_doc != NULL && m_doc->ioPluginCache() != NULL)
+    {
+        foreach (QLCIOPlugin *plugin, m_doc->ioPluginCache()->plugins())
+        {
+            if (plugin != NULL)
+                plugin->clearClosingFrameSource(this);
+        }
+    }
     removeAllUniverses();
     delete m_grandMaster;
     delete m_beatTime;
@@ -700,6 +709,15 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
 
     QMutexLocker locker(&m_universeMutex);
     QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(pluginName);
+    /* Review 10 M2: a plugin whose lines go away under it (a USB device
+       unplugged, a rescan) asks this for each open output's closing frame
+       before it lets go of it. */
+    if (plugin != NULL && isFeedback == false)
+        plugin->setClosingFrameSource([this](quint32 uni, QByteArray &frame) {
+            const QList<Universe *> ua = universesSnapshot();
+            return uni < quint32(ua.size()) && ua.at(int(uni)) != NULL
+                   && ua.at(int(uni))->closingFrame(frame, false);
+        }, this);
 
     // An explicit (re)patch or unpatch replaces any feedback kept offline.
     if (isFeedback)
@@ -1446,8 +1464,10 @@ void InputOutputMap::pushTransmitNetworks()
 
 int InputOutputMap::applyTransmitGate()
 {
-    pushTransmitNetworks();
-
+    /* Review 10 H2: the patches are held first -- each held line is sent
+       its closing frame (OutputPatch::closeLine()) -- and only then are
+       the plugins told the networks: a plugin's own transmit hold (Art-Net,
+       E1.31, WLED) would drop that frame, and the node keep the laser on. */
     const bool active = transmitGateActive();
     int held = 0;
     for (quint32 u = 0; u < universesCount(); u++)
@@ -1481,6 +1501,8 @@ int InputOutputMap::applyTransmitGate()
             held++;
         }
     }
+
+    pushTransmitNetworks();
 
     if (held > 0)
         emit offlinePatchesChanged();
@@ -1851,6 +1873,7 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
 
     QMutexLocker locker(&m_universeMutex);
     bool success = true;
+    bool keptOffLine = false;
     for (quint32 i = 0; i < universesCount(); i++)
     {
         Universe *universe = m_universeArray.at(i);
@@ -1861,6 +1884,10 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
             if (op != NULL && op->plugin() == plugin)
             {
                 /*success = */ op->reconnect();
+                // Its device gone, a Show-only universe kept off whatever
+                // took its line (review 10 M2): said, and kept to reopen.
+                if (op->isPending() && op->reconnectHeld().isEmpty() == false)
+                    keptOffLine = true;
             }
         }
 
@@ -1883,6 +1910,8 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
        it now rather than at the next retry tick. */
     if (plugin->linesAreHardware() && hasOfflinePatches())
         retryOfflinePatches();
+    if (keptOffLine)
+        emit offlinePatchesChanged();
 
     emit pluginConfigurationChanged(plugin->name(), success);
 }
