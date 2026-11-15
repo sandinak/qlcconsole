@@ -274,6 +274,13 @@ public:
     bool runCommand(const ShowControl::Request &request, ShowControl::Route route);
     /** The notice runCommand() shows when it held something. */
     static QString heldForRunText();
+    /** The double-GO guard's window, ms, this computer's (Settings ▸
+     *  General ▸ Show Controls): ShowControl::defaultGoGuardMs() unless
+     *  set; 0 is off. setGoGuardMs() keeps it and hands it to the show's
+     *  ShowControl (its rules at ShowControl::run()). */
+    static QString goGuardSettingKey();
+    static int goGuardMs();
+    void setGoGuardMs(int ms);
     /** Blind's tooltip in Design (the mute). */
     static QString blindDesignTip();
     /** RC8: as a show opens, when any fixture is drawn from the show's own

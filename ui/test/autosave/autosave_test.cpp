@@ -69,6 +69,9 @@ void Autosave_Test::initTestCase()
 
     m_app = new App();
     m_app->init();
+    // GOs here come back to back on purpose: the double-GO guard (its own
+    // tests, engine/test/goguard and ui/test/goguardui) is off for them.
+    m_app->doc()->showControl()->setGoGuardMs(0);
 }
 
 void Autosave_Test::cleanupTestCase()

@@ -577,6 +577,23 @@ void CueRunner::buildFullLayout()
     head->addWidget(m_mode);
     v->addLayout(head);
 
+    /* The double-GO guard's hold (ShowControl::run(), rule 2), under the
+       Pad: role button: whose GO was taken and that the second was held,
+       in the words the footer, the phone page and the pad say. Gone once
+       ShowControl::heldNotice() is. */
+    m_goHeld = new QLabel(this);
+    m_goHeld->setObjectName(QStringLiteral("crGoHeld"));
+    m_goHeld->setFont(hf);
+    m_goHeld->setWordWrap(true);
+    m_goHeld->setProperty("helpTopic", QStringLiteral("show-control.md#two-gos-at-once"));
+    m_goHeld->setStyleSheet(QStringLiteral("QLabel#crGoHeld { color: #d08a1c; border: 2px solid #d08a1c; "
+                                           "border-radius: 6px; padding: 4px 10px; }"));
+    m_goHeld->setToolTip(tr("Two GOs a moment apart on one cue list: the first plays, the second is held "
+                            "(Settings ▸ General ▸ Show Controls, Double-GO guard)."));
+    m_goHeld->hide();
+    v->addWidget(m_goHeld);
+    connect(m_doc->showControl(), &ShowControl::commandHeld, this, &CueRunner::refreshGoHeld);
+
     /* After a crash (crash-resume-cue): the cue each list was on, offered
        back as standby -- one click LOADs it, nothing plays, the next GO
        goes on. Operate only; the phone and the pad never see it (the
@@ -1898,6 +1915,22 @@ void CueRunner::refresh()
     rebuildTree();
     updateStates();
     refreshResume();
+    refreshGoHeld();
+}
+
+void CueRunner::refreshGoHeld()
+{
+    if (m_goHeld == nullptr)
+        return;
+    const QString text = m_doc->showControl()->heldNotice();
+    if (m_goHeld->text() != text)
+        m_goHeld->setText(text);
+    m_goHeld->setVisible(!text.isEmpty());
+}
+
+QString CueRunner::goHeldText() const
+{
+    return m_goHeld != nullptr && !m_goHeld->isHidden() ? m_goHeld->text() : QString();
 }
 
 QString CueRunner::headerText() const

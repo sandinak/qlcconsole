@@ -55,6 +55,9 @@ WebAccessRun::WebAccessRun(Doc *doc, QObject *parent)
     connect(&m_timer, &QTimer::timeout, this, &WebAccessRun::poll);
     // A command lands at once; the poll catches a list that steps on its own.
     connect(m_doc->showControl(), &ShowControl::commandHandled, this, &WebAccessRun::poll);
+    // A second GO held by the guard, from anywhere: said here at once (and
+    // gone with the poll once ShowControl::heldNotice() is).
+    connect(m_doc->showControl(), &ShowControl::commandHeld, this, [this]() { poll(); });
     // The hit RT fires next, as the console names it (PadRun's one source).
     if (m_doc->programmer() != nullptr)
         connect(m_doc->programmer()->padRun(), &PadRun::hitChanged, this, &WebAccessRun::poll);
@@ -600,6 +603,10 @@ QByteArray WebAccessRun::stateJson() const
     o[QStringLiteral("blackout")] = m_doc->inputOutputMap()->blackout();
     o[QStringLiteral("grand")] = byteToPercent(m_doc->inputOutputMap()->grandMasterValue());
     o[QStringLiteral("pad")] = padMap();
+    // The double-GO guard's hold, in the console's words (one text, every surface).
+    const QString goHeld = sc->heldNotice();
+    if (!goHeld.isEmpty())
+        o[QStringLiteral("goHeld")] = goHeld;
     // Focus running on the console: the page offers the focus remote.
     o[QStringLiteral("focus")] = m_doc->programmer() != nullptr && m_doc->programmer()->focusSession()->isActive();
     // Show Status (the footer chip): one line each, never the detail or items.

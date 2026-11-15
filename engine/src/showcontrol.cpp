@@ -50,6 +50,7 @@ ShowControl::ShowControl(Doc *doc, QObject *parent)
     , m_source(Local)
     , m_sourceUniverse(UINT_MAX)
 {
+    m_guardElapsed.start();
     if (m_doc != nullptr)
         connect(m_doc, &Doc::functionRemoved, this, &ShowControl::slotFunctionRemoved);
 }
@@ -239,15 +240,182 @@ QString ShowControl::routeName(Route route)
     return QStringLiteral("other");
 }
 
+namespace
+{
+/* The route of the run() under way on this thread: execute() stamps the
+   guard's window with it (RouteOther: execute() called on its own). */
+thread_local ShowControl::Route t_runRoute = ShowControl::RouteOther;
+
+struct RouteScope
+{
+    explicit RouteScope(ShowControl::Route route) : m_was(t_runRoute) { t_runRoute = route; }
+    ~RouteScope() { t_runRoute = m_was; }
+    ShowControl::Route m_was;
+};
+} // namespace
+
 bool ShowControl::run(const Request &request, Route route)
 {
+    /* The double-GO guard (the rules are at run() in the header): before
+       anything else, so a held command reaches no handler, no preview hold
+       and no runner. */
+    if (holdIfGuarded(request, route))
+        return false;
+
     /* The one way in (docs/design/RUN_COMMANDS.md). The handler is the UI's
        (notices, the preview hold it reports): only on this object's thread.
        Off it -- a command arriving on a plugin's thread -- execute() alone,
        whose aboutToTakeStage() still holds the previews, queued. */
+    const RouteScope scope(route);
     if (m_runHandler && QThread::currentThread() == thread())
         return m_runHandler(request, route);
     return execute(request);
+}
+
+/*****************************************************************************
+ * The double-GO guard
+ *****************************************************************************/
+
+bool ShowControl::holdIfGuarded(const Request &request, Route route)
+{
+    QString held;
+    quint32 heldList = UINT_MAX;
+    if (!holds(request, route, &held, &heldList))
+        return false;
+    emit commandHandled(held, false);
+    emit commandFrom(m_source, m_sourceUniverse, held, false);
+    emit commandHeld(held, heldList, route);
+    return true;
+}
+
+bool ShowControl::admitDirect(quint32 chaserId, Command command, Route route)
+{
+    Request r;
+    r.command = command;
+    r.chaser = chaserId;
+    if (holdIfGuarded(r, route))
+        return false;
+    const RouteScope scope(route);
+    markTaken(chaserId, command);
+    return true;
+}
+
+int ShowControl::goGuardMs() const
+{
+    QMutexLocker lock(&m_guardMutex);
+    return m_goGuardMs;
+}
+
+void ShowControl::setGoGuardMs(int ms)
+{
+    QMutexLocker lock(&m_guardMutex);
+    m_goGuardMs = qBound(0, ms, maxGoGuardMs());
+    if (m_goGuardMs == 0)
+        m_guardMarks.clear();
+}
+
+void ShowControl::setGuardClock(const GuardClock &clock)
+{
+    QMutexLocker lock(&m_guardMutex);
+    m_guardClock = clock;
+    m_guardMarks.clear();
+    m_heldAt = -1;
+    m_heldText.clear();
+}
+
+qint64 ShowControl::guardNow() const
+{
+    return m_guardClock ? m_guardClock() : m_guardElapsed.elapsed();
+}
+
+QString ShowControl::sourceName(Route route)
+{
+    switch (route)
+    {
+        case RouteKey:
+        case RouteRunTab:     return tr("Laptop");
+        case RoutePad:        return tr("Pad");
+        case RouteWeb:        return tr("Phone");
+        case RouteVcRunner:   return tr("Cue Runner");
+        case RouteVcCueList:  return tr("VC Cue List");
+        case RouteControlMap: return tr("Control Map");
+        case RouteFocusCall:  return tr("Focus call");
+        case RouteOsc:        return tr("OSC");
+        case RouteMsc:        return tr("MSC");
+        case RouteTimecode:   return tr("Timecode");
+        case RouteOther:      break;
+    }
+    return tr("Another source");
+}
+
+QString ShowControl::heldText(Command held, Command taken, Route takenBy, qint64 agoMs)
+{
+    // Tenths of a second; never "0.0 s", which reads as no time at all.
+    const QString ago = QString::number(qMax<qint64>(agoMs, 100) / 1000.0, 'f', 1);
+    if (held == taken)
+        return tr("Second %1 held: %2's %3 took it %4 s ago")
+            .arg(commandName(held), sourceName(takenBy), commandName(taken), ago);
+    return tr("%1 held: %2's %3 took it %4 s ago")
+        .arg(commandName(held), sourceName(takenBy), commandName(taken), ago);
+}
+
+QString ShowControl::heldNotice() const
+{
+    QMutexLocker lock(&m_guardMutex);
+    if (m_heldAt < 0 || guardNow() - m_heldAt >= heldNoticeMs())
+        return QString();
+    return m_heldText;
+}
+
+bool ShowControl::holds(const Request &request, Route route, QString *text, quint32 *chaserId)
+{
+    // Rule 3: only the five; ALL OFF never. The clock's own GOs never (decided).
+    if (!isGuarded(request.command) || route == RouteTimecode || m_doc == nullptr)
+        return false;
+    {
+        QMutexLocker lock(&m_guardMutex);
+        if (m_goGuardMs <= 0 || m_guardMarks.isEmpty())
+            return false;
+    }
+    // Rule 4: the list it is for, as execute() finds it.
+    const Chaser *chaser = request.chaser != UINT_MAX ? qobject_cast<const Chaser *>(m_doc->function(request.chaser))
+                                                      : cueList(request.list);
+    if (chaser == nullptr)
+        return false;
+
+    QMutexLocker lock(&m_guardMutex);
+    const auto it = m_guardMarks.constFind(chaser->id());
+    if (it == m_guardMarks.constEnd())
+        return false;
+    const qint64 now = guardNow();
+    const qint64 ago = now - it->at;
+    if (ago < 0 || ago >= m_goGuardMs)
+        return false;
+    // Rule 1: held; the window stays where it was.
+    m_heldText = heldText(request.command, it->command, it->route, ago);
+    m_heldAt = now;
+    *text = m_heldText;
+    *chaserId = chaser->id();
+    return true;
+}
+
+void ShowControl::markTaken(quint32 chaserId, Command command)
+{
+    const Route route = t_runRoute;
+    QMutexLocker lock(&m_guardMutex);
+    if (command == AllOff)
+    {
+        // The emergency stop: whatever comes next is a fresh start.
+        m_guardMarks.clear();
+        return;
+    }
+    if (!isGuarded(command) || route == RouteTimecode || m_goGuardMs <= 0 || chaserId == UINT_MAX)
+        return;
+    GuardMark mark;
+    mark.at = guardNow();
+    mark.route = route;
+    mark.command = command;
+    m_guardMarks.insert(chaserId, mark);
 }
 
 bool ShowControl::isTreeGoList(quint32 chaserId) const
@@ -280,8 +448,12 @@ bool ShowControl::execute(const Request &request)
     QString what = commandName(request.command);
     if (!cue.isEmpty())
         what += tr(" cue %1").arg(cue);
+    quint32 listId = UINT_MAX;          // the list it acts on, once found
 
     auto finish = [&](bool done, const QString &how) {
+        // Carried out: the double-GO guard's window opens on its list.
+        if (done)
+            markTaken(listId, request.command);
         const QString line = how.isEmpty() ? what : what + QStringLiteral(" — ") + how;
         emit commandHandled(line, done);
         emit commandFrom(m_source, m_sourceUniverse, line, done);
@@ -317,6 +489,7 @@ bool ShowControl::execute(const Request &request)
         return finish(false, tr("no main cue list (mark one in its chaser)"));
     }
     const QString name = listName(chaser);
+    listId = chaser->id();
 
     // A cue by number: a main cue -- one numbered "4.2" wins -- else a
     // sub-cue, "4.2" being sub-cue 2 of cue 4 (or one numbered so).
@@ -470,6 +643,10 @@ bool ShowControl::execute(const Request &request)
 void ShowControl::slotFunctionRemoved(quint32 id)
 {
     m_loaded.remove(id);
+    {
+        QMutexLocker lock(&m_guardMutex);
+        m_guardMarks.remove(id);
+    }
     if (id == m_mainCueList)
     {
         m_mainCueList = UINT_MAX;
@@ -776,6 +953,11 @@ void ShowControl::reset()
     m_mainCueList = UINT_MAX;
     m_loaded.clear();
     m_out = OutSettings();
+    // Another show: no window carries over (the window itself is Settings').
+    QMutexLocker lock(&m_guardMutex);
+    m_guardMarks.clear();
+    m_heldAt = -1;
+    m_heldText.clear();
 }
 
 /*****************************************************************************

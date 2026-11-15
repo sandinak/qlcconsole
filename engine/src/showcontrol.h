@@ -27,6 +27,8 @@
 #include <QString>
 #include <QList>
 #include <QHash>
+#include <QMutex>
+#include <QElapsedTimer>
 #include <functional>
 #include <QMetaType>
 
@@ -135,10 +137,53 @@ public:
      *********************************************************************/
 public:
     /** THE entry point of a run command (docs/design/RUN_COMMANDS.md): what
-     *  every route calls. With a run handler (the App's runCommand(): the
-     *  guards, the preview hold, the console's notices), it goes there,
+     *  every route calls. The double-GO guard first (below): a command it
+     *  holds goes nowhere. Then, with a run handler (the App's runCommand():
+     *  the guards, the preview hold, the console's notices), it goes there,
      *  which then calls execute(); with none (the engine alone, a test), or
-     *  off this object's thread, straight to execute(). */
+     *  off this object's thread, straight to execute().
+     *
+     *  The double-GO guard (board Q233, "add the double-GO guard": a student
+     *  at the laptop owns GO, the pad stays armed for the staff hits, the
+     *  phone page can GO too). The rules -- every later change keeps them:
+     *
+     *   1. A GO arriving within goGuardMs() (Settings ▸ General ▸ Show
+     *      Controls, "Double-GO guard", 1.0 s by default; 0 turns it off)
+     *      of a GO carried out on the same cue list is held: refused, the
+     *      cue does not advance. The window runs from the command carried
+     *      out; a held one does not lengthen it. Any source, the same one
+     *      twice included.
+     *   2. A hold is said on every surface at once, in one text
+     *      (heldNotice(), commandHeld()): the Run tab, the footer's Next
+     *      chip, the phone Run page, and the pad (a long rumble and its
+     *      notice) -- naming whose command was taken and that the second
+     *      was held: "Second GO held: Laptop's GO took it 0.4 s ago".
+     *   3. Back, Sub GO, Sub Back and Stop are held, and open the window,
+     *      the same way (a Back right after a GO is held). ALL OFF -- the
+     *      emergency stop, from the pad, the phone, a key or MSC -- is NEVER
+     *      held, and clears every window. Blackout is not a run command and
+     *      never comes here. Pause, Resume, Load and Reset are not held.
+     *   4. Each cue list has its own window: commands on different lists
+     *      never hold each other.
+     *   5. Enforced here, in run(), before the run handler and execute()
+     *      (claim() included): the one path every route takes (the keys and
+     *      the Run tab, the pad, the phone, the VC Cue List and Cue Runner,
+     *      a VC button's step, the Control Map, a focus call, OSC, MSC).
+     *      Never per surface. The two GOs that step a plain chaser outside
+     *      the Show Tree directly, as in QLC+ 4 -- a VC button's step and a
+     *      VC Cue List's Next / Previous / Play on one -- ask admitDirect(),
+     *      the same check and the same window, before they act.
+     *   6. Timed on a command's arrival only: nothing on the DMX /
+     *      MasterTimer path, nothing per frame.
+     *
+     *  decided: a list following timecode GOs at its cues' times; those GOs
+     *  (RouteTimecode) are never held and open no window (can change).
+     *  decided: the Show tab's Play is not held: it is a timeline's play /
+     *  pause toggle, not a cue list's GO, and its second press (Pause)
+     *  must act at once (can change).
+     *  decided: a held command never reaches execute(), so it never lets
+     *  go of the emergency stop's latch (OutputRuleKeeper); ALL OFF clears
+     *  every window, so the first GO after it plays at once and does. */
     bool run(const Request &request, Route route);
 
     /** A GO on a list already running (a command here, a VC step button):
@@ -146,6 +191,73 @@ public:
      *  (Fixture::ShowOnly), resumed if paused, and the emergency stop's
      *  hold let go (Operate) */
     void claim(Chaser *chaser);
+
+    /*********************************************************************
+     * The double-GO guard (rules at run())
+     *********************************************************************/
+public:
+    /** The window the Settings default to, ms. */
+    static constexpr int defaultGoGuardMs() { return 1000; }
+    /** The longest window Settings offer, ms. */
+    static constexpr int maxGoGuardMs() { return 5000; }
+    /** The window, ms; 0: off. Off in the engine alone: the console sets
+     *  it from Settings (App, "showcontrol/goGuardMs"). */
+    int goGuardMs() const;
+    void setGoGuardMs(int ms);
+    /** GO, Back, Sub GO, Sub Back and Stop: held and timed (rule 3). */
+    static bool isGuarded(Command command)
+    {
+        return command == Go || command == Back || command == SubGo || command == SubBack
+               || command == Stop;
+    }
+    /** Who a route is, as a hold names it: "Laptop", "Pad", "Phone"... */
+    static QString sourceName(Route route);
+    /** The words of a hold: @a held arrived @a agoMs after @a takenBy's
+     *  @a taken. "Second GO held: Laptop's GO took it 0.4 s ago". */
+    static QString heldText(Command held, Command taken, Route takenBy, qint64 agoMs);
+    /** The last hold's words for heldNoticeMs() after it; empty after, or
+     *  with none. What every surface shows (rule 2). */
+    QString heldNotice() const;
+    static constexpr int heldNoticeMs() { return 3000; }
+    /** A GO, Back... on @a chaserId that does not come through run(): a
+     *  plain chaser stepped directly (a VC button's step, a VC Cue List on
+     *  a chaser outside the Show Tree). Held as run() would hold it (said
+     *  the same way); else its window opens and true: go ahead. */
+    bool admitDirect(quint32 chaserId, Command command, Route route);
+    /** The clock the window is timed on, ms (monotonic; tests swap it). */
+    using GuardClock = std::function<qint64()>;
+    void setGuardClock(const GuardClock &clock);
+
+signals:
+    /** A command was held by the guard: @a text is heldNotice()'s, on cue
+     *  list @a chaserId, the held command came by @a route. Once a hold,
+     *  on the thread the command arrived on; commandHandled() says it too. */
+    void commandHeld(const QString &text, quint32 chaserId, ShowControl::Route route);
+
+private:
+    qint64 guardNow() const;
+    /** True, with the words, when the guard holds @a request (rules 1-4). */
+    bool holds(const Request &request, Route route, QString *text, quint32 *chaserId);
+    /** holds(), and said on every surface when it does. */
+    bool holdIfGuarded(const Request &request, Route route);
+    /** @a command was carried out on @a chaserId: its window opens. */
+    void markTaken(quint32 chaserId, Command command);
+
+    struct GuardMark
+    {
+        qint64 at = 0;
+        Route route = RouteOther;
+        Command command = Go;
+    };
+    mutable QMutex m_guardMutex;            ///< a command may arrive on a plugin's thread
+    int m_goGuardMs = 0;
+    QHash<quint32, GuardMark> m_guardMarks; ///< cue list -> the last command carried out
+    QString m_heldText;
+    qint64 m_heldAt = -1;
+    GuardClock m_guardClock;
+    QElapsedTimer m_guardElapsed;
+
+public:
 
     /** The one place run commands are guarded, set by the App; empty: none.
      *  It must end in execute() for anything it lets through. */

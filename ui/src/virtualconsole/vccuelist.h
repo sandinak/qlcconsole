@@ -240,6 +240,9 @@ private:
      *  through ShowControl::run(RouteVcCueList) and return true. False for
      *  any other chaser: the caller steps it directly, as in QLC+ 4. */
     bool runShowTree(int command, int startIndex = -1);
+    /** A plain chaser's step (ShowControl::Command @a command): false
+     *  when the double-GO guard holds it (ShowControl::admitDirect()). */
+    bool admitDirect(int command);
 
     int getFadeMode() const;
 

@@ -136,7 +136,7 @@ button:disabled{opacity:.35}
 static const char kScript[] = R"HTML(<script>
 (function(){
 var $=function(i){return document.getElementById(i)};
-var ws=null,st={},unlocked=false,retry=500,armedTimer=null,wake=null;
+var ws=null,st={},unlocked=false,retry=500,armedTimer=null,wake=null,lastHeld='';
 function store(k,v){try{if(v===null)sessionStorage.removeItem(k);else sessionStorage.setItem(k,v)}catch(e){}}
 function load(k){try{return sessionStorage.getItem(k)}catch(e){return null}}
 function msg(t){$('msg').textContent=t||''}
@@ -170,6 +170,9 @@ function paint(){
   var off='GO from the phone is off in Show Settings.';
   if(st.remote===false)msg(off);
   else if($('msg').textContent===off)msg('');
+  /* A second GO held by the double-GO guard, from anywhere: the console's words (st.goHeld). */
+  if(st.goHeld){if(st.goHeld!==lastHeld&&navigator.vibrate)navigator.vibrate(300);msg(st.goHeld);lastHeld=st.goHeld}
+  else if(lastHeld){if($('msg').textContent===lastHeld)msg('');lastHeld=''}
   if(st.remote&&st.pin&&!unlocked&&$('lock').className!=='show')askPin('');
   $('go').textContent=st.paused?'GO (paused)':'GO';
   rig(canRig());statusList();padLabels();showHit()}
@@ -230,7 +233,7 @@ function connect(){
       if(p[3]==='refused')msg('Refused: GO from the phone is off.');
       else if(p[3]==='needpin'){unlocked=false;askPin('')}
       else if(p[3]==='nothing'&&p[2]==='solo')msg('Solo needs a cue playing in the Show Tree preview.');
-      else if(p[3]==='nothing')msg('Nothing to play.');
+      else if(p[3]==='nothing')msg(st.goHeld||'Nothing to play.');
       else if(p[3]==='design')msg('Hits fire in Operate: switch the console to Operate.');
       else if(p[3]==='operate')msg('Blind and Solo are for Design: the show is running.');
       else msg('')}}}
