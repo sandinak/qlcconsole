@@ -135,6 +135,11 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
             leaveLineToSibling(m_pluginLine);
     }
 
+    /* Another plugin: the old one's parameters mean nothing to it, and
+       would be replayed (reconnect(), resolvePending()) or saved with it. */
+    if (m_plugin != NULL && plugin != m_plugin)
+        m_parametersCache.clear();
+
     // A concrete set() always supersedes whatever this patch was pending on.
     m_pendingUID.clear();
     m_pendingLine = UINT_MAX;
@@ -174,10 +179,11 @@ bool OutputPatch::set(QLCIOPlugin *plugin, quint32 output, const QMap<QString, Q
     /* Review 12 F7: opened with its target in one step -- the parameters
        given to the plugin before any frame (the caller holds the frame
        lock), never to its default target first, and no closing frame: it
-       was sending nowhere. */
+       was sending nowhere. Onto another line, the old one gets its
+       closing frame first, to the target it had (set()). */
+    const bool opened = set(plugin, output);
     for (auto it = params.constBegin(); it != params.constEnd(); ++it)
         m_parametersCache[it.key()] = it.value();
-    const bool opened = set(plugin, output);
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
         for (auto it = params.constBegin(); it != params.constEnd(); ++it)
             m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
@@ -287,6 +293,8 @@ void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid,
             leaveLineToSibling(m_pluginLine);
     }
 
+    if (m_plugin != NULL && plugin != m_plugin)
+        m_parametersCache.clear();     // as set(): another plugin's mean nothing
     m_plugin = plugin;
     m_pluginLine = QLCIOPlugin::invalidLine();
     m_reconnectHeld.clear();
@@ -401,8 +409,13 @@ void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values, con
     if (m_frameLock != nullptr)
         locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
     const bool open = m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine();
-    // A parameter the plugin has but this patch never cached is cleared too.
-    const QMap<QString, QVariant> stored = open
+    /* An output: a parameter the plugin has but this patch never cached is
+       cleared too, and what the plugin has is where the line sends now (a
+       key it does not have is its default: clearing it moves nothing).
+       Never a feedback patch: the plugin keeps one entry per universe, the
+       output's (review 21, V2) -- it clears only what it cached itself. */
+    const bool byPlugin = open && m_isFeedback == false;
+    const QMap<QString, QVariant> stored = byPlugin
         ? m_plugin->getParameters(m_universe, m_pluginLine, QLCIOPlugin::Output) : QMap<QString, QVariant>();
     bool retarget = false;
     for (auto it = values.constBegin(); it != values.constEnd(); ++it)
@@ -410,7 +423,7 @@ void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values, con
             && sameParameterValue(m_parametersCache.value(it.key()), it.value()) == false)
             retarget = true;
     foreach (const QString &prop, unset)
-        if (isTargetParameter(prop) && (m_parametersCache.contains(prop) || stored.contains(prop)))
+        if (isTargetParameter(prop) && (byPlugin ? stored.contains(prop) : m_parametersCache.contains(prop)))
             retarget = true;
     // One closing frame, to the old target only: then every change at once.
     if (retarget)
@@ -421,13 +434,21 @@ void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values, con
         if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
             m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
     }
+    bool cleared = false;
     foreach (const QString &prop, unset)
     {
         if (m_parametersCache.remove(prop) == 0 && stored.contains(prop) == false)
             continue;
         if (open)
+        {
             m_plugin->unSetParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, prop);
+            cleared = true;
+        }
     }
+    /* A feedback patch on an output's line cleared a target of that one
+       entry: the output gets its own back. */
+    if (cleared && m_isFeedback)
+        leaveLineToSibling(m_pluginLine);
 }
 
 void OutputPatch::replacePluginParameters(const QMap<QString, QVariant> &values)
@@ -436,8 +457,9 @@ void OutputPatch::replacePluginParameters(const QMap<QString, QVariant> &values)
     if (m_frameLock != nullptr)
         locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
     const bool open = m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine();
-    // What the line has now: the plugin's when open (a default is absent)
-    const QMap<QString, QVariant> now = open
+    /* What the line has now: the plugin's when open (a default is absent);
+       a feedback patch only its own (the plugin's entry is the output's). */
+    const QMap<QString, QVariant> now = open && m_isFeedback == false
         ? m_plugin->getParameters(m_universe, m_pluginLine, QLCIOPlugin::Output) : m_parametersCache;
     QStringList unset;
     for (auto it = now.constBegin(); it != now.constEnd(); ++it)
@@ -468,6 +490,9 @@ void OutputPatch::replacePluginParameters(const QMap<QString, QVariant> &values)
         if (open)
             m_plugin->unSetParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, prop);
     }
+    // As setPluginParameters(): a feedback patch gives an output its own back.
+    if (open && m_isFeedback && unset.isEmpty() == false)
+        leaveLineToSibling(m_pluginLine);
 }
 
 void OutputPatch::reapplyPluginParameters()

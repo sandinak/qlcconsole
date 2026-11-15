@@ -3740,6 +3740,92 @@ void InputOutputMap_Test::r21_siblingLegsNeverLeaveALineOpen()
     QVERIFY2(stub->mapped(0, 1) == false, "the universe deleted with two legs on line 2: still open");
 }
 
+/* Review of c54477406 (independent), V1: a venue switch
+   (VenueRig -> InputOutputMap::replaceOutputPatches() -> loadPatch()) opens
+   the leg with setOutputPatch() and no parameters -- the plugin's default
+   target, broadcast on the universe's own Port-Address -- and only then sets
+   the saved target one parameter at a time. The first is a retarget: its
+   closing frame goes to the default. Same pattern restoreOne() had. */
+void InputOutputMap_Test::r21r_venueSwitchSendsNoClosingFrameToTheDefault()
+{
+    mockMachine(QList<NetworkRoute::LocalAddress>() << localAddr("en0", "10.4.12.7", 24),
+                QMap<QString, QString>{ { "10.4.12.", "10.4.12.7" } });
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "10.4.12.7");
+    InputOutputMap iom(m_doc, 1);
+    Universe *fog = iom.universe(0);
+    fog->markShowOnly(14, true, 0);
+    QMap<QString, QVariant> node;
+    node.insert("outputIP", "10.4.12.5");
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 0, false, 0, node));
+    fog->write(0, 200, true);
+    fog->dumpOutput(fog->postGMValues()->mid(0, fog->usedChannels()), true);
+    Universe::OfflinePatch venue;
+    venue.tag = Universe::OutputPatchTag;
+    venue.plugin = "ArtNet";
+    venue.uid = "10.4.12.7";
+    venue.line = 0;
+    venue.params.insert("outputIP", "10.4.12.6");
+    venue.params.insert("outputUni", 3);
+    stub->m_lastByTarget.clear();
+    iom.replaceOutputPatches(0, QList<Universe::OfflinePatch>() << venue);
+    const QStringList got = stub->m_lastByTarget.keys();
+    stub->m_lastByTarget.clear();
+    QVERIFY(iom.outputPatch(0, 0) != NULL && iom.outputPatch(0, 0)->isPatched());
+    QCOMPARE(iom.outputPatch(0, 0)->getPluginParameters().value("outputIP").toString(), QString("10.4.12.6"));
+    QVERIFY2(got.contains("default/0") == false,
+             qPrintable("a venue switch sent a frame to broadcast (the plugin's default target): " + got.join(", ")));
+}
+
+/* Review of c54477406 (independent), V2: an Art-Net feedback patch on the
+   universe's own output line shares the plugin's one entry for that
+   universe. Clearing the feedback target (ConnectionsTree::retargetFeedback,
+   the Connection editor with no feedback address) is now
+   setPluginParameters({}, {outputIP, outputUni}): it unsets the keys the
+   PLUGIN has (the output's), and Art-Net's unSetParameter() now puts the
+   controller on broadcast at once -- the output leg leaves its node. */
+void InputOutputMap_Test::r21r_clearingTheFeedbackTargetKeepsTheOutputOnItsNode()
+{
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "10.4.12.7");
+    InputOutputMap iom(m_doc, 1);
+    QMap<QString, QVariant> node;
+    node.insert("outputIP", "10.4.12.5");
+    node.insert("outputUni", 16);
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 0, false, 0, node));
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 0, true, 0));       // feedback, same line, no target
+    OutputPatch *fb = iom.feedbackPatch(0);
+    QVERIFY(fb != NULL && fb->isPatched());
+    fb->setPluginParameters({}, { QStringLiteral("outputIP"), QStringLiteral("outputUni") });
+    Universe *u = iom.universe(0);
+    u->write(0, 77, true);
+    stub->m_lastByTarget.clear();
+    u->dumpOutput(u->postGMValues()->mid(0, u->usedChannels()), true);
+    const QStringList got = stub->m_lastByTarget.keys();
+    stub->m_lastByTarget.clear();
+    QVERIFY2(iom.outputPatch(0, 0)->getPluginParameters().value("outputIP").toString() == QString("10.4.12.5"),
+             qPrintable("clearing the feedback target cleared the OUTPUT's: it reads "
+                        + iom.outputPatch(0, 0)->getPluginParameters().value("outputIP").toString()));
+    QVERIFY2(got.contains("10.4.12.5/0") && got.contains("default/0") == false,
+             qPrintable("the output leg (10.4.12.5) sends to: " + got.join(", ")));
+}
+
+/* Review of c54477406 (independent), V3 (pre-existing, the feedback
+   target): the feedback patch is not in the Universe's patch list, so
+   SiblingOnLine never sees the output leg on its line: removing the
+   feedback closes (line, universe) under the open output leg. */
+void InputOutputMap_Test::r21r_removingFeedbackOnTheOutputsLineKeepsTheOutputOpen()
+{
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "10.4.12.7");
+    InputOutputMap iom(m_doc, 1);
+    QMap<QString, QVariant> node;
+    node.insert("outputIP", "10.4.12.5");
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 0, false, 0, node));
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 0, true, 0));
+    QVERIFY(iom.setOutputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine(), true, 0));   // feedback removed
+    QVERIFY(iom.outputPatch(0, 0)->isPatched());
+    QVERIFY2(stub->mapped(0, 0),
+             "removing the feedback patch closed (line 1, universe 1) under the open output leg");
+}
+
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()
 {
     schoolLaptop();

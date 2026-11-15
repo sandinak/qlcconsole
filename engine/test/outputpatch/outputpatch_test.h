@@ -36,6 +36,8 @@ private slots:
     void patch();
     void dump();
     void pending();
+    /** Review 21: another plugin, none of the old one's parameters */
+    void anotherPluginForgetsTheOldOnesParameters();
 
 private:
     Doc* m_doc;

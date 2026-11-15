@@ -162,6 +162,9 @@ private slots:
     void theUniverseGridSaysTheAddressUnderThePointer();
     void aWledNotSetUpSaysWhyOnItsUniverse();
     void connectionEditorPatchesANewArtNetUniverse();
+    /** Review of c54477406 (independent), V5: red */
+    void r21r_editorLineChangeSendsNothingToTheDefault();
+    void r21r_editorLineChangeSendsNoClosingFrameToTheDefault();
     void connectionEditorOpensFilledInForAPatchedUniverse();
     void connectionEditorSetsSacnSettings();
     void connectionEditorPatchesAUsbWidget();
