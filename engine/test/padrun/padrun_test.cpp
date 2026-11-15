@@ -1262,6 +1262,42 @@ void PadRun_Test::theVenueFocusSweep()
             hold(kMenu, false);
             hold(kView, false);
             check("FOCUS, View + Menu held");
+
+            /* The exit chord never moves the focus: LT + Menu, held and let
+               go in either order, leaves the call where it was -- here with
+               the laptop's prompt answered Cancel, so the focus goes on. */
+            QVERIFY(disconnect(s, &FocusSession::exitRequested, s, &FocusSession::finish));
+            s->setCallIndex(1);
+            const QList<QList<QPair<quint32, bool>>> orders = {
+                { { kLT, true }, { kMenu, true }, { kMenu, false }, { kLT, false } },
+                { { kLT, true }, { kMenu, true }, { kLT, false }, { kMenu, false } },
+                { { kMenu, true }, { kLT, true }, { kLT, false }, { kMenu, false } },
+                { { kMenu, true }, { kLT, true }, { kMenu, false }, { kLT, false } } };
+            int asked = 0;
+            for (int o = 0; o < orders.size(); ++o)
+            {
+                for (const QPair<quint32, bool> &step : orders.at(o))
+                    step.first == kLT ? axis(kLT, step.second ? 255 : 0) : hold(kMenu, step.second);
+                const QString what = QString("FOCUS, LT + Menu, order %1").arg(o + 1);
+                QVERIFY2(s->callIndex() == 1, qPrintable(what + QString(": call %1").arg(s->callIndex())));
+                QVERIFY2(run->state() == PadRun::Focus, qPrintable(what));
+                QVERIFY2(m_runs.isEmpty(), qPrintable(what));
+                // LT held as Menu went down: the end was asked (Cancel here).
+                if (o < 2)
+                    ++asked;
+                QVERIFY2(exits.count() == asked, qPrintable(what + QString(": asked %1").arg(exits.count())));
+            }
+            // An LT tap alone still steps back one call (on its release).
+            axis(kLT, 255);
+            QCOMPARE(s->callIndex(), 1);
+            axis(kLT, 0);
+            QCOMPARE(s->callIndex(), 0);
+            // RT is unchanged: the next call on the press.
+            axis(kRT, 255);
+            QCOMPARE(s->callIndex(), 1);
+            axis(kRT, 0);
+            QCOMPARE(run->state(), PadRun::Focus);
+            QVERIFY(m_runs.isEmpty());
         }
     }
 }

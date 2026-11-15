@@ -201,6 +201,9 @@ ProgrammerController::ProgrammerController(Doc *doc)
     connect(m_padRun, &PadRun::enabledChanged, m_focusCallCue, &FocusCallCue::setRunRole);
     m_focusSession->setLastCallHold([this]() { return m_padRun->lastCallHold(); });
     connect(m_focusCallCue, &FocusCallCue::stateChanged, this, [this]() {
+        // A new FOCUS (or none): LT's step starts afresh.
+        m_focusLt.reset();
+        m_focusLtChord = false;
         m_padRun->focusCueChanged();
         if (m_focusCallCue->state() != FocusCallCue::NamingVenue)
             m_holdVenueA.reset();
@@ -3113,7 +3116,12 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         if (role == FocusCallCue::startRole() && m_padRun->isFocusing())
         {
             if (value > 0)
+            {
+                // LT held: the chord, not a step back on LT's release.
+                if (m_focusLt.isDown())
+                    m_focusLtChord = true;
                 m_padRun->focusMenu(universe);
+            }
             return true;
         }
         /* A focus-call cue armed: Start (Menu) begins the calls -- in the
@@ -3361,7 +3369,23 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     }
 
     // Focus mode owns the controller: everything stops here.
-    if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
+    /* FOCUS (PadRun rule 6): LT is also the safety of LT + Menu, which
+       ends the focus -- so its step back goes on the release, and only
+       when Menu was not pressed with it. The Tools role steps on the
+       press, as it always has; RT is unchanged. */
+    if (role == GamepadRole::LeftTrigger && m_padRun->isFocusing())
+    {
+        const bool was = m_focusLt.isDown();
+        if (m_focusLt.update(qBound(0.0f, norm, 1.0f)))
+            m_focusLtChord = m_heldRoles.contains(FocusCallCue::startRole());
+        else if (was && !m_focusLt.isDown())
+        {
+            if (!m_focusLtChord && !m_heldRoles.contains(FocusCallCue::startRole()))
+                m_focusSession->apply(FocusSession::PreviousCall);
+            m_focusLtChord = false;
+        }
+    }
+    else if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
     {
         // The triggers step the focus calls.
         m_focusSession->setTrigger(role == GamepadRole::LeftTrigger ? 0 : 1, norm);

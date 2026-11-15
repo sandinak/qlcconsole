@@ -900,6 +900,11 @@ private:
     ControllerScheme::LongPress m_holdB;
     /** Hold A answering "Still at <venue>?" yes (board Q230). */
     ControllerScheme::LongPress m_holdVenueA { ControllerScheme::keepAllHoldSeconds() };
+    /** FOCUS (PadRun rule 6): LT is the exit chord's safety too, so its
+     *  step back a call goes on its release, and not when Menu was
+     *  pressed while it was held (or held as it went down). */
+    ControllerScheme::TriggerButton m_focusLt;
+    bool m_focusLtChord = false;
     QColor m_padLight;
     PadTriggers::State m_padTriggers;
     bool m_padTriggersSent = false;

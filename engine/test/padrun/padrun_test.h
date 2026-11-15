@@ -95,7 +95,9 @@ private slots:
     /* Venue focus from the pad (rule 6, 2026-11-15). */
     /** A venue focus cue waiting, the pad not armed, ARMED, and in FOCUS:
      *  every control alone, pressed and held past every hold, starts and
-     *  ends no focus, plays nothing and leaves the state as it was. */
+     *  ends no focus, plays nothing and leaves the state as it was. In
+     *  FOCUS, LT + Menu in any order leaves the call where it was, an LT
+     *  tap steps back one call on its release, RT steps on as before. */
     void theVenueFocusSweep();
     /** Not armed, LT + Menu is refused, saying to arm first; ARMED, LT +
      *  Menu is FOCUS (its words, colour and light, one stateChanged()); Menu
