@@ -3506,9 +3506,18 @@ void OutputRules_Test::review10_aClosingLineInBlindGetsNoPreview()
     QVERIFY(flame && wash);
     m_doc->outputRuleKeeper()->rebuild();
     // Programmed in Blind: a preview only
-    u->write(3, 200);
+    QSharedPointer<GenericFader> fader = u->requestFader();
+    {
+        GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, u, Fixture::invalidId(), 3);
+        fc->setStart(200);
+        fc->setCurrent(200);
+        fc->setTarget(200);
+        fc.release();
+        fader->stampLiveEpoch();
+    }
     u->processFaders();
     u->processFaders();
+    qInfo("the wash in the preview: %d", int(uchar(u->postGMValues()->at(3))));
     const int before = uchar(m_stub->m_universe.at(1024 + 3));
 
     // Re-patched to another interface while still in Blind
@@ -3517,6 +3526,8 @@ void OutputRules_Test::review10_aClosingLineInBlindGetsNoPreview()
     const int flame2 = uchar(m_stub->m_universe.at(1024 + 5));
 
     QVERIFY(io->setOutputPatch(uni, QString(), QString(), QLCIOPlugin::invalidLine(), false, 0));
+    u->dismissFader(fader);
+    fader.clear();
     QVERIFY(m_doc->deleteFixture(flame->id()));
     QVERIFY(m_doc->deleteFixture(wash->id()));
     QVERIFY(io->removeUniverse(int(uni)));
