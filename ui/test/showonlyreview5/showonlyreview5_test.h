@@ -51,6 +51,16 @@ private slots:
     void sweepAudioDmxBar();
     void sweepVcClockSchedule();
 
+    /* Sixth review (of 1391a70ca1): automatic writers that come back after
+       the stop, and a GO that should drive */
+    void r6AudioWidgetFunctionBarAfterStop();
+    void r6AudioBarMovesVcSliderAfterStop();
+    void r6AudioBarPressesVcButtonAfterStop();
+    void r6VcClockFirstScheduleAfterStop();
+    void r6InputPassthroughThroughStop();
+    void r6PlaybackSliderRestartsAfterStop();
+    void r6ScriptLaunchedCueDrives();
+
 private:
     Fixture *addDimmer(const QString &name, int address, int rules);
     Fixture *addLaser(const QString &name, int address);

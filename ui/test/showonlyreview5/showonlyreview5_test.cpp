@@ -32,6 +32,7 @@
 #include "vcaudiotriggers.h"
 #include "vcclock.h"
 #include "grouphead.h"
+#include "vcbutton.h"
 #undef private
 #undef protected
 
@@ -54,6 +55,7 @@
 #include "scene.h"
 #include "doc.h"
 #include "function.h"
+#include "script.h"
 #include <QMouseEvent>
 
 enum { LaserAt = 0, Stage = 10, Flame = 14 };
@@ -582,6 +584,236 @@ void ShowOnlyReview5_Test::sweepVcClockSchedule()
     clock.mousePressEvent(&press);
     fog->start(m_doc->masterTimer(), clock.functionParent());     // the next schedule
     tick(3);
+    QCOMPARE(sent(Flame), 255);
+}
+
+/****************************************************************************
+ * Sixth review (of 1391a70ca1)
+ ****************************************************************************/
+
+/* R6-1. A real VC audio triggers widget: its bars are made in its
+   constructor, before the widget has an id (VCWidget::invalidId(), set
+   later by loadXMLCommon()/setID()), so AudioBar::m_parentId is
+   quint32(-1) and AudioBar::functionParent() is FunctionParent::master(),
+   not the AutoVCWidget source the "armed in session" registry keys on.
+   Every peak starts its function as a fresh Master source: after All Off
+   the music goes on and the flame fires on the next peak. */
+void ShowOnlyReview5_Test::r6AudioWidgetFunctionBarAfterStop()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *burst = new Scene(m_doc);
+    burst->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(burst);
+    QWidget w;
+    VCAudioTriggers *at = new VCAudioTriggers(&w, m_doc);
+    at->setID(42);                                  // as loadXMLCommon() does
+    AudioBar *bar = at->m_spectrumBars.at(0);
+    bar->setType(AudioBar::FunctionBar);
+    bar->attachFunction(burst);
+    bar->setMinThreshold(20);
+    bar->setMaxThreshold(200);
+    m_doc->setMode(Doc::Operate);
+    // Switched on by the operator in Operate: what slotEnableButtonToggled() arms.
+    Function::armAutoSource(FunctionParent(FunctionParent::AutoVCWidget, at->id()));
+    Function::armAutoSource(bar->functionParent());
+    bar->m_value = 230;
+    bar->checkFunctionThresholds(m_doc);
+    tick(3);
+    QCOMPARE(sent(Flame), 255);
+
+    allOff();
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    bar->m_value = 230;                             // the music goes on; nobody touches it
+    bar->checkFunctionThresholds(m_doc);
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    delete at;
+}
+
+/* R6-2. An audio bar of type VC widget on a VC slider (Level, on the
+   flame): AudioBar::checkWidgetFunctionality() calls
+   VCSlider::setSliderValue(m_value, true, true) -- external, a new value
+   on every beat -- which stamps the slider as "really moved". After All
+   Off the music moves the slider and the flame follows. */
+void ShowOnlyReview5_Test::r6AudioBarMovesVcSliderAfterStop()
+{
+    Fixture *flame = addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly);
+    QVERIFY(flame != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setID(50);
+    slider.setSliderMode(VCSlider::Level);
+    slider.addLevelChannel(flame->id(), 0);
+    m_doc->setMode(Doc::Operate);
+    AudioBar bar(AudioBar::VCWidgetBar, 0, 77);
+    bar.m_widgetID = slider.id();
+    bar.m_widget = &slider;
+    bar.m_value = 230;
+    bar.checkWidgetFunctionality();
+    tick(3);
+    QCOMPARE(sent(Flame), 230);
+
+    allOff();
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    bar.m_value = 240;                              // the next beat; nobody touched anything
+    bar.checkWidgetFunctionality();
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+}
+
+/* R6-3. The same bar on a VC button: the peak presses it
+   (VCButton::pressFunction()), a ManualVCWidget start in this session --
+   the show. After All Off the next peak lights the flame. */
+void ShowOnlyReview5_Test::r6AudioBarPressesVcButtonAfterStop()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *burst = new Scene(m_doc);
+    burst->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(burst);
+    QWidget w;
+    VCButton button(&w, m_doc);
+    button.setID(51);
+    button.setFunction(burst->id());
+    m_doc->setMode(Doc::Operate);
+    AudioBar bar(AudioBar::VCWidgetBar, 0, 77);
+    bar.setMinThreshold(20);
+    bar.setMaxThreshold(200);
+    bar.m_widgetID = button.id();
+    bar.m_widget = &button;
+    bar.m_value = 230;
+    bar.checkWidgetFunctionality();
+    tick(3);
+    QCOMPARE(sent(Flame), 255);
+
+    allOff();
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    QVERIFY(button.state() == VCButton::Inactive);
+    bar.m_value = 10;                               // between beats
+    bar.checkWidgetFunctionality();
+    bar.m_value = 230;                              // the next beat
+    bar.checkWidgetFunctionality();
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+}
+
+/* R6-4. A VC Clock schedule set up before the stop that had not fired yet:
+   Function::autoSourceEpoch() makes its FIRST start arm it in the session
+   it fires in -- the session All Off just started. E4 says an armed
+   schedule from before the stop stays held. */
+void ShowOnlyReview5_Test::r6VcClockFirstScheduleAfterStop()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fog = new Scene(m_doc);
+    fog->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fog);
+    QWidget w;
+    VCClock clock(&w, m_doc);
+    clock.setID(61);
+    m_doc->setMode(Doc::Operate);
+    tick(2);
+    allOff();
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    // 21:00, the schedule's time (VCClock::slotUpdateTime()); nobody touched the clock.
+    fog->start(m_doc->masterTimer(), clock.functionParent());
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+}
+
+/* R6-5. Input passthrough (Universe::setPassthrough): what comes in is
+   HTP-merged into the output in updatePostGMValue()/applyPassthrough(),
+   past every fader -- no gate, no stamp. In Operate a Show-only channel
+   goes out at the input's value, and All Off's cut (cutShowOnly() then
+   updatePostGMValue()) merges it straight back. */
+void ShowOnlyReview5_Test::r6InputPassthroughThroughStop()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        ua[0]->setPassthrough(true);
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    }
+    m_doc->setMode(Doc::Operate);
+    {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        ua[0]->slotInputValueChanged(0, Flame, 255, QString());    // a house desk's channel
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    }
+    tick(3);
+    allOff();
+    tick(3);
+    // E1: every Show-only channel at its safe value, at once.
+    QCOMPARE(sent(Flame), 0);
+}
+
+/* R6-6. A VC playback slider: setPlaybackValue() arms a 5-tick change
+   counter, and writeDMXPlayback() starts the function again whenever it
+   is stopped while the counter runs. All Off within those ticks of the
+   last move: the next tick restarts it as a fresh ManualVCWidget source
+   in the new session -- the flame comes back with no hand after the stop. */
+void ShowOnlyReview5_Test::r6PlaybackSliderRestartsAfterStop()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *burst = new Scene(m_doc);
+    burst->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(burst);
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setID(52);
+    slider.setSliderMode(VCSlider::Playback);
+    slider.setPlaybackFunction(burst->id());
+    m_doc->setMode(Doc::Operate);
+    slider.setSliderValue(255, false, true);
+    tick(6);
+    QCOMPARE(sent(Flame), 255);
+    slider.setSliderValue(250, false, true);        // the last move
+    allOff();                                       // in the same moment
+    int flameMax = 0;
+    for (int i = 0; i < 6; i++)
+    {
+        tick(1);
+        flameMax = qMax(flameMax, sent(Flame));
+    }
+    QCOMPARE(flameMax, 0);
+}
+
+/* R6-7 (should drive). A GO in Operate on a Script that starts the fog
+   cue and leaves it running (stoponexit false): the cue's source is
+   Function(script) since this train (script.cpp handleStartFunction), so
+   it follows the Script's gate -- and the Script's gate turns to held the
+   moment the Script ends (no source left, E5). The cue keeps running and
+   the fogger it was GOne for goes dark. */
+void ShowOnlyReview5_Test::r6ScriptLaunchedCueDrives()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    QVERIFY(addDimmer(QStringLiteral("Stage"), Stage, 0) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fog = new Scene(m_doc);
+    fog->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fog);
+    Script *script = new Script(m_doc);
+    QVERIFY(script->setData(QStringLiteral("stoponexit:false\nstartfunction:%1\n").arg(fog->id())));
+    m_doc->addFunction(script);
+    m_doc->setMode(Doc::Operate);
+    script->start(m_doc->masterTimer(), FunctionParent::master());     // the operator's GO
+    tick(10);
+    QVERIFY(fog->isRunning());
+    QVERIFY(!script->isRunning());
     QCOMPARE(sent(Flame), 255);
 }
 
