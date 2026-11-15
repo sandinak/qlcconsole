@@ -347,8 +347,11 @@ signals:
     void hasFeedbackChanged();
 
     /** The first Show-only channel was marked (none before): the I/O map
-     *  checks its line (S-H1, outputpatch.h) */
+     *  holds its hardware outputs (N2, outputpatch.h) */
     void showOnlyStarted();
+    /** The last Show-only channel was unmarked: the I/O map lets those
+     *  holds go (N4) */
+    void showOnlyEnded();
 
 private:
     /** Reference to the input patch associated to this universe. */

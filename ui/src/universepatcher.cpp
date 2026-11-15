@@ -1085,7 +1085,7 @@ int UniversePatcher::applyOrderedPatch(const OrderedPatch &plan)
         if (iomap->setOutputPatch(e.universe, plan.pluginName, QString(), e.line,
                                   false, 0) == false)
         {
-            // S-H1: a laser universe onto an interface with no serial.
+            // N1: a universe with Show-only fixtures onto a hardware line.
             if (iomap->lastPatchRefusal().isEmpty() == false)
                 refused << tr("Universe %1: %2").arg(e.universe + 1).arg(iomap->lastPatchRefusal());
             continue;

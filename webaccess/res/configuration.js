@@ -24,6 +24,18 @@ function ioChanged(cmd, uni, val)
   websocket.send("QLC+IO|" + cmd + "|" + uni + "|" + val);
 }
 
+// A refused output patch (Show-only fixtures need a network output): the
+// select goes back to the patch the universe really has.
+function ioSetOutput(uni, val)
+{
+  var sel = document.getElementById("ioOutput" + uni);
+  if (!sel)
+    return;
+  sel.value = val;
+  if (sel.value !== val)
+    sel.selectedIndex = 0;
+}
+
 function authChangeUser(username)
 {
   var newPasswordElement = document.getElementById("auth-password-" + username);

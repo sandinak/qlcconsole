@@ -2845,8 +2845,8 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
     }
 
     /* The Show-only fixtures are known now (the I/O map is read before
-       them): every patch the load opened, checked against S-H1..S-H3
-       (outputpatch.h), then output let go. */
+       them): N3 holds their universes' hardware outputs (outputpatch.h),
+       then output is let go. */
     if (loadIO)
     {
         m_outputRuleKeeper->rebuild();

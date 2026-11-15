@@ -26,6 +26,7 @@
 #include "outputrulekeeper.h"
 #include "fixturegroup.h"
 #include "monitor/monitor.h"
+#include "inputoutputmap.h"
 #include "doc.h"
 
 OutputRulesDialog::OutputRulesDialog(Doc *doc, const QList<quint32> &fixtureIds, QWidget *parent)
@@ -170,6 +171,10 @@ Fixture::OutputRules OutputRulesDialog::rulesFor(quint32 fixtureId) const
 bool OutputRulesDialog::apply()
 {
     bool changed = false;
+    /* N2 (outputpatch.h): a group made Show only holds a hardware output
+       once, after every fixture is marked -- the closing frame has them all
+       at safe. */
+    InputOutputMap::ShowOnlyMarks marks(m_doc->inputOutputMap());
     foreach (quint32 id, m_fixtures)
     {
         Fixture *f = m_doc->fixture(id);

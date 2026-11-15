@@ -38,6 +38,7 @@
 #include "qlcfile.h"
 #include "doc.h"
 #include "inputpatch.h"
+#include "outputpatch.h"
 #include "audiocapture.h"
 #include "audiorenderer.h"
 #include "qhttpserver.h"
@@ -669,10 +670,19 @@ bool WebAccessBase::handleCommonWebSocketCommand(QHttpConnection *conn, WebAcces
         else if (cmdList[1] == "OUTPUT")
         {
             InputOutputMap *iom = m_doc->inputOutputMap();
-            // S-H1: a laser universe onto an interface with no serial is refused, said.
+            /* N1: a universe with Show-only fixtures onto a hardware line is
+               refused: the page's select goes back to the real patch, said. */
             if (iom->setOutputPatch(universe, cmdList[3], "", cmdList[4].toUInt(), false) == false
                 && iom->lastPatchRefusal().isEmpty() == false && conn)
-                conn->webSocketWrite(QString("ALERT|" + iom->lastPatchRefusal()));
+            {
+                const QString refusal = iom->lastPatchRefusal();
+                OutputPatch *real = iom->outputPatch(universe);
+                const QString value = real != nullptr && real->isPatched()
+                        ? QString("%1|%2").arg(real->pluginName()).arg(real->output())
+                        : QString("None| -1");
+                conn->webSocketWrite(QString("IO_OUTPUT|%1|%2").arg(universe).arg(value));
+                conn->webSocketWrite(QString("ALERT|" + refusal));
+            }
             iom->saveDefaults();
         }
         else if (cmdList[1] == "FB")

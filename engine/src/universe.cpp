@@ -791,9 +791,11 @@ void Universe::setOutputRules(const QByteArray &bits)
         }
         updateMaxMarkLocked();
     }
-    // S-H1 (outputpatch.h): the I/O map checks the line it is on.
+    // N2, N4 (outputpatch.h): the I/O map holds or lets go its hardware outputs.
     if (hadShowOnly == false && showOnlyChannelCount() > 0)
         emit showOnlyStarted();
+    else if (hadShowOnly && showOnlyChannelCount() == 0)
+        emit showOnlyEnded();
 }
 
 void Universe::updateMaxMarkLocked()
@@ -917,9 +919,11 @@ void Universe::markShowOnly(int channel, bool on, uchar safe, bool remark)
         updateMaxMarkLocked();
         updatePostGMValue(channel);
     }
-    // S-H1 (outputpatch.h): the I/O map checks the line it is on.
+    // N2, N4 (outputpatch.h): the I/O map holds or lets go its hardware outputs.
     if (hadShowOnly == false && showOnlyChannelCount() > 0)
         emit showOnlyStarted();
+    else if (hadShowOnly && showOnlyChannelCount() == 0)
+        emit showOnlyEnded();
 }
 
 bool Universe::showOnlyHeld() const
@@ -2888,10 +2892,8 @@ bool Universe::saveXML(QXmlStreamWriter *doc) const
                      p.params, p.hidProfile, p.network);
     if (feedbackPatch() != NULL)
     {
-        // Held off a Show-only device (S-H3): its own number, as it was.
-        const OutputPatch *fb = feedbackPatch();
-        savePatchXML(doc, KXMLQLCUniverseFeedbackPatch, fb->pluginName(), fb->outputName(),
-            fb->isPending() ? fb->pendingLine() : fb->output(), "", feedbackPatch()->getPluginParameters(), QString(),
+        savePatchXML(doc, KXMLQLCUniverseFeedbackPatch, feedbackPatch()->pluginName(), feedbackPatch()->outputName(),
+            feedbackPatch()->output(), "", feedbackPatch()->getPluginParameters(), QString(),
             NetworkRoute::networkForLine(feedbackPatch()->outputName()));
     }
     else
