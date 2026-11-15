@@ -1039,7 +1039,8 @@ void Universe::sendHeld()
        sent, Blind or not. The Show-only channels at safe; the others as
        they are -- in Blind, frozen at the frame from before Blind. */
     QMutexLocker frameLocker(&m_frameMutex);
-    if (m_notOursWhole.load(std::memory_order_relaxed) || m_outputPatchList.isEmpty())
+    if (m_notOursWhole.load(std::memory_order_relaxed) || m_outputPatchList.isEmpty()
+        || m_loadHold.load(std::memory_order_relaxed))
         return;
     QByteArray frame = heldBaseFrame();
     if (showOnlyChannelCount() > 0)
@@ -1898,6 +1899,9 @@ void Universe::dumpOutputFrame(const QByteArray &data, bool dataChanged, bool li
     /* A universe the venue's house desk keeps (docs/design/VENUES.md section 5): nothing
        of ours goes out on it at all -- not Blind's, not Blackout's. */
     if (m_notOursWhole.load(std::memory_order_relaxed))
+        return;
+    // A show being loaded: nothing until its patches are checked (review 13).
+    if (m_loadHold.load(std::memory_order_relaxed))
         return;
 
     /* Show only: held outside a real run (Design) and in Blind; in a

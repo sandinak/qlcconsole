@@ -160,6 +160,8 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
         }
         m_reconnectHeld.clear();
         m_deviceHold = NoDeviceHold;
+        m_heldFromOpen = false;
+        m_loadedLine = UINT_MAX;
         return opened;
     }
 
@@ -204,6 +206,10 @@ bool OutputPatch::reconnect()
         if (ret == true)
         {
             m_freshLine.store(true, std::memory_order_relaxed);
+            // The name stays the one it was patched to; how many lines carry
+            // it now is the count from here on (review 13 L3).
+            if (m_plugin->linesAreHardware() && m_lineName.isEmpty() == false)
+                m_lineNameCount = int(m_plugin->outputs().count(m_lineName));
             QMap<QString, QVariant>::iterator it = m_parametersCache.begin();
             for (; it != m_parametersCache.end(); it++)
                 m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
@@ -232,10 +238,13 @@ QString OutputPatch::recordedLineName() const
 {
     if (m_pluginLine != QLCIOPlugin::invalidLine())
         return m_lineName;
-    return m_deviceHold != NoDeviceHold ? m_pendingUID : QString();
+    // Held, or pending on it from load (review 13 C1): the name it waits for.
+    if (m_plugin != NULL && m_plugin->linesAreHardware())
+        return m_pendingUID;
+    return QString();
 }
 
-void OutputPatch::holdForDeviceChange(const QString &why, bool closeTheLine, bool needsConfirm)
+void OutputPatch::holdForDeviceChange(const QString &why, bool closeTheLine, bool sendClosing)
 {
     if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine())
         return;
@@ -243,7 +252,8 @@ void OutputPatch::holdForDeviceChange(const QString &why, bool closeTheLine, boo
     if (m_frameLock != nullptr)
         locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
     m_reconnectHeld = why;
-    m_deviceHold = needsConfirm ? HeldNeedsConfirm : HeldDeviceChanged;
+    m_deviceHold = HeldDeviceChanged;
+    m_heldFromOpen = true;
     qWarning() << "[OutputPatch]" << why;
     /* Not closed when another patch is open on it now: closing is per line
        in a USB plugin, and would stop that universe too -- the plugin only
@@ -251,7 +261,12 @@ void OutputPatch::holdForDeviceChange(const QString &why, bool closeTheLine, boo
        written to that device again. No closing frame: the line is another
        device now. */
     if (closeTheLine)
+    {
+        // A line this patch did open (a show load): its closing frame first.
+        if (sendClosing)
+            sendClosingFrame();
         m_plugin->closeOutput(m_pluginLine, m_universe);
+    }
     else
         m_plugin->forgetOutput(m_pluginLine, m_universe);
     m_pendingUID = m_lineName;
@@ -272,6 +287,7 @@ void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid,
     m_pluginLine = QLCIOPlugin::invalidLine();
     m_reconnectHeld.clear();
     m_deviceHold = NoDeviceHold;
+    m_heldFromOpen = false;
     m_pendingUID = uid;
     m_pendingLine = savedLine;
     m_pendingNetwork = network;

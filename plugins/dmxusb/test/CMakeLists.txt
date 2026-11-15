@@ -30,6 +30,14 @@ target_link_libraries(dmxusb_test PRIVATE
     Qt6::Test
 )
 
+# dmxusbwidget.cpp sets the Windows timer resolution (timeBeginPeriod...), as
+# the plugin does: winmm, as the plugin's CMakeLists links it. The test
+# compiles no driver backend (no QTSERIAL, no D2XX), so nothing else of the
+# plugin's Windows libraries (ftd2xx) is needed.
+if(WIN32)
+    target_link_libraries(dmxusb_test PRIVATE winmm)
+endif()
+
 # No USB driver backend is compiled into the test (the widgets get a fake
 # interface): dmxusbwidget.h then never declares DMXInterface itself.
 target_compile_options(dmxusb_test PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/../src/dmxinterface.h)

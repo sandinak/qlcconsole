@@ -612,6 +612,14 @@ public:
      *  channel's safe value (UNIVERSE_SIZE bytes; off, closed -- what
      *  OutputRuleKeeper::safeValue() says). Set with the rule bits. */
     void setShowOnlySafeValues(const QByteArray &safe);
+    /** A show being loaded (InputOutputMap::setLoadHold()): nothing of
+     *  this universe reaches any plugin -- frames, sendCurrent(),
+     *  sendHeld() -- until its patches have been checked against the
+     *  Show-only rules (review 13: before the first frame after a load).
+     *  A closing frame still goes out. Safe from any thread. */
+    void setLoadHold(bool hold) { m_loadHold.store(hold, std::memory_order_relaxed); }
+    bool loadHold() const { return m_loadHold.load(std::memory_order_relaxed); }
+
     /** Whether a real run of the show may drive the Show-only channels:
      *  true in Operate. False (Design, the default): every frame sent has
      *  them at their safe value, whatever wrote them -- universeWritten()
@@ -733,6 +741,7 @@ private:
     QByteArray m_showOnlyFrame;
     std::atomic<int> m_showOnlyCount { 0 };
     std::atomic<bool> m_showOnlyLive { false };
+    std::atomic<bool> m_loadHold { false };
     /** Channels made Show only while live: the next frame starts them
      *  from safe (m_showOnlyResetChannels, under m_outputRulesMutex) */
     std::atomic<bool> m_showOnlyReset { false };

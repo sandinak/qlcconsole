@@ -318,6 +318,7 @@ bool InputOutputMap::addUniverse(quint32 id)
                 uni = new Universe(universesCount(), m_grandMaster);
                 // In Blind: inhibited from its first frame, as the others are.
                 uni->setInhibitOutput(m_outputInhibited);
+                uni->setLoadHold(m_loadHold);
                 connect(uni, SIGNAL(universeWritten(quint32,QByteArray)), this, SIGNAL(universeWritten(quint32,QByteArray)));
                 m_universeArray.append(uni);
             }
@@ -329,6 +330,7 @@ bool InputOutputMap::addUniverse(quint32 id)
            its first frame, matching the others. */
         uni = new Universe(id, m_grandMaster);
         uni->setInhibitOutput(m_outputInhibited);
+        uni->setLoadHold(m_loadHold);
         connect(uni, SIGNAL(universeWritten(quint32,QByteArray)), this, SIGNAL(universeWritten(quint32,QByteArray)));
         m_universeArray.append(uni);
     }
@@ -774,7 +776,8 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
                       << "- keeping" << outputUID << "as pending rather than trusting index" << output;
         {
             Universe *pu = m_universeArray.at(universe);
-            if (pu->setOutputPatchPending(plugin, outputUID, index) == false)
+            // The line it asked for kept: H1 reopens it there only.
+            if (pu->setOutputPatchPending(plugin, outputUID, index, output) == false)
                 return false;
             // Its target kept with it, for when it opens (review 12 F7).
             for (auto it = params.constBegin(); it != params.constEnd(); ++it)
@@ -797,12 +800,12 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
         if (plugin != NULL && output != QLCIOPlugin::invalidLine() && transmitGateActive())
         {
             const QString lineName = plugin->outputs().value(int(output));
-            QMap<QString, QVariant> params;
+            QMap<QString, QVariant> lineParams;
             Universe *uni = m_universeArray.at(universe);
             if (NetworkRoute::isAddressIdentity(lineName) == false && index < uni->outputPatchesCount()
                 && uni->outputPatch(index) != NULL)
-                params = uni->outputPatch(index)->getPluginParameters();
-            const QString reason = transmitHoldReason(lineName, params, plugin);
+                lineParams = uni->outputPatch(index)->getPluginParameters();
+            const QString reason = transmitHoldReason(lineName, lineParams, plugin);
             if (reason.isEmpty() == false && lineName.isEmpty() == false)
             {
                 holdOutputPatch(universe, index, plugin, lineName, output,
@@ -923,7 +926,8 @@ QList<InputOutputMap::DanglingPatch> InputOutputMap::danglingOutputPatches() con
 }
 
 int InputOutputMap::resolveSavedLine(QLCIOPlugin *plugin, bool output, const QString &uid,
-                                     const QString &network, const QString &target) const
+                                     const QString &network, const QString &target,
+                                     quint32 savedLine, bool showOnly) const
 {
     if (plugin == NULL)
         return -1;
@@ -958,6 +962,16 @@ int InputOutputMap::resolveSavedLine(QLCIOPlugin *plugin, bool output, const QSt
         return -1;
     }
 
+    /* H5 (outputpatch.h): a name more than one line carries (two of one
+       model with no serial) resolves to the saved line number when that
+       line carries it; otherwise a Show-only universe stays pending. */
+    if (lines.count(uid) > 1)
+    {
+        if (savedLine != UINT_MAX && savedLine < quint32(lines.count()) && lines.at(int(savedLine)) == uid)
+            return int(savedLine);
+        if (showOnly)
+            return -1;
+    }
     const int idx = lines.indexOf(uid);
     if (idx != -1)
         return idx;
@@ -990,10 +1004,31 @@ void InputOutputMap::loadPatch(quint32 universe, const Universe::OfflinePatch &p
     }
 
     int line = int(patch.line);
+    const bool showOnly = uni->showOnlyChannelCount() > 0;
+    QString keptWhy;
     if (hasIdentity)
     {
         line = resolveSavedLine(plugin, patch.tag != Universe::InputPatchTag, patch.uid,
-                                patch.network, NetworkRoute::targetFromParameters(patch.params));
+                                patch.network, NetworkRoute::targetFromParameters(patch.params),
+                                patch.line, showOnly && patch.tag == Universe::OutputPatchTag);
+        /* H1/H2 on load (outputpatch.h), as far as the Show-only fixtures
+           are known by now: a Show-only universe opens only on its saved
+           number; nothing else on a Show-only universe's device. */
+        if (line >= 0 && patch.tag != Universe::InputPatchTag && plugin->linesAreHardware())
+        {
+            const QString lineName = plugin->outputs().value(line);
+            if (showOnly && patch.tag == Universe::OutputPatchTag && quint32(line) != patch.line
+                && patch.line != QLCIOPlugin::invalidLine())
+            {
+                keptWhy = showOnlyMovedText(universe, patch.uid);
+                line = -1;
+            }
+            else if (loadBlockedByShowOnly(plugin, line, NULL))
+            {
+                keptWhy = protectedLineText(universe, quint32(line), lineName, patch.uid);
+                line = -1;
+            }
+        }
     }
     else
     {
@@ -1065,6 +1100,8 @@ void InputOutputMap::loadPatch(quint32 universe, const Universe::OfflinePatch &p
             {
                 QMutexLocker locker(&m_universeMutex);
                 uni->setOutputPatchPending(plugin, patch.uid, index, patch.line, patch.network);
+                if (keptWhy.isEmpty() == false && uni->outputPatch(index) != NULL)
+                    uni->outputPatch(index)->markDeviceHold(keptWhy);
             }
             else if (holdReason.isEmpty() == false)
             {
@@ -1078,6 +1115,10 @@ void InputOutputMap::loadPatch(quint32 universe, const Universe::OfflinePatch &p
             else
             {
                 setOutputPatch(universe, patch.plugin, QString(), quint32(line), false, index);
+                // Its saved number, for the check once the show is read (H1, H5).
+                if (OutputPatch *lop = uni->outputPatch(index))
+                    if (lop->isPatched())
+                        lop->setLoadedLine(patch.line);
             }
             if (OutputPatch *op = outputPatch(universe, index))
             {
@@ -1144,14 +1185,25 @@ int InputOutputMap::retryOfflinePatches(const QSet<const OutputPatch *> &skip)
             OutputPatch *op = uni->outputPatch(o);
             if (op == NULL || op->isPending() == false || skip.contains(op))
                 continue;
-            // Only "Reconnect as before", confirmed (review 12 F3).
-            if (op->deviceHold() == OutputPatch::HeldNeedsConfirm)
-                continue;
             const QMap<QString, QVariant> params = op->getPluginParameters();
-            const int line = op->deviceHold() == OutputPatch::HeldDeviceChanged
-                    ? deviceHeldLine(uni, op)
-                    : resolveSavedLine(op->plugin(), true, op->outputName(),
-                                       op->pendingNetwork(), NetworkRoute::targetFromParameters(params));
+            const bool hardware = op->plugin() != NULL && op->plugin()->linesAreHardware();
+            const bool showOnly = uni->showOnlyChannelCount() > 0;
+            int line = -1;
+            if (hardware && (showOnly || op->deviceHold() != OutputPatch::NoDeviceHold))
+                line = deviceHeldLine(uni, op);         // H1, H3
+            else
+            {
+                line = resolveSavedLine(op->plugin(), true, op->outputName(), op->pendingNetwork(),
+                                        NetworkRoute::targetFromParameters(params),
+                                        op->pendingLine(), showOnly);
+                // H2: never by name onto a Show-only universe's device.
+                const QString lineName = line >= 0 && hardware ? op->plugin()->outputs().value(line) : QString();
+                if (lineName.isEmpty() == false && loadBlockedByShowOnly(op->plugin(), line, op))
+                {
+                    op->markDeviceHold(protectedLineText(i, quint32(line), lineName, op->outputName()));
+                    line = -1;
+                }
+            }
             if (line < 0)
             {
                 /* Nothing reaches its network. With the gate on and this
@@ -1884,6 +1936,77 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
         emit offlinePatchesChanged();
 }
 
+QStringList InputOutputMap::protectedLineNames(const QLCIOPlugin *plugin, const OutputPatch *except) const
+{
+    /* H2 (outputpatch.h): the devices Show-only universes on this hardware
+       plugin were patched to -- open, held, or pending on them from load. */
+    QStringList out;
+    if (plugin == NULL || plugin->linesAreHardware() == false)
+        return out;
+    for (quint32 u = 0; u < universesCount(); u++)
+    {
+        const Universe *uni = m_universeArray.at(u);
+        if (uni->showOnlyChannelCount() == 0)
+            continue;
+        for (int o = 0; o < uni->outputPatchesCount(); o++)
+        {
+            const OutputPatch *op = uni->outputPatch(o);
+            if (op == NULL || op == except || op->plugin() != plugin)
+                continue;
+            const QString name = op->recordedLineName();
+            if (name.isEmpty() == false && out.contains(name) == false)
+                out << name;
+        }
+    }
+    return out;
+}
+
+bool InputOutputMap::loadBlockedByShowOnly(const QLCIOPlugin *plugin, int line, const OutputPatch *except) const
+{
+    if (plugin == NULL || line < 0 || plugin->linesAreHardware() == false)
+        return false;
+    const QStringList lines = const_cast<QLCIOPlugin *>(plugin)->outputs();
+    const QString name = lines.value(line);
+    if (name.isEmpty())
+        return false;
+    /* H5 with H2 (outputpatch.h): a name only one line carries is a device
+       -- nothing loads onto a Show-only universe's. One that several carry
+       (identical interfaces) resolved to its saved number: nothing loads
+       onto the line a Show-only universe has, or was saved on. */
+    if (lines.count(name) <= 1)
+        return protectedLineNames(plugin, except).contains(name);
+    for (quint32 u = 0; u < universesCount(); u++)
+    {
+        const Universe *uni = m_universeArray.at(u);
+        if (uni->showOnlyChannelCount() == 0)
+            continue;
+        for (int o = 0; o < uni->outputPatchesCount(); o++)
+        {
+            const OutputPatch *op = uni->outputPatch(o);
+            if (op == NULL || op == except || op->plugin() != plugin)
+                continue;
+            if ((op->isPatched() && op->output() == quint32(line))
+                || (op->isPending() && op->pendingLine() == quint32(line)))
+                return true;
+        }
+    }
+    return false;
+}
+
+QString InputOutputMap::showOnlyMovedText(quint32 universe, const QString &device) const
+{
+    // H1's words, everywhere it holds.
+    return tr("Universe %1: %2 missing or moved: re-patch to use it").arg(universe + 1).arg(device);
+}
+
+QString InputOutputMap::protectedLineText(quint32 universe, quint32 line, const QString &now,
+                                          const QString &own) const
+{
+    return tr("Universe %1: line %2 is now %3, the interface a universe with Show-only fixtures is "
+              "patched to: kept off until %4 is back").arg(universe + 1).arg(line + 1).arg(now)
+            .arg(own.isEmpty() ? tr("its own interface") : own);
+}
+
 int InputOutputMap::deviceHeldLine(const Universe *uni, OutputPatch *op)
 {
     QLCIOPlugin *plugin = op->plugin();
@@ -1891,102 +2014,141 @@ int InputOutputMap::deviceHeldLine(const Universe *uni, OutputPatch *op)
         return -1;
     const QStringList names = plugin->outputs();
     const QString rec = op->outputName();
+    const quint32 saved = op->pendingLine();
     if (uni->showOnlyChannelCount() > 0)
     {
-        /* F4: a Show-only universe's device back at any number -- the name
-           unique (as a workspace load matches it) and no other patch on
-           that line. Not unique: nobody can tell which; ask (F3). */
-        const int count = int(names.count(rec));
-        if (count > 1)
-        {
-            op->markNeedsConfirm(tr("Universe %1: %2 interfaces are named %3 -- which one is its own "
-                                    "can't be told: kept off until you reconnect it as before")
-                                 .arg(uni->id() + 1).arg(count).arg(rec));
-            return -1;
-        }
-        const int line = names.indexOf(rec);
-        if (line < 0 || lineUsedByAnother(plugin, quint32(line), op))
-            return -1;
-        return line;
+        /* H1: back by itself only on its own number, the name unique there,
+           the line free. Seen anywhere else (or not unique): it waits for
+           the operator, and says so. */
+        if (saved != UINT_MAX && names.value(int(saved)) == rec && names.count(rec) == 1
+            && lineUsedByAnother(plugin, saved, op) == false)
+            return int(saved);
+        if (names.contains(rec) && op->deviceHold() == OutputPatch::NoDeviceHold)
+            op->markDeviceHold(showOnlyMovedText(uni->id(), rec));
+        return -1;
     }
-    /* F1: an ordinary universe kept off a Show-only universe's device comes
-       back by number, once that line names its own device again. */
-    if (op->pendingLine() != UINT_MAX && names.value(int(op->pendingLine())) == rec
-        && lineUsedByAnother(plugin, op->pendingLine(), op) == false)
-        return int(op->pendingLine());
+    /* H3: an ordinary universe held for these rules -- back on its own
+       number, or anywhere its name is unique; never on a line that is free
+       only in name (another patch on it) or a Show-only universe's device. */
+    const QStringList guarded = protectedLineNames(plugin, op);
+    if (guarded.contains(rec))
+        return -1;
+    if (saved != UINT_MAX && names.value(int(saved)) == rec && lineUsedByAnother(plugin, saved, op) == false)
+        return int(saved);
+    if (names.count(rec) == 1)
+    {
+        const int line = names.indexOf(rec);
+        if (lineUsedByAnother(plugin, quint32(line), op) == false)
+            return line;
+    }
     return -1;
 }
 
 QString InputOutputMap::deviceHoldReason(QLCIOPlugin *plugin, quint32 universe, const OutputPatch *op,
-                                         const QStringList &names,
-                                         const QMultiMap<QString, const OutputPatch *> &showOnlyRecorded) const
+                                         const QStringList &names) const
 {
     if (plugin->linesAreHardware() == false || op->isPatched() == false)
         return QString();
     const quint32 line = op->output();
     const QString now = names.value(int(line));
     const QString rec = op->recordedLineName();
-    const bool showOnly = m_universeArray.at(universe)->showOnlyChannelCount() > 0;
-    const QString nowText = now.isEmpty() ? tr("nothing") : now;
 
-    /* F3: two (or more) of one model with no serial, and their number
-       changed: nobody can tell which line is which, and a Show-only
-       universe is patched to one of them. Every universe on that name is
-       held; only the operator reconnects them ("Reconnect as before").
-       A leading '?' says so to the caller. */
-    if (rec.isEmpty() == false && showOnlyRecorded.contains(rec)
-        && op->recordedLineNameCount() != int(names.count(rec))
-        && (op->recordedLineNameCount() > 1 || names.count(rec) > 1))
-        return QStringLiteral("?") + tr("Universe %1: there were %2 interfaces named %3 and now there "
-                                         "are %4 -- which is which can't be told, and a universe with "
-                                         "Show-only fixtures is patched to one of them: kept off until "
-                                         "you reconnect it as before")
-                .arg(universe + 1).arg(op->recordedLineNameCount()).arg(rec).arg(names.count(rec));
-
-    // A Show-only universe whose line is another device now (review 11).
-    if (showOnly && op->lineNameChanged())
-        return tr("Universe %1: %2 is not on line %3 any more (%4 is): it has Show-only fixtures, "
-                  "so it is kept off until %2 is back").arg(universe + 1).arg(rec).arg(line + 1).arg(nowText);
-
-    /* F1: any universe whose line is now the device a Show-only universe
-       was patched to -- its levels would drive the laser rig. */
-    if (now.isEmpty() == false && now != rec)
+    // H1: a Show-only universe stays only on its own, unique device.
+    if (m_universeArray.at(universe)->showOnlyChannelCount() > 0)
     {
-        foreach (const OutputPatch *sop, showOnlyRecorded.values(now))
-        {
-            if (sop == op)
-                continue;
-            return tr("Universe %1: line %2 is now %3, the interface of a universe with "
-                          "Show-only fixtures: kept off until line %2 is %4 again")
-                        .arg(universe + 1).arg(line + 1).arg(now).arg(rec.isEmpty() ? tr("its own") : rec);
-        }
+        if (now == rec && names.count(rec) == 1)
+            return QString();
+        return showOnlyMovedText(universe, rec);
     }
+    // H2: nothing else on a Show-only universe's device.
+    if (now.isEmpty() == false && protectedLineNames(plugin, op).contains(now))
+        return protectedLineText(universe, line, now, rec);
     return QString();
 }
 
-int InputOutputMap::reconnectAsBefore(quint32 universe)
+void InputOutputMap::setLoadHold(bool hold)
 {
-    if (universe >= universesCount())
-        return 0;
-    Universe *uni = m_universeArray.at(universe);
-    int done = 0;
-    for (int o = 0; o < uni->outputPatchesCount(); o++)
+    m_loadHold = hold;
+    QMutexLocker locker(&m_universeMutex);
+    foreach (Universe *uni, m_universeArray)
+        uni->setLoadHold(hold);
+}
+
+int InputOutputMap::recheckPatchesAfterLoad()
+{
+    /* Review 13: the I/O map is read before the fixtures, so while a show
+       loads its patches resolve without knowing which universes have
+       Show-only fixtures. Once it is read, every patch the load opened is
+       checked against H1, H2 and H5 (outputpatch.h) -- before the first
+       frame goes out (setLoadHold()) -- and held where they say so. */
+    int held = 0;
+    for (quint32 u = 0; u < universesCount(); u++)
     {
-        OutputPatch *op = uni->outputPatch(o);
-        if (op == NULL || op->isPending() == false || op->deviceHold() == OutputPatch::NoDeviceHold
-            || op->plugin() == NULL || op->pendingLine() == UINT_MAX
-            || op->pendingLine() >= quint32(op->plugin()->outputs().count())
-            || lineUsedByAnother(op->plugin(), op->pendingLine(), op))
-            continue;
-        qWarning() << "[IOMAP] universe" << universe + 1 << "reconnected as before on line"
-                   << op->pendingLine() + 1 << "(confirmed)";
-        QMutexLocker locker(&m_universeMutex);
-        if (uni->resolveOutputPatch(o, op->pendingLine()))
-            done++;
+        Universe *uni = m_universeArray.at(u);
+        const bool showOnly = uni->showOnlyChannelCount() > 0;
+        for (int o = 0; o < uni->outputPatchesCount(); o++)
+        {
+            OutputPatch *op = uni->outputPatch(o);
+            QLCIOPlugin *plugin = op != NULL ? op->plugin() : NULL;
+            if (op == NULL || op->isPatched() == false || plugin == NULL
+                || plugin->linesAreHardware() == false)
+                continue;
+            const QStringList names = plugin->outputs();
+            const quint32 line = op->output();
+            const QString name = names.value(int(line));
+            const quint32 saved = op->loadedLine();
+            QString why;
+            // H1, H5: a Show-only universe only on its saved number.
+            if (showOnly && saved != UINT_MAX
+                && (line != saved || (names.count(name) > 1 && names.value(int(saved)) != name)))
+                why = showOnlyMovedText(u, name);
+            // H2: nothing else on a Show-only universe's device.
+            if (why.isEmpty() && loadBlockedByShowOnly(plugin, int(line), op))
+                why = protectedLineText(u, line, name, op->recordedLineName());
+            if (why.isEmpty())
+                continue;
+            op->holdForDeviceChange(why, lineUsedByAnother(plugin, line, op) == false, true);
+            held++;
+        }
     }
-    if (done > 0)
+    if (held > 0)
         emit offlinePatchesChanged();
-    return done;
+    return held;
+}
+
+int InputOutputMap::releaseShowOnlyHolds()
+{
+    /* L3: no Show-only universe left -- every hold made for these rules is
+       let go as stock QLC+ would have reconnected it: one held off an open
+       line (a hot-plug) by its number, one pending from load by its name. */
+    int released = 0;
+    for (quint32 u = 0; u < universesCount(); u++)
+    {
+        Universe *uni = m_universeArray.at(u);
+        for (int o = 0; o < uni->outputPatchesCount(); o++)
+        {
+            OutputPatch *op = uni->outputPatch(o);
+            if (op == NULL || op->isPending() == false || op->deviceHold() == OutputPatch::NoDeviceHold)
+                continue;
+            const bool fromOpen = op->heldFromOpen();
+            op->clearDeviceHold();
+            released++;
+            if (fromOpen && op->plugin() != NULL && op->pendingLine() != UINT_MAX
+                && op->pendingLine() < quint32(op->plugin()->outputs().count())
+                && lineUsedByAnother(op->plugin(), op->pendingLine(), op) == false)
+            {
+                QMutexLocker locker(&m_universeMutex);
+                uni->resolveOutputPatch(o, op->pendingLine());
+            }
+        }
+    }
+    if (released > 0)
+    {
+        if (hasOfflinePatches())
+            retryOfflinePatches();
+        emit offlinePatchesChanged();
+    }
+    return released;
 }
 
 bool InputOutputMap::lineUsedByAnother(const QLCIOPlugin *plugin, quint32 line,
@@ -2019,22 +2181,7 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
     QMutexLocker locker(&m_universeMutex);
     bool success = true;
     bool keptOffLine = false;
-    /* The devices Show-only universes were patched to (open, or held for
-       their device), by name: nothing else is reopened onto them. */
     const QStringList names = plugin->linesAreHardware() ? plugin->outputs() : QStringList();
-    QMultiMap<QString, const OutputPatch *> showOnlyRecorded;
-    for (quint32 u = 0; plugin->linesAreHardware() && u < universesCount(); u++)
-    {
-        Universe *uni = m_universeArray.at(u);
-        if (uni->showOnlyChannelCount() == 0)
-            continue;
-        for (int o = 0; o < uni->outputPatchesCount(); o++)
-        {
-            const OutputPatch *sop = uni->outputPatch(o);
-            if (sop != NULL && sop->plugin() == plugin && sop->recordedLineName().isEmpty() == false)
-                showOnlyRecorded.insert(sop->recordedLineName(), sop);
-        }
-    }
     QSet<const OutputPatch *> heldNow;
     for (quint32 i = 0; i < universesCount(); i++)
     {
@@ -2045,16 +2192,13 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
 
             if (op != NULL && op->plugin() == plugin)
             {
-                /* Review 11/12: every universe reconnects by line number,
-                   as it always did -- except onto a device a Show-only
-                   universe was patched to (see deviceHoldReason()). */
-                const QString why = deviceHoldReason(plugin, i, op, names, showOnlyRecorded);
+                /* Every universe reconnects by line number, as stock does --
+                   except as H1/H2 say (outputpatch.h, deviceHoldReason()). */
+                const QString why = deviceHoldReason(plugin, i, op, names);
                 if (why.isEmpty() == false)
                 {
                     const quint32 line = op->output();
-                    const bool confirm = why.startsWith(QLatin1Char('?'));
-                    op->holdForDeviceChange(confirm ? why.mid(1) : why,
-                                            lineUsedByAnother(plugin, line, op) == false, confirm);
+                    op->holdForDeviceChange(why, lineUsedByAnother(plugin, line, op) == false);
                     heldNow.insert(op);
                     keptOffLine = true;
                     continue;
@@ -2073,7 +2217,18 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
         OutputPatch* fp = m_universeArray.at(i)->feedbackPatch();
         if (fp != NULL && fp->plugin() == plugin)
         {
-            /*success = */ fp->reconnect();
+            /* L4: a feedback line obeys H2 -- never reopened on a Show-only
+               universe's device; kept closed until its line is its own. */
+            const QString fnow = names.value(int(fp->output()));
+            if (fp->isPatched() && fnow.isEmpty() == false && fnow != fp->recordedLineName()
+                && protectedLineNames(plugin, fp).contains(fnow))
+            {
+                qWarning() << "[IOMAP]" << protectedLineText(i, fp->output(), fnow, fp->recordedLineName())
+                           << "(feedback)";
+                plugin->closeOutput(fp->output(), i);
+            }
+            else
+                /*success = */ fp->reconnect();
         }
     }
     locker.unlock();
