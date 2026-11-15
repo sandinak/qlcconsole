@@ -2449,6 +2449,87 @@ void InputOutputMap_Test::review11_keptPendingDoesNotCloseTheLineAnotherUniverse
                         .arg(b->output()).arg(b->outputName())));
 }
 
+/* Review 12 (critical): the other direction of the Show-only rule. The
+   universe WITHOUT Show-only fixtures is on the lower line; the laser
+   rig's interface is the next one. The first interface is unplugged (a
+   cable bump): the laser rig's interface is line 0 now, and the ordinary
+   universe reconnects there by number -- its levels drive the laser. The
+   Show-only universe itself is held, as designed; nothing stops another
+   universe taking its device. */
+void InputOutputMap_Test::review12_anOrdinaryUniverseIsNotReopenedOnTheShowOnlyDevice()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)" << "Pro (S/N: B2)";
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 0));     // universe 1 (dimmers) -> A1
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 1));     // universe 2 (laser rig) -> B2
+    iom.universe(1)->markShowOnly(14, true, 0);
+    QVERIFY(iom.universe(0)->showOnlyChannelCount() == 0);
+
+    stub->m_lineNames = QStringList() << "Pro (S/N: B2)";          // A1 unplugged
+    stub->configure();
+
+    QVERIFY(iom.outputPatch(1, 0)->isPending());                    // the laser universe: held
+    OutputPatch *dim = iom.outputPatch(0, 0);
+    const QString now = dim->isPatched() ? stub->outputs().value(int(dim->output())) : QString();
+    QVERIFY2(!(now == QLatin1String("Pro (S/N: B2)") && stub->m_openOutputs.contains(dim->output())),
+             qPrintable(QString("universe 1 (no Show-only) was reopened on line %1 = %2, the laser rig's "
+                                "interface: its dimmer levels now drive the laser's DMX line")
+                        .arg(dim->output()).arg(now)));
+}
+
+/* Review 12 (high): the same with two of one model whose line name has no
+   serial (Eurolite, NanoDMX, Stageprofi, uDMX). One of two is unplugged;
+   by name nobody can tell which -- the one left may be the laser rig's,
+   and the ordinary universe on line 0 reopens on it anyway. */
+void InputOutputMap_Test::review12_identicalInterfacesAnOrdinaryUniverseIsNotReopenedOnTheLaserOne()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    const QString e("Eurolite USB-DMX512 PRO");
+    stub->m_lineNames = QStringList() << e << e;
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 0));     // dimmers -> #1
+    QVERIFY(iom.setOutputPatch(1, stub->name(), QString(), 1));     // laser rig -> #2
+    iom.universe(1)->markShowOnly(14, true, 0);
+
+    // #1 unplugged: what is left at line 0 is #2, the laser rig's.
+    stub->m_lineNames = QStringList() << e;
+    stub->configure();
+    QVERIFY(iom.outputPatch(1, 0)->isPending());
+    OutputPatch *dim = iom.outputPatch(0, 0);
+    QVERIFY2(!(dim->isPatched() && dim->output() == 0 && stub->m_openOutputs.contains(0)),
+             "universe 1 (no Show-only) reopened on the only Eurolite left, which may be the laser rig's "
+             "(a Show-only universe was patched to one of that name and is held)");
+}
+
+/* Review 12 (medium): held, and never back. The laser rig's interface is
+   back -- the same name, unique, no other patch on it -- but at another
+   number (the other interface was plugged back into another port and is
+   enumerated after it). The hold waits for it at its old number only;
+   the retry tick never releases it. */
+void InputOutputMap_Test::review12_aHeldUniverseReopensWhenItsDeviceIsBackAtAnotherNumber()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << "Pro (S/N: A1)" << "Pro (S/N: B2)";
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(iom.setOutputPatch(0, stub->name(), QString(), 1));     // laser rig -> B2
+    iom.universe(0)->markShowOnly(14, true, 0);
+
+    stub->m_lineNames = QStringList() << "Pro (S/N: B2)";          // A1 unplugged
+    stub->configure();
+    QVERIFY(iom.outputPatch(0, 0)->isPending());
+
+    stub->m_lineNames = QStringList() << "Pro (S/N: B2)" << "Pro (S/N: A1)";   // A1 back, after it
+    stub->configure();
+    iom.retryOfflinePatches();
+    QVERIFY2(iom.outputPatch(0, 0)->isPatched(),
+             qPrintable(QString("B2 is here (line 1) and nothing else uses it, but universe 1 is still "
+                                "held: %1").arg(iom.outputPatch(0, 0)->reconnectHeld())));
+}
+
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()
 {
     schoolLaptop();
