@@ -419,6 +419,33 @@ void E131_Test::r18_aForgottenUniverseLeavesTheController()
     QVERIFY(left.contains(1));
 }
 
+void E131_Test::r19_unSetParameterPutsTheDefaultBackAtOnce()
+{
+    E131Plugin plugin;
+    E131Controller *ctrl = testController(&plugin, { 0 });
+    E131IO io;
+    io.controller = ctrl;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+    const QHostAddress byDefault = ctrl->m_universeMap[0].outputUcastAddress;
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "multicast", 0);
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "ucastIP", "10.0.0.5");
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "universe", 9);
+    const QHostAddress aimed = ctrl->m_universeMap[0].outputUcastAddress;
+    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "ucastIP");
+    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "multicast");
+    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "universe");
+    const QHostAddress after = ctrl->m_universeMap[0].outputUcastAddress;
+    const bool multicast = ctrl->m_universeMap[0].outputMulticast;
+    const quint32 universe = ctrl->m_universeMap[0].outputUniverse;
+    plugin.m_IOmapping.clear();
+    delete ctrl;
+    QCOMPARE(aimed, QHostAddress("10.0.0.5"));
+    QCOMPARE(after, byDefault);
+    QVERIFY(multicast);
+    QCOMPARE(universe, quint32(1));
+}
+
 QTEST_MAIN(E131_Test)
 
 void E131_Test::dmxPacketsAreBoundedByTheDatagramAndAUniverse()

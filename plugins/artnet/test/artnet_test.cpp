@@ -121,6 +121,54 @@ void ArtNet_Test::r18_aForgottenUniverseIsNotResent()
                                    .arg(full)));
 }
 
+void ArtNet_Test::r19_unSetParameterPutsTheDefaultBackAtOnce()
+{
+    ArtNetPlugin plugin;
+    ArtNetController *ctrl = testController(&plugin, QHostAddress::LocalHost, { 0 });
+    ArtNetIO io;
+    io.controller = ctrl;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "outputIP", "10.0.0.5");
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, "outputUni", 7);
+    const QHostAddress aimed = ctrl->m_universeMap[0].outputAddress;
+    const quint32 aimedUni = ctrl->m_universeMap[0].outputUniverse;
+    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "outputIP");
+    plugin.unSetParameter(0, 0, QLCIOPlugin::Output, "outputUni");
+    const QHostAddress after = ctrl->m_universeMap[0].outputAddress;
+    const quint32 afterUni = ctrl->m_universeMap[0].outputUniverse;
+    const QHostAddress broadcast = ctrl->m_broadcastAddr;
+    plugin.m_IOmapping.clear();
+    delete ctrl;
+    QCOMPARE(aimed, QHostAddress("10.0.0.5"));
+    QCOMPARE(aimedUni, quint32(7));
+    QCOMPARE(after, broadcast);
+    QCOMPARE(afterUni, quint32(0));
+}
+
+void ArtNet_Test::r19_aFailedClosingFrameIsTriedOnceMore()
+{
+    ArtNetPlugin plugin;
+    ArtNetController *ctrl = testController(&plugin, QHostAddress::LocalHost, { 0 });
+    QList<QNetworkDatagram> sink;
+    ctrl->m_testSink = &sink;
+    ArtNetIO io;
+    io.controller = ctrl;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+    ctrl->m_testSinkFails = true;                                   // the closing frame: lost
+    plugin.writeUniverse(0, 0, QByteArray(512, char(0)), true);
+    ctrl->m_testSinkFails = false;
+    plugin.flushOutput(0, 0);                                       // OutputPatch's flush: once more
+    const int sent = sink.count();
+    plugin.flushOutput(0, 0);                                       // nothing left to retry
+    const int again = sink.count();
+    plugin.m_IOmapping.clear();
+    delete ctrl;
+    QCOMPARE(sent, 1);
+    QCOMPARE(again, 1);
+}
+
 QTEST_MAIN(ArtNet_Test)
 
 /** A real ArtPollReply, captured off the wire from the rig's CR041R

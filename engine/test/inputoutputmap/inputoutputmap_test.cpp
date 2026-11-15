@@ -3635,6 +3635,151 @@ void InputOutputMap_Test::r18n_reAimingAShowOnlyUniverseIsChecked()
     QVERIFY(iom.outputPatch(1, 0)->isPatched());
 }
 
+/* Review 19, finding C1 (critical): the protocol's own settings window --
+   "Configure ArtNet..." in the Connection editor (ConnectionEditor::
+   slotConfigurePlugin) and the I/O tab -- re-aims a universe straight in the
+   plugin: ConfigureArtNet::accept() calls QLCIOPlugin::setParameter(universe,
+   line, Output, "outputIP", ...) (ConfigureE131::accept() likewise sets
+   "multicast" 0 and "ucastIP"). No OutputPatch, no TargetCheck: a Show-only
+   universe aimed at its node is turned back at this computer and keeps
+   sending there. */
+void InputOutputMap_Test::r19_aProtocolSettingsWindowAimsAShowOnlyUniverseBackHere()
+{
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+    mockMachine(QList<NetworkRoute::LocalAddress>()
+                    << localAddr("lo0", "127.0.0.1", 8)
+                    << localAddr("en0", "10.4.12.7", 24),
+                QMap<QString, QString>());
+    InputOutputMap iom(m_doc, 1);
+    Universe *fog = iom.universe(0);
+    fog->markShowOnly(14, true, 0);
+    QMap<QString, QVariant> node;
+    node.insert("outputIP", "10.4.12.99");
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, node));
+    QVERIFY(iom.outputPatch(0, 0)->isPatched());
+
+    // ConfigureArtNet::accept(), the IP column of universe 1 typed as 127.0.0.1
+    stub->setParameter(0, 1, QLCIOPlugin::Output, "outputIP", "127.0.0.1");
+    QCoreApplication::processEvents();
+    iom.retryOfflinePatches();
+
+    stub->m_lastByTarget.clear();
+    fog->write(0, 10, true);
+    fog->write(14, 255, true);
+    fog->dumpOutput(fog->postGMValues()->mid(0, fog->usedChannels()), true);
+    const bool backHere = stub->m_lastByTarget.contains("127.0.0.1/1");
+    stub->m_lastByTarget.clear();
+    QVERIFY2(backHere == false,
+             qPrintable(QString("a Show-only universe's frames go to 127.0.0.1 after the Art-Net settings "
+                                "window re-aimed it (patch open: %1, saved target: %2)")
+                        .arg(iom.outputPatch(0, 0)->isPatched())
+                        .arg(iom.outputPatch(0, 0)->getPluginParameters().value("outputIP").toString())));
+}
+
+/* Review 19, finding B1 (high, regression of decision B): a show saved with
+   the lasers' universe and another on "uDMX" as line 2, opened where the
+   uDMX is line 1 (H5: by name, the first) and line 2 is another device. N3
+   holds the lasers' universe waiting on its SAVED number (loadedLine) with
+   sharedLine true; the rule taken off, decision B brings it back "by
+   number" -- onto line 2, a device it never was on (another universe's),
+   instead of the uDMX it shared. Before review 18 it came back by name. */
+void InputOutputMap_Test::r19_aFormerLaserLoadedByNameComesBackOnTheLineItShared()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_linesAreHardware = true;
+    const QString udmx("uDMX"), b2("Pro (S/N: B2)");
+    stub->m_lineNames = QStringList() << udmx << b2;
+    InputOutputMap iom(m_doc, 3);
+    iom.setLoadHold(true);
+    Universe::OfflinePatch p;
+    p.plugin = stub->name();
+    p.uid = udmx;
+    p.line = 1;                                                     // saved: the uDMX was line 2 there
+    iom.loadPatch(0, p);                                            // lasers
+    iom.loadPatch(1, p);                                            // another universe on the uDMX too
+    Universe::OfflinePatch q = p;
+    q.uid = b2;
+    q.line = 1;
+    iom.loadPatch(2, q);                                            // universe 3 on the B2
+    QVERIFY(iom.outputPatch(0, 0)->isPatched() && iom.outputPatch(0, 0)->output() == 0);   // H5: by name
+    QVERIFY(iom.outputPatch(1, 0)->isPatched() && iom.outputPatch(1, 0)->output() == 0);
+    QVERIFY(iom.outputPatch(2, 0)->isPatched() && iom.outputPatch(2, 0)->output() == 1);
+    iom.universe(0)->markShowOnly(14, true, 0);                     // the fixtures read
+    iom.recheckPatchesAfterLoad();
+    iom.setLoadHold(false);
+    QVERIFY(iom.outputPatch(0, 0)->isPending());                    // N3
+
+    iom.universe(0)->markShowOnly(14, false, 0);                    // the rule off: no laser left
+    QCoreApplication::processEvents();
+    for (int i = 0; i < 3; i++)
+        iom.retryOfflinePatches();
+    const OutputPatch *op = iom.outputPatch(0, 0);
+    QVERIFY2(op->isPatched() && op->output() == 0,
+             qPrintable(QString("the former laser universe came back on line %1 (%2), not on the uDMX it "
+                                "shared (line 1); universe 3 is on line %3")
+                        .arg(op->isPatched() ? int(op->output()) + 1 : -1).arg(op->outputName())
+                        .arg(int(iom.outputPatch(2, 0)->output()) + 1)));
+}
+
+/* Review 19, finding D1: sACN unicast with no "ucastIP" sends to
+   E131Controller's default, (line & 255.255.255.0) + universe + 1
+   (e131controller.cpp addUniverse()). On a console at 10.4.12.1 that is the
+   console itself for universe 1. showOnlyRefusal() checks only an explicit
+   ucastIP. Reached by a show saved with multicast="0" and no ucastIP, a
+   one-parameter change (Connections, undo replaying multicast before
+   ucastIP), or a universe made Show only while unicasting so. */
+void InputOutputMap_Test::r19_sacnUnicastToItsDefaultReceiverIsThisComputer()
+{
+    namedStub(m_doc, "E1.31", QStringList() << "127.0.0.1" << "10.4.12.1");
+    mockMachine(QList<NetworkRoute::LocalAddress>()
+                    << localAddr("lo0", "127.0.0.1", 8)
+                    << localAddr("en0", "10.4.12.1", 24),
+                QMap<QString, QString>());
+    InputOutputMap iom(m_doc, 1);
+    iom.universe(0)->markShowOnly(14, true, 0);
+    QMap<QString, QVariant> unicast;
+    unicast.insert("multicast", 0);                                 // to the default receiver: 10.4.12.1
+    const bool allowed = iom.setOutputPatch(0, "E1.31", QString(), 1, false, 0, unicast);
+    QVERIFY2(allowed == false,
+             "a Show-only universe may unicast sACN to its default receiver, 10.4.12.1 -- this computer");
+}
+
+/* Review 19, finding A1 (high, made worse by the Art-Net/E1.31 forgetOutput()
+   overrides): a Show-only universe's patch held (aimed back here), a second
+   output of that universe added on the same interface to its node, then the
+   held one removed. ~OutputPatch() forgets the universe on the line it was
+   held off -- the very line the open patch uses (the plugin keys by
+   universe): its parameters go, and with review 18's overrides Art-Net and
+   E1.31 take the universe out of the controller, so the open patch sends
+   nothing while it reads as patched. */
+void InputOutputMap_Test::r19_removingAHeldPatchStopsTheUniversesOpenOne()
+{
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+    mockMachine(QList<NetworkRoute::LocalAddress>()
+                    << localAddr("lo0", "127.0.0.1", 8)
+                    << localAddr("en0", "10.4.12.7", 24),
+                QMap<QString, QString>());
+    stub->m_forgotten.clear();
+    InputOutputMap iom(m_doc, 1);
+    iom.universe(0)->markShowOnly(14, true, 0);
+    QMap<QString, QVariant> node;
+    node.insert("outputIP", "10.4.12.99");
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, node));
+    iom.outputPatch(0, 0)->setPluginParameter("outputIP", "10.4.12.7");   // aimed here: held
+    QVERIFY(iom.outputPatch(0, 0)->isPending() && iom.outputPatch(0, 0)->showOnlyHold());
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 1, node));   // a new output, to the node
+    QVERIFY(iom.outputPatch(0, 1)->isPatched());
+    QVERIFY(stub->mapped(0, 1));
+    QVERIFY(iom.setOutputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine(), false, 0));   // the held one removed
+    const OutputPatch *op = iom.outputPatch(0, 0);
+    QVERIFY(op != NULL && op->isPatched());
+    const bool forgotten = stub->m_forgotten.contains(qMakePair(quint32(1), quint32(0)));
+    QVERIFY2(forgotten == false && stub->mapped(0, 1),
+             qPrintable(QString("the open output of universe 1 on 10.4.12.7 was forgotten by the plugin "
+                                "(its target now '%1'): Art-Net/E1.31 stop sending it")
+                        .arg(const_cast<OutputPatch *>(op)->getPluginParameters().value("outputIP").toString())));
+}
+
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()
 {
     schoolLaptop();

@@ -217,6 +217,21 @@ public:
     typedef std::function<QString(const OutputPatch *patch, const QMap<QString, QVariant> &params)> TargetCheck;
     void setTargetCheck(const TargetCheck &check) { m_targetCheck = check; }
 
+    /** Review 19 (A1): whether another open patch of this universe uses
+     *  @p line of this plugin -- then a hold or the destructor neither
+     *  closes nor forgets (line, universe), which is that patch's too. The
+     *  Universe sets it. */
+    typedef std::function<bool(const OutputPatch *patch, quint32 line)> SiblingOnLine;
+    void setSiblingOnLine(const SiblingOnLine &check) { m_siblingOnLine = check; }
+
+    /** Review 19 (C1): what the plugin itself was set to (a protocol's
+     *  settings window, past this patch) taken into this patch's
+     *  parameters, so it is saved and re-checked as it is */
+    void adoptPluginParameters(const QMap<QString, QVariant> &values);
+
+    /** The line it was open on when it was held (UINT_MAX: never held) */
+    quint32 heldOnLine() const { return m_heldOnLine; }
+
     /** Two parameter values that mean the same ("1" and 1) */
     static bool sameParameterValue(const QVariant &a, const QVariant &b);
 
@@ -309,6 +324,9 @@ private:
     /** See setClosingFrame() */
     std::function<bool(QByteArray &, bool)> m_closingFrame;
     TargetCheck m_targetCheck;
+    SiblingOnLine m_siblingOnLine;
+    quint32 m_heldOnLine = UINT_MAX;
+    bool siblingOnLine(quint32 line) const { return m_siblingOnLine && m_siblingOnLine(this, line); }
 
     /** Close the open line for good: its closing frame first (see
      *  setClosingFrame()), then the plugin's closeOutput() */

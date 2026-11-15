@@ -70,7 +70,7 @@ OutputPatch::~OutputPatch()
         /* Held by N2/N3 and now unpatched (review 12 F6): the plugin
            forgets this universe on the line it had, whoever else is open
            there. */
-        if (m_holdKind != NotHeld && m_pendingLine != UINT_MAX)
+        if (m_holdKind != NotHeld && m_pendingLine != UINT_MAX && siblingOnLine(m_pendingLine) == false)
             m_plugin->forgetOutput(m_pendingLine, m_universe);
     }
 }
@@ -216,19 +216,25 @@ void OutputPatch::hold(HoldKind kind, const QString &why, bool closeTheLine, boo
     m_holdKind = kind;
     m_sharedLine = sharedLine;
     m_fromShowOnlyHold = false;
+    m_heldOnLine = m_pluginLine;
     qWarning() << "[OutputPatch]" << why;
     /* N2: its frame, the whole Show-only mask at safe, on the wire before
        the line stops receiving this universe. @p closeTheLine false: the
        plugin only forgets this universe there (review 12 F6) -- the patch
        that holds the line closes it (review 17). */
-    if (closeTheLine)
+    /* Review 19 (A1): another open patch of this universe on this line
+       goes on sending it there -- neither closed nor forgotten. */
+    if (siblingOnLine(m_pluginLine) == false)
     {
-        if (sendClosing)
-            sendClosingFrame();
-        m_plugin->closeOutput(m_pluginLine, m_universe);
+        if (closeTheLine)
+        {
+            if (sendClosing)
+                sendClosingFrame();
+            m_plugin->closeOutput(m_pluginLine, m_universe);
+        }
+        else
+            m_plugin->forgetOutput(m_pluginLine, m_universe);
     }
-    else
-        m_plugin->forgetOutput(m_pluginLine, m_universe);
     // F3: no name (a dangling line): pending on its number only.
     m_pendingUID = m_lineName;
     m_pendingByNumber = m_lineName.isEmpty();
@@ -236,6 +242,12 @@ void OutputPatch::hold(HoldKind kind, const QString &why, bool closeTheLine, boo
     m_pendingNetwork.clear();
     m_pluginLine = QLCIOPlugin::invalidLine();
     emit outputNameChanged();
+}
+
+void OutputPatch::adoptPluginParameters(const QMap<QString, QVariant> &values)
+{
+    for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+        m_parametersCache[it.key()] = it.value();
 }
 
 QString OutputPatch::deviceText(const QLCIOPlugin *plugin, quint32 line, const QString &name)
