@@ -14,6 +14,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed and fixed
 
+- **The Simple Desk sends its newest value after a fixture is patched or moved under a channel it holds.** It used to keep two faders on the one address and send the old or the new value at random, run to run.
+
 - **Show Review flags a laser that stands inside a no-light zone (PWR-13).** A laser whose place on the plot is inside a zone that keeps lasers out (the band, the pit) is a warning naming the laser and the zone; Show Me finds it on the plot. Other lights inside a zone are left alone.
 - **The Workbench opens Blind in Operate; Play Live is one click.** During a run, what you load and change in the Workbench no longer reaches the stage (it used to play what was loaded as soon as it opened). The header says *Blind: edits stay off the stage*; **Play Live** plays it on the stage and the footer says *LIVE · Workbench: name*; **Back to Blind** (the same button), loading something else, leaving the Workbench or switching to Design takes it off. Show-only fixtures still wait for a GO. Design is unchanged.
 
