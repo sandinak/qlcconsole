@@ -203,6 +203,7 @@ add_library(${module_name}
     patchlistdialog.cpp patchlistdialog.h
     cuesheetdialog.cpp cuesheetdialog.h
     callingscriptview.cpp callingscriptview.h
+    scriptcuesdialog.cpp scriptcuesdialog.h
     whyonpanel.cpp whyonpanel.h
     speedmastersfooter.cpp speedmastersfooter.h
     speedmasterspanel.cpp speedmasterspanel.h

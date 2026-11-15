@@ -62,6 +62,17 @@ public:
 
     /** The cue the Show Tree has selected, offered to "Cue here". */
     void setCueSource(const std::function<quint32()> &source) { m_cueSource = source; }
+    /** The cue list the Show Tree has selected: Make Cues makes its cues
+     *  there (else in the production's main list). */
+    void setListSource(const std::function<quint32()> &source) { m_listSource = source; }
+    /** The list Make Cues makes its cues in (invalid: the production has none). */
+    quint32 targetList() const;
+    /** Make Cues…: the script's SCENE and LIGHTING lines as proposed cues,
+     *  previewed (ScriptCuesDialog), made in one undo step on Make. The
+     *  cues made (empty: none, or cancelled). */
+    QList<quint32> makeCuesFromScript();
+    /** The SCENE and LIGHTING lines that have no cue's GO yet. */
+    int uncuedDirections() const;
 
     /** The script as laid out now. */
     const CallingScriptSheet &sheet() const { return m_sheet; }
@@ -118,6 +129,7 @@ protected:
 
 private slots:
     void slotImport();
+    void slotMakeCues();
     void slotPdf();
     void slotCueHere();
     void slotStandbyHere();
@@ -136,10 +148,12 @@ private:
     Doc *m_doc;
     quint32 m_production;
     std::function<quint32()> m_cueSource;
+    std::function<quint32()> m_listSource;
     CallingScriptSheet m_sheet;
     class CallingScriptEdit *m_text;
     QPushButton *m_import;
     QPushButton *m_edit;
+    QPushButton *m_makeCues;
     QPushButton *m_here;
     QPushButton *m_standby;
     QPushButton *m_pdf;

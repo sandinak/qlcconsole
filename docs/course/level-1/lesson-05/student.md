@@ -54,8 +54,10 @@ Roles: **SM**, **Board op** (the only one on the laptop), **Spotter**
 A real SM calls from a **script**, with the cue numbers pencilled on the
 words where each standby and GO is called. The app can keep that copy:
 **More ▾ → Cue Sheet…** on the Show Tree tab, then its **Calling Script…** button, shows the lyrics with
-the cues in the margin and follows the show as it runs. You don't need it
-today; you may want it for the check.
+the cues in the margin and follows the show as it runs. If the script's
+**SCENE:** and **LIGHTING:** lines already say what the lights do, its
+**Make Cues…** button turns them into cues. You don't need it today; you
+may want it for the check.
 
 ## Steps
 

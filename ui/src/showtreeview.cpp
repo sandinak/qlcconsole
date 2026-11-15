@@ -12943,6 +12943,7 @@ CallingScriptView *ShowTreeView::showCallingScript()
         m_scriptView = new CallingScriptView(m_doc, prod, this);
         m_scriptView->setAttribute(Qt::WA_DeleteOnClose, false);
         m_scriptView->setCueSource([this]() { return currentCueId(); });
+        m_scriptView->setListSource([this]() { return currentListId(); });
     }
     m_scriptView->show();
     m_scriptView->raise();

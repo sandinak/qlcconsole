@@ -515,6 +515,72 @@ public:
     /** No script. One undo step. */
     bool clearScript(quint32 productionId);
 
+    /* Cues from the script (0.4.9, board Q237): the script's stage
+       directions -- its SCENE: and LIGHTING: lines -- proposed as cues,
+       previewed, then made in one undo step, each called on its line. */
+
+    /** A stage direction: a line that begins SCENE:, LIGHTING:, LIGHTS: or
+     *  LIGHT: (any case; spaces before the colon, and the zero-width spaces
+     *  a Google Docs export leaves, allowed). */
+    struct ScriptDirection
+    {
+        int line = -1;                  //!< the line, from 0
+        int offset = -1;                //!< where its GO is called: the keyword's first letter
+        QString kind;                   //!< "SCENE", "LIGHTING", upper case
+        QString text;                   //!< what follows the colon, spaces tidied
+    };
+    /** The script's stage directions, top to bottom (one with nothing
+     *  after its colon is no direction). */
+    static QList<ScriptDirection> scriptDirections(const QString &text);
+    /** A line that may be a song's title: a Markdown "#" line, or one in
+     *  capitals (two letters or more, no lower case, no colon). Its text
+     *  without the "#"s, else empty. */
+    static QString scriptTitleLine(const QString &line);
+    /** The cue name a direction suggests: its first phrase (up to a comma,
+     *  a full stop, a bracket, a dash...), at most 32 characters, cut at a
+     *  word. */
+    static QString scriptCueName(const QString &direction);
+
+    /** A cue proposed for a stage direction. */
+    struct ScriptCue
+    {
+        ScriptDirection direction;
+        QString number;                 //!< the number it gets; empty: none (skipped, left out)
+        QString name;                   //!< scriptCueName()
+        QString song;                   //!< its song section's key ("1"); empty: no scheme
+        QString songTitle;              //!< the song as the list or the script names it
+        bool newSong = false;           //!< the list has no name for the song: the script's title names it
+        quint32 cuedBy = 0xFFFFFFFF;    //!< the line already has a cue's GO: that cue (skipped)
+        QString cuedAs;                 //!< "1.0.2 Ahhs"
+        bool leftOut = false;           //!< unticked
+        bool noRoom = false;            //!< no number fits between the cues around it
+        bool made() const { return !number.isEmpty(); }
+    };
+    /** The cues the script of production @a productionId proposes for list
+     *  @a listId (a cue list of it), one per stage direction, top to
+     *  bottom. Lines in @a leaveOut (unticked) and lines whose words
+     *  already have a cue's GO get no number. Numbered to the production's
+     *  scheme: under {S}.{P}.{II} each goes in its song -- the one the
+     *  script is in at that line: a line that is a song section's name or
+     *  title, a title line followed by a LIGHTING: line (a song the list
+     *  has no name for: the next number), or a cue already called on an
+     *  earlier line -- after the cue called before it in that song, else
+     *  in front of the first called after it, else after the song's last
+     *  cue, by D23's rule (numberInSection()). A cue not on the script yet
+     *  is taken to come right after the one before it in number order, so
+     *  a new cue goes after it too. Without a scheme, after the cue called
+     *  before it, else at the end. Changes nothing. */
+    QList<ScriptCue> proposeScriptCues(quint32 productionId, quint32 listId,
+                                       const QSet<int> &leaveOut = QSet<int>()) const;
+    /** Make them: the proposed cues with a number, in list @a listId, each
+     *  with the direction as its note and its GO called at the start of its
+     *  line; a song the list has no name for named from the script. One
+     *  undo step, "Cues from the script". The new cues' ids, script order
+     *  (empty: nothing made, @a message says why; else what was made and
+     *  what was skipped). */
+    QList<quint32> makeScriptCues(quint32 productionId, quint32 listId, const QSet<int> &leaveOut = QSet<int>(),
+                                  QString *message = nullptr);
+
     /** The cues of list @a listId in the order it plays: list indexes, one
      *  per chaser step (the identity without a running order). */
     QList<int> playOrderOf(quint32 listId, QList<bool> *skipped = nullptr) const;

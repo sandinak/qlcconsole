@@ -20,6 +20,7 @@
 #include <climits>
 
 #include <QSyntaxHighlighter>
+#include <QKeySequence>
 #include <QContextMenuEvent>
 #include <QPlainTextEdit>
 #include <QTextBlock>
@@ -44,6 +45,7 @@
 #include <QFile>
 
 #include "callingscriptview.h"
+#include "scriptcuesdialog.h"
 #include "showtreecontroller.h"
 #include "showtreeview.h"
 #include "showcontrol.h"
@@ -415,6 +417,10 @@ CallingScriptView::CallingScriptView(Doc *doc, quint32 productionId, QWidget *pa
     m_edit->setObjectName(QStringLiteral("scriptEdit"));
     m_edit->setCheckable(true);
     m_edit->setToolTip(tr("Type or paste the script. Cues keep to their words as the text changes"));
+    m_makeCues = new QPushButton(tr("Make Cues…"), this);
+    m_makeCues->setObjectName(QStringLiteral("scriptMakeCues"));
+    m_makeCues->setToolTip(tr("A cue for each SCENE and LIGHTING line, numbered for the show and called on its "
+                              "line. You see them first; nothing is made until you press Make"));
     m_cue = new QComboBox(this);
     m_cue->setObjectName(QStringLiteral("scriptCue"));
     m_cue->setToolTip(tr("The cue Cue Here places. Drag a cue from the Show Tree onto a word instead"));
@@ -438,7 +444,7 @@ CallingScriptView::CallingScriptView(Doc *doc, quint32 productionId, QWidget *pa
     QFont gf = m_go->font();
     gf.setBold(true);
     m_go->setFont(gf);
-    for (QWidget *w : QList<QWidget *>{m_import, m_edit, m_cue, m_here, m_standby})
+    for (QWidget *w : QList<QWidget *>{m_import, m_edit, m_makeCues, m_cue, m_here, m_standby})
         bar->addWidget(w);
     bar->addStretch(1);
     for (QWidget *w : QList<QWidget *>{m_follow, m_pdf, m_go})
@@ -454,6 +460,7 @@ CallingScriptView::CallingScriptView(Doc *doc, quint32 productionId, QWidget *pa
     root->addWidget(m_summary);
 
     connect(m_import, &QPushButton::clicked, this, &CallingScriptView::slotImport);
+    connect(m_makeCues, &QPushButton::clicked, this, &CallingScriptView::slotMakeCues);
     connect(m_edit, &QPushButton::toggled, this, &CallingScriptView::slotEditToggled);
     connect(m_here, &QPushButton::clicked, this, &CallingScriptView::slotCueHere);
     connect(m_standby, &QPushButton::clicked, this, &CallingScriptView::slotStandbyHere);
@@ -536,9 +543,16 @@ void CallingScriptView::rebuild()
         m_text->setPlainText(text);
     fillCues();
     const int placed = m_sheet.markerCount();
-    m_summary->setText(m_sheet.isEmpty() ? tr("No script yet")
-                                         : tr("%1 — %n cue(s) placed", "", placed)
-                                               .arg(m_sheet.title().isEmpty() ? tr("Script") : m_sheet.title()));
+    QString summary = m_sheet.isEmpty() ? tr("No script yet")
+                                        : tr("%1 — %n cue(s) placed", "", placed)
+                                              .arg(m_sheet.title().isEmpty() ? tr("Script") : m_sheet.title());
+    // The directions still to cue, and where to make them (Q237).
+    const int open = m_sheet.isEmpty() ? 0 : uncuedDirections();
+    if (open > 0)
+        summary += QStringLiteral(" · ")
+                   + (open == 1 ? tr("1 SCENE / LIGHTING line with no cue: Make Cues… proposes it")
+                                : tr("%1 SCENE / LIGHTING lines with no cue: Make Cues… proposes them").arg(open));
+    m_summary->setText(summary);
     updateButtons();
     m_rebuilding = false;
 }
@@ -575,6 +589,7 @@ void CallingScriptView::updateButtons()
     const bool editing = isEditing();
     const bool can = m_cue->count() > 0 && !m_text->toPlainText().isEmpty();
     m_here->setEnabled(can && !editing);
+    m_makeCues->setEnabled(!m_text->toPlainText().isEmpty());
     m_standby->setEnabled(can && !editing);
     m_pdf->setEnabled(!m_sheet.isEmpty());
     m_go->setEnabled(mainChaser() != nullptr);
@@ -778,6 +793,61 @@ void CallingScriptView::slotImport()
     QString error;
     if (!importFile(path, &error))
         QMessageBox::warning(this, tr("Calling Script"), error);
+}
+
+quint32 CallingScriptView::targetList() const
+{
+    ShowTreeController *st = m_doc->showTree();
+    const Production *p = st->production(m_production);
+    if (p == nullptr)
+        return invalidId();
+    const quint32 picked = m_listSource ? m_listSource() : invalidId();
+    const CueList *l = picked == invalidId() ? nullptr : p->list(picked);
+    if (l != nullptr && !l->looks && !l->isSubCues())
+        return l->id;
+    const quint32 main = st->mainList(m_production);
+    l = main == invalidId() ? nullptr : p->list(main);
+    return l != nullptr && !l->looks && !l->isSubCues() ? l->id : invalidId();
+}
+
+int CallingScriptView::uncuedDirections() const
+{
+    int n = 0;
+    const QList<CallingScriptSheet::Line> &lines = m_sheet.lines();
+    for (const ShowTreeController::ScriptDirection &d :
+         ShowTreeController::scriptDirections(m_doc->showTree()->callingScript(m_production).text))
+    {
+        bool cued = false;
+        if (d.line < lines.count())
+            for (const CallingScriptSheet::Marker &m : lines.at(d.line).markers)
+                cued |= m.go;
+        n += cued ? 0 : 1;
+    }
+    return n;
+}
+
+QList<quint32> CallingScriptView::makeCuesFromScript()
+{
+    commitEdit();
+    const quint32 list = targetList();
+    if (list == invalidId())
+    {
+        m_summary->setText(tr("Add a cue list to the production first: the cues are made in it."));
+        return QList<quint32>();
+    }
+    ScriptCuesDialog dlg(m_doc, m_production, list, this);
+    if (dlg.exec() != QDialog::Accepted)
+        return QList<quint32>();
+    refresh();
+    m_summary->setText(dlg.message() + QLatin1Char(' ')
+                       + tr("%1 takes them all back.").arg(QKeySequence(QKeySequence::Undo).toString(QKeySequence::NativeText)));
+    emit scriptChanged();
+    return dlg.made();
+}
+
+void CallingScriptView::slotMakeCues()
+{
+    makeCuesFromScript();
 }
 
 bool CallingScriptView::savePdf(const QString &path, QString *error) const
