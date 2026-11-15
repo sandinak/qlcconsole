@@ -78,6 +78,7 @@
 #include "track.h"
 #include "showfunction.h"
 #include <QThread>
+#include <atomic>
 
 #define TESTPLUGINDIR "../iopluginstub"
 
@@ -2714,6 +2715,152 @@ void OutputRules_Test::anAutomaticSourceIsHeldUntilArmed()
         tickFrame(Flame);
     QCOMPARE(sent(Flame), 255);
     stopFunctions();
+}
+
+/****************************************************************************
+ * Eighth review (of 1e5ccc7b62): red until fixed
+ ****************************************************************************/
+
+/* R8-1: a Park set in Design is held in Operate (it counts for nothing),
+   but its write past the Grand Master still marks the channel "past GM"
+   for the frame (Universe::writePastGM()). writeFader() puts the GO's
+   level back -- and updatePostGMValue() then skips the Grand Master. */
+void OutputRules_Test::r8_aHeldParkTakesTheGoPastTheGrandMaster()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    // Parked at 0 in Design (to be sure it stays off): not the show.
+    OutputLayer park(m_doc, Universe::Park, FadeChannel::Override | FadeChannel::PastGM,
+                     QStringLiteral("Park"));
+    park.set({ { m_doc->fixtureForAddress(Flame), 0, 0 } });
+    m_doc->setMode(Doc::Operate);
+    const FunctionParent go = FunctionParent::master();
+    startScene({ { Flame, 255 } }, go.type(), go.id());     // a GO
+    tickFrame(Flame);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 255);
+    // The operator pulls the Grand Master down to nothing.
+    m_doc->inputOutputMap()->setGrandMasterValue(0);
+    tickFrame(Flame);
+    tickFrame(Flame);
+    const int out = sent(Flame);
+    park.clear();
+    stopFunctions();
+    QCOMPARE(out, 0);
+}
+
+/* R8-2: bitsFor() leaves On-when-not-in-use off a Show-only fixture's
+   own channels, but not off another fixture's that shares them: the
+   channel has both bits and updatePostGMValue() puts it at full. */
+void OutputRules_Test::r8_anOnAtOpenFixtureOnItsAddressDrivesIt()
+{
+    addDimmer("Laser", Flame, Fixture::ShowOnly);
+    Fixture *work = addDimmer("Work 2", 40, Fixture::OnAtOpen);
+    QVERIFY(work != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    work->setAddress(Flame);            // re-patched over it (a mistake)
+    QCoreApplication::processEvents();  // the rebuild
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);       // OnAtOperate: armed now; no GO
+    tickFrame(Flame);
+    tickFrame(Flame);
+    QCOMPARE(sent(Flame), 0);
+}
+
+/* R8-3: markShowOnly() takes a new mark only for a channel that was not
+   Show only. A Show-only fixture moved by one channel keeps the old mark
+   on the channels it still covers, so a GO from before the move still
+   counts there (S0: "later than the channel's own: a fixture patched or
+   moved onto it"). */
+void OutputRules_Test::r8_aGoFromBeforeARepatchStillDrivesIt()
+{
+    enum { At = 30 };
+    Fixture *laser = new Fixture(m_doc);
+    laser->setName(QStringLiteral("Laser"));
+    laser->setChannels(2);
+    laser->setAddress(At);
+    laser->setUniverse(0);
+    laser->setOutputRules(Fixture::ShowOnly);
+    QVERIFY(m_doc->addFixture(laser));
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    Scene *s = new Scene(m_doc);
+    s->setValue(laser->id(), 0, 255);
+    s->setValue(laser->id(), 1, 200);
+    m_doc->addFunction(s);
+    s->start(m_doc->masterTimer(), FunctionParent::master());     // a GO
+    tickFrame(At);
+    tickFrame(At);
+    QCOMPARE(sent(At), 255);
+    QCOMPARE(sent(At + 1), 200);
+    // Re-patched one channel up, mid-show: nothing since is a GO.
+    laser->setAddress(At + 1);
+    QCoreApplication::processEvents();
+    for (int i = 0; i < 3; i++)
+        tickFrame(At);
+    const int ch0 = sent(At + 1), ch1 = sent(At + 2);
+    stopFunctions();
+    QCOMPARE(ch0, 0);
+    QCOMPARE(ch1, 0);
+}
+
+/* R8-4: InputOutputMap::applyBlackout(), setOutputInhibited(),
+   OutputRuleKeeper::emergencyStop() and Monitor::sendMaintenance() copy
+   postGMValues() with no frame lock and then dumpOutput() it -- live, with
+   no hold. Universe::writeFader() lets a held writer write and only then
+   puts the Show-only channels back: a copy taken in between has the held
+   writer's level, and it is sent. The universe thread here is a second
+   thread running processFaders(); the copy and the send are those calls'. */
+void OutputRules_Test::r8_aSendBetweenTwoFramesCarriesAHeldWriter()
+{
+    addDimmer("Flame", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);
+    // A preview (the Workbench's Play Live) on the whole universe, the flame too.
+    QSharedPointer<GenericFader> preview = m_uni->requestFader(Universe::Override);
+    preview->setHoldsShowOnly(true);
+    for (int c = 0; c < 512; c++)
+    {
+        if (c == House || c == Stage || c == Relay || c == Work)
+            continue;
+        GenericFader::ChannelRef fc = preview->getChannelFader(m_doc, m_uni, Fixture::invalidId(), quint32(c));
+        fc->setStart(255);
+        fc->setCurrent(255);
+        fc->setTarget(255);
+    }
+    frame(Flame);
+    QCOMPARE(sent(Flame), 0);
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(Flame))), 0);
+
+    std::atomic<bool> stop { false };
+    Universe *uni = m_uni;
+    QThread *t = QThread::create([uni, &stop]() {
+        while (!stop.load())
+            uni->processFaders();
+    });
+    t->start();
+    QByteArray caught;
+    for (int i = 0; i < 200000 && caught.isEmpty(); i++)
+    {
+        // What applyBlackout()/setOutputInhibited()/emergencyStop() copy
+        const QByteArray pg = m_uni->postGMValues()->mid(0, m_uni->usedChannels());
+        if (pg.size() > Flame && pg.at(Flame) != 0)
+            caught = pg;
+    }
+    stop.store(true);
+    QVERIFY(t->wait(5000));
+    delete t;
+    int out = 0;
+    if (!caught.isEmpty())
+    {
+        m_uni->dumpOutput(caught, true);   // ...and send
+        out = sent(Flame);
+    }
+    m_uni->dismissFader(preview);
+    frame(Flame);
+    QVERIFY2(caught.isEmpty(), qPrintable(QString("a copy between two frames had the flame at %1; "
+                                                  "dumpOutput() sent %2")
+                                          .arg(caught.isEmpty() ? 0 : int(uchar(caught.at(Flame)))).arg(out)));
 }
 
 QTEST_GUILESS_MAIN(OutputRules_Test)

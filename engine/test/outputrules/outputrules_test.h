@@ -220,6 +220,20 @@ private slots:
     void aShowOnlyFixtureMovedOntoAStampedChannelWaits();
     void aChildKeepsItsParentsStampForTheSession();
     void anAutomaticSourceIsHeldUntilArmed();
+    /* Eighth review (of 1e5ccc7b62): red until fixed */
+    /** R8-1: a held park (set in Design) on a Show-only channel takes the
+     *  GO's level past the Grand Master */
+    void r8_aHeldParkTakesTheGoPastTheGrandMaster();
+    /** R8-2: an On-when-not-in-use fixture moved onto a Show-only one's
+     *  address drives it in Operate with no GO */
+    void r8_anOnAtOpenFixtureOnItsAddressDrivesIt();
+    /** R8-3: a fixture moved by fewer channels than it has keeps the old
+     *  marks there: the GO from before the re-patch still drives it */
+    void r8_aGoFromBeforeARepatchStillDrivesIt();
+    /** R8-4: a send between two frames (Blackout off, Blind off, All Off,
+     *  a maintenance send) copies postGMValues() unlocked, mid-frame: a held
+     *  writer's value, not yet put back, goes out */
+    void r8_aSendBetweenTwoFramesCarriesAHeldWriter();
 
 private slots:
     /* The e-stop rules (OutputRuleKeeper E1-E7), swept: each writer set
