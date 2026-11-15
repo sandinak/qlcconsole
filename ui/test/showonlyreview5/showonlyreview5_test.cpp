@@ -1297,7 +1297,7 @@ void ShowOnlyReview5_Test::r7SharedSceneLatchesAcrossADesignTrip()
         flameMax = qMax(flameMax, sent(Flame));
     }
     dump("end");
-    QVERIFY2(false, qPrintable(info));      // DEBUG
+    qDebug() << info;
     QVERIFY(a->previewGate()->load());      // both lists are held (left from Design)...
     QVERIFY(b->previewGate()->load());
     QCOMPARE(flameMax, 0);                  // ...so the flame must be too
@@ -1596,7 +1596,7 @@ void ShowOnlyReview5_Test::r7XYPadLoadedInOperateIsStamped()
    cut -> the per-function stop loop.) */
 void ShowOnlyReview5_Test::r7AllOffRaceLeavesAnLtpChannelUp()
 {
-    QVERIFY(addFogger(QStringLiteral("Fogger"), Flame) != nullptr);
+    QVERIFY(addFogger(QStringLiteral("Race fogger"), Flame) != nullptr);
     m_doc->outputRuleKeeper()->rebuild();
     Scene *fog = new Scene(m_doc);
     fog->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
@@ -1631,6 +1631,48 @@ void ShowOnlyReview5_Test::r7AllOffRaceLeavesAnLtpChannelUp()
     qDebug() << "frame after the cut:" << raced << "ten frames later:" << after;
     QCOMPARE(after, 0);                     // All Off: out, and stays out
     QCOMPARE(raced, 0);
+}
+
+/* R7-1b. The latch of R7-1 with a parent that does not renew its children
+   each tick (a Collection; a chaser does, which undoes the latch on the
+   next tick). A fire scene is a step of list A; a Collection holding it is
+   started in Operate (a VC button, the web FUNCTION command) -- the scene
+   sits before the Collection in the MasterTimer's list. A trip to Design
+   and back: refreshPreviewGates() reads the Collection's gate before it is
+   worked out for the new session, and the scene latches the new session.
+   Nothing renews it: it is the show from then on. */
+void ShowOnlyReview5_Test::r7CollectionChildLatchesAcrossADesignTrip()
+{
+    QVERIFY(addDimmer(QStringLiteral("Flame"), Flame, Fixture::ShowOnly) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    Scene *fire = new Scene(m_doc);
+    fire->setValue(m_doc->fixtureForAddress(Flame), 0, 255);
+    m_doc->addFunction(fire);
+    Chaser *a = listOf(fire, QStringLiteral("A"));
+    Collection *both = new Collection(m_doc);
+    both->addFunction(fire->id());
+    m_doc->addFunction(both);
+    m_doc->setMode(Doc::Operate);
+    goList(a);
+    tick(3);
+    both->start(m_doc->masterTimer(), FunctionParent(FunctionParent::ManualVCWidget, 71));  // a VC button
+    tick(3);
+    QCOMPARE(fire->sources().size(), 2);
+    QCOMPARE(sent(Flame), 255);             // the show: right
+
+    m_doc->setMode(Doc::Design);
+    tick(3);
+    QCOMPARE(sent(Flame), 0);
+    m_doc->setMode(Doc::Operate);           // back; nobody touches anything
+    int flameMax = 0;
+    for (int i = 0; i < 10; i++)
+    {
+        tick(1);
+        flameMax = qMax(flameMax, sent(Flame));
+    }
+    QVERIFY(a->previewGate()->load());      // list A: left from Design, held
+    QVERIFY(both->previewGate()->load());   // the Collection: held
+    QCOMPARE(flameMax, 0);                  // ...so the flame must be too
 }
 
 QTEST_MAIN(ShowOnlyReview5_Test)

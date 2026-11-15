@@ -79,6 +79,7 @@ private slots:
     /* Seventh review (of 66445810d0) */
     void r7SharedSceneLatchesAcrossADesignTrip();
     void r7DesignLeftoverLatchesAtOperate();
+    void r7CollectionChildLatchesAcrossADesignTrip();
     void r7QueuedAllOffChildLatchesInTheGap();
     void r7LtpChannelKeptWhenItsCueLetsGo();
     void r7GoInBlindFiresWhenBlindEnds();
