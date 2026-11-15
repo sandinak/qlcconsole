@@ -43,6 +43,11 @@ private slots:
     void everySurfaceNamesTheNextHit();
     /** The phone page's list is the Run tab's (rule 1). */
     void thePhonePlaysTheRunTabsList();
+    /** A GO while a hit plays: the hit completes (output still the hit's,
+     *  a previous cue's hit too, a pull on the new cue leaves it). */
+    void aHitPlayingWhenAGoComesCompletes();
+    /** A one-shot hit ends on its own time, not at the GO. */
+    void aOneShotHitEndsOnItsOwnTimeNotAtTheGo();
     /** Pictures for the visual check (QLC_SHOT_DIR set; else skipped): the
      *  Run tab and the footer, armed on a cue with two hits, after a pull,
      *  and on a cue with one, at 1024, 1280 and 1920 wide. */
@@ -56,6 +61,7 @@ private:
     void value(quint32 channel, unsigned char v);
     void chord(bool on);
     void go();
+    int level(int channel);
 
     App *m_app = nullptr;
     QTemporaryDir *m_pluginDir = nullptr;

@@ -51,6 +51,9 @@
 #include "qlcfixturehead.h"
 #include "qlcchannel.h"
 #include "qlcpalette.h"
+#include "effectscriptrunner.h"
+#include "universe.h"
+#include "functionparent.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -365,6 +368,216 @@ void PadHit_Test::thePhonePlaysTheRunTabsList()
     doc->controlMap()->setRunTabList(ShowTree::invalidId());
     settle();
     QCOMPARE(list(), QStringLiteral("Act One"));
+}
+
+/* The product rule: a cue that fires while a hit is firing -- the hit
+   completes. A GO moves the list on and touches nothing of a hit playing. */
+namespace
+{
+struct Undo
+{
+    std::function<void()> f;
+    ~Undo() { if (f) f(); }
+};
+}
+
+int PadHit_Test::level(int channel)
+{
+    Doc *doc = m_app->doc();
+    QList<Universe *> us = doc->inputOutputMap()->claimUniverses();
+    const int v = int(uchar(us.at(0)->preGMValues().at(channel)));
+    doc->inputOutputMap()->releaseUniverses(false);
+    return v;
+}
+
+void PadHit_Test::aHitPlayingWhenAGoComesCompletes()
+{
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    PadRun *run = doc->programmer()->padRun();
+    doc->masterTimer()->stopAllFunctions();
+    settle(100);
+    // A temporary cue after Opening that also drives the hit's own channel,
+    // lower than the hit: the hit must stay on top of it.
+    QLCPalette *half = new QLCPalette(QLCPalette::Dimmer);
+    half->setName("Half (hit GO test)");
+    half->setValue(60);
+    doc->addPalette(half);
+    ShowTree::Target both;
+    for (Fixture *fxi : doc->fixtures())
+        both.fixtures << fxi->id();
+    const quint32 overlap = st->addCue(m_list, 0, "Overlap");
+    QVERIFY(overlap != ShowTree::invalidId());
+    Undo undo;
+    undo.f = [&]() {
+        doc->masterTimer()->stopAllFunctions();
+        st->removeCue(overlap);
+        doc->deletePalette(half->id());
+        doc->setMode(Doc::Design);
+        run->setEnabled(false, false);
+        settle(50);
+    };
+    QVERIFY(st->setLayerLook(overlap, st->addLayer(overlap, both, "Both"), st->lookForPalette(half->id())));
+    settle(50);
+
+    doc->setMode(Doc::Operate);
+    settle(50);
+    run->setEnabled(true);
+    if (!run->isArmed())
+        chord(true);
+    QVERIFY(run->isArmed());
+    QSignalSpy fired(run, &PadRun::hitFired);
+
+    go();
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(m_list) == m_cues.at(0), 3000);
+    tap(kRT);
+    QTRY_COMPARE_WITH_TIMEOUT(fired.count(), 1, 2000);
+    const quint32 hitId = fired.last().at(0).toUInt();
+    QVERIFY(fired.last().at(1).toBool());
+    QCOMPARE(st->hitScope(hitId), ShowTree::HitScope::Cue);
+    Function *hitFn = doc->function(st->lookFunction(hitId));
+    QVERIFY(hitFn != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(hitFn->isRunning(), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(level(1), 255, 2000);
+
+    // The GO: Overlap plays its 60 on the hit's channel, the hit keeps 255.
+    go();
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(m_list) == overlap, 3000);
+    QVERIFY2(!st->isHitArmed(hitId), "the hit's cue is no longer the running one");
+    for (int i = 0; i < 8; ++i)
+    {
+        QTest::qWait(100);
+        QVERIFY2(hitFn->isRunning(), qPrintable(QString("the GO stopped the hit (%1)").arg(i)));
+        QVERIFY2(level(1) == 255, qPrintable(QString("the hit's channel is %1 after the GO").arg(level(1))));
+        QCOMPARE(level(0), 60);         // the new cue is playing, on its own channel
+    }
+
+    // An RT pull on a cue with no hit of its own does not touch the old one.
+    tap(kRT);
+    settle(200);
+    QVERIFY(hitFn->isRunning());
+    QCOMPARE(level(1), 255);
+
+    // On to Ballad: only Breathe responds to RT; the first hit plays on.
+    go();
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(m_list) == m_cues.at(1), 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Breathe"), 2000);
+    tap(kRT);
+    QTRY_COMPARE_WITH_TIMEOUT(fired.count(), 2, 2000);
+    QVERIFY(fired.last().at(0).toUInt() != hitId);
+    QVERIFY(fired.last().at(1).toBool());
+    const quint32 breatheId = fired.last().at(0).toUInt();
+    Function *breatheFn = doc->function(st->lookFunction(breatheId));
+    QVERIFY(breatheFn != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(breatheFn->isRunning(), 2000);
+    tap(kRT);                           // Breathe off
+    QTRY_COMPARE_WITH_TIMEOUT(fired.count(), 3, 2000);
+    QVERIFY(!fired.last().at(1).toBool());
+    QVERIFY(fired.last().at(0).toUInt() != hitId);
+    settle(200);
+    QVERIFY2(hitFn->isRunning(), "a pull on the new cue let the previous cue's hit go");
+    QCOMPARE(level(1), 255);
+
+    // Let go at last: what the hit was holding is the cue's under it. Ballad
+    // drives only the first dimmer, so the hit's channel is the dark.
+    hitFn->stop(FunctionParent::master());
+    QTRY_COMPARE_WITH_TIMEOUT(level(1), 0, 2000);
+}
+
+void PadHit_Test::aOneShotHitEndsOnItsOwnTimeNotAtTheGo()
+{
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    PadRun *run = doc->programmer()->padRun();
+    doc->masterTimer()->stopAllFunctions();
+    settle(100);
+    ShowTree::Target both;
+    for (Fixture *fxi : doc->fixtures())
+        both.fixtures << fxi->id();
+    ShowTree::Target onHit;
+    onHit.fixtures = { doc->fixtures().last()->id() };
+    QLCPalette *half = new QLCPalette(QLCPalette::Dimmer);
+    half->setName("Half (one-shot GO test)");
+    half->setValue(60);
+    doc->addPalette(half);
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer);
+    full->setName("Full (one-shot GO test)");
+    full->setValue(255);
+    doc->addPalette(full);
+    QLCPalette *breathe = new QLCPalette(QLCPalette::Effect);
+    breathe->setName("Breathe (one-shot GO test)");
+    breathe->setScriptPath(QStringLiteral(QLC_TEST_RESOURCE_ROOT) + "effectscripts/dimmer-phaser.js");
+    doc->addPalette(breathe);
+    breathe->setEffectParamValue("waveform", 0);
+    breathe->setEffectParamValue("rate", 1.0);              // a 1 s breath
+    breathe->setEffectParamValue("minDim", 0.05);
+    breathe->setEffectParamValue("maxDim", 1.0);
+    breathe->setEffectParamValue("spread", 0);
+    breathe->setEffectParamValue("__runs", 1);              // once
+    // Finale has no hit of its own: the production's one-shot is the one armed.
+    const quint32 encore = st->addCue(m_list, int(m_cues.size()) - 1, "Encore");
+    QVERIFY(encore != ShowTree::invalidId());
+    const quint32 flash = st->addHit(ShowTree::HitScope::Production, st->currentProduction(), "Flash (one-shot)");
+    QVERIFY(flash != ShowTree::invalidId());
+    Undo undo;
+    undo.f = [&]() {
+        doc->masterTimer()->stopAllFunctions();
+        st->removeCue(flash);
+        st->removeCue(encore);
+        doc->deletePalette(breathe->id());
+        doc->deletePalette(full->id());
+        doc->deletePalette(half->id());
+        doc->setMode(Doc::Design);
+        run->setEnabled(false, false);
+        settle(50);
+    };
+    QVERIFY(st->setLayerLook(encore, st->addLayer(encore, both, "Both"), st->lookForPalette(half->id())));
+    const quint32 layer = st->addLayer(flash, onHit, "Flash");
+    QVERIFY(st->setLayerLook(flash, layer, st->lookForPalette(full->id())));
+    ShowTree::Look fx = st->lookForPalette(breathe->id());
+    fx.fadeIn = ShowTree::Look::FadeSnap;
+    fx.fadeOut = ShowTree::Look::FadeSnap;
+    QVERIFY(st->setLayerLook(flash, layer, fx));
+    settle(50);
+
+    doc->setMode(Doc::Operate);
+    settle(50);
+    run->setEnabled(true);
+    if (!run->isArmed())
+        chord(true);
+    QVERIFY(run->isArmed());
+    QSignalSpy fired(run, &PadRun::hitFired);
+
+    go();
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(m_list) == m_cues.at(0), 3000);
+    go();
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(m_list) == m_cues.at(1), 3000);
+    go();
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(m_list) == m_cues.at(2), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(!run->armedHitText().isEmpty(), 2000);
+    tap(kRT);
+    QTRY_COMPARE_WITH_TIMEOUT(fired.count(), 1, 2000);
+    QCOMPARE(fired.last().at(0).toUInt(), flash);
+    Function *hitFn = doc->function(st->lookFunction(flash));
+    QVERIFY(hitFn != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(hitFn->isRunning(), 2000);
+    EffectScriptRunner *esr = doc->effectScriptRunner();
+    QVERIFY(esr != nullptr);
+    QTRY_COMPARE_WITH_TIMEOUT(esr->oneShotState(hitFn->id()), 0, 1000);   // mid-breath
+
+    // The GO, mid-breath: Encore (60 on both) plays, the breath is not cut.
+    go();
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(m_list) == encore, 3000);
+    QVERIFY2(esr->oneShotState(hitFn->id()) == 0, "the GO ended the one-shot");
+    QVERIFY(hitFn->isRunning());
+    // Over the new cue's 60, the breath rises to its top.
+    QTRY_VERIFY2_WITH_TIMEOUT(level(1) > 120, qPrintable(QString::number(level(1))), 1500);
+    // It ends on its own time: the breath done, the hit still on (a toggle),
+    // holding the breath's last level -- the hit's, not the new cue's 60.
+    QTRY_COMPARE_WITH_TIMEOUT(esr->oneShotState(hitFn->id()), 1, 3000);
+    QVERIFY(hitFn->isRunning());
+    QTRY_VERIFY2_WITH_TIMEOUT(level(1) < 30, qPrintable(QString::number(level(1))), 1000);
+    QCOMPARE(level(0), 60);             // the cue plays on its own channel
 }
 
 void PadHit_Test::pictures()
