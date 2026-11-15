@@ -98,7 +98,7 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
 13. **Run** tab: **Stop**, then **Design**.
 14. In the Show Tree, **More ▾ → Cue Sheet…**. The **Sheet** box has two
     sheets. Read the **Cue sheet** (the cues by song), then the **Tracking
-    sheet**. Save one as a PDF with **Save PDF…**. The dialog's **Calling Script…** button opens the script with the cues on its lines.
+    sheet**. Save one as a PDF with **Save PDF…**. The dialog's **Calling Script…** button opens the script with the cues on its lines. A script whose **SCENE:** and **LIGHTING:** lines say what the lights do can write its own cues: **Make Cues…** there lists one per line, numbered into its song, and makes the ones you leave ticked in one undo step.
 
     ![The cue sheet, with Save PDF… and Calling Script…](../../images/lesson-3-8/cue-sheet.png)
 

@@ -1796,7 +1796,9 @@ to keep cues.
 
 - **Get the text in.** **Edit Text** lets you type or paste it; **Import…**
   reads a plain text or Markdown file (UTF-8). The script is kept with the
-  production in the show file. A production without one has none.
+  production in the show file. A production without one has none. Its
+  SCENE and LIGHTING lines can become cues in one go:
+  [Cues from the script](#cues-from-the-script).
 - **Place a cue.** Drag a cue from the Show Tree onto a word: its **GO** is
   called there (hold Alt for its **standby**). Or select the words, pick the
   cue in the box beside **Import…** (it follows the cue selected in the
@@ -1823,6 +1825,39 @@ to keep cues.
 
 The script is saved as a `CallingScript` element of its production, which
 an older build ignores.
+
+### Cues from the script
+
+A script that already says what the lights do can write the cues for you.
+**Make Cues…** in the calling script's window reads every line that begins
+**SCENE:**, **LIGHTING:** or **LIGHTS:** (any case, as a Google Docs ▸
+Download ▸ Plain text export has them) and proposes a cue for each. The
+line under the window counts the ones still to cue.
+
+- **You see them first.** The list shows each proposed cue under its song:
+  the number it would get, a name (the line's first words) and its note
+  (the line's words). Untick a line, or a whole song, and the rest are
+  numbered again. Nothing is made until you press **Make N Cues**;
+  **Cancel** makes nothing.
+- **Numbered for the show.** Under `{S}.{P}.{II}` each cue goes in its song:
+  a line that is a song's name (`EVERYBODY SCREAM` for "Everybody Scream")
+  starts that song, and a title line in capitals with a **LIGHTING:** line
+  under it starts the next one, named from the script (`HEADS WILL ROLL`
+  becomes "Heads Will Roll"). Lines before the first song are the preshow,
+  song 0. A cue already on the script puts the script in its song from that
+  line. In a song, a new cue goes after the cue called before it, else
+  after the song's last cue: a cue not on the script yet is taken to come
+  right after the one before it, so place your cues on their lines first
+  if the new ones should go between them. Numbers follow the same rule as
+  **+ Cue** (`1.0.3` after `1.0.2`, `1.0.1.5` between `1.0.1` and `1.0.2`).
+  Without a scheme they follow on from the last cue.
+- **Lines that have a cue are skipped.** A line where a cue's GO is called
+  is shown greyed with that cue and gets no new one, so Make Cues can be
+  used again as the script grows.
+- **Made in one step.** The cues go into the cue list picked in the Show
+  Tree (else the production's main list), each called on its line (the
+  margin shows `GO 1.0.3 …`), its note the line's words. One **⌘Z** takes
+  them all back, with the songs' new names and the marks on the script.
 
 ## Notes
 

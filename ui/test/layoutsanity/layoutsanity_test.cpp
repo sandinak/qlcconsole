@@ -112,6 +112,8 @@
 #include "createfixturegroup.h"
 #include "cuerunner.h"
 #include "cuesheetdialog.h"
+#include "callingscriptview.h"
+#include "scriptcuesdialog.h"
 #include "definitionupdatesdialog.h"
 #include "dmxmonitorwindow.h"
 #include "effectspage.h"
@@ -583,6 +585,32 @@ Doc *extraDoc()
     return d;
 }
 
+/** A show numbered {S}.{P}.{II} with a calling script of SCENE / LIGHTING
+ *  lines: the calling script and Cues from the Script (Q237). */
+Doc *scriptShow()
+{
+    Doc *doc = extraDoc();
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction(QStringLiteral("Dance Hysteria"));
+    const quint32 list = st->addCueList(prod, QStringLiteral("Production Show"));
+    st->setNumbering(prod, ShowTree::Numbering::ShowPartIteration);
+    st->addSection(list, QStringLiteral("Startup"));
+    st->addSection(list, QStringLiteral("Everybody Scream"));
+    st->setScriptText(prod, QStringLiteral("OPENING\n"
+                                           "SCENE: CURTAIN closed, LIGHTS on Curtain and Announcer\n"
+                                           "ANNOUNCER: A festival.\n"
+                                           "SCENE: Lanterns light, Front stage lighting gets creepy\n"
+                                           "EVERYBODY SCREAM\n"
+                                           "LIGHTING: Primary Blue/Purple/Yellow Hi-lights\n"
+                                           "SCENE: NIGHT-TIME in the square, LANTERNS lit, LIGHTS just backlit, "
+                                           "CAST in position on RISERS wearing Formal Festival costume\n"
+                                           "HEADS WILL ROLL\n"
+                                           "LIGHTS: Orange, Green\n"),
+                      QStringLiteral("script.txt"));
+    st->anchorCue(prod, st->cueList(list)->cues.first().id, 8);
+    return doc;
+}
+
 /** The status bar as the app has it, with the speed masters' footer in it
  *  and Main Speed (and two more) in use. */
 QWidget *speedMastersInTheStatusBar(App *)
@@ -1051,6 +1079,15 @@ QList<Screen> screens()
          << screen(QStringLiteral("Cue sheet"), [](App *app) -> QWidget * {
                 const QList<ShowTree::Production> &p = docOf(app)->showTree()->productions();
                 return p.isEmpty() ? nullptr : new CueSheetDialog(docOf(app), p.first().id);
+            })
+         << screen(QStringLiteral("Calling script"), [](App *) -> QWidget * {
+                Doc *doc = scriptShow();
+                return new CallingScriptView(doc, doc->showTree()->productions().first().id);
+            })
+         << screen(QStringLiteral("Cues from the script"), [](App *) -> QWidget * {
+                Doc *doc = scriptShow();
+                const quint32 prod = doc->showTree()->productions().first().id;
+                return new ScriptCuesDialog(doc, prod, doc->showTree()->mainList(prod));
             })
          << screen(QStringLiteral("Create groups"), [](App *app) -> QWidget * {
                 return new CreateGroupsDialog(docOf(app), someFixtures(docOf(app), 8));

@@ -13,3 +13,9 @@ target_link_libraries(callingscript_test PRIVATE
     Qt6::Test
     qlcplusengine
 )
+
+# script-excerpt.txt: the format of a real script, for the Cues from the
+# script tests.
+target_compile_definitions(callingscript_test PRIVATE
+    CALLINGSCRIPT_TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)

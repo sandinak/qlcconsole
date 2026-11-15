@@ -21,6 +21,7 @@
 #include <QXmlStreamWriter>
 #include <QTemporaryDir>
 #include <QBuffer>
+#include <QRegularExpression>
 #include <QtTest>
 
 #include "showtreecontroller.h"
@@ -292,6 +293,267 @@ void CallingScript_Test::pdfAndHtml()
     // A file that can't be written says so.
     QVERIFY(!sheet.writePdf(dir.filePath("no/such/dir/x.pdf"), "x", &error));
     QVERIFY(!error.isEmpty());
+}
+
+/****************************************************************************
+ * Cues from the script (Q237)
+ ****************************************************************************/
+
+namespace
+{
+typedef ShowTreeController::ScriptCue ScriptCue;
+
+/* The proposal for script line @a line (null: none). */
+const ScriptCue *proposalAt(const QList<ScriptCue> &plan, int line)
+{
+    for (const ScriptCue &sc : plan)
+        if (sc.direction.line == line)
+            return &sc;
+    return nullptr;
+}
+
+/* "line:number" for every proposal, "line:-" for one with no number. */
+QStringList numbered(const QList<ScriptCue> &plan)
+{
+    QStringList out;
+    for (const ScriptCue &sc : plan)
+        out << QStringLiteral("%1:%2").arg(sc.direction.line).arg(sc.made() ? sc.number : QStringLiteral("-"));
+    return out;
+}
+
+/* The lines of the excerpt that are stage directions. */
+const QList<int> kDirectionLines = { 5, 8, 9, 11, 13, 15, 16, 18, 21, 23, 24, 25, 30, 31, 35, 36 };
+} // namespace
+
+void CallingScript_Test::importExcerpt()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QString error;
+    QVERIFY2(st->importScript(m_prod, QStringLiteral(CALLINGSCRIPT_TEST_DIR "/script-excerpt.txt"), &error),
+             qPrintable(error));
+    QVERIFY(st->addSection(m_list, "Lets Dance") != invalidId());       // 2.0.1
+}
+
+void CallingScript_Test::scriptDirectionsAreFoundInAnExport()
+{
+    importExcerpt();
+    const QString text = m_doc->showTree()->callingScript(m_prod).text;
+    QVERIFY(!text.contains('\r'));
+    const QStringList lines = text.split('\n');
+    const QList<ShowTreeController::ScriptDirection> dirs = ShowTreeController::scriptDirections(text);
+    QList<int> at;
+    for (const auto &d : dirs)
+        at << d.line;
+    // Not "SCENE:" with nothing after it, a wrapped "LiGHTING," line, CHOREO: or WITCH:.
+    QCOMPARE(at, kDirectionLines);
+
+    QCOMPARE(dirs.at(0).kind, QString("SCENE"));
+    QCOMPARE(dirs.at(0).text, QString("CURTAIN closed, LIGHTS on Curtain and Announcer"));
+    QCOMPARE(dirs.at(3).kind, QString("LIGHTING"));
+    // The zero-width space after the colon is gone; "SCENE :" is one too.
+    QCOMPARE(dirs.at(6).text, QString("CREW Help with screams?"));
+    QCOMPARE(dirs.at(11).kind, QString("SCENE"));
+    QVERIFY(dirs.at(11).text.startsWith("VOCAL HIT ( Bum da dum"));
+    QCOMPARE(dirs.at(12).kind, QString("LIGHTS"));
+    QCOMPARE(dirs.at(12).text, QString("Orange, Green"));
+    // The GO goes on the keyword's first letter, past the zero-width space.
+    for (const auto &d : dirs)
+    {
+        QVERIFY(d.offset >= 0 && d.offset < text.length());
+        QVERIFY2(text.mid(d.offset).startsWith(d.kind, Qt::CaseInsensitive), qPrintable(lines.at(d.line)));
+    }
+
+    // Title lines: capitals or Markdown, never a line with a colon or lower case.
+    QCOMPARE(ShowTreeController::scriptTitleLine("EVERYBODY SCREAM"), QString("EVERYBODY SCREAM"));
+    QCOMPARE(ShowTreeController::scriptTitleLine(QString("APPLAUSE") + QChar(0x200B)), QString("APPLAUSE"));
+    QCOMPARE(ShowTreeController::scriptTitleLine("## Act 1"), QString("Act 1"));
+    QVERIFY(ShowTreeController::scriptTitleLine("Script").isEmpty());
+    QVERIFY(ShowTreeController::scriptTitleLine("CHOREO: DANCE BREAK").isEmpty());
+    QVERIFY(ShowTreeController::scriptTitleLine("D").isEmpty());        // a watermark's letter
+
+    // Names: the first phrase, at most 32 characters, cut at a word.
+    QCOMPARE(ShowTreeController::scriptCueName(dirs.at(0).text), QString("CURTAIN closed"));
+    QCOMPARE(ShowTreeController::scriptCueName(dirs.at(1).text), QString("Lanterns light"));
+    QCOMPARE(ShowTreeController::scriptCueName(dirs.at(3).text), QString("Primary Blue/Purple/Yellow"));
+    QCOMPARE(ShowTreeController::scriptCueName(dirs.at(5).text), QString("UPLIGHTS come up on groups for"));
+    QCOMPARE(ShowTreeController::scriptCueName(dirs.at(11).text), QString("VOCAL HIT"));
+    QCOMPARE(ShowTreeController::scriptCueName(dirs.at(13).text), QString("WITCH SLAMS STAFF on STOP"));
+    QCOMPARE(ShowTreeController::scriptCueName("Minimal lighting .. WITCH is CS"), QString("Minimal lighting"));
+    QCOMPARE(ShowTreeController::scriptCueName("TOWN1 reaches for torch — LANTERN 1 ignites"),
+             QString("TOWN1 reaches for torch"));
+}
+
+void CallingScript_Test::scriptCuesAreNumberedSongBySong()
+{
+    importExcerpt();
+    ShowTreeController *st = m_doc->showTree();
+    const QList<ScriptCue> plan = st->proposeScriptCues(m_prod, m_list);
+    QCOMPARE(plan.count(), kDirectionLines.count());
+    // Before the first song: the preshow (0), after its last cue. A song's
+    // name in the script (any case) is that song; a title line with a
+    // LIGHTING: line under it is the next song, named from the script.
+    // DANCE BREAK, APPLAUSE and TIME SKIP are not songs.
+    QCOMPARE(numbered(plan), QStringList({ "5:0.0.3", "8:0.0.4", "9:0.0.5",
+                                           "11:1.0.3", "13:1.0.4", "15:1.0.5", "16:1.0.6", "18:1.0.7", "21:1.0.8",
+                                           "23:2.0.2", "24:2.0.3", "25:2.0.4",
+                                           "30:3.0.1", "31:3.0.2",
+                                           "35:4.0.1", "36:4.0.2" }));
+    const ScriptCue *a = proposalAt(plan, 11);
+    QCOMPARE(a->song, QString("1"));
+    QCOMPARE(a->songTitle, QString("Everybody Scream"));
+    QVERIFY(!a->newSong);
+    QCOMPARE(a->name, QString("Primary Blue/Purple/Yellow"));
+    QCOMPARE(a->direction.text, QString("Primary Blue/Purple/Yellow Hi-lights"));
+    const ScriptCue *b = proposalAt(plan, 30);
+    QCOMPARE(b->song, QString("3"));
+    QCOMPARE(b->songTitle, QString("Heads Will Roll"));
+    QVERIFY(b->newSong);
+    QCOMPARE(proposalAt(plan, 35)->songTitle, QString("Life And Death Reprise"));
+    // Nothing changed: four cues and the one made for song 2.
+    QCOMPARE(st->cueList(m_list)->cues.count(), 5);
+    QVERIFY(st->callingScript(m_prod).anchors.isEmpty());
+
+    // An earlier song's name as a lyric further on doesn't take the script back.
+    QVERIFY(st->setScriptText(m_prod, "EVERYBODY SCREAM\nSCENE: one\nLETS DANCE\nEverybody scream\nSCENE: two\n"));
+    QCOMPARE(numbered(st->proposeScriptCues(m_prod, m_list)), QStringList({ "1:1.0.3", "4:2.0.2" }));
+}
+
+void CallingScript_Test::scriptLinesWithACueAreSkipped()
+{
+    importExcerpt();
+    ShowTreeController *st = m_doc->showTree();
+    const QString text = st->callingScript(m_prod).text;
+    const QList<ShowTreeController::ScriptDirection> dirs = ShowTreeController::scriptDirections(text);
+    // "Big hit" (1.0.1) called on the curtain line: that line is skipped,
+    // and the script is in song 1 from there. "Hold" (1.0.2) is not on the
+    // script: it is taken to follow 1.0.1, so the next cue is 1.0.3.
+    QVERIFY(st->anchorCue(m_prod, m_cues[2], dirs.at(2).offset + 7));
+    const QList<ScriptCue> plan = st->proposeScriptCues(m_prod, m_list);
+    const ScriptCue *cued = proposalAt(plan, 9);
+    QVERIFY(!cued->made());
+    QCOMPARE(cued->cuedBy, m_cues[2]);
+    QCOMPARE(cued->cuedAs, QString("1.0.1 Big hit"));
+    QCOMPARE(numbered(plan).mid(0, 5), QStringList({ "5:0.0.3", "8:0.0.4", "9:-", "11:1.0.3", "13:1.0.4" }));
+}
+
+void CallingScript_Test::scriptCuesNumberAroundCuesOnTheScript()
+{
+    importExcerpt();
+    ShowTreeController *st = m_doc->showTree();
+    const QList<ShowTreeController::ScriptDirection> dirs =
+        ShowTreeController::scriptDirections(st->callingScript(m_prod).text);
+    // "Hold" (1.0.2) called on line 15: the song's lines before it go in
+    // front of it, those after it after it.
+    QVERIFY(st->anchorCue(m_prod, m_cues[3], dirs.at(5).offset));
+    const QList<ScriptCue> plan = st->proposeScriptCues(m_prod, m_list);
+    QCOMPARE(numbered(plan).mid(3, 6), QStringList({ "11:1.0.1.5", "13:1.0.1.6", "15:-", "16:1.0.3", "18:1.0.4",
+                                                     "21:1.0.5" }));
+}
+
+void CallingScript_Test::untickedLinesAreLeftOutAndTheRestRenumbered()
+{
+    importExcerpt();
+    ShowTreeController *st = m_doc->showTree();
+    const QList<ScriptCue> plan = st->proposeScriptCues(m_prod, m_list, QSet<int>({ 8, 30 }));
+    QVERIFY(proposalAt(plan, 8)->leftOut);
+    QVERIFY(!proposalAt(plan, 8)->made());
+    QCOMPARE(proposalAt(plan, 9)->number, QString("0.0.4"));
+    QCOMPARE(proposalAt(plan, 31)->number, QString("3.0.1"));
+
+    const QList<quint32> ids = st->makeScriptCues(m_prod, m_list, QSet<int>({ 8, 30 }));
+    QCOMPARE(ids.count(), kDirectionLines.count() - 2);
+    const CallingScriptSheet sheet = CallingScriptSheet::build(m_doc, m_prod);
+    QVERIFY(sheet.lines().at(8).markers.isEmpty());
+    QVERIFY(sheet.lines().at(30).markers.isEmpty());
+    // The ones left out are offered again; the rest have their cue.
+    const QList<ScriptCue> again = st->proposeScriptCues(m_prod, m_list);
+    QCOMPARE(numbered(again).filter(QRegularExpression(":\\d")).count(), 2);
+    QCOMPARE(proposalAt(again, 8)->number, QString("0.0.3.5"));       // between 0.0.3 and 0.0.4
+    const QString thirty = proposalAt(again, 30)->number;               // in song 3, before 3.0.1
+    QCOMPARE(sectionKey(Numbering::ShowPartIteration, thirty), QString("3"));
+    QVERIFY(compareCueNumbers(thirty, "3.0.1") < 0);
+}
+
+void CallingScript_Test::scriptCuesAreMadeInOneUndoStep()
+{
+    importExcerpt();
+    ShowTreeController *st = m_doc->showTree();
+    const int undoBefore = int(st->undoSteps().count());
+    QString message;
+    const QList<quint32> ids = st->makeScriptCues(m_prod, m_list, QSet<int>(), &message);
+    QCOMPARE(ids.count(), kDirectionLines.count());
+    QVERIFY2(message.contains("16"), qPrintable(message));
+    QCOMPARE(int(st->undoSteps().count()), undoBefore + 1);
+    QCOMPARE(st->undoText(), QString("Cues from the script"));
+
+    // Each in number order, its note the line's words, its GO on its line.
+    const CueList *list = st->cueList(m_list);
+    QCOMPARE(list->cues.count(), 5 + kDirectionLines.count());
+    for (int i = 1; i < list->cues.count(); ++i)
+        QVERIFY(compareCueNumbers(list->cues.at(i - 1).number, list->cues.at(i).number) < 0);
+    const CallingScriptSheet sheet = CallingScriptSheet::build(m_doc, m_prod);
+    const QList<ScriptCue> plan = st->proposeScriptCues(m_prod, m_list);
+    for (int i = 0; i < ids.count(); ++i)
+    {
+        const Cue *c = st->cue(ids.at(i));
+        QVERIFY(c != nullptr);
+        QCOMPARE(sheet.lineOfCue(ids.at(i)), kDirectionLines.at(i));
+        QCOMPARE(c->note, ShowTreeController::scriptDirections(st->callingScript(m_prod).text).at(i).text);
+        QCOMPARE(proposalAt(plan, kDirectionLines.at(i))->cuedBy, ids.at(i));
+    }
+    QCOMPARE(st->cue(ids.first())->number, QString("0.0.3"));
+    QCOMPARE(st->cue(ids.first())->name, QString("CURTAIN closed"));
+    // The new songs are named from the script.
+    QStringList titles;
+    for (const Section &s : st->sections(m_list))
+        titles << sectionTitle(s);
+    QCOMPARE(titles, QStringList({ "0 — Preshow", "1 — Everybody Scream", "2 — Lets Dance", "3 — Heads Will Roll",
+                                   "4 — Life And Death Reprise" }));
+
+    // Again: every line has its cue, nothing is made, and it says so.
+    QVERIFY(st->makeScriptCues(m_prod, m_list, QSet<int>(), &message).isEmpty());
+    QCOMPARE(message, QString("Every SCENE and LIGHTING line already has a cue."));
+    QCOMPARE(int(st->undoSteps().count()), undoBefore + 1);
+
+    // One undo takes them all back, the songs' names and the script's marks too.
+    QVERIFY(st->undo());
+    QCOMPARE(st->cueList(m_list)->cues.count(), 5);
+    QVERIFY(st->callingScript(m_prod).anchors.isEmpty());
+    QCOMPARE(st->sections(m_list).count(), 3);
+    for (const SectionHead &h : st->cueList(m_list)->sections)
+        QVERIFY(h.key != "3" && h.key != "4");
+    QVERIFY(st->redo());
+    QCOMPARE(st->cueList(m_list)->cues.count(), 5 + kDirectionLines.count());
+    QCOMPARE(CallingScriptSheet::build(m_doc, m_prod).markerCount(), kDirectionLines.count());
+
+    // A list that isn't one of the production's cue lists makes nothing.
+    QVERIFY(st->makeScriptCues(m_prod, 99999, QSet<int>(), &message).isEmpty());
+    QVERIFY(!message.isEmpty());
+}
+
+void CallingScript_Test::scriptCuesWithoutASchemeFollowOn()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Plain");
+    const quint32 list = st->addCueList(prod, "Main");
+    st->addCue(list, -1, "One");                    // 1
+    st->addCue(list, 0, "Two");                     // 2
+    QString error;
+    QVERIFY2(st->importScript(prod, QStringLiteral(CALLINGSCRIPT_TEST_DIR "/script-excerpt.txt"), &error),
+             qPrintable(error));
+    const QList<ScriptCue> plan = st->proposeScriptCues(prod, list);
+    QCOMPARE(plan.count(), kDirectionLines.count());
+    for (int i = 0; i < plan.count(); ++i)
+    {
+        QCOMPARE(plan.at(i).number, QString::number(3 + i));
+        QVERIFY(plan.at(i).song.isEmpty());
+    }
+    // No script: nothing proposed, and making says why.
+    QVERIFY(st->clearScript(prod));
+    QVERIFY(st->proposeScriptCues(prod, list).isEmpty());
+    QString message;
+    QVERIFY(st->makeScriptCues(prod, list, QSet<int>(), &message).isEmpty());
+    QCOMPARE(message, QString("The script has no SCENE: or LIGHTING: lines."));
 }
 
 QTEST_MAIN(CallingScript_Test)
