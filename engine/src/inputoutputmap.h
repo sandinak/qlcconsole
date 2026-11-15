@@ -500,21 +500,14 @@ public:
     /** Try every kept (offline/pending) patch again; returns how many
      *  reconnected. Runs by itself every few seconds while any exist. */
     int retryOfflinePatches();
-    /** The same, leaving @p skip alone (held in the pass that calls it) */
-    int retryOfflinePatches(const QSet<const OutputPatch *> &skip);
-
-    /** S-H4: no Show-only universe left -- every hold made for the
-     *  hardware-line rules (outputpatch.h, S-H1..S-H3) let go, reconnected
-     *  as stock would have. Returns how many. OutputRuleKeeper calls it. */
-    int releaseShowOnlyHolds();
 
     /** A show being loaded (Doc::loadXML()): no universe sends anything to
      *  a plugin -- universes added meanwhile neither -- until it is let go,
      *  after recheckPatchesAfterLoad() */
     void setLoadHold(bool hold);
-    /** Every patch a show load opened (outputs and feedback), checked
-     *  against S-H1..S-H3 (outputpatch.h) now its Show-only fixtures are
-     *  known, held where they say so. Returns how many. */
+    /** N3 (outputpatch.h): once a show's Show-only fixtures are known,
+     *  every output patch of their universes on a hardware line is held,
+     *  before any output is let go. Returns how many. */
     int recheckPatchesAfterLoad();
 
     /** Are any patches being kept offline right now? */
@@ -598,15 +591,29 @@ public:
                          const QString &network, const QString &target,
                          quint32 savedLine = UINT_MAX) const;
 
-    /** Why the last setOutputPatch() was refused by S-H1 (outputpatch.h):
-     *  a universe with Show-only fixtures onto a hardware line whose name
-     *  other lines share. Empty when it was not; cleared by each call. */
+    /** Why the last setOutputPatch() was refused by N1 (outputpatch.h): a
+     *  universe with Show-only fixtures onto a hardware line. Empty when it
+     *  was not; cleared by each call. */
     QString lastPatchRefusal() const { return m_lastPatchRefusal; }
 
-    /** S-H1's words: @p name has no serial number */
-    static QString sharedNameText(const QString &name);
-    /** S-H2's words: @p device's interfaces changed, re-patch */
-    static QString interfacesChangedText(const QString &device);
+    /** N1's words: @p device can't send to Show-only fixtures */
+    static QString networkOnlyText(const QString &device);
+
+    /** N2: marks made between begin and end (a fixture's channels, a
+     *  group's fixtures) hold a hardware patch once, after the last of
+     *  them -- its closing frame then has every one at safe. Nests. */
+    void beginShowOnlyMarks();
+    void endShowOnlyMarks();
+    /** beginShowOnlyMarks() / endShowOnlyMarks() for a scope */
+    class ShowOnlyMarks
+    {
+    public:
+        explicit ShowOnlyMarks(InputOutputMap *io) : m_io(io) { if (m_io) m_io->beginShowOnlyMarks(); }
+        ~ShowOnlyMarks() { if (m_io) m_io->endShowOnlyMarks(); }
+    private:
+        Q_DISABLE_COPY(ShowOnlyMarks)
+        InputOutputMap *m_io;
+    };
 
     /*********************************************************************
      * Rig network transmit gate
@@ -889,31 +896,11 @@ private:
     /** True when an open output patch other than @p except sends on
      *  @p plugin's @p line (review 11: a kept-off patch must not close it) */
     bool lineUsedByAnother(const QLCIOPlugin *plugin, quint32 line, const OutputPatch *except) const;
-    /** Why @p op (open, of @p universe) must not be reopened on its line
-     *  after a configuration change (S-H1..S-H3, outputpatch.h); empty:
-     *  reconnect by number, as stock does */
-    QString deviceHoldReason(QLCIOPlugin *plugin, quint32 universe, const OutputPatch *op,
-                             const QStringList &names) const;
-    /** S-H3: the line an ordinary or feedback patch held by these rules
-     *  reopens on now -- its own number, once that line names no
-     *  protected device -- or -1 */
-    int heldLineFree(OutputPatch *op, bool feedback = false) const;
-    /** S-H3: the recorded devices of every Show-only universe's patch on
-     *  @p plugin (open, held, pending from load), but @p except's */
-    QStringList protectedLineNames(const QLCIOPlugin *plugin, const OutputPatch *except) const;
-    /** S-H3: @p plugin's @p line names one of protectedLineNames() */
-    bool lineProtected(const QLCIOPlugin *plugin, int line, const OutputPatch *except) const;
-    /** S-H1: @p plugin is a hardware plugin and the name of its @p line is
-     *  carried by another line too */
-    static bool lineNameShared(QLCIOPlugin *plugin, int line);
-    /** S-H1 on load: another patch was saved on @p name at a line other
-     *  than @p saved (the name was shared where the show was saved) */
-    bool savedNameShared(const QLCIOPlugin *plugin, const QString &name, quint32 saved,
-                         const OutputPatch *except) const;
-    /** S-H1: @p universe just got its first Show-only fixture -- each of its
-     *  open patches on a shared hardware name is held */
-    void holdShowOnlyOnSharedNames(Universe *universe);
-    QString protectedLineText(quint32 universe, quint32 line, const QString &now, const QString &own) const;
+    /** N2: @p universe has Show-only fixtures now -- each of its output
+     *  patches on a hardware line is held (N1's words), closing frame first */
+    void holdShowOnlyHardware(Universe *universe);
+    /** N2, N4: follow @p uni's Show-only fixtures coming and going */
+    void watchShowOnly(Universe *uni);
 
 private slots:
    /** Slot that catches plugin configuration change notifications from UIPluginCache */
@@ -923,6 +910,9 @@ private slots:
 private:
     QTimer *m_offlineRetry;
     QString m_lastPatchRefusal;
+    /** beginShowOnlyMarks() depth, and the universes marked meanwhile */
+    int m_showOnlyMarks = 0;
+    QSet<quint32> m_showOnlyMarked;
     /** applyInputSlot() is patching: not the user choosing one device */
     bool m_applyingSlot = false;
 

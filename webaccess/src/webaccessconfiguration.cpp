@@ -103,7 +103,7 @@ QString WebAccessConfiguration::getIOConfigHTML(Doc *doc)
                     esc(QString("[%1] %2").arg(strList.at(0)).arg(strList.at(1))) + "</option>\n";
         }
         html += "</select></td>\n";
-        html += "<td><select onchange=\"ioChanged('OUTPUT', " + QString::number(i) + ", this.value);\">\n";
+        html += "<td><select id=\"ioOutput" + QString::number(i) + "\" onchange=\"ioChanged('OUTPUT', " + QString::number(i) + ", this.value);\">\n";
         for (int in = 0; in < outputLines.count(); in++)
         {
             QStringList strList = outputLines.at(in).split(",");

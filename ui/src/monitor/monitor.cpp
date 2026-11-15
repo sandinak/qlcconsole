@@ -1899,6 +1899,8 @@ void Monitor::restoreRig(const QByteArray &snap)
     }
     if (haveRules)
     {
+        // N2: every fixture marked before a hardware output is held.
+        InputOutputMap::ShowOnlyMarks marks(m_doc->inputOutputMap());
         foreach (Fixture *fx, m_doc->fixtures())
             fx->setOutputRules(Fixture::OutputRules(rules.value(fx->id(), 0)));
     }

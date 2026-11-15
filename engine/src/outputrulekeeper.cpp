@@ -128,6 +128,10 @@ void OutputRuleKeeper::markNow(quint32 id)
         if (m_doc->masterTimer() != nullptr)
             m_doc->masterTimer()->refreshPreviewGates();
     }
+    /* N2 (outputpatch.h): a hardware output of a universe this marks is
+       held once every channel is marked -- its closing frame has them all
+       at safe. */
+    InputOutputMap::ShowOnlyMarks marks(m_doc->inputOutputMap());
     QSet<quint32> now;
     if (showOnly)
         for (quint32 i = 0; i < fx->channels(); i++)
@@ -531,15 +535,6 @@ void OutputRuleKeeper::rebuild()
         m_lastHeldBy = by;
         emit showOnlyChanged();
     }
-    /* S-H4: the last Show-only fixture gone -- every patch held for the
-       hardware-line rules (outputpatch.h) is let go as stock would have
-       reconnected it. Queued: rebuild() can run under the universe
-       claim, which reconnecting takes. */
-    if (showOnlyListChanged && showOnly.isEmpty())
-        QMetaObject::invokeMethod(this, [this]() {
-            if (m_showOnly.isEmpty() && m_doc->inputOutputMap() != nullptr)
-                m_doc->inputOutputMap()->releaseShowOnlyHolds();
-        }, Qt::QueuedConnection);
 }
 
 QString OutputRuleKeeper::describe(Fixture::OutputRules rules)

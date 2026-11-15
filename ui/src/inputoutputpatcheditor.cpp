@@ -739,11 +739,30 @@ void InputOutputPatchEditor::slotMapItemChanged(QTreeWidgetItem* item, int col)
                 if (m_ioMap->setOutputPatch(m_universe, m_currentOutputPluginName, "",
                                             m_currentOutput, false) == false)
                 {
-                    // S-H1: a laser universe onto an interface with no serial.
-                    if (m_ioMap->lastPatchRefusal().isEmpty() == false)
+                    /* N1: a universe with Show-only fixtures onto a hardware
+                       line -- refused. The tree and this editor go back to
+                       the patch the universe really has. */
+                    const QString refusal = m_ioMap->lastPatchRefusal();
+                    if (refusal.isEmpty() == false)
                     {
-                        item->setCheckState(KMapColumnHasOutput, Qt::Unchecked);
-                        QMessageBox::warning(this, tr("Show only"), m_ioMap->lastPatchRefusal());
+                        OutputPatch *real = m_ioMap->outputPatch(m_universe);
+                        const bool open = real != NULL && real->isPatched();
+                        m_currentOutputPluginName = open ? real->pluginName() : KOutputNone;
+                        m_currentOutput = open ? real->output() : QLCIOPlugin::invalidLine();
+                        QTreeWidgetItemIterator rit(m_mapTree);
+                        for (; *rit != NULL; ++rit)
+                        {
+                            // Only the rows that have an output box.
+                            if ((*rit)->data(KMapColumnHasOutput, Qt::CheckStateRole).isValid())
+                            {
+                                const bool mine = open
+                                        && (*rit)->text(KMapColumnPluginName) == m_currentOutputPluginName
+                                        && (*rit)->text(KMapColumnOutputLine).toUInt() == m_currentOutput;
+                                if ((*rit)->checkState(KMapColumnHasOutput) != (mine ? Qt::Checked : Qt::Unchecked))
+                                    (*rit)->setCheckState(KMapColumnHasOutput, mine ? Qt::Checked : Qt::Unchecked);
+                            }
+                        }
+                        QMessageBox::warning(this, tr("Show only"), refusal);
                     }
                     else
                         showPluginMappingError();

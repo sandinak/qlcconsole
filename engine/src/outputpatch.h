@@ -117,83 +117,53 @@ public:
     bool reconnect();
 
     /*
-     * Show-only fixtures (lasers, foggers, flame) on hardware lines
-     * (QLCIOPlugin::linesAreHardware(): USB DMX, MIDI, HID) -- review 14's
-     * strict rules, kept by InputOutputMap. Network outputs (Art-Net, sACN,
-     * WLED) are not affected. With no Show-only universe anywhere,
-     * everything is exactly as stock QLC+ does it (reconnect by number).
+     * Show-only fixtures (lasers, foggers, flame) and hardware lines
+     * (QLCIOPlugin::linesAreHardware(): USB DMX, MIDI, HID...) -- review
+     * 15's network-only rules, kept by InputOutputMap. With no Show-only
+     * fixture on a universe, everything is exactly as stock QLC+ does it.
      *
-     *  S-H1. A unique interface name is required. A universe with Show-only
-     *      fixtures may be patched to a hardware line only if that line's
-     *      name is unique among the plugin's lines (a device with a serial
-     *      in its name). Patching one onto a shared name is refused (I/O
-     *      tab, Connections, the web); a fixture marked Show only on, or
-     *      added to, a universe on such a line holds that universe; a show
-     *      loaded with one on such a name keeps it pending -- each saying
-     *      "<name> has no serial number: lasers and foggers need an
-     *      interface that can be told apart. Use one with a serial, or a
-     *      network output." (InputOutputMap::sharedNameText())
-     *  S-H2. Lasers never reconnect by themselves. A configuration change
-     *      of the plugin (hot-plug, rescan) that changes the name at a
-     *      Show-only universe's line -- its device gone, moved, or another
-     *      in its place -- holds it, closing frame first, until the
-     *      operator re-patches it; so does a load where its saved line does
-     *      not carry its unique name. No exception, not even the same
-     *      device back at the same number; the retry tick never reopens
-     *      it. "<device>: interfaces changed -- re-patch to send to the
-     *      lasers again." A change that leaves its line as it was (same
-     *      name at the same number) leaves it open.
-     *  S-H3. Nothing else takes a laser's interface. No ordinary universe
-     *      and no feedback patch is opened by itself -- by number, by name,
-     *      on retry, on load or by the check after a load -- onto a line
-     *      whose name is the recorded device of a Show-only universe that
-     *      is open, held or pending from load (InputOutputMap::
-     *      protectedLineNames()). Such a patch is held, and reopens by
-     *      number once its line no longer names a protected device. S-H1
-     *      makes those names unique, so the check by name is sound.
-     *  S-H4. When the last Show-only fixture is gone, every hold made for
-     *      these rules is let go as stock would have reconnected it
-     *      (InputOutputMap::releaseShowOnlyHolds()).
+     *  N1. A universe with Show-only fixtures may not have an output patch
+     *      to a hardware line. Patching one there is refused, through every
+     *      path (setOutputPatch(): the I/O tab, Connections, Patch Planner, a
+     *      retarget, the web, a venue's patch, undo and redo), saying
+     *      "Lasers, foggers and flame need a network output (Art-Net, sACN,
+     *      WLED) in this version: <device> can't send to them. Patch this
+     *      universe to a network output, or take the Show-only rule off."
+     *      (InputOutputMap::networkOnlyText()). A feedback patch is not
+     *      output: allowed.
+     *  N2. A fixture (or a group) made Show only in a universe that has a
+     *      hardware output patch holds that patch: every channel of every
+     *      fixture being marked is marked first, then the line gets its
+     *      closing frame (the whole Show-only mask at safe) and a flush, and
+     *      only then it is closed. The patch says N1's words.
+     *  N3. On load, a universe with Show-only fixtures whose saved output is
+     *      a hardware line stays pending, with N1's words -- checked before
+     *      any output is let go (InputOutputMap::recheckPatchesAfterLoad()).
+     *  N4. A universe with no Show-only fixture any more (the rule taken off,
+     *      the fixture deleted or moved): its patches held by N2/N3 come back
+     *      as stock does -- by name (with H5's saved-line preference), never
+     *      onto a line another patch has.
      *
-     *  On load, a name more than one line carries resolves to the saved
-     *  line number when that line carries it, else to the first (H5, for
-     *  ordinary universes). The I/O map is read before the fixtures: a
-     *  file load holds every output until the show is read, then checks
-     *  each patch it opened against S-H1..S-H3 (InputOutputMap::
-     *  recheckPatchesAfterLoad()) before the first frame.
+     *  H5 (all universes): on load, a name more than one line carries
+     *  resolves to the saved line number when that line carries it, else to
+     *  the first, as stock does.
      */
 
-    /** The name of the device this patch was made to (a hardware line):
-     *  open, held for a device change, or pending on it from load (its
-     *  saved name); empty otherwise */
-    QString recordedLineName() const;
-
-    /** How a patch is held for a device change */
-    enum DeviceHold
-    {
-        NoDeviceHold = 0,
-        /** Held by the rules above; reconnectHeld() says why */
-        HeldDeviceChanged
-    };
-    /** Held by the rules above, @p why said: kept pending on the name it
-     *  was patched with and @p waitLine (UINT_MAX: the line it is on).
-     *  @p closeTheLine false: another open patch uses the line, which
-     *  stays open for it (the plugin only forgets this universe there). */
-    void holdForDeviceChange(const QString &why, bool closeTheLine, bool sendClosing = false,
-                             quint32 waitLine = UINT_MAX);
+    /** Held by N2/N3 (@p why said): kept pending on the name it was
+     *  patched with and @p waitLine (UINT_MAX: the line it is on), after
+     *  the line's closing frame. @p closeTheLine false: another open patch
+     *  uses the line, which stays open for it (the plugin only forgets this
+     *  universe there). */
+    void holdForShowOnly(const QString &why, bool closeTheLine, quint32 waitLine = UINT_MAX);
     /** The line number a show load saved for this patch, when it opened
-     *  it (InputOutputMap::loadPatch()); UINT_MAX otherwise. The check after
-     *  the load reads it; any other set() forgets it. */
+     *  it (InputOutputMap::loadPatch()); UINT_MAX otherwise. N3's hold
+     *  waits there; any other set() forgets it. */
     void setLoadedLine(quint32 line) { m_loadedLine = line; }
     quint32 loadedLine() const { return m_loadedLine; }
-    /** A pending patch (from load, or held) the rules keep pending: said */
-    void markDeviceHold(const QString &why) { m_deviceHold = HeldDeviceChanged; m_reconnectHeld = why; }
-    DeviceHold deviceHold() const { return m_deviceHold; }
-    /** It was open when it was held (a hot-plug): let go, it reopens by
-     *  number, as stock would have; else it resolves as a load does */
-    bool heldFromOpen() const { return m_heldFromOpen; }
-    /** Let go of the hold (no Show-only universe left): plain pending */
-    void clearDeviceHold() { m_deviceHold = NoDeviceHold; m_reconnectHeld.clear(); m_heldFromOpen = false; }
+    /** A pending patch N1/N3 keep pending: said */
+    void markShowOnlyHold(const QString &why) { m_showOnlyHold = true; m_reconnectHeld = why; }
+    /** Held by N2/N3 */
+    bool showOnlyHold() const { return m_showOnlyHold; }
     /** Why this patch is held; empty if not */
     QString reconnectHeld() const { return m_reconnectHeld; }
 
@@ -279,8 +249,7 @@ private:
     /** Why the rig network gate holds this patch; empty when it does not */
     QString m_heldReason;
     QString m_reconnectHeld;
-    DeviceHold m_deviceHold = NoDeviceHold;
-    bool m_heldFromOpen = false;
+    bool m_showOnlyHold = false;
     quint32 m_loadedLine = UINT_MAX;
     /** The patch parameters cache */
     QMap<QString, QVariant>m_parametersCache;
@@ -293,7 +262,7 @@ private:
     /** The closing frame to the line's current target, on the wire
      *  (QLCIOPlugin::flushOutput()) -- the line still open */
     void sendClosingFrame();
-    /** The open line's name when it was opened: reconnect() follows it */
+    /** A hardware line's name when it was opened: what N2 holds it on */
     QString m_lineName;
     QRecursiveMutex *m_frameLock = nullptr;
 

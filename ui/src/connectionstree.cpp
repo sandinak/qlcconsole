@@ -3610,7 +3610,7 @@ void ConnectionsTree::rerouteLine(const QString &pluginName, quint32 oldLine,
 
     m_doc->setModified();
     refresh();
-    // S-H1: a laser universe stays where it was.
+    // N1: a universe with Show-only fixtures stays where it was.
     if (refused.isEmpty() == false)
         QMessageBox::warning(this, tr("Reroute interface"), refused.join("\n\n"));
 }

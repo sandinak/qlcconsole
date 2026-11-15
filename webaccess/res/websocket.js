@@ -75,6 +75,10 @@ function connect() {
       setFramePage(msgParams[0], msgParams[2]);
     } else if (msgParams[1] === "FRAME_DISABLE") {
       setFrameDisableState(msgParams[0], msgParams[2]);
+    } else if (msgParams[0] === "IO_OUTPUT") {
+      // IO_OUTPUT|<universe>|<plugin>|<line>: the select back to the real patch
+      if (typeof ioSetOutput === "function")
+        ioSetOutput(msgParams[1], msgParams.slice(2).join("|"));
     } else if (msgParams[0] === "ALERT") {
       alert(msgParams[1]);
     } else if (msgParams[1] === "CUE_STEP_NOTE") {

@@ -67,10 +67,10 @@ OutputPatch::~OutputPatch()
     else if (m_plugin != NULL)
     {
         m_plugin->closeOutput(m_pluginLine, m_universe);
-        /* Held for a device change and now unpatched (review 12 F6): the
-           plugin forgets this universe on the line it had, whoever else
-           is open there. */
-        if (m_deviceHold != NoDeviceHold && m_pendingLine != UINT_MAX)
+        /* Held by N2/N3 and now unpatched (review 12 F6): the plugin
+           forgets this universe on the line it had, whoever else is open
+           there. */
+        if (m_showOnlyHold && m_pendingLine != UINT_MAX)
             m_plugin->forgetOutput(m_pendingLine, m_universe);
     }
 }
@@ -144,15 +144,13 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
     {
         const bool opened = m_plugin->openOutput(m_pluginLine, m_universe);
         m_freshLine.store(opened, std::memory_order_relaxed);
-        /* The device this patch was made to, recorded here once (a reopen
-           by number never changes it). */
+        // The device it was patched to: N2 keeps it pending on that name.
         if (m_plugin->linesAreHardware())
             m_lineName = m_plugin->outputs().value(int(m_pluginLine));
         else
             m_lineName.clear();
         m_reconnectHeld.clear();
-        m_deviceHold = NoDeviceHold;
-        m_heldFromOpen = false;
+        m_showOnlyHold = false;
         m_loadedLine = UINT_MAX;
         return opened;
     }
@@ -186,8 +184,7 @@ bool OutputPatch::reconnect()
 
         /* By number, as it always was (review 11: following a name broke an
            ordinary unplug and replug). A universe with Show-only channels
-           is checked before this is called (S-H2, outputpatch.h). The name
-           recorded when the patch was made is kept: never this line's. */
+           is never on a hardware line (N1, outputpatch.h). */
         m_plugin->closeOutput(m_pluginLine, m_universe);
 #if defined(WIN32) || defined(Q_OS_WIN)
         Sleep(GRACE_MS);
@@ -207,18 +204,7 @@ bool OutputPatch::reconnect()
     return false;
 }
 
-QString OutputPatch::recordedLineName() const
-{
-    if (m_pluginLine != QLCIOPlugin::invalidLine())
-        return m_lineName;
-    // Held, or pending on it from load (review 13 C1): the name it waits for.
-    if (m_plugin != NULL && m_plugin->linesAreHardware())
-        return m_pendingUID;
-    return QString();
-}
-
-void OutputPatch::holdForDeviceChange(const QString &why, bool closeTheLine, bool sendClosing,
-                                      quint32 waitLine)
+void OutputPatch::holdForShowOnly(const QString &why, bool closeTheLine, quint32 waitLine)
 {
     if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine())
         return;
@@ -226,21 +212,16 @@ void OutputPatch::holdForDeviceChange(const QString &why, bool closeTheLine, boo
     if (m_frameLock != nullptr)
         locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
     m_reconnectHeld = why;
-    m_deviceHold = HeldDeviceChanged;
-    m_heldFromOpen = true;
+    m_showOnlyHold = true;
     qWarning() << "[OutputPatch]" << why;
-    /* Not closed when another patch is open on it now: closing is per line
-       in a USB plugin, and would stop that universe too -- the plugin only
-       forgets this universe there (review 12 F6), so nothing of it is ever
-       written to that device again. No closing frame: the line is another
-       device now. */
+    /* N2: the whole Show-only mask at safe, on the wire, before the line
+       stops receiving this universe. Not closed when another patch is open
+       on it: closing is per line in a USB plugin, and would stop that
+       universe too -- the plugin only forgets this one there (review 12
+       F6), so nothing of it is written to that device again. */
+    sendClosingFrame();
     if (closeTheLine)
-    {
-        // A line this patch did open (a show load): its closing frame first.
-        if (sendClosing)
-            sendClosingFrame();
         m_plugin->closeOutput(m_pluginLine, m_universe);
-    }
     else
         m_plugin->forgetOutput(m_pluginLine, m_universe);
     m_pendingUID = m_lineName;
@@ -260,8 +241,7 @@ void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid,
     m_plugin = plugin;
     m_pluginLine = QLCIOPlugin::invalidLine();
     m_reconnectHeld.clear();
-    m_deviceHold = NoDeviceHold;
-    m_heldFromOpen = false;
+    m_showOnlyHold = false;
     m_pendingUID = uid;
     m_pendingLine = savedLine;
     m_pendingNetwork = network;
