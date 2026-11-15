@@ -459,6 +459,45 @@ void E131Plugin::setParameter(quint32 universe, quint32 line, Capability type,
     QLCIOPlugin::setParameter(universe, line, type, name, value);
 }
 
+void E131Plugin::unSetParameter(quint32 universe, quint32 line, Capability type, QString name)
+{
+    E131Controller *controller = line < (quint32)m_IOmapping.length() ? m_IOmapping.at(line).controller : NULL;
+    if (type == Output && controller != NULL && controller->universesList().contains(universe))
+    {
+        /* As stock puts a default back (setParameter()), then dropped from
+           the store: the controller stops sending to the old target now. */
+        const QMap<QString, QVariant> stored = getParameters(universe, line, type);
+        QString key = name;
+        QVariant byDefault;
+        if (name == E131_MULTICAST)
+            byDefault = 1;
+        else if ((name == E131_MCASTIP && stored.contains(E131_MCASTFULLIP) == false)
+                 || (name == E131_MCASTFULLIP && stored.contains(E131_MCASTIP) == false))
+        {
+            // Either key names the group; the other one set still says where.
+            key = E131_MCASTFULLIP;
+            byDefault = E131Controller::defaultOutputMCastAddress(universe).toString();
+        }
+        else if (name == E131_UCASTIP)
+            byDefault = controller->defaultOutputUCastAddress(universe).toString();
+        else if (name == E131_UCASTPORT)
+            byDefault = E131_DEFAULT_PORT;
+        else if (name == E131_UNIVERSE)
+            byDefault = universe + 1;
+        else if (name == E131_TRANSMITMODE)
+            byDefault = E131Controller::transmissionModeToString(E131Controller::Full);
+        else if (name == E131_PRIORITY)
+            byDefault = E131_PRIORITY_DEFAULT;
+        if (byDefault.isValid())
+        {
+            setParameter(universe, line, type, key, byDefault);
+            if (key != name)
+                QLCIOPlugin::unSetParameter(universe, line, type, key);
+        }
+    }
+    QLCIOPlugin::unSetParameter(universe, line, type, name);
+}
+
 QList<E131IO> E131Plugin::getIOMapping() const
 {
     return m_IOmapping;

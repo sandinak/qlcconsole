@@ -31,6 +31,8 @@ class ArtNet_Test final : public QObject
 private slots:
     /** Review 19: a closing frame whose send failed goes again on the flush */
     void r19_aFailedClosingFrameIsTriedOnceMore();
+    /** Review 21 (independent), finding 1: red */
+    void r21_broadcastChosenAfterANodeStillSendsToTheNode();
     /** Review 16 F5: one of the outputs a universe with Show-only
      *  fixtures may use (QLCIOPlugin::isNetworkDmxOutput()). */
     void showOnlyMayUseIt();

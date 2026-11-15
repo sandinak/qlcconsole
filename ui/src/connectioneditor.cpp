@@ -1234,46 +1234,53 @@ bool ConnectionEditor::apply()
             m_error = tr("Could not patch that universe to %1.").arg(plugin);
             return false;
         }
-        /* Another protocol's settings mean nothing to this one. */
-        if (samePlugin == false)
-        {
-            foreach (const QString &key, op->getPluginParameters().keys())
-                op->unSetPluginParameter(key);
-        }
-
+        /* The whole target in one step (review 21): one closing frame for
+           the old node, then address, port and mode together -- never a
+           frame to the default target or to a new address on the old port
+           half-way. */
+        QMap<QString, QVariant> values;
+        QStringList unset;
         switch (kindOf(p))
         {
             case KindTargets:
                 if (address.isEmpty())
-                {
-                    op->unSetPluginParameter(QStringLiteral("outputIP"));
-                    op->unSetPluginParameter(QStringLiteral("outputUni"));
-                }
+                    unset << QStringLiteral("outputIP") << QStringLiteral("outputUni");
                 else
                 {
-                    op->setPluginParameter(QStringLiteral("outputIP"), address);
-                    op->setPluginParameter(QStringLiteral("outputUni"), portAddress);
+                    values.insert(QStringLiteral("outputIP"), address);
+                    values.insert(QStringLiteral("outputUni"), portAddress);
                 }
-                op->setPluginParameter(QStringLiteral("transmitMode"), m_transmitMode->currentText());
+                values.insert(QStringLiteral("transmitMode"), m_transmitMode->currentText());
             break;
             case KindSacn:
-                op->setPluginParameter(QStringLiteral("multicast"), m_sacnMulticast->isChecked() ? 1 : 0);
+                values.insert(QStringLiteral("multicast"), m_sacnMulticast->isChecked() ? 1 : 0);
                 if (m_sacnMulticast->isChecked())
-                    op->unSetPluginParameter(QStringLiteral("ucastIP"));
+                    unset << QStringLiteral("ucastIP");
                 else
-                    op->setPluginParameter(QStringLiteral("ucastIP"), m_sacnIP->text().trimmed());
-                op->setPluginParameter(QStringLiteral("universe"), m_sacnUniverse->value());
-                op->setPluginParameter(QStringLiteral("priority"), m_sacnPriority->value());
-                op->setPluginParameter(QStringLiteral("transmitMode"), m_sacnMode->currentText());
+                    values.insert(QStringLiteral("ucastIP"), m_sacnIP->text().trimmed());
+                values.insert(QStringLiteral("universe"), m_sacnUniverse->value());
+                values.insert(QStringLiteral("priority"), m_sacnPriority->value());
+                values.insert(QStringLiteral("transmitMode"), m_sacnMode->currentText());
             break;
             case KindMidi:
-                op->setPluginParameter(QStringLiteral("mode"), m_midiMode->currentText());
+                values.insert(QStringLiteral("mode"), m_midiMode->currentText());
             break;
             case KindWled:
             case KindDevice:
             case KindNone:
             break;
         }
+        /* Another protocol's settings mean nothing to this one. */
+        if (samePlugin == false)
+        {
+            foreach (const QString &key, op->getPluginParameters().keys())
+            {
+                if (values.contains(key) == false && unset.contains(key) == false)
+                    unset << key;
+            }
+        }
+        if (values.isEmpty() == false || unset.isEmpty() == false)
+            op->setPluginParameters(values, unset);
     }
 
     // ---- Input, profile ----
@@ -1313,16 +1320,12 @@ bool ConnectionEditor::apply()
     fb = u->feedbackPatch();
     if (fb != nullptr && fbPlugin.isEmpty() == false && m_feedbackIP->isEnabled())
     {
+        // In one step, as an output's target (review 21).
         if (fbAddress.isEmpty())
-        {
-            fb->unSetPluginParameter(QStringLiteral("outputIP"));
-            fb->unSetPluginParameter(QStringLiteral("outputUni"));
-        }
+            fb->setPluginParameters({}, { QStringLiteral("outputIP"), QStringLiteral("outputUni") });
         else
-        {
-            fb->setPluginParameter(QStringLiteral("outputIP"), fbAddress);
-            fb->setPluginParameter(QStringLiteral("outputUni"), fbPort);
-        }
+            fb->setPluginParameters({ { QStringLiteral("outputIP"), fbAddress },
+                                      { QStringLiteral("outputUni"), fbPort } });
     }
 
     // ---- The universe itself ----

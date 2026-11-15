@@ -483,8 +483,9 @@ void UniversePatcher::retargetPatch(quint32 universe, const QString &pluginName,
                     continue;
                 if (op->plugin()->name() != pluginName || op->output() != line)
                     continue;
-                op->unSetPluginParameter("outputIP");
-                op->unSetPluginParameter("outputUni");
+                // Back to broadcast in one step: one closing frame, to the
+                // node, never one to broadcast on the node's port (review 21).
+                op->setPluginParameters({}, { QStringLiteral("outputIP"), QStringLiteral("outputUni") });
                 break;
             }
         }
@@ -1094,8 +1095,7 @@ int UniversePatcher::applyOrderedPatch(const OrderedPatch &plan)
         OutputPatch *op = (u != NULL && u->outputPatchesCount() > 0) ? u->outputPatch(0) : NULL;
         if (op != NULL)
         {
-            op->unSetPluginParameter("outputIP");
-            op->unSetPluginParameter("outputUni");
+            op->setPluginParameters({}, { QStringLiteral("outputIP"), QStringLiteral("outputUni") });
         }
         placed << e;
     }

@@ -91,7 +91,10 @@ public:
     void closeOutput(quint32 output, quint32 universe) override;
 
     /** @reimp Review 18: the universe leaves the controller too -- never
-     *  resent by the Standard-mode refresh -- the line stays for the others */
+     *  resent by the Standard-mode refresh -- the line stays for the others.
+     *  Defence only since 0.4.8: no rule holds or forgets a network output
+     *  (OutputPatch::hold() is reached for hardware lines), but a plugin
+     *  told to forget a universe must not go on sending it. */
     void forgetOutput(quint32 output, quint32 universe) override;
 
     /** @reimp Review 19: a closing frame whose send failed is tried once more */
@@ -140,6 +143,14 @@ public:
 
     /** @reimp */
     void setParameter(quint32 universe, quint32 line, Capability type, QString name, QVariant value) override;
+
+    /** @reimp Review 21: a cleared output parameter puts the controller back
+     *  on its default at once -- multicast, its default multicast group and
+     *  unicast receiver, port 5568, its own universe number (universe + 1),
+     *  Full, priority 100 -- through setParameter(), as stock QLC+ puts a
+     *  default back; not only dropped from the store. The caller sends any
+     *  closing frame first (OutputPatch::setPluginParameters()). */
+    void unSetParameter(quint32 universe, quint32 line, Capability type, QString name) override;
 
     /** Get a list of the available Input/Output lines */
     QList<E131IO> getIOMapping() const;

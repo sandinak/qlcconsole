@@ -3647,6 +3647,99 @@ void InputOutputMap_Test::r20_removingOneOfTwoOpenLegsStopsTheOther()
              "removing one open leg closed (line 2, universe 1) under the other open leg: it reads patched, sends nothing");
 }
 
+/* Review 21 (independent), finding 2: the scope commit reverted the
+   Art-Net / E1.31 unSetParameter() overrides because PatchUndo sent closing
+   frames to broadcast / Port-Address 0:0:0. It still does: restoreOne()
+   clears every parameter, re-sets the same line (closeOutput() then
+   openOutput(): the plugin's default target, broadcast on the universe's
+   own Port-Address) and only then sets the captured target, one parameter
+   at a time -- the first is a retarget, and its closing frame goes to that
+   default. The stub keys a frame by the outputIP the plugin has as it goes
+   out; "default" is none: broadcast. */
+void InputOutputMap_Test::r21_undoOfAReAimSendsTheClosingFrameToBroadcast()
+{
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "10.4.12.7");
+    InputOutputMap iom(m_doc, 1);
+    Universe *fog = iom.universe(0);
+    fog->markShowOnly(14, true, 0);
+    QMap<QString, QVariant> node;
+    node.insert("outputIP", "10.4.12.5");
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 0, false, 0, node));
+    fog->write(0, 200, true);
+    fog->dumpOutput(fog->postGMValues()->mid(0, fog->usedChannels()), true);
+    iom.patchUndo()->capture(QList<quint32>() << 0, QStringLiteral("re-aim"));
+    stub->m_lastByTarget.clear();
+    iom.outputPatch(0, 0)->setPluginParameter("outputIP", "10.4.12.6");   // re-aimed
+    QVERIFY(stub->m_lastByTarget.contains("10.4.12.5/0"));                  // its closing frame: the old node
+    stub->m_lastByTarget.clear();
+    QVERIFY(iom.patchUndo()->undo());
+    const QStringList got = stub->m_lastByTarget.keys();
+    stub->m_lastByTarget.clear();
+    QCOMPARE(iom.outputPatch(0, 0)->getPluginParameters().value("outputIP").toString(), QString("10.4.12.5"));
+    QVERIFY2(got.contains("default/0") == false,
+             qPrintable("undo of a re-aim sent a frame to broadcast (the plugin's default target): " + got.join(", ")));
+}
+
+/* Review 21 (independent), finding 3: review 20 keeps (line, universe) open
+   for the leg left when its sibling on the same line is removed -- but the
+   plugin keeps one target per universe, the last one set (the removed
+   leg's), and nothing gives the remaining leg its own back. It reads
+   10.4.12.99 and sends to 10.4.12.98, the node just removed. */
+void InputOutputMap_Test::r21_theLegLeftAfterItsSiblingIsRemovedSendsToItsOwnNode()
+{
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+    InputOutputMap iom(m_doc, 1);
+    QMap<QString, QVariant> a, b;
+    a.insert("outputIP", "10.4.12.99");
+    b.insert("outputIP", "10.4.12.98");
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0, a));
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 1, b));
+    QVERIFY(iom.setOutputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine(), false, 1));   // leg 2 removed
+    QVERIFY(iom.outputPatch(0, 0)->isPatched());
+    Universe *u = iom.universe(0);
+    u->write(0, 77, true);
+    stub->m_lastByTarget.clear();
+    u->dumpOutput(u->postGMValues()->mid(0, u->usedChannels()), true);
+    const QStringList got = stub->m_lastByTarget.keys();
+    stub->m_lastByTarget.clear();
+    QCOMPARE(iom.outputPatch(0, 0)->getPluginParameters().value("outputIP").toString(), QString("10.4.12.99"));
+    QVERIFY2(got.contains("10.4.12.99/1") && got.contains("10.4.12.98/1") == false,
+             qPrintable("the leg left (10.4.12.99) sends to: " + got.join(", ")));
+}
+
+/* Review 21 (independent), a check (expected green): SiblingOnLine on the
+   open close paths never leaves (line, universe) open with no patch on it
+   -- removing both legs, moving both, setPending() on both, and the
+   universe deleted with both. */
+void InputOutputMap_Test::r21_siblingLegsNeverLeaveALineOpen()
+{
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+    {
+        InputOutputMap iom(m_doc, 1);
+        QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0));
+        QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 1));
+        QVERIFY(iom.setOutputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine(), false, 0));
+        QVERIFY(stub->mapped(0, 1));
+        QVERIFY(iom.setOutputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine(), false, 0));
+        QVERIFY2(stub->mapped(0, 1) == false, "both legs removed: line 2 still open for universe 1");
+    }
+    {
+        InputOutputMap iom(m_doc, 1);
+        QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0));
+        QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 1));
+        QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 0, false, 0));    // leg 1 moved to line 1
+        QVERIFY(iom.universe(0)->setOutputPatchPending(stub, "10.4.12.7", 1, 1));   // leg 2 pending
+        QVERIFY(iom.outputPatch(0, 1)->isPending());
+        QVERIFY2(stub->m_openOutputs.contains(1) == false, "moved and pending: line 2 still open for universe 1");
+    }
+    {
+        InputOutputMap iom(m_doc, 1);
+        QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 0));
+        QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 1));
+    }
+    QVERIFY2(stub->mapped(0, 1) == false, "the universe deleted with two legs on line 2: still open");
+}
+
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()
 {
     schoolLaptop();

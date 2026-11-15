@@ -848,6 +848,30 @@ void ArtNetPlugin::setParameter(quint32 universe, quint32 line, Capability type,
         QLCIOPlugin::setParameter(universe, line, type, name, value);
 }
 
+void ArtNetPlugin::unSetParameter(quint32 universe, quint32 line, Capability type, QString name)
+{
+    /* Stock QLC+ never unsets a target: ConfigureArtNet sets its default
+       (setParameter() then drops it from the store). An unset is the same
+       here, so the controller stops sending to the node now. */
+    QVariant byDefault;
+    if (type == Input && name == ARTNET_INPUTUNI)
+        byDefault = universe;
+    else if (type == Output && name == ARTNET_OUTPUTIP)
+        byDefault = QString();
+    else if (type == Output && name == ARTNET_OUTPUTUNI)
+        byDefault = universe;
+    else if (type == Output && name == ARTNET_TRANSMITMODE)
+        byDefault = ArtNetController::transmissionModeToString(ArtNetController::Standard);
+    if (byDefault.isValid() && line < (quint32)m_IOmapping.length()
+        && m_IOmapping.at(line).controller != NULL
+        && m_IOmapping.at(line).controller->universesList().contains(universe))
+    {
+        setParameter(universe, line, type, name, byDefault);
+        return;
+    }
+    QLCIOPlugin::unSetParameter(universe, line, type, name);
+}
+
 QList<ArtNetIO> ArtNetPlugin::getIOMapping() const
 {
     return m_IOmapping;

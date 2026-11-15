@@ -2170,29 +2170,28 @@ void InputOutputMap::holdShowOnlyOutputs(Universe *universe, bool fromLoad)
             const QString why = showOnlyRefusal(plugin, plugin->outputs().value(int(line)), line);
             if (why.isEmpty())
                 continue;
+            /* Only a line that is not a network DMX output gets here (N1:
+               showOnlyRefusal() is the plugin allow-list). Every other
+               universe on it is held first (F4, only forgotten there). */
             bool shared = false;
-            if (plugin->isNetworkDmxOutput() == false)
+            const QString kept = reservedText(op->deviceText(), universe->name(),
+                                              plugin->linesAreHardware() ? tr("USB") : plugin->name());
+            for (quint32 u = 0; u < universesCount(); u++)
             {
-                const QString kept = reservedText(op->deviceText(), universe->name(),
-                                                  plugin->linesAreHardware() ? tr("USB") : plugin->name());
-                for (quint32 u = 0; u < universesCount(); u++)
+                Universe *other = m_universeArray.at(u);
+                for (int k = 0; k < other->outputPatchesCount(); k++)
                 {
-                    Universe *other = m_universeArray.at(u);
-                    for (int k = 0; k < other->outputPatchesCount(); k++)
-                    {
-                        OutputPatch *q = other->outputPatch(k);
-                        if (q == NULL || q == op || q->plugin() != plugin || q->isPatched() == false
-                            || q->output() != line)
-                            continue;
-                        q->hold(OutputPatch::HeldReserved, kept, false, false, UINT_MAX, true);
-                        shared = true;
-                    }
+                    OutputPatch *q = other->outputPatch(k);
+                    if (q == NULL || q == op || q->plugin() != plugin || q->isPatched() == false
+                        || q->output() != line)
+                        continue;
+                    q->hold(OutputPatch::HeldReserved, kept, false, false, UINT_MAX, true);
+                    shared = true;
                 }
             }
-            /* Then this universe: its closing frame, flushed, then closed --
-               on a network line (Art-Net, sACN, WLED: they close per
-               universe) the others on it are left alone (review 18). Shared
-               before: it comes back there by number once its lasers are gone. */
+            /* Then this universe: its closing frame, flushed, then closed.
+               Shared before: it comes back there by number once its lasers
+               are gone. */
             op->hold(OutputPatch::HeldShowOnly, why, true, true, fromLoad ? op->loadedLine() : UINT_MAX, shared);
             held = true;
         }

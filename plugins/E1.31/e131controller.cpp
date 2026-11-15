@@ -250,6 +250,11 @@ QHostAddress E131Controller::defaultOutputUCastAddress(quint32 universe) const
     return m_ipAddr;
 }
 
+QHostAddress E131Controller::defaultOutputMCastAddress(quint32 universe)
+{
+    return multicastFor(universe + 1);
+}
+
 bool E131Controller::retryUnsent(quint32 universe)
 {
     QMutexLocker locker(&m_dataMutex);
