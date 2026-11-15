@@ -871,10 +871,22 @@ opened — over the web while in Operate too). So:
   channel keeps the cue's level — a fogger's fog channel included.
 - **Blind**: a GO in Blind is checked on screen; GO again after Blind to
   fire it. Leaving Blind in Operate starts afresh, as switching to Operate
-  does.
-- **Patched or moved mid-show**: whatever was driving the addresses a
-  Show-only fixture lands on (a cue stack, a fader, a Simple Desk channel)
-  does not drive it there until you move or GO it again.
+  does. Going into Blind, the rig keeps the look from before it (as in
+  QLC+) except the Show-only fixtures, which are sent to safe first; **All
+  Off** and **Blackout** still reach the rig while in Blind.
+- **Every send, not just the frame**: Blackout on and off, Blind on and
+  off, All Off, Identify and any other output a plugin sends between two
+  frames put a Show-only fixture at the same value the frame does — safe,
+  or what the show's GO gives it. A preview never shows through, not even
+  for an instant.
+- **Sharing an address**: a fixture patched over a Show-only one cannot
+  turn it on — **On when not in use** and **Ignore Blackout** do nothing on
+  the shared channels. The Grand Master never scales a safe value (a gobo
+  wheel's "open"), held or live.
+- **Patched or moved mid-show** (by any number of channels, or its mode
+  changed): whatever was driving the addresses it lands on — a cue stack, a
+  fader, a Simple Desk channel, an effect, even its own GO from before the
+  move — does not drive it there until you move or GO it again.
 - **A last look** never holds a Show-only fixture.
 - **Its safe value**: every intensity channel at 0 (a relay open, a laser
   or flame off); a laser's, fogger's, hazer's or plain dimmer's every

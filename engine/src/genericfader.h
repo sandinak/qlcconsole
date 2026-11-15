@@ -338,13 +338,11 @@ public:
      *     XY pad, flash or audio DMX bar -- the stamp is its owner's, given
      *     again on every write, so a fader rebuilt from a control left up
      *     stays as old as the control);
-     *   - stamped per channel (setChannelLiveEpoch(): the Simple Desk;
-     *     channelStamp());
-     *   - trusted (setTrustedForShowOnly(): the effect runner's own
-     *     fader, which gets only the writes it sorted as the show by their
-     *     scenes' stamps -- a Show-only write with no scene, or on a channel
-     *     made Show only since its publish, goes on its held fader): always;
+     *   - stamped per channel (setChannelLiveEpoch(): the Simple Desk, the
+     *     effect runner's own fader -- each Show-only write with its
+     *     scene's stamp; channelStamp());
      *   - none of these: not the show -- 0.
+     *  No writer bypasses a channel's mark (R8-5).
      *  Read once a frame on the universe thread. */
     quint32 showStamp() const
     {
@@ -358,8 +356,6 @@ public:
         }
         if (m_liveBound.load(std::memory_order_relaxed))
             return m_liveEpoch.load(std::memory_order_relaxed);
-        if (m_trusted.load(std::memory_order_relaxed))
-            return 0xFFFFFFFF;
         return 0;
     }
     /** True when the whole fader is held now (its stamp is not of this
@@ -372,8 +368,6 @@ public:
         return showStamp() < liveEpoch();
     }
     void setHoldsShowOnly(bool hold) { m_holdsShowOnly.store(hold, std::memory_order_relaxed); }
-    /** It sorts its own writes (the effect runner): never held whole */
-    void setTrustedForShowOnly(bool trusted) { m_trusted.store(trusted, std::memory_order_relaxed); }
 
     /** Stamped by its owner now (an operator action; or, inside a
      *  StampScope, the automatic writer's own stamp) */
@@ -490,7 +484,6 @@ private:
     std::atomic<bool> m_holdsShowOnly { false };
     std::atomic<bool> m_liveBound { false };
     std::atomic<quint32> m_liveEpoch { 0 };
-    std::atomic<bool> m_trusted { false };
     std::atomic<bool> m_channelStamped { false };
     mutable QMutex m_channelEpochMutex;
     QHash<int, quint32> m_channelEpochs;

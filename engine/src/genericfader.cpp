@@ -369,7 +369,7 @@ GenericFader::ChannelRef GenericFader::getChannelFader(const Doc *doc, Universe 
             fcFound->addChannel(channel);
             // An inert channel (unpatched fixture) has no address to read.
             if (universe && fcFound->address() != QLCChannel::invalid())
-                fcFound->setCurrent(universe->preGMValue(fcFound->address() + 1), 1);
+                fcFound->setCurrent(universe->fadeStartValue(int(fcFound->address() + 1)), 1);
         }
         return ChannelRef(std::move(lock), fcFound);
     }
@@ -377,7 +377,7 @@ GenericFader::ChannelRef GenericFader::getChannelFader(const Doc *doc, Universe 
     // set current universe value -- none for an inert channel (a fixture in
     // the inventory): it has no address, and sends nothing.
     if (universe && fc.address() != QLCChannel::invalid())
-        fc.setCurrent(universe->preGMValue(fc.address()));
+        fc.setCurrent(universe->fadeStartValue(int(fc.address())));   // S0: a Show-only channel's last build
 
     // new channel. Add to GenericFader
     channelIterator = m_channels.insert(hash, fc);

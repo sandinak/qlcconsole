@@ -1707,8 +1707,13 @@ void VCCueList::slotSideFaderValueChanged(int value)
             /* The crossfader is the show (a VC action): it claims the list
                once, through the double-GO guard; the fade itself is never
                held (it starts nothing). */
-            if (ch->previewGate()->load() && admitDirect(ShowControl::Go))
+            if (ch->previewGate()->load())
+            {
+                // Held by the double-GO guard: it starts nothing at all.
+                if (!admitDirect(ShowControl::Go))
+                    return;
                 claimRunning(ch);
+            }
             ch->adjustStepIntensity(qreal(value) / 100.0, m_primaryTop ? m_primaryIndex : m_secondaryIndex,
                                     Chaser::FadeControlMode(getFadeMode()));
             ch->adjustStepIntensity(qreal(100 - value) / 100.0, m_primaryTop ? m_secondaryIndex : m_primaryIndex,

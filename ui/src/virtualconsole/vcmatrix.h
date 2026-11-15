@@ -91,6 +91,10 @@ public:
 private:
     ClickAndGoSlider *m_slider;
     bool m_sliderExternalMovement;
+    /** Show only: the stamp of the last hand on the slider, and whether
+     *  adjustIntensity() is what moves it now */
+    quint32 m_sliderStamp = 0;
+    bool m_adjusting = false;
     QLabel *m_label;
     QToolButton *m_mtxColor1Button;
     ClickAndGoWidget *m_mtxColor1CnGWidget;

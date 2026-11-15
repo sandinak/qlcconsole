@@ -75,9 +75,22 @@ class QXmlStreamWriter;
  *      patched or moved onto it, the rule given). A writer that does not
  *      count contributes nothing -- nothing is undone to what was there.
  *      With none, the channel is at its safe value: a cue letting go cuts
- *      it, whatever its channel group (board Q246). The same in Blind (the
- *      frame is built for the plot, safe is sent), under Blackout (safe is
- *      sent) and after the emergency stop's cut.
+ *      it, whatever its channel group (board Q246). A writer that does not
+ *      count writes nothing there at all, not even for a moment, and sets
+ *      no flag (past the Grand Master): every write entry point drops it.
+ *      A safe value goes out as it is, through the channel's modifier,
+ *      never scaled by the Grand Master -- held or live alike.
+ *      Every send. Every byte that leaves for a Show-only channel comes
+ *      from this one builder (Universe::buildShowOnly()): the frame's own
+ *      send; a send between two frames (Blackout on or off, Blind on or
+ *      off, the emergency stop, a maintenance send, a plugin's own
+ *      dumpOutput()) -- taken under the frame lock, never a copy of the
+ *      stored values: safe when held or under Blackout, else what the last
+ *      frame built there. A fade starting on one starts from that build.
+ *      Blind freezes the other channels at the frame from before it (as
+ *      stock QLC+ does) but sends one frame on entering it with the
+ *      Show-only channels at safe -- what the rig keeps through Blind; All
+ *      Off, Blackout and the emergency stop always send, Blind or not.
  *  S1. Outside Operate, and in Blind, every frame sent has a Show-only
  *      channel at its safe value (safeValue(): dark, closed, through the
  *      channel's modifier). Blackout always wins, Ignore Blackout or not.
@@ -99,6 +112,14 @@ class QXmlStreamWriter;
  *        is stopping) is held, fade-out and all. A fader reads its
  *        function's stamp every frame: a new session holds it at once,
  *        before any gate is worked out again.
+ *      - A Show-only fixture moved (by any number of channels) or re-moded
+ *        takes a fresh stamp on all its channels; on a channel it shares
+ *        with another fixture Show only wins (no On when not in use, no
+ *        Ignore Blackout there).
+ *      - A function started by another from outside the MasterTimer's
+ *        scope takes its parent's stamp, never a fresh one; the effect
+ *        runner's writes on a Show-only channel carry their scene's stamp
+ *        and meet the channel's mark as any writer's.
  *      - A Park, Mark or cue stack is stamped when set, started or stepped
  *        by hand; a Park or Mark loaded with the show (or a parked fixture
  *        patched later) is stamped by nothing.
@@ -281,6 +302,8 @@ private:
     /** Where each Show-only fixture's channels are marked (absolute base,
      *  channel count) */
     QHash<quint32, QPair<quint32, quint32> > m_showOnlyAt;
+    /** ...and in which mode (a mode change takes fresh marks: R8-3) */
+    QHash<quint32, const class QLCFixtureMode *> m_showOnlyMode;
     int m_rebuilds = 0;
     class QTimer *m_rebuildTimer = nullptr;
 };

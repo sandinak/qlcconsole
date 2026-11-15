@@ -220,6 +220,34 @@ private slots:
     void aShowOnlyFixtureMovedOntoAStampedChannelWaits();
     void aChildKeepsItsParentsStampForTheSession();
     void anAutomaticSourceIsHeldUntilArmed();
+    /* Eighth review (of 1e5ccc7b62): red until fixed */
+    /** R8-1: a held park (set in Design) on a Show-only channel takes the
+     *  GO's level past the Grand Master */
+    void r8_aHeldParkTakesTheGoPastTheGrandMaster();
+    /** R8-2: an On-when-not-in-use fixture moved onto a Show-only one's
+     *  address drives it in Operate with no GO */
+    void r8_anOnAtOpenFixtureOnItsAddressDrivesIt();
+    /** R8-3: a fixture moved by fewer channels than it has keeps the old
+     *  marks there: the GO from before the re-patch still drives it */
+    void r8_aGoFromBeforeARepatchStillDrivesIt();
+    /** R8-4: a send between two frames (Blackout off, Blind off, All Off,
+     *  a maintenance send) copies postGMValues() unlocked, mid-frame: a held
+     *  writer's value, not yet put back, goes out */
+    void r8_aSendBetweenTwoFramesCarriesAHeldWriter();
+    /** R8-6: in Blind on a universe with no Blackout-exempt circuit nothing
+     *  is sent at all -- not the emergency stop's cut, not Blackout: the
+     *  rig keeps the last frame, the laser on */
+    void r8_allOffAndBlackoutInBlindNeverReachTheRig();
+    /** R8-5: the effect runner's own fader is trusted always: an effect
+     *  GO'd before a Show-only fixture is re-patched drives it at its new
+     *  address, past the new marks */
+    void r8_anEffectFollowsARepatchPastTheMarks();
+    /** S0, every send: each send path between two frames, a held writer
+     *  present -- the Show-only channel goes out at its S0 value */
+    void everySendGoesThroughTheS0Builder();
+    /** AllChannels Grand Master: a non-zero safe value goes out the same,
+     *  unscaled, held and live */
+    void aSafeValueIsNeverScaledHeldOrLive();
 
 private slots:
     /* The e-stop rules (OutputRuleKeeper E1-E7), swept: each writer set

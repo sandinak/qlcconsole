@@ -10522,8 +10522,7 @@ void Monitor::sendMaintenance(quint32 fxId, int channel, uchar value)
         Universe *uni = ua[u];
         before = uni->preGMValue(addr);
         uni->write(addr, value, true);
-        const QByteArray pg = uni->postGMValues()->mid(0, uni->usedChannels());
-        uni->dumpOutput(pg, true);
+        uni->sendCurrent();         // under the frame lock; Show only through S0
         sent = true;
     }
     m_doc->inputOutputMap()->releaseUniverses(false);
@@ -10538,8 +10537,7 @@ void Monitor::sendMaintenance(quint32 fxId, int channel, uchar value)
         {
             Universe *uni = ua[u];
             uni->write(addr, before, true);
-            const QByteArray pg = uni->postGMValues()->mid(0, uni->usedChannels());
-            uni->dumpOutput(pg, true);
+            uni->sendCurrent();
         }
         doc->inputOutputMap()->releaseUniverses(false);
     });

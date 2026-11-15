@@ -144,18 +144,27 @@ void OutputRuleKeeper::markNow(quint32 id)
     }
     if (showOnly)
     {
+        /* R8-3: moved (by any number of channels) or re-moded: a fresh mark
+           on all its channels, those that were Show only already too -- a
+           writer from before the move counts nowhere it lands. */
+        const bool moved = was != m_showOnlyAt.constEnd()
+                           && (was.value().first != fx->universeAddress()
+                               || was.value().second != fx->channels()
+                               || m_showOnlyMode.value(id) != fx->fixtureMode());
         for (quint32 i = 0; i < fx->channels(); i++)
         {
             const quint32 abs = fx->universeAddress() + i;
             const int u = int(abs >> 9);
             if (u < ua.size() && ua.at(u) != nullptr)
-                ua.at(u)->markShowOnly(int(abs & 0x1ff), true, safeValue(fx, i));
+                ua.at(u)->markShowOnly(int(abs & 0x1ff), true, safeValue(fx, i), moved);
         }
         m_showOnlyAt.insert(id, qMakePair(fx->universeAddress(), fx->channels()));
+        m_showOnlyMode.insert(id, fx->fixtureMode());
     }
     else
     {
         m_showOnlyAt.remove(id);
+        m_showOnlyMode.remove(id);
     }
 }
 
@@ -289,6 +298,15 @@ QByteArray OutputRuleKeeper::bitsFor(quint32 universe) const
         if (rules & Fixture::ShowOnly)
             mark(Fixture::ShowOnly, char(Universe::ShowOnlyOutput));
     }
+    /* R8-2: a channel a Show-only fixture shares with another (patched over
+       it): Show only wins there too -- never on when not in use, never past
+       Blackout, whichever fixture asked. */
+    for (int c = 0; c < UNIVERSE_SIZE; c++)
+    {
+        const uchar b = uchar(bits.at(c));
+        if (b & Universe::ShowOnlyOutput)
+            bits[c] = char(b & ~(Universe::OnAtOpenOutput | Universe::BlackoutExempt));
+    }
     return bits;
 }
 
@@ -340,7 +358,9 @@ void OutputRuleKeeper::emergencyStop()
         if (u == nullptr || u->showOnlyChannelCount() == 0)
             continue;
         u->cutShowOnly();
-        u->dumpOutput(u->postGMValues()->mid(0, u->usedChannels()), true);
+        // Always sent, Blind or not (R8-6): the Show-only channels at safe,
+        // the rest as they are (frozen in Blind).
+        u->sendHeld();
     }
     // E1, E5: then every function stopped, queued ones too; each is held
     // at once (no source left), so its fade-out is kept off. The Doc's
@@ -465,9 +485,13 @@ void OutputRuleKeeper::rebuild()
             showOnly << fx->id();
     }
     m_showOnlyAt.clear();
+    m_showOnlyMode.clear();
     foreach (Fixture *fx, m_doc->fixtures())
         if ((fx->outputRules() & Fixture::ShowOnly) && fx->isPatched())
+        {
             m_showOnlyAt.insert(fx->id(), qMakePair(fx->universeAddress(), fx->channels()));
+            m_showOnlyMode.insert(fx->id(), fx->fixtureMode());
+        }
     m_count = count;
     const bool showOnlyListChanged = showOnly != m_showOnly;
     m_showOnly = showOnly;

@@ -500,8 +500,9 @@ void VCXYPad::slotPositionChanged(const QPointF& pt)
        pad, its input or a preset pressed -- it is the show from now on. A
        position set by code (a load, a page change, a re-sync) is no move
        (R7-8). */
-    if (mode() == Doc::Operate && pt != m_stampedPosition
-        && (m_area->movedByHand() || m_inputValueChanged || m_presetByHand))
+    if (mode() == Doc::Operate
+        && (m_area->movedByHand()       // a press re-stamps, even at the same point
+            || ((m_inputValueChanged || m_presetByHand) && pt != m_stampedPosition)))
     {
         m_stampedPosition = pt;
         m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
