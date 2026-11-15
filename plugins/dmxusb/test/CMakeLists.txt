@@ -29,3 +29,7 @@ target_link_libraries(dmxusb_test PRIVATE
     Qt6::Core
     Qt6::Test
 )
+
+# No USB driver backend is compiled into the test (the widgets get a fake
+# interface): dmxusbwidget.h then never declares DMXInterface itself.
+target_compile_options(dmxusb_test PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/../src/dmxinterface.h)
