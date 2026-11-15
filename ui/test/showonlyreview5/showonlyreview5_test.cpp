@@ -1471,9 +1471,12 @@ void ShowOnlyReview5_Test::r7CueStackStampSurvivesARepatch()
     QCOMPARE(sent(Free), 150);
     flame->setAddress(Free);                // the flame re-patched onto it, mid-show
     tick(5);
-    QCOMPARE(sent(Free), 0);
+    const int repatched = sent(Free);
     cs->stop();
     tick(3);
+    eng.clearContents();
+    tick(2);
+    QCOMPARE(repatched, 0);
 }
 
 /* R7-7. A Show Tree cue list set to follow timecode (saved with the show:

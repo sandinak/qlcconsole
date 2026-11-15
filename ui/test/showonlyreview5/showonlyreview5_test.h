@@ -83,10 +83,10 @@ private slots:
     void r7LtpChannelKeptWhenItsCueLetsGo();
     void r7GoInBlindFiresWhenBlindEnds();
     void r7VcButtonFlashIsHeld();
-    void r7CueStackStampSurvivesARepatch();
     void r7TimecodeCueListFiresUnarmed();
     void r7XYPadLoadedInOperateIsStamped();
     void r7AllOffRaceLeavesAnLtpChannelUp();
+    void r7CueStackStampSurvivesARepatch();
 
 private:
     Fixture *addDimmer(const QString &name, int address, int rules);
