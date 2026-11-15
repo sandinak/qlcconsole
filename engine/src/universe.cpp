@@ -1141,6 +1141,13 @@ OutputPatch *Universe::newOutputPatch()
         return closingFrame(frame, blackout);
     });
     patch->setTargetCheck(m_outputTargetCheck);
+    // Review 19 (A1): the patch list holds only live patches (taken out before a delete).
+    patch->setSiblingOnLine([this](const OutputPatch *self, quint32 line) {
+        foreach (const OutputPatch *op, m_outputPatchList)
+            if (op != self && op->plugin() == self->plugin() && op->isPatched() && op->output() == line)
+                return true;
+        return false;
+    });
     return patch;
 }
 

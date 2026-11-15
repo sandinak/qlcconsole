@@ -610,7 +610,15 @@ public:
      *  network DMX output, or Art-Net / sACN back to this computer; empty
      *  when it may */
     static QString showOnlyRefusal(QLCIOPlugin *plugin, const QString &lineName, quint32 line,
-                                   const QMap<QString, QVariant> &params);
+                                   const QMap<QString, QVariant> &params, quint32 universe);
+
+    /** Review 19 (C1): N1 again on every open output of every universe
+     *  with Show-only fixtures, its target re-read from the plugin (a
+     *  protocol's own settings window aims it there, past OutputPatch);
+     *  one that now fails is held, closing frame first. Run after every
+     *  plugin configure(), on a plugin's configurationChanged and on each
+     *  retry. Returns how many it held. */
+    int recheckShowOnlyTargets();
     /** Why @p universe's output patch @p index may not be patched by hand
      *  onto @p pluginName's @p line (N1, F4); empty when it may. The I/O
      *  tab asks before it changes anything. */

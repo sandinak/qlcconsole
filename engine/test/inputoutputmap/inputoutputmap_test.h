@@ -132,6 +132,11 @@ private slots:
     void r17n_heldPatchesSayWhy();
     void r18n_aNetworkHoldClosesOnlyThatUniverse();
     void r18n_reAimingAShowOnlyUniverseIsChecked();
+    /** Review 19 (independent): red tests, see each */
+    void r19_aProtocolSettingsWindowAimsAShowOnlyUniverseBackHere();
+    void r19_aFormerLaserLoadedByNameComesBackOnTheLineItShared();
+    void r19_sacnUnicastToItsDefaultReceiverIsThisComputer();
+    void r19_removingAHeldPatchStopsTheUniversesOpenOne();
     void r16_fixtureRemapLeavesALaserUnheldOnUsb();
     void r16_holdingADanglingPatchKeepsIt();
     void r16_patchingTwoLasersOntoUsbClosesWithBothSafe();

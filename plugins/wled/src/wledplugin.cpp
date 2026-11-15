@@ -384,10 +384,14 @@ void WledPlugin::flushOutput(quint32 output, quint32 universe)
                 continue;
             const QJsonObject state = WledState::decode(t.data, t.addressOf(d), t.channelsOf(d),
                                                         m_sendInterval);
-            if (sameLook(state, d.sent) && d.layoutGen == d.sentLayoutGen)
+            /* Review 19: with a look on its way, what the device ends on is
+               that look, not d.sent: the closing state is never skipped then,
+               and goes whole (queued after it, below). */
+            if (d.inFlight == false && sameLook(state, d.sent) && d.layoutGen == d.sentLayoutGen)
                 continue;
-            QJsonObject body = trimmed(message(state, d, nullptr), state, d.sent,
-                                       d.layoutGen == d.sentLayoutGen);
+            QJsonObject body = d.inFlight ? message(state, d, nullptr)
+                                          : trimmed(message(state, d, nullptr), state, d.sent,
+                                                    d.layoutGen == d.sentLayoutGen);
             body[QStringLiteral("transition")] = 0;     // at once: it is the last one
             const ClosingPost c { d.ip, QJsonDocument(body).toJson(QJsonDocument::Compact), universe, state };
             if (noEventLoop)

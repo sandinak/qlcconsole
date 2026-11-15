@@ -599,6 +599,32 @@ void ArtNetPlugin::forgetOutput(quint32 output, quint32 universe)
         controller->removeUniverse(universe, ArtNetController::Output);
 }
 
+void ArtNetPlugin::flushOutput(quint32 output, quint32 universe)
+{
+    if (output >= (quint32)m_IOmapping.length())
+        return;
+    ArtNetController *controller = m_IOmapping.at(output).controller;
+    if (controller != NULL)
+        controller->retryUnsent(universe);
+}
+
+void ArtNetPlugin::unSetParameter(quint32 universe, quint32 line, Capability type, QString name)
+{
+    ArtNetController *controller = line < (quint32)m_IOmapping.length() ? m_IOmapping.at(line).controller : NULL;
+    if (controller != NULL)
+    {
+        if (type == Input && name == ARTNET_INPUTUNI)
+            controller->setInputUniverse(universe, universe);
+        else if (type == Output && name == ARTNET_OUTPUTIP)
+            controller->setOutputIPAddress(universe, QString());
+        else if (type == Output && name == ARTNET_OUTPUTUNI)
+            controller->setOutputUniverse(universe, universe);
+        else if (type == Output && name == ARTNET_TRANSMITMODE)
+            controller->setTransmissionMode(universe, ArtNetController::Standard);
+    }
+    QLCIOPlugin::unSetParameter(universe, line, type, name);
+}
+
 void ArtNetPlugin::writeUniverse(quint32 universe, quint32 output, const QByteArray &data, bool dataChanged)
 {
     if (output >= (quint32)m_IOmapping.count())

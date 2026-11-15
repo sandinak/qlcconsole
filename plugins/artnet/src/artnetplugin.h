@@ -87,6 +87,14 @@ public:
      *  resent by the Standard-mode refresh -- the line stays for the others */
     void forgetOutput(quint32 output, quint32 universe) override;
 
+    /** @reimp Review 19: a closing frame whose send failed is tried once more */
+    void flushOutput(quint32 output, quint32 universe) override;
+
+    /** @reimp Review 19: a parameter cleared puts the controller back on its
+     *  default at once (broadcast, its own universe number), not at the
+     *  next reconnect */
+    void unSetParameter(quint32 universe, quint32 line, Capability type, QString name) override;
+
     /** @reimp */
     QStringList outputs() override;
 
