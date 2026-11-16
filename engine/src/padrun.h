@@ -363,8 +363,12 @@ public:
     /** Its short name ("DualSense Wireless Controller (…77:93)"); empty
      *  when none holds Run. */
     QString runnerName() const;
-    /** "<name> is running cues." */
+    /** "<name> is running cues." -- said aloud and kept as notice(). */
     QString runningCuesText() const;
+    /** notice() as the footer's Pad chip shows it beside roleText(): when
+     *  the chip already names the runner, a refusal of another pad does
+     *  not name it again ("another controller is running cues"). */
+    QString chipNotice() const;
     static QString noRunCuesText();
     static QString noFocusText();
     /** Game controllers patched now (roleText() names the runner when

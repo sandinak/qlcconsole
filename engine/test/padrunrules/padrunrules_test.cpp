@@ -1367,6 +1367,8 @@ void PadRunRules_Test::jobsOneRunnerAtATime()
     hold(kRB, false, 1);
     hold(kLB, false, 1);
     QCOMPARE(run->notice(), QString::fromUtf8("Pad A (\u202600:01) is running cues."));
+    // The chip already names A: its refusal does not again.
+    QCOMPARE(run->chipNotice(), QString("another controller is running cues"));
     QVERIFY(run->isArmed());
     QCOMPARE(run->armedUniverse(), quint32(0));
     press(kA, 0);                       // A's LT still held: its GO goes

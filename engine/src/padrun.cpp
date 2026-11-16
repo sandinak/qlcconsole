@@ -1168,6 +1168,15 @@ QString PadRun::runningCuesText() const
                           : tr("%1 is running cues.").arg(name);
 }
 
+QString PadRun::chipNotice() const
+{
+    const QString name = runnerName();
+    if (!m_notice.isEmpty() && !name.isEmpty() && m_notice == runningCuesText()
+        && roleText().contains(name))
+        return tr("another controller is running cues");
+    return m_notice;
+}
+
 void PadRun::jobsChanged()
 {
     /* A job taken away while it is in use (CONTROLLER_JOBS.md 10): the

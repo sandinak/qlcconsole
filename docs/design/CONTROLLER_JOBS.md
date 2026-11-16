@@ -86,7 +86,9 @@ connects. (can change: a pad's serial over USB, when one says it.)
    away, the role switched, a tool taking the pad); a venue focus it started
    keeps its arm aside, and no other pad arms meanwhile. While it holds
    it, another pad's arm chord, GO family, hit and LT + Menu are refused
-   with **<name> is running cues** (the name short: "DualSense (…77:93)"), and nothing on the runner changes: still
+   with **<name> is running cues** (the name short: "DualSense (…77:93)";
+   aloud and as `notice()`; the footer chip, which already names the
+   runner, says "another controller is running cues": `chipNotice()`), and nothing on the runner changes: still
    armed, its held safety still held, its chord timing untouched.
 7. **Follow spot off.** That pad's sticks never move a follow spot: the
    follow spot's binding skips it (the next pad with the job, else none),

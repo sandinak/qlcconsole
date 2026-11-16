@@ -601,8 +601,11 @@ void PadRunRulesUi_Test::twoPadsOnEverySurface()
     value(1, kRB, 0);
     value(1, kLB, 0);
     settle();
-    QVERIFY2(chip->text().contains(QString::fromUtf8("Pad A (\u202600:01) is running cues.")),
+    // The chip names the runner once; the full words are the notice (and said).
+    QVERIFY2(chip->text().startsWith(armed + QString::fromUtf8(" \u00B7 another controller is running cues")),
              qPrintable(chip->text()));
+    QCOMPARE(chip->text().count(QString::fromUtf8("Pad A (\u202600:01)")), 1);
+    QCOMPARE(run->notice(), QString::fromUtf8("Pad A (\u202600:01) is running cues."));
     QCOMPARE(run->armedUniverse(), quint32(0));
     /* QLC_SHOT_DIR: the footer as it is now (A runs cues, B told so) at
        three sizes, for the UX review; and once the notice is gone. */

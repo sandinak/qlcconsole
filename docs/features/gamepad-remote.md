@@ -237,8 +237,10 @@ saved at once.
   Sub Back and the hit do nothing, and the footer says *This controller
   doesn't run cues*.
 - **One controller runs cues at a time.** The first pad to arm holds the
-  show until it disarms. Another pad that tries is refused, and the
-  footer says which pad has it (*DualSense (…77:93) is running cues*). Nothing on the first pad changes. With more than one
+  show until it disarms. Another pad that tries is refused and told
+  which pad has it (*DualSense (…77:93) is running cues*); the footer,
+  which already names that pad, adds *another controller is running
+  cues*. Nothing on the first pad changes. With more than one
   pad connected, the footer's **Pad: ARMED** chip names the pad that
   armed, and only that pad's light shows the arm.
 - **Follow spot off.** The pad's sticks never move the follow spot; it
