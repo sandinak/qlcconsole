@@ -45,14 +45,14 @@
 
 // Its public face only: included before the define below.
 #include "controllertestdialog.h"
-#include "programmercontroller.h"
-#include "controllerjobs.h"
 
 #include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 
 #include "connectionstree_test.h"
+#include "programmercontroller.h"
+#include "controllerjobs.h"
 #include "connectionstree.h"
 #include "universeoutputview.h"
 #include "fixture.h"
