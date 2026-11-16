@@ -263,9 +263,9 @@ show from any pad.
   any Focus pad while another pad runs cues) starts a waiting venue focus
   with **LT + Menu**, no arm; Menu alone only says *To start the venue
   focus, hold LT and press Menu.* The pad that runs cues **stays armed**:
-  the chip reads **Pad: FOCUS · <the focus pad>**, only the focus pad's
+  the chip reads **Pad: FOCUS ·** and the focus pad's name, only the focus pad's
   light is blue, and the runner's GO, Back, Sub GO, Sub Back and new hits
-  are refused with *Venue focus is running on <the focus pad>: nothing
+  are refused with *Venue focus is running on* (the focus pad)*: nothing
   plays until it ends.* A hit already playing keeps playing (a one-shot
   to its end; a toggle until the runner pulls RT to let it go). The focus
   pad ends it with LT + Menu, and the runner's GO works again at once, no
