@@ -154,13 +154,30 @@ int PadTraces_Test::inputsNamed(const QString &name) const
 
 void PadTraces_Test::cloneFlipToXbox()
 {
-    /* A cabled DualSense clone, armed and used; Create + Options held for
-       ~3 s; it leaves; three Xbox 360 arrivals at its port, two leaving
-       again. The operator's rules: the arm drops, saying why; nothing arms
-       it again; no stale device stays; a GO from what came back moves no
-       cue. */
+    /* The bench as it happened: Create + Options held ~3 s (View + Menu 1 s
+       switches the role, which drops the arm: no button arms or disarms
+       but the chord, rule 3, a role switch is one of the exceptions); the
+       pad leaves; three Xbox 360 arrivals at its port, two leaving again.
+       Disarmed, nothing arms it again, no stale device stays, a GO from
+       what came back moves no cue. */
+    flip(true);
+}
+
+void PadTraces_Test::cloneLeavesWhileArmed()
+{
+    /* The same flip without the hold (a clone that drops off USB while
+       armed some other way, as an unplug does): the arm drops saying why. */
+    flip(false);
+}
+
+void PadTraces_Test::flip(bool hold)
+{
     QString error;
     QVERIFY2(m_player->load(trace("clone_flip_to_xbox.jsonl"), &error), qPrintable(error));
+    if (!hold)
+        m_player->setSkip([](const PadTracePlayer::Event &e) {
+            const int ch = e.o.value("ch").toInt(-1);
+            return e.ev == QLatin1String("input") && (ch == 12 || ch == 13); });
     PadRun *run = m_doc->programmer()->padRun();
 
     QVERIFY(m_player->step() != nullptr);       // the DualSense arrives
@@ -175,11 +192,12 @@ void PadTraces_Test::cloneFlipToXbox()
     QTRY_COMPARE_WITH_TIMEOUT(commandCount(int(ShowControl::Go)), 1, 2000);
     QVERIFY(run->isArmed());
 
-    // Create + Options held, then the pad is gone from the system.
+    // Create + Options (or not), then the pad is gone from the system.
     QVERIFY(m_player->playUntil([](const PadTracePlayer::Event &e) {
         return e.ev == QLatin1String("gone") && e.o.value("path").toString() == kDualSensePath; }));
     QTRY_VERIFY_WITH_TIMEOUT(run->isArmed() == false, 2000);
-    QCOMPARE(run->notice(), QString("Disarmed: the controller went away."));
+    if (!hold)
+        QCOMPARE(run->notice(), QString("Disarmed: the controller went away."));
     QVERIFY(m_hid->inputs().contains(kDualSense) == false);
 
     // The clone comes back as an Xbox pad, three times over.
@@ -254,6 +272,33 @@ void PadTraces_Test::triggerRest()
     QCOMPARE(m_player->orphanInputs(), 0);
     QVERIFY(run->isArmed());
     QVERIFY2(m_commands.isEmpty(), qPrintable(QString("a resting trigger moved the show: %1 commands").arg(m_commands.size())));
+}
+
+void PadTraces_Test::triggerRestDuringTheChord()
+{
+    /* What the first version of the trace above found: the triggers keep
+       reporting their rest (a pad sends what changed, and resting triggers
+       jitter) while LB + RB are held. The chord fired once; the next trigger
+       report restarts it (PadRun::armChordUpdate() starts the timer again
+       when it is not running, and the fired chord left it stopped), and it
+       fires again and toggles the arm off. Rule 3: only a fresh chord
+       changes the arm. Owner of engine/src/padrun.cpp: fix, then delete the
+       QEXPECT_FAIL (an unexpected pass fails the test, to remind). */
+    QString error;
+    QVERIFY2(m_player->load(trace("trigger_rest_in_chord.jsonl"), &error), qPrintable(error));
+    PadRun *run = m_doc->programmer()->padRun();
+
+    QVERIFY(m_player->step() != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(m_hid->inputs().contains(kDualSense), 2000);
+    QCOMPARE(patchPads(kDualSense), 1);
+    startRunning();
+
+    QVERIFY(m_player->playUntil([](const PadTracePlayer::Event &e) { return e.t >= 1600; }));
+    QTest::qWait(100);
+    QEXPECT_FAIL("", "padrun.cpp: a resting trigger's report with LB + RB held toggles the arm off again", Continue);
+    QVERIFY(run->isArmed());
+    m_player->playAll();
+    QVERIFY(m_commands.isEmpty());      // and nothing fired meanwhile
 }
 
 void PadTraces_Test::aSessionIsRecorded()

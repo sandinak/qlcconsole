@@ -44,8 +44,10 @@ private slots:
     void cleanup();
 
     void cloneFlipToXbox();
+    void cloneLeavesWhileArmed();
     void twinListing();
     void triggerRest();
+    void triggerRestDuringTheChord();
     void aSessionIsRecorded();
 
 private:
@@ -55,6 +57,9 @@ private:
     /** Everything running as the app runs it. */
     void startRunning();
     void teardown();
+    /** The clone flip; @p hold: with the Create + Options hold that
+     *  causes it, else the pad just leaves while armed. */
+    void flip(bool hold);
     int commandCount(int command) const;
     int inputsNamed(const QString &name) const;
 

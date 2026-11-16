@@ -27,6 +27,7 @@
 #include <QObject>
 #include <QString>
 #include <QtTest>
+#include <functional>
 
 #include "fakehidbackend.h"
 
@@ -94,6 +95,10 @@ public:
     bool atEnd() const { return m_next >= m_events.size(); }
     int position() const { return m_next; }
 
+    /** Events @p skip says yes to are left out (their time still passes):
+     *  a trace replayed without one press, to see what that press did. */
+    void setSkip(const std::function<bool(const Event &)> &skip) { m_skip = skip; }
+
     /** Times are divided by @p speed (1: as recorded; 0: no waiting). */
     void setSpeed(double speed) { m_speed = speed; }
 
@@ -108,7 +113,8 @@ public:
         if (m_speed > 0 && e.t > m_last)
             QTest::qWait(int((e.t - m_last) / m_speed));
         m_last = qMax(m_last, e.t);
-        apply(e);
+        if (!m_skip || !m_skip(e))
+            apply(e);
         return &e;
     }
 
@@ -243,6 +249,7 @@ private:
     double m_speed = 1.0;
     quint64 m_instance = 0;
     int m_orphans = 0;
+    std::function<bool(const Event &)> m_skip;
     QHash<QString, int> m_listed;
 };
 

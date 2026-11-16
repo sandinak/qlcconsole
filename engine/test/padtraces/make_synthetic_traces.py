@@ -110,13 +110,13 @@ def twin_listing():
     tr.save("twin_listing.jsonl")
 
 
-def trigger_rest():
-    tr = Trace(["SYNTHETIC. Both triggers rest at ~8 % (20 of 255) and the sticks",
-                "jitter around centre. Armed by the chord, A pressed with no LT",
-                "held: the resting trigger is not the safety, so no GO; no hit."])
+def trigger_rest(name, quiet, header):
+    tr = Trace(header)
     tr.arrive(0, DS_PATH, "054c", "0ce6", DS_NAME, "SYN0003")
     rnd = random.Random(11)
     for t in range(0, 4500, 100):
+        if quiet and 760 <= t <= 1540:
+            continue    # a pad sends what changed: the triggers hold still while the chord is held
         tr.inp(t + 5, DS_PATH, "lt", 20 + rnd.choice((-1, 0, 0, 1)))
         tr.inp(t + 7, DS_PATH, "rt", 20 + rnd.choice((-1, 0, 0, 1)))
     settle_sticks(tr, DS_PATH, 10, 4500)
@@ -124,11 +124,18 @@ def trigger_rest():
     for t in (2200, 3000, 3800):
         tr.inp(t, DS_PATH, "a", 255)
         tr.inp(t + 150, DS_PATH, "a", 0)
-    tr.save("trigger_rest.jsonl")
+    tr.save(name)
 
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     clone_flip()
     twin_listing()
-    trigger_rest()
+    trigger_rest("trigger_rest.jsonl", True,
+                 ["SYNTHETIC. Both triggers rest at ~8 % (20 of 255) and the sticks",
+                  "jitter around centre (the triggers hold still for the arm chord). Armed",
+                  "by the chord, A pressed with no LT held: the resting trigger is not the",
+                  "safety, so no GO; no hit."])
+    trigger_rest("trigger_rest_in_chord.jsonl", False,
+                 ["SYNTHETIC. As trigger_rest.jsonl, but the resting triggers keep",
+                  "reporting while LB + RB are held (the arm chord)."])

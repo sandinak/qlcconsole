@@ -15,6 +15,10 @@ has shown, until Branson records the real pads:
 - `twin_listing.jsonl`: one pad listed twice with the same identity.
 - `trigger_rest.jsonl`: both triggers resting near 8 % and stick jitter
   around centre.
+- `trigger_rest_in_chord.jsonl`: the same, the triggers still reporting while
+  LB + RB are held. `triggerRestDuringTheChord` expects it to FAIL: it found
+  that PadRun toggles the arm off again on the next trigger report (see the
+  test). Remove its QEXPECT_FAIL when padrun.cpp is fixed.
 
 A real recording that replaces one keeps the file name its test loads, or
 the test is pointed at the new name.
