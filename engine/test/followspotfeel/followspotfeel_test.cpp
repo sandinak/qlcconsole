@@ -1631,8 +1631,10 @@ void FollowSpotFeel_Test::q253TheSpotBesideEveryTool()
         h.pc->focusSession()->stop();
     else if (tool == "walk")
     {
+        // A's stick moved the walk's light: that change goes back first.
+        h.pc->refineSession()->revert();
         press(0, kQMenu);
-        QVERIFY(!run->isWalking());
+        QVERIFY2(!run->isWalking(), qPrintable(run->notice()));
     }
     else
         h.pc->refineSession()->stop();
