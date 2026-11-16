@@ -31,6 +31,7 @@
 #include <QRandomGenerator>
 #include <QScopeGuard>
 #include <QTemporaryDir>
+#include <QThread>
 
 #include <algorithm>
 #include <climits>
@@ -348,6 +349,33 @@ int PadRunRules_Test::saidCount(const QString &part) const
     int n = 0;
     for (const QString &s : m_said)
         n += s.contains(part) ? 1 : 0;
+    return n;
+}
+
+void PadRunRules_Test::offPadStop()
+{
+    ShowControl *sc = m_doc->showControl();
+    sc->setRunHandler([this, sc](const ShowControl::Request &r, ShowControl::Route route) {
+        m_runs << qMakePair(r, route);
+        return sc->execute(r);
+    });
+    QThread *osc = QThread::create([sc]() {
+        ShowControl::Request r;
+        r.command = ShowControl::AllOff;
+        sc->run(r, ShowControl::RouteOsc);
+    });
+    osc->start();
+    QVERIFY(osc->wait(5000));
+    delete osc;
+    QCoreApplication::processEvents();
+    QCoreApplication::processEvents();
+}
+
+int PadRunRules_Test::doubleBuzzes(const QSignalSpy &spy)
+{
+    int n = 0;
+    for (const QList<QVariant> &r : spy)
+        n += r.at(0).toInt() == 2 ? 1 : 0;
     return n;
 }
 
@@ -1838,6 +1866,107 @@ void PadRunRules_Test::jobsTheStopDuringAnotherPadsFocus()
     QVERIFY(!run->isArmed());
     withLt(kA, 0);
     QCOMPARE(goes(), 0);
+}
+
+void PadRunRules_Test::anOffPadStopNeverReArmsAPadPutByForAFocus()
+{
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    // The laptop starts the venue focus: FOCUS, the arm put by for its end.
+    QString why;
+    QVERIFY2(pc->focusCallCue()->start(&why), qPrintable(why));
+    QCOMPARE(run->state(), PadRun::Focus);
+    QCOMPARE(run->m_focusArm, quint32(0));
+    QSignalSpy rumbled(pc, &ProgrammerController::padRumbled);
+    QSignalSpy armed(run, &PadRun::armedChanged);
+    offPadStop();
+    QCOMPARE(stops(), 1);
+    QVERIFY(!pc->focusSession()->isActive());
+    QCOMPARE(pc->focusCallCue()->state(), FocusCallCue::Idle);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY2(!run->isArmed(), "the emergency stop left the pad ARMED");
+    for (const QList<QVariant> &a : armed)
+        QVERIFY2(!a.at(0).toBool(), "the pad was armed again during the stop");
+    QCOMPARE(doubleBuzzes(rumbled), 0);
+    QCOMPARE(lightOn(0), PadRun::stoppedColour().name());
+    withLt(kA, 0);
+    QCOMPARE(goes(), 0);
+}
+
+void PadRunRules_Test::anOffPadStopBesideAFocusOrAWalk_data()
+{
+    QTest::addColumn<bool>("walk");
+    QTest::newRow("beside another pad's venue focus (Q250)") << false;
+    QTest::newRow("beside another pad's walk (Q252)") << true;
+}
+
+void PadRunRules_Test::anOffPadStopBesideAFocusOrAWalk()
+{
+    QFETCH(bool, walk);
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    if (!walk)
+        makeFocusCue();
+    run->setEnabled(true);
+    arm(true, 0);
+    if (walk)
+    {
+        press(kMenu, 1);
+        QVERIFY(run->isWalking());
+    }
+    else
+    {
+        ltMenu(1);
+        QCOMPARE(run->state(), PadRun::Focus);
+    }
+    QVERIFY(run->isArmed());        // the runner keeps its arm beside it
+    m_said.clear();
+    QSignalSpy rumbled(pc, &ProgrammerController::padRumbled);
+    offPadStop();
+    QCoreApplication::processEvents();      // a walk's end looks again a moment later
+    QCOMPARE(stops(), 1);
+    QVERIFY(!run->isWalking());
+    QVERIFY(!pc->focusSession()->isActive());
+    QVERIFY(!pc->refineSession()->isActive());
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY(!run->isArmed());
+    QCOMPARE(doubleBuzzes(rumbled), 0);
+    QCOMPARE(saidCount("Walk off"), 0);
+    QCOMPARE(lightOn(0), PadRun::stoppedColour().name());
+    QCOMPARE(lightOn(1), PadRun::stoppedColour().name());
+}
+
+void PadRunRules_Test::anOffPadStopTurnsTheArmedPadRed()
+{
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    QCOMPARE(run->state(), PadRun::Armed);
+    QSignalSpy rumbled(pc, &ProgrammerController::padRumbled);
+    offPadStop();
+    // Red, as after the pad's own stop: one stopped state (rule 2). The
+    // ALL OFF's own "carried out" (queued from OSC's thread) does not end it.
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY(!run->isArmed());
+    QCOMPARE(lightOn(0), PadRun::stoppedColour().name());
+    bool three = false;
+    for (const QList<QVariant> &r : rumbled)
+        three = three || r.at(0).toInt() == 3;
+    QVERIFY2(three, "the pad was not told of the stop");
+    // A second ALL OFF from anywhere leaves it red too.
+    offPadStop();
+    QCOMPARE(run->state(), PadRun::Stopped);
+    // Armed again by the chord: the red ends.
+    arm(true, 0);
+    QCOMPARE(run->state(), PadRun::Armed);
 }
 
 void PadRunRules_Test::jobsRunAndFocusOnOnePadAsBefore()

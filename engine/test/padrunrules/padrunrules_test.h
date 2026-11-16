@@ -27,6 +27,7 @@
 #include "showcontrol.h"
 
 class IOPluginStub;
+class QSignalSpy;
 class PadRun;
 class Doc;
 
@@ -100,6 +101,18 @@ private slots:
     /** The four from either pad while the other pad's venue focus runs. */
     void jobsTheStopDuringAnotherPadsFocus_data();
     void jobsTheStopDuringAnotherPadsFocus();
+    /** An ALL OFF from another route (OSC, from its own thread) after the
+     *  laptop started a venue focus with the pad armed: the pad is Stopped
+     *  and stays disarmed -- the focus's put-by arm never comes back, no
+     *  "GO works again" double buzz. */
+    void anOffPadStopNeverReArmsAPadPutByForAFocus();
+    /** The same for a runner kept armed beside another pad's focus (Q250)
+     *  or beside a walk (Q252); the walk's end says nothing over the stop. */
+    void anOffPadStopBesideAFocusOrAWalk_data();
+    void anOffPadStopBesideAFocusOrAWalk();
+    /** An off-pad ALL OFF turns an armed pad red (Stopped, one state on
+     *  every surface); that ALL OFF does not end the red, a new arm does. */
+    void anOffPadStopTurnsTheArmedPadRed();
     /** One pad with Run cues and Focus: as before (armed, LT + Menu, the
      *  arm put by and back; not armed, refused saying to arm). */
     void jobsRunAndFocusOnOnePadAsBefore();
@@ -200,6 +213,11 @@ private:
     int stops() const;
     /** Announcements said since @p from that contain @p part. */
     int saidCount(const QString &part) const;
+    /** The real ALL OFF (ShowControl::execute()), as OSC sends it: from a
+     *  thread of its own, then the main thread's queue run. */
+    void offPadStop();
+    /** "GO works again" double buzzes since @p spy began. */
+    static int doubleBuzzes(const QSignalSpy &spy);
 
 private:
     Doc *m_doc = nullptr;
