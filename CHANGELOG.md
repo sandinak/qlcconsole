@@ -10,13 +10,7 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
-## [0.4.11] - Unreleased
-
-### Changed and fixed
-
-- **The Run tab's frame goes the moment Pad Run disarms (macOS).** The orange (armed), red (stopped) or blue (focus) frame round the Run tab stayed on screen on a Mac after the pad disarmed, though the button and the footer chip had changed. The frame is now drawn by a widget of its own that is repainted with every state change, so it is gone with them. It does not move anything on the tab. Also fixed: switching a Run tab between its full and compact size could leave its Pad, Venue focus and hit widgets dangling, so the next Pad Run change could crash.
-- **A game controller that stops answering no longer freezes the app.** Holding View + Menu (Create + Options) on a DualSense clone flips it to Xbox 360 mode: it drops off USB and comes back, and macOS can leave the new device half-opened for good. The whole app hung on it (bench, 0.4.10). Controllers are now found and opened off the app's main thread, each with a 2-second limit: one that doesn't answer is skipped and named in the footer ("Xbox 360 Controller for Windows (USB 2124000) — not answering"), while the other pads, the DMX output and every pad's emergency stop carry on. The system may keep holding that pad, and the USB hub it is on, until the computer restarts: the footer says to restart this Mac to free its USB after the show, not to replug it. A pad that drops out mid-Pad-Run disarms as for an unplug ("Disarmed: the controller went away."). Closing the show and quitting never wait on a stuck pad, though with one stuck the app may not finish quitting until a restart; it says so as it quits.
-## [Unreleased]
+## [0.4.12] - Unreleased
 
 ### Changed and fixed
 
@@ -25,6 +19,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **The arm changes once a chord.** Holding LB + RB longer than the arm's half second no longer toggles the arm again (on a DualSense the triggers' resting noise restarted the chord's timer, so a long hold armed and then disarmed): once the chord has armed, disarmed or been refused, nothing changes until both bumpers are let go. A walk beside the runner also ends by itself, saying why, when the show goes into Operate, the role is switched, or the walking pad loses its Focus job or is unplugged.
 - **Run / Tools is switched on the computer, not the pad (board Q251).** Holding View + Menu (Create + Options) no longer switches the pad between Run and Tools: on a wired PlayStation clone that hold puts the pad into its Xbox mode, so it dropped off USB mid-show. The hold now changes nothing (not the role, not the arm) and the footer's Pad chip and the voice say *Run / Tools is switched on the computer: the Run tab's Pad: button*, in Tools too. The Run tab's **Pad:** button is the switch. A quick tap of View + Menu in Tools still opens Focus mode; the arm and the emergency stop are unchanged.
 
+## [0.4.11] - Unreleased
+
+### Changed and fixed
+
+- **The Run tab's frame goes the moment Pad Run disarms (macOS).** The orange (armed), red (stopped) or blue (focus) frame round the Run tab stayed on screen on a Mac after the pad disarmed, though the button and the footer chip had changed. The frame is now drawn by a widget of its own that is repainted with every state change, so it is gone with them. It does not move anything on the tab. Also fixed: switching a Run tab between its full and compact size could leave its Pad, Venue focus and hit widgets dangling, so the next Pad Run change could crash.
+- **A game controller that stops answering no longer freezes the app.** Holding View + Menu (Create + Options) on a DualSense clone flips it to Xbox 360 mode: it drops off USB and comes back, and macOS can leave the new device half-opened for good. The whole app hung on it (bench, 0.4.10). Controllers are now found and opened off the app's main thread, each with a 2-second limit: one that doesn't answer is skipped and named in the footer ("Xbox 360 Controller for Windows (USB 2124000) — not answering"), while the other pads, the DMX output and every pad's emergency stop carry on. The system may keep holding that pad, and the USB hub it is on, until the computer restarts: the footer says to restart this Mac to free its USB after the show, not to replug it. A pad that drops out mid-Pad-Run disarms as for an unplug ("Disarmed: the controller went away."). Closing the show and quitting never wait on a stuck pad, though with one stuck the app may not finish quitting until a restart; it says so as it quits.
 ## [0.4.10] - Unreleased
 
 ### Changed and fixed
