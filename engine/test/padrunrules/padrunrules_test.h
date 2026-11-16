@@ -54,6 +54,11 @@ private slots:
     /* Rules 3 and 5: the chords */
     void theStopsOwnBumpersDoNotArm();
     void aTriggerInTheArmChordSpendsIt();
+    /** Rule 3 (pad-trace replay, 2026-11-16): a chord that fired (or was
+     *  refused) does not fire again while both bumpers stay held, whatever
+     *  else comes in -- a DualSense's resting trigger noise above all. */
+    void aHeldChordFiresOnce_data();
+    void aHeldChordFiresOnce();
     void everyOrderOfTheFour();
     void holdingTheFourIsOneStop();
     void theStopWorksWhileWalking();
@@ -84,6 +89,76 @@ private slots:
     void jobsEachPadsLight();
     void jobsTheFollowSpotSkipsAPad();
     void jobsFocusOnlyFromFocusPads();
+    /** Board Q250 (a), each job on its own: the runner has Run cues only
+     *  and is armed; the other pad has each of the eight job mixes, on
+     *  either line. With Focus it starts the venue focus with LT + Menu
+     *  and no arm (Menu alone never does), the runner stays armed with
+     *  its GO family refused on the screen, FOCUS names the focus's pad,
+     *  and after the end the runner's GO works with no re-arm. */
+    void jobsVenueFocusFromAFocusPad_data();
+    void jobsVenueFocusFromAFocusPad();
+    /** The four from either pad while the other pad's venue focus runs. */
+    void jobsTheStopDuringAnotherPadsFocus_data();
+    void jobsTheStopDuringAnotherPadsFocus();
+    /** One pad with Run cues and Focus: as before (armed, LT + Menu, the
+     *  arm put by and back; not armed, refused saying to arm). */
+    void jobsRunAndFocusOnOnePadAsBefore();
+    /** A toggle hit on while another pad starts the venue focus: not cut;
+     *  the runner's pull lets it go, a new pull is refused until the end. */
+    void jobsAHitPlayingAcrossAnotherPadsFocus();
+    /** A Focus pad's Menu while another pad is armed: no walk, and the
+     *  words name the runner (never "disarm first" to a pad that can't). */
+    void jobsTheWalkBesideTheRunner();
+    /** A swipe on a pad without Focus starts no walk (the walk is Focus's). */
+    void jobsASwipeIsTheFocusJobs();
+    /** View + Menu on a Focus pad in the Run role: Focus mode is the Tools
+     *  role's, said on the screen. */
+    void jobsFocusModeInRunIsSaidOnScreen();
+    /** The pad the focus tools read is one with the Focus job. */
+    void jobsTheFocusControllerHasTheFocusJob();
+    /* Review of a430351ef (Q250): invariants -- feedback goes to the pad
+       whose action it is; a tool taking the pad drops the runner's arm,
+       whoever started the focus; the four's bits are never cleared. */
+    /** 1: the runner's triggers, buzzes and button names are its own. */
+    void reviewFeedbackGoesToThePadWhoseActionItIs();
+    /** 2: the laptop's Focus this cue over a beside focus disarms. */
+    void reviewALaptopToolDisarmsABesideRunner();
+    /** 9: so does the Controller Test. */
+    void reviewTheControllerTestDisarmsABesideRunner();
+    /** 3: the four held across a tool taking the pad still stop. */
+    void reviewTheFourSurviveAToolTakingThePad();
+    /** 4: a laptop start beside a runner without Focus. */
+    void reviewALaptopStartBesideARunnerWithoutFocus();
+    /** 5: no venue focus from a pad after the emergency stop. */
+    void reviewNoVenueFocusFromAStoppedShow();
+    /** 6: one double buzz at the focus end (and at a start given up). */
+    void reviewOneBuzzAtTheFocusEnd();
+    /** 10: a View let go in another pad's FOCUS is let go. */
+    void reviewAViewLetGoInFocusIsLetGo();
+    /** 11: the focus pad's Focus job taken mid-focus. */
+    void reviewTheFocusJobTakenMidFocus_data();
+    void reviewTheFocusJobTakenMidFocus();
+    /** 12: the focus pad unplugged mid-focus (second review 3: with a
+     *  runner that has Focus too, the pad back takes it again). */
+    void reviewTheFocusPadUnpluggedMidFocus_data();
+    void reviewTheFocusPadUnpluggedMidFocus();
+    /* Board Q252 (a): a Focus pad's walk while another pad is armed --
+       Design yes, Operate no; the runner as beside a venue focus. */
+    void q252AWalkBesideTheRunnerInDesign();
+    void q252NoWalkBesideTheRunnerInOperate();
+    void q252TheStopDuringABesideWalk_data();
+    void q252TheStopDuringABesideWalk();
+    void q252ALaptopToolMidWalkDisarmsTheRunner();
+    /* Second review of 46cfdd708 */
+    /** 1: Operate mid-walk ends a walk beside the runner. */
+    void review2OperateMidWalkEndsABesideWalk();
+    /** 2: the walker loses Focus, or is unplugged, mid-walk. */
+    void review2TheWalkerLosesFocusMidWalk();
+    void review2TheWalkerUnpluggedMidWalk();
+    /** 5: the runner's swipe beside a walk steps nothing. */
+    void review2ARunnersSwipeBesideAWalk();
+    /** 6: the role switched mid-walk ends a walk beside the runner. */
+    void review2ARoleSwitchEndsABesideWalk();
     void jobsTakenAwayWhileInUse();
     /** Review 0.4.10: one pad listed twice (one address, two universes,
      *  CONTROLLER_JOBS.md 9: one controller) is told one light. */
@@ -97,6 +172,15 @@ private:
     IOPluginStub *loadStub();
     /** Four spots, a list: Opening, Blackout (no layer), Ballad. */
     void makeShow();
+    /** A focus call on the spots and Opening a venue focus cue, waiting
+     *  (Operate; the probe says the list is on Opening). */
+    void makeFocusCue();
+    /** The focus cue waiting again (the list off it and back). */
+    void focusCueAgain();
+    /** LT held + Menu on @p universe. */
+    void ltMenu(quint32 universe);
+    /** LT held + @p channel on @p universe. */
+    void withLt(quint32 channel, quint32 universe);
     void press(quint32 channel, quint32 universe = 0);
     void axis(quint32 channel, uchar value, quint32 universe = 0);
     void hold(quint32 channel, bool down, quint32 universe = 0);
@@ -109,6 +193,9 @@ private:
     void twoPads(int jobsA, int jobsB);
     /** The last light sent to input line @p line ("": its own; "none"). */
     QString lightOn(quint32 line) const;
+    /** The feedback of @p kind ("triggers", "rumble") sent to @p line,
+     *  in order. */
+    QList<QVariantMap> feedbackOn(quint32 line, const QString &kind) const;
     int goes() const;
     int stops() const;
     /** Announcements said since @p from that contain @p part. */
@@ -120,6 +207,8 @@ private:
     QList<QPair<ShowControl::Request, ShowControl::Route>> m_runs;
     QStringList m_said;
     quint32 m_list = 0, m_cue1 = 0, m_cue2 = 0;
+    QList<quint32> m_spots;
+    quint32 m_running = 0;      // the cue the focus probe says the list is on
 };
 
 #endif

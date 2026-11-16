@@ -215,9 +215,21 @@ public:
      *  {"gamepad": "light", "rgb": "#rrggbb"} or {"gamepad": "rumble",
      *  "pulses": n}); a plugin or pad that cannot do it ignores it. */
     void setPadLight(const QColor &colour);
-    /** @p universe: the pad that buzzes (UINT_MAX: the tools' pad). */
+    /** @p universe: the pad that buzzes -- kAllPads: every pad (the stop);
+     *  UINT_MAX: the pad whose action it is (feedbackPad()). */
     void padRumble(int pulses, int lengthMs = ControllerScheme::rumbleShortMs(),
                    quint32 universe = UINT_MAX);
+    /** Every pad, for padRumble() (one line of a pad listed twice). */
+    static constexpr quint32 kAllPads = UINT_MAX - 1;
+    /** Feedback goes to the pad whose action it is (review of 0.4.11's
+     *  jobs, CONTROLLER_JOBS.md 9): the pad an input event came from
+     *  while it is handled; else the pad the state is on (statePad());
+     *  else the tools' pad (UINT_MAX, focusController()). */
+    quint32 feedbackPad() const;
+    /** With more than one pad, the pad the state is on: the runner armed,
+     *  the venue focus's pad in FOCUS, a tool's owner (UINT_MAX: none, or
+     *  one pad -- the tools' pad, as ever). The light and the triggers. */
+    quint32 statePad() const;
     /** Something important for the operator on stage (board Q131): said
      *  in every feedback setting, the selection's slow long blink, one
      *  long buzz. Warnings, refusals, the controller lost or back, the
@@ -283,12 +295,16 @@ public:
          *  (QLCIOPlugin::inputDeviceKind()), else PadNames::guess(). */
         PadNames::Family family = PadNames::Xbox;
     };
-    FocusController focusController() const;
-    /** The family of the pad the tools use (Xbox with none): what every
-     *  line that names a control calls it (PadNames). */
+    /** The pad the focus tools read (its owner first, then a pad with the
+     *  Focus job, then the most controls); @p only: describe that
+     *  universe's pad alone. */
+    FocusController focusController(quint32 only = UINT_MAX) const;
+    /** The family of the pad whose action it is (feedbackPad(); else the
+     *  pad the tools use; Xbox with none): what every line that names a
+     *  control calls it (PadNames). */
     PadNames::Family padFamily() const;
     /** @p text with its control tokens ("{A} keeps it") in the words of
-     *  the pad the tools use. */
+     *  that pad. */
     QString padText(const QString &text) const;
     /** The pad on @p universe uses the controller tools now (the Run role
      *  starting a venue focus from it): it is their owner, if none is. */
@@ -706,8 +722,8 @@ public:
 signals:
     /** Emitted whenever the programmer selection changes. */
     void programmerSelectionChanged();
-    /** View + Menu (Back + Start) held together on the controller while
-     *  Focus mode is off: the UI opens it. */
+    /** View + Menu (Back + Start) tapped together on the controller in
+     *  the Tools role while Focus mode is off: the UI opens it. */
     void focusModeRequested();
     /** Focus mode, Focus calls or Refine has something to say to the
      *  operator on stage (the UI's voice reads it). */
@@ -926,14 +942,17 @@ private:
     QColor m_padLight;
     PadTriggers::State m_padTriggers;
     bool m_padTriggersSent = false;
+    /** Where the triggers were last sent (as m_padLightTarget). */
+    quint32 m_padTriggersTarget = UINT_MAX;
+    /** The pad whose input is being handled now (UINT_MAX: none). */
+    quint32 m_actingUniverse = UINT_MAX;
     int m_padRumbles = 0;
-    /** To @p universe's pad (UINT_MAX: the tools' pad, focusController()). */
+    /** To @p universe's pad (UINT_MAX: statePad(), else the tools' pad,
+     *  focusController(); kAllPads: every pad, once each). */
     void sendPadFeedback(const QVariantMap &params, quint32 universe = UINT_MAX);
     /** Where the light was last sent: one pad (PadRun::lightUniverse()),
      *  every pad (kAllPads, the stop) or the tools' pad (UINT_MAX). */
     quint32 m_padLightTarget = UINT_MAX;
-    /** View + Menu pressed on a pad without Run cues: no role chord. */
-    bool m_viewMenuNoRun = false;
     void refreshPadLight();
     /** A hold came round on the controller tick. */
     void heldTick(double dt);
@@ -967,8 +986,25 @@ private:
     QTimer *m_keepAliveTimer = nullptr;
     /** When the joystick tick last ran, for Focus mode's dt. */
     QElapsedTimer m_joyTickClock;
-    /** Controller buttons held, by gamepad role, for the View+Menu combo. */
-    QSet<int> m_heldRoles;
+    /** Controller buttons held, by gamepad role, for the chords (View +
+     *  Menu, View + LS, ...) -- per pad: one pad's View and another's Menu
+     *  are no chord (review of 0.4.11's jobs). Read and written for the pad
+     *  whose input is handled (pad, set by routeFocusInput()). */
+    struct HeldRoles
+    {
+        QHash<quint32, QSet<int>> pads;
+        quint32 pad = 0;
+        void insert(int role) { pads[pad].insert(role); }
+        void remove(int role)
+        {
+            auto it = pads.find(pad);
+            if (it != pads.end())
+                it->remove(role);
+        }
+        bool contains(int role) const { return pads.value(pad).contains(role); }
+        void clear() { pads.clear(); }
+    };
+    HeldRoles m_heldRoles;
     float m_fineNormX = 0.5f, m_fineNormY = 0.5f;
     /** The follow spot's fine stick, per pad and per axis (review 0.4.10
      *  verify, H-A): universe -> its last X and Y readings (0..1). The

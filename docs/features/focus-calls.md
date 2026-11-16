@@ -290,7 +290,7 @@ PlayStation words:
 | LT / RT | L2 / R2 | L2 / R2 | Previous / next call (Focus this cue: layer) |
 | LS / RS (stick clicks) | L3 / R3 | L3 / R3 | Second reference / say the light; both at once hold every light |
 | View | Share | Create | Undo the last save |
-| Menu | Options | Options | Leave, and start a venue focus cue (in the pad's Run role: armed, hold LT + Menu, for both) |
+| Menu | Options | Options | Leave, and start a venue focus cue (in the pad's Run role: armed, hold LT + Menu, for both; a pad with Focus and no Run cues: LT + Menu, no arm) |
 | Xbox button | PS button | PS button | Switch the pad on |
 | (none) | Touchpad | Touchpad | Fine aim, zoom and focus (below) |
 

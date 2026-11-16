@@ -67,8 +67,12 @@ class Doc;
  *   (the bumpers are the mode only: the arm, and the stop's four)
  *   RS           say the list and what is on standby
  *   Menu         walk the show (below); not while armed
- *   armed, LT held + Menu   start the venue focus cue that waits (FOCUS)
- *   hold View + Menu 1 s   switch the role (Tools / Run), either way
+ *   armed, LT held + Menu   start the venue focus cue that waits (FOCUS);
+ *                a pad with Focus and no arm of its own to give (no
+ *                Run cues, or another pad runs cues): LT held + Menu
+ *   View + Menu  nothing to the role (Q251): Run / Tools is switched on
+ *                the computer (the Run tab's Pad: button); held, it says so.
+ *                In Tools a tap is Focus mode
  *
  * The rules (the operator's, 2026-11-14; every later change keeps them):
  *   1. The pad never picks the list: the screen does (the Run tab).
@@ -100,6 +104,12 @@ class Doc;
  *      until the operator moves it (LT + A, or GO on the laptop): ending
  *      a venue focus, from anywhere, never moves the list. The pad going
  *      away in FOCUS: back not armed, never FOCUS with no pad.
+ *      Each job on its own (board Q250, CONTROLLER_JOBS.md 11): a pad
+ *      with Focus and no arm of its own to give starts the focus with LT
+ *      held + Menu, no arm; the runner on another pad stays ARMED, its
+ *      GO family and new hits refused on the screen until the focus ends
+ *      (a hit already playing completes, or is let go by its pull), and
+ *      FOCUS names the focus's pad.
  *
  * Hits (Q154, show-tree.md "Hits"): every hit of the show whose place is
  * live now is armed; the narrowest place wins (cue, then list, production,
@@ -143,7 +153,10 @@ class Doc;
  * (0.4.5; it was LB held): a held arm let go by one finger disarmed.
  * decided: there is no "stop the list" on the pad (it was LB + X held):
  * the screen stops a list, the pad has the emergency stop.
- * decided: nothing on the pad leaves the Run role but the View + Menu hold.
+ * decided: nothing on the pad leaves the Run role (Q251, 2026-11-16: the
+ * View + Menu hold that did put a wired PlayStation clone into its Xbox
+ * mode, which re-enumerated it on USB mid-show). The role is the
+ * computer's: the Run tab's Pad: button.
  *
  * Triggers and swipes (Q199): on a DualSense the arm firms both triggers (the
  * safety and the hit take a squeeze, a brush does neither) and walking clicks them
@@ -163,6 +176,8 @@ class Doc;
 class QLC_ENGINE_EXPORT PadRun final : public QObject
 {
     Q_OBJECT
+    // The rules' tests clear a notice and read the arm a focus put by.
+    friend class PadRunRules_Test;
 
 public:
     PadRun(Doc *doc, ProgrammerController *pc, QObject *parent = nullptr);
@@ -374,7 +389,14 @@ public:
      *  not name it again ("another controller is running cues"). */
     QString chipNotice() const;
     static QString noRunCuesText();
+    /** "Run / Tools is switched on the computer: the Run tab's Pad:
+     *  button" -- View + Menu held (Q251), and on the chip, in Tools too. */
+    static QString roleSwitchText();
     static QString noFocusText();
+    /** Refused on the pad, a press PadRun did not read itself (the role
+     *  chord's): said, and shown as notice() so the footer's chip says it
+     *  too (lights-only feedback says nothing aloud). */
+    void tellRefused(const QString &text);
     /** Game controllers patched now (roleText() names the runner when
      *  more than one is). */
     int padCount() const;
@@ -416,6 +438,38 @@ public:
     /** The venue focus cue changed state (ProgrammerController): FOCUS
      *  begins or ends; ended, the arm it came from is back. */
     void focusCueChanged();
+    /** The pad the venue focus is on: board Q135's owner (UINT_MAX: none
+     *  yet -- not the pad whose arm it put by). FOCUS names it and only
+     *  its light shows FOCUS (CONTROLLER_JOBS.md 11). */
+    quint32 focusOwnerUniverse() const;
+    /** The owner of the tools changed (claimed, a job taken away, its pad
+     *  gone): FOCUS, its light and the runner's arm follow; a focus left
+     *  with no pad says so. */
+    void focusOwnerChanged();
+    /** Its short name; empty when none. */
+    QString focusOwnerName() const;
+    /** @p universe is not the focus's pad while a venue focus runs: another
+     *  pad has it, or none does and @p universe can't work it (no Focus
+     *  job). Its presses play nothing; its arm, if it runs cues, stays. */
+    bool isBesideFocus(quint32 universe) const;
+    /** "Venue focus is running on <pad>: nothing plays until it ends." --
+     *  the runner's GO, Back, Sub GO, Sub Back and new hits while another
+     *  pad has the venue focus (board Q250). */
+    QString focusBesideText() const;
+    /** A walk on another pad beside the runner (board Q252): @p universe
+     *  is not the walker's. */
+    bool isBesideWalk(quint32 universe) const;
+    /** isBesideFocus() or isBesideWalk(): its presses play nothing. */
+    bool isBesideTool(quint32 universe) const;
+    /** "<walker> is walking the show: nothing plays until the walk ends." */
+    QString walkBesideText() const;
+    /** How a waiting venue focus cue starts from a pad (one source for the
+     *  voice, the Run tab and the footer): ArmFirst -- armed, LT + Menu
+     *  (every pad with Focus also runs cues and none is armed by another);
+     *  NoArm -- LT + Menu on a pad with Focus; NoFocusPad -- pads are
+     *  patched and none has the Focus job (start it on the laptop). */
+    enum FocusStart { ArmFirst, NoArm, NoFocusPad };
+    FocusStart focusStart() const;
 
     /*********************************************************************
      * Triggers and swipes (Q199)
@@ -540,10 +594,11 @@ public:
     void bumperChord() { m_lbUsed = true; }
 
     /*********************************************************************
-     * The role chord: hold View + Menu to switch Tools / Run
+     * View + Menu: the tap (Focus mode in Tools) and the hold, which no
+     * longer switches the role (Q251) but says where it is switched
      *********************************************************************/
 public:
-    /** How long View + Menu are held to switch the role, ms. */
+    /** How long View + Menu are held before it is a hold, not a tap, ms. */
     static constexpr int defaultRoleChordMs() { return 1000; }
     /** Both chord buttons are down: start timing the hold. */
     void roleChordBegin();
@@ -554,7 +609,7 @@ public:
      *  mode, is the caller's to do. */
     bool roleChordEnd();
     bool isRoleChordPending() const { return m_chordPending; }
-    /** The chord switched the role and its buttons are not yet up. */
+    /** The hold was told (roleSwitchText()) and its buttons are not yet up. */
     bool roleChordFinished() const { return m_chordFired; }
     /** The time the hold takes (tests shorten it). */
     void setRoleChordMs(int ms);
@@ -605,8 +660,20 @@ private:
     void armChordFired();
     /** Start or stop timing the chord from what @p universe holds now. */
     void armChordUpdate(quint32 universe);
-    /** reset() without telling the screens (the caller does). */
-    void clear();
+    /** reset() without telling the screens (the caller does). @p four:
+     *  keep the four's held bits (the stop reads them in every state; only
+     *  a role switch, where they were not read, forgets them). */
+    void clear(bool four = true);
+    /** What is held is forgotten (a tool, the test, the walk took or gave
+     *  back the pad) -- but the four's bits (LB, RB, LT, RT), which
+     *  watchStop() keeps true whatever has the pad: the stop held across
+     *  the change still fires (review 3). The arm chord is spent until
+     *  both bumpers are up. */
+    void forgetHeld();
+    /** A tool other than the venue focus itself has the pad (the laptop's
+     *  Focus this cue / look, Quick focus, the Controller Test): its name,
+     *  else empty. A runner beside a venue focus is disarmed by it. */
+    QString toolOverFocus() const;
     /** Tell a press what it lacks, aloud and on the screen. */
     void refuse(Action action, const QString &text);
     /** The state may have changed: the light, the triggers, stateChanged(). */
@@ -627,7 +694,9 @@ private:
     void letGoFinishedOneShots();
     /** The controller on @p universe has @p job (a ControllerJobs::Job). */
     bool hasJob(quint32 universe, int job) const;
-    /** Armed, LT held + Menu with a venue focus cue waiting: start it. */
+    /** LT held + Menu with a venue focus cue waiting: start it. From the
+     *  runner's own pad its arm is put by (m_focusArm); from another pad
+     *  (Focus alone, board Q250) the runner keeps its arm. */
     bool startFocus(quint32 universe);
     /** Into FOCUS from ARMED, however the calls began: the arm is kept
      *  aside (m_focusArm) for the focus's end. */
@@ -677,6 +746,25 @@ private:
     quint32 m_focusArm = UINT_MAX;
     /** The controller is gone (ProgrammerController's presence check). */
     bool m_padGone = false;
+    /** isFocusing() when focusCueChanged() last looked: its end is told
+     *  to a runner that kept its arm beside it. */
+    bool m_wasFocusing = false;
+    /** A Focus pad walks while another pad is armed (Q252, Design only):
+     *  the runner keeps its arm; m_walker is the walking pad. */
+    bool m_walkBeside = false;
+    quint32 m_walker = UINT_MAX;
+    /** Q252: start the walk on @p universe beside the armed runner. */
+    bool startWalkBeside(quint32 universe);
+    /** End a walk beside the runner that can't go on (Operate, the role
+     *  switched, the walker's Focus job taken or the walker gone; second
+     *  review 1, 2, 6): the runner's GO works again, and @p reason (with
+     *  any change not kept, which goes back) is said on the screen. */
+    void endBesideWalk(const QString &reason);
+    /** The words a press beside the focus was refused with (cleared when
+     *  the focus ends, review 8). */
+    QString m_besideNotice;
+    /** The tools' owner (controllerOwner()) when last looked. */
+    quint32 m_shownOwner = UINT_MAX;
     bool m_testing = false;     ///< the Controller Test has the pad
     /** holder() when last seen: a change forgets what was held. */
     QString m_lastHolder;

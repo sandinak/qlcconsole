@@ -48,6 +48,23 @@ and per-head argument building), Release on an M-series Mac; Fire Spread
 kronk with the real show (make perf / renderperf) and cut the host cost
 before 0.5.0. From feat/046-spell-spread's report.
 
+## Candidate: Run / Tools switch as a cue step (Q251, not to build now)
+
+Run/Tools switch as a cue step (like the venue focus cue): owner's Q251 "as
+a cue'd request or something". Since Q251 the pad no longer switches roles
+(View + Menu held put a wired PlayStation clone into its Xbox mode and off
+USB); the Run tab's Pad: button is the switch. A cue flagged "Tools here"
+(as `setCuesFocusCall`) could put the pad into Tools when the list reaches
+it and back to Run on the next GO, so a pre-show focus block needs no
+laptop click.
+
+ROI (first guess): reach = shows with a pre-show focus block run from a pad
+(few now; his PMS show will); value = one laptop click saved per show, and
+no reach for the laptop mid-pre-show; cost = small (FocusCallCue's pattern:
+a cue flag, its arm/disarm on cueCurrent, the Run tab's line, tests, help);
+risk = a role change by a GO the operator did not mean (needs the same
+"said on every surface" as FOCUS). Rough ROI 2: after 0.5.0 unless he asks.
+
 ## His PL-4003 definition: Layout Width 64 for 40 heads
 
 His user definition of "PL-4003 1 Bar" says Layout Width="64" but has 40

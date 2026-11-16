@@ -363,15 +363,35 @@ void PadRunRulesUi_Test::everySurfaceAgreesAtEveryStep()
         pc->refineSession()->stop();
     surfaces("the walk ended after the stop");
 
-    // Switched off from the pad (View + Menu held), armed.
+    /* View + Menu held, armed (Q251): the role stays, the arm stays, and
+       the chip says where Run / Tools is switched. */
     chord(true);
     run->setRoleChordMs(40);
     value(kView, 255);
     value(kMenu, 255);
-    QTRY_VERIFY(!run->isEnabled());
+    QTRY_COMPARE(run->notice(), PadRun::roleSwitchText());
     value(kMenu, 0);
     value(kView, 0);
-    surfaces("the role off from the pad");
+    QVERIFY(run->isEnabled());
+    QVERIFY(run->isArmed());
+    surfaces("View + Menu held: the role stays");
+    QVERIFY2(m_app->padRoleChip()->text().contains(PadRun::roleSwitchText()),
+             qPrintable(m_app->padRoleChip()->text()));
+    // Switched off on the computer, armed: Tools on every surface.
+    btn->click();
+    QVERIFY(!run->isEnabled());
+    surfaces("the role off from the Run tab");
+    // In Tools the hold is said on the chip too, and switches nothing.
+    value(kView, 255);
+    value(kMenu, 255);
+    QTRY_COMPARE(run->notice(), PadRun::roleSwitchText());
+    value(kMenu, 0);
+    value(kView, 0);
+    settle();
+    QVERIFY(!run->isEnabled());
+    QVERIFY2(m_app->padRoleChip()->isVisible()
+                 && m_app->padRoleChip()->text() == QString("Pad: Tools \u00B7 ") + PadRun::roleSwitchText(),
+             qPrintable(m_app->padRoleChip()->text()));
     btn->click();
     QVERIFY(run->isEnabled());
 
@@ -659,6 +679,155 @@ void PadRunRulesUi_Test::twoPadsOnEverySurface()
     QCOMPARE(light(1), PadRun::stoppedColour().name());
     for (quint32 ch : { kRT, kLT, kRB, kLB })
         value(1, ch, 0);
+}
+
+void PadRunRulesUi_Test::focusBesideTheRunnerOnEverySurface()
+{
+    Doc *doc = m_app->doc();
+    InputOutputMap *iom = doc->inputOutputMap();
+    ProgrammerController *pc = doc->programmer();
+    PadRun *run = pc->padRun();
+    ControllerJobs *jobs = pc->controllerJobs();
+    FocusCallCue *fcc = pc->focusCallCue();
+    m_stub->m_lineNames = QStringList() << "Pad A (AA:BB:CC:00:00:01)" << "Pad B (AA:BB:CC:00:00:02)";
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 1));
+    QList<ShowControl::Request> runs;
+    ShowControl *sc = doc->showControl();
+    sc->setRunHandler([&runs](const ShowControl::Request &r, ShowControl::Route) {
+        runs << r;
+        return true;
+    });
+    auto restore = qScopeGuard([&]() {
+        sc->setRunHandler(ShowControl::RunHandler());
+        if (pc->focusSession()->isActive())
+            pc->focusSession()->finish();
+        fcc->setRunningCueProbe({});
+        run->setEnabled(false, false);
+        jobs->resetAll();
+        iom->setInputPatch(1, QString(), QString(), QLCIOPlugin::invalidLine());
+        m_stub->m_lineNames.clear();
+        doc->masterTimer()->stopAllFunctions();
+        doc->setMode(Doc::Design);
+        settle(50);
+    });
+    jobs->setJobs(jobs->identityOfUniverse(0), ControllerJobs::RunCues);
+    jobs->setJobs(jobs->identityOfUniverse(1), ControllerJobs::Focus);
+    run->setArmChordMs(15);
+    run->setEnabled(true, false);
+    quint32 focus = 0, house = 0;
+    const quint32 list = makeFocusShow(&focus, &house);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    // B ends the focus with the panel's Leave, as the laptop does.
+    QMetaObject::Connection leave = connect(pc->focusSession(), &FocusSession::exitRequested,
+                                            pc->focusSession(), &FocusSession::finish);
+    auto unleave = qScopeGuard([leave]() { QObject::disconnect(leave); });
+
+    QToolButton *btn = m_app->findChild<QToolButton *>(QStringLiteral("crPadRun"));
+    QVERIFY(btn != nullptr);
+    QWidget *w = btn;
+    while (w != nullptr && qobject_cast<CueRunner *>(w) == nullptr)
+        w = w->parentWidget();
+    CueRunner *runTab = qobject_cast<CueRunner *>(w);
+    QVERIFY(runTab != nullptr);
+    QLabel *chip = m_app->padRoleChip();
+    QVERIFY(chip != nullptr);
+    auto value = [&](quint32 u, quint32 ch, uchar v) { emit iom->inputValueChanged(u, ch, v, QString()); };
+    auto with = [&](quint32 u, quint32 ch) {
+        value(u, kLT, 255);
+        value(u, ch, 255);
+        value(u, ch, 0);
+        value(u, kLT, 0);
+    };
+    auto light = [&](quint32 line) {
+        const int offset = m_stub->m_feedbackLines.size() - m_stub->m_feedbackParams.size();
+        for (int i = m_stub->m_feedbackParams.size() - 1; i >= 0; --i)
+        {
+            const QVariantMap p = m_stub->m_feedbackParams.at(i).toMap();
+            if (p.value("gamepad").toString() == QLatin1String("light")
+                && m_stub->m_feedbackLines.value(offset + i) == line)
+                return p.value("rgb").toString();
+        }
+        return QStringLiteral("none");
+    };
+
+    // A arms.
+    value(0, kLB, 255);
+    value(0, kRB, 255);
+    QTRY_VERIFY(run->isArmed());
+    value(0, kRB, 0);
+    value(0, kLB, 0);
+    settle();
+    // The Run tab says how B starts it: LT + Menu, no arm.
+    QVERIFY2(runTab->focusArmedText().contains("hold LT and press Menu")
+                 && !runTab->focusArmedText().contains("armed"),
+             qPrintable(runTab->focusArmedText()));
+    // A job changed: the Run tab follows at once, as the footer does (review 7).
+    jobs->setJob(jobs->identityOfUniverse(1), ControllerJobs::Focus, false);
+    settle();
+    QVERIFY2(runTab->focusArmedText().contains("no controller does focus"), qPrintable(runTab->focusArmedText()));
+    jobs->setJob(jobs->identityOfUniverse(1), ControllerJobs::Focus, true);
+    settle();
+    QVERIFY2(runTab->focusArmedText().contains("hold LT and press Menu"), qPrintable(runTab->focusArmedText()));
+
+    // B: LT + Menu. FOCUS names B on every surface; A stays armed.
+    with(1, kMenu);
+    QTRY_COMPARE(fcc->state(), FocusCallCue::Running);
+    settle();
+    const QString focusText = QString::fromUtf8("Pad: FOCUS · Pad B (…00:02)");
+    QCOMPARE(run->roleText(), focusText);
+    QCOMPARE(btn->text(), focusText);
+    QVERIFY2(chip->isVisible() && chip->text().startsWith(focusText), qPrintable(chip->text()));
+    QVERIFY2(chip->styleSheet().contains(PadRun::focusColour().name()), qPrintable(chip->styleSheet()));
+    QCOMPARE(light(1), PadRun::focusColour().name());
+    QCOMPARE(light(0), QString());
+    QVERIFY(run->isArmed());
+    QCOMPARE(run->armedUniverse(), quint32(0));
+
+    // A's GO: nothing plays, and the chip says why (the footer names B once).
+    with(0, kA);
+    settle();
+    QVERIFY(runs.isEmpty());
+    QCOMPARE(run->notice(), QString::fromUtf8("Venue focus is running on Pad B (…00:02): nothing plays until it ends."));
+    QVERIFY2(chip->text().startsWith(focusText + QString::fromUtf8(" · nothing plays until the venue focus ends")),
+             qPrintable(chip->text()));
+    QCOMPARE(chip->text().count(QString::fromUtf8("Pad B (…00:02)")), 1);
+
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shotDir.isEmpty())
+    {
+        QDir().mkpath(shotDir);
+        const QSize was = m_app->size();
+        m_app->showContext(QStringLiteral("Run"));
+        for (const QSize &z : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            m_app->resize(z);
+            with(0, kA);        // the refusal, fresh on the chip for the shot
+            settle(150);
+            const QString wh = QString("%1x%2").arg(z.width()).arg(z.height());
+            const QPixmap full = m_app->grab();
+            full.save(QDir(shotDir).filePath(QStringLiteral("after-focus-beside-runner-%1.png").arg(wh)));
+            const int h = 44 * int(full.devicePixelRatio());
+            full.copy(0, full.height() - h, full.width(), h)
+                .save(QDir(shotDir).filePath(QStringLiteral("after-footer-focus-beside-runner-%1.png").arg(wh)));
+        }
+        m_app->resize(was);
+        settle(50);
+    }
+
+    // B ends it: ARMED names A, A's light shows it, A's GO plays.
+    with(1, kMenu);
+    QTRY_VERIFY(!pc->focusSession()->isActive());
+    settle();
+    const QString armedText = QString::fromUtf8("Pad: ARMED · Pad A (…00:01)");
+    QCOMPARE(run->roleText(), armedText);
+    QCOMPARE(btn->text(), armedText);
+    QVERIFY2(chip->text().startsWith(armedText), qPrintable(chip->text()));
+    QCOMPARE(light(0), PadRun::armedColour().name());
+    with(0, kA);
+    QCOMPARE(runs.size(), 1);
+    QCOMPARE(runs.at(0).command, ShowControl::Go);
+    Q_UNUSED(list);
 }
 
 quint32 PadRunRulesUi_Test::makeFocusShow(quint32 *focus, quint32 *house)

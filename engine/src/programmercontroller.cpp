@@ -32,6 +32,7 @@
 #include <QMutexLocker>
 #include <QVariant>
 #include <QTimer>
+#include <QScopeGuard>
 
 #include "programmercontroller.h"
 #include "controllerjobs.h"
@@ -190,7 +191,6 @@ ProgrammerController::ProgrammerController(Doc *doc)
        held after (its release may have gone to the test), so a View held
        as it opened cannot make a later Menu the role chord. */
     connect(m_padRun, &PadRun::testingChanged, this, [this]() {
-        m_viewMenuNoRun = false;
         m_heldRoles.clear();
         m_viewChord = false;
         m_centreChord = false;
@@ -236,6 +236,8 @@ ProgrammerController::ProgrammerController(Doc *doc)
        the pad is in FOCUS while they run, and RT past the last call says
        how to finish rather than finishing. */
     m_focusCallCue->setRunRole(m_padRun->isEnabled());
+    // How it starts from a pad: one source (PadRun::focusStart()).
+    m_focusCallCue->setStartProbe([this]() { return int(m_padRun->focusStart()); });
     connect(m_padRun, &PadRun::enabledChanged, m_focusCallCue, &FocusCallCue::setRunRole);
     m_focusSession->setLastCallHold([this]() { return m_padRun->lastCallHold(); });
     connect(m_focusCallCue, &FocusCallCue::stateChanged, this, [this]() {
@@ -369,6 +371,9 @@ ProgrammerController::ProgrammerController(Doc *doc)
             this, &ProgrammerController::checkControllerPresence);
     connect(this, &ProgrammerController::focusControllerChanged,
             this, &ProgrammerController::refreshPadFamily);
+    // Who has the venue focus: FOCUS names it, its light, the runner's arm.
+    connect(this, &ProgrammerController::focusControllerChanged,
+            m_padRun, &PadRun::focusOwnerChanged);
     connect(this, &ProgrammerController::axisBindingChanged,
             this, &ProgrammerController::refreshControllerKeepAlive);
     m_markPlanner = new MarkPlanner(m_doc, m_markEffect, this);
@@ -1799,7 +1804,6 @@ void ProgrammerController::setPadLight(const QColor &colour)
     /* Which pad shows it (CONTROLLER_JOBS.md 9), with more than one pad:
        the one that runs cues (or has the venue focus), every pad red after
        the stop, the others their own colour. One pad: that pad, as ever. */
-    const quint32 kAllPads = UINT_MAX - 1;
     quint32 target = UINT_MAX;
     InputOutputMap *iom = m_doc->inputOutputMap();
     if (m_padRun != nullptr && iom != nullptr && m_padRun->padCount() > 1)
@@ -1862,15 +1866,40 @@ void ProgrammerController::setPadLight(const QColor &colour)
 
 void ProgrammerController::setPadTriggers(const PadTriggers::State &state, bool force)
 {
-    if (m_padTriggersSent && state == m_padTriggers && !force)
+    /* The pad the state is on (the runner armed): the arm's firm triggers
+       are its own, never another pad's (review 1); every other pad's are
+       off. One pad: that pad, as ever. */
+    const quint32 target = statePad();
+    if (m_padTriggersSent && state == m_padTriggers && target == m_padTriggersTarget && !force)
         return;
+    const quint32 was = m_padTriggersTarget;
     m_padTriggers = state;
     m_padTriggersSent = true;
-    QVariantMap p;
-    p.insert(QStringLiteral("gamepad"), QStringLiteral("triggers"));
-    p.insert(QStringLiteral("right"), QString::fromLatin1(PadTriggers::name(state.right)));
-    p.insert(QStringLiteral("left"), QString::fromLatin1(PadTriggers::name(state.left)));
-    sendPadFeedback(p);
+    m_padTriggersTarget = target;
+    auto params = [](const PadTriggers::State &st) {
+        QVariantMap p;
+        p.insert(QStringLiteral("gamepad"), QStringLiteral("triggers"));
+        p.insert(QStringLiteral("right"), QString::fromLatin1(PadTriggers::name(st.right)));
+        p.insert(QStringLiteral("left"), QString::fromLatin1(PadTriggers::name(st.left)));
+        return p;
+    };
+    const QVariantMap p = params(state), off = params(PadTriggers::State());
+    if (target == UINT_MAX && was == UINT_MAX)
+        sendPadFeedback(p);
+    else
+    {
+        InputOutputMap *iom = m_doc->inputOutputMap();
+        for (quint32 u = 0; iom != nullptr && u < iom->universesCount(); ++u)
+        {
+            InputPatch *ip = iom->inputPatch(u);
+            if (ip == nullptr || !ip->isPatched() || !isPadUniverse(u))
+                continue;
+            const bool on = target != UINT_MAX && (u == target || m_padRun->sameController(u, target));
+            sendPadFeedback(on ? p : off, u);
+        }
+        if (target == UINT_MAX)
+            sendPadFeedback(p);
+    }
     emit padTriggersChanged();
 }
 
@@ -1892,7 +1921,8 @@ void ProgrammerController::padRumble(int pulses, int lengthMs, quint32 universe)
     p.insert(QStringLiteral("gamepad"), QStringLiteral("rumble"));
     p.insert(QStringLiteral("pulses"), pulses);
     p.insert(QStringLiteral("ms"), lengthMs);
-    sendPadFeedback(p, universe);
+    // The pad whose action it is (review 1), unless one was named.
+    sendPadFeedback(p, universe == UINT_MAX ? feedbackPad() : universe);
     emit padRumbled(pulses, lengthMs);
 }
 
@@ -1942,6 +1972,27 @@ void ProgrammerController::sendPadFeedback(const QVariantMap &params, quint32 un
     InputOutputMap *iom = m_doc->inputOutputMap();
     if (iom == nullptr)
         return;
+    if (universe == kAllPads)
+    {
+        // Every pad once (one listed twice is one pad).
+        QList<quint32> sent;
+        for (quint32 u = 0; u < iom->universesCount(); ++u)
+        {
+            InputPatch *ip = iom->inputPatch(u);
+            if (ip == nullptr || !ip->isPatched() || !isPadUniverse(u))
+                continue;
+            bool twin = false;
+            for (quint32 v : std::as_const(sent))
+                twin = twin || m_padRun->sameController(u, v);
+            if (twin)
+                continue;
+            sent << u;
+            sendPadFeedback(params, u);
+        }
+        return;
+    }
+    if (universe == UINT_MAX)
+        universe = statePad();
     if (universe == UINT_MAX)
     {
         // The controller the tools read: its own plugin, its own line.
@@ -1950,12 +2001,30 @@ void ProgrammerController::sendPadFeedback(const QVariantMap &params, quint32 un
             return;
         universe = pad.universe;
     }
-    if (universe >= iom->universesCount())
+    if (universe >= iom->universesCount() || !isPadUniverse(universe))
         return;
     InputPatch *ip = iom->inputPatch(universe);
     if (ip == nullptr || ip->plugin() == nullptr)
         return;
     ip->plugin()->sendFeedBack(universe, ip->input(), 0, 0, params);
+}
+
+quint32 ProgrammerController::feedbackPad() const
+{
+    // A MIDI or OSC input is no pad: its events are no pad's action.
+    if (m_actingUniverse != UINT_MAX && isPadUniverse(m_actingUniverse))
+        return m_actingUniverse;
+    return statePad();
+}
+
+quint32 ProgrammerController::statePad() const
+{
+    if (m_padRun == nullptr || m_padRun->padCount() <= 1)
+        return UINT_MAX;
+    const quint32 u = m_padRun->lightUniverse();
+    if (u != UINT_MAX)
+        return u;
+    return m_ownerUniverse != 0xFFFFFFFF ? m_ownerUniverse : UINT_MAX;
 }
 
 QString ProgrammerController::followSpotJobNote() const
@@ -2884,6 +2953,14 @@ void ProgrammerController::connectControllerInput()
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputPatchChanged, this, [this](quint32 universe) {
         if (m_padRun != nullptr)
             m_padRun->forgetPad(universe);
+        /* The pad that owns the tools went (unplugged, swapped in its
+           slot): the tool runs on with no owner, the next pad with the
+           Focus job to press takes it (review 12, as a job taken away). */
+        if (m_ownerUniverse != 0xFFFFFFFF && m_ownerUniverse == universe)
+        {
+            m_ownerUniverse = 0xFFFFFFFF;
+            emit focusControllerChanged();
+        }
         // Its pushes went with it (no release comes): the follow spot lets go.
         const bool stick = (m_panBound && m_panUniverse == universe) || (m_tiltBound && m_tiltUniverse == universe);
         if (stick || m_finePads.contains(universe) || (m_recalHeld && m_recalUniverse == universe))
@@ -2934,6 +3011,11 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
        owner, tool, job, role or Controller Test check, so nothing can
        swallow it. Swallowed itself while all four are down. */
     int role = -1;      // worked out once an event (L2), when it is needed
+    /* Feedback while this is handled -- a buzz, a control's name -- is
+       this pad's (review 1): it is the pad whose action it is. */
+    const quint32 wasActing = m_actingUniverse;
+    m_actingUniverse = universe;
+    const auto acting = qScopeGuard([this, wasActing]() { m_actingUniverse = wasActing; });
     if (m_padRun != nullptr && m_padRun->isEnabled())
     {
         role = controllerRole(universe, channel);
@@ -3050,7 +3132,7 @@ int ProgrammerController::controllerRole(quint32 universe, quint32 channel) cons
                                     ip->plugin()->inputChannelName(ip->input(), device));
 }
 
-ProgrammerController::FocusController ProgrammerController::focusController() const
+ProgrammerController::FocusController ProgrammerController::focusController(quint32 only) const
 {
     /* Controls numbered past this are not a gamepad's: HID channels are
        the axes, then the buttons, and no profile goes near it. */
@@ -3063,6 +3145,8 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
     int bestScore = 0;
     for (quint32 u = 0; u < iom->universesCount(); ++u)
     {
+        if (only != UINT_MAX && u != only)
+            continue;
         InputPatch *ip = iom->inputPatch(u);
         if (ip == nullptr || ip->plugin() == nullptr)
             continue;
@@ -3107,8 +3191,12 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
                                   : PadNames::familyFrom(kind);
         // Most of what Focus mode uses wins; the follow spot's breaks a tie.
         // The pad that owns the tools (Q135) is the one, though.
+        /* A pad with the Focus job before one without (CONTROLLER_JOBS.md
+           8): the focus tools never read, name or wait for a pad that
+           cannot work them while one that can is here. */
+        const bool focusJob = m_controllerJobs == nullptr || m_controllerJobs->has(u, ControllerJobs::Focus);
         const int score = used * 2 + ((m_panBound && m_panUniverse == u) ? 1 : 0)
-                          + (u == m_ownerUniverse ? 1000 : 0);
+                          + (focusJob ? 500 : 0) + (u == m_ownerUniverse ? 1000 : 0);
         if (score > bestScore)
         {
             bestScore = score;
@@ -3122,6 +3210,14 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
 
 PadNames::Family ProgrammerController::padFamily() const
 {
+    // The pad whose action it is names its own controls (review 1).
+    const quint32 u = feedbackPad();
+    if (u != UINT_MAX)
+    {
+        const FocusController own = focusController(u);
+        if (own.present)
+            return own.family;
+    }
     const FocusController fc = focusController();
     return fc.present ? fc.family : PadNames::Xbox;
 }
@@ -3258,10 +3354,20 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         return false;
 
     const GamepadRole::Role role = GamepadRole::Role(knownRole >= 0 ? knownRole : controllerRole(universe, channel));
-    // The touchpad's swipes (Q199): kept here, read on the tick.
-    if (GamepadRole::isTouch(role))
+    // What this pad holds (its chords are its own).
+    m_heldRoles.pad = universe;
+    /* The touchpad's swipes (Q199): kept here, read on the tick. A swipe
+       walks the show, so only a pad with the Focus job's (CONTROLLER_JOBS.md 8). */
+    const bool beside = m_padRun->isBesideTool(universe);
+    const bool swipes = m_controllerJobs->has(universe, ControllerJobs::Focus) && !beside;
+    /* Beside another pad's focus or walk a swipe is a press like the
+       others: refused, said (second review 5). */
+    if (beside && role == GamepadRole::TouchDown && value > 0)
+        m_padRun->tellRefused(m_padRun->isBesideFocus(universe) ? m_padRun->focusBesideText()
+                                                                : m_padRun->walkBesideText());
+    if (GamepadRole::isTouch(role) && swipes)
         m_padRun->touchValue(role, norm);
-    else if (role == GamepadRole::TouchClick)
+    else if (role == GamepadRole::TouchClick && swipes)
         m_padRun->touchClick(value > 0);
     /* The Controller Test is open and no tool has the pad: its buttons and
        triggers are being tried, so they do nothing here -- no GO, no hit,
@@ -3279,8 +3385,31 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             m_heldRoles.remove(role);
         return true;
     }
+    /* What is held, kept before any early return (review 10): a View let
+       go while another pad has the focus is let go, so a later Menu is
+       never View + Menu. (Pressed, the chord checks below read it.) */
+    if (role != GamepadRole::None && !GamepadRole::isAxis(role) && !GamepadRole::isTouch(role))
+    {
+        if (value > 0)
+            m_heldRoles.insert(role);
+        else
+            m_heldRoles.remove(role);
+    }
     if (role == GamepadRole::None && !active)
         return false;
+    /* Another pad's venue focus in the Run role (board Q250): this pad's
+       buttons and triggers are the Run map's, which plays nothing until
+       the focus ends and says so (the runner keeps its arm) -- never the
+       focus tool's, never "doesn't do focus" for a GO. Its sticks stay as
+       a tool leaves them. */
+    if (active && m_padRun->isBesideTool(universe) && role != GamepadRole::None
+        && !GamepadRole::isTouch(role) && !isPan && !isTilt
+        && role != GamepadRole::LeftX && role != GamepadRole::LeftY
+        && role != GamepadRole::RightX && role != GamepadRole::RightY)
+    {
+        m_padRun->handle(universe, role, value);
+        return true;
+    }
     /* Its jobs (CONTROLLER_JOBS.md 8): a pad without Focus works no tool
        -- Quick focus, Venue focus, Focus this cue -- its presses are told
        so and go nowhere (the stop, above, is every pad's). */
@@ -3306,8 +3435,9 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
                            && !isPan && !isTilt;
         if (m_ownerUniverse == 0xFFFFFFFF)
         {
-            /* In the Run role the pad that starts the calls (armed, LT +
-               Menu) claims it there: an unarmed Menu claims nothing. */
+            /* In the Run role the pad that starts the calls (LT + Menu:
+               PadRun::startFocus()) claims it there: a Menu alone claims
+               nothing. */
             if (press && m_controllerJobs->has(universe, ControllerJobs::Focus)
                 && (active || (role == FocusCallCue::startRole() && !m_padRun->isEnabled())))
             {
@@ -3391,44 +3521,35 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
                 tellOperator(padText(tr("Hold {A} to say yes, same room.")), ControllerScheme::ConfirmPriority);
             return true;
         }
-        /* View + Menu together: held 1 s, the role switches (Tools / Run,
-           PadRun); in Tools a shorter press, on its release, asks for Focus
-           mode as it always did. Neither does anything on its own before
-           that, so a brush of both cannot take the show. */
+        /* View + Menu together. In Tools a tap (let go before the hold's
+           time), on its release, asks for Focus mode as it always did.
+           Held, nothing switches (board Q251: the hold put a wired
+           PlayStation clone into its Xbox mode, off USB mid-show): Run /
+           Tools is the computer's, and the hold says so. Neither does
+           anything on its own before that, so a brush of both is nothing. */
         if (!active && (role == GamepadRole::Back || role == GamepadRole::Start))
         {
             const GamepadRole::Role other = role == GamepadRole::Back ? GamepadRole::Start : GamepadRole::Back;
             if (value > 0 && m_heldRoles.contains(other))
             {
-                /* The role is Run cues' to switch (CONTROLLER_JOBS.md 5):
-                   a pad without the job times no chord; its press, let
-                   go, is Focus mode in Tools (Focus's), else refused. */
-                if (m_controllerJobs->has(universe, ControllerJobs::RunCues))
-                    m_padRun->roleChordBegin();
-                else
-                    m_viewMenuNoRun = true;
-                return true;
-            }
-            if (value == 0 && m_viewMenuNoRun)
-            {
-                m_viewMenuNoRun = false;
-                if (!m_padRun->isEnabled() && m_controllerJobs->has(universe, ControllerJobs::Focus))
-                    emit focusModeRequested();
-                else
-                    tellOperator(m_padRun->isEnabled() ? PadRun::noRunCuesText() : PadRun::noFocusText(),
-                                 ControllerScheme::ConfirmPriority);
+                m_padRun->roleChordBegin();
                 return true;
             }
             if (value == 0 && (m_padRun->isRoleChordPending() || m_padRun->roleChordFinished()))
             {
-                const bool shortPress = m_padRun->roleChordEnd();
-                if (shortPress && !m_padRun->isEnabled())
+                const bool tap = m_padRun->roleChordEnd();
+                const bool focus = m_controllerJobs->has(universe, ControllerJobs::Focus);
+                if (tap && !m_padRun->isEnabled())
                 {
-                    if (m_controllerJobs->has(universe, ControllerJobs::Focus))
+                    if (focus)
                         emit focusModeRequested();
                     else
                         tellOperator(PadRun::noFocusText(), ControllerScheme::ConfirmPriority);
                 }
+                /* A tap in Run: nothing, as ever -- but a pad without Run
+                   cues and with Focus is told where its Focus mode is. */
+                else if (tap && focus && !m_controllerJobs->has(universe, ControllerJobs::RunCues))
+                    m_padRun->tellRefused(tr("Focus mode is in the Tools role. %1.").arg(PadRun::roleSwitchText()));
                 return true;
             }
         }
@@ -3439,7 +3560,8 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
        takes the pad until it ends. */
     if (!active && !isPan && !isTilt && m_padRun->handle(universe, role, value))
         return true;
-    if (active && m_padRun->isArmed())
+    // Not another pad's venue focus or walk: the runner keeps its arm (Q250, Q252).
+    if (active && m_padRun->isArmed() && !m_padRun->isFocusing() && !m_padRun->isWalking())
         m_padRun->reset();
     if (!active)
         return false;

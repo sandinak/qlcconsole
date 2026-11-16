@@ -821,7 +821,7 @@ void App::init()
     }
     if (ProgrammerController *pc = m_doc->programmer())
     {
-        // View + Menu on the controller.
+        // View + Menu tapped on the controller (Tools).
         connect(pc, &ProgrammerController::focusModeRequested, this, &App::slotFocusMode);
         /* Focus calls and Refine say where the controller is, from the
            laptop, to whoever holds it on stage (board Q107). */
@@ -9633,7 +9633,12 @@ void App::slotUpdateStandby()
             const ProgrammerController *pc = m_doc->programmer();
             const bool runRole = pc->padRun()->isEnabled();
             QString text;
-            if (fcc->isArmed())
+            const PadRun::FocusStart start = pc->padRun()->focusStart();
+            if (fcc->isArmed() && runRole && start == PadRun::NoArm)
+                text = pc->padText(tr("Venue focus: waiting for the controller ({LT} + {Menu})"));
+            else if (fcc->isArmed() && runRole && start == PadRun::NoFocusPad)
+                text = tr("Venue focus: no controller does focus (start it on the Run tab)");
+            else if (fcc->isArmed())
                 text = runRole ? pc->padText(tr("Venue focus: waiting for the controller ({LT} + {Menu}, armed)"))
                        : PadNames::isPlayStation(pc->padFamily())
                          ? pc->padText(tr("Venue focus: waiting for the controller ({Menu})"))
@@ -10207,7 +10212,9 @@ void App::updatePadRoleChip()
         return;
     ProgrammerController *pc = m_doc->programmer();
     const PadRun *run = pc->padRun();
-    if (run->state() == PadRun::Tools)
+    /* Tools: no chip -- but for a View + Menu held on the pad (Q251), which
+       is told where Run / Tools is switched, on the screen too. */
+    if (run->state() == PadRun::Tools && run->notice() != PadRun::roleSwitchText())
     {
         m_statusPadRoleLabel->hide();
         if (m_statusFitTimer != nullptr)

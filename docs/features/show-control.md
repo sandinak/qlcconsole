@@ -148,13 +148,15 @@ them:
 | **Emergency stop**: everything off | LB + RB + LT + RT | L1 + R1 + L2 + R2 |
 | Say the list and what's on standby | RS click | R3 |
 | Walk the show (below), not while armed | Menu | Options |
-| Start a waiting **venue focus cue** (below), and finish it | armed, hold LT + Menu | armed, hold L2 + Options |
-| Switch the role: Tools / Run | hold View + Menu 1 s | hold Create + Options 1 s |
+| Start a waiting **venue focus cue** (below), and finish it | armed, hold LT + Menu (a pad with Focus and no Run cues: LT + Menu) | armed, hold L2 + Options (a Focus-only pad: L2 + Options) |
+| Switch the role: Tools / Run | on the computer: the Run tab's **Pad:** button (held View + Menu only says so) | the same (held Create + Options only says so) |
 
+- **One hold, one change.** Once LB + RB have armed, disarmed or been
+  refused, holding them on changes nothing more: let go of both to use
+  the chord again.
 - **Armed stays armed.** The arm drops only on the LB + RB hold, or with
   no button of the Run map at all: the role is switched (the Run tab's
-  **Pad:** button, or on the pad by holding View + Menu for a second: two
-  buttons, never one), a tool started on the laptop takes the pad, the
+  **Pad:** button, on the computer), a tool started on the laptop takes the pad, the
   controller disconnects, or the emergency stop goes.
   Each of those says so on the footer's Pad chip ("Disarmed: the
   controller went away.").
@@ -188,8 +190,9 @@ them:
   more than one list). The pick is saved with the show. The pad cannot
   change it: sight unseen, a wrong list is too easy. RS says which list
   it is.
-- **Nothing on the pad leaves Run** but holding View + Menu for a second
-  (below). Menu walks the show and Menu again comes back, still in Run.
+- **Nothing on the pad leaves Run.** Run / Tools is switched on the
+  computer, with the Run tab's **Pad:** button (below). Menu walks the
+  show and Menu again comes back, still in Run.
 - **Venue focus from the pad: Pad: FOCUS.** With a [venue focus
   cue](focus-calls.md#a-venue-focus-cue-pre-show) waiting, armed, hold
   **LT** and press **Menu**: the calls begin and the pad is in **FOCUS**
@@ -206,7 +209,11 @@ them:
   the next cue**) until LT + A or GO on the laptop moves it on; ending
   the focus never moves the list, from the pad or the laptop. A focus
   started on the laptop while armed is FOCUS too and comes back ARMED.
-  The controller going away mid-focus: back not armed.
+  The controller going away mid-focus: back not armed. With two pads, a
+  pad with Focus and not Run cues starts it with **LT + Menu**, no arm,
+  and the pad that runs cues stays armed with nothing playing from it
+  until the focus ends (**Pad: FOCUS** names the focus pad): see
+  [Controller jobs](gamepad-remote.md#controller-jobs-more-than-one-controller).
   While armed, Menu does nothing ("Armed. To walk, disarm first: hold LB
   and RB."): armed, the pad is the cue map and nothing else.
 - **Two pads.** The pad that armed is the one whose presses count; another
@@ -290,16 +297,21 @@ held (two fingers still zoom and focus).
 
 decided (can change): swipes need no arm: they preview and walk, never GO.
 
-### Switch roles from the pad
+### Switch roles: on the computer
 
-Hold **View + Menu** (Create + Options) for a second and the controller
-changes role: Tools to Run, or Run to Tools. The voice says which
-("Run role. Hold LB and RB to arm." / "Tools role.") and the Run tab's
-**Pad:** button follows. Neither button does anything alone, and any third
-button pressed during the hold cancels it, so a knocked pad cannot take the
-show. In Tools, View + Menu released before the second is still Focus mode,
-now on its release. Not while a tool (Focus mode, Focus this cue) has the
-pad: end it first.
+Run / Tools is switched on the computer, with the Run tab's **Pad:**
+button; the voice says which ("Run role. Hold LB and RB to arm." / "Run
+role off."). The pad does not switch it. Holding **View + Menu** (Create +
+Options) for a second does nothing to the role or the arm; the voice and
+the footer's Pad chip say *Run / Tools is switched on the computer: the
+Run tab's Pad: button* (in Tools too). In Tools, a tap of View + Menu
+(let go before the second) is still Focus mode, on its release.
+
+decided (board Q251, 2026-11-16): the pad's hold is gone because holding
+Create + Options puts a wired PlayStation clone into its Xbox mode: the
+pad drops off USB and comes back as another device, mid-show. (can
+change: a Run / Tools switch as a step of the show, like a venue focus
+cue, is a TODO candidate.)
 
 decided (2026-11-14, the operator's rules): the bumpers are the mode only
 (the arm a latch on the two of them, never a button held); the left
@@ -467,14 +479,20 @@ button to **Pad: Run**. Connect one pad at a time, and check that
     Then hold **A** (Cross) for a second. *Expected:* a short buzz, "Still
     at *venue*.", and the first call begins. (With no venue applied, answer
     on the laptop.) Press Menu again to leave the calls.
-12. Hold **View + Menu** (Create + Options) for a second. *Expected:* the
-    voice says "Tools role." and the button says **Pad: Tools**. Hold them
-    again: "Run role. …" and **Pad: Run**.
-13. Start the same hold and press A before the second is up. *Expected:*
-    the role does not change.
+12. Arm, then hold **View + Menu** (Create + Options) for two seconds.
+    *Expected:* still **Pad: ARMED**; the chip and the voice say *Run /
+    Tools is switched on the computer: the Run tab's Pad: button*. On a
+    wired PlayStation clone: the pad stays connected (no new device in
+    the Controller Test, its light and buzz still work). Disarm. Click the
+    Run tab's **Pad:** button: **Pad: Tools**; hold View + Menu again:
+    still Tools, the chip shows the same words. Tap View + Menu (let go
+    at once): Focus mode opens. Close it, click **Pad:** for Run.
+13. On a wired PlayStation clone, tap View + Menu (Create + Options) ten
+    times in Tools. *Expected:* Focus mode each time, and the pad never
+    drops off USB. If it does, note how long the tap was.
 14. In Run, not armed, press every button once, then hold each for two
     seconds, as in step 6. *Expected:* never armed, and the Run tab's
-    button never reads **Pad: Tools**; only View + Menu held leaves Run.
+    button never reads **Pad: Tools**: nothing on the pad leaves Run.
     (Menu walks: Menu again comes back.)
 15. Arm, then unplug the pad (or switch it off). *Expected:* **Pad: Run**
     and the chip says **Disarmed: the controller went away.** Plug it in:

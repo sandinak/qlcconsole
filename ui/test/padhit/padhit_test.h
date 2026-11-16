@@ -49,6 +49,12 @@ private slots:
     /** A one-shot hit ends on its own time, not at the GO, then lets go by
      *  itself and the cue's levels return (Q239). */
     void aOneShotHitEndsOnItsOwnTimeNotAtTheGo();
+    /** Board Q250 with the hit rule: pad A (Run cues only) fires a
+     *  one-shot, then pad B (Focus only) starts the venue focus. The
+     *  one-shot is not cut: it plays to its end and lets go by itself; a
+     *  new pull on A meanwhile is refused on the screen; after B ends the
+     *  focus, A's pull plays it again with no re-arm. */
+    void aOneShotPlaysOutAcrossAnotherPadsFocus();
     /** A new set of armed hits starts at 1 of n, and so does the same set
      *  armed again (Q240). */
     void eachNewSetOfHitsStartsAtOneOfN();

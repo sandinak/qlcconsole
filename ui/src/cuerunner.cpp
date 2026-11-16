@@ -53,6 +53,7 @@
 #include "programmercontroller.h"
 #include "focuscallcue.h"
 #include "padrun.h"
+#include "controllerjobs.h"
 #include "cuerunner.h"
 #include "controlmap.h"
 #include "groupmasterstrip.h"
@@ -737,7 +738,7 @@ void CueRunner::buildFullLayout()
         m_focusStart->setObjectName(QStringLiteral("crFocusStart"));
         m_focusStart->setText(tr("Start Venue Focus"));
         m_focusStart->setToolTip(tr("Begin venue focus (Start on the controller, or \u2318\u21a9; "
-                                    "the controller in the Run role: armed, LT + Menu)"));
+                                    "the controller in the Run role: LT + Menu, armed on a controller that runs cues)"));
         connect(m_focusStart, &QToolButton::clicked, this, [this]() {
             m_doc->programmer()->focusCallCue()->start();
         });
@@ -749,6 +750,14 @@ void CueRunner::buildFullLayout()
         connect(m_doc->programmer()->focusCallCue(), &FocusCallCue::doneChanged,
                 this, &CueRunner::refreshFocusArmed);
         connect(m_doc->programmer()->padRun(), &PadRun::enabledChanged,
+                this, &CueRunner::refreshFocusArmed);
+        /* An arm made or dropped, a job changed, a pad plugged in or out:
+           how a pad starts it changes (PadRun::focusStart()). */
+        connect(m_doc->programmer()->padRun(), &PadRun::stateChanged,
+                this, &CueRunner::refreshFocusArmed);
+        connect(m_doc->programmer()->controllerJobs(), &ControllerJobs::jobsChanged,
+                this, [this]() { refreshFocusArmed(); });
+        connect(m_doc->programmer(), &ProgrammerController::focusControllerChanged,
                 this, &CueRunner::refreshFocusArmed);
         refreshFocusArmed();
     }
@@ -1385,7 +1394,11 @@ void CueRunner::refreshFocusArmed()
     {
         case FocusCallCue::Armed:
             m_focusArmedLabel->setText(runRole
-                ? pc->padText(tr("Venue focus: waiting for the controller \u2014 armed, hold {LT} and press {Menu}"))
+                ? (pc->padRun()->focusStart() == PadRun::NoArm
+                   ? pc->padText(tr("Venue focus: waiting for the controller \u2014 hold {LT} and press {Menu}"))
+                   : pc->padRun()->focusStart() == PadRun::NoFocusPad
+                   ? tr("Venue focus: no controller does focus \u2014 Start Venue Focus here")
+                   : pc->padText(tr("Venue focus: waiting for the controller \u2014 armed, hold {LT} and press {Menu}")))
                 : PadNames::isPlayStation(pc->padFamily())
                   ? pc->padText(tr("Venue focus: waiting for the controller \u2014 press {Menu}"))
                   : tr("Venue focus: waiting for the controller \u2014 press Start"));
