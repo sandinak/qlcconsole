@@ -101,9 +101,9 @@ public:
     /** A pad's own name without its serial ("DUALSHOCK 4 Wireless
      *  Controller (DE:4C:...)" is "DUALSHOCK 4 Wireless Controller"). */
     static QString modelName(const QString &name);
-    /** A short name a person tells pads apart by: the model and, when the
-     *  identity has one, the end of its address or its port
-     *  ("DUALSHOCK 4 Wireless Controller (…77:93)"). */
+    /** A short name a person tells pads apart by: the model (without
+     *  " Wireless Controller") and, when the identity has one, the end of
+     *  its address or its port ("DUALSHOCK 4 (…77:93)"). */
     static QString shortName(const QString &name, const QString &identity);
     /** shortName() of the controller on @p universe; empty: none there. */
     QString nameOfUniverse(quint32 universe) const;

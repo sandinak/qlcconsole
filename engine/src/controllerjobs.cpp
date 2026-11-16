@@ -180,7 +180,12 @@ QString ControllerJobs::modelName(const QString &name)
 
 QString ControllerJobs::shortName(const QString &name, const QString &identity)
 {
-    const QString model = modelName(name);
+    /* Short enough for the footer's chip: "DualSense Wireless Controller"
+       is a DualSense (as followSpotStickName() says it). */
+    QString model = modelName(name);
+    const QLatin1String tail(" Wireless Controller");
+    if (model.size() > tail.size() && model.endsWith(tail, Qt::CaseInsensitive))
+        model.chop(tail.size());
     if (identity.startsWith(kMac))
         return QStringLiteral("%1 (…%2)").arg(model, identity.right(5).toUpper());
     if (identity.startsWith(kPort))

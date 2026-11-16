@@ -43,6 +43,11 @@ private slots:
      *  Menu again: ARMED, and the Run tab says the list waits (Venue focus
      *  done: LT + A for the next cue) with no command sent. */
     void focusOnEverySurface();
+    /** Controller jobs on the real surfaces: two pads, A arms -- the
+     *  button and the footer chip name it, only A's light shows the arm;
+     *  B without Run cues is told so on the chip; B with it is told A runs
+     *  cues; the stop from B turns both lights red. */
+    void twoPadsOnEverySurface();
     /** QLC_SHOT_DIR set: the Run tab and the footer at 1024x640, 1280x800
      *  and 1920x1080 with a venue focus started from the armed pad (LT +
      *  Menu), then finished the same way (the UX review's shots). */

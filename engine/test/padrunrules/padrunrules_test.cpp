@@ -1304,7 +1304,7 @@ void PadRunRules_Test::jobsEveryControlOnASecondPad()
             else if (aArmed)
             {
                 // One runner: refused, named, and A as it was (invariant 6).
-                QVERIFY2(saidCount("Pad A (…00:01) is running cues") > runningB, qPrintable(why));
+                QVERIFY2(saidCount("Pad A (\u202600:01) is running cues") > runningB, qPrintable(why));
                 QVERIFY(run->isArmed());
                 QCOMPARE(run->armedUniverse(), quint32(0));
             }
@@ -1352,9 +1352,9 @@ void PadRunRules_Test::jobsOneRunnerAtATime()
     PadRun *run = m_doc->programmer()->padRun();
     run->setEnabled(true);
     arm(true, 0);
-    QCOMPARE(run->runnerName(), QString::fromUtf8("Pad A (…00:01)"));
+    QCOMPARE(run->runnerName(), QString::fromUtf8("Pad A (\u202600:01)"));
     // Two pads: the chip names the one that runs cues (invariant 9).
-    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: ARMED · Pad A (…00:01)"));
+    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: ARMED \u00B7 Pad A (\u202600:01)"));
     // B's chord, held long and let go: refused, A as it was, its safety kept.
     axis(kLT, 255, 0);
     hold(kLB, true, 1);
@@ -1362,7 +1362,7 @@ void PadRunRules_Test::jobsOneRunnerAtATime()
     QTest::qWait(80);
     hold(kRB, false, 1);
     hold(kLB, false, 1);
-    QCOMPARE(run->notice(), QString::fromUtf8("Pad A (…00:01) is running cues."));
+    QCOMPARE(run->notice(), QString::fromUtf8("Pad A (\u202600:01) is running cues."));
     QVERIFY(run->isArmed());
     QCOMPARE(run->armedUniverse(), quint32(0));
     press(kA, 0);                       // A's LT still held: its GO goes
@@ -1373,12 +1373,12 @@ void PadRunRules_Test::jobsOneRunnerAtATime()
     press(kA, 1);
     axis(kLT, 0, 1);
     QCOMPARE(goes(), 1);
-    QCOMPARE(run->notice(), QString::fromUtf8("Pad A (…00:01) is running cues."));
+    QCOMPARE(run->notice(), QString::fromUtf8("Pad A (\u202600:01) is running cues."));
     // A lets go: the next to arm holds it.
     arm(false, 0);
     arm(true, 1);
     QCOMPARE(run->armedUniverse(), quint32(1));
-    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: ARMED · Pad B (…00:02)"));
+    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: ARMED \u00B7 Pad B (\u202600:02)"));
     with(kLT, kA, 1);
     QCOMPARE(goes(), 2);
     hold(kLB, true, 0);
@@ -1387,7 +1387,7 @@ void PadRunRules_Test::jobsOneRunnerAtATime()
     hold(kRB, false, 0);
     hold(kLB, false, 0);
     QCOMPARE(run->armedUniverse(), quint32(1));
-    QCOMPARE(run->notice(), QString::fromUtf8("Pad B (…00:02) is running cues."));
+    QCOMPARE(run->notice(), QString::fromUtf8("Pad B (\u202600:02) is running cues."));
 }
 
 void PadRunRules_Test::jobsTheStopFromAPadWithNoJobs()

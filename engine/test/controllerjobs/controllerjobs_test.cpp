@@ -235,7 +235,7 @@ void ControllerJobs_Test::theDescriptionsAPersonReads()
     QCOMPARE(J::modelName("DUALSHOCK 4 Wireless Controller (DE:4C:09:77:77:93)"),
              QString("DUALSHOCK 4 Wireless Controller"));
     QCOMPARE(J::shortName("DUALSHOCK 4 Wireless Controller (DE:4C:09:77:77:93)", "mac:de:4c:09:77:77:93"),
-             QString::fromUtf8("DUALSHOCK 4 Wireless Controller (…77:93)"));
+             QString::fromUtf8("DUALSHOCK 4 (\u202677:93)"));
     QCOMPARE(J::shortName("Wireless Controller", "port:HID:USB 14200000"),
              QString("Wireless Controller (USB port 14200000)"));
     QCOMPARE(J::shortName("Wireless Controller", "name:HID:Wireless Controller"),
