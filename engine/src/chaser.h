@@ -115,6 +115,14 @@ public:
     bool replaceStep(const ChaserStep& step, int index);
 
     /**
+     * Replace every step with $steps at once. A running chase keeps the
+     * steps it plays: its runner follows each one to its new index (by
+     * function), so a step added or removed before the one on stage leaves
+     * that one on stage, and the next GO plays the step after it.
+     */
+    void setSteps(const QList<ChaserStep> &steps);
+
+    /**
      * Move a step from $sourceIdx to $destIdx
      *
      * @param sourceIdx Source index of the step

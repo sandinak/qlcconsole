@@ -186,6 +186,29 @@ bool Chaser::replaceStep(const ChaserStep& step, int index)
     }
 }
 
+void Chaser::setSteps(const QList<ChaserStep> &steps)
+{
+    int moved = -1;
+    {
+        // The runner lock first (as write()), so the MasterTimer never sees
+        // the new steps with the old indices. Nothing here waits on a device.
+        QMutexLocker runnerLocker(&m_runnerMutex);
+        QList<ChaserStep> before;
+        {
+            QMutexLocker stepListLocker(&m_stepListMutex);
+            before = m_steps;
+            m_steps = steps;
+        }
+        if (m_runner != NULL)
+            moved = m_runner->remapSteps(before, steps);
+    }
+
+    emit changed(this->id());
+    emit stepsListChanged(this->id());
+    if (moved >= 0)
+        emit currentStepChanged(moved);
+}
+
 bool Chaser::moveStep(int sourceIdx, int destIdx)
 {
     if (sourceIdx < 0 || sourceIdx >= m_steps.size())

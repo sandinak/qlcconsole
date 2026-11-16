@@ -98,6 +98,8 @@ bool ShowTreeController::setMainList(quint32 listId)
         return false;
     if (production(pid)->mainList == listId)
         return true;
+    // The tree's choice from here on, an undo step as any edit.
+    m_outsideMain.remove(pid);
     const bool ok = edit(tr("Main list"), [&](QList<Production> &ps) {
         for (Production &p : ps)
             if (p.id == pid)
@@ -193,6 +195,7 @@ void ShowTreeController::slotMainCueListChanged(quint32 chaserId)
     for (Production &p : m_productions)
         if (p.id == pid)
             p.mainList = listId;
+    m_outsideMain.insert(pid, listId);
     m_current = pid;
     applyProductionTimecode();
     emit currentProductionChanged();

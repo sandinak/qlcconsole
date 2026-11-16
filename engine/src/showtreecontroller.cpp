@@ -1986,9 +1986,25 @@ quint32 ShowTreeController::runningCue(quint32 listId) const
     ChaserStep *step = idx < 0 ? nullptr : chaser->stepAt(idx);
     if (step == nullptr)
         return invalidId();
+    const quint32 fid = step->fid;
     for (const Cue &c : list->cues)
-        if (c.collection != invalidId() && c.collection == step->fid)
+        if (c.collection != invalidId() && c.collection == fid)
             return c.id;
+    /* A cue with sub-cues: its step plays their chaser (the bake), not the
+       cue's Collection -- that cue is the one running. */
+    for (const Production &p : m_productions)
+    {
+        bool here = false;
+        for (const CueList &l : p.lists)
+            here = here || l.id == listId;
+        if (!here)
+            continue;
+        for (const CueList &s : p.lists)
+            if (s.isSubCues() && s.chaser == fid)
+                for (const Cue &c : list->cues)
+                    if (c.id == s.subOf)
+                        return c.id;
+    }
     return invalidId();
 }
 
@@ -4717,6 +4733,14 @@ void ShowTreeController::restoreSnapshot(const QByteArray &xml)
     m_snapshotDetached.clear();
     if (r.name() == KXMLQLCShowTree)
         loadState(r, true);
+    // A main list picked outside the tree is no undo step: kept.
+    for (Production &p : m_productions)
+    {
+        const quint32 picked = m_outsideMain.value(p.id, invalidId());
+        for (const CueList &l : p.lists)
+            if (l.id == picked && !l.looks && !l.isSubCues())
+                p.mainList = picked;
+    }
     if (!m_snapshotRemap.isEmpty())
         for (Production &p : m_productions)
             for (CueList &l : p.lists)
@@ -5370,16 +5394,10 @@ void ShowTreeController::bake()
             const QList<ChaserStep> have = chaser->steps();
             if (!sameSteps(have, steps))
             {
-                // In place, so a running list keeps its current step.
-                for (int i = 0; i < steps.count(); ++i)
-                {
-                    if (i < have.count())
-                        chaser->replaceStep(steps.at(i), i);
-                    else
-                        chaser->addStep(steps.at(i));
-                }
-                for (int i = chaser->stepsCount() - 1; i >= steps.count(); --i)
-                    chaser->removeStep(i);
+                // At once, so a running list keeps the cue on stage: its
+                // runner follows that cue to its new place (a cue added or
+                // deleted before it), and the next GO plays the one after.
+                chaser->setSteps(steps);
             }
         }
     }
@@ -6705,6 +6723,7 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
     const quint32 next = root.attributes().value(KXMLShowTreeNextId).toString().toUInt();
     if (!snapshot)
     {
+        m_outsideMain.clear();
         bool ok = false;
         const quint32 cur = root.attributes().value(QStringLiteral("Current")).toString().toUInt(&ok);
         m_current = ok ? cur : invalidId();
@@ -7030,6 +7049,7 @@ void ShowTreeController::reset()
     m_noteImages.clear();
     m_nextId = 1;
     m_current = invalidId();
+    m_outsideMain.clear();
     applyProductionTimecode();
     emit changed();
 }

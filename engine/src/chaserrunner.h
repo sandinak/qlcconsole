@@ -136,6 +136,12 @@ public:
      *  (ChaserStep::SubGoFollow: auto-follow sub-cues). */
     void setSubCueFollow(bool enable) { m_subCueFollow = enable; }
 
+    /** The chaser's steps went from $before to $after (Chaser::setSteps()):
+     *  each running step, and the current index, follow their function to
+     *  its new index. Called with the chaser's runner lock held. Returns the
+     *  new current index if it moved, else -1. */
+    int remapSteps(const QList<ChaserStep> &before, const QList<ChaserStep> &after);
+
     /**
      * Compute next step for manual fading
      */

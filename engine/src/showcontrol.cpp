@@ -582,11 +582,28 @@ bool ShowControl::execute(const Request &request)
             action.m_stepIntensity = 1.0;
             action.m_fadeMode = Chaser::FromFunction;
             {
-                // The step before, passing over the skipped ones.
+                // The step before, passing over the skipped ones (a
+                // Backward list's "before" is the step after).
                 const int from = chaser->currentStepIndex();
-                int to = from - 1;
-                while (to > 0 && chaser->isStepSkipped(to))
-                    --to;
+                const int count = chaser->stepsCount();
+                const int dir = chaser->direction() == Function::Backward ? 1 : -1;
+                auto playable = [&](int i) {
+                    while (i >= 0 && i < count && chaser->isStepSkipped(i))
+                        i += dir;
+                    return i >= 0 && i < count ? i : -1;
+                };
+                int to = playable(from + dir);
+                if (to < 0 && from >= 0 && chaser->runOrder() == Function::SingleShot)
+                {
+                    /* Back on the first cue played: there is none before it.
+                       The cue stays on stage and the list plays on (the
+                       runner does the same for every other route); nothing
+                       is taken, so nothing is logged as a cue change. */
+                    return finish(true, tr("cue %1 is the first: it stays")
+                                            .arg(cueName(chaser, from, -1)));
+                }
+                if (to < 0 && chaser->runOrder() == Function::Loop)
+                    to = playable(dir < 0 ? count - 1 : 0);   // round to the last
                 emit cueTaken(Back, chaser->id(), from, chaser->currentSubCueIndex(),
                               to < 0 ? from : to, -1);
             }

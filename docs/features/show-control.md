@@ -41,6 +41,12 @@ A **cue list** is a chase (a chaser). Its steps are the **cues**.
   where GO, Back, Stop and LOAD are.
 - **GO** is ⌘↩ and **Back** ⌘⇧↩, in every window, and in
   **Control** → GO / Back (Main Cue List).
+- **Back** on the first cue a list plays (or the first one not skipped)
+  leaves that cue on stage and the list playing: there is no cue before
+  it, and the line says *cue 1 is the first: it stays*.
+- Editing a list while it runs — a cue deleted, recorded or pasted before
+  the one on stage — leaves the cue on stage where it is; the next GO
+  plays the cue after it.
 - From a game controller: [Pad Run](#go-from-the-game-controller-pad-run).
 - A **Virtual Console cue list** shows a **Cue** column beside the step
   number and a **Next:** line under its list — the cue, its name and its

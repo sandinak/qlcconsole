@@ -456,6 +456,53 @@ int ChaserRunner::randomStepIndex(int step) const
    return step;
 }
 
+int ChaserRunner::remapSteps(const QList<ChaserStep> &before, const QList<ChaserStep> &after)
+{
+    // Where the step at $from (playing $fid) is now: the same index if it
+    // still plays that function, else the nearest index that does.
+    auto follow = [&](int from, quint32 fid) {
+        if (from >= 0 && from < after.count() && after.at(from).fid == fid)
+            return from;
+        int best = -1;
+        for (int j = 0; j < after.count(); ++j)
+            if (after.at(j).fid == fid && (best < 0 || qAbs(j - from) < qAbs(best - from)))
+                best = j;
+        return best;
+    };
+    auto remap = [&](ChaserRunnerStep *step) {
+        if (step == NULL)
+            return;
+        const quint32 fid = step->m_index >= 0 && step->m_index < before.count()
+                            ? before.at(step->m_index).fid
+                            : (step->m_function != NULL ? step->m_function->id() : Function::invalidId());
+        const int to = follow(step->m_index, fid);
+        if (to >= 0)
+            step->m_index = to;
+    };
+    for (ChaserRunnerStep *step : std::as_const(m_runnerSteps))
+        remap(step);
+    for (ChaserRunnerStep *step : std::as_const(m_leavingSteps))
+        remap(step);
+    for (ChaserRunnerStep *step : std::as_const(m_handedOverSteps))
+        remap(step);
+    for (ChaserRunnerStep *step : std::as_const(m_handedOverLater))
+        remap(step);
+
+    int moved = -1;
+    if (m_lastRunStepIdx >= 0 && m_lastRunStepIdx < before.count())
+    {
+        const int to = follow(m_lastRunStepIdx, before.at(m_lastRunStepIdx).fid);
+        if (to >= 0 && to != m_lastRunStepIdx)
+        {
+            m_lastRunStepIdx = to;
+            moved = to;
+        }
+    }
+    if (before.count() != after.count())
+        fillOrder(after.count());
+    return moved;
+}
+
 void ChaserRunner::fillOrder()
 {
     fillOrder(m_chaser->stepsCount());
@@ -1292,6 +1339,17 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
     // Nothing to do
     if (m_chaser->stepsCount() == 0)
         return false;
+
+    /* Back on the first cue a SingleShot list plays (every Show Tree list):
+       there is no cue before it. The cue stays on stage -- Back never stops
+       the list (it would fade out while the operator saw it "stay"). Only
+       SingleShot: a Loop goes round to its last cue, a Ping Pong turns. */
+    if (m_pendingAction.m_action == ChaserPreviousStep
+        && m_chaser->runOrder() == Function::SingleShot
+        && !m_runnerSteps.isEmpty() && getNextStepIndex() < 0)
+    {
+        m_pendingAction.m_action = ChaserNoAction;
+    }
 
     /* GO on the beat (docs/design/PLAYBACK_TIMING_DESIGN.md, P1): a step change waits for
        the next whole beat or bar of the chaser's clock. The chase carries on
