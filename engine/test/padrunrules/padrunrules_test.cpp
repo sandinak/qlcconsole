@@ -1083,13 +1083,14 @@ void PadRunRules_Test::twinPadsToldApartAreTwoPads()
     arm(true, 0);
     // The same LT + A on both at once: the runner's GO goes, the other's is refused.
     m_runs.clear();
+    run->showNotice(QString());
     for (const auto &s : QList<QPair<quint32, uchar>>({ { kLT, 255 }, { kA, 255 }, { kA, 0 }, { kLT, 0 } }))
     {
         axis(s.first, s.second, 0);
         axis(s.first, s.second, 1);
     }
     QCOMPARE(goes(), 1);
-    QCOMPARE(saidCount("is running cues"), 1);
+    QVERIFY2(run->notice().endsWith("is running cues."), qPrintable(run->notice()));
     QCOMPARE(run->armedUniverse(), quint32(0));
     // Each pad's four is its own stop: once a press on each.
     int expected = 0;
