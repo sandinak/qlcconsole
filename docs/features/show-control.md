@@ -210,8 +210,12 @@ them:
   While armed, Menu does nothing ("Armed. To walk, disarm first: hold LB
   and RB."): armed, the pad is the cue map and nothing else.
 - **Two pads.** The pad that armed is the one whose presses count; another
-  pad's GO is refused ("Another controller is armed.") and it cannot
-  disarm the first.
+  pad's GO is refused and named ("DualSense (…77:93) is running cues.")
+  and it cannot disarm the first. With two pads or more the **Pad: ARMED**
+  chip names the pad that armed, and only its light shows the arm. Each
+  pad's jobs (Run cues, Follow spot, Focus) are set in Connections ▸
+  right-click the controller ▸ **Test Controller and Jobs…**: see
+  [Controller jobs](gamepad-remote.md#controller-jobs-more-than-one-controller).
 - **The same buttons on every pad.** The map goes by button, not by
   channel, so a [controller slot](other-improvements.md#one-input-whichever-controller-is-here) that finds a
   DualSense in place of the Xbox pad keeps it.

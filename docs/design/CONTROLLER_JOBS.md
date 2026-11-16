@@ -20,9 +20,9 @@ can steer the spot. A job is what one pad is for.
 
 | Job | What it covers |
 |---|---|
-| **Run cues** | Pad Run's map: the arm chord, GO / Back / Sub GO / Sub Back, the hit, RS (say where we are), and the View + Menu hold that switches the Run role |
+| **Run cues** | Pad Run's map: the arm chord, GO / Back / Sub GO / Sub Back, the hit, RS (say where we are), and the View + Menu hold that switches the Run role. Starting a venue focus from the pad (armed, LT + Menu) needs it too, since only the runner is armed |
 | **Follow spot** | the follow spot's sticks (bound from the profile or by hand), its fine stick, its D-pad speed and size |
-| **Focus** | venue focus (a focus-call cue's Menu start, its calls, "still at <venue>?"), Focus mode (View + Menu tap in Tools), Refine and the walk (Menu in Run) |
+| **Focus** | venue focus (LT + Menu in and out of FOCUS in Run, Menu in Tools, its calls, "still at <venue>?"), Focus mode (View + Menu tap in Tools), Refine and the walk (Menu in Run) |
 
 Outside every job, on every pad: the emergency stop (the four together)
 and Centre Sticks (View + LS, moves nothing). A Virtual Console widget
@@ -73,7 +73,8 @@ connects. (can change: a pad's serial over USB, when one says it.)
    different ports, are different controllers, whatever their names.
 4. **The emergency stop is everyone's.** The four together stop the show
    from ANY connected controller, whatever its jobs, armed or not, a tool
-   holding the pad or not (Pad Run rule 5). A controller with no jobs
+   holding the pad or not, in FOCUS or not (Pad Run rule 5; in the Run
+   role, as before: the Tools role has no stop). A controller with no jobs
    does nothing else: no command, no arm, no light change, no follow
    spot move, no tool step.
 5. **Run cues off.** Every Run-map control on that pad does nothing but
@@ -82,26 +83,32 @@ connects. (can change: a pad's serial over USB, when one says it.)
    the hit, RS, the role hold. Nothing on any other pad changes.
 6. **One runner.** The first controller to arm holds Run until it
    disarms (its chord, the stop, the pad lost, its Run cues job taken
-   away, the role switched, a tool taking the pad). While it holds it,
-   another pad's arm chord, GO family and hit are refused with
-   **<name> is running cues**, and nothing on the runner changes: still
+   away, the role switched, a tool taking the pad); a venue focus it started
+   keeps its arm aside, and no other pad arms meanwhile. While it holds
+   it, another pad's arm chord, GO family, hit and LT + Menu are refused
+   with **<name> is running cues** (the name short: "DualSense (…77:93)"), and nothing on the runner changes: still
    armed, its held safety still held, its chord timing untouched.
 7. **Follow spot off.** That pad's sticks never move a follow spot: the
    follow spot's binding skips it (the next pad with the job, else none),
-   a stick bound to it by hand stops moving the spot, and its fine
-   stick, D-pad speed and size do nothing.
-8. **Focus off.** That pad cannot start venue focus (a focus-call cue's
-   Menu), Focus mode, Refine or the walk, and cannot become the pad that
-   owns a tool (Q135). Its presses while a tool runs are ignored (but the
+   a stick bound to it by hand stops moving the spot, its fine stick,
+   D-pad speed and size do nothing, and a profile's follow spot button is
+   refused. The follow spot's set-up in the Look Editor says which pads
+   steer it and where that is set, and when no pad has the job.
+8. **Focus off.** That pad cannot start or end venue focus (LT + Menu,
+   or Menu in Tools), Focus mode, Refine or the walk, and cannot become
+   the pad that owns a tool (Q135); it is told **This controller doesn't
+   do focus**. Its presses while a tool runs are ignored (but the
    stop). Among the pads with Focus, the first to press Start still owns
    the tool; another is told "Another controller is in use."
 9. **One status source.** `PadRun::state()`, `stateColour()`,
    `roleText()` and `stateChanged()` stay the only source. With more than
-   one pad connected, `roleText()` armed names the runner ("Pad: ARMED ·
-   DualSense (…77:93)"); the footer chip and the Run tab read it, nothing
-   derives its own. Each pad's light shows its own state: the runner the
-   state's light, every other pad its own colour, every pad red after
-   the stop.
+   one pad connected, `roleText()` armed (and in FOCUS) names the runner
+   ("Pad: ARMED · DualSense (…77:93)"); the footer chip and the Run tab
+   read it, nothing derives its own. Each pad's light shows its own state
+   (`PadRun::lightUniverse()`): the runner the state's light, every other
+   pad its own colour, every pad red after the stop. One pad: as before.
+   The same pad seen twice (one identity on two universes) is one
+   controller.
 10. **Jobs changed live.** Taking Run cues from the runner disarms it (no
    button: rule 3's "with no button at all"); taking Focus from the pad
    that owns a tool lets the ownership go; taking Follow spot from the
@@ -121,9 +128,10 @@ runs nothing (as before); the jobs apply when it closes.
 
 ## Tests (sweeps, not examples)
 
-- Two pads, every job mix (eight), every control pressed alone and in the
-  chords on each pad, armed and not: what each produces is exactly its
-  jobs' (engine/test/padrunrules `jobsSweep`).
+- Two pads, every job mix of the second (eight), every control alone and
+  in the chords on it, the first armed and not: what it produces is
+  exactly its jobs' (engine/test/padrunrules
+  `jobsEveryControlOnASecondPad`).
 - One runner: pad A arms, pad B's every control; then A disarms and B
   arms.
 - The stop from a pad with no jobs, armed elsewhere and not.

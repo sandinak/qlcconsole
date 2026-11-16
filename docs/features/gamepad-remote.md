@@ -238,17 +238,19 @@ saved at once.
   doesn't run cues*.
 - **One controller runs cues at a time.** The first pad to arm holds the
   show until it disarms. Another pad that tries is refused, and the
-  footer says which pad has it (*DualSense Wireless Controller (…77:93)
-  is running cues*). Nothing on the first pad changes. With more than one
+  footer says which pad has it (*DualSense (…77:93) is running cues*). Nothing on the first pad changes. With more than one
   pad connected, the footer's **Pad: ARMED** chip names the pad that
   armed, and only that pad's light shows the arm.
 - **Follow spot off.** The pad's sticks never move the follow spot; it
-  takes the next pad that has the job.
-- **Focus off.** The pad can't start or work Venue focus, Focus mode or
-  Focus this cue (see [Venue focus](focus-calls.md)).
-- **The emergency stop is on every pad.** Both bumpers and both triggers
-  together stop everything from any connected controller, whatever its
-  jobs.
+  takes the next pad that has the job. The follow spot's settings in the
+  Look Editor say where the jobs are set, and say when no pad has the
+  job.
+- **Focus off.** The pad can't start or work Venue focus (armed, LT +
+  Menu), Focus mode or Focus this cue, and the footer says *This
+  controller doesn't do focus* (see [Venue focus](focus-calls.md)).
+- **The emergency stop is on every pad.** In the Run role, both bumpers
+  and both triggers together stop everything from any connected
+  controller, whatever its jobs.
 
 ## Latency
 
