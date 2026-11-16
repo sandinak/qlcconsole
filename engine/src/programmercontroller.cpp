@@ -3353,6 +3353,8 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         return false;
 
     const GamepadRole::Role role = GamepadRole::Role(knownRole >= 0 ? knownRole : controllerRole(universe, channel));
+    // What this pad holds (its chords are its own).
+    m_heldRoles.pad = universe;
     /* The touchpad's swipes (Q199): kept here, read on the tick. A swipe
        walks the show, so only a pad with the Focus job's (CONTROLLER_JOBS.md 8). */
     const bool swipes = m_controllerJobs->has(universe, ControllerJobs::Focus);

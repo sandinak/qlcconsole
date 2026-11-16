@@ -1266,7 +1266,7 @@ void PadRun::focusCueChanged()
             m_pc->padRumble(2, ControllerScheme::rumbleShortMs(), m_armUniverse);
     }
     m_wasFocusing = focusing;
-    m_shownOwner = focusOwnerUniverse();
+    m_shownOwner = m_pc != nullptr ? m_pc->controllerOwner() : UINT_MAX;
     sync();
 }
 
@@ -1278,8 +1278,8 @@ void PadRun::focusOwnerChanged()
        (review 4, 11). */
     if (m_armed && isFocusing() && !isBesideFocus(m_armUniverse))
         putArmBy();
-    const quint32 owner = focusOwnerUniverse();
     // Left with no pad (its job taken, its pad gone, review 11, 12): said.
+    const quint32 owner = m_pc != nullptr ? m_pc->controllerOwner() : UINT_MAX;
     if (isFocusing() && owner == UINT_MAX && m_shownOwner != UINT_MAX && padCount() > 0)
         showNotice(tr("Venue focus has no controller now: a controller with the Focus job takes it "
                       "with a press, or finish it on the laptop."));

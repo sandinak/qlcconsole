@@ -986,8 +986,25 @@ private:
     QTimer *m_keepAliveTimer = nullptr;
     /** When the joystick tick last ran, for Focus mode's dt. */
     QElapsedTimer m_joyTickClock;
-    /** Controller buttons held, by gamepad role, for the View+Menu combo. */
-    QSet<int> m_heldRoles;
+    /** Controller buttons held, by gamepad role, for the chords (View +
+     *  Menu, View + LS, ...) -- per pad: one pad's View and another's Menu
+     *  are no chord (review of 0.4.11's jobs). Read and written for the pad
+     *  whose input is handled (pad, set by routeFocusInput()). */
+    struct HeldRoles
+    {
+        QHash<quint32, QSet<int>> pads;
+        quint32 pad = 0;
+        void insert(int role) { pads[pad].insert(role); }
+        void remove(int role)
+        {
+            auto it = pads.find(pad);
+            if (it != pads.end())
+                it->remove(role);
+        }
+        bool contains(int role) const { return pads.value(pad).contains(role); }
+        void clear() { pads.clear(); }
+    };
+    HeldRoles m_heldRoles;
     float m_fineNormX = 0.5f, m_fineNormY = 0.5f;
     /** The follow spot's fine stick, per pad and per axis (review 0.4.10
      *  verify, H-A): universe -> its last X and Y readings (0..1). The

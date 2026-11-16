@@ -758,7 +758,7 @@ private:
     /** The words a press beside the focus was refused with (cleared when
      *  the focus ends, review 8). */
     QString m_besideNotice;
-    /** focusOwnerUniverse() when focusOwnerChanged() last looked. */
+    /** The tools' owner (controllerOwner()) when last looked. */
     quint32 m_shownOwner = UINT_MAX;
     bool m_testing = false;     ///< the Controller Test has the pad
     /** holder() when last seen: a change forgets what was held. */
