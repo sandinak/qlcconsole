@@ -353,7 +353,10 @@ it holds, and the chip says why."
   every change (`HIDPlugin::announceLines()`) and emits
   `inputReopened(line)` once per changed line, never for one unchanged;
   `InputOutputMap::inputPatchReconnected()` tells the universes patched to
-  it. That pad keeps the four as read, for the stop (a stale "held" can
+  it, after dropping what the old device read and the input patch had not
+  delivered yet (`InputPatch::forgetBufferedInput()`: buffered, or flushed
+  and queued for the GUI thread) -- none of it reaches Pad Run as the new
+  device's. That pad keeps the four as read, for the stop (a stale "held" can
   only make a stop easier; some pads -- winmm, macOS's polled ones --
   never send their held state again, and a stop squeezed with three of
   four held must not be lost), but **a stop it fired is no longer
