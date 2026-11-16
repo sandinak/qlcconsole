@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **Record a game controller once, test it on every change.** Set `QLC_HID_RECORD=<folder>` and the HID plugin writes a trace of the session there (`pads-<date-time>.jsonl`: each pad arriving and leaving, with its identity, every value it delivers, every open that failed or stuck), at no cost when unset and never holding up the reader. The gate replays traces from `engine/test/padtraces/traces/` through the real plugin into Pad Run: a DualSense clone flipping to an Xbox 360 pad, one pad listed twice, triggers resting at 8 % and noisy sticks (synthetic until a real pad is recorded; docs/dev/PAD_TRACES.md).
+
 ### Fixed
 
 - **A game controller that stops answering no longer freezes the app.** Holding View + Menu (Create + Options) on a DualSense clone flips it to Xbox 360 mode: it drops off USB and comes back, and macOS can leave the new device half-opened for good. The whole app hung on it (bench, 0.4.10). Controllers are now found and opened off the app's main thread, each with a 2-second limit: one that doesn't answer is skipped, named in the footer ("Xbox 360 Controller for Windows (USB 2124000) — not answering"), and tried again once the system lets go of it, while the other pads, the DMX output and every pad's emergency stop carry on. A pad that drops out mid-Pad-Run disarms as for an unplug ("Disarmed: the controller went away."), and quitting or closing the show never waits on a stuck pad.
