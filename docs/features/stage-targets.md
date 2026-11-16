@@ -435,12 +435,6 @@ that into a raw pan/tilt pair, and — because a yoke can usually reach the
 same point two different ways (swing-and-tilt-forward, or the long way
 round and tilt back through home) — picks whichever solution actually stays
 in range, preferring the one that doesn't need to swing all the way around.
-A head with more than a turn of pan (540° is common) can point the same way
-at two pans a turn apart: the solver uses the **middle of its pan range** for
-centre stage and takes, for every target, the pan nearest that, keeping
-clear of both ends of the channel. A move across the stage then never runs a
-head to the end of its pan and round, and a fade between two aims goes the
-short way.
 It reports **margin**: how much spare travel is left before the nearest
 limit. Negative margin means the fixture physically can't get there at all.
 
@@ -594,11 +588,6 @@ Let go and it holds.
   before.
 - **The subject keeps its height.** A person standing on a riser stays on
   it while you walk them across the floor.
-- **Each head works from the middle of its pan.** A head is aimed with
-  centre stage near the middle of its pan range, so walking the subject
-  across the stage never runs it to the end of its pan and round.
-  (A 360° head has only one pan for each direction: face its pan zero
-  toward the stage.)
 - **Across cues nothing jumps.** A layer that tracks into the next cue
   (the same subject followed there) carries on from where the stick left
   it. With **Persist across restarts** ticked on the follow-spot look, the

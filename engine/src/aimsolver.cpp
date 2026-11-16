@@ -101,23 +101,6 @@ bool AimSolver::frameFor(Doc *doc, quint32 fixtureId, Frame &frame)
     frame.panInvert     = rp.panInvert;
     frame.tiltInvert    = rp.tiltInvert;
 
-    /* Which way centre stage is: the pan solve() puts in the middle of the
-       range (Frame::panReferenceDir). From the body, before any arm's offset,
-       so every arm of a fixture takes the same turn. A head standing over
-       centre stage has no bearing to it, and keeps its pan zero. */
-    {
-        const QVector3D c = mProps->stageCentre();
-        const float dx = c.x() - frame.position.x();
-        const float dy = c.y() - frame.position.y();
-        if (dx * dx + dy * dy > 0.25f)
-        {
-            float dir = float(qRadiansToDegrees(qAtan2(double(-dx), double(dy))));
-            if (dir < 0.0f) dir += 360.0f;
-            frame.hasPanReference = true;
-            frame.panReferenceDir = dir;
-        }
-    }
-
     const Fixture::EffectiveBeam eb = fixture->effectiveBeam();
     frame.panMax  = float(eb.panMax);  if (frame.panMax  <= 0.0f) frame.panMax  = 360.0f;
     frame.tiltMax = float(eb.tiltMax); if (frame.tiltMax <= 0.0f) frame.tiltMax = 270.0f;
@@ -284,43 +267,6 @@ AimSolver::Solution AimSolver::solve(const Frame &frame, const QVector3D &target
     while (relativePan < -180.0f) relativePan += 360.0f;
 
     float panRaw = frame.panMax / 2.0f + relativePan + frame.panOffsetDeg;
-
-    /* Which turn: of this pan and the same a whole turn either side, the one
-       in range nearest the pan for centre stage -- and that pan the turn
-       nearest the middle of the range -- keeping kPanEdgeMarginDeg from
-       either end where one can. The whole stage then sits within half a turn
-       of a reference near the middle: a move across it never crosses the
-       seam, and two aims on it fade the short way. Without a reference the
-       pan zero is the reference, which is the answer this always gave. All
-       before invert, which mirrors distances and margins alike. */
-    {
-        float refRel = frame.hasPanReference ? frame.panReferenceDir - frame.panZeroDir : 0.0f;
-        refRel += frame.panOffsetDeg;
-        while (refRel >  180.0f) refRel -= 360.0f;
-        while (refRel < -180.0f) refRel += 360.0f;
-        const float ref = frame.panMax / 2.0f + refRel;
-        bool found = false, roomy = false;
-        float pick = panRaw, pickDist = 0.0f;
-        // This turn first, so a tie keeps the answer it always was.
-        for (int k : { 0, -1, 1, -2, 2 })
-        {
-            const float pan = panRaw + 360.0f * float(k);
-            const float room = qMin(pan, frame.panMax - pan);
-            if (room < 0.0f)
-                continue;
-            const bool r = room >= kPanEdgeMarginDeg;
-            const float dist = qAbs(pan - ref);
-            if (!found || (r && !roomy) || (r == roomy && dist < pickDist))
-            {
-                found = true;
-                roomy = r;
-                pick = pan;
-                pickDist = dist;
-            }
-        }
-        panRaw = pick;
-    }
-
     // Floor mount = hung fixture flipped 180° about horizontal → pan sense
     // reverses (and tilt negates). The panInvert flag toggles from there.
     bool invertPan = frame.panInvert;

@@ -1097,69 +1097,6 @@ void FollowSpotFeel_Test::deletingTheSceneLetsGo()
     QVERIFY(!mover->isOn());
 }
 
-/* Each head faces upstage (pan zero 180) over a stage that is downstage
-   of it, so the stage sits across the seam of the turn the solver used to
-   answer in: walked across, the pan ran to a channel end and swung round
-   to the other. Answered from the middle of the range, it moves smoothly. */
-void FollowSpotFeel_Test::aWalkAcrossTheSeamNeverSwingsRound()
-{
-    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
-    MonitorProperties *props = m_doc->monitorProperties();
-    props->setGridUnits(MonitorProperties::Meters);
-    props->setGridSize(QVector3D(4.0f, 3.0f, 6.0f));        // centre stage (2, 3)
-    for (Fixture *f : { h.rig.fine, h.rig.coarse })
-    {
-        FixtureRigProps rp = props->fixtureRigProps(f->id());
-        rp.panZeroDir = 180.0f;
-        props->setFixtureRigProps(f->id(), rp);
-    }
-    h.bind();
-    h.use(h.rig.targetScene);
-
-    const int a16 = int(h.rig.fine->address()), a8 = int(h.rig.coarse->address());
-    double prev16 = -1, prev8 = -1, step16 = 0, step8 = 0;
-    double lo16 = 540, hi16 = 0, lo8 = 540, hi8 = 0;
-    float minX = 0, maxX = 0;
-    // Across one way, all the way back past where it started, and home.
-    const struct { uchar x; int ticks; } legs[] = { { 255, 85 }, { 0, 170 }, { 255, 85 } };
-    for (const auto &leg : legs)
-    {
-        h.stick(leg.x);
-        for (int i = 0; i < leg.ticks; ++i)
-        {
-            h.tick();
-            const QByteArray d = dmx(m_doc);
-            const double p16 = 540.0 * ((uchar(d.at(a16)) << 8) | uchar(d.at(a16 + 1))) / 65535.0;
-            const double p8 = 540.0 * uchar(d.at(a8)) / 255.0;
-            if (prev16 >= 0)
-            {
-                step16 = qMax(step16, std::abs(p16 - prev16));
-                step8 = qMax(step8, std::abs(p8 - prev8));
-            }
-            prev16 = p16;
-            prev8 = p8;
-            lo16 = qMin(lo16, p16); hi16 = qMax(hi16, p16);
-            lo8 = qMin(lo8, p8);    hi8 = qMax(hi8, p8);
-            minX = qMin(minX, h.rig.subject->position().x());
-            maxX = qMax(maxX, h.rig.subject->position().x());
-        }
-    }
-    h.stick(127);
-    // The subject crossed the line straight downstage of each head (x = -2, +2).
-    QVERIFY2(minX < -2.3f && maxX > 2.3f, qPrintable(QString("walked %1..%2").arg(minX).arg(maxX)));
-    const double edge = AimSolver::kPanEdgeMarginDeg;
-    const double dmxStep8 = 540.0 / 255.0;
-    QVERIFY2(step16 < 3.0, qPrintable(QString("16-bit head: a %1 degree step in one frame (pan %2..%3)")
-                                      .arg(step16).arg(lo16).arg(hi16)));
-    QVERIFY2(step8 < 2.0 * dmxStep8 + 0.01,
-             qPrintable(QString("8-bit head: a %1 degree step in one frame (pan %2..%3)")
-                        .arg(step8).arg(lo8).arg(hi8)));
-    QVERIFY2(lo16 >= edge && hi16 <= 540.0 - edge,
-             qPrintable(QString("16-bit head's pan ran %1..%2").arg(lo16).arg(hi16)));
-    QVERIFY2(lo8 >= edge - dmxStep8 && hi8 <= 540.0 - edge + dmxStep8,
-             qPrintable(QString("8-bit head's pan ran %1..%2").arg(lo8).arg(hi8)));
-}
-
 void FollowSpotFeel_Test::report()
 {
     if (qEnvironmentVariableIsEmpty("QLC_FSPOT_REPORT"))
