@@ -1073,8 +1073,10 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
     }
 
     /* Game controllers that stopped answering while the HID plugin opened
-       them (a pad switching USB mode, held "busy" by the system): skipped,
-       tried again once the system lets go; the show runs on meanwhile. */
+       them (a pad switching USB mode, held "busy" by the system): skipped;
+       the show runs on meanwhile. The call that hangs may never return
+       (dink, 0.4.10: it held the USB hub until a restart), so a replug is
+       not promised to fix it: the restart is what frees the USB. */
     {
         QLCIOPlugin *hid = doc->ioPluginCache() != NULL
                          ? doc->ioPluginCache()->plugin(QStringLiteral("HID")) : NULL;
@@ -1085,9 +1087,19 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
             status->setStatus("controllers.notAnswering", ShowStatus::Warning,
                 QCoreApplication::translate("AppUtil", "%n controller(s) not answering",
                                             "", items.count()),
-                QCoreApplication::translate("AppUtil", "Skipped and tried again by itself; the "
-                                            "show keeps running. Unplug it, wait a few seconds "
-                                            "and plug it back in."),
+#if defined(Q_OS_MACOS)
+                QCoreApplication::translate("AppUtil", "Skipped: the show keeps running, and the "
+                                            "other controllers and the emergency stop still work. "
+                                            "The system is holding the controller and may not let "
+                                            "go: after the show, restart this Mac to free its USB. "
+                                            "Until then qlcconsole may not finish quitting."),
+#else
+                QCoreApplication::translate("AppUtil", "Skipped: the show keeps running, and the "
+                                            "other controllers and the emergency stop still work. "
+                                            "The system is holding the controller and may not let "
+                                            "go: after the show, restart this computer to free its "
+                                            "USB. Until then qlcconsole may not finish quitting."),
+#endif
                 items);
     }
 

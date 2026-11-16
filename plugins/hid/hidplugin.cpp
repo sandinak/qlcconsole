@@ -636,7 +636,11 @@ HIDPlugin::~HIDPlugin()
 {
     /* Threads still in a call to the system are left to it: they see the
        plugin gone and delete what they made themselves. Nothing here waits
-       for them. */
+       for them -- but one that never returns may keep the process from
+       finishing its exit until the computer restarts. Said in the log. */
+    if (openingCount() > 0)
+        qWarning() << Q_FUNC_INFO << openingCount() << "controller open(s) still stuck in the system:"
+                   << "the app may not finish quitting until this computer restarts";
     if (m_shared)
     {
         QMutexLocker locker(&m_shared->lock);
@@ -1213,10 +1217,12 @@ void HIDPlugin::applyScan(const QList<HIDFound> &found, const QSet<QString> &sta
     }
 
     /* A stuck open whose device left the list, or is listed as another
-       system entry (replugged into the same port: the same path): given
-       up, so the pad that is there now can be opened. Its thread is left
-       to the system -- one such per path: a second one stuck there keeps
-       the path until one of them returns. */
+       system entry at the same path: given up, so a device there now can
+       be opened if the system ever offers it again. That is not a fix for
+       the stuck one: its call may never return (dink, 0.4.10: macOS kept
+       the dead device, and the USB hub, until a restart). Its thread is
+       left to the system -- one such per path: a second one stuck there
+       keeps the path until one of them returns. */
     QHash<QString, quint64> instances;
     for (const HIDFound &f : std::as_const(unique))
         instances.insert(f.path, f.instance);

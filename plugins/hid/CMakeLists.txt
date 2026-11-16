@@ -55,6 +55,13 @@ if(UNIX AND NOT APPLE)
     target_include_directories(${module_name} PRIVATE
         linux
     )
+
+    # linux/hidapi.cpp enumerates through libudev. Unlinked, the plugin
+    # only worked as long as the app happened to load libudev first;
+    # hidrescan_test, the first program to link the plugin, failed to link.
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
+    target_link_libraries(${module_name} PRIVATE PkgConfig::LIBUDEV)
 endif()
 
 if(APPLE)
