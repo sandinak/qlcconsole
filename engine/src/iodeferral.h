@@ -47,6 +47,12 @@
  * (its line is not ready) until they have run.
  *
  * Per thread: the universe threads never see the GUI thread's queue.
+ *
+ * Not covered: frame writes (QLCIOPlugin::writeUniverse() from a universe's
+ * thread under its frame lock, and from Blackout/Blind under the universe
+ * claim) -- a device that hangs while sending still stalls them. And the
+ * queued calls run on the thread that queued them (the GUI's): one that
+ * never returns still holds that thread.
  */
 class QLC_ENGINE_EXPORT IODeferral
 {

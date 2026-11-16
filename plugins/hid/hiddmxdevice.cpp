@@ -50,7 +50,9 @@ HIDDMXDevice::~HIDDMXDevice()
     closeOutput();
     /* Never closed under a reader still in a read (the bounded stop above
        may have left it there): it ends within HID_DMX_READ_TIMEOUT of the
-       device answering. Deleting is not a patch change: no lock is held. */
+       device answering. Unbounded: HIDPlugin::removeDevice() deletes the
+       device on the calling thread (the GUI's, no universe lock held), and
+       a reader that never returns holds it there. */
     if (isRunning())
         wait();
     if (m_handle != nullptr)

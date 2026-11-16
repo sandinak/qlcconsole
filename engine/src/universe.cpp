@@ -1769,8 +1769,9 @@ bool Universe::setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index,
        and sendCurrent()/sendHeld() never walk the list, nor dump to a patch,
        while it changes; a line closed sends its closing frame first (R9-1:
        OutputPatch::closeLine()). The signals after, with the lock let go.
-       The device calls after it too (IODeferral): a device that does not
-       answer must never hold this universe's thread, nor the tick. */
+       The opens and closes after it too (IODeferral): a device that does
+       not answer while opened or closed holds neither this universe's
+       thread nor the tick (its frame writes still run under the lock). */
     IODeferral io;
     bool result = false;
     enum { NoChange, Changed, CountChanged } change = NoChange;

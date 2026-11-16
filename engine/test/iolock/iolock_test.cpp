@@ -182,6 +182,15 @@ void IOLock_Test::cleanup()
     m_plugin = nullptr;
 }
 
+int IOLock_Test::sentBetween(quint32 universe, quint32 line, qint64 from, qint64 to) const
+{
+    int n = 0;
+    for (qint64 t : m_plugin->writes(universe, line))
+        if (t > from && t < to)
+            n++;
+    return n;
+}
+
 void IOLock_Test::start()
 {
     // As the app runs: the universe threads, the timer.
@@ -233,8 +242,20 @@ void IOLock_Test::theDmxTicksWhileAStuckOutputIsPatchedReconnectedAndRemoved()
     m_plugin->m_outputStuck = true;
     const qint64 from = s_clock.elapsed();
     QVERIFY(iom->setOutputPatch(1, m_plugin->name(), QString(), 0));            // open
+    const qint64 opened = s_clock.elapsed();
     QVERIFY(iom->outputPatch(1)->isPatched());
+    /* Not ready while its open is in flight: universe 2 sent nothing to the
+       line (its thread ran, the tick went on), then sends once it is open. */
+    QVERIFY2(sentBetween(1, 0, from, opened - 50) == 0,
+             qPrintable(QString("%1 frame(s) sent while the line was opening").arg(sentBetween(1, 0, from, opened - 50))));
+    QTRY_VERIFY_WITH_TIMEOUT(sentBetween(1, 0, opened, s_clock.elapsed()) > 0, 1000);
+    const qint64 reconnecting = s_clock.elapsed();
     deviceListChanged();                                                        // close + open
+    const qint64 reconnected = s_clock.elapsed();
+    QVERIFY2(sentBetween(1, 0, reconnecting + 50, reconnected - 50) == 0,
+             qPrintable(QString("%1 frame(s) sent while the line was reconnecting")
+                        .arg(sentBetween(1, 0, reconnecting + 50, reconnected - 50))));
+    QTRY_VERIFY_WITH_TIMEOUT(sentBetween(1, 0, reconnected, s_clock.elapsed()) > 0, 1000);
     QVERIFY(iom->setOutputPatch(2, m_plugin->name(), QString(), 0, true));      // feedback open
     QVERIFY(iom->setOutputPatch(1, KOutputNone, QString(), QLCIOPlugin::invalidLine()));       // close
     QVERIFY(iom->setOutputPatch(2, KOutputNone, QString(), QLCIOPlugin::invalidLine(), true)); // close

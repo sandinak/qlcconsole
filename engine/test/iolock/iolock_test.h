@@ -48,6 +48,8 @@ private:
     void start();
     /** The plugin's configurationChanged(), as a device coming or going says it */
     void deviceListChanged();
+    /** Frames the plugin got for @p universe on @p line in (from, to), ms */
+    int sentBetween(quint32 universe, quint32 line, qint64 from, qint64 to) const;
 
     Doc *m_doc = nullptr;
     StuckPlugin *m_plugin = nullptr;

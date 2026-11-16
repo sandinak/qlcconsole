@@ -192,6 +192,8 @@ bool InputOutputMap::setBlackout(bool blackout)
 {
     // GUI entry (blackout button / menu): the caller does NOT hold
     // m_universeMutex, so take it here to serialise with the MasterTimer tick.
+    // The frames Blackout sends (sendCurrent/sendHeld -> writeUniverse) are
+    // written here, under the lock: IODeferral defers opens and closes only.
     bool changed;
     {
         IODeferral io;
@@ -239,7 +241,9 @@ bool InputOutputMap::setOutputInhibited(bool inhibit)
     // GUI entry only: take m_universeMutex to serialise the universe iteration
     // and the dumpOutput() calls with the MasterTimer tick (which holds the same
     // lock via claimUniverses), so we never touch a universe's output or the
-    // array concurrently with the tick / a structural change.
+    // array concurrently with the tick / a structural change. The frames it
+    // sends are written under the lock (IODeferral defers opens and closes,
+    // not frame writes).
     {
         IODeferral io;
         QMutexLocker locker(&m_universeMutex);
@@ -729,9 +733,10 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
 {
     /* The bookkeeping under the universe claim, the device calls (the old
        line's closing frame and close, the new one's open and target) after
-       it: a DMX interface that does not answer (a USB hub wedged by a
-       device re-enumerating) must never stop every universe's output. The
-       patch sends nothing until its calls have run. */
+       it: a DMX interface that does not answer while it is opened or
+       closed (a USB hub wedged by a device re-enumerating) never stops the
+       other universes' output. The patch sends nothing until its calls
+       have run. (A frame write that hangs is not covered: iodeferral.h.) */
     IODeferral io;
     const bool done = patchOutput(universe, pluginName, outputUID, output, isFeedback, index, params);
     return io.finish() && done;
@@ -2347,8 +2352,9 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
        with Show-only fixtures has none on a hardware line (N1), and nothing
        else opens onto the interface one was held off (F4). The bookkeeping
        under the claim, every close and open after it (IODeferral): a
-       device that does not answer -- a reader stuck in a call, a DMX
-       interface on a wedged USB hub -- never stops the DMX output. */
+       device that does not answer while closed or opened -- a reader
+       stuck in a call, a DMX interface on a wedged USB hub -- never stops
+       the other universes' DMX output. */
     IODeferral io;
     QMutexLocker locker(&m_universeMutex);
     bool success = true;

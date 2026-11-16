@@ -2891,8 +2891,8 @@ void ConnectionsTree_Test::r21r_editorLineChangeSendsNothingToTheDefault()
     /* Since 0.4.12 the line is opened and aimed after the universe claim
        (IODeferral) and the patch sends nothing until it has been: a frame
        in the gap goes nowhere -- never to broadcast. */
-    QVERIFY2(between.contains("default/2") == false,
-             qPrintable("the Connection editor's line change sent a frame to broadcast: " + between.join(", ")));
+    QVERIFY2(between.isEmpty(),
+             qPrintable("the Connection editor's line change sent a frame in the gap: " + between.join(", ")));
 }
 
 /* Review of c54477406 (independent), V5b: as V5, a universe with a
