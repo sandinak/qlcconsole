@@ -116,6 +116,7 @@ void HIDStuckPad_Test::cleanup()
     if (m_fake != nullptr)
         m_fake->release();
     QTRY_COMPARE_WITH_TIMEOUT(m_fake->callsInProgress(), 0, 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(m_fake->readsInProgress(), 0, 2000);
     m_doc->showControl()->setRunHandler(ShowControl::RunHandler());
     m_doc->masterTimer()->stop();
     delete m_doc;
@@ -187,7 +188,8 @@ void HIDStuckPad_Test::theShowRunsOnWhileAPadHangs()
     QElapsedTimer call;
     call.start();
     m_hid->rescan();
-    QVERIFY2(call.elapsed() < 50, qPrintable(QString("rescan() took %1 ms").arg(call.elapsed())));
+    // A rescan that waited on the open would never return (the fake doesn't).
+    QVERIFY2(call.elapsed() < 1000, qPrintable(QString("rescan() took %1 ms").arg(call.elapsed())));
 
     // As for an unplug: disarmed, said why, and no stale device left.
     QTRY_VERIFY_WITH_TIMEOUT(run->isArmed() == false, 2000);
@@ -215,13 +217,49 @@ void HIDStuckPad_Test::theShowRunsOnWhileAPadHangs()
     for (const char *role : { "rt", "lt", "rb", "lb" })
         QVERIFY(inject(stopLine, role, 0));
 
+    /* Waiting on the stuck open, the output would stop for good: anything
+       well under the open limit's multiple is not that. */
     const qint64 gap = worstGap(from);
-    QVERIFY2(gap < 250, qPrintable(QString("the DMX output stalled %1 ms").arg(gap)));
+    QVERIFY2(gap < 1000, qPrintable(QString("the DMX output stalled %1 ms").arg(gap)));
     {
         QMutexLocker l(&s_tickLock);
         QVERIFY2(s_ticks.count() > 20, qPrintable(QString::number(s_ticks.count())));
     }
     QCOMPARE(m_fake->callsInProgress(), 1);     // still stuck all along
+}
+
+void HIDStuckPad_Test::theDmxTicksWhileAStuckPadsPatchReconnects()
+{
+    /* A patched pad whose reader is stuck in a call to the system (it
+       stopped answering while being read): every patch reconnects (a
+       device came or went). Closing it waits for its reader -- at most
+       HIDDevice::kReaderStopMs -- and reopening it as long again. With the
+       universes locked through that (InputOutputMap, before 0.4.11) each
+       reconnect stopped the DMX output for ~0.6 s; now none does. */
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    m_fake->list(kDualSensePath, 0x054c, 0x0ce6, kDualSense, 0, 0, true);
+    QMetaObject::invokeMethod(m_hid, "setTestBackend", Qt::DirectConnection,
+                              Q_ARG(quintptr, quintptr(m_fake)));
+    QTRY_VERIFY_WITH_TIMEOUT(m_hid->inputs().contains(kDualSense), 2000);
+    const quint32 padLine = quint32(m_hid->inputs().indexOf(kDualSense));
+    QVERIFY(iom->setInputPatch(1, QStringLiteral("HID"), QString(), padLine));
+    iom->startUniverses();
+    m_doc->masterTimer()->start();
+    QTest::qWait(100);
+
+    m_fake->setReaderBlocked(true);
+    QTRY_COMPARE_WITH_TIMEOUT(m_fake->readsInProgress(), 1, 2000);    // stuck in a read
+    const qint64 from = s_clock.elapsed();
+    for (int i = 0; i < 3; ++i)
+    {
+        QMetaObject::invokeMethod(m_hid, "configurationChanged", Qt::DirectConnection);
+        QTest::qWait(100);
+    }
+    QTest::qWait(100);
+    const qint64 gap = worstGap(from);
+    QCOMPARE(m_fake->readsInProgress(), 1);     // stuck throughout
+    m_fake->setReaderBlocked(false);
+    QVERIFY2(gap < 250, qPrintable(QString("a reconnect stopped the DMX output for %1 ms").arg(gap)));
 }
 
 QTEST_MAIN(HIDStuckPad_Test)

@@ -27,7 +27,9 @@
 #include <QHash>
 #include <QElapsedTimer>
 
+#include <functional>
 #include <memory>
+#include <QPair>
 
 #include "qlcioplugin.h"
 #include "stickfilter.h"
@@ -207,6 +209,9 @@ public:
     /** How long an open may take before it is named and skipped:
      *  QLC_HID_OPEN_LIMIT_MS, else 2 s. */
     int openLimitMs() const { return m_openLimitMs; }
+    /** HID worker threads still running, every plugin's (scan, open,
+     *  dispose): a test waits for 0 before it ends. */
+    static int workerThreads();
 
     /** A value from the virtual pad (QLC_HID_VIRTUAL_PAD) on @p input, sent
      *  on as the pad's own reading would be. False if it is not one. */
@@ -257,9 +262,15 @@ private slots:
 private slots:
     /** Take what the scan thread and the open threads have finished. */
     void drainResults();
+    /** Every few seconds: each device's system entry still there? On the
+     *  scan thread; one gone rescans. */
+    void checkStale();
 
 private:
     HIDBackend *backend() const;
+    QList<QPair<QString, std::function<bool()>>> staleProbes() const;
+    /** The scan thread, made the first time. m_shared's lock held. */
+    void startScanner();
     /** Wait at most @p ms for the scan and its opens (startup only: a
      *  show's patches find their pads, a stuck one waits no longer). */
     void settleScan(int ms);
@@ -280,11 +291,15 @@ private:
         quint64 job = 0;
         bool replacing = false;     ///< a device at this path is stale
         bool stuck = false;         ///< past the limit: named, skipped
+        quint64 instance = 0;       ///< the system entry it opens (HIDFound)
         QString name;               ///< for a person
     };
     /** One open at a time per path: a stuck one blocks only its own. */
     QHash<QString, Opening> m_opening;
     quint64 m_nextJob = 0;
+    /** Stuck opens given up on (their pad left the list or came back as
+     *  another), by path: at most one each, its result dropped. */
+    QHash<QString, quint64> m_abandoned;
     /** The paths the latest scan listed. */
     QSet<QString> m_listed;
     QTimer *m_scanWatch = nullptr;

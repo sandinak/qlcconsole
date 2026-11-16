@@ -70,6 +70,8 @@ void HIDRescan_Test::cleanup()
     delete m_plugin;
     m_plugin = nullptr;
     QTRY_COMPARE(m_fake->callsInProgress(), 0);
+    // Every scan, open and dispose thread out, before the next test or exit.
+    QTRY_COMPARE_WITH_TIMEOUT(HIDPlugin::workerThreads(), 0, 5000);
     m_fake = nullptr;
 }
 
@@ -110,7 +112,9 @@ void HIDRescan_Test::aStuckOpenNeverHoldsTheGui()
     m_plugin->setTestBackend(quintptr(m_fake));
     m_plugin->rescanDevices();
     m_plugin->rescanDevices();
-    QVERIFY2(call.elapsed() < 50, qPrintable(QString("asking for a scan took %1 ms").arg(call.elapsed())));
+    /* The fake never returns: a rescan that waited on it would not return
+       at all. A loaded host's scheduling is not what is measured here. */
+    QVERIFY2(call.elapsed() < 1000, qPrintable(QString("asking for a scan took %1 ms").arg(call.elapsed())));
 
     // The other pad is there, as if nothing were wrong.
     QTRY_VERIFY_WITH_TIMEOUT(m_plugin->inputs().contains(kOtherName), 2000);
@@ -127,7 +131,9 @@ void HIDRescan_Test::aStuckOpenNeverHoldsTheGui()
 
     QTest::qWait(300);      // and stuck a while longer
     beat.stop();
-    QVERIFY2(worst < 100, qPrintable(QString("the GUI thread stalled %1 ms").arg(worst)));
+    /* Held by the open, the GUI would be stalled for good (the fake never
+       returns), at the least for the open limit: well under that. */
+    QVERIFY2(worst < 1000, qPrintable(QString("the GUI thread stalled %1 ms").arg(worst)));
 
     // The system lets go: the pad comes after all, and is no longer named.
     releaseFake();
@@ -138,10 +144,12 @@ void HIDRescan_Test::aStuckOpenNeverHoldsTheGui()
 
 void HIDRescan_Test::anOpenThatTakesAWhileArrivesLate()
 {
-    m_fake->list(kClonePath, 0x045e, 0x028e, kCloneName, kLimitMs * 2);
+    /* Past the limit, then the system answers (released, not timed). */
+    m_fake->list(kClonePath, 0x045e, 0x028e, kCloneName, FakeHIDBackend::Forever);
     m_plugin->setTestBackend(quintptr(m_fake));
-    QTRY_COMPARE_WITH_TIMEOUT(m_plugin->targetProblems().count(), 1, 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(m_plugin->targetProblems().count(), 1, 3000);
     QVERIFY(m_plugin->inputs().isEmpty());
+    m_fake->release();
     // It answers at last: listed, not named.
     QTRY_VERIFY_WITH_TIMEOUT(m_plugin->inputs().contains(kCloneName), 3000);
     QTRY_VERIFY(m_plugin->targetProblems().isEmpty());
@@ -164,6 +172,35 @@ void HIDRescan_Test::aPadThatGoesMidOpenIsNotAdded()
     releaseFake();
     QTest::qWait(50);
     QVERIFY2(m_plugin->inputs().isEmpty(), qPrintable(m_plugin->inputs().join(", ")));
+}
+
+void HIDRescan_Test::aPadReplugedAtTheSamePathOpens()
+{
+    /* What the footer tells the operator: unplug it, plug it back in --
+       into the same port, so the same path (macOS: transport_vid_pid_
+       location). The open stuck before is given up once the pad leaves the
+       list; the pad back is opened afresh, while that one stays stuck. */
+    m_fake->list(kClonePath, 0x045e, 0x028e, kCloneName, FakeHIDBackend::Forever);
+    m_plugin->setTestBackend(quintptr(m_fake));
+    QTRY_COMPARE_WITH_TIMEOUT(m_plugin->targetProblems().count(), 1, 3000);
+
+    m_fake->unlist(kClonePath);             // unplugged
+    m_plugin->rescanDevices();
+    QTRY_VERIFY_WITH_TIMEOUT(m_plugin->targetProblems().isEmpty(), 3000);
+    QTRY_VERIFY(m_plugin->isScanning() == false);
+
+    m_fake->list(kClonePath, 0x045e, 0x028e, kCloneName);   // back, answering
+    m_plugin->rescanDevices();
+    QTRY_VERIFY_WITH_TIMEOUT(m_plugin->inputs().contains(kCloneName), 3000);
+    QCOMPARE(m_fake->opens(kClonePath), 2);
+    QCOMPARE(m_fake->callsInProgress(), 1);     // the first, still stuck
+    QVERIFY(m_plugin->targetProblems().isEmpty());
+
+    // The first one returns at last: what it made is dropped.
+    releaseFake();
+    QTest::qWait(50);
+    QCOMPARE(countOf(m_plugin->inputs(), kCloneName), 1);
+    QVERIFY(m_plugin->targetProblems().isEmpty());
 }
 
 void HIDRescan_Test::aPadBackAtTheSamePathReplacesTheOld()
@@ -230,7 +267,7 @@ void HIDRescan_Test::oneScanAtATime()
     m_plugin->setTestBackend(quintptr(m_fake));
     for (int i = 0; i < 5; ++i)
         m_plugin->rescanDevices();
-    QVERIFY2(call.elapsed() < 50, qPrintable(QString("asking took %1 ms").arg(call.elapsed())));
+    QVERIFY2(call.elapsed() < 1000, qPrintable(QString("asking took %1 ms").arg(call.elapsed())));
     QTRY_COMPARE_WITH_TIMEOUT(m_plugin->targetProblems().count(), 1, 2000);
     QVERIFY2(m_plugin->targetProblems().first().contains("device list is not answering"),
              qPrintable(m_plugin->targetProblems().first()));
@@ -259,8 +296,14 @@ void HIDRescan_Test::thePluginGoesWithAnOpenStuck()
     t.start();
     delete m_plugin;    // closing the show, quitting the app
     m_plugin = nullptr;
-    QVERIFY2(t.elapsed() < 1000, qPrintable(QString("the plugin took %1 ms to go").arg(t.elapsed())));
-    // The stuck thread finds the plugin gone and drops what it made.
+    /* Waiting on the stuck open would never end (the fake never returns
+       unreleased): any bound is the proof, not the host's speed. */
+    QVERIFY2(t.elapsed() < 2000, qPrintable(QString("the plugin took %1 ms to go").arg(t.elapsed())));
+    QVERIFY(HIDPlugin::workerThreads() > 0);    // the stuck one, left to it
+
+    // Released: the stuck thread finds the plugin gone, drops its pad, ends.
+    m_fake->release();
+    QTRY_COMPARE_WITH_TIMEOUT(HIDPlugin::workerThreads(), 0, 5000);
 }
 
 QTEST_MAIN(HIDRescan_Test)

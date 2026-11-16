@@ -61,11 +61,6 @@ protected:
     int buttonCount() const override { return (int)m_buttonsNumber; }
 
 protected:
-    /** How long closeInput() waits for the reader (each reads at least
-     *  every 100 ms): past it, the reader is in a call that is not
-     *  answering, and stops by itself once it returns. */
-    static constexpr int kReaderStopMs = 300;
-
     struct hid_device_info *m_dev_info;
     unsigned char m_axesNumber;
     unsigned char m_buttonsNumber;

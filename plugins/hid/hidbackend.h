@@ -43,6 +43,10 @@ struct HIDFound
     /** The system entry it is, when the listing says (0: it does not):
      *  the same path with another one is a device that came back. */
     quint64 instance = 0;
+    /** A test's only: a virtual pad made for it runs a reader thread that
+     *  calls this on every read, standing for a call to the system (one
+     *  that blocks is a pad that stopped answering while it is read). */
+    std::function<void()> testRead;
 };
 
 /**

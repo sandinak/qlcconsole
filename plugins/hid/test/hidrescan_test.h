@@ -38,6 +38,7 @@ private slots:
     void aStuckOpenNeverHoldsTheGui();
     void anOpenThatTakesAWhileArrivesLate();
     void aPadThatGoesMidOpenIsNotAdded();
+    void aPadReplugedAtTheSamePathOpens();
     void aPadBackAtTheSamePathReplacesTheOld();
     void aPadListedTwiceIsOneDevice();
     void oneOpenPerPathHoweverOftenItRescans();

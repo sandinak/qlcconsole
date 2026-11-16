@@ -22,7 +22,6 @@
 #include <QString>
 #include <QDebug>
 #include <QFile>
-#include <QDeadlineTimer>
 
 #include "hidjsdevice.h"
 #include "hidplugin.h"
@@ -78,23 +77,15 @@ HIDJsDevice::~HIDJsDevice()
 bool HIDJsDevice::openInput()
 {
     qDebug() << Q_FUNC_INFO;
-    /* A reader closeInput() left still in a call to the system: it reads
-       on once that returns, rather than a second one started beside it. */
-    if (isRunning())
-        wait(QDeadlineTimer(kReaderStopMs));
-    m_running = true;
-    if (isRunning() == false)
-        start();
-
+    startReading();
     return true;
 }
 
 void HIDJsDevice::closeInput()
 {
-    /* Bounded: a patch is closed with the universes locked
-       (InputOutputMap), and a controller that stopped answering must not
-       hold the DMX output. A reader still in a call stops by itself. */
-    if (stopReading(kReaderStopMs) == false)
+    /* Bounded (kReaderStopMs): a reader still in a call stops by itself,
+       its file closed then by the destructor or the next close. */
+    if (stopReadingBounded() == false)
     {
         qWarning() << Q_FUNC_INFO << m_name << "is still reading: left to stop by itself";
         return;

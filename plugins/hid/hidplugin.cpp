@@ -23,6 +23,7 @@
 #include <QMutex>
 #include <QSettings>
 #include <QWaitCondition>
+#include <atomic>
 #include <cstring>
 #include <memory>
 #include <optional>
@@ -83,6 +84,10 @@ struct HIDScanShared
     bool scannerStarted = false;
     bool scanPending = false;
     bool scanBusy = false;
+    /* The stale check between scans: the devices' staleProbe()s alone,
+       run here so the GUI thread makes no call to the system for it. */
+    bool probePending = false;
+    bool staleSeen = false;
     HIDBackend *scanBackend = nullptr;
     QList<QPair<QString, std::function<bool()>>> staleProbes;
     QSet<QString> knownPaths;
@@ -127,13 +132,27 @@ struct HIDScanShared
 
 namespace
 {
+/** Every HID worker thread still running (scan, open, dispose), for
+ *  HIDPlugin::workerThreads(). */
+std::atomic<int> s_workers { 0 };
+
+/** Counts a worker thread out as it ends, however it ends. */
+struct WorkerCount
+{
+    ~WorkerCount() { s_workers--; }
+};
+
 /** A device that is out of the plugin's list: deleted off the GUI thread,
  *  as stopping its reader and closing it are calls to the system too. */
 void disposeOffThread(HIDDevice *dev)
 {
     if (dev == nullptr)
         return;
-    std::thread([dev]() { delete dev; }).detach();
+    s_workers++;
+    std::thread([dev]() {
+        WorkerCount counted;
+        delete dev;
+    }).detach();
 }
 
 HIDDevice *makeVirtualPad(const HIDFound &found)
@@ -142,19 +161,45 @@ HIDDevice *makeVirtualPad(const HIDFound &found)
                          ? QStringLiteral("Virtual pad %1").arg(found.path) : found.product;
     HIDVirtualPad *pad = new HIDVirtualPad(nullptr, 0, name, found.vendorId, found.productId);
     pad->setPath(found.path);
+    if (found.testRead)
+        pad->setReadHook(found.testRead);
     return pad;
 }
 
 /** The scan thread: one scan at a time, as asked, until the plugin goes. */
 void scanLoop(std::shared_ptr<HIDScanShared> sh)
 {
+    WorkerCount counted;
     QMutexLocker locker(&sh->lock);
     for (;;)
     {
-        while (sh->scanPending == false && sh->quit == false)
+        while (sh->scanPending == false && sh->probePending == false && sh->quit == false)
             sh->changed.wait(&sh->lock);
         if (sh->quit)
+        {
+            locker.unlock();
+            sh.reset();     // before it counts itself out
             return;
+        }
+        if (sh->scanPending == false)
+        {
+            /* The stale check alone: is each device's system entry still
+               there? One gone asks the plugin for a scan. */
+            sh->probePending = false;
+            const auto probes = sh->staleProbes;
+            locker.unlock();
+            bool gone = false;
+            for (const auto &probe : probes)
+                gone = gone || (probe.second && probe.second());
+            locker.relock();
+            if (gone)
+            {
+                sh->staleSeen = true;
+                sh->ping();
+            }
+            continue;
+        }
+        sh->probePending = false;   // the scan checks them too
         sh->scanPending = false;
         sh->scanBusy = true;
         HIDBackend *backend = sh->scanBackend;
@@ -197,6 +242,7 @@ void scanLoop(std::shared_ptr<HIDScanShared> sh)
 /** An open thread: one device, as long as the system takes. */
 void openJob(std::shared_ptr<HIDScanShared> sh, HIDBackend *backend, HIDFound found, quint64 job)
 {
+    WorkerCount counted;
     HIDDevice *dev = backend->open(found, makeVirtualPad);
     if (dev != nullptr)
         dev->setInstance(found.instance);
@@ -213,6 +259,7 @@ void openJob(std::shared_ptr<HIDScanShared> sh, HIDBackend *backend, HIDFound fo
     sh->ping();
     locker.unlock();
     delete dev;     // the plugin has gone: nobody to give it to
+    sh.reset();
 }
 }
 
@@ -301,17 +348,7 @@ void HIDPlugin::init()
        controller that went is never left patched and silent. */
     m_staleTimer = new QTimer(this);
     m_staleTimer->setInterval(3000);
-    connect(m_staleTimer, &QTimer::timeout, this, [this]() {
-        for (HIDDevice *dev : std::as_const(m_devices))
-        {
-            if (dev->isStale())
-            {
-                qDebug() << Q_FUNC_INFO << dev->name() << "is gone: rescanning";
-                scheduleRescan(0);
-                break;
-            }
-        }
-    });
+    connect(m_staleTimer, &QTimer::timeout, this, &HIDPlugin::checkStale);
     m_staleTimer->start();
 
 #if defined(Q_OS_LINUX)
@@ -974,34 +1011,69 @@ void HIDPlugin::rescanDevices()
     if (be == nullptr)
         return;
 
-    /* What the scan thread checks without touching a device: whether each
-       one's system entry is still there (staleProbe()). */
-    QList<QPair<QString, std::function<bool()>>> probes;
     QSet<QString> known;
     for (HIDDevice *dev : std::as_const(m_devices))
-    {
         known.insert(dev->path());
-        if (std::function<bool()> probe = dev->staleProbe())
-            probes << qMakePair(dev->path(), probe);
-    }
 
     QMutexLocker locker(&m_shared->lock);
     /* Asked while one runs: that one is followed by this one, never a
        second beside it. */
     m_shared->scanPending = true;
     m_shared->scanBackend = be;
-    m_shared->staleProbes = probes;
+    m_shared->staleProbes = staleProbes();
     m_shared->knownPaths = known;
-    if (m_shared->scannerStarted == false)
-    {
-        m_shared->scannerStarted = true;
-        std::thread(scanLoop, m_shared).detach();
-    }
+    startScanner();
     m_shared->changed.wakeAll();
     locker.unlock();
 
     if (m_scanWatch != nullptr && m_scanWatch->isActive() == false)
         m_scanWatch->start(m_openLimitMs);
+}
+
+QList<QPair<QString, std::function<bool()>>> HIDPlugin::staleProbes() const
+{
+    /* What the scan thread checks without touching a device: whether each
+       one's system entry is still there (staleProbe()). */
+    QList<QPair<QString, std::function<bool()>>> probes;
+    for (HIDDevice *dev : std::as_const(m_devices))
+        if (std::function<bool()> probe = dev->staleProbe())
+            probes << qMakePair(dev->path(), probe);
+    return probes;
+}
+
+void HIDPlugin::startScanner()
+{
+    if (m_shared->scannerStarted)
+        return;
+    m_shared->scannerStarted = true;
+    s_workers++;
+    std::thread(scanLoop, m_shared).detach();
+}
+
+void HIDPlugin::checkStale()
+{
+    /* Whatever a notification missed (a Mac asleep through it, App Nap):
+       a device whose system entry is gone rescans, so a controller that
+       went is never left patched and silent. Asked of the scan thread --
+       the GUI thread makes no call to the system -- and not while a scan
+       (which checks them too) is asked for or under way. */
+    if (!m_shared)
+        return;
+    const auto probes = staleProbes();
+    if (probes.isEmpty())
+        return;
+    QMutexLocker locker(&m_shared->lock);
+    if (m_shared->scanPending || m_shared->scanBusy || m_shared->probePending)
+        return;
+    m_shared->probePending = true;
+    m_shared->staleProbes = probes;
+    startScanner();
+    m_shared->changed.wakeAll();
+}
+
+int HIDPlugin::workerThreads()
+{
+    return s_workers.load();
 }
 
 void HIDPlugin::settleScan(int ms)
@@ -1029,10 +1101,18 @@ void HIDPlugin::drainResults()
         return;
     std::optional<HIDScanShared::Scan> scan;
     QList<HIDScanShared::Opened> opened;
+    bool staleSeen = false;
     {
         QMutexLocker locker(&m_shared->lock);
         scan.swap(m_shared->scan);
         opened.swap(m_shared->opened);
+        staleSeen = m_shared->staleSeen;
+        m_shared->staleSeen = false;
+    }
+    if (staleSeen)
+    {
+        qDebug() << Q_FUNC_INFO << "a device's system entry is gone: rescanning";
+        scheduleRescan(0);
     }
     if (scan)
         applyScan(scan->found, scan->stale, scan->dmx);
@@ -1116,6 +1196,30 @@ void HIDPlugin::applyScan(const QList<HIDFound> &found, const QSet<QString> &sta
         changed = true;
     }
 
+    /* A stuck open whose device left the list, or is listed as another
+       system entry (replugged into the same port: the same path): given
+       up, so the pad that is there now can be opened. Its thread is left
+       to the system -- one such per path: a second one stuck there keeps
+       the path until one of them returns. */
+    QHash<QString, quint64> instances;
+    for (const HIDFound &f : std::as_const(unique))
+        instances.insert(f.path, f.instance);
+    for (auto it = m_opening.begin(); it != m_opening.end(); )
+    {
+        const bool gone = listed.contains(it.key()) == false;
+        const quint64 now = instances.value(it.key());
+        const bool another = !gone && now != 0 && now != it->instance;
+        if (it->stuck && (gone || another) && m_abandoned.contains(it.key()) == false)
+        {
+            qWarning() << Q_FUNC_INFO << it->name << (gone ? "left the list" : "is another device now")
+                       << "while its open is stuck: given up";
+            m_abandoned.insert(it.key(), it->job);
+            it = m_opening.erase(it);
+        }
+        else
+            ++it;
+    }
+
     /* Joysticks: a new one, or one that came back at the same path (the
        old one reads nothing any more), is opened on a thread of its own. */
     for (const HIDFound &f : std::as_const(unique))
@@ -1149,6 +1253,7 @@ void HIDPlugin::startOpen(const HIDFound &found, bool replacing)
     Opening o;
     o.job = ++m_nextJob;
     o.replacing = replacing;
+    o.instance = found.instance;
     QString name = found.product.trimmed();
     if (name.isEmpty())
         name = QStringLiteral("HID device %1:%2")
@@ -1161,6 +1266,7 @@ void HIDPlugin::startOpen(const HIDFound &found, bool replacing)
         QMutexLocker locker(&m_shared->lock);
         m_shared->opening++;
     }
+    s_workers++;
     std::thread(openJob, m_shared, be, found, o.job).detach();
     const QString path = found.path;
     const quint64 job = o.job;
@@ -1192,6 +1298,15 @@ void HIDPlugin::openTimedOut(const QString &path, quint64 job)
 
 void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
 {
+    /* One given up on (its pad left, or came back as another): whatever it
+       made is not wanted; the path may take a new stuck one again. */
+    auto given = m_abandoned.find(path);
+    if (given != m_abandoned.end() && given.value() == job)
+    {
+        m_abandoned.erase(given);
+        disposeOffThread(dev);
+        return;
+    }
     auto it = m_opening.find(path);
     if (it == m_opening.end() || it->job != job)
     {

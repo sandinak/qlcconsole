@@ -41,7 +41,7 @@ public:
     /** List a pad at @p path; its open takes @p openMs (Forever: until
      *  release()). A second call with the same path lists it twice. */
     void list(const QString &path, unsigned short vid, unsigned short pid, const QString &product,
-              int openMs = 0, quint64 instance = 0)
+              int openMs = 0, quint64 instance = 0, bool withReader = false)
     {
         QMutexLocker l(&m_lock);
         HIDFound f;
@@ -50,6 +50,11 @@ public:
         f.productId = pid;
         f.product = product;
         f.instance = instance;
+        /* A pad that is read by a thread of its own, as a real one is:
+           each read waits while setReaderBlocked(true) (a pad that stopped
+           answering while it is read). */
+        if (withReader)
+            f.testRead = [this]() { read(); };
         m_listed << f;
         m_openMs.insert(path, openMs);
     }
@@ -61,6 +66,17 @@ public:
             if (m_listed.at(i).path == path)
                 m_listed.removeAt(i);
     }
+    /** Every read of a pad listed withReader hangs, until false again or
+     *  release(). */
+    void setReaderBlocked(bool on)
+    {
+        QMutexLocker l(&m_lock);
+        m_readerBlocked = on;
+        m_wake.wakeAll();
+    }
+    /** Reads in progress (one hung, while blocked). */
+    int readsInProgress() const { QMutexLocker l(&m_lock); return m_inReads; }
+
     /** The listing itself hangs until release(). */
     void setEnumerateBlocks(bool on) { QMutexLocker l(&m_lock); m_enumerateBlocks = on; }
     /** Every blocked call returns (an open that was released makes its
@@ -117,12 +133,23 @@ public:
     }
 
 private:
+    void read()
+    {
+        QMutexLocker l(&m_lock);
+        m_inReads++;
+        while (m_readerBlocked && !m_released)
+            m_wake.wait(&m_lock);
+        m_inReads--;
+    }
+
     mutable QMutex m_lock;
     QWaitCondition m_wake;
     QList<HIDFound> m_listed;
     QHash<QString, int> m_openMs;
     QHash<QString, int> m_opens;
     bool m_enumerateBlocks = false;
+    bool m_readerBlocked = false;
+    int m_inReads = 0;
     bool m_released = false;
     bool m_openGives = true;
     int m_enumerations = 0;

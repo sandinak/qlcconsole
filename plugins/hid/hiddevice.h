@@ -160,6 +160,25 @@ public:
      *  call returns, and the device must not be deleted before. */
     bool stopReading(int ms);
 
+    /** How long closing an input waits for the reader (each looks at
+     *  m_running at least every 100 ms): past it, the reader is in a call
+     *  that is not answering, and stops by itself once it returns. A patch
+     *  is closed with the universes locked on some paths
+     *  (InputOutputMap), so a controller that stopped answering must
+     *  never hold the DMX output longer. */
+    static constexpr int kReaderStopMs = 300;
+
+protected:
+    /** Start the reader, or keep the one a bounded stop left still in a
+     *  call: it reads on, and if it was on its way out it is started again
+     *  as it finishes (never left stopped, never two). */
+    void startReading();
+    /** Stop the reader, waiting kReaderStopMs at most; false when it is
+     *  still in a call (it stops by itself). */
+    bool stopReadingBounded() { return stopReading(kReaderStopMs); }
+
+public:
+
     /** How the device is connected and read, for a person ("Bluetooth LE ·
      *  Xbox Series X|S Controller (045E:0B13) · GameController framework").
      *  Empty when there is nothing to say. */

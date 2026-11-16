@@ -42,6 +42,7 @@ private slots:
     void cleanup();
 
     void theShowRunsOnWhileAPadHangs();
+    void theDmxTicksWhileAStuckPadsPatchReconnects();
 
 private:
     /** @p role's channel on HID line @p line ("lb", "lt"...), or -1. */

@@ -41,3 +41,10 @@ ui/test/renderperf
 # 0.1 bar (100 ms) of the bar line; under a loaded gate (Werror leg, and
 # newaudio 2026-11-07) a 10 ms wait stretched past that and it read 0.13.
 engine/test/speedmasters
+
+# A controller that stops answering (0.4.11): each asserts that a timer --
+# the GUI thread's, the MasterTimer's -- keeps its time while a fake device
+# hangs. hidstuckpad holds a patch reconnect's DMX gap to 250 ms (the old
+# code's was ~600 ms); next to two other legs' tests a tick can be late.
+engine/test/hidstuckpad
+plugins/hid/test

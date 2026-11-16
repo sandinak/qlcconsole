@@ -37,6 +37,8 @@ class HIDVirtualPad final : public HIDDevice
 public:
     HIDVirtualPad(HIDPlugin *parent, quint32 line, const QString &name,
                   unsigned short vendorId, unsigned short productId);
+    /** Stops its reader first: run() reads members this class owns. */
+    ~HIDVirtualPad() override;
 
     bool hasInput() const override { return true; }
     bool openInput() override;
@@ -57,6 +59,11 @@ public:
     /** A pad a test's HIDBackend lists: at the path it lists it on. */
     void setPath(const QString &path) { m_filename = path; m_file.setFileName(path); }
 
+    /** A test's stand-in for reading the hardware (HIDFound::testRead):
+     *  with one, the pad runs a reader thread that calls it, and opening
+     *  and closing it start and stop that reader as a real pad's are. */
+    void setReadHook(const std::function<void()> &hook) { m_readHook = hook; }
+
     /** A value as the pad's reading would give it. */
     void inject(quint32 channel, uchar value);
 
@@ -70,6 +77,9 @@ private:
     unsigned short m_productId;
     bool m_open = false;
     QString m_location;
+    std::function<void()> m_readHook;
+
+    void run() override;
 };
 
 #endif

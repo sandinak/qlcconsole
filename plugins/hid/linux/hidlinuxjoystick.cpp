@@ -25,13 +25,11 @@
 #include <unistd.h>
 #include <poll.h>
 
-#include <QDeadlineTimer>
-
 #include "hidlinuxjoystick.h"
 #include "hidplugin.h"
 
 /* The reader looks at m_running this often: closeInput() waits for it at
-   most HIDJsDevice::kReaderStopMs, with the universes locked. */
+   most HIDDevice::kReaderStopMs, with the universes locked. */
 #define KPollTimeout 100
 
 HIDLinuxJoystick::HIDLinuxJoystick(HIDPlugin* parent, quint32 line, struct hid_device_info *info)
@@ -144,11 +142,7 @@ bool HIDLinuxJoystick::openInput()
 
     if (result == true)
     {
-        if (isRunning())
-            wait(QDeadlineTimer(kReaderStopMs));
-        m_running = true;
-        if (isRunning() == false)
-            start();
+        startReading();
     }
 
     return result;
