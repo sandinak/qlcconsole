@@ -292,7 +292,9 @@ it holds, and the chip says why."
   one controller here that pad is the tool's at once, as before; with
   more, the follow spot's pad keeps steering until a press takes the
   tool. Its sticks are the tool's (`m_toolPanNorm`..., apart from the
-  follow spot's).
+  follow spot's). A walk's cue step (RT, LT, a swipe) restarts Focus this
+  cue on the next cue: that stop is no end, so the walker stays the
+  owner (`PadRun::isRestarting()`; review of f16599314, blocker 1).
 - **Another pad with Follow spot steers on**: its bound stick, its fine
   stick, D-pad speed and size and the facing push, as with no tool
   (`routeFocusInput()`, before the beside-the-runner and owner checks);
@@ -306,10 +308,20 @@ it holds, and the chip says why."
   layer, every layer of the cue (or every scene) Focus This Cue / Look
   steps through (`toolOnSpotLights()`; both sets cached, the tool's
   worked out again only when its call, cue, layer or session changes, the
-  spot's when its scene changes and once a second). Then the spot
+  spot's when its scene changes, and both once a second for an edit
+  meanwhile). **Its lights include the ones tied to its subject**: when
+  the follow spot follows a stage target and the tool's live looks aim
+  at that target -- a focus reference or call target, an Aim look of the
+  cue, its layer or the scene -- moving the subject would re-aim those
+  lights under the operator, so the spot holds for them too (decided, the
+  conservative reading of the owner's answer: hold whenever moving the
+  spot would move the tool's lights). Then the spot
   **holds**: what was pushed on it is let go and it stops at once (no
   drift, no velocity kept for later), nothing a pad sends moves it, and
-  its one status (`FollowSpotStatus::heldBy`) says why -- the footer's
+  its one status (`FollowSpotStatus::heldBy`) says why. The mover is
+  stopped before the data channel is told, so a free-fly script hears no
+  speed through the hold (no stale `vx` / `vy`); the channel is told even
+  when the sticks were already centred and the spot only gliding -- the footer's
   follow spot chip, the Look Editor's line and the rig view's tip read
   "Follow spot holds: <tool> is working on its lights" (no second
   source).
@@ -322,9 +334,25 @@ it holds, and the chip says why."
 - **One pad with both jobs** (or its twin line): the tool has its sticks,
   as before; what it had pushed on the spot is let go when the tool
   begins or the pad takes it, and the same no-jump rule applies at the
-  tool's end.
+  tool's end. A tool starting (or a walk's cue step) touches only the
+  tool's sticks: another pad's fine stick held beside it stays.
 - **One pad seen twice** steers once: a twin line's fine stick is that
-  pad's one share (`fineSlot()`), never added to itself.
+  pad's one share (`fineSlot()`), never added to itself; the owner's twin
+  line is the owner (the owner check uses `sameController()`, as
+  `isToolsPad()` does).
+- **The tick beside a tool.** The controller tick now runs the follow
+  spot's own part while a tool runs: `joystickScene()` (a running cue's
+  follow spot found, `endLiveFollow()` and its restore glide when that
+  cue ends), `advanceRestoreGlide()`, `updateFollowSpotStatus()` and the
+  once-a-second stick search. Before, all of it waited for the tool's
+  end; a glide or a cue change during a tool now happens on time.
+- **What a pad held goes with it.** A pad re-patched or reopened in place
+  by its plugin (switched off and on, re-enumerated, back from sleep:
+  `InputOutputMap::inputPatchReconnected()`) holds nothing after: LT held
+  as it dropped is no safety (a GO needs LT again), a View no chord; a
+  stop it already fired stays fired, a chord its bumpers began is spent
+  (`PadRun::padReopened()`), and the arm stays (the lead's evaluation of
+  0.4.12).
 - Unchanged: the emergency stop is read first on every pad (4), the arm
   takes two controls, the runner's GO family rules beside a focus or a
   walk (11, Q252), and one status source per surface (9).
@@ -379,5 +407,12 @@ window still open.
   words, the sticks zeroed on hold, no jump at the tool's start or end or
   from a stick held through it (engine/test/followspotfeel
   `q253TheSpotBesideEveryTool`); one pad seen twice steers once
-  (`q253ATwinPadDoesNotDoubleSteer`); the footer's chip
-  (ui/test/padrunrules `q253TheFollowChipSaysWhyItHolds`).
+  (`q253ATwinPadDoesNotDoubleSteer`); lights aimed at the spot's subject
+  hold it, every tool (`q253TargetTiedLightsHoldTheSpot`); a free-fly
+  spot's script hears no speed through the hold
+  (`q253AFreeFlySpotHoldsStill`); a walk's cue steps keep its owner and a
+  beside pad's fine stick (`q253AWalksCueStepsKeepItsOwnerAndTheSpot`);
+  the footer's chip as drawn, at three sizes
+  (ui/test/padrunrules `q253TheFollowChipSaysWhyItHolds`); a pad
+  reopened or re-patched holds no stale LT or View
+  (engine/test/padrunrules `aReopenedPadHoldsNoStaleSafety`).

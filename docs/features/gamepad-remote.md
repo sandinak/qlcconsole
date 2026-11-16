@@ -303,7 +303,8 @@ show from any pad.
   while another pad works a tool: Venue focus, Focus mode, Focus this cue
   or look, or the walk. If the tool is working on the follow spot's own
   lights (the focus call, the walk's layer, or the cue or look being
-  focused lights one of them), the spot **holds** instead: it stops at
+  focused lights one of them, or aims a light at the subject the follow
+  spot is following), the spot **holds** instead: it stops at
   once, the follow spot chip in the footer says *Follow spot holds:
   Venue Focus is working on its lights* (or the tool it is), and nothing
   pushed on its pad moves it. When the tool ends or moves off those
@@ -320,6 +321,10 @@ show from any pad.
   Focus mode is in the Tools role, and Run /
   Tools is switched on the computer (the Run tab's **Pad:** button) for
   every pad: a View + Menu tap in Run on a Focus-only pad says so.
+- **A pad that drops out holds nothing when it is back.** If a pad
+  switches off and on, re-enumerates or wakes from sleep while LT (or
+  View) is held, it is not held when the pad is back: press LT again for
+  a GO. The emergency stop works as before.
 - **The emergency stop is on every pad.** In the Run role, both bumpers
   and both triggers together stop everything from any connected
   controller, whatever its jobs, whatever the pads are doing: a tool or a
@@ -400,7 +405,14 @@ list. Set pad A to **Run cues** only and pad B to **Focus** only.
     holds: Focus This Look is working on its lights*; A's sticks work the
     look; B's stick moves nothing. End the look on the laptop, let B's
     stick come back to centre and push: the spot steers.
-19. Set A to Run cues. Disarmed, on A: hold LB + RB, squeeze LT and let it go,
+19. A walking (Run role, Design), B steering: on A, press RT to step to
+    the next cue. *Expected:* B's stick and held right stick keep the spot
+    moving; A's sticks stay the walk's; a press on a third pad with Focus
+    says *Another controller is in use.*
+20. Arm A, hold LT, and switch A off and on (or unplug it and plug it back)
+    still holding LT. Press A. *Expected:* nothing plays; the chip says
+    *GO is LT held and A.* Let go of LT, hold it again and press A: GO.
+21. Set A to Run cues. Disarmed, on A: hold LB + RB, squeeze LT and let it go,
     let go of RB and press it again. *Expected:* nothing arms; the chip
     says *Let go of both bumpers, then hold LB and RB again.* Let go of
     both and hold LB + RB: it arms.

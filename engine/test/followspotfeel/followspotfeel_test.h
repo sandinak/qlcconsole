@@ -87,6 +87,21 @@ private slots:
      *  its fine stick is one share, and with the follow spot and the tool
      *  on that pad its twin line's stick is the tool's, not the spot's. */
     void q253ATwinPadDoesNotDoubleSteer();
+    /** The review of f16599314: lights the tool aims at the follow spot's
+     *  own subject (a focus reference, an Aim look) move when the spot
+     *  moves it, so the spot holds for them too, every tool. */
+    void q253TargetTiedLightsHoldTheSpot_data();
+    void q253TargetTiedLightsHoldTheSpot();
+    /** A free-fly follow spot (no subject: the script flies the heads) on
+     *  the tool's lights: through the hold the script hears no speed and
+     *  the heads stay where they were, every tool. */
+    void q253AFreeFlySpotHoldsStill_data();
+    void q253AFreeFlySpotHoldsStill();
+    /** A walk's cue steps (RT, a swipe) keep the walker its owner: its
+     *  stick stays the walk's, another Focus pad is told it is in use; a
+     *  pad steering the spot beside it keeps its held fine stick. */
+    void q253AWalksCueStepsKeepItsOwnerAndTheSpot_data();
+    void q253AWalksCueStepsKeepItsOwnerAndTheSpot();
 
     /* Where the operator stands (FollowSpotOperator). */
     void stickUpGoesAwayFromTheOperator();

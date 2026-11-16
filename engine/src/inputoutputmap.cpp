@@ -2300,6 +2300,7 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
     bool success = true;
     bool keptOff = false;
     QList<InputPatch *> inputs;
+    QList<quint32> inputUniverses;
     for (quint32 i = 0; i < universesCount(); i++)
     {
         Universe *universe = m_universeArray.at(i);
@@ -2324,7 +2325,10 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
 
         InputPatch* ip = universe->inputPatch();
         if (ip != NULL && ip->plugin() == plugin)
+        {
             inputs << ip;
+            inputUniverses << i;
+        }
 
         OutputPatch* fp = universe->feedbackPatch();
         if (fp != NULL && fp->plugin() == plugin)
@@ -2338,6 +2342,11 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
        this thread changes patches, so each is still there. */
     for (InputPatch *ip : std::as_const(inputs))
         /*success = */ ip->reconnect();
+    /* A device input reopened in place may be another device than the one
+       whose presses came before (a pad re-enumerated): what it held is let
+       go (a trigger held as it dropped is no safety now). */
+    for (quint32 u : std::as_const(inputUniverses))
+        emit inputPatchReconnected(u);
 
     /* The device a kept patch waits for may be what just appeared: reopen
        it now rather than at the next retry tick. */

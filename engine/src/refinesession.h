@@ -26,6 +26,7 @@
 #include <QMutex>
 #include <QHash>
 #include <QList>
+#include <QSet>
 #include <functional>
 
 #include "qlcengine_export.h"
@@ -151,6 +152,11 @@ public:
      *  Build scenes'), each once: the lights it can work on (board Q253:
      *  a follow spot on any of them holds while it runs). */
     QList<quint32> cueFixtures() const;
+    /** The stage targets its looks aim at (Aim looks): every layer's and
+     *  the cue's own (or every scene's), or with @p currentLayerOnly the
+     *  current layer's, its children's and the cue's. A follow spot moving
+     *  one of these subjects moves those lights (board Q253). */
+    QSet<quint32> aimTargets(bool currentLayerOnly) const;
     int fixtureIndex() const { return m_fixtureIndex; }
     quint32 currentFixture() const;
     /** Next / previous group or fixture (by scope); at Layer scope it picks

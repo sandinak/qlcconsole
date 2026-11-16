@@ -415,6 +415,13 @@ public:
      *  made on it drops as controllerLost() -- its releases may never have
      *  come, so a held safety is no safety on the pad there now. */
     void forgetPad(quint32 universe);
+    /** The input on @p universe was reopened in place (the same line, maybe
+     *  another device): what it held is not held now -- a trigger held as
+     *  it dropped is no safety -- but a stop it already fired stays fired
+     *  and a chord its bumpers began is spent. The arm stays. */
+    void padReopened(quint32 universe);
+    /** A walk's cue step restarts Focus this cue: its stop is no end. */
+    bool isRestarting() const { return m_restarting; }
 
     /*********************************************************************
      * Venue focus from the pad (rule 6)

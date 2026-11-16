@@ -420,6 +420,43 @@ QList<quint32> RefineSession::cueFixtures() const
     return out;
 }
 
+QSet<quint32> RefineSession::aimTargets(bool currentLayerOnly) const
+{
+    QSet<quint32> out;
+    if (!m_active)
+        return out;
+    auto aimsOf = [&](const QList<quint32> &palettes) {
+        for (quint32 pid : palettes)
+        {
+            const QLCPalette *p = m_doc->palette(pid);
+            if (p != nullptr && p->type() == QLCPalette::Aim)
+                out.insert(p->stageTargetId());
+        }
+    };
+    if (m_sceneMode)
+    {
+        for (quint32 lid : m_layers)
+            if (!currentLayerOnly || lid == currentLayer())
+                if (const Scene *s = sceneAt(lid))
+                    aimsOf(s->palettes());
+        return out;
+    }
+    const ShowTree::Cue *c = cue();
+    if (c == nullptr)
+        return out;
+    for (const ShowTree::Look &l : c->looks)
+        aimsOf(l.palettes);
+    const quint32 current = currentLayer();
+    for (const ShowTree::Layer &layer : c->layers)
+    {
+        if (currentLayerOnly && layer.id != current && layer.parent != current)
+            continue;
+        for (const ShowTree::Look &l : layer.looks)
+            aimsOf(l.palettes);
+    }
+    return out;
+}
+
 quint32 RefineSession::currentFixture() const
 {
     return layerFixtures().value(m_fixtureIndex, kInvalid);

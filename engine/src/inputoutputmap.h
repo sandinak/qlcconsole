@@ -959,6 +959,12 @@ signals:
      *  hand or by its controller slot. */
     void inputPatchChanged(quint32 universe);
 
+    /** @p universe's input was reopened on the same line by its plugin
+     *  (a controller switched off and on, re-enumerated or back from sleep:
+     *  the plugin's configurationChanged()). What it held is not held on
+     *  the device there now. */
+    void inputPatchReconnected(quint32 universe);
+
     /** Everyone interested in input data should connect to this signal */
     void inputValueChanged(quint32 universe, quint32 channel, uchar value, const QString& key = 0);
 

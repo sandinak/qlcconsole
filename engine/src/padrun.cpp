@@ -1072,6 +1072,22 @@ void PadRun::forgetPad(quint32 universe)
         sync();     // the runner's name on the chip comes or goes with a pad
 }
 
+void PadRun::padReopened(quint32 universe)
+{
+    auto it = m_held.find(universe);
+    if (it == m_held.end())
+        return;
+    Held fresh;
+    fresh.stopFired = it->stopFired;        // a stop fired is not fired again
+    fresh.spent = it->lb || it->rb;         // a chord begun before is no chord after
+    *it = fresh;
+    if (m_chordUniverse == universe)
+    {
+        m_armChord->stop();
+        m_chordUniverse = UINT_MAX;
+    }
+}
+
 void PadRun::setPadPresent(bool present)
 {
     if (m_padGone == !present)

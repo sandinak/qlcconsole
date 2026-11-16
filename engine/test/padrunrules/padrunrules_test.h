@@ -59,6 +59,12 @@ private slots:
      *  says to let go of both -- never a silent retry (the jobs-alone
      *  review's nit, board Q253's branch). */
     void aSpentChordPressedAgainSaysLetGo();
+    /** A pad holding LT (the safety) or View reopened in place by its
+     *  plugin (switched off and on, re-enumerated) or re-patched: what it
+     *  held is not held after -- A with no fresh LT is refused, Menu is
+     *  no View + Menu chord -- and the emergency stop still stops, from
+     *  either pad (the lead's evaluation of 0.4.12). */
+    void aReopenedPadHoldsNoStaleSafety();
     /** Rule 3 (pad-trace replay, 2026-11-16): a chord that fired (or was
      *  refused) does not fire again while both bumpers stay held, whatever
      *  else comes in -- a DualSense's resting trigger noise above all. */

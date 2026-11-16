@@ -610,6 +610,71 @@ void PadRunRules_Test::aSpentChordPressedAgainSaysLetGo()
     hold(kLB, false);
 }
 
+void PadRunRules_Test::aReopenedPadHoldsNoStaleSafety()
+{
+    makeShow();
+    twoPads(int(ControllerJobs::AllJobs), int(ControllerJobs::AllJobs));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    m_doc->setMode(Doc::Operate);
+    auto restore = qScopeGuard([&]() { m_doc->setMode(Doc::Design); });
+    arm(true, 0);
+    // LT held as the pad is reopened in place (its plugin's configurationChanged()).
+    axis(kLT, 255, 0);
+    emit m_stub->configurationChanged();
+    QVERIFY(run->isArmed());
+    run->showNotice(QString());
+    press(kA, 0);
+    QCOMPARE(goes(), 0);
+    QCOMPARE(run->notice(), QString("GO is LT held and A."));
+    // The LT the pad has now is a fresh one: then A goes.
+    axis(kLT, 0, 0);
+    withLt(kA, 0);
+    QCOMPARE(goes(), 1);
+    // The stop still stops, from either pad, after the reopen.
+    for (quint32 u : { quint32(1), quint32(0) })
+    {
+        if (u == 0)
+            arm(true, 0);
+        const int before = stops();
+        for (quint32 ch : { kLB, kRB, kLT, kRT })
+            hold(ch, true, u);
+        QCOMPARE(stops(), before + 1);
+        for (quint32 ch : { kRT, kLT, kRB, kLB })
+            hold(ch, false, u);
+        emit m_stub->configurationChanged();
+    }
+    run->setEnabled(false);
+
+    // The Tools role: View held as the pad is reopened, or re-patched, is
+    // no View after -- Menu alone is no View + Menu (Focus mode).
+    QSignalSpy focusMode(pc, &ProgrammerController::focusModeRequested);
+    m_doc->setMode(Doc::Design);
+    for (int how = 0; how < 2; ++how)
+    {
+        hold(kView, true, 1);
+        if (how == 0)
+            emit m_stub->configurationChanged();
+        else
+        {
+            drop(1);
+            back(1);
+        }
+        hold(kMenu, true, 1);
+        hold(kMenu, false, 1);
+        QVERIFY2(focusMode.isEmpty(), how == 0 ? "a View held across a reopen made Menu a chord"
+                                               : "a View held across a re-patch made Menu a chord");
+        hold(kView, false, 1);
+    }
+    // Control: View + Menu, both pressed now, is Focus mode.
+    hold(kView, true, 1);
+    hold(kMenu, true, 1);
+    hold(kMenu, false, 1);
+    hold(kView, false, 1);
+    QCOMPARE(focusMode.count(), 1);
+}
+
 void PadRunRules_Test::aHeldChordFiresOnce_data()
 {
     QTest::addColumn<int>("start");     // 0: to arm, 1: to disarm, 2: refused (another pad runs cues)

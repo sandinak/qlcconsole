@@ -23,6 +23,8 @@
 #include <QLabel>
 #include <QtTest>
 #include <QScopeGuard>
+#include <QRegularExpression>
+#include <QDir>
 
 #include "../../../engine/test/common/stdprelude.h"
 #define private public
@@ -1031,6 +1033,19 @@ void PadRunRulesUi_Test::q253TheFollowChipSaysWhyItHolds()
     spot->addFixture(fids.at(0));
     spot->addFixture(fids.at(1));
     spot->addPalette(follow->id());
+    // It follows a subject; another light aimed at that subject moves with it.
+    StageTarget *subject = doc->monitorProperties()->addStageTarget();
+    subject->setName("Soloist");
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("On Soloist");
+    aim->setStageTargetId(subject->id());
+    doc->addPalette(aim);
+    spot->addPalette(aim->id());
+    Scene *aimed = new Scene(doc);
+    aimed->setName("Another light on the subject");
+    doc->addFunction(aimed);
+    aimed->addFixture(fids.at(2));
+    aimed->addPalette(aim->id());
     Scene *mine = new Scene(doc);
     mine->setName("On the spot's lights");
     doc->addFunction(mine);
@@ -1049,7 +1064,10 @@ void PadRunRulesUi_Test::q253TheFollowChipSaysWhyItHolds()
         doc->deleteFunction(spot->id());
         doc->deleteFunction(mine->id());
         doc->deleteFunction(others->id());
+        doc->deleteFunction(aimed->id());
         doc->deletePalette(follow->id());
+        doc->deletePalette(aim->id());
+        doc->monitorProperties()->removeStageTarget(subject->id());
         for (quint32 fid : fids)
             doc->deleteFixture(fid);
         settle(50);
@@ -1066,18 +1084,37 @@ void PadRunRulesUi_Test::q253TheFollowChipSaysWhyItHolds()
                               qPrintable(chip->property("fullText").toString()), 2000);
     QVERIFY2(chip->toolTip().contains(held), qPrintable(chip->toolTip()));
     QCOMPARE(pc->followSpotStatus().heldBy, QString("Focus This Look"));
-    /* QLC_SHOT_DIR: the footer holding, at three sizes, for the UX review
-       (the chip shortens on a narrow footer, never squeezed away). */
+    /* What the footer draws, at three sizes: the chip's own text (the
+       variant the footer fitted, "holds: Focus This Look" in its short
+       form too), on screen inside the window, and drawn (its pixels).
+       QLC_SHOT_DIR: saved for the UX review. */
+    auto shown = [&]() {
+        QString t = chip->text();
+        t.remove(QRegularExpression(QStringLiteral("<[^>]*>")));
+        return t.replace(QStringLiteral("&amp;"), QStringLiteral("&"));
+    };
     const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
     if (!shotDir.isEmpty())
-    {
         QDir().mkpath(shotDir);
-        const QSize was = m_app->size();
-        for (const QSize &z : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+    const QSize was = m_app->size();
+    for (const QSize &z : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+    {
+        m_app->resize(z);
+        settle(200);
+        const QString where = QString("%1x%2: '%3'").arg(z.width()).arg(z.height()).arg(shown());
+        QTRY_VERIFY2_WITH_TIMEOUT(chip->isVisible() && shown().contains(QStringLiteral("holds: Focus This Look")),
+                                  qPrintable(where), 2000);
+        const QPoint right = chip->mapTo(m_app, QPoint(chip->width(), chip->height()));
+        QVERIFY2(chip->width() > 20 && right.x() <= m_app->width() && right.y() <= m_app->height(),
+                 qPrintable(QString("%1: the chip is squeezed or off the window").arg(where)));
+        const QImage drawn = chip->grab().toImage();
+        QSet<QRgb> colours;
+        for (int y = 0; y < drawn.height() && colours.size() < 3; ++y)
+            for (int x = 0; x < drawn.width() && colours.size() < 3; ++x)
+                colours.insert(drawn.pixel(x, y));
+        QVERIFY2(colours.size() >= 2, qPrintable(QString("%1: the chip draws nothing").arg(where)));
+        if (!shotDir.isEmpty())
         {
-            m_app->resize(z);
-            settle(200);
-            QVERIFY2(chip->isVisible() && chip->width() > 0, qPrintable(QString("%1 wide").arg(z.width())));
             const QPixmap full = m_app->grab();
             const int h = 44 * int(full.devicePixelRatio());
             full.copy(0, full.height() - h, full.width(), h)
@@ -1086,17 +1123,26 @@ void PadRunRulesUi_Test::q253TheFollowChipSaysWhyItHolds()
             m_app->grab().save(QDir(shotDir).filePath(QStringLiteral("after-window-follow-spot-holds-%1x%2.png")
                                                       .arg(z.width()).arg(z.height())));
         }
-        m_app->resize(was);
-        settle(50);
     }
+    m_app->resize(was);
+    settle(50);
 
     // On another light: no hold, nothing said of one.
     r->stop();
     QVERIFY2(r->startScene({ others->id() }, 0xFFFFFFFF, &why), qPrintable(why));
-    QTRY_VERIFY2_WITH_TIMEOUT(!chip->property("fullText").toString().contains("Follow spot holds"),
-                              qPrintable(chip->property("fullText").toString()), 2000);
+    QTRY_VERIFY2_WITH_TIMEOUT(!chip->property("fullText").toString().contains("holds")
+                                  && !shown().contains(QStringLiteral("holds")),
+                              qPrintable(shown()), 2000);
     QCOMPARE(pc->followSpotStatus().heldBy, QString());
     r->stop();
+
+    // A light aimed at the follow spot's subject (not one of its own): it holds too.
+    QVERIFY2(r->startScene({ aimed->id() }, 0xFFFFFFFF, &why), qPrintable(why));
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->isVisible() && shown().contains(QStringLiteral("holds: Focus This Look")),
+                              qPrintable(shown()), 2000);
+    QCOMPARE(pc->followSpotStatus().heldBy, QString("Focus This Look"));
+    r->stop();
+    QTRY_VERIFY2_WITH_TIMEOUT(!shown().contains(QStringLiteral("holds")), qPrintable(shown()), 2000);
 }
 
 int main(int argc, char **argv)

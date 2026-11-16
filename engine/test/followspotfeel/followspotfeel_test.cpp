@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QSignalSpy>
 #include <QElapsedTimer>
 #include <QBuffer>
 #include <QXmlStreamWriter>
@@ -1429,13 +1430,13 @@ namespace
 {
 /* Board Q253's bench: two stub pads with an Xbox pad's roles, told apart
    by their addresses (or one pad seen twice, @p twin). */
-const quint32 kQMenu = 17;
+const quint32 kQRT = 5, kQA = 10, kQMenu = 17, kQRS = 19;
 
 void q253Pads(IOPluginStub *stub, InputOutputMap *iom, bool twin)
 {
-    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" }, { 4, "lt" }, { 5, "rt" },
-                             { 10, "a" }, { 11, "b" }, { 12, "x" }, { 13, "y" }, { 14, "lb" }, { 15, "rb" },
-                             { 16, "back" }, { kQMenu, "start" }, { 18, "ls" }, { 19, "rs" },
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" }, { 4, "lt" }, { kQRT, "rt" },
+                             { kQA, "a" }, { 11, "b" }, { 12, "x" }, { 13, "y" }, { 14, "lb" }, { 15, "rb" },
+                             { 16, "back" }, { kQMenu, "start" }, { 18, "ls" }, { kQRS, "rs" },
                              { 20, "dpad_up" }, { 21, "dpad_down" }, { 22, "dpad_left" }, { 23, "dpad_right" } };
     stub->m_lineNames = QStringList() << "Pad A (AA:BB:CC:00:00:01)"
                                       << (twin ? "Pad A (AA:BB:CC:00:00:01)" : "Pad B (AA:BB:CC:00:00:02)");
@@ -1458,6 +1459,155 @@ double travel(Harness &h, int ticks)
     for (int i = 0; i < ticks; ++i)
         h.tick();
     return double((h.rig.subject->position() - at).length());
+}
+
+/* The show the tools work on: a third head on the pipe (in neither follow
+   spot scene); a list of three cues, each one layer on the lights (a
+   Dimmer look, and with @p aimed an Aim look on the follow spot's
+   subject); a look (a scene) on them; a stage target the spot never
+   moves, for the focus tools' reference. */
+struct Q253Show
+{
+    Fixture *other = nullptr;
+    QList<quint32> lights;
+    QList<quint32> cues;
+    Scene *look = nullptr;
+    StageTarget *elsewhere = nullptr;
+};
+
+Q253Show q253Show(Doc *doc, Harness &h, bool inside, bool aimed)
+{
+    Q253Show show;
+    QLCFixtureDef *def = moverDef(false);
+    show.other = new Fixture(doc);
+    show.other->setName("Spot Other");
+    show.other->setFixtureDefinition(def, def->modes().first());
+    show.other->setUniverse(0);
+    show.other->setAddress(130);
+    doc->addFixture(show.other);
+    MonitorProperties *props = doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(h.rig.fine->id());
+    rp.trussOffset = 3.0f;
+    props->setFixtureRigProps(show.other->id(), rp);
+    show.lights = inside ? QList<quint32>{ h.rig.fine->id(), h.rig.coarse->id() }
+                         : QList<quint32>{ show.other->id() };
+
+    ShowTreeController *st = doc->showTree();
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer);
+    full->setName("Full");
+    full->setValue(255);
+    doc->addPalette(full);
+    const quint32 list = st->addCueList(st->addProduction("Spring"), "Main", ShowTree::ListMode::NonTracking);
+    ShowTree::Target t;
+    t.fixtures = show.lights;
+    for (int i = 0; i < 3; ++i)
+    {
+        const quint32 cue = st->addCue(list, i - 1, QString("Cue %1").arg(i + 1));
+        const quint32 layer = st->addLayer(cue, t, "Spots");
+        ShowTree::Look dimmer;
+        dimmer.key = ShowTree::KeyDimmer;
+        dimmer.palettes = { full->id() };
+        st->setLayerLook(cue, layer, dimmer);
+        if (aimed)
+        {
+            ShowTree::Look aim;
+            aim.key = ShowTree::KeyPosition;
+            aim.palettes = { h.rig.aim->id() };
+            st->setLayerLook(cue, layer, aim);
+        }
+        show.cues << cue;
+    }
+    st->pickCue(show.cues.first());
+    h.pc->refineSession()->setFlashEnabled(false);
+    show.look = new Scene(doc);
+    show.look->setName("Look");
+    doc->addFunction(show.look);
+    for (quint32 fid : show.lights)
+        show.look->addFixture(fid);
+    if (aimed)
+        show.look->addPalette(h.rig.aim->id());
+    show.elsewhere = props->addStageTarget();
+    show.elsewhere->setName("DSC");
+    show.elsewhere->setPosition(QVector3D(1.0f, 1.0f, 0.0f));
+    return show;
+}
+
+void q253Press(Harness &h, quint32 u, quint32 ch)
+{
+    h.pc->slotControllerInputChanged(u, ch, 255, QString());
+    h.pc->slotControllerInputChanged(u, ch, 0, QString());
+}
+
+/* @p tool started on the show's lights, as the operator does: the walk
+   from pad A's Menu (A owns it from there), a laptop tool taken by A's
+   first press (RS: say the light). The focus tools aim at @p reference. */
+bool q253Start(Harness &h, const Q253Show &show, const QString &tool, quint32 reference, QString *why)
+{
+    FocusSession::Options o;
+    o.order = FocusSession::AsGiven;
+    FocusSession::Reference ref;
+    ref.kind = FocusSession::Reference::Target;
+    ref.id = reference;
+    bool ok = false;
+    if (tool == "quick")
+    {
+        o.fixtures = show.lights;
+        o.first = ref;
+        ok = h.pc->focusSession()->start(o, why);
+    }
+    else if (tool == "venue")
+    {
+        FocusSession::Call c;
+        c.name = "Spots -> target";
+        c.fixtures = show.lights;
+        c.target = ref;
+        o.calls = { c };
+        ok = h.pc->focusSession()->start(o, why);
+    }
+    else if (tool == "cue")
+        ok = h.pc->refineSession()->start(show.cues.first(), 0xFFFFFFFF, why);
+    else if (tool == "look")
+        ok = h.pc->refineSession()->startScene({ show.look->id() }, 0xFFFFFFFF, why);
+    else
+    {
+        h.pc->padRun()->setEnabled(true, false);
+        q253Press(h, 0, kQMenu);
+        ok = h.pc->padRun()->isWalking();
+        if (!ok && why != nullptr)
+            *why = h.pc->padRun()->notice();
+        return ok;
+    }
+    if (ok)
+        q253Press(h, 0, kQRS);
+    return ok;
+}
+
+void q253End(Harness &h, const QString &tool)
+{
+    if (tool == "quick" || tool == "venue")
+        h.pc->focusSession()->stop();
+    else if (tool == "walk")
+    {
+        // What A's stick changed on the walk goes back first.
+        h.pc->refineSession()->revert();
+        q253Press(h, 0, kQMenu);
+    }
+    else
+        h.pc->refineSession()->stop();
+}
+
+QString q253Name(const QString &tool)
+{
+    return tool == "quick" ? "Quick Focus" : tool == "venue" ? "Venue Focus"
+           : tool == "cue" ? "Focus This Cue" : tool == "look" ? "Focus This Look" : "the walk";
+}
+
+int q253Said(const QStringList &said, const QString &part)
+{
+    int n = 0;
+    for (const QString &s : said)
+        n += s.contains(part) ? 1 : 0;
+    return n;
 }
 }
 
@@ -1487,9 +1637,13 @@ void FollowSpotFeel_Test::q253TheSpotBesideEveryTool()
     InputOutputMap *iom = m_doc->inputOutputMap();
     ControllerJobs *jobs = h.pc->controllerJobs();
     PadRun *run = h.pc->padRun();
+    QStringList said;
+    const QMetaObject::Connection listen = connect(h.pc, &ProgrammerController::operatorAnnounce, this,
+                                                   [&said](const QString &text) { said << text; });
     jobs->resetAll();
     q253Pads(stub, iom, false);
     auto restore = qScopeGuard([&]() {
+        disconnect(listen);
         h.pc->focusSession()->stop();
         h.pc->refineSession()->stop();
         run->setEnabled(false, false);
@@ -1498,61 +1652,21 @@ void FollowSpotFeel_Test::q253TheSpotBesideEveryTool()
         h.pc->refreshStickBinding();
     });
     /* Pad A (line 0) works the tool. The follow spot is A's too, or pad
-       B's (line 1) alone. */
+       B's (line 1), which can work the focus tools as well. */
     jobs->setJobs(jobs->identityOfUniverse(0), ownersPad ? CJ::Jobs(CJ::AllJobs) : CJ::Jobs(CJ::RunCues | CJ::Focus));
-    jobs->setJobs(jobs->identityOfUniverse(1), ownersPad ? CJ::Jobs(CJ::RunCues) : CJ::Jobs(CJ::FollowSpot));
+    jobs->setJobs(jobs->identityOfUniverse(1), ownersPad ? CJ::Jobs(CJ::RunCues | CJ::Focus)
+                                                        : CJ::Jobs(CJ::FollowSpot | CJ::Focus));
     if (FollowSpotMover *m = h.pc->followSpotMover())
         m->setFixedDt(MasterTimer::tick() / 1000.0);
     h.pc->refreshStickBinding();
     const quint32 spot = ownersPad ? 0 : 1;
     QVERIFY(h.pc->m_panBound);
     QCOMPARE(h.pc->m_panUniverse, spot);
-
-    // A third head on the pipe, in neither follow spot scene.
-    QLCFixtureDef *def = moverDef(false);
-    Fixture *other = new Fixture(m_doc);
-    other->setName("Spot Other");
-    other->setFixtureDefinition(def, def->modes().first());
-    other->setUniverse(0);
-    other->setAddress(130);
-    m_doc->addFixture(other);
-    FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(h.rig.fine->id());
-    rp.trussOffset = 3.0f;
-    m_doc->monitorProperties()->setFixtureRigProps(other->id(), rp);
-    const QList<quint32> lights = inside ? QList<quint32>{ h.rig.fine->id(), h.rig.coarse->id() }
-                                         : QList<quint32>{ other->id() };
-
-    // A cue (Focus This Cue, the walk) and a look (Focus This Look) on them.
-    ShowTreeController *st = m_doc->showTree();
-    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer);
-    full->setName("Full");
-    full->setValue(255);
-    m_doc->addPalette(full);
-    const quint32 list = st->addCueList(st->addProduction("Spring"), "Main", ShowTree::ListMode::NonTracking);
-    const quint32 cue = st->addCue(list, -1, "Opening");
-    ShowTree::Target t;
-    t.fixtures = lights;
-    const quint32 layer = st->addLayer(cue, t, "Spots");
-    ShowTree::Look dimmer;
-    dimmer.key = ShowTree::KeyDimmer;
-    dimmer.palettes = { full->id() };
-    QVERIFY(st->setLayerLook(cue, layer, dimmer));
-    st->pickCue(cue);
-    h.pc->refineSession()->setFlashEnabled(false);
-    Scene *look = new Scene(m_doc);
-    look->setName("Look");
-    m_doc->addFunction(look);
-    for (quint32 fid : lights)
-        look->addFixture(fid);
+    const Q253Show show = q253Show(m_doc, h, inside, false);
 
     h.use(h.rig.targetScene);
     auto stick = [&](quint32 u, uchar v) { h.pc->slotControllerInputChanged(u, 0, v, QString()); };
-    auto press = [&](quint32 u, quint32 ch) {
-        h.pc->slotControllerInputChanged(u, ch, 255, QString());
-        h.pc->slotControllerInputChanged(u, ch, 0, QString());
-    };
-    const QString name = tool == "quick" ? "Quick Focus" : tool == "venue" ? "Venue Focus"
-                         : tool == "cue" ? "Focus This Cue" : tool == "look" ? "Focus This Look" : "the walk";
+    const QString name = q253Name(tool);
     const QString held = QString("Follow spot holds: %1 is working on its lights").arg(name);
     const bool steers = !ownersPad && !inside;
 
@@ -1562,41 +1676,15 @@ void FollowSpotFeel_Test::q253TheSpotBesideEveryTool()
 
     // The tool starts, the stick still held (no reading comes with the start).
     QString why;
-    FocusSession::Options o;
-    o.order = FocusSession::AsGiven;
-    FocusSession::Reference subject;
-    subject.kind = FocusSession::Reference::Target;
-    subject.id = h.rig.subject->id();
-    if (tool == "quick")
-    {
-        o.fixtures = lights;
-        o.first = subject;
-        QVERIFY2(h.pc->focusSession()->start(o, &why), qPrintable(why));
-    }
-    else if (tool == "venue")
-    {
-        FocusSession::Call c;
-        c.name = "Spots -> Soloist";
-        c.fixtures = lights;
-        c.target = subject;
-        o.calls = { c };
-        QVERIFY2(h.pc->focusSession()->start(o, &why), qPrintable(why));
-    }
-    else if (tool == "cue")
-        QVERIFY2(h.pc->refineSession()->start(cue, 0xFFFFFFFF, &why), qPrintable(why));
-    else if (tool == "look")
-        QVERIFY2(h.pc->refineSession()->startScene({ look->id() }, 0xFFFFFFFF, &why), qPrintable(why));
-    else
-    {
-        run->setEnabled(true, false);
-        press(0, kQMenu);
-        QVERIFY2(run->isWalking(), qPrintable(run->notice()));
-    }
-    // A's first press takes a tool begun on the laptop (Q135); a walk is A's from its start.
-    h.pc->claimController(0);
+    QVERIFY2(q253Start(h, show, tool, show.elsewhere->id(), &why), qPrintable(why));
+    // A has it: its Menu began the walk, its first press took a laptop tool.
     QCOMPARE(h.pc->controllerOwner(), quint32(0));
     QCOMPARE(h.pc->toolName(), name);
     QCOMPARE(h.pc->isToolsPad(spot), ownersPad);
+    // B, which can work it too, is told it is in use.
+    const int inUse = q253Said(said, "Another controller is in use.");
+    q253Press(h, 1, kQA);
+    QCOMPARE(q253Said(said, "Another controller is in use."), inUse + 1);
 
     const QString text = QString("%1 lights, spot on %2").arg(inside ? "its" : "other", ownersPad ? "A" : "B");
     if (steers)
@@ -1627,17 +1715,8 @@ void FollowSpotFeel_Test::q253TheSpotBesideEveryTool()
     }
 
     // The tool ends with the stick still held.
-    if (tool == "quick" || tool == "venue")
-        h.pc->focusSession()->stop();
-    else if (tool == "walk")
-    {
-        // A's stick moved the walk's light: that change goes back first.
-        h.pc->refineSession()->revert();
-        press(0, kQMenu);
-        QVERIFY2(!run->isWalking(), qPrintable(run->notice()));
-    }
-    else
-        h.pc->refineSession()->stop();
+    q253End(h, tool);
+    QVERIFY2(!run->isWalking(), qPrintable(run->notice()));
     if (steers)
         QVERIFY2(travel(h, 20) > 0.05, qPrintable(text + ": the spot stopped as the tool ended"));
     else
@@ -1664,6 +1743,220 @@ void FollowSpotFeel_Test::q253TheSpotBesideEveryTool()
     driftAfter(h);
 }
 
+void FollowSpotFeel_Test::q253TargetTiedLightsHoldTheSpot_data()
+{
+    QTest::addColumn<QString>("tool");
+    for (const char *tool : { "quick", "venue", "cue", "look", "walk" })
+        QTest::newRow(tool) << QString(tool);
+}
+
+void FollowSpotFeel_Test::q253TargetTiedLightsHoldTheSpot()
+{
+    QFETCH(QString, tool);
+    using CJ = ControllerJobs;
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    jobs->resetAll();
+    q253Pads(stub, iom, false);
+    auto restore = qScopeGuard([&]() {
+        h.pc->focusSession()->stop();
+        h.pc->refineSession()->stop();
+        h.pc->padRun()->setEnabled(false, false);
+        jobs->resetAll();
+        q253Unpads(stub, iom);
+        h.pc->refreshStickBinding();
+    });
+    jobs->setJobs(jobs->identityOfUniverse(0), CJ::Jobs(CJ::RunCues | CJ::Focus));
+    jobs->setJobs(jobs->identityOfUniverse(1), CJ::Jobs(CJ::FollowSpot));
+    if (FollowSpotMover *m = h.pc->followSpotMover())
+        m->setFixedDt(MasterTimer::tick() / 1000.0);
+    h.pc->refreshStickBinding();
+    QCOMPARE(h.pc->m_panUniverse, quint32(1));
+    // Not the spot's lights, but aimed at its subject: moving it moves them.
+    const Q253Show show = q253Show(m_doc, h, false, true);
+    h.use(h.rig.targetScene);
+    h.pc->slotControllerInputChanged(1, 0, 255, QString());
+    QVERIFY2(travel(h, 15) > 0.05, "the stick moved nothing before any tool (no control)");
+    QString why;
+    QVERIFY2(q253Start(h, show, tool, h.rig.subject->id(), &why), qPrintable(why));
+    const double d = driftAfter(h);
+    QVERIFY2(d < 0.005, qPrintable(QString("%1 aims lights at the spot's subject, yet the spot moved it %2 m")
+                                   .arg(tool).arg(d)));
+    QCOMPARE(h.pc->followSpotStatus().heldBy, q253Name(tool));
+    QVERIFY2(h.pc->followSpotStatusText().contains(QString("Follow spot holds: %1 is working on its lights")
+                                                   .arg(q253Name(tool))),
+             qPrintable(h.pc->followSpotStatusText()));
+    q253End(h, tool);
+    driftAfter(h);
+    QCOMPARE(h.pc->followSpotStatus().heldBy, QString());
+    h.pc->slotControllerInputChanged(1, 0, 127, QString());
+    driftAfter(h);
+}
+
+void FollowSpotFeel_Test::q253AFreeFlySpotHoldsStill_data()
+{
+    QTest::addColumn<QString>("tool");
+    for (const char *tool : { "quick", "venue", "cue", "look", "walk" })
+        QTest::newRow(tool) << QString(tool);
+}
+
+void FollowSpotFeel_Test::q253AFreeFlySpotHoldsStill()
+{
+    QFETCH(QString, tool);
+    using CJ = ControllerJobs;
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    jobs->resetAll();
+    q253Pads(stub, iom, false);
+    auto restore = qScopeGuard([&]() {
+        h.pc->focusSession()->stop();
+        h.pc->refineSession()->stop();
+        h.pc->padRun()->setEnabled(false, false);
+        jobs->resetAll();
+        q253Unpads(stub, iom);
+        h.pc->refreshStickBinding();
+    });
+    jobs->setJobs(jobs->identityOfUniverse(0), CJ::Jobs(CJ::RunCues | CJ::Focus));
+    jobs->setJobs(jobs->identityOfUniverse(1), CJ::Jobs(CJ::FollowSpot));
+    if (FollowSpotMover *m = h.pc->followSpotMover())
+        m->setFixedDt(MasterTimer::tick() / 1000.0);
+    h.pc->refreshStickBinding();
+    QCOMPARE(h.pc->m_panUniverse, quint32(1));
+    const Q253Show show = q253Show(m_doc, h, true, false);
+    // Free-fly: the effect flies the heads on its own clock, as in the app.
+    h.spacingMs = 20;
+    h.use(h.rig.freeScene);
+    auto pan = [&]() {
+        const QByteArray d = dmx(m_doc);
+        const int a = int(h.rig.fine->address());
+        return (uchar(d.at(a)) * 256 + uchar(d.at(a + 1))) * 540.0 / 65535.0;
+    };
+    const double start = pan();
+    h.pc->slotControllerInputChanged(1, 0, 255, QString());
+    for (int i = 0; i < 15; ++i)
+        h.tick();
+    const double flown = pan();
+    QVERIFY2(qAbs(flown - start) > 0.5, qPrintable(QString("the stick flew nothing (%1 to %2 deg)").arg(start).arg(flown)));
+
+    // The tool on its lights, the stick still held: the effect hears no speed.
+    QString why;
+    QVERIFY2(q253Start(h, show, tool, show.elsewhere->id(), &why), qPrintable(why));
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    for (int i = 0; i < 25; ++i)
+    {
+        h.tick();
+        const QVariantMap jd = runner->dataChannel(QStringLiteral("joystick"));
+        QVERIFY2(jd.value("vx", 0.0).toDouble() == 0.0 && jd.value("vy", 0.0).toDouble() == 0.0
+                     && jd.value("pan").toDouble() == 0.5,
+                 qPrintable(QString("tick %1 of the hold: the effect still hears vx %2, vy %3, pan %4")
+                            .arg(i).arg(jd.value("vx").toDouble()).arg(jd.value("vy").toDouble())
+                            .arg(jd.value("pan").toDouble())));
+    }
+    QCOMPARE(h.pc->followSpotStatus().heldBy, q253Name(tool));
+    // The tool ends (the stick still held): the heads are where they were.
+    q253End(h, tool);
+    for (int i = 0; i < 10; ++i)
+        h.tick();
+    const double after = pan();
+    QVERIFY2(qAbs(after - flown) < 1.0, qPrintable(QString("the free-fly head moved %1 deg through the hold")
+                                                   .arg(after - flown)));
+    h.pc->slotControllerInputChanged(1, 0, 127, QString());
+    h.spacingMs = 0;
+}
+
+void FollowSpotFeel_Test::q253AWalksCueStepsKeepItsOwnerAndTheSpot_data()
+{
+    QTest::addColumn<bool>("walkerSteers");
+    QTest::newRow("another pad's fine stick through the steps") << false;
+    QTest::newRow("the walker's own stick through the steps") << true;
+}
+
+void FollowSpotFeel_Test::q253AWalksCueStepsKeepItsOwnerAndTheSpot()
+{
+    QFETCH(bool, walkerSteers);
+    using CJ = ControllerJobs;
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    PadRun *run = h.pc->padRun();
+    QStringList said;
+    const QMetaObject::Connection listen = connect(h.pc, &ProgrammerController::operatorAnnounce, this,
+                                                   [&said](const QString &text) { said << text; });
+    jobs->resetAll();
+    q253Pads(stub, iom, false);
+    auto restore = qScopeGuard([&]() {
+        disconnect(listen);
+        h.pc->refineSession()->stop();
+        run->setEnabled(false, false);
+        jobs->resetAll();
+        q253Unpads(stub, iom);
+        h.pc->refreshStickBinding();
+    });
+    // A walks. The follow spot is B's (beside), or A's own.
+    jobs->setJobs(jobs->identityOfUniverse(0), walkerSteers ? CJ::Jobs(CJ::AllJobs) : CJ::Jobs(CJ::RunCues | CJ::Focus));
+    jobs->setJobs(jobs->identityOfUniverse(1), walkerSteers ? CJ::Jobs(CJ::RunCues | CJ::Focus) : CJ::Jobs(CJ::FollowSpot));
+    if (FollowSpotMover *m = h.pc->followSpotMover())
+        m->setFixedDt(MasterTimer::tick() / 1000.0);
+    h.pc->refreshStickBinding();
+    QCOMPARE(h.pc->m_panUniverse, walkerSteers ? quint32(0) : quint32(1));
+    const Q253Show show = q253Show(m_doc, h, false, false);
+    h.use(h.rig.targetScene);
+    if (!walkerSteers)
+    {
+        // B trims with its fine stick, and holds it.
+        h.pc->slotControllerInputChanged(1, 2, 255, QString());
+        QVERIFY2(travel(h, 15) > 0.01, "B's fine stick moved nothing (no control)");
+    }
+    QString why;
+    QVERIFY2(q253Start(h, show, "walk", UINT_MAX, &why), qPrintable(why));
+    QCOMPARE(h.pc->controllerOwner(), quint32(0));
+    const quint32 first = run->walkCue();
+    // A steps the walk on: RT (the next cue), then a swipe.
+    for (int step = 0; step < 2; ++step)
+    {
+        if (step == 0)
+            q253Press(h, 0, kQRT);
+        else
+            run->swipe(TouchSwipe::Right);
+        QVERIFY(run->isWalking());
+        QVERIFY2(run->walkCue() != first, "the walk did not step");
+        QVERIFY2(h.pc->controllerOwner() == 0,
+                 qPrintable(QString("after the %1 the walk has no owner").arg(step == 0 ? "RT" : "swipe")));
+        if (!walkerSteers)
+        {
+            const double d = travel(h, 15);
+            QVERIFY2(d > 0.01, qPrintable(QString("B's held fine stick stopped steering after the walk's %1 (%2 m)")
+                                          .arg(step == 0 ? "RT" : "swipe").arg(d)));
+        }
+    }
+    if (walkerSteers)
+    {
+        // The walker's stick is the walk's: the spot does not move.
+        h.pc->slotControllerInputChanged(0, 0, 255, QString());
+        const double d = driftAfter(h);
+        QVERIFY2(d < 0.005, qPrintable(QString("the walker's stick steered the follow spot %1 m after a cue step")
+                                       .arg(d)));
+        h.pc->slotControllerInputChanged(0, 0, 127, QString());
+        // Another pad with Focus does not take the walk.
+        const int inUse = q253Said(said, "Another controller is in use.");
+        q253Press(h, 1, kQA);
+        QCOMPARE(q253Said(said, "Another controller is in use."), inUse + 1);
+        QCOMPARE(h.pc->controllerOwner(), quint32(0));
+    }
+    else
+        h.pc->slotControllerInputChanged(1, 2, 127, QString());
+    q253End(h, "walk");
+    QVERIFY(!run->isWalking());
+}
+
 void FollowSpotFeel_Test::q253ATwinPadDoesNotDoubleSteer()
 {
     Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
@@ -1685,6 +1978,7 @@ void FollowSpotFeel_Test::q253ATwinPadDoesNotDoubleSteer()
     h.pc->refreshStickBinding();
     QVERIFY(h.pc->m_panBound);
     QCOMPARE(h.pc->m_panUniverse, quint32(0));
+    const Q253Show show = q253Show(m_doc, h, false, false);
     h.use(h.rig.targetScene);
     auto fine = [&](uchar v, bool both) {
         h.pc->slotControllerInputChanged(0, 2, v, QString());
@@ -1710,30 +2004,23 @@ void FollowSpotFeel_Test::q253ATwinPadDoesNotDoubleSteer()
                                 "counted twice").arg(twice).arg(once)));
 
     // The tool and the follow spot on that pad, the tool taken on its twin
-    // line: the bound stick is the tool's, the spot holds still.
-    QLCFixtureDef *def = moverDef(false);
-    Fixture *other = new Fixture(m_doc);
-    other->setName("Spot Other");
-    other->setFixtureDefinition(def, def->modes().first());
-    other->setUniverse(0);
-    other->setAddress(130);
-    m_doc->addFixture(other);
-    FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(h.rig.fine->id());
-    rp.trussOffset = 3.0f;
-    m_doc->monitorProperties()->setFixtureRigProps(other->id(), rp);
+    // line: the bound stick (line 0) is the tool's -- it moves the head
+    // being focused -- and the spot holds still.
     FocusSession::Options o;
-    o.fixtures = { other->id() };
+    o.fixtures = { show.other->id() };
     o.first.kind = FocusSession::Reference::Target;
-    o.first.id = h.rig.subject->id();
+    o.first.id = show.elsewhere->id();
     QString why;
     QVERIFY2(h.pc->focusSession()->start(o, &why), qPrintable(why));
     h.pc->claimController(1);
     QVERIFY(h.pc->isToolsPad(0));
+    QSignalSpy nudged(h.pc->focusSession(), &FocusSession::offsetChanged);
     h.pc->slotControllerInputChanged(0, 0, 255, QString());
     h.pc->slotControllerInputChanged(0, 2, 255, QString());
     const double d = driftAfter(h);
     QVERIFY2(d < 0.005, qPrintable(QString("the tool's pad, on its twin line, steered the follow spot %1 m "
                                            "beside its own tool").arg(d)));
+    QVERIFY2(!nudged.isEmpty(), "the tool's own pad, on its twin line, moved nothing of the tool");
     h.pc->slotControllerInputChanged(0, 0, 127, QString());
     h.pc->slotControllerInputChanged(0, 2, 127, QString());
 }

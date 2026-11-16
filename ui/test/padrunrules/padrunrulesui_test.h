@@ -63,7 +63,9 @@ private slots:
      *  lights holds it, and the follow spot's chip (and its tooltip, from
      *  the same status) says why -- "Follow spot holds: Focus This Look
      *  is working on its lights"; on other lights, or once the tool ends,
-     *  it says nothing of a hold. */
+     *  it says nothing of a hold; a light aimed at the spot's subject holds
+     *  it too. The chip as drawn at 1024, 1440 and 1920 wide (its fitted
+     *  text, inside the window, its pixels). */
     void q253TheFollowChipSaysWhyItHolds();
 
 private:

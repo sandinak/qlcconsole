@@ -1097,7 +1097,14 @@ private:
      *  @p sceneId (empty: it does not, or no tool runs). @p tick: the
      *  controller tick (the spot's own lights are looked at again now and
      *  then). */
-    QString toolOnSpotLights(quint32 sceneId, bool tick);
+    QString toolOnSpotLights(quint32 sceneId, quint32 targetId, bool tick);
+    /** The stage targets the tool's live looks aim at (its calls' and
+     *  references', its cue's or layer's Aim looks): the follow spot
+     *  moving its subject @p targetId moves those lights (review of Q253). */
+    QSet<quint32> m_toolTargets;
+    int m_toolLightsTicks = 0;
+    /** toolName() as of the last change of the tool (not a tr() a tick). */
+    QString m_toolNameCached;
     /** The hold the follow spot is under now (m_followStatus.heldBy as it
      *  will be): from no hold to one, everything pushed on it is let go
      *  and latched and it stops at once. */
