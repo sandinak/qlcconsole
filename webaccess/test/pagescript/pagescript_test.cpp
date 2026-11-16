@@ -995,4 +995,45 @@ void PageScript_Test::focusShowsBlindAndTeaching()
     QVERIFY(text(QStringLiteral("held")).contains(QStringLiteral("Teaching holds real output")));
 }
 
+void PageScript_Test::noStopIsShownThatWasNotSent()
+{
+    /* Remote GO off (Show Settings, off by default) or the show's PIN not
+       given yet: the page's pad may not send the emergency stop (board
+       Q256 keeps today's rule: WebAccessRun::kStopNeedsRemote), and the
+       server would refuse it anyway. The page turned its banner red and
+       read EMERGENCY STOP all the same (eval/0412): the person holding the
+       pad was told the show stopped when no ALL OFF went. Now it says the
+       stop was NOT sent, and why. */
+    loadPage(WebAccessRun::html());
+    js(QStringLiteral("__open()"));
+    sent();
+    const QList<QJsonObject> states = { liveRun(QJsonObject{ { "remote", false } }),
+                                        liveRun(QJsonObject{ { "pin", true } }) };
+    for (const QJsonObject &state : states)
+    {
+        runState(state);
+        pad(QJsonObject{ { "lb", 1 }, { "rb", 1 }, { "lt", 1 }, { "rt", 1 } });
+        const QStringList words = sent();
+        const bool claimsStop = shown(QStringLiteral("armed"))
+                                && text(QStringLiteral("armed")) == QStringLiteral("EMERGENCY STOP");
+        const bool remoteOn = state.value(QStringLiteral("remote")).toBool();
+        QVERIFY2(!claimsStop || words.contains(QStringLiteral("QLC+RUN|alloff")),
+                 qPrintable(QString("the page says EMERGENCY STOP and sent no ALL OFF (%1)")
+                                .arg(remoteOn ? QStringLiteral("PIN not given") : QStringLiteral("remote GO off"))));
+        QVERIFY(!words.contains(QStringLiteral("QLC+RUN|alloff")));
+        // Said plainly: not sent, and why.
+        QVERIFY(shown(QStringLiteral("armed")));
+        QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("STOP NOT SENT"));
+        QVERIFY2(text(QStringLiteral("msg")).contains(remoteOn ? QStringLiteral("PIN") : QStringLiteral("remote GO is off")),
+                 qPrintable(text(QStringLiteral("msg"))));
+        pad(QJsonObject(), 50);
+    }
+    // Allowed (remote GO on, no PIN): the stop goes, and only then is it shown.
+    runState(liveRun());
+    pad(QJsonObject{ { "lb", 1 }, { "rb", 1 }, { "lt", 1 }, { "rt", 1 } });
+    QVERIFY(sent().contains(QStringLiteral("QLC+RUN|alloff")));
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("EMERGENCY STOP"));
+    pad(QJsonObject(), 50);
+}
+
 QTEST_MAIN(PageScript_Test)

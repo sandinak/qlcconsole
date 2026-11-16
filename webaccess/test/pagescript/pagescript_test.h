@@ -62,6 +62,10 @@ private slots:
      *  (each pull, the cue moving on), and is gone disarmed, after the
      *  stop and when the console names none. */
     void theArmedHitIsNamedUnderTheBanner();
+    /** The page never shows EMERGENCY STOP for a stop it did not send
+     *  (remote GO off, the PIN not given): it says STOP NOT SENT and why
+     *  (eval/0412; board Q256 keeps the permission rule). */
+    void noStopIsShownThatWasNotSent();
     void theTestOpenedMidChordArmsNothing();
     void aPadGoneMidHoldDisarmsThePage();
     void acksSayWhyInPlainWords();
