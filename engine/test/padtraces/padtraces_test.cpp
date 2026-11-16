@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include <QSignalSpy>
 #include <QMutex>
 #include <QSettings>
 #include <QTemporaryDir>
@@ -299,9 +300,15 @@ void PadTraces_Test::aShiftedLineIsNoSafety()
     QVERIFY(in(a, kRb, 0));
     QVERIFY(in(a, kLb, 0));
     QVERIFY(in(a, kLt, 255));
-    // A goes: B is on line 0 now, universe 1 still patched there.
+    // A goes: B is on line 0 now, universe 1 still patched there -- and told.
+    QSignalSpy told(m_doc->inputOutputMap(), &InputOutputMap::inputPatchReconnected);
     m_fake->unlist(a);
     scan(1);
+    QStringList toldUniverses;
+    for (const QList<QVariant> &args : std::as_const(told))
+        toldUniverses << QString::number(args.at(0).toUInt());
+    QVERIFY2(toldUniverses.contains(QStringLiteral("1")),
+             qPrintable(QString("universe 1 was not told its line changed (told: %1)").arg(toldUniverses.join(','))));
     QCOMPARE(lineOf(b), 0);
     QCOMPARE(m_doc->inputOutputMap()->inputPatch(1)->input(), quint32(0));
     if (!run->isArmed())
@@ -310,7 +317,11 @@ void PadTraces_Test::aShiftedLineIsNoSafety()
     QVERIFY(in(b, kA, 255));
     QVERIFY(in(b, kA, 0));
     QTest::qWait(50);
-    QVERIFY2(commandCount(int(ShowControl::Go)) == 0, "B's A press played a cue on the LT pad A held");
+    QVERIFY2(commandCount(int(ShowControl::Go)) == 0,
+             qPrintable(QString("B's A press played a cue on the LT pad A held (armed on %1, notice '%2', "
+                                "u2 on line %3)")
+                        .arg(run->armedUniverse()).arg(run->notice())
+                        .arg(m_doc->inputOutputMap()->inputPatch(2)->input())));
     // B's own LT, then A: a GO.
     QVERIFY(in(b, kLt, 255));
     QVERIFY(in(b, kA, 255));
