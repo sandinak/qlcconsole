@@ -1110,6 +1110,9 @@ protected:
 public:
     /** Undo the last fixture move (Cmd/Ctrl+Z). */
     void undoLastMove();
+    /** True while fixtureMoved() is for a fixture the person did not place:
+     *  an undo putting it back, a truss carrying it. */
+    bool quietMoves() const { return m_quietMoves; }
 
     /** Record a stage-feature paste on the undo stack so Ctrl+Z removes the
      *  copies (and any palettes created for pasted targets, and the fixtures
@@ -1298,6 +1301,9 @@ signals:
 
     /** Signal emitted after fixture point -> metrics conversion */
     void fixtureMoved(quint32 id, QPointF pos);
+    /** Centre the Pan on the Stage was chosen for these heads (Monitor
+     *  does it: PanTurn, one undo step). */
+    void centrePanRequested(const QList<quint32> &fixtureIds);
 
     /** A drag was refused because what it grabbed is held still; @p why is
      *  for the status line ("Plot locked — Edit Plot to move"). */
@@ -1667,6 +1673,7 @@ private:
     QList<UndoEntry> m_moveUndo;
     int m_undoBatch = 0;          ///< last batch number handed out
     int m_openUndoBatch = 0;      ///< the drag in progress's batch, 0 = none
+    bool m_quietMoves = false;    ///< quietMoves()
     /** Record an undo entry (in the open batch, if any), keeping the last 50. */
     void pushUndo(UndoEntry e);
     /** Put back what one entry recorded. */

@@ -71,6 +71,47 @@ private slots:
     void areaCoversHisChorus();
     void areaCoverNeedsHeadAndDeck();
     void areaTiesGoToTheBestCover();
+
+    /** The pan turn, stored with the head (PanTurn). Centred by the action,
+     *  a target swept across the stage and back moves the pan smoothly,
+     *  clear of both channel ends, never round, for a 540 and a 630 degree
+     *  head whose zero faces away from the stage (the stage across turn
+     *  0's seam) and a 360 facing it; hung and standing, inverted or not.
+     *  Every answer still points at its target; turn 0 is the old answer. */
+    void aSweepAcrossTheStageStaysOnOneTurn_data();
+    void aSweepAcrossTheStageStaysOnOneTurn();
+    /** A 360 degree head has one pan for each bearing: nothing to choose,
+     *  and its answers are what they always were. */
+    void aHeadWithOneTurnHasNothingToChoose();
+    /** M1: a 360 head with a calibration offset answers the same on any
+     *  stored turn. */
+    void aCalibratedOneTurnHeadIgnoresAStoredTurn();
+    /** Two Aim looks either side of turn 0's seam, the turn centred: their
+     *  pans are the short way apart, and a fade lands between the marks. */
+    void looksEitherSideOfTheSeamFadeTheShortWay();
+    /** Save and load: the turn goes in the show (only when not 0) and
+     *  comes back; a show without it loads on turn 0, today's DMX. */
+    void thePanTurnIsSavedWithTheShow();
+    /** A calibration nudge, a centimetre move, a resized grid, a change of
+     *  units: the stored turn and the pan stay put. */
+    void nothingButThePersonChangesTheTurn();
+    /** Over the stage: turn 0 (its pan zero) whatever the action or move. */
+    void aHeadOverTheStageKeepsItsPanZero();
+    /** The proposal: 0 while the stage fits, else the turn with most room;
+     *  a move proposes only when the stage crosses the seam. */
+    void theProposalPutsTheStageClearOfTheSeam();
+    /** A front truss just inside the grid (no decks) is out front: the
+     *  stage in its near-vertical cone is left out (PadBench). */
+    void aFrontTrussJustInsideTheGridIsOutFront();
+    /** A seam within kClearDeg of the stage counts as on it. */
+    void aSeamJustOffTheStageCountsAsOnIt();
+
+    // Review of d1dd9d380c (the per-frame reference): what must not happen.
+    void reviewACalibrationNudgeNeverSwingsTheHeadRound();
+    void reviewACentimetreMoveKeepsTheTurn();
+    void reviewTheUnitsSettingDoesNotTurnAHeadRound();
+    void reviewOverheadLooksThatFadedShortStillDo();
+    void reviewAWalkUpTheSideNeverSwingsRound();
 };
 
 #endif

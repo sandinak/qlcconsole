@@ -100,6 +100,7 @@ bool AimSolver::frameFor(Doc *doc, quint32 fixtureId, Frame &frame)
     frame.tiltOffsetDeg = rp.tiltOffsetDeg;
     frame.panInvert     = rp.panInvert;
     frame.tiltInvert    = rp.tiltInvert;
+    frame.panTurn       = rp.panTurn;
 
     const Fixture::EffectiveBeam eb = fixture->effectiveBeam();
     frame.panMax  = float(eb.panMax);  if (frame.panMax  <= 0.0f) frame.panMax  = 360.0f;
@@ -266,7 +267,7 @@ AimSolver::Solution AimSolver::solve(const Frame &frame, const QVector3D &target
     while (relativePan >  180.0f) relativePan -= 360.0f;
     while (relativePan < -180.0f) relativePan += 360.0f;
 
-    float panRaw = frame.panMax / 2.0f + relativePan + frame.panOffsetDeg;
+    float panRaw = turnPan(frame, relativePan);
     // Floor mount = hung fixture flipped 180° about horizontal → pan sense
     // reverses (and tilt negates). The panInvert flag toggles from there.
     bool invertPan = frame.panInvert;
@@ -322,6 +323,35 @@ AimSolver::Solution AimSolver::solve(const Frame &frame, const QVector3D &target
     out.tiltDeg = qBound(0.0f, bestTilt, frame.tiltMax);
     out.marginDeg = best;
     return out;
+}
+
+float AimSolver::turnPan(const Frame &frame, float relativePan)
+{
+    const float panRaw = frame.panMax / 2.0f + relativePan + frame.panOffsetDeg;
+    /* Turn 0 is the answer this always gave, exactly. A head with one turn
+       of pan or less has nothing to choose. */
+    if (frame.panTurn == 0 || frame.panMax <= 360.0f + 1e-3f)
+        return panRaw;
+    /* Of this pan and the same a whole turn either side, the one in range
+       nearest the stored turn's centre; this one first, so a tie keeps it.
+       Before invert, which mirrors pans and centre alike. */
+    const float centre = frame.panMax / 2.0f + frame.panOffsetDeg + 360.0f * float(frame.panTurn);
+    float pick = panRaw, pickDist = 0.0f;
+    bool found = false;
+    for (int j : { 0, -1, 1, -2, 2, -3, 3 })
+    {
+        const float pan = panRaw + 360.0f * float(j);
+        if (pan < 0.0f || pan > frame.panMax)
+            continue;
+        const float dist = qAbs(pan - centre);
+        if (!found || dist < pickDist - 1e-3f)
+        {
+            found = true;
+            pick = pan;
+            pickDist = dist;
+        }
+    }
+    return pick;
 }
 
 void AimSolver::intendedAngles(const FixtureRigProps &rp, double panCentredDeg,

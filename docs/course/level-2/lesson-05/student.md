@@ -147,6 +147,21 @@ beam. Leave Select without a fade: a fade passes through the other
 buttons on the way. The plot shows what was last sent, not what a candle
 did: one in a pocket missed the button.
 
+## When a head swings the long way round
+
+A 540° head reaches most places two ways, a whole turn apart on its pan
+channel. Where it changes from one to the other is its **seam**: a beam
+moved across that line swings all the way round the other way, in front
+of the audience. A spot hung out front with its pan zero facing away from
+the stage has the seam in the middle of the stage, so a follow spot walked
+across it whips round.
+
+The turn a head works in is kept with it. **Fixture Properties ▸ Pan works
+around** shows where the seam is and how clear of it the stage is; Show
+Review warns about a head with its seam on the stage (**MOV-14**), and its
+fix, **Centre the Pan on Stage…**, moves the seam off the stage in one
+Undo step. Nothing else moves it.
+
 ## Exit ticket
 
 1. What does a **line target** do that a point target doesn't?

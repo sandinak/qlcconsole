@@ -1058,6 +1058,14 @@ private slots:
      *  (wfaudit-silent-failures) */
     void aRefusedLayersDropSaysWhy();
 
+    /** The pan turn (PanTurn): Fixture Properties' row and its three
+     *  actions, each one undo step; Cancel puts it back; a 360 has none. */
+    void thePanTurnInFixturePropertiesIsOneUndoStep();
+    /** Centre the pan for a selection (and the plot's menu): one undo step. */
+    void centringASelectionIsOneUndoStep();
+    /** A move changes the turn only when the stage crosses the seam, said. */
+    void aMovedHeadsTurnChangesOnlyWhenItMustAndSaysSo();
+
 private:
     Doc* m_doc;
 };

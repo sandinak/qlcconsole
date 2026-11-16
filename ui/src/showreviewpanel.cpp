@@ -475,7 +475,14 @@ void ShowReviewPanel::updateButtons()
     bool backwash = !sel.isEmpty();
     for (const ReviewFinding &f : sel)
         backwash = backwash && f.check == QLatin1String("PWR-12");
-    m_fix->setText(backwash ? tr("Show Me ▸") : tr("Fix ▸"));
+    // MOV-14: the fix is the action itself (it says what changes first).
+    bool panSeam = !sel.isEmpty();
+    for (const ReviewFinding &f : sel)
+        panSeam = panSeam && f.check == QLatin1String("MOV-14");
+    m_fix->setText(backwash ? tr("Show Me ▸") : panSeam ? tr("Centre the Pan on Stage…") : tr("Fix ▸"));
+    m_fix->setToolTip(panSeam ? tr("Each head takes the turn of its pan that keeps the seam off the stage. "
+                                   "It says what changes first; one undo step.")
+                              : tr("Go to the place to fix it (or double-click the row)"));
     m_accept->setText(meantRows ? tr("I Meant It") : tr("Not a Problem…"));
     m_accept->setToolTip(meantRows ? tr("This light on the cyc is on purpose: kept on the layer that lights "
                                         "it (one undo step), so the warning goes away and stays away")

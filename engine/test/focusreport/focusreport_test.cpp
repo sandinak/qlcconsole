@@ -29,6 +29,7 @@
 #include "fixturegroup.h"
 #include "focussession.h"
 #include "focusreport.h"
+#include "panturn.h"
 #include "rigowner.h"
 #include "stagetarget.h"
 #include "qlcphysical.h"
@@ -187,6 +188,55 @@ void FocusReport_Test::aVenueRemembersChecksAndDeadLights()
     QVERIFY(v->setActiveVenue(QString()));
     QVERIFY(!v->setDead(a->id(), true));
     QVERIFY(!v->markChecked({ a->id() }));
+}
+
+/* A head's pan turn is part of what a venue keeps (its pan zero there can
+   need another); a venue file from before turns were kept leaves the
+   show's own turn standing. */
+void FocusReport_Test::aVenueKeepsItsPanTurn()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10.0f, 6.0f, 8.0f));
+    Fixture *a = makeSpot(m_doc, "FOH", 5.0f, 12.0f);
+    QVERIFY(a != nullptr);
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(m_dir->filePath("Tour.qlcc"), false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    QVERIFY(PanTurn::centre(m_doc, a->id()));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 1);
+    QVERIFY(v->hasCorrection(a->id()));
+    QByteArray side = readFile(v->filePath());
+    QVERIFY2(side.contains("PanTurn=\"1\""), side.constData());
+
+    // The show as built: its own turn. The venue again: the venue's.
+    QVERIFY(v->setActiveVenue(QString()));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 0);
+    QVERIFY(v->setActiveVenue("Lincoln HS"));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 1);
+    VenueCorrections again(m_doc);
+    QVERIFY(again.fromXml(side));
+    QCOMPARE(again.venue("Lincoln HS").fixtures.value(a->id()).panTurn, 1);
+
+    // A venue file from before: no PanTurn. The show's own turn (now -1) stands.
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(PanTurn::setTurn(m_doc, a->id(), -1));
+    side = readFile(v->filePath());
+    side.replace("PanTurn=\"1\"", "");
+    QVERIFY(!side.contains("PanTurn"));
+    VenueCorrections older(m_doc);
+    QVERIFY(older.fromXml(side));
+    QCOMPARE(older.venue("Lincoln HS").fixtures.value(a->id()).panTurn, RigCalibration::kTurnUnset);
+    {
+        QFile f(v->filePath());
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(side);
+    }
+    QVERIFY(v->load());
+    QVERIFY(v->setActiveVenue("Lincoln HS"));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, -1);
+    QVERIFY(v->setActiveVenue(QString()));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, -1);
 }
 
 void FocusReport_Test::theReportListsEveryLight()

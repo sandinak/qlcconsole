@@ -321,6 +321,16 @@ struct FixtureRigProps
      *  the fixture's centre: effective = panMax - computed (before qBound). */
     bool             panInvert  = false;
     bool             tiltInvert = false;
+    /** Which turn of its pan a head with more than 360 degrees answers in
+     *  (AimSolver::solve()). 0, every older show and the default, is the
+     *  turn round the pan zero: half a turn either side of it, the seam
+     *  behind it. +1 / -1 take, for every bearing, the pan furthest up / down
+     *  the channel that points there, which moves the seam round to one side
+     *  (PanTurn::seamBearing()). Stored, and never changed by anything but
+     *  the person: a calibration nudge, a move of a centimetre, a resized
+     *  grid or a change of units cannot swing a head round a turn. The app
+     *  only proposes one at clear moments (PanTurn). */
+    int              panTurn = 0;
 
     /** A FIXED light (no pan or tilt channels) aimed like a par on its yoke
      *  (board Q100): panZeroDir is its bearing seen from above, degrees
@@ -690,6 +700,11 @@ struct RigCalibration
     float panZeroDir = 0.0f;
     float aimDown = 90.0f;
     float lensDeg = 0.0f;
+    /** The head's pan turn (FixtureRigProps::panTurn): a venue whose pan
+     *  zero differs can need another. kTurnUnset: a venue file from before
+     *  turns were kept -- the show's own turn stands. */
+    int   panTurn = 0;
+    static constexpr int kTurnUnset = INT_MIN;
 
     static RigCalibration of(const FixtureRigProps &rp)
     {
@@ -700,10 +715,13 @@ struct RigCalibration
         c.panZeroDir = rp.panZeroDir;
         c.aimDown = rp.aimDown;
         c.lensDeg = rp.lensDeg;
+        c.panTurn = rp.panTurn;
         return c;
     }
     void applyTo(FixtureRigProps &rp) const
     {
+        if (panTurn != kTurnUnset)
+            rp.panTurn = panTurn;
         rp.panOffsetDeg = panOffsetDeg;
         rp.tiltOffsetDeg = tiltOffsetDeg;
         rp.fixedAim = fixedAim;
@@ -718,7 +736,8 @@ struct RigCalibration
             && fixedAim == o.fixedAim
             && qFuzzyCompare(1.0f + panZeroDir, 1.0f + o.panZeroDir)
             && qFuzzyCompare(1.0f + aimDown, 1.0f + o.aimDown)
-            && qFuzzyCompare(1.0f + lensDeg, 1.0f + o.lensDeg);
+            && qFuzzyCompare(1.0f + lensDeg, 1.0f + o.lensDeg)
+            && (panTurn == o.panTurn || panTurn == kTurnUnset || o.panTurn == kTurnUnset);
     }
     bool operator!=(const RigCalibration &o) const { return !(*this == o); }
 };

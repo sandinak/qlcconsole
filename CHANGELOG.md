@@ -10,6 +10,12 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [0.5.0] - Unreleased
+
+### Changed and fixed
+
+- **A follow spot walked across the stage no longer swings round a whole turn.** A head with more than a turn of pan (540°, 630°) now keeps a **pan turn** with it in the show (and by venue): which of the two pans a turn apart it answers with, and so where its seam is, the one bearing where a move swings the head round. Turn 0 is every older show's DMX exactly. Fixture Properties ▸ Aim & Mount ▸ **Pan works around** shows the turn, the seam and how clear of it the stage is, with **Centre on Stage**, **Earlier Turn** and **Later Turn**; the plot's Facing menu centres a selection in one undo step. Nothing changes a turn on its own (a calibration nudge, a small move, a resized grid or a change of units cannot); placing, moving or patching a head changes it only when the stage now crosses its seam, and the notice line says so. Show Review's new **MOV-14** names each head whose stage crosses its seam, a follow spot out front facing away from the stage, and its **Centre the Pan on Stage…** fix says what changes first.
+
 ## [0.4.9] - Unreleased
 
 ### Changed and fixed

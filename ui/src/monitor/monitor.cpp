@@ -28,6 +28,7 @@
 #include <QActionGroup>
 #include <QTabWidget>
 #include <QMainWindow>
+#include <QStatusBar>
 #include <QColorDialog>
 #include <QSet>
 #include <QStyleOptionComboBox>
@@ -103,6 +104,7 @@
 #include "focusmodepanel.h"
 #include "focusmenu.h"
 #include "aimsolver.h"
+#include "panturn.h"
 #include "powerdistribution.h"
 #include "networktopology.h"
 #include "networkgearcatalog.h"
@@ -310,6 +312,11 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
             this, SLOT(slotFixtureChanged(quint32)));
     connect(m_doc, SIGNAL(fixtureRemoved(quint32)),
             this, SLOT(slotFixtureRemoved(quint32)));
+    // Patched: a clear moment to look at each head's pan turn (PanTurn).
+    connect(m_doc, &Doc::fixturesPatched, this, [this](const QList<quint32> &ids) {
+        if (m_doc->loadStatus() != Doc::Loading)
+            schedulePanTurns(ids);
+    });
     connect(m_doc->masterTimer(), SIGNAL(functionStarted(quint32)),
             this, SLOT(slotFunctionStarted(quint32)));
     // Repaint fixture ghost outlines when the mark set changes (add/remove or an
@@ -748,6 +755,8 @@ void Monitor::initGraphicsView()
 
     connect(m_graphicsView, SIGNAL(fixtureMoved(quint32,QPointF)),
             this, SLOT(slotFixtureMoved(quint32,QPointF)));
+    connect(m_graphicsView, &MonitorGraphicsView::centrePanRequested, this,
+            [this](const QList<quint32> &ids) { centrePanOnStage(ids); });
     connect(m_graphicsView, SIGNAL(viewClicked(QMouseEvent*)),
             this, SLOT(slotViewClicked()));
     connect(m_graphicsView, &MonitorGraphicsView::fixtureDoubleClicked,
@@ -1945,6 +1954,83 @@ void Monitor::pushUndoCallback(const std::function<void()> &undo)
 {
     if (m_graphicsView != nullptr)
         m_graphicsView->pushUndoCallback(undo);
+}
+
+/*****************************************************************************
+ * Pan turns (PanTurn): changed only by the person, or proposed at a clear
+ * moment and said
+ *****************************************************************************/
+
+void Monitor::sayTurnChanges(const QStringList &changes, bool proposed)
+{
+    if (changes.isEmpty())
+        return;
+    const QString what = changes.size() == 1 ? changes.first()
+                                             : tr("%n heads' pan turns changed", "", int(changes.size()));
+    const QString text = proposed
+        ? tr("Its pan seam was on the stage there: %1. Undo puts it back.").arg(what)
+        : tr("Centred the pan on the stage: %1. Undo puts it back.").arg(what);
+    showNotice(text);
+    if (QMainWindow *mw = qobject_cast<QMainWindow *>(window()))
+        if (mw->statusBar() != nullptr)
+            mw->statusBar()->showMessage(text, 8000);
+}
+
+QStringList Monitor::centrePanOnStage(const QList<quint32> &fids)
+{
+    QStringList changes;
+    const QByteArray before = rigSnapshot();
+    for (quint32 fid : fids)
+    {
+        const int was = m_props->fixtureRigProps(fid).panTurn;
+        if (PanTurn::centre(m_doc, fid))
+            changes << PanTurn::changeText(m_doc, fid, was, m_props->fixtureRigProps(fid).panTurn);
+    }
+    if (changes.isEmpty())
+    {
+        showNotice(tr("The pan is already centred on the stage: nothing to change."));
+        return changes;
+    }
+    pushRigUndo(before);
+    m_doc->setModified();
+    sayTurnChanges(changes, false);
+    return changes;
+}
+
+QStringList Monitor::proposePanTurns(const QList<quint32> &fids, bool ownStep)
+{
+    QStringList changes;
+    const QByteArray before = ownStep ? rigSnapshot() : QByteArray();
+    for (quint32 fid : fids)
+    {
+        const int was = m_props->fixtureRigProps(fid).panTurn;
+        const int now = PanTurn::proposalAfterMove(m_doc, fid);
+        if (now != was && PanTurn::setTurn(m_doc, fid, now))
+            changes << PanTurn::changeText(m_doc, fid, was, now);
+    }
+    if (changes.isEmpty())
+        return changes;
+    if (ownStep)
+        pushRigUndo(before);
+    m_doc->setModified();
+    sayTurnChanges(changes, true);
+    return changes;
+}
+
+void Monitor::schedulePanTurns(const QList<quint32> &fids)
+{
+    const bool first = m_pendingTurns.isEmpty();
+    for (quint32 fid : fids)
+        if (!m_pendingTurns.contains(fid))
+            m_pendingTurns << fid;
+    if (!first || m_pendingTurns.isEmpty())
+        return;
+    // Once the drag or drop is over and its own undo step is in.
+    QTimer::singleShot(0, this, [this]() {
+        const QList<quint32> fids = m_pendingTurns;
+        m_pendingTurns.clear();
+        proposePanTurns(fids);
+    });
 }
 
 void Monitor::showGraphicsView()
@@ -4035,6 +4121,7 @@ void Monitor::slotAddFixture()
                 m_graphicsView->updateFixture(fid);
             m_doc->setModified();
         }
+        schedulePanTurns(fs.selection());     // placed: its pan turn looked at
     }
     if (m_layersPanel) m_layersPanel->reload();
     m_graphicsView->refreshFixtureLabels();   // apply per-layer labels to the new item
@@ -6943,6 +7030,7 @@ void Monitor::slotFixturesDropped(const QList<quint32> &fixtureIds, QPointF scen
     bool asked = false;
     quint32 layer = 0;
     QList<quint32> placed;      // already on the plot: shown, not silently skipped
+    QList<quint32> dropped;
     foreach (quint32 fid, fixtureIds)
     {
         Fixture *fx = m_doc->fixture(fid);
@@ -6966,10 +7054,12 @@ void Monitor::slotFixturesDropped(const QList<quint32> &fixtureIds, QPointF scen
         m_props->setFixtureLayer(fid, layer);
         Fountain::mountIn(m_doc, m_props, fid, mm.x() / 1000.0, mm.y() / 1000.0);
         m_graphicsView->finishFixtureDrop(fid);
+        dropped << fid;
         n++;
     }
     if (n > 0)
         m_doc->setModified();
+    schedulePanTurns(dropped);      // placed: a clear moment for each one's pan turn
     if (m_layersPanel) m_layersPanel->reload();
     m_graphicsView->refreshFixtureLabels();
     if (m_inventoryPanel) m_inventoryPanel->reload();
@@ -9902,6 +9992,7 @@ void Monitor::slotAddFixtureToTruss(quint32 trussId, float offsetMetres)
         m_props->setFixtureFlags(fid, 0, 0, 0);
         m_doc->setModified();
     }
+    schedulePanTurns(fs.selection());         // hung: its pan turn looked at
     m_graphicsView->refreshFixtureLabels();   // apply per-layer labels to the new item
 }
 
@@ -11685,6 +11776,10 @@ void Monitor::slotFixtureMoved(quint32 fid, QPointF pos)
     // The position is only now what the tally should be counting -- the view
     // emitted this before the store had it.
     m_graphicsView->refreshOffGridTally();
+    /* The person put it there: a clear moment to look at its pan turn. Not
+       an undo putting it back, nor a truss carrying it. */
+    if (!m_graphicsView->quietMoves())
+        schedulePanTurns({ fid });
 }
 
 void Monitor::slotViewClicked()
@@ -12327,6 +12422,51 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                     m_graphicsView->updateFixture(fid);
                 }
         });
+        /* The heads among them with more than a turn of pan: each to the
+           turn that keeps its seam off the stage (PanTurn). In the dialog's
+           undo step, like every row. */
+        {
+            QList<quint32> turners;
+            foreach (quint32 fid, fids)
+                if (PanTurn::info(m_doc, fid).hasTurns)
+                    turners << fid;
+            if (!turners.isEmpty())
+            {
+                QWidget *row = new QWidget(box);
+                row->setObjectName(QStringLiteral("fixturePanTurnRow"));
+                QHBoxLayout *rl = new QHBoxLayout(row);
+                rl->setContentsMargins(0, 0, 0, 0);
+                QLabel *say = new QLabel(row);
+                say->setObjectName(QStringLiteral("fixturePanTurn"));
+                say->setWordWrap(true);
+                QPushButton *centre = new QPushButton(tr("Centre on Stage"), row);
+                centre->setObjectName(QStringLiteral("fixturePanTurnCentre"));
+                centre->setToolTip(tr("Each head with more than a turn of pan takes the turn that keeps "
+                                      "its seam off the stage; one over the stage keeps its pan zero's"));
+                rl->addWidget(say, 1);
+                rl->addWidget(centre);
+                auto sayIt = [this, turners, say, centre]() {
+                    int crossingNow = 0, toChange = 0;
+                    for (quint32 fid : turners)
+                    {
+                        const PanTurn::Info in = PanTurn::info(m_doc, fid);
+                        crossingNow += in.crossesSeam() ? 1 : 0;
+                        toChange += in.proposal != in.turn ? 1 : 0;
+                    }
+                    say->setText(crossingNow == 0
+                                 ? tr("The stage is clear of every head's pan seam.")
+                                 : tr("%n of these heads has its pan seam on the stage.", "", crossingNow));
+                    centre->setEnabled(toChange > 0);
+                };
+                sayIt();
+                connect(centre, &QPushButton::clicked, &dlg, [this, turners, sayIt]() {
+                    for (quint32 fid : turners)
+                        PanTurn::centre(m_doc, fid);
+                    sayIt();
+                });
+                form->addRow(tr("Pan works around:"), row);
+            }
+        }
         vl->addWidget(box);
 
         auto loadExtras = [this, fids, panZeroSpin, rotSpin]() {
@@ -12665,6 +12805,58 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     invertLayout->addStretch();
     rigForm->addRow(tr("Direction:"), invertRow);
 
+    /* Which turn of its pan a head with more than 360 degrees works in, and
+       where that leaves the seam (PanTurn): stored with the head, changed
+       only here, by Show Review's fix or when the person moves it. Live
+       like every row; OK is one undo step, Cancel puts it back. */
+    QWidget *turnRow = new QWidget;
+    turnRow->setObjectName(QStringLiteral("fixturePanTurnRow"));
+    QVBoxLayout *turnLayout = new QVBoxLayout(turnRow);
+    turnLayout->setContentsMargins(0, 0, 0, 0);
+    turnLayout->setSpacing(2);
+    QLabel *turnLabel = new QLabel(turnRow);
+    turnLabel->setObjectName(QStringLiteral("fixturePanTurn"));
+    turnLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    QLabel *turnStage = new QLabel(turnRow);
+    turnStage->setObjectName(QStringLiteral("fixturePanTurnStage"));
+    turnStage->setWordWrap(true);
+    turnStage->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    QHBoxLayout *turnBtns = new QHBoxLayout;
+    turnBtns->setContentsMargins(0, 0, 0, 0);
+    QPushButton *turnCentreBtn = new QPushButton(tr("Centre on Stage"), turnRow);
+    turnCentreBtn->setObjectName(QStringLiteral("fixturePanTurnCentre"));
+    turnCentreBtn->setToolTip(tr("Choose the turn that keeps the seam off the stage, with the most room. "
+                                 "A head over the stage, or one the stage already clears, keeps its "
+                                 "pan zero's turn."));
+    QPushButton *turnEarlierBtn = new QPushButton(tr("Earlier Turn"), turnRow);
+    turnEarlierBtn->setObjectName(QStringLiteral("fixturePanTurnEarlier"));
+    turnEarlierBtn->setToolTip(tr("Work a turn lower on the pan channel: the seam moves round"));
+    QPushButton *turnLaterBtn = new QPushButton(tr("Later Turn"), turnRow);
+    turnLaterBtn->setObjectName(QStringLiteral("fixturePanTurnLater"));
+    turnLaterBtn->setToolTip(tr("Work a turn higher on the pan channel: the seam moves round"));
+    turnBtns->addWidget(turnCentreBtn);
+    turnBtns->addWidget(turnEarlierBtn);
+    turnBtns->addWidget(turnLaterBtn);
+    turnBtns->addStretch();
+    turnLayout->addWidget(turnLabel);
+    turnLayout->addWidget(turnStage);
+    turnLayout->addLayout(turnBtns);
+    rigForm->addRow(tr("Pan works around:"), turnRow);
+    auto refreshTurn = [this, fxId, turnLabel, turnStage, turnCentreBtn, turnEarlierBtn, turnLaterBtn]() {
+        const PanTurn::Info in = PanTurn::info(m_doc, fxId);
+        turnLabel->setText(PanTurn::worksAround(in));
+        turnStage->setText(PanTurn::stageText(in));
+        turnCentreBtn->setEnabled(in.hasTurns && in.proposal != in.turn);
+        turnEarlierBtn->setEnabled(in.hasTurns && in.turn > in.lowest);
+        turnLaterBtn->setEnabled(in.hasTurns && in.turn < in.highest);
+    };
+    refreshTurn();
+    // Pan zero, offsets, its place: the seam and the stage's room follow.
+    connect(m_props, &MonitorProperties::rigPropsChanged, turnRow, [fxId, refreshTurn](quint32 f) {
+        if (f == fxId)
+            refreshTurn();
+    });
+
     // Test Orientation controls — mode selector + target combo + toggle button
     QWidget *testRowWidget = new QWidget;
     QHBoxLayout *testRowLayout = new QHBoxLayout(testRowWidget);
@@ -12799,6 +12991,9 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     if (!isMover)
     { hideRow(panOffsetSpin); hideRow(tiltOffsetSpin);
       hideRow(invertRow); hideRow(testRowWidget); }
+    // A turn to choose only with more than one turn of pan.
+    if (!hasPanCh || !PanTurn::info(m_doc, fxId).hasTurns)
+        hideRow(turnRow);
     /* A fixed light (a par on its yoke) is aimed by a bearing and an
        elevation (Q100); a moving head's Aim is its pan home instead. */
     const bool fixedLight = !isMover && !isStrip;
@@ -12824,7 +13019,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         for (QWidget *w : std::initializer_list<QWidget *>{ panZeroSpin, aimDownSpin, lensSpin,
                                                            maskSpin[0]->parentWidget(), laserClassCb,
                                                            panOffsetSpin, tiltOffsetSpin, invertRow,
-                                                           testRowWidget })
+                                                           turnRow, testRowWidget })
             hideRow(w);
     }
     bool aimTouched = rp.fixedAim;
@@ -13035,6 +13230,25 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     connect(tiltOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){ liveRigUpdate(); });
     connect(panInvertCb,    &QCheckBox::toggled, [&](bool) { liveRigUpdate(); });
     connect(tiltInvertCb,   &QCheckBox::toggled, [&](bool) { liveRigUpdate(); });
+    // The turn: live (running looks re-solve), in the dialog's undo step.
+    bool turnTouched = false, posTyped = false;
+    auto turnTo = [&](int turn) {
+        turnTouched = true;
+        if (PanTurn::setTurn(m_doc, fxId_dlg, turn))
+        {
+            flushSceneCaches();
+            refreshTest();
+        }
+    };
+    connect(turnCentreBtn, &QPushButton::clicked, [&]() {
+        turnTo(PanTurn::proposal(m_doc, fxId_dlg));
+    });
+    connect(turnEarlierBtn, &QPushButton::clicked, [&]() {
+        turnTo(m_props->fixtureRigProps(fxId_dlg).panTurn - 1);
+    });
+    connect(turnLaterBtn, &QPushButton::clicked, [&]() {
+        turnTo(m_props->fixtureRigProps(fxId_dlg).panTurn + 1);
+    });
 
     // Position & Orientation  (placed above Rig Assignment, per user request).
     // Spinboxes on the left, live facing preview on the right to save height.
@@ -13195,6 +13409,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         fxItem->setPos(m_graphicsView->realPositionToPixels(newPos.x(), newPos.y()));
         fxItem->setRealPosition(newPos);
         m_props->setFixturePosition(fxId_dlg, 0, 0, QVector3D(newPos.x(), newPos.y(), 0));
+        posTyped = true;
         refreshStagePos();
     };
     for (QDoubleSpinBox *sp : { xSpin, ySpin })
@@ -13347,6 +13562,10 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     // Everything is applied already; the name may still be in its field.
     testSrc.reset();
     applyName();
+    /* A typed position is the person placing it: its pan turn looked at,
+       in this dialog's undo step -- unless they chose the turn here. */
+    if (posTyped && !turnTouched)
+        proposePanTurns({ fxId_dlg }, false);
     flushSceneCaches();
     m_doc->setModified();
     edit.accept();
