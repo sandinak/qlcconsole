@@ -304,8 +304,15 @@ private slots:
     void reusableLayerEffectFadeIsEveryUses();
     /** A None effect look saves its fades and reloads as it was. */
     void noneEffectLookKeepsItsFadesOnReload();
+    /** A show saved before an effect's fades were shared: its reusable's
+     *  uses keep their own fades through loading and every edit after. */
+    void olderShowsReusableUsesKeepTheirFades();
 
 private:
+    /** A reusable layer "Wash" in cues One (l1) and Two (l2), an effect
+     *  faded in over 3 s, saved and loaded with use 2's fade made 4 s (an
+     *  older build's show). Its id; invalid if the XML wasn't as expected. */
+    quint32 olderShowWithOwnFades(quint32 *c1, quint32 *l1, quint32 *c2, quint32 *l2, ShowTree::Look *fx);
     /** What a dry run of the import on a show file found (importARealShow). */
     struct DryRun
     {

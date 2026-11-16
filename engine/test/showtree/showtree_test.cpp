@@ -11955,3 +11955,80 @@ void ShowTree_Test::noneEffectLookKeepsItsFadesOnReload()
     QCOMPARE(cueContent(back.lists.first().cues.first()), cueContent(c));
     QCOMPARE(productionXml(back), xml);
 }
+
+/* A reusable layer saved before an effect's fades were shared (0.4.12):
+   one use with fades of its own. Loading, and any edit after, keep every
+   use's as saved -- loading a show never changes what a cue plays. */
+quint32 ShowTree_Test::olderShowWithOwnFades(quint32 *c1, quint32 *l1, quint32 *c2, quint32 *l2, Look *fxOut)
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    QLCPalette *pulse = new QLCPalette(QLCPalette::Effect, m_doc);
+    pulse->setName("Pulse");
+    m_doc->addPalette(pulse);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    *c1 = st->addCue(listId, -1, "One");
+    *c2 = st->addCue(listId, 0, "Two");
+    *l1 = st->addLayer(*c1, groupTarget(a->id()));
+    st->setLayerLook(*c1, *l1, st->lookForPalette(full));
+    Look fx = st->lookForPalette(pulse->id());
+    fx.fadeIn = 3000;
+    st->setLayerLook(*c1, *l1, fx);
+    const quint32 rid = st->makeLayerReusable(*c1, *l1, "Wash");
+    *l2 = st->insertReusableLayer(*c2, rid);
+    *fxOut = fx;
+
+    // Saved, and use 2's fade made its own, as an older build could leave it.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter w(&buffer);
+    st->saveXML(&w);
+    buffer.close();
+    QByteArray xml = buffer.data();
+    const int at = xml.indexOf(QStringLiteral("<Layer ID=\"%1\"").arg(*l2).toUtf8());
+    const QByteArray was("FadeIn=\"3000\"");
+    const int fade = at < 0 ? -1 : xml.indexOf(was, at);
+    if (fade < 0 || fade > xml.indexOf("</Layer>", at))
+        return invalidId();
+    xml.replace(fade, was.size(), "FadeIn=\"4000\"");
+    QXmlStreamReader rd(xml);
+    rd.readNextStartElement();
+    if (!st->loadXML(rd))
+        return invalidId();
+    return rid;
+}
+
+void ShowTree_Test::olderShowsReusableUsesKeepTheirFades()
+{
+    quint32 c1, l1, c2, l2;
+    Look fx;
+    const quint32 rid = olderShowWithOwnFades(&c1, &l1, &c2, &l2, &fx);
+    QVERIFY(rid != invalidId());
+    ShowTreeController *st = m_doc->showTree();
+    auto fadeOf = [st](quint32 c, quint32 l, const QString &key) {
+        const Layer *layer = st->cue(c) == nullptr ? nullptr : st->cue(c)->layer(l);
+        const Look *look = layer == nullptr ? nullptr : layer->look(key);
+        return look == nullptr ? -100 : look->fadeIn;
+    };
+    QCOMPARE(fadeOf(c1, l1, fx.key), 3000);
+    QCOMPARE(fadeOf(c2, l2, fx.key), 4000);
+
+    // An edit elsewhere: every use as saved.
+    const quint32 listId = st->listOfCue(c1)->id;
+    QVERIFY(st->addCue(listId, 1, "Three") != invalidId());
+    QCOMPARE(fadeOf(c1, l1, fx.key), 3000);
+    QCOMPARE(fadeOf(c2, l2, fx.key), 4000);
+    // An edit to the reusable itself (a dimmer, in use 2): every use takes
+    // it, and keeps its own fades.
+    QVERIFY(st->setLayerLook(c2, l2, st->lookForPalette(dimmer(128, "Half"))));
+    QCOMPARE(st->cue(c1)->layer(l1)->look(KeyDimmer)->palettes,
+             st->cue(c2)->layer(l2)->look(KeyDimmer)->palettes);
+    QCOMPARE(fadeOf(c1, l1, fx.key), 3000);
+    QCOMPARE(fadeOf(c2, l2, fx.key), 4000);
+    // A fade changed in one use stays that use's while they differ.
+    fx.fadeIn = 5000;
+    QVERIFY(st->setLayerLook(c1, l1, fx));
+    QCOMPARE(fadeOf(c1, l1, fx.key), 5000);
+    QCOMPARE(fadeOf(c2, l2, fx.key), 4000);
+}

@@ -568,28 +568,32 @@ void SystemTuning_Test::aPadsBatteryIsNotTheComputers()
 {
     QTemporaryDir root;
     QVERIFY(root.isValid());
+    // False when a file couldn't be written: the caller's QVERIFY fails the test.
     auto supply = [&root](const QString &name, const QHash<QString, QString> &files) {
-        QDir().mkpath(root.filePath(name));
+        if (!QDir().mkpath(root.filePath(name)))
+            return false;
         for (auto it = files.cbegin(); it != files.cend(); ++it)
         {
             QFile f(root.filePath(name + QLatin1Char('/') + it.key()));
-            QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(it.value().toUtf8() + "\n");
+            const QByteArray text = it.value().toUtf8() + "\n";
+            if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate) || f.write(text) != text.size())
+                return false;
         }
+        return true;
     };
     // A Pi on mains, a DualSense paired at 15% and running down.
-    supply("AC", { { "type", "Mains" }, { "online", "1" } });
-    supply("ps-controller-battery-a0:b1:c2:d3:e4:f5",
-           { { "type", "Battery" }, { "scope", "Device" }, { "status", "Discharging" }, { "capacity", "15" } });
+    QVERIFY(supply("AC", { { "type", "Mains" }, { "online", "1" } }));
+    QVERIFY(supply("ps-controller-battery-a0:b1:c2:d3:e4:f5",
+           { { "type", "Battery" }, { "scope", "Device" }, { "status", "Discharging" }, { "capacity", "15" } }));
     int percent = 0;
     QCOMPARE(SystemProbe::readPowerSupplies(root.path(), &percent), 0);
     QCOMPARE(percent, -1);
 
     // A laptop's own battery (no scope, as most say, or "System"): counted.
-    supply("BAT0", { { "type", "Battery" }, { "status", "Charging" }, { "capacity", "80" } });
+    QVERIFY(supply("BAT0", { { "type", "Battery" }, { "status", "Charging" }, { "capacity", "80" } }));
     QCOMPARE(SystemProbe::readPowerSupplies(root.path(), &percent), 0);
     QCOMPARE(percent, 80);
-    supply("BAT0", { { "type", "Battery" }, { "scope", "System" }, { "status", "Discharging" }, { "capacity", "64" } });
+    QVERIFY(supply("BAT0", { { "type", "Battery" }, { "scope", "System" }, { "status", "Discharging" }, { "capacity", "64" } }));
     QCOMPARE(SystemProbe::readPowerSupplies(root.path(), &percent), 1);
     QCOMPARE(percent, 64);
 }
