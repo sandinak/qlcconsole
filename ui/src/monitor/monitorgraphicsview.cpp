@@ -10913,8 +10913,8 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
         if (any)
         {
             facing->addSeparator();
-            QAction *c = facing->addAction(heads.size() > 1 ? tr("Centre Their Pans on the Stage")
-                                                            : tr("Centre the Pan on the Stage"),
+            QAction *c = facing->addAction(heads.size() > 1 ? tr("Centre Their Pans on Stage")
+                                                            : tr("Centre the Pan on Stage"),
                                            this, [this, heads]() { emit centrePanRequested(heads); });
             c->setObjectName(QStringLiteral("plotCentrePan"));
             c->setToolTip(tr("The turn of its pan that keeps the seam off the stage (one undo step)"));

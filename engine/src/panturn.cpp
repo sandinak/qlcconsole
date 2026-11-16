@@ -19,6 +19,9 @@
 
 #include <QCoreApplication>
 #include <QPolygonF>
+#include <QDataStream>
+#include <QMutex>
+#include <QHash>
 #include <QLineF>
 #include <cmath>
 #include <QtMath>
@@ -30,6 +33,9 @@
 #include "qlcchannel.h"
 #include "fixture.h"
 #include "truss.h"
+#include "fixturegroup.h"
+#include "scenevalue.h"
+#include "scene.h"
 #include "doc.h"
 
 namespace
@@ -130,6 +136,54 @@ float PanTurn::margin(const AimSolver::Frame &frame, const Span &span, int turn)
     return qMin(a - r0, r0 + 360.0f - (a + span.width));
 }
 
+namespace
+{
+/* How far along a ray from @p head at bearing @p deg the stage reaches:
+   the furthest outline edge it crosses (0 when it crosses none). */
+double rayReach(const QList<QPolygonF> &outline, const QPointF &head, double deg)
+{
+    const double b = qDegreesToRadians(deg);
+    const QPointF dir(-qSin(b), qCos(b));       // 0 downstage (+Y), 90 stage right (-X)
+    double reach = 0.0;
+    for (const QPolygonF &poly : outline)
+        for (int e = 0; e < poly.size(); ++e)
+        {
+            const QPointF p = poly.at(e), q = poly.at((e + 1) % poly.size());
+            const QPointF d = q - p;
+            const double den = dir.x() * d.y() - dir.y() * d.x();
+            if (qAbs(den) < 1e-12)
+                continue;
+            const QPointF w = p - head;
+            const double t = (w.x() * d.y() - w.y() * d.x()) / den;     // along the ray
+            const double u = (w.x() * dir.y() - w.y() * dir.x()) / den; // along the edge
+            if (t > 0.0 && u >= 0.0 && u <= 1.0)
+                reach = qMax(reach, t);
+        }
+    return reach;
+}
+
+/* The span of one head over one stage, worked out once: the views and Show
+   Review ask about every head again and again, and the rays cost about a
+   millisecond a head. Keyed by everything the answer reads (where the head
+   is and the outline), so a stale entry can't be found. */
+QMutex s_spanMutex;
+QHash<QByteArray, PanTurn::Span> s_spans;
+
+QByteArray spanKey(const QVector3D &head, const QList<QPolygonF> &outline)
+{
+    QByteArray key;
+    QDataStream ds(&key, QIODevice::WriteOnly);
+    ds << head.x() << head.y() << head.z();
+    for (const QPolygonF &poly : outline)
+    {
+        ds << qint32(poly.size());
+        for (const QPointF &pt : poly)
+            ds << pt.x() << pt.y();
+    }
+    return key;
+}
+}
+
 PanTurn::Span PanTurn::stageSpan(Doc *doc, quint32 fixtureId)
 {
     Span span;
@@ -140,6 +194,13 @@ PanTurn::Span PanTurn::stageSpan(Doc *doc, quint32 fixtureId)
     const QList<QPolygonF> outline = stageOutline(mp);
     if (outline.isEmpty())
         return span;
+    const QByteArray key = spanKey(f.position, outline);
+    {
+        QMutexLocker lock(&s_spanMutex);
+        const auto it = s_spans.constFind(key);
+        if (it != s_spans.constEnd())
+            return it.value();
+    }
     span.valid = true;
 
     /* The stage close under a hung head is in its near-vertical cone
@@ -151,44 +212,33 @@ PanTurn::Span PanTurn::stageSpan(Doc *doc, quint32 fixtureId)
     const double headZ = double(f.position.z());
     const double coneRadius = qMax(0.3, (headZ - 1.0) * qTan(qDegreesToRadians(kNearConeDeg)));
     const QPointF head(double(f.position.x()), double(f.position.y()));
+    auto sees = [&](double deg) { return rayReach(outline, head, deg) > coneRadius; };
 
-    /* A ray at each half degree: it sees stage beyond the cone when it
-       crosses an outline edge further out than that. */
+    // A ray at each half degree first, to find the arc.
     const int steps = 720;
+    const double stepDeg = 360.0 / steps;
     QVector<bool> seen(steps, false);
     int seenCount = 0;
     for (int i = 0; i < steps; ++i)
-    {
-        const double b = qDegreesToRadians(i * 360.0 / steps);
-        const QPointF dir(-qSin(b), qCos(b));       // 0 downstage (+Y), 90 stage right (-X)
-        double reach = 0.0;
-        for (const QPolygonF &poly : outline)
-            for (int e = 0; e < poly.size(); ++e)
-            {
-                const QPointF p = poly.at(e), q = poly.at((e + 1) % poly.size());
-                const QPointF d = q - p;
-                const double den = dir.x() * d.y() - dir.y() * d.x();
-                if (qAbs(den) < 1e-12)
-                    continue;
-                const QPointF w = p - head;
-                const double t = (w.x() * d.y() - w.y() * d.x()) / den;     // along the ray
-                const double u = (w.x() * dir.y() - w.y() * dir.x()) / den; // along the edge
-                if (t > 0.0 && u >= 0.0 && u <= 1.0)
-                    reach = qMax(reach, t);
-            }
-        if (reach > coneRadius)
+        if (sees(i * stepDeg))
         {
             seen[i] = true;
             ++seenCount;
         }
-    }
+    auto keep = [&](const Span &s) {
+        QMutexLocker lock(&s_spanMutex);
+        if (s_spans.size() > 4096)
+            s_spans.clear();
+        s_spans.insert(key, s);
+        return s;
+    };
     if (seenCount == 0)
-        return Span();                              // nothing of it beyond the cone
+        return keep(Span());                        // nothing of it beyond the cone
     if (seenCount == steps)
     {
         span.overStage = true;
         span.width = 360.0f;
-        return span;
+        return keep(span);
     }
     // The widest run it doesn't see is the way it isn't looking.
     int bestLen = 0, bestEnd = 0;
@@ -208,16 +258,31 @@ PanTurn::Span PanTurn::stageSpan(Doc *doc, quint32 fixtureId)
             break;
         i += len;
     }
-    const float stepDeg = 360.0f / float(steps);
-    if (bestLen * stepDeg < 10.0f)
+    if (bestLen * stepDeg < 10.0)
     {
         span.overStage = true;
         span.width = 360.0f;
-        return span;
+        return keep(span);
     }
-    span.from = float(bestEnd) * stepDeg;
-    span.width = 360.0f - float(bestLen) * stepDeg;
-    return span;
+    /* Then each end exactly, between the last ray that missed and the
+       first that saw: a margin read off half-degree rays put a head 9.8
+       degrees clear on one side of a 10 degree line or the other by chance. */
+    auto edge = [&](double missed, double hit) {
+        for (int i = 0; i < 30; ++i)
+        {
+            const double mid = (missed + hit) / 2.0;
+            (sees(mid) ? hit : missed) = mid;
+        }
+        return hit;
+    };
+    const double from = edge(bestEnd * stepDeg - stepDeg, bestEnd * stepDeg);
+    const int gapStart = (bestEnd - bestLen + steps) % steps;     // first ray of the gap
+    double to = edge(gapStart * stepDeg, gapStart * stepDeg - stepDeg);
+    while (to < from)
+        to += 360.0;
+    span.from = wrap360(float(from));
+    span.width = float(to - from);
+    return keep(span);
 }
 
 PanTurn::Info PanTurn::info(Doc *doc, quint32 fixtureId)
@@ -243,10 +308,9 @@ PanTurn::Info PanTurn::info(Doc *doc, quint32 fixtureId)
     for (int k = in.lowest; k <= in.highest; ++k)
     {
         const float m = margin(f, in.span, k);
-        /* Within a ray step (stageSpan()'s half degree) is a tie: a head on
-           the stage's centre line takes the later turn, not whichever side
-           the rounding favoured. */
-        const float tieDeg = 0.75f;
+        /* A head on the stage's centre line ties: it takes the later turn,
+           not whichever side the rounding favoured. */
+        const float tieDeg = 0.05f;
         const bool better = m > in.proposalMargin + tieDeg;
         const bool tie = qAbs(m - in.proposalMargin) <= tieDeg
                          && (qAbs(k) < qAbs(in.proposal) || (qAbs(k) == qAbs(in.proposal) && k > in.proposal));
@@ -293,6 +357,30 @@ bool PanTurn::setTurn(Doc *doc, quint32 fixtureId, int turn)
 bool PanTurn::centre(Doc *doc, quint32 fixtureId)
 {
     return setTurn(doc, fixtureId, proposal(doc, fixtureId));
+}
+
+bool PanTurn::isLive(Doc *doc, quint32 fixtureId)
+{
+    if (doc == nullptr)
+        return false;
+    if (doc->mode() == Doc::Operate)
+        return true;
+    for (Function *fn : doc->functions())
+    {
+        const Scene *sc = qobject_cast<const Scene *>(fn);
+        if (sc == nullptr || !sc->isRunning())
+            continue;
+        if (sc->fixtures().contains(fixtureId))
+            return true;
+        for (const SceneValue &sv : sc->values())
+            if (sv.fxi == fixtureId)
+                return true;
+        for (quint32 gid : sc->fixtureGroups())
+            if (const FixtureGroup *g = doc->fixtureGroup(gid))
+                if (g->fixtureList().contains(fixtureId))
+                    return true;
+    }
+    return false;
 }
 
 QString PanTurn::bearingName(float b)

@@ -92,8 +92,12 @@ namespace PanTurn
         float proposalMargin = 0.0f;
         /** The stage is on its seam, or within kClearDeg of it. */
         bool crossesSeam() const { return hasTurns && span.valid && !span.overStage && margin < kClearDeg; }
-        /** Show Review's question: it crosses, and a turn clears it or does better. */
-        bool fixable() const { return crossesSeam() && proposal != turn && proposalMargin > margin + 0.5f; }
+        /** Another turn gives the stage more room than the stored one. */
+        bool improves() const { return proposal != turn && proposalMargin > margin + 0.5f; }
+        /** It crosses, and a turn clears it or does better. */
+        bool fixable() const { return crossesSeam() && improves(); }
+        /** No turn clears it: only turning the head's Facing round can. */
+        bool needsFacing() const { return crossesSeam() && (improves() ? proposalMargin : margin) < kClearDeg; }
     };
 
     /** The turns a head can take: @p lowest..@p highest, each a different
@@ -124,6 +128,9 @@ namespace PanTurn
     bool setTurn(Doc *doc, quint32 fixtureId, int turn);
     /** "Centre the pan on the stage": setTurn(proposal()). */
     bool centre(Doc *doc, quint32 fixtureId);
+    /** A change of its turn would move its beam now: the show is in
+     *  Operate, or a running scene sets it (its own channels or a group). */
+    bool isLive(Doc *doc, quint32 fixtureId);
 
     /** What Fixture Properties' "Pan works around:" says: "270° stage left
      *  ±180° (turn 1)", the bearing with the most room either way. */

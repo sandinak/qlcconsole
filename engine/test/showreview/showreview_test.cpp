@@ -2761,7 +2761,7 @@ void ShowReview_Test::mov14()
     QCOMPARE(f.first().jump, QStringLiteral("panturn"));
     QCOMPARE(f.first().jumpData, QVariantList() << spot->id());
     QVERIFY2(f.first().message.contains("Spot 1") && f.first().message.contains("pan seam is on the stage")
-             && f.first().message.contains("Centre the pan on the stage (turn 1)")
+             && f.first().message.contains("Centre the Pan on Stage (turn 1)")
              && f.first().message.contains("pan turn 0"), qPrintable(f.first().message));
 
     // The fix: the turn it proposes, and the finding is gone.
@@ -2772,6 +2772,29 @@ void ShowReview_Test::mov14()
     // Put back by hand (an undo): it says so again.
     QVERIFY(PanTurn::setTurn(m_doc, spot->id(), 0));
     QVERIFY(fires("MOV-14"));
+    QVERIFY(PanTurn::setTurn(m_doc, spot->id(), 1));
+    QVERIFY(quiet("MOV-14"));
+
+    /* No turn clears the stage (PadBench's front truss, 0.3 m inside a
+       24 x 20 ft grid): still said, with the best turn's help and the real
+       fix, its Facing. */
+    mp->setGridUnits(MonitorProperties::Feet);
+    mp->setGridSize(QVector3D(24.0f, 14.0f, 20.0f));
+    for (Fixture *fx : { over, facing })
+        mp->removeFixture(fx->id());
+    mp->setFixturePosition(spot->id(), 0, 0, QVector3D(2158.0f, 5796.0f, 4.5f));
+    QVERIFY(PanTurn::setTurn(m_doc, spot->id(), 0));
+    const PanTurn::Info in = PanTurn::info(m_doc, spot->id());
+    QVERIFY(in.crossesSeam() && in.improves() && in.proposalMargin < PanTurn::kClearDeg);
+    QVERIFY(fires("MOV-14"));
+    QString msg = findings("MOV-14").first().message;
+    QVERIFY2(msg.contains("helps") && msg.contains("no turn clears the stage")
+             && msg.contains("point the head's Facing toward the stage"), qPrintable(msg));
+    // On that best turn it is still said (nothing better to offer but Facing).
+    QVERIFY(PanTurn::centre(m_doc, spot->id()));
+    QVERIFY(fires("MOV-14"));
+    msg = findings("MOV-14").first().message;
+    QVERIFY2(msg.startsWith("Spot 1") && msg.contains("No turn clears the stage"), qPrintable(msg));
 }
 
 namespace

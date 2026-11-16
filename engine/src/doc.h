@@ -929,8 +929,10 @@ signals:
     /** Signal that a fixture's properties have changed */
     void fixtureChanged(quint32 fxi_id);
 
-    /** patchFixtures() patched (or re-patched) these fixtures: a clear
-     *  moment for the views to look at their pan turns (PanTurn). */
+    /** patchFixtures() patched these fixtures for the FIRST time (out of
+     *  the inventory). A re-patch of a placed head is not here: the turn
+     *  the person chose for it stands. A clear moment for the views to
+     *  look at a head's pan turn (PanTurn). */
     void fixturesPatched(const QList<quint32> &ids);
 
     /** What every Auto fixture looks like may have changed at once: the

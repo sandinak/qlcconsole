@@ -494,17 +494,29 @@ front truss just inside the grid still counts as out front, and a head
 whose seam is within 10° of the stage's edge counts as on it. The turn never changes on its
 own: not when a calibration is nudged, the head moves a little, the grid
 is resized or Settings ▸ Units changes. The app looks at it only at clear
-moments — a head placed or dragged on the plot, a position typed in
-Fixture Properties, a fixture patched — and changes it then only when the
-stage now crosses the seam, saying so on the plot's notice line (Undo
-puts it back). For several heads at once, the plot's right-click
-**Facing (pan zero) ▸ Centre Their Pans on the Stage**, or Fixture
-Properties for the selection, does them all in one step.
+moments in Design — a head placed or dragged on the plot, a position typed
+in Fixture Properties, a fixture patched for the first time out of the
+inventory — and changes it then only when the stage now crosses the seam,
+saying so on the plot's notice line (Undo puts it back). Never in Operate
+(a slip of the mouse on a live head moves nothing round), never on a
+re-patch of a placed head (the turn you chose stands), and never when an
+Undo, a Cancel or the Patch Planner puts the rig back. A venue keeps its
+own turns: switching to one that turns a head says so on the notice line.
+For several heads at once, the plot's right-click **Facing (pan zero) ▸
+Centre Their Pans on Stage**, or Fixture Properties for the selection, does
+them all in one step. The **Earlier Turn** and **Later Turn** buttons say,
+when you point at them, where each would put the seam.
 
-[Show Review](show-review.md) checks it (MOV-14): a head whose stage
-crosses the seam of its turn is named, and its fix, **Centre the Pan on
-Stage…**, says what changes before it does. A 360° head has one turn and
-nothing to choose.
+[Show Review](show-review.md) checks it (MOV-14): a head whose stage is on
+the seam of its turn, or within 10° of it, is named, and its fix, **Centre
+the Pan on Stage…**, says what changes before it does — and warns when the
+head is live (in Operate, or a running look sets it): its beam moves now.
+Several of these findings selected are fixed together, one undo step.
+When no turn clears the stage — a head right at the front edge, facing the
+audience — the finding says the best turn helps but cannot clear it, and
+the real fix: point the head's Facing toward the stage (Fixture
+Properties ▸ Facing), then Centre the Pan on Stage. A 360° head has one
+turn and nothing to choose.
 
 ## Reachability
 

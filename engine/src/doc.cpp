@@ -1589,9 +1589,12 @@ bool Doc::patchFixtures(const QList<FixturePatch> &patches, QString *why)
             it.remove();
     }
 
+    QList<quint32> firsts;          // patched for the first time (from the inventory)
     foreach (const FixturePatch &p, patches)
     {
         Fixture *fxi = fixture(p.fixtureId);
+        if (!fxi->isPatched())
+            firsts << p.fixtureId;
         clearFixturePairs(fxi, inputOutputMap());
         fxi->blockSignals(true);
         fxi->setUniverse(p.universe);
@@ -1608,13 +1611,10 @@ bool Doc::patchFixtures(const QList<FixturePatch> &patches, QString *why)
 
     m_changeJournal->noteArea(ChangeJournal::Fixture, tr("Patched fixtures (%1)").arg(patches.count()));
     setModified();
-    QList<quint32> ids;
     foreach (const FixturePatch &p, patches)
-    {
         emit fixtureChanged(p.fixtureId);
-        ids << p.fixtureId;
-    }
-    emit fixturesPatched(ids);
+    if (!firsts.isEmpty())
+        emit fixturesPatched(firsts);
     return true;
 }
 

@@ -98,6 +98,12 @@ void AimSolver_Test::anglesAreUnchangedWherePanFits()
             const QVector3D t(x, y, z);
             float lp = 0.0f, lt = 0.0f;
             legacyAim(f, t, lp, lt);
+            /* Where the old answer was clamped at a limit it never reached
+               the mark: the flipped branch (tilt through home) may reach
+               it now that it keeps the tilt calibration (review of
+               c8824b22ce). Elsewhere: exactly as it always was. */
+            if (lt <= 0.0f || lt >= f.tiltMax || lp <= 0.0f || lp >= f.panMax)
+                continue;
             const AimSolver::Solution s = AimSolver::solve(f, t);
             QVERIFY2(qAbs(s.panDeg - lp) < 1e-3f && qAbs(s.tiltDeg - lt) < 1e-3f,
                      qPrintable(QString("mount %1 pan %2 tilt %3 flags %4 at (%5,%6,%7): "
@@ -2375,5 +2381,160 @@ void AimSolver_Test::aSeamJustOffTheStageCountsAsOnIt()
     QVERIFY(in.crossesSeam() && in.fixable());
     QVERIFY(in.proposalMargin >= PanTurn::kClearDeg);
     QVERIFY2(PanTurn::stageText(in).contains("only"), qPrintable(PanTurn::stageText(in)));
+    delete doc;
+}
+
+/* Review of c8824b22ce: a seeded sweep over the rig shapes the turn has to
+   work for. */
+void AimSolver_Test::review_everyTurnPointsAtItsTarget()
+{
+    quint32 seed = 0x5eed1234u;
+    auto rnd = [&seed]() {
+        seed = seed * 1664525u + 1013904223u;
+        return double(seed >> 8) / double(1u << 24);
+    };
+    int checked = 0, flipped = 0, outOfWindow = 0;
+    QStringList bad;
+    for (int panMax : { 360, 540, 630 })
+        for (int tiltMax : { 270, 180 })
+            for (int mount = 0; mount < 3; ++mount)
+                for (int inv = 0; inv < 4; ++inv)
+                    for (int trial = 0; trial < 60; ++trial)
+                    {
+                        FixtureRigProps rp;
+                        rp.mountingType = mount == 0 ? Truss::TopHung
+                                        : mount == 1 ? Truss::FloorMounted : Truss::SideArm;
+                        rp.panZeroDir = float(rnd() * 360.0);
+                        rp.panOffsetDeg = float((rnd() - 0.5) * 30.0);
+                        rp.panInvert = (inv & 1) != 0;
+                        rp.tiltInvert = (inv & 2) != 0;
+                        AimSolver::Frame f;
+                        f.floorMounted = AimSolver::floorMounted(rp);
+                        f.position = QVector3D(float(rnd() * 12.0), float(rnd() * 14.0),
+                                               f.floorMounted ? 0.3f : 6.0f);
+                        f.panZeroDir = rp.panZeroDir;
+                        f.panOffsetDeg = rp.panOffsetDeg;
+                        f.panInvert = rp.panInvert;
+                        f.tiltInvert = rp.tiltInvert;
+                        f.panMax = float(panMax);
+                        f.tiltMax = float(tiltMax);
+                        int lo = 0, hi = 0;
+                        PanTurn::turnRange(f, lo, hi);
+                        const QVector3D t(float(rnd() * 12.0), float(rnd() * 10.0), float(rnd() * 2.0));
+                        f.panTurn = 0;
+                        const AimSolver::Solution s0 = AimSolver::solve(f, t);
+                        for (int turn = qMin(lo, -1); turn <= qMax(hi, 1); ++turn)
+                        {
+                            f.panTurn = turn;
+                            rp.panTurn = turn;
+                            const AimSolver::Solution s = AimSolver::solve(f, t);
+                            if (panMax == 360 && (s.panDeg != s0.panDeg || s.tiltDeg != s0.tiltDeg))
+                                bad << QString("360 head answers differently on turn %1").arg(turn);
+                            if (!s.reachable())
+                                continue;
+                            ++checked;
+                            QVector3D dir;
+                            if (!AimSolver::beamDirection(rp, s.panDeg - f.panMax / 2.0f,
+                                                          s.tiltDeg - f.tiltMax / 2.0f, dir))
+                                continue;
+                            const double off = degreesBetween(dir, t - f.position);
+                            if (off > 0.2 && bad.size() < 12)
+                                bad << QString("pan %1 tilt %2 (max %3/%4 mount %5 inv %6 ofs %7 turn %8) "
+                                               "points %9 deg off")
+                                           .arg(s.panDeg).arg(s.tiltDeg).arg(panMax).arg(tiltMax).arg(mount)
+                                           .arg(inv).arg(rp.panOffsetDeg).arg(turn).arg(off);
+                            // The main branch (pan within its turn's window), or the flipped one.
+                            bool invertPan = f.panInvert != f.floorMounted;
+                            const float pre = invertPan ? f.panMax - s.panDeg : s.panDeg;
+                            if (turn != 0 && panMax > 360 && turn >= lo && turn <= hi)
+                            {
+                                const float zero = f.panMax / 2.0f + f.panOffsetDeg;
+                                const float ws = qBound(0.0f, zero + 360.0f * turn - 180.0f, f.panMax - 360.0f);
+                                if (pre < ws - 0.01f || pre > ws + 360.01f)
+                                {
+                                    // Half a turn round, tilt mirrored: allowed only when the window can't.
+                                    ++flipped;
+                                    if (s0.reachable() && qAbs(s0.panDeg - s.panDeg) > 1.0f
+                                        && qAbs(qAbs(s0.panDeg - s.panDeg) - 360.0f) > 1.0f)
+                                        ++outOfWindow;
+                                }
+                            }
+                        }
+                    }
+    qInfo() << "turn sweep: checked" << checked << "flipped" << flipped << "out of window" << outOfWindow;
+    QVERIFY2(bad.isEmpty(), qPrintable(bad.join('\n')));
+    QVERIFY(checked > 1000);
+}
+
+/* Review (pre-existing on turn 0 too): a head whose main branch is out of
+   pan range takes pan + 180 and mirrors the tilt as tiltMax - tilt. With a
+   tilt offset the mirror is about the wrong centre. */
+void AimSolver_Test::review_theFlippedBranchKeepsTheTiltOffset()
+{
+    // A 360 head, its pan zero offset so the main branch runs off the end.
+    FixtureRigProps rp;
+    rp.mountingType = Truss::TopHung;
+    rp.panZeroDir = 0.0f;
+    rp.panOffsetDeg = 40.0f;
+    rp.tiltOffsetDeg = 6.0f;
+    AimSolver::Frame f;
+    f.floorMounted = false;
+    f.position = QVector3D(5.0f, 10.0f, 6.0f);
+    f.panZeroDir = rp.panZeroDir;
+    f.panOffsetDeg = rp.panOffsetDeg;
+    f.tiltOffsetDeg = rp.tiltOffsetDeg;
+    f.panMax = 360.0f;
+    f.tiltMax = 270.0f;
+    // Bearing 160 from pan zero: main pan 180 + 160 + 40 = 380, off the end.
+    const double b = qDegreesToRadians(160.0);
+    const QVector3D t = f.position + QVector3D(float(-qSin(b)) * 4.0f, float(qCos(b)) * 4.0f, -6.0f);
+    const AimSolver::Solution s = AimSolver::solve(f, t);
+    QVERIFY(s.reachable());
+    QVector3D dir;
+    QVERIFY(AimSolver::beamDirection(rp, s.panDeg - 180.0f, s.tiltDeg - 135.0f, dir));
+    const double off = degreesBetween(dir, t - f.position);
+    QVERIFY2(off < 0.5, qPrintable(QString("pan %1 tilt %2 points %3 degrees off (2 x tilt offset = %4)")
+                                       .arg(s.panDeg).arg(s.tiltDeg).arg(off).arg(2.0 * rp.tiltOffsetDeg)));
+}
+
+/* After the review: a change of turn moves a live head's beam now. Live is
+   Operate, or a running scene setting it. */
+void AimSolver_Test::aHeadIsLiveInOperate()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = frontOfHouse(doc, 540, false, false, 0.0f);
+    QVERIFY(fx != nullptr);
+    QVERIFY(!PanTurn::isLive(doc, fx->id()));
+    Scene *sc = new Scene(doc);
+    QVERIFY(doc->addFunction(sc));
+    sc->setValue(SceneValue(fx->id(), 0, 128));
+    QVERIFY(!PanTurn::isLive(doc, fx->id()));       // not running
+    doc->setMode(Doc::Operate);
+    QVERIFY(PanTurn::isLive(doc, fx->id()));
+    doc->setMode(Doc::Design);
+    delete doc;
+}
+
+/* After the review: the span's ends are exact, not half-degree rays, and
+   the answer is kept until the head or the stage moves. */
+void AimSolver_Test::theStageSpanIsExactAndKept()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = frontOfHouse(doc, 540, false, false, 0.0f);
+    QVERIFY(fx != nullptr);
+    // From (6, 12) the 10 x 8 grid's corners are at these bearings.
+    const PanTurn::Span s = PanTurn::stageSpan(doc, fx->id());
+    const double from = qRadiansToDegrees(qAtan2(6.0, -4.0));            // (0, 8)
+    const double to = 360.0 + qRadiansToDegrees(qAtan2(-4.0, -4.0));     // (10, 8)
+    QVERIFY2(qAbs(s.from - from) < 1e-3 && qAbs(s.width - (to - from)) < 1e-3,
+             qPrintable(QString("%1 + %2, want %3 + %4").arg(s.from).arg(s.width).arg(from).arg(to - from)));
+    QElapsedTimer t;
+    t.start();
+    for (int i = 0; i < 200; ++i)
+        PanTurn::info(doc, fx->id());
+    QVERIFY2(t.elapsed() < 200, qPrintable(QString("200 asks took %1 ms").arg(t.elapsed())));
+    // Moved: worked out again.
+    doc->monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(4000.0f, 12000.0f, 6.0f));
+    QVERIFY(qAbs(PanTurn::stageSpan(doc, fx->id()).from - s.from) > 1.0f);
     delete doc;
 }

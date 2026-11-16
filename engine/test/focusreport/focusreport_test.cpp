@@ -212,8 +212,14 @@ void FocusReport_Test::aVenueKeepsItsPanTurn()
     // The show as built: its own turn. The venue again: the venue's.
     QVERIFY(v->setActiveVenue(QString()));
     QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 0);
+    QCOMPARE(v->lastTurnChanges().size(), 1);           // said on the notice line
+    QCOMPARE(v->lastTurnChanges().first().from, 1);
+    QCOMPARE(v->lastTurnChanges().first().to, 0);
     QVERIFY(v->setActiveVenue("Lincoln HS"));
     QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 1);
+    QCOMPARE(v->lastTurnChanges().size(), 1);
+    QCOMPARE(v->lastTurnChanges().first().fixtureId, a->id());
+    QCOMPARE(v->lastTurnChanges().first().to, 1);
     VenueCorrections again(m_doc);
     QVERIFY(again.fromXml(side));
     QCOMPARE(again.venue("Lincoln HS").fixtures.value(a->id()).panTurn, 1);
