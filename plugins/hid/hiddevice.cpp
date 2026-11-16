@@ -19,6 +19,7 @@
 
 #include <QString>
 #include <QFile>
+#include <QDeadlineTimer>
 
 #include "hiddevice.h"
 #include "gamepadlayout.h"
@@ -31,7 +32,13 @@ HIDDevice::HIDDevice(HIDPlugin* parent, quint32 line, const QString &name, const
     m_filename = path;
     m_file.setFileName(path);
     m_line = line;
-    m_running = false;
+
+    /* A reader a bounded stop left in a call, asked to read again just as
+       it left its loop: started again here, once it has finished. */
+    connect(this, &QThread::finished, this, [this]() {
+        if (m_running && isRunning() == false)
+            start();
+    }, Qt::QueuedConnection);
 }
 
 HIDDevice::~HIDDevice()
@@ -42,6 +49,29 @@ HIDDevice::~HIDDevice()
         wait();
     }
     closeInput();
+}
+
+void HIDDevice::handTo(QThread *thread)
+{
+    m_file.moveToThread(thread);
+    moveToThread(thread);
+}
+
+void HIDDevice::startReading()
+{
+    if (isRunning())
+        wait(QDeadlineTimer(kReaderStopMs));
+    m_running = true;
+    if (isRunning() == false)
+        start();
+}
+
+bool HIDDevice::stopReading(int ms)
+{
+    m_running = false;
+    if (isRunning() == false)
+        return true;
+    return wait(QDeadlineTimer(ms));
 }
 
 /*****************************************************************************

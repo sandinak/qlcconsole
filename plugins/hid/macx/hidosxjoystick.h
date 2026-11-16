@@ -73,6 +73,8 @@ public:
     /** @reimp */
     bool isStale() const override;
     /** @reimp */
+    std::function<bool()> staleProbe() const override;
+    /** @reimp */
     QString connectionInfo() const override;
     /** @reimp */
     QString inputProblem() const override;

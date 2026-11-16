@@ -51,6 +51,8 @@
 #include "inputpatch.h"
 #include "ioplugincache.h"
 #include "qlcioplugin.h"
+#include "showstatus.h"
+#include "fakehidbackend.h"
 #include "stagetarget.h"
 #include "qlcchannel.h"
 #include "qlcfixturedef.h"
@@ -2183,6 +2185,40 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
     bench->load(Function::invalidId());
     settle(100);
     doc->resetModified();
+}
+
+void FollowSpotCue_Test::aControllerThatHangsIsNamedInTheFooter()
+{
+    QLCIOPlugin *hid = hidPlugin(m_app->doc());
+    QVERIFY(hid != nullptr);
+    static FakeHIDBackend fake;     // static: a thread may still be leaving it
+    fake.list(QStringLiteral("USB_045e_028e_2124000"), 0x045e, 0x028e,
+              QStringLiteral("Xbox 360 Controller for Windows"), FakeHIDBackend::Forever);
+    auto entry = []() {
+        for (const ShowStatus::Entry &e : ShowStatus::instance()->allEntries())
+            if (e.key == QLatin1String("controllers.notAnswering"))
+                return e;
+        return ShowStatus::Entry();
+    };
+    const QStringList before = hid->inputs();
+    QMetaObject::invokeMethod(hid, "setTestBackend", Qt::DirectConnection,
+                              Q_ARG(quintptr, quintptr(&fake)));
+
+    /* The app's own path: the plugin says so, the footer's readiness check
+       reads it -- the stuck pad named, by its port. */
+    QTRY_COMPARE_WITH_TIMEOUT(entry().key, QString("controllers.notAnswering"), 5000);
+    QCOMPARE(entry().items.count(), 1);
+    QVERIFY2(entry().items.first().startsWith("Xbox 360 Controller for Windows (USB 2124000)"),
+             qPrintable(entry().items.first()));
+    QVERIFY2(entry().summary.contains("not answering"), qPrintable(entry().summary));
+    QCOMPARE(hid->inputs(), before);    // the other pads, as they were
+
+    /* The system lets go with nothing there: the line goes. */
+    fake.release(false);
+    QTRY_COMPARE_WITH_TIMEOUT(fake.callsInProgress(), 0, 2000);
+    QMetaObject::invokeMethod(hid, "setTestBackend", Qt::DirectConnection, Q_ARG(quintptr, quintptr(0)));
+    QTRY_VERIFY_WITH_TIMEOUT(entry().key.isEmpty(), 5000);
+    QCOMPARE(hid->inputs(), before);
 }
 
 QTEST_MAIN(FollowSpotCue_Test)

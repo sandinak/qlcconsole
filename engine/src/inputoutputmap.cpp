@@ -2299,6 +2299,7 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
     QMutexLocker locker(&m_universeMutex);
     bool success = true;
     bool keptOff = false;
+    QList<InputPatch *> inputs;
     for (quint32 i = 0; i < universesCount(); i++)
     {
         Universe *universe = m_universeArray.at(i);
@@ -2323,13 +2324,20 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
 
         InputPatch* ip = universe->inputPatch();
         if (ip != NULL && ip->plugin() == plugin)
-            /*success = */ ip->reconnect();
+            inputs << ip;
 
         OutputPatch* fp = universe->feedbackPatch();
         if (fp != NULL && fp->plugin() == plugin)
             /*success = */ fp->reconnect();
     }
     locker.unlock();
+
+    /* Inputs after the lock: nothing the MasterTimer tick reads, and a
+       controller's close can wait on its reader (a pad that stopped
+       answering) -- never with every universe's DMX output held. Only
+       this thread changes patches, so each is still there. */
+    for (InputPatch *ip : std::as_const(inputs))
+        /*success = */ ip->reconnect();
 
     /* The device a kept patch waits for may be what just appeared: reopen
        it now rather than at the next retry tick. */

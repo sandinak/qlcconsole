@@ -10,6 +10,12 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Fixed
+
+- **A game controller that stops answering no longer freezes the app.** Holding View + Menu (Create + Options) on a DualSense clone flips it to Xbox 360 mode: it drops off USB and comes back, and macOS can leave the new device half-opened for good. The whole app hung on it (bench, 0.4.10). Controllers are now found and opened off the app's main thread, each with a 2-second limit: one that doesn't answer is skipped, named in the footer ("Xbox 360 Controller for Windows (USB 2124000) — not answering"), and tried again once the system lets go of it, while the other pads, the DMX output and every pad's emergency stop carry on. A pad that drops out mid-Pad-Run disarms as for an unplug ("Disarmed: the controller went away."), and quitting or closing the show never waits on a stuck pad.
+
 ## [0.4.10] - Unreleased
 
 ### Changed and fixed

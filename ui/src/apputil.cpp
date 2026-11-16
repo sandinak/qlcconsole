@@ -1072,6 +1072,25 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
                 items, ips);
     }
 
+    /* Game controllers that stopped answering while the HID plugin opened
+       them (a pad switching USB mode, held "busy" by the system): skipped,
+       tried again once the system lets go; the show runs on meanwhile. */
+    {
+        QLCIOPlugin *hid = doc->ioPluginCache() != NULL
+                         ? doc->ioPluginCache()->plugin(QStringLiteral("HID")) : NULL;
+        const QStringList items = hid != NULL ? hid->targetProblems() : QStringList();
+        if (items.isEmpty())
+            status->clearStatus("controllers.notAnswering");
+        else
+            status->setStatus("controllers.notAnswering", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n controller(s) not answering",
+                                            "", items.count()),
+                QCoreApplication::translate("AppUtil", "Skipped and tried again by itself; the "
+                                            "show keeps running. Unplug it, wait a few seconds "
+                                            "and plug it back in."),
+                items);
+    }
+
     /* Network outputs in trouble, as their plugins judge it -- sends that
        keep failing, Art-Net nodes that stopped answering, node ports that
        report a fault (QLCIOPlugin::outputProblems()). Asked per patch so

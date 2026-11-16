@@ -28,7 +28,9 @@
 #include "hidlinuxjoystick.h"
 #include "hidplugin.h"
 
-#define KPollTimeout 1000
+/* The reader looks at m_running this often: closeInput() waits for it at
+   most HIDDevice::kReaderStopMs, with the universes locked. */
+#define KPollTimeout 100
 
 HIDLinuxJoystick::HIDLinuxJoystick(HIDPlugin* parent, quint32 line, struct hid_device_info *info)
     : HIDJsDevice(parent, line, info)
@@ -135,12 +137,12 @@ void HIDLinuxJoystick::emitButton(int index, bool down)
 
 bool HIDLinuxJoystick::openInput()
 {
-    bool result = openDevice();
+    /* Still open: closeInput() left a reader that had not stopped yet. */
+    bool result = m_file.isOpen() || openDevice();
 
     if (result == true)
     {
-        m_running = true;
-        start();
+        startReading();
     }
 
     return result;

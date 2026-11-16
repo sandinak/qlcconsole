@@ -54,6 +54,10 @@ public:
     HIDDMXDevice(HIDPlugin* parent, quint32 line, const QString& name, const QString& path);
     virtual ~HIDDMXDevice();
 
+    /** The interface could not be opened (HIDPlugin says so, on the GUI
+     *  thread: the device is made on its scan thread). */
+    bool openFailed() const { return m_handle == nullptr; }
+
 protected:
     /** Initialize the device, find out its capabilities etc. */
     void init();

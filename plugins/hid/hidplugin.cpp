@@ -18,10 +18,19 @@
 */
 
 #include <QApplication>
+#include <QDeadlineTimer>
 #include <QFileSystemWatcher>
+#include <QMutex>
 #include <QSettings>
+#include <QWaitCondition>
+#include <atomic>
+#include <cstring>
 #include <memory>
+#include <optional>
+#include <string>
+#include <thread>
 #include <QMessageBox>
+#include <QPair>
 #include <QStringList>
 #include <QTimer>
 #include <QDebug>
@@ -35,6 +44,7 @@
 #include "gamepadlayout.h"
 #include "hidprofileeditor.h"
 #include "hidapi.h"
+#include "hidbackend.h"
 #include <QColor>
 
 #include "hidplugin.h"
@@ -53,6 +63,205 @@
   #include "hidosxjoystick.h"
   #include "hidosxhotplug.h"
 #endif
+
+/*****************************************************************************
+ * The scan and open threads
+ *****************************************************************************/
+
+/* What the GUI thread and the HID threads share; each thread holds it, so
+   it outlives the plugin while one is still in a call to the system. The
+   lock is only ever held for bookkeeping, never across a call to the
+   system (or the backend). */
+struct HIDScanShared
+{
+    QMutex lock;
+    QWaitCondition changed;
+    HIDPlugin *owner = nullptr;         ///< null once the plugin has gone
+    QThread *guiThread = nullptr;       ///< where finished devices go
+    bool quit = false;
+
+    // The scan thread: one, made at the first scan, kept.
+    bool scannerStarted = false;
+    bool scanPending = false;
+    bool scanBusy = false;
+    /* The stale check between scans: the devices' staleProbe()s alone,
+       run here so the GUI thread makes no call to the system for it. */
+    bool probePending = false;
+    bool staleSeen = false;
+    HIDBackend *scanBackend = nullptr;
+    QList<QPair<QString, std::function<bool()>>> staleProbes;
+    QSet<QString> knownPaths;
+
+    // Finished, for drainResults().
+    struct Scan
+    {
+        QList<HIDFound> found;
+        QSet<QString> stale;
+        QList<HIDDevice *> dmx;
+    };
+    std::optional<Scan> scan;
+    struct Opened
+    {
+        QString path;
+        quint64 job = 0;
+        HIDDevice *dev = nullptr;
+    };
+    QList<Opened> opened;
+    int opening = 0;                    ///< open threads still in their call
+
+    /** The system's backend: here, not in the plugin, so a thread stuck in
+     *  it still has it after the plugin has gone. */
+    std::unique_ptr<HIDBackend> systemBackend;
+
+    ~HIDScanShared()
+    {
+        if (scan)
+            qDeleteAll(scan->dmx);
+        for (const Opened &o : std::as_const(opened))
+            delete o.dev;
+    }
+
+    /** Tell the plugin there is something to take. Lock held. */
+    void ping()
+    {
+        if (owner != nullptr)
+            QMetaObject::invokeMethod(owner, "drainResults", Qt::QueuedConnection);
+        changed.wakeAll();
+    }
+};
+
+namespace
+{
+/** Every HID worker thread still running (scan, open, dispose), for
+ *  HIDPlugin::workerThreads(). */
+std::atomic<int> s_workers { 0 };
+
+/** Counts a worker thread out as it ends, however it ends. */
+struct WorkerCount
+{
+    ~WorkerCount() { s_workers--; }
+};
+
+/** A device that is out of the plugin's list: deleted off the GUI thread,
+ *  as stopping its reader and closing it are calls to the system too. */
+void disposeOffThread(HIDDevice *dev)
+{
+    if (dev == nullptr)
+        return;
+    s_workers++;
+    std::thread([dev]() {
+        WorkerCount counted;
+        delete dev;
+    }).detach();
+}
+
+HIDDevice *makeVirtualPad(const HIDFound &found)
+{
+    const QString name = found.product.isEmpty()
+                         ? QStringLiteral("Virtual pad %1").arg(found.path) : found.product;
+    HIDVirtualPad *pad = new HIDVirtualPad(nullptr, 0, name, found.vendorId, found.productId);
+    pad->setPath(found.path);
+    if (found.testRead)
+        pad->setReadHook(found.testRead);
+    return pad;
+}
+
+/** The scan thread: one scan at a time, as asked, until the plugin goes. */
+void scanLoop(std::shared_ptr<HIDScanShared> sh)
+{
+    WorkerCount counted;
+    QMutexLocker locker(&sh->lock);
+    for (;;)
+    {
+        while (sh->scanPending == false && sh->probePending == false && sh->quit == false)
+            sh->changed.wait(&sh->lock);
+        if (sh->quit)
+        {
+            locker.unlock();
+            sh.reset();     // before it counts itself out
+            return;
+        }
+        if (sh->scanPending == false)
+        {
+            /* The stale check alone: is each device's system entry still
+               there? One gone asks the plugin for a scan. */
+            sh->probePending = false;
+            const auto probes = sh->staleProbes;
+            locker.unlock();
+            bool gone = false;
+            for (const auto &probe : probes)
+                gone = gone || (probe.second && probe.second());
+            locker.relock();
+            if (gone)
+            {
+                sh->staleSeen = true;
+                sh->ping();
+            }
+            continue;
+        }
+        sh->probePending = false;   // the scan checks them too
+        sh->scanPending = false;
+        sh->scanBusy = true;
+        HIDBackend *backend = sh->scanBackend;
+        const auto probes = sh->staleProbes;
+        const QSet<QString> known = sh->knownPaths;
+        QThread *gui = sh->guiThread;
+        locker.unlock();
+
+        HIDScanShared::Scan scan;
+        if (backend != nullptr)
+            scan.found = backend->enumerate();
+        for (const auto &probe : probes)
+            if (probe.second && probe.second())
+                scan.stale.insert(probe.first);
+        /* A DMX interface is opened here, one at a time: hidapi's own
+           handle, which shares its listing's state. */
+        for (const HIDFound &f : std::as_const(scan.found))
+        {
+            if (f.dmx == false || known.contains(f.path) || backend == nullptr)
+                continue;
+            if (HIDDevice *dev = backend->open(f, makeVirtualPad))
+            {
+                dev->handTo(gui);
+                scan.dmx << dev;
+            }
+        }
+
+        locker.relock();
+        sh->scanBusy = false;
+        if (sh->scan)
+        {
+            // Not taken yet: the newer listing wins, its DMX devices join.
+            scan.dmx = sh->scan->dmx + scan.dmx;
+        }
+        sh->scan = std::move(scan);
+        sh->ping();
+    }
+}
+
+/** An open thread: one device, as long as the system takes. */
+void openJob(std::shared_ptr<HIDScanShared> sh, HIDBackend *backend, HIDFound found, quint64 job)
+{
+    WorkerCount counted;
+    HIDDevice *dev = backend->open(found, makeVirtualPad);
+    if (dev != nullptr)
+        dev->setInstance(found.instance);
+
+    QMutexLocker locker(&sh->lock);
+    sh->opening--;
+    if (sh->owner != nullptr)
+    {
+        if (dev != nullptr)
+            dev->handTo(sh->guiThread);
+        sh->opened << HIDScanShared::Opened { found.path, job, dev };
+        dev = nullptr;
+    }
+    sh->ping();
+    locker.unlock();
+    delete dev;     // the plugin has gone: nobody to give it to
+    sh.reset();
+}
+}
 
 /*****************************************************************************
  * HID Initialization
@@ -88,12 +297,32 @@ void HIDPlugin::init()
         addDevice(pad);
     }
     m_virtualOnly = qEnvironmentVariableIntValue("QLC_HID_VIRTUAL_ONLY") == 1;
+    const int limit = qEnvironmentVariableIntValue("QLC_HID_OPEN_LIMIT_MS");
+    if (limit > 0)
+        m_openLimitMs = limit;
 
     m_rescanTimer = new QTimer(this);
     m_rescanTimer->setSingleShot(true);
     connect(m_rescanTimer, &QTimer::timeout, this, &HIDPlugin::rescanDevices);
 
+    /* A scan that does not come back in time: the system's list itself is
+       not answering. Named, and the next one waits for it (never two). */
+    m_scanWatch = new QTimer(this);
+    m_scanWatch->setSingleShot(true);
+    connect(m_scanWatch, &QTimer::timeout, this, [this]() {
+        if (isScanning() && !m_scanStuck)
+        {
+            qWarning() << Q_FUNC_INFO << "the HID device list has not answered in"
+                       << m_openLimitMs << "ms";
+            m_scanStuck = true;
+            noteProblems();
+        }
+    });
+
+    /* The first scan, waited for a moment so a show's patches find the
+       pads that are there; one that hangs is not waited for. */
     rescanDevices();
+    settleScan(m_openLimitMs);
 
 #if defined (__APPLE__) || defined(Q_OS_MACOS)
     /* The app's hotplug monitor sees USB only: a Bluetooth pad switched off
@@ -119,17 +348,7 @@ void HIDPlugin::init()
        controller that went is never left patched and silent. */
     m_staleTimer = new QTimer(this);
     m_staleTimer->setInterval(3000);
-    connect(m_staleTimer, &QTimer::timeout, this, [this]() {
-        for (HIDDevice *dev : std::as_const(m_devices))
-        {
-            if (dev->isStale())
-            {
-                qDebug() << Q_FUNC_INFO << dev->name() << "is gone: rescanning";
-                scheduleRescan(0);
-                break;
-            }
-        }
-    });
+    connect(m_staleTimer, &QTimer::timeout, this, &HIDPlugin::checkStale);
     m_staleTimer->start();
 
 #if defined(Q_OS_LINUX)
@@ -403,12 +622,30 @@ QString HIDPlugin::inputChannelRole(quint32 input, quint32 channel) const
 
 HIDPlugin::~HIDPlugin()
 {
+    /* Threads still in a call to the system are left to it: they see the
+       plugin gone and delete what they made themselves. Nothing here waits
+       for them. */
+    if (m_shared)
+    {
+        QMutexLocker locker(&m_shared->lock);
+        m_shared->owner = nullptr;
+        m_shared->quit = true;
+        m_shared->changed.wakeAll();
+    }
 #if defined (__APPLE__) || defined(Q_OS_MACOS)
     delete m_osxHotplug;
     m_osxHotplug = nullptr;
 #endif
     while (m_devices.isEmpty() == false)
-        delete m_devices.takeFirst();
+    {
+        HIDDevice *dev = m_devices.takeFirst();
+        /* A reader stuck in a call cannot be deleted under it: left, as
+           the process is closing anyway. */
+        if (dev->stopReading(500))
+            delete dev;
+        else
+            qWarning() << Q_FUNC_INFO << dev->name() << "is still in a call: left";
+    }
 }
 
 QString HIDPlugin::name() const
@@ -606,8 +843,10 @@ bool HIDPlugin::canConfigure() const
  *****************************************************************************/
 
 /** A joystick for @p info on this platform, or null when it is not one. */
-static HIDDevice *makeJoystick(HIDPlugin *plugin, quint32 line, struct hid_device_info *info)
+static HIDDevice *makeJoystick(struct hid_device_info *info)
 {
+    HIDPlugin *plugin = nullptr;    // made off the GUI thread: no parent
+    const quint32 line = 0;         // HIDPlugin numbers it as it adds it
     HIDDevice *dev = NULL;
 #if defined(Q_WS_X11) || defined(Q_OS_LINUX)
     if (QString(info->path).contains("js"))
@@ -655,111 +894,512 @@ static bool isDMXInterface(const struct hid_device_info *info)
             && info->product_id == HID_DMX_INTERFACE_PRODUCT_ID_4);
 }
 
+/** The system's devices: hidapi's listing, each platform's joystick. */
+class HIDSystemBackend final : public HIDBackend
+{
+public:
+    QList<HIDFound> enumerate() override
+    {
+        QList<HIDFound> list;
+        struct hid_device_info *devs = hid_enumerate(0x0, 0x0);
+        for (struct hid_device_info *cur = devs; cur != nullptr; cur = cur->next)
+        {
+            HIDFound f;
+            f.path = QString(cur->path);
+            f.vendorId = cur->vendor_id;
+            f.productId = cur->product_id;
+            f.usagePage = cur->usage_page;
+            f.usage = cur->usage;
+            f.releaseNumber = cur->release_number;
+            f.interfaceNumber = cur->interface_number;
+            f.manufacturer = cur->manufacturer_string ? QString::fromWCharArray(cur->manufacturer_string) : QString();
+            f.product = cur->product_string ? QString::fromWCharArray(cur->product_string) : QString();
+            f.serial = cur->serial_number ? QString::fromWCharArray(cur->serial_number) : QString();
+            f.dmx = isDMXInterface(cur);
+            if (f.dmx || isJoystickCandidate(cur))
+                list << f;
+        }
+        if (devs != nullptr)
+            hid_free_enumeration(devs);
+        return list;
+    }
+
+    HIDDevice *open(const HIDFound &f,
+                    const std::function<HIDDevice *(const HIDFound &)> &) override
+    {
+        if (f.dmx)
+            return new HIDDMXDevice(nullptr, 0, f.manufacturer + " " + f.product + " "
+                                                + "(" + f.serial + ")", f.path);
+        /* A listing entry again, its strings owned here for the call. */
+        QByteArray path = f.path.toUtf8();
+        std::wstring manufacturer = f.manufacturer.toStdWString();
+        std::wstring product = f.product.toStdWString();
+        std::wstring serial = f.serial.toStdWString();
+        struct hid_device_info info;
+        memset(&info, 0, sizeof(info));
+        info.path = path.data();
+        info.vendor_id = f.vendorId;
+        info.product_id = f.productId;
+        info.usage_page = f.usagePage;
+        info.usage = f.usage;
+        info.release_number = f.releaseNumber;
+        info.interface_number = f.interfaceNumber;
+        info.manufacturer_string = manufacturer.data();
+        info.product_string = product.data();
+        info.serial_number = serial.data();
+        info.next = nullptr;
+        return makeJoystick(&info);
+    }
+
+private:
+    static bool isJoystickCandidate(const struct hid_device_info *info)
+    {
+#if defined(Q_WS_X11) || defined(Q_OS_LINUX)
+        return QString(info->path).contains("js");
+#elif defined(WIN32) || defined (Q_OS_WIN)
+        return HIDWindowsJoystick::isJoystick(info->vendor_id, info->product_id);
+#elif defined (__APPLE__) || defined(Q_OS_MACOS)
+        return HIDOSXJoystick::isJoystick(info->usage);
+#else
+        Q_UNUSED(info)
+        return false;
+#endif
+    }
+};
+
+HIDBackend *HIDPlugin::backend() const
+{
+    if (m_testBackend != nullptr)
+        return m_testBackend;
+    if (m_virtualOnly || !m_shared)
+        return nullptr;
+    return m_shared->systemBackend.get();
+}
+
+void HIDPlugin::setTestBackend(quintptr backend)
+{
+    m_testBackend = reinterpret_cast<HIDBackend *>(backend);
+    rescanDevices();
+}
+
+int HIDPlugin::openingCount() const
+{
+    if (!m_shared)
+        return 0;
+    QMutexLocker locker(&m_shared->lock);
+    return m_shared->opening;
+}
+
+bool HIDPlugin::isScanning() const
+{
+    if (!m_shared)
+        return false;
+    QMutexLocker locker(&m_shared->lock);
+    return m_shared->scanPending || m_shared->scanBusy;
+}
+
 void HIDPlugin::rescanDevices()
 {
-    /* Treat all devices as dead first, until we find them again. Those
-       that aren't found, get destroyed at the end of this function. */
-    QList <HIDDevice*> destroyList(m_devices);
-    for (HIDVirtualPad *pad : std::as_const(m_virtualPads))
-        destroyList.removeAll(pad);     // never found: never gone
-    bool changed = false;
-
-    struct hid_device_info *devs, *cur_dev;
-    quint32 line = 0;
-
-    devs = m_virtualOnly ? nullptr : hid_enumerate(0x0, 0x0);
-
-    cur_dev = devs;
-
-    while (cur_dev)
+    if (!m_shared)
     {
-        //qDebug() << "[HID Device found] path:" << QString(cur_dev->path) << ", name:" << QString::fromWCharArray(cur_dev->product_string);
-
-        HIDDevice* dev = device(QString(cur_dev->path));
-        if (dev != NULL && dev->isStale())
-        {
-            /* Same path, but not the device it was opened on: a controller
-               switched off and on again, or reconnected after the Mac slept.
-               The old one reads nothing any more. Replace it where it is, so
-               the input line -- and the patch on it -- stays the same; the
-               configurationChanged() below reopens it. */
-            HIDDevice *fresh = makeJoystick(this, dev->line(), cur_dev);
-            /* No device to read there now: it goes with the others not
-               found (below), not kept listed, patched and silent. */
-            if (fresh != NULL)
-            {
-                destroyList.removeAll(dev);
-                qDebug() << Q_FUNC_INFO << "reconnected:" << fresh->name();
-                const int index = m_devices.indexOf(dev);
-                m_devices[index] = fresh;
-                m_diagnosticsStarted.remove(dev);
-                emit deviceRemoved(dev);
-                delete dev;
-                emit deviceAdded(fresh);
-                setupDiagnostics(fresh);
-                changed = true;
-            }
-        }
-        else if (dev != NULL)
-        {
-            /** Device already exists, delete from remove list */
-            destroyList.removeAll(dev);
-        }
-        else if (isDMXInterface(cur_dev))
-        {
-            /* Device is a USB DMX Interface, add it */
-            dev = new HIDDMXDevice(this, line++,
-                                   QString::fromWCharArray(cur_dev->manufacturer_string) + " " +
-                                   QString::fromWCharArray(cur_dev->product_string) + " " +
-                                   "(" + QString::fromWCharArray(cur_dev->serial_number) + ")",
-                                   QString(cur_dev->path));
-            addDevice(dev);
-        }
-        else
-        {
-            dev = makeJoystick(this, line, cur_dev);
-            if (dev != NULL)
-            {
-                line++;
-                addDevice(dev);
-                setupDiagnostics(dev);
-            }
-        }
-
-        cur_dev = cur_dev->next;
+        m_shared = std::make_shared<HIDScanShared>();
+        m_shared->owner = this;
+        m_shared->guiThread = thread();
+        m_shared->systemBackend = std::make_unique<HIDSystemBackend>();
     }
+    HIDBackend *be = backend();
+    if (be == nullptr)
+        return;
 
-    if (devs != nullptr)
-        hid_free_enumeration(devs);
+    QSet<QString> known;
+    for (HIDDevice *dev : std::as_const(m_devices))
+        known.insert(dev->path());
 
-    /* Destroy those devices that were no longer found. */
-    while (destroyList.isEmpty() == false)
+    QMutexLocker locker(&m_shared->lock);
+    /* Asked while one runs: that one is followed by this one, never a
+       second beside it. */
+    m_shared->scanPending = true;
+    m_shared->scanBackend = be;
+    m_shared->staleProbes = staleProbes();
+    m_shared->knownPaths = known;
+    startScanner();
+    m_shared->changed.wakeAll();
+    locker.unlock();
+
+    if (m_scanWatch != nullptr && m_scanWatch->isActive() == false)
+        m_scanWatch->start(m_openLimitMs);
+}
+
+QList<QPair<QString, std::function<bool()>>> HIDPlugin::staleProbes() const
+{
+    /* What the scan thread checks without touching a device: whether each
+       one's system entry is still there (staleProbe()). */
+    QList<QPair<QString, std::function<bool()>>> probes;
+    for (HIDDevice *dev : std::as_const(m_devices))
+        if (std::function<bool()> probe = dev->staleProbe())
+            probes << qMakePair(dev->path(), probe);
+    return probes;
+}
+
+void HIDPlugin::startScanner()
+{
+    if (m_shared->scannerStarted)
+        return;
+    m_shared->scannerStarted = true;
+    s_workers++;
+    std::thread(scanLoop, m_shared).detach();
+}
+
+void HIDPlugin::checkStale()
+{
+    /* Whatever a notification missed (a Mac asleep through it, App Nap):
+       a device whose system entry is gone rescans, so a controller that
+       went is never left patched and silent. Asked of the scan thread --
+       the GUI thread makes no call to the system -- and not while a scan
+       (which checks them too) is asked for or under way. */
+    if (!m_shared)
+        return;
+    const auto probes = staleProbes();
+    if (probes.isEmpty())
+        return;
+    QMutexLocker locker(&m_shared->lock);
+    if (m_shared->scanPending || m_shared->scanBusy || m_shared->probePending)
+        return;
+    m_shared->probePending = true;
+    m_shared->staleProbes = probes;
+    startScanner();
+    m_shared->changed.wakeAll();
+}
+
+int HIDPlugin::workerThreads()
+{
+    return s_workers.load();
+}
+
+void HIDPlugin::settleScan(int ms)
+{
+    if (!m_shared)
+        return;
+    QDeadlineTimer deadline(ms);
+    for (;;)
     {
-        HIDDevice* dev = destroyList.takeFirst();
-        m_devices.removeAll(dev);
-        m_diagnosticsStarted.remove(dev);
-        delete dev;
-        changed = true;
+        drainResults();
+        QMutexLocker locker(&m_shared->lock);
+        if (m_shared->scan || m_shared->opened.isEmpty() == false)
+            continue;
+        if (m_shared->scanPending == false && m_shared->scanBusy == false
+            && m_shared->opening == 0)
+            break;
+        if (m_shared->changed.wait(&m_shared->lock, deadline) == false)
+            break;
     }
+}
 
+void HIDPlugin::drainResults()
+{
+    if (!m_shared)
+        return;
+    std::optional<HIDScanShared::Scan> scan;
+    QList<HIDScanShared::Opened> opened;
+    bool staleSeen = false;
+    {
+        QMutexLocker locker(&m_shared->lock);
+        scan.swap(m_shared->scan);
+        opened.swap(m_shared->opened);
+        staleSeen = m_shared->staleSeen;
+        m_shared->staleSeen = false;
+    }
+    if (staleSeen)
+    {
+        qDebug() << Q_FUNC_INFO << "a device's system entry is gone: rescanning";
+        scheduleRescan(0);
+    }
+    if (scan)
+        applyScan(scan->found, scan->stale, scan->dmx);
+    for (const HIDScanShared::Opened &o : std::as_const(opened))
+        applyOpened(o.path, o.job, o.dev);
+}
+
+void HIDPlugin::dropDevice(HIDDevice *dev)
+{
+    m_devices.removeAll(dev);
+    m_diagnosticsStarted.remove(dev);
+    emit deviceRemoved(dev);
+    disposeOffThread(dev);
+}
+
+void HIDPlugin::renumberLines()
+{
     /* An input line is a device's place in this list (device(index)), and
        InputPatch only takes values whose line matches the one it opened.
        Numbering devices as they were found did not keep to that: a device
-       skipped above (Apple's internal ones) still used a number up, and a
-       rescan numbered new devices from 0 again -- so a controller found
-       after them, or back after being switched off, sent its input under a
-       line no patch listens to. Keep them in step. */
+       skipped (Apple's internal ones) still used a number up, and a rescan
+       numbered new devices from 0 again -- so a controller found after
+       them, or back after being switched off, sent its input under a line
+       no patch listens to. Keep them in step. */
     for (int i = 0; i < m_devices.size(); ++i)
         m_devices.at(i)->setLine(quint32(i));
+}
+
+void HIDPlugin::applyScan(const QList<HIDFound> &found, const QSet<QString> &stale,
+                          const QList<HIDDevice *> &dmx)
+{
+    if (m_scanWatch != nullptr)
+        m_scanWatch->stop();
+    m_scanStuck = false;
+
+    /* The same device listed twice is one device. */
+    QList<HIDFound> unique;
+    QSet<QString> listed;
+    for (const HIDFound &f : found)
+    {
+        if (listed.contains(f.path))
+            continue;
+        listed.insert(f.path);
+        unique << f;
+    }
+    m_listed = listed;
+    bool changed = false;
+
+    /* Gone from the list: gone. */
+    const QList<HIDDevice *> devices = m_devices;
+    for (HIDDevice *dev : devices)
+    {
+        if (m_virtualPads.contains(qobject_cast<HIDVirtualPad *>(dev)))
+            continue;   // never found: never gone
+        if (listed.contains(dev->path()) == false)
+        {
+            dropDevice(dev);
+            changed = true;
+        }
+    }
+
+    /* USB DMX interfaces, opened by the scan thread. */
+    for (HIDDevice *dev : dmx)
+    {
+        if (device(dev->path()) != nullptr || listed.contains(dev->path()) == false)
+        {
+            disposeOffThread(dev);
+            continue;
+        }
+        HIDDMXDevice *iface = qobject_cast<HIDDMXDevice *>(dev);
+        if (iface != nullptr && iface->openFailed()
+            && qobject_cast<QApplication *>(QCoreApplication::instance()) != nullptr
+            && qEnvironmentVariableIntValue("QLC_TEST_OFFSCREEN_GUARD") != 1)
+        {
+            QMessageBox::warning(NULL, tr("HID DMX Interface Error"),
+                tr("Unable to open %1. Make sure the udev rule is installed.").arg(dev->name()),
+                QMessageBox::Ok, QMessageBox::Ok);
+        }
+        m_devices.append(dev);
+        emit deviceAdded(dev);
+        changed = true;
+    }
+
+    /* A stuck open whose device left the list, or is listed as another
+       system entry (replugged into the same port: the same path): given
+       up, so the pad that is there now can be opened. Its thread is left
+       to the system -- one such per path: a second one stuck there keeps
+       the path until one of them returns. */
+    QHash<QString, quint64> instances;
+    for (const HIDFound &f : std::as_const(unique))
+        instances.insert(f.path, f.instance);
+    for (auto it = m_opening.begin(); it != m_opening.end(); )
+    {
+        const bool gone = listed.contains(it.key()) == false;
+        const quint64 now = instances.value(it.key());
+        const bool another = !gone && now != 0 && now != it->instance;
+        if (it->stuck && (gone || another) && m_abandoned.contains(it.key()) == false)
+        {
+            qWarning() << Q_FUNC_INFO << it->name << (gone ? "left the list" : "is another device now")
+                       << "while its open is stuck: given up";
+            m_abandoned.insert(it.key(), it->job);
+            it = m_opening.erase(it);
+        }
+        else
+            ++it;
+    }
+
+    /* Joysticks: a new one, or one that came back at the same path (the
+       old one reads nothing any more), is opened on a thread of its own. */
+    for (const HIDFound &f : std::as_const(unique))
+    {
+        if (f.dmx)
+            continue;
+        HIDDevice *dev = device(f.path);
+        const bool cameBack = dev != nullptr
+            && (stale.contains(f.path)
+                || (f.instance != 0 && dev->instance() != 0 && f.instance != dev->instance()));
+        if (dev != nullptr && cameBack == false)
+            continue;
+        if (m_opening.contains(f.path))
+            continue;   // one open at a time per device: a stuck one holds only itself
+        startOpen(f, dev != nullptr);
+    }
 
     if (changed)
+    {
+        renumberLines();
         emit configurationChanged();
+    }
+    noteProblems();
+}
+
+void HIDPlugin::startOpen(const HIDFound &found, bool replacing)
+{
+    HIDBackend *be = backend();
+    if (be == nullptr)
+        return;
+    Opening o;
+    o.job = ++m_nextJob;
+    o.replacing = replacing;
+    o.instance = found.instance;
+    QString name = found.product.trimmed();
+    if (name.isEmpty())
+        name = QStringLiteral("HID device %1:%2")
+                   .arg(found.vendorId, 4, 16, QLatin1Char('0'))
+                   .arg(found.productId, 4, 16, QLatin1Char('0')).toUpper();
+    const QString where = GamepadLayout::locationFromPath(found.path);
+    o.name = where.isEmpty() ? name : QStringLiteral("%1 (%2)").arg(name, where);
+    m_opening.insert(found.path, o);
+    {
+        QMutexLocker locker(&m_shared->lock);
+        m_shared->opening++;
+    }
+    s_workers++;
+    std::thread(openJob, m_shared, be, found, o.job).detach();
+    const QString path = found.path;
+    const quint64 job = o.job;
+    QTimer::singleShot(m_openLimitMs, this, [this, path, job]() { openTimedOut(path, job); });
+}
+
+void HIDPlugin::openTimedOut(const QString &path, quint64 job)
+{
+    auto it = m_opening.find(path);
+    if (it == m_opening.end() || it->job != job || it->stuck)
+        return;
+    qWarning() << Q_FUNC_INFO << it->name << "has not answered in" << m_openLimitMs
+               << "ms: skipped until the system lets go of it";
+    it->stuck = true;
+    /* The one it was to replace reads nothing any more: not kept listed,
+       patched and silent (a patch on it goes offline, Pad Run disarms). */
+    if (it->replacing)
+    {
+        it->replacing = false;
+        if (HIDDevice *old = device(path))
+        {
+            dropDevice(old);
+            renumberLines();
+            emit configurationChanged();
+        }
+    }
+    noteProblems();
+}
+
+void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
+{
+    /* One given up on (its pad left, or came back as another): whatever it
+       made is not wanted; the path may take a new stuck one again. */
+    auto given = m_abandoned.find(path);
+    if (given != m_abandoned.end() && given.value() == job)
+    {
+        m_abandoned.erase(given);
+        disposeOffThread(dev);
+        return;
+    }
+    auto it = m_opening.find(path);
+    if (it == m_opening.end() || it->job != job)
+    {
+        disposeOffThread(dev);
+        return;
+    }
+    const bool wasStuck = it->stuck;
+    m_opening.erase(it);
+    HIDDevice *old = device(path);
+    bool changed = false;
+
+    if (m_listed.contains(path) == false || dev == nullptr)
+    {
+        /* Gone while it was opened, or nothing there to read: no device,
+           and not the stale one it was to replace either. */
+        disposeOffThread(dev);
+        if (old != nullptr && m_listed.contains(path) == false)
+        {
+            dropDevice(old);
+            changed = true;
+        }
+        else if (old != nullptr && dev == nullptr)
+        {
+            dropDevice(old);
+            changed = true;
+        }
+        /* The system let go of one it held: ask again, it may answer now. */
+        if (wasStuck && m_listed.contains(path))
+            scheduleRescan(0);
+    }
+    else if (old != nullptr)
+    {
+        /* Same path, but not the device it was opened on: a controller
+           switched off and on again, re-enumerated, or reconnected after
+           the Mac slept. Replaced where it is, so the input line -- and the
+           patch on it -- stays the same; configurationChanged() reopens it. */
+        qDebug() << Q_FUNC_INFO << "reconnected:" << dev->name();
+        const int index = m_devices.indexOf(old);
+        m_devices[index] = dev;
+        m_diagnosticsStarted.remove(old);
+        emit deviceRemoved(old);
+        disposeOffThread(old);
+        emit deviceAdded(dev);
+        setupDiagnostics(dev);
+        changed = true;
+    }
+    else
+    {
+        m_devices.append(dev);
+        emit deviceAdded(dev);
+        setupDiagnostics(dev);
+        changed = true;
+    }
+
+    if (changed)
+    {
+        renumberLines();
+        emit configurationChanged();
+    }
+    noteProblems();
+}
+
+QStringList HIDPlugin::targetProblems() const
+{
+    QStringList out;
+    if (m_scanStuck)
+        out << tr("USB controllers — the system's device list is not answering; "
+                  "the show keeps running");
+    for (auto it = m_opening.constBegin(); it != m_opening.constEnd(); ++it)
+    {
+        /* One the system no longer lists is gone, even if its open never
+           returns: nothing to name, nothing the operator can do. */
+        if (it->stuck && m_listed.contains(it.key()))
+            out << tr("%1 — not answering; skipped, the show keeps running").arg(it->name);
+    }
+    out.sort();
+    return out;
+}
+
+void HIDPlugin::noteProblems()
+{
+    const QStringList now = targetProblems();
+    if (now == m_lastProblems)
+        return;
+    m_lastProblems = now;
+    emit targetProblemsChanged();
 }
 
 bool HIDPlugin::injectVirtualInput(quint32 input, quint32 channel, uint value)
 {
+    /* QLC_HID_VIRTUAL_PAD's, or a test backend's (HIDBackend). */
     HIDVirtualPad *pad = qobject_cast<HIDVirtualPad *>(device(input));
-    if (pad == nullptr || !m_virtualPads.contains(pad))
+    if (pad == nullptr)
         return false;
     pad->inject(channel, uchar(qMin(value, 255u)));
     return true;

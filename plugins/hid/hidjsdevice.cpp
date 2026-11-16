@@ -77,18 +77,18 @@ HIDJsDevice::~HIDJsDevice()
 bool HIDJsDevice::openInput()
 {
     qDebug() << Q_FUNC_INFO;
-    m_running = true;
-    start();
-
+    startReading();
     return true;
 }
 
 void HIDJsDevice::closeInput()
 {
-    if (isRunning() == true)
+    /* Bounded (kReaderStopMs): a reader still in a call stops by itself,
+       its file closed then by the destructor or the next close. */
+    if (stopReadingBounded() == false)
     {
-        m_running = false;
-        wait();
+        qWarning() << Q_FUNC_INFO << m_name << "is still reading: left to stop by itself";
+        return;
     }
     if (m_file.isOpen())
         m_file.close();

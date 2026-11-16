@@ -22,6 +22,7 @@ add_library(${module_name} SHARED
 target_sources(${module_name} PRIVATE
     ../interfaces/qlcioplugin.cpp ../interfaces/qlcioplugin.h
     configurehid.cpp configurehid.h configurehid.ui
+    hidbackend.h
     gamepadlayout.cpp gamepadlayout.h
     hiddevice.cpp hiddevice.h
     hiddmxdevice.cpp hiddmxdevice.h
@@ -106,9 +107,8 @@ install(TARGETS ${module_name}
     RUNTIME DESTINATION ${INSTALLROOT}/${PLUGINDIR}
 )
 
-# The GameController framework side (a pad's auto-off and wake), macOS only.
-if(APPLE)
-    if(NOT QLC_NO_TESTS)
-        add_subdirectory(test)
-    endif()
+# The scan and open threads (hidrescan_test), and on macOS the
+# GameController framework side (a pad's auto-off and wake).
+if(NOT QLC_NO_TESTS AND NOT WIN32)
+    add_subdirectory(test)
 endif()

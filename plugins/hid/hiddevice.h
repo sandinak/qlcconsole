@@ -24,6 +24,9 @@
 #include <QThread>
 #include <QFile>
 
+#include <atomic>
+#include <functional>
+
 class HIDPlugin;
 
 /*****************************************************************************
@@ -136,6 +139,46 @@ public:
      *  is now a different device at the same path. HIDPlugin replaces it. */
     virtual bool isStale() const { return false; }
 
+    /** isStale(), as a check that holds nothing of this object: the plugin's
+     *  scan thread runs it while the device stays the GUI thread's. Empty
+     *  when the device can't tell (never stale). */
+    virtual std::function<bool()> staleProbe() const { return {}; }
+
+    /** Which system entry it was made for, when the listing says (0: it
+     *  does not). The same path listed with another one is a device that
+     *  came back -- re-enumerated, switched off and on -- and is replaced. */
+    quint64 instance() const { return m_instance; }
+    void setInstance(quint64 instance) { m_instance = instance; }
+
+    /** Made on a worker thread (HIDPlugin opens devices off the GUI
+     *  thread): move it, and its file, to @p thread. Called on the thread
+     *  that made it, before anything else uses it. */
+    void handTo(QThread *thread);
+
+    /** Ask the reader to stop and wait for it at most @p ms. False when it
+     *  is still in a call to the system: it then stops by itself once the
+     *  call returns, and the device must not be deleted before. */
+    bool stopReading(int ms);
+
+    /** How long closing an input waits for the reader (each looks at
+     *  m_running at least every 100 ms): past it, the reader is in a call
+     *  that is not answering, and stops by itself once it returns. A patch
+     *  is closed with the universes locked on some paths
+     *  (InputOutputMap), so a controller that stopped answering must
+     *  never hold the DMX output longer. */
+    static constexpr int kReaderStopMs = 300;
+
+protected:
+    /** Start the reader, or keep the one a bounded stop left still in a
+     *  call: it reads on, and if it was on its way out it is started again
+     *  as it finishes (never left stopped, never two). */
+    void startReading();
+    /** Stop the reader, waiting kReaderStopMs at most; false when it is
+     *  still in a call (it stops by itself). */
+    bool stopReadingBounded() { return stopReading(kReaderStopMs); }
+
+public:
+
     /** How the device is connected and read, for a person ("Bluetooth LE ·
      *  Xbox Series X|S Controller (045E:0B13) · GameController framework").
      *  Empty when there is nothing to say. */
@@ -154,6 +197,7 @@ public:
 protected:
     quint32 m_line;
     int m_capabilities;
+    quint64 m_instance = 0;
 
     /*************************************************************************
      * Device info
@@ -212,7 +256,8 @@ public:
     virtual void feedBack(quint32 channel, uchar value);
 
 protected:
-    bool m_running;
+    /** The reader runs while true; set from the GUI thread, read by it. */
+    std::atomic<bool> m_running { false };
 
 private:
     /** Input data thread worker method */

@@ -27,6 +27,10 @@
 #include <QHash>
 #include <QElapsedTimer>
 
+#include <functional>
+#include <memory>
+#include <QPair>
+
 #include "qlcioplugin.h"
 #include "stickfilter.h"
 
@@ -35,6 +39,9 @@ class HIDDevice;
 class HIDVirtualPad;
 class HIDProfile;
 class HIDOSXHotplug;
+class HIDBackend;
+struct HIDFound;
+struct HIDScanShared;
 class QTimer;
 
 /*****************************************************************************
@@ -172,6 +179,11 @@ public:
     /** @reimp A line here means a device is plugged in. */
     bool linesAreHardware() const override { return true; }
 
+    /** @reimp -- controllers that stopped answering while being opened
+     *  ("Xbox 360 Controller for Windows (USB 2124000) -- not answering"):
+     *  skipped, tried again once the system lets go, the show running on. */
+    QStringList targetProblems() const override;
+
 
 signals:
     void configurationChanged();
@@ -180,7 +192,26 @@ signals:
      * Devices
      *********************************************************************/
 public:
+    /** Ask the scan thread for the system's devices again; never waits.
+     *  A scan already under way is followed by one more, never a second
+     *  beside it. New devices are opened on threads of their own and
+     *  added as each is ready (drainResults()). */
     void rescanDevices();
+
+    /** The test seam: find and open devices through @p backend (an
+     *  HIDBackend *, kept alive by the test until openingCount() is 0)
+     *  instead of the system's; 0 for the system's again. Rescans. */
+    Q_INVOKABLE void setTestBackend(quintptr backend);
+    /** Opens still in a call to their backend, stuck ones included. */
+    Q_INVOKABLE int openingCount() const;
+    /** True while the scan thread has a scan asked for or under way. */
+    Q_INVOKABLE bool isScanning() const;
+    /** How long an open may take before it is named and skipped:
+     *  QLC_HID_OPEN_LIMIT_MS, else 2 s. */
+    int openLimitMs() const { return m_openLimitMs; }
+    /** HID worker threads still running, every plugin's (scan, open,
+     *  dispose): a test waits for 0 before it ends. */
+    static int workerThreads();
 
     /** A value from the virtual pad (QLC_HID_VIRTUAL_PAD) on @p input, sent
      *  on as the pad's own reading would be. False if it is not one. */
@@ -228,7 +259,54 @@ private slots:
     void slotDeviceValue(quint32 universe, quint32 line, quint32 channel, uchar value);
     void slotStickTick();
 
+private slots:
+    /** Take what the scan thread and the open threads have finished. */
+    void drainResults();
+    /** Every few seconds: each device's system entry still there? On the
+     *  scan thread; one gone rescans. */
+    void checkStale();
+
 private:
+    HIDBackend *backend() const;
+    QList<QPair<QString, std::function<bool()>>> staleProbes() const;
+    /** The scan thread, made the first time. m_shared's lock held. */
+    void startScanner();
+    /** Wait at most @p ms for the scan and its opens (startup only: a
+     *  show's patches find their pads, a stuck one waits no longer). */
+    void settleScan(int ms);
+    void applyScan(const QList<HIDFound> &found, const QSet<QString> &stale,
+                   const QList<HIDDevice *> &dmx);
+    void applyOpened(const QString &path, quint64 job, HIDDevice *dev);
+    void startOpen(const HIDFound &found, bool replacing);
+    void openTimedOut(const QString &path, quint64 job);
+    /** Out of the list, its reader stopped and deleted off this thread. */
+    void dropDevice(HIDDevice *dev);
+    void renumberLines();
+
+    std::shared_ptr<HIDScanShared> m_shared;
+    HIDBackend *m_testBackend = nullptr;
+    int m_openLimitMs = 2000;
+    struct Opening
+    {
+        quint64 job = 0;
+        bool replacing = false;     ///< a device at this path is stale
+        bool stuck = false;         ///< past the limit: named, skipped
+        quint64 instance = 0;       ///< the system entry it opens (HIDFound)
+        QString name;               ///< for a person
+    };
+    /** One open at a time per path: a stuck one blocks only its own. */
+    QHash<QString, Opening> m_opening;
+    quint64 m_nextJob = 0;
+    /** Stuck opens given up on (their pad left the list or came back as
+     *  another), by path: at most one each, its result dropped. */
+    QHash<QString, quint64> m_abandoned;
+    /** The paths the latest scan listed. */
+    QSet<QString> m_listed;
+    QTimer *m_scanWatch = nullptr;
+    bool m_scanStuck = false;
+    QStringList m_lastProblems;
+    void noteProblems();
+
     /** Rescan a moment from now, once however often it is asked. */
     void scheduleRescan(int ms = 400);
     /** Wire @p dev up for diagnostics, starting it if they are on. */

@@ -25,7 +25,6 @@
 #endif
 
 #include <QApplication>
-#include <QMessageBox>
 #include <QByteArray>
 #include <QObject>
 #include <QString>
@@ -57,13 +56,10 @@ void HIDDMXDevice::init()
     /* Device name */
     m_handle = hid_open_path(path().toUtf8().constData());
 
+    /* Made on the plugin's scan thread: no dialog here. HIDPlugin says it
+       once the device is on the GUI thread (openFailed()). */
     if (!m_handle)
-    {
-        QMessageBox::warning(NULL, (tr("HID DMX Interface Error")),
-            (tr("Unable to open %1. Make sure the udev rule is installed.").arg(name())),
-             QMessageBox::Ok, QMessageBox::Ok);
         return;
-    }
 
     /** Reset channels when opening the interface: */
     m_dmx_cmp.fill(0, 512);

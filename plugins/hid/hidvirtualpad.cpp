@@ -18,6 +18,7 @@
 */
 
 #include <climits>
+#include <QDebug>
 
 #include "hidvirtualpad.h"
 #include "hidplugin.h"
@@ -30,15 +31,37 @@ HIDVirtualPad::HIDVirtualPad(HIDPlugin *parent, quint32 line, const QString &nam
 {
 }
 
+HIDVirtualPad::~HIDVirtualPad()
+{
+    if (isRunning())
+    {
+        m_running = false;
+        wait();
+    }
+}
+
 bool HIDVirtualPad::openInput()
 {
     m_open = true;
+    if (m_readHook)
+        startReading();
     return true;
 }
 
 void HIDVirtualPad::closeInput()
 {
     m_open = false;
+    if (m_readHook && stopReadingBounded() == false)
+        qWarning() << Q_FUNC_INFO << m_name << "is still reading: left to stop by itself";
+}
+
+void HIDVirtualPad::run()
+{
+    while (m_running)
+    {
+        m_readHook();
+        msleep(10);
+    }
 }
 
 QString HIDVirtualPad::connectionInfo() const

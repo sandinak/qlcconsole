@@ -335,18 +335,29 @@ void HIDOSXJoystick::init()
  * State
  *****************************************************************************/
 
-bool HIDOSXJoystick::isStale() const
+/* The registry entry goes when the device does; a pad that came back
+   (switched on again, reconnected after sleep) is a new entry. */
+static bool registryEntryGone(quint64 registryID)
 {
-    if (m_registryID == 0)
+    if (registryID == 0)
         return false;
-    /* The registry entry goes when the device does; a pad that came back
-       (switched on again, reconnected after sleep) is a new entry. */
     io_service_t service = IOServiceGetMatchingService(MACH_PORT_NULL,
-                                                       IORegistryEntryIDMatching(m_registryID));
+                                                       IORegistryEntryIDMatching(registryID));
     if (service == IO_OBJECT_NULL)
         return true;
     IOObjectRelease(service);
     return false;
+}
+
+bool HIDOSXJoystick::isStale() const
+{
+    return registryEntryGone(m_registryID);
+}
+
+std::function<bool()> HIDOSXJoystick::staleProbe() const
+{
+    const quint64 id = m_registryID;
+    return [id]() { return registryEntryGone(id); };
 }
 
 QString HIDOSXJoystick::connectionInfo() const
