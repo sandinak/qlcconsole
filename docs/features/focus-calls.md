@@ -543,7 +543,11 @@ letting go a short one):
 - **another pad**: with two pads, the first to press Start (or, for a
   tool started on the laptop, any button) has the controls; the other is
   ignored and told "Another controller is in use." The panel names the
-  pad that has it.
+  pad that has it. Only pads with the **Focus** job count: a pad whose
+  Focus job is off (Connections ▸ right-click the controller ▸ **Test
+  Controller and Jobs…**) can't start the calls or take the controls, and
+  is told "This controller doesn't do focus." See [Controller
+  jobs](gamepad-remote.md#controller-jobs-more-than-one-controller).
 
 The voice is the Mac's own (`say`); on Linux `spd-say`, elsewhere Qt's
 speech, if the computer has one. [Focus this cue](refine.md) speaks the same way.

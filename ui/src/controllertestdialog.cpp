@@ -209,7 +209,6 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
     m_jobsKnownAs = new QLabel(m_jobsRow);
     m_jobsKnownAs->setObjectName(QStringLiteral("controllerTestKnownAs"));
     m_jobsKnownAs->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_jobsKnownAs->setStyleSheet(QStringLiteral("color: palette(mid);"));
     jr->addWidget(m_jobsKnownAs, 1);
     m_jobsRow->hide();
     vl->addWidget(m_jobsRow);
@@ -1113,7 +1112,7 @@ void ControllerTestDialog::resetPicture()
     m_lastReadAt = 0;
     m_lastRead->setText(m_shown.plugin.isNull()
                         ? tr("No game controller is connected.")
-                        : tr("Press any control on %1.").arg(m_shown.name));
+                        : tr("Press any control on %1.").arg(pickerText(m_shown)));
 }
 
 void ControllerTestDialog::feedPicture(QLCIOPlugin *plugin, quint32 input, const QString &element,

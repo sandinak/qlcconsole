@@ -211,6 +211,45 @@ key shows here), and the round trip to the console in milliseconds. If a
 button lights the wrong box, the browser has not given the controller the
 standard layout. Use the screenshot to report it.
 
+## Controller jobs: more than one controller
+
+Each game controller plugged into this computer has three jobs: **Run
+cues**, **Follow spot** and **Focus**. All three are on until you change
+them, so a show with one pad works as it always has. With two or three
+pads, give each its job: one runs cues, one steers the follow spot, one
+walks the stage for focus.
+
+To set them, go to **Connections**, right-click the controller under its
+universe's input and choose **Test Controller and Jobs…**. Under the
+picture of the controller, **Jobs** has a switch for each job. A change is
+saved at once.
+
+- **Saved with this computer, not the show.** A show opened on another
+  computer uses that computer's jobs.
+- **Which pad is which.** **Known as** says how this computer tells the
+  pad apart: its Bluetooth address, or the USB port it is plugged into
+  when it has no address. Two pads of the same model read apart in the
+  **Controller** list by that. Press a control on the pad in your hand:
+  only the picture of that pad lights. A pad plugged into another USB
+  port is another controller to this computer, and a Bluetooth pad on a
+  cable is too, so set its jobs again there.
+- **Run cues off.** The pad can't arm. Its arm chord, GO, Back, Sub GO,
+  Sub Back and the hit do nothing, and the footer says *This controller
+  doesn't run cues*.
+- **One controller runs cues at a time.** The first pad to arm holds the
+  show until it disarms. Another pad that tries is refused, and the
+  footer says which pad has it (*DualSense Wireless Controller (…77:93)
+  is running cues*). Nothing on the first pad changes. With more than one
+  pad connected, the footer's **Pad: ARMED** chip names the pad that
+  armed, and only that pad's light shows the arm.
+- **Follow spot off.** The pad's sticks never move the follow spot; it
+  takes the next pad that has the job.
+- **Focus off.** The pad can't start or work Venue focus, Focus mode or
+  Focus this cue (see [Venue focus](focus-calls.md)).
+- **The emergency stop is on every pad.** Both bumpers and both triggers
+  together stop everything from any connected controller, whatever its
+  jobs.
+
 ## Latency
 
 On the console itself (loopback), a stick message moves the light in
