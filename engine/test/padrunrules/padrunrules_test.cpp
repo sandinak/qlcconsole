@@ -1932,7 +1932,8 @@ void PadRunRules_Test::jobsFocusModeInRunIsSaidOnScreen()
     hold(kView, false, 1);
     QCOMPARE(focusMode.count(), 0);
     QVERIFY(run->isEnabled());
-    QCOMPARE(run->notice(), QString("Focus mode is in the Tools role: switch roles on the laptop (the Run tab's Pad: button)."));
+    QCOMPARE(run->notice(), QString("Focus mode is in the Tools role. Run / Tools is switched on the computer: "
+                                    "the Run tab's Pad: button."));
 }
 
 void PadRunRules_Test::jobsTheFocusControllerHasTheFocusJob()

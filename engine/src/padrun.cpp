@@ -254,6 +254,9 @@ void PadRun::setEnabled(bool on, bool say)
     clear();
     m_stopped = false;
     m_enabled = on;
+    // Switched: the words saying where it is switched have done their job.
+    if (m_notice == roleSwitchText())
+        showNotice(QString());
     emit enabledChanged(on);
     sync();
     if (say && m_pc != nullptr)
@@ -810,10 +813,7 @@ QString PadRun::helpHtml() const
                   "then the controller runs the show again.</p>").arg(tool.toHtmlEscaped());
     if (!m_enabled)
         out += tr("<p>Tools: Focus Mode, Venue Focus, Focus This Cue and the follow spot. Click the "
-                  "Run tab's Pad: button, or hold %1 + %2 for a second, to run the show from the "
-                  "controller.</p>")
-                   .arg(m_pc->padText(QStringLiteral("{View}")).toHtmlEscaped(),
-                        m_pc->padText(QStringLiteral("{Menu}")).toHtmlEscaped());
+                  "Run tab's Pad: button to run the show from the controller.</p>");
     out += QStringLiteral("<table cellspacing=\"0\" cellpadding=\"2\"><tr><th align=left>%1</th>"
                           "<th align=left>%2</th></tr>")
                .arg(tr("Control"), tr("What It Does"));
@@ -829,7 +829,8 @@ QString PadRun::helpHtml() const
                tr("Centre Sticks"));
     out += row(m_pc->padText(QStringLiteral("{View}")) + QStringLiteral(" + ")
                    + m_pc->padText(QStringLiteral("{Menu}")),
-               tr("Hold 1 s: switch between Run and Tools"));
+               tr("In Tools, a tap: Focus mode. Run / Tools is switched on the computer "
+                  "(the Run tab's Pad: button), never on the controller"));
     out += QStringLiteral("</table>");
     out += tr("<p><b>Walking</b> (%1 in Run):</p><table cellspacing=\"0\" cellpadding=\"2\">")
                .arg(PadNames::name(roleFor(Walk), fam).toHtmlEscaped());
@@ -1254,6 +1255,11 @@ QString PadRun::noRunCuesText()
 QString PadRun::noFocusText()
 {
     return tr("This controller doesn't do focus.");
+}
+
+QString PadRun::roleSwitchText()
+{
+    return tr("Run / Tools is switched on the computer: the Run tab's Pad: button");
 }
 
 void PadRun::tellRefused(const QString &text)
@@ -1688,16 +1694,12 @@ void PadRun::roleChordFired()
     if (!m_chordPending)
         return;
     m_chordPending = false;
-    reset();
+    /* Held (Q251): the role is not the pad's to switch -- the hold put a
+       wired PlayStation clone into its Xbox mode, and the pad dropped off
+       USB mid-show. Nothing changes: not the role, not the arm. Its
+       release is no tap (no Focus mode). */
     m_chordFired = true;
-    const bool on = !m_enabled;
-    setEnabled(on, false);
-    if (m_pc == nullptr)
-        return;
-    m_pc->padRumble(2, ControllerScheme::rumbleShortMs());
-    m_pc->tellOperator(on ? m_pc->padText(tr("Run role. Hold {LB} and {RB} to arm."))
-                          : tr("Tools role."),
-                       ControllerScheme::ConfirmPriority);
+    tellRefused(roleSwitchText());
 }
 
 quint32 PadRun::listChaserOf(const Doc *doc)

@@ -255,9 +255,24 @@ show from any pad.
   the other pad's trim stays. The follow spot's settings in the
   Look Editor say where the jobs are set, and say when no pad has the
   job.
-- **Focus off.** The pad can't start or work Venue focus (armed, LT +
-  Menu), Focus mode or Focus this cue, and the footer says *This
-  controller doesn't do focus* (see [Venue focus](focus-calls.md)).
+- **Focus off.** The pad can't start or work Venue focus (LT + Menu),
+  Focus mode, Focus this cue or the walk (Menu, or a swipe), and the
+  footer says *This controller doesn't do focus* (see [Venue
+  focus](focus-calls.md)).
+- **Each job works on its own.** A pad with Focus and not Run cues (or
+  any Focus pad while another pad runs cues) starts a waiting venue focus
+  with **LT + Menu**, no arm; Menu alone only says *To start the venue
+  focus, hold LT and press Menu.* The pad that runs cues **stays armed**:
+  the chip reads **Pad: FOCUS · <the focus pad>**, only the focus pad's
+  light is blue, and the runner's GO, Back, Sub GO, Sub Back and new hits
+  are refused with *Venue focus is running on <the focus pad>: nothing
+  plays until it ends.* A hit already playing keeps playing (a one-shot
+  to its end; a toggle until the runner pulls RT to let it go). The focus
+  pad ends it with LT + Menu, and the runner's GO works again at once, no
+  re-arm (two short buzzes). One pad with Run cues and Focus works as
+  before: armed, LT + Menu. Focus mode is in the Tools role, and Run /
+  Tools is switched on the computer (the Run tab's **Pad:** button) for
+  every pad: a View + Menu tap in Run on a Focus-only pad says so.
 - **The emergency stop is on every pad.** In the Run role, both bumpers
   and both triggers together stop everything from any connected
   controller, whatever its jobs, whatever the pads are doing: a tool or a
@@ -265,6 +280,44 @@ show from any pad.
 - **One pad listed twice is one pad.** macOS sometimes lists one
   controller twice; with the same address it is one controller here: the
   Pad chip names no second runner and both get the same light.
+
+### Check jobs with two real pads
+
+Two pads (say a DualSense and an Xbox pad), the show in Operate with a
+cue list of at least three cues, a toggle hit on the production, and a
+[venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show) on a Pre-show
+list. Set pad A to **Run cues** only and pad B to **Focus** only.
+
+1. Arm A (LB + RB). *Expected:* **Pad: ARMED · A**, orange, only A's
+   light orange.
+2. Put the Pre-show list on its focus cue. *Expected:* the Run tab says
+   *waiting for the controller — hold LT and press Menu* (no "armed"),
+   and the voice says "Hold LT and press Menu to begin."
+3. On B, press Menu alone. *Expected:* nothing starts; the chip says
+   *To start the venue focus, hold LT and press Menu.*
+4. On A, pull RT (the toggle hit comes on). On B, hold LT and press
+   Menu. *Expected:* the calls start; **Pad: FOCUS · B**, blue, only B's
+   light blue; A's light its own colour; the hit still on.
+5. On A, hold LT and press A, then B, X, Y. *Expected:* nothing plays;
+   the chip says *Pad: FOCUS · B · nothing plays until the venue focus
+   ends* each time.
+6. On A, pull RT. *Expected:* the hit lets go ("… off."). Pull again:
+   refused with the same words, nothing comes on.
+7. On A, hold LB + RB for a second. *Expected:* nothing changes; same
+   words.
+8. On B, hold LT and press Menu. *Expected:* the focus ends; **Pad:
+   ARMED · A** again, A's light orange, two short buzzes on A. On A, LT +
+   A: the next cue plays, with no re-arm.
+9. Start the focus on B again, then press all four on A (LB + RB + LT +
+   RT). *Expected:* **Pad: STOPPED**, both lights red, everything off. End
+   the focus on B (LT + Menu): A is not armed. Repeat with the four on B.
+10. Set A to every job, B to Follow spot only. Disarmed, on A, LT +
+    Menu. *Expected:* refused: *Not armed. To start the venue focus, hold
+    LB and RB to arm, then LT + Menu.* Arm A, LT + Menu: **Pad: FOCUS**,
+    not armed; LT + Menu again: ARMED (as before jobs).
+
+Write down any step that did not give its expected result, with the pads
+and how they were connected.
 
 ## Latency
 

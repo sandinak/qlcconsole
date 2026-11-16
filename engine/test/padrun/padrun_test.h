@@ -202,7 +202,7 @@ private slots:
     void theNextHitIsNamedBeforeItFires();
     /** Hold View + Menu 1 s: Tools to Run and back, said, the Run tab's
      *  button follows. */
-    void theRoleChordSwitches();
+    void theRoleHoldSwitchesNothing();
     /** A brush of View + Menu, a third button, one of the two alone: no
      *  switch; in Tools a short View + Menu is still Focus mode. */
     void theRoleChordResistsAccidents();

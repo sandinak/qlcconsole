@@ -20,9 +20,13 @@ can steer the spot. A job is what one pad is for.
 
 | Job | What it covers |
 |---|---|
-| **Run cues** | Pad Run's map: the arm chord, GO / Back / Sub GO / Sub Back, the hit, RS (say where we are), and the View + Menu hold that switches the Run role. Starting a venue focus from the pad (armed, LT + Menu) needs it too, since only the runner is armed |
+| **Run cues** | Pad Run's map: the arm chord, GO / Back / Sub GO / Sub Back, the hit, RS (say where we are). (The View + Menu hold switched the Run role until Q251; Run / Tools is now the computer's, the Run tab's Pad: button, and the hold only says so, on any pad) |
 | **Follow spot** | the follow spot's sticks (bound from the profile or by hand), its fine stick, its D-pad speed and size |
-| **Focus** | venue focus (LT + Menu in and out of FOCUS in Run, Menu in Tools, its calls, "still at <venue>?"), Focus mode (View + Menu tap in Tools), Refine and the walk (Menu in Run) |
+| **Focus** | venue focus (LT + Menu in and out of FOCUS in Run, Menu in Tools, its calls, "still at <venue>?"), Focus mode (View + Menu tap in Tools), Refine and the walk (Menu, or a touchpad swipe, in Run) |
+
+Each job works on its own (board Q250, 2026-11-16: "assign roles
+discretely per pad: focus, followspot, cueing"): nothing a job grants
+needs a second job on the same pad. Invariant 11 and the sweep below.
 
 Outside every job, on every pad: the emergency stop (the four together)
 and Centre Sticks (View + LS, moves nothing). A Virtual Console widget
@@ -86,7 +90,7 @@ connects. (can change: a pad's serial over USB, when one says it.)
 5. **Run cues off.** Every Run-map control on that pad does nothing but
    say **This controller doesn't run cues** (the notice, so the footer's
    chip shows it, and aloud): the arm chord, GO, Back, Sub GO, Sub Back,
-   the hit, RS, the role hold. Nothing on any other pad changes.
+   the hit, RS. (The role hold is no pad's since Q251.) Nothing on any other pad changes.
 6. **One runner.** The first controller to arm holds Run until it
    disarms (its chord, the stop, the pad lost, its Run cues job taken
    away, the role switched, a tool taking the pad); a venue focus it started
@@ -103,9 +107,10 @@ connects. (can change: a pad's serial over USB, when one says it.)
    refused. The follow spot's set-up in the Look Editor says which pads
    steer it and where that is set, and when no pad has the job.
 8. **Focus off.** That pad cannot start or end venue focus (LT + Menu,
-   or Menu in Tools), Focus mode, Refine or the walk, and cannot become
-   the pad that owns a tool (Q135); it is told **This controller doesn't
-   do focus**. Its presses while a tool runs are ignored (but the
+   or Menu in Tools), Focus mode, Refine or the walk (Menu, or a swipe),
+   and cannot become the pad that owns a tool (Q135); it is told **This
+   controller doesn't do focus**. The pad the focus tools read and name
+   (`focusController()`) is one with the job whenever one is here. Its presses while a tool runs are ignored (but the
    stop). Among the pads with Focus, the first to press Start still owns
    the tool; another is told "Another controller is in use."
 9. **One status source.** `PadRun::state()`, `stateColour()`,
@@ -131,6 +136,70 @@ connects. (can change: a pad's serial over USB, when one says it.)
    push, so a pad letting go takes only its own share away and one pad's
    resting noise never hides another's held push (verify, H-A).
    A venue focus start given up or refused lets its owner go too.
+
+11. **Each job on its own (Q250, option a).** A pad with Focus and no
+   arm of its own to give -- no Run cues, or another pad runs cues --
+   starts a waiting venue focus in Run with **LT + Menu**, no arm (still
+   two controls; Menu alone only says "To start the venue focus, hold LT
+   and press Menu."), and ends it with LT + Menu; only the pad that owns
+   the focus ends it (Q135). The runner on another pad **stays armed**:
+   its GO, Back, Sub GO, Sub Back and new hits are refused with
+   **Venue focus is running on <pad>: nothing plays until it ends.**
+   (the notice and aloud; the chip, which already names that pad, says
+   "nothing plays until the venue focus ends"), its arm chord changes
+   nothing and says the same, and when the focus ends it is still armed:
+   its GO works with no re-arm (two short buzzes on its pad say so). A
+   hit already playing is not cut by the focus start: a one-shot plays
+   to its end and lets go by itself, a toggle stays on until the
+   runner's own pull lets it go (that pull starts nothing). FOCUS on the
+   chip, the Run tab, `roleText()` and the light names the pad the focus
+   is on (`focusOwnerUniverse()`: the owner, else the pad whose arm it
+   put by); only that pad's light is blue. One pad with Run cues and
+   Focus is as before: armed, LT + Menu, the arm put by
+   (`m_focusArm`) and back at the end; not armed, refused saying to arm.
+   How it starts is said from one source (`PadRun::focusStart()`): the
+   voice's "Venue focus ready…", the Run tab and the footer say "armed"
+   only when the pads that do focus must arm first, and say when no pad
+   does focus. The emergency stop stays first on every pad (4).
+
+## Every gate, swept (2026-11-16)
+
+Every check of the arm (`m_armed`, the arm universe, `isArmed()`), the
+runner, the focus owner (`controllerOwner()`) or a job (`hasJob`,
+`ControllerJobs::has`), with its job and whether it needed another.
+
+| Where | Gate | Job | Needed another job? |
+|---|---|---|---|
+| `PadRun::watchStop()` (top of `slotControllerInputChanged()`) | the four, first | none (everyone's) | no |
+| `PadRun::handle()`, the four | arm chord, the hit | Run cues | no |
+| `PadRun::handle()`, the map | Menu is Focus's, the rest Run cues' | both, apart | no |
+| `PadRun::handle()`, FOCUS | GO family, hit, RS, Menu while focusing | Run cues (RS, refusals), Focus (Menu) | **was**: the runner's presses never reached it once the calls ran (they were told "doesn't do focus"). Fixed: routed here, refused with the focus's pad named; a playing hit can be let go |
+| `PadRun::focusStartPress()` | LT + Menu with a focus cue waiting | Focus | **yes, fixed**: needed the pad armed, and only Run cues arms. A pad with no arm to give starts it with LT + Menu |
+| `PadRun::startFocus()` | puts the arm by | Focus | **was**: put the runner's arm by from any pad. Now only from the runner's own pad |
+| `PadRun::toolChanged()`, `focusCueChanged()`, `ProgrammerController::routeFocusInput()` (`isArmed()` → `reset()`) | a tool taking the pad drops the arm | none (the tool) | **was**: another pad's venue focus disarmed the runner. Fixed: not in FOCUS |
+| `PadRun::armChordUpdate()` / `armChordFired()` / `setArmed()` | no arm change in FOCUS, one runner | Run cues | no (now says why to the runner) |
+| `PadRun::roleText()`, `lightUniverse()`, `chipNotice()` | FOCUS names a pad | (status) | **was**: named the runner. Now the focus's pad |
+| `PadRun::triggerState()` | the triggers' feel | (status) | **was**: armed feel on every pad while another pad focused. Now Armed only |
+| `PadRun::handle()` → `startWalk()` | Menu walks, not while armed | Focus | not a job, the one runner: a Focus pad's walk waits while another pad is armed, now told so by name ("…is running cues: walk once it disarms.", not "disarm first") |
+| `PadRun::swipe()` (`routeFocusInput()` feeds the touchpad) | a swipe starts or steps the walk | Focus | **was missing**: any pad's swipe walked. Now only a pad with Focus is read |
+| `PadRun::focusMenu()` | ends the focus | Focus + the owner (Q135) | no |
+| `PadRun::jobsChanged()` | a job taken away | each its own | no |
+| `PadRun::fireHit()`, `trigger()` | reached from the map only | Run cues | no |
+| `ProgrammerController` jobs lambda | owner, follow spot let go | Focus, Follow spot | no |
+| `routeFocusInput()`, tool + no Focus | a tool's presses | Focus | no |
+| `routeFocusInput()`, Q135 owner claim | first press owns a tool | Focus | no (in Run the pad's start claims it) |
+| `routeFocusInput()`, Menu in Tools | starts the focus cue | Focus | no |
+| `routeFocusInput()`, "Still at…?" A held | answers yes | Focus + owner | no |
+| `routeFocusInput()`, View + Menu | the hold / the tap | none (the hold switches nothing, Q251), Focus (the tap: Focus mode, Tools) | no: the role is the computer's for every pad now; a Focus pad without Run cues tapping in Run is told on the screen where Focus mode is |
+| `focusController()` | the pad the focus tools read and name | Focus | **was**: could pick a pad without Focus. Now one with the job first |
+| `followSpotTakes()`, the bound sticks, a profile's follow spot button, `refreshStickBinding()`, `combineFineSticks()` | the follow spot | Follow spot | no: never the arm, the runner or a tool owner. While any tool runs the follow spot holds (the tick feeds the tool), as before jobs |
+| `ui/src/controllertestdialog.cpp` | the test takes the pad, disarms the runner | none | no (documented: arm again on close) |
+| `ui/src/app.cpp` ⌘↩ with a focus cue armed | the laptop starts it | none | no |
+| `ui/src/monitor/focusmodepanel.cpp`, `refinepanel.cpp` | name the owner | (status) | no |
+
+Open, for the owner: walking (Refine) on one pad while another pad is
+armed (Quiet Refine in Operate beside a runner), and the follow spot
+steering while another pad's tool runs.
 
 ## Where it is set
 
@@ -161,3 +230,12 @@ window still open.
   ports; neither).
 - One pad, nothing saved: the sweep equals the pre-jobs sweep.
 - Settings: written, read back by a new store, absent from a saved show.
+- Each job on its own (Q250): the runner with Run cues only, the other
+  pad each of the eight mixes on either line -- the focus started and
+  ended with LT + Menu and no arm, Menu alone refused, the runner armed
+  throughout and its GO family refused then working
+  (`jobsVenueFocusFromAFocusPad`); the stop from either pad in the other's
+  FOCUS; one pad with both jobs as before; a toggle hit across the focus
+  start (engine/test/padrunrules) and a one-shot (ui/test/padhit); the
+  chip, button and lights (ui/test/padrunrules
+  `focusBesideTheRunnerOnEverySurface`).

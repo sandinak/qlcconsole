@@ -2128,7 +2128,7 @@ PlayStation pad's own names, and its touchpad, are in
 
 **Start it** from **Focus ▸ Quick Focus…** on the Lighting Studio toolbar,
 **Quick Focus** on the Rig Overview's bar, **View → Quick Focus…** (⌘⌥F),
-or by holding **View + Menu** on the controller. Choose:
+or with a tap of **View + Menu** on the controller (the pad in the Tools role). Choose:
 
 - **Heads** — **As selected** (what is selected on the plot, or in the
   programmer; greyed until something is), every moving head on the plot,

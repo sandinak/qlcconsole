@@ -70,7 +70,9 @@ class Doc;
  *   armed, LT held + Menu   start the venue focus cue that waits (FOCUS);
  *                a pad with Focus and no arm of its own to give (no
  *                Run cues, or another pad runs cues): LT held + Menu
- *   hold View + Menu 1 s   switch the role (Tools / Run), either way
+ *   View + Menu  nothing to the role (Q251): Run / Tools is switched on
+ *                the computer (the Run tab's Pad: button); held, it says so.
+ *                In Tools a tap is Focus mode
  *
  * The rules (the operator's, 2026-11-14; every later change keeps them):
  *   1. The pad never picks the list: the screen does (the Run tab).
@@ -151,7 +153,10 @@ class Doc;
  * (0.4.5; it was LB held): a held arm let go by one finger disarmed.
  * decided: there is no "stop the list" on the pad (it was LB + X held):
  * the screen stops a list, the pad has the emergency stop.
- * decided: nothing on the pad leaves the Run role but the View + Menu hold.
+ * decided: nothing on the pad leaves the Run role (Q251, 2026-11-16: the
+ * View + Menu hold that did put a wired PlayStation clone into its Xbox
+ * mode, which re-enumerated it on USB mid-show). The role is the
+ * computer's: the Run tab's Pad: button.
  *
  * Triggers and swipes (Q199): on a DualSense the arm firms both triggers (the
  * safety and the hit take a squeeze, a brush does neither) and walking clicks them
@@ -384,6 +389,9 @@ public:
      *  not name it again ("another controller is running cues"). */
     QString chipNotice() const;
     static QString noRunCuesText();
+    /** "Run / Tools is switched on the computer: the Run tab's Pad:
+     *  button" -- View + Menu held (Q251), and on the chip, in Tools too. */
+    static QString roleSwitchText();
     static QString noFocusText();
     /** Refused on the pad, a press PadRun did not read itself (the role
      *  chord's): said, and shown as notice() so the footer's chip says it
@@ -574,10 +582,11 @@ public:
     void bumperChord() { m_lbUsed = true; }
 
     /*********************************************************************
-     * The role chord: hold View + Menu to switch Tools / Run
+     * View + Menu: the tap (Focus mode in Tools) and the hold, which no
+     * longer switches the role (Q251) but says where it is switched
      *********************************************************************/
 public:
-    /** How long View + Menu are held to switch the role, ms. */
+    /** How long View + Menu are held before it is a hold, not a tap, ms. */
     static constexpr int defaultRoleChordMs() { return 1000; }
     /** Both chord buttons are down: start timing the hold. */
     void roleChordBegin();
@@ -588,7 +597,7 @@ public:
      *  mode, is the caller's to do. */
     bool roleChordEnd();
     bool isRoleChordPending() const { return m_chordPending; }
-    /** The chord switched the role and its buttons are not yet up. */
+    /** The hold was told (roleSwitchText()) and its buttons are not yet up. */
     bool roleChordFinished() const { return m_chordFired; }
     /** The time the hold takes (tests shorten it). */
     void setRoleChordMs(int ms);

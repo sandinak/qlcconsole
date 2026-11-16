@@ -190,7 +190,6 @@ ProgrammerController::ProgrammerController(Doc *doc)
        held after (its release may have gone to the test), so a View held
        as it opened cannot make a later Menu the role chord. */
     connect(m_padRun, &PadRun::testingChanged, this, [this]() {
-        m_viewMenuNoRun = false;
         m_heldRoles.clear();
         m_viewChord = false;
         m_centreChord = false;
@@ -3413,50 +3412,35 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
                 tellOperator(padText(tr("Hold {A} to say yes, same room.")), ControllerScheme::ConfirmPriority);
             return true;
         }
-        /* View + Menu together: held 1 s, the role switches (Tools / Run,
-           PadRun); in Tools a shorter press, on its release, asks for Focus
-           mode as it always did. Neither does anything on its own before
-           that, so a brush of both cannot take the show. */
+        /* View + Menu together. In Tools a tap (let go before the hold's
+           time), on its release, asks for Focus mode as it always did.
+           Held, nothing switches (board Q251: the hold put a wired
+           PlayStation clone into its Xbox mode, off USB mid-show): Run /
+           Tools is the computer's, and the hold says so. Neither does
+           anything on its own before that, so a brush of both is nothing. */
         if (!active && (role == GamepadRole::Back || role == GamepadRole::Start))
         {
             const GamepadRole::Role other = role == GamepadRole::Back ? GamepadRole::Start : GamepadRole::Back;
             if (value > 0 && m_heldRoles.contains(other))
             {
-                /* The role is Run cues' to switch (CONTROLLER_JOBS.md 5):
-                   a pad without the job times no chord; its press, let
-                   go, is Focus mode in Tools (Focus's), else refused. */
-                if (m_controllerJobs->has(universe, ControllerJobs::RunCues))
-                    m_padRun->roleChordBegin();
-                else
-                    m_viewMenuNoRun = true;
-                return true;
-            }
-            if (value == 0 && m_viewMenuNoRun)
-            {
-                m_viewMenuNoRun = false;
-                const bool focus = m_controllerJobs->has(universe, ControllerJobs::Focus);
-                if (!m_padRun->isEnabled() && focus)
-                    emit focusModeRequested();
-                /* The Run role: the role is Run cues' to switch, so a Focus
-                   pad is told where Focus mode is -- on the screen too. */
-                else if (m_padRun->isEnabled())
-                    m_padRun->tellRefused(focus ? tr("Focus mode is in the Tools role: switch roles on the laptop "
-                                                     "(the Run tab's Pad: button).")
-                                                : PadRun::noRunCuesText());
-                else
-                    tellOperator(PadRun::noFocusText(), ControllerScheme::ConfirmPriority);
+                m_padRun->roleChordBegin();
                 return true;
             }
             if (value == 0 && (m_padRun->isRoleChordPending() || m_padRun->roleChordFinished()))
             {
-                const bool shortPress = m_padRun->roleChordEnd();
-                if (shortPress && !m_padRun->isEnabled())
+                const bool tap = m_padRun->roleChordEnd();
+                const bool focus = m_controllerJobs->has(universe, ControllerJobs::Focus);
+                if (tap && !m_padRun->isEnabled())
                 {
-                    if (m_controllerJobs->has(universe, ControllerJobs::Focus))
+                    if (focus)
                         emit focusModeRequested();
                     else
                         tellOperator(PadRun::noFocusText(), ControllerScheme::ConfirmPriority);
                 }
+                /* A tap in Run: nothing, as ever -- but a pad without Run
+                   cues and with Focus is told where its Focus mode is. */
+                else if (tap && focus && !m_controllerJobs->has(universe, ControllerJobs::RunCues))
+                    m_padRun->tellRefused(tr("Focus mode is in the Tools role. %1.").arg(PadRun::roleSwitchText()));
                 return true;
             }
         }

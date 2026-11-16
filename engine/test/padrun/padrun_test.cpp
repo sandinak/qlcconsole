@@ -984,13 +984,17 @@ void PadRun_Test::nothingOnThePadLeavesTheRunRole()
         check(QString("axis %1").arg(a));
     }
     QCOMPARE(off.count(), 0);
-    // Only the role chord leaves: View + Menu held.
+    /* Nothing on the pad leaves Run (Q251): View + Menu held only says
+       where it is switched. The Run tab's button does. */
     run->setRoleChordMs(30);
     hold(kView, true);
     hold(kMenu, true);
-    QTRY_VERIFY(!run->isEnabled());
+    QTRY_COMPARE(run->notice(), PadRun::roleSwitchText());
     hold(kMenu, false);
     hold(kView, false);
+    QVERIFY(run->isEnabled());
+    QCOMPARE(off.count(), 0);
+    run->setEnabled(false);
     QCOMPARE(run->roleText(), QString("Pad: Tools"));
 }
 
@@ -2799,8 +2803,13 @@ void PadRun_Test::theNextHitIsNamedBeforeItFires()
     m_doc->setMode(Doc::Design);
 }
 
-void PadRun_Test::theRoleChordSwitches()
+void PadRun_Test::theRoleHoldSwitchesNothing()
 {
+    /* Board Q251: holding View + Menu (Create + Options) put a wired
+       PlayStation clone into its Xbox mode, off USB mid-show. The hold
+       switches nothing now, armed or not, in Run or Tools; it says where
+       Run / Tools is switched (the computer). The tap is Tools' Focus mode
+       as before; the arm and the stop are untouched. */
     IOPluginStub *stub = loadStub();
     QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
     QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
@@ -2813,32 +2822,47 @@ void PadRun_Test::theRoleChordSwitches()
     QSignalSpy focusAsked(pc, &ProgrammerController::focusModeRequested);
     QVERIFY(!run->isEnabled());
 
-    // Tools to Run: held, the role switches and says so; nothing else fires.
+    // Tools, held: still Tools, said, no Focus mode on the release.
     hold(kView, true);
     hold(kMenu, true);
     QVERIFY(run->isRoleChordPending());
-    QVERIFY(!run->isEnabled());
-    QTRY_VERIFY(run->isEnabled());
-    QCOMPARE(changed.count(), 1);
-    QVERIFY(said.last().at(0).toString().contains("Run role"));
+    QTRY_COMPARE(run->notice(), PadRun::roleSwitchText());
+    QVERIFY(said.last().at(0).toString().contains("switched on the computer"));
     hold(kMenu, false);
     hold(kView, false);
+    QVERIFY(!run->isEnabled());
+    QCOMPARE(changed.count(), 0);
     QCOMPARE(focusAsked.count(), 0);
-    QVERIFY(!run->isWalking());
-    QVERIFY(m_runs.isEmpty());
+    // Tools, a tap: Focus mode, as ever.
+    hold(kView, true);
+    hold(kMenu, true);
+    hold(kMenu, false);
+    hold(kView, false);
+    QCOMPARE(focusAsked.count(), 1);
 
-    // Run to Tools, the other order.
+    // Run, armed, held, the other order: still Run, still armed.
+    run->setEnabled(true);
+    QCOMPARE(changed.count(), 1);
+    QVERIFY(run->notice().isEmpty());
+    arm(true);
     hold(kMenu, true);
     hold(kView, true);
-    QTRY_VERIFY(!run->isEnabled());
-    QVERIFY(said.last().at(0).toString().contains("Tools"));
+    QTRY_COMPARE(run->notice(), PadRun::roleSwitchText());
     hold(kView, false);
     hold(kMenu, false);
-    QCOMPARE(changed.count(), 2);
-    QCOMPARE(focusAsked.count(), 0);
-
-    // The Run tab's button follows enabledChanged (the same signal).
+    QVERIFY(run->isEnabled());
+    QVERIFY(run->isArmed());
+    QCOMPARE(changed.count(), 1);
+    QCOMPARE(focusAsked.count(), 1);
+    QVERIFY(!run->isWalking());
+    QVERIFY(m_runs.isEmpty());
+    // The arm and the GO as before.
+    with(kLT, kA);
+    QCOMPARE(m_runs.size(), 1);
+    // The computer switches it, and the words that said so go.
     run->setEnabled(false);
+    QCOMPARE(changed.count(), 2);
+    QVERIFY(run->notice().isEmpty());
 }
 
 void PadRun_Test::theRoleChordResistsAccidents()

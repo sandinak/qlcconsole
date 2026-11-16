@@ -821,7 +821,7 @@ void App::init()
     }
     if (ProgrammerController *pc = m_doc->programmer())
     {
-        // View + Menu on the controller.
+        // View + Menu tapped on the controller (Tools).
         connect(pc, &ProgrammerController::focusModeRequested, this, &App::slotFocusMode);
         /* Focus calls and Refine say where the controller is, from the
            laptop, to whoever holds it on stage (board Q107). */
@@ -10185,7 +10185,9 @@ void App::updatePadRoleChip()
         return;
     ProgrammerController *pc = m_doc->programmer();
     const PadRun *run = pc->padRun();
-    if (run->state() == PadRun::Tools)
+    /* Tools: no chip -- but for a View + Menu held on the pad (Q251), which
+       is told where Run / Tools is switched, on the screen too. */
+    if (run->state() == PadRun::Tools && run->notice() != PadRun::roleSwitchText())
     {
         m_statusPadRoleLabel->hide();
         if (m_statusFitTimer != nullptr)

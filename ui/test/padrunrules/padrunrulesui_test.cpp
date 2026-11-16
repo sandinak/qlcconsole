@@ -352,15 +352,35 @@ void PadRunRulesUi_Test::everySurfaceAgreesAtEveryStep()
         pc->refineSession()->stop();
     surfaces("the walk ended after the stop");
 
-    // Switched off from the pad (View + Menu held), armed.
+    /* View + Menu held, armed (Q251): the role stays, the arm stays, and
+       the chip says where Run / Tools is switched. */
     chord(true);
     run->setRoleChordMs(40);
     value(kView, 255);
     value(kMenu, 255);
-    QTRY_VERIFY(!run->isEnabled());
+    QTRY_COMPARE(run->notice(), PadRun::roleSwitchText());
     value(kMenu, 0);
     value(kView, 0);
-    surfaces("the role off from the pad");
+    QVERIFY(run->isEnabled());
+    QVERIFY(run->isArmed());
+    surfaces("View + Menu held: the role stays");
+    QVERIFY2(m_app->padRoleChip()->text().contains(PadRun::roleSwitchText()),
+             qPrintable(m_app->padRoleChip()->text()));
+    // Switched off on the computer, armed: Tools on every surface.
+    btn->click();
+    QVERIFY(!run->isEnabled());
+    surfaces("the role off from the Run tab");
+    // In Tools the hold is said on the chip too, and switches nothing.
+    value(kView, 255);
+    value(kMenu, 255);
+    QTRY_COMPARE(run->notice(), PadRun::roleSwitchText());
+    value(kMenu, 0);
+    value(kView, 0);
+    settle();
+    QVERIFY(!run->isEnabled());
+    QVERIFY2(m_app->padRoleChip()->isVisible()
+                 && m_app->padRoleChip()->text() == QString("Pad: Tools \u00B7 ") + PadRun::roleSwitchText(),
+             qPrintable(m_app->padRoleChip()->text()));
     btn->click();
     QVERIFY(run->isEnabled());
 

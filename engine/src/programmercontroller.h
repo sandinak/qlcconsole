@@ -706,8 +706,8 @@ public:
 signals:
     /** Emitted whenever the programmer selection changes. */
     void programmerSelectionChanged();
-    /** View + Menu (Back + Start) held together on the controller while
-     *  Focus mode is off: the UI opens it. */
+    /** View + Menu (Back + Start) tapped together on the controller in
+     *  the Tools role while Focus mode is off: the UI opens it. */
     void focusModeRequested();
     /** Focus mode, Focus calls or Refine has something to say to the
      *  operator on stage (the UI's voice reads it). */
@@ -932,8 +932,6 @@ private:
     /** Where the light was last sent: one pad (PadRun::lightUniverse()),
      *  every pad (kAllPads, the stop) or the tools' pad (UINT_MAX). */
     quint32 m_padLightTarget = UINT_MAX;
-    /** View + Menu pressed on a pad without Run cues: no role chord. */
-    bool m_viewMenuNoRun = false;
     void refreshPadLight();
     /** A hold came round on the controller tick. */
     void heldTick(double dt);
