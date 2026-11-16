@@ -1267,6 +1267,18 @@ void PadRun_Test::theVenueFocusSweep()
                go in either order, leaves the call where it was -- here with
                the laptop's prompt answered Cancel, so the focus goes on. */
             QVERIFY(disconnect(s, &FocusSession::exitRequested, s, &FocusSession::finish));
+            auto diag = [&]() {
+                return QString("call %1, pc holding %2, session holding %3, target page %4, target moved %5, "
+                               "state %6, cue %7")
+                    .arg(s->callIndex()).arg(pc->isHolding()).arg(s->isHolding()).arg(s->isTargetPage())
+                    .arg(s->targetMoved()).arg(run->roleText()).arg(int(fcc->state()));
+            };
+            // First an LT tap on its own, before any chord: back one call, on the release.
+            s->setCallIndex(1);
+            axis(kLT, 255);
+            QVERIFY2(s->callIndex() == 1, qPrintable("LT down: " + diag()));
+            axis(kLT, 0);
+            QVERIFY2(s->callIndex() == 0, qPrintable("LT tap, before the chords: " + diag()));
             s->setCallIndex(1);
             const QList<QList<QPair<quint32, bool>>> orders = {
                 { { kLT, true }, { kMenu, true }, { kMenu, false }, { kLT, false } },
@@ -1289,9 +1301,9 @@ void PadRun_Test::theVenueFocusSweep()
             }
             // An LT tap alone still steps back one call (on its release).
             axis(kLT, 255);
-            QCOMPARE(s->callIndex(), 1);
+            QVERIFY2(s->callIndex() == 1, qPrintable("LT down: " + diag()));
             axis(kLT, 0);
-            QCOMPARE(s->callIndex(), 0);
+            QVERIFY2(s->callIndex() == 0, qPrintable("LT tap, after the chords: " + diag()));
             // RT is unchanged: the next call on the press.
             axis(kRT, 255);
             QCOMPARE(s->callIndex(), 1);
