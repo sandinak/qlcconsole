@@ -41,7 +41,8 @@ public:
     /** List a pad at @p path; its open takes @p openMs (Forever: until
      *  release()). A second call with the same path lists it twice. */
     void list(const QString &path, unsigned short vid, unsigned short pid, const QString &product,
-              int openMs = 0, quint64 instance = 0, bool withReader = false)
+              int openMs = 0, quint64 instance = 0, bool withReader = false,
+              const QString &serial = QString())
     {
         QMutexLocker l(&m_lock);
         HIDFound f;
@@ -50,6 +51,7 @@ public:
         f.productId = pid;
         f.product = product;
         f.instance = instance;
+        f.serial = serial;
         /* A pad that is read by a thread of its own, as a real one is:
            each read waits while setReaderBlocked(true) (a pad that stopped
            answering while it is read). */

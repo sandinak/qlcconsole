@@ -142,7 +142,8 @@ private:
             // (A second arrival at a path still listed lists it twice.)
             const int openMs = e.o.value(QStringLiteral("open_ms")).toInt(0);
             m_fake->list(path, quint16(hex(e.o, "vid")), quint16(hex(e.o, "pid")),
-                         e.o.value(QStringLiteral("name")).toString(), openMs, ++m_instance);
+                         e.o.value(QStringLiteral("name")).toString(), openMs, ++m_instance, false,
+                         e.o.value(QStringLiteral("serial")).toString());
             m_listed[path]++;
             scan(openMs != FakeHIDBackend::Forever);
         }
