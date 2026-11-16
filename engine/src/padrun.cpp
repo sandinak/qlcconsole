@@ -352,12 +352,7 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
            LT down: LT + RT together is the stop in the making, never a
            hit. The rest of the four is done. */
         if (!rtPressed || h.lb || h.rb || h.lt.isDown())
-        {
-            // Only an LT the pad came back holding stops the hit: say so.
-            if (rtPressed && !h.lb && !h.rb && h.ltStale && hasJob(universe, ControllerJobs::RunCues))
-                tellStale(h, tr("pull {RT}"));
             return true;
-        }
     }
 
     const Action action = actionFor(role);
@@ -431,7 +426,7 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
     // A venue focus cue waits: Menu is its start, armed and with LT held.
     if (action == Walk && isFocusCueWaiting())
     {
-        focusStartPress(universe, h.safety());
+        focusStartPress(universe, h.lt.isDown());
         return true;
     }
 
@@ -466,7 +461,7 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
             return true;
         }
         // The safety: LT held, for every cue command.
-        if (needsSafety(action) && !h.safety())
+        if (needsSafety(action) && !h.lt.isDown())
         {
             switch (action)
             {
@@ -536,49 +531,14 @@ void PadRun::armChordUpdate(quint32 universe, bool bumperDown)
        why -- a trigger that does not come back up would otherwise make a
        pad that "will not arm" with nothing to show for it. */
     if (h.lb && h.rb && h.anyTrigger() && !h.all() && m_pc != nullptr)
-    {
-        // An LT the pad came back holding, never read since: it can't be let go.
-        if (h.ltStale && !h.rt.isDown())
-            tellStale(h, tr("hold {LB} and {RB}"));
-        else
-            showNotice(m_pc->padText(tr("To arm, let go of everything, then hold {LB} and {RB}.")));
-    }
+        showNotice(m_pc->padText(tr("To arm, let go of everything, then hold {LB} and {RB}.")));
     /* Both bumpers down again, no trigger, but the chord is spent (it
        fired, was refused, or a trigger came with them; or a tool took the
        pad mid-chord): one bumper pressed again to try once more times
        nothing -- the screen says what does. */
     else if (bumperDown && h.lb && h.rb && !h.anyTrigger() && h.spent && !isFocusing() && !isWalking()
              && !isBesideTool(universe) && m_pc != nullptr)
-    {
-        // A bumper the pad came back holding was never let go: press it.
-        if (h.lbStale || h.rbStale)
-            tellStale(h, tr("hold {LB} and {RB}"));
-        else
-            showNotice(m_pc->padText(tr("Let go of both bumpers, then hold {LB} and {RB} again.")));
-    }
-}
-
-QString PadRun::Held::staleText() const
-{
-    QStringList held;
-    if (lbStale && lb)
-        held << QStringLiteral("{LB}");
-    if (rbStale && rb)
-        held << QStringLiteral("{RB}");
-    if (ltStale && lt.isDown())
-        held << QStringLiteral("{LT}");
-    return held.join(QStringLiteral(" + "));
-}
-
-void PadRun::tellStale(const Held &h, const QString &then)
-{
-    const QString held = h.staleText();
-    if (m_pc == nullptr || held.isEmpty())
-        return;
-    const QString text = held.contains(QLatin1Char('+'))
-        ? tr("The controller came back with %1 held: press each once, then %2.").arg(held, then)
-        : tr("The controller came back with %1 held: press it once, then %2.").arg(held, then);
-    showNotice(m_pc->padText(text));
+        showNotice(m_pc->padText(tr("Let go of both bumpers, then hold {LB} and {RB} again.")));
 }
 
 void PadRun::armChordFired()
@@ -1037,9 +997,9 @@ bool PadRun::noteHeld(quint32 universe, GamepadRole::Role role, uchar value)
     bool rtPressed = false;
     switch (role)
     {
-        case GamepadRole::LB:           h.lb = value > 0; h.lbStale = false; break;
-        case GamepadRole::RB:           h.rb = value > 0; h.rbStale = false; break;
-        case GamepadRole::LeftTrigger:  h.lt.update(value / 255.0f); h.ltStale = false; break;
+        case GamepadRole::LB:           h.lb = value > 0; break;
+        case GamepadRole::RB:           h.rb = value > 0; break;
+        case GamepadRole::LeftTrigger:  h.lt.update(value / 255.0f); break;
         case GamepadRole::RightTrigger: rtPressed = h.rt.update(value / 255.0f); break;
         default:                        break;
     }
@@ -1100,7 +1060,21 @@ void PadRun::forgetPad(quint32 universe)
     // The walker beside the runner went (second review 2).
     if (m_walkBeside && isWalking() && sameController(universe, m_walker))
         endBesideWalk(tr("Walk ended: the controller walking it went away."));
+    /* Nothing it held is held (a pad lost, or another device behind its
+       patch, board Q253's fourth review): its four, its latch -- on its
+       twin lines too, so a new squeeze stops -- and the walk's modifier
+       and level if it walks. */
+    for (auto t = m_held.begin(); t != m_held.end(); ++t)
+        if (t.key() != universe && sameController(t.key(), universe))
+            t->stopFired = false;
     m_held.remove(universe);
+    if (isWalking() && m_pc != nullptr && m_pc->controllerOwner() != UINT_MAX
+        && sameController(universe, m_pc->controllerOwner()))
+    {
+        m_lbHeld = false;
+        m_lbUsed = false;
+        m_levelUp = m_levelDown = 0.0f;
+    }
     if (m_chordUniverse == universe)
     {
         m_armChord->stop();
@@ -1110,43 +1084,6 @@ void PadRun::forgetPad(quint32 universe)
         controllerLost();
     else
         sync();     // the runner's name on the chip comes or goes with a pad
-}
-
-void PadRun::padReopened(quint32 universe)
-{
-    /* The four stay as they were read, for the stop: a "held" there can
-       only make a stop easier, and the stop latches (second review of
-       Q253) -- a pad that sends its state again corrects them, and one that
-       never does (winmm keeps its button mask) would otherwise lose a stop
-       squeezed with three of four held. LT is no safety until read again.
-       A chord the bumpers began is spent. */
-    auto it = m_held.find(universe);
-    if (it != m_held.end())
-    {
-        it->ltStale = it->lt.isDown();
-        it->lbStale = it->lb;
-        it->rbStale = it->rb;
-        it->spent = it->spent || it->lb || it->rb;
-    }
-    /* A stop it fired is no longer latched (third review of Q253): its
-       releases may never come (a pad that does not send its state again),
-       so a latch kept here would swallow the next squeeze -- on its twin
-       lines too. A second stop errs the safe way. */
-    for (auto t = m_held.begin(); t != m_held.end(); ++t)
-        if (sameController(t.key(), universe))
-            t->stopFired = false;
-    if (m_chordUniverse == universe)
-    {
-        m_armChord->stop();
-        m_chordUniverse = UINT_MAX;
-    }
-    // The walk's modifier and level, if it is the walker's pad.
-    if (isWalking() && m_pc != nullptr && sameController(universe, m_pc->controllerOwner()))
-    {
-        m_lbHeld = false;
-        m_lbUsed = false;
-        m_levelUp = m_levelDown = 0.0f;
-    }
 }
 
 void PadRun::setPadPresent(bool present)
@@ -1299,7 +1236,7 @@ bool PadRun::focusMenu(quint32 universe)
         refuse(Walk, tr("Another controller is in use."));
         return true;
     }
-    if (!m_held.value(universe).safety())
+    if (!m_held.value(universe).lt.isDown())
     {
         refuse(Walk, tr("Venue focus: hold {LT} and press {Menu} to finish it."));
         return true;

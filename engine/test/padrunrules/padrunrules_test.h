@@ -63,23 +63,20 @@ private slots:
      *  keeps what it holds -- its LT still a safety, three of the four
      *  still a stop with the fourth (second review of Q253). */
     void aHotPlugKeepsTheOtherPadsHeld();
-    /** A pad reopened in place (QLCIOPlugin::inputReopened()) that never
-     *  sends its held state again: its LT is no GO safety until read again,
-     *  yet still one of the four for the stop; one that sends it again
-     *  GOs; another pad's reopen changes nothing of it; View held across a
-     *  reopen or a re-patch makes no View + Menu chord (the lead's
-     *  evaluation of 0.4.12, the second review of Q253). */
-    void aReopenedPadHoldsNoStaleSafety();
-    /** The four squeezed, the stop, the pad reopened with them held and
-     *  sending nothing again, squeezed again: the stop fires again, on one
-     *  pad listed twice too (third review of Q253). */
-    void aStopAfterAReopenFiresAgain_data();
-    void aStopAfterAReopenFiresAgain();
-    /** What a reopened pad came back holding and never sent again blocks
-     *  the arm or the hit: the chip says to press it once. */
-    void aReopenedPadSaysWhatItCameBackHolding();
-    /** A stick click held across a reopen: its release is no click. */
-    void aReopenSwallowsAHeldClicksRelease();
+    /** Another device behind a patch is a pad lost and a new one: the
+     *  runner disarmed (said), nothing held counts, the new device arms
+     *  and GOs with its own controls; a rescan of the same device changes
+     *  nothing (board Q253's fourth review). */
+    void aChangedDeviceIsALostPad();
+    /** The old device's stop press, read and not yet delivered, counts
+     *  before the reset; the new device's squeeze stops again. */
+    void aBufferedStopPressCountsBeforeTheReset();
+    /** The four held through a device change: the new device's arm chord
+     *  arms, no stop. */
+    void noStopOnAnArmAfterADeviceChange();
+    /** A release with no press seen since the device was new is no click
+     *  (LS, RS). */
+    void aReleaseWithNoPressSeenDoesNothing();
     /** Rule 3 (pad-trace replay, 2026-11-16): a chord that fired (or was
      *  refused) does not fire again while both bumpers stay held, whatever
      *  else comes in -- a DualSense's resting trigger noise above all. */

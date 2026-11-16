@@ -127,6 +127,7 @@ public:
     QString inputDeviceKind(quint32 input) const override;
     /** @reimp -- HIDDevice::location(): the USB port, by platform. */
     QString inputDeviceLocation(quint32 input) const override;
+    quint64 inputDeviceId(quint32 input) const override;
 
     /** @reimp — starts every joystick (patched or not) reporting raw input. */
     bool setInputDiagnostics(bool enable) override;
@@ -286,13 +287,11 @@ private:
     /** Out of the list, its reader stopped and deleted off this thread. */
     void dropDevice(HIDDevice *dev);
     void renumberLines();
-    /** After configurationChanged(): inputReopened() for every line whose
-     *  device is another than when last told (replaced, or shifted onto it
-     *  by a drop before it); never for one unchanged. */
-    void announceLines();
+    /** @p dev's id (QLCIOPlugin::inputDeviceId()), given the first time
+     *  it is asked for while the device is listed; forgotten when it goes. */
+    quint64 deviceId(const HIDDevice *dev);
     QHash<const HIDDevice *, quint64> m_deviceIds;
     quint64 m_nextDeviceId = 0;
-    QList<quint64> m_lineIds;
 
     std::shared_ptr<HIDScanShared> m_shared;
     HIDBackend *m_testBackend = nullptr;

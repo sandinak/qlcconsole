@@ -46,9 +46,15 @@ private slots:
     void cloneFlipToXbox();
     void cloneLeavesWhileArmed();
     void twinListing();
-    /** Two same-named pads with no location: A holds LT and goes, B moves
-     *  onto A's line; B's A is no GO until B's LT is read. */
+    /** Two same-named pads with no location: A arms, holds LT and goes; B
+     *  moves onto A's line: pad A lost -- disarmed, said; B's LT + A plays
+     *  nothing (board Q253's fourth review). */
     void aShiftedLineIsNoSafety();
+    /** Another pad's drop leaves the runner as it was (macOS-like and
+     *  Linux-like): armed, its held LT a safety, three of four of a stop
+     *  completed by the fourth. */
+    void anotherPadsDropLeavesTheRunnerAsItWas_data();
+    void anotherPadsDropLeavesTheRunnerAsItWas();
     void triggerRest();
     void triggerRestDuringTheChord();
     void aSessionIsRecorded();
@@ -67,6 +73,11 @@ private:
     void flip(bool hold);
     int commandCount(int command) const;
     int inputsNamed(const QString &name) const;
+    /** Rescan until @p count pads named @p name are listed. */
+    void q253Scan(const QString &name, int count);
+    int q253Line(const QString &path) const;
+    /** A reading on the pad at @p path, as it would send it. */
+    bool q253In(const QString &path, quint32 ch, uint value);
 
     QTemporaryDir *m_pluginDir = nullptr;
     QTemporaryDir *m_recordDir = nullptr;

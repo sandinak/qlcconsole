@@ -987,6 +987,47 @@ void PadRunRulesUi_Test::venueFocusShots()
     settle(50);
 }
 
+void PadRunRulesUi_Test::aChangedDeviceDisarmsOnTheChip()
+{
+    /* Another device behind the armed pad's patch (re-enumerated where it
+       was, another pad shifted onto its line): the pad lost -- the footer's
+       chip, as drawn, and the Run tab's button say it is not armed and why
+       (board Q253's fourth review). */
+    Doc *doc = m_app->doc();
+    InputOutputMap *iom = doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    m_stub->m_deviceIds = { { 0, 1 } };
+    PadRun *run = doc->programmer()->padRun();
+    auto restore = qScopeGuard([&]() {
+        m_stub->m_deviceIds.clear();
+        run->setEnabled(false, false);
+        iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+        settle(50);
+    });
+    run->setEnabled(true, false);
+    run->setArmChordMs(15);
+    auto value = [&](quint32 ch, uchar v) { emit iom->inputValueChanged(0, ch, v, QString()); };
+    value(kLB, 255);
+    value(kRB, 255);
+    QTRY_VERIFY(run->isArmed());
+    value(kRB, 0);
+    value(kLB, 0);
+    value(kLT, 255);
+    QLabel *chip = m_app->padRoleChip();
+    QToolButton *btn = m_app->findChild<QToolButton *>(QStringLiteral("crPadRun"));
+    QVERIFY(btn != nullptr);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->isVisible() && chip->text().startsWith(QStringLiteral("Pad: ARMED")),
+                              qPrintable(chip->text()), 2000);
+    m_stub->m_deviceIds[0] = 2;
+    emit m_stub->configurationChanged();
+    settle(50);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->text() == QStringLiteral("Pad: Run · Disarmed: the controller went away."),
+                              qPrintable(chip->text()), 2000);
+    QCOMPARE(btn->text(), QString("Pad: Run"));
+    QVERIFY2(!chip->styleSheet().contains(PadRun::armedColour().name()), qPrintable(chip->styleSheet()));
+    value(kLT, 0);
+}
+
 void PadRunRulesUi_Test::q253TheFollowChipSaysWhyItHolds()
 {
     Doc *doc = m_app->doc();

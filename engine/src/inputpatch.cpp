@@ -368,11 +368,9 @@ void InputPatch::flush(quint32 universe)
         return;
 
     QHash<quint32, InputValue> batch;
-    quint64 generation = 0;
     {
         QMutexLocker inputBufferLocker(&m_inputBufferMutex);
         batch.swap(m_inputBuffer);
-        generation = m_inputGeneration;
     }
     if (batch.isEmpty())
         return;
@@ -383,28 +381,46 @@ void InputPatch::flush(quint32 universe)
        universes of changing Art-Net input, with the event queue's lock fought
        over by every universe thread). One queued call per universe per frame
        instead; the values go out from the GUI thread, in the same order, to
-       the same receivers (pb5). */
+       the same receivers (pb5). The frame waits in m_pendingFrames, so
+       deliverNow() can still deliver it first. */
     if (QThread::currentThread() == thread())
     {
         emitValues(batch);
         return;
     }
-    QMetaObject::invokeMethod(this, [this, generation, batch = std::move(batch)]() {
-        {
-            // The line's device was replaced since: these are the old one's.
-            QMutexLocker inputBufferLocker(&m_inputBufferMutex);
-            if (generation != m_inputGeneration)
-                return;
-        }
-        emitValues(batch);
-    }, Qt::QueuedConnection);
+    {
+        QMutexLocker inputBufferLocker(&m_inputBufferMutex);
+        m_pendingFrames.append(std::move(batch));
+    }
+    QMetaObject::invokeMethod(this, &InputPatch::deliverPendingFrame, Qt::QueuedConnection);
 }
 
-void InputPatch::forgetBufferedInput()
+void InputPatch::deliverPendingFrame()
 {
-    QMutexLocker inputBufferLocker(&m_inputBufferMutex);
-    m_inputBuffer.clear();
-    ++m_inputGeneration;
+    QHash<quint32, InputValue> batch;
+    {
+        QMutexLocker inputBufferLocker(&m_inputBufferMutex);
+        if (m_pendingFrames.isEmpty())
+            return;     // delivered already (deliverNow())
+        batch = m_pendingFrames.takeFirst();
+    }
+    emitValues(batch);
+}
+
+void InputPatch::deliverNow()
+{
+    QList<QHash<quint32, InputValue>> frames;
+    {
+        QMutexLocker inputBufferLocker(&m_inputBufferMutex);
+        frames.swap(m_pendingFrames);
+        if (!m_inputBuffer.isEmpty())
+        {
+            frames.append(m_inputBuffer);
+            m_inputBuffer.clear();
+        }
+    }
+    for (const QHash<quint32, InputValue> &frame : std::as_const(frames))
+        emitValues(frame);
 }
 
 void InputPatch::emitValues(const QHash<quint32, InputValue> &values)

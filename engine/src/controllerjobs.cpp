@@ -61,7 +61,6 @@ ControllerJobs::ControllerJobs(Doc *doc, QObject *parent)
         connect(iom, &InputOutputMap::pluginConfigurationChanged, this, &ControllerJobs::forgetIdentities);
         connect(iom, &InputOutputMap::offlinePatchesChanged, this, &ControllerJobs::forgetIdentities);
         connect(iom, &InputOutputMap::inputSlotChanged, this, &ControllerJobs::forgetIdentities);
-        connect(iom, &InputOutputMap::inputPatchReconnected, this, &ControllerJobs::forgetIdentities);
     }
 }
 

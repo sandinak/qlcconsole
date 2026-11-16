@@ -111,8 +111,7 @@ InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
 
     connect(doc->ioPluginCache(), SIGNAL(pluginConfigurationChanged(QLCIOPlugin*)),
             this, SLOT(slotPluginConfigurationChanged(QLCIOPlugin*)));
-    connect(doc->ioPluginCache(), SIGNAL(pluginInputReopened(QLCIOPlugin*,quint32)),
-            this, SLOT(slotPluginInputReopened(QLCIOPlugin*,quint32)));
+
     connect(doc->masterTimer(), SIGNAL(beat()), this, SLOT(slotMasterTimerBeat()));
 
     /* Kept offline patches reconnect by themselves when their network shows
@@ -2349,23 +2348,6 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
         emit offlinePatchesChanged();
 
     emit pluginConfigurationChanged(plugin->name(), success);
-}
-
-void InputOutputMap::slotPluginInputReopened(QLCIOPlugin* plugin, quint32 input)
-{
-    /* That line's device was replaced where it is (a pad re-enumerated):
-       the universes patched to it are told, and only they -- another
-       pad's hot-plug reopens nothing of the pads already here. */
-    for (quint32 u = 0; u < universesCount(); ++u)
-    {
-        InputPatch *ip = inputPatch(u);
-        if (ip != NULL && ip->plugin() == plugin && ip->input() == input)
-        {
-            // What the old device read and was not delivered yet is not the new one's.
-            ip->forgetBufferedInput();
-            emit inputPatchReconnected(u);
-        }
-    }
 }
 
 /*****************************************************************************

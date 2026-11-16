@@ -175,6 +175,7 @@ void PadRunRules_Test::cleanup()
         m_stub->m_feedbackParams.clear();
         m_stub->m_feedbackLines.clear();
         m_stub->m_lineLocations.clear();
+        m_stub->m_deviceIds.clear();
     }
     QSettings().remove(ControllerJobs::settingsGroup());
     delete m_doc;
@@ -636,195 +637,121 @@ void PadRunRules_Test::aHotPlugKeepsTheOtherPadsHeld()
         hold(ch, false, 0);
 }
 
-void PadRunRules_Test::aReopenedPadHoldsNoStaleSafety()
+void PadRunRules_Test::aChangedDeviceIsALostPad()
 {
+    /* Another device behind the runner's patch (re-enumerated where it
+       was, or another pad shifted onto its line): a pad lost and a new one
+       plugged in -- disarmed, saying why; nothing it held counts; the new
+       device arms with its own two controls and GOs with its own LT + A
+       (board Q253's fourth review: "the pad lost disarms"). */
     makeShow();
-    twoPads(int(ControllerJobs::AllJobs), int(ControllerJobs::AllJobs));
-    ProgrammerController *pc = m_doc->programmer();
-    PadRun *run = pc->padRun();
+    m_stub->m_deviceIds = { { 0, 1 } };
+    PadRun *run = m_doc->programmer()->padRun();
     run->setEnabled(true);
     m_doc->setMode(Doc::Operate);
     auto restore = qScopeGuard([&]() { m_doc->setMode(Doc::Design); });
-    // A's device replaced on its line, as the HID plugin does it.
-    auto reopen = [&](quint32 line) {
-        emit m_stub->configurationChanged();
-        emit m_stub->inputReopened(line);
-    };
-
-    // A pad that does not send its state again (winmm keeps its mask): LT
-    // held as it was reopened is no safety -- A alone is refused.
     arm(true, 0);
-    axis(kLT, 255, 0);
-    reopen(0);
-    QVERIFY(run->isArmed());
-    run->showNotice(QString());
-    press(kA, 0);
-    QCOMPARE(goes(), 0);
-    QCOMPARE(run->notice(), QString("GO is LT held and A."));
-    // ...but it is still one of the four: the bumpers and RT stop.
-    const int before = stops();
-    hold(kLB, true, 0);
-    hold(kRB, true, 0);
-    hold(kRT, true, 0);
-    QVERIFY2(stops() == before + 1, "after a reopen the stop needed LT read again");
-    for (quint32 ch : { kRT, kRB, kLB })
-        hold(ch, false, 0);
-    axis(kLT, 0, 0);
-
-    // A pad that sends its state again: the held LT counts once re-sent.
-    arm(true, 0);
-    axis(kLT, 255, 0);
-    reopen(0);
-    axis(kLT, 255, 0);
-    press(kA, 0);
-    QCOMPARE(goes(), 1);
-    axis(kLT, 0, 0);
-
-    // The other pad's reopen leaves A's LT a safety.
-    axis(kLT, 255, 0);
-    reopen(1);
-    press(kA, 0);
-    QCOMPARE(goes(), 2);
-    axis(kLT, 0, 0);
-    run->setEnabled(false);
-
-    // The Tools role: View held as the pad is reopened, or re-patched, is
-    // no View after -- Menu alone is no View + Menu (Focus mode).
-    QSignalSpy focusMode(pc, &ProgrammerController::focusModeRequested);
-    m_doc->setMode(Doc::Design);
-    for (int how = 0; how < 2; ++how)
-    {
-        hold(kView, true, 1);
-        if (how == 0)
-            reopen(1);
-        else
-        {
-            drop(1);
-            back(1);
-        }
-        hold(kMenu, true, 1);
-        hold(kMenu, false, 1);
-        QVERIFY2(focusMode.isEmpty(), how == 0 ? "a View held across a reopen made Menu a chord"
-                                               : "a View held across a re-patch made Menu a chord");
-        hold(kView, false, 1);
-    }
-    // Control: View + Menu, both pressed now, is Focus mode.
-    hold(kView, true, 1);
-    hold(kMenu, true, 1);
-    hold(kMenu, false, 1);
-    hold(kView, false, 1);
-    QCOMPARE(focusMode.count(), 1);
-}
-
-void PadRunRules_Test::aStopAfterAReopenFiresAgain_data()
-{
-    QTest::addColumn<bool>("twin");
-    QTest::newRow("one pad") << false;
-    QTest::newRow("one pad listed twice") << true;
-}
-
-void PadRunRules_Test::aStopAfterAReopenFiresAgain()
-{
-    /* A pad that never sends its state again (winmm keeps its mask): the
-       four squeezed, the stop fires, the pad is reopened with the four
-       held, let go (no release comes), squeezed again: the stop fires
-       again -- a latch kept across the reopen must not swallow it, on the
-       pad's twin line either (third review of Q253). */
-    QFETCH(bool, twin);
-    makeShow();
-    m_stub->m_lineNames = QStringList() << "Pad (AA:BB:CC:00:00:01)"
-                                        << (twin ? "Pad (AA:BB:CC:00:00:01)" : "Pad (AA:BB:CC:00:00:02)");
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
-    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 1));
-    PadRun *run = m_doc->programmer()->padRun();
-    QCOMPARE(run->sameController(0, 1), twin);
-    run->setEnabled(true);
-    auto squeeze = [&]() {
-        for (quint32 ch : { kLB, kRB, kLT, kRT })
-        {
-            axis(ch, 255, 0);
-            if (twin)
-                axis(ch, 255, 1);
-        }
-    };
-    squeeze();
-    QCOMPARE(stops(), 1);
-    // Reopened on line 0 with the four held; nothing sent again.
-    emit m_stub->configurationChanged();
-    emit m_stub->inputReopened(0);
-    // Let go (no release reaches us), and squeezed again: the presses come.
-    squeeze();
-    QVERIFY2(stops() == 2, qPrintable(QString("the squeeze after the reopen stopped nothing (%1 stops)").arg(stops())));
-    for (quint32 ch : { kRT, kLT, kRB, kLB })
-    {
-        axis(ch, 0, 0);
-        axis(ch, 0, 1);
-    }
-}
-
-void PadRunRules_Test::aReopenedPadSaysWhatItCameBackHolding()
-{
-    /* A control the reopened pad never sent again blocks the arm or the
-       hit: the chip says to press it once, not nothing or "let go" of
-       what is not held (third review of Q253). */
-    makeShow();
-    PadRun *run = m_doc->programmer()->padRun();
-    run->setEnabled(true);
-    run->setArmChordMs(5000);       // the chord never times out here
-    auto reopen = [&]() {
-        emit m_stub->configurationChanged();
-        emit m_stub->inputReopened(0);
-    };
-    // LT held across the reopen: the chord, and the hit.
     axis(kLT, 255);
-    reopen();
-    run->showNotice(QString());
-    hold(kLB, true);
-    hold(kRB, true);
-    QCOMPARE(run->notice(), QString("The controller came back with LT held: press it once, then hold LB and RB."));
-    hold(kRB, false);
-    hold(kLB, false);
-    run->showNotice(QString());
-    hold(kRT, true);
-    QCOMPARE(run->notice(), QString("The controller came back with LT held: press it once, then pull RT."));
-    hold(kRT, false);
+    m_stub->m_deviceIds[0] = 2;
+    emit m_stub->configurationChanged();
+    QVERIFY2(!run->isArmed(), "another device behind the patch kept the arm");
+    QCOMPARE(run->notice(), QString("Disarmed: the controller went away."));
+    press(kA);
+    QCOMPARE(goes(), 0);
+    // The new device's own: two controls arm, its LT + A is a GO.
     axis(kLT, 0);
-    // Both bumpers held across it: one pressed again is told the other.
-    hold(kLB, true);
-    hold(kRB, true);
-    reopen();
-    run->showNotice(QString());
-    hold(kRB, true);
-    QCOMPARE(run->notice(), QString("The controller came back with LB held: press it once, then hold LB and RB."));
-    hold(kRB, false);
-    hold(kLB, false);
-    QVERIFY(!run->isArmed());
+    arm(true, 0);
+    withLt(kA, 0);
+    QCOMPARE(goes(), 1);
+    // The same device after a rescan (its id unchanged): nothing changes.
+    axis(kLT, 255);
+    emit m_stub->configurationChanged();
+    QVERIFY(run->isArmed());
+    press(kA);
+    QCOMPARE(goes(), 2);
+    axis(kLT, 0);
 }
 
-void PadRunRules_Test::aReopenSwallowsAHeldClicksRelease()
+void PadRunRules_Test::aBufferedStopPressCountsBeforeTheReset()
 {
-    /* The stick click held across a reopen, sent again still held and let
-       go: that release ends the hold it was in, never a click of its own
-       (Refine's LS turns the page; third review of Q253). */
+    /* Three of the four held, the fourth read but not yet delivered (the
+       input patch flushes once a frame) as another device comes behind the
+       patch: the old device's press goes out first, and the stop fires. */
     makeShow();
+    m_stub->m_deviceIds = { { 0, 1 } };
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    for (quint32 ch : { kLB, kRB, kLT })
+        hold(ch, true);
+    QCOMPARE(stops(), 0);
+    // RT read on the line: held in the patch's buffer (no frame has run).
+    emit m_stub->valueChanged(0, 0, kRT, 255);
+    QCOMPARE(stops(), 0);
+    m_stub->m_deviceIds[0] = 2;
+    emit m_stub->configurationChanged();
+    QVERIFY2(stops() == 1, "the old device's stop press was lost with it");
+    // The new device starts from nothing: its own squeeze stops again.
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        hold(ch, true);
+    QCOMPARE(stops(), 2);
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        hold(ch, false);
+}
+
+void PadRunRules_Test::noStopOnAnArmAfterADeviceChange()
+{
+    /* The four held through a device change (the stop went): the new
+       device's LB + RB arm -- no stop from the old device's four. */
+    makeShow();
+    m_stub->m_deviceIds = { { 0, 1 } };
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    run->setArmChordMs(15);
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        hold(ch, true);
+    QCOMPARE(stops(), 1);
+    m_stub->m_deviceIds[0] = 2;
+    emit m_stub->configurationChanged();
+    hold(kLB, true);
+    hold(kRB, true);
+    QCOMPARE(stops(), 1);
+    QTRY_VERIFY2(run->isArmed(), qPrintable(run->notice()));
+    QCOMPARE(stops(), 1);
+    hold(kRB, false);
+    hold(kLB, false);
+}
+
+void PadRunRules_Test::aReleaseWithNoPressSeenDoesNothing()
+{
+    /* A button's release with no press seen since the device was new (held
+       through a device change, or as the app started): no click of its own
+       -- Focus this cue's LS (the page) and RS (say the light). */
+    makeShow();
+    m_stub->m_deviceIds = { { 0, 1 } };
     RefineSession *r = m_doc->programmer()->refineSession();
     QVERIFY(r->start(m_cue1, 0xFFFFFFFF, nullptr));
     auto stop = qScopeGuard([&]() { r->stop(); });
-    const RefineSession::Page page = r->page();
     // Control: a click turns the page.
+    const RefineSession::Page first = r->page();
     press(kLS);
-    QVERIFY(r->page() != page);
-    const RefineSession::Page now = r->page();
+    QVERIFY(r->page() != first);
+    // Held across a device change, let go: nothing.
+    const RefineSession::Page page = r->page();
     hold(kLS, true);
+    hold(kRS, true);
+    m_stub->m_deviceIds[0] = 2;
     emit m_stub->configurationChanged();
-    emit m_stub->inputReopened(0);
-    hold(kLS, true);        // the pad sends its state again: still held
+    const int said = int(m_said.size());
     hold(kLS, false);
-    QVERIFY2(r->page() == now, "the release of a click held across a reopen turned the page");
+    hold(kRS, false);
+    QVERIFY2(r->page() == page, "the release of a click held across a device change turned the page");
+    QVERIFY2(int(m_said.size()) == said, qPrintable(QString("RS's release said: %1").arg(m_said.mid(said).join(" | "))));
+    // A release never pressed at all: nothing.
+    hold(kLS, false);
+    QVERIFY(r->page() == page);
     // The next click is a click.
     press(kLS);
-    QVERIFY(r->page() != now);
+    QVERIFY(r->page() != page);
 }
 
 void PadRunRules_Test::aHeldChordFiresOnce_data()

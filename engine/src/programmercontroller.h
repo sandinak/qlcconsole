@@ -1024,10 +1024,20 @@ private:
         void clear() { pads.clear(); }
     };
     HeldRoles m_heldRoles;
-    /** Per pad, the roles whose next release is swallowed: held as it was
-     *  reopened in place (View, LS, RS), so the release ends that hold,
-     *  not a click of its own. */
-    QHash<quint32, QSet<int>> m_swallowRelease;
+    /** Per pad universe, the device last seen behind its patch: the
+     *  plugin and its QLCIOPlugin::inputDeviceId() (0: not known). */
+    QHash<quint32, QPair<QString, quint64>> m_padDevices;
+    /** Per pad universe, the buttons seen down since its device was new:
+     *  a release with none seen is ignored. */
+    QHash<quint32, QSet<int>> m_seenDown;
+    QPair<QString, quint64> padDevice(quint32 universe) const;
+    /** After a plugin's configuration changed: a pad patch whose device id
+     *  changed (replaced, or another shifted onto its line) is a pad lost
+     *  and a new one -- what the old one read is delivered first. */
+    void checkPadDevices();
+    /** The pad on @p universe is gone (unplugged, re-patched to another
+     *  device, or another device behind its patch): as an unplug. */
+    void padLost(quint32 universe);
     float m_fineNormX = 0.5f, m_fineNormY = 0.5f;
     /** The follow spot's fine stick, per pad and per axis (review 0.4.10
      *  verify, H-A): universe -> its last X and Y readings (0..1). The

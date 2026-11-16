@@ -229,50 +229,48 @@ void HIDRescan_Test::aPadBackAtTheSamePathReplacesTheOld()
     QTRY_VERIFY(m_plugin->targetProblems().isEmpty());
 }
 
-void HIDRescan_Test::everyChangedLineIsToldOnce()
+void HIDRescan_Test::aDevicesIdFollowsTheDevice()
 {
-    /* inputReopened(line) (third review of Q253): once for each line whose
-       device is another than before -- replaced where it was, or shifted
-       onto it when a device before it went (Linux pads with no location) --
-       with the line as it is now; never for a line that kept its device,
-       nor for one new at the end. */
+    /* inputDeviceId(line) (board Q253's fourth review): an id for each
+       device, never given to another -- the same while it stays, whatever
+       line it moves to when one before it goes (Linux pads with no
+       location); another once a different device is on the line
+       (re-enumerated at its path). */
     const QString a = QStringLiteral("/dev/input/js0"), b = QStringLiteral("/dev/input/js1"),
                   c = QStringLiteral("/dev/input/js2");
     const QString name = QStringLiteral("Xbox Wireless Controller");
     m_plugin->setTestBackend(quintptr(m_fake));
-    QSignalSpy told(m_plugin, SIGNAL(inputReopened(quint32)));
     auto settle = [&](int count) {
         m_plugin->rescanDevices();
         QTRY_VERIFY_WITH_TIMEOUT(m_plugin->isScanning() == false && m_plugin->openingCount() == 0
                                      && countOf(m_plugin->inputs(), name) == count, 3000);
         QTest::qWait(30);
     };
-    auto lines = [&]() {
-        QList<quint32> out;
-        for (const QList<QVariant> &args : std::as_const(told))
-            out << args.at(0).toUInt();
-        told.clear();
-        return out;
+    auto idOf = [&](const QString &path) {
+        const int line = m_plugin->inputForPath(path);
+        return line < 0 ? quint64(0) : m_plugin->inputDeviceId(quint32(line));
     };
-    // One by one: A on line 0, B on 1, C on 2 -- nothing reopened.
     m_fake->list(a, 0x045e, 0x0b13, name, 0, 1);
     settle(1);
     m_fake->list(b, 0x045e, 0x0b13, name, 0, 2);
     settle(2);
     m_fake->list(c, 0x045e, 0x0b13, name, 0, 3);
     settle(3);
-    QCOMPARE(m_plugin->inputForPath(b), 1);
-    QCOMPARE(lines(), QList<quint32>());
-    // C (the last) goes: no line has another device.
+    const quint64 idA = idOf(a), idB = idOf(b), idC = idOf(c);
+    QVERIFY(idA != 0 && idB != 0 && idC != 0);
+    QVERIFY(idA != idB && idB != idC && idA != idC);
+    QCOMPARE(m_plugin->inputDeviceId(99), quint64(0));
+    // The last goes: the others keep theirs.
     m_fake->unlist(c);
     settle(2);
-    QCOMPARE(lines(), QList<quint32>());
-    // A (the first) goes: B moves onto line 0 -- told, once.
+    QCOMPARE(idOf(a), idA);
+    QCOMPARE(idOf(b), idB);
+    // The first goes: B moves onto line 0 with its own id -- not A's.
     m_fake->unlist(a);
     settle(1);
     QCOMPARE(m_plugin->inputForPath(b), 0);
-    QCOMPARE(lines(), QList<quint32>{ 0 });
-    // B re-enumerates where it is (another system entry, same path): line 0, once.
+    QCOMPARE(m_plugin->inputDeviceId(0), idB);
+    // B re-enumerates where it is (another system entry, same path): a new id.
     m_fake->unlist(b);
     m_fake->list(b, 0x045e, 0x0b13, name, 0, 4);
     m_plugin->rescanDevices();
@@ -280,10 +278,11 @@ void HIDRescan_Test::everyChangedLineIsToldOnce()
     QTRY_VERIFY_WITH_TIMEOUT(m_plugin->isScanning() == false && m_plugin->openingCount() == 0, 3000);
     QTest::qWait(30);
     QCOMPARE(countOf(m_plugin->inputs(), name), 1);
-    QCOMPARE(lines(), QList<quint32>{ 0 });
-    // A rescan that changes nothing tells nothing.
+    const quint64 idB2 = m_plugin->inputDeviceId(0);
+    QVERIFY(idB2 != 0 && idB2 != idB && idB2 != idA && idB2 != idC);
+    // A rescan that changes nothing keeps it.
     settle(1);
-    QCOMPARE(lines(), QList<quint32>());
+    QCOMPARE(m_plugin->inputDeviceId(0), idB2);
 }
 
 void HIDRescan_Test::aPadListedTwiceIsOneDevice()

@@ -321,11 +321,13 @@ show from any pad.
   Focus mode is in the Tools role, and Run /
   Tools is switched on the computer (the Run tab's **Pad:** button) for
   every pad: a View + Menu tap in Run on a Focus-only pad says so.
-- **A pad that drops out and comes back.** If a pad switches off and on,
-  re-enumerates or wakes from sleep while LT is held, that LT no longer
-  counts for a GO when the pad is back: press LT again. The emergency
-  stop works as before, and another pad being plugged in or out changes
-  nothing on the pads already connected.
+- **A pad that is replaced is a pad lost.** If the pad that runs cues
+  re-enumerates, or (on Linux, two pads of one name) another pad takes its
+  place on its line because one before it was unplugged, it is disarmed as
+  if unplugged: the chip says *Disarmed: the controller went away.*, and
+  nothing it was holding counts. Arm again with LB + RB. A pad that is
+  only renumbered because another one went keeps everything: its arm, the
+  LT it holds, a stop it is squeezing.
 - **The emergency stop is on every pad.** In the Run role, both bumpers
   and both triggers together stop everything from any connected
   controller, whatever its jobs, whatever the pads are doing: a tool or a
@@ -410,9 +412,11 @@ list. Set pad A to **Run cues** only and pad B to **Focus** only.
     the next cue. *Expected:* B's stick and held right stick keep the spot
     moving; A's sticks stay the walk's; a press on a third pad with Focus
     says *Another controller is in use.*
-20. Arm A, hold LT, and switch A off and on (or unplug it and plug it back)
-    still holding LT. Press A. *Expected:* nothing plays; the chip says
-    *GO is LT held and A.* Let go of LT, hold it again and press A: GO.
+20. Arm A, hold LT, and switch A off and on (or unplug it and plug it
+    back) still holding LT. *Expected:* the chip says *Disarmed: the
+    controller went away.*; pressing A plays nothing. Arm again (LB + RB),
+    hold LT and press A: GO. With three pads, arm the last one, hold its
+    LT, and unplug the first: it stays armed and LT + A plays.
 21. Set A to Run cues. Disarmed, on A: hold LB + RB, squeeze LT and let it go,
     let go of RB and press it again. *Expected:* nothing arms; the chip
     says *Let go of both bumpers, then hold LB and RB again.* Let go of

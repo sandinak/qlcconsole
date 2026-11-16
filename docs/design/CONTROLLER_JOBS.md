@@ -346,32 +346,33 @@ it holds, and the chip says why."
   cue ends), `advanceRestoreGlide()`, `updateFollowSpotStatus()` and the
   once-a-second stick search. Before, all of it waited for the tool's
   end; a glide or a cue change during a tool now happens on time.
-- **What a reopened pad held.** A line whose device is another than
-  before -- replaced where it was, or another pad shifted onto it when one
-  before it went (Linux joysticks with no location: the patch stays on
-  the line) -- is told: the HID plugin compares each line's device after
-  every change (`HIDPlugin::announceLines()`) and emits
-  `inputReopened(line)` once per changed line, never for one unchanged;
-  `InputOutputMap::inputPatchReconnected()` tells the universes patched to
-  it, after dropping what the old device read and the input patch had not
-  delivered yet (`InputPatch::forgetBufferedInput()`: buffered, or flushed
-  and queued for the GUI thread) -- none of it reaches Pad Run as the new
-  device's. That pad keeps the four as read, for the stop (a stale "held" can
-  only make a stop easier; some pads -- winmm, macOS's polled ones --
-  never send their held state again, and a stop squeezed with three of
-  four held must not be lost), but **a stop it fired is no longer
-  latched**, on its twin lines too: its releases may never come, and a
-  latch kept would swallow the next squeeze (a second stop errs the safe
-  way). Its LT is no GO safety (nor LT + Menu's) until LT is read again
-  (`Held::ltStale`); a chord its bumpers began is spent; when a control it
-  never sent again blocks the arm or the hit, the chip says to press it
-  once ("The controller came back with LT held: press it once, then hold
-  LB and RB."); the release of a View or stick click it held is
-  swallowed (the end of that hold, never a click); the walk's modifier
-  lets go; the arm stays (`PadRun::padReopened()`). Another pad's hot-plug or a rescan reopens
-  nothing of the pads already here: they keep what they hold. A pad
-  re-patched (`inputPatchChanged`) forgets all it held, as before (the
-  lead's evaluation of 0.4.12; the second review of Q253).
+- **Another device behind a patch is a pad lost (rule 3: "the pad lost
+  disarms").** Each input patch's device is known by an id its plugin
+  never gives another device (`QLCIOPlugin::inputDeviceId()`; the HID
+  plugin's, kept per device: the same whatever line it moves to). When a
+  plugin's configuration changes, after the patches have followed their
+  devices to new lines, a patch whose device id changed -- a pad
+  re-enumerated at its path, or another pad shifted onto its line when
+  one before it went (Linux joysticks with no location) -- is treated
+  exactly as an unplug followed by a plug (`ProgrammerController::
+  checkPadDevices()`, `padLost()`): what the old device read and the
+  input patch had not delivered yet goes out first, in order
+  (`InputPatch::deliverNow()`: a stop press of the old device counts);
+  then an arm made on it drops, saying "Disarmed: the controller went
+  away." on the chip; a tool it owned runs on with no owner; what it
+  pushed on the follow spot lets go; and nothing it held is held -- the
+  Run role's four and the stop's latch (on its twin lines too), the
+  chords and buttons, the walk's modifier and level. The device there
+  now starts from nothing: it arms with its own two controls, and GOs
+  with its own LT + A. A pad that only moved lines (the same device id)
+  is told nothing: it keeps its arm, its held safety, a chord or a stop
+  squeeze in progress, and every reading. A plugin that can't tell a
+  device (id 0) is concluded nothing about, as before. A button's
+  release with no press seen since its pad was new is ignored (never a
+  View undo or a stick click). decided (inherent): three of the four
+  held on the pad whose device changed are gone with it -- the new
+  device must squeeze the stop afresh (a full squeeze held across the
+  change has stopped already, and the next full squeeze stops again).
 - **The restore glide waits for a tool.** A cue's follow spot ending
   glides its subject back where the show has it; while a tool's lights
   aim at that subject the glide waits where it is, and goes on when the
@@ -437,16 +438,17 @@ window still open.
   (`q253AFreeFlySpotHoldsStill`); a walk's cue steps keep its owner and a
   beside pad's fine stick (`q253AWalksCueStepsKeepItsOwnerAndTheSpot`);
   the footer's chip as drawn, at three sizes
-  (ui/test/padrunrules `q253TheFollowChipSaysWhyItHolds`); a pad
-  reopened holds no stale GO safety yet still stops, and another pad's
-  hot-plug keeps what a pad holds (engine/test/padrunrules
-  `aReopenedPadHoldsNoStaleSafety`, `aHotPlugKeepsTheOtherPadsHeld`); the
+  (ui/test/padrunrules `q253TheFollowChipSaysWhyItHolds`); another
+  pad's hot-plug keeps what a pad holds (engine/test/padrunrules
+  `aHotPlugKeepsTheOtherPadsHeld`); the
   restore glide waits for a tool aimed at the subject
-  (`q253TheRestoreGlideWaitsForTheTool`); after a reopen the stop fires
-  again, the chip says what the pad came back holding, a held click's
-  release is no click (`aStopAfterAReopenFiresAgain`,
-  `aReopenedPadSaysWhatItCameBackHolding`,
-  `aReopenSwallowsAHeldClicksRelease`); a line is told once when its
-  device changes (plugins/hid/test `everyChangedLineIsToldOnce`), and a
-  pad shifted onto another's line through the real plugin is no GO on
-  the held LT (engine/test/padtraces `aShiftedLineIsNoSafety`).
+  (`q253TheRestoreGlideWaitsForTheTool`); another device behind a patch is
+  a pad lost (`aChangedDeviceIsALostPad`, `noStopOnAnArmAfterADeviceChange`,
+  `aBufferedStopPressCountsBeforeTheReset`,
+  `aReleaseWithNoPressSeenDoesNothing`; the chip as drawn,
+  ui/test/padrunrules `aChangedDeviceDisarmsOnTheChip`); a device's id
+  follows it (plugins/hid/test `aDevicesIdFollowsTheDevice`); through the
+  real HID plugin, a pad shifted onto another's line disarms it and
+  another pad's drop leaves the runner as it was, with and without
+  locations (engine/test/padtraces `aShiftedLineIsNoSafety`,
+  `anotherPadsDropLeavesTheRunnerAsItWas`).

@@ -66,6 +66,9 @@ private slots:
      *  it says nothing of a hold; a light aimed at the spot's subject holds
      *  it too. The chip as drawn at 1024, 1440 and 1920 wide (its fitted
      *  text, inside the window, its pixels). */
+    /** Another device behind the armed pad's patch: the footer's chip and
+     *  the Run tab's button, as drawn, say it is disarmed and why. */
+    void aChangedDeviceDisarmsOnTheChip();
     void q253TheFollowChipSaysWhyItHolds();
 
 private:

@@ -1156,31 +1156,23 @@ void HIDPlugin::dropDevice(HIDDevice *dev)
     disposeOffThread(dev);
 }
 
-void HIDPlugin::announceLines()
+quint64 HIDPlugin::deviceId(const HIDDevice *dev)
 {
-    /* Each line's device now, by an id never reused (a pointer can be, to
-       a device made where a dropped one was). */
-    QList<quint64> now;
-    now.reserve(m_devices.size());
-    for (HIDDevice *dev : std::as_const(m_devices))
-    {
-        auto it = m_deviceIds.find(dev);
-        if (it == m_deviceIds.end())
-            it = m_deviceIds.insert(dev, ++m_nextDeviceId);
-        now << it.value();
-    }
-    /* A line that had a device and has another now -- replaced where it
-       was, or another shifted onto it when one before it went (a Linux
-       pad with no location: the patch on the line stays) -- is told:
-       what was held on it is not known to be held (third review of Q253).
-       A line new at the end, or one gone, is not: the patch follows those. */
-    QList<quint32> changed;
-    for (int i = 0; i < qMin(m_lineIds.size(), now.size()); ++i)
-        if (m_lineIds.at(i) != now.at(i))
-            changed << quint32(i);
-    m_lineIds = now;
-    for (quint32 line : std::as_const(changed))
-        emit inputReopened(line);
+    auto it = m_deviceIds.find(dev);
+    if (it == m_deviceIds.end())
+        it = m_deviceIds.insert(dev, ++m_nextDeviceId);
+    return it.value();
+}
+
+quint64 HIDPlugin::inputDeviceId(quint32 input) const
+{
+    /* An id given when the device came into the list and never given
+       again (a pointer can be: a device made where a dropped one was):
+       the same while it stays, whatever line it moves to; another device
+       on the line, another id (board Q253's fourth review). */
+    if (input >= quint32(m_devices.size()))
+        return 0;
+    return m_deviceIds.value(m_devices.at(int(input)), 0);
 }
 
 void HIDPlugin::renumberLines()
@@ -1193,7 +1185,10 @@ void HIDPlugin::renumberLines()
        them, or back after being switched off, sent its input under a line
        no patch listens to. Keep them in step. */
     for (int i = 0; i < m_devices.size(); ++i)
+    {
         m_devices.at(i)->setLine(quint32(i));
+        deviceId(m_devices.at(i));      // a device new to the list gets its id
+    }
 }
 
 void HIDPlugin::applyScan(const QList<HIDFound> &found, const QSet<QString> &stale,
@@ -1300,7 +1295,6 @@ void HIDPlugin::applyScan(const QList<HIDFound> &found, const QSet<QString> &sta
     {
         renumberLines();
         emit configurationChanged();
-        announceLines();
     }
     noteProblems();
 }
@@ -1357,8 +1351,7 @@ void HIDPlugin::openTimedOut(const QString &path, quint64 job)
             dropDevice(old);
             renumberLines();
             emit configurationChanged();
-            announceLines();
-        }
+            }
     }
     noteProblems();
 }
@@ -1442,7 +1435,6 @@ void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
     {
         renumberLines();
         emit configurationChanged();
-        announceLines();
     }
     noteProblems();
 }
@@ -1575,12 +1567,12 @@ void HIDPlugin::addDevice(HIDDevice* device)
 
     device->setLine(quint32(m_devices.count()));
     m_devices.append(device);
+    deviceId(device);
     if (m_trace != nullptr && device->axisCount() >= 0)
         m_trace->arrived(device, QString());
     emit deviceAdded(device);
 
     emit configurationChanged();
-    announceLines();
 }
 
 void HIDPlugin::removeDevice(HIDDevice* device)
@@ -1594,7 +1586,6 @@ void HIDPlugin::removeDevice(HIDDevice* device)
     delete device;
 
     emit configurationChanged();
-    announceLines();
 }
 
 /*****************************************************************************

@@ -40,9 +40,9 @@ private slots:
     void aPadThatGoesMidOpenIsNotAdded();
     void aPadReplugedAtTheSamePathOpens();
     void aPadBackAtTheSamePathReplacesTheOld();
-    /** inputReopened(): once per line whose device changed (replaced, or
-     *  shifted onto it by a drop before it), never an unchanged line. */
-    void everyChangedLineIsToldOnce();
+    /** inputDeviceId(): the same while a device stays, whatever its line;
+     *  another for another device on the line; never reused. */
+    void aDevicesIdFollowsTheDevice();
     void aPadListedTwiceIsOneDevice();
     void oneOpenPerPathHoweverOftenItRescans();
     void oneScanAtATime();

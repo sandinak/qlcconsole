@@ -54,14 +54,10 @@ public:
 
 signals:
     void pluginConfigurationChanged(QLCIOPlugin* plugin);
-    /** @p plugin's input line @p input was reopened in place
-     *  (QLCIOPlugin::inputReopened()). */
-    void pluginInputReopened(QLCIOPlugin* plugin, quint32 input);
     void pluginLoaded(const QString& name);
 
 private slots:
     void slotConfigurationChanged();
-    void slotInputReopened(quint32 input);
 
 private:
     QList <QLCIOPlugin*> m_plugins;

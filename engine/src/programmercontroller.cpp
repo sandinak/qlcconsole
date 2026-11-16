@@ -3221,58 +3221,23 @@ void ProgrammerController::connectControllerInput()
        what it held (its releases never came) and drops an arm made on it;
        the pad now there starts in its own colour, so it is told the
        state's light again. */
-    /* A pad reopened in place (switched off and on, re-enumerated, back
-       from sleep: the same line): what it held is not held now, so a
-       trigger held as it dropped is no safety and a View no chord (the
-       lead's evaluation of 0.4.12). A stop it fired stays fired. */
-    connect(m_doc->inputOutputMap(), &InputOutputMap::inputPatchReconnected, this, [this](quint32 universe) {
-        /* A View or a stick click it held: its release, if one comes (a
-           pad that sends its state again, still held), is swallowed -- the
-           end of the hold it was in, never a plain click (an undo, a page
-           turn; third review of Q253). */
-        const QSet<int> held = m_heldRoles.pads.value(universe);
-        for (int role : { int(GamepadRole::Back), int(GamepadRole::LS), int(GamepadRole::RS) })
-            if (held.contains(role))
-                m_swallowRelease[universe].insert(role);
-        m_heldRoles.pads.remove(universe);
-        // The tools' pad (or its twin line): no focus LT.
-        if (m_ownerUniverse == 0xFFFFFFFF || m_padRun->sameController(universe, m_ownerUniverse))
-        {
-            m_focusLt.reset();
-            m_focusLtChord = false;
-        }
-        if (m_padRun != nullptr)
-            m_padRun->padReopened(universe);
-    });
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputPatchChanged, this, [this](quint32 universe) {
-        // Its held buttons went with it: no stale View (a chord) or LT.
-        m_heldRoles.pads.remove(universe);
-        m_swallowRelease.remove(universe);
-        if (m_padRun != nullptr)
-            m_padRun->forgetPad(universe);
-        /* The pad that owns the tools went (unplugged, swapped in its
-           slot): the tool runs on with no owner, the next pad with the
-           Focus job to press takes it (review 12, as a job taken away). */
-        if (m_ownerUniverse != 0xFFFFFFFF && m_ownerUniverse == universe)
-        {
-            m_ownerUniverse = 0xFFFFFFFF;
-            emit focusControllerChanged();
-        }
-        // Its pushes went with it (no release comes): the follow spot lets go.
-        const bool stick = (m_panBound && m_panUniverse == universe) || (m_tiltBound && m_tiltUniverse == universe);
-        if (stick || m_finePads.contains(universe) || (m_recalHeld && m_recalUniverse == universe))
-            letGoOfFollowSpotInputs(universe, stick);
-        if (m_padLight.isValid() || m_padLightTarget != UINT_MAX)
-        {
-            const QColor light = m_padLight;
-            m_padLight = QColor();
-            m_padLightTarget = UINT_MAX - 2;     // not known: sent again
-            if (light.isValid())
-                setPadLight(light);
-            else
-                refreshPadLight();
-        }
+        /* The same device, moved to another line because one before it
+           went (a Linux joystick with no location): nothing changed for it
+           -- it keeps its arm, its held safety, its chord (board Q253's
+           fourth review). Anything else is a pad lost. */
+        const QPair<QString, quint64> now = padDevice(universe);
+        const QPair<QString, quint64> was = m_padDevices.value(universe);
+        m_padDevices.insert(universe, now);
+        if (was.second != 0 && was == now)
+            return;
+        padLost(universe);
     });
+    /* A device that changed behind a patch (replaced where it was, or
+       another shifted onto its line): a pad lost and a new one plugged in
+       (rule 3, "the pad lost disarms"). */
+    connect(m_doc->inputOutputMap(), &InputOutputMap::pluginConfigurationChanged,
+            this, &ProgrammerController::checkPadDevices);
     // Blackout or the Grand Master to zero mid-session: said.
     auto recheck = [this]() {
         checkRigOutput(m_focusSession->isActive() ? m_focusSession->currentFixture()
@@ -3281,6 +3246,87 @@ void ProgrammerController::connectControllerInput()
     connect(m_doc->inputOutputMap(), &InputOutputMap::blackoutChanged, this, recheck);
     connect(m_doc->inputOutputMap(), &InputOutputMap::grandMasterValueChanged, this, recheck);
     m_controllerInputConnected = true;
+}
+
+QPair<QString, quint64> ProgrammerController::padDevice(quint32 universe) const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = iom != nullptr && universe < iom->universesCount() ? iom->inputPatch(universe) : nullptr;
+    if (ip == nullptr || ip->plugin() == nullptr || ip->input() == QLCIOPlugin::invalidLine())
+        return qMakePair(QString(), quint64(0));
+    return qMakePair(ip->plugin()->name(), ip->plugin()->inputDeviceId(ip->input()));
+}
+
+void ProgrammerController::checkPadDevices()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr)
+        return;
+    const QList<quint32> known = m_padDevices.keys();
+    for (quint32 universe : known)
+    {
+        const QPair<QString, quint64> was = m_padDevices.value(universe);
+        const QPair<QString, quint64> now = padDevice(universe);
+        // An id that was not known, or a pad merely gone quiet: nothing to conclude.
+        if (was.second == 0 || was == now)
+        {
+            m_padDevices.insert(universe, now);
+            continue;
+        }
+        /* Another device behind this patch now. What the old one read and
+           was not delivered yet goes out first, in order -- its stop press
+           counts -- then the pad is lost (board Q253's fourth review). */
+        if (InputPatch *ip = universe < iom->universesCount() ? iom->inputPatch(universe) : nullptr)
+            ip->deliverNow();
+        m_padDevices.insert(universe, now);
+        padLost(universe);
+    }
+}
+
+void ProgrammerController::padLost(quint32 universe)
+{
+    /* As an unplug: nothing it held is held -- the chords made of it, the
+       buttons seen down, the Run role's four and its stop latch, the walk's
+       modifier -- an arm made on it drops (rule 3), a tool it owned runs on
+       with no owner, what it pushed on the follow spot lets go. The device
+       there now starts from nothing; its own readings are new input. */
+    const bool owned = m_ownerUniverse == 0xFFFFFFFF
+                       || (m_padRun != nullptr && m_padRun->sameController(universe, m_ownerUniverse));
+    m_heldRoles.pads.remove(universe);
+    m_seenDown.remove(universe);
+    if (owned)
+    {
+        m_viewChord = false;
+        m_centreChord = false;
+        m_stickChord = false;
+        m_rsChord = false;
+        m_focusLt.reset();
+        m_focusLtChord = false;
+    }
+    if (m_padRun != nullptr)
+        m_padRun->forgetPad(universe);
+    /* The pad that owns the tools went (unplugged, swapped in its slot):
+       the tool runs on with no owner, the next pad with the Focus job to
+       press takes it (review 12, as a job taken away). */
+    if (m_ownerUniverse != 0xFFFFFFFF && m_ownerUniverse == universe)
+    {
+        m_ownerUniverse = 0xFFFFFFFF;
+        emit focusControllerChanged();
+    }
+    // Its pushes went with it (no release comes): the follow spot lets go.
+    const bool stick = (m_panBound && m_panUniverse == universe) || (m_tiltBound && m_tiltUniverse == universe);
+    if (stick || m_finePads.contains(universe) || (m_recalHeld && m_recalUniverse == universe))
+        letGoOfFollowSpotInputs(universe, stick);
+    if (m_padLight.isValid() || m_padLightTarget != UINT_MAX)
+    {
+        const QColor light = m_padLight;
+        m_padLight = QColor();
+        m_padLightTarget = UINT_MAX - 2;     // not known: sent again
+        if (light.isValid())
+            setPadLight(light);
+        else
+            refreshPadLight();
+    }
 }
 
 void ProgrammerController::updateFollowspotJsBindings()
@@ -3345,6 +3391,24 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
 
     // Something came in: a controller being found again after a sleep is.
     m_keepAlive->noteInput();
+
+    // The device behind this patch, as first heard (padLost() on a change).
+    if (!m_padDevices.contains(universe))
+        m_padDevices.insert(universe, padDevice(universe));
+    /* A button's release with no press seen since the pad was new (a pad
+       lost and back, another device behind the patch, or held as the app
+       started): the end of a hold that is not this one's -- never a click
+       (View's undo, a stick click's page turn). */
+    if (role < 0)
+        role = controllerRole(universe, channel);
+    if (role != GamepadRole::None && !GamepadRole::isAxis(GamepadRole::Role(role))
+        && !GamepadRole::isTouch(GamepadRole::Role(role)))
+    {
+        if (value > 0)
+            m_seenDown[universe].insert(role);
+        else if (!m_seenDown[universe].remove(role))
+            return;
+    }
 
     if (routeFocusInput(universe, channel, value, role))
         return;
@@ -3647,14 +3711,6 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     const GamepadRole::Role role = GamepadRole::Role(knownRole >= 0 ? knownRole : controllerRole(universe, channel));
     // What this pad holds (its chords are its own).
     m_heldRoles.pad = universe;
-    // The release of a View or stick click held across a reopen: swallowed.
-    if (value == 0 && m_swallowRelease.contains(universe) && m_swallowRelease[universe].remove(int(role)))
-    {
-        if (m_swallowRelease[universe].isEmpty())
-            m_swallowRelease.remove(universe);
-        m_heldRoles.remove(role);
-        return true;
-    }
     /* The touchpad's swipes (Q199): kept here, read on the tick. A swipe
        walks the show, so only a pad with the Focus job's (CONTROLLER_JOBS.md 8). */
     const bool beside = m_padRun->isBesideTool(universe);

@@ -258,86 +258,155 @@ void PadTraces_Test::twinListing()
     VERIFY_CLEAN_PLAY();
 }
 
+namespace
+{
+const quint32 kPadLt = 2, kPadRt = 5, kPadA = 6, kPadLb = 10, kPadRb = 11;
+}
+
+/* The pads by path: rescanned until @p count of @p name are listed. */
+void PadTraces_Test::q253Scan(const QString &name, int count)
+{
+    QMetaObject::invokeMethod(m_hid, "rescanDevices", Qt::DirectConnection);
+    QTRY_VERIFY_WITH_TIMEOUT(inputsNamed(name) == count, 3000);
+    QTest::qWait(50);
+}
+
+int PadTraces_Test::q253Line(const QString &path) const
+{
+    int line = -1;
+    QMetaObject::invokeMethod(m_hid, "inputForPath", Qt::DirectConnection,
+                              Q_RETURN_ARG(int, line), Q_ARG(QString, path));
+    return line;
+}
+
+bool PadTraces_Test::q253In(const QString &path, quint32 ch, uint value)
+{
+    bool ok = false;
+    QMetaObject::invokeMethod(m_hid, "injectVirtualInput", Qt::DirectConnection, Q_RETURN_ARG(bool, ok),
+                              Q_ARG(quint32, quint32(q253Line(path))), Q_ARG(quint32, ch), Q_ARG(uint, value));
+    return ok;
+}
+
 void PadTraces_Test::aShiftedLineIsNoSafety()
 {
     /* Two pads of one name with no location (Linux joysticks, /dev/input/
        js*), patched to universes 1 and 2. A arms and holds LT; A goes, so B
        moves onto A's line and universe 1 hears B -- with no patch change.
-       B's A press must not GO on A's held LT; once B's LT is read, it does
-       (third review of Q253). Through the real HID plugin. */
+       That is pad A lost: disarmed, saying so; B's LT + A plays nothing
+       (board Q253's fourth review). Through the real HID plugin. */
     const QString name = QStringLiteral("Xbox Wireless Controller");
     const QString a = QStringLiteral("/dev/input/js0"), b = QStringLiteral("/dev/input/js1");
-    const quint32 kLt = 2, kA = 6, kLb = 10, kRb = 11;
-    auto scan = [&](int count) {
-        QMetaObject::invokeMethod(m_hid, "rescanDevices", Qt::DirectConnection);
-        QTRY_VERIFY_WITH_TIMEOUT(inputsNamed(name) == count, 3000);
-        QTest::qWait(50);
-    };
-    auto lineOf = [&](const QString &path) {
-        int line = -1;
-        QMetaObject::invokeMethod(m_hid, "inputForPath", Qt::DirectConnection,
-                                  Q_RETURN_ARG(int, line), Q_ARG(QString, path));
-        return line;
-    };
-    auto in = [&](const QString &path, quint32 ch, uint value) {
-        bool ok = false;
-        QMetaObject::invokeMethod(m_hid, "injectVirtualInput", Qt::DirectConnection, Q_RETURN_ARG(bool, ok),
-                                  Q_ARG(quint32, quint32(lineOf(path))), Q_ARG(quint32, ch), Q_ARG(uint, value));
-        return ok;
-    };
-    m_fake->list(a, 0x045e, 0x028e, name, 0, 1);
-    scan(1);
-    m_fake->list(b, 0x045e, 0x028e, name, 0, 2);
-    scan(2);
-    QCOMPARE(lineOf(a), 0);
-    QCOMPARE(lineOf(b), 1);
-    QCOMPARE(patchPads(name), 2);
-    startRunning();
-    PadRun *run = m_doc->programmer()->padRun();
-    // A arms and holds the safety.
-    QVERIFY(in(a, kLb, 255));
-    QVERIFY(in(a, kRb, 255));
-    QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
-    QVERIFY(in(a, kRb, 0));
-    QVERIFY(in(a, kLb, 0));
     QStringList heard;
     const QMetaObject::Connection listen = connect(m_doc->inputOutputMap(), &InputOutputMap::inputValueChanged, this,
         [&heard](quint32 u, quint32 ch, uchar v) { heard << QString("u%1:ch%2=%3").arg(u).arg(ch).arg(v); });
     auto unlisten = qScopeGuard([&]() { disconnect(listen); });
-    QVERIFY(in(a, kLt, 255));
-    // Held, and heard: A's LT is the safety on universe 1 now.
+    m_fake->list(a, 0x045e, 0x028e, name, 0, 1);
+    q253Scan(name, 1);
+    m_fake->list(b, 0x045e, 0x028e, name, 0, 2);
+    q253Scan(name, 2);
+    QCOMPARE(q253Line(a), 0);
+    QCOMPARE(q253Line(b), 1);
+    QCOMPARE(patchPads(name), 2);
+    startRunning();
+    PadRun *run = m_doc->programmer()->padRun();
+    // A arms and holds the safety (heard: the patch delivers once a frame).
+    QVERIFY(q253In(a, kPadLb, 255));
+    QVERIFY(q253In(a, kPadRb, 255));
+    QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
+    QVERIFY(q253In(a, kPadRb, 0));
+    QVERIFY(q253In(a, kPadLb, 0));
+    QVERIFY(q253In(a, kPadLt, 255));
     QTRY_VERIFY_WITH_TIMEOUT(heard.contains(QStringLiteral("u1:ch2=255")), 2000);
-    heard.clear();
-    // A goes: B is on line 0 now, universe 1 still patched there -- and told.
-    QSignalSpy told(m_doc->inputOutputMap(), &InputOutputMap::inputPatchReconnected);
+    // A goes: B is on line 0 now, universe 1 still patched there.
     m_fake->unlist(a);
-    scan(1);
-    QStringList toldUniverses;
-    for (const QList<QVariant> &args : std::as_const(told))
-        toldUniverses << QString::number(args.at(0).toUInt());
-    QVERIFY2(toldUniverses.contains(QStringLiteral("1")),
-             qPrintable(QString("universe 1 was not told its line changed (told: %1)").arg(toldUniverses.join(','))));
-    QCOMPARE(lineOf(b), 0);
+    q253Scan(name, 1);
+    QCOMPARE(q253Line(b), 0);
     QCOMPARE(m_doc->inputOutputMap()->inputPatch(1)->input(), quint32(0));
-    if (!run->isArmed())
-        QSKIP("the arm went with A here: nothing for B's press to GO from");
-    // B's A press: no GO on A's LT.
-    QVERIFY(in(b, kA, 255));
-    QVERIFY(in(b, kA, 0));
-    QTest::qWait(50);
-    QVERIFY2(commandCount(int(ShowControl::Go)) == 0,
-             qPrintable(QString("B's A press played a cue on the LT pad A held (armed on %1, notice '%2', "
-                                "u2 on line %3; heard %4)")
-                        .arg(run->armedUniverse()).arg(run->notice())
-                        .arg(m_doc->inputOutputMap()->inputPatch(2)->input()).arg(heard.join(' '))));
-    // B's own LT (heard), then A: a GO.
+    QTRY_VERIFY2_WITH_TIMEOUT(!run->isArmed(), "the arm stayed on universe 1 with another pad behind it", 2000);
+    QCOMPARE(run->roleText(), QString("Pad: Run"));
+    QCOMPARE(run->chipNotice(), QString("Disarmed: the controller went away."));
+    // B's LT + A: nothing plays (B has not armed).
     heard.clear();
-    QVERIFY(in(b, kLt, 255));
+    QVERIFY(q253In(b, kPadLt, 255));
     QTRY_VERIFY_WITH_TIMEOUT(heard.contains(QStringLiteral("u1:ch2=255")), 2000);
-    QVERIFY(in(b, kA, 255));
-    QVERIFY(in(b, kA, 0));
-    QTRY_COMPARE_WITH_TIMEOUT(commandCount(int(ShowControl::Go)), 1, 2000);
-    QVERIFY(in(b, kLt, 0));
+    QVERIFY(q253In(b, kPadA, 255));
+    QVERIFY(q253In(b, kPadA, 0));
+    QTest::qWait(100);
+    QCOMPARE(commandCount(int(ShowControl::Go)), 0);
+    QVERIFY(q253In(b, kPadLt, 0));
+}
+
+void PadTraces_Test::anotherPadsDropLeavesTheRunnerAsItWas_data()
+{
+    QTest::addColumn<bool>("located");
+    QTest::newRow("macOS-like: each pad its USB location") << true;
+    QTest::newRow("Linux-like: no location, one name") << false;
+}
+
+void PadTraces_Test::anotherPadsDropLeavesTheRunnerAsItWas()
+{
+    /* Three pads; C (the last) runs cues. The pads before it go, one at a
+       time, so C moves down a line each time and its universe's patch
+       follows it -- the same device: C stays armed, its held LT still a
+       safety (LT + A plays), and a stop squeezed three of four across a
+       drop completes with the fourth. No reading of C's is lost. */
+    QFETCH(bool, located);
+    const QString name = QStringLiteral("Xbox Wireless Controller");
+    QStringList paths;
+    for (int i = 0; i < 3; ++i)
+        paths << (located ? QStringLiteral("USB_045e_028e_%1000000").arg(i + 1)
+                          : QStringLiteral("/dev/input/js%1").arg(i));
+    const QString c = paths.at(2);
+    for (int i = 0; i < 3; ++i)
+    {
+        m_fake->list(paths.at(i), 0x045e, 0x028e, name, 0, quint64(i + 1));
+        q253Scan(name, i + 1);
+    }
+    QCOMPARE(q253Line(c), 2);
+    QCOMPARE(patchPads(name), 3);       // universes 1, 2, 3; C on 3
+    startRunning();
+    PadRun *run = m_doc->programmer()->padRun();
+    QStringList heard;
+    const QMetaObject::Connection listen = connect(m_doc->inputOutputMap(), &InputOutputMap::inputValueChanged, this,
+        [&heard](quint32 u, quint32 ch, uchar v) { heard << QString("u%1:ch%2=%3").arg(u).arg(ch).arg(v); });
+    auto unlisten = qScopeGuard([&]() { disconnect(listen); });
+    // C arms and holds LT.
+    QVERIFY(q253In(c, kPadLb, 255));
+    QVERIFY(q253In(c, kPadRb, 255));
+    QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
+    QCOMPARE(run->armedUniverse(), quint32(3));
+    QVERIFY(q253In(c, kPadRb, 0));
+    QVERIFY(q253In(c, kPadLb, 0));
+    QVERIFY(q253In(c, kPadLt, 255));
+    QTRY_VERIFY_WITH_TIMEOUT(heard.contains(QStringLiteral("u3:ch2=255")), 2000);
+
+    // The first pad goes: C moves to line 1, still universe 3's.
+    m_fake->unlist(paths.at(0));
+    q253Scan(name, 2);
+    QCOMPARE(q253Line(c), 1);
+    QCOMPARE(m_doc->inputOutputMap()->inputPatch(3)->input(), quint32(1));
+    QVERIFY2(run->isArmed() && run->armedUniverse() == 3,
+             qPrintable(QString("another pad's drop disarmed the runner: '%1'").arg(run->notice())));
+    // Its LT, held throughout, is still the safety: A plays.
+    QVERIFY(q253In(c, kPadA, 255));
+    QVERIFY(q253In(c, kPadA, 0));
+    QTRY_VERIFY2_WITH_TIMEOUT(commandCount(int(ShowControl::Go)) == 1,
+                              qPrintable(QString("C's LT + A after another pad's drop: '%1'").arg(run->notice())), 2000);
+
+    // Three of the four held; the second pad goes; the fourth stops.
+    heard.clear();
+    QVERIFY(q253In(c, kPadLb, 255));
+    QVERIFY(q253In(c, kPadRb, 255));
+    QTRY_VERIFY_WITH_TIMEOUT(heard.contains(QStringLiteral("u3:ch10=255")) && heard.contains(QStringLiteral("u3:ch11=255")), 2000);
+    m_fake->unlist(paths.at(1));
+    q253Scan(name, 1);
+    QCOMPARE(q253Line(c), 0);
+    QCOMPARE(commandCount(int(ShowControl::AllOff)), 0);
+    QVERIFY(q253In(c, kPadRt, 255));
+    QTRY_VERIFY2_WITH_TIMEOUT(commandCount(int(ShowControl::AllOff)) == 1,
+                              "a stop squeezed three of four across another pad's drop did not fire", 2000);
+    for (quint32 ch : { kPadRt, kPadLt, kPadRb, kPadLb })
+        QVERIFY(q253In(c, ch, 0));
 }
 
 void PadTraces_Test::triggerRest()

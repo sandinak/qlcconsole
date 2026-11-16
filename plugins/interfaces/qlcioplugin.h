@@ -719,6 +719,19 @@ public:
     { Q_UNUSED(input); return QString(); }
 
     /**
+     * Which device input line @p input reads now, as an id the plugin never
+     * gives another device: the same while the device stays (whatever its
+     * line becomes after another one goes), another once a different
+     * device is on the line -- a pad replaced where it was, or another
+     * shifted onto the line. The engine treats a patch whose device id
+     * changed as a pad lost and a new one plugged in (board Q253's fourth
+     * review). 0 when the plugin can't tell (the default): nothing is
+     * concluded from it.
+     */
+    virtual quint64 inputDeviceId(quint32 input) const
+    { Q_UNUSED(input); return 0; }
+
+    /**
      * Diagnostics, for the Controller test window: while on, report every
      * raw input every device reads -- patched or not -- through
      * inputDiagnostic(). Returns false when the plugin has none to give
@@ -787,13 +800,6 @@ signals:
      * re-read the plugin's current configuration.
      */
     void configurationChanged();
-
-    /** Input line @p input was reopened in place, on another device (a
-     *  controller switched off and on, re-enumerated, back from sleep): the
-     *  same line, so its patch stays, but what was held on it is not known
-     *  to be held -- some devices send their state again, some never do.
-     *  Emitted after configurationChanged(), for that line only. */
-    void inputReopened(quint32 input);
 
     /** targetProblems() has changed: the footer reads it again. Nothing is
      *  reconnected -- a device going quiet is not a new configuration. */
@@ -942,11 +948,12 @@ private:
 
 /* The interface's identity, bumped whenever its virtual table changes
    (review 13 L6: 0.4.8 added flushOutput(), forgetOutput() and the
-   closing-frame source; 0.4.9 inputDeviceLocation()): a plugin built
+   closing-frame source; 0.4.9 inputDeviceLocation(); 0.4.13
+   inputDeviceId()): a plugin built
    against an older one is refused
    by QPluginLoader -- it would call through the wrong slots -- rather than
    loaded. Every in-tree plugin names it with this macro. */
-#define QLCIOPlugin_iid "org.qlcconsole.QLCIOPlugin/0.4.9.1"
+#define QLCIOPlugin_iid "org.qlcconsole.QLCIOPlugin/0.4.13.1"
 
 Q_DECLARE_INTERFACE(QLCIOPlugin, QLCIOPlugin_iid)
 

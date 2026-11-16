@@ -415,12 +415,6 @@ public:
      *  made on it drops as controllerLost() -- its releases may never have
      *  come, so a held safety is no safety on the pad there now. */
     void forgetPad(quint32 universe);
-    /** The input on @p universe was reopened in place (the same line, maybe
-     *  another device that never sends its held state again): LT is no
-     *  safety until it is read again; the four stay as read, for the stop
-     *  (a fired stop stays fired); a chord its bumpers began is spent; the
-     *  walk's modifier lets go. The arm stays. */
-    void padReopened(quint32 universe);
     /** A walk's cue step restarts Focus this cue: its stop is no end. */
     bool isRestarting() const { return m_restarting; }
 
@@ -734,27 +728,10 @@ private:
         /** A trigger was down with both bumpers (the stop, or one on its
          *  way): no arm until both bumpers are up and squeezed afresh. */
         bool spent = false;
-        /** LT read before its pad was reopened in place: still one of the
-         *  four for the stop, but no safety until LT is read again (a pad
-         *  that never sends its held state again must not GO on it). */
-        bool ltStale = false;
-        /** The same for the bumpers: held as read before the reopen, never
-         *  read since (a chord they make is spent until let go). */
-        bool lbStale = false;
-        bool rbStale = false;
-        /** The words for what was held over a reopen and not read since,
-         *  in control tokens ("{LT}", "{LB} and {RB}"); empty: none. */
-        QString staleText() const;
-        /** LT held as the GO family's safety (and LT + Menu's). */
-        bool safety() const { return lt.isDown() && !ltStale; }
         bool anyTrigger() const { return lt.isDown() || rt.isDown(); }
         bool all() const { return lb && rb && lt.isDown() && rt.isDown(); }
     };
     QHash<quint32, Held> m_held;
-    /** "The controller came back with {LT} held: press it once, then
-     *  @p then" -- a control a reopened pad never sent again blocks what
-     *  the operator tried (third review of Q253). */
-    void tellStale(const Held &h, const QString &then);
     /** The event watchStop() last read (and RT's press in it), for handle()
      *  to take instead of reading it again. */
     struct Noted

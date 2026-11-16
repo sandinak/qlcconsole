@@ -221,19 +221,22 @@ public:
      *  channelMap(), setChannelMap()), and the mutex is not recursive. */
     QMutex m_inputBufferMutex;
     QHash<quint32, InputValue> m_inputBuffer;
-    /** Raised by forgetBufferedInput(): a batch flushed before it is the
-     *  old device's and is not delivered (guarded by m_inputBufferMutex). */
-    quint64 m_inputGeneration = 0;
+    /** Frames flushed on a universe thread and not yet delivered on the
+     *  GUI thread, oldest first (guarded by m_inputBufferMutex): kept here,
+     *  not in a queued call, so deliverNow() can deliver them first. */
+    QList<QHash<quint32, InputValue>> m_pendingFrames;
 
-    /** The line's device was replaced in place (QLCIOPlugin::inputReopened()):
-     *  values read from the old one and not yet delivered -- buffered, or
-     *  flushed and queued for the GUI thread -- are dropped, so none of them
-     *  reaches a receiver as the new device's (third review of Q253). */
-    void forgetBufferedInput();
+    /** Deliver, now and in order, every value read and not yet delivered
+     *  -- the frames flushed and queued, then the buffer -- before the
+     *  device behind this patch is treated as gone (its stop press still
+     *  counts; board Q253's fourth review). GUI thread. */
+    void deliverNow();
 
 private:
     /** Emit inputValueChanged() for each of @p values (GUI thread). */
     void emitValues(const QHash<quint32, InputValue> &values);
+    /** The oldest flushed frame, delivered (the universe thread's queued call). */
+    void deliverPendingFrame();
 };
 
 /** @} */
