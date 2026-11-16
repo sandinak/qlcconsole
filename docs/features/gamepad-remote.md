@@ -99,6 +99,14 @@ Nothing shows when there is no hit to fire.
 The last three are the remote's own. The console's controller does not
 use View, the D-pad or LS in its Run role, so nothing clashes.
 
+The console's controller has one more state, **Pad: FOCUS** (blue): a
+[venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show) started from
+it, armed, with LT + Menu. While it is in FOCUS that controller plays no
+cue and LT + Menu again finishes the focus (the console's
+[Pad Run](show-control.md#go-from-the-game-controller-pad-run) rules);
+the list stays on the focus cue until a GO moves it on, from the
+console's controller (LT + A), the laptop or this page.
+
 **On the console's own controller, while a follow spot plays** (see
 [Moving a follow spot](stage-targets.md#moving-a-follow-spot))
 

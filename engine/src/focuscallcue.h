@@ -41,11 +41,13 @@ class Doc;
  * A focus-call cue in a cue list (docs/design/FOCUS_REFINE_DESIGN.md section 7), for
  * pre-show: GO onto it plays the cue's own looks -- a preset, the work
  * light, the first call's lights parked -- and ARMS the show's focus calls.
- * Nothing steps yet: the voice says "Focus calls ready. Press Start to
+ * Nothing steps yet: the voice says "Venue focus ready. Press Start to
  * begin." and the crew, hearing it through the headsets, gets set. The
  * controller's Start (Menu) begins them, in Operate, with the voice and the
- * blink together; leaving them (Menu, or past the last call) goes on with
- * the list: the next cue.
+ * blink together -- in the pad's Run role, armed and with LT held (PadRun
+ * rule 6). Leaving them (Menu, past the last call, the laptop) never moves
+ * the list: it stays on the focus cue, done, until the operator moves it
+ * on (GO; the pad's LT + A).
  *
  * Watches the Show Tree's cue lists as they play (their chasers' current
  * step). Owned by ProgrammerController, which routes Start to it while it
@@ -104,14 +106,29 @@ public:
      *  test stands in for playing lists with @p probe (empty: the tree). */
     void setRunningCueProbe(const std::function<quint32(quint32)> &probe) { m_runningProbe = probe; }
 
-    /** What is said when armed. */
+    /** What is said when armed (the Tools role: Start begins). */
     static QString armedPhrase();
+    /** What is said when armed now: armedPhrase(), or in the pad's Run
+     *  role how the pad starts it (arm, then LT + Menu). */
+    QString readyPhrase() const;
+    /** The pad is in the Run role (PadRun): the words say LT + Menu. */
+    void setRunRole(bool on);
+    bool isRunRole() const { return m_runRole; }
+
+    /** NamingVenue: give up the start (the pad's LT + Menu again) -- the cue
+     *  is armed again, waiting. False when nothing is being named. */
+    bool cancelStart();
+
+    /** The calls were finished by the operator and the list is still on the
+     *  focus cue: it waits there for the next GO, never going on by itself. */
+    bool isDone() const { return m_done; }
 
 signals:
     void stateChanged(FocusCallCue::State state);
     void announce(const QString &text, int priority = ControllerScheme::ConfirmPriority);
-    /** The calls are done: the list goes on (GO on its chaser). */
-    void continueRequested(quint32 chaserId);
+    /** isDone() changed: the calls finished with the list on the cue, or
+     *  the list moved off it since. */
+    void doneChanged(bool done);
     /** Start: confirm the venue on the laptop (board Q129) -- "Still at
      *  @p current?" (empty: none applied, "Which venue is this?") -- and,
      *  if nobody answers in @p timeoutMs, a new venue named @p fallback. */
@@ -124,6 +141,7 @@ private:
     void stepped(quint32 chaserId);
     void sessionStopped();
     quint32 chaserOf(quint32 listId) const;
+    void setDone(bool done);
 
 private:
     Doc *m_doc;
@@ -133,6 +151,9 @@ private:
     quint32 m_cue = 0xFFFFFFFF;
     quint32 m_list = 0xFFFFFFFF;
     quint32 m_finished = 0xFFFFFFFF;    ///< the focus-call cue just done
+    quint32 m_finishedList = 0xFFFFFFFF;
+    bool m_done = false;
+    bool m_runRole = false;
     QList<QPointer<Chaser>> m_watched;
     int m_askTimeout = 8000;
     std::function<quint32(quint32)> m_runningProbe;

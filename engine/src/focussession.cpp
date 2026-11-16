@@ -555,6 +555,13 @@ void FocusSession::nextCall()
         return;
     if (m_options.endAfterLastCall && m_callIndex == m_calls.size() - 1)
     {
+        // The pad's Run role: a step never ends it; the words say what does.
+        const QString hold = m_lastCallHold ? m_lastCallHold() : QString();
+        if (!hold.isEmpty())
+        {
+            emit announce(hold, ControllerScheme::ConfirmPriority);
+            return;
+        }
         // The last call done: leave (asking about anything unsaved).
         emit announce(tr("Last call done."), ControllerScheme::ConfirmPriority);
         emit exitRequested();

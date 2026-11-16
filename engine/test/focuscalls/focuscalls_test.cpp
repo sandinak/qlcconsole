@@ -864,7 +864,7 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
     FocusSession *s = m_doc->programmer()->focusSession();
     QSignalSpy said(m_doc->programmer(), &ProgrammerController::operatorAnnounce);
-    QSignalSpy goOn(fcc, &FocusCallCue::continueRequested);
+    QSignalSpy done(fcc, &FocusCallCue::doneChanged);
     quint32 running = focus;                 // the list is on the focus cue
     fcc->setRunningCueProbe([&running](quint32) { return running; });
     m_doc->setMode(Doc::Operate);
@@ -895,7 +895,9 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     s->setTrigger(1, 1.0f);
     QCOMPARE(exit.count(), 1);
     QCOMPARE(s->callIndex(), 1);
-    // The GO it goes on with takes the one GO path (RUN_COMMANDS.md).
+    /* Leaving never moves the list (PadRun rule 6, 2026-11-15; it used to
+       GO on): no command at all, and the cue is done, waiting for the
+       operator's GO. */
     QList<ShowControl::Route> routes;
     ShowControl *sc = m_doc->showControl();
     sc->setRunHandler([&routes, sc](const ShowControl::Request &r, ShowControl::Route route) {
@@ -904,29 +906,36 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     });
     auto unhook = qScopeGuard([sc]() { sc->setRunHandler(nullptr); });
     s->finish();
-    // Leaving goes on with the list.
     QCOMPARE(fcc->state(), FocusCallCue::Idle);
-    QCOMPARE(routes, QList<ShowControl::Route>({ ShowControl::RouteFocusCall }));
-    QCOMPARE(goOn.count(), 1);
-    QCOMPARE(goOn.first().at(0).toUInt(), st->cueList(list)->chaser);
-    // ...and does not arm the same cue again as the list moves off it.
+    QVERIFY(routes.isEmpty());
+    QVERIFY(fcc->isDone());
+    QCOMPARE(done.count(), 1);
+    QCOMPARE(said.last().at(0).toString(), QString("Venue focus done. GO for the next cue."));
+    // ...and the cue is not armed again while the list stays on it.
     fcc->cueCurrent(list, focus);
     QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    QVERIFY(fcc->isDone());
+    // The operator's GO moves the list on: done no longer.
+    fcc->cueCurrent(list, house);
+    QVERIFY(!fcc->isDone());
+    QCOMPARE(done.count(), 2);
 
-    // Gap 5: the list moved on by hand meanwhile -- no GO (it would skip).
+    // Gap 5: the list moved on by hand meanwhile -- not done, no command.
     fcc->cueCurrent(list, house);
     fcc->cueCurrent(list, focus);
     QVERIFY(fcc->start());
     running = house;
     s->finish();
-    QCOMPARE(goOn.count(), 1);
-    // Stopped from outside (not Menu): said, and no GO.
+    QVERIFY(!fcc->isDone());
+    QVERIFY(routes.isEmpty());
+    // Stopped from outside (not Menu): said, not done, and no command.
     running = focus;
     fcc->cueCurrent(list, house);
     fcc->cueCurrent(list, focus);
     QVERIFY(fcc->start());
     s->stop();
-    QCOMPARE(goOn.count(), 1);
+    QVERIFY(!fcc->isDone());
+    QVERIFY(routes.isEmpty());
     QCOMPARE(said.last().at(0).toString(), QString("Venue focus ended."));
     QCOMPARE(said.last().at(1).toInt(), int(ControllerScheme::ImportantPriority));
     fcc->cueCurrent(list, house);
@@ -2305,7 +2314,8 @@ void FocusCalls_Test::theDpadSaysTheCrewsWords()
    controller's Start" -- here through real playback: ShowControl's GO, the
    cue list's chaser stepped by the MasterTimer, FocusCallCue watching it
    (MasterTimer::functionStarted, Chaser::currentStepChanged). Leaving the
-   calls goes on with the list; a list moved on by hand lets it go; a
+   calls leaves the list on the cue until the next GO; a list moved on by
+   hand lets it go; a
    skipped focus-call cue is passed over by GO. */
 void FocusCalls_Test::aFocusCallCueArmsOnARealGo()
 {
@@ -2365,7 +2375,6 @@ void FocusCalls_Test::aFocusCallCueArmsOnARealGo()
     FocusSession *s = pc->focusSession();
     QSignalSpy states(fcc, &FocusCallCue::stateChanged);
     QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
-    QSignalSpy goOn(fcc, &FocusCallCue::continueRequested);
     auto readySaid = [&said]() {
         int n = 0;
         for (const QList<QVariant> &l : said)
@@ -2399,18 +2408,24 @@ void FocusCalls_Test::aFocusCallCueArmsOnARealGo()
     QVERIFY(s->isRunningCalls());
     play(5);
     QCOMPARE(st->runningCue(list), focus);
-    // RT on the last call asks to leave; leaving (the panel's finish) goes
-    // on with the list -- a real GO, the next cue playing.
+    /* RT on the last call asks to leave (the Tools role); leaving (the
+       panel's finish) leaves the list on the focus cue, done, until the
+       operator's GO (PadRun rule 6: it used to GO on by itself). */
     QSignalSpy exit(s, &FocusSession::exitRequested);
     s->setTrigger(1, 1.0f);
     s->setTrigger(1, 0.0f);
     QCOMPARE(exit.count(), 1);
     s->finish();
-    QCOMPARE(goOn.count(), 1);
-    QCOMPARE(goOn.first().at(0).toUInt(), chaser);
+    play(20);
+    QCOMPARE(st->runningCue(list), focus);
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    QVERIFY(fcc->isDone());
+    QCOMPARE(readySaid(), 1);                   // not armed again while it stays
+    // The operator's GO: the next cue, and done no longer.
+    QVERIFY(command(ShowControl::Go));
     play(5);
     QCOMPARE(st->runningCue(list), show);
-    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    QVERIFY(!fcc->isDone());
     QCOMPARE(readySaid(), 1);                   // not armed again on the way off
 
     // BACK onto it by hand: armed again; GO by hand before Start lets it go.

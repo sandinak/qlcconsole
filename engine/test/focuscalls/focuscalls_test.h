@@ -69,7 +69,7 @@ private slots:
     void anEditElsewhereGoesToTheVenue();
     /** A focus-call cue: GO arms it (said once), Start begins the calls in
      *  Operate, triggers step, past the last call it asks to leave, and
-     *  leaving goes on with the list. */
+     *  leaving leaves the list on the cue, done, until the operator's GO. */
     void aFocusCallCueArmsThenStartsOnTheController();
     /** Q120: no venue applied, the laptop asks; a name, or after a few
      *  seconds today's date, said. */

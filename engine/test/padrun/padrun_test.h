@@ -92,6 +92,37 @@ private slots:
     /** The controller lost while armed: disarmed, and the screen says why. */
     void aLostPadDisarms();
 
+    /* Venue focus from the pad (rule 6, 2026-11-15). */
+    /** A venue focus cue waiting, the pad not armed, ARMED, and in FOCUS:
+     *  every control alone, pressed and held past every hold, starts and
+     *  ends no focus, plays nothing and leaves the state as it was. In
+     *  FOCUS, LT + Menu in any order leaves the call where it was, an LT
+     *  tap steps back one call on its release, RT steps on as before. */
+    void theVenueFocusSweep();
+    /** Not armed, LT + Menu is refused, saying to arm first; ARMED, LT +
+     *  Menu is FOCUS (its words, colour and light, one stateChanged()); Menu
+     *  alone does nothing; LT + Menu again ends it (no command) and the
+     *  pad is ARMED, the list still on the focus cue, done; LT + A is the
+     *  GO that moves it on. */
+    void ltMenuGoesIntoAndOutOfFocus();
+    /** RT past the last call says "LT + Menu to finish" and ends nothing. */
+    void rtPastTheLastCallAsks();
+    /** The venue named on the laptop first: FOCUS meanwhile (LT + A plays
+     *  nothing); LT + Menu gives the start up, ARMED, the cue waiting again;
+     *  named, the calls run without passing through ARMED. */
+    void focusWhileTheVenueIsNamed();
+    /** In FOCUS the focus's own chords (LB + RB, LT, RT, LT + RT, the
+     *  bumpers with one trigger) are no stop; all four are: STOPPED, and
+     *  the focus ending after it does not re-arm. */
+    void theStopInFocus();
+    /** The laptop's Start and the laptop's end of focus (armed, not armed,
+     *  and in the Tools role): no command, the list stays; armed before, the
+     *  pad is ARMED after. */
+    void theLaptopsFocusMovesNoList();
+    /** The pad unpatched and gone in FOCUS: not FOCUS, not armed, said;
+     *  back mid-focus it is FOCUS; the end leaves it not armed. */
+    void aLostPadInFocus();
+
     /* Walking the show (Q192). */
     /** The walking map by role, the same for both pads. */
     void walkMapByRole();
@@ -206,6 +237,11 @@ private:
     quint32 hitWithLayer(ShowTree::HitScope scope, quint32 placeId, const QString &name);
     /** A pad in the Run role, armed or not as asked; Operate. */
     PadRun *runPad(bool armed);
+    /** After makeShow(): two focus calls (the fronts, the backs, to a
+     *  target), Opening a venue focus cue the list is on (a probe stands
+     *  in for it playing), armed, Operate; the panel's part done by
+     *  finishing on the session's exitRequested(). */
+    void makeFocusCue();
 
 private:
     Doc *m_doc = nullptr;
@@ -214,6 +250,7 @@ private:
     QList<quint32> m_fronts, m_backs;
     ShowTree::Target m_frontTarget, m_backTarget;
     quint32 m_list = 0, m_cue1 = 0, m_cue2 = 0, m_empty = 0, m_layer1 = 0, m_layer2 = 0;
+    quint32 m_running = 0;         // the cue the probe says the list is on
 };
 
 #endif

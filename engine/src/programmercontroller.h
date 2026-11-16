@@ -276,6 +276,9 @@ public:
     /** @p text with its control tokens ("{A} keeps it") in the words of
      *  the pad the tools use. */
     QString padText(const QString &text) const;
+    /** The pad on @p universe uses the controller tools now (the Run role
+     *  starting a venue focus from it): it is their owner, if none is. */
+    void claimController(quint32 universe);
 
     /** Board Q170, a PlayStation pad's touchpad as a trackpad: a finger
      *  dragged right across the whole pad nudges pan this many degrees
@@ -897,6 +900,11 @@ private:
     ControllerScheme::LongPress m_holdB;
     /** Hold A answering "Still at <venue>?" yes (board Q230). */
     ControllerScheme::LongPress m_holdVenueA { ControllerScheme::keepAllHoldSeconds() };
+    /** FOCUS (PadRun rule 6): LT is the exit chord's safety too, so its
+     *  step back a call goes on its release, and not when Menu was
+     *  pressed while it was held (or held as it went down). */
+    ControllerScheme::TriggerButton m_focusLt;
+    bool m_focusLtChord = false;
     QColor m_padLight;
     PadTriggers::State m_padTriggers;
     bool m_padTriggersSent = false;

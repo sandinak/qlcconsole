@@ -177,7 +177,7 @@ the running calls with the Deck's sticks and buttons, in the same scheme
 
 | Do | Controller | Keyboard |
 |---|---|---|
-| Next / previous focus call | RT / LT | PgDn / PgUp |
+| Next / previous focus call | RT / LT (the pad's Run role: LT on its release, never with Menu) | PgDn / PgUp |
 | Next / previous fixture | RB / LB | ] / [ (or Tab / ⇧Tab) |
 | One fixture / the whole call (scope) | Y | G |
 | Nudge (coarse, fine) | Left stick, right stick | Arrows (0.1°; ⇧: 1°) |
@@ -198,7 +198,7 @@ the running calls with the Deck's sticks and buttons, in the same scheme
 | Mark this light dead (or not) | View + X | D |
 | Hold every light where it is (again: release) | Both stick clicks | H |
 | Go to a light | Click it on the plot | |
-| Leave | Menu | Esc |
+| Leave | Menu (the pad's Run role: hold LT + Menu) | Esc |
 
 Held, a D-pad arm keeps zooming or focusing until you let go; the
 bumpers and triggers step once a press. **A** must be held for a full
@@ -290,7 +290,7 @@ PlayStation words:
 | LT / RT | L2 / R2 | L2 / R2 | Previous / next call (Focus this cue: layer) |
 | LS / RS (stick clicks) | L3 / R3 | L3 / R3 | Second reference / say the light; both at once hold every light |
 | View | Share | Create | Undo the last save |
-| Menu | Options | Options | Leave (and start a venue focus cue) |
+| Menu | Options | Options | Leave, and start a venue focus cue (in the pad's Run role: armed, hold LT + Menu, for both) |
 | Xbox button | PS button | PS button | Switch the pad on |
 | (none) | Touchpad | Touchpad | Fine aim, zoom and focus (below) |
 
@@ -396,10 +396,18 @@ are one checklist:
 2. **GO** onto it in Operate. The cue's looks play and the focus calls are
    **armed**: nothing moves yet. The laptop says "Venue focus ready.
    Press Start to begin." and the cue page, the Run tab and the footer say
-   **Venue focus: waiting for the controller**.
-3. When the crew is ready, press **Start** (Menu) on the controller — or
-   **Start Venue Focus** on the Run tab, or **⌘↩** (GO's key: while the calls
-   wait, it begins them rather than going on). The first call comes up,
+   **Venue focus: waiting for the controller**. With the controller in
+   its Run role ([Pad Run](show-control.md#go-from-the-game-controller-pad-run))
+   they say how it starts there: armed, hold LT and press Menu.
+3. When the crew is ready, start the calls on the controller — in the
+   Tools role, press **Start** (Menu); in the Run role, arm (hold LB +
+   RB) and then hold **LT** and press **Menu**. Two controls, never one:
+   Menu alone, armed, does nothing to the focus (the Pad chip says
+   "LT + Menu starts the venue focus"), and not armed the start is
+   refused, saying to arm first. The pad is then in **Pad: FOCUS** (blue)
+   on the Run tab, the footer and its light bar. Or press **Start Venue
+   Focus** on the Run tab, or **⌘↩** (GO's key: while the calls wait, it
+   begins them rather than going on). The first call comes up,
    blinking, as the voice says it. First the laptop confirms the venue
    (for a show that has been saved: a venue lives beside the show file): "Still at Lincoln HS? Hold A on the pad for yes, or answer on the laptop, or wait for a new
    venue." (with none applied: "Name this venue on the laptop, or wait
@@ -413,11 +421,23 @@ are one checklist:
    date, so an old room is never corrected by mistake. Typing holds the
    clock. With no venue applied there is nothing to confirm, so A is not
    used for it.
-4. Work the calls as below. **Menu**, or **RT** on the last call, ends
-   them (asking about anything unsaved) and the list goes on to the next
-   cue — only if it is still on the focus cue. Ended any other way (say,
+4. Work the calls as below. To finish: in the Tools role **Menu**, or
+   **RT** on the last call; in the Run role hold **LT** and press **Menu**
+   (a Menu tap does nothing, and RT on the last call only says "Last
+   call. Hold LT and press Menu to finish."). The laptop asks about
+   anything unsaved, as always, and a controller that was armed is
+   **ARMED** again. The list **does not move**: it stays on the focus
+   cue, and the Run tab and the footer say **Venue focus done: LT + A
+   for the next cue** (Tools role: **GO for the next cue**) until you move
+   it on, with LT + A on the controller or GO on the laptop. Ending from
+   the laptop's panel leaves it there too. Ended any other way (say,
    Focus this cue started), the voice says "Venue focus ended." and the
    list stays where it is.
+   In **Pad: FOCUS** no cue plays from the controller (no GO, Back, Sub
+   GO, Sub Back or hit), the focus has the pad exactly as below, and the
+   emergency stop (all four: LB + RB + LT + RT) still stops everything.
+   If the controller goes away mid-focus, the focus is held as below and
+   the controller comes back not armed.
 
 Starting Quick focus, Venue focus or Focus this cue while another of them
 has work not saved is refused, saying what to do first; nothing is thrown

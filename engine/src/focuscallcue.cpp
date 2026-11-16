@@ -23,7 +23,6 @@
 #include "venuecorrections.h"
 #include "focuscallcue.h"
 #include "focussession.h"
-#include "showcontrol.h"
 #include "mastertimer.h"
 #include "focuscalls.h"
 #include "chaser.h"
@@ -49,6 +48,12 @@ FocusCallCue::FocusCallCue(Doc *doc, FocusSession *session, FocusCalls *calls, Q
         connect(m_doc->masterTimer(), &MasterTimer::functionStopped, this, [this](quint32 id) {
             if (m_state == Armed && id == chaserOf(m_list))
                 disarm();
+            // Done, and the list stopped: nothing waits on the cue now.
+            if (m_finishedList != kInvalid && id == chaserOf(m_finishedList))
+            {
+                m_finished = m_finishedList = kInvalid;
+                setDone(false);
+            }
         }, Qt::QueuedConnection);
     }
     if (m_session != nullptr)
@@ -63,7 +68,9 @@ FocusCallCue::FocusCallCue(Doc *doc, FocusSession *session, FocusCalls *calls, Q
         connect(m_doc, &Doc::clearing, this, [this]() {
             m_watched.clear();
             m_cue = m_list = kInvalid;
+            m_finished = m_finishedList = kInvalid;
             setState(Idle);
+            setDone(false);
         });
 }
 
@@ -74,6 +81,26 @@ FocusCallCue::~FocusCallCue()
 QString FocusCallCue::armedPhrase()
 {
     return tr("Venue focus ready. Press Start to begin.");
+}
+
+QString FocusCallCue::readyPhrase() const
+{
+    // The Run role (PadRun rule 6): the start takes the arm and the safety.
+    return m_runRole ? tr("Venue focus ready. Armed, hold {LT} and press {Menu} to begin.")
+                     : armedPhrase();
+}
+
+void FocusCallCue::setRunRole(bool on)
+{
+    m_runRole = on;
+}
+
+void FocusCallCue::setDone(bool done)
+{
+    if (done == m_done)
+        return;
+    m_done = done;
+    emit doneChanged(done);
 }
 
 quint32 FocusCallCue::chaserOf(quint32 listId) const
@@ -115,8 +142,12 @@ void FocusCallCue::cueCurrent(quint32 listId, quint32 cueId)
     if (m_state == Running)
         return;     // the calls run on; the list waits for them
     const bool focus = cueId != kInvalid && m_doc->showTree()->isCueFocusCall(cueId);
-    if (cueId != m_finished)
-        m_finished = kInvalid;
+    if (cueId != m_finished && m_finished != kInvalid && listId == m_finishedList)
+    {
+        // The list moved off the cue that was done: the next GO went.
+        m_finished = m_finishedList = kInvalid;
+        setDone(false);
+    }
     if (!focus)
     {
         if (m_state == Armed && listId == m_list)
@@ -132,7 +163,7 @@ void FocusCallCue::cueCurrent(quint32 listId, quint32 cueId)
     m_list = listId;
     setState(Armed);
     // The crew's cue, through the headsets: nothing moves until Start.
-    emit announce(armedPhrase());
+    emit announce(readyPhrase());
 }
 
 bool FocusCallCue::start(QString *why)
@@ -193,13 +224,25 @@ bool FocusCallCue::useVenue(const QString &name)
         emit announce(wanted.isEmpty() ? tr("New venue, named for today.")
                                        : tr("Venue %1.").arg(applied));
     }
-    setState(Armed);
+    /* Straight on to the calls: never through Armed, which would read as
+       the focus over (PadRun rule 6) between the name and the calls. */
     QString why;
     if (!beginCalls(&why))
     {
+        setState(Armed);
         emit announce(why, ControllerScheme::ImportantPriority);
         return false;
     }
+    return true;
+}
+
+bool FocusCallCue::cancelStart()
+{
+    if (m_state != NamingVenue)
+        return false;
+    m_askTimer->stop();
+    setState(Armed);
+    emit announce(tr("Venue focus not started."), ControllerScheme::ImportantPriority);
     return true;
 }
 
@@ -259,12 +302,12 @@ void FocusCallCue::sessionStopped()
 {
     if (m_state != Running)
         return;
-    const quint32 chaser = chaserOf(m_list);
     const quint32 running = m_runningProbe ? m_runningProbe(m_list)
                                            : m_doc->showTree()->runningCue(m_list);
     const bool stillOnIt = running == m_cue;
     const bool asked = m_session->endedByOperator();
     m_finished = m_cue;
+    m_finishedList = m_list;
     m_cue = m_list = kInvalid;
     setState(Idle);
     /* Ended by something else (Refine started, the show closed): said, and
@@ -274,19 +317,14 @@ void FocusCallCue::sessionStopped()
         emit announce(tr("Venue focus ended."), ControllerScheme::ImportantPriority);
         return;
     }
-    /* Done: on with the list -- only if it is still on this cue. Moved on
-       by hand meanwhile, a GO would skip a cue. */
-    if (chaser != kInvalid && stillOnIt)
-    {
-        emit continueRequested(chaser);
-        if (ShowControl *sc = m_doc->showControl())
-        {
-            ShowControl::Request r;
-            r.command = ShowControl::Go;
-            r.chaser = chaser;
-            sc->run(r, ShowControl::RouteFocusCall);
-        }
-    }
+    /* Done: the list stays on the focus cue until the operator moves it on
+       (PadRun rule 6, 2026-11-15) -- from the pad, the laptop or anywhere,
+       the list never goes on by itself. Said, and shown, as waiting. */
+    if (!stillOnIt)
+        return;
+    setDone(true);
+    emit announce(m_runRole ? tr("Venue focus done. {LT} and {A} for the next cue.")
+                            : tr("Venue focus done. GO for the next cue."));
 }
 
 void FocusCallCue::setState(State state)

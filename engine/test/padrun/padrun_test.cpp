@@ -60,6 +60,11 @@
 #include "monitorproperties.h"
 #include "venuecorrections.h"
 #include "stagetarget.h"
+#include "focuscallcue.h"
+#include "focuscalls.h"
+#include "focussession.h"
+#include "fixturegroup.h"
+#include "qlcpoint.h"
 
 namespace
 {
@@ -1135,6 +1140,515 @@ void PadRun_Test::aLostPadDisarms()
     run->setEnabled(false);
     QVERIFY(!run->isArmed());
     with(kLT, kA);
+    QVERIFY(m_runs.isEmpty());
+}
+
+/*****************************************************************************
+ * Venue focus from the pad (rule 6)
+ *****************************************************************************/
+
+void PadRun_Test::makeFocusCue()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    MonitorProperties *props = m_doc->monitorProperties();
+    QList<quint32> all = m_fronts + m_backs;
+    for (int i = 0; i < all.size(); ++i)
+        props->setFixturePosition(all.at(i), 0, 0, QVector3D(2000.0f * (i + 1), 2000.0f, 5.0f));
+    auto group = [this](const QString &name, const QList<quint32> &ids) {
+        FixtureGroup *g = new FixtureGroup(m_doc);
+        g->setName(name);
+        g->setSize(QSize(int(ids.size()), 1));
+        for (int i = 0; i < ids.size(); ++i)
+            g->assignFixture(ids.at(i), QLCPoint(i, 0));
+        m_doc->addFixtureGroup(g);
+        return g->id();
+    };
+    StageTarget *dsc = props->addStageTarget();
+    dsc->setName("DSC");
+    dsc->setPosition(QVector3D(5.0f, 6.0f, 0.0f));
+    FocusCall c1;
+    c1.groups << group("Fronts", m_fronts);
+    c1.target.kind = FocusSession::Reference::Target;
+    c1.target.id = dsc->id();
+    FocusCall c2 = c1;
+    c2.groups = { group("Backs", m_backs) };
+    pc->focusCalls()->setCalls({ c1, c2 });
+    QVERIFY(m_doc->showTree()->setCuesFocusCall({ m_cue1 }, true));
+    m_running = m_cue1;
+    pc->focusCallCue()->setRunningCueProbe([this](quint32) { return m_running; });
+    // The panel's part: Leave asks about unsaved work, then finishes.
+    connect(pc->focusSession(), &FocusSession::exitRequested, pc->focusSession(), &FocusSession::finish);
+    m_doc->setMode(Doc::Operate);
+    pc->focusCallCue()->cueCurrent(m_list, m_cue1);
+    QCOMPARE(pc->focusCallCue()->state(), FocusCallCue::Armed);
+}
+
+void PadRun_Test::theVenueFocusSweep()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    // Every button and trigger the Xbox profile has, by its role.
+    QMap<quint32, QString> roles = xboxRoles();
+    const QMap<quint32, QString> more = {
+        { 40, "ls" }, { 41, "guide" }, { 42, "dpad_down" }, { 43, "dpad_left" }, { 44, "dpad_right" } };
+    for (auto it = more.begin(); it != more.end(); ++it)
+        roles.insert(it.key(), it.value());
+    stub->m_channelRoles = roles;
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    FocusSession *s = pc->focusSession();
+    run->setEnabled(true);
+    run->setRoleChordMs(30);
+    QSignalSpy exits(s, &FocusSession::exitRequested);
+
+    const char *names[] = { "not armed", "ARMED", "FOCUS" };
+    for (int mode = 0; mode < 3; ++mode)
+    {
+        if (mode == 1)
+            arm(true);
+        if (mode == 2)
+        {
+            with(kLT, kMenu);
+            QCOMPARE(run->state(), PadRun::Focus);
+        }
+        const PadRun::State state = run->state();
+        const FocusCallCue::State cue = fcc->state();
+        const bool armed = run->isArmed();
+        auto check = [&](const QString &what) {
+            QVERIFY2(run->state() == state, qPrintable(what + ": " + run->roleText()));
+            QVERIFY2(fcc->state() == cue, qPrintable(what + ": the focus started or ended"));
+            QVERIFY2(run->isArmed() == armed, qPrintable(what + ": the arm changed"));
+            QVERIFY2(m_runs.isEmpty(), qPrintable(what + ": a command went to run()"));
+            QVERIFY2(exits.isEmpty(), qPrintable(what + ": the focus was asked to end"));
+            QVERIFY2(s->isActive() == (mode == 2), qPrintable(what));
+            QVERIFY2(run->isEnabled(), qPrintable(what));
+        };
+        for (auto it = roles.begin(); it != roles.end(); ++it)
+        {
+            const quint32 ch = it.key();
+            const QString what = QString("%1, %2").arg(names[mode], it.value());
+            // A press, then a hold past every hold time, then the release.
+            press(ch);
+            check(what + " pressed");
+            hold(ch, true);
+            QTest::qWait(60);
+            check(what + " held");
+            hold(ch, false);
+            check(what + " let go");
+            if (ch == kMenu)
+            {
+                // Menu alone says what starts or ends it.
+                const QString n = run->notice();
+                if (mode == 0)
+                    QVERIFY2(n.contains("Not armed. To start the venue focus, hold LB and RB to arm, then LT + Menu."),
+                             qPrintable(n));
+                else if (mode == 1)
+                    QVERIFY2(n.contains("disarm first") && n.contains("LT + Menu starts the venue focus"),
+                             qPrintable(n));
+                else
+                    QVERIFY2(n.contains("hold LT and press Menu to finish it"), qPrintable(n));
+            }
+        }
+        // View + Menu held past the role chord's time: in FOCUS, nothing.
+        if (mode == 2)
+        {
+            hold(kView, true);
+            hold(kMenu, true);
+            QTest::qWait(80);
+            hold(kMenu, false);
+            hold(kView, false);
+            check("FOCUS, View + Menu held");
+
+            /* The exit chord never moves the focus: LT + Menu, held and let
+               go in either order, leaves the call where it was -- here with
+               the laptop's prompt answered Cancel, so the focus goes on.
+               A fresh focus first: the sweep left the target page on with
+               the target moved, which holds the calls (by design). */
+            s->stop();
+            QCOMPARE(run->state(), PadRun::Armed);
+            m_running = m_empty;
+            fcc->cueCurrent(m_list, m_empty);
+            m_running = m_cue1;
+            fcc->cueCurrent(m_list, m_cue1);
+            with(kLT, kMenu);
+            QCOMPARE(run->state(), PadRun::Focus);
+            exits.clear();
+            QVERIFY(disconnect(s, &FocusSession::exitRequested, s, &FocusSession::finish));
+            auto diag = [&]() {
+                return QString("call %1, pc holding %2, session holding %3, target page %4, target moved %5, "
+                               "state %6, cue %7")
+                    .arg(s->callIndex()).arg(pc->isHolding()).arg(s->isHolding()).arg(s->isTargetPage())
+                    .arg(s->targetMoved()).arg(run->roleText()).arg(int(fcc->state()));
+            };
+            // First an LT tap on its own, before any chord: back one call, on the release.
+            s->setCallIndex(1);
+            axis(kLT, 255);
+            QVERIFY2(s->callIndex() == 1, qPrintable("LT down: " + diag()));
+            axis(kLT, 0);
+            QVERIFY2(s->callIndex() == 0, qPrintable("LT tap, before the chords: " + diag()));
+            s->setCallIndex(1);
+            const QList<QList<QPair<quint32, bool>>> orders = {
+                { { kLT, true }, { kMenu, true }, { kMenu, false }, { kLT, false } },
+                { { kLT, true }, { kMenu, true }, { kLT, false }, { kMenu, false } },
+                { { kMenu, true }, { kLT, true }, { kLT, false }, { kMenu, false } },
+                { { kMenu, true }, { kLT, true }, { kMenu, false }, { kLT, false } } };
+            int asked = 0;
+            for (int o = 0; o < orders.size(); ++o)
+            {
+                for (const QPair<quint32, bool> &step : orders.at(o))
+                    step.first == kLT ? axis(kLT, step.second ? 255 : 0) : hold(kMenu, step.second);
+                const QString what = QString("FOCUS, LT + Menu, order %1").arg(o + 1);
+                QVERIFY2(s->callIndex() == 1, qPrintable(what + QString(": call %1").arg(s->callIndex())));
+                QVERIFY2(run->state() == PadRun::Focus, qPrintable(what));
+                QVERIFY2(m_runs.isEmpty(), qPrintable(what));
+                // LT held as Menu went down: the end was asked (Cancel here).
+                if (o < 2)
+                    ++asked;
+                QVERIFY2(exits.count() == asked, qPrintable(what + QString(": asked %1").arg(exits.count())));
+            }
+            // An LT tap alone still steps back one call (on its release).
+            axis(kLT, 255);
+            QVERIFY2(s->callIndex() == 1, qPrintable("LT down: " + diag()));
+            axis(kLT, 0);
+            QVERIFY2(s->callIndex() == 0, qPrintable("LT tap, after the chords: " + diag()));
+            // RT is unchanged: the next call on the press.
+            axis(kRT, 255);
+            QCOMPARE(s->callIndex(), 1);
+            axis(kRT, 0);
+            QCOMPARE(run->state(), PadRun::Focus);
+            QVERIFY(m_runs.isEmpty());
+        }
+    }
+}
+
+void PadRun_Test::ltMenuGoesIntoAndOutOfFocus()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    FocusSession *s = pc->focusSession();
+    run->setEnabled(true);
+    QCOMPARE(fcc->readyPhrase(), QString("Venue focus ready. Armed, hold {LT} and press {Menu} to begin."));
+
+    // Not armed: refused, saying to arm first.
+    with(kLT, kMenu);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QCOMPARE(run->state(), PadRun::Run);
+    QCOMPARE(run->notice(), QString("Not armed. To start the venue focus, hold LB and RB to arm, then LT + Menu."));
+
+    // ARMED, LT + Menu: FOCUS, from the one source.
+    arm(true);
+    QSignalSpy states(run, &PadRun::stateChanged);
+    with(kLT, kMenu);
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QVERIFY(s->isActive());
+    QCOMPARE(run->state(), PadRun::Focus);
+    QCOMPARE(run->roleText(), QString("Pad: FOCUS"));
+    QCOMPARE(run->stateColour(), PadRun::focusColour());
+    QCOMPARE(run->lightColour(), PadRun::focusColour());
+    QCOMPARE(pc->padLight(), PadRun::focusColour());
+    QCOMPARE(run->stateInk(), QColor(Qt::black));
+    QVERIFY(!run->isArmed());
+    QCOMPARE(states.count(), 1);
+    QVERIFY(m_runs.isEmpty());
+    // The colour is its own: not the arm's, the GO's, the stop's.
+    for (const QColor &c : { PadRun::armedColour(), PadRun::playingColour(), PadRun::stoppedColour() })
+        QVERIFY(c != PadRun::focusColour());
+    QVERIFY(run->helpHtml().contains("Venue focus has the controller"));
+
+    // Menu alone: nothing ends.
+    press(kMenu);
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QCOMPARE(run->state(), PadRun::Focus);
+    QCOMPARE(run->notice(), QString("Venue focus: hold LT and press Menu to finish it."));
+
+    // LT + Menu again: the focus ends (as the panel's Leave), ARMED again.
+    QSignalSpy armedSpy(run, &PadRun::armedChanged);
+    with(kLT, kMenu);
+    QVERIFY(!s->isActive());
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    QCOMPARE(run->state(), PadRun::Armed);
+    QVERIFY(run->isArmed());
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    QCOMPARE(armedSpy.count(), 1);
+    QCOMPARE(pc->padLight(), PadRun::armedColour());
+    // The list did not move: no command at all, still on the focus cue, done.
+    QVERIFY(m_runs.isEmpty());
+    QVERIFY(fcc->isDone());
+    fcc->cueCurrent(m_list, m_cue1);            // the list still there: not armed again
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    QVERIFY(fcc->isDone());
+
+    // LT + A: the GO that moves it on.
+    with(kLT, kA);
+    QCOMPARE(m_runs.size(), 1);
+    QCOMPARE(m_runs.at(0).first.command, ShowControl::Go);
+    QCOMPARE(m_runs.at(0).second, ShowControl::RoutePad);
+    m_running = m_empty;
+    fcc->cueCurrent(m_list, m_empty);
+    QVERIFY(!fcc->isDone());
+}
+
+void PadRun_Test::rtPastTheLastCallAsks()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    FocusSession *s = pc->focusSession();
+    run->setEnabled(true);
+    arm(true);
+    with(kLT, kMenu);
+    QCOMPARE(run->state(), PadRun::Focus);
+    QCOMPARE(s->callIndex(), 0);
+    QSignalSpy exits(s, &FocusSession::exitRequested);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    // RT: the second (last) call; RT again: it says how to finish, and stays.
+    axis(kRT, 255);
+    axis(kRT, 0);
+    QCOMPARE(s->callIndex(), 1);
+    axis(kRT, 255);
+    axis(kRT, 0);
+    QCOMPARE(s->callIndex(), 1);
+    QCOMPARE(exits.count(), 0);
+    QVERIFY(s->isActive());
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QCOMPARE(run->state(), PadRun::Focus);
+    QCOMPARE(run->notice(), QString("Last call. Hold LT and press Menu to finish."));
+    QCOMPARE(said.last().at(0).toString(), QString("Last call. Hold LT and press Menu to finish."));
+    // Held on RT: still nothing ends.
+    axis(kRT, 255);
+    QTest::qWait(60);
+    axis(kRT, 0);
+    QCOMPARE(exits.count(), 0);
+    // Then LT + Menu finishes: ARMED, nothing played.
+    with(kLT, kMenu);
+    QCOMPARE(exits.count(), 1);
+    QCOMPARE(run->state(), PadRun::Armed);
+    QVERIFY(m_runs.isEmpty());
+
+    // In the Tools role, RT past the last call ends the calls, as it did.
+    run->setEnabled(false);
+    m_running = m_empty;
+    fcc->cueCurrent(m_list, m_empty);
+    m_running = m_cue1;
+    fcc->cueCurrent(m_list, m_cue1);
+    QVERIFY(fcc->start());
+    s->setCallIndex(1);
+    s->setTrigger(1, 1.0f);
+    s->setTrigger(1, 0.0f);
+    QCOMPARE(exits.count(), 2);
+    QVERIFY(!s->isActive());
+    QVERIFY(m_runs.isEmpty());
+}
+
+void PadRun_Test::focusWhileTheVenueIsNamed()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    QTemporaryDir dir;
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    pc->venueCorrections()->setShowFile(dir.filePath("Spring.qlcc"), false);
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    FocusSession *s = pc->focusSession();
+    run->setEnabled(true);
+    arm(true);
+    with(kLT, kMenu);
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    QVERIFY(!s->isActive());
+    QCOMPARE(run->state(), PadRun::Focus);
+    QVERIFY(!run->isArmed());
+    // No cue moves meanwhile, whatever is pressed; the bumpers arm nothing.
+    with(kLT, kA);
+    with(kLT, kB);
+    with(kLT, kX);
+    with(kLT, kY);
+    press(kA);
+    axis(kRT, 255);
+    axis(kRT, 0);
+    run->setArmChordMs(15);
+    hold(kLB, true);
+    hold(kRB, true);
+    QTest::qWait(60);
+    hold(kRB, false);
+    hold(kLB, false);
+    QVERIFY(m_runs.isEmpty());
+    QVERIFY(!run->isArmed());
+    QCOMPARE(run->state(), PadRun::Focus);
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    // LT + Menu gives the start up: the cue waits again, ARMED.
+    with(kLT, kMenu);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QCOMPARE(run->state(), PadRun::Armed);
+    QVERIFY(run->isArmed());
+    // Again, and named on the laptop: the calls, never ARMED on the way.
+    with(kLT, kMenu);
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    QSignalSpy armedSpy(run, &PadRun::armedChanged);
+    QVERIFY(fcc->useVenue("Kennedy"));
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QCOMPARE(run->state(), PadRun::Focus);
+    QCOMPARE(armedSpy.count(), 0);
+    with(kLT, kMenu);
+    QCOMPARE(run->state(), PadRun::Armed);
+    QVERIFY(m_runs.isEmpty());
+}
+
+void PadRun_Test::theStopInFocus()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    run->setEnabled(true);
+    arm(true);
+    with(kLT, kMenu);
+    QCOMPARE(run->state(), PadRun::Focus);
+
+    // The focus's own presses and chords: no stop.
+    const QList<QList<quint32>> notStops = {
+        { kLB, kRB }, { kLT }, { kRT }, { kLT, kRT }, { kLB, kRB, kRT }, { kLB, kRB, kLT },
+        { kLB, kLT, kRT }, { kRB, kLT, kRT } };
+    for (const QList<quint32> &chord : notStops)
+    {
+        for (quint32 ch : chord)
+            (ch == kLT || ch == kRT) ? axis(ch, 255) : hold(ch, true);
+        QTest::qWait(20);
+        for (quint32 ch : chord)
+            (ch == kLT || ch == kRT) ? axis(ch, 0) : hold(ch, false);
+        QVERIFY2(m_runs.isEmpty(), qPrintable(QString("%1 controls made a stop").arg(chord.size())));
+        QCOMPARE(run->state(), PadRun::Focus);
+        QCOMPARE(fcc->state(), FocusCallCue::Running);
+    }
+    // All four: the stop.
+    hold(kLB, true);
+    hold(kRB, true);
+    axis(kLT, 255);
+    axis(kRT, 255);
+    QCOMPARE(m_runs.size(), 1);
+    QCOMPARE(m_runs.at(0).first.command, ShowControl::AllOff);
+    QCOMPARE(m_runs.at(0).second, ShowControl::RoutePad);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QCOMPARE(run->roleText(), QString("Pad: STOPPED"));
+    QCOMPARE(pc->padLight(), PadRun::stoppedColour());
+    axis(kRT, 0);
+    axis(kLT, 0);
+    hold(kRB, false);
+    hold(kLB, false);
+    // The focus ended after the stop: not armed again.
+    with(kLT, kMenu);
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    QVERIFY(!run->isArmed());
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QCOMPARE(m_runs.size(), 1);
+}
+
+void PadRun_Test::theLaptopsFocusMovesNoList()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    FocusSession *s = pc->focusSession();
+    auto again = [&]() {
+        m_running = m_empty;
+        fcc->cueCurrent(m_list, m_empty);
+        m_running = m_cue1;
+        fcc->cueCurrent(m_list, m_cue1);
+        QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    };
+    run->setEnabled(true);
+
+    // Armed, the laptop's Start (the Run tab's button, Cmd+Return): FOCUS.
+    arm(true);
+    QVERIFY(fcc->start());
+    QCOMPARE(run->state(), PadRun::Focus);
+    QVERIFY(!run->isArmed());
+    // The laptop's end (the panel's Finish): no command, ARMED, done.
+    s->finish();
+    QVERIFY(m_runs.isEmpty());
+    QVERIFY(fcc->isDone());
+    QCOMPARE(run->state(), PadRun::Armed);
+
+    // Not armed: FOCUS, then back to Run, not armed.
+    arm(false);
+    again();
+    QVERIFY(fcc->start());
+    QCOMPARE(run->state(), PadRun::Focus);
+    s->finish();
+    QCOMPARE(run->state(), PadRun::Run);
+    QVERIFY(m_runs.isEmpty());
+    QVERIFY(fcc->isDone());
+
+    // The Tools role: Menu still starts and ends it, and the list stays too.
+    run->setEnabled(false);
+    again();
+    QCOMPARE(fcc->readyPhrase(), FocusCallCue::armedPhrase());
+    press(kMenu);
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QCOMPARE(run->state(), PadRun::Tools);
+    press(kMenu);
+    QVERIFY(!s->isActive());
+    QVERIFY(m_runs.isEmpty());
+    QVERIFY(fcc->isDone());
+}
+
+void PadRun_Test::aLostPadInFocus()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    FocusSession *s = pc->focusSession();
+    run->setEnabled(true);
+    arm(true);
+    with(kLT, kMenu);
+    QCOMPARE(run->state(), PadRun::Focus);
+    // Gone: unpatched (its releases never come) and said gone.
+    QVERIFY(iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine()));
+    emit iom->inputDeviceDisconnected(0, stub->name(), QStringLiteral("Stub pad"));
+    QVERIFY2(run->state() != PadRun::Focus, qPrintable(QString("present %1").arg(pc->focusController().present)));
+    QCOMPARE(run->roleText(), QString("Pad: Venue Focus"));
+    QVERIFY(!run->isArmed());
+    QCOMPARE(run->notice(), QString("Disarmed: the controller went away."));
+    // Back mid-focus: FOCUS again, and its end leaves the pad not armed.
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    emit iom->inputDeviceConnected(0, stub->name(), QStringLiteral("Stub pad"));
+    QCOMPARE(run->state(), PadRun::Focus);
+    QVERIFY(fcc->state() == FocusCallCue::Running);
+    s->finish();
+    QCOMPARE(run->state(), PadRun::Run);
+    QVERIFY(!run->isArmed());
     QVERIFY(m_runs.isEmpty());
 }
 

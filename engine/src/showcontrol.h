@@ -97,7 +97,7 @@ public:
         RoutePad,           //!< a controller profile's chaser step on a Show Tree list
         RouteVcCueList,     //!< a VC Cue List (and the web page driving it) or a VC button's next/previous step, on a Show Tree list
         RouteControlMap,    //!< a Control Map binding (GO / Stop a list or cue)
-        RouteFocusCall,     //!< a focus-call cue going on with its list when done
+        RouteFocusCall,     //!< a focus-call cue going on with its list (none since 0.4.9: the list waits)
         RouteOsc,           //!< OSC (QLab and others)
         RouteMsc,           //!< MIDI Show Control
         RouteWeb,           //!< the phone / tablet Run page (web access; "allow remote GO")

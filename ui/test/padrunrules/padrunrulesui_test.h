@@ -37,11 +37,29 @@ private slots:
     void initTestCase();
     void cleanupTestCase();
     void everySurfaceAgreesAtEveryStep();
+    /** Rule 6 on the real surfaces: a venue focus cue waiting, ARMED, LT +
+     *  Menu -- Pad: FOCUS in its blue on the button, the frame, the chip
+     *  and the pad's light; the emergency stop there turns them red; LT +
+     *  Menu again: ARMED, and the Run tab says the list waits (Venue focus
+     *  done: LT + A for the next cue) with no command sent. */
+    void focusOnEverySurface();
+    /** QLC_SHOT_DIR set: the Run tab and the footer at 1024x640, 1280x800
+     *  and 1920x1080 with a venue focus started from the armed pad (LT +
+     *  Menu), then finished the same way (the UX review's shots). */
+    void venueFocusShots();
 
 private:
+    /** Two spots on the plot, a group, a target, one focus call; a
+     *  Pre-show list (Focus, a venue focus cue, then House) the list is on
+     *  (a probe stands in for it playing), the cue armed. Its list id;
+     *  @p focus and @p house its cues. */
+    quint32 makeFocusShow(quint32 *focus, quint32 *house);
+
     App *m_app = nullptr;
     QTemporaryDir *m_pluginDir = nullptr;
     IOPluginStub *m_stub = nullptr;
+    quint32 m_running = 0;      // the cue the probe says the focus list is on
+    quint32 m_focusList = 0, m_focusCue = 0, m_houseCue = 0;
 };
 
 #endif

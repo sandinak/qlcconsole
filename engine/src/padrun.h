@@ -67,6 +67,7 @@ class Doc;
  *   (the bumpers are the mode only: the arm, and the stop's four)
  *   RS           say the list and what is on standby
  *   Menu         walk the show (below); not while armed
+ *   armed, LT held + Menu   start the venue focus cue that waits (FOCUS)
  *   hold View + Menu 1 s   switch the role (Tools / Run), either way
  *
  * The rules (the operator's, 2026-11-14; every later change keeps them):
@@ -84,8 +85,21 @@ class Doc;
  *      hit is the right trigger's own, armed.
  *   5. The pad's light says the state where it has one: the arm's colour
  *      armed, blinking green while a cue fades, red after the emergency
- *      stop, its own colour otherwise. A pad with no light buzzes: twice
- *      armed, once long disarmed, three long for the stop.
+ *      stop, blue in FOCUS, its own colour otherwise. A pad with no light
+ *      buzzes: twice armed, once long disarmed, three long for the stop.
+ *   6. Venue focus from the pad (2026-11-15): armed, with a venue focus
+ *      cue waiting, LT held + Menu starts its calls and the pad is in
+ *      FOCUS -- not armed, not disarmed. Menu alone does nothing to the
+ *      focus (armed: the walk's refusal, which names LT + Menu); not
+ *      armed, the start is refused, saying to arm first. In FOCUS the
+ *      focus tool has the pad as it always has, no cue moves and no hit
+ *      fires from the pad, and the four-together stop still stops. LT
+ *      held + Menu again -- the one way out from the pad; RT past the
+ *      last call only says so -- ends the focus (its unsaved-work prompt
+ *      kept) and the pad is ARMED again. The list stays on the focus cue
+ *      until the operator moves it (LT + A, or GO on the laptop): ending
+ *      a venue focus, from anywhere, never moves the list. The pad going
+ *      away in FOCUS: back not armed, never FOCUS with no pad.
  *
  * Hits (Q154, show-tree.md "Hits"): every hit of the show whose place is
  * live now is armed; the narrowest place wins (cue, then list, production,
@@ -241,6 +255,9 @@ public:
     static QColor armedColour() { return ControllerScheme::othersUnsavedColour(); }
     static QColor stoppedColour() { return QColor(0xD3, 0x2F, 0x2F); }
     static QColor playingColour() { return QColor(0x2E, 0xB8, 0x4E); }
+    /** FOCUS (rule 6): a blue, apart from the arm's orange, the stop's red
+     *  and the GO's green (black ink reads on it). */
+    static QColor focusColour() { return QColor(0x1E, 0x88, 0xE5); }
     /** A GO shows as playing at least this long, however short its fade. */
     static constexpr int wentFlashMs() { return 400; }
     /** Half the blink's period while a cue fades, ms. */
@@ -279,7 +296,9 @@ public:
         Stopped,        ///< the emergency stop went; until armed again or the
                         ///< show runs (shown over a walk or a tool too)
         Walking,
-        ToolHasPad      ///< a tool started on the laptop holds the pad
+        ToolHasPad,     ///< a tool started on the laptop holds the pad
+        Focus           ///< a venue focus cue's calls have the pad (rule 6):
+                        ///< not armed, not disarmed; LT + Menu leaves
     };
     Q_ENUM(State)
     State state() const;
@@ -311,8 +330,8 @@ public:
     QString notice() const { return m_notice; }
     static constexpr int noticeMs() { return 3000; }
     /** state() in words, for the button and the footer: "Pad: Tools",
-     *  "Pad: Run", "Pad: ARMED", "Pad: STOPPED", "Pad: Walk", or the tool
-     *  holding it ("Pad: Venue focus"). */
+     *  "Pad: Run", "Pad: ARMED", "Pad: STOPPED", "Pad: Walk", "Pad: FOCUS",
+     *  or the tool holding it ("Pad: Venue focus"). */
     QString roleText() const;
     /** The tooltip for the Run tab's Pad: button and the footer's Pad chip,
      *  one text for both: the role line, the tool holding the pad (and how
@@ -330,11 +349,38 @@ public:
     /** The controller went away: reset(), and the screen says why the arm
      *  dropped. */
     void controllerLost();
+    /** The controller went (@p present false) or came back: in FOCUS with
+     *  no pad the state is not FOCUS (rule 6), and the arm the focus would
+     *  go back to is dropped, as controllerLost(). */
+    void setPadPresent(bool present);
     /** The input on @p universe was repatched (its pad unplugged, another
      *  pad in its slot, back again): what it held is forgotten, and an arm
      *  made on it drops as controllerLost() -- its releases may never have
      *  come, so a held safety is no safety on the pad there now. */
     void forgetPad(quint32 universe);
+
+    /*********************************************************************
+     * Venue focus from the pad (rule 6)
+     *********************************************************************/
+public:
+    /** The Run role is on and a venue focus cue's calls have begun (the
+     *  venue being named, or the calls running): the pad's presses start
+     *  or end nothing but by LT + Menu, and play no cue. With the pad gone
+     *  this stays true; state() is then not Focus. */
+    bool isFocusing() const;
+    /** A venue focus cue is armed and waits for its start. */
+    bool isFocusCueWaiting() const;
+    /** Menu (Start) on @p universe while isFocusing(): with LT held, the
+     *  focus ends (the laptop asks about unsaved work); alone it says so.
+     *  False (nothing done) when not focusing. */
+    bool focusMenu(quint32 universe);
+    /** RT past the last call while focusing: the words that say how to
+     *  finish (also shown); empty when not focusing (the calls end there,
+     *  as in the Tools role). FocusSession's last-call hold. */
+    QString lastCallHold();
+    /** The venue focus cue changed state (ProgrammerController): FOCUS
+     *  begins or ends; ended, the arm it came from is back. */
+    void focusCueChanged();
 
     /*********************************************************************
      * Triggers and swipes (Q199)
@@ -541,6 +587,13 @@ private:
     void syncHit();
     /** Stops a one-shot hit whose run is over (Q239). */
     void letGoFinishedOneShots();
+    /** Armed, LT held + Menu with a venue focus cue waiting: start it. */
+    bool startFocus(quint32 universe);
+    /** Into FOCUS from ARMED, however the calls began: the arm is kept
+     *  aside (m_focusArm) for the focus's end. */
+    void putArmBy();
+    /** Menu with a venue focus cue waiting, pressed on @p universe. */
+    void focusStartPress(quint32 universe, bool safetyHeld);
 
 private:
     Doc *m_doc;
@@ -563,6 +616,11 @@ private:
     bool m_armed = false;
     quint32 m_armUniverse = UINT_MAX;
     bool m_stopped = false;
+    /** FOCUS was entered from ARMED on this pad (LT + Menu): the arm it
+     *  goes back to when the focus ends (UINT_MAX: none). */
+    quint32 m_focusArm = UINT_MAX;
+    /** The controller is gone (ProgrammerController's presence check). */
+    bool m_padGone = false;
     bool m_testing = false;     ///< the Controller Test has the pad
     /** holder() when last seen: a change forgets what was held. */
     QString m_lastHolder;

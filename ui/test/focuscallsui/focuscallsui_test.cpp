@@ -58,6 +58,8 @@
 #include "focuscallcue.h"
 #include "fixturevisualtraits.h"
 #include "cuerunner.h"
+#include "showcontrol.h"
+#include <QScopeGuard>
 #include "controllerscheme.h"
 #include "showtreeview.h"
 #include "focusmenu.h"
@@ -477,11 +479,23 @@ void FocusCallsUi_Test::aFocusCallCueWaitsForTheController()
     QPointer<FocusModePanel> panel = FocusModePanel::attach(m_doc, nullptr);
     QVERIFY(panel != nullptr);
     QVERIFY(panel->findChild<QLabel *>("focusCall")->text().startsWith("Call 1 of 1"));
-    // Menu (Esc): leave, and on with the list.
-    QSignalSpy goOn(fcc, &FocusCallCue::continueRequested);
+    /* Menu (Esc): leave -- and the list stays on the cue, done, until the
+       operator's GO (PadRun rule 6; it used to GO on by itself). */
+    QList<ShowControl::Request> runs;
+    ShowControl *sc = m_doc->showControl();
+    sc->setRunHandler([&runs](const ShowControl::Request &r, ShowControl::Route) {
+        runs << r;
+        return true;
+    });
+    auto unhook = qScopeGuard([sc]() { sc->setRunHandler(nullptr); });
     QTest::keyClick(panel, Qt::Key_Escape);
     QTRY_COMPARE(fcc->state(), FocusCallCue::Idle);
-    QCOMPARE(goOn.count(), 1);
+    QVERIFY(runs.isEmpty());
+    QVERIFY(fcc->isDone());
+    QCOMPARE(runner.focusArmedText(), QString("Venue focus done: GO for the next cue"));
+    // The next GO moves the list off it: the line goes.
+    fcc->cueCurrent(list, st->addCue(list, 0, "House"));
+    QVERIFY(!fcc->isDone());
     QVERIFY(runner.focusArmedText().isEmpty());
     fcc->setRunningCueProbe({});
     m_doc->setMode(Doc::Design);
