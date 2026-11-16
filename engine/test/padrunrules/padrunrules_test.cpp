@@ -580,7 +580,7 @@ void PadRunRules_Test::aHeldChordFiresOnce()
 {
     QFETCH(int, start);
     makeShow();
-    twoPads(int(CJ::AllJobs), int(CJ::AllJobs));
+    twoPads(int(ControllerJobs::AllJobs), int(ControllerJobs::AllJobs));
     PadRun *run = m_doc->programmer()->padRun();
     run->setEnabled(true);
     run->setArmChordMs(15);
