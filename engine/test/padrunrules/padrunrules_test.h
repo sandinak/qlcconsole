@@ -69,6 +69,15 @@ private slots:
     void theSamePressTwiceIsOneGo();
     void aBouncingButton();
     void theDuplicateDevice();
+    /** One pad seen on two universes, one identity (eval 0.4.12): one
+     *  press is one action -- one GO, one hit, one stop -- whichever line
+     *  brings it first, in step or a gesture behind. */
+    void aPadOnTwoUniversesIsOnePad_data();
+    void aPadOnTwoUniversesIsOnePad();
+    /** Twin pads told apart (address, USB port) stay two pads: each its
+     *  own stop, its own chord, one runner. */
+    void twinPadsToldApartAreTwoPads_data();
+    void twinPadsToldApartAreTwoPads();
 
     /* Rules 2 and 6: one state, the light */
     void theLightAfterAToolOrWalkEndsStopped();
@@ -84,6 +93,15 @@ private slots:
     void jobsEveryControlOnASecondPad_data();
     void jobsEveryControlOnASecondPad();
     void jobsOneRunnerAtATime();
+    /** CONTROLLER_JOBS.md invariant 6 (eval 0.4.12): another pad's
+     *  chord, squeezed and let go inside the runner's, leaves the
+     *  runner's chord timing untouched. */
+    void anotherPadsChordLeavesTheRunnersTiming();
+    /** The sweep: A holds its chord while B does each thing a pad can do
+     *  with the four, from every arm state. A's chord ends as it would
+     *  alone; B's never arms or disarms anything. */
+    void everyChordOnTwoPads_data();
+    void everyChordOnTwoPads();
     void jobsTheStopFromAPadWithNoJobs();
     void jobsOnePadNothingSavedIsAsBefore();
     void jobsEachPadsLight();
