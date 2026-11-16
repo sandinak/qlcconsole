@@ -43,6 +43,7 @@ PadRun::PadRun(Doc *doc, ProgrammerController *pc, QObject *parent)
     , m_doc(doc)
     , m_pc(pc)
 {
+    m_clock.start();
     m_flash = new QTimer(this);
     m_flash->setSingleShot(true);
     m_flash->setInterval(wentFlashMs());
@@ -54,10 +55,6 @@ PadRun::PadRun(Doc *doc, ProgrammerController *pc, QObject *parent)
     m_noticeTimer->setSingleShot(true);
     m_noticeTimer->setInterval(noticeMs());
     connect(m_noticeTimer, &QTimer::timeout, this, [this]() { showNotice(QString()); });
-    m_armChord = new QTimer(this);
-    m_armChord->setSingleShot(true);
-    m_armChord->setInterval(armChordMs());
-    connect(m_armChord, &QTimer::timeout, this, &PadRun::armChordFired);
     m_blink = new QTimer(this);
     m_blink->setInterval(blinkMs());
     connect(m_blink, &QTimer::timeout, this, &PadRun::lightTick);
@@ -303,7 +300,10 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
     const bool down = value > 0;
     const bool chordControl = role == GamepadRole::LB || role == GamepadRole::RB
                               || role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger;
-    Held &h = m_held[universe];
+    /* One pad, one Held: a pad seen on two universes (one identity) holds
+       its controls once, whichever line a press came on. */
+    const quint32 pad = padKey(universe);
+    Held &h = m_held[pad];
     bool rtPressed = false;
     /* The four were read first, by watchStop() (the stop is checked before
        anything else): this event's reading is taken from there, never made
@@ -311,6 +311,10 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
     const bool noted = m_noted.valid && m_noted.universe == universe
                        && m_noted.role == int(role) && m_noted.value == value;
     m_noted.valid = false;
+    /* One press, one action: the pad's other line repeating it is
+       swallowed (one LT + A was a GO a line, review 0.4.12). */
+    if (noted ? m_noted.echo : isTwinEcho(pad, universe, role, value))
+        return true;
     if (chordControl)
     {
         if (noted)
@@ -347,7 +351,7 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
         }
         /* Both bumpers and no trigger, held: the arm changes. Anything
            else of the four ends the timing. */
-        armChordUpdate(universe);
+        armChordUpdate(pad);
         /* RT's pull on its own is the hit (below) -- not with a bumper or
            LT down: LT + RT together is the stop in the making, never a
            hit. The rest of the four is done. */
@@ -483,12 +487,23 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
 
 void PadRun::setArmChordMs(int ms)
 {
-    m_armChord->setInterval(ms);
+    m_armChordMs = ms;
+    for (QTimer *t : std::as_const(m_armChords))
+        t->setInterval(ms);
 }
 
 bool PadRun::isArmChordPending() const
 {
-    return m_armChord->isActive();
+    for (const QTimer *t : m_armChords)
+        if (t->isActive())
+            return true;
+    return false;
+}
+
+void PadRun::stopArmChords()
+{
+    for (QTimer *t : std::as_const(m_armChords))
+        t->stop();
 }
 
 void PadRun::armChordUpdate(quint32 universe)
@@ -496,20 +511,25 @@ void PadRun::armChordUpdate(quint32 universe)
     const Held h = m_held.value(universe);
     // In FOCUS the bumpers are the focus tool's: no arm change (rule 6).
     const bool chord = h.lb && h.rb && !h.anyTrigger() && !h.spent && !isFocusing() && !isWalking();
+    /* Each pad its own timing (CONTROLLER_JOBS.md 6): another pad's chord,
+       squeezed or let go, never takes or stops this one's. */
+    QTimer *t = m_armChords.value(universe);
     if (chord)
     {
-        // Timed from the second bumper down; a held chord is not restarted.
-        if (!m_armChord->isActive() || m_chordUniverse != universe)
+        if (t == nullptr)
         {
-            m_chordUniverse = universe;
-            m_armChord->start();
+            t = new QTimer(this);
+            t->setSingleShot(true);
+            t->setInterval(m_armChordMs);
+            connect(t, &QTimer::timeout, this, [this, universe]() { armChordFired(universe); });
+            m_armChords.insert(universe, t);
         }
+        // Timed from the second bumper down; a held chord is not restarted.
+        if (!t->isActive())
+            t->start();
     }
-    else if (m_chordUniverse == universe)
-    {
-        m_armChord->stop();
-        m_chordUniverse = UINT_MAX;
-    }
+    else if (t != nullptr)
+        t->stop();
     /* The runner's chord while another pad has the venue focus: its arm
        stays as it is until the focus ends, and the screen says why. */
     if (h.lb && h.rb && !h.anyTrigger() && !h.spent && isBesideTool(universe) && m_pc != nullptr)
@@ -524,10 +544,8 @@ void PadRun::armChordUpdate(quint32 universe)
         showNotice(m_pc->padText(tr("To arm, let go of everything, then hold {LB} and {RB}.")));
 }
 
-void PadRun::armChordFired()
+void PadRun::armChordFired(quint32 u)
 {
-    const quint32 u = m_chordUniverse;
-    m_chordUniverse = UINT_MAX;
     const Held h = m_held.value(u);
     if (!m_enabled || !h.lb || !h.rb || h.anyTrigger() || h.spent || isFocusing() || isWalking())
         return;
@@ -591,8 +609,7 @@ bool PadRun::setArmed(bool on, quint32 universe)
 
 void PadRun::emergencyStop()
 {
-    m_armChord->stop();
-    m_chordUniverse = UINT_MAX;
+    stopArmChords();
     hookShowControl();
     ShowControl *sc = m_doc != nullptr ? m_doc->showControl() : nullptr;
     bool done = false;
@@ -684,8 +701,7 @@ void PadRun::setTesting(bool on)
         return;
     m_testing = on;
     roleChordCancel();
-    m_armChord->stop();
-    m_chordUniverse = UINT_MAX;
+    stopArmChords();
     forgetHeld();       // what is held across the change was not the Run map's (but the four)
     emit testingChanged(on);
     toolChanged();
@@ -714,8 +730,7 @@ void PadRun::toolChanged()
     if (now != m_lastHolder)
     {
         m_lastHolder = now;
-        m_armChord->stop();
-        m_chordUniverse = UINT_MAX;
+        stopArmChords();
         forgetHeld();
     }
     emit holderChanged();
@@ -924,8 +939,7 @@ void PadRun::reset()
 void PadRun::clear(bool four)
 {
     roleChordCancel();
-    m_armChord->stop();
-    m_chordUniverse = UINT_MAX;
+    stopArmChords();
     if (four)
         forgetHeld();
     else
@@ -976,7 +990,7 @@ QString PadRun::toolOverFocus() const
 
 bool PadRun::noteHeld(quint32 universe, GamepadRole::Role role, uchar value)
 {
-    Held &h = m_held[universe];
+    Held &h = m_held[padKey(universe)];
     bool rtPressed = false;
     switch (role)
     {
@@ -1007,8 +1021,12 @@ bool PadRun::watchStop(quint32 universe, GamepadRole::Role role, uchar value)
     if (role != GamepadRole::LB && role != GamepadRole::RB
         && role != GamepadRole::LeftTrigger && role != GamepadRole::RightTrigger)
         return false;
-    Held &h = m_held[universe];
-    m_noted.rtPressed = noteHeld(universe, role, value);
+    const quint32 pad = padKey(universe);
+    Held &h = m_held[pad];
+    /* The pad's other line repeating a press already read: read once (the
+       stop is still the stop while the four are held, and fires once). */
+    m_noted.echo = isTwinEcho(pad, universe, role, value);
+    m_noted.rtPressed = m_noted.echo ? false : noteHeld(universe, role, value);
     m_noted.universe = universe;
     m_noted.role = int(role);
     m_noted.value = value;
@@ -1043,12 +1061,10 @@ void PadRun::forgetPad(quint32 universe)
     // The walker beside the runner went (second review 2).
     if (m_walkBeside && isWalking() && sameController(universe, m_walker))
         endBesideWalk(tr("Walk ended: the controller walking it went away."));
-    m_held.remove(universe);
-    if (m_chordUniverse == universe)
-    {
-        m_armChord->stop();
-        m_chordUniverse = UINT_MAX;
-    }
+    const quint32 pad = padKey(universe);
+    m_held.remove(pad);
+    if (QTimer *t = m_armChords.value(pad))
+        t->stop();
     if ((m_armed && m_armUniverse == universe) || m_focusArm == universe)
         controllerLost();
     else
@@ -1159,8 +1175,7 @@ bool PadRun::startFocus(quint32 universe)
         m_focusArm = armedOn;
         m_armed = false;
         m_armUniverse = UINT_MAX;
-        m_armChord->stop();
-        m_chordUniverse = UINT_MAX;
+        stopArmChords();
         m_playing = false;
         m_flash->stop();
     }
@@ -1205,7 +1220,7 @@ bool PadRun::focusMenu(quint32 universe)
         refuse(Walk, tr("Another controller is in use."));
         return true;
     }
-    if (!m_held.value(universe).lt.isDown())
+    if (!m_held.value(padKey(universe)).lt.isDown())
     {
         refuse(Walk, tr("Venue focus: hold {LT} and press {Menu} to finish it."));
         return true;
@@ -1233,8 +1248,7 @@ void PadRun::putArmBy()
     m_focusArm = m_armUniverse;
     m_armed = false;
     m_armUniverse = UINT_MAX;
-    m_armChord->stop();
-    m_chordUniverse = UINT_MAX;
+    stopArmChords();
     m_playing = false;
     m_flash->stop();
     emit armedChanged(false);
@@ -1258,8 +1272,7 @@ void PadRun::focusCueChanged()
         {
             m_armed = true;
             m_armUniverse = u;
-            m_armChord->stop();
-            m_chordUniverse = UINT_MAX;
+            stopArmChords();
             emit armedChanged(true);
             // Its own pad, once (review 1, 6).
             if (m_pc != nullptr)
@@ -1342,6 +1355,50 @@ bool PadRun::sameController(quint32 a, quint32 b) const
         return false;
     const QString ia = jobs->identityOfUniverse(a);
     return !ia.isEmpty() && !ControllerJobs::isNameOnly(ia) && ia == jobs->identityOfUniverse(b);
+}
+
+quint32 PadRun::padKey(quint32 universe) const
+{
+    if (universe == UINT_MAX || universe == 0)
+        return universe;
+    InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
+    const quint32 count = iom != nullptr ? iom->universesCount() : 0;
+    for (quint32 v = 0; v < universe && v < count; ++v)
+        if (sameController(universe, v))
+            return v;
+    return universe;
+}
+
+bool PadRun::isTwinEcho(quint32 pad, quint32 universe, GamepadRole::Role role, uchar value)
+{
+    /* One pad on two lines sends each change on both, the lines in any
+       order and either one behind. A change is acted on once: from the
+       line that brings it first. A line bringing a change another line
+       already brought (and it has not followed yet) is its echo. Kept
+       twinEchoMs(); a line on its own is never an echo. */
+    Held &h = m_held[pad];
+    QList<Held::Change> &changes = h.changes[int(role)];
+    quint64 &followed = h.followed[int(role)][universe];
+    const qint64 now = m_clock.elapsed();
+    while (!changes.isEmpty()
+           && (now - changes.first().at > twinEchoMs() || changes.size() > 64))
+        changes.removeFirst();
+    for (const Held::Change &c : std::as_const(changes))
+    {
+        if (c.seq > followed && c.from != universe && c.value == value)
+        {
+            followed = c.seq;
+            return true;
+        }
+    }
+    Held::Change c;
+    c.value = value;
+    c.from = universe;
+    c.at = now;
+    c.seq = ++h.seq;
+    changes.append(c);
+    followed = c.seq;
+    return false;
 }
 
 quint32 PadRun::runnerUniverse() const
@@ -2068,8 +2125,7 @@ void PadRun::walkStarted()
         m_armed = false;
         m_armUniverse = UINT_MAX;
     }
-    m_armChord->stop();
-    m_chordUniverse = UINT_MAX;
+    stopArmChords();
     forgetHeld();
     m_walkRt.reset();
     m_walkLt.reset();

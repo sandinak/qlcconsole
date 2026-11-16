@@ -26,6 +26,7 @@
 #include <QList>
 #include <QHash>
 #include <QSet>
+#include <QElapsedTimer>
 
 #include "qlcengine_export.h"
 #include "controllerscheme.h"
@@ -656,10 +657,14 @@ private:
     void roleChordFired();
     /** Say @p text on the screen (notice()) for noticeMs(). */
     void showNotice(const QString &text);
-    /** LB + RB held long enough: the arm changes. */
-    void armChordFired();
-    /** Start or stop timing the chord from what @p universe holds now. */
+    /** LB + RB held long enough on the pad @p universe (its padKey()):
+     *  the arm changes. */
+    void armChordFired(quint32 universe);
+    /** Start or stop timing the chord from what @p universe (a padKey())
+     *  holds now. Each pad times its own chord (CONTROLLER_JOBS.md 6). */
     void armChordUpdate(quint32 universe);
+    /** Stop timing every pad's chord. */
+    void stopArmChords();
     /** reset() without telling the screens (the caller does). @p four:
      *  keep the four's held bits (the stop reads them in every state; only
      *  a role switch, where they were not read, forgets them). */
@@ -709,6 +714,17 @@ private:
     /** The same pad on another universe (one identity) has fired the stop
      *  for the chord now held: one stop per physical pad. */
     bool twinStopFired(quint32 universe) const;
+    /** The universe that stands for the pad on @p universe: the lowest
+     *  universe with its identity (sameController()), so a pad seen on two
+     *  universes keeps one Held and one chord. Twin pads told apart (MAC,
+     *  USB port) are two pads, two keys. */
+    quint32 padKey(quint32 universe) const;
+    /** @p value of @p role on @p universe is the pad's other line repeating
+     *  what it already sent (one pad seen on two universes): one press, one
+     *  action. Records the value either way. @p pad is padKey(universe). */
+    bool isTwinEcho(quint32 pad, quint32 universe, GamepadRole::Role role, uchar value);
+    /** How long a line may lag its twin and still be its echo, ms. */
+    static constexpr qint64 twinEchoMs() { return 300; }
 
 private:
     Doc *m_doc;
@@ -724,9 +740,23 @@ private:
         /** A trigger was down with both bumpers (the stop, or one on its
          *  way): no arm until both bumpers are up and squeezed afresh. */
         bool spent = false;
+        /** What each control did lately on this pad (by role), and how far
+         *  each of its lines has followed: a line repeating a change
+         *  another line already brought is its echo (isTwinEcho()). */
+        struct Change
+        {
+            uchar value = 0;
+            quint32 from = UINT_MAX;
+            qint64 at = 0;
+            quint64 seq = 0;
+        };
+        QHash<int, QList<Change>> changes;
+        QHash<int, QHash<quint32, quint64>> followed;
+        quint64 seq = 0;
         bool anyTrigger() const { return lt.isDown() || rt.isDown(); }
         bool all() const { return lb && rb && lt.isDown() && rt.isDown(); }
     };
+    /** Keyed by padKey(): one pad, one Held, however many lines it is on. */
     QHash<quint32, Held> m_held;
     /** The event watchStop() last read (and RT's press in it), for handle()
      *  to take instead of reading it again. */
@@ -737,6 +767,7 @@ private:
         int role = 0;
         uchar value = 0;
         bool rtPressed = false;
+        bool echo = false;      ///< the pad's other line repeating it
     } m_noted;
     bool m_armed = false;
     quint32 m_armUniverse = UINT_MAX;
@@ -775,8 +806,12 @@ private:
     /** What the screens were last told of the hit, so hitChanged() goes once. */
     QString m_shownHit;
     QString m_shownArmedHit;
-    QTimer *m_armChord = nullptr;
-    quint32 m_chordUniverse = UINT_MAX;
+    /** Each pad's arm chord timing, by padKey(): another pad's chord never
+     *  takes or stops the runner's (CONTROLLER_JOBS.md 6). */
+    QHash<quint32, QTimer *> m_armChords;
+    int m_armChordMs = armChordMs();
+    /** isTwinEcho()'s clock. */
+    QElapsedTimer m_clock;
     /** What the screens were last told, so stateChanged() goes once. */
     int m_shownState = int(Tools);
     QString m_shownText;

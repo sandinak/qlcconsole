@@ -122,7 +122,12 @@ connects. (can change: a pad's serial over USB, when one says it.)
    pad its own colour, every pad red after the stop. One pad: as before.
    The same pad seen twice (one identity on two universes) is one
    controller: counted once (no runner's name on the chip), and told one
-   light, the same colour on both lines (review 0.4.10, M1).
+   light, the same colour on both lines (review 0.4.10, M1). Its presses
+   are one pad's: one held state, one chord timer, and a change that
+   arrives on both lines acts once, from the line that brings it first
+   (`PadRun::padKey()`, `isTwinEcho()`; eval 0.4.12). Each pad (each
+   identity) times its own arm chord (rule 6's "its chord timing
+   untouched").
 10. **Jobs changed live.** Taking Run cues from the runner disarms it (no
    button: rule 3's "with no button at all"); taking Focus from the pad
    that owns a tool lets the ownership go; taking Follow spot from the
