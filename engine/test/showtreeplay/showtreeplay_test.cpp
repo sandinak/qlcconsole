@@ -50,6 +50,7 @@
 #include "qlcfile.h"
 #include "fixture.h"
 #include "qlcfixturedef.h"
+#include "qlcchannel.h"
 #include "chaser.h"
 #include "scene.h"
 #include "doc.h"
@@ -2408,17 +2409,20 @@ void ShowTreePlay_Test::stepsSetMidRunCarryTheTrackedState()
        tracked state -- the step started last, the steps played -- follows
        the steps. Left on the old indices, the GO after a step added at the
        top looked like a jump, and restack() put on what the new step sets
-       though it never played: a channel only it sets (the par's red, LTP)
+       though it never played: a channel only it sets (a head's pan, LTP)
        came up at that GO and stayed. Plain Collections: no Show Tree
-       tracking carries anything on. */
-    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Generic", "Generic RGB");
+       tracking carries anything on. A moving head's pan: LTP (a par's
+       colour is intensity, HTP, which the restack leaves alone). */
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Clay Paky", "Sharpy");
     QVERIFY(def != nullptr);
-    Fixture *par = new Fixture(m_doc);
-    par->setName("Par");
-    par->setFixtureDefinition(def, def->mode("RGB Dimmer"));
-    par->setAddress(8);
-    par->setUniverse(0);
-    m_doc->addFixture(par);
+    Fixture *head = new Fixture(m_doc);
+    head->setName("Spot");
+    head->setFixtureDefinition(def, def->mode("Standard"));
+    head->setAddress(8);
+    head->setUniverse(0);
+    m_doc->addFixture(head);
+    const quint32 pan = head->channelNumber(QLCChannel::Pan, QLCChannel::MSB);
+    QVERIFY(pan != QLCChannel::invalid());
     auto cue = [this](quint32 fixture, quint32 channel, uchar value) {
         Scene *scene = new Scene(m_doc);
         scene->setValue(fixture, channel, value);
@@ -2428,9 +2432,9 @@ void ShowTreePlay_Test::stepsSetMidRunCarryTheTrackedState()
         m_doc->addFunction(coll);
         return coll->id();
     };
-    auto red = [this]() {
+    auto panNow = [this, pan]() {
         QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
-        const int v = uchar(ua.first()->preGMValues().at(8));
+        const int v = uchar(ua.first()->preGMValues().at(int(8 + pan)));
         m_doc->inputOutputMap()->releaseUniverses(false);
         return v;
     };
@@ -2458,19 +2462,19 @@ void ShowTreePlay_Test::stepsSetMidRunCarryTheTrackedState()
     QCOMPARE(chaser->currentStepIndex(), 2);
     QCOMPARE(int(settle(5)[0]), 120);
 
-    ChaserStep top(cue(par->id(), 0, 255), 0, Function::infiniteSpeed(), 0);
+    ChaserStep top(cue(head->id(), pan, 200), 0, Function::infiniteSpeed(), 0);
     top.duration = Function::infiniteSpeed();
     steps.prepend(top);
     chaser->setSteps(steps);
     QCOMPARE(chaser->currentStepIndex(), 3);
     QCOMPARE(int(settle(5)[0]), 120);
-    QCOMPARE(red(), 0);
+    QCOMPARE(panNow(), 0);
 
     go(chaser);
     QCOMPARE(int(settle(5)[0]), 160);
     QCOMPARE(chaser->currentStepIndex(), 4);
-    QVERIFY2(red() == 0, qPrintable(QString("GO after a step was added at the top put on what it sets "
-                                            "(the par's red at %1), though it never played").arg(red())));
+    QVERIFY2(panNow() == 0, qPrintable(QString("GO after a step was added at the top put on what it sets "
+                                               "(the head's pan at %1), though it never played").arg(panNow())));
 }
 
 void ShowTreePlay_Test::aLoadedCueStaysLoadedWhenACueIsAddedBeforeIt()
