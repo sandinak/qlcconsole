@@ -1160,10 +1160,10 @@ public:
 QString venueFocusCueTip()
 {
     return ShowTreeView::tr("Pre-show: GO onto this cue plays its looks as a preset and waits; the "
-                            "voice says \"Venue focus ready\". On the controller, armed, hold LT and "
-                            "press Menu (or press \u2318\u21a9) to begin the show's focus calls; LT + "
-                            "Menu again ends the focus and the pad is armed again. The list stays on "
-                            "the focus cue until LT + A.");
+                            "voice says \"Venue focus ready\". On the controller, hold LT and press "
+                            "Menu (or press \u2318\u21a9) to begin the show's focus calls; a pad "
+                            "that also runs cues is armed first, a Focus-only pad needs no arm. LT + "
+                            "Menu again ends the focus. The list stays on the focus cue until LT + A.");
 }
 } // namespace
 
