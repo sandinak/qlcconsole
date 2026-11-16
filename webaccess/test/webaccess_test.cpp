@@ -2735,6 +2735,18 @@ void WebAccess_Test::theRemoteEmergencyStopNeedsNoCueList()
     QCOMPARE(run.command(QStringLiteral("alloff"), true, QString(), QString()), WebAccessRun::Done);
     // GO in the same show still has nothing to play.
     QCOMPARE(run.command(QStringLiteral("go"), true, QString(), QString()), WebAccessRun::NothingToDo);
+
+    /* Board Q256 (open): until it is answered the stop asks what every
+       command asks, and the page is told so (stopFree false), so it says
+       STOP NOT SENT rather than a stop it did not send. */
+    QVERIFY(WebAccessRun::kStopNeedsRemote);
+    QCOMPARE(QJsonDocument::fromJson(run.stateJson()).object().value(QStringLiteral("stopFree")).toBool(true), false);
+    m_doc->operateSettings()->setRemoteGo(false);
+    QCOMPARE(run.command(QStringLiteral("alloff"), true, QString(), QString()), WebAccessRun::Refused);
+    m_doc->operateSettings()->setRemoteGo(true);
+    m_doc->operateSettings()->setPin(QStringLiteral("2468"));
+    QCOMPARE(run.command(QStringLiteral("alloff"), false, QString(), QString()), WebAccessRun::NeedPin);
+    m_doc->operateSettings()->setPin(QString());
 }
 
 void WebAccess_Test::soloFromTheRemotePlaysOneLayerOfThePreview()
