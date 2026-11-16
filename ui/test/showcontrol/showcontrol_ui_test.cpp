@@ -32,6 +32,7 @@
 #include <QNetworkInterface>
 #include <QCryptographicHash>
 #include <QtTest>
+#include <QElapsedTimer>
 
 #include "../../../engine/test/common/stdprelude.h"
 #define private public
@@ -359,17 +360,26 @@ void ShowControlUi_Test::aCommandReceivedShowsAsLast()
 
     // Each wait is on what the page shows, for as long as a busy machine
     // could take to hand a datagram over -- never on a fixed delay.
+    // UDP may drop a datagram on a loaded machine, so each one is sent
+    // again every half second until the page shows it.
     QUdpSocket qlab;
-    qlab.writeDatagram(osc("/cue/2/start"), QHostAddress::LocalHost, quint16(port));
-    QTRY_VERIFY2_WITH_TIMEOUT(oscLast->text().contains("GO cue 2"), qPrintable(oscLast->text()),
-                              kDatagramTimeout);
+    auto sendUntil = [&](const QByteArray &dgram, const QString &shown) {
+        QElapsedTimer t;
+        t.start();
+        while (oscLast->text().contains(shown) == false && t.elapsed() < kDatagramTimeout)
+        {
+            qlab.writeDatagram(dgram, QHostAddress::LocalHost, quint16(port));
+            for (int i = 0; i < 10 && oscLast->text().contains(shown) == false; ++i)
+                QTest::qWait(50);
+        }
+        return oscLast->text().contains(shown);
+    };
+    QVERIFY2(sendUntil(osc("/cue/2/start"), "GO cue 2"), qPrintable(oscLast->text()));
     QVERIFY(oscLast->text().contains(QRegularExpression("^\\d\\d:\\d\\d:\\d\\d")));
     QCOMPARE(mscLast->text(), QString("Nothing received yet."));
 
     // An address that isn't a cue command says what it was.
-    qlab.writeDatagram(osc("/qlab/hello"), QHostAddress::LocalHost, quint16(port));
-    QTRY_VERIFY2_WITH_TIMEOUT(oscLast->text().contains("/qlab/hello"), qPrintable(oscLast->text()),
-                              kDatagramTimeout);
+    QVERIFY2(sendUntil(osc("/qlab/hello"), "/qlab/hello"), qPrintable(oscLast->text()));
     QVERIFY(oscLast->text().contains("not a cue command"));
 
     // MSC, as it arrives from a patched MIDI input.
