@@ -144,6 +144,13 @@ void FixtureRest::stopAll(Doc *doc, int fadeMs)
         mt->stopAllFunctions();
     else
         mt->fadeAndStopAll(fadeMs);
+    restAfterStop(doc);
+}
+
+void FixtureRest::restAfterStop(Doc *doc)
+{
+    if (doc == nullptr)
+        return;
     /* At rest now: a fade out that has not started yet fades to the rest
        values (it fades an LTP channel to what is under it). And again once
        the fades are over, for one that had already started. Looked at for

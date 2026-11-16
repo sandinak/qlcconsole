@@ -77,7 +77,7 @@ arm and disarm, the left trigger is the safety, the right trigger the hit)
 | Armed, hold LT + X | Sub GO |
 | Armed, hold LT + Y | Sub Back |
 | Armed, pull RT | Fire the armed hit (named under ARMED: **Hit ▸ Breathe**) |
-| LB + RB + LT + RT | Emergency stop: everything off (the page says EMERGENCY STOP) |
+| LB + RB + LT + RT | Emergency stop: everything off (the page says EMERGENCY STOP). With **Allow GO from the phone Run page** off, or the PIN not given yet, it is **not sent**: the page says STOP NOT SENT and why |
 | Armed, hold LT + View | Solo: the first layer of the cue in the preview, or the whole cue again |
 | Armed, hold LT + D-pad right / left | Solo the next / previous layer |
 | Armed, hold LT + LS (click) | Blind on / off |

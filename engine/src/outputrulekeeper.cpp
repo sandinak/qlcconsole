@@ -377,6 +377,12 @@ void OutputRuleKeeper::emergencyStop()
         // The gates of whatever is still running, worked out as a tick would.
         if (m_doc->masterTimer() != nullptr)
             m_doc->masterTimer()->refreshPreviewGates();
+        /* Then every fixture at rest, as Stop all does (one path:
+           FixtureRest::restAfterStop()): a fogger or a WLED effect not
+           marked Show only kept the last value its cue sent (UX-70). Here,
+           on the main thread; it takes the universes' frame locks as a patch
+           does and never waits for the MasterTimer. */
+        FixtureRest::restAfterStop(m_doc);
     };
     if (thread() == QThread::currentThread())
         stopAll();

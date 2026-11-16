@@ -1024,7 +1024,7 @@ void PageScript_Test::noStopIsShownThatWasNotSent()
         // Said plainly: not sent, and why.
         QVERIFY(shown(QStringLiteral("armed")));
         QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("STOP NOT SENT"));
-        QVERIFY2(text(QStringLiteral("msg")).contains(remoteOn ? QStringLiteral("PIN") : QStringLiteral("remote GO is off")),
+        QVERIFY2(text(QStringLiteral("msg")).contains(remoteOn ? QStringLiteral("PIN") : QStringLiteral("GO from the phone is off")),
                  qPrintable(text(QStringLiteral("msg"))));
         pad(QJsonObject(), 50);
     }

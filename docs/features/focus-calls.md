@@ -440,7 +440,9 @@ are one checklist:
    list stays where it is.
    In **Pad: FOCUS** no cue plays from the controller (no GO, Back, Sub
    GO, Sub Back or hit), the focus has the pad exactly as below, and the
-   emergency stop (all four: LB + RB + LT + RT) still stops everything.
+   emergency stop (all four: LB + RB + LT + RT) still stops everything:
+   it ends the focus too (no focus light is left on, and lights not
+   saved are put back), and the list stays where the stop left it.
    If the controller goes away mid-focus, the focus is held as below and
    the controller comes back not armed.
 

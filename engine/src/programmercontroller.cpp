@@ -1926,6 +1926,15 @@ void ProgrammerController::padRumble(int pulses, int lengthMs, quint32 universe)
     emit padRumbled(pulses, lengthMs);
 }
 
+void ProgrammerController::endToolsForStop()
+{
+    m_focusCallCue->cut();
+    if (m_focusSession->isActive())
+        m_focusSession->stop();
+    if (m_refineSession->isActive())
+        m_refineSession->stop();
+}
+
 void ProgrammerController::tellOperator(const QString &text, int priority)
 {
     if (priority >= ControllerScheme::ImportantPriority)

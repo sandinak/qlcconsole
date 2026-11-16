@@ -164,7 +164,11 @@ them:
   alone, the safety only brushed, or the right trigger in its place does
   nothing, and the Pad chip says what it needs ("GO is LT held and A.").
 - **The emergency stop** stops everything that plays (the same as ALL
-  OFF), in the Run role whatever the pad is doing. The arm drops, and the
+  OFF), in the Run role whatever the pad is doing, and then puts every
+  fixture at rest as **Stop all** does: a fogger, a hazer or a WLED effect
+  stops too, whether it is marked Show only or not (pan and tilt stay
+  where they are). A Quick focus, Venue focus, Focus this cue or walk
+  running then ends with it, and what it had not saved is put back. The arm drops, and the
   button, the frame, the chip and the pad's light turn red (**Pad:
   STOPPED**), over a walk or a tool too, until you arm again or any run
   command goes through from anywhere: a GO, Back or Stop from the laptop,

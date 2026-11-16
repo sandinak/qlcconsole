@@ -90,6 +90,7 @@ button:disabled{opacity:.35}
 #focuslink{display:none;color:var(--go2);font-weight:700;text-decoration:none}
 #armed{display:none;text-align:center;font-size:14px;font-weight:700;letter-spacing:.1em;color:#101214;background:var(--warn);border-radius:8px;padding:3px;margin-bottom:8px}
 #armed.stopped{background:var(--stop);color:#fff}
+#armed.refused{background:transparent;color:var(--warn);border:2px solid var(--warn)}
 #padhit{display:none;text-align:center;font-size:16px;font-weight:700;color:var(--warn);margin:-4px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #testbtn{width:auto;min-height:32px;font-size:14px;font-weight:400;padding:0 10px;margin:0 auto 10px;display:block;background:none;border:0;color:var(--dim);text-decoration:underline}
 #statusline{display:none;flex-shrink:0;font-size:14px;color:var(--warn);padding:0 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -270,9 +271,18 @@ function statusList(){
    Solo (a.cmd). */
 function padAction(r){return (st.pad||{})[r]}
 function padLabels(){var l={};for(var r in (st.pad||{}))l[r]=st.pad[r].label;QPad.labels(l)}
-var padArmed=false,padStopped=false,armT=null,estopDone=false,spent=false;
-function showArm(){var e=$('armed');e.style.display=(padArmed||padStopped)?'block':'none';
-  e.className=padStopped?'stopped':'';e.textContent=padStopped?'EMERGENCY STOP':'ARMED: LT + A IS GO';showHit()}
+var padArmed=false,padStopped=false,stopRefused=false,armT=null,estopDone=false,spent=false;
+function showArm(){var e=$('armed');e.style.display=(padArmed||padStopped||stopRefused)?'block':'none';
+  e.className=padStopped?'stopped':stopRefused?'refused':'';
+  e.textContent=padStopped?'EMERGENCY STOP':stopRefused?'STOP NOT SENT':'ARMED: LT + A IS GO';showHit()}
+/* Why the page may not send the emergency stop, in plain words; empty when
+   it may. The page never shows a stop it did not send. The stop asks what
+   every command asks (remote GO on, the PIN given) unless the console says
+   otherwise (st.stopFree, WebAccessRun::kStopNeedsRemote: board Q256). */
+function stopRefusal(){if(st.stopFree)return '';
+  if(!st.remote)return 'Stop not sent: GO from the phone is off on the laptop (Show Settings).';
+  if(st.pin&&!unlocked)return 'Stop not sent: give the show\'s PIN on this page first.';
+  return ''}
 /* What RT fires next, in the console's words (st.hit: PadRun's one source),
    while this pad is armed; nothing when a pull would fire nothing. */
 function showHit(){var h=$('padhit'),t=padArmed&&!padStopped&&st.hit?st.hit:'';
@@ -288,7 +298,7 @@ function chord(){var a=padAction('lb'),lb=QPad.down('lb'),rb=QPad.down('rb'),tr=
   armT=setTimeout(function(){armT=null;
     /* The controller test opened inside the chord's time: nothing pressed there arms. */
     if(!(QPad.down('lb')&&QPad.down('rb'))||QPad.down('lt')||QPad.down('rt')||spent||QPad.isOpen())return;
-    padArmed=!padArmed;padStopped=false;showArm();
+    padArmed=!padArmed;padStopped=false;stopRefused=false;showArm();
     if(navigator.vibrate)navigator.vibrate(padArmed?[30,60,30]:150)},(a&&a.hold)||500)}
 QPad.on({
   down:function(r){
@@ -296,8 +306,10 @@ QPad.on({
     if(isChord(r)){
       if(QPad.down('lb')&&QPad.down('rb')&&QPad.down('lt')&&QPad.down('rt')){
         clearTimeout(armT);armT=null;spent=true;
-        if(!estopDone){estopDone=true;padArmed=false;padStopped=true;showArm();
-          if(canRig())cmd('alloff');if(navigator.vibrate)navigator.vibrate([150,80,150,80,150])}
+        if(!estopDone){estopDone=true;padArmed=false;var no=stopRefusal();
+          padStopped=!no;stopRefused=!!no;showArm();
+          if(no){msg(no);if(navigator.vibrate)navigator.vibrate(600)}
+          else{cmd('alloff');if(navigator.vibrate)navigator.vibrate([150,80,150,80,150])}}
         return}
       chord();
       /* RT's pull on its own is the hit, below -- not with a bumper or LT down (the stop in the making). */

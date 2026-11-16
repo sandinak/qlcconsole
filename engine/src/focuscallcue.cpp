@@ -306,6 +306,15 @@ void FocusCallCue::disarm()
     setState(Idle);
 }
 
+void FocusCallCue::cut()
+{
+    if (m_state == Idle)
+        return;
+    m_askTimer->stop();
+    m_cue = m_list = kInvalid;
+    setState(Idle);
+}
+
 void FocusCallCue::sessionStopped()
 {
     if (m_state != Running)

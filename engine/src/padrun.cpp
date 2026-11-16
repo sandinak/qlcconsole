@@ -594,6 +594,16 @@ void PadRun::emergencyStop()
     m_armChord->stop();
     m_chordUniverse = UINT_MAX;
     hookShowControl();
+    /* Stopped first: the stop ends a focus or a walk inside run() (E9), and
+       what their ends do here must find the pad stopped -- not ARMED again
+       from the arm a focus put by. */
+    const bool was = m_armed;
+    m_armed = false;
+    m_armUniverse = UINT_MAX;
+    m_focusArm = UINT_MAX;      // a focus ending after the stop does not re-arm
+    m_stopped = true;
+    m_playing = false;
+    m_flash->stop();
     ShowControl *sc = m_doc != nullptr ? m_doc->showControl() : nullptr;
     bool done = false;
     if (sc != nullptr)
@@ -604,13 +614,6 @@ void PadRun::emergencyStop()
         done = sc->run(r, ShowControl::RoutePad);
         m_stopping = false;
     }
-    const bool was = m_armed;
-    m_armed = false;
-    m_armUniverse = UINT_MAX;
-    m_focusArm = UINT_MAX;      // a focus ending after the stop does not re-arm
-    m_stopped = true;
-    m_playing = false;
-    m_flash->stop();
     emit commandSent(ShowControl::AllOff, done);
     if (was)
         emit armedChanged(false);

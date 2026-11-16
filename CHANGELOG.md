@@ -10,6 +10,12 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Changed and fixed
+
+- **The emergency stop is "Everything is off".** The pad's four together, the phone or Deck page's, and an OSC or MSC ALL OFF now put every fixture at rest after stopping everything, as **Stop all** does and through the same code: a fogger, hazer or WLED effect not marked Show only no longer keeps fogging or running (pan and tilt stay where they are). A Quick focus, Venue focus, Focus this cue or walk running at the time ends with it, so no focus light is left on; what it had not saved is put back. On the phone or Deck page, the four together with **Allow GO from the phone Run page** off, or before the PIN is given, no longer turn the banner red with EMERGENCY STOP when nothing was sent: the page says **STOP NOT SENT** and why (whether the stop should go anyway is board Q256).
+
 ## [0.4.12] - Unreleased
 
 ### Changed and fixed

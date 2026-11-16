@@ -83,6 +83,10 @@ public:
     bool start(QString *why = nullptr);
     /** Let go of an armed cue (the list moved on, or stopped). */
     void disarm();
+    /** The emergency stop: the cue let go of, armed or running, at once and
+     *  quietly (the stop says what happened; "Venue focus ended." would talk
+     *  over it). The focus session itself is ended by the caller. */
+    void cut();
 
     /** While NamingVenue: the venue's name (empty: a new one for today's
      *  date; the one applied: still at it), and the calls begin. False

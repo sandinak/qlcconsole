@@ -61,8 +61,8 @@ class Doc;
  *                        / A / B)
  *   LB + RB + LT + RT    EMERGENCY STOP: everything stops (ALL OFF), in
  *                        the Run role whatever the pad is doing (armed or
- *                        not, walking, a tool holding it; not while the
- *                        Controller Test is open); the arm drops and every
+ *                        not, walking, a tool holding it, the Controller
+ *                        Test open too); the arm drops and every
  *                        surface shows red, over a walk or a tool too
  *   (the bumpers are the mode only: the arm, and the stop's four)
  *   RS           say the list and what is on standby

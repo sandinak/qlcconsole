@@ -58,6 +58,14 @@ namespace FixtureRest
      *  channels were written. */
     QLC_ENGINE_EXPORT int putAllAtRest(Doc *doc);
 
+    /** What Stop ALL and the emergency stop do once they have stopped the
+     *  functions (both through here, so the two cannot drift apart): every
+     *  fixture put at rest now (putAllAtRest()), and again when the last fade
+     *  out is over -- only when nothing has started since. On the main
+     *  thread (the fixture list's); it takes each universe's frame lock as a
+     *  patch does and never waits for the MasterTimer. */
+    QLC_ENGINE_EXPORT void restAfterStop(Doc *doc);
+
     /** Stop ALL: every function stops (over @p fadeMs, 0 at once) and,
      *  once they have, every fixture is put at rest (putAllAtRest()), so a
      *  fog machine stops pumping and a gobo or WLED effect stops running.
