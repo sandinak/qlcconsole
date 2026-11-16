@@ -11874,3 +11874,49 @@ void ShowTree_Test::releaseAndUntrackCommands()
     QVERIFY2(r.help.contains("Untrack From This Cue"), qPrintable(r.help));
     QVERIFY(ShowTreeCommand::showTreeOnlyWord("untrack"));
 }
+
+/*****************************************************************************
+ * Independent evaluation of 0.4.12 (eval/0412): a failing test for a fixer
+ *****************************************************************************/
+
+void ShowTree_Test::evalAReusableLayersEffectFadeIsEveryUses()
+{
+    /* The uses of a reusable layer are one content: syncReusables() finds
+       the use an edit changed, and makes every use the same, by
+       layerContent() -> looksContent() -- which leaves out a look's
+       fadeIn / fadeOut (showtreemodel.cpp). An effect's fade set in one use
+       is never carried to the others (the two cues bake different fades),
+       and the next edit made in another use copies that use's looks, old
+       fades and all, over every use: the fade set first is gone. */
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    QLCPalette *pulse = new QLCPalette(QLCPalette::Effect, m_doc);
+    pulse->setName("Pulse");
+    m_doc->addPalette(pulse);
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(128, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+    Look fx = st->lookForPalette(pulse->id());
+    QVERIFY(st->setLayerLook(c1, l1, fx));
+    const quint32 rid = st->makeLayerReusable(c1, l1, "Wash");
+    QVERIFY(rid != invalidId());
+    const quint32 l2 = st->insertReusableLayer(c2, rid);
+    QVERIFY(l2 != invalidId());
+    QVERIFY(st->cue(c2)->layer(l2)->look(fx.key) != nullptr);
+
+    // Use 1: the effect fades in over 3 s.
+    fx.fadeIn = 3000;
+    QVERIFY(st->setLayerLook(c1, l1, fx));
+    QCOMPARE(st->cue(c1)->layer(l1)->look(fx.key)->fadeIn, 3000);
+    const int other = st->cue(c2)->layer(l2)->look(fx.key)->fadeIn;
+    // Use 2 recoloured (a dimmer change): the content every use takes.
+    QVERIFY(st->setLayerLook(c2, l2, st->lookForPalette(half)));
+    const int firstAfter = st->cue(c1)->layer(l1)->look(fx.key)->fadeIn;
+    QVERIFY2(other == 3000, qPrintable(QString("the fade set in one use is not the other use's (it has %1)").arg(other)));
+    QVERIFY2(firstAfter == 3000, qPrintable(QString("an edit in the other use wiped the first use's fade (now %1)")
+                                                .arg(firstAfter)));
+}
