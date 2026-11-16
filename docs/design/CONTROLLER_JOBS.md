@@ -346,24 +346,34 @@ it holds, and the chip says why."
   cue ends), `advanceRestoreGlide()`, `updateFollowSpotStatus()` and the
   once-a-second stick search. Before, all of it waited for the tool's
   end; a glide or a cue change during a tool now happens on time.
-- **What a reopened pad held.** A pad reopened in place by its plugin
-  (switched off and on, re-enumerated, back from sleep: the plugin's
-  `inputReopened(line)`, for that line only -- the HID plugin's replace
-  path; `InputOutputMap::inputPatchReconnected()`) keeps the four as read,
-  for the stop (a stale "held" can only make a stop easier, and it
-  latches; some pads -- winmm, macOS's polled ones -- never send their
-  held state again, and a stop squeezed with three of four held must not
-  be lost), but its LT is no GO safety (nor LT + Menu's) until LT is read
-  again (`Held::ltStale`); a View is no chord, a chord its bumpers began
-  is spent, the walk's modifier lets go, and the arm stays
-  (`PadRun::padReopened()`). Another pad's hot-plug or a rescan reopens
+- **What a reopened pad held.** A line whose device is another than
+  before -- replaced where it was, or another pad shifted onto it when one
+  before it went (Linux joysticks with no location: the patch stays on
+  the line) -- is told: the HID plugin compares each line's device after
+  every change (`HIDPlugin::announceLines()`) and emits
+  `inputReopened(line)` once per changed line, never for one unchanged;
+  `InputOutputMap::inputPatchReconnected()` tells the universes patched to
+  it. That pad keeps the four as read, for the stop (a stale "held" can
+  only make a stop easier; some pads -- winmm, macOS's polled ones --
+  never send their held state again, and a stop squeezed with three of
+  four held must not be lost), but **a stop it fired is no longer
+  latched**, on its twin lines too: its releases may never come, and a
+  latch kept would swallow the next squeeze (a second stop errs the safe
+  way). Its LT is no GO safety (nor LT + Menu's) until LT is read again
+  (`Held::ltStale`); a chord its bumpers began is spent; when a control it
+  never sent again blocks the arm or the hit, the chip says to press it
+  once ("The controller came back with LT held: press it once, then hold
+  LB and RB."); the release of a View or stick click it held is
+  swallowed (the end of that hold, never a click); the walk's modifier
+  lets go; the arm stays (`PadRun::padReopened()`). Another pad's hot-plug or a rescan reopens
   nothing of the pads already here: they keep what they hold. A pad
   re-patched (`inputPatchChanged`) forgets all it held, as before (the
   lead's evaluation of 0.4.12; the second review of Q253).
 - **The restore glide waits for a tool.** A cue's follow spot ending
   glides its subject back where the show has it; while a tool's lights
   aim at that subject the glide waits where it is, and goes on when the
-  tool ends or moves off them (`advanceRestoreGlide()`).
+  tool ends or moves off them, from where the subject is then, over the
+  whole fade (`advanceRestoreGlide()`).
 - Unchanged: the emergency stop is read first on every pad (4), the arm
   takes two controls, the runner's GO family rules beside a focus or a
   walk (11, Q252), and one status source per surface (9).
@@ -429,4 +439,11 @@ window still open.
   hot-plug keeps what a pad holds (engine/test/padrunrules
   `aReopenedPadHoldsNoStaleSafety`, `aHotPlugKeepsTheOtherPadsHeld`); the
   restore glide waits for a tool aimed at the subject
-  (`q253TheRestoreGlideWaitsForTheTool`).
+  (`q253TheRestoreGlideWaitsForTheTool`); after a reopen the stop fires
+  again, the chip says what the pad came back holding, a held click's
+  release is no click (`aStopAfterAReopenFiresAgain`,
+  `aReopenedPadSaysWhatItCameBackHolding`,
+  `aReopenSwallowsAHeldClicksRelease`); a line is told once when its
+  device changes (plugins/hid/test `everyChangedLineIsToldOnce`), and a
+  pad shifted onto another's line through the real plugin is no GO on
+  the held LT (engine/test/padtraces `aShiftedLineIsNoSafety`).

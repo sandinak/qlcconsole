@@ -70,6 +70,16 @@ private slots:
      *  reopen or a re-patch makes no View + Menu chord (the lead's
      *  evaluation of 0.4.12, the second review of Q253). */
     void aReopenedPadHoldsNoStaleSafety();
+    /** The four squeezed, the stop, the pad reopened with them held and
+     *  sending nothing again, squeezed again: the stop fires again, on one
+     *  pad listed twice too (third review of Q253). */
+    void aStopAfterAReopenFiresAgain_data();
+    void aStopAfterAReopenFiresAgain();
+    /** What a reopened pad came back holding and never sent again blocks
+     *  the arm or the hit: the chip says to press it once. */
+    void aReopenedPadSaysWhatItCameBackHolding();
+    /** A stick click held across a reopen: its release is no click. */
+    void aReopenSwallowsAHeldClicksRelease();
     /** Rule 3 (pad-trace replay, 2026-11-16): a chord that fired (or was
      *  refused) does not fire again while both bumpers stay held, whatever
      *  else comes in -- a DualSense's resting trigger noise above all. */

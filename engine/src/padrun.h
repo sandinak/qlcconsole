@@ -738,12 +738,23 @@ private:
          *  four for the stop, but no safety until LT is read again (a pad
          *  that never sends its held state again must not GO on it). */
         bool ltStale = false;
+        /** The same for the bumpers: held as read before the reopen, never
+         *  read since (a chord they make is spent until let go). */
+        bool lbStale = false;
+        bool rbStale = false;
+        /** The words for what was held over a reopen and not read since,
+         *  in control tokens ("{LT}", "{LB} and {RB}"); empty: none. */
+        QString staleText() const;
         /** LT held as the GO family's safety (and LT + Menu's). */
         bool safety() const { return lt.isDown() && !ltStale; }
         bool anyTrigger() const { return lt.isDown() || rt.isDown(); }
         bool all() const { return lb && rb && lt.isDown() && rt.isDown(); }
     };
     QHash<quint32, Held> m_held;
+    /** "The controller came back with {LT} held: press it once, then
+     *  @p then" -- a control a reopened pad never sent again blocks what
+     *  the operator tried (third review of Q253). */
+    void tellStale(const Held &h, const QString &then);
     /** The event watchStop() last read (and RT's press in it), for handle()
      *  to take instead of reading it again. */
     struct Noted

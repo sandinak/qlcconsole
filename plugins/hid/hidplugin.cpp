@@ -1150,9 +1150,37 @@ void HIDPlugin::dropDevice(HIDDevice *dev)
     if (m_trace != nullptr && dev->axisCount() >= 0)
         m_trace->gone(dev);
     m_devices.removeAll(dev);
+    m_deviceIds.remove(dev);
     m_diagnosticsStarted.remove(dev);
     emit deviceRemoved(dev);
     disposeOffThread(dev);
+}
+
+void HIDPlugin::announceLines()
+{
+    /* Each line's device now, by an id never reused (a pointer can be, to
+       a device made where a dropped one was). */
+    QList<quint64> now;
+    now.reserve(m_devices.size());
+    for (HIDDevice *dev : std::as_const(m_devices))
+    {
+        auto it = m_deviceIds.find(dev);
+        if (it == m_deviceIds.end())
+            it = m_deviceIds.insert(dev, ++m_nextDeviceId);
+        now << it.value();
+    }
+    /* A line that had a device and has another now -- replaced where it
+       was, or another shifted onto it when one before it went (a Linux
+       pad with no location: the patch on the line stays) -- is told:
+       what was held on it is not known to be held (third review of Q253).
+       A line new at the end, or one gone, is not: the patch follows those. */
+    QList<quint32> changed;
+    for (int i = 0; i < qMin(m_lineIds.size(), now.size()); ++i)
+        if (m_lineIds.at(i) != now.at(i))
+            changed << quint32(i);
+    m_lineIds = now;
+    for (quint32 line : std::as_const(changed))
+        emit inputReopened(line);
 }
 
 void HIDPlugin::renumberLines()
@@ -1272,6 +1300,7 @@ void HIDPlugin::applyScan(const QList<HIDFound> &found, const QSet<QString> &sta
     {
         renumberLines();
         emit configurationChanged();
+        announceLines();
     }
     noteProblems();
 }
@@ -1328,6 +1357,7 @@ void HIDPlugin::openTimedOut(const QString &path, quint64 job)
             dropDevice(old);
             renumberLines();
             emit configurationChanged();
+            announceLines();
         }
     }
     noteProblems();
@@ -1355,7 +1385,6 @@ void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
     m_opening.erase(it);
     HIDDevice *old = device(path);
     bool changed = false;
-    HIDDevice *reopened = nullptr;      // replaced where it was: its line is told
 
     if (m_listed.contains(path) == false || dev == nullptr)
     {
@@ -1397,7 +1426,7 @@ void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
         emit deviceAdded(dev);
         setupDiagnostics(dev);
         changed = true;
-        reopened = dev;
+        m_deviceIds.remove(old);            // its line's device is another now
     }
     else
     {
@@ -1413,11 +1442,7 @@ void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
     {
         renumberLines();
         emit configurationChanged();
-        /* A held trigger or button of the old device may never be sent
-           again (some pads keep their state across the reopen): the
-           engine lets go of that line's GO safety (board Q253's review). */
-        if (reopened != nullptr && m_devices.contains(reopened))
-            emit inputReopened(reopened->line());
+        announceLines();
     }
     noteProblems();
 }
@@ -1555,6 +1580,7 @@ void HIDPlugin::addDevice(HIDDevice* device)
     emit deviceAdded(device);
 
     emit configurationChanged();
+    announceLines();
 }
 
 void HIDPlugin::removeDevice(HIDDevice* device)
@@ -1563,10 +1589,12 @@ void HIDPlugin::removeDevice(HIDDevice* device)
 
     m_devices.removeAll(device);
 
+    m_deviceIds.remove(device);
     emit deviceRemoved(device);
     delete device;
 
     emit configurationChanged();
+    announceLines();
 }
 
 /*****************************************************************************

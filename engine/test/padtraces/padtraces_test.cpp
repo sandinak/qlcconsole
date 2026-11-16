@@ -256,6 +256,69 @@ void PadTraces_Test::twinListing()
     VERIFY_CLEAN_PLAY();
 }
 
+void PadTraces_Test::aShiftedLineIsNoSafety()
+{
+    /* Two pads of one name with no location (Linux joysticks, /dev/input/
+       js*), patched to universes 1 and 2. A arms and holds LT; A goes, so B
+       moves onto A's line and universe 1 hears B -- with no patch change.
+       B's A press must not GO on A's held LT; once B's LT is read, it does
+       (third review of Q253). Through the real HID plugin. */
+    const QString name = QStringLiteral("Xbox Wireless Controller");
+    const QString a = QStringLiteral("/dev/input/js0"), b = QStringLiteral("/dev/input/js1");
+    const quint32 kLt = 2, kA = 6, kLb = 10, kRb = 11;
+    auto scan = [&](int count) {
+        QMetaObject::invokeMethod(m_hid, "rescanDevices", Qt::DirectConnection);
+        QTRY_VERIFY_WITH_TIMEOUT(inputsNamed(name) == count, 3000);
+        QTest::qWait(50);
+    };
+    auto lineOf = [&](const QString &path) {
+        int line = -1;
+        QMetaObject::invokeMethod(m_hid, "inputForPath", Qt::DirectConnection,
+                                  Q_RETURN_ARG(int, line), Q_ARG(QString, path));
+        return line;
+    };
+    auto in = [&](const QString &path, quint32 ch, uint value) {
+        bool ok = false;
+        QMetaObject::invokeMethod(m_hid, "injectVirtualInput", Qt::DirectConnection, Q_RETURN_ARG(bool, ok),
+                                  Q_ARG(quint32, quint32(lineOf(path))), Q_ARG(quint32, ch), Q_ARG(uint, value));
+        return ok;
+    };
+    m_fake->list(a, 0x045e, 0x028e, name, 0, 1);
+    scan(1);
+    m_fake->list(b, 0x045e, 0x028e, name, 0, 2);
+    scan(2);
+    QCOMPARE(lineOf(a), 0);
+    QCOMPARE(lineOf(b), 1);
+    QCOMPARE(patchPads(name), 2);
+    startRunning();
+    PadRun *run = m_doc->programmer()->padRun();
+    // A arms and holds the safety.
+    QVERIFY(in(a, kLb, 255));
+    QVERIFY(in(a, kRb, 255));
+    QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
+    QVERIFY(in(a, kRb, 0));
+    QVERIFY(in(a, kLb, 0));
+    QVERIFY(in(a, kLt, 255));
+    // A goes: B is on line 0 now, universe 1 still patched there.
+    m_fake->unlist(a);
+    scan(1);
+    QCOMPARE(lineOf(b), 0);
+    QCOMPARE(m_doc->inputOutputMap()->inputPatch(1)->input(), quint32(0));
+    if (!run->isArmed())
+        QSKIP("the arm went with A here: nothing for B's press to GO from");
+    // B's A press: no GO on A's LT.
+    QVERIFY(in(b, kA, 255));
+    QVERIFY(in(b, kA, 0));
+    QTest::qWait(50);
+    QVERIFY2(commandCount(int(ShowControl::Go)) == 0, "B's A press played a cue on the LT pad A held");
+    // B's own LT, then A: a GO.
+    QVERIFY(in(b, kLt, 255));
+    QVERIFY(in(b, kA, 255));
+    QVERIFY(in(b, kA, 0));
+    QTRY_COMPARE_WITH_TIMEOUT(commandCount(int(ShowControl::Go)), 1, 2000);
+    QVERIFY(in(b, kLt, 0));
+}
+
 void PadTraces_Test::triggerRest()
 {
     /* Triggers resting at ~8 % and the sticks' jitter: the chord still

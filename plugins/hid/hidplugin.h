@@ -286,6 +286,13 @@ private:
     /** Out of the list, its reader stopped and deleted off this thread. */
     void dropDevice(HIDDevice *dev);
     void renumberLines();
+    /** After configurationChanged(): inputReopened() for every line whose
+     *  device is another than when last told (replaced, or shifted onto it
+     *  by a drop before it); never for one unchanged. */
+    void announceLines();
+    QHash<const HIDDevice *, quint64> m_deviceIds;
+    quint64 m_nextDeviceId = 0;
+    QList<quint64> m_lineIds;
 
     std::shared_ptr<HIDScanShared> m_shared;
     HIDBackend *m_testBackend = nullptr;

@@ -1024,6 +1024,10 @@ private:
         void clear() { pads.clear(); }
     };
     HeldRoles m_heldRoles;
+    /** Per pad, the roles whose next release is swallowed: held as it was
+     *  reopened in place (View, LS, RS), so the release ends that hold,
+     *  not a click of its own. */
+    QHash<quint32, QSet<int>> m_swallowRelease;
     float m_fineNormX = 0.5f, m_fineNormY = 0.5f;
     /** The follow spot's fine stick, per pad and per axis (review 0.4.10
      *  verify, H-A): universe -> its last X and Y readings (0..1). The

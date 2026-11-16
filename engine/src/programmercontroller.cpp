@@ -3226,14 +3226,20 @@ void ProgrammerController::connectControllerInput()
        trigger held as it dropped is no safety and a View no chord (the
        lead's evaluation of 0.4.12). A stop it fired stays fired. */
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputPatchReconnected, this, [this](quint32 universe) {
+        /* A View or a stick click it held: its release, if one comes (a
+           pad that sends its state again, still held), is swallowed -- the
+           end of the hold it was in, never a plain click (an undo, a page
+           turn; third review of Q253). */
+        const QSet<int> held = m_heldRoles.pads.value(universe);
+        for (int role : { int(GamepadRole::Back), int(GamepadRole::LS), int(GamepadRole::RS) })
+            if (held.contains(role))
+                m_swallowRelease[universe].insert(role);
         m_heldRoles.pads.remove(universe);
-        // The tools' pad (or its twin line): no focus LT, no chord half made.
+        // The tools' pad (or its twin line): no focus LT.
         if (m_ownerUniverse == 0xFFFFFFFF || m_padRun->sameController(universe, m_ownerUniverse))
         {
             m_focusLt.reset();
             m_focusLtChord = false;
-            m_viewChord = false;
-            m_centreChord = false;
         }
         if (m_padRun != nullptr)
             m_padRun->padReopened(universe);
@@ -3241,6 +3247,7 @@ void ProgrammerController::connectControllerInput()
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputPatchChanged, this, [this](quint32 universe) {
         // Its held buttons went with it: no stale View (a chord) or LT.
         m_heldRoles.pads.remove(universe);
+        m_swallowRelease.remove(universe);
         if (m_padRun != nullptr)
             m_padRun->forgetPad(universe);
         /* The pad that owns the tools went (unplugged, swapped in its
@@ -3640,6 +3647,14 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     const GamepadRole::Role role = GamepadRole::Role(knownRole >= 0 ? knownRole : controllerRole(universe, channel));
     // What this pad holds (its chords are its own).
     m_heldRoles.pad = universe;
+    // The release of a View or stick click held across a reopen: swallowed.
+    if (value == 0 && m_swallowRelease.contains(universe) && m_swallowRelease[universe].remove(int(role)))
+    {
+        if (m_swallowRelease[universe].isEmpty())
+            m_swallowRelease.remove(universe);
+        m_heldRoles.remove(role);
+        return true;
+    }
     /* The touchpad's swipes (Q199): kept here, read on the tick. A swipe
        walks the show, so only a pad with the Focus job's (CONTROLLER_JOBS.md 8). */
     const bool beside = m_padRun->isBesideTool(universe);
@@ -5326,7 +5341,15 @@ void ProgrammerController::advanceRestoreGlide()
        where it is until the tool ends or moves off them, then glides on
        (second review of Q253) -- never moved under the operator. */
     if (refreshToolSets(false) && m_toolTargets.contains(m_glide.targetId))
+    {
+        /* Where it is now is where it goes on from, the whole fade again
+           (third review of Q253): never a jump from the old start. */
+        if (MonitorProperties *mp = m_doc->monitorProperties())
+            if (StageTarget *tgt = mp->stageTarget(m_glide.targetId))
+                m_glide.from = tgt->positionIn(mp->liveBlocking());
+        m_glide.elapsedMs = 0;
         return;
+    }
     MonitorProperties *mProps = m_doc->monitorProperties();
     StageTarget *tgt = mProps ? mProps->stageTarget(m_glide.targetId) : nullptr;
     if (tgt == nullptr)

@@ -2008,8 +2008,18 @@ void FollowSpotFeel_Test::q253TheRestoreGlideWaitsForTheTool()
     QVERIFY2(h.pc->m_glide.active, "no glide back began when the cue ended");
     const double moved = double((h.rig.subject->position() - away).length());
     QVERIFY2(moved < 1e-4, qPrintable(QString("the subject glided %1 m while the venue focus aimed at it").arg(moved)));
-    // The focus ends: it glides home.
+    /* Moved meanwhile by something else (the subject dragged on the plot):
+       the glide goes on from there, never jumping back to where it began. */
+    const QVector3D dragged = away + QVector3D(0.0f, 1.0f, 0.0f);
+    h.rig.subject->setPosition(dragged);
+    h.tick();
+    // The focus ends: it glides home, from where the subject is.
     q253End(h, "venue");
+    h.tick();
+    const double step = double((h.rig.subject->position() - dragged).length());
+    const double way = double((dragged - h.rig.home).length());
+    QVERIFY2(step < 0.2 * way, qPrintable(QString("the glide jumped %1 m of its %2 m on its first step after the "
+                                                  "focus").arg(step).arg(way)));
     for (int i = 0; i < 120 && h.pc->m_glide.active; ++i)
         h.tick();
     QVERIFY2((h.rig.subject->position() - h.rig.home).length() < 1e-3f,

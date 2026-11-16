@@ -46,6 +46,9 @@ private slots:
     void cloneFlipToXbox();
     void cloneLeavesWhileArmed();
     void twinListing();
+    /** Two same-named pads with no location: A holds LT and goes, B moves
+     *  onto A's line; B's A is no GO until B's LT is read. */
+    void aShiftedLineIsNoSafety();
     void triggerRest();
     void triggerRestDuringTheChord();
     void aSessionIsRecorded();

@@ -352,7 +352,12 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
            LT down: LT + RT together is the stop in the making, never a
            hit. The rest of the four is done. */
         if (!rtPressed || h.lb || h.rb || h.lt.isDown())
+        {
+            // Only an LT the pad came back holding stops the hit: say so.
+            if (rtPressed && !h.lb && !h.rb && h.ltStale && hasJob(universe, ControllerJobs::RunCues))
+                tellStale(h, tr("pull {RT}"));
             return true;
+        }
     }
 
     const Action action = actionFor(role);
@@ -531,14 +536,49 @@ void PadRun::armChordUpdate(quint32 universe, bool bumperDown)
        why -- a trigger that does not come back up would otherwise make a
        pad that "will not arm" with nothing to show for it. */
     if (h.lb && h.rb && h.anyTrigger() && !h.all() && m_pc != nullptr)
-        showNotice(m_pc->padText(tr("To arm, let go of everything, then hold {LB} and {RB}.")));
+    {
+        // An LT the pad came back holding, never read since: it can't be let go.
+        if (h.ltStale && !h.rt.isDown())
+            tellStale(h, tr("hold {LB} and {RB}"));
+        else
+            showNotice(m_pc->padText(tr("To arm, let go of everything, then hold {LB} and {RB}.")));
+    }
     /* Both bumpers down again, no trigger, but the chord is spent (it
        fired, was refused, or a trigger came with them; or a tool took the
        pad mid-chord): one bumper pressed again to try once more times
        nothing -- the screen says what does. */
     else if (bumperDown && h.lb && h.rb && !h.anyTrigger() && h.spent && !isFocusing() && !isWalking()
              && !isBesideTool(universe) && m_pc != nullptr)
-        showNotice(m_pc->padText(tr("Let go of both bumpers, then hold {LB} and {RB} again.")));
+    {
+        // A bumper the pad came back holding was never let go: press it.
+        if (h.lbStale || h.rbStale)
+            tellStale(h, tr("hold {LB} and {RB}"));
+        else
+            showNotice(m_pc->padText(tr("Let go of both bumpers, then hold {LB} and {RB} again.")));
+    }
+}
+
+QString PadRun::Held::staleText() const
+{
+    QStringList held;
+    if (lbStale && lb)
+        held << QStringLiteral("{LB}");
+    if (rbStale && rb)
+        held << QStringLiteral("{RB}");
+    if (ltStale && lt.isDown())
+        held << QStringLiteral("{LT}");
+    return held.join(QStringLiteral(" + "));
+}
+
+void PadRun::tellStale(const Held &h, const QString &then)
+{
+    const QString held = h.staleText();
+    if (m_pc == nullptr || held.isEmpty())
+        return;
+    const QString text = held.contains(QLatin1Char('+'))
+        ? tr("The controller came back with %1 held: press each once, then %2.").arg(held, then)
+        : tr("The controller came back with %1 held: press it once, then %2.").arg(held, then);
+    showNotice(m_pc->padText(text));
 }
 
 void PadRun::armChordFired()
@@ -997,8 +1037,8 @@ bool PadRun::noteHeld(quint32 universe, GamepadRole::Role role, uchar value)
     bool rtPressed = false;
     switch (role)
     {
-        case GamepadRole::LB:           h.lb = value > 0; break;
-        case GamepadRole::RB:           h.rb = value > 0; break;
+        case GamepadRole::LB:           h.lb = value > 0; h.lbStale = false; break;
+        case GamepadRole::RB:           h.rb = value > 0; h.rbStale = false; break;
         case GamepadRole::LeftTrigger:  h.lt.update(value / 255.0f); h.ltStale = false; break;
         case GamepadRole::RightTrigger: rtPressed = h.rt.update(value / 255.0f); break;
         default:                        break;
@@ -1084,8 +1124,17 @@ void PadRun::padReopened(quint32 universe)
     if (it != m_held.end())
     {
         it->ltStale = it->lt.isDown();
+        it->lbStale = it->lb;
+        it->rbStale = it->rb;
         it->spent = it->spent || it->lb || it->rb;
     }
+    /* A stop it fired is no longer latched (third review of Q253): its
+       releases may never come (a pad that does not send its state again),
+       so a latch kept here would swallow the next squeeze -- on its twin
+       lines too. A second stop errs the safe way. */
+    for (auto t = m_held.begin(); t != m_held.end(); ++t)
+        if (sameController(t.key(), universe))
+            t->stopFired = false;
     if (m_chordUniverse == universe)
     {
         m_armChord->stop();
