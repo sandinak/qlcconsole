@@ -2339,10 +2339,10 @@ void ShowTreePlay_Test::anEarlierCueAddedOrDeletedMidRunKeepsTheCueOnStage()
     QCOMPARE(st->runningCue(listId), cues[2]);  // cue 3 on stage
     QCOMPARE(int(settle(5)[0]), 120);
 
-    // A cue added at the top, with a look of its own on an RGB par (its
-    // colour channels are LTP, which the restack puts back) that it
-    // releases, so no later cue tracks it on: cue 3 stays on stage, and the
-    // new cue never played.
+    // A cue added at the top, with a look of its own on an RGB par that it
+    // releases: cue 3 stays on stage, and the new cue never played. (The
+    // tree's tracking sets the par in every later cue, so this can't show
+    // a stale restack; stepsSetMidRunCarryTheTrackedState() does.)
     QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Generic", "Generic RGB");
     QVERIFY(def != nullptr);
     Fixture *par = new Fixture(m_doc);
@@ -2400,6 +2400,73 @@ void ShowTreePlay_Test::anEarlierCueAddedOrDeletedMidRunKeepsTheCueOnStage()
     QCOMPARE(int(out[0]), 200);
     QCOMPARE(red(), 0);
     QCOMPARE(st->runningCue(listId), cues[4]);
+}
+
+void ShowTreePlay_Test::stepsSetMidRunCarryTheTrackedState()
+{
+    /* Chaser::setSteps() on a running list (the bake's way): the runner's
+       tracked state -- the step started last, the steps played -- follows
+       the steps. Left on the old indices, the GO after a step added at the
+       top looked like a jump, and restack() put on what the new step sets
+       though it never played: a channel only it sets (the par's red, LTP)
+       came up at that GO and stayed. Plain Collections: no Show Tree
+       tracking carries anything on. */
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Generic", "Generic RGB");
+    QVERIFY(def != nullptr);
+    Fixture *par = new Fixture(m_doc);
+    par->setName("Par");
+    par->setFixtureDefinition(def, def->mode("RGB Dimmer"));
+    par->setAddress(8);
+    par->setUniverse(0);
+    m_doc->addFixture(par);
+    auto cue = [this](quint32 fixture, quint32 channel, uchar value) {
+        Scene *scene = new Scene(m_doc);
+        scene->setValue(fixture, channel, value);
+        m_doc->addFunction(scene);
+        Collection *coll = new Collection(m_doc);
+        coll->addFunction(scene->id());
+        m_doc->addFunction(coll);
+        return coll->id();
+    };
+    auto red = [this]() {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(8));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    QList<ChaserStep> steps;
+    for (int level : { 40, 80, 120, 160 })
+    {
+        ChaserStep step(cue(m_fixtures[0], 0, uchar(level)), 0, Function::infiniteSpeed(), 0);
+        step.duration = Function::infiniteSpeed();
+        steps << step;
+    }
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setRunOrder(Function::SingleShot);
+    m_doc->addFunction(chaser);
+    chaser->setSteps(steps);
+    QCOMPARE(chaser->stepsCount(), 4);
+    for (int i = 0; i < 3; ++i)
+    {
+        go(chaser);
+        settle();
+    }
+    QCOMPARE(chaser->currentStepIndex(), 2);
+    QCOMPARE(int(settle(5)[0]), 120);
+
+    ChaserStep top(cue(par->id(), 0, 255), 0, Function::infiniteSpeed(), 0);
+    top.duration = Function::infiniteSpeed();
+    steps.prepend(top);
+    chaser->setSteps(steps);
+    QCOMPARE(chaser->currentStepIndex(), 3);
+    QCOMPARE(int(settle(5)[0]), 120);
+    QCOMPARE(red(), 0);
+
+    go(chaser);
+    QCOMPARE(int(settle(5)[0]), 160);
+    QCOMPARE(chaser->currentStepIndex(), 4);
+    QVERIFY2(red() == 0, qPrintable(QString("GO after a step was added at the top put on what it sets "
+                                            "(the par's red at %1), though it never played").arg(red())));
 }
 
 void ShowTreePlay_Test::aLoadedCueStaysLoadedWhenACueIsAddedBeforeIt()

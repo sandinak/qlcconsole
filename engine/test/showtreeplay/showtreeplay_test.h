@@ -101,6 +101,9 @@ private slots:
     /** A cue LOADed on standby stays the one loaded when a cue is added
      *  before it: GO plays it. */
     void aLoadedCueStaysLoadedWhenACueIsAddedBeforeIt();
+    /** Chaser::setSteps() mid-run: the GO after a step added at the top
+     *  puts on nothing of it (the runner's tracked state follows). */
+    void stepsSetMidRunCarryTheTrackedState();
     /** The main cue list picked outside the tree (a chaser editor) is not
      *  taken back by undoing an unrelated tree edit. */
     void aMainListPickedElsewhereSurvivesAnUnrelatedUndo();
