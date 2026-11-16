@@ -635,8 +635,11 @@ void PadRun_Test::theEmergencyStop()
     hold(kRB, false);
     hold(kLB, false);
 
+    // An ALL OFF carried out, from anywhere, is the stop again: still Stopped.
+    emit m_doc->showControl()->commandCarried(ShowControl::AllOff, true);
+    QCOMPARE(run->state(), PadRun::Stopped);
     // The show run again from anywhere (the keys, the Run tab): no longer Stopped.
-    emit m_doc->showControl()->commandHandled(QStringLiteral("GO"), true);
+    emit m_doc->showControl()->commandCarried(ShowControl::Go, true);
     QCOMPARE(run->state(), PadRun::Run);
     QVERIFY(!pc->padLight().isValid());
 

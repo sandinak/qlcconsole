@@ -44,6 +44,7 @@
 #include "iopluginstub.h"
 #include "qlcioplugin.h"
 #include "showcontrol.h"
+#include "outputrulekeeper.h"
 #include "padrunrules_test.h"
 #include "refinesession.h"
 #include "controlmap.h"
@@ -357,7 +358,7 @@ void PadRunRules_Test::offPadStop()
     ShowControl *sc = m_doc->showControl();
     sc->setRunHandler([this, sc](const ShowControl::Request &r, ShowControl::Route route) {
         m_runs << qMakePair(r, route);
-        return sc->execute(r);
+        return sc->execute(r);      // the main thread's; OSC's own thread runs execute() itself
     });
     QThread *osc = QThread::create([sc]() {
         ShowControl::Request r;
@@ -1005,7 +1006,7 @@ void PadRunRules_Test::aFadingCueShowsPlayingForItsFade()
     ShowControl *sc = m_doc->showControl();
     sc->setRunHandler([this, sc](const ShowControl::Request &r, ShowControl::Route route) {
         m_runs << qMakePair(r, route);
-        return sc->execute(r);
+        return sc->execute(r);      // the main thread's; OSC's own thread runs execute() itself
     });
     m_doc->setMode(Doc::Operate);
     PadRun *run = m_doc->programmer()->padRun();
@@ -1884,7 +1885,7 @@ void PadRunRules_Test::anOffPadStopNeverReArmsAPadPutByForAFocus()
     QSignalSpy rumbled(pc, &ProgrammerController::padRumbled);
     QSignalSpy armed(run, &PadRun::armedChanged);
     offPadStop();
-    QCOMPARE(stops(), 1);
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());   // the real ALL OFF ran
     QVERIFY(!pc->focusSession()->isActive());
     QCOMPARE(pc->focusCallCue()->state(), FocusCallCue::Idle);
     QCOMPARE(run->state(), PadRun::Stopped);
@@ -1930,7 +1931,7 @@ void PadRunRules_Test::anOffPadStopBesideAFocusOrAWalk()
     QSignalSpy rumbled(pc, &ProgrammerController::padRumbled);
     offPadStop();
     QCoreApplication::processEvents();      // a walk's end looks again a moment later
-    QCOMPARE(stops(), 1);
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());   // the real ALL OFF ran
     QVERIFY(!run->isWalking());
     QVERIFY(!pc->focusSession()->isActive());
     QVERIFY(!pc->refineSession()->isActive());
