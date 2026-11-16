@@ -298,6 +298,22 @@ show from any pad.
   cues. The walk beside the runner also ends by itself, saying why, if
   the show goes into Operate, the role is switched, or the walking pad
   loses its Focus job or is unplugged (a change not kept goes back).
+- **The follow spot beside a tool.** A pad with Follow spot keeps
+  steering the spot (its sticks, the fine stick, D-pad speed and size)
+  while another pad works a tool: Venue focus, Focus mode, Focus this cue
+  or look, or the walk. If the tool is working on the follow spot's own
+  lights (the focus call, the walk's layer, or the cue or look being
+  focused lights one of them), the spot **holds** instead: it stops at
+  once, the follow spot chip in the footer says *Follow spot holds:
+  Venue Focus is working on its lights* (or the tool it is), and nothing
+  pushed on its pad moves it. When the tool ends or moves off those
+  lights it steers again once its stick has come back to centre: a stick
+  held through the change never jumps the spot. One pad with both jobs
+  gives its sticks to the tool, as before. A tool started on the laptop
+  belongs to the first pad with Focus to press a button (not the D-pad:
+  on the follow spot's pad that stays the spot's); until then the follow
+  spot's pad steers on, and with only one controller connected the tool
+  has its sticks at once.
 - Buzzes, trigger feel and the names of buttons in a message go to the
   pad they are about: the runner's armed triggers and GO buzz are on the
   runner, the emergency stop buzzes every pad.
@@ -310,7 +326,8 @@ show from any pad.
   venue focus on another pad, or the Controller Test open.
 - **One pad listed twice is one pad.** macOS sometimes lists one
   controller twice; with the same address it is one controller here: the
-  Pad chip names no second runner and both get the same light.
+  Pad chip names no second runner, both get the same light, and its fine
+  stick steers the follow spot once, not twice as fast.
 
 ### Check jobs with two real pads
 
@@ -359,6 +376,34 @@ list. Set pad A to **Run cues** only and pad B to **Focus** only.
     Menu. *Expected:* refused: *Not armed. To start the venue focus, hold
     LB and RB to arm, then LT + Menu.* Arm A, LT + Menu: **Pad: FOCUS**,
     not armed; LT + Menu again: ARMED (as before jobs).
+14. The follow spot beside a walk. Set A to **Focus** only and B to
+    **Follow spot** only; the show in Design, a follow spot on (its scene
+    open in the Workbench, B named as its stick on the footer chip), and
+    a cue whose first layer lights other fixtures and whose second layer
+    lights the follow spot's. Pick that cue, turn the Run role on and
+    press Menu on A (the walk, on layer 1). Push B's left stick.
+    *Expected:* the subject moves; the follow spot chip says *stick
+    moving* and nothing about holding. B's right stick trims it, B's
+    D-pad Up steps the speed.
+15. Keep B's stick pushed and press RB on A (the walk's next layer: the
+    follow spot's lights). *Expected:* the spot stops at once; the follow
+    spot chip says *Follow spot holds: the walk is working on its lights*;
+    B's sticks and D-pad move nothing.
+16. Still holding B's stick, press LB on A (back to layer 1).
+    *Expected:* the hold words go, but the spot does not move. Let B's
+    stick come back to centre, then push it: the spot steers again.
+17. On A press Menu (the walk ends) while B steers. *Expected:* the spot
+    keeps moving with B's stick throughout; nothing jumps.
+18. Walk ended, B steering. Start **Focus This Look** on the laptop on a
+    look that lights the follow spot's fixtures, then press Y on A (A
+    takes the tool). *Expected:* the follow spot chip says *Follow spot
+    holds: Focus This Look is working on its lights*; A's sticks work the
+    look; B's stick moves nothing. End the look on the laptop, let B's
+    stick come back to centre and push: the spot steers.
+19. Set A to Run cues. Disarmed, on A: hold LB + RB, squeeze LT and let it go,
+    let go of RB and press it again. *Expected:* nothing arms; the chip
+    says *Let go of both bumpers, then hold LB and RB again.* Let go of
+    both and hold LB + RB: it arms.
 
 Write down any step that did not give its expected result, with the pads
 and how they were connected.

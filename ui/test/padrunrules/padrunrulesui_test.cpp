@@ -1066,6 +1066,29 @@ void PadRunRulesUi_Test::q253TheFollowChipSaysWhyItHolds()
                               qPrintable(chip->property("fullText").toString()), 2000);
     QVERIFY2(chip->toolTip().contains(held), qPrintable(chip->toolTip()));
     QCOMPARE(pc->followSpotStatus().heldBy, QString("Focus This Look"));
+    /* QLC_SHOT_DIR: the footer holding, at three sizes, for the UX review
+       (the chip shortens on a narrow footer, never squeezed away). */
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shotDir.isEmpty())
+    {
+        QDir().mkpath(shotDir);
+        const QSize was = m_app->size();
+        for (const QSize &z : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            m_app->resize(z);
+            settle(200);
+            QVERIFY2(chip->isVisible() && chip->width() > 0, qPrintable(QString("%1 wide").arg(z.width())));
+            const QPixmap full = m_app->grab();
+            const int h = 44 * int(full.devicePixelRatio());
+            full.copy(0, full.height() - h, full.width(), h)
+                .save(QDir(shotDir).filePath(QStringLiteral("after-footer-follow-spot-holds-%1x%2.png")
+                                             .arg(z.width()).arg(z.height())));
+            m_app->grab().save(QDir(shotDir).filePath(QStringLiteral("after-window-follow-spot-holds-%1x%2.png")
+                                                      .arg(z.width()).arg(z.height())));
+        }
+        m_app->resize(was);
+        settle(50);
+    }
 
     // On another light: no hold, nothing said of one.
     r->stop();

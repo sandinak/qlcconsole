@@ -192,7 +192,7 @@ runner, the focus owner (`controllerOwner()`) or a job (`hasJob`,
 | `routeFocusInput()`, "Still at…?" A held | answers yes | Focus + owner | no |
 | `routeFocusInput()`, View + Menu | the hold / the tap | none (the hold switches nothing, Q251), Focus (the tap: Focus mode, Tools) | no: the role is the computer's for every pad now; a Focus pad without Run cues tapping in Run is told on the screen where Focus mode is |
 | `focusController()` | the pad the focus tools read and name | Focus | **was**: could pick a pad without Focus. Now one with the job first |
-| `followSpotTakes()`, the bound sticks, a profile's follow spot button, `refreshStickBinding()`, `combineFineSticks()` | the follow spot | Follow spot | no: never the arm, the runner or a tool owner. While any tool runs the follow spot holds (the tick feeds the tool), as before jobs. Q253 (steer beside a tool unless it works on the spot's lights) is open, below |
+| `followSpotTakes()`, the bound sticks, a profile's follow spot button, `refreshStickBinding()`, `combineFineSticks()` | the follow spot | Follow spot | no: never the arm or the runner. **Was**: while any tool ran the follow spot held, every pad's (the tick fed the tool and returned first). Q253 (built, below): beside a tool the follow spot is steered by a Follow spot pad that is not the tool's (`isToolsPad()`), and holds only while the tool works on its own lights (`toolOnSpotLights()`); a twin line's fine stick is one share (`fineSlot()`) |
 | `sendPadFeedback()`, `padRumble()`, `setPadTriggers()`, `padFamily()` | which pad is told | (feedback) | **was**: the tools' pad (`focusController()`, a Focus pad first) for every buzz, trigger feel and control name -- the runner's armed triggers and GO buzzes went to the focus pad. Now the acting pad, else the state's pad (review 1) |
 | `ui/src/controllertestdialog.cpp` | the test takes the pad, disarms the runner | none | no (documented: arm again on close); **was**: not beside a venue focus -- now in every case (review 9) |
 | `ui/src/app.cpp` ⌘↩ with a focus cue armed | the laptop starts it | none | no |
@@ -278,17 +278,62 @@ and FOCUS names no pad until one does.
 Already true before the build: the stop from either pad (`watchStop()`
 first); a playing hit not cut (a walk starts or stops no function).
 
-### Open, for the owner (board Q253, not built here)
+### The follow spot beside a tool (board Q253, option a)
 
-The follow spot pad keeps steering while another pad's tool runs, unless
-that tool is working on the follow spot's own lights (then it holds, its
-sticks zeroed, the chip saying why). Not built on this branch: while any
-tool runs, `applyDesignJoystick()` hands the controller tick to the tool
-and returns before the follow spot's integration, and `routeFocusInput()`
-gives a tool's time to its owner; steering beside a tool needs the tick
-split per pad, and "its lights" needs each tool's live fixture set (the
-focus call's, the walk's layer, Focus this cue's cue). Today the follow
-spot holds while any tool runs, as before jobs.
+Decided by the owner 2026-11-16: "the follow spot keeps steering during
+another pad's tool unless that tool works on the spot's own lights; then
+it holds, and the chip says why."
+
+- **The tool's pad and the others.** While a tool runs (Quick Focus /
+  Focus mode, Venue Focus, Focus This Cue, Focus This Look, the walk), the
+  tool's pad is its owner (Q135; the walk's pad owns it from its start, a
+  Menu or a swipe), or the owner's twin line (`isToolsPad()`). A tool
+  begun on the laptop is no pad's until a pad with Focus presses: with
+  one controller here that pad is the tool's at once, as before; with
+  more, the follow spot's pad keeps steering until a press takes the
+  tool. Its sticks are the tool's (`m_toolPanNorm`..., apart from the
+  follow spot's).
+- **Another pad with Follow spot steers on**: its bound stick, its fine
+  stick, D-pad speed and size and the facing push, as with no tool
+  (`routeFocusInput()`, before the beside-the-runner and owner checks);
+  the controller tick runs the follow spot after the tool's
+  (`applyDesignJoystick()`). Its other buttons are as before beside a
+  tool (the Run map's refusals, "Another controller is in use.", "This
+  controller doesn't do focus.").
+- **Unless the tool works on the spot's own lights**: the fixtures of the
+  follow spot's scene (its groups too) meet the tool's live set -- the
+  venue focus's current call, Quick Focus's list, the walk's current
+  layer, every layer of the cue (or every scene) Focus This Cue / Look
+  steps through (`toolOnSpotLights()`; both sets cached, the tool's
+  worked out again only when its call, cue, layer or session changes, the
+  spot's when its scene changes and once a second). Then the spot
+  **holds**: what was pushed on it is let go and it stops at once (no
+  drift, no velocity kept for later), nothing a pad sends moves it, and
+  its one status (`FollowSpotStatus::heldBy`) says why -- the footer's
+  follow spot chip, the Look Editor's line and the rig view's tip read
+  "Follow spot holds: <tool> is working on its lights" (no second
+  source).
+- **No jump after.** When the tool ends or moves off those lights (another
+  call, another layer), the spot steers again from zeroed sticks: an axis
+  that was deflected when the spot stopped taking it (the hold, or its pad
+  becoming the tool's) moves nothing until it has read centre once
+  (`m_panLatched`, `m_tiltLatched`, `m_fineLatched`). A stick held through
+  the change never moves the spot.
+- **One pad with both jobs** (or its twin line): the tool has its sticks,
+  as before; what it had pushed on the spot is let go when the tool
+  begins or the pad takes it, and the same no-jump rule applies at the
+  tool's end.
+- **One pad seen twice** steers once: a twin line's fine stick is that
+  pad's one share (`fineSlot()`), never added to itself.
+- Unchanged: the emergency stop is read first on every pad (4), the arm
+  takes two controls, the runner's GO family rules beside a focus or a
+  walk (11, Q252), and one status source per surface (9).
+
+decided (by the builder, can change): the live set of Focus This Cue /
+Look started on the laptop is the whole cue (every layer it can step to),
+the walk's only its current layer; with one controller a laptop tool has
+the sticks at once (invariant 1); a beside pad's D-pad is the spot's, so a
+press that is to take an ownerless tool is any other button.
 
 ## Where it is set
 
@@ -328,3 +373,11 @@ window still open.
   start (engine/test/padrunrules) and a one-shot (ui/test/padhit); the
   chip, button and lights (ui/test/padrunrules
   `focusBesideTheRunnerOnEverySurface`).
+- The follow spot beside a tool (Q253): every tool x its lights inside the
+  spot's or not x the spot on the tool's pad or another, on the real
+  follow spot path (the subject's motion): steers or holds, the status
+  words, the sticks zeroed on hold, no jump at the tool's start or end or
+  from a stick held through it (engine/test/followspotfeel
+  `q253TheSpotBesideEveryTool`); one pad seen twice steers once
+  (`q253ATwinPadDoesNotDoubleSteer`); the footer's chip
+  (ui/test/padrunrules `q253TheFollowChipSaysWhyItHolds`).
