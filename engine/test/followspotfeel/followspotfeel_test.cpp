@@ -27,6 +27,13 @@
 #include <cmath>
 
 #include "followspotfeel_test.h"
+// Review 0.4.10: the stub pad and the jobs (before the define below).
+#include <QDir>
+#include <QScopeGuard>
+#include "../iopluginstub/iopluginstub.h"
+#include "ioplugincache.h"
+#include "controllerjobs.h"
+#include "qlcfile.h"
 #include "../common/stdprelude.h"       // every std header, before the define
 #define private public                  // MasterTimer::timerTick(), the controller's state
 #define protected public                // Universe::processFaders()
@@ -1172,6 +1179,128 @@ void FollowSpotFeel_Test::aWalkAcrossTheSeamNeverSwingsRound()
              qPrintable(QString("16-bit head's pan ran %1..%2").arg(lo16).arg(hi16)));
     QVERIFY2(lo8 >= edge - dmxStep8 && hi8 <= 540.0 - edge + dmxStep8,
              qPrintable(QString("8-bit head's pan ran %1..%2").arg(lo8).arg(hi8)));
+}
+
+namespace
+{
+IOPluginStub *loadPadStub(Doc *doc)
+{
+    if (doc->ioPluginCache()->plugins().isEmpty())
+    {
+        QDir dir("../iopluginstub");
+        dir.setFilter(QDir::Files);
+        dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+        doc->ioPluginCache()->load(dir);
+    }
+    if (doc->ioPluginCache()->plugins().isEmpty())
+        return nullptr;
+    return static_cast<IOPluginStub *>(doc->ioPluginCache()->plugins().at(0));
+}
+
+/* Ticks until any glide has settled, then how far the subject goes in 20
+   more frames with nothing pushed. */
+double driftAfter(Harness &h)
+{
+    for (int i = 0; i < 40; ++i)
+        h.tick();
+    const QVector3D at = h.rig.subject->position();
+    for (int i = 0; i < 20; ++i)
+        h.tick();
+    return double((h.rig.subject->position() - at).length());
+}
+}
+
+void FollowSpotFeel_Test::reviewAHandBoundStickHeldAsItsJobGoes()
+{
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    jobs->resetAll();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    auto restore = qScopeGuard([&]() {
+        jobs->resetAll();
+        iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+    });
+    // The follow spot's Bind: the pad's left stick, bound by hand.
+    if (FollowSpotMover *m = h.pc->followSpotMover())
+        m->setFixedDt(MasterTimer::tick() / 1000.0);
+    h.pc->bindPanAxis();
+    h.pc->slotControllerInputChanged(0, 0, 127, QString());
+    h.pc->bindTiltAxis();
+    h.pc->slotControllerInputChanged(0, 1, 127, QString());
+    h.use(h.rig.targetScene);
+    const QString pad = jobs->identityOfUniverse(0);
+    QVERIFY(!pad.isEmpty());
+
+    // Control: pushed and let go, the subject stops.
+    h.pc->slotControllerInputChanged(0, 0, 200, QString());
+    for (int i = 0; i < 10; ++i)
+        h.tick();
+    h.pc->slotControllerInputChanged(0, 0, 127, QString());
+    const double control = driftAfter(h);
+    QVERIFY2(control < 0.005, qPrintable(QString("control drift %1 m").arg(control)));
+
+    // Pushed; this pad's Follow spot job taken away (Controller Test);
+    // the operator lets go.
+    h.pc->slotControllerInputChanged(0, 0, 200, QString());
+    for (int i = 0; i < 10; ++i)
+        h.tick();
+    jobs->setJob(pad, ControllerJobs::FollowSpot, false);
+    h.pc->slotControllerInputChanged(0, 0, 127, QString());
+    const double d = driftAfter(h);
+    QVERIFY2(d < 0.005, qPrintable(QString("no stick held, yet the subject (and every head on it) moved "
+                                           "%1 m in 20 frames: the last push stays in m_panNorm").arg(d)));
+}
+
+void FollowSpotFeel_Test::reviewAFineStickHeldAsTheJobIsHandedOver()
+{
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    jobs->resetAll();
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" } };
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 1));
+    auto restore = qScopeGuard([&]() {
+        jobs->resetAll();
+        stub->m_channelRoles.clear();
+        iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+        iom->setInputPatch(1, QString(), QString(), QLCIOPlugin::invalidLine());
+        h.pc->refreshStickBinding();
+    });
+    if (FollowSpotMover *m = h.pc->followSpotMover())
+        m->setFixedDt(MasterTimer::tick() / 1000.0);
+    h.pc->refreshStickBinding();
+    QVERIFY(h.pc->m_panBound);
+    QCOMPARE(h.pc->m_panUniverse, quint32(0));      // pad A steers
+    h.use(h.rig.targetScene);
+    const QString padA = jobs->identityOfUniverse(0), padB = jobs->identityOfUniverse(1);
+    QVERIFY(!padA.isEmpty() && padA != padB);
+    auto fineA = [&](uchar v) { h.pc->slotControllerInputChanged(0, 2, v, QString()); };
+
+    // Control: A's fine stick pushed and let go, the subject stops.
+    fineA(255);
+    for (int i = 0; i < 10; ++i)
+        h.tick();
+    fineA(127);
+    const double control = driftAfter(h);
+    QVERIFY2(control < 0.005, qPrintable(QString("control drift %1 m").arg(control)));
+
+    // A trimming with its fine stick; the job handed to B (A's taken away);
+    // A lets go.
+    fineA(255);
+    for (int i = 0; i < 10; ++i)
+        h.tick();
+    jobs->setJob(padA, ControllerJobs::FollowSpot, false);
+    QCOMPARE(h.pc->m_panUniverse, quint32(1));      // B steers now
+    fineA(127);
+    const double d = driftAfter(h);
+    QVERIFY2(d < 0.005, qPrintable(QString("nothing pushed on either pad, yet the subject moved %1 m in "
+                                           "20 frames: A's last fine push stays in m_fineNormX").arg(d)));
 }
 
 void FollowSpotFeel_Test::report()

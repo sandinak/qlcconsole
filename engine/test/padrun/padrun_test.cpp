@@ -1670,6 +1670,45 @@ void PadRun_Test::theVenueFocusNeedsTheFocusJob()
     QVERIFY(m_runs.isEmpty());
 }
 
+void PadRun_Test::reviewTheStopFromAnotherPadAfterAFocusGivenUp()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 1));
+    QTemporaryDir dir;
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    pc->venueCorrections()->setShowFile(dir.filePath("Spring.qlcc"), false);
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    run->setEnabled(true);
+    // A arms and starts the venue focus; the laptop asks for the venue.
+    arm(true, 0);
+    with(kLT, kMenu, 0);
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    // A gives the start up: ARMED again, the focus cue waiting again.
+    with(kLT, kMenu, 0);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QCOMPARE(run->state(), PadRun::Armed);
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    // (A is still the owner the start claimed.)
+    QCOMPARE(pc->controllerOwner(), quint32(0));
+    // B, every job (nothing saved): its four together.
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        axis(ch, 255, 1);
+    int stops = 0;
+    for (const auto &r : m_runs)
+        stops += r.first.command == ShowControl::AllOff ? 1 : 0;
+    QVERIFY2(stops == 1, "pad B's emergency stop was swallowed (\"Another controller is in use.\")");
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY(!run->isArmed());
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        axis(ch, 0, 1);
+}
+
 void PadRun_Test::aLostPadInFocus()
 {
     IOPluginStub *stub = loadStub();
