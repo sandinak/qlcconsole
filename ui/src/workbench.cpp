@@ -365,8 +365,8 @@ void Workbench::fillFocusMenu(QMenu *m)
     make->setCheckable(true);
     make->setChecked(cue->focusCall);
     FocusMenu::setAvailable(make, cue->focusCall ? QString() : FocusMenu::venueFocusCueBlocked(m_doc),
-                            tr("Pre-show: GO onto this cue arms the show's focus calls; Start on the "
-                               "controller begins them"));
+                            tr("Pre-show: GO onto this cue arms the show's focus calls; on the "
+                               "controller, armed, hold LT and press Menu to begin them"));
     connect(make, &QAction::toggled, this, [this, cueId](bool on) {
         m_doc->showTree()->setCuesFocusCall({ cueId }, on);
     });

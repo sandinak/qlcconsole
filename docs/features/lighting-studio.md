@@ -1,5 +1,7 @@
 # Lighting Studio
 
+Lengths in this guide are written in feet and inches, the default. The app shows and reads every length in your **Settings ▸ Units**.
+
 ## Why
 
 Stock QLC+ only has a flat 2D plot — fixture icons on a grid. That can't
@@ -54,7 +56,7 @@ Targets** — see [Stage Targets](stage-targets.md).
 
 **Fixtures underneath things.** Looking straight down, every fixture is
 drawn over every structure, so it can always be clicked. A fixture with a
-truss, deck, pipe or tower top more than 20 in (0.5 m) **above** it, over it
+truss, deck, pipe or tower top more than 20 in **above** it, over it
 on the plan, is drawn **faded with a dashed grey outline** — underneath,
 but still there to click. What it is mounted on never counts (a light hung
 on a truss is not "under" that truss). Front and Side show heights, so
@@ -156,7 +158,7 @@ a rounded front. A bare floor uses the front edge of the grid. The **front
 of the stage** is the front of the deck, or of the apron when it reaches
 further. On **Auto** the **curtain line** follows the most downstage **Main
 drape** across the centre line, or a **Proscenium** if there is no main
-drape; with neither, it sits 4 ft (1.2 m) upstage of the front of the deck.
+drape; with neither, it sits 4 ft upstage of the front of the deck.
 The **number line** sits at the front of the stage. A line you've set
 stays where it is on the plan: move a deck or the other line and it stays
 put, and the distance shown changes to match.
@@ -194,8 +196,8 @@ deck.
 **Where a target is, in crew terms.** Every stage target on the plot has a
 small readout under it giving where it is against these marks, in the show's
 unit, for example **SR 7' 11" · US 10' 2"** (`SL 2.4 · US 3.1 m` on a
-metric show, to the inch in feet). That's 7 ft 11 in (2.4 m) stage right of the
-centre line (**SL** for stage left, **CL** on it) and 10 ft 2 in (3.1 m) upstage of the
+metric show, to the inch in feet). That's 7 ft 11 in stage right of the
+centre line (**SL** for stage left, **CL** on it) and 10 ft 2 in upstage of the
 number line (**DS** downstage, **on line** on it). If the target stands on a deck, the deck's height
 follows: **↑ 3'** (`↑ 0.9 m` on a metric show). Distances count from the number line, or from the
 curtain line when only the curtain line is shown. The readout is
@@ -527,12 +529,12 @@ lines, each with its own count.
 - **Fill with people**: select the risers (steps or decks) and the same
   entry reads **Fill Selected Risers with People…** (or right-click a
   riser for **Add ▸ People on the Risers…**). It makes a line along the
-  middle of every tread — a deck gets one to every 3 ft (0.9 m) of its depth —
-  by **Apart** — 2 ft (0.6 m) is a choir, shoulder to shoulder about 1 ft 8 in (0.5 m) — or
+  middle of every tread — a deck gets one to every 3 ft of its depth —
+  by **Apart** — 2 ft is a choir, shoulder to shoulder about 1 ft 8 in — or
   **To a row**, and spaced rows can be **staggered**, so each face shows
   between the two in front. The dialog counts the people first.
-- **Height**: Children 4 ft 3 in (1.30 m), Students 5 ft 3 in (1.60 m) or Adults 5 ft 9 in (1.75 m), or
-  type one, and **Give or take** (±3 in (8 cm) unless set): some are taller than
+- **Height**: Children 4 ft 3 in, Students 5 ft 3 in or Adults 5 ft 9 in, or
+  type one, and **Give or take** (±3 in unless set): some are taller than
   others. Each person keeps their height every time the show opens;
   **Shuffle** in the line's own dialog picks again.
 - **Costume**: the colour they wear. The rig view lights the body in it,
@@ -581,7 +583,7 @@ A truss can wear a **sock** — fabric over the truss that diffuses LED bars
 rigged inside it. In the truss editor, tick **Sock** and set its colour
 (white by default) and how much of the truss it covers (**from / to**).
 Bars placed **Inside** the truss no longer throw beams of their own: they
-glow *through* the sock, in 8 in (20 cm) stretches each lit by the bars nearest
+glow *through* the sock, in 8 in stretches each lit by the bars nearest
 it, filtered by the fabric's colour. **Sock printed** adds an image
 (**Pattern…** to choose, **×** to clear) stretched over the fabric, with an
 opacity percentage beside it; the print still glows, filtering the light,
@@ -639,13 +641,13 @@ goes where you clicked) offers each kind and puts it where it usually goes:
 
 | Kind | Starts as |
 |---|---|
-| **Cyclorama** | across the back, stage width, 20 ft (6 m) tall, pale |
-| **Back wall** | across the back, 8 in (20 cm) thick |
-| **Proscenium** | framing the front: an arch 6 ft 7 in (2 m) wider than the stage, 23 ft (7 m) high, 16 in (40 cm) thick, its opening the stage's width and 18 ft (5.5 m) high |
+| **Cyclorama** | across the back, stage width, 20 ft tall, pale |
+| **Back wall** | across the back, 8 in thick |
+| **Proscenium** | framing the front: an arch 6 ft 7 in wider than the stage, 23 ft high, 16 in thick, its opening the stage's width and 18 ft high |
 | **Main drape** | across the front, house red |
 | **Traveler** | mid-stage, black |
-| **Leg** | a pair, one each side, 4 ft (1.2 m) wide, black |
-| **Border** | hung across, 4 ft (1.2 m) deep with its bottom at 15 ft 9 in (4.8 m) |
+| **Leg** | a pair, one each side, 4 ft wide, black |
+| **Border** | hung across, 4 ft deep with its bottom at 15 ft 9 in |
 | **Scrim** | just in front of the cyc, seen through |
 | **Wall** | a low built wall: a planter, a fountain's rim |
 
@@ -721,7 +723,7 @@ cyc and a scrim, by default) is checked by [Show Review](show-review.md)
   at its set state (Open, Closed, Flown).
 - **What counts as meant.** Only something the show says: the fixture's plot
   symbol is **Cyc / strip light** or **Uplight wash**; or its look aims it at
-  a target standing on that cyc (a mark, an area or a line within 1 ft 8 in (0.5 m) of
+  a target standing on that cyc (a mark, an area or a line within 1 ft 8 in of
   it — never a person or a kit, who stand in front of it); or you said so with
   **I Meant It**. Nothing is guessed.
 - **I Meant It** (the Show Review row) keeps the mark on the layer that lights
@@ -838,7 +840,7 @@ out of the base to take it out.
 string, a pixel tape) gets a **Pixel path** in its properties: **Inner wall
 top ring**, **Outer wall top ring**, **Base ring** (round the base's edge)
 **Wrapped up the flame** (a spiral; **Turns** sets how many, Auto about
-one every 1 ft (30 cm)) or **Sprinkle loops (over the gap)**. See
+one every 1 ft) or **Sprinkle loops (over the gap)**. See
 [Pixel paths](#pixel-paths) and [Sprinkle loops](#sprinkle-loops).
 
 ### Pixel paths
@@ -895,7 +897,7 @@ the gap)** (it has to be in a fountain):
 Each span droops between the two wall tops: its middle hangs below the
 straight line between them by 30% of that distance, more for a span with
 more LEDs than the string's average and less for one with fewer. Spans at
-one point hang 2" (5 cm) apart. The LEDs are placed by their number on
+one point hang 2" apart. The LEDs are placed by their number on
 the string, so a live WLED's pixels and its effects land where they really
 are, whatever the segments' Reverse settings.
 
@@ -950,12 +952,12 @@ driven by a WLED. Set a pixel fixture's **Pixel path** to **Wand (wound round
 a staff)**. Every length below is shown and typed in your unit (Settings ▸
 Units):
 
-- **Wand length**: the staff, 4 ft (1.2 m) unless set.
+- **Wand length**: the staff, 4 ft unless set.
 - **String length**: how long the lit string is, first LED to last. A fairy
   string of 50 LEDs on 16 ft is 16 ft; with the LED count this says how far
   apart they are. Left at **LED tape**, the LEDs are taken as tape, ¾ in
-  (2 cm) apart.
-- **Staff diameter**: how thick the staff is under the string, 1 in (25 mm)
+  apart.
+- **Staff diameter**: how thick the staff is under the string, 1 in
   unless set.
 - **First LED at**: the end the data comes in. **Top (the tip)** runs the
   string down from the tip, so an effect starts at the top; **Bottom (the
@@ -965,7 +967,7 @@ Units):
   example **Auto (58.0)** for 16 ft of string on a 5 ft, 1 in staff. Set a
   number to override it (count the wraps on the real staff).
 - **Held by**: a Person target. The wand is then in their hand: its middle
-  **Held at** 3 ft 3 in (1.0 m) above where they stand, a forearm in front
+  **Held at** 3 ft 3 in above where they stand, a forearm in front
   of them, **Leaning** 20° toward the audience, and it goes where they go.
   **Nobody**: it stands upright where it was placed.
 
@@ -1007,8 +1009,8 @@ through, in the order the string runs from its first LED.
   count up along the string, or one past its last LED, are refused, in
   words.
 - **String length**: as for a wand, the lit string first LED to last. A
-  fairy string of 50 LEDs on 16 ft is 16 ft (4.9 m); left at **LED tape**,
-  the LEDs are ¾ in (2 cm) apart.
+  fairy string of 50 LEDs on 16 ft is 16 ft; left at **LED tape**,
+  the LEDs are ¾ in apart.
 
 **Where the LEDs go.** LED 1 is at the first anchor and the rest follow
 along the line through the anchors, the String length apart, heights and
@@ -1278,7 +1280,7 @@ made some lanterns draw on their side, as dark squares).
 right-click one → **Mount on → Deck (N fixtures)**:
 
 - **The Deck Under Each** stands every selected fixture on the platform it
-  is over — the nearest within 20 in (0.5 m) when it sits on or just off an
+  is over — the nearest within 20 in when it sits on or just off an
   edge — with its base on the deck's top surface;
 - or pick a **platform by name** to put them all on that one.
 
@@ -1303,8 +1305,8 @@ landed along it, so their spacing is kept.
   placing it is the point of that drag.
 - **Height counts.** A fixture already mounted on something else (a tower,
   a deck, a riser, a pipe) is only offered a truss or pipe within 20 in
-  (0.5 m) of its own height, Shift or not — a light at the foot of a tower is
-  not hung on the bar 8 ft (2.4 m) above it just because it is under it on the
+  of its own height, Shift or not — a light at the foot of a tower is
+  not hung on the bar 8 ft above it just because it is under it on the
   plan. A free-standing fixture is hung by where you drop it.
 
 **Patching like structures alike.** Right-click a truss, tower, deck or
@@ -1326,8 +1328,8 @@ pressing **Duplicate**:
 - **What is copied.** The same definition, mode and settings, and the same
   place on the structure: offset along it, side, shelf or deck position,
   face and orientation, and the calibration offsets (pan / tilt offset and
-  invert). A copy is hung where the *target* puts that place, so a tower 16 ft 5 in (5 m)
-  further on holds its lights 16 ft 5 in (5 m) further on.
+  invert). A copy is hung where the *target* puts that place, so a tower 16 ft 5 in
+  further on holds its lights 16 ft 5 in further on.
 - **Hangers and child bars.** A truss's hangers and the child bars hung
   from it (with the hangers on those bars), or a tower's hangers, are copied
   onto each target with the same place, arm, drop, face and run, together
@@ -1587,7 +1589,7 @@ props, images and nodes:
   right-clicked. A right-click outside the selection selects just that item
   first.
 - **Duplicate** (right-click, or **Cmd/Ctrl+D** on the plot) copies the
-  selection 20 in (0.5 m) on: a target keeps its kind, colour, size, aim and
+  selection 20 in on: a target keeps its kind, colour, size, aim and
   person heights, a line its points and people, and is numbered on
   ("Soloist" → "Soloist 2"). **Cmd/Ctrl+C** / **Cmd/Ctrl+V** copy and paste
   targets the same way, several at once, with trusses, decks and scenery.
@@ -1835,7 +1837,7 @@ show it:
 
 - **What blocks a beam** — drapes and cyc, walls and proscenium, platforms
   and risers, towers, trusses, pipes and stands (trusses, pipes and stands
-  only when at least 8 in (20 cm) thick). Saved with the show; it's what a follow
+  only when at least 8 in thick). Saved with the show; it's what a follow
   spot's *Fade When Blocked*, an Aim look's *Dim lights that can't see the
   target* and the blocked traces go by. See
   [Line of sight](stage-targets.md#line-of-sight).
@@ -1996,7 +1998,7 @@ lasers:
   the apertures light in its live colour; the box itself stays dark, as the
   real one does. **Tilt in yoke** tips the box between the plates; the yoke
   turns to the way it **Points** and stays square to its clamp. A
-  definition with no size gets a sky laser's, 7 7/8 × 4 3/8 × 7 1/2 in (200 × 110 × 190 mm). Drawn so
+  definition with no size gets a sky laser's, 7 7/8 × 4 3/8 × 7 1/2 in. Drawn so
   are definitions of type **Laser**, those whose light is a laser beam or a
   star field, and any fixture given the **Laser / star projector** symbol;
   another symbol (a strobe, say) draws it as that.
@@ -2062,7 +2064,7 @@ venue file (decided, can change: a venue file carries only the power today).
 crosses one, and the lights and the zone.
 
 A fixed laser also gets its **scan window** drawn in Top: a dashed amber
-outline where its H × V window lands on the floor (100 ft (30 m) out when it doesn't
+outline where its H × V window lands on the floor (100 ft out when it doesn't
 come down), the same window PWR-09 checks against the audience and PWR-11
 against the zones.
 
@@ -2541,7 +2543,7 @@ the other way round: you make the plot match the real light. Pick **Every
 fixed light on the plot** (or select some), and it needs no **Aim at**.
 
 Each in turn is lit, and a **person** stands where it lands, at head height
-(5 ft 3 in (1.6 m) above whatever is there), so you see what the light gives. Move
+(5 ft 3 in above whatever is there), so you see what the light gives. Move
 where it lands until it matches the real one: **right** is toward stage
 left, **up** is upstage — the left stick (fast), the right stick (fine) or
 the arrow keys (⇧ for bigger steps; **+** / **−** change the step). The panel shows the light's **Pan** (° from downstage) and **Tilt**
@@ -2666,7 +2668,7 @@ Two small but load-bearing visual cues:
 | **Count badge** | The numbered circle a structure's own fixtures collapse into when they'd otherwise cover more than 40% of it on screen. |
 | **Light footprint / coverage** | Everywhere a fixture's full pan/tilt range can reach — distinct from where it's currently pointed. |
 | **Shift-drop** | Holding Shift as you drop a fixture over a truss, pipe or deck, to hang or stand it there; a plain drop only moves it. |
-| **Beneath (faded)** | In the Top view, a fixture with a structure more than 20 in (0.5 m) above it, drawn faded and dashed but still clickable. |
+| **Beneath (faded)** | In the Top view, a fixture with a structure more than 20 in above it, drawn faded and dashed but still clickable. |
 | **Curtain line** | Where the main curtain hangs, across the stage (also called the setting line; the plaster line is the proscenium's). A stage piece on the Stage layer. |
 | **Number line** | A line across the front of the stage numbered out from centre (CL), in feet or metres, for spiking and focusing. A stage piece on the Stage layer. |
 | **Apron** | The stage downstage of the curtain line: its own piece of deck, from the curtain line out by its depth, with its front curve. A stage piece on the Stage layer. |

@@ -394,11 +394,16 @@ are one checklist:
    says **focus**. It is greyed, saying why, until the show has focus
    calls.
 2. **GO** onto it in Operate. The cue's looks play and the focus calls are
-   **armed**: nothing moves yet. The laptop says "Venue focus ready.
-   Press Start to begin." and the cue page, the Run tab and the footer say
-   **Venue focus: waiting for the controller**. With the controller in
-   its Run role ([Pad Run](show-control.md#go-from-the-game-controller-pad-run))
-   they say how it starts there: armed, hold LT and press Menu.
+   **armed**: nothing moves yet. The laptop says a line that depends on the
+   pad's role, and the cue page, the Run tab and the footer say **Venue
+   focus: waiting for the controller**. In the Tools role: "Venue focus
+   ready. Press Start to begin." In the Run role
+   ([Pad Run](show-control.md#go-from-the-game-controller-pad-run)) it
+   says how the start works there: "Venue focus ready. Armed, hold LT and
+   press Menu to begin.", or "Venue focus ready. Hold LT and press Menu to
+   begin." for a pad with Focus and no Run cues, or "Venue focus ready. No
+   controller does focus: start it on the laptop." when no pad has the
+   Focus job.
 3. When the crew is ready, start the calls on the controller — in the
    Tools role, press **Start** (Menu); in the Run role, arm (hold LB +
    RB) and then hold **LT** and press **Menu**. Two controls, never one:

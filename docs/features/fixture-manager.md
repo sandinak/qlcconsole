@@ -466,7 +466,7 @@ print dialog, or saves it as a PDF.
    `{owner}`, `{group}`. A field the label doesn't know is printed as
    typed.
 4. **Cut gap** — blank tape between one label's text and the next, half at
-   each end of a label, where it is cut (5/32 in (4 mm) unless changed).
+   each end of a label, where it is cut (5/32 in unless changed).
 5. The first label, as it prints.
 6. **Print…** — the system's print dialog, set to the label's size;
    **Save PDF…** saves the same pages.

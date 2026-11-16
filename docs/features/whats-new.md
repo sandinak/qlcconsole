@@ -1664,7 +1664,7 @@ their house lights, relays and subs.
   ([Mounting](lighting-studio.md#mounting-a-fixture))
 - **Height counts when attaching.** A fixture mounted on something (the
   foot of a tower, a deck) is only offered a truss or pipe within 20 in
-  (0.5 m) of its own height — no more lights at a tower's base hung on the
+  of its own height — no more lights at a tower's base hung on the
   bar on top.
 - **Mount on → Deck.** Stands every selected fixture on the deck under it
   (or a named one): on its top, upright, nothing floating, nudged inside a
