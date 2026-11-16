@@ -331,8 +331,7 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
             if (!h.stopFired)
             {
                 h.stopFired = true;
-                if (!twinStopFired(universe))
-                    emergencyStop();
+                emergencyStop();
             }
             return true;
         }
@@ -1039,21 +1038,11 @@ bool PadRun::watchStop(quint32 universe, GamepadRole::Role role, uchar value)
     if (!h.stopFired)
     {
         h.stopFired = true;
-        // One pad listed twice sends the four on both: one stop (L1).
-        if (!twinStopFired(universe))
-            emergencyStop();
+        /* One pad listed twice sends the four on both: one Held (padKey()),
+           so one stop (L1). */
+        emergencyStop();
     }
     return true;
-}
-
-bool PadRun::twinStopFired(quint32 universe) const
-{
-    /* The stop is once a chord per physical pad (review 0.4.10 verify,
-       L1): its other line, the same identity, may have fired it already. */
-    for (auto it = m_held.constBegin(); it != m_held.constEnd(); ++it)
-        if (it.key() != universe && it.value().stopFired && sameController(universe, it.key()))
-            return true;
-    return false;
 }
 
 void PadRun::forgetPad(quint32 universe)
