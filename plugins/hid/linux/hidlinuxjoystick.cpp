@@ -19,6 +19,7 @@
 
 #include <QDebug>
 #include <QFile>
+#include <QFileInfo>
 
 #include <linux/joystick.h>
 #include <linux/input.h>
@@ -35,6 +36,27 @@
    most HIDDevice::kReaderStopMs (on the thread that closes the patch, after
    the universes are let go: IODeferral). */
 #define KPollTimeout 100
+
+/* Where the joystick nodes' devices are described (a test's copy). */
+static QString s_sysfsInput = QStringLiteral("/sys/class/input");
+
+void HIDLinuxJoystick::setSysfsInputForTest(const QString &dir)
+{
+    s_sysfsInput = dir;
+}
+
+static QString sysfsText(const QString &file)
+{
+    QFile f(file);
+    if (f.open(QIODevice::ReadOnly) == false)
+        return QString();
+    return QString::fromLatin1(f.readAll()).trimmed();
+}
+
+QString HIDLinuxJoystick::sysfsDevice() const
+{
+    return QStringLiteral("%1/%2/device/").arg(s_sysfsInput, QFileInfo(m_file.fileName()).fileName());
+}
 
 HIDLinuxJoystick::HIDLinuxJoystick(HIDPlugin* parent, quint32 line, struct hid_device_info *info)
     : HIDJsDevice(parent, line, info)
@@ -65,6 +87,12 @@ bool HIDLinuxJoystick::openDevice()
 
 void HIDLinuxJoystick::init()
 {
+    /* Which pad this is, beyond its model: its Bluetooth address (uniq)
+       and where it is connected (phys), for reopenNode(). */
+    const QString dev = sysfsDevice();
+    m_uniq = sysfsText(dev + QStringLiteral("uniq"));
+    m_phys = sysfsText(dev + QStringLiteral("phys"));
+
     if (openDevice() == false)
         return;
 
@@ -249,24 +277,24 @@ bool HIDLinuxJoystick::reopenNode()
         return false;
     const QString path = m_file.fileName();
 
-    /* The same pad: one that took its number is another device, which the
-       plugin's rescan adds as its own line. */
-    if (vendorId() != 0 && path.startsWith(QLatin1String("/dev/input/")))
+    /* The same pad, not one that took its number (a second DualSense):
+       that one is another device, which the plugin's rescan adds as its
+       own line with its own jobs. Its model, Bluetooth address and port
+       must all match what this one had; one that can't be read is not
+       taken on trust. */
+    const QString dev = sysfsDevice();
+    if (vendorId() != 0 || productId() != 0)
     {
-        const QString id = QStringLiteral("/sys/class/input/%1/device/id/").arg(path.mid(11));
-        auto hex = [](const QString &file) {
-            QFile f(file);
-            if (f.open(QIODevice::ReadOnly) == false)
-                return -1;
-            bool ok = false;
-            const int v = QString::fromLatin1(f.readAll()).trimmed().toInt(&ok, 16);
-            return ok ? v : -1;
-        };
-        const int vendor = hex(id + QStringLiteral("vendor"));
-        const int product = hex(id + QStringLiteral("product"));
-        if (vendor >= 0 && product >= 0 && (vendor != int(vendorId()) || product != int(productId())))
+        bool okV = false, okP = false;
+        const int vendor = sysfsText(dev + QStringLiteral("id/vendor")).toInt(&okV, 16);
+        const int product = sysfsText(dev + QStringLiteral("id/product")).toInt(&okP, 16);
+        if (!okV || !okP || vendor != int(vendorId()) || product != int(productId()))
             return false;
     }
+    if (!m_uniq.isEmpty() && sysfsText(dev + QStringLiteral("uniq")) != m_uniq)
+        return false;
+    if (!m_phys.isEmpty() && sysfsText(dev + QStringLiteral("phys")) != m_phys)
+        return false;
 
     const QByteArray node = QFile::encodeName(path);
     int fd = ::open(node.constData(), O_RDWR | O_CLOEXEC);

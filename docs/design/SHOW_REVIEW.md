@@ -553,6 +553,16 @@ the show has no focus calls, or none whose fixtures are in this production.
 Says: *"Cue 0.1 is a venue focus cue, but the show has no focus calls."*
 [cue 0.1]
 
+**CUE-18 Reusable uses with their own fades.** · N · cheap · v1 ✓
+Detects: a reusable layer or cue whose uses differ in an effect look's fade
+in / out (`ShowTreeController::reusableFadesShared()`) -- a show saved
+before 0.4.12, when the fades were not part of what the uses share. Each
+use keeps its own, as saved (syncReusables leaves the fades out of that
+reusable's content until the uses agree), so loading never changes a cue.
+Fix (jump `sharefades`): `shareReusableFades()`, every use takes the first
+use's, one undo step. Says: *"Reusable layer Wash: its uses have effect
+fades of their own (L 1 One, L 2 Two)…"* [every use's cue]
+
 **CUE-17 A press that tracks or repeats.** · W · cheap · v1 ✓
 Detects: a cue whose own function layer sets a press
 (`QLCCapability::isPress()`, the IR candle remote's Dim and Brighten) and

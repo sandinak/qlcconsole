@@ -794,6 +794,44 @@ static void cue08(ReviewContext &ctx, QList<ReviewFinding> &out)
     }
 }
 
+/* CUE-18: a reusable whose uses have effect fades of their own. A show
+   saved before an effect's fades were shared by every use (0.4.12) keeps
+   each use's as saved; the operator makes them one with a click. */
+static void cue18(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    ShowTreeController *st = ctx.doc()->showTree();
+    QList<QPair<quint32, bool>> ids;
+    for (const ReusableLayer &r : st->reusableLayers())
+        ids << qMakePair(r.id, true);
+    for (const ReusableCue &r : st->reusableCues())
+        ids << qMakePair(r.id, false);
+    for (const auto &id : ids)
+    {
+        if (st->reusableFadesShared(id.first))
+            continue;
+        QStringList where, keys;
+        QByteArray print = QByteArray::number(id.first);
+        for (const ShowTreeController::ReusableUse &u : st->reusableUses(id.first))
+        {
+            if (!where.contains(u.label))
+                where << u.label;
+            const QString key = QStringLiteral("list:%1/cue:%2").arg(u.list).arg(u.cue);
+            if (!keys.contains(key))
+                keys << key;
+            print += ':' + QByteArray::number(u.cue);
+        }
+        keys.sort();
+        const QString name = st->reusableName(id.first);
+        out << ReviewContext::make(QStringLiteral("CUE-18"), ReviewFinding::Note,
+            (id.second ? tr("Reusable layer %1: its uses have effect fades of their own (%2). Each plays its "
+                            "own, as saved; Fix makes them one, the first use's.")
+                       : tr("Reusable cue %1: its uses have effect fades of their own (%2). Each plays its "
+                            "own, as saved; Fix makes them one, the first use's."))
+                .arg(name, where.join(QStringLiteral(", "))),
+            keys, print, QStringLiteral("sharefades"), QVariantList() << id.first);
+    }
+}
+
 static void cue11(ReviewContext &ctx, QList<ReviewFinding> &out)
 {
     ShowTreeController *st = ctx.doc()->showTree();
@@ -1003,6 +1041,11 @@ QList<ShowReview::Check> ShowReviewChecks::treeChecks()
              "— but a Back to that cue, a jump to it or running it again presses it again, and "
              "a chase presses it every time it comes round. Give the press a cue of its own, with "
              "a short Window, and set Release After This Cue on it."), cue17 },
+        { QStringLiteral("CUE-18"), tr("Reusable uses with their own fades"), S::Cues,
+          tr("The uses of a reusable layer or cue share an effect's fade in and out. In a show "
+             "saved before they did, the uses can have different fades: each keeps its own, as "
+             "saved, and a change to one use's fades stays that use's, until they are made one."),
+          cue18 },
         { QStringLiteral("VC-01"), tr("Hits that fight in one place"), S::Hits,
           tr("Two hits in the same place that set the same attribute on the same lights: the "
              "stage depends on which was pressed last. Give them different places, or different "

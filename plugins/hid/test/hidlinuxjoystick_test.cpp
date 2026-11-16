@@ -19,6 +19,9 @@
 #include <QTemporaryDir>
 #include <QAtomicInt>
 #include <QElapsedTimer>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 
 #include <linux/joystick.h>
 #include <sys/stat.h>
@@ -41,6 +44,51 @@ qint64 processCpuMs()
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
     return qint64(ts.tv_sec) * 1000 + ts.tv_nsec / 1000000;
 }
+
+bool writeFile(const QString &path, const QByteArray &text)
+{
+    QDir().mkpath(QFileInfo(path).path());
+    QFile f(path);
+    return f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(text + "\n") == text.size() + 1;
+}
+
+/** The pad goes: its fd answers at once with a hang-up and reads nothing. */
+bool goneNow(HIDLinuxJoystick *pad)
+{
+    int dead[2];
+    if (::pipe(dead) != 0)
+        return false;
+    ::close(dead[1]);
+    const bool ok = ::dup2(dead[0], pad->handle()) == pad->handle();
+    ::close(dead[0]);
+    return ok;
+}
+
+/** A writer on the FIFO node, once the reader has it open again (a FIFO
+    opens for writing only then); -1 if that takes over @a ms. */
+int writerWithin(const QString &node, int ms)
+{
+    int writer = -1;
+    QElapsedTimer waited;
+    waited.start();
+    while (writer < 0 && waited.elapsed() < ms)
+    {
+        writer = ::open(QFile::encodeName(node).constData(), O_WRONLY | O_NONBLOCK);
+        if (writer < 0)
+            QTest::qWait(20);
+    }
+    return writer;
+}
+
+bool press(int writer, short value)
+{
+    struct js_event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type = JS_EVENT_BUTTON;
+    ev.number = 0;
+    ev.value = value;
+    return ::write(writer, &ev, sizeof(ev)) == ssize_t(sizeof(ev));
+}
 }
 
 void HIDLinuxJoystick_Test::padValue(quint32 universe, quint32 line, quint32 channel, uchar value)
@@ -59,11 +107,23 @@ void HIDLinuxJoystick_Test::aPadThatGoesIsWaitedForAndReadAgain()
     const QString away = dir.filePath(QStringLiteral("js0.gone"));
     QCOMPARE(::mkfifo(QFile::encodeName(node).constData(), 0600), 0);
 
+    /* Its sysfs: a DualSense on Bluetooth. */
+    const QString sys = dir.filePath(QStringLiteral("sys"));
+    const QString dev = sys + QStringLiteral("/js0/device/");
+    const QByteArray mac("a0:b1:c2:d3:e4:f5");
+    QVERIFY(writeFile(dev + QStringLiteral("id/vendor"), "054c"));
+    QVERIFY(writeFile(dev + QStringLiteral("id/product"), "0ce6"));
+    QVERIFY(writeFile(dev + QStringLiteral("uniq"), mac));
+    QVERIFY(writeFile(dev + QStringLiteral("phys"), "00:1a:7d:da:71:13"));
+    HIDLinuxJoystick::setSysfsInputForTest(sys);
+
     QByteArray path = QFile::encodeName(node);
     wchar_t empty[] = L"";
     struct hid_device_info info;
     memset(&info, 0, sizeof(info));
     info.path = path.data();
+    info.vendor_id = 0x054c;
+    info.product_id = 0x0ce6;
     info.serial_number = empty;
     info.manufacturer_string = empty;
     info.product_string = empty;
@@ -77,14 +137,9 @@ void HIDLinuxJoystick_Test::aPadThatGoesIsWaitedForAndReadAgain()
     QTRY_VERIFY(pad->isRunning());
     QVERIFY(pad->handle() >= 0);
 
-    /* The pad goes: its fd answers at once with a hang-up and reads
-       nothing, and the node is not there to open again. */
+    /* Gone, and the node not there to open again. */
     QCOMPARE(::rename(QFile::encodeName(node).constData(), QFile::encodeName(away).constData()), 0);
-    int dead[2];
-    QCOMPARE(::pipe(dead), 0);
-    ::close(dead[1]);
-    QCOMPARE(::dup2(dead[0], pad->handle()), pad->handle());
-    ::close(dead[0]);
+    QVERIFY(goneNow(pad));
 
     /* Waiting for it costs (next to) nothing: the old reader spun on
        poll() at a whole core. */
@@ -95,30 +150,35 @@ void HIDLinuxJoystick_Test::aPadThatGoesIsWaitedForAndReadAgain()
 
     /* Back at the same node: read again, a button press arrives. */
     QCOMPARE(::rename(QFile::encodeName(away).constData(), QFile::encodeName(node).constData()), 0);
-    /* A FIFO opens for writing only once the reader has it again. */
-    int writer = -1;
-    QElapsedTimer waited;
-    waited.start();
-    while (writer < 0 && waited.elapsed() < 3000)
-    {
-        writer = ::open(QFile::encodeName(node).constData(), O_WRONLY | O_NONBLOCK);
-        if (writer < 0)
-            QTest::qWait(20);
-    }
+    int writer = writerWithin(node, 3000);
     QVERIFY2(writer >= 0, "the reader never opened the node again");
-    struct js_event ev;
-    memset(&ev, 0, sizeof(ev));
-    ev.type = JS_EVENT_BUTTON;
-    ev.number = 0;
-    ev.value = 1;
-    QCOMPARE(int(::write(writer, &ev, sizeof(ev))), int(sizeof(ev)));
+    QVERIFY(press(writer, 1));
     QTRY_COMPARE_WITH_TIMEOUT(s_pressed.loadRelaxed(), 255, 3000);
+    ::close(writer);
+
+    /* Gone again, and another DualSense takes its number (another
+       Bluetooth address): not read on this pad's line. */
+    QVERIFY(goneNow(pad));
+    QVERIFY(writeFile(dev + QStringLiteral("uniq"), "a0:b1:c2:d3:e4:99"));
+    writer = writerWithin(node, 800);
+    QVERIFY2(writer < 0, "another pad at its node was read as this one");
+    /* Nor one whose address can't be read. */
+    QVERIFY(QFile::remove(dev + QStringLiteral("uniq")));
+    writer = writerWithin(node, 500);
+    QVERIFY2(writer < 0, "a pad with no address to compare was read as this one");
+    /* Its own address again: read again. */
+    QVERIFY(writeFile(dev + QStringLiteral("uniq"), mac));
+    writer = writerWithin(node, 3000);
+    QVERIFY2(writer >= 0, "the pad never came back");
+    QVERIFY(press(writer, 0));
+    QTRY_COMPARE_WITH_TIMEOUT(s_pressed.loadRelaxed(), 0, 3000);
     ::close(writer);
 
     /* Taken apart while it reads: the reader is stopped first (its maps
        are this class's members). */
     QVERIFY(pad->isRunning());
     delete pad;
+    HIDLinuxJoystick::setSysfsInputForTest(QStringLiteral("/sys/class/input"));
 }
 
 QTEST_MAIN(HIDLinuxJoystick_Test)

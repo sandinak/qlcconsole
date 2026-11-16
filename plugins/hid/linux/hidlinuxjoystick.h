@@ -36,6 +36,10 @@ public:
     HIDLinuxJoystick(HIDPlugin* parent, quint32 line, struct hid_device_info *info);
     ~HIDLinuxJoystick() override;
 
+    /** Read the joystick nodes' sysfs from @a dir, not /sys/class/input
+     *  (a test's fake tree); for devices made after it. */
+    static void setSysfsInputForTest(const QString &dir);
+
     /** @reimp */
     void init() override;
 
@@ -51,6 +55,8 @@ protected:
      *  (a pad that went and came back at the same jsN); false while it
      *  is not there, or another device has its number. */
     bool reopenNode();
+    /** The node's device in sysfs ("/sys/class/input/js0/device/"). */
+    QString sysfsDevice() const;
 
 private:
     /** @reimp */
@@ -68,6 +74,8 @@ private:
     QVector<quint16> m_axisCodes;                   // evdev code by axis number
     bool m_dpad[4] = { false, false, false, false };
     bool m_inLayout = false;
+    QString m_uniq;     // its Bluetooth address, when it has one (at open)
+    QString m_phys;     // where it is connected (at open)
 };
 
 #endif // HIDLINUXJOYSTICK_H

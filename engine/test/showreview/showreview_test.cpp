@@ -2091,6 +2091,54 @@ void ShowReview_Test::cue17()
     QVERIFY(quiet("CUE-17"));
 }
 
+/* CUE-18: a reusable layer whose uses kept effect fades of their own (a
+   show saved before 0.4.12); quiet while they agree, and after its Fix. */
+void ShowReview_Test::cue18()
+{
+    FixtureGroup *g = group("Wash", { par("Par 1", 0) });
+    QLCPalette *pulse = new QLCPalette(QLCPalette::Effect, m_doc);
+    pulse->setName("Pulse");
+    m_doc->addPalette(pulse);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Main");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    const quint32 c2 = st->addCue(lid, 0, "Two");
+    ShowTree::Target t;
+    t.groups << g->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    ShowTree::Look fx = st->lookForPalette(pulse->id());
+    fx.fadeIn = 3000;
+    QVERIFY(st->setLayerLook(c1, l1, fx));
+    const quint32 rid = st->makeLayerReusable(c1, l1, "Back Wash");
+    const quint32 l2 = st->insertReusableLayer(c2, rid);
+    QVERIFY(l2 != ShowTree::invalidId());
+    QVERIFY(quiet("CUE-18"));                       // one fade, every use
+
+    // As an older build could save it: use 2's fade its own.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter w(&buffer);
+    st->saveXML(&w);
+    buffer.close();
+    QByteArray xml = buffer.data();
+    const int at = xml.indexOf(QStringLiteral("<Layer ID=\"%1\"").arg(l2).toUtf8());
+    const QByteArray was("FadeIn=\"3000\"");
+    const int fade = xml.indexOf(was, at);
+    QVERIFY(at >= 0 && fade > at);
+    xml.replace(fade, was.size(), "FadeIn=\"4000\"");
+    QXmlStreamReader rd(xml);
+    rd.readNextStartElement();
+    QVERIFY(st->loadXML(rd));
+    QVERIFY(fires("CUE-18"));
+    const ReviewFinding f = findings("CUE-18").first();
+    QCOMPARE(f.severity, ReviewFinding::Note);
+    QVERIFY2(f.message.contains("Back Wash") && f.message.contains("One") && f.message.contains("Two"),
+             qPrintable(f.message));
+    QCOMPARE(f.jump, QString("sharefades"));
+    QVERIFY(st->shareReusableFades(f.jumpData.first().toUInt()));
+    QVERIFY(quiet("CUE-18"));
+}
+
 /****************************************************************************
  * Venues and focus
  ****************************************************************************/

@@ -2061,7 +2061,7 @@ bool loadXML(QXmlStreamReader &root, ReusableCue &reusable)
  * Reusable content (P4)
  ****************************************************************************/
 
-static QString looksContent(const QList<Look> &looks)
+static QString looksContent(const QList<Look> &looks, bool fades)
 {
     QStringList parts;
     for (const Look &l : looks)
@@ -2071,7 +2071,7 @@ static QString looksContent(const QList<Look> &looks)
         // An effect's fades are its content too (Look::operator==): the
         // uses of a reusable layer share them, and a cue that differs
         // only in them differs.
-        if (isEffectKey(l.key))
+        if (fades && isEffectKey(l.key))
             part += QStringLiteral("/%1/%2").arg(l.fadeIn).arg(l.fadeOut);
         parts << part;
     }
@@ -2079,23 +2079,23 @@ static QString looksContent(const QList<Look> &looks)
     return parts.join(QLatin1Char(';'));
 }
 
-QString layerContent(const Layer &layer)
+QString layerContent(const Layer &layer, bool fades)
 {
-    return QStringLiteral("%1|%2|%3").arg(layer.name, layer.target.signature(), looksContent(layer.looks));
+    return QStringLiteral("%1|%2|%3").arg(layer.name, layer.target.signature(), looksContent(layer.looks, fades));
 }
 
-QString cueContent(const Cue &cue)
+QString cueContent(const Cue &cue, bool fades)
 {
     QStringList parts;
     parts << cue.name << cueModeToString(cue.mode) << (cue.mixOverlap ? QStringLiteral("mix") : QString())
-          << looksContent(cue.looks);
+          << looksContent(cue.looks, fades);
     for (const Layer &l : cue.layers)
     {
         int parent = -1;
         for (int k = 0; k < cue.layers.count(); ++k)
             if (l.parent != invalidId() && cue.layers.at(k).id == l.parent)
                 parent = k;
-        parts << QStringLiteral("[%1|%2|%3|%4]").arg(layerContent(l)).arg(l.release ? 1 : 0).arg(parent)
+        parts << QStringLiteral("[%1|%2|%3|%4]").arg(layerContent(l, fades)).arg(l.release ? 1 : 0).arg(parent)
                  .arg(l.reusable == invalidId() ? QString() : QString::number(l.reusable));
     }
     return parts.join(QLatin1Char('#'));

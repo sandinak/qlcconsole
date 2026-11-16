@@ -59,6 +59,7 @@
 #include "qlcchannel.h"
 #include "stagetarget.h"
 #include "aimsolver.h"
+#include "showreview.h"
 #include "truss.h"
 #include "showembedding.h"
 #include <QTemporaryDir>
@@ -12031,4 +12032,45 @@ void ShowTree_Test::olderShowsReusableUsesKeepTheirFades()
     QVERIFY(st->setLayerLook(c1, l1, fx));
     QCOMPARE(fadeOf(c1, l1, fx.key), 5000);
     QCOMPARE(fadeOf(c2, l2, fx.key), 4000);
+}
+
+/* Show Review says which reusable's uses kept fades of their own (CUE-18),
+   naming it and its cues, and its Fix makes them one (one undo step);
+   after that the fades are shared again. */
+void ShowTree_Test::ownFadesAreReviewedAndShared()
+{
+    quint32 c1, l1, c2, l2;
+    Look fx;
+    const quint32 rid = olderShowWithOwnFades(&c1, &l1, &c2, &l2, &fx);
+    QVERIFY(rid != invalidId());
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(!st->reusableFadesShared(rid));
+
+    ShowReview::Options o;
+    o.checks = QStringList() << QStringLiteral("CUE-18");
+    QList<ReviewFinding> found = m_doc->showReview()->run(o).findings;
+    QCOMPARE(found.count(), 1);
+    const ReviewFinding f = found.first();
+    QVERIFY2(f.message.contains("Wash") && f.message.contains("One") && f.message.contains("Two"),
+             qPrintable(f.message));
+    QCOMPARE(f.targets.count(), 2);
+    QCOMPARE(f.jump, QString("sharefades"));
+    QCOMPARE(f.jumpData, QVariantList() << rid);
+
+    // Fix: every use takes the first use's, one undo step.
+    QVERIFY(st->shareReusableFades(rid));
+    QCOMPARE(st->cue(c2)->layer(l2)->look(fx.key)->fadeIn, 3000);
+    QVERIFY(st->reusableFadesShared(rid));
+    QVERIFY(m_doc->showReview()->run(o).findings.isEmpty());
+    QVERIFY(!st->shareReusableFades(rid));              // nothing left to share
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c2)->layer(l2)->look(fx.key)->fadeIn, 4000);
+    QVERIFY(st->redo());
+    QCOMPARE(st->cue(c2)->layer(l2)->look(fx.key)->fadeIn, 3000);
+
+    // Shared from now on: a fade set in one use is every use's.
+    fx.fadeIn = 6000;
+    QVERIFY(st->setLayerLook(c2, l2, fx));
+    QCOMPARE(st->cue(c1)->layer(l1)->look(fx.key)->fadeIn, 6000);
+    QCOMPARE(st->cue(c2)->layer(l2)->look(fx.key)->fadeIn, 6000);
 }

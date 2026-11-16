@@ -307,6 +307,9 @@ private slots:
     /** A show saved before an effect's fades were shared: its reusable's
      *  uses keep their own fades through loading and every edit after. */
     void olderShowsReusableUsesKeepTheirFades();
+    /** Show Review CUE-18 names such a reusable and its cues; its Fix
+     *  makes the fades one, one undo step, shared from then on. */
+    void ownFadesAreReviewedAndShared();
 
 private:
     /** A reusable layer "Wash" in cues One (l1) and Two (l2), an effect

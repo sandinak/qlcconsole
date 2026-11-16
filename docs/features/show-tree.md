@@ -2439,6 +2439,9 @@ reusables are reusable *arrangements*.
   every use changes, in one undo step. The tree marks each use **⟲** with
   how many there are; the page says *"Reusable layer Back Wash — used in 3
   place(s): an edit here is an edit to all"*.
+  In a show saved before an effect's fades were shared, the uses can have
+  fades of their own: each keeps them, as saved, until Show Review's
+  **CUE-18** Fix makes them one.
 - **What stays each use's own.** A layer's **Release**, its parent and
   what it carries on from. A cue's **number**, **note**, **fades and hold**
   and **includes**.
