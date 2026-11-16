@@ -290,7 +290,9 @@ void ShowTreeController::syncReusables(const QList<Production> &before, QList<Pr
             // keeps its own, and only the rest is made the same.
             const Layer *firstUse = nullptr;
             const bool fades = layerUsesAgree(before, r.id, &firstUse);
-            if (fades && firstUse != nullptr)
+            // Once, before the edit is taken: the pass after the cues' must
+            // not put the fades from before the edit back.
+            if (adopt && fades && firstUse != nullptr)
                 keepFades(r.looks, firstUse->looks);
             const QHash<QString, QString> &was = fades ? wasLayer : wasLayerNoFades;
             Layer def;
