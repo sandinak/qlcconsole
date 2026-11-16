@@ -214,11 +214,11 @@ public:
      *  dispose): a test waits for 0 before it ends. */
     static int workerThreads();
 
-    /** A value from the virtual pad (QLC_HID_VIRTUAL_PAD) on @p input, sent
-     *  on as the pad's own reading would be. False if it is not one. */
     /** The input line of the joystick at system path @p path, or -1: a
      *  trace's replay finds a pad by where it is listed. */
     Q_INVOKABLE int inputForPath(const QString &path) const;
+    /** A value from the virtual pad (QLC_HID_VIRTUAL_PAD) on @p input, sent
+     *  on as the pad's own reading would be. False if it is not one. */
     Q_INVOKABLE bool injectVirtualInput(quint32 input, quint32 channel, uint value);
 
 protected:
@@ -292,6 +292,7 @@ private:
     int m_openLimitMs = 2000;
     /** QLC_HID_RECORD's recorder; null (one check per event) when unset. */
     HIDTrace *m_trace = nullptr;
+    bool m_initDone = false;
     struct Opening
     {
         quint64 job = 0;

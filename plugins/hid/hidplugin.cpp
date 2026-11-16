@@ -162,6 +162,9 @@ HIDDevice *makeVirtualPad(const HIDFound &found)
                          ? QStringLiteral("Virtual pad %1").arg(found.path) : found.product;
     HIDVirtualPad *pad = new HIDVirtualPad(nullptr, 0, name, found.vendorId, found.productId);
     pad->setPath(found.path);
+    /* The port the system path says, as a real pad's location (only a test
+       backend's pads are made here), so their controller-jobs identity is
+       port-based as a real pad's is. */
     pad->setLocation(GamepadLayout::locationFromPath(found.path));
     if (found.testRead)
         pad->setReadHook(found.testRead);
@@ -271,6 +274,10 @@ void openJob(std::shared_ptr<HIDScanShared> sh, HIDBackend *backend, HIDFound fo
 
 void HIDPlugin::init()
 {
+    if (m_initDone)
+        return;     // once: a second call would list the virtual pads and the recorder again
+    m_initDone = true;
+
     /* QLC_HID_PROFILE_DIR: the profiles from there alone (tests: the
        source tree's, not whatever this machine's user has). */
     const QString profileDir = qEnvironmentVariable("QLC_HID_PROFILE_DIR");

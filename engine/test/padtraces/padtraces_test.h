@@ -49,6 +49,8 @@ private slots:
     void triggerRest();
     void triggerRestDuringTheChord();
     void aSessionIsRecorded();
+    void theIdentitiesAreTheEngines();
+    void aLongRecordingStopsAtItsCap();
 
 private:
     /** Patch every HID input named @p name to a universe of its own, from

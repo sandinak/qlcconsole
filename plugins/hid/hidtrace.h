@@ -43,9 +43,12 @@ class HIDDevice;
  * Plugin-level events only, never raw HID reports. The plugin holds one of
  * these only when the variable is set: unset, the cost is one null check
  * per event. Lines are queued and written by a thread of its own at the
- * lowest priority, so the reader and the GUI never wait on the disk; a
- * queue that outgrows kMaxQueued drops lines (counted in a final "dropped"
- * event) rather than grow.
+ * lowest priority, so the reader and the GUI never wait on the disk. Two
+ * caps keep it from growing: the queue (kMaxQueued lines; a writer that
+ * falls behind drops lines, counted in a final "dropped" event) and the
+ * file (kMaxFileBytes; past it the file ends with a "truncated" event and
+ * nothing more is kept). A write that fails (disk full) is warned about
+ * once and ends the recording.
  *
  * plugins/hid/test/padtraceplayer.h plays a trace back through the plugin.
  */
@@ -72,7 +75,8 @@ public:
      *  padtraces test holds the two equal). */
     static QString identityFor(const QString &name, const QString &location);
 
-    static constexpr int kMaxQueued = 200000;
+    static constexpr int kMaxQueued = 200000;           ///< lines waiting for the writer
+    static constexpr qint64 kMaxFileBytes = 200LL << 20;  ///< about 200 MB a file
 
 protected:
     void run() override;
@@ -88,6 +92,8 @@ private:
     QWaitCondition m_wake;
     QList<QByteArray> m_queue;
     bool m_quit = false;
+    qint64 m_maxBytes = kMaxFileBytes;     ///< QLC_HID_RECORD_MAX_BYTES, for a test
+    bool m_stopped = false;     ///< file full or a write failed: nothing more kept
     int m_dropped = 0;
 };
 

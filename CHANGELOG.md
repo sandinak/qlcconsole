@@ -14,7 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
-- **Record a game controller once, test it on every change.** Set `QLC_HID_RECORD=<folder>` and the HID plugin writes a trace of the session there (`pads-<date-time>.jsonl`: each pad arriving and leaving, with its identity, every value it delivers, every open that failed or stuck), at no cost when unset and never holding up the reader. The gate replays traces from `engine/test/padtraces/traces/` through the real plugin into Pad Run: a DualSense clone flipping to an Xbox 360 pad, one pad listed twice, triggers resting at 8 % and noisy sticks (synthetic until a real pad is recorded; docs/dev/PAD_TRACES.md).
+- **Record a game controller once, test it on every change.** Set `QLC_HID_RECORD=<folder>` and the HID plugin writes a trace of the session there (`pads-<date-time>.jsonl`: each pad arriving and leaving, with its identity, every value it delivers, every open that failed or stuck), at no cost when unset and never holding up the reader (a file stops at about 200 MB with a final `truncated` line; a write that fails, such as a full disk, warns once and ends the recording). The gate replays traces from `engine/test/padtraces/traces/` through the real plugin into Pad Run: a DualSense clone flipping to an Xbox 360 pad, one pad listed twice, triggers resting at 8 % and noisy sticks (synthetic until a real pad is recorded; docs/dev/PAD_TRACES.md).
 
 ### Fixed
 

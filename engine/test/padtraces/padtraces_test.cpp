@@ -43,6 +43,13 @@ const QString kDualSensePath = QStringLiteral("USB_054c_0ce6_2124000");
    trace plays in about 5 s. */
 const double kSpeed = 2.0;
 
+/* The replay settled every scan and pad in time, and no input found no pad. */
+#define VERIFY_CLEAN_PLAY() \
+    do { \
+        QVERIFY2(m_player->problems().isEmpty(), qPrintable(m_player->problems().join(QStringLiteral("; ")))); \
+        QCOMPARE(m_player->orphanInputs(), 0); \
+    } while (false)
+
 /* Never deleted: a thread may still be leaving a call into one. */
 QList<FakeHIDBackend *> s_fakes;
 
@@ -74,8 +81,12 @@ void PadTraces_Test::cleanupTestCase()
 void PadTraces_Test::init()
 {
     QSettings().remove(ControllerJobs::settingsGroup());    // every pad every job
-    if (QLatin1String(QTest::currentTestFunction()) == QLatin1String("aSessionIsRecorded"))
+    const QString current = QLatin1String(QTest::currentTestFunction());
+    if (current == QLatin1String("aSessionIsRecorded") || current == QLatin1String("theIdentitiesAreTheEngines")
+        || current == QLatin1String("aLongRecordingStopsAtItsCap"))
     {
+        if (current == QLatin1String("aLongRecordingStopsAtItsCap"))
+            qputenv("QLC_HID_RECORD_MAX_BYTES", "1500");
         m_recordDir = new QTemporaryDir();
         QVERIFY(m_recordDir->isValid());
         qputenv("QLC_HID_RECORD", m_recordDir->path().toUtf8());
@@ -119,6 +130,7 @@ void PadTraces_Test::cleanup()
     delete m_recordDir;
     m_recordDir = nullptr;
     qunsetenv("QLC_HID_RECORD");
+    qunsetenv("QLC_HID_RECORD_MAX_BYTES");
     QSettings().remove(ControllerJobs::settingsGroup());
 }
 
@@ -202,7 +214,7 @@ void PadTraces_Test::flip(bool hold)
 
     // The clone comes back as an Xbox pad, three times over.
     m_player->playAll();
-    QCOMPARE(m_player->orphanInputs(), 0);
+    VERIFY_CLEAN_PLAY();
     QTest::qWait(100);
     QVERIFY2(run->isArmed() == false, "the arm came back by itself");
     QCOMPARE(commandCount(int(ShowControl::Go)), 1);    // the GO from the Xbox pad moved nothing
@@ -241,6 +253,7 @@ void PadTraces_Test::twinListing()
     QCOMPARE(commandCount(int(ShowControl::AllOff)), 1);
     QVERIFY(run->isArmed() == false);           // the stop drops the arm
     QCOMPARE(inputsNamed(kDualSense), 1);
+    VERIFY_CLEAN_PLAY();
 }
 
 void PadTraces_Test::triggerRest()
@@ -269,7 +282,7 @@ void PadTraces_Test::triggerRest()
     // Three presses of A, no LT.
     m_player->playAll();
     QTest::qWait(100);
-    QCOMPARE(m_player->orphanInputs(), 0);
+    VERIFY_CLEAN_PLAY();
     QVERIFY(run->isArmed());
     QVERIFY2(m_commands.isEmpty(), qPrintable(QString("a resting trigger moved the show: %1 commands").arg(m_commands.size())));
 }
@@ -294,11 +307,19 @@ void PadTraces_Test::triggerRestDuringTheChord()
     startRunning();
 
     QVERIFY(m_player->playUntil([](const PadTracePlayer::Event &e) { return e.t >= 1600; }));
-    QTest::qWait(100);
+    /* The bug, waited for with a bound (a slow timer is late, not absent):
+       armed by the chord, then the next trigger report fires it again and
+       the arm is off. When padrun.cpp is fixed (0.4.12, fix/0411-jobs-alone:
+       after a chord fires or is refused, nothing fires again until both
+       bumpers are released) this wait times out and fails: whoever merges
+       after that fix deletes the QTRY line, the QEXPECT_FAIL and this
+       comment, and keeps the QVERIFY (armed after the chord). */
+    QTRY_VERIFY_WITH_TIMEOUT(run->isArmed() == false, 3000);
     QEXPECT_FAIL("", "padrun.cpp: a resting trigger's report with LB + RB held toggles the arm off again", Continue);
     QVERIFY(run->isArmed());
     m_player->playAll();
     QVERIFY(m_commands.isEmpty());      // and nothing fired meanwhile
+    VERIFY_CLEAN_PLAY();
 }
 
 void PadTraces_Test::aSessionIsRecorded()
@@ -358,6 +379,80 @@ void PadTraces_Test::aSessionIsRecorded()
     QCOMPARE(arrived, 4);   // the DualSense, the Xbox three times
     QCOMPARE(gone, 3);      // the DualSense, the Xbox twice
     QVERIFY2(inputs >= 10, qPrintable(QString::number(inputs)));
+}
+
+void PadTraces_Test::theIdentitiesAreTheEngines()
+{
+    /* The recorder mirrors ControllerJobs::identityFor() (the plugin does not
+       link the engine): every branch of it, so the two cannot drift. */
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString file = dir.filePath("identities.jsonl");
+    {
+        QFile f(file);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        // a Bluetooth address in the name; a port; neither (no location in the path).
+        f.write("{\"t\":0,\"ev\":\"arrived\",\"path\":\"Bluetooth_054c_0ce6_1234\",\"vid\":\"054c\",\"pid\":\"0ce6\","
+                "\"name\":\"Wireless Controller 12:34:56:AB:CD:EF\"}\n"
+                "{\"t\":10,\"ev\":\"arrived\",\"path\":\"USB_045e_028e_2124000\",\"vid\":\"045e\",\"pid\":\"028e\","
+                "\"name\":\"Xbox 360 Controller for Windows\"}\n"
+                "{\"t\":20,\"ev\":\"arrived\",\"path\":\"hidraw7\",\"vid\":\"045e\",\"pid\":\"0b13\","
+                "\"name\":\"Some Pad\"}\n");
+    }
+    PadTracePlayer one(m_hid, m_fake);
+    QString error;
+    QVERIFY2(one.load(file, &error), qPrintable(error));
+    one.setSpeed(0);
+    one.playAll();
+    QVERIFY2(one.problems().isEmpty(), qPrintable(one.problems().join("; ")));
+    QTRY_COMPARE_WITH_TIMEOUT(m_hid->inputs().size(), 3, 2000);
+    teardown();
+
+    const QStringList files = QDir(m_recordDir->path()).entryList(QStringList() << "pads-*.jsonl", QDir::Files);
+    QCOMPARE(files.size(), 1);
+    PadTracePlayer back(nullptr, nullptr);
+    QVERIFY2(back.load(m_recordDir->filePath(files.first()), &error), qPrintable(error));
+    QHash<QString, QString> identity;
+    for (const PadTracePlayer::Event &e : back.events())
+    {
+        if (e.ev != QLatin1String("arrived"))
+            continue;
+        const QString name = e.o.value("name").toString();
+        const QString got = e.o.value("identity").toString();
+        QCOMPARE(got, ControllerJobs::identityFor(QStringLiteral("HID"), name, e.o.value("location").toString()));
+        identity.insert(name, got);
+    }
+    QCOMPARE(identity.size(), 3);
+    QCOMPARE(identity.value("Wireless Controller 12:34:56:AB:CD:EF"), QString("mac:12:34:56:ab:cd:ef"));
+    QVERIFY(identity.value("Xbox 360 Controller for Windows").startsWith("port:HID:"));
+    QCOMPARE(identity.value("Some Pad"), QString("name:HID:Some Pad"));
+}
+
+void PadTraces_Test::aLongRecordingStopsAtItsCap()
+{
+    /* A file past its cap (here 1500 bytes) ends with a "truncated" event,
+       and keeps nothing after it. */
+    QString error;
+    QVERIFY2(m_player->load(trace("clone_flip_to_xbox.jsonl"), &error), qPrintable(error));
+    m_player->setSpeed(0);
+    QVERIFY(m_player->step() != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(m_hid->inputs().contains(kDualSense), 2000);
+    QCOMPARE(patchPads(kDualSense), 1);
+    startRunning();
+    m_player->playAll();
+    QTest::qWait(100);
+    teardown();
+
+    const QStringList files = QDir(m_recordDir->path()).entryList(QStringList() << "pads-*.jsonl", QDir::Files);
+    QCOMPARE(files.size(), 1);
+    QFile f(m_recordDir->filePath(files.first()));
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QList<QByteArray> lines = f.readAll().trimmed().split('\n');
+    QVERIFY(lines.size() > 3);
+    QVERIFY2(lines.last().contains("\"ev\":\"truncated\""), lines.last().constData());
+    QVERIFY2(f.size() < 4000, qPrintable(QString::number(f.size())));   // far short of the full trace
+    for (const QByteArray &l : lines.mid(0, lines.size() - 1))
+        QVERIFY(!l.contains("truncated"));
 }
 
 QTEST_MAIN(PadTraces_Test)

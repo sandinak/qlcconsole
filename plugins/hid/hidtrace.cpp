@@ -40,6 +40,9 @@ HIDTrace *HIDTrace::create(const QString &dir)
         delete t;
         return nullptr;
     }
+    const qint64 maxBytes = qEnvironmentVariableIntValue("QLC_HID_RECORD_MAX_BYTES");
+    if (maxBytes > 0)
+        t->m_maxBytes = maxBytes;
     t->m_clock.start();
     t->start(QThread::LowestPriority);
     return t;
@@ -62,6 +65,8 @@ void HIDTrace::push(QByteArray line)
 {
     line += '\n';
     QMutexLocker l(&m_lock);
+    if (m_stopped)
+        return;
     if (m_queue.size() >= kMaxQueued)
     {
         m_dropped++;
@@ -73,6 +78,7 @@ void HIDTrace::push(QByteArray line)
 
 void HIDTrace::run()
 {
+    qint64 written = 0;
     for (;;)
     {
         QList<QByteArray> batch;
@@ -84,9 +90,36 @@ void HIDTrace::run()
             batch.swap(m_queue);
             quit = m_quit;
         }
+        bool failed = false;
         for (const QByteArray &line : std::as_const(batch))
-            m_file.write(line);
-        m_file.flush();
+        {
+            if (m_file.write(line) != line.size())
+            {
+                failed = true;
+                break;
+            }
+            written += line.size();
+        }
+        if (!failed)
+            failed = !m_file.flush() && m_file.error() != QFileDevice::NoError;
+        if (failed)
+        {
+            qWarning() << "QLC_HID_RECORD: writing" << m_file.fileName()
+                       << "failed (" << m_file.errorString() << "): recording stopped";
+            QMutexLocker l(&m_lock);
+            m_stopped = true;
+            m_queue.clear();
+            break;
+        }
+        if (written >= m_maxBytes)
+        {
+            m_file.write(QByteArray("{\"t\":") + QByteArray::number(now())
+                         + ",\"ev\":\"truncated\",\"bytes\":" + QByteArray::number(written) + "}\n");
+            QMutexLocker l(&m_lock);
+            m_stopped = true;
+            m_queue.clear();
+            break;
+        }
         if (quit)
             break;
     }

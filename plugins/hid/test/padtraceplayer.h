@@ -139,6 +139,11 @@ public:
      *  consistent has none. */
     int orphanInputs() const { return m_orphans; }
 
+    /** What did not settle in time (a scan, or a pad that never showed or
+     *  never went): a loaded host's slowness says so here, not as inputs
+     *  that found no pad. Empty on a clean play. */
+    QStringList problems() const { return m_problems; }
+
 private:
     void apply(const Event &e)
     {
@@ -202,7 +207,7 @@ private:
     {
         QElapsedTimer t;
         t.start();
-        while (t.elapsed() < 1000)
+        while (t.elapsed() < kSettleMs)
         {
             int line = -1;
             QMetaObject::invokeMethod(m_plugin, "inputForPath", Qt::DirectConnection,
@@ -214,6 +219,9 @@ private:
                 return;
             QTest::qWait(5);
         }
+        m_problems << QStringLiteral("%1 did not %2 within %3 ms")
+                          .arg(path, present ? QStringLiteral("appear") : QStringLiteral("go"))
+                          .arg(kSettleMs);
     }
 
     /** Ask for a scan and wait for it (and, @p opens, for what it opens). */
@@ -222,7 +230,8 @@ private:
         QMetaObject::invokeMethod(m_plugin, "rescanDevices", Qt::DirectConnection);
         QElapsedTimer t;
         t.start();
-        while (t.elapsed() < 3000)
+        bool settled = false;
+        while (t.elapsed() < kSettleMs)
         {
             QTest::qWait(5);
             bool scanning = false;
@@ -232,14 +241,23 @@ private:
             QMetaObject::invokeMethod(m_plugin, "openingCount", Qt::DirectConnection,
                                       Q_RETURN_ARG(int, opening));
             if (!scanning && (!opens || opening == 0))
+            {
+                settled = true;
                 break;
+            }
         }
+        if (!settled)
+            m_problems << QStringLiteral("a scan did not finish within %1 ms").arg(kSettleMs);
         /* The scan's and the opens' results come to the plugin as queued
            calls: take them. */
         for (int i = 0; i < 3; ++i)
             QTest::qWait(5);
         QCoreApplication::processEvents();
     }
+
+    /** How long a scan, or the coming or going of a pad, may take: far over
+     *  what it takes, so a loaded host fails here and says so. */
+    static constexpr int kSettleMs = 5000;
 
     QObject *m_plugin;
     FakeHIDBackend *m_fake;
@@ -249,6 +267,7 @@ private:
     double m_speed = 1.0;
     quint64 m_instance = 0;
     int m_orphans = 0;
+    QStringList m_problems;
     std::function<bool(const Event &)> m_skip;
     QHash<QString, int> m_listed;
 };
