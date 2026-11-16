@@ -166,6 +166,8 @@ void HIDStuckPad_Test::theShowRunsOnWhileAPadHangs()
     QVERIFY(iom->setInputPatch(1, QStringLiteral("HID"), QString(), padLine));
     QVERIFY(channelOf(padLine, "lb") >= 0);
 
+    // As the app runs: the universe threads (which pass the input on), the timer.
+    iom->startUniverses();
     m_doc->masterTimer()->start();
     run->setEnabled(true);
     run->setArmChordMs(15);
