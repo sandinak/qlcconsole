@@ -32,6 +32,7 @@
 #include <QMutexLocker>
 #include <QVariant>
 #include <QTimer>
+#include <QScopeGuard>
 
 #include "programmercontroller.h"
 #include "controllerjobs.h"
@@ -370,6 +371,9 @@ ProgrammerController::ProgrammerController(Doc *doc)
             this, &ProgrammerController::checkControllerPresence);
     connect(this, &ProgrammerController::focusControllerChanged,
             this, &ProgrammerController::refreshPadFamily);
+    // Who has the venue focus: FOCUS names it, its light, the runner's arm.
+    connect(this, &ProgrammerController::focusControllerChanged,
+            m_padRun, &PadRun::focusOwnerChanged);
     connect(this, &ProgrammerController::axisBindingChanged,
             this, &ProgrammerController::refreshControllerKeepAlive);
     m_markPlanner = new MarkPlanner(m_doc, m_markEffect, this);
@@ -1800,7 +1804,6 @@ void ProgrammerController::setPadLight(const QColor &colour)
     /* Which pad shows it (CONTROLLER_JOBS.md 9), with more than one pad:
        the one that runs cues (or has the venue focus), every pad red after
        the stop, the others their own colour. One pad: that pad, as ever. */
-    const quint32 kAllPads = UINT_MAX - 1;
     quint32 target = UINT_MAX;
     InputOutputMap *iom = m_doc->inputOutputMap();
     if (m_padRun != nullptr && iom != nullptr && m_padRun->padCount() > 1)
@@ -1863,15 +1866,40 @@ void ProgrammerController::setPadLight(const QColor &colour)
 
 void ProgrammerController::setPadTriggers(const PadTriggers::State &state, bool force)
 {
-    if (m_padTriggersSent && state == m_padTriggers && !force)
+    /* The pad the state is on (the runner armed): the arm's firm triggers
+       are its own, never another pad's (review 1); every other pad's are
+       off. One pad: that pad, as ever. */
+    const quint32 target = statePad();
+    if (m_padTriggersSent && state == m_padTriggers && target == m_padTriggersTarget && !force)
         return;
+    const quint32 was = m_padTriggersTarget;
     m_padTriggers = state;
     m_padTriggersSent = true;
-    QVariantMap p;
-    p.insert(QStringLiteral("gamepad"), QStringLiteral("triggers"));
-    p.insert(QStringLiteral("right"), QString::fromLatin1(PadTriggers::name(state.right)));
-    p.insert(QStringLiteral("left"), QString::fromLatin1(PadTriggers::name(state.left)));
-    sendPadFeedback(p);
+    m_padTriggersTarget = target;
+    auto params = [](const PadTriggers::State &st) {
+        QVariantMap p;
+        p.insert(QStringLiteral("gamepad"), QStringLiteral("triggers"));
+        p.insert(QStringLiteral("right"), QString::fromLatin1(PadTriggers::name(st.right)));
+        p.insert(QStringLiteral("left"), QString::fromLatin1(PadTriggers::name(st.left)));
+        return p;
+    };
+    const QVariantMap p = params(state), off = params(PadTriggers::State());
+    if (target == UINT_MAX && was == UINT_MAX)
+        sendPadFeedback(p);
+    else
+    {
+        InputOutputMap *iom = m_doc->inputOutputMap();
+        for (quint32 u = 0; iom != nullptr && u < iom->universesCount(); ++u)
+        {
+            InputPatch *ip = iom->inputPatch(u);
+            if (ip == nullptr || !ip->isPatched() || !isPadUniverse(u))
+                continue;
+            const bool on = target != UINT_MAX && (u == target || m_padRun->sameController(u, target));
+            sendPadFeedback(on ? p : off, u);
+        }
+        if (target == UINT_MAX)
+            sendPadFeedback(p);
+    }
     emit padTriggersChanged();
 }
 
@@ -1893,7 +1921,8 @@ void ProgrammerController::padRumble(int pulses, int lengthMs, quint32 universe)
     p.insert(QStringLiteral("gamepad"), QStringLiteral("rumble"));
     p.insert(QStringLiteral("pulses"), pulses);
     p.insert(QStringLiteral("ms"), lengthMs);
-    sendPadFeedback(p, universe);
+    // The pad whose action it is (review 1), unless one was named.
+    sendPadFeedback(p, universe == UINT_MAX ? feedbackPad() : universe);
     emit padRumbled(pulses, lengthMs);
 }
 
@@ -1943,6 +1972,27 @@ void ProgrammerController::sendPadFeedback(const QVariantMap &params, quint32 un
     InputOutputMap *iom = m_doc->inputOutputMap();
     if (iom == nullptr)
         return;
+    if (universe == kAllPads)
+    {
+        // Every pad once (one listed twice is one pad).
+        QList<quint32> sent;
+        for (quint32 u = 0; u < iom->universesCount(); ++u)
+        {
+            InputPatch *ip = iom->inputPatch(u);
+            if (ip == nullptr || !ip->isPatched() || !isPadUniverse(u))
+                continue;
+            bool twin = false;
+            for (quint32 v : std::as_const(sent))
+                twin = twin || m_padRun->sameController(u, v);
+            if (twin)
+                continue;
+            sent << u;
+            sendPadFeedback(params, u);
+        }
+        return;
+    }
+    if (universe == UINT_MAX)
+        universe = statePad();
     if (universe == UINT_MAX)
     {
         // The controller the tools read: its own plugin, its own line.
@@ -1957,6 +2007,23 @@ void ProgrammerController::sendPadFeedback(const QVariantMap &params, quint32 un
     if (ip == nullptr || ip->plugin() == nullptr)
         return;
     ip->plugin()->sendFeedBack(universe, ip->input(), 0, 0, params);
+}
+
+quint32 ProgrammerController::feedbackPad() const
+{
+    if (m_actingUniverse != UINT_MAX)
+        return m_actingUniverse;
+    return statePad();
+}
+
+quint32 ProgrammerController::statePad() const
+{
+    if (m_padRun == nullptr || m_padRun->padCount() <= 1)
+        return UINT_MAX;
+    const quint32 u = m_padRun->lightUniverse();
+    if (u != UINT_MAX)
+        return u;
+    return m_ownerUniverse != 0xFFFFFFFF ? m_ownerUniverse : UINT_MAX;
 }
 
 QString ProgrammerController::followSpotJobNote() const
@@ -2885,6 +2952,14 @@ void ProgrammerController::connectControllerInput()
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputPatchChanged, this, [this](quint32 universe) {
         if (m_padRun != nullptr)
             m_padRun->forgetPad(universe);
+        /* The pad that owns the tools went (unplugged, swapped in its
+           slot): the tool runs on with no owner, the next pad with the
+           Focus job to press takes it (review 12, as a job taken away). */
+        if (m_ownerUniverse != 0xFFFFFFFF && m_ownerUniverse == universe)
+        {
+            m_ownerUniverse = 0xFFFFFFFF;
+            emit focusControllerChanged();
+        }
         // Its pushes went with it (no release comes): the follow spot lets go.
         const bool stick = (m_panBound && m_panUniverse == universe) || (m_tiltBound && m_tiltUniverse == universe);
         if (stick || m_finePads.contains(universe) || (m_recalHeld && m_recalUniverse == universe))
@@ -2935,6 +3010,11 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
        owner, tool, job, role or Controller Test check, so nothing can
        swallow it. Swallowed itself while all four are down. */
     int role = -1;      // worked out once an event (L2), when it is needed
+    /* Feedback while this is handled -- a buzz, a control's name -- is
+       this pad's (review 1): it is the pad whose action it is. */
+    const quint32 wasActing = m_actingUniverse;
+    m_actingUniverse = universe;
+    const auto acting = qScopeGuard([this, wasActing]() { m_actingUniverse = wasActing; });
     if (m_padRun != nullptr && m_padRun->isEnabled())
     {
         role = controllerRole(universe, channel);
@@ -3051,7 +3131,7 @@ int ProgrammerController::controllerRole(quint32 universe, quint32 channel) cons
                                     ip->plugin()->inputChannelName(ip->input(), device));
 }
 
-ProgrammerController::FocusController ProgrammerController::focusController() const
+ProgrammerController::FocusController ProgrammerController::focusController(quint32 only) const
 {
     /* Controls numbered past this are not a gamepad's: HID channels are
        the axes, then the buttons, and no profile goes near it. */
@@ -3064,6 +3144,8 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
     int bestScore = 0;
     for (quint32 u = 0; u < iom->universesCount(); ++u)
     {
+        if (only != UINT_MAX && u != only)
+            continue;
         InputPatch *ip = iom->inputPatch(u);
         if (ip == nullptr || ip->plugin() == nullptr)
             continue;
@@ -3127,6 +3209,14 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
 
 PadNames::Family ProgrammerController::padFamily() const
 {
+    // The pad whose action it is names its own controls (review 1).
+    const quint32 u = feedbackPad();
+    if (u != UINT_MAX)
+    {
+        const FocusController own = focusController(u);
+        if (own.present)
+            return own.family;
+    }
     const FocusController fc = focusController();
     return fc.present ? fc.family : PadNames::Xbox;
 }
@@ -3285,6 +3375,16 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         if (role != GamepadRole::None && !GamepadRole::isAxis(role) && value == 0)
             m_heldRoles.remove(role);
         return true;
+    }
+    /* What is held, kept before any early return (review 10): a View let
+       go while another pad has the focus is let go, so a later Menu is
+       never View + Menu. (Pressed, the chord checks below read it.) */
+    if (role != GamepadRole::None && !GamepadRole::isAxis(role) && !GamepadRole::isTouch(role))
+    {
+        if (value > 0)
+            m_heldRoles.insert(role);
+        else
+            m_heldRoles.remove(role);
     }
     if (role == GamepadRole::None && !active)
         return false;

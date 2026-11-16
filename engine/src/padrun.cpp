@@ -251,7 +251,7 @@ void PadRun::setEnabled(bool on, bool say)
     if (on == m_enabled)
         return;
     hookShowControl();
-    clear();
+    clear(false);       // the four were not read in Tools
     m_stopped = false;
     m_enabled = on;
     // Switched: the words saying where it is switched have done their job.
@@ -381,7 +381,10 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
                 && nextHit(&letsGo) != ShowTree::invalidId() && letsGo)
                 trigger(action);
             else
+            {
+                m_besideNotice = m_pc != nullptr ? m_pc->padText(focusBesideText()) : focusBesideText();
                 refuse(action, focusBesideText());
+            }
         }
         else if (m_pc != nullptr)
             showNotice(m_pc->padText(tr("Venue focus: nothing plays from the controller. "
@@ -471,7 +474,10 @@ void PadRun::armChordUpdate(quint32 universe)
     /* The runner's chord while another pad has the venue focus: its arm
        stays as it is until the focus ends, and the screen says why. */
     if (h.lb && h.rb && !h.anyTrigger() && !h.spent && isBesideFocus(universe) && m_pc != nullptr)
-        showNotice(focusBesideText());
+    {
+        m_besideNotice = focusBesideText();
+        showNotice(m_besideNotice);
+    }
     /* Both bumpers with one trigger down: no chord, and the screen says
        why -- a trigger that does not come back up would otherwise make a
        pad that "will not arm" with nothing to show for it. */
@@ -565,7 +571,8 @@ void PadRun::emergencyStop()
     sync();
     if (m_pc != nullptr)
     {
-        m_pc->padRumble(3, ControllerScheme::rumbleLongMs());
+        // Every pad buzzes: the stop is everyone's (review 1).
+        m_pc->padRumble(3, ControllerScheme::rumbleLongMs(), ProgrammerController::kAllPads);
         const QString said = tr("Emergency stop. Everything is off.");
         m_pc->tellOperator(said, ControllerScheme::ConfirmPriority);
         showNotice(said);
@@ -633,7 +640,7 @@ void PadRun::setTesting(bool on)
     roleChordCancel();
     m_armChord->stop();
     m_chordUniverse = UINT_MAX;
-    m_held.clear();     // what is held across the change was not the Run map's
+    forgetHeld();       // what is held across the change was not the Run map's (but the four)
     emit testingChanged(on);
     toolChanged();
 }
@@ -646,11 +653,13 @@ void PadRun::toolChanged()
         putArmBy();
     /* A tool started on the laptop takes the pad: the arm drops with it
        (no button did that), so it is not found armed when the tool ends.
-       Not another pad's venue focus: the runner keeps its arm (Q250). */
-    if (m_armed && !holder().isEmpty() && !isFocusing())
+       Not the venue focus a runner keeps its arm beside (Q250) -- but any
+       other tool, whoever started the focus (review 2, 9). */
+    const QString tool = isFocusing() ? toolOverFocus() : holder();
+    if (m_armed && !tool.isEmpty())
     {
         reset();
-        showNotice(tr("Disarmed: %1 has the controller.").arg(holder()));
+        showNotice(tr("Disarmed: %1 has the controller.").arg(tool));
     }
     /* What was held when the pad changed hands (either way) is not known
        any more: the tool hears the releases, the Run map does not. A
@@ -661,7 +670,7 @@ void PadRun::toolChanged()
         m_lastHolder = now;
         m_armChord->stop();
         m_chordUniverse = UINT_MAX;
-        m_held.clear();
+        forgetHeld();
     }
     emit holderChanged();
     m_shownState = -1;      // the tool's name is part of what is shown
@@ -861,12 +870,15 @@ void PadRun::reset()
     sync();
 }
 
-void PadRun::clear()
+void PadRun::clear(bool four)
 {
     roleChordCancel();
     m_armChord->stop();
     m_chordUniverse = UINT_MAX;
-    m_held.clear();
+    if (four)
+        forgetHeld();
+    else
+        m_held.clear();
     m_swipe.reset();
     m_flash->stop();
     const bool was = m_armed;
@@ -884,6 +896,31 @@ void PadRun::controllerLost()
     reset();
     if (was)
         showNotice(tr("Disarmed: the controller went away."));
+}
+
+void PadRun::forgetHeld()
+{
+    for (auto it = m_held.begin(); it != m_held.end(); ++it)
+    {
+        Held &h = it.value();
+        // The four's bits stay; a chord begun before is no chord after.
+        h.spent = h.lb || h.rb;
+    }
+}
+
+QString PadRun::toolOverFocus() const
+{
+    if (m_pc == nullptr)
+        return QString();
+    const RefineSession *r = m_pc->refineSession();
+    if (r->isActive() && !isWalking())
+        return r->isSceneMode() ? tr("Focus This Look") : tr("Focus This Cue");
+    if (m_testing)
+        return tr("Controller Test");
+    const FocusSession *f = m_pc->focusSession();
+    if (f->isActive() && !f->isRunningCalls())
+        return tr("Quick Focus");
+    return QString();
 }
 
 bool PadRun::noteHeld(quint32 universe, GamepadRole::Role role, uchar value)
@@ -1013,6 +1050,14 @@ bool PadRun::isFocusCueWaiting() const
 
 void PadRun::focusStartPress(quint32 universe, bool safetyHeld)
 {
+    /* After the emergency stop nothing comes up from a pad until the stop
+       is over (an arm, or a GO on the computer): every surface says
+       STOPPED (review 5; decided, safe default -- can change). */
+    if (m_stopped)
+    {
+        refuse(Walk, tr("Emergency stop: arm a pad (or GO on the computer) before the venue focus."));
+        return;
+    }
     // The start is never one button (rules 3 and 6): LT + Menu, always.
     if (m_armed && sameController(universe, m_armUniverse))
     {
@@ -1150,6 +1195,7 @@ void PadRun::focusCueChanged()
     /* Over (or the start given up): ARMED again, as it was before LT +
        Menu -- unless something else has happened to the pad since (the
        stop, the pad gone, another tool, the role). */
+    bool told = false;
     if (!isFocusing() && m_focusArm != UINT_MAX)
     {
         const quint32 u = m_focusArm;
@@ -1161,16 +1207,53 @@ void PadRun::focusCueChanged()
             m_armChord->stop();
             m_chordUniverse = UINT_MAX;
             emit armedChanged(true);
+            // Its own pad, once (review 1, 6).
             if (m_pc != nullptr)
-                m_pc->padRumble(2, ControllerScheme::rumbleShortMs());
+                m_pc->padRumble(2, ControllerScheme::rumbleShortMs(), u);
+            told = true;
         }
     }
-    /* Over while the runner kept its arm beside it: its pad is told by its
-       motors, as an arm is, that GO works again (its light turns back). */
     const bool focusing = isFocusing();
-    if (m_wasFocusing && !focusing && m_armed && m_pc != nullptr)
-        m_pc->padRumble(2, ControllerScheme::rumbleShortMs(), m_armUniverse);
+    if (m_wasFocusing && !focusing)
+    {
+        // The words of a press refused beside it go with it (review 8).
+        if (!m_besideNotice.isEmpty() && m_notice == m_besideNotice)
+            showNotice(QString());
+        m_besideNotice.clear();
+        /* A tool has the pad as the focus ends (the laptop's Focus this
+           cue ended it): the runner it was kept beside is disarmed now,
+           and never told GO works (review 2). */
+        const QString tool = holder();
+        if (m_armed && !tool.isEmpty())
+        {
+            reset();
+            showNotice(tr("Disarmed: %1 has the controller.").arg(tool));
+        }
+        /* Over while the runner kept its arm beside it: its pad is told by
+           its motors, as an arm is, that GO works again (its light turns
+           back) -- once. */
+        else if (m_armed && !told && m_pc != nullptr)
+            m_pc->padRumble(2, ControllerScheme::rumbleShortMs(), m_armUniverse);
+    }
     m_wasFocusing = focusing;
+    m_shownOwner = focusOwnerUniverse();
+    sync();
+}
+
+void PadRun::focusOwnerChanged()
+{
+    /* A pad that can work it took it while the runner could too (the
+       runner itself), or it has no pad now and the runner can work it:
+       the runner's arm is put by, as for a focus begun on the laptop
+       (review 4, 11). */
+    if (m_armed && isFocusing() && !isBesideFocus(m_armUniverse))
+        putArmBy();
+    const quint32 owner = focusOwnerUniverse();
+    // Left with no pad (its job taken, its pad gone, review 11, 12): said.
+    if (isFocusing() && owner == UINT_MAX && m_shownOwner != UINT_MAX && padCount() > 0)
+        showNotice(tr("Venue focus has no controller now: a controller with the Focus job takes it "
+                      "with a press, or finish it on the laptop."));
+    m_shownOwner = owner;
     sync();
 }
 
@@ -1291,13 +1374,16 @@ bool PadRun::isBesideFocus(quint32 universe) const
     if (!isFocusing() || universe == UINT_MAX)
         return false;
     const quint32 owner = focusOwnerUniverse();
-    return owner != UINT_MAX && !sameController(universe, owner);
+    if (owner != UINT_MAX)
+        return !sameController(universe, owner);
+    // No pad has it yet: a pad that can work it may take it (Q135).
+    return !hasJob(universe, ControllerJobs::Focus);
 }
 
 QString PadRun::focusBesideText() const
 {
     const QString name = focusOwnerName();
-    return name.isEmpty() ? tr("Venue focus is running on another controller: nothing plays until it ends.")
+    return name.isEmpty() ? tr("Venue focus is running: nothing plays until it ends.")
                           : tr("Venue focus is running on %1: nothing plays until it ends.").arg(name);
 }
 
@@ -1886,7 +1972,7 @@ void PadRun::walkStarted()
     m_armUniverse = UINT_MAX;
     m_armChord->stop();
     m_chordUniverse = UINT_MAX;
-    m_held.clear();
+    forgetHeld();
     m_walkRt.reset();
     m_walkLt.reset();
     m_holdY.reset();
@@ -1914,7 +2000,7 @@ void PadRun::walkEnded()
     m_walkRt.reset();
     m_walkLt.reset();
     setSolo(false);
-    m_held.clear();     // what was held while walking was the walk's
+    forgetHeld();       // what was held while walking was the walk's (but the four)
     emit walkingChanged(false);
     sync();
     m_pc->tellOperator(tr("Walk off. Run role."), ControllerScheme::ConfirmPriority);

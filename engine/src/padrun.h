@@ -442,10 +442,15 @@ public:
      *  whose arm it put by; UINT_MAX: none yet). FOCUS names it and only
      *  its light shows FOCUS (CONTROLLER_JOBS.md 11). */
     quint32 focusOwnerUniverse() const;
+    /** The owner of the tools changed (claimed, a job taken away, its pad
+     *  gone): FOCUS, its light and the runner's arm follow; a focus left
+     *  with no pad says so. */
+    void focusOwnerChanged();
     /** Its short name; empty when none. */
     QString focusOwnerName() const;
-    /** @p universe is not the focus's pad while another pad has it: its
-     *  presses play nothing (its arm, if it runs cues, stays). */
+    /** @p universe is not the focus's pad while a venue focus runs: another
+     *  pad has it, or none does and @p universe can't work it (no Focus
+     *  job). Its presses play nothing; its arm, if it runs cues, stays. */
     bool isBesideFocus(quint32 universe) const;
     /** "Venue focus is running on <pad>: nothing plays until it ends." --
      *  the runner's GO, Back, Sub GO, Sub Back and new hits while another
@@ -648,8 +653,20 @@ private:
     void armChordFired();
     /** Start or stop timing the chord from what @p universe holds now. */
     void armChordUpdate(quint32 universe);
-    /** reset() without telling the screens (the caller does). */
-    void clear();
+    /** reset() without telling the screens (the caller does). @p four:
+     *  keep the four's held bits (the stop reads them in every state; only
+     *  a role switch, where they were not read, forgets them). */
+    void clear(bool four = true);
+    /** What is held is forgotten (a tool, the test, the walk took or gave
+     *  back the pad) -- but the four's bits (LB, RB, LT, RT), which
+     *  watchStop() keeps true whatever has the pad: the stop held across
+     *  the change still fires (review 3). The arm chord is spent until
+     *  both bumpers are up. */
+    void forgetHeld();
+    /** A tool other than the venue focus itself has the pad (the laptop's
+     *  Focus this cue / look, Quick focus, the Controller Test): its name,
+     *  else empty. A runner beside a venue focus is disarmed by it. */
+    QString toolOverFocus() const;
     /** Tell a press what it lacks, aloud and on the screen. */
     void refuse(Action action, const QString &text);
     /** The state may have changed: the light, the triggers, stateChanged(). */
@@ -725,6 +742,11 @@ private:
     /** isFocusing() when focusCueChanged() last looked: its end is told
      *  to a runner that kept its arm beside it. */
     bool m_wasFocusing = false;
+    /** The words a press beside the focus was refused with (cleared when
+     *  the focus ends, review 8). */
+    QString m_besideNotice;
+    /** focusOwnerUniverse() when focusOwnerChanged() last looked. */
+    quint32 m_shownOwner = UINT_MAX;
     bool m_testing = false;     ///< the Controller Test has the pad
     /** holder() when last seen: a change forgets what was held. */
     QString m_lastHolder;

@@ -53,6 +53,7 @@
 #include "programmercontroller.h"
 #include "focuscallcue.h"
 #include "padrun.h"
+#include "controllerjobs.h"
 #include "cuerunner.h"
 #include "controlmap.h"
 #include "groupmasterstrip.h"
@@ -710,8 +711,13 @@ void CueRunner::buildFullLayout()
                 this, &CueRunner::refreshFocusArmed);
         connect(m_doc->programmer()->padRun(), &PadRun::enabledChanged,
                 this, &CueRunner::refreshFocusArmed);
-        // An arm made or dropped changes how a pad starts it (PadRun::focusStart()).
+        /* An arm made or dropped, a job changed, a pad plugged in or out:
+           how a pad starts it changes (PadRun::focusStart()). */
         connect(m_doc->programmer()->padRun(), &PadRun::stateChanged,
+                this, &CueRunner::refreshFocusArmed);
+        connect(m_doc->programmer()->controllerJobs(), &ControllerJobs::jobsChanged,
+                this, [this]() { refreshFocusArmed(); });
+        connect(m_doc->programmer(), &ProgrammerController::focusControllerChanged,
                 this, &CueRunner::refreshFocusArmed);
         refreshFocusArmed();
     }
