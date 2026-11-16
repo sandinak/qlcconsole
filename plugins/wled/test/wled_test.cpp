@@ -48,6 +48,7 @@ namespace
         QList<qint64> postedAt;             ///< when each came (ms since the epoch)
         int rssi = -60;
         bool hang = false;                  ///< takes connections, never answers
+        int latencyMs = 0;                  ///< each request reaches it this much later
         bool noSi = false;                  ///< an old WLED: /json/si is 501
         int liveAsked = 0;                  ///< GET /json/live count
         int siAsked = 0;                    ///< GET /json/si count
@@ -139,47 +140,56 @@ namespace
                         m_buffer.remove(s);
                         if (hang)
                             return;
-                        QByteArray reply = "{\"success\":true}";
-                        QByteArray status = "200 OK";
-                        if (req.startsWith("POST /json/state"))
-                        {
-                            posts << QJsonDocument::fromJson(body).object();
-                            postedAt << QDateTime::currentMSecsSinceEpoch();
-                            apply(posts.last());
-                        }
-                        else if (req.startsWith("GET /json/palx"))
-                        {
-                            ++palxAsked;
-                            const int page = req.contains("page=1") ? 1 : 0;
-                            reply = page == 0
-                                ? "{\"m\":1,\"p\":{\"0\":[[0,255,0,0],[255,0,0,255]],\"1\":[\"c1\",\"c2\"]}}"
-                                : "{\"m\":1,\"p\":{\"2\":[\"r\"]}}";
-                        }
-                        else if (req.startsWith("GET /json/pal"))
-                            reply = "[\"Default\",\"* Color 1&2\",\"Rand\"]";
-                        else if (req.startsWith("GET /json/info"))
-                            reply = QJsonDocument(info()).toJson(QJsonDocument::Compact);
-                        else if (req.startsWith("GET /json/si"))
-                        {
-                            ++siAsked;
-                            if (noSi)
+                        auto answer = [this, peer = QPointer<QTcpSocket>(s), req, body]() {
+                            QByteArray reply = "{\"success\":true}";
+                            QByteArray status = "200 OK";
+                            if (req.startsWith("POST /json/state"))
                             {
-                                status = "501 Not Implemented";
-                                reply = "{\"error\":3}";
+                                posts << QJsonDocument::fromJson(body).object();
+                                postedAt << QDateTime::currentMSecsSinceEpoch();
+                                apply(posts.last());
                             }
-                            else
-                                reply = QJsonDocument(QJsonObject{ { "state", state() }, { "info", info() } })
-                                            .toJson(QJsonDocument::Compact);
-                        }
-                        else if (req.startsWith("GET /json/state"))
-                            reply = QJsonDocument(state()).toJson(QJsonDocument::Compact);
-                        else if (req.startsWith("GET /json/live"))
-                        {
-                            ++liveAsked;
-                            reply = live;
-                        }
-                        s->write("HTTP/1.1 " + status + "\r\nContent-Type: application/json\r\n"
-                                 "Content-Length: " + QByteArray::number(reply.size()) + "\r\n\r\n" + reply);
+                            else if (req.startsWith("GET /json/palx"))
+                            {
+                                ++palxAsked;
+                                const int page = req.contains("page=1") ? 1 : 0;
+                                reply = page == 0
+                                    ? "{\"m\":1,\"p\":{\"0\":[[0,255,0,0],[255,0,0,255]],\"1\":[\"c1\",\"c2\"]}}"
+                                    : "{\"m\":1,\"p\":{\"2\":[\"r\"]}}";
+                            }
+                            else if (req.startsWith("GET /json/pal"))
+                                reply = "[\"Default\",\"* Color 1&2\",\"Rand\"]";
+                            else if (req.startsWith("GET /json/info"))
+                                reply = QJsonDocument(info()).toJson(QJsonDocument::Compact);
+                            else if (req.startsWith("GET /json/si"))
+                            {
+                                ++siAsked;
+                                if (noSi)
+                                {
+                                    status = "501 Not Implemented";
+                                    reply = "{\"error\":3}";
+                                }
+                                else
+                                    reply = QJsonDocument(QJsonObject{ { "state", state() }, { "info", info() } })
+                                                .toJson(QJsonDocument::Compact);
+                            }
+                            else if (req.startsWith("GET /json/state"))
+                                reply = QJsonDocument(state()).toJson(QJsonDocument::Compact);
+                            else if (req.startsWith("GET /json/live"))
+                            {
+                                ++liveAsked;
+                                reply = live;
+                            }
+                            if (peer.isNull())
+                                return;         // it hung up meanwhile: taken, not answered
+                            peer->write("HTTP/1.1 " + status + "\r\nContent-Type: application/json\r\n"
+                                        "Content-Length: " + QByteArray::number(reply.size()) + "\r\n\r\n" + reply);
+                        };
+                        // A slow network: it reaches the lantern (and is taken) later.
+                        if (latencyMs > 0)
+                            QTimer::singleShot(latencyMs, this, answer);
+                        else
+                            answer();
                     });
                     connect(s, &QTcpSocket::disconnected, s, &QObject::deleteLater);
                     m_sockets << s;
@@ -743,15 +753,46 @@ void Wled_Test::aDeadDeviceDoesNotHoldUpTheOthers()
     QTRY_VERIFY_WITH_TIMEOUT(backup.posts.size() > before, 600);
 }
 
+namespace
+{
+    /** What a post to the lantern was: its first colour's red (the looks
+     *  here differ in it), -1 without one; "off" for a dark one. */
+    QString postSays(const QJsonObject &p)
+    {
+        if (p.contains("on") && p.value("on").toBool() == false)
+            return QStringLiteral("off");
+        const int red = p.value("seg").toArray().at(0).toObject().value("col").toArray()
+                            .at(0).toArray().at(0).toInt(-1);
+        return QStringLiteral("red %1").arg(red);
+    }
+    QString postsSay(const QList<QJsonObject> &posts, int from)
+    {
+        QStringList out;
+        for (int i = from; i < posts.size(); i++)
+            out << postSays(posts.at(i));
+        return out.join(QStringLiteral(", "));
+    }
+}
+
 /* Reviews 11-12 (M-2, F8): flushOutput() sends a closing frame's look to
    each device. With the event loop running (the show) it never holds its
    caller -- the engine's frame lock -- and the closing state is not cut off
    under load: it arrives, however late, and no newer look overtakes it. As
    the app quits (no event loop) it is waited on, about a second at most.
    A device that never answers holds up neither. */
+void Wled_Test::aFlushSendsTheLastLookWithinItsBudget_data()
+{
+    QTest::addColumn<int>("latencyMs");
+    QTest::newRow("a quick network") << 0;
+    // Each request 150 ms late, as on a loaded machine (CI's macOS runner).
+    QTest::newRow("a slow network") << 150;
+}
+
 void Wled_Test::aFlushSendsTheLastLookWithinItsBudget()
 {
+    QFETCH(int, latencyMs);
     FakeWled lantern;
+    lantern.latencyMs = latencyMs;
     QVERIFY(lantern.powerOn());
     WledPlugin plugin;
     plugin.init();
@@ -769,8 +810,15 @@ void Wled_Test::aFlushSendsTheLastLookWithinItsBudget()
         d.gateOpen = true;
     }
     plugin.writeUniverse(4, 0, universe({ 255, 0, 128, 128, 0, 0, 200, 0, 0 }), true);
-    QTRY_VERIFY_WITH_TIMEOUT(!lantern.posts.isEmpty(), 10000);
-    QTest::qWait(100);
+    /* The look taken -- on the lantern, and the plugin told so -- before
+       the flush. Not "a post came, and 100 ms": the first post may be the
+       dark state sent once the layout was known, with the look still on
+       its way and landing after "before" (CI's slow macOS runner; the
+       slow network row). */
+    QTRY_VERIFY_WITH_TIMEOUT(!lantern.posts.isEmpty() && postSays(lantern.posts.last()) == "red 200"
+                             && !plugin.m_targets.value(4).devices.value(0).inFlight
+                             && plugin.m_targets.value(4).devices.value(0).sent.value("on").toBool(),
+                             10000);
     const int before = lantern.posts.size();
     auto firstDarkSince = [&lantern](int from) {
         for (int i = from; i < lantern.posts.size(); i++)
@@ -802,7 +850,8 @@ void Wled_Test::aFlushSendsTheLastLookWithinItsBudget()
     // Nothing but the closing state since the look before it was taken.
     for (int i = before; i < dark; i++)
         QVERIFY2(lantern.posts.at(i).value("on").toBool() == false,
-                 "the new look reached the lantern before its closing state");
+                 qPrintable("the new look reached the lantern before its closing state: "
+                            + postsSay(lantern.posts, before)));
 
     // 2. The app quitting (no event loop left): waited on, about a second
     //    at most however many devices do not answer; it reaches the device.
@@ -814,6 +863,57 @@ void Wled_Test::aFlushSendsTheLastLookWithinItsBudget()
     const qint64 tookQuit = t.elapsed();
     QVERIFY2(tookQuit < 2500, qPrintable(QString("flushOutput() at quit took %1 ms").arg(tookQuit)));
     QTRY_VERIFY_WITH_TIMEOUT(firstDarkSince(before2) >= 0, 15000);
+}
+
+/* On a slow network (each request reaches the lantern 300 ms after it is
+   sent, as on a loaded machine or a busy Wi-Fi), the order on the wire
+   still holds: a look already on its way when the flush comes is older
+   and lands first; the closing state lands before any newer look (L5,
+   review 19), and the newer look then follows. */
+void Wled_Test::aFlushOnASlowNetworkPutsTheClosingStateBeforeANewerLook()
+{
+    FakeWled lantern;
+    lantern.latencyMs = 300;
+    QVERIFY(lantern.powerOn());
+    WledPlugin plugin;
+    plugin.init();
+    plugin.setSendInterval(40);
+    plugin.setInfoInterval(60);
+    QVERIFY(plugin.openOutput(0, 5));
+    plugin.setParameter(5, 0, QLCIOPlugin::Output, WLED_OUTPUTIP, lantern.ip());
+    QTRY_VERIFY_WITH_TIMEOUT(plugin.m_targets.value(5).devices.value(0).layoutKnown, 10000);
+    plugin.setInfoInterval(60000);          // no asks in the way from here
+    auto device = [&plugin]() {
+        QMutexLocker locker(&plugin.m_mutex);
+        return plugin.m_targets.value(5).devices.value(0);
+    };
+    // The first look taken, nothing on its way.
+    plugin.writeUniverse(5, 0, universe({ 255, 0, 128, 128, 0, 0, 200, 0, 0 }), true);
+    QTRY_VERIFY_WITH_TIMEOUT(!device().inFlight && !device().infoInFlight
+                             && device().sent.value("on").toBool()
+                             && !lantern.posts.isEmpty() && postSays(lantern.posts.last()) == "red 200",
+                             15000);
+    const int before = lantern.posts.size();
+
+    // A look on its way (not there yet: 300 ms) when the flush comes.
+    plugin.writeUniverse(5, 0, universe({ 255, 0, 128, 128, 0, 0, 30, 0, 0 }), true);
+    QElapsedTimer t;
+    t.start();
+    while (!device().inFlight && t.elapsed() < 10000)
+        QTest::qWait(1);
+    QVERIFY(device().inFlight);
+    plugin.writeUniverse(5, 0, universe({ 0, 0, 0, 0, 0, 0, 0, 0, 0 }), true);   // the closing frame
+    QEventLoop loop;
+    QTimer::singleShot(0, &loop, [&]() {
+        plugin.flushOutput(0, 5);
+        // A newer look at once.
+        plugin.writeUniverse(5, 0, universe({ 255, 0, 128, 128, 0, 0, 90, 0, 0 }), true);
+        loop.quit();
+    });
+    loop.exec();
+    QTRY_VERIFY_WITH_TIMEOUT(!lantern.posts.isEmpty() && postSays(lantern.posts.last()) == "red 90", 15000);
+    QTest::qWait(400);                      // nothing more after it
+    QCOMPARE(postsSay(lantern.posts, before), QStringLiteral("red 30, off, red 90"));
 }
 
 /* Switched off and on again, a lantern has forgotten the look: it is sent

@@ -616,6 +616,9 @@ private:
     void hookShowControl();
     /** hitText() may have changed: hitChanged() once if it did. */
     void syncHit();
+    /** m_hitStep for @p tier (the hits armed now): 0 for a set syncHit()
+     *  has not seen yet -- a new set starts at 1 of n. */
+    int turnIn(const QList<quint32> &tier) const;
     /** Stops a one-shot hit whose run is over (Q239). */
     void letGoFinishedOneShots();
     /** The controller on @p universe has @p job (a ControllerJobs::Job). */
