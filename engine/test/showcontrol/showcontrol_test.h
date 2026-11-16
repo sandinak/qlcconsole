@@ -79,6 +79,11 @@ private slots:
     void aCommandFromOscOrMscIsNotEchoed();
     void theOutSettingsAreSavedWithTheShow();
 
+    /* From the independent evaluation of 0.4.12. */
+    /** Back on the first cue a list plays (step 0, or the first one not
+     *  skipped) keeps the list playing: it never stops it. */
+    void backOnTheFirstPlayedCueKeepsTheListPlaying();
+
 private:
     Chaser *makeList(int steps, const QString &name);
     /** "Main": cues 1, 2, 3, cue 2 a chase of three steps on Sub GO. */

@@ -1170,6 +1170,67 @@ void ShowControl_Test::wouldTakeStageMatchesExecute()
     stopAll();
 }
 
+/*****************************************************************************
+ * Back on the first cue (from the independent evaluation of 0.4.12)
+ *****************************************************************************/
+
+void ShowControl_Test::backOnTheFirstPlayedCueKeepsTheListPlaying()
+{
+    /* Every Show Tree list is a SingleShot chaser. Back (the pad's LT + B,
+       Cmd+Shift+Return, the Run tab) on the first cue it plays asked the
+       runner for the step before; there is none, so the list STOPPED -- its
+       cue faded out on stage -- while ShowControl reported the cue as
+       staying. Now the cue stays, the list plays on, and the line says so;
+       nothing is logged as a cue change. The same with the first cue
+       skipped and Back from the second, and for a Back sent straight to
+       the chaser (a route that doesn't come through ShowControl). */
+    MasterTimer *timer = m_doc->masterTimer();
+    auto tick = [timer]() { for (int i = 0; i < 3; ++i) timer->timerTick(); };
+    ShowControl *sc = m_doc->showControl();
+    Chaser *c = makeList(3, "Main");
+    c->setRunOrder(Function::SingleShot);      // as every Show Tree list
+    QSignalSpy said(sc, &ShowControl::commandHandled);
+    int taken = 0;
+    QObject counting;                           // goes with the test, whatever fails
+    connect(sc, &ShowControl::cueTaken, &counting, [&taken]() { ++taken; });
+    for (bool firstSkipped : { false, true })
+    {
+        c->setStepSkipped(0, firstSkipped);
+        QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+        tick();
+        const int first = firstSkipped ? 1 : 0;
+        QCOMPARE(c->currentStepIndex(), first);    // the first cue played
+        said.clear();
+        taken = 0;
+        QVERIFY(sc->execute({ ShowControl::Back, QString(), QString() }));
+        tick();
+        const bool running = c->isRunning();
+        const int at = c->currentStepIndex();
+        // Straight to the chaser: the runner keeps it too.
+        ChaserAction back;
+        back.m_action = ChaserPreviousStep;
+        back.m_stepIndex = -1;
+        back.m_masterIntensity = 1.0;
+        back.m_stepIntensity = 1.0;
+        back.m_fadeMode = Chaser::FromFunction;
+        c->setAction(back);
+        tick();
+        const bool stillRunning = c->isRunning();
+        const int stillAt = c->currentStepIndex();
+        c->stop(FunctionParent::master());
+        tick();
+        QVERIFY2(running, qPrintable(QString("Back on the first cue played (step %1%2) stopped the list")
+                                         .arg(first + 1).arg(firstSkipped ? ", step 1 skipped" : "")));
+        QCOMPARE(at, first);
+        QCOMPARE(said.count(), 1);
+        QVERIFY2(said.last().at(0).toString().contains(QStringLiteral("is the first: it stays")),
+                 qPrintable(said.last().at(0).toString()));
+        QCOMPARE(taken, 0);                        // no cue change logged
+        QVERIFY2(stillRunning, "Back sent to the chaser on its first cue stopped the list");
+        QCOMPARE(stillAt, first);
+    }
+}
+
 QTEST_MAIN(ShowControl_Test)
 
 /*****************************************************************************
