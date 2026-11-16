@@ -48,6 +48,13 @@ private slots:
      *  B without Run cues is told so on the chip; B with it is told A runs
      *  cues; the stop from B turns both lights red. */
     void twoPadsOnEverySurface();
+    /** Board Q250 on the real surfaces: A runs cues only, B does focus
+     *  only. A arms; the Run tab says LT + Menu with no arm; B's LT + Menu
+     *  starts the venue focus: Pad: FOCUS names B on the button and the
+     *  chip, only B's light is blue, A stays armed; A's GO plays nothing
+     *  and the chip says why; B ends it: ARMED names A, A's light shows
+     *  it, A's GO plays. QLC_SHOT_DIR: the footer and the Run tab then. */
+    void focusBesideTheRunnerOnEverySurface();
     /** QLC_SHOT_DIR set: the Run tab and the footer at 1024x640, 1280x800
      *  and 1920x1080 with a venue focus started from the armed pad (LT +
      *  Menu), then finished the same way (the UX review's shots). */

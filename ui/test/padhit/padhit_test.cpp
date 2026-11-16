@@ -59,6 +59,15 @@
 #include "functionparent.h"
 #include "fixture.h"
 #include "doc.h"
+#include "controllerjobs.h"
+#include "focuscallcue.h"
+#include "focuscalls.h"
+#include "focussession.h"
+#include "fixturegroup.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
+#include "qlcphysical.h"
+#include "qlcpoint.h"
 
 #include "padhit_test.h"
 
@@ -610,6 +619,183 @@ void PadHit_Test::aOneShotHitEndsOnItsOwnTimeNotAtTheGo()
     QVERIFY(fired.last().at(1).toBool());
     QTRY_VERIFY_WITH_TIMEOUT(hitFn->isRunning(), 2000);
     QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Flash (one-shot) off"), 1000);
+}
+
+void PadHit_Test::aOneShotPlaysOutAcrossAnotherPadsFocus()
+{
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    ProgrammerController *pc = doc->programmer();
+    PadRun *run = pc->padRun();
+    InputOutputMap *iom = doc->inputOutputMap();
+    ControllerJobs *jobs = pc->controllerJobs();
+    FocusCallCue *fcc = pc->focusCallCue();
+    doc->masterTimer()->stopAllFunctions();
+    settle(100);
+
+    // The one-shot: a 1 s breath, once, on the production (as above).
+    ShowTree::Target onHit;
+    onHit.fixtures = { doc->fixtures().at(1)->id() };
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer);
+    full->setName("Full (focus one-shot test)");
+    full->setValue(255);
+    doc->addPalette(full);
+    QLCPalette *breathe = new QLCPalette(QLCPalette::Effect);
+    breathe->setName("Breathe (focus one-shot test)");
+    breathe->setScriptPath(QStringLiteral(QLC_TEST_RESOURCE_ROOT) + "effectscripts/dimmer-phaser.js");
+    doc->addPalette(breathe);
+    breathe->setEffectParamValue("waveform", 0);
+    breathe->setEffectParamValue("rate", 1.0);
+    breathe->setEffectParamValue("minDim", 0.05);
+    breathe->setEffectParamValue("maxDim", 1.0);
+    breathe->setEffectParamValue("spread", 0);
+    breathe->setEffectParamValue("__runs", 1);
+    const quint32 flash = st->addHit(ShowTree::HitScope::Production, st->currentProduction(), "Flare (one-shot)");
+    QVERIFY(flash != ShowTree::invalidId());
+    const quint32 layer = st->addLayer(flash, onHit, "Flare");
+    QVERIFY(st->setLayerLook(flash, layer, st->lookForPalette(full->id())));
+    ShowTree::Look fx = st->lookForPalette(breathe->id());
+    fx.fadeIn = ShowTree::Look::FadeSnap;
+    fx.fadeOut = ShowTree::Look::FadeSnap;
+    QVERIFY(st->setLayerLook(flash, layer, fx));
+
+    // A venue focus cue on a list of its own, on one moving spot.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Hit Focus Spot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    QLCFixtureHead head;
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("Ch %1").arg(k));
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *spot = new Fixture(doc);
+    spot->setName("Hit Focus Spot");
+    spot->setFixtureDefinition(def, mode);
+    spot->setUniverse(0);
+    spot->setAddress(200);
+    doc->addFixture(spot);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setFixturePosition(spot->id(), 0, 0, QVector3D(2000.0f, 2000.0f, 5.0f));
+    FixtureGroup *g = new FixtureGroup(doc);
+    g->setName("Hit Focus Spots");
+    g->setSize(QSize(1, 1));
+    g->assignFixture(spot->id(), QLCPoint(0, 0));
+    doc->addFixtureGroup(g);
+    StageTarget *dsc = props->addStageTarget();
+    dsc->setName("DSC (focus one-shot test)");
+    dsc->setPosition(QVector3D(5.0f, 6.0f, 0.0f));
+    FocusCall call;
+    call.groups << g->id();
+    call.target.kind = FocusSession::Reference::Target;
+    call.target.id = dsc->id();
+    pc->focusCalls()->setCalls({ call });
+    const quint32 preshow = st->addCueList(st->currentProduction(), "Pre-show (focus one-shot test)");
+    const quint32 focusCue = st->addCue(preshow, -1, "Focus");
+    QVERIFY(st->setCuesFocusCall({ focusCue }, true));
+    quint32 onCue = focusCue;
+    fcc->setRunningCueProbe([&onCue](quint32) { return onCue; });
+    QMetaObject::Connection leave = connect(pc->focusSession(), &FocusSession::exitRequested,
+                                            pc->focusSession(), &FocusSession::finish);
+
+    // Two pads: A (line 0) runs cues only, B (line 1) does focus only.
+    m_stub->m_lineNames = QStringList() << "Pad A (AA:BB:CC:00:00:01)" << "Pad B (AA:BB:CC:00:00:02)";
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 1));
+    jobs->setJobs(jobs->identityOfUniverse(0), ControllerJobs::RunCues);
+    jobs->setJobs(jobs->identityOfUniverse(1), ControllerJobs::Focus);
+    auto onB = [&](quint32 ch, uchar v) { emit iom->inputValueChanged(1, ch, v, QString()); };
+    auto ltMenuOnB = [&]() {
+        onB(kLT, 255);
+        onB(kMenu, 255);
+        onB(kMenu, 0);
+        onB(kLT, 0);
+    };
+    auto undo = qScopeGuard([&]() {
+        if (pc->focusSession()->isActive())
+            pc->focusSession()->finish();
+        QObject::disconnect(leave);
+        fcc->setRunningCueProbe({});
+        pc->focusCalls()->setCalls({});
+        doc->masterTimer()->stopAllFunctions();
+        run->setEnabled(false, false);
+        jobs->resetAll();
+        iom->setInputPatch(1, QString(), QString(), QLCIOPlugin::invalidLine());
+        m_stub->m_lineNames.clear();
+        st->removeCueList(preshow);
+        st->removeCue(flash);
+        doc->deleteFixtureGroup(g->id());
+        doc->deleteFixture(spot->id());
+        doc->deletePalette(breathe->id());
+        doc->deletePalette(full->id());
+        doc->setMode(Doc::Design);
+        settle(50);
+    });
+    settle(50);
+
+    doc->setMode(Doc::Operate);
+    settle(50);
+    run->setEnabled(true);
+    if (!run->isArmed())
+        chord(true);
+    QVERIFY(run->isArmed());
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    QSignalSpy fired(run, &PadRun::hitFired);
+    // Finale has no hit of its own: the production's one-shot is the one armed.
+    for (int i = 0; i < 3; ++i)
+    {
+        go();
+        QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(m_list) == m_cues.at(i), 3000);
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(run->armedHits() == QList<quint32>({ flash }), 2000);
+    tap(kRT);
+    QTRY_COMPARE_WITH_TIMEOUT(fired.count(), 1, 2000);
+    Function *hitFn = doc->function(st->lookFunction(flash));
+    QVERIFY(hitFn != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(hitFn->isRunning(), 2000);
+    EffectScriptRunner *esr = doc->effectScriptRunner();
+    QVERIFY(esr != nullptr);
+    QTRY_COMPARE_WITH_TIMEOUT(esr->oneShotState(hitFn->id()), 0, 1000);   // mid-breath
+
+    // B starts the venue focus mid-breath: the one-shot is not cut.
+    fcc->cueCurrent(preshow, focusCue);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    ltMenuOnB();
+    QTRY_COMPARE_WITH_TIMEOUT(fcc->state(), FocusCallCue::Running, 2000);
+    QCOMPARE(run->state(), PadRun::Focus);
+    QVERIFY(run->isArmed());
+    QVERIFY2(hitFn->isRunning() && esr->oneShotState(hitFn->id()) == 0, "the focus start cut the one-shot");
+    // It runs its time and lets go by itself, focus or not.
+    QTRY_VERIFY_WITH_TIMEOUT(!hitFn->isRunning(), 4000);
+    // A new pull on A meanwhile: refused, and the screen says why.
+    tap(kRT);
+    settle(50);
+    QCOMPARE(fired.count(), 1);
+    QVERIFY(!hitFn->isRunning());
+    QCOMPARE(run->notice(), QString::fromUtf8("Venue focus is running on Pad B (…00:02): nothing plays until it ends."));
+
+    // B ends the focus: A, still armed, plays it again with one pull.
+    ltMenuOnB();
+    QTRY_VERIFY_WITH_TIMEOUT(!pc->focusSession()->isActive(), 2000);
+    QVERIFY(run->isArmed());
+    tap(kRT);
+    QTRY_COMPARE_WITH_TIMEOUT(fired.count(), 2, 2000);
+    QVERIFY(fired.last().at(1).toBool());
 }
 
 void PadHit_Test::eachNewSetOfHitsStartsAtOneOfN()

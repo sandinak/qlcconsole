@@ -113,6 +113,10 @@ public:
     QString readyPhrase() const;
     /** The pad is in the Run role (PadRun): the words say LT + Menu. */
     void setRunRole(bool on);
+    /** How a waiting cue starts from a pad in the Run role, asked when it
+     *  is said (a PadRun::FocusStart: 0 armed + LT + Menu, 1 LT + Menu, 2
+     *  no pad does focus). None set: armed. */
+    void setStartProbe(std::function<int()> probe) { m_startProbe = std::move(probe); }
     bool isRunRole() const { return m_runRole; }
 
     /** NamingVenue: give up the start (the pad's LT + Menu again) -- the cue
@@ -157,6 +161,7 @@ private:
     QList<QPointer<Chaser>> m_watched;
     int m_askTimeout = 8000;
     std::function<quint32(quint32)> m_runningProbe;
+    std::function<int()> m_startProbe;
 
     class QTimer *m_askTimer = nullptr;
 };

@@ -236,6 +236,8 @@ ProgrammerController::ProgrammerController(Doc *doc)
        the pad is in FOCUS while they run, and RT past the last call says
        how to finish rather than finishing. */
     m_focusCallCue->setRunRole(m_padRun->isEnabled());
+    // How it starts from a pad: one source (PadRun::focusStart()).
+    m_focusCallCue->setStartProbe([this]() { return int(m_padRun->focusStart()); });
     connect(m_padRun, &PadRun::enabledChanged, m_focusCallCue, &FocusCallCue::setRunRole);
     m_focusSession->setLastCallHold([this]() { return m_padRun->lastCallHold(); });
     connect(m_focusCallCue, &FocusCallCue::stateChanged, this, [this]() {
@@ -3107,8 +3109,12 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
                                   : PadNames::familyFrom(kind);
         // Most of what Focus mode uses wins; the follow spot's breaks a tie.
         // The pad that owns the tools (Q135) is the one, though.
+        /* A pad with the Focus job before one without (CONTROLLER_JOBS.md
+           8): the focus tools never read, name or wait for a pad that
+           cannot work them while one that can is here. */
+        const bool focusJob = m_controllerJobs == nullptr || m_controllerJobs->has(u, ControllerJobs::Focus);
         const int score = used * 2 + ((m_panBound && m_panUniverse == u) ? 1 : 0)
-                          + (u == m_ownerUniverse ? 1000 : 0);
+                          + (focusJob ? 500 : 0) + (u == m_ownerUniverse ? 1000 : 0);
         if (score > bestScore)
         {
             bestScore = score;
@@ -3258,10 +3264,12 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         return false;
 
     const GamepadRole::Role role = GamepadRole::Role(knownRole >= 0 ? knownRole : controllerRole(universe, channel));
-    // The touchpad's swipes (Q199): kept here, read on the tick.
-    if (GamepadRole::isTouch(role))
+    /* The touchpad's swipes (Q199): kept here, read on the tick. A swipe
+       walks the show, so only a pad with the Focus job's (CONTROLLER_JOBS.md 8). */
+    const bool swipes = m_controllerJobs->has(universe, ControllerJobs::Focus);
+    if (GamepadRole::isTouch(role) && swipes)
         m_padRun->touchValue(role, norm);
-    else if (role == GamepadRole::TouchClick)
+    else if (role == GamepadRole::TouchClick && swipes)
         m_padRun->touchClick(value > 0);
     /* The Controller Test is open and no tool has the pad: its buttons and
        triggers are being tried, so they do nothing here -- no GO, no hit,
@@ -3281,6 +3289,19 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     }
     if (role == GamepadRole::None && !active)
         return false;
+    /* Another pad's venue focus in the Run role (board Q250): this pad's
+       buttons and triggers are the Run map's, which plays nothing until
+       the focus ends and says so (the runner keeps its arm) -- never the
+       focus tool's, never "doesn't do focus" for a GO. Its sticks stay as
+       a tool leaves them. */
+    if (active && m_padRun->isBesideFocus(universe) && role != GamepadRole::None
+        && !GamepadRole::isTouch(role) && !isPan && !isTilt
+        && role != GamepadRole::LeftX && role != GamepadRole::LeftY
+        && role != GamepadRole::RightX && role != GamepadRole::RightY)
+    {
+        m_padRun->handle(universe, role, value);
+        return true;
+    }
     /* Its jobs (CONTROLLER_JOBS.md 8): a pad without Focus works no tool
        -- Quick focus, Venue focus, Focus this cue -- its presses are told
        so and go nowhere (the stop, above, is every pad's). */
@@ -3306,8 +3327,9 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
                            && !isPan && !isTilt;
         if (m_ownerUniverse == 0xFFFFFFFF)
         {
-            /* In the Run role the pad that starts the calls (armed, LT +
-               Menu) claims it there: an unarmed Menu claims nothing. */
+            /* In the Run role the pad that starts the calls (LT + Menu:
+               PadRun::startFocus()) claims it there: a Menu alone claims
+               nothing. */
             if (press && m_controllerJobs->has(universe, ControllerJobs::Focus)
                 && (active || (role == FocusCallCue::startRole() && !m_padRun->isEnabled())))
             {
@@ -3412,11 +3434,17 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             if (value == 0 && m_viewMenuNoRun)
             {
                 m_viewMenuNoRun = false;
-                if (!m_padRun->isEnabled() && m_controllerJobs->has(universe, ControllerJobs::Focus))
+                const bool focus = m_controllerJobs->has(universe, ControllerJobs::Focus);
+                if (!m_padRun->isEnabled() && focus)
                     emit focusModeRequested();
+                /* The Run role: the role is Run cues' to switch, so a Focus
+                   pad is told where Focus mode is -- on the screen too. */
+                else if (m_padRun->isEnabled())
+                    m_padRun->tellRefused(focus ? tr("Focus mode is in the Tools role: switch roles on the laptop "
+                                                     "(the Run tab's Pad: button).")
+                                                : PadRun::noRunCuesText());
                 else
-                    tellOperator(m_padRun->isEnabled() ? PadRun::noRunCuesText() : PadRun::noFocusText(),
-                                 ControllerScheme::ConfirmPriority);
+                    tellOperator(PadRun::noFocusText(), ControllerScheme::ConfirmPriority);
                 return true;
             }
             if (value == 0 && (m_padRun->isRoleChordPending() || m_padRun->roleChordFinished()))
@@ -3439,7 +3467,8 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
        takes the pad until it ends. */
     if (!active && !isPan && !isTilt && m_padRun->handle(universe, role, value))
         return true;
-    if (active && m_padRun->isArmed())
+    // Not another pad's venue focus: the runner keeps its arm (Q250).
+    if (active && m_padRun->isArmed() && !m_padRun->isFocusing())
         m_padRun->reset();
     if (!active)
         return false;

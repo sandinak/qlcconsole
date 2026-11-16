@@ -85,9 +85,17 @@ QString FocusCallCue::armedPhrase()
 
 QString FocusCallCue::readyPhrase() const
 {
-    // The Run role (PadRun rule 6): the start takes the arm and the safety.
-    return m_runRole ? tr("Venue focus ready. Armed, hold {LT} and press {Menu} to begin.")
-                     : armedPhrase();
+    if (!m_runRole)
+        return armedPhrase();
+    /* The Run role (PadRun rule 6): LT + Menu -- from the arm on a pad that
+       runs cues, with no arm on a Focus pad that has none to give (Q250). */
+    switch (m_startProbe ? m_startProbe() : 0)
+    {
+        case 1:     return tr("Venue focus ready. Hold {LT} and press {Menu} to begin.");
+        case 2:     return tr("Venue focus ready. No controller does focus: start it on the laptop.");
+        default:    break;
+    }
+    return tr("Venue focus ready. Armed, hold {LT} and press {Menu} to begin.");
 }
 
 void FocusCallCue::setRunRole(bool on)

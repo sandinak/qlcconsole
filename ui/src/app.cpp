@@ -9606,7 +9606,12 @@ void App::slotUpdateStandby()
             const ProgrammerController *pc = m_doc->programmer();
             const bool runRole = pc->padRun()->isEnabled();
             QString text;
-            if (fcc->isArmed())
+            const PadRun::FocusStart start = pc->padRun()->focusStart();
+            if (fcc->isArmed() && runRole && start == PadRun::NoArm)
+                text = pc->padText(tr("Venue focus: waiting for the controller ({LT} + {Menu})"));
+            else if (fcc->isArmed() && runRole && start == PadRun::NoFocusPad)
+                text = tr("Venue focus: no controller does focus (start it on the Run tab)");
+            else if (fcc->isArmed())
                 text = runRole ? pc->padText(tr("Venue focus: waiting for the controller ({LT} + {Menu}, armed)"))
                        : PadNames::isPlayStation(pc->padFamily())
                          ? pc->padText(tr("Venue focus: waiting for the controller ({Menu})"))
