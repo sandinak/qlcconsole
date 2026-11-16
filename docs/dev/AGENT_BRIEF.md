@@ -45,6 +45,14 @@ Shared files
 - Add a test function next to related ones, not only at the end of the file.
 
 What "done" means
+- Every new or changed test fails on the code before your fix: show it
+  (a temporary branch with the old hunk back, its --quick gate=1 line in your
+  report; delete that branch after). A test that passes both ways proves
+  nothing. Test what the user sees: pixels (QWidget::grab), not a style
+  string; the footer text, not a model flag.
+- A device or OS path (HID, MIDI, network, files) is tested with a fake that
+  misbehaves the way hardware does: hangs, vanishes mid-call, comes back as
+  another device, shows up twice.
 - A feature that can't act says so on the screen, not only by voice or in a
   log: test what the user sees (footer, label, enabled state), not just the
   model. Anything that needs a real pad, Deck or rig gets a numbered step in
@@ -64,6 +72,19 @@ is left open. Commit trailer: Co-Authored-By: <model line from the lead>.
 ```
 
 ## For the lead
+
+- Before a branch goes to a train, an independent review: the
+  `branch-reviewer` agent (.claude/agents/branch-reviewer.md), opus for
+  threads, DMX, pad input and safety rules, sonnet for UI-only. Give it the
+  clone, branch, head, base and what the branch claims -- never your own
+  conclusions. Its should-fixes go back to the author before hand-off; NOT
+  SAFE means fixed and reviewed again. (Decided 2026-11-16: Branson prefers
+  this to finding the bugs on the bench.)
+- Before a hardware bench round goes to Branson, a reviewer reads each step
+  against the build's code and predicts the result: a step it predicts to
+  fail is fixed first; one it can't decide from the code is marked as the
+  one that needs his hands. A step that needs no real device or screen
+  becomes a test instead (ui/test/padbenchshow).
 
 - Plan where the agents' builds go before spawning them (`make
   pool-status`); two or three gating agents at once, not eight.
