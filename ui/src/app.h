@@ -239,6 +239,11 @@ public:
                         const QString &button2Text = QString(),
                         const std::function<void()> &action2 = nullptr);
     void hideViewNotice();
+    /** Quitting with a game controller still stuck being opened (the HID
+     *  plugin's openingCount()): logged, and one line on the status bar --
+     *  the app may not finish quitting until the computer restarts. Never
+     *  waits or asks; false when nothing is stuck. */
+    bool noteStuckControllersAtQuit();
     /** A device input came or went (InputDeviceNotices): the notice line,
      *  amber while @p warning; a plain one puts itself away after a while. */
     void showInputDeviceNotice(const QString &text, bool warning);
