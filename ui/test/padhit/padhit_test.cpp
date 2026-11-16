@@ -645,7 +645,9 @@ void PadHit_Test::aOneShotPlaysOutAcrossAnotherPadsFocus()
     breathe->setScriptPath(QStringLiteral(QLC_TEST_RESOURCE_ROOT) + "effectscripts/dimmer-phaser.js");
     doc->addPalette(breathe);
     breathe->setEffectParamValue("waveform", 0);
-    breathe->setEffectParamValue("rate", 1.0);
+    /* A 4 s breath (rate 0.25): the focus start lands well inside it even
+       on a loaded runner (second review 7), so "mid-breath" never races. */
+    breathe->setEffectParamValue("rate", 0.25);
     breathe->setEffectParamValue("minDim", 0.05);
     breathe->setEffectParamValue("maxDim", 1.0);
     breathe->setEffectParamValue("spread", 0);
@@ -781,7 +783,7 @@ void PadHit_Test::aOneShotPlaysOutAcrossAnotherPadsFocus()
     QVERIFY(run->isArmed());
     QVERIFY2(hitFn->isRunning() && esr->oneShotState(hitFn->id()) == 0, "the focus start cut the one-shot");
     // It runs its time and lets go by itself, focus or not.
-    QTRY_VERIFY_WITH_TIMEOUT(!hitFn->isRunning(), 4000);
+    QTRY_VERIFY_WITH_TIMEOUT(!hitFn->isRunning(), 12000);
     // A new pull on A meanwhile: refused, and the screen says why.
     tap(kRT);
     settle(50);

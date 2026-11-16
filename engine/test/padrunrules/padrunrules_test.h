@@ -133,7 +133,9 @@ private slots:
     /** 11: the focus pad's Focus job taken mid-focus. */
     void reviewTheFocusJobTakenMidFocus_data();
     void reviewTheFocusJobTakenMidFocus();
-    /** 12: the focus pad unplugged mid-focus. */
+    /** 12: the focus pad unplugged mid-focus (second review 3: with a
+     *  runner that has Focus too, the pad back takes it again). */
+    void reviewTheFocusPadUnpluggedMidFocus_data();
     void reviewTheFocusPadUnpluggedMidFocus();
     /* Board Q252 (a): a Focus pad's walk while another pad is armed --
        Design yes, Operate no; the runner as beside a venue focus. */
@@ -142,6 +144,16 @@ private slots:
     void q252TheStopDuringABesideWalk_data();
     void q252TheStopDuringABesideWalk();
     void q252ALaptopToolMidWalkDisarmsTheRunner();
+    /* Second review of 46cfdd708 */
+    /** 1: Operate mid-walk ends a walk beside the runner. */
+    void review2OperateMidWalkEndsABesideWalk();
+    /** 2: the walker loses Focus, or is unplugged, mid-walk. */
+    void review2TheWalkerLosesFocusMidWalk();
+    void review2TheWalkerUnpluggedMidWalk();
+    /** 5: the runner's swipe beside a walk steps nothing. */
+    void review2ARunnersSwipeBesideAWalk();
+    /** 6: the role switched mid-walk ends a walk beside the runner. */
+    void review2ARoleSwitchEndsABesideWalk();
     void jobsTakenAwayWhileInUse();
     /** Review 0.4.10: one pad listed twice (one address, two universes,
      *  CONTROLLER_JOBS.md 9: one controller) is told one light. */

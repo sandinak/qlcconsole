@@ -2271,10 +2271,18 @@ void PadRunRules_Test::reviewTheFocusJobTakenMidFocus()
     QCOMPARE(goes(), 1);
 }
 
+void PadRunRules_Test::reviewTheFocusPadUnpluggedMidFocus_data()
+{
+    QTest::addColumn<bool>("runnerHasFocus");
+    QTest::newRow("the runner without Focus") << false;
+    QTest::newRow("the runner with Focus") << true;
+}
+
 void PadRunRules_Test::reviewTheFocusPadUnpluggedMidFocus()
 {
+    QFETCH(bool, runnerHasFocus);
     makeShow();
-    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    twoPads(int(runnerHasFocus ? CJ::RunCues | CJ::Focus : CJ::RunCues), int(CJ::Focus));
     makeFocusCue();
     ProgrammerController *pc = m_doc->programmer();
     PadRun *run = pc->padRun();
@@ -2284,15 +2292,20 @@ void PadRunRules_Test::reviewTheFocusPadUnpluggedMidFocus()
     QCOMPARE(pc->controllerOwner(), quint32(1));
     drop(1);
     QCOMPARE(pc->controllerOwner(), quint32(0xFFFFFFFF));
-    QVERIFY(run->isArmed());
+    // A runner that can work it has its arm put by; one that can't keeps it.
+    QCOMPARE(run->isArmed(), !runnerHasFocus);
     QVERIFY(run->notice().startsWith("Venue focus has no controller now"));
-    // Back: B takes it again with a press, and ends it.
+    // FOCUS names no pad while none has it (the notice says so too).
+    QCOMPARE(run->roleText(), QString("Pad: FOCUS"));
+    // Back: B, with Focus, takes it again with a press, and ends it.
     back(1);
     press(kY, 1);
     QCOMPARE(pc->controllerOwner(), quint32(1));
+    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: FOCUS · Pad B (…00:02)"));
     ltMenu(1);
     QVERIFY(!pc->focusSession()->isActive());
     QVERIFY(run->isArmed());
+    QCOMPARE(run->armedUniverse(), quint32(0));
     withLt(kA, 0);
     QCOMPARE(goes(), 1);
 }
@@ -2430,6 +2443,113 @@ void PadRunRules_Test::q252ALaptopToolMidWalkDisarmsTheRunner()
     pc->refineSession()->stop();
     withLt(kA, 0);
     QCOMPARE(goes(), 0);
+}
+
+/*****************************************************************************
+ * Second review of 46cfdd708
+ *****************************************************************************/
+
+void PadRunRules_Test::review2OperateMidWalkEndsABesideWalk()
+{
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    press(kMenu, 1);
+    QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    // The laptop switches to Operate: the walk beside the runner ends.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY2(!run->isWalking(), "a walk beside the runner went on into Operate");
+    QVERIFY(run->isArmed());
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    QCOMPARE(run->notice(), QString::fromUtf8("Walk ended: the show is in Operate and Pad A (…00:01) runs cues."));
+    withLt(kA, 0);
+    QCOMPARE(goes(), 1);
+    m_doc->setMode(Doc::Design);
+}
+
+void PadRunRules_Test::review2TheWalkerLosesFocusMidWalk()
+{
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    ControllerJobs *jobs = pc->controllerJobs();
+    run->setEnabled(true);
+    arm(true, 0);
+    press(kMenu, 1);
+    QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    jobs->setJob(jobs->identityOfUniverse(1), CJ::Focus, false);
+    QVERIFY2(!run->isWalking(), "the walker lost Focus and its walk went on");
+    QVERIFY(run->isArmed());
+    QCOMPARE(run->notice(), QString::fromUtf8("Walk ended: Pad B (…00:02) no longer does focus."));
+    withLt(kA, 0);
+    QCOMPARE(goes(), 1);
+}
+
+void PadRunRules_Test::review2TheWalkerUnpluggedMidWalk()
+{
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    press(kMenu, 1);
+    QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    drop(1);
+    QVERIFY2(!run->isWalking(), "the walker went away and its walk went on");
+    QVERIFY(run->isArmed());
+    QCOMPARE(run->notice(), QString("Walk ended: the controller walking it went away."));
+    withLt(kA, 0);
+    QCOMPARE(goes(), 1);
+}
+
+void PadRunRules_Test::review2ARunnersSwipeBesideAWalk()
+{
+    const quint32 kTouchX = 30, kTouchY = 31, kTouchDown = 32;
+    m_stub->m_channelRoles.insert(kTouchX, "touch_x");
+    m_stub->m_channelRoles.insert(kTouchY, "touch_y");
+    m_stub->m_channelRoles.insert(kTouchDown, "touch_down");
+    makeShow();
+    twoPads(int(CJ::RunCues | CJ::Focus), int(CJ::Focus));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    press(kMenu, 1);
+    QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    const quint32 cue = pc->refineSession()->cueId();
+    run->showNotice(QString());
+    // A swipes across its touchpad: no step, said as its other presses are.
+    for (int i = 0; i <= 10; ++i)
+    {
+        axis(kTouchX, uchar((0.2f + 0.06f * i) * 255.0f), 0);
+        axis(kTouchY, uchar(0.5f * 255.0f), 0);
+        if (i == 0)
+            axis(kTouchDown, 255, 0);
+        run->swipeTick(0.02);
+    }
+    axis(kTouchDown, 0, 0);
+    run->swipeTick(0.02);
+    run->swipeTick(1.0);
+    QCOMPARE(pc->refineSession()->cueId(), cue);
+    QCOMPARE(run->notice(), QString::fromUtf8("Pad B (…00:02) is walking the show: nothing plays until the walk ends."));
+    run->stopWalk();
+}
+
+void PadRunRules_Test::review2ARoleSwitchEndsABesideWalk()
+{
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    press(kMenu, 1);
+    QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    run->setEnabled(false);
+    QVERIFY2(!run->isWalking(), "a walk beside the runner went on into the Tools role");
+    QVERIFY(!m_doc->programmer()->refineSession()->isActive());
 }
 
 void PadRunRules_Test::jobsTakenAwayWhileInUse()
