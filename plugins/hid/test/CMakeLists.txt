@@ -18,6 +18,27 @@ target_link_libraries(hidrescan_test PRIVATE
     hidplugin
 )
 
+if(UNIX AND NOT APPLE)
+    # Linux only: the joystick reader (/dev/input/jsN) when its pad goes and
+    # comes back, a FIFO for the node.
+    add_executable(hidlinuxjoystick_test
+        hidlinuxjoystick_test.cpp hidlinuxjoystick_test.h
+    )
+    target_include_directories(hidlinuxjoystick_test PRIVATE
+        ..
+        ../linux
+        ../../interfaces
+        ../../../engine/src
+    )
+    target_link_libraries(hidlinuxjoystick_test PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+        Qt6::Test
+        hidplugin
+    )
+endif()
+
 if(APPLE)
     # macOS only: the GameController framework side of the HID plugin.
     add_executable(hidgamecontroller_test WIN32 MACOSX_BUNDLE

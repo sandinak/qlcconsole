@@ -340,7 +340,6 @@ QString SystemProbe::runTool(const QString &program, const QStringList &args, co
 
 namespace
 {
-#if defined(Q_OS_LINUX)
 QString readText(const QString &path)
 {
     QFile f(path);
@@ -348,7 +347,6 @@ QString readText(const QString &path)
         return QString();
     return QString::fromUtf8(f.readAll()).remove(QChar(0)).trimmed();
 }
-#endif
 
 #if defined(Q_OS_LINUX) || defined(Q_OS_WIN)
 struct CpuSample
@@ -465,23 +463,7 @@ int SystemProbe::onBattery(int *percent)
         *percent = int(s.BatteryLifePercent);
     return s.ACLineStatus == 0 ? 1 : 0;
 #elif defined(Q_OS_LINUX)
-    if (percent != nullptr)
-        *percent = -1;
-    const QDir supplies(QStringLiteral("/sys/class/power_supply"));
-    int result = 0;
-    const QStringList names = supplies.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    for (const QString &dev : names)
-    {
-        if (readText(supplies.filePath(dev + QStringLiteral("/type"))) != QLatin1String("Battery"))
-            continue;
-        if (readText(supplies.filePath(dev + QStringLiteral("/status"))) == QLatin1String("Discharging"))
-            result = 1;
-        bool ok = false;
-        const int charge = readText(supplies.filePath(dev + QStringLiteral("/capacity"))).toInt(&ok);
-        if (ok && percent != nullptr)
-            *percent = charge;
-    }
-    return result;
+    return readPowerSupplies(QStringLiteral("/sys/class/power_supply"), percent);
 #else
     if (percent != nullptr)
         *percent = -1;
@@ -768,6 +750,27 @@ int SystemProbe::parseThrottled(const QString &vcgencmd)
     static const QRegularExpression re(QStringLiteral("throttled=0x([0-9a-fA-F]+)"));
     const QRegularExpressionMatch m = re.match(vcgencmd);
     return m.hasMatch() ? m.captured(1).toInt(nullptr, 16) : -1;
+}
+
+int SystemProbe::readPowerSupplies(const QString &dir, int *percent)
+{
+    if (percent != nullptr)
+        *percent = -1;
+    const QDir supplies(dir);
+    int result = 0;
+    const QStringList names = supplies.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QString &dev : names)
+    {
+        if (readText(supplies.filePath(dev + QStringLiteral("/type"))) != QLatin1String("Battery"))
+            continue;
+        if (readText(supplies.filePath(dev + QStringLiteral("/status"))) == QLatin1String("Discharging"))
+            result = 1;
+        bool ok = false;
+        const int charge = readText(supplies.filePath(dev + QStringLiteral("/capacity"))).toInt(&ok);
+        if (ok && percent != nullptr)
+            *percent = charge;
+    }
+    return result;
 }
 
 bool SystemProbe::parseProcStat(const QString &stat, QString *name, qint64 *ticks)

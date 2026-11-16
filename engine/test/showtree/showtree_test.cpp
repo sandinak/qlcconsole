@@ -11876,10 +11876,10 @@ void ShowTree_Test::releaseAndUntrackCommands()
 }
 
 /*****************************************************************************
- * Independent evaluation of 0.4.12 (eval/0412): a failing test for a fixer
+ * Effect fades and reusable content (independent evaluation of 0.4.12)
  *****************************************************************************/
 
-void ShowTree_Test::evalAReusableLayersEffectFadeIsEveryUses()
+void ShowTree_Test::reusableLayerEffectFadeIsEveryUses()
 {
     /* The uses of a reusable layer are one content: syncReusables() finds
        the use an edit changed, and makes every use the same, by
@@ -11919,4 +11919,39 @@ void ShowTree_Test::evalAReusableLayersEffectFadeIsEveryUses()
     QVERIFY2(other == 3000, qPrintable(QString("the fade set in one use is not the other use's (it has %1)").arg(other)));
     QVERIFY2(firstAfter == 3000, qPrintable(QString("an edit in the other use wiped the first use's fade (now %1)")
                                                 .arg(firstAfter)));
+}
+
+void ShowTree_Test::noneEffectLookKeepsItsFadesOnReload()
+{
+    /* A None effect look ("off here") is an effect look: its fades are
+       part of it (Look::operator==). Saved without them, it came back as
+       FadeSnap -- a different look than the one saved, so the reloaded
+       show's cue differed from the one the operator had. */
+    Production p;
+    p.id = 1;
+    CueList list;
+    list.id = 2;
+    Cue c = cue(3, "1", CueMode::ListDefault,
+                { layer(4, ATSpots, { look(effectKey("Dimmer"), {}), look(effectKey("Color"), {}) }) }, {}, {});
+    c.layers[0].looks[0].none = true;                  // a new None: the cue's fades
+    c.layers[0].looks[1].none = true;
+    c.layers[0].looks[1].fadeIn = 2000;
+    c.layers[0].looks[1].fadeOut = Look::FadeSnap;
+    list.cues << c;
+    p.lists << list;
+    const QByteArray xml = productionXml(p);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    Production back;
+    QVERIFY(ShowTree::loadXML(r, back));
+    const QList<Look> &bl = back.lists.first().cues.first().layers.first().looks;
+    QCOMPARE(bl.count(), 2);
+    QVERIFY(bl.at(0).none && bl.at(1).none);
+    QCOMPARE(bl.at(0).fadeIn, int(Look::FadeFollowCue));
+    QCOMPARE(bl.at(0).fadeOut, int(Look::FadeFollowCue));
+    QCOMPARE(bl.at(1).fadeIn, 2000);
+    QCOMPARE(bl.at(1).fadeOut, int(Look::FadeSnap));
+    QVERIFY(bl == c.layers.first().looks);
+    QCOMPARE(cueContent(back.lists.first().cues.first()), cueContent(c));
+    QCOMPARE(productionXml(back), xml);
 }

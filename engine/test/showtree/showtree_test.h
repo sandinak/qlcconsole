@@ -299,11 +299,11 @@ private slots:
     /** effectKind() is empty for a non-effect, "Other" for a bare effect. */
     void effectKindIsForEffectsOnly();
 
-    /* Independent evaluation of 0.4.12 (eval/0412): fails on the code as
-       it is, for a fixer to make pass. */
     /** An effect's fade set in one use of a reusable layer is every use's,
      *  and an edit in another use does not wipe it. */
-    void evalAReusableLayersEffectFadeIsEveryUses();
+    void reusableLayerEffectFadeIsEveryUses();
+    /** A None effect look saves its fades and reloads as it was. */
+    void noneEffectLookKeepsItsFadesOnReload();
 
 private:
     /** What a dry run of the import on a show file found (importARealShow). */
