@@ -24,7 +24,10 @@
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QLabel>
+#include <QThread>
+#include <QElapsedTimer>
 #include <QtTest>
+#include <functional>
 
 #include "../../../engine/test/common/stdprelude.h"
 #define private public
@@ -652,6 +655,70 @@ void PadHit_Test::eachNewSetOfHitsStartsAtOneOfN()
     tap(kRT);
     QTRY_COMPARE_WITH_TIMEOUT(fired.count(), 1, 2000);
     QCOMPARE(st->cue(fired.last().at(0).toUInt())->name, QString("Staff Slam"));
+}
+
+void PadHit_Test::aPullAsTheCueChangesStartsAtOneOfN()
+{
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    PadRun *run = doc->programmer()->padRun();
+    doc->masterTimer()->stopAllFunctions();
+    settle(100);
+    doc->setMode(Doc::Operate);
+    settle(50);
+    run->setEnabled(true);
+    if (!run->isArmed())
+        chord(true);
+    QVERIFY(run->isArmed());
+    Undo undo;
+    undo.f = [&]() {
+        doc->masterTimer()->stopAllFunctions();
+        doc->setMode(Doc::Design);
+        run->setEnabled(false, false);
+        settle(50);
+    };
+    /* Without the event loop: what a loaded machine does between the
+       MasterTimer's thread moving the cue on and the main thread hearing of
+       it (functionStarted and currentStepChanged come queued). */
+    auto spinUntil = [](const std::function<bool()> &done, int ms) {
+        QElapsedTimer t;
+        t.start();
+        while (!done() && t.elapsed() < ms)
+            QThread::msleep(2);
+        return done();
+    };
+    // Ballad's one hit pulled and let go: the turn has moved on from 1.
+    go();
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(m_list) == m_cues.at(0), 3000);
+    go();
+    QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(m_list) == m_cues.at(1), 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Breathe"), 2000);
+    settle(50);
+    tap(kRT);
+    QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Breathe off"), 2000);
+    tap(kRT);
+    QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Breathe"), 2000);
+    settle(50);
+
+    // Back to Opening, and the pull comes before the main thread has heard.
+    QSignalSpy fired(run, &PadRun::hitFired);
+    ShowControl::Request back;
+    back.command = ShowControl::Back;
+    back.chaser = st->cueList(m_list)->chaser;
+    QVERIFY(doc->showControl()->run(back, ShowControl::RouteKey));
+    QVERIFY(spinUntil([&]() { return st->runningCue(m_list) == m_cues.at(0); }, 3000));
+    // A new set: 1 of 2, said and fired, though nothing has been told yet.
+    QCOMPARE(run->armedHitText(), hit("Staff Slam (1 of 2)"));
+    tap(kRT);
+    QCOMPARE(fired.count(), 1);
+    QCOMPARE(st->cue(fired.last().at(0).toUInt())->name, QString("Staff Slam"));
+    // Once heard, the turn the pull moved on stands: let go, Thunder is next.
+    QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Staff Slam off (1 of 2)"), 2000);
+    settle(300);                        // the one-shot tick and the queued news
+    tap(kRT);
+    QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Thunder (2 of 2)"), 2000);
+    settle(300);
+    QCOMPARE(run->armedHitText(), hit("Thunder (2 of 2)"));
 }
 
 void PadHit_Test::pictures()

@@ -1207,14 +1207,32 @@ bool PadRun::fireHit()
 quint32 PadRun::hitTurn() const
 {
     const QList<quint32> tier = armedHits();
-    return tier.isEmpty() ? ShowTree::invalidId() : tier.at(m_hitStep % tier.count());
+    return tier.isEmpty() ? ShowTree::invalidId() : tier.at(turnIn(tier) % tier.count());
+}
+
+int PadRun::turnIn(const QList<quint32> &tier) const
+{
+    /* The turn counts in the set syncHit() last saw. A set it has not seen
+       yet is new, so it starts at 1 of n: syncHit() hears of a cue change
+       a moment late (functionStarted() and currentStepChanged() come queued
+       from the MasterTimer's thread), and a pull in that moment -- a busy
+       machine, a quick operator -- took the old set's turn. */
+    return tier == m_armedSet ? m_hitStep : 0;
 }
 
 void PadRun::nextHitTurn()
 {
     /* No syncHit() here: the hit starting is what changes the words (its
        functionStarted(), a tick later), and telling the screens now would
-       flash the next one's name for that tick before "… off". */
+       flash the next one's name for that tick before "… off". The set it
+       counts in is taken now, though: syncHit() finding it later must not
+       start it over and lose this pull's turn. */
+    const QList<quint32> armedNow = armedHits();
+    if (armedNow != m_armedSet)
+    {
+        m_armedSet = armedNow;
+        m_hitStep = 0;
+    }
     ++m_hitStep;
 }
 
@@ -1248,7 +1266,7 @@ quint32 PadRun::nextHit(bool *letsGo, int *index, int *count) const
     }
     if (pick == ShowTree::invalidId())
     {
-        pick = tier.at(m_hitStep % tier.count());
+        pick = tier.at(turnIn(tier) % tier.count());
         if (m_doc->function(st->lookFunction(pick)) == nullptr)
             return ShowTree::invalidId();     // fireHit(): "No hit armed."
     }
