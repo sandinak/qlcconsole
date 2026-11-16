@@ -33,6 +33,7 @@
 #include "ioplugincache.h"
 #include "qlcioplugin.h"
 #include "inputpatch.h"
+#include "iodeferral.h"
 #include "universe.h"
 #include "doc.h"
 
@@ -288,7 +289,9 @@ bool InputOutputMap::applyInputSlot(quint32 universe)
         {
             if (int(ip->input()) != line)
             {
-                // Still the one, on another line (a device before it went).
+                // Still the one, on another line (a device before it went):
+                // reopened after the claim (iodeferral.h).
+                IODeferral io;
                 QMutexLocker locker(&m_universeMutex);
                 uni->setInputPatch(plugin, quint32(line), ip->profile());
             }

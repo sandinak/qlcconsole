@@ -202,6 +202,12 @@ Joystick** in the same layout.
   computer (on a Mac, restart this Mac to free its USB). Until then
   qlcconsole may not finish quitting: the window closes, but the app can
   stay listed as running.
+  Opening or closing a device on another line no longer waits with
+  every universe held: a device that does not answer while it is
+  opened or closed keeps the other universes' DMX running. A USB DMX
+  interface that stops answering while it is sending is not covered:
+  it can still stop the output, and the app, until the restart. Do not
+  re-patch a USB DMX interface on a hub held that way during a show.
 - **Teaching mode holds the remote as it holds the console.** A remote GO
   goes through the same path as the console's GO, so the instructor's
   settings ([Teaching mode](teaching.md#instructor-settings)) apply to it

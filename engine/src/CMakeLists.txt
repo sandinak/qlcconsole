@@ -57,6 +57,7 @@ add_library(${module_name} SHARED
     inputslots.cpp
     patchundo.cpp patchundo.h
     inputpatch.cpp inputpatch.h
+    iodeferral.cpp iodeferral.h
     ioplugincache.cpp ioplugincache.h
     keypadparser.cpp keypadparser.h
     mastertimer.cpp mastertimer.h

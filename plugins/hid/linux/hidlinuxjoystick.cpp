@@ -29,7 +29,8 @@
 #include "hidplugin.h"
 
 /* The reader looks at m_running this often: closeInput() waits for it at
-   most HIDDevice::kReaderStopMs, with the universes locked. */
+   most HIDDevice::kReaderStopMs (on the thread that closes the patch, after
+   the universes are let go: IODeferral). */
 #define KPollTimeout 100
 
 HIDLinuxJoystick::HIDLinuxJoystick(HIDPlugin* parent, quint32 line, struct hid_device_info *info)

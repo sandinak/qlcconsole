@@ -48,7 +48,15 @@ HIDDMXDevice::~HIDDMXDevice()
 {
     closeInput();
     closeOutput();
-    hid_close(m_handle);
+    /* Never closed under a reader still in a read (the bounded stop above
+       may have left it there): it ends within HID_DMX_READ_TIMEOUT of the
+       device answering. Unbounded: HIDPlugin::removeDevice() deletes the
+       device on the calling thread (the GUI's, no universe lock held), and
+       a reader that never returns holds it there. */
+    if (isRunning())
+        wait();
+    if (m_handle != nullptr)
+        hid_close(m_handle);
 }
 
 void HIDDMXDevice::init()
@@ -235,19 +243,19 @@ void HIDDMXDevice::updateMode()
     buffer[1] = 16;
     buffer[2] = driver_mode;
 
-    hid_write(m_handle, buffer, 34);
+    if (m_handle != nullptr)
+        hid_write(m_handle, buffer, 34);
 
     /**
-    *  Start / stop input polling thread based on whether the input is activated
+    *  Start / stop input polling thread based on whether the input is activated.
+    *  Bounded, as a pad's reader (HIDDevice::kReaderStopMs): a reader in a
+    *  read the interface never answers stops by itself once it returns,
+    *  and is restarted then if the input was opened again meanwhile. The
+    *  wait used to have no end -- an interface on a wedged USB hub held
+    *  whoever opened or closed it for good.
     */
     if (m_mode & DMX_MODE_INPUT)
-    {
-        m_running = true;
-        start();
-    }
-    else if (isRunning() == true)
-    {
-        m_running = false;
-        wait();
-    }
+        startReading();
+    else if (stopReadingBounded() == false)
+        qWarning() << Q_FUNC_INFO << m_name << "is still reading: left to stop by itself";
 }

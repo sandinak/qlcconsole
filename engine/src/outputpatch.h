@@ -358,6 +358,18 @@ private:
     QString m_lineName;
     QRecursiveMutex *m_frameLock = nullptr;
 
+    /** A call to the plugin that reaches the device (open, close, aim, a
+     *  closing frame): now, or after the locks when an IODeferral is open
+     *  (iodeferral.h) -- then this patch sends no frame until it has run.
+     *  @p call holds what it needs: the patch may be gone by then. */
+    bool deviceCall(const std::function<bool()> &call);
+    /** The plugin told @p values and @p unset for the open line (deviceCall()) */
+    void applyParameters(const QMap<QString, QVariant> &values, const QStringList &unset);
+    /** Device calls queued and not yet run: dump() sends nothing */
+    std::atomic<int> m_deviceCalls { 0 };
+    /** In the destructor: its calls are not counted (nothing to send) */
+    bool m_dying = false;
+
     /********************************************************************
      * Value dump
      ********************************************************************/

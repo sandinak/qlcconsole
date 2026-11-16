@@ -29,6 +29,7 @@
 #include "qlcinputchannel.h"
 #include "qlcioplugin.h"
 #include "inputpatch.h"
+#include "iodeferral.h"
 
 #define GRACE_MS 1
 
@@ -63,7 +64,12 @@ InputPatch::InputPatch(quint32 inputUniverse, QObject* parent)
 InputPatch::~InputPatch()
 {
     if (m_plugin != NULL)
-        m_plugin->closeInput(m_pluginLine, m_universe);
+    {
+        // After the locks (IODeferral): a reader that stopped answering waits there.
+        QLCIOPlugin *plugin = m_plugin;
+        const quint32 line = m_pluginLine, universe = m_universe;
+        IODeferral::run([plugin, line, universe]() { plugin->closeInput(line, universe); return true; });
+    }
 }
 
 /*****************************************************************************
@@ -86,7 +92,9 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
                    this, SLOT(slotTimeCodeChanged(quint32,quint32,quint32,uchar)));
         disconnect(m_plugin, SIGNAL(sysExReceived(quint32,quint32,QByteArray)),
                    this, SLOT(slotSysExReceived(quint32,quint32,QByteArray)));
-        m_plugin->closeInput(m_pluginLine, m_universe);
+        QLCIOPlugin *old = m_plugin;
+        const quint32 line = m_pluginLine, universe = m_universe;
+        IODeferral::run([old, line, universe]() { old->closeInput(line, universe); return true; });
     }
 
     m_plugin = plugin;
@@ -113,7 +121,11 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
                 this, SLOT(slotTimeCodeChanged(quint32,quint32,quint32,uchar)));
         connect(m_plugin, SIGNAL(sysExReceived(quint32,quint32,QByteArray)),
                 this, SLOT(slotSysExReceived(quint32,quint32,QByteArray)));
-        result = m_plugin->openInput(m_pluginLine, m_universe);
+        /* After the locks when an IODeferral is open (true for now:
+           InputOutputMap::setInputPatch() says how it went). */
+        QLCIOPlugin *plugin = m_plugin;
+        const quint32 line = m_pluginLine, universe = m_universe;
+        result = IODeferral::run([plugin, line, universe]() { return plugin->openInput(line, universe); });
 
         if (m_profile != NULL)
             setProfilePageControls();
@@ -140,23 +152,27 @@ bool InputPatch::reconnect()
 {
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
     {
-        m_plugin->closeInput(m_pluginLine, m_universe);
+        QLCIOPlugin *plugin = m_plugin;
+        const quint32 line = m_pluginLine, universe = m_universe;
+        const QMap<QString, QVariant> params = m_parametersCache;
+        return IODeferral::run([plugin, line, universe, params]() {
+            plugin->closeInput(line, universe);
 #if defined(WIN32) || defined(Q_OS_WIN)
-        Sleep(GRACE_MS);
+            Sleep(GRACE_MS);
 #else
-        usleep(GRACE_MS * 1000);
+            usleep(GRACE_MS * 1000);
 #endif
-        bool ret = m_plugin->openInput(m_pluginLine, m_universe);
-        if (ret == true)
-        {
-            QMap<QString, QVariant>::iterator it = m_parametersCache.begin();
-            for (; it != m_parametersCache.end(); it++)
+            const bool ret = plugin->openInput(line, universe);
+            if (ret == true)
             {
-                qDebug() << "[InputPatch] restoring parameter:" << it.key() << it.value();
-                m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Input, it.key(), it.value());
+                for (auto it = params.constBegin(); it != params.constEnd(); ++it)
+                {
+                    qDebug() << "[InputPatch] restoring parameter:" << it.key() << it.value();
+                    plugin->setParameter(universe, line, QLCIOPlugin::Input, it.key(), it.value());
+                }
             }
-        }
-        return ret;
+            return ret;
+        });
     }
     return false;
 }
@@ -242,14 +258,28 @@ void InputPatch::setPluginParameter(QString prop, QVariant value)
     qDebug() << "[InputPatch] caching parameter:" << prop << value;
     m_parametersCache[prop] = value;
     if (m_plugin != NULL)
-        m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Input, prop, value);
+    {
+        QLCIOPlugin *plugin = m_plugin;
+        const quint32 line = m_pluginLine, universe = m_universe;
+        IODeferral::run([plugin, line, universe, prop, value]() {
+            plugin->setParameter(universe, line, QLCIOPlugin::Input, prop, value);
+            return true;
+        });
+    }
 }
 
 void InputPatch::unsetPluginParameter(const QString &prop)
 {
     m_parametersCache.remove(prop);
     if (m_plugin != NULL)
-        m_plugin->unSetParameter(m_universe, m_pluginLine, QLCIOPlugin::Input, prop);
+    {
+        QLCIOPlugin *plugin = m_plugin;
+        const quint32 line = m_pluginLine, universe = m_universe;
+        IODeferral::run([plugin, line, universe, prop]() {
+            plugin->unSetParameter(universe, line, QLCIOPlugin::Input, prop);
+            return true;
+        });
+    }
 }
 
 QMap<QString, QVariant> InputPatch::getPluginParameters()
@@ -333,15 +363,16 @@ void InputPatch::setProfilePageControls()
     {
         if (m_plugin != NULL)
         {
-            QMap<QString, QVariant> settings = m_profile->globalSettings();
+            const QMap<QString, QVariant> settings = m_profile->globalSettings();
             if (settings.isEmpty() == false)
             {
-                QMapIterator <QString,QVariant> it(settings);
-                while (it.hasNext() == true)
-                {
-                    it.next();
-                    m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Input, it.key(), it.value());
-                }
+                QLCIOPlugin *plugin = m_plugin;
+                const quint32 line = m_pluginLine, universe = m_universe;
+                IODeferral::run([plugin, line, universe, settings]() {
+                    for (auto it = settings.constBegin(); it != settings.constEnd(); ++it)
+                        plugin->setParameter(universe, line, QLCIOPlugin::Input, it.key(), it.value());
+                    return true;
+                });
             }
         }
         QMapIterator <quint32,QLCInputChannel*> it(m_profile->channels());
