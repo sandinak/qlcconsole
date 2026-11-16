@@ -646,6 +646,9 @@ public:
     /** Show Review's Fix: a finding's jump kind and ids to the view it is
      *  fixed in (a Show Tree cue, Functions, Fixtures, the plot, Build). */
     bool reviewJump(QWidget *parent, const QString &jump, const QVariantList &data);
+    /** MOV-14's fix ("panturn"): Centre the pan on the stage for those
+     *  heads, after saying what changes (one undo step). */
+    bool centrePansFromReview(QWidget *parent, const QVariantList &data);
 private:
     /** The Teaching chip's menu */
     void showTeachingMenu();

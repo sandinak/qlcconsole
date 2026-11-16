@@ -238,6 +238,25 @@ public:
     /** One undo step that @p undo puts back (fixtures added with their
      *  universes, say: more than a rig snapshot holds). */
     void pushUndoCallback(const std::function<void()> &undo);
+
+    /** "Centre the pan on the stage" (PanTurn::centre) for @p fids: one
+     *  undo step, and the notice line says what changed. Fixture
+     *  Properties' button for a selection, the plot's menu, Show Review's
+     *  fix. Returns what changed, a line a head (PanTurn::changeText). */
+    QStringList centrePanOnStage(const QList<quint32> &fids);
+    /** The person placed, moved or patched @p fids: a head's pan turn
+     *  changes only when the stage now crosses its seam
+     *  (PanTurn::proposalAfterMove), and the notice line says so. Its own
+     *  undo step unless @p ownStep is false (inside a dialog's). */
+    QStringList proposePanTurns(const QList<quint32> &fids, bool ownStep = true);
+
+private:
+    /** proposePanTurns() once a drag or a drop is over (coalesced). */
+    void schedulePanTurns(const QList<quint32> &fids);
+    QList<quint32> m_pendingTurns;
+    /** Says @p changes on the notice line and the window's status bar. */
+    void sayTurnChanges(const QStringList &changes, bool proposed);
+public:
     /** Undo the rig's last change -- a move, a dialog's edit, a patch. */
     void undo();
     /** Something to undo on the rig (Edit ▸ Undo, Q81). */

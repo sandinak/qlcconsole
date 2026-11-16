@@ -61,7 +61,18 @@ void writeTruth(QXmlStreamWriter &w, quint32 fid, const RigCalibration &c)
     w.writeAttribute(QStringLiteral("PanZero"), num(c.panZeroDir, 1));
     if (c.lensDeg > 0.0f)
         w.writeAttribute(QStringLiteral("Lens"), num(c.lensDeg, 1));
+    if (c.panTurn != RigCalibration::kTurnUnset)
+        w.writeAttribute(QStringLiteral("PanTurn"), QString::number(c.panTurn));
     w.writeEndElement();
+}
+
+/* A venue's pan turn: absent in a file from before turns were kept, when
+   the show's own turn stands (RigCalibration::kTurnUnset). */
+int readTurn(const QXmlStreamAttributes &a)
+{
+    bool ok = false;
+    const int k = a.value(QStringLiteral("PanTurn")).toInt(&ok);
+    return ok ? k : RigCalibration::kTurnUnset;
 }
 
 RigCalibration readTruth(const QXmlStreamAttributes &a)
@@ -71,6 +82,7 @@ RigCalibration readTruth(const QXmlStreamAttributes &a)
     c.tiltOffsetDeg = a.value(QStringLiteral("TiltOfs")).toFloat();
     c.panZeroDir = a.value(QStringLiteral("PanZero")).toFloat();
     c.lensDeg = a.value(QStringLiteral("Lens")).toFloat();
+    c.panTurn = readTurn(a);
     return c;
 }
 
@@ -462,6 +474,9 @@ QByteArray VenueCorrections::toXml(const QList<Venue> &venues, const QString &ac
             }
             if (c.lensDeg > 0.0f)
                 w.writeAttribute(QStringLiteral("Lens"), num(c.lensDeg, 1));
+            // Always (when known): absent means "the show's turn".
+            if (c.panTurn != RigCalibration::kTurnUnset)
+                w.writeAttribute(QStringLiteral("PanTurn"), QString::number(c.panTurn));
             w.writeEndElement();
         }
         for (auto it = v.trims.constBegin(); it != v.trims.constEnd(); ++it)
@@ -571,6 +586,7 @@ bool VenueCorrections::fromXml(const QByteArray &xml, QString *why)
                     if (c.fixedAim)
                         c.aimDown = a.value(QStringLiteral("AimDown")).toFloat();
                     c.lensDeg = a.value(QStringLiteral("Lens")).toFloat();
+                    c.panTurn = readTurn(a);
                     v.fixtures.insert(fid, c);
                     if (a.hasAttribute(QStringLiteral("Name")))
                         v.names.insert(fid, a.value(QStringLiteral("Name")).toString());
@@ -927,9 +943,14 @@ void VenueCorrections::writeRig(quint32 fid, const RigCalibration &c)
 {
     MonitorProperties *props = m_doc->monitorProperties();
     FixtureRigProps rp = props->fixtureRigProps(fid);
-    if (RigCalibration::of(rp) == c)
+    /* A venue kept before pan turns were: the show's own turn, not the one
+       the venue applied before this left on the rig. */
+    RigCalibration with = c;
+    if (with.panTurn == RigCalibration::kTurnUnset)
+        with.panTurn = baseOf(fid).panTurn;
+    if (RigCalibration::of(rp) == with && rp.panTurn == with.panTurn)
         return;
-    c.applyTo(rp);
+    with.applyTo(rp);
     // Its own writes are not edits to record.
     const bool was = m_writing;
     m_writing = true;
@@ -1343,7 +1364,11 @@ bool VenueCorrections::hasCorrection(quint32 fid) const
 
 RigCalibration VenueCorrections::correction(quint32 fid) const
 {
-    return venue(m_active).fixtures.value(fid);
+    RigCalibration c = venue(m_active).fixtures.value(fid);
+    // Kept before pan turns were: the show's own turn stands.
+    if (c.panTurn == RigCalibration::kTurnUnset)
+        c.panTurn = baseOf(fid).panTurn;
+    return c;
 }
 
 int VenueCorrections::correctionCount() const

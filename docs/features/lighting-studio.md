@@ -1156,7 +1156,11 @@ not, in three boxes:
   of device, or a fixed light's **Points** and **Tilt in yoke**; **Beam (lens set
   to)**, the angle a lens zoomed by hand is set to (see
   [The beam](#the-beam)); the [calibration offsets](#calibration-offsets);
-  **Invert pan** / **Invert tilt**; **Test orientation**; and **Identify**.
+  **Invert pan** / **Invert tilt**; for a head with more than a turn of pan,
+  **Pan works around** — its pan turn, where the seam is and how clear of
+  it the stage is, with **Centre on Stage**, **Earlier Turn** and **Later
+  Turn** (see [The pan turn and its seam](stage-targets.md#the-pan-turn-and-its-seam));
+  **Test orientation**; and **Identify**.
   **Identify** and **Reset** send the fixture's own value, hold it about
   3 seconds, then put the channel back as it was. A cue that sets that
   channel in the meantime keeps its value.

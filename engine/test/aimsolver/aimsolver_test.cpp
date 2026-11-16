@@ -21,6 +21,7 @@
 
 #include "aimsolver_test.h"
 #include "aimsolver.h"
+#include "panturn.h"
 #include "monitorproperties.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
@@ -1649,5 +1650,730 @@ void AimSolver_Test::areaTiesGoToTheBestCover()
     const QList<AreaCover::Zone> again = AreaCover::zones(doc, area, members);
     for (int i = 0; i < 4; ++i)
         QCOMPARE(again.at(i).cell, zones.at(i).cell);
+    delete doc;
+}
+
+/****************************************************************************
+ * The pan turn (PanTurn, FixtureRigProps::panTurn): stored with the head
+ ****************************************************************************/
+
+namespace
+{
+/* A 16-bit mover with @p panMax degrees of pan and 270 of tilt. */
+Fixture *addMover(Doc *doc, const QString &name, int panMax, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel(QString("Mover %1 %2").arg(panMax).arg(name));
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("16bit");
+    QLCFixtureHead head;
+    int n = 0;
+    for (QLCChannel::Group g : { QLCChannel::Pan, QLCChannel::Tilt })
+        for (QLCChannel::ControlByte b : { QLCChannel::MSB, QLCChannel::LSB })
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("%1%2").arg(g == QLCChannel::Pan ? "Pan" : "Tilt")
+                                        .arg(b == QLCChannel::MSB ? "" : " fine"));
+            ch->setGroup(g);
+            ch->setControlByte(b);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(n));
+            head.addChannel(quint32(n));
+            ++n;
+        }
+    QLCPhysical ph;
+    ph.setFocusPanMax(panMax);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(address);
+    return doc->addFixture(fxi) ? fxi : nullptr;
+}
+
+/* A 10 m x 8 m stage (centre (5, 4)) and one head out front at (6, 12):
+   hung 6 m up, or standing on the floor. Pan zero 0 faces downstage, away
+   from the stage, so the stage sits right across the seam of turn 0; 180
+   faces it. */
+Fixture *frontOfHouse(Doc *doc, int panMax, bool standing, bool invert, float panZero)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10.0f, 6.0f, 8.0f));
+    Fixture *fx = addMover(doc, "FOH", panMax, 0);
+    if (fx == nullptr)
+        return nullptr;
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(6000.0f, 12000.0f, standing ? 0.0f : 6.0f));
+    FixtureRigProps rp;
+    rp.mountingType = standing ? Truss::FloorMounted : Truss::TopHung;
+    rp.panZeroDir = panZero;
+    rp.panInvert = invert;
+    props->setFixtureRigProps(fx->id(), rp);
+    return fx;
+}
+
+/* Across the stage at chest height and back, 5 cm a step. */
+QList<QVector3D> sweep()
+{
+    QList<QVector3D> out;
+    for (int i = 0; i <= 200; ++i)
+        out << QVector3D(0.05f * float(i), 4.0f, 1.4f);
+    for (int i = 199; i >= 0; --i)
+        out << QVector3D(0.05f * float(i), 4.0f, 1.4f);
+    return out;
+}
+
+/* The pan, in degrees, a look's values give @p fx (16-bit). */
+double lookPan(const QList<SceneValue> &values, const Fixture *fx, double &frac)
+{
+    int coarse = -1, fine = 0;
+    for (const SceneValue &v : values)
+    {
+        if (v.fxi != fx->id())
+            continue;
+        if (v.channel == 0)
+            coarse = v.value;
+        else if (v.channel == 1)
+            fine = v.value;
+    }
+    frac = (coarse + fine / 256.0) / 255.0;
+    return coarse < 0 ? -1.0 : fx->effectiveBeam().panMax * (coarse * 256 + fine) / 65535.0;
+}
+
+double lookTiltFrac(const QList<SceneValue> &values, const Fixture *fx)
+{
+    int coarse = 0, fine = 0;
+    for (const SceneValue &v : values)
+    {
+        if (v.fxi != fx->id())
+            continue;
+        if (v.channel == 2)
+            coarse = v.value;
+        else if (v.channel == 3)
+            fine = v.value;
+    }
+    return (coarse + fine / 256.0) / 255.0;
+}
+
+/* How near a channel end a centred head's sweep may come. */
+const float kEdge = 10.0f;
+
+int storedTurn(Doc *doc, const Fixture *fx)
+{
+    return doc->monitorProperties()->fixtureRigProps(fx->id()).panTurn;
+}
+}
+
+void AimSolver_Test::aSweepAcrossTheStageStaysOnOneTurn_data()
+{
+    QTest::addColumn<int>("panMax");
+    QTest::addColumn<bool>("standing");
+    QTest::addColumn<bool>("invert");
+    QTest::addColumn<float>("panZero");
+    QTest::newRow("540 hung, zero away from the stage")       << 540 << false << false << 0.0f;
+    QTest::newRow("540 hung, inverted")                       << 540 << false << true  << 0.0f;
+    QTest::newRow("540 standing, zero away from the stage")   << 540 << true  << false << 0.0f;
+    QTest::newRow("540 standing, inverted")                   << 540 << true  << true  << 0.0f;
+    QTest::newRow("630 hung, zero away from the stage")       << 630 << false << false << 0.0f;
+    QTest::newRow("630 standing, inverted")                   << 630 << true  << true  << 0.0f;
+    QTest::newRow("360 hung, facing the stage")               << 360 << false << false << 180.0f;
+    QTest::newRow("360 standing, inverted, facing the stage") << 360 << true  << true  << 180.0f;
+}
+
+void AimSolver_Test::aSweepAcrossTheStageStaysOnOneTurn()
+{
+    QFETCH(int, panMax);
+    QFETCH(bool, standing);
+    QFETCH(bool, invert);
+    QFETCH(float, panZero);
+
+    Doc *doc = new Doc(this);
+    Fixture *fx = frontOfHouse(doc, panMax, standing, invert, panZero);
+    QVERIFY(fx != nullptr);
+    AimSolver::Frame before;
+    QVERIFY(AimSolver::frameFor(doc, fx->id(), before));
+    QCOMPARE(before.panTurn, 0);                    // as every older show loads
+
+    // What it was: the seam is on the stage, and the pan went round.
+    float oldJump = 0.0f, oldPrev = -1.0f;
+    for (const QVector3D &t : sweep())
+    {
+        float lp = 0.0f, lt = 0.0f;
+        legacyAim(before, t, lp, lt);
+        const AimSolver::Solution s = AimSolver::solve(before, t);
+        QVERIFY2(qAbs(s.panDeg - lp) < 1e-3f, "turn 0 is not the answer it always was");
+        if (oldPrev >= 0.0f)
+            oldJump = qMax(oldJump, qAbs(lp - oldPrev));
+        oldPrev = lp;
+    }
+    if (panZero == 0.0f)
+    {
+        QVERIFY2(oldJump > 300.0f, qPrintable(QString("the old answer should go round here, "
+                                                      "largest step %1").arg(oldJump)));
+        QVERIFY(PanTurn::info(doc, fx->id()).fixable());
+    }
+
+    // Centre the pan on the stage (Fixture Properties, Show Review's fix).
+    PanTurn::centre(doc, fx->id());
+    if (panMax == 360)
+        QCOMPARE(storedTurn(doc, fx), 0);           // nothing to choose
+    else
+        QVERIFY(storedTurn(doc, fx) != 0);
+    QVERIFY(!PanTurn::info(doc, fx->id()).crossesSeam());
+
+    AimSolver::Frame frame;
+    QVERIFY(AimSolver::frameFor(doc, fx->id(), frame));
+    QCOMPARE(frame.floorMounted, standing);
+    QCOMPARE(frame.panMax, float(panMax));
+    const FixtureRigProps rp = doc->monitorProperties()->fixtureRigProps(fx->id());
+    float newJump = 0.0f, prev = -1.0f;
+    float lo = frame.panMax, hi = 0.0f;
+    for (const QVector3D &t : sweep())
+    {
+        const AimSolver::Solution s = AimSolver::solve(frame, t);
+        QVERIFY2(s.reachable(), qPrintable(QString("(%1, %2) out of reach, margin %3")
+                                           .arg(t.x()).arg(t.y()).arg(s.marginDeg)));
+        if (prev >= 0.0f)
+            newJump = qMax(newJump, qAbs(s.panDeg - prev));
+        prev = s.panDeg;
+        lo = qMin(lo, s.panDeg);
+        hi = qMax(hi, s.panDeg);
+
+        // The same beam, whichever turn it is on.
+        QVector3D dir;
+        QVERIFY(AimSolver::beamDirection(rp, s.panDeg - frame.panMax / 2.0f,
+                                         s.tiltDeg - frame.tiltMax / 2.0f, dir));
+        const double off = degreesBetween(dir, t - frame.position);
+        QVERIFY2(off < 0.5, qPrintable(QString("pan %1 tilt %2 at (%3, %4) points %5 degrees off")
+                                       .arg(s.panDeg).arg(s.tiltDeg).arg(t.x()).arg(t.y()).arg(off)));
+    }
+    QVERIFY2(newJump < 3.0f, qPrintable(QString("the pan stepped %1 degrees between two "
+                                                "samples 5 cm apart (range %2..%3)")
+                                        .arg(newJump).arg(lo).arg(hi)));
+    QVERIFY2(lo >= kEdge && hi <= frame.panMax - kEdge,
+             qPrintable(QString("pan ran %1..%2 of 0..%3: within %4 of an end")
+                        .arg(lo).arg(hi).arg(frame.panMax).arg(kEdge)));
+    delete doc;
+}
+
+void AimSolver_Test::aHeadWithOneTurnHasNothingToChoose()
+{
+    for (bool standing : { false, true })
+    {
+        Doc *doc = new Doc(this);
+        Fixture *fx = frontOfHouse(doc, 360, standing, false, 0.0f);
+        QVERIFY(fx != nullptr);
+        QVERIFY(!PanTurn::info(doc, fx->id()).hasTurns);
+        QVERIFY(!PanTurn::centre(doc, fx->id()));
+        QVERIFY(!PanTurn::setTurn(doc, fx->id(), 1));    // held to what it can take
+        AimSolver::Frame frame;
+        QVERIFY(AimSolver::frameFor(doc, fx->id(), frame));
+        for (const QVector3D &t : sweep())
+        {
+            float lp = 0.0f, lt = 0.0f;
+            legacyAim(frame, t, lp, lt);
+            const AimSolver::Solution s = AimSolver::solve(frame, t);
+            QVERIFY2(qAbs(s.panDeg - lp) < 1e-3f && qAbs(s.tiltDeg - lt) < 1e-3f,
+                     qPrintable(QString("%1 at (%2, %3): %4/%5, was %6/%7")
+                                .arg(standing ? "standing" : "hung").arg(t.x()).arg(t.y())
+                                .arg(s.panDeg).arg(s.tiltDeg).arg(lp).arg(lt)));
+        }
+        delete doc;
+    }
+}
+
+/* M1: a 360 head calibrated off its centre (its turn's ends inside the
+   stage) answers the same whatever turn its rig says -- a file or a hand
+   that wrote one cannot move it. */
+void AimSolver_Test::aCalibratedOneTurnHeadIgnoresAStoredTurn()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = frontOfHouse(doc, 360, false, false, 0.0f);
+    QVERIFY(fx != nullptr);
+    MonitorProperties *props = doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(fx->id());
+    rp.panOffsetDeg = 7.5f;
+    props->setFixtureRigProps(fx->id(), rp);
+    AimSolver::Frame zero;
+    QVERIFY(AimSolver::frameFor(doc, fx->id(), zero));
+    for (int turn : { 1, -1, 3 })
+    {
+        rp.panTurn = turn;                          // as a file might say
+        props->setFixtureRigProps(fx->id(), rp);
+        AimSolver::Frame f;
+        QVERIFY(AimSolver::frameFor(doc, fx->id(), f));
+        QCOMPARE(f.panTurn, turn);
+        for (const QVector3D &t : sweep())
+        {
+            const AimSolver::Solution a = AimSolver::solve(zero, t), b = AimSolver::solve(f, t);
+            QVERIFY2(a.panDeg == b.panDeg && a.tiltDeg == b.tiltDeg && a.marginDeg == b.marginDeg,
+                     qPrintable(QString("turn %1 at (%2, %3): %4/%5, turn 0 %6/%7").arg(turn)
+                                .arg(t.x()).arg(t.y()).arg(b.panDeg).arg(b.tiltDeg)
+                                .arg(a.panDeg).arg(a.tiltDeg)));
+        }
+    }
+    delete doc;
+}
+
+void AimSolver_Test::looksEitherSideOfTheSeamFadeTheShortWay()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = frontOfHouse(doc, 540, false, false, 0.0f);
+    QVERIFY(fx != nullptr);
+    QVERIFY(PanTurn::centre(doc, fx->id()));
+    MonitorProperties *props = doc->monitorProperties();
+    AimSolver::Frame frame;
+    QVERIFY(AimSolver::frameFor(doc, fx->id(), frame));
+
+    // Either side of the line straight upstage from the head: turn 0's seam.
+    const QVector3D marks[2] = { QVector3D(frame.position.x() - 1.5f, 4.0f, 0.0f),
+                                 QVector3D(frame.position.x() + 1.5f, 4.0f, 0.0f) };
+    QList<SceneValue> values[2];
+    double pan[2], panFrac[2], tiltFrac[2];
+    float aimZ = 0.0f;
+    for (int i = 0; i < 2; ++i)
+    {
+        StageTarget *t = props->addStageTarget();
+        t->setName(i == 0 ? "Left of it" : "Right of it");
+        t->setPosition(marks[i]);
+        aimZ = props->targetAimPoint(t).z();
+        QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+        aim->setName(t->name());
+        aim->setStageTargetId(t->id());
+        QVERIFY(doc->addPalette(aim));
+        values[i] = aim->valuesFromFixtures(doc, { fx->id() });
+        pan[i] = lookPan(values[i], fx, panFrac[i]);
+        tiltFrac[i] = lookTiltFrac(values[i], fx);
+        QVERIFY2(pan[i] >= 0.0, "the look sets no pan");
+    }
+    // 1.5 m either side, 8 m away: about 21 degrees apart, not a turn less that.
+    QVERIFY2(qAbs(pan[0] - pan[1]) < 30.0,
+             qPrintable(QString("the two looks pan %1 and %2: %3 degrees apart")
+                        .arg(pan[0]).arg(pan[1]).arg(qAbs(pan[0] - pan[1]))));
+
+    // A fade is a straight line in DMX: half way, the beam is between the two marks.
+    const double midPan = (panFrac[0] + panFrac[1]) / 2.0, midTilt = (tiltFrac[0] + tiltFrac[1]) / 2.0;
+    QVector3D dir;
+    QVERIFY(AimSolver::headDirection(fx, QByteArray(fx->channels(), '\0'), -1,
+                                     props->fixtureRigProps(fx->id()), dir, &midPan, &midTilt));
+    QVERIFY(dir.z() < -1e-3f);
+    const QVector3D at = frame.position + dir * ((aimZ - frame.position.z()) / dir.z());
+    QVERIFY2(at.x() > marks[0].x() && at.x() < marks[1].x() && qAbs(at.y() - 4.0f) < 0.5f,
+             qPrintable(QString("half way through the fade the beam is at (%1, %2), not between "
+                                "(%3, 4) and (%4, 4)").arg(at.x()).arg(at.y())
+                        .arg(marks[0].x()).arg(marks[1].x())));
+    delete doc;
+}
+
+/* Turn 0 is today's DMX exactly; a show loads its turn, and keeps it. */
+void AimSolver_Test::thePanTurnIsSavedWithTheShow()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = frontOfHouse(doc, 540, false, false, 0.0f);
+    Fixture *other = addMover(doc, "Other", 540, 20);
+    QVERIFY(fx != nullptr && other != nullptr);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setFixturePosition(other->id(), 0, 0, QVector3D(2000.0f, 3000.0f, 6.0f));
+    QVERIFY(PanTurn::centre(doc, fx->id()));
+    const int turn = storedTurn(doc, fx);
+    QVERIFY(turn != 0);
+
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        w.writeStartDocument();
+        QVERIFY(props->saveXML(&w, doc, true));
+        w.writeEndDocument();
+    }
+    QVERIFY2(xml.contains(QByteArray("PanTurn=\"") + QByteArray::number(turn) + "\""), xml.constData());
+    // Turn 0, the default, is not written: an older build reads the file as ever.
+    QCOMPARE(xml.count("PanTurn="), 1);
+
+    Doc *again = new Doc(this);
+    Fixture *fx2 = frontOfHouse(again, 540, false, false, 0.0f);
+    QVERIFY(addMover(again, "Other", 540, 20) != nullptr);
+    {
+        QXmlStreamReader r(xml);
+        QVERIFY(r.readNextStartElement());
+        QVERIFY(again->monitorProperties()->loadXML(r, again));
+    }
+    QCOMPARE(storedTurn(again, fx2), turn);
+    QCOMPARE(again->monitorProperties()->fixtureRigProps(other->id()).panTurn, 0);
+
+    // A show saved before turns were kept: the same file without the
+    // attribute loads on turn 0, which is the DMX it always sent.
+    QByteArray old = xml;
+    old.replace(QByteArray(" PanTurn=\"") + QByteArray::number(turn) + "\"", QByteArray());
+    QVERIFY(!old.contains("PanTurn"));
+    Doc *older = new Doc(this);
+    Fixture *fx3 = frontOfHouse(older, 540, false, false, 0.0f);
+    QVERIFY(addMover(older, "Other", 540, 20) != nullptr);
+    {
+        QXmlStreamReader r(old);
+        QVERIFY(r.readNextStartElement());
+        QVERIFY(older->monitorProperties()->loadXML(r, older));
+    }
+    QCOMPARE(storedTurn(older, fx3), 0);
+    AimSolver::Frame f;
+    QVERIFY(AimSolver::frameFor(older, fx3->id(), f));
+    for (const QVector3D &t : sweep())
+    {
+        float lp = 0.0f, lt = 0.0f;
+        legacyAim(f, t, lp, lt);
+        QCOMPARE(AimSolver::solve(f, t).panDeg, lp);
+    }
+    delete older;
+    delete again;
+    delete doc;
+}
+
+/* Nothing works the turn out again: after it is set, the head's pan for a
+   look stays on its turn whatever is nudged, moved, resized or relabelled,
+   and the stored turn is what it was. */
+void AimSolver_Test::nothingButThePersonChangesTheTurn()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = frontOfHouse(doc, 540, false, false, 0.0f);
+    QVERIFY(fx != nullptr && PanTurn::centre(doc, fx->id()));
+    MonitorProperties *props = doc->monitorProperties();
+    const int turn = storedTurn(doc, fx);
+    const QVector3D look(6.0f, 4.0f, 0.0f);       // straight upstage: turn 0's seam
+    auto pan = [&]() {
+        AimSolver::Frame f;
+        return AimSolver::frameFor(doc, fx->id(), f) ? AimSolver::solve(f, look).panDeg : -1000.0f;
+    };
+    const float was = pan();
+    FixtureRigProps rp = props->fixtureRigProps(fx->id());
+    for (float ofs : { -0.3f, -0.1f, 0.1f, 0.3f })
+    {
+        rp.panOffsetDeg = ofs;
+        props->setFixtureRigProps(fx->id(), rp);
+        QVERIFY2(qAbs(pan() - was) < 1.0f, qPrintable(QString("offset %1: %2 (was %3)").arg(ofs).arg(pan()).arg(was)));
+    }
+    rp.panOffsetDeg = 0.0f;
+    props->setFixtureRigProps(fx->id(), rp);
+    for (float x : { 5990.0f, 6010.0f, 6000.0f })
+    {
+        props->setFixturePosition(fx->id(), 0, 0, QVector3D(x, 12000.0f, 6.0f));
+        QVERIFY2(qAbs(pan() - was) < 1.0f, qPrintable(QString("x %1: %2 (was %3)").arg(x).arg(pan()).arg(was)));
+        // The move hook proposes nothing: the stage is clear of the seam.
+        QCOMPARE(PanTurn::proposalAfterMove(doc, fx->id()), turn);
+    }
+    props->setGridSize(QVector3D(12.0f, 6.0f, 9.0f));
+    QVERIFY(qAbs(pan() - was) < 1.0f);
+    props->convertGridUnits(MonitorProperties::Feet);
+    QVERIFY(qAbs(pan() - was) < 1.0f);
+    QCOMPARE(storedTurn(doc, fx), turn);
+    delete doc;
+}
+
+/* A head over the stage sees it all round: its pan zero rules, and no
+   action or move changes its turn. */
+void AimSolver_Test::aHeadOverTheStageKeepsItsPanZero()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10.0f, 6.0f, 8.0f));
+    Fixture *fx = addMover(doc, "Overhead", 540, 0);
+    QVERIFY(fx != nullptr);
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(4000.0f, 4000.0f, 6.0f));
+    const PanTurn::Info in = PanTurn::info(doc, fx->id());
+    QVERIFY(in.span.valid && in.span.overStage);
+    QVERIFY(!in.crossesSeam() && !in.fixable());
+    QCOMPARE(PanTurn::proposal(doc, fx->id()), 0);
+    QVERIFY(!PanTurn::centre(doc, fx->id()));
+    // Turned by hand, a move keeps it; Centre on stage gives the pan zero back.
+    QVERIFY(PanTurn::setTurn(doc, fx->id(), 1));
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(4010.0f, 4000.0f, 6.0f));
+    QCOMPARE(PanTurn::proposalAfterMove(doc, fx->id()), 1);
+    QVERIFY(PanTurn::centre(doc, fx->id()));
+    QCOMPARE(storedTurn(doc, fx), 0);
+    delete doc;
+}
+
+/* The proposal: the turn with the most room, 0 when the stage fits at 0,
+   and after a move only when the stage now crosses the seam. */
+void AimSolver_Test::theProposalPutsTheStageClearOfTheSeam()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = frontOfHouse(doc, 540, false, false, 180.0f);    // facing the stage
+    QVERIFY(fx != nullptr);
+    PanTurn::Info in = PanTurn::info(doc, fx->id());
+    QVERIFY(in.hasTurns && in.span.valid && !in.span.overStage);
+    QCOMPARE(in.lowest, -1);
+    QCOMPARE(in.highest, 1);
+    QVERIFY2(in.margin > 30.0f, qPrintable(QString::number(in.margin)));
+    QCOMPARE(in.proposal, 0);                       // it fits: the person's zero stands
+    QCOMPARE(PanTurn::proposalAfterMove(doc, fx->id()), 0);
+
+    // Turned round to face away: the stage crosses turn 0's seam.
+    MonitorProperties *props = doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(fx->id());
+    rp.panZeroDir = 0.0f;
+    props->setFixtureRigProps(fx->id(), rp);
+    in = PanTurn::info(doc, fx->id());
+    QVERIFY(in.crossesSeam() && in.fixable());
+    QVERIFY(in.proposal == 1 || in.proposal == -1);
+    QVERIFY2(in.proposalMargin > 30.0f, qPrintable(QString::number(in.proposalMargin)));
+    QCOMPARE(PanTurn::proposalAfterMove(doc, fx->id()), in.proposal);
+    // The seam the proposal leaves is off the stage, to one side.
+    AimSolver::Frame f;
+    QVERIFY(AimSolver::frameFor(doc, fx->id(), f));
+    const float seam = PanTurn::seamBearing(f, in.proposal);
+    QVERIFY2(qAbs(seam - 90.0f) < 1.0f || qAbs(seam - 270.0f) < 1.0f, qPrintable(QString::number(seam)));
+    QVERIFY(!PanTurn::worksAround(in).isEmpty() && !PanTurn::stageText(in).isEmpty());
+    QVERIFY(PanTurn::stageText(in).contains("a move across it swings the head a whole turn"));
+    delete doc;
+}
+
+/****************************************************************************
+ * Review of d1dd9d380c (the middle of the pan range): what it must not do
+ ****************************************************************************/
+
+namespace
+{
+/* A hung 540 head at (x, y, z) metres on a W x 8 m metric grid, pan zero
+   @p panZero, calibrated by @p panOffset. */
+Fixture *reviewHead(Doc *doc, float gridW, float x, float y, float z,
+                    float panZero, float panOffset)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(gridW, 6.0f, 8.0f));
+    Fixture *fx = addMover(doc, "Review", 540, 0);
+    if (fx == nullptr)
+        return nullptr;
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(x * 1000.0f, y * 1000.0f, z));
+    FixtureRigProps rp;
+    rp.mountingType = Truss::TopHung;
+    rp.panZeroDir = panZero;
+    rp.panOffsetDeg = panOffset;
+    props->setFixtureRigProps(fx->id(), rp);
+    return fx;
+}
+
+float reviewPan(Doc *doc, const Fixture *fx, const QVector3D &t)
+{
+    AimSolver::Frame f;
+    if (!AimSolver::frameFor(doc, fx->id(), f))
+        return -1000.0f;
+    return AimSolver::solve(f, t).panDeg;
+}
+}
+
+/* A FOH centre head (on the centre line, pan zero 0 = facing away, the very
+   rig the fix is for), aimed at centre stage. Focus mode nudges its pan
+   calibration a tenth of a degree at a time (FocusSession::nudge ->
+   applyOffset -> the solver reads it next frame): no nudge may swing it. */
+void AimSolver_Test::reviewACalibrationNudgeNeverSwingsTheHeadRound()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = reviewHead(doc, 10.0f, 5.0f, 12.0f, 6.0f, 0.0f, 0.0f);
+    QVERIFY(fx != nullptr);
+    MonitorProperties *props = doc->monitorProperties();
+    /* Changed for the stored turn (the premise was the per-frame reference):
+       the head as the owner would have it, its turn centred once; then the
+       nudges, which must leave the turn and the pan where they are. */
+    QVERIFY(PanTurn::centre(doc, fx->id()));
+    const int turn = props->fixtureRigProps(fx->id()).panTurn;
+    const QVector3D centre(5.0f, 4.0f, 0.0f);
+    float prev = -1000.0f, worst = 0.0f;
+    QString seen;
+    for (int i = -3; i <= 3; ++i)
+    {
+        FixtureRigProps rp = props->fixtureRigProps(fx->id());
+        rp.panOffsetDeg = 0.1f * float(i);
+        props->setFixtureRigProps(fx->id(), rp);
+        const float p = reviewPan(doc, fx, centre);
+        seen += QString(" %1:%2").arg(rp.panOffsetDeg, 0, 'f', 1).arg(p, 0, 'f', 2);
+        if (prev > -1000.0f)
+            worst = qMax(worst, qAbs(p - prev));
+        prev = p;
+    }
+    QVERIFY2(worst < 1.0f, qPrintable(QString("a 0.1 degree calibration nudge moved the pan %1 "
+                                              "degrees (offset:pan%2)").arg(worst).arg(seen)));
+    QCOMPARE(props->fixtureRigProps(fx->id()).panTurn, turn);
+    delete doc;
+}
+
+/* The same head moved a centimetre either side of the centre line: every
+   one of its looks must stay on its turn.
+   Changed for the stored turn (the premise was the per-frame reference,
+   three fresh heads at 4.99 / 5.00 / 5.01): ONE head, its turn centred at
+   5.00, then moved a centimetre each way as the person would -- the move's
+   proposal (PanTurn::proposalAfterMove) included. */
+void AimSolver_Test::reviewACentimetreMoveKeepsTheTurn()
+{
+    float pans[3];
+    const float xs[3] = { 4.99f, 5.0f, 5.01f };
+    Doc *doc = new Doc(this);
+    Fixture *fx = reviewHead(doc, 10.0f, 5.0f, 12.0f, 6.0f, 0.0f, 0.0f);
+    QVERIFY(fx != nullptr);
+    MonitorProperties *props = doc->monitorProperties();
+    QVERIFY(PanTurn::centre(doc, fx->id()));
+    const int turn = props->fixtureRigProps(fx->id()).panTurn;
+    for (int i = 0; i < 3; ++i)
+    {
+        props->setFixturePosition(fx->id(), 0, 0, QVector3D(xs[i] * 1000.0f, 12000.0f, 6.0f));
+        PanTurn::setTurn(doc, fx->id(), PanTurn::proposalAfterMove(doc, fx->id()));
+        QCOMPARE(props->fixtureRigProps(fx->id()).panTurn, turn);
+        pans[i] = reviewPan(doc, fx, QVector3D(5.0f, 4.0f, 0.0f));
+    }
+    delete doc;
+    QVERIFY2(qAbs(pans[0] - pans[1]) < 1.0f && qAbs(pans[2] - pans[1]) < 1.0f,
+             qPrintable(QString("at x 4.99 / 5.00 / 5.01 the look pans %1 / %2 / %3")
+                        .arg(pans[0]).arg(pans[1]).arg(pans[2])));
+}
+
+/* Settings > Units converts the grid (App::applyUnitPreference ->
+   convertGridUnits, at load and when the setting changes). Centre stage
+   moves by float rounding only (23 m -> 75.4593 ft -> 11.500001 m), and a
+   centre head 2 m downstage of it must not change turn. */
+void AimSolver_Test::reviewTheUnitsSettingDoesNotTurnAHeadRound()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = reviewHead(doc, 23.0f, 11.5f, 6.0f, 6.0f, 0.0f, 0.0f);
+    QVERIFY(fx != nullptr);
+    MonitorProperties *props = doc->monitorProperties();
+    /* Changed for the stored turn: the turn centred once, as the owner
+       would; the units change (and a resize) must leave it. */
+    PanTurn::centre(doc, fx->id());
+    const int turn = props->fixtureRigProps(fx->id()).panTurn;
+    const QVector3D t(11.5f, 3.0f, 0.0f);
+    const float metres = reviewPan(doc, fx, t);
+    props->convertGridUnits(MonitorProperties::Feet);
+    const float feet = reviewPan(doc, fx, t);
+    QCOMPARE(props->fixtureRigProps(fx->id()).panTurn, turn);
+    props->setGridSize(props->gridSize() * 1.1f);
+    QVERIFY(qAbs(reviewPan(doc, fx, t) - feet) < 1.0f);
+    QCOMPARE(props->fixtureRigProps(fx->id()).panTurn, turn);
+    QVERIFY2(qAbs(metres - feet) < 1.0f,
+             qPrintable(QString("the same look pans %1 with metres, %2 with feet (centre x %3)")
+                        .arg(metres).arg(feet).arg(double(props->stageCentre().x()), 0, 'f', 7)));
+    delete doc;
+}
+
+/* A head on an overhead electric 1 m stage right of centre, pan zero 0
+   (default, facing downstage). Two looks near the SR wing, 10 degrees apart
+   as the head sees them: before the change they faded 10 degrees; they
+   must not now fade the long way round. */
+void AimSolver_Test::reviewOverheadLooksThatFadedShortStillDo()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = reviewHead(doc, 10.0f, 4.0f, 4.0f, 6.0f, 0.0f, 0.0f);
+    QVERIFY(fx != nullptr);
+    AimSolver::Frame f;
+    QVERIFY(AimSolver::frameFor(doc, fx->id(), f));
+    QVector3D marks[2];
+    float now[2], was[2];
+    const float bearings[2] = { 95.0f, 105.0f };
+    for (int i = 0; i < 2; ++i)
+    {
+        const double r = qDegreesToRadians(double(bearings[i]));
+        marks[i] = QVector3D(4.0f - 3.0f * float(qSin(r)), 4.0f + 3.0f * float(qCos(r)), 0.0f);
+        float lt = 0.0f;
+        legacyAim(f, marks[i], was[i], lt);
+        now[i] = AimSolver::solve(f, marks[i]).panDeg;
+    }
+    QVERIFY2(qAbs(now[0] - now[1]) <= qAbs(was[0] - was[1]) + 1.0f,
+             qPrintable(QString("(%1, %2) and (%3, %4): pans %5 and %6 now (a %7 degree fade), "
+                                "%8 and %9 before (%10)")
+                        .arg(marks[0].x()).arg(marks[0].y()).arg(marks[1].x()).arg(marks[1].y())
+                        .arg(now[0]).arg(now[1]).arg(qAbs(now[0] - now[1]))
+                        .arg(was[0]).arg(was[1]).arg(qAbs(was[0] - was[1]))));
+    delete doc;
+}
+
+/* A follow spot from a head on an overhead electric 3 m stage right of
+   centre (pan zero 0), the subject walked up the SR side of the stage
+   (x 0.5, from y 7 to y 1): before the change it moved smoothly. */
+void AimSolver_Test::reviewAWalkUpTheSideNeverSwingsRound()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = reviewHead(doc, 10.0f, 2.0f, 4.0f, 6.0f, 0.0f, 0.0f);
+    QVERIFY(fx != nullptr);
+    AimSolver::Frame f;
+    QVERIFY(AimSolver::frameFor(doc, fx->id(), f));
+    float prevNew = -1.0f, prevOld = -1.0f, stepNew = 0.0f, stepOld = 0.0f;
+    for (int i = 0; i <= 120; ++i)
+    {
+        const QVector3D t(0.5f, 7.0f - 0.05f * float(i), 1.4f);
+        float lp = 0.0f, lt = 0.0f;
+        legacyAim(f, t, lp, lt);
+        const float p = AimSolver::solve(f, t).panDeg;
+        if (prevNew >= 0.0f)
+        {
+            stepNew = qMax(stepNew, qAbs(p - prevNew));
+            stepOld = qMax(stepOld, qAbs(lp - prevOld));
+        }
+        prevNew = p;
+        prevOld = lp;
+    }
+    QVERIFY2(stepOld < 3.0f, qPrintable(QString("the old answer already swung (%1)").arg(stepOld)));
+    QVERIFY2(stepNew < 3.0f, qPrintable(QString("walked 5 cm a step, the pan stepped %1 degrees "
+                                                "(before: %2)").arg(stepNew).arg(stepOld)));
+    delete doc;
+}
+
+/* PadBench's follow spots: a front truss 0.3 m inside the downstage edge of
+   a 24 x 20 ft grid with no decks, pan zero facing the audience. The stage
+   close under the head (its near-vertical cone) does not make it a head
+   "over the stage": it is out front, its seam is in the middle of where the
+   bench person walks, and Centre on Stage moves it off. */
+void AimSolver_Test::aFrontTrussJustInsideTheGridIsOutFront()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Feet);
+    props->setGridSize(QVector3D(24.0f, 14.0f, 20.0f));
+    Fixture *fx = addMover(doc, "Spot 1", 540, 0);
+    QVERIFY(fx != nullptr);
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(2158.0f, 5796.0f, 4.5f));
+    FixtureRigProps rp;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(fx->id(), rp);
+    const PanTurn::Info in = PanTurn::info(doc, fx->id());
+    QVERIFY(in.span.valid && !in.span.overStage);
+    QVERIFY(in.crossesSeam() && in.fixable());
+    QVERIFY(PanTurn::centre(doc, fx->id()));
+    AimSolver::Frame f;
+    QVERIFY(AimSolver::frameFor(doc, fx->id(), f));
+    float prev = -1.0f, step = 0.0f;
+    for (int i = 0; i <= 130; ++i)
+    {
+        const float p = AimSolver::solve(f, QVector3D(0.5f + 0.05f * float(i), 3.048f, 1.4f)).panDeg;
+        if (prev >= 0.0f)
+            step = qMax(step, qAbs(p - prev));
+        prev = p;
+    }
+    QVERIFY2(step < 3.0f, qPrintable(QString("walked across 5 cm a step, the pan stepped %1").arg(step)));
+    delete doc;
+}
+
+/* A seam within kClearDeg of the stage's edge counts as on it: a subject a
+   step past the deck crosses it. */
+void AimSolver_Test::aSeamJustOffTheStageCountsAsOnIt()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = frontOfHouse(doc, 540, false, false, 0.0f);
+    QVERIFY(fx != nullptr);
+    MonitorProperties *props = doc->monitorProperties();
+    PanTurn::Info in = PanTurn::info(doc, fx->id());
+    // Turn the pan zero until turn 0's seam is 5 degrees off the span's edge.
+    FixtureRigProps rp = props->fixtureRigProps(fx->id());
+    rp.panZeroDir = std::fmod(in.span.from - 5.0f - 180.0f + 720.0f, 360.0f);
+    props->setFixtureRigProps(fx->id(), rp);
+    in = PanTurn::info(doc, fx->id());
+    QVERIFY2(in.margin > 3.0f && in.margin < PanTurn::kClearDeg, qPrintable(QString::number(in.margin)));
+    QVERIFY(in.crossesSeam() && in.fixable());
+    QVERIFY(in.proposalMargin >= PanTurn::kClearDeg);
+    QVERIFY2(PanTurn::stageText(in).contains("only"), qPrintable(PanTurn::stageText(in)));
     delete doc;
 }

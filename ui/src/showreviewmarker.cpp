@@ -312,6 +312,11 @@ void ShowReviewMarker::fillMenu(ContextMenu &menu, Doc *doc, const QList<ReviewF
                     QStringLiteral("reviewShowMe"),
                     tr("Opens the layer that lights it: aim it off, shutter or zoom it, or darken it "
                        "in this cue"));
+            else if (f.check == QLatin1String("MOV-14"))
+                add(tr("Centre the Pan on Stage…"), [f, parent]() { showMe(f, parent); },
+                    QStringLiteral("reviewShowMe"),
+                    tr("Each head takes the turn of its pan that keeps the seam off the stage; it says "
+                       "what changes first (one undo step)"));
             else
                 add(tr("Show Me"), [f, parent]() { showMe(f, parent); }, QStringLiteral("reviewShowMe"),
                     tr("Where to fix it"));

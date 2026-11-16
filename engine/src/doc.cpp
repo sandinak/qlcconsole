@@ -1608,8 +1608,13 @@ bool Doc::patchFixtures(const QList<FixturePatch> &patches, QString *why)
 
     m_changeJournal->noteArea(ChangeJournal::Fixture, tr("Patched fixtures (%1)").arg(patches.count()));
     setModified();
+    QList<quint32> ids;
     foreach (const FixturePatch &p, patches)
+    {
         emit fixtureChanged(p.fixtureId);
+        ids << p.fixtureId;
+    }
+    emit fixturesPatched(ids);
     return true;
 }
 

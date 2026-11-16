@@ -62,6 +62,7 @@
 #include "gobolibrary.h"
 #include "nolightzone.h"
 #include "aimsolver.h"
+#include "panturn.h"
 #include "righeads.h"
 #include "scenery.h"
 #include "placementcheck.h"
@@ -2732,6 +2733,45 @@ void ShowReview_Test::mov13()
     aimAt(narrow);
     area->setFootprint(QSizeF());
     QVERIFY(quiet("MOV-13"));
+}
+
+/* MOV-14: a 540 head out front whose pan zero faces away from the stage
+   has turn 0's seam on the stage. Fix: Centre the pan on the stage. */
+void ShowReview_Test::mov14()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridUnits(MonitorProperties::Meters);
+    mp->setGridSize(QVector3D(10.0f, 6.0f, 8.0f));
+    Fixture *spot = mover(QStringLiteral("Spot 1"), 0);
+    Fixture *over = mover(QStringLiteral("Overhead"), 20);
+    Fixture *facing = mover(QStringLiteral("Facing it"), 40);
+    QVERIFY(spot != nullptr && over != nullptr && facing != nullptr);
+    mp->setFixturePosition(spot->id(), 0, 0, QVector3D(5000.0f, 12000.0f, 6.0f));
+    mp->setFixturePosition(over->id(), 0, 0, QVector3D(4000.0f, 3000.0f, 6.0f));
+    mp->setFixturePosition(facing->id(), 0, 0, QVector3D(3000.0f, 12000.0f, 6.0f));
+    FixtureRigProps rp = mp->fixtureRigProps(facing->id());
+    rp.panZeroDir = 180.0f;
+    mp->setFixtureRigProps(facing->id(), rp);
+
+    QVERIFY(fires("MOV-14"));
+    const QList<ReviewFinding> f = findings("MOV-14");
+    QCOMPARE(f.size(), 1);                  // not the one over the stage, not the one facing it
+    QCOMPARE(f.first().severity, ReviewFinding::Warning);
+    QCOMPARE(f.first().targets, QStringList() << QStringLiteral("fx:%1").arg(spot->id()));
+    QCOMPARE(f.first().jump, QStringLiteral("panturn"));
+    QCOMPARE(f.first().jumpData, QVariantList() << spot->id());
+    QVERIFY2(f.first().message.contains("Spot 1") && f.first().message.contains("pan seam is on the stage")
+             && f.first().message.contains("Centre the pan on the stage (turn 1)")
+             && f.first().message.contains("pan turn 0"), qPrintable(f.first().message));
+
+    // The fix: the turn it proposes, and the finding is gone.
+    for (const QVariant &id : f.first().jumpData)
+        QVERIFY(PanTurn::centre(m_doc, id.toUInt()));
+    QCOMPARE(mp->fixtureRigProps(spot->id()).panTurn, 1);
+    QVERIFY(quiet("MOV-14"));
+    // Put back by hand (an undo): it says so again.
+    QVERIFY(PanTurn::setTurn(m_doc, spot->id(), 0));
+    QVERIFY(fires("MOV-14"));
 }
 
 namespace

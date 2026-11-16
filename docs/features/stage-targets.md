@@ -458,6 +458,54 @@ Reachability is a question of pan/tilt range against the fixture's own
 calibrated limits. Whether anything *stands in the way* is a separate
 question — see [Line of sight](#line-of-sight).
 
+### The pan turn and its seam
+
+A head with more than a full turn of pan (540°, 630°) reaches most places
+two ways: at one pan, or a whole turn further along the channel. Whichever
+it uses, somewhere round the head there is a **seam**: the one bearing where
+its answer jumps a whole turn. A beam moved across the seam — a follow spot
+walked through it, a fade between two looks either side of it — swings
+round the other way, the full length of the channel.
+
+Which way it answers is the head's **pan turn**, kept with the head in the
+show (and by venue). Turn 0, the default and every older show, works half
+a turn either side of its pan zero, with the seam straight behind it. That
+is right for a head over the stage, and for one facing the stage. A head
+out front whose pan zero faces away from the stage has the seam in the
+middle of the stage: "it ran up against the start and end of the channel
+and had to rotate."
+
+Fixture Properties shows it under **Aim & Mount ▸ Pan works around**: the
+bearing with the most room either way, the turn, where the seam is, and how
+clear of it the stage is. Three buttons change it, live like every row
+(OK keeps it as one undo step, Cancel puts it back):
+
+- **Centre on Stage** — the turn that keeps the seam off the stage with
+  the most room. A head over the stage, or one the stage already clears by
+  10° at turn 0, keeps turn 0: its pan zero still decides.
+- **Earlier Turn** / **Later Turn** — a turn lower or higher on the pan
+  channel, moving the seam round. A 540° head has three: turn −1, 0 and 1.
+
+The stage is the stage pieces (the deck and what is butted on in front of
+it) when there are any, else the stage grid. The stage close under a hung
+head (within 20° of straight down) is left out: someone walking under a
+head swings its pan right round whatever the turn. So a follow spot on a
+front truss just inside the grid still counts as out front, and a head
+whose seam is within 10° of the stage's edge counts as on it. The turn never changes on its
+own: not when a calibration is nudged, the head moves a little, the grid
+is resized or Settings ▸ Units changes. The app looks at it only at clear
+moments — a head placed or dragged on the plot, a position typed in
+Fixture Properties, a fixture patched — and changes it then only when the
+stage now crosses the seam, saying so on the plot's notice line (Undo
+puts it back). For several heads at once, the plot's right-click
+**Facing (pan zero) ▸ Centre Their Pans on the Stage**, or Fixture
+Properties for the selection, does them all in one step.
+
+[Show Review](show-review.md) checks it (MOV-14): a head whose stage
+crosses the seam of its turn is named, and its fix, **Centre the Pan on
+Stage…**, says what changes before it does. A 360° head has one turn and
+nothing to choose.
+
 ## Reachability
 
 An Aim look's Targets panel in the Build tab flags, in red, exactly
@@ -565,6 +613,10 @@ with an Aim look:
   each flying its own per-fixture angle steps (which diverge from different
   rig positions). Per-fixture "free-fly" from a joystick is only used when
   no Aim look is present at all.
+- **A walk never swings a head round** once its pan turn has the seam off
+  the stage ([The pan turn and its seam](#the-pan-turn-and-its-seam)). A
+  follow spot out front whose pan zero faces away from the stage: Show
+  Review flags it, and Centre the Pan on Stage fixes it in one click.
 
 ### Moving a follow spot
 

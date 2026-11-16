@@ -145,6 +145,13 @@ in the design (docs/design/SHOW_REVIEW.md in the source).
   centre" ("lights only 72% of it, at head height and on the deck (deck dark
   upstage left)"). Zoom wider, add a light, tilt some in so the beams reach
   the deck, or make the area smaller.
+- **MOV-14** Follow spot / head crosses its pan seam on stage: a head with
+  more than a turn of pan whose stage crosses the seam of its stored
+  [pan turn](stage-targets.md#the-pan-turn-and-its-seam), where another turn
+  clears it — typically a follow spot out front whose pan zero faces away
+  from the stage. A walk across that line swings the head a whole turn. Its
+  fix, **Centre the Pan on Stage…**, says which turn and where the seam goes
+  before it changes anything (one undo step).
 
 How long a move takes comes from the head's type: a moving head turns 180°
 in 0.4 s, a scanner in 0.1 s, pan and tilt together (the slower of the two).

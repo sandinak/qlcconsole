@@ -4149,6 +4149,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             rp.tiltOffsetDeg  = a.value("TiltOfs").toFloat();
             rp.panInvert      = a.value("PanInv").toString() == QStringLiteral("1");
             rp.tiltInvert     = a.value("TiltInv").toString() == QStringLiteral("1");
+            // No PanTurn: an older show, on the turn it always answered in.
+            rp.panTurn        = a.value("PanTurn").toInt();
             if (a.hasAttribute("Lens"))
                 rp.lensDeg = a.value("Lens").toFloat();
             rp.maskTop = a.value("MaskTop").toFloat();
@@ -5132,6 +5134,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
             doc->writeAttribute(QStringLiteral("PanInv"),  QStringLiteral("1"));
         if (rp.tiltInvert)
             doc->writeAttribute(QStringLiteral("TiltInv"), QStringLiteral("1"));
+        if (rp.panTurn != 0)
+            doc->writeAttribute(QStringLiteral("PanTurn"), QString::number(rp.panTurn));
         if (rp.onRiser())
         {
             doc->writeAttribute(QStringLiteral("Riser"),     QString::number(rp.riserPlatformId));

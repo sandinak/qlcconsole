@@ -176,6 +176,7 @@
 #include "showreviewmarker.h"
 #include "contextmenus.h"
 #include "showreview.h"
+#include "panturn.h"
 #include "qlcfixturedef.h"
 #include "definitionupdatesdialog.h"
 #include "qlcioplugin.h"
@@ -10639,7 +10640,55 @@ bool App::reviewJump(QWidget *parent, const QString &jump, const QVariantList &d
         showContextKeepingPreview(tr("Fixtures"));
         return true;
     }
+    if (jump == QLatin1String("panturn"))
+        return centrePansFromReview(parent, data);
     return false;
+}
+
+bool App::centrePansFromReview(QWidget *parent, const QVariantList &data)
+{
+    /* MOV-14's fix: each head to the turn that keeps its seam off the
+       stage. What changes is said first, plainly; one undo step. */
+    QList<quint32> fids;
+    QStringList lines;
+    for (const QVariant &v : data)
+    {
+        const quint32 fid = v.toUInt();
+        const PanTurn::Info in = PanTurn::info(m_doc, fid);
+        if (!in.valid || in.proposal == in.turn)
+            continue;
+        fids << fid;
+        lines << PanTurn::changeText(m_doc, fid, in.turn, in.proposal);
+    }
+    if (fids.isEmpty())
+    {
+        m_doc->showReview()->run();
+        return true;            // already done: the finding goes on the re-check
+    }
+    QMessageBox box(parent != nullptr ? parent : this);
+    box.setObjectName(QStringLiteral("centrePanConfirm"));
+    box.setIcon(QMessageBox::Question);
+    box.setWindowTitle(tr("Centre the Pan on the Stage"));
+    box.setText(lines.join(QLatin1Char('\n')));
+    box.setInformativeText(tr("Its looks are worked out again on the new turn: the same places on the stage, "
+                              "reached from the other end of the pan channel, so a move across the stage no "
+                              "longer swings the head round. Undo puts it back."));
+    QPushButton *go = box.addButton(tr("Centre the Pan"), QMessageBox::AcceptRole);
+    box.addButton(QMessageBox::Cancel);
+    box.setDefaultButton(go);
+    box.exec();
+    if (box.clickedButton() != go)
+        return true;
+    if (Monitor *mon = Monitor::instance())
+        mon->centrePanOnStage(fids);
+    else
+    {
+        for (quint32 fid : fids)
+            PanTurn::centre(m_doc, fid);
+        m_doc->setModified();
+    }
+    m_doc->showReview()->run();
+    return true;
 }
 
 void App::updateTeachingStatus()

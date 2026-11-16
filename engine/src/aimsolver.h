@@ -62,6 +62,10 @@ namespace AimSolver
         bool  tiltInvert = false;
         float panMax = 360.0f;
         float tiltMax = 270.0f;
+        /** The head's stored pan turn (FixtureRigProps::panTurn): which of
+         *  the pans a whole turn apart solve() answers with, on a head with
+         *  more than 360 degrees. 0 is the turn round the pan zero. */
+        int   panTurn = 0;
     };
 
     /** Which way up a head is rigged: standing (home points UP) or hanging.
@@ -141,8 +145,21 @@ namespace AimSolver
      *  is what this has always answered, and it is kept whenever it is within
      *  range, so a head does not swing round mid-move. The second is taken only
      *  when the first is out of range and the second is not as far out --
-     *  which is the case a clamp used to get silently wrong. */
+     *  which is the case a clamp used to get silently wrong.
+     *
+     *  On a head with more than 360 degrees of pan the first way is itself
+     *  a whole turn either side. Turn 0 (Frame::panTurn, the default and
+     *  every older show) answers within half a turn of the pan zero, as it
+     *  always has. Another turn takes, of those pans in range, the one
+     *  nearest that turn's centre (the middle of the range plus 360 per
+     *  turn): the seam goes round to the side (PanTurn). Only the stored
+     *  turn decides -- nothing about the stage, the grid or the
+     *  calibration's last nudge -- so the same rig gives the same DMX. */
     Solution solve(const Frame &frame, const QVector3D &targetWorld);
+    /** The pan solve() answers for @p relativePan (a bearing from the pan
+     *  zero, -180..180) before invert: the turn chosen. What PanTurn reads
+     *  to say where a turn's seam is. */
+    float turnPan(const Frame &frame, float relativePan);
 
     /** The way back: a head's pan and tilt as DMX sends them (fixture
      *  degrees, CENTRED -- 0 is the middle of the range) turned into what they

@@ -114,6 +114,7 @@
 #include "performerfill.h"
 #include "monitor.h"
 #include "aimsolver.h"
+#include "panturn.h"
 #include "linecurve.h"
 #include "qlcfixturemode.h"
 #include "qlcpalette.h"
@@ -4725,6 +4726,8 @@ void MonitorGraphicsView::slotImageMoved(MonitorImageItem *item)
 
 void MonitorGraphicsView::followParentTrusses()
 {
+    // Fixtures it moves were not placed by the person (fixtureMoved).
+    QScopedValueRollback<bool> quiet(m_quietMoves, true);
     MonitorProperties *props = m_doc->monitorProperties();
     props->recomputeChildTrusses();
     updateTrusses();
@@ -5209,6 +5212,8 @@ bool MonitorGraphicsView::elevationBarDraggable(const Truss *t) const
 
 void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
 {
+    // Fixtures it moves were not placed by the person (fixtureMoved).
+    QScopedValueRollback<bool> quiet(m_quietMoves, true);
     // ELEVATION drag of a bar: convert the drop into its truss-local params
     // (Along = height, cross-shift = horizontal) instead of a world origin.
     if (isElevation())
@@ -10895,6 +10900,25 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
             a->setCheckable(true);
             a->setChecked(qAbs(rp.panZeroDir - deg) < 0.5f);
         }
+        /* The turn its pan works in (PanTurn), for this head or the whole
+           selection: one undo step, said on the notice line. */
+        QList<quint32> heads;
+        for (MonitorFixtureItem *it : selectedFixtureItems())
+            heads << it->fixtureID();
+        if (!heads.contains(fid))
+            heads = { fid };
+        bool any = false;
+        for (quint32 h : heads)
+            any = any || PanTurn::info(m_doc, h).hasTurns;
+        if (any)
+        {
+            facing->addSeparator();
+            QAction *c = facing->addAction(heads.size() > 1 ? tr("Centre Their Pans on the Stage")
+                                                            : tr("Centre the Pan on the Stage"),
+                                           this, [this, heads]() { emit centrePanRequested(heads); });
+            c->setObjectName(QStringLiteral("plotCentrePan"));
+            c->setToolTip(tr("The turn of its pan that keeps the seam off the stage (one undo step)"));
+        }
     }
     // In the show's units, as the plot's other dialogs.
     QAction *heightAct = menu->addAction(MonitorFixtureItem::mountingHeightText(props, fid),
@@ -12870,6 +12894,8 @@ void MonitorGraphicsView::pushUndoCallback(const std::function<void()> &undo)
 
 void MonitorGraphicsView::undoOne(const UndoEntry &entry)
 {
+    // Fixtures it moves were not placed by the person (fixtureMoved).
+    QScopedValueRollback<bool> quiet(m_quietMoves, true);
     if (entry.type == UndoEntry::Callback)
     {
         entry.callback();

@@ -39,6 +39,8 @@ private slots:
     /** A save in a venue notes who checked the light and when; a light can
      *  be marked dead; both are in the venue's file and read back. */
     void aVenueRemembersChecksAndDeadLights();
+    /** The pan turn is kept by venue; an older venue file keeps the show's. */
+    void aVenueKeepsItsPanTurn();
     /** The report: call by call, the target with the stage marks'
      *  position, the correction from the show's own, the checks and flags;
      *  the CSV in Lightwright's columns, quoted where it must be. */

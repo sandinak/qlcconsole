@@ -32,6 +32,7 @@
 #include "stagetarget.h"
 #include "areacover.h"
 #include "aimsolver.h"
+#include "panturn.h"
 #include "scene.h"
 #include "fixturegroup.h"
 #include "movespeed.h"
@@ -412,6 +413,49 @@ void mov13(ReviewContext &ctx, QList<ReviewFinding> &out)
     }
 }
 
+/* MOV-14: a head with more than a turn of pan whose stage span crosses
+   the seam of the turn it has stored (PanTurn), when another turn clears
+   it. A follow spot or a move across that place swings it a whole turn.
+   Fix: Centre the pan on the stage (the turn PanTurn proposes). */
+void mov14(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    Doc *doc = ctx.doc();
+    MonitorProperties *mp = doc->monitorProperties();
+    if (mp == nullptr)
+        return;
+    for (Fixture *fx : doc->fixtures())
+    {
+        if (fx == nullptr || !mp->containsFixture(fx->id()))
+            continue;
+        const PanTurn::Info in = PanTurn::info(doc, fx->id());
+        if (!in.fixable())
+            continue;
+        AimSolver::Frame f;
+        AimSolver::frameFor(doc, fx->id(), f);
+        const float to = PanTurn::seamBearing(f, in.proposal);
+        const QString fix = in.proposalMargin >= PanTurn::kClearDeg
+            ? tr("Centre the pan on the stage (turn %1) moves the seam to %2\302\260 %3, %4\302\260 clear of "
+                 "the stage.").arg(in.proposal).arg(qRound(to) % 360).arg(PanTurn::bearingName(to))
+                  .arg(qRound(in.proposalMargin))
+            : tr("Centre the pan on the stage (turn %1) moves the seam to %2\302\260 %3, as far off the "
+                 "stage as it goes.").arg(in.proposal).arg(qRound(to) % 360).arg(PanTurn::bearingName(to));
+        out << ReviewContext::make(QStringLiteral("MOV-14"), ReviewFinding::Warning,
+            (in.margin < 0.0f
+                 ? tr("%1's pan seam is on the stage, at %2\302\260 %3 (pan turn %4): a follow spot or a move "
+                      "across that line swings the head a whole turn the other way. %5")
+                       .arg(fx->name()).arg(qRound(in.seam) % 360).arg(PanTurn::bearingName(in.seam))
+                       .arg(in.turn).arg(fix)
+                 : tr("%1's pan seam is only %2\302\260 off the stage, at %3\302\260 %4 (pan turn %5): a follow "
+                      "spot a step past the edge swings the head a whole turn the other way. %6")
+                       .arg(fx->name()).arg(qRound(in.margin)).arg(qRound(in.seam) % 360)
+                       .arg(PanTurn::bearingName(in.seam)).arg(in.turn).arg(fix)),
+            { QStringLiteral("fx:%1").arg(fx->id()) },
+            QByteArray::number(in.turn) + ',' + QByteArray::number(in.proposal) + ','
+                + QByteArray::number(qRound(in.span.from)) + ',' + QByteArray::number(qRound(in.span.width)),
+            QStringLiteral("panturn"), QVariantList() << fx->id());
+    }
+}
+
 void mov01(ReviewContext &ctx, QList<ReviewFinding> &out) { walk(ctx, out, 1); }
 void mov02(ReviewContext &ctx, QList<ReviewFinding> &out) { walk(ctx, out, 2); }
 void mov08(ReviewContext &ctx, QList<ReviewFinding> &out) { walk(ctx, out, 8); }
@@ -439,5 +483,12 @@ QList<ShowReview::Check> ShowReviewChecks::moveChecks()
              "height there. When the beams, as wide as their zoom has them, leave more than a "
              "tenth of the area unlit, someone stands in the dark. Zoom wider, add a light, or "
              "make the area smaller."), mov13 },
+        { QStringLiteral("MOV-14"), tr("Follow spot / head crosses its pan seam on stage"), S::Movement,
+          tr("A head with more than a turn of pan reaches most places at two pans a turn apart, and "
+             "the turn it works in has a seam: the one bearing where its answer jumps a whole turn. A "
+             "head out front whose pan zero faces away from the stage has that seam on the stage, so a "
+             "follow spot walked across it, or a fade between two looks either side, swings the head "
+             "round the long way. The turn is stored with the head; Centre the pan on the stage moves "
+             "the seam off the stage (one undo step). Nothing else changes it."), mov14 },
     };
 }

@@ -134,6 +134,7 @@
 #include "studiotemplate.h"
 #include "fixturevisualtraits.h"
 #include "aimsolver.h"
+#include "panturn.h"
 #include "scene.h"
 #include "zraster.h"
 #include "trussitem.h"
@@ -33091,4 +33092,296 @@ void Monitor_Test::aRefusedLayersDropSaysWhy()
         QVERIFY2(hint->text().contains("group is gone"), qPrintable(hint->text()));
     }
     delete doc;
+}
+
+/****************************************************************************
+ * The pan turn in Fixture Properties, on the plot and after a move (PanTurn)
+ ****************************************************************************/
+
+namespace
+{
+/* A 540 head (pan, tilt, dimmer), hung at @p at (metres), pan zero 0. */
+Fixture *makeTurnHead(Doc *doc, const char *name, const QVector3D &at, quint32 addr, int panMax = 540)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel(QString("Turn head %1 %2").arg(name).arg(panMax));
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const char *nm[] = { "Pan", "Tilt", "Dimmer" };
+    const QLCChannel::Group gp[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(nm[k]);
+        ch->setGroup(gp[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(panMax);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    QLCFixtureHead hd;
+    for (int k = 0; k < 3; ++k)
+        hd.addChannel(quint32(k));
+    mode->insertHead(-1, hd);
+    def->addMode(mode);
+    Fixture *f = new Fixture(doc);
+    f->setName(name);
+    f->setFixtureDefinition(def, mode);
+    f->setUniverse(0);
+    f->setAddress(addr);
+    if (!doc->addFixture(f))
+        return nullptr;
+    doc->monitorProperties()->setFixturePosition(f->id(), 0, 0,
+                                                 QVector3D(at.x() * 1000.0f, at.y() * 1000.0f, at.z()));
+    FixtureRigProps rp;
+    rp.mountingType = Truss::TopHung;
+    doc->monitorProperties()->setFixtureRigProps(f->id(), rp);
+    return f;
+}
+
+/* A plot with a 10 x 8 m deck across its centre line (the stage) and heads
+   out front of it, their pan zero facing away from it. */
+struct TurnRig
+{
+    QWidget parent;
+    Monitor *mon = nullptr;
+    MonitorGraphicsView *gv = nullptr;
+    Doc *doc = nullptr;
+    quint32 deck = 0;
+    QList<quint32> fids;
+    QVector3D grid;
+    MonitorProperties::GridUnits units = MonitorProperties::Meters;
+
+    ~TurnRig()
+    {
+        if (doc == nullptr)
+            return;
+        for (quint32 fid : fids)
+            doc->deleteFixture(fid);
+        MonitorProperties *p = doc->monitorProperties();
+        if (deck != 0)
+            p->removePlatform(deck);
+        p->setGridUnits(units);
+        p->setGridSize(grid);
+        delete mon;
+    }
+    bool build(Doc *d)
+    {
+        doc = d;
+        mon = new Monitor(&parent, d);
+        gv = mon->findChild<MonitorGraphicsView *>();
+        if (gv == nullptr)
+            return false;
+        gv->resize(1230, 760);
+        gv->setSnapDivisions(0);
+        gv->setGridMetrics(1000.0);
+        gv->setGridSize(QSize(40, 24));
+        MonitorProperties *p = d->monitorProperties();
+        grid = p->gridSize();
+        units = p->gridUnits();
+        p->setGridUnits(MonitorProperties::Meters);     // centre line x = 20 m
+        p->setGridSize(QVector3D(40.0f, 6.0f, 24.0f));
+        StagePlatform *pl = p->addPlatform();
+        pl->setOriginX(15.0f);
+        pl->setOriginY(0.0f);
+        pl->setWidth(10.0f);
+        pl->setDepth(8.0f);
+        pl->setHeight(0.5f);
+        deck = pl->id();
+        return !p->stageDecks().isEmpty() && p->stageDecks().first() == pl;
+    }
+    quint32 head(const char *name, float x, int panMax = 540)
+    {
+        Fixture *f = makeTurnHead(doc, name, QVector3D(x, 12.0f, 6.0f), quint32(fids.size() * 3), panMax);
+        if (f == nullptr)
+            return Fixture::invalidId();
+        fids << f->id();
+        gv->addFixture(f->id(), QPointF(x * 1000.0, 12000.0));
+        return f->id();
+    }
+    int turn(quint32 fid) const { return doc->monitorProperties()->fixtureRigProps(fid).panTurn; }
+};
+}
+
+/* Fixture Properties says which turn the pan works in and where the seam
+   is; Centre on Stage, Earlier Turn and Later Turn each change it live,
+   OK keeps it as one undo step, Cancel puts it back. QLC_SHOT_DIR set: the
+   dialog before and after Centre on Stage at 1024x640, 1280x800 and
+   1920x1080. */
+void Monitor_Test::thePanTurnInFixturePropertiesIsOneUndoStep()
+{
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+    QVERIFY(PanTurn::info(m_doc, fid).fixable());
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+
+    struct Seen { QString before, beforeStage, after, afterStage; bool shown = false; bool found = false; };
+    auto press = [&](const char *button, bool accept, const QString &shot = QString()) {
+        Seen seen;
+        driveDialog([&](QWidget *dlg) {
+            QLabel *label = dlg->findChild<QLabel *>("fixturePanTurn");
+            QLabel *stage = dlg->findChild<QLabel *>("fixturePanTurnStage");
+            QPushButton *btn = dlg->findChild<QPushButton *>(button);
+            QWidget *row = dlg->findChild<QWidget *>("fixturePanTurnRow");
+            if (label == nullptr || stage == nullptr || btn == nullptr || row == nullptr)
+                return false;
+            seen.found = true;
+            seen.shown = row->isVisibleTo(dlg);
+            seen.before = label->text();
+            seen.beforeStage = stage->text();
+            auto grab = [&](const QString &when) {
+                if (shots.isEmpty() || shot.isEmpty())
+                    return;
+                QDir().mkpath(shots);
+                for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+                {
+                    dlg->resize(sz);
+                    QApplication::processEvents();
+                    dlg->grab().save(QStringLiteral("%1/%2-%3-%4x%5.png").arg(shots, shot, when)
+                                         .arg(sz.width()).arg(sz.height()));
+                }
+            };
+            grab(QStringLiteral("before"));
+            btn->click();
+            seen.after = label->text();
+            seen.afterStage = stage->text();
+            grab(QStringLiteral("after"));
+            return true;
+        }, accept);
+        rig.mon->showFixtureItemEditor(fid);
+        return seen;
+    };
+
+    // Centre on Stage, OK: turn 1, said; one undo puts turn 0 back.
+    const int steps = rig.gv->m_moveUndo.size();
+    Seen s = press("fixturePanTurnCentre", true, QStringLiteral("fixture-properties-pan-turn"));
+    QVERIFY(s.found && s.shown);
+    QVERIFY2(s.before.contains("(turn 0)"), qPrintable(s.before));
+    QVERIFY2(s.beforeStage.contains("swings the head a whole turn")
+             && s.beforeStage.contains("Centre on Stage sets turn 1"), qPrintable(s.beforeStage));
+    QVERIFY2(s.after.contains("(turn 1)"), qPrintable(s.after));
+    QVERIFY2(s.afterStage.contains("clear of the stage"), qPrintable(s.afterStage));
+    QCOMPARE(rig.turn(fid), 1);
+    QCOMPARE(rig.gv->m_moveUndo.size(), steps + 1);
+    rig.gv->undoLastMove();
+    QCOMPARE(rig.turn(fid), 0);
+
+    // Later Turn, OK; undo.
+    s = press("fixturePanTurnLater", true);
+    QVERIFY(s.found);
+    QCOMPARE(rig.turn(fid), 1);
+    rig.gv->undoLastMove();
+    QCOMPARE(rig.turn(fid), 0);
+
+    // Earlier Turn, OK; undo.
+    s = press("fixturePanTurnEarlier", true);
+    QVERIFY(s.found);
+    QCOMPARE(rig.turn(fid), -1);
+    rig.gv->undoLastMove();
+    QCOMPARE(rig.turn(fid), 0);
+
+    // Centre on Stage, Cancel: as it was, and nothing to undo.
+    const int before = rig.gv->m_moveUndo.size();
+    s = press("fixturePanTurnCentre", false);
+    QVERIFY(s.found);
+    QCOMPARE(rig.turn(fid), 0);
+    QCOMPARE(rig.gv->m_moveUndo.size(), before);
+
+    // A 360 head has no turn to choose: no row.
+    const quint32 one = rig.head("One turn", 22.0f, 360);
+    bool rowShown = true;
+    driveDialog([&](QWidget *dlg) {
+        QWidget *row = dlg->findChild<QWidget *>("fixturePanTurnRow");
+        rowShown = row != nullptr && row->isVisibleTo(dlg);
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(one);
+    QVERIFY(!rowShown);
+}
+
+/* For a selection (the plot's menu, Fixture Properties for several):
+   every head centred, one undo step, said on the notice line. */
+void Monitor_Test::centringASelectionIsOneUndoStep()
+{
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 a = rig.head("Spot 1", 18.0f), b = rig.head("Spot 2", 22.0f);
+    QVERIFY(a != Fixture::invalidId() && b != Fixture::invalidId());
+    const QStringList changes = rig.mon->centrePanOnStage({ a, b });
+    QCOMPARE(changes.size(), 2);
+    QVERIFY(rig.turn(a) != 0 && rig.turn(b) != 0);
+    QVERIFY2(rig.mon->m_noticeLabel->text().contains("Centred the pan on the stage"),
+             qPrintable(rig.mon->m_noticeLabel->text()));
+    rig.gv->undoLastMove();
+    QCOMPARE(rig.turn(a), 0);
+    QCOMPARE(rig.turn(b), 0);
+    // Already centred: nothing to do, said.
+    rig.mon->centrePanOnStage({ a, b });
+    QVERIFY(rig.mon->centrePanOnStage({ a, b }).isEmpty());
+    QVERIFY(rig.mon->m_noticeLabel->text().contains("already centred"));
+
+    // The plot's menu offers it for the selection.
+    rig.gv->undoLastMove();
+    rig.gv->scene()->clearSelection();
+    for (quint32 f : { a, b })
+        rig.gv->m_fixtures.value(f)->setSelected(true);
+    QMenu menu;
+    {
+        ContextMenu cm(&menu);
+        rig.gv->populateItemMenu(&menu, cm, QStringLiteral("fixture"), a, QPointF());
+    }
+    QAction *centre = nullptr;
+    for (QAction *act : menu.findChildren<QAction *>())
+        if (act->objectName() == QLatin1String("plotCentrePan"))
+            centre = act;
+    QVERIFY(centre != nullptr);
+    QCOMPARE(centre->text(), QString("Centre Their Pans on the Stage"));
+    centre->trigger();
+    QVERIFY(rig.turn(a) != 0 && rig.turn(b) != 0);
+}
+
+/* A head the person moves gets a new turn only when the stage now
+   crosses its seam, and the notice line says so; an undo is its own step
+   and re-proposes nothing. */
+void Monitor_Test::aMovedHeadsTurnChangesOnlyWhenItMustAndSaysSo()
+{
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    MonitorProperties *props = m_doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.panZeroDir = 180.0f;                     // facing the stage: it fits
+    props->setFixtureRigProps(fid, rp);
+    rig.mon->m_noticeLabel->clear();
+    rig.mon->slotFixtureMoved(fid, QPointF(20010.0, 12000.0));
+    QApplication::processEvents();
+    QCOMPARE(rig.turn(fid), 0);
+    QVERIFY(rig.mon->m_noticeLabel->text().isEmpty());
+
+    rp.panZeroDir = 0.0f;                       // turned to face away
+    props->setFixtureRigProps(fid, rp);
+    QCOMPARE(rig.turn(fid), 0);                 // nothing changes it on its own
+    const int steps = rig.gv->m_moveUndo.size();
+    rig.mon->slotFixtureMoved(fid, QPointF(20000.0, 12000.0));
+    QApplication::processEvents();
+    QCOMPARE(rig.turn(fid), 1);
+    QVERIFY2(rig.mon->m_noticeLabel->text().contains("pan turn 0 to 1")
+             && rig.mon->m_noticeLabel->text().contains("Undo puts it back"),
+             qPrintable(rig.mon->m_noticeLabel->text()));
+    QCOMPARE(rig.gv->m_moveUndo.size(), steps + 1);
+    rig.gv->undoLastMove();
+    QApplication::processEvents();
+    QCOMPARE(rig.turn(fid), 0);
+    // Moved again with the turn it has now clear: nothing.
+    QVERIFY(PanTurn::centre(m_doc, fid));
+    rig.mon->slotFixtureMoved(fid, QPointF(20010.0, 12000.0));
+    QApplication::processEvents();
+    QCOMPARE(rig.turn(fid), 1);
 }
