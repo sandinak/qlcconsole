@@ -21,6 +21,9 @@
 #include <climits>
 
 #include "programmercontroller.h"
+#include "controllerjobs.h"
+#include "inputoutputmap.h"
+#include "inputpatch.h"
 #include "showtreecontroller.h"
 #include "refinesession.h"
 #include "focussession.h"
@@ -314,6 +317,18 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
             return true;
         }
         h.stopFired = false;
+        /* No Run cues job (docs/design/CONTROLLER_JOBS.md, 5): the arm
+           chord is never timed and the hit never fires; each fresh try is
+           told why. The stop above is every pad's. */
+        if (!hasJob(universe, ControllerJobs::RunCues))
+        {
+            const bool chordNow = down && (role == GamepadRole::LB || role == GamepadRole::RB)
+                                  && h.lb && h.rb && !h.anyTrigger();
+            const bool hitNow = rtPressed && !h.lb && !h.rb && !h.lt.isDown();
+            if (chordNow || hitNow)
+                refuse(chordNow ? Arm : FireHit, noRunCuesText());
+            return true;
+        }
         /* Both bumpers and no trigger, held: the arm changes. Anything
            else of the four ends the timing. */
         armChordUpdate(universe);
@@ -328,6 +343,22 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
     // Everything else acts on the press; the rest of the map is swallowed.
     if (!down || action == NoAction)
         return true;
+
+    /* The jobs (CONTROLLER_JOBS.md 5 and 8): Menu is the walk or the venue
+       focus -- Focus's; the rest of the map is Run cues'. */
+    if (action == Walk)
+    {
+        if (!hasJob(universe, ControllerJobs::Focus))
+        {
+            refuse(action, noFocusText());
+            return true;
+        }
+    }
+    else if (!hasJob(universe, ControllerJobs::RunCues))
+    {
+        refuse(action, noRunCuesText());
+        return true;
+    }
 
     /* Rule 6: a venue focus begun (the venue being named; once the calls
        run the focus tool has the pad) -- no cue moves and no hit fires
@@ -357,9 +388,9 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
             refuse(action, tr("Not armed: hold {LB} and {RB}."));
             return true;
         }
-        if (universe != m_armUniverse)
+        if (!sameController(universe, m_armUniverse))
         {
-            refuse(action, tr("Another controller is armed."));
+            refuse(action, runningCuesText());
             return true;
         }
         // The safety: LT held, for every cue command.
@@ -426,19 +457,33 @@ void PadRun::armChordFired()
     const Held h = m_held.value(u);
     if (!m_enabled || !h.lb || !h.rb || h.anyTrigger() || h.spent || isFocusing())
         return;
-    // Another pad's arm is not this one's to drop.
-    if (m_armed && u != m_armUniverse)
+    /* One runner (CONTROLLER_JOBS.md 6): another pad's arm -- or the arm a
+       venue focus put by -- is not this one's to drop or share. */
+    if (m_armed && !sameController(u, m_armUniverse))
     {
-        refuse(Arm, tr("Another controller is armed."));
+        refuse(Arm, runningCuesText());
         return;
     }
-    setArmed(!m_armed, u);
+    if (!m_armed && m_focusArm != UINT_MAX && !sameController(u, m_focusArm))
+    {
+        refuse(Arm, runningCuesText());
+        return;
+    }
+    if (!hasJob(u, ControllerJobs::RunCues))
+    {
+        refuse(Arm, noRunCuesText());
+        return;
+    }
+    setArmed(!m_armed, m_armed ? m_armUniverse : u);
 }
 
 bool PadRun::setArmed(bool on, quint32 universe)
 {
     if (on == m_armed)
         return true;
+    // Disarmed: the pad that armed is the one told.
+    if (!on)
+        universe = m_armUniverse;
     if (on && (!m_enabled || isWalking() || !holder().isEmpty() || isFocusing()))
         return false;
     m_armed = on;
@@ -454,9 +499,9 @@ bool PadRun::setArmed(bool on, quint32 universe)
     {
         // A pad with no light is told by its motors: twice armed, once long not.
         if (on)
-            m_pc->padRumble(2, ControllerScheme::rumbleShortMs());
+            m_pc->padRumble(2, ControllerScheme::rumbleShortMs(), universe);
         else
-            m_pc->padRumble(1, ControllerScheme::rumbleLongMs());
+            m_pc->padRumble(1, ControllerScheme::rumbleLongMs(), universe);
         m_pc->tellOperator(on ? m_pc->padText(tr("Armed. {LT} and {A} is GO.")) : tr("Disarmed."),
                            ControllerScheme::ConfirmPriority);
     }
@@ -610,9 +655,11 @@ void PadRun::sync()
     }
     updateTriggers();
     showLight();
-    if (int(now) != m_shownState)
+    const QString text = roleText();
+    if (int(now) != m_shownState || text != m_shownText)
     {
         m_shownState = int(now);
+        m_shownText = text;
         emit stateChanged();
     }
     syncHit();
@@ -691,11 +738,18 @@ QString PadRun::roleText() const
     {
         case Tools:         return tr("Pad: Tools");
         case Run:           return tr("Pad: Run");
-        case Armed:         return tr("Pad: ARMED");
+        case Armed:
+            // Two pads or more: which one runs cues (CONTROLLER_JOBS.md 9).
+            if (padCount() > 1 && !runnerName().isEmpty())
+                return tr("Pad: ARMED \u00B7 %1").arg(runnerName());
+            return tr("Pad: ARMED");
         case Stopped:       return tr("Pad: STOPPED");
         case Walking:       return tr("Pad: Walk");
         case ToolHasPad:    return tr("Pad: %1").arg(holder());
-        case Focus:         return tr("Pad: FOCUS");
+        case Focus:
+            if (padCount() > 1 && !runnerName().isEmpty())
+                return tr("Pad: FOCUS \u00B7 %1").arg(runnerName());
+            return tr("Pad: FOCUS");
     }
     return QString();
 }
@@ -843,6 +897,8 @@ void PadRun::forgetPad(quint32 universe)
     }
     if ((m_armed && m_armUniverse == universe) || m_focusArm == universe)
         controllerLost();
+    else
+        sync();     // the runner's name on the chip comes or goes with a pad
 }
 
 void PadRun::setPadPresent(bool present)
@@ -900,9 +956,9 @@ void PadRun::focusStartPress(quint32 universe, bool safetyHeld)
         refuse(Walk, tr("Not armed. To start the venue focus, hold {LB} and {RB} to arm, then {LT} + {Menu}."));
         return;
     }
-    if (universe != m_armUniverse)
+    if (!sameController(universe, m_armUniverse))
     {
-        refuse(Walk, tr("Another controller is armed."));
+        refuse(Walk, runningCuesText());
         return;
     }
     if (!safetyHeld)
@@ -951,6 +1007,18 @@ bool PadRun::focusMenu(quint32 universe)
 {
     if (!isFocusing() || m_pc == nullptr)
         return false;
+    if (!hasJob(universe, ControllerJobs::Focus))
+    {
+        refuse(Walk, noFocusText());
+        return true;
+    }
+    // The pad that has the focus ends it (Q135), not another.
+    const quint32 owner = m_pc->controllerOwner();
+    if (owner != 0xFFFFFFFF && !sameController(universe, owner))
+    {
+        refuse(Walk, tr("Another controller is in use."));
+        return true;
+    }
     if (!m_held.value(universe).lt.isDown())
     {
         refuse(Walk, tr("Venue focus: hold {LT} and press {Menu} to finish it."));
@@ -1009,6 +1077,110 @@ void PadRun::focusCueChanged()
                 m_pc->padRumble(2, ControllerScheme::rumbleShortMs());
         }
     }
+    sync();
+}
+
+/*****************************************************************************
+ * Controller jobs (docs/design/CONTROLLER_JOBS.md)
+ *****************************************************************************/
+
+bool PadRun::hasJob(quint32 universe, int job) const
+{
+    const ControllerJobs *jobs = m_pc != nullptr ? m_pc->controllerJobs() : nullptr;
+    return jobs == nullptr || jobs->has(universe, ControllerJobs::Job(job));
+}
+
+bool PadRun::sameController(quint32 a, quint32 b) const
+{
+    if (a == b)
+        return true;
+    if (a == UINT_MAX || b == UINT_MAX)
+        return false;
+    /* One pad seen on two universes (macOS can list one controller twice)
+       is one controller: its twin's presses are its own. */
+    const ControllerJobs *jobs = m_pc != nullptr ? m_pc->controllerJobs() : nullptr;
+    if (jobs == nullptr)
+        return false;
+    const QString ia = jobs->identityOfUniverse(a);
+    return !ia.isEmpty() && !ControllerJobs::isNameOnly(ia) && ia == jobs->identityOfUniverse(b);
+}
+
+quint32 PadRun::runnerUniverse() const
+{
+    return m_armed ? m_armUniverse : m_focusArm;
+}
+
+QString PadRun::runnerName() const
+{
+    const quint32 u = runnerUniverse();
+    const ControllerJobs *jobs = m_pc != nullptr ? m_pc->controllerJobs() : nullptr;
+    if (u == UINT_MAX || jobs == nullptr)
+        return QString();
+    return jobs->nameOfUniverse(u);
+}
+
+int PadRun::padCount() const
+{
+    InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
+    if (iom == nullptr || m_pc == nullptr)
+        return 0;
+    int n = 0;
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        InputPatch *ip = iom->inputPatch(u);
+        if (ip != nullptr && ip->isPatched() && m_pc->isPadUniverse(u))
+            ++n;
+    }
+    return n;
+}
+
+quint32 PadRun::lightUniverse() const
+{
+    switch (state())
+    {
+        case Armed:     return m_armUniverse;
+        case Focus:
+            if (m_focusArm != UINT_MAX)
+                return m_focusArm;
+            return m_pc != nullptr ? m_pc->controllerOwner() : UINT_MAX;
+        default:        break;
+    }
+    return UINT_MAX;
+}
+
+QString PadRun::noRunCuesText()
+{
+    return tr("This controller doesn't run cues.");
+}
+
+QString PadRun::noFocusText()
+{
+    return tr("This controller doesn't do focus.");
+}
+
+QString PadRun::runningCuesText() const
+{
+    const QString name = runnerName();
+    return name.isEmpty() ? tr("Another controller is running cues.")
+                          : tr("%1 is running cues.").arg(name);
+}
+
+void PadRun::jobsChanged()
+{
+    /* A job taken away while it is in use (CONTROLLER_JOBS.md 10): the
+       runner's Run cues -- disarmed, with no button (rule 3's "no button
+       at all"); the arm a venue focus put by is not given back. */
+    if (m_armed && !hasJob(m_armUniverse, ControllerJobs::RunCues))
+    {
+        clear();
+        sync();
+        showNotice(tr("Disarmed: this controller no longer runs cues."));
+        if (m_pc != nullptr)
+            m_pc->tellOperator(tr("Disarmed."), ControllerScheme::ConfirmPriority);
+        return;
+    }
+    if (m_focusArm != UINT_MAX && !hasJob(m_focusArm, ControllerJobs::RunCues))
+        m_focusArm = UINT_MAX;
     sync();
 }
 

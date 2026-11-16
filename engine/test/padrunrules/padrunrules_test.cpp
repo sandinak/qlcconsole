@@ -19,6 +19,7 @@
 
 #include <QtTest>
 #include <QSignalSpy>
+#include <QSettings>
 
 // MasterTimer::timerTick() is private: driven by hand here, as markplanner_test does.
 #include "../common/stdprelude.h"
@@ -48,6 +49,7 @@
 #include "inputpatch.h"
 #include "gamepadrole.h"
 #include "padrun.h"
+#include "controllerjobs.h"
 #include "chaser.h"
 #include "doc.h"
 #include "showtreemodel.h"
@@ -133,6 +135,7 @@ bool isGoFamily(ShowControl::Command c)
 
 void PadRunRules_Test::init()
 {
+    QSettings().remove(ControllerJobs::settingsGroup());    // every pad every job
     m_doc = new Doc(this);
     m_runs.clear();
     m_said.clear();
@@ -158,7 +161,10 @@ void PadRunRules_Test::cleanup()
         m_stub->m_lineDeviceKind.clear();
         m_stub->m_buttonActions.clear();
         m_stub->m_feedbackParams.clear();
+        m_stub->m_feedbackLines.clear();
+        m_stub->m_lineLocations.clear();
     }
+    QSettings().remove(ControllerJobs::settingsGroup());
     delete m_doc;
     m_doc = nullptr;
     m_stub = nullptr;
@@ -277,6 +283,33 @@ int PadRunRules_Test::saidCount(const QString &part) const
     for (const QString &s : m_said)
         n += s.contains(part) ? 1 : 0;
     return n;
+}
+
+void PadRunRules_Test::twoPads(int jobsA, int jobsB)
+{
+    m_stub->m_lineNames = QStringList() << "Pad A (AA:BB:CC:00:00:01)" << "Pad B (AA:BB:CC:00:00:02)";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 1));
+    ControllerJobs *jobs = m_doc->programmer()->controllerJobs();
+    jobs->setJobs(jobs->identityOfUniverse(0), ControllerJobs::Jobs(jobsA));
+    jobs->setJobs(jobs->identityOfUniverse(1), ControllerJobs::Jobs(jobsB));
+    QCOMPARE(int(jobs->jobsOf(jobs->identityOfUniverse(0))), jobsA);
+    QCOMPARE(int(jobs->jobsOf(jobs->identityOfUniverse(1))), jobsB);
+}
+
+QString PadRunRules_Test::lightOn(quint32 line) const
+{
+    // Other tests clear the params alone: the lines are aligned from the end.
+    const int offset = m_stub->m_feedbackLines.size() - m_stub->m_feedbackParams.size();
+    for (int i = m_stub->m_feedbackParams.size() - 1; i >= 0; --i)
+    {
+        const QVariantMap p = m_stub->m_feedbackParams.at(i).toMap();
+        if (p.value("gamepad").toString() == QLatin1String("light")
+            && m_stub->m_feedbackLines.value(offset + i) == line)
+            return p.value("rgb").toString();
+    }
+    return QStringLiteral("none");
 }
 
 /*****************************************************************************
@@ -754,7 +787,7 @@ void PadRunRules_Test::theDuplicateDevice()
     both(kLT, 0);
     QCOMPARE(goes(), 1);                     // one GO, not two
     QEXPECT_FAIL("", "the twin's press is refused aloud on every GO (reported, not fixed)", Continue);
-    QCOMPARE(saidCount("Another controller is armed"), 0);
+    QCOMPARE(saidCount("is running cues"), 0);
     // The stop on both: how many ALL OFFs.
     both(kLB, 255);
     both(kRB, 255);
@@ -1160,6 +1193,381 @@ void PadRunRules_Test::theRulesHoldOverRandomPresses()
     QCOMPARE(run->listChaser(), list);
     QCOMPARE(listMoved.count(), 0);
     m_doc->setMode(Doc::Design);
+}
+
+/*****************************************************************************
+ * Controller jobs (docs/design/CONTROLLER_JOBS.md), swept
+ *****************************************************************************/
+
+namespace
+{
+using CJ = ControllerJobs;
+/* One gesture on a pad: (channel, value) in order, all let go at the end;
+   chord: the arm chord's hold is waited out in the middle. */
+struct Gesture
+{
+    QString name;
+    QList<QPair<quint32, uchar>> steps;
+    bool chord = false;
+};
+
+QList<Gesture> everyGesture()
+{
+    QList<Gesture> g;
+    for (quint32 ch : { kA, kB, kX, kY, kLB, kRB, kView, kMenu, kLS, kRS, kUp, kUnroled })
+        g << Gesture { QString("press %1").arg(ch), { { ch, 255 }, { ch, 0 } } };
+    g << Gesture { "LT", { { kLT, 255 }, { kLT, 0 } } };
+    g << Gesture { "RT (the hit)", { { kRT, 255 }, { kRT, 0 } } };
+    for (quint32 ch : { kA, kB, kX, kY, kMenu })
+        g << Gesture { QString("LT + %1").arg(ch), { { kLT, 255 }, { ch, 255 }, { ch, 0 }, { kLT, 0 } } };
+    g << Gesture { "View + Menu", { { kView, 255 }, { kMenu, 255 }, { kMenu, 0 }, { kView, 0 } } };
+    Gesture arm { "LB + RB held (the arm)", { { kLB, 255 }, { kRB, 255 }, { kRB, 0 }, { kLB, 0 } } };
+    arm.chord = true;
+    g << arm;
+    g << Gesture { "the four (the stop)", { { kLB, 255 }, { kRB, 255 }, { kLT, 255 }, { kRT, 255 },
+                                            { kRT, 0 }, { kLT, 0 }, { kRB, 0 }, { kLB, 0 } } };
+    return g;
+}
+}
+
+void PadRunRules_Test::jobsEveryControlOnASecondPad_data()
+{
+    QTest::addColumn<int>("jobsB");
+    QTest::addColumn<bool>("aArmed");
+    // Every mix of pad B's jobs (eight), pad A armed and not.
+    for (int j = 0; j <= int(CJ::AllJobs); ++j)
+        for (bool armed : { false, true })
+        {
+            QStringList names;
+            for (CJ::Job job : CJ::jobs())
+                if (j & job)
+                    names << CJ::jobKey(job);
+            QTest::newRow(qPrintable(QString("B[%1] A %2").arg(names.isEmpty() ? "none" : names.join('+'),
+                                                                armed ? "armed" : "not armed")))
+                << j << armed;
+        }
+}
+
+void PadRunRules_Test::jobsEveryControlOnASecondPad()
+{
+    /* Pad A has every job; pad B the row's. Every control and chord on B,
+       with A armed and not: what it does is exactly its jobs' (invariants
+       4-6, 8). A GO never comes from B (it never holds Run here), the arm
+       only moves to B on its chord with Run cues and no runner, the stop
+       always stops; a refusal says why. */
+    QFETCH(int, jobsB);
+    QFETCH(bool, aArmed);
+    makeShow();
+    twoPads(int(CJ::AllJobs), jobsB);
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    run->setArmChordMs(15);
+    const bool runs = jobsB & CJ::RunCues, focus = jobsB & CJ::Focus;
+
+    for (const Gesture &g : everyGesture())
+    {
+        if (aArmed)
+            arm(true, 0);
+        else
+            arm(false, run->armedUniverse() == UINT_MAX ? 0 : run->armedUniverse());
+        QCOMPARE(run->isArmed(), aArmed);
+        if (run->isWalking())
+            run->stopWalk();
+        const int goesBefore = goes(), stopsBefore = stops();
+        const int noRun = saidCount("doesn't run cues"), noFocus = saidCount("doesn't do focus");
+        const int runningB = saidCount("is running cues");
+        for (int i = 0; i < g.steps.size(); ++i)
+        {
+            axis(g.steps.at(i).first, g.steps.at(i).second, 1);
+            if (g.chord && i == 1)
+                QTest::qWait(60);      // the arm's hold, waited out
+        }
+        const QString why = QString("%1 on B").arg(g.name);
+        // A GO never comes from a pad that does not hold Run.
+        QVERIFY2(goes() == goesBefore, qPrintable(why + ": a GO"));
+        if (g.name.startsWith("the four"))
+        {
+            // The stop is every pad's, whatever its jobs (invariant 4).
+            QVERIFY2(stops() == stopsBefore + 1, qPrintable(why));
+            QVERIFY(!run->isArmed());
+            QCOMPARE(run->state(), PadRun::Stopped);
+            continue;
+        }
+        QVERIFY2(stops() == stopsBefore, qPrintable(why + ": a stop"));
+        if (g.chord)
+        {
+            if (!runs)
+            {
+                QVERIFY2(saidCount("doesn't run cues") > noRun, qPrintable(why));
+                QCOMPARE(run->isArmed(), aArmed);
+            }
+            else if (aArmed)
+            {
+                // One runner: refused, named, and A as it was (invariant 6).
+                QVERIFY2(saidCount("Pad A (…00:01) is running cues") > runningB, qPrintable(why));
+                QVERIFY(run->isArmed());
+                QCOMPARE(run->armedUniverse(), quint32(0));
+            }
+            else
+            {
+                QVERIFY2(run->isArmed() && run->armedUniverse() == 1, qPrintable(why + ": B did not arm"));
+                arm(false, 1);
+            }
+            continue;
+        }
+        // Nothing else moves the arm.
+        QVERIFY2(run->isArmed() == aArmed, qPrintable(why + ": the arm moved"));
+        if (aArmed)
+            QCOMPARE(run->armedUniverse(), quint32(0));
+        const bool cueCommand = g.name == "press 10" || g.name == "press 11" || g.name == "press 12"
+                                || g.name == "press 13"
+                                || (g.name.startsWith("LT + ") && !g.name.endsWith(QString::number(kMenu)));
+        const bool menu = g.name.endsWith(QString::number(kMenu)) && !g.name.startsWith("View");
+        if (cueCommand || g.name == QString("press %1").arg(kRS) || g.name.startsWith("RT"))
+        {
+            if (!runs)
+                QVERIFY2(saidCount("doesn't run cues") > noRun, qPrintable(why + ": not told"));
+            else if (aArmed && cueCommand)
+                QVERIFY2(saidCount("is running cues") > runningB, qPrintable(why + ": not told who runs"));
+        }
+        if (menu)
+            QVERIFY2((saidCount("doesn't do focus") > noFocus) == !focus, qPrintable(why + ": focus"));
+        // A runner is never told the job words of B's.
+        if (runs && !menu)
+            QVERIFY2(saidCount("doesn't run cues") == noRun, qPrintable(why + ": refused with Run cues"));
+    }
+    // And pad A still runs the show.
+    arm(true, 0);
+    const int before = goes();
+    axis(kLT, 255, 0);
+    press(kA, 0);
+    axis(kLT, 0, 0);
+    QCOMPARE(goes(), before + 1);
+}
+
+void PadRunRules_Test::jobsOneRunnerAtATime()
+{
+    makeShow();
+    twoPads(int(CJ::AllJobs), int(CJ::AllJobs));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    QCOMPARE(run->runnerName(), QString::fromUtf8("Pad A (…00:01)"));
+    // Two pads: the chip names the one that runs cues (invariant 9).
+    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: ARMED · Pad A (…00:01)"));
+    // B's chord, held long and let go: refused, A as it was, its safety kept.
+    axis(kLT, 255, 0);
+    hold(kLB, true, 1);
+    hold(kRB, true, 1);
+    QTest::qWait(80);
+    hold(kRB, false, 1);
+    hold(kLB, false, 1);
+    QCOMPARE(run->notice(), QString::fromUtf8("Pad A (…00:01) is running cues."));
+    QVERIFY(run->isArmed());
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    press(kA, 0);                       // A's LT still held: its GO goes
+    axis(kLT, 0, 0);
+    QCOMPARE(goes(), 1);
+    // B's LT + A: refused, named.
+    axis(kLT, 255, 1);
+    press(kA, 1);
+    axis(kLT, 0, 1);
+    QCOMPARE(goes(), 1);
+    QCOMPARE(run->notice(), QString::fromUtf8("Pad A (…00:01) is running cues."));
+    // A lets go: the next to arm holds it.
+    arm(false, 0);
+    arm(true, 1);
+    QCOMPARE(run->armedUniverse(), quint32(1));
+    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: ARMED · Pad B (…00:02)"));
+    with(kLT, kA, 1);
+    QCOMPARE(goes(), 2);
+    hold(kLB, true, 0);
+    hold(kRB, true, 0);
+    QTest::qWait(80);
+    hold(kRB, false, 0);
+    hold(kLB, false, 0);
+    QCOMPARE(run->armedUniverse(), quint32(1));
+    QCOMPARE(run->notice(), QString::fromUtf8("Pad B (…00:02) is running cues."));
+}
+
+void PadRunRules_Test::jobsTheStopFromAPadWithNoJobs()
+{
+    makeShow();
+    twoPads(int(CJ::AllJobs), int(CJ::NoJobs));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    // A armed: B's four stop everything.
+    arm(true, 0);
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        axis(ch, 255, 1);
+    QCOMPARE(stops(), 1);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY(!run->isArmed());
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        axis(ch, 0, 1);
+    // Nobody armed: still the stop.
+    arm(true, 0);
+    arm(false, 0);
+    for (quint32 ch : { kRT, kLB, kLT, kRB })
+        axis(ch, 255, 1);
+    QCOMPARE(stops(), 2);
+    for (quint32 ch : { kRT, kLB, kLT, kRB })
+        axis(ch, 0, 1);
+    // While a tool has the pad: the stop too, from the pad with no jobs.
+    RefineSession *r = m_doc->programmer()->refineSession();
+    run->setEnabled(false);
+    run->setEnabled(true);
+    QVERIFY(r->start(m_cue1, 0xFFFFFFFF, nullptr));
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        axis(ch, 255, 1);
+    QCOMPARE(stops(), 3);
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        axis(ch, 0, 1);
+    r->stop();
+    // And nothing else it does is a command.
+    QCOMPARE(goes(), 0);
+}
+
+void PadRunRules_Test::jobsOnePadNothingSavedIsAsBefore()
+{
+    /* One pad, nothing saved (invariant 1): every job, the chip unnamed,
+       the arm, GO and the stop as they were, nothing written. */
+    makeShow();
+    ControllerJobs *jobs = m_doc->programmer()->controllerJobs();
+    QVERIFY(jobs->saved().isEmpty());
+    for (CJ::Job job : CJ::jobs())
+        QVERIFY(jobs->has(0, job));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    QCOMPARE(run->padCount(), 1);
+    press(kA);
+    QCOMPARE(run->notice(), QString("Not armed: hold LB and RB."));
+    arm(true);
+    QCOMPARE(run->roleText(), QString("Pad: ARMED"));
+    QCOMPARE(lightOn(0), PadRun::armedColour().name());
+    axis(kLT, 255);
+    press(kA);
+    axis(kLT, 0);
+    QCOMPARE(goes(), 1);
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        axis(ch, 255);
+    QCOMPARE(stops(), 1);
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        axis(ch, 0);
+    QCOMPARE(saidCount("doesn't"), 0);
+    QCOMPARE(saidCount("is running cues"), 0);
+    QVERIFY(jobs->saved().isEmpty());
+}
+
+void PadRunRules_Test::jobsEachPadsLight()
+{
+    makeShow();
+    twoPads(int(CJ::AllJobs), int(CJ::AllJobs));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    arm(true, 1);
+    // The runner shows the arm; the other its own colour (invariant 9).
+    QCOMPARE(lightOn(1), PadRun::armedColour().name());
+    QCOMPARE(lightOn(0), QString());
+    arm(false, 1);
+    arm(true, 0);
+    QCOMPARE(lightOn(0), PadRun::armedColour().name());
+    QCOMPARE(lightOn(1), QString());
+    // The stop: red on every pad.
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        axis(ch, 255, 1);
+    QCOMPARE(lightOn(0), PadRun::stoppedColour().name());
+    QCOMPARE(lightOn(1), PadRun::stoppedColour().name());
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        axis(ch, 0, 1);
+}
+
+void PadRunRules_Test::jobsTheFollowSpotSkipsAPad()
+{
+    twoPads(int(CJ::RunCues | CJ::Focus), int(CJ::AllJobs));
+    ProgrammerController *pc = m_doc->programmer();
+    pc->refreshStickBinding();
+    // A has no Follow spot: the binding is B's (invariant 7).
+    QCOMPARE(pc->followSpotStickName(), QString("Pad B"));
+    QVERIFY(pc->followSpotJobNote().isEmpty());
+    // B's job taken away: no pad steers it, and that is said.
+    ControllerJobs *jobs = pc->controllerJobs();
+    jobs->setJob(jobs->identityOfUniverse(1), CJ::FollowSpot, false);
+    QCOMPARE(pc->followSpotStickName(), QString());
+    QCOMPARE(pc->followSpotJobNote(), QString("No controller has the Follow spot job."));
+    // A given it: A's.
+    jobs->setJob(jobs->identityOfUniverse(0), CJ::FollowSpot, true);
+    QCOMPARE(pc->followSpotStickName(), QString("Pad A"));
+}
+
+void PadRunRules_Test::jobsFocusOnlyFromFocusPads()
+{
+    makeShow();
+    twoPads(int(CJ::AllJobs), int(CJ::RunCues | CJ::FollowSpot));
+    ProgrammerController *pc = m_doc->programmer();
+    // Tools: View + Menu on B is no Focus mode; on A it is.
+    QSignalSpy focusMode(pc, &ProgrammerController::focusModeRequested);
+    for (quint32 u : { quint32(1), quint32(0) })
+    {
+        hold(kView, true, u);
+        hold(kMenu, true, u);
+        hold(kMenu, false, u);
+        hold(kView, false, u);
+    }
+    QCOMPARE(focusMode.count(), 1);
+    QCOMPARE(saidCount("doesn't do focus"), 1);
+    // A tool started on the laptop: B's presses take nothing, A's do (Q135).
+    RefineSession *r = pc->refineSession();
+    QVERIFY(r->start(m_cue1, 0xFFFFFFFF, nullptr));
+    press(kY, 1);
+    QCOMPARE(pc->controllerOwner(), quint32(0xFFFFFFFF));
+    QCOMPARE(saidCount("doesn't do focus"), 2);
+    press(kY, 0);
+    QCOMPARE(pc->controllerOwner(), quint32(0));
+    // Two pads with Focus: the first press still owns it.
+    ControllerJobs *jobs = pc->controllerJobs();
+    jobs->setJob(jobs->identityOfUniverse(1), CJ::Focus, true);
+    press(kY, 1);
+    QCOMPARE(pc->controllerOwner(), quint32(0));
+    QCOMPARE(saidCount("Another controller is in use"), 1);
+    r->stop();
+    // The Run role: Menu (the walk) on a pad without Focus is refused.
+    jobs->setJob(jobs->identityOfUniverse(1), CJ::Focus, false);
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    press(kMenu, 1);
+    QVERIFY(!run->isWalking());
+    QCOMPARE(run->notice(), QString("This controller doesn't do focus."));
+}
+
+void PadRunRules_Test::jobsTakenAwayWhileInUse()
+{
+    makeShow();
+    twoPads(int(CJ::AllJobs), int(CJ::AllJobs));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    ControllerJobs *jobs = pc->controllerJobs();
+    run->setEnabled(true);
+    arm(true, 0);
+    // The runner's Run cues taken away: disarmed, with no button, said.
+    jobs->setJob(jobs->identityOfUniverse(0), CJ::RunCues, false);
+    QVERIFY(!run->isArmed());
+    QCOMPARE(run->notice(), QString("Disarmed: this controller no longer runs cues."));
+    QCOMPARE(goes(), 0);
+    // Now B may arm; A may not.
+    arm(true, 1);
+    QCOMPARE(run->armedUniverse(), quint32(1));
+    arm(false, 1);
+    // The focus's pad loses Focus: the tool is free for another (Q135).
+    run->setEnabled(false);
+    QVERIFY(pc->refineSession()->start(m_cue1, 0xFFFFFFFF, nullptr));
+    press(kY, 0);
+    QCOMPARE(pc->controllerOwner(), quint32(0));
+    jobs->setJob(jobs->identityOfUniverse(0), CJ::Focus, false);
+    QCOMPARE(pc->controllerOwner(), quint32(0xFFFFFFFF));
+    press(kY, 1);
+    QCOMPARE(pc->controllerOwner(), quint32(1));
+    pc->refineSession()->stop();
 }
 
 QTEST_MAIN(PadRunRules_Test)

@@ -3501,13 +3501,20 @@ void LookEditor::rebuildEffectDynWidget()
         eye->setSizePolicy(QSizePolicy::Ignored, eye->sizePolicy().verticalPolicy());
         eye->setMinimumWidth(eye->fontMetrics().horizontalAdvance(QStringLiteral("00' 00 1/2\"")) + 30);
         forWho->setWordWrap(true);
+        /* Which pad steers it is its jobs' (docs/design/CONTROLLER_JOBS.md):
+           said here, with where they are set, and when no pad has it. */
+        QLabel *jobs = new QLabel(opRow);
+        jobs->setObjectName(QStringLiteral("followSpotJobs"));
+        jobs->setWordWrap(true);
+        jobs->setStyleSheet(QStringLiteral("color: gray;"));
         opl->addRow(opLabel, where);
         opl->addRow(LookEditor::tr("Facing:"), facing);
         opl->addRow(LookEditor::tr("Eye:"), eye);
         opl->addRow(forWho);
+        opl->addRow(jobs);
         dv->addWidget(opRow);
 
-        auto fill = [pc, where, facing, eye, forWho]() {
+        auto fill = [pc, where, facing, eye, forWho, jobs]() {
             const FollowSpotOperator op = pc->followSpotOperator();
             const QSignalBlocker b1(where), b2(facing), b3(eye);
             where->setCurrentIndex(qMax(0, where->findData(int(op.preset))));
@@ -3523,6 +3530,11 @@ void LookEditor::rebuildEffectDynWidget()
             if (!venue.isEmpty())
                 text = LookEditor::tr("%1 in %2").arg(text, venue);
             forWho->setText(LookEditor::tr("For %1").arg(text));
+            const QString pointer = LookEditor::tr("Which controller steers it: Connections \u25B8 right-click "
+                                                 "the controller \u25B8 Test Controller and Jobs\u2026");
+            const QString note = pc->followSpotJobNote();
+            jobs->setText(note.isEmpty() ? pointer : note + QLatin1Char(' ') + pointer);
+            jobs->setStyleSheet(note.isEmpty() ? QStringLiteral("color: gray;") : QString());
         };
         fill();
         connect(pc, &ProgrammerController::followSpotOperatorChanged, opRow, fill);

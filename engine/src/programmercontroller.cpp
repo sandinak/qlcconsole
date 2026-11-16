@@ -145,6 +145,20 @@ ProgrammerController::ProgrammerController(Doc *doc)
     // The light itself, from the walk (Q192): its corrections go where Focus mode's do.
     m_refineSession->setVenues(m_venues);
     m_padRun = new PadRun(m_doc, this, this);
+    /* A job taken away while in use lets go (CONTROLLER_JOBS.md 10): the
+       runner disarms, the focus's pad lets the tool go to another, the
+       follow spot's stick is found again on a pad that has the job. */
+    connect(m_controllerJobs, &ControllerJobs::jobsChanged, this, [this]() {
+        m_padRun->jobsChanged();
+        if (m_ownerUniverse != 0xFFFFFFFF && !m_controllerJobs->has(m_ownerUniverse, ControllerJobs::Focus))
+        {
+            m_ownerUniverse = 0xFFFFFFFF;
+            emit focusControllerChanged();
+        }
+        refreshStickBinding();
+        emit axisBindingChanged();      // the follow spot's set-up says it
+        refreshPadLight();
+    });
     // The Run role reads the controller even with no tool or follow spot on.
     connect(m_padRun, &PadRun::enabledChanged, this, [this](bool on) {
         if (on)
@@ -155,6 +169,7 @@ ProgrammerController::ProgrammerController(Doc *doc)
        held after (its release may have gone to the test), so a View held
        as it opened cannot make a later Menu the role chord. */
     connect(m_padRun, &PadRun::testingChanged, this, [this]() {
+        m_viewMenuNoRun = false;
         m_heldRoles.clear();
         m_viewChord = false;
         m_centreChord = false;
@@ -1755,13 +1770,53 @@ void ProgrammerController::refreshPadLight()
 
 void ProgrammerController::setPadLight(const QColor &colour)
 {
-    if (colour == m_padLight)
+    /* Which pad shows it (CONTROLLER_JOBS.md 9), with more than one pad:
+       the one that runs cues (or has the venue focus), every pad red after
+       the stop, the others their own colour. One pad: that pad, as ever. */
+    const quint32 kAllPads = UINT_MAX - 1;
+    quint32 target = UINT_MAX;
+    QList<quint32> pads;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (m_padRun != nullptr && iom != nullptr && m_padRun->padCount() > 1)
+    {
+        for (quint32 u = 0; u < iom->universesCount(); ++u)
+        {
+            InputPatch *ip = iom->inputPatch(u);
+            if (ip != nullptr && ip->isPatched() && isPadUniverse(u))
+                pads << u;
+        }
+        if (m_padRun->state() == PadRun::Stopped)
+            target = kAllPads;
+        else
+            target = m_padRun->lightUniverse();
+    }
+    if (colour == m_padLight && target == m_padLightTarget)
         return;
+    const quint32 was = m_padLightTarget;
     m_padLight = colour;
+    m_padLightTarget = target;
     QVariantMap p;
     p.insert(QStringLiteral("gamepad"), QStringLiteral("light"));
     p.insert(QStringLiteral("rgb"), colour.isValid() ? colour.name() : QString());
-    sendPadFeedback(p);
+    if (target == UINT_MAX)
+    {
+        // A pad that showed the state alone, or the stop, is its own again.
+        if (was != UINT_MAX)
+        {
+            QVariantMap own = p;
+            own.insert(QStringLiteral("rgb"), QString());
+            for (quint32 u : std::as_const(pads))
+                sendPadFeedback(own, u);
+        }
+        sendPadFeedback(p);
+    }
+    else
+    {
+        QVariantMap own = p;
+        own.insert(QStringLiteral("rgb"), QString());
+        for (quint32 u : std::as_const(pads))
+            sendPadFeedback(target == kAllPads || u == target ? p : own, u);
+    }
     emit padLightChanged(colour);
 }
 
@@ -1788,7 +1843,7 @@ ProgrammerController::~ProgrammerController()
     m_followMover = nullptr;
 }
 
-void ProgrammerController::padRumble(int pulses, int lengthMs)
+void ProgrammerController::padRumble(int pulses, int lengthMs, quint32 universe)
 {
     if (pulses <= 0)
         return;
@@ -1797,7 +1852,7 @@ void ProgrammerController::padRumble(int pulses, int lengthMs)
     p.insert(QStringLiteral("gamepad"), QStringLiteral("rumble"));
     p.insert(QStringLiteral("pulses"), pulses);
     p.insert(QStringLiteral("ms"), lengthMs);
-    sendPadFeedback(p);
+    sendPadFeedback(p, universe);
     emit padRumbled(pulses, lengthMs);
 }
 
@@ -1842,16 +1897,43 @@ void ProgrammerController::setHolding(bool on)
     emit holdingChanged(on);
 }
 
-void ProgrammerController::sendPadFeedback(const QVariantMap &params)
+void ProgrammerController::sendPadFeedback(const QVariantMap &params, quint32 universe)
 {
-    // The controller the tools read: its own plugin, its own line.
-    const FocusController pad = focusController();
-    if (!pad.present || m_doc->inputOutputMap() == nullptr)
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr)
         return;
-    InputPatch *ip = m_doc->inputOutputMap()->inputPatch(pad.universe);
+    if (universe == UINT_MAX)
+    {
+        // The controller the tools read: its own plugin, its own line.
+        const FocusController pad = focusController();
+        if (!pad.present)
+            return;
+        universe = pad.universe;
+    }
+    if (universe >= iom->universesCount())
+        return;
+    InputPatch *ip = iom->inputPatch(universe);
     if (ip == nullptr || ip->plugin() == nullptr)
         return;
-    ip->plugin()->sendFeedBack(pad.universe, ip->input(), 0, 0, params);
+    ip->plugin()->sendFeedBack(universe, ip->input(), 0, 0, params);
+}
+
+QString ProgrammerController::followSpotJobNote() const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr || m_controllerJobs == nullptr)
+        return QString();
+    bool anyPad = false;
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        InputPatch *ip = iom->inputPatch(u);
+        if (ip == nullptr || !ip->isPatched() || !isPadUniverse(u))
+            continue;
+        if (m_controllerJobs->has(u, ControllerJobs::FollowSpot))
+            return QString();
+        anyPad = true;
+    }
+    return anyPad ? tr("No controller has the Follow spot job.") : QString();
 }
 
 void ProgrammerController::heldTick(double dt)
@@ -2490,6 +2572,9 @@ ProgrammerController::Stick ProgrammerController::findStick() const
         InputPatch *ip = iom->inputPatch(u);
         if (ip == nullptr || ip->plugin() == nullptr || !ip->isPatched())
             continue;
+        // Its jobs (CONTROLLER_JOBS.md 7): a pad without Follow spot is skipped.
+        if (!m_controllerJobs->has(u, ControllerJobs::FollowSpot))
+            continue;
         QLCIOPlugin *plugin = ip->plugin();
         /* The device's own pan/tilt slots (its HID profile, matched by
            vendor and product)... */
@@ -2683,11 +2768,15 @@ void ProgrammerController::connectControllerInput()
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputPatchChanged, this, [this](quint32 universe) {
         if (m_padRun != nullptr)
             m_padRun->forgetPad(universe);
-        if (m_padLight.isValid())
+        if (m_padLight.isValid() || m_padLightTarget != UINT_MAX)
         {
             const QColor light = m_padLight;
             m_padLight = QColor();
-            setPadLight(light);
+            m_padLightTarget = UINT_MAX - 2;     // not known: sent again
+            if (light.isValid())
+                setPadLight(light);
+            else
+                refreshPadLight();
         }
     });
     // Blackout or the Grand Master to zero mid-session: said.
@@ -2767,6 +2856,13 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         }
     }
 
+    /* A stick bound to a pad without the Follow spot job (by hand, or the
+       job taken away) moves nothing (CONTROLLER_JOBS.md 7). */
+    if (((m_panBound && universe == m_panUniverse && channel == m_panChannel)
+         || (m_tiltBound && universe == m_tiltUniverse && channel == m_tiltChannel))
+        && !m_controllerJobs->has(universe, ControllerJobs::FollowSpot))
+        return;
+
     // Input events only update the latest stick value; the 50 Hz timer
     // (m_designJoyTimer → applyDesignJoystick) integrates it continuously so a
     // held stick keeps moving at a rate set by its deflection.
@@ -2797,7 +2893,12 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         {
             const QString action = ip->plugin()->inputButtonAction(ip->input(),
                                                                    ip->deviceChannel(channel));
-            if (!action.isEmpty())
+            // A follow spot action is the Follow spot job's (CONTROLLER_JOBS.md 7).
+            if (action.startsWith(QLatin1String("followspot"))
+                && !m_controllerJobs->has(universe, ControllerJobs::FollowSpot))
+                tellOperator(tr("This controller doesn't run the follow spot."),
+                             ControllerScheme::ConfirmPriority);
+            else if (!action.isEmpty())
                 emit buttonActionTriggered(action);
         }
     }
@@ -3051,6 +3152,16 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
        are watched before they reach it, and swallowed while all are down. */
     if (active && m_padRun->isEnabled() && m_padRun->watchStop(universe, role, value))
         return true;
+    /* Its jobs (CONTROLLER_JOBS.md 8): a pad without Focus works no tool
+       -- Quick focus, Venue focus, Focus this cue -- its presses are told
+       so and go nowhere (the stop, above, is every pad's). */
+    if (active && !m_controllerJobs->has(universe, ControllerJobs::Focus))
+    {
+        if (value > 0 && role != GamepadRole::None && !GamepadRole::isAxis(role)
+            && !GamepadRole::isTouch(role) && !isPan && !isTilt)
+            tellOperator(PadRun::noFocusText(), ControllerScheme::ConfirmPriority);
+        return true;
+    }
     /* A follow spot on and no tool: the right stick is its fine stick, the
        D-pad's Up and Down its speed step, Left and Right its beam size
        (before the Run map, which has no use for them and would swallow
@@ -3068,7 +3179,8 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         {
             /* In the Run role the pad that starts the calls (armed, LT +
                Menu) claims it there: an unarmed Menu claims nothing. */
-            if (press && (active || (role == FocusCallCue::startRole() && !m_padRun->isEnabled())))
+            if (press && m_controllerJobs->has(universe, ControllerJobs::Focus)
+                && (active || (role == FocusCallCue::startRole() && !m_padRun->isEnabled())))
             {
                 m_ownerUniverse = universe;
                 emit focusControllerChanged();     // the panels name it
@@ -3131,14 +3243,18 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         if (!active && value > 0 && role == FocusCallCue::startRole() && m_focusCallCue->isArmed()
             && !m_padRun->isEnabled() && !m_heldRoles.contains(GamepadRole::Back))
         {
-            m_focusCallCue->start();
+            if (!m_controllerJobs->has(universe, ControllerJobs::Focus))
+                tellOperator(PadRun::noFocusText(), ControllerScheme::ConfirmPriority);
+            else
+                m_focusCallCue->start();
             return true;
         }
         /* "Still at <venue>?" asked (Menu began the calls): A held answers
            yes, same room (board Q230, reversing Q129's laptop-only); a tap
            does nothing, and no is the laptop's. Whatever the role. */
         if (!active && role == GamepadRole::A && m_focusCallCue->asksStill()
-            && (m_ownerUniverse == 0xFFFFFFFF || universe == m_ownerUniverse))
+            && (m_ownerUniverse == 0xFFFFFFFF || universe == m_ownerUniverse)
+            && m_controllerJobs->has(universe, ControllerJobs::Focus))
         {
             if (value > 0)
                 m_holdVenueA.press();
@@ -3155,14 +3271,35 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             const GamepadRole::Role other = role == GamepadRole::Back ? GamepadRole::Start : GamepadRole::Back;
             if (value > 0 && m_heldRoles.contains(other))
             {
-                m_padRun->roleChordBegin();
+                /* The role is Run cues' to switch (CONTROLLER_JOBS.md 5):
+                   a pad without the job times no chord; its press, let
+                   go, is Focus mode in Tools (Focus's), else refused. */
+                if (m_controllerJobs->has(universe, ControllerJobs::RunCues))
+                    m_padRun->roleChordBegin();
+                else
+                    m_viewMenuNoRun = true;
+                return true;
+            }
+            if (value == 0 && m_viewMenuNoRun)
+            {
+                m_viewMenuNoRun = false;
+                if (!m_padRun->isEnabled() && m_controllerJobs->has(universe, ControllerJobs::Focus))
+                    emit focusModeRequested();
+                else
+                    tellOperator(m_padRun->isEnabled() ? PadRun::noRunCuesText() : PadRun::noFocusText(),
+                                 ControllerScheme::ConfirmPriority);
                 return true;
             }
             if (value == 0 && (m_padRun->isRoleChordPending() || m_padRun->roleChordFinished()))
             {
                 const bool shortPress = m_padRun->roleChordEnd();
                 if (shortPress && !m_padRun->isEnabled())
-                    emit focusModeRequested();
+                {
+                    if (m_controllerJobs->has(universe, ControllerJobs::Focus))
+                        emit focusModeRequested();
+                    else
+                        tellOperator(PadRun::noFocusText(), ControllerScheme::ConfirmPriority);
+                }
                 return true;
             }
         }
@@ -5212,6 +5349,9 @@ void ProgrammerController::publishFollowSpotVelocity()
 bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, int role, uchar value)
 {
     if (m_followStatus.state == FollowSpotStatus::Off)
+        return false;
+    // Not this pad's job (CONTROLLER_JOBS.md 7): its fine stick, speed and size do nothing.
+    if (!m_controllerJobs->has(universe, ControllerJobs::FollowSpot))
         return false;
     // A control the Control Map fires something with is that, not this.
     if (m_doc->controlMap() != nullptr && m_doc->controlMap()->isBound(universe, channel))

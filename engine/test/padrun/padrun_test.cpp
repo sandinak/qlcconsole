@@ -21,6 +21,7 @@
 
 #include <QtTest>
 #include <QSignalSpy>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QSemaphore>
 #include <QThread>
@@ -41,6 +42,7 @@
 #include "inputpatch.h"
 #include "padnames.h"
 #include "padrun.h"
+#include "controllerjobs.h"
 #include "padtriggers.h"
 #include "touchswipe.h"
 #include "chaser.h"
@@ -542,7 +544,8 @@ void PadRun_Test::goNeedsTheArmAndItsTrigger()
     QVERIFY(m_doc->inputOutputMap()->setInputPatch(1, stub->name(), QString(), 1));
     with(kLT, kA, 1);
     QCOMPARE(m_runs.size(), 6);
-    QCOMPARE(run->notice(), QString("Another controller is armed."));
+    // One runner (controller jobs): the refusal names the pad that runs cues.
+    QCOMPARE(run->notice(), QString("1: Stub 1 is running cues."));
     // Nor may it drop the first pad's arm.
     hold(kLB, true, 1);
     hold(kRB, true, 1);
@@ -1616,6 +1619,55 @@ void PadRun_Test::theLaptopsFocusMovesNoList()
     QVERIFY(!s->isActive());
     QVERIFY(m_runs.isEmpty());
     QVERIFY(fcc->isDone());
+}
+
+void PadRun_Test::theVenueFocusNeedsTheFocusJob()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    ControllerJobs *jobs = pc->controllerJobs();
+    auto restore = qScopeGuard([jobs]() { jobs->resetAll(); });
+    const QString padA = jobs->identityOfUniverse(0);
+    jobs->setJobs(padA, ControllerJobs::RunCues | ControllerJobs::FollowSpot);
+    run->setEnabled(true);
+
+    // ARMED, no Focus job: LT + Menu starts nothing, and says why.
+    arm(true);
+    with(kLT, kMenu);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QCOMPARE(run->state(), PadRun::Armed);
+    QCOMPARE(run->notice(), QString("This controller doesn't do focus."));
+    QVERIFY(m_runs.isEmpty());
+
+    // Given Focus: FOCUS.
+    jobs->setJob(padA, ControllerJobs::Focus, true);
+    with(kLT, kMenu);
+    QCOMPARE(run->state(), PadRun::Focus);
+
+    // A second pad, no Focus: its LT + Menu ends nothing.
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(1, stub->name(), QString(), 1));
+    const QString padB = jobs->identityOfUniverse(1);
+    QVERIFY(padB != padA);
+    jobs->setJobs(padB, ControllerJobs::RunCues);
+    with(kLT, kMenu, 1);
+    QCOMPARE(run->state(), PadRun::Focus);
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    // With Focus, it is not the focus's pad: refused (Q135).
+    jobs->setJob(padB, ControllerJobs::Focus, true);
+    with(kLT, kMenu, 1);
+    QCOMPARE(run->state(), PadRun::Focus);
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    // The focus's own pad ends it: ARMED, on it.
+    with(kLT, kMenu);
+    QCOMPARE(run->state(), PadRun::Armed);
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    QVERIFY(m_runs.isEmpty());
 }
 
 void PadRun_Test::aLostPadInFocus()
