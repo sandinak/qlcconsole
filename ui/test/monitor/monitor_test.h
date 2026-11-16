@@ -1061,6 +1061,11 @@ private slots:
     /** The pan turn (PanTurn): Fixture Properties' row and its three
      *  actions, each one undo step; Cancel puts it back; a 360 has none. */
     void thePanTurnInFixturePropertiesIsOneUndoStep();
+    /** Review 0.4.10, M3: a live head's turn (Operate, or a running look)
+     *  from Fixture Properties -- Centre on Stage, Earlier Turn, Later Turn,
+     *  one head or several -- is said first ("its beam moves now, a whole
+     *  turn round") and done only on a yes. */
+    void aLiveHeadsTurnIsSaidFirst();
     /** Centre the pan for a selection (and the plot's menu): one undo step. */
     void centringASelectionIsOneUndoStep();
     /** A move changes the turn only when the stage crosses the seam, said. */

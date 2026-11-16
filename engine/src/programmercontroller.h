@@ -292,6 +292,10 @@ public:
     /** The pad on @p universe uses the controller tools now (the Run role
      *  starting a venue focus from it): it is their owner, if none is. */
     void claimController(quint32 universe);
+    /** A venue focus start given up or refused (the focus cue waits,
+     *  Armed, again): its owner is let go once the event that did it is
+     *  done, so any pad with Focus may start it (review 0.4.10, H1). */
+    void releaseControllerSoon();
 
     /** Board Q170, a PlayStation pad's touchpad as a trackpad: a finger
      *  dragged right across the whole pad nudges pan this many degrees
@@ -944,7 +948,8 @@ private:
     void sayNoController();
     bool m_padPresent = false;
     quint32 m_ownerUniverse = 0xFFFFFFFF;
-    /** Nobody is using the controller tools (nothing running or armed). */
+    /** Nobody is using the controller tools (no tool running, no venue
+     *  being named; a focus cue that only waits holds no owner). */
     void releaseOwnerIfIdle();
     /** Said once until it changes: what keeps the rig from showing it. */
     QString m_lastRigProblem;
@@ -964,6 +969,16 @@ private:
     /** Controller buttons held, by gamepad role, for the View+Menu combo. */
     QSet<int> m_heldRoles;
     float m_fineNormX = 0.5f, m_fineNormY = 0.5f;
+    /** The pad the follow spot's fine stick (or its facing push, LS held)
+     *  was last read from; UINT_MAX: none. */
+    quint32 m_fineUniverse = UINT_MAX;
+    /** The follow spot lets go of what @p universe's pad left it (UINT_MAX:
+     *  every pad's): the stick, the fine stick, a facing push -- centred, so
+     *  nothing drifts on with no hand on it (review 0.4.10, H2). Called
+     *  when a pad loses the Follow spot job, and whenever the binding
+     *  changes (job, rebind, Bind by hand, unplug). @p stick: the bound
+     *  stick too; else only the fine stick and the facing push. */
+    void letGoOfFollowSpotInputs(quint32 universe, bool stick);
     /** The touchpad (Q170), read on the controller tick. */
     TouchpadGesture m_touch;
     /** A two-finger drag does one thing, chosen by its first move: 0

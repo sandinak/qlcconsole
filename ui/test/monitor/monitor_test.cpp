@@ -33306,6 +33306,105 @@ void Monitor_Test::thePanTurnInFixturePropertiesIsOneUndoStep()
     QVERIFY(!rowShown);
 }
 
+void Monitor_Test::aLiveHeadsTurnIsSaidFirst()
+{
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    const quint32 other = rig.head("Spot 2", 21.0f);
+    QVERIFY(fid != Fixture::invalidId() && other != Fixture::invalidId());
+    QVERIFY(!PanTurn::isLive(m_doc, fid));
+    m_doc->setMode(Doc::Operate);
+    auto design = qScopeGuard([this]() { m_doc->setMode(Doc::Design); });
+    QVERIFY(PanTurn::isLive(m_doc, fid));
+
+    /* Presses @p button in Fixture Properties for @p fids, answers the
+       warning yes or no, and Cancels the dialog (which puts the turn back):
+       what was asked, and the turn just after the press. */
+    struct Asked { QString text; int turnAfter = -9999; bool found = false; };
+    /* QLC_SHOT_DIR set: the question over Fixture Properties, at 1024x640,
+       1280x800 and 1920x1080 (@p shot names it). */
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    auto press = [&](const QList<quint32> &fids, const char *button, bool yes, const QString &shot = QString()) {
+        Asked a;
+        driveDialog([&](QWidget *dlg) {
+            QPushButton *btn = dlg->findChild<QPushButton *>(button);
+            if (btn == nullptr || !btn->isEnabled())
+                return false;
+            a.found = true;
+            const QString goText = btn->text();
+            QTimer::singleShot(0, [&a, &shots, goText, yes, dlg, shot]() {
+                QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+                if (box == nullptr || box->objectName() != QLatin1String("panTurnLiveConfirm"))
+                    return;
+                a.text = box->text();
+                if (!shots.isEmpty() && !shot.isEmpty())
+                {
+                    QDir().mkpath(shots);
+                    for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+                    {
+                        dlg->resize(sz);
+                        QApplication::processEvents();
+                        QImage img = dlg->grab().toImage();
+                        const QPixmap over = box->grab();
+                        QPainter p(&img);
+                        p.drawPixmap((img.width() - over.width()) / 2, (img.height() - over.height()) / 2, over);
+                        p.end();
+                        img.save(QStringLiteral("%1/%2-%3x%4.png").arg(shots, shot).arg(sz.width()).arg(sz.height()));
+                    }
+                }
+                QPushButton *b = yes ? findButtonByText(box, goText)
+                                     : qobject_cast<QPushButton *>(box->button(QMessageBox::Cancel));
+                if (b != nullptr)
+                    b->click();
+                else
+                    box->close();
+            });
+            btn->click();
+            a.turnAfter = rig.turn(fids.first());
+            return true;
+        }, false);
+        if (fids.size() == 1)
+            rig.mon->showFixtureItemEditor(fids.first());
+        else
+            rig.mon->showFixtureItemEditor(fids);
+        return a;
+    };
+
+    for (const char *button : { "fixturePanTurnCentre", "fixturePanTurnLater", "fixturePanTurnEarlier" })
+    {
+        // No: asked, nothing turned.
+        Asked a = press({ fid }, button, false,
+                        QString(button) == QLatin1String("fixturePanTurnCentre")
+                        ? QStringLiteral("after-fixture-properties-live-turn") : QString());
+        QVERIFY2(a.found, button);
+        QVERIFY2(a.text.contains("Spot 1 is live: its beam moves now, a whole turn round"), qPrintable(a.text));
+        QCOMPARE(a.turnAfter, 0);
+        // Yes: turned (the dialog's Cancel then puts it back).
+        a = press({ fid }, button, true);
+        QVERIFY2(!a.text.isEmpty(), button);
+        QVERIFY2(a.turnAfter != 0, button);
+        QCOMPARE(rig.turn(fid), 0);
+    }
+
+    // Several heads: Centre on Stage names them, and turns them only on a yes.
+    Asked a = press({ fid, other }, "fixturePanTurnCentre", false,
+                    QStringLiteral("after-fixture-properties-live-turn-several"));
+    QVERIFY(a.found);
+    QVERIFY2(a.text.contains("Spot 1, Spot 2 are live: their beams move now"), qPrintable(a.text));
+    QCOMPARE(a.turnAfter, 0);
+    QCOMPARE(rig.turn(other), 0);
+    a = press({ fid, other }, "fixturePanTurnCentre", true);
+    QVERIFY(a.turnAfter != 0);
+
+    // In Design, nothing running: no question, as before.
+    design.dismiss();
+    m_doc->setMode(Doc::Design);
+    a = press({ fid }, "fixturePanTurnLater", true);
+    QVERIFY(a.text.isEmpty());
+    QCOMPARE(a.turnAfter, 1);
+}
+
 /* For a selection (the plot's menu, Fixture Properties for several):
    every head centred, one undo step, said on the notice line. */
 void Monitor_Test::centringASelectionIsOneUndoStep()

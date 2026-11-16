@@ -244,4 +244,35 @@ void ControllerJobs_Test::theDescriptionsAPersonReads()
         QVERIFY(!J::jobName(job).isEmpty() && !J::jobKey(job).isEmpty());
 }
 
+void ControllerJobs_Test::anIdentityIsWorkedOutOncePerDevice()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    m_stub->m_lineNames = QStringList() << "Wireless Controller" << "Wireless Controller";
+    m_stub->m_lineLocations = { { 0, "USB 14200000" }, { 1, "USB 14300000" } };
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    J *jobs = m_doc->programmer()->controllerJobs();
+    const QString first = jobs->identityOfUniverse(0);
+    QCOMPARE(first, J::identityOf(m_stub, 0));
+    // Asked on every event: the plugin is asked once.
+    m_stub->m_locationAsks = 0;
+    for (int i = 0; i < 100; ++i)
+    {
+        QCOMPARE(jobs->identityOfUniverse(0), first);
+        QVERIFY(jobs->has(0, J::RunCues));
+    }
+    QCOMPARE(m_stub->m_locationAsks, 0);
+    // Patched to the other pad: that pad.
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 1));
+    QCOMPARE(jobs->identityOfUniverse(0), J::identityOf(m_stub, 1));
+    // The same pad moved to another port, said by a hot-plug: found again.
+    m_stub->m_lineLocations = { { 0, "USB 14200000" }, { 1, "USB 14500000" } };
+    emit iom->inputDeviceDisconnected(0, m_stub->name(), "Wireless Controller");
+    emit iom->inputDeviceConnected(0, m_stub->name(), "Wireless Controller");
+    QCOMPARE(jobs->identityOfUniverse(0), J::identityOf(m_stub, 1));
+    QVERIFY(jobs->identityOfUniverse(0).endsWith("USB 14500000"));
+    // Unpatched: none.
+    QVERIFY(iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine()));
+    QCOMPARE(jobs->identityOfUniverse(0), QString());
+}
+
 QTEST_MAIN(ControllerJobs_Test)

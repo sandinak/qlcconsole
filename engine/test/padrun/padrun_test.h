@@ -127,6 +127,18 @@ private slots:
      *  pad's LT + Menu ends nothing: without Focus it is not heard, with
      *  Focus it is not the focus's pad (Q135). */
     void theVenueFocusNeedsTheFocusJob();
+    /** Review 0.4.10: two pads, A armed, A's venue focus start given up
+     *  (the cue waits again, A still the controller's owner): B's four
+     *  together are still the emergency stop (CONTROLLER_JOBS.md 4). */
+    void reviewTheStopFromAnotherPadAfterAFocusGivenUp();
+    /** Review 0.4.10, H1: a venue focus start given up (from the pad or
+     *  the laptop) or refused leaves the cue waiting with no owner, once
+     *  the press is done; a start claims it again. */
+    void aFocusStartGivenUpLetsTheControllerGo();
+    /** Review 0.4.10, H1: the four together from any pad stop the show in
+     *  every state of the venue focus: waiting, naming the venue, the calls
+     *  running (another pad the owner each time). */
+    void theStopFromAnyPadInEveryFocusState();
 
     /* Walking the show (Q192). */
     /** The walking map by role, the same for both pads. */

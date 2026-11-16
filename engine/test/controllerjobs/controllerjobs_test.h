@@ -45,6 +45,10 @@ private slots:
     void aPortWithSlashesIsOneKey();
     void neverInTheShow();
     void theDescriptionsAPersonReads();
+    /** Review 0.4.10: a universe's identity is worked out once per device
+     *  (has() asks on every event; Linux reads /sys for the port), and
+     *  again after a patch or a hot-plug. */
+    void anIdentityIsWorkedOutOncePerDevice();
 
 private:
     Doc *m_doc = nullptr;

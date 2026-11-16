@@ -222,7 +222,10 @@ walks the stage for focus.
 To set them, go to **Connections**, right-click the controller under its
 universe's input and choose **Test Controller and Jobs…**. Under the
 picture of the controller, **Jobs** has a switch for each job. A change is
-saved at once.
+saved, and works, at once, with the window still open. While the window is
+open the pad runs nothing else: the pad that runs cues is disarmed (arm it
+again with LB + RB when you close), but the emergency stop still stops the
+show from any pad.
 
 - **Saved with this computer, not the show.** A show opened on another
   computer uses that computer's jobs.
@@ -244,7 +247,10 @@ saved at once.
   pad connected, the footer's **Pad: ARMED** chip names the pad that
   armed, and only that pad's light shows the arm.
 - **Follow spot off.** The pad's sticks never move the follow spot; it
-  takes the next pad that has the job. The follow spot's settings in the
+  takes the next pad that has the job. Taken off mid-push, whatever the
+  pad was pushing lets go: the follow spot stops, it does not drift on.
+  The same happens when the follow spot moves to another pad, is bound by
+  hand, or the pad is unplugged. The follow spot's settings in the
   Look Editor say where the jobs are set, and say when no pad has the
   job.
 - **Focus off.** The pad can't start or work Venue focus (armed, LT +
@@ -252,7 +258,11 @@ saved at once.
   controller doesn't do focus* (see [Venue focus](focus-calls.md)).
 - **The emergency stop is on every pad.** In the Run role, both bumpers
   and both triggers together stop everything from any connected
-  controller, whatever its jobs.
+  controller, whatever its jobs, whatever the pads are doing: a tool or a
+  venue focus on another pad, or the Controller Test open.
+- **One pad listed twice is one pad.** macOS sometimes lists one
+  controller twice; with the same address it is one controller here: the
+  Pad chip names no second runner and both get the same light.
 
 ## Latency
 

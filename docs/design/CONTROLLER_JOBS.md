@@ -73,8 +73,13 @@ connects. (can change: a pad's serial over USB, when one says it.)
    different ports, are different controllers, whatever their names.
 4. **The emergency stop is everyone's.** The four together stop the show
    from ANY connected controller, whatever its jobs, armed or not, a tool
-   holding the pad or not, in FOCUS or not (Pad Run rule 5; in the Run
-   role, as before: the Tools role has no stop). A controller with no jobs
+   holding the pad or not, in FOCUS or not, a venue focus waiting or
+   owned by another pad, the Controller Test open or not (Pad Run rule 5;
+   in the Run role, as before: the Tools role has no stop). It is read
+   first, before any owner, tool, job, role or test check
+   (`PadRun::watchStop()` at the top of
+   `ProgrammerController::slotControllerInputChanged()`), so nothing can
+   swallow it (review 0.4.10, H1 and M2). A controller with no jobs
    does nothing else: no command, no arm, no light change, no follow
    spot move, no tool step.
 5. **Run cues off.** Every Run-map control on that pad does nothing but
@@ -110,11 +115,17 @@ connects. (can change: a pad's serial over USB, when one says it.)
    (`PadRun::lightUniverse()`): the runner the state's light, every other
    pad its own colour, every pad red after the stop. One pad: as before.
    The same pad seen twice (one identity on two universes) is one
-   controller.
+   controller: counted once (no runner's name on the chip), and told one
+   light, the same colour on both lines (review 0.4.10, M1).
 10. **Jobs changed live.** Taking Run cues from the runner disarms it (no
    button: rule 3's "with no button at all"); taking Focus from the pad
    that owns a tool lets the ownership go; taking Follow spot from the
-   bound pad rebinds. A change is saved at once.
+   bound pad rebinds. A change is saved at once. Whatever a pad left
+   pushed on the follow spot (its stick, fine stick, a facing push) is
+   let go when it loses the job or the binding changes for any reason
+   (job, rebind, Bind by hand, unplug): its later events are dropped, so
+   a push it left would drive the spot on by itself (review 0.4.10, H2).
+   A venue focus start given up or refused lets its owner go too.
 
 ## Where it is set
 
@@ -126,7 +137,11 @@ Bluetooth address or USB port). The picker lists each controller with
 that identity, so two identical pads read "DUALSHOCK 4 · Bluetooth
 …77:93" and "DUALSHOCK 4 · USB port 14200000"; pressing a control lights
 the picture of the pad in your hand only. While the test is open the pad
-runs nothing (as before); the jobs apply when it closes.
+runs nothing but the emergency stop, which still stops the show from
+any pad. Opening it takes the pad as a tool does, so the runner is
+disarmed; the window says so ("arm it again with LB + RB when you
+close"). A job applies on each tick of a switch, at once, with the
+window still open.
 
 ## Tests (sweeps, not examples)
 

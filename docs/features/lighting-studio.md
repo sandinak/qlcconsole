@@ -2460,7 +2460,10 @@ Controller…**. The picture only reads the controller and sends nothing
 itself. While the window is open the controller's buttons and triggers
 run nothing: no GO, no hit, no button action, and in the Run role the
 arm drops and the Run tab and the footer read **Pad: Controller Test**
-until you close it. The sticks still move a follow spot that is playing,
+until you close it (the window says so: arm again with LB + RB when you
+close). The emergency stop is the exception: both bumpers and both
+triggers together still stop the show, from any pad, while the window
+shows the presses. The sticks still move a follow spot that is playing,
 so close the test before a show.
 
 The list below the picture gives each input:

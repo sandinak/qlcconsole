@@ -41,6 +41,12 @@ private slots:
     void aVenueRemembersChecksAndDeadLights();
     /** The pan turn is kept by venue; an older venue file keeps the show's. */
     void aVenueKeepsItsPanTurn();
+    /** Review 0.4.10, M4: a venue keeps a head's turn only when it was
+     *  changed there; another correction leaves the show's turn standing. */
+    void aVenuePinsOnlyTheTurnItChose();
+    /** Review 0.4.10, M4: in Operate a venue's turn never swings a head;
+     *  it waits for Design, and is said both times. */
+    void aVenueTurnWaitsForDesign();
     /** The report: call by call, the target with the stage marks'
      *  position, the correction from the show's own, the checks and flags;
      *  the CSV in Lightwright's columns, quoted where it must be. */

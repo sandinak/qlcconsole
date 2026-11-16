@@ -51,6 +51,21 @@ ControllerJobs::ControllerJobs(Doc *doc, QObject *parent)
     , m_doc(doc)
 {
     load();
+    /* A pad plugged in, unplugged, rescanned or patched: who is on each
+       line is worked out again. */
+    if (InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr)
+    {
+        connect(iom, &InputOutputMap::inputPatchChanged, this, &ControllerJobs::forgetIdentities);
+        connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControllerJobs::forgetIdentities);
+        connect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ControllerJobs::forgetIdentities);
+        connect(iom, &InputOutputMap::pluginConfigurationChanged, this, &ControllerJobs::forgetIdentities);
+        connect(iom, &InputOutputMap::offlinePatchesChanged, this, &ControllerJobs::forgetIdentities);
+    }
+}
+
+void ControllerJobs::forgetIdentities()
+{
+    m_identities.clear();
 }
 
 ControllerJobs::~ControllerJobs()
@@ -141,9 +156,19 @@ QString ControllerJobs::identityOfUniverse(quint32 universe) const
     if (ip == nullptr || ip->plugin() == nullptr)
         return QString();
     /* The device on the line now (a controller slot may have another pad
-       there than the one it was patched with). */
+       there than the one it was patched with): worked out once for it. */
     const QString name = ip->inputName();
-    return identityFor(ip->plugin()->name(), name, ip->plugin()->inputDeviceLocation(ip->input()));
+    const QString plugin = ip->plugin()->name();
+    const auto it = m_identities.constFind(universe);
+    if (it != m_identities.constEnd() && it->plugin == plugin && it->input == ip->input() && it->name == name)
+        return it->identity;
+    KnownIdentity k;
+    k.plugin = plugin;
+    k.input = ip->input();
+    k.name = name;
+    k.identity = identityFor(plugin, name, ip->plugin()->inputDeviceLocation(ip->input()));
+    m_identities.insert(universe, k);
+    return k.identity;
 }
 
 QString ControllerJobs::describe(const QString &identity)

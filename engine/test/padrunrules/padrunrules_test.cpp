@@ -639,7 +639,8 @@ void PadRunRules_Test::theStopWorksWhileAToolHasThePad()
     r->stop();
     QCOMPARE(run->state(), PadRun::Stopped);
 
-    // The Controller Test open (rule 7): nothing runs the show, not even this.
+    /* The Controller Test open: it runs nothing else, but the four are
+       still the stop (review 0.4.10, M2: nothing swallows it). */
     QVERIFY(r->start(m_cue1, 0xFFFFFFFF, nullptr));
     run->setTesting(true);
     hold(kLB, true);
@@ -650,7 +651,7 @@ void PadRunRules_Test::theStopWorksWhileAToolHasThePad()
     axis(kLT, 0);
     hold(kRB, false);
     hold(kLB, false);
-    QCOMPARE(stops(), 1);
+    QCOMPARE(stops(), 2);
     run->setTesting(false);
     r->stop();
 }
@@ -1576,6 +1577,39 @@ void PadRunRules_Test::jobsTakenAwayWhileInUse()
     press(kY, 1);
     QCOMPARE(pc->controllerOwner(), quint32(1));
     pc->refineSession()->stop();
+}
+
+void PadRunRules_Test::reviewTheSamePadTwiceIsToldOneLight()
+{
+    /* macOS lists one DualSense as two HID devices, both patched (as
+       theDuplicateDevice): one address, so one controller by its identity. */
+    makeShow();
+    m_stub->m_lineNames = QStringList() << "Pad (AA:BB:CC:00:00:01)" << "Pad (AA:BB:CC:00:00:01)";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 1));
+    ControllerJobs *jobs = m_doc->programmer()->controllerJobs();
+    QCOMPARE(jobs->identityOfUniverse(0), jobs->identityOfUniverse(1));
+    PadRun *run = m_doc->programmer()->padRun();
+    QVERIFY(run->sameController(0, 1));
+    run->setEnabled(true);
+    run->setArmChordMs(15);
+    auto both = [&](quint32 ch, uchar v) {
+        axis(ch, v, 0);
+        axis(ch, v, 1);
+    };
+    both(kLB, 255);
+    both(kRB, 255);
+    QTRY_VERIFY(run->isArmed());
+    both(kRB, 0);
+    both(kLB, 0);
+    // One physical pad: its two lines must not be told two different lights.
+    QVERIFY2(lightOn(0) == lightOn(1),
+             qPrintable(QString("line 0 told \"%1\", line 1 told \"%2\" (the armed colour is %3); the pad "
+                                "shows whichever came last").arg(lightOn(0), lightOn(1),
+                                                                 PadRun::armedColour().name())));
+    // And the chip treats it as one pad (one pad: no runner's name).
+    QCOMPARE(run->roleText(), QString("Pad: ARMED"));
 }
 
 QTEST_MAIN(PadRunRules_Test)
