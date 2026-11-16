@@ -54,6 +54,11 @@ private slots:
     /* Rules 3 and 5: the chords */
     void theStopsOwnBumpersDoNotArm();
     void aTriggerInTheArmChordSpendsIt();
+    /** Rule 3 (pad-trace replay, 2026-11-16): a chord that fired (or was
+     *  refused) does not fire again while both bumpers stay held, whatever
+     *  else comes in -- a DualSense's resting trigger noise above all. */
+    void aHeldChordFiresOnce_data();
+    void aHeldChordFiresOnce();
     void everyOrderOfTheFour();
     void holdingTheFourIsOneStop();
     void theStopWorksWhileWalking();

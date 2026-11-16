@@ -568,6 +568,55 @@ void PadRunRules_Test::aTriggerInTheArmChordSpendsIt()
     QVERIFY(run->isArmed());
 }
 
+void PadRunRules_Test::aHeldChordFiresOnce_data()
+{
+    QTest::addColumn<int>("start");     // 0: to arm, 1: to disarm, 2: refused (another pad runs cues)
+    QTest::newRow("arming") << 0;
+    QTest::newRow("disarming") << 1;
+    QTest::newRow("refused") << 2;
+}
+
+void PadRunRules_Test::aHeldChordFiresOnce()
+{
+    QFETCH(int, start);
+    makeShow();
+    twoPads(int(CJ::AllJobs), int(CJ::AllJobs));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    run->setArmChordMs(15);
+    if (start == 1)
+        arm(true, 0);
+    if (start == 2)
+        arm(true, 1);
+    const quint32 u = 0;
+    const bool armedBefore = run->isArmed();
+    const int refusedBefore = saidCount("is running cues");
+    // The chord, held: it fires (or is refused) once.
+    hold(kLB, true, u);
+    hold(kRB, true, u);
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 5000);
+    const bool afterChord = run->isArmed();
+    if (start == 2)
+        QCOMPARE(afterChord, true);
+    else
+        QCOMPARE(afterChord, !armedBefore);
+    // Still held: a DualSense's triggers report their resting noise.
+    for (int i = 0; i < 4; ++i)
+    {
+        axis(i % 2 ? kRT : kLT, uchar(6 + i), u);
+        QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 5000);
+        QVERIFY2(run->isArmed() == afterChord,
+                 qPrintable(QString("the held chord fired again after trigger noise %1").arg(i)));
+    }
+    if (start == 2)
+        QCOMPARE(saidCount("is running cues") - refusedBefore, 1);
+    for (quint32 ch : { kLT, kRT })
+        axis(ch, 0, u);
+    hold(kRB, false, u);
+    hold(kLB, false, u);
+    QCOMPARE(run->isArmed(), afterChord);
+}
+
 void PadRunRules_Test::everyOrderOfTheFour()
 {
     /* Rule 5 in all 24 orders, armed or not: one stop, no GO, no arm flip
