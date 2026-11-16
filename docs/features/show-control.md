@@ -170,10 +170,13 @@ them:
   where they are). A Quick focus, Venue focus, Focus this cue or walk
   running then ends with it, and what it had not saved is put back. The arm drops, and the
   button, the frame, the chip and the pad's light turn red (**Pad:
-  STOPPED**), over a walk or a tool too, until you arm again or any run
+  STOPPED**), over a walk or a tool too. An ALL OFF from anywhere else
+  (the laptop, the phone page, OSC or MSC) does the same: the pad turns
+  red, buzzes three times and says so, and a focus or walk it was armed
+  beside never arms it again. It stays red until you arm again or a run
   command goes through from anywhere: a GO, Back or Stop from the laptop,
-  the phone page or OSC, or an ALL OFF from another route (the pad's own
-  four again leave it red). There is no "stop the list" on the pad:
+  the phone page or OSC. Another ALL OFF never ends the red. There is no
+  "stop the list" on the pad:
   stop a list on the Run tab.
 - **A pad with no light buzzes instead.** Two short buzzes: armed. One
   long: disarmed. Three long: the emergency stop. An Xbox pad's light

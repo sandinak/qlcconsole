@@ -175,8 +175,8 @@ WebAccessRun::Result WebAccessRun::command(const QString &command, bool unlocked
     else
         return Unknown;
 
-    // The stop's permission is kStopNeedsRemote's (board Q256).
-    if (r.command != ShowControl::AllOff || kStopNeedsRemote)
+    // The stop's permission is ShowControl's rule (board Q256), as App's is.
+    if (ShowControl::webNeedsRemote(r.command))
     {
         if (!remoteAllowed())
             return Refused;
@@ -565,7 +565,7 @@ QByteArray WebAccessRun::stateJson() const
     o[QStringLiteral("remote")] = remoteAllowed();
     o[QStringLiteral("pin")] = pinRequired();
     // The page may send its emergency stop without remote GO and the PIN (Q256).
-    o[QStringLiteral("stopFree")] = !kStopNeedsRemote;
+    o[QStringLiteral("stopFree")] = !ShowControl::webNeedsRemote(ShowControl::AllOff);
     o[QStringLiteral("mode")] = m_doc->mode() == Doc::Operate ? QStringLiteral("LIVE") : QStringLiteral("DESIGN");
     const TeachingSettings *teach = m_doc->teachingSettings();
     o[QStringLiteral("teaching")] = teach != nullptr && teach->enabled();

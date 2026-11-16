@@ -159,12 +159,6 @@ public:
 
     static const int kMaxTries = 5;
     static const int kLockoutMs = 30000;
-    /** Board Q256 (open): the emergency stop (alloff) asks what every other
-     *  command asks -- remote GO on, the PIN given. Until it is answered it
-     *  does; letting the stop through without them is this line: false (the
-     *  page reads it as stopFree in the state, and says why a stop it may not
-     *  send was not sent). */
-    static constexpr bool kStopNeedsRemote = true;
 
 signals:
     /** The state changed: its JSON text. */

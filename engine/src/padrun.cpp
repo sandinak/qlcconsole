@@ -133,8 +133,10 @@ void PadRun::hookShowControl()
     if (sc == nullptr || m_showControlHooked)
         return;
     m_showControlHooked = true;
-    connect(sc, &ShowControl::commandHandled, this, [this](const QString &, bool done) {
-        if (m_stopped && !m_stopping && done)
+    /* Never an ALL OFF, from any route: it is the stop (stopStruck()), not
+       the show run again. */
+    connect(sc, &ShowControl::commandCarried, this, [this](ShowControl::Command command, bool done) {
+        if (m_stopped && !m_stopping && done && command != ShowControl::AllOff)
         {
             m_stopped = false;
             sync();
@@ -591,41 +593,75 @@ bool PadRun::setArmed(bool on, quint32 universe)
 
 void PadRun::emergencyStop()
 {
-    m_armChord->stop();
-    m_chordUniverse = UINT_MAX;
     hookShowControl();
-    /* Stopped first: the stop ends a focus or a walk inside run() (E9), and
-       what their ends do here must find the pad stopped -- not ARMED again
-       from the arm a focus put by. */
-    const bool was = m_armed;
-    m_armed = false;
-    m_armUniverse = UINT_MAX;
-    m_focusArm = UINT_MAX;      // a focus ending after the stop does not re-arm
-    m_stopped = true;
-    m_playing = false;
-    m_flash->stop();
+    /* Stopped first (stopStruck()), then the ALL OFF: the stop's own
+       emergencyStopStruck() comes back here during run() and is the same
+       stop, struck once. */
+    m_stopping = true;
+    m_struckNow = false;
+    stopStruck();
     ShowControl *sc = m_doc != nullptr ? m_doc->showControl() : nullptr;
     bool done = false;
     if (sc != nullptr)
     {
         ShowControl::Request r;
         r.command = ShowControl::AllOff;
-        m_stopping = true;      // its own commandHandled() does not end Stopped
         done = sc->run(r, ShowControl::RoutePad);
-        m_stopping = false;
     }
+    m_stopping = false;
+    m_struckNow = false;
     emit commandSent(ShowControl::AllOff, done);
+    sayStopped();
+}
+
+void PadRun::stopStruck()
+{
+    // The pad's own stop: struck already, before its ALL OFF went.
+    if (m_stopping && m_struckNow)
+        return;
+    if (m_stopping)
+        m_struckNow = true;
+    /* One stopped state, whatever route the stop came by (rule 2): the arm
+       drops, a focus's put-by arm is forgotten, the state is Stopped -- all
+       before a tool ends below, so nothing its end does re-arms the pad
+       or says GO works again. */
+    m_armChord->stop();
+    m_chordUniverse = UINT_MAX;
+    const bool was = m_armed;
+    m_armed = false;
+    m_armUniverse = UINT_MAX;
+    m_focusArm = UINT_MAX;
+    m_stopped = true;
+    m_playing = false;
+    m_flash->stop();
     if (was)
         emit armedChanged(false);
-    sync();
+    // E9: the focus tools end with it, quietly (the stop speaks for itself).
     if (m_pc != nullptr)
     {
-        // Every pad buzzes: the stop is everyone's (review 1).
-        m_pc->padRumble(3, ControllerScheme::rumbleLongMs(), ProgrammerController::kAllPads);
-        const QString said = tr("Emergency stop. Everything is off.");
-        m_pc->tellOperator(said, ControllerScheme::ConfirmPriority);
-        showNotice(said);
+        m_endingForStop = true;
+        m_pc->focusCallCue()->cut();
+        if (m_pc->focusSession()->isActive())
+            m_pc->focusSession()->stop();
+        if (m_pc->refineSession()->isActive())
+            m_pc->refineSession()->stop();
+        m_endingForStop = false;
     }
+    sync();
+    // From another route (OSC, MSC, the phone, the laptop): every pad told too.
+    if (!m_stopping && m_enabled)
+        sayStopped();
+}
+
+void PadRun::sayStopped()
+{
+    if (m_pc == nullptr)
+        return;
+    // Every pad buzzes: the stop is everyone's (review 1).
+    m_pc->padRumble(3, ControllerScheme::rumbleLongMs(), ProgrammerController::kAllPads);
+    const QString said = tr("Emergency stop. Everything is off.");
+    m_pc->tellOperator(said, ControllerScheme::ConfirmPriority);
+    showNotice(said);
 }
 
 /*****************************************************************************
@@ -2129,7 +2165,9 @@ void PadRun::walkEnded()
             });
     }
     sync();
-    m_pc->tellOperator(tr("Walk off. Run role."), ControllerScheme::ConfirmPriority);
+    // Ended by the emergency stop: its own line speaks.
+    if (!m_endingForStop)
+        m_pc->tellOperator(tr("Walk off. Run role."), ControllerScheme::ConfirmPriority);
 }
 
 void PadRun::endBesideWalk(const QString &reason)

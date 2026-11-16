@@ -183,7 +183,11 @@ class QXmlStreamWriter;
  *  E9. A focus tool lighting the rig through its own layer (Quick focus,
  *      Venue focus, Focus this cue / the pad's walk) ends with it
  *      (ProgrammerController::emergencyStopStruck(), on the main thread):
- *      what it had not saved is put back, as leaving it unsaved does.
+ *      what it had not saved is put back, as leaving it unsaved does. The
+ *      pad goes Stopped first, whatever route the stop came by
+ *      (PadRun::stopStruck()). The follow spot (FollowSpotMover) is not
+ *      stopped: it holds a position only, and its light came from the cue
+ *      the stop has stopped.
  *
  * When OnAtOpen fixtures come on is the show's setting (saved with it,
  * Settings > Output): when you switch to Operate (the default, the safer

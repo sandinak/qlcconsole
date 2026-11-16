@@ -2034,6 +2034,24 @@ void AppViews_Test::aWebGoIsRefusedUntilTheShowAllowsIt()
     QVERIFY(sc->run(r, ShowControl::RouteWeb));
     QCOMPARE(m_app->m_lastRunRoute, ShowControl::RouteWeb);
     QTRY_VERIFY_WITH_TIMEOUT(list->isRunning(), 5000);
+
+    /* The page's emergency stop follows ShowControl::webNeedsRemote() here
+       as the web server does (board Q256): refused with remote GO off
+       while the rule asks for it; flipped, the ALL OFF really runs. */
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    doc->operateSettings()->setRemoteGo(false);
+    QVERIFY(ShowControl::webStopNeedsRemote());
+    QVERIFY(!sc->run(off, ShowControl::RouteWeb));
+    QVERIFY(handled.last().at(0).toString().contains(QStringLiteral("remote GO is off")));
+    QVERIFY(list->isRunning());
+    ShowControl::setWebStopNeedsRemote(false);
+    auto rule = qScopeGuard([]() { ShowControl::setWebStopNeedsRemote(ShowControl::kWebStopNeedsRemote); });
+    QVERIFY(sc->run(off, ShowControl::RouteWeb));
+    QVERIFY(handled.last().at(1).toBool());
+    QTRY_VERIFY_WITH_TIMEOUT(!list->isRunning(), 5000);
+    // Every other page command still asks.
+    QVERIFY(!sc->run(r, ShowControl::RouteWeb));
 }
 
 void AppViews_Test::aGoThatFindsNothingHoldsNoPreview()

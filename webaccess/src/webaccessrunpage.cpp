@@ -221,7 +221,8 @@ function connect(){
   ws=new WebSocket(u);
   ws.onopen=function(){retry=500;$('dot').className='on';send('QLC+RUN|hello');
     var p=load('pin');if(p)send('QLC+RUN|pin|'+p)};
-  ws.onclose=function(){$('dot').className='';ws=null;setTimeout(connect,retry);retry=Math.min(retry*2,8000)};
+  ws.onclose=function(){$('dot').className='';ws=null;
+    if(stopSending)stopNotDone('STOP NOT CONFIRMED','Stop not confirmed: the connection to the console dropped. Stop from the laptop.');setTimeout(connect,retry);retry=Math.min(retry*2,8000)};
   ws.onerror=function(){try{ws.close()}catch(e){}};
   ws.onmessage=function(e){
     var p=String(e.data).split('|');
@@ -231,6 +232,7 @@ function connect(){
       if(p[2]==='ok'){unlocked=true;$('lock').className='';$('pin').value='';store('pin',pendingPin||load('pin'));paint()}
       else{unlocked=false;store('pin',null);askPin(p[2]==='locked'?'Too many tries. Wait a little.':'Wrong PIN.')}}
     else if(p[1]==='ack'){
+      if(p[2]==='alloff'){stopAck(p[3]);return}
       if(p[3]==='refused')msg('Refused: GO from the phone is off.');
       else if(p[3]==='needpin'){unlocked=false;askPin('')}
       else if(p[3]==='nothing'&&p[2]==='solo')msg('Solo needs a cue playing in the Show Tree preview.');
@@ -271,14 +273,37 @@ function statusList(){
    Solo (a.cmd). */
 function padAction(r){return (st.pad||{})[r]}
 function padLabels(){var l={};for(var r in (st.pad||{}))l[r]=st.pad[r].label;QPad.labels(l)}
-var padArmed=false,padStopped=false,stopRefused=false,armT=null,estopDone=false,spent=false;
-function showArm(){var e=$('armed');e.style.display=(padArmed||padStopped||stopRefused)?'block':'none';
-  e.className=padStopped?'stopped':stopRefused?'refused':'';
-  e.textContent=padStopped?'EMERGENCY STOP':stopRefused?'STOP NOT SENT':'ARMED: LT + A IS GO';showHit()}
+var padArmed=false,padStopped=false,stopRefused=false,stopSending=false,stopBanner='',stopTimer=null,
+  armT=null,estopDone=false,spent=false;
+function showArm(){var e=$('armed');e.style.display=(padArmed||padStopped||stopRefused||stopSending)?'block':'none';
+  e.className=padStopped?'stopped':(stopRefused||stopSending)?'refused':'';
+  e.textContent=padStopped?'EMERGENCY STOP':stopSending?'SENDING STOP\u2026':stopRefused?stopBanner:'ARMED: LT + A IS GO';showHit()}
+/* The page says EMERGENCY STOP only once the console has answered that the
+   stop was carried out (RUN|ack|alloff|ok); until then SENDING STOP. A stop
+   it could not send, or one refused, says so and why: never a red banner
+   for a stop that did not happen. */
+function stopNotDone(banner,why){clearTimeout(stopTimer);stopTimer=null;stopSending=false;padStopped=false;
+  stopRefused=true;stopBanner=banner;showArm();msg(why);if(navigator.vibrate)navigator.vibrate(600)}
+function stopDone(){clearTimeout(stopTimer);stopTimer=null;stopSending=false;stopRefused=false;padStopped=true;
+  showArm();msg('');if(navigator.vibrate)navigator.vibrate([150,80,150,80,150])}
+function sendStop(){
+  var no=stopRefusal();
+  if(no){stopNotDone('STOP NOT SENT',no);return}
+  if(!(ws&&ws.readyState===1)){stopNotDone('STOP NOT SENT','Stop not sent: the page has lost the console. Stop from the laptop.');return}
+  stopSending=true;padStopped=false;stopRefused=false;showArm();cmd('alloff');
+  clearTimeout(stopTimer);
+  stopTimer=setTimeout(function(){if(stopSending)stopNotDone('STOP NOT CONFIRMED',
+    'Stop not confirmed: the console did not answer. Stop from the laptop.')},3000)}
+function stopAck(answer){
+  if(answer==='ok'){stopDone();return}
+  if(answer==='needpin'){unlocked=false;askPin('')}
+  stopNotDone('STOP NOT SENT',answer==='refused'?'Stop not sent: GO from the phone is off on the laptop (Show Settings).'
+    :answer==='needpin'?'Stop not sent: give the show\'s PIN on this page first.'
+    :'Stop not done: the console refused it. Stop from the laptop.')}
 /* Why the page may not send the emergency stop, in plain words; empty when
    it may. The page never shows a stop it did not send. The stop asks what
    every command asks (remote GO on, the PIN given) unless the console says
-   otherwise (st.stopFree, WebAccessRun::kStopNeedsRemote: board Q256). */
+   otherwise (st.stopFree, ShowControl::kWebStopNeedsRemote: board Q256). */
 function stopRefusal(){if(st.stopFree)return '';
   if(!st.remote)return 'Stop not sent: GO from the phone is off on the laptop (Show Settings).';
   if(st.pin&&!unlocked)return 'Stop not sent: give the show\'s PIN on this page first.';
@@ -298,7 +323,7 @@ function chord(){var a=padAction('lb'),lb=QPad.down('lb'),rb=QPad.down('rb'),tr=
   armT=setTimeout(function(){armT=null;
     /* The controller test opened inside the chord's time: nothing pressed there arms. */
     if(!(QPad.down('lb')&&QPad.down('rb'))||QPad.down('lt')||QPad.down('rt')||spent||QPad.isOpen())return;
-    padArmed=!padArmed;padStopped=false;stopRefused=false;showArm();
+    padArmed=!padArmed;padStopped=false;stopRefused=false;stopSending=false;clearTimeout(stopTimer);showArm();
     if(navigator.vibrate)navigator.vibrate(padArmed?[30,60,30]:150)},(a&&a.hold)||500)}
 QPad.on({
   down:function(r){
@@ -306,10 +331,7 @@ QPad.on({
     if(isChord(r)){
       if(QPad.down('lb')&&QPad.down('rb')&&QPad.down('lt')&&QPad.down('rt')){
         clearTimeout(armT);armT=null;spent=true;
-        if(!estopDone){estopDone=true;padArmed=false;var no=stopRefusal();
-          padStopped=!no;stopRefused=!!no;showArm();
-          if(no){msg(no);if(navigator.vibrate)navigator.vibrate(600)}
-          else{cmd('alloff');if(navigator.vibrate)navigator.vibrate([150,80,150,80,150])}}
+        if(!estopDone){estopDone=true;padArmed=false;sendStop()}
         return}
       chord();
       /* RT's pull on its own is the hit, below -- not with a bumper or LT down (the stop in the making). */

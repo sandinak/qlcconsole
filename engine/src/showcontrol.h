@@ -65,6 +65,7 @@ public:
     /** SubGo / SubBack: through the sub-cues of the cue playing
      *  (docs/design/SUBCUES_DESIGN.md) -- OSC /subgo and /subback; MSC has none. */
     enum Command { Go, Stop, Pause, Resume, Load, AllOff, Reset, Back, SubGo, SubBack };
+    Q_ENUM(Command)
 
     /** Where a command came from: OSC, MSC, or this console (a key, the
      *  footer, the Virtual Console). */
@@ -112,6 +113,25 @@ public:
     {
         return route == RouteKey || route == RouteRunTab || route == RoutePad;
     }
+    /** Board Q256 (open): does the emergency stop (ALL OFF) from the phone
+     *  or Deck page need what every page command needs -- GO from the
+     *  phone on in Show Settings, the page's PIN given? Until it is
+     *  answered, yes. Letting the stop through without them is this one
+     *  line: false. WebAccessRun (the server's check and the page's
+     *  stopFree) and App::runCommand() both read webNeedsRemote(), so the
+     *  two can never disagree ("shown but not done"). */
+    static constexpr bool kWebStopNeedsRemote = true;
+    /** kWebStopNeedsRemote, unless a test set it (setWebStopNeedsRemote()) */
+    static bool webStopNeedsRemote();
+    static void setWebStopNeedsRemote(bool on);
+    /** A command from the phone or Deck page (RouteWeb) needs GO from the
+     *  phone on, and the page's PIN: every one, the stop as
+     *  webStopNeedsRemote() says. */
+    static bool webNeedsRemote(Command command)
+    {
+        return command != AllOff || webStopNeedsRemote();
+    }
+
     /** GO, Back, Sub GO and Sub Back put a cue on stage (RC8 holds the
      *  previews for them). */
     static bool takesStage(Command command)
@@ -330,6 +350,11 @@ signals:
      *  line saying which and why: "GO cue 12.5 — Main", "GO cue 9: no such
      *  cue in Main". */
     void commandHandled(const QString &what, bool done);
+    /** The same command, by what it was: emitted with commandHandled() by
+     *  execute(), on the thread the command arrived on. PadRun reads it:
+     *  a command carried out ends the pad's red Stopped -- but never an
+     *  ALL OFF, from any route (one stopped state, rule 2). */
+    void commandCarried(ShowControl::Command command, bool done);
 
     /** The same, with where the command came from -- and for MSC, the
      *  universe whose MIDI input it arrived on (UINT_MAX otherwise). */

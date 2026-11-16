@@ -21,6 +21,7 @@
 #include <QJSEngine>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QScopeGuard>
 #include <QJsonObject>
 #include <QTcpSocket>
 #include <QTcpServer>
@@ -65,6 +66,7 @@
 #include "doc.h"
 #include "chaser.h"
 #include "showcontrol.h"
+#include "outputrulekeeper.h"
 #include "showoperate.h"
 #include "showtreecontroller.h"
 #include "programmercontroller.h"
@@ -2739,13 +2741,31 @@ void WebAccess_Test::theRemoteEmergencyStopNeedsNoCueList()
     /* Board Q256 (open): until it is answered the stop asks what every
        command asks, and the page is told so (stopFree false), so it says
        STOP NOT SENT rather than a stop it did not send. */
-    QVERIFY(WebAccessRun::kStopNeedsRemote);
+    QVERIFY(ShowControl::kWebStopNeedsRemote);
+    QVERIFY(ShowControl::webStopNeedsRemote());
     QCOMPARE(QJsonDocument::fromJson(run.stateJson()).object().value(QStringLiteral("stopFree")).toBool(true), false);
+    m_doc->operateSettings()->setRemoteGo(true);
+    QCOMPARE(run.command(QStringLiteral("go"), true, QString(), QString()), WebAccessRun::NothingToDo);
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
+    m_doc->outputRuleKeeper()->noteGo();       // the stop's mark gone, to see the next one
     m_doc->operateSettings()->setRemoteGo(false);
     QCOMPARE(run.command(QStringLiteral("alloff"), true, QString(), QString()), WebAccessRun::Refused);
+    QVERIFY(!m_doc->outputRuleKeeper()->emergencyStopped());
     m_doc->operateSettings()->setRemoteGo(true);
     m_doc->operateSettings()->setPin(QStringLiteral("2468"));
     QCOMPARE(run.command(QStringLiteral("alloff"), false, QString(), QString()), WebAccessRun::NeedPin);
+    QVERIFY(!m_doc->outputRuleKeeper()->emergencyStopped());
+
+    /* Q256 answered "send it anyway" (the rule flipped): the page is told,
+       and the stop really runs with GO from the phone off and no PIN. */
+    ShowControl::setWebStopNeedsRemote(false);
+    auto restore = qScopeGuard([]() { ShowControl::setWebStopNeedsRemote(ShowControl::kWebStopNeedsRemote); });
+    m_doc->operateSettings()->setRemoteGo(false);
+    QCOMPARE(QJsonDocument::fromJson(run.stateJson()).object().value(QStringLiteral("stopFree")).toBool(false), true);
+    QCOMPARE(run.command(QStringLiteral("alloff"), false, QString(), QString()), WebAccessRun::Done);
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
+    // Every other command still asks.
+    QCOMPARE(run.command(QStringLiteral("go"), true, QString(), QString()), WebAccessRun::Refused);
     m_doc->operateSettings()->setPin(QString());
 }
 

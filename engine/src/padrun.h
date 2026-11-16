@@ -508,6 +508,17 @@ public:
     /** Everything stops (ALL OFF through run()), the arm drops, the state
      *  is Stopped. */
     void emergencyStop();
+    /** Every pad told of the stop: three long buzzes on every pad, the
+     *  voice and the notice. */
+    void sayStopped();
+    /** The emergency stop struck, from any route (the pad's own, OSC, MSC,
+     *  the phone, the laptop; ProgrammerController::endToolsForStop(), on
+     *  the main thread): the one stopped state (rule 2) -- the arm
+     *  dropped, a focus's put-by arm forgotten, Stopped until a command
+     *  other than ALL OFF is carried out or the pad arms -- and then the
+     *  focus tools ended (E9), so none of their ends re-arms the pad or
+     *  says GO works again. Another route's stop is said on every pad. */
+    void stopStruck();
     /** Fire the armed hit: start it, or let it go when it runs (a finished
      *  one-shot plays again). Says its name; false, said, when none is
      *  armed or the show is in Design. */
@@ -769,6 +780,8 @@ private:
     /** holder() when last seen: a change forgets what was held. */
     QString m_lastHolder;
     bool m_stopping = false;    ///< the stop's own ALL OFF is going through run()
+    bool m_struckNow = false;   ///< the pad's own stop has struck (stopStruck()) already
+    bool m_endingForStop = false;   ///< the stop is ending the focus tools (quiet)
     bool m_heldNow = false;     ///< the double-GO guard held the command trigger() sent
     bool m_showControlHooked = false;
     bool m_showTreeHooked = false;

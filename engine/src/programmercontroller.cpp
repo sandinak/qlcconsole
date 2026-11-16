@@ -1928,11 +1928,8 @@ void ProgrammerController::padRumble(int pulses, int lengthMs, quint32 universe)
 
 void ProgrammerController::endToolsForStop()
 {
-    m_focusCallCue->cut();
-    if (m_focusSession->isActive())
-        m_focusSession->stop();
-    if (m_refineSession->isActive())
-        m_refineSession->stop();
+    // The pad's stopped state first, then the tools: PadRun does both, in that order.
+    m_padRun->stopStruck();
 }
 
 void ProgrammerController::tellOperator(const QString &text, int priority)
