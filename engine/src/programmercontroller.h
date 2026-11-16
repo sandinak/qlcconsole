@@ -50,6 +50,7 @@ class FocusCalls;
 class FocusCallCue;
 class RefineSession;
 class PadRun;
+class ControllerJobs;
 class VenueCorrections;
 class ControllerKeepAlive;
 class ParkEffect;
@@ -242,6 +243,9 @@ public:
      *  the controller, through ShowControl::run() with RoutePad, while no
      *  tool has the pad. Never null. */
     PadRun *padRun() const { return m_padRun; }
+    /** What each game controller is for, on this computer (Run cues,
+     *  Follow spot, Focus; docs/design/CONTROLLER_JOBS.md). Never null. */
+    ControllerJobs *controllerJobs() const { return m_controllerJobs; }
 
     bool saveFocusCallsXML(QXmlStreamWriter *doc) const;
     bool loadFocusCallsXML(QXmlStreamReader &root);
@@ -934,6 +938,7 @@ private:
     VenueCorrections *m_venues = nullptr;
     RefineSession *m_refineSession = nullptr;
     PadRun *m_padRun = nullptr;
+    ControllerJobs *m_controllerJobs = nullptr;
     /** See controllerKeepAlive(). */
     ControllerKeepAlive *m_keepAlive = nullptr;
     /** Asks the controller how it is while it is wanted: a plugin does not

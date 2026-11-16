@@ -2152,9 +2152,9 @@ void ConnectionsTree::refresh()
                     "from. The first one in this list that is connected drives it; "
                     "each keeps its own input and controller profile, and the show's "
                     "controls work from whichever it is. Right-click to change the "
-                    "order or take it out, choose Test Controller\u2026 to see each control "
-                    "light as you press it, or Check Mapping\u2026 to walk it through every "
-                    "control.")
+                    "order or take it out, choose Test Controller and Jobs\u2026 to see each "
+                    "control light as you press it and set what it is for (Run cues, Follow "
+                    "spot, Focus), or Check Mapping\u2026 to walk it through every control.")
                     .arg((dev.anyGamepad ? tr("Any game controller") : dev.uid).toHtmlEscaped())
                     .arg(u + 1));
             }
@@ -3037,9 +3037,10 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         if (hasAny == false)
             any = menu.addAction(tr("Also Take Any Game Controller (last)"));
         menu.addSeparator();
-        QAction *testPad = menu.addAction(tr("Test Controller\u2026"));
+        QAction *testPad = menu.addAction(tr("Test Controller and Jobs\u2026"));
         testPad->setToolTip(tr("Open the Controller Test on this controller: a picture of it "
-                               "lights each control as you press it"));
+                               "lights each control as you press it, and its jobs on this "
+                               "computer (Run cues, Follow spot, Focus) are set there"));
         QAction *checkMap = menu.addAction(tr("Check Mapping\u2026"));
         checkMap->setToolTip(tr("Open the Controller Test and walk this controller through every "
                                 "control, to check each is read as the control it is"));

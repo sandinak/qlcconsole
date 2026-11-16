@@ -186,6 +186,7 @@ add_library(${module_name} SHARED
     refinesession.cpp refinesession.h
     refinescene.cpp
     controllerkeepalive.cpp controllerkeepalive.h
+    controllerjobs.cpp controllerjobs.h
     gamepadrole.cpp gamepadrole.h
     padnames.cpp padnames.h
     padrun.cpp padrun.h

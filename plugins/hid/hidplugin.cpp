@@ -305,6 +305,14 @@ QString HIDPlugin::inputDeviceKind(quint32 input) const
     return GamepadLayout::deviceKind(dev->vendorId(), dev->productId());
 }
 
+QString HIDPlugin::inputDeviceLocation(quint32 input) const
+{
+    HIDDevice *dev = device(input);
+    if (dev == nullptr || dev->axisCount() < 0)    // joysticks only
+        return QString();
+    return dev->location();
+}
+
 bool HIDPlugin::isPatchedInput(quint32 line) const
 {
     for (const PluginUniverseDescriptor &d : m_universesMap)

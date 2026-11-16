@@ -33,6 +33,7 @@
 #include <QVariant>
 
 #include "programmercontroller.h"
+#include "controllerjobs.h"
 #include "padrun.h"
 #include "controlmap.h"
 #include "controllerkeepalive.h"
@@ -139,6 +140,7 @@ ProgrammerController::ProgrammerController(Doc *doc)
         applyFollowSpotOperator();
     });
     m_focusCalls = new FocusCalls(m_doc, this);
+    m_controllerJobs = new ControllerJobs(m_doc, this);
     m_refineSession = new RefineSession(m_doc, this);
     // The light itself, from the walk (Q192): its corrections go where Focus mode's do.
     m_refineSession->setVenues(m_venues);

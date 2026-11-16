@@ -23,6 +23,7 @@
 #include <QTreeWidget>
 #include <QListWidget>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QHeaderView>
 #include <QSplitter>
 #include <QFileDialog>
@@ -42,6 +43,7 @@
 #include <QUrl>
 
 #include "controllertestdialog.h"
+#include "controllerjobs.h"
 #include "programmercontroller.h"
 #include "controllerkeepalive.h"
 #include "focuscontrolmap.h"
@@ -164,6 +166,57 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
     pr->addStretch(1);
     m_pickerRow->hide();
     vl->addWidget(m_pickerRow);
+
+    /* Its jobs on this computer (docs/design/CONTROLLER_JOBS.md): what the
+       controller shown is for, and how it is told from another of its
+       model. Saved at once, with this computer, not the show. */
+    m_jobsRow = new QWidget(this);
+    m_jobsRow->setObjectName(QStringLiteral("controllerTestJobs"));
+    m_jobsRow->setToolTip(tr("What this controller is for, on this computer (not saved with the "
+                             "show). The emergency stop (both bumpers and both triggers) works "
+                             "on every controller, whatever its jobs."));
+    QHBoxLayout *jr = new QHBoxLayout(m_jobsRow);
+    jr->setContentsMargins(0, 0, 0, 0);
+    QLabel *jobsLabel = new QLabel(tr("Jobs:"), m_jobsRow);
+    jr->addWidget(jobsLabel);
+    ControllerJobs *store = m_doc->programmer()->controllerJobs();
+    for (const ControllerJobs::Job job : ControllerJobs::jobs())
+    {
+        QCheckBox *box = new QCheckBox(ControllerJobs::jobName(job), m_jobsRow);
+        box->setObjectName(QStringLiteral("controllerTestJob_%1").arg(ControllerJobs::jobKey(job)));
+        switch (job)
+        {
+            case ControllerJobs::RunCues:
+                box->setToolTip(tr("Arm and run cues from this controller. One controller runs "
+                                   "cues at a time: the first to arm, until it disarms."));
+                break;
+            case ControllerJobs::FollowSpot:
+                box->setToolTip(tr("This controller's sticks steer the follow spot."));
+                break;
+            default:
+                box->setToolTip(tr("This controller works venue focus, Focus mode and Focus "
+                                   "this cue."));
+                break;
+        }
+        jr->addWidget(box);
+        m_jobSwitches.insert(int(job), box);
+        connect(box, &QCheckBox::toggled, this, [this, store, job](bool on) {
+            if (!m_shownIdentity.isEmpty())
+                store->setJob(m_shownIdentity, job, on);
+        });
+    }
+    jr->addSpacing(12);
+    m_jobsKnownAs = new QLabel(m_jobsRow);
+    m_jobsKnownAs->setObjectName(QStringLiteral("controllerTestKnownAs"));
+    m_jobsKnownAs->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_jobsKnownAs->setStyleSheet(QStringLiteral("color: palette(mid);"));
+    jr->addWidget(m_jobsKnownAs, 1);
+    m_jobsRow->hide();
+    vl->addWidget(m_jobsRow);
+    connect(store, &ControllerJobs::jobsChanged, this, [this](const QString &identity) {
+        if (identity == m_shownIdentity)
+            refreshJobs();
+    });
 
     /* Check Mapping: shown once a walk is started. */
     m_checkPanel = new QWidget(this);
@@ -938,7 +991,7 @@ void ControllerTestDialog::refreshPicker()
         const QSignalBlocker block(m_device);
         m_device->clear();
         for (const Controller &c : list)
-            m_device->addItem(c.name);
+            m_device->addItem(pickerText(c));
     }
     m_pickerRow->setVisible(list.size() > 1);
     // The one shown stays shown (marks and all) while it is connected.
@@ -1006,6 +1059,52 @@ void ControllerTestDialog::loadControls()
     }
     m_picture->setControls(controls);
     m_picture->setFamily(family);
+    refreshJobs();
+}
+
+QString ControllerTestDialog::pickerText(const Controller &c) const
+{
+    /* Two of one model differ in their address or port only: say it, so
+       the one picked is the one in hand (press a control: it lights). */
+    const QString identity = ControllerJobs::identityOf(c.plugin.data(), c.input);
+    if (identity.isEmpty() || ControllerJobs::isNameOnly(identity))
+        return c.name;
+    return QStringLiteral("%1 \u00B7 %2").arg(ControllerJobs::modelName(c.name),
+                                              ControllerJobs::describe(identity));
+}
+
+QStringList ControllerTestDialog::pickerTexts() const
+{
+    QStringList out;
+    for (int i = 0; i < m_device->count(); ++i)
+        out << m_device->itemText(i);
+    return out;
+}
+
+QCheckBox *ControllerTestDialog::jobSwitch(int job) const
+{
+    return m_jobSwitches.value(job);
+}
+
+void ControllerTestDialog::refreshJobs()
+{
+    m_shownIdentity = m_shown.plugin.isNull() ? QString()
+                                              : ControllerJobs::identityOf(m_shown.plugin.data(),
+                                                                           m_shown.input);
+    m_jobsRow->setVisible(!m_shownIdentity.isEmpty());
+    if (m_shownIdentity.isEmpty())
+        return;
+    const ControllerJobs::Jobs jobs = m_doc->programmer()->controllerJobs()->jobsOf(m_shownIdentity);
+    for (auto it = m_jobSwitches.constBegin(); it != m_jobSwitches.constEnd(); ++it)
+    {
+        const QSignalBlocker block(it.value());
+        it.value()->setChecked(jobs.testFlag(ControllerJobs::Job(it.key())));
+    }
+    m_jobsKnownAs->setText(tr("Known as: %1").arg(ControllerJobs::describe(m_shownIdentity)));
+    m_jobsKnownAs->setToolTip(ControllerJobs::isNameOnly(m_shownIdentity)
+        ? tr("This controller sends no Bluetooth address and its plugin gives no port: another "
+             "of its model shares these jobs.")
+        : tr("How this controller is told from another of its model. Its jobs follow it."));
 }
 
 void ControllerTestDialog::resetPicture()

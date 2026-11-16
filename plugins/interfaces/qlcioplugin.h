@@ -708,6 +708,17 @@ public:
     { Q_UNUSED(input); return QString(); }
 
     /**
+     * Where input line @p input's device is plugged in, so two of one
+     * model are told apart when their names are the same (controller
+     * jobs, docs/design/CONTROLLER_JOBS.md): the HID plugin gives the
+     * USB port ("USB 14200000": macOS's location ID; Linux the joystick's
+     * sysfs phys; Windows the HID device path). Stable while the device
+     * stays in that port. Empty when the plugin can't tell (the default).
+     */
+    virtual QString inputDeviceLocation(quint32 input) const
+    { Q_UNUSED(input); return QString(); }
+
+    /**
      * Diagnostics, for the Controller test window: while on, report every
      * raw input every device reads -- patched or not -- through
      * inputDiagnostic(). Returns false when the plugin has none to give
@@ -924,10 +935,11 @@ private:
 
 /* The interface's identity, bumped whenever its virtual table changes
    (review 13 L6: 0.4.8 added flushOutput(), forgetOutput() and the
-   closing-frame source): a plugin built against an older one is refused
+   closing-frame source; 0.4.9 inputDeviceLocation()): a plugin built
+   against an older one is refused
    by QPluginLoader -- it would call through the wrong slots -- rather than
    loaded. Every in-tree plugin names it with this macro. */
-#define QLCIOPlugin_iid "org.qlcconsole.QLCIOPlugin/0.4.8.1"
+#define QLCIOPlugin_iid "org.qlcconsole.QLCIOPlugin/0.4.9.1"
 
 Q_DECLARE_INTERFACE(QLCIOPlugin, QLCIOPlugin_iid)
 

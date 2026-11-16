@@ -100,6 +100,10 @@ namespace GamepadLayout
     Transport transportFromString(const QString &name);
     /** The transport in a macOS hidapi path ("<transport>_<vid>_<pid>_<location>"). */
     Transport transportFromPath(const QString &path);
+    /** Where a macOS hidapi path's device is plugged in: its transport and
+     *  location ID, "USB 14200000" (the USB port; controller jobs tell two
+     *  of one model apart by it). Empty for any other path. */
+    QString locationFromPath(const QString &path);
     QString transportName(Transport transport);
 
     /** A Sony pad this layout knows (DualShock 4, DualSense). */

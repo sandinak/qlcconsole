@@ -70,7 +70,17 @@ QList<HIDVirtualPad *> HIDVirtualPad::fromEnvironment(HIDPlugin *parent)
         const unsigned short pid = one.mid(a + 1, b - a - 1).toUShort(&okP, 16);
         if (!okV || !okP)
             continue;
-        pads << new HIDVirtualPad(parent, 0, one.mid(b + 1), vid, pid);
+        QString name = one.mid(b + 1);
+        QString location;
+        const int at = name.lastIndexOf(QLatin1Char('@'));
+        if (at > 0)
+        {
+            location = name.mid(at + 1);
+            name.truncate(at);
+        }
+        HIDVirtualPad *pad = new HIDVirtualPad(parent, 0, name, vid, pid);
+        pad->setLocation(location);
+        pads << pad;
     }
     return pads;
 }

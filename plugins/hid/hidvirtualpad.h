@@ -49,18 +49,25 @@ public:
     int axisCount() const override { return 6; }
     int buttonCount() const override { return 22; }
     QString connectionInfo() const override;
+    /** The port it says it is in ("@USB 14200000" after its name in
+     *  QLC_HID_VIRTUAL_PAD), else none: two pads of one model with no
+     *  address, told apart by their ports (controller jobs). */
+    QString location() const override { return m_location; }
+    void setLocation(const QString &location) { m_location = location; }
 
     /** A value as the pad's reading would give it. */
     void inject(quint32 channel, uchar value);
 
     /** "054c:09cc: DUALSHOCK 4 Wireless Controller (DE:4C:...)" pads,
-     *  separated by ';', from QLC_HID_VIRTUAL_PAD. */
+     *  separated by ';', from QLC_HID_VIRTUAL_PAD; a name may end in
+     *  "@<location>" (its port). */
     static QList<HIDVirtualPad *> fromEnvironment(HIDPlugin *parent);
 
 private:
     unsigned short m_vendorId;
     unsigned short m_productId;
     bool m_open = false;
+    QString m_location;
 };
 
 #endif

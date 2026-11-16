@@ -128,6 +128,10 @@ public:
     QString inputDeviceKind(quint32 input) const override
     { return m_lineDeviceKind.contains(input) ? m_lineDeviceKind.value(input) : m_deviceKind; }
 
+    /** @reimp m_lineLocations for @p input (the port: controller jobs) */
+    QString inputDeviceLocation(quint32 input) const override
+    { return m_lineLocations.value(input); }
+
     /** @reimp Counted, like a real plugin's. */
     bool setInputDiagnostics(bool enable) override
     { m_diagnostics += enable ? 1 : -1; return true; }
@@ -158,6 +162,8 @@ public:
     QMap<quint32, QString> m_inputProblems;
     /** What inputDeviceKind() reports ("dualshock4"...) */
     QString m_deviceKind;
+    /** What inputDeviceLocation() reports, by input line ("USB 14200000") */
+    QMap<quint32, QString> m_lineLocations;
     /** setInputDiagnostics() calls: +1 on, -1 off */
     int m_diagnostics = 0;
     QList<Device> m_devices;

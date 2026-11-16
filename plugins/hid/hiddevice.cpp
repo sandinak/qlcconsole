@@ -18,8 +18,10 @@
 */
 
 #include <QString>
+#include <QFile>
 
 #include "hiddevice.h"
+#include "gamepadlayout.h"
 #include "hidplugin.h"
 
 HIDDevice::HIDDevice(HIDPlugin* parent, quint32 line, const QString &name, const QString& path)
@@ -82,6 +84,31 @@ void HIDDevice::closeOutput()
 QString HIDDevice::path() const
 {
     return m_filename;
+}
+
+QString HIDDevice::location() const
+{
+    const QString p = path();
+    /* macOS hidapi: "<transport>_<vid>_<pid>_<location>" -- the USB port
+       (or the Bluetooth link) it is on. */
+    const QString mac = GamepadLayout::locationFromPath(p);
+    if (!mac.isEmpty())
+        return mac;
+#if defined(Q_OS_LINUX)
+    /* A joystick node (/dev/input/js0): the number moves as pads come and
+       go; its phys is the port. */
+    if (p.startsWith(QLatin1String("/dev/input/")))
+    {
+        QFile phys(QStringLiteral("/sys/class/input/%1/device/phys").arg(p.mid(11)));
+        if (phys.open(QIODevice::ReadOnly))
+        {
+            const QString text = QString::fromLatin1(phys.readAll()).trimmed();
+            if (!text.isEmpty())
+                return text.startsWith(QLatin1String("usb-")) ? QStringLiteral("USB ") + text : text;
+        }
+    }
+#endif
+    return p;
 }
 
 int HIDDevice::handle() const

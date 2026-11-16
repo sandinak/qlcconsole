@@ -36,6 +36,7 @@ class QTimer;
 class QLabel;
 class QComboBox;
 class QListWidget;
+class QCheckBox;
 class Doc;
 
 /** @addtogroup ui UI
@@ -101,6 +102,15 @@ public:
     /** The picture, for tests. */
     FocusControlMap *picture() const { return m_picture; }
 
+    /** The identity of the controller shown (ControllerJobs): whose jobs
+     *  the switches set; empty when none is shown. */
+    QString shownIdentity() const { return m_shownIdentity; }
+    /** The switch of @p job (a ControllerJobs::Job), for tests. */
+    QCheckBox *jobSwitch(int job) const;
+    /** The picker's text for each controller (its identity beside its
+     *  name, so two of a model read apart), for tests. */
+    QStringList pickerTexts() const;
+
 private:
     void addInput(QLCIOPlugin *plugin, quint32 input, const QString &device,
                   const QString &connection, const QString &element, int raw,
@@ -147,6 +157,11 @@ private:
     void feedCheck(QLCIOPlugin *plugin, quint32 input, int channel, int value);
     QString checkReport() const;
 
+    /** The jobs row: the shown controller's identity and its jobs. */
+    void refreshJobs();
+    /** What the picker says for @p c: its model and how it is told apart. */
+    QString pickerText(const Controller &c) const;
+
     void clear();
     void copyLog();
     void saveLog();
@@ -178,6 +193,12 @@ private:
     QHash<QString, QTreeWidgetItem *> m_rows;
     QHash<QString, QString> m_connections;   ///< device -> how it is connected
     QStringList m_events;             ///< in order, for the log
+
+    // Its jobs, on this computer (docs/design/CONTROLLER_JOBS.md)
+    QWidget *m_jobsRow;
+    QLabel *m_jobsKnownAs;
+    QHash<int, QCheckBox *> m_jobSwitches;
+    QString m_shownIdentity;
 
     // Check Mapping
     QPushButton *m_checkButton;

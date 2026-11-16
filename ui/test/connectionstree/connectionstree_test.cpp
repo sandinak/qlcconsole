@@ -44,6 +44,8 @@
 
 // Its public face only: included before the define below.
 #include "controllertestdialog.h"
+#include "programmercontroller.h"
+#include "controllerjobs.h"
 
 #include "../../../engine/test/common/stdprelude.h"
 #define protected public
@@ -644,7 +646,7 @@ void ConnectionsTree_Test::testControllerOpensThePictureOnIt()
         foreach (QAction *a, m->actions())
         {
             items << a->text();
-            if (a->text() == QString::fromUtf8("Test Controller\u2026"))
+            if (a->text() == QString::fromUtf8("Test Controller and Jobs\u2026"))
                 chosen = a;
         }
         if (chosen == NULL)
@@ -659,7 +661,7 @@ void ConnectionsTree_Test::testControllerOpensThePictureOnIt()
     QApplication::processEvents();
 
     // One new item, just above Check Mapping….
-    const int at = items.indexOf(QString::fromUtf8("Test Controller\u2026"));
+    const int at = items.indexOf(QString::fromUtf8("Test Controller and Jobs\u2026"));
     QVERIFY2(at >= 0, qPrintable(items.join(" | ")));
     QCOMPARE(items.value(at + 1), QString::fromUtf8("Check Mapping\u2026"));
     ControllerTestDialog *dlg = ControllerTestDialog::instance();
@@ -671,6 +673,77 @@ void ConnectionsTree_Test::testControllerOpensThePictureOnIt()
     QPointer<ControllerTestDialog> gone(dlg);
     dlg->close();
     QTRY_VERIFY(gone.isNull());
+}
+
+void ConnectionsTree_Test::testControllerJobsAreSetFromIt()
+{
+    /* Two pads of one model, no address in either name: told apart by
+       their ports. Right-click the second: its jobs, its port. */
+    const QString pad = QStringLiteral("Wireless Controller");
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << pad << pad;
+    stub->m_connectionInfo = { { 0, QStringLiteral("USB") }, { 1, QStringLiteral("USB") } };
+    stub->m_lineLocations = { { 0, QStringLiteral("USB 14200000") }, { 1, QStringLiteral("USB 14300000") } };
+    ControllerJobs *jobs = m_doc->programmer()->controllerJobs();
+    auto restore = qScopeGuard([stub, jobs]() {
+        stub->m_connectionInfo.clear();
+        stub->m_lineLocations.clear();
+        jobs->resetAll();
+        if (ControllerTestDialog *d = ControllerTestDialog::instance())
+            d->close();
+    });
+    jobs->resetAll();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 1));
+
+    const QString first = ControllerJobs::identityOf(stub, 0);
+    const QString second = ControllerJobs::identityOf(stub, 1);
+    QVERIFY(first != second);
+    QCOMPARE(jobs->identityOfUniverse(1), second);
+
+    ControllerTestDialog *dlg = ControllerTestDialog::open(m_doc, nullptr);
+    QVERIFY(dlg->showController(stub->name(), pad));
+    // The picker names each by its port: the two read apart.
+    const QStringList texts = dlg->pickerTexts();
+    QCOMPARE(texts.size(), 2);
+    QVERIFY2(texts.at(0) != texts.at(1), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.at(1).contains("USB port 14300000"), qPrintable(texts.at(1)));
+    QComboBox *picker = dlg->findChild<QComboBox *>(QStringLiteral("controllerTestDevice"));
+    QVERIFY(picker != nullptr && picker->isVisibleTo(dlg));
+    picker->setCurrentIndex(1);
+    emit picker->activated(1);
+    QCOMPARE(dlg->shownIdentity(), second);
+    QWidget *row = dlg->findChild<QWidget *>(QStringLiteral("controllerTestJobs"));
+    QLabel *known = dlg->findChild<QLabel *>(QStringLiteral("controllerTestKnownAs"));
+    QVERIFY(row != nullptr && row->isVisibleTo(dlg) && known != nullptr);
+    QCOMPARE(known->text(), QStringLiteral("Known as: USB port 14300000"));
+
+    // All three on by default, and each switch is its own job.
+    for (const ControllerJobs::Job job : ControllerJobs::jobs())
+    {
+        QCheckBox *box = dlg->jobSwitch(int(job));
+        QVERIFY(box != nullptr && box->isChecked());
+        QCOMPARE(box->text(), ControllerJobs::jobName(job));
+    }
+    dlg->jobSwitch(ControllerJobs::RunCues)->click();
+    QCOMPARE(jobs->jobsOf(second), ControllerJobs::Jobs(ControllerJobs::FollowSpot | ControllerJobs::Focus));
+    QCOMPARE(jobs->jobsOf(first), ControllerJobs::Jobs(ControllerJobs::AllJobs));   // the other pad
+    QVERIFY(!jobs->has(1, ControllerJobs::RunCues));
+    QVERIFY(jobs->has(0, ControllerJobs::RunCues));
+
+    // Saved with this computer: a new store reads it back.
+    ControllerJobs again(m_doc);
+    QCOMPARE(again.jobsOf(second), jobs->jobsOf(second));
+    QCOMPARE(again.saved(), QStringList() << second);
+
+    // The first pad picked: its own switches, all on.
+    picker->setCurrentIndex(0);
+    emit picker->activated(0);
+    QCOMPARE(dlg->shownIdentity(), first);
+    QVERIFY(dlg->jobSwitch(ControllerJobs::RunCues)->isChecked());
+    QCOMPARE(known->text(), QStringLiteral("Known as: USB port 14200000"));
 }
 
 void ConnectionsTree_Test::targetAliasIsShownOnTheRow()
