@@ -111,6 +111,30 @@ private slots:
     void jobsFocusModeInRunIsSaidOnScreen();
     /** The pad the focus tools read is one with the Focus job. */
     void jobsTheFocusControllerHasTheFocusJob();
+    /* Review of a430351ef (Q250): invariants -- feedback goes to the pad
+       whose action it is; a tool taking the pad drops the runner's arm,
+       whoever started the focus; the four's bits are never cleared. */
+    /** 1: the runner's triggers, buzzes and button names are its own. */
+    void reviewFeedbackGoesToThePadWhoseActionItIs();
+    /** 2: the laptop's Focus this cue over a beside focus disarms. */
+    void reviewALaptopToolDisarmsABesideRunner();
+    /** 9: so does the Controller Test. */
+    void reviewTheControllerTestDisarmsABesideRunner();
+    /** 3: the four held across a tool taking the pad still stop. */
+    void reviewTheFourSurviveAToolTakingThePad();
+    /** 4: a laptop start beside a runner without Focus. */
+    void reviewALaptopStartBesideARunnerWithoutFocus();
+    /** 5: no venue focus from a pad after the emergency stop. */
+    void reviewNoVenueFocusFromAStoppedShow();
+    /** 6: one double buzz at the focus end (and at a start given up). */
+    void reviewOneBuzzAtTheFocusEnd();
+    /** 10: a View let go in another pad's FOCUS is let go. */
+    void reviewAViewLetGoInFocusIsLetGo();
+    /** 11: the focus pad's Focus job taken mid-focus. */
+    void reviewTheFocusJobTakenMidFocus_data();
+    void reviewTheFocusJobTakenMidFocus();
+    /** 12: the focus pad unplugged mid-focus. */
+    void reviewTheFocusPadUnpluggedMidFocus();
     void jobsTakenAwayWhileInUse();
     /** Review 0.4.10: one pad listed twice (one address, two universes,
      *  CONTROLLER_JOBS.md 9: one controller) is told one light. */
@@ -145,6 +169,9 @@ private:
     void twoPads(int jobsA, int jobsB);
     /** The last light sent to input line @p line ("": its own; "none"). */
     QString lightOn(quint32 line) const;
+    /** The feedback of @p kind ("triggers", "rumble") sent to @p line,
+     *  in order. */
+    QList<QVariantMap> feedbackOn(quint32 line, const QString &kind) const;
     int goes() const;
     int stops() const;
     /** Announcements said since @p from that contain @p part. */

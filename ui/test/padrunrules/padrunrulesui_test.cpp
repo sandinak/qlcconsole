@@ -750,6 +750,13 @@ void PadRunRulesUi_Test::focusBesideTheRunnerOnEverySurface()
     QVERIFY2(runTab->focusArmedText().contains("hold LT and press Menu")
                  && !runTab->focusArmedText().contains("armed"),
              qPrintable(runTab->focusArmedText()));
+    // A job changed: the Run tab follows at once, as the footer does (review 7).
+    jobs->setJob(jobs->identityOfUniverse(1), ControllerJobs::Focus, false);
+    settle();
+    QVERIFY2(runTab->focusArmedText().contains("no controller does focus"), qPrintable(runTab->focusArmedText()));
+    jobs->setJob(jobs->identityOfUniverse(1), ControllerJobs::Focus, true);
+    settle();
+    QVERIFY2(runTab->focusArmedText().contains("hold LT and press Menu"), qPrintable(runTab->focusArmedText()));
 
     // B: LT + Menu. FOCUS names B on every surface; A stays armed.
     with(1, kMenu);
