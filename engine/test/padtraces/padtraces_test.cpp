@@ -295,8 +295,8 @@ void PadTraces_Test::triggerRestDuringTheChord()
        report restarts it (PadRun::armChordUpdate() starts the timer again
        when it is not running, and the fired chord left it stopped), and it
        fires again -- the arm flaps on and off. Rule 3: only a fresh chord
-       changes the arm. Fixed in padrun.cpp by 0.4.12; see the comment at the
-       QEXPECT_FAIL below for what to delete then. */
+       changes the arm. Fixed in padrun.cpp in 0.4.12 (after a chord fires or
+       is refused, nothing fires again until both bumpers are released). */
     QString error;
     QVERIFY2(m_player->load(trace("trigger_rest_in_chord.jsonl"), &error), qPrintable(error));
     PadRun *run = m_doc->programmer()->padRun();
@@ -308,18 +308,12 @@ void PadTraces_Test::triggerRestDuringTheChord()
 
     QSignalSpy changes(run, &PadRun::armedChanged);
     QVERIFY(m_player->playUntil([](const PadTracePlayer::Event &e) { return e.t >= 1600; }));
-    /* The bug, waited for with a bound (a slow timer is late, not absent):
-       armed by the chord, then every trigger report while the bumpers are
-       still held fires it again -- the arm flaps on and off, and where it
-       ends is luck. When padrun.cpp is fixed (0.4.12, fix/0411-jobs-alone:
-       after a chord fires or is refused, nothing fires again until both
-       bumpers are released) the wait times out and fails: whoever merges
-       after that fix deletes the QTRY line, the QEXPECT_FAIL and this
-       comment, and keeps the QCOMPARE (one change, the arm). */
-    QTRY_VERIFY_WITH_TIMEOUT(changes.count() >= 2, 3000);
-    QEXPECT_FAIL("", "padrun.cpp: a resting trigger's report with LB + RB held fires the arm chord again", Continue);
+    // The chord fires once (a slow timer is late, not absent) and only once.
+    QTRY_VERIFY_WITH_TIMEOUT(changes.count() >= 1, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 3000);
     QCOMPARE(int(changes.count()), 1);
     m_player->playAll();
+    QCOMPARE(int(changes.count()), 1);  // the rest of the hold changes nothing
     QVERIFY(m_commands.isEmpty());      // and nothing fired meanwhile
     VERIFY_CLEAN_PLAY();
 }
