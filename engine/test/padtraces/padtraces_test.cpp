@@ -300,13 +300,16 @@ void PadTraces_Test::aShiftedLineIsNoSafety()
     QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
     QVERIFY(in(a, kRb, 0));
     QVERIFY(in(a, kLb, 0));
-    QVERIFY(in(a, kLt, 255));
-    // A goes: B is on line 0 now, universe 1 still patched there -- and told.
-    QSignalSpy told(m_doc->inputOutputMap(), &InputOutputMap::inputPatchReconnected);
     QStringList heard;
     const QMetaObject::Connection listen = connect(m_doc->inputOutputMap(), &InputOutputMap::inputValueChanged, this,
         [&heard](quint32 u, quint32 ch, uchar v) { heard << QString("u%1:ch%2=%3").arg(u).arg(ch).arg(v); });
     auto unlisten = qScopeGuard([&]() { disconnect(listen); });
+    QVERIFY(in(a, kLt, 255));
+    // Held, and heard: A's LT is the safety on universe 1 now.
+    QTRY_VERIFY_WITH_TIMEOUT(heard.contains(QStringLiteral("u1:ch2=255")), 2000);
+    heard.clear();
+    // A goes: B is on line 0 now, universe 1 still patched there -- and told.
+    QSignalSpy told(m_doc->inputOutputMap(), &InputOutputMap::inputPatchReconnected);
     m_fake->unlist(a);
     scan(1);
     QStringList toldUniverses;

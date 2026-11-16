@@ -2360,7 +2360,11 @@ void InputOutputMap::slotPluginInputReopened(QLCIOPlugin* plugin, quint32 input)
     {
         InputPatch *ip = inputPatch(u);
         if (ip != NULL && ip->plugin() == plugin && ip->input() == input)
+        {
+            // What the old device read and was not delivered yet is not the new one's.
+            ip->forgetBufferedInput();
             emit inputPatchReconnected(u);
+        }
     }
 }
 

@@ -368,9 +368,11 @@ void InputPatch::flush(quint32 universe)
         return;
 
     QHash<quint32, InputValue> batch;
+    quint64 generation = 0;
     {
         QMutexLocker inputBufferLocker(&m_inputBufferMutex);
         batch.swap(m_inputBuffer);
+        generation = m_inputGeneration;
     }
     if (batch.isEmpty())
         return;
@@ -387,8 +389,22 @@ void InputPatch::flush(quint32 universe)
         emitValues(batch);
         return;
     }
-    QMetaObject::invokeMethod(this, [this, batch = std::move(batch)]() { emitValues(batch); },
-                              Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, [this, generation, batch = std::move(batch)]() {
+        {
+            // The line's device was replaced since: these are the old one's.
+            QMutexLocker inputBufferLocker(&m_inputBufferMutex);
+            if (generation != m_inputGeneration)
+                return;
+        }
+        emitValues(batch);
+    }, Qt::QueuedConnection);
+}
+
+void InputPatch::forgetBufferedInput()
+{
+    QMutexLocker inputBufferLocker(&m_inputBufferMutex);
+    m_inputBuffer.clear();
+    ++m_inputGeneration;
 }
 
 void InputPatch::emitValues(const QHash<quint32, InputValue> &values)

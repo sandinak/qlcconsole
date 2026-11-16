@@ -221,6 +221,15 @@ public:
      *  channelMap(), setChannelMap()), and the mutex is not recursive. */
     QMutex m_inputBufferMutex;
     QHash<quint32, InputValue> m_inputBuffer;
+    /** Raised by forgetBufferedInput(): a batch flushed before it is the
+     *  old device's and is not delivered (guarded by m_inputBufferMutex). */
+    quint64 m_inputGeneration = 0;
+
+    /** The line's device was replaced in place (QLCIOPlugin::inputReopened()):
+     *  values read from the old one and not yet delivered -- buffered, or
+     *  flushed and queued for the GUI thread -- are dropped, so none of them
+     *  reaches a receiver as the new device's (third review of Q253). */
+    void forgetBufferedInput();
 
 private:
     /** Emit inputValueChanged() for each of @p values (GUI thread). */
