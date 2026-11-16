@@ -1,12 +1,23 @@
 name: QLCplus Github Actions CI Build
 
 on:
+  # Board Q255 (2026-11-16): only main, trains and ci/** run on push. Feature
+  # branches are covered by the gate pool (Mac + Linux); a branch that needs
+  # Windows is pushed as ci/<name>. Every pushed branch used to start a full
+  # run, and ~20 runs for already-merged branches queued ahead of a train.
   push:
+    branches: [main, 'train/**', 'ci/**']
   pull_request:
   # Lets a run be started from the Actions tab / `gh workflow run` without
   # having to invent a commit. This workflow sat unregistered with GitHub for
   # weeks; being able to fire it on demand makes that state easy to spot.
   workflow_dispatch:
+
+# A newer push to the same train or ci/ branch replaces its queued or running
+# run; main's runs are never cancelled (each main SHA keeps its own result).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build-linux:

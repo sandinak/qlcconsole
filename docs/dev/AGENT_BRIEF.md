@@ -25,6 +25,9 @@ Builds and tests: on the pool, never on ender
   --quick builds with the -Werror set; before you call the work ready run the
   same with --strict (adds the Release leg: -O2 finds what Debug hides). Your
   report quotes the --strict result line.
+- GitHub CI runs only on main, train/** and ci/** (board Q255). Your
+  feature branch gets none; if it needs Windows, push it as ci/<name> as
+  well (git push origin HEAD:refs/heads/ci/<name>) and delete that after.
 - On ender only `cmake --build build --target X -j2`. A hook blocks the rest;
   do not get around it: no scp of scripts or archives to pool hosts, no ssh
   builds there by hand. If the pool cannot do what you need, STOP and say
