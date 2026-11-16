@@ -85,6 +85,9 @@ private slots:
     void jobsTheFollowSpotSkipsAPad();
     void jobsFocusOnlyFromFocusPads();
     void jobsTakenAwayWhileInUse();
+    /** Review 0.4.10: one pad listed twice (one address, two universes,
+     *  CONTROLLER_JOBS.md 9: one controller) is told one light. */
+    void reviewTheSamePadTwiceIsToldOneLight();
 
     /* Rules 1, 3, 4 and 5 over random presses */
     void theRulesHoldOverRandomPresses_data();
