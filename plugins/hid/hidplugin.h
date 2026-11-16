@@ -40,6 +40,7 @@ class HIDVirtualPad;
 class HIDProfile;
 class HIDOSXHotplug;
 class HIDBackend;
+class HIDTrace;
 struct HIDFound;
 struct HIDScanShared;
 class QTimer;
@@ -196,7 +197,7 @@ public:
      *  A scan already under way is followed by one more, never a second
      *  beside it. New devices are opened on threads of their own and
      *  added as each is ready (drainResults()). */
-    void rescanDevices();
+    Q_INVOKABLE void rescanDevices();
 
     /** The test seam: find and open devices through @p backend (an
      *  HIDBackend *, kept alive by the test until openingCount() is 0)
@@ -213,6 +214,9 @@ public:
      *  dispose): a test waits for 0 before it ends. */
     static int workerThreads();
 
+    /** The input line of the joystick at system path @p path, or -1: a
+     *  trace's replay finds a pad by where it is listed. */
+    Q_INVOKABLE int inputForPath(const QString &path) const;
     /** A value from the virtual pad (QLC_HID_VIRTUAL_PAD) on @p input, sent
      *  on as the pad's own reading would be. False if it is not one. */
     Q_INVOKABLE bool injectVirtualInput(quint32 input, quint32 channel, uint value);
@@ -286,6 +290,9 @@ private:
     std::shared_ptr<HIDScanShared> m_shared;
     HIDBackend *m_testBackend = nullptr;
     int m_openLimitMs = 2000;
+    /** QLC_HID_RECORD's recorder; null (one check per event) when unset. */
+    HIDTrace *m_trace = nullptr;
+    bool m_initDone = false;
     struct Opening
     {
         quint64 job = 0;
@@ -293,6 +300,10 @@ private:
         bool stuck = false;         ///< past the limit: named, skipped
         quint64 instance = 0;       ///< the system entry it opens (HIDFound)
         QString name;               ///< for a person
+        QString serial;             ///< for the trace (QLC_HID_RECORD)
+        QString product;
+        unsigned short vid = 0;
+        unsigned short pid = 0;
     };
     /** One open at a time per path: a stuck one blocks only its own. */
     QHash<QString, Opening> m_opening;

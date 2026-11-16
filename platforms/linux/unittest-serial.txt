@@ -48,3 +48,11 @@ engine/test/speedmasters
 # code's was ~600 ms); next to two other legs' tests a tick can be late.
 engine/test/hidstuckpad
 plugins/hid/test
+
+# Pad traces (0.4.11): each replays a recorded pad session through the real
+# HID plugin in wall-clock time (a trace's own timing at 2x: the arm chord's
+# hold, the 3 s Create + Options hold, the scans' settling), and asserts what
+# Pad Run did with it. The program takes about 24 s (measured on ender, 10 tests;
+# over the usual 10 s because the timing IS the input; the longest test, the
+# clone flip, runs ~5 s); next to other legs' tests a chord's timer can be late.
+engine/test/padtraces

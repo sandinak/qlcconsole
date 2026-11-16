@@ -28,6 +28,7 @@ target_sources(${module_name} PRIVATE
     hiddmxdevice.cpp hiddmxdevice.h
     hidjsdevice.cpp hidjsdevice.h
     hidprofile.cpp hidprofile.h
+    hidtrace.cpp hidtrace.h
     hidprofileeditor.cpp hidprofileeditor.h
     hidvirtualpad.cpp hidvirtualpad.h
     stickfilter.cpp stickfilter.h
