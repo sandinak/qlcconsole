@@ -48,6 +48,9 @@ private slots:
     /** The pad's role on the Run tab (0.4 Pad Run): Tools / Run / ARMED,
      *  a click switches it, and the tooltip carries the button map. */
     void thePadRoleShowsOnTheRunTab();
+    /** UX shots: the Run tab armed, stopped and disarmed at 1024x640,
+     *  1440x900 and 1920x1080 (QLC_SHOT_DIR; skipped without it). */
+    void padFrameShots();
     void theRunTabHasTheGroupMasters();
     void clickLoadsDoubleClickJumps();
     void aClickInDesignShowsTheCue();

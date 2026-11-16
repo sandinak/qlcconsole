@@ -28,6 +28,7 @@
 
 class QTreeWidgetItem;
 class CueRunnerHandle;
+class CueRunnerFrame;
 class QProgressBar;
 class QTreeWidget;
 class QToolButton;
@@ -319,6 +320,7 @@ private:
     QToolButton *m_focusCallsBtn = nullptr;
     /** The pad's Run role (0.4): on / off, and armed while LB is held. */
     QToolButton *m_padRunBtn = nullptr;
+    CueRunnerFrame *m_padFrame = nullptr;
     QWidget *m_focusArmed = nullptr;
     QLabel *m_focusArmedLabel = nullptr;
     /** Scoped hits (Q157): the VC buttons whose armed hit overrides a

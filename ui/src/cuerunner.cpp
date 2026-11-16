@@ -301,6 +301,46 @@ private:
 
 /* A handle inside the runner: a bar between the info and the buttons
    (dragged up and down) or between GO and Sub GO (left and right). */
+/** The frame round the Run tab while Pad Run has a state (armed, stopped,
+ *  focus). Its own child widget, painted here, so clearing it repaints on
+ *  every platform (a CueRunner stylesheet border was left on screen by
+ *  Cocoa after it was cleared). Never takes the mouse or the focus. */
+class CueRunnerFrame final : public QWidget
+{
+public:
+    explicit CueRunnerFrame(QWidget *parent)
+        : QWidget(parent)
+    {
+        setObjectName(QStringLiteral("crPadFrame"));
+        setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        setFocusPolicy(Qt::NoFocus);
+        setGeometry(parent->rect());
+    }
+    static constexpr int Thickness = 5;
+    void setColour(const QColor &c)
+    {
+        m_colour = c;
+        setVisible(c.isValid());
+        if (c.isValid())
+            raise();
+        update();
+    }
+    QColor colour() const { return m_colour; }
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        if (!m_colour.isValid())
+            return;
+        QPainter p(this);
+        p.fillRect(0, 0, width(), Thickness, m_colour);
+        p.fillRect(0, height() - Thickness, width(), Thickness, m_colour);
+        p.fillRect(0, 0, Thickness, height(), m_colour);
+        p.fillRect(width() - Thickness, 0, Thickness, height(), m_colour);
+    }
+private:
+    QColor m_colour;
+};
+
 class CueRunnerHandle final : public QWidget
 {
 public:
@@ -1134,6 +1174,12 @@ QStringList CueRunner::upcomingTexts() const
 void CueRunner::resizeEvent(QResizeEvent *ev)
 {
     QWidget::resizeEvent(ev);
+    if (m_padFrame != nullptr)
+    {
+        m_padFrame->setGeometry(rect());
+        if (m_padFrame->colour().isValid())
+            m_padFrame->raise();
+    }
     layoutPanel();
 }
 
@@ -1146,6 +1192,7 @@ void CueRunner::setRunnerSize(Size size)
     for (QShortcut *s : findChildren<QShortcut *>(QString(), Qt::FindDirectChildrenOnly))
         delete s;
     delete layout();
+    m_padFrame = nullptr;
     m_header = nullptr;
     m_followBox = nullptr;
     m_tree = nullptr;
@@ -1275,10 +1322,10 @@ void CueRunner::refreshPadRun()
         ? QStringLiteral("QToolButton { color: %1; background: %2; font-weight: bold; }")
               .arg(run->stateInk().name(), state.name())
         : QString());
-    setAttribute(Qt::WA_StyledBackground, true);
-    setStyleSheet(state.isValid()
-        ? QStringLiteral("CueRunner { border: 5px solid %1; }").arg(state.name())
-        : QString());
+    if (m_padFrame == nullptr)
+        m_padFrame = new CueRunnerFrame(this);
+    m_padFrame->setGeometry(rect());
+    m_padFrame->setColour(state);
     m_padRunBtn->setToolTip(run->helpHtml());
 }
 

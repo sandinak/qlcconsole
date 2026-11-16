@@ -83,6 +83,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include "cuerunner_test.h"
+#include "../common/padframe.h"
 
 using namespace ShowTree;
 
@@ -473,12 +474,46 @@ void CueRunner_Test::noMainListGreysGoAndOffersUpgrade()
     CueRunner::setUpgradeAction(nullptr);
 }
 
+void CueRunner_Test::padFrameShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    CueRunner runner(m_doc, CueRunner::Full);
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+    for (const QSize &sz : sizes)
+    {
+        runner.resize(sz);
+        runner.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&runner));
+        auto shot = [&](const char *what) {
+            QApplication::processEvents();
+            QVERIFY(runner.grab().save(QDir(dir).filePath(
+                QString("runtab-padframe-%1-%2x%3.png").arg(what).arg(sz.width()).arg(sz.height()))));
+        };
+        QVERIFY(run->setArmed(true));
+        shot("armed");
+        run->emergencyStop();
+        shot("stopped");
+        QVERIFY(run->setArmed(true));
+        QVERIFY(run->setArmed(false));
+        shot("disarmed");
+    }
+    run->setEnabled(false, false);
+}
+
 void CueRunner_Test::thePadRoleShowsOnTheRunTab()
 {
     CueRunner runner(m_doc, CueRunner::Full);
     QToolButton *pad = runner.findChild<QToolButton *>("crPadRun");
     QVERIFY(pad != nullptr);
     PadRun *run = m_doc->programmer()->padRun();
+    runner.resize(900, 600);
+    runner.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&runner));
     QVERIFY(!run->isEnabled());
     QCOMPARE(pad->text(), QString("Pad: Tools"));
     QVERIFY(!pad->isChecked());
@@ -495,14 +530,24 @@ void CueRunner_Test::thePadRoleShowsOnTheRunTab()
         QCOMPARE(pad->text(), words);
         if (colour.isValid())
         {
-            QVERIFY2(runner.styleSheet().contains(colour.name()), qPrintable(runner.styleSheet()));
             QVERIFY2(pad->styleSheet().contains(colour.name()), qPrintable(pad->styleSheet()));
+            QVERIFY(padFrameShown(&runner));
         }
         else
         {
-            QVERIFY(runner.styleSheet().isEmpty());
             QVERIFY(pad->styleSheet().isEmpty());
+            QVERIFY(!padFrameShown(&runner));
         }
+        // The frame as DRAWN, not its style string: a cleared one must leave no pixels.
+        QApplication::processEvents();
+        const QColor drawn = padFrameDrawn(&runner);
+        if (colour.isValid())
+            QVERIFY2(drawn == colour, qPrintable(QString("frame drawn %1, state %2").arg(drawn.name(), colour.name())));
+        else
+            QVERIFY2(drawn != PadRun::armedColour() && drawn != PadRun::stoppedColour()
+                     && drawn != PadRun::focusColour(), qPrintable(QString("frame still drawn: %1").arg(drawn.name())));
+        // The overlay never moves the layout: the frame is not in contentsRect.
+        QCOMPARE(runner.contentsRect(), runner.rect());
     };
     // Armed from the pad (its chord): it stays, with nothing held.
     QVERIFY(run->setArmed(true));
