@@ -65,6 +65,13 @@ private slots:
     /** A stick and fine stick held as the pad is unpatched (no release
      *  ever comes): the subject stops. */
     void aStickHeldAsItsPadGoesStops();
+    /** Review 0.4.10 verify: two pads with Follow spot, B's fine stick
+     *  held, A's fine stick touched after; B's job taken away and B lets
+     *  go (its release is dropped): the subject must stop. */
+    void reviewBFineStickHeldAsItsJobGoesAfterATouch();
+    /** Review 0.4.10 verify: as above, B unpatched (unplugged) while its
+     *  fine stick is held: the subject must stop. */
+    void reviewBFineStickHeldAsItsPadGoesAfterATouch();
 
     /* Where the operator stands (FollowSpotOperator). */
     void stickUpGoesAwayFromTheOperator();

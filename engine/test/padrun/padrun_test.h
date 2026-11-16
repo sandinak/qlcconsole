@@ -139,6 +139,9 @@ private slots:
      *  every state of the venue focus: waiting, naming the venue, the calls
      *  running (another pad the owner each time). */
     void theStopFromAnyPadInEveryFocusState();
+    /** Review 0.4.10 verify: one pad seen on two universes (one identity,
+     *  CONTROLLER_JOBS.md 9) sends the four on both: one stop, not two. */
+    void reviewOnePadListedTwiceStopsOnce();
 
     /* Walking the show (Q192). */
     /** The walking map by role, the same for both pads. */

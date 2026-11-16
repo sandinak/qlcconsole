@@ -47,6 +47,13 @@ private slots:
     /** Review 0.4.10, M4: in Operate a venue's turn never swings a head;
      *  it waits for Design, and is said both times. */
     void aVenueTurnWaitsForDesign();
+    /** Review 0.4.10 verify: a venue left in Operate (its turn on the
+     *  head, the show's waiting): what a save writes is the show's own turn. */
+    void reviewAVenueLeftInOperateSavesTheShowsTurn();
+    /** Review 0.4.10 verify: a venue's turn waiting, the operator turns the
+     *  head by hand in Operate (Fixture Properties, asked first): Design
+     *  keeps the operator's turn. */
+    void reviewATurnSetByHandInOperateStandsInDesign();
     /** The report: call by call, the target with the stage marks'
      *  position, the correction from the show's own, the checks and flags;
      *  the CSV in Lightwright's columns, quoted where it must be. */

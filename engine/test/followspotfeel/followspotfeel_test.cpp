@@ -25,6 +25,7 @@
 #include <QMutex>
 #include <QThread>
 #include <cmath>
+#include <functional>
 
 #include "followspotfeel_test.h"
 // Review 0.4.10: the stub pad and the jobs (before the define below).
@@ -1332,6 +1333,91 @@ void FollowSpotFeel_Test::aStickHeldAsItsPadGoesStops()
     QVERIFY(iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine()));
     const double d = driftAfter(h);
     QVERIFY2(d < 0.005, qPrintable(QString("the pad is gone, yet the subject moved %1 m in 20 frames").arg(d)));
+}
+
+namespace
+{
+/* Two stub pads, A (universe 0, the bound stick) and B (universe 1), both
+   with every job: B pushes its fine stick right and holds it, then A's
+   fine stick sends one reading on the other axis (a touch, or a resting
+   stick's noise). Then @p takeB takes B away; B's release is sent. */
+double fineHeldOnBThen(Harness &h, Doc *doc, IOPluginStub *stub, const std::function<void()> &takeB)
+{
+    InputOutputMap *iom = doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    jobs->resetAll();
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" } };
+    stub->m_lineLocations = { { 0, "USB 1" }, { 1, "USB 2" } };
+    if (!iom->setInputPatch(0, stub->name(), QString(), 0)
+        || !iom->setInputPatch(1, stub->name(), QString(), 1))
+        return -1.0;
+    if (FollowSpotMover *m = h.pc->followSpotMover())
+        m->setFixedDt(MasterTimer::tick() / 1000.0);
+    h.pc->refreshStickBinding();
+    if (!h.pc->m_panBound || h.pc->m_panUniverse != 0)
+        return -2.0;
+    h.use(h.rig.targetScene);
+
+    // B trims right with its fine stick, and holds it.
+    h.pc->slotControllerInputChanged(1, 2, 255, QString());
+    for (int i = 0; i < 10; ++i)
+        h.tick();
+    // A's fine stick, the other axis: one reading at rest.
+    h.pc->slotControllerInputChanged(0, 3, 127, QString());
+    takeB();
+    // B lets go (dropped: B no longer feeds the follow spot).
+    h.pc->slotControllerInputChanged(1, 2, 127, QString());
+    return driftAfter(h);
+}
+}
+
+void FollowSpotFeel_Test::reviewBFineStickHeldAsItsJobGoesAfterATouch()
+{
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    auto restore = qScopeGuard([&]() {
+        jobs->resetAll();
+        stub->m_channelRoles.clear();
+        stub->m_lineLocations.clear();
+        iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+        iom->setInputPatch(1, QString(), QString(), QLCIOPlugin::invalidLine());
+        h.pc->refreshStickBinding();
+    });
+    const double d = fineHeldOnBThen(h, m_doc, stub, [&]() {
+        const QString padB = jobs->identityOfUniverse(1);
+        QVERIFY(!padB.isEmpty() && padB != jobs->identityOfUniverse(0));
+        jobs->setJob(padB, ControllerJobs::FollowSpot, false);
+    });
+    QVERIFY2(d >= 0.0, "set-up failed (patch or binding)");
+    QVERIFY2(d < 0.005, qPrintable(QString("B lost the Follow spot job and let go, yet the subject moved %1 m in "
+                                           "20 frames: m_fineUniverse named A (its last touch), so B's held "
+                                           "fine push stays in m_fineNormX").arg(d)));
+}
+
+void FollowSpotFeel_Test::reviewBFineStickHeldAsItsPadGoesAfterATouch()
+{
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    auto restore = qScopeGuard([&]() {
+        jobs->resetAll();
+        stub->m_channelRoles.clear();
+        stub->m_lineLocations.clear();
+        iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+        iom->setInputPatch(1, QString(), QString(), QLCIOPlugin::invalidLine());
+        h.pc->refreshStickBinding();
+    });
+    const double d = fineHeldOnBThen(h, m_doc, stub, [&]() {
+        QVERIFY(iom->setInputPatch(1, QString(), QString(), QLCIOPlugin::invalidLine()));
+    });
+    QVERIFY2(d >= 0.0, "set-up failed (patch or binding)");
+    QVERIFY2(d < 0.005, qPrintable(QString("B is gone (no release ever comes), yet the subject moved %1 m in "
+                                           "20 frames: B's held fine push stays in m_fineNormX").arg(d)));
 }
 
 void FollowSpotFeel_Test::report()
