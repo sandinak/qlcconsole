@@ -141,6 +141,9 @@ public:
      *  its new index. Called with the chaser's runner lock held. Returns the
      *  new current index if it moved, else -1. */
     int remapSteps(const QList<ChaserStep> &before, const QList<ChaserStep> &after);
+    /** Where step @a from of @a before is in @a after: the same index if it
+     *  still plays the same function, else the nearest that does; -1: gone. */
+    static int followStep(const QList<ChaserStep> &before, const QList<ChaserStep> &after, int from);
 
     /**
      * Compute next step for manual fading

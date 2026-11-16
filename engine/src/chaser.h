@@ -118,7 +118,8 @@ public:
      * Replace every step with $steps at once. A running chase keeps the
      * steps it plays: its runner follows each one to its new index (by
      * function), so a step added or removed before the one on stage leaves
-     * that one on stage, and the next GO plays the step after it.
+     * that one on stage, and the next GO plays the step after it. A list
+     * with a step that plays this chaser itself is refused (as addStep()).
      */
     void setSteps(const QList<ChaserStep> &steps);
 

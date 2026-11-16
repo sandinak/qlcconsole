@@ -456,26 +456,28 @@ int ChaserRunner::randomStepIndex(int step) const
    return step;
 }
 
+int ChaserRunner::followStep(const QList<ChaserStep> &before, const QList<ChaserStep> &after, int from)
+{
+    if (from < 0 || from >= before.count())
+        return -1;
+    // The same index if it still plays that function, else the nearest
+    // index that does; gone: -1.
+    const quint32 fid = before.at(from).fid;
+    if (from < after.count() && after.at(from).fid == fid)
+        return from;
+    int best = -1;
+    for (int j = 0; j < after.count(); ++j)
+        if (after.at(j).fid == fid && (best < 0 || qAbs(j - from) < qAbs(best - from)))
+            best = j;
+    return best;
+}
+
 int ChaserRunner::remapSteps(const QList<ChaserStep> &before, const QList<ChaserStep> &after)
 {
-    // Where the step at $from (playing $fid) is now: the same index if it
-    // still plays that function, else the nearest index that does.
-    auto follow = [&](int from, quint32 fid) {
-        if (from >= 0 && from < after.count() && after.at(from).fid == fid)
-            return from;
-        int best = -1;
-        for (int j = 0; j < after.count(); ++j)
-            if (after.at(j).fid == fid && (best < 0 || qAbs(j - from) < qAbs(best - from)))
-                best = j;
-        return best;
-    };
     auto remap = [&](ChaserRunnerStep *step) {
         if (step == NULL)
             return;
-        const quint32 fid = step->m_index >= 0 && step->m_index < before.count()
-                            ? before.at(step->m_index).fid
-                            : (step->m_function != NULL ? step->m_function->id() : Function::invalidId());
-        const int to = follow(step->m_index, fid);
+        const int to = followStep(before, after, step->m_index);
         if (to >= 0)
             step->m_index = to;
     };
@@ -489,15 +491,54 @@ int ChaserRunner::remapSteps(const QList<ChaserStep> &before, const QList<Chaser
         remap(step);
 
     int moved = -1;
-    if (m_lastRunStepIdx >= 0 && m_lastRunStepIdx < before.count())
     {
-        const int to = follow(m_lastRunStepIdx, before.at(m_lastRunStepIdx).fid);
+        const int to = followStep(before, after, m_lastRunStepIdx);
         if (to >= 0 && to != m_lastRunStepIdx)
         {
             m_lastRunStepIdx = to;
             moved = to;
         }
     }
+
+    /* The tracked state follows too: the step started last and those played
+       since the list started. Left on the old indices, the next GO would
+       look like a jump (isNextStep() false) and restack() would put on what
+       a cue that never played sets. A step that is gone: the one before it
+       that is still there (else none), and out of the visited ones. */
+    if (m_restackFrom >= 0)
+    {
+        int to = followStep(before, after, m_restackFrom);
+        for (int k = m_restackFrom - 1; to < 0 && k >= 0; --k)
+            to = followStep(before, after, k);
+        m_restackFrom = to;
+    }
+    QSet<int> visited;
+    for (int k : std::as_const(m_visited))
+    {
+        const int to = followStep(before, after, k);
+        if (to >= 0)
+            visited.insert(to);
+    }
+    m_visited = visited;
+
+    // A jump waiting for the beat or the next write: to the same cue.
+    if (m_pendingAction.m_action == ChaserSetStepIndex && m_pendingAction.m_stepIndex >= 0)
+    {
+        const int to = followStep(before, after, m_pendingAction.m_stepIndex);
+        if (to >= 0)
+            m_pendingAction.m_stepIndex = to;
+        else
+            m_pendingAction.m_action = ChaserNoAction;     // its cue is gone
+    }
+    if (m_pendingSubAction.m_action == ChaserSubSetStep && m_pendingSubAction.m_stepIndex >= 0)
+    {
+        const int to = followStep(before, after, m_pendingSubAction.m_stepIndex);
+        if (to >= 0)
+            m_pendingSubAction.m_stepIndex = to;
+        else
+            m_pendingSubAction.m_action = ChaserNoAction;
+    }
+
     if (before.count() != after.count())
         fillOrder(after.count());
     return moved;

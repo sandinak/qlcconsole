@@ -35,6 +35,7 @@
 #include "presses.h"
 #include "blocking.h"
 #include "showcontrol.h"
+#include "chaserrunner.h"
 #include "paletteops.h"
 #include "monitorproperties.h"
 #include "stagetarget.h"
@@ -5398,6 +5399,14 @@ void ShowTreeController::bake()
                 // runner follows that cue to its new place (a cue added or
                 // deleted before it), and the next GO plays the one after.
                 chaser->setSteps(steps);
+                // The cue LOADed on standby too: the same cue, not the
+                // index (GO would play the one that slid into its place).
+                if (ShowControl *sc = m_doc->showControl())
+                {
+                    const int loaded = sc->loadedStep(chaser->id());
+                    if (loaded >= 0)
+                        sc->moveLoaded(chaser->id(), ChaserRunner::followStep(have, steps, loaded));
+                }
             }
         }
     }

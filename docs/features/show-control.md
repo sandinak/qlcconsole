@@ -43,10 +43,11 @@ A **cue list** is a chase (a chaser). Its steps are the **cues**.
   **Control** → GO / Back (Main Cue List).
 - **Back** on the first cue a list plays (or the first one not skipped)
   leaves that cue on stage and the list playing: there is no cue before
-  it, and the line says *cue 1 is the first: it stays*.
+  it, and the line says *cue 1 is the first: it stays*. A GO already
+  waiting for the beat still plays.
 - Editing a list while it runs — a cue deleted, recorded or pasted before
   the one on stage — leaves the cue on stage where it is; the next GO
-  plays the cue after it.
+  plays the cue after it. A cue LOADed on standby stays the one loaded.
 - From a game controller: [Pad Run](#go-from-the-game-controller-pad-run).
 - A **Virtual Console cue list** shows a **Cue** column beside the step
   number and a **Next:** line under its list — the cue, its name and its

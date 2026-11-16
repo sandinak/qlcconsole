@@ -188,6 +188,10 @@ bool Chaser::replaceStep(const ChaserStep& step, int index)
 
 void Chaser::setSteps(const QList<ChaserStep> &steps)
 {
+    // As addStep(): never a step that plays this chaser itself.
+    for (const ChaserStep &step : steps)
+        if (step.fid == this->id())
+            return;
     int moved = -1;
     {
         // The runner lock first (as write()), so the MasterTimer never sees
@@ -201,6 +205,13 @@ void Chaser::setSteps(const QList<ChaserStep> &steps)
         }
         if (m_runner != NULL)
             moved = m_runner->remapSteps(before, steps);
+        if (m_startupAction.m_action == ChaserSetStepIndex && m_startupAction.m_stepIndex >= 0)
+        {
+            // A start asked for a cue (not running yet): the same cue.
+            const int to = ChaserRunner::followStep(before, steps, m_startupAction.m_stepIndex);
+            if (to >= 0)
+                m_startupAction.m_stepIndex = to;
+        }
     }
 
     emit changed(this->id());
