@@ -2433,8 +2433,9 @@ reusables are reusable *arrangements*.
   - a reusable **cue** becomes a new cue right after it, numbered as + Cue
     numbers, with the timing it was made with.
   The drop hint says which before you let go.
-- **Live-linked.** Every use is the same: change one — a look, a group
-  added, its name, a cue's mode, a layer added to a reusable cue — and
+- **Live-linked.** Every use is the same: change one — a look, an
+  effect's fade in or out, a group added, its name, a cue's mode, a layer
+  added to a reusable cue — and
   every use changes, in one undo step. The tree marks each use **⟲** with
   how many there are; the page says *"Reusable layer Back Wash — used in 3
   place(s): an edit here is an edit to all"*.
@@ -2893,7 +2894,8 @@ Cue Runner back into a Cue List).
 - **External Input.** The properties' **External Input** tab maps each
   action: **GO**, **Sub GO**, **Back**, **Sub Back**, **Pause / Resume**,
   **Stop**, **Load next** and **Load previous** (they move STANDBY one
-  main cue). Each one takes a controller input and a key, as a Cue List's
+  main cue, in tonight's [running order](#songs-and-sections), past skipped
+  cues and songs left out tonight, as GO passes them). Each one takes a controller input and a key, as a Cue List's
   buttons do: auto-detect or choose the input, the input profile's
   settings and custom feedback values. They act in Operate mode only. A
   mapped control with feedback is lit while its action can do something:

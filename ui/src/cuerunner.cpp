@@ -1484,25 +1484,47 @@ QString CueRunner::stepCue(int step) const
         return QString();
     ShowTreeController *st = m_doc->showTree();
     if (const CueList *list = st->cueList(listId()))
-        return step < list->cues.count() ? st->cueNumber(*list, step) : QString();
+    {
+        // A step is the cue at that place in tonight's running order
+        // (ShowTreeController::cueOfStep), not at that place in the list.
+        const QList<int> order = st->playOrderOf(listId());
+        if (step >= order.count())
+            return QString();
+        const int at = order.at(step);
+        return at >= 0 && at < list->cues.count() ? st->cueNumber(*list, at) : QString();
+    }
     return ch->stepCue(step);
+}
+
+int CueRunner::loadStep(int delta) const
+{
+    Chaser *ch = chaser();
+    if (ch == nullptr)
+        return -1;
+    // The next cue GO would come to from the one on standby (skipped cues
+    // passed over, as GO and Back pass them): LOAD never puts a skipped
+    // cue on standby, where a GO would play it as if named.
+    const int standby = m_doc->showControl()->standbyStep(ch);
+    const int from = standby >= 0 ? standby : (delta > 0 ? -1 : ch->stepsCount());
+    return ch->nextPlayableStep(from, delta);
 }
 
 void CueRunner::loadNext()
 {
-    Chaser *ch = chaser();
-    if (ch == nullptr || !canLoadNext())
+    if (!canLoadNext())
         return;
-    load(stepCue(m_doc->showControl()->standbyStep(ch) + 1));
+    const int step = loadStep(+1);
+    if (step >= 0)
+        load(stepCue(step));
 }
 
 void CueRunner::loadPrevious()
 {
-    Chaser *ch = chaser();
-    if (ch == nullptr || !canLoadPrevious())
+    if (!canLoadPrevious())
         return;
-    const int standby = m_doc->showControl()->standbyStep(ch);
-    load(stepCue(standby < 0 ? ch->stepsCount() - 1 : standby - 1));
+    const int step = loadStep(-1);
+    if (step >= 0)
+        load(stepCue(step));
 }
 
 QString CueRunner::rowCue(const QTreeWidgetItem *item) const
@@ -1951,10 +1973,9 @@ void CueRunner::updateStates()
         flags |= FlagPaused;
     if (running)
         flags |= FlagStop;
-    const int steps = ch == nullptr ? 0 : ch->stepsCount();
-    if (standby >= 0 && standby + 1 < steps)
+    if (standby >= 0 && loadStep(+1) >= 0)
         flags |= FlagLoadNext;
-    if (steps > 0 && standby != 0)
+    if (loadStep(-1) >= 0)
         flags |= FlagLoadPrevious;
     if (flags != m_flags)
     {

@@ -18,12 +18,15 @@
 */
 
 #include <QDebug>
+#include <QFile>
 
 #include <linux/joystick.h>
 #include <linux/input.h>
 #include <errno.h>
 #include <unistd.h>
 #include <poll.h>
+#include <fcntl.h>
+#include <string.h>
 
 #include "hidlinuxjoystick.h"
 #include "hidplugin.h"
@@ -236,31 +239,118 @@ bool HIDLinuxJoystick::readEvent()
     }
 }
 
+bool HIDLinuxJoystick::reopenNode()
+{
+    /* The fd QFile holds stays its own: the node opened again is put in
+       its place (dup2), so nothing but this reader ever touches the file
+       while it runs. */
+    const int have = handle();
+    if (have < 0)
+        return false;
+    const QString path = m_file.fileName();
+
+    /* The same pad: one that took its number is another device, which the
+       plugin's rescan adds as its own line. */
+    if (vendorId() != 0 && path.startsWith(QLatin1String("/dev/input/")))
+    {
+        const QString id = QStringLiteral("/sys/class/input/%1/device/id/").arg(path.mid(11));
+        auto hex = [](const QString &file) {
+            QFile f(file);
+            if (f.open(QIODevice::ReadOnly) == false)
+                return -1;
+            bool ok = false;
+            const int v = QString::fromLatin1(f.readAll()).trimmed().toInt(&ok, 16);
+            return ok ? v : -1;
+        };
+        const int vendor = hex(id + QStringLiteral("vendor"));
+        const int product = hex(id + QStringLiteral("product"));
+        if (vendor >= 0 && product >= 0 && (vendor != int(vendorId()) || product != int(productId())))
+            return false;
+    }
+
+    const QByteArray node = QFile::encodeName(path);
+    int fd = ::open(node.constData(), O_RDWR | O_CLOEXEC);
+    if (fd < 0)
+        fd = ::open(node.constData(), O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
+        return false;
+    const bool ok = ::dup2(fd, have) == have;
+    ::close(fd);
+    return ok;
+}
+
 void HIDLinuxJoystick::run()
 {
-    struct pollfd* fds = NULL;
-    fds = new struct pollfd[1];
-    memset(fds, 0, 1);
-
-    fds[0].fd = handle();
-    fds[0].events = POLLIN;
-
+    /* Gone: the node answers poll() at once (POLLHUP/POLLERR) and a read
+       fails, so the reader waits KPollTimeout between tries to open it
+       again -- never a loop that spins -- and reads on when it is back
+       (the driver then sends every control's state, JS_EVENT_INIT). */
+    bool gone = false;
 
     while (m_running == true)
     {
-        int r = poll(fds, 1, KPollTimeout);
+        if (gone)
+        {
+            msleep(KPollTimeout);
+            if (m_running == true && reopenNode())
+            {
+                qDebug() << "HID JS" << name() << "is back at" << m_file.fileName();
+                gone = false;
+            }
+            continue;
+        }
 
-        if (r < 0 && errno != EINTR)
+        struct pollfd fds;
+        memset(&fds, 0, sizeof(fds));
+        fds.fd = handle();
+        fds.events = POLLIN;
+
+        const int r = poll(&fds, 1, KPollTimeout);
+        if (r < 0)
         {
             /* Print abnormal errors. EINTR may happen often. */
-            perror("poll");
+            if (errno != EINTR)
+            {
+                perror("poll");
+                msleep(KPollTimeout);
+            }
+            continue;
         }
-        else if (r != 0)
+        if (r == 0)
+            continue;
+
+        if (fds.revents & POLLNVAL)
         {
-            if (fds[0].revents != 0)
-                readEvent();
+            /* Not an open fd: nothing to read and nothing to put back. */
+            msleep(KPollTimeout);
+            continue;
+        }
+
+        if (fds.revents & POLLIN)
+        {
+            errno = 0;
+            if (readEvent())
+                continue;
+            if (errno == EINTR || errno == EAGAIN)
+                continue;
+        }
+
+        if (fds.revents & (POLLIN | POLLERR | POLLHUP))
+        {
+            qWarning() << "HID JS" << name() << "is gone: waiting for it at" << m_file.fileName();
+            gone = true;
         }
     }
 }
 
-
+HIDLinuxJoystick::~HIDLinuxJoystick()
+{
+    /* Stop the reader before what it reads goes (m_buttonMap, m_axisMap):
+       the base class would only stop it after these members are gone. It
+       looks at m_running every KPollTimeout. */
+    if (isRunning())
+    {
+        m_running = false;
+        wait();
+    }
+}

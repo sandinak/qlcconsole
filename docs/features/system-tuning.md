@@ -46,7 +46,7 @@ lowest priority the system has, so the show always comes first.
 | **Measured with this show** ● | How many frames actually left late, or never left. In the footer it covers the last 15 seconds. 1% late or more is marked important. | Work down the list. If it stays late, the show is more than this computer can compute in time. |
 | **Universe threads** | Whether the threads that compute and send each universe are real-time too. Measured on a Raspberry Pi 5: at 160 universes, real-time universe threads halved the worst frame times for about 10% more CPU. | On Linux with 64 or more universes it shows how to try it. Not measured on other systems yet. |
 | **This computer** ● | The processor, its cores, and whether this build matches it. | Apple silicon, Intel Macs, and small ARM boards each get their own advice. A Mac running the app under Rosetta, or a build for the wrong processor: use the right one. |
-| **Mains power** ● | On battery or plugged in. | Plug it in. |
+| **Mains power** ● | On battery or plugged in. Only the computer's own battery counts: a wireless controller's is not this line. | Plug it in. |
 | **Temperature** ● | Whether the system says it is slowing down from heat. Windows doesn't say. | Clear the vents and close what else is running. |
 | **Wi-Fi** ● | Wi-Fi in use. Important when your Art-Net or sACN outputs are on it. | Send DMX over wired Ethernet. |
 | **Screen sleep and lock** ● | How soon the screen sleeps, and whether it asks for a password. DMX keeps going behind a locked screen, but nobody can operate it. Important when it locks. | **Keep the display awake** is on by default. On Linux (GNOME) copy the commands. |

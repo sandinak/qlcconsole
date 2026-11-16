@@ -34,6 +34,7 @@ class HIDLinuxJoystick final : public HIDJsDevice
     Q_OBJECT
 public:
     HIDLinuxJoystick(HIDPlugin* parent, quint32 line, struct hid_device_info *info);
+    ~HIDLinuxJoystick() override;
 
     /** @reimp */
     void init() override;
@@ -46,6 +47,10 @@ public:
 
 protected:
     bool openDevice();
+    /** The node this pad was at, opened again in place of the dead fd
+     *  (a pad that went and came back at the same jsN); false while it
+     *  is not there, or another device has its number. */
+    bool reopenNode();
 
 private:
     /** @reimp */

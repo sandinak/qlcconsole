@@ -1372,8 +1372,9 @@ static void saveLooks(QXmlStreamWriter *doc, const QList<Look> &looks)
         if (!l.value.isEmpty())
             doc->writeAttribute(QStringLiteral("Value"), l.value);
         // An effect's fades: absent is FadeSnap, as a show saved before
-        // them plays (an older build ignores both).
-        if (isEffectKey(l.key) && !l.none)
+        // them plays (an older build ignores both). A None effect keeps
+        // its own too, so it reloads as it was saved.
+        if (isEffectKey(l.key))
         {
             auto fade = [](int ms) {
                 return ms == Look::FadeFollowCue ? QStringLiteral("cue") : QString::number(ms);
@@ -2064,8 +2065,16 @@ static QString looksContent(const QList<Look> &looks)
 {
     QStringList parts;
     for (const Look &l : looks)
-        parts << QStringLiteral("%1=%2/%3/%4/%5").arg(l.key, idsToString(l.palettes), idsToString(l.own),
-                                                      l.none ? QStringLiteral("none") : QString(), l.value);
+    {
+        QString part = QStringLiteral("%1=%2/%3/%4/%5").arg(l.key, idsToString(l.palettes), idsToString(l.own),
+                                                            l.none ? QStringLiteral("none") : QString(), l.value);
+        // An effect's fades are its content too (Look::operator==): the
+        // uses of a reusable layer share them, and a cue that differs
+        // only in them differs.
+        if (isEffectKey(l.key))
+            part += QStringLiteral("/%1/%2").arg(l.fadeIn).arg(l.fadeOut);
+        parts << part;
+    }
     parts.sort();
     return parts.join(QLatin1Char(';'));
 }

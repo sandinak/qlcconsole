@@ -763,6 +763,10 @@ int SystemProbe::readPowerSupplies(const QString &dir, int *percent)
     {
         if (readText(supplies.filePath(dev + QStringLiteral("/type"))) != QLatin1String("Battery"))
             continue;
+        /* A device's own battery (a Bluetooth pad, a mouse): not what
+           runs this computer. No scope, or System: the computer's. */
+        if (readText(supplies.filePath(dev + QStringLiteral("/scope"))) == QLatin1String("Device"))
+            continue;
         if (readText(supplies.filePath(dev + QStringLiteral("/status"))) == QLatin1String("Discharging"))
             result = 1;
         bool ok = false;
