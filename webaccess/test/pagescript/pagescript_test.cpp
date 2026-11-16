@@ -995,4 +995,36 @@ void PageScript_Test::focusShowsBlindAndTeaching()
     QVERIFY(text(QStringLiteral("held")).contains(QStringLiteral("Teaching holds real output")));
 }
 
+/*****************************************************************************
+ * Independent evaluation of 0.4.12 (eval/0412): a failing test for a fixer
+ *****************************************************************************/
+
+void PageScript_Test::evalNoStopIsShownThatWasNotSent()
+{
+    /* Remote GO off (Show Settings, off by default) or the show's PIN not
+       given yet: the page's pad sends nothing (canRig()), its emergency
+       stop included -- and the server would refuse it anyway
+       (WebAccessRun::command()). The page still turns its banner red, reads
+       EMERGENCY STOP and buzzes the stop's three pulses: the person holding
+       the pad is told the show stopped when no ALL OFF went. */
+    loadPage(WebAccessRun::html());
+    js(QStringLiteral("__open()"));
+    sent();
+    const QList<QJsonObject> states = { liveRun(QJsonObject{ { "remote", false } }),
+                                        liveRun(QJsonObject{ { "pin", true } }) };
+    for (const QJsonObject &state : states)
+    {
+        runState(state);
+        pad(QJsonObject{ { "lb", 1 }, { "rb", 1 }, { "lt", 1 }, { "rt", 1 } });
+        const QStringList words = sent();
+        const bool claimsStop = shown(QStringLiteral("armed"))
+                                && text(QStringLiteral("armed")) == QStringLiteral("EMERGENCY STOP");
+        pad(QJsonObject(), 50);
+        QVERIFY2(!claimsStop || words.contains(QStringLiteral("QLC+RUN|alloff")),
+                 qPrintable(QString("the page says EMERGENCY STOP and sent no ALL OFF (%1)")
+                                .arg(state.value(QStringLiteral("remote")).toBool() ? QStringLiteral("PIN not given")
+                                                                                    : QStringLiteral("remote GO off"))));
+    }
+}
+
 QTEST_MAIN(PageScript_Test)

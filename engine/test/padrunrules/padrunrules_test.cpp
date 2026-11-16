@@ -2668,4 +2668,80 @@ void PadRunRules_Test::reviewTheSamePadTwiceIsToldOneLight()
     QCOMPARE(run->roleText(), QString("Pad: ARMED"));
 }
 
+/*****************************************************************************
+ * Independent evaluation of 0.4.12 (eval/0412): failing tests for a fixer
+ *****************************************************************************/
+
+void PadRunRules_Test::evalOneLtAOnAPadSeenTwiceIsOneGo()
+{
+    /* One pad on two universes, one identity (the bench of
+       reviewTheSamePadTwiceIsToldOneLight: its stop and its light are
+       already one pad's, review 0.4.10 L1 and M1). Every press arrives on
+       both lines, and each line passes the arm check (sameController())
+       with its own held LT -- so one LT + A sends a GO a line. With the
+       double-GO guard off (Settings allow it) the second GO skips a cue;
+       with it on, every GO is followed by "Second GO held" and a long
+       buzz. theDuplicateDevice does not show it: its two lines are two
+       name-only identities, two controllers. */
+    makeShow();
+    m_stub->m_lineNames = QStringList() << "Pad (AA:BB:CC:00:00:01)" << "Pad (AA:BB:CC:00:00:01)";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 1));
+    PadRun *run = m_doc->programmer()->padRun();
+    QVERIFY(run->sameController(0, 1));
+    run->setEnabled(true);
+    run->setArmChordMs(15);
+    auto both = [&](quint32 ch, uchar v) {
+        axis(ch, v, 0);
+        axis(ch, v, 1);
+    };
+    both(kLB, 255);
+    both(kRB, 255);
+    QTRY_VERIFY(run->isArmed());
+    both(kRB, 0);
+    both(kLB, 0);
+    m_runs.clear();
+    both(kLT, 255);
+    both(kA, 255);
+    both(kA, 0);
+    both(kLT, 0);
+    QVERIFY2(goes() == 1, qPrintable(QString("one LT + A on one pad (seen on two universes) sent %1 GO commands")
+                                         .arg(goes())));
+}
+
+void PadRunRules_Test::evalAnotherPadsChordLeavesTheRunnersChordTiming()
+{
+    /* Invariant 6: another pad's arm chord is refused "and nothing on the
+       runner changes: still armed, its held safety still held, its chord
+       timing untouched". The chord timer is one for every pad
+       (PadRun::armChordUpdate()): B's chord, squeezed while the runner A
+       holds its disarm chord, takes the timer, B letting go stops it, and
+       A -- still holding LB + RB -- never disarms. Every refused-chord
+       test so far has the runner idle. */
+    makeShow();
+    twoPads(int(CJ::AllJobs), int(CJ::AllJobs));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    run->setArmChordMs(300);
+    // A holds its disarm chord...
+    hold(kLB, true, 0);
+    hold(kRB, true, 0);
+    QVERIFY(run->isArmChordPending());
+    // ...and B squeezes and lets go of its own inside A's time (no event
+    // loop turn between: deterministic, whatever the machine's load).
+    hold(kLB, true, 1);
+    hold(kRB, true, 1);
+    hold(kRB, false, 1);
+    hold(kLB, false, 1);
+    // A keeps holding, past its chord's time: it disarms.
+    QTRY_VERIFY2_WITH_TIMEOUT(!run->isArmed(),
+                              "the runner held LB + RB past the chord's time and is still armed: "
+                              "another pad's chord took its timing", 3000);
+    hold(kRB, false, 0);
+    hold(kLB, false, 0);
+}
+
 QTEST_MAIN(PadRunRules_Test)

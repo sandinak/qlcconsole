@@ -79,6 +79,12 @@ private slots:
     void aCommandFromOscOrMscIsNotEchoed();
     void theOutSettingsAreSavedWithTheShow();
 
+    /* Independent evaluation of 0.4.12 (eval/0412): fails on the code as
+       it is, for a fixer to make pass. */
+    /** Back on the first cue a list plays (step 0, or the first one not
+     *  skipped) keeps the list playing: it never stops it. */
+    void evalBackOnTheFirstPlayedCueKeepsTheListPlaying();
+
 private:
     Chaser *makeList(int steps, const QString &name);
     /** "Main": cues 1, 2, 3, cue 2 a chase of three steps on Sub GO. */

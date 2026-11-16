@@ -168,6 +168,14 @@ private slots:
     void theRulesHoldOverRandomPresses_data();
     void theRulesHoldOverRandomPresses();
 
+    /* Independent evaluation of 0.4.12 (eval/0412): each fails on the
+       code as it is, for a fixer to make pass. */
+    /** Rule 4 on one pad seen on two universes: one LT + A, one GO. */
+    void evalOneLtAOnAPadSeenTwiceIsOneGo();
+    /** CONTROLLER_JOBS.md invariant 6: another pad's refused arm chord
+     *  leaves the runner's chord timing untouched. */
+    void evalAnotherPadsChordLeavesTheRunnersChordTiming();
+
 private:
     IOPluginStub *loadStub();
     /** Four spots, a list: Opening, Blackout (no layer), Ballad. */

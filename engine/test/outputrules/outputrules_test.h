@@ -306,6 +306,15 @@ private slots:
     void sweepCueStack();
     void sweepEffectRunner();
 
+    /* Independent evaluation of 0.4.12 (eval/0412): each fails on the
+       code as it is, for a fixer to make pass. */
+    /** The pad's emergency stop (ShowControl AllOff) leaves a fogger at
+     *  rest, as Stop all does (UX-70: "a fog machine kept pumping"). */
+    void evalTheEmergencyStopPutsAFoggerAtRest();
+    /** The pad's emergency stop in FOCUS ("Everything is off.") leaves no
+     *  focus light on. */
+    void evalTheEmergencyStopLeavesNoFocusLightOn();
+
 private:
     /** One processFaders() frame; the output value at @p address */
     int frame(int address);

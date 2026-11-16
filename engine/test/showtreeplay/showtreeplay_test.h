@@ -91,6 +91,17 @@ private slots:
     void aHeldCueHitLetsGoOverItsFadeOutWhenItsCueEnds();
     void aListHitDoesNothingWhileItsListIsntRunning();
 
+    /* Independent evaluation of 0.4.12 (eval/0412): each fails on the
+       code as it is, for a fixer to make pass. */
+    /** runningCue() finds a cue with sub-cues while it plays. */
+    void evalTheRunningCueWithSubCuesIsFound();
+    /** A cue deleted earlier in a running list leaves the cue on stage as
+     *  the running one, and the next GO plays the next cue. */
+    void evalAnEarlierCueDeletedMidRunKeepsTheCueOnStage();
+    /** The main cue list picked outside the tree (a chaser editor) is not
+     *  taken back by undoing an unrelated tree edit. */
+    void evalAMainListPickedElsewhereSurvivesAnUnrelatedUndo();
+
 private:
     quint32 dimmer(int level, const QString &name);
     FixtureGroup *group(const QString &name, const QList<quint32> &fixtures);

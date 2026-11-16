@@ -62,6 +62,10 @@ private slots:
      *  (each pull, the cue moving on), and is gone disarmed, after the
      *  stop and when the console names none. */
     void theArmedHitIsNamedUnderTheBanner();
+    /** Independent evaluation of 0.4.12 (eval/0412), fails on the code as
+     *  it is: the page never shows EMERGENCY STOP for a stop it did not
+     *  send (remote GO off, the PIN not given). */
+    void evalNoStopIsShownThatWasNotSent();
     void theTestOpenedMidChordArmsNothing();
     void aPadGoneMidHoldDisarmsThePage();
     void acksSayWhyInPlainWords();

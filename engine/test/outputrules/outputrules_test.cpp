@@ -3608,6 +3608,81 @@ void OutputRules_Test::aHeldAutoRemoveChannelLetsGoOfNothing()
     QVERIFY2(letGoBy != token, "a held writer is named as letting go of the channel");
 }
 
+/*****************************************************************************
+ * Independent evaluation of 0.4.12 (eval/0412): failing tests for a fixer
+ *****************************************************************************/
+
+void OutputRules_Test::evalTheEmergencyStopPutsAFoggerAtRest()
+{
+    /* Stop all puts every fixture at rest (FixtureRest::stopAll(), the
+       CHANGELOG's UX-70 entry: "a fog machine kept pumping"). The emergency
+       stop -- the pad's four, the phone page's, an OSC or MSC ALL OFF, all
+       ShowControl AllOff -- stops the functions and cuts Show-only channels
+       only (OutputRuleKeeper::emergencyStop()): a fogger that is not marked
+       Show only keeps the fog level its cue left on its LTP channel, while
+       the pad says "Emergency stop. Everything is off." */
+    enum { Fog = 50 };
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Test"));
+    def->setModel(QStringLiteral("Eval Fogger"));
+    def->setType(QLCFixtureDef::Smoke);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("1ch"));
+    QLCChannel *fog = new QLCChannel();
+    fog->setName(QStringLiteral("Fog"));
+    fog->setGroup(QLCChannel::Effect);         // LTP, as a fogger's output often is
+    def->addChannel(fog);
+    mode->insertChannel(fog, 0);
+    def->addMode(mode);
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(def));
+    Fixture *fogger = new Fixture(m_doc);
+    fogger->setName(QStringLiteral("Fogger"));
+    fogger->setFixtureDefinition(def, mode);
+    fogger->setUniverse(0);
+    fogger->setAddress(quint32(Fog));
+    QVERIFY(m_doc->addFixture(fogger));
+    m_doc->outputRuleKeeper()->rebuild();
+
+    Scene *s = new Scene(m_doc);
+    s->setValue(fogger->id(), 0, 200);
+    m_doc->addFunction(s);
+    s->start(m_doc->masterTimer(), FunctionParent::master());
+    for (int i = 0; i < 5; i++)
+        tickFrame(Fog);
+    QCOMPARE(sent(Fog), 200);                   // the cue's fog
+
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+    for (int i = 0; i < 10; i++)
+        tickFrame(Fog);
+    QCOMPARE(m_doc->masterTimer()->runningFunctions(), 0);
+    QVERIFY2(sent(Fog) == 0, qPrintable(QString("the fogger still gets %1 after the emergency stop "
+                                                "(Stop all would have put it at rest)").arg(sent(Fog))));
+}
+
+void OutputRules_Test::evalTheEmergencyStopLeavesNoFocusLightOn()
+{
+    /* padrun.h rule 6: in FOCUS "the four-together stop still stops";
+       focus-calls.md: "still stops everything"; the pad says "Emergency
+       stop. Everything is off." The stop is ShowControl AllOff, which stops
+       functions. A venue or quick focus lights its fixture through its own
+       layer (Universe::Focus, over everything but Park): still lit after
+       the stop. (Refine's pending layer -- the walk, Focus this cue -- is
+       the same kind.) */
+    const quint32 stage = m_doc->fixtureForAddress(Stage);
+    m_doc->monitorProperties()->setFixturePosition(stage, 0, 0, QVector3D(4000, 2000, 5));
+    startFocus(stage, 1.0f);
+    QCOMPARE(frame(Stage), 255);
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+    int after = 0;
+    for (int i = 0; i < 3; i++)
+        after = tickFrame(Stage);
+    QVERIFY2(after == 0, qPrintable(QString("the focus light is at %1 after \"Everything is off\"").arg(after)));
+}
+
 QTEST_GUILESS_MAIN(OutputRules_Test)
 
 /* Review 10: Blind sends nothing of the preview. A fixture patched (or a

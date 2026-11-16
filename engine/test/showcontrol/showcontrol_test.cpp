@@ -1170,6 +1170,41 @@ void ShowControl_Test::wouldTakeStageMatchesExecute()
     stopAll();
 }
 
+/*****************************************************************************
+ * Independent evaluation of 0.4.12 (eval/0412): a failing test for a fixer
+ *****************************************************************************/
+
+void ShowControl_Test::evalBackOnTheFirstPlayedCueKeepsTheListPlaying()
+{
+    /* Every Show Tree list is a SingleShot chaser. Back (the pad's LT + B,
+       ⌘⇧↩, the Run tab) on the first cue it plays asks the runner for the
+       step before; there is none (ChaserRunner::getNextStepIndex() -> -1),
+       so the runner's write() returns false and the list STOPS -- its cue
+       fades out on stage -- while ShowControl reports the Back as done and
+       the cue as staying (cueTaken(.., to < 0 ? from : to)). The same with
+       the first cue skipped and Back from the second. */
+    MasterTimer *timer = m_doc->masterTimer();
+    auto tick = [timer]() { for (int i = 0; i < 3; ++i) timer->timerTick(); };
+    ShowControl *sc = m_doc->showControl();
+    Chaser *c = makeList(3, "Main");
+    c->setRunOrder(Function::SingleShot);      // as every Show Tree list
+    for (bool firstSkipped : { false, true })
+    {
+        c->setStepSkipped(0, firstSkipped);
+        QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+        tick();
+        const int first = firstSkipped ? 1 : 0;
+        QCOMPARE(c->currentStepIndex(), first);    // the first cue played
+        QVERIFY(sc->execute({ ShowControl::Back, QString(), QString() }));
+        tick();
+        const bool running = c->isRunning();
+        c->stop(FunctionParent::master());
+        tick();
+        QVERIFY2(running, qPrintable(QString("Back on the first cue played (step %1%2) stopped the list")
+                                         .arg(first + 1).arg(firstSkipped ? ", step 1 skipped" : "")));
+    }
+}
+
 QTEST_MAIN(ShowControl_Test)
 
 /*****************************************************************************
