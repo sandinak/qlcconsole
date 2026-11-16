@@ -2443,6 +2443,10 @@ void ShowTreePlay_Test::stepsSetMidRunCarryTheTrackedState()
     }
     Chaser *chaser = new Chaser(m_doc);
     chaser->setRunOrder(Function::SingleShot);
+    // As the bake's lists: each step's own times, held until a GO.
+    chaser->setFadeInMode(Chaser::PerStep);
+    chaser->setFadeOutMode(Chaser::PerStep);
+    chaser->setDurationMode(Chaser::PerStep);
     m_doc->addFunction(chaser);
     chaser->setSteps(steps);
     QCOMPARE(chaser->stepsCount(), 4);
