@@ -1883,17 +1883,21 @@ void PadRunRules_Test::jobsAHitPlayingAcrossAnotherPadsFocus()
 
 void PadRunRules_Test::jobsTheWalkBesideTheRunner()
 {
+    // Operate (Q252): the walk waits for the runner, and says who.
     makeShow();
     twoPads(int(CJ::RunCues), int(CJ::Focus));
     PadRun *run = m_doc->programmer()->padRun();
     run->setEnabled(true);
+    m_doc->setMode(Doc::Operate);
     arm(true, 0);
     press(kMenu, 1);
     QVERIFY(!run->isWalking());
     QVERIFY(run->isArmed());
-    QCOMPARE(run->notice(), QString::fromUtf8("Pad A (…00:01) is running cues: walk once it disarms."));
-    // A disarms: B walks with its Focus job alone.
+    QCOMPARE(run->notice(), QString::fromUtf8("Pad A (\u202600:01) is running cues: in Operate the walk waits "
+                                              "until it disarms."));
+    // A disarms: B walks with its Focus job alone (Design, the cue in hand).
     arm(false, 0);
+    m_doc->setMode(Doc::Design);
     press(kMenu, 1);
     QVERIFY(run->isWalking());
     run->stopWalk();
@@ -2291,6 +2295,141 @@ void PadRunRules_Test::reviewTheFocusPadUnpluggedMidFocus()
     QVERIFY(run->isArmed());
     withLt(kA, 0);
     QCOMPARE(goes(), 1);
+}
+
+/*****************************************************************************
+ * Board Q252: a walk beside the runner
+ *****************************************************************************/
+
+void PadRunRules_Test::q252AWalkBesideTheRunnerInDesign()
+{
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    // B's Menu in Design: B walks; A stays armed.
+    press(kMenu, 1);
+    QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    QVERIFY(run->isArmed());
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    QCOMPARE(pc->controllerOwner(), quint32(1));
+    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: Walk · Pad B (…00:02)"));
+    // A: nothing plays while the walk runs, on the screen.
+    const QString why = QString::fromUtf8("Pad B (…00:02) is walking the show: nothing plays until the walk ends.");
+    for (quint32 ch : { kA, kB, kX, kY })
+    {
+        run->showNotice(QString());
+        withLt(ch, 0);
+        QVERIFY2(run->notice() == why, qPrintable(QString("LT + %1: '%2'").arg(ch).arg(run->notice())));
+    }
+    run->showNotice(QString());
+    press(kRT, 0);
+    QCOMPARE(run->notice(), why);
+    hold(kLB, true, 0);
+    hold(kRB, true, 0);
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 5000);
+    hold(kRB, false, 0);
+    hold(kLB, false, 0);
+    QVERIFY(run->isArmed());
+    QCOMPARE(goes(), 0);
+    QVERIFY(run->isWalking());
+    // The walk's feedback (its triggers) is B's.
+    QCOMPARE(pc->statePad(), quint32(1));
+    // The walk ends (B's Menu): A's GO works, no re-arm, one double buzz on A.
+    const int rumblesA = int(feedbackOn(0, "rumble").size());
+    press(kMenu, 1);
+    QTRY_VERIFY(!run->isWalking());
+    QCOMPARE(run->state(), PadRun::Armed);
+    QCOMPARE(run->notice(), QString());
+    QTRY_VERIFY(feedbackOn(0, "rumble").size() > rumblesA);
+    int twos = 0;
+    for (const QVariantMap &m : feedbackOn(0, "rumble").mid(rumblesA))
+        twos += m.value("pulses").toInt() == 2 ? 1 : 0;
+    QCOMPARE(twos, 1);
+    withLt(kA, 0);
+    QCOMPARE(goes(), 1);
+}
+
+void PadRunRules_Test::q252NoWalkBesideTheRunnerInOperate()
+{
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    m_doc->setMode(Doc::Operate);
+    arm(true, 0);
+    press(kMenu, 1);
+    QVERIFY(!run->isWalking());
+    QVERIFY(run->isArmed());
+    QVERIFY2(run->notice().contains("in Operate the walk waits until it disarms"), qPrintable(run->notice()));
+    withLt(kA, 0);
+    QCOMPARE(goes(), 1);
+    m_doc->setMode(Doc::Design);
+}
+
+void PadRunRules_Test::q252TheStopDuringABesideWalk_data()
+{
+    QTest::addColumn<int>("stopper");
+    QTest::newRow("the runner") << 0;
+    QTest::newRow("the walker") << 1;
+}
+
+void PadRunRules_Test::q252TheStopDuringABesideWalk()
+{
+    QFETCH(int, stopper);
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    press(kMenu, 1);
+    QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        axis(ch, 255, quint32(stopper));
+    QCOMPARE(stops(), 1);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY(!run->isArmed());
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        axis(ch, 0, quint32(stopper));
+    if (run->isWalking())
+        run->stopWalk();
+    QVERIFY(!run->isArmed());
+}
+
+void PadRunRules_Test::q252ALaptopToolMidWalkDisarmsTheRunner()
+{
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    // The Controller Test opened mid-walk.
+    arm(true, 0);
+    press(kMenu, 1);
+    QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    run->setTesting(true);
+    QVERIFY2(!run->isArmed(), "the Controller Test opened and the runner is still armed");
+    QCOMPARE(run->notice(), QString("Disarmed: Controller Test has the controller."));
+    run->setTesting(false);
+    if (run->isWalking())
+        run->stopWalk();
+    QTRY_VERIFY(!run->isWalking());
+    // The laptop's Focus this cue on another cue mid-walk.
+    arm(true, 0);
+    press(kMenu, 1);
+    QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    const int rumblesA = int(feedbackOn(0, "rumble").size());
+    QString why;
+    QVERIFY2(pc->refineSession()->start(m_cue2, 0xFFFFFFFF, &why), qPrintable(why));
+    QCoreApplication::processEvents();
+    QVERIFY2(!run->isArmed(), "the laptop's Focus this cue took the pad and the runner is still armed");
+    for (const QVariantMap &m : feedbackOn(0, "rumble").mid(rumblesA))
+        QVERIFY2(m.value("pulses").toInt() != 2, "told GO works again as a tool took the pad");
+    pc->refineSession()->stop();
+    withLt(kA, 0);
+    QCOMPARE(goes(), 0);
 }
 
 void PadRunRules_Test::jobsTakenAwayWhileInUse()

@@ -135,6 +135,13 @@ private slots:
     void reviewTheFocusJobTakenMidFocus();
     /** 12: the focus pad unplugged mid-focus. */
     void reviewTheFocusPadUnpluggedMidFocus();
+    /* Board Q252 (a): a Focus pad's walk while another pad is armed --
+       Design yes, Operate no; the runner as beside a venue focus. */
+    void q252AWalkBesideTheRunnerInDesign();
+    void q252NoWalkBesideTheRunnerInOperate();
+    void q252TheStopDuringABesideWalk_data();
+    void q252TheStopDuringABesideWalk();
+    void q252ALaptopToolMidWalkDisarmsTheRunner();
     void jobsTakenAwayWhileInUse();
     /** Review 0.4.10: one pad listed twice (one address, two universes,
      *  CONTROLLER_JOBS.md 9: one controller) is told one light. */
