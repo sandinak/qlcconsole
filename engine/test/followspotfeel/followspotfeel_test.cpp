@@ -1957,6 +1957,66 @@ void FollowSpotFeel_Test::q253AWalksCueStepsKeepItsOwnerAndTheSpot()
     QVERIFY(!run->isWalking());
 }
 
+void FollowSpotFeel_Test::q253TheRestoreGlideWaitsForTheTool()
+{
+    using CJ = ControllerJobs;
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    jobs->resetAll();
+    q253Pads(stub, iom, false);
+    auto restore = qScopeGuard([&]() {
+        h.pc->focusSession()->stop();
+        jobs->resetAll();
+        q253Unpads(stub, iom);
+        h.pc->refreshStickBinding();
+    });
+    jobs->setJobs(jobs->identityOfUniverse(0), CJ::Jobs(CJ::RunCues | CJ::Focus));
+    jobs->setJobs(jobs->identityOfUniverse(1), CJ::Jobs(CJ::FollowSpot));
+    if (FollowSpotMover *m = h.pc->followSpotMover())
+        m->setFixedDt(MasterTimer::tick() / 1000.0);
+    h.pc->refreshStickBinding();
+    const Q253Show show = q253Show(m_doc, h, false, false);
+    // A cue's follow spot playing (nothing open in the Workbench).
+    h.use(h.rig.targetScene);
+    h.pc->m_focusedSceneId = Function::invalidId();
+    for (int i = 0; i < 12; ++i)
+        h.tick();
+    QCOMPARE(h.pc->m_liveFollowSceneId, h.rig.targetScene->id());
+    // B moves the subject off where the show has it.
+    h.pc->slotControllerInputChanged(1, 0, 255, QString());
+    QVERIFY2(travel(h, 20) > 0.1, "the stick moved nothing (no control)");
+    h.pc->slotControllerInputChanged(1, 0, 127, QString());
+    driftAfter(h);
+    const QVector3D away = h.rig.subject->position();
+    QVERIFY((away - h.rig.home).length() > 0.1f);
+
+    // A venue focus aims its call at that subject (another light): the spot holds.
+    QString why;
+    QVERIFY2(q253Start(h, show, "venue", h.rig.subject->id(), &why), qPrintable(why));
+    h.tick();
+    QCOMPARE(h.pc->followSpotStatus().heldBy, QString("Venue Focus"));
+    // The cue ends meanwhile: the subject would glide back -- not now.
+    h.rig.targetScene->stop(FunctionParent::master());
+    for (int i = 0; i < 60; ++i)
+    {
+        h.tick();
+        QCoreApplication::processEvents();
+    }
+    QVERIFY2(h.pc->m_glide.active, "no glide back began when the cue ended");
+    const double moved = double((h.rig.subject->position() - away).length());
+    QVERIFY2(moved < 1e-4, qPrintable(QString("the subject glided %1 m while the venue focus aimed at it").arg(moved)));
+    // The focus ends: it glides home.
+    q253End(h, "venue");
+    for (int i = 0; i < 120 && h.pc->m_glide.active; ++i)
+        h.tick();
+    QVERIFY2((h.rig.subject->position() - h.rig.home).length() < 1e-3f,
+             qPrintable(QString("not home after the focus: %1 m off")
+                        .arg(double((h.rig.subject->position() - h.rig.home).length()))));
+}
+
 void FollowSpotFeel_Test::q253ATwinPadDoesNotDoubleSteer()
 {
     Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };

@@ -92,6 +92,8 @@ void IOPluginCache::load(const QDir& dir)
                 m_plugins << ptr;
                 connect(ptr, SIGNAL(configurationChanged()),
                         this, SLOT(slotConfigurationChanged()));
+                connect(ptr, SIGNAL(inputReopened(quint32)),
+                        this, SLOT(slotInputReopened(quint32)));
 #if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
                 if (hotplug.isValid() && hotplug.toBool() == true)
                     HotPlugMonitor::connectListener(ptr);
@@ -140,6 +142,13 @@ void IOPluginCache::slotConfigurationChanged()
     QLCIOPlugin* plugin = static_cast<QLCIOPlugin*> (QObject::sender());
     if (plugin != NULL) // 3rd party plugins might not behave correctly
         emit pluginConfigurationChanged(plugin);
+}
+
+void IOPluginCache::slotInputReopened(quint32 input)
+{
+    QLCIOPlugin* plugin = static_cast<QLCIOPlugin*> (QObject::sender());
+    if (plugin != NULL)
+        emit pluginInputReopened(plugin, input);
 }
 
 QDir IOPluginCache::systemPluginDirectory()

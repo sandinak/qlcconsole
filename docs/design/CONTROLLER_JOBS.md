@@ -346,13 +346,24 @@ it holds, and the chip says why."
   cue ends), `advanceRestoreGlide()`, `updateFollowSpotStatus()` and the
   once-a-second stick search. Before, all of it waited for the tool's
   end; a glide or a cue change during a tool now happens on time.
-- **What a pad held goes with it.** A pad re-patched or reopened in place
-  by its plugin (switched off and on, re-enumerated, back from sleep:
-  `InputOutputMap::inputPatchReconnected()`) holds nothing after: LT held
-  as it dropped is no safety (a GO needs LT again), a View no chord; a
-  stop it already fired stays fired, a chord its bumpers began is spent
-  (`PadRun::padReopened()`), and the arm stays (the lead's evaluation of
-  0.4.12).
+- **What a reopened pad held.** A pad reopened in place by its plugin
+  (switched off and on, re-enumerated, back from sleep: the plugin's
+  `inputReopened(line)`, for that line only -- the HID plugin's replace
+  path; `InputOutputMap::inputPatchReconnected()`) keeps the four as read,
+  for the stop (a stale "held" can only make a stop easier, and it
+  latches; some pads -- winmm, macOS's polled ones -- never send their
+  held state again, and a stop squeezed with three of four held must not
+  be lost), but its LT is no GO safety (nor LT + Menu's) until LT is read
+  again (`Held::ltStale`); a View is no chord, a chord its bumpers began
+  is spent, the walk's modifier lets go, and the arm stays
+  (`PadRun::padReopened()`). Another pad's hot-plug or a rescan reopens
+  nothing of the pads already here: they keep what they hold. A pad
+  re-patched (`inputPatchChanged`) forgets all it held, as before (the
+  lead's evaluation of 0.4.12; the second review of Q253).
+- **The restore glide waits for a tool.** A cue's follow spot ending
+  glides its subject back where the show has it; while a tool's lights
+  aim at that subject the glide waits where it is, and goes on when the
+  tool ends or moves off them (`advanceRestoreGlide()`).
 - Unchanged: the emergency stop is read first on every pad (4), the arm
   takes two controls, the runner's GO family rules beside a focus or a
   walk (11, Q252), and one status source per surface (9).
@@ -414,5 +425,8 @@ window still open.
   beside pad's fine stick (`q253AWalksCueStepsKeepItsOwnerAndTheSpot`);
   the footer's chip as drawn, at three sizes
   (ui/test/padrunrules `q253TheFollowChipSaysWhyItHolds`); a pad
-  reopened or re-patched holds no stale LT or View
-  (engine/test/padrunrules `aReopenedPadHoldsNoStaleSafety`).
+  reopened holds no stale GO safety yet still stops, and another pad's
+  hot-plug keeps what a pad holds (engine/test/padrunrules
+  `aReopenedPadHoldsNoStaleSafety`, `aHotPlugKeepsTheOtherPadsHeld`); the
+  restore glide waits for a tool aimed at the subject
+  (`q253TheRestoreGlideWaitsForTheTool`).

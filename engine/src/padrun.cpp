@@ -426,7 +426,7 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
     // A venue focus cue waits: Menu is its start, armed and with LT held.
     if (action == Walk && isFocusCueWaiting())
     {
-        focusStartPress(universe, h.lt.isDown());
+        focusStartPress(universe, h.safety());
         return true;
     }
 
@@ -461,7 +461,7 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
             return true;
         }
         // The safety: LT held, for every cue command.
-        if (needsSafety(action) && !h.lt.isDown())
+        if (needsSafety(action) && !h.safety())
         {
             switch (action)
             {
@@ -999,7 +999,7 @@ bool PadRun::noteHeld(quint32 universe, GamepadRole::Role role, uchar value)
     {
         case GamepadRole::LB:           h.lb = value > 0; break;
         case GamepadRole::RB:           h.rb = value > 0; break;
-        case GamepadRole::LeftTrigger:  h.lt.update(value / 255.0f); break;
+        case GamepadRole::LeftTrigger:  h.lt.update(value / 255.0f); h.ltStale = false; break;
         case GamepadRole::RightTrigger: rtPressed = h.rt.update(value / 255.0f); break;
         default:                        break;
     }
@@ -1074,17 +1074,29 @@ void PadRun::forgetPad(quint32 universe)
 
 void PadRun::padReopened(quint32 universe)
 {
+    /* The four stay as they were read, for the stop: a "held" there can
+       only make a stop easier, and the stop latches (second review of
+       Q253) -- a pad that sends its state again corrects them, and one that
+       never does (winmm keeps its button mask) would otherwise lose a stop
+       squeezed with three of four held. LT is no safety until read again.
+       A chord the bumpers began is spent. */
     auto it = m_held.find(universe);
-    if (it == m_held.end())
-        return;
-    Held fresh;
-    fresh.stopFired = it->stopFired;        // a stop fired is not fired again
-    fresh.spent = it->lb || it->rb;         // a chord begun before is no chord after
-    *it = fresh;
+    if (it != m_held.end())
+    {
+        it->ltStale = it->lt.isDown();
+        it->spent = it->spent || it->lb || it->rb;
+    }
     if (m_chordUniverse == universe)
     {
         m_armChord->stop();
         m_chordUniverse = UINT_MAX;
+    }
+    // The walk's modifier and level, if it is the walker's pad.
+    if (isWalking() && m_pc != nullptr && sameController(universe, m_pc->controllerOwner()))
+    {
+        m_lbHeld = false;
+        m_lbUsed = false;
+        m_levelUp = m_levelDown = 0.0f;
     }
 }
 
@@ -1238,7 +1250,7 @@ bool PadRun::focusMenu(quint32 universe)
         refuse(Walk, tr("Another controller is in use."));
         return true;
     }
-    if (!m_held.value(universe).lt.isDown())
+    if (!m_held.value(universe).safety())
     {
         refuse(Walk, tr("Venue focus: hold {LT} and press {Menu} to finish it."));
         return true;
@@ -2293,6 +2305,8 @@ bool PadRun::stepCue(int delta)
         if (!tryStart(from))
         {
             walkEnded();
+            // No walk now: its owner goes once this press is done (and is said).
+            m_pc->releaseControllerSoon();
             return false;
         }
     }

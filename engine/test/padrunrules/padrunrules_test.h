@@ -59,11 +59,16 @@ private slots:
      *  says to let go of both -- never a silent retry (the jobs-alone
      *  review's nit, board Q253's branch). */
     void aSpentChordPressedAgainSaysLetGo();
-    /** A pad holding LT (the safety) or View reopened in place by its
-     *  plugin (switched off and on, re-enumerated) or re-patched: what it
-     *  held is not held after -- A with no fresh LT is refused, Menu is
-     *  no View + Menu chord -- and the emergency stop still stops, from
-     *  either pad (the lead's evaluation of 0.4.12). */
+    /** Another pad comes or goes (the plugin rescans): a pad already here
+     *  keeps what it holds -- its LT still a safety, three of the four
+     *  still a stop with the fourth (second review of Q253). */
+    void aHotPlugKeepsTheOtherPadsHeld();
+    /** A pad reopened in place (QLCIOPlugin::inputReopened()) that never
+     *  sends its held state again: its LT is no GO safety until read again,
+     *  yet still one of the four for the stop; one that sends it again
+     *  GOs; another pad's reopen changes nothing of it; View held across a
+     *  reopen or a re-patch makes no View + Menu chord (the lead's
+     *  evaluation of 0.4.12, the second review of Q253). */
     void aReopenedPadHoldsNoStaleSafety();
     /** Rule 3 (pad-trace replay, 2026-11-16): a chord that fired (or was
      *  refused) does not fire again while both bumpers stay held, whatever

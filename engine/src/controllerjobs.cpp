@@ -60,6 +60,8 @@ ControllerJobs::ControllerJobs(Doc *doc, QObject *parent)
         connect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ControllerJobs::forgetIdentities);
         connect(iom, &InputOutputMap::pluginConfigurationChanged, this, &ControllerJobs::forgetIdentities);
         connect(iom, &InputOutputMap::offlinePatchesChanged, this, &ControllerJobs::forgetIdentities);
+        connect(iom, &InputOutputMap::inputSlotChanged, this, &ControllerJobs::forgetIdentities);
+        connect(iom, &InputOutputMap::inputPatchReconnected, this, &ControllerJobs::forgetIdentities);
     }
 }
 
@@ -156,12 +158,16 @@ QString ControllerJobs::identityOfUniverse(quint32 universe) const
     if (ip == nullptr || ip->plugin() == nullptr)
         return QString();
     /* The device on the line now (a controller slot may have another pad
-       there than the one it was patched with): worked out once for it. */
-    const QString name = ip->inputName();
+       there than the one it was patched with): worked out once for it, and
+       again when a patch, a slot, a device or the plugin changes
+       (forgetIdentities()). Its name is not asked for each time: that
+       builds the plugin's whole input list, twice a sameController() --
+       on every pad event (second review of Q253). */
     const QString plugin = ip->plugin()->name();
     const auto it = m_identities.constFind(universe);
-    if (it != m_identities.constEnd() && it->plugin == plugin && it->input == ip->input() && it->name == name)
+    if (it != m_identities.constEnd() && it->plugin == plugin && it->input == ip->input())
         return it->identity;
+    const QString name = ip->inputName();
     KnownIdentity k;
     k.plugin = plugin;
     k.input = ip->input();

@@ -1098,6 +1098,9 @@ private:
      *  controller tick (the spot's own lights are looked at again now and
      *  then). */
     QString toolOnSpotLights(quint32 sceneId, quint32 targetId, bool tick);
+    /** The running tool's lights, targets and name, worked out again when
+     *  it changed (and with @p tick once a second); false with no tool. */
+    bool refreshToolSets(bool tick);
     /** The stage targets the tool's live looks aim at (its calls' and
      *  references', its cue's or layer's Aim looks): the follow spot
      *  moving its subject @p targetId moves those lights (review of Q253). */

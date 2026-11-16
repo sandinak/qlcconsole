@@ -416,9 +416,10 @@ public:
      *  come, so a held safety is no safety on the pad there now. */
     void forgetPad(quint32 universe);
     /** The input on @p universe was reopened in place (the same line, maybe
-     *  another device): what it held is not held now -- a trigger held as
-     *  it dropped is no safety -- but a stop it already fired stays fired
-     *  and a chord its bumpers began is spent. The arm stays. */
+     *  another device that never sends its held state again): LT is no
+     *  safety until it is read again; the four stay as read, for the stop
+     *  (a fired stop stays fired); a chord its bumpers began is spent; the
+     *  walk's modifier lets go. The arm stays. */
     void padReopened(quint32 universe);
     /** A walk's cue step restarts Focus this cue: its stop is no end. */
     bool isRestarting() const { return m_restarting; }
@@ -733,6 +734,12 @@ private:
         /** A trigger was down with both bumpers (the stop, or one on its
          *  way): no arm until both bumpers are up and squeezed afresh. */
         bool spent = false;
+        /** LT read before its pad was reopened in place: still one of the
+         *  four for the stop, but no safety until LT is read again (a pad
+         *  that never sends its held state again must not GO on it). */
+        bool ltStale = false;
+        /** LT held as the GO family's safety (and LT + Menu's). */
+        bool safety() const { return lt.isDown() && !ltStale; }
         bool anyTrigger() const { return lt.isDown() || rt.isDown(); }
         bool all() const { return lb && rb && lt.isDown() && rt.isDown(); }
     };

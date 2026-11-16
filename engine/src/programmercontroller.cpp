@@ -2826,12 +2826,12 @@ void ProgrammerController::zeroAndLatchSpot(quint32 universe, bool stick)
             letGoOfFollowSpotInputs(share, false);
 }
 
-QString ProgrammerController::toolOnSpotLights(quint32 sceneId, quint32 targetId, bool tick)
+bool ProgrammerController::refreshToolSets(bool tick)
 {
     const bool focus = m_focusSession != nullptr && m_focusSession->isActive();
     const bool refine = !focus && m_refineSession != nullptr && m_refineSession->isActive();
-    if ((!focus && !refine) || sceneId == UINT_MAX)
-        return QString();
+    if (!focus && !refine)
+        return false;
 
     /* The tool's lights, again only when what it works on changed: the
        venue focus's call, the walk's layer, another cue or session -- and
@@ -2880,6 +2880,13 @@ QString ProgrammerController::toolOnSpotLights(quint32 sceneId, quint32 targetId
             m_toolTargets = m_refineSession->aimTargets(walking);
         m_toolNameCached = toolName();
     }
+    return true;
+}
+
+QString ProgrammerController::toolOnSpotLights(quint32 sceneId, quint32 targetId, bool tick)
+{
+    if (sceneId == UINT_MAX || !refreshToolSets(tick))
+        return QString();
 
     // The follow spot's own lights: its scene's fixtures and groups.
     if (sceneId != m_spotLightsScene || (tick && --m_spotLightsTicks <= 0))
@@ -3220,10 +3227,13 @@ void ProgrammerController::connectControllerInput()
        lead's evaluation of 0.4.12). A stop it fired stays fired. */
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputPatchReconnected, this, [this](quint32 universe) {
         m_heldRoles.pads.remove(universe);
-        if (universe == m_ownerUniverse)
+        // The tools' pad (or its twin line): no focus LT, no chord half made.
+        if (m_ownerUniverse == 0xFFFFFFFF || m_padRun->sameController(universe, m_ownerUniverse))
         {
             m_focusLt.reset();
             m_focusLtChord = false;
+            m_viewChord = false;
+            m_centreChord = false;
         }
         if (m_padRun != nullptr)
             m_padRun->padReopened(universe);
@@ -5311,6 +5321,11 @@ void ProgrammerController::startRestoreGlide()
 void ProgrammerController::advanceRestoreGlide()
 {
     if (!m_glide.active)
+        return;
+    /* A tool works on lights aimed at the subject gliding back: it waits
+       where it is until the tool ends or moves off them, then glides on
+       (second review of Q253) -- never moved under the operator. */
+    if (refreshToolSets(false) && m_toolTargets.contains(m_glide.targetId))
         return;
     MonitorProperties *mProps = m_doc->monitorProperties();
     StageTarget *tgt = mProps ? mProps->stageTarget(m_glide.targetId) : nullptr;

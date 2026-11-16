@@ -610,6 +610,32 @@ void PadRunRules_Test::aSpentChordPressedAgainSaysLetGo()
     hold(kLB, false);
 }
 
+void PadRunRules_Test::aHotPlugKeepsTheOtherPadsHeld()
+{
+    makeShow();
+    twoPads(int(ControllerJobs::AllJobs), int(ControllerJobs::AllJobs));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    m_doc->setMode(Doc::Operate);
+    auto restore = qScopeGuard([&]() { m_doc->setMode(Doc::Design); });
+    // A holds the safety; another pad comes or goes (the plugin rescans).
+    arm(true, 0);
+    axis(kLT, 255, 0);
+    emit m_stub->configurationChanged();
+    press(kA, 0);
+    QVERIFY2(goes() == 1, qPrintable(QString("a hot-plug of another pad forgot A's held LT: '%1'").arg(run->notice())));
+    axis(kLT, 0, 0);
+    // Three of the four held through a hot-plug: the fourth still stops.
+    for (quint32 ch : { kLB, kRB, kLT })
+        hold(ch, true, 0);
+    emit m_stub->configurationChanged();
+    const int before = stops();
+    hold(kRT, true, 0);
+    QVERIFY2(stops() == before + 1, "a hot-plug of another pad lost a stop squeezed with three of four held");
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        hold(ch, false, 0);
+}
+
 void PadRunRules_Test::aReopenedPadHoldsNoStaleSafety()
 {
     makeShow();
@@ -619,32 +645,47 @@ void PadRunRules_Test::aReopenedPadHoldsNoStaleSafety()
     run->setEnabled(true);
     m_doc->setMode(Doc::Operate);
     auto restore = qScopeGuard([&]() { m_doc->setMode(Doc::Design); });
+    // A's device replaced on its line, as the HID plugin does it.
+    auto reopen = [&](quint32 line) {
+        emit m_stub->configurationChanged();
+        emit m_stub->inputReopened(line);
+    };
+
+    // A pad that does not send its state again (winmm keeps its mask): LT
+    // held as it was reopened is no safety -- A alone is refused.
     arm(true, 0);
-    // LT held as the pad is reopened in place (its plugin's configurationChanged()).
     axis(kLT, 255, 0);
-    emit m_stub->configurationChanged();
+    reopen(0);
     QVERIFY(run->isArmed());
     run->showNotice(QString());
     press(kA, 0);
     QCOMPARE(goes(), 0);
     QCOMPARE(run->notice(), QString("GO is LT held and A."));
-    // The LT the pad has now is a fresh one: then A goes.
+    // ...but it is still one of the four: the bumpers and RT stop.
+    const int before = stops();
+    hold(kLB, true, 0);
+    hold(kRB, true, 0);
+    hold(kRT, true, 0);
+    QVERIFY2(stops() == before + 1, "after a reopen the stop needed LT read again");
+    for (quint32 ch : { kRT, kRB, kLB })
+        hold(ch, false, 0);
     axis(kLT, 0, 0);
-    withLt(kA, 0);
+
+    // A pad that sends its state again: the held LT counts once re-sent.
+    arm(true, 0);
+    axis(kLT, 255, 0);
+    reopen(0);
+    axis(kLT, 255, 0);
+    press(kA, 0);
     QCOMPARE(goes(), 1);
-    // The stop still stops, from either pad, after the reopen.
-    for (quint32 u : { quint32(1), quint32(0) })
-    {
-        if (u == 0)
-            arm(true, 0);
-        const int before = stops();
-        for (quint32 ch : { kLB, kRB, kLT, kRT })
-            hold(ch, true, u);
-        QCOMPARE(stops(), before + 1);
-        for (quint32 ch : { kRT, kLT, kRB, kLB })
-            hold(ch, false, u);
-        emit m_stub->configurationChanged();
-    }
+    axis(kLT, 0, 0);
+
+    // The other pad's reopen leaves A's LT a safety.
+    axis(kLT, 255, 0);
+    reopen(1);
+    press(kA, 0);
+    QCOMPARE(goes(), 2);
+    axis(kLT, 0, 0);
     run->setEnabled(false);
 
     // The Tools role: View held as the pad is reopened, or re-patched, is
@@ -655,7 +696,7 @@ void PadRunRules_Test::aReopenedPadHoldsNoStaleSafety()
     {
         hold(kView, true, 1);
         if (how == 0)
-            emit m_stub->configurationChanged();
+            reopen(1);
         else
         {
             drop(1);

@@ -1355,6 +1355,7 @@ void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
     m_opening.erase(it);
     HIDDevice *old = device(path);
     bool changed = false;
+    HIDDevice *reopened = nullptr;      // replaced where it was: its line is told
 
     if (m_listed.contains(path) == false || dev == nullptr)
     {
@@ -1396,6 +1397,7 @@ void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
         emit deviceAdded(dev);
         setupDiagnostics(dev);
         changed = true;
+        reopened = dev;
     }
     else
     {
@@ -1411,6 +1413,11 @@ void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
     {
         renumberLines();
         emit configurationChanged();
+        /* A held trigger or button of the old device may never be sent
+           again (some pads keep their state across the reopen): the
+           engine lets go of that line's GO safety (board Q253's review). */
+        if (reopened != nullptr && m_devices.contains(reopened))
+            emit inputReopened(reopened->line());
     }
     noteProblems();
 }

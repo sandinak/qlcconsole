@@ -788,6 +788,13 @@ signals:
      */
     void configurationChanged();
 
+    /** Input line @p input was reopened in place, on another device (a
+     *  controller switched off and on, re-enumerated, back from sleep): the
+     *  same line, so its patch stays, but what was held on it is not known
+     *  to be held -- some devices send their state again, some never do.
+     *  Emitted after configurationChanged(), for that line only. */
+    void inputReopened(quint32 input);
+
     /** targetProblems() has changed: the footer reads it again. Nothing is
      *  reconnected -- a device going quiet is not a new configuration. */
     void targetProblemsChanged();

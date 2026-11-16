@@ -321,10 +321,11 @@ show from any pad.
   Focus mode is in the Tools role, and Run /
   Tools is switched on the computer (the Run tab's **Pad:** button) for
   every pad: a View + Menu tap in Run on a Focus-only pad says so.
-- **A pad that drops out holds nothing when it is back.** If a pad
-  switches off and on, re-enumerates or wakes from sleep while LT (or
-  View) is held, it is not held when the pad is back: press LT again for
-  a GO. The emergency stop works as before.
+- **A pad that drops out and comes back.** If a pad switches off and on,
+  re-enumerates or wakes from sleep while LT is held, that LT no longer
+  counts for a GO when the pad is back: press LT again. The emergency
+  stop works as before, and another pad being plugged in or out changes
+  nothing on the pads already connected.
 - **The emergency stop is on every pad.** In the Run role, both bumpers
   and both triggers together stop everything from any connected
   controller, whatever its jobs, whatever the pads are doing: a tool or a

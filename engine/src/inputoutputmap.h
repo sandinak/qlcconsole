@@ -923,6 +923,9 @@ private:
 private slots:
    /** Slot that catches plugin configuration change notifications from UIPluginCache */
     void slotPluginConfigurationChanged(QLCIOPlugin* plugin);
+    /** One input line reopened in place: the universes patched to it are
+     *  told (inputPatchReconnected()); no other line is. */
+    void slotPluginInputReopened(QLCIOPlugin* plugin, quint32 input);
     void slotRetryOfflinePatches();
 
 private:
@@ -961,8 +964,8 @@ signals:
 
     /** @p universe's input was reopened on the same line by its plugin
      *  (a controller switched off and on, re-enumerated or back from sleep:
-     *  the plugin's configurationChanged()). What it held is not held on
-     *  the device there now. */
+     *  QLCIOPlugin::inputReopened() for that line only, not every rescan).
+     *  What it held may not be held on the device there now. */
     void inputPatchReconnected(quint32 universe);
 
     /** Everyone interested in input data should connect to this signal */

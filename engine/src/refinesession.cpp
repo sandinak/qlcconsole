@@ -393,9 +393,13 @@ QList<quint32> RefineSession::cueFixtures() const
     QList<quint32> out;
     if (!m_active)
         return out;
+    QSet<quint32> seen;     // a big cue: no list search a fixture
     auto add = [&](quint32 fid) {
-        if (!out.contains(fid) && m_doc->fixture(fid) != nullptr)
+        if (!seen.contains(fid) && m_doc->fixture(fid) != nullptr)
+        {
+            seen.insert(fid);
             out << fid;
+        }
     };
     for (quint32 lid : m_layers)
     {

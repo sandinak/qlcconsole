@@ -102,6 +102,10 @@ private slots:
      *  pad steering the spot beside it keeps its held fine stick. */
     void q253AWalksCueStepsKeepItsOwnerAndTheSpot_data();
     void q253AWalksCueStepsKeepItsOwnerAndTheSpot();
+    /** Second review: a cue's follow spot ends while a venue focus aims at
+     *  its subject: the subject's glide back waits while the focus runs,
+     *  then glides home. */
+    void q253TheRestoreGlideWaitsForTheTool();
 
     /* Where the operator stands (FollowSpotOperator). */
     void stickUpGoesAwayFromTheOperator();
