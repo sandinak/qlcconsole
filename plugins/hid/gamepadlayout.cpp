@@ -15,6 +15,8 @@
   limitations under the License.
 */
 
+#include <QStringList>
+
 #include "gamepadlayout.h"
 
 namespace GamepadLayout

@@ -191,6 +191,9 @@ private slots:
     void byUniverseShowsTheSelectedUniversesSettings();
     void byUniverseCellsEditThePatch();
     void byUniverseShots();
+    /** With QLC_SHOT_DIR: the controller's right-click menu and the
+     *  Controller Test on it (two of one model), at three sizes. */
+    void controllerJobsShots();
 
 private:
     Doc *m_doc;

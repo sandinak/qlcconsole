@@ -24,6 +24,7 @@
 #include <QSignalSpy>
 #include <QScrollBar>
 #include <QMenu>
+#include <QPainter>
 #include <QSettings>
 #include <QSplitter>
 #include <QContextMenuEvent>
@@ -4096,3 +4097,101 @@ void ConnectionsTree_Test::byUniverseShots()
     }
     QApplication::setPalette(light);
 }
+
+/* With QLC_SHOT_DIR: Connections ▸ right-click a controller (the menu over
+   the list), and the Controller Test it opens, two pads of one model and a
+   DualShock 4 connected, at 1024x640, 1280x800 and 1920x1080.
+   QLC_SHOT_PREFIX names them ("after" by default). */
+void ConnectionsTree_Test::controllerJobsShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    const QString prefix = qEnvironmentVariable("QLC_SHOT_PREFIX", QStringLiteral("after"));
+
+    const QString pad = QStringLiteral("Wireless Controller");
+    const QString ds4 = QStringLiteral("DUALSHOCK 4 Wireless Controller (DE:4C:09:77:77:93)");
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << pad << pad << ds4;
+    stub->m_connectionInfo = { { 0, QStringLiteral("USB \u00B7 Xbox Wireless Controller (045E:0B12)") },
+                               { 1, QStringLiteral("USB \u00B7 Xbox Wireless Controller (045E:0B12)") },
+                               { 2, QStringLiteral("Bluetooth \u00B7 DualShock 4 (054C:09CC)") } };
+#if __has_include("controllerjobs.h")
+    stub->m_lineLocations = { { 0, QStringLiteral("USB 14200000") }, { 1, QStringLiteral("USB 14300000") } };
+#endif
+    auto restore = qScopeGuard([stub]() {
+        stub->m_connectionInfo.clear();
+#if __has_include("controllerjobs.h")
+        stub->m_lineLocations.clear();
+#endif
+        if (ControllerTestDialog *d = ControllerTestDialog::instance())
+            d->close();
+        QApplication::processEvents();
+    });
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    iom->setUniverseName(0, QStringLiteral("U01-Pads"));
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->addInputSlotDevice(0, stub->name(), ds4));
+
+    ConnectionsTree tree(m_doc);
+    tree.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tree));
+    tree.m_refreshTimer->stop();
+    tree.refresh();
+    tree.m_tree->expandAll();
+    QTreeWidgetItem *row = NULL;
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+        if (it->data(COL_NAME, ROLE_KIND).toInt() == 11 && it->text(COL_NAME).endsWith(ds4))  // KIND_SLOTDEVICE
+            row = it;
+    QVERIFY(row != NULL);
+
+    const QList<QSize> sizes { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) };
+    for (const QSize &z : sizes)
+    {
+        tree.resize(z);
+        for (int i = 0; i < 5; i++)
+            QApplication::processEvents();
+        tree.m_tree->scrollToItem(row);
+        tree.m_tree->setCurrentItem(row);
+        const QRect rect = tree.m_tree->visualItemRect(row);
+        const QPoint at = rect.center();
+        QImage shot;
+        QTimer::singleShot(50, [&tree, &shot]() {
+            QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+            if (m == NULL)
+                return;
+            for (QAction *a : m->actions())
+                if (a->text().startsWith(QStringLiteral("Test Controller")))
+                    m->setActiveAction(a);
+            QApplication::processEvents();
+            shot = tree.grab().toImage();
+            QPainter p(&shot);
+            const QPoint where = tree.mapFromGlobal(m->mapToGlobal(QPoint(0, 0)));
+            p.drawPixmap(where, m->grab());
+            p.end();
+            m->close();
+        });
+        tree.slotContextMenu(at);
+        QApplication::processEvents();
+        QVERIFY(!shot.isNull());
+        const QString file = QStringLiteral("%1-connections-controller-menu-%2x%3.png")
+                                 .arg(prefix).arg(z.width()).arg(z.height());
+        QVERIFY(shot.save(QDir(dir).filePath(file)));
+    }
+
+    ControllerTestDialog *dlg = ControllerTestDialog::open(m_doc, nullptr);
+    QVERIFY(dlg->showController(stub->name(), pad));
+    for (const QSize &z : sizes)
+    {
+        dlg->resize(z);
+        for (int i = 0; i < 5; i++)
+            QApplication::processEvents();
+        QTest::qWait(30);
+        const QString file = QStringLiteral("%1-controller-test-%2x%3.png")
+                                 .arg(prefix).arg(z.width()).arg(z.height());
+        QVERIFY(dlg->grab().save(QDir(dir).filePath(file)));
+    }
+}
+
