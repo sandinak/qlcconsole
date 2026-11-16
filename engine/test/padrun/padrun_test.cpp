@@ -1265,7 +1265,18 @@ void PadRun_Test::theVenueFocusSweep()
 
             /* The exit chord never moves the focus: LT + Menu, held and let
                go in either order, leaves the call where it was -- here with
-               the laptop's prompt answered Cancel, so the focus goes on. */
+               the laptop's prompt answered Cancel, so the focus goes on.
+               A fresh focus first: the sweep left the target page on with
+               the target moved, which holds the calls (by design). */
+            s->stop();
+            QCOMPARE(run->state(), PadRun::Armed);
+            m_running = m_empty;
+            fcc->cueCurrent(m_list, m_empty);
+            m_running = m_cue1;
+            fcc->cueCurrent(m_list, m_cue1);
+            with(kLT, kMenu);
+            QCOMPARE(run->state(), PadRun::Focus);
+            exits.clear();
             QVERIFY(disconnect(s, &FocusSession::exitRequested, s, &FocusSession::finish));
             auto diag = [&]() {
                 return QString("call %1, pc holding %2, session holding %3, target page %4, target moved %5, "
