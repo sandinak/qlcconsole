@@ -593,7 +593,14 @@ void PadHit_Test::aOneShotHitEndsOnItsOwnTimeNotAtTheGo()
     QCOMPARE(line->text(), hit("Flash (one-shot)"));
     QCOMPARE(QJsonDocument::fromJson(phone.stateJson()).object().value(QStringLiteral("hit")).toString(),
              hit("Flash (one-shot)"));
-    QVERIFY(m_app->padRoleChip()->text().contains(hit("Flash (one-shot)")) || !run->notice().isEmpty());
+    /* The footer chip says it too -- unless the footer is too narrow for the
+       hit beside the Grand Master (it depends on the platform's font, as in
+       everySurfaceNamesTheNextHit), or a notice holds it. Never "off". */
+    QVERIFY2(!m_app->padRoleChip()->text().contains(QStringLiteral("Flash (one-shot) off")),
+             qPrintable(m_app->padRoleChip()->text()));
+    QVERIFY2(m_app->padRoleChip()->text().contains(hit("Flash (one-shot)")) || m_app->m_padChipShort
+                 || !run->notice().isEmpty(),
+             qPrintable(m_app->padRoleChip()->text()));
     // The next pull fires it again, as a pull, not as a let-go.
     tap(kRT);
     QTRY_COMPARE_WITH_TIMEOUT(fired.count(), 2, 2000);
