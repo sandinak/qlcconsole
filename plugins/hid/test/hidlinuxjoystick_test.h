@@ -28,6 +28,10 @@ class HIDLinuxJoystick_Test final : public QObject
 {
     Q_OBJECT
 
+public slots:
+    /** The pad's values (channel 0: its first button). */
+    void padValue(quint32 universe, quint32 line, quint32 channel, uchar value);
+
 private slots:
     void aPadThatGoesIsWaitedForAndReadAgain();
 };
