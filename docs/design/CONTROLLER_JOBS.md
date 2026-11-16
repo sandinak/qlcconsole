@@ -123,9 +123,13 @@ connects. (can change: a pad's serial over USB, when one says it.)
    The same pad seen twice (one identity on two universes) is one
    controller: counted once (no runner's name on the chip), and told one
    light, the same colour on both lines (review 0.4.10, M1). Its presses
-   are one pad's: one held state, one chord timer, and a change that
-   arrives on both lines acts once, from the line that brings it first
-   (`PadRun::padKey()`, `isTwinEcho()`; eval 0.4.12). Each pad (each
+   are one pad's (eval 0.4.12): each line keeps its own reading (its own
+   trigger hysteresis), and the pad holds a control while any of its lines
+   does (`PadRun::padHeld()`, keyed by `padId()`, the identity, which does
+   not change as a line comes or goes). An action fires on the pad's
+   press only: a press already down on its other line is the same press.
+   The chord, the stop and the safety read the pad's state; one chord
+   timer a pad, one stop a press of the pad's four. Each pad (each
    identity) times its own arm chord (rule 6's "its chord timing
    untouched").
 10. **Jobs changed live.** Taking Run cues from the runner disarms it (no

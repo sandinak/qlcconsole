@@ -74,6 +74,14 @@ private slots:
      *  brings it first, in step or a gesture behind. */
     void aPadOnTwoUniversesIsOnePad_data();
     void aPadOnTwoUniversesIsOnePad();
+    /** Review of 201fa9f28: a pad's lines read its triggers apart (each
+     *  its own hysteresis); the pad holds what either holds. */
+    void twinLinesReadTheTriggersApartAndStopOnce();
+    void twinLinesReadTheTriggersApartAndHitOnce();
+    /** Rule 3: the twin line patched in below mid-chord arms nothing. */
+    void aTwinLineAddedMidChordArmsNothing();
+    /** The lower line dropping leaves the other line's four. */
+    void theLowerLineDroppingMidFourStillStops();
     /** Twin pads told apart (address, USB port) stay two pads: each its
      *  own stop, its own chord, one runner. */
     void twinPadsToldApartAreTwoPads_data();
@@ -209,6 +217,9 @@ private:
     /** Pads A (universe 0) and B (universe 1), told apart by address,
      *  with these jobs (ControllerJobs::Jobs as int). */
     void twoPads(int jobsA, int jobsB);
+    /** One pad (one address) on universes 0 and 1; @p lower: universe 0
+     *  not patched yet (the twin line comes later). */
+    void twinLines(bool lower = false);
     /** The last light sent to input line @p line ("": its own; "none"). */
     QString lightOn(quint32 line) const;
     /** The feedback of @p kind ("triggers", "rumble") sent to @p line,
