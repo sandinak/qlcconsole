@@ -531,6 +531,13 @@ void PadRun::armChordFired()
     const Held h = m_held.value(u);
     if (!m_enabled || !h.lb || !h.rb || h.anyTrigger() || h.spent || isFocusing() || isWalking())
         return;
+    /* Rule 3: one chord, one change. Decided (fired or refused), it is
+       spent until both bumpers are up -- on this pad and its twin lines --
+       so nothing that comes in while they stay held (a DualSense's resting
+       trigger noise) times it again (pad-trace replay, 2026-11-16). */
+    for (auto it = m_held.begin(); it != m_held.end(); ++it)
+        if (sameController(it.key(), u))
+            it.value().spent = true;
     /* One runner (CONTROLLER_JOBS.md 6): another pad's arm -- or the arm a
        venue focus put by -- is not this one's to drop or share. */
     if (m_armed && !sameController(u, m_armUniverse))
