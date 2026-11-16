@@ -146,12 +146,15 @@ private:
                          e.o.value(QStringLiteral("serial")).toString());
             m_listed[path]++;
             scan(openMs != FakeHIDBackend::Forever);
+            if (openMs != FakeHIDBackend::Forever)
+                waitFor(path, true, m_fake->opens(path));
         }
         else if (e.ev == QLatin1String("gone"))
         {
             m_fake->unlist(path);       // every listing of it
             m_listed[path] = 0;
             scan(true);
+            waitFor(path, false, 0);
         }
         else if (e.ev == QLatin1String("open_failed")
                  && e.o.value(QStringLiteral("why")).toString() == QLatin1String("stuck"))
@@ -187,6 +190,26 @@ private:
         return o.value(QLatin1String(key)).toString().toUInt(nullptr, 16);
     }
 
+    /** Wait (1 s at most) until the plugin has a joystick at @p path (or has
+     *  none), once the backend has been asked to open @p opens times. */
+    void waitFor(const QString &path, bool present, int opens)
+    {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < 1000)
+        {
+            int line = -1;
+            QMetaObject::invokeMethod(m_plugin, "inputForPath", Qt::DirectConnection,
+                                      Q_RETURN_ARG(int, line), Q_ARG(QString, path));
+            int opening = 0;
+            QMetaObject::invokeMethod(m_plugin, "openingCount", Qt::DirectConnection,
+                                      Q_RETURN_ARG(int, opening));
+            if ((line >= 0) == present && opening == 0 && (!present || m_fake->opens(path) >= opens))
+                return;
+            QTest::qWait(5);
+        }
+    }
+
     /** Ask for a scan and wait for it (and, @p opens, for what it opens). */
     void scan(bool opens)
     {
@@ -205,7 +228,11 @@ private:
             if (!scanning && (!opens || opening == 0))
                 break;
         }
-        QTest::qWait(10);   // the queued results are taken
+        /* The scan's and the opens' results come to the plugin as queued
+           calls: take them. */
+        for (int i = 0; i < 3; ++i)
+            QTest::qWait(5);
+        QCoreApplication::processEvents();
     }
 
     QObject *m_plugin;

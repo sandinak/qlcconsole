@@ -38,9 +38,10 @@ namespace
 const QString kDualSense = QStringLiteral("DualSense Wireless Controller");
 const QString kXbox = QStringLiteral("Xbox 360 Controller for Windows");
 const QString kDualSensePath = QStringLiteral("USB_054c_0ce6_2124000");
-/* The trace's own timing, four times as fast: a chord's hold stays well over
-   the 15 ms the test gives it, and the longest trace plays in about 2 s. */
-const double kSpeed = 4.0;
+/* The trace's own timing, twice as fast: a chord's hold (350 ms) stays far
+   over the 15 ms the test gives it, even on a loaded host, and the longest
+   trace plays in about 5 s. */
+const double kSpeed = 2.0;
 
 /* Never deleted: a thread may still be leaving a call into one. */
 QList<FakeHIDBackend *> s_fakes;
@@ -244,7 +245,7 @@ void PadTraces_Test::triggerRest()
     QVERIFY(m_commands.isEmpty());
 
     // The chord arms it, with the triggers resting all the while.
-    QVERIFY(m_player->playUntil([](const PadTracePlayer::Event &e) { return e.t >= 1500; }));
+    QVERIFY(m_player->playUntil([](const PadTracePlayer::Event &e) { return e.t >= 1600; }));
     QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
 
     // Three presses of A, no LT.

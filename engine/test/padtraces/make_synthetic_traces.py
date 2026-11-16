@@ -58,9 +58,9 @@ def settle_sticks(tr, path, t0, t1, step=100):
 def arm(tr, path, t):
     tr.inp(t, path, "lb", 255)
     tr.inp(t + 60, path, "rb", 255)
-    tr.inp(t + 500, path, "rb", 0)
-    tr.inp(t + 520, path, "lb", 0)
-    return t + 520
+    tr.inp(t + 700, path, "rb", 0)
+    tr.inp(t + 720, path, "lb", 0)
+    return t + 720
 
 
 def go(tr, path, t):
