@@ -2868,10 +2868,12 @@ void ConnectionsTree_Test::r21r_editorLineChangeSendsNothingToTheDefault()
     Universe *u = iom->universe(3);
     u->write(0, 90, true);
     QStringList between;
+    int frames = 0;
     QMetaObject::Connection tick = connect(u, &Universe::outputPatchChanged, this, [&]() {
         stub->m_lastByTarget.clear();
         u->dumpOutput(u->postGMValues()->mid(0, u->usedChannels()), true);
         between << stub->m_lastByTarget.keys();
+        frames++;
     });
     ConnectionEditor ed(m_doc, 3);
     QCOMPARE(ed.m_interfaceCombo->currentIndex(), 0);
@@ -2885,7 +2887,10 @@ void ConnectionsTree_Test::r21r_editorLineChangeSendsNothingToTheDefault()
     QVERIFY2(applied, qPrintable(ed.error()));
     QCOMPARE(u->outputPatch(0)->output(), quint32(2));
     QCOMPARE(u->outputPatch(0)->getPluginParameters().value("outputIP").toString(), QString("10.1.1.9"));
-    QVERIFY2(between.isEmpty() == false, "no frame was simulated in the gap");
+    QVERIFY2(frames > 0, "no frame was simulated in the gap");
+    /* Since 0.4.12 the line is opened and aimed after the universe claim
+       (IODeferral) and the patch sends nothing until it has been: a frame
+       in the gap goes nowhere -- never to broadcast. */
     QVERIFY2(between.contains("default/2") == false,
              qPrintable("the Connection editor's line change sent a frame to broadcast: " + between.join(", ")));
 }
