@@ -45,6 +45,7 @@
 #include "hidprofileeditor.h"
 #include "hidapi.h"
 #include "hidbackend.h"
+#include "hidtrace.h"
 #include <QColor>
 
 #include "hidplugin.h"
@@ -161,6 +162,7 @@ HIDDevice *makeVirtualPad(const HIDFound &found)
                          ? QStringLiteral("Virtual pad %1").arg(found.path) : found.product;
     HIDVirtualPad *pad = new HIDVirtualPad(nullptr, 0, name, found.vendorId, found.productId);
     pad->setPath(found.path);
+    pad->setLocation(GamepadLayout::locationFromPath(found.path));
     if (found.testRead)
         pad->setReadHook(found.testRead);
     return pad;
@@ -288,6 +290,16 @@ void HIDPlugin::init()
     }
 
     m_stickClock.start();
+
+    /* QLC_HID_RECORD=<dir>: a trace of this session (hidtrace.h). */
+    const QString recordDir = qEnvironmentVariable("QLC_HID_RECORD");
+    if (!recordDir.isEmpty())
+    {
+        m_trace = HIDTrace::create(QDir::fromNativeSeparators(recordDir.startsWith(QLatin1String("~/"))
+            ? QDir::homePath() + recordDir.mid(1) : recordDir));
+        if (m_trace == nullptr)
+            qWarning() << "QLC_HID_RECORD:" << recordDir << "cannot be written";
+    }
 
     /* QLC_HID_VIRTUAL_PAD: pads that are not there, read as real ones
        (HIDVirtualPad). QLC_HID_VIRTUAL_ONLY=1: and none that are. */
@@ -646,6 +658,8 @@ HIDPlugin::~HIDPlugin()
         else
             qWarning() << Q_FUNC_INFO << dev->name() << "is still in a call: left";
     }
+    delete m_trace;
+    m_trace = nullptr;
 }
 
 QString HIDPlugin::name() const
@@ -1122,6 +1136,8 @@ void HIDPlugin::drainResults()
 
 void HIDPlugin::dropDevice(HIDDevice *dev)
 {
+    if (m_trace != nullptr && dev->axisCount() >= 0)
+        m_trace->gone(dev);
     m_devices.removeAll(dev);
     m_diagnosticsStarted.remove(dev);
     emit deviceRemoved(dev);
@@ -1213,6 +1229,8 @@ void HIDPlugin::applyScan(const QList<HIDFound> &found, const QSet<QString> &sta
         {
             qWarning() << Q_FUNC_INFO << it->name << (gone ? "left the list" : "is another device now")
                        << "while its open is stuck: given up";
+            if (m_trace != nullptr)
+                m_trace->openFailed(it.key(), it->product, it->vid, it->pid, QStringLiteral("given_up"));
             m_abandoned.insert(it.key(), it->job);
             it = m_opening.erase(it);
         }
@@ -1254,6 +1272,10 @@ void HIDPlugin::startOpen(const HIDFound &found, bool replacing)
     o.job = ++m_nextJob;
     o.replacing = replacing;
     o.instance = found.instance;
+    o.serial = found.serial;
+    o.vid = found.vendorId;
+    o.pid = found.productId;
+    o.product = found.product.trimmed();
     QString name = found.product.trimmed();
     if (name.isEmpty())
         name = QStringLiteral("HID device %1:%2")
@@ -1281,6 +1303,8 @@ void HIDPlugin::openTimedOut(const QString &path, quint64 job)
     qWarning() << Q_FUNC_INFO << it->name << "has not answered in" << m_openLimitMs
                << "ms: skipped until the system lets go of it";
     it->stuck = true;
+    if (m_trace != nullptr)
+        m_trace->openFailed(path, it->product, it->vid, it->pid, QStringLiteral("stuck"));
     /* The one it was to replace reads nothing any more: not kept listed,
        patched and silent (a patch on it goes offline, Pad Run disarms). */
     if (it->replacing)
@@ -1314,6 +1338,7 @@ void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
         return;
     }
     const bool wasStuck = it->stuck;
+    const Opening opened = *it;
     m_opening.erase(it);
     HIDDevice *old = device(path);
     bool changed = false;
@@ -1333,6 +1358,8 @@ void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
             dropDevice(old);
             changed = true;
         }
+        if (dev == nullptr && m_trace != nullptr)
+            m_trace->openFailed(path, opened.product, opened.vid, opened.pid, QStringLiteral("nothing"));
         /* The system let go of one it held: ask again, it may answer now. */
         if (wasStuck && m_listed.contains(path))
             scheduleRescan(0);
@@ -1346,6 +1373,10 @@ void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
         qDebug() << Q_FUNC_INFO << "reconnected:" << dev->name();
         const int index = m_devices.indexOf(old);
         m_devices[index] = dev;
+        if (m_trace != nullptr && old->axisCount() >= 0)
+            m_trace->gone(old);
+        if (m_trace != nullptr && dev->axisCount() >= 0)
+            m_trace->arrived(dev, opened.serial);
         m_diagnosticsStarted.remove(old);
         emit deviceRemoved(old);
         disposeOffThread(old);
@@ -1355,6 +1386,8 @@ void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
     }
     else
     {
+        if (m_trace != nullptr && dev->axisCount() >= 0)
+            m_trace->arrived(dev, opened.serial);
         m_devices.append(dev);
         emit deviceAdded(dev);
         setupDiagnostics(dev);
@@ -1393,6 +1426,14 @@ void HIDPlugin::noteProblems()
         return;
     m_lastProblems = now;
     emit targetProblemsChanged();
+}
+
+int HIDPlugin::inputForPath(const QString &path) const
+{
+    for (int i = 0; i < m_devices.size(); ++i)
+        if (m_devices.at(i)->axisCount() >= 0 && m_devices.at(i)->path() == path)
+            return i;
+    return -1;
 }
 
 bool HIDPlugin::injectVirtualInput(quint32 input, quint32 channel, uint value)
@@ -1489,6 +1530,8 @@ void HIDPlugin::addDevice(HIDDevice* device)
 
     device->setLine(quint32(m_devices.count()));
     m_devices.append(device);
+    if (m_trace != nullptr && device->axisCount() >= 0)
+        m_trace->arrived(device, QString());
     emit deviceAdded(device);
 
     emit configurationChanged();
@@ -1669,7 +1712,11 @@ void HIDPlugin::slotDeviceValue(quint32 universe, quint32 line, quint32 channel,
         }
     }
     if (isPatchedInput(line))
+    {
+        if (m_trace != nullptr && dev != nullptr)
+            m_trace->input(dev->path(), channel, value);
         emit valueChanged(universe, line, channel, value);
+    }
 }
 
 void HIDPlugin::slotStickTick()
@@ -1693,7 +1740,11 @@ void HIDPlugin::slotStickTick()
         // A rest learnt changes what the stick reads: say it again.
         if (isPatchedInput(line))
             for (int ch : t.learnt)
+            {
+                if (m_trace != nullptr)
+                    m_trace->input(dev->path(), quint32(ch), f.output(ch));
                 emit valueChanged(UINT_MAX, line, quint32(ch), f.output(ch));
+            }
         if (t.captureDone)
             emit inputSticksCentred(line, t.held);
         if (t.drifted >= 0)

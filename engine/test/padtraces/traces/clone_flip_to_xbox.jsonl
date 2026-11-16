@@ -1,0 +1,25 @@
+# SYNTHETIC (written by make_synthetic_traces.py, not recorded).
+# A cabled DualSense clone: armed, GO, then Create + Options held
+# ~3 s flips it to an Xbox 360 pad: it leaves USB and comes back
+# as three 045e:028e arrivals at one port within ~1 s; the first two leave again.
+{"t":0,"ev":"arrived","path":"USB_054c_0ce6_2124000","vid":"054c","pid":"0ce6","name":"DualSense Wireless Controller","serial":"SYN0001","location":"USB 2124000","identity":"port:HID:USB 2124000","axes":6,"buttons":22}
+{"t":600,"ev":"input","path":"USB_054c_0ce6_2124000","ch":10,"value":255}
+{"t":660,"ev":"input","path":"USB_054c_0ce6_2124000","ch":11,"value":255}
+{"t":1100,"ev":"input","path":"USB_054c_0ce6_2124000","ch":11,"value":0}
+{"t":1120,"ev":"input","path":"USB_054c_0ce6_2124000","ch":10,"value":0}
+{"t":1720,"ev":"input","path":"USB_054c_0ce6_2124000","ch":2,"value":255}
+{"t":1800,"ev":"input","path":"USB_054c_0ce6_2124000","ch":6,"value":255}
+{"t":1920,"ev":"input","path":"USB_054c_0ce6_2124000","ch":6,"value":0}
+{"t":1980,"ev":"input","path":"USB_054c_0ce6_2124000","ch":2,"value":0}
+{"t":2680,"ev":"input","path":"USB_054c_0ce6_2124000","ch":12,"value":255}
+{"t":2720,"ev":"input","path":"USB_054c_0ce6_2124000","ch":13,"value":255}
+{"t":5780,"ev":"gone","path":"USB_054c_0ce6_2124000","name":"DualSense Wireless Controller"}
+{"t":6080,"ev":"arrived","path":"USB_045e_028e_2124000","vid":"045e","pid":"028e","name":"Xbox 360 Controller for Windows","serial":"","location":"USB 2124000","identity":"port:HID:USB 2124000","axes":6,"buttons":22}
+{"t":6380,"ev":"gone","path":"USB_045e_028e_2124000","name":"Xbox 360 Controller for Windows"}
+{"t":6580,"ev":"arrived","path":"USB_045e_028e_2124000","vid":"045e","pid":"028e","name":"Xbox 360 Controller for Windows","serial":"","location":"USB 2124000","identity":"port:HID:USB 2124000","axes":6,"buttons":22}
+{"t":6880,"ev":"gone","path":"USB_045e_028e_2124000","name":"Xbox 360 Controller for Windows"}
+{"t":7080,"ev":"arrived","path":"USB_045e_028e_2124000","vid":"045e","pid":"028e","name":"Xbox 360 Controller for Windows","serial":"","location":"USB 2124000","identity":"port:HID:USB 2124000","axes":6,"buttons":22}
+{"t":8080,"ev":"input","path":"USB_045e_028e_2124000","ch":2,"value":255}
+{"t":8160,"ev":"input","path":"USB_045e_028e_2124000","ch":6,"value":255}
+{"t":8280,"ev":"input","path":"USB_045e_028e_2124000","ch":6,"value":0}
+{"t":8340,"ev":"input","path":"USB_045e_028e_2124000","ch":2,"value":0}
