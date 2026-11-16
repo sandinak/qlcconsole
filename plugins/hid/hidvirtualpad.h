@@ -54,6 +54,8 @@ public:
      *  address, told apart by their ports (controller jobs). */
     QString location() const override { return m_location; }
     void setLocation(const QString &location) { m_location = location; }
+    /** A pad a test's HIDBackend lists: at the path it lists it on. */
+    void setPath(const QString &path) { m_filename = path; m_file.setFileName(path); }
 
     /** A value as the pad's reading would give it. */
     void inject(quint32 channel, uchar value);

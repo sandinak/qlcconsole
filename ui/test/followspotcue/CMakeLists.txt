@@ -9,6 +9,8 @@ add_executable(${module_name} WIN32 MACOSX_BUNDLE
 target_include_directories(${module_name} PRIVATE
     ../../../engine/src
     ../../../plugins/interfaces
+    ../../../plugins/hid
+    ../../../plugins/hid/test
     ../../src
     ../../src/monitor
 )

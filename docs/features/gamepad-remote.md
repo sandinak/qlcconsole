@@ -191,6 +191,13 @@ Joystick** in the same layout.
   at the console, so Menu doesn't leave.
 - **The controller test sends nothing.** While it is open, the controls
   only light up their boxes.
+- **A controller that stops answering is skipped.** Controllers are
+  opened in the background, two seconds each at most. One that doesn't
+  answer (a USB pad switching mode, held busy by the computer) is left
+  out and named in the footer, "... not answering", and tried again by
+  itself; the other pads, the lights and every pad's emergency stop
+  carry on, and the show keeps running. If it stays named, unplug it,
+  wait a few seconds and plug it back in.
 - **Teaching mode holds the remote as it holds the console.** A remote GO
   goes through the same path as the console's GO, so the instructor's
   settings ([Teaching mode](teaching.md#instructor-settings)) apply to it
@@ -353,3 +360,15 @@ for and note each result.
     controller list.
     *Expected:* the Deck's controller is listed, with Xbox button names,
     and its VID:PID starts with 28DE (Valve). Report the whole VID:PID.
+15. **A pad that switches mode.** Not the Deck: plug the Xbox 360 clone
+    pad (a DualSense clone, 045E:028E once switched) into the console by
+    USB, patch it, and start a cue list running with the console's
+    output on the rig. Hold View + Menu (Create + Options) on the pad for
+    a full second, twice.
+    *Expected:* the app stays responsive the whole time: menus open, the
+    Run tab's clock keeps going and the lights keep running. If the pad
+    had armed Pad Run, the Run tab says "Disarmed: the controller went
+    away." If the pad doesn't come back within a few seconds, the footer
+    names it ("Xbox 360 Controller for Windows (USB …) — not
+    answering"); another pad's emergency stop (both bumpers and both
+    triggers) still stops the show. Quit the app: it quits at once.

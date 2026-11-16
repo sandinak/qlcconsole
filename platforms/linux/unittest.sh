@@ -254,8 +254,11 @@ list_tests()
         # The web pages' scripts (/run, /focus, the gamepad), in a QJSEngine.
         echo webaccess/test/pagescript
     fi
-    # The HID plugin's GameController side: a Mac's framework only.
-    [[ "$OSTYPE" == "darwin"* ]] && echo plugins/hid/test
+    # The HID plugin: its scan and open threads (not built on Windows), and
+    # on a Mac its GameController side.
+    if [[ "$OSTYPE" != "msys" && "$OSTYPE" != "cygwin" ]]; then
+        echo plugins/hid/test
+    fi
     return 0
 }
 

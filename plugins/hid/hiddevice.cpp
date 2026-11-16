@@ -19,6 +19,7 @@
 
 #include <QString>
 #include <QFile>
+#include <QDeadlineTimer>
 
 #include "hiddevice.h"
 #include "gamepadlayout.h"
@@ -31,7 +32,6 @@ HIDDevice::HIDDevice(HIDPlugin* parent, quint32 line, const QString &name, const
     m_filename = path;
     m_file.setFileName(path);
     m_line = line;
-    m_running = false;
 }
 
 HIDDevice::~HIDDevice()
@@ -42,6 +42,20 @@ HIDDevice::~HIDDevice()
         wait();
     }
     closeInput();
+}
+
+void HIDDevice::handTo(QThread *thread)
+{
+    m_file.moveToThread(thread);
+    moveToThread(thread);
+}
+
+bool HIDDevice::stopReading(int ms)
+{
+    m_running = false;
+    if (isRunning() == false)
+        return true;
+    return wait(QDeadlineTimer(ms));
 }
 
 /*****************************************************************************

@@ -24,6 +24,9 @@
 #include <QThread>
 #include <QFile>
 
+#include <atomic>
+#include <functional>
+
 class HIDPlugin;
 
 /*****************************************************************************
@@ -136,6 +139,27 @@ public:
      *  is now a different device at the same path. HIDPlugin replaces it. */
     virtual bool isStale() const { return false; }
 
+    /** isStale(), as a check that holds nothing of this object: the plugin's
+     *  scan thread runs it while the device stays the GUI thread's. Empty
+     *  when the device can't tell (never stale). */
+    virtual std::function<bool()> staleProbe() const { return {}; }
+
+    /** Which system entry it was made for, when the listing says (0: it
+     *  does not). The same path listed with another one is a device that
+     *  came back -- re-enumerated, switched off and on -- and is replaced. */
+    quint64 instance() const { return m_instance; }
+    void setInstance(quint64 instance) { m_instance = instance; }
+
+    /** Made on a worker thread (HIDPlugin opens devices off the GUI
+     *  thread): move it, and its file, to @p thread. Called on the thread
+     *  that made it, before anything else uses it. */
+    void handTo(QThread *thread);
+
+    /** Ask the reader to stop and wait for it at most @p ms. False when it
+     *  is still in a call to the system: it then stops by itself once the
+     *  call returns, and the device must not be deleted before. */
+    bool stopReading(int ms);
+
     /** How the device is connected and read, for a person ("Bluetooth LE ·
      *  Xbox Series X|S Controller (045E:0B13) · GameController framework").
      *  Empty when there is nothing to say. */
@@ -154,6 +178,7 @@ public:
 protected:
     quint32 m_line;
     int m_capabilities;
+    quint64 m_instance = 0;
 
     /*************************************************************************
      * Device info
@@ -212,7 +237,8 @@ public:
     virtual void feedBack(quint32 channel, uchar value);
 
 protected:
-    bool m_running;
+    /** The reader runs while true; set from the GUI thread, read by it. */
+    std::atomic<bool> m_running { false };
 
 private:
     /** Input data thread worker method */

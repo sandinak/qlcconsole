@@ -324,7 +324,7 @@ if [ \$rc -eq 0 ]; then
     ta=\$(nt \$t0)
     ran=\$(grep -E "^Test programs run:" \$L/tests.log | awk '{ n += \$4 + \$6 + \$10 } END { print n + 0 }')
     exp=\$({ ls engine/test/*/test.sh ui/test/*/test.sh ai/test/*/test.sh
-        ls plugins/{enttecwing,midi,artnet,E1.31,wled}/test/test.sh plugins/velleman/test/test.sh; } 2>/dev/null | wc -l)
+        ls plugins/{enttecwing,midi,artnet,E1.31,wled,hid}/test/test.sh plugins/velleman/test/test.sh; } 2>/dev/null | wc -l)
     if [ "\$ran" -lt "\$exp" ]; then
         res="FAIL(count)"; rc=1
         echo "ran \$ran test programs of the \$exp in the tree. This is not a pass." >> \$L/tests.log

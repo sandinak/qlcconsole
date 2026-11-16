@@ -52,6 +52,9 @@ private slots:
      *  pad's LS-and-push recalibration, the footer's "from SL tower", the
      *  stick turned, and the Rig Overview's Operator views. */
     void theOperatorViewpointTurnsTheStick();
+    /** A pad that stops answering while it is opened (the bench's clone
+     *  after View + Menu): the footer names it, the app stays live. */
+    void aControllerThatHangsIsNamedInTheFooter();
 
 private:
     bool open(const QString &path);
