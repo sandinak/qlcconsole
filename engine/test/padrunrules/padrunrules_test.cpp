@@ -591,6 +591,8 @@ void PadRunRules_Test::aHeldChordFiresOnce()
     const quint32 u = 0;
     const bool armedBefore = run->isArmed();
     const int refusedBefore = saidCount("is running cues");
+    // One change over the whole hold (none when refused).
+    QSignalSpy changes(run, &PadRun::armedChanged);
     // The chord, held: it fires (or is refused) once.
     hold(kLB, true, u);
     hold(kRB, true, u);
@@ -600,8 +602,8 @@ void PadRunRules_Test::aHeldChordFiresOnce()
         QCOMPARE(afterChord, true);
     else
         QCOMPARE(afterChord, !armedBefore);
-    // Still held: a DualSense's triggers report their resting noise.
-    for (int i = 0; i < 4; ++i)
+    // Still held: a DualSense's triggers report their resting noise, a stream.
+    for (int i = 0; i < 8; ++i)
     {
         axis(i % 2 ? kRT : kLT, uchar(6 + i), u);
         QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 5000);
@@ -615,6 +617,8 @@ void PadRunRules_Test::aHeldChordFiresOnce()
     hold(kRB, false, u);
     hold(kLB, false, u);
     QCOMPARE(run->isArmed(), afterChord);
+    QVERIFY2(changes.count() == (start == 2 ? 0 : 1),
+             qPrintable(QString("the arm changed %1 times over one hold").arg(changes.count())));
 }
 
 void PadRunRules_Test::everyOrderOfTheFour()
