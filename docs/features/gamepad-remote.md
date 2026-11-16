@@ -202,6 +202,9 @@ Joystick** in the same layout.
   computer (on a Mac, restart this Mac to free its USB). Until then
   qlcconsole may not finish quitting: the window closes, but the app can
   stay listed as running.
+  A USB DMX interface on a hub held that way, opened, closed or
+  re-patched, holds up only its own universe, which sends nothing until
+  the interface answers again: every other universe keeps its output.
 - **Teaching mode holds the remote as it holds the console.** A remote GO
   goes through the same path as the console's GO, so the instructor's
   settings ([Teaching mode](teaching.md#instructor-settings)) apply to it
@@ -383,6 +386,9 @@ for and note each result.
     footer (reopen the app if you quit), and a second pad patched:
     *Expected:* the console's DMX output still runs (a cue fades on the
     rig, the output monitor moves), and the second pad's emergency stop
-    (both bumpers and both triggers) stops the show. Restart the Mac
-    afterwards and check the clone pad, and anything else on that USB
-    hub, works again.
+    (both bumpers and both triggers) stops the show. If a USB DMX
+    interface is on the same hub, un-patch and re-patch its universe in
+    Connections while the pad is stuck: the other universes' lights keep
+    running throughout (that interface's own universe may stay dark until
+    the restart). Restart the Mac afterwards and check the clone pad, and
+    anything else on that USB hub, works again.
