@@ -21,6 +21,7 @@
 #include <QXmlStreamWriter>
 #include <QSignalSpy>
 #include <QBuffer>
+#include <QColor>
 #include <QtTest>
 #include <QRandomGenerator>
 
@@ -48,6 +49,7 @@
 #include "resource_paths.h"
 #include "qlcfile.h"
 #include "fixture.h"
+#include "qlcfixturedef.h"
 #include "chaser.h"
 #include "scene.h"
 #include "doc.h"
@@ -2337,19 +2339,38 @@ void ShowTreePlay_Test::anEarlierCueAddedOrDeletedMidRunKeepsTheCueOnStage()
     QCOMPARE(st->runningCue(listId), cues[2]);  // cue 3 on stage
     QCOMPARE(int(settle(5)[0]), 120);
 
-    // A cue added at the top, with a look of its own on fixture 1 that it
-    // releases (so no later cue tracks it on): cue 3 stays on stage, and
-    // the new cue never played.
-    FixtureGroup *b = group("B", { m_fixtures[1] });
+    // A cue added at the top, with a look of its own on an RGB par (its
+    // colour channels are LTP, which the restack puts back) that it
+    // releases, so no later cue tracks it on: cue 3 stays on stage, and the
+    // new cue never played.
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Generic", "Generic RGB");
+    QVERIFY(def != nullptr);
+    Fixture *par = new Fixture(m_doc);
+    par->setName("Par");
+    par->setFixtureDefinition(def, def->mode("RGB Dimmer"));
+    par->setAddress(8);
+    par->setUniverse(0);
+    m_doc->addFixture(par);
+    FixtureGroup *b = group("B", { par->id() });
+    QLCPalette *redPalette = new QLCPalette(QLCPalette::Color, m_doc);
+    redPalette->setName("Red");
+    redPalette->setValue(QLCPalette::colorToString(QColor(Qt::red), QColor(Qt::black)));
+    m_doc->addPalette(redPalette);
+    auto red = [this]() {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(8));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
     stepSaid.clear();
     const quint32 top = st->addCue(listId, -1, "Top");
     QVERIFY(top != ShowTree::invalidId());
     const quint32 topLayer = st->addLayer(top, groupTarget(b->id()));
-    st->setLayerLook(top, topLayer, st->lookForPalette(dimmer(77, "L77")));
+    st->setLayerLook(top, topLayer, st->lookForPalette(redPalette->id()));
     QVERIFY(st->setLayerRelease(top, topLayer, true));
     QHash<quint32, uchar> out = settle(5);
     QCOMPARE(int(out[0]), 120);
-    QCOMPARE(int(out[1]), 0);
+    QCOMPARE(red(), 0);
     QCOMPARE(st->runningCue(listId), cues[2]);
     QCOMPARE(chaser()->currentStepIndex(), 3);
     QVERIFY(!stepSaid.isEmpty());               // the Run tab hears it moved
@@ -2359,8 +2380,8 @@ void ShowTreePlay_Test::anEarlierCueAddedOrDeletedMidRunKeepsTheCueOnStage()
     go(chaser());
     out = settle(5);
     QCOMPARE(int(out[0]), 160);
-    QVERIFY2(int(out[1]) == 0, qPrintable(QString("GO after a cue was added at the top put on its look "
-                                                  "(fixture 1 at %1)").arg(int(out[1]))));
+    QVERIFY2(red() == 0, qPrintable(QString("GO after a cue was added at the top put on its look "
+                                            "(the par's red at %1)").arg(red())));
     QCOMPARE(st->runningCue(listId), cues[3]);
 
     // Cue 1 deleted: cue 4 stays on stage, named as the one running.
@@ -2377,7 +2398,7 @@ void ShowTreePlay_Test::anEarlierCueAddedOrDeletedMidRunKeepsTheCueOnStage()
     go(chaser());
     out = settle(5);
     QCOMPARE(int(out[0]), 200);
-    QCOMPARE(int(out[1]), 0);
+    QCOMPARE(red(), 0);
     QCOMPARE(st->runningCue(listId), cues[4]);
 }
 
